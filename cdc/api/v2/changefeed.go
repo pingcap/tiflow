@@ -48,7 +48,6 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 	}
 	if len(config.PDAddrs) == 0 {
 		up := h.capture.UpstreamManager.GetDefaultUpstream()
-		defer up.Release()
 		config.PDAddrs = up.PdEndpoints
 		config.KeyPath = up.SecurityConfig.KeyPath
 		config.CAPath = up.SecurityConfig.CAPath
@@ -98,7 +97,6 @@ func (h *OpenAPIV2) VerifyTable(c *gin.Context) {
 	}
 	if len(cfg.PDAddrs) == 0 {
 		up := h.capture.UpstreamManager.GetDefaultUpstream()
-		defer up.Release()
 		cfg.PDAddrs = up.PdEndpoints
 		cfg.KeyPath = up.SecurityConfig.KeyPath
 		cfg.CAPath = up.SecurityConfig.CAPath
@@ -176,7 +174,6 @@ func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
 	}
 	if cfInfo.UpstreamID == 0 {
 		up := h.capture.UpstreamManager.GetDefaultUpstream()
-		defer up.Release()
 		cfInfo.UpstreamID = up.ID
 	}
 	upInfo, err := h.capture.EtcdClient.GetUpstreamInfo(ctx, cfInfo.UpstreamID, cfInfo.Namespace)

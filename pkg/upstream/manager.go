@@ -17,16 +17,21 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/security"
 	pd "github.com/tikv/pd/client"
 )
 
 // testUpstreamID is a pseudo upstreamID for now. It will be removed in the future.
 const testUpstreamID uint64 = 1
+
+// tickInterval is the minimum interval that upstream manager to check upstreams
+var tickInterval = 3 * time.Minute
 
 // Manager manages all upstream.
 type Manager struct {
@@ -42,6 +47,8 @@ type Manager struct {
 	mu sync.Mutex
 
 	defaultUpstream *Upstream
+
+	lastTickTime time.Time
 }
 
 // NewManager creates a new Manager.
@@ -65,7 +72,6 @@ func NewManager4Test(pdClient pd.Client) *Manager {
 		defaultUpstream: up,
 	}
 	up.isDefaultUpstream = true
-	up.hold()
 	res.ups.Store(testUpstreamID, up)
 	return res
 }
@@ -87,14 +93,12 @@ func (m *Manager) AddDefaultUpstream(pdEndpoint []string,
 	up.ID = up.PDClient.GetClusterID(m.ctx)
 	up.isDefaultUpstream = true
 	m.defaultUpstream = up
-	up.hold()
 	m.ups.Store(up.ID, up)
 	return up, nil
 }
 
 // GetDefaultUpstream returns the default upstream
 func (m *Manager) GetDefaultUpstream() *Upstream {
-	m.defaultUpstream.hold()
 	return m.defaultUpstream
 }
 
@@ -106,7 +110,7 @@ func (m *Manager) add(upstreamID uint64,
 	v, ok := m.ups.Load(upstreamID)
 	if ok {
 		up := v.(*Upstream)
-		up.hold()
+		up.resetIdleTime()
 		return up
 	}
 	securityConf := &security.Credential{}
@@ -123,7 +127,7 @@ func (m *Manager) add(upstreamID uint64,
 	go func() {
 		_ = up.init(m.ctx, m.gcServiceID)
 	}()
-	up.hold()
+	up.resetIdleTime()
 	return up
 }
 
@@ -141,15 +145,6 @@ func (m *Manager) AddUpstream(upstreamID model.UpstreamID,
 		})
 }
 
-// RemoveUpstream remove upstream from the manager
-func (m *Manager) RemoveUpstream(upstreamID model.UpstreamID) {
-	v, ok := m.ups.Load(upstreamID)
-	if ok {
-		up := v.(*Upstream)
-		up.unhold()
-	}
-}
-
 // Get gets a upstream by upstreamID.
 func (m *Manager) Get(upstreamID uint64) (*Upstream, bool) {
 	v, ok := m.ups.Load(upstreamID)
@@ -157,7 +152,7 @@ func (m *Manager) Get(upstreamID uint64) (*Upstream, bool) {
 		return nil, false
 	}
 	up := v.(*Upstream)
-	up.hold()
+	up.resetIdleTime()
 	return up, true
 }
 
@@ -173,8 +168,20 @@ func (m *Manager) Close() {
 
 // Tick checks and frees upstream that have not been used
 // for a long time to save resources.
-// Tick should be only call in Owner.Tick().
-func (m *Manager) Tick(ctx context.Context) error {
+func (m *Manager) Tick(ctx context.Context,
+	globalState *orchestrator.GlobalReactorState,
+) error {
+	if time.Since(m.lastTickTime) < tickInterval {
+		return nil
+	}
+
+	activeUpstreams := make(map[uint64]struct{})
+	for _, cf := range globalState.Changefeeds {
+		activeUpstreams[cf.Info.UpstreamID] = struct{}{}
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	var err error
 	m.ups.Range(func(k, v interface{}) bool {
 		select {
@@ -185,15 +192,21 @@ func (m *Manager) Tick(ctx context.Context) error {
 		}
 		id := k.(uint64)
 
+		_, ok := activeUpstreams[id]
+		if ok {
+			return true
+		}
 		up := v.(*Upstream)
+		if up.isDefaultUpstream {
+			return true
+		}
+		up.trySetIdleTime()
 		if up.shouldClose() {
 			go up.close()
 		}
 
 		if up.IsClosed() {
-			m.mu.Lock()
 			m.ups.Delete(id)
-			m.mu.Unlock()
 		}
 		return true
 	})

@@ -674,7 +674,6 @@ func (c *changefeed) updateStatus(checkpointTs, resolvedTs model.Ts) {
 
 func (c *changefeed) Close(ctx cdcContext.Context) {
 	startTime := time.Now()
-	c.upstream.Release()
 	c.releaseResources(ctx)
 
 	costTime := time.Since(startTime)

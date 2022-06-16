@@ -16,8 +16,10 @@ package upstream
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/benbjohnson/clock"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/stretchr/testify/require"
 )
@@ -49,15 +51,14 @@ func TestUpstream(t *testing.T) {
 	require.NotNil(t, up)
 
 	// test Tick
-	up2.Release()
-	up2.Release()
+	_ = manager.Tick(context.Background(), &orchestrator.GlobalReactorState{})
 	mockClock.Add(maxIdleDuration * 2)
-
-	manager.Tick(context.Background())
+	manager.lastTickTime = time.Time{}
+	_ = manager.Tick(context.Background(), &orchestrator.GlobalReactorState{})
 	// wait until up2 is closed
 	for !up2.IsClosed() {
 	}
-	manager.Tick(context.Background())
+	_ = manager.Tick(context.Background(), &orchestrator.GlobalReactorState{})
 	up, ok = manager.Get(testID)
 	require.False(t, ok)
 	require.Nil(t, up)

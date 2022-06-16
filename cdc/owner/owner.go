@@ -213,18 +213,6 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 		}
 	}
 
-	// close upstream
-	activeUpstreams := make(map[model.UpstreamID]struct{})
-	for _, cf := range o.changefeeds {
-		activeUpstreams[cf.upstream.ID] = struct{}{}
-	}
-	for key := range state.Upstreams {
-		_, ok := activeUpstreams[key]
-		if !ok {
-			o.upstreamManager.RemoveUpstream(key)
-		}
-	}
-
 	// Close and cleanup all changefeeds.
 	if atomic.LoadInt32(&o.closed) != 0 {
 		for changefeedID, cfReactor := range o.changefeeds {
@@ -235,7 +223,10 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 		}
 		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 	}
-
+	// close upstream
+	if err := o.upstreamManager.Tick(stdCtx, state); err != nil {
+		return state, errors.Trace(err)
+	}
 	return state, nil
 }
 
