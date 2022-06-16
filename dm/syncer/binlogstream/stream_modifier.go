@@ -120,11 +120,7 @@ func (m *streamModifier) Set(req *pb.HandleWorkerErrorRequest, events []*replica
 			break
 		}
 	}
-
-	if toInsertIndex < m.nextOp {
-		m.nextOp++
-	}
-
+	
 	if toInsertIndex == len(m.ops) {
 		m.ops = append(m.ops, toInject)
 		return nil
@@ -142,6 +138,9 @@ func (m *streamModifier) Set(req *pb.HandleWorkerErrorRequest, events []*replica
 	m.ops = append(m.ops, nil)
 	copy(m.ops[toInsertIndex+1:], m.ops[toInsertIndex:])
 	m.ops[toInsertIndex] = toInject
+	if toInsertIndex < m.nextOp {
+		m.nextOp++
+	}
 	m.logger.Info("set a new operator",
 		zap.Stringer("position", pos),
 		zap.Stringer("new operator", toInject))
@@ -165,11 +164,7 @@ func (m *streamModifier) Delete(posStr string) error {
 		}
 	}
 
-	if toDeleteIndex < m.nextOp {
-		m.nextOp--
-	}
-
-	if toDeleteIndex == len(m.ops) {
+	if toDeleteIndex < m.nextOp || toDeleteIndex == len(m.ops) {
 		return terror.ErrSyncerOperatorNotExist.Generate(posStr)
 	}
 	pre := m.ops[toDeleteIndex]

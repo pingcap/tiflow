@@ -218,8 +218,9 @@ func TestSet(t *testing.T) {
 	// after reset, front will see the op we just Set
 	op = m.front()
 	require.Equal(t, pb.ErrorOp_Replace, op.op)
+	require.Equal(t, []byte("event4"), op.events[0].RawData)
 
-	// test Set can overwrite
+	// test Set can overwrite an operator after the front
 	req = &pb.HandleWorkerErrorRequest{
 		Op:        pb.ErrorOp_Replace,
 		BinlogPos: "mysql.000001:3000",
@@ -232,6 +233,26 @@ func TestSet(t *testing.T) {
 	require.Equal(t, pb.ErrorOp_Replace, m.ops[0].op)
 	require.Equal(t, pb.ErrorOp_Inject, m.ops[1].op)
 	require.Equal(t, pb.ErrorOp_Replace, m.ops[2].op)
+
+	m.next()
+	op = m.front()
+	require.Equal(t, pb.ErrorOp_Inject, op.op)
+	// test Set can overwrite an operator before the front
+	req = &pb.HandleWorkerErrorRequest{
+		Op:        pb.ErrorOp_Skip,
+		BinlogPos: "mysql.000001:1000",
+	}
+	err = m.Set(req, []*replication.BinlogEvent{
+		{RawData: []byte("event5")},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 3, len(m.ops))
+	require.Equal(t, pb.ErrorOp_Skip, m.ops[0].op)
+	require.Equal(t, pb.ErrorOp_Inject, m.ops[1].op)
+	require.Equal(t, pb.ErrorOp_Replace, m.ops[2].op)
+
+	op = m.front()
+	require.Equal(t, pb.ErrorOp_Inject, op.op)
 }
 
 func TestDelete(t *testing.T) {
@@ -268,18 +289,18 @@ func TestDelete(t *testing.T) {
 	op := m.front()
 	require.Equal(t, opSkip, op)
 
-	// Delete before front
+	// Delete before front will raise error https://github.com/pingcap/dm/issues/1249
 	err = m.Delete("mysql.000001:1234")
-	require.NoError(t, err)
+	require.ErrorContains(t, err, "error operator not exist")
 	op = m.front()
 	require.Equal(t, opSkip, op)
 
-	// Delete after front, also clear the ops
+	// Delete after front
 	err = m.Delete("mysql.000001:2345")
 	require.NoError(t, err)
 	op = m.front()
 	require.Nil(t, op)
-	require.Len(t, m.ops, 0)
+	require.Len(t, m.ops, 1)
 }
 
 func TestRemoveOutdated(t *testing.T) {
