@@ -28,7 +28,7 @@ import (
 )
 
 // testUpstreamID is a pseudo upstreamID for now. It will be removed in the future.
-const testUpstreamID uint64 = 1
+const testUpstreamID uint64 = 0
 
 // tickInterval is the minimum interval that upstream manager to check upstreams
 var tickInterval = 3 * time.Minute
@@ -210,5 +210,6 @@ func (m *Manager) Tick(ctx context.Context,
 		}
 		return true
 	})
+	m.lastTickTime = time.Now()
 	return err
 }
