@@ -104,7 +104,6 @@ func TestFillV1(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, &ChangeFeedInfo{
 		SinkURI: "blackhole://",
-		Opts:    map[string]string{},
 		StartTs: 417136892416622595,
 		Engine:  "memory",
 		SortDir: ".",
@@ -150,7 +149,6 @@ func TestVerifyAndComplete(t *testing.T) {
 
 	info := &ChangeFeedInfo{
 		SinkURI: "blackhole://",
-		Opts:    map[string]string{},
 		StartTs: 417257993615179777,
 		Config: &config.ReplicaConfig{
 			CaseSensitive:    true,
@@ -602,7 +600,6 @@ func TestChangeFeedInfoClone(t *testing.T) {
 
 	info := &ChangeFeedInfo{
 		SinkURI: "blackhole://",
-		Opts:    map[string]string{},
 		StartTs: 417257993615179777,
 		Config: &config.ReplicaConfig{
 			CaseSensitive:    true,
