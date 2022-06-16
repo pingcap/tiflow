@@ -14,13 +14,9 @@
 package dumpling
 
 import (
-	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/dumpling/export"
+	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/prometheus/client_golang/prometheus"
-	"go.uber.org/zap"
-
-	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
 )
 
 type metricProxies struct {
@@ -41,16 +37,9 @@ var defaultMetricProxies = &metricProxies{
 // RegisterMetrics registers metrics and saves the given registry for later use.
 func RegisterMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(defaultMetricProxies.dumplingExitWithErrorCounter)
-	export.InitMetricsVector(prometheus.Labels{"task": "", "source_id": ""})
-	export.RegisterMetrics(registry)
 }
 
 func (m *Dumpling) removeLabelValuesWithTaskInMetrics(task, source string) {
 	labels := prometheus.Labels{"task": task, "source_id": source}
 	m.metricProxies.dumplingExitWithErrorCounter.DeleteAllAboutLabels(labels)
-	failpoint.Inject("SkipRemovingDumplingMetrics", func(_ failpoint.Value) {
-		m.logger.Info("", zap.String("failpoint", "SkipRemovingDumplingMetrics"))
-		failpoint.Return()
-	})
-	export.RemoveLabelValuesWithTaskInMetrics(labels)
 }

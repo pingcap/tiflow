@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
+	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/engine/pkg/ctxmu"
 	"github.com/pingcap/tiflow/engine/pkg/dm"
@@ -65,7 +66,7 @@ func TestJobManagerSubmitJob(t *testing.T) {
 	err := mockMaster.Init(ctx)
 	require.Nil(t, err)
 	req := &pb.SubmitJobRequest{
-		Tp:     pb.JobType_CVSDemo,
+		Tp:     int32(engineModel.JobTypeCVSDemo),
 		Config: []byte("{\"srcHost\":\"0.0.0.0:1234\", \"dstHost\":\"0.0.0.0:1234\", \"srcDir\":\"data\", \"dstDir\":\"data1\"}"),
 	}
 	resp := mgr.SubmitJob(ctx, req)
@@ -116,7 +117,7 @@ func TestCreateWorkerReturnError(t *testing.T) {
 	err := mockMaster.Init(ctx)
 	require.Nil(t, err)
 	req := &pb.SubmitJobRequest{
-		Tp:     pb.JobType_CVSDemo,
+		Tp:     int32(engineModel.JobTypeCVSDemo),
 		Config: []byte("{\"srcHost\":\"0.0.0.0:1234\", \"dstHost\":\"0.0.0.0:1234\", \"srcDir\":\"data\", \"dstDir\":\"data1\"}"),
 	}
 	resp := mgr.SubmitJob(ctx, req)
@@ -327,7 +328,7 @@ func TestJobManagerOnlineJob(t *testing.T) {
 	err := mockMaster.Init(ctx)
 	require.Nil(t, err)
 	req := &pb.SubmitJobRequest{
-		Tp:     pb.JobType_CVSDemo,
+		Tp:     int32(engineModel.JobTypeCVSDemo),
 		Config: []byte("{\"srcHost\":\"0.0.0.0:1234\", \"dstHost\":\"0.0.0.0:1234\", \"srcDir\":\"data\", \"dstDir\":\"data1\"}"),
 	}
 	resp := mgr.SubmitJob(ctx, req)

@@ -30,20 +30,20 @@ import (
 	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	dmutils "github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/cyclic"
-	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	tifilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/retry"
-	"github.com/prometheus/client_golang/prometheus"
-	"go.uber.org/zap"
 )
 
 const (
@@ -57,7 +57,6 @@ type mysqlSink struct {
 	params *sinkParams
 
 	filter *tifilter.Filter
-	cyclic *cyclic.Cyclic
 
 	txnCache           *unresolvedTxnCache
 	workers            []*mysqlSinkWorker
@@ -77,6 +76,10 @@ type mysqlSink struct {
 
 	forceReplicate bool
 	cancel         func()
+
+	// error is set when the sink has encountered an
+	// error and cannot work anymore.
+	error atomic.Error
 }
 
 // NewMySQLSink creates a new MySQL sink using schema storage
@@ -141,17 +144,6 @@ func NewMySQLSink(
 		return nil, errors.Trace(err)
 	}
 
-	// Adjust sql_mode for cyclic replication.
-	var sinkCyclic *cyclic.Cyclic = nil
-	if val, ok := opts[mark.OptCyclicConfig]; ok {
-		cfg := new(config.CyclicConfig)
-		err := cfg.Unmarshal([]byte(val))
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-		}
-		sinkCyclic = cyclic.NewCyclic(cfg)
-		dsn.Params["sql_mode"] = cyclic.RelaxSQLMode(dsn.Params["sql_mode"])
-	}
 	// NOTE: quote the string is necessary to avoid ambiguities.
 	dsn.Params["sql_mode"] = strconv.Quote(dsn.Params["sql_mode"])
 
@@ -192,7 +184,6 @@ func NewMySQLSink(
 		db:                              db,
 		params:                          params,
 		filter:                          filter,
-		cyclic:                          sinkCyclic,
 		txnCache:                        newUnresolvedTxnCache(),
 		statistics:                      metrics.NewStatistics(ctx, metrics.SinkTypeDB),
 		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
@@ -228,6 +219,10 @@ func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 func (s *mysqlSink) FlushRowChangedEvents(
 	ctx context.Context, tableID model.TableID, resolved model.ResolvedTs,
 ) (model.ResolvedTs, error) {
+	if err := s.error.Load(); err != nil {
+		return model.NewResolvedTs(0), err
+	}
+
 	v, ok := s.getTableResolvedTs(tableID)
 	if !ok || v.Less(resolved) {
 		s.tableMaxResolvedTs.Store(tableID, resolved)
@@ -237,8 +232,6 @@ func (s *mysqlSink) FlushRowChangedEvents(
 	select {
 	case <-ctx.Done():
 		return model.NewResolvedTs(0), ctx.Err()
-	case err := <-s.errCh:
-		return model.NewResolvedTs(0), err
 	case s.resolvedCh <- struct{}{}:
 		// Notify `flushRowChangedEvents` to asynchronously write data.
 	default:
@@ -255,23 +248,34 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context) {
 			worker.close()
 		}
 	}()
+outer:
 	for {
 		select {
 		case <-ctx.Done():
+			return
+		case err := <-s.errCh:
+			log.Error("mysqlSink encountered error",
+				zap.Error(err),
+				zap.String("namespace", s.params.changefeedID.Namespace),
+				zap.String("changefeed", s.params.changefeedID.ID))
+			s.error.Store(err)
 			return
 		case <-s.resolvedCh:
 		}
 		checkpointTsMap, resolvedTxnsMap := s.txnCache.Resolved(&s.tableMaxResolvedTs)
 
-		if s.cyclic != nil {
-			// Filter rows if it is origin from downstream.
-			skippedRowCount := cyclic.FilterAndReduceTxns(
-				resolvedTxnsMap, s.cyclic.FilterReplicaID(), s.cyclic.ReplicaID())
-			s.statistics.SubRowsCount(skippedRowCount)
-		}
-
 		if len(resolvedTxnsMap) != 0 {
 			s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
+		}
+
+		// This is an ad-hoc fix to prevent the checkpoint
+		// from being updated after a DML has failed to execute.
+		for _, worker := range s.workers {
+			if !worker.isNormal() {
+				// We still need to loop to the next iteration
+				// because we would like to read from `s.errCh`.
+				continue outer
+			}
 		}
 		for tableID, resolved := range checkpointTsMap {
 			s.tableCheckpointTs.Store(tableID, resolved)
@@ -453,7 +457,9 @@ func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
 	// scenario happens, the blocked goroutine will be leak.
 	select {
 	case <-ctx.Done():
+		return
 	case <-done:
+		return
 	}
 }
 
@@ -466,28 +472,41 @@ func (s *mysqlSink) broadcastFinishTxn() {
 	}
 }
 
+// dispatchAndExecTxns dispatches txns to workers and waits for them to finish.
+// 1) Try to distribute all transactions equally to each worker
+// 2) Each conflicting transaction will be executed in the order of the CommitTs
+// 3）Conflict-free transactions will be executed concurrently
 func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model.TableID][]*model.SingleTableTxn) {
 	nWorkers := s.params.workerCount
 	causality := newCausality()
-	rowsChIdx := 0
+	workerIndex := 0
 
-	sendFn := func(txn *model.SingleTableTxn, keys [][]byte, idx int) {
-		causality.add(keys, idx)
-		s.workers[idx].appendTxn(ctx, txn)
+	sendFn := func(txn *model.SingleTableTxn, keys [][]byte, workerIndex int) {
+		causality.add(keys, workerIndex)
+		s.workers[workerIndex].appendTxn(ctx, txn)
 	}
+
 	resolveConflict := func(txn *model.SingleTableTxn) {
 		keys := genTxnKeys(txn)
-		if conflict, idx := causality.detectConflict(keys); conflict {
-			if idx >= 0 {
-				sendFn(txn, keys, idx)
+		if conflict, conflictWorkerIndex := causality.detectConflict(keys); conflict {
+			// This means that the conflict only occurs on one worker,
+			// and we can just send the transaction to that worker to queue it.
+			if conflictWorkerIndex >= 0 {
+				// Send all these conflicting transactions
+				// to the same worker queue.
+				sendFn(txn, keys, conflictWorkerIndex)
 				return
 			}
+			// This means that the conflict occurs on multiple workers,
+			// and we have to wait all workers to finish their current transactions.
 			s.notifyAndWaitExec(ctx)
 			causality.reset()
 		}
-		sendFn(txn, keys, rowsChIdx)
-		rowsChIdx++
-		rowsChIdx = rowsChIdx % nWorkers
+		// Distribute the data to the next worker.
+		// Make txn more evenly distributed to each worker.
+		sendFn(txn, keys, workerIndex)
+		workerIndex++
+		workerIndex = workerIndex % nWorkers
 	}
 	h := newTxnsHeap(txnsGroup)
 	h.iter(func(txn *model.SingleTableTxn) {
@@ -547,6 +566,9 @@ func (s *mysqlSink) RemoveTable(ctx context.Context, tableID model.TableID) erro
 				zap.Any("resolvedTs", maxResolved.Ts),
 				zap.Uint64("checkpointTs", s.getTableCheckpointTs(tableID).Ts))
 		default:
+			if err := s.error.Load(); err != nil {
+				return err
+			}
 			maxResolved, ok := s.getTableResolvedTs(tableID)
 			if !ok {
 				log.Info("No table resolvedTs is found", zap.Int64("tableID", tableID))
@@ -765,15 +787,6 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 	dmls := &preparedDMLs{
 		sqls:   sqls,
 		values: values,
-	}
-	if s.cyclic != nil && len(rows) > 0 {
-		// Write mark table with the current replica ID.
-		row := rows[0]
-		updateMark := s.cyclic.UdpateSourceTableCyclicMark(
-			row.Table.Schema, row.Table.Table, uint64(bucket), replicaID, row.StartTs)
-		dmls.markSQL = updateMark
-		// rowCount is used in statistics, and for simplicity,
-		// we do not count mark table rows in rowCount.
 	}
 	dmls.rowCount = rowCount
 	return dmls

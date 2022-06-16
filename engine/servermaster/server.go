@@ -405,7 +405,7 @@ func (s *Server) ReportExecutorWorkload(
 	// TODO: pass executor workload to capacity manager
 	log.L().Debug("receive workload report", zap.String("executor", req.ExecutorId))
 	for _, res := range req.GetWorkloads() {
-		log.L().Debug("workload", zap.Int32("type", int32(res.GetTp())), zap.Int32("usage", res.GetUsage()))
+		log.L().Debug("workload", zap.Int32("type", res.GetTp()), zap.Int32("usage", res.GetUsage()))
 	}
 	return &pb.ExecWorkloadResponse{}, nil
 }
@@ -651,10 +651,9 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 
 	// start background managers
 	s.executorManager.Start(ctx)
+	defer s.executorManager.Stop()
 	s.resourceManagerService.StartBackgroundWorker()
-	defer func() {
-		s.resourceManagerService.Stop()
-	}()
+	defer s.resourceManagerService.Stop()
 
 	clients := client.NewClientManager()
 	err = clients.AddMasterClient(ctx, []string{s.cfg.MasterAddr})
