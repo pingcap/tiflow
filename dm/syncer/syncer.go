@@ -265,13 +265,6 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	syncer.handleJobFunc = syncer.handleJob
 	syncer.cli = etcdClient
 
-	metricProxies := metrics.DefaultMetricsProxies
-	if syncer.cfg.MetricsFactory != nil {
-		metricProxies = &metrics.Proxies{}
-		metricProxies.Init(syncer.cfg.MetricsFactory)
-	}
-	syncer.metricsProxies = metricProxies.CacheForOneTask(syncer.cfg.Name, syncer.cfg.WorkerName, syncer.cfg.SourceID)
-
 	syncer.checkpoint = NewRemoteCheckPoint(syncer.tctx, cfg, syncer.metricsProxies, syncer.checkpointID())
 
 	syncer.binlogType = binlogstream.RelayToBinlogType(relay)
@@ -469,6 +462,14 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		rollbackHolder.Add(fr.FuncRollback{Name: "remove-active-realylog", Fn: s.removeActiveRelayLog})
 	}
 	s.reset()
+
+	metricProxies := metrics.DefaultMetricsProxies
+	if s.cfg.MetricsFactory != nil {
+		metricProxies = &metrics.Proxies{}
+		metricProxies.Init(s.cfg.MetricsFactory)
+	}
+	s.metricsProxies = metricProxies.CacheForOneTask(s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID)
+
 	return nil
 }
 

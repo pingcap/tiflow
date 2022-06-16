@@ -68,6 +68,7 @@ func NewMockMasterImpl(masterID, id frameModel.MasterID) *MockMasterImpl {
 	ret := &MockMasterImpl{
 		masterID:          masterID,
 		id:                id,
+		tp:                FakeJobMaster,
 		dispatchedWorkers: make(chan WorkerHandle, 1),
 		dispatchedResult:  make(chan error, 1),
 		updatedStatuses:   make(chan *frameModel.WorkerStatus, 1024),

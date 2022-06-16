@@ -16,6 +16,7 @@ package promutil
 import (
 	"testing"
 
+	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
@@ -125,7 +126,7 @@ func TestNewCounter(t *testing.T) {
 	projectID := tent.ProjectID()
 	labelKey := "k0"
 	labelValue := "v0"
-	jobType := "DM"
+	jobType := engineModel.JobTypeDM
 	jobID := "job0"
 	jobKey := constLabelJobKey
 	projectKey := constLabelProjectKey
@@ -284,7 +285,7 @@ func TestNewCounterFailConstLabelConflict(t *testing.T) {
 			"user0",
 			"proj0",
 		),
-		"DM",
+		engineModel.JobTypeDM,
 		"job0",
 	)
 	_ = factory.NewCounter(prometheus.CounterOpts{
@@ -309,7 +310,7 @@ func TestNewCounterVec(t *testing.T) {
 			"user0",
 			"proj0",
 		),
-		"DM",
+		engineModel.JobTypeDM,
 		"job0",
 	)
 	counterVec := factory.NewCounterVec(prometheus.CounterOpts{

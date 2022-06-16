@@ -73,15 +73,8 @@ message HeartbeatResponse {
     repeated string addrs = 3;
 }
 
-enum JobType {
-    CVSDemo = 0;
-    DM = 1;
-    CDC = 2;
-    FakeJob = 3;
-}
-
 message SubmitJobRequest {
-    JobType tp = 1;
+    int32 tp = 1;
     bytes config = 2;
     ProjectInfo project_info = 3;
     // TODO: Resource Limit
@@ -111,7 +104,7 @@ message QueryJobResponse {
         finished = 4;
         stopped = 5;
     }
-    int64   tp = 1;
+    int32   tp = 1;
     bytes config = 2;
     JobStatus status = 3;
     WorkerInfo job_master_info = 4;
@@ -166,7 +159,7 @@ message ScheduleTaskResponse {
 }
 
 message ExecWorkload {
-    JobType tp = 1;
+    int32 tp = 1;
     int32 usage = 2;
 }
 
