@@ -16,7 +16,6 @@ package writer
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"net/url"
 	"os"
@@ -34,8 +33,10 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/uber-go/atomic"
 	"go.uber.org/multierr"
 )
 
@@ -302,9 +303,7 @@ func TestLogWriterFlushLog(t *testing.T) {
 		},
 	}
 
-	dir, err := ioutil.TempDir("", "redo-FlushLog")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	for _, tt := range tests {
 		controller := gomock.NewController(t)
@@ -393,9 +392,7 @@ func TestLogWriterEmitCheckpointTs(t *testing.T) {
 		},
 	}
 
-	dir, err := ioutil.TempDir("", "redo-EmitCheckpointTs")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	for _, tt := range tests {
 		controller := gomock.NewController(t)
@@ -485,9 +482,7 @@ func TestLogWriterEmitResolvedTs(t *testing.T) {
 		},
 	}
 
-	dir, err := ioutil.TempDir("", "redo-ResolvedTs")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	for _, tt := range tests {
 		controller := gomock.NewController(t)
@@ -567,9 +562,7 @@ func TestLogWriterGetCurrentResolvedTs(t *testing.T) {
 		},
 	}
 
-	dir, err := ioutil.TempDir("", "redo-GetCurrentResolvedTs")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	for _, tt := range tests {
 		mockWriter := &mockFileWriter{}
@@ -625,7 +618,10 @@ func TestNewLogWriter(t *testing.T) {
 		CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 		FlushIntervalInMs: 5,
 	}
-	ll, err := NewLogWriter(ctx, cfg)
+	uuidGen := uuid.NewConstGenerator("const-uuid")
+	ll, err := NewLogWriter(ctx, cfg,
+		WithUUIDGenerator(func() uuid.Generator { return uuidGen }),
+	)
 	require.Nil(t, err)
 	time.Sleep(time.Duration(defaultGCIntervalInMs+1) * time.Millisecond)
 	require.Equal(t, map[int64]uint64{}, ll.meta.ResolvedTsList)
@@ -650,9 +646,7 @@ func TestNewLogWriter(t *testing.T) {
 	require.Nil(t, err)
 	require.NotSame(t, ll, ll2)
 
-	dir, err := ioutil.TempDir("", "redo-NewLogWriter")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 	fileName := fmt.Sprintf("%s_%s_%d_%s%s", "cp", "test-changefeed", time.Now().Unix(), common.DefaultMetaFileType, common.MetaEXT)
 	path := filepath.Join(dir, fileName)
 	f, err := os.Create(path)
@@ -748,8 +742,11 @@ func TestWriterRedoGC(t *testing.T) {
 		mockWriter.On("Close").Return(nil)
 		mockWriter.On("IsRunning").Return(false)
 
+		gcRunCounter := atomic.NewUint32(0)
 		if tt.args.isRunning {
-			mockWriter.On("GC", mock.Anything).Return(nil)
+			mockWriter.On("GC", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+				gcRunCounter.Inc()
+			})
 		}
 		writer := LogWriter{
 			rowWriter: mockWriter,
@@ -758,7 +755,15 @@ func TestWriterRedoGC(t *testing.T) {
 			cfg:       cfg,
 		}
 		go writer.runGC(context.Background())
-		time.Sleep(time.Duration(defaultGCIntervalInMs+1) * time.Millisecond)
+		if tt.args.isRunning {
+			require.Eventually(t, func() bool {
+				if gcRunCounter.Load() < uint32(2) {
+					return false
+				}
+				return true
+			}, time.Second*1, time.Millisecond,
+				"gc should be called twice, but actual gcRunCounter is: %d", gcRunCounter.Load())
+		}
 
 		writer.Close()
 		mockWriter.AssertNumberOfCalls(t, "Close", 2)
@@ -828,10 +833,9 @@ func TestDeleteAllLogs(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		dir, err := ioutil.TempDir("", "redo-DeleteAllLogs")
-		require.Nil(t, err)
+		dir := t.TempDir()
 		path := filepath.Join(dir, fileName)
-		_, err = os.Create(path)
+		_, err := os.Create(path)
 		require.Nil(t, err)
 		path = filepath.Join(dir, fileName1)
 		_, err = os.Create(path)
@@ -880,7 +884,6 @@ func TestDeleteAllLogs(t *testing.T) {
 				require.True(t, os.IsNotExist(err), tt.name)
 			}
 		}
-		os.RemoveAll(dir)
 		getAllFilesInS3 = origin
 	}
 }

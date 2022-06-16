@@ -24,19 +24,23 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
+	"github.com/pingcap/tiflow/pkg/retry"
 )
 
 const (
-	gcCheckInterval = 10 * time.Second
-	gcTimeout       = 10 * time.Second
+	gcCheckInterval          = 10 * time.Second
+	gcTimeout                = 10 * time.Second
+	gcOnceRetryMinIntervalMs = 100
+	gcOnceRetryMaxIntervalMs = 100
 )
 
-type gcHandlerFunc = func(ctx context.Context, meta *resModel.ResourceMeta) error
+// GCHandlerFunc is the type for a function that actually removes a resource.
+type GCHandlerFunc = func(ctx context.Context, meta *resModel.ResourceMeta) error
 
 // DefaultGCRunner implements GCRunner.
 type DefaultGCRunner struct {
 	client     pkgOrm.ResourceClient
-	gcHandlers map[resModel.ResourceType]gcHandlerFunc
+	gcHandlers map[resModel.ResourceType]GCHandlerFunc
 	notifyCh   chan struct{}
 
 	clock clock.Clock
@@ -45,7 +49,7 @@ type DefaultGCRunner struct {
 // NewGCRunner returns a new GCRunner.
 func NewGCRunner(
 	client pkgOrm.ResourceClient,
-	gcHandlers map[resModel.ResourceType]gcHandlerFunc,
+	gcHandlers map[resModel.ResourceType]GCHandlerFunc,
 ) *DefaultGCRunner {
 	return &DefaultGCRunner{
 		client:     client,
@@ -72,7 +76,7 @@ func (r *DefaultGCRunner) Run(ctx context.Context) error {
 		}
 
 		timeoutCtx, cancel := context.WithTimeout(ctx, gcTimeout)
-		err := r.gcOnce(timeoutCtx)
+		err := r.gcOnceWithRetry(timeoutCtx)
 		cancel()
 
 		if err != nil {
@@ -81,13 +85,22 @@ func (r *DefaultGCRunner) Run(ctx context.Context) error {
 	}
 }
 
-// Notify is used to ask GCRunner to GC the next resource immediately.
+// GCNotify is used to ask GCRunner to GC the next resource immediately.
 // It is used when we have just marked a resource as gc_pending.
-func (r *DefaultGCRunner) Notify() {
+func (r *DefaultGCRunner) GCNotify() {
 	select {
 	case r.notifyCh <- struct{}{}:
 	default:
 	}
+}
+
+func (r *DefaultGCRunner) gcOnceWithRetry(ctx context.Context) error {
+	return retry.Do(ctx, func() error {
+		return r.gcOnce(ctx)
+	},
+		retry.WithBackoffBaseDelay(gcOnceRetryMinIntervalMs),
+		retry.WithBackoffMaxDelay(gcOnceRetryMaxIntervalMs),
+	)
 }
 
 func (r *DefaultGCRunner) gcOnce(
@@ -128,9 +141,10 @@ func (r *DefaultGCRunner) gcOnce(
 
 	result, err := r.client.DeleteResource(ctx, res.ID)
 	if err != nil {
-		// If deletion fails, we do not need to retry for now.
-		log.L().Warn("Failed to delete resource after GC", zap.Any("resource", res))
-		return nil
+		log.L().Warn("Failed to delete resource meta after GC",
+			zap.Any("resource", res),
+			zap.Error(err))
+		return err
 	}
 	if result.RowsAffected() == 0 {
 		log.L().Warn("Resource is deleted unexpectedly", zap.Any("resource", res))

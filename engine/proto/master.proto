@@ -1,9 +1,10 @@
 syntax = "proto3";
 
-package pb;
+package enginepb;
 
 import "error.proto";
 import "metastore.proto";
+import "projects.proto";
 
 // I'm trying to phase out the communication protocal.
 // - system level
@@ -26,6 +27,8 @@ service Master {
     rpc PauseJob(PauseJobRequest) returns(PauseJobResponse) {}
 
     rpc CancelJob(CancelJobRequest) returns(CancelJobResponse) {}
+
+    rpc DebugJob(DebugJobRequest) returns(DebugJobResponse) {}
 
     //GetMembers returns the available master members
     //rpc GetMembers(GetMembersRequest) {}
@@ -70,23 +73,16 @@ message HeartbeatResponse {
     repeated string addrs = 3;
 }
 
-enum JobType {
-    CVSDemo = 0;
-    DM = 1;
-    CDC = 2;
-    FakeJob = 3;
-}
-
 message SubmitJobRequest {
-    JobType tp = 1;
+    int32 tp = 1;
     bytes config = 2;
-    // User name, token, etc...
-    string user = 3;
+    ProjectInfo project_info = 3;
     // TODO: Resource Limit
 }
 
 message QueryJobRequest {
     string job_id = 1;
+    ProjectInfo project_info = 2;
 }
 
 message WorkerInfo {
@@ -108,7 +104,7 @@ message QueryJobResponse {
         finished = 4;
         stopped = 5;
     }
-    int64   tp = 1;
+    int32   tp = 1;
     bytes config = 2;
     JobStatus status = 3;
     WorkerInfo job_master_info = 4;
@@ -116,19 +112,18 @@ message QueryJobResponse {
 }
 
 message CancelJobRequest {
-    int32 job_id = 1 [deprecated=true];
-    string job_id_str = 2;
+    string job_id = 1;
+    ProjectInfo project_info = 2;
 }
 
 message PauseJobRequest {
-    int32 job_id = 1 [deprecated=true];
-    string job_id_str = 2;
+    string job_id = 1 ;
+    ProjectInfo project_info = 2;
 }
 
 message SubmitJobResponse {
     Error err = 1;
-    int32 job_id = 2 [deprecated=true];
-    string job_id_str = 3;
+    string  job_id = 2;
 }
 
 message PauseJobResponse {
@@ -164,7 +159,7 @@ message ScheduleTaskResponse {
 }
 
 message ExecWorkload {
-    JobType tp = 1;
+    int32 tp = 1;
     int32 usage = 2;
 }
 
@@ -185,4 +180,15 @@ message PersistResourceRequest {
 
 message PersistResourceResponse {
     Error err = 1;
+}
+
+message DebugJobRequest {
+    string job_id = 1;
+    string command = 2;
+    string json_arg = 3;
+}
+
+message DebugJobResponse {
+    Error err = 1;
+    string json_ret = 2;
 }

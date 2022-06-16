@@ -34,6 +34,7 @@ LINUX := "Linux"
 MAC   := "Darwin"
 CDC_PKG := github.com/pingcap/tiflow
 DM_PKG := github.com/pingcap/tiflow/dm
+ENGINE_PKG := github.com/pingcap/tiflow/engine
 PACKAGE_LIST := go list ./... | grep -vE 'vendor|proto|tiflow\/tests|integration|testing_utils|pb|pbmock|tiflow\/bin'
 PACKAGE_LIST_WITHOUT_DM_ENGINE := $(PACKAGE_LIST) | grep -vE 'github.com/pingcap/tiflow/dm|github.com/pingcap/tiflow/engine'
 DM_PACKAGE_LIST := go list github.com/pingcap/tiflow/dm/... | grep -vE 'pb|pbmock|dm/cmd'
@@ -85,6 +86,13 @@ LDFLAGS += -X "$(DM_PKG)/pkg/utils.BuildTS=$(BUILDTS)"
 LDFLAGS += -X "$(DM_PKG)/pkg/utils.GitHash=$(GITHASH)"
 LDFLAGS += -X "$(DM_PKG)/pkg/utils.GitBranch=$(GITBRANCH)"
 LDFLAGS += -X "$(DM_PKG)/pkg/utils.GoVersion=$(GOVERSION)"
+
+# Engine LDFLAGS.
+LDFLAGS += -X "$(ENGINE_PKG)/pkg/version.ReleaseVersion=$(RELEASE_VERSION)"
+LDFLAGS += -X "$(ENGINE_PKG)/pkg/version.BuildTS=$(BUILDTS)"
+LDFLAGS += -X "$(ENGINE_PKG)/pkg/version.GitHash=$(GITHASH)"
+LDFLAGS += -X "$(ENGINE_PKG)/pkg/version.GitBranch=$(GITBRANCH)"
+LDFLAGS += -X "$(ENGINE_PKG)/pkg/version.GoVersion=$(GOVERSION)"
 
 default: build buildsucc
 
@@ -190,6 +198,10 @@ terror_check:
 	@echo "check terror conflict"
 	@cd dm && _utils/terror_gen/check.sh
 
+check-engine-errdoc: tools/bin/errdoc-gen
+	@echo "generate engine errors.toml"
+	./engine/tools/check-errdoc.sh
+
 check-copyright:
 	@echo "check-copyright"
 	@./scripts/check-copyright.sh
@@ -234,7 +246,7 @@ check-static: tools/bin/golangci-lint
 	tools/bin/golangci-lint run --timeout 10m0s --skip-files kv_gen --skip-dirs dm,tests
 	cd dm && ../tools/bin/golangci-lint run --timeout 10m0s
 
-check: check-copyright fmt check-static tidy terror_check errdoc check-leaktest-added check-merge-conflicts check-ticdc-dashboard check-diff-line-width swagger-spec
+check: check-copyright fmt check-static tidy terror_check errdoc check-engine-errdoc check-leaktest-added check-merge-conflicts check-ticdc-dashboard check-diff-line-width swagger-spec
 	@git --no-pager diff --exit-code || echo "Please add changed files!"
 
 integration_test_coverage: tools/bin/gocovmerge tools/bin/goveralls
@@ -308,7 +320,7 @@ define run_dm_unit_test
 	mkdir -p $(DM_TEST_DIR)
 	$(FAILPOINT_ENABLE)
 	@export log_level=error; \
-	$(GOTEST) -timeout 5m -covermode=atomic -coverprofile="$(DM_TEST_DIR)/cov.unit_test.out" $(1) \
+	$(GOTEST) -timeout 10m -covermode=atomic -coverprofile="$(DM_TEST_DIR)/cov.unit_test.out" $(1) \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(FAILPOINT_DISABLE)
 endef
@@ -324,7 +336,7 @@ dm_unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin/goc
 	mkdir -p $(DM_TEST_DIR)
 	$(FAILPOINT_ENABLE)
 	@export log_level=error; \
-	CGO_ENABLED=1 tools/bin/gotestsum --junitfile dm-junit-report.xml -- -v -timeout 5m -p $(P) --race \
+	CGO_ENABLED=1 tools/bin/gotestsum --junitfile dm-junit-report.xml -- -v -timeout 10m -p $(P) --race \
 	-covermode=atomic -coverprofile="$(DM_TEST_DIR)/cov.unit_test.out" $(DM_PACKAGES) \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
 	tools/bin/gocov convert "$(DM_TEST_DIR)/cov.unit_test.out" | tools/bin/gocov-xml > dm-coverage.xml
@@ -463,6 +475,9 @@ tools/bin/msgp: tools/check/go.mod
 tools/bin/protoc:
 	./scripts/download-protoc.sh
 
+tools/bin/goimports:
+	cd tools/check && $(GO) build -mod=mod -o ../bin/goimports golang.org/x/tools/cmd/goimports
+
 check_failpoint_ctl: tools/bin/failpoint-ctl
 
 failpoint-enable: check_failpoint_ctl
@@ -473,30 +488,29 @@ failpoint-disable: check_failpoint_ctl
 
 engine: df-master df-executor df-master-client df-demo
 
-df-proto:
+df-proto: tools/bin/protoc tools/bin/protoc-gen-gogofaster tools/bin/goimports
 	./engine/generate-proto.sh
 
 df-master:
-	$(GOBUILD) -o bin/df-master ./engine/cmd/master
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/df-master ./engine/cmd/master
 	cp ./bin/df-master ./engine/ansible/roles/common/files/master.bin
 
 df-executor:
-	$(GOBUILD) -o bin/df-executor ./engine/cmd/executor
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/df-executor ./engine/cmd/executor
 	cp ./bin/df-executor ./engine/ansible/roles/common/files/executor.bin
 
 df-master-client:
-	$(GOBUILD) -o bin/df-master-client ./engine/cmd/master-client
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/df-master-client ./engine/cmd/master-client
 
 df-demo:
-	$(GOBUILD) -o bin/df-demoserver ./engine/cmd/demoserver
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/df-demoserver ./engine/cmd/demoserver
 	cp ./bin/df-demoserver ./engine/ansible/roles/common/files/demoserver.bin
 
 df-chaos-case:
-	$(GOBUILD) -o bin/df-chaos-case ./engine/chaos/cases
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/df-chaos-case ./engine/chaos/cases
 
-df-kvmock: tools/bin/mockgen tools/bin/protoc tools/bin/protoc-gen-gogofaster
-	tools/bin/mockgen -package mock github.com/pingcap/tiflow/engine/pkg/meta/metaclient KVClient \
-	> engine/pkg/meta/kvclient/mock/mockclient.go
+df-mock: tools/bin/mockgen
+	scripts/generate-engine-mock.sh
 
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))

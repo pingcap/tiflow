@@ -37,6 +37,11 @@ func DecodeKey(key []byte) (uniqueID uint32, tableID uint64, startTs, CRTs uint6
 	return
 }
 
+// DecodeCRTs decodes CRTs from the given key.
+func DecodeCRTs(key []byte) uint64 {
+	return binary.BigEndian.Uint64(key[12:])
+}
+
 // EncodeTsKey encodes uniqueID, tableID, CRTs.
 func EncodeTsKey(uniqueID uint32, tableID uint64, ts uint64) []byte {
 	// uniqueID, tableID, CRTs.

@@ -16,10 +16,12 @@ package promutil
 import (
 	"net/http"
 
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
-	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	engineModel "github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
 // [NOTICE]: SHOULD NOT use following functions. USE functions in 'util.go' INSTEAD.
@@ -34,44 +36,53 @@ func HTTPHandlerForMetricImpl(gather prometheus.Gatherer) http.Handler {
 }
 
 // NewFactory4MasterImpl return a Factory for jobmaster
-func NewFactory4MasterImpl(reg *Registry, info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID) Factory {
-	return &wrappingFactory{
-		r:      reg,
-		prefix: jobType,
-		id:     jobID,
-		constLabels: prometheus.Labels{
-			constLabelTenantKey:  info.TenantID,
-			constLabelProjectKey: info.ProjectID,
-			constLabelJobKey:     jobID,
-		},
-	}
+func NewFactory4MasterImpl(reg *Registry, info tenant.ProjectInfo, jobType engineModel.JobType, jobID engineModel.JobID) Factory {
+	return NewAutoRegisterFactory(
+		NewWrappingFactory(
+			NewPromFactory(),
+			jobType.String(),
+			prometheus.Labels{
+				constLabelTenantKey:  info.TenantID(),
+				constLabelProjectKey: info.ProjectID(),
+				constLabelJobKey:     jobID,
+			},
+		),
+		reg,
+		jobID,
+	)
 }
 
 // NewFactory4WorkerImpl return a Factory for worker
-func NewFactory4WorkerImpl(reg *Registry, info tenant.ProjectInfo, jobType libModel.JobType, jobID libModel.MasterID,
-	workerID libModel.WorkerID,
+func NewFactory4WorkerImpl(reg *Registry, info tenant.ProjectInfo, jobType engineModel.JobType, jobID engineModel.JobID,
+	workerID frameModel.WorkerID,
 ) Factory {
-	return &wrappingFactory{
-		r:      reg,
-		prefix: jobType,
-		id:     workerID,
-		constLabels: prometheus.Labels{
-			constLabelTenantKey:  info.TenantID,
-			constLabelProjectKey: info.ProjectID,
-			constLabelJobKey:     jobID,
-			constLabelWorkerKey:  workerID,
-		},
-	}
+	return NewAutoRegisterFactory(
+		NewWrappingFactory(
+			NewPromFactory(),
+			jobType.String(),
+			prometheus.Labels{
+				constLabelTenantKey:  info.TenantID(),
+				constLabelProjectKey: info.ProjectID(),
+				constLabelJobKey:     jobID,
+				constLabelWorkerKey:  workerID,
+			},
+		),
+		reg,
+		workerID,
+	)
 }
 
 // NewFactory4FrameworkImpl return a Factory for dataflow framework
 func NewFactory4FrameworkImpl(reg *Registry) Factory {
-	return &wrappingFactory{
-		r:      reg,
-		prefix: frameworkMetricPrefix,
-		id:     frameworkID,
-		constLabels: prometheus.Labels{
-			constLabelFrameworkKey: "true",
-		},
-	}
+	return NewAutoRegisterFactory(
+		NewWrappingFactory(
+			NewPromFactory(),
+			frameworkMetricPrefix,
+			prometheus.Labels{
+				constLabelFrameworkKey: "true",
+			},
+		),
+		reg,
+		frameworkID,
+	)
 }

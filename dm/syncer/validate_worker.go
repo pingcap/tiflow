@@ -179,6 +179,11 @@ func (vw *validateWorker) validateTableChange() {
 	// clear accumulated row counter
 	vw.accuRowCount.Store(0)
 
+	if vw.getAllPendingRowCount() == 0 {
+		vw.L.Debug("pending row count = 0, skip validation")
+		return
+	}
+
 	failedChanges := make(map[string]map[string]*validateFailedRow)
 	for k, tblChange := range vw.pendingChangesMap {
 		var insertUpdateChanges, deleteChanges []*rowValidationJob
@@ -462,6 +467,10 @@ func (vw *validateWorker) setPendingRowCountsAndSize(newCounts []int64, newSize 
 	vw.validator.addPendingRowSize(diff)
 }
 
+func (vw *validateWorker) getAllPendingRowCount() int64 {
+	return vw.pendingRowCounts[rowInsert] + vw.pendingRowCounts[rowUpdated] + vw.pendingRowCounts[rowDeleted]
+}
+
 type validateCompareContext struct {
 	logger      log.Logger
 	sourceTable *cdcmodel.TableName
@@ -479,7 +488,7 @@ func (c *validateCompareContext) compareData(key string, sourceData, targetData 
 		str1, str2 := data1.String, data2.String
 		if str1 == str2 {
 			continue
-		} else if column.FieldType.Tp == tidbmysql.TypeFloat || column.FieldType.Tp == tidbmysql.TypeDouble {
+		} else if column.FieldType.GetType() == tidbmysql.TypeFloat || column.FieldType.GetType() == tidbmysql.TypeDouble {
 			// source and target data have different precision?
 			num1, err1 := strconv.ParseFloat(str1, 64)
 			num2, err2 := strconv.ParseFloat(str2, 64)

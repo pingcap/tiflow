@@ -27,9 +27,9 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/pingcap/tiflow/engine/client"
-	cvs "github.com/pingcap/tiflow/engine/jobmaster/cvsJob"
-	"github.com/pingcap/tiflow/engine/lib"
-	"github.com/pingcap/tiflow/engine/pb"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
+	cvs "github.com/pingcap/tiflow/engine/jobmaster/cvsjob"
+	engineModel "github.com/pingcap/tiflow/engine/model"
 )
 
 type Config struct {
@@ -149,16 +149,16 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr stri
 	fmt.Printf("test is ready\n")
 
 	resp, err := masterclient.SubmitJob(ctx, &pb.SubmitJobRequest{
-		Tp:     pb.JobType_CVSDemo,
+		Tp:     int32(engineModel.JobTypeCVSDemo),
 		Config: configBytes,
 	})
 	require.Nil(t, err)
 	require.Nil(t, resp.Err)
 
-	fmt.Printf("job id %s\n", resp.JobIdStr)
+	fmt.Printf("job id %s\n", resp.JobId)
 
 	queryReq := &pb.QueryJobRequest{
-		JobId: resp.JobIdStr,
+		JobId: resp.JobId,
 	}
 	// continue to query
 	for {
@@ -166,19 +166,19 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr stri
 		queryResp, err := masterclient.QueryJob(ctx1, queryReq)
 		require.NoError(t, err)
 		require.Nil(t, queryResp.Err)
-		require.Equal(t, queryResp.Tp, int64(lib.CvsJobMaster))
+		require.Equal(t, queryResp.Tp, int32(engineModel.JobTypeCVSDemo))
 		cancel()
-		fmt.Printf("query id %s, status %d, time %s\n", resp.JobIdStr, int(queryResp.Status), time.Now().Format("2006-01-02 15:04:05"))
+		fmt.Printf("query id %s, status %d, time %s\n", resp.JobId, int(queryResp.Status), time.Now().Format("2006-01-02 15:04:05"))
 		if queryResp.Status == pb.QueryJobResponse_finished {
 			break
 		}
 		time.Sleep(time.Second)
 	}
-	fmt.Printf("job id %s checking\n", resp.JobIdStr)
+	fmt.Printf("job id %s checking\n", resp.JobId)
 	// check files
 	demoResp, err := democlient.client.CheckDir(ctx, &pb.CheckDirRequest{
 		Dir: cfg.DstDir,
 	})
-	require.Nil(t, err, resp.JobIdStr)
+	require.Nil(t, err, resp.JobId)
 	require.Empty(t, demoResp.ErrMsg, demoResp.ErrFileIdx)
 }

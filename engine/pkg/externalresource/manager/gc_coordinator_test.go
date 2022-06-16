@@ -21,7 +21,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 )
@@ -106,9 +106,9 @@ func (h *gcTestHelper) LoadDefaultMockData(t *testing.T) {
 	h.ExecInfo.AddExecutor("executor-2")
 	h.ExecInfo.AddExecutor("executor-3")
 
-	h.JobInfo.SetJobStatus("job-1", libModel.MasterStatusInit)
-	h.JobInfo.SetJobStatus("job-2", libModel.MasterStatusInit)
-	h.JobInfo.SetJobStatus("job-3", libModel.MasterStatusInit)
+	h.JobInfo.SetJobStatus("job-1", frameModel.MasterStatusInit)
+	h.JobInfo.SetJobStatus("job-2", frameModel.MasterStatusInit)
+	h.JobInfo.SetJobStatus("job-3", frameModel.MasterStatusInit)
 
 	err := h.Meta.CreateResource(context.Background(), &resModel.ResourceMeta{
 		ID:       "resource-1",
@@ -189,6 +189,28 @@ func TestGCCoordinatorRemoveJobs(t *testing.T) {
 	helper.Notifier.WaitNotify(t, 1*time.Second)
 	require.Eventually(t, func() bool {
 		return helper.IsGCPending(t, "resource-3")
+	}, 1*time.Second, 10*time.Millisecond)
+
+	helper.Close()
+}
+
+func TestGCCoordinatorRemoveJobAndExecutor(t *testing.T) {
+	helper := newGCTestHelper()
+	helper.LoadDefaultMockData(t)
+	helper.Start()
+
+	require.False(t, helper.IsGCPending(t, "resource-1"))
+	require.False(t, helper.IsGCPending(t, "resource-2"))
+
+	helper.JobInfo.RemoveJob("job-1")
+	helper.ExecInfo.RemoveExecutor("executor-2")
+
+	helper.Notifier.WaitNotify(t, 1*time.Second)
+	require.Eventually(t, func() bool {
+		return helper.IsGCPending(t, "resource-1")
+	}, 1*time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool {
+		return helper.IsRemoved(t, "resource-2")
 	}, 1*time.Second, 10*time.Millisecond)
 
 	helper.Close()

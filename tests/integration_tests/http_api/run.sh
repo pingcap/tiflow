@@ -7,8 +7,7 @@ source $CUR/../_utils/test_prepare
 WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
-TLS_DIR=$(cd $CUR/../_certificates && pwd)
-MAX_RETRIES=20
+MAX_RETRIES=50
 
 function run() {
 	# mysql and kafka are the same
@@ -20,101 +19,79 @@ function run() {
 
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
-	start_tidb_cluster --workdir $WORK_DIR
-	start_tls_tidb_cluster --workdir $WORK_DIR --tlsdir $TLS_DIR
+	start_tidb_cluster --workdir $WORK_DIR --multiple-upstream-pd true
 
 	cd $WORK_DIR
 
-	echo " \
-  [security]
-   ca-path = \"$TLS_DIR/ca.pem\"
-   cert-path = \"$TLS_DIR/server.pem\"
-   key-path = \"$TLS_DIR/server-key.pem\"
-   cert-allowed-cn = [\"fake_cn\"]
-  " >$WORK_DIR/server.toml
-
-	run_cdc_server \
-		--workdir $WORK_DIR \
-		--binary $CDC_BINARY \
-		--logsuffix "_${TEST_NAME}_tls1" \
-		--pd "https://${TLS_PD_HOST}:${TLS_PD_PORT}" \
-		--addr "127.0.0.1:8300" \
-		--config "$WORK_DIR/server.toml" \
-		--tlsdir "$TLS_DIR" \
-		--cert-allowed-cn "client" # The common name of client.pem
-
-	sleep 2
-
-	run_cdc_server \
-		--workdir $WORK_DIR \
-		--binary $CDC_BINARY \
-		--logsuffix "_${TEST_NAME}_tls2" \
-		--pd "https://${TLS_PD_HOST}:${TLS_PD_PORT}" \
-		--addr "127.0.0.1:8301" \
-		--config "$WORK_DIR/server.toml" \
-		--tlsdir "$TLS_DIR" \
-		--cert-allowed-cn "client" # The common name of client.pem
-
+	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 	# wait for cdc run
-	sleep 2
+	ensure $MAX_RETRIES "$CDC_BINARY cli capture list --disable-version-check 2>&1 | grep '\"is-owner\": true'"
+	owner_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}')
+	owner_id=$($CDC_BINARY cli capture list --disable-version-check 2>&1 | awk -F '"' '/id/{print $4}')
+	echo "owner pid:" $owner_pid
+	echo "owner id" $owner_id
+
+	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8301"
+	ensure $MAX_RETRIES "$CDC_BINARY cli capture list --disable-version-check 2>&1 | grep -v \"$owner_id\" | grep id"
+	capture_id=$($CDC_BINARY cli capture list --disable-version-check 2>&1 | awk -F '"' '/id/{print $4}' | grep -v "$owner_id")
+	echo "capture_id:" $capture_id
+
+	python3 $CUR/util/test_case.py check_health
+	python3 $CUR/util/test_case.py get_status
 
 	SINK_URI="mysql://normal:123456@127.0.0.1:3306/"
+	python3 $CUR/util/test_case.py create_changefeed "$SINK_URI"
 
-	python3 $CUR/util/test_case.py check_health $TLS_DIR
-	python3 $CUR/util/test_case.py get_status $TLS_DIR
-
-	python3 $CUR/util/test_case.py create_changefeed $TLS_DIR "$SINK_URI"
-	# wait for all changefeed created
-	ensure $MAX_RETRIES check_changefeed_state "https://${TLS_PD_HOST}:${TLS_PD_PORT}" "changefeed-test1" "normal" "null" ${TLS_DIR}
-	ensure $MAX_RETRIES check_changefeed_state "https://${TLS_PD_HOST}:${TLS_PD_PORT}" "changefeed-test2" "normal" "null" ${TLS_DIR}
-	ensure $MAX_RETRIES check_changefeed_state "https://${TLS_PD_HOST}:${TLS_PD_PORT}" "changefeed-test3" "normal" "null" ${TLS_DIR}
-
-	# test processor query with no attached tables
-	#TODO: comment this test temporary
-	#python $CUR/util/test_case.py get_processor $TLS_DIR
-
-	run_sql "CREATE table test.simple0(id int primary key, val int);"
+	run_sql "CREATE table test.simple(id int primary key, val int);"
 	run_sql "CREATE table test.\`simple-dash\`(id int primary key, val int);"
-	run_sql "CREATE table test.simple1(id int primary key, val int);" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
-		--ssl-ca=$TLS_DIR/ca.pem \
-		--ssl-cert=$TLS_DIR/server.pem \
-		--ssl-key=$TLS_DIR/server-key.pem
-	run_sql "CREATE table test.simple2(id int primary key, val int);" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
-		--ssl-ca=$TLS_DIR/ca.pem \
-		--ssl-cert=$TLS_DIR/server.pem \
-		--ssl-key=$TLS_DIR/server-key.pem
-	run_sql "INSERT INTO test.simple1(id, val) VALUES (1, 1);" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
-		--ssl-ca=$TLS_DIR/ca.pem \
-		--ssl-cert=$TLS_DIR/server.pem \
-		--ssl-key=$TLS_DIR/server-key.pem
-	run_sql "INSERT INTO test.simple1(id, val) VALUES (2, 2);" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
-		--ssl-ca=$TLS_DIR/ca.pem \
-		--ssl-cert=$TLS_DIR/server.pem \
-		--ssl-key=$TLS_DIR/server-key.pem
+	run_sql "CREATE table test.simple1(id int primary key, val int);"
+	run_sql "CREATE table test.simple2(id int primary key, val int);"
+	run_sql "INSERT INTO test.simple1(id, val) VALUES (1, 1);"
+	run_sql "INSERT INTO test.simple1(id, val) VALUES (2, 2);"
+
 	# wait for above sql done in the up source
 	sleep 2
 
 	check_table_exists test.simple1 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
-	sequential_cases=(
+	sequential_cases1=(
 		"list_changefeed"
 		"get_changefeed"
 		"pause_changefeed"
 		"update_changefeed"
+	)
+
+	for case in ${sequential_cases1[@]}; do
+		python3 $CUR/util/test_case.py "$case"
+	done
+
+	# kill the cdc owner server
+	kill $owner_pid
+	# check that the new owner is elected
+	ensure $MAX_RETRIES "$CDC_BINARY cli capture list --disable-version-check 2>&1 |grep $capture_id -A1 | grep '\"is-owner\": true'"
+	# restart the old owner capture
+	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
+	ensure $MAX_RETRIES "$CDC_BINARY cli capture list --disable-version-check 2>&1 | grep '\"address\": \"127.0.0.1:8300\"'"
+
+	# make sure api works well after one owner was killed and another owner was elected
+	sequential_cases2=(
+		"list_changefeed"
+		"get_changefeed"
 		"resume_changefeed"
+		"pause_changefeed"
 		"rebalance_table"
-		"list_processor"
-		"get_processor"
 		"move_table"
+		"get_processor"
+		"list_processor"
 		"set_log_level"
 		"remove_changefeed"
 		"resign_owner"
+		"get_tso"
 	)
 
-	for case in ${sequential_cases[@]}; do
-		python3 $CUR/util/test_case.py "$case" $TLS_DIR
+	for case in ${sequential_cases2[@]}; do
+		python3 $CUR/util/test_case.py "$case"
 	done
-
 	cleanup_process $CDC_BINARY
 }
 

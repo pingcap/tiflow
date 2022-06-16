@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/pipeline"
-	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -55,21 +54,15 @@ func newPullerNode(
 
 func (n *pullerNode) tableSpan(ctx cdcContext.Context) []regionspan.Span {
 	// start table puller
-	config := ctx.ChangefeedVars().Info.Config
 	spans := make([]regionspan.Span, 0, 4)
 	spans = append(spans, regionspan.GetTableSpan(n.tableID))
-
-	if config.Cyclic.IsEnabled() && n.replicaInfo.MarkTableID != 0 {
-		spans = append(spans, regionspan.GetTableSpan(n.replicaInfo.MarkTableID))
-	}
 	return spans
 }
 
-func (n *pullerNode) Init(ctx pipeline.NodeContext) error {
-	return n.start(ctx, nil, new(errgroup.Group), false, nil)
-}
-
-func (n *pullerNode) start(ctx pipeline.NodeContext, upStream *upstream.Upstream, wg *errgroup.Group, isActorMode bool, sorter *sorterNode) error {
+func (n *pullerNode) start(ctx pipeline.NodeContext,
+	up *upstream.Upstream, wg *errgroup.Group,
+	sorter *sorterNode,
+) error {
 	n.wg = wg
 	ctxC, cancel := context.WithCancel(ctx)
 	ctxC = contextutil.PutTableInfoInCtx(ctxC, n.tableID, n.tableName)
@@ -81,11 +74,11 @@ func (n *pullerNode) start(ctx pipeline.NodeContext, upStream *upstream.Upstream
 	// See also: https://github.com/pingcap/tiflow/issues/2301.
 	plr := puller.NewPuller(
 		ctxC,
-		upStream.PDClient,
-		upStream.GrpcPool,
-		upStream.RegionCache,
-		upStream.KVStorage,
-		upStream.PDClock,
+		up.PDClient,
+		up.GrpcPool,
+		up.RegionCache,
+		up.KVStorage,
+		up.PDClock,
 		n.changefeed,
 		n.replicaInfo.StartTs,
 		n.tableSpan(ctx),
@@ -105,26 +98,10 @@ func (n *pullerNode) start(ctx pipeline.NodeContext, upStream *upstream.Upstream
 					continue
 				}
 				pEvent := model.NewPolymorphicEvent(rawKV)
-				if isActorMode {
-					sorter.handleRawEvent(ctx, pEvent)
-				} else {
-					ctx.SendToNextNode(pmessage.PolymorphicEventMessage(pEvent))
-				}
+				sorter.handleRawEvent(ctx, pEvent)
 			}
 		}
 	})
 	n.cancel = cancel
 	return nil
-}
-
-// Receive receives the message from the previous node
-func (n *pullerNode) Receive(ctx pipeline.NodeContext) error {
-	// just forward any messages to the next node
-	ctx.SendToNextNode(ctx.Message())
-	return nil
-}
-
-func (n *pullerNode) Destroy(ctx pipeline.NodeContext) error {
-	n.cancel()
-	return n.wg.Wait()
 }

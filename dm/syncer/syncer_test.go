@@ -40,7 +40,9 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"github.com/stretchr/testify/require"
@@ -58,6 +60,7 @@ import (
 	"github.com/pingcap/tidb/parser/ast"
 	pmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/filter"
+	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
 	"go.uber.org/zap"
 )
@@ -126,7 +129,7 @@ type MockStreamProducer struct {
 	events []*replication.BinlogEvent
 }
 
-func (mp *MockStreamProducer) generateStreamer(location binlog.Location) (reader.Streamer, error) {
+func (mp *MockStreamProducer) GenerateStreamer(location binlog.Location) (reader.Streamer, error) {
 	if location.Position.Pos == 4 {
 		return &MockStreamer{mp.events, 0, false}, nil
 	}
@@ -371,6 +374,7 @@ func (s *testSyncerSuite) TestSelectTable(c *C) {
 	c.Assert(err, IsNil)
 	syncer := NewSyncer(cfg, nil, nil)
 	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
 	c.Assert(err, IsNil)
 	c.Assert(syncer.genRouter(), IsNil)
 
@@ -507,6 +511,7 @@ func (s *testSyncerSuite) TestIgnoreTable(c *C) {
 	c.Assert(err, IsNil)
 	syncer := NewSyncer(cfg, nil, nil)
 	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
 	c.Assert(err, IsNil)
 	c.Assert(syncer.genRouter(), IsNil)
 
@@ -783,6 +788,10 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	syncer.ddlDBConn = dbconn.NewDBConn(s.cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
 	syncer.downstreamTrackConn = dbconn.NewDBConn(s.cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
 	syncer.schemaTracker, err = schema.NewTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.downstreamTrackConn)
+	c.Assert(err, IsNil)
+
+	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
+
 	mock.ExpectBegin()
 	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", pmysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
@@ -794,12 +803,13 @@ func (s *testSyncerSuite) TestRun(c *C) {
 			AddRow("t_1", "create table t_1(id int primary key, name varchar(24), KEY `index1` (`name`))"))
 
 	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
-	c.Assert(err, IsNil)
 	c.Assert(syncer.Type(), Equals, pb.UnitType_Sync)
 
 	syncer.columnMapping, err = cm.NewMapping(s.cfg.CaseSensitive, s.cfg.ColumnMappingRules)
 	c.Assert(err, IsNil)
 	c.Assert(syncer.genRouter(), IsNil)
+
+	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
 
 	syncer.setupMockCheckpoint(c, checkPointDBConn, checkPointMock)
 
@@ -821,12 +831,12 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	}
 
 	mockStreamerProducer := &MockStreamProducer{s.generateEvents(events1, c)}
-	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
+	mockStreamer, err := mockStreamerProducer.GenerateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
 	c.Assert(err, IsNil)
-	syncer.streamerController = &StreamerController{
-		streamerProducer: mockStreamerProducer,
-		streamer:         mockStreamer,
-	}
+	syncer.streamerController = binlogstream.NewStreamerController4Test(
+		mockStreamerProducer,
+		mockStreamer,
+	)
 	syncer.checkpointFlushWorker = &checkpointFlushWorker{
 		input:              make(chan *checkpointFlushTask, 16),
 		cp:                 syncer.checkpoint,
@@ -977,12 +987,12 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	// simulate `syncer.Resume` here, but doesn't reset database conns
 	syncer.reset()
 	mockStreamerProducer = &MockStreamProducer{s.generateEvents(events2, c)}
-	mockStreamer, err = mockStreamerProducer.generateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
+	mockStreamer, err = mockStreamerProducer.GenerateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
 	c.Assert(err, IsNil)
-	syncer.streamerController = &StreamerController{
-		streamerProducer: mockStreamerProducer,
-		streamer:         mockStreamer,
-	}
+	syncer.streamerController = binlogstream.NewStreamerController4Test(
+		mockStreamerProducer,
+		mockStreamer,
+	)
 	syncer.checkpointFlushWorker = &checkpointFlushWorker{
 		input:              make(chan *checkpointFlushTask, 16),
 		cp:                 syncer.checkpoint,
@@ -1025,6 +1035,50 @@ func (s *testSyncerSuite) TestRun(c *C) {
 
 	cancel()
 	<-resultCh // wait for the process to finish
+
+	// test OperateSchema starts
+	ctx, cancel = context.WithCancel(context.Background())
+
+	syncer.sessCtx = utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
+	sourceSchemaFromCheckPoint, err := syncer.OperateSchema(ctx, &pb.OperateWorkerSchemaRequest{Op: pb.SchemaOp_GetSchema, Database: "test_1", Table: "t_1"})
+	c.Assert(err, IsNil)
+
+	syncer.tableRouter = &regexprrouter.RouteTable{}
+	c.Assert(syncer.tableRouter.AddRule(&router.TableRule{
+		SchemaPattern: "test_1",
+		TablePattern:  "t_1",
+		TargetSchema:  "test_1",
+		TargetTable:   "t_2",
+	}), IsNil)
+
+	syncer.checkpoint.(*RemoteCheckPoint).points = make(map[string]map[string]*binlogPoint)
+
+	showTableResultString := "CREATE TABLE `t_2` (\n" +
+		"  `id` int(11) NOT NULL,\n" +
+		"  `name` varchar(24) DEFAULT NULL,\n" +
+		"  PRIMARY KEY (`id`) /*T![clustered_index] NONCLUSTERED */,\n" +
+		"  KEY `index1` (`name`)\n" +
+		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+
+	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_2`").WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("t_2", showTableResultString))
+
+	sourceSchemaFromDownstream, err := syncer.OperateSchema(ctx, &pb.OperateWorkerSchemaRequest{Op: pb.SchemaOp_GetSchema, Database: "test_1", Table: "t_1"})
+	c.Assert(err, IsNil)
+
+	sourceSchemaExpected := "CREATE TABLE `t_1` (" +
+		" `id` int(11) NOT NULL," +
+		" `name` varchar(24) DEFAULT NULL," +
+		" PRIMARY KEY (`id`) /*T![clustered_index] NONCLUSTERED */," +
+		" KEY `index1` (`name`)" +
+		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+	c.Assert(sourceSchemaFromCheckPoint, Equals, sourceSchemaExpected)
+	c.Assert(sourceSchemaFromDownstream, Equals, sourceSchemaExpected)
+
+	cancel()
+	// test OperateSchema ends
+
 	syncer.Close()
 	c.Assert(syncer.isClosed(), IsTrue)
 
@@ -1081,11 +1135,13 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 			AddRow("t_1", "create table t_1(id int primary key, name varchar(24))"))
 
 	syncer.schemaTracker, err = schema.NewTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.ddlDBConn)
-	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
 	c.Assert(err, IsNil)
 	c.Assert(syncer.Type(), Equals, pb.UnitType_Sync)
 
+	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
 	c.Assert(syncer.genRouter(), IsNil)
+
+	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
 
 	syncer.setupMockCheckpoint(c, checkPointDBConn, checkPointMock)
 
@@ -1119,12 +1175,12 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 	generatedEvents = append(generatedEvents, generatedEvents2...)
 
 	mockStreamerProducer := &MockStreamProducer{generatedEvents}
-	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
+	mockStreamer, err := mockStreamerProducer.GenerateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
 	c.Assert(err, IsNil)
-	syncer.streamerController = &StreamerController{
-		streamerProducer: mockStreamerProducer,
-		streamer:         mockStreamer,
-	}
+	syncer.streamerController = binlogstream.NewStreamerController4Test(
+		mockStreamerProducer,
+		mockStreamer,
+	)
 	syncer.checkpointFlushWorker = &checkpointFlushWorker{
 		input:              make(chan *checkpointFlushTask, 16),
 		cp:                 syncer.checkpoint,
@@ -1740,7 +1796,7 @@ func (s *testSyncerSuite) TestExecuteSQLSWithIgnore(c *C) {
 	mock.ExpectCommit()
 
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestExecuteSQLSWithIgnore")))
-	n, err := conn.ExecuteSQLWithIgnore(tctx, errorutil.IsIgnorableMySQLDDLError, sqls)
+	n, err := conn.ExecuteSQLWithIgnore(tctx, nil, errorutil.IsIgnorableMySQLDDLError, sqls)
 	c.Assert(err, IsNil)
 	c.Assert(n, Equals, 2)
 
@@ -1749,7 +1805,7 @@ func (s *testSyncerSuite) TestExecuteSQLSWithIgnore(c *C) {
 	mock.ExpectExec(sqls[0]).WillReturnError(newMysqlErr(uint16(infoschema.ErrColumnExists.Code()), "column a already exists"))
 	mock.ExpectRollback()
 
-	n, err = conn.ExecuteSQL(tctx, sqls)
+	n, err = conn.ExecuteSQL(tctx, nil, sqls)
 	c.Assert(err, ErrorMatches, ".*column a already exists.*")
 	c.Assert(n, Equals, 0)
 
@@ -1793,6 +1849,7 @@ func TestWaitBeforeRunExit(t *testing.T) {
 		"tidb_skip_utf8_check": "0",
 	}
 	syncer := NewSyncer(cfg, nil, nil)
+	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
 
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -1803,13 +1860,14 @@ func TestWaitBeforeRunExit(t *testing.T) {
 	require.NoError(t, syncer.genRouter())
 
 	mockStreamerProducer := &MockStreamProducer{}
-	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
+	mockStreamer, err := mockStreamerProducer.GenerateStreamer(binlog.MustZeroLocation(mysql.MySQLFlavor))
 	require.NoError(t, err)
 	// let getEvent pending until ctx.Done()
 	mockStreamer.(*MockStreamer).pending = true
-	syncer.streamerController = &StreamerController{
-		streamerProducer: mockStreamerProducer, streamer: mockStreamer, closed: false,
-	}
+	syncer.streamerController = binlogstream.NewStreamerController4Test(
+		mockStreamerProducer,
+		mockStreamer,
+	)
 
 	wg := &sync.WaitGroup{}
 	errCh := make(chan error, 1)

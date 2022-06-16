@@ -20,15 +20,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pb"
 )
 
 func TestExecutorManager(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	heartbeatTTL := time.Millisecond * 100
 	checkInterval := time.Millisecond * 10
 	mgr := NewExecutorManagerImpl(heartbeatTTL, checkInterval, nil)
@@ -77,6 +76,9 @@ func TestExecutorManager(t *testing.T) {
 	require.Nil(t, err)
 	require.NotNil(t, resp.Err)
 	require.Equal(t, pb.ErrorCode_UnknownExecutor, resp.Err.GetCode())
+
+	cancel()
+	mgr.Stop()
 }
 
 func TestExecutorManagerWatch(t *testing.T) {
@@ -84,8 +86,9 @@ func TestExecutorManagerWatch(t *testing.T) {
 
 	heartbeatTTL := time.Millisecond * 400
 	checkInterval := time.Millisecond * 10
+	ctx, cancel := context.WithCancel(context.Background())
 	mgr := NewExecutorManagerImpl(heartbeatTTL, checkInterval, nil)
-	mgr.Start(context.Background())
+	mgr.Start(ctx)
 
 	// register an executor server
 	executorAddr := "127.0.0.1:10001"
@@ -145,4 +148,7 @@ func TestExecutorManagerWatch(t *testing.T) {
 		ID: executorID1,
 		Tp: model.EventExecutorOffline,
 	}, event)
+
+	cancel()
+	mgr.Stop()
 }

@@ -28,7 +28,6 @@ import (
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
-	"github.com/pingcap/tiflow/dm/syncer/metrics"
 )
 
 func parseOneStmt(qec *queryEventContext) (stmt ast.StmtNode, err error) {
@@ -70,7 +69,7 @@ func (s *Syncer) processOneDDL(qec *queryEventContext, sql string) ([]string, er
 		return nil, err
 	}
 	if shouldSkip {
-		metrics.SkipBinlogDurationHistogram.WithLabelValues("query", s.cfg.Name, s.cfg.SourceID).Observe(time.Since(qec.startTime).Seconds())
+		s.metricsProxies.SkipBinlogDurationHistogram.WithLabelValues("query", s.cfg.Name, s.cfg.SourceID).Observe(time.Since(qec.startTime).Seconds())
 		qec.tctx.L().Warn("skip event", zap.String("event", "query"), zap.String("statement", sql), zap.Stringer("query event context", qec))
 		if s.onlineDDL == nil || len(ddlInfo.originDDL) != 0 {
 			return nil, nil
@@ -282,14 +281,14 @@ func adjustColumnsCollation(tctx *tcontext.Context, createStmt *ast.CreateTableS
 		}
 		fieldType := col.Tp
 		// already have 'Collation'
-		if fieldType.Collate != "" {
+		if fieldType.GetCollate() != "" {
 			continue
 		}
-		if fieldType.Charset != "" {
+		if fieldType.GetCharset() != "" {
 			// just have charset
-			collation, ok := charsetAndDefaultCollationMap[strings.ToLower(fieldType.Charset)]
+			collation, ok := charsetAndDefaultCollationMap[strings.ToLower(fieldType.GetCharset())]
 			if !ok {
-				tctx.L().Warn("not found charset default collation for column.", zap.String("table", createStmt.Table.Name.String()), zap.String("column", col.Name.String()), zap.String("charset", strings.ToLower(fieldType.Charset)))
+				tctx.L().Warn("not found charset default collation for column.", zap.String("table", createStmt.Table.Name.String()), zap.String("column", col.Name.String()), zap.String("charset", strings.ToLower(fieldType.GetCharset())))
 				continue
 			}
 			col.Options = append(col.Options, &ast.ColumnOption{Tp: ast.ColumnOptionCollate, StrValue: collation})

@@ -126,6 +126,7 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 		conf.TiKVClient.AsyncCommit.AllowedClockDrift = 0
 		// explicitly disable new-collation for better compatibility as tidb only support a subset of all mysql collations.
 		conf.NewCollationsEnabledOnFirstBootstrap = false
+		conf.Performance.RunAutoAnalyze = false
 	})
 
 	if len(sessionCfg) == 0 {
@@ -138,7 +139,7 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 	for _, k := range downstreamVars {
 		if _, ok := sessionCfg[k]; !ok {
 			var ignoredColumn interface{}
-			rows, err2 := downstreamConn.QuerySQL(tctx, fmt.Sprintf("SHOW VARIABLES LIKE '%s'", k))
+			rows, err2 := downstreamConn.QuerySQL(tctx, nil, fmt.Sprintf("SHOW VARIABLES LIKE '%s'", k))
 			if err2 != nil {
 				return nil, err2
 			}
@@ -178,7 +179,6 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 	}})
 
 	// avoid data race and of course no use in DM
-	domain.RunAutoAnalyze = false
 	session.DisableStats4Test()
 
 	dom, err = session.BootstrapSession(store)
@@ -565,7 +565,7 @@ func (dt *downstreamTracker) getTableInfoByCreateStmt(tctx *tcontext.Context, ta
 // initDownStreamTrackerParser init downstream tracker parser by default sql_mode.
 func (dt *downstreamTracker) initDownStreamSQLModeAndParser(tctx *tcontext.Context) error {
 	setSQLMode := fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)
-	_, err := dt.downstreamConn.ExecuteSQL(tctx, []string{setSQLMode})
+	_, err := dt.downstreamConn.ExecuteSQL(tctx, nil, []string{setSQLMode})
 	if err != nil {
 		return dmterror.ErrSchemaTrackerCannotSetDownstreamSQLMode.Delegate(err, mysql.DefaultSQLMode)
 	}

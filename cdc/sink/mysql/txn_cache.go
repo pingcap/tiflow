@@ -112,7 +112,7 @@ func (c *unresolvedTxnCache) Append(filter *filter.Filter, rows ...*model.RowCha
 // The returned map contains many txns grouped by tableID. for each table, the each commitTs of txn in txns slice is strictly increasing
 func (c *unresolvedTxnCache) Resolved(
 	resolvedTsMap *sync.Map,
-) (map[model.TableID]uint64, map[model.TableID][]*model.SingleTableTxn) {
+) (map[model.TableID]model.ResolvedTs, map[model.TableID][]*model.SingleTableTxn) {
 	c.unresolvedTxnsMu.Lock()
 	defer c.unresolvedTxnsMu.Unlock()
 
@@ -121,7 +121,7 @@ func (c *unresolvedTxnCache) Resolved(
 
 func splitResolvedTxn(
 	resolvedTsMap *sync.Map, unresolvedTxns map[model.TableID][]*txnsWithTheSameCommitTs,
-) (checkpointTsMap map[model.TableID]uint64,
+) (checkpointTsMap map[model.TableID]model.ResolvedTs,
 	resolvedRowsMap map[model.TableID][]*model.SingleTableTxn,
 ) {
 	var (
@@ -131,21 +131,21 @@ func splitResolvedTxn(
 		resolvedTxnsWithTheSameCommitTs []*txnsWithTheSameCommitTs
 	)
 
-	checkpointTsMap = make(map[model.TableID]uint64, len(unresolvedTxns))
+	checkpointTsMap = make(map[model.TableID]model.ResolvedTs, len(unresolvedTxns))
 	resolvedTsMap.Range(func(k, v any) bool {
 		tableID := k.(model.TableID)
 		resolved := v.(model.ResolvedTs)
-		checkpointTsMap[tableID] = resolved.Ts
+		checkpointTsMap[tableID] = resolved
 		return true
 	})
 
 	resolvedRowsMap = make(map[model.TableID][]*model.SingleTableTxn, len(unresolvedTxns))
-	for tableID, resolvedTs := range checkpointTsMap {
+	for tableID, resolved := range checkpointTsMap {
 		if txns, ok = unresolvedTxns[tableID]; !ok {
 			continue
 		}
 		i := sort.Search(len(txns), func(i int) bool {
-			return txns[i].commitTs > resolvedTs
+			return txns[i].commitTs > resolved.Ts
 		})
 		if i != 0 {
 			if i == len(txns) {

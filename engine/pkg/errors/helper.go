@@ -28,7 +28,7 @@ package errors
 
 import (
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/engine/pb"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	cdc_errors "github.com/pingcap/tiflow/pkg/errors"
 )
 

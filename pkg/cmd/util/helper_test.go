@@ -16,7 +16,6 @@ package util
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -100,12 +99,8 @@ func TestVerifyPdEndpoint(t *testing.T) {
 }
 
 func TestStrictDecodeValidFile(t *testing.T) {
-	dataDir, err := ioutil.TempDir("", "data")
-	require.NoError(t, err)
-	tmpDir, err := ioutil.TempDir("", "tmp")
-	require.NoError(t, err)
-	defer os.RemoveAll(dataDir)
-	defer os.RemoveAll(tmpDir)
+	dataDir := t.TempDir()
+	tmpDir := t.TempDir()
 
 	configPath := filepath.Join(tmpDir, "ticdc.toml")
 	configContent := fmt.Sprintf(`
@@ -142,7 +137,7 @@ cert-path = "bb"
 key-path = "cc"
 cert-allowed-cn = ["dd","ee"]
 `, dataDir)
-	err = os.WriteFile(configPath, []byte(configContent), 0o644)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.Nil(t, err)
 
 	conf := config.GetDefaultServerConfig()
@@ -151,12 +146,8 @@ cert-allowed-cn = ["dd","ee"]
 }
 
 func TestStrictDecodeInvalidFile(t *testing.T) {
-	dataDir, err := ioutil.TempDir("", "data")
-	require.NoError(t, err)
-	tmpDir, err := ioutil.TempDir("", "tmp")
-	require.NoError(t, err)
-	defer os.RemoveAll(dataDir)
-	defer os.RemoveAll(tmpDir)
+	dataDir := t.TempDir()
+	tmpDir := t.TempDir()
 
 	configPath := filepath.Join(tmpDir, "ticdc.toml")
 	configContent := fmt.Sprintf(`
@@ -168,7 +159,7 @@ max-size = 200
 max-days = 1
 max-backups = 1
 `, dataDir)
-	err = os.WriteFile(configPath, []byte(configContent), 0o644)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.Nil(t, err)
 
 	conf := config.GetDefaultServerConfig()
@@ -202,12 +193,6 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 		},
 		Protocol: "open-protocol",
 	}, cfg.Sink)
-	require.Equal(t, &config.CyclicConfig{
-		Enable:          false,
-		ReplicaID:       1,
-		FilterReplicaID: []uint64{2, 3},
-		SyncDDL:         true,
-	}, cfg.Cyclic)
 }
 
 func TestAndWriteExampleServerTOML(t *testing.T) {
@@ -244,12 +229,8 @@ func TestJSONPrint(t *testing.T) {
 }
 
 func TestIgnoreStrictCheckItem(t *testing.T) {
-	dataDir, err := ioutil.TempDir("", "data")
-	require.NoError(t, err)
-	tmpDir, err := ioutil.TempDir("", "tmp")
-	require.NoError(t, err)
-	defer os.RemoveAll(dataDir)
-	defer os.RemoveAll(tmpDir)
+	dataDir := t.TempDir()
+	tmpDir := t.TempDir()
 
 	configPath := filepath.Join(tmpDir, "ticdc.toml")
 	configContent := fmt.Sprintf(`
@@ -259,7 +240,7 @@ max-size = 200
 max-days = 1
 max-backups = 1
 `, dataDir)
-	err = os.WriteFile(configPath, []byte(configContent), 0o644)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.Nil(t, err)
 
 	conf := config.GetDefaultServerConfig()

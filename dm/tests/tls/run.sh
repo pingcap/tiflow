@@ -70,6 +70,9 @@ function setup_mysql_tls() {
 
 	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
 	sed -i "s%dir-placeholer%$mysql_data_path%g" $WORK_DIR/source1.yaml
+	# add a tls source with only ca
+	cp $cur/conf/source-only-ca.yaml $WORK_DIR/source-only-ca.yaml
+	sed -i "s%dir-placeholer%$mysql_data_path%g" $WORK_DIR/source-only-ca.yaml
 	echo "add dm_tls_test user done $mysql_data_path"
 }
 
@@ -84,6 +87,7 @@ function prepare_test() {
 	pkill -hup tidb-server 2>/dev/null || true
 	wait_process_exit tidb-server
 
+	run_sql 'SHOW GLOBAL VARIABLES LIKE "tls_version";' $MYSQL_PORT1 $MYSQL_PASSWORD1
 	setup_mysql_tls
 	setup_tidb_with_tls
 	prepare_data
@@ -120,7 +124,7 @@ function test_worker_handle_multi_tls_tasks() {
 
 	# operate mysql config to worker
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
-		"operate-source create $WORK_DIR/source1.yaml" \
+		"operate-source create $WORK_DIR/source-only-ca.yaml" \
 		"\"result\": true" 2 \
 		"\"source\": \"$SOURCE_ID1\"" 1
 
@@ -308,7 +312,7 @@ function test_worker_ha_when_enable_source_tls() {
 	echo "============================== test_worker_ha_when_enable_source_tls success =================================="
 }
 
-function test_master_ha_when_enable_tidb_tls() {
+function test_master_ha_when_enable_tidb_and_only_ca_source_tls() {
 	prepare_test
 
 	cp $cur/conf/dm-master1.toml $WORK_DIR/
@@ -377,14 +381,15 @@ function test_master_ha_when_enable_tidb_tls() {
 	# check the log is not repeatedly printed
 	check_log_contains $WORK_DIR/master1/log/dm-master.log "remote error: tls: bad certificate" 1
 
-	echo "============================== test_master_ha_when_enable_tidb_tls success =================================="
+	echo "============================== test_master_ha_when_enable_tidb_and_only_ca_source_tls success =================================="
 }
 
 function run() {
+	test_master_ha_when_enable_tidb_and_only_ca_source_tls
+
 	test_worker_handle_multi_tls_tasks
 	test_worker_download_certs_from_master
 	test_worker_ha_when_enable_source_tls
-	test_master_ha_when_enable_tidb_tls
 }
 
 cleanup_data tls

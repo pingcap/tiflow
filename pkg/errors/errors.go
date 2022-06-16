@@ -248,6 +248,9 @@ var (
 		"kafka broker config item not found",
 		errors.RFCCodeText("CDC:ErrKafkaBrokerConfigNotFound"),
 	)
+	ErrKafkaTopicNotExists = errors.Normalize("kafka topic not exists after creation",
+		errors.RFCCodeText("CDC:ErrKafkaTopicNotExists"),
+	)
 	ErrPulsarNewProducer = errors.Normalize(
 		"new pulsar producer",
 		errors.RFCCodeText("CDC:ErrPulsarNewProducer"),
@@ -328,8 +331,6 @@ var (
 		"MySQL worker panic",
 		errors.RFCCodeText("CDC:ErrMySQLWorkerPanic"),
 	)
-	ErrMQWorkerClosed = errors.Normalize("MQ worker has closed",
-		errors.RFCCodeText("CDC:ErrMQWorkerClosed"))
 	ErrAvroToEnvelopeError = errors.Normalize(
 		"to envelope failed",
 		errors.RFCCodeText("CDC:ErrAvroToEnvelopeError"),
@@ -551,6 +552,10 @@ var (
 	ErrCaptureRegister = errors.Normalize(
 		"capture register to etcd failed",
 		errors.RFCCodeText("CDC:ErrCaptureRegister"),
+	)
+	ErrCaptureNotInitialized = errors.Normalize(
+		"capture has not been initialized yet",
+		errors.RFCCodeText("CDC:ErrCaptureNotInitialized"),
 	)
 	ErrNewProcessorFailed = errors.Normalize(
 		"new processor failed",
@@ -984,9 +989,9 @@ var (
 		errors.RFCCodeText("CDC:ErrInvalidHost"),
 	)
 
-	// UpStream error
-	ErrUpStreamNotFound = errors.Normalize(
-		"upStram not found, cluster-id: %d",
-		errors.RFCCodeText("CDC:ErrUpStreamNotFound"),
+	// Upstream error
+	ErrUpstreamNotFound = errors.Normalize(
+		"upstream not found, cluster-id: %d",
+		errors.RFCCodeText("CDC:ErrUpstreamNotFound"),
 	)
 )

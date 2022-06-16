@@ -59,9 +59,6 @@ type sorterNode struct {
 	barrierTs model.Ts
 
 	replConfig *config.ReplicaConfig
-
-	// isTableActorMode identify if the sorter node is run is actor mode, todo: remove it after GA
-	isTableActorMode bool
 }
 
 func newSorterNode(
@@ -78,11 +75,6 @@ func newSorterNode(
 		barrierTs:      startTs,
 		replConfig:     replConfig,
 	}
-}
-
-func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
-	wg := errgroup.Group{}
-	return n.start(ctx, false, &wg, 0, nil)
 }
 
 func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.TableID) (sorter.EventSorter, error) {
@@ -127,10 +119,9 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 }
 
 func (n *sorterNode) start(
-	ctx pipeline.NodeContext, isTableActorMode bool, eg *errgroup.Group,
+	ctx pipeline.NodeContext, eg *errgroup.Group,
 	tableActorID actor.ID, tableActorRouter *actor.Router[pmessage.Message],
 ) error {
-	n.isTableActorMode = isTableActorMode
 	n.eg = eg
 	stdCtx, cancel := context.WithCancel(ctx)
 	n.cancel = cancel
@@ -151,6 +142,20 @@ func (n *sorterNode) start(
 		lastSentResolvedTs := uint64(0)
 		lastSendResolvedTsTime := time.Now() // the time at which we last sent a resolved-ts.
 		lastCRTs := uint64(0)                // the commit-ts of the last row changed we sent.
+
+		resolvedTsInterpolateFunc := func(commitTs uint64) {
+			// checks the condition: cur_event_commit_ts > prev_event_commit_ts > last_resolved_ts
+			// If this is true, it implies that (1) the last transaction has finished, and we are
+			// processing the first event in a new transaction, (2) a resolved-ts is safe to be
+			// sent, but it has not yet. This means that we can interpolate prev_event_commit_ts
+			// as a resolved-ts, improving the frequency at which the sink flushes.
+			if lastCRTs > lastSentResolvedTs && commitTs > lastCRTs {
+				lastSentResolvedTs = lastCRTs
+				lastSendResolvedTsTime = time.Now()
+			}
+			msg := model.NewResolvedPolymorphicEvent(0, lastSentResolvedTs)
+			ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
+		}
 
 		for {
 			// We must call `sorter.Output` before receiving resolved events.
@@ -177,34 +182,33 @@ func (n *sorterNode) start(
 					commitTs := msg.CRTs
 					// We interpolate a resolved-ts if none has been sent for some time.
 					if time.Since(lastSendResolvedTsTime) > resolvedTsInterpolateInterval {
-						// checks the condition: cur_event_commit_ts > prev_event_commit_ts > last_resolved_ts
-						// If this is true, it implies that (1) the last transaction has finished, and we are processing
-						// the first event in a new transaction, (2) a resolved-ts is safe to be sent, but it has not yet.
-						// This means that we can interpolate prev_event_commit_ts as a resolved-ts, improving the frequency
-						// at which the sink flushes.
-						if lastCRTs > lastSentResolvedTs && commitTs > lastCRTs {
-							lastSentResolvedTs = lastCRTs
-							lastSendResolvedTsTime = time.Now()
-							msg := model.NewResolvedPolymorphicEvent(0, lastCRTs)
-							ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
-						}
+						resolvedTsInterpolateFunc(commitTs)
 					}
 
 					// We calculate memory consumption by RowChangedEvent size.
 					// It's much larger than RawKVEntry.
 					size := uint64(msg.Row.ApproximateBytes())
-					// NOTE we allow the quota to be exceeded if blocking means interrupting a transaction.
-					// Otherwise the pipeline would deadlock.
-					err = n.flowController.Consume(msg, size, func(batch bool) error {
-						if batch {
-							log.Panic("cdc does not support the batch resolve mechanism at this time")
-						} else if lastCRTs > lastSentResolvedTs {
+					// NOTE when redo log enabled, we allow the quota to be exceeded if blocking
+					// means interrupting a transaction. Otherwise the pipeline would deadlock.
+					err = n.flowController.Consume(msg, size, func(batchID uint64) error {
+						if commitTs > lastCRTs {
 							// If we are blocking, we send a Resolved Event here to elicit a sink-flush.
 							// Not sending a Resolved Event here will very likely deadlock the pipeline.
-							lastSentResolvedTs = lastCRTs
-							lastSendResolvedTsTime = time.Now()
+							resolvedTsInterpolateFunc(commitTs)
+						} else if commitTs == lastCRTs {
+							// send batch resolve event
 							msg := model.NewResolvedPolymorphicEvent(0, lastCRTs)
+							msg.Resolved = &model.ResolvedTs{
+								Ts:      commitTs,
+								Mode:    model.BatchResolvedMode,
+								BatchID: batchID,
+							}
 							ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
+						} else {
+							log.Panic("flow control blocked, report a bug",
+								zap.Uint64("commitTs", commitTs),
+								zap.Uint64("lastCommitTs", lastCRTs),
+								zap.Uint64("lastSentResolvedTs", lastSentResolvedTs))
 						}
 						return nil
 					})
@@ -218,16 +222,14 @@ func (n *sorterNode) start(
 						}
 						return nil
 					}
-					lastCRTs = commitTs
+					lastCRTs = msg.CRTs
 				} else {
 					// handle OpTypeResolved
 					if msg.CRTs < lastSentResolvedTs {
 						continue
 					}
-					if isTableActorMode {
-						msg := message.ValueMessage(pmessage.TickMessage())
-						_ = tableActorRouter.Send(tableActorID, msg)
-					}
+					tickMsg := message.ValueMessage(pmessage.TickMessage())
+					_ = tableActorRouter.Send(tableActorID, tickMsg)
 					lastSentResolvedTs = msg.CRTs
 					lastSendResolvedTsTime = time.Now()
 				}
@@ -237,12 +239,6 @@ func (n *sorterNode) start(
 	})
 	n.sorter = eventSorter
 	return nil
-}
-
-// Receive receives the message from the previous node
-func (n *sorterNode) Receive(ctx pipeline.NodeContext) error {
-	_, err := n.TryHandleDataMessage(ctx, ctx.Message())
-	return err
 }
 
 // handleRawEvent process the raw kv event,send it to sorter
@@ -304,12 +300,6 @@ func (n *sorterNode) releaseResource(changefeedID model.ChangeFeedID) {
 	// the flowController will be blocked in a background goroutine,
 	// We need to abort the flowController manually in the nodeRunner
 	n.flowController.Abort()
-}
-
-func (n *sorterNode) Destroy(ctx pipeline.NodeContext) error {
-	n.cancel()
-	n.releaseResource(ctx.ChangefeedVars().ID)
-	return n.eg.Wait()
 }
 
 func (n *sorterNode) ResolvedTs() model.Ts {

@@ -30,7 +30,7 @@ import (
 
 type gcRunnerTestHelper struct {
 	Runner *DefaultGCRunner
-	Meta   pkgOrm.Client
+	Meta   pkgOrm.ResourceClient
 	Clock  *clock.Mock
 
 	wg     sync.WaitGroup
@@ -46,17 +46,20 @@ func newGCRunnerTestHelper() *gcRunnerTestHelper {
 	if err != nil {
 		panic(err)
 	}
+	return newGCRunnerTestHelperWithMeta(meta)
+}
 
+func newGCRunnerTestHelperWithMeta(meta pkgOrm.ResourceClient) *gcRunnerTestHelper {
 	reqCh := make(chan *resModel.ResourceMeta, 16)
 	mockHandler := func(ctx context.Context, meta *resModel.ResourceMeta) error {
 		select {
 		case <-ctx.Done():
-			return errors.Trace(err)
+			return errors.Trace(ctx.Err())
 		case reqCh <- meta:
 		}
 		return nil
 	}
-	runner := NewGCRunner(meta, map[resModel.ResourceType]gcHandlerFunc{"local": mockHandler})
+	runner := NewGCRunner(meta, map[resModel.ResourceType]GCHandlerFunc{"local": mockHandler})
 	clk := clock.NewMock()
 	runner.clock = clk
 	ctx, cancel := context.WithCancel(context.Background())
@@ -96,6 +99,46 @@ func (h *gcRunnerTestHelper) WaitGC(t *testing.T) (meta *resModel.ResourceMeta) 
 	return
 }
 
+// mockMetaClientErrOnce is a temporary solution for testing
+// the retry logic of gcOnce().
+// TODO make a more generic version of this struct, and
+// do better error condition testing in other situations too.
+type mockMetaClientErrOnce struct {
+	pkgOrm.ResourceClient
+
+	methodsAllReadyErred map[string]struct{}
+}
+
+func newMockMetaClientErrOnce() *mockMetaClientErrOnce {
+	inner, err := pkgOrm.NewMockClient()
+	if err != nil {
+		panic(err)
+	}
+
+	return &mockMetaClientErrOnce{
+		ResourceClient:       inner,
+		methodsAllReadyErred: make(map[string]struct{}),
+	}
+}
+
+func (c *mockMetaClientErrOnce) DeleteResource(ctx context.Context, resourceID string) (pkgOrm.Result, error) {
+	if _, erred := c.methodsAllReadyErred["DeleteResource"]; !erred {
+		c.methodsAllReadyErred["DeleteResource"] = struct{}{}
+		return nil, errors.New("injected error")
+	}
+
+	return c.ResourceClient.DeleteResource(ctx, resourceID)
+}
+
+func (c *mockMetaClientErrOnce) GetOneResourceForGC(ctx context.Context) (*resModel.ResourceMeta, error) {
+	if _, erred := c.methodsAllReadyErred["GetOneResourceForGC"]; !erred {
+		c.methodsAllReadyErred["GetOneResourceForGC"] = struct{}{}
+		return nil, errors.New("injected error")
+	}
+
+	return c.ResourceClient.GetOneResourceForGC(ctx)
+}
+
 func TestGCRunnerNotify(t *testing.T) {
 	helper := newGCRunnerTestHelper()
 
@@ -111,7 +154,7 @@ func TestGCRunnerNotify(t *testing.T) {
 	helper.Start()
 	// Note that since we are not advancing the clock,
 	// GC can only be triggered by calling Notify.
-	helper.Runner.Notify()
+	helper.Runner.GCNotify()
 
 	gcRes := helper.WaitGC(t)
 	require.Equal(t, "/local/resource-1", gcRes.ID)
@@ -133,7 +176,7 @@ func TestGCRunnerUnsupportedResourceType(t *testing.T) {
 	require.NoError(t, err)
 
 	helper.Start()
-	helper.Runner.Notify()
+	helper.Runner.GCNotify()
 
 	// Assert that unsupported resources should not cause panic
 	// and are NOT removed from meta.
@@ -208,8 +251,33 @@ loop:
 		default:
 		}
 
-		helper.Runner.Notify()
+		helper.Runner.GCNotify()
 	}
+
+	helper.Close()
+}
+
+func TestGCRunnerRetry(t *testing.T) {
+	mockMeta := newMockMetaClientErrOnce()
+	helper := newGCRunnerTestHelperWithMeta(mockMeta)
+
+	err := helper.Meta.CreateResource(context.Background(), &resModel.ResourceMeta{
+		ID:        "/local/resource-1",
+		Job:       "job-1",
+		Worker:    "worker-1",
+		Executor:  "executor-1",
+		GCPending: true,
+	})
+	require.NoError(t, err)
+
+	helper.Start()
+
+	// Note that since we are not advancing the clock,
+	// GC can only be triggered by calling Notify.
+	helper.Runner.GCNotify()
+
+	gcRes := helper.WaitGC(t)
+	require.Equal(t, "/local/resource-1", gcRes.ID)
 
 	helper.Close()
 }

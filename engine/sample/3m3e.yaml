@@ -7,11 +7,12 @@ services:
                 volumes:
                         - ./config/master.toml:/config.toml
                 command:
-                        - "./bin/df-master"
+                        - "/df-master"
                         - "--name"
                         - "master0"
                         - "--config"
                         - "/config.toml"
+                        - "-L=debug"
                         - "--master-addr"
                         - "0.0.0.0:10240"
                         - "--advertise-addr"
@@ -38,11 +39,12 @@ services:
                 volumes:
                         - ./config/master.toml:/config.toml
                 command:
-                        - "./bin/df-master"
+                        - "/df-master"
                         - "--name"
                         - "master1"
                         - "--config"
                         - "/config.toml"
+                        - "-L=debug"
                         - "--master-addr"
                         - "0.0.0.0:10240"
                         - "--advertise-addr"
@@ -69,11 +71,12 @@ services:
                 volumes:
                         - ./config/master.toml:/config.toml
                 command:
-                        - "./bin/df-master"
+                        - "/df-master"
                         - "--name"
                         - "master2"
                         - "--config"
                         - "/config.toml"
+                        - "-L=debug"
                         - "--master-addr"
                         - "0.0.0.0:10240"
                         - "--advertise-addr"
@@ -95,13 +98,16 @@ services:
                     condition: service_healthy
         server-executor-0:
                 image: dataflow:test
+                ports:
+                        - "11241:10241"
                 volumes:
                         - ./config/executor.toml:/config.toml
                         - /tmp/dataflow:/tmp/dataflow
                 command:
-                        - "./bin/df-executor"
+                        - "/df-executor"
                         - "--config"
                         - "/config.toml"
+                        - "-L=debug"
                         - "--join"
                         - "server-master-0:10240,server-master-1:10240,server-master-2:10240"
                         - "--worker-addr"
@@ -116,13 +122,16 @@ services:
                         - "host.docker.internal:host-gateway"
         server-executor-1:
                 image: dataflow:test
+                ports:
+                        - "11242:10241"
                 volumes:
                         - ./config/executor.toml:/config.toml
                         - /tmp/dataflow:/tmp/dataflow
                 command:
-                        - "./bin/df-executor"
+                        - "/df-executor"
                         - "--config"
                         - "/config.toml"
+                        - "-L=debug"
                         - "--join"
                         - "server-master-0:10240,server-master-1:10240,server-master-2:10240"
                         - "--worker-addr"
@@ -137,13 +146,16 @@ services:
                         - "host.docker.internal:host-gateway"
         server-executor-2:
                 image: dataflow:test
+                ports:
+                        - "11243:10241"
                 volumes:
                         - ./config/executor.toml:/config.toml
                         - /tmp/dataflow:/tmp/dataflow
                 command:
-                        - "./bin/df-executor"
+                        - "/df-executor"
                         - "--config"
                         - "/config.toml"
+                        - "-L=debug"
                         - "--join"
                         - "server-master-0:10240,server-master-1:10240,server-master-2:10240"
                         - "--worker-addr"

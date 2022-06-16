@@ -15,10 +15,17 @@ package broker
 
 import (
 	"context"
+	"encoding/hex"
+	"path/filepath"
+	"testing"
 
+	"github.com/pingcap/errors"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/stretchr/testify/require"
 
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 )
 
 func newBrStorageForLocalFile(filePath string) (brStorage.ExternalStorage, error) {
@@ -31,4 +38,54 @@ func newBrStorageForLocalFile(filePath string) (brStorage.ExternalStorage, error
 		return nil, derrors.ErrFailToCreateExternalStorage.Wrap(err)
 	}
 	return ls, nil
+}
+
+func resourceNameToFilePathName(resName model.ResourceName) string {
+	return hex.EncodeToString([]byte(resName))
+}
+
+func filePathNameToResourceName(filePath string) (model.ResourceName, error) {
+	result, err := hex.DecodeString(filePath)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	return model.ResourceName(result), nil
+}
+
+func localPathWithEncoding(baseDir string,
+	creator frameModel.WorkerID,
+	resName model.ResourceName,
+	suffixes ...string,
+) string {
+	joinSegments := []string{
+		baseDir, creator, resourceNameToFilePathName(resName),
+	}
+	joinSegments = append(joinSegments, suffixes...)
+	return filepath.Join(joinSegments...)
+}
+
+// AssertLocalFileExists is a test helper.
+func AssertLocalFileExists(
+	t *testing.T,
+	baseDir string,
+	creator frameModel.WorkerID,
+	resName model.ResourceName,
+	suffixes ...string,
+) {
+	require.FileExistsf(t, localPathWithEncoding(baseDir, creator, resName, suffixes...),
+		"local file does not exist: baseDir %s, creator %s, resName %s",
+		baseDir, creator, resName)
+}
+
+// AssertNoLocalFileExists is a test helper.
+func AssertNoLocalFileExists(
+	t *testing.T,
+	baseDir string,
+	creator frameModel.WorkerID,
+	resName model.ResourceName,
+	suffixes ...string,
+) {
+	require.NoFileExists(t, localPathWithEncoding(baseDir, creator, resName, suffixes...),
+		"local file does not exist: baseDir %s, creator %s, resName %s",
+		baseDir, creator, resName)
 }

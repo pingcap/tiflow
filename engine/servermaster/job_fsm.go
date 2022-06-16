@@ -16,9 +16,10 @@ package servermaster
 import (
 	"sync"
 
-	"github.com/pingcap/tiflow/engine/lib"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
-	"github.com/pingcap/tiflow/engine/pb"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/framework"
+	frame "github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -26,8 +27,8 @@ import (
 )
 
 type jobHolder struct {
-	lib.WorkerHandle
-	*libModel.MasterMetaKVData
+	framework.WorkerHandle
+	*frameModel.MasterMetaKVData
 	// True means the job is loaded from metastore during jobmanager failover.
 	// Otherwise it is added by SubmitJob.
 	addFromFailover bool
@@ -80,9 +81,9 @@ type JobFsm struct {
 	JobStats
 
 	jobsMu      sync.RWMutex
-	pendingJobs map[libModel.MasterID]*libModel.MasterMetaKVData
-	waitAckJobs map[libModel.MasterID]*jobHolder
-	onlineJobs  map[libModel.MasterID]*jobHolder
+	pendingJobs map[frameModel.MasterID]*frameModel.MasterMetaKVData
+	waitAckJobs map[frameModel.MasterID]*jobHolder
+	onlineJobs  map[frameModel.MasterID]*jobHolder
 }
 
 // JobStats defines a statistics interface for JobFsm
@@ -93,21 +94,22 @@ type JobStats interface {
 // NewJobFsm creates a new job fsm
 func NewJobFsm() *JobFsm {
 	return &JobFsm{
-		pendingJobs: make(map[libModel.MasterID]*libModel.MasterMetaKVData),
-		waitAckJobs: make(map[libModel.MasterID]*jobHolder),
-		onlineJobs:  make(map[libModel.MasterID]*jobHolder),
+		pendingJobs: make(map[frameModel.MasterID]*frameModel.MasterMetaKVData),
+		waitAckJobs: make(map[frameModel.MasterID]*jobHolder),
+		onlineJobs:  make(map[frameModel.MasterID]*jobHolder),
 	}
 }
 
 // QueryOnlineJob queries job from online job list
-func (fsm *JobFsm) QueryOnlineJob(jobID libModel.MasterID) *jobHolder {
+func (fsm *JobFsm) QueryOnlineJob(jobID frameModel.MasterID) *jobHolder {
 	fsm.jobsMu.RLock()
 	defer fsm.jobsMu.RUnlock()
 	return fsm.onlineJobs[jobID]
 }
 
 // QueryJob queries job with given jobID and returns QueryJobResponse
-func (fsm *JobFsm) QueryJob(jobID libModel.MasterID) *pb.QueryJobResponse {
+// TODO: Refine me. remove the pb from JobFsm to alleviate coupling
+func (fsm *JobFsm) QueryJob(jobID frameModel.MasterID) *pb.QueryJobResponse {
 	checkPendingJob := func() *pb.QueryJobResponse {
 		fsm.jobsMu.Lock()
 		defer fsm.jobsMu.Unlock()
@@ -117,7 +119,7 @@ func (fsm *JobFsm) QueryJob(jobID libModel.MasterID) *pb.QueryJobResponse {
 			return nil
 		}
 		resp := &pb.QueryJobResponse{
-			Tp:     int64(meta.Tp),
+			Tp:     int32(frame.MustConvertWorkerType2JobType(meta.Tp)),
 			Config: meta.Config,
 			Status: pb.QueryJobResponse_pending,
 		}
@@ -134,7 +136,7 @@ func (fsm *JobFsm) QueryJob(jobID libModel.MasterID) *pb.QueryJobResponse {
 		}
 		meta := job.MasterMetaKVData
 		resp := &pb.QueryJobResponse{
-			Tp:     int64(meta.Tp),
+			Tp:     int32(frame.MustConvertWorkerType2JobType(meta.Tp)),
 			Config: meta.Config,
 			Status: pb.QueryJobResponse_dispatched,
 		}
@@ -150,7 +152,7 @@ func (fsm *JobFsm) QueryJob(jobID libModel.MasterID) *pb.QueryJobResponse {
 			return nil
 		}
 		resp := &pb.QueryJobResponse{
-			Tp:     int64(job.Tp),
+			Tp:     int32(frame.MustConvertWorkerType2JobType(job.Tp)),
 			Config: job.Config,
 			Status: pb.QueryJobResponse_online,
 		}
@@ -180,7 +182,7 @@ func (fsm *JobFsm) QueryJob(jobID libModel.MasterID) *pb.QueryJobResponse {
 }
 
 // JobDispatched is called when a job is firstly created or server master is failovered
-func (fsm *JobFsm) JobDispatched(job *libModel.MasterMetaKVData, addFromFailover bool) {
+func (fsm *JobFsm) JobDispatched(job *frameModel.MasterMetaKVData, addFromFailover bool) {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 	fsm.waitAckJobs[job.ID] = &jobHolder{
@@ -190,7 +192,7 @@ func (fsm *JobFsm) JobDispatched(job *libModel.MasterMetaKVData, addFromFailover
 }
 
 // IterPendingJobs iterates all pending jobs and dispatch(via create worker) them again.
-func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *libModel.MasterMetaKVData) (string, error)) error {
+func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *frameModel.MasterMetaKVData) (string, error)) error {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 
@@ -211,7 +213,7 @@ func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *libModel.MasterMetaKV
 }
 
 // IterWaitAckJobs iterates wait ack jobs, failover them if they are added from failover
-func (fsm *JobFsm) IterWaitAckJobs(dispatchJobFn func(job *libModel.MasterMetaKVData) (string, error)) error {
+func (fsm *JobFsm) IterWaitAckJobs(dispatchJobFn func(job *frameModel.MasterMetaKVData) (string, error)) error {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 
@@ -231,7 +233,7 @@ func (fsm *JobFsm) IterWaitAckJobs(dispatchJobFn func(job *libModel.MasterMetaKV
 }
 
 // JobOnline is called when the first heartbeat of job is received
-func (fsm *JobFsm) JobOnline(worker lib.WorkerHandle) error {
+func (fsm *JobFsm) JobOnline(worker framework.WorkerHandle) error {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 
@@ -248,7 +250,7 @@ func (fsm *JobFsm) JobOnline(worker lib.WorkerHandle) error {
 }
 
 // JobOffline is called when a job meets error or finishes
-func (fsm *JobFsm) JobOffline(worker lib.WorkerHandle, needFailover bool) {
+func (fsm *JobFsm) JobOffline(worker framework.WorkerHandle, needFailover bool) {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 
@@ -269,7 +271,7 @@ func (fsm *JobFsm) JobOffline(worker lib.WorkerHandle, needFailover bool) {
 }
 
 // JobDispatchFailed is called when a job dispatch fails
-func (fsm *JobFsm) JobDispatchFailed(worker lib.WorkerHandle) error {
+func (fsm *JobFsm) JobDispatchFailed(worker framework.WorkerHandle) error {
 	fsm.jobsMu.Lock()
 	defer fsm.jobsMu.Unlock()
 

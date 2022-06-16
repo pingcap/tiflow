@@ -28,7 +28,6 @@ package servermaster
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -42,6 +41,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
+	"github.com/pingcap/tiflow/engine/pkg/version"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/zap"
 )
@@ -80,7 +80,6 @@ func NewConfig() *Config {
 	fs := cfg.flagSet
 
 	fs.BoolVar(&cfg.printVersion, "V", false, "prints version and exit")
-	fs.BoolVar(&cfg.printSampleConfig, "print-sample-config", false, "print sample config file of dm-worker")
 	fs.StringVar(&cfg.ConfigFile, "config", "", "path to config file")
 	fs.StringVar(&cfg.MasterAddr, "master-addr", "", "master API server and status addr")
 	fs.StringVar(&cfg.AdvertiseAddr, "advertise-addr", "", `advertise address for client traffic (default "${master-addr}")`)
@@ -135,8 +134,7 @@ type Config struct {
 	KeepAliveInterval time.Duration `toml:"-" json:"-"`
 	RPCTimeout        time.Duration `toml:"-" json:"-"`
 
-	printVersion      bool
-	printSampleConfig bool
+	printVersion bool
 }
 
 func (c *Config) String() string {
@@ -167,17 +165,8 @@ func (c *Config) Parse(arguments []string) error {
 		return errors.Wrap(errors.ErrMasterConfigParseFlagSet, err)
 	}
 
-	if c.printSampleConfig {
-		if strings.TrimSpace(SampleConfigFile) == "" {
-			fmt.Println("sample config file of dm-master is empty")
-		} else {
-			rawConfig, err2 := base64.StdEncoding.DecodeString(SampleConfigFile)
-			if err2 != nil {
-				fmt.Println("base64 decode config error:", err2)
-			} else {
-				fmt.Println(string(rawConfig))
-			}
-		}
+	if c.printVersion {
+		fmt.Print(version.GetRawInfo())
 		return flag.ErrHelp
 	}
 

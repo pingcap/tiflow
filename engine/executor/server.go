@@ -15,48 +15,47 @@ package executor
 
 import (
 	"context"
-	"encoding/json"
+	"net/http"
+	"net/http/pprof"
 	"strings"
 	"time"
 
 	pcErrors "github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	p2pImpl "github.com/pingcap/tiflow/pkg/p2p"
-	"github.com/pingcap/tiflow/pkg/retry"
-	"github.com/pingcap/tiflow/pkg/security"
-	"github.com/pingcap/tiflow/pkg/tcpserver"
-	"go.etcd.io/etcd/client/pkg/v3/logutil"
-	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/pingcap/tiflow/dm/dm/common"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/client"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/executor/server"
 	"github.com/pingcap/tiflow/engine/executor/worker"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
-	"github.com/pingcap/tiflow/engine/lib/registry"
+	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	"github.com/pingcap/tiflow/engine/framework/registry"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pb"
-	"github.com/pingcap/tiflow/engine/pkg/config"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
 	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
-	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/serverutils"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
+	p2pImpl "github.com/pingcap/tiflow/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/tcpserver"
 )
 
 // Server is a executor server abstraction
@@ -78,16 +77,12 @@ type Server struct {
 
 	mockSrv mock.GrpcServer
 
-	// etcdCli connects to server master embed etcd, it should be used in service
-	// discovery only.
-	etcdCli *clientv3.Client
-	// framework metastore client
-	frameMetaClient pkgOrm.Client
-	// user metastore raw kvclient(reuse for all workers)
-	userRawKVClient extkv.KVClientEx
+	metastores server.MetastoreManager
+
 	p2pMsgRouter    p2pImpl.MessageRouter
 	discoveryKeeper *serverutils.DiscoveryKeepaliver
 	resourceBroker  broker.Broker
+	jobAPISrv       *jobAPIServer
 }
 
 // NewServer creates a new executor server instance
@@ -96,6 +91,8 @@ func NewServer(cfg *Config, ctx *test.Context) *Server {
 		cfg:         cfg,
 		testCtx:     ctx,
 		cliUpdateCh: make(chan cliUpdateInfo),
+		jobAPISrv:   newJobAPIServer(),
+		metastores:  server.NewMetastoreManager(),
 	}
 	return &s
 }
@@ -117,14 +114,14 @@ func (s *Server) buildDeps() (*deps.Deps, error) {
 	}
 
 	err = deps.Provide(func() pkgOrm.Client {
-		return s.frameMetaClient
+		return s.metastores.FrameworkStore()
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	err = deps.Provide(func() extkv.KVClientEx {
-		return s.userRawKVClient
+		return s.metastores.BusinessStore()
 	})
 	if err != nil {
 		return nil, err
@@ -156,9 +153,10 @@ func (s *Server) buildDeps() (*deps.Deps, error) {
 
 func (s *Server) makeTask(
 	ctx context.Context,
-	workerID libModel.WorkerID,
-	masterID libModel.MasterID,
-	workerType libModel.WorkerType,
+	projectInfo *pb.ProjectInfo,
+	workerID frameModel.WorkerID,
+	masterID frameModel.MasterID,
+	workerType frameModel.WorkerType,
 	workerConfig []byte,
 ) (worker.Runnable, error) {
 	dctx := dcontext.NewContext(ctx, log.L())
@@ -169,13 +167,14 @@ func (s *Server) makeTask(
 	dctx = dctx.WithDeps(dp)
 	dctx.Environ.NodeID = p2p.NodeID(s.info.ID)
 	dctx.Environ.Addr = s.info.Addr
+	dctx.ProjectInfo = tenant.NewProjectInfo(projectInfo.GetTenantId(), projectInfo.GetProjectId())
 
 	// NOTICE: only take effect when job type is job master
-	masterMeta := &libModel.MasterMetaKVData{
-		// TODO: ProjectID
-		ID:     workerID,
-		Tp:     workerType,
-		Config: workerConfig,
+	masterMeta := &frameModel.MasterMetaKVData{
+		ProjectID: dctx.ProjectInfo.UniqueID(),
+		ID:        workerID,
+		Tp:        workerType,
+		Config:    workerConfig,
 	}
 	metaBytes, err := masterMeta.Marshal()
 	if err != nil {
@@ -193,16 +192,25 @@ func (s *Server) makeTask(
 		log.L().Error("Failed to create worker", zap.Error(err))
 		return nil, err
 	}
+	if jm, ok := newWorker.(framework.BaseJobMasterExt); ok {
+		jobID := newWorker.ID()
+		s.jobAPISrv.initialize(jobID, jm.TriggerOpenAPIInitialize)
+	}
 	return newWorker, nil
 }
 
 // PreDispatchTask implements Executor.PreDispatchTask
 func (s *Server) PreDispatchTask(ctx context.Context, req *pb.PreDispatchTaskRequest) (*pb.PreDispatchTaskResponse, error) {
+	if !s.isReadyToServe() {
+		return nil, status.Error(codes.Unavailable, "executor server is not ready")
+	}
+
 	task, err := s.makeTask(
 		ctx,
+		req.GetProjectInfo(),
 		req.GetWorkerId(),
 		req.GetMasterId(),
-		libModel.WorkerType(req.GetTaskTypeId()),
+		frameModel.WorkerType(req.GetTaskTypeId()),
 		req.GetTaskConfig())
 	if err != nil {
 		// We use the code Aborted here per the suggestion in gRPC's documentation
@@ -223,6 +231,10 @@ func (s *Server) PreDispatchTask(ctx context.Context, req *pb.PreDispatchTaskReq
 
 // ConfirmDispatchTask implements Executor.ConfirmDispatchTask
 func (s *Server) ConfirmDispatchTask(ctx context.Context, req *pb.ConfirmDispatchTaskRequest) (*pb.ConfirmDispatchTaskResponse, error) {
+	if !s.isReadyToServe() {
+		return nil, status.Error(codes.Unavailable, "executor server is not ready")
+	}
+
 	ok, err := s.taskCommitter.ConfirmDispatchTask(req.GetRequestId(), req.GetWorkerId())
 	if err != nil {
 		return nil, status.Error(codes.Aborted, err.Error())
@@ -246,29 +258,16 @@ func (s *Server) Stop() {
 		}
 	}
 
-	if s.etcdCli != nil {
-		// clear executor info in metastore to accelerate service discovery. If
-		// not delete actively, the session will be timeout after TTL.
+	if s.metastores.IsInitialized() {
+		etcdCli := s.metastores.ServiceDiscoveryStore()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
-		_, err := s.etcdCli.Delete(ctx, s.info.EtcdKey())
+		_, err := etcdCli.Delete(ctx, s.info.EtcdKey())
 		if err != nil {
 			log.L().Warn("failed to delete executor info", zap.Error(err))
 		}
-	}
 
-	if s.frameMetaClient != nil {
-		err := s.frameMetaClient.Close()
-		if err != nil {
-			log.L().Warn("failed to close connection to framework metastore", zap.Error(err))
-		}
-	}
-
-	if s.userRawKVClient != nil {
-		err := s.userRawKVClient.Close()
-		if err != nil {
-			log.L().Warn("failed to close connection to user metastore", zap.Error(err))
-		}
+		s.metastores.Close()
 	}
 
 	if s.mockSrv != nil {
@@ -309,6 +308,10 @@ func (s *Server) startMsgService(ctx context.Context, wg *errgroup.Group) (err e
 	return nil
 }
 
+func (s *Server) isReadyToServe() bool {
+	return s.metastores.IsInitialized()
+}
+
 const (
 	// TODO since we introduced queuing in the TaskRunner, it is no longer
 	// easy to implement the capacity. Think of a better solution later.
@@ -336,6 +339,12 @@ func (s *Server) Run(ctx context.Context) error {
 		return s.taskRunner.Run(ctx)
 	})
 
+	wg.Go(func() error {
+		taskStopReceiver := s.taskRunner.TaskStopReceiver()
+		defer taskStopReceiver.Close()
+		return s.jobAPISrv.listenStoppedJobs(ctx, taskStopReceiver.C)
+	})
+
 	err := s.initClients(ctx)
 	if err != nil {
 		return err
@@ -345,9 +354,13 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
+	if err := broker.PreCheckConfig(s.cfg.Storage); err != nil {
+		return err
+	}
+
 	// TODO: make the prefix configurable later
 	s.resourceBroker = broker.NewBroker(
-		&storagecfg.Config{Local: &storagecfg.LocalFileConfig{BaseDir: "./"}},
+		&storagecfg.Config{Local: storagecfg.LocalFileConfig{BaseDir: "./"}},
 		s.info.ID,
 		s.resourceClient)
 
@@ -364,13 +377,13 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
-	err = s.fetchMetaStore(ctx)
-	if err != nil {
+	if err := s.metastores.Init(ctx, s.masterClient); err != nil {
+		log.L().Error("Failed to init metastores", zap.Error(err))
 		return err
 	}
 
 	s.discoveryKeeper = serverutils.NewDiscoveryKeepaliver(
-		s.info, s.etcdCli, s.cfg.SessionTTL, defaultDiscoverTicker,
+		s.info, s.metastores.ServiceDiscoveryStore(), s.cfg.SessionTTL, defaultDiscoverTicker,
 		s.p2pMsgRouter,
 	)
 	// connects to metastore and maintains a etcd session
@@ -405,6 +418,7 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 	}
 	s.tcpServer = tcpServer
 	pb.RegisterExecutorServer(s.grpcSrv, s)
+	pb.RegisterBrokerServiceServer(s.grpcSrv, s.resourceBroker)
 	log.L().Logger.Info("listen address", zap.String("addr", s.cfg.WorkerAddr))
 
 	wg.Go(func() error {
@@ -416,96 +430,25 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 	})
 
 	wg.Go(func() error {
-		return httpHandler(s.tcpServer.HTTP1Listener())
+		mux := http.NewServeMux()
+
+		mux.HandleFunc("/debug/pprof/", pprof.Index)
+		mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+		mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+		mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+		mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+		mux.Handle("/metrics", promutil.HTTPHandlerForMetric())
+		mux.Handle(jobAPIPrefix, s.jobAPISrv)
+
+		httpSrv := &http.Server{
+			Handler: mux,
+		}
+		err := httpSrv.Serve(s.tcpServer.HTTP1Listener())
+		if err != nil && !common.IsErrNetClosing(err) && err != http.ErrServerClosed {
+			log.L().Error("http server returned", log.ShortError(err))
+		}
+		return err
 	})
-	return nil
-}
-
-// current the metastore is an embed etcd underlying
-func (s *Server) fetchMetaStore(ctx context.Context) error {
-	// query service discovery metastore to fetch metastore connection endpoint
-	resp, err := s.masterClient.QueryMetaStore(
-		ctx,
-		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_ServiceDiscovery},
-		s.cfg.RPCTimeout,
-	)
-	if err != nil {
-		return err
-	}
-	log.L().Info("update service discovery metastore", zap.String("addr", resp.Address))
-
-	logConfig := logutil.DefaultZapLoggerConfig
-	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
-	etcdCli, err := clientv3.New(clientv3.Config{
-		Endpoints:        strings.Split(resp.GetAddress(), ","),
-		Context:          ctx,
-		LogConfig:        &logConfig,
-		DialTimeout:      config.ServerMasterEtcdDialTimeout,
-		AutoSyncInterval: config.ServerMasterEtcdSyncInterval,
-		DialOptions: []grpc.DialOption{
-			grpc.WithInsecure(),
-			grpc.WithBlock(),
-			grpc.WithConnectParams(grpc.ConnectParams{
-				Backoff: backoff.Config{
-					BaseDelay:  time.Second,
-					Multiplier: 1.1,
-					Jitter:     0.1,
-					MaxDelay:   3 * time.Second,
-				},
-				MinConnectTimeout: 3 * time.Second,
-			}),
-		},
-	})
-	if err != nil {
-		return errors.ErrExecutorEtcdConnFail.Wrap(err)
-	}
-	s.etcdCli = etcdCli
-
-	// fetch framework metastore connection endpoint
-	resp, err = s.masterClient.QueryMetaStore(
-		ctx,
-		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_SystemMetaStore},
-		s.cfg.RPCTimeout,
-	)
-	if err != nil {
-		log.L().Error("query framework metastore fail")
-		return err
-	}
-	var conf metaclient.StoreConfigParams
-	err = json.Unmarshal([]byte(resp.Address), &conf)
-	if err != nil {
-		log.L().Error("unmarshal framework metastore config fail", zap.String("conf", resp.Address), zap.Error(err))
-		return err
-	}
-	// TODO: replace the default DB config
-	s.frameMetaClient, err = pkgOrm.NewClient(conf, pkgOrm.NewDefaultDBConfig())
-	if err != nil {
-		log.L().Error("connect to framework metastore fail", zap.Any("conf", conf), zap.Error(err))
-		return err
-	}
-	log.L().Info("update framework metastore successful", zap.String("addr", resp.Address))
-
-	// fetch user metastore connection endpoint
-	resp, err = s.masterClient.QueryMetaStore(
-		ctx,
-		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_AppMetaStore},
-		s.cfg.RPCTimeout,
-	)
-	if err != nil {
-		log.L().Error("query user metastore fail")
-		return err
-	}
-
-	conf = metaclient.StoreConfigParams{
-		Endpoints: []string{resp.Address},
-	}
-	s.userRawKVClient, err = kvclient.NewKVClient(&conf)
-	if err != nil {
-		log.L().Error("connect to user metastore fail", zap.Any("store-conf", conf), zap.Error(err))
-		return err
-	}
-	log.L().Info("update user metastore successful", zap.String("addr", resp.Address))
-
 	return nil
 }
 

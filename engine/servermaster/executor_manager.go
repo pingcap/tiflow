@@ -22,14 +22,14 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
-	"github.com/pingcap/tiflow/engine/pkg/uuid"
 	"github.com/pingcap/tiflow/engine/servermaster/resource"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 	"github.com/pingcap/tiflow/engine/test"
+	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
 // ExecutorManager defines an interface to manager all executors
@@ -37,13 +37,14 @@ type ExecutorManager interface {
 	HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error)
 	AllocateNewExec(req *pb.RegisterExecutorRequest) (*model.NodeInfo, error)
 	RegisterExec(info *model.NodeInfo)
-	Start(ctx context.Context)
 	// ExecutorCount returns executor count with given status
 	ExecutorCount(status model.ExecutorStatus) int
 	HasExecutor(executorID string) bool
 	ListExecutors() []string
 	CapacityProvider() scheduler.CapacityProvider
 	GetAddr(executorID model.ExecutorID) (string, bool)
+	Start(ctx context.Context)
+	Stop()
 
 	// WatchExecutors returns a snapshot of all online executors plus
 	// a stream of events describing changes that happen to the executors
@@ -56,6 +57,7 @@ type ExecutorManager interface {
 // ExecutorManagerImpl holds all the executors info, including liveness, status, resource usage.
 type ExecutorManagerImpl struct {
 	testContext *test.Context
+	wg          sync.WaitGroup
 
 	mu        sync.Mutex
 	executors map[model.ExecutorID]*Executor
@@ -235,28 +237,34 @@ func (e *Executor) checkAlive() bool {
 	return true
 }
 
-// Start check alive goroutine.
+// Start implements ExecutorManager.Start. It starts a background goroutine to
+// check whether all executors are alive periodically.
 func (e *ExecutorManagerImpl) Start(ctx context.Context) {
-	go e.checkAlive(ctx)
+	e.wg.Add(1)
+	go func() {
+		defer e.wg.Done()
+		ticker := time.NewTicker(e.keepAliveInterval)
+		defer func() {
+			ticker.Stop()
+			log.L().Logger.Info("check executor alive finished")
+		}()
+		for {
+			select {
+			case <-ticker.C:
+				err := e.checkAliveImpl()
+				if err != nil {
+					log.L().Logger.Info("check alive meet error", zap.Error(err))
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 }
 
-// checkAlive goroutine checks whether all the executors are alive periodically.
-func (e *ExecutorManagerImpl) checkAlive(ctx context.Context) {
-	ticker := time.NewTicker(e.keepAliveInterval)
-	defer func() {
-		ticker.Stop()
-		log.L().Logger.Info("check alive finished")
-	}()
-	for {
-		select {
-		case <-ticker.C:
-			err := e.checkAliveImpl()
-			if err != nil {
-				log.L().Logger.Info("check alive meet error", zap.Error(err))
-			}
-		case <-ctx.Done():
-		}
-	}
+// Stop implements ExecutorManager.Stop
+func (e *ExecutorManagerImpl) Stop() {
+	e.wg.Wait()
 }
 
 func (e *ExecutorManagerImpl) checkAliveImpl() error {

@@ -16,7 +16,6 @@ package owner
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
 	"math"
 	"os"
 	"path/filepath"
@@ -170,13 +169,13 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T) (
 	*changefeed, *orchestrator.ChangefeedReactorState,
 	map[model.CaptureID]*model.CaptureInfo, *orchestrator.ReactorStateTester,
 ) {
-	upStream := upstream.NewUpstream4Test(&gc.MockPDClient{
+	up := upstream.NewUpstream4Test(&gc.MockPDClient{
 		UpdateServiceGCSafePointFunc: func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
 			return safePoint, nil
 		},
 	})
 
-	cf := newChangefeed4Test(ctx.ChangefeedVars().ID, upStream, func(ctx cdcContext.Context, upStream *upstream.Upstream, startTs uint64) (DDLPuller, error) {
+	cf := newChangefeed4Test(ctx.ChangefeedVars().ID, up, func(ctx cdcContext.Context, up *upstream.Upstream, startTs uint64) (DDLPuller, error) {
 		return &mockDDLPuller{resolvedTs: startTs - 1}, nil
 	}, func() DDLSink {
 		return &mockDDLSink{
@@ -189,7 +188,7 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T) (
 	) (scheduler.Scheduler, error) {
 		return &mockScheduler{}, nil
 	}
-	cf.upStream = upStream
+	cf.upstream = up
 	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
@@ -282,7 +281,7 @@ func TestExecDDL(t *testing.T) {
 	})
 
 	cf, state, captures, tester := createChangefeed4Test(ctx, t)
-	cf.upStream.KVStorage = helper.Storage()
+	cf.upstream.KVStorage = helper.Storage()
 	defer cf.Close(ctx)
 	tickThreeTime := func() {
 		cf.Tick(ctx, state, captures)
@@ -372,7 +371,7 @@ func TestEmitCheckpointTs(t *testing.T) {
 	})
 
 	cf, state, captures, tester := createChangefeed4Test(ctx, t)
-	cf.upStream.KVStorage = helper.Storage()
+	cf.upstream.KVStorage = helper.Storage()
 
 	defer cf.Close(ctx)
 	tickThreeTime := func() {
@@ -479,9 +478,7 @@ func TestRemoveChangefeed(t *testing.T) {
 	baseCtx, cancel := context.WithCancel(context.Background())
 	ctx := cdcContext.NewContext4Test(baseCtx, true)
 	info := ctx.ChangefeedVars().Info
-	dir, err := ioutil.TempDir("", "remove-changefeed-test")
-	require.NoError(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 	info.Config.Consistent = &config.ConsistentConfig{
 		Level:   "eventual",
 		Storage: filepath.Join("nfs://", dir),
@@ -498,9 +495,7 @@ func TestRemovePausedChangefeed(t *testing.T) {
 	ctx := cdcContext.NewContext4Test(baseCtx, true)
 	info := ctx.ChangefeedVars().Info
 	info.State = model.StateStopped
-	dir, err := ioutil.TempDir("", "remove-paused-changefeed-test")
-	require.NoError(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 	info.Config.Consistent = &config.ConsistentConfig{
 		Level:   "eventual",
 		Storage: filepath.Join("nfs://", dir),

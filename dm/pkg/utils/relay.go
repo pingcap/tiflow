@@ -34,7 +34,7 @@ var (
 	uuidIndexSeparator = "."
 )
 
-// ParseUUIDIndex parses server-uuid.index.
+// ParseUUIDIndex parses UUIDIndexFilename, return a list of relay log subdirectory names and error.
 func ParseUUIDIndex(indexPath string) ([]string, error) {
 	fd, err := os.Open(indexPath)
 	if os.IsNotExist(err) {
@@ -67,18 +67,19 @@ func ParseUUIDIndex(indexPath string) ([]string, error) {
 	return uuids, nil
 }
 
-// AddSuffixForUUID adds a suffix for UUID.
+// AddSuffixForUUID adds a suffix for UUID, returns the name for relay log subdirectory.
 func AddSuffixForUUID(uuid string, id int) string {
 	return fmt.Sprintf("%s%s%06d", uuid, uuidIndexSeparator, id) // eg. 53ea0ed1-9bf8-11e6-8bea-64006a897c73.000001
 }
 
 // SuffixIntToStr convert int-represented suffix to string-represented.
+// TODO: assign RelaySubDirSuffix a type and implement Stringer.
 func SuffixIntToStr(id int) string {
 	return fmt.Sprintf("%06d", id)
 }
 
-// ParseSuffixForUUID parses UUID (with suffix) to (UUID without suffix, suffix) pair.
-func ParseSuffixForUUID(uuid string) (string, int, error) {
+// ParseRelaySubDir parses relay log subdirectory name to (server UUID, RelaySubDirSuffix) pair.
+func ParseRelaySubDir(uuid string) (string, int, error) {
 	parts := strings.Split(uuid, uuidIndexSeparator)
 	if len(parts) != 2 || len(parts[1]) != 6 {
 		return "", 0, terror.ErrRelayParseUUIDSuffix.Generate(uuid)
@@ -90,29 +91,7 @@ func ParseSuffixForUUID(uuid string) (string, int, error) {
 	return parts[0], ID, nil
 }
 
-// GetSuffixUUID gets UUID (with suffix) by UUID (without suffix)
-// when multi UUIDs (without suffix) are the same, the newest will be return.
-func GetSuffixUUID(indexPath, uuid string) (string, error) {
-	uuids, err := ParseUUIDIndex(indexPath)
-	if err != nil {
-		return "", err
-	}
-
-	// newer is preferred
-	for i := len(uuids) - 1; i >= 0; i-- {
-		uuid2, _, err := ParseSuffixForUUID(uuids[i])
-		if err != nil {
-			return "", err
-		}
-		if uuid2 == uuid {
-			return uuids[i], nil
-		}
-	}
-
-	return "", terror.ErrRelayUUIDWithSuffixNotFound.Generate(uuid, indexPath, uuids)
-}
-
-// GetUUIDBySuffix gets UUID from uuids by suffix.
+// GetUUIDBySuffix gets relay log subdirectory name by matching suffix.
 func GetUUIDBySuffix(uuids []string, suffix string) string {
 	suffix2 := fmt.Sprintf("%s%s", uuidIndexSeparator, suffix)
 	for _, uuid := range uuids {
