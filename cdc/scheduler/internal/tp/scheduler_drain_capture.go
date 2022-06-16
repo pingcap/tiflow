@@ -69,30 +69,29 @@ func (d *drainCaptureScheduler) Schedule(
 		return nil
 	}
 
-	otherCaptures := make(map[model.CaptureID]*model.CaptureInfo)
-	for id, info := range captures {
-		if id != d.target {
-			otherCaptures[id] = info
+	var availableCaptureCount int
+	for id := range captures {
+		if id == d.target {
+			availableCaptureCount++
 		}
 	}
 
 	// this may happen when inject the target, there is at least 2 alive captures
 	// but when schedule the task, only owner alive.
-	if len(otherCaptures) == 0 {
+	if availableCaptureCount == 0 {
 		log.Warn("tpscheduler: drain capture scheduler ignore drain target capture, "+
 			"since cannot found destination captures",
 			zap.String("target", d.target), zap.Any("captures", captures))
 		d.target = captureIDNotDraining
 		return nil
 	}
-	
+
 	// victims record all table instance should be dropped from the target capture
 	victims := make([]model.TableID, 0)
 	captureWorkload := make(map[model.CaptureID]int)
 	for tableID, rep := range replications {
-		if rep.Secondary == d.target {
-			// only drain the target capture if all tables on it is replicating,
-			// or no table is preparing / commit on it.
+		if rep.State != ReplicationSetStateReplicating {
+			// only drain the target capture if all tables is replicating,
 			log.Warn("tpscheduler: drain capture scheduler skip this tick,"+
 				"since it's secondary to some table",
 				zap.String("target", d.target),
@@ -100,14 +99,12 @@ func (d *drainCaptureScheduler) Schedule(
 			return nil
 		}
 
-		// target is the `Primary`, indicate the target capture is replicating the table,
-		// should be moved to other capture.
 		if rep.Primary == d.target {
 			victims = append(victims, tableID)
 		}
 
 		// only calculate workload of other captures not the drain target.
-		if rep.Primary != d.target && rep.State == ReplicationSetStateReplicating {
+		if rep.Primary != d.target {
 			captureWorkload[rep.Primary] += 1
 		}
 	}
@@ -152,6 +149,7 @@ func (d *drainCaptureScheduler) Schedule(
 	accept := func() {
 		d.mu.Lock()
 		defer d.mu.Unlock()
+		// todo: before all tables removed from the target capture, this should always be set.
 		d.target = captureIDNotDraining
 	}
 

@@ -104,6 +104,7 @@ func newCoordinator(
 	}
 }
 
+// Tick implement the scheduler interface
 func (c *coordinator) Tick(
 	ctx context.Context,
 	// Latest global checkpoint of the changefeed
@@ -119,6 +120,7 @@ func (c *coordinator) Tick(
 	return c.poll(ctx, checkpointTs, currentTables, aliveCaptures)
 }
 
+// MoveTable implement the scheduler interface
 func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -146,6 +148,7 @@ func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {
 	}
 }
 
+// Rebalance implement the scheduler interface
 func (c *coordinator) Rebalance() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -168,11 +171,20 @@ func (c *coordinator) Rebalance() {
 }
 
 // DrainCapture implement the scheduler interface
+// return the count of table replicating on the target capture
+// return true if the target capture no more need to be drained, or cannot be drained.
 func (c *coordinator) DrainCapture(target model.CaptureID) (int, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	count := len(c.replicationM.ReplicationSets())
+	var count int
+	for _, rep := range c.replicationM.ReplicationSets() {
+		// todo: revise this, shall we also consider replication set in other state ?
+		if rep.Primary == target {
+			count++
+		}
+	}
+
 	if !c.captureM.checkAllCaptureInitialized() {
 		log.Info("tpscheduler: manual drain capture task ignored, "+
 			"since not all captures initialized",
@@ -195,7 +207,9 @@ func (c *coordinator) DrainCapture(target model.CaptureID) (int, bool) {
 			"since less than 2 captures alive",
 			zap.String("target", target),
 			zap.Int("tableCount", count))
-		return count, false
+		// in such a case, the capture cannot be drained, so return true here.
+		// the caller should make sure at least 2 captures alive.
+		return count, true
 	}
 
 	// the caller should guarantee the target capture exist
@@ -204,18 +218,16 @@ func (c *coordinator) DrainCapture(target model.CaptureID) (int, bool) {
 			"since cannot found the target capture",
 			zap.String("target", target),
 			zap.Int("tableCount", count))
-		return count, false
+		// in such a case, the capture cannot be drained, so return true here.
+		// the caller should make sure at least 2 captures alive.
+		return count, true
 	}
 
-	// the owner is the drain target, it's not allowed, just ignore the request.
-	// todo: this should be revised, owner can be drained if it's the last one.
-	// this should be guaranteed by the caller, since it knows the draining order.
+	// the owner is the drain target. In the rolling upgrade scenario, owner should be drained
+	// at the last, this should be guaranteed by the caller, since it knows the draining order.
 	if target == c.captureID {
-		log.Warn("tpscheduler: manual drain capture task ignored, "+
-			"since the target is the owner",
-			zap.String("target", target),
-			zap.Int("tableCount", count))
-		return count, false
+		log.Warn("tpscheduler: manual drain capture, the target is the owner now",
+			zap.String("target", target), zap.Int("tableCount", count))
 	}
 
 	scheduler, ok := c.schedulers[schedulerTypeDrainCapture]
