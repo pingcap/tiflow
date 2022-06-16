@@ -23,7 +23,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/dumpling/export"
-	promutil2 "github.com/pingcap/tidb/util/promutil"
+	tidbpromutil "github.com/pingcap/tidb/util/promutil"
 	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
@@ -89,7 +89,7 @@ func (m *Dumpling) Init(ctx context.Context) error {
 				"task": m.cfg.Name, "source_id": m.cfg.SourceID,
 			},
 		)
-		m.dumpConfig.PromRegistry = promutil2.NewNoopRegistry()
+		m.dumpConfig.PromRegistry = tidbpromutil.NewNoopRegistry()
 	} else {
 		m.metricProxies = defaultMetricProxies
 		m.dumpConfig.PromFactory = promutil.NewWrappingFactory(
