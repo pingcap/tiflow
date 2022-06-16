@@ -34,9 +34,6 @@ func TestFillV1(t *testing.T) {
 	v1Config := `
 {
     "sink-uri":"blackhole://",
-    "opts":{
-
-    },
     "start-ts":417136892416622595,
     "target-ts":0,
     "admin-job-type":0,
