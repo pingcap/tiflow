@@ -81,8 +81,13 @@ function test_source() {
 		"\"worker\": \"worker2\"" 1
 
 	init_noshard_data # init table in database openapi for test get schema and table
+
 	# test get source schemas and tables
 	openapi_source_check "get_source_schemas_and_tables_success" "mysql-01" "openapi" "t1"
+
+	# test the table name that must be quoted are working properly
+	run_sql_source1 "CREATE TABLE openapi.\`t-1\`(i TINYINT, j INT UNIQUE KEY);"
+	openapi_source_check "get_source_schemas_and_tables_success" "mysql-01" "openapi" "t-1"
 
 	# delete source success
 	openapi_source_check "delete_source_success" "mysql-01"
