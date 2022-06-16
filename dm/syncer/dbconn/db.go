@@ -21,12 +21,8 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-<<<<<<< HEAD
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
-=======
 	"github.com/pingcap/tidb/errno"
-	"github.com/pingcap/tidb/util/dbutil"
->>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"

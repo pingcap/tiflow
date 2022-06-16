@@ -19,21 +19,15 @@ import (
 	"encoding/json"
 	"strings"
 
-<<<<<<< HEAD
 	"github.com/pingcap/tidb-tools/pkg/filter"
-	"github.com/pingcap/tidb/parser/ast"
-	"github.com/pingcap/tidb/parser/format"
-	"github.com/pingcap/tidb/parser/model"
-=======
 	ddl2 "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/executor"
 	"github.com/pingcap/tidb/meta/autoid"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
->>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
+	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -123,19 +117,10 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 			return "", terror.ErrSchemaTrackerRestoreStmtFail.Delegate(err2)
 		}
 
-<<<<<<< HEAD
-		if req.Flush {
-			log.L().Info("flush table info", zap.String("table info", newSQL))
-			err = s.checkpoint.FlushPointWithTableInfo(tcontext.NewContext(ctx, log.L()), sourceTable, ti)
-			if err != nil {
-				return "", err
-			}
-=======
-		s.tctx.L().Info("flush table info", zap.String("table info", newSQL))
-		err = s.checkpoint.FlushPointsWithTableInfos(tcontext.NewContext(ctx, log.L()), []*filter.Table{sourceTable}, []*model.TableInfo{ti})
+		log.L().Info("flush table info", zap.String("table info", newSQL))
+		err = s.checkpoint.FlushPointWithTableInfo(tcontext.NewContext(ctx, log.L()), sourceTable, ti)
 		if err != nil {
 			return "", err
->>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 		}
 
 		if req.Sync {

@@ -40,12 +40,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
-<<<<<<< HEAD
-=======
 	"github.com/pingcap/tiflow/pkg/errorutil"
-	"github.com/pingcap/tiflow/pkg/sqlmodel"
-	"github.com/stretchr/testify/require"
->>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
@@ -62,8 +57,6 @@ import (
 	"github.com/pingcap/tidb/parser/ast"
 	pmysql "github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
-
-	"github.com/pingcap/tiflow/pkg/errorutil"
 )
 
 var _ = Suite(&testSyncerSuite{})
@@ -808,14 +801,6 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_1`").WillReturnRows(
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
 			AddRow("t_1", "create table t_1(id int primary key, name varchar(24), KEY `index1` (`name`))"))
-<<<<<<< HEAD
-	s.mockGetServerUnixTS(mock)
-	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_2`").WillReturnRows(
-		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow("t_2", "create table t_2(id int primary key, name varchar(24))"))
-=======
-
->>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
 	c.Assert(err, IsNil)
 	c.Assert(syncer.Type(), Equals, pb.UnitType_Sync)
@@ -972,7 +957,6 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	mockDBProvider := conn.InitMockDB(c)
 	mockDBProvider.ExpectQuery("SELECT cast\\(TIMEDIFF\\(NOW\\(6\\), UTC_TIMESTAMP\\(6\\)\\) as time\\);").
 		WillReturnRows(sqlmock.NewRows([]string{""}).AddRow("01:00:00"))
-	mockGetServerUnixTS(mock)
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(
 		sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
 	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_2`").WillReturnRows(
@@ -1729,178 +1713,3 @@ func (s *testSyncerSuite) TestExecuteSQLSWithIgnore(c *C) {
 
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
 }
-<<<<<<< HEAD
-=======
-
-func genDefaultSubTaskConfig4Test() *config.SubTaskConfig {
-	loaderDir, err := os.MkdirTemp("", "loader")
-	if err != nil {
-		panic(err) // no happen
-	}
-
-	loaderCfg := config.LoaderConfig{
-		Dir: loaderDir,
-	}
-	cfg := &config.SubTaskConfig{
-		From:             config.GetDBConfigForTest(),
-		To:               config.GetDBConfigForTest(),
-		ServerID:         101,
-		MetaSchema:       "test",
-		Name:             "syncer_ut",
-		ShadowTableRules: []string{config.DefaultShadowTableRules},
-		TrashTableRules:  []string{config.DefaultTrashTableRules},
-		Mode:             config.ModeIncrement,
-		Flavor:           "mysql",
-		LoaderConfig:     loaderCfg,
-		UseRelay:         false,
-	}
-	cfg.Experimental.AsyncCheckpointFlush = true
-	cfg.From.Adjust()
-	cfg.To.Adjust()
-	return cfg
-}
-
-func TestWaitBeforeRunExit(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cfg := genDefaultSubTaskConfig4Test()
-	cfg.WorkerCount = 0
-	cfg.To.Session = map[string]string{
-		"sql_mode":             "ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION",
-		"tidb_skip_utf8_check": "0",
-	}
-	syncer := NewSyncer(cfg, nil, nil)
-
-	db, mock, err := sqlmock.New()
-	require.NoError(t, err)
-	mockGetServerUnixTS(mock)
-
-	syncer.fromDB = &dbconn.UpStreamConn{BaseDB: conn.NewBaseDB(db)}
-	syncer.reset()
-	require.NoError(t, syncer.genRouter())
-
-	mockStreamerProducer := &MockStreamProducer{}
-	mockStreamer, err := mockStreamerProducer.generateStreamer(binlog.NewLocation(""))
-	require.NoError(t, err)
-	// let getEvent pending until ctx.Done()
-	mockStreamer.(*MockStreamer).pending = true
-	syncer.streamerController = &StreamerController{
-		streamerProducer: mockStreamerProducer, streamer: mockStreamer, closed: false,
-	}
-
-	wg := &sync.WaitGroup{}
-	errCh := make(chan error, 1)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		errCh <- syncer.Run(ctx)
-	}()
-	time.Sleep(time.Second) // wait s.Run start
-
-	// test s.Run will not exit unit caller cancel ctx or call s.runCancel
-	require.Len(t, errCh, 0)
-	cancel() // this will make s.Run exit
-	wg.Wait()
-	<-errCh
-
-	// test syncer wait time not more than maxPauseOrStopWaitTime
-	oldMaxPauseOrStopWaitTime := defaultMaxPauseOrStopWaitTime
-	defaultMaxPauseOrStopWaitTime = time.Second
-	ctx2, cancel := context.WithCancel(context.Background())
-	cancel()
-	runCtx, runCancel := context.WithCancel(context.Background())
-	syncer.runCtx, syncer.runCancel = tcontext.NewContext(runCtx, syncer.tctx.L()), runCancel
-	syncer.isTransactionEnd = false
-	syncer.runWg.Add(1)
-	syncer.waitBeforeRunExit(ctx2)
-	require.Equal(t, context.Canceled, syncer.runCtx.Ctx.Err())
-	defaultMaxPauseOrStopWaitTime = oldMaxPauseOrStopWaitTime
-
-	// test use cliArgs
-	require.NoError(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/recordAndIgnorePrepareTime", "return()"))
-	syncer.cliArgs = &config.TaskCliArgs{WaitTimeOnStop: "2s"}
-	ctx3, cancel := context.WithCancel(context.Background())
-	cancel()
-	runCtx, runCancel = context.WithCancel(context.Background())
-	syncer.runCtx, syncer.runCancel = tcontext.NewContext(runCtx, syncer.tctx.L()), runCancel
-	syncer.runWg.Add(1)
-	syncer.waitBeforeRunExit(ctx3)
-	require.Equal(t, context.Canceled, syncer.runCtx.Ctx.Err())
-	require.Equal(t, 2*time.Second, waitBeforeRunExitDurationForTest)
-	require.NoError(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/recordAndIgnorePrepareTime"))
-}
-
-func TestSyncerGetTableInfo(t *testing.T) {
-	cfg := genDefaultSubTaskConfig4Test()
-	cfg.WorkerCount = 0
-	syncer := NewSyncer(cfg, nil, nil)
-	ctx := context.Background()
-	tctx := tcontext.Background()
-
-	db, mock, err := sqlmock.New()
-	require.NoError(t, err)
-	dbConn, err := db.Conn(ctx)
-	require.NoError(t, err)
-	baseConn := conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})
-	syncer.ddlDBConn = dbconn.NewDBConn(cfg, baseConn)
-	syncer.downstreamTrackConn = dbconn.NewDBConn(cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
-	syncer.schemaTracker, err = schema.NewTracker(ctx, cfg.Name, defaultTestSessionCfg, syncer.downstreamTrackConn)
-	require.NoError(t, err)
-	defer syncer.schemaTracker.Close()
-
-	upTable := &filter.Table{
-		Schema: "test",
-		Name:   "up",
-	}
-	downTable := &filter.Table{
-		Schema: "test",
-		Name:   "down",
-	}
-
-	mock.ExpectQuery("SHOW VARIABLES LIKE .*").WillReturnRows(
-		sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
-	mock.ExpectQuery("SHOW CREATE TABLE.*").WillReturnRows(
-		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow(downTable.Name, " CREATE TABLE `"+downTable.Name+"` (c1 int, c2 int)"))
-
-	ti, err := syncer.getTableInfo(tctx, upTable, downTable)
-	require.NoError(t, err)
-	require.Len(t, ti.Columns, 2)
-	// get again, since it's cached, should return the same result
-	ti, err = syncer.getTableInfo(tctx, upTable, downTable)
-	require.NoError(t, err)
-	require.Len(t, ti.Columns, 2)
-
-	noExistTbl := &filter.Table{
-		Schema: "test",
-		Name:   "not-exist",
-	}
-	mock.ExpectQuery("SHOW VARIABLES LIKE .*").WillReturnRows(
-		sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
-	mock.ExpectQuery("SHOW CREATE TABLE.*").WillReturnRows(
-		sqlmock.NewRows([]string{"Table", "Create Table"}))
-	_, err = syncer.getTableInfo(tctx, noExistTbl, noExistTbl)
-	require.Error(t, err)
-}
-
-func TestCheckCanUpdateCfg(t *testing.T) {
-	cfg := genDefaultSubTaskConfig4Test()
-	syncer := NewSyncer(cfg, nil, nil)
-
-	// update to a not change cfg is ok
-	require.NoError(t, syncer.CheckCanUpdateCfg(cfg))
-
-	cfg2 := genDefaultSubTaskConfig4Test()
-	cfg2.Name = "new name"
-	// updated to a not allowed field
-	require.True(t, terror.ErrWorkerUpdateSubTaskConfig.Equal(syncer.CheckCanUpdateCfg(cfg2)))
-
-	// update ba list or route rules or filter rules is ok or syncerCfg
-	cfg2.Name = cfg.Name
-
-	cfg2.BAList = &filter.Rules{DoDBs: []string{"test"}}
-	cfg2.RouteRules = []*router.TableRule{{SchemaPattern: "test", TargetSchema: "test1"}}
-	cfg2.FilterRules = []*bf.BinlogEventRule{{SchemaPattern: "test"}}
-	cfg2.SyncerConfig.Compact = !cfg.SyncerConfig.Compact
-	require.NoError(t, syncer.CheckCanUpdateCfg(cfg))
-}
->>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))

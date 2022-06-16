@@ -16,6 +16,7 @@ package utils
 import (
 	"context"
 	"strconv"
+	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -25,6 +26,7 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
+	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 )
@@ -458,32 +460,9 @@ func (t *testDBSuite) TestAddGSetWithPurged(c *C) {
 		c.Assert(originSet, DeepEquals, tc.originGSet)
 	}
 }
-<<<<<<< HEAD
-=======
-
-func (t *testDBSuite) TestGetMaxConnections(c *C) {
-	ctx, cancel := context.WithTimeout(context.Background(), DefaultDBTimeout)
-	defer cancel()
-
-	db, mock, err := sqlmock.New()
-	c.Assert(err, IsNil)
-
-	rows := mock.NewRows([]string{"Variable_name", "Value"}).AddRow("max_connections", "151")
-	mock.ExpectQuery(`SHOW VARIABLES LIKE 'max_connections'`).WillReturnRows(rows)
-	maxConnections, err := GetMaxConnections(ctx, db)
-	c.Assert(err, IsNil)
-	c.Assert(maxConnections, Equals, 151)
-	c.Assert(mock.ExpectationsWereMet(), IsNil)
-}
-
-func TestIsMariaDB(t *testing.T) {
-	require.True(t, IsMariaDB("5.5.50-MariaDB-1~wheezy"))
-	require.False(t, IsMariaDB("5.7.19-17-log"))
-}
 
 func TestCreateTableSQLToOneRow(t *testing.T) {
 	input := "CREATE TABLE `t1` (\n  `id` bigint(20) NOT NULL,\n  `c1` varchar(20) DEFAULT NULL,\n  `c2` varchar(20) DEFAULT NULL,\n  PRIMARY KEY (`id`) /*T![clustered_index] NONCLUSTERED */\n) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin"
 	expected := "CREATE TABLE `t1` ( `id` bigint(20) NOT NULL, `c1` varchar(20) DEFAULT NULL, `c2` varchar(20) DEFAULT NULL, PRIMARY KEY (`id`) /*T![clustered_index] NONCLUSTERED */) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin"
 	require.Equal(t, expected, CreateTableSQLToOneRow(input))
 }
->>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))

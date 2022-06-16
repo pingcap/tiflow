@@ -36,13 +36,9 @@ import (
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/store/mockstore"
-<<<<<<< HEAD
-	"github.com/pingcap/tidb/types"
-=======
 	unistoreConfig "github.com/pingcap/tidb/store/mockstore/unistore/config"
-	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tidb/types"
 	"go.uber.org/atomic"
->>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -418,34 +414,7 @@ func (tr *Tracker) CreateTableIfNotExists(table *filter.Table, ti *model.TableIn
 	tableName := model.NewCIStr(table.Name)
 	ti = cloneTableInfo(ti)
 	ti.Name = tableName
-<<<<<<< HEAD
 	return tr.dom.DDL().CreateTableWithInfo(tr.se, schemaName, ti, ddl.OnExistIgnore, false)
-=======
-	return tr.dom.DDL().CreateTableWithInfo(tr.se, schemaName, ti, ddl.OnExistIgnore)
-}
-
-// BatchCreateTableIfNotExist will batch creating tables per schema. If the schema does not exist, it will create it.
-// The argument is { database name -> { table name -> TableInfo } }.
-func (tr *Tracker) BatchCreateTableIfNotExist(tablesToCreate map[string]map[string]*model.TableInfo) error {
-	tr.se.SetValue(sessionctx.QueryString, "skip")
-	for schema, tableNameInfo := range tablesToCreate {
-		if err := tr.CreateSchemaIfNotExists(schema); err != nil {
-			return err
-		}
-
-		var cloneTis []*model.TableInfo
-		for table, ti := range tableNameInfo {
-			cloneTi := cloneTableInfo(ti)        // clone TableInfo w.r.t the warning of the CreateTable function
-			cloneTi.Name = model.NewCIStr(table) // TableInfo has no `TableName`
-			cloneTis = append(cloneTis, cloneTi)
-		}
-		schemaName := model.NewCIStr(schema)
-		if err := tr.dom.DDL().BatchCreateTableWithInfo(tr.se, schemaName, cloneTis, ddl.OnExistIgnore); err != nil {
-			return err
-		}
-	}
-	return nil
->>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 }
 
 // GetSystemVar gets a variable from schema tracker.

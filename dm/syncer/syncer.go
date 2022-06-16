@@ -164,12 +164,7 @@ type Syncer struct {
 	exprFilterGroup *ExprFilterGroup
 	sessCtx         sessionctx.Context
 
-<<<<<<< HEAD
 	closed atomic.Bool
-=======
-	running atomic.Bool
-	closed  atomic.Bool
->>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 
 	start    atomic.Time
 	lastTime atomic.Time
@@ -697,7 +692,7 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 
 	// try to rollback checkpoints, if they already flushed, no effect
 	prePos := s.checkpoint.GlobalPoint()
-	s.checkpoint.Rollback(s.schemaTracker)
+	s.checkpoint.Rollback()
 	currPos := s.checkpoint.GlobalPoint()
 	if binlog.CompareLocation(prePos, currPos, s.cfg.EnableGTID) != 0 {
 		s.tctx.L().Warn("something wrong with rollback global checkpoint", zap.Stringer("previous position", prePos), zap.Stringer("current position", currPos))
@@ -1465,38 +1460,12 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	if s.cfg.Mode == config.ModeAll && fresh {
 		delLoadTask = true
 		flushCheckpoint = true
-<<<<<<< HEAD
-		err = s.loadTableStructureFromDump(ctx)
-		if err != nil {
-			tctx.L().Warn("error happened when load table structure from dump files", zap.Error(err))
-			cleanDumpFile = false
-		}
-	} else {
-		cleanDumpFile = false
-	}
-
-=======
 		freshAndAllMode = true
 	}
 
 	if s.cfg.Mode == config.ModeIncrement || !fresh {
 		cleanDumpFile = false
 	}
-
-	s.runWg.Add(1)
-	go s.syncDML()
-	s.runWg.Add(1)
-	go func() {
-		defer s.runWg.Done()
-		// also need to use a different ctx. checkpointFlushWorker worker will be closed in the first defer
-		s.checkpointFlushWorker.Run(s.tctx)
-	}()
-	s.runWg.Add(1)
-	go s.syncDDL(adminQueueName, s.ddlDBConn, s.ddlJobCh)
-	s.runWg.Add(1)
-	go s.updateLagCronJob(s.runCtx.Ctx)
-	s.runWg.Add(1)
-	go s.updateTSOffsetCronJob(s.runCtx.Ctx)
 
 	// some prepare work before the binlog event loop:
 	// 1. first we flush checkpoint as needed, so in next resume we won't go to Load unit.
@@ -1510,7 +1479,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	//    TODO: we can't handle failure between 1. and 4. After 1. it's not a fresh task.
 	// 5. finally clean the dump files
 
->>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 	if flushCheckpoint {
 		if err = s.flushCheckPoints(); err != nil {
 			tctx.L().Warn("fail to flush checkpoints when starting task", zap.Error(err))
@@ -1519,10 +1487,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	}
 	if delLoadTask {
 		if err = s.delLoadTask(); err != nil {
-<<<<<<< HEAD
 			tctx.L().Warn("error when del load task in etcd", zap.Error(err))
-=======
-			s.tctx.L().Error("error when del load task in etcd", zap.Error(err))
 		}
 	}
 
@@ -1537,14 +1502,10 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			s.tctx.L().Warn("error happened when load table structure from dump files", zap.Error(err))
 			cleanDumpFile = false
 		}
-		if s.cfg.ShardMode == config.ShardOptimistic {
-			s.flushOptimisticTableInfos(s.runCtx)
-		}
 	} else {
 		err = s.checkpoint.LoadIntoSchemaTracker(ctx, s.schemaTracker)
 		if err != nil {
 			return err
->>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 		}
 	}
 	if cleanDumpFile {
@@ -3376,20 +3337,8 @@ func (s *Syncer) Close() {
 	s.closed.Store(true)
 }
 
-<<<<<<< HEAD
 // stopSync stops syncing, now it used by Close and Pause
 // maybe we can refine the workflow more clear.
-=======
-// Kill kill syncer without graceful.
-func (s *Syncer) Kill() {
-	s.tctx.L().Warn("kill syncer without graceful")
-	s.runCancel()
-	s.syncCancel()
-	s.Close()
-}
-
-// stopSync stops stream and rollbacks checkpoint. Now it's used by Close() and Pause().
->>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 func (s *Syncer) stopSync() {
 	if s.done != nil {
 		<-s.done // wait Run to return
@@ -3401,19 +3350,7 @@ func (s *Syncer) stopSync() {
 	// when resuming, re-create s.syncer
 
 	if s.streamerController != nil {
-<<<<<<< HEAD
 		s.streamerController.Close(s.tctx)
-=======
-		s.streamerController.Close()
-	}
-
-	// try to rollback checkpoints, if they already flushed, no effect, this operation should call before close schemaTracker
-	prePos := s.checkpoint.GlobalPoint()
-	s.checkpoint.Rollback()
-	currPos := s.checkpoint.GlobalPoint()
-	if binlog.CompareLocation(prePos, currPos, s.cfg.EnableGTID) != 0 {
-		s.tctx.L().Warn("rollback global checkpoint", zap.Stringer("previous position", prePos), zap.Stringer("current position", currPos))
->>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 	}
 }
 

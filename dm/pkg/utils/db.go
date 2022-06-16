@@ -632,33 +632,6 @@ func GetTableCreateSQL(ctx context.Context, conn *sql.Conn, tableID string) (sql
 	}
 	return createStr, nil
 }
-<<<<<<< HEAD
-=======
-
-// GetMaxConnections gets max_connections for sql.DB which is suitable for session variable max_connections.
-func GetMaxConnections(ctx context.Context, db *sql.DB) (int, error) {
-	c, err := db.Conn(ctx)
-	if err != nil {
-		return 0, err
-	}
-	defer c.Close()
-	return GetMaxConnectionsForConn(ctx, c)
-}
-
-// GetMaxConnectionsForConn gets max_connections for sql.Conn which is suitable for session variable max_connections.
-func GetMaxConnectionsForConn(ctx context.Context, conn *sql.Conn) (int, error) {
-	maxConnectionsStr, err := GetSessionVariable(ctx, conn, "max_connections")
-	if err != nil {
-		return 0, err
-	}
-	maxConnections, err := strconv.ParseUint(maxConnectionsStr, 10, 32)
-	return int(maxConnections), err
-}
-
-// IsMariaDB tells whether the version is mariadb.
-func IsMariaDB(version string) bool {
-	return strings.Contains(strings.ToUpper(version), "MARIADB")
-}
 
 // CreateTableSQLToOneRow formats the result of SHOW CREATE TABLE to one row.
 func CreateTableSQLToOneRow(sql string) string {
@@ -666,4 +639,3 @@ func CreateTableSQLToOneRow(sql string) string {
 	sql = strings.ReplaceAll(sql, "  ", " ")
 	return sql
 }
->>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))

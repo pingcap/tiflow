@@ -150,12 +150,7 @@ function DM_050_CASE() {
 		# can't make sure DDL of which source comes first
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-<<<<<<< HEAD
 			"because schema conflict detected" 2
-=======
-			'ALTER TABLE `shardddl`.`tb` CHANGE COLUMN' 1 \
-			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
->>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 	fi
 }
 

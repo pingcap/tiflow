@@ -290,6 +290,9 @@ type CheckPoint interface {
 	// String return text of global position
 	String() string
 
+	// LoadIntoSchemaTracker loads table infos of all points into schema tracker.
+	LoadIntoSchemaTracker(ctx context.Context, schemaTracker *schema.Tracker) error
+
 	// CheckAndUpdate check the checkpoint data consistency and try to fix them if possible
 	CheckAndUpdate(ctx context.Context, schemas map[string]string, tables map[string]map[string]string) error
 }
@@ -722,59 +725,22 @@ func (cp *RemoteCheckPoint) FlushPointWithTableInfo(tctx *tcontext.Context, tabl
 	args := make([][]interface{}, 0, 10)
 	point := newBinlogPoint(binlog.NewLocation(cp.cfg.Flavor), binlog.NewLocation(cp.cfg.Flavor), nil, nil, cp.cfg.EnableGTID)
 
-	if tablePoints, ok := cp.points[sourceSchema]; ok {
-		if p, ok2 := tablePoints[sourceTable]; ok2 {
-			point = p
-		}
+	tablePoints, ok := cp.points[sourceSchema]
+	if !ok {
+		tablePoints = map[string]*binlogPoint{}
+		cp.points[sourceSchema] = tablePoints
+	}
+	p, ok2 := tablePoints[sourceTable]
+	if ok2 {
+		point = p
+	} else {
+		tablePoints[sourceTable] = point
 	}
 
-<<<<<<< HEAD
 	tiBytes, err := json.Marshal(ti)
 	if err != nil {
 		return terror.ErrSchemaTrackerCannotSerialize.Delegate(err, sourceSchema, sourceTable)
 	}
-=======
-		sqls := make([]string, 0, batchFlushPoints)
-		args := make([][]interface{}, 0, batchFlushPoints)
-		points := make([]*binlogPoint, 0, batchFlushPoints)
-		for j := i; j < end; j++ {
-			table := tables[j]
-			ti := tis[j]
-			sourceSchema, sourceTable := table.Schema, table.Name
-
-			var point *binlogPoint
-			// if point already in memory, use it
-			if tablePoints, ok := cp.points[sourceSchema]; ok {
-				if p, ok2 := tablePoints[sourceTable]; ok2 {
-					point = p
-				}
-			}
-			// create new point
-			if point == nil {
-				cp.saveTablePoint(table, cp.globalPoint.MySQLLocation(), ti)
-				point = cp.points[sourceSchema][sourceTable]
-			} else {
-				point.savedPoint.ti = ti
-				point.flushedPoint.ti = ti
-			}
-			tiBytes, err := json.Marshal(ti)
-			if err != nil {
-				return terror.ErrSchemaTrackerCannotSerialize.Delegate(err, sourceSchema, sourceTable)
-			}
-			location := point.MySQLLocation()
-			sql, arg := cp.genUpdateSQL(sourceSchema, sourceTable, location, nil, tiBytes, false)
-			sqls = append(sqls, sql)
-			args = append(args, arg)
-			points = append(points, point)
-		}
-		// use a new context apart from syncer, to make sure when syncer call `cancel` checkpoint could update
-		tctx2, cancel := tctx.WithContext(context.Background()).WithTimeout(utils.DefaultDBTimeout)
-		defer cancel()
-		_, err := cp.dbConn.ExecuteSQL(tctx2, sqls, args...)
-		if err != nil {
-			return err
-		}
->>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 
 	location := point.MySQLLocation()
 	sql2, arg := cp.genUpdateSQL(sourceSchema, sourceTable, location, nil, tiBytes, false)
@@ -902,11 +868,7 @@ func (cp *RemoteCheckPoint) LastFlushOutdated() bool {
 func (cp *RemoteCheckPoint) Rollback() {
 	cp.RLock()
 	defer cp.RUnlock()
-<<<<<<< HEAD
-	cp.globalPoint.rollback(schemaTracker, "")
-=======
 	cp.globalPoint.rollback()
->>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 	for schemaName, mSchema := range cp.points {
 		for tableName, point := range mSchema {
 			table := &filter.Table{
@@ -915,42 +877,7 @@ func (cp *RemoteCheckPoint) Rollback() {
 			}
 			logger := cp.logCtx.L().WithFields(zap.Stringer("table", table))
 			logger.Debug("try to rollback checkpoint", log.WrapStringerField("checkpoint", point))
-<<<<<<< HEAD
-			from := point.MySQLLocation()
-			if point.rollback(schemaTracker, schemaName) {
-				logger.Info("rollback checkpoint", zap.Stringer("from", from), zap.Stringer("to", point.FlushedMySQLLocation()))
-				// schema changed
-				if err := schemaTracker.DropTable(table); err != nil {
-					logger.Warn("failed to drop table from schema tracker", log.ShortError(err))
-				}
-				if point.savedPoint.ti != nil {
-					// TODO: Figure out how to recover from errors.
-					if err := schemaTracker.CreateSchemaIfNotExists(schemaName); err != nil {
-						logger.Error("failed to rollback schema on schema tracker: cannot create schema", log.ShortError(err))
-					}
-					if err := schemaTracker.CreateTableIfNotExists(table, point.savedPoint.ti); err != nil {
-						logger.Error("failed to rollback schema on schema tracker: cannot create table", log.ShortError(err))
-					}
-				}
-			}
-		}
-	}
-
-	// drop any tables in the tracker if no corresponding checkpoint exists.
-	for _, schema := range schemaTracker.AllSchemas() {
-		_, ok1 := cp.points[schema.Name.O]
-		for _, table := range schema.Tables {
-			var ok2 bool
-			if ok1 {
-				_, ok2 = cp.points[schema.Name.O][table.Name.O]
-			}
-			if !ok2 {
-				err := schemaTracker.DropTable(&filter.Table{Schema: schema.Name.O, Name: table.Name.O})
-				cp.logCtx.L().Info("drop table in schema tracker because no checkpoint exists", zap.String("schema", schema.Name.O), zap.String("table", table.Name.O), log.ShortError(err))
-			}
-=======
 			point.rollback()
->>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 		}
 	}
 }
@@ -1106,33 +1033,33 @@ func (cp *RemoteCheckPoint) Load(tctx *tcontext.Context) error {
 	return terror.WithScope(terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError), terror.ScopeDownstream)
 }
 
-<<<<<<< HEAD
-=======
 // LoadIntoSchemaTracker loads table infos of all points into schema tracker.
 func (cp *RemoteCheckPoint) LoadIntoSchemaTracker(ctx context.Context, schemaTracker *schema.Tracker) error {
 	cp.RLock()
 	defer cp.RUnlock()
 
-	tablesToCreate := map[string]map[string]*model.TableInfo{}
 	for cpSchema, mSchema := range cp.points {
+		err := schemaTracker.CreateSchemaIfNotExists(cpSchema)
+		if err != nil {
+			return err
+		}
 		for cpTable, point := range mSchema {
 			// for create database DDL, we'll create a table point with no table name and table info, need to skip.
 			if point.flushedPoint.ti == nil {
 				continue
 			}
-			if _, ok := tablesToCreate[cpSchema]; !ok {
-				tablesToCreate[cpSchema] = make(map[string]*model.TableInfo)
-			}
-			tablesToCreate[cpSchema][cpTable] = point.flushedPoint.ti
 			cp.logCtx.L().Debug("will init table info in schema tracker",
 				zap.String("database", cpSchema),
 				zap.String("table", cpTable))
+			err := schemaTracker.CreateTableIfNotExists(&filter.Table{Schema: cpSchema, Name: cpTable}, point.flushedPoint.ti)
+			if err != nil {
+				return err
+			}
 		}
 	}
-	return schemaTracker.BatchCreateTableIfNotExist(tablesToCreate)
+	return nil
 }
 
->>>>>>> f3bf091a6 (tracker(dm): close and recreate tracker when pause and resume (#5350))
 // CheckAndUpdate check the checkpoint data consistency and try to fix them if possible.
 func (cp *RemoteCheckPoint) CheckAndUpdate(ctx context.Context, schemas map[string]string, tables map[string]map[string]string) error {
 	cp.Lock()
