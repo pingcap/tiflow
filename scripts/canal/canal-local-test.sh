@@ -74,7 +74,7 @@ sub_help() {
 sub_init() {
 	prepare_db
 	sudo docker exec -it ticdc_controller_1 sh -c "
-  /cdc cli changefeed create --pd=\"http://upstream-pd:2379\" --sink-uri=\"kafka://kafka:9092/testdb\" --config=\"/config/canal-test-config.toml\" --opts \"force-handle-key-pkey=true, support-txn=true\"
+  /cdc cli changefeed create --pd=\"http://upstream-pd:2379\" --sink-uri=\"kafka://kafka:9092/testdb\" --config=\"/config/canal-test-config.toml\"
   "
 }
 
