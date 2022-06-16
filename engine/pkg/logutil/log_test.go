@@ -15,7 +15,6 @@ package logutil
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"regexp"
 	"sync"
