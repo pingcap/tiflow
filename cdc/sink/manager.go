@@ -87,9 +87,7 @@ func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts, 
 
 // Close closes the Sink manager and backend Sink, this method can be reentrantly called
 func (m *Manager) Close(ctx context.Context) error {
-	m.tableSinksMu.Lock()
-	defer m.tableSinksMu.Unlock()
-	tableSinkTotalRowsCountCounter.DeleteLabelValues(m.changefeedID)
+	tableSinkTotalRowsCountCounter.DeleteLabelValues(m.captureAddr, m.changefeedID)
 	if m.backendSink != nil {
 		if err := m.backendSink.Close(ctx); err != nil && errors.Cause(err) != context.Canceled {
 			log.Warn("close bufSink failed",
