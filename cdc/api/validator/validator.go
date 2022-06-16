@@ -130,7 +130,6 @@ func VerifyCreateChangefeedConfig(
 	// init ChangefeedInfo
 	info := &model.ChangeFeedInfo{
 		SinkURI:           changefeedConfig.SinkURI,
-		Opts:              make(map[string]string),
 		CreateTime:        time.Now(),
 		StartTs:           changefeedConfig.StartTS,
 		TargetTs:          changefeedConfig.TargetTS,
@@ -157,7 +156,7 @@ func VerifyCreateChangefeedConfig(
 		return nil, cerror.ErrAPIInvalidParam.Wrap(errors.Annotatef(err, "invalid timezone:%s", changefeedConfig.TimeZone))
 	}
 	ctx = contextutil.PutTimezoneInCtx(ctx, tz)
-	if err := sink.Validate(ctx, info.SinkURI, info.Config, info.Opts); err != nil {
+	if err := sink.Validate(ctx, info.SinkURI, info.Config); err != nil {
 		return nil, err
 	}
 
@@ -205,7 +204,7 @@ func VerifyUpdateChangefeedConfig(ctx context.Context,
 	// verify sink_uri
 	if changefeedConfig.SinkURI != "" {
 		newInfo.SinkURI = changefeedConfig.SinkURI
-		if err := sink.Validate(ctx, changefeedConfig.SinkURI, newInfo.Config, newInfo.Opts); err != nil {
+		if err := sink.Validate(ctx, changefeedConfig.SinkURI, newInfo.Config); err != nil {
 			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 	}
