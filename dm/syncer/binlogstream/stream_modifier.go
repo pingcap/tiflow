@@ -120,7 +120,7 @@ func (m *streamModifier) Set(req *pb.HandleWorkerErrorRequest, events []*replica
 			break
 		}
 	}
-	
+
 	if toInsertIndex == len(m.ops) {
 		m.ops = append(m.ops, toInject)
 		return nil
