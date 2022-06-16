@@ -206,6 +206,9 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 
 	var opts []lightning.Option
 	if l.cfg.MetricsFactory != nil {
+		// this branch means dataflow engine has set a Factory, the Factory itself
+		// will register and deregister metrics, so we must use NoopRegistry
+		// to avoid duplicated registration.
 		opts = append(opts,
 			lightning.WithPromFactory(
 				promutil.NewWrappingFactory(

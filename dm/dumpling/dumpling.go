@@ -72,6 +72,9 @@ func (m *Dumpling) Init(ctx context.Context) error {
 		return err
 	}
 	if m.cfg.MetricsFactory != nil {
+		// this branch means dataflow engine has set a Factory, the Factory itself
+		// will register and deregister metrics, so we must use NoopRegistry
+		// to avoid duplicated registration.
 		m.metricProxies = &metricProxies{}
 		m.metricProxies.dumplingExitWithErrorCounter = metricsproxy.NewCounterVec(
 			m.cfg.MetricsFactory,
