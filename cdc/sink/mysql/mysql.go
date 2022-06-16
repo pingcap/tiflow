@@ -472,28 +472,41 @@ func (s *mysqlSink) broadcastFinishTxn() {
 	}
 }
 
+// dispatchAndExecTxns dispatches txns to workers and waits for them to finish.
+// 1) Try to distribute all transactions equally to each worker
+// 2) Each conflicting transaction will be executed in the order of the CommitTs
+// 3）Conflict-free transactions will be executed concurrently
 func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model.TableID][]*model.SingleTableTxn) {
 	nWorkers := s.params.workerCount
 	causality := newCausality()
-	rowsChIdx := 0
+	workerIndex := 0
 
-	sendFn := func(txn *model.SingleTableTxn, keys [][]byte, idx int) {
-		causality.add(keys, idx)
-		s.workers[idx].appendTxn(ctx, txn)
+	sendFn := func(txn *model.SingleTableTxn, keys [][]byte, workerIndex int) {
+		causality.add(keys, workerIndex)
+		s.workers[workerIndex].appendTxn(ctx, txn)
 	}
+
 	resolveConflict := func(txn *model.SingleTableTxn) {
 		keys := genTxnKeys(txn)
-		if conflict, idx := causality.detectConflict(keys); conflict {
-			if idx >= 0 {
-				sendFn(txn, keys, idx)
+		if conflict, conflictWorkerIndex := causality.detectConflict(keys); conflict {
+			// This means that the conflict only occurs on one worker,
+			// and we can just send the transaction to that worker to queue it.
+			if conflictWorkerIndex >= 0 {
+				// Send all these conflicting transactions
+				// to the same worker queue.
+				sendFn(txn, keys, conflictWorkerIndex)
 				return
 			}
+			// This means that the conflict occurs on multiple workers,
+			// and we have to wait all workers to finish their current transactions.
 			s.notifyAndWaitExec(ctx)
 			causality.reset()
 		}
-		sendFn(txn, keys, rowsChIdx)
-		rowsChIdx++
-		rowsChIdx = rowsChIdx % nWorkers
+		// Distribute the data to the next worker.
+		// Make txn more evenly distributed to each worker.
+		sendFn(txn, keys, workerIndex)
+		workerIndex++
+		workerIndex = workerIndex % nWorkers
 	}
 	h := newTxnsHeap(txnsGroup)
 	h.iter(func(txn *model.SingleTableTxn) {
