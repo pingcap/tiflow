@@ -20,6 +20,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/http"
+	"regexp"
 	"sync"
 	"testing"
 	"time"
@@ -79,6 +81,27 @@ func TestDMJob(t *testing.T) {
 		testSimpleAllModeTask(t, masterClient, mysql, tidb, "test2")
 	}()
 	wg.Wait()
+
+	// test metrics for syncer
+	jobIDs := map[string]struct{}{}
+	metricsURLs := []string{
+		"http://127.0.0.1:11241/metrics",
+		"http://127.0.0.1:11242/metrics",
+		"http://127.0.0.1:11243/metrics",
+	}
+	re := regexp.MustCompile(`job_id="(.{36})"`)
+	for _, metricsURL := range metricsURLs {
+		resp, err := http.Get(metricsURL)
+		require.NoError(t, err)
+		content, err := ioutil.ReadAll(resp.Body)
+		require.NoError(t, err)
+		matched := re.FindAllSubmatch(content, -1)
+		for _, m := range matched {
+			jobIDs[string(m[1])] = struct{}{}
+		}
+	}
+
+	require.Equal(t, 2, len(jobIDs))
 }
 
 // testSimpleAllModeTask extracts the common logic for a DM "all" mode task,

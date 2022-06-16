@@ -79,6 +79,23 @@ func ErrorHandleMiddleware() gin.HandlerFunc {
 	}
 }
 
+// ForwardToOwnerMiddleware forward an request to owner if current server
+// is not owner, or handle it locally.
+func ForwardToOwnerMiddleware(p api.CaptureInfoProvider) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		if !p.IsOwner() {
+			api.ForwardToOwner(ctx, p)
+
+			// Without calling Abort(), Gin will continued to process the next handler,
+			// execute code which should only be run by the owner, and cause a panic.
+			// See https://github.com/pingcap/tiflow/issues/5888
+			ctx.Abort()
+			return
+		}
+		ctx.Next()
+	}
+}
+
 // CheckServerReadyMiddleware checks if the server is ready
 func CheckServerReadyMiddleware(capture *capture.Capture) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -90,18 +107,5 @@ func CheckServerReadyMiddleware(capture *capture.Capture) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-	}
-}
-
-// ForwardToOwnerMiddleware forward an request to owner if current server
-// is not owner, or handle it locally.
-func ForwardToOwnerMiddleware(c *capture.Capture) gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		if !c.IsOwner() {
-			api.ForwardToOwner(ctx, c)
-			ctx.Abort()
-			return
-		}
-		ctx.Next()
 	}
 }
