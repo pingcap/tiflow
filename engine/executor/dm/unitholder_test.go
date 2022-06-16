@@ -137,7 +137,7 @@ func TestUnitHolderBinlog(t *testing.T) {
 	unitHolder.unit = syncer.NewSyncer(&config.SubTaskConfig{Flavor: mysql.MySQLFlavor}, nil, nil)
 	unitHolder.runCtx = context.Background()
 	msg, err = unitHolder.Binlog(context.Background(), &dmpkg.BinlogTaskRequest{})
-	require.Error(t, err)
+	require.EqualError(t, err, "source '' has no error")
 	require.Equal(t, "", msg)
 	// binlog skip
 	msg, err = unitHolder.Binlog(context.Background(), &dmpkg.BinlogTaskRequest{Op: pb.ErrorOp_Skip, BinlogPos: "mysql-bin.000001:2345"})
@@ -157,7 +157,7 @@ func TestUnitHolderBinlogSchema(t *testing.T) {
 	unitHolder.unit = syncer.NewSyncer(&config.SubTaskConfig{Flavor: mysql.MySQLFlavor}, nil, nil)
 	unitHolder.runCtx = context.Background()
 	msg, err = unitHolder.BinlogSchema(context.Background(), &dmpkg.BinlogSchemaTaskRequest{})
-	require.Error(t, err)
+	require.EqualError(t, err, fmt.Sprintf("current stage is %d but not paused, invalid", metadata.StageRunning))
 	require.Equal(t, "", msg)
 	// binlog schema list
 	unitHolder.result = &pb.ProcessResult{Errors: []*pb.ProcessError{{ErrCode: 1}}}
