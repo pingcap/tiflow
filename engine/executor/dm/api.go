@@ -69,3 +69,26 @@ func (w *dmWorker) OperateTask(ctx context.Context, msg *dmpkg.OperateTaskMessag
 		return errors.Errorf("unsupported op type %d for task %s", msg.Op, w.taskID)
 	}
 }
+
+// BinlogTask implements the api of binlog task request.
+// BinlogTask is called by refection of commandHandler.
+func (w *dmWorker) BinlogTask(ctx context.Context, req *dmpkg.BinlogTaskRequest) *dmpkg.CommonTaskResponse {
+	msg, err := w.unitHolder.Binlog(ctx, req)
+	if err != nil {
+		return &dmpkg.CommonTaskResponse{ErrorMsg: err.Error()}
+	}
+	return &dmpkg.CommonTaskResponse{Msg: msg}
+}
+
+// BinlogSchemaTask implements the api of binlog schema request.
+// BinlogSchemaTask is called by refection of commandHandler.
+func (w *dmWorker) BinlogSchemaTask(ctx context.Context, req *dmpkg.BinlogSchemaTaskRequest) *dmpkg.CommonTaskResponse {
+	if w.taskID != req.Source {
+		return &dmpkg.CommonTaskResponse{ErrorMsg: fmt.Sprintf("task id mismatch, get %s, actually %s", req.Source, w.taskID)}
+	}
+	msg, err := w.unitHolder.BinlogSchema(ctx, req)
+	if err != nil {
+		return &dmpkg.CommonTaskResponse{ErrorMsg: err.Error()}
+	}
+	return &dmpkg.CommonTaskResponse{Msg: msg}
+}
