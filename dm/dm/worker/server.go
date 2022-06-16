@@ -665,6 +665,7 @@ func (s *Server) disableHandleSubtasks(source string) error {
 		log.L().Warn("worker has already stopped before DisableHandleSubtasks", zap.String("source", source))
 		return nil
 	}
+
 	w.DisableHandleSubtasks()
 
 	// now the worker is unbound, stop relay if it's started by source config
