@@ -14,75 +14,34 @@
 package logutil
 
 import (
-	"context"
-	"path/filepath"
 	"regexp"
-	"sync"
 	"testing"
-	"time"
 
-	"github.com/hpcloud/tail"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest"
 )
 
 func TestNewLogger(t *testing.T) {
-	testFile := filepath.Join(t.TempDir(), "test.log")
-	lg, prop, err := log.InitLogger(&log.Config{
-		Level: "warn",
-		File: log.FileLogConfig{
-			Filename: testFile,
-		},
-	})
+	var buffer zaptest.Buffer
+	lg, property, err := log.InitLoggerWithWriteSyncer(&log.Config{
+		Level:  "warn",
+		Format: "text",
+	}, &buffer, nil)
 	require.NoError(t, err)
-	log.ReplaceGlobals(lg, prop)
-
-	var wg sync.WaitGroup
-	defer wg.Wait()
-
-	tailHandler, err := tail.TailFile(testFile, tail.Config{Follow: true, Poll: true})
-	require.NoError(t, err)
-	defer tailHandler.Stop()
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
-	defer cancel()
-
-	lineCh := make(chan string, 10)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		defer close(lineCh)
-		for {
-			select {
-			case line, ok := <-tailHandler.Lines:
-				if !ok {
-					return
-				}
-				require.NoError(t, line.Err)
-				lineCh <- line.Text
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
+	log.ReplaceGlobals(lg, property)
 
 	logger := NewLogger4Framework()
 	logger.Warn("framework test", zap.String("type", "framework"))
-	logger.Sync()
-	line := <-lineCh
-	require.Regexp(t, regexp.QuoteMeta("[\"framework test\"] [framework=true] [type=framework]"), line)
+	require.Regexp(t, regexp.QuoteMeta("[\"framework test\"] [framework=true] [type=framework]"), buffer.Stripped())
 
 	logger = NewLogger4Master(tenant.NewProjectInfo("tenant1", "proj1"), "job1")
 	logger.Warn("master test", zap.String("type", "master"))
-	logger.Sync()
-	line = <-lineCh
-	require.Regexp(t, regexp.QuoteMeta("[\"master test\"] [tenant=tenant1] [project_id=proj1] [job_id=job1] [type=master]"), line)
+	require.Regexp(t, regexp.QuoteMeta("[\"master test\"] [tenant=tenant1] [project_id=proj1] [job_id=job1] [type=master]"), buffer.Stripped())
 
 	logger = NewLogger4Worker(tenant.NewProjectInfo("tenant1", "proj1"), "job1", "worker1")
 	logger.Warn("worker test", zap.String("type", "worker"))
-	logger.Sync()
-	line = <-lineCh
-	require.Regexp(t, regexp.QuoteMeta("[\"worker test\"] [tenant=tenant1] [project_id=proj1] [job_id=job1] [worker_id=worker1] [type=worker]"), line)
+	require.Regexp(t, regexp.QuoteMeta("[\"worker test\"] [tenant=tenant1] [project_id=proj1] [job_id=job1] [worker_id=worker1] [type=worker]"), buffer.Stripped())
 }
