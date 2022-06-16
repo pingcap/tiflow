@@ -19,12 +19,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/security"
 	pd "github.com/tikv/pd/client"
+	"go.uber.org/zap"
 )
 
 // testUpstreamID is a pseudo upstreamID for now. It will be removed in the future.
@@ -200,6 +202,17 @@ func (m *Manager) Tick(ctx context.Context,
 		if up.isDefaultUpstream {
 			return true
 		}
+
+		// remove failed upstream
+		if up.Error() != nil {
+			log.Warn("upstream init failed, remove from upstream",
+				zap.Uint64("id", up.ID),
+				zap.Error(up.Error()))
+			go up.close()
+			m.ups.Delete(id)
+			return true
+		}
+
 		up.trySetIdleTime()
 		if up.shouldClose() {
 			go up.close()

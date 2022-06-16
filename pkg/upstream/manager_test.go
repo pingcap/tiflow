@@ -58,6 +58,8 @@ func TestUpstream(t *testing.T) {
 	// wait until up2 is closed
 	for !up2.IsClosed() {
 	}
+	manager.lastTickTime = time.Time{}
+	_ = manager.Tick(context.Background(), &orchestrator.GlobalReactorState{})
 	_ = manager.Tick(context.Background(), &orchestrator.GlobalReactorState{})
 	up, ok = manager.Get(testID)
 	require.False(t, ok)
