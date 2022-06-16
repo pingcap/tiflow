@@ -134,6 +134,11 @@ func (t *tableSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	return nil
 }
 
+// Init table sink resources
+func (t *tableSink) Init(tableID model.TableID) error {
+	return t.manager.backendSink.Init(tableID)
+}
+
 // Close once the method is called, no more events can be written to this table sink
 func (t *tableSink) Close(ctx context.Context) error {
 	return t.manager.destroyTableSink(ctx, t.tableID)
