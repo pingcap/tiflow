@@ -66,8 +66,8 @@ type Scheduler interface {
 type Query struct {
 	CaptureID model.CaptureID
 
-	//changefeedID model.ChangeFeedID
-	//tableID      model.TableID
+	// changefeedID model.ChangeFeedID
+	// tableID      model.TableID
 
 	Resp interface{}
 }
