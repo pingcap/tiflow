@@ -647,12 +647,13 @@ function test_data_filter() {
 
 function test_validation_syncer_stopped() {
 	echo "--> validate when syncer is stopped"
+	insertCnt=5
 	prepare_for_standalone_test
 	run_sql_source1 "create table validator_basic.test(a int primary key, b int)"
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation stop test" \
 		"\"result\": true" 1
-	for ((k = 0; k < 30; k++)); do
+	for ((k = 0; k < $insertCnt; k++)); do
 		run_sql_source1 "insert into validator_basic.test values($k, $k)"
 	done
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -666,7 +667,7 @@ function test_validation_syncer_stopped() {
 		"\"result\": true" 2
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
-		"\"processedRowsStatus\": \"insert\/update\/delete: 30\/0\/0\"" 1 \
+		"\"processedRowsStatus\": \"insert\/update\/delete: $insertCnt\/0\/0\"" 1 \
 		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
 		"new\/ignored\/resolved: 0\/0\/0" 1
 }
