@@ -675,19 +675,24 @@ func (r *ReplicationSet) hasRemoved() bool {
 	return r.State == ReplicationSetStateRemoving && len(r.Captures) == 0
 }
 
+// handleCaptureShutdown handle capture shutdown event.
+// Besides returning messages and errors, it also returns a bool to indicate
+// whether r is affected by the capture shutdown.
 func (r *ReplicationSet) handleCaptureShutdown(
 	captureID model.CaptureID,
-) ([]*schedulepb.Message, error) {
+) ([]*schedulepb.Message, bool, error) {
 	_, ok := r.Captures[captureID]
 	if !ok {
-		return nil, nil
+		// r is not affected by the capture shutdown.
+		return nil, false, nil
 	}
 	// The capture has shutdown, the table has stopped.
 	status := schedulepb.TableStatus{
 		TableID: r.TableID,
 		State:   schedulepb.TableStateStopped,
 	}
-	return r.poll(&status, captureID)
+	msgs, err := r.poll(&status, captureID)
+	return msgs, true, errors.Trace(err)
 }
 
 func (r *ReplicationSet) updateCheckpoint(checkpoint schedulepb.Checkpoint) {

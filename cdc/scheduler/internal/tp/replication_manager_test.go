@@ -676,3 +676,43 @@ func TestReplicationManagerHandleCaptureChanges(t *testing.T) {
 	require.Equal(t, ReplicationSetStateReplicating, r.tables[3].State)
 	require.Equal(t, ReplicationSetStateAbsent, r.tables[4].State)
 }
+
+func TestReplicationManagerHandleCaptureChangesDuringAddTable(t *testing.T) {
+	t.Parallel()
+
+	r := newReplicationManager(1, model.ChangeFeedID{})
+	addTableCh := make(chan int, 1)
+
+	msgs, err := r.HandleTasks([]*scheduleTask{{
+		addTable: &addTable{TableID: 1, CaptureID: "1"},
+		accept: func() {
+			addTableCh <- 1
+		},
+	}})
+	require.Nil(t, err)
+	require.Len(t, msgs, 1)
+	require.NotNil(t, r.runningTasks[1])
+	require.Equal(t, 1, <-addTableCh)
+
+	changes := captureChanges{Removed: map[string][]schedulepb.TableStatus{
+		"1": {{TableID: 1, State: schedulepb.TableStatePreparing}},
+	}}
+	msgs, err = r.HandleCaptureChanges(&changes, 0)
+	require.Nil(t, err)
+	require.Len(t, msgs, 0)
+	require.Len(t, r.tables, 1)
+	require.Equal(t, ReplicationSetStateAbsent, r.tables[1].State)
+	require.Nil(t, r.runningTasks[1])
+
+	// New task must be accepted.
+	msgs, err = r.HandleTasks([]*scheduleTask{{
+		addTable: &addTable{TableID: 1, CaptureID: "1"},
+		accept: func() {
+			addTableCh <- 1
+		},
+	}})
+	require.Nil(t, err)
+	require.Len(t, msgs, 1)
+	require.NotNil(t, r.runningTasks[1])
+	require.Equal(t, 1, <-addTableCh)
+}
