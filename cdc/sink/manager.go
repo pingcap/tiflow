@@ -18,6 +18,7 @@ import (
 	"math"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -86,22 +87,12 @@ func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts, 
 
 // Close closes the Sink manager and backend Sink, this method can be reentrantly called
 func (m *Manager) Close(ctx context.Context) error {
-<<<<<<< HEAD
-	tableSinkTotalRowsCountCounter.DeleteLabelValues(m.captureAddr, m.changefeedID)
-	if m.backendSink != nil {
-		log.Info("sinkManager try close bufSink",
-			zap.String("changefeed", m.changefeedID))
-		start := time.Now()
-		if err := m.backendSink.Close(ctx); err != nil {
-			log.Info("close bufSink failed",
-=======
 	m.tableSinksMu.Lock()
 	defer m.tableSinksMu.Unlock()
 	tableSinkTotalRowsCountCounter.DeleteLabelValues(m.changefeedID)
-	if m.bufSink != nil {
-		if err := m.bufSink.Close(ctx); err != nil && errors.Cause(err) != context.Canceled {
+	if m.backendSink != nil {
+		if err := m.backendSink.Close(ctx); err != nil && errors.Cause(err) != context.Canceled {
 			log.Warn("close bufSink failed",
->>>>>>> f80a34f63 (sink(ticdc): asynchronously close the mq producers (#5186))
 				zap.String("changefeed", m.changefeedID),
 				zap.Error(err))
 			return err
