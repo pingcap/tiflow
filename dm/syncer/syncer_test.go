@@ -374,6 +374,7 @@ func (s *testSyncerSuite) TestSelectTable(c *C) {
 	c.Assert(err, IsNil)
 	syncer := NewSyncer(cfg, nil, nil)
 	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
 	c.Assert(err, IsNil)
 	c.Assert(syncer.genRouter(), IsNil)
 
@@ -510,6 +511,7 @@ func (s *testSyncerSuite) TestIgnoreTable(c *C) {
 	c.Assert(err, IsNil)
 	syncer := NewSyncer(cfg, nil, nil)
 	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
 	c.Assert(err, IsNil)
 	c.Assert(syncer.genRouter(), IsNil)
 
@@ -1847,6 +1849,7 @@ func TestWaitBeforeRunExit(t *testing.T) {
 		"tidb_skip_utf8_check": "0",
 	}
 	syncer := NewSyncer(cfg, nil, nil)
+	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
 
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
