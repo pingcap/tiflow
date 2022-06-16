@@ -20,6 +20,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/docker/go-units"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	tidbConfig "github.com/pingcap/tidb/config"
@@ -35,7 +36,9 @@ import (
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/store/mockstore"
+	unistoreConfig "github.com/pingcap/tidb/store/mockstore/unistore/config"
 	"github.com/pingcap/tidb/types"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -60,6 +63,11 @@ var (
 	}
 )
 
+func init() {
+	unistoreConfig.DefaultConf.Engine.VlogFileSize = 4 * units.MiB
+	unistoreConfig.DefaultConf.Engine.L1Size = 128 * units.MiB
+}
+
 // Tracker is used to track schema locally.
 type Tracker struct {
 	storePath string
@@ -67,6 +75,7 @@ type Tracker struct {
 	dom       *domain.Domain
 	se        session.Session
 	dsTracker *downstreamTracker
+	closed    atomic.Bool
 }
 
 // downstreamTracker tracks downstream schema.
@@ -265,10 +274,7 @@ func (tr *Tracker) GetCreateTable(ctx context.Context, table *filter.Table) (str
 
 	row := req.GetRow(0)
 	str := row.GetString(1) // the first column is the table name.
-	// returned as single line.
-	str = strings.ReplaceAll(str, "\n", "")
-	str = strings.ReplaceAll(str, "  ", " ")
-	return str, nil
+	return utils.CreateTableSQLToOneRow(str), nil
 }
 
 // AllSchemas returns all schemas visible to the tracker (excluding system tables).
@@ -348,6 +354,12 @@ func (tr *Tracker) Reset() error {
 
 // Close close a tracker.
 func (tr *Tracker) Close() error {
+	if tr == nil {
+		return nil
+	}
+	if !tr.closed.CAS(false, true) {
+		return nil
+	}
 	tr.se.Close()
 	tr.dom.Close()
 	if err := tr.store.Close(); err != nil {

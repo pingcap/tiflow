@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -53,12 +54,12 @@ type mqSink struct {
 	filter         *filter.Filter
 	protocol       codec.Protocol
 
-	partitionNum        int32
-	partitionInput      []chan mqEvent
-	partitionResolvedTs []uint64
-	tableCheckpointTs   map[model.TableID]uint64
-	resolvedNotifier    *notify.Notifier
-	resolvedReceiver    *notify.Receiver
+	partitionNum         int32
+	partitionInput       []chan mqEvent
+	partitionResolvedTs  []uint64
+	tableCheckpointTsMap sync.Map
+	resolvedNotifier     *notify.Notifier
+	resolvedReceiver     *notify.Receiver
 
 	statistics *Statistics
 
@@ -117,7 +118,6 @@ func newMqSink(
 		partitionNum:        partitionNum,
 		partitionInput:      partitionInput,
 		partitionResolvedTs: make([]uint64, partitionNum),
-		tableCheckpointTs:   make(map[model.TableID]uint64),
 		resolvedNotifier:    notifier,
 		resolvedReceiver:    resolvedReceiver,
 
@@ -168,7 +168,12 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 }
 
 func (k *mqSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
-	if checkpointTs, ok := k.tableCheckpointTs[tableID]; ok && resolvedTs <= checkpointTs {
+	var checkpointTs uint64
+	v, ok := k.tableCheckpointTsMap.Load(tableID)
+	if ok {
+		checkpointTs = v.(uint64)
+	}
+	if resolvedTs <= checkpointTs {
 		return checkpointTs, nil
 	}
 
@@ -202,7 +207,7 @@ flushLoop:
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
-	k.tableCheckpointTs[tableID] = resolvedTs
+	k.tableCheckpointTsMap.Store(tableID, resolvedTs)
 	k.statistics.PrintStatus(ctx)
 	return resolvedTs, nil
 }

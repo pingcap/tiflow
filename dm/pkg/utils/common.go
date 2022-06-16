@@ -181,12 +181,13 @@ func FetchLowerCaseTableNamesSetting(ctx context.Context, conn *sql.Conn) (Lower
 	return LowerCaseTableNamesFlavor(res), nil
 }
 
-// GetDBCaseSensitive returns the case sensitive setting of target db.
+// GetDBCaseSensitive returns the case-sensitive setting of target db.
 func GetDBCaseSensitive(ctx context.Context, db *sql.DB) (bool, error) {
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return true, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 	}
+	defer conn.Close()
 	lcFlavor, err := FetchLowerCaseTableNamesSetting(ctx, conn)
 	if err != nil {
 		return true, err
