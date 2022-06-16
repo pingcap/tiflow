@@ -30,10 +30,10 @@ type balanceScheduler struct {
 	checkBalanceInterval time.Duration
 }
 
-func newBalanceScheduler(cfg *config.SchedulerConfig) *balanceScheduler {
+func newBalanceScheduler(interval config.TomlDuration) *balanceScheduler {
 	return &balanceScheduler{
 		random:               rand.New(rand.NewSource(time.Now().UnixNano())),
-		checkBalanceInterval: time.Duration(cfg.CheckBalanceInterval),
+		checkBalanceInterval: time.Duration(interval),
 	}
 }
 
