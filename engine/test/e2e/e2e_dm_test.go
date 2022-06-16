@@ -20,6 +20,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/http"
+	"regexp"
 	"sync"
 	"testing"
 	"time"
@@ -31,6 +33,7 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
+	engineModel "github.com/pingcap/tiflow/engine/model"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 )
 
@@ -78,6 +81,27 @@ func TestDMJob(t *testing.T) {
 		testSimpleAllModeTask(t, masterClient, mysql, tidb, "test2")
 	}()
 	wg.Wait()
+
+	// test metrics for syncer
+	jobIDs := map[string]struct{}{}
+	metricsURLs := []string{
+		"http://127.0.0.1:11241/metrics",
+		"http://127.0.0.1:11242/metrics",
+		"http://127.0.0.1:11243/metrics",
+	}
+	re := regexp.MustCompile(`job_id="(.{36})"`)
+	for _, metricsURL := range metricsURLs {
+		resp, err := http.Get(metricsURL)
+		require.NoError(t, err)
+		content, err := ioutil.ReadAll(resp.Body)
+		require.NoError(t, err)
+		matched := re.FindAllSubmatch(content, -1)
+		for _, m := range matched {
+			jobIDs[string(m[1])] = struct{}{}
+		}
+	}
+
+	require.Equal(t, 2, len(jobIDs))
 }
 
 // testSimpleAllModeTask extracts the common logic for a DM "all" mode task,
@@ -107,7 +131,7 @@ func testSimpleAllModeTask(
 	var resp *pb.SubmitJobResponse
 	require.Eventually(t, func() bool {
 		resp, err = client.SubmitJob(ctx, &pb.SubmitJobRequest{
-			Tp:     pb.JobType_DM,
+			Tp:     int32(engineModel.JobTypeDM),
 			Config: dmJobCfg,
 		})
 		return err == nil && resp.Err == nil

@@ -23,8 +23,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/fake"
+	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/test/e2e"
 	"github.com/pingcap/tiflow/pkg/retry"
@@ -68,7 +68,7 @@ func runFakeJobCase(ctx context.Context, cfg *config) error {
 	var jobID string
 	err = retry.Do(ctx, func() error {
 		var inErr error
-		jobID, err = cli.CreateJob(ctx, pb.JobType_FakeJob, cfgBytes)
+		jobID, err = cli.CreateJob(ctx, engineModel.JobTypeFakeJob, cfgBytes)
 		return inErr
 	},
 		retry.WithBackoffBaseDelay(1000 /* 1 second */),

@@ -37,9 +37,6 @@ var defaultReplicaConfig = &ReplicaConfig{
 		WorkerNum: 16,
 	},
 	Sink: &SinkConfig{},
-	Cyclic: &CyclicConfig{
-		Enable: false,
-	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
 		MaxLogSize:        64,
@@ -59,7 +56,6 @@ type replicaConfig struct {
 	Filter           *FilterConfig     `toml:"filter" json:"filter"`
 	Mounter          *MounterConfig    `toml:"mounter" json:"mounter"`
 	Sink             *SinkConfig       `toml:"sink" json:"sink"`
-	Cyclic           *CyclicConfig     `toml:"cyclic-replication" json:"cyclic-replication"`
 	Consistent       *ConsistentConfig `toml:"consistent" json:"consistent"`
 }
 
