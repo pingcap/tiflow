@@ -602,7 +602,7 @@ func TestSubtaskRace(t *testing.T) {
 				_, _ = tempQueryStatusResponse.Marshal()
 			}
 		}()
-		st.markResultCanceled()
+		_ = st.markResultCanceled()
 	}
 	// this test is to test data race, so don't need assert here
 }
