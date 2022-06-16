@@ -23,6 +23,7 @@ import (
 	"sort"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	dmysql "github.com/go-sql-driver/mysql"
@@ -1926,4 +1927,164 @@ func TestHolderString(t *testing.T) {
 	// test invalid input
 	require.Panics(t, func() { placeHolder(0) }, "strings.Builder.Grow: negative count")
 	require.Panics(t, func() { placeHolder(-1) }, "strings.Builder.Grow: negative count")
+}
+
+func TestMySQLSinkExecDMLError(t *testing.T) {
+	dbIndex := 0
+	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		defer func() {
+			dbIndex++
+		}()
+		if dbIndex == 0 {
+			// test db
+			db, err := mockTestDB(true)
+			require.Nil(t, err)
+			return db, nil
+		}
+		// normal db
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		require.Nil(t, err)
+		mock.ExpectBegin()
+		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`,`b`) VALUES (?,?)").WillDelayFor(1 * time.Second).
+			WillReturnError(&dmysql.MySQLError{Number: mysql.ErrNoSuchTable})
+		return db, nil
+	}
+	backupGetDBConn := GetDBConnImpl
+	GetDBConnImpl = mockGetDBConn
+	defer func() {
+		GetDBConnImpl = backupGetDBConn
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	changefeed := "test-changefeed"
+	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&batch-replace-size=1")
+	require.Nil(t, err)
+	rc := config.GetDefaultReplicaConfig()
+	f, err := filter.NewFilter(rc)
+	require.Nil(t, err)
+	sink, err := NewMySQLSink(ctx,
+		model.DefaultChangeFeedID(changefeed),
+		sinkURI, f, rc, map[string]string{})
+	require.Nil(t, err)
+
+	rows := []*model.RowChangedEvent{
+		{
+			StartTs:  1,
+			CommitTs: 2,
+			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 1,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Flag:  0,
+					Value: "test",
+				},
+			},
+		},
+		{
+			StartTs:  2,
+			CommitTs: 3,
+			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 2,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Flag:  0,
+					Value: "test",
+				},
+			},
+		},
+		{
+			StartTs:  3,
+			CommitTs: 4,
+			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 3,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Flag:  0,
+					Value: "test",
+				},
+			},
+		},
+		{
+			StartTs:  4,
+			CommitTs: 5,
+			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 1,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Flag:  0,
+					Value: "test",
+				},
+			},
+		},
+		{
+			StartTs:  5,
+			CommitTs: 6,
+			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 2,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Flag:  0,
+					Value: "test",
+				},
+			},
+		},
+	}
+
+	for _, row := range rows {
+		err = sink.EmitRowChangedEvents(ctx, row)
+		require.NoError(t, err)
+	}
+
+	i := 0
+	for {
+		// Keep flushing so that appendFinishTxn is called enough times.
+		ts, err := sink.FlushRowChangedEvents(ctx, 1, model.NewResolvedTs(uint64(i)))
+		if err != nil {
+			break
+		}
+		require.Less(t, ts.Ts, uint64(2))
+		i++
+	}
+
+	err = sink.RemoveTable(ctx, 1)
+	require.Error(t, err)
+	require.Regexp(t, ".*ErrMySQLTxnError.*", err)
+
+	_ = sink.Close(ctx)
 }

@@ -55,9 +55,9 @@ func TestCausality(t *testing.T) {
 		{[][]byte{[]byte("b"), []byte("b")}, true, 1},
 		{[][]byte{[]byte("c"), []byte("c")}, true, 2},
 		// Test for multi-key index conflict.
-		{[][]byte{[]byte("a"), []byte("b")}, true, -1},
-		{[][]byte{[]byte("b"), []byte("a")}, true, -1},
-		{[][]byte{[]byte("b"), []byte("c")}, true, -1},
+		{[][]byte{[]byte("a"), []byte("b")}, true, -2},
+		{[][]byte{[]byte("b"), []byte("a")}, true, -2},
+		{[][]byte{[]byte("b"), []byte("c")}, true, -2},
 	}
 	for _, cas := range cases {
 		conflict, idx := ca.detectConflict(cas.keys)
