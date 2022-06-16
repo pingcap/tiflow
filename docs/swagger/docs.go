@@ -819,6 +819,9 @@ var doc = `{
                 },
                 "state": {
                     "type": "string"
+                },
+                "upstream_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -928,6 +931,9 @@ var doc = `{
                     "items": {
                         "$ref": "#/definitions/model.CaptureTaskStatus"
                     }
+                },
+                "upstream_id": {
+                    "type": "integer"
                 }
             }
         },

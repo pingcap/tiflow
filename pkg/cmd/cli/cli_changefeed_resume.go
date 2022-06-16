@@ -16,6 +16,7 @@ package cli
 import (
 	"context"
 
+	v2 "github.com/pingcap/tiflow/cdc/api/v2"
 	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
 	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
@@ -69,17 +70,20 @@ func (o *resumeChangefeedOptions) confirmResumeChangefeedCheck(ctx context.Conte
 			return err
 		}
 		var checkpointTs uint64 = 0
+		var upstreamID uint64 = 0
 
 		for _, cf := range *cfs {
 			if cf.ID == o.changefeedID {
 				checkpointTs = cf.CheckpointTSO
+				upstreamID = cf.UpstreamID
 			}
 		}
 		if checkpointTs == 0 {
 			return errors.ErrChangeFeedNotExists
 		}
 
-		tso, err := o.apiV2Client.Tso().Get(ctx)
+		tso, err := o.apiV2Client.Tso().Query(ctx,
+			&v2.UpstreamConfig{ID: upstreamID})
 		if err != nil {
 			return err
 		}

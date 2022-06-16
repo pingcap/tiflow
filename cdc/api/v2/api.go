@@ -50,5 +50,5 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	v2.DELETE("/unsafe/service_gc_safepoint", api.DeleteServiceGcSafePoint)
 
 	// common APIs
-	v2.GET("/tso", api.GetTso)
+	v2.POST("/tso", api.QueryTso)
 }

@@ -352,7 +352,9 @@ def verify_table():
 def get_tso():
     # test state: all
     url = BASE_URL0_V2+"/tso"
-    resp = rq.get(url, cert=CERT, verify=VERIFY)
+    data = json.dumps({})
+    headers = {"Content-Type": "application/json"}
+    resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.ok
 
     print("pass test: get tso")

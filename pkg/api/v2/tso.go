@@ -27,7 +27,7 @@ type TsoGetter interface {
 
 // TsoInterface has methods to work with status api
 type TsoInterface interface {
-	Get(ctx context.Context) (*v2.Tso, error)
+	Query(ctx context.Context, config *v2.UpstreamConfig) (*v2.Tso, error)
 }
 
 // tso implements StatusGetter
@@ -42,11 +42,12 @@ func newTso(c *APIV2Client) *tso {
 	}
 }
 
-// Get returns the pd tso
-func (c *tso) Get(ctx context.Context) (*v2.Tso, error) {
+// Query returns the pd tso
+func (c *tso) Query(ctx context.Context, config *v2.UpstreamConfig) (*v2.Tso, error) {
 	result := new(v2.Tso)
-	err := c.client.Get().
+	err := c.client.Post().
 		WithURI("tso").
+		WithBody(config).
 		Do(ctx).
 		Into(result)
 	return result, err

@@ -271,8 +271,13 @@ type EtcdData struct {
 
 // ResolveLockReq contains request parameter to resolve lock
 type ResolveLockReq struct {
-	RegionID uint64 `json:"region_id,omitempty"`
-	Ts       uint64 `json:"ts,omitempty"`
+	RegionID      uint64   `json:"region_id,omitempty"`
+	Ts            uint64   `json:"ts,omitempty"`
+	PDAddrs       []string `json:"pd_addrs"`
+	CAPath        string   `json:"ca_path"`
+	CertPath      string   `json:"cert_path"`
+	KeyPath       string   `json:"key_path"`
+	CertAllowedCN []string `json:"cert_allowed_cn"`
 }
 
 // ChangeFeedInfo describes the detail of a ChangeFeed
@@ -330,4 +335,14 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 			cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: %v", data)
 	}
 	return nil
+}
+
+// UpstreamConfig contains info to connect to pd
+type UpstreamConfig struct {
+	ID            uint64   `json:"id"`
+	PDAddrs       []string `json:"pd_addrs"`
+	CAPath        string   `json:"ca_path"`
+	CertPath      string   `json:"cert_path"`
+	KeyPath       string   `json:"key_path"`
+	CertAllowedCN []string `json:"cert_allowed_cn"`
 }

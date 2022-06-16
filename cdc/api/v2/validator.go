@@ -57,7 +57,7 @@ func verifyCreateChangefeedConfig(
 		credential.CertAllowedCN = cfg.CertAllowedCN
 	}
 
-	pdClient, err := getPDClient(ctx, cfg.PDAddrs, credential, capture)
+	pdClient, err := getPDClient(ctx, cfg.PDAddrs, credential)
 	if err != nil {
 		return nil, err
 	}
@@ -207,13 +207,7 @@ func verifyCreateChangefeedConfig(
 func getPDClient(ctx context.Context,
 	pdAddrs []string,
 	credential *security.Credential,
-	capture *capture.Capture,
 ) (pd.Client, error) {
-	// If there are no pdAddrs, we use default upstream's pdClient
-	if len(pdAddrs) == 0 {
-		return capture.UpstreamManager.Get(model.DefaultUpstreamID).PDClient, nil
-	}
-
 	grpcTLSOption, err := credential.ToGRPCDialOption()
 	if err != nil {
 		return nil, errors.Trace(err)
