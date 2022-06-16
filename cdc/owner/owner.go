@@ -403,21 +403,13 @@ func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model
 }
 
 func (o *ownerImpl) handleDrainCaptures(query *scheduler.Query, done chan<- error) {
-	// valid indicate that at least one changefeed drain capture take effect,
-	// which means this request is valid.
-	valid := false
 	totalTableCount := 0
-	target := query.CaptureID
 	for _, changefeed := range o.changefeeds {
-		count, ok := changefeed.scheduler.DrainCapture(target)
+		count := changefeed.scheduler.DrainCapture(query.CaptureID)
 		totalTableCount += count
-		if ok {
-			valid = true
-		}
 	}
 	query.Resp = &model.DrainCaptureResp{
 		TotalTableCount: totalTableCount,
-		Valid:           valid,
 	}
 	close(done)
 }

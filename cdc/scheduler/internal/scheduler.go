@@ -53,8 +53,8 @@ type Scheduler interface {
 	Rebalance()
 
 	// DrainCapture is used to drop all tables situated at the target capture
-	// shall we return error or bool?
-	DrainCapture(target model.CaptureID) (int, bool)
+	// It is thread-safe
+	DrainCapture(target model.CaptureID) int
 
 	// Close scheduler and release resource.
 	// It is not thread-safe.
