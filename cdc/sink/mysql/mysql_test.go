@@ -1965,7 +1965,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 	require.Nil(t, err)
 	sink, err := NewMySQLSink(ctx,
 		model.DefaultChangeFeedID(changefeed),
-		sinkURI, f, rc, map[string]string{})
+		sinkURI, f, rc)
 	require.Nil(t, err)
 
 	rows := []*model.RowChangedEvent{
