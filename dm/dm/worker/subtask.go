@@ -552,12 +552,17 @@ func (st *SubTask) markResultCanceled() bool {
 func (st *SubTask) Result() *pb.ProcessResult {
 	st.RLock()
 	defer st.RUnlock()
-	tempProcessResult, err := st.result.Marshal()
-	if err != nil {
-		log.L().Panic("Marshal of the process result is not successful.")
+	tempProcessResult := st.result
+	Errors := []*pb.ProcessError{}
+	Detail := []byte{}
+	immProcessResult := pb.ProcessResult{
+		IsCanceled: false,
+		Errors:     Errors,
+		Detail:     Detail,
 	}
-	newProcessResult := &pb.ProcessResult{}
-	_ = newProcessResult.Unmarshal(tempProcessResult)
+	var newProcessResult *pb.ProcessResult
+	newProcessResult = &immProcessResult
+	*newProcessResult = *tempProcessResult
 	return newProcessResult
 }
 
