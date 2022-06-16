@@ -14,6 +14,7 @@
 package v2
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -93,12 +94,29 @@ func (h *OpenAPIV2) ResolveLock(c *gin.Context) {
 
 // DeleteServiceGcSafePoint Delete CDC service GC safepoint in PD
 func (h *OpenAPIV2) DeleteServiceGcSafePoint(c *gin.Context) {
-	ctx := c.Request.Context()
-	upstreamConfig := UpstreamConfig{}
-	if err := c.BindJSON(&upstreamConfig); err != nil {
+	upstreamConfig := &UpstreamConfig{}
+	if err := c.BindJSON(upstreamConfig); err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
 	}
+	err := h.withUpstreamConfig(c, upstreamConfig,
+		func(ctx context.Context, client pd.Client) error {
+			err := gc.RemoveServiceGCSafepoint(c, client, h.capture.EtcdClient.GetGCServiceID())
+			if err != nil {
+				return cerror.WrapError(cerror.ErrInternalServerError, err)
+			}
+			return nil
+		})
+	if err != nil {
+		_ = c.Error(err)
+	}
+	c.Status(http.StatusNoContent)
+}
+
+func (h *OpenAPIV2) withUpstreamConfig(c context.Context,
+	upstreamConfig *UpstreamConfig,
+	doWithClient func(ctx context.Context, client pd.Client) error,
+) error {
 	var (
 		err      error
 		pdClient pd.Client
@@ -108,30 +126,20 @@ func (h *OpenAPIV2) DeleteServiceGcSafePoint(c *gin.Context) {
 		defer up.Release()
 		pdClient = up.PDClient
 	} else if len(upstreamConfig.PDAddrs) > 0 {
-		pdClient, err = getPDClient(ctx, upstreamConfig.PDAddrs, &security.Credential{
+		pdClient, err = getPDClient(c, upstreamConfig.PDAddrs, &security.Credential{
 			CAPath:        upstreamConfig.CAPath,
 			CertPath:      upstreamConfig.CertPath,
 			KeyPath:       upstreamConfig.KeyPath,
 			CertAllowedCN: nil,
-		}, h.capture)
+		})
 		if err != nil {
-			_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
-			return
+			return cerror.WrapError(cerror.ErrInternalServerError, err)
 		}
+		defer pdClient.Close()
 	} else {
 		up := h.capture.UpstreamManager.GetDefaultUpstream()
 		defer up.Release()
 		pdClient = up.PDClient
 	}
-
-	if pdClient == nil {
-		c.Status(http.StatusServiceUnavailable)
-		return
-	}
-	err = gc.RemoveServiceGCSafepoint(c, pdClient, h.capture.EtcdClient.GetGCServiceID())
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-	c.Status(http.StatusNoContent)
+	return doWithClient(c, pdClient)
 }

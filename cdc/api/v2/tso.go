@@ -14,12 +14,11 @@
 package v2
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/security"
 	pd "github.com/tikv/pd/client"
 )
 
@@ -30,48 +29,25 @@ func (h *OpenAPIV2) QueryTso(c *gin.Context) {
 		c.Status(http.StatusServiceUnavailable)
 		return
 	}
-	upstreamConfig := UpstreamConfig{}
-	if err := c.BindJSON(&upstreamConfig); err != nil {
+	upstreamConfig := &UpstreamConfig{}
+	if err := c.BindJSON(upstreamConfig); err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
 	}
-	var (
-		err      error
-		pdClient pd.Client
-	)
-	if upstreamConfig.ID > 0 {
-		up := h.capture.UpstreamManager.Get(upstreamConfig.ID)
-		defer up.Release()
-		pdClient = up.PDClient
-	} else if len(upstreamConfig.PDAddrs) > 0 {
-		pdClient, err = getPDClient(ctx, upstreamConfig.PDAddrs, &security.Credential{
-			CAPath:        upstreamConfig.CAPath,
-			CertPath:      upstreamConfig.CertPath,
-			KeyPath:       upstreamConfig.KeyPath,
-			CertAllowedCN: nil,
-		}, h.capture)
-		if err != nil {
-			_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
-			return
-		}
-	} else {
-		up := h.capture.UpstreamManager.GetDefaultUpstream()
-		defer up.Release()
-		pdClient = up.PDClient
-	}
-
-	if pdClient == nil {
-		c.Status(http.StatusServiceUnavailable)
-		return
-	}
-
-	timestamp, logicalTime, err := pdClient.GetTS(ctx)
+	resp := &Tso{}
+	err := h.withUpstreamConfig(ctx, upstreamConfig,
+		func(ctx context.Context, client pd.Client) error {
+			timestamp, logicalTime, err := client.GetTS(ctx)
+			if err != nil {
+				return cerror.WrapError(cerror.ErrInternalServerError, err)
+			}
+			resp.LogicTime = logicalTime
+			resp.Timestamp = timestamp
+			return nil
+		})
 	if err != nil {
 		_ = c.Error(err)
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 		return
 	}
-
-	resp := Tso{timestamp, logicalTime}
 	c.IndentedJSON(http.StatusOK, resp)
 }
