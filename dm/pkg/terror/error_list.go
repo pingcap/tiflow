@@ -696,7 +696,7 @@ const (
 
 // dmctl error code.
 const (
-	codeCtlGRPCCreateConn ErrCode = iota + 48001
+	codeCtlCreateMasterConn ErrCode = iota + 48001
 	codeCtlInvalidTLSCfg
 	codeCtlLoadTLSCfg
 )
@@ -1381,9 +1381,9 @@ var (
 	ErrSchedulerWorkerNotFree                = New(codeSchedulerWorkerNotFree, ClassScheduler, ScopeInternal, LevelLow, "dm-worker with name %s not free", "")
 
 	// dmctl.
-	ErrCtlGRPCCreateConn = New(codeCtlGRPCCreateConn, ClassDMCtl, ScopeInternal, LevelHigh, "can not create grpc connection", "Please check your network connection.")
-	ErrCtlInvalidTLSCfg  = New(codeCtlInvalidTLSCfg, ClassDMCtl, ScopeInternal, LevelMedium, "invalid TLS config", "Please check the `ssl-ca`, `ssl-cert` and `ssl-key` config in command line.")
-	ErrCtlLoadTLSCfg     = New(codeCtlLoadTLSCfg, ClassDMCtl, ScopeInternal, LevelHigh, "can not load tls config", "Please ensure that the tls certificate is accessible on the node currently running dmctl.")
+	ErrCtlCreateMasterConn = New(codeCtlCreateMasterConn, ClassDMCtl, ScopeInternal, LevelHigh, "can not create master connection", "Please check your network connection.")
+	ErrCtlInvalidTLSCfg    = New(codeCtlInvalidTLSCfg, ClassDMCtl, ScopeInternal, LevelMedium, "invalid TLS config", "Please check the `ssl-ca`, `ssl-cert` and `ssl-key` config in command line.")
+	ErrCtlLoadTLSCfg       = New(codeCtlLoadTLSCfg, ClassDMCtl, ScopeInternal, LevelHigh, "can not load tls config", "Please ensure that the tls certificate is accessible on the node currently running dmctl.")
 
 	// openapi.
 	ErrOpenAPICommonError        = New(codeOpenAPICommon, ClassOpenAPI, ScopeInternal, LevelHigh, "some unexpected errors have occurred, please check the detailed error message", "")
