@@ -778,6 +778,12 @@ func (h *OpenAPI) DrainCapture(c *gin.Context) {
 		return
 	}
 
+	if len(captures) < 2 {
+		_ = c.Error(cerror.ErrSchedulerRequestFailed.
+			GenWithStackByArgs("capture count less than 2"))
+		return
+	}
+
 	target := req.CaptureID
 	checkCaptureFound := func() bool {
 		// make sure the target capture exist

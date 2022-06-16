@@ -60,7 +60,7 @@ func (m *moveTableScheduler) addTask(tableID model.TableID, target model.Capture
 }
 
 func (m *moveTableScheduler) Schedule(
-	checkpointTs model.Ts,
+	_ model.Ts,
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
 	replications map[model.TableID]*ReplicationSet,

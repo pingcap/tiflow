@@ -57,8 +57,8 @@ func (d *drainCaptureScheduler) setTarget(target model.CaptureID) bool {
 }
 
 func (d *drainCaptureScheduler) Schedule(
-	checkpointTs model.Ts,
-	currentTables []model.TableID,
+	_ model.Ts,
+	_ []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
 	replications map[model.TableID]*ReplicationSet,
 ) []*scheduleTask {
@@ -132,7 +132,7 @@ func (d *drainCaptureScheduler) Schedule(
 		}
 
 		if minWorkload == math.MaxInt64 {
-			log.Panic("tpscheduler: rebalance meet unexpected min workload " +
+			log.Panic("tpscheduler: drain capture meet unexpected min workload " +
 				"when try to the the target capture")
 		}
 
@@ -144,16 +144,16 @@ func (d *drainCaptureScheduler) Schedule(
 		captureWorkload[target] = randomizeWorkload(d.random, minWorkload+1)
 	}
 
-	// todo: accept should be called, after all tables moved to other captures,
-	// make sure this is guaranteed by the scheduler.
 	accept := func() {
 		d.mu.Lock()
 		defer d.mu.Unlock()
-		// todo: before all tables removed from the target capture, this should always be set.
+		log.Info("tpscheduler: drain capture task accepted, clean the target",
+			zap.String("target", d.target))
+		// todo: accept the task does not mean drain capture finished, revise this.
 		d.target = captureIDNotDraining
 	}
 
-	// todo: return a burst balance at the moment, adjust this if concurrency control necessary.
+	// todo: revise this if we have to control the concurrency.
 	task := &scheduleTask{
 		burstBalance: &burstBalance{MoveTables: moveTables},
 		accept:       accept,

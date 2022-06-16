@@ -42,7 +42,7 @@ func (b *balanceScheduler) Name() string {
 }
 
 func (b *balanceScheduler) Schedule(
-	checkpointTs model.Ts,
+	_ model.Ts,
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
 	replications map[model.TableID]*ReplicationSet,
