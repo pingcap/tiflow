@@ -131,6 +131,11 @@ error = '''
 changefeed already exists, %s
 '''
 
+["CDC:ErrChangeFeedDeletionUnfinished"]
+error = '''
+changefeed exists after deletion, %s
+'''
+
 ["CDC:ErrChangeFeedNotExists"]
 error = '''
 changefeed not exists, %s
