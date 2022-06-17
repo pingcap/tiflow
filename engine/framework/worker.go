@@ -25,10 +25,10 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework/config"
+	"github.com/pingcap/tiflow/engine/framework/internal/worker"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/statusutil"
-	"github.com/pingcap/tiflow/engine/framework/worker"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
@@ -54,8 +54,8 @@ type Worker interface {
 	Poll(ctx context.Context) error
 	ID() runtime.RunnableID
 	Workload() model.RescUnit
-
-	runtime.Closer
+	Close(ctx context.Context) error
+	NotifyExit(ctx context.Context, errIn error) error
 }
 
 // WorkerImpl is the implementation of a worker of dataflow engine.
@@ -94,6 +94,7 @@ type BaseWorker interface {
 	// When `err` is not nil, the status code is assigned WorkerStatusError.
 	// Otherwise worker should set its status code to a meaningful value.
 	Exit(ctx context.Context, status frameModel.WorkerStatus, err error) error
+	NotifyExit(ctx context.Context, errIn error) error
 }
 
 // DefaultBaseWorker implements BaseWorker interface, it also embeds an Impl
@@ -204,6 +205,12 @@ func NewBaseWorker(
 // Workload implements BaseWorker.Workload
 func (w *DefaultBaseWorker) Workload() model.RescUnit {
 	return w.Impl.Workload()
+}
+
+// NotifyExit implements BaseWorker.NotifyExit
+func (w *DefaultBaseWorker) NotifyExit(ctx context.Context, errIn error) error {
+	// No-op for now.
+	return nil
 }
 
 // Init implements BaseWorker.Init

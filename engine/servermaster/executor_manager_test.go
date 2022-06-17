@@ -125,7 +125,7 @@ func TestExecutorManagerWatch(t *testing.T) {
 			ExecutorId: string(executorID),
 			Status:     int32(model.Running),
 			Timestamp:  uint64(time.Now().Unix()),
-			Ttl:        uint64(10), // 10ms ttl
+			Ttl:        uint64(100), // 10ms ttl
 		}
 	}
 
