@@ -886,7 +886,6 @@ func (p *processor) Close() error {
 	}
 	p.cancel()
 	p.wg.Wait()
-	p.upstream.Release()
 
 	if p.agent == nil {
 		return nil

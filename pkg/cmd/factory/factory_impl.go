@@ -217,6 +217,7 @@ func (f *factoryImpl) findServerAddr() (string, error) {
 	if f.clientGetter.GetServerAddr() != "" {
 		return f.clientGetter.GetServerAddr(), nil
 	}
+	// use pd to get server addr from etcd
 	etcdClient, err := f.EtcdClient()
 	if err != nil {
 		return "", errors.Trace(err)

@@ -188,7 +188,11 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 		})
 		cfReactor, exist := o.changefeeds[changefeedID]
 		if !exist {
-			up := o.upstreamManager.Get(changefeedState.Info.UpstreamID)
+			up, ok := o.upstreamManager.Get(changefeedState.Info.UpstreamID)
+			if !ok {
+				upstreamInfo := state.Upstreams[changefeedState.Info.UpstreamID]
+				up = o.upstreamManager.AddUpstream(upstreamInfo.ID, upstreamInfo)
+			}
 			cfReactor = o.newChangefeed(changefeedID, up)
 			o.changefeeds[changefeedID] = cfReactor
 		}
@@ -219,7 +223,10 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 		}
 		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 	}
-
+	// close upstream
+	if err := o.upstreamManager.Tick(stdCtx, state); err != nil {
+		return state, errors.Trace(err)
+	}
 	return state, nil
 }
 
@@ -539,7 +546,11 @@ func (o *ownerImpl) updateGCSafepoint(
 ) error {
 	minChekpoinTsMap, forceUpdateMap := o.calculateGCSafepoint(state)
 	for upstreamID, minCheckpointTs := range minChekpoinTsMap {
-		up := o.upstreamManager.Get(upstreamID)
+		up, ok := o.upstreamManager.Get(upstreamID)
+		if !ok {
+			upstreamInfo := state.Upstreams[upstreamID]
+			up = o.upstreamManager.AddUpstream(upstreamInfo.ID, upstreamInfo)
+		}
 		if !up.IsNormal() {
 			log.Warn("upstream is not ready, skip",
 				zap.Uint64("id", up.ID),

@@ -16,8 +16,10 @@ package upstream
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/benbjohnson/clock"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/stretchr/testify/require"
 )
@@ -26,33 +28,43 @@ func TestUpstream(t *testing.T) {
 	pdClient := &gc.MockPDClient{}
 	manager := NewManager4Test(pdClient)
 
-	up1 := manager.Get(DefaultUpstreamID)
+	up1, ok1 := manager.Get(testUpstreamID)
+	require.True(t, ok1)
 	require.NotNil(t, up1)
 
 	// test Add
-	manager.add(DefaultUpstreamID, []string{}, nil)
+	manager.add(testUpstreamID, []string{}, nil)
 
 	// test Get
-	testID := uint64(1)
-	require.Panics(t, func() { manager.Get(testID) })
+	testID := uint64(21)
+	up, ok := manager.Get(testID)
+	require.Nil(t, up)
+	require.False(t, ok)
 	up2 := NewUpstream4Test(pdClient)
 	up2.ID = testID
 	mockClock := clock.NewMock()
 	up2.clock = mockClock
 
 	manager.ups.Store(testID, up2)
-	require.NotNil(t, manager.Get(testID))
+	up, ok = manager.Get(testID)
+	require.True(t, ok)
+	require.NotNil(t, up)
 
 	// test Tick
-	up2.Release()
-	up2.Release()
+	_ = manager.Tick(context.Background(), &orchestrator.GlobalReactorState{})
 	mockClock.Add(maxIdleDuration * 2)
-
-	manager.Tick(context.Background())
+	manager.lastTickTime = time.Time{}
+	_ = manager.Tick(context.Background(), &orchestrator.GlobalReactorState{})
 	// wait until up2 is closed
 	for !up2.IsClosed() {
 	}
-	manager.Tick(context.Background())
-	require.Panics(t, func() { manager.Get(testID) })
-	require.NotNil(t, manager.Get(DefaultUpstreamID))
+	manager.lastTickTime = time.Time{}
+	_ = manager.Tick(context.Background(), &orchestrator.GlobalReactorState{})
+	_ = manager.Tick(context.Background(), &orchestrator.GlobalReactorState{})
+	up, ok = manager.Get(testID)
+	require.False(t, ok)
+	require.Nil(t, up)
+	up, ok = manager.Get(testUpstreamID)
+	require.True(t, ok)
+	require.NotNil(t, up)
 }

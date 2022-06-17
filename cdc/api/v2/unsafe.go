@@ -72,7 +72,6 @@ func (h *OpenAPIV2) ResolveLock(c *gin.Context) {
 		}
 	} else {
 		up := h.capture.UpstreamManager.GetDefaultUpstream()
-		defer up.Release()
 		kvStorage = up.KVStorage
 	}
 
@@ -122,8 +121,10 @@ func (h *OpenAPIV2) withUpstreamConfig(c context.Context,
 		pdClient pd.Client
 	)
 	if upstreamConfig.ID > 0 {
-		up := h.capture.UpstreamManager.Get(upstreamConfig.ID)
-		defer up.Release()
+		up, ok := h.capture.UpstreamManager.Get(upstreamConfig.ID)
+		if !ok {
+			return cerror.ErrUpstreamNotFound
+		}
 		pdClient = up.PDClient
 	} else if len(upstreamConfig.PDAddrs) > 0 {
 		pdClient, err = getPDClient(c, upstreamConfig.PDAddrs, &security.Credential{
@@ -138,7 +139,6 @@ func (h *OpenAPIV2) withUpstreamConfig(c context.Context,
 		defer pdClient.Close()
 	} else {
 		up := h.capture.UpstreamManager.GetDefaultUpstream()
-		defer up.Release()
 		pdClient = up.PDClient
 	}
 	return doWithClient(c, pdClient)

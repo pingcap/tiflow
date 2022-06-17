@@ -39,10 +39,6 @@ type GlobalReactorState struct {
 	// to be called when captures are added and removed.
 	onCaptureAdded   func(captureID model.CaptureID, addr string)
 	onCaptureRemoved func(captureID model.CaptureID)
-	// onUpstreamAdded and onUpstreamRemoved are hook functions
-	// to be called when upstream are added and removed.
-	onUpstreamAdded   func(captureID model.UpstreamID, info *model.UpstreamInfo)
-	onUpstreamRemoved func(captureID model.UpstreamID)
 }
 
 // NewGlobalState creates a new global state
@@ -156,18 +152,6 @@ func (s *GlobalReactorState) SetOnCaptureAdded(f func(captureID model.CaptureID,
 // SetOnCaptureRemoved registers a function that is called when a capture goes offline.
 func (s *GlobalReactorState) SetOnCaptureRemoved(f func(captureID model.CaptureID)) {
 	s.onCaptureRemoved = f
-}
-
-// SetOnUpstreamAdded registers a function that is called when an upstream is added.
-func (s *GlobalReactorState) SetOnUpstreamAdded(
-	f func(upstreamID model.UpstreamID, info *model.UpstreamInfo),
-) {
-	s.onUpstreamAdded = f
-}
-
-// SetOnUpstreamRemoved registers a function that is called when an upstream is removed
-func (s *GlobalReactorState) SetOnUpstreamRemoved(f func(upstreamID model.UpstreamID)) {
-	s.onUpstreamRemoved = f
 }
 
 // ChangefeedReactorState represents a changefeed state which stores all key-value pairs of a changefeed in ETCD

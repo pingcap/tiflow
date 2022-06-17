@@ -74,9 +74,6 @@ func NewManager(upstreamManager *upstream.Manager) *Manager {
 func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	ctx := stdCtx.(cdcContext.Context)
 	globalState := state.(*orchestrator.GlobalReactorState)
-	if err := m.upstreamManager.Tick(stdCtx); err != nil {
-		return state, errors.Trace(err)
-	}
 	if err := m.handleCommand(); err != nil {
 		return state, err
 	}
@@ -95,7 +92,11 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 		})
 		processor, exist := m.processors[changefeedID]
 		if !exist {
-			up := m.upstreamManager.Get(changefeedState.Info.UpstreamID)
+			up, ok := m.upstreamManager.Get(changefeedState.Info.UpstreamID)
+			if !ok {
+				upstreamInfo := globalState.Upstreams[changefeedState.Info.UpstreamID]
+				up = m.upstreamManager.AddUpstream(upstreamInfo.ID, upstreamInfo)
+			}
 			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
 			processor = m.newProcessor(ctx, up)
 			m.processors[changefeedID] = processor
@@ -115,6 +116,11 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 				m.closeProcessor(changefeedID)
 			}
 		}
+	}
+
+	// close upstream
+	if err := m.upstreamManager.Tick(stdCtx, globalState); err != nil {
+		return state, errors.Trace(err)
 	}
 	return state, nil
 }
