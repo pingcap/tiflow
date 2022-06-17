@@ -391,7 +391,7 @@ func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context,
 	return errors.Trace(err)
 }
 
-// UpdateChangefeedInfo updates a changefeed info and its upstream info into etcd
+// UpdateChangefeedAndUpstream updates the changefeed's info and its upstream info into etcd
 func (c CDCEtcdClient) UpdateChangefeedAndUpstream(ctx context.Context,
 	upstreamInfo *model.UpstreamInfo,
 	changeFeedInfo *model.ChangeFeedInfo,
