@@ -105,6 +105,12 @@ func TestEtcdKey(t *testing.T) {
 			Namespace:  model.DefaultNamespace,
 			UpstreamID: 12345,
 		},
+	}, {
+		key: fmt.Sprintf("%s%s", DefaultClusterAndMetaPrefix, MetaVersionKey),
+		expected: &CDCKey{
+			Tp:        CDCKeyTypeMetaVersion,
+			ClusterID: DefaultCDCClusterID,
+		},
 	}}
 	for _, tc := range testcases {
 		k := new(CDCKey)
@@ -137,6 +143,12 @@ func TestEtcdKeyParseError(t *testing.T) {
 	}, {
 		key:   "/tidb/cdc/",
 		error: true,
+	}, {
+		key:   "/tidb/cdc/default/__meta_data__/abcd",
+		error: true,
+	}, {
+		key:   "/tidb/cdc/default/default/abcd",
+		error: true,
 	}}
 	for _, tc := range testCases {
 		k := new(CDCKey)
@@ -147,4 +159,9 @@ func TestEtcdKeyParseError(t *testing.T) {
 			require.Nil(t, err)
 		}
 	}
+	k := new(CDCKey)
+	k.Tp = CDCKeyTypeUpStream + 1
+	require.Panics(t, func() {
+		_ = k.String()
+	})
 }

@@ -318,13 +318,13 @@ def get_tso():
     resp = rq.post(url, data=data, headers=headers)
     assert resp.status_code == rq.codes.ok
 
-    data = json.dumps({"pd_addrs": PD_ADDR})
+    data = json.dumps({"pd_addrs": [PD_ADDR]})
     headers = {"Content-Type": "application/json"}
     resp = rq.post(url, data=data, headers=headers)
     assert resp.status_code == rq.codes.ok
 
     # wrong pd address
-    data = json.dumps({"pd_addrs": "http://127.0.0.1:2233"})
+    data = json.dumps({"pd_addrs": ["http://127.0.0.1:2233"]})
     headers = {"Content-Type": "application/json"}
     resp = rq.post(url, data=data, headers=headers)
     assert resp.status_code != rq.codes.ok
