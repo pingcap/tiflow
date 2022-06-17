@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 
+	"github.com/pingcap/tiflow/engine/framework/utils"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 )
 
@@ -53,13 +54,13 @@ func TestTaskRunnerBasics(t *testing.T) {
 			id: fmt.Sprintf("worker-%d", i),
 		}
 		workers = append(workers, worker)
-		err := tr.AddTask(worker)
+		err := tr.AddTask(utils.WrapWorker(worker))
 		require.NoError(t, err)
 	}
 
 	require.Eventually(t, func() bool {
 		t.Logf("taskNum %d", tr.Workload())
-		return tr.Workload() == workerNum
+		return tr.WorkerCount() == workerNum
 	}, 1*time.Second, 10*time.Millisecond)
 
 	for _, worker := range workers {
@@ -67,52 +68,8 @@ func TestTaskRunnerBasics(t *testing.T) {
 	}
 
 	require.Eventually(t, func() bool {
-		return tr.Workload() == 0
+		return tr.WorkerCount() == 0
 	}, 1*time.Second, 100*time.Millisecond)
-
-	cancel()
-	wg.Wait()
-}
-
-func TestTaskRunnerInitBlocked(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	tr := NewTaskRunner(10, 10)
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err := tr.Run(ctx)
-		require.Error(t, err)
-		require.Regexp(t, ".*context canceled.*", err.Error())
-	}()
-
-	var workers []*dummyWorker
-	for i := 0; i < 21; i++ {
-		worker := newDummyWorker(fmt.Sprintf("worker-%d", i))
-		worker.BlockInit()
-		workers = append(workers, worker)
-
-		require.Eventually(t, func() bool {
-			err := tr.AddTask(worker)
-			return err == nil
-		}, 100*time.Millisecond, 1*time.Millisecond)
-	}
-
-	worker := newDummyWorker("my-worker")
-	err := tr.AddTask(worker)
-	require.Error(t, err)
-	require.Regexp(t, ".*ErrRuntimeIncomingQueueFull.*", err.Error())
-
-	for _, worker := range workers {
-		worker.UnblockInit()
-	}
-
-	require.Eventually(t, func() bool {
-		t.Logf("taskNum %d", tr.Workload())
-		return tr.Workload() == 21
-	}, 1*time.Second, 10*time.Millisecond)
 
 	cancel()
 	wg.Wait()
@@ -132,7 +89,7 @@ func TestTaskRunnerSubmitTime(t *testing.T) {
 	// We call AddTask before calling Run to make sure that the submitTime
 	// is recorded during the execution of the AddTask call.
 	worker := newDummyWorker("my-worker")
-	err := tr.AddTask(worker)
+	err := tr.AddTask(utils.WrapWorker(worker))
 	require.NoError(t, err)
 
 	// Advance the internal clock
@@ -179,7 +136,7 @@ func TestTaskStopReceiver(t *testing.T) {
 		}
 		running.Store(worker.id, struct{}{})
 		workers = append(workers, worker)
-		err := tr.AddTask(worker)
+		err := tr.AddTask(utils.WrapWorker(worker))
 		require.NoError(t, err)
 	}
 

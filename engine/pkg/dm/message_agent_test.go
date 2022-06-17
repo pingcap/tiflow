@@ -22,11 +22,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/engine/framework"
-	"github.com/pingcap/tiflow/engine/framework/master"
-	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+
+	"github.com/pingcap/tiflow/engine/framework"
+	"github.com/pingcap/tiflow/engine/pkg/p2p"
 )
 
 func TestAllocID(t *testing.T) {
@@ -101,8 +101,8 @@ func TestMessageMatcher(t *testing.T) {
 func TestUpdateClient(t *testing.T) {
 	messageAgent := NewMessageAgentImpl("", nil, p2p.NewMockMessageHandlerManager())
 	require.NoError(t, messageAgent.Init(context.Background()))
-	workerHandle1 := &master.MockHandle{WorkerID: "worker1"}
-	workerHandle2 := &master.MockHandle{WorkerID: "worker2"}
+	workerHandle1 := &framework.MockHandle{WorkerID: "worker1"}
+	workerHandle2 := &framework.MockHandle{WorkerID: "worker2"}
 
 	// add client
 	messageAgent.UpdateClient("task1", workerHandle1)
