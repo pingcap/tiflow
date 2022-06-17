@@ -1083,6 +1083,9 @@ func TestNewMySQLSink(t *testing.T) {
 	require.Nil(t, err)
 	err = sink.Close(ctx)
 	require.Nil(t, err)
+	// Test idempotency of `Close` interface
+	err = sink.Close(ctx)
+	require.Nil(t, err)
 }
 
 func TestMySQLSinkClose(t *testing.T) {
@@ -1232,7 +1235,7 @@ func TestCleanTableResource(t *testing.T) {
 	require.Nil(t, s.Init(tblID))
 	m := &sync.Map{}
 	m.Store(tblID, uint64(10))
-	ret, _ := s.txnCache.Resolved(m)
+	_, ret := s.txnCache.Resolved(m)
 	require.True(t, len(ret) == 0)
 	_, ok := s.tableCheckpointTs.Load(tblID)
 	require.False(t, ok)
