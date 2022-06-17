@@ -126,7 +126,6 @@ func TestCreateRemoveChangefeed(t *testing.T) {
 	removeJob := model.AdminJob{
 		CfID:  changefeedID,
 		Type:  model.AdminRemove,
-		Opts:  &model.AdminJobOption{ForceRemove: true},
 		Error: nil,
 	}
 
@@ -179,9 +178,6 @@ func TestStopChangefeed(t *testing.T) {
 	owner.EnqueueJob(model.AdminJob{
 		CfID: changefeedID,
 		Type: model.AdminRemove,
-		Opts: &model.AdminJobOption{
-			ForceRemove: true,
-		},
 	}, done)
 
 	// this tick to clean the leak info fo the removed changefeed

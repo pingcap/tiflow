@@ -40,6 +40,10 @@ var (
 		"changefeed already exists, %s",
 		errors.RFCCodeText("CDC:ErrChangeFeedAlreadyExists"),
 	)
+	ErrChangeFeedDeletionUnfinished = errors.Normalize(
+		"changefeed exists after deletion, %s",
+		errors.RFCCodeText("CDC:ErrChangeFeedDeletionUnfinished"),
+	)
 	ErrTaskStatusNotExists = errors.Normalize(
 		"task status not exists, %s",
 		errors.RFCCodeText("CDC:ErrTaskStatusNotExists"),

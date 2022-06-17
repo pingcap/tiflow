@@ -95,7 +95,7 @@ func WriteData(w http.ResponseWriter, data interface{}) {
 func HandleOwnerJob(
 	ctx context.Context, capture *capture.Capture, job model.AdminJob,
 ) error {
-	// Use buffered channel to prevent blocking owner.
+	// Use buffered channel to prevent blocking owner from happening.
 	done := make(chan error, 1)
 	o, err := capture.GetOwner()
 	if err != nil {

@@ -45,8 +45,6 @@ const (
 	OpVarTargetCaptureID = "target-cp-id"
 	// OpVarTableID is the key of table ID in HTTP API
 	OpVarTableID = "table-id"
-	// OpForceRemoveChangefeed is used when remove a changefeed
-	OpForceRemoveChangefeed = "force-remove"
 )
 
 type commonResp struct {
@@ -140,20 +138,9 @@ func (h *ownerAPI) handleChangefeedAdmin(w http.ResponseWriter, req *http.Reques
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid admin job type: %s", typeStr))
 		return
 	}
-	opts := &model.AdminJobOption{}
-	if forceRemoveStr := req.Form.Get(OpForceRemoveChangefeed); forceRemoveStr != "" {
-		forceRemoveOpt, err := strconv.ParseBool(forceRemoveStr)
-		if err != nil {
-			api.WriteError(w, http.StatusBadRequest,
-				cerror.ErrAPIInvalidParam.GenWithStack("invalid force remove option: %s", forceRemoveStr))
-			return
-		}
-		opts.ForceRemove = forceRemoveOpt
-	}
 	job := model.AdminJob{
 		CfID: model.DefaultChangeFeedID(req.Form.Get(OpVarChangefeedID)),
 		Type: model.AdminJobType(typ),
-		Opts: opts,
 	}
 
 	err = api.HandleOwnerJob(req.Context(), h.capture, job)

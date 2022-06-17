@@ -40,7 +40,6 @@ const (
 	apiOpVarChangefeedID = "changefeed_id"
 	// apiOpVarCaptureID is the key of capture ID in HTTP API
 	apiOpVarCaptureID = "capture_id"
-	force             = "force"
 )
 
 // OpenAPI provides capture APIs.
@@ -446,11 +445,6 @@ func (h *OpenAPI) RemoveChangefeed(c *gin.Context) {
 			changefeedID.ID))
 		return
 	}
-	var optForceRemove bool
-	forceRemoveStr, ok := c.GetQuery(force)
-	if ok && (forceRemoveStr == "true" || forceRemoveStr == "y") {
-		optForceRemove = true
-	}
 	// check if the changefeed exists
 	_, err := h.statusProvider().GetChangeFeedStatus(ctx, changefeedID)
 	if err != nil {
@@ -461,9 +455,6 @@ func (h *OpenAPI) RemoveChangefeed(c *gin.Context) {
 	job := model.AdminJob{
 		CfID: changefeedID,
 		Type: model.AdminRemove,
-		Opts: &model.AdminJobOption{
-			ForceRemove: optForceRemove,
-		},
 	}
 
 	if err := api.HandleOwnerJob(ctx, h.capture, job); err != nil {
