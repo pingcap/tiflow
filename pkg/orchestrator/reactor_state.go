@@ -202,7 +202,6 @@ func (s *ChangefeedReactorState) UpdateCDCKey(key *etcd.CDCKey, value []byte) er
 			s.Info = nil
 			return nil
 		}
-		log.Info("in update CDC Key ", zap.String("ectd.CDCKey", key.String()), zap.Any("value", value))
 		s.Info = new(model.ChangeFeedInfo)
 		e = s.Info
 	case etcd.CDCKeyTypeChangeFeedStatus:

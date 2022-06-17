@@ -190,18 +190,15 @@ func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
 		return
 	}
 
-	log.Info("Check CF and UP info")
-	log.Info("Old changefeed Info", zap.String("info ", cfInfo.String()))
-	log.Info("Old Up Info", zap.Any("info ", upInfo))
-
+	log.Info("Old ChangeFeed Info", zap.String("info ", cfInfo.String()))
+	log.Info("Old Upstream Info", zap.Any("info ", upInfo))
 	newCfInfo, newUpInfo, err := verifyUpdateChangefeedConfig(ctx, changefeedConfig, cfInfo, upInfo)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
-
-	log.Info("New changefeed Info", zap.String("info ", newCfInfo.String()))
-	log.Info("New Up Info", zap.Any("info ", newUpInfo))
+	log.Info("New ChangeFeed Info", zap.String("info ", newCfInfo.String()))
+	log.Info("New Upstream Info", zap.Any("info ", newUpInfo))
 
 	err = h.capture.EtcdClient.UpdateChangefeedAndUpstream(ctx, newUpInfo, newCfInfo, changefeedID)
 	if err != nil {

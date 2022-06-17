@@ -418,10 +418,6 @@ func (c CDCEtcdClient) UpdateChangefeedAndUpstream(ctx context.Context,
 		clientv3.OpPut(upstreamKeyStr, string(upstreamInfoStr)),
 	}
 
-	log.Info("Begin update transaction: ")
-	log.Info("New Upstream Info", zap.String("key", upstreamKeyStr), zap.ByteString("value", upstreamInfoStr))
-	log.Info("New changefeed Info", zap.String("key", infoKey), zap.String("value", changeFeedInfoStr))
-
 	resp, err := c.Client.Txn(ctx, txnEmptyCmps, opsThen, TxnEmptyOpsElse)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
