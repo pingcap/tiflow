@@ -205,7 +205,6 @@ func (t *testUtilsSuite) TestIgnoreErrorCheckpoint(c *C) {
 
 func TestIsInterestedDDL(t *testing.T) {
 	p := parser.New()
-	require.True(t, IsInterestedDDL("DROP /*!40005 TEMPORARY */ TABLE IF EXISTS `h2`", p))
 
 	cases := []struct {
 		sql        string
