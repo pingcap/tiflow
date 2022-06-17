@@ -51,6 +51,8 @@ type Manager struct {
 	defaultUpstream *Upstream
 
 	lastTickTime time.Time
+
+	initUpstreamFunc func(ctx context.Context, up *Upstream, gcID string) error
 }
 
 // NewManager creates a new Manager.
@@ -58,10 +60,11 @@ type Manager struct {
 func NewManager(ctx context.Context, gcServiceID string) *Manager {
 	ctx, cancel := context.WithCancel(ctx)
 	return &Manager{
-		ups:         new(sync.Map),
-		ctx:         ctx,
-		cancel:      cancel,
-		gcServiceID: gcServiceID,
+		ups:              new(sync.Map),
+		ctx:              ctx,
+		cancel:           cancel,
+		gcServiceID:      gcServiceID,
+		initUpstreamFunc: initUpstream,
 	}
 }
 
@@ -82,17 +85,10 @@ func NewManager4Test(pdClient pd.Client) *Manager {
 func (m *Manager) AddDefaultUpstream(pdEndpoint []string,
 	conf *security.Credential,
 ) (*Upstream, error) {
-	up := newUpstream(pdEndpoint,
-		&security.Credential{
-			CAPath:        conf.CAPath,
-			CertPath:      conf.CertPath,
-			KeyPath:       conf.KeyPath,
-			CertAllowedCN: conf.CertAllowedCN,
-		})
-	if err := up.init(m.ctx, m.gcServiceID); err != nil {
+	up := newUpstream(pdEndpoint, conf)
+	if err := m.initUpstreamFunc(m.ctx, up, m.gcServiceID); err != nil {
 		return nil, err
 	}
-	up.ID = up.PDClient.GetClusterID(m.ctx)
 	up.isDefaultUpstream = true
 	m.defaultUpstream = up
 	m.ups.Store(up.ID, up)
@@ -125,10 +121,10 @@ func (m *Manager) add(upstreamID uint64,
 		}
 	}
 	up := newUpstream(pdEndpoints, securityConf)
-	up.ID = upstreamID
 	m.ups.Store(upstreamID, up)
 	go func() {
-		_ = up.init(m.ctx, m.gcServiceID)
+		err := m.initUpstreamFunc(m.ctx, up, m.gcServiceID)
+		up.err.Store(err)
 	}()
 	up.resetIdleTime()
 	return up
@@ -163,7 +159,7 @@ func (m *Manager) Get(upstreamID uint64) (*Upstream, bool) {
 func (m *Manager) Close() {
 	m.cancel()
 	m.ups.Range(func(k, v interface{}) bool {
-		v.(*Upstream).close()
+		v.(*Upstream).Close()
 		return true
 	})
 }
@@ -194,28 +190,27 @@ func (m *Manager) Tick(ctx context.Context,
 		}
 		id := k.(uint64)
 
-		_, ok := activeUpstreams[id]
-		if ok {
-			return true
-		}
 		up := v.(*Upstream)
 		if up.isDefaultUpstream {
 			return true
 		}
-
 		// remove failed upstream
 		if up.Error() != nil {
 			log.Warn("upstream init failed, remove from upstream",
 				zap.Uint64("id", up.ID),
 				zap.Error(up.Error()))
-			go up.close()
+			go up.Close()
 			m.ups.Delete(id)
+			return true
+		}
+		_, ok := activeUpstreams[id]
+		if ok {
 			return true
 		}
 
 		up.trySetIdleTime()
 		if up.shouldClose() {
-			go up.close()
+			go up.Close()
 		}
 
 		if up.IsClosed() {

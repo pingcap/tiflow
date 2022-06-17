@@ -44,6 +44,8 @@ const (
 	uninit int32 = iota
 	// indicate an upstream is initialized and can work normally.
 	normal
+	// indicate an upstream is closing
+	closing
 	// indicate an upstream is closed.
 	closed
 
@@ -104,7 +106,8 @@ func NewUpstream4Test(pdClient pd.Client) *Upstream {
 	return res
 }
 
-func (up *Upstream) init(ctx context.Context, gcServiceID string) error {
+// init initializes the upstream
+func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
 	log.Info("upstream is initializing", zap.Uint64("upstreamID", up.ID))
 	grpcTLSOption, err := up.SecurityConfig.ToGRPCDialOption()
 	if err != nil {
@@ -198,11 +201,16 @@ func (up *Upstream) init(ctx context.Context, gcServiceID string) error {
 	return nil
 }
 
-// close all resources.
-func (up *Upstream) close() {
-	if atomic.LoadInt32(&up.status) == closed {
+// Close all resources.
+func (up *Upstream) Close() {
+	up.mu.Lock()
+	up.mu.Unlock()
+
+	if atomic.LoadInt32(&up.status) == closed ||
+		atomic.LoadInt32(&up.status) == closing {
 		return
 	}
+	atomic.StoreInt32(&up.status, closing)
 
 	if up.PDClient != nil {
 		up.PDClient.Close()
@@ -245,6 +253,7 @@ func (up *Upstream) IsClosed() bool {
 	return atomic.LoadInt32(&up.status) == closed
 }
 
+// resetIdleTime set the upstream idle time to true
 func (up *Upstream) resetIdleTime() {
 	up.mu.Lock()
 	defer up.mu.Unlock()
@@ -254,6 +263,7 @@ func (up *Upstream) resetIdleTime() {
 	}
 }
 
+// trySetIdleTime set the upstream idle time if it's not zero
 func (up *Upstream) trySetIdleTime() {
 	up.mu.Lock()
 	defer up.mu.Unlock()
@@ -263,7 +273,8 @@ func (up *Upstream) trySetIdleTime() {
 	}
 }
 
-// return true if this upstream idleTime reaches maxIdleDuration.
+// shouldClose returns true if
+// this upstream idleTime reaches maxIdleDuration.
 func (up *Upstream) shouldClose() bool {
 	// default upstream should never be closed.
 	if up.isDefaultUpstream {
