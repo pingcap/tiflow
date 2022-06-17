@@ -391,6 +391,50 @@ func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context,
 	return errors.Trace(err)
 }
 
+// UpdateChangefeedInfo updates a changefeed info and its upstream info into etcd
+func (c CDCEtcdClient) UpdateChangefeedAndUpstream(ctx context.Context,
+	upstreamInfo *model.UpstreamInfo,
+	changeFeedInfo *model.ChangeFeedInfo,
+	changeFeedID model.ChangeFeedID,
+) error {
+	infoKey := GetEtcdKeyChangeFeedInfo(c.ClusterID, changeFeedID)
+	changeFeedInfoStr, err := changeFeedInfo.Marshal()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	upstreamKey := CDCKey{
+		Tp:         CDCKeyTypeUpStream,
+		ClusterID:  c.ClusterID,
+		UpstreamID: upstreamInfo.ID,
+		Namespace:  changeFeedID.Namespace,
+	}
+	upstreamKeyStr := upstreamKey.String()
+	upstreamInfoStr, err := upstreamInfo.Marshal()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	opsThen := []clientv3.Op{
+		clientv3.OpPut(infoKey, changeFeedInfoStr),
+		clientv3.OpPut(upstreamKeyStr, string(upstreamInfoStr)),
+	}
+
+	log.Info("Begin update transaction: ")
+	log.Info("New Upstream Info", zap.String("key", upstreamKeyStr), zap.ByteString("value", upstreamInfoStr))
+	log.Info("New changefeed Info", zap.String("key", infoKey), zap.String("value", changeFeedInfoStr))
+
+	resp, err := c.Client.Txn(ctx, txnEmptyCmps, opsThen, TxnEmptyOpsElse)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+	}
+	if !resp.Succeeded {
+		log.Warn("unexpected etcd transaction failure",
+			zap.String("namespace", changeFeedID.Namespace),
+			zap.String("changefeed", changeFeedID.ID))
+		return cerror.ErrChangefeedUpdateFailedTransaction.GenWithStackByArgs(changeFeedID)
+	}
+	return errors.Trace(err)
+}
+
 // SaveChangeFeedInfo stores change feed info into etcd
 // TODO: this should be called from outer system, such as from a TiDB client
 func (c CDCEtcdClient) SaveChangeFeedInfo(ctx context.Context,

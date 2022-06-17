@@ -189,26 +189,23 @@ func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
 	}
+
+	log.Info("Check CF and UP info")
+	log.Info("Old changefeed Info", zap.String("info ", cfInfo.String()))
+	log.Info("Old Up Info", zap.Any("info ", upInfo))
+
 	newCfInfo, newUpInfo, err := verifyUpdateChangefeedConfig(ctx, changefeedConfig, cfInfo, upInfo)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
 
-	if newCfInfo != nil {
-		err = h.capture.EtcdClient.SaveChangeFeedInfo(ctx, newCfInfo, changefeedID)
-		if err != nil {
-			_ = c.Error(err)
-			return
-		}
-	}
+	log.Info("New changefeed Info", zap.String("info ", newCfInfo.String()))
+	log.Info("New Up Info", zap.Any("info ", newUpInfo))
 
-	if newUpInfo != nil {
-		err = h.capture.EtcdClient.SaveUpstreamInfo(ctx, newUpInfo, changefeedID.Namespace)
-		if err != nil {
-			_ = c.Error(err)
-			return
-		}
+	err = h.capture.EtcdClient.UpdateChangefeedAndUpstream(ctx, newUpInfo, newCfInfo, changefeedID)
+	if err != nil {
+		_ = c.Error(err)
 	}
 
 	c.JSON(http.StatusOK, newCfInfo)
