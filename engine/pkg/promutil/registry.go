@@ -157,3 +157,28 @@ func (f *AutoRegisterFactory) NewHistogramVec(opts prometheus.HistogramOpts, lab
 	f.r.MustRegister(f.id, c)
 	return c
 }
+
+// RegOnlyRegister can Register collectors but can't Unregister. It's only used in tests.
+type RegOnlyRegister struct {
+	r prometheus.Registerer
+}
+
+// NewOnlyRegRegister creates an RegOnlyRegister.
+func NewOnlyRegRegister(r prometheus.Registerer) prometheus.Registerer {
+	return &RegOnlyRegister{r}
+}
+
+// Register implements prometheus.Registerer.
+func (o RegOnlyRegister) Register(collector prometheus.Collector) error {
+	return o.r.Register(collector)
+}
+
+// MustRegister implements prometheus.Registerer.
+func (o RegOnlyRegister) MustRegister(collector ...prometheus.Collector) {
+	o.r.MustRegister(collector...)
+}
+
+// Unregister implements prometheus.Registerer.
+func (o RegOnlyRegister) Unregister(collector prometheus.Collector) bool {
+	return false
+}
