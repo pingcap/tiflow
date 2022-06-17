@@ -85,9 +85,12 @@ function test_source() {
 	# test get source schemas and tables
 	openapi_source_check "get_source_schemas_and_tables_success" "mysql-01" "openapi" "t1"
 
-	# test the table name that must be quoted are working properly
-	run_sql_source1 "CREATE TABLE openapi.\`t-1\`(i TINYINT, j INT UNIQUE KEY);"
-	openapi_source_check "get_source_schemas_and_tables_success" "mysql-01" "openapi" "t-1"
+	# test the db name that must be quoted are working properly
+	must_quote_db_name="\`db-name\`"
+	run_sql_source1 "create database if not exists $must_quote_db_name"
+	run_sql_source1 "create table $must_quote_db_name.t1 (i TINYINT, j INT UNIQUE KEY)"
+	openapi_source_check "get_source_schemas_and_tables_success" "mysql-01" "db-name" "t1"
+	run_sql_source1 "drop database $must_quote_db_name"
 
 	# delete source success
 	openapi_source_check "delete_source_success" "mysql-01"
