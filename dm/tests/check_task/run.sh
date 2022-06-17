@@ -14,12 +14,6 @@ function prepare_incompatible_tables() {
 	done
 }
 
-function prepare_many_tables() {
-	run_sql_both_source "drop database if exists checktask"
-	run_sql_both_source "create database if not exists checktask"
-	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
-}
-
 function prepare() {
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
@@ -36,7 +30,10 @@ function test_check_task_fail_no_block() {
 }
 
 function test_check_task_fail_no_block_forsharding() {
-	prepare_many_tables
+	run_sql_both_source "drop database if exists \`check-task\`"
+	run_sql_both_source "create database if not exists \`check-task\`"
+	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"check-task $cur/conf/task-sharding.yaml" \
 		"\"state\": \"fail\"" 1
