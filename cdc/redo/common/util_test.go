@@ -16,8 +16,8 @@ package common
 import (
 	"fmt"
 	"testing"
-	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,7 +25,6 @@ func TestParseLogFileName(t *testing.T) {
 	type arg struct {
 		name string
 	}
-	// the log looks like: fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.captureID, w.cfg.changeFeedID, w.cfg.createTime.Unix(), w.cfg.fileType, w.commitTS.Load(), redo.LogEXT)
 	tests := []struct {
 		name         string
 		args         arg
@@ -36,7 +35,19 @@ func TestParseLogFileName(t *testing.T) {
 		{
 			name: "happy row .log",
 			args: arg{
-				name: fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test", time.Now().Unix(), DefaultRowLogFileType, 1, LogEXT),
+				name: fmt.Sprintf(RedoLogFileFormatV1, "cp",
+					"test",
+					DefaultRowLogFileType, 1, uuid.New().String(), LogEXT),
+			},
+			wantTs:       1,
+			wantFileType: DefaultRowLogFileType,
+		},
+		{
+			name: "happy row .log",
+			args: arg{
+				name: fmt.Sprintf(RedoLogFileFormatV1, "cp",
+					"test",
+					DefaultRowLogFileType, 1, uuid.New().String(), LogEXT),
 			},
 			wantTs:       1,
 			wantFileType: DefaultRowLogFileType,
@@ -44,7 +55,19 @@ func TestParseLogFileName(t *testing.T) {
 		{
 			name: "happy row .tmp",
 			args: arg{
-				name: fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test", time.Now().Unix(), DefaultRowLogFileType, 1, LogEXT) + TmpEXT,
+				name: fmt.Sprintf(RedoLogFileFormatV1, "cp",
+					"test",
+					DefaultRowLogFileType, 1, uuid.New().String(), LogEXT) + TmpEXT,
+			},
+			wantTs:       1,
+			wantFileType: DefaultRowLogFileType,
+		},
+		{
+			name: "happy row .tmp",
+			args: arg{
+				name: fmt.Sprintf(RedoLogFileFormatV1, "cp",
+					"test",
+					DefaultRowLogFileType, 1, uuid.New().String(), LogEXT) + TmpEXT,
 			},
 			wantTs:       1,
 			wantFileType: DefaultRowLogFileType,
@@ -52,7 +75,19 @@ func TestParseLogFileName(t *testing.T) {
 		{
 			name: "happy ddl .log",
 			args: arg{
-				name: fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test", time.Now().Unix(), DefaultDDLLogFileType, 1, LogEXT),
+				name: fmt.Sprintf(RedoLogFileFormatV1, "cp",
+					"test",
+					DefaultDDLLogFileType, 1, uuid.New().String(), LogEXT),
+			},
+			wantTs:       1,
+			wantFileType: DefaultDDLLogFileType,
+		},
+		{
+			name: "happy ddl .log",
+			args: arg{
+				name: fmt.Sprintf(RedoLogFileFormatV1, "cp",
+					"test",
+					DefaultDDLLogFileType, 1, uuid.New().String(), LogEXT),
 			},
 			wantTs:       1,
 			wantFileType: DefaultDDLLogFileType,
@@ -60,7 +95,19 @@ func TestParseLogFileName(t *testing.T) {
 		{
 			name: "happy ddl .sort",
 			args: arg{
-				name: fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test", time.Now().Unix(), DefaultDDLLogFileType, 1, LogEXT) + SortLogEXT,
+				name: fmt.Sprintf(RedoLogFileFormatV1, "cp",
+					"test",
+					DefaultDDLLogFileType, 1, uuid.New().String(), LogEXT) + SortLogEXT,
+			},
+			wantTs:       1,
+			wantFileType: DefaultDDLLogFileType,
+		},
+		{
+			name: "happy ddl .sort",
+			args: arg{
+				name: fmt.Sprintf(RedoLogFileFormatV1, "cp",
+					"test",
+					DefaultDDLLogFileType, 1, uuid.New().String(), LogEXT) + SortLogEXT,
 			},
 			wantTs:       1,
 			wantFileType: DefaultDDLLogFileType,
@@ -68,7 +115,19 @@ func TestParseLogFileName(t *testing.T) {
 		{
 			name: "happy ddl .tmp",
 			args: arg{
-				name: fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test", time.Now().Unix(), DefaultDDLLogFileType, 1, LogEXT) + TmpEXT,
+				name: fmt.Sprintf(RedoLogFileFormatV1, "cp",
+					"test",
+					DefaultDDLLogFileType, 1, uuid.New().String(), LogEXT) + TmpEXT,
+			},
+			wantTs:       1,
+			wantFileType: DefaultDDLLogFileType,
+		},
+		{
+			name: "happy ddl .tmp",
+			args: arg{
+				name: fmt.Sprintf(RedoLogFileFormatV1, "cp",
+					"test",
+					DefaultDDLLogFileType, 1, uuid.New().String(), LogEXT) + TmpEXT,
 			},
 			wantTs:       1,
 			wantFileType: DefaultDDLLogFileType,
@@ -90,7 +149,9 @@ func TestParseLogFileName(t *testing.T) {
 		{
 			name: "err wrong format ddl .tmp",
 			args: arg{
-				name: fmt.Sprintf("%s_%s_%d_%s%d%s", "cp", "test", time.Now().Unix(), DefaultDDLLogFileType, 1, LogEXT) + TmpEXT,
+				name: fmt.Sprintf("%s_%s_%s_%d%s%s", /* a wrong format */
+					"cp", "test",
+					DefaultDDLLogFileType, 1, uuid.New().String(), LogEXT) + TmpEXT,
 			},
 			wantErr: ".*bad log name*.",
 		},

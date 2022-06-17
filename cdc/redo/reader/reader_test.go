@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
 	"github.com/pingcap/tidb/br/pkg/storage"
@@ -84,7 +85,9 @@ func TestLogReaderResetReader(t *testing.T) {
 		MaxLogSize: 100000,
 		Dir:        dir,
 	}
-	fileName := fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf100", time.Now().Unix(), common.DefaultDDLLogFileType, 100, common.LogEXT)
+	fileName := fmt.Sprintf(common.RedoLogFileFormatV1, "cp",
+		"test-cf100",
+		common.DefaultDDLLogFileType, 100, uuid.New().String(), common.LogEXT)
 	w, err := writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
 		return fileName
 	}))
@@ -103,7 +106,9 @@ func TestLogReaderResetReader(t *testing.T) {
 	f, err := os.Open(path)
 	require.Nil(t, err)
 
-	fileName = fmt.Sprintf("%s_%s_%d_%s_%d%s", "cp", "test-cf10", time.Now().Unix(), common.DefaultRowLogFileType, 10, common.LogEXT)
+	fileName = fmt.Sprintf(common.RedoLogFileFormatV1, "cp",
+		"test-cf10",
+		common.DefaultRowLogFileType, 10, uuid.New().String(), common.LogEXT)
 	w, err = writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
 		return fileName
 	}))
