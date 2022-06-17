@@ -372,6 +372,10 @@ func (tr *Tracker) Reset() error {
 
 // Close close a tracker.
 func (tr *Tracker) Close() error {
+	// prevent SchemaTracker being closed when
+	// other components are getting/setting table info
+	tr.Lock()
+	defer tr.Unlock()
 	if tr == nil {
 		return nil
 	}

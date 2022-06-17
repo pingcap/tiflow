@@ -685,6 +685,7 @@ function check_validate_at_least() {
 		if [[ $count -ge $expect ]]; then
 			return
 		fi
+		sleep 3
 	done
 	echo "validator is expected to validate at least $expect!"
 	cat $dmctl_log | echo
