@@ -14,7 +14,6 @@
 package v1
 
 import (
-	"bufio"
 	"fmt"
 	"net/http"
 	"os"
@@ -27,9 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
-	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
@@ -43,8 +40,6 @@ const (
 	apiOpVarChangefeedID = "changefeed_id"
 	// apiOpVarCaptureID is the key of capture ID in HTTP API
 	apiOpVarCaptureID = "capture_id"
-	// forWardFromCapture is a header to be set when a request is forwarded from another capture
-	forWardFromCapture = "TiCDC-ForwardFromCapture"
 )
 
 // OpenAPI provides capture APIs.
@@ -85,7 +80,7 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api OpenAPI) {
 
 	// changefeed API
 	changefeedGroup := v1.Group("/changefeeds")
-	changefeedGroup.Use(api.forwardToOwnerMiddleware)
+	changefeedGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
 	changefeedGroup.GET("", api.ListChangefeed)
 	changefeedGroup.GET("/:changefeed_id", api.GetChangefeed)
 	changefeedGroup.POST("", api.CreateChangefeed)
@@ -98,18 +93,18 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api OpenAPI) {
 
 	// owner API
 	ownerGroup := v1.Group("/owner")
-	ownerGroup.Use(api.forwardToOwnerMiddleware)
+	ownerGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
 	ownerGroup.POST("/resign", api.ResignOwner)
 
 	// processor API
 	processorGroup := v1.Group("/processors")
-	processorGroup.Use(api.forwardToOwnerMiddleware)
+	processorGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
 	processorGroup.GET("", api.ListProcessor)
 	processorGroup.GET("/:changefeed_id/:capture_id", api.GetProcessor)
 
 	// capture API
 	captureGroup := v1.Group("/captures")
-	captureGroup.Use(api.forwardToOwnerMiddleware)
+	captureGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
 	captureGroup.GET("", api.ListCapture)
 }
 
@@ -772,95 +767,4 @@ func SetLogLevel(c *gin.Context) {
 	}
 	log.Warn("log level changed", zap.String("level", data.Level))
 	c.Status(http.StatusOK)
-}
-
-// forwardToOwnerMiddleware forward an request to owner if current server
-// is not owner, or handle it locally.
-func (h *OpenAPI) forwardToOwnerMiddleware(c *gin.Context) {
-	if !h.capture.IsOwner() {
-		h.forwardToOwner(c)
-		return
-	}
-	c.Next()
-}
-
-// forwardToOwner forward an request to owner
-func (h *OpenAPI) forwardToOwner(c *gin.Context) {
-	ctx := c.Request.Context()
-	// every request can only forward to owner one time
-	if len(c.GetHeader(forWardFromCapture)) != 0 {
-		_ = c.Error(cerror.ErrRequestForwardErr.FastGenByArgs())
-		return
-	}
-
-	info, err := h.capture.Info()
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-
-	c.Header(forWardFromCapture, info.ID)
-
-	var owner *model.CaptureInfo
-	// get owner
-	owner, err = h.capture.GetOwnerCaptureInfo(ctx)
-	if err != nil {
-		log.Info("get owner failed", zap.Error(err))
-		_ = c.Error(err)
-		return
-	}
-
-	security := config.GetGlobalServerConfig().Security
-
-	// init a request
-	req, err := http.NewRequestWithContext(
-		ctx, c.Request.Method, c.Request.RequestURI, c.Request.Body)
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-
-	req.URL.Host = owner.AdvertiseAddr
-	// we should check tls config instead of security here because
-	// security will never be nil
-	if tls, _ := security.ToTLSConfigWithVerify(); tls != nil {
-		req.URL.Scheme = "https"
-	} else {
-		req.URL.Scheme = "http"
-	}
-	for k, v := range c.Request.Header {
-		for _, vv := range v {
-			req.Header.Add(k, vv)
-		}
-	}
-
-	// forward to owner
-	cli, err := httputil.NewClient(security)
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-	resp, err := cli.Do(req)
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-
-	// write header
-	for k, values := range resp.Header {
-		for _, v := range values {
-			c.Header(k, v)
-		}
-	}
-
-	// write status code
-	c.Status(resp.StatusCode)
-
-	// write response body
-	defer resp.Body.Close()
-	_, err = bufio.NewReader(resp.Body).WriteTo(c.Writer)
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
 }
