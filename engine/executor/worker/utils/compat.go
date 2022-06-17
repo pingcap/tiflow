@@ -40,6 +40,6 @@ type Wrapper struct {
 func WrapWorker(worker worker) *Wrapper {
 	return &Wrapper{
 		worker: worker,
-		Runner: eventloop.NewRunner(worker, worker.ID()),
+		Runner: eventloop.NewRunner(worker),
 	}
 }

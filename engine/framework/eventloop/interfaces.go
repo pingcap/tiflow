@@ -13,11 +13,14 @@
 
 package eventloop
 
-import "context"
+import (
+	"context"
+)
 
-// task defines the common methods used to drive both workers
+// Task defines the common methods used to drive both workers
 // and masters.
-type task interface {
+// It will replace the current `Worker` interface in further refactors.
+type Task interface {
 	// Init is called before entering the loop calling Poll.
 	Init(ctx context.Context) error
 
@@ -32,4 +35,7 @@ type task interface {
 	// Close does necessary clean up.
 	// TODO `ctx` is for compatibility, remove it.
 	Close(ctx context.Context) error
+
+	// ID returns an identifier for the Task.
+	ID() string
 }

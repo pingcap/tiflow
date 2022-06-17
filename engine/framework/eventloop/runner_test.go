@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 
+	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 )
 
@@ -93,11 +94,15 @@ func (t *toyTask) Close(ctx context.Context) error {
 	return args.Error(0)
 }
 
+func (t *toyTask) ID() runtime.RunnableID {
+	return "toy"
+}
+
 func TestRunnerNormalPath(t *testing.T) {
 	t.Parallel()
 
 	task := newToyTask(t, false)
-	runner := NewRunner(task, "task")
+	runner := NewRunner(task)
 
 	errIn := errors.New("injected error")
 
@@ -133,7 +138,7 @@ func TestRunnerForcefulExit(t *testing.T) {
 	t.Parallel()
 
 	task := newToyTask(t, true)
-	runner := NewRunner(task, "task")
+	runner := NewRunner(task)
 
 	errIn := derrors.ErrWorkerSuicide.GenWithStackByArgs()
 
@@ -168,7 +173,7 @@ func TestRunnerContextCanceled(t *testing.T) {
 	t.Parallel()
 
 	task := newToyTask(t, true)
-	runner := NewRunner(task, "task")
+	runner := NewRunner(task)
 
 	task.On("Init", mock.Anything).Return(nil).Once()
 	task.On("Close", mock.Anything).Return(nil).Once()

@@ -32,22 +32,20 @@ const (
 	defaultEventLoopTickInterval = 50 * time.Millisecond
 )
 
-// Runner runs a task.
-type Runner[T task] struct {
+// Runner runs a Task.
+type Runner[T Task] struct {
 	task T
 
 	alreadyRun atomic.Bool
-	label      string
 
 	clk clock.Clock
 }
 
 // NewRunner returns a new Runner.
-func NewRunner[T task](t T, label string) *Runner[T] {
+func NewRunner[T Task](t T) *Runner[T] {
 	return &Runner[T]{
-		task:  t,
-		label: label,
-		clk:   clock.New(),
+		task: t,
+		clk:  clock.New(),
 	}
 }
 
@@ -55,12 +53,12 @@ func NewRunner[T task](t T, label string) *Runner[T] {
 // ctx cancels the task immediately and forcefully.
 func (r *Runner[R]) Run(ctx context.Context) error {
 	if r.alreadyRun.Swap(true) {
-		panic(fmt.Sprintf("duplicate calls to Run: %s", r.label))
+		panic(fmt.Sprintf("duplicate calls to Run: %s", r.task.ID()))
 	}
 
 	err := r.doRun(ctx)
 	if err == nil {
-		panic(fmt.Sprintf("unexpected exiting with nil error: %s", r.label))
+		panic(fmt.Sprintf("unexpected exiting with nil error: %s", r.task.ID()))
 	}
 
 	if !isForcefulExitError(err) {
@@ -69,7 +67,7 @@ func (r *Runner[R]) Run(ctx context.Context) error {
 	}
 
 	if closeErr := r.task.Close(context.Background()); closeErr != nil {
-		log.L().Warn("Closing task returned error", zap.String("label", r.label))
+		log.L().Warn("Closing task returned error", zap.String("label", r.task.ID()))
 	}
 	return err
 }
