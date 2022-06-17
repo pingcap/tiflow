@@ -37,8 +37,6 @@ function test_check_task_fail_no_block_forsharding() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"check-task $cur/conf/task-sharding.yaml" \
 		"\"state\": \"fail\"" 1
-
-	run_sql_both_source "drop database if exists \`check-task\`"
 }
 
 function run() {
@@ -47,8 +45,10 @@ function run() {
 	test_check_task_fail_no_block_forsharding
 }
 
+cleanup_data check-task
 cleanup_data checktask
 cleanup_process $*
 run $*
 cleanup_process $*
 cleanup_data checktask
+cleanup_data check-task
