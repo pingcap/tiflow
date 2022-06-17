@@ -41,7 +41,6 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
@@ -309,7 +308,7 @@ func ExtractSQLsFromArgs(args []string) ([]string, error) {
 	concat = utils.TrimQuoteMark(concat)
 
 	parser := parser.New()
-	nodes, err := parserpkg.Parse(parser, concat, "", "")
+	nodes, err := utils.Parse(parser, concat, "", "")
 	if err != nil {
 		return nil, errors.Annotatef(err, "invalid sql '%s'", concat)
 	}

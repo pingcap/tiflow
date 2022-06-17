@@ -25,15 +25,14 @@ import (
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/util/filter"
-	"go.uber.org/zap"
-
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
@@ -90,7 +89,7 @@ func (s *testDDLSuite) TestDDLWithDashComments(c *C) {
 CREATE TABLE test.test_table_with_c (id int);
 `
 	parser := parser.New()
-	_, err := parserpkg.Parse(parser, sql, "", "")
+	_, err := utils.Parse(parser, sql, "", "")
 	c.Assert(err, IsNil)
 }
 
@@ -111,7 +110,7 @@ func (s *testDDLSuite) TestCommentQuote(c *C) {
 	stmt, err := parseOneStmt(qec)
 	c.Assert(err, IsNil)
 
-	qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
+	qec.splitDDLs, err = utils.SplitDDL(stmt, qec.ddlSchema)
 	c.Assert(err, IsNil)
 
 	syncer := NewSyncer(&config.SubTaskConfig{Flavor: mysql.MySQLFlavor}, nil, nil)
@@ -248,7 +247,7 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 		stmt, err := parseOneStmt(qec)
 		c.Assert(err, IsNil)
 
-		qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
+		qec.splitDDLs, err = utils.SplitDDL(stmt, qec.ddlSchema)
 		c.Assert(err, IsNil)
 		for _, sql2 := range qec.splitDDLs {
 			sqls, err := syncer.processOneDDL(qec, sql2)
@@ -396,7 +395,7 @@ func (s *testDDLSuite) TestResolveGeneratedColumnSQL(c *C) {
 		stmt, err := parseOneStmt(qec)
 		c.Assert(err, IsNil)
 
-		qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
+		qec.splitDDLs, err = utils.SplitDDL(stmt, qec.ddlSchema)
 		c.Assert(err, IsNil)
 		for _, sql := range qec.splitDDLs {
 			sqls, err := syncer.processOneDDL(qec, sql)
@@ -476,7 +475,7 @@ func (s *testDDLSuite) TestResolveOnlineDDL(c *C) {
 		c.Assert(err, IsNil)
 		_, ok := stmt.(ast.DDLNode)
 		c.Assert(ok, IsTrue)
-		qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
+		qec.splitDDLs, err = utils.SplitDDL(stmt, qec.ddlSchema)
 		c.Assert(err, IsNil)
 		for _, sql := range qec.splitDDLs {
 			sqls, err := syncer.processOneDDL(qec, sql)
@@ -694,7 +693,7 @@ func (s *testDDLSuite) TestAdjustDatabaseCollation(c *C) {
 			c.Assert(stmt, NotNil)
 			ddlInfo.originStmt = stmt
 			adjustCollation(tctx, ddlInfo, statusVars, charsetAndDefaultCollationMap, idAndCollationMap)
-			routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
+			routedDDL, err := utils.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
 			c.Assert(err, IsNil)
 			c.Assert(routedDDL, Equals, expectedSQLs[i][j])
 		}
@@ -770,7 +769,7 @@ func (s *testDDLSuite) TestAdjustCollation(c *C) {
 		c.Assert(stmt, NotNil)
 		ddlInfo.originStmt = stmt
 		adjustCollation(tctx, ddlInfo, statusVars, charsetAndDefaultCollationMap, idAndCollationMap)
-		routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
+		routedDDL, err := utils.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
 		c.Assert(err, IsNil)
 		c.Assert(routedDDL, Equals, expectedSQLs[i])
 	}

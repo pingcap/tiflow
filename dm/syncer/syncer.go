@@ -41,9 +41,6 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
-	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
-	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
-	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -60,16 +57,18 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
+	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/pessimism"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/streamer"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/relay"
+	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	operator "github.com/pingcap/tiflow/dm/syncer/err-operator"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 	sm "github.com/pingcap/tiflow/dm/syncer/safe-mode"
 	"github.com/pingcap/tiflow/dm/syncer/shardddl"
@@ -2749,8 +2748,12 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 		eventStatusVars: ev.StatusVars,
 	}
 
+	var interestedDDL bool
 	defer func() {
 		if err == nil {
+			return
+		}
+		if !interestedDDL {
 			return
 		}
 		// why not `skipSQLByPattern` at beginning, but at defer?
@@ -2796,7 +2799,8 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 		return terror.Annotatef(terror.ErrSyncUnitDMLStatementFound.Generate(), "query %s", qec.originSQL)
 	}
 
-	if _, ok := stmt.(ast.DDLNode); !ok {
+	interestedDDL = utils.IsInterestedStmt(stmt)
+	if !interestedDDL {
 		return nil
 	}
 
@@ -2822,7 +2826,7 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 	*qec.lastLocation = *qec.currentLocation // update lastLocation, because we have checked `isDDL`
 
 	// TiDB can't handle multi schema change DDL, so we split it here.
-	qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
+	qec.splitDDLs, err = utils.SplitDDL(stmt, qec.ddlSchema)
 	if err != nil {
 		return err
 	}
@@ -3375,7 +3379,7 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 
 func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext) (map[string]map[string]struct{}, error) {
 	originSQL := strings.TrimSpace(string(ev.Query))
-	if originSQL == "BEGIN" || originSQL == "" || utils.IsBuildInSkipDDL(originSQL) {
+	if originSQL == "BEGIN" || originSQL == "" {
 		return nil, nil
 	}
 	var err error
@@ -3399,12 +3403,12 @@ func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext) (ma
 		return nil, err
 	}
 
-	if _, ok := stmt.(ast.DDLNode); !ok {
+	if !utils.IsInterestedStmt(stmt) {
 		return nil, nil
 	}
 
 	// TiDB can't handle multi schema change DDL, so we split it here.
-	qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
+	qec.splitDDLs, err = utils.SplitDDL(stmt, qec.ddlSchema)
 	if err != nil {
 		return nil, err
 	}

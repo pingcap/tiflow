@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
-	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
@@ -456,7 +455,7 @@ func (r *RealOnlinePlugin) Apply(tctx *tcontext.Context, tables []*filter.Table,
 	switch tp {
 	case RealTable:
 		if _, ok := stmt.(*ast.RenameTableStmt); ok {
-			if len(tables) != parserpkg.SingleRenameTableNameNum {
+			if len(tables) != utils.SingleRenameTableNameNum {
 				return nil, terror.ErrSyncerUnitGhostRenameTableNotValid.Generate()
 			}
 
@@ -471,7 +470,7 @@ func (r *RealOnlinePlugin) Apply(tctx *tcontext.Context, tables []*filter.Table,
 	case TrashTable:
 		// ignore TrashTable
 		if _, ok := stmt.(*ast.RenameTableStmt); ok {
-			if len(tables) != parserpkg.SingleRenameTableNameNum {
+			if len(tables) != utils.SingleRenameTableNameNum {
 				return nil, terror.ErrSyncerUnitGhostRenameTableNotValid.Generate()
 			}
 
@@ -494,7 +493,7 @@ func (r *RealOnlinePlugin) Apply(tctx *tcontext.Context, tables []*filter.Table,
 				return nil, err
 			}
 		case *ast.RenameTableStmt:
-			if len(tables) != parserpkg.SingleRenameTableNameNum {
+			if len(tables) != utils.SingleRenameTableNameNum {
 				return nil, terror.ErrSyncerUnitGhostRenameTableNotValid.Generate()
 			}
 
@@ -682,7 +681,7 @@ func renameOnlineDDLTable(p *parser.Parser, targetTable *filter.Table, sqls []st
 			return nil, terror.ErrSyncerUnitParseStmt.New(err.Error())
 		}
 
-		sql, err = parserpkg.RenameDDLTable(stmt, targetTables)
+		sql, err = utils.RenameDDLTable(stmt, targetTables)
 		if err != nil {
 			return nil, err
 		}

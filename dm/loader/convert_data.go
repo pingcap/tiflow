@@ -23,8 +23,8 @@ import (
 	"unsafe"
 
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
+
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
-	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 
@@ -245,7 +245,7 @@ func parseTable(ctx *tcontext.Context, r *regexprrouter.RouteTable, schema, tabl
 		return nil, err
 	}
 
-	stmts, err := parserpkg.Parse(parser2, string(statement), "", "")
+	stmts, err := utils.Parse(parser2, string(statement), "", "")
 	if err != nil {
 		return nil, terror.ErrLoadUnitParseStatement.Delegate(err, statement)
 	}

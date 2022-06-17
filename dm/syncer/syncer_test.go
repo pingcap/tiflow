@@ -25,29 +25,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/pb"
-	"github.com/pingcap/tiflow/dm/pkg/binlog"
-	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
-	"github.com/pingcap/tiflow/dm/pkg/binlog/reader"
-	"github.com/pingcap/tiflow/dm/pkg/conn"
-	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
-	"github.com/pingcap/tiflow/dm/pkg/cputil"
-	"github.com/pingcap/tiflow/dm/pkg/gtid"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
-	"github.com/pingcap/tiflow/dm/pkg/retry"
-	"github.com/pingcap/tiflow/dm/pkg/schema"
-	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
-	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
-	"github.com/pingcap/tiflow/dm/syncer/dbconn"
-	"github.com/pingcap/tiflow/dm/syncer/metrics"
-	"github.com/pingcap/tiflow/pkg/errorutil"
-	"github.com/pingcap/tiflow/pkg/sqlmodel"
-	"github.com/stretchr/testify/require"
-
-	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 	_ "github.com/go-sql-driver/mysql"
@@ -62,7 +40,28 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
+	"github.com/pingcap/tiflow/dm/pkg/binlog/reader"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/cputil"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/retry"
+	"github.com/pingcap/tiflow/dm/pkg/schema"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
+	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
+	"github.com/pingcap/tiflow/pkg/errorutil"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
 
 var _ = Suite(&testSyncerSuite{})
@@ -1453,7 +1452,7 @@ func checkEventWithTableResult(c *C, syncer *Syncer, allEvents []*replication.Bi
 			if _, ok := stmt.(ast.DDLNode); !ok {
 				continue // BEGIN event
 			}
-			qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
+			qec.splitDDLs, err = utils.SplitDDL(stmt, qec.ddlSchema)
 			c.Assert(err, IsNil)
 			for _, sql := range qec.splitDDLs {
 				sqls, err := syncer.processOneDDL(qec, sql)

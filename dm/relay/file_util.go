@@ -27,8 +27,8 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/reader"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
-	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	parserpkg "github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // checkBinlogHeaderExist checks if the file has a binlog file header.
@@ -194,8 +194,8 @@ func getTxnPosGTIDs(ctx context.Context, filename string, p *parser.Parser) (int
 		case *replication.FormatDescriptionEvent:
 			latestPos = int64(e.Header.LogPos)
 		case *replication.QueryEvent:
-			isDDL := parserpkg.CheckIsDDL(string(ev.Query), p)
-			if isDDL {
+			sql := parserpkg.TrimCtrlChars(string(ev.Query))
+			if parserpkg.IsInterestedDDL(sql, p) {
 				if latestGSet != nil { // GTID may not be enabled in the binlog
 					err = latestGSet.Update(nextGTIDStr)
 					if err != nil {

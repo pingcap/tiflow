@@ -41,7 +41,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	pkgstreamer "github.com/pingcap/tiflow/dm/pkg/streamer"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -515,7 +514,8 @@ func (r *Relay) preprocessEvent(e *replication.BinlogEvent, parser2 *parser.Pars
 		result.NextLogName = string(ev.NextLogName) // for RotateEvent, update binlog name
 	case *replication.QueryEvent:
 		// when RawModeEnabled not true, QueryEvent will be parsed.
-		if parserpkg.CheckIsDDL(string(ev.Query), parser2) {
+		sql := utils.TrimCtrlChars(string(ev.Query))
+		if utils.IsInterestedDDL(sql, parser2) {
 			// we only update/save GTID for DDL/XID event
 			// if the query is something like `BEGIN`, we do not update/save GTID.
 			result.GTIDSet = ev.GSet

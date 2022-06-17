@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
-	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
@@ -34,7 +33,7 @@ func parseOneStmt(qec *queryEventContext) (stmt ast.StmtNode, err error) {
 	// We use Parse not ParseOneStmt here, because sometimes we got a commented out ddl which can't be parsed
 	// by ParseOneStmt(it's a limitation of tidb parser.)
 	qec.tctx.L().Info("parse ddl", zap.String("event", "query"), zap.Stringer("query event context", qec))
-	stmts, err := parserpkg.Parse(qec.p, qec.originSQL, "", "")
+	stmts, err := utils.Parse(qec.p, qec.originSQL, "", "")
 	if err != nil {
 		// log error rather than fatal, so other defer can be executed
 		qec.tctx.L().Error("parse ddl", zap.String("event", "query"), zap.Stringer("query event context", qec))
@@ -109,7 +108,7 @@ func (s *Syncer) genDDLInfo(qec *queryEventContext, sql string) (*ddlInfo, error
 		return nil, terror.Annotatef(terror.ErrSyncerUnitParseStmt.New(err.Error()), "ddl %s", sql)
 	}
 
-	sourceTables, err := parserpkg.FetchDDLTables(qec.ddlSchema, stmt, s.SourceTableNamesFlavor)
+	sourceTables, err := utils.FetchDDLTables(qec.ddlSchema, stmt, s.SourceTableNamesFlavor)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +131,7 @@ func (s *Syncer) genDDLInfo(qec *queryEventContext, sql string) (*ddlInfo, error
 		adjustCollation(s.tctx, ddlInfo, qec.eventStatusVars, s.charsetAndDefaultCollation, s.idAndCollationMap)
 	}
 
-	routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
+	routedDDL, err := utils.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
 	ddlInfo.routedDDL = routedDDL
 	return ddlInfo, err
 }

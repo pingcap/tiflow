@@ -20,7 +20,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 )
 
@@ -28,9 +27,6 @@ import (
 // * track the ddlInfo;
 // * changes ddlInfo.originDDL to empty string.
 func (s *Syncer) skipQueryEvent(qec *queryEventContext, ddlInfo *ddlInfo) (bool, error) {
-	if utils.IsBuildInSkipDDL(qec.originSQL) {
-		return true, nil
-	}
 	et := bf.AstToDDLEvent(ddlInfo.originStmt)
 	// get real tables before apply block-allow list
 	realTables := make([]*filter.Table, 0, len(ddlInfo.sourceTables))
@@ -95,9 +91,6 @@ func (s *Syncer) skipRowsEvent(table *filter.Table, eventType replication.EventT
 
 // skipSQLByPattern skip unsupported sql in tidb and global sql-patterns in binlog-filter config file.
 func (s *Syncer) skipSQLByPattern(sql string) (bool, error) {
-	if utils.IsBuildInSkipDDL(sql) {
-		return true, nil
-	}
 	action, err := s.binlogFilter.Filter("", "", bf.NullEvent, sql)
 	if err != nil {
 		return false, terror.Annotatef(terror.ErrSyncerUnitBinlogEventFilter.New(err.Error()), "skip query %s", sql)

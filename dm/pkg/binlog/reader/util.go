@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
@@ -53,8 +52,8 @@ func GetGTIDsForPosFromStreamer(ctx context.Context, r Streamer, endPos gmysql.P
 				log.L().Warn("found error when get sql_mode from binlog status_vars", zap.Error(err2))
 			}
 
-			isDDL := parser.CheckIsDDL(string(ev.Query), parser2)
-			if isDDL {
+			sql := utils.TrimCtrlChars(string(ev.Query))
+			if utils.IsInterestedDDL(sql, parser2) {
 				if latestGSet == nil {
 					// GTID not enabled, can't get GTIDs for the position.
 					return nil, errors.Errorf("should have a GTIDEvent before the DDL QueryEvent %+v", e.Header)

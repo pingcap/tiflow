@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package parser
+package utils
 
 import (
 	"testing"
@@ -21,7 +21,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 type testCase struct {
@@ -376,7 +375,7 @@ func TestError(t *testing.T) {
 
 	stmts, err := Parse(p, dml, "", "")
 	require.NoError(t, err)
-	_, err = FetchDDLTables("test", stmts[0], utils.LCTableNamesInsensitive)
+	_, err = FetchDDLTables("test", stmts[0], LCTableNamesInsensitive)
 	require.True(t, terror.ErrUnknownTypeDDL.Equal(err))
 
 	_, err = RenameDDLTable(stmts[0], nil)
@@ -409,7 +408,7 @@ func TestResolveDDL(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, s, 1)
 
-			tableNames, err := FetchDDLTables("test", s[0], utils.LCTableNamesSensitive)
+			tableNames, err := FetchDDLTables("test", s[0], LCTableNamesSensitive)
 			require.NoError(t, err)
 			require.Equal(t, tbs[j], tableNames)
 
@@ -417,37 +416,5 @@ func TestResolveDDL(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, ca.targetSQLs[j], targetSQL)
 		}
-	}
-}
-
-func TestCheckIsDDL(t *testing.T) {
-	t.Parallel()
-	var (
-		cases = []struct {
-			sql   string
-			isDDL bool
-		}{
-			{
-				sql:   "CREATE DATABASE test_is_ddl",
-				isDDL: true,
-			},
-			{
-				sql:   "BEGIN",
-				isDDL: false,
-			},
-			{
-				sql:   "INSERT INTO test_is_ddl.test_is_ddl_table VALUES (1)",
-				isDDL: false,
-			},
-			{
-				sql:   "INVAID SQL STATEMENT",
-				isDDL: false,
-			},
-		}
-		parser2 = parser.New()
-	)
-
-	for _, cs := range cases {
-		require.Equal(t, cs.isDDL, CheckIsDDL(cs.sql, parser2))
 	}
 }

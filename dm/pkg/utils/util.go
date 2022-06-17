@@ -27,6 +27,8 @@ import (
 	gmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/errno"
+	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/ast"
 	"go.uber.org/zap"
 	"golang.org/x/net/http/httpproxy"
 
@@ -38,67 +40,6 @@ import (
 var (
 	// OsExit is function placeholder for os.Exit.
 	OsExit func(int)
-	/*
-		CREATE [TEMPORARY] TABLE [IF NOT EXISTS] tbl_name
-			{ LIKE old_tbl_name | (LIKE old_tbl_name) }
-	*/
-	builtInSkipDDLs = []string{
-		// transaction
-		"^SAVEPOINT",
-
-		// skip all flush sqls
-		"^FLUSH",
-
-		// table maintenance
-		"^OPTIMIZE\\s+TABLE",
-		"^ANALYZE\\s+TABLE",
-		"^REPAIR\\s+TABLE",
-
-		// temporary table
-		"^DROP\\s+(\\/\\*\\!40005\\s+)?TEMPORARY\\s+(\\*\\/\\s+)?TABLE",
-
-		// trigger
-		"^CREATE\\s+(DEFINER\\s?=.+?)?TRIGGER",
-		"^DROP\\s+TRIGGER",
-
-		// procedure
-		"^DROP\\s+PROCEDURE",
-		"^CREATE\\s+(DEFINER\\s?=.+?)?PROCEDURE",
-		"^ALTER\\s+PROCEDURE",
-
-		// view
-		"^CREATE\\s*(OR REPLACE)?\\s+(ALGORITHM\\s?=.+?)?(DEFINER\\s?=.+?)?\\s+(SQL SECURITY DEFINER)?VIEW",
-		"^DROP\\s+VIEW",
-		"^ALTER\\s+(ALGORITHM\\s?=.+?)?(DEFINER\\s?=.+?)?(SQL SECURITY DEFINER)?VIEW",
-
-		// function
-		// user-defined function
-		"^CREATE\\s+(AGGREGATE)?\\s*?FUNCTION",
-		// stored function
-		"^CREATE\\s+(DEFINER\\s?=.+?)?FUNCTION",
-		"^ALTER\\s+FUNCTION",
-		"^DROP\\s+FUNCTION",
-
-		// tableSpace
-		"^CREATE\\s+TABLESPACE",
-		"^ALTER\\s+TABLESPACE",
-		"^DROP\\s+TABLESPACE",
-
-		// event
-		"^CREATE\\s+(DEFINER\\s?=.+?)?EVENT",
-		"^ALTER\\s+(DEFINER\\s?=.+?)?EVENT",
-		"^DROP\\s+EVENT",
-
-		// account management
-		"^GRANT",
-		"^REVOKE",
-		"^CREATE\\s+USER",
-		"^ALTER\\s+USER",
-		"^RENAME\\s+USER",
-		"^DROP\\s+USER",
-		"^SET\\s+PASSWORD",
-	}
-	builtInSkipDDLPatterns *regexp.Regexp
 
 	passwordPatterns = `(password: (\\")?)(.*?)((\\")?\\n)`
 	sslPatterns      = `(ssl-(ca|key|cert)-bytes:)((\\n\s{4}-\s\d+)+)`
@@ -109,7 +50,6 @@ var (
 
 func init() {
 	OsExit = os.Exit
-	builtInSkipDDLPatterns = regexp.MustCompile("(?i)" + strings.Join(builtInSkipDDLs, "|"))
 	passwordRegexp = regexp.MustCompile(passwordPatterns)
 	sslRegexp = regexp.MustCompile(sslPatterns)
 	pb.HideSensitiveFunc = HideSensitive
@@ -171,9 +111,34 @@ func IgnoreErrorCheckpoint(err error) bool {
 	}
 }
 
-// IsBuildInSkipDDL return true when checked sql that will be skipped for syncer.
-func IsBuildInSkipDDL(sql string) bool {
-	return builtInSkipDDLPatterns.FindStringIndex(sql) != nil
+// IsInterestedDDL checks whether sql is an interested ddl of dm.
+// un-parsable ddl is always not interested.
+func IsInterestedDDL(sql string, p *parser.Parser) bool {
+	stmts, err := Parse(p, sql, "", "")
+	if err != nil || len(stmts) == 0 {
+		return false
+	}
+	return IsInterestedStmt(stmts[0])
+}
+
+// IsInterestedStmt whether stmt is an interested ddl of dm.
+// including:
+// - create/alter/drop database.
+// - create/alter/drop/rename/truncate table (non-temporary).
+// - create/drop index.
+func IsInterestedStmt(stmt ast.StmtNode) bool {
+	if _, ok := stmt.(ast.DDLNode); !ok {
+		return false
+	}
+	switch n := stmt.(type) {
+	case *ast.CreateTableStmt:
+		return n.TemporaryKeyword == ast.TemporaryNone
+	case *ast.CreateViewStmt:
+		return false
+	case *ast.DropTableStmt:
+		return !n.IsView && n.TemporaryKeyword == ast.TemporaryNone
+	}
+	return true
 }
 
 // HideSensitive replace password with ******.

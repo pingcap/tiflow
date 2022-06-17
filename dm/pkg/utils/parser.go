@@ -11,25 +11,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package parser
+package utils
 
 import (
 	"bytes"
 	"strings"
 
-	"github.com/pingcap/tidb/parser/charset"
-
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
-
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
+	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
 	_ "github.com/pingcap/tidb/types/parser_driver" // for import parser driver
 	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 const (
@@ -67,14 +65,14 @@ func Parse(p *parser.Parser, sql, charset, collation string) (stmt []ast.StmtNod
 // ref: https://github.com/pingcap/tidb/blob/09feccb529be2830944e11f5fed474020f50370f/server/sql_info_fetcher.go#L46
 type tableNameExtractor struct {
 	curDB  string
-	flavor utils.LowerCaseTableNamesFlavor
+	flavor LowerCaseTableNamesFlavor
 	names  []*filter.Table
 }
 
 func (tne *tableNameExtractor) Enter(in ast.Node) (ast.Node, bool) {
 	if t, ok := in.(*ast.TableName); ok {
 		var tb *filter.Table
-		if tne.flavor == utils.LCTableNamesSensitive {
+		if tne.flavor == LCTableNamesSensitive {
 			tb = &filter.Table{Schema: t.Schema.O, Name: t.Name.O}
 		} else {
 			tb = &filter.Table{Schema: t.Schema.L, Name: t.Name.L}
@@ -98,7 +96,7 @@ func (tne *tableNameExtractor) Leave(in ast.Node) (ast.Node, bool) {
 // specifically, for `create table like` DDL, result contains [sourceTable, sourceRefTable]
 // for rename table ddl, result contains [old1, new1, old2, new2, old3, new3, ...] because of TiDB parser
 // for other DDL, order of tableName is the node visit order.
-func FetchDDLTables(schema string, stmt ast.StmtNode, flavor utils.LowerCaseTableNamesFlavor) ([]*filter.Table, error) {
+func FetchDDLTables(schema string, stmt ast.StmtNode, flavor LowerCaseTableNamesFlavor) ([]*filter.Table, error) {
 	switch stmt.(type) {
 	case ast.DDLNode:
 	default:
@@ -353,28 +351,4 @@ func SplitDDL(stmt ast.StmtNode, schema string) (sqls []string, err error) {
 
 func genTableName(schema string, table string) *filter.Table {
 	return &filter.Table{Schema: schema, Name: table}
-}
-
-// CheckIsDDL checks input SQL whether is a valid DDL statement.
-func CheckIsDDL(sql string, p *parser.Parser) bool {
-	sql = utils.TrimCtrlChars(sql)
-
-	if utils.IsBuildInSkipDDL(sql) {
-		return false
-	}
-
-	// if parse error, treat it as not a DDL
-	stmts, err := Parse(p, sql, "", "")
-	if err != nil || len(stmts) == 0 {
-		return false
-	}
-
-	stmt := stmts[0]
-	switch stmt.(type) {
-	case ast.DDLNode:
-		return true
-	default:
-		// other thing this like `BEGIN`
-		return false
-	}
 }

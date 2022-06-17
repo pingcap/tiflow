@@ -25,8 +25,8 @@ import (
 
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
-	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	parserpkg "github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // HandleError handle error for syncer.
