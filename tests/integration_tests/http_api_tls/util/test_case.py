@@ -311,7 +311,9 @@ def verify_table():
     i = 0
     while i < 10:
         try:
-            resp = rq.get(url, cert=CERT, verify=VERIFY, timeout=5)
+            data = json.dumps({})
+            headers = {"Content-Type": "application/json"}
+            resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY, timeout=5)
             if resp.status_code == rq.codes.ok:
               break
             else:
