@@ -44,7 +44,6 @@ type changefeedCommonOptions struct {
 	sinkURI           string
 	schemaRegistry    string
 	configFile        string
-	opts              []string
 	sortEngine        string
 	sortDir           string
 	syncPointEnabled  bool
@@ -72,7 +71,6 @@ func (o *changefeedCommonOptions) addFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().Uint64Var(&o.targetTs, "target-ts", 0, "Target ts of changefeed")
 	cmd.PersistentFlags().StringVar(&o.sinkURI, "sink-uri", "", "sink uri")
 	cmd.PersistentFlags().StringVar(&o.configFile, "config", "", "Path of the configuration file")
-	cmd.PersistentFlags().StringSliceVar(&o.opts, "opts", nil, "Extra options, in the `key=value` format")
 	cmd.PersistentFlags().StringVar(&o.sortEngine, "sort-engine", model.SortUnified, "sort engine used for data sort")
 	cmd.PersistentFlags().StringVar(&o.sortDir, "sort-dir", "", "directory used for data sort")
 	cmd.PersistentFlags().BoolVar(&o.syncPointEnabled, "sync-point", false, "(Experimental) Set and Record syncpoint in replication(default off)")
@@ -233,11 +231,6 @@ func (o *createChangefeedOptions) completeReplicaCfg(
 func (o *createChangefeedOptions) validate(cmd *cobra.Command) error {
 	if o.timezone != "SYSTEM" {
 		cmd.Printf(color.HiYellowString("[WARN] --tz is deprecated in changefeed settings.\n"))
-	}
-
-	if len(o.commonChangefeedOptions.opts) != 0 {
-		cmd.Printf(color.HiYellowString("[WARN] --opts is deprecated in changefeed settings.\n"))
-		return errors.New("Creating changefeed with `--opts`, it's invalid")
 	}
 	// user is not allowed to set sort-dir at changefeed level
 	if o.commonChangefeedOptions.sortDir != "" {

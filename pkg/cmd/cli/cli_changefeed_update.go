@@ -174,22 +174,6 @@ func (o *updateChangefeedOptions) applyChanges(oldInfo *v2.ChangeFeedInfo,
 			newInfo.Config = v2.ToAPIReplicaConfig(cfg)
 		case "schema-registry":
 			newInfo.Config.Sink.SchemaRegistry = o.commonChangefeedOptions.schemaRegistry
-		case "opts":
-			for _, opt := range o.commonChangefeedOptions.opts {
-				s := strings.SplitN(opt, "=", 2)
-				if len(s) <= 0 {
-					cmd.Printf("omit opt: %s", opt)
-					continue
-				}
-
-				var key string
-				var value string
-				key = s[0]
-				if len(s) > 1 {
-					value = s[1]
-				}
-				newInfo.Opts[key] = value
-			}
 		case "sort-engine":
 			newInfo.Engine = o.commonChangefeedOptions.sortEngine
 		case "sync-point":

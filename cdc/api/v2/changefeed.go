@@ -254,7 +254,6 @@ func toAPIModel(info *model.ChangeFeedInfo) *ChangeFeedInfo {
 		Namespace:         info.Namespace,
 		ID:                info.ID,
 		SinkURI:           info.SinkURI,
-		Opts:              info.Opts,
 		CreateTime:        info.CreateTime,
 		StartTs:           info.StartTs,
 		TargetTs:          info.TargetTs,

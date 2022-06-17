@@ -182,7 +182,7 @@ func verifyCreateChangefeedConfig(
 	}
 
 	// verify sink
-	if err := sink.Validate(ctx, cfg.SinkURI, replicaCfg, map[string]string{}); err != nil {
+	if err := sink.Validate(ctx, cfg.SinkURI, replicaCfg); err != nil {
 		return nil, err
 	}
 
@@ -191,7 +191,6 @@ func verifyCreateChangefeedConfig(
 		Namespace:         cfg.Namespace,
 		ID:                cfg.ID,
 		SinkURI:           cfg.SinkURI,
-		Opts:              make(map[string]string),
 		CreateTime:        time.Now(),
 		StartTs:           cfg.StartTs,
 		TargetTs:          cfg.TargetTs,
@@ -268,7 +267,7 @@ func verifyUpdateChangefeedConfig(ctx context.Context,
 	// verify SinkURI
 	if cfg.SinkURI != "" {
 		newInfo.SinkURI = cfg.SinkURI
-		if err := sink.Validate(ctx, newInfo.SinkURI, newInfo.Config, newInfo.Opts); err != nil {
+		if err := sink.Validate(ctx, newInfo.SinkURI, newInfo.Config); err != nil {
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 	}

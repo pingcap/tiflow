@@ -89,9 +89,8 @@ func NewMySQLSink(
 	sinkURI *url.URL,
 	filter *tifilter.Filter,
 	replicaConfig *config.ReplicaConfig,
-	opts map[string]string,
 ) (*mysqlSink, error) {
-	params, err := parseSinkURIToParams(ctx, changefeedID, sinkURI, opts)
+	params, err := parseSinkURIToParams(ctx, changefeedID, sinkURI)
 	if err != nil {
 		return nil, err
 	}
