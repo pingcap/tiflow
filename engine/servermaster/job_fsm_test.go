@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	"github.com/pingcap/tiflow/engine/framework/master"
+	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 )
 
@@ -55,7 +55,7 @@ func TestJobFsmStateTrans(t *testing.T) {
 	require.Equal(t, 1, createWorkerCount)
 
 	// OnWorkerOnline, WaitAck -> Online
-	err = fsm.JobOnline(&master.MockHandle{
+	err = fsm.JobOnline(&framework.MockHandle{
 		WorkerID:     id,
 		WorkerStatus: &frameModel.WorkerStatus{Code: frameModel.WorkerStatusNormal},
 		ExecutorID:   "executor-1",
@@ -65,7 +65,7 @@ func TestJobFsmStateTrans(t *testing.T) {
 	require.Equal(t, 1, fsm.JobCount(pb.QueryJobResponse_online))
 
 	// OnWorkerOffline, Online -> Pending
-	fsm.JobOffline(&master.MockHandle{
+	fsm.JobOffline(&framework.MockHandle{
 		WorkerID:     id,
 		WorkerStatus: &frameModel.WorkerStatus{Code: frameModel.WorkerStatusNormal},
 		IsTombstone:  true,
@@ -84,7 +84,7 @@ func TestJobFsmStateTrans(t *testing.T) {
 	require.Equal(t, 1, fsm.JobCount(pb.QueryJobResponse_dispatched))
 
 	// Dispatch job meets error, WaitAck -> Pending
-	err = fsm.JobDispatchFailed(&master.MockHandle{
+	err = fsm.JobDispatchFailed(&framework.MockHandle{
 		WorkerID:     id,
 		WorkerStatus: &frameModel.WorkerStatus{Code: frameModel.WorkerStatusNormal},
 		IsTombstone:  true,
@@ -100,7 +100,7 @@ func TestJobFsmStateTrans(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, 1, fsm.JobCount(pb.QueryJobResponse_dispatched))
 	// job finished
-	fsm.JobOffline(&master.MockHandle{
+	fsm.JobOffline(&framework.MockHandle{
 		WorkerID:     id,
 		WorkerStatus: &frameModel.WorkerStatus{Code: frameModel.WorkerStatusNormal},
 		IsTombstone:  true,
@@ -108,7 +108,7 @@ func TestJobFsmStateTrans(t *testing.T) {
 	require.Equal(t, 0, fsm.JobCount(pb.QueryJobResponse_dispatched))
 
 	// offline invalid job, will do nothing
-	invalidWorker := &master.MockHandle{
+	invalidWorker := &framework.MockHandle{
 		WorkerID:     id + "invalid",
 		WorkerStatus: &frameModel.WorkerStatus{Code: frameModel.WorkerStatusNormal},
 		ExecutorID:   "executor-1",

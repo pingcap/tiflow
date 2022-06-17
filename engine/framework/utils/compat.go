@@ -14,32 +14,21 @@
 package utils
 
 import (
-	"context"
-
-	"github.com/pingcap/tiflow/engine/executor/worker/internal"
-	"github.com/pingcap/tiflow/engine/framework/eventloop"
+	"github.com/pingcap/tiflow/engine/framework/internal/eventloop"
 )
-
-type worker interface {
-	Init(ctx context.Context) error
-	Poll(ctx context.Context) error
-	ID() internal.RunnableID
-	Close(ctx context.Context) error
-	NotifyExit(ctx context.Context, errIn error) error
-}
 
 // Wrapper is a compatibility layer to use current
 // implementations of workers as the new runtime.Runnable.
 type Wrapper struct {
-	worker
-	*eventloop.Runner[worker]
+	eventloop.Task
+	*eventloop.Runner[eventloop.Task]
 }
 
 // WrapWorker wraps a framework.Worker so that it can be used by
 // the runtime.
-func WrapWorker(worker worker) *Wrapper {
+func WrapWorker(worker eventloop.Task) *Wrapper {
 	return &Wrapper{
-		worker: worker,
+		Task:   worker,
 		Runner: eventloop.NewRunner(worker),
 	}
 }

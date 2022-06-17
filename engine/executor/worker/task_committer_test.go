@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/engine/executor/worker/internal"
-	"github.com/pingcap/tiflow/engine/executor/worker/utils"
+	"github.com/pingcap/tiflow/engine/framework/utils"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 )

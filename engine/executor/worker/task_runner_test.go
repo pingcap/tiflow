@@ -23,7 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 
-	"github.com/pingcap/tiflow/engine/executor/worker/utils"
+	"github.com/pingcap/tiflow/engine/framework/utils"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 )
 
