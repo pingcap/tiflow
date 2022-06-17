@@ -15,6 +15,7 @@ package upstream
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -127,6 +128,13 @@ func (up *Upstream) init(ctx context.Context, gcServiceID string) error {
 			}),
 		))
 	if err != nil {
+		up.err.Store(err)
+		return errors.Trace(err)
+	}
+	clusterID := up.PDClient.GetClusterID(ctx)
+	if up.ID != 0 && up.ID != clusterID {
+		err := fmt.Errorf("upstream id missmatch expected %d, actual: %d",
+			up.ID, clusterID)
 		up.err.Store(err)
 		return errors.Trace(err)
 	}

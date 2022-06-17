@@ -125,6 +125,7 @@ func (m *Manager) add(upstreamID uint64,
 		}
 	}
 	up := newUpstream(pdEndpoints, securityConf)
+	up.ID = upstreamID
 	m.ups.Store(upstreamID, up)
 	go func() {
 		_ = up.init(m.ctx, m.gcServiceID)

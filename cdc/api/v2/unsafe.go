@@ -17,6 +17,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	tidbkv "github.com/pingcap/tidb/kv"
@@ -127,7 +128,9 @@ func (h *OpenAPIV2) withUpstreamConfig(c context.Context,
 		}
 		pdClient = up.PDClient
 	} else if len(upstreamConfig.PDAddrs) > 0 {
-		pdClient, err = getPDClient(c, upstreamConfig.PDAddrs, &security.Credential{
+		timeoutCtx, cancel := context.WithTimeout(c, 30*time.Second)
+		defer cancel()
+		pdClient, err = getPDClient(timeoutCtx, upstreamConfig.PDAddrs, &security.Credential{
 			CAPath:        upstreamConfig.CAPath,
 			CertPath:      upstreamConfig.CertPath,
 			KeyPath:       upstreamConfig.KeyPath,
