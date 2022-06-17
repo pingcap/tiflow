@@ -16,6 +16,7 @@ package dm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -26,7 +27,7 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
-	"github.com/pingcap/tiflow/engine/pkg/errors"
+	engineErrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/stretchr/testify/require"
 )
@@ -143,7 +144,7 @@ func TestStopWorker(t *testing.T) {
 
 	require.EqualError(t, dmWorker.StopWorker(context.Background(), &dmpkg.StopWorkerMessage{Task: "wrong-task-id"}), "task id mismatch, get wrong-task-id, actually task-id")
 	err := dmWorker.StopWorker(context.Background(), &dmpkg.StopWorkerMessage{Task: "task-id"})
-	require.True(t, errors.ErrWorkerFinish.Equal(err))
+	require.True(t, engineErrors.ErrWorkerFinish.Equal(err))
 
 	// mock close by framework
 	require.NoError(t, dmWorker.CloseImpl(context.Background()))
@@ -170,4 +171,25 @@ func TestOperateTask(t *testing.T) {
 	require.Nil(t, dmWorker.OperateTask(context.Background(), &dmpkg.OperateTaskMessage{Task: "task-id", Op: dmpkg.Resume}))
 	require.EqualError(t, dmWorker.OperateTask(context.Background(), &dmpkg.OperateTaskMessage{Task: "task-id", Op: dmpkg.Update}),
 		fmt.Sprintf("unsupported op type %d for task %s", dmpkg.Update, "task-id"))
+}
+
+func TestBinlog(t *testing.T) {
+	mockUnitHolder := &mockUnitHolder{}
+	dmWorker := &dmWorker{taskID: "task-id", unitHolder: mockUnitHolder}
+
+	mockUnitHolder.On("Binlog").Return("", errors.New("error")).Once()
+	require.Equal(t, "error", dmWorker.BinlogTask(context.Background(), &dmpkg.BinlogTaskRequest{Task: "task-id"}).ErrorMsg)
+	mockUnitHolder.On("Binlog").Return("msg", nil).Once()
+	require.Equal(t, "msg", dmWorker.BinlogTask(context.Background(), &dmpkg.BinlogTaskRequest{Task: "task-id"}).Msg)
+}
+
+func TestBinlogSchema(t *testing.T) {
+	mockUnitHolder := &mockUnitHolder{}
+	dmWorker := &dmWorker{taskID: "task-id", unitHolder: mockUnitHolder}
+
+	require.Equal(t, "task id mismatch, get wrong-task-id, actually task-id", dmWorker.BinlogSchemaTask(context.Background(), &dmpkg.BinlogSchemaTaskRequest{Source: "wrong-task-id"}).ErrorMsg)
+	mockUnitHolder.On("BinlogSchema").Return("", errors.New("error")).Once()
+	require.Equal(t, "error", dmWorker.BinlogSchemaTask(context.Background(), &dmpkg.BinlogSchemaTaskRequest{Source: "task-id"}).ErrorMsg)
+	mockUnitHolder.On("BinlogSchema").Return("msg", nil).Once()
+	require.Equal(t, "msg", dmWorker.BinlogSchemaTask(context.Background(), &dmpkg.BinlogSchemaTaskRequest{Source: "task-id"}).Msg)
 }
