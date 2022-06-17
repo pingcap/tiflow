@@ -653,6 +653,10 @@ var (
 		"changefeed update error: %s",
 		errors.RFCCodeText("CDC:ErrChangefeedUpdateRefused"),
 	)
+	ErrChangefeedUpdateFailedTransaction = errors.Normalize(
+		"changefeed update failed due to unexpected etcd transaction failure: %s",
+		errors.RFCCodeText("CDC:ErrChangefeedUpdateFailed"),
+	)
 	ErrChangefeedAbnormalState = errors.Normalize(
 		"changefeed in abnormal state: %s, replication status: %+v",
 		errors.RFCCodeText("CDC:ErrChangefeedAbnormalState"),

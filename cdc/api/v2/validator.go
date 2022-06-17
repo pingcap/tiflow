@@ -305,13 +305,5 @@ func verifyUpdateChangefeedConfig(ctx context.Context,
 			GenWithStackByArgs("changefeed config is the same with the old one, do nothing")
 	}
 
-	if !changefeedInfoChanged {
-		newInfo = nil
-	}
-
-	if !upstreamInfoChanged {
-		newUpInfo = nil
-	}
-
 	return newInfo, newUpInfo, nil
 }
