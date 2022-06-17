@@ -24,4 +24,5 @@ type CaptureInfoProvider interface {
 	Info() (model.CaptureInfo, error)
 	IsOwner() bool
 	GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error)
+	IsReady() bool
 }
