@@ -83,7 +83,6 @@ func TestKafkaSink(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	fr, err := filter.NewFilter(replicaConfig)
 	require.Nil(t, err)
-	opts := map[string]string{}
 	errCh := make(chan error, 1)
 
 	kafkap.NewAdminClientImpl = kafka.NewMockAdminClient
@@ -91,7 +90,7 @@ func TestKafkaSink(t *testing.T) {
 		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
-	sink, err := NewKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
+	sink, err := NewKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, errCh)
 	require.Nil(t, err)
 
 	encoder := sink.encoderBuilder.Build()
@@ -179,7 +178,6 @@ func TestKafkaSinkFilter(t *testing.T) {
 	}
 	fr, err := filter.NewFilter(replicaConfig)
 	require.Nil(t, err)
-	opts := map[string]string{}
 	errCh := make(chan error, 1)
 
 	kafkap.NewAdminClientImpl = kafka.NewMockAdminClient
@@ -187,7 +185,7 @@ func TestKafkaSinkFilter(t *testing.T) {
 		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
-	sink, err := NewKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
+	sink, err := NewKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, errCh)
 	require.Nil(t, err)
 
 	row := &model.RowChangedEvent{
@@ -236,10 +234,9 @@ func TestPulsarSinkEncoderConfig(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	fr, err := filter.NewFilter(replicaConfig)
 	require.Nil(t, err)
-	opts := map[string]string{}
 	errCh := make(chan error, 1)
 
-	sink, err := NewPulsarSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
+	sink, err := NewPulsarSink(ctx, sinkURI, fr, replicaConfig, errCh)
 	require.Nil(t, err)
 
 	encoder := sink.encoderBuilder.Build()
@@ -270,7 +267,6 @@ func TestFlushRowChangedEvents(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	fr, err := filter.NewFilter(replicaConfig)
 	require.Nil(t, err)
-	opts := map[string]string{}
 	errCh := make(chan error, 1)
 
 	kafkap.NewAdminClientImpl = kafka.NewMockAdminClient
@@ -278,7 +274,7 @@ func TestFlushRowChangedEvents(t *testing.T) {
 		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
-	sink, err := NewKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
+	sink, err := NewKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, errCh)
 	require.Nil(t, err)
 
 	// mock kafka broker processes 1 row changed event

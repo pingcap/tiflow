@@ -24,6 +24,9 @@ import (
 	"github.com/pingcap/tidb/br/pkg/lightning"
 	"github.com/pingcap/tidb/br/pkg/lightning/checkpoints"
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
+	tidbpromutil "github.com/pingcap/tidb/util/promutil"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
+	"github.com/prometheus/client_golang/prometheus"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -202,11 +205,40 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 	}
 
 	var opts []lightning.Option
+	if l.cfg.MetricsFactory != nil {
+		// this branch means dataflow engine has set a Factory, the Factory itself
+		// will register and deregister metrics, so we must use NoopRegistry
+		// to avoid duplicated registration.
+		opts = append(opts,
+			lightning.WithPromFactory(
+				promutil.NewWrappingFactory(
+					l.cfg.MetricsFactory,
+					"",
+					prometheus.Labels{"task": l.cfg.Name, "source_id": l.cfg.SourceID},
+				)),
+			lightning.WithPromRegistry(tidbpromutil.NewNoopRegistry()))
+	} else {
+		registry := prometheus.DefaultGatherer.(prometheus.Registerer)
+		failpoint.Inject("DontUnregister", func() {
+			registry = promutil.NewOnlyRegRegister(registry)
+		})
+
+		opts = append(opts,
+			lightning.WithPromFactory(
+				promutil.NewWrappingFactory(
+					tidbpromutil.NewDefaultFactory(),
+					"",
+					prometheus.Labels{"task": l.cfg.Name, "source_id": l.cfg.SourceID},
+				),
+			),
+			lightning.WithPromRegistry(registry))
+	}
 	if l.cfg.ExtStorage != nil {
 		opts = append(opts,
 			lightning.WithDumpFileStorage(l.cfg.ExtStorage),
 			lightning.WithCheckpointStorage(l.cfg.ExtStorage, lightningCheckpointFileName))
 	}
+
 	err = l.core.RunOnceWithOptions(taskCtx, cfg, opts...)
 	failpoint.Inject("LoadDataSlowDown", nil)
 	failpoint.Inject("LoadDataSlowDownByTask", func(val failpoint.Value) {
