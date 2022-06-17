@@ -24,9 +24,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/workerpool"
-	"github.com/pingcap/tiflow/proto/p2p"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -34,6 +31,10 @@ import (
 	"google.golang.org/grpc/codes"
 	gRPCPeer "google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
+
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/workerpool"
+	"github.com/pingcap/tiflow/proto/p2p"
 )
 
 const (
@@ -408,6 +409,7 @@ func (m *MessageServer) AddHandler(
 			return nil
 		}
 
+		log.Info("sequence", zap.Int64("seq", entry.Sequence))
 		if lastAck != initAck && entry.Sequence > lastAck+1 {
 			// We detected a message loss at seq = (lastAck+1).
 			// Note that entry.Sequence == lastAck+1 is actual a requirement
