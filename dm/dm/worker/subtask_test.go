@@ -19,8 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
@@ -576,6 +574,7 @@ func TestValidatorStatus(t *testing.T) {
 }
 
 func TestSubtaskRace(t *testing.T) {
+	// to test data race of Marshal() and markResultCanceled()
 	Errors := []*pb.ProcessError{}
 	Detail := []byte{}
 	tempProcessResult := pb.ProcessResult{
@@ -591,11 +590,19 @@ func TestSubtaskRace(t *testing.T) {
 	}
 	st := NewSubTaskWithStage(cfg, pb.Stage_Paused, nil, "worker")
 	st.result = &tempProcessResult
-	var check bool
-	if st.Result() == st.result {
-		check = false
-	} else {
-		check = true
+	tempQueryStatusResponse := pb.QueryStatusResponse{}
+	tempQueryStatusResponse.SubTaskStatus = make([]*pb.SubTaskStatus, 1)
+	tempSubTaskStatus := pb.SubTaskStatus{}
+	tempSubTaskStatus.Result = st.Result()
+	tempQueryStatusResponse.SubTaskStatus[0] = &tempSubTaskStatus
+	for i := 0; i < 10; i++ {
+		st.result.IsCanceled = false
+		go func() {
+			for i := 0; i < 10; i++ {
+				_, _ = tempQueryStatusResponse.Marshal()
+			}
+		}()
+		st.markResultCanceled()
 	}
-	assert.Equal(t, check, true)
+	// this test is to test data race, so don't need assert here
 }
