@@ -154,7 +154,6 @@ func (m *Manager) Get(upstreamID uint64) (*Upstream, bool) {
 		return nil, false
 	}
 	up := v.(*Upstream)
-	up.resetIdleTime()
 	return up, true
 }
 

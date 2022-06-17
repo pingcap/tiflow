@@ -356,34 +356,26 @@ func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context,
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	var cmps []clientv3.Cmp
-	var opsThen []clientv3.Op
+	upstreamData, err := upstreamInfo.Marshal()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	cmps := []clientv3.Cmp{
+		clientv3.Compare(clientv3.ModRevision(infoKey), "=", 0),
+		clientv3.Compare(clientv3.ModRevision(jobKey), "=", 0),
+	}
+	opsThen := []clientv3.Op{
+		clientv3.OpPut(infoKey, value),
+		clientv3.OpPut(upstreamEtcdKeyStr, string(upstreamData)),
+	}
 	if len(upstreamResp.Kvs) == 0 {
-		cmps = []clientv3.Cmp{
-			clientv3.Compare(clientv3.ModRevision(infoKey), "=", 0),
-			clientv3.Compare(clientv3.ModRevision(jobKey), "=", 0),
+		cmps = append(cmps,
 			clientv3.Compare(clientv3.ModRevision(upstreamEtcdKeyStr),
-				"=", 0),
-		}
-		upstreamData, err := upstreamInfo.Marshal()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		opsThen = []clientv3.Op{
-			clientv3.OpPut(infoKey, value),
-			clientv3.OpPut(upstreamEtcdKeyStr, string(upstreamData)),
-		}
+				"=", 0))
 	} else {
-		cmps = []clientv3.Cmp{
-			clientv3.Compare(clientv3.ModRevision(infoKey), "=", 0),
-			clientv3.Compare(clientv3.ModRevision(jobKey), "=", 0),
+		cmps = append(cmps,
 			clientv3.Compare(clientv3.ModRevision(upstreamInfoKey.String()),
-				"=", upstreamResp.Kvs[0].ModRevision),
-		}
-		opsThen = []clientv3.Op{
-			clientv3.OpPut(infoKey, value),
-		}
+				"=", upstreamResp.Kvs[0].ModRevision))
 	}
 
 	resp, err := c.Client.Txn(ctx, cmps, opsThen, TxnEmptyOpsElse)
