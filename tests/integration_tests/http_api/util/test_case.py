@@ -14,7 +14,7 @@ BASE_URL1 = "http://127.0.0.1:8301/api/v1"
 BASE_URL0_V2 = "http://127.0.0.1:8300/api/v2"
 BASE_URL1_V2 = "https://127.0.0.1:8301/api/v2"
 
-TLS_PD_ADDR = "https://127.0.0.1:2579"
+PD_ADDR = "http://127.0.0.1:2379"
 SINK_URI="mysql://normal:123456@127.0.0.1:3306/"
 
 physicalShiftBits = 18
@@ -317,6 +317,17 @@ def get_tso():
     headers = {"Content-Type": "application/json"}
     resp = rq.post(url, data=data, headers=headers)
     assert resp.status_code == rq.codes.ok
+
+    data = json.dumps({"pd_addrs": [PD_ADDR]})
+    headers = {"Content-Type": "application/json"}
+    resp = rq.post(url, data=data, headers=headers)
+    assert resp.status_code == rq.codes.ok
+
+    # wrong pd address
+    data = json.dumps({"pd_addrs": ["http://127.0.0.1:2233"]})
+    headers = {"Content-Type": "application/json"}
+    resp = rq.post(url, data=data, headers=headers)
+    assert resp.status_code != rq.codes.ok
 
     print("pass test: get tso")
 

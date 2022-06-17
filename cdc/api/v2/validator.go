@@ -57,7 +57,9 @@ func verifyCreateChangefeedConfig(
 		credential.CertAllowedCN = cfg.CertAllowedCN
 	}
 
-	pdClient, err := getPDClient(ctx, cfg.PDAddrs, credential)
+	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	pdClient, err := getPDClient(timeoutCtx, cfg.PDAddrs, credential)
 	if err != nil {
 		return nil, err
 	}

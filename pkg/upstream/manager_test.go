@@ -19,7 +19,10 @@ import (
 	"time"
 
 	"github.com/benbjohnson/clock"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/stretchr/testify/require"
 )
@@ -67,4 +70,72 @@ func TestUpstream(t *testing.T) {
 	up, ok = manager.Get(testUpstreamID)
 	require.True(t, ok)
 	require.NotNil(t, up)
+}
+
+func TestRemoveErrorUpstream(t *testing.T) {
+	pdClient := &gc.MockPDClient{}
+	manager := NewManager4Test(pdClient)
+	up1 := NewUpstream4Test(pdClient)
+	manager.ups.Store(uint64(4), up1)
+	up2 := NewUpstream4Test(pdClient)
+	up2.err.Store(errors.New("test"))
+	manager.ups.Store(testUpstreamID, up2)
+	up, ok := manager.Get(testUpstreamID)
+	require.True(t, ok)
+	require.NotNil(t, up)
+	_ = manager.Tick(context.Background(), &orchestrator.GlobalReactorState{
+		Changefeeds: map[model.ChangeFeedID]*orchestrator.ChangefeedReactorState{
+			model.DefaultChangeFeedID("1"): {
+				Info: &model.ChangeFeedInfo{UpstreamID: testUpstreamID},
+			},
+			model.DefaultChangeFeedID("4"): {
+				Info: &model.ChangeFeedInfo{UpstreamID: 4},
+			},
+		},
+	})
+	up, ok = manager.Get(testUpstreamID)
+	require.False(t, ok)
+	require.Nil(t, up)
+}
+
+func TestAddDefaultUpstream(t *testing.T) {
+	m := NewManager(context.Background(), "id")
+	m.initUpstreamFunc = func(ctx context.Context,
+		up *Upstream, gcID string,
+	) error {
+		return errors.New("test")
+	}
+	_, err := m.AddDefaultUpstream([]string{}, &security.Credential{})
+	require.NotNil(t, err)
+	require.Nil(t, m.GetDefaultUpstream())
+	m.initUpstreamFunc = func(ctx context.Context,
+		up *Upstream, gcID string,
+	) error {
+		up.ID = uint64(2)
+		return nil
+	}
+	_, err = m.AddDefaultUpstream([]string{}, &security.Credential{})
+	require.Nil(t, err)
+	require.NotNil(t, m.GetDefaultUpstream())
+	up, ok := m.Get(uint64(2))
+	require.NotNil(t, up)
+	require.True(t, ok)
+}
+
+func TestAddUpstream(t *testing.T) {
+	m := NewManager(context.Background(), "id")
+	m.initUpstreamFunc = func(ctx context.Context,
+		up *Upstream, gcID string,
+	) error {
+		return errors.New("test")
+	}
+	up := m.AddUpstream(uint64(3), &model.UpstreamInfo{})
+	require.NotNil(t, up)
+	up1, ok := m.Get(uint64(3))
+	require.NotNil(t, up1)
+	require.True(t, ok)
+	require.False(t, up1.IsNormal())
+	for up.Error() == nil {
+	}
+	require.NotNil(t, up.Error())
 }

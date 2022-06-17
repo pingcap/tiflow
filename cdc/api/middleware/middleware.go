@@ -20,7 +20,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/api"
-	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
@@ -97,7 +96,7 @@ func ForwardToOwnerMiddleware(p api.CaptureInfoProvider) gin.HandlerFunc {
 }
 
 // CheckServerReadyMiddleware checks if the server is ready
-func CheckServerReadyMiddleware(capture *capture.Capture) gin.HandlerFunc {
+func CheckServerReadyMiddleware(capture api.CaptureInfoProvider) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if capture.IsReady() {
 			c.Next()
