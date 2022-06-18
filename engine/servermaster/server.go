@@ -650,10 +650,11 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	}
 
 	// start background managers
-	s.executorManager.Start(ctx)
-	defer s.executorManager.Stop()
 	s.resourceManagerService.StartBackgroundWorker()
-	defer s.resourceManagerService.Stop()
+	defer func() {
+		s.resourceManagerService.Stop()
+		log.L().Info("resource manager exited")
+	}()
 
 	clients := client.NewClientManager()
 	err = clients.AddMasterClient(ctx, []string{s.cfg.MasterAddr})
@@ -735,8 +736,8 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		if err != nil {
 			log.L().Warn("job manager close with error", zap.Error(err))
 		}
+		log.L().Info("job manager exited")
 	}()
-	s.leaderInitialized.Store(true)
 
 	s.gcRunner = externRescManager.NewGCRunner(s.frameMetaClient, map[resModel.ResourceType]externRescManager.GCHandlerFunc{
 		"local": resourcetypes.NewLocalFileResourceType(clients).GCHandler(),
@@ -745,12 +746,6 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 
 	// TODO refactor this method to make it more readable and maintainable.
 	errg, errgCtx := errgroup.WithContext(ctx)
-	defer func() {
-		err := errg.Wait()
-		if err != nil {
-			log.L().Error("resource GC exited with error", zap.Error(err))
-		}
-	}()
 
 	errg.Go(func() error {
 		return s.gcRunner.Run(errgCtx)
@@ -759,30 +754,45 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		return s.gcCoordinator.Run(errgCtx)
 	})
 
-	metricTicker := time.NewTicker(defaultMetricInterval)
-	defer metricTicker.Stop()
-	leaderTicker := time.NewTicker(time.Millisecond * 200)
-	defer leaderTicker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			// ctx is a leaderCtx actually
-			return ctx.Err()
-		case <-leaderTicker.C:
-			if !s.isEtcdLeader() {
-				log.L().Info("etcd leader changed, resigns server master leader",
-					zap.String("old-leader-name", s.name()))
-				return derrors.ErrEtcdLeaderChanged.GenWithStackByArgs()
+	errg.Go(func() error {
+		defer func() {
+			s.executorManager.Stop()
+			log.L().Info("executor manager exited")
+		}()
+		s.executorManager.Start(errgCtx)
+		return nil
+	})
+
+	errg.Go(func() error {
+		metricTicker := time.NewTicker(defaultMetricInterval)
+		defer metricTicker.Stop()
+		leaderTicker := time.NewTicker(time.Millisecond * 200)
+		defer leaderTicker.Stop()
+		for {
+			select {
+			case <-errgCtx.Done():
+				// errgCtx is a leaderCtx actually
+				return perrors.Trace(errgCtx.Err())
+			case <-leaderTicker.C:
+				if !s.isEtcdLeader() {
+					log.L().Info("etcd leader changed, resigns server master leader",
+						zap.String("old-leader-name", s.name()))
+					return derrors.ErrEtcdLeaderChanged.GenWithStackByArgs()
+				}
+				err := s.jobManager.Poll(errgCtx)
+				if err != nil {
+					log.L().Warn("Polling JobManager failed", zap.Error(err))
+					return err
+				}
+			case <-leaderTicker.C:
+				s.collectLeaderMetric()
 			}
-			err := s.jobManager.Poll(ctx)
-			if err != nil {
-				log.L().Warn("Polling JobManager failed", zap.Error(err))
-				return err
-			}
-		case <-leaderTicker.C:
-			s.collectLeaderMetric()
 		}
-	}
+	})
+
+	s.leaderInitialized.Store(true)
+
+	return errg.Wait()
 }
 
 func withHost(addr string) string {
