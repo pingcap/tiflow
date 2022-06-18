@@ -590,26 +590,6 @@ func (c CDCEtcdClient) GetEnsureGCServiceID() string {
 	return c.GetGCServiceID() + "-creating-"
 }
 
-// SaveUpstreamInfo save a upstreamInfo to etcd server
-func (c CDCEtcdClient) SaveUpstreamInfo(ctx context.Context,
-	upstreamInfo *model.UpstreamInfo,
-	namespace string,
-) error {
-	Key := CDCKey{
-		Tp:         CDCKeyTypeUpStream,
-		ClusterID:  c.ClusterID,
-		UpstreamID: upstreamInfo.ID,
-		Namespace:  namespace,
-	}
-	KeyStr := Key.String()
-	value, err := upstreamInfo.Marshal()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	_, err = c.Client.Put(ctx, KeyStr, string(value))
-	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
-}
-
 // GetUpstreamInfo get a upstreamInfo from etcd server
 func (c CDCEtcdClient) GetUpstreamInfo(ctx context.Context,
 	upstreamID model.UpstreamID,

@@ -141,6 +141,7 @@ func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
 		up.err.Store(err)
 		return errors.Trace(err)
 	}
+	up.ID = clusterID
 	log.Info("upstream's PDClient created", zap.Uint64("upstreamID", up.ID))
 
 	// To not block CDC server startup, we need to warn instead of error
