@@ -84,6 +84,11 @@ type cdcPeer struct {
 	// necessary information on the stream.
 	sender *streamHandle
 
+	// valid says whether the peer is valid.
+	// Note that it does not need to be thread-safe
+	// because it should only be accessed in MessageServer.run().
+	valid bool
+
 	metricsAckCount prometheus.Counter
 }
 
@@ -92,16 +97,24 @@ func newCDCPeer(senderID NodeID, epoch int64, sender *streamHandle) *cdcPeer {
 		PeerID: senderID,
 		Epoch:  epoch,
 		sender: sender,
+		valid:  true,
 		metricsAckCount: serverAckCount.With(prometheus.Labels{
 			"to": senderID,
 		}),
 	}
 }
 
-func (p *cdcPeer) abortWithError(ctx context.Context, err error) {
-	if err1 := p.sender.Send(ctx, errorToRPCResponse(err)); err1 != nil {
+func (p *cdcPeer) abort(ctx context.Context, err error) {
+	if !p.valid {
+		log.Panic("p2p: aborting invalid peer", zap.String("peer", p.PeerID))
+	}
+
+	defer func() {
+		p.valid = false
+	}()
+	if sendErr := p.sender.Send(ctx, errorToRPCResponse(err)); sendErr != nil {
 		log.Warn("could not send error to peer", zap.Error(err),
-			zap.NamedError("sendErr", err1))
+			zap.NamedError("sendErr", sendErr))
 		return
 	}
 	log.Debug("sent error to peer", zap.Error(err))
@@ -344,7 +357,7 @@ func (m *MessageServer) deregisterPeer(ctx context.Context, peer *cdcPeer, err e
 	delete(m.peers, peer.PeerID)
 	m.peerLock.Unlock()
 	if err != nil {
-		peer.abortWithError(ctx, err)
+		peer.abort(ctx, err)
 	}
 }
 
@@ -757,6 +770,21 @@ func (m *MessageServer) receive(stream p2p.CDCPeerToPeer_SendMessageServer, stre
 }
 
 func (m *MessageServer) handleMessage(ctx context.Context, streamMeta *p2p.StreamMeta, entry *p2p.MessageEntry) error {
+	m.peerLock.RLock()
+	peer, ok := m.peers[streamMeta.SenderId]
+	m.peerLock.RUnlock()
+	if !ok || peer.Epoch != streamMeta.GetEpoch() {
+		log.Debug("p2p: message without corresponding peer",
+			zap.String("topic", entry.GetTopic()),
+			zap.Int64("seq", entry.GetSequence()))
+		return nil
+	}
+
+	// Drop messages from invalid peers
+	if !peer.valid {
+		return nil
+	}
+
 	topic := entry.GetTopic()
 	pendingMessageKey := topicSenderPair{
 		Topic:    topic,
@@ -769,12 +797,7 @@ func (m *MessageServer) handleMessage(ctx context.Context, streamMeta *p2p.Strea
 		if len(pendingEntries) > m.config.MaxPendingMessageCountPerTopic {
 			log.Warn("Topic congested because no handler has been registered", zap.String("topic", topic))
 			delete(m.pendingMessages, pendingMessageKey)
-			m.peerLock.RLock()
-			peer, ok := m.peers[streamMeta.SenderId]
-			m.peerLock.RUnlock()
-			if ok {
-				m.deregisterPeer(ctx, peer, cerror.ErrPeerMessageTopicCongested.FastGenByArgs())
-			}
+			m.deregisterPeer(ctx, peer, cerror.ErrPeerMessageTopicCongested.FastGenByArgs())
 			return nil
 		}
 		m.pendingMessages[pendingMessageKey] = append(pendingEntries, pendingMessageEntry{
