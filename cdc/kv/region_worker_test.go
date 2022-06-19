@@ -161,7 +161,7 @@ func TestRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	eventCh := make(chan model.RegionFeedEvent, 2)
-	s := createFakeEventFeedSession(ctx)
+	s := createFakeEventFeedSession(ctx, config.GetGlobalServerConfig().KVClient)
 	s.enableOldValue = true
 	s.eventCh = eventCh
 	span := regionspan.Span{}.Hack()
