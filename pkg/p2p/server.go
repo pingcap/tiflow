@@ -422,7 +422,6 @@ func (m *MessageServer) AddHandler(
 				zap.Int64("lastAck", lastAck))
 			return nil
 		}
-
 		log.Info("sequence", zap.Int64("seq", entry.Sequence))
 		if lastAck != initAck && entry.Sequence > lastAck+1 {
 			// We detected a message loss at seq = (lastAck+1).
@@ -814,7 +813,9 @@ func (m *MessageServer) handleMessage(ctx context.Context, streamMeta *p2p.Strea
 		streamMeta: streamMeta,
 		entry:      entry,
 	}); err != nil {
-		return errors.Trace(err)
+		log.Warn("Failed to process message due to a handler error",
+			zap.Error(err), zap.String("topic", topic))
+		m.deregisterPeer(ctx, peer, err)
 	}
 
 	return nil
