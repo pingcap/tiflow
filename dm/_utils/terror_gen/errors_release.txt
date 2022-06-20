@@ -530,6 +530,7 @@ ErrSchemaTrackerCannotSetDownstreamSQLMode,[code=44016:class=schema-tracker:scop
 ErrSchemaTrackerCannotInitDownstreamParser,[code=44017:class=schema-tracker:scope=internal:level=high], "Message: failed to init downstream parser by sql_mode %v in schema tracker"
 ErrSchemaTrackerCannotMockDownstreamTable,[code=44018:class=schema-tracker:scope=internal:level=high], "Message: failed to mock downstream table by create table statement %v in schema tracker"
 ErrSchemaTrackerCannotFetchDownstreamCreateTableStmt,[code=44019:class=schema-tracker:scope=internal:level=high], "Message: failed to fetch downstream table %v by show create table statement in schema tracker"
+ErrSchemaTrackerIsClosed,[code=44020:class=schema-tracker:scope=internal:level=high], "Message: schema tracker is closed"
 ErrSchedulerNotStarted,[code=46001:class=scheduler:scope=internal:level=high], "Message: the scheduler has not started"
 ErrSchedulerStarted,[code=46002:class=scheduler:scope=internal:level=medium], "Message: the scheduler has already started"
 ErrSchedulerWorkerExist,[code=46003:class=scheduler:scope=internal:level=medium], "Message: dm-worker with name %s already exists"

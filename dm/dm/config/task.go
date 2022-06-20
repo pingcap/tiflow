@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"math"
 	"os"
 	"sort"
 	"strings"
@@ -71,7 +72,8 @@ const (
 	DefaultValidatorBatchQuerySize    = 100
 	DefaultValidatorMaxPendingRowSize = "500m"
 
-	ValidatorMaxAccumulatedRow = 500
+	ValidatorMaxAccumulatedRow    = 100000
+	DefaultValidatorMaxPendingRow = math.MaxInt32
 )
 
 // default config item values.
@@ -399,7 +401,7 @@ func (v *ValidatorConfig) Adjust() error {
 		// validator validates every ValidatorMaxAccumulatedRow rows.
 		// if after 4 validation on each worker, we still cannot reduce the row count,
 		// we take it as a signal that there are too many validation failures.
-		v.MaxPendingRowCount = v.WorkerCount * 4 * ValidatorMaxAccumulatedRow
+		v.MaxPendingRowCount = DefaultValidatorMaxPendingRow
 	}
 	return nil
 }

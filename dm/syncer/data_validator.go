@@ -807,25 +807,23 @@ func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table, columnCo
 	// 	for non-needed tables, we will not validate them.
 	// in case 2, validator should be paused
 	res := &validateTableInfo{targetTable: targetTable}
-	isTrackerStopped := !v.syncer.IsRunning()
 	var (
 		tableInfo *model.TableInfo
 		err       error
 	)
-	if isTrackerStopped {
-		// if syncer is not running, the schemaTracker is stopped
-		// we should get tableInfo from checkpoint
-		tableInfo = v.syncer.getTableInfoFromCheckpoint(sourceTable)
-	} else {
-		tableInfo, err = v.syncer.getTrackedTableInfo(sourceTable)
-	}
+	tableInfo, err = v.syncer.getTrackedTableInfo(sourceTable)
 	if err != nil {
-		if schema.IsTableNotExists(err) {
+		switch {
+		case schema.IsTableNotExists(err):
 			// not a table need to sync
 			res.message = tableNotSyncedOrDropped
 			return res, nil
+		case terror.ErrSchemaTrackerIsClosed.Equal(err):
+			// schema tracker is closed
+			tableInfo = v.syncer.getTableInfoFromCheckpoint(sourceTable)
+		default:
+			return res, err
 		}
-		return res, err
 	}
 	if len(tableInfo.Columns) < columnCount {
 		res.message = moreColumnInBinlogMsg

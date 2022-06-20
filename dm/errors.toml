@@ -3190,6 +3190,12 @@ description = ""
 workaround = ""
 tags = ["internal", "high"]
 
+[error.DM-schema-tracker-44020]
+message = "schema tracker is closed"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
 [error.DM-scheduler-46001]
 message = "the scheduler has not started"
 description = ""

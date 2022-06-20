@@ -653,6 +653,7 @@ const (
 	codeSchemaTrackerCannotInitDownstreamParser
 	codeSchemaTrackerCannotMockDownstreamTable
 	codeSchemaTrackerCannotFetchDownstreamCreateTableStmt
+	codeSchemaTrackerIsClosed
 )
 
 // HA scheduler.
@@ -1342,7 +1343,7 @@ var (
 		"failed to mock downstream table by create table statement %v in schema tracker", "")
 	ErrSchemaTrackerCannotFetchDownstreamCreateTableStmt = New(codeSchemaTrackerCannotFetchDownstreamCreateTableStmt, ClassSchemaTracker, ScopeInternal, LevelHigh,
 		"failed to fetch downstream table %v by show create table statement in schema tracker", "")
-
+	ErrSchemaTrackerIsClosed = New(codeSchemaTrackerIsClosed, ClassSchemaTracker, ScopeInternal, LevelHigh, "schema tracker is closed", "")
 	// HA scheduler.
 	ErrSchedulerNotStarted                   = New(codeSchedulerNotStarted, ClassScheduler, ScopeInternal, LevelHigh, "the scheduler has not started", "")
 	ErrSchedulerStarted                      = New(codeSchedulerStarted, ClassScheduler, ScopeInternal, LevelMedium, "the scheduler has already started", "")
