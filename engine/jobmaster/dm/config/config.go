@@ -167,6 +167,21 @@ func (c *JobCfg) ToTaskCfgs() map[string]*TaskCfg {
 	return taskCfgs
 }
 
+// FromTaskCfgs converts task configs to a jobCfg.
+func FromTaskCfgs(taskCfgs []*TaskCfg) *JobCfg {
+	if len(taskCfgs) == 0 {
+		return nil
+	}
+
+	jobCfg := (*JobCfg)(taskCfgs[0])
+	// nolint:errcheck
+	jobCfg, _ = jobCfg.Clone()
+	for i := 1; i < len(taskCfgs); i++ {
+		jobCfg.Upstreams = append(jobCfg.Upstreams, taskCfgs[i].Upstreams...)
+	}
+	return jobCfg
+}
+
 // toDMTaskConfig transform a jobCfg to DM TaskCfg.
 func (c *JobCfg) toDMTaskConfig() (*dmconfig.TaskConfig, error) {
 	dmTaskCfg := &dmconfig.TaskConfig{}

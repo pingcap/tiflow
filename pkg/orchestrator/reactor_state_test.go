@@ -111,7 +111,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				ID: model.DefaultChangeFeedID("test1"),
 				Info: &model.ChangeFeedInfo{
 					SinkURI:           "blackhole://",
-					Opts:              map[string]string{},
 					CreateTime:        createTime,
 					StartTs:           421980685886554116,
 					Engine:            model.SortInMemory,
@@ -170,7 +169,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				ID: model.DefaultChangeFeedID("test1"),
 				Info: &model.ChangeFeedInfo{
 					SinkURI:           "blackhole://",
-					Opts:              map[string]string{},
 					CreateTime:        createTime,
 					StartTs:           421980685886554116,
 					Engine:            model.SortInMemory,
@@ -236,7 +234,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
 				ID: model.DefaultChangeFeedID("test1"),
 				Info: &model.ChangeFeedInfo{
 					SinkURI:           "blackhole://",
-					Opts:              map[string]string{},
 					CreateTime:        createTime,
 					StartTs:           421980685886554116,
 					Engine:            model.SortInMemory,

@@ -23,7 +23,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/pingcap/tidb/util/filter"
-	promutil2 "github.com/pingcap/tidb/util/promutil"
+	tidbpromutil "github.com/pingcap/tidb/util/promutil"
 	tfilter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/prometheus/client_golang/prometheus"
@@ -144,7 +144,7 @@ func (t *testDumplingSuite) TestCallStatus(c *C) {
 			"task": m.cfg.Name, "source_id": m.cfg.SourceID,
 		},
 	)
-	dumpConf.PromRegistry = promutil2.NewDefaultRegistry()
+	dumpConf.PromRegistry = tidbpromutil.NewDefaultRegistry()
 
 	s := m.Status(nil).(*pb.DumpStatus)
 	c.Assert(s.CompletedTables, Equals, float64(0))
