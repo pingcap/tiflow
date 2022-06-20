@@ -18,6 +18,7 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/util/filter"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -111,7 +112,7 @@ create table t (
 			},
 		}
 		sessCtx := utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
-		g := NewExprFilterGroup(sessCtx, exprConfig)
+		g := NewExprFilterGroup(tcontext.Background(), sessCtx, exprConfig)
 		exprs, err := g.GetInsertExprs(table, ti)
 		c.Assert(err, IsNil)
 		c.Assert(exprs, HasLen, 1)
@@ -374,7 +375,7 @@ create table t (
 			},
 		}
 		sessCtx := utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
-		g := NewExprFilterGroup(sessCtx, exprConfig)
+		g := NewExprFilterGroup(tcontext.Background(), sessCtx, exprConfig)
 		exprs, err := g.GetInsertExprs(table, ti)
 		c.Assert(err, IsNil)
 		c.Assert(exprs, HasLen, 1)
@@ -428,7 +429,7 @@ create table t (
 		},
 	}
 	sessCtx := utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
-	g := NewExprFilterGroup(sessCtx, exprConfig)
+	g := NewExprFilterGroup(tcontext.Background(), sessCtx, exprConfig)
 	exprs, err := g.GetInsertExprs(table, ti)
 	c.Assert(err, IsNil)
 	c.Assert(exprs, HasLen, 1)

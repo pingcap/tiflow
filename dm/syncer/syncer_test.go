@@ -802,7 +802,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
 			AddRow("t_1", "create table t_1(id int primary key, name varchar(24), KEY `index1` (`name`))"))
 
-	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
+	syncer.exprFilterGroup = NewExprFilterGroup(tcontext.Background(), utils.NewSessionCtx(nil), nil)
 	c.Assert(syncer.Type(), Equals, pb.UnitType_Sync)
 
 	syncer.columnMapping, err = cm.NewMapping(s.cfg.CaseSensitive, s.cfg.ColumnMappingRules)
@@ -1138,7 +1138,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(syncer.Type(), Equals, pb.UnitType_Sync)
 
-	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
+	syncer.exprFilterGroup = NewExprFilterGroup(tcontext.Background(), utils.NewSessionCtx(nil), nil)
 	c.Assert(syncer.genRouter(), IsNil)
 
 	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
@@ -1343,7 +1343,7 @@ func (s *testSyncerSuite) TestTrackDDL(c *C) {
 	syncer.schemaTracker, err = schema.NewTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.ddlDBConn)
 	c.Assert(err, IsNil)
 	defer syncer.schemaTracker.Close()
-	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
+	syncer.exprFilterGroup = NewExprFilterGroup(tcontext.Background(), utils.NewSessionCtx(nil), nil)
 	c.Assert(syncer.genRouter(), IsNil)
 
 	cases := []struct {

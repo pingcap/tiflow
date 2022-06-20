@@ -73,7 +73,7 @@ func (s *testFilterSuite) TestSkipQueryEvent(c *C) {
 	syncer.schemaTracker, err = schema.NewTracker(context.Background(), syncer.cfg.Name, defaultTestSessionCfg, syncer.ddlDBConn)
 	c.Assert(err, IsNil)
 	defer syncer.schemaTracker.Close()
-	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
+	syncer.exprFilterGroup = NewExprFilterGroup(tcontext.Background(), utils.NewSessionCtx(nil), nil)
 
 	// test binlog filter
 	filterRules := []*bf.BinlogEventRule{
