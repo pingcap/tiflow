@@ -19,8 +19,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/pingcap/tiflow/engine/framework/internal/worker"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	"github.com/pingcap/tiflow/engine/framework/worker"
 	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
