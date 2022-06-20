@@ -683,9 +683,9 @@ type schemaStorageImpl struct {
 	gcTs       uint64
 	resolvedTs uint64
 
-	filter         *filter.Filter
-  
-	explicitTables bool
+	filter *filter.Filter
+
+	forceReplicate bool
 	id             model.ChangeFeedID
 }
 
@@ -703,11 +703,11 @@ func NewSchemaStorage(meta *timeta.Meta, startTs uint64, filter *filter.Filter,
 		return nil, errors.Trace(err)
 	}
 	schema := &schemaStorageImpl{
-		snaps:          []*schemaSnapshot{snap},
-		resolvedTs:     startTs,
-		filter:         filter,
+		snaps:      []*schemaSnapshot{snap},
+		resolvedTs: startTs,
+		filter:     filter,
 
-		explicitTables: forceReplicate,
+		forceReplicate: forceReplicate,
 		id:             id,
 	}
 	return schema, nil

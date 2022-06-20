@@ -149,7 +149,7 @@ func (c *Client) Delete(ctx context.Context, key string,
 // such as context.Canceled, context.DeadlineExceeded, errors.ErrReachMaxTry.
 func (c *Client) Txn(ctx context.Context,
 	cmps []clientV3.Cmp, opsThen, opsElse []clientV3.Op) (resp *clientV3.TxnResponse, err error) {
-	txnCtx, cancel := context.WithTimeout(ctx, etcdTxnTimeoutDuration)
+	txnCtx, cancel := context.WithTimeout(ctx, etcdClientTimeoutDuration)
 	defer cancel()
 	err = retryRPC(EtcdTxn, c.metrics[EtcdTxn], func() error {
 		var inErr error

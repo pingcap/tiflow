@@ -133,9 +133,8 @@ func (r *resolver) Resolve(ctx context.Context, regionID uint64, maxVersion uint
 	log.Info("resolve lock successfully",
 		zap.Uint64("regionID", regionID),
 		zap.Uint64("maxVersion", maxVersion),
+		zap.Int("lockCount", lockCount),
 		zap.String("changefeed", r.changefeed),
 		zap.Any("role", r.role))
-		zap.Int("lockCount", lockCount),
-		zap.Uint64("maxVersion", maxVersion))
 	return nil
 }
