@@ -308,12 +308,14 @@ var NewCDCKVClient func(
 	kvStorage tikv.Storage,
 	grpcPool GrpcPool,
 	changefeed string,
+	cfg *config.KVClientConfig,
 ) CDCKVClient = NewCDCClient
 
 // CDCClient to get events from TiKV
 type CDCClient struct {
 	pd pd.Client
 
+	config    *config.KVClientConfig
 	clusterID uint64
 
 	grpcPool GrpcPool
@@ -332,6 +334,7 @@ func NewCDCClient(
 	kvStorage tikv.Storage,
 	grpcPool GrpcPool,
 	changefeed string,
+	cfg *config.KVClientConfig,
 ) (c CDCKVClient) {
 	clusterID := pd.GetClusterID(ctx)
 
@@ -347,6 +350,7 @@ func NewCDCClient(
 
 	c = &CDCClient{
 		clusterID:      clusterID,
+		config:         cfg,
 		pd:             pd,
 		kvStorage:      store,
 		grpcPool:       grpcPool,
@@ -503,7 +507,6 @@ func newEventFeedSession(
 	eventCh chan<- model.RegionFeedEvent,
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
-	kvClientCfg := config.GetGlobalServerConfig().KVClient
 	rangeLock := regionspan.NewRegionRangeLock(
 		totalSpan.Start, totalSpan.End, startTs, client.changefeed)
 	return &eventFeedSession{
@@ -512,7 +515,7 @@ func newEventFeedSession(
 		kvStorage:         kvStorage,
 		totalSpan:         totalSpan,
 		eventCh:           eventCh,
-		regionRouter:      NewSizedRegionRouter(ctx, kvClientCfg.RegionScanLimit),
+		regionRouter:      NewSizedRegionRouter(ctx, client.config.RegionScanLimit),
 		regionCh:          make(chan singleRegionInfo, defaultRegionChanSize),
 		errCh:             make(chan regionErrorInfo, defaultRegionChanSize),
 		requestRangeCh:    make(chan rangeRequestTask, defaultRegionChanSize),
@@ -947,6 +950,8 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 	nextSpan := span
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 
+	// Max backoff 500ms.
+	scanRegionMaxBackoff := int64(500)
 	for {
 		var (
 			regions []*tikv.Region
@@ -986,7 +991,8 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 				zap.Reflect("regions", metas),
 				zap.String("changefeed", s.client.changefeed))
 			return nil
-		}, retry.WithBackoffMaxDelay(50), retry.WithMaxTries(100), retry.WithIsRetryableErr(cerror.IsRetryableError))
+		}, retry.WithBackoffMaxDelay(scanRegionMaxBackoff),
+			retry.WithTotalRetryDuratoin(time.Duration(s.client.config.RegionRetryDuration)))
 		if retryErr != nil {
 			return retryErr
 		}

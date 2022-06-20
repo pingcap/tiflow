@@ -882,7 +882,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 		// normal db
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
-		for i := 0; i < defaultDMLMaxRetryTime; i++ {
+		for i := 0; i < defaultDMLMaxRetry; i++ {
 			mock.ExpectBegin()
 			mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?),(?)").
 				WithArgs(1, 2).
