@@ -99,8 +99,8 @@ func (d *drainCaptureScheduler) Schedule(
 	for tableID, rep := range replications {
 		if rep.State != ReplicationSetStateReplicating {
 			// only drain the target capture if all tables is replicating,
-			log.Warn("tpscheduler: drain capture scheduler skip this tick,"+
-				"since it's secondary to some table",
+			log.Debug("tpscheduler: drain capture scheduler skip this tick,"+
+				"not all table is replicating",
 				zap.String("target", d.target),
 				zap.Any("replication", rep))
 			return nil
@@ -117,6 +117,8 @@ func (d *drainCaptureScheduler) Schedule(
 	}
 
 	if len(victims) == 0 {
+		log.Info("tpscheduler: drain capture scheduler finished, since no table",
+			zap.String("target", d.target), zap.Any("captures", captures))
 		d.target = captureIDNotDraining
 		return nil
 	}
@@ -151,13 +153,11 @@ func (d *drainCaptureScheduler) Schedule(
 		captureWorkload[target] = randomizeWorkload(d.random, minWorkload+1)
 	}
 
-	// todo: accept the task does not mean drain capture finished, revise this.
 	accept := func() {
 		d.mu.Lock()
 		defer d.mu.Unlock()
-		log.Info("tpscheduler: drain capture task accepted, clean the target",
+		log.Info("tpscheduler: drain capture task accepted",
 			zap.String("target", d.target))
-		d.target = captureIDNotDraining
 	}
 
 	// todo: revise this if we have to control the concurrency.

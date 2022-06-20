@@ -130,8 +130,9 @@ var defaultServerConfig = &ServerConfig{
 
 		EnableTwoPhaseScheduler: false,
 		Scheduler: &SchedulerConfig{
-			HeartbeatTick:        2,
-			MaxTaskConcurrency:   10,
+			HeartbeatTick:      2,
+			MaxTaskConcurrency: 10,
+			// todo: no need to check balance each minute, relax the interval.
 			CheckBalanceInterval: TomlDuration(time.Minute),
 		},
 	},

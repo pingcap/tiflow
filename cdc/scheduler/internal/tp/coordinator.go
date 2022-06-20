@@ -160,7 +160,7 @@ func (c *coordinator) DrainCapture(target model.CaptureID) int {
 	}
 
 	if count == 0 {
-		log.Info("tpscheduler: manual drain capture finished, "+
+		log.Info("tpscheduler: manual drain capture ignored, "+
 			"since the target has no tables",
 			zap.String("target", target))
 		return count
