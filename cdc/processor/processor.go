@@ -480,7 +480,9 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	p.mounter = entry.NewMounter(p.schemaStorage,
 		p.changefeedID,
 		contextutil.TimezoneFromCtx(ctx),
-		p.changefeed.Info.Config.EnableOldValue)
+		p.filter,
+		p.changefeed.Info.Config.EnableOldValue,
+	)
 
 	opts := make(map[string]string, len(p.changefeed.Info.Opts)+2)
 	for k, v := range p.changefeed.Info.Opts {
@@ -493,7 +495,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		zap.String("changefeed", p.changefeed.ID.ID))
 
 	start := time.Now()
-	p.sink, err = sink.New(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
+	p.sink, err = sink.New(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.changefeed.Info.Config, opts, errCh)
 	if err != nil {
 		log.Info("processor new sink failed",
 			zap.String("namespace", p.changefeedID.Namespace),

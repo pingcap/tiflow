@@ -29,6 +29,8 @@ import (
 	"github.com/pingcap/tidb/testkit"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	pfilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
@@ -289,9 +291,12 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	scheamStorage.AdvanceResolvedTs(ver.Ver)
+	config := config.GetDefaultReplicaConfig()
+	filter, err := pfilter.NewFilter(config)
+	require.Nil(t, err)
 	mounter := NewMounter(scheamStorage,
 		model.DefaultChangeFeedID("c1"),
-		time.UTC, false).(*mounterImpl)
+		time.UTC, filter, false).(*mounterImpl)
 	mounter.tz = time.Local
 	ctx := context.Background()
 

@@ -178,7 +178,10 @@ func (n *sorterNode) start(
 					if err != nil {
 						return errors.Trace(err)
 					}
-
+					if msg.Row.Filtered {
+						log.Info("Row changed event ignored", zap.Uint64("startTs", msg.StartTs))
+						continue
+					}
 					commitTs := msg.CRTs
 					// We interpolate a resolved-ts if none has been sent for some time.
 					if time.Since(lastSendResolvedTsTime) > resolvedTsInterpolateInterval {

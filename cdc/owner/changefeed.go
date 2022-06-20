@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	pfilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
@@ -73,6 +74,7 @@ type changefeed struct {
 	schema      *schemaWrap4Owner
 	sink        DDLSink
 	ddlPuller   DDLPuller
+	filter      *pfilter.Filter
 	initialized bool
 	// isRemoved is true if the changefeed is removed
 	isRemoved bool
@@ -351,6 +353,10 @@ LOOP:
 	if err != nil {
 		return errors.Trace(err)
 	}
+	c.filter, err = pfilter.NewFilter(c.state.Info.Config)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
 
@@ -557,6 +563,11 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 	return barrierTs, nil
 }
 
+// asyncExecDDLJob execute ddl job asynchronously, it returns true if the jod is done.
+// 0. build ddl events from job.
+// 1. Apply ddl job to c.schema.
+// 2. Emit ddl event to redo manager.
+// 3. emit ddl event to ddl sink.
 func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 	job *timodel.Job,
 ) (bool, error) {
@@ -567,6 +578,7 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 	}
 
 	if c.ddlEventCache == nil {
+		// We must build ddl events from job before we call c.schema.HandleDDL(job).
 		ddlEvents, err := c.schema.BuildDDLEvents(job)
 		if err != nil {
 			log.Error("build DDL event fail", zap.String("changefeed", c.id.ID),
@@ -580,13 +592,28 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
 		// refresh checkpointTs and currentTableNames when a ddl job is received
 		c.sink.emitCheckpointTs(checkpointTs, c.currentTableNames)
+		// we apply ddl to update changefeed schema here.
 		err = c.schema.HandleDDL(job)
 		if err != nil {
 			return false, errors.Trace(err)
 		}
-		c.ddlEventCache = ddlEvents
+		// filter ddl event here
 		for _, ddlEvent := range ddlEvents {
-			if c.redoManager.Enabled() {
+			if c.filter.ShouldIgnoreDDLEvent(ddlEvent.StartTs, ddlEvent.Type, ddlEvent.TableInfo.Schema, ddlEvent.TableInfo.Table) {
+				log.Info(
+					"DDL event ignored",
+					zap.String("query", ddlEvent.Query),
+					zap.Uint64("startTs", ddlEvent.StartTs),
+					zap.Uint64("commitTs", ddlEvent.CommitTs),
+					zap.String("namespace", c.id.Namespace),
+					zap.String("changefeed", c.id.ID),
+				)
+				continue
+			}
+			c.ddlEventCache = append(c.ddlEventCache, ddlEvent)
+		}
+		if c.redoManager.Enabled() {
+			for _, ddlEvent := range c.ddlEventCache {
 				err = c.redoManager.EmitDDLEvent(ctx, ddlEvent)
 				if err != nil {
 					return false, err
@@ -618,6 +645,9 @@ func (c *changefeed) asyncExecDDLEvent(ctx cdcContext.Context,
 	ddlEvent *model.DDLEvent,
 ) (done bool, err error) {
 	ddlEvent.Query, err = addSpecialComment(ddlEvent.Query)
+	if err != nil {
+		return false, err
+	}
 	if ddlEvent.TableInfo != nil &&
 		c.schema.IsIneligibleTableID(ddlEvent.TableInfo.TableID) {
 		log.Warn("ignore the DDL event of ineligible table",

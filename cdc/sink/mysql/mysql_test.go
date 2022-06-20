@@ -36,7 +36,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -44,13 +43,10 @@ import (
 )
 
 func newMySQLSink4Test(ctx context.Context, t *testing.T) *mysqlSink {
-	f, err := filter.NewFilter(config.GetDefaultReplicaConfig())
-	require.Nil(t, err)
 	params := defaultParams.Clone()
 	params.batchReplaceEnabled = false
 	return &mysqlSink{
 		txnCache:   newUnresolvedTxnCache(),
-		filter:     f,
 		statistics: metrics.NewStatistics(ctx, metrics.SinkTypeDB),
 		params:     params,
 	}
@@ -1008,15 +1004,12 @@ func TestAdjustSQLMode(t *testing.T) {
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
 	require.Nil(t, err)
-	require.Nil(t, err)
 	rc := config.GetDefaultReplicaConfig()
-	f, err := filter.NewFilter(rc)
-	require.Nil(t, err)
 	require.Nil(t, err)
 	opts := map[string]string{}
 	sink, err := NewMySQLSink(ctx,
 		model.DefaultChangeFeedID(changefeed),
-		sinkURI, f, rc, opts)
+		sinkURI, rc, opts)
 	require.Nil(t, err)
 
 	err = sink.Close(ctx)
@@ -1082,10 +1075,9 @@ func TestNewMySQLTimeout(t *testing.T) {
 	sinkURI, err := url.Parse(fmt.Sprintf("mysql://%s/?read-timeout=2s&timeout=2s", addr))
 	require.Nil(t, err)
 	rc := config.GetDefaultReplicaConfig()
-	f, err := filter.NewFilter(rc)
 	require.Nil(t, err)
 	_, err = NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed),
-		sinkURI, f, rc, map[string]string{})
+		sinkURI, rc, map[string]string{})
 	require.Equal(t, driver.ErrBadConn, errors.Cause(err))
 }
 
@@ -1129,11 +1121,9 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
 	require.Nil(t, err)
 	rc := config.GetDefaultReplicaConfig()
-	f, err := filter.NewFilter(rc)
-	require.Nil(t, err)
 	sink, err := NewMySQLSink(ctx,
 		model.DefaultChangeFeedID(changefeed),
-		sinkURI, f, rc, map[string]string{})
+		sinkURI, rc, map[string]string{})
 	require.Nil(t, err)
 
 	rows := []*model.RowChangedEvent{
@@ -1336,11 +1326,9 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1")
 	require.Nil(t, err)
 	rc := config.GetDefaultReplicaConfig()
-	f, err := filter.NewFilter(rc)
-	require.Nil(t, err)
 	sink, err := NewMySQLSink(ctx,
 		model.DefaultChangeFeedID(changefeed),
-		sinkURI, f, rc, map[string]string{})
+		sinkURI, rc, map[string]string{})
 	require.Nil(t, err)
 
 	err = sink.execDMLs(ctx, rows, 1 /* replicaID */, 1 /* bucket */)
@@ -1414,11 +1402,9 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1")
 	require.Nil(t, err)
 	rc := config.GetDefaultReplicaConfig()
-	f, err := filter.NewFilter(rc)
-	require.Nil(t, err)
 	sink, err := NewMySQLSink(ctx,
 		model.DefaultChangeFeedID(changefeed),
-		sinkURI, f, rc, map[string]string{})
+		sinkURI, rc, map[string]string{})
 	require.Nil(t, err)
 
 	err = sink.execDMLs(ctx, rows, 1 /* replicaID */, 1 /* bucket */)
@@ -1497,11 +1483,9 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1")
 	require.Nil(t, err)
 	rc := config.GetDefaultReplicaConfig()
-	f, err := filter.NewFilter(rc)
-	require.Nil(t, err)
 	sink, err := NewMySQLSink(ctx,
 		model.DefaultChangeFeedID(changefeed),
-		sinkURI, f, rc, map[string]string{})
+		sinkURI, rc, map[string]string{})
 	require.Nil(t, err)
 
 	err = sink.execDMLs(ctx, rows, 1 /* replicaID */, 1 /* bucket */)
@@ -1555,11 +1539,9 @@ func TestNewMySQLSinkExecDDL(t *testing.T) {
 	rc.Filter = &config.FilterConfig{
 		Rules: []string{"test.t1"},
 	}
-	f, err := filter.NewFilter(rc)
-	require.Nil(t, err)
 	sink, err := NewMySQLSink(ctx,
 		model.DefaultChangeFeedID(changefeed),
-		sinkURI, f, rc, map[string]string{})
+		sinkURI, rc, map[string]string{})
 	require.Nil(t, err)
 
 	ddl1 := &model.DDLEvent{
@@ -1675,11 +1657,9 @@ func TestNewMySQLSink(t *testing.T) {
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
 	require.Nil(t, err)
 	rc := config.GetDefaultReplicaConfig()
-	f, err := filter.NewFilter(rc)
-	require.Nil(t, err)
 	sink, err := NewMySQLSink(ctx,
 		model.DefaultChangeFeedID(changefeed),
-		sinkURI, f, rc, map[string]string{})
+		sinkURI, rc, map[string]string{})
 	require.Nil(t, err)
 	err = sink.Close(ctx)
 	require.Nil(t, err)
@@ -1718,13 +1698,10 @@ func TestMySQLSinkClose(t *testing.T) {
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
 	require.Nil(t, err)
 	rc := config.GetDefaultReplicaConfig()
-	f, err := filter.NewFilter(rc)
-	require.Nil(t, err)
-
 	// test sink.Close will work correctly even if the ctx pass in has not been cancel
 	sink, err := NewMySQLSink(ctx,
 		model.DefaultChangeFeedID(changefeed),
-		sinkURI, f, rc, map[string]string{})
+		sinkURI, rc, map[string]string{})
 	require.Nil(t, err)
 	err = sink.Close(ctx)
 	require.Nil(t, err)
@@ -1770,13 +1747,11 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
 	require.Nil(t, err)
 	rc := config.GetDefaultReplicaConfig()
-	f, err := filter.NewFilter(rc)
-	require.Nil(t, err)
 
 	// test sink.Close will work correctly even if the ctx pass in has not been cancel
 	sink, err := NewMySQLSink(ctx,
 		model.DefaultChangeFeedID(changefeed),
-		sinkURI, f, rc, map[string]string{})
+		sinkURI, rc, map[string]string{})
 	require.Nil(t, err)
 	checkpoint, err := sink.FlushRowChangedEvents(ctx, model.TableID(1), model.NewResolvedTs(1))
 	require.Nil(t, err)
@@ -1866,11 +1841,9 @@ func TestGBKSupported(t *testing.T) {
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
 	require.Nil(t, err)
 	rc := config.GetDefaultReplicaConfig()
-	f, err := filter.NewFilter(rc)
-	require.Nil(t, err)
 	sink, err := NewMySQLSink(ctx,
 		model.DefaultChangeFeedID(changefeed),
-		sinkURI, f, rc, map[string]string{})
+		sinkURI, rc, map[string]string{})
 	require.Nil(t, err)
 
 	// no gbk-related warning log will be output because GBK charset is supported
@@ -1886,11 +1859,8 @@ func TestCleanTableResource(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 	tblID := model.TableID(1)
-	f, err := filter.NewFilter(config.GetDefaultReplicaConfig())
-	require.Nil(t, err)
 	s := &mysqlSink{
 		txnCache:   newUnresolvedTxnCache(),
-		filter:     f,
 		statistics: metrics.NewStatistics(ctx, metrics.SinkTypeDB),
 	}
 	require.Nil(t, s.EmitRowChangedEvents(ctx, &model.RowChangedEvent{

@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	pfilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -66,15 +67,11 @@ type Mounter interface {
 }
 
 type mounterImpl struct {
-	schemaStorage  SchemaStorage
-	tz             *time.Location
-	workerNum      int
-	enableOldValue bool
-	changefeedID   model.ChangeFeedID
-
-	// index is an atomic variable to dispatch input events to workers.
-	index int64
-
+	schemaStorage       SchemaStorage
+	tz                  *time.Location
+	enableOldValue      bool
+	changefeedID        model.ChangeFeedID
+	filter              *pfilter.Filter
 	metricMountDuration prometheus.Observer
 	metricTotalRows     prometheus.Gauge
 }
@@ -83,12 +80,14 @@ type mounterImpl struct {
 func NewMounter(schemaStorage SchemaStorage,
 	changefeedID model.ChangeFeedID,
 	tz *time.Location,
+	filter *pfilter.Filter,
 	enableOldValue bool,
 ) Mounter {
 	return &mounterImpl{
 		schemaStorage:  schemaStorage,
 		changefeedID:   changefeedID,
 		enableOldValue: enableOldValue,
+		filter:         filter,
 		metricMountDuration: mountDuration.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricTotalRows: totalRowsCountGauge.
@@ -112,6 +111,11 @@ func (m *mounterImpl) DecodeEvent(ctx context.Context, pEvent *model.Polymorphic
 	pEvent.Row = rowEvent
 	pEvent.RawKV.Value = nil
 	pEvent.RawKV.OldValue = nil
+	pEvent.Row.Filtered = m.filter.ShouldIgnoreDMLEvent(
+		pEvent.Row.StartTs,
+		pEvent.Row.Table.Schema,
+		pEvent.Row.Table.Table)
+
 	duration := time.Since(start)
 	if duration > time.Second {
 		m.metricMountDuration.Observe(duration.Seconds())

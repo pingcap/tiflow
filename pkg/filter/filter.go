@@ -23,7 +23,8 @@ import (
 
 // Filter is an event filter implementation.
 type Filter struct {
-	filter           filterV2.Filter
+	// tableFilter is used to filter row event by table name.
+	tableFilter      filterV2.Filter
 	ignoreTxnStartTs []uint64
 	ddlAllowlist     []model.ActionType
 }
@@ -60,7 +61,7 @@ func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
 		f = filterV2.CaseInsensitive(f)
 	}
 	return &Filter{
-		filter:           f,
+		tableFilter:      f,
 		ignoreTxnStartTs: cfg.Filter.IgnoreTxnStartTs,
 		ddlAllowlist:     cfg.Filter.DDLAllowlist,
 	}, nil
@@ -81,26 +82,27 @@ func (f *Filter) ShouldIgnoreTable(db, tbl string) bool {
 	if isSysSchema(db) {
 		return true
 	}
-	return !f.filter.MatchTable(db, tbl)
+	return !f.tableFilter.MatchTable(db, tbl)
 }
 
-// ShouldIgnoreDMLEvent removes DMLs that's not wanted by this change feed.
+// ShouldIgnoreDMLEvent removes DMLs that's not wanted by this changefeed.
 // CDC only supports filtering by database/table now.
 func (f *Filter) ShouldIgnoreDMLEvent(ts uint64, schema, table string) bool {
 	return f.shouldIgnoreStartTs(ts) || f.ShouldIgnoreTable(schema, table)
 }
 
-// ShouldIgnoreDDLEvent removes DDLs that's not wanted by this change feed.
+// ShouldIgnoreDDLEvent removes DDLs that's not wanted by this changefeed.
 // CDC only supports filtering by database/table now.
 func (f *Filter) ShouldIgnoreDDLEvent(ts uint64, ddlType model.ActionType, schema, table string) bool {
 	var shouldIgnoreTableOrSchema bool
 	switch ddlType {
 	case model.ActionCreateSchema, model.ActionDropSchema,
 		model.ActionModifySchemaCharsetAndCollate:
-		shouldIgnoreTableOrSchema = !f.filter.MatchSchema(schema)
+		shouldIgnoreTableOrSchema = !f.tableFilter.MatchSchema(schema)
 	default:
 		shouldIgnoreTableOrSchema = f.ShouldIgnoreTable(schema, table)
 	}
+
 	return f.shouldIgnoreStartTs(ts) || shouldIgnoreTableOrSchema
 }
 
