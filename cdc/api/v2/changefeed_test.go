@@ -11,18 +11,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package api
+package v2
 
 import (
-	"context"
-
-	"github.com/pingcap/tiflow/cdc/model"
+	"testing"
 )
 
-// CaptureInfoProvider provides capture and its onwnership information
-type CaptureInfoProvider interface {
-	Info() (model.CaptureInfo, error)
-	IsOwner() bool
-	GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error)
-	IsReady() bool
-}
+func TestCreateChangefeed(t *testing.T) {}
+
+func TestUpdateChangefeed(t *testing.T) {}

@@ -146,6 +146,11 @@ error = '''
 changefeed in abnormal state: %s, replication status: %+v
 '''
 
+["CDC:ErrChangefeedUpdateFailed"]
+error = '''
+changefeed update failed due to unexpected etcd transaction failure: %s
+'''
+
 ["CDC:ErrChangefeedUpdateRefused"]
 error = '''
 changefeed update error: %s

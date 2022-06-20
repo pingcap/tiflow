@@ -229,6 +229,38 @@ func TestCreateChangefeed(t *testing.T) {
 	require.True(t, cerror.ErrChangeFeedAlreadyExists.Equal(err))
 }
 
+func TestUpdateChangefeedAndUpstream(t *testing.T) {
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
+
+	ctx := context.Background()
+	upstreamInfo := &model.UpstreamInfo{
+		ID:          1,
+		PDEndpoints: "http://127.0.0.1:2385",
+	}
+	changeFeedID := model.DefaultChangeFeedID("test-update-cf-and-up")
+	changeFeedInfo := &model.ChangeFeedInfo{
+		ID:        changeFeedID.ID,
+		Namespace: changeFeedID.Namespace,
+		SinkURI:   "blackhole://",
+	}
+
+	err := s.client.UpdateChangefeedAndUpstream(ctx, upstreamInfo, changeFeedInfo, changeFeedID)
+	require.NoError(t, err)
+
+	var upstreamResult *model.UpstreamInfo
+	var changefeedResult *model.ChangeFeedInfo
+
+	upstreamResult, err = s.client.GetUpstreamInfo(ctx, 1, changeFeedID.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, upstreamInfo.PDEndpoints, upstreamResult.PDEndpoints)
+
+	changefeedResult, err = s.client.GetChangeFeedInfo(ctx, changeFeedID)
+	require.NoError(t, err)
+	require.Equal(t, changeFeedInfo.SinkURI, changefeedResult.SinkURI)
+}
+
 func TestGetAllCaptureLeases(t *testing.T) {
 	s := &Tester{}
 	s.SetUpTest(t)

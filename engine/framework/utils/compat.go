@@ -11,18 +11,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package api
+package utils
 
 import (
-	"context"
-
-	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/engine/framework/internal/eventloop"
 )
 
-// CaptureInfoProvider provides capture and its onwnership information
-type CaptureInfoProvider interface {
-	Info() (model.CaptureInfo, error)
-	IsOwner() bool
-	GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error)
-	IsReady() bool
+// Wrapper is a compatibility layer to use current
+// implementations of workers as the new runtime.Runnable.
+type Wrapper struct {
+	eventloop.Task
+	*eventloop.Runner[eventloop.Task]
+}
+
+// WrapWorker wraps a framework.Worker so that it can be used by
+// the runtime.
+func WrapWorker(worker eventloop.Task) *Wrapper {
+	return &Wrapper{
+		Task:   worker,
+		Runner: eventloop.NewRunner(worker),
+	}
 }

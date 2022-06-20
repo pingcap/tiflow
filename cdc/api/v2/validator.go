@@ -57,7 +57,9 @@ func verifyCreateChangefeedConfig(
 		credential.CertAllowedCN = cfg.CertAllowedCN
 	}
 
-	pdClient, err := getPDClient(ctx, cfg.PDAddrs, credential)
+	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	pdClient, err := getPDClient(timeoutCtx, cfg.PDAddrs, credential)
 	if err != nil {
 		return nil, err
 	}
@@ -303,14 +305,6 @@ func verifyUpdateChangefeedConfig(ctx context.Context,
 	if !changefeedInfoChanged && !upstreamInfoChanged {
 		return nil, nil, cerror.ErrChangefeedUpdateRefused.
 			GenWithStackByArgs("changefeed config is the same with the old one, do nothing")
-	}
-
-	if !changefeedInfoChanged {
-		newInfo = nil
-	}
-
-	if !upstreamInfoChanged {
-		newUpInfo = nil
 	}
 
 	return newInfo, newUpInfo, nil
