@@ -121,7 +121,7 @@ func TestHandleKeyPriority(t *testing.T) {
 		PKIsHandle:     false,
 	}
 	info := WrapTableInfo(1, "", 0, &tbl)
-	require.Equal(t, int64(8), info.HandleIndexID)
+	require.Equal(t, int64(10), info.HandleIndexID)
 }
 
 func TestTableInfoGetterFuncs(t *testing.T) {
