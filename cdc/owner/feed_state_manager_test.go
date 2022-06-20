@@ -218,7 +218,6 @@ func TestHandleError(t *testing.T) {
 	manager.PushAdminJob(&model.AdminJob{
 		CfID: ctx.ChangefeedVars().ID,
 		Type: model.AdminResume,
-		Opts: &model.AdminJobOption{ForceRemove: false},
 	})
 	manager.Tick(state)
 	tester.MustApplyPatches()
@@ -327,7 +326,6 @@ func TestChangefeedStatusNotExist(t *testing.T) {
 	manager.PushAdminJob(&model.AdminJob{
 		CfID: ctx.ChangefeedVars().ID,
 		Type: model.AdminRemove,
-		Opts: &model.AdminJobOption{ForceRemove: true},
 	})
 	manager.Tick(state)
 	require.False(t, manager.ShouldRunning())

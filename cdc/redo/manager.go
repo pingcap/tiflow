@@ -55,12 +55,12 @@ const (
 )
 
 const (
-	// supposing to replicate 10k tables, each table has one cached changce averagely.
+	// supposing to replicate 10k tables, each table has one cached chance averagely.
 	logBufferChanSize = 10000
 	logBufferTimeout  = time.Minute * 10
 )
 
-// IsValidConsistentLevel checks whether a give consistent level is valid
+// IsValidConsistentLevel checks whether a given consistent level is valid
 func IsValidConsistentLevel(level string) bool {
 	switch ConsistentLevelType(level) {
 	case ConsistentLevelNone, ConsistentLevelEventual:

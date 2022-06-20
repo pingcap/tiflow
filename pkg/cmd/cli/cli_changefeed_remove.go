@@ -14,18 +14,19 @@
 package cli
 
 import (
+	"strings"
+
 	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
 	"github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
 // removeChangefeedOptions defines flags for the `cli changefeed remove` command.
 type removeChangefeedOptions struct {
-	apiClient *apiv1client.APIV1Client
-
-	changefeedID   string
-	optForceRemove bool
+	apiClient    *apiv1client.APIV1Client
+	changefeedID string
 }
 
 // newRemoveChangefeedOptions creates new options for the `cli changefeed remove` command.
@@ -37,7 +38,6 @@ func newRemoveChangefeedOptions() *removeChangefeedOptions {
 // flags related to template printing to it.
 func (o *removeChangefeedOptions) addFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
-	cmd.PersistentFlags().BoolVarP(&o.optForceRemove, "force", "f", false, "remove all information of the changefeed")
 	_ = cmd.MarkPersistentFlagRequired("changefeed-id")
 }
 
@@ -47,14 +47,58 @@ func (o *removeChangefeedOptions) complete(f factory.Factory) error {
 	if err != nil {
 		return err
 	}
+
 	o.apiClient = apiClient
 	return nil
 }
 
 // run the `cli changefeed remove` command.
-func (o *removeChangefeedOptions) run() error {
+func (o *removeChangefeedOptions) run(cmd *cobra.Command) error {
 	ctx := context.GetDefaultContext()
-	return o.apiClient.Changefeeds().Delete(ctx, o.changefeedID, o.optForceRemove)
+
+	changefeedDetail, err := o.apiClient.Changefeeds().Get(ctx, o.changefeedID)
+	if err != nil {
+		if strings.Contains(err.Error(), "ErrChangeFeedNotExists") {
+			cmd.Printf("Changefeed not found.\nID: %s\n", o.changefeedID)
+			return nil
+		}
+
+		cmd.Printf("Changefeed remove failed.\nID: %s\nError: %s\n", o.changefeedID,
+			err.Error())
+		return err
+	}
+	checkpointTs := changefeedDetail.CheckpointTSO
+	sinkURI := changefeedDetail.SinkURI
+
+	err = o.apiClient.Changefeeds().Delete(ctx, o.changefeedID)
+	if err != nil {
+		cmd.Printf("Changefeed remove failed.\nID: %s\nError: %s\n", o.changefeedID,
+			err.Error())
+		return err
+	}
+
+	_, err = o.apiClient.Changefeeds().Get(ctx, o.changefeedID)
+	// Should never happen here. This checking is for defending.
+	// The reason is that changefeed query to owner is invoked in the subsequent owner
+	// Tick and in that Tick, the in-memory data structure and the metadata stored in
+	// etcd is already deleted.
+	if err == nil {
+		err = cerror.ErrChangeFeedDeletionUnfinished.GenWithStackByArgs(o.changefeedID)
+	}
+
+	if strings.Contains(err.Error(), "ErrChangeFeedNotExists") {
+		err = nil
+	}
+
+	if err == nil {
+		cmd.Printf("Changefeed remove successfully.\nID: %s\nCheckpointTs: %d\nSinkURI: %s\n",
+			o.changefeedID, checkpointTs, sinkURI)
+	} else {
+		cmd.Printf("Changefeed remove failed.\nID: %s\nError: %s\n", o.changefeedID,
+			err.Error())
+	}
+
+	return err
 }
 
 // newCmdRemoveChangefeed creates the `cli changefeed remove` command.
@@ -71,7 +115,7 @@ func newCmdRemoveChangefeed(f factory.Factory) *cobra.Command {
 				return err
 			}
 
-			return o.run()
+			return o.run(cmd)
 		},
 	}
 
