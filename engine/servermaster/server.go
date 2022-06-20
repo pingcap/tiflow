@@ -774,13 +774,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 				// errgCtx is a leaderCtx actually
 				return perrors.Trace(errgCtx.Err())
 			case <-leaderTicker.C:
-				if !s.isEtcdLeader() {
-					log.L().Info("etcd leader changed, resigns server master leader",
-						zap.String("old-leader-name", s.name()))
-					return derrors.ErrEtcdLeaderChanged.GenWithStackByArgs()
-				}
-				err := s.jobManager.Poll(errgCtx)
-				if err != nil {
+				if err := s.jobManager.Poll(errgCtx); err != nil {
 					log.L().Warn("Polling JobManager failed", zap.Error(err))
 					return err
 				}
