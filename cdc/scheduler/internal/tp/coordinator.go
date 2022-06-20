@@ -95,6 +95,7 @@ func newCoordinator(
 		schedulers:   schedulers,
 		replicationM: newReplicationManager(cfg.MaxTaskConcurrency, changefeedID),
 		captureM:     newCaptureManager(changefeedID, revision, cfg.HeartbeatTick),
+		changefeedID: changefeedID,
 		tasksCounter: make(map[struct {
 			scheduler string
 			task      string
@@ -169,6 +170,13 @@ func (c *coordinator) Close(ctx context.Context) {
 	defer c.mu.Unlock()
 
 	_ = c.trans.Close()
+	c.captureM.CleanMetrics()
+	c.replicationM.CleanMetrics()
+
+	log.Info("tpscheduler: coordinator closed",
+		zap.Any("ownerRev", c.captureM.OwnerRev),
+		zap.String("namespace", c.changefeedID.Namespace),
+		zap.String("name", c.changefeedID.ID))
 }
 
 // ===========
