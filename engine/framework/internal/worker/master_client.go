@@ -62,6 +62,8 @@ type MasterClient struct {
 	timeoutConfig   config.TimeoutConfig
 	messageSender   p2p.MessageSender
 	frameMetaClient pkgOrm.Client
+
+	clk clock.Clock
 }
 
 // NewMasterClient creates a new MasterClient.
@@ -71,6 +73,7 @@ func NewMasterClient(
 	messageSender p2p.MessageSender,
 	metaCli pkgOrm.Client,
 	initTime clock.MonotonicTime,
+	clk clock.Clock,
 ) *MasterClient {
 	return &MasterClient{
 		masterID:                masterID,
@@ -81,6 +84,7 @@ func NewMasterClient(
 		closeState:              *atomic.NewInt32(masterClientNormal),
 		closeCh:                 make(chan struct{}),
 		timeoutConfig:           config.DefaultTimeoutConfig(),
+		clk:                     clk,
 	}
 }
 
@@ -212,10 +216,10 @@ func (m *MasterClient) HandleHeartbeat(sender p2p.NodeID, msg *frameModel.Heartb
 
 // CheckMasterTimeout checks whether the master has timed out, i.e. we have lost
 // contact with the master for a while.
-func (m *MasterClient) CheckMasterTimeout(clk clock.Clock) (ok bool, err error) {
+func (m *MasterClient) CheckMasterTimeout() (ok bool, err error) {
 	lastMasterAckedPingTime := clock.MonotonicTime(m.lastMasterAckedPingTime.Load())
 
-	sinceLastAcked := clk.Mono().Sub(lastMasterAckedPingTime)
+	sinceLastAcked := m.clk.Mono().Sub(lastMasterAckedPingTime)
 	if sinceLastAcked <= 2*m.timeoutConfig.WorkerHeartbeatInterval {
 		return true, nil
 	}
@@ -232,13 +236,13 @@ func (m *MasterClient) CheckMasterTimeout(clk clock.Clock) (ok bool, err error) 
 }
 
 // SendHeartBeat sends a heartbeat to the master.
-func (m *MasterClient) SendHeartBeat(ctx context.Context, clock clock.Clock) error {
+func (m *MasterClient) SendHeartBeat(ctx context.Context) error {
 	nodeID, epoch := m.getMasterInfo()
 	// We use the monotonic time because we would like to serialize a local timestamp.
 	// The timestamp will be returned in a PONG for time-out check, so we need
 	// the timestamp to be a local monotonic timestamp, which is not exposed by the
 	// standard library `time`.
-	sendTime := clock.Mono()
+	sendTime := m.clk.Mono()
 	isFinished := m.closeState.Load() == masterClientClosing
 
 	heartbeatMsg := &frameModel.HeartbeatPingMessage{
@@ -288,9 +292,14 @@ func (m *MasterClient) WaitClosed(ctx context.Context) error {
 		return nil
 	}
 
+	timer := m.clk.Timer(workerExitWaitForMasterTimeout)
+	defer timer.Stop()
+
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
+	case <-timer.C:
+		return errors.Trace(context.DeadlineExceeded)
 	case <-m.closeCh:
 	}
 

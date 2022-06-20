@@ -41,3 +41,9 @@ func TestIsFailFastErrorFalse(t *testing.T) {
 	anyErr := errors.New("test")
 	require.False(t, IsFailFastError(anyErr))
 }
+
+func TestFailFastWrapNil(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, FailFast(nil))
+}

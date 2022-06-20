@@ -131,8 +131,7 @@ type DefaultBaseWorker struct {
 	cancelBgTasks context.CancelFunc
 	cancelPool    context.CancelFunc
 
-	exitController *worker.ExitController
-	closeImplOnce  sync.Once
+	closeImplOnce sync.Once
 
 	clock clock.Clock
 
@@ -208,12 +207,6 @@ func (w *DefaultBaseWorker) Workload() model.RescUnit {
 	return w.Impl.Workload()
 }
 
-// NotifyExit implements BaseWorker.NotifyExit
-func (w *DefaultBaseWorker) NotifyExit(ctx context.Context, errIn error) error {
-	// No-op for now.
-	return nil
-}
-
 // Init implements BaseWorker.Init
 func (w *DefaultBaseWorker) Init(ctx context.Context) error {
 	ctx = w.errCenter.WithCancelOnFirstError(ctx)
@@ -231,6 +224,27 @@ func (w *DefaultBaseWorker) Init(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// NotifyExit implements BaseWorker.NotifyExit
+func (w *DefaultBaseWorker) NotifyExit(ctx context.Context, errIn error) (retErr error) {
+	w.closeImplOnce.Do(func() {
+		// Must ensure that the business logic is
+		// notified before closing.
+		w.callCloseImpl()
+	})
+
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime)
+		w.logger.Info("worker finished exiting",
+			zap.NamedError("caused", errIn),
+			zap.Duration("duration", duration),
+			log.ShortError(retErr))
+	}()
+
+	w.logger.Info("worker start exiting", zap.NamedError("cause", errIn))
+	return w.masterClient.WaitClosed(ctx)
 }
 
 func (w *DefaultBaseWorker) doPreInit(ctx context.Context) (retErr error) {
@@ -270,21 +284,8 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) (retErr error) {
 		w.id,
 		w.messageSender,
 		w.frameMetaClient,
-		initTime)
-
-	w.exitController = worker.NewExitController(
-		w.masterClient,
-		w.errCenter,
-		worker.WithClock(w.clock),
-		// TODO use a logger passed down from the caller.
-		worker.WithLogger(log.L().WithFields(
-			zap.String("worker-id", w.id),
-			zap.String("master-id", w.masterID))),
-		worker.WithPrepareExitFunc(func() {
-			w.closeImplOnce.Do(func() {
-				w.callCloseImpl()
-			})
-		}))
+		initTime,
+		w.clock)
 
 	w.workerMetaClient = metadata.NewWorkerMetadataClient(w.masterID, w.frameMetaClient)
 
@@ -324,8 +325,7 @@ func (w *DefaultBaseWorker) doPostInit(ctx context.Context) error {
 }
 
 func (w *DefaultBaseWorker) doPoll(ctx context.Context) error {
-	err := w.exitController.PollExit()
-	if err != nil {
+	if err := w.errCenter.CheckError(); err != nil {
 		return err
 	}
 
@@ -341,14 +341,12 @@ func (w *DefaultBaseWorker) Poll(ctx context.Context) error {
 	ctx = w.errCenter.WithCancelOnFirstError(ctx)
 
 	if err := w.doPoll(ctx); err != nil {
-		if derror.ErrWorkerHalfExit.NotEqual(err) {
-			return err
-		}
-		return nil
+		return err
 	}
 
 	if err := w.Impl.Tick(ctx); err != nil {
 		w.errCenter.OnError(err)
+		return err
 	}
 	return nil
 }
@@ -402,7 +400,8 @@ func (w *DefaultBaseWorker) callCloseImpl() {
 	err := w.Impl.CloseImpl(closeCtx)
 	if err != nil {
 		log.L().Warn("Failed to close worker",
-			zap.String("worker-id", w.id))
+			zap.String("worker-id", w.id),
+			log.ShortError(err))
 	}
 }
 
@@ -524,7 +523,7 @@ func (w *DefaultBaseWorker) runHeartbeatWorker(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case <-ticker.C:
-			if err := w.masterClient.SendHeartBeat(ctx, w.clock); err != nil {
+			if err := w.masterClient.SendHeartBeat(ctx); err != nil {
 				return errors.Trace(err)
 			}
 		}
@@ -540,13 +539,12 @@ func (w *DefaultBaseWorker) runWatchDog(ctx context.Context) error {
 		case <-ticker.C:
 		}
 
-		isNormal, err := w.masterClient.CheckMasterTimeout(w.clock)
+		isNormal, err := w.masterClient.CheckMasterTimeout()
 		if err != nil {
 			return errors.Trace(err)
 		}
 		if !isNormal {
 			errOut := derror.ErrWorkerSuicide.GenWithStackByArgs(w.masterClient.MasterID())
-			w.exitController.ForceExit(errOut)
 			return errOut
 		}
 	}

@@ -25,6 +25,9 @@ type FailFastError struct {
 // FailFast wraps an error and marks it as needing to fail
 // the worker or master immediately.
 func FailFast(errIn error) error {
+	if errIn == nil {
+		return nil
+	}
 	return &FailFastError{cause: errIn}
 }
 

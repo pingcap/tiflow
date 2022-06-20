@@ -33,6 +33,7 @@ type masterClientTestHelper struct {
 	Meta          pkgOrm.Client
 	MessageSender *p2p.MockMessageSender
 	InitTime      time.Time
+	Clk           *clock.Mock
 
 	wg         sync.WaitGroup
 	closeErrCh chan error
@@ -49,18 +50,21 @@ func newMasterClientTestHelper(
 
 	initTime := time.Now()
 	msgSender := p2p.NewMockMessageSender()
+	clk := clock.NewMock()
 	masterCli := NewMasterClient(
 		masterID,
 		workerID,
 		msgSender,
 		meta,
-		clock.ToMono(initTime))
+		clock.ToMono(initTime),
+		clk)
 
 	return &masterClientTestHelper{
 		Client:        masterCli,
 		Meta:          meta,
 		MessageSender: msgSender,
 		InitTime:      initTime,
+		Clk:           clk,
 		closeErrCh:    make(chan error, 1),
 	}
 }
@@ -152,11 +156,10 @@ func TestMasterClientHeartbeat(t *testing.T) {
 	err = helper.Client.InitMasterInfoFromMeta(context.Background())
 	require.NoError(t, err)
 
-	clk := clock.NewMock()
 	sendTime1 := helper.InitTime.Add(1 * time.Second)
-	clk.Set(sendTime1)
+	helper.Clk.Set(sendTime1)
 
-	err = helper.Client.SendHeartBeat(context.Background(), clk)
+	err = helper.Client.SendHeartBeat(context.Background())
 	require.NoError(t, err)
 
 	ping := helper.PopHeartbeat(t)
@@ -176,7 +179,7 @@ func TestMasterClientHeartbeat(t *testing.T) {
 	require.Equal(t, clock.ToMono(sendTime1), helper.Client.getLastMasterAckedPingTime())
 
 	sendTime2 := helper.InitTime.Add(2 * time.Second)
-	clk.Set(sendTime2)
+	helper.Clk.Set(sendTime2)
 
 	helper.SimulateWorkerClose(1 * time.Second)
 
@@ -184,7 +187,7 @@ func TestMasterClientHeartbeat(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Send a heartbeat with IsFinished set to true
-	err = helper.Client.SendHeartBeat(context.Background(), clk)
+	err = helper.Client.SendHeartBeat(context.Background())
 	require.NoError(t, err)
 	ping = helper.PopHeartbeat(t)
 	require.Equal(t, &frameModel.HeartbeatPingMessage{
@@ -229,11 +232,10 @@ func TestMasterClientHeartbeatMismatch(t *testing.T) {
 	err = helper.Client.InitMasterInfoFromMeta(context.Background())
 	require.NoError(t, err)
 
-	clk := clock.NewMock()
 	sendTime1 := helper.InitTime.Add(1 * time.Second)
-	clk.Set(sendTime1)
+	helper.Clk.Set(sendTime1)
 
-	err = helper.Client.SendHeartBeat(context.Background(), clk)
+	err = helper.Client.SendHeartBeat(context.Background())
 	require.NoError(t, err)
 
 	ping := helper.PopHeartbeat(t)
@@ -287,9 +289,8 @@ func TestMasterClientHeartbeatLargerEpoch(t *testing.T) {
 	require.Equal(t, "executor-1", nodeID)
 	require.Equal(t, frameModel.Epoch(1), epoch)
 
-	clk := clock.NewMock()
 	sendTime1 := helper.InitTime.Add(1 * time.Second)
-	clk.Set(sendTime1)
+	helper.Clk.Set(sendTime1)
 
 	helper.Client.HandleHeartbeat("executor-2", &frameModel.HeartbeatPongMessage{
 		SendTime:   clock.ToMono(sendTime1),
@@ -320,10 +321,9 @@ func TestMasterClientTimeoutFromInit(t *testing.T) {
 
 	// Add a delta more than the timeout threshould
 	currentTime := helper.InitTime.Add(time.Minute)
-	clk := clock.NewMock()
-	clk.Set(currentTime)
+	helper.Clk.Set(currentTime)
 
-	ok, err := helper.Client.CheckMasterTimeout(clk)
+	ok, err := helper.Client.CheckMasterTimeout()
 	// False indicates having timed out.
 	require.False(t, ok)
 	require.NoError(t, err)
@@ -350,8 +350,7 @@ func TestMasterClientCheckTimeoutRefreshMaster(t *testing.T) {
 	// Add a delta more than two heartbeat intervals,
 	// but less than the timeout threshold.
 	currentTime := helper.InitTime.Add(config.DefaultTimeoutConfig().WorkerHeartbeatInterval * 3)
-	clk := clock.NewMock()
-	clk.Set(currentTime)
+	helper.Clk.Set(currentTime)
 
 	// Simulates a master failover
 	err = helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMetaKVData{
@@ -363,7 +362,7 @@ func TestMasterClientCheckTimeoutRefreshMaster(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ok, err := helper.Client.CheckMasterTimeout(clk)
+	ok, err := helper.Client.CheckMasterTimeout()
 	require.True(t, ok) // not timed out
 	require.NoError(t, err)
 
@@ -406,7 +405,7 @@ func TestMasterClientSendHeartbeatRefreshMaster(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = helper.Client.SendHeartBeat(context.Background(), clock.New())
+	err = helper.Client.SendHeartBeat(context.Background())
 	require.NoError(t, err)
 
 	// Since the refreshing happens asynchronously,
