@@ -127,39 +127,9 @@ func (s *schemaWrap4Owner) BuildDDLEvent(job *timodel.Job) (*model.DDLEvent, err
 	return ddlEvent, nil
 }
 
-func (s *schemaWrap4Owner) SinkTableInfos() []*model.SimpleTableInfo {
-	var sinkTableInfos []*model.SimpleTableInfo
-	for tableID := range s.schemaSnapshot.CloneTables() {
-		tblInfo, ok := s.schemaSnapshot.TableByID(tableID)
-		if !ok {
-			log.Panic("table not found for table ID", zap.Int64("tid", tableID))
-		}
-		if s.shouldIgnoreTable(tblInfo) {
-			continue
-		}
-		dbInfo, ok := s.schemaSnapshot.SchemaByTableID(tableID)
-		if !ok {
-			log.Panic("schema not found for table ID", zap.Int64("tid", tableID))
-		}
-
-		// TODO separate function for initializing SimpleTableInfo
-		sinkTableInfo := new(model.SimpleTableInfo)
-		sinkTableInfo.Schema = dbInfo.Name.O
-		sinkTableInfo.TableID = tableID
-		sinkTableInfo.Table = tblInfo.TableName.Table
-		sinkTableInfo.ColumnInfo = make([]*model.ColumnInfo, len(tblInfo.Cols()))
-		for i, colInfo := range tblInfo.Cols() {
-			sinkTableInfo.ColumnInfo[i] = new(model.ColumnInfo)
-			sinkTableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
-		}
-		sinkTableInfos = append(sinkTableInfos, sinkTableInfo)
-	}
-	return sinkTableInfos
-}
-
-func (s *schemaWrap4Owner) shouldIgnoreTable(tableInfo *model.TableInfo) bool {
-	schemaName := tableInfo.TableName.Schema
-	tableName := tableInfo.TableName.Table
+func (s *schemaWrap4Owner) shouldIgnoreTable(t *model.TableInfo) bool {
+	schemaName := t.TableName.Schema
+	tableName := t.TableName.Table
 	if s.filter.ShouldIgnoreTable(schemaName, tableName) {
 		return true
 	}
@@ -167,6 +137,7 @@ func (s *schemaWrap4Owner) shouldIgnoreTable(tableInfo *model.TableInfo) bool {
 		// skip the mark table if cyclic is enabled
 		return true
 	}
+
 	if !tableInfo.IsEligible(s.config.ForceReplicate) {
 		log.Warn("skip ineligible table",
 			zap.Int64("tableID", tableInfo.ID),

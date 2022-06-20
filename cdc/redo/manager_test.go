@@ -15,6 +15,8 @@ package redo
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -173,6 +175,81 @@ func TestLogManagerInProcessor(t *testing.T) {
 	require.Nil(t, err)
 }
 
+// TestUpdateResolvedTsWithDelayedTable tests redo manager doesn't move resolved
+// ts forward if one or more tables resolved ts are not returned from underlying
+// writer, this secenario happens when there is no data or resolved ts of this
+// table sent to redo log writer yet.
+func TestUpdateResolvedTsWithDelayedTable(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cfg := &config.ConsistentConfig{
+		Level:   string(consistentLevelEventual),
+		Storage: "blackhole://",
+	}
+	errCh := make(chan error, 1)
+	opts := &ManagerOptions{
+		EnableBgRunner: true,
+		ErrCh:          errCh,
+	}
+	logMgr, err := NewManager(ctx, cfg, opts)
+	require.Nil(t, err)
+
+	var (
+		table53 = int64(53)
+		table55 = int64(55)
+		table57 = int64(57)
+
+		startTs   = uint64(100)
+		table53Ts = uint64(125)
+		table55Ts = uint64(120)
+		table57Ts = uint64(110)
+	)
+	tables := []model.TableID{table53, table55, table57}
+	for _, tableID := range tables {
+		logMgr.AddTable(tableID, startTs)
+	}
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		logMgr.bgWriteLog(ctx, errCh)
+	}()
+
+	// table 53 has new data, resolved-ts moves forward to 125
+	rows := []*model.RowChangedEvent{
+		{CommitTs: table53Ts, Table: &model.TableName{TableID: table53}},
+		{CommitTs: table53Ts, Table: &model.TableName{TableID: table53}},
+	}
+	err = logMgr.EmitRowChangedEvents(ctx, table53, rows...)
+	require.Nil(t, err)
+	require.Eventually(t, func() bool {
+		tsMap, err := logMgr.writer.GetCurrentResolvedTs(ctx, []int64{table53})
+		require.Nil(t, err)
+		ts, ok := tsMap[table53]
+		return ok && ts == table53Ts
+	}, time.Second, time.Millisecond*10)
+
+	// table 55 has no data, but receives resolved-ts event and moves forward to 120
+	err = logMgr.FlushLog(ctx, table55, table55Ts)
+	require.Nil(t, err)
+
+	// get min resolved ts should take each table into consideration
+	err = logMgr.updateTableResolvedTs(ctx)
+	require.Nil(t, err)
+	require.Equal(t, startTs, logMgr.GetMinResolvedTs())
+
+	// table 57 moves forward, update table resolved ts and check again
+	err = logMgr.FlushLog(ctx, table57, table57Ts)
+	require.Nil(t, err)
+	err = logMgr.updateTableResolvedTs(ctx)
+	require.Nil(t, err)
+	require.Equal(t, table57Ts, logMgr.GetMinResolvedTs())
+
+	cancel()
+	wg.Wait()
+}
+
 // TestLogManagerInOwner tests how redo log manager is used in owner,
 // where the redo log manager needs to handle DDL event only.
 func TestLogManagerInOwner(t *testing.T) {
@@ -196,4 +273,74 @@ func TestLogManagerInOwner(t *testing.T) {
 
 	err = logMgr.writer.DeleteAllLogs(ctx)
 	require.Nil(t, err)
+}
+
+// TestWriteLogFlushLogSequence tests flush log must be executed after table's
+// log has been written to writer.
+func TestWriteLogFlushLogSequence(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cfg := &config.ConsistentConfig{
+		Level:   string(consistentLevelEventual),
+		Storage: "blackhole://",
+	}
+	errCh := make(chan error, 1)
+	opts := &ManagerOptions{
+		EnableBgRunner: false,
+		ErrCh:          errCh,
+	}
+	logMgr, err := NewManager(ctx, cfg, opts)
+	require.Nil(t, err)
+
+	var (
+		wg sync.WaitGroup
+
+		tableID    = int64(53)
+		startTs    = uint64(100)
+		resolvedTs = uint64(150)
+	)
+	logMgr.AddTable(tableID, startTs)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		select {
+		case <-ctx.Done():
+			return
+		case err := <-errCh:
+			require.Nil(t, err)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		// FlushLog blocks until bgWriteLog consumes data and close callback chan.
+		err := logMgr.FlushLog(ctx, tableID, resolvedTs)
+		require.Nil(t, err)
+	}()
+
+	// Sleep a short time to ensure `logMgr.FlushLog` is called
+	time.Sleep(time.Millisecond * 100)
+	// FlushLog is still ongoing
+	require.Equal(t, int64(1), atomic.LoadInt64(&logMgr.flushing))
+	err = logMgr.updateTableResolvedTs(ctx)
+	require.Nil(t, err)
+	require.Equal(t, startTs, logMgr.GetMinResolvedTs())
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		logMgr.bgWriteLog(ctx, errCh)
+	}()
+
+	require.Eventually(t, func() bool {
+		err = logMgr.updateTableResolvedTs(ctx)
+		require.Nil(t, err)
+		return logMgr.GetMinResolvedTs() == resolvedTs
+	}, time.Second, time.Millisecond*20)
+
+	cancel()
+	wg.Wait()
 }

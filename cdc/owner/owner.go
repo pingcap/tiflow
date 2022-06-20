@@ -244,6 +244,7 @@ func (o *Owner) WriteDebugInfo(w io.Writer) {
 // AsyncStop stops the owner asynchronously
 func (o *Owner) AsyncStop() {
 	atomic.StoreInt32(&o.closed, 1)
+	o.cleanStaleMetrics()
 }
 
 func (o *Owner) cleanUpChangefeed(state *orchestrator.ChangefeedReactorState) {
@@ -273,6 +274,7 @@ func (o *Owner) cleanUpChangefeed(state *orchestrator.ChangefeedReactorState) {
 // Bootstrap checks if the state contains incompatible or incorrect information and tries to fix it.
 func (o *Owner) Bootstrap(state *orchestrator.GlobalReactorState) {
 	log.Info("Start bootstrapping", zap.Any("state", state))
+	o.cleanStaleMetrics()
 	fixChangefeedInfos(state)
 }
 
@@ -281,11 +283,26 @@ func fixChangefeedInfos(state *orchestrator.GlobalReactorState) {
 	for _, changefeedState := range state.Changefeeds {
 		if changefeedState != nil {
 			changefeedState.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+				if info == nil {
+					return nil, false, nil
+				}
 				info.FixIncompatible()
 				return info, true, nil
 			})
 		}
 	}
+}
+
+func (o *Owner) cleanStaleMetrics() {
+	// The gauge metrics of the Owner should be reset
+	// each time a new owner is launched, in case the previous owner
+	// has crashed and has not cleaned up the stale metrics values.
+	changefeedCheckpointTsGauge.Reset()
+	changefeedCheckpointTsLagGauge.Reset()
+	changefeedResolvedTsGauge.Reset()
+	changefeedResolvedTsLagGauge.Reset()
+	ownerMaintainTableNumGauge.Reset()
+	changefeedStatusGauge.Reset()
 }
 
 func (o *Owner) updateMetrics(state *orchestrator.GlobalReactorState) {
@@ -297,6 +314,7 @@ func (o *Owner) updateMetrics(state *orchestrator.GlobalReactorState) {
 
 	ownerMaintainTableNumGauge.Reset()
 	changefeedStatusGauge.Reset()
+
 	for changefeedID, changefeedState := range state.Changefeeds {
 		for captureID, captureInfo := range state.Captures {
 			taskStatus, exist := changefeedState.TaskStatuses[captureID]

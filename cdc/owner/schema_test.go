@@ -149,28 +149,3 @@ func (s *schemaSuite) TestBuildDDLEvent(c *check.C) {
 		},
 	})
 }
-
-func (s *schemaSuite) TestSinkTableInfos(c *check.C) {
-	defer testleak.AfterTest(c)()
-	helper := entry.NewSchemaTestHelper(c)
-	defer helper.Close()
-	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
-	c.Assert(err, check.IsNil)
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig(), dummyChangeFeedID)
-	c.Assert(err, check.IsNil)
-	// add normal table
-	job := helper.DDL2Job("create table test.t1(id int primary key)")
-	tableIDT1 := job.BinlogInfo.TableInfo.ID
-	c.Assert(schema.HandleDDL(job), check.IsNil)
-	// add ineligible table
-	job = helper.DDL2Job("create table test.t2(id int)")
-	c.Assert(schema.HandleDDL(job), check.IsNil)
-	c.Assert(schema.SinkTableInfos(), check.DeepEquals, []*model.SimpleTableInfo{
-		{
-			Schema:     "test",
-			Table:      "t1",
-			TableID:    tableIDT1,
-			ColumnInfo: []*model.ColumnInfo{{Name: "id", Type: mysql.TypeLong}},
-		},
-	})
-}

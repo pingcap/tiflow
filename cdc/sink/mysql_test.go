@@ -1083,6 +1083,9 @@ func TestNewMySQLSink(t *testing.T) {
 	require.Nil(t, err)
 	err = sink.Close(ctx)
 	require.Nil(t, err)
+	// Test idempotency of `Close` interface
+	err = sink.Close(ctx)
+	require.Nil(t, err)
 }
 
 func TestMySQLSinkClose(t *testing.T) {
@@ -1209,4 +1212,33 @@ func TestMySQLSinkFlushResovledTs(t *testing.T) {
 	require.Equal(t, uint64(5), sink.getTableCheckpointTs(model.TableID(2)))
 	err = sink.Close(ctx)
 	require.Nil(t, err)
+}
+
+func TestCleanTableResource(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+	tblID := model.TableID(1)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig())
+	require.Nil(t, err)
+	s := &mysqlSink{
+		txnCache:   common.NewUnresolvedTxnCache(),
+		filter:     f,
+		statistics: NewStatistics(ctx, "db"),
+	}
+	require.Nil(t, s.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
+		Table: &model.TableName{TableID: tblID, Schema: "test", Table: "t1"},
+	}))
+	s.tableCheckpointTs.Store(tblID, uint64(1))
+	s.tableMaxResolvedTs.Store(tblID, uint64(2))
+	require.Nil(t, s.Init(tblID))
+	m := &sync.Map{}
+	m.Store(tblID, uint64(10))
+	_, ret := s.txnCache.Resolved(m)
+	require.True(t, len(ret) == 0)
+	_, ok := s.tableCheckpointTs.Load(tblID)
+	require.False(t, ok)
+	_, ok = s.tableMaxResolvedTs.Load(tblID)
+	require.False(t, ok)
 }
