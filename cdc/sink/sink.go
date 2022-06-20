@@ -115,7 +115,6 @@ func init() {
 		errCh chan error,
 	) (Sink, error) {
 		return mysql.NewMySQLSink(ctx, changefeedID, sinkURI, config)
-
 	}
 	sinkIniterMap["tidb"] = sinkIniterMap["mysql"]
 	sinkIniterMap["mysql+ssl"] = sinkIniterMap["mysql"]
@@ -170,7 +169,6 @@ func New(
 }
 
 // Validate sink if given valid parameters.
-
 func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig) error {
 	errCh := make(chan error)
 	// TODO: find a better way to verify a sinkURI is valid

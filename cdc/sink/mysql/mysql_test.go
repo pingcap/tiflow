@@ -37,7 +37,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -1939,11 +1938,9 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&batch-replace-size=1")
 	require.Nil(t, err)
 	rc := config.GetDefaultReplicaConfig()
-	f, err := filter.NewFilter(rc)
-	require.Nil(t, err)
 	sink, err := NewMySQLSink(ctx,
 		model.DefaultChangeFeedID(changefeed),
-		sinkURI, f, rc)
+		sinkURI, rc)
 	require.Nil(t, err)
 
 	rows := []*model.RowChangedEvent{

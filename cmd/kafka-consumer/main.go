@@ -415,7 +415,6 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 		s, err := sink.New(ctx,
 			model.DefaultChangeFeedID("kafka-consumer"),
 			downstreamURIStr, config.GetDefaultReplicaConfig(), errCh)
-
 		if err != nil {
 			cancel()
 			return nil, errors.Trace(err)
@@ -424,8 +423,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	}
 	sink, err := sink.New(ctx,
 		model.DefaultChangeFeedID("kafka-consumer"),
-		downstreamURIStr, config.GetDefaultReplicaConfig(), opts, errCh)
-
+		downstreamURIStr, config.GetDefaultReplicaConfig(), errCh)
 	if err != nil {
 		cancel()
 		return nil, errors.Trace(err)
