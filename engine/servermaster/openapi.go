@@ -185,7 +185,7 @@ func (o *OpenAPI) ForwardJobMaster(c *gin.Context) {
 
 	jobID := c.Param(apiOpVarJobID)
 	if jobID == "" {
-		c.AbortWithError(http.StatusBadRequest, errors.New("job id must not be empty"))
+		_ = c.AbortWithError(http.StatusBadRequest, errors.New("job id must not be empty"))
 	}
 
 	ctx := c.Request.Context()
@@ -194,23 +194,24 @@ func (o *OpenAPI) ForwardJobMaster(c *gin.Context) {
 		if resp.Err.Code == pb.ErrorCode_UnKnownJob {
 			c.AbortWithStatus(http.StatusNotFound)
 		} else {
-			c.AbortWithError(http.StatusInternalServerError, errors.New(resp.Err.String()))
+			_ = c.AbortWithError(http.StatusInternalServerError, errors.New(resp.Err.String()))
 		}
 		return
 	}
 
 	if resp.Status != pb.QueryJobResponse_online {
-		c.AbortWithError(http.StatusServiceUnavailable, errors.New("job is not online"))
+		_ = c.AbortWithError(http.StatusServiceUnavailable, errors.New("job is not online"))
+		return
 	}
 	if resp.JobMasterInfo == nil {
-		c.AbortWithError(http.StatusInternalServerError, errors.New("couldn't find job master info"))
+		_ = c.AbortWithError(http.StatusInternalServerError, errors.New("couldn't find job master info"))
 		return
 	}
 
 	executorID := model.ExecutorID(resp.JobMasterInfo.ExecutorId)
 	addr, ok := o.execMgr.GetAddr(executorID)
 	if !ok {
-		c.AbortWithError(http.StatusInternalServerError, errors.New("couldn't find executor address"))
+		_ = c.AbortWithError(http.StatusInternalServerError, errors.New("couldn't find executor address"))
 		return
 	}
 
@@ -221,7 +222,7 @@ func (o *OpenAPI) ForwardJobMaster(c *gin.Context) {
 	}
 	u, err := url.Parse(execURL)
 	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("invalid executor address: %s", addr))
+		_ = c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("invalid executor address: %s", addr))
 		return
 	}
 

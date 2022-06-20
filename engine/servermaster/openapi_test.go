@@ -50,9 +50,8 @@ func (m mockManager) QueryJob(ctx context.Context, req *pb.QueryJobRequest) *pb.
 func (m mockManager) GetAddr(executorID model.ExecutorID) (string, bool) {
 	if executorID == "executor1" {
 		return m.execAddr, true
-	} else {
-		return "", false
 	}
+	return "", false
 }
 
 func TestOpenAPI(t *testing.T) {
