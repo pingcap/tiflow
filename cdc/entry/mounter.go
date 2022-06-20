@@ -115,7 +115,6 @@ func (m *mounterImpl) DecodeEvent(ctx context.Context, pEvent *model.Polymorphic
 		pEvent.Row.StartTs,
 		pEvent.Row.Table.Schema,
 		pEvent.Row.Table.Table)
-
 	duration := time.Since(start)
 	if duration > time.Second {
 		m.metricMountDuration.Observe(duration.Seconds())

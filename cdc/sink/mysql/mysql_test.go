@@ -1540,9 +1540,6 @@ func TestNewMySQLSinkExecDDL(t *testing.T) {
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
 	require.Nil(t, err)
 	rc := config.GetDefaultReplicaConfig()
-	rc.Filter = &config.FilterConfig{
-		Rules: []string{"test.t1"},
-	}
 	sink, err := NewMySQLSink(ctx,
 		model.DefaultChangeFeedID(changefeed),
 		sinkURI, rc)
@@ -1559,22 +1556,8 @@ func TestNewMySQLSinkExecDDL(t *testing.T) {
 		Type:  timodel.ActionAddColumn,
 		Query: "ALTER TABLE test.t1 ADD COLUMN a int",
 	}
-	ddl2 := &model.DDLEvent{
-		StartTs:  1020,
-		CommitTs: 1030,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "test",
-			Table:  "t2",
-		},
-		Type:  timodel.ActionAddColumn,
-		Query: "ALTER TABLE test.t1 ADD COLUMN a int",
-	}
-
 	err = sink.EmitDDLEvent(ctx, ddl1)
 	require.Nil(t, err)
-	err = sink.EmitDDLEvent(ctx, ddl2)
-	require.True(t, cerror.ErrDDLEventIgnored.Equal(err))
-	// DDL execute failed, but error can be ignored
 	err = sink.EmitDDLEvent(ctx, ddl1)
 	require.Nil(t, err)
 

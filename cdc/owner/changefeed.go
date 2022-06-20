@@ -597,21 +597,7 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		if err != nil {
 			return false, errors.Trace(err)
 		}
-		// filter ddl event here
-		for _, ddlEvent := range ddlEvents {
-			if c.filter.ShouldIgnoreDDLEvent(ddlEvent.StartTs, ddlEvent.Type, ddlEvent.TableInfo.Schema, ddlEvent.TableInfo.Table) {
-				log.Info(
-					"DDL event ignored",
-					zap.String("query", ddlEvent.Query),
-					zap.Uint64("startTs", ddlEvent.StartTs),
-					zap.Uint64("commitTs", ddlEvent.CommitTs),
-					zap.String("namespace", c.id.Namespace),
-					zap.String("changefeed", c.id.ID),
-				)
-				continue
-			}
-			c.ddlEventCache = append(c.ddlEventCache, ddlEvent)
-		}
+		c.ddlEventCache = c.filterDDLEvent(ddlEvents)
 		if c.redoManager.Enabled() {
 			for _, ddlEvent := range c.ddlEventCache {
 				err = c.redoManager.EmitDDLEvent(ctx, ddlEvent)
@@ -660,6 +646,26 @@ func (c *changefeed) asyncExecDDLEvent(ctx cdcContext.Context,
 	}
 
 	return done, nil
+}
+
+func (c *changefeed) filterDDLEvent(ddlEvents []*model.DDLEvent) []*model.DDLEvent {
+	res := make([]*model.DDLEvent, 0)
+	// filter ddl event here
+	for _, ddlEvent := range ddlEvents {
+		if c.filter.ShouldIgnoreDDLEvent(ddlEvent.StartTs, ddlEvent.Type, ddlEvent.TableInfo.Schema, ddlEvent.TableInfo.Table) {
+			log.Info(
+				"DDL event ignored",
+				zap.String("query", ddlEvent.Query),
+				zap.Uint64("startTs", ddlEvent.StartTs),
+				zap.Uint64("commitTs", ddlEvent.CommitTs),
+				zap.String("namespace", c.id.Namespace),
+				zap.String("changefeed", c.id.ID),
+			)
+			continue
+		}
+		res = append(c.ddlEventCache, ddlEvent)
+	}
+	return res
 }
 
 func (c *changefeed) updateMetrics(currentTs int64, checkpointTs, resolvedTs model.Ts) {
