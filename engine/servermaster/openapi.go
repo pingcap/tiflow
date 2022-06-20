@@ -119,7 +119,7 @@ func (o *OpenAPI) SubmitJob(c *gin.Context) {
 	c.AbortWithStatus(http.StatusNotImplemented)
 }
 
-// QueryJob queries a detail information of a job.
+// QueryJob queries detail information of a job.
 // @Summary Query a job
 // @Description query a detail information of a job
 // @Tags jobs
