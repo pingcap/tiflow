@@ -229,6 +229,8 @@ func (c *captureManager) HandleAliveCaptureUpdate(
 		for id, capture := range c.Captures {
 			c.changes.Init[id] = capture.Tables
 		}
+		log.Info("tpscheduler: all capture initialized",
+			zap.Int("captureCount", len(c.Captures)))
 		c.initialized = true
 	}
 
@@ -251,5 +253,12 @@ func (c *captureManager) CollectMetrics() {
 		captureTableGauge.
 			WithLabelValues(cf.Namespace, cf.ID, capture.Addr).
 			Set(float64(len(capture.Tables)))
+	}
+}
+
+func (c *captureManager) CleanMetrics() {
+	cf := c.changefeedID
+	for _, capture := range c.Captures {
+		captureTableGauge.DeleteLabelValues(cf.Namespace, cf.ID, capture.Addr)
 	}
 }
