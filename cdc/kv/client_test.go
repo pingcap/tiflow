@@ -2995,6 +2995,15 @@ func (s *clientSuite) testKVClientForceReconnect(c *check.C) {
 	cluster.AddStore(1, addr1)
 	cluster.Bootstrap(regionID3, []uint64{1}, []uint64{4}, 4)
 
+	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/kv/kvClientResolveLockInterval", "return(1)")
+	c.Assert(err, check.IsNil)
+	originalReconnectInterval := reconnectInterval
+	reconnectInterval = 3 * time.Second
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientResolveLockInterval")
+		reconnectInterval = originalReconnectInterval
+	}()
+
 	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})

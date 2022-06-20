@@ -189,6 +189,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			var e model.RegionFeedEvent
 			select {
 			case e = <-eventCh:
+			case <-ctx.Done():
+				return errors.Trace(ctx.Err())
 			}
 
 			if e.Val != nil {
