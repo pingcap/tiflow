@@ -795,11 +795,13 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 	require.Equal(t, ReplicationSetStatePrepare, r.State)
 	require.Equal(t, from, r.Secondary)
 
+	affected := false
 	// Secondary shutdown during Prepare, Prepare -> Absent
 	t.Run("AddTableSecondaryShutdownDuringPrepare", func(t *testing.T) {
 		rClone := clone(r)
-		msgs, err = rClone.handleCaptureShutdown(from)
+		msgs, affected, err = rClone.handleCaptureShutdown(from)
 		require.Nil(t, err)
+		require.True(t, affected)
 		require.Len(t, msgs, 0)
 		require.Empty(t, rClone.Captures)
 		require.Equal(t, "", rClone.Primary)
@@ -821,8 +823,9 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 	// Secondary shutdown during Commit, Commit -> Absent
 	t.Run("AddTableSecondaryShutdownDuringCommit", func(t *testing.T) {
 		rClone := clone(r)
-		msgs, err = rClone.handleCaptureShutdown(from)
+		msgs, affected, err = rClone.handleCaptureShutdown(from)
 		require.Nil(t, err)
+		require.True(t, affected)
 		require.Len(t, msgs, 0)
 		require.Empty(t, rClone.Captures)
 		require.Equal(t, "", rClone.Primary)
@@ -844,8 +847,9 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 	// Primary shutdown during Replicating, Replicating -> Absent
 	t.Run("AddTablePrimaryShutdownDuringReplicating", func(t *testing.T) {
 		rClone := clone(r)
-		msgs, err = rClone.handleCaptureShutdown(from)
+		msgs, affected, err = rClone.handleCaptureShutdown(from)
 		require.Nil(t, err)
+		require.True(t, affected)
 		require.Len(t, msgs, 0)
 		require.Empty(t, rClone.Captures)
 		require.Equal(t, "", rClone.Primary)
@@ -864,16 +868,18 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 	// Primary shutdown during Prepare, Prepare -> Prepare
 	t.Run("MoveTablePrimaryShutdownDuringPrepare", func(t *testing.T) {
 		rClone := clone(r)
-		msgs, err = rClone.handleCaptureShutdown(rClone.Primary)
+		msgs, affected, err = rClone.handleCaptureShutdown(rClone.Primary)
 		require.Nil(t, err)
+		require.True(t, affected)
 		require.Len(t, msgs, 0)
 		require.EqualValues(t, map[string]struct{}{dest: {}}, rClone.Captures)
 		require.Equal(t, "", rClone.Primary)
 		require.Equal(t, dest, rClone.Secondary)
 		require.Equal(t, ReplicationSetStatePrepare, rClone.State)
 		// Secondary shutdown after primary shutdown, Prepare -> Absent
-		msgs, err = rClone.handleCaptureShutdown(rClone.Secondary)
+		msgs, affected, err = rClone.handleCaptureShutdown(rClone.Secondary)
 		require.Nil(t, err)
+		require.True(t, affected)
 		require.Len(t, msgs, 0)
 		require.Empty(t, rClone.Captures)
 		require.Equal(t, "", rClone.Primary)
@@ -883,8 +889,9 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 	// Primary shutdown during Prepare, Prepare -> Prepare
 	t.Run("MoveTableSecondaryShutdownDuringPrepare", func(t *testing.T) {
 		rClone := clone(r)
-		msgs, err = rClone.handleCaptureShutdown(rClone.Secondary)
+		msgs, affected, err = rClone.handleCaptureShutdown(rClone.Secondary)
 		require.Nil(t, err)
+		require.True(t, affected)
 		require.Len(t, msgs, 0)
 		require.EqualValues(t, map[string]struct{}{from: {}}, rClone.Captures)
 		require.Equal(t, from, rClone.Primary)
@@ -906,8 +913,9 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 	// Original primary shutdown during Commit, Commit -> Commit
 	t.Run("MoveTableOriginalPrimaryShutdownDuringCommit", func(t *testing.T) {
 		rClone := clone(r)
-		msgs, err = rClone.handleCaptureShutdown(rClone.Primary)
+		msgs, affected, err = rClone.handleCaptureShutdown(rClone.Primary)
 		require.Nil(t, err)
+		require.True(t, affected)
 		require.Len(t, msgs, 1)
 		require.EqualValues(t, &schedulepb.Message{
 			To:      dest,
@@ -927,8 +935,9 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 		require.Equal(t, "", rClone.Secondary)
 		require.Equal(t, ReplicationSetStateCommit, rClone.State)
 		// New primary shutdown after original primary shutdown, Commit -> Absent
-		msgs, err = rClone.handleCaptureShutdown(dest)
+		msgs, affected, err = rClone.handleCaptureShutdown(dest)
 		require.Nil(t, err)
+		require.True(t, affected)
 		require.Len(t, msgs, 0)
 		require.Empty(t, rClone.Captures)
 		require.Equal(t, "", rClone.Primary)
@@ -939,8 +948,9 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 	// Secondary shutdown during Commit, Commit -> Commit
 	t.Run("MoveTableSecondaryShutdownDuringCommit", func(t *testing.T) {
 		rClone := clone(r)
-		msgs, err = rClone.handleCaptureShutdown(rClone.Secondary)
+		msgs, affected, err = rClone.handleCaptureShutdown(rClone.Secondary)
 		require.Nil(t, err)
+		require.True(t, affected)
 		require.Len(t, msgs, 0)
 		require.EqualValues(t, map[string]struct{}{from: {}}, rClone.Captures)
 		require.Equal(t, from, rClone.Primary)
@@ -1019,8 +1029,9 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 	require.Equal(t, "", r.Secondary)
 	t.Run("MoveTableNewPrimaryShutdownDuringCommit", func(t *testing.T) {
 		rClone := clone(r)
-		msgs, err = rClone.handleCaptureShutdown(rClone.Primary)
+		msgs, affected, err = rClone.handleCaptureShutdown(rClone.Primary)
 		require.Nil(t, err)
+		require.True(t, affected)
 		require.Len(t, msgs, 0)
 		require.Empty(t, rClone.Captures)
 		require.Equal(t, "", rClone.Primary)
@@ -1038,6 +1049,16 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 	require.Equal(t, ReplicationSetStateReplicating, r.State)
 	require.Equal(t, dest, r.Primary)
 	require.Equal(t, "", r.Secondary)
+
+	// Unknown capture shutdown has no effect.
+	t.Run("UnknownCaptureShutdown", func(t *testing.T) {
+		rClone := clone(r)
+		msgs, affected, err = rClone.handleCaptureShutdown("unknown")
+		require.Nil(t, err)
+		require.False(t, affected)
+		require.Len(t, msgs, 0)
+		require.EqualValues(t, r, rClone)
+	})
 }
 
 func TestReplicationSetMoveTableWithHeartbeatResponse(t *testing.T) {

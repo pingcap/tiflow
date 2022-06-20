@@ -128,11 +128,15 @@ func (r *replicationManager) HandleCaptureChanges(
 	if changes.Removed != nil {
 		for _, table := range r.tables {
 			for captureID := range changes.Removed {
-				msgs, err := table.handleCaptureShutdown(captureID)
+				msgs, affected, err := table.handleCaptureShutdown(captureID)
 				if err != nil {
 					return nil, errors.Trace(err)
 				}
 				sentMsgs = append(sentMsgs, msgs...)
+				if affected {
+					// Cleanup its running task.
+					delete(r.runningTasks, table.TableID)
+				}
 			}
 		}
 	}
@@ -354,11 +358,13 @@ func (r *replicationManager) handleBurstBalanceTasks(
 	for _, task := range task.RemoveTables {
 		perCapture[task.CaptureID]++
 	}
-	fields := make([]zap.Field, 0, len(perCapture))
+	fields := make([]zap.Field, 0, len(perCapture)+3)
 	for captureID, count := range perCapture {
 		fields = append(fields, zap.Int(captureID, count))
 	}
-	fields = append(fields, zap.Int("total", len(task.AddTables)+len(task.RemoveTables)))
+	fields = append(fields, zap.Int("addTable", len(task.AddTables)))
+	fields = append(fields, zap.Int("removeTable", len(task.RemoveTables)))
+	fields = append(fields, zap.Int("moveTable", len(task.MoveTables)))
 	log.Info("tpscheduler: handle burst balance task", fields...)
 
 	sentMsgs := make([]*schedulepb.Message, 0, len(task.AddTables))
@@ -489,5 +495,47 @@ func (r *replicationManager) CollectMetrics() {
 		tableStateGauge.
 			WithLabelValues(cf.Namespace, cf.ID, ReplicationSetState(s).String()).
 			Set(float64(counter))
+	}
+}
+
+func (r *replicationManager) CleanMetrics() {
+	cf := r.changefeedID
+	tableGauge.
+		DeleteLabelValues(cf.Namespace, cf.ID)
+	slowestTableIDGauge.
+		DeleteLabelValues(cf.Namespace, cf.ID)
+	slowestTableStateGauge.
+		DeleteLabelValues(cf.Namespace, cf.ID)
+	slowestTableCheckpointTsGauge.
+		DeleteLabelValues(cf.Namespace, cf.ID)
+	slowestTableResolvedTsGauge.
+		DeleteLabelValues(cf.Namespace, cf.ID)
+	metricAcceptScheduleTask := acceptScheduleTaskCounter.MustCurryWith(map[string]string{
+		"namespace": cf.Namespace, "changefeed": cf.ID,
+	})
+	metricAcceptScheduleTask.DeleteLabelValues("addTable")
+	metricAcceptScheduleTask.DeleteLabelValues("removeTable")
+	metricAcceptScheduleTask.DeleteLabelValues("moveTable")
+	metricAcceptScheduleTask.DeleteLabelValues("burstBalance")
+	var stateCounters [6]int
+	for _, table := range r.tables {
+		switch table.State {
+		case ReplicationSetStateUnknown:
+			stateCounters[ReplicationSetStateUnknown]++
+		case ReplicationSetStateAbsent:
+			stateCounters[ReplicationSetStateAbsent]++
+		case ReplicationSetStatePrepare:
+			stateCounters[ReplicationSetStatePrepare]++
+		case ReplicationSetStateCommit:
+			stateCounters[ReplicationSetStateCommit]++
+		case ReplicationSetStateReplicating:
+			stateCounters[ReplicationSetStateReplicating]++
+		case ReplicationSetStateRemoving:
+			stateCounters[ReplicationSetStateRemoving]++
+		}
+	}
+	for s := range stateCounters {
+		tableStateGauge.
+			DeleteLabelValues(cf.Namespace, cf.ID, ReplicationSetState(s).String())
 	}
 }

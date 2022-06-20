@@ -77,6 +77,13 @@ func (b *basicScheduler) Schedule(
 		for captureID := range captures {
 			captureIDs = append(captureIDs, captureID)
 		}
+		const logTableIDThreshold = 50
+		tableField := zap.Skip()
+		if len(newTables) < logTableIDThreshold {
+			tableField = zap.Int64s("tableIDs", newTables)
+		}
+		log.Info("tpscheduler: burst add table",
+			tableField, zap.Strings("captureIDs", captureIDs))
 		tasks = append(
 			tasks, newBurstBalanceAddTables(checkpointTs, newTables, captureIDs))
 		if len(newTables) == len(currentTables) {
