@@ -20,20 +20,12 @@ import (
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-<<<<<<< HEAD
-=======
 	"github.com/prometheus/client_golang/prometheus"
-	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	clientV3 "go.etcd.io/etcd/client/v3"
-	"go.uber.org/zap"
-	"google.golang.org/grpc/codes"
 
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/retry"
-	"github.com/prometheus/client_golang/prometheus"
-	"go.etcd.io/etcd/clientv3"
 	v3rpc "go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
@@ -67,16 +59,10 @@ const (
 )
 
 var (
-<<<<<<< HEAD
-	TxnEmptyCmps    = []clientv3.Cmp{}
-	TxnEmptyOpsThen = []clientv3.Op{}
-	TxnEmptyOpsElse = []clientv3.Op{}
-=======
 	txnEmptyCmps    = []clientV3.Cmp{}
 	txnEmptyOpsThen = []clientV3.Op{}
 	// TxnEmptyOpsElse is a no-op operation.
 	TxnEmptyOpsElse = []clientV3.Op{}
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 )
 
 // set to var instead of const for mocking the value to speedup test

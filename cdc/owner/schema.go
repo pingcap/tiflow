@@ -167,19 +167,11 @@ func (s *schemaWrap4Owner) shouldIgnoreTable(tableInfo *model.TableInfo) bool {
 		// skip the mark table if cyclic is enabled
 		return true
 	}
-<<<<<<< HEAD
 	if !tableInfo.IsEligible(s.config.ForceReplicate) {
-		log.Warn("skip ineligible table", zap.Int64("tid", tableInfo.ID), zap.Stringer("table", tableInfo.TableName))
-=======
-	if !t.IsEligible(s.config.ForceReplicate) {
-		// Sequence is not supported yet, and always ineligible.
-		// Skip Warn to avoid confusion.
-		// See https://github.com/pingcap/tiflow/issues/4559
-		if !t.IsSequence() {
-			log.Warn("skip ineligible table", zap.Int64("tableID", t.ID),
-				zap.Stringer("tableName", t.TableName), zap.String("changefeed", s.id))
-		}
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+		log.Warn("skip ineligible table",
+			zap.Int64("tableID", tableInfo.ID),
+			zap.Stringer("table", tableInfo.TableName),
+			zap.String("changefeed", s.id))
 		return true
 	}
 	return false
