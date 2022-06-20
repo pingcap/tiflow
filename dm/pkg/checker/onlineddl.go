@@ -17,9 +17,13 @@ import (
 	"context"
 	"database/sql"
 
+<<<<<<< HEAD
 	"github.com/pingcap/tidb-tools/pkg/filter"
+=======
+	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/util/filter"
+>>>>>>> 86b704b71 (utils(dm): fix get tables without using quote schema name (#5896))
 
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 )
 
@@ -48,7 +52,7 @@ func (c *OnlineDDLChecker) Check(ctx context.Context) *Result {
 	}
 
 	for schema := range c.checkSchemas {
-		tableList, err := utils.GetTableList(ctx, c.db, schema)
+		tableList, err := dbutil.GetTables(ctx, c.db, schema)
 		if err != nil {
 			markCheckError(r, err)
 			return r

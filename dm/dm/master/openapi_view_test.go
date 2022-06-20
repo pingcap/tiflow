@@ -265,7 +265,8 @@ func (t *openAPISuite) TestSourceAPI(c *check.C) {
 
 	mockDB = conn.InitMockDB(c)
 	tableName := "CHARACTER_SETS"
-	mockDB.ExpectQuery("SHOW TABLES FROM " + schemaName).WillReturnRows(sqlmock.NewRows([]string{"Tables_in_information_schema"}).AddRow(tableName))
+	mockDB.ExpectQuery("SHOW FULL TABLES IN `information_schema` WHERE Table_Type != 'VIEW';").WillReturnRows(
+		sqlmock.NewRows([]string{"Tables_in_information_schema", "Table_type"}).AddRow(tableName, "BASE TABLE"))
 	tableURL := fmt.Sprintf("%s/%s/schemas/%s", baseURL, source1.SourceName, schemaName)
 	result = testutil.NewRequest().Get(tableURL).GoWithHTTPHandler(t.testT, s.openapiHandles)
 	c.Assert(result.Code(), check.Equals, http.StatusOK)

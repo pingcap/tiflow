@@ -1,0 +1,32 @@
+name: test             # 任务名称，需要全局唯一
+task-mode: all         # 任务模式，可设为 "full"、"incremental"、"all"
+shard-mode: "pessimistic"
+
+target-database:       # 下游数据库实例配置
+  host: "127.0.0.1"
+  port: 4000
+  user: "root"
+  password: ""         # 如果密码不为空，则推荐使用经过 dmctl 加密的密文
+
+## ******** 功能配置集 **********
+block-allow-list:        # 上游数据库实例匹配的表的 block-allow-list 过滤规则集，如果 DM 版本 <= v2.0.0-beta.2 则使用 black-white-list
+  bw-rule-1:             # 黑白名单配置的名称
+    do-dbs: ["check-task"] # 迁移哪些库
+
+# ----------- 实例配置 -----------
+mysql-instances:
+  - source-id: "mysql-replica-01"  # 上游实例或者复制组 ID，参考  的  配置
+    block-allow-list:  "bw-rule-1" # 黑白名单配置名称，如果 DM 版本 <= v2.0.0-beta.2 则使用 black-white-list
+    route-rules: ["rule1"]
+    mydumper-config-name: "global"
+
+routes:
+  rule1:
+    schema-pattern: "check-task"
+    table-pattern: "t*"
+    target-schema: "check-task"
+    target-table: "t"
+
+mydumpers:
+  global:
+    threads: 1
