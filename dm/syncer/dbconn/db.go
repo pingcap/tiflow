@@ -18,10 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-sql-driver/mysql"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/errno"
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
@@ -210,8 +207,7 @@ func (conn *DBConn) ExecuteSQLWithIgnore(
 					zap.Error(err))
 				return true
 			}
-			// TODO: move it to above IsRetryableError
-			return isRetryableError(err)
+			return false
 		},
 	}
 
@@ -254,16 +250,6 @@ func (conn *DBConn) ExecuteSQLWithIgnore(
 		return ret.(int), err
 	}
 	return ret.(int), nil
-}
-
-func isRetryableError(err error) bool {
-	err = errors.Cause(err) // check the original error
-	mysqlErr, ok := err.(*mysql.MySQLError)
-	if !ok {
-		return false
-	}
-
-	return mysqlErr.Number == errno.ErrKeyColumnDoesNotExits
 }
 
 // ExecuteSQL does some SQL executions.
