@@ -575,12 +575,12 @@ func TestValidatorStatus(t *testing.T) {
 
 func TestSubtaskRace(t *testing.T) {
 	// to test data race of Marshal() and markResultCanceled()
-	Errors := []*pb.ProcessError{}
-	Detail := []byte{}
+	tempErrors := []*pb.ProcessError{}
+	tempDetail := []byte{}
 	tempProcessResult := pb.ProcessResult{
 		IsCanceled: false,
-		Errors:     Errors,
-		Detail:     Detail,
+		Errors:     tempErrors,
+		Detail:     tempDetail,
 	}
 	cfg := &config.SubTaskConfig{
 		Name: "test-subtask-race",
@@ -595,14 +595,12 @@ func TestSubtaskRace(t *testing.T) {
 	tempSubTaskStatus := pb.SubTaskStatus{}
 	tempSubTaskStatus.Result = st.Result()
 	tempQueryStatusResponse.SubTaskStatus[0] = &tempSubTaskStatus
-	for i := 0; i < 10; i++ {
-		st.result.IsCanceled = false
-		go func() {
-			for i := 0; i < 10; i++ {
-				_, _ = tempQueryStatusResponse.Marshal()
-			}
-		}()
-		st.markResultCanceled()
-	}
+	st.result.IsCanceled = false
+	go func() {
+		for i := 0; i < 10; i++ {
+			_, _ = tempQueryStatusResponse.Marshal()
+		}
+	}()
+	st.markResultCanceled()
 	// this test is to test data race, so don't need assert here
 }
