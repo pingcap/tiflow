@@ -236,13 +236,9 @@ func (m *streamModifier) reset(loc binlog.Location) {
 	m.nextOp = 0
 	m.nextEventInOp = 0
 
-	for i, op := range m.ops {
-		if op.pos.Compare(loc.Position) < 0 {
-			m.nextOp = i + 1
-		} else {
-			break
-		}
-	}
+	m.nextOp = sort.Search(len(m.ops), func(i int) bool {
+		return loc.Position.Compare(m.ops[i].pos) <= 0
+	})
 
 	if m.nextOp == len(m.ops) {
 		return
