@@ -28,11 +28,11 @@ func TestListEqualAndAfter(t *testing.T) {
 	t.Parallel()
 	m := newStreamModifier(log.L())
 
-	got := m.ListEqualAndAfter("")
-	require.Equal(t, "[]", got)
+	reqs := m.ListEqualAndAfter("")
+	require.Len(t, reqs, 0)
 
-	got = m.ListEqualAndAfter("mysql.000001:1234")
-	require.Equal(t, "[]", got)
+	reqs = m.ListEqualAndAfter("mysql.000001:1234")
+	require.Len(t, reqs, 0)
 
 	m.ops = []*operator{
 		{
@@ -45,17 +45,19 @@ func TestListEqualAndAfter(t *testing.T) {
 		},
 	}
 
-	got = m.ListEqualAndAfter("")
-	require.Equal(t, "[{\"op\":5},{\"op\":1}]", got)
+	reqs = m.ListEqualAndAfter("")
+	require.Equal(t, pb.ErrorOp_List, reqs[0].Op)
+	require.Equal(t, pb.ErrorOp_Skip, reqs[1].Op)
 
-	got = m.ListEqualAndAfter("mysql.000001:1234")
-	require.Equal(t, "[{\"op\":5},{\"op\":1}]", got)
+	reqs = m.ListEqualAndAfter("mysql.000001:1234")
+	require.Equal(t, pb.ErrorOp_List, reqs[0].Op)
+	require.Equal(t, pb.ErrorOp_Skip, reqs[1].Op)
 
-	got = m.ListEqualAndAfter("mysql.000001:1235")
-	require.Equal(t, "[{\"op\":1}]", got)
+	reqs = m.ListEqualAndAfter("mysql.000001:1235")
+	require.Equal(t, pb.ErrorOp_Skip, reqs[0].Op)
 
-	got = m.ListEqualAndAfter("mysql.000001:9999")
-	require.Equal(t, "[]", got)
+	reqs = m.ListEqualAndAfter("mysql.000001:9999")
+	require.Len(t, reqs, 0)
 }
 
 func TestInteraction(t *testing.T) {

@@ -15,7 +15,6 @@ package binlogstream
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -169,16 +168,16 @@ func (m *streamModifier) Delete(posStr string) error {
 // - if argument is "", it returns all operators.
 // - Otherwise caller should make sure the argument in format of "binlog-file:pos"
 //   and it returns all operators >= this position.
-func (m *streamModifier) ListEqualAndAfter(posStr string) string {
-	toPrint := []*operator{}
+func (m *streamModifier) ListEqualAndAfter(posStr string) []*pb.HandleWorkerErrorRequest {
+	var matchedOps []*operator
 	if posStr == "" {
-		toPrint = m.ops
+		matchedOps = m.ops
 	} else {
 		pos, err := binlog.PositionFromStr(posStr)
 		if err != nil {
 			m.logger.DPanic("invalid position, should be verified in caller",
 				zap.String("position", posStr))
-			return ""
+			return []*pb.HandleWorkerErrorRequest{}
 		}
 
 		i := 0
@@ -187,20 +186,16 @@ func (m *streamModifier) ListEqualAndAfter(posStr string) string {
 		}
 
 		if i < len(m.ops) {
-			toPrint = m.ops[i:]
+			matchedOps = m.ops[i:]
 		}
 	}
 
-	reqs := make([]*pb.HandleWorkerErrorRequest, 0, len(toPrint))
-	for _, op := range toPrint {
+	reqs := make([]*pb.HandleWorkerErrorRequest, 0, len(matchedOps))
+	for _, op := range matchedOps {
 		reqs = append(reqs, op.originReq)
 	}
 
-	b, err2 := json.Marshal(reqs)
-	if err2 != nil {
-		m.logger.DPanic("failed to marshal operators", zap.Error(err2))
-	}
-	return string(b)
+	return reqs
 }
 
 // RemoveOutdated removes outdated operators which will not be triggered again after
