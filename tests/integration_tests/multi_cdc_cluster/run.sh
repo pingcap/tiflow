@@ -22,9 +22,9 @@ function run() {
 	run_sql "CREATE table test.multi_cdc2(id int primary key, val int);"
 
   # run one cdc cluster
-  run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --cluster_id "test1" --addr "127.0.0.1:8300" --logsuffix mult_cdc.server1
+  run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --cluster-id "test1" --addr "127.0.0.1:8300" --logsuffix mult_cdc.server1
   # run another cdc cluster
-  run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --cluster_id "test2" --addr "127.0.0.1:8301" --logsuffix mult_cdc.server2
+  run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --cluster-id "test2" --addr "127.0.0.1:8301" --logsuffix mult_cdc.server2
 
 	TOPIC_NAME="ticdc-simple-test-$RANDOM"
 	case $SINK_TYPE in
