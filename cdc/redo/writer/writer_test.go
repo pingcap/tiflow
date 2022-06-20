@@ -338,7 +338,7 @@ func TestLogWriterFlushLog(t *testing.T) {
 			cancel()
 			tt.args.ctx = ctx
 		}
-		err := writer.FlushLog(tt.args.ctx, tt.args.tableID, tt.args.ts)
+		err := writer.FlushLog(tt.args.ctx, map[int64]uint64{tt.args.tableID: tt.args.ts})
 		if tt.wantErr != nil {
 			require.True(t, errors.ErrorEqual(tt.wantErr, err), err.Error()+tt.wantErr.Error())
 		} else {
@@ -588,9 +588,7 @@ func TestLogWriterGetCurrentResolvedTs(t *testing.T) {
 			cancel()
 			tt.args.ctx = ctx
 		}
-		for k, v := range tt.args.ts {
-			_ = writer.FlushLog(tt.args.ctx, k, v)
-		}
+		_ = writer.FlushLog(tt.args.ctx, tt.args.ts)
 		ret, err := writer.GetCurrentResolvedTs(tt.args.ctx, tt.args.tableIDs)
 		if tt.wantErr != nil {
 			require.True(t, errors.ErrorEqual(tt.wantErr, err), tt.name, err.Error())

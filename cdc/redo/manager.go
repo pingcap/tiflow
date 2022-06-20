@@ -17,7 +17,6 @@ import (
 	"context"
 	"math"
 	"path/filepath"
-	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -28,12 +27,16 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
+	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
-var updateRtsInterval = time.Second
+var (
+	flushInterval    = time.Second * 2
+	logBufferTimeout = time.Minute * 10
+)
 
 // ConsistentLevelType is the level of redo log consistent level.
 type ConsistentLevelType string
@@ -52,12 +55,6 @@ const (
 	consistentStorageNFS       consistentStorage = "nfs"
 	consistentStorageS3        consistentStorage = "s3"
 	consistentStorageBlackhole consistentStorage = "blackhole"
-)
-
-const (
-	// supposing to replicate 10k tables, each table has one cached changce averagely.
-	logBufferChanSize = 10000
-	logBufferTimeout  = time.Minute * 10
 )
 
 // IsValidConsistentLevel checks whether a give consistent level is valid
@@ -99,6 +96,7 @@ type LogManager interface {
 	// The following 6 APIs are called from processor only
 	AddTable(tableID model.TableID, startTs uint64)
 	RemoveTable(tableID model.TableID)
+	GetResolvedTs(tableID model.TableID) model.Ts
 	GetMinResolvedTs() uint64
 	EmitRowChangedEvents(ctx context.Context, tableID model.TableID, rows ...*model.RowChangedEvent) error
 	FlushLog(ctx context.Context, tableID model.TableID, resolvedTs uint64) error
@@ -118,14 +116,11 @@ type ManagerOptions struct {
 	ErrCh          chan<- error
 }
 
-type cacheRows struct {
-	tableID model.TableID
-	rows    []*model.RowChangedEvent
-	// When calling FlushLog for a table, we must ensure that all data of this
-	// table has been written to underlying writer. Since the EmitRowChangedEvents
-	// and FlushLog of the same table can't be executed concurrently, we can
-	// insert a simple barrier data into data stream to achieve this goal.
-	flushCallback chan struct{}
+type cacheEvents struct {
+	tableID    model.TableID
+	rows       []*model.RowChangedEvent
+	resolvedTs model.Ts
+	eventType  model.MqMessageType
 }
 
 // ManagerImpl manages redo log writer, buffers un-persistent redo logs, calculates
@@ -135,16 +130,13 @@ type ManagerImpl struct {
 	level       ConsistentLevelType
 	storageType consistentStorage
 
-	logBuffer chan cacheRows
-	writer    writer.RedoLogWriter
-
+	writer        writer.RedoLogWriter
+	logBuffer     *chann.Chann[cacheEvents]
 	minResolvedTs uint64
-	tableIDs      []model.TableID
-	rtsMap        map[model.TableID]uint64
-	rtsMapMu      sync.RWMutex
+	needsFlush    chan struct{}
 
-	// record whether there exists a table being flushing resolved ts
-	flushing int64
+	rtsMap   map[model.TableID]model.Ts
+	rtsMapMu sync.RWMutex
 }
 
 // NewManager creates a new Manager
@@ -162,7 +154,8 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 		level:       ConsistentLevelType(cfg.Level),
 		storageType: consistentStorage(uri.Scheme),
 		rtsMap:      make(map[model.TableID]uint64),
-		logBuffer:   make(chan cacheRows, logBufferChanSize),
+		logBuffer:   chann.New[cacheEvents](),
+		needsFlush:  make(chan struct{}, 1),
 	}
 
 	switch m.storageType {
@@ -208,8 +201,8 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 	}
 
 	if opts.EnableBgRunner {
-		go m.bgUpdateResolvedTs(ctx, opts.ErrCh)
-		go m.bgWriteLog(ctx, opts.ErrCh)
+		go m.bgUpdateFlushFlag(ctx)
+		go m.bgUpdateLog(ctx, opts.ErrCh)
 	}
 	return m, nil
 }
@@ -252,32 +245,6 @@ func (m *ManagerImpl) Enabled() bool {
 	return m.enabled
 }
 
-// TryEmitRowChangedEvents sends row changed events to a log buffer, the log buffer
-// will be consumed by a background goroutine, which converts row changed events
-// to redo logs and sends to log writer. Note this function is non-blocking
-func (m *ManagerImpl) TryEmitRowChangedEvents(
-	ctx context.Context,
-	tableID model.TableID,
-	rows ...*model.RowChangedEvent,
-) (bool, error) {
-	timer := time.NewTimer(logBufferTimeout)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return false, ctx.Err()
-	case m.logBuffer <- cacheRows{
-		tableID: tableID,
-		// Because the pipeline sink doesn't hold slice memory after calling
-		// EmitRowChangedEvents, we copy to a new slice to manage memory
-		// in redo manager itself, which is the same behavior as sink manager.
-		rows: append(make([]*model.RowChangedEvent, 0, len(rows)), rows...),
-	}:
-		return true, nil
-	default:
-		return false, nil
-	}
-}
-
 // EmitRowChangedEvents sends row changed events to a log buffer, the log buffer
 // will be consumed by a background goroutine, which converts row changed events
 // to redo logs and sends to log writer. Note this function is non-blocking if
@@ -300,12 +267,10 @@ func (m *ManagerImpl) EmitRowChangedEvents(
 		return nil
 	case <-timer.C:
 		return cerror.ErrBufferLogTimeout.GenWithStackByArgs()
-	case m.logBuffer <- cacheRows{
-		tableID: tableID,
-		// Because the pipeline sink doesn't hold slice memory after calling
-		// EmitRowChangedEvents, we copy to a new slice to manage memory
-		// in redo manager itself, which is the same behavior as sink manager.
-		rows: append(make([]*model.RowChangedEvent, 0, len(rows)), rows...),
+	case m.logBuffer.In() <- cacheEvents{
+		tableID:   tableID,
+		rows:      rows,
+		eventType: model.MqMessageTypeRow,
 	}:
 	}
 	return nil
@@ -317,26 +282,21 @@ func (m *ManagerImpl) FlushLog(
 	tableID model.TableID,
 	resolvedTs uint64,
 ) error {
-	// Use flushing as a lightweight lock to reduce log contention in log writer.
-	if !atomic.CompareAndSwapInt64(&m.flushing, 0, 1) {
-		return nil
-	}
-	defer atomic.StoreInt64(&m.flushing, 0)
-
-	// Adding a barrier to data stream, to ensure all logs of this table has been
-	// written to underlying writer.
-	flushCallbackCh := make(chan struct{})
-	m.logBuffer <- cacheRows{
-		tableID:       tableID,
-		flushCallback: flushCallbackCh,
-	}
+	timer := time.NewTimer(logBufferTimeout)
+	defer timer.Stop()
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
-	case <-flushCallbackCh:
+	case <-timer.C:
+		return cerror.ErrBufferLogTimeout.GenWithStackByArgs()
+	case m.logBuffer.In() <- cacheEvents{
+		tableID:    tableID,
+		resolvedTs: resolvedTs,
+		eventType:  model.MqMessageTypeResolved,
+	}:
 	}
 
-	return m.writer.FlushLog(ctx, tableID, resolvedTs)
+	return nil
 }
 
 // EmitDDLEvent sends DDL event to redo log writer
@@ -344,8 +304,16 @@ func (m *ManagerImpl) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) err
 	return m.writer.SendDDL(ctx, DDLToRedo(ddl))
 }
 
+// GetResolvedTs returns the resolved ts of a table
+func (m *ManagerImpl) GetResolvedTs(tableID model.TableID) model.Ts {
+	m.rtsMapMu.Lock()
+	defer m.rtsMapMu.Unlock()
+	return m.rtsMap[tableID]
+}
+
 // GetMinResolvedTs returns the minimum resolved ts of all tables in this redo log manager
-func (m *ManagerImpl) GetMinResolvedTs() uint64 {
+func (m *ManagerImpl) GetMinResolvedTs() model.Ts {
+	log.Error("", zap.Uint64("minResolvedTs", atomic.LoadUint64(&m.minResolvedTs)))
 	return atomic.LoadUint64(&m.minResolvedTs)
 }
 
@@ -363,18 +331,9 @@ func (m *ManagerImpl) FlushResolvedAndCheckpointTs(ctx context.Context, resolved
 func (m *ManagerImpl) AddTable(tableID model.TableID, startTs uint64) {
 	m.rtsMapMu.Lock()
 	defer m.rtsMapMu.Unlock()
-	i := sort.Search(len(m.tableIDs), func(i int) bool {
-		return m.tableIDs[i] >= tableID
-	})
-	if i < len(m.tableIDs) && m.tableIDs[i] == tableID {
+	if _, ok := m.rtsMap[tableID]; ok {
 		log.Warn("add duplicated table in redo log manager", zap.Int64("tableID", tableID))
 		return
-	}
-	if i == len(m.tableIDs) {
-		m.tableIDs = append(m.tableIDs, tableID)
-	} else {
-		m.tableIDs = append(m.tableIDs[:i+1], m.tableIDs[i:]...)
-		m.tableIDs[i] = tableID
 	}
 	m.rtsMap[tableID] = startTs
 }
@@ -383,12 +342,7 @@ func (m *ManagerImpl) AddTable(tableID model.TableID, startTs uint64) {
 func (m *ManagerImpl) RemoveTable(tableID model.TableID) {
 	m.rtsMapMu.Lock()
 	defer m.rtsMapMu.Unlock()
-	i := sort.Search(len(m.tableIDs), func(i int) bool {
-		return m.tableIDs[i] >= tableID
-	})
-	if i < len(m.tableIDs) && m.tableIDs[i] == tableID {
-		copy(m.tableIDs[i:], m.tableIDs[i+1:])
-		m.tableIDs = m.tableIDs[:len(m.tableIDs)-1]
+	if _, ok := m.rtsMap[tableID]; ok {
 		delete(m.rtsMap, tableID)
 	} else {
 		log.Warn("remove a table not maintained in redo log manager", zap.Int64("tableID", tableID))
@@ -397,76 +351,131 @@ func (m *ManagerImpl) RemoveTable(tableID model.TableID) {
 
 // Cleanup removes all redo logs of this manager, it is called when changefeed is removed
 func (m *ManagerImpl) Cleanup(ctx context.Context) error {
+	m.logBuffer.Close()
+	// We must finish consuming the data here,
+	// otherwise it will cause the channel to not close properly.
+	for range m.logBuffer.Out() {
+		// Do nothing. We do not care about the data.
+	}
 	return m.writer.DeleteAllLogs(ctx)
 }
 
-// updateTableResolvedTs reads rtsMap from redo log writer and calculate the minimum
-// resolved ts of all maintaining tables.
-func (m *ManagerImpl) updateTableResolvedTs(ctx context.Context) error {
+func (m *ManagerImpl) flushLog(
+	ctx context.Context, tableRtsMap map[model.TableID]model.Ts,
+) (map[model.TableID]model.Ts, error) {
+	emptyRtsMap := make(map[model.TableID]model.Ts)
+	err := m.writer.FlushLog(ctx, tableRtsMap)
+	if err != nil {
+		return emptyRtsMap, err
+	}
+
 	m.rtsMapMu.Lock()
 	defer m.rtsMapMu.Unlock()
-	rtsMap, err := m.writer.GetCurrentResolvedTs(ctx, m.tableIDs)
-	if err != nil {
-		return err
-	}
+
 	minResolvedTs := uint64(math.MaxUint64)
 	for tableID := range m.rtsMap {
-		if rts, ok := rtsMap[tableID]; ok {
-			m.rtsMap[tableID] = rts
+		if newRts, ok := tableRtsMap[tableID]; ok {
+			if newRts < m.rtsMap[tableID] {
+				log.Panic("resolvedTs in redoManager regressed, report a bug",
+					zap.Int64("tableID", tableID),
+					zap.Uint64("oldResolvedTs", m.rtsMap[tableID]),
+					zap.Uint64("currentReolvedTs", newRts))
+			}
+			m.rtsMap[tableID] = newRts
 		}
+
 		rts := m.rtsMap[tableID]
 		if rts < minResolvedTs {
 			minResolvedTs = rts
 		}
 	}
 	atomic.StoreUint64(&m.minResolvedTs, minResolvedTs)
-	return nil
+	return emptyRtsMap, nil
 }
 
-func (m *ManagerImpl) bgUpdateResolvedTs(ctx context.Context, errCh chan<- error) {
-	ticker := time.NewTicker(updateRtsInterval)
+func (m *ManagerImpl) bgUpdateFlushFlag(ctx context.Context) {
+	ticker := time.NewTicker(flushInterval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			err := m.updateTableResolvedTs(ctx)
-			if err != nil {
-				select {
-				case errCh <- err:
-				default:
-					log.Error("err channel is full", zap.Error(err))
-				}
-				return
+			select {
+			case m.needsFlush <- struct{}{}:
+			default:
+				log.Warn("Fail to update flush flag, " +
+					"the previous flush operation hasn't finished yet")
 			}
 		}
 	}
 }
 
-func (m *ManagerImpl) bgWriteLog(ctx context.Context, errCh chan<- error) {
+func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
+	tableRtsMap := make(map[int64]uint64)
+	handleErr := func(err error) {
+		select {
+		case errCh <- err:
+		default:
+			log.Error("err channel is full", zap.Error(err))
+		}
+	}
+
+	ticker := time.NewTicker(time.Millisecond * 500)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case cache := <-m.logBuffer:
-			if cache.flushCallback != nil {
-				close(cache.flushCallback)
-				continue
+		case <-ticker.C:
+			// interpolate tick message to prevent the flush opration from blocking
+		case cache, ok := <-m.logBuffer.Out():
+			if !ok {
+				return // channel closed
 			}
-			logs := make([]*model.RedoRowChangedEvent, 0, len(cache.rows))
-			for _, row := range cache.rows {
-				logs = append(logs, RowToRedo(row))
-			}
-			_, err := m.writer.WriteLog(ctx, cache.tableID, logs)
-			if err != nil {
-				select {
-				case errCh <- err:
-				default:
-					log.Error("err channel is full", zap.Error(err))
+			switch cache.eventType {
+			case model.MqMessageTypeRow:
+				logs := make([]*model.RedoRowChangedEvent, 0, len(cache.rows))
+				for _, row := range cache.rows {
+					logs = append(logs, RowToRedo(row))
 				}
+				_, err := m.writer.WriteLog(ctx, cache.tableID, logs)
+				if err != nil {
+					handleErr(err)
+					return
+				}
+			case model.MqMessageTypeResolved:
+				// handle resolved ts
+				if oldRts, ok := tableRtsMap[cache.tableID]; ok {
+					if cache.resolvedTs < oldRts {
+						log.Panic("resolvedTs in redoManager regressed, report a bug",
+							zap.Int64("tableID", cache.tableID),
+							zap.Uint64("oldResolvedTs", oldRts),
+							zap.Uint64("currentReolvedTs", cache.resolvedTs))
+					}
+				}
+				tableRtsMap[cache.tableID] = cache.resolvedTs
+			default:
+				log.Debug("handle unknown event type")
+			}
+		}
+
+		// flush writer if needed
+		select {
+		case <-ctx.Done():
+			return
+		case <-m.needsFlush:
+			log.Info("flushing redo log >>>>>>")
+			var err error
+			tableRtsMap, err = m.flushLog(ctx, tableRtsMap)
+			log.Info("flushing done <<<<<<======")
+			if err != nil {
+				handleErr(err)
 				return
 			}
+		default:
+			log.Info("no need to flush log")
 		}
 	}
 }

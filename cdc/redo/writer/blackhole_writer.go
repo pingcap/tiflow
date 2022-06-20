@@ -56,10 +56,12 @@ func (bs *blackHoleWriter) WriteLog(_ context.Context, tableID model.TableID, lo
 	return
 }
 
-func (bs *blackHoleWriter) FlushLog(_ context.Context, tableID model.TableID, resolvedTs uint64) error {
+func (bs *blackHoleWriter) FlushLog(_ context.Context, rtsMap map[model.TableID]model.Ts) error {
 	bs.tableRtsMu.Lock()
 	defer bs.tableRtsMu.Unlock()
-	bs.tableRtsMap[tableID] = resolvedTs
+	for tableID, rts := range rtsMap {
+		bs.tableRtsMap[tableID] = rts
+	}
 	return nil
 }
 
