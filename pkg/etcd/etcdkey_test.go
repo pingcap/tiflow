@@ -106,7 +106,7 @@ func TestEtcdKey(t *testing.T) {
 			UpstreamID: 12345,
 		},
 	}, {
-		key: fmt.Sprintf("%s%s", DefaultClusterAndMetaPrefix, MetaVersionKey),
+		key: fmt.Sprintf("%s%s", DefaultClusterAndMetaPrefix, metaVersionKey),
 		expected: &CDCKey{
 			Tp:        CDCKeyTypeMetaVersion,
 			ClusterID: DefaultCDCClusterID,
