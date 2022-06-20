@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
@@ -110,16 +111,9 @@ func (m *streamModifier) Set(req *pb.HandleWorkerErrorRequest, events []*replica
 	}
 
 	toInject := newOperator(req.Op, pos, events, req)
-	toInsertIndex := 0
-
-	// not too much op, don't need binary search
-	for i, op := range m.ops {
-		if op.pos.Compare(pos) < 0 {
-			toInsertIndex = i + 1
-		} else {
-			break
-		}
-	}
+	toInsertIndex := sort.Search(len(m.ops), func(i int) bool {
+		return pos.Compare(m.ops[i].pos) <= 0
+	})
 
 	if toInsertIndex == len(m.ops) {
 		m.ops = append(m.ops, toInject)
@@ -154,15 +148,9 @@ func (m *streamModifier) Delete(posStr string) error {
 		return err
 	}
 
-	toDeleteIndex := 0
-	// not too much op, don't need binary search
-	for i, op := range m.ops {
-		if op.pos.Compare(pos) < 0 {
-			toDeleteIndex = i + 1
-		} else {
-			break
-		}
-	}
+	toDeleteIndex := sort.Search(len(m.ops), func(i int) bool {
+		return pos.Compare(m.ops[i].pos) <= 0
+	})
 
 	if toDeleteIndex < m.nextOp || toDeleteIndex == len(m.ops) {
 		return terror.ErrSyncerOperatorNotExist.Generate(posStr)
