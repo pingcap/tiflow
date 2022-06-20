@@ -38,7 +38,7 @@ func newBalanceScheduler(interval config.TomlDuration) *balanceScheduler {
 }
 
 func (b *balanceScheduler) Name() string {
-	return string(schedulerTypeBalance)
+	return schedulerTypeBalance.String()
 }
 
 func (b *balanceScheduler) Schedule(

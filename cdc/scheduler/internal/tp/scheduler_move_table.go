@@ -35,7 +35,7 @@ func newMoveTableScheduler() *moveTableScheduler {
 }
 
 func (m *moveTableScheduler) Name() string {
-	return string(schedulerTypeMoveTable)
+	return schedulerTypeMoveTable.String()
 }
 
 func (m *moveTableScheduler) addTask(tableID model.TableID, target model.CaptureID) bool {

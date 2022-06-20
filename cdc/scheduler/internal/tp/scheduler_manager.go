@@ -24,8 +24,8 @@ import (
 
 type schedulerManager struct {
 	changefeedID model.ChangeFeedID
-	schedulers   map[schedulerType]scheduler
 
+	schedulers   map[schedulerType]scheduler
 	tasksCounter map[struct{ scheduler, task string }]int
 }
 
@@ -55,23 +55,24 @@ func (sm *schedulerManager) Schedule(
 	currentTables []model.TableID,
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 	replications map[model.TableID]*ReplicationSet) []*scheduleTask {
-	allTasks := make([]*scheduleTask, 0)
+
 	for _, scheduler := range sm.schedulers {
 		tasks := scheduler.Schedule(checkpointTs, currentTables, aliveCaptures, replications)
-		if len(tasks) != 0 {
-			log.Info("tpscheduler: new schedule task",
-				zap.Int("task", len(tasks)),
-				zap.String("scheduler", scheduler.Name()))
-		}
-		allTasks = append(allTasks, tasks...)
 		for _, t := range tasks {
 			name := struct {
 				scheduler, task string
 			}{scheduler: scheduler.Name(), task: t.Name()}
 			sm.tasksCounter[name]++
 		}
+		if len(tasks) != 0 {
+			log.Info("tpscheduler: new schedule task",
+				zap.Int("task", len(tasks)),
+				zap.String("scheduler", scheduler.Name()))
+			return tasks
+		}
 	}
-	return allTasks
+
+	return nil
 }
 
 func (sm *schedulerManager) MoveTable(tableID model.TableID, target model.CaptureID) {

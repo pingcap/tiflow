@@ -42,7 +42,7 @@ func newDrainCaptureScheduler() *drainCaptureScheduler {
 }
 
 func (d *drainCaptureScheduler) Name() string {
-	return string(schedulerTypeDrainCapture)
+	return schedulerTypeDrainCapture.String()
 }
 
 func (d *drainCaptureScheduler) setTarget(target model.CaptureID) bool {

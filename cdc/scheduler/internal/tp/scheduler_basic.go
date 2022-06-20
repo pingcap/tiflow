@@ -44,7 +44,7 @@ func newBasicScheduler() *basicScheduler {
 }
 
 func (b *basicScheduler) Name() string {
-	return string(schedulerTypeBasic)
+	return schedulerTypeBasic.String()
 }
 
 func (b *basicScheduler) Schedule(
