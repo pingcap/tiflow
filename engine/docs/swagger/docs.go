@@ -89,7 +89,7 @@ var doc = `{
         },
         "/api/v1/jobs/{job_id}": {
             "get": {
-                "description": "query a detail information of a job",
+                "description": "query detail information of a job",
                 "consumes": [
                     "application/json"
                 ],

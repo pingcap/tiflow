@@ -47,7 +47,7 @@ paths:
     get:
       consumes:
       - application/json
-      description: query a detail information of a job
+      description: query detail information of a job
       parameters:
       - description: job id
         in: path
