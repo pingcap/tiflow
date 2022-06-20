@@ -21,10 +21,10 @@ function run() {
 	run_sql "CREATE table test.multi_cdc1(id int primary key, val int);"
 	run_sql "CREATE table test.multi_cdc2(id int primary key, val int);"
 
-  # run one cdc cluster
-  run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --cluster-id "test1" --addr "127.0.0.1:8300" --logsuffix mult_cdc.server1
-  # run another cdc cluster
-  run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --cluster-id "test2" --addr "127.0.0.1:8301" --logsuffix mult_cdc.server2
+	# run one cdc cluster
+	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --cluster-id "test1" --addr "127.0.0.1:8300" --logsuffix mult_cdc.server1
+	# run another cdc cluster
+	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --cluster-id "test2" --addr "127.0.0.1:8301" --logsuffix mult_cdc.server2
 
 	TOPIC_NAME="ticdc-simple-test-$RANDOM"
 	case $SINK_TYPE in
@@ -38,22 +38,21 @@ function run() {
 		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
 	fi
 
-  # same dml for table multi_cdc1
-  run_sql "INSERT INTO test.multi_cdc1(id, val) VALUES (1, 1);"
-  run_sql "INSERT INTO test.multi_cdc1(id, val) VALUES (2, 2);"
-  run_sql "INSERT INTO test.multi_cdc1(id, val) VALUES (3, 3);"
+	# same dml for table multi_cdc1
+	run_sql "INSERT INTO test.multi_cdc1(id, val) VALUES (1, 1);"
+	run_sql "INSERT INTO test.multi_cdc1(id, val) VALUES (2, 2);"
+	run_sql "INSERT INTO test.multi_cdc1(id, val) VALUES (3, 3);"
 
-  # same dml for table multi_cdc2
-  run_sql "INSERT INTO test.multi_cdc2(id, val) VALUES (1, 1);"
-  run_sql "INSERT INTO test.multi_cdc2(id, val) VALUES (2, 2);"
-  run_sql "INSERT INTO test.multi_cdc2(id, val) VALUES (3, 3);"
+	# same dml for table multi_cdc2
+	run_sql "INSERT INTO test.multi_cdc2(id, val) VALUES (1, 1);"
+	run_sql "INSERT INTO test.multi_cdc2(id, val) VALUES (2, 2);"
+	run_sql "INSERT INTO test.multi_cdc2(id, val) VALUES (3, 3);"
 
-  check_table_exists "test.multi_cdc1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-  check_table_exists "test.multi_cdc2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-  check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
-  cleanup_process $CDC_BINARY
+	check_table_exists "test.multi_cdc1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "test.multi_cdc2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
+	cleanup_process $CDC_BINARY
 }
-
 
 trap stop_tidb_cluster EXIT
 run $*

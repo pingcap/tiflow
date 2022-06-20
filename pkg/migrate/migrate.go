@@ -339,8 +339,9 @@ func (m *migrator) Migrate(ctx context.Context) error {
 
 	if version == noMetaVersion {
 		if m.cli.ClusterID != etcd.DefaultCDCClusterID {
-			//not default cluster
-			log.Info("not an default cdc cluster, skip migration data", zap.String("cluster", m.cli.ClusterID))
+			// not default cluster
+			log.Info("not a default cdc cluster, skip migration data",
+				zap.String("cluster", m.cli.ClusterID))
 			_, err := m.cli.Client.Put(ctx, m.metaVersionKey, fmt.Sprintf("%d", newVersion))
 			if err != nil {
 				log.Error("put meta version failed", zap.Error(err))
