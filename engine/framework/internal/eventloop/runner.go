@@ -111,7 +111,7 @@ func isForcefulExitError(errIn error) bool {
 		return true
 	}
 
-	if _, ok := frameErrors.TryUnwrapFailFastError(errIn); ok {
+	if frameErrors.IsFailFastError(errIn) {
 		return true
 	}
 

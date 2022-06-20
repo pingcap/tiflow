@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework/config"
+	frameErrors "github.com/pingcap/tiflow/engine/framework/internal/errors"
 	"github.com/pingcap/tiflow/engine/framework/internal/worker"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -232,7 +233,17 @@ func (w *DefaultBaseWorker) Init(ctx context.Context) error {
 	return nil
 }
 
-func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
+func (w *DefaultBaseWorker) doPreInit(ctx context.Context) (retErr error) {
+	defer func() {
+		if retErr != nil {
+			// Wraps the error as FailFast because errors
+			// that occurred during doPreInit may indicate
+			// a failure that's severe enough that it is not
+			// possible for the worker to correctly communicate
+			// with the master.
+			retErr = frameErrors.FailFast(retErr)
+		}
+	}()
 	// TODO refine this part
 	poolCtx, cancelPool := context.WithCancel(context.TODO())
 	w.cancelMu.Lock()

@@ -21,7 +21,7 @@ import (
 	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 )
 
-func TestFailFastWrapAndUnwrap(t *testing.T) {
+func TestFailFastWrap(t *testing.T) {
 	t.Parallel()
 
 	// Note: this error is only used for testing.
@@ -32,15 +32,12 @@ func TestFailFastWrapAndUnwrap(t *testing.T) {
 	require.True(t, derrors.ErrTooManyStatusUpdates.Equal(err))
 	require.Regexp(t, "ErrTooManyStatusUpdates", err)
 
-	unwrapped, ok := TryUnwrapFailFastError(err)
-	require.True(t, ok)
-	require.False(t, errors.Is(unwrapped, &FailFastError{}))
+	require.True(t, IsFailFastError(err))
 }
 
-func TestTryUnwrapFailFastErrorReturnsFalse(t *testing.T) {
+func TestIsFailFastErrorFalse(t *testing.T) {
 	t.Parallel()
 
 	anyErr := errors.New("test")
-	_, ok := TryUnwrapFailFastError(anyErr)
-	require.False(t, ok)
+	require.False(t, IsFailFastError(anyErr))
 }

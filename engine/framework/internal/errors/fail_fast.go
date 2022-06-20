@@ -28,6 +28,7 @@ func FailFast(errIn error) error {
 	return &FailFastError{cause: errIn}
 }
 
+// Cause implement causer for the error.
 func (e *FailFastError) Cause() error {
 	return e.cause
 }
@@ -36,11 +37,15 @@ func (e *FailFastError) Error() string {
 	return e.cause.Error()
 }
 
-// TryUnwrapFailFastError unwraps the error if it is FailFastError.
-func TryUnwrapFailFastError(errIn error) (error, bool) {
+// IsFailFastError tells whether the error is FailFastError.
+func IsFailFastError(errIn error) bool {
 	var out *FailFastError
+
+	// We use `As` instead of `Is` because
+	// `Is` requires exact equalities instead
+	// of type matching.
 	if !gerrors.As(errIn, &out) {
-		return nil, false
+		return false
 	}
-	return out.cause, true
+	return true
 }
