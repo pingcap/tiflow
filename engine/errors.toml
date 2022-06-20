@@ -161,6 +161,11 @@ error = '''
 invalid server master id: %s
 '''
 
+["DFLOW:ErrInvalidWorkerType"]
+error = '''
+invalid worker type: %s
+'''
+
 ["DFLOW:ErrLeaderCtxCanceled"]
 error = '''
 leader context is canceled

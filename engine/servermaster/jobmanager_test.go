@@ -23,10 +23,10 @@ import (
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
-	"github.com/pingcap/tiflow/engine/framework/master"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
+	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/engine/pkg/ctxmu"
 	"github.com/pingcap/tiflow/engine/pkg/dm"
@@ -65,7 +65,7 @@ func TestJobManagerSubmitJob(t *testing.T) {
 	err := mockMaster.Init(ctx)
 	require.Nil(t, err)
 	req := &pb.SubmitJobRequest{
-		Tp:     pb.JobType_CVSDemo,
+		Tp:     int32(engineModel.JobTypeCVSDemo),
 		Config: []byte("{\"srcHost\":\"0.0.0.0:1234\", \"dstHost\":\"0.0.0.0:1234\", \"srcDir\":\"data\", \"dstDir\":\"data1\"}"),
 	}
 	resp := mgr.SubmitJob(ctx, req)
@@ -116,7 +116,7 @@ func TestCreateWorkerReturnError(t *testing.T) {
 	err := mockMaster.Init(ctx)
 	require.Nil(t, err)
 	req := &pb.SubmitJobRequest{
-		Tp:     pb.JobType_CVSDemo,
+		Tp:     int32(engineModel.JobTypeCVSDemo),
 		Config: []byte("{\"srcHost\":\"0.0.0.0:1234\", \"dstHost\":\"0.0.0.0:1234\", \"srcDir\":\"data\", \"dstDir\":\"data1\"}"),
 	}
 	resp := mgr.SubmitJob(ctx, req)
@@ -144,7 +144,7 @@ func TestJobManagerPauseJob(t *testing.T) {
 	meta := &frameModel.MasterMetaKVData{ID: pauseWorkerID}
 	mgr.JobFsm.JobDispatched(meta, false)
 
-	mockWorkerHandle := &master.MockHandle{WorkerID: pauseWorkerID, ExecutorID: "executor-1"}
+	mockWorkerHandle := &framework.MockHandle{WorkerID: pauseWorkerID, ExecutorID: "executor-1"}
 	err := mgr.JobFsm.JobOnline(mockWorkerHandle)
 	require.Nil(t, err)
 
@@ -219,7 +219,7 @@ func TestJobManagerDebug(t *testing.T) {
 	meta := &frameModel.MasterMetaKVData{ID: debugJobID}
 	mgr.JobFsm.JobDispatched(meta, false)
 
-	mockWorkerHandle := &master.MockHandle{WorkerID: debugJobID, ExecutorID: "executor-1"}
+	mockWorkerHandle := &framework.MockHandle{WorkerID: debugJobID, ExecutorID: "executor-1"}
 	err := mgr.JobFsm.JobOnline(mockWorkerHandle)
 	require.Nil(t, err)
 
@@ -327,13 +327,13 @@ func TestJobManagerOnlineJob(t *testing.T) {
 	err := mockMaster.Init(ctx)
 	require.Nil(t, err)
 	req := &pb.SubmitJobRequest{
-		Tp:     pb.JobType_CVSDemo,
+		Tp:     int32(engineModel.JobTypeCVSDemo),
 		Config: []byte("{\"srcHost\":\"0.0.0.0:1234\", \"dstHost\":\"0.0.0.0:1234\", \"srcDir\":\"data\", \"dstDir\":\"data1\"}"),
 	}
 	resp := mgr.SubmitJob(ctx, req)
 	require.Nil(t, resp.Err)
 
-	err = mgr.JobFsm.JobOnline(&master.MockHandle{
+	err = mgr.JobFsm.JobOnline(&framework.MockHandle{
 		WorkerID:   resp.JobId,
 		ExecutorID: "executor-1",
 	})

@@ -16,12 +16,10 @@ package worker
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/pingcap/errors"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
-	"golang.org/x/sync/semaphore"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/executor/worker/internal"
@@ -39,17 +37,14 @@ type (
 	RunnableID = internal.RunnableID
 	// Workloader alias internal.Workloader
 	Workloader = internal.Workloader
-	// Closer alias internal.Closer
-	Closer = internal.Closer
 )
 
 // TaskRunner receives RunnableContainer in a FIFO way, and runs them in
 // independent background goroutines.
 type TaskRunner struct {
-	inQueue       chan *internal.RunnableContainer
-	initQuotaSema *semaphore.Weighted
-	tasks         sync.Map
-	wg            sync.WaitGroup
+	inQueue chan *internal.RunnableContainer
+	tasks   sync.Map
+	wg      sync.WaitGroup
 
 	cancelMu sync.RWMutex
 	canceled bool
@@ -61,38 +56,15 @@ type TaskRunner struct {
 	taskStopNotifier *notifier.Notifier[RunnableID]
 }
 
-const (
-	defaultTaskWeight         = 1
-	defaultPollInterval       = 50 * time.Millisecond
-	defaultInitQueuingTimeout = 10 * time.Second
-)
-
 type taskEntry struct {
 	*internal.RunnableContainer
 	cancel context.CancelFunc
-}
-
-func (e *taskEntry) EventLoop(ctx context.Context) error {
-	ticker := time.NewTicker(defaultPollInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case <-ticker.C:
-			if err := e.Poll(ctx); err != nil {
-				return errors.Trace(err)
-			}
-		}
-	}
 }
 
 // NewTaskRunner creates a new TaskRunner instance
 func NewTaskRunner(inQueueSize int, initConcurrency int) *TaskRunner {
 	return &TaskRunner{
 		inQueue:          make(chan *internal.RunnableContainer, inQueueSize),
-		initQuotaSema:    semaphore.NewWeighted(int64(initConcurrency)),
 		clock:            clock.New(),
 		taskStopNotifier: notifier.NewNotifier[RunnableID](),
 	}
@@ -136,7 +108,7 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 			if task == nil {
 				return derror.ErrRuntimeIsClosed.GenWithStackByArgs()
 			}
-			if err := r.onNewTask(ctx, task); err != nil {
+			if err := r.onNewTask(task); err != nil {
 				log.L().Warn("Failed to launch task",
 					zap.String("id", task.ID()),
 					zap.Error(err))
@@ -164,6 +136,11 @@ func (r *TaskRunner) Workload() (ret model.RescUnit) {
 	return
 }
 
+// WorkerCount returns the number of currently running workers.
+func (r *TaskRunner) WorkerCount() int64 {
+	return r.taskCount.Load()
+}
+
 func (r *TaskRunner) cancelAll() {
 	r.cancelMu.Lock()
 	if r.canceled {
@@ -184,21 +161,10 @@ func (r *TaskRunner) cancelAll() {
 	r.wg.Wait()
 }
 
-func (r *TaskRunner) onNewTask(ctx context.Context, task *internal.RunnableContainer) (ret error) {
-	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, defaultInitQueuingTimeout)
-	defer cancelTimeout()
-
-	err := r.initQuotaSema.Acquire(timeoutCtx, defaultTaskWeight)
-	if err != nil {
-		return derror.ErrRuntimeInitQueuingTimeOut.Wrap(err).GenWithStackByArgs()
-	}
-
+func (r *TaskRunner) onNewTask(task *internal.RunnableContainer) (ret error) {
 	defer func() {
 		if r := recover(); r != nil {
 			ret = errors.Trace(errors.Errorf("panic: %v", r))
-		}
-		if ret != nil {
-			r.initQuotaSema.Release(defaultTaskWeight)
 		}
 	}()
 
@@ -223,54 +189,40 @@ func (r *TaskRunner) onNewTask(ctx context.Context, task *internal.RunnableConta
 		return derror.ErrRuntimeDuplicateTaskID.GenWithStackByArgs(task.ID())
 	}
 
-	r.taskCount.Inc()
-	runInit := func(initCtx context.Context) (ret error) {
-		defer func() {
-			if r := recover(); r != nil {
-				ret = errors.Trace(errors.Errorf("panic: %v", r))
-			}
-			r.initQuotaSema.Release(defaultTaskWeight)
-		}()
+	r.launchTask(rctx, t)
 
-		if err := t.Init(initCtx); err != nil {
-			return errors.Trace(err)
-		}
-		t.OnInitialized()
-		return nil
-	}
+	return nil
+}
 
+func (r *TaskRunner) launchTask(rctx *RuntimeContext, entry *taskEntry) {
 	r.wg.Add(1)
+	r.taskCount.Inc()
+
 	go func() {
 		defer r.wg.Done()
 		defer r.taskCount.Dec()
 
+		var err error
 		defer func() {
-			err := t.Close(rctx)
 			log.L().Info("Task Closed",
-				zap.String("id", t.ID()),
+				zap.String("id", entry.ID()),
 				zap.Error(err),
 				zap.Int64("runtime-task-count", r.taskCount.Load()))
-			t.OnStopped()
-			r.taskStopNotifier.Notify(t.ID())
-			if _, ok := r.tasks.LoadAndDelete(t.ID()); !ok {
-				log.L().Panic("Task does not exist", zap.String("id", t.ID()))
+			entry.OnStopped()
+			r.taskStopNotifier.Notify(entry.ID())
+			if _, ok := r.tasks.LoadAndDelete(entry.ID()); !ok {
+				log.L().Panic("Task does not exist", zap.String("id", entry.ID()))
 			}
 		}()
 
-		if err := runInit(rctx); err != nil {
-			log.L().Warn("Task init returned error", zap.String("id", t.ID()), zap.Error(err))
-			return
-		}
-
-		log.L().Info("Task initialized",
-			zap.String("id", t.ID()),
+		entry.OnLaunched()
+		log.L().Info("Launching task",
+			zap.String("id", entry.ID()),
 			zap.Int64("runtime-task-count", r.taskCount.Load()))
 
-		err := t.EventLoop(rctx)
-		log.L().Info("Task stopped", zap.String("id", t.ID()), zap.Error(err))
+		err = entry.Run(rctx)
+		log.L().Info("Task stopped", zap.String("id", entry.ID()), zap.Error(err))
 	}()
-
-	return nil
 }
 
 // TaskCount returns current task count

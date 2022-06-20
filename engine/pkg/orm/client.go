@@ -18,6 +18,8 @@ import (
 	"database/sql"
 	gerrors "errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	dmysql "github.com/go-sql-driver/mysql"
@@ -196,9 +198,21 @@ func generateDSNByParams(mc metaclient.StoreConfigParams, projectID tenant.Proje
 	dsnCfg.Params["parseTime"] = "true"
 	// TODO: check for timezone
 	dsnCfg.Params["loc"] = "Local"
+	dsnCfg.Params["sql_mode"] = strconv.Quote(getSQLStrictMode())
 
 	// dsn format: [username[:password]@][protocol[(address)]]/
 	return dsnCfg.FormatDSN()
+}
+
+// getSQLStrictMode return SQL strict mode for metastore
+func getSQLStrictMode() string {
+	needEnable := []string{
+		"STRICT_TRANS_TABLES",
+		"STRICT_ALL_TABLES",
+		"ERROR_FOR_DIVISION_BY_ZERO",
+	}
+
+	return strings.Join(needEnable, ",")
 }
 
 // newSqlDB return sql.DB for specified driver and dsn

@@ -22,11 +22,8 @@ type (
 	// - It is job master id when master is job manager and worker is job master.
 	// - It is worker id when master is job master and worker is worker.
 	WorkerID = string
+	// WorkerType represents task type, such as DM worker, DM master, etc.
+	WorkerType int16
 	// Epoch is an increasing only value.
 	Epoch = int64
-	// JobID is the unique identifier for job.
-	// JobID is the alias of MasterID
-	JobID = MasterID
-	// JobType is the unique identifier for job
-	JobType = string
 )

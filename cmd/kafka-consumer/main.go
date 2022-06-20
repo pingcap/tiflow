@@ -411,11 +411,11 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleKafkaConsumer)
 	errCh := make(chan error, 1)
-	opts := map[string]string{}
 	for i := 0; i < int(kafkaPartitionNum); i++ {
 		s, err := sink.New(ctx,
 			model.DefaultChangeFeedID("kafka-consumer"),
-			downstreamURIStr, config.GetDefaultReplicaConfig(), opts, errCh)
+			downstreamURIStr, config.GetDefaultReplicaConfig(), errCh)
+
 		if err != nil {
 			cancel()
 			return nil, errors.Trace(err)
@@ -425,6 +425,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	sink, err := sink.New(ctx,
 		model.DefaultChangeFeedID("kafka-consumer"),
 		downstreamURIStr, config.GetDefaultReplicaConfig(), opts, errCh)
+
 	if err != nil {
 		cancel()
 		return nil, errors.Trace(err)
