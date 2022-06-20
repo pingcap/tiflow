@@ -52,8 +52,8 @@ const (
 	DefaultWorkerCount = 16
 	DefaultMaxTxnRow   = 256
 
-	defaultDMLMaxRetryTime     = 8
-	defaultDDLMaxRetryTime     = 20
+	defaultDMLMaxRetry         = 8
+	defaultDDLMaxRetry         = 20
 	defaultTiDBTxnMode         = "optimistic"
 	defaultFlushInterval       = time.Millisecond * 50
 	defaultBatchReplaceEnabled = true
@@ -1020,7 +1020,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 			zap.Int("num of Rows", dmls.rowCount),
 			zap.Int("bucket", bucket))
 		return nil
-	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithBackoffMaxDelay(backoffMaxDelayInMs), retry.WithMaxTries(defaultDMLMaxRetryTime), retry.WithIsRetryableErr(isRetryableDMLError))
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithBackoffMaxDelay(backoffMaxDelayInMs), retry.WithMaxTries(defaultDMLMaxRetry), retry.WithIsRetryableErr(isRetryableDMLError))
 }
 
 type preparedDMLs struct {
