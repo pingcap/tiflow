@@ -27,12 +27,20 @@ type scheduler interface {
 	) []*scheduleTask
 }
 
-type schedulerType string
+type schedulerType int
 
 const (
-	schedulerTypeBasic        schedulerType = "basic-scheduler"
-	schedulerTypeBalance      schedulerType = "balance-scheduler"
-	schedulerTypeMoveTable    schedulerType = "move-table-scheduler"
-	schedulerTypeRebalance    schedulerType = "rebalance-scheduler"
-	schedulerTypeDrainCapture schedulerType = "drain-capture-scheduler"
+	schedulerTypeBasic     schedulerType = 0
+	schedulerTypeBalance   schedulerType = 1
+	schedulerTypeMoveTable schedulerType = 2
 )
+
+//type schedulerType string
+//
+//const (
+//	schedulerTypeBasic        schedulerType = "basic-scheduler"
+//	schedulerTypeBalance      schedulerType = "balance-scheduler"
+//	schedulerTypeMoveTable    schedulerType = "move-table-scheduler"
+//	schedulerTypeRebalance    schedulerType = "rebalance-scheduler"
+//	schedulerTypeDrainCapture schedulerType = "drain-capture-scheduler"
+//)
