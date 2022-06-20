@@ -25,6 +25,7 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/br/pkg/lightning/common"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/atomic"
@@ -964,6 +965,9 @@ func (v *DataValidator) checkAndPersistCheckpointAndData(loc binlog.Location) er
 		v.lastFlushTime = time.Now()
 		if err := v.persistCheckpointAndData(loc); err != nil {
 			v.L.Warn("failed to flush checkpoint: ", zap.Error(err))
+			if common.IsRetryableError(err) {
+				return nil
+			}
 			return err
 		}
 	}

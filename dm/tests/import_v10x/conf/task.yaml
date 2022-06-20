@@ -130,7 +130,7 @@ validators:
     meta-flush-interval: 1m0s
     batch-query-size: 100
     max-pending-row-size: 500m
-    max-pending-row-count: 8000
+    max-pending-row-count: 2147483647
 clean-dump-file: false
 ansi-quotes: false
 remove-meta: false
