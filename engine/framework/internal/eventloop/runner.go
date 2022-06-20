@@ -24,6 +24,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	frameErrors "github.com/pingcap/tiflow/engine/framework/internal/errors"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 )
@@ -69,6 +70,7 @@ func (r *Runner[R]) Run(ctx context.Context) error {
 	if closeErr := r.task.Close(context.Background()); closeErr != nil {
 		log.L().Warn("Closing task returned error", zap.String("label", r.task.ID()))
 	}
+
 	return err
 }
 
@@ -108,6 +110,11 @@ func isForcefulExitError(errIn error) bool {
 		// Cancellation should result in a forceful exit.
 		return true
 	}
+
+	if _, ok := frameErrors.TryUnwrapFailFastError(errIn); ok {
+		return true
+	}
+
 	// Suicides should result in a forceful exit.
 	return derrors.ErrWorkerSuicide.Equal(errIn)
 }

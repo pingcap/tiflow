@@ -411,8 +411,8 @@ func (w *DefaultBaseWorker) MetricFactory() promutil.Factory {
 }
 
 // Logger implements BaseMaster.Logger
-func (m *DefaultBaseWorker) Logger() *zap.Logger {
-	return m.logger
+func (w *DefaultBaseWorker) Logger() *zap.Logger {
+	return w.logger
 }
 
 // UpdateStatus updates the worker's status and tries to notify the master.
