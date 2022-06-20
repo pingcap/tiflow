@@ -422,7 +422,6 @@ func (m *MessageServer) AddHandler(
 				zap.Int64("lastAck", lastAck))
 			return nil
 		}
-		log.Info("sequence", zap.Int64("seq", entry.Sequence))
 		if lastAck != initAck && entry.Sequence > lastAck+1 {
 			// We detected a message loss at seq = (lastAck+1).
 			// Note that entry.Sequence == lastAck+1 is actual a requirement
