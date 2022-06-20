@@ -663,7 +663,7 @@ func (c *changefeed) filterDDLEvent(ddlEvents []*model.DDLEvent) []*model.DDLEve
 			)
 			continue
 		}
-		res = append(c.ddlEventCache, ddlEvent)
+		res = append(res, ddlEvent)
 	}
 	return res
 }
