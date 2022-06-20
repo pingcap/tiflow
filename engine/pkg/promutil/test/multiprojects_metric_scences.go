@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
+	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/prometheus/client_golang/prometheus"
@@ -204,7 +205,7 @@ func scenarios3OneJobmasterOneWorker(wg *sync.WaitGroup) {
 		"user0",
 		"proj0",
 	)
-	jobType := "DM"
+	jobType := engineModel.JobTypeDM
 	jobID := "job0"
 	workerID := "worker0"
 
@@ -282,7 +283,7 @@ func scenarios4OneJobmasterMultiWorker(wg *sync.WaitGroup) {
 		"user0",
 		"proj0",
 	)
-	jobType := "DM"
+	jobType := engineModel.JobTypeDM
 	jobID := "job0"
 
 	go func() {
@@ -350,8 +351,8 @@ func scenarios5MultiJobmasterMultiWorker(wg *sync.WaitGroup) {
 		"user0",
 		"proj0",
 	)
-	jobType0 := "DM"
-	jobType1 := "CDC"
+	jobType0 := engineModel.JobTypeDM
+	jobType1 := engineModel.JobTypeCDC
 
 	jobID0 := "job0"
 	jobID1 := "job1"
@@ -487,7 +488,7 @@ func scenarios6OneJobmasterOneExecutor(wg *sync.WaitGroup) {
 		"user0",
 		"proj0",
 	)
-	jobType := "DM"
+	jobType := engineModel.JobTypeDM
 	jobID := "job0"
 
 	go func() {
@@ -538,7 +539,7 @@ func scenarios7MultiJobmasterMultiProjects(wg *sync.WaitGroup) {
 		"user1",
 		"proj1",
 	)
-	jobType := "DM"
+	jobType := engineModel.JobTypeDM
 	jobID := "job0"
 
 	go func() {

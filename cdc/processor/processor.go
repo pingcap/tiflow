@@ -34,12 +34,10 @@ import (
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/cdc/sink"
-	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	sinkmetric "github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
-	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -483,26 +481,19 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		contextutil.TimezoneFromCtx(ctx),
 		p.changefeed.Info.Config.EnableOldValue)
 
-	opts := make(map[string]string, len(p.changefeed.Info.Opts)+2)
-	for k, v := range p.changefeed.Info.Opts {
-		opts[k] = v
-	}
-
-	// TODO(neil) find a better way to let sink know cyclic is enabled.
-	if p.changefeed.Info.Config.Cyclic.IsEnabled() {
-		cyclicCfg, err := p.changefeed.Info.Config.Cyclic.Marshal()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		opts[mark.OptCyclicConfig] = cyclicCfg
-	}
-	opts[metrics.OptCaptureAddr] = ctx.GlobalVars().CaptureInfo.AdvertiseAddr
 	log.Info("processor try new sink",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeed.ID.ID))
 
 	start := time.Now()
-	p.sink, err = sink.New(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
+	p.sink, err = sink.New(
+		stdCtx,
+		p.changefeed.ID,
+		p.changefeed.Info.SinkURI,
+		p.filter,
+		p.changefeed.Info.Config,
+		errCh,
+	)
 	if err != nil {
 		log.Info("processor new sink failed",
 			zap.String("namespace", p.changefeedID.Namespace),
@@ -749,36 +740,6 @@ func (p *processor) getTableName(ctx cdcContext.Context,
 	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
 		retry.WithMaxTries(maxTries),
 		retry.WithIsRetryableErr(cerror.IsRetryableError))
-	// TODO: remove this feature flag after table actor is GA
-	if p.changefeed.Info.Config.Cyclic.IsEnabled() {
-		// Retry to find mark table ID
-		var markTableID model.TableID
-		err := retry.Do(context.Background(), func() error {
-			if tableName == nil {
-				x, exist := p.schemaStorage.GetLastSnapshot().PhysicalTableByID(tableID)
-				if !exist {
-					return cerror.ErrProcessorTableNotFound.
-						GenWithStack("normal table(%s)", tableID)
-				}
-				tableName = &x.TableName
-			}
-			markTableSchemaName, markTableTableName := mark.GetMarkTableName(tableName.Schema, tableName.Table)
-			tableInfo, exist := p.schemaStorage.GetLastSnapshot().TableByName(markTableSchemaName, markTableTableName)
-			if !exist {
-				return cerror.ErrProcessorTableNotFound.
-					GenWithStack("normal table(%s) and mark table not match",
-						tableName.String())
-			}
-			markTableID = tableInfo.ID
-			return nil
-		}, retry.WithBackoffBaseDelay(50),
-			retry.WithBackoffMaxDelay(60*1000),
-			retry.WithMaxTries(20))
-		if err != nil {
-			return "", errors.Trace(err)
-		}
-		replicaInfo.MarkTableID = markTableID
-	}
 
 	if tableName == nil {
 		log.Warn("failed to get table name for metric")

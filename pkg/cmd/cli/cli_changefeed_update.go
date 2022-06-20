@@ -164,40 +164,15 @@ func (o *updateChangefeedOptions) applyChanges(oldInfo *model.ChangeFeedInfo, cm
 			}
 		case "schema-registry":
 			newInfo.Config.Sink.SchemaRegistry = o.commonChangefeedOptions.schemaRegistry
-		case "opts":
-			for _, opt := range o.commonChangefeedOptions.opts {
-				s := strings.SplitN(opt, "=", 2)
-				if len(s) <= 0 {
-					cmd.Printf("omit opt: %s", opt)
-					continue
-				}
-
-				var key string
-				var value string
-				key = s[0]
-				if len(s) > 1 {
-					value = s[1]
-				}
-				newInfo.Opts[key] = value
-			}
-
 		case "sort-engine":
 			newInfo.Engine = o.commonChangefeedOptions.sortEngine
-		case "cyclic-replica-id":
-			filter := make([]uint64, 0, len(o.commonChangefeedOptions.cyclicFilterReplicaIDs))
-			for _, id := range o.commonChangefeedOptions.cyclicFilterReplicaIDs {
-				filter = append(filter, uint64(id))
-			}
-			newInfo.Config.Cyclic.FilterReplicaID = filter
-		case "cyclic-sync-ddl":
-			newInfo.Config.Cyclic.SyncDDL = o.commonChangefeedOptions.cyclicSyncDDL
 		case "sync-point":
 			newInfo.SyncPointEnabled = o.commonChangefeedOptions.syncPointEnabled
 		case "sync-interval":
 			newInfo.SyncPointInterval = o.commonChangefeedOptions.syncPointInterval
 		case "sort-dir":
 			log.Warn("this flag cannot be updated and will be ignored", zap.String("flagName", flag.Name))
-		case "changefeed-id", "no-confirm", "cyclic-filter-replica-ids":
+		case "changefeed-id", "no-confirm":
 			// Do nothing, these are some flags from the changefeed command,
 			// we don't use it to update, but we do use these flags.
 		case "interact":

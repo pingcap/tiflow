@@ -60,7 +60,6 @@ func initProcessor4Test(ctx cdcContext.Context, t *testing.T) (*processor, *orch
 	changefeedInfo := `
 {
     "sink-uri": "blackhole://",
-    "opts": {},
     "create-time": "2020-02-02T00:00:00.000000+00:00",
     "start-ts": 0,
     "target-ts": 0,
@@ -85,13 +84,6 @@ func initProcessor4Test(ctx cdcContext.Context, t *testing.T) (*processor, *orch
         "sink": {
             "dispatchers": null,
             "protocol": "open-protocol"
-        },
-        "cyclic-replication": {
-            "enable": false,
-            "replica-id": 0,
-            "filter-replica-ids": null,
-            "id-buckets": 0,
-            "sync-ddl": false
         }
     },
     "state": "normal",
