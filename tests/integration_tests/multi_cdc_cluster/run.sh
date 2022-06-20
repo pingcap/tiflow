@@ -48,8 +48,8 @@ function run() {
   run_sql "INSERT INTO test.multi_cdc2(id, val) VALUES (2, 2);"
   run_sql "INSERT INTO test.multi_cdc2(id, val) VALUES (3, 3);"
 
-  check_table_exists "sink_hang.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-  check_table_exists "sink_hang.t2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+  check_table_exists "test.multi_cdc1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+  check_table_exists "test.multi_cdc2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
   check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
   cleanup_process $CDC_BINARY
 }
