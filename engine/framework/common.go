@@ -14,7 +14,6 @@
 package framework
 
 import (
-	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -26,8 +25,19 @@ import (
 type (
 	// WorkerType alias to model.WorkerType
 	WorkerType = model.WorkerType
+
 	// WorkerConfig stores worker config in any type
 	WorkerConfig = interface{}
+
+	// WorkerHandle alias to master.WorkerHandle
+	WorkerHandle = master.WorkerHandle
+
+	// MockHandle is a mock for WorkerHandle.
+	// Re-exported for testing.
+	MockHandle = master.MockHandle
+
+	// MasterFailoverReasonCode is used as reason code
+	MasterFailoverReasonCode int32
 )
 
 // Defines all task type
@@ -53,9 +63,6 @@ const (
 	// extend the worker type here
 )
 
-// MasterFailoverReasonCode is used as reason code
-type MasterFailoverReasonCode int32
-
 // Defines all reason codes
 const (
 	MasterTimedOut = MasterFailoverReasonCode(iota + 1)
@@ -67,16 +74,6 @@ type MasterFailoverReason struct {
 	Code         MasterFailoverReasonCode
 	ErrorMessage string
 }
-
-// WorkerHandle alias to master.WorkerHandle
-type WorkerHandle = master.WorkerHandle
-
-// MockHandle is a mock for WorkerHandle.
-// Re-exported for testing.
-type MockHandle = master.MockHandle
-
-// nolint:revive
-var StopAfterTick = errors.New("stop after tick")
 
 // MustConvertWorkerType2JobType return the job type of worker type. Panic if it fail.
 // TODO: let user register a unique identifier for the metric prefix
