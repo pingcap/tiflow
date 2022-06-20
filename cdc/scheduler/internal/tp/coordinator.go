@@ -219,7 +219,7 @@ func (c *coordinator) poll(
 
 	var msgBuf []*schedulepb.Message
 	c.captureM.HandleMessage(recvMsgs)
-	msgs := c.captureM.Tick(c.replicationM.ReplicationSets())
+	msgs := c.captureM.Tick(c.replicationM.ReplicationSets(), c.schedulerM.DrainingTarget())
 	msgBuf = append(msgBuf, msgs...)
 	msgs = c.captureM.HandleAliveCaptureUpdate(aliveCaptures)
 	msgBuf = append(msgBuf, msgs...)

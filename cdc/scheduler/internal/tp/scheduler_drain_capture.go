@@ -45,6 +45,12 @@ func (d *drainCaptureScheduler) Name() string {
 	return schedulerTypeDrainCapture.String()
 }
 
+func (d *drainCaptureScheduler) getTarget() model.CaptureID {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.target
+}
+
 func (d *drainCaptureScheduler) setTarget(target model.CaptureID) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()

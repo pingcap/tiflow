@@ -137,7 +137,7 @@ func (c *captureManager) checkAllCaptureInitialized() bool {
 }
 
 func (c *captureManager) Tick(
-	reps map[model.TableID]*ReplicationSet,
+	reps map[model.TableID]*ReplicationSet, drainingCapture model.CaptureID,
 ) []*schedulepb.Message {
 	c.tickCounter++
 	if c.tickCounter < c.heartbeatTick {
@@ -160,6 +160,9 @@ func (c *captureManager) Tick(
 			MsgType: schedulepb.MsgHeartbeat,
 			Heartbeat: &schedulepb.Heartbeat{
 				TableIDs: tables[to],
+				// IsStopping let the receiver capture know that it should be stopping now.
+				// At the moment, this is trigger by `DrainCapture` scheduler.
+				IsStopping: drainingCapture == to,
 			},
 		})
 	}

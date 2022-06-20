@@ -127,3 +127,7 @@ func (sm *schedulerManager) DrainCapture(target model.CaptureID) bool {
 
 	return drainCaptureScheduler.setTarget(target)
 }
+
+func (sm *schedulerManager) DrainingTarget() model.CaptureID {
+	return sm.schedulers[schedulerTypeDrainCapture].(*drainCaptureScheduler).getTarget()
+}
