@@ -29,7 +29,8 @@ const captureIDNotDraining = ""
 var _ scheduler = &drainCaptureScheduler{}
 
 type drainCaptureScheduler struct {
-	mu     sync.Mutex
+	mu sync.Mutex
+	// todo: when should reset `target`
 	target model.CaptureID
 	random *rand.Rand
 }
@@ -150,12 +151,12 @@ func (d *drainCaptureScheduler) Schedule(
 		captureWorkload[target] = randomizeWorkload(d.random, minWorkload+1)
 	}
 
+	// todo: accept the task does not mean drain capture finished, revise this.
 	accept := func() {
 		d.mu.Lock()
 		defer d.mu.Unlock()
 		log.Info("tpscheduler: drain capture task accepted, clean the target",
 			zap.String("target", d.target))
-		// todo: accept the task does not mean drain capture finished, revise this.
 		d.target = captureIDNotDraining
 	}
 
