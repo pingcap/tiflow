@@ -34,8 +34,8 @@ const (
 	ChangefeedInfoKey = "/changefeed/info"
 	// ChangefeedStatusKey is the key path for changefeed status
 	ChangefeedStatusKey = "/changefeed/status"
-	// MetaVersionKey is the key path for metadata version
-	MetaVersionKey = "/meta/meta-version"
+	// metaVersionKey is the key path for metadata version
+	metaVersionKey = "/meta/meta-version"
 	upstreamKey    = "/upstream"
 
 	// DeletionCounterKey is the key path for the counter of deleted keys
@@ -130,7 +130,7 @@ func (k *CDCKey) Parse(clusterID, key string) error {
 			k.Tp = CDCKeyTypeCapture
 			k.CaptureID = key[len(captureKey)+1:]
 			k.OwnerLeaseID = ""
-		case strings.HasPrefix(key, MetaVersionKey):
+		case strings.HasPrefix(key, metaVersionKey):
 			k.Tp = CDCKeyTypeMetaVersion
 		default:
 			return cerror.ErrInvalidEtcdKey.GenWithStackByArgs(key)
@@ -202,7 +202,7 @@ func (k *CDCKey) String() string {
 		return NamespacedPrefix(k.ClusterID, k.ChangefeedID.Namespace) + taskPositionKey +
 			"/" + k.CaptureID + "/" + k.ChangefeedID.ID
 	case CDCKeyTypeMetaVersion:
-		return BaseKey(k.ClusterID) + metaPrefix + MetaVersionKey
+		return BaseKey(k.ClusterID) + metaPrefix + metaVersionKey
 	case CDCKeyTypeUpStream:
 		return fmt.Sprintf("%s%s/%d",
 			NamespacedPrefix(k.ClusterID, k.Namespace),
