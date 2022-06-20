@@ -524,14 +524,7 @@ func (w *DefaultBaseWorker) runHeartbeatWorker(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case <-ticker.C:
-			isFinished := false
-			if w.exitController.IsExiting() {
-				// If we are in the state workerHalfExit,
-				// we need to notify the master so that the master
-				// marks us as exited.
-				isFinished = true
-			}
-			if err := w.masterClient.SendHeartBeat(ctx, w.clock, isFinished); err != nil {
+			if err := w.masterClient.SendHeartBeat(ctx, w.clock); err != nil {
 				return errors.Trace(err)
 			}
 		}

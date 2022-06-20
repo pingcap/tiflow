@@ -15,6 +15,7 @@ package worker
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -32,6 +33,9 @@ type masterClientTestHelper struct {
 	Meta          pkgOrm.Client
 	MessageSender *p2p.MockMessageSender
 	InitTime      time.Time
+
+	wg         sync.WaitGroup
+	closeErrCh chan error
 }
 
 func newMasterClientTestHelper(
@@ -57,6 +61,7 @@ func newMasterClientTestHelper(
 		Meta:          meta,
 		MessageSender: msgSender,
 		InitTime:      initTime,
+		closeErrCh:    make(chan error, 1),
 	}
 }
 
@@ -68,6 +73,35 @@ func (h *masterClientTestHelper) PopHeartbeat(t *testing.T) *frameModel.Heartbea
 	require.True(t, ok)
 
 	return msg.(*frameModel.HeartbeatPingMessage)
+}
+
+func (h *masterClientTestHelper) SimulateWorkerClose(timeout time.Duration) {
+	h.wg.Add(1)
+	go func() {
+		defer h.wg.Done()
+
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+
+		h.closeErrCh <- h.Client.WaitClosed(ctx)
+	}()
+}
+
+func (h *masterClientTestHelper) WaitWorkerClosed(t *testing.T) error {
+	h.wg.Wait()
+
+	// The timeout is for terminating the test when there is a serious problem,
+	// so that the test does not run for 10 minutes and then times out.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	select {
+	case <-ctx.Done():
+		t.FailNow()
+	case err := <-h.closeErrCh:
+		return err
+	}
+	return nil
 }
 
 func TestMasterClientRefreshInfo(t *testing.T) {
@@ -122,7 +156,7 @@ func TestMasterClientHeartbeat(t *testing.T) {
 	sendTime1 := helper.InitTime.Add(1 * time.Second)
 	clk.Set(sendTime1)
 
-	err = helper.Client.SendHeartBeat(context.Background(), clk, false)
+	err = helper.Client.SendHeartBeat(context.Background(), clk)
 	require.NoError(t, err)
 
 	ping := helper.PopHeartbeat(t)
@@ -144,8 +178,13 @@ func TestMasterClientHeartbeat(t *testing.T) {
 	sendTime2 := helper.InitTime.Add(2 * time.Second)
 	clk.Set(sendTime2)
 
+	helper.SimulateWorkerClose(1 * time.Second)
+
+	// Wait for the goroutine running WaitClose() to launch.
+	time.Sleep(100 * time.Millisecond)
+
 	// Send a heartbeat with IsFinished set to true
-	err = helper.Client.SendHeartBeat(context.Background(), clk, true)
+	err = helper.Client.SendHeartBeat(context.Background(), clk)
 	require.NoError(t, err)
 	ping = helper.PopHeartbeat(t)
 	require.Equal(t, &frameModel.HeartbeatPingMessage{
@@ -173,6 +212,7 @@ func TestMasterClientHeartbeat(t *testing.T) {
 		IsFinished: true,
 	})
 	require.True(t, helper.Client.IsMasterSideClosed())
+	require.NoError(t, helper.WaitWorkerClosed(t))
 }
 
 func TestMasterClientHeartbeatMismatch(t *testing.T) {
@@ -193,7 +233,7 @@ func TestMasterClientHeartbeatMismatch(t *testing.T) {
 	sendTime1 := helper.InitTime.Add(1 * time.Second)
 	clk.Set(sendTime1)
 
-	err = helper.Client.SendHeartBeat(context.Background(), clk, false)
+	err = helper.Client.SendHeartBeat(context.Background(), clk)
 	require.NoError(t, err)
 
 	ping := helper.PopHeartbeat(t)
@@ -366,7 +406,7 @@ func TestMasterClientSendHeartbeatRefreshMaster(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = helper.Client.SendHeartBeat(context.Background(), clock.New(), false)
+	err = helper.Client.SendHeartBeat(context.Background(), clock.New())
 	require.NoError(t, err)
 
 	// Since the refreshing happens asynchronously,
