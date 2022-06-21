@@ -61,6 +61,9 @@ func NewGCRunner(
 
 // Run runs the GCRunner. It blocks until ctx is canceled.
 func (r *DefaultGCRunner) Run(ctx context.Context) error {
+	defer func() {
+		log.L().Info("default gc runner exited")
+	}()
 	// TODO this will result in DB queries every 10 seconds.
 	// This is a very naive strategy, we will modify the
 	// algorithm after doing enough system testing.
