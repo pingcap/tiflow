@@ -72,7 +72,9 @@ const (
 	DefaultValidatorBatchQuerySize    = 100
 	DefaultValidatorMaxPendingRowSize = "500m"
 
-	ValidatorMaxAccumulatedRow    = 100000
+	ValidatorMaxAccumulatedRow = 100000
+	// PendingRow is substantial in this version (in sysbench test)
+	// set to MaxInt temporaly and reset in the future
 	DefaultValidatorMaxPendingRow = math.MaxInt32
 )
 
@@ -398,9 +400,6 @@ func (v *ValidatorConfig) Adjust() error {
 		return err
 	}
 	if v.MaxPendingRowCount == 0 {
-		// validator validates every ValidatorMaxAccumulatedRow rows.
-		// if after 4 validation on each worker, we still cannot reduce the row count,
-		// we take it as a signal that there are too many validation failures.
 		v.MaxPendingRowCount = DefaultValidatorMaxPendingRow
 	}
 	return nil
