@@ -68,7 +68,7 @@ func (c DeadlineExceeded) grpcStatusCode() codes.Code {
 type AlreadyExists struct{}
 
 func (c AlreadyExists) grpcStatusCode() codes.Code {
-	return codes.NotFound
+	return codes.AlreadyExists
 }
 
 // NotFound can be passed as a parameter to Error to
