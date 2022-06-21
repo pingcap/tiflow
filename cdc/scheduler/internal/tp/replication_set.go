@@ -45,15 +45,22 @@ const (
 	// ReplicationSetStateUnknown means the replication state is unknown,
 	// it should not happen.
 	ReplicationSetStateUnknown ReplicationSetState = 0
+
 	// ReplicationSetStateAbsent means there is no one replicates or prepares it.
 	ReplicationSetStateAbsent ReplicationSetState = 1
-	// ReplicationSetStatePrepare means it needs to add a secondary.
+
+	// ReplicationSetStatePrepare means one capture is preparing it,
+	// there might have another capture is replicating the table.
 	ReplicationSetStatePrepare ReplicationSetState = 2
-	// ReplicationSetStateCommit means it needs to promote secondary to primary.
+
+	// ReplicationSetStateCommit means one capture is prepared,
+	// it needs to promote secondary to primary.
 	ReplicationSetStateCommit ReplicationSetState = 3
+
 	// ReplicationSetStateReplicating means there is exactly one capture
 	// that is replicating the table.
 	ReplicationSetStateReplicating ReplicationSetState = 4
+
 	// ReplicationSetStateRemoving means all captures need to
 	// stop replication eventually.
 	ReplicationSetStateRemoving ReplicationSetState = 5
@@ -84,9 +91,11 @@ func (r ReplicationSetState) MarshalJSON() ([]byte, error) {
 
 // ReplicationSet is a state machine that manages replication states.
 type ReplicationSet struct {
-	TableID    model.TableID
-	State      ReplicationSetState
-	Primary    model.CaptureID
+	TableID model.TableID
+	State   ReplicationSetState
+	// Primary set indicate that the table is replicating on this capture
+	Primary model.CaptureID
+	// Secondary set indicate that the table is preparing on this capture
 	Secondary  model.CaptureID
 	Captures   map[model.CaptureID]struct{}
 	Checkpoint schedulepb.Checkpoint
@@ -598,10 +607,10 @@ func (r *ReplicationSet) handleAddTable(
 	}
 	oldState := r.State
 	r.State = ReplicationSetStateAbsent
+	r.Captures[captureID] = struct{}{}
 	log.Info("tpscheduler: replication state transition, add table",
 		zap.Any("replicationSet", r),
 		zap.Stringer("old", oldState), zap.Stringer("new", r.State))
-	r.Captures[captureID] = struct{}{}
 	status := schedulepb.TableStatus{
 		TableID:    r.TableID,
 		State:      schedulepb.TableStateAbsent,
@@ -629,11 +638,11 @@ func (r *ReplicationSet) handleMoveTable(
 	}
 	oldState := r.State
 	r.State = ReplicationSetStatePrepare
+	r.Secondary = dest
+	r.Captures[dest] = struct{}{}
 	log.Info("tpscheduler: replication state transition, move table",
 		zap.Any("replicationSet", r),
 		zap.Stringer("old", oldState), zap.Stringer("new", r.State))
-	r.Secondary = dest
-	r.Captures[dest] = struct{}{}
 	status := schedulepb.TableStatus{
 		TableID:    r.TableID,
 		State:      schedulepb.TableStateAbsent,

@@ -171,9 +171,9 @@ func TestCaptureManagerTick(t *testing.T) {
 	cm := newCaptureManager(model.ChangeFeedID{}, rev, 2)
 
 	// No heartbeat if there is no capture.
-	msgs := cm.Tick(nil)
+	msgs := cm.Tick(nil, captureIDNotDraining)
 	require.Empty(t, msgs)
-	msgs = cm.Tick(nil)
+	msgs = cm.Tick(nil, captureIDNotDraining)
 	require.Empty(t, msgs)
 
 	ms := map[model.CaptureID]*model.CaptureInfo{
@@ -183,9 +183,9 @@ func TestCaptureManagerTick(t *testing.T) {
 	cm.HandleAliveCaptureUpdate(ms)
 
 	// Heartbeat even if capture is uninitialized.
-	msgs = cm.Tick(nil)
+	msgs = cm.Tick(nil, captureIDNotDraining)
 	require.Empty(t, msgs)
-	msgs = cm.Tick(nil)
+	msgs = cm.Tick(nil, captureIDNotDraining)
 	require.ElementsMatch(t, []*schedulepb.Message{
 		{To: "1", MsgType: schedulepb.MsgHeartbeat, Heartbeat: &schedulepb.Heartbeat{}},
 		{To: "2", MsgType: schedulepb.MsgHeartbeat, Heartbeat: &schedulepb.Heartbeat{}},
@@ -195,9 +195,9 @@ func TestCaptureManagerTick(t *testing.T) {
 	for _, s := range []CaptureState{CaptureStateInitialized, CaptureStateStopping} {
 		cm.Captures["1"].State = s
 		cm.Captures["2"].State = s
-		msgs = cm.Tick(nil)
+		msgs = cm.Tick(nil, captureIDNotDraining)
 		require.Empty(t, msgs)
-		msgs = cm.Tick(nil)
+		msgs = cm.Tick(nil, captureIDNotDraining)
 		require.ElementsMatch(t, []*schedulepb.Message{
 			{To: "1", MsgType: schedulepb.MsgHeartbeat, Heartbeat: &schedulepb.Heartbeat{}},
 			{To: "2", MsgType: schedulepb.MsgHeartbeat, Heartbeat: &schedulepb.Heartbeat{}},
@@ -205,7 +205,7 @@ func TestCaptureManagerTick(t *testing.T) {
 	}
 
 	// TableID in heartbeat.
-	msgs = cm.Tick(nil)
+	msgs = cm.Tick(nil, captureIDNotDraining)
 	require.Empty(t, msgs)
 	tables := map[model.TableID]*ReplicationSet{
 		1: {Primary: "1"},
@@ -213,7 +213,7 @@ func TestCaptureManagerTick(t *testing.T) {
 		3: {Secondary: "2"},
 		4: {},
 	}
-	msgs = cm.Tick(tables)
+	msgs = cm.Tick(tables, captureIDNotDraining)
 	require.Len(t, msgs, 2)
 	if msgs[0].To == "1" {
 		require.ElementsMatch(t, []model.TableID{1, 2}, msgs[0].Heartbeat.TableIDs)

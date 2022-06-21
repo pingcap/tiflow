@@ -132,11 +132,7 @@ var defaultServerConfig = &ServerConfig{
 		Messages: defaultMessageConfig.Clone(),
 
 		EnableTwoPhaseScheduler: false,
-		Scheduler: &SchedulerConfig{
-			HeartbeatTick:        2,
-			MaxTaskConcurrency:   10,
-			CheckBalanceInterval: TomlDuration(time.Minute),
-		},
+		Scheduler:               NewDefaultSchedulerConfig(),
 	},
 }
 

@@ -172,7 +172,7 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) []*schedulepb.Message {
 
 		switch message.GetMsgType() {
 		case schedulepb.MsgHeartbeat:
-			response := a.handleMessageHeartbeat(message.Heartbeat.GetTableIDs())
+			response := a.handleMessageHeartbeat(message.GetHeartbeat())
 			result = append(result, response)
 		case schedulepb.MsgDispatchTableRequest:
 			a.handleMessageDispatchTableRequest(message.DispatchTableRequest, processorEpoch)
@@ -187,7 +187,7 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) []*schedulepb.Message {
 	return result
 }
 
-func (a *agent) handleMessageHeartbeat(expected []model.TableID) *schedulepb.Message {
+func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) *schedulepb.Message {
 	allTables := a.tableM.getAllTables()
 	result := make([]schedulepb.TableStatus, 0, len(allTables))
 	for _, table := range allTables {
@@ -197,13 +197,14 @@ func (a *agent) handleMessageHeartbeat(expected []model.TableID) *schedulepb.Mes
 		}
 		result = append(result, status)
 	}
-	for _, tableID := range expected {
+	for _, tableID := range request.GetTableIDs() {
 		if _, ok := allTables[tableID]; !ok {
 			status := a.tableM.getTableStatus(tableID)
 			result = append(result, status)
 		}
 	}
 
+	a.stopping = a.stopping || request.GetIsStopping()
 	response := &schedulepb.HeartbeatResponse{
 		Tables:     result,
 		IsStopping: a.stopping,

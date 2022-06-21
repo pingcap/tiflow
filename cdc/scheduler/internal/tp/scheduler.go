@@ -27,11 +27,24 @@ type scheduler interface {
 	) []*scheduleTask
 }
 
-type schedulerType string
+type schedulerType int
 
 const (
-	schedulerTypeBasic     schedulerType = "basic-scheduler"
-	schedulerTypeBalance   schedulerType = "balance-scheduler"
-	schedulerTypeMoveTable schedulerType = "move-table-scheduler"
-	schedulerTypeRebalance schedulerType = "rebalance-scheduler"
+	schedulerTypeBasic        schedulerType = 0
+	schedulerTypeBalance      schedulerType = 1
+	schedulerTypeMoveTable    schedulerType = 2
+	schedulerTypeRebalance    schedulerType = 3
+	schedulerTypeDrainCapture schedulerType = 4
 )
+
+var schedulerTypeName = map[int]string{
+	0: "basic-scheduler",
+	1: "balance-scheduler",
+	2: "move-table-scheduler",
+	3: "rebalance-scheduler",
+	4: "drain-capture-scheduler",
+}
+
+func (s schedulerType) String() string {
+	return schedulerTypeName[int(s)]
+}

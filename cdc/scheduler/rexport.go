@@ -44,6 +44,9 @@ type Scheduler internal.Scheduler
 // We need this interface so that we can provide the information through HTTP API.
 type InfoProvider internal.InfoProvider
 
+// Query is for open api can access the scheduler
+type Query internal.Query
+
 // Agent is an interface for an object inside Processor that is responsible
 // for receiving commands from the Owner.
 // Ideally the processor should drive the Agent by Tick.
