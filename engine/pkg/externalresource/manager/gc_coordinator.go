@@ -62,6 +62,9 @@ func NewGCCoordinator(
 
 // Run runs the DefaultGCCoordinator.
 func (c *DefaultGCCoordinator) Run(ctx context.Context) error {
+	defer func() {
+		log.L().Info("default gc coordinator exited")
+	}()
 	// We run a retry loop at the max frequency of once per second.
 	rl := ratelimit.New(1 /* once per second */)
 	for {

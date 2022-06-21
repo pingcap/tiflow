@@ -22,10 +22,10 @@ import (
 	"net/http"
 	"net/http/httputil"
 
-	"github.com/pingcap/failpoint"
-
 	ginmiddleware "github.com/deepmap/oapi-codegen/pkg/gin-middleware"
 	"github.com/gin-gonic/gin"
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/util/dbutil"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -36,7 +36,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 const (
@@ -374,7 +373,7 @@ func (s *Server) DMAPIGetSourceSchemaList(c *gin.Context, sourceName string) {
 		return
 	}
 	defer baseDB.Close()
-	schemaList, err := utils.GetSchemaList(c.Request.Context(), baseDB.DB)
+	schemaList, err := dbutil.GetSchemas(c.Request.Context(), baseDB.DB)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -390,7 +389,7 @@ func (s *Server) DMAPIGetSourceTableList(c *gin.Context, sourceName string, sche
 		return
 	}
 	defer baseDB.Close()
-	tableList, err := utils.GetTableList(c.Request.Context(), baseDB.DB, schemaName)
+	tableList, err := dbutil.GetTables(c.Request.Context(), baseDB.DB, schemaName)
 	if err != nil {
 		_ = c.Error(err)
 		return
