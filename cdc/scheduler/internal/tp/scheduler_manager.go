@@ -57,8 +57,8 @@ func (sm *schedulerManager) Schedule(
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
-	replications map[model.TableID]*ReplicationSet) []*scheduleTask {
-
+	replications map[model.TableID]*ReplicationSet,
+) []*scheduleTask {
 	for _, scheduler := range sm.schedulers {
 		tasks := scheduler.Schedule(checkpointTs, currentTables, aliveCaptures, replications)
 		for _, t := range tasks {

@@ -88,5 +88,4 @@ func TestDrainCapture(t *testing.T) {
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Equal(t, "a", scheduler.target)
 	require.Len(t, tasks, 1)
-
 }
