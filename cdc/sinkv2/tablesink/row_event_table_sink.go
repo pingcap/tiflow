@@ -26,7 +26,7 @@ var _ TableSink = (*rowEventTableSink)(nil)
 
 type rowEventTableSink struct {
 	backendSink       roweventsink.RowEventSink
-	rowEventTsTracker *tsProgressTracker
+	rowEventTsTracker *progressTracker
 	rowBuffer         []*model.RowChangedEvent
 	TableStopped      *atomic.Bool
 }

@@ -20,27 +20,27 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
-type tsProgressTracker struct {
-	lock      sync.Mutex
-	pendingTs *linkedhashmap.Map
+type progressTracker struct {
+	lock             sync.Mutex
+	pendingEventKeys *linkedhashmap.Map
 }
 
-func (r *tsProgressTracker) add(key any, resolvedTs model.ResolvedTs) {
+func (r *progressTracker) add(key any, resolvedTs model.ResolvedTs) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
-	r.pendingTs.Put(key, resolvedTs)
+	r.pendingEventKeys.Put(key, resolvedTs)
 }
 
-func (r *tsProgressTracker) remove(key any) {
+func (r *progressTracker) remove(key any) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
-	r.pendingTs.Remove(key)
+	r.pendingEventKeys.Remove(key)
 }
 
-func (r *tsProgressTracker) minTs() model.ResolvedTs {
+func (r *progressTracker) minTs() model.ResolvedTs {
 	r.lock.Lock()
 	defer r.lock.Unlock()
-	iterator := r.pendingTs.Iterator()
+	iterator := r.pendingEventKeys.Iterator()
 	if !iterator.First() {
 		return model.NewResolvedTs(0)
 	}

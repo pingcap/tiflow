@@ -24,7 +24,7 @@ var _ TableSink = (*txnEventTableSink)(nil)
 
 type txnEventTableSink struct {
 	backendSink       txneventsink.TxnEventSink
-	txnEventTsTracker *tsProgressTracker
+	txnEventTsTracker *progressTracker
 	txnBuffer         map[uint64][]*model.SingleTableTxn
 	TableStopped      *atomic.Bool
 }
