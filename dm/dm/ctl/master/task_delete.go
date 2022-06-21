@@ -30,7 +30,7 @@ import (
 // NewTaskDeleteCmd creates a task delete command.
 func NewTaskDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "delete <task-name | config-file> [--false] [--yes]",
+		Use:   "delete <task-name | config-file> [--force] [--yes]",
 		Short: "Delete a task",
 		RunE:  taskDeleteFunc,
 	}

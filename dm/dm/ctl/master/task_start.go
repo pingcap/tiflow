@@ -28,13 +28,13 @@ import (
 // NewTaskStartCmd creates a Task Start command.
 func NewTaskStartCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "start <task-name | config-file> [-s source ...] [--remove-meta] [--start-time] [--safe-mode-time]",
+		Use:   "start <task-name | config-file> [-s source ...] [--remove-meta] [--start-time] [--safe-mode-duration]",
 		Short: "Start a task with specified conditions",
 		RunE:  taskStartFunc,
 	}
 	cmd.Flags().BoolP("remove-meta", "", false, "whether to remove task's meta data")
 	cmd.Flags().String("start-time", "", "specify the start time of binlog replication, e.g. '2021-10-21 00:01:00' or 2021-10-21T00:01:00")
-	cmd.Flags().String("safe-mode-time", "", "specify time duration of safe mode, e.g. '10s'")
+	cmd.Flags().String("safe-mode-duration", "", "specify time duration of safe mode, e.g. '10s'")
 
 	return cmd
 }
@@ -47,25 +47,6 @@ func taskStartFunc(cmd *cobra.Command, _ []string) error {
 	}
 	arg0 := cmd.Flags().Arg(0)
 	taskName := common.GetTaskNameFromArgOrFile(arg0)
-	// check task is exist
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	getStatusReq := &openapi.DMAPIGetTaskStatusParams{}
-	params := []interface{}{taskName, getStatusReq}
-	res := &openapi.GetTaskStatusResponse{}
-	errResp := common.SendOpenapiRequest(ctx, "DMAPIGetTaskStatus", params, http.StatusOK, res)
-	if errResp != nil {
-		if strings.Contains(errResp.Error(), "task with name "+taskName+" not exist") &&
-			strings.HasSuffix(arg0, ".yaml") || strings.HasSuffix(arg0, ".yml") {
-			// create to keep compatible start-task
-			_, err := createTask(arg0)
-			if err != nil {
-				return errors.Trace(err)
-			}
-		} else {
-			return errResp
-		}
-	}
 
 	sources, err := common.GetSourceArgs(cmd)
 	if err != nil {
@@ -83,12 +64,26 @@ func taskStartFunc(cmd *cobra.Command, _ []string) error {
 		common.PrintLinesf("error in parse `--start-time`")
 		return err
 	}
-	safeModeTime, err := cmd.Flags().GetString("safe-mode-time")
+	safeModeTime, err := cmd.Flags().GetString("safe-mode-duration")
 	if err != nil {
-		common.PrintLinesf("error in parse `--safe-mode-time`")
+		common.PrintLinesf("error in parse `--safe-mode-duration`")
 		return err
 	}
 
+	// check task is exist
+	notExist, err := isTaskNotExist(taskName)
+	if notExist && strings.HasSuffix(arg0, ".yaml") || strings.HasSuffix(arg0, ".yml") {
+		// create to keep compatible start-task
+		_, err := createTask(arg0)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	} else if err != nil {
+		return errors.Trace(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	// start task
 	startReq := openapi.StartTaskRequest{
 		RemoveMeta:           &removeMeta,
@@ -96,8 +91,8 @@ func taskStartFunc(cmd *cobra.Command, _ []string) error {
 		SourceNameList:       &sourceList,
 		StartTime:            &startTime,
 	}
-	params = []interface{}{taskName, startReq}
-	errResp = common.SendOpenapiRequest(ctx, "DMAPIStartTask", params, http.StatusOK, nil)
+	params := []interface{}{taskName, startReq}
+	errResp := common.SendOpenapiRequest(ctx, "DMAPIStartTask", params, http.StatusOK, nil)
 	if errResp != nil {
 		return errResp
 	}

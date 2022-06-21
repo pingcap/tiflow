@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"reflect"
@@ -425,6 +426,14 @@ func (e SendToOpenapiError) Error() string {
 	return string(s)
 }
 
+// GetOriginMsg returns origin error msg to make print exception simple
+func (e SendToOpenapiError) GetOriginMsg() interface{} {
+	if e.StructMsg != nil {
+		return e.StructMsg
+	}
+	return e.StringMsg
+}
+
 func SendOpenapiRequest(ctx context.Context, reqName string, params []interface{}, successCode int, respPointer interface{}) *SendToOpenapiError {
 	httpRes, err := GlobalCtlClient.sendOpenapiRequest(ctx, reqName, params)
 	if err != nil {
@@ -442,9 +451,14 @@ func SendOpenapiRequest(ctx context.Context, reqName string, params []interface{
 		}
 	case http.StatusBadRequest:
 		errResp := &openapi.ErrorWithMessage{}
-		err = json.NewDecoder(httpRes.Body).Decode(&errResp)
+		body, err := ioutil.ReadAll(httpRes.Body)
 		if err != nil {
 			return &SendToOpenapiError{StringMsg: err.Error()}
+		}
+		// try to make ErrorWithMessage
+		err = json.Unmarshal(body, &errResp)
+		if err != nil || errResp.ErrorMsg == "" {
+			return &SendToOpenapiError{StringMsg: string(body)}
 		}
 		return &SendToOpenapiError{StructMsg: errResp}
 	default:

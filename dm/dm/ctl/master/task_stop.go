@@ -15,6 +15,7 @@ package master
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/spf13/cobra"
@@ -26,7 +27,7 @@ import (
 // NewTaskStopCmd creates a Task Stop command.
 func NewTaskStopCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "stop [task-name | config-file] [-s source ...] [-t duration]",
+		Use:   "stop [task-name | config-file] [-s source ...] [--timeout duration] [--batch-size 5]",
 		Short: "Stop a task with specified conditions",
 		RunE:  taskStopFunc,
 	}
@@ -59,10 +60,15 @@ func taskStopOperateFunc(cmd *cobra.Command, taskName string, sources []string) 
 	sendErr := common.SendOpenapiRequest(ctx, "DMAPIStopTask", params, http.StatusOK, nil)
 	if sendErr != nil {
 		taskResult.Result = false
-		taskResult.Msg = err.Error()
+		taskResult.Msg = sendErr.GetOriginMsg()
 	} else {
 		taskResult.Result = true
-		taskResult.Msg = "Stop task " + taskName + " success."
+		if len(sources) > 0 {
+			taskResult.Msg = fmt.Sprintf("Stop task %s in source %v success.", taskName, sources)
+		} else {
+			taskResult.Msg = fmt.Sprintf("Stop task %s success.", taskName)
+		}
+
 	}
 	return taskResult
 }

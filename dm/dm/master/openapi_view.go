@@ -515,7 +515,29 @@ func (s *Server) DMAPIGetTaskStatus(c *gin.Context, taskName string, params open
 		_ = c.Error(err)
 		return
 	}
-	resp := openapi.GetTaskStatusResponse{Total: len(*task.StatusList), Data: *task.StatusList}
+	resp := openapi.GetTaskStatusResponse{}
+
+	// filter by sources
+	if params.SourceNameList != nil {
+		sutasks := make([]openapi.SubTaskStatus, 0, len(*task.StatusList))
+		sourceNameMap := make(map[string]struct{})
+		for _, sourceName := range *params.SourceNameList {
+			sourceNameMap[sourceName] = struct{}{}
+		}
+		for source := range sourceNameMap {
+			for _, status := range *task.StatusList {
+				if source == status.SourceName {
+					sutasks = append(sutasks, status)
+					break
+				}
+			}
+		}
+		resp.Total = len(sutasks)
+		resp.Data = sutasks
+	} else {
+		resp.Total = len(*task.StatusList)
+		resp.Data = *task.StatusList
+	}
 	c.IndentedJSON(http.StatusOK, resp)
 }
 

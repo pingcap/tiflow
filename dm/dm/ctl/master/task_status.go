@@ -18,6 +18,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -68,4 +69,22 @@ func taskStatusFunc(cmd *cobra.Command, _ []string) (err error) {
 	}
 	common.PrettyPrintOpenapiResp(true, res)
 	return nil
+}
+
+func isTaskNotExist(taskName string) (bool, error) {
+	// check task is exist
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	getStatusReq := &openapi.DMAPIGetTaskStatusParams{}
+	params := []interface{}{taskName, getStatusReq}
+	res := &openapi.GetTaskStatusResponse{}
+	errResp := common.SendOpenapiRequest(ctx, "DMAPIGetTaskStatus", params, http.StatusOK, res)
+	if errResp != nil {
+		if strings.Contains(errResp.Error(), "task with name "+taskName+" not exist") {
+			return true, errResp
+		} else {
+			return false, errResp
+		}
+	}
+	return false, nil
 }

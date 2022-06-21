@@ -624,25 +624,24 @@ func (s *Server) listTask(ctx context.Context, req openapi.DMAPIGetTaskListParam
 		filtered := false
 		// filter by stage
 		if task.StatusList != nil && req.Stage != nil {
+			filtered = true
 			for _, status := range *task.StatusList {
-				if status.Stage != *req.Stage {
-					filtered = true
+				if status.Stage == *req.Stage {
+					filtered = false
 					break
 				}
 			}
 		}
 		// filter by source
-		if req.SourceNameList != nil {
-			if len(task.SourceConfig.SourceConf) != len(*req.SourceNameList) {
-				filtered = true
-			}
+		if !filtered && req.SourceNameList != nil {
 			sourceNameMap := make(map[string]struct{})
 			for _, sourceName := range *req.SourceNameList {
 				sourceNameMap[sourceName] = struct{}{}
 			}
+			filtered = true
 			for _, sourceConf := range task.SourceConfig.SourceConf {
-				if _, ok := sourceNameMap[sourceConf.SourceName]; !ok {
-					filtered = true
+				if _, ok := sourceNameMap[sourceConf.SourceName]; ok {
+					filtered = false
 					break
 				}
 			}

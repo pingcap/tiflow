@@ -15,6 +15,7 @@ package master
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"sort"
@@ -38,10 +39,10 @@ type batchTaskOperateResult struct {
 }
 
 type taskOperateResult struct {
-	Task   string `json:"task"`
-	Op     string `json:"op"`
-	Result bool   `json:"result"`
-	Msg    string `json:"msg"`
+	Task   string      `json:"task"`
+	Op     string      `json:"op"`
+	Result bool        `json:"result"`
+	Msg    interface{} `json:"msg"`
 }
 
 func taskOperateFunc(cmd *cobra.Command, operateFunc func(cmd *cobra.Command, taskName string, sources []string) *taskOperateResult) error {
@@ -61,6 +62,13 @@ func taskOperateFunc(cmd *cobra.Command, operateFunc func(cmd *cobra.Command, ta
 	if err != nil {
 		return err
 	}
+
+	// check task is exist
+	notExist, err := isTaskNotExist(taskName)
+	if notExist || err != nil {
+		return err
+	}
+
 	common.PrettyPrintInterface(operateFunc(cmd, taskName, sources))
 	return nil
 }
@@ -104,7 +112,7 @@ func sourceTaskOperateFunc(cmd *cobra.Command,
 	ctx, cancel := context.WithTimeout(context.Background(), common.GlobalConfig().RPCTimeout)
 	defer cancel()
 
-	listReq := openapi.DMAPIGetTaskListParams{SourceNameList: &sourceList}
+	listReq := &openapi.DMAPIGetTaskListParams{SourceNameList: &sourceList}
 	resp := &openapi.GetTaskListResponse{}
 	params := []interface{}{listReq}
 	sendErr := common.SendOpenapiRequest(ctx, "DMAPIGetTaskList", params, http.StatusOK, resp)
@@ -114,7 +122,7 @@ func sourceTaskOperateFunc(cmd *cobra.Command,
 	}
 
 	if resp.Total == 0 {
-		common.PrintLinesf("there is no tasks of source: %v", sources)
+		common.PrettyPrintOpenapiResp(false, fmt.Sprintf("there is no tasks of source: %v", sources))
 		return nil
 	}
 	result := batchTaskOperate(cmd, batchSize, sources, resp.Data, operateFunc)
