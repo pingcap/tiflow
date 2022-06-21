@@ -1008,6 +1008,7 @@ function DM_155_CASE {
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(40,40,40,40,40);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(41,41,41,41,41);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(42,42,42,42);" # source2 won't redirect until it receives new event
+
 	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb1} add column e int not null after f" \
 		$WORK_DIR/worker1/log/dm-worker.log
 	check_log_contain_with_retry "finish to handle ddls in optimistic shard mode.*alter table ${shardddl1}.${tb1} add column e int not null after f" \
