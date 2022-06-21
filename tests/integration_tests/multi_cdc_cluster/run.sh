@@ -9,6 +9,10 @@ CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
 function run() {
+	# test mysql sink only in this case
+	if [ "$SINK_TYPE" == "kafka" ]; then
+		return
+	fi
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
 	start_tidb_cluster --workdir $WORK_DIR
@@ -26,17 +30,10 @@ function run() {
 	# run another cdc cluster
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --cluster-id "test2" --addr "127.0.0.1:8301" --logsuffix mult_cdc.server2
 
-	TOPIC_NAME="ticdc-simple-test-$RANDOM"
-	case $SINK_TYPE in
-	kafka) SINK_URI="kafka+ssl://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&kafka-client-id=cdc_test_simple&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
-	*) SINK_URI="mysql+ssl://normal:123456@127.0.0.1:3306/" ;;
-	esac
+	SINK_URI="mysql://normal:123456@127.0.0.1:3306/"
 
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --server "http://127.0.0.1:8300" --config="$CUR/conf/changefeed1.toml"
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --server "http://127.0.0.1:8301" --config="$CUR/conf/changefeed2.toml"
-	if [ "$SINK_TYPE" == "kafka" ]; then
-		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
-	fi
 
 	# same dml for table multi_cdc1
 	run_sql "INSERT INTO test.multi_cdc1(id, val) VALUES (1, 1);"

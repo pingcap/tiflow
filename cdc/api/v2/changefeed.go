@@ -14,8 +14,10 @@
 package v2
 
 import (
+	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
@@ -190,6 +192,10 @@ func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
 		return
 	}
 
+	if err := h.verifyUpstream(ctx, changefeedConfig, cfInfo); err != nil {
+		return
+	}
+
 	log.Info("Old ChangeFeed and Upstream Info",
 		zap.String("changefeedInfo", cfInfo.String()),
 		zap.Any("upstreamInfo", upInfo))
@@ -210,6 +216,32 @@ func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, newCfInfo)
+}
+
+func (h *OpenAPIV2) verifyUpstream(ctx context.Context,
+	changefeedConfig *ChangefeedConfig,
+	cfInfo *model.ChangeFeedInfo,
+) error {
+	if len(changefeedConfig.PDAddrs) != 0 {
+		// check if the upstream cluster id changed
+		timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		pd, err := getPDClient(timeoutCtx, changefeedConfig.PDAddrs, &security.Credential{
+			CAPath:        changefeedConfig.CAPath,
+			CertPath:      changefeedConfig.CertPath,
+			KeyPath:       changefeedConfig.KeyPath,
+			CertAllowedCN: changefeedConfig.CertAllowedCN,
+		})
+		if err != nil {
+			return err
+		}
+		defer pd.Close()
+		if pd.GetClusterID(ctx) != cfInfo.UpstreamID {
+			return cerror.ErrUpstreamMissMatch.
+				GenWithStackByArgs(cfInfo.UpstreamID, pd.GetClusterID(ctx))
+		}
+	}
+	return nil
 }
 
 // GetChangeFeedMetaInfo handles get changefeed's meta info request
