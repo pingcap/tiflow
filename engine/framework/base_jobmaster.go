@@ -21,7 +21,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/engine/executor/worker"
+	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
@@ -89,6 +89,11 @@ type DefaultBaseJobMaster struct {
 	worker    *DefaultBaseWorker
 	impl      JobMasterImpl
 	errCenter *errctx.ErrCenter
+}
+
+// NotifyExit implements BaseJobMaster interface
+func (d *DefaultBaseJobMaster) NotifyExit(ctx context.Context, errIn error) error {
+	return d.worker.NotifyExit(ctx, errIn)
 }
 
 // JobMasterImpl is the implementation of a job master of dataflow engine.
@@ -247,7 +252,7 @@ func (d *DefaultBaseJobMaster) Workload() model.RescUnit {
 }
 
 // ID delegates the ID of inner worker
-func (d *DefaultBaseJobMaster) ID() worker.RunnableID {
+func (d *DefaultBaseJobMaster) ID() runtime.RunnableID {
 	return d.worker.ID()
 }
 

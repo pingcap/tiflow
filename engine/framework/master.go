@@ -29,9 +29,8 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework/config"
-	"github.com/pingcap/tiflow/engine/framework/master"
+	"github.com/pingcap/tiflow/engine/framework/internal/master"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/statusutil"
@@ -59,8 +58,8 @@ type Master interface {
 	Init(ctx context.Context) error
 	Poll(ctx context.Context) error
 	MasterID() frameModel.MasterID
-
-	runtime.Closer
+	Close(ctx context.Context) error
+	NotifyExit(ctx context.Context, errIn error) error
 }
 
 // MasterImpl defines the interface to implement a master, business logic can be
@@ -185,6 +184,12 @@ type DefaultBaseMaster struct {
 
 	// deps is a container for injected dependencies
 	deps *deps.Deps
+}
+
+// NotifyExit implements BaseWorker.NotifyExit
+func (m *DefaultBaseMaster) NotifyExit(ctx context.Context, errIn error) error {
+	// no-op for now.
+	return nil
 }
 
 type masterParams struct {

@@ -18,7 +18,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/engine/framework/master"
+	"github.com/pingcap/tiflow/engine/framework/internal/master"
 	"github.com/pingcap/tiflow/engine/framework/model"
 	engineModel "github.com/pingcap/tiflow/engine/model"
 )
@@ -70,6 +70,10 @@ type MasterFailoverReason struct {
 
 // WorkerHandle alias to master.WorkerHandle
 type WorkerHandle = master.WorkerHandle
+
+// MockHandle is a mock for WorkerHandle.
+// Re-exported for testing.
+type MockHandle = master.MockHandle
 
 // nolint:revive
 var StopAfterTick = errors.New("stop after tick")

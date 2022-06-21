@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/cdc/sink"
-	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	sinkmetric "github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -482,18 +481,19 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		contextutil.TimezoneFromCtx(ctx),
 		p.changefeed.Info.Config.EnableOldValue)
 
-	opts := make(map[string]string, len(p.changefeed.Info.Opts)+2)
-	for k, v := range p.changefeed.Info.Opts {
-		opts[k] = v
-	}
-
-	opts[metrics.OptCaptureAddr] = ctx.GlobalVars().CaptureInfo.AdvertiseAddr
 	log.Info("processor try new sink",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeed.ID.ID))
 
 	start := time.Now()
-	p.sink, err = sink.New(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
+	p.sink, err = sink.New(
+		stdCtx,
+		p.changefeed.ID,
+		p.changefeed.Info.SinkURI,
+		p.filter,
+		p.changefeed.Info.Config,
+		errCh,
+	)
 	if err != nil {
 		log.Info("processor new sink failed",
 			zap.String("namespace", p.changefeedID.Namespace),
@@ -723,10 +723,7 @@ func (p *processor) addTable(ctx cdcContext.Context, tableID model.TableID, repl
 	return nil
 }
 
-func (p *processor) getTableName(ctx cdcContext.Context,
-	tableID model.TableID,
-	replicaInfo *model.TableReplicaInfo,
-) (string, error) {
+func (p *processor) getTableName(ctx cdcContext.Context, tableID model.TableID) string {
 	// FIXME: using GetLastSnapshot here would be confused and get the wrong table name
 	// after `rename table` DDL, since `rename table` keeps the tableID unchanged
 	var tableName *model.TableName
@@ -743,10 +740,10 @@ func (p *processor) getTableName(ctx cdcContext.Context,
 
 	if tableName == nil {
 		log.Warn("failed to get table name for metric")
-		return strconv.Itoa(int(tableID)), nil
+		return strconv.Itoa(int(tableID))
 	}
 
-	return tableName.QuoteString(), nil
+	return tableName.QuoteString()
 }
 
 func (p *processor) createTablePipelineImpl(
@@ -763,10 +760,7 @@ func (p *processor) createTablePipelineImpl(
 		return nil
 	})
 
-	tableName, err := p.getTableName(ctx, tableID, replicaInfo)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+	tableName := p.getTableName(ctx, tableID)
 
 	s, err := sink.NewTableSink(p.sink, tableID, p.metricsTableSinkTotalRows, p.redoManager)
 	if err != nil {
