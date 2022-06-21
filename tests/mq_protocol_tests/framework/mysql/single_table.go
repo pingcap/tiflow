@@ -46,7 +46,6 @@ func (c *SingleTableTask) GetCDCProfile() *framework.CDCProfile {
 	return &framework.CDCProfile{
 		PDUri:      framework.UpstreamPD,
 		SinkURI:    sinkURI,
-		Opts:       map[string]string{},
 		ConfigFile: "/configs/enable-oldvalue-config.toml",
 	}
 }
