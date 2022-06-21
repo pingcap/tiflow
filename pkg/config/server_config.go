@@ -39,7 +39,7 @@ const (
 	DebugConfigurationItem = "debug"
 
 	// DefaultTableMemoryQuota is the default memory quota for each table.
-	DefaultTableMemoryQuota = 35 * 1024 * 1024 // 35 MB
+	DefaultTableMemoryQuota = 10 * 1024 * 1024 // 10 MB
 )
 
 func init() {
