@@ -102,6 +102,8 @@ require (
 	upper.io/db.v3 v3.7.1+incompatible
 )
 
+require github.com/emirpasic/gods v1.18.1
+
 require (
 	cloud.google.com/go v0.100.2 // indirect
 	cloud.google.com/go/compute v1.2.0 // indirect

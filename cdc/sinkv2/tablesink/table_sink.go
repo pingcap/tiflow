@@ -20,16 +20,14 @@ import "github.com/pingcap/tiflow/cdc/model"
 type TableSink interface {
 	// AppendRowChangedEvents appends row changed events to the table sink.
 	// Usually, it is used to cache the row changed events into table sink.
-	AppendRowChangedEvents(rows ...*model.RowChangedEvent) error
+	AppendRowChangedEvents(rows ...*model.RowChangedEvent)
 	// UpdateResolvedTs writes the buffered row changed events to the TxnEventSink/RowEventSink.
 	// Note: This is an asynchronous method.
 	UpdateResolvedTs(resolvedTs model.ResolvedTs) error
 	// GetCheckpointTs returns the current checkpoint ts of table sink.
 	// Usually, it requires some computational work.
-	// For example, calculating the current progress from the minimum heap.
-	GetCheckpointTs() (model.ResolvedTs, error)
+	// For example, calculating the current progress from the statistics of the table sink.
+	GetCheckpointTs() model.ResolvedTs
 	// Close closes the table sink.
-	// 1) set the table status to stopped.
-	// 2) clean up the table sink buffer.
-	Close() error
+	Close()
 }
