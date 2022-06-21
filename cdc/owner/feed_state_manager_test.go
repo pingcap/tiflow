@@ -258,7 +258,6 @@ func TestChangefeedStatusNotExist(t *testing.T) {
 	changefeedInfo := `
 {
     "sink-uri": "blackhole:///",
-    "opts": {},
     "create-time": "2021-06-05T00:44:15.065939487+08:00",
     "start-ts": 425381670108266496,
     "target-ts": 0,

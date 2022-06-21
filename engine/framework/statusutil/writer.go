@@ -17,19 +17,18 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/tiflow/engine/framework/worker"
-
 	"github.com/modern-go/reflect2"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/engine/framework/internal/worker"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/retry"
 )
 
 // Writer is used to persist WorkerStatus changes and send notifications

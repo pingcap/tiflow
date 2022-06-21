@@ -20,15 +20,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/http"
+	"regexp"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/tests/integration_tests/util"
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/engine/client"
-	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	engineModel "github.com/pingcap/tiflow/engine/model"
@@ -79,6 +83,27 @@ func TestDMJob(t *testing.T) {
 		testSimpleAllModeTask(t, masterClient, mysql, tidb, "test2")
 	}()
 	wg.Wait()
+
+	// test metrics for syncer
+	jobIDs := map[string]struct{}{}
+	metricsURLs := []string{
+		"http://127.0.0.1:11241/metrics",
+		"http://127.0.0.1:11242/metrics",
+		"http://127.0.0.1:11243/metrics",
+	}
+	re := regexp.MustCompile(`job_id="(.{36})"`)
+	for _, metricsURL := range metricsURLs {
+		resp, err := http.Get(metricsURL)
+		require.NoError(t, err)
+		content, err := ioutil.ReadAll(resp.Body)
+		require.NoError(t, err)
+		matched := re.FindAllSubmatch(content, -1)
+		for _, m := range matched {
+			jobIDs[string(m[1])] = struct{}{}
+		}
+	}
+
+	require.Equal(t, 2, len(jobIDs))
 }
 
 // testSimpleAllModeTask extracts the common logic for a DM "all" mode task,
@@ -105,9 +130,9 @@ func testSimpleAllModeTask(
 	dmJobCfg, err := ioutil.ReadFile("./dm-job.yaml")
 	require.NoError(t, err)
 	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("<placeholder>"), []byte(db))
-	var resp *pb.SubmitJobResponse
+	var resp *enginepb.SubmitJobResponse
 	require.Eventually(t, func() bool {
-		resp, err = client.SubmitJob(ctx, &pb.SubmitJobRequest{
+		resp, err = client.SubmitJob(ctx, &enginepb.SubmitJobRequest{
 			Tp:     int32(engineModel.JobTypeDM),
 			Config: dmJobCfg,
 		})
@@ -176,6 +201,21 @@ func testSimpleAllModeTask(
 		return jobStatus.TaskStatus[source1].Status.Stage == metadata.StagePaused
 	}, time.Second*10, time.Second)
 
+	// binlog schema list
+	binlogSchemaReq := &dmpkg.BinlogSchemaRequest{
+		Op:      pb.SchemaOp_ListSchema,
+		Sources: []string{source1},
+	}
+	resp2, err = binlogSchema(ctx, client, resp.JobId, binlogSchemaReq, t)
+	require.NoError(t, err)
+	require.Nil(t, resp2.Err)
+	var binlogSchemaResp dmpkg.BinlogSchemaResponse
+	require.NoError(t, json.Unmarshal([]byte(resp2.JsonRet), &binlogSchemaResp))
+	require.Equal(t, "", binlogSchemaResp.ErrorMsg)
+	require.Len(t, binlogSchemaResp.Results, 1)
+	require.Equal(t, fmt.Sprintf(`["%s"]`, db), binlogSchemaResp.Results[source1].Msg)
+	require.Equal(t, "", binlogSchemaResp.Results[source1].ErrorMsg)
+
 	// resume task
 	resp2, err = operateTask(ctx, client, resp.JobId, nil, dmpkg.Resume, t)
 	require.NoError(t, err)
@@ -190,9 +230,58 @@ func testSimpleAllModeTask(
 		require.NoError(t, json.Unmarshal([]byte(resp2.JsonRet), &jobStatus))
 		return jobStatus.TaskStatus[source1].Status.Stage == metadata.StageRunning
 	}, time.Second*10, time.Second)
+
+	// get job cfg
+	resp2, err = getJobCfg(ctx, client, resp.JobId, t)
+	require.NoError(t, err)
+	require.Nil(t, resp2.Err)
+	require.Contains(t, resp2.JsonRet, `"flavor":"mysql"`)
+
+	noError(mysql.Exec("alter table " + db + ".t1 add column new_col int unique"))
+	noError(mysql.Exec("insert into " + db + ".t1 values(4,4)"))
+
+	// eventually error
+	require.Eventually(t, func() bool {
+		resp2, err = queryStatus(ctx, client, resp.JobId, []string{source1}, t)
+		require.NoError(t, err)
+		require.Nil(t, resp2.Err)
+		require.NoError(t, json.Unmarshal([]byte(resp2.JsonRet), &jobStatus))
+		return jobStatus.TaskStatus[source1].Status.Stage == metadata.StageError &&
+			strings.Contains(jobStatus.TaskStatus[source1].Status.Result.Errors[0].RawCause,
+				`unsupported add column 'new_col' constraint UNIQUE KEY when altering`)
+	}, time.Second*10, time.Second)
+
+	// binlog replace
+	binlogReq := &dmpkg.BinlogRequest{
+		Op: pb.ErrorOp_Replace,
+		Sqls: []string{
+			"alter table " + db + ".t1 add column new_col int;",
+			"alter table " + db + ".t1 add unique(new_col);",
+		},
+	}
+	resp2, err = binlog(ctx, client, resp.JobId, binlogReq, t)
+	require.NoError(t, err)
+	require.Nil(t, resp2.Err)
+	var binlogResp dmpkg.BinlogResponse
+	require.NoError(t, json.Unmarshal([]byte(resp2.JsonRet), &binlogResp))
+	require.Equal(t, "", binlogResp.ErrorMsg)
+	require.Len(t, binlogResp.Results, 1)
+	require.Equal(t, "", binlogResp.Results[source1].ErrorMsg)
+	require.Equal(t, "", binlogResp.Results[source1].Msg)
+	waitRow("new_col = 4")
+
+	// binlog replace again
+	resp2, err = binlog(ctx, client, resp.JobId, binlogReq, t)
+	require.NoError(t, err)
+	require.Nil(t, resp2.Err)
+	require.NoError(t, json.Unmarshal([]byte(resp2.JsonRet), &binlogResp))
+	require.Equal(t, "", binlogResp.ErrorMsg)
+	require.Len(t, binlogResp.Results, 1)
+	require.Equal(t, "", binlogResp.Results[source1].Msg)
+	require.Equal(t, fmt.Sprintf("source '%s' has no error", source1), binlogResp.Results[source1].ErrorMsg)
 }
 
-func queryStatus(ctx context.Context, client client.MasterClient, jobID string, tasks []string, t *testing.T) (*pb.DebugJobResponse, error) {
+func queryStatus(ctx context.Context, client client.MasterClient, jobID string, tasks []string, t *testing.T) (*enginepb.DebugJobResponse, error) {
 	var args struct {
 		Tasks []string
 	}
@@ -201,10 +290,10 @@ func queryStatus(ctx context.Context, client client.MasterClient, jobID string, 
 	require.NoError(t, err)
 	ctx2, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	return client.DebugJob(ctx2, &pb.DebugJobRequest{JobId: jobID, Command: dmpkg.QueryStatus, JsonArg: string(jsonArg)})
+	return client.DebugJob(ctx2, &enginepb.DebugJobRequest{JobId: jobID, Command: dmpkg.QueryStatus, JsonArg: string(jsonArg)})
 }
 
-func operateTask(ctx context.Context, client client.MasterClient, jobID string, tasks []string, op dmpkg.OperateType, t *testing.T) (*pb.DebugJobResponse, error) {
+func operateTask(ctx context.Context, client client.MasterClient, jobID string, tasks []string, op dmpkg.OperateType, t *testing.T) (*enginepb.DebugJobResponse, error) {
 	var args struct {
 		Tasks []string
 		Op    dmpkg.OperateType
@@ -215,5 +304,27 @@ func operateTask(ctx context.Context, client client.MasterClient, jobID string, 
 	require.NoError(t, err)
 	ctx2, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	return client.DebugJob(ctx2, &pb.DebugJobRequest{JobId: jobID, Command: dmpkg.OperateTask, JsonArg: string(jsonArg)})
+	return client.DebugJob(ctx2, &enginepb.DebugJobRequest{JobId: jobID, Command: dmpkg.OperateTask, JsonArg: string(jsonArg)})
+}
+
+func getJobCfg(ctx context.Context, client client.MasterClient, jobID string, t *testing.T) (*enginepb.DebugJobResponse, error) {
+	ctx2, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	return client.DebugJob(ctx2, &enginepb.DebugJobRequest{JobId: jobID, Command: dmpkg.GetJobCfg})
+}
+
+func binlog(ctx context.Context, client client.MasterClient, jobID string, req *dmpkg.BinlogRequest, t *testing.T) (*enginepb.DebugJobResponse, error) {
+	ctx2, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	jsonArg, err := json.Marshal(req)
+	require.NoError(t, err)
+	return client.DebugJob(ctx2, &enginepb.DebugJobRequest{JobId: jobID, Command: dmpkg.Binlog, JsonArg: string(jsonArg)})
+}
+
+func binlogSchema(ctx context.Context, client client.MasterClient, jobID string, req *dmpkg.BinlogSchemaRequest, t *testing.T) (*enginepb.DebugJobResponse, error) {
+	ctx2, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	jsonArg, err := json.Marshal(req)
+	require.NoError(t, err)
+	return client.DebugJob(ctx2, &enginepb.DebugJobRequest{JobId: jobID, Command: dmpkg.BinlogSchema, JsonArg: string(jsonArg)})
 }

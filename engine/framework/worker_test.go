@@ -30,10 +30,7 @@ import (
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 )
 
-var (
-	_ Worker           = (*DefaultBaseWorker)(nil)
-	_ runtime.Runnable = (Worker)(nil)
-)
+var _ Worker = (*DefaultBaseWorker)(nil) // _ runtime.Runnable = (Worker)(nil)
 
 func putMasterMeta(ctx context.Context, t *testing.T, metaclient pkgOrm.Client, metaData *frameModel.MasterMetaKVData) {
 	err := metaclient.UpsertJob(ctx, metaData)

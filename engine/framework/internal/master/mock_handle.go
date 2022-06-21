@@ -16,13 +16,12 @@ package master
 import (
 	"context"
 
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
-
 	"go.uber.org/atomic"
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
+	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 )
 

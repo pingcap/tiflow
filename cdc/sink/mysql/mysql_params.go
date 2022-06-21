@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
 	"go.uber.org/zap"
@@ -84,7 +83,6 @@ type sinkParams struct {
 	maxTxnRow           int
 	tidbTxnMode         string
 	changefeedID        model.ChangeFeedID
-	captureAddr         string
 	batchReplaceEnabled bool
 	batchReplaceSize    int
 	readTimeout         string
@@ -103,14 +101,11 @@ func (s *sinkParams) Clone() *sinkParams {
 
 func parseSinkURIToParams(ctx context.Context,
 	changefeedID model.ChangeFeedID,
-	sinkURI *url.URL, opts map[string]string,
+	sinkURI *url.URL,
 ) (*sinkParams, error) {
 	params := defaultParams.Clone()
 
 	params.changefeedID = changefeedID
-	if caddr, ok := opts[metrics.OptCaptureAddr]; ok {
-		params.captureAddr = caddr
-	}
 
 	if sinkURI == nil {
 		return nil, cerror.ErrMySQLConnectionError.GenWithStack("fail to open MySQL sink, empty URL")
