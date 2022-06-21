@@ -25,15 +25,10 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
-	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/pingcap/tiflow/pkg/uuid"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/context"
 )
-
-func TestMain(m *testing.M) {
-	leakutil.SetUpLeakTest(m)
-}
 
 func TestReaderNewReader(t *testing.T) {
 	_, err := newReader(context.Background(), nil)
