@@ -1015,6 +1015,11 @@ var (
 		errors.RFCCodeText("CDC:ErrUpstreamNotFound"),
 	)
 
+	ErrUpstreamMissMatch = errors.Normalize(
+		"upstream missmatch,old: %d, new %d",
+		errors.RFCCodeText("CDC:ErrUpstreamMissMatch"),
+	)
+
 	ErrServerIsNotReady = errors.Normalize(
 		"cdc server is not ready",
 		errors.RFCCodeText("CDC:ErrServerIsNotReady"),

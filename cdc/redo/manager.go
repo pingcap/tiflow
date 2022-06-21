@@ -100,7 +100,8 @@ type LogManager interface {
 	AddTable(tableID model.TableID, startTs uint64)
 	RemoveTable(tableID model.TableID)
 	GetMinResolvedTs() uint64
-	EmitRowChangedEvents(ctx context.Context, tableID model.TableID, rows ...*model.RowChangedEvent) error
+	EmitRowChangedEvents(ctx context.Context, tableID model.TableID,
+		rows ...*model.RowChangedEvent) error
 	FlushLog(ctx context.Context, tableID model.TableID, resolvedTs uint64) error
 	FlushResolvedAndCheckpointTs(ctx context.Context, resolvedTs, checkpointTs uint64) (err error)
 

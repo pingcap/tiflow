@@ -1096,6 +1096,11 @@ error = '''
 updating service safepoint failed
 '''
 
+["CDC:ErrUpstreamMissMatch"]
+error = '''
+upstream missmatch,old: %d, new %d
+'''
+
 ["CDC:ErrUpstreamNotFound"]
 error = '''
 upstream not found, cluster-id: %d
