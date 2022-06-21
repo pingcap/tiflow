@@ -23,7 +23,7 @@ type TableSink interface {
 	AppendRowChangedEvents(rows ...*model.RowChangedEvent)
 	// UpdateResolvedTs writes the buffered row changed events to the TxnEventSink/RowEventSink.
 	// Note: This is an asynchronous method.
-	UpdateResolvedTs(resolvedTs model.ResolvedTs) error
+	UpdateResolvedTs(resolvedTs model.ResolvedTs)
 	// GetCheckpointTs returns the current checkpoint ts of table sink.
 	// Usually, it requires some computational work.
 	// For example, calculating the current progress from the statistics of the table sink.

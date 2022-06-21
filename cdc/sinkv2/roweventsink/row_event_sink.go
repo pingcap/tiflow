@@ -33,7 +33,7 @@ type RowEvent struct {
 type RowEventSink interface {
 	// WriteRowChangedEvents writes row changed events to the sink.
 	// Note: This is an asynchronous and thread-safe method.
-	WriteRowChangedEvents(rows ...*RowEvent) error
+	WriteRowChangedEvents(rows ...*RowEvent)
 	// Close closes the sink.
 	Close() error
 }

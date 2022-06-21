@@ -33,7 +33,7 @@ type TxnEvent struct {
 type TxnEventSink interface {
 	// WriteTxnEvents writes transaction events to the sink.
 	// Note: This is an asynchronous and thread-safe method.
-	WriteTxnEvents(txns ...*TxnEvent) error
+	WriteTxnEvents(txns ...*TxnEvent)
 	// Close closes the sink.
 	Close() error
 }

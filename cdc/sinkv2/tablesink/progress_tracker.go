@@ -21,29 +21,34 @@ import (
 )
 
 type progressTracker struct {
-	lock             sync.Mutex
-	pendingEventKeys *linkedhashmap.Map
+	lock              sync.Mutex
+	pendingTs         *linkedhashmap.Map
+	lastMinResolvedTs model.ResolvedTs
 }
 
 func (r *progressTracker) add(key any, resolvedTs model.ResolvedTs) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
-	r.pendingEventKeys.Put(key, resolvedTs)
+	r.pendingTs.Put(key, resolvedTs)
 }
 
 func (r *progressTracker) remove(key any) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
-	r.pendingEventKeys.Remove(key)
+	iterator := r.pendingTs.Iterator()
+	if iterator.First() {
+		if iterator.Key() == key {
+			// It means we need to advance the min ts.
+			// We need to store the last min ts.
+			r.lastMinResolvedTs = iterator.Value().(model.ResolvedTs)
+		}
+	}
+	r.pendingTs.Remove(key)
 }
 
 func (r *progressTracker) minTs() model.ResolvedTs {
 	r.lock.Lock()
 	defer r.lock.Unlock()
-	iterator := r.pendingEventKeys.Iterator()
-	if !iterator.First() {
-		return model.NewResolvedTs(0)
-	}
-	// TODO: commitTs -1
-	return iterator.Value().(model.ResolvedTs)
+
+	return r.lastMinResolvedTs
 }

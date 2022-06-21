@@ -14,6 +14,8 @@
 package tablesink
 
 import (
+	"sort"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/txneventsink"
 	"go.uber.org/atomic"
@@ -25,40 +27,38 @@ var _ TableSink = (*txnEventTableSink)(nil)
 type txnEventTableSink struct {
 	backendSink       txneventsink.TxnEventSink
 	txnEventTsTracker *progressTracker
-	txnBuffer         map[uint64][]*model.SingleTableTxn
+	txnBuffer         []*model.SingleTableTxn
 	TableStopped      *atomic.Bool
 }
 
 func (t *txnEventTableSink) AppendRowChangedEvents(rows ...*model.RowChangedEvent) {
 	// TODO implement me
-	// Append into txnBuffer by commitTs.
+	// Assemble each txn with the same startTs and the same commitTs in the order of commitTs.
 	panic("implement me")
 }
 
-func (t *txnEventTableSink) UpdateResolvedTs(resolvedTs model.ResolvedTs) error {
+func (t *txnEventTableSink) UpdateResolvedTs(resolvedTs model.ResolvedTs) {
 	// TODO: use real txn ID.
 	var fakeTxnID uint64 = 0
-	var resolvedTxnEvents []*txneventsink.TxnEvent
-	for commitTs, txns := range t.txnBuffer {
-		if commitTs <= resolvedTs.Ts {
-			for _, txn := range txns {
-				resolvedTxnEvents = append(resolvedTxnEvents, &txneventsink.TxnEvent{
-					Txn: txn,
-					Callback: func() {
-						t.txnEventTsTracker.remove(fakeTxnID)
-					},
-					TableStopped: t.TableStopped,
-				})
-				t.txnEventTsTracker.add(fakeTxnID, resolvedTs)
-			}
-			delete(t.txnBuffer, commitTs)
-		}
+	i := sort.Search(len(t.txnBuffer), func(i int) bool {
+		return t.txnBuffer[i].CommitTs > resolvedTs.Ts
+	})
+	if i == 0 {
+		return
 	}
-	if len(resolvedTxnEvents) == 0 {
-		return nil
-	}
+	resolvedTxns := t.txnBuffer[:i]
 
-	return t.backendSink.WriteTxnEvents(resolvedTxnEvents...)
+	for _, txn := range resolvedTxns {
+		txnEvent := &txneventsink.TxnEvent{
+			Txn: txn,
+			Callback: func() {
+				t.txnEventTsTracker.remove(fakeTxnID)
+			},
+			TableStopped: t.TableStopped,
+		}
+		t.backendSink.WriteTxnEvents(txnEvent)
+		t.txnEventTsTracker.add(fakeTxnID, resolvedTs)
+	}
 }
 
 func (t *txnEventTableSink) GetCheckpointTs() model.ResolvedTs {

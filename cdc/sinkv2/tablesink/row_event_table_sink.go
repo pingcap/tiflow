@@ -35,14 +35,14 @@ func (r *rowEventTableSink) AppendRowChangedEvents(rows ...*model.RowChangedEven
 	r.rowBuffer = append(r.rowBuffer, rows...)
 }
 
-func (r *rowEventTableSink) UpdateResolvedTs(resolvedTs model.ResolvedTs) error {
+func (r *rowEventTableSink) UpdateResolvedTs(resolvedTs model.ResolvedTs) {
 	// TODO: use real row ID.
 	var fakeRowID uint64 = 0
 	i := sort.Search(len(r.rowBuffer), func(i int) bool {
 		return r.rowBuffer[i].CommitTs > resolvedTs.Ts
 	})
 	if i == 0 {
-		return nil
+		return
 	}
 	resolvedRows := r.rowBuffer[:i]
 
@@ -54,14 +54,9 @@ func (r *rowEventTableSink) UpdateResolvedTs(resolvedTs model.ResolvedTs) error 
 			},
 			TableStopped: r.TableStopped,
 		}
-		err := r.backendSink.WriteRowChangedEvents(rowEvent)
-		if err != nil {
-			return err
-		}
+		r.backendSink.WriteRowChangedEvents(rowEvent)
 		r.rowEventTsTracker.add(fakeRowID, resolvedTs)
 	}
-
-	return nil
 }
 
 func (r *rowEventTableSink) GetCheckpointTs() model.ResolvedTs {
