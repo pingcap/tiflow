@@ -32,7 +32,8 @@ import (
 )
 
 const (
-	reloadMasterInfoTimeout = 10 * time.Second
+	reloadMasterInfoTimeout        = 10 * time.Second
+	workerExitWaitForMasterTimeout = time.Second * 15
 )
 
 type masterClientCloseState = int32
