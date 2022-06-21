@@ -1135,7 +1135,7 @@ tags = ["internal", "high"]
 [error.DM-config-20056]
 message = "mysql-instance(%d)'s continuous validator config %s not exist"
 description = ""
-workaround = "Please check the `continuous-validator-config-name` config in task configuration file."
+workaround = "Please check the `validator-config-name` config in task configuration file."
 tags = ["internal", "medium"]
 
 [error.DM-config-20057]

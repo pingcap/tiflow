@@ -68,7 +68,7 @@ const (
 	DefaultValidatorValidateInterval  = 10 * time.Second
 	DefaultValidatorCheckInterval     = 5 * time.Second
 	DefaultValidatorRowErrorDelay     = 30 * time.Minute
-	DefaultValidatorMetaFlushInterval = 1 * time.Minute
+	DefaultValidatorMetaFlushInterval = 5 * time.Minute
 	DefaultValidatorBatchQuerySize    = 100
 	DefaultValidatorMaxPendingRowSize = "500m"
 
@@ -159,7 +159,7 @@ type MySQLInstance struct {
 	// SyncerThread is alias for WorkerCount in SyncerConfig, and its priority is higher than WorkerCount
 	SyncerThread int `yaml:"syncer-thread"`
 
-	ContinuousValidatorConfigName string          `yaml:"continuous-validator-config-name"`
+	ContinuousValidatorConfigName string          `yaml:"validator-config-name"`
 	ContinuousValidator           ValidatorConfig `yaml:"-"`
 }
 
