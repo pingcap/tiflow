@@ -1148,3 +1148,26 @@ func TestReplicationSetMarshalJSON(t *testing.T) {
 	require.Nil(t, err)
 	require.Contains(t, string(b), "Replicating", string(b))
 }
+
+func TestReplicationSetMoveTableSameDestCapture(t *testing.T) {
+	t.Parallel()
+
+	tableID := model.TableID(1)
+	r, err := newReplicationSet(tableID, 0, nil)
+	require.Nil(t, err)
+
+	source := "1"
+	dest := source
+	r.Captures[source] = struct{}{}
+	r.State = ReplicationSetStateReplicating
+	r.Primary = source
+	r.Secondary = ""
+
+	// Ignore move table.
+	msgs, err := r.handleMoveTable(dest)
+	require.Nil(t, err)
+	require.Len(t, msgs, 0)
+	require.Equal(t, ReplicationSetStateReplicating, r.State)
+	require.Equal(t, "", r.Secondary)
+	require.Equal(t, source, r.Primary)
+}
