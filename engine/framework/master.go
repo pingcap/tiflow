@@ -353,22 +353,25 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 			log.L().Info("Heartbeat Ping received",
 				zap.Any("msg", msg),
 				zap.String("master-id", m.id))
+
+			replyMsg := &frameModel.HeartbeatPongMessage{
+				SendTime:   msg.SendTime,
+				ReplyTime:  m.clock.Now(),
+				ToWorkerID: msg.FromWorkerID,
+				Epoch:      m.currentEpoch.Load(),
+				IsFinished: msg.IsFinished,
+			}
 			ok, err := m.messageSender.SendToNode(
 				ctx,
 				sender,
 				frameModel.HeartbeatPongTopic(m.id, msg.FromWorkerID),
-				&frameModel.HeartbeatPongMessage{
-					SendTime:   msg.SendTime,
-					ReplyTime:  m.clock.Now(),
-					ToWorkerID: msg.FromWorkerID,
-					Epoch:      m.currentEpoch.Load(),
-					IsFinished: msg.IsFinished,
-				})
+				replyMsg)
 			if err != nil {
 				return err
 			}
 			if !ok {
-				// TODO add a retry mechanism
+				log.L().Warn("Sending Heartbeat Pong failed",
+					zap.Any("reply", replyMsg))
 				return nil
 			}
 			m.workerManager.HandleHeartbeat(msg, sender)
