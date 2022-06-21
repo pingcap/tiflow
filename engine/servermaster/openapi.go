@@ -36,23 +36,34 @@ const (
 	apiOpVarJobID = "job_id"
 )
 
+// ServerInfoProvider provides server info.
+type ServerInfoProvider interface {
+	// IsLeader returns whether the server is leader.
+	IsLeader() bool
+	// LeaderAddr returns the address of leader.
+	LeaderAddr() (string, bool)
+	// JobManager returns the job manager instance.
+	// It returns nil if the server is not leader.
+	JobManager() (JobManager, bool)
+	// ExecutorManager returns the executor manager instance.
+	// It returns nil if the server is not leader.
+	ExecutorManager() (ExecutorManager, bool)
+}
+
 // OpenAPI provides API for servermaster.
 type OpenAPI struct {
-	jobMgr  JobManager
-	execMgr ExecutorManager
+	infoProvider ServerInfoProvider
 }
 
 // NewOpenAPI creates a new OpenAPI.
-func NewOpenAPI(jobMgr JobManager, execMgr ExecutorManager) *OpenAPI {
-	return &OpenAPI{
-		jobMgr:  jobMgr,
-		execMgr: execMgr,
-	}
+func NewOpenAPI(infoProvider ServerInfoProvider) *OpenAPI {
+	return &OpenAPI{infoProvider: infoProvider}
 }
 
 // RegisterOpenAPIRoutes registers routes for OpenAPI.
 func RegisterOpenAPIRoutes(router *gin.Engine, openapi *OpenAPI) {
 	v1 := router.Group("/api/v1")
+	v1.Use(openapi.ForwardToLeader)
 
 	jobGroup := v1.Group("/jobs")
 	jobGroup.GET("", openapi.ListJobs)
@@ -77,7 +88,7 @@ func RegisterOpenAPIRoutes(router *gin.Engine, openapi *OpenAPI) {
 				openapi.CancelJob(c)
 			}
 		default:
-			openapi.ForwardJobMaster(c)
+			openapi.ForwardToJobMaster(c)
 		}
 	})
 }
@@ -176,8 +187,8 @@ func (o *OpenAPI) CancelJob(c *gin.Context) {
 	c.AbortWithStatus(http.StatusNotImplemented)
 }
 
-// ForwardJobMaster forwards the request to job master.
-func (o *OpenAPI) ForwardJobMaster(c *gin.Context) {
+// ForwardToJobMaster forwards the request to job master.
+func (o *OpenAPI) ForwardToJobMaster(c *gin.Context) {
 	tenantID := c.Query(apiOpVarTenantID)
 	projectID := c.Query(apiOpVarProjectID)
 	_, _ = tenantID, projectID
@@ -186,10 +197,22 @@ func (o *OpenAPI) ForwardJobMaster(c *gin.Context) {
 	jobID := c.Param(apiOpVarJobID)
 	if jobID == "" {
 		_ = c.AbortWithError(http.StatusBadRequest, errors.New("job id must not be empty"))
+		return
+	}
+
+	jobMgr, ok := o.infoProvider.JobManager()
+	if !ok {
+		_ = c.AbortWithError(http.StatusServiceUnavailable, errors.New("job manager is not initialized"))
+		return
+	}
+	executorMgr, ok := o.infoProvider.ExecutorManager()
+	if !ok {
+		_ = c.AbortWithError(http.StatusServiceUnavailable, errors.New("executor manager is not initialized"))
+		return
 	}
 
 	ctx := c.Request.Context()
-	resp := o.jobMgr.QueryJob(ctx, &pb.QueryJobRequest{JobId: jobID})
+	resp := jobMgr.QueryJob(ctx, &pb.QueryJobRequest{JobId: jobID})
 	if resp.Err != nil {
 		if resp.Err.Code == pb.ErrorCode_UnKnownJob {
 			c.AbortWithStatus(http.StatusNotFound)
@@ -209,23 +232,51 @@ func (o *OpenAPI) ForwardJobMaster(c *gin.Context) {
 	}
 
 	executorID := model.ExecutorID(resp.JobMasterInfo.ExecutorId)
-	addr, ok := o.execMgr.GetAddr(executorID)
+	addr, ok := executorMgr.GetAddr(executorID)
 	if !ok {
 		_ = c.AbortWithError(http.StatusInternalServerError, errors.New("couldn't find executor address"))
 		return
 	}
 
-	execURL := addr
-	if !strings.HasPrefix(execURL, "http://") &&
-		!strings.HasPrefix(execURL, "https://") {
-		execURL = "http://" + execURL
-	}
-	u, err := url.Parse(execURL)
+	u, err := o.parseURL(addr)
 	if err != nil {
 		_ = c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("invalid executor address: %s", addr))
 		return
 	}
-
 	proxy := httputil.NewSingleHostReverseProxy(u)
 	proxy.ServeHTTP(c.Writer, c.Request)
+	c.Abort()
+}
+
+// ForwardToLeader forwards the request to leader if current server is not a leader.
+func (o *OpenAPI) ForwardToLeader(c *gin.Context) {
+	if !o.infoProvider.IsLeader() {
+		leaderAddr, ok := o.infoProvider.LeaderAddr()
+		if !ok {
+			_ = c.AbortWithError(http.StatusServiceUnavailable, errors.New("leader is not ready"))
+			return
+		}
+		u, err := o.parseURL(leaderAddr)
+		if err != nil {
+			if err != nil {
+				_ = c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("invalid executor address: %s", leaderAddr))
+				return
+			}
+		}
+		proxy := httputil.NewSingleHostReverseProxy(u)
+		proxy.ServeHTTP(c.Writer, c.Request)
+		c.Abort()
+	} else {
+		c.Next()
+	}
+}
+
+func (o *OpenAPI) parseURL(addrOrURL string) (*url.URL, error) {
+	rawURL := addrOrURL
+	if !strings.HasPrefix(rawURL, "http://") &&
+		!strings.HasPrefix(rawURL, "https://") {
+		// TODO: Use https if tls config is provided.
+		rawURL = "http://" + rawURL
+	}
+	return url.Parse(rawURL)
 }

@@ -32,37 +32,73 @@ func init() {
 }
 
 type mockManager struct {
+	job2ExecutorID map[model.JobID]model.ExecutorID
+	executorAddrs  map[model.ExecutorID]string
+
 	JobManager
 	ExecutorManager
-
-	execAddr string
 }
 
-func (m mockManager) QueryJob(ctx context.Context, req *pb.QueryJobRequest) *pb.QueryJobResponse {
+func (m *mockManager) QueryJob(ctx context.Context, req *pb.QueryJobRequest) *pb.QueryJobResponse {
+	executorID, ok := m.job2ExecutorID[req.JobId]
+	if !ok {
+		return &pb.QueryJobResponse{
+			Err: &pb.Error{Code: pb.ErrorCode_UnKnownJob},
+		}
+	}
 	return &pb.QueryJobResponse{
 		Status: pb.QueryJobResponse_online,
 		JobMasterInfo: &pb.WorkerInfo{
-			ExecutorId: "executor1",
+			ExecutorId: string(executorID),
 		},
 	}
 }
 
-func (m mockManager) GetAddr(executorID model.ExecutorID) (string, bool) {
-	if executorID == "executor1" {
-		return m.execAddr, true
-	}
-	return "", false
+func (m *mockManager) GetAddr(executorID model.ExecutorID) (string, bool) {
+	addr, ok := m.executorAddrs[executorID]
+	return addr, ok
 }
 
-func TestOpenAPI(t *testing.T) {
+type mockServerInfoProvider struct {
+	mockMgr    *mockManager
+	serverAddr string
+	leaderAddr string
+}
+
+func (m *mockServerInfoProvider) IsLeader() bool {
+	return m.serverAddr == m.leaderAddr
+}
+
+func (m *mockServerInfoProvider) LeaderAddr() (string, bool) {
+	return m.leaderAddr, true
+}
+
+func (m *mockServerInfoProvider) JobManager() (JobManager, bool) {
+	return m.mockMgr, true
+}
+
+func (m *mockServerInfoProvider) ExecutorManager() (ExecutorManager, bool) {
+	return m.mockMgr, true
+}
+
+func TestOpenAPIBasic(t *testing.T) {
 	reqs := make(chan *http.Request, 10)
-	execSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	executorSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reqs <- r
 	}))
-	defer execSrv.Close()
+	defer executorSrv.Close()
 
-	mockMgr := mockManager{execAddr: execSrv.URL}
-	openapi := NewOpenAPI(mockMgr, mockMgr)
+	infoProvider := &mockServerInfoProvider{
+		mockMgr: &mockManager{
+			job2ExecutorID: map[model.JobID]model.ExecutorID{
+				"job1": "mock-executor",
+			},
+			executorAddrs: map[model.ExecutorID]string{
+				"mock-executor": executorSrv.URL,
+			},
+		},
+	}
+	openapi := NewOpenAPI(infoProvider)
 	router := gin.New()
 	RegisterOpenAPIRoutes(router, openapi)
 
@@ -142,4 +178,32 @@ func TestOpenAPI(t *testing.T) {
 		})
 	}
 	require.Len(t, reqs, 0)
+}
+
+func TestForwardToLeader(t *testing.T) {
+	reqs := make(chan *http.Request, 10)
+	leaderSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reqs <- r
+	}))
+	defer leaderSrv.Close()
+
+	infoProvider := &mockServerInfoProvider{
+		mockMgr:    &mockManager{},
+		serverAddr: "",
+		leaderAddr: leaderSrv.URL,
+	}
+	openapi := NewOpenAPI(infoProvider)
+	router := gin.New()
+	RegisterOpenAPIRoutes(router, openapi)
+
+	masterSrv := httptest.NewServer(router)
+	defer masterSrv.Close()
+
+	req, err := http.NewRequest(http.MethodGet, masterSrv.URL+"/api/v1/jobs", nil)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	forwardReq := <-reqs
+	require.Equal(t, "/api/v1/jobs", forwardReq.URL.Path)
 }

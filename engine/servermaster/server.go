@@ -576,7 +576,7 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 	}
 
 	router := gin.New()
-	openapi := NewOpenAPI(s.jobManager, s.executorManager)
+	openapi := NewOpenAPI(s)
 	RegisterRoutes(router, openapi)
 	httpHandlers := map[string]http.Handler{
 		"/debug/":   router,
@@ -842,4 +842,34 @@ func makeScheduler(
 		executorManager.CapacityProvider(),
 		externalResourceManager,
 	)
+}
+
+func (s *Server) IsLeader() bool {
+	leader, ok := s.leader.Load().(*rpcutil.Member)
+	if !ok || leader == nil {
+		return false
+	}
+	return leader.Name == s.id
+}
+
+func (s *Server) LeaderAddr() (string, bool) {
+	leader, ok := s.leader.Load().(*rpcutil.Member)
+	if !ok || leader == nil {
+		return "", false
+	}
+	return leader.AdvertiseAddr, true
+}
+
+func (s *Server) JobManager() (JobManager, bool) {
+	if s.leaderInitialized.Load() && s.jobManager != nil {
+		return s.jobManager, true
+	}
+	return nil, false
+}
+
+func (s *Server) ExecutorManager() (ExecutorManager, bool) {
+	if s.leaderInitialized.Load() && s.executorManager != nil {
+		return s.executorManager, true
+	}
+	return nil, false
 }

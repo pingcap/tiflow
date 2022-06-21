@@ -23,7 +23,7 @@ import (
 
 func TestRegisterRoutes(t *testing.T) {
 	router := gin.New()
-	RegisterRoutes(router, NewOpenAPI(nil, nil))
+	RegisterRoutes(router, NewOpenAPI(nil))
 
 	routes := router.Routes()
 	require.True(t, containsRoute(routes, "GET", "/swagger/*any"))
