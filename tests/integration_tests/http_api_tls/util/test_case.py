@@ -495,7 +495,8 @@ if __name__ == "__main__":
         # api v2
         "get_tso": get_tso,
         "verify_table": verify_table,
-        "create_changefeed_v2": create_changefeed_v2
+        "create_changefeed_v2": create_changefeed_v2,
+        "unsafe_apis": unsafe_apis
     }
 
     func = FUNC_MAP[sys.argv[1]]

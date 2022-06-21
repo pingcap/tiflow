@@ -120,6 +120,7 @@ function run() {
 		"get_tso"
 		"verify_table"
 		"create_changefeed_v2"
+		"unsafe_apis"
 	)
 
 	for case in ${sequential_cases[@]}; do
