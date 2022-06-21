@@ -200,6 +200,7 @@ func TestForwardToLeader(t *testing.T) {
 	defer masterSrv.Close()
 
 	req, err := http.NewRequest(http.MethodGet, masterSrv.URL+"/api/v1/jobs", nil)
+	require.NoError(t, err)
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()

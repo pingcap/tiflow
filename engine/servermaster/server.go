@@ -844,6 +844,7 @@ func makeScheduler(
 	)
 }
 
+// IsLeader implements ServerInfoProvider.IsLeader.
 func (s *Server) IsLeader() bool {
 	leader, ok := s.leader.Load().(*rpcutil.Member)
 	if !ok || leader == nil {
@@ -852,6 +853,7 @@ func (s *Server) IsLeader() bool {
 	return leader.Name == s.id
 }
 
+// LeaderAddr implements ServerInfoProvider.LeaderAddr.
 func (s *Server) LeaderAddr() (string, bool) {
 	leader, ok := s.leader.Load().(*rpcutil.Member)
 	if !ok || leader == nil {
@@ -860,6 +862,7 @@ func (s *Server) LeaderAddr() (string, bool) {
 	return leader.AdvertiseAddr, true
 }
 
+// JobManager implements ServerInfoProvider.JobManager.
 func (s *Server) JobManager() (JobManager, bool) {
 	if s.leaderInitialized.Load() && s.jobManager != nil {
 		return s.jobManager, true
@@ -867,6 +870,7 @@ func (s *Server) JobManager() (JobManager, bool) {
 	return nil, false
 }
 
+// ExecutorManager implements ServerInfoProvider.ExecutorManager.
 func (s *Server) ExecutorManager() (ExecutorManager, bool) {
 	if s.leaderInitialized.Load() && s.executorManager != nil {
 		return s.executorManager, true
