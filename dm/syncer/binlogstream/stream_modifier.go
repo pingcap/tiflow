@@ -110,9 +110,7 @@ func (m *streamModifier) Set(req *pb.HandleWorkerErrorRequest, events []*replica
 	}
 
 	toInject := newOperator(req.Op, pos, events, req)
-	toInsertIndex := sort.Search(len(m.ops), func(i int) bool {
-		return pos.Compare(m.ops[i].pos) <= 0
-	})
+	toInsertIndex := m.minIdxLargerOrEqual(pos)
 
 	if toInsertIndex == len(m.ops) {
 		m.ops = append(m.ops, toInject)
@@ -147,9 +145,7 @@ func (m *streamModifier) Delete(posStr string) error {
 		return err
 	}
 
-	toDeleteIndex := sort.Search(len(m.ops), func(i int) bool {
-		return pos.Compare(m.ops[i].pos) <= 0
-	})
+	toDeleteIndex := m.minIdxLargerOrEqual(pos)
 
 	if toDeleteIndex < m.nextOp || toDeleteIndex == len(m.ops) {
 		return terror.ErrSyncerOperatorNotExist.Generate(posStr)
@@ -180,13 +176,10 @@ func (m *streamModifier) ListEqualAndAfter(posStr string) []*pb.HandleWorkerErro
 			return []*pb.HandleWorkerErrorRequest{}
 		}
 
-		i := 0
-		for i < len(m.ops) && m.ops[i].pos.Compare(pos) < 0 {
-			i++
-		}
+		newStartIdx := m.minIdxLargerOrEqual(pos)
 
-		if i < len(m.ops) {
-			matchedOps = m.ops[i:]
+		if newStartIdx < len(m.ops) {
+			matchedOps = m.ops[newStartIdx:]
 		}
 	}
 
@@ -203,20 +196,14 @@ func (m *streamModifier) ListEqualAndAfter(posStr string) []*pb.HandleWorkerErro
 // the argument.
 // RemoveOutdated will not remove the operator equals or after the `front`.
 func (m *streamModifier) RemoveOutdated(pos mysql.Position) {
-	lastRemoveIndex := 0
-	for i, op := range m.ops {
-		if op.pos.Compare(pos) < 0 {
-			lastRemoveIndex = i
-		} else {
-			break
-		}
-	}
-	if lastRemoveIndex > m.nextOp-1 {
-		lastRemoveIndex = m.nextOp - 1
+	newStartIdx := m.minIdxLargerOrEqual(pos)
+
+	if newStartIdx > m.nextOp {
+		newStartIdx = m.nextOp
 	}
 
-	m.ops = m.ops[lastRemoveIndex+1:]
-	m.nextOp -= lastRemoveIndex + 1
+	m.ops = m.ops[newStartIdx:]
+	m.nextOp -= newStartIdx
 }
 
 func (m *streamModifier) front() *operator {
@@ -229,6 +216,14 @@ func (m *streamModifier) front() *operator {
 func (m *streamModifier) next() {
 	m.nextOp++
 	m.nextEventInOp = 0
+}
+
+// minIdxLargerOrEqual return an index of m.ops where m.ops[index:] are all equal
+// or larger than `pos` since m.ops are monotonous.
+func (m *streamModifier) minIdxLargerOrEqual(pos mysql.Position) int {
+	return sort.Search(len(m.ops), func(i int) bool {
+		return pos.Compare(m.ops[i].pos) <= 0
+	})
 }
 
 // reset will also reset nextEventInOp to a correct value.
