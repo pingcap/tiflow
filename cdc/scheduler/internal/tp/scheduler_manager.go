@@ -69,6 +69,8 @@ func (sm *schedulerManager) Schedule(
 		}
 		if len(tasks) != 0 {
 			log.Info("tpscheduler: new schedule task",
+				zap.String("namespace", sm.changefeedID.Namespace),
+				zap.String("changefeed", sm.changefeedID.ID),
 				zap.Int("task", len(tasks)),
 				zap.String("scheduler", scheduler.Name()))
 			return tasks
@@ -90,6 +92,8 @@ func (sm *schedulerManager) MoveTable(tableID model.TableID, target model.Captur
 	if !moveTableScheduler.addTask(tableID, target) {
 		log.Info("tpscheduler: manual move Table task ignored, "+
 			"since the last triggered task not finished",
+			zap.String("namespace", sm.changefeedID.Namespace),
+			zap.String("changefeed", sm.changefeedID.ID),
 			zap.Int64("tableID", tableID),
 			zap.String("targetCapture", target))
 	}

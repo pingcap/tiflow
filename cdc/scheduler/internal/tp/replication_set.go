@@ -607,10 +607,10 @@ func (r *ReplicationSet) handleAddTable(
 	}
 	oldState := r.State
 	r.State = ReplicationSetStateAbsent
+	r.Captures[captureID] = struct{}{}
 	log.Info("tpscheduler: replication state transition, add table",
 		zap.Any("replicationSet", r),
 		zap.Stringer("old", oldState), zap.Stringer("new", r.State))
-	r.Captures[captureID] = struct{}{}
 	status := schedulepb.TableStatus{
 		TableID:    r.TableID,
 		State:      schedulepb.TableStateAbsent,
@@ -636,11 +636,11 @@ func (r *ReplicationSet) handleMoveTable(
 	}
 	oldState := r.State
 	r.State = ReplicationSetStatePrepare
+	r.Secondary = dest
+	r.Captures[dest] = struct{}{}
 	log.Info("tpscheduler: replication state transition, move table",
 		zap.Any("replicationSet", r),
 		zap.Stringer("old", oldState), zap.Stringer("new", r.State))
-	r.Secondary = dest
-	r.Captures[dest] = struct{}{}
 	status := schedulepb.TableStatus{
 		TableID:    r.TableID,
 		State:      schedulepb.TableStateAbsent,

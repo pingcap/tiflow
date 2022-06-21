@@ -55,7 +55,9 @@ func (t *table) getAndUpdateTableState() (schedulepb.TableState, bool) {
 
 	if oldState != state {
 		log.Info("tpscheduler: table state changed",
-			zap.Any("oldState", oldState), zap.Any("state", state))
+			zap.Int64("tableID", t.id),
+			zap.Any("oldState", oldState),
+			zap.Any("state", state))
 		return t.state, true
 
 	}
