@@ -19,15 +19,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-<<<<<<< HEAD
-=======
-	"net/http/httputil"
->>>>>>> 86b704b71 (utils(dm): fix get tables without using quote schema name (#5896))
 
 	ginmiddleware "github.com/deepmap/oapi-codegen/pkg/gin-middleware"
 	"github.com/gin-gonic/gin"
-	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"

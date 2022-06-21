@@ -17,12 +17,8 @@ import (
 	"context"
 	"database/sql"
 
-<<<<<<< HEAD
+	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
-=======
-	"github.com/pingcap/tidb/util/dbutil"
-	"github.com/pingcap/tidb/util/filter"
->>>>>>> 86b704b71 (utils(dm): fix get tables without using quote schema name (#5896))
 
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 )
