@@ -74,7 +74,7 @@ const (
 
 	ValidatorMaxAccumulatedRow = 100000
 	// PendingRow is substantial in this version (in sysbench test)
-	// set to MaxInt temporaly and reset in the future
+	// set to MaxInt temporaly and reset in the future.
 	DefaultValidatorMaxPendingRow = math.MaxInt32
 )
 
