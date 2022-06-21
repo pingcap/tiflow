@@ -26,6 +26,7 @@ type SchedulerConfig struct {
 	CheckBalanceInterval TomlDuration `toml:"check-balance-interval" json:"check-balance-interval"`
 }
 
+// NewDefaultSchedulerConfig return the default scheduler configuration.
 func NewDefaultSchedulerConfig() *SchedulerConfig {
 	return &SchedulerConfig{
 		HeartbeatTick:      2,

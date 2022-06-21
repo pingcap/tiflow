@@ -32,7 +32,7 @@ type balanceScheduler struct {
 func newBalanceScheduler(interval time.Duration) *balanceScheduler {
 	return &balanceScheduler{
 		random:               rand.New(rand.NewSource(time.Now().UnixNano())),
-		checkBalanceInterval: time.Duration(interval),
+		checkBalanceInterval: interval,
 	}
 }
 
