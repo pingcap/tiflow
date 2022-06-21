@@ -25,7 +25,7 @@ func TestNewSchedulerManager(t *testing.T) {
 	t.Parallel()
 
 	m := newSchedulerManager(model.DefaultChangeFeedID("test-changefeed"),
-		config.NewSchedulerConfig())
+		config.NewDefaultSchedulerConfig())
 	require.NotNil(t, m)
 	require.NotNil(t, m.schedulers[schedulerTypeBasic])
 	require.NotNil(t, m.schedulers[schedulerTypeBalance])
