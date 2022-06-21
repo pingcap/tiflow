@@ -153,7 +153,7 @@ func (o *OpenAPI) PauseJob(c *gin.Context) {
 	projectID := c.Query(apiOpVarProjectID)
 	jobID := c.Param(apiOpVarJobID)
 	_, _, _ = tenantID, projectID, jobID
-	// TODO: Implement it.
+	// TODO: PauseJob will be removed in the future.
 	c.AbortWithStatus(http.StatusNotImplemented)
 }
 

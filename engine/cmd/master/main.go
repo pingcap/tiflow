@@ -59,7 +59,9 @@ func main() {
 		os.Exit(2)
 	}
 	version.LogVersionInfo()
-	gin.SetMode(gin.ReleaseMode)
+	if os.Getenv(gin.EnvGinMode) == "" {
+		gin.SetMode(gin.ReleaseMode)
+	}
 
 	// 3. start server
 	ctx, cancel := context.WithCancel(context.Background())
