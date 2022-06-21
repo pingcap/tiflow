@@ -520,3 +520,81 @@ func (t *testSubTask) TestSubtaskFastQuit(c *C) {
 	}
 	c.Assert(st.Stage(), Equals, pb.Stage_Stopped)
 }
+<<<<<<< HEAD
+=======
+
+func TestGetValidatorError(t *testing.T) {
+	cfg := &config.SubTaskConfig{
+		Name: "test-validate-error",
+		ValidatorCfg: config.ValidatorConfig{
+			Mode: config.ValidationFast,
+		},
+	}
+	st := NewSubTaskWithStage(cfg, pb.Stage_Paused, nil, "worker")
+	// validator == nil
+	validatorErrs, err := st.GetValidatorError(pb.ValidateErrorState_InvalidErr)
+	require.Nil(t, validatorErrs)
+	require.True(t, terror.ErrValidatorNotFound.Equal(err))
+	// validator != nil: will be tested in IT
+}
+
+func TestOperateValidatorError(t *testing.T) {
+	cfg := &config.SubTaskConfig{
+		Name: "test-validate-error",
+		ValidatorCfg: config.ValidatorConfig{
+			Mode: config.ValidationFast,
+		},
+	}
+	st := NewSubTaskWithStage(cfg, pb.Stage_Paused, nil, "worker")
+	// validator == nil
+	require.True(t, terror.ErrValidatorNotFound.Equal(st.OperateValidatorError(pb.ValidationErrOp_ClearErrOp, 0, true)))
+	// validator != nil: will be tested in IT
+}
+
+func TestValidatorStatus(t *testing.T) {
+	cfg := &config.SubTaskConfig{
+		Name: "test-validate-status",
+		ValidatorCfg: config.ValidatorConfig{
+			Mode: config.ValidationFast,
+		},
+	}
+	st := NewSubTaskWithStage(cfg, pb.Stage_Paused, nil, "worker")
+	// validator == nil
+	stats, err := st.GetValidatorStatus()
+	require.Nil(t, stats)
+	require.True(t, terror.ErrValidatorNotFound.Equal(err))
+	// validator != nil: will be tested in IT
+}
+
+func TestSubtaskRace(t *testing.T) {
+	// to test data race of Marshal() and markResultCanceled()
+	tempErrors := []*pb.ProcessError{}
+	tempDetail := []byte{}
+	tempProcessResult := pb.ProcessResult{
+		IsCanceled: false,
+		Errors:     tempErrors,
+		Detail:     tempDetail,
+	}
+	cfg := &config.SubTaskConfig{
+		Name: "test-subtask-race",
+		ValidatorCfg: config.ValidatorConfig{
+			Mode: config.ValidationFast,
+		},
+	}
+	st := NewSubTaskWithStage(cfg, pb.Stage_Paused, nil, "worker")
+	st.result = &tempProcessResult
+	tempQueryStatusResponse := pb.QueryStatusResponse{}
+	tempQueryStatusResponse.SubTaskStatus = make([]*pb.SubTaskStatus, 1)
+	tempSubTaskStatus := pb.SubTaskStatus{}
+	tempSubTaskStatus.Result = st.Result()
+	tempQueryStatusResponse.SubTaskStatus[0] = &tempSubTaskStatus
+	st.result.IsCanceled = false
+	go func() {
+		for i := 0; i < 10; i++ {
+			_, _ = tempQueryStatusResponse.Marshal()
+		}
+	}()
+	st.markResultCanceled()
+	// this test is to test data race, so don't need assert here
+}
+>>>>>>> 86780b1bd (syncer(dm): fix the data race issue (#5881))
