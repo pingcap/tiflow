@@ -2753,7 +2753,7 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 		if err == nil {
 			return
 		}
-		if !interestedDDL {
+		if interestedDDL {
 			return
 		}
 		// why not `skipSQLByPattern` at beginning, but at defer?
