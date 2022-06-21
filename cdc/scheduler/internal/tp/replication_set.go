@@ -628,8 +628,10 @@ func (r *ReplicationSet) handleMoveTable(
 			zap.Any("replicationSet", r), zap.Int64("tableID", r.TableID))
 		return nil, nil
 	}
-	// Ignore move table if it's not in Replicating state.
-	if r.State != ReplicationSetStateReplicating {
+	// Ignore move table if
+	// 1) it's not in Replicating state or
+	// 2) the dest capture is the primary.
+	if r.State != ReplicationSetStateReplicating || r.Primary == dest {
 		log.Warn("tpscheduler: move table is ignored",
 			zap.Any("replicationSet", r), zap.Int64("tableID", r.TableID))
 		return nil, nil
