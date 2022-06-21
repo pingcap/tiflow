@@ -127,7 +127,7 @@ validators:
     validate-interval: 10s
     check-interval: 5s
     row-error-delay: 30m0s
-    meta-flush-interval: 1m0s
+    meta-flush-interval: 5m0s
     batch-query-size: 100
     max-pending-row-size: 500m
     max-pending-row-count: 2147483647
