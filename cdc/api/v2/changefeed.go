@@ -55,8 +55,35 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 		config.CAPath = up.SecurityConfig.CAPath
 		config.CertPath = up.SecurityConfig.CertPath
 	}
+	credential := &security.Credential{
+		CAPath:   config.CAPath,
+		CertPath: config.CertPath,
+		KeyPath:  config.KeyPath,
+	}
+	if len(config.CertAllowedCN) != 0 {
+		credential.CertAllowedCN = config.CertAllowedCN
+	}
+	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	pdClient, err := getPDClient(timeoutCtx, config.PDAddrs, credential)
+	if err != nil {
+		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
+		return
+	}
+	defer pdClient.Close()
 
-	info, err := verifyCreateChangefeedConfig(ctx, config, h.capture)
+	// verify tables
+	kvStorage, err := kv.CreateTiStore(strings.Join(config.PDAddrs, ","), credential)
+	if err != nil {
+		_ = c.Error(cerror.WrapError(cerror.ErrInternalServerError, err))
+		return
+	}
+	// We should not close kvStorage since all kvStorage in cdc is the same one.
+	// defer kvStorage.Close()
+
+	info, err := verifyCreateChangefeedConfig(ctx, config, pdClient,
+		h.capture.StatusProvider(), h.capture.EtcdClient.GetEnsureGCServiceID(),
+		kvStorage)
 	if err != nil {
 		_ = c.Error(err)
 		return
