@@ -228,12 +228,8 @@ func (m *streamModifier) minIdxLargerOrEqual(pos mysql.Position) int {
 
 // reset will also reset nextEventInOp to a correct value.
 func (m *streamModifier) reset(loc binlog.Location) {
-	m.nextOp = 0
 	m.nextEventInOp = 0
-
-	m.nextOp = sort.Search(len(m.ops), func(i int) bool {
-		return loc.Position.Compare(m.ops[i].pos) <= 0
-	})
+	m.nextOp = m.minIdxLargerOrEqual(loc.Position)
 
 	if m.nextOp == len(m.ops) {
 		return
