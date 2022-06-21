@@ -39,6 +39,7 @@ func TestDrainCapture(t *testing.T) {
 
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
+	// the target capture has no table at the beginning, so reset the target
 	require.Equal(t, captureIDNotDraining, scheduler.target)
 
 	captures["a"] = &model.CaptureInfo{}
@@ -47,6 +48,7 @@ func TestDrainCapture(t *testing.T) {
 
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
+	// the target capture cannot be found in the latest captures
 	require.Equal(t, captureIDNotDraining, scheduler.target)
 
 	captures["b"] = &model.CaptureInfo{}
@@ -79,9 +81,5 @@ func TestDrainCapture(t *testing.T) {
 
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Equal(t, "a", scheduler.target)
-	require.Len(t, tasks, 1)
-
-	moveTables := tasks[0].burstBalance.MoveTables
-	require.Len(t, moveTables, 3)
-
+	require.Len(t, tasks, 3)
 }

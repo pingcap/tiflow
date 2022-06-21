@@ -15,10 +15,10 @@ package tp
 
 import (
 	"sync/atomic"
+	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	"go.uber.org/zap"
 )
 
@@ -30,7 +30,7 @@ type schedulerManager struct {
 }
 
 func newSchedulerManager(changefeedID model.ChangeFeedID,
-	balanceInterval config.TomlDuration,
+	balanceInterval time.Duration,
 ) *schedulerManager {
 	sm := &schedulerManager{
 		changefeedID: changefeedID,
@@ -92,16 +92,6 @@ func (sm *schedulerManager) MoveTable(tableID model.TableID, target model.Captur
 	}
 }
 
-func (sm *schedulerManager) CollectMetrics() {
-	cf := sm.changefeedID
-	for name, counter := range sm.tasksCounter {
-		scheduleTaskCounter.
-			WithLabelValues(cf.Namespace, cf.ID, name.scheduler, name.task).
-			Add(float64(counter))
-		sm.tasksCounter[name] = 0
-	}
-}
-
 func (sm *schedulerManager) Rebalance() {
 	scheduler, ok := sm.schedulers[schedulerTypeRebalance]
 	if !ok {
@@ -130,4 +120,21 @@ func (sm *schedulerManager) DrainCapture(target model.CaptureID) bool {
 
 func (sm *schedulerManager) DrainingTarget() model.CaptureID {
 	return sm.schedulers[schedulerTypeDrainCapture].(*drainCaptureScheduler).getTarget()
+}
+
+func (sm *schedulerManager) CollectMetrics() {
+	cf := sm.changefeedID
+	for name, counter := range sm.tasksCounter {
+		scheduleTaskCounter.
+			WithLabelValues(cf.Namespace, cf.ID, name.scheduler, name.task).
+			Add(float64(counter))
+		sm.tasksCounter[name] = 0
+	}
+}
+
+func (sm *schedulerManager) CleanMetrics() {
+	cf := sm.changefeedID
+	for name := range sm.tasksCounter {
+		scheduleTaskCounter.DeleteLabelValues(cf.Namespace, cf.ID, name.scheduler, name.task)
+	}
 }

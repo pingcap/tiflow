@@ -416,7 +416,7 @@ func (o *ownerImpl) handleDrainCaptures(query *scheduler.Query, done chan<- erro
 		zap.Int("changefeedWithTableCount", changefeedWithTableCount),
 		zap.Int("totalTableCount", totalTableCount))
 	query.Resp = &model.DrainCaptureResp{
-		TotalTableCount: totalTableCount,
+		CurrentTableCount: totalTableCount,
 	}
 	close(done)
 }

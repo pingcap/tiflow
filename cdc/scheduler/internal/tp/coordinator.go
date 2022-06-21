@@ -87,7 +87,7 @@ func newCoordinator(
 		captureID:    captureID,
 		replicationM: newReplicationManager(cfg.MaxTaskConcurrency, changefeedID),
 		captureM:     newCaptureManager(changefeedID, revision, cfg.HeartbeatTick),
-		schedulerM:   newSchedulerManager(changefeedID, cfg.CheckBalanceInterval),
+		schedulerM:   newSchedulerManager(changefeedID, time.Duration(cfg.CheckBalanceInterval)),
 		changefeedID: changefeedID,
 	}
 }
@@ -151,7 +151,7 @@ func (c *coordinator) DrainCapture(target model.CaptureID) int {
 		}
 	}
 
-	if !c.captureM.checkAllCaptureInitialized() {
+	if !c.captureM.CheckAllCaptureInitialized() {
 		log.Info("tpscheduler: manual drain capture task ignored, "+
 			"since not all captures initialized",
 			zap.String("target", target),
@@ -168,9 +168,9 @@ func (c *coordinator) DrainCapture(target model.CaptureID) int {
 
 	// when draining the capture, tables need to be dispatched to other
 	// capture except the draining one, so at least should have 2 captures alive.
-	if len(c.captureM.Captures) < 2 {
+	if len(c.captureM.Captures) <= 1 {
 		log.Warn("tpscheduler: manual drain capture ignored, "+
-			"since less than 2 captures alive",
+			"since only one captures alive",
 			zap.String("target", target),
 			zap.Int("tableCount", count))
 		return count
@@ -200,6 +200,7 @@ func (c *coordinator) Close(ctx context.Context) {
 	_ = c.trans.Close()
 	c.captureM.CleanMetrics()
 	c.replicationM.CleanMetrics()
+	c.schedulerM.CleanMetrics()
 
 	log.Info("tpscheduler: coordinator closed",
 		zap.Any("ownerRev", c.captureM.OwnerRev),

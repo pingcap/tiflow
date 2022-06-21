@@ -29,8 +29,7 @@ const captureIDNotDraining = ""
 var _ scheduler = &drainCaptureScheduler{}
 
 type drainCaptureScheduler struct {
-	mu sync.Mutex
-	// todo: when should reset `target`
+	mu     sync.Mutex
 	target model.CaptureID
 	random *rand.Rand
 }
@@ -116,6 +115,10 @@ func (d *drainCaptureScheduler) Schedule(
 		}
 	}
 
+	// this always indicate that the whole draining process finished, and can be triggered by:
+	// 1. the target capture has no table at the beginning
+	// 2. all tables moved from the target capture
+	// 3. the target capture cannot be found in the latest captures
 	if len(victims) == 0 {
 		log.Info("tpscheduler: drain capture scheduler finished, since no table",
 			zap.String("target", d.target), zap.Any("captures", captures))
@@ -127,8 +130,10 @@ func (d *drainCaptureScheduler) Schedule(
 		captureWorkload[captureID] = randomizeWorkload(d.random, w)
 	}
 
+	result := make([]*scheduleTask, 0, len(victims))
+
 	// for each victim table, find the target for it
-	moveTables := make([]moveTable, 0, len(victims))
+	//moveTables := make([]moveTable, 0, len(victims))
 	for _, tableID := range victims {
 		target := ""
 		minWorkload := math.MaxInt64
@@ -145,26 +150,16 @@ func (d *drainCaptureScheduler) Schedule(
 				"when try to the the target capture")
 		}
 
-		moveTables = append(moveTables, moveTable{
-			TableID:     tableID,
-			DestCapture: target,
+		result = append(result, &scheduleTask{
+			moveTable: &moveTable{
+				TableID:     tableID,
+				DestCapture: target,
+			},
+			accept: (callback)(nil), // We do not need to accept callback here.
 		})
 
 		captureWorkload[target] = randomizeWorkload(d.random, minWorkload+1)
 	}
 
-	accept := func() {
-		d.mu.Lock()
-		defer d.mu.Unlock()
-		log.Info("tpscheduler: drain capture task accepted",
-			zap.String("target", d.target))
-	}
-
-	// todo: revise this if we have to control the concurrency.
-	task := &scheduleTask{
-		burstBalance: &burstBalance{MoveTables: moveTables},
-		accept:       accept,
-	}
-
-	return []*scheduleTask{task}
+	return result
 }

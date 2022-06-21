@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 )
 
 var _ scheduler = &balanceScheduler{}
@@ -30,7 +29,7 @@ type balanceScheduler struct {
 	checkBalanceInterval time.Duration
 }
 
-func newBalanceScheduler(interval config.TomlDuration) *balanceScheduler {
+func newBalanceScheduler(interval time.Duration) *balanceScheduler {
 	return &balanceScheduler{
 		random:               rand.New(rand.NewSource(time.Now().UnixNano())),
 		checkBalanceInterval: time.Duration(interval),

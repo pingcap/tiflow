@@ -204,10 +204,10 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) *schedulep
 		}
 	}
 
-	stopping := request.GetIsStopping() || a.stopping
+	a.stopping = a.stopping || request.GetIsStopping()
 	response := &schedulepb.HeartbeatResponse{
 		Tables:     result,
-		IsStopping: stopping,
+		IsStopping: a.stopping,
 	}
 
 	message := &schedulepb.Message{
