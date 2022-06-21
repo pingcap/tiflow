@@ -144,7 +144,7 @@ func (r *DefaultGCRunner) gcOnce(
 		}
 		// remove resource rpc returns resource not found, ignore this error and
 		// continue to delete resource from resourcemeta
-		log.L().Warn("remove resource rpc returns resource not found, which is ignorable", zap.Error(err))
+		log.L().Info("remove resource rpc returns resource not found, which is ignorable", zap.Error(err))
 	}
 
 	result, err := r.client.DeleteResource(ctx, res.ID)
