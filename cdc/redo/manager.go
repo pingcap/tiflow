@@ -97,16 +97,15 @@ type LogManager interface {
 	Enabled() bool
 
 	// The following 6 APIs are called from processor only
-	TryEmitRowChangedEvents(ctx context.Context, tableID model.TableID, rows ...*model.RowChangedEvent) (bool, error)
-	EmitRowChangedEvents(ctx context.Context, tableID model.TableID, rows ...*model.RowChangedEvent) error
-	FlushLog(ctx context.Context, tableID model.TableID, resolvedTs uint64) error
 	AddTable(tableID model.TableID, startTs uint64)
 	RemoveTable(tableID model.TableID)
 	GetMinResolvedTs() uint64
-
-	// EmitDDLEvent and FlushResolvedAndCheckpointTs are called from owner only
-	EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
+	EmitRowChangedEvents(ctx context.Context, tableID model.TableID, rows ...*model.RowChangedEvent) error
+	FlushLog(ctx context.Context, tableID model.TableID, resolvedTs uint64) error
 	FlushResolvedAndCheckpointTs(ctx context.Context, resolvedTs, checkpointTs uint64) (err error)
+
+	// EmitDDLEvent are called from owner only
+	EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 
 	// Cleanup removes all redo logs
 	Cleanup(ctx context.Context) error
