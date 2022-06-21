@@ -756,7 +756,7 @@ func (h *OpenAPI) ListCapture(c *gin.Context) {
 // @Tags capture
 // @Accept json
 // @Produce json
-// @Success 200, 202
+// @Success 200,202
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/captures/drain [post]
 func (h *OpenAPI) DrainCapture(c *gin.Context) {
