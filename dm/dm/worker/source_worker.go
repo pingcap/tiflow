@@ -593,7 +593,7 @@ func (w *SourceWorker) UpdateSubTask(ctx context.Context, cfg *config.SubTaskCon
 	return st.Update(ctx, cfg)
 }
 
-// OperateSubTask stop/resume/pause  sub task.
+// OperateSubTask stop/resume/pause sub task.
 func (w *SourceWorker) OperateSubTask(name string, op pb.TaskOp) error {
 	w.Lock()
 	defer w.Unlock()
