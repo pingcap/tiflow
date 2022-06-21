@@ -25,12 +25,13 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/security"
-	"github.com/pingcap/tiflow/proto/p2p"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/proto/p2p"
 )
 
 // read only
@@ -375,6 +376,79 @@ func TestMessageBackPressure(t *testing.T) {
 		log.Info("checked ack", zap.Int64("ack", latestAck))
 		return latestAck == atomic.LoadInt64(&lastSeq)
 	}, time.Second*10, time.Millisecond*20)
+	cancel()
+	wg.Wait()
+}
+
+func TestTopicCongested(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
+	defer cancel()
+
+	server, addr, cancelServer := newServerForIntegrationTesting(t, "test-server-1", func(config *MessageServerConfig) {
+		config.MaxPendingMessageCountPerTopic = 10
+	})
+	defer cancelServer()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := server.Run(ctx)
+		if err != nil {
+			require.Regexp(t, ".*context canceled.*", err.Error())
+		}
+	}()
+
+	newClientConfig := *clientConfig4Testing
+	newClientConfig.MaxBatchCount = 1
+	newClientConfig.RetryRateLimitPerSecond = 100
+	client := NewMessageClient("test-client-1", clientConfig4Testing)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := client.Run(ctx, "tcp", addr, "test-server-1", &security.Credential{})
+		require.Error(t, err)
+		require.Regexp(t, ".*context canceled.*", err.Error())
+	}()
+
+	var lastSeq Seq
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		for i := 0; i < 100; i++ {
+			seq, err := client.SendMessage(ctx, "test-topic-1", &testTopicContent{})
+			require.NoError(t, err)
+			atomic.StoreInt64(&lastSeq, seq)
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
+
+	// No-op handler.
+	_ = mustAddHandler(ctx, t, server, "test-topic-1", &testTopicContent{}, func(senderID string, i interface{}) error {
+		return nil
+	})
+
+	time.Sleep(100 * time.Millisecond)
+	err := server.SyncRemoveHandler(ctx, "test-topic-1")
+	require.NoError(t, err)
+
+	time.Sleep(1000 * time.Millisecond)
+
+	// No-op handler.
+	_ = mustAddHandler(ctx, t, server, "test-topic-1", &testTopicContent{}, func(senderID string, i interface{}) error {
+		return nil
+	})
+
+	require.Eventually(t, func() bool {
+		latestAck, ok := client.CurrentAck("test-topic-1")
+		if !ok {
+			return false
+		}
+		log.Info("checked ack", zap.Int64("ack", latestAck))
+		return latestAck == 100
+	}, time.Second*10, time.Millisecond*20)
+
 	cancel()
 	wg.Wait()
 }
