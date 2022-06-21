@@ -439,7 +439,7 @@ func (o *ownerImpl) handleJobs() {
 			cfReactor.scheduler.MoveTable(job.TableID, job.TargetCaptureID)
 		case ownerJobTypeDrainCapture:
 			o.handleDrainCaptures(job.scheduleQuery, job.done)
-			continue
+			continue // continue here to prevent close the done channel twice
 		case ownerJobTypeRebalance:
 			cfReactor.scheduler.Rebalance()
 		case ownerJobTypeQuery:

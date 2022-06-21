@@ -778,9 +778,11 @@ func (h *OpenAPI) DrainCapture(c *gin.Context) {
 		return
 	}
 
-	if len(captures) < 2 {
+	// drain capture only work if there is at least two alive captures,
+	// it cannot work properly if has only one capture.
+	if len(captures) <= 1 {
 		_ = c.Error(cerror.ErrSchedulerRequestFailed.
-			GenWithStackByArgs("capture count less than 2"))
+			GenWithStackByArgs("only one capture alive"))
 		return
 	}
 
