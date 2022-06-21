@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -125,7 +126,7 @@ func HandleOwnerScheduleTable(
 	ctx context.Context, capture *capture.Capture,
 	changefeedID model.ChangeFeedID, captureID string, tableID int64,
 ) error {
-	// Use buffered channel to prevernt blocking owner.
+	// Use buffered channel to prevent blocking owner.
 	done := make(chan error, 1)
 	o, err := capture.GetOwner()
 	if err != nil {
@@ -138,4 +139,30 @@ func HandleOwnerScheduleTable(
 	case err := <-done:
 		return errors.Trace(err)
 	}
+}
+
+// HandleOwnerDrainCapture schedule drain the target capture
+func HandleOwnerDrainCapture(
+	ctx context.Context, capture *capture.Capture, captureID string,
+) (*model.DrainCaptureResp, error) {
+	// Use buffered channel to prevent blocking owner.
+	done := make(chan error, 1)
+	o, err := capture.GetOwner()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	query := scheduler.Query{
+		CaptureID: captureID,
+	}
+
+	o.DrainCapture(&query, done)
+
+	select {
+	case <-ctx.Done():
+		err = ctx.Err()
+	case err = <-done:
+	}
+
+	return query.Resp.(*model.DrainCaptureResp), errors.Trace(err)
 }

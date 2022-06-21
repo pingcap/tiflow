@@ -268,6 +268,13 @@ func TestAgentHandleMessageHeartbeat(t *testing.T) {
 	response = a.handleMessage([]*schedulepb.Message{heartbeat})
 	require.Len(t, response, 1)
 	require.True(t, response[0].GetHeartbeatResponse().IsStopping)
+
+	a.stopping = false
+
+	heartbeat.Heartbeat.IsStopping = true
+	response = a.handleMessage([]*schedulepb.Message{heartbeat})
+	require.True(t, response[0].GetHeartbeatResponse().IsStopping)
+	require.True(t, a.stopping)
 }
 
 func TestAgentPermuteMessages(t *testing.T) {

@@ -70,6 +70,7 @@ message Heartbeat {
         (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
         (gogoproto.customname) = "TableIDs"
     ];
+    bool is_stopping = 2;
 }
 
 // TableState is the state of table replication in processor.

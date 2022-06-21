@@ -106,6 +106,7 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api OpenAPI) {
 	// capture API
 	captureGroup := v1.Group("/captures")
 	captureGroup.GET("", api.ListCapture)
+	captureGroup.POST("/drain", api.DrainCapture)
 }
 
 // ListChangefeed lists all changgefeeds in cdc cluster
@@ -747,6 +748,67 @@ func (h *OpenAPI) ListCapture(c *gin.Context) {
 	}
 
 	c.IndentedJSON(http.StatusOK, captures)
+}
+
+// DrainCapture remove all tables at the given capture.
+// @Summary Drain captures
+// @Description Drain all tables at the target captures in cdc cluster
+// @Tags capture
+// @Accept json
+// @Produce json
+// @Success 200,202
+// @Failure 500,400 {object} model.HTTPError
+// @Router	/api/v1/captures/drain [post]
+func (h *OpenAPI) DrainCapture(c *gin.Context) {
+	if !h.capture.IsOwner() {
+		h.forwardToOwner(c)
+		return
+	}
+
+	var req model.DrainCaptureRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.Wrap(err))
+		return
+	}
+
+	ctx := c.Request.Context()
+	captures, err := h.statusProvider().GetCaptures(ctx)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	// drain capture only work if there is at least two alive captures,
+	// it cannot work properly if has only one capture.
+	if len(captures) <= 1 {
+		_ = c.Error(cerror.ErrSchedulerRequestFailed.
+			GenWithStackByArgs("only one capture alive"))
+		return
+	}
+
+	target := req.CaptureID
+	checkCaptureFound := func() bool {
+		// make sure the target capture exist
+		for _, capture := range captures {
+			if capture.ID == target {
+				return true
+			}
+		}
+		return false
+	}
+
+	if !checkCaptureFound() {
+		_ = c.Error(cerror.ErrCaptureNotExist.GenWithStackByArgs(target))
+		return
+	}
+
+	resp, err := api.HandleOwnerDrainCapture(ctx, h.capture, target)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	c.JSON(http.StatusAccepted, resp)
 }
 
 // ServerStatus gets the status of server(capture)
