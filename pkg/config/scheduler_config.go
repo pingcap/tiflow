@@ -26,6 +26,15 @@ type SchedulerConfig struct {
 	CheckBalanceInterval TomlDuration `toml:"check-balance-interval" json:"check-balance-interval"`
 }
 
+func NewSchedulerConfig() *SchedulerConfig {
+	return &SchedulerConfig{
+		HeartbeatTick:      2,
+		MaxTaskConcurrency: 10,
+		// TODO: no need to check balance each minute, relax the interval.
+		CheckBalanceInterval: TomlDuration(time.Minute),
+	}
+}
+
 // ValidateAndAdjust verifies that each parameter is valid.
 func (c *SchedulerConfig) ValidateAndAdjust() error {
 	if c.HeartbeatTick <= 0 {

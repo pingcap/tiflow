@@ -15,9 +15,9 @@ package tp
 
 import (
 	"testing"
-	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,7 +25,7 @@ func TestNewSchedulerManager(t *testing.T) {
 	t.Parallel()
 
 	m := newSchedulerManager(model.DefaultChangeFeedID("test-changefeed"),
-		10*time.Minute)
+		config.NewSchedulerConfig())
 	require.NotNil(t, m)
 	require.NotNil(t, m.schedulers[schedulerTypeBasic])
 	require.NotNil(t, m.schedulers[schedulerTypeBalance])

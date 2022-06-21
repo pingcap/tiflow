@@ -87,7 +87,7 @@ func newCoordinator(
 		captureID:    captureID,
 		replicationM: newReplicationManager(cfg.MaxTaskConcurrency, changefeedID),
 		captureM:     newCaptureManager(changefeedID, revision, cfg.HeartbeatTick),
-		schedulerM:   newSchedulerManager(changefeedID, time.Duration(cfg.CheckBalanceInterval)),
+		schedulerM:   newSchedulerManager(changefeedID, cfg),
 		changefeedID: changefeedID,
 	}
 }

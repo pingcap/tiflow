@@ -23,7 +23,7 @@ import (
 func TestDrainCapture(t *testing.T) {
 	t.Parallel()
 
-	scheduler := newDrainCaptureScheduler()
+	scheduler := newDrainCaptureScheduler(10)
 	require.Equal(t, "drain-capture-scheduler", scheduler.Name())
 
 	var checkpointTs model.Ts
@@ -82,4 +82,11 @@ func TestDrainCapture(t *testing.T) {
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Equal(t, "a", scheduler.target)
 	require.Len(t, tasks, 3)
+
+	scheduler = newDrainCaptureScheduler(1)
+	require.True(t, scheduler.setTarget("a"))
+	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	require.Equal(t, "a", scheduler.target)
+	require.Len(t, tasks, 1)
+
 }

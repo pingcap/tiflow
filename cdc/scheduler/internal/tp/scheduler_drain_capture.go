@@ -24,6 +24,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// captureIDNotDraining is the default capture ID if the drain target not set
 const captureIDNotDraining = ""
 
 var _ scheduler = &drainCaptureScheduler{}
@@ -32,12 +33,15 @@ type drainCaptureScheduler struct {
 	mu     sync.Mutex
 	target model.CaptureID
 	random *rand.Rand
+
+	maxTaskConcurrency int
 }
 
-func newDrainCaptureScheduler() *drainCaptureScheduler {
+func newDrainCaptureScheduler(concurrency int) *drainCaptureScheduler {
 	return &drainCaptureScheduler{
-		target: captureIDNotDraining,
-		random: rand.New(rand.NewSource(time.Now().UnixNano())),
+		target:             captureIDNotDraining,
+		random:             rand.New(rand.NewSource(time.Now().UnixNano())),
+		maxTaskConcurrency: concurrency,
 	}
 }
 
@@ -77,7 +81,7 @@ func (d *drainCaptureScheduler) Schedule(
 
 	var availableCaptureCount int
 	for id := range captures {
-		if id == d.target {
+		if id != d.target {
 			availableCaptureCount++
 		}
 	}
@@ -130,11 +134,15 @@ func (d *drainCaptureScheduler) Schedule(
 		captureWorkload[captureID] = randomizeWorkload(d.random, w)
 	}
 
-	result := make([]*scheduleTask, 0, len(victims))
+	maxTaskConcurrency := d.maxTaskConcurrency
+	if len(victims) < maxTaskConcurrency {
+		maxTaskConcurrency = len(victims)
+	}
 
 	// for each victim table, find the target for it
-	//moveTables := make([]moveTable, 0, len(victims))
-	for _, tableID := range victims {
+	result := make([]*scheduleTask, 0, maxTaskConcurrency)
+	for i := 0; i < maxTaskConcurrency; i++ {
+		tableID := victims[i]
 		target := ""
 		minWorkload := math.MaxInt64
 

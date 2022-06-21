@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"go.uber.org/zap"
 )
 
@@ -30,7 +31,7 @@ type schedulerManager struct {
 }
 
 func newSchedulerManager(changefeedID model.ChangeFeedID,
-	balanceInterval time.Duration,
+	cfg *config.SchedulerConfig,
 ) *schedulerManager {
 	sm := &schedulerManager{
 		changefeedID: changefeedID,
@@ -41,11 +42,13 @@ func newSchedulerManager(changefeedID model.ChangeFeedID,
 		}]int),
 	}
 
+	balanceInterval := time.Duration(cfg.CheckBalanceInterval)
+
 	sm.schedulers[schedulerTypeBasic] = newBasicScheduler()
 	sm.schedulers[schedulerTypeBalance] = newBalanceScheduler(balanceInterval)
 	sm.schedulers[schedulerTypeMoveTable] = newMoveTableScheduler()
 	sm.schedulers[schedulerTypeRebalance] = newRebalanceScheduler()
-	sm.schedulers[schedulerTypeDrainCapture] = newDrainCaptureScheduler()
+	sm.schedulers[schedulerTypeDrainCapture] = newDrainCaptureScheduler(cfg.MaxTaskConcurrency)
 
 	return sm
 }
