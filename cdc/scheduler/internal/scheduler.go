@@ -63,7 +63,7 @@ type Scheduler interface {
 
 // Query is for scheduler related owner job.
 // at the moment, only for `DrainCapture`, we can use this to handle all manual schedule task.
-// TODO: refactor  `MoveTable` use Query to access the scheduler
+// TODO: refactor `MoveTable` use Query to access the scheduler
 type Query struct {
 	CaptureID model.CaptureID
 
