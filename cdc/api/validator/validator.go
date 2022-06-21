@@ -44,8 +44,8 @@ func VerifyCreateChangefeedConfig(
 	capture *capture.Capture,
 ) (*model.ChangeFeedInfo, error) {
 	// TODO(dongmen): we should pass ClusterID in ChangefeedConfig in the upcoming future
-	upStream := capture.UpstreamManager.Get(upstream.DefaultUpstreamID)
-	defer upStream.Release()
+	up := capture.UpstreamManager.Get(upstream.DefaultUpstreamID)
+	defer up.Release()
 
 	// verify sinkURI
 	if changefeedConfig.SinkURI == "" {
@@ -68,7 +68,7 @@ func VerifyCreateChangefeedConfig(
 
 	// verify start-ts
 	if changefeedConfig.StartTS == 0 {
-		ts, logical, err := upStream.PDClient.GetTS(ctx)
+		ts, logical, err := up.PDClient.GetTS(ctx)
 		if err != nil {
 			return nil, cerror.ErrPDEtcdAPIError.GenWithStackByArgs("fail to get ts from pd client")
 		}
@@ -79,7 +79,7 @@ func VerifyCreateChangefeedConfig(
 	const ensureTTL = 60 * 60
 	if err := gc.EnsureChangefeedStartTsSafety(
 		ctx,
-		upStream.PDClient,
+		up.PDClient,
 		model.DefaultChangeFeedID(changefeedConfig.ID),
 		ensureTTL, changefeedConfig.StartTS); err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {
@@ -130,7 +130,6 @@ func VerifyCreateChangefeedConfig(
 	// init ChangefeedInfo
 	info := &model.ChangeFeedInfo{
 		SinkURI:           changefeedConfig.SinkURI,
-		Opts:              make(map[string]string),
 		CreateTime:        time.Now(),
 		StartTs:           changefeedConfig.StartTS,
 		TargetTs:          changefeedConfig.TargetTS,
@@ -143,7 +142,7 @@ func VerifyCreateChangefeedConfig(
 	}
 
 	if !replicaConfig.ForceReplicate && !changefeedConfig.IgnoreIneligibleTable {
-		ineligibleTables, _, err := VerifyTables(replicaConfig, upStream.KVStorage, changefeedConfig.StartTS)
+		ineligibleTables, _, err := VerifyTables(replicaConfig, up.KVStorage, changefeedConfig.StartTS)
 		if err != nil {
 			return nil, err
 		}
@@ -157,7 +156,7 @@ func VerifyCreateChangefeedConfig(
 		return nil, cerror.ErrAPIInvalidParam.Wrap(errors.Annotatef(err, "invalid timezone:%s", changefeedConfig.TimeZone))
 	}
 	ctx = contextutil.PutTimezoneInCtx(ctx, tz)
-	if err := sink.Validate(ctx, info.SinkURI, info.Config, info.Opts); err != nil {
+	if err := sink.Validate(ctx, info.SinkURI, info.Config); err != nil {
 		return nil, err
 	}
 
@@ -205,7 +204,7 @@ func VerifyUpdateChangefeedConfig(ctx context.Context,
 	// verify sink_uri
 	if changefeedConfig.SinkURI != "" {
 		newInfo.SinkURI = changefeedConfig.SinkURI
-		if err := sink.Validate(ctx, changefeedConfig.SinkURI, newInfo.Config, newInfo.Opts); err != nil {
+		if err := sink.Validate(ctx, changefeedConfig.SinkURI, newInfo.Config); err != nil {
 			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 	}

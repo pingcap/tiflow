@@ -215,40 +215,6 @@ func (t *testDBSuite) TestGetServerUnixTS(c *C) {
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
 }
 
-func (t *testDBSuite) TestGetSchemaList(c *C) {
-	ctx := context.Background()
-
-	db, mock, err := sqlmock.New()
-	c.Assert(err, IsNil)
-
-	schemaName := "information_schema"
-	rows := sqlmock.NewRows([]string{"Database"}).AddRow(schemaName)
-	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(rows)
-
-	schemaList, err := GetSchemaList(ctx, db)
-	c.Assert(err, IsNil)
-	c.Assert(schemaName, Equals, schemaList[0])
-	c.Assert(mock.ExpectationsWereMet(), IsNil)
-}
-
-func (t *testDBSuite) TestGetTableList(c *C) {
-	ctx := context.Background()
-
-	db, mock, err := sqlmock.New()
-	c.Assert(err, IsNil)
-
-	schemaName := "information_schema"
-	tableName := "CHARACTER_SETS"
-	sql := "SHOW TABLES FROM " + schemaName
-	rows := sqlmock.NewRows([]string{"Tables_in_information_schema"}).AddRow(tableName)
-	mock.ExpectQuery(sql).WillReturnRows(rows)
-
-	tableList, err := GetTableList(ctx, db, schemaName)
-	c.Assert(err, IsNil)
-	c.Assert(tableName, Equals, tableList[0])
-	c.Assert(mock.ExpectationsWereMet(), IsNil)
-}
-
 func (t *testDBSuite) TestGetParser(c *C) {
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultDBTimeout)
 	defer cancel()

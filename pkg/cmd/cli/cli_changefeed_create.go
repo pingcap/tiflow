@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/cyclic"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -46,19 +45,15 @@ import (
 
 // changefeedCommonOptions defines common changefeed flags.
 type changefeedCommonOptions struct {
-	noConfirm              bool
-	targetTs               uint64
-	sinkURI                string
-	schemaRegistry         string
-	configFile             string
-	opts                   []string
-	sortEngine             string
-	sortDir                string
-	cyclicReplicaID        uint64
-	cyclicFilterReplicaIDs []uint
-	cyclicSyncDDL          bool
-	syncPointEnabled       bool
-	syncPointInterval      time.Duration
+	noConfirm         bool
+	targetTs          uint64
+	sinkURI           string
+	schemaRegistry    string
+	configFile        string
+	sortEngine        string
+	sortDir           string
+	syncPointEnabled  bool
+	syncPointInterval time.Duration
 }
 
 // newChangefeedCommonOptions creates new changefeed common options.
@@ -77,12 +72,8 @@ func (o *changefeedCommonOptions) addFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().Uint64Var(&o.targetTs, "target-ts", 0, "Target ts of changefeed")
 	cmd.PersistentFlags().StringVar(&o.sinkURI, "sink-uri", "", "sink uri")
 	cmd.PersistentFlags().StringVar(&o.configFile, "config", "", "Path of the configuration file")
-	cmd.PersistentFlags().StringSliceVar(&o.opts, "opts", nil, "Extra options, in the `key=value` format")
 	cmd.PersistentFlags().StringVar(&o.sortEngine, "sort-engine", model.SortUnified, "sort engine used for data sort")
 	cmd.PersistentFlags().StringVar(&o.sortDir, "sort-dir", "", "directory used for data sort")
-	cmd.PersistentFlags().Uint64Var(&o.cyclicReplicaID, "cyclic-replica-id", 0, "(Experimental) Cyclic replication replica ID of changefeed")
-	cmd.PersistentFlags().UintSliceVar(&o.cyclicFilterReplicaIDs, "cyclic-filter-replica-ids", []uint{}, "(Experimental) Cyclic replication filter replica ID of changefeed")
-	cmd.PersistentFlags().BoolVar(&o.cyclicSyncDDL, "cyclic-sync-ddl", true, "(Experimental) Cyclic replication sync DDL of changefeed")
 	cmd.PersistentFlags().BoolVar(&o.syncPointEnabled, "sync-point", false, "(Experimental) Set and Record syncpoint in replication(default off)")
 	cmd.PersistentFlags().DurationVar(&o.syncPointInterval, "sync-interval", 10*time.Minute, "(Experimental) Set the interval for syncpoint in replication(default 10min)")
 	cmd.PersistentFlags().
@@ -255,26 +246,6 @@ func (o *createChangefeedOptions) completeCfg(
 	if o.disableGCSafePointCheck {
 		cfg.CheckGCSafePoint = false
 	}
-
-	if o.commonChangefeedOptions.cyclicReplicaID != 0 || len(o.commonChangefeedOptions.cyclicFilterReplicaIDs) != 0 {
-		if !(o.commonChangefeedOptions.cyclicReplicaID != 0 && len(o.commonChangefeedOptions.cyclicFilterReplicaIDs) != 0) {
-			return errors.New("invalid cyclic config, please make sure using " +
-				"nonzero replica ID and specify filter replica IDs")
-		}
-
-		filter := make([]uint64, 0, len(o.commonChangefeedOptions.cyclicFilterReplicaIDs))
-		for _, id := range o.commonChangefeedOptions.cyclicFilterReplicaIDs {
-			filter = append(filter, uint64(id))
-		}
-
-		cfg.Cyclic = &config.CyclicConfig{
-			Enable:          true,
-			ReplicaID:       o.commonChangefeedOptions.cyclicReplicaID,
-			FilterReplicaID: filter,
-			SyncDDL:         o.commonChangefeedOptions.cyclicSyncDDL,
-			// TODO(neil) enable ID bucket.
-		}
-	}
 	// Complete cfg.
 	o.cfg = cfg
 
@@ -325,7 +296,6 @@ func (o *createChangefeedOptions) validate(ctx context.Context, cmd *cobra.Comma
 func (o *createChangefeedOptions) getInfo(cmd *cobra.Command) *model.ChangeFeedInfo {
 	info := &model.ChangeFeedInfo{
 		SinkURI:           o.commonChangefeedOptions.sinkURI,
-		Opts:              make(map[string]string),
 		CreateTime:        time.Now(),
 		StartTs:           o.startTs,
 		TargetTs:          o.commonChangefeedOptions.targetTs,
@@ -341,23 +311,6 @@ func (o *createChangefeedOptions) getInfo(cmd *cobra.Command) *model.ChangeFeedI
 		cmd.Printf("[WARN] file sorter is deprecated. " +
 			"make sure that you DO NOT use it in production. " +
 			"Adjust \"sort-engine\" to make use of the right sorter.\n")
-	}
-
-	for _, opt := range o.commonChangefeedOptions.opts {
-		s := strings.SplitN(opt, "=", 2)
-		if len(s) <= 0 {
-			cmd.Printf("omit opt: %s", opt)
-			continue
-		}
-
-		var key string
-		var value string
-
-		key = s[0]
-		if len(s) > 1 {
-			value = s[1]
-		}
-		info.Opts[key] = value
 	}
 
 	return info
@@ -384,9 +337,9 @@ func (o *createChangefeedOptions) validateTargetTs() error {
 
 // validateSink will create a sink and verify that the configuration is correct.
 func (o *createChangefeedOptions) validateSink(
-	ctx context.Context, cfg *config.ReplicaConfig, opts map[string]string,
+	ctx context.Context, cfg *config.ReplicaConfig,
 ) error {
-	return sink.Validate(ctx, o.commonChangefeedOptions.sinkURI, cfg, opts)
+	return sink.Validate(ctx, o.commonChangefeedOptions.sinkURI, cfg)
 }
 
 // run the `cli changefeed create` command.
@@ -410,7 +363,7 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 		}
 	}
 
-	ineligibleTables, eligibleTables, err := getTables(o.pdAddr, o.credential, o.cfg, o.startTs)
+	ineligibleTables, _, err := getTables(o.pdAddr, o.credential, o.cfg, o.startTs)
 	if err != nil {
 		return err
 	}
@@ -428,11 +381,6 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 		}
 	}
 
-	if o.cfg.Cyclic.IsEnabled() && !cyclic.IsTablesPaired(eligibleTables) {
-		return errors.New("normal tables and mark tables are not paired, " +
-			"please run `cdc cli changefeed cyclic create-marktables`")
-	}
-
 	info := o.getInfo(cmd)
 
 	tz, err := ticdcutil.GetTimezone(o.timezone)
@@ -441,7 +389,7 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 	}
 
 	ctx = contextutil.PutTimezoneInCtx(ctx, tz)
-	err = o.validateSink(ctx, info.Config, info.Opts)
+	err = o.validateSink(ctx, info.Config)
 	if err != nil {
 		return err
 	}

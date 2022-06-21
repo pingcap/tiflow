@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os/exec"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/fake"
+	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
@@ -41,6 +43,8 @@ type ChaosCli struct {
 	masterCli client.MasterClient
 	// used to query metadata which is stored from business logic
 	metaCli metaclient.KVClient
+	// masterEtcdCli is used to interact with embedded etcd in server master
+	masterEtcdCli *clientv3.Client
 	// used to write to etcd to simulate the business of fake job, this etcd client
 	// reuses the endpoints of user meta KV.
 	fakeJobCli *clientv3.Client
@@ -82,19 +86,30 @@ func NewUTCli(
 		return nil, errors.Trace(err)
 	}
 
+	masterEtcdCli, err := clientv3.New(clientv3.Config{
+		Endpoints:   masterAddrs,
+		Context:     ctx,
+		DialTimeout: 3 * time.Second,
+		DialOptions: []grpc.DialOption{},
+	})
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	return &ChaosCli{
-		masterCli:  masterCli,
-		metaCli:    metaCli,
-		fakeJobCli: fakeJobCli,
-		fakeJobCfg: cfg,
-		project:    project,
+		masterCli:     masterCli,
+		metaCli:       metaCli,
+		masterEtcdCli: masterEtcdCli,
+		fakeJobCli:    fakeJobCli,
+		fakeJobCfg:    cfg,
+		project:       project,
 	}, nil
 }
 
 // CreateJob sends SubmitJob command to servermaster
-func (cli *ChaosCli) CreateJob(ctx context.Context, tp pb.JobType, config []byte) (string, error) {
+func (cli *ChaosCli) CreateJob(ctx context.Context, tp engineModel.JobType, config []byte) (string, error) {
 	req := &pb.SubmitJobRequest{
-		Tp:     tp,
+		Tp:     int32(tp),
 		Config: config,
 		ProjectInfo: &pb.ProjectInfo{
 			TenantId:  cli.project.TenantID(),
@@ -248,6 +263,57 @@ func runCmdHandleError(cmd *exec.Cmd) []byte {
 
 	log.L().Info("Finished executing command", zap.String("cmd", cmd.String()), zap.ByteString("output", bytes))
 	return bytes
+}
+
+// TransferEtcdLeader moves etcd leader to a random node
+func (cli *ChaosCli) TransferEtcdLeader(ctx context.Context) error {
+	if len(cli.masterEtcdCli.Endpoints()) == 0 {
+		return errors.Errorf("master etcd endpoints is empty")
+	}
+	var (
+		leaderID  uint64
+		leaderCli *clientv3.Client
+	)
+	for _, endpoint := range cli.masterEtcdCli.Endpoints() {
+		etcdCli, err := clientv3.New(clientv3.Config{
+			Endpoints:   []string{endpoint},
+			Context:     ctx,
+			DialTimeout: 3 * time.Second,
+			DialOptions: []grpc.DialOption{},
+		})
+		if err != nil {
+			return err
+		}
+		status, err := etcdCli.Status(ctx, endpoint)
+		if err != nil {
+			return err
+		}
+		leaderID = status.Leader
+		if status.Header.MemberId == leaderID {
+			leaderCli = etcdCli
+			break
+		}
+		_ = etcdCli.Close()
+	}
+
+	defer func() {
+		_ = leaderCli.Close()
+	}()
+
+	members, err := cli.masterEtcdCli.MemberList(ctx)
+	if err != nil {
+		return err
+	}
+	followerIDs := make([]uint64, 0, members.Header.Size()-1)
+	for _, m := range members.Members {
+		if m.GetID() != leaderID {
+			followerIDs = append(followerIDs, m.GetID())
+		}
+	}
+
+	// MoveLeader must request the etcd leader
+	_, err = leaderCli.MoveLeader(ctx, followerIDs[rand.Intn(len(followerIDs))])
+	return err
 }
 
 // ContainerRestart restarts a docker container

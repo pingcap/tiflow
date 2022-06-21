@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/fake"
+	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/test/e2e"
 )
@@ -62,6 +64,10 @@ func TestNodeFailure(t *testing.T) {
 		userMetaAddrsInContainer = []string{"user-etcd-standalone:2379"}
 	)
 
+	seed := time.Now().Unix()
+	rand.Seed(seed)
+	log.L().Info("set random seed", zap.Int64("seed", seed))
+
 	ctx := context.Background()
 	cfg := &fake.Config{
 		JobName:     "test-node-failure",
@@ -83,7 +89,7 @@ func TestNodeFailure(t *testing.T) {
 	cli, err := e2e.NewUTCli(ctx, masterAddrs, userMetaAddrs, tenant.DefaultUserProjectInfo, fakeJobCfg)
 	require.NoError(t, err)
 
-	jobID, err := cli.CreateJob(ctx, pb.JobType_FakeJob, cfgBytes)
+	jobID, err := cli.CreateJob(ctx, engineModel.JobTypeFakeJob, cfgBytes)
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
@@ -108,6 +114,15 @@ func TestNodeFailure(t *testing.T) {
 		cli.ContainerRestart(masterContainerName(i))
 		mvccCount++
 		value := fmt.Sprintf("restart-server-master-value-%d", i)
+		updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, value, mvccCount)
+	}
+
+	// transfer etcd leader to a random node for several times
+	for i := 0; i < nodeCount; i++ {
+		err := cli.TransferEtcdLeader(ctx)
+		require.NoError(t, err)
+		mvccCount++
+		value := fmt.Sprintf("transfer-etcd-leader-value-%d", i)
 		updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, value, mvccCount)
 	}
 

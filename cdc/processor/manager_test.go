@@ -44,7 +44,7 @@ func NewManager4Test(
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
 ) *Manager {
 	m := NewManager(upstream.NewManager4Test(nil))
-	m.newProcessor = func(ctx cdcContext.Context, upStream *upstream.Upstream) *processor {
+	m.newProcessor = func(ctx cdcContext.Context, up *upstream.Upstream) *processor {
 		return newProcessor4Test(ctx, t, createTablePipeline)
 	}
 	return m

@@ -15,6 +15,7 @@ package servermaster
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -28,7 +29,6 @@ func TestExecutorManager(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	heartbeatTTL := time.Millisecond * 100
 	checkInterval := time.Millisecond * 10
 	mgr := NewExecutorManagerImpl(heartbeatTTL, checkInterval, nil)
@@ -77,15 +77,18 @@ func TestExecutorManager(t *testing.T) {
 	require.Nil(t, err)
 	require.NotNil(t, resp.Err)
 	require.Equal(t, pb.ErrorCode_UnknownExecutor, resp.Err.GetCode())
+
+	cancel()
+	mgr.Stop()
 }
 
 func TestExecutorManagerWatch(t *testing.T) {
 	t.Parallel()
 
 	heartbeatTTL := time.Millisecond * 400
-	checkInterval := time.Millisecond * 10
+	checkInterval := time.Millisecond * 50
+	ctx, cancel := context.WithCancel(context.Background())
 	mgr := NewExecutorManagerImpl(heartbeatTTL, checkInterval, nil)
-	mgr.Start(context.Background())
 
 	// register an executor server
 	executorAddr := "127.0.0.1:10001"
@@ -122,21 +125,49 @@ func TestExecutorManagerWatch(t *testing.T) {
 			ExecutorId: string(executorID),
 			Status:     int32(model.Running),
 			Timestamp:  uint64(time.Now().Unix()),
-			Ttl:        uint64(10), // 10ms ttl
+			Ttl:        uint64(100), // 10ms ttl
 		}
 	}
 
-	_, err = mgr.HandleHeartbeat(newHeartbeatReq(executorID1))
-	require.NoError(t, err)
-	_, err = mgr.HandleHeartbeat(newHeartbeatReq(executorID2))
-	require.NoError(t, err)
-
-	require.Equal(t, 2, mgr.ExecutorCount(model.Running))
-
-	require.Eventually(t, func() bool {
-		resp, err := mgr.HandleHeartbeat(newHeartbeatReq(executorID2))
+	bgExecutorHeartbeat := func(
+		ctx context.Context, wg *sync.WaitGroup, executorID model.DeployNodeID,
+	) context.CancelFunc {
+		// send a synchronous heartbeat first in order to ensure the online
+		// count of this executor takes effect immediately.
+		resp, err := mgr.HandleHeartbeat(newHeartbeatReq(executorID))
 		require.NoError(t, err)
 		require.Nil(t, resp.Err)
+
+		ctxIn, cancelIn := context.WithCancel(ctx)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ticker := time.NewTicker(time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctxIn.Done():
+					return
+				case <-ticker.C:
+					resp, err := mgr.HandleHeartbeat(newHeartbeatReq(executorID))
+					require.NoError(t, err)
+					require.Nil(t, resp.Err)
+				}
+			}
+		}()
+		return cancelIn
+	}
+
+	mgr.Start(ctx)
+	require.Equal(t, 0, mgr.ExecutorCount(model.Running))
+	var wg sync.WaitGroup
+	cancel1 := bgExecutorHeartbeat(ctx, &wg, executorID1)
+	cancel2 := bgExecutorHeartbeat(ctx, &wg, executorID2)
+	require.Equal(t, 2, mgr.ExecutorCount(model.Running))
+
+	// executor-1 will timeout
+	cancel1()
+	require.Eventually(t, func() bool {
 		return mgr.ExecutorCount(model.Running) == 1
 	}, time.Second*2, time.Millisecond*5)
 
@@ -145,4 +176,16 @@ func TestExecutorManagerWatch(t *testing.T) {
 		ID: executorID1,
 		Tp: model.EventExecutorOffline,
 	}, event)
+
+	// executor-2 will timeout
+	cancel2()
+	wg.Wait()
+	event = <-stream.C
+	require.Equal(t, model.ExecutorStatusChange{
+		ID: executorID2,
+		Tp: model.EventExecutorOffline,
+	}, event)
+
+	cancel()
+	mgr.Stop()
 }

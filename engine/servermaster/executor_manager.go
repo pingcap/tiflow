@@ -37,13 +37,14 @@ type ExecutorManager interface {
 	HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error)
 	AllocateNewExec(req *pb.RegisterExecutorRequest) (*model.NodeInfo, error)
 	RegisterExec(info *model.NodeInfo)
-	Start(ctx context.Context)
 	// ExecutorCount returns executor count with given status
 	ExecutorCount(status model.ExecutorStatus) int
 	HasExecutor(executorID string) bool
 	ListExecutors() []string
 	CapacityProvider() scheduler.CapacityProvider
 	GetAddr(executorID model.ExecutorID) (string, bool)
+	Start(ctx context.Context)
+	Stop()
 
 	// WatchExecutors returns a snapshot of all online executors plus
 	// a stream of events describing changes that happen to the executors
@@ -56,6 +57,7 @@ type ExecutorManager interface {
 // ExecutorManagerImpl holds all the executors info, including liveness, status, resource usage.
 type ExecutorManagerImpl struct {
 	testContext *test.Context
+	wg          sync.WaitGroup
 
 	mu        sync.Mutex
 	executors map[model.ExecutorID]*Executor
@@ -116,7 +118,8 @@ func (e *ExecutorManagerImpl) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.Hea
 		log.L().Logger.Info("handle heart beat", zap.Stringer("req", req))
 	}
 	e.mu.Lock()
-	exec, ok := e.executors[model.ExecutorID(req.ExecutorId)]
+	execID := model.ExecutorID(req.ExecutorId)
+	exec, ok := e.executors[execID]
 
 	// executor not exists
 	if !ok {
@@ -126,20 +129,12 @@ func (e *ExecutorManagerImpl) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.Hea
 	}
 	e.mu.Unlock()
 
-	// exists and apply the resource usage.
-	exec.mu.Lock()
-	defer exec.mu.Unlock()
-	if exec.Status == model.Tombstone {
-		err := errors.ErrTombstoneExecutor.FastGenByArgs(req.ExecutorId)
+	status := model.ExecutorStatus(req.Status)
+	if err := exec.heartbeat(req.Ttl, status); err != nil {
 		return &pb.HeartbeatResponse{Err: errors.ToPBError(err)}, nil
 	}
-	exec.lastUpdateTime = time.Now()
-	exec.heartbeatTTL = time.Duration(req.Ttl) * time.Millisecond
-	exec.Status = model.ExecutorStatus(req.Status)
 	usage := model.RescUnit(req.GetResourceUsage())
-	// TODO: update reserve resources by heartbeats.
-	err := e.rescMgr.Update(exec.ID, usage, usage, exec.Status)
-	if err != nil {
+	if err := e.rescMgr.Update(execID, usage, usage, status); err != nil {
 		return nil, err
 	}
 	resp := &pb.HeartbeatResponse{}
@@ -153,7 +148,7 @@ func (e *ExecutorManagerImpl) RegisterExec(info *model.NodeInfo) {
 		NodeInfo:       *info,
 		lastUpdateTime: time.Now(),
 		heartbeatTTL:   e.initHeartbeatTTL,
-		Status:         model.Initing,
+		status:         model.Initing,
 		logRL:          rate.NewLimiter(rate.Every(time.Second*5), 1 /*burst*/),
 	}
 	e.mu.Lock()
@@ -209,9 +204,9 @@ func (e *ExecutorManagerImpl) ListExecutors() []string {
 // Executor records the status of an executor instance.
 type Executor struct {
 	model.NodeInfo
-	Status model.ExecutorStatus
+	status model.ExecutorStatus
 
-	mu sync.Mutex
+	mu sync.RWMutex
 	// Last heartbeat
 	lastUpdateTime time.Time
 	heartbeatTTL   time.Duration
@@ -225,38 +220,62 @@ func (e *Executor) checkAlive() bool {
 
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if e.Status == model.Tombstone {
+	if e.status == model.Tombstone {
 		return false
 	}
 	if e.lastUpdateTime.Add(e.heartbeatTTL).Before(time.Now()) {
-		e.Status = model.Tombstone
+		e.status = model.Tombstone
 		return false
 	}
 	return true
 }
 
-// Start check alive goroutine.
-func (e *ExecutorManagerImpl) Start(ctx context.Context) {
-	go e.checkAlive(ctx)
+func (e *Executor) heartbeat(ttl uint64, status model.ExecutorStatus) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.status == model.Tombstone {
+		return errors.ErrTombstoneExecutor.FastGenByArgs(e.ID)
+	}
+	e.lastUpdateTime = time.Now()
+	e.heartbeatTTL = time.Duration(ttl) * time.Millisecond
+	e.status = status
+	return nil
 }
 
-// checkAlive goroutine checks whether all the executors are alive periodically.
-func (e *ExecutorManagerImpl) checkAlive(ctx context.Context) {
-	ticker := time.NewTicker(e.keepAliveInterval)
-	defer func() {
-		ticker.Stop()
-		log.L().Logger.Info("check alive finished")
-	}()
-	for {
-		select {
-		case <-ticker.C:
-			err := e.checkAliveImpl()
-			if err != nil {
-				log.L().Logger.Info("check alive meet error", zap.Error(err))
+func (e *Executor) statusEqual(status model.ExecutorStatus) bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.status == status
+}
+
+// Start implements ExecutorManager.Start. It starts a background goroutine to
+// check whether all executors are alive periodically.
+func (e *ExecutorManagerImpl) Start(ctx context.Context) {
+	e.wg.Add(1)
+	go func() {
+		defer e.wg.Done()
+		ticker := time.NewTicker(e.keepAliveInterval)
+		defer func() {
+			ticker.Stop()
+			log.L().Logger.Info("check executor alive finished")
+		}()
+		for {
+			select {
+			case <-ticker.C:
+				err := e.checkAliveImpl()
+				if err != nil {
+					log.L().Logger.Info("check alive meet error", zap.Error(err))
+				}
+			case <-ctx.Done():
+				return
 			}
-		case <-ctx.Done():
 		}
-	}
+	}()
+}
+
+// Stop implements ExecutorManager.Stop
+func (e *ExecutorManagerImpl) Stop() {
+	e.wg.Wait()
 }
 
 func (e *ExecutorManagerImpl) checkAliveImpl() error {
@@ -277,7 +296,7 @@ func (e *ExecutorManagerImpl) ExecutorCount(status model.ExecutorStatus) (count 
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	for _, executor := range e.executors {
-		if executor.Status == status {
+		if executor.statusEqual(status) {
 			count++
 		}
 	}

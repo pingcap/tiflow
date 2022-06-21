@@ -34,9 +34,6 @@ func TestFillV1(t *testing.T) {
 	v1Config := `
 {
     "sink-uri":"blackhole://",
-    "opts":{
-
-    },
     "start-ts":417136892416622595,
     "target-ts":0,
     "admin-job-type":0,
@@ -95,16 +92,6 @@ func TestFillV1(t *testing.T) {
                     "rule":"rowid"
                 }
             ]
-        },
-        "cyclic-replication":{
-            "enable":true,
-            "replica-id":1,
-            "filter-replica-ids":[
-                2,
-                3
-            ],
-            "id-buckets":4,
-            "sync-ddl":true
         }
     }
 }
@@ -114,9 +101,6 @@ func TestFillV1(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, &ChangeFeedInfo{
 		SinkURI: "blackhole://",
-		Opts: map[string]string{
-			"_cyclic_relax_sql_mode": `{"enable":true,"replica-id":1,"filter-replica-ids":[2,3],"id-buckets":4,"sync-ddl":true}`,
-		},
 		StartTs: 417136892416622595,
 		Engine:  "memory",
 		SortDir: ".",
@@ -153,13 +137,6 @@ func TestFillV1(t *testing.T) {
 					{Matcher: []string{"test.tbl4"}, DispatcherRule: "rowid"},
 				},
 			},
-			Cyclic: &config.CyclicConfig{
-				Enable:          true,
-				ReplicaID:       1,
-				FilterReplicaID: []uint64{2, 3},
-				IDBuckets:       4,
-				SyncDDL:         true,
-			},
 		},
 	}, cfg)
 }
@@ -169,7 +146,6 @@ func TestVerifyAndComplete(t *testing.T) {
 
 	info := &ChangeFeedInfo{
 		SinkURI: "blackhole://",
-		Opts:    map[string]string{},
 		StartTs: 417257993615179777,
 		Config: &config.ReplicaConfig{
 			CaseSensitive:    true,
@@ -621,7 +597,6 @@ func TestChangeFeedInfoClone(t *testing.T) {
 
 	info := &ChangeFeedInfo{
 		SinkURI: "blackhole://",
-		Opts:    map[string]string{},
 		StartTs: 417257993615179777,
 		Config: &config.ReplicaConfig{
 			CaseSensitive:    true,
