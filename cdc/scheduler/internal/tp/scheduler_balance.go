@@ -18,31 +18,30 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 )
 
 var _ scheduler = &balanceScheduler{}
 
-// The scheduler for balancing tables of each captures.
+// The scheduler for balancing tables among all captures.
 type balanceScheduler struct {
 	random               *rand.Rand
 	lastRebalanceTime    time.Time
 	checkBalanceInterval time.Duration
 }
 
-func newBalanceScheduler(cfg *config.SchedulerConfig) *balanceScheduler {
+func newBalanceScheduler(interval time.Duration) *balanceScheduler {
 	return &balanceScheduler{
 		random:               rand.New(rand.NewSource(time.Now().UnixNano())),
-		checkBalanceInterval: time.Duration(cfg.CheckBalanceInterval),
+		checkBalanceInterval: interval,
 	}
 }
 
 func (b *balanceScheduler) Name() string {
-	return string(schedulerTypeBalance)
+	return schedulerTypeBalance.String()
 }
 
 func (b *balanceScheduler) Schedule(
-	checkpointTs model.Ts,
+	_ model.Ts,
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
 	replications map[model.TableID]*ReplicationSet,
@@ -81,7 +80,7 @@ func buildBurstBalanceMoveTables(
 		}
 	}
 
-	// We does not need accept callback here.
+	// We do not need to accept callback here.
 	accept := (callback)(nil)
 	return newBurstBalanceMoveTables(accept, random, captures, replications)
 }

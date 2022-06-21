@@ -44,7 +44,7 @@ func newBasicScheduler() *basicScheduler {
 }
 
 func (b *basicScheduler) Name() string {
-	return string(schedulerTypeBasic)
+	return schedulerTypeBasic.String()
 }
 
 func (b *basicScheduler) Schedule(
@@ -122,6 +122,7 @@ func (b *basicScheduler) Schedule(
 	return tasks
 }
 
+// newBurstBalanceAddTables add each new table to captures in a round-robin way.
 func newBurstBalanceAddTables(
 	checkpointTs model.Ts, newTables []model.TableID, captureIDs []model.CaptureID,
 ) *scheduleTask {

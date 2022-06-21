@@ -18,16 +18,13 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSchedulerBalanceCaptureOnline(t *testing.T) {
 	t.Parallel()
 
-	sched := newBalanceScheduler(&config.SchedulerConfig{
-		CheckBalanceInterval: config.TomlDuration(time.Duration(0)),
-	})
+	sched := newBalanceScheduler(time.Duration(0))
 	sched.random = nil
 
 	// New capture "b" online

@@ -16,7 +16,6 @@ package tp
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -46,13 +45,12 @@ type coordinator struct {
 	revision     schedulepb.OwnerRevision
 	captureID    model.CaptureID
 	trans        transport
-	schedulers   map[schedulerType]scheduler
 	replicationM *replicationManager
 	captureM     *captureManager
+	schedulerM   *schedulerManager
 
 	lastCollectTime time.Time
 	changefeedID    model.ChangeFeedID
-	tasksCounter    map[struct{ scheduler, task string }]int
 }
 
 // NewCoordinator returns a two phase scheduler.
@@ -82,27 +80,19 @@ func newCoordinator(
 	cfg *config.SchedulerConfig,
 ) *coordinator {
 	revision := schedulepb.OwnerRevision{Revision: ownerRevision}
-	schedulers := make(map[schedulerType]scheduler)
-	schedulers[schedulerTypeBasic] = newBasicScheduler()
-	schedulers[schedulerTypeBalance] = newBalanceScheduler(cfg)
-	schedulers[schedulerTypeMoveTable] = newMoveTableScheduler()
-	schedulers[schedulerTypeRebalance] = newRebalanceScheduler()
 
 	return &coordinator{
 		version:      version.ReleaseSemver(),
 		revision:     revision,
 		captureID:    captureID,
-		schedulers:   schedulers,
 		replicationM: newReplicationManager(cfg.MaxTaskConcurrency, changefeedID),
 		captureM:     newCaptureManager(changefeedID, revision, cfg.HeartbeatTick),
+		schedulerM:   newSchedulerManager(changefeedID, cfg),
 		changefeedID: changefeedID,
-		tasksCounter: make(map[struct {
-			scheduler string
-			task      string
-		}]int),
 	}
 }
 
+// Tick implement the scheduler interface
 func (c *coordinator) Tick(
 	ctx context.Context,
 	// Latest global checkpoint of the changefeed
@@ -118,6 +108,7 @@ func (c *coordinator) Tick(
 	return c.poll(ctx, checkpointTs, currentTables, aliveCaptures)
 }
 
+// MoveTable implement the scheduler interface
 func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -129,22 +120,11 @@ func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {
 			zap.String("targetCapture", target))
 		return
 	}
-	scheduler, ok := c.schedulers[schedulerTypeMoveTable]
-	if !ok {
-		log.Panic("tpscheduler: move table scheduler not found")
-	}
-	moveTableScheduler, ok := scheduler.(*moveTableScheduler)
-	if !ok {
-		log.Panic("tpscheduler: invalid move table scheduler found")
-	}
-	if !moveTableScheduler.addTask(tableID, target) {
-		log.Info("tpscheduler: manual move Table task ignored, "+
-			"since the last triggered task not finished",
-			zap.Int64("tableID", tableID),
-			zap.String("targetCapture", target))
-	}
+
+	c.schedulerM.MoveTable(tableID, target)
 }
 
+// Rebalance implement the scheduler interface
 func (c *coordinator) Rebalance() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -154,15 +134,63 @@ func (c *coordinator) Rebalance() {
 			"since not all captures initialized")
 		return
 	}
-	scheduler, ok := c.schedulers[schedulerTypeRebalance]
-	if !ok {
-		log.Panic("tpscheduler: rebalance scheduler not found")
+
+	c.schedulerM.Rebalance()
+}
+
+// DrainCapture implement the scheduler interface
+// return the count of table replicating on the target capture
+func (c *coordinator) DrainCapture(target model.CaptureID) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	var count int
+	for _, rep := range c.replicationM.ReplicationSets() {
+		if rep.Primary == target {
+			count++
+		}
 	}
-	rebalanceScheduler, ok := scheduler.(*rebalanceScheduler)
-	if !ok {
-		log.Panic("tpscheduler: invalid rebalance scheduler found")
+
+	if !c.captureM.CheckAllCaptureInitialized() {
+		log.Info("tpscheduler: manual drain capture task ignored, "+
+			"since not all captures initialized",
+			zap.String("target", target),
+			zap.Int("tableCount", count))
+		return count
 	}
-	atomic.StoreInt32(&rebalanceScheduler.rebalance, 1)
+
+	if count == 0 {
+		log.Info("tpscheduler: manual drain capture ignored, "+
+			"since the target has no tables",
+			zap.String("target", target))
+		return count
+	}
+
+	// when draining the capture, tables need to be dispatched to other
+	// capture except the draining one, so at least should have 2 captures alive.
+	if len(c.captureM.Captures) <= 1 {
+		log.Warn("tpscheduler: manual drain capture ignored, "+
+			"since only one captures alive",
+			zap.String("target", target),
+			zap.Int("tableCount", count))
+		return count
+	}
+
+	// the owner is the drain target. In the rolling upgrade scenario, owner should be drained
+	// at the last, this should be guaranteed by the caller, since it knows the draining order.
+	if target == c.captureID {
+		log.Warn("tpscheduler: manual drain capture, the target is the owner now",
+			zap.String("target", target), zap.Int("tableCount", count))
+	}
+
+	if !c.schedulerM.DrainCapture(target) {
+		log.Info("tpscheduler: manual drain capture task ignored,"+
+			"since there is capture draining",
+			zap.String("target", target),
+			zap.Int("tableCount", count))
+	}
+
+	return count
 }
 
 func (c *coordinator) Close(ctx context.Context) {
@@ -172,6 +200,7 @@ func (c *coordinator) Close(ctx context.Context) {
 	_ = c.trans.Close()
 	c.captureM.CleanMetrics()
 	c.replicationM.CleanMetrics()
+	c.schedulerM.CleanMetrics()
 
 	log.Info("tpscheduler: coordinator closed",
 		zap.Any("ownerRev", c.captureM.OwnerRev),
@@ -192,7 +221,7 @@ func (c *coordinator) poll(
 
 	var msgBuf []*schedulepb.Message
 	c.captureM.HandleMessage(recvMsgs)
-	msgs := c.captureM.Tick(c.replicationM.ReplicationSets())
+	msgs := c.captureM.Tick(c.replicationM.ReplicationSets(), c.schedulerM.DrainingTarget())
 	msgBuf = append(msgBuf, msgs...)
 	msgs = c.captureM.HandleAliveCaptureUpdate(aliveCaptures)
 	msgBuf = append(msgBuf, msgs...)
@@ -220,22 +249,7 @@ func (c *coordinator) poll(
 
 	// Generate schedule tasks based on the current status.
 	replications := c.replicationM.ReplicationSets()
-	allTasks := make([]*scheduleTask, 0)
-	for _, scheduler := range c.schedulers {
-		tasks := scheduler.Schedule(checkpointTs, currentTables, aliveCaptures, replications)
-		if len(tasks) != 0 {
-			log.Info("tpscheduler: new schedule task",
-				zap.Int("task", len(tasks)),
-				zap.String("scheduler", scheduler.Name()))
-		}
-		allTasks = append(allTasks, tasks...)
-		for _, t := range tasks {
-			name := struct {
-				scheduler, task string
-			}{scheduler: scheduler.Name(), task: t.Name()}
-			c.tasksCounter[name]++
-		}
-	}
+	allTasks := c.schedulerM.Schedule(checkpointTs, currentTables, aliveCaptures, replications)
 
 	// Handle generated schedule tasks.
 	msgs, err = c.replicationM.HandleTasks(allTasks)
@@ -305,13 +319,7 @@ func (c *coordinator) maybeCollectMetrics() {
 	}
 	c.lastCollectTime = now
 
-	cf := c.replicationM.changefeedID
-	for name, counter := range c.tasksCounter {
-		scheduleTaskCounter.
-			WithLabelValues(cf.Namespace, cf.ID, name.scheduler, name.task).
-			Add(float64(counter))
-		c.tasksCounter[name] = 0
-	}
+	c.schedulerM.CollectMetrics()
 	c.replicationM.CollectMetrics()
 	c.captureM.CollectMetrics()
 }

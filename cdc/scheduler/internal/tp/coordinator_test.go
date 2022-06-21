@@ -194,7 +194,7 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 	require.Nil(t, err)
 	require.True(t, coord.captureM.CheckAllCaptureInitialized())
 	msgs = trans.sendBuffer
-	require.Len(t, msgs, 2)
+	require.Len(t, msgs, 1)
 	// Basic scheduler, make sure all tables get replicated.
 	require.EqualValues(t, 3, msgs[0].DispatchTableRequest.GetAddTable().TableID)
 	require.Len(t, coord.replicationM.tables, 3)
@@ -337,19 +337,12 @@ func BenchmarkCoordinatorInit(b *testing.B) {
 		for i := 0; i < total; i++ {
 			currentTables = append(currentTables, int64(10000+i))
 		}
-		schedulers := make(map[schedulerType]scheduler)
-		schedulers[schedulerTypeBasic] = newBasicScheduler()
 		coord = &coordinator{
 			trans:        &mockTrans{},
-			schedulers:   schedulers,
 			replicationM: newReplicationManager(10, model.ChangeFeedID{}),
 			// Disable heartbeat.
 			captureM: newCaptureManager(
 				model.ChangeFeedID{}, schedulepb.OwnerRevision{}, math.MaxInt),
-			tasksCounter: make(map[struct {
-				scheduler string
-				task      string
-			}]int),
 		}
 		name = fmt.Sprintf("InitTable %d", total)
 		return name, coord, currentTables, captures
@@ -377,17 +370,10 @@ func BenchmarkCoordinatorHeartbeat(b *testing.B) {
 		for i := 0; i < total; i++ {
 			currentTables = append(currentTables, int64(10000+i))
 		}
-		schedulers := make(map[schedulerType]scheduler)
-		schedulers[schedulerTypeBasic] = newBasicScheduler()
 		coord = &coordinator{
 			trans:        &mockTrans{},
-			schedulers:   schedulers,
 			replicationM: newReplicationManager(10, model.ChangeFeedID{}),
 			captureM:     captureM,
-			tasksCounter: make(map[struct {
-				scheduler string
-				task      string
-			}]int),
 		}
 		name = fmt.Sprintf("Heartbeat %d", total)
 		return name, coord, currentTables, captures
@@ -452,17 +438,10 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 			recvBuffer:     recvMsgs,
 			keepRecvBuffer: true,
 		}
-		schedulers := make(map[schedulerType]scheduler)
-		schedulers[schedulerTypeBasic] = newBasicScheduler()
 		coord = &coordinator{
 			trans:        trans,
-			schedulers:   schedulers,
 			replicationM: replicationM,
 			captureM:     captureM,
-			tasksCounter: make(map[struct {
-				scheduler string
-				task      string
-			}]int),
 		}
 		name = fmt.Sprintf("HeartbeatResponse %d", total)
 		return name, coord, currentTables, captures

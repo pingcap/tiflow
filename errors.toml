@@ -886,6 +886,11 @@ error = '''
 scan lock failed
 '''
 
+["CDC:ErrSchedulerRequestFailed"]
+error = '''
+scheduler request failed, %s
+'''
+
 ["CDC:ErrSchemaSnapshotNotFound"]
 error = '''
 can not found schema snapshot, ts: %d

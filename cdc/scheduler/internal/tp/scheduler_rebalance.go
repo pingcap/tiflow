@@ -39,11 +39,11 @@ func newRebalanceScheduler() *rebalanceScheduler {
 }
 
 func (r *rebalanceScheduler) Name() string {
-	return string(schedulerTypeRebalance)
+	return schedulerTypeRebalance.String()
 }
 
 func (r *rebalanceScheduler) Schedule(
-	checkpointTs model.Ts,
+	_ model.Ts,
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
 	replications map[model.TableID]*ReplicationSet,
@@ -71,6 +71,7 @@ func (r *rebalanceScheduler) Schedule(
 
 	accept := func() {
 		atomic.StoreInt32(&r.rebalance, 0)
+		log.Info("tpscheduler: manual rebalance request accepted")
 	}
 	task := newBurstBalanceMoveTables(accept, r.random, captures, replications)
 	if task == nil {
@@ -220,6 +221,11 @@ func (s *tableSet) keys() []model.TableID {
 		result = append(result, k)
 	}
 	return result
+}
+
+func (s *tableSet) contain(tableID model.TableID) bool {
+	_, ok := s.memo[tableID]
+	return ok
 }
 
 func (s *tableSet) size() int {

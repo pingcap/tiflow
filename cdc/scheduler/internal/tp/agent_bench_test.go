@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/tp/schedulepb"
 )
 
 func benchmarkHeartbeatResponse(b *testing.B, bench func(b *testing.B, a *agent)) {
@@ -43,7 +44,7 @@ func BenchmarkRefreshAllTables(b *testing.B) {
 		total := len(a.tableM.tables)
 		b.Run(fmt.Sprintf("%d tables", total), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				a.handleMessageHeartbeat([]model.TableID{})
+				a.handleMessageHeartbeat(&schedulepb.Heartbeat{})
 			}
 		})
 	})
