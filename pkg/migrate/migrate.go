@@ -259,7 +259,8 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 	// put upstream id
 	err = m.saveUpstreamInfo(ctx)
 	if err != nil {
-		log.Error("save default upstream failed, etcd meta data migration failed", zap.Error(err))
+		log.Error("save default upstream failed, "+
+			"etcd meta data migration failed", zap.Error(err))
 		return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
 	}
 
@@ -351,7 +352,9 @@ func (m *migrator) Migrate(ctx context.Context) error {
 			// put upstream id
 			err = m.saveUpstreamInfo(ctx)
 			if err != nil {
-				log.Error("save default upstream failed, etcd meta data migration failed", zap.Error(err))
+				log.Error("save default upstream failed, "+
+					"etcd meta data migration failed",
+					zap.Error(err))
 				return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
 			}
 			_, err := m.cli.Client.Put(ctx, m.metaVersionKey, fmt.Sprintf("%d", newVersion))

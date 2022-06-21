@@ -37,20 +37,24 @@ func TestWithUpstreamConfig(t *testing.T) {
 		ID: 1,
 	}
 	err := api.withUpstreamConfig(ctx, upstreamConfig, func(ctx context.Context,
-		client pd.Client) error {
+		client pd.Client,
+	) error {
 		return nil
 	})
+	require.Nil(t, err)
 	upstreamConfig = &UpstreamConfig{
 		ID: 2,
 	}
 	err = api.withUpstreamConfig(ctx, upstreamConfig, func(ctx context.Context,
-		client pd.Client) error {
+		client pd.Client,
+	) error {
 		return nil
 	})
 	require.NotNil(t, err)
 	upstreamConfig = &UpstreamConfig{PDAddrs: []string{"http://127.0.0.1:22379"}}
 	err = api.withUpstreamConfig(ctx, upstreamConfig, func(ctx context.Context,
-		client pd.Client) error {
+		client pd.Client,
+	) error {
 		return nil
 	})
 	require.NotNil(t, err)
@@ -58,7 +62,8 @@ func TestWithUpstreamConfig(t *testing.T) {
 
 	require.Panics(t, func() {
 		_ = api.withUpstreamConfig(ctx, upstreamConfig, func(ctx context.Context,
-			client pd.Client) error {
+			client pd.Client,
+		) error {
 			return nil
 		})
 	})

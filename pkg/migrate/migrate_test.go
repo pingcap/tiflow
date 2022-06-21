@@ -16,7 +16,6 @@ package migrate
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"sync"
 	"testing"
 	"time"
@@ -26,64 +25,10 @@ import (
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
-	"go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.etcd.io/etcd/server/v3/embed"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"golang.org/x/sync/errgroup"
 )
-
-type etcdTester struct {
-	dir       string
-	etcd      *embed.Etcd
-	clientURL *url.URL
-	client    etcd.CDCEtcdClient
-	ctx       context.Context
-	cancel    context.CancelFunc
-	errg      *errgroup.Group
-}
-
-func (s *etcdTester) setUpTest(t *testing.T) {
-	var err error
-	s.dir = t.TempDir()
-	s.clientURL, s.etcd, err = etcd.SetupEmbedEtcd(s.dir)
-	require.Nil(t, err)
-	logConfig := logutil.DefaultZapLoggerConfig
-	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
-	client, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{s.clientURL.String()},
-		DialTimeout: 3 * time.Second,
-		LogConfig:   &logConfig,
-	})
-	require.NoError(t, err)
-
-	s.client, err = etcd.NewCDCEtcdClient(context.TODO(), client, etcd.DefaultCDCClusterID)
-	require.Nil(t, err)
-	s.ctx, s.cancel = context.WithCancel(context.Background())
-	s.errg = util.HandleErrWithErrGroup(s.ctx, s.etcd.Err(), func(e error) { t.Log(e) })
-}
-
-func (s *etcdTester) tearDownTest(t *testing.T) {
-	s.etcd.Close()
-	s.cancel()
-logEtcdError:
-	for {
-		select {
-		case err, ok := <-s.etcd.Err():
-			if !ok {
-				break logEtcdError
-			}
-			t.Logf("etcd server error: %v", err)
-		default:
-			break logEtcdError
-		}
-	}
-	s.client.Close() //nolint:errcheck
-}
 
 // 1. create an etcd server
 // 2. put some old metadata to etcd cluster

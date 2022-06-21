@@ -41,12 +41,14 @@ type mockStatusProvider struct {
 
 // GetChangeFeedStatus returns a changefeeds' runtime status.
 func (m *mockStatusProvider) GetChangeFeedStatus(ctx context.Context,
-	changefeedID model.ChangeFeedID) (*model.ChangeFeedStatus, error) {
+	changefeedID model.ChangeFeedID,
+) (*model.ChangeFeedStatus, error) {
 	return m.changefeedStatus, m.err
 }
 
 func (m *mockPdClient) UpdateServiceGCSafePoint(ctx context.Context, serviceID string,
-	ttl int64, safePoint uint64) (uint64, error) {
+	ttl int64, safePoint uint64,
+) (uint64, error) {
 	return safePoint, nil
 }
 
@@ -72,16 +74,17 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	require.Nil(t, cfInfo)
 	require.NotNil(t, err)
 	cfg.SinkURI = "blackhole://"
-	//repliconfig is nil
+	// repliconfig is nil
 	require.Panics(t, func() {
 		_, _ = verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
 	})
 	cfg.ReplicaConfig = GetDefaultReplicaConfig()
 	cfg.ReplicaConfig.ForceReplicate = true
 	cfg.ReplicaConfig.EnableOldValue = false
-	//disable old value but force replicate
+	// disable old value but force replicate
 	cfInfo, err = verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
 	require.NotNil(t, err)
+	require.Nil(t, cfInfo)
 	cfg.ReplicaConfig.ForceReplicate = false
 	cfg.ReplicaConfig.IgnoreIneligibleTable = true
 	cfInfo, err = verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
@@ -99,7 +102,7 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	require.NotNil(t, err)
 	cfg.ID = ""
 	cfg.Namespace = ""
-	//changefeed already exists
+	// changefeed already exists
 	provider.changefeedStatus = &model.ChangeFeedStatus{}
 	cfInfo, err = verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
 	require.NotNil(t, err)
