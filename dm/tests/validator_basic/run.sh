@@ -671,29 +671,6 @@ function test_validation_syncer_stopped() {
 		"new\/ignored\/resolved: 0\/0\/0" 1
 }
 
-# function check_validate_at_least() {
-# 	workdir=$1
-# 	master_addr=$2
-# 	cmd="validation status $3"
-# 	PWD=$(pwd)
-# 	ts=$(date +"%s")
-# 	dmctl_log=$workdir/dmctl.$ts.log
-# 	binary=$PWD/bin/dmctl.test
-# 	expect=$4
-# 	pid=$$
-# 	for ((k = 0; k < 10; k++)); do
-# 		echo "$cmd" | $binary -test.coverprofile="$TEST_DIR/cov.$TEST_NAME.dmctl.$ts.$pid.out" DEVEL --master-addr=$master_addr >$dmctl_log 2>&1
-# 		count=$(grep "\"processedRowsStatus\": \"insert\/update\/delete: .*\/0\/0\"" $dmctl_log | cut -d":" -f3 | cut -d"/" -f1)
-# 		if [[ $count -ge $expect ]]; then
-# 			return
-# 		fi
-# 		sleep 3
-# 	done
-# 	echo "validator is expected to validate at least $expect!"
-# 	cat $dmctl_log | echo
-# 	exit 1
-# }
-
 run_standalone $*
 validate_table_with_different_pk
 test_unsupported_table_status
