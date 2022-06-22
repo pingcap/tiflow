@@ -439,13 +439,13 @@ def unsafe_apis():
     data = json.dumps(data)
     headers = {"Content-Type": "application/json"}
     resp = rq.delete(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
-    assert resp.status_code == rq.codes.no_conttent
+    assert resp.status_code == 204
 
     data = json.dumps({})
     data = json.dumps(data)
     headers = {"Content-Type": "application/json"}
     resp = rq.delete(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
-    assert resp.status_code == rq.codes.no_conttent
+    assert resp.status_code == 204
     print("pass test: delete service_gc_safepoint")
 
     # create changefeed fail because sink_uri is invalid
