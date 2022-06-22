@@ -1752,6 +1752,7 @@ components:
       enum:
         - Stopped
         - Running
+        - Paused
         - Finished
     Task:
       description: "task"

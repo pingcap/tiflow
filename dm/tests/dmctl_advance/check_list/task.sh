@@ -411,6 +411,12 @@ function task_list_op() {
 		"task list --filter source=mysql-replica-01 --filter status=Running --more" \
 		"\"stage\": \"Running\"" 2 \
 		"\"total\": 1" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"task stop test" \
+		"Stop task test success" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"task list --filter source=mysql-replica-01 --filter status=Paused" \
+		"\"total\": 1" 1
 	# delete
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task delete test -f -y" \
