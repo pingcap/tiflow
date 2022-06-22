@@ -410,10 +410,10 @@ func TestMasterClientHeartbeatStalePong(t *testing.T) {
 		IsFinished:   false,
 	}, ping)
 
-	sendTime2 := helper.InitTime.Add(-30 * time.Second)
+	sendTimeOld := helper.InitTime.Add(-30 * time.Second)
 	// master_client receives a stale pong heartbeat
 	helper.Client.HandleHeartbeat("executor-1", &frameModel.HeartbeatPongMessage{
-		SendTime:   clock.ToMono(sendTime2),
+		SendTime:   clock.ToMono(sendTimeOld),
 		ReplyTime:  time.Now(),
 		ToWorkerID: "worker-1",
 		Epoch:      1,
