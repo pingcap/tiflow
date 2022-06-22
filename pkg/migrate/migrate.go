@@ -256,6 +256,13 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 			}
 		}
 	}
+	// put upstream id
+	err = m.saveUpstreamInfo(ctx)
+	if err != nil {
+		log.Error("save default upstream failed, "+
+			"etcd meta data migration failed", zap.Error(err))
+		return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
+	}
 
 	err = m.migrateGcServiceSafePointFunc(ctx, pdClient,
 		m.config.Security, m.cli.GetGCServiceID(), m.config.GcTTL)
@@ -342,6 +349,14 @@ func (m *migrator) Migrate(ctx context.Context) error {
 			// not default cluster
 			log.Info("not a default cdc cluster, skip migration data",
 				zap.String("cluster", m.cli.ClusterID))
+			// put upstream id
+			err = m.saveUpstreamInfo(ctx)
+			if err != nil {
+				log.Error("save default upstream failed, "+
+					"etcd meta data migration failed",
+					zap.Error(err))
+				return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
+			}
 			_, err := m.cli.Client.Put(ctx, m.metaVersionKey, fmt.Sprintf("%d", newVersion))
 			if err != nil {
 				log.Error("put meta version failed", zap.Error(err))
@@ -408,6 +423,39 @@ func (m *migrator) WaitMetaVersionMatched(ctx context.Context) error {
 				zap.Duration("duration", time.Since(start)))
 		}
 	}
+}
+
+// saveUpstreamInfo save the default upstream info to etcd
+func (m *migrator) saveUpstreamInfo(ctx context.Context) error {
+	pdClient, err := m.createPDClientFunc(ctx,
+		m.pdEndpoints, m.config.Security)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer pdClient.Close()
+
+	upstreamID := pdClient.GetClusterID(ctx)
+	upstreamKey := etcd.CDCKey{
+		Tp:         etcd.CDCKeyTypeUpStream,
+		ClusterID:  m.cli.ClusterID,
+		UpstreamID: upstreamID,
+		Namespace:  model.DefaultNamespace,
+	}
+	upstreamKeyStr := upstreamKey.String()
+	upstreamInfo := &model.UpstreamInfo{
+		ID:            upstreamID,
+		PDEndpoints:   strings.Join(m.pdEndpoints, ","),
+		KeyPath:       m.config.Security.KeyPath,
+		CertPath:      m.config.Security.CertPath,
+		CAPath:        m.config.Security.CAPath,
+		CertAllowedCN: m.config.Security.CertAllowedCN,
+	}
+	upstreamInfoStr, err := upstreamInfo.Marshal()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	_, err = m.cli.Client.Put(ctx, upstreamKeyStr, string(upstreamInfoStr))
+	return err
 }
 
 func getMetaVersion(ctx context.Context, cli *etcd.Client, clusterID string) (int, error) {

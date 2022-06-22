@@ -124,7 +124,7 @@ func (h *OpenAPIV2) withUpstreamConfig(c context.Context,
 	if upstreamConfig.ID > 0 {
 		up, ok := h.capture.UpstreamManager.Get(upstreamConfig.ID)
 		if !ok {
-			return cerror.ErrUpstreamNotFound
+			return cerror.ErrUpstreamNotFound.GenWithStackByArgs(upstreamConfig.ID)
 		}
 		pdClient = up.PDClient
 	} else if len(upstreamConfig.PDAddrs) > 0 {
