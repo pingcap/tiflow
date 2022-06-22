@@ -19,9 +19,9 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/atomic"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/model"
 )
 
@@ -78,6 +78,10 @@ func (d *dummyWorker) Workload() model.RescUnit {
 }
 
 func (d *dummyWorker) Close(ctx context.Context) error {
+	return nil
+}
+
+func (d *dummyWorker) NotifyExit(ctx context.Context, errIn error) error {
 	return nil
 }
 

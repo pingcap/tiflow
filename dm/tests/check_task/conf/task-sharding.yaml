@@ -11,7 +11,7 @@ target-database:       # 下游数据库实例配置
 ## ******** 功能配置集 **********
 block-allow-list:        # 上游数据库实例匹配的表的 block-allow-list 过滤规则集，如果 DM 版本 <= v2.0.0-beta.2 则使用 black-white-list
   bw-rule-1:             # 黑白名单配置的名称
-    do-dbs: ["checktask"] # 迁移哪些库
+    do-dbs: ["check-task"] # 迁移哪些库
 
 # ----------- 实例配置 -----------
 mysql-instances:
@@ -22,9 +22,9 @@ mysql-instances:
 
 routes:
   rule1:
-    schema-pattern: "checktask"
+    schema-pattern: "check-task"
     table-pattern: "t*"
-    target-schema: "checktask"
+    target-schema: "check-task"
     target-table: "t"
 
 mydumpers:

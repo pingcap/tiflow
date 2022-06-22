@@ -189,14 +189,21 @@ jobs:
           $GITHUB_WORKSPACE/engine/chaos/scripts/check-case.sh
 
       - name: Pause all chaos
+        if: ${{ always() }}
         run: |
           kubectl delete -f $GITHUB_WORKSPACE/engine/chaos/manifests/${{ matrix.chaos-obj }}.yaml
+
+      - name: Dump goroutines
+        if: ${{ failure() }}
+        run: |
+          kubectl get pods --no-headers -o custom-columns=":metadata.name"|grep -E "server-master"|xargs -I{} kubectl exec -it {} -- wget http://127.0.0.1:10240/debug/pprof/goroutine?debug=2 -O /log/{}_goroutines.log || true
+          kubectl get pods --no-headers -o custom-columns=":metadata.name"|grep -E "executor"|xargs -I{} kubectl exec -it {} -- wget http://127.0.0.1:10241/debug/pprof/goroutine?debug=2 -O /log/{}_goroutines.log || true
 
       - name: Copy logs to hack permission
         if: ${{ always() }}
         run: |
           mkdir ./logs
-          kubectl get pods --no-headers -o custom-columns=":metadata.name"|grep -E "server-master|executor"|xargs -I{} sudo kubectl cp {}:/log/{}.log ./logs/{}.log || true
+          kubectl get pods --no-headers -o custom-columns=":metadata.name"|grep -E "server-master|executor"|xargs -I{} sudo kubectl cp {}:/log ./logs || true
           kind export logs ./logs/kind --name chart-testing
           sudo chown -R runner ./logs
 

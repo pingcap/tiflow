@@ -17,12 +17,12 @@ import (
 	"context"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/pkg/workerpool"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/workerpool"
 )
 
 const defaultMessageRouterBufferSize = 4
