@@ -243,17 +243,7 @@ def operate_schema_and_table_success(task_name, source_name, schema_name, table_
     assert create_table["schema_name"] == schema_name
     assert table_name in create_table["schema_create_sql"]
 
-    # delete table
-    resp = requests.delete(url=single_table_url)
-    assert resp.status_code == 204
-
-    # after delete, no table in schema
-    resp = requests.get(url=table_url)
-    assert resp.status_code == 200
-    print("get_task_schema_success table resp=", resp.json())
-    assert len(resp.json()) == 0
-
-    # add table back again
+    # overwrite table
     set_table_data = {
         "sql_content": "CREATE TABLE openapi.t1(i TINYINT, j INT UNIQUE KEY);",
         "flush": True,
