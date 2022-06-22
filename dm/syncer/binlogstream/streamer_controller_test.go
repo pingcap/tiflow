@@ -19,6 +19,7 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/relay"
 	"github.com/stretchr/testify/require"
 )
@@ -45,7 +46,15 @@ func TestToBinlogType(t *testing.T) {
 
 func TestCanErrorRetry(t *testing.T) {
 	relay2 := &relay.Relay{}
-	controller := NewStreamerController(replication.BinlogSyncerConfig{}, true, nil, "", nil, relay2)
+	controller := NewStreamerController(
+		replication.BinlogSyncerConfig{},
+		true,
+		nil,
+		"",
+		nil,
+		relay2,
+		log.L(),
+	)
 
 	mockErr := errors.New("test")
 
@@ -61,7 +70,15 @@ func TestCanErrorRetry(t *testing.T) {
 	}()
 
 	// test with remote binlog
-	controller = NewStreamerController(replication.BinlogSyncerConfig{}, true, nil, "", nil, nil)
+	controller = NewStreamerController(
+		replication.BinlogSyncerConfig{},
+		true,
+		nil,
+		"",
+		nil,
+		nil,
+		log.L(),
+	)
 
 	require.True(t, controller.CanRetry(mockErr))
 	require.False(t, controller.CanRetry(mockErr))

@@ -311,7 +311,15 @@ func (v *DataValidator) initialize() error {
 		return err
 	}
 
-	v.streamerController = binlogstream.NewStreamerController(v.syncCfg, v.cfg.EnableGTID, &dbconn.UpStreamConn{BaseDB: v.fromDB}, v.cfg.RelayDir, v.timezone, nil)
+	v.streamerController = binlogstream.NewStreamerController(
+		v.syncCfg,
+		v.cfg.EnableGTID,
+		&dbconn.UpStreamConn{BaseDB: v.fromDB},
+		v.cfg.RelayDir,
+		v.timezone,
+		nil,
+		v.L,
+	)
 	return nil
 }
 
@@ -632,7 +640,7 @@ func (v *DataValidator) doValidate() {
 	locationForFlush := currLoc.Clone()
 	v.lastFlushTime = time.Now()
 	for {
-		e, err := v.streamerController.GetEvent(v.tctx)
+		e, _, err := v.streamerController.GetEvent(v.tctx)
 		if err != nil {
 			switch {
 			case err == context.Canceled:

@@ -26,10 +26,11 @@ import (
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
-	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/reader"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -123,7 +124,6 @@ func (r *remoteBinlogReader) GenerateStreamer(location binlog.Location) (reader.
 // 1. reset streamer to a binlog position or GTID
 // 2. read next binlog event (TODO: and maintain the locations of the events)
 // 3. transfer from local streamer to remote streamer.
-// TODO: 4. inject or delete events from original binlog stream.
 type StreamerController struct {
 	sync.RWMutex
 
@@ -141,6 +141,10 @@ type StreamerController struct {
 
 	streamer         reader.Streamer
 	streamerProducer StreamerProducer
+	*streamModifier
+
+	lastEvent      *replication.BinlogEvent
+	currBinlogFile string // TODO: should be replaced by location recorder
 
 	// meetError means meeting error when get binlog event
 	// if binlogType is local and meetError is true, then need to create remote binlog stream
@@ -165,6 +169,7 @@ func NewStreamerController(
 	localBinlogDir string,
 	timezone *time.Location,
 	relay relay.Process,
+	logger log.Logger,
 ) *StreamerController {
 	var strategy retryStrategy = alwaysRetryStrategy{}
 	binlogType := RelayToBinlogType(relay)
@@ -190,6 +195,7 @@ func NewStreamerController(
 		fromDB:            fromDB,
 		closed:            true,
 		relay:             relay,
+		streamModifier:    newStreamModifier(logger),
 	}
 
 	return streamerController
@@ -278,37 +284,146 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 	}
 
 	c.streamer, err = c.streamerProducer.GenerateStreamer(location)
+	if err == nil {
+		c.streamModifier.reset(location)
+	}
 	return err
 }
 
 var mockRestarted = false
 
-// GetEvent returns binlog event, should only have one thread call this function.
-func (c *StreamerController) GetEvent(tctx *tcontext.Context) (event *replication.BinlogEvent, err error) {
-	ctx, cancel := context.WithTimeout(tctx.Context(), common.SlaveReadTimeout)
-	failpoint.Inject("SyncerEventTimeout", func(val failpoint.Value) {
-		if seconds, ok := val.(int); ok {
-			cancel()
-			ctx, cancel = context.WithTimeout(tctx.Context(), time.Duration(seconds)*time.Second)
-			tctx.L().Info("set fetch binlog event timeout", zap.String("failpoint", "SyncerEventTimeout"), zap.Int("value", seconds))
-		}
-	})
-
+// GetEvent returns binlog event from upstream binlog or streamModifier, should
+// only have one thread call this function.
+func (c *StreamerController) GetEvent(tctx *tcontext.Context) (event *replication.BinlogEvent, op pb.ErrorOp, err error) {
 	failpoint.Inject("SyncerGetEventError", func(_ failpoint.Value) {
 		if !mockRestarted {
 			mockRestarted = true
 			c.meetError = true
 			tctx.L().Info("mock upstream instance restart", zap.String("failpoint", "SyncerGetEventError"))
-			failpoint.Return(nil, terror.ErrDBBadConn.Generate())
+			failpoint.Return(nil, pb.ErrorOp_InvalidErrorOp, terror.ErrDBBadConn.Generate())
 		}
 	})
+
+	appendRelaySubDir := func() (*replication.BinlogEvent, pb.ErrorOp, error) {
+		switch ev := event.Event.(type) {
+		case *replication.RotateEvent:
+			c.currBinlogFile = string(ev.NextLogName)
+			// if is local binlog but switch to remote on error, need to add uuid information in binlog's name
+			// nolint:dogsled
+			_, relaySubDirSuffix, _, _ := binlog.SplitFilenameWithUUIDSuffix(string(ev.NextLogName))
+			if relaySubDirSuffix != "" {
+				c.relaySubDirSuffix = relaySubDirSuffix
+			} else if c.relaySubDirSuffix != "" {
+				filename, err := binlog.ParseFilename(string(ev.NextLogName))
+				if err != nil {
+					return nil, pb.ErrorOp_InvalidErrorOp, terror.Annotate(err, "fail to parse binlog file name from rotate event")
+				}
+				ev.NextLogName = []byte(binlog.ConstructFilenameWithUUIDSuffix(filename, c.relaySubDirSuffix))
+				event.Event = ev
+			}
+		}
+		return event, op, nil
+	}
 
 	c.RLock()
 	streamer := c.streamer
 	c.RUnlock()
 
-	event, err = streamer.GetEvent(ctx)
-	cancel()
+FORLOOP:
+	for frontOp := c.streamModifier.front(); frontOp != nil
+	{
+		if c.lastEvent == nil {
+			c.lastEvent, err = streamer.GetEvent(tctx.Context())
+			failpoint.Inject("GetEventError", func() {
+				err = errors.New("go-mysql returned an error")
+			})
+			if err != nil {
+				if err != context.Canceled && err != context.DeadlineExceeded {
+					c.Lock()
+					tctx.L().Error("meet error when get binlog event", zap.Error(err))
+					c.meetError = true
+					c.Unlock()
+				}
+
+				return nil, pb.ErrorOp_InvalidErrorOp, err
+			}
+		}
+
+		startPos := mysql.Position{
+			Name: c.currBinlogFile,
+			Pos:  c.lastEvent.Header.LogPos - c.lastEvent.Header.EventSize,
+		}
+		cmp := binlog.ComparePosition(startPos, frontOp.pos)
+		switch cmp {
+		case -1:
+			event = c.lastEvent
+			c.lastEvent = nil
+			break FORLOOP
+		case 0:
+			// TODO: check it's DDL
+			switch frontOp.op {
+			case pb.ErrorOp_Skip:
+				// skipped event and op should be sent to caller, to let schema
+				// tracker and checkpoint work
+				event = c.lastEvent
+				c.lastEvent = nil
+				c.streamModifier.next()
+				op = pb.ErrorOp_Skip
+				break FORLOOP
+			case pb.ErrorOp_Replace:
+				if c.streamModifier.nextEventInOp == len(frontOp.events) {
+					c.lastEvent = nil
+					c.streamModifier.next()
+				}
+				event = frontOp.events[c.streamModifier.nextEventInOp]
+				c.streamModifier.nextEventInOp++
+				op = pb.ErrorOp_Replace
+				// TODO: currently we let caller to modify Suffix, after location recorder
+				// binlog streamer itself can maintain it
+				break FORLOOP
+			case pb.ErrorOp_Inject:
+				if c.streamModifier.nextEventInOp == len(frontOp.events) {
+					c.streamModifier.next()
+					event = c.lastEvent
+					c.lastEvent = nil
+					break FORLOOP
+				}
+				event = frontOp.events[c.streamModifier.nextEventInOp]
+				c.streamModifier.nextEventInOp++
+				// inject and replace seems same to caller to maintain Suffix, maybe unify them?
+				op = pb.ErrorOp_Inject
+				break FORLOOP
+			default:
+				c.logger.DPanic("invalid error handle op", zap.Stringer("op", frontOp.op))
+			}
+		case 1:
+			switch frontOp.op {
+			case pb.ErrorOp_Inject:
+				if c.streamModifier.nextEventInOp == len(frontOp.events) {
+					c.streamModifier.next()
+					continue
+				}
+				event = frontOp.events[c.streamModifier.nextEventInOp]
+				c.streamModifier.nextEventInOp++
+				op = pb.ErrorOp_Inject
+				break FORLOOP
+			default:
+				c.logger.DPanic("invalid error handle op", zap.Stringer("op", frontOp.op))
+			}
+		}
+	}
+
+	if event != nil {
+		return appendRelaySubDir()
+	}
+
+	if c.lastEvent != nil {
+		event = c.lastEvent
+		c.lastEvent = nil
+		return appendRelaySubDir()
+	}
+
+	event, err = streamer.GetEvent(tctx.Context())
 	failpoint.Inject("GetEventError", func() {
 		err = errors.New("go-mysql returned an error")
 	})
@@ -319,29 +434,10 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (event *replicatio
 			c.meetError = true
 			c.Unlock()
 		}
-
-		return nil, err
+		return nil, pb.ErrorOp_InvalidErrorOp, err
 	}
 
-	switch ev := event.Event.(type) {
-	case *replication.RotateEvent:
-		// if is local binlog but switch to remote on error, need to add uuid information in binlog's name
-		// nolint:dogsled
-		_, relaySubDirSuffix, _, _ := binlog.SplitFilenameWithUUIDSuffix(string(ev.NextLogName))
-		if relaySubDirSuffix != "" {
-			c.relaySubDirSuffix = relaySubDirSuffix
-		} else if c.relaySubDirSuffix != "" {
-			filename, err := binlog.ParseFilename(string(ev.NextLogName))
-			if err != nil {
-				return nil, terror.Annotate(err, "fail to parse binlog file name from rotate event")
-			}
-			ev.NextLogName = []byte(binlog.ConstructFilenameWithUUIDSuffix(filename, c.relaySubDirSuffix))
-			event.Event = ev
-		}
-	default:
-	}
-
-	return event, nil
+	return appendRelaySubDir()
 }
 
 // Close closes streamer.

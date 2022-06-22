@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
+// TODO: change this!
 // HandleError handle error for syncer.
 func (s *Syncer) HandleError(ctx context.Context, req *pb.HandleWorkerErrorRequest) (string, error) {
 	pos := req.BinlogPos

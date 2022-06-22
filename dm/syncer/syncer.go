@@ -208,8 +208,6 @@ type Syncer struct {
 
 	errOperatorHolder *operator.Holder
 
-	isReplacingOrInjectingErr bool // true if we are in replace or inject events by handle-error
-
 	currentLocationMu struct {
 		sync.RWMutex
 		currentLocation binlog.Location // use to calc remain binlog size
@@ -364,7 +362,15 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		}
 	}
 
-	s.streamerController = binlogstream.NewStreamerController(s.syncCfg, s.cfg.EnableGTID, s.fromDB, s.cfg.RelayDir, s.timezone, s.relay)
+	s.streamerController = binlogstream.NewStreamerController(
+		s.syncCfg,
+		s.cfg.EnableGTID,
+		s.fromDB,
+		s.cfg.RelayDir,
+		s.timezone,
+		s.relay,
+		s.tctx.L(),
+	)
 
 	s.baList, err = filter.New(s.cfg.CaseSensitive, s.cfg.BAList)
 	if err != nil {
@@ -596,7 +602,6 @@ func (s *Syncer) reset() {
 
 	s.execError.Store(nil)
 	s.setErrLocation(nil, nil, false)
-	s.isReplacingOrInjectingErr = false
 	s.waitXIDJob.Store(int64(noWait))
 	s.isTransactionEnd = true
 	s.flushSeq = 0
@@ -1840,8 +1845,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			currentLocation = savedGlobalLastLocation
 			lastLocation = savedGlobalLastLocation // restore global last pos
 		}
-		// if suffix>0, we are replacing error
-		s.isReplacingOrInjectingErr = currentLocation.Suffix != 0
 
 		s.locations.reset(currentLocation)
 		err3 := s.streamerController.ResetReplicationSyncer(s.tctx, currentLocation)
@@ -1859,7 +1862,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 
 		for i := 0; i < n; {
-			e, err1 := s.getEvent(s.runCtx, currentLocation)
+			e, _, err1 := s.streamerController.GetEvent(s.runCtx)
 			if err1 != nil {
 				return err
 			}
@@ -1961,8 +1964,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 
 			currentLocation = shardingReSync.currLocation
-			// if suffix>0, we are replacing error
-			s.isReplacingOrInjectingErr = currentLocation.Suffix != 0
 			s.locations.reset(shardingReSync.currLocation)
 			err = s.streamerController.ResetReplicationSyncer(s.runCtx, shardingReSync.currLocation)
 			if err != nil {
@@ -2021,7 +2022,11 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 
 		startTime := time.Now()
-		e, err = s.getEvent(s.runCtx, currentLocation)
+		var (
+			op                    pb.ErrorOp
+			injectOrReplaceSuffix int
+		)
+		e, op, err = s.streamerController.GetEvent(s.runCtx)
 
 		failpoint.Inject("SafeModeExit", func(val failpoint.Value) {
 			if intVal, ok := val.(int); ok && intVal == 1 {
@@ -2126,8 +2131,9 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		if _, ok := e.Event.(*replication.GenericEvent); !ok {
 			lastEvent = e
 		}
-		switch ev := e.Event.(type) {
-		case *replication.QueryEvent, *replication.RowsEvent:
+
+		switch op {
+		case pb.ErrorOp_Replace, pb.ErrorOp_Inject:
 			startLocation = binlog.NewLocation(
 				mysql.Position{
 					Name: lastLocation.Position.Name,
@@ -2137,10 +2143,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			)
 			startLocation.Suffix = currentLocation.Suffix
 
-			endSuffix := startLocation.Suffix
-			if s.isReplacingOrInjectingErr {
-				endSuffix++
-			}
+			injectOrReplaceSuffix++
 			currentLocation = binlog.NewLocation(
 				mysql.Position{
 					Name: lastLocation.Position.Name,
@@ -2148,75 +2151,53 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				},
 				currentLocation.GetGTID(),
 			)
-			currentLocation.Suffix = endSuffix
-
+			currentLocation.Suffix = injectOrReplaceSuffix
 			// TODO: can be removed in the future
-			if queryEvent, ok := ev.(*replication.QueryEvent); ok {
+			if queryEvent, ok := e.Event.(*replication.QueryEvent); ok {
 				err = currentLocation.SetGTID(queryEvent.GSet)
 				if err != nil {
 					return terror.Annotatef(err, "fail to record GTID %v", queryEvent.GSet)
 				}
 			}
+		case pb.ErrorOp_Skip:
+			injectOrReplaceSuffix = 0
+			// TODO: check type assertion!!
+			queryEvent := e.Event.(*replication.QueryEvent)
+			ec := eventContext{
+				tctx:            s.tctx,
+				header:          e.Header,
+				startLocation:   &startLocation,
+				currentLocation: &currentLocation,
+				lastLocation:    &lastLocation,
+			}
+			var sourceTbls map[string]map[string]struct{}
+			sourceTbls, err = s.trackOriginDDL(queryEvent, ec)
+			if err != nil {
+				s.tctx.L().Warn("failed to track query when handle-error skip", zap.Error(err), zap.ByteString("sql", queryEvent.Query))
+			}
 
-			if !s.isReplacingOrInjectingErr {
-				apply, op := s.errOperatorHolder.MatchAndApply(startLocation, currentLocation, e)
-				if apply {
-					if op == pb.ErrorOp_Replace || op == pb.ErrorOp_Inject {
-						s.isReplacingOrInjectingErr = true
-						// revert currentLocation to startLocation
-						currentLocation = startLocation
-					} else if op == pb.ErrorOp_Skip {
-						queryEvent := ev.(*replication.QueryEvent)
-						ec := eventContext{
-							tctx:            s.tctx,
-							header:          e.Header,
-							startLocation:   &startLocation,
-							currentLocation: &currentLocation,
-							lastLocation:    &lastLocation,
-						}
-						var sourceTbls map[string]map[string]struct{}
-						sourceTbls, err = s.trackOriginDDL(queryEvent, ec)
-						if err != nil {
-							s.tctx.L().Warn("failed to track query when handle-error skip", zap.Error(err), zap.ByteString("sql", queryEvent.Query))
-						}
-
-						s.saveGlobalPoint(currentLocation)
-						for sourceSchema, tableMap := range sourceTbls {
-							if sourceSchema == "" {
-								continue
-							}
-							for sourceTable := range tableMap {
-								s.saveTablePoint(&filter.Table{Schema: sourceSchema, Name: sourceTable}, currentLocation)
-							}
-						}
-						err = s.flushJobs()
-						if err != nil {
-							s.tctx.L().Warn("failed to flush jobs when handle-error skip", zap.Error(err))
-						} else {
-							s.tctx.L().Info("flush jobs when handle-error skip")
-						}
-					}
-					// skip the current event
+			s.saveGlobalPoint(currentLocation)
+			for sourceSchema, tableMap := range sourceTbls {
+				if sourceSchema == "" {
 					continue
 				}
-			}
-			// set endLocation.Suffix=0 of last replace or inject event
-			if currentLocation.Suffix > 0 && e.Header.EventSize > 0 {
-				currentLocation.Suffix = 0
-				s.isReplacingOrInjectingErr = false
-				s.locations.reset(currentLocation)
-				if !s.errOperatorHolder.IsInject(startLocation) {
-					// replace operator need redirect to currentLocation
-					if err = s.streamerController.ResetReplicationSyncer(s.runCtx, currentLocation); err != nil {
-						return err
-					}
+				for sourceTable := range tableMap {
+					s.saveTablePoint(&filter.Table{Schema: sourceSchema, Name: sourceTable}, currentLocation)
 				}
 			}
+			err = s.flushJobs()
+			if err != nil {
+				s.tctx.L().Warn("failed to flush jobs when handle-error skip", zap.Error(err))
+			} else {
+				s.tctx.L().Info("flush jobs when handle-error skip")
+			}
+		default:
+			injectOrReplaceSuffix = 0
 		}
 
 		// check pass SafeModeExitLoc and try disable safe mode, but not in sharding or replacing error
 		safeModeExitLoc := s.checkpoint.SafeModeExitPoint()
-		if safeModeExitLoc != nil && !s.isReplacingOrInjectingErr && shardingReSync == nil {
+		if safeModeExitLoc != nil && shardingReSync == nil {
 			// TODO: for RowsEvent (in fact other than QueryEvent), `currentLocation` is updated in `handleRowsEvent`
 			// so here the meaning of `currentLocation` is the location of last event
 			if binlog.CompareLocation(currentLocation, *safeModeExitLoc, s.cfg.EnableGTID) > 0 {
@@ -2242,7 +2223,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 		}
 		// check if need to exit safe mode by binlog header TS
-		if s.exitSafeModeTS != nil && !s.isReplacingOrInjectingErr && shardingReSync == nil {
+		if s.exitSafeModeTS != nil && shardingReSync == nil {
 			if checkErr := s.checkAndExitSafeModeByBinlogTS(s.runCtx, int64(e.Header.Timestamp)); checkErr != nil {
 				return checkErr
 			}
@@ -3971,21 +3952,6 @@ func (s *Syncer) handleEventError(err error, startLocation, endLocation binlog.L
 	return terror.Annotatef(err, "startLocation: [%s], endLocation: [%s]", startLocation, endLocation)
 }
 
-// getEvent gets an event from streamerController or errOperatorHolder.
-func (s *Syncer) getEvent(tctx *tcontext.Context, startLocation binlog.Location) (*replication.BinlogEvent, error) {
-	// next event is a replace or inject event
-	if s.isReplacingOrInjectingErr {
-		s.tctx.L().Info("try to get replace or inject event", zap.Stringer("location", startLocation))
-		return s.errOperatorHolder.GetEvent(startLocation)
-	}
-
-	e, err := s.streamerController.GetEvent(tctx)
-	if err == nil {
-		s.locations.update(e)
-	}
-	return e, err
-}
-
 func (s *Syncer) adjustGlobalPointGTID(tctx *tcontext.Context) (bool, error) {
 	location := s.checkpoint.GlobalPoint()
 	// situations that don't need to adjust
@@ -3997,7 +3963,15 @@ func (s *Syncer) adjustGlobalPointGTID(tctx *tcontext.Context) (bool, error) {
 		return false, nil
 	}
 	// set enableGTID to false for new streamerController
-	streamerController := binlogstream.NewStreamerController(s.syncCfg, false, s.fromDB, s.cfg.RelayDir, s.timezone, s.relay)
+	streamerController := binlogstream.NewStreamerController(
+		s.syncCfg,
+		false,
+		s.fromDB,
+		s.cfg.RelayDir,
+		s.timezone,
+		s.relay,
+		s.tctx.L(),
+	)
 
 	endPos := binlog.AdjustPosition(location.Position)
 	startPos := mysql.Position{
