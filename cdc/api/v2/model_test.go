@@ -76,3 +76,13 @@ func TestToAPIReplicaConfig(t *testing.T) {
 	cfg.Sink.DispatchRules[0].DispatcherRule = ""
 	require.Equal(t, cfg, cfg2)
 }
+
+func TestChangefeedInfoClone(t *testing.T) {
+	cf1 := &ChangeFeedInfo{}
+	cf1.UpstreamID = 1
+	cf2, err := cf1.Clone()
+	require.Nil(t, err)
+	require.Equal(t, cf1, cf2)
+	cf2.UpstreamID = 2
+	require.Equal(t, uint64(1), cf1.UpstreamID)
+}

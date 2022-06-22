@@ -40,10 +40,10 @@ func (h *OpenAPIV2) CDCMetaData(c *gin.Context) {
 		return
 	}
 	resp := make([]EtcdData, 0, len(kvs))
-	for _, kv := range kvs {
+	for _, pair := range kvs {
 		resp = append(resp, EtcdData{
-			Key:   string(kv.Key),
-			Value: string(kv.Value),
+			Key:   string(pair.Key),
+			Value: string(pair.Value),
 		})
 	}
 	c.IndentedJSON(http.StatusOK, resp)
@@ -124,7 +124,7 @@ func (h *OpenAPIV2) withUpstreamConfig(c context.Context,
 	if upstreamConfig.ID > 0 {
 		up, ok := h.capture.GetUpstreamManager().Get(upstreamConfig.ID)
 		if !ok {
-			return cerror.ErrUpstreamNotFound
+			return cerror.ErrUpstreamNotFound.GenWithStackByArgs(upstreamConfig.ID)
 		}
 		pdClient = up.PDClient
 	} else if len(upstreamConfig.PDAddrs) > 0 {

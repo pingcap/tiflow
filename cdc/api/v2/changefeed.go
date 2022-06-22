@@ -66,7 +66,6 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 	defer pdClient.Close()
 
 	// verify tables
-
 	kvStorage, err := kv.CreateTiStore(strings.Join(config.PDAddrs, ","), credential)
 	if err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrInternalServerError, err))

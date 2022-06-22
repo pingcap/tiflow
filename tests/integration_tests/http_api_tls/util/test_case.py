@@ -421,6 +421,45 @@ def create_changefeed_v2():
 
     print("pass test: create changefeed v2")
 
+def unsafe_apis():
+    url = BASE_URL1_V2+"/unsafe/metadata"
+    resp = rq.get(url, cert=CERT, verify=VERIFY)
+    assert resp.status_code == rq.codes.ok
+    print("status code", resp.status_code)
+    print("pass test: show metadata")
+
+    # service_gc_safepoint 1
+    url = BASE_URL1_V2+"/unsafe/service_gc_safepoint"
+    data = {
+        "pd_addrs": [TLS_PD_ADDR],
+        "ca_path":CA_PEM_PATH,
+        "cert_path":CLIENT_PEM_PATH,
+        "key_path":CLIENT_KEY_PEM_PATH,
+        "cert_allowed_cn":["client"],
+    }
+    data = json.dumps(data)
+    headers = {"Content-Type": "application/json"}
+    resp = rq.delete(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    print("status code", resp.status_code)
+    assert resp.status_code == 204
+
+    data = json.dumps({})
+    headers = {"Content-Type": "application/json"}
+    resp = rq.delete(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    print("status code", resp.status_code)
+    assert resp.status_code == 204
+    print("pass test: delete service_gc_safepoint")
+
+    # create changefeed fail because sink_uri is invalid
+    data = json.dumps({})
+    url = BASE_URL1_V2+"/unsafe/resolve_lock"
+    headers = {"Content-Type": "application/json"}
+    resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    print("status code", resp.status_code)
+    assert resp.status_code != rq.codes.not_found
+    print("pass test: resolve lock")
+
+
 # util functions define belows
 
 # compose physical time and logical time into tso
@@ -459,7 +498,8 @@ if __name__ == "__main__":
         # api v2
         "get_tso": get_tso,
         "verify_table": verify_table,
-        "create_changefeed_v2": create_changefeed_v2
+        "create_changefeed_v2": create_changefeed_v2,
+        "unsafe_apis": unsafe_apis
     }
 
     func = FUNC_MAP[sys.argv[1]]
