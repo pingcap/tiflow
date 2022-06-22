@@ -27,8 +27,9 @@ var _ TableSink = (*txnEventTableSink)(nil)
 type txnEventTableSink struct {
 	backendSink       txneventsink.TxnEventSink
 	txnEventTsTracker *progressTracker
-	txnBuffer         []*model.SingleTableTxn
-	TableStopped      *atomic.Bool
+	// NOTICE: It is ordered by commitTs.
+	txnBuffer    []*model.SingleTableTxn
+	TableStopped *atomic.Bool
 }
 
 func (t *txnEventTableSink) AppendRowChangedEvents(rows ...*model.RowChangedEvent) {

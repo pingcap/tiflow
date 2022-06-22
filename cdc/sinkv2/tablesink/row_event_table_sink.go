@@ -25,10 +25,11 @@ import (
 var _ TableSink = (*rowEventTableSink)(nil)
 
 type rowEventTableSink struct {
-	backendSink       roweventsink.RowEventSink
-	rowEventTsTracker *progressTracker
-	rowBuffer         []*model.RowChangedEvent
-	TableStopped      *atomic.Bool
+	backendSink             roweventsink.RowEventSink
+	rowEventProgressTracker *progressTracker
+	// NOTICE: It is ordered by commitTs.
+	rowBuffer    []*model.RowChangedEvent
+	TableStopped *atomic.Bool
 }
 
 func (r *rowEventTableSink) AppendRowChangedEvents(rows ...*model.RowChangedEvent) {
@@ -50,17 +51,17 @@ func (r *rowEventTableSink) UpdateResolvedTs(resolvedTs model.ResolvedTs) {
 		rowEvent := &roweventsink.RowEvent{
 			Row: row,
 			Callback: func() {
-				r.rowEventTsTracker.remove(fakeRowID)
+				r.rowEventProgressTracker.remove(fakeRowID)
 			},
 			TableStopped: r.TableStopped,
 		}
 		r.backendSink.WriteRowChangedEvents(rowEvent)
-		r.rowEventTsTracker.add(fakeRowID, resolvedTs)
+		r.rowEventProgressTracker.add(fakeRowID, resolvedTs)
 	}
 }
 
 func (r *rowEventTableSink) GetCheckpointTs() model.ResolvedTs {
-	return r.rowEventTsTracker.minTs()
+	return r.rowEventProgressTracker.minTs()
 }
 
 func (r *rowEventTableSink) Close() {
