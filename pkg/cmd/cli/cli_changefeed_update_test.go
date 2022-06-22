@@ -19,6 +19,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/golang/mock/gomock"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	v2 "github.com/pingcap/tiflow/cdc/api/v2"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -93,4 +95,77 @@ func initTestLogger(filename string) (func(), error) {
 		logger, props, _ := log.InitLogger(conf)
 		log.ReplaceGlobals(logger, props)
 	}, nil
+}
+
+func TestChangefeedUpdateCli(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	f := newMockFactory(ctrl)
+
+	cmd := newCmdUpdateChangefeed(f)
+	f.changefeedsv2.EXPECT().GetInfo(gomock.Any(), "abc").Return(nil, errors.New("test"))
+	os.Args = []string{"update", "--no-confirm=true", "--changefeed-id=abc"}
+	require.NotNil(t, cmd.Execute())
+
+	f.changefeedsv2.EXPECT().GetInfo(gomock.Any(), "abc").
+		Return(&v2.ChangeFeedInfo{
+			ID: "abc",
+			Config: &v2.ReplicaConfig{
+				Sink: &v2.SinkConfig{},
+			},
+		}, nil)
+	f.changefeedsv2.EXPECT().Update(gomock.Any(), gomock.Any(), "abc").
+		Return(&v2.ChangeFeedInfo{}, nil)
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "cf.toml")
+	err := os.WriteFile(configPath, []byte(""), 0o644)
+	require.Nil(t, err)
+	os.Args = []string{
+		"update",
+		"--config=" + configPath,
+		"--no-confirm=false",
+		"--target-ts=10",
+		"--sink-uri=abcd",
+		"--schema-registry=a",
+		"--sort-engine=memory",
+		"--sync-point=true",
+		"--sync-interval=1s",
+		"--changefeed-id=abc",
+		"--sort-dir=a",
+		"--upstream-pd=pd",
+		"--upstream-ca=ca",
+		"--upstream-cert=cer",
+		"--upstream-key=key",
+	}
+
+	path := filepath.Join(dir, "confirm.txt")
+	err = os.WriteFile(path, []byte("y"), 0o644)
+	require.Nil(t, err)
+	file, err := os.Open(path)
+	require.Nil(t, err)
+	stdin := os.Stdin
+	os.Stdin = file
+	defer func() {
+		os.Stdin = stdin
+	}()
+	require.Nil(t, cmd.Execute())
+
+	// no diff
+	cmd = newCmdUpdateChangefeed(f)
+	f.changefeedsv2.EXPECT().GetInfo(gomock.Any(), "abc").
+		Return(&v2.ChangeFeedInfo{}, nil)
+	os.Args = []string{"update", "--no-confirm=true", "-c", "abc"}
+	require.Nil(t, cmd.Execute())
+
+	cmd = newCmdUpdateChangefeed(f)
+	f.changefeedsv2.EXPECT().GetInfo(gomock.Any(), "abc").
+		Return(&v2.ChangeFeedInfo{ID: "abc"}, nil)
+	f.changefeedsv2.EXPECT().Update(gomock.Any(), gomock.Any(), "abc").
+		Return(nil, errors.New("test"))
+	os.Args = []string{
+		"update", "--no-confirm=true",
+		"--sort-engine=memory",
+		"-c", "abc",
+	}
+	require.NotNil(t, cmd.Execute())
 }

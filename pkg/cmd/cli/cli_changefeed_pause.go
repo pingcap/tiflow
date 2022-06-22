@@ -22,7 +22,7 @@ import (
 
 // pauseChangefeedOptions defines flags for the `cli changefeed pause` command.
 type pauseChangefeedOptions struct {
-	apiClient *apiv1client.APIV1Client
+	apiClient apiv1client.APIV1Interface
 
 	changefeedID string
 }

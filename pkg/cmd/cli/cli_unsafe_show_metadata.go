@@ -23,7 +23,7 @@ import (
 
 // unsafeShowMetadataOptions defines flags for the `cli unsafe show-metadata` command.
 type unsafeShowMetadataOptions struct {
-	apiClient *apiv2client.APIV2Client
+	apiClient apiv2client.APIV2Interface
 }
 
 // newUnsafeShowMetadataOptions creates new unsafeShowMetadataOptions

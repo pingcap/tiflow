@@ -180,7 +180,7 @@ func (f factoryImpl) PdClient() (pd.Client, error) {
 }
 
 // APIV1Client returns cdc api v1 client.
-func (f *factoryImpl) APIV1Client() (*apiv1client.APIV1Client, error) {
+func (f *factoryImpl) APIV1Client() (apiv1client.APIV1Interface, error) {
 	serverAddr, err := f.findServerAddr()
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -190,7 +190,7 @@ func (f *factoryImpl) APIV1Client() (*apiv1client.APIV1Client, error) {
 }
 
 // APIV2Client returns cdc api v2 client.
-func (f *factoryImpl) APIV2Client() (*apiv2client.APIV2Client, error) {
+func (f *factoryImpl) APIV2Client() (apiv2client.APIV2Interface, error) {
 	serverAddr, err := f.findServerAddr()
 	if err != nil {
 		return nil, errors.Trace(err)

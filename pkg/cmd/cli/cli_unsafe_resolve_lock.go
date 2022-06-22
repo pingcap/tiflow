@@ -28,7 +28,7 @@ import (
 
 // unsafeResolveLockOptions defines flags for the `cli unsafe show-metadata` command.
 type unsafeResolveLockOptions struct {
-	apiClient *apiv2client.APIV2Client
+	apiClient apiv2client.APIV2Interface
 
 	regionID uint64
 	ts       uint64

@@ -27,8 +27,8 @@ import (
 
 // resumeChangefeedOptions defines flags for the `cli changefeed resume` command.
 type resumeChangefeedOptions struct {
-	apiV1Client *apiv1client.APIV1Client
-	apiV2Client *apiv2client.APIV2Client
+	apiV1Client apiv1client.APIV1Interface
+	apiV2Client apiv2client.APIV2Interface
 
 	changefeedID string
 	noConfirm    bool
