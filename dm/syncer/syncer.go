@@ -69,7 +69,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/relay"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
-	operator "github.com/pingcap/tiflow/dm/syncer/err-operator"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 	sm "github.com/pingcap/tiflow/dm/syncer/safe-mode"
 	"github.com/pingcap/tiflow/dm/syncer/shardddl"
@@ -206,8 +205,6 @@ type Syncer struct {
 	readerHub              *streamer.ReaderHub
 	recordedActiveRelayLog bool
 
-	errOperatorHolder *operator.Holder
-
 	currentLocationMu struct {
 		sync.RWMutex
 		currentLocation binlog.Location // use to calc remain binlog size
@@ -266,7 +263,6 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	syncer.checkpoint = NewRemoteCheckPoint(syncer.tctx, cfg, syncer.metricsProxies, syncer.checkpointID())
 
 	syncer.binlogType = binlogstream.RelayToBinlogType(relay)
-	syncer.errOperatorHolder = operator.NewHolder(&logger)
 	syncer.readerHub = streamer.GetReaderHub()
 
 	if cfg.ShardMode == config.ShardPessimistic {
@@ -2191,6 +2187,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			} else {
 				s.tctx.L().Info("flush jobs when handle-error skip")
 			}
+			continue
 		default:
 			injectOrReplaceSuffix = 0
 		}
