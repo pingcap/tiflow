@@ -64,7 +64,7 @@ type mysqlSink struct {
 	tableMaxResolvedTs sync.Map
 
 	execWaitNotifier *notify.Notifier
-	resolvedNotifier *notify.Notifier
+	resolvedCh       chan struct{}
 	errCh            chan error
 	flushSyncWg      sync.WaitGroup
 
@@ -193,18 +193,14 @@ func newMySQLSink(
 	}
 
 	sink.execWaitNotifier = new(notify.Notifier)
-	sink.resolvedNotifier = new(notify.Notifier)
+	sink.resolvedCh = make(chan struct{}, 1)
 
 	err = sink.createSinkWorkers(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	receiver, err := sink.resolvedNotifier.NewReceiver(50 * time.Millisecond)
-	if err != nil {
-		return nil, err
-	}
-	go sink.flushRowChangedEvents(ctx, receiver)
+	go sink.flushRowChangedEvents(ctx)
 
 	return sink, nil
 }
@@ -222,12 +218,15 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 	if !ok || v.(uint64) < resolvedTs {
 		s.tableMaxResolvedTs.Store(tableID, resolvedTs)
 	}
-	s.resolvedNotifier.Notify()
 
 	// check and throw error
 	select {
+	case <-ctx.Done():
+		return 0, ctx.Err()
 	case err := <-s.errCh:
 		return 0, err
+	case s.resolvedCh <- struct{}{}:
+		// Notify `flushRowChangedEvents` to asynchronously write data.
 	default:
 	}
 
@@ -236,7 +235,7 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, tableID model.Tab
 	return checkpointTs, nil
 }
 
-func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.Receiver) {
+func (s *mysqlSink) flushRowChangedEvents(ctx context.Context) {
 	defer func() {
 		for _, worker := range s.workers {
 			worker.closedCh <- struct{}{}
@@ -246,16 +245,9 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 		select {
 		case <-ctx.Done():
 			return
-		case <-receiver.C:
+		case <-s.resolvedCh:
 		}
-		flushedResolvedTsMap, resolvedTxnsMap := s.txnCache.Resolved(&s.tableMaxResolvedTs)
-		if len(resolvedTxnsMap) == 0 {
-			s.tableMaxResolvedTs.Range(func(key, value interface{}) bool {
-				s.tableCheckpointTs.Store(key, value)
-				return true
-			})
-			continue
-		}
+		checkpointTsMap, resolvedTxnsMap := s.txnCache.Resolved(&s.tableMaxResolvedTs)
 
 		if s.cyclic != nil {
 			// Filter rows if it is origin from downstream.
@@ -264,8 +256,10 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context, receiver *notify.
 			s.statistics.SubRowsCount(skippedRowCount)
 		}
 
-		s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
-		for tableID, resolvedTs := range flushedResolvedTsMap {
+		if len(resolvedTxnsMap) != 0 {
+			s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
+		}
+		for tableID, resolvedTs := range checkpointTsMap {
 			s.tableCheckpointTs.Store(tableID, resolvedTs)
 		}
 	}
@@ -452,15 +446,40 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 	s.notifyAndWaitExec(ctx)
 }
 
+func (s *mysqlSink) Init(tableID model.TableID) error {
+	s.cleanTableResource(tableID)
+	return nil
+}
+
+func (s *mysqlSink) cleanTableResource(tableID model.TableID) {
+	// We need to clean up the old values of the table,
+	// otherwise when the table is dispatched back again,
+	// it may read the old values.
+	// See: https://github.com/pingcap/tiflow/issues/4464#issuecomment-1085385382.
+	if resolvedTs, loaded := s.tableMaxResolvedTs.LoadAndDelete(tableID); loaded {
+		log.Info("clean up table max resolved ts in MySQL sink",
+			zap.Int64("tableID", tableID),
+			zap.Uint64("resolvedTs", resolvedTs.(uint64)))
+	}
+	if checkpointTs, loaded := s.tableCheckpointTs.LoadAndDelete(tableID); loaded {
+		log.Info("clean up table checkpoint ts in MySQL sink",
+			zap.Int64("tableID", tableID),
+			zap.Uint64("checkpointTs", checkpointTs.(uint64)))
+	}
+	// try to remove table txn cache
+	s.txnCache.RemoveTableTxn(tableID)
+}
+
 func (s *mysqlSink) Close(ctx context.Context) error {
 	s.execWaitNotifier.Close()
-	s.resolvedNotifier.Close()
 	err := s.db.Close()
 	s.cancel()
 	return cerror.WrapError(cerror.ErrMySQLConnectionError, err)
 }
 
 func (s *mysqlSink) Barrier(ctx context.Context, tableID model.TableID) error {
+	defer s.cleanTableResource(tableID)
+
 	warnDuration := 3 * time.Minute
 	ticker := time.NewTicker(warnDuration)
 	defer ticker.Stop()
@@ -667,8 +686,6 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 				}
 			} else {
 				query, args = prepareReplace(quoteTable, row.Columns, true /* appendPlaceHolder */, translateToInsert)
-				sqls = append(sqls, query)
-				values = append(values, args)
 				if query != "" {
 					sqls = append(sqls, query)
 					values = append(values, args)

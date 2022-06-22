@@ -34,7 +34,8 @@ type MessagesConfig struct {
 
 // read only
 var defaultMessageConfig = &MessagesConfig{
-	ClientMaxBatchInterval:       TomlDuration(time.Millisecond * 200),
+	// Note that ClientMaxBatchInterval may increase the checkpoint latency.
+	ClientMaxBatchInterval:       TomlDuration(time.Millisecond * 10),
 	ClientMaxBatchSize:           8 * 1024 * 1024, // 8MB
 	ClientMaxBatchCount:          128,
 	ClientRetryRateLimit:         1.0, // Once per second

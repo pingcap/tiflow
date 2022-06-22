@@ -339,9 +339,11 @@ func TestClientSendAnomalies(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 		closeClient()
 	}()
-	_, err = client.SendMessage(ctx, "test-topic", &testMessage{Value: 1})
-	require.Error(t, err)
-	require.Regexp(t, ".*ErrPeerMessageClientClosed.*", err.Error())
+	_, _ = client.SendMessage(ctx, "test-topic", &testMessage{Value: 1})
+	// There is no need to check for error here, because when a client is closing,
+	// message loss is expected because sending the message is fully asynchronous.
+	// The client implementation is considered correct if `SendMessage` does not
+	// block infinitely.
 
 	wg.Wait()
 

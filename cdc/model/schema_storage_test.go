@@ -403,9 +403,19 @@ func TestTableInfoGetterFuncs(t *testing.T) {
 	info = WrapTableInfo(1, "test", 0, &tbl)
 	require.False(t, info.IsEligible(false))
 	require.True(t, info.IsEligible(true))
+
+	// View is eligible.
 	tbl.View = &timodel.ViewInfo{}
 	info = WrapTableInfo(1, "test", 0, &tbl)
+	require.True(t, info.IsView())
 	require.True(t, info.IsEligible(false))
+
+	// Sequence is ineligible.
+	tbl.Sequence = &timodel.SequenceInfo{}
+	info = WrapTableInfo(1, "test", 0, &tbl)
+	require.True(t, info.IsSequence())
+	require.False(t, info.IsEligible(false))
+	require.False(t, info.IsEligible(true))
 }
 
 func TestTableInfoClone(t *testing.T) {

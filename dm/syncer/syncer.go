@@ -89,7 +89,6 @@ var (
 	maxDDLConnectionTimeout = fmt.Sprintf("%dm", MaxDDLConnectionTimeoutMinute)
 
 	maxDMLConnectionDuration, _ = time.ParseDuration(maxDMLConnectionTimeout)
-	maxDMLExecutionDuration     = 30 * time.Second
 
 	maxPauseOrStopWaitTime = 10 * time.Second
 
@@ -328,11 +327,6 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		return err
 	}
 	rollbackHolder.Add(fr.FuncRollback{Name: "close-DBs", Fn: s.closeDBs})
-
-	s.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, s.cfg.To.Session, s.downstreamTrackConn)
-	if err != nil {
-		return terror.ErrSchemaTrackerInit.Delegate(err)
-	}
 
 	if s.cfg.CollationCompatible == config.StrictCollationCompatible {
 		s.charsetAndDefaultCollation, s.idAndCollationMap, err = dbconn.GetCharsetAndCollationInfo(tctx, s.fromConn)
@@ -698,7 +692,7 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 
 	// try to rollback checkpoints, if they already flushed, no effect
 	prePos := s.checkpoint.GlobalPoint()
-	s.checkpoint.Rollback(s.schemaTracker)
+	s.checkpoint.Rollback()
 	currPos := s.checkpoint.GlobalPoint()
 	if binlog.CompareLocation(prePos, currPos, s.cfg.EnableGTID) != 0 {
 		s.tctx.L().Warn("something wrong with rollback global checkpoint", zap.Stringer("previous position", prePos), zap.Stringer("current position", currPos))
@@ -1047,7 +1041,7 @@ func (s *Syncer) addJob(job *job) error {
 	}
 
 	// Periodically create checkpoint snapshot and async flush checkpoint snapshot
-	if s.checkpoint.CheckGlobalPoint() && s.checkpoint.CheckLastSnapshotCreationTime() {
+	if s.checkpoint.LastFlushOutdated() {
 		jobSeq := s.getFlushSeq()
 		s.jobWg.Add(1)
 		if s.cfg.Experimental.AsyncCheckpointFlush {
@@ -1094,7 +1088,7 @@ func (s *Syncer) resetShardingGroup(table *filter.Table) {
 // and except rejecting to flush the checkpoint, we also need to rollback the checkpoint saved before
 // this should be handled when `s.Run` returned
 //
-// we may need to refactor the concurrency model to make the work-flow more clearer later.
+// we may need to refactor the concurrency model to make the work-flow more clear later.
 func (s *Syncer) flushCheckPoints() error {
 	err := s.execError.Load()
 	// TODO: for now, if any error occurred (including user canceled), checkpoint won't be updated. But if we have put
@@ -1457,6 +1451,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		flushCheckpoint bool
 		delLoadTask     bool
 		cleanDumpFile   = s.cfg.CleanDumpFile
+		freshAndAllMode bool
 	)
 	flushCheckpoint, err = s.adjustGlobalPointGTID(tctx)
 	if err != nil {
@@ -1465,14 +1460,24 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	if s.cfg.Mode == config.ModeAll && fresh {
 		delLoadTask = true
 		flushCheckpoint = true
-		err = s.loadTableStructureFromDump(ctx)
-		if err != nil {
-			tctx.L().Warn("error happened when load table structure from dump files", zap.Error(err))
-			cleanDumpFile = false
-		}
-	} else {
+		freshAndAllMode = true
+	}
+
+	if s.cfg.Mode == config.ModeIncrement || !fresh {
 		cleanDumpFile = false
 	}
+
+	// some prepare work before the binlog event loop:
+	// 1. first we flush checkpoint as needed, so in next resume we won't go to Load unit.
+	// 2. then since we are confident that Load unit is done we can delete the load task etcd KV.
+	//    TODO: we can't handle panic between 1. and 2., or fail to delete the load task etcd KV.
+	// 3. then we initiate schema tracker
+	// 4. - when it's a fresh task, load the table structure from dump files into schema tracker.
+	//      if it's also a optimistic sharding task, also load the table structure into checkpoints because shard tables
+	//      may not have same table structure so we can't fetch the downstream table structure for them lazily.
+	//    - when it's a resumed task, load the table structure from checkpoints into schema tracker.
+	//    TODO: we can't handle failure between 1. and 4. After 1. it's not a fresh task.
+	// 5. finally clean the dump files
 
 	if flushCheckpoint {
 		if err = s.flushCheckPoints(); err != nil {
@@ -1483,6 +1488,24 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	if delLoadTask {
 		if err = s.delLoadTask(); err != nil {
 			tctx.L().Warn("error when del load task in etcd", zap.Error(err))
+		}
+	}
+
+	s.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, s.cfg.To.Session, s.downstreamTrackConn)
+	if err != nil {
+		return terror.ErrSchemaTrackerInit.Delegate(err)
+	}
+
+	if freshAndAllMode {
+		err = s.loadTableStructureFromDump(ctx)
+		if err != nil {
+			s.tctx.L().Warn("error happened when load table structure from dump files", zap.Error(err))
+			cleanDumpFile = false
+		}
+	} else {
+		err = s.checkpoint.LoadIntoSchemaTracker(ctx, s.schemaTracker)
+		if err != nil {
+			return err
 		}
 	}
 	if cleanDumpFile {
@@ -2016,7 +2039,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		case *replication.GenericEvent:
 			if e.Header.EventType == replication.HEARTBEAT_EVENT {
 				// flush checkpoint even if there are no real binlog events
-				if s.checkpoint.CheckGlobalPoint() {
+				if s.checkpoint.LastFlushOutdated() {
 					tctx.L().Info("meet heartbeat event and then flush jobs")
 					err2 = s.flushJobs()
 				}
@@ -3148,6 +3171,9 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 					zap.Error(err))
 				setFirstErr(err)
 			}
+			// TODO: we should save table checkpoint here, but considering when
+			// the first time of flushing checkpoint, user may encounter https://github.com/pingcap/tiflow/issues/5010
+			// we should fix that problem first.
 		}
 	}
 	return firstErr
@@ -3342,6 +3368,9 @@ func (s *Syncer) Pause() {
 		return
 	}
 	s.stopSync()
+	if err := s.schemaTracker.Close(); err != nil {
+		s.tctx.L().Error("fail to close schema tracker", log.ShortError(err))
+	}
 }
 
 // Resume resumes the paused process.

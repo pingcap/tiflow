@@ -66,6 +66,7 @@ type agentImpl struct {
 
 	changeFeed     model.ChangeFeedID
 	ownerCaptureID model.CaptureID
+	ownerRevision  int64
 
 	clock              clock.Clock
 	barrierSeqs        map[p2p.Topic]p2p.Seq
@@ -84,7 +85,7 @@ func newAgent(
 	messageRouter p2p.MessageRouter,
 	executor scheduler.TableExecutor,
 	changeFeedID model.ChangeFeedID,
-) (processorAgent, error) {
+) (retVal processorAgent, err error) {
 	ret := &agentImpl{
 		messageServer: messageServer,
 		messageRouter: messageRouter,
@@ -102,8 +103,8 @@ func newAgent(
 	flushInterval := time.Duration(conf.ProcessorFlushInterval)
 
 	log.Debug("creating processor agent",
-		zap.String("changefeed-id", changeFeedID),
-		zap.Duration("send-checkpoint-ts-interval", flushInterval))
+		zap.String("changefeed", changeFeedID),
+		zap.Duration("sendCheckpointTsInterval", flushInterval))
 
 	ret.BaseAgent = scheduler.NewBaseAgent(
 		changeFeedID,
@@ -114,14 +115,24 @@ func newAgent(
 	// Note that registerPeerMessageHandlers sets handlerErrChs.
 	if err := ret.registerPeerMessageHandlers(); err != nil {
 		log.Warn("failed to register processor message handlers",
-			zap.String("changefeed-id", changeFeedID),
+			zap.String("changefeed", changeFeedID),
 			zap.Error(err))
 		return nil, errors.Trace(err)
 	}
+	defer func() {
+		if err != nil {
+			if err1 := ret.deregisterPeerMessageHandlers(); err1 != nil {
+				log.Warn("failed to unregister processor message handlers",
+					zap.String("changefeed", changeFeedID),
+					zap.Error(err))
+			}
+		}
+	}()
 
 	etcdCliCtx, cancel := stdContext.WithTimeout(ctx, getOwnerFromEtcdTimeout)
-	ownerCaptureID, err := ctx.GlobalVars().EtcdClient.GetOwnerID(etcdCliCtx, etcd.CaptureOwnerKey)
-	cancel()
+	defer cancel()
+	ownerCaptureID, err := ctx.GlobalVars().EtcdClient.
+		GetOwnerID(etcdCliCtx, etcd.CaptureOwnerKey)
 	if err != nil {
 		if err != concurrency.ErrElectionNoLeader {
 			return nil, errors.Trace(err)
@@ -130,13 +141,28 @@ func newAgent(
 		// If we are registered in Etcd, an elected Owner will have to
 		// contact us before it can schedule any table.
 		log.Info("no owner found. We will wait for an owner to contact us.",
-			zap.String("changefeed-id", changeFeedID),
+			zap.String("changefeed", changeFeedID),
 			zap.Error(err))
-	} else {
-		ret.ownerCaptureID = ownerCaptureID
-		log.Debug("found owner",
-			zap.String("changefeed-id", changeFeedID),
-			zap.String("owner-capture-id", ownerCaptureID))
+		return ret, nil
+	}
+
+	ret.ownerCaptureID = ownerCaptureID
+	log.Debug("found owner",
+		zap.String("changefeed", changeFeedID),
+		zap.String("ownerID", ownerCaptureID))
+
+	ret.ownerRevision, err = ctx.GlobalVars().EtcdClient.
+		GetOwnerRevision(etcdCliCtx, ownerCaptureID)
+	if err != nil {
+		if cerror.ErrOwnerNotFound.Equal(err) || cerror.ErrNotOwner.Equal(err) {
+			// These are expected errors when no owner has been elected
+			log.Info("no owner found when querying for the owner revision",
+				zap.String("changefeed", changeFeedID),
+				zap.Error(err))
+			ret.ownerCaptureID = ""
+			return ret, nil
+		}
+		return nil, errors.Trace(err)
 	}
 	return ret, nil
 }
@@ -165,6 +191,18 @@ func (a *agentImpl) FinishTableOperation(
 	tableID model.TableID,
 	epoch model.ProcessorEpoch,
 ) (done bool, err error) {
+	topic := model.SyncTopic(a.changeFeed)
+	if !a.Barrier(ctx) {
+		if _, exists := a.barrierSeqs[topic]; exists {
+			log.L().Info("Delay sending FinishTableOperation due to pending sync",
+				zap.String("changefeedID", a.changeFeed),
+				zap.String("ownerID", a.ownerCaptureID),
+				zap.Int64("tableID", tableID),
+				zap.String("epoch", epoch))
+			return false, nil
+		}
+	}
+
 	message := &model.DispatchTableResponseMessage{ID: tableID, Epoch: epoch}
 	defer func() {
 		if err != nil {
@@ -321,8 +359,19 @@ func (a *agentImpl) Barrier(_ context.Context) (done bool) {
 	return true
 }
 
-func (a *agentImpl) OnOwnerChanged(ctx context.Context, newOwnerCaptureID model.CaptureID) {
+func (a *agentImpl) OnOwnerChanged(
+	ctx context.Context,
+	newOwnerCaptureID model.CaptureID,
+	newOwnerRev int64,
+) {
+	// The BaseAgent will notify us of an owner change if an AnnounceOwner is received.
+	// However, we need to filter out the event if we already learned of this owner directly
+	// from Etcd.
+	if a.ownerCaptureID == newOwnerCaptureID && a.ownerRevision == newOwnerRev {
+		return
+	}
 	a.ownerCaptureID = newOwnerCaptureID
+	a.ownerRevision = newOwnerRev
 	// Note that we clear the pending barriers.
 	a.barrierSeqs = map[p2p.Topic]p2p.Seq{}
 }

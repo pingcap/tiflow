@@ -80,7 +80,9 @@ type ProcessorMessenger interface {
 	// Barrier returns whether there is a pending message not yet acknowledged by the owner.
 	Barrier(ctx context.Context) (done bool)
 	// OnOwnerChanged is called when the owner is changed.
-	OnOwnerChanged(ctx context.Context, newOwnerCaptureID model.CaptureID)
+	OnOwnerChanged(ctx context.Context,
+		newOwnerCaptureID model.CaptureID,
+		newOwnerRevision int64)
 	// Close closes the messenger and does the necessary cleanup.
 	Close() error
 }
@@ -192,7 +194,8 @@ func (a *BaseAgent) Tick(ctx context.Context) error {
 		// We need to notify the communicator if the owner has changed.
 		// This is necessary because the communicator might be waiting for
 		// messages to be received by the previous owner.
-		a.communicator.OnOwnerChanged(ctx, a.currentOwner())
+		ownerID, ownerRev := a.currentOwner()
+		a.communicator.OnOwnerChanged(ctx, ownerID, ownerRev)
 	}
 
 	if a.needSyncNow.Load() {
@@ -473,11 +476,11 @@ func (a *BaseAgent) updateOwnerInfo(ownerCaptureID model.CaptureID, ownerRev int
 	return true
 }
 
-func (a *BaseAgent) currentOwner() model.CaptureID {
+func (a *BaseAgent) currentOwner() (model.CaptureID, int64 /* revision */) {
 	a.ownerInfoMu.RLock()
 	defer a.ownerInfoMu.RUnlock()
 
-	return a.ownerInfo.OwnerCaptureID
+	return a.ownerInfo.OwnerCaptureID, a.ownerInfo.OwnerRev
 }
 
 func (a *BaseAgent) resetEpoch() {
