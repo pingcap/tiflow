@@ -20,6 +20,7 @@ require (
 	github.com/docker/go-units v0.4.0
 	github.com/dustin/go-humanize v1.0.0
 	github.com/edwingeng/deque v0.0.0-20191220032131-8596380dee17
+	github.com/emirpasic/gods v1.18.1
 	github.com/facebookgo/subset v0.0.0-20200203212716-c811ad88dec4
 	github.com/fatih/color v1.13.0
 	github.com/gavv/monotime v0.0.0-20190418164738-30dba4353424
@@ -101,8 +102,6 @@ require (
 	gorm.io/gorm v1.23.4
 	upper.io/db.v3 v3.7.1+incompatible
 )
-
-require github.com/emirpasic/gods v1.18.1
 
 require (
 	cloud.google.com/go v0.100.2 // indirect
