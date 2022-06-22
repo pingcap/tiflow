@@ -74,5 +74,5 @@ func MonoNow() MonotonicTime {
 
 // ToMono converts time.Time to MonotonicTime
 func ToMono(t time.Time) MonotonicTime {
-	return MonotonicTime(t.Sub(unixEpoch))
+	return MonotonicTime(t.UnixNano())
 }
