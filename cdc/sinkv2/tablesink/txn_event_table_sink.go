@@ -39,8 +39,6 @@ func (t *txnEventTableSink) AppendRowChangedEvents(rows ...*model.RowChangedEven
 }
 
 func (t *txnEventTableSink) UpdateResolvedTs(resolvedTs model.ResolvedTs) {
-	// TODO: use real txn ID.
-	var fakeTxnID uint64 = 0
 	i := sort.Search(len(t.txnBuffer), func(i int) bool {
 		return t.txnBuffer[i].CommitTs > resolvedTs.Ts
 	})
@@ -53,12 +51,12 @@ func (t *txnEventTableSink) UpdateResolvedTs(resolvedTs model.ResolvedTs) {
 		txnEvent := &txneventsink.TxnEvent{
 			Txn: txn,
 			Callback: func() {
-				t.txnEventTsTracker.remove(fakeTxnID)
+				t.txnEventTsTracker.remove(txn.CommitTs, resolvedTs)
 			},
 			TableStopped: t.TableStopped,
 		}
 		t.backendSink.WriteTxnEvents(txnEvent)
-		t.txnEventTsTracker.add(fakeTxnID, resolvedTs)
+		t.txnEventTsTracker.add(txn.CommitTs, resolvedTs)
 	}
 }
 

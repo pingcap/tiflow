@@ -37,8 +37,6 @@ func (r *rowEventTableSink) AppendRowChangedEvents(rows ...*model.RowChangedEven
 }
 
 func (r *rowEventTableSink) UpdateResolvedTs(resolvedTs model.ResolvedTs) {
-	// TODO: use real row ID.
-	var fakeRowID uint64 = 0
 	i := sort.Search(len(r.rowBuffer), func(i int) bool {
 		return r.rowBuffer[i].CommitTs > resolvedTs.Ts
 	})
@@ -51,12 +49,12 @@ func (r *rowEventTableSink) UpdateResolvedTs(resolvedTs model.ResolvedTs) {
 		rowEvent := &roweventsink.RowEvent{
 			Row: row,
 			Callback: func() {
-				r.rowEventProgressTracker.remove(fakeRowID)
+				r.rowEventProgressTracker.remove(row.CommitTs, resolvedTs)
 			},
 			TableStopped: r.TableStopped,
 		}
 		r.backendSink.WriteRowChangedEvents(rowEvent)
-		r.rowEventProgressTracker.add(fakeRowID, resolvedTs)
+		r.rowEventProgressTracker.add(row.CommitTs, resolvedTs)
 	}
 }
 
