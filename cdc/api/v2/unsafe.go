@@ -34,7 +34,7 @@ import (
 
 // CDCMetaData returns all etcd key values used by cdc
 func (h *OpenAPIV2) CDCMetaData(c *gin.Context) {
-	kvs, err := h.etcdClient().GetAllCDCInfo(c)
+	kvs, err := h.capture.GetEtcdClient().GetAllCDCInfo(c)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -72,7 +72,7 @@ func (h *OpenAPIV2) ResolveLock(c *gin.Context) {
 			return
 		}
 	} else {
-		up := h.upstreamManager().GetDefaultUpstream()
+		up := h.capture.GetUpstreamManager().GetDefaultUpstream()
 		kvStorage = up.KVStorage
 	}
 
@@ -101,7 +101,7 @@ func (h *OpenAPIV2) DeleteServiceGcSafePoint(c *gin.Context) {
 	}
 	err := h.withUpstreamConfig(c, upstreamConfig,
 		func(ctx context.Context, client pd.Client) error {
-			err := gc.RemoveServiceGCSafepoint(c, client, h.etcdClient().GetGCServiceID())
+			err := gc.RemoveServiceGCSafepoint(c, client, h.capture.GetEtcdClient().GetGCServiceID())
 			if err != nil {
 				return cerror.WrapError(cerror.ErrInternalServerError, err)
 			}
@@ -122,7 +122,7 @@ func (h *OpenAPIV2) withUpstreamConfig(c context.Context,
 		pdClient pd.Client
 	)
 	if upstreamConfig.ID > 0 {
-		up, ok := h.upstreamManager().Get(upstreamConfig.ID)
+		up, ok := h.capture.GetUpstreamManager().Get(upstreamConfig.ID)
 		if !ok {
 			return cerror.ErrUpstreamNotFound
 		}
@@ -130,7 +130,7 @@ func (h *OpenAPIV2) withUpstreamConfig(c context.Context,
 	} else if len(upstreamConfig.PDAddrs) > 0 {
 		timeoutCtx, cancel := context.WithTimeout(c, 30*time.Second)
 		defer cancel()
-		pdClient, err = getPDClient(timeoutCtx, upstreamConfig.PDAddrs, &security.Credential{
+		pdClient, err = h.apiV2Helper.getPDClient(timeoutCtx, upstreamConfig.PDAddrs, &security.Credential{
 			CAPath:        upstreamConfig.CAPath,
 			CertPath:      upstreamConfig.CertPath,
 			KeyPath:       upstreamConfig.KeyPath,
@@ -141,7 +141,7 @@ func (h *OpenAPIV2) withUpstreamConfig(c context.Context,
 		}
 		defer pdClient.Close()
 	} else {
-		up := h.upstreamManager().GetDefaultUpstream()
+		up := h.capture.GetUpstreamManager().GetDefaultUpstream()
 		pdClient = up.PDClient
 	}
 	return doWithClient(c, pdClient)

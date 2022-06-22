@@ -22,10 +22,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/api"
+	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/entry"
-	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -43,28 +43,14 @@ import (
 
 // verifyCreateChangefeedConfig verifies ChangefeedConfig and
 // returns a  changefeedInfo for create a changefeed.
-func verifyCreateChangefeedConfig(
+func (h APIV2HelperImpl) verifyCreateChangefeedConfig(
 	ctx context.Context,
 	cfg *ChangefeedConfig,
-	capture api.CaptureInfoProvider,
+	pdClient pd.Client,
+	statusProvider owner.StatusProvider,
+	ensureGCServiceID string,
+	kvStorage tidbkv.Storage,
 ) (*model.ChangeFeedInfo, error) {
-	credential := &security.Credential{
-		CAPath:   cfg.CAPath,
-		CertPath: cfg.CertPath,
-		KeyPath:  cfg.KeyPath,
-	}
-	if len(cfg.CertAllowedCN) != 0 {
-		credential.CertAllowedCN = cfg.CertAllowedCN
-	}
-
-	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	pdClient, err := getPDClient(timeoutCtx, cfg.PDAddrs, credential)
-	if err != nil {
-		return nil, err
-	}
-	defer pdClient.Close()
-
 	// verify sinkURI
 	if cfg.SinkURI == "" {
 		return nil, cerror.ErrSinkURIInvalid.GenWithStackByArgs(
@@ -88,7 +74,7 @@ func verifyCreateChangefeedConfig(
 			"invalid namespace: %s", cfg.Namespace)
 	}
 
-	cfStatus, err := capture.StatusProvider().GetChangeFeedStatus(ctx,
+	cfStatus, err := statusProvider.GetChangeFeedStatus(ctx,
 		model.DefaultChangeFeedID(cfg.ID))
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return nil, err
@@ -112,7 +98,7 @@ func verifyCreateChangefeedConfig(
 	if err := gc.EnsureChangefeedStartTsSafety(
 		ctx,
 		pdClient,
-		capture.GetEtcdClient().GetEnsureGCServiceID(),
+		ensureGCServiceID,
 		model.DefaultChangeFeedID(cfg.ID),
 		ensureTTL, cfg.StartTs); err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {
@@ -165,14 +151,6 @@ func verifyCreateChangefeedConfig(
 		return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs(err.Error())
 	}
 
-	// verify tables
-	kvStorage, err := kv.CreateTiStore(strings.Join(cfg.PDAddrs, ","), credential)
-	if err != nil {
-		return nil, err
-	}
-	// We should not close kvStorage since all kvStorage in cdc is the same one.
-	// defer kvStorage.Close()
-
 	if !replicaCfg.ForceReplicate && !cfg.ReplicaConfig.IgnoreIneligibleTable {
 		ineligibleTables, _, err := entry.VerifyTables(replicaCfg, kvStorage, cfg.StartTs)
 		if err != nil {
@@ -205,7 +183,7 @@ func verifyCreateChangefeedConfig(
 	}, nil
 }
 
-func getPDClient(ctx context.Context,
+func (h APIV2HelperImpl) getPDClient(ctx context.Context,
 	pdAddrs []string,
 	credential *security.Credential,
 ) (pd.Client, error) {
@@ -237,7 +215,7 @@ func getPDClient(ctx context.Context,
 
 // verifyUpdateChangefeedConfig verifies config to update
 // a changefeed and returns a changefeedInfo
-func verifyUpdateChangefeedConfig(ctx context.Context,
+func (h APIV2HelperImpl) verifyUpdateChangefeedConfig(ctx context.Context,
 	cfg *ChangefeedConfig, oldInfo *model.ChangeFeedInfo,
 	oldUpInfo *model.UpstreamInfo,
 ) (*model.ChangeFeedInfo, *model.UpstreamInfo, error) {
@@ -273,16 +251,13 @@ func verifyUpdateChangefeedConfig(ctx context.Context,
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 	}
-
-	if cfg.ReplicaConfig != nil {
-		newInfo.Config = cfg.ReplicaConfig.ToInternalReplicaConfig()
+	if cfg.Engine != "" {
+		newInfo.Engine = cfg.Engine
 	}
-
 	newUpInfo, err := oldUpInfo.Clone()
 	if err != nil {
 		return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs(err.Error())
 	}
-
 	if cfg.PDAddrs != nil {
 		newUpInfo.PDEndpoints = strings.Join(cfg.PDAddrs, ",")
 	}
@@ -298,7 +273,6 @@ func verifyUpdateChangefeedConfig(ctx context.Context,
 	if cfg.CertAllowedCN != nil {
 		newUpInfo.CertAllowedCN = cfg.CertAllowedCN
 	}
-
 	changefeedInfoChanged := diff.Changed(oldInfo, newInfo)
 	upstreamInfoChanged := diff.Changed(oldUpInfo, newUpInfo)
 
@@ -306,6 +280,5 @@ func verifyUpdateChangefeedConfig(ctx context.Context,
 		return nil, nil, cerror.ErrChangefeedUpdateRefused.
 			GenWithStackByArgs("changefeed config is the same with the old one, do nothing")
 	}
-
 	return newInfo, newUpInfo, nil
 }

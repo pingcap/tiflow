@@ -42,14 +42,42 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 		return
 	}
 	if len(config.PDAddrs) == 0 {
-		up := h.upstreamManager().GetDefaultUpstream()
+		up := h.capture.GetUpstreamManager().GetDefaultUpstream()
 		config.PDAddrs = up.PdEndpoints
 		config.KeyPath = up.SecurityConfig.KeyPath
 		config.CAPath = up.SecurityConfig.CAPath
 		config.CertPath = up.SecurityConfig.CertPath
 	}
+	credential := &security.Credential{
+		CAPath:   config.CAPath,
+		CertPath: config.CertPath,
+		KeyPath:  config.KeyPath,
+	}
+	if len(config.CertAllowedCN) != 0 {
+		credential.CertAllowedCN = config.CertAllowedCN
+	}
+	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	pdClient, err := h.apiV2Helper.getPDClient(timeoutCtx, config.PDAddrs, credential)
+	if err != nil {
+		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
+		return
+	}
+	defer pdClient.Close()
 
-	info, err := h.verifyCreateChangefeedConfig()(ctx, config, h.capture)
+	// verify tables
+
+	kvStorage, err := kv.CreateTiStore(strings.Join(config.PDAddrs, ","), credential)
+	if err != nil {
+		_ = c.Error(cerror.WrapError(cerror.ErrInternalServerError, err))
+		return
+	}
+	// We should not close kvStorage since all kvStorage in cdc is the same one.
+	// defer kvStorage.Close() TODO: ?
+
+	info, err := h.apiV2Helper.verifyCreateChangefeedConfig(ctx, config, pdClient,
+		h.capture.StatusProvider(), h.capture.GetEtcdClient().GetEnsureGCServiceID(),
+		kvStorage)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -68,7 +96,7 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
-	err = h.etcdClient().CreateChangefeedInfo(ctx,
+	err = h.capture.GetEtcdClient().CreateChangefeedInfo(ctx,
 		upstreamInfo,
 		info,
 		model.DefaultChangeFeedID(info.ID))
@@ -91,7 +119,7 @@ func (h *OpenAPIV2) VerifyTable(c *gin.Context) {
 		return
 	}
 	if len(cfg.PDAddrs) == 0 {
-		up := h.upstreamManager().GetDefaultUpstream()
+		up := h.capture.GetUpstreamManager().GetDefaultUpstream()
 		cfg.PDAddrs = up.PdEndpoints
 		cfg.KeyPath = up.SecurityConfig.KeyPath
 		cfg.CAPath = up.SecurityConfig.CAPath
@@ -152,7 +180,7 @@ func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
 		return
 	}
 
-	cfInfo, err := h.statusProvider().GetChangeFeedInfo(ctx, changefeedID)
+	cfInfo, err := h.capture.StatusProvider().GetChangeFeedInfo(ctx, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -163,10 +191,10 @@ func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
 		return
 	}
 	if cfInfo.UpstreamID == 0 {
-		up := h.upstreamManager().GetDefaultUpstream()
+		up := h.capture.GetUpstreamManager().GetDefaultUpstream()
 		cfInfo.UpstreamID = up.ID
 	}
-	upInfo, err := h.etcdClient().GetUpstreamInfo(ctx, cfInfo.UpstreamID, cfInfo.Namespace)
+	upInfo, err := h.capture.GetEtcdClient().GetUpstreamInfo(ctx, cfInfo.UpstreamID, cfInfo.Namespace)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -188,7 +216,7 @@ func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
 		zap.String("changefeedInfo", cfInfo.String()),
 		zap.Any("upstreamInfo", upInfo))
 
-	newCfInfo, newUpInfo, err := verifyUpdateChangefeedConfig(ctx, changefeedConfig, cfInfo, upInfo)
+	newCfInfo, newUpInfo, err := h.apiV2Helper.verifyUpdateChangefeedConfig(ctx, changefeedConfig, cfInfo, upInfo)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -198,14 +226,13 @@ func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
 		zap.String("changefeedInfo", newCfInfo.String()),
 		zap.Any("upstreamInfo", newUpInfo))
 
-	err = h.etcdClient().UpdateChangefeedAndUpstream(ctx, newUpInfo, newCfInfo, changefeedID)
+	err = h.capture.GetEtcdClient().UpdateChangefeedAndUpstream(ctx, newUpInfo, newCfInfo, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
 	}
 
 	c.JSON(http.StatusOK, newCfInfo)
 }
-
 func (h *OpenAPIV2) verifyUpstream(ctx context.Context,
 	changefeedConfig *ChangefeedConfig,
 	cfInfo *model.ChangeFeedInfo,
@@ -214,7 +241,7 @@ func (h *OpenAPIV2) verifyUpstream(ctx context.Context,
 		// check if the upstream cluster id changed
 		timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
-		pd, err := getPDClient(timeoutCtx, changefeedConfig.PDAddrs, &security.Credential{
+		pd, err := h.apiV2Helper.getPDClient(timeoutCtx, changefeedConfig.PDAddrs, &security.Credential{
 			CAPath:        changefeedConfig.CAPath,
 			CertPath:      changefeedConfig.CertPath,
 			KeyPath:       changefeedConfig.KeyPath,
@@ -232,8 +259,6 @@ func (h *OpenAPIV2) verifyUpstream(ctx context.Context,
 	return nil
 }
 
-// GetChangeFeedMetaInfo handles get changefeed's meta info request
-// This API for cdc cli use only.
 func (h *OpenAPIV2) GetChangeFeedMetaInfo(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -243,7 +268,7 @@ func (h *OpenAPIV2) GetChangeFeedMetaInfo(c *gin.Context) {
 			changefeedID.ID))
 		return
 	}
-	info, err := h.statusProvider().GetChangeFeedInfo(ctx, changefeedID)
+	info, err := h.capture.StatusProvider().GetChangeFeedInfo(ctx, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
 		return

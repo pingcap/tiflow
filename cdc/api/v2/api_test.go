@@ -18,9 +18,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/owner"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/stretchr/testify/mock"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
@@ -78,6 +81,53 @@ func newStatusProvider() *mockStatusProvider {
 		Return([]*model.CaptureInfo{{ID: captureID}}, nil)
 
 	return statusProvider
+}
+
+type mockAPIV2Helper struct {
+	APIV2Helper
+
+	verifyCreateFunc func(context.Context, *ChangefeedConfig, pd.Client,
+		owner.StatusProvider, string, tidbkv.Storage) (*model.ChangeFeedInfo, error)
+	verifyUpdateFunc func(context.Context, *ChangefeedConfig, *model.ChangeFeedInfo,
+		*model.UpstreamInfo) (*model.ChangeFeedInfo, *model.UpstreamInfo, error)
+	getPDClientFunc func(context.Context, []string, *security.Credential) (pd.Client, error)
+	//getKvStorageFunc func()
+}
+
+func (m mockAPIV2Helper) verifyCreateChangefeedConfig(
+	ctx context.Context,
+	cfg *ChangefeedConfig,
+	pdClient pd.Client,
+	statusProvider owner.StatusProvider,
+	ensureGCServiceID string,
+	kvStorage tidbkv.Storage,
+) (*model.ChangeFeedInfo, error) {
+	if m.verifyCreateFunc != nil {
+		return m.verifyCreateFunc(ctx, cfg, pdClient, statusProvider, ensureGCServiceID, kvStorage)
+	}
+	return APIV2HelperImpl{}.verifyCreateChangefeedConfig(ctx, cfg, pdClient, statusProvider, ensureGCServiceID, kvStorage)
+}
+
+func (m mockAPIV2Helper) verifyUpdateChangefeedConfig(
+	ctx context.Context,
+	cfg *ChangefeedConfig,
+	oldInfo *model.ChangeFeedInfo,
+	oldUpInfo *model.UpstreamInfo,
+) (*model.ChangeFeedInfo, *model.UpstreamInfo, error) {
+	if m.verifyUpdateFunc != nil {
+		return m.verifyUpdateFunc(ctx, cfg, oldInfo, oldUpInfo)
+	}
+	return APIV2HelperImpl{}.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo)
+}
+
+func (m mockAPIV2Helper) getPDClient(ctx context.Context,
+	pdAddrs []string,
+	credential *security.Credential,
+) (pd.Client, error) {
+	if m.verifyUpdateFunc != nil {
+		return m.getPDClientFunc(ctx, pdAddrs, credential)
+	}
+	return APIV2HelperImpl{}.getPDClient(ctx, pdAddrs, credential)
 }
 
 // MockPDClient mocks pd.Client to facilitate unit testing.

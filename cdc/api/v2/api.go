@@ -17,78 +17,49 @@ import (
 	"context"
 
 	"github.com/gin-gonic/gin"
+	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/api/middleware"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
-	"github.com/pingcap/tiflow/pkg/etcd"
-	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/security"
+	pd "github.com/tikv/pd/client"
 )
 
-type mockStubs struct {
-	testStatusProvider  owner.StatusProvider
-	testEtcdClient      *etcd.CDCEtcdClient
-	testUpstreamManager *upstream.Manager
-	verifyCreateFunc    func(ctx context.Context, cfg *ChangefeedConfig,
-		capture api.CaptureInfoProvider) (*model.ChangeFeedInfo, error)
-	verifyUpdateFunc func(ctx context.Context, cfg *ChangefeedConfig, oldInfo *model.ChangeFeedInfo,
-		oldUpInfo *model.UpstreamInfo) (*model.ChangeFeedInfo, *model.UpstreamInfo, error)
+type APIV2Helper interface {
+	verifyCreateChangefeedConfig(
+		context.Context,
+		*ChangefeedConfig,
+		pd.Client,
+		owner.StatusProvider,
+		string,
+		tidbkv.Storage,
+	) (*model.ChangeFeedInfo, error)
+
+	getPDClient(context.Context, []string, *security.Credential) (pd.Client, error)
+
+	verifyUpdateChangefeedConfig(context.Context, *ChangefeedConfig, *model.ChangeFeedInfo,
+		*model.UpstreamInfo) (*model.ChangeFeedInfo, *model.UpstreamInfo, error)
 }
+
+type APIV2HelperImpl struct{}
 
 // OpenAPIV2 provides CDC v2 APIs
 type OpenAPIV2 struct {
-	capture api.CaptureInfoProvider
-	// stubs, only work for unit tests
-	stubs *mockStubs
+	capture     api.CaptureInfoProvider
+	apiV2Helper APIV2Helper
 }
 
 // NewOpenAPIV2 creates a new OpenAPIV2.
 func NewOpenAPIV2(c *capture.Capture) OpenAPIV2 {
-	return OpenAPIV2{capture: c}
+	return OpenAPIV2{c, &APIV2HelperImpl{}}
 }
 
 // NewOpenAPIV2ForTest creates a new OpenAPIV2.
-func NewOpenAPIV2ForTest(capture api.CaptureInfoProvider, stubs *mockStubs) OpenAPIV2 {
-	return OpenAPIV2{capture, stubs}
-}
-
-func (h *OpenAPIV2) statusProvider() owner.StatusProvider {
-	if h.stubs != nil {
-		return h.stubs.testStatusProvider
-	}
-	return h.capture.StatusProvider()
-}
-
-func (h *OpenAPIV2) etcdClient() *etcd.CDCEtcdClient {
-	if h.stubs != nil {
-		return h.stubs.testEtcdClient
-	}
-	return h.capture.GetEtcdClient()
-}
-
-func (h *OpenAPIV2) upstreamManager() *upstream.Manager {
-	if h.stubs != nil {
-		return h.stubs.testUpstreamManager
-	}
-	return h.capture.GetUpstreamManager()
-}
-
-func (h *OpenAPIV2) verifyUpdateChangefeedConfig() func(ctx context.Context, cfg *ChangefeedConfig,
-	oldInfo *model.ChangeFeedInfo, oldUpInfo *model.UpstreamInfo) (*model.ChangeFeedInfo, *model.UpstreamInfo, error) {
-	if h.stubs != nil {
-		return h.stubs.verifyUpdateFunc
-	}
-	return verifyUpdateChangefeedConfig
-}
-
-func (h *OpenAPIV2) verifyCreateChangefeedConfig() func(ctx context.Context, cfg *ChangefeedConfig,
-	capture api.CaptureInfoProvider) (*model.ChangeFeedInfo, error) {
-	if h.stubs != nil {
-		return h.stubs.verifyCreateFunc
-	}
-	return verifyCreateChangefeedConfig
-}
+//func NewOpenAPIV2ForTest(capture api.CaptureInfoProvider, stubs *mockStubs) OpenAPIV2 {
+//	return OpenAPIV2{capture, stubs}
+//}
 
 // RegisterOpenAPIV2Routes registers routes for OpenAPI
 func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
