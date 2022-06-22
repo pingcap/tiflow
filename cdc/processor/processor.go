@@ -283,7 +283,9 @@ func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableI
 		// The processor needs to make sure all reasonable invariants about the checkpoint-ts and
 		// the resolved-ts are preserved before communicating with the Owner.
 		//
-		// These conditions are similar to those in the legacy implementation of the Owner/Processor.
+		// These conditions are similar to those in the legacy implementation of
+		// the Owner/Processor.
+		// the adding table is considered into the calculation of checkpoint ts and resolved ts
 		if table.CheckpointTs() < localCheckpointTs || localCheckpointTs < globalCheckpointTs {
 			return false
 		}
