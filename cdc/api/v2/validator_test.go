@@ -110,6 +110,7 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	provider.err = cerror.ErrChangeFeedNotExists.GenWithStackByArgs("aaa")
 	cfInfo, err = verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
 	require.Nil(t, err)
+	require.Equal(t, uint64(123), cfInfo.UpstreamID)
 	cfg.TargetTs = 3
 	cfg.StartTs = 4
 	cfInfo, err = verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)

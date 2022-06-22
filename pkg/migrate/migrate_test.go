@@ -189,3 +189,14 @@ func TestMigration(t *testing.T) {
 		require.Equal(t, tc.status, status)
 	}
 }
+
+func TestNoOpMigrator(t *testing.T) {
+	noOp := &NoOpMigrator{}
+	require.True(t, noOp.IsMigrateDone())
+	noOp.MarkMigrateDone()
+	require.Nil(t, noOp.Migrate(context.Background()))
+	ok, err := noOp.ShouldMigrate(context.Background())
+	require.False(t, ok)
+	require.Nil(t, err)
+	require.Nil(t, noOp.WaitMetaVersionMatched(context.Background()))
+}
