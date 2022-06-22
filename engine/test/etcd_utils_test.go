@@ -21,11 +21,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func init() {
+	err := log.InitLogger(&log.Config{Level: "warn"})
+	if err != nil {
+		panic(err)
+	}
+}
+
 func TestPrepareEtcd(t *testing.T) {
 	t.Parallel()
-
-	err := log.InitLogger(&log.Config{})
-	require.Nil(t, err)
 
 	ctx := context.Background()
 	addr, etcd, client, cleanFn := PrepareEtcd(t, "test-etcd")
@@ -37,9 +41,6 @@ func TestPrepareEtcd(t *testing.T) {
 
 func TestPrepareEtcdCluster(t *testing.T) {
 	t.Parallel()
-
-	err := log.InitLogger(&log.Config{})
-	require.Nil(t, err)
 
 	ctx := context.Background()
 	names := []string{"etcd-1", "etcd-2", "etcd-3"}
