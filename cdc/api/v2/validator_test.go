@@ -19,24 +19,4 @@ import (
 
 func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	t.Parallel()
-	//
-	//ctx := context.Background()
-	//info, err := verifyCreateChangefeedConfig(ctx, nil, nil)
-	//ctrl := gomock.NewController(t)
-	//mockOwner := mock_owner.NewMockOwner(ctrl)
-	//mockPDClient := &MockPDClient{}
-	//mockManager := upstream.NewManager4Test(mockPDClient)
-	//cp := capture.NewCaptureWithManager4Test(mockOwner, mockManager)
-	//
-	//router := newRouter(cp)
-	//w := httptest.NewRecorder()
-	//
-	//tc := testCase{url: "/api/v2/tso", method: "POST"}
-	//buf := &bytes.Buffer{}
-	//buf.WriteString("{}")
-	//req, err := http.NewRequestWithContext(context.Background(),
-	//	tc.method, tc.url, buf)
-	//require.Nil(t, err)
-	//router.ServeHTTP(w, req)
-	//require.Equal(t, 200, w.Code)
 }

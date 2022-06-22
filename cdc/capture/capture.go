@@ -131,10 +131,12 @@ func NewCaptureWithManager4Test(o owner.Owner, m *upstream.Manager) *Capture {
 	return res
 }
 
+// GetUpstreamManager is a Getter of capture's upstream manager
 func (c *Capture) GetUpstreamManager() *upstream.Manager {
 	return c.UpstreamManager
 }
 
+// GetEtcdClient is a Getter of capture's Etcd client
 func (c *Capture) GetEtcdClient() *etcd.CDCEtcdClient {
 	return c.EtcdClient
 }

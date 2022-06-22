@@ -15,7 +15,6 @@ package v2
 
 import (
 	"context"
-	"github.com/pingcap/tiflow/cdc/api"
 	"net/url"
 	"strings"
 	"time"
@@ -23,6 +22,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
