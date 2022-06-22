@@ -133,66 +133,115 @@ func GetAllRelayConfigBeforeV620(cli *clientv3.Client) (map[string]map[string]st
 }
 
 // GetRelayConfig returns the source config which the given worker need to pull relay log from etcd, with revision.
-func GetRelayConfig(cli *clientv3.Client, worker string) (*config.SourceConfig, int64, error) {
+func GetRelayConfig(cli *clientv3.Client, worker string) (map[string]*config.SourceConfig, int64, error) {
 	var (
-		source    string
-		newSource string
-		rev       int64
-		retryNum  = defaultGetRelayConfigRetry
+		sources    []string
+		newSources []string
+		rev        int64
+		retryNum   = defaultGetRelayConfigRetry
 	)
 	ctx, cancel := context.WithTimeout(cli.Ctx(), etcdutil.DefaultRequestTimeout)
 	defer cancel()
 
-	getSourceIDFromResp := func(resp *clientv3.GetResponse) (string, int64, error) {
+	getSourceIDsFromResp := func(resp *clientv3.GetResponse) ([]string, int64, error) {
 		if resp.Count == 0 {
-			return "", resp.Header.Revision, nil
+			return nil, resp.Header.Revision, nil
 		}
-		if resp.Count > 1 {
-			return "", resp.Header.Revision, terror.ErrConfigMoreThanOne.Generate(resp.Count, "relay relationship", "worker: "+worker)
+		sourceIDs := make([]string, 0, resp.Count)
+		// get all sourceID
+		for _, kv := range resp.Kvs {
+			keys, err2 := common.UpstreamRelayWorkerKeyAdapter.Decode(string(kv.Key))
+			if err2 != nil {
+				return nil, resp.Header.Revision, err2
+			}
+			if len(keys) != 2 {
+				// should not happened
+				return nil, resp.Header.Revision, terror.ErrDecodeEtcdKeyFail.Generate("illegal key of UpstreamRelayWorkerKeyAdapter")
+			}
+			sourceIDs = append(sourceIDs, keys[1])
 		}
-		keys, err2 := common.UpstreamRelayWorkerKeyAdapter.Decode(string(resp.Kvs[0].Key))
-		if err2 != nil {
-			return "", resp.Header.Revision, err2
-		}
-		if len(keys) != 2 {
-			// should not happened
-			return "", resp.Header.Revision, terror.ErrDecodeEtcdKeyFail.Generate("illegal key of UpstreamRelayWorkerKeyAdapter")
-		}
-		return keys[1], resp.Header.Revision, nil
+		return sourceIDs, resp.Header.Revision, nil
 	}
 
 	resp, err := cli.Get(ctx, common.UpstreamRelayWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix())
 	if err != nil {
 		return nil, 0, terror.ErrHAFailTxnOperation.Delegate(err, "fail to get relay config")
 	}
-	source, rev, err = getSourceIDFromResp(resp)
-	if err != nil || source == "" {
+	sources, rev, err = getSourceIDsFromResp(resp)
+	if err != nil || len(sources) == 0 {
 		return nil, rev, err
 	}
 
+	appendGetUpstreamCfgOps := func(sources []string, ops []clientv3.Op) []clientv3.Op {
+		for _, source := range sources {
+			ops = append(ops, clientv3.OpGet(common.UpstreamConfigKeyAdapter.Encode(source)))
+		}
+		return ops
+	}
+
+	getSourceCfgFromResp := func(txnResp *clientv3.TxnResponse) (map[string]*config.SourceConfig, error) {
+		if txnResp == nil || len(txnResp.Responses) < 2 {
+			return nil, nil
+		}
+		scm := make(map[string]*config.SourceConfig, 0)
+		for i := 1; i < len(txnResp.Responses); i++ {
+			cfgResp := txnResp.Responses[i].GetResponseRange()
+			scs, err1 := sourceCfgFromResp("", (*clientv3.GetResponse)(cfgResp))
+			if err1 != nil {
+				return nil, err1
+			}
+			for src, conf := range scs {
+				scm[src] = conf
+			}
+		}
+		return scm, nil
+	}
+
 	for retryCnt := 1; retryCnt <= retryNum; retryCnt++ {
-		txnResp, _, err2 := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(
-			clientv3.OpGet(common.UpstreamRelayWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix()),
-			clientv3.OpGet(common.UpstreamConfigKeyAdapter.Encode(source))))
+		ops := make([]clientv3.Op, 1, len(sources)+1)
+		ops[0] = clientv3.OpGet(common.UpstreamRelayWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix())
+		ops = appendGetUpstreamCfgOps(sources, ops)
+		txnResp, _, err2 := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(ops...))
 		if err2 != nil {
-			return nil, 0, err
+			return nil, 0, err2
 		}
 
 		var rev2 int64
 		sourceResp := txnResp.Responses[0].GetResponseRange()
-		newSource, rev2, err = getSourceIDFromResp((*clientv3.GetResponse)(sourceResp))
+		newSources, rev2, err = getSourceIDsFromResp((*clientv3.GetResponse)(sourceResp))
 		if err != nil {
 			return nil, 0, err
 		}
-
-		if newSource != source {
+		// 1. newSources and sources are exactly the same, find source configs and return.
+		// 2. newSources and sources are not the same, retry, when last retry is still not the same, for loop end and return error.
+		newSourcesLen := len(newSources)
+		sourcesLen := len(sources)
+		if newSourcesLen == 0 && sourcesLen == 0 {
+			return nil, rev2, nil
+		}
+		hasDiff := false
+		if newSourcesLen == sourcesLen {
+			for _, newSource := range newSources {
+				for _, source := range sources {
+					if newSource != source {
+						hasDiff = true
+						break
+					}
+				}
+				if hasDiff {
+					break
+				}
+			}
+		}
+		// not exactly the same, will retry
+		if newSourcesLen != sourcesLen || hasDiff {
 			log.L().Warn("relay config has been changed, will take a retry",
-				zap.String("old relay source", source),
-				zap.String("new relay source", newSource),
+				zap.Strings("old relay sources", sources),
+				zap.Strings("new relay sources", newSources),
 				zap.Int("retryTime", retryCnt))
 			// if we are about to fail, don't update relay source to save the last source to error
 			if retryCnt != retryNum {
-				source = newSource
+				sources = newSources
 			}
 			select {
 			case <-cli.Ctx().Done():
@@ -201,28 +250,30 @@ func GetRelayConfig(cli *clientv3.Client, worker string) (*config.SourceConfig, 
 				// retryInterval shouldn't be too long because the longer we wait, bound is more
 				// possible to be different from newBound
 			}
-			continue
-		}
-		// newSource == source == "" means this relay source is truly deleted
-		if newSource == "" {
-			return nil, rev2, nil
+			if retryCnt != retryNum {
+				continue
+			}
 		}
 
-		cfgResp := txnResp.Responses[1].GetResponseRange()
-		scm, err3 := sourceCfgFromResp(newSource, (*clientv3.GetResponse)(cfgResp))
+		// after retry and already the same, find source configs and return
+		scm, err3 := getSourceCfgFromResp(txnResp)
 		if err3 != nil {
 			return nil, 0, err3
 		}
-		cfg, ok := scm[newSource]
-		// ok == false means we have got relay source but there is no source config, this shouldn't happen
-		if !ok {
-			// this should not happen.
-			return nil, 0, terror.ErrConfigMissingForBound.Generate(source)
+		configs := make(map[string]*config.SourceConfig, 0)
+		for _, sourceID := range sources {
+			cfg, ok := scm[sourceID]
+			// ok == false means we have got relay source but there is no source config, this shouldn't happen
+			if !ok {
+				// this should not happen.
+				return nil, 0, terror.ErrConfigMissingForBound.Generate(sourceID)
+			}
+			configs[sourceID] = cfg
 		}
 
-		return cfg, rev2, nil
+		return configs, rev2, nil
 	}
-	return nil, 0, terror.ErrWorkerRelayConfigChanging.Generate(worker, source, newSource)
+	return nil, 0, terror.ErrWorkerRelayConfigChanging.Generate(worker, sources, newSources)
 }
 
 // putRelayConfigOp returns PUT etcd operations for the relay relationship of the specified DM-worker.

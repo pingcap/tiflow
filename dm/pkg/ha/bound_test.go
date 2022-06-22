@@ -136,19 +136,20 @@ func (t *testForEtcd) TestGetSourceBoundConfigEtcd(c *C) {
 	defer clearTestInfoOperation(c)
 
 	var (
-		worker = "dm-worker-1"
-		source = "mysql-replica-1"
-		bound  = NewSourceBound(source, worker)
+		worker  = "dm-worker-1"
+		source1 = "mysql-replica-1"
+		source2 = "mysql-replica-2"
+		bound   = NewSourceBound(source1, worker)
 	)
 	cfg, err := config.LoadFromFile(sourceSampleFilePath)
 	c.Assert(err, IsNil)
-	cfg.SourceID = source
+	cfg.SourceID = source1
 	// no source bound and config
-	bound1, cfg1, rev1, err := GetSourceBoundConfig(etcdTestCli, worker, "")
+	bounds1, cfgs1, rev1, err := GetSourceBoundConfig(etcdTestCli, worker, "")
 	c.Assert(err, IsNil)
 	c.Assert(rev1, Greater, int64(0))
-	c.Assert(bound1.IsEmpty(), IsTrue)
-	c.Assert(cfg1, IsNil)
+	c.Assert(bounds1, HasLen, 0)
+	c.Assert(cfgs1, HasLen, 0)
 
 	rev2, err := PutSourceBound(etcdTestCli, bound)
 	c.Assert(err, IsNil)
@@ -157,22 +158,41 @@ func (t *testForEtcd) TestGetSourceBoundConfigEtcd(c *C) {
 	// nolint:dogsled
 	_, _, _, err = GetSourceBoundConfig(etcdTestCli, worker, "")
 	c.Assert(err, ErrorMatches, ".*doesn't have related source config in etcd.*")
-
 	rev3, err := PutSourceCfg(etcdTestCli, cfg)
 	c.Assert(err, IsNil)
 	c.Assert(rev3, Greater, rev2)
 	// get source bound and config
-	bound2, cfg2, rev4, err := GetSourceBoundConfig(etcdTestCli, worker, "")
+	bounds2, cfgs2, rev4, err := GetSourceBoundConfig(etcdTestCli, worker, "")
 	c.Assert(err, IsNil)
 	c.Assert(rev4, Equals, rev3)
 	bound.Revision = rev2
-	c.Assert(bound2, DeepEquals, bound)
-	c.Assert(cfg2, DeepEquals, cfg)
+	c.Assert(bounds2, DeepEquals, map[string]SourceBound{bound.Source: bound})
+	c.Assert(cfgs2, DeepEquals, map[string]*config.SourceConfig{cfg.SourceID: cfg})
 	// get source bound and config with a source
-	bound3, cfg3, rev5, err := GetSourceBoundConfig(etcdTestCli, worker, source)
+	bounds3, cfgs3, rev5, err := GetSourceBoundConfig(etcdTestCli, worker, source1)
 	c.Assert(err, IsNil)
 	c.Assert(rev5, Equals, rev4)
 	bound.Revision = rev2
-	c.Assert(bound3, DeepEquals, bound2)
-	c.Assert(cfg3, DeepEquals, cfg2)
+	c.Assert(bounds3, DeepEquals, bounds2)
+	c.Assert(cfgs3, DeepEquals, cfgs2)
+
+	// put another source and related bound into etcd, check whether can GetSourceBoundConfig return two configs
+	bound2 := NewSourceBound(source2, worker)
+	rev6, err := PutSourceBound(etcdTestCli, bound2)
+	c.Assert(err, IsNil)
+	c.Assert(rev6, Greater, rev5)
+	cfg2 := cfg.Clone()
+	cfg2.SourceID = source2
+	rev7, err := PutSourceCfg(etcdTestCli, cfg2)
+	c.Assert(err, IsNil)
+	c.Assert(rev7, Greater, rev6)
+	// get source bound and config with two sources
+	bounds4, cfgs4, rev8, err := GetSourceBoundConfig(etcdTestCli, worker, "")
+	c.Assert(err, IsNil)
+	c.Assert(rev8, Equals, rev7)
+	bound2.Revision = rev6
+	expectedBounds := map[string]SourceBound{bound.Source: bound, bound2.Source: bound2}
+	expectedCfgs := map[string]*config.SourceConfig{cfg.SourceID: cfg, cfg2.SourceID: cfg2}
+	c.Assert(bounds4, DeepEquals, expectedBounds)
+	c.Assert(cfgs4, DeepEquals, expectedCfgs)
 }

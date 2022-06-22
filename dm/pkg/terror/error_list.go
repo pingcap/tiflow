@@ -1186,7 +1186,7 @@ var (
 	ErrMasterAdvertisePeerURLsNotValid = New(codeMasterAdvertisePeerURLsNotValid, ClassDMMaster, ScopeInternal, LevelHigh, "advertise peer urls %s not valid", "Please check the `advertise-peer-urls` config in master configuration file.")
 	ErrMasterTLSConfigNotValid         = New(codeMasterTLSConfigNotValid, ClassDMMaster, ScopeInternal, LevelHigh, "TLS config not valid", "Please check the `ssl-ca`, `ssl-cert` and `ssl-key` config in master configuration file.")
 
-	ErrMasterBoundChanging = New(codeMasterBoundChanging, ClassDMMaster, ScopeInternal, LevelLow, "source bound is changed too frequently, last old bound %s:, new bound %s", "Please try again later")
+	ErrMasterBoundChanging = New(codeMasterBoundChanging, ClassDMMaster, ScopeInternal, LevelLow, "source bound is changed too frequently, last old bound %v:, new bound %v", "Please try again later")
 
 	ErrMasterFailToImportFromV10x = New(codeMasterFailToImportFromV10x, ClassDMMaster, ScopeInternal, LevelHigh, "fail to import DM cluster from v1.0.x", "Please confirm that you have not violated any restrictions in the upgrade documentation.")
 
@@ -1277,7 +1277,7 @@ var (
 	ErrWorkerDDLLockOpNotFound              = New(codeWorkerDDLLockOpNotFound, ClassDMWorker, ScopeInternal, LevelHigh, "missing shard DDL lock operation for shard DDL info (%s)", "")
 	ErrWorkerTLSConfigNotValid              = New(codeWorkerTLSConfigNotValid, ClassDMWorker, ScopeInternal, LevelHigh, "TLS config not valid", "Please check the `ssl-ca`, `ssl-cert` and `ssl-key` config in worker configuration file.")
 	ErrWorkerFailConnectMaster              = New(codeWorkerFailConnectMaster, ClassDMWorker, ScopeInternal, LevelHigh, "cannot join with master endpoints: %v, error: %v", "Please check network connection of worker and check worker name is unique.")
-	ErrWorkerRelayConfigChanging            = New(codeWorkerRelayConfigChanging, ClassDMWorker, ScopeInternal, LevelLow, "relay config of worker %s is changed too frequently, last relay source %s:, new relay source %s", "Please try again later")
+	ErrWorkerRelayConfigChanging            = New(codeWorkerRelayConfigChanging, ClassDMWorker, ScopeInternal, LevelLow, "relay config of worker %s is changed too frequently, last relay source %v:, new relay source %v", "Please try again later")
 	ErrWorkerRouteTableDupMatch             = New(codeWorkerRouteTableDupMatch, ClassDMWorker, ScopeInternal, LevelHigh, "table %s.%s matches more than one rule", "please check the route rules in the task config")
 	ErrWorkerValidatorNotPaused             = New(codeWorkerValidatorNotPaused, ClassDMWorker, ScopeInternal, LevelHigh, "current validator stage is %s but not paused, invalid", "")
 

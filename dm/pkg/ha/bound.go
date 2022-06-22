@@ -202,46 +202,86 @@ func GetLastSourceBounds(cli *clientv3.Client) (map[string]SourceBound, int64, e
 // if source bound is empty, will return an empty sourceBound and an empty source config
 // if source bound is not empty but sourceConfig is empty, will return an error
 // if the source bound is different for over retryNum times, will return an error.
-func GetSourceBoundConfig(cli *clientv3.Client, worker, source string) (SourceBound, *config.SourceConfig, int64, error) {
+func GetSourceBoundConfig(cli *clientv3.Client, worker, source string) (map[string]SourceBound, map[string]*config.SourceConfig, int64, error) {
 	var (
-		bound    SourceBound
-		newBound SourceBound
-		cfg      *config.SourceConfig
-		ok       bool
-		retryNum = defaultGetSourceBoundConfigRetry
-		sbm      map[string]SourceBound
+		bounds    map[string]SourceBound
+		newBounds map[string]SourceBound
+		configs   map[string]*config.SourceConfig
+		ok        bool
+		retryNum  = defaultGetSourceBoundConfigRetry
 	)
 	wbm, rev, err := GetSourceBound(cli, worker, source)
 	if err != nil {
-		return bound, cfg, 0, err
+		return bounds, configs, 0, err
 	}
-	if sbm, ok = wbm[worker]; !ok {
-		return bound, cfg, rev, nil
+	if bounds, ok = wbm[worker]; !ok {
+		return bounds, configs, rev, nil
 	}
-	bound = GetSourceBoundFromMap(sbm)
+
+	appendGetUpstreamCfgOps := func(sourceBounds map[string]SourceBound, ops []clientv3.Op) []clientv3.Op {
+		for src := range sourceBounds {
+			ops = append(ops, clientv3.OpGet(common.UpstreamConfigKeyAdapter.Encode(src)))
+		}
+		return ops
+	}
+
+	getSourceCfgFromResp := func(txnResp *clientv3.TxnResponse) (map[string]*config.SourceConfig, error) {
+		if txnResp == nil || len(txnResp.Responses) < 2 {
+			return nil, nil
+		}
+		scm := make(map[string]*config.SourceConfig, 0)
+		for i := 1; i < len(txnResp.Responses); i++ {
+			cfgResp := txnResp.Responses[i].GetResponseRange()
+			scs, err1 := sourceCfgFromResp("", (*clientv3.GetResponse)(cfgResp))
+			if err1 != nil {
+				return nil, err1
+			}
+			for src, conf := range scs {
+				scm[src] = conf
+			}
+		}
+		return scm, nil
+	}
 
 	for retryCnt := 1; retryCnt <= retryNum; retryCnt++ {
-		txnResp, rev2, err2 := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(clientv3.OpGet(common.UpstreamBoundWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix()),
-			clientv3.OpGet(common.UpstreamConfigKeyAdapter.Encode(bound.Source))))
+		ops := make([]clientv3.Op, 1, len(bounds)+1)
+		ops[0] = clientv3.OpGet(common.UpstreamBoundWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix())
+		ops = appendGetUpstreamCfgOps(bounds, ops)
+		txnResp, rev2, err2 := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(ops...))
 		if err2 != nil {
-			return bound, cfg, 0, err2
+			return bounds, configs, 0, err2
 		}
 
 		boundResp := txnResp.Responses[0].GetResponseRange()
 		sbm2, err2 := sourceBoundFromResp((*clientv3.GetResponse)(boundResp))
 		if err2 != nil {
-			return bound, cfg, 0, err2
+			return bounds, configs, 0, err2
 		}
+		newBounds = sbm2[worker]
 
-		newBound, ok = sbm2[worker][bound.Source]
-		// when ok is false, newBound will be empty which means bound for this worker has been deleted in this turn
-		// if bound is not empty, we should wait for another turn to make sure bound is really deleted.
-		if newBound != bound {
-			log.L().Warn("source bound has been changed, will take a retry", zap.Stringer("oldBound", bound),
-				zap.Stringer("newBound", newBound), zap.Int("retryTime", retryCnt))
+		// 1. newBounds and bounds are exactly the same, find source configs and return.
+		// 2. newBounds and bounds are not the same, retry, when last retry is still not the same, for loop end and return error.
+		newBoundsLen := len(newBounds)
+		boundsLen := len(bounds)
+		if newBoundsLen == 0 && boundsLen == 0 {
+			return bounds, configs, rev2, nil
+		}
+		hasDiff := false
+		if newBoundsLen == boundsLen {
+			for sourceID := range newBounds {
+				if _, ok := bounds[sourceID]; !ok {
+					hasDiff = true
+					break
+				}
+			}
+		}
+		// not exactly the same, will retry
+		if newBoundsLen != boundsLen || hasDiff {
+			log.L().Warn("source bound has been changed, will take a retry", zap.String("oldBounds", fmt.Sprintf("%v", bounds)),
+				zap.String("newBounds", fmt.Sprintf("%v", newBounds)), zap.Int("retryTime", retryCnt))
 			// if we are about to fail, don't update bound to save the last bound to error
 			if retryCnt != retryNum {
-				bound = newBound
+				bounds = newBounds
 			}
 			select {
 			case <-cli.Ctx().Done():
@@ -252,27 +292,26 @@ func GetSourceBoundConfig(cli *clientv3.Client, worker, source string) (SourceBo
 			}
 			continue
 		}
-		// ok == false and newBound == bound means this bound is truly deleted, we don't need source config anymore
-		if !ok {
-			return bound, cfg, rev2, nil
-		}
 
-		cfgResp := txnResp.Responses[1].GetResponseRange()
-		scm, err2 := sourceCfgFromResp(bound.Source, (*clientv3.GetResponse)(cfgResp))
-		if err2 != nil {
-			return bound, cfg, 0, err2
+		// after retry and already the same, find source configs and return
+		scm, err3 := getSourceCfgFromResp(txnResp)
+		if err3 != nil {
+			return nil, nil, 0, err3
 		}
-		cfg, ok = scm[bound.Source]
-		// ok == false means we have got source bound but there is no source config, this shouldn't happen
-		if !ok {
-			// this should not happen.
-			return bound, cfg, 0, terror.ErrConfigMissingForBound.Generate(bound)
+		configs = make(map[string]*config.SourceConfig, 0)
+		for sourceID := range bounds {
+			cfg, ok := scm[sourceID]
+			// ok == false means we have got source bound but there is no source config, this shouldn't happen
+			if !ok {
+				// this should not happen.
+				return bounds, configs, 0, terror.ErrConfigMissingForBound.Generate(sourceID)
+			}
+			configs[sourceID] = cfg
 		}
-
-		return bound, cfg, rev2, nil
+		return bounds, configs, rev2, nil
 	}
 
-	return bound, cfg, 0, terror.ErrMasterBoundChanging.Generate(bound, newBound)
+	return bounds, configs, 0, terror.ErrMasterBoundChanging.Generate(bounds, newBounds)
 }
 
 // WatchSourceBound watches PUT & DELETE operations for the bound relationship of the specified DM-worker.

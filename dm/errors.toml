@@ -2405,7 +2405,7 @@ workaround = "Please check the `ssl-ca`, `ssl-cert` and `ssl-key` config in mast
 tags = ["internal", "high"]
 
 [error.DM-dm-master-38052]
-message = "source bound is changed too frequently, last old bound %s:, new bound %s"
+message = "source bound is changed too frequently, last old bound %v:, new bound %v"
 description = ""
 workaround = "Please try again later"
 tags = ["internal", "low"]
@@ -2915,7 +2915,7 @@ workaround = ""
 tags = ["internal", "high"]
 
 [error.DM-dm-worker-40079]
-message = "relay config of worker %s is changed too frequently, last relay source %s:, new relay source %s"
+message = "relay config of worker %s is changed too frequently, last relay source %v:, new relay source %v"
 description = ""
 workaround = "Please try again later"
 tags = ["internal", "low"]
