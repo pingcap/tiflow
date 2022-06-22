@@ -441,8 +441,8 @@ func (s *Server) doClose() {
 	s.wg.Wait()
 
 	// stop worker and wait for return(we already lock the whole Sever, so no need use lock to get source worker)
-	if works := s.getSourceWorkers(false); works != nil {
-		for _, w := range works {
+	if workers := s.getSourceWorkers(false); workers != nil {
+		for _, w := range workers {
 			w.Stop(true)
 		}
 	}
@@ -532,7 +532,8 @@ func (s *Server) setSourceStatus(source string, err error, needLock bool) {
 	}
 }
 
-// we will check sourceID with w.cfg.SourceID, sourceID can't be empty.
+// if sourceID is set to "", worker will be closed directly
+// if sourceID is not "", we will check sourceID with w.cfg.SourceID.
 func (s *Server) stopSourceWorker(sourceID string, needLock, graceful bool) error {
 	if needLock {
 		s.Lock()
@@ -738,7 +739,7 @@ func (s *Server) enableRelay(sourceCfg *config.SourceConfig, needLock bool) erro
 	return nil
 }
 
-// disableRelay stops the relay that are operated to this worker.
+// disableRelay stops the relay that are operated to this worker and removes idle worker.
 func (s *Server) disableRelay(source string) error {
 	s.Lock()
 	defer s.Unlock()
