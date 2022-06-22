@@ -425,6 +425,7 @@ def unsafe_apis():
     url = BASE_URL1_V2+"/unsafe/metadata"
     resp = rq.get(url, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.ok
+    print("status code", resp.status_code)
     print("pass test: show metadata")
 
     # service_gc_safepoint 1
@@ -439,12 +440,13 @@ def unsafe_apis():
     data = json.dumps(data)
     headers = {"Content-Type": "application/json"}
     resp = rq.delete(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    print("status code", resp.status_code)
     assert resp.status_code == 204
 
     data = json.dumps({})
-    data = json.dumps(data)
     headers = {"Content-Type": "application/json"}
     resp = rq.delete(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    print("status code", resp.status_code)
     assert resp.status_code == 204
     print("pass test: delete service_gc_safepoint")
 
@@ -453,6 +455,7 @@ def unsafe_apis():
     url = BASE_URL1_V2+"/unsafe/resolve_lock"
     headers = {"Content-Type": "application/json"}
     resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    print("status code", resp.status_code)
     assert resp.status_code != rq.codes.not_found
     print("pass test: resolve lock")
 
