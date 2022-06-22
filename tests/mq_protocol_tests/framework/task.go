@@ -48,7 +48,6 @@ type CDCProfile struct {
 	SinkURI        string
 	ConfigFile     string
 	SchemaRegistry string
-	Opts           map[string]string
 }
 
 // CreateDB creates a database in both the upstream and the downstream
@@ -102,14 +101,6 @@ func (p *CDCProfile) String() string {
 
 	if p.SchemaRegistry != "" {
 		builder.WriteString(fmt.Sprintf("--schema-registry=%s ", strconv.Quote(p.SchemaRegistry)))
-	}
-
-	if p.Opts == nil || len(p.Opts) == 0 {
-		return builder.String()
-	}
-
-	for k, v := range p.Opts {
-		builder.WriteString("--opts=\"" + k + "=" + v + "\" ")
 	}
 
 	builder.WriteString(" --log-level debug")
