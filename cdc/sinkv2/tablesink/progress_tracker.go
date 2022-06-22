@@ -51,6 +51,7 @@ func newProgressTracker() *progressTracker {
 func (r *progressTracker) add(commitTs uint64, resolvedTs model.ResolvedTs) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
+	// TODO: use string to avoid the overflow.
 	key := commitTs + resolvedTs.BatchID
 	count, exists := r.pendingCommitTs.Get(commitTs + resolvedTs.BatchID)
 	if exists {
@@ -71,6 +72,7 @@ func (r *progressTracker) remove(commitTs uint64, resolvedTs model.ResolvedTs) {
 	if !iterator.First() {
 		panic("pendingCommitTs is empty")
 	}
+	// TODO: use string to avoid the overflow.
 	key := commitTs + resolvedTs.BatchID
 	// Is the smallest commitTs?
 	if iterator.Key() == key {
