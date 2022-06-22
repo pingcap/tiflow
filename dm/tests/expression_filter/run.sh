@@ -8,6 +8,8 @@ WORK_DIR=$TEST_DIR/$TEST_NAME
 API_VERSION="v1alpha1"
 
 function complex_behaviour() {
+	cleanup_data expr_filter
+
 	run_dm_master $WORK_DIR/master $MASTER_PORT1 $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT1
 
@@ -16,6 +18,18 @@ function complex_behaviour() {
 	dmctl_operate_source create $cur/conf/source1.yaml $SOURCE_ID1
 
 	run_sql_file $cur/data/db1.prepare2.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+
+	# test no permission
+	chmod -w $WORK_DIR/worker1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $cur/conf/dm-task2.yaml"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"dumpling runs with error" 1 \
+		"permission denied" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task test"
+	chmod +w $WORK_DIR/worker1
 
 	dmctl_start_task_standalone $cur/conf/dm-task2.yaml
 
@@ -53,8 +67,13 @@ function complex_behaviour() {
 	update_num=$(grep -o '"number of filtered update"=[0-9]\+' $WORK_DIR/worker1/log/dm-worker.log | grep -o '[0-9]\+' | awk '{n += $1}; END{print n}')
 	[ $update_num -eq 3 ]
 
-	cleanup_data expr_filter
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task test"
+
+	ls $WORK_DIR/worker1/schema-tracker* && exit 1 || echo "schema tracker path has been cleaned"
+
 	cleanup_process $*
+	cleanup_data expr_filter
 }
 
 function run() {

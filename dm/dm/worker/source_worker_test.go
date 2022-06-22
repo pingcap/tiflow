@@ -18,11 +18,13 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
+	"github.com/stretchr/testify/require"
 	"github.com/tikv/pd/pkg/tempurl"
 	"go.etcd.io/etcd/clientv3"
 
@@ -111,6 +113,11 @@ func (t *testServer) testWorker(c *C) {
 
 	err = w.OperateSubTask("testSubTask", pb.TaskOp_Stop)
 	c.Assert(err, ErrorMatches, ".*worker already closed.*")
+}
+
+func mockShowMasterStatusNoRows(mockDB sqlmock.Sqlmock) {
+	rows := mockDB.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"})
+	mockDB.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
 }
 
 type testServer2 struct{}
@@ -625,4 +632,28 @@ func (t *testWorkerEtcdCompact) TestWatchRelayStageEtcdCompact(c *C) {
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		return w.relayHolder.Stage() == pb.Stage_Stopped
 	}), IsTrue)
+}
+
+func TestMasterBinlogOff(t *testing.T) {
+	ctx := context.Background()
+	cfg, err := config.LoadFromFile(sourceSampleFile)
+	require.NoError(t, err)
+	cfg.From.Password = "no need to connect"
+
+	w, err := NewSourceWorker(cfg, nil, "", "")
+	require.NoError(t, err)
+	w.closed.Store(false)
+
+	// start task
+	var subtaskCfg config.SubTaskConfig
+	require.NoError(t, subtaskCfg.DecodeFile(subtaskSampleFile, true))
+	require.NoError(t, w.StartSubTask(&subtaskCfg, pb.Stage_Running, true))
+
+	_, mockDB, err := conn.InitMockDBFull()
+	require.NoError(t, err)
+	mockShowMasterStatusNoRows(mockDB)
+	status, _, err := w.QueryStatus(ctx, subtaskCfg.Name)
+	require.NoError(t, err)
+	require.Len(t, status, 1)
+	require.Equal(t, subtaskCfg.Name, status[0].Name)
 }

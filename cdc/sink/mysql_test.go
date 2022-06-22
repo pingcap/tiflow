@@ -49,7 +49,7 @@ func newMySQLSink4Test(ctx context.Context, t *testing.T) *mysqlSink {
 	return &mysqlSink{
 		txnCache:   common.NewUnresolvedTxnCache(),
 		filter:     f,
-		statistics: NewStatistics(ctx, "test", make(map[string]string)),
+		statistics: NewStatistics(ctx, "test"),
 		params:     params,
 	}
 }
@@ -58,41 +58,68 @@ func TestPrepareDML(t *testing.T) {
 	testCases := []struct {
 		input    []*model.RowChangedEvent
 		expected *preparedDMLs
-	}{{
-		input:    []*model.RowChangedEvent{},
-		expected: &preparedDMLs{sqls: []string{}, values: [][]interface{}{}},
-	}, {
-		input: []*model.RowChangedEvent{
-			{
-				StartTs:  418658114257813514,
-				CommitTs: 418658114257813515,
-				Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-				PreColumns: []*model.Column{nil, {
-					Name:  "a1",
-					Type:  mysql.TypeLong,
-					Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
-					Value: 1,
-				}, {
-					Name:  "a3",
-					Type:  mysql.TypeLong,
-					Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
-					Value: 1,
-				}},
-				IndexColumns: [][]int{{1, 2}},
+	}{
+		{
+			input:    []*model.RowChangedEvent{},
+			expected: &preparedDMLs{sqls: []string{}, values: [][]interface{}{}},
+		}, {
+			input: []*model.RowChangedEvent{
+				{
+					StartTs:  418658114257813514,
+					CommitTs: 418658114257813515,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					PreColumns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Value: 1,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Value: 1,
+					}},
+					IndexColumns: [][]int{{1, 2}},
+				},
+			},
+			expected: &preparedDMLs{
+				sqls:     []string{"DELETE FROM `common_1`.`uk_without_pk` WHERE `a1` = ? AND `a3` = ? LIMIT 1;"},
+				values:   [][]interface{}{{1, 1}},
+				rowCount: 1,
+			},
+		}, {
+			input: []*model.RowChangedEvent{
+				{
+					StartTs:  418658114257813516,
+					CommitTs: 418658114257813517,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					Columns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Value: 2,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Value: 2,
+					}},
+					IndexColumns: [][]int{{1, 2}},
+				},
+			},
+			expected: &preparedDMLs{
+				sqls:     []string{"REPLACE INTO `common_1`.`uk_without_pk`(`a1`,`a3`) VALUES (?,?);"},
+				values:   [][]interface{}{{2, 2}},
+				rowCount: 1,
 			},
 		},
-		expected: &preparedDMLs{
-			sqls:     []string{"DELETE FROM `common_1`.`uk_without_pk` WHERE `a1` = ? AND `a3` = ? LIMIT 1;"},
-			values:   [][]interface{}{{1, 1}},
-			rowCount: 1,
-		},
-	}}
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ms := newMySQLSink4Test(ctx, t)
-	for i, tc := range testCases {
+	for _, tc := range testCases {
 		dmls := ms.prepareDMLs(tc.input, 0, 0)
-		require.Equal(t, tc.expected, dmls, tc.expected, fmt.Sprintf("%d", i))
+		require.Equal(t, tc.expected, dmls)
 	}
 }
 
@@ -1056,6 +1083,9 @@ func TestNewMySQLSink(t *testing.T) {
 	require.Nil(t, err)
 	err = sink.Close(ctx)
 	require.Nil(t, err)
+	// Test idempotency of `Close` interface
+	err = sink.Close(ctx)
+	require.Nil(t, err)
 }
 
 func TestMySQLSinkClose(t *testing.T) {
@@ -1182,4 +1212,33 @@ func TestMySQLSinkFlushResovledTs(t *testing.T) {
 	require.Equal(t, uint64(5), sink.getTableCheckpointTs(model.TableID(2)))
 	err = sink.Close(ctx)
 	require.Nil(t, err)
+}
+
+func TestCleanTableResource(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+	tblID := model.TableID(1)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig())
+	require.Nil(t, err)
+	s := &mysqlSink{
+		txnCache:   common.NewUnresolvedTxnCache(),
+		filter:     f,
+		statistics: NewStatistics(ctx, "db"),
+	}
+	require.Nil(t, s.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
+		Table: &model.TableName{TableID: tblID, Schema: "test", Table: "t1"},
+	}))
+	s.tableCheckpointTs.Store(tblID, uint64(1))
+	s.tableMaxResolvedTs.Store(tblID, uint64(2))
+	require.Nil(t, s.Init(tblID))
+	m := &sync.Map{}
+	m.Store(tblID, uint64(10))
+	_, ret := s.txnCache.Resolved(m)
+	require.True(t, len(ret) == 0)
+	_, ok := s.tableCheckpointTs.Load(tblID)
+	require.False(t, ok)
+	_, ok = s.tableMaxResolvedTs.Load(tblID)
+	require.False(t, ok)
 }

@@ -16,7 +16,9 @@ package etcd
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"net/url"
+	"os"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -26,28 +28,15 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
-<<<<<<< HEAD
-=======
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/clientv3"
->>>>>>> fc3b5ad53 (etcd (ticdc): fix a data race in unit test (#4551))
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
 	"go.etcd.io/etcd/pkg/logutil"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
-<<<<<<< HEAD
-
-	"github.com/pingcap/check"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
-	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/embed"
-=======
->>>>>>> fc3b5ad53 (etcd (ticdc): fix a data race in unit test (#4551))
 )
-
-func Test(t *testing.T) { check.TestingT(t) }
 
 type Captures []*model.CaptureInfo
 
@@ -55,7 +44,8 @@ func (c Captures) Len() int           { return len(c) }
 func (c Captures) Less(i, j int) bool { return c[i].ID < c[j].ID }
 func (c Captures) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
 
-type etcdSuite struct {
+type etcdTester struct {
+	dir       string
 	etcd      *embed.Etcd
 	clientURL *url.URL
 	client    CDCEtcdClient
@@ -64,13 +54,12 @@ type etcdSuite struct {
 	errg      *errgroup.Group
 }
 
-var _ = check.Suite(&etcdSuite{})
-
-func (s *etcdSuite) SetUpTest(c *check.C) {
-	dir := c.MkDir()
+func (s *etcdTester) setUpTest(t *testing.T) {
 	var err error
-	s.clientURL, s.etcd, err = SetupEmbedEtcd(dir)
-	c.Assert(err, check.IsNil)
+	s.dir, err = ioutil.TempDir("", "etcd-testing")
+	require.Nil(t, err)
+	s.clientURL, s.etcd, err = SetupEmbedEtcd(s.dir)
+	require.Nil(t, err)
 	logConfig := logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 	client, err := clientv3.New(clientv3.Config{
@@ -78,36 +67,38 @@ func (s *etcdSuite) SetUpTest(c *check.C) {
 		DialTimeout: 3 * time.Second,
 		LogConfig:   &logConfig,
 	})
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	s.client = NewCDCEtcdClient(context.TODO(), client)
 	s.ctx, s.cancel = context.WithCancel(context.Background())
-	s.errg = util.HandleErrWithErrGroup(s.ctx, s.etcd.Err(), func(e error) { c.Log(e) })
+	s.errg = util.HandleErrWithErrGroup(s.ctx, s.etcd.Err(), func(e error) { t.Log(e) })
 }
 
-func (s *etcdSuite) TearDownTest(c *check.C) {
+func (s *etcdTester) tearDownTest(t *testing.T) {
 	s.etcd.Close()
 	s.cancel()
 logEtcdError:
 	for {
 		select {
 		case err := <-s.etcd.Err():
-			c.Logf("etcd server error: %v", err)
+			t.Logf("etcd server error: %v", err)
 		default:
 			break logEtcdError
 		}
 	}
 	s.client.Close() //nolint:errcheck
+	os.RemoveAll(s.dir)
 }
 
-func (s *etcdSuite) TestEmbedEtcd(c *check.C) {
-	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
+func TestEmbedEtcd(t *testing.T) {
+	s := &etcdTester{}
+	s.setUpTest(t)
+	defer s.tearDownTest(t)
 	curl := s.clientURL.String()
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{curl},
 		DialTimeout: 3 * time.Second,
 	})
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	defer cli.Close()
 
 	var (
@@ -115,19 +106,17 @@ func (s *etcdSuite) TestEmbedEtcd(c *check.C) {
 		val = "test-val"
 	)
 	_, err = cli.Put(context.Background(), key, val)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	resp, err2 := cli.Get(context.Background(), key)
-	c.Assert(err2, check.IsNil)
-	c.Assert(resp.Kvs, check.HasLen, 1)
-	c.Assert(resp.Kvs[0].Value, check.DeepEquals, []byte(val))
-	s.TearDownTest(c)
+	require.NoError(t, err2)
+	require.Len(t, resp.Kvs, 1)
+	require.Equal(t, resp.Kvs[0].Value, []byte(val))
 }
 
-func (s *etcdSuite) TestGetChangeFeeds(c *check.C) {
-	defer testleak.AfterTest(c)()
-	// `TearDownTest` must be called before leak test, so we take advantage of
-	// the stack feature of defer. Ditto for all tests with etcdSuite.
-	defer s.TearDownTest(c)
+func TestGetChangeFeeds(t *testing.T) {
+	s := &etcdTester{}
+	s.setUpTest(t)
+	defer s.tearDownTest(t)
 	testCases := []struct {
 		ids     []string
 		details []string
@@ -139,32 +128,34 @@ func (s *etcdSuite) TestGetChangeFeeds(c *check.C) {
 	for _, tc := range testCases {
 		for i := 0; i < len(tc.ids); i++ {
 			_, err := s.client.Client.Put(context.Background(), GetEtcdKeyChangeFeedInfo(tc.ids[i]), tc.details[i])
-			c.Assert(err, check.IsNil)
+			require.NoError(t, err)
 		}
 		_, result, err := s.client.GetChangeFeeds(context.Background())
-		c.Assert(err, check.IsNil)
-		c.Assert(len(result), check.Equals, len(tc.ids))
+		require.NoError(t, err)
+		require.NoError(t, err)
+		require.Equal(t, len(result), len(tc.ids))
 		for i := 0; i < len(tc.ids); i++ {
 			rawKv, ok := result[tc.ids[i]]
-			c.Assert(ok, check.IsTrue)
-			c.Assert(string(rawKv.Value), check.Equals, tc.details[i])
+			require.True(t, ok)
+			require.Equal(t, string(rawKv.Value), tc.details[i])
 		}
 	}
 	_, result, err := s.client.GetChangeFeeds(context.Background())
-	c.Assert(err, check.IsNil)
-	c.Assert(len(result), check.Equals, 3)
+	require.NoError(t, err)
+	require.Equal(t, len(result), 3)
 
 	err = s.client.ClearAllCDCInfo(context.Background())
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	_, result, err = s.client.GetChangeFeeds(context.Background())
-	c.Assert(err, check.IsNil)
-	c.Assert(len(result), check.Equals, 0)
+	require.NoError(t, err)
+	require.Equal(t, len(result), 0)
 }
 
-func (s *etcdSuite) TestGetPutTaskStatus(c *check.C) {
-	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
+func TestGetPutTaskStatus(t *testing.T) {
+	s := &etcdTester{}
+	s.setUpTest(t)
+	defer s.tearDownTest(t)
 	ctx := context.Background()
 	info := &model.TaskStatus{
 		Tables: map[model.TableID]*model.TableReplicaInfo{
@@ -176,21 +167,22 @@ func (s *etcdSuite) TestGetPutTaskStatus(c *check.C) {
 	captureID := "captureid"
 
 	err := s.client.PutTaskStatus(ctx, feedID, captureID, info)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	_, getInfo, err := s.client.GetTaskStatus(ctx, feedID, captureID)
-	c.Assert(err, check.IsNil)
-	c.Assert(getInfo, check.DeepEquals, info)
+	require.NoError(t, err)
+	require.Equal(t, getInfo, info)
 
 	err = s.client.ClearAllCDCInfo(context.Background())
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	_, _, err = s.client.GetTaskStatus(ctx, feedID, captureID)
-	c.Assert(cerror.ErrTaskStatusNotExists.Equal(err), check.IsTrue)
+	require.True(t, cerror.ErrTaskStatusNotExists.Equal(err))
 }
 
-func (s *etcdSuite) TestGetPutTaskPosition(c *check.C) {
-	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
+func TestGetPutTaskPosition(t *testing.T) {
+	s := &etcdTester{}
+	s.setUpTest(t)
+	defer s.tearDownTest(t)
 	ctx := context.Background()
 	info := &model.TaskPosition{
 		ResolvedTs:   99,
@@ -201,31 +193,32 @@ func (s *etcdSuite) TestGetPutTaskPosition(c *check.C) {
 	captureID := "captureid"
 
 	updated, err := s.client.PutTaskPositionOnChange(ctx, feedID, captureID, info)
-	c.Assert(err, check.IsNil)
-	c.Assert(updated, check.IsTrue)
+	require.NoError(t, err)
+	require.True(t, updated)
 
 	updated, err = s.client.PutTaskPositionOnChange(ctx, feedID, captureID, info)
-	c.Assert(err, check.IsNil)
-	c.Assert(updated, check.IsFalse)
+	require.NoError(t, err)
+	require.False(t, updated)
 
 	info.CheckPointTs = 99
 	updated, err = s.client.PutTaskPositionOnChange(ctx, feedID, captureID, info)
-	c.Assert(err, check.IsNil)
-	c.Assert(updated, check.IsTrue)
+	require.NoError(t, err)
+	require.True(t, updated)
 
 	_, getInfo, err := s.client.GetTaskPosition(ctx, feedID, captureID)
-	c.Assert(err, check.IsNil)
-	c.Assert(getInfo, check.DeepEquals, info)
+	require.NoError(t, err)
+	require.Equal(t, getInfo, info)
 
 	err = s.client.ClearAllCDCInfo(ctx)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	_, _, err = s.client.GetTaskStatus(ctx, feedID, captureID)
-	c.Assert(cerror.ErrTaskStatusNotExists.Equal(err), check.IsTrue)
+	require.True(t, cerror.ErrTaskStatusNotExists.Equal(err))
 }
 
-func (s *etcdSuite) TestOpChangeFeedDetail(c *check.C) {
-	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
+func TestOpChangeFeedDetail(t *testing.T) {
+	s := &etcdTester{}
+	s.setUpTest(t)
+	defer s.tearDownTest(t)
 	ctx := context.Background()
 	detail := &model.ChangeFeedInfo{
 		SinkURI: "root@tcp(127.0.0.1:3306)/mysql",
@@ -234,23 +227,24 @@ func (s *etcdSuite) TestOpChangeFeedDetail(c *check.C) {
 	cfID := "test-op-cf"
 
 	err := s.client.SaveChangeFeedInfo(ctx, detail, cfID)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	d, err := s.client.GetChangeFeedInfo(ctx, cfID)
-	c.Assert(err, check.IsNil)
-	c.Assert(d.SinkURI, check.Equals, detail.SinkURI)
-	c.Assert(d.SortDir, check.Equals, detail.SortDir)
+	require.NoError(t, err)
+	require.Equal(t, d.SinkURI, detail.SinkURI)
+	require.Equal(t, d.SortDir, detail.SortDir)
 
 	err = s.client.DeleteChangeFeedInfo(ctx, cfID)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	_, err = s.client.GetChangeFeedInfo(ctx, cfID)
-	c.Assert(cerror.ErrChangeFeedNotExists.Equal(err), check.IsTrue)
+	require.True(t, cerror.ErrChangeFeedNotExists.Equal(err))
 }
 
-func (s etcdSuite) TestGetAllChangeFeedInfo(c *check.C) {
-	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
+func TestGetAllChangeFeedInfo(t *testing.T) {
+	s := &etcdTester{}
+	s.setUpTest(t)
+	defer s.tearDownTest(t)
 	ctx := context.Background()
 	infos := []struct {
 		id   string
@@ -273,23 +267,25 @@ func (s etcdSuite) TestGetAllChangeFeedInfo(c *check.C) {
 
 	for _, item := range infos {
 		err := s.client.SaveChangeFeedInfo(ctx, item.info, item.id)
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 	}
 
 	allChangFeedInfo, err := s.client.GetAllChangeFeedInfo(ctx)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	for _, item := range infos {
 		obtained, found := allChangFeedInfo[item.id]
-		c.Assert(found, check.IsTrue)
-		c.Assert(item.info.SinkURI, check.Equals, obtained.SinkURI)
-		c.Assert(item.info.SortDir, check.Equals, obtained.SortDir)
+		require.True(t, found)
+		require.Equal(t, item.info.SinkURI, obtained.SinkURI)
+		require.Equal(t, item.info.SortDir, obtained.SortDir)
 	}
 }
 
-func (s etcdSuite) TestGetAllChangeFeedStatus(c *check.C) {
-	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
+func TestGetAllChangeFeedStatus(t *testing.T) {
+	s := &etcdTester{}
+	s.setUpTest(t)
+	defer s.tearDownTest(t)
+
 	changefeeds := map[model.ChangeFeedID]*model.ChangeFeedStatus{
 		"cf1": {
 			ResolvedTs:   100,
@@ -302,31 +298,35 @@ func (s etcdSuite) TestGetAllChangeFeedStatus(c *check.C) {
 	}
 	for id, cf := range changefeeds {
 		err := s.client.PutChangeFeedStatus(context.Background(), id, cf)
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 	}
 	statuses, err := s.client.GetAllChangeFeedStatus(context.Background())
-	c.Assert(err, check.IsNil)
-	c.Assert(statuses, check.DeepEquals, changefeeds)
+	require.NoError(t, err)
+	require.Equal(t, statuses, changefeeds)
 }
 
-func (s *etcdSuite) TestCreateChangefeed(c *check.C) {
-	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
+func TestCreateChangefeed(t *testing.T) {
+	s := &etcdTester{}
+	s.setUpTest(t)
+	defer s.tearDownTest(t)
+
 	ctx := context.Background()
 	detail := &model.ChangeFeedInfo{
 		SinkURI: "root@tcp(127.0.0.1:3306)/mysql",
 	}
 
 	err := s.client.CreateChangefeedInfo(ctx, detail, "test-id")
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	err = s.client.CreateChangefeedInfo(ctx, detail, "test-id")
-	c.Assert(cerror.ErrChangeFeedAlreadyExists.Equal(err), check.IsTrue)
+	require.True(t, cerror.ErrChangeFeedAlreadyExists.Equal(err))
 }
 
-func (s *etcdSuite) TestGetAllCaptureLeases(c *check.C) {
-	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
+func TestGetAllCaptureLeases(t *testing.T) {
+	s := &etcdTester{}
+	s.setUpTest(t)
+	defer s.tearDownTest(t)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	testCases := []*model.CaptureInfo{
@@ -348,38 +348,39 @@ func (s *etcdSuite) TestGetAllCaptureLeases(c *check.C) {
 	for _, cinfo := range testCases {
 		sess, err := concurrency.NewSession(s.client.Client.Unwrap(),
 			concurrency.WithTTL(10), concurrency.WithContext(ctx))
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 		err = s.client.PutCaptureInfo(ctx, cinfo, sess.Lease())
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 		leases[cinfo.ID] = int64(sess.Lease())
 	}
 
 	_, captures, err := s.client.GetCaptures(ctx)
-	c.Assert(err, check.IsNil)
-	c.Assert(captures, check.HasLen, len(testCases))
+	require.NoError(t, err)
+	require.Len(t, captures, len(testCases))
 	sort.Sort(Captures(captures))
-	c.Assert(captures, check.DeepEquals, testCases)
+	require.Equal(t, captures, testCases)
 
 	queryLeases, err := s.client.GetCaptureLeases(ctx)
-	c.Assert(err, check.IsNil)
-	c.Check(queryLeases, check.DeepEquals, leases)
+	require.NoError(t, err)
+	require.Equal(t, queryLeases, leases)
 
 	// make sure the RevokeAllLeases function can ignore the lease not exist
 	leases["/fake/capture/info"] = 200
 	err = s.client.RevokeAllLeases(ctx, leases)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	queryLeases, err = s.client.GetCaptureLeases(ctx)
-	c.Assert(err, check.IsNil)
-	c.Check(queryLeases, check.DeepEquals, map[string]int64{})
+	require.NoError(t, err)
+	require.Equal(t, queryLeases, map[string]int64{})
 }
 
 const (
 	testOwnerRevisionForMaxEpochs = 16
 )
 
-func (s *etcdSuite) TestGetOwnerRevision(c *check.C) {
-	defer testleak.AfterTest(c)()
-	defer s.TearDownTest(c)
+func TestGetOwnerRevision(t *testing.T) {
+	s := &etcdTester{}
+	s.setUpTest(t)
+	defer s.tearDownTest(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -387,7 +388,7 @@ func (s *etcdSuite) TestGetOwnerRevision(c *check.C) {
 	// First we check that GetOwnerRevision correctly reports errors
 	// Note that there is no owner for now.
 	_, err := s.client.GetOwnerRevision(ctx, "fake-capture-id")
-	c.Check(err, check.ErrorMatches, ".*ErrOwnerNotFound.*")
+	require.Contains(t, err.Error(), "ErrOwnerNotFound")
 
 	var (
 		ownerRev int64
@@ -406,7 +407,6 @@ func (s *etcdSuite) TestGetOwnerRevision(c *check.C) {
 			defer wg.Done()
 			sess, err := concurrency.NewSession(s.client.Client.Unwrap(),
 				concurrency.WithTTL(10 /* seconds */))
-			c.Check(err, check.IsNil)
 			election := concurrency.NewElection(sess, CaptureOwnerKey)
 
 			mockCaptureID := fmt.Sprintf("capture-%d", i)
@@ -414,22 +414,22 @@ func (s *etcdSuite) TestGetOwnerRevision(c *check.C) {
 			for {
 				err = election.Campaign(ctx, mockCaptureID)
 				if err != nil {
-					c.Check(err, check.ErrorMatches, ".*context canceled.*")
+					require.Contains(t, err.Error(), "context canceled")
 					return
 				}
 
 				rev, err := s.client.GetOwnerRevision(ctx, mockCaptureID)
-				c.Check(err, check.IsNil)
+				require.NoError(t, err)
 
 				_, err = s.client.GetOwnerRevision(ctx, "fake-capture-id")
-				c.Check(err, check.ErrorMatches, ".*ErrNotOwner.*")
+				require.Contains(t, err.Error(), "ErrNotOwner")
 
 				lastRev := atomic.SwapInt64(&ownerRev, rev)
-				c.Check(lastRev, check.Less, rev)
+				require.Less(t, lastRev, rev)
 
 				err = election.Resign(ctx)
 				if err != nil {
-					c.Check(err, check.ErrorMatches, ".*context canceled.*")
+					require.Contains(t, err.Error(), "context canceled")
 					return
 				}
 

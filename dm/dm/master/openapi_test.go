@@ -16,11 +16,17 @@
 package master
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
+	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/deepmap/oapi-codegen/pkg/testutil"
@@ -75,7 +81,7 @@ func (t *openAPISuite) SetUpTest(c *check.C) {
 	c.Assert(ha.ClearTestInfoOperation(t.etcdTestCli), check.IsNil)
 }
 
-func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
+func (t *openAPISuite) TestReverseRequestToLeader(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -85,6 +91,7 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	cfg1.Name = "dm-master-1"
 	cfg1.DataDir = c.MkDir()
 	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfg1.AdvertiseAddr = cfg1.MasterAddr
 	cfg1.PeerUrls = tempurl.Alloc()
 	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
 	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
@@ -93,10 +100,11 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	s1 := NewServer(cfg1)
 	c.Assert(s1.Start(ctx), check.IsNil)
 	defer s1.Close()
+	defer cancel()
 
 	// wait the first one become the leader
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-		return s1.election.IsLeader()
+		return s1.election.IsLeader() && s1.scheduler.Started()
 	}), check.IsTrue)
 
 	// join to an existing cluster
@@ -105,6 +113,7 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	cfg2.Name = "dm-master-2"
 	cfg2.DataDir = c.MkDir()
 	cfg2.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfg2.AdvertiseAddr = cfg2.MasterAddr
 	cfg2.PeerUrls = tempurl.Alloc()
 	cfg2.AdvertisePeerUrls = cfg2.PeerUrls
 	cfg2.Join = cfg1.MasterAddr // join to an existing cluster
@@ -113,6 +122,12 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	s2 := NewServer(cfg2)
 	c.Assert(s2.Start(ctx), check.IsNil)
 	defer s2.Close()
+	defer cancel() // this cancel must call before s.Close() to avoid deadlock
+
+	// wait the second master ready
+	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		return s2.election.IsLeader()
+	}), check.IsFalse)
 
 	baseURL := "/api/v1/sources"
 	// list source from leader
@@ -125,10 +140,155 @@ func (t *openAPISuite) TestRedirectRequestToLeader(c *check.C) {
 	c.Assert(resultListSource.Data, check.HasLen, 0)
 	c.Assert(resultListSource.Total, check.Equals, 0)
 
-	// list source not from leader will get a redirect
-	result2 := testutil.NewRequest().Get(baseURL).GoWithHTTPHandler(t.testT, s2.openapiHandles)
-	c.Assert(result2.Code(), check.Equals, http.StatusTemporaryRedirect)
-	cancel()
+	// list source from non-leader will get result too
+	result2, err := HTTPTestWithTestResponseRecorder(testutil.NewRequest().Get(baseURL), s2.openapiHandles)
+	c.Assert(err, check.IsNil)
+	c.Assert(result2.Code(), check.Equals, http.StatusOK)
+	var resultListSource2 openapi.GetSourceListResponse
+	c.Assert(result2.UnmarshalBodyToObject(&resultListSource2), check.IsNil)
+	c.Assert(resultListSource2.Data, check.HasLen, 0)
+	c.Assert(resultListSource2.Total, check.Equals, 0)
+}
+
+func (t *openAPISuite) TestReverseRequestToHttpsLeader(c *check.C) {
+	pwd, err := os.Getwd()
+	require.NoError(t.testT, err)
+	caPath := pwd + "/tls_for_test/ca.pem"
+	certPath := pwd + "/tls_for_test/dm.pem"
+	keyPath := pwd + "/tls_for_test/dm.key"
+
+	// master1
+	masterAddr1 := tempurl.Alloc()[len("http://"):]
+	peerAddr1 := tempurl.Alloc()[len("http://"):]
+	cfg1 := NewConfig()
+	require.NoError(t.testT, cfg1.Parse([]string{
+		"--name=dm-master-tls-1",
+		fmt.Sprintf("--data-dir=%s", t.testT.TempDir()),
+		fmt.Sprintf("--master-addr=https://%s", masterAddr1),
+		fmt.Sprintf("--advertise-addr=https://%s", masterAddr1),
+		fmt.Sprintf("--peer-urls=https://%s", peerAddr1),
+		fmt.Sprintf("--advertise-peer-urls=https://%s", peerAddr1),
+		fmt.Sprintf("--initial-cluster=dm-master-tls-1=https://%s", peerAddr1),
+		"--ssl-ca=" + caPath,
+		"--ssl-cert=" + certPath,
+		"--ssl-key=" + keyPath,
+	}))
+	cfg1.OpenAPI = true
+	s1 := NewServer(cfg1)
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	require.NoError(t.testT, s1.Start(ctx1))
+	defer func() {
+		cancel1()
+		s1.Close()
+	}()
+	// wait the first one become the leader
+	require.True(t.testT, utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		return s1.election.IsLeader() && s1.scheduler.Started()
+	}))
+
+	// master2
+	masterAddr2 := tempurl.Alloc()[len("http://"):]
+	peerAddr2 := tempurl.Alloc()[len("http://"):]
+	cfg2 := NewConfig()
+	require.NoError(t.testT, cfg2.Parse([]string{
+		"--name=dm-master-tls-2",
+		fmt.Sprintf("--data-dir=%s", t.testT.TempDir()),
+		fmt.Sprintf("--master-addr=https://%s", masterAddr2),
+		fmt.Sprintf("--advertise-addr=https://%s", masterAddr2),
+		fmt.Sprintf("--peer-urls=https://%s", peerAddr2),
+		fmt.Sprintf("--advertise-peer-urls=https://%s", peerAddr2),
+		"--ssl-ca=" + caPath,
+		"--ssl-cert=" + certPath,
+		"--ssl-key=" + keyPath,
+	}))
+	cfg2.OpenAPI = true
+	cfg2.Join = s1.cfg.MasterAddr // join to an existing cluster
+	s2 := NewServer(cfg2)
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	require.NoError(t.testT, s2.Start(ctx2))
+	defer func() {
+		cancel2()
+		s2.Close()
+	}()
+	// wait the second master ready
+	require.False(t.testT, utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		return s2.election.IsLeader()
+	}))
+
+	baseURL := "/api/v1/sources"
+	// list source from leader
+	result := testutil.NewRequest().Get(baseURL).GoWithHTTPHandler(t.testT, s1.openapiHandles)
+	require.Equal(t.testT, http.StatusOK, result.Code())
+	var resultListSource openapi.GetSourceListResponse
+	require.NoError(t.testT, result.UnmarshalBodyToObject(&resultListSource))
+	require.Len(t.testT, resultListSource.Data, 0)
+	require.Equal(t.testT, 0, resultListSource.Total)
+
+	// with tls, list source not from leader will get result too
+	result, err = HTTPTestWithTestResponseRecorder(testutil.NewRequest().Get(baseURL), s2.openapiHandles)
+	require.NoError(t.testT, err)
+	require.Equal(t.testT, http.StatusOK, result.Code())
+	var resultListSource2 openapi.GetSourceListResponse
+	require.NoError(t.testT, result.UnmarshalBodyToObject(&resultListSource2))
+	require.Len(t.testT, resultListSource2.Data, 0)
+	require.Equal(t.testT, 0, resultListSource2.Total)
+
+	// without tls, list source not from leader will be 502
+	require.NoError(t.testT, failpoint.Enable("github.com/pingcap/tiflow/dm/dm/master/MockNotSetTls", `return()`))
+	result, err = HTTPTestWithTestResponseRecorder(testutil.NewRequest().Get(baseURL), s2.openapiHandles)
+	require.NoError(t.testT, err)
+	require.Equal(t.testT, http.StatusBadGateway, result.Code())
+	require.NoError(t.testT, failpoint.Disable("github.com/pingcap/tiflow/dm/dm/master/MockNotSetTls"))
+}
+
+// httptest.ResponseRecorder is not http.CloseNotifier, will panic when test reverse proxy.
+// We need to implement the interface ourselves.
+// ref: https://github.com/gin-gonic/gin/blob/ce20f107f5dc498ec7489d7739541a25dcd48463/context_test.go#L1747-L1765
+type TestResponseRecorder struct {
+	*httptest.ResponseRecorder
+	closeChannel chan bool
+}
+
+func (r *TestResponseRecorder) CloseNotify() <-chan bool {
+	return r.closeChannel
+}
+
+func CreateTestResponseRecorder() *TestResponseRecorder {
+	return &TestResponseRecorder{
+		httptest.NewRecorder(),
+		make(chan bool, 1),
+	}
+}
+
+func HTTPTestWithTestResponseRecorder(r *testutil.RequestBuilder, handler http.Handler) (*testutil.CompletedRequest, error) {
+	if r == nil {
+		return nil, nil
+	}
+	if r.Error != nil {
+		return nil, r.Error
+	}
+	var bodyReader io.Reader
+	if r.Body != nil {
+		bodyReader = bytes.NewReader(r.Body)
+	}
+
+	req := httptest.NewRequest(r.Method, r.Path, bodyReader)
+	for h, v := range r.Headers {
+		req.Header.Add(h, v)
+	}
+	if host, ok := r.Headers["Host"]; ok {
+		req.Host = host
+	}
+	for _, c := range r.Cookies {
+		req.AddCookie(c)
+	}
+
+	rec := CreateTestResponseRecorder()
+	handler.ServeHTTP(rec, req)
+
+	return &testutil.CompletedRequest{
+		Recorder: rec.ResponseRecorder,
+	}, nil
 }
 
 func (t *openAPISuite) TestOpenAPIWillNotStartInDefaultConfig(c *check.C) {
@@ -138,6 +298,7 @@ func (t *openAPISuite) TestOpenAPIWillNotStartInDefaultConfig(c *check.C) {
 	cfg1.Name = "dm-master-1"
 	cfg1.DataDir = c.MkDir()
 	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfg1.AdvertiseAddr = cfg1.MasterAddr
 	cfg1.PeerUrls = tempurl.Alloc()
 	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
 	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
@@ -151,7 +312,7 @@ func (t *openAPISuite) TestOpenAPIWillNotStartInDefaultConfig(c *check.C) {
 	}), check.IsTrue)
 	c.Assert(s1.openapiHandles, check.IsNil)
 	defer s1.Close()
-	cancel()
+	defer cancel()
 }
 
 func (t *openAPISuite) TestSourceAPI(c *check.C) {

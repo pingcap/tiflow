@@ -38,7 +38,7 @@ func TestFlushTable(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
-	b := newBufferSink(newBlackHoleSink(ctx, make(map[string]string)), 5, make(chan drawbackMsg))
+	b := newBufferSink(newBlackHoleSink(ctx), 5)
 	go b.run(ctx, make(chan error))
 
 	require.Equal(t, uint64(5), b.getTableCheckpointTs(2))
@@ -82,7 +82,7 @@ func TestFlushFailed(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.TODO())
-	b := newBufferSink(newBlackHoleSink(ctx, make(map[string]string)), 5, make(chan drawbackMsg))
+	b := newBufferSink(newBlackHoleSink(ctx), 5)
 	go b.run(ctx, make(chan error))
 
 	checkpoint, err := b.FlushRowChangedEvents(ctx, 3, 8)
@@ -98,6 +98,19 @@ func TestFlushFailed(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 	require.Equal(t, uint64(8), b.getTableCheckpointTs(3))
 	require.Equal(t, uint64(5), b.getTableCheckpointTs(1))
+}
+
+func TestCleanBufferedData(t *testing.T) {
+	t.Parallel()
+
+	tblID := model.TableID(1)
+	b := newBufferSink(newBlackHoleSink(context.TODO()), 5)
+	b.buffer[tblID] = []*model.RowChangedEvent{}
+	_, ok := b.buffer[tblID]
+	require.True(t, ok)
+	require.Nil(t, b.Init(tblID))
+	_, ok = b.buffer[tblID]
+	require.False(t, ok)
 }
 
 type benchSink struct {
@@ -128,7 +141,7 @@ func BenchmarkRun(b *testing.B) {
 
 	for exp := 0; exp < 9; exp++ {
 		count := int(math.Pow(4, float64(exp)))
-		s := newBufferSink(&benchSink{}, 5, make(chan drawbackMsg))
+		s := newBufferSink(&benchSink{}, 5)
 		s.flushTsChan = make(chan flushMsg, count)
 		for i := 0; i < count; i++ {
 			s.buffer[int64(i)] = []*model.RowChangedEvent{{CommitTs: 5}}

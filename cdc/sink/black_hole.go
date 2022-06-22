@@ -23,9 +23,9 @@ import (
 )
 
 // newBlackHoleSink creates a black hole sink
-func newBlackHoleSink(ctx context.Context, opts map[string]string) *blackHoleSink {
+func newBlackHoleSink(ctx context.Context) *blackHoleSink {
 	return &blackHoleSink{
-		statistics: NewStatistics(ctx, "blackhole", opts),
+		statistics: NewStatistics(ctx, "blackhole"),
 	}
 }
 
@@ -33,6 +33,11 @@ type blackHoleSink struct {
 	statistics      *Statistics
 	accumulated     uint64
 	lastAccumulated uint64
+}
+
+// Init table sink resources
+func (b *blackHoleSink) Init(tableID model.TableID) error {
+	return nil
 }
 
 func (b *blackHoleSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {

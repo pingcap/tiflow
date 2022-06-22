@@ -196,7 +196,7 @@ func TestParseCfg(t *testing.T) {
 			},
 			// We expect the default configuration here.
 			Messages: &config.MessagesConfig{
-				ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 200),
+				ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 10),
 				ClientMaxBatchSize:           8 * 1024 * 1024,
 				ClientMaxBatchCount:          128,
 				ClientRetryRateLimit:         1.0,
@@ -472,7 +472,7 @@ cert-allowed-cn = ["dd","ee"]
 			},
 			// We expect the default configuration here.
 			Messages: &config.MessagesConfig{
-				ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 200),
+				ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 10),
 				ClientMaxBatchSize:           8 * 1024 * 1024,
 				ClientMaxBatchCount:          128,
 				ClientRetryRateLimit:         1.0,
@@ -528,7 +528,7 @@ unknown3 = 3
 		},
 		// We expect the default configuration here.
 		Messages: &config.MessagesConfig{
-			ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 200),
+			ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 10),
 			ClientMaxBatchSize:           8 * 1024 * 1024,
 			ClientMaxBatchCount:          128,
 			ClientRetryRateLimit:         1.0,

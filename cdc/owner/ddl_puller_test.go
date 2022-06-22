@@ -18,10 +18,10 @@ import (
 	"encoding/json"
 	"sync"
 	"sync/atomic"
+	"testing"
 	"time"
 
 	"github.com/benbjohnson/clock"
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/parser/model"
@@ -29,25 +29,21 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/retry"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
 
-var _ = check.Suite(&ddlPullerSuite{})
-
-type ddlPullerSuite struct{}
-
 type mockPuller struct {
-	c          *check.C
+	t          *testing.T
 	inCh       chan *model.RawKVEntry
 	outCh      chan *model.RawKVEntry
 	resolvedTs model.Ts
 }
 
-func newMockPuller(c *check.C, startTs model.Ts) *mockPuller {
+func newMockPuller(t *testing.T, startTs model.Ts) *mockPuller {
 	return &mockPuller{
-		c:          c,
+		t:          t,
 		inCh:       make(chan *model.RawKVEntry),
 		outCh:      make(chan *model.RawKVEntry),
 		resolvedTs: startTs - 1,
@@ -84,7 +80,7 @@ func (m *mockPuller) append(e *model.RawKVEntry) {
 
 func (m *mockPuller) appendDDL(job *timodel.Job) {
 	b, err := json.Marshal(job)
-	m.c.Assert(err, check.IsNil)
+	require.Nil(m.t, err)
 	ek := []byte("m")
 	ek = codec.EncodeBytes(ek, []byte("DDLJobList"))
 	ek = codec.EncodeUint(ek, uint64('l'))
@@ -106,13 +102,12 @@ func (m *mockPuller) appendResolvedTs(ts model.Ts) {
 	})
 }
 
-func (s *ddlPullerSuite) TestPuller(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestPuller(t *testing.T) {
 	startTs := uint64(10)
-	mockPuller := newMockPuller(c, startTs)
+	mockPuller := newMockPuller(t, startTs)
 	ctx := cdcContext.NewBackendContext4Test(true)
 	p, err := newDDLPuller(ctx, startTs)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 	p.(*ddlPullerImpl).puller = mockPuller
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -122,22 +117,22 @@ func (s *ddlPullerSuite) TestPuller(c *check.C) {
 		if errors.Cause(err) == context.Canceled {
 			err = nil
 		}
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 	}()
 	defer wg.Wait()
 	defer p.Close()
 
 	// test initialize state
 	resolvedTs, ddl := p.FrontDDL()
-	c.Assert(resolvedTs, check.Equals, startTs)
-	c.Assert(ddl, check.IsNil)
+	require.Equal(t, resolvedTs, startTs)
+	require.Nil(t, ddl)
 	resolvedTs, ddl = p.PopFrontDDL()
-	c.Assert(resolvedTs, check.Equals, startTs)
-	c.Assert(ddl, check.IsNil)
+	require.Equal(t, resolvedTs, startTs)
+	require.Nil(t, ddl)
 
 	// test send resolvedTs
 	mockPuller.appendResolvedTs(15)
-	waitResolvedTsGrowing(c, p, 15)
+	waitResolvedTsGrowing(t, p, 15)
 
 	// test send ddl job out of order
 	mockPuller.appendDDL(&timodel.Job{
@@ -155,23 +150,23 @@ func (s *ddlPullerSuite) TestPuller(c *check.C) {
 		BinlogInfo: &timodel.HistoryInfo{FinishedTS: 16},
 	})
 	resolvedTs, ddl = p.FrontDDL()
-	c.Assert(resolvedTs, check.Equals, uint64(15))
-	c.Assert(ddl, check.IsNil)
+	require.Equal(t, resolvedTs, uint64(15))
+	require.Nil(t, ddl)
 
 	mockPuller.appendResolvedTs(20)
-	waitResolvedTsGrowing(c, p, 16)
+	waitResolvedTsGrowing(t, p, 16)
 	resolvedTs, ddl = p.FrontDDL()
-	c.Assert(resolvedTs, check.Equals, uint64(16))
-	c.Assert(ddl.ID, check.Equals, int64(1))
+	require.Equal(t, resolvedTs, uint64(16))
+	require.Equal(t, ddl.ID, int64(1))
 	resolvedTs, ddl = p.PopFrontDDL()
-	c.Assert(resolvedTs, check.Equals, uint64(16))
-	c.Assert(ddl.ID, check.Equals, int64(1))
+	require.Equal(t, resolvedTs, uint64(16))
+	require.Equal(t, ddl.ID, int64(1))
 
 	// DDL could be processed with a delay, wait here for a pending DDL job is added
-	waitResolvedTsGrowing(c, p, 18)
+	waitResolvedTsGrowing(t, p, 18)
 	resolvedTs, ddl = p.PopFrontDDL()
-	c.Assert(resolvedTs, check.Equals, uint64(18))
-	c.Assert(ddl.ID, check.Equals, int64(2))
+	require.Equal(t, resolvedTs, uint64(18))
+	require.Equal(t, ddl.ID, int64(2))
 
 	// test add ddl job repeated
 	mockPuller.appendDDL(&timodel.Job{
@@ -189,18 +184,18 @@ func (s *ddlPullerSuite) TestPuller(c *check.C) {
 		BinlogInfo: &timodel.HistoryInfo{FinishedTS: 25},
 	})
 	mockPuller.appendResolvedTs(30)
-	waitResolvedTsGrowing(c, p, 25)
+	waitResolvedTsGrowing(t, p, 25)
 
 	resolvedTs, ddl = p.PopFrontDDL()
-	c.Assert(resolvedTs, check.Equals, uint64(25))
-	c.Assert(ddl.ID, check.Equals, int64(3))
+	require.Equal(t, resolvedTs, uint64(25))
+	require.Equal(t, ddl.ID, int64(3))
 	_, ddl = p.PopFrontDDL()
-	c.Assert(ddl, check.IsNil)
+	require.Nil(t, ddl)
 
-	waitResolvedTsGrowing(c, p, 30)
+	waitResolvedTsGrowing(t, p, 30)
 	resolvedTs, ddl = p.PopFrontDDL()
-	c.Assert(resolvedTs, check.Equals, uint64(30))
-	c.Assert(ddl, check.IsNil)
+	require.Equal(t, resolvedTs, uint64(30))
+	require.Nil(t, ddl)
 
 	// test add invalid ddl job
 	mockPuller.appendDDL(&timodel.Job{
@@ -218,15 +213,14 @@ func (s *ddlPullerSuite) TestPuller(c *check.C) {
 		BinlogInfo: &timodel.HistoryInfo{FinishedTS: 36},
 	})
 	mockPuller.appendResolvedTs(40)
-	waitResolvedTsGrowing(c, p, 40)
+	waitResolvedTsGrowing(t, p, 40)
 	resolvedTs, ddl = p.PopFrontDDL()
 	// no ddl should be received
-	c.Assert(resolvedTs, check.Equals, uint64(40))
-	c.Assert(ddl, check.IsNil)
+	require.Equal(t, resolvedTs, uint64(40))
+	require.Nil(t, ddl)
 }
 
-func (*ddlPullerSuite) TestResolvedTsStuck(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestResolvedTsStuck(t *testing.T) {
 	// For observing the logs
 	zapcore, logs := observer.New(zap.WarnLevel)
 	conf := &log.Config{Level: "warn", File: log.FileLogConfig{}}
@@ -236,10 +230,10 @@ func (*ddlPullerSuite) TestResolvedTsStuck(c *check.C) {
 	defer restoreFn()
 
 	startTs := uint64(10)
-	mockPuller := newMockPuller(c, startTs)
+	mockPuller := newMockPuller(t, startTs)
 	ctx := cdcContext.NewBackendContext4Test(true)
 	p, err := newDDLPuller(ctx, startTs)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	mockClock := clock.NewMock()
 	p.(*ddlPullerImpl).clock = mockClock
@@ -253,22 +247,22 @@ func (*ddlPullerSuite) TestResolvedTsStuck(c *check.C) {
 		if errors.Cause(err) == context.Canceled {
 			err = nil
 		}
-		c.Assert(err, check.IsNil)
+		require.Nil(t, err)
 	}()
 	defer wg.Wait()
 	defer p.Close()
 
 	// test initialize state
 	resolvedTs, ddl := p.FrontDDL()
-	c.Assert(resolvedTs, check.Equals, startTs)
-	c.Assert(ddl, check.IsNil)
+	require.Equal(t, resolvedTs, startTs)
+	require.Nil(t, ddl)
 	resolvedTs, ddl = p.PopFrontDDL()
-	c.Assert(resolvedTs, check.Equals, startTs)
-	c.Assert(ddl, check.IsNil)
+	require.Equal(t, resolvedTs, startTs)
+	require.Nil(t, ddl)
 
 	mockPuller.appendResolvedTs(30)
-	waitResolvedTsGrowing(c, p, 30)
-	c.Assert(logs.Len(), check.Equals, 0)
+	waitResolvedTsGrowing(t, p, 30)
+	require.Equal(t, logs.Len(), 0)
 
 	mockClock.Add(2 * ownerDDLPullerStuckWarnTimeout)
 	for i := 0; i < 20; i++ {
@@ -278,17 +272,17 @@ func (*ddlPullerSuite) TestResolvedTsStuck(c *check.C) {
 		}
 		time.Sleep(10 * time.Millisecond)
 		if i == 19 {
-			c.Fatal("warning log not printed")
+			t.Fatal("warning log not printed")
 		}
 	}
 
 	mockPuller.appendResolvedTs(40)
-	waitResolvedTsGrowing(c, p, 40)
+	waitResolvedTsGrowing(t, p, 40)
 }
 
 // waitResolvedTsGrowing can wait the first DDL reaches targetTs or if no pending
 // DDL, DDL resolved ts reaches targetTs.
-func waitResolvedTsGrowing(c *check.C, p DDLPuller, targetTs model.Ts) {
+func waitResolvedTsGrowing(t *testing.T, p DDLPuller, targetTs model.Ts) {
 	err := retry.Do(context.Background(), func() error {
 		resolvedTs, _ := p.FrontDDL()
 		if resolvedTs < targetTs {
@@ -296,5 +290,5 @@ func waitResolvedTsGrowing(c *check.C, p DDLPuller, targetTs model.Ts) {
 		}
 		return nil
 	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(100))
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 }

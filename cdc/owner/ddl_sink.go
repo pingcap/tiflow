@@ -27,6 +27,7 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -90,7 +91,9 @@ func ddlSinkInitializer(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeF
 		return errors.Trace(err)
 	}
 
-	s, err := sink.New(ctx, id, info.SinkURI, filter, info.Config, info.Opts, a.errCh)
+	stdCtx := util.PutChangefeedIDInCtx(ctx, id)
+	stdCtx = util.PutRoleInCtx(stdCtx, util.RoleOwner)
+	s, err := sink.New(stdCtx, id, info.SinkURI, filter, info.Config, info.Opts, a.errCh)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -99,13 +102,13 @@ func ddlSinkInitializer(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeF
 	if !info.SyncPointEnabled {
 		return nil
 	}
-	syncPointStore, err := sink.NewSyncpointStore(ctx, id, info.SinkURI)
+	syncPointStore, err := sink.NewSyncpointStore(stdCtx, id, info.SinkURI)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	a.syncPointStore = syncPointStore
 
-	if err := a.syncPointStore.CreateSynctable(ctx); err != nil {
+	if err := a.syncPointStore.CreateSynctable(stdCtx); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
@@ -121,11 +124,13 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 
 		start := time.Now()
 		if err := s.sinkInitHandler(ctx, s, id, info); err != nil {
-			log.Warn("ddl sink initialize failed", zap.Duration("elapsed", time.Since(start)))
+			log.Warn("ddl sink initialize failed",
+				zap.Duration("duration", time.Since(start)))
 			ctx.Throw(err)
 			return
 		}
-		log.Info("ddl sink initialized, start processing...", zap.Duration("elapsed", time.Since(start)))
+		log.Info("ddl sink initialized, start processing...",
+			zap.Duration("duration", time.Since(start)))
 
 		// TODO make the tick duration configurable
 		ticker := time.NewTicker(time.Second)
@@ -154,7 +159,10 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 					err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 				})
 				if err == nil || cerror.ErrDDLEventIgnored.Equal(errors.Cause(err)) {
-					log.Info("Execute DDL succeeded", zap.String("changefeed", ctx.ChangefeedVars().ID), zap.Bool("ignored", err != nil), zap.Reflect("ddl", ddl))
+					log.Info("Execute DDL succeeded",
+						zap.String("changefeed", ctx.ChangefeedVars().ID),
+						zap.Bool("ignored", err != nil),
+						zap.Reflect("ddl", ddl))
 					atomic.StoreUint64(&s.ddlFinishedTs, ddl.CommitTs)
 					continue
 				}
@@ -214,5 +222,8 @@ func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 		err = s.syncPointStore.Close()
 	}
 	s.wg.Wait()
-	return err
+	if err != nil && errors.Cause(err) != context.Canceled {
+		return err
+	}
+	return nil
 }

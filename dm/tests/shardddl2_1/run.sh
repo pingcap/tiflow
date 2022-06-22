@@ -147,6 +147,7 @@ function DM_050_CASE() {
 	if [[ "$1" = "pessimistic" ]]; then
 		check_log_contain_with_retry "is different with" $WORK_DIR/master/log/dm-master.log
 	else
+		# can't make sure DDL of which source comes first
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
 			"because schema conflict detected" 2

@@ -36,8 +36,6 @@ type Manager struct {
 	tableSinksMu           sync.Mutex
 	changeFeedCheckpointTs uint64
 
-	drawbackChan chan drawbackMsg
-
 	captureAddr               string
 	changefeedID              model.ChangeFeedID
 	metricsTableSinkTotalRows prometheus.Counter
@@ -48,22 +46,24 @@ func NewManager(
 	ctx context.Context, backendSink Sink, errCh chan error, checkpointTs model.Ts,
 	captureAddr string, changefeedID model.ChangeFeedID,
 ) *Manager {
-	drawbackChan := make(chan drawbackMsg, 16)
-	bufSink := newBufferSink(backendSink, checkpointTs, drawbackChan)
+	bufSink := newBufferSink(backendSink, checkpointTs)
 	go bufSink.run(ctx, errCh)
 	return &Manager{
-		bufSink:                   bufSink,
-		changeFeedCheckpointTs:    checkpointTs,
-		tableSinks:                make(map[model.TableID]*tableSink),
-		drawbackChan:              drawbackChan,
-		captureAddr:               captureAddr,
+		bufSink:                bufSink,
+		changeFeedCheckpointTs: checkpointTs,
+		tableSinks:             make(map[model.TableID]*tableSink),
+		captureAddr:            captureAddr,
+
 		changefeedID:              changefeedID,
 		metricsTableSinkTotalRows: tableSinkTotalRowsCountCounter.WithLabelValues(captureAddr, changefeedID),
 	}
 }
 
 // CreateTableSink creates a table sink
-func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts, redoManager redo.LogManager) Sink {
+func (m *Manager) CreateTableSink(
+	tableID model.TableID,
+	redoManager redo.LogManager,
+) (Sink, error) {
 	m.tableSinksMu.Lock()
 	defer m.tableSinksMu.Unlock()
 	if _, exist := m.tableSinks[tableID]; exist {
@@ -75,8 +75,11 @@ func (m *Manager) CreateTableSink(tableID model.TableID, checkpointTs model.Ts, 
 		buffer:      make([]*model.RowChangedEvent, 0, 128),
 		redoManager: redoManager,
 	}
+	if err := sink.Init(tableID); err != nil {
+		return nil, errors.Trace(err)
+	}
 	m.tableSinks[tableID] = sink
-	return sink
+	return sink, nil
 }
 
 // Close closes the Sink manager and backend Sink, this method can be reentrantly called
@@ -85,7 +88,12 @@ func (m *Manager) Close(ctx context.Context) error {
 	defer m.tableSinksMu.Unlock()
 	tableSinkTotalRowsCountCounter.DeleteLabelValues(m.captureAddr, m.changefeedID)
 	if m.bufSink != nil {
-		return m.bufSink.Close(ctx)
+		if err := m.bufSink.Close(ctx); err != nil && errors.Cause(err) != context.Canceled {
+			log.Warn("close bufSink failed",
+				zap.String("changefeed", m.changefeedID),
+				zap.Error(err))
+			return err
+		}
 	}
 	return nil
 }
@@ -103,17 +111,6 @@ func (m *Manager) destroyTableSink(ctx context.Context, tableID model.TableID) e
 	m.tableSinksMu.Lock()
 	delete(m.tableSinks, tableID)
 	m.tableSinksMu.Unlock()
-	callback := make(chan struct{})
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case m.drawbackChan <- drawbackMsg{tableID: tableID, callback: callback}:
-	}
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-callback:
-	}
 	return m.bufSink.Barrier(ctx, tableID)
 }
 
@@ -132,9 +129,4 @@ func (m *Manager) UpdateChangeFeedCheckpointTs(checkpointTs uint64) {
 	if m.bufSink != nil {
 		m.bufSink.UpdateChangeFeedCheckpointTs(checkpointTs)
 	}
-}
-
-type drawbackMsg struct {
-	tableID  model.TableID
-	callback chan struct{}
 }

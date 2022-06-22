@@ -30,10 +30,6 @@ import (
 	"go.uber.org/zap"
 )
 
-func init() {
-	sarama.MaxRequestSize = 1024 * 1024 * 1024 // 1GB
-}
-
 // Config stores user specified Kafka producer configuration
 type Config struct {
 	BrokerEndpoints []string
@@ -50,6 +46,11 @@ type Config struct {
 	SaslScram       *security.SaslScram
 	// control whether to create topic
 	AutoCreate bool
+
+	// Timeout for sarama `config.Net` configurations, default to `10s`
+	DialTimeout  time.Duration
+	WriteTimeout time.Duration
+	ReadTimeout  time.Duration
 }
 
 // NewConfig returns a default Kafka configuration
@@ -63,6 +64,9 @@ func NewConfig() *Config {
 		Credential:        &security.Credential{},
 		SaslScram:         &security.SaslScram{},
 		AutoCreate:        true,
+		DialTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		ReadTimeout:       10 * time.Second,
 	}
 }
 
@@ -201,6 +205,33 @@ func CompleteConfigsAndOpts(sinkURI *url.URL, producerConfig *Config, replicaCon
 		opts["enable-tidb-extension"] = s
 	}
 
+	s = params.Get("dial-timeout")
+	if s != "" {
+		a, err := time.ParseDuration(s)
+		if err != nil {
+			return err
+		}
+		producerConfig.DialTimeout = a
+	}
+
+	s = params.Get("write-timeout")
+	if s != "" {
+		a, err := time.ParseDuration(s)
+		if err != nil {
+			return err
+		}
+		producerConfig.WriteTimeout = a
+	}
+
+	s = params.Get("read-timeout")
+	if s != "" {
+		a, err := time.ParseDuration(s)
+		if err != nil {
+			return err
+		}
+		producerConfig.ReadTimeout = a
+	}
+
 	return nil
 }
 
@@ -226,31 +257,45 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 		return nil, errors.Trace(err)
 	}
 	config.Version = version
-	// See: https://kafka.apache.org/documentation/#replication
-	// When one of the brokers in a Kafka cluster is down, the partition leaders
-	// in this broker is broken, Kafka will election a new partition leader and
-	// replication logs, this process will last from a few seconds to a few minutes.
-	// Kafka cluster will not provide a writing service in this process.
-	// Time out in one minute.
-	config.Metadata.Retry.Max = 120
-	config.Metadata.Retry.Backoff = 500 * time.Millisecond
-	// If it is not set, this means a metadata request against an unreachable
-	// cluster (all brokers are unreachable or unresponsive) can take up to
-	// `Net.[Dial|Read]Timeout * BrokerCount * (Metadata.Retry.Max + 1) +
-	// Metadata.Retry.Backoff * Metadata.Retry.Max`
-	// to fail.
-	// See: https://github.com/Shopify/sarama/issues/765
-	// and https://github.com/pingcap/tiflow/issues/3352.
+
+	// Producer fetch metadata from brokers frequently, if metadata cannot be
+	// refreshed easily, this would indicate the network condition between the
+	// capture server and kafka broker is not good.
+	// In the scenario that cannot get response from Kafka server, this default
+	// setting can help to get response more quickly.
+	config.Metadata.Retry.Max = 1
+	config.Metadata.Retry.Backoff = 100 * time.Millisecond
+	// This Timeout is useless if the `RefreshMetadata` time cost is less than it.
 	config.Metadata.Timeout = 1 * time.Minute
+
+	// Admin.Retry take effect on `ClusterAdmin` related operations,
+	// only `CreateTopic` for cdc now. set the `Timeout` to `1m` to make CI stable.
+	config.Admin.Retry.Max = 5
+	config.Admin.Retry.Backoff = 100 * time.Millisecond
+	config.Admin.Timeout = 1 * time.Minute
+
+	// Producer.Retry take effect when the producer try to send message to kafka
+	// brokers. If kafka cluster is healthy, just the default value should be enough.
+	// For kafka cluster with a bad network condition, producer should not try to
+	// waster too much time on sending a message, get response no matter success
+	// or fail as soon as possible is preferred.
+	config.Producer.Retry.Max = 3
+	config.Producer.Retry.Backoff = 100 * time.Millisecond
+
+	// make sure sarama producer flush messages as soon as possible.
+	config.Producer.Flush.Bytes = 0
+	config.Producer.Flush.Messages = 0
+	config.Producer.Flush.Frequency = time.Duration(0)
+
+	config.Net.DialTimeout = c.DialTimeout
+	config.Net.WriteTimeout = c.WriteTimeout
+	config.Net.ReadTimeout = c.ReadTimeout
 
 	config.Producer.Partitioner = sarama.NewManualPartitioner
 	config.Producer.MaxMessageBytes = c.MaxMessageBytes
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
 	config.Producer.RequiredAcks = sarama.WaitForAll
-	// Time out in five minutes(600 * 500ms).
-	config.Producer.Retry.Max = 600
-	config.Producer.Retry.Backoff = 500 * time.Millisecond
 	switch strings.ToLower(strings.TrimSpace(c.Compression)) {
 	case "none":
 		config.Producer.Compression = sarama.CompressionNone
@@ -266,11 +311,6 @@ func newSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 		log.Warn("Unsupported compression algorithm", zap.String("compression", c.Compression))
 		config.Producer.Compression = sarama.CompressionNone
 	}
-
-	// Time out in one minute(120 * 500ms).
-	config.Admin.Retry.Max = 120
-	config.Admin.Retry.Backoff = 500 * time.Millisecond
-	config.Admin.Timeout = 1 * time.Minute
 
 	if c.Credential != nil && len(c.Credential.CAPath) != 0 {
 		config.Net.TLS.Enable = true

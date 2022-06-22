@@ -28,6 +28,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
+	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 	"go.etcd.io/etcd/etcdserver/etcdserverpb"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.uber.org/zap"
@@ -36,9 +37,6 @@ import (
 )
 
 const (
-	// etcdTxnTimeoutDuration represents the timeout duration for committing a
-	// transaction to Etcd
-	etcdTxnTimeoutDuration = 30 * time.Second
 	// When EtcdWorker commits a txn to etcd or ticks its reactor
 	// takes more than etcdWorkerLogsWarnDuration, it will print a log
 	etcdWorkerLogsWarnDuration = 1 * time.Second
@@ -119,9 +117,8 @@ func (worker *EtcdWorker) initMetrics(captureAddr string) {
 // A tick is generated either on a timer whose interval is timerInterval, or on an Etcd event.
 // If the specified etcd session is Done, this Run function will exit with cerrors.ErrEtcdSessionDone.
 // And the specified etcd session is nil-safety.
-func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session, timerInterval time.Duration, captureAddr string) error {
+func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session, timerInterval time.Duration, captureAddr string, role string) error {
 	defer worker.cleanUp()
-
 	worker.initMetrics(captureAddr)
 
 	err := worker.syncRawState(ctx)
@@ -134,7 +131,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 
 	watchCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	watchCh := worker.client.Watch(watchCtx, worker.prefix.String(), clientv3.WithPrefix(), clientv3.WithRev(worker.revision+1))
+	watchCh := worker.client.Watch(watchCtx, worker.prefix.String(), role, clientv3.WithPrefix(), clientv3.WithRev(worker.revision+1))
 
 	var (
 		pendingPatches [][]DataPatch
@@ -190,7 +187,8 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				log.Info("Stale Etcd event dropped",
 					zap.Int64("event-revision", response.Header.GetRevision()),
 					zap.Int64("previous-revision", worker.revision),
-					zap.Any("events", response.Events))
+					zap.Any("events", response.Events),
+					zap.String("role", role))
 				continue
 			}
 			worker.revision = response.Header.GetRevision()
@@ -205,10 +203,10 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 		if len(pendingPatches) > 0 {
 			// Here we have some patches yet to be uploaded to Etcd.
 			pendingPatches, err = worker.applyPatchGroups(ctx, pendingPatches)
+			if isRetryableError(err) {
+				continue
+			}
 			if err != nil {
-				if cerrors.ErrEtcdTryAgain.Equal(errors.Cause(err)) {
-					continue
-				}
 				return errors.Trace(err)
 			}
 		} else {
@@ -239,7 +237,9 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			nextState, err := worker.reactor.Tick(ctx, worker.state)
 			costTime := time.Since(startTime)
 			if costTime > etcdWorkerLogsWarnDuration {
-				log.Warn("EtcdWorker reactor tick took too long", zap.Duration("duration", costTime))
+				log.Warn("EtcdWorker reactor tick took too long",
+					zap.Duration("duration", costTime),
+					zap.String("role", role))
 			}
 			worker.metrics.metricEtcdWorkerTickDuration.Observe(costTime.Seconds())
 			if err != nil {
@@ -253,6 +253,18 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 			pendingPatches = append(pendingPatches, nextState.GetPatches()...)
 		}
 	}
+}
+
+func isRetryableError(err error) bool {
+	err = errors.Cause(err)
+	if cerrors.ErrEtcdTryAgain.Equal(err) ||
+		context.DeadlineExceeded == err {
+		return true
+	}
+	// When encountering an abnormal connection with etcd, the worker will keep retrying
+	// until the session is done.
+	_, ok := err.(rpctypes.EtcdError)
+	return ok
 }
 
 func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) {
@@ -349,7 +361,7 @@ func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState m
 	}
 
 	cmps := make([]clientv3.Cmp, 0, len(changedState))
-	ops := make([]clientv3.Op, 0, len(changedState))
+	opsThen := make([]clientv3.Op, 0, len(changedState))
 	hasDelete := false
 
 	for key, value := range changedState {
@@ -371,11 +383,11 @@ func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState m
 			op = clientv3.OpDelete(key.String())
 			hasDelete = true
 		}
-		ops = append(ops, op)
+		opsThen = append(opsThen, op)
 	}
 
 	if hasDelete {
-		ops = append(ops, clientv3.OpPut(worker.prefix.String()+deletionCounterKey, fmt.Sprint(worker.deleteCounter+1)))
+		opsThen = append(opsThen, clientv3.OpPut(worker.prefix.String()+deletionCounterKey, fmt.Sprint(worker.deleteCounter+1)))
 	}
 	if worker.deleteCounter > 0 {
 		cmps = append(cmps, clientv3.Compare(clientv3.Value(worker.prefix.String()+deletionCounterKey), "=", fmt.Sprint(worker.deleteCounter)))
@@ -387,10 +399,7 @@ func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState m
 
 	worker.metrics.metricEtcdTxnSize.Observe(float64(size))
 	startTime := time.Now()
-
-	txnCtx, cancel := context.WithTimeout(ctx, etcdTxnTimeoutDuration)
-	resp, err := worker.client.Txn(txnCtx).If(cmps...).Then(ops...).Commit()
-	cancel()
+	resp, err := worker.client.Txn(ctx, cmps, opsThen, etcd.TxnEmptyOpsElse)
 
 	// For testing the situation where we have a progress notification that
 	// has the same revision as the committed Etcd transaction.
@@ -409,7 +418,7 @@ func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState m
 		return errors.Trace(err)
 	}
 
-	logEtcdOps(ops, resp.Succeeded)
+	logEtcdOps(opsThen, resp.Succeeded)
 	if resp.Succeeded {
 		worker.barrierRev = resp.Header.GetRevision()
 		return nil

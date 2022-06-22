@@ -593,7 +593,7 @@ func (w *SourceWorker) UpdateSubTask(ctx context.Context, cfg *config.SubTaskCon
 	return st.Update(ctx, cfg)
 }
 
-// OperateSubTask stop/resume/pause  sub task.
+// OperateSubTask stop/resume/pause sub task.
 func (w *SourceWorker) OperateSubTask(name string, op pb.TaskOp) error {
 	w.Lock()
 	defer w.Unlock()
@@ -647,9 +647,9 @@ func (w *SourceWorker) QueryStatus(ctx context.Context, name string) ([]*pb.SubT
 	if err := w.updateSourceStatus(ctx); err != nil {
 		if terror.ErrNoMasterStatus.Equal(err) {
 			w.l.Warn("This source's bin_log is OFF, so it only supports full_mode.", zap.String("sourceID", w.cfg.SourceID), zap.Error(err))
-			return nil, nil, nil
+		} else {
+			w.l.Error("failed to update source status", zap.Error(err))
 		}
-		w.l.Error("failed to update source status", zap.Error(err))
 	} else {
 		sourceStatus = w.sourceStatus.Load().(*binlog.SourceStatus)
 	}

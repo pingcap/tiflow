@@ -31,6 +31,7 @@ const (
 	ctxKeyIsOwner      = ctxKey("isOwner")
 	ctxKeyTimezone     = ctxKey("timezone")
 	ctxKeyKVStorage    = ctxKey("kvStorage")
+	ctxKeyRole         = ctxKey("role")
 )
 
 // CaptureAddrFromCtx returns a capture ID stored in the specified context.
@@ -119,6 +120,21 @@ func ChangefeedIDFromCtx(ctx context.Context) string {
 // PutChangefeedIDInCtx returns a new child context with the specified changefeed ID stored.
 func PutChangefeedIDInCtx(ctx context.Context, changefeedID string) context.Context {
 	return context.WithValue(ctx, ctxKeyChangefeedID, changefeedID)
+}
+
+// RoleFromCtx returns a role stored in the specified context.
+// It returns RoleUnknown if there's no valid role found
+func RoleFromCtx(ctx context.Context) Role {
+	role, ok := ctx.Value(ctxKeyRole).(Role)
+	if !ok {
+		return RoleUnknown
+	}
+	return role
+}
+
+// PutRoleInCtx return a new child context with the specified role stored.
+func PutRoleInCtx(ctx context.Context, role Role) context.Context {
+	return context.WithValue(ctx, ctxKeyRole, role)
 }
 
 // ZapFieldCapture returns a zap field containing capture address

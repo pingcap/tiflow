@@ -30,13 +30,12 @@ const (
 )
 
 // NewStatistics creates a statistics
-func NewStatistics(ctx context.Context, name string, opts map[string]string) *Statistics {
-	statistics := &Statistics{name: name, lastPrintStatusTime: time.Now()}
-	if cid, ok := opts[OptChangefeedID]; ok {
-		statistics.changefeedID = cid
-	}
-	if cid, ok := opts[OptCaptureAddr]; ok {
-		statistics.captureAddr = cid
+func NewStatistics(ctx context.Context, name string) *Statistics {
+	statistics := &Statistics{
+		name:                name,
+		captureAddr:         util.CaptureAddrFromCtx(ctx),
+		changefeedID:        util.ChangefeedIDFromCtx(ctx),
+		lastPrintStatusTime: time.Now(),
 	}
 	statistics.metricExecTxnHis = execTxnHistogram.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
 	statistics.metricExecDDLHis = execDDLHistogram.WithLabelValues(statistics.captureAddr, statistics.changefeedID)

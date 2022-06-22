@@ -191,12 +191,12 @@ func (t *testMaster) SetUpSuite(c *check.C) {
 	t.workerClients = make(map[string]workerrpc.Client)
 	t.saveMaxRetryNum = maxRetryNum
 	maxRetryNum = 2
-	checkAndAdjustSourceConfigFunc = checkAndNoAdjustSourceConfigMock
+	checkAndAdjustSourceConfigForDMCtlFunc = checkAndNoAdjustSourceConfigMock
 }
 
 func (t *testMaster) TearDownSuite(c *check.C) {
 	maxRetryNum = t.saveMaxRetryNum
-	checkAndAdjustSourceConfigFunc = checkAndAdjustSourceConfig
+	checkAndAdjustSourceConfigForDMCtlFunc = checkAndAdjustSourceConfig
 }
 
 func (t *testMaster) SetUpTest(c *check.C) {
@@ -1363,40 +1363,51 @@ func (t *testMaster) TestOperateWorkerRelayTask(c *check.C) {
 }
 
 func (t *testMaster) TestServer(c *check.C) {
+	var err error
 	cfg := NewConfig()
 	c.Assert(cfg.Parse([]string{"-config=./dm-master.toml"}), check.IsNil)
 	cfg.PeerUrls = "http://127.0.0.1:8294"
 	cfg.DataDir = c.MkDir()
 	cfg.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfg.AdvertiseAddr = cfg.MasterAddr
 
-	s := NewServer(cfg)
+	basicServiceCheck := func(c *check.C, cfg *Config) {
+		t.testHTTPInterface(c, fmt.Sprintf("http://%s/status", cfg.AdvertiseAddr), []byte(utils.GetRawInfo()))
+		t.testHTTPInterface(c, fmt.Sprintf("http://%s/debug/pprof/", cfg.AdvertiseAddr), []byte("Types of profiles available"))
+		// HTTP API in this unit test is unstable, but we test it in `http_apis` in integration test.
+		// t.testHTTPInterface(c, fmt.Sprintf("http://%s/apis/v1alpha1/status/test-task", cfg.AdvertiseAddr), []byte("task test-task has no source or not exist"))
+	}
+	t.testNormalServerLifecycle(c, cfg, func(c *check.C, cfg *Config) {
+		basicServiceCheck(c, cfg)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	err1 := s.Start(ctx)
-	c.Assert(err1, check.IsNil)
+		// try to start another server with the same address.  Expect it to fail
+		dupServer := NewServer(cfg)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		err1 := dupServer.Start(ctx)
+		c.Assert(terror.ErrMasterStartEmbedEtcdFail.Equal(err1), check.IsTrue)
+		c.Assert(err1.Error(), check.Matches, ".*bind: address already in use.*")
+	})
 
-	t.testHTTPInterface(c, fmt.Sprintf("http://%s/status", cfg.MasterAddr), []byte(utils.GetRawInfo()))
-	t.testHTTPInterface(c, fmt.Sprintf("http://%s/debug/pprof/", cfg.MasterAddr), []byte("Types of profiles available"))
-	// HTTP API in this unit test is unstable, but we test it in `http_apis` in integration test.
-	// t.testHTTPInterface(c, fmt.Sprintf("http://%s/apis/v1alpha1/status/test-task", cfg.MasterAddr), []byte("task test-task has no source or not exist"))
-
-	dupServer := NewServer(cfg)
-	err := dupServer.Start(ctx)
-	c.Assert(terror.ErrMasterStartEmbedEtcdFail.Equal(err), check.IsTrue)
-	c.Assert(err.Error(), check.Matches, ".*bind: address already in use.*")
-
-	// close
-	cancel()
-	s.Close()
-
-	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
-		return s.closed.Load()
-	}), check.IsTrue)
+	// test the listen address is 0.0.0.0
+	masterAddrStr := tempurl.Alloc()[len("http://"):]
+	_, masterPort, err := net.SplitHostPort(masterAddrStr)
+	c.Assert(err, check.IsNil)
+	cfg2 := NewConfig()
+	*cfg2 = *cfg
+	cfg2.MasterAddr = fmt.Sprintf("0.0.0.0:%s", masterPort)
+	cfg2.AdvertiseAddr = masterAddrStr
+	t.testNormalServerLifecycle(c, cfg2, basicServiceCheck)
 }
 
 func (t *testMaster) TestMasterTLS(c *check.C) {
+	var err error
 	masterAddr := tempurl.Alloc()[len("http://"):]
 	peerAddr := tempurl.Alloc()[len("http://"):]
+	_, masterPort, err := net.SplitHostPort(masterAddr)
+	c.Assert(err, check.IsNil)
+	_, peerPort, err := net.SplitHostPort(peerAddr)
+	c.Assert(err, check.IsNil)
 
 	// all with `https://` prefix
 	cfg := NewConfig()
@@ -1544,17 +1555,40 @@ func (t *testMaster) TestMasterTLS(c *check.C) {
 	c.Assert(cfg.AdvertisePeerUrls, check.Equals, "https://"+peerAddr)
 	c.Assert(cfg.InitialCluster, check.Equals, "master-tls=https://"+peerAddr)
 	t.testTLSPrefix(c, cfg)
+
+	// listen address set to 0.0.0.0
+	cfg = NewConfig()
+	c.Assert(cfg.Parse([]string{
+		"--name=master-tls",
+		fmt.Sprintf("--data-dir=%s", c.MkDir()),
+		fmt.Sprintf("--master-addr=0.0.0.0:%s", masterPort),
+		fmt.Sprintf("--advertise-addr=https://%s", masterAddr),
+		fmt.Sprintf("--peer-urls=0.0.0.0:%s", peerPort),
+		fmt.Sprintf("--advertise-peer-urls=https://%s", peerAddr),
+		fmt.Sprintf("--initial-cluster=master-tls=https://%s", peerAddr),
+		"--ssl-ca=./tls_for_test/ca.pem",
+		"--ssl-cert=./tls_for_test/dm.pem",
+		"--ssl-key=./tls_for_test/dm.key",
+	}), check.IsNil)
+	t.testTLSPrefix(c, cfg)
 }
 
 func (t *testMaster) testTLSPrefix(c *check.C, cfg *Config) {
+	t.testNormalServerLifecycle(c, cfg, func(c *check.C, cfg *Config) {
+		t.testHTTPInterface(c, fmt.Sprintf("https://%s/status", cfg.AdvertiseAddr), []byte(utils.GetRawInfo()))
+		t.testHTTPInterface(c, fmt.Sprintf("https://%s/debug/pprof/", cfg.AdvertiseAddr), []byte("Types of profiles available"))
+	})
+}
+
+func (t *testMaster) testNormalServerLifecycle(c *check.C, cfg *Config, checkLogic func(*check.C, *Config)) {
+	var err error
 	s := NewServer(cfg)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	err1 := s.Start(ctx)
-	c.Assert(err1, check.IsNil)
+	err = s.Start(ctx)
+	c.Assert(err, check.IsNil)
 
-	t.testHTTPInterface(c, fmt.Sprintf("https://%s/status", cfg.AdvertiseAddr), []byte(utils.GetRawInfo()))
-	t.testHTTPInterface(c, fmt.Sprintf("https://%s/debug/pprof/", cfg.AdvertiseAddr), []byte("Types of profiles available"))
+	checkLogic(c, cfg)
 
 	// close
 	cancel()
@@ -1591,6 +1625,7 @@ func (t *testMaster) TestJoinMember(c *check.C) {
 	cfg1.Name = "dm-master-1"
 	cfg1.DataDir = c.MkDir()
 	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfg1.AdvertiseAddr = cfg1.MasterAddr
 	cfg1.PeerUrls = tempurl.Alloc()
 	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
 	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
@@ -1610,6 +1645,7 @@ func (t *testMaster) TestJoinMember(c *check.C) {
 	cfg2.Name = "dm-master-2"
 	cfg2.DataDir = c.MkDir()
 	cfg2.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfg2.AdvertiseAddr = cfg2.MasterAddr
 	cfg2.PeerUrls = tempurl.Alloc()
 	cfg2.AdvertisePeerUrls = cfg2.PeerUrls
 	cfg2.Join = cfg1.MasterAddr // join to an existing cluster
@@ -1644,6 +1680,7 @@ func (t *testMaster) TestJoinMember(c *check.C) {
 	cfg3.Name = "dm-master-3"
 	cfg3.DataDir = c.MkDir()
 	cfg3.MasterAddr = tempurl.Alloc()[len("http://"):]
+	cfg3.AdvertiseAddr = cfg3.MasterAddr
 	cfg3.PeerUrls = tempurl.Alloc()
 	cfg3.AdvertisePeerUrls = cfg3.PeerUrls
 	cfg3.Join = cfg1.MasterAddr // join to an existing cluster
@@ -1686,7 +1723,7 @@ func (t *testMaster) TestOperateSource(c *check.C) {
 	cfg1.Name = "dm-master-1"
 	cfg1.DataDir = c.MkDir()
 	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
-	cfg1.AdvertiseAddr = tempurl.Alloc()[len("http://"):]
+	cfg1.AdvertiseAddr = cfg1.MasterAddr
 	cfg1.PeerUrls = tempurl.Alloc()
 	cfg1.AdvertisePeerUrls = cfg1.PeerUrls
 	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
