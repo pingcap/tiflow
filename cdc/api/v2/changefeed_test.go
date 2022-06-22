@@ -15,7 +15,24 @@ package v2
 
 import (
 	"testing"
+
+	"github.com/pingcap/tiflow/pkg/security"
 )
+
+type MockUpstream struct {
+	ID             uint64
+	PDAddrs        []string `json:"pd_addrs"`
+	SecurityConfig *security.Credential
+}
+
+type mockUpstreamManager struct {
+	mockUpstream       MockUpstream
+	getDefaultUpstream func() *MockUpstream
+}
+
+func (up *mockUpstreamManager) GetDefaultUpstream() *MockUpstream {
+	return &up.mockUpstream
+}
 
 func TestCreateChangefeed(t *testing.T) {}
 

@@ -15,6 +15,7 @@ package v2
 
 import (
 	"context"
+	"github.com/pingcap/tiflow/cdc/api"
 	"net/url"
 	"strings"
 	"time"
@@ -22,7 +23,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -46,7 +46,7 @@ import (
 func verifyCreateChangefeedConfig(
 	ctx context.Context,
 	cfg *ChangefeedConfig,
-	capture *capture.Capture,
+	capture api.CaptureInfoProvider,
 ) (*model.ChangeFeedInfo, error) {
 	credential := &security.Credential{
 		CAPath:   cfg.CAPath,
@@ -112,7 +112,7 @@ func verifyCreateChangefeedConfig(
 	if err := gc.EnsureChangefeedStartTsSafety(
 		ctx,
 		pdClient,
-		capture.EtcdClient.GetEnsureGCServiceID(),
+		capture.GetEtcdClient().GetEnsureGCServiceID(),
 		model.DefaultChangeFeedID(cfg.ID),
 		ensureTTL, cfg.StartTs); err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {

@@ -34,7 +34,7 @@ import (
 
 // CDCMetaData returns all etcd key values used by cdc
 func (h *OpenAPIV2) CDCMetaData(c *gin.Context) {
-	kvs, err := h.capture.EtcdClient.GetAllCDCInfo(c)
+	kvs, err := h.etcdClient().GetAllCDCInfo(c)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -72,7 +72,7 @@ func (h *OpenAPIV2) ResolveLock(c *gin.Context) {
 			return
 		}
 	} else {
-		up := h.capture.UpstreamManager.GetDefaultUpstream()
+		up := h.upstreamManager().GetDefaultUpstream()
 		kvStorage = up.KVStorage
 	}
 
@@ -101,7 +101,7 @@ func (h *OpenAPIV2) DeleteServiceGcSafePoint(c *gin.Context) {
 	}
 	err := h.withUpstreamConfig(c, upstreamConfig,
 		func(ctx context.Context, client pd.Client) error {
-			err := gc.RemoveServiceGCSafepoint(c, client, h.capture.EtcdClient.GetGCServiceID())
+			err := gc.RemoveServiceGCSafepoint(c, client, h.etcdClient().GetGCServiceID())
 			if err != nil {
 				return cerror.WrapError(cerror.ErrInternalServerError, err)
 			}
@@ -122,7 +122,7 @@ func (h *OpenAPIV2) withUpstreamConfig(c context.Context,
 		pdClient pd.Client
 	)
 	if upstreamConfig.ID > 0 {
-		up, ok := h.capture.UpstreamManager.Get(upstreamConfig.ID)
+		up, ok := h.upstreamManager().Get(upstreamConfig.ID)
 		if !ok {
 			return cerror.ErrUpstreamNotFound
 		}
@@ -141,7 +141,7 @@ func (h *OpenAPIV2) withUpstreamConfig(c context.Context,
 		}
 		defer pdClient.Close()
 	} else {
-		up := h.capture.UpstreamManager.GetDefaultUpstream()
+		up := h.upstreamManager().GetDefaultUpstream()
 		pdClient = up.PDClient
 	}
 	return doWithClient(c, pdClient)

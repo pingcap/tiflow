@@ -21,7 +21,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -35,13 +34,7 @@ const apiOpVarChangefeedID = "changefeed_id"
 // CreateChangefeed handles create changefeed request,
 // it returns the changefeed's changefeedInfo that it just created
 func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
-	if !h.capture.IsOwner() {
-		api.ForwardToOwner(c, h.capture)
-		return
-	}
-
 	ctx := c.Request.Context()
-
 	config := &ChangefeedConfig{ReplicaConfig: GetDefaultReplicaConfig()}
 
 	if err := c.BindJSON(&config); err != nil {
@@ -49,14 +42,14 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 		return
 	}
 	if len(config.PDAddrs) == 0 {
-		up := h.capture.UpstreamManager.GetDefaultUpstream()
+		up := h.upstreamManager().GetDefaultUpstream()
 		config.PDAddrs = up.PdEndpoints
 		config.KeyPath = up.SecurityConfig.KeyPath
 		config.CAPath = up.SecurityConfig.CAPath
 		config.CertPath = up.SecurityConfig.CertPath
 	}
 
-	info, err := verifyCreateChangefeedConfig(ctx, config, h.capture)
+	info, err := h.verifyCreateChangefeedConfig()(ctx, config, h.capture)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -75,7 +68,7 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
-	err = h.capture.EtcdClient.CreateChangefeedInfo(ctx,
+	err = h.etcdClient().CreateChangefeedInfo(ctx,
 		upstreamInfo,
 		info,
 		model.DefaultChangeFeedID(info.ID))
@@ -98,7 +91,7 @@ func (h *OpenAPIV2) VerifyTable(c *gin.Context) {
 		return
 	}
 	if len(cfg.PDAddrs) == 0 {
-		up := h.capture.UpstreamManager.GetDefaultUpstream()
+		up := h.upstreamManager().GetDefaultUpstream()
 		cfg.PDAddrs = up.PdEndpoints
 		cfg.KeyPath = up.SecurityConfig.KeyPath
 		cfg.CAPath = up.SecurityConfig.CAPath
@@ -150,11 +143,6 @@ func (h *OpenAPIV2) VerifyTable(c *gin.Context) {
 // ReplicaConfig, PDAddrs, CAPath, CertPath, KeyPath,
 // SyncPointEnabled, SyncPointInterval
 func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
-	if !h.capture.IsOwner() {
-		api.ForwardToOwner(c, h.capture)
-		return
-	}
-
 	ctx := c.Request.Context()
 
 	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
@@ -164,7 +152,7 @@ func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
 		return
 	}
 
-	cfInfo, err := h.capture.StatusProvider().GetChangeFeedInfo(ctx, changefeedID)
+	cfInfo, err := h.statusProvider().GetChangeFeedInfo(ctx, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -175,10 +163,10 @@ func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
 		return
 	}
 	if cfInfo.UpstreamID == 0 {
-		up := h.capture.UpstreamManager.GetDefaultUpstream()
+		up := h.upstreamManager().GetDefaultUpstream()
 		cfInfo.UpstreamID = up.ID
 	}
-	upInfo, err := h.capture.EtcdClient.GetUpstreamInfo(ctx, cfInfo.UpstreamID, cfInfo.Namespace)
+	upInfo, err := h.etcdClient().GetUpstreamInfo(ctx, cfInfo.UpstreamID, cfInfo.Namespace)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -210,7 +198,7 @@ func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
 		zap.String("changefeedInfo", newCfInfo.String()),
 		zap.Any("upstreamInfo", newUpInfo))
 
-	err = h.capture.EtcdClient.UpdateChangefeedAndUpstream(ctx, newUpInfo, newCfInfo, changefeedID)
+	err = h.etcdClient().UpdateChangefeedAndUpstream(ctx, newUpInfo, newCfInfo, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
 	}
@@ -247,10 +235,6 @@ func (h *OpenAPIV2) verifyUpstream(ctx context.Context,
 // GetChangeFeedMetaInfo handles get changefeed's meta info request
 // This API for cdc cli use only.
 func (h *OpenAPIV2) GetChangeFeedMetaInfo(c *gin.Context) {
-	if !h.capture.IsOwner() {
-		api.ForwardToOwner(c, h.capture)
-		return
-	}
 	ctx := c.Request.Context()
 
 	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
@@ -259,7 +243,7 @@ func (h *OpenAPIV2) GetChangeFeedMetaInfo(c *gin.Context) {
 			changefeedID.ID))
 		return
 	}
-	info, err := h.capture.StatusProvider().GetChangeFeedInfo(ctx, changefeedID)
+	info, err := h.statusProvider().GetChangeFeedInfo(ctx, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
 		return

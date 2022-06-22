@@ -14,19 +14,80 @@
 package v2
 
 import (
+	"context"
+
 	"github.com/gin-gonic/gin"
+	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/api/middleware"
 	"github.com/pingcap/tiflow/cdc/capture"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/owner"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/upstream"
 )
+
+type mockStubs struct {
+	testStatusProvider  owner.StatusProvider
+	testEtcdClient      *etcd.CDCEtcdClient
+	testUpstreamManager *upstream.Manager
+	verifyCreateFunc    func(ctx context.Context, cfg *ChangefeedConfig,
+		capture api.CaptureInfoProvider) (*model.ChangeFeedInfo, error)
+	verifyUpdateFunc func(ctx context.Context, cfg *ChangefeedConfig, oldInfo *model.ChangeFeedInfo,
+		oldUpInfo *model.UpstreamInfo) (*model.ChangeFeedInfo, *model.UpstreamInfo, error)
+}
 
 // OpenAPIV2 provides CDC v2 APIs
 type OpenAPIV2 struct {
-	capture *capture.Capture
+	capture api.CaptureInfoProvider
+	// stubs, only work for unit tests
+	stubs *mockStubs
 }
 
 // NewOpenAPIV2 creates a new OpenAPIV2.
 func NewOpenAPIV2(c *capture.Capture) OpenAPIV2 {
 	return OpenAPIV2{capture: c}
+}
+
+// NewOpenAPIV2ForTest creates a new OpenAPIV2.
+func NewOpenAPIV2ForTest(capture api.CaptureInfoProvider, stubs *mockStubs) OpenAPIV2 {
+	return OpenAPIV2{capture, stubs}
+}
+
+func (h *OpenAPIV2) statusProvider() owner.StatusProvider {
+	if h.stubs != nil {
+		return h.stubs.testStatusProvider
+	}
+	return h.capture.StatusProvider()
+}
+
+func (h *OpenAPIV2) etcdClient() *etcd.CDCEtcdClient {
+	if h.stubs != nil {
+		return h.stubs.testEtcdClient
+	}
+	return h.capture.GetEtcdClient()
+}
+
+func (h *OpenAPIV2) upstreamManager() *upstream.Manager {
+	if h.stubs != nil {
+		return h.stubs.testUpstreamManager
+	}
+	return h.capture.GetUpstreamManager()
+}
+
+func (h *OpenAPIV2) verifyUpdateChangefeedConfig() func(ctx context.Context, cfg *ChangefeedConfig,
+	oldInfo *model.ChangeFeedInfo, oldUpInfo *model.UpstreamInfo) (*model.ChangeFeedInfo, *model.UpstreamInfo, error) {
+	if h.stubs != nil {
+		return h.stubs.verifyUpdateFunc
+	}
+	return verifyUpdateChangefeedConfig
+}
+
+func (h *OpenAPIV2) verifyCreateChangefeedConfig() func(ctx context.Context, cfg *ChangefeedConfig,
+	capture api.CaptureInfoProvider) (*model.ChangeFeedInfo, error) {
+	if h.stubs != nil {
+		return h.stubs.verifyCreateFunc
+	}
+	return verifyCreateChangefeedConfig
 }
 
 // RegisterOpenAPIV2Routes registers routes for OpenAPI
@@ -39,15 +100,21 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 
 	// changefeed apis
 	changefeedGroup := v2.Group("/changefeeds")
+	changefeedGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
 	changefeedGroup.POST("", api.CreateChangefeed)
 	changefeedGroup.PUT("/:changefeed_id", api.UpdateChangefeed)
 	changefeedGroup.GET("/:changefeed_id/meta_info", api.GetChangeFeedMetaInfo)
-	v2.POST("/verify_table", api.VerifyTable)
+
+	verifyTableGroup := v2.Group("/verify_table")
+	verifyTableGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
+	verifyTableGroup.POST("", api.VerifyTable)
 
 	// unsafe apis
-	v2.GET("/unsafe/metadata", api.CDCMetaData)
-	v2.POST("/unsafe/resolve_lock", api.ResolveLock)
-	v2.DELETE("/unsafe/service_gc_safepoint", api.DeleteServiceGcSafePoint)
+	unsafeGroup := v2.Group("/unsafe")
+	unsafeGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
+	unsafeGroup.GET("/unsafe/metadata", api.CDCMetaData)
+	unsafeGroup.POST("/unsafe/resolve_lock", api.ResolveLock)
+	unsafeGroup.DELETE("/unsafe/service_gc_safepoint", api.DeleteServiceGcSafePoint)
 
 	// common APIs
 	v2.POST("/tso", api.QueryTso)

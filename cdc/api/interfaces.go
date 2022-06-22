@@ -17,12 +17,18 @@ import (
 	"context"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/owner"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/upstream"
 )
 
-// CaptureInfoProvider provides capture and its onwnership information
+// CaptureInfoProvider provides capture's info&getter used for api
 type CaptureInfoProvider interface {
 	Info() (model.CaptureInfo, error)
 	IsOwner() bool
-	GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error)
 	IsReady() bool
+	GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error)
+	StatusProvider() owner.StatusProvider
+	GetEtcdClient() *etcd.CDCEtcdClient
+	GetUpstreamManager() *upstream.Manager
 }

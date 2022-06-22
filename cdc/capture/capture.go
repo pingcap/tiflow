@@ -131,6 +131,14 @@ func NewCaptureWithManager4Test(o owner.Owner, m *upstream.Manager) *Capture {
 	return res
 }
 
+func (c *Capture) GetUpstreamManager() *upstream.Manager {
+	return c.UpstreamManager
+}
+
+func (c *Capture) GetEtcdClient() *etcd.CDCEtcdClient {
+	return c.EtcdClient
+}
+
 func (c *Capture) reset(ctx context.Context) error {
 	conf := config.GetGlobalServerConfig()
 	sess, err := concurrency.NewSession(c.EtcdClient.Client.Unwrap(),
