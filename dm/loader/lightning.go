@@ -134,7 +134,7 @@ func (l *LightningLoader) Init(ctx context.Context) (err error) {
 		return err
 	}
 
-	checkpointList := NewLightningCheckpointList(l.toDB, l.cfg.Name, l.cfg.SourceID, l.cfg.MetaSchema)
+	checkpointList := NewLightningCheckpointList(l.toDB, l.cfg.Name, l.cfg.SourceID, l.cfg.MetaSchema, l.logger)
 	err = checkpointList.Prepare(ctx)
 	if err == nil {
 		l.checkPointList = checkpointList

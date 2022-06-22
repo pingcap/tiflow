@@ -1696,7 +1696,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 	}
 
-	s.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, s.cfg.To.Session, s.downstreamTrackConn)
+	s.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, s.cfg.To.Session, s.downstreamTrackConn, s.tctx.L())
 	if err != nil {
 		return terror.ErrSchemaTrackerInit.Delegate(err)
 	}
