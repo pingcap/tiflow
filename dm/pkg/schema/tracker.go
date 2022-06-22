@@ -259,9 +259,9 @@ func (tr *Tracker) Exec(ctx context.Context, db string, sql string) error {
 func (tr *Tracker) GetTableInfo(table *filter.Table) (*model.TableInfo, error) {
 	tr.RLock()
 	defer tr.RUnlock()
-	// if tr.closed.Load() {
-	// 	return nil, dmterror.ErrSchemaTrackerIsClosed.New("fail to get table info")
-	// }
+	if tr.closed.Load() {
+		return nil, dmterror.ErrSchemaTrackerIsClosed.New("fail to get table info")
+	}
 	dbName := model.NewCIStr(table.Schema)
 	tableName := model.NewCIStr(table.Name)
 	t, err := tr.dom.InfoSchema().TableByName(dbName, tableName)
@@ -380,8 +380,8 @@ func (tr *Tracker) Close() error {
 	}
 	// prevent SchemaTracker being closed when
 	// other components are getting/setting table info
-	// tr.Lock()
-	// defer tr.Unlock()
+	tr.Lock()
+	defer tr.Unlock()
 	if !tr.closed.CAS(false, true) {
 		return nil
 	}

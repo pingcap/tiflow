@@ -820,7 +820,12 @@ func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table, columnCo
 			return res, nil
 		case terror.ErrSchemaTrackerIsClosed.Equal(err):
 			// schema tracker is closed
+			// try to get table schema from checkpoint
 			tableInfo = v.syncer.getTableInfoFromCheckpoint(sourceTable)
+			if tableInfo == nil {
+				// get table schema from checkpoint failed
+				return res, errors.Annotate(err, "fail to get table info from checkpoint")
+			}
 		default:
 			return res, err
 		}
