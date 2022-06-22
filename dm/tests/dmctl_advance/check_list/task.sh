@@ -8,6 +8,21 @@ function task_op() {
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 	dmctl_operate_source create $cur/conf/source2.yaml $SOURCE_ID2
 
+	invalid_task_op
+	available_task_op
+}
+
+function invalid_task_op() {
+	invalid_task_create_op
+	invalid_task_start_op
+	invalid_task_stop_op
+	invalid_task_delete_op
+	invalid_task_update_op
+	invalid_task_status_op
+	invalid_task_list_op
+}
+
+function available_task_op() {
 	task_create_op
 	task_start_op
 	task_stop_op
@@ -19,8 +34,9 @@ function task_op() {
 	https_availability
 }
 
-function task_create_op() {
-	# commond tips
+function invalid_task_create_op() {
+	echo "run run invalid_task_create_op"
+	# command tips
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task create" \
 		"dmctl task create <config-file> \[flags\]" 1
@@ -32,6 +48,10 @@ function task_create_op() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task create $cur/conf/dm-task_no_source.yaml" \
 		"source mysql-replica-03 in deployment configuration not found" 1
+}
+
+function task_create_op() {
+	echo "run task_create_op"
 	# has source
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task create $cur/conf/dm-task.yaml" \
@@ -46,8 +66,9 @@ function task_create_op() {
 		"Delete task test success" 1
 }
 
-function task_start_op() {
-	# commond tips
+function invalid_task_start_op() {
+	echo "run invalid_task_start_op"
+	# command tips
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task start" \
 		"dmctl task start <task-name | config-file> \[-s source ...\] \[--remove-meta\] \[--start-time\] \[--safe-mode-duration\] \[flags\]" 1
@@ -83,6 +104,10 @@ function task_start_op() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task delete test --yes" \
 		"Delete task test success" 1
+}
+
+function task_start_op() {
+	echo "run task_start_op"
 	# start by file
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task start $cur/conf/dm-task.yaml" \
@@ -156,8 +181,9 @@ function task_start_op() {
 	run_sql_source2 'DROP DATABASE if exists task_advance;'
 }
 
-function task_stop_op() {
-	# commond tips
+function invalid_task_stop_op() {
+	echo "run invalid_task_stop_op"
+	# command tips
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task stop" \
 		"dmctl task stop \[task-name | config-file\] \[-s source ...\] \[--timeout duration\] \[--batch-size 5\] \[flags\]" 1
@@ -193,10 +219,22 @@ function task_stop_op() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task stop test -s mysql-replica-03" \
 		"sources \[mysql-replica-03\] need to be operate not exist" 1
+	# delete
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"task delete test --yes -f" \
+		"Delete task test success" 1
+}
+
+function task_stop_op() {
+	echo "run task_stop_op"
 	# stop by test
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task start $cur/conf/dm-task.yaml" \
 		"\"Result\": true" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"task status test" \
+		"\"unit\": \"Sync\"" 2 \
+		"\"stage\": \"Running\"" 2
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task stop test" \
 		"Stop task test success" 1
@@ -259,8 +297,9 @@ function task_stop_op() {
 		"Delete task test1 success" 1
 }
 
-function task_delete_op() {
-	# commond tips
+function invalid_task_delete_op() {
+	echo "run invalid_task_delete_op"
+	# command tips
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task delete" \
 		"dmctl task delete <task-name | config-file> \[--force\] \[--yes\] \[flags\]" 1
@@ -276,6 +315,10 @@ function task_delete_op() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task delete test" \
 		"Do you want to continue" 1
+}
+
+function task_delete_op() {
+	echo "run task_delete_op"
 	# delete stopped task
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task create $cur/conf/dm-task.yaml" \
@@ -301,8 +344,9 @@ function task_delete_op() {
 		"task with name test not exist" 1
 }
 
-function task_update_op() {
-	# commond tips
+function invalid_task_update_op() {
+	echo "run invalid_task_update_op"
+	# command tips
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task update" \
 		"update <config-file> \[flags\]" 1
@@ -318,6 +362,10 @@ function task_update_op() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task update $cur/conf/dm-task.yaml" \
 		"task with name test not exist" 1
+}
+
+function task_update_op() {
+	echo "run task_update_op"
 	# running task
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task start $cur/conf/dm-task.yaml" \
@@ -342,8 +390,9 @@ function task_update_op() {
 		"Delete task test success" 1
 }
 
-function task_status_op() {
-	# commond tips
+function invalid_task_status_op() {
+	echo "run invalid_task_status_op"
+	# command tips
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task status" \
 		"dmctl task status <task-name | config-file> \[-s source ...\] \[flags\]" 1
@@ -355,6 +404,10 @@ function task_status_op() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task status not_exist_file.yaml" \
 		"task with name not_exist_file.yaml not exist" 1
+}
+
+function task_status_op() {
+	echo "run task_status_op"
 	# has task but error source
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task start $cur/conf/dm-task.yaml" \
@@ -376,8 +429,9 @@ function task_status_op() {
 		"Delete task test success" 1
 }
 
-function task_list_op() {
-	# commond tips
+function invalid_task_list_op() {
+	echo "run invalid_task_list_op"
+	# command tips
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task list -h" \
 		"dmctl task list \[\[--filter status=Running | source=...\]..\]\[--more\] \[flags\]" 1
@@ -397,6 +451,10 @@ function task_list_op() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task list --filter source=abc --filter status=abc --filter source=bcd" \
 		"too many filters" 1
+}
+
+function task_list_op() {
+	echo "run task_list_op"
 	# filter
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task start $cur/conf/dm-task.yaml" \
@@ -411,12 +469,15 @@ function task_list_op() {
 		"task list --filter source=mysql-replica-01 --filter status=Running --more" \
 		"\"stage\": \"Running\"" 2 \
 		"\"total\": 1" 1
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"task stop test" \
-		"Stop task test success" 1
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"task list --filter source=mysql-replica-01 --filter status=Paused" \
-		"\"total\": 1" 1
+
+	# TODO need to change status to be Stopped
+	# run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	# 	"task stop test" \
+	# 	"Stop task test success" 1
+	# run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	# 	"task list --filter source=mysql-replica-01 --filter status=Stopped" \
+	# 	"\"total\": 1" 1
+
 	# delete
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task delete test -f -y" \
@@ -428,7 +489,8 @@ function task_list_op() {
 
 # check,pause,resume still use grpc interface, just Simply test availability
 function other_op() {
-	# commond tips
+	echo "run other_op"
+	# command tips
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task check" \
 		"dmctl task check <config-file> \[--error count\] \[--warn count\] \[--start-time\] \[flags\]" 1
@@ -436,7 +498,7 @@ function other_op() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task check $cur/conf/dm-task.yaml" \
 		"pre-check is passed" 1
-	# commond tips
+	# command tips
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task pause" \
 		"dmctl task pause \[task-name | config-file\] \[-s source ...\] \[flags\]" 1
@@ -451,7 +513,7 @@ function other_op() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task pause test" \
 		"\"result\": true" 3
-	# commond tips
+	# command tips
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"task resume" \
 		"dmctl task resume \[task-name | config-file\] \[-s source ...\] \[flags\]" 1
@@ -468,6 +530,7 @@ function other_op() {
 }
 
 function https_availability() {
+	echo "run https_availability"
 	cleanup_data task_advance
 	cleanup_process
 
