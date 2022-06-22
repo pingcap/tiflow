@@ -16,8 +16,6 @@ package test
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -113,12 +111,37 @@ func PrepareEtcdCluster(t *testing.T, names []string) (
 	etcdCli *clientv3.Client,
 	cleanFn func(),
 ) {
+	err := retry.Do(context.TODO(), func() error {
+		var err error
+		advertiseAddrs, embedEtcds, etcdCli, cleanFn, err = prepareEtcdClusterOnce(t, names)
+		return err
+	},
+		retry.WithBackoffBaseDelay(1000 /* 1000 ms */),
+		retry.WithBackoffMaxDelay(3000 /* 3 seconds */),
+		retry.WithMaxTries(3 /* fail after 10 seconds*/),
+		retry.WithIsRetryableErr(func(err error) bool {
+			if strings.Contains(err.Error(), "address already in use") {
+				return true
+			}
+			return false
+		}),
+	)
+	require.Nil(t, err)
+	return
+}
+
+func prepareEtcdClusterOnce(t *testing.T, names []string) (
+	advertiseAddrs []string,
+	embedEtcds []*embed.Etcd,
+	etcdCli *clientv3.Client,
+	cleanFn func(),
+	err error,
+) {
 	dirs := make([]string, 0, len(names))
 	cfgs := make([]*etcdutils.ConfigParams, 0, len(names))
 	initialCluster := make([]string, 0, len(names))
 	for _, name := range names {
-		dir, err := ioutil.TempDir("", name)
-		require.Nil(t, err)
+		dir := t.TempDir()
 		dirs = append(dirs, dir)
 
 		advertiseAddr := allocTempURL(t)
@@ -133,9 +156,9 @@ func PrepareEtcdCluster(t *testing.T, names []string) (
 		initialCluster = append(initialCluster, fmt.Sprintf("%s=%s", name, cfgCluster.PeerUrls))
 	}
 	etcdCh := make(chan *embed.Etcd)
+	startEtcdError := make(chan error)
 	for idx, cfg := range cfgs {
 		cfg.InitialCluster = strings.Join(initialCluster, ",")
-		fmt.Printf("cfg: %+v\n", cfg)
 		cfg.Adjust("", embed.ClusterStateFlagNew)
 		cfgClusterEtcd := etcdutils.GenEmbedEtcdConfigWithLogger("info")
 		addr := advertiseAddrs[idx]
@@ -143,9 +166,16 @@ func PrepareEtcdCluster(t *testing.T, names []string) (
 		require.Nil(t, err)
 		go func() {
 			etcd, err := etcdutils.StartEtcd(cfgClusterEtcd, nil, nil, time.Minute)
-			require.Nil(t, err)
-			etcdCh <- etcd
+			if err != nil {
+				startEtcdError <- err
+			} else {
+				etcdCh <- etcd
+			}
 		}()
+	}
+	startEtcdErrors := make([]error, 0)
+	checkFetchFinish := func() bool {
+		return len(startEtcdErrors)+len(embedEtcds) == len(names)
 	}
 fetchLoop:
 	for {
@@ -155,12 +185,20 @@ fetchLoop:
 			if len(embedEtcds) == len(names) {
 				break fetchLoop
 			}
+		case startErr := <-startEtcdError:
+			startEtcdErrors = append(startEtcdErrors, startErr)
 		case <-time.After(time.Minute):
 			t.Error("etcd doesn't start in time")
 		}
+		if checkFetchFinish() {
+			break fetchLoop
+		}
+	}
+	if len(startEtcdErrors) > 0 {
+		err = startEtcdErrors[0]
+		return
 	}
 
-	var err error
 	etcdCli, err = clientv3.New(clientv3.Config{
 		Endpoints:   advertiseAddrs,
 		DialTimeout: 3 * time.Second,
@@ -168,9 +206,6 @@ fetchLoop:
 	require.Nil(t, err)
 
 	cleanFn = func() {
-		for _, dir := range dirs {
-			os.RemoveAll(dir)
-		}
 		for _, etcd := range embedEtcds {
 			etcd.Close()
 		}
