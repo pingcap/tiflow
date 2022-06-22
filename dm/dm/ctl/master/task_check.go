@@ -23,7 +23,7 @@ func NewTaskCheckCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "check <config-file> [--error count] [--warn count] [--start-time]",
 		Short: "Check the configuration file of the task",
-		//TODO check task by openapi
+		// TODO check task by openapi
 		RunE: checkTaskFunc,
 	}
 	cmd.Flags().Int64P("error", "e", common.DefaultErrorCnt, "max count of errors to display")

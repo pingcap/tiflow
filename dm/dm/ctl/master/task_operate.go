@@ -99,7 +99,8 @@ func parseSourceTaskOperateParams(cmd *cobra.Command) (string, int, error) {
 }
 
 func sourceTaskOperateFunc(cmd *cobra.Command,
-	operateFunc func(cmd *cobra.Command, taskName string, sources []string) *taskOperateResult) error {
+	operateFunc func(cmd *cobra.Command, taskName string, sources []string) *taskOperateResult,
+) error {
 	source, batchSize, err := parseSourceTaskOperateParams(cmd)
 	if err != nil {
 		cmd.SetOut(os.Stdout)
@@ -131,7 +132,8 @@ func sourceTaskOperateFunc(cmd *cobra.Command,
 }
 
 func batchTaskOperate(cmd *cobra.Command, batchSize int, sources []string, tasks []openapi.Task,
-	operateFunc func(cmd *cobra.Command, taskName string, sources []string) *taskOperateResult) *batchTaskOperateResult {
+	operateFunc func(cmd *cobra.Command, taskName string, sources []string) *taskOperateResult,
+) *batchTaskOperateResult {
 	result := batchTaskOperateResult{Result: true, Tasks: []*taskOperateResult{}}
 
 	if len(tasks) < batchSize {

@@ -15,7 +15,6 @@ package master
 
 import (
 	"context"
-
 	"net/http"
 	"os"
 

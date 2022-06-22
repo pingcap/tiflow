@@ -2234,7 +2234,7 @@ func (t *testMaster) TestGRPCLongResponse(c *check.C) {
 	c.Assert(err, check.IsNil)
 	defer conn.Close()
 
-	common.GlobalCtlClient.MasterClient = pb.NewMasterClient(conn)
+	common.GlobalCtlClient.MasterGRPCClient = pb.NewMasterClient(conn)
 	ctx := context.Background()
 	resp := &pb.StartTaskResponse{}
 	err = common.SendRequest(ctx, "StartTask", &pb.StartTaskRequest{}, &resp)

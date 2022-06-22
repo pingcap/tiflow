@@ -74,7 +74,7 @@ func taskStartFunc(cmd *cobra.Command, _ []string) error {
 	notExist, err := isTaskNotExist(taskName)
 	if notExist && strings.HasSuffix(arg0, ".yaml") || strings.HasSuffix(arg0, ".yml") {
 		// create to keep compatible start-task
-		_, err := createTask(arg0)
+		_, err = createTask(arg0)
 		if err != nil {
 			return errors.Trace(err)
 		}

@@ -68,7 +68,6 @@ func taskStopOperateFunc(cmd *cobra.Command, taskName string, sources []string) 
 		} else {
 			taskResult.Msg = fmt.Sprintf("Stop task %s success.", taskName)
 		}
-
 	}
 	return taskResult
 }

@@ -82,9 +82,8 @@ func isTaskNotExist(taskName string) (bool, error) {
 	if errResp != nil {
 		if strings.Contains(errResp.Error(), "task with name "+taskName+" not exist") {
 			return true, errResp
-		} else {
-			return false, errResp
 		}
+		return false, errResp
 	}
 	return false, nil
 }

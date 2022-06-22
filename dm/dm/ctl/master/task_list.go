@@ -58,7 +58,8 @@ func taskListFunc(cmd *cobra.Command, _ []string) (err error) {
 	}
 
 	for _, filter := range filters {
-		if strings.HasPrefix(filter, "status") {
+		switch {
+		case strings.HasPrefix(filter, "status"):
 			split := strings.Split(filter, "=")
 			if len(split) != 2 {
 				common.PrintLinesf("error in parse `--filter status`")
@@ -66,7 +67,7 @@ func taskListFunc(cmd *cobra.Command, _ []string) (err error) {
 			}
 			status := openapi.TaskStage(split[1])
 			stage = &status
-		} else if strings.HasPrefix(filter, "source") {
+		case strings.HasPrefix(filter, "source"):
 			split := strings.Split(filter, "=")
 			if len(split) != 2 {
 				common.PrintLinesf("error in parse `--filter source`")
@@ -74,7 +75,7 @@ func taskListFunc(cmd *cobra.Command, _ []string) (err error) {
 			}
 			sources := openapi.SourceNameList(strings.Split(split[1], ","))
 			sourceList = &sources
-		} else {
+		default:
 			common.PrintLinesf("error in parse `--filter`")
 			return errors.New("invalid filter")
 		}
@@ -96,14 +97,5 @@ func taskListFunc(cmd *cobra.Command, _ []string) (err error) {
 		return errors.Trace(sendErr)
 	}
 	common.PrettyPrintOpenapiResp(true, listResp)
-
-	// if resp.Result && taskName == "" && len(sources) == 0 && !more {
-	// 	result, hasFalseResult := wrapTaskResult(resp)
-	// 	if !hasFalseResult { // if any result is false, we still print the full status.
-	// 		common.PrettyPrintInterface(result)
-	// 		return nil
-	// 	}
-	// }
-	// common.PrettyPrintResponse(resp)
 	return nil
 }

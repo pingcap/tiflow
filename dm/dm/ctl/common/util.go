@@ -426,7 +426,7 @@ func (e SendToOpenapiError) Error() string {
 	return string(s)
 }
 
-// GetOriginMsg returns origin error msg to make print exception simple
+// GetOriginMsg returns origin error msg to make print exception simple.
 func (e SendToOpenapiError) GetOriginMsg() interface{} {
 	if e.StructMsg != nil {
 		return e.StructMsg

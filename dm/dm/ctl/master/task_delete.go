@@ -90,8 +90,7 @@ func confirm() (bool, error) {
 
 	if input == "y" || input == "yes" {
 		return true, nil
-	} else {
-		common.PrintLinesf("Operation aborted by user (with answer '%s')", input)
-		return false, nil
 	}
+	common.PrintLinesf("Operation aborted by user (with answer '%s')", input)
+	return false, nil
 }

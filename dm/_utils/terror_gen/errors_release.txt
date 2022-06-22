@@ -565,7 +565,7 @@ ErrSchedulerStartRelayOnBound,[code=46030:class=scheduler:scope=internal:level=l
 ErrSchedulerStopRelayOnBound,[code=46031:class=scheduler:scope=internal:level=low], "Message: the source has `start-relay` automatically for bound worker, so it can't `stop-relay` with worker name now, Workaround: Please use `stop-relay` without worker name."
 ErrSchedulerPauseTaskForTransferSource,[code=46032:class=scheduler:scope=internal:level=low], "Message: failed to auto pause tasks %s when transfer-source, Workaround: Please pause task by `dmctl pause-task`."
 ErrSchedulerWorkerNotFree,[code=46033:class=scheduler:scope=internal:level=low], "Message: dm-worker with name %s not free"
-ErrCtlGRPCCreateConn,[code=48001:class=dmctl:scope=internal:level=high], "Message: can not create grpc connection, Workaround: Please check your network connection."
+ErrCtlCreateMasterConn,[code=48001:class=dmctl:scope=internal:level=high], "Message: can not create master connection, Workaround: Please check your network connection."
 ErrCtlInvalidTLSCfg,[code=48002:class=dmctl:scope=internal:level=medium], "Message: invalid TLS config, Workaround: Please check the `ssl-ca`, `ssl-cert` and `ssl-key` config in command line."
 ErrCtlLoadTLSCfg,[code=48003:class=dmctl:scope=internal:level=high], "Message: can not load tls config, Workaround: Please ensure that the tls certificate is accessible on the node currently running dmctl."
 ErrOpenAPICommonError,[code=49001:class=openapi:scope=internal:level=high], "Message: some unexpected errors have occurred, please check the detailed error message"

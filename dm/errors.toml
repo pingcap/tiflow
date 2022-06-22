@@ -3401,7 +3401,7 @@ workaround = ""
 tags = ["internal", "low"]
 
 [error.DM-dmctl-48001]
-message = "can not create grpc connection"
+message = "can not create master connection"
 description = ""
 workaround = "Please check your network connection."
 tags = ["internal", "high"]
