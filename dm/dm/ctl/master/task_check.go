@@ -26,7 +26,7 @@ func NewTaskCheckCmd() *cobra.Command {
 		// TODO check task by openapi
 		RunE: checkTaskFunc,
 	}
-	cmd.Flags().Int64P("error", "e", common.DefaultErrorCnt, "max count of errors to display")
+	cmd.Flags().Int64P("error", "e", common.DefaultErrorCnt, "maximum number of errors to display")
 	cmd.Flags().Int64P("warn", "w", common.DefaultWarnCnt, "max count of warns to display")
 	cmd.Flags().String("start-time", "", "specify the start time of binlog replication, e.g. '2021-10-21 00:01:00' or 2021-10-21T00:01:00")
 	return cmd
