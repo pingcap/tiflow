@@ -151,14 +151,12 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 
 	if n.redoManager != nil && n.redoManager.Enabled() {
 		// redo log do not support batch resolve mode
-		if resolved.IsBatchMode() {
-			resolved = model.NewResolvedTs(resolved.ResolvedMark())
-		}
+		resolved = model.NewResolvedTs(resolved.ResolvedMark())
 		err = n.redoManager.FlushLog(ctx, n.tableID, resolved.Ts)
 
 		redoTs := n.redoManager.GetMinResolvedTs()
 		if redoTs < currentBarrierTs {
-			log.Panic("redoTs should not less than current barrierTs",
+			log.Debug("redoTs should not less than current barrierTs",
 				zap.Int64("tableID", n.tableID),
 				zap.Uint64("redoTs", redoTs),
 				zap.Uint64("barrierTs", currentBarrierTs))
