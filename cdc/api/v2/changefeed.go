@@ -63,7 +63,7 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 	}
 	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	pdClient, err := h.apiV2Helper.GetPDClient(timeoutCtx, config.PDAddrs, credential)
+	pdClient, err := h.helpers.GetPDClient(timeoutCtx, config.PDAddrs, credential)
 	if err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
@@ -71,7 +71,7 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 	defer pdClient.Close()
 
 	// verify tables
-	kvStorage, err := h.apiV2Helper.CreateTiStore(config.PDAddrs, credential)
+	kvStorage, err := h.helpers.CreateTiStore(config.PDAddrs, credential)
 	if err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrInternalServerError, err))
 		return
@@ -79,7 +79,7 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 	// We should not close kvStorage since all kvStorage in cdc is the same one.
 	// defer kvStorage.Close() TODO: ?
 
-	info, err := h.apiV2Helper.VerifyCreateChangefeedConfig(ctx, config, pdClient,
+	info, err := h.helpers.VerifyCreateChangefeedConfig(ctx, config, pdClient,
 		h.capture.StatusProvider(), h.capture.GetEtcdClient().GetEnsureGCServiceID(),
 		kvStorage)
 	if err != nil {
@@ -139,7 +139,7 @@ func (h *OpenAPIV2) VerifyTable(c *gin.Context) {
 		credential.CertAllowedCN = cfg.CertAllowedCN
 	}
 
-	kvStore, err := h.apiV2Helper.CreateTiStore(cfg.PDAddrs, credential)
+	kvStore, err := h.helpers.CreateTiStore(cfg.PDAddrs, credential)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -212,7 +212,7 @@ func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
 		return
 	}
 
-	if err := h.apiV2Helper.VerifyUpstream(ctx, changefeedConfig, cfInfo); err != nil {
+	if err := h.helpers.VerifyUpstream(ctx, changefeedConfig, cfInfo); err != nil {
 		return
 	}
 
@@ -220,7 +220,7 @@ func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
 		zap.String("changefeedInfo", cfInfo.String()),
 		zap.Any("upstreamInfo", upInfo))
 
-	newCfInfo, newUpInfo, err := h.apiV2Helper.VerifyUpdateChangefeedConfig(ctx, changefeedConfig, cfInfo, upInfo)
+	newCfInfo, newUpInfo, err := h.helpers.VerifyUpdateChangefeedConfig(ctx, changefeedConfig, cfInfo, upInfo)
 	if err != nil {
 		_ = c.Error(err)
 		return

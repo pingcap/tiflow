@@ -21,8 +21,8 @@ import (
 
 // OpenAPIV2 provides CDC v2 APIs
 type OpenAPIV2 struct {
-	capture     capture.CaptureInfoProvider
-	apiV2Helper APIV2Helpers
+	capture capture.CaptureInfoProvider
+	helpers APIV2Helpers
 }
 
 // NewOpenAPIV2 creates a new OpenAPIV2.
