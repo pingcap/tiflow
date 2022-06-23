@@ -193,7 +193,8 @@ func (p *processor) AddTable(
 		zap.Uint64("checkpointTs", startTs),
 		zap.Bool("isPrepare", isPrepare))
 
-	table, err := p.createTablePipeline(ctx.(cdcContext.Context), tableID, &model.TableReplicaInfo{StartTs: startTs})
+	table, err := p.createTablePipeline(
+		ctx.(cdcContext.Context), tableID, &model.TableReplicaInfo{StartTs: startTs})
 	if err != nil {
 		return false, errors.Trace(err)
 	}
@@ -260,15 +261,38 @@ func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableI
 
 	localResolvedTs := p.resolvedTs
 	globalResolvedTs := p.changefeed.Status.ResolvedTs
+	localCheckpointTs := p.agent.GetLastSentCheckpointTs()
 	globalCheckpointTs := p.changefeed.Status.CheckpointTs
 
 	done := func() bool {
 		if isPrepare {
-			// todo: add ut to cover this, after 2ps supported.
 			return table.State() == pipeline.TableStatePrepared
 		}
-		// The table is `replicating`, it's indicating that the `add table` must be finished.
-		return table.State() == pipeline.TableStateReplicating
+
+		if config.GetGlobalServerConfig().Debug.EnableTwoPhaseScheduler {
+			// The table is `replicating`, it's indicating that the `add table` must be finished.
+			return table.State() == pipeline.TableStateReplicating
+		}
+
+		// TODO: this should be removed, after SchedulerV3 become the first choice.
+		// The following only work for SchedulerV2.
+		// These two conditions are used to determine if the table's pipeline has finished
+		// initializing and all invariants have been preserved.
+		//
+		// The processor needs to make sure all reasonable invariants about the checkpoint-ts and
+		// the resolved-ts are preserved before communicating with the Owner.
+		//
+		// These conditions are similar to those in the legacy implementation of
+		// the Owner/Processor.
+		// the adding table is considered into the calculation of checkpoint ts and resolved ts
+		if table.CheckpointTs() < localCheckpointTs || localCheckpointTs < globalCheckpointTs {
+			return false
+		}
+		if table.ResolvedTs() < localResolvedTs || localResolvedTs < globalResolvedTs {
+			return false
+		}
+
+		return true
 	}
 	if !done() {
 		log.Debug("Add Table not finished",
@@ -280,6 +304,7 @@ func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableI
 			zap.Uint64("localResolvedTs", localResolvedTs),
 			zap.Uint64("globalResolvedTs", globalResolvedTs),
 			zap.Uint64("tableCheckpointTs", table.CheckpointTs()),
+			zap.Uint64("localCheckpointTs", localCheckpointTs),
 			zap.Uint64("globalCheckpointTs", globalCheckpointTs),
 			zap.Any("state", table.State()), zap.Bool("isPrepare", isPrepare))
 		return false
@@ -294,6 +319,7 @@ func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableI
 		zap.Uint64("localResolvedTs", localResolvedTs),
 		zap.Uint64("globalResolvedTs", globalResolvedTs),
 		zap.Uint64("tableCheckpointTs", table.CheckpointTs()),
+		zap.Uint64("localCheckpointTs", localCheckpointTs),
 		zap.Uint64("globalCheckpointTs", globalCheckpointTs),
 		zap.Any("state", table.State()), zap.Bool("isPrepare", isPrepare))
 	return true
@@ -776,12 +802,6 @@ func (p *processor) handlePosition(currentTs int64) {
 		minResolvedTs = p.schemaStorage.ResolvedTs()
 	}
 	for _, table := range p.tables {
-		status := table.State()
-		// todo: add ut to cover this.
-		if status == pipeline.TableStatePreparing ||
-			status == pipeline.TableStatePrepared {
-			continue
-		}
 		ts := table.ResolvedTs()
 		if ts < minResolvedTs {
 			minResolvedTs = ts
@@ -792,12 +812,6 @@ func (p *processor) handlePosition(currentTs int64) {
 	minCheckpointTs := minResolvedTs
 	minCheckpointTableID := int64(0)
 	for _, table := range p.tables {
-		status := table.State()
-		// todo: add ut to cover this
-		if status == pipeline.TableStatePreparing ||
-			status == pipeline.TableStatePrepared {
-			continue
-		}
 		ts := table.CheckpointTs()
 		if ts < minCheckpointTs {
 			minCheckpointTs = ts
@@ -831,10 +845,7 @@ func (p *processor) pushResolvedTs2Table() {
 		resolvedTs = schemaResolvedTs
 	}
 	for _, table := range p.tables {
-		// todo: add ut to cover this
-		if table.State() == pipeline.TableStateReplicating {
-			table.UpdateBarrierTs(resolvedTs)
-		}
+		table.UpdateBarrierTs(resolvedTs)
 	}
 }
 
