@@ -26,12 +26,17 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 )
 
+const (
+	dummyChangeFeedID = "dummy_changefeed"
+)
+
 func TestAllPhysicalTables(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig())
+	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
+		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
 	require.Nil(t, err)
 	require.Len(t, schema.AllPhysicalTables(), 0)
 	// add normal table
@@ -50,7 +55,6 @@ func TestAllPhysicalTables(t *testing.T) {
 			store_id INT NOT NULL,
 			department_id INT NOT NULL
 		)
-
 		PARTITION BY RANGE(id)  (
 			PARTITION p0 VALUES LESS THAN (5),
 			PARTITION p1 VALUES LESS THAN (10),
@@ -77,7 +81,8 @@ func TestIsIneligibleTableID(t *testing.T) {
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig())
+	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
+		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
 	require.Nil(t, err)
 	// add normal table
 	job := helper.DDL2Job("create table test.t1(id int primary key)")
@@ -97,7 +102,8 @@ func TestBuildDDLEvent(t *testing.T) {
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig())
+	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
+		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
 	require.Nil(t, err)
 	// add normal table
 	job := helper.DDL2Job("create table test.t1(id int primary key)")

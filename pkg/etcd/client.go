@@ -74,12 +74,12 @@ type Client struct {
 	clock clock.Clock
 }
 
-// Wrap warps a clientv3.Client that provides etcd APIs required by TiCDC.
+// Wrap warps a clientV3.Client that provides etcd APIs required by TiCDC.
 func Wrap(cli *clientv3.Client, metrics map[string]prometheus.Counter) *Client {
 	return &Client{cli: cli, metrics: metrics, clock: clock.New()}
 }
 
-// Unwrap returns a clientv3.Client
+// Unwrap returns a clientV3.Client
 func (c *Client) Unwrap() *clientv3.Client {
 	return c.cli
 }
@@ -99,7 +99,10 @@ func retryRPC(rpcName string, metric prometheus.Counter, etcdRPC func() error) e
 			metric.Inc()
 		}
 		return err
-	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithBackoffMaxDelay(backoffMaxDelayInMs), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(isRetryableError(rpcName)))
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
+		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
+		retry.WithMaxTries(maxTries),
+		retry.WithIsRetryableErr(isRetryableError(rpcName)))
 }
 
 // Put delegates request to clientv3.KV.Put
@@ -130,8 +133,9 @@ func (c *Client) Get(
 	return
 }
 
-// Delete delegates request to clientv3.KV.Delete
-func (c *Client) Delete(ctx context.Context, key string, opts ...clientv3.OpOption) (resp *clientv3.DeleteResponse, err error) {
+// Delete delegates request to clientV3.KV.Delete
+func (c *Client) Delete(ctx context.Context, key string,
+	opts ...clientv3.OpOption) (resp *clientv3.DeleteResponse, err error) {
 	if metric, ok := c.metrics[EtcdDel]; ok {
 		metric.Inc()
 	}
@@ -220,15 +224,18 @@ func (c *Client) TimeToLive(
 	return
 }
 
-// Watch delegates request to clientv3.Watcher.Watch
-func (c *Client) Watch(ctx context.Context, key string, role string, opts ...clientv3.OpOption) clientv3.WatchChan {
+// Watch delegates request to clientV3.Watcher.Watch
+func (c *Client) Watch(
+	ctx context.Context, key string, role string, opts ...clientv3.OpOption,
+) clientv3.WatchChan {
 	watchCh := make(chan clientv3.WatchResponse, etcdWatchChBufferSize)
 	go c.WatchWithChan(ctx, watchCh, key, role, opts...)
 	return watchCh
 }
 
 // WatchWithChan maintains a watchCh and sends all msg from the watchCh to outCh
-func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchResponse, key string, role string, opts ...clientv3.OpOption) {
+func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientv3.WatchResponse,
+	key string, role string, opts ...clientv3.OpOption) {
 	defer func() {
 		close(outCh)
 		log.Info("WatchWithChan exited", zap.String("role", role))

@@ -313,6 +313,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 		}
 		failpoint.Return(nil)
 	})
+	log.Info("start exec DDL", zap.Any("DDL", ddl))
 	err := s.statistics.RecordDDLExecution(func() error {
 		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
