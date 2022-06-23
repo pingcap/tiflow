@@ -14,9 +14,8 @@
 package internal
 
 import (
-	"sync"
-
 	"container/list"
+	"sync"
 )
 
 type Eq[T any] interface {
@@ -45,14 +44,18 @@ func (s *Slots[E]) Add(elem E, keys []int64, onConflict func(dependee E)) {
 	defer s.mu.Unlock()
 
 	for _, key := range keys {
-		if elemList, ok := s.slots[key/s.numSlots]; ok {
+		if elemList, ok := s.slots[key%s.numSlots]; ok {
 			for e := elemList.Front(); e != nil; e = e.Next() {
-				onConflict(e.Value.(E))
+				e := e.Value.(E)
+				if e.Equals(elem) {
+					continue
+				}
+				onConflict(e)
 			}
 		} else {
-			s.slots[key/s.numSlots] = list.New()
+			s.slots[key%s.numSlots] = list.New()
 		}
-		s.slots[key/s.numSlots].PushBack(elem)
+		s.slots[key%s.numSlots].PushBack(elem)
 	}
 }
 
@@ -61,15 +64,15 @@ func (s *Slots[E]) Remove(elem E, keys []int64) {
 	defer s.mu.Unlock()
 
 	for _, key := range keys {
-		elemList, ok := s.slots[key/s.numSlots]
+		elemList, ok := s.slots[key%s.numSlots]
 		if !ok {
 			panic("elem list is not found")
 		}
-		for e := elemList.Front(); e != nil; e.Next() {
+		for e := elemList.Front(); e != nil; e = e.Next() {
 			if elem.Equals(e.Value.(E)) {
 				elemList.Remove(e)
+				break
 			}
 		}
-		panic("elem not found")
 	}
 }
