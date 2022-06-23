@@ -24,16 +24,11 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
-	"gopkg.in/check.v1"
 )
-
-var _ = check.Suite(&schemaSuite{})
 
 const (
 	dummyChangeFeedID = "dummy_changefeed"
 )
-
-type schemaSuite struct{}
 
 func TestAllPhysicalTables(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
