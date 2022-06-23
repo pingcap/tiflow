@@ -39,7 +39,7 @@ EOF
 		--path $WORK_DIR/tidb \
 		--store unistore \
 		--config $WORK_DIR/tidb-tls-config.toml \
-		--log-file "$WORK_DIR/tidb.log" &
+		--log-file "$WORK_DIR/tidb.log" 2>&1 &
 
 	sleep 3
 	# if execute failed, print tidb's log for debug
