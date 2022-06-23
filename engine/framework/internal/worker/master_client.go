@@ -258,8 +258,9 @@ func (m *MasterClient) SendHeartBeat(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.L().Info("sending heartbeat success", zap.String("worker", m.workerID),
-		zap.String("master-id", m.masterID))
+	log.L().Debug("sending heartbeat ping success",
+		zap.String("master-id", m.masterID),
+		zap.Any("msg", heartbeatMsg))
 	if !ok {
 		// Reloads master info asynchronously.
 		// Not using `ctx` because the caller might cancel unexpectedly.
