@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller/frontier"
@@ -29,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/txnutil"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/oracle"
 	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
@@ -66,6 +66,8 @@ type pullerImpl struct {
 
 	changefeed model.ChangeFeedID
 	tableID    model.TableID
+
+	role util.Role
 }
 
 // New create a new Puller fetch event start from checkpointTs
@@ -147,10 +149,10 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 
 	checkpointTs := p.checkpointTs
 	lockResolver := txnutil.NewLockerResolver(p.kvStorage,
-		contextutil.ChangefeedIDFromCtx(ctx), contextutil.RoleFromCtx(ctx))
+		p.changefeed, p.role)
+
 	for _, span := range p.spans {
 		span := span
-
 		g.Go(func() error {
 			return p.kvCli.EventFeed(ctx, span, checkpointTs, lockResolver, p, p.inputCh)
 		})

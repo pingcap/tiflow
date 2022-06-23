@@ -174,7 +174,7 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 	g, stdCtx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		return h.puller.Run(ctx)
+		return h.puller.Run(stdCtx)
 	})
 
 	rawDDLCh := memory.SortOutput(stdCtx, h.puller.Output())
