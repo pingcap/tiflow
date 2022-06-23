@@ -91,7 +91,7 @@ func init() {
 	flag.StringVar(&key, "key", "", "Private key path for Kafka SSL connection")
 	flag.Parse()
 
-	err := logutil.InitLogger(&logutil.Config{
+	err := logutil.InitLoggerForCDC(&logutil.Config{
 		Level: logLevel,
 		File:  logPath,
 	})
