@@ -14,25 +14,20 @@
 package syncer
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-<<<<<<< HEAD
-=======
 	"fmt"
-	"regexp"
->>>>>>> 1ba147108 (syncer(dm): fix different output format for operate-schema get (#5824))
 	"strings"
 
 	"github.com/pingcap/tidb-tools/pkg/filter"
+	"github.com/pingcap/tidb/executor"
+	"github.com/pingcap/tidb/meta/autoid"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
-<<<<<<< HEAD
-=======
-	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/quotes"
->>>>>>> 1ba147108 (syncer(dm): fix different output format for operate-schema get (#5824))
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -72,19 +67,37 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 		}
 		return string(tableListJSON), err
 	case pb.SchemaOp_GetSchema:
-<<<<<<< HEAD
-		// we only try to get schema from schema-tracker now.
-		// in other words, we can not get the schema if any DDL/DML has been replicated, or set a schema previously.
-		return s.schemaTracker.GetCreateTable(ctx, sourceTable)
-=======
 		// when task is paused, schemaTracker is closed. We get the table structure from checkpoint.
 		ti := s.checkpoint.GetTableInfo(req.Database, req.Table)
 		if ti == nil {
 			s.tctx.L().Info("table schema is not in checkpoint, fetch from downstream",
 				zap.String("table", sourceTable.String()))
 			targetTable := s.route(sourceTable)
-			result, err2 := dbconn.GetTableCreateSQL(s.tctx.WithContext(ctx), s.downstreamTrackConn, targetTable.String())
-			result = strings.Replace(result, fmt.Sprintf("CREATE TABLE %s", quotes.QuoteName(targetTable.Name)), fmt.Sprintf("CREATE TABLE %s", quotes.QuoteName(sourceTable.Name)), 1)
+
+			// Get table create SQL
+			tableID := targetTable.String()
+			querySQL := fmt.Sprintf("SHOW CREATE TABLE %s", tableID)
+			var table, createStr string
+
+			rows, err2 := s.downstreamTrackConn.QuerySQL(s.tctx.WithContext(ctx), querySQL)
+			if err2 != nil {
+				return "", err2
+			}
+
+			defer rows.Close()
+			if rows.Next() {
+				if scanErr := rows.Scan(&table, &createStr); scanErr != nil {
+					return "", terror.DBErrorAdapt(scanErr, terror.ErrDBDriverError)
+				}
+			} else {
+				return "", terror.ErrSyncerDownstreamTableNotFound.Generate(tableID)
+			}
+
+			if err = rows.Close(); err != nil {
+				return "", terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
+			}
+
+			result := strings.Replace(createStr, fmt.Sprintf("CREATE TABLE %s", quotes.QuoteName(targetTable.Name)), fmt.Sprintf("CREATE TABLE %s", quotes.QuoteName(sourceTable.Name)), 1)
 			return utils.CreateTableSQLToOneRow(result), err2
 		}
 
@@ -92,7 +105,6 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 		err2 := executor.ConstructResultOfShowCreateTable(s.sessCtx, ti, autoid.Allocators{}, result)
 		return utils.CreateTableSQLToOneRow(result.String()), err2
 
->>>>>>> 1ba147108 (syncer(dm): fix different output format for operate-schema get (#5824))
 	case pb.SchemaOp_SetSchema:
 		// for set schema, we must ensure it's a valid `CREATE TABLE` statement.
 		// now, we only set schema for schema-tracker,
