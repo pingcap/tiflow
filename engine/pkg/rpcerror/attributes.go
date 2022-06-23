@@ -151,6 +151,8 @@ func (u Unauthenticated) grpcStatusCode() codes.Code {
 	return codes.Unauthenticated
 }
 
+// errorInfo is so defined that only those structs who embed an implementer of errorInfo
+// can be used with this package. This is intended to force the caller to embed an Error[R, E].
 type errorInfo interface {
 	isErrorInfo()
 }

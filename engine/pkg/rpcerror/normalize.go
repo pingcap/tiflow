@@ -28,6 +28,9 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 )
 
+// normalizeOpts stores information used to generate a Prototype.
+// Prototype cannot be elegantly used here, because its type parameter
+// would make it difficult to define NormalizeOpt.
 type normalizeOpts struct {
 	name string
 	msg  string
