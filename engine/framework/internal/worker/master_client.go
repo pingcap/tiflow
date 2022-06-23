@@ -190,6 +190,9 @@ func (m *MasterClient) HandleHeartbeat(sender p2p.NodeID, msg *frameModel.Heartb
 		m.masterSideClosed.Store(true)
 	}
 
+	// worker may receive stale heartbeat pong message from job master, stale
+	// message doesn't contribute to job master aliveness detection and even
+	// leads to false positive.
 	lastAckTime := m.lastMasterAckedPingTime.Load()
 	if lastAckTime > time.Duration(msg.SendTime) {
 		log.L().Info("received stale pong heartbeat",
