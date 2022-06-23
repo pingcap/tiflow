@@ -31,7 +31,7 @@ func TestListEqualAndAfter(t *testing.T) {
 	reqs := m.ListEqualAndAfter("")
 	require.Len(t, reqs, 0)
 
-	reqs = m.ListEqualAndAfter("mysql.000001:1234")
+	reqs = m.ListEqualAndAfter("(mysql.000001, 1234)")
 	require.Len(t, reqs, 0)
 
 	m.ops = []*operator{
@@ -49,14 +49,14 @@ func TestListEqualAndAfter(t *testing.T) {
 	require.Equal(t, pb.ErrorOp_List, reqs[0].Op)
 	require.Equal(t, pb.ErrorOp_Skip, reqs[1].Op)
 
-	reqs = m.ListEqualAndAfter("mysql.000001:1234")
+	reqs = m.ListEqualAndAfter("(mysql.000001, 1234)")
 	require.Equal(t, pb.ErrorOp_List, reqs[0].Op)
 	require.Equal(t, pb.ErrorOp_Skip, reqs[1].Op)
 
-	reqs = m.ListEqualAndAfter("mysql.000001:1235")
+	reqs = m.ListEqualAndAfter("(mysql.000001, 1235)")
 	require.Equal(t, pb.ErrorOp_Skip, reqs[0].Op)
 
-	reqs = m.ListEqualAndAfter("mysql.000001:9999")
+	reqs = m.ListEqualAndAfter("(mysql.000001, 9999)")
 	require.Len(t, reqs, 0)
 }
 
