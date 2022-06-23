@@ -34,9 +34,9 @@ import (
 const (
 	// The max number of workers of a system.
 	maxWorkerNum = 64
-	// The default size of polled actor batch.
+	// defaultActorBatchSize is the default size of polled actor batch.
 	defaultActorBatchSize = 1
-	// The default size of receive message batch.
+	// defaultMsgBatchSizePerActor is the default size of receive message batch.
 	defaultMsgBatchSizePerActor = 64
 )
 
@@ -45,11 +45,33 @@ var (
 	errActorNotFound = cerrors.ErrActorNotFound.FastGenByArgs()
 )
 
+// procState is the state of a proc.
+//
+//   ┌---------┐  Actor.Close()
+//   | Running |-----------------┐
+//   └--+------┘                 v
+//      |                    ┌--------┐
+//      | System.Close()     | Closed |
+//      v                    └--------┘
+//   ┌---------------┐           ^
+//   | MailboxClosed |-----------┘
+//   └---------------┘ Mailbox Empty
+type procState uint64
+
+const (
+	// Running state, proc can be polled.
+	procStateRunning procState = iota
+	// Mailbox closed, proc is about to be closed.
+	procStateMailboxClosed
+	// Closed, both mailbox and actor is closed, proc can not be polled.
+	procStateClosed
+)
+
 // proc is wrapper of a running actor.
 type proc struct {
-	mb     Mailbox
-	actor  Actor
-	closed uint64
+	state uint64
+	mb    Mailbox
+	actor Actor
 }
 
 // batchReceiveMsgs receives messages into batchMsg.
@@ -68,17 +90,57 @@ func (p *proc) batchReceiveMsgs(batchMsg []message.Message) int {
 	return n
 }
 
-// close its actor.
-// close is threadsafe.
-func (p *proc) close() {
-	atomic.StoreUint64(&p.closed, 1)
-}
-
-// isClosed returns ture, means its actor is closed.
+// isClosed returns ture, means its mailbox and actor are closed.
 // isClosed is threadsafe.
 func (p *proc) isClosed() bool {
-	return atomic.LoadUint64(&p.closed) == 1
+	return atomic.LoadUint64(&p.state) == uint64(procStateClosed)
 }
+
+// closeMailbox close mailbox and set state to closed for graceful close.
+// onSystemStop is threadsafe.
+func (p *proc) onSystemStop() {
+	// Running -> MailboxClosed
+	if atomic.CompareAndSwapUint64(
+		&p.state, uint64(procStateRunning), uint64(procStateMailboxClosed)) {
+		p.mb.close()
+	}
+}
+
+// closeMailbox close mailbox and set state to closed.
+// onMailboxEmpty is threadsafe.
+func (p *proc) onMailboxEmpty() {
+	// MailboxClosed -> Close
+	if atomic.CompareAndSwapUint64(
+		&p.state, uint64(procStateMailboxClosed), uint64(procStateClosed)) {
+		p.actor.OnClose()
+	}
+}
+
+// onActorClosed all mailbox and actor.
+// onActorClosed is threadsafe.
+func (p *proc) onActorClosed() {
+	if atomic.CompareAndSwapUint64(
+		&p.state, uint64(procStateRunning), uint64(procStateClosed)) {
+		p.mb.close()
+		p.actor.OnClose()
+		return
+	}
+	if atomic.CompareAndSwapUint64(
+		&p.state, uint64(procStateMailboxClosed), uint64(procStateClosed)) {
+		p.actor.OnClose()
+	}
+}
+
+type readyState int
+
+const (
+	// Running state, system needs to poll actors.
+	readyStateRunning readyState = 0
+	// It's about to stop, system needs to graceful stop actors.
+	readyStateStopping readyState = 1
+	// Stopped, system stops polling.
+	readyStateStopped readyState = 2
+)
 
 // ready is a centralize notification struct, shared by a router and a system.
 // It schedules notification and actors.
@@ -91,33 +153,31 @@ type ready struct {
 	queue list.List
 	// In the set, an actor is either polling by system
 	// or is pending to be polled.
-	procs   map[ID]struct{}
-	stopped bool
+	procs map[ID]struct{}
+	state readyState
 
 	metricDropMessage prometheus.Counter
 }
 
+func (rd *ready) prepareStop() {
+	rd.Lock()
+	rd.state = readyStateStopping
+	rd.Unlock()
+}
+
 func (rd *ready) stop() {
 	rd.Lock()
-	rd.stopped = true
+	rd.state = readyStateStopped
 	rd.Unlock()
 	rd.cond.Broadcast()
 }
 
 // enqueueLocked enqueues ready proc.
 // If the proc is already enqueued, it ignores.
-// If the proc is closed, it ignores, drop messages in mailbox and return error.
 // Set force to true to force enqueue. It is useful to force the proc to be
 // polled again.
 func (rd *ready) enqueueLocked(p *proc, force bool) error {
 	if p.isClosed() {
-		// Drop all remaining messages.
-		counter := 0
-		_, ok := p.mb.Receive()
-		for ; ok; _, ok = p.mb.Receive() {
-			counter++
-		}
-		rd.metricDropMessage.Add(float64(counter))
 		return errActorStopped
 	}
 	id := p.mb.ID()
@@ -125,7 +185,6 @@ func (rd *ready) enqueueLocked(p *proc, force bool) error {
 		rd.queue.PushBack(p)
 		rd.procs[id] = struct{}{}
 	}
-
 	return nil
 }
 
@@ -224,13 +283,13 @@ func (r *Router) SendB(ctx context.Context, id ID, msg message.Message) error {
 }
 
 // Broadcast a message to all actors in the router.
-// The message may be dropped when a actor is full.
-func (r *Router) Broadcast(msg message.Message) {
+// The message may be dropped when context is canceled.
+func (r *Router) Broadcast(ctx context.Context, msg message.Message) {
 	batchSize := 128
 	ps := make([]*proc, 0, batchSize)
 	r.procs.Range(func(key, value interface{}) bool {
 		p := value.(*proc)
-		if err := p.mb.Send(msg); err != nil {
+		if err := p.mb.SendB(ctx, msg); err != nil {
 			log.Warn("failed to send to message",
 				zap.Error(err), zap.Uint64("id", uint64(p.mb.ID())),
 				zap.Reflect("msg", msg))
@@ -346,9 +405,11 @@ func (b *SystemBuilder) Build() (*System, *Router) {
 		metricTotalWorkers:     totalWorkers.WithLabelValues(b.name),
 		metricWorkingWorkers:   workingWorkers.WithLabelValues(b.name),
 		metricWorkingDurations: metricWorkingDurations,
-		metricPollDuration:     pollActorDuration.WithLabelValues(b.name),
-		metricProcBatch:        batchSizeHistogram.WithLabelValues(b.name, "proc"),
-		metricMsgBatch:         batchSizeHistogram.WithLabelValues(b.name, "msg"),
+		metricSystemPollLoop:   pollCounter.WithLabelValues(b.name, "system"),
+		metricActorPollLoop:    pollCounter.WithLabelValues(b.name, "actor"),
+		metricSlowPollDuration: slowPollActorDuration.WithLabelValues(b.name),
+		metricProcBatch:        batchSizeCounter.WithLabelValues(b.name, "proc"),
+		metricMsgBatch:         batchSizeCounter.WithLabelValues(b.name, "msg"),
 	}, router
 }
 
@@ -370,9 +431,11 @@ type System struct {
 	metricTotalWorkers     prometheus.Gauge
 	metricWorkingWorkers   prometheus.Gauge
 	metricWorkingDurations []prometheus.Counter
-	metricPollDuration     prometheus.Observer
-	metricProcBatch        prometheus.Observer
-	metricMsgBatch         prometheus.Observer
+	metricSystemPollLoop   prometheus.Counter
+	metricActorPollLoop    prometheus.Counter
+	metricSlowPollDuration prometheus.Observer
+	metricProcBatch        prometheus.Counter
+	metricMsgBatch         prometheus.Counter
 }
 
 // Start the system. Cancelling the context to stop the system.
@@ -396,13 +459,21 @@ func (s *System) Start(ctx context.Context) {
 }
 
 // Stop the system, cancels all actors. It should be called after Start.
+// Messages sent before this call will be receive by actors.
 // Stop is not threadsafe.
 func (s *System) Stop() error {
-	s.metricTotalWorkers.Add(-float64(s.numWorker))
+	// Cancel context-aware work currently being polled.
 	if s.cancel != nil {
 		s.cancel()
 	}
+	// Before stopping any actor, set ready status to readyStateStopping, so
+	// any actor that is polled after this line will be closed by the system.
+	s.rd.prepareStop()
+	// Notify all actors in the system.
+	s.router.Broadcast(context.Background(), message.StopMessage())
+	// Wake workers to close ready actors.
 	s.rd.stop()
+	s.metricTotalWorkers.Add(-float64(s.numWorker))
 	return s.wg.Wait()
 }
 
@@ -414,8 +485,6 @@ func (s *System) Spawn(mb Mailbox, actor Actor) error {
 	return s.router.insert(id, p)
 }
 
-const slowReceiveThreshold = time.Second
-
 // The main poll of actor system.
 func (s *System) poll(ctx context.Context, id int) {
 	batchPBuf := make([]*proc, s.actorBatchSize)
@@ -423,32 +492,59 @@ func (s *System) poll(ctx context.Context, id int) {
 	rd := s.rd
 	rd.Lock()
 
-	startTime := time.Now()
+	// Approximate current time. It is updated when calling `now`.
+	var approximateCurrentTime time.Time
+	now := func() time.Time {
+		approximateCurrentTime = time.Now()
+		return approximateCurrentTime
+	}
+	// Start time of polling procs.
+	systemPollStartTime := now()
+	// The last time of recording metrics.
+	lastRecordMetricTime := systemPollStartTime
+	procBatchCnt, systemPollLoopCnt := 0, 0
+	msgBatchCnt, actorPollLoopCnt := 0, 0
 	s.metricWorkingWorkers.Inc()
 	for {
+		// Recording batch and loop metrics.
+		// We update metrics every `metricsInterval` to reduce overhead.
+		if approximateCurrentTime.Sub(lastRecordMetricTime) > metricsInterval {
+			lastRecordMetricTime = approximateCurrentTime
+			s.metricProcBatch.Add(float64(procBatchCnt))
+			s.metricSystemPollLoop.Add(float64(systemPollLoopCnt))
+			procBatchCnt, systemPollLoopCnt = 0, 0
+			s.metricMsgBatch.Add(float64(msgBatchCnt))
+			s.metricActorPollLoop.Add(float64(actorPollLoopCnt))
+			msgBatchCnt, actorPollLoopCnt = 0, 0
+		}
+
 		var batchP []*proc
 		for {
-			if rd.stopped {
-				rd.Unlock()
-				return
-			}
 			// Batch receive ready procs.
 			n := rd.batchReceiveProcs(batchPBuf)
 			if n != 0 {
 				batchP = batchPBuf[:n]
-				s.metricProcBatch.Observe(float64(n))
+				procBatchCnt += n
+				systemPollLoopCnt++
 				break
 			}
-			// Recording metrics.
-			s.metricWorkingDurations[id].Add(time.Since(startTime).Seconds())
+			// Recording working metrics.
+			systemPollDuration := now().Sub(systemPollStartTime)
+			s.metricWorkingDurations[id].Add(systemPollDuration.Seconds())
 			s.metricWorkingWorkers.Dec()
-			// Park the poll until it is awakened.
+			if rd.state == readyStateStopped {
+				rd.Unlock()
+				return
+			}
+			// Park the poll until awoken by Send or Broadcast.
 			rd.cond.Wait()
-			startTime = time.Now()
+			systemPollStartTime = now()
 			s.metricWorkingWorkers.Inc()
 		}
 		rd.Unlock()
 
+		actorPollLoopCnt += len(batchP)
+		actorPollStartTime := now()
 		for _, p := range batchP {
 			closed := p.isClosed()
 			if closed {
@@ -463,34 +559,43 @@ func (s *System) poll(ctx context.Context, id int) {
 				continue
 			}
 			batchMsg := batchMsgBuf[:n]
-			s.metricMsgBatch.Observe(float64(n))
+			msgBatchCnt += n
 
 			// Poll actor.
-			pollStartTime := time.Now()
 			running := p.actor.Poll(ctx, batchMsg)
 			if !running {
-				// Close the actor.
-				p.close()
+				// Close the actor and mailbox.
+				p.onActorClosed()
 			}
-			receiveDuration := time.Since(pollStartTime)
-			if receiveDuration > slowReceiveThreshold {
-				log.Warn("actor handle received messages too slow",
-					zap.Duration("duration", receiveDuration),
-					zap.Uint64("id", uint64(p.mb.ID())),
-					zap.String("name", s.name))
+			actorPollDuration := now().Sub(actorPollStartTime)
+			actorPollStartTime = approximateCurrentTime
+			if actorPollDuration > slowPollThreshold {
+				// Prometheus histogram is expensive, we only record slow poll.
+				s.metricSlowPollDuration.Observe(actorPollDuration.Seconds())
+				if actorPollDuration > 10*slowPollThreshold { // 1s
+					log.Warn("actor poll received messages too slow",
+						zap.Duration("duration", actorPollDuration),
+						zap.Uint64("id", uint64(p.mb.ID())),
+						zap.String("name", s.name))
+				}
 			}
-			s.metricPollDuration.Observe(receiveDuration.Seconds())
 		}
 
 		rd.Lock()
 		for _, p := range batchP {
-			if p.mb.len() == 0 {
-				// At this point, there is no more message needs to be polled
-				// by the actor. Delete the actor from ready set.
+			if rd.state != readyStateRunning {
+				// System is about to stop.
+				p.onSystemStop()
+			}
+			remainMsgCount := p.mb.len()
+			if remainMsgCount == 0 {
+				// At this point, there is no more message needs to be polled,
+				// or the actor is closing.
+				// Delete the actor from ready set.
 				delete(rd.procs, p.mb.ID())
+				p.onMailboxEmpty()
 			} else {
-				// Force enqueue to poll remaining messages.
-				// Also it drops remaining messages if proc is stopped.
+				// Force enqueue to poll remaining messages if it's running.
 				_ = rd.enqueueLocked(p, true)
 			}
 			if p.isClosed() {
@@ -499,6 +604,12 @@ func (s *System) poll(ctx context.Context, id int) {
 				if !present {
 					s.handleFatal(
 						"try to remove non-existent actor", p.mb.ID())
+				}
+
+				// Drop all remaining messages.
+				if remainMsgCount != 0 {
+					// TODO: we may need to release resources hold by messages.
+					rd.metricDropMessage.Add(float64(remainMsgCount))
 				}
 			}
 		}

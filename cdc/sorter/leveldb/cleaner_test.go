@@ -132,6 +132,7 @@ func TestCleanerPoll(t *testing.T) {
 
 	// Close leveldb.
 	closed = !clean.Poll(ctx, []actormsg.Message{actormsg.StopMessage()})
+	clean.OnClose()
 	require.True(t, closed)
 	closedWg.Wait()
 	require.Nil(t, db.Close())
@@ -154,6 +155,7 @@ func TestCleanerContextCancel(t *testing.T) {
 	tasks := makeCleanTask(1, 1)
 	closed := !clean.Poll(ctx, tasks)
 	require.True(t, closed)
+	clean.OnClose()
 	closedWg.Wait()
 	require.Nil(t, db.Close())
 }
@@ -229,6 +231,7 @@ func TestCleanerWriteRateLimited(t *testing.T) {
 	// Close leveldb.
 	closed := !clean.Poll(ctx, []actormsg.Message{actormsg.StopMessage()})
 	require.True(t, closed)
+	clean.OnClose()
 	closedWg.Wait()
 	require.Nil(t, db.Close())
 }
@@ -327,6 +330,7 @@ func TestCleanerTaskRescheduled(t *testing.T) {
 	// Close leveldb.
 	closed = !clean.Poll(ctx, []actormsg.Message{actormsg.StopMessage()})
 	require.True(t, closed)
+	clean.OnClose()
 	closedWg.Wait()
 	// TODO: find a better to test if iterators are leaked.
 	// stats := leveldb.DBStats{}
@@ -389,6 +393,7 @@ func TestCleanerCompact(t *testing.T) {
 	// Close db.
 	closed = !cleaner.Poll(ctx, []actormsg.Message{actormsg.StopMessage()})
 	require.True(t, closed)
+	cleaner.OnClose()
 	closedWg.Wait()
 	require.Nil(t, db.Close())
 }
