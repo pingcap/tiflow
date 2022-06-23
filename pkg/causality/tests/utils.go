@@ -17,12 +17,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/log"
+
 	"github.com/pingcap/tiflow/engine/pkg/containers"
 	"github.com/pingcap/tiflow/pkg/causality"
 )
 
 type txnForTest struct {
 	keys []int64
+	done func()
 }
 
 func (t *txnForTest) ConflictKeys() []int64 {
@@ -30,18 +33,20 @@ func (t *txnForTest) ConflictKeys() []int64 {
 }
 
 func (t *txnForTest) Finish(err error) {
-	// no-op
+	if t.done != nil {
+		t.done()
+	}
 }
 
 type workerForTest struct {
-	txnQueue *containers.SliceQueue[*txnForTest]
+	txnQueue *containers.SliceQueue[*causality.OutTxnEvent[*txnForTest]]
 	wg       sync.WaitGroup
 	closeCh  chan struct{}
 }
 
 func newWorkerForTest() *workerForTest {
 	ret := &workerForTest{
-		txnQueue: containers.NewSliceQueue[*txnForTest](),
+		txnQueue: containers.NewSliceQueue[*causality.OutTxnEvent[*txnForTest]](),
 		closeCh:  make(chan struct{}),
 	}
 
@@ -54,8 +59,8 @@ func newWorkerForTest() *workerForTest {
 	return ret
 }
 
-func (w *workerForTest) Add(txn *causality.OutTxnEvent[*txnForTest]) error {
-
+func (w *workerForTest) Add(txn *causality.OutTxnEvent[*txnForTest]) {
+	w.txnQueue.Push(txn)
 }
 
 func (w *workerForTest) Close() {
@@ -78,7 +83,8 @@ outer:
 				continue outer
 			}
 
-			txn.Finish(nil)
+			log.Info("transaction finished")
+			txn.Callback(nil)
 			time.Sleep(10 * time.Millisecond)
 		}
 	}

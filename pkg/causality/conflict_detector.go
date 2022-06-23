@@ -16,16 +16,23 @@ package causality
 import (
 	"sync"
 
+	"github.com/pingcap/log"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tiflow/engine/pkg/containers"
 	"github.com/pingcap/tiflow/pkg/causality/internal"
 )
 
 type ConflictDetector[Txn txnEvent, Worker worker[Txn]] struct {
-	workers workerGroup[Txn, Worker]
-	slots   *internal.Slots[*internal.Node[Txn]]
+	workers     []Worker
+	workerLocks []sync.Mutex
+	slots       *internal.Slots[*internal.Node[Txn]]
 
-	finishedTxnQueue containers.SliceQueue[finishedTxn[Txn]]
-	nextWorkerID     int64
+	finishedTxnQueue *containers.SliceQueue[finishedTxn[Txn]]
+	resolvedTxnQueue *containers.SliceQueue[resolvedTxn[Txn]]
+
+	nextWorkerID atomic.Int64
 
 	wg      sync.WaitGroup
 	closeCh chan struct{}
@@ -36,23 +43,38 @@ type finishedTxn[Txn txnEvent] struct {
 	node *internal.Node[Txn]
 }
 
+type resolvedTxn[Txn txnEvent] struct {
+	txn      Txn
+	node     *internal.Node[Txn]
+	workerID int64
+}
+
 // NewConflictDetector creates a new ConflictDetector.
 func NewConflictDetector[Txn txnEvent, Worker worker[Txn]](
-	workers workerGroup[Txn, Worker],
+	workers []Worker,
 	numSlots int64,
 ) *ConflictDetector[Txn, Worker] {
 	ret := &ConflictDetector[Txn, Worker]{
-		workers: workers,
-		slots:   internal.NewSlots[*internal.Node[Txn]](numSlots),
-		closeCh: make(chan struct{}),
+		workers:          workers,
+		workerLocks:      make([]sync.Mutex, len(workers)),
+		slots:            internal.NewSlots[*internal.Node[Txn]](numSlots),
+		finishedTxnQueue: containers.NewSliceQueue[finishedTxn[Txn]](),
+		resolvedTxnQueue: containers.NewSliceQueue[resolvedTxn[Txn]](),
+		closeCh:          make(chan struct{}),
 	}
 
 	ret.wg.Add(1)
 	go func() {
 		defer ret.wg.Done()
-
 		ret.runFinishHandler()
 	}()
+
+	ret.wg.Add(1)
+	go func() {
+		defer ret.wg.Done()
+		ret.runResolvedHandler()
+	}()
+
 	return ret
 }
 
@@ -60,23 +82,17 @@ func NewConflictDetector[Txn txnEvent, Worker worker[Txn]](
 func (d *ConflictDetector[Txn, Worker]) Add(txn Txn) error {
 	node := internal.NewNode(txn)
 	d.slots.Add(node, txn.ConflictKeys(), func(other *internal.Node[Txn]) {
+		//log.Info("dependency detected",
+		//	zap.Int64("node-id-a", node.ID()),
+		//	zap.Int64("node-id-b", other.ID()))
 		node.DependOn(other)
 	})
 	node.AsyncResolve(func(workerID int64) {
-		err := d.sendToWorker(&OutTxnEvent[Txn]{
-			Txn: txn,
-			Callback: func(errIn error) {
-				d.finishedTxnQueue.Push(finishedTxn[Txn]{
-					txn:  txn,
-					node: node,
-				})
-				txn.Finish(errIn)
-			},
-		}, node, workerID)
-
-		if err != nil {
-			txn.Finish(err)
-		}
+		d.resolvedTxnQueue.Push(resolvedTxn[Txn]{
+			txn:      txn,
+			node:     node,
+			workerID: workerID,
+		})
 	})
 	return nil
 }
@@ -87,7 +103,40 @@ func (d *ConflictDetector[Txn, Worker]) Close() {
 	d.wg.Wait()
 }
 
+func (d *ConflictDetector[Txn, Worker]) runResolvedHandler() {
+selectLoop:
+	for {
+		select {
+		case <-d.closeCh:
+			return
+		case <-d.resolvedTxnQueue.C:
+		}
+
+		log.Info("resolvedHandler run")
+		for {
+			resolvedTxn, ok := d.resolvedTxnQueue.Pop()
+			if !ok {
+				continue selectLoop
+			}
+
+			d.sendToWorker(&OutTxnEvent[Txn]{
+				Txn: resolvedTxn.txn,
+				Callback: func(errIn error) {
+					log.Info("node finished", zap.Int64("node-id", resolvedTxn.node.ID()))
+					d.finishedTxnQueue.Push(finishedTxn[Txn]{
+						txn:  resolvedTxn.txn,
+						node: resolvedTxn.node,
+					})
+					resolvedTxn.txn.Finish(errIn)
+				},
+			}, resolvedTxn.node, resolvedTxn.workerID)
+		}
+	}
+}
+
 func (d *ConflictDetector[Txn, Worker]) runFinishHandler() {
+	// TODO remove this
+	removedNodeIDSet := make(map[int64]struct{})
 selectLoop:
 	for {
 		select {
@@ -96,12 +145,18 @@ selectLoop:
 		case <-d.finishedTxnQueue.C:
 		}
 
+		log.Info("finishHandler run")
 		for {
 			finishedTxn, ok := d.finishedTxnQueue.Pop()
 			if !ok {
 				continue selectLoop
 			}
 
+			if _, ok := removedNodeIDSet[finishedTxn.node.ID()]; ok {
+				panic("double remove")
+			}
+			removedNodeIDSet[finishedTxn.node.ID()] = struct{}{}
+			log.Info("node removed", zap.Int64("node-id", finishedTxn.node.ID()))
 			d.slots.Remove(finishedTxn.node, finishedTxn.txn.ConflictKeys())
 			finishedTxn.node.Remove()
 			finishedTxn.node.Free()
@@ -110,16 +165,18 @@ selectLoop:
 }
 
 // sendToWorker should not call txn.Callback if it returns an error.
-func (d *ConflictDetector[Txn, Worker]) sendToWorker(txn *OutTxnEvent[Txn], node *internal.Node[Txn], workerID int64) error {
+func (d *ConflictDetector[Txn, Worker]) sendToWorker(txn *OutTxnEvent[Txn], node *internal.Node[Txn], workerID int64) {
 	if workerID == -1 {
-		workerID = d.nextWorkerID
-		d.nextWorkerID++
+		workerID = d.nextWorkerID.Add(1) % int64(len(d.workers))
 	}
 
+	//d.workerLocks[workerID].Lock()
+	//defer d.workerLocks[workerID].Unlock()
+
 	node.AssignTo(workerID)
-	worker := d.workers.GetWorkerByID(workerID)
-	if err := worker.Add(txn); err != nil {
-		return err
-	}
-	return nil
+	worker := d.workers[workerID]
+	log.Info("sendToWorker",
+		zap.Int64("node-id", node.ID()),
+		zap.Int64("worker-id", workerID))
+	worker.Add(txn)
 }

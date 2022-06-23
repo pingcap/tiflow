@@ -15,7 +15,6 @@ package causality
 
 type (
 	conflictKey = int64
-	workerID    = int64
 )
 
 type txnEvent interface {
@@ -29,9 +28,5 @@ type OutTxnEvent[T txnEvent] struct {
 }
 
 type worker[Txn txnEvent] interface {
-	Add(txn *OutTxnEvent[Txn]) error
-}
-
-type workerGroup[Txn txnEvent, Worker worker[Txn]] interface {
-	GetWorkerByID(id workerID) Worker
+	Add(txn *OutTxnEvent[Txn])
 }

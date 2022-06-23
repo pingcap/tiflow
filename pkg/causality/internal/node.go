@@ -47,6 +47,7 @@ type Node[T any] struct {
 	dependers      map[nodeID]*Node[T]
 	assignedTo     workerID
 	onResolved     func(id workerID)
+	resolved       atomic.Bool
 
 	data T
 }
@@ -55,6 +56,7 @@ func NewNode[T any](data T) (ret *Node[T]) {
 	defer func() {
 		ret.id = nextNodeID.Add(1)
 		ret.data = data
+		ret.assignedTo = unassigned
 	}()
 
 	if obj := nodePool.Get(); obj != nil {
@@ -63,10 +65,21 @@ func NewNode[T any](data T) (ret *Node[T]) {
 	return new(Node[T])
 }
 
+func (n *Node[T]) ID() int64 {
+	return n.id
+}
+
 func (n *Node[T]) Free() {
+	if n.id == -1 {
+		panic("double free")
+	}
+
 	n.id = -1
 	n.conflictCounts = nil
 	n.dependers = nil
+	n.assignedTo = unassigned
+	n.onResolved = nil
+	n.resolved.Store(false)
 
 	var zeroData T
 	n.data = zeroData
@@ -85,8 +98,19 @@ func (n *Node[T]) DependOn(target *Node[T]) {
 	target.mu.Lock()
 	defer target.mu.Unlock()
 
+	if target.id == n.id {
+		panic("you cannot depend on yourself")
+	}
+
 	n.mu.Lock()
 	defer n.mu.Unlock()
+
+	// Make sure that the dependers and conflictCounts have
+	// been created.
+	// Creating these maps is done lazily because we want to
+	// optimize for the case where there are little conflicts.
+	target.lazyCreateMaps()
+	n.lazyCreateMaps()
 
 	target.dependers[n.id] = n
 	n.conflictCounts[target.assignedTo]++
@@ -107,12 +131,29 @@ func (n *Node[T]) AssignTo(workerID int64) {
 		// Use a closure to make it possible to use deferred unlock.
 		func() {
 			node.mu.Lock()
+
+			var cb func()
+			/*
+				defer func() {
+					if cb != nil {
+						cb()
+					}
+				}()
+			*/
+
 			defer node.mu.Unlock()
 
 			node.conflictCounts[unassigned]--
+			if node.conflictCounts[unassigned] == 0 {
+				delete(node.conflictCounts, unassigned)
+			}
+
 			node.conflictCounts[workerID]++
 
-			node.notifyMaybeResolved()
+			cb = node.notifyMaybeResolved()
+			if cb != nil {
+				cb()
+			}
 		}()
 	}
 }
@@ -125,10 +166,25 @@ func (n *Node[T]) Remove() {
 		// Use a closure to make it possible to use deferred unlock.
 		func() {
 			node.mu.Lock()
+
+			var cb func()
+			/*defer func() {
+				if cb != nil {
+					cb()
+				}
+			}()*/
+
 			defer node.mu.Unlock()
 
 			node.conflictCounts[n.assignedTo]--
-			node.notifyMaybeResolved()
+			if node.conflictCounts[n.assignedTo] == 0 {
+				delete(node.conflictCounts, n.assignedTo)
+			}
+
+			cb = node.notifyMaybeResolved()
+			if cb != nil {
+				cb()
+			}
 		}()
 	}
 }
@@ -156,15 +212,20 @@ func (n *Node[T]) AsyncResolve(fn func(id workerID)) {
 
 // notifyMaybeResolved must be called with n.mu taken.
 // It should be called if n.conflictCounts is updated.
-func (n *Node[T]) notifyMaybeResolved() {
+func (n *Node[T]) notifyMaybeResolved() func() {
 	workerNum, ok := n.tryResolve()
 	if !ok {
-		return
+		return nil
 	}
 
 	if n.onResolved != nil {
-		n.onResolved(workerNum)
+		return func() {
+			if !n.resolved.Swap(true) {
+				n.onResolved(workerNum)
+			}
+		}
 	}
+	return nil
 }
 
 // tryResolve must be called with n.mu locked.
@@ -195,4 +256,13 @@ func (n *Node[T]) tryResolve() (int64, bool) {
 	// or conflicting with at least two workers. In both cases,
 	// no resolution is available.
 	return 0, false
+}
+
+func (n *Node[T]) lazyCreateMaps() {
+	if n.dependers == nil {
+		n.dependers = make(map[nodeID]*Node[T])
+	}
+	if n.conflictCounts == nil {
+		n.conflictCounts = make(map[workerID]int)
+	}
 }
