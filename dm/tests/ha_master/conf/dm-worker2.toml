@@ -1,2 +1,0 @@
-name = "worker2"
-join = "localhost:8261,localhost:8361,localhost:8461,localhost:8561,localhost:8661"

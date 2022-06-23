@@ -1,7 +1,0 @@
-# Master Configuration.
-name = "master2"
-master-addr = ":8361"
-advertise-addr = "127.0.0.1:8361"
-peer-urls = "http://127.0.0.1:8292"
-join = "127.0.0.1:8261"
-auto-compaction-retention = "3s"

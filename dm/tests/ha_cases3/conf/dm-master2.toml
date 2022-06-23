@@ -1,7 +1,0 @@
-# Master Configuration.
-name = "master2"
-master-addr = ":8361"
-advertise-addr = "127.0.0.1:8361"
-peer-urls = "127.0.0.1:8292"
-initial-cluster = "master1=http://127.0.0.1:8291,master2=http://127.0.0.1:8292,master3=http://127.0.0.1:8293"
-auto-compaction-retention = "3s"

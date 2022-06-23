@@ -1,5 +1,0 @@
-# Master Configuration.
-master-addr = ":8261"
-advertise-addr = "127.0.0.1:8261"
-v1-sources-path = "./v1-sources"
-auto-compaction-retention = "3s"
