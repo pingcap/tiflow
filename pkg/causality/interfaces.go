@@ -23,9 +23,13 @@ type txnEvent interface {
 	Finish(errIn error)
 }
 
+type OutTxnEvent[T txnEvent] struct {
+	Txn      T
+	Callback func(errIn error)
+}
+
 type worker[Txn txnEvent] interface {
-	Add(txn Txn) error
-	ID() workerID
+	Add(txn *OutTxnEvent[Txn]) error
 }
 
 type workerGroup[Txn txnEvent, Worker worker[Txn]] interface {
