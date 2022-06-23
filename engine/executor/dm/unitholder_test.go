@@ -139,10 +139,6 @@ func TestUnitHolderBinlog(t *testing.T) {
 	msg, err = unitHolder.Binlog(context.Background(), &dmpkg.BinlogTaskRequest{})
 	require.EqualError(t, err, "source '' has no error")
 	require.Equal(t, "", msg)
-	// binlog skip
-	msg, err = unitHolder.Binlog(context.Background(), &dmpkg.BinlogTaskRequest{Op: pb.ErrorOp_Skip, BinlogPos: "mysql-bin.000001:2345"})
-	require.Nil(t, err)
-	require.Equal(t, "", msg)
 }
 
 func TestUnitHolderBinlogSchema(t *testing.T) {
