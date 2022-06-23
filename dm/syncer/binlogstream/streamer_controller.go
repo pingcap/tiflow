@@ -330,8 +330,7 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (event *replicatio
 	c.RUnlock()
 
 FORLOOP:
-	for frontOp := c.streamModifier.front(); frontOp != nil
-	{
+	for frontOp := c.streamModifier.front(); frontOp != nil; {
 		if c.lastEvent == nil {
 			c.lastEvent, err = streamer.GetEvent(tctx.Context())
 			failpoint.Inject("GetEventError", func() {
@@ -559,6 +558,7 @@ func NewStreamerController4Test(
 		streamerProducer: streamerProducer,
 		streamer:         streamer,
 		closed:           false,
+		streamModifier:   &streamModifier{},
 	}
 }
 
