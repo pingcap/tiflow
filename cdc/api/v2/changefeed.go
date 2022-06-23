@@ -43,7 +43,7 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 	config := &ChangefeedConfig{ReplicaConfig: GetDefaultReplicaConfig()}
 
 	if err := c.BindJSON(&config); err != nil {
-		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err)) //todo: how to mock?
+		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
 	}
 	if len(config.PDAddrs) == 0 {
@@ -63,7 +63,7 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 	}
 	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	pdClient, err := h.apiV2Helper.getPDClient(timeoutCtx, config.PDAddrs, credential)
+	pdClient, err := h.apiV2Helper.GetPDClient(timeoutCtx, config.PDAddrs, credential)
 	if err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
@@ -71,7 +71,7 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 	defer pdClient.Close()
 
 	// verify tables
-	kvStorage, err := h.apiV2Helper.createTiStore(config.PDAddrs, credential)
+	kvStorage, err := h.apiV2Helper.CreateTiStore(config.PDAddrs, credential)
 	if err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrInternalServerError, err))
 		return
@@ -79,7 +79,7 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 	// We should not close kvStorage since all kvStorage in cdc is the same one.
 	// defer kvStorage.Close() TODO: ?
 
-	info, err := h.apiV2Helper.verifyCreateChangefeedConfig(ctx, config, pdClient,
+	info, err := h.apiV2Helper.VerifyCreateChangefeedConfig(ctx, config, pdClient,
 		h.capture.StatusProvider(), h.capture.GetEtcdClient().GetEnsureGCServiceID(),
 		kvStorage)
 	if err != nil {
@@ -139,7 +139,7 @@ func (h *OpenAPIV2) VerifyTable(c *gin.Context) {
 		credential.CertAllowedCN = cfg.CertAllowedCN
 	}
 
-	kvStore, err := h.apiV2Helper.createTiStore(cfg.PDAddrs, credential)
+	kvStore, err := h.apiV2Helper.CreateTiStore(cfg.PDAddrs, credential)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -212,7 +212,7 @@ func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
 		return
 	}
 
-	if err := h.apiV2Helper.verifyUpstream(ctx, changefeedConfig, cfInfo); err != nil {
+	if err := h.apiV2Helper.VerifyUpstream(ctx, changefeedConfig, cfInfo); err != nil {
 		return
 	}
 
@@ -220,7 +220,7 @@ func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
 		zap.String("changefeedInfo", cfInfo.String()),
 		zap.Any("upstreamInfo", upInfo))
 
-	newCfInfo, newUpInfo, err := h.apiV2Helper.verifyUpdateChangefeedConfig(ctx, changefeedConfig, cfInfo, upInfo)
+	newCfInfo, newUpInfo, err := h.apiV2Helper.VerifyUpdateChangefeedConfig(ctx, changefeedConfig, cfInfo, upInfo)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -255,7 +255,7 @@ func (h *OpenAPIV2) GetChangeFeedMetaInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, toAPIModel(info))
 }
 
-func (APIV2HelpersImpl) getPDClient(ctx context.Context,
+func (APIV2HelpersImpl) GetPDClient(ctx context.Context,
 	pdAddrs []string,
 	credential *security.Credential,
 ) (pd.Client, error) {
@@ -285,8 +285,9 @@ func (APIV2HelpersImpl) getPDClient(ctx context.Context,
 	return pdClient, nil
 }
 
-func (h APIV2HelpersImpl) createTiStore(pdAddrs []string,
-	credential *security.Credential) (tidbkv.Storage, error) {
+func (h APIV2HelpersImpl) CreateTiStore(pdAddrs []string,
+	credential *security.Credential,
+) (tidbkv.Storage, error) {
 	return kv.CreateTiStore(strings.Join(pdAddrs, ","), credential)
 }
 

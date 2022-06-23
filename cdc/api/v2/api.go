@@ -19,8 +19,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/capture"
 )
 
-type APIV2HelpersImpl struct{}
-
 // OpenAPIV2 provides CDC v2 APIs
 type OpenAPIV2 struct {
 	capture     capture.CaptureInfoProvider

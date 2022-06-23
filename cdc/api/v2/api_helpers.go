@@ -23,14 +23,10 @@ import (
 	pd "github.com/tikv/pd/client"
 )
 
+// APIV2Helpers is a collections of helper functions of OpenAPIV2.
+// Defining it as an interface to make APIs more testable.
 type APIV2Helpers interface {
-	verifyUpstream(
-		context.Context,
-		*ChangefeedConfig,
-		*model.ChangeFeedInfo,
-	) error
-
-	verifyCreateChangefeedConfig(
+	VerifyCreateChangefeedConfig(
 		context.Context,
 		*ChangefeedConfig,
 		pd.Client,
@@ -39,13 +35,22 @@ type APIV2Helpers interface {
 		tidbkv.Storage,
 	) (*model.ChangeFeedInfo, error)
 
-	verifyUpdateChangefeedConfig(
+	VerifyUpdateChangefeedConfig(
 		context.Context,
 		*ChangefeedConfig,
 		*model.ChangeFeedInfo,
 		*model.UpstreamInfo,
 	) (*model.ChangeFeedInfo, *model.UpstreamInfo, error)
 
-	getPDClient(context.Context, []string, *security.Credential) (pd.Client, error)
-	createTiStore([]string, *security.Credential) (tidbkv.Storage, error)
+	VerifyUpstream(
+		context.Context,
+		*ChangefeedConfig,
+		*model.ChangeFeedInfo,
+	) error
+
+	GetPDClient(context.Context, []string, *security.Credential) (pd.Client, error)
+
+	CreateTiStore([]string, *security.Credential) (tidbkv.Storage, error)
 }
+
+type APIV2HelpersImpl struct{}

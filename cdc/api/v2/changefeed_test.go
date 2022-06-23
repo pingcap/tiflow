@@ -24,6 +24,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	tidbkv "github.com/pingcap/tidb/kv"
+	mock_v2 "github.com/pingcap/tiflow/cdc/api/v2/mock"
 	mock_capture "github.com/pingcap/tiflow/cdc/capture/mock"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
@@ -63,8 +64,9 @@ func (*mockEtcdClient) GetEnsureGCServiceID() string {
 	return "demo-gc-service-id"
 }
 
-func (m *mockEtcdClient) GetUpstreamInfo(context.Context, model.UpstreamID,
-	string) (*model.UpstreamInfo, error) {
+func (m *mockEtcdClient) GetUpstreamInfo(
+	context.Context, model.UpstreamID, string,
+) (*model.UpstreamInfo, error) {
 	if m.upstreamExists {
 		return nil, nil
 	}
@@ -105,7 +107,7 @@ func TestCreateChangefeed(t *testing.T) {
 	t.Parallel()
 
 	helperCtrl := gomock.NewController(t)
-	helper := NewMockAPIV2Helpers(helperCtrl)
+	helper := mock_v2.NewMockAPIV2Helpers(helperCtrl)
 	captureCtrl := gomock.NewController(t)
 	cp := mock_capture.NewMockCaptureInfoProvider(captureCtrl)
 	apiV2 := NewOpenAPIV2ForTest(cp, helper)
@@ -116,13 +118,13 @@ func TestCreateChangefeed(t *testing.T) {
 	mockUpManager := upstream.NewManager4Test(pdClient)
 
 	helper.EXPECT().
-		getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).
+		GetPDClient(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(pdClient, nil)
 	helper.EXPECT().
-		createTiStore(gomock.Any(), gomock.Any()).
+		CreateTiStore(gomock.Any(), gomock.Any()).
 		Return(nil, nil)
 	helper.EXPECT().
-		verifyCreateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(),
+		VerifyCreateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(),
 			gomock.Any(), gomock.Any(), gomock.Any()).
 		DoAndReturn(func(ctx context.Context,
 			cfg *ChangefeedConfig,
@@ -136,7 +138,8 @@ func TestCreateChangefeed(t *testing.T) {
 			return &model.ChangeFeedInfo{
 				UpstreamID: 0,
 				ID:         cfg.ID,
-				SinkURI:    cfg.SinkURI}, nil
+				SinkURI:    cfg.SinkURI,
+			}, nil
 		})
 
 	mockEtcdCli := &mockEtcdClient{
