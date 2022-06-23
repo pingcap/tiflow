@@ -371,15 +371,9 @@ func (s *clientSuite) TestConnectOfflineTiKV(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-<<<<<<< HEAD
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 1, false, lockresolver, isPullInit, eventCh)
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-=======
-		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 			1, false, lockResolver, isPullInit, eventCh)
-		require.Equal(t, context.Canceled, errors.Cause(err))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}()
 
 	// new session, request to store 1, request to store 2
@@ -478,15 +472,9 @@ func (s *clientSuite) TestRecvLargeMessageSize(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-<<<<<<< HEAD
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 1, false, lockresolver, isPullInit, eventCh)
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-=======
-		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 			1, false, lockResolver, isPullInit, eventCh)
-		require.Equal(t, context.Canceled, errors.Cause(err))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}()
 
 	// new session, new request
@@ -584,15 +572,9 @@ func (s *clientSuite) TestHandleError(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-<<<<<<< HEAD
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("d")}, 100, false, lockresolver, isPullInit, eventCh)
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-=======
-		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("d")},
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("d")},
 			100, false, lockResolver, isPullInit, eventCh)
-		require.Equal(t, context.Canceled, errors.Cause(err))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -750,15 +732,9 @@ func (s *clientSuite) TestCompatibilityWithSameConn(c *check.C) {
 	wg2.Add(1)
 	go func() {
 		defer wg2.Done()
-<<<<<<< HEAD
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockResolver, isPullInit, eventCh)
-		c.Assert(cerror.ErrVersionIncompatible.Equal(err), check.IsTrue)
-=======
-		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 			100, false, lockResolver, isPullInit, eventCh)
-		require.True(t, cerror.ErrVersionIncompatible.Equal(err))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+		c.Assert(cerror.ErrVersionIncompatible.Equal(err), check.IsTrue)
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -827,15 +803,9 @@ func (s *clientSuite) TestClusterIDMismatch(c *check.C) {
 	wg2.Add(1)
 	go func() {
 		defer wg2.Done()
-<<<<<<< HEAD
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockResolver, isPullInit, eventCh)
-		c.Assert(cerror.ErrClusterIDMismatch.Equal(err), check.IsTrue)
-=======
-		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 			100, false, lockResolver, isPullInit, eventCh)
-		require.True(t, cerror.ErrClusterIDMismatch.Equal(err))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+		c.Assert(cerror.ErrClusterIDMismatch.Equal(err), check.IsTrue)
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -899,15 +869,9 @@ func (s *clientSuite) testHandleFeedEvent(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-<<<<<<< HEAD
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-=======
-		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 			100, false, lockResolver, isPullInit, eventCh)
-		require.Equal(t, context.Canceled, errors.Cause(err))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -1356,15 +1320,9 @@ func (s *clientSuite) TestStreamSendWithError(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-<<<<<<< HEAD
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockerResolver, isPullInit, eventCh)
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-=======
-		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
 			100, false, lockerResolver, isPullInit, eventCh)
-		require.Equal(t, context.Canceled, errors.Cause(err))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}()
 
 	var requestIds sync.Map
@@ -1474,15 +1432,9 @@ func (s *clientSuite) testStreamRecvWithError(c *check.C, failpointStr string) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-<<<<<<< HEAD
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-=======
-		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 			100, false, lockResolver, isPullInit, eventCh)
-		require.Equal(t, context.Canceled, errors.Cause(err))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -1612,15 +1564,9 @@ func (s *clientSuite) TestStreamRecvWithErrorAndResolvedGoBack(c *check.C) {
 	go func() {
 		defer wg.Done()
 		defer close(eventCh)
-<<<<<<< HEAD
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-=======
-		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 			100, false, lockResolver, isPullInit, eventCh)
-		require.Equal(t, context.Canceled, errors.Cause(err))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -1829,15 +1775,9 @@ func (s *clientSuite) TestIncompatibleTiKV(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-<<<<<<< HEAD
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-=======
-		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 			100, false, lockResolver, isPullInit, eventCh)
-		require.Equal(t, context.Canceled, errors.Cause(err))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}()
 
 	err = retry.Do(context.Background(), func() error {
@@ -1913,15 +1853,9 @@ func (s *clientSuite) TestNoPendingRegionError(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-<<<<<<< HEAD
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-=======
-		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 			100, false, lockResolver, isPullInit, eventCh)
-		require.Equal(t, context.Canceled, errors.Cause(err))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -1997,15 +1931,9 @@ func (s *clientSuite) TestDropStaleRequest(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-<<<<<<< HEAD
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-=======
-		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 			100, false, lockResolver, isPullInit, eventCh)
-		require.Equal(t, context.Canceled, errors.Cause(err))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -2114,15 +2042,9 @@ func (s *clientSuite) TestResolveLock(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-<<<<<<< HEAD
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-=======
-		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 			100, false, lockResolver, isPullInit, eventCh)
-		require.Equal(t, context.Canceled, errors.Cause(err))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -2222,15 +2144,9 @@ func (s *clientSuite) testEventCommitTsFallback(c *check.C, events []*cdcpb.Chan
 	clientWg.Add(1)
 	go func() {
 		defer clientWg.Done()
-<<<<<<< HEAD
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
-		c.Assert(err, check.Equals, errUnreachable)
-=======
-		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 			100, false, lockResolver, isPullInit, eventCh)
-		require.Equal(t, errUnreachable, err)
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+		c.Assert(err, check.Equals, errUnreachable)
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -2376,15 +2292,9 @@ func (s *clientSuite) testEventAfterFeedStop(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-<<<<<<< HEAD
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-=======
-		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 			100, false, lockResolver, isPullInit, eventCh)
-		require.Equal(t, context.Canceled, errors.Cause(err))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -2563,15 +2473,9 @@ func (s *clientSuite) TestOutOfRegionRangeEvent(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-<<<<<<< HEAD
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-=======
-		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 			100, false, lockResolver, isPullInit, eventCh)
-		require.Equal(t, context.Canceled, errors.Cause(err))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -2785,15 +2689,9 @@ func (s *clientSuite) TestResolveLockNoCandidate(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-<<<<<<< HEAD
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-=======
-		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 			100, false, lockResolver, isPullInit, eventCh)
-		require.Equal(t, context.Canceled, errors.Cause(err))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -2876,11 +2774,7 @@ func (s *clientSuite) TestFailRegionReentrant(c *check.C) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/kv/kvClientRegionReentrantErrorDelay")
 	}()
 	baseAllocatedID := currentRequestID()
-<<<<<<< HEAD
-	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
-=======
 	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -2891,15 +2785,9 @@ func (s *clientSuite) TestFailRegionReentrant(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-<<<<<<< HEAD
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-=======
-		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 			100, false, lockResolver, isPullInit, eventCh)
-		require.Equal(t, context.Canceled, errors.Cause(err))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -2980,15 +2868,9 @@ func (s *clientSuite) TestClientV1UnlockRangeReentrant(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-<<<<<<< HEAD
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockresolver, isPullInit, eventCh)
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-=======
-		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
 			100, false, lockResolver, isPullInit, eventCh)
-		require.Equal(t, context.Canceled, errors.Cause(err))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}()
 
 	// wait the second region is scheduled
@@ -3054,15 +2936,9 @@ func (s *clientSuite) testClientErrNoPendingRegion(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-<<<<<<< HEAD
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockresolver, isPullInit, eventCh)
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-=======
-		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
 			100, false, lockResolver, isPullInit, eventCh)
-		require.Equal(t, context.Canceled, errors.Cause(err))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}()
 
 	baseAllocatedID := currentRequestID()
@@ -3119,7 +2995,6 @@ func (s *clientSuite) testKVClientForceReconnect(c *check.C) {
 	cluster.AddStore(1, addr1)
 	cluster.Bootstrap(regionID3, []uint64{1}, []uint64{4}, 4)
 
-<<<<<<< HEAD
 	err = failpoint.Enable("github.com/pingcap/tiflow/cdc/kv/kvClientResolveLockInterval", "return(1)")
 	c.Assert(err, check.IsNil)
 	originalReconnectInterval := reconnectInterval
@@ -3129,10 +3004,7 @@ func (s *clientSuite) testKVClientForceReconnect(c *check.C) {
 		reconnectInterval = originalReconnectInterval
 	}()
 
-	lockresolver := txnutil.NewLockerResolver(kvStorage)
-=======
 	lockResolver := txnutil.NewLockerResolver(kvStorage, "changefeed-test", util.RoleTester)
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	isPullInit := &mockPullerInit{}
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
@@ -3143,15 +3015,9 @@ func (s *clientSuite) testKVClientForceReconnect(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-<<<<<<< HEAD
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockresolver, isPullInit, eventCh)
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-=======
-		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
 			100, false, lockResolver, isPullInit, eventCh)
-		require.Equal(t, context.Canceled, errors.Cause(err))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}()
 
 	baseAllocatedID := currentRequestID()
@@ -3301,15 +3167,9 @@ func (s *clientSuite) TestConcurrentProcessRangeRequest(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-<<<<<<< HEAD
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("z")}, 100, false, lockresolver, isPullInit, eventCh)
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-=======
-		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("z")},
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("z")},
 			100, false, lockResolver, isPullInit, eventCh)
-		require.Equal(t, context.Canceled, errors.Cause(err))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}()
 
 	// the kv client is blocked by failpoint injection, and after region has split
@@ -3424,15 +3284,9 @@ func (s *clientSuite) TestEvTimeUpdate(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-<<<<<<< HEAD
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-=======
-		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 			100, false, lockResolver, isPullInit, eventCh)
-		require.Equal(t, context.Canceled, errors.Cause(err))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -3551,15 +3405,9 @@ func (s *clientSuite) TestRegionWorkerExitWhenIsIdle(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-<<<<<<< HEAD
-		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 100, false, lockresolver, isPullInit, eventCh)
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-=======
-		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 			100, false, lockResolver, isPullInit, eventCh)
-		require.Equal(t, context.Canceled, errors.Cause(err))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}()
 
 	// wait request id allocated with: new session, new request
@@ -3652,15 +3500,9 @@ func (s *clientSuite) TestPrewriteNotMatchError(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-<<<<<<< HEAD
-		err = cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 100, false, lockResolver, isPullInit, eventCh)
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-=======
-		err = cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+		err = cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
 			100, false, lockResolver, isPullInit, eventCh)
-		require.Equal(t, context.Canceled, errors.Cause(err))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}()
 
 	// The expected request ids are agnostic because the kv client could retry

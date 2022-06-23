@@ -23,13 +23,9 @@ import (
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/prometheus/client_golang/prometheus"
-<<<<<<< HEAD
 	"go.etcd.io/etcd/clientv3"
+	clientV3 "go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
-=======
-	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
-	clientV3 "go.etcd.io/etcd/client/v3"
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 )
@@ -56,19 +52,6 @@ const (
 	etcdRequestProgressDuration = 1 * time.Second
 	// etcdWatchChBufferSize is arbitrarily specified, it will be modified in the future
 	etcdWatchChBufferSize = 16
-<<<<<<< HEAD
-=======
-	// etcdTxnTimeoutDuration represents the timeout duration for committing a
-	// transaction to Etcd
-	etcdTxnTimeoutDuration = 30 * time.Second
-)
-
-var (
-	txnEmptyCmps    = []clientV3.Cmp{}
-	txnEmptyOpsThen = []clientV3.Op{}
-	// TxnEmptyOpsElse is a no-op operation.
-	TxnEmptyOpsElse = []clientV3.Op{}
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 )
 
 // set to var instead of const for mocking the value to speedup test
@@ -145,27 +128,12 @@ func (c *Client) Delete(ctx context.Context, key string,
 	return c.cli.Delete(ctx, key, opts...)
 }
 
-<<<<<<< HEAD
 // Txn delegates request to clientv3.KV.Txn
 func (c *Client) Txn(ctx context.Context) clientv3.Txn {
 	if metric, ok := c.metrics[EtcdTxn]; ok {
 		metric.Inc()
 	}
 	return c.cli.Txn(ctx)
-=======
-// Txn delegates request to clientV3.KV.Txn. The error returned can only be a non-retryable error,
-// such as context.Canceled, context.DeadlineExceeded, errors.ErrReachMaxTry.
-func (c *Client) Txn(ctx context.Context,
-	cmps []clientV3.Cmp, opsThen, opsElse []clientV3.Op) (resp *clientV3.TxnResponse, err error) {
-	txnCtx, cancel := context.WithTimeout(ctx, etcdTxnTimeoutDuration)
-	defer cancel()
-	err = retryRPC(EtcdTxn, c.metrics[EtcdTxn], func() error {
-		var inErr error
-		resp, inErr = c.cli.Txn(txnCtx).If(cmps...).Then(opsThen...).Else(opsElse...).Commit()
-		return inErr
-	})
-	return
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 }
 
 // Grant delegates request to clientV3.Lease.Grant
@@ -288,14 +256,7 @@ func (c *Client) WatchWithChan(ctx context.Context, outCh chan<- clientV3.WatchR
 					zap.String("role", role))
 				cancel()
 				watchCtx, cancel = context.WithCancel(ctx)
-<<<<<<< HEAD
-				watchCh = c.cli.Watch(watchCtx, key, clientv3.WithPrefix(), clientv3.WithRev(lastRevision))
-=======
-				// to avoid possible context leak warning from govet
-				_ = cancel
-				watchCh = c.cli.Watch(watchCtx, key,
-					clientV3.WithPrefix(), clientV3.WithRev(lastRevision))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+				watchCh = c.cli.Watch(watchCtx, key, clientV3.WithPrefix(), clientV3.WithRev(lastRevision))
 				// we need to reset lastReceivedResponseTime after reset Watch
 				lastReceivedResponseTime = c.clock.Now()
 			}

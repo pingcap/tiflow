@@ -128,15 +128,10 @@ func (r *resolver) Resolve(ctx context.Context, regionID uint64, maxVersion uint
 		}
 		bo = tikv.NewGcResolveLockMaxBackoffer(ctx)
 	}
-<<<<<<< HEAD
-	log.Info("resolve lock successfully", zap.Uint64("regionID", regionID), zap.Uint64("maxVersion", maxVersion))
-=======
 	log.Info("resolve lock successfully",
 		zap.Uint64("regionID", regionID),
-		zap.Int("lockCount", lockCount),
 		zap.Uint64("maxVersion", maxVersion),
 		zap.String("changefeed", r.changefeed),
 		zap.Any("role", r.role))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	return nil
 }

@@ -714,13 +714,8 @@ type schemaStorageImpl struct {
 	resolvedTs uint64
 
 	filter         *filter.Filter
-<<<<<<< HEAD
 	explicitTables bool
-=======
-	forceReplicate bool
-
-	id model.ChangeFeedID
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
+	id             model.ChangeFeedID
 }
 
 // NewSchemaStorage creates a new schema storage
@@ -740,12 +735,8 @@ func NewSchemaStorage(meta *timeta.Meta, startTs uint64, filter *filter.Filter,
 		snaps:          []*schemaSnapshot{snap},
 		resolvedTs:     startTs,
 		filter:         filter,
-<<<<<<< HEAD
 		explicitTables: forceReplicate,
-=======
-		forceReplicate: forceReplicate,
 		id:             id,
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	}
 	return schema, nil
 }
@@ -898,12 +889,9 @@ func (s *schemaStorageImpl) DoGC(ts uint64) (lastSchemaTs uint64) {
 // Now, it write DDL Binlog in the txn that the state of job is changed to *done* (before change to *synced*)
 // At state *done*, it will be always and only changed to *synced*.
 func (s *schemaStorageImpl) skipJob(job *timodel.Job) bool {
-<<<<<<< HEAD
-=======
 	log.Debug("handle DDL new commit",
 		zap.String("DDL", job.Query), zap.Stringer("job", job),
 		zap.String("changefeed", s.id))
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 	if s.filter != nil && s.filter.ShouldDiscardDDL(job.Type) {
 		log.Info("discard DDL",
 			zap.Int64("jobID", job.ID), zap.String("DDL", job.Query),

@@ -180,16 +180,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		for {
 			var e model.RegionFeedEvent
 			select {
-<<<<<<< HEAD
-=======
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
-			case <-metricsTicker.C:
-				metricEventChanSize.Observe(float64(len(eventCh)))
-				metricOutputChanSize.Observe(float64(len(p.outputCh)))
-				metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(atomic.LoadUint64(&p.resolvedTs))))
-				continue
->>>>>>> 1e8f99f5e (cdc/owner: add some logs to help debug puller / kvclient / lock resolver (#4822))
 			case e = <-eventCh:
 			}
 
