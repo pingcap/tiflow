@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package api
+package capture
 
 import (
 	"context"
@@ -29,6 +29,6 @@ type CaptureInfoProvider interface {
 	IsReady() bool
 	GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error)
 	StatusProvider() owner.StatusProvider
-	GetEtcdClient() *etcd.CDCEtcdClient
+	GetEtcdClient() etcd.CDCEtcdClientForAPI
 	GetUpstreamManager() *upstream.Manager
 }

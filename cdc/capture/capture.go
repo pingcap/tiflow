@@ -137,7 +137,7 @@ func (c *Capture) GetUpstreamManager() *upstream.Manager {
 }
 
 // GetEtcdClient is a Getter of capture's Etcd client
-func (c *Capture) GetEtcdClient() *etcd.CDCEtcdClient {
+func (c *Capture) GetEtcdClient() etcd.CDCEtcdClientForAPI {
 	return c.EtcdClient
 }
 

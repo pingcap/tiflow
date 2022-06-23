@@ -15,168 +15,12 @@ package v2
 
 import (
 	"context"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	tidbkv "github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
-	"github.com/pingcap/tiflow/pkg/etcd"
-	"github.com/pingcap/tiflow/pkg/security"
-	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 )
-
-var (
-	changeFeedID         = model.DefaultChangeFeedID("test-changeFeed")
-	captureID            = "test-capture"
-	nonExistChangefeedID = model.DefaultChangeFeedID("non-exist-changefeed")
-)
-
-//type mockStatusProvider struct {
-//	mock.Mock
-//}
-//
-//func newStatusProvider() *mockStatusProvider {
-//	statusProvider := &mockStatusProvider{}
-//	statusProvider.On("GetChangeFeedStatus", mock.Anything, changeFeedID).
-//		Return(&model.ChangeFeedStatus{CheckpointTs: 1}, nil)
-//
-//	statusProvider.On("GetChangeFeedStatus", mock.Anything, nonExistChangefeedID).
-//		Return(new(model.ChangeFeedStatus),
-//			cerror.ErrChangeFeedNotExists.GenWithStackByArgs(nonExistChangefeedID))
-//
-//	statusProvider.On("GetAllTaskStatuses", mock.Anything).
-//		Return(map[model.CaptureID]*model.TaskStatus{captureID: {}}, nil)
-//
-//	statusProvider.On("GetTaskPositions", mock.Anything).
-//		Return(map[model.CaptureID]*model.TaskPosition{
-//			captureID: {Error: &model.RunningError{Message: "test"}},
-//		}, nil)
-//
-//	statusProvider.On("GetAllChangeFeedStatuses", mock.Anything).
-//		Return(map[model.ChangeFeedID]*model.ChangeFeedStatus{
-//			model.DefaultChangeFeedID(changeFeedID.ID + "1"): {CheckpointTs: 1},
-//			model.DefaultChangeFeedID(changeFeedID.ID + "2"): {CheckpointTs: 2},
-//		}, nil)
-//
-//	statusProvider.On("GetAllChangeFeedInfo", mock.Anything).
-//		Return(map[model.ChangeFeedID]*model.ChangeFeedInfo{
-//			model.DefaultChangeFeedID(changeFeedID.ID + "1"): {State: model.StateNormal},
-//			model.DefaultChangeFeedID(changeFeedID.ID + "2"): {State: model.StateStopped},
-//		}, nil)
-//
-//	statusProvider.On("GetAllTaskStatuses", mock.Anything).
-//		Return(map[model.CaptureID]*model.TaskStatus{captureID: {}}, nil)
-//
-//	statusProvider.On("GetChangeFeedInfo", mock.Anything).
-//		Return(&model.ChangeFeedInfo{State: model.StateNormal}, nil)
-//
-//	statusProvider.On("GetProcessors", mock.Anything).
-//		Return([]*model.ProcInfoSnap{{CfID: changeFeedID, CaptureID: captureID}}, nil)
-//
-//	statusProvider.On("GetCaptures", mock.Anything).
-//		Return([]*model.CaptureInfo{{ID: captureID}}, nil)
-//
-//	return statusProvider
-//}
-
-type mockAPIV2Helpers struct {
-	verifyUpstreamFunc func(context.Context, *ChangefeedConfig, *model.ChangeFeedInfo) error
-	verifyCreateFunc   func(context.Context, *ChangefeedConfig, pd.Client,
-		owner.StatusProvider, string, tidbkv.Storage) (*model.ChangeFeedInfo, error)
-	verifyUpdateFunc func(context.Context, *ChangefeedConfig, *model.ChangeFeedInfo,
-		*model.UpstreamInfo) (*model.ChangeFeedInfo, *model.UpstreamInfo, error)
-	getPDClientFunc func(context.Context, []string, *security.Credential) (pd.Client, error)
-	//getKvStorageFunc func()
-}
-
-// NewOpenAPIV2ForTest creates a new OpenAPIV2.
-func NewOpenAPIV2ForTest(capture api.CaptureInfoProvider, mockHelper mockAPIV2Helpers) OpenAPIV2 {
-	return OpenAPIV2{capture, mockHelper}
-}
-
-func (m mockAPIV2Helpers) verifyCreateChangefeedConfig(
-	ctx context.Context,
-	cfg *ChangefeedConfig,
-	pdClient pd.Client,
-	statusProvider owner.StatusProvider,
-	ensureGCServiceID string,
-	kvStorage tidbkv.Storage,
-) (*model.ChangeFeedInfo, error) {
-	if m.verifyCreateFunc != nil {
-		return m.verifyCreateFunc(ctx, cfg, pdClient, statusProvider, ensureGCServiceID, kvStorage)
-	}
-	return APIV2HelpersImpl{}.verifyCreateChangefeedConfig(ctx, cfg, pdClient, statusProvider, ensureGCServiceID, kvStorage)
-}
-
-func (m mockAPIV2Helpers) verifyUpdateChangefeedConfig(
-	ctx context.Context,
-	cfg *ChangefeedConfig,
-	oldInfo *model.ChangeFeedInfo,
-	oldUpInfo *model.UpstreamInfo,
-) (*model.ChangeFeedInfo, *model.UpstreamInfo, error) {
-	if m.verifyUpdateFunc != nil {
-		return m.verifyUpdateFunc(ctx, cfg, oldInfo, oldUpInfo)
-	}
-	return APIV2HelpersImpl{}.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo)
-}
-
-func (m mockAPIV2Helpers) verifyUpstream(
-	ctx context.Context,
-	config *ChangefeedConfig,
-	cfInfo *model.ChangeFeedInfo,
-) error {
-	if m.verifyUpdateFunc != nil {
-		return m.verifyUpstreamFunc(ctx, config, cfInfo)
-	}
-	return APIV2HelpersImpl{}.verifyUpstream(ctx, config, cfInfo)
-}
-
-func (m mockAPIV2Helpers) getPDClient(ctx context.Context,
-	pdAddrs []string,
-	credential *security.Credential,
-) (pd.Client, error) {
-	if m.verifyUpdateFunc != nil {
-		return m.getPDClientFunc(ctx, pdAddrs, credential)
-	}
-	return APIV2HelpersImpl{}.getPDClient(ctx, pdAddrs, credential)
-}
-
-// MockPDClient mocks pd.Client to facilitate unit testing.
-type mockPDClient struct {
-	pd.Client
-	logicTime int64
-	timestamp int64
-}
-
-func (m *mockPdClient4Validator) UpdateServiceGCSafePoint(ctx context.Context, serviceID string,
-	ttl int64, safePoint uint64,
-) (uint64, error) {
-	return safePoint, nil
-}
-
-func (m *mockPdClient4Validator) GetTS(ctx context.Context) (int64, int64, error) {
-	return m.logicTime, m.timestamp, nil
-}
-
-func (m *mockPdClient4Validator) GetClusterID(ctx context.Context) uint64 {
-	return 123
-}
-
-func (m *mockPDClient) GetTS(context.Context) (int64, int64, error) {
-	return oracle.GetPhysical(time.Now()), 0, nil
-}
-
-// MockPDClient mocks pd.Client to facilitate unit testing.
-type MockEtcdClient struct {
-	etcd.CDCEtcdClient
-}
-
-func (*MockEtcdClient) CreateChangefeedInfo(...interface{}) error {
-	return nil
-}
 
 type testCase struct {
 	url    string
@@ -187,4 +31,48 @@ func newRouter(apiV2 OpenAPIV2) *gin.Engine {
 	router := gin.New()
 	RegisterOpenAPIV2Routes(router, apiV2)
 	return router
+}
+
+// mockPDClient mocks pd.Client to facilitate unit testing.
+type mockPDClient struct {
+	pd.Client
+	logicTime int64
+	timestamp int64
+}
+
+func (m *mockPDClient) UpdateServiceGCSafePoint(ctx context.Context, serviceID string,
+	ttl int64, safePoint uint64,
+) (uint64, error) {
+	return safePoint, nil
+}
+
+func (m *mockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
+	return m.logicTime, m.timestamp, nil
+}
+
+func (m *mockPDClient) GetClusterID(ctx context.Context) uint64 {
+	return 123
+}
+
+func (c *mockPDClient) Close() {}
+
+type mockStatusProvider struct {
+	owner.StatusProvider
+	changefeedStatus *model.ChangeFeedStatus
+	changefeedInfo   *model.ChangeFeedInfo
+	err              error
+}
+
+// GetChangeFeedStatus returns a changefeeds' runtime status.
+func (m *mockStatusProvider) GetChangeFeedStatus(ctx context.Context,
+	changefeedID model.ChangeFeedID,
+) (*model.ChangeFeedStatus, error) {
+	return m.changefeedStatus, m.err
+}
+
+// GetChangeFeedStatus returns a mock changefeeds' info.
+func (m *mockStatusProvider) GetChangeFeedInfo(ctx context.Context,
+	changefeedID model.ChangeFeedID,
+) (*model.ChangeFeedInfo, error) {
+	return m.changefeedInfo, m.err
 }

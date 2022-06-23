@@ -15,82 +15,164 @@ package v2
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
-	"time"
 
-	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/golang/mock/gomock"
+	tidbkv "github.com/pingcap/tidb/kv"
+	mock_capture "github.com/pingcap/tiflow/cdc/capture/mock"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/owner"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
+	"go.etcd.io/etcd/api/v3/mvccpb"
 )
 
-type MockUpstream struct {
-	ID             uint64
-	PDAddrs        []string `json:"pd_addrs"`
-	SecurityConfig *security.Credential
-}
+var (
+	changeFeedID         = model.DefaultChangeFeedID("test-changeFeed")
+	captureID            = "test-capture"
+	nonExistChangefeedID = model.DefaultChangeFeedID("non-exist-changefeed")
+	blackHoleSink        = "blackhole://"
+)
 
 type mockUpstreamManager struct {
-	mockUpstream       MockUpstream
-	getDefaultUpstream func() *MockUpstream
+	up *upstream.Upstream
+	x  upstream.Manager
 }
 
-func (up *mockUpstreamManager) GetDefaultUpstream() *MockUpstream {
-	return &up.mockUpstream
+func (m *mockUpstreamManager) GetDefaultUpstream() *upstream.Upstream {
+	return m.up
 }
 
-type configToSend struct {
-	Namespace string `json:"namespace"`
-	ID        string `json:"changefeed_id"`
-	StartTs   uint64 `json:"start_ts"`
-	TargetTs  uint64 `json:"target_ts"`
-	SinkURI   string `json:"sink_uri"`
-	Engine    string `json:"engine"`
-
-	ReplicaConfig *ReplicaConfig `json:"replica_config"`
-
-	SyncPointEnabled  bool          `json:"sync_point_enabled"`
-	SyncPointInterval time.Duration `json:"sync_point_interval"`
-
-	PDAddrs       []string `json:"pd_addrs"`
-	CAPath        string   `json:"ca_path"`
-	CertPath      string   `json:"cert_path"`
-	KeyPath       string   `json:"key_path"`
-	CertAllowedCN []string `json:"cert_allowed_cn"`
+type mockEtcdClient struct {
+	etcd.CDCEtcdClientForAPI
+	upstreamExists  bool
+	createOpSuccess bool
+	updateOpSuccess bool
+	err             error
 }
 
-const (
-	changeFeedID4Test1 = "changefeedID-for-test-1"
-	blackHoleSink      = "blackhole://"
-)
-
-type mockPDClient4CfTest struct {
-	pd.Client
+func (*mockEtcdClient) GetEnsureGCServiceID() string {
+	return "demo-gc-service-id"
 }
 
-func (c *mockPDClient4CfTest) Close() {}
+func (m *mockEtcdClient) GetUpstreamInfo(context.Context, model.UpstreamID,
+	string) (*model.UpstreamInfo, error) {
+	if m.upstreamExists {
+		return nil, nil
+	}
+	return nil, cerror.ErrUpstreamNotFound.FastGen("MockEtcdError")
+}
+
+func (m *mockEtcdClient) CreateChangefeedInfo(ctx context.Context,
+	upstreamInfo *model.UpstreamInfo,
+	info *model.ChangeFeedInfo,
+	changeFeedID model.ChangeFeedID,
+) error {
+	if m.createOpSuccess {
+		return nil
+	}
+	return cerror.ErrChangeFeedAlreadyExists.GenWithStackByArgs(changeFeedID)
+}
+
+func (m *mockEtcdClient) UpdateChangefeedAndUpstream(ctx context.Context,
+	upstreamInfo *model.UpstreamInfo,
+	changeFeedInfo *model.ChangeFeedInfo,
+	changeFeedID model.ChangeFeedID,
+) error {
+	if m.updateOpSuccess {
+		return nil
+	}
+	return cerror.ErrChangefeedUpdateFailedTransaction.GenWithStackByArgs(changeFeedID)
+}
+
+func (m *mockEtcdClient) GetAllCDCInfo(ctx context.Context) ([]*mvccpb.KeyValue, error) {
+	return nil, nil
+}
+
+func (m *mockEtcdClient) GetGCServiceID() string {
+	return fmt.Sprintf("ticdc-%s-%d", "defalut", 0)
+}
 
 func TestCreateChangefeed(t *testing.T) {
 	t.Parallel()
-	NewOpenAPIV2()
+
+	helperCtrl := gomock.NewController(t)
+	helper := NewMockAPIV2Helpers(helperCtrl)
+	captureCtrl := gomock.NewController(t)
+	cp := mock_capture.NewMockCaptureInfoProvider(captureCtrl)
+	apiV2 := NewOpenAPIV2ForTest(cp, helper)
+	router := newRouter(apiV2)
+
+	pdClient := &mockPDClient{}
+	statusProvider := &mockStatusProvider{}
+	mockUpManager := upstream.NewManager4Test(pdClient)
+
+	helper.EXPECT().
+		getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(pdClient, nil)
+	helper.EXPECT().
+		createTiStore(gomock.Any(), gomock.Any()).
+		Return(nil, nil)
+	helper.EXPECT().
+		verifyCreateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(),
+			gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context,
+			cfg *ChangefeedConfig,
+			pdClient pd.Client,
+			statusProvider owner.StatusProvider,
+			ensureGCServiceID string,
+			kvStorage tidbkv.Storage,
+		) (*model.ChangeFeedInfo, error) {
+			require.EqualValues(t, cfg.ID, changeFeedID.ID)
+			require.EqualValues(t, cfg.SinkURI, blackHoleSink)
+			return &model.ChangeFeedInfo{
+				UpstreamID: 0,
+				ID:         cfg.ID,
+				SinkURI:    cfg.SinkURI}, nil
+		})
+
+	mockEtcdCli := &mockEtcdClient{
+		upstreamExists:  true,
+		createOpSuccess: true,
+	}
+
+	cp.EXPECT().
+		StatusProvider().
+		Return(statusProvider)
+	cp.EXPECT().
+		GetEtcdClient().
+		Return(mockEtcdCli).AnyTimes()
+	cp.EXPECT().
+		GetUpstreamManager().
+		Return(mockUpManager).AnyTimes()
+	cp.EXPECT().IsReady().Return(true)
+	cp.EXPECT().IsOwner().Return(true)
 
 	// test succeed
 	config1 := struct {
-		ID      string `json:"changefeed_id"`
-		SinkURI string `json:"sink_uri"`
-		PDAddrs string `json:"pd_addrs"`
-	}{changeFeedID4Test1, blackHoleSink, ""}
+		ID      string   `json:"changefeed_id"`
+		SinkURI string   `json:"sink_uri"`
+		PDAddrs []string `json:"pd_addrs"`
+	}{ID: changeFeedID.ID, SinkURI: blackHoleSink, PDAddrs: []string{"http://127.0.0.1:2379"}}
 	b, err := json.Marshal(&config1)
 	require.Nil(t, err)
 	body := bytes.NewReader(b)
 
-	getPdCliFunc1 := func(a, b, c any) (mockPDClient4CfTest, error) {
-		return mockPDClient4CfTest{}, nil
-	}
-	getPdCliFunc2 := func(a, b, c any) (mockPDClient4CfTest, error) {
-		return , nil
-	}
+	case1 := testCase{url: "/api/v2/changefeeds", method: "POST"}
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequestWithContext(context.Background(), case1.method, case1.url, body)
+	router.ServeHTTP(w, req)
+	require.Equal(t, 201, w.Code)
 
+	require.Nil(t, err)
 }
 
 func TestUpdateChangefeed(t *testing.T) {}

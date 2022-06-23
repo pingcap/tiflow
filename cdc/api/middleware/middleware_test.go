@@ -20,12 +20,12 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pingcap/tiflow/cdc/api"
+	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/stretchr/testify/require"
 )
 
 type testCaptureInfoProvider struct {
-	api.CaptureInfoProvider
+	capture.CaptureInfoProvider
 	ready bool
 }
 

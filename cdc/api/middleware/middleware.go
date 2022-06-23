@@ -20,6 +20,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/api"
+	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
@@ -80,7 +81,7 @@ func ErrorHandleMiddleware() gin.HandlerFunc {
 
 // ForwardToOwnerMiddleware forward an request to owner if current server
 // is not owner, or handle it locally.
-func ForwardToOwnerMiddleware(p api.CaptureInfoProvider) gin.HandlerFunc {
+func ForwardToOwnerMiddleware(p capture.CaptureInfoProvider) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		if !p.IsOwner() {
 			api.ForwardToOwner(ctx, p)
@@ -96,7 +97,7 @@ func ForwardToOwnerMiddleware(p api.CaptureInfoProvider) gin.HandlerFunc {
 }
 
 // CheckServerReadyMiddleware checks if the server is ready
-func CheckServerReadyMiddleware(capture api.CaptureInfoProvider) gin.HandlerFunc {
+func CheckServerReadyMiddleware(capture capture.CaptureInfoProvider) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if capture.IsReady() {
 			c.Next()

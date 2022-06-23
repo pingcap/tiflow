@@ -14,57 +14,27 @@
 package v2
 
 import (
-	"context"
-
 	"github.com/gin-gonic/gin"
-	tidbkv "github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/api/middleware"
 	"github.com/pingcap/tiflow/cdc/capture"
-	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/owner"
-	"github.com/pingcap/tiflow/pkg/security"
-	pd "github.com/tikv/pd/client"
 )
-
-type APIV2Helpers interface {
-	verifyUpstream(
-		context.Context,
-		*ChangefeedConfig,
-		*model.ChangeFeedInfo,
-	) error
-
-	verifyCreateChangefeedConfig(
-		context.Context,
-		*ChangefeedConfig,
-		pd.Client,
-		owner.StatusProvider,
-		string,
-		tidbkv.Storage,
-	) (*model.ChangeFeedInfo, error)
-
-	verifyUpdateChangefeedConfig(
-		context.Context,
-		*ChangefeedConfig,
-		*model.ChangeFeedInfo,
-		*model.UpstreamInfo,
-	) (*model.ChangeFeedInfo, *model.UpstreamInfo, error)
-
-	getPDClient(context.Context, []string, *security.Credential) (pd.Client, error)
-	createTiStore([]string, *security.Credential) (tidbkv.Storage, error)
-}
 
 type APIV2HelpersImpl struct{}
 
 // OpenAPIV2 provides CDC v2 APIs
 type OpenAPIV2 struct {
-	capture     api.CaptureInfoProvider
+	capture     capture.CaptureInfoProvider
 	apiV2Helper APIV2Helpers
 }
 
 // NewOpenAPIV2 creates a new OpenAPIV2.
 func NewOpenAPIV2(c *capture.Capture) OpenAPIV2 {
-	return OpenAPIV2{c, &APIV2HelpersImpl{}}
+	return OpenAPIV2{c, APIV2HelpersImpl{}}
+}
+
+// NewOpenAPIV2ForTest creates a new OpenAPIV2.
+func NewOpenAPIV2ForTest(c capture.CaptureInfoProvider, h APIV2Helpers) OpenAPIV2 {
+	return OpenAPIV2{c, h}
 }
 
 // RegisterOpenAPIV2Routes registers routes for OpenAPI

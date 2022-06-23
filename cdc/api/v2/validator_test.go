@@ -20,31 +20,16 @@ import (
 
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
-	pd "github.com/tikv/pd/client"
 )
 
-type mockPdClient struct {
-	pd.Client
-	logicTime int64
-	timestamp int64
-}
-
-type mockStatusProvider struct {
-	owner.StatusProvider
-	changefeedStatus *model.ChangeFeedStatus
-	err              error
-}
-
-// GetChangeFeedStatus returns a changefeeds' runtime status.
-func (m *mockStatusProvider) GetChangeFeedStatus(ctx context.Context,
-	changefeedID model.ChangeFeedID,
-) (*model.ChangeFeedStatus, error) {
-	return m.changefeedStatus, m.err
-}
+//type mockPdClient struct {
+//	pd.Client
+//	logicTime int64
+//	timestamp int64
+//}
 
 type mockStorage struct {
 	tidbkv.Storage
@@ -52,7 +37,7 @@ type mockStorage struct {
 
 func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	ctx := context.Background()
-	pdClient := &mockPdClient4Validator{}
+	pdClient := &mockPDClient{}
 	storage := &mockStorage{}
 	provider := &mockStatusProvider{}
 	cfg := &ChangefeedConfig{}
