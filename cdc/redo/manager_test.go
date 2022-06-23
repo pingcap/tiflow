@@ -15,11 +15,8 @@ package redo
 
 import (
 	"context"
-<<<<<<< HEAD
-=======
 	"sync"
 	"sync/atomic"
->>>>>>> 9b29eef20 (redo(ticdc): fix a bug that flush log executed before writing logs (#5621))
 	"testing"
 	"time"
 
@@ -176,6 +173,80 @@ func TestLogManagerInProcessor(t *testing.T) {
 
 	err = logMgr.FlushResolvedAndCheckpointTs(ctx, 200 /*resolvedTs*/, 120 /*CheckPointTs*/)
 	require.Nil(t, err)
+}
+
+// TestUpdateResolvedTsWithDelayedTable tests redo manager doesn't move resolved
+// ts forward if one or more tables resolved ts are not returned from underlying
+// writer, this secenario happens when there is no data or resolved ts of this
+// table sent to redo log writer yet.
+func TestUpdateResolvedTsWithDelayedTable(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cfg := &config.ConsistentConfig{
+		Level:   string(ConsistentLevelEventual),
+		Storage: "blackhole://",
+	}
+	errCh := make(chan error, 1)
+	opts := &ManagerOptions{
+		EnableBgRunner: true,
+		ErrCh:          errCh,
+	}
+	logMgr, err := NewManager(ctx, cfg, opts)
+	require.Nil(t, err)
+
+	var (
+		table53 = int64(53)
+		table55 = int64(55)
+		table57 = int64(57)
+
+		startTs   = uint64(100)
+		table53Ts = uint64(125)
+		table55Ts = uint64(120)
+		table57Ts = uint64(110)
+	)
+	tables := []model.TableID{table53, table55, table57}
+	for _, tableID := range tables {
+		logMgr.AddTable(tableID, startTs)
+	}
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		logMgr.bgWriteLog(ctx, errCh)
+	}()
+
+	// table 53 has new data, resolved-ts moves forward to 125
+	rows := []*model.RowChangedEvent{
+		{CommitTs: table53Ts, Table: &model.TableName{TableID: table53}},
+		{CommitTs: table53Ts, Table: &model.TableName{TableID: table53}},
+	}
+	err = logMgr.EmitRowChangedEvents(ctx, table53, rows...)
+	require.Nil(t, err)
+	require.Eventually(t, func() bool {
+		tsMap, err := logMgr.writer.GetCurrentResolvedTs(ctx, []int64{table53})
+		require.Nil(t, err)
+		ts, ok := tsMap[table53]
+		return ok && ts == table53Ts
+	}, time.Second, time.Millisecond*10)
+
+	// table 55 has no data, but receives resolved-ts event and moves forward to 120
+	err = logMgr.FlushLog(ctx, table55, table55Ts)
+	require.Nil(t, err)
+
+	// get min resolved ts should take each table into consideration
+	err = logMgr.updateTableResolvedTs(ctx)
+	require.Nil(t, err)
+	require.Equal(t, startTs, logMgr.GetMinResolvedTs())
+
+	// table 57 moves forward, update table resolved ts and check again
+	logMgr.FlushLog(ctx, table57, table57Ts)
+	err = logMgr.updateTableResolvedTs(ctx)
+	require.Nil(t, err)
+	require.Equal(t, table57Ts, logMgr.GetMinResolvedTs())
+
+	cancel()
+	wg.Wait()
 }
 
 // TestLogManagerInOwner tests how redo log manager is used in owner,

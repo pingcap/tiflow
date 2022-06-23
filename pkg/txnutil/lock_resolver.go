@@ -54,6 +54,7 @@ func (r *resolver) Resolve(ctx context.Context, regionID uint64, maxVersion uint
 	})
 
 	bo := tikv.NewGcResolveLockMaxBackoffer(ctx)
+	var lockCount int
 	var loc *tikv.KeyLocation
 	var key []byte
 	flushRegion := func() error {
@@ -105,6 +106,7 @@ func (r *resolver) Resolve(ctx context.Context, regionID uint64, maxVersion uint
 		for i := range locksInfo {
 			locks[i] = txnkv.NewLock(locksInfo[i])
 		}
+		lockCount += len(locksInfo)
 
 		_, err1 := r.kvStorage.GetLockResolver().ResolveLocks(bo, 0, locks)
 		if err1 != nil {
@@ -121,6 +123,9 @@ func (r *resolver) Resolve(ctx context.Context, regionID uint64, maxVersion uint
 		}
 		bo = tikv.NewGcResolveLockMaxBackoffer(ctx)
 	}
-	log.Info("resolve lock successfully", zap.Uint64("regionID", regionID), zap.Uint64("maxVersion", maxVersion))
+	log.Info("resolve lock successfully",
+		zap.Uint64("regionID", regionID),
+		zap.Int("lockCount", lockCount),
+		zap.Uint64("maxVersion", maxVersion))
 	return nil
 }

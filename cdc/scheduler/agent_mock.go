@@ -102,7 +102,7 @@ func NewMockTableExecutor(t *testing.T) *MockTableExecutor {
 }
 
 func (e *MockTableExecutor) AddTable(ctx cdcContext.Context, tableID model.TableID) (bool, error) {
-	log.Info("AddTable", zap.Int64("table-id", tableID))
+	log.Info("AddTable", zap.Int64("tableID", tableID))
 	require.NotContains(e.t, e.Adding, tableID)
 	require.NotContains(e.t, e.Running, tableID)
 	require.NotContains(e.t, e.Removing, tableID)
@@ -115,7 +115,7 @@ func (e *MockTableExecutor) AddTable(ctx cdcContext.Context, tableID model.Table
 }
 
 func (e *MockTableExecutor) RemoveTable(ctx cdcContext.Context, tableID model.TableID) (bool, error) {
-	log.Info("RemoveTable", zap.Int64("table-id", tableID))
+	log.Info("RemoveTable", zap.Int64("tableID", tableID))
 	args := e.Called(ctx, tableID)
 	require.Contains(e.t, e.Running, tableID)
 	require.NotContains(e.t, e.Removing, tableID)

@@ -266,7 +266,18 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	return errors.Trace(err)
 }
 
-func (k *mqSink) Init(_ model.TableID) error {
+func (k *mqSink) Init(tableID model.TableID) error {
+	// We need to clean up the old values of the table,
+	// otherwise when the table is dispatched back again,
+	// it may read the old values.
+	// See: https://github.com/pingcap/tiflow/issues/4464#issuecomment-1085385382.
+	if checkpointTs, ok := k.tableCheckpointTs[tableID]; ok {
+		delete(k.tableCheckpointTs, tableID)
+		log.Info("clean up table checkpoint ts in MQ sink",
+			zap.Int64("tableID", tableID),
+			zap.Uint64("checkpointTs", checkpointTs))
+	}
+
 	return nil
 }
 

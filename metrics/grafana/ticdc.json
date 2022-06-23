@@ -1121,11 +1121,11 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "avg(ticdc_processor_min_resolved_table_id{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}) by (capture)",
+              "expr": "ticdc_processor_min_resolved_table_id{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"})",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 2,
-              "legendFormat": "{{capture}}-table-id",
+              "legendFormat": "{{capture}}-{{changefeed}}-table-id",
               "refId": "A",
               "step": 10
             }
@@ -1220,11 +1220,11 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "avg(ticdc_processor_min_checkpoint_table_id{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}) by (capture)",
+              "expr": "ticdc_processor_min_checkpoint_table_id{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"})",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 2,
-              "legendFormat": "{{capture}}-table-id",
+              "legendFormat": "{{capture}}-{{changefeed}}-table-id",
               "refId": "A",
               "step": 10
             }
@@ -2783,7 +2783,7 @@
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "0-2 row/s worker",
+              "legendFormat": "0-2 txn/m worker",
               "refId": "C"
             },
             {
@@ -2792,7 +2792,7 @@
               "hide": false,
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "2-10 row/s worker",
+              "legendFormat": "2-10 txn/m worker",
               "refId": "D"
             },
             {
@@ -2801,7 +2801,7 @@
               "hide": false,
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "10-100 row/s worker",
+              "legendFormat": "10-100 txn/m worker",
               "refId": "E"
             },
             {
@@ -2810,7 +2810,7 @@
               "hide": false,
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": ">100 row/s worker",
+              "legendFormat": ">100 txn/m worker",
               "refId": "F"
             }
           ],

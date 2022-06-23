@@ -84,7 +84,7 @@ func NewSchedulerV2(
 	if err := ret.registerPeerMessageHandlers(ctx); err != nil {
 		return nil, err
 	}
-	log.Debug("scheduler created", zap.Uint64("checkpoint-ts", checkpointTs))
+	log.Debug("scheduler created", zap.Uint64("checkpointTs", checkpointTs))
 	return ret, nil
 }
 
@@ -234,7 +234,7 @@ func (s *schedulerV2) trySendMessage(
 		if cerror.ErrPeerMessageClientClosed.Equal(err) {
 			log.Warn("peer messaging client is closed while trying to send a message through it. "+
 				"Report a bug if this warning repeats",
-				zap.String("changefeed-id", s.changeFeedID),
+				zap.String("changefeed", s.changeFeedID),
 				zap.String("target", target))
 			return false, nil
 		}
@@ -245,7 +245,7 @@ func (s *schedulerV2) trySendMessage(
 }
 
 func (s *schedulerV2) Close(ctx context.Context) {
-	log.Debug("scheduler closed", zap.String("changefeed-id", s.changeFeedID))
+	log.Debug("scheduler closed", zap.String("changefeed", s.changeFeedID))
 	s.deregisterPeerMessageHandlers(ctx)
 }
 
