@@ -33,7 +33,7 @@ type MockProcessorMessenger struct {
 
 // FinishTableOperation marks this function as being called.
 func (m *MockProcessorMessenger) FinishTableOperation(
-	ctx context.Context, tableID model.TableID, checkpointTs model.Ts, epoch protocol.ProcessorEpoch,
+	ctx context.Context, tableID model.TableID, epoch protocol.ProcessorEpoch,
 ) (bool, error) {
 	args := m.Called(ctx, tableID, epoch)
 	return args.Bool(0), args.Error(1)
@@ -153,9 +153,6 @@ func (e *MockTableExecutor) IsAddTableFinished(ctx context.Context, tableID mode
 }
 
 // IsRemoveTableFinished determines if the table has been removed.
-// func (e *MockTableExecutor) IsRemoveTableFinished(
-// 	ctx context.Context, tableID model.TableID,
-// ) (model.Ts, bool) {
 func (e *MockTableExecutor) IsRemoveTableFinished(ctx context.Context, tableID model.TableID) (model.Ts, bool) {
 	_, ok := e.Removing[tableID]
 	return 0, !ok
