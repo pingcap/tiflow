@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/txnutil"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
 	"github.com/tikv/client-go/v2/tikv"
@@ -72,7 +73,8 @@ func (o *unsafeResolveLockOptions) run() error {
 		return e
 	}
 	log.ReplaceGlobals(lg, p)
-	txnResolver := txnutil.NewLockerResolver(o.kvStorage.(tikv.Storage))
+	txnResolver := txnutil.NewLockerResolver(o.kvStorage.(tikv.Storage),
+		"changefeed-client", util.RoleClient)
 	return txnResolver.Resolve(ctx, o.regionID, o.ts)
 }
 

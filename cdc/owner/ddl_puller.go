@@ -95,10 +95,11 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 	log.Debug("DDL puller started", zap.String("changefeed", ctx.ChangefeedVars().ID))
 	stdCtx := util.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = util.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
-	errg, stdCtx := errgroup.WithContext(stdCtx)
-	lastResolvedTsAdanvcedTime := h.clock.Now()
+	stdCtx = util.PutRoleInCtx(stdCtx, util.RoleProcessor)
+	g, stdCtx := errgroup.WithContext(stdCtx)
+	lastResolvedTsAdvancedTime := h.clock.Now()
 
-	errg.Go(func() error {
+	g.Go(func() error {
 		return h.puller.Run(stdCtx)
 	})
 
@@ -112,7 +113,7 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 			h.mu.Lock()
 			defer h.mu.Unlock()
 			if rawDDL.CRTs > h.resolvedTS {
-				lastResolvedTsAdanvcedTime = h.clock.Now()
+				lastResolvedTsAdvancedTime = h.clock.Now()
 				h.resolvedTS = rawDDL.CRTs
 			}
 			return nil
@@ -142,13 +143,13 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 	ticker := h.clock.Ticker(ownerDDLPullerStuckWarnTimeout)
 	defer ticker.Stop()
 
-	errg.Go(func() error {
+	g.Go(func() error {
 		for {
 			select {
 			case <-stdCtx.Done():
 				return stdCtx.Err()
 			case <-ticker.C:
-				duration := h.clock.Since(lastResolvedTsAdanvcedTime)
+				duration := h.clock.Since(lastResolvedTsAdvancedTime)
 				if duration > ownerDDLPullerStuckWarnTimeout {
 					log.Warn("ddl puller resolved ts has not advanced",
 						zap.String("changefeed", ctx.ChangefeedVars().ID),
@@ -163,7 +164,7 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 		}
 	})
 
-	return errg.Wait()
+	return g.Wait()
 }
 
 func (h *ddlPullerImpl) FrontDDL() (uint64, *timodel.Job) {

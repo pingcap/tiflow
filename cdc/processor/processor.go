@@ -667,6 +667,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	kvCfg := config.GetGlobalServerConfig().KVClient
 	stdCtx := util.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = util.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
+	stdCtx = util.PutRoleInCtx(stdCtx, util.RoleProcessor)
 	ddlPuller := puller.NewPuller(
 		stdCtx,
 		ctx.GlobalVars().PDClient,
@@ -678,7 +679,8 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	schemaStorage, err := entry.NewSchemaStorage(meta, checkpointTs, p.filter, p.changefeed.Info.Config.ForceReplicate)
+	schemaStorage, err := entry.NewSchemaStorage(meta, checkpointTs, p.filter,
+		p.changefeed.Info.Config.ForceReplicate, ctx.ChangefeedVars().ID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
