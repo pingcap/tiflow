@@ -88,23 +88,14 @@ func TestLogManagerInProcessor(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	logMgr, err := NewMockManager(ctx)
+	require.Nil(t, err)
+
 	checkResovledTs := func(mgr LogManager, expectedRts uint64) {
 		time.Sleep(time.Millisecond*200 + updateRtsInterval)
 		resolvedTs := mgr.GetMinResolvedTs()
 		require.Equal(t, expectedRts, resolvedTs)
 	}
-
-	cfg := &config.ConsistentConfig{
-		Level:   string(ConsistentLevelEventual),
-		Storage: "blackhole://",
-	}
-	errCh := make(chan error, 1)
-	opts := &ManagerOptions{
-		EnableBgRunner: true,
-		ErrCh:          errCh,
-	}
-	logMgr, err := NewManager(ctx, cfg, opts)
-	require.Nil(t, err)
 
 	// check emit row changed events can move forward resolved ts
 	tables := []model.TableID{53, 55, 57, 59}
@@ -183,16 +174,8 @@ func TestUpdateResolvedTsWithDelayedTable(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cfg := &config.ConsistentConfig{
-		Level:   string(ConsistentLevelEventual),
-		Storage: "blackhole://",
-	}
-	errCh := make(chan error, 1)
-	opts := &ManagerOptions{
-		EnableBgRunner: true,
-		ErrCh:          errCh,
-	}
-	logMgr, err := NewManager(ctx, cfg, opts)
+	defer cancel()
+	logMgr, err := NewMockManager(ctx)
 	require.Nil(t, err)
 
 	var (
@@ -209,12 +192,6 @@ func TestUpdateResolvedTsWithDelayedTable(t *testing.T) {
 	for _, tableID := range tables {
 		logMgr.AddTable(tableID, startTs)
 	}
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		logMgr.bgWriteLog(ctx, errCh)
-	}()
 
 	// table 53 has new data, resolved-ts moves forward to 125
 	rows := []*model.RowChangedEvent{
@@ -244,9 +221,6 @@ func TestUpdateResolvedTsWithDelayedTable(t *testing.T) {
 	err = logMgr.updateTableResolvedTs(ctx)
 	require.Nil(t, err)
 	require.Equal(t, table57Ts, logMgr.GetMinResolvedTs())
-
-	cancel()
-	wg.Wait()
 }
 
 // TestLogManagerInOwner tests how redo log manager is used in owner,
@@ -256,14 +230,7 @@ func TestLogManagerInOwner(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cfg := &config.ConsistentConfig{
-		Level:   string(ConsistentLevelEventual),
-		Storage: "blackhole://",
-	}
-	opts := &ManagerOptions{
-		EnableBgRunner: false,
-	}
-	logMgr, err := NewManager(ctx, cfg, opts)
+	logMgr, err := NewMockManager(ctx)
 	require.Nil(t, err)
 
 	ddl := &model.DDLEvent{StartTs: 100, CommitTs: 120, Query: "CREATE TABLE `TEST.T1`"}
