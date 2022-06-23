@@ -270,8 +270,6 @@ type RowChangedEvent struct {
 
 	// SplitTxn marks this RowChangedEvent as the first line of a new txn.
 	SplitTxn bool `json:"-" msg:"-"`
-	// Filtered marks this RowChangedEvent was filtered by filter in mounter.
-	Filtered bool `json:"-" msg:"-"`
 }
 
 // IsDelete returns true if the row is a delete event

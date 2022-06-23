@@ -649,10 +649,12 @@ func (c *changefeed) asyncExecDDLEvent(ctx cdcContext.Context,
 }
 
 func (c *changefeed) filterDDLEvent(ddlEvents []*model.DDLEvent) []*model.DDLEvent {
-	res := make([]*model.DDLEvent, 0)
+	res := make([]*model.DDLEvent, 0, len(ddlEvents))
 	// filter ddl event here
 	for _, ddlEvent := range ddlEvents {
-		if c.filter.ShouldIgnoreDDLEvent(ddlEvent.StartTs, ddlEvent.Type, ddlEvent.TableInfo.Schema, ddlEvent.TableInfo.Table) {
+		if c.filter.ShouldIgnoreDDLEvent(
+			ddlEvent.StartTs, ddlEvent.Type,
+			ddlEvent.TableInfo.Schema, ddlEvent.TableInfo.Table) {
 			log.Info(
 				"DDL event ignored",
 				zap.String("query", ddlEvent.Query),

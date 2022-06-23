@@ -109,12 +109,13 @@ func (m *mounterImpl) DecodeEvent(ctx context.Context, pEvent *model.Polymorphic
 		return errors.Trace(err)
 	}
 	pEvent.Row = rowEvent
+	if m.filter.ShouldIgnoreDMLEvent(
+		pEvent.Row.StartTs, pEvent.Row.Table.Schema, pEvent.Row.Table.Table) {
+		pEvent.Row = nil
+	}
 	pEvent.RawKV.Value = nil
 	pEvent.RawKV.OldValue = nil
-	pEvent.Row.Filtered = m.filter.ShouldIgnoreDMLEvent(
-		pEvent.Row.StartTs,
-		pEvent.Row.Table.Schema,
-		pEvent.Row.Table.Table)
+
 	duration := time.Since(start)
 	if duration > time.Second {
 		m.metricMountDuration.Observe(duration.Seconds())
