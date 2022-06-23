@@ -57,8 +57,8 @@ type tableActor struct {
 	// backend mounter
 	mounter entry.Mounter
 	// backend tableSink
-	tableSink      sink.Sink
-	redoLogEnabled bool
+	tableSink   sink.Sink
+	redoManager redo.LogManager
 
 	pullerNode *pullerNode
 	sortNode   *sorterNode
@@ -103,7 +103,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	tableName string,
 	replicaInfo *model.TableReplicaInfo,
 	sink sink.Sink,
-	redoLogEnabled bool,
+	redoManager redo.LogManager,
 	targetTs model.Ts,
 ) (TablePipeline, error) {
 	config := cdcCtx.ChangefeedVars().Info.Config
@@ -124,18 +124,18 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		wg:        wg,
 		cancel:    cancel,
 
-		tableID:        tableID,
-		markTableID:    replicaInfo.MarkTableID,
-		tableName:      tableName,
-		memoryQuota:    serverConfig.GetGlobalServerConfig().PerTableMemoryQuota,
-		upstream:       up,
-		mounter:        mounter,
-		replicaInfo:    replicaInfo,
-		replicaConfig:  config,
-		tableSink:      sink,
-		redoLogEnabled: redoLogEnabled,
-		targetTs:       targetTs,
-		started:        false,
+		tableID:       tableID,
+		markTableID:   replicaInfo.MarkTableID,
+		tableName:     tableName,
+		memoryQuota:   serverConfig.GetGlobalServerConfig().PerTableMemoryQuota,
+		upstream:      up,
+		mounter:       mounter,
+		replicaInfo:   replicaInfo,
+		replicaConfig: config,
+		tableSink:     sink,
+		redoManager:   redoManager,
+		targetTs:      targetTs,
+		started:       false,
 
 		changefeedID:   changefeedVars.ID,
 		changefeedVars: changefeedVars,
@@ -279,7 +279,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		zap.String("tableName", t.tableName),
 		zap.Uint64("quota", t.memoryQuota))
 
-	flowController := flowcontrol.NewTableFlowController(t.memoryQuota, t.redoLogEnabled)
+	flowController := flowcontrol.NewTableFlowController(t.memoryQuota, t.redoManager.Enabled())
 	sorterNode := newSorterNode(t.tableName, t.tableID,
 		t.replicaInfo.StartTs, flowController,
 		t.mounter, t.replicaConfig,
@@ -315,7 +315,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 
 	actorSinkNode := newSinkNode(t.tableID, t.tableSink,
 		t.replicaInfo.StartTs,
-		t.targetTs, flowController)
+		t.targetTs, flowController, t.redoManager)
 	actorSinkNode.initWithReplicaConfig(t.replicaConfig)
 	t.sinkNode = actorSinkNode
 
@@ -389,7 +389,7 @@ func (t *tableActor) ResolvedTs() model.Ts {
 	// will be able to cooperate replication status directly. Then we will add
 	// another replication barrier for consistent replication instead of reusing
 	// the global resolved-ts.
-	if redo.IsConsistentEnabled(t.replicaConfig.Consistent.Level) {
+	if t.redoManager.Enabled() {
 		return t.sinkNode.ResolvedTs()
 	}
 	return t.sortNode.ResolvedTs()

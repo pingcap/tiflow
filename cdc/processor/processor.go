@@ -762,7 +762,7 @@ func (p *processor) createTablePipelineImpl(
 
 	tableName := p.getTableName(ctx, tableID)
 
-	s, err := sink.NewTableSink(p.sink, tableID, p.metricsTableSinkTotalRows, p.redoManager)
+	s, err := sink.NewTableSink(p.sink, tableID, p.metricsTableSinkTotalRows)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -774,7 +774,7 @@ func (p *processor) createTablePipelineImpl(
 		tableName,
 		replicaInfo,
 		s,
-		p.redoManager.Enabled(),
+		p.redoManager,
 		p.changefeed.Info.GetTargetTs())
 	if err != nil {
 		return nil, errors.Trace(err)
