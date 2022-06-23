@@ -189,38 +189,7 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 	}
 
 	w.running.Store(true)
-	// go w.runFlushToDisk(ctx, cfg.FlushIntervalInMs)
-
 	return w, nil
-}
-
-func (w *Writer) runFlushToDisk(ctx context.Context, flushIntervalInMs int64) {
-	ticker := time.NewTicker(time.Duration(flushIntervalInMs) * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		if !w.IsRunning() {
-			return
-		}
-
-		select {
-		case <-ctx.Done():
-			err := w.Close()
-			if err != nil {
-				log.Error("runFlushToDisk close fail",
-					zap.String("namespace", w.cfg.ChangeFeedID.Namespace),
-					zap.String("changefeed", w.cfg.ChangeFeedID.ID),
-					zap.Error(err))
-			}
-		case <-ticker.C:
-			err := w.Flush()
-			if err != nil {
-				log.Error("redo log flush fail",
-					zap.String("namespace", w.cfg.ChangeFeedID.Namespace),
-					zap.String("changefeed", w.cfg.ChangeFeedID.ID), zap.Error(err))
-			}
-		}
-	}
 }
 
 // Write implement write interface
