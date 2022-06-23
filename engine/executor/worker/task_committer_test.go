@@ -70,7 +70,7 @@ func TestTaskCommitterSuccessCase(t *testing.T) {
 
 	suite.Runner.On("addWrappedTask",
 		mock.MatchedBy(func(arg *internal.RunnableContainer) bool {
-			return arg.ID() == "task-1" && arg.Info().SubmitTime == submitTime
+			return arg.ID() == "task-1" && arg.Info().SubmitTime == clock.ToMono(submitTime)
 		})).Return(nil)
 	ok, err := suite.Committer.ConfirmDispatchTask("request-1", "task-1")
 	require.True(t, ok)
@@ -122,7 +122,7 @@ func TestTaskCommitterSameTaskIDOverwrites(t *testing.T) {
 
 	suite.Runner.On("addWrappedTask",
 		mock.MatchedBy(func(arg *internal.RunnableContainer) bool {
-			return arg.ID() == "task-1" && arg.Info().SubmitTime == submitTime2
+			return arg.ID() == "task-1" && arg.Info().SubmitTime == clock.ToMono(submitTime2)
 		})).Return(nil)
 	ok, err = suite.Committer.ConfirmDispatchTask("request-2", "task-1")
 	require.True(t, ok)
