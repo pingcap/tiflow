@@ -16,17 +16,22 @@ package syncer
 import (
 	"context"
 	"fmt"
+	"testing"
 
-	. "github.com/pingcap/check"
+	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
+	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 )
 
-func (s *testSyncerSuite) TestHandleError(c *C) {
+func TestHandleError(t *testing.T) {
+	t.Parallel()
+
 	var (
-		syncer = NewSyncer(s.cfg, nil, nil)
+		cfg    = genDefaultSubTaskConfig4Test()
+		syncer = NewSyncer(cfg, nil, nil)
 		task   = "test"
 		ctx    = context.Background()
 		cases  = []struct {
@@ -83,22 +88,23 @@ func (s *testSyncerSuite) TestHandleError(c *C) {
 			},
 		}
 	)
-	mockDB := conn.InitMockDB(c)
-	var err error
-	syncer.fromDB, err = dbconn.NewUpStreamConn(&s.cfg.From) // used to get parser
-	c.Assert(err, IsNil)
+	mockDB, err := conn.MockDefaultDBProvider()
+	require.NoError(t, err)
+	syncer.fromDB, err = dbconn.NewUpStreamConn(&cfg.From) // used to get parser
+	require.NoError(t, err)
+	syncer.streamerController = binlogstream.NewStreamerController4Test(nil, nil)
 
 	for _, cs := range cases {
 		commandsJSON, err := syncer.HandleError(ctx, cs.req)
 		if cs.req.Op == pb.ErrorOp_List {
-			c.Assert(commandsJSON, Equals, "[{\"op\":1,\"task\":\"test\",\"binlogPos\":\"(mysql-bin.000001, 2345)\"}]")
+			require.Equal(t, "[{\"op\":1,\"task\":\"test\",\"binlogPos\":\"(mysql-bin.000001, 2345)\"}]", commandsJSON)
 		}
 		if len(cs.errMsg) == 0 {
-			c.Assert(err, IsNil)
+			require.NoError(t, err)
 		} else {
-			c.Assert(err, NotNil)
-			c.Assert(err.Error(), Matches, cs.errMsg)
+			require.Error(t, err)
+			require.Regexp(t, cs.errMsg, err.Error())
 		}
 	}
-	c.Assert(mockDB.ExpectationsWereMet(), IsNil)
+	require.NoError(t, mockDB.ExpectationsWereMet())
 }

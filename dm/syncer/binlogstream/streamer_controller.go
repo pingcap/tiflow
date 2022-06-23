@@ -305,8 +305,7 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (event *replicatio
 	})
 
 	appendRelaySubDir := func() (*replication.BinlogEvent, pb.ErrorOp, error) {
-		switch ev := event.Event.(type) {
-		case *replication.RotateEvent:
+		if ev, ok := event.Event.(*replication.RotateEvent); ok {
 			c.currBinlogFile = string(ev.NextLogName)
 			// if is local binlog but switch to remote on error, need to add uuid information in binlog's name
 			// nolint:dogsled
@@ -314,9 +313,9 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (event *replicatio
 			if relaySubDirSuffix != "" {
 				c.relaySubDirSuffix = relaySubDirSuffix
 			} else if c.relaySubDirSuffix != "" {
-				filename, err := binlog.ParseFilename(string(ev.NextLogName))
-				if err != nil {
-					return nil, pb.ErrorOp_InvalidErrorOp, terror.Annotate(err, "fail to parse binlog file name from rotate event")
+				filename, err2 := binlog.ParseFilename(string(ev.NextLogName))
+				if err2 != nil {
+					return nil, pb.ErrorOp_InvalidErrorOp, terror.Annotate(err2, "fail to parse binlog file name from rotate event")
 				}
 				ev.NextLogName = []byte(binlog.ConstructFilenameWithUUIDSuffix(filename, c.relaySubDirSuffix))
 				event.Event = ev
@@ -558,7 +557,7 @@ func NewStreamerController4Test(
 		streamerProducer: streamerProducer,
 		streamer:         streamer,
 		closed:           false,
-		streamModifier:   &streamModifier{},
+		streamModifier:   &streamModifier{logger: log.L()},
 	}
 }
 

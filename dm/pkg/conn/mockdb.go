@@ -62,6 +62,20 @@ func InitMockDB(c *check.C) sqlmock.Sqlmock {
 	return mock
 }
 
+// MockDefaultDBProvider return a mocked db for unit test.
+func MockDefaultDBProvider() (sqlmock.Sqlmock, error) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		return nil, err
+	}
+	if mdbp, ok := DefaultDBProvider.(*mockDBProvider); ok {
+		mdbp.db = db
+	} else {
+		DefaultDBProvider = &mockDBProvider{db: db}
+	}
+	return mock, nil
+}
+
 // InitVersionDB return a mocked db for unit test's show version.
 func InitVersionDB(c *check.C) sqlmock.Sqlmock {
 	db, mock, err := sqlmock.New()

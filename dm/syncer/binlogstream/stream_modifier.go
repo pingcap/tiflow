@@ -104,7 +104,7 @@ func (m *streamModifier) Set(req *pb.HandleWorkerErrorRequest, events []*replica
 		return terror.ErrSyncerEvent.Generatef("invalid error op: %s", req.Op.String())
 	}
 
-	pos, err := binlog.PositionFromStr(req.BinlogPos)
+	pos, err := binlog.PositionFromPosStr(req.BinlogPos)
 	if err != nil {
 		return err
 	}
@@ -169,7 +169,7 @@ func (m *streamModifier) ListEqualAndAfter(posStr string) []*pb.HandleWorkerErro
 	if posStr == "" {
 		matchedOps = m.ops
 	} else {
-		pos, err := binlog.PositionFromStr(posStr)
+		pos, err := binlog.PositionFromPosStr(posStr)
 		if err != nil {
 			m.logger.DPanic("invalid position, should be verified in caller",
 				zap.String("position", posStr))
