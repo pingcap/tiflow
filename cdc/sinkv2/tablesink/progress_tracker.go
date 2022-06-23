@@ -21,33 +21,41 @@ import (
 )
 
 // progressTracker is used to track the progress of the table sink.
+// For example,
+// We have txn1, txn2, resolvedTs2, txn3-1, txn3-2, resolvedTs3, resolvedTs4, resolvedTs5.
+// txn3-1 and txn3-2 are in the same big txn.
+// First txn1 and txn2 are written, then the progress can be updated to resolvedTs2.
+// Then txn3-1 and txn3-2 are written, then the progress can be updated to resolvedTs3.
+// Next, since no data is being written, we can update to resolvedTs5 in order.
 type progressTracker struct {
-	// This lock for both pendingEventAndResolvedTs and lastMinCommitTs.
+	// This lock for both pendingEventAndResolvedTs and lastMinResolvedTs.
 	lock sync.Mutex
-	// pendingEventAndResolvedTs is used to store the pending events and resolved tss.
+	// pendingEventAndResolvedTs is used to store the pending event keys and resolved tss.
 	// The key is the key of the event or the resolved ts.
-	// The value is nil or the resolved ts.
+	// The value is nil or the resolved ts. **nil for event**.
 	// Since the data in TableSink is sequential,
 	// we only need to maintain an insertion order.
 	pendingEventAndResolvedTs *linkedhashmap.Map
-	// lastMinCommitTs is used to store the last min commits ts.
+	// lastMinResolvedTs is used to store the last min resolved ts.
 	// It is used to indicate the progress of the table sink.
-	lastMinCommitTs model.ResolvedTs
+	lastMinResolvedTs model.ResolvedTs
 }
 
 // newProgressTracker is used to create a new progress tracker.
-// The last min commit ts is set to 0.
+// The last min resolved ts is set to 0.
 // It means that the table sink has not started yet.
 // nolint:deadcode
 func newProgressTracker() *progressTracker {
 	return &progressTracker{
 		pendingEventAndResolvedTs: linkedhashmap.New(),
 		// It means the start of the table.
-		lastMinCommitTs: model.NewResolvedTs(0),
+		// It's Ok to use 0 here.
+		// Because sink node only update the checkpoint when it's growing.
+		lastMinResolvedTs: model.NewResolvedTs(0),
 	}
 }
 
-// addEvent is used to add the pending event.
+// addEvent is used to add the pending event key.
 func (r *progressTracker) addEvent(key uint64) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -61,21 +69,22 @@ func (r *progressTracker) addResolvedTs(key uint64, resolvedTs model.ResolvedTs)
 	// If no pending event and resolved ts,
 	// we can directly advance the progress.
 	if r.pendingEventAndResolvedTs.Empty() {
-		r.lastMinCommitTs = resolvedTs
+		r.lastMinResolvedTs = resolvedTs
+		return
 	}
 	r.pendingEventAndResolvedTs.Put(key, resolvedTs)
 }
 
 // remove is used to remove the pending resolved ts.
-// If we are deleting the smallest row or txn,
+// If we are deleting the last value before resolved ts,
 // that means we can advance the progress,
-// and we will update lastMinCommitTs.
+// and we will update lastMinResolvedTs.
 func (r *progressTracker) remove(key uint64) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	r.pendingEventAndResolvedTs.Remove(key)
 	iterator := r.pendingEventAndResolvedTs.Iterator()
-	// No need to update lastMinCommitTs
+	// No need to update lastMinResolvedTs
 	// if there is no pending event and resolved ts.
 	if !iterator.First() {
 		return
@@ -84,7 +93,9 @@ func (r *progressTracker) remove(key uint64) {
 	// If the first element is resolved ts,
 	// it means we can advance the progress.
 	if iterator.Value() != nil {
-		r.lastMinCommitTs = iterator.Value().(model.ResolvedTs)
+		r.lastMinResolvedTs = iterator.Value().(model.ResolvedTs)
+		// Do not forget to remove the resolved ts.
+		r.pendingEventAndResolvedTs.Remove(iterator.Key())
 	}
 }
 
@@ -95,5 +106,5 @@ func (r *progressTracker) minTs() model.ResolvedTs {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	return r.lastMinCommitTs
+	return r.lastMinResolvedTs
 }
