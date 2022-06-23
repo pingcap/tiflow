@@ -22,14 +22,14 @@ import (
 
 // progressTracker is used to track the progress of the table sink.
 type progressTracker struct {
-	// This lock for both pendingCommitTs and lastMinCommitTs.
+	// This lock for both pendingEventAndResolvedTs and lastMinCommitTs.
 	lock sync.Mutex
-	// pendingCommitTs is used to store the pending commits ts.
-	// The key is the key of the commitTs + batchID.
-	// The value is the row or txn count.
+	// pendingEventAndResolvedTs is used to store the pending events and resolved tss.
+	// The key is the key of the event or the resolved ts.
+	// The value is nil or the resolved ts.
 	// Since the data in TableSink is sequential,
 	// we only need to maintain an insertion order.
-	pendingCommitTs *linkedhashmap.Map
+	pendingEventAndResolvedTs *linkedhashmap.Map
 	// lastMinCommitTs is used to store the last min commits ts.
 	// It is used to indicate the progress of the table sink.
 	lastMinCommitTs model.ResolvedTs
@@ -41,62 +41,50 @@ type progressTracker struct {
 // nolint:deadcode
 func newProgressTracker() *progressTracker {
 	return &progressTracker{
-		pendingCommitTs: linkedhashmap.New(),
+		pendingEventAndResolvedTs: linkedhashmap.New(),
 		// It means the start of the table.
 		lastMinCommitTs: model.NewResolvedTs(0),
 	}
 }
 
-// add is used to add the pending commit ts.
-func (r *progressTracker) add(commitTs uint64, resolvedTs model.ResolvedTs) {
+// addEvent is used to add the pending event.
+func (r *progressTracker) addEvent(key uint64) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
-	// TODO: use string to avoid the overflow.
-	key := commitTs + resolvedTs.BatchID
-	count, exists := r.pendingCommitTs.Get(commitTs + resolvedTs.BatchID)
-	if exists {
-		r.pendingCommitTs.Put(key, count.(uint64)+1)
-	} else {
-		r.pendingCommitTs.Put(key, 1)
+	r.pendingEventAndResolvedTs.Put(key, nil)
+}
+
+// addResolvedTs is used to add the pending resolved ts.
+func (r *progressTracker) addResolvedTs(key uint64, resolvedTs model.ResolvedTs) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	// If no pending event and resolved ts,
+	// we can directly advance the progress.
+	if r.pendingEventAndResolvedTs.Empty() {
+		r.lastMinCommitTs = resolvedTs
 	}
+	r.pendingEventAndResolvedTs.Put(key, resolvedTs)
 }
 
 // remove is used to remove the pending resolved ts.
 // If we are deleting the smallest row or txn,
 // that means we can advance the progress,
 // and we will update lastMinCommitTs.
-func (r *progressTracker) remove(commitTs uint64, resolvedTs model.ResolvedTs) {
+func (r *progressTracker) remove(key uint64) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
-	iterator := r.pendingCommitTs.Iterator()
+	r.pendingEventAndResolvedTs.Remove(key)
+	iterator := r.pendingEventAndResolvedTs.Iterator()
+	// No need to update lastMinCommitTs
+	// if there is no pending event and resolved ts.
 	if !iterator.First() {
-		panic("pendingCommitTs is empty")
-	}
-	// TODO: use string to avoid the overflow.
-	key := commitTs + resolvedTs.BatchID
-	// Is the smallest commitTs?
-	if iterator.Key() == key {
-		count := iterator.Value().(uint64)
-		count--
-		if count == 0 {
-			// It means we need to advance the min ts.
-			// We need to store the last min ts.
-			r.lastMinCommitTs = model.ResolvedTs{
-				Ts:      commitTs,
-				BatchID: resolvedTs.BatchID,
-				Mode:    resolvedTs.Mode,
-			}
-			r.pendingCommitTs.Remove(key)
-		} else {
-			r.pendingCommitTs.Put(key, count)
-		}
 		return
 	}
 
-	if count, exists := r.pendingCommitTs.Get(key); exists {
-		r.pendingCommitTs.Put(key, count.(uint64)-1)
-	} else {
-		panic("can not find the key")
+	// If the first element is resolved ts,
+	// it means we can advance the progress.
+	if iterator.Value() != nil {
+		r.lastMinCommitTs = iterator.Value().(model.ResolvedTs)
 	}
 }
 

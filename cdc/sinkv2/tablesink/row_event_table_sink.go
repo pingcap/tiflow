@@ -25,11 +25,13 @@ import (
 var _ TableSink = (*rowEventTableSink)(nil)
 
 type rowEventTableSink struct {
+	rowID                   uint64
+	maxResolvedTs           model.ResolvedTs
 	backendSink             roweventsink.RowEventSink
 	rowEventProgressTracker *progressTracker
 	// NOTICE: It is ordered by commitTs.
-	rowBuffer    []*model.RowChangedEvent
-	TableStopped *atomic.Bool
+	rowBuffer   []*model.RowChangedEvent
+	TableStatus *atomic.Uint32
 }
 
 func (r *rowEventTableSink) AppendRowChangedEvents(rows ...*model.RowChangedEvent) {
@@ -37,6 +39,13 @@ func (r *rowEventTableSink) AppendRowChangedEvents(rows ...*model.RowChangedEven
 }
 
 func (r *rowEventTableSink) UpdateResolvedTs(resolvedTs model.ResolvedTs) {
+	// If resolvedTs is not greater than maxResolvedTs,
+	// the flush is unnecessary.
+	if !r.maxResolvedTs.Less(resolvedTs) {
+		return
+	}
+	r.maxResolvedTs = resolvedTs
+
 	i := sort.Search(len(r.rowBuffer), func(i int) bool {
 		return r.rowBuffer[i].CommitTs > resolvedTs.Ts
 	})
@@ -45,17 +54,23 @@ func (r *rowEventTableSink) UpdateResolvedTs(resolvedTs model.ResolvedTs) {
 	}
 	resolvedRows := r.rowBuffer[:i]
 
+	resolvedRowEvents := make([]*roweventsink.RowEvent, 0, len(resolvedRows))
 	for _, row := range resolvedRows {
 		rowEvent := &roweventsink.RowEvent{
 			Row: row,
 			Callback: func() {
-				r.rowEventProgressTracker.remove(row.CommitTs, resolvedTs)
+				r.rowEventProgressTracker.remove(r.rowID)
 			},
-			TableStopped: r.TableStopped,
+			TableStatus: r.TableStatus,
 		}
-		r.backendSink.WriteRowChangedEvents(rowEvent)
-		r.rowEventProgressTracker.add(row.CommitTs, resolvedTs)
+		resolvedRowEvents = append(resolvedRowEvents, rowEvent)
+		r.rowEventProgressTracker.addEvent(r.rowID)
+		r.rowID++
 	}
+	r.rowEventProgressTracker.addResolvedTs(r.rowID, resolvedTs)
+	r.rowID++
+
+	r.backendSink.WriteRowChangedEvents(resolvedRowEvents...)
 }
 
 func (r *rowEventTableSink) GetCheckpointTs() model.ResolvedTs {

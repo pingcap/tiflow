@@ -25,11 +25,13 @@ import (
 var _ TableSink = (*txnEventTableSink)(nil)
 
 type txnEventTableSink struct {
-	backendSink       txneventsink.TxnEventSink
-	txnEventTsTracker *progressTracker
+	txnID                   uint64
+	maxResolvedTs           model.ResolvedTs
+	backendSink             txneventsink.TxnEventSink
+	txnEventProgressTracker *progressTracker
 	// NOTICE: It is ordered by commitTs.
-	txnBuffer    []*model.SingleTableTxn
-	TableStopped *atomic.Bool
+	txnBuffer   []*model.SingleTableTxn
+	TableStatus *atomic.Uint32
 }
 
 func (t *txnEventTableSink) AppendRowChangedEvents(rows ...*model.RowChangedEvent) {
@@ -39,6 +41,13 @@ func (t *txnEventTableSink) AppendRowChangedEvents(rows ...*model.RowChangedEven
 }
 
 func (t *txnEventTableSink) UpdateResolvedTs(resolvedTs model.ResolvedTs) {
+	// If resolvedTs is not greater than maxResolvedTs,
+	// the flush is unnecessary.
+	if !t.maxResolvedTs.Less(resolvedTs) {
+		return
+	}
+	t.maxResolvedTs = resolvedTs
+
 	i := sort.Search(len(t.txnBuffer), func(i int) bool {
 		return t.txnBuffer[i].CommitTs > resolvedTs.Ts
 	})
@@ -47,21 +56,26 @@ func (t *txnEventTableSink) UpdateResolvedTs(resolvedTs model.ResolvedTs) {
 	}
 	resolvedTxns := t.txnBuffer[:i]
 
+	resolvedTxnEvents := make([]*txneventsink.TxnEvent, 0, len(resolvedTxns))
 	for _, txn := range resolvedTxns {
 		txnEvent := &txneventsink.TxnEvent{
 			Txn: txn,
 			Callback: func() {
-				t.txnEventTsTracker.remove(txn.CommitTs, resolvedTs)
+				t.txnEventProgressTracker.remove(t.txnID)
 			},
-			TableStopped: t.TableStopped,
+			TableStatus: t.TableStatus,
 		}
-		t.backendSink.WriteTxnEvents(txnEvent)
-		t.txnEventTsTracker.add(txn.CommitTs, resolvedTs)
+		resolvedTxnEvents = append(resolvedTxnEvents, txnEvent)
+		t.txnEventProgressTracker.addEvent(t.txnID)
+		t.txnID++
 	}
+	t.txnEventProgressTracker.addResolvedTs(t.txnID, resolvedTs)
+	t.txnID++
+	t.backendSink.WriteTxnEvents(resolvedTxnEvents...)
 }
 
 func (t *txnEventTableSink) GetCheckpointTs() model.ResolvedTs {
-	return t.txnEventTsTracker.minTs()
+	return t.txnEventProgressTracker.minTs()
 }
 
 func (t *txnEventTableSink) Close() {

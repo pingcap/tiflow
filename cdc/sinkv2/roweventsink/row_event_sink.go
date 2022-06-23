@@ -23,9 +23,9 @@ import (
 // When we process row events, TableStopped is used to
 // determine if we really need to process the event.
 type RowEvent struct {
-	Row          *model.RowChangedEvent
-	Callback     func()
-	TableStopped *atomic.Bool
+	Row         *model.RowChangedEvent
+	Callback    func()
+	TableStatus *atomic.Uint32
 }
 
 // RowEventSink is a sink that processes row events.

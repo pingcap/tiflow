@@ -23,9 +23,9 @@ import (
 // When we process row events, TableStopped is used to
 // determine if we really need to process the event.
 type TxnEvent struct {
-	Txn          *model.SingleTableTxn
-	Callback     func()
-	TableStopped *atomic.Bool
+	Txn         *model.SingleTableTxn
+	Callback    func()
+	TableStatus *atomic.Uint32
 }
 
 // TxnEventSink is a sink that processes transaction events.
