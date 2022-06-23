@@ -44,13 +44,14 @@ func TestAsyncStopFailed(t *testing.T) {
 	}()
 
 	tbl := &tableActor{
-		stopped:   0,
-		tableID:   1,
-		router:    tableActorRouter,
-		cancel:    func() {},
-		reportErr: func(err error) {},
-		sinkNode:  newSinkNode(1, &mockSink{}, 0, 0, &mockFlowController{}, false),
+		stopped:     0,
+		tableID:     1,
+		router:      tableActorRouter,
+		cancel:      func() {},
+		reportErr:   func(err error) {},
+		redoManager: redo.NewDisabledManager(),
 	}
+	tbl.sinkNode = newSinkNode(1, &mockSink{}, 0, 0, &mockFlowController{}, false, tbl.redoManager)
 	require.True(t, tbl.AsyncStop(1))
 
 	mb := actor.NewMailbox[pmessage.Message](actor.ID(1), 0)
@@ -67,6 +68,7 @@ func TestTableActorInterface(t *testing.T) {
 	tbl := &tableActor{
 		markTableID: 2,
 		tableID:     1,
+		redoManager: redo.NewDisabledManager(),
 		sinkNode:    sink,
 		sortNode:    sorter,
 		tableName:   "t1",
@@ -90,6 +92,9 @@ func TestTableActorInterface(t *testing.T) {
 
 	require.Equal(t, model.Ts(5), tbl.ResolvedTs())
 	tbl.replicaConfig.Consistent.Level = string(redo.ConsistentLevelEventual)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tbl.redoManager, _ = redo.NewMockManager(ctx)
 	sink.resolvedTs.Store(model.NewResolvedTs(6))
 	require.Equal(t, model.Ts(6), tbl.ResolvedTs())
 }
@@ -105,11 +110,12 @@ func TestTableActorCancel(t *testing.T) {
 	}()
 
 	tbl := &tableActor{
-		stopped:   0,
-		tableID:   1,
-		router:    tableActorRouter,
-		cancel:    func() {},
-		reportErr: func(err error) {},
+		stopped:     0,
+		tableID:     1,
+		redoManager: redo.NewDisabledManager(),
+		router:      tableActorRouter,
+		cancel:      func() {},
+		reportErr:   func(err error) {},
 	}
 	mb := actor.NewMailbox[pmessage.Message](actor.ID(1), 0)
 	tbl.actorID = actor.ID(1)
@@ -122,7 +128,7 @@ func TestTableActorCancel(t *testing.T) {
 func TestTableActorWait(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	eg, _ := errgroup.WithContext(ctx)
-	tbl := &tableActor{wg: eg}
+	tbl := &tableActor{wg: eg, redoManager: redo.NewDisabledManager()}
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	stopped := false
@@ -140,6 +146,7 @@ func TestHandleError(t *testing.T) {
 	canceled := false
 	reporterErr := false
 	tbl := &tableActor{
+		redoManager: redo.NewDisabledManager(),
 		cancel: func() {
 			canceled = true
 		},
@@ -403,7 +410,8 @@ func TestTableActorStart(t *testing.T) {
 		return nil
 	}
 	tbl := &tableActor{
-		globalVars: globalVars,
+		redoManager: redo.NewDisabledManager(),
+		globalVars:  globalVars,
 		changefeedVars: &cdcContext.ChangefeedVars{
 			ID: model.DefaultChangeFeedID("changefeed-id-test"),
 			Info: &model.ChangeFeedInfo{
@@ -414,7 +422,6 @@ func TestTableActorStart(t *testing.T) {
 			StartTs:     0,
 			MarkTableID: 1,
 		},
-		redoManager:   redo.NewDisabledManager(),
 		replicaConfig: config.GetDefaultReplicaConfig(),
 	}
 	require.Nil(t, tbl.start(ctx))
