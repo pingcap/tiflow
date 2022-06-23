@@ -22,11 +22,13 @@ import (
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/client"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
+	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	"github.com/pingcap/tiflow/engine/servermaster/cluster"
@@ -48,9 +50,9 @@ func (s *Server) generateSessionConfig() (*cluster.EtcdSessionConfig, error) {
 
 func (s *Server) leaderLoop(ctx context.Context) error {
 	var (
-		leaderCtx      context.Context
 		leaderResignFn context.CancelFunc
 
+		checkEtcdLeader  = time.Millisecond * 200
 		retryInterval    = time.Millisecond * 200
 		needResetSession = false
 	)
@@ -100,10 +102,32 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 			needResetSession = session.CheckNeedReset(err)
 			continue
 		}
-		leaderCtx = newCtx
 		leaderResignFn = newResignFn
 
-		err = s.leaderServiceFn(leaderCtx)
+		errg, leaderCtx := errgroup.WithContext(newCtx)
+		// Note there isn't any correctness issue if server master leader is
+		// different from the etcd leader. But in order to reduce the maintenance
+		// cost, we evict server master leader actively if etcd leader changes.
+		errg.Go(func() error {
+			ticker := time.NewTicker(checkEtcdLeader)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-leaderCtx.Done():
+					return perrors.Trace(ctx.Err())
+				case <-ticker.C:
+					if !s.isEtcdLeader() {
+						log.L().Info("etcd leader changed, resigns server master leader",
+							zap.String("old-leader-name", s.name()))
+						return derrors.ErrEtcdLeaderChanged.GenWithStackByArgs()
+					}
+				}
+			}
+		})
+		errg.Go(func() error {
+			return s.leaderServiceFn(leaderCtx)
+		})
+		err = errg.Wait()
 		if err != nil {
 			if perrors.Cause(err) == context.Canceled ||
 				errors.ErrEtcdLeaderChanged.Equal(err) {

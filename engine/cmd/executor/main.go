@@ -22,6 +22,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 
@@ -58,6 +59,9 @@ func main() {
 		os.Exit(2)
 	}
 	version.LogVersionInfo()
+	if os.Getenv(gin.EnvGinMode) == "" {
+		gin.SetMode(gin.ReleaseMode)
+	}
 
 	// 3. register signal handler
 	ctx, cancel := context.WithCancel(context.Background())
