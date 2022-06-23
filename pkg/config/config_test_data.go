@@ -73,6 +73,7 @@ const (
   "data-dir": "",
   "gc-ttl": 86400,
   "tz": "System",
+  "max-elapsed-time": 90,
   "capture-session-ttl": 10,
   "owner-flush-interval": 200000000,
   "processor-flush-interval": 100000000,

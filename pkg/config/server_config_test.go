@@ -56,6 +56,8 @@ func TestServerConfigValidateAndAdjust(t *testing.T) {
 	conf.Addr = "cdc:1234"
 	require.Regexp(t, ".*empty GC TTL is not allowed", conf.ValidateAndAdjust())
 	conf.GcTTL = 60
+	require.Regexp(t, ".*empty MaxElapsedTime is not allowed", conf.ValidateAndAdjust())
+	conf.MaxElapsedTime = 90
 	require.Nil(t, conf.ValidateAndAdjust())
 	require.Equal(t, conf.Addr, conf.AdvertiseAddr)
 	conf.AdvertiseAddr = "advertise:1234"

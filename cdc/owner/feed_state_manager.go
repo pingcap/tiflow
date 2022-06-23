@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"go.uber.org/zap"
@@ -33,7 +34,6 @@ const (
 	// To avoid thunderherd, a random factor is also added.
 	defaultBackoffInitInterval        = 10 * time.Second
 	defaultBackoffMaxInterval         = 30 * time.Minute
-	defaultBackoffMaxElapsedTime      = 90 * time.Minute
 	defaultBackoffRandomizationFactor = 0.1
 	defaultBackoffMultiplier          = 2.0
 
@@ -63,11 +63,15 @@ type feedStateManager struct {
 // newFeedStateManager creates feedStateManager and initialize the exponential backoff
 func newFeedStateManager() *feedStateManager {
 	f := new(feedStateManager)
+	serverConfig := config.GetGlobalServerConfig()
 
 	f.errBackoff = backoff.NewExponentialBackOff()
 	f.errBackoff.InitialInterval = defaultBackoffInitInterval
 	f.errBackoff.MaxInterval = defaultBackoffMaxInterval
-	f.errBackoff.MaxElapsedTime = defaultBackoffMaxElapsedTime
+	if serverConfig.MaxElapsedTime != 90 {
+		log.Warn("changefeed's MaxElapsedTime is not set to default (90 min)", zap.Duration("maxElapsedTime", time.Duration(serverConfig.MaxElapsedTime)*time.Minute))
+	}
+	f.errBackoff.MaxElapsedTime = time.Duration(serverConfig.MaxElapsedTime) * time.Minute
 	f.errBackoff.Multiplier = defaultBackoffMultiplier
 	f.errBackoff.RandomizationFactor = defaultBackoffRandomizationFactor
 

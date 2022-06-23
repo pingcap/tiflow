@@ -75,9 +75,10 @@ var defaultServerConfig = &ServerConfig{
 		},
 		InternalErrOutput: "stderr",
 	},
-	DataDir: "",
-	GcTTL:   24 * 60 * 60, // 24H
-	TZ:      "System",
+	DataDir:        "",
+	GcTTL:          24 * 60 * 60, // 24H
+	TZ:             "System",
+	MaxElapsedTime: 90,
 	// The default election-timeout in PD is 3s and minimum session TTL is 5s,
 	// which is calculated by `math.Ceil(3 * election-timeout / 2)`, we choose
 	// default capture session ttl to 10s to increase robust to PD jitter,
@@ -146,6 +147,8 @@ type ServerConfig struct {
 
 	GcTTL int64  `toml:"gc-ttl" json:"gc-ttl"`
 	TZ    string `toml:"tz" json:"tz"`
+
+	MaxElapsedTime int64 `toml:"max-elapsed-time" json:"max-elapsed-time"`
 
 	CaptureSessionTTL int `toml:"capture-session-ttl" json:"capture-session-ttl"`
 
@@ -219,6 +222,9 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	}
 	if c.GcTTL == 0 {
 		return cerror.ErrInvalidServerOption.GenWithStack("empty GC TTL is not allowed")
+	}
+	if c.MaxElapsedTime == 0 {
+		return cerror.ErrInvalidServerOption.GenWithStack("empty MaxElapsedTime is not allowed")
 	}
 	// 5s is minimum lease ttl in etcd(PD)
 	if c.CaptureSessionTTL < 5 {

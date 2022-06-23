@@ -67,6 +67,7 @@ func (o *options) addFlags(cmd *cobra.Command) {
 
 	cmd.Flags().StringVar(&o.serverConfig.TZ, "tz", o.serverConfig.TZ, "Specify time zone of TiCDC cluster")
 	cmd.Flags().Int64Var(&o.serverConfig.GcTTL, "gc-ttl", o.serverConfig.GcTTL, "CDC GC safepoint TTL duration, specified in seconds")
+	cmd.Flags().Int64Var(&o.serverConfig.MaxElapsedTime, "max-elapsed-time", o.serverConfig.MaxElapsedTime, "CDC MaxElapsedTime duration, specified in minutes")
 
 	cmd.Flags().StringVar(&o.serverConfig.LogFile, "log-file", o.serverConfig.LogFile, "log file path")
 	cmd.Flags().StringVar(&o.serverConfig.LogLevel, "log-level", o.serverConfig.LogLevel, "log level (etc: debug|info|warn|error)")
@@ -191,6 +192,8 @@ func (o *options) complete(cmd *cobra.Command) error {
 			cfg.TZ = o.serverConfig.TZ
 		case "gc-ttl":
 			cfg.GcTTL = o.serverConfig.GcTTL
+		case "max-elapsed-time":
+			cfg.MaxElapsedTime = o.serverConfig.MaxElapsedTime
 		case "log-file":
 			cfg.LogFile = o.serverConfig.LogFile
 		case "log-level":

@@ -118,6 +118,7 @@ func TestParseCfg(t *testing.T) {
 		"--log-level", "debug",
 		"--data-dir", dataDir,
 		"--gc-ttl", "10",
+		"--max-elapsed-time", "100",
 		"--tz", "UTC",
 		"--owner-flush-interval", "150ms",
 		"--processor-flush-interval", "150ms",
@@ -151,6 +152,7 @@ func TestParseCfg(t *testing.T) {
 		},
 		DataDir:                dataDir,
 		GcTTL:                  10,
+		MaxElapsedTime:         100,
 		TZ:                     "UTC",
 		CaptureSessionTTL:      10,
 		OwnerFlushInterval:     config.TomlDuration(150 * time.Millisecond),
@@ -226,6 +228,7 @@ log-level = "warn"
 data-dir = "%+v"
 gc-ttl = 500
 tz = "US"
+max-elapsed-time=300
 capture-session-ttl = 10
 
 owner-flush-interval = "600ms"
@@ -301,6 +304,7 @@ server-worker-pool-size = 16
 		},
 		DataDir:                dataDir,
 		GcTTL:                  500,
+		MaxElapsedTime:         300,
 		TZ:                     "US",
 		CaptureSessionTTL:      10,
 		OwnerFlushInterval:     config.TomlDuration(600 * time.Millisecond),
@@ -408,6 +412,7 @@ cert-allowed-cn = ["dd","ee"]
 		"--log-level", "debug",
 		"--data-dir", dataDir,
 		"--gc-ttl", "10",
+		"--max-elapsed-time", "200",
 		"--tz", "UTC",
 		"--owner-flush-interval", "150ms",
 		"--processor-flush-interval", "150ms",
@@ -438,6 +443,7 @@ cert-allowed-cn = ["dd","ee"]
 		},
 		DataDir:                dataDir,
 		GcTTL:                  10,
+		MaxElapsedTime:         200,
 		TZ:                     "UTC",
 		CaptureSessionTTL:      10,
 		OwnerFlushInterval:     config.TomlDuration(150 * time.Millisecond),
