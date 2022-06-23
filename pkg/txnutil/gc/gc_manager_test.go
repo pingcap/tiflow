@@ -18,14 +18,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/pkg/pdtime"
-
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/tikv/client-go/v2/oracle"
+
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
-	"github.com/tikv/client-go/v2/oracle"
 )
 
 func Test(t *testing.T) {
@@ -96,8 +96,11 @@ func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 	gcManager.isTiCDCBlockGC = true
 	ctx := context.Background()
 
-	TimeAcquirer := pdtime.NewTimeAcquirer(mockPDClient)
+	TimeAcquirer, err := pdutil.NewTimeAcquirer(ctx, mockPDClient)
+	c.Assert(err, check.IsNil)
+
 	go TimeAcquirer.Run(ctx)
+
 	time.Sleep(1 * time.Second)
 	defer TimeAcquirer.Stop()
 
@@ -105,7 +108,7 @@ func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 		TimeAcquirer: TimeAcquirer,
 	})
 
-	err := gcManager.CheckStaleCheckpointTs(cCtx, "cfID", 10)
+	err = gcManager.CheckStaleCheckpointTs(cCtx, "cfID", 10)
 	c.Assert(cerror.ErrGCTTLExceeded.Equal(errors.Cause(err)), check.IsTrue)
 	c.Assert(cerror.ChangefeedFastFailError(err), check.IsTrue)
 

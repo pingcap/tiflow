@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -250,6 +251,7 @@ func (o *Owner) WriteDebugInfo(w io.Writer) {
 // AsyncStop stops the owner asynchronously
 func (o *Owner) AsyncStop() {
 	atomic.StoreInt32(&o.closed, 1)
+	o.cleanStaleMetrics()
 }
 
 func (o *Owner) cleanUpChangefeed(state *orchestrator.ChangefeedReactorState) {
@@ -279,6 +281,7 @@ func (o *Owner) cleanUpChangefeed(state *orchestrator.ChangefeedReactorState) {
 // Bootstrap checks if the state contains incompatible or incorrect information and tries to fix it.
 func (o *Owner) Bootstrap(state *orchestrator.GlobalReactorState) {
 	log.Info("Start bootstrapping")
+	o.cleanStaleMetrics()
 	fixChangefeedInfos(state)
 }
 
@@ -297,6 +300,18 @@ func fixChangefeedInfos(state *orchestrator.GlobalReactorState) {
 	}
 }
 
+func (o *Owner) cleanStaleMetrics() {
+	// The gauge metrics of the Owner should be reset
+	// each time a new owner is launched, in case the previous owner
+	// has crashed and has not cleaned up the stale metrics values.
+	changefeedCheckpointTsGauge.Reset()
+	changefeedCheckpointTsLagGauge.Reset()
+	changefeedResolvedTsGauge.Reset()
+	changefeedResolvedTsLagGauge.Reset()
+	ownerMaintainTableNumGauge.Reset()
+	changefeedStatusGauge.Reset()
+}
+
 func (o *Owner) updateMetrics(state *orchestrator.GlobalReactorState) {
 	// Keep the value of prometheus expression `rate(counter)` = 1
 	// Please also change alert rule in ticdc.rules.yml when change the expression value.
@@ -304,8 +319,37 @@ func (o *Owner) updateMetrics(state *orchestrator.GlobalReactorState) {
 	ownershipCounter.Add(float64(now.Sub(o.lastTickTime)) / float64(time.Second))
 	o.lastTickTime = now
 
-	ownerMaintainTableNumGauge.Reset()
-	changefeedStatusGauge.Reset()
+	conf := config.GetGlobalServerConfig()
+
+	// TODO refactor this piece of code when the new scheduler is stabilized,
+	// and the old scheduler is removed.
+	if conf.Debug != nil && conf.Debug.EnableNewScheduler {
+		for cfID, cf := range o.changefeeds {
+			if cf.state != nil && cf.state.Info != nil {
+				changefeedStatusGauge.WithLabelValues(cfID).Set(float64(cf.state.Info.State.ToInt()))
+			}
+
+			// The InfoProvider is a proxy object returning information
+			// from the scheduler.
+			infoProvider := cf.GetInfoProvider()
+			if infoProvider == nil {
+				// The scheduler has not been initialized yet.
+				continue
+			}
+
+			totalCounts := infoProvider.GetTotalTableCounts()
+			pendingCounts := infoProvider.GetPendingTableCounts()
+
+			for captureID, info := range o.captures {
+				ownerMaintainTableNumGauge.WithLabelValues(
+					cfID, info.AdvertiseAddr, maintainTableTypeTotal).Set(float64(totalCounts[captureID]))
+				ownerMaintainTableNumGauge.WithLabelValues(
+					cfID, info.AdvertiseAddr, maintainTableTypeWip).Set(float64(pendingCounts[captureID]))
+			}
+		}
+		return
+	}
+
 	for changefeedID, changefeedState := range state.Changefeeds {
 		for captureID, captureInfo := range state.Captures {
 			taskStatus, exist := changefeedState.TaskStatuses[captureID]
@@ -326,7 +370,8 @@ func (o *Owner) clusterVersionConsistent(captures map[model.CaptureID]*model.Cap
 	for _, capture := range captures {
 		if myVersion != capture.Version {
 			if o.logLimiter.Allow() {
-				log.Warn("the capture version is different with the owner", zap.Reflect("capture", capture), zap.String("owner-version", myVersion))
+				log.Warn("the capture version is different with the owner",
+					zap.Reflect("capture", capture), zap.String("ownerVer", myVersion))
 			}
 			return false
 		}

@@ -84,7 +84,7 @@ func NewSchedulerV2(
 	if err := ret.registerPeerMessageHandlers(ctx); err != nil {
 		return nil, err
 	}
-	log.Debug("scheduler created", zap.Uint64("checkpoint-ts", checkpointTs))
+	log.Debug("scheduler created", zap.Uint64("checkpointTs", checkpointTs))
 	return ret, nil
 }
 
@@ -127,13 +127,26 @@ func (s *schedulerV2) DispatchTable(
 	tableID model.TableID,
 	captureID model.CaptureID,
 	isDelete bool,
+	epoch model.ProcessorEpoch,
 ) (done bool, err error) {
 	topic := model.DispatchTableTopic(changeFeedID)
 	message := &model.DispatchTableMessage{
 		OwnerRev: ctx.GlobalVars().OwnerRevision,
 		ID:       tableID,
 		IsDelete: isDelete,
+		Epoch:    epoch,
 	}
+
+	defer func() {
+		if err != nil {
+			return
+		}
+		log.Info("schedulerV2: DispatchTable",
+			zap.Any("message", message),
+			zap.Any("successful", done),
+			zap.String("changefeedID", changeFeedID),
+			zap.String("captureID", captureID))
+	}()
 
 	ok, err := s.trySendMessage(ctx, captureID, topic, message)
 	if err != nil {
@@ -155,12 +168,23 @@ func (s *schedulerV2) Announce(
 	ctx context.Context,
 	changeFeedID model.ChangeFeedID,
 	captureID model.CaptureID,
-) (bool, error) {
+) (done bool, err error) {
 	topic := model.AnnounceTopic(changeFeedID)
 	message := &model.AnnounceMessage{
 		OwnerRev:     ctx.GlobalVars().OwnerRevision,
 		OwnerVersion: version.ReleaseSemver(),
 	}
+
+	defer func() {
+		if err != nil {
+			return
+		}
+		log.Info("schedulerV2: Announce",
+			zap.Any("message", message),
+			zap.Any("successful", done),
+			zap.String("changefeedID", changeFeedID),
+			zap.String("captureID", captureID))
+	}()
 
 	ok, err := s.trySendMessage(ctx, captureID, topic, message)
 	if err != nil {
@@ -210,7 +234,7 @@ func (s *schedulerV2) trySendMessage(
 		if cerror.ErrPeerMessageClientClosed.Equal(err) {
 			log.Warn("peer messaging client is closed while trying to send a message through it. "+
 				"Report a bug if this warning repeats",
-				zap.String("changefeed-id", s.changeFeedID),
+				zap.String("changefeed", s.changeFeedID),
 				zap.String("target", target))
 			return false, nil
 		}
@@ -221,7 +245,7 @@ func (s *schedulerV2) trySendMessage(
 }
 
 func (s *schedulerV2) Close(ctx context.Context) {
-	log.Debug("scheduler closed", zap.String("changefeed-id", s.changeFeedID))
+	log.Debug("scheduler closed", zap.String("changefeed", s.changeFeedID))
 	s.deregisterPeerMessageHandlers(ctx)
 }
 
@@ -239,7 +263,7 @@ func (s *schedulerV2) registerPeerMessageHandlers(ctx context.Context) (ret erro
 		func(sender string, messageI interface{}) error {
 			message := messageI.(*model.DispatchTableResponseMessage)
 			s.stats.RecordDispatchResponse()
-			s.OnAgentFinishedTableOperation(sender, message.ID)
+			s.OnAgentFinishedTableOperation(sender, message.ID, message.Epoch)
 			return nil
 		})
 	if err != nil {
@@ -256,6 +280,7 @@ func (s *schedulerV2) registerPeerMessageHandlers(ctx context.Context) (ret erro
 			s.stats.RecordSync()
 			s.OnAgentSyncTaskStatuses(
 				sender,
+				message.Epoch,
 				message.Running,
 				message.Adding,
 				message.Removing)

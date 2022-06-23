@@ -106,7 +106,7 @@ func (p *processor) AddTable(ctx cdcContext.Context, tableID model.TableID) (boo
 	}
 
 	log.Info("adding table",
-		zap.Int64("table-id", tableID),
+		zap.Int64("tableID", tableID),
 		cdcContext.ZapFieldChangefeed(ctx))
 	err := p.addTable(ctx, tableID, &model.TableReplicaInfo{})
 	if err != nil {
@@ -664,6 +664,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	kvStorage := ctx.GlobalVars().KVStorage
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
+	kvCfg := config.GetGlobalServerConfig().KVClient
 	stdCtx := util.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = util.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
 	stdCtx = util.PutRoleInCtx(stdCtx, util.RoleProcessor)
@@ -673,7 +674,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		ctx.GlobalVars().GrpcPool,
 		ctx.GlobalVars().RegionCache,
 		ctx.GlobalVars().KVStorage,
-		checkpointTs, ddlspans, false)
+		checkpointTs, ddlspans, kvCfg)
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -925,6 +926,9 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		p.sendError(err)
 		return nil
 	})
+
+	// FIXME: using GetLastSnapshot here would be confused and get the wrong table name
+	// after `rename table` DDL, since `rename table` keeps the tableID unchanged
 	var tableName *model.TableName
 	retry.Do(ctx, func() error { //nolint:errcheck
 		if name, ok := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID); ok {
@@ -965,7 +969,10 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		tableNameStr = tableName.QuoteString()
 	}
 
-	sink := p.sinkManager.CreateTableSink(tableID, replicaInfo.StartTs, p.redoManager)
+	sink, err := p.sinkManager.CreateTableSink(tableID, p.redoManager)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	table := tablepipeline.NewTablePipeline(
 		ctx,
 		p.mounter,

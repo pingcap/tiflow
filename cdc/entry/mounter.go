@@ -179,6 +179,9 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 	if err != nil {
 		return nil, err
 	}
+	if len(raw.OldValue) == 0 && len(raw.Value) == 0 {
+		log.Warn("empty value and old value", zap.Any("row", raw))
+	}
 	baseInfo := baseKVEntry{
 		StartTs:         raw.StartTs,
 		CRTs:            raw.CRTs,
@@ -538,7 +541,7 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, e
 		default:
 			d = table.GetZeroValue(col)
 			if d.IsNull() {
-				log.Error("meet unsupported column type", zap.String("column info", col.String()))
+				log.Error("meet unsupported column type", zap.String("columnInfo", col.String()))
 			}
 		}
 	}

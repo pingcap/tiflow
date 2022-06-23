@@ -282,7 +282,7 @@ func (m *ManagerImpl) AddTable(tableID model.TableID, startTs uint64) {
 		return m.tableIDs[i] >= tableID
 	})
 	if i < len(m.tableIDs) && m.tableIDs[i] == tableID {
-		log.Warn("add duplicated table in redo log manager", zap.Int64("table-id", tableID))
+		log.Warn("add duplicated table in redo log manager", zap.Int64("tableID", tableID))
 		return
 	}
 	if i == len(m.tableIDs) {
@@ -306,7 +306,7 @@ func (m *ManagerImpl) RemoveTable(tableID model.TableID) {
 		m.tableIDs = m.tableIDs[:len(m.tableIDs)-1]
 		delete(m.rtsMap, tableID)
 	} else {
-		log.Warn("remove a table not maintained in redo log manager", zap.Int64("table-id", tableID))
+		log.Warn("remove a table not maintained in redo log manager", zap.Int64("tableID", tableID))
 	}
 }
 
@@ -325,8 +325,11 @@ func (m *ManagerImpl) updateTableResolvedTs(ctx context.Context) error {
 		return err
 	}
 	minResolvedTs := uint64(math.MaxUint64)
-	for tableID, rts := range rtsMap {
-		m.rtsMap[tableID] = rts
+	for tableID := range m.rtsMap {
+		if rts, ok := rtsMap[tableID]; ok {
+			m.rtsMap[tableID] = rts
+		}
+		rts := m.rtsMap[tableID]
 		if rts < minResolvedTs {
 			minResolvedTs = rts
 		}

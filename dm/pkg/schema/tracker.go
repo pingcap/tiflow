@@ -16,8 +16,11 @@ package schema
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
+	"os"
 	"strings"
 
+	"github.com/docker/go-units"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	tidbConfig "github.com/pingcap/tidb/config"
@@ -33,10 +36,13 @@ import (
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/store/mockstore"
+	unistoreConfig "github.com/pingcap/tidb/store/mockstore/unistore/config"
 	"github.com/pingcap/tidb/types"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	dmterror "github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -57,12 +63,19 @@ var (
 	}
 )
 
+func init() {
+	unistoreConfig.DefaultConf.Engine.VlogFileSize = 4 * units.MiB
+	unistoreConfig.DefaultConf.Engine.L1Size = 128 * units.MiB
+}
+
 // Tracker is used to track schema locally.
 type Tracker struct {
+	storePath string
 	store     kv.Storage
 	dom       *domain.Domain
 	se        session.Session
 	dsTracker *downstreamTracker
+	closed    atomic.Bool
 }
 
 // downstreamTracker tracks downstream schema.
@@ -83,6 +96,21 @@ type DownstreamTableInfo struct {
 // some variable from downstream using `downstreamConn`.
 // NOTE **sessionCfg is a reference to caller**.
 func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, downstreamConn *dbconn.DBConn) (*Tracker, error) {
+	var (
+		err       error
+		storePath string
+		store     kv.Storage
+		dom       *domain.Domain
+		se        session.Session
+	)
+
+	rollbackHolder := fr.NewRollbackHolder("schema-tracker")
+	defer func() {
+		if err != nil {
+			rollbackHolder.RollbackReverseOrder()
+		}
+	}()
+
 	// NOTE: tidb uses a **global** config so can't isolate tracker's config from each other. If that isolation is needed,
 	// we might SetGlobalConfig before every call to tracker, or use some patch like https://github.com/bouk/monkey
 	tidbConfig.UpdateGlobal(func(conf *tidbConfig.Config) {
@@ -122,24 +150,39 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 		}
 	}
 
-	store, err := mockstore.NewMockStore(mockstore.WithStoreType(mockstore.EmbedUnistore))
+	storePath, err = ioutil.TempDir("./", "schema-tracker")
 	if err != nil {
 		return nil, err
 	}
+	rollbackHolder.Add(fr.FuncRollback{Name: "DeleteStorePath", Fn: func() {
+		_ = os.RemoveAll(storePath)
+	}})
+
+	store, err = mockstore.NewMockStore(
+		mockstore.WithStoreType(mockstore.EmbedUnistore),
+		mockstore.WithPath(storePath))
+	if err != nil {
+		return nil, err
+	}
+	rollbackHolder.Add(fr.FuncRollback{Name: "CloseStore", Fn: func() {
+		_ = store.Close()
+	}})
 
 	// avoid data race and of course no use in DM
 	domain.RunAutoAnalyze = false
 	session.DisableStats4Test()
 
-	dom, err := session.BootstrapSession(store)
+	dom, err = session.BootstrapSession(store)
 	if err != nil {
 		return nil, err
 	}
+	rollbackHolder.Add(fr.FuncRollback{Name: "CloseDomain", Fn: dom.Close})
 
-	se, err := session.CreateSession(store)
+	se, err = session.CreateSession(store)
 	if err != nil {
 		return nil, err
 	}
+	rollbackHolder.Add(fr.FuncRollback{Name: "CloseSession", Fn: se.Close})
 
 	globalVarsToSet := make(map[string]string, len(defaultGlobalVars))
 	for k, v := range defaultGlobalVars {
@@ -182,6 +225,7 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 	}
 
 	return &Tracker{
+		storePath: storePath,
 		store:     store,
 		dom:       dom,
 		se:        se,
@@ -230,10 +274,7 @@ func (tr *Tracker) GetCreateTable(ctx context.Context, table *filter.Table) (str
 
 	row := req.GetRow(0)
 	str := row.GetString(1) // the first column is the table name.
-	// returned as single line.
-	str = strings.ReplaceAll(str, "\n", "")
-	str = strings.ReplaceAll(str, "  ", " ")
-	return str, nil
+	return utils.CreateTableSQLToOneRow(str), nil
 }
 
 // AllSchemas returns all schemas visible to the tracker (excluding system tables).
@@ -313,9 +354,18 @@ func (tr *Tracker) Reset() error {
 
 // Close close a tracker.
 func (tr *Tracker) Close() error {
+	if tr == nil {
+		return nil
+	}
+	if !tr.closed.CAS(false, true) {
+		return nil
+	}
 	tr.se.Close()
 	tr.dom.Close()
-	return tr.store.Close()
+	if err := tr.store.Close(); err != nil {
+		return err
+	}
+	return os.RemoveAll(tr.storePath)
 }
 
 // DropTable drops a table from this tracker.
@@ -495,7 +545,7 @@ func GetDownStreamTi(ti *model.TableInfo, originTi *model.TableInfo) *Downstream
 		return mysql.HasNotNullFlag(ti.Columns[i].Flag)
 	}
 
-	for i, idx := range ti.Indices {
+	for _, idx := range ti.Indices {
 		if !idx.Primary && !idx.Unique {
 			continue
 		}
@@ -506,12 +556,12 @@ func GetDownStreamTi(ti *model.TableInfo, originTi *model.TableInfo) *Downstream
 		availableUKIndexList = append(availableUKIndexList, indexRedirect)
 		if idx.Primary {
 			absoluteUKIndexInfo = indexRedirect
-			absoluteUKPosition = i
+			absoluteUKPosition = len(availableUKIndexList) - 1
 			hasPk = true
 		} else if absoluteUKIndexInfo == nil && isSpecifiedIndexColumn(idx, fn) {
 			// second check not null unique key
 			absoluteUKIndexInfo = indexRedirect
-			absoluteUKPosition = i
+			absoluteUKPosition = len(availableUKIndexList) - 1
 		}
 	}
 

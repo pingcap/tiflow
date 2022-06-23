@@ -25,6 +25,13 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/tikv/client-go/v2/tikv"
+	pd "github.com/tikv/pd/client"
+	"go.etcd.io/etcd/clientv3/concurrency"
+	"go.etcd.io/etcd/mvcc"
+	"go.uber.org/zap"
+	"golang.org/x/time/rate"
+
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
@@ -37,14 +44,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/p2p"
-	"github.com/pingcap/tiflow/pkg/pdtime"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/version"
-	"github.com/tikv/client-go/v2/tikv"
-	pd "github.com/tikv/pd/client"
-	"go.etcd.io/etcd/clientv3/concurrency"
-	"go.etcd.io/etcd/mvcc"
-	"go.uber.org/zap"
-	"golang.org/x/time/rate"
 )
 
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
@@ -65,7 +66,7 @@ type Capture struct {
 	etcdClient   *etcd.CDCEtcdClient
 	grpcPool     kv.GrpcPool
 	regionCache  *tikv.RegionCache
-	TimeAcquirer pdtime.TimeAcquirer
+	TimeAcquirer pdutil.TimeAcquirer
 	sorterSystem *ssystem.System
 
 	enableNewScheduler bool
@@ -114,9 +115,17 @@ func NewCapture4Test() *Capture {
 }
 
 func (c *Capture) reset(ctx context.Context) error {
+	conf := config.GetGlobalServerConfig()
+	sess, err := concurrency.NewSession(c.etcdClient.Client.Unwrap(),
+		concurrency.WithTTL(conf.CaptureSessionTTL))
+	if err != nil {
+		return errors.Annotate(
+			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
+			"create capture session")
+	}
+
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
-	conf := config.GetGlobalServerConfig()
 	c.info = &model.CaptureInfo{
 		ID:            uuid.New().String(),
 		AdvertiseAddr: conf.AdvertiseAddr,
@@ -127,20 +136,17 @@ func (c *Capture) reset(ctx context.Context) error {
 		// It can't be handled even after it fails, so we ignore it.
 		_ = c.session.Close()
 	}
-	sess, err := concurrency.NewSession(c.etcdClient.Client.Unwrap(),
-		concurrency.WithTTL(conf.CaptureSessionTTL))
-	if err != nil {
-		return errors.Annotate(
-			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
-			"create capture session")
-	}
+
 	c.session = sess
 	c.election = concurrency.NewElection(sess, etcd.CaptureOwnerKey)
 
 	if c.TimeAcquirer != nil {
 		c.TimeAcquirer.Stop()
 	}
-	c.TimeAcquirer = pdtime.NewTimeAcquirer(c.pdClient)
+	c.TimeAcquirer, err = pdutil.NewTimeAcquirer(ctx, c.pdClient)
+	if err != nil {
+		return errors.Trace(err)
+	}
 
 	if c.tableActorSystem != nil {
 		err := c.tableActorSystem.Stop()
@@ -212,8 +218,8 @@ func (c *Capture) reset(ctx context.Context) error {
 	}
 
 	log.Info("init capture",
-		zap.String("capture-id", c.info.ID),
-		zap.String("capture-addr", c.info.AdvertiseAddr))
+		zap.String("captureID", c.info.ID),
+		zap.String("captureAddr", c.info.AdvertiseAddr))
 	return nil
 }
 
@@ -248,7 +254,7 @@ func (c *Capture) Run(ctx context.Context) error {
 		//   2. the parent context canceled, it means that the caller of the capture hope the capture to exit, and this loop will return in the above `select` block
 		// TODO: make sure the internal cancel should return the real error instead of context.Canceled
 		if cerror.ErrCaptureSuicide.Equal(err) || context.Canceled == errors.Cause(err) {
-			log.Info("capture recovered", zap.String("capture-id", c.info.ID))
+			log.Info("capture recovered", zap.String("captureID", c.info.ID))
 			continue
 		}
 		return errors.Trace(err)
@@ -407,9 +413,17 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 		newGlobalVars.OwnerRevision = ownerRev
 		ownerCtx := cdcContext.NewContext(ctx, newGlobalVars)
 
+		// Update meta-region label to ensure that meta region isolated from data regions.
+		err = pdutil.UpdateMetaLabel(ctx, c.pdClient)
+		if err != nil {
+			log.Warn("Fail to verify region label rule",
+				zap.Error(err),
+				zap.String("captureID", c.info.ID))
+		}
+
 		log.Info("campaign owner successfully",
-			zap.String("capture-id", c.info.ID),
-			zap.Int64("owner-rev", ownerRev))
+			zap.String("captureID", c.info.ID),
+			zap.Int64("ownerRev", ownerRev))
 
 		owner := c.newOwner(c.pdClient)
 		c.setOwner(owner)

@@ -154,23 +154,20 @@ type regionWorker struct {
 
 	metrics *regionWorkerMetrics
 
-	enableOldValue bool
-	storeAddr      string
+	storeAddr string
 }
 
 func newRegionWorker(s *eventFeedSession, addr string) *regionWorker {
-	cfg := config.GetGlobalServerConfig().KVClient
 	worker := &regionWorker{
-		session:        s,
-		inputCh:        make(chan *regionStatefulEvent, regionWorkerInputChanSize),
-		outputCh:       s.eventCh,
-		errorCh:        make(chan error, 1),
-		statesManager:  newRegionStateManager(-1),
-		rtsManager:     newRegionTsManager(),
-		rtsUpdateCh:    make(chan *regionTsInfo, 1024),
-		enableOldValue: s.enableOldValue,
-		storeAddr:      addr,
-		concurrent:     cfg.WorkerConcurrent,
+		session:       s,
+		inputCh:       make(chan *regionStatefulEvent, regionWorkerInputChanSize),
+		outputCh:      s.eventCh,
+		errorCh:       make(chan error, 1),
+		statesManager: newRegionStateManager(-1),
+		rtsManager:    newRegionTsManager(),
+		rtsUpdateCh:   make(chan *regionTsInfo, 1024),
+		storeAddr:     addr,
+		concurrent:    s.client.config.WorkerConcurrent,
 	}
 	return worker
 }
@@ -352,6 +349,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 						continue
 					}
 					log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
+						zap.String("addr", w.storeAddr),
 						zap.Uint64("regionID", rts.regionID),
 						zap.Stringer("span", state.getRegionSpan()),
 						zap.Duration("duration", sinceLastResolvedTs),
@@ -633,16 +631,16 @@ func (w *regionWorker) handleEventEntry(
 		case cdcpb.Event_INITIALIZED:
 			if time.Since(state.startFeedTime) > 20*time.Second {
 				log.Warn("The time cost of initializing is too much",
-					zap.Duration("timeCost", time.Since(state.startFeedTime)),
+					zap.Duration("duration", time.Since(state.startFeedTime)),
 					zap.Uint64("regionID", regionID))
 			}
 			w.metrics.metricPullEventInitializedCounter.Inc()
 
 			state.initialized = true
 			w.session.regionRouter.Release(state.sri.rpcCtx.Addr)
-			cachedEvents := state.matcher.matchCachedRow()
+			cachedEvents := state.matcher.matchCachedRow(state.initialized)
 			for _, cachedEvent := range cachedEvents {
-				revent, err := assembleRowEvent(regionID, cachedEvent, w.enableOldValue)
+				revent, err := assembleRowEvent(regionID, cachedEvent)
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -653,16 +651,17 @@ func (w *regionWorker) handleEventEntry(
 					return errors.Trace(ctx.Err())
 				}
 			}
+			state.matcher.matchCachedRollbackRow(state.initialized)
 		case cdcpb.Event_COMMITTED:
 			w.metrics.metricPullEventCommittedCounter.Inc()
-			revent, err := assembleRowEvent(regionID, entry, w.enableOldValue)
+			revent, err := assembleRowEvent(regionID, entry)
 			if err != nil {
 				return errors.Trace(err)
 			}
 
 			if entry.CommitTs <= state.lastResolvedTs {
 				logPanic("The CommitTs must be greater than the resolvedTs",
-					zap.String("Event Type", "COMMITTED"),
+					zap.String("EventType", "COMMITTED"),
 					zap.Uint64("CommitTs", entry.CommitTs),
 					zap.Uint64("resolvedTs", state.lastResolvedTs),
 					zap.Uint64("regionID", regionID))
@@ -681,13 +680,13 @@ func (w *regionWorker) handleEventEntry(
 			w.metrics.metricPullEventCommitCounter.Inc()
 			if entry.CommitTs <= state.lastResolvedTs {
 				logPanic("The CommitTs must be greater than the resolvedTs",
-					zap.String("Event Type", "COMMIT"),
+					zap.String("EventType", "COMMIT"),
 					zap.Uint64("CommitTs", entry.CommitTs),
 					zap.Uint64("resolvedTs", state.lastResolvedTs),
 					zap.Uint64("regionID", regionID))
 				return errUnreachable
 			}
-			ok := state.matcher.matchRow(entry)
+			ok := state.matcher.matchRow(entry, state.initialized)
 			if !ok {
 				if !state.initialized {
 					state.matcher.cacheCommitRow(entry)
@@ -699,7 +698,7 @@ func (w *regionWorker) handleEventEntry(
 					entry.GetType(), entry.GetOpType())
 			}
 
-			revent, err := assembleRowEvent(regionID, entry, w.enableOldValue)
+			revent, err := assembleRowEvent(regionID, entry)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -712,6 +711,10 @@ func (w *regionWorker) handleEventEntry(
 			}
 		case cdcpb.Event_ROLLBACK:
 			w.metrics.metricPullEventRollbackCounter.Inc()
+			if !state.initialized {
+				state.matcher.cacheRollbackRow(entry)
+				continue
+			}
 			state.matcher.rollbackRow(entry)
 		}
 	}
@@ -738,8 +741,8 @@ func (w *regionWorker) handleResolvedTs(
 	}
 
 	if resolvedTs < state.lastResolvedTs {
-		log.Warn("The resolvedTs is fallen back in kvclient",
-			zap.String("Event Type", "RESOLVED"),
+		log.Debug("The resolvedTs is fallen back in kvclient",
+			zap.String("EventType", "RESOLVED"),
 			zap.Uint64("resolvedTs", resolvedTs),
 			zap.Uint64("lastResolvedTs", state.lastResolvedTs),
 			zap.Uint64("regionID", regionID))

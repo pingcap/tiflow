@@ -73,7 +73,7 @@ type Server struct {
 func NewServer(pdEndpoints []string) (*Server, error) {
 	conf := config.GetGlobalServerConfig()
 	log.Info("creating CDC server",
-		zap.Strings("pd-addrs", pdEndpoints),
+		zap.Strings("pd", pdEndpoints),
 		zap.Stringer("config", conf),
 	)
 
@@ -149,7 +149,6 @@ func (s *Server) Run(ctx context.Context) error {
 		LogConfig:   &logConfig,
 		DialTimeout: 5 * time.Second,
 		DialOptions: []grpc.DialOption{
-			grpcTLSOption,
 			grpc.WithBlock(),
 			grpc.WithConnectParams(grpc.ConnectParams{
 				Backoff: backoff.Config{

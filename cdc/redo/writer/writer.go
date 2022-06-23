@@ -108,7 +108,9 @@ type LogWriter struct {
 }
 
 // NewLogWriter creates a LogWriter instance. It is guaranteed only one LogWriter per changefeed
-func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) (*LogWriter, error) {
+func NewLogWriter(
+	ctx context.Context, cfg *LogWriterConfig, opts ...Option,
+) (*LogWriter, error) {
 	if cfg == nil {
 		return nil, cerror.WrapError(cerror.ErrRedoConfigInvalid, errors.New("LogWriterConfig can not be nil"))
 	}
@@ -150,11 +152,11 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) (*LogWriter, error)
 	logWriter = &LogWriter{
 		cfg: cfg,
 	}
-	logWriter.rowWriter, err = NewWriter(ctx, rowCfg)
+	logWriter.rowWriter, err = NewWriter(ctx, rowCfg, opts...)
 	if err != nil {
 		return nil, err
 	}
-	logWriter.ddlWriter, err = NewWriter(ctx, ddlCfg)
+	logWriter.ddlWriter, err = NewWriter(ctx, ddlCfg, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +165,7 @@ func NewLogWriter(ctx context.Context, cfg *LogWriterConfig) (*LogWriter, error)
 	err = logWriter.initMeta(ctx)
 	if err != nil {
 		log.Warn("init redo meta fail",
-			zap.String("change feed", cfg.ChangeFeedID),
+			zap.String("changefeed", cfg.ChangeFeedID),
 			zap.Error(err))
 	}
 	if cfg.S3Storage {
@@ -274,12 +276,12 @@ func (l *LogWriter) runGC(ctx context.Context) {
 		case <-ctx.Done():
 			err := l.Close()
 			if err != nil {
-				log.Error("runGC close fail", zap.String("changefeedID", l.cfg.ChangeFeedID), zap.Error(err))
+				log.Error("runGC close fail", zap.String("changefeed", l.cfg.ChangeFeedID), zap.Error(err))
 			}
 		case <-ticker.C:
 			err := l.gc()
 			if err != nil {
-				log.Error("redo log GC fail", zap.String("changefeedID", l.cfg.ChangeFeedID), zap.Error(err))
+				log.Error("redo log GC fail", zap.String("changefeed", l.cfg.ChangeFeedID), zap.Error(err))
 			}
 		}
 	}

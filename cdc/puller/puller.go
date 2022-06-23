@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller/frontier"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -52,15 +53,14 @@ type Puller interface {
 }
 
 type pullerImpl struct {
-	kvCli          kv.CDCKVClient
-	kvStorage      tikv.Storage
-	checkpointTs   uint64
-	spans          []regionspan.ComparableSpan
-	outputCh       chan *model.RawKVEntry
-	tsTracker      frontier.Frontier
-	resolvedTs     uint64
-	initialized    int64
-	enableOldValue bool
+	kvCli        kv.CDCKVClient
+	kvStorage    tikv.Storage
+	checkpointTs uint64
+	spans        []regionspan.ComparableSpan
+	outputCh     chan *model.RawKVEntry
+	tsTracker    frontier.Frontier
+	resolvedTs   uint64
+	initialized  int64
 }
 
 // NewPuller create a new Puller fetch event start from checkpointTs
@@ -73,7 +73,7 @@ func NewPuller(
 	kvStorage tidbkv.Storage,
 	checkpointTs uint64,
 	spans []regionspan.Span,
-	enableOldValue bool,
+	cfg *config.KVClientConfig,
 ) Puller {
 	tikvStorage, ok := kvStorage.(tikv.Storage)
 	if !ok {
@@ -87,17 +87,16 @@ func NewPuller(
 	// the initial ts for frontier to 0. Once the puller level resolved ts
 	// initialized, the ts should advance to a non-zero value.
 	tsTracker := frontier.NewFrontier(0, comparableSpans...)
-	kvCli := kv.NewCDCKVClient(ctx, pdCli, tikvStorage, grpcPool, regionCache)
+	kvCli := kv.NewCDCKVClient(ctx, pdCli, tikvStorage, grpcPool, regionCache, cfg)
 	p := &pullerImpl{
-		kvCli:          kvCli,
-		kvStorage:      tikvStorage,
-		checkpointTs:   checkpointTs,
-		spans:          comparableSpans,
-		outputCh:       make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
-		tsTracker:      tsTracker,
-		resolvedTs:     checkpointTs,
-		initialized:    0,
-		enableOldValue: enableOldValue,
+		kvCli:        kvCli,
+		kvStorage:    tikvStorage,
+		checkpointTs: checkpointTs,
+		spans:        comparableSpans,
+		outputCh:     make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
+		tsTracker:    tsTracker,
+		resolvedTs:   checkpointTs,
+		initialized:  0,
 	}
 	return p
 }
@@ -115,8 +114,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		span := span
 
 		g.Go(func() error {
-			return p.kvCli.EventFeed(ctx, span, checkpointTs, p.enableOldValue,
-				lockResolver, p, eventCh)
+			return p.kvCli.EventFeed(ctx, span, checkpointTs, lockResolver, p, eventCh)
 		})
 	}
 

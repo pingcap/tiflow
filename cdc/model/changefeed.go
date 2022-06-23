@@ -302,9 +302,9 @@ func (info *ChangeFeedInfo) fixState() {
 
 	if state != info.State {
 		log.Info("handle old owner inconsistent state",
-			zap.String("old state", string(info.State)),
-			zap.String("admin job type", info.AdminJobType.String()),
-			zap.String("new state", string(state)))
+			zap.String("oldState", string(info.State)),
+			zap.String("adminJob", info.AdminJobType.String()),
+			zap.String("newState", string(state)))
 		info.State = state
 	}
 }
@@ -353,8 +353,8 @@ func (info *ChangeFeedInfo) fixSinkProtocol() {
 	} else {
 		if needsFix(info.Config.Sink.Protocol) {
 			log.Info("handle incompatible protocol from sink config",
-				zap.String("old protocol", info.Config.Sink.Protocol),
-				zap.String("fixed protocol", openProtocolStr))
+				zap.String("oldProtocol", info.Config.Sink.Protocol),
+				zap.String("fixedProtocol", openProtocolStr))
 			info.Config.Sink.Protocol = openProtocolStr
 		}
 	}

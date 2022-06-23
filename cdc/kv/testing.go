@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/driver"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil"
@@ -153,16 +154,14 @@ func TestSplit(t require.TestingT, pdCli pd.Client, storage tikv.Storage, kvStor
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	regionCache := tikv.NewRegionCache(pdCli)
 
-	cli := NewCDCClient(context.Background(), pdCli, storage, grpcPool, regionCache)
+	cli := NewCDCClient(context.Background(), pdCli, storage, grpcPool, regionCache, config.GetDefaultServerConfig().KVClient)
 
 	startTS := mustGetTimestamp(t, storage)
 
 	lockResolver := txnutil.NewLockerResolver(storage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	go func() {
-		err := cli.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: nil, End: nil},
-			startTS, false, lockResolver, isPullInit, eventCh)
+		err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, lockResolver, isPullInit, eventCh)
 		require.Equal(t, err, context.Canceled)
 	}()
 
@@ -245,15 +244,13 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage tikv.Storage, 
 
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	regionCache := tikv.NewRegionCache(pdCli)
-	cli := NewCDCClient(context.Background(), pdCli, storage, grpcPool, regionCache)
+	cli := NewCDCClient(context.Background(), pdCli, storage, grpcPool, regionCache, config.GetDefaultServerConfig().KVClient)
 
 	startTS := mustGetTimestamp(t, storage)
 	lockResolver := txnutil.NewLockerResolver(storage, "changefeed-test", util.RoleTester)
 	isPullInit := &mockPullerInit{}
 	go func() {
-		err := cli.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: nil, End: nil},
-			startTS, false, lockResolver, isPullInit, checker.eventCh)
+		err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, lockResolver, isPullInit, checker.eventCh)
 		require.Equal(t, err, context.Canceled)
 	}()
 
@@ -275,9 +272,7 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage tikv.Storage, 
 		if i == 1 {
 			checker = newEventChecker(t)
 			go func() {
-				err := cli.EventFeed(ctx,
-					regionspan.ComparableSpan{Start: nil, End: nil},
-					startTS, false, lockResolver, isPullInit, checker.eventCh)
+				err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, lockResolver, isPullInit, checker.eventCh)
 				require.Equal(t, err, context.Canceled)
 			}()
 		}
