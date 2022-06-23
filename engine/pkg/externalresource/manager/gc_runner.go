@@ -17,9 +17,11 @@ import (
 	"context"
 	"time"
 
+	"github.com/gogo/status"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
 
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
@@ -61,6 +63,9 @@ func NewGCRunner(
 
 // Run runs the GCRunner. It blocks until ctx is canceled.
 func (r *DefaultGCRunner) Run(ctx context.Context) error {
+	defer func() {
+		log.L().Info("default gc runner exited")
+	}()
 	// TODO this will result in DB queries every 10 seconds.
 	// This is a very naive strategy, we will modify the
 	// algorithm after doing enough system testing.
@@ -136,7 +141,13 @@ func (r *DefaultGCRunner) gcOnce(
 	}
 
 	if err := handler(ctx, res); err != nil {
-		return err
+		st := status.Convert(err)
+		if st.Code() != codes.NotFound {
+			return err
+		}
+		// remove resource rpc returns resource not found, ignore this error and
+		// continue to delete resource from resourcemeta
+		log.L().Info("remove resource rpc returns resource not found, which is ignorable", zap.Error(err))
 	}
 
 	result, err := r.client.DeleteResource(ctx, res.ID)

@@ -724,10 +724,7 @@ func (p *processor) addTable(ctx cdcContext.Context, tableID model.TableID, repl
 	return nil
 }
 
-func (p *processor) getTableName(ctx cdcContext.Context,
-	tableID model.TableID,
-	replicaInfo *model.TableReplicaInfo,
-) (string, error) {
+func (p *processor) getTableName(ctx cdcContext.Context, tableID model.TableID) string {
 	// FIXME: using GetLastSnapshot here would be confused and get the wrong table name
 	// after `rename table` DDL, since `rename table` keeps the tableID unchanged
 	var tableName *model.TableName
@@ -744,10 +741,10 @@ func (p *processor) getTableName(ctx cdcContext.Context,
 
 	if tableName == nil {
 		log.Warn("failed to get table name for metric")
-		return strconv.Itoa(int(tableID)), nil
+		return strconv.Itoa(int(tableID))
 	}
 
-	return tableName.QuoteString(), nil
+	return tableName.QuoteString()
 }
 
 func (p *processor) createTablePipelineImpl(
@@ -764,12 +761,9 @@ func (p *processor) createTablePipelineImpl(
 		return nil
 	})
 
-	tableName, err := p.getTableName(ctx, tableID, replicaInfo)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+	tableName := p.getTableName(ctx, tableID)
 
-	s, err := sink.NewTableSink(p.sink, tableID, p.metricsTableSinkTotalRows, p.redoManager)
+	s, err := sink.NewTableSink(p.sink, tableID, p.metricsTableSinkTotalRows)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -781,7 +775,7 @@ func (p *processor) createTablePipelineImpl(
 		tableName,
 		replicaInfo,
 		s,
-		p.redoManager.Enabled(),
+		p.redoManager,
 		p.changefeed.Info.GetTargetTs())
 	if err != nil {
 		return nil, errors.Trace(err)
