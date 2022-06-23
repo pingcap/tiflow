@@ -47,8 +47,5 @@ func IsFailFastError(errIn error) bool {
 	// We use `As` instead of `Is` because
 	// `Is` requires exact equalities instead
 	// of type matching.
-	if !gerrors.As(errIn, &out) {
-		return false
-	}
-	return true
+	return gerrors.As(errIn, &out)
 }
