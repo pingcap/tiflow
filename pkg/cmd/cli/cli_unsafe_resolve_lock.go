@@ -21,7 +21,6 @@ import (
 	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	"github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
-	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -32,9 +31,6 @@ type unsafeResolveLockOptions struct {
 
 	regionID uint64
 	ts       uint64
-
-	pdAddr     string
-	credential *security.Credential
 
 	upstreamPDAddrs  string
 	upstreamCaPath   string
@@ -51,8 +47,6 @@ func newUnsafeResolveLockOptions() *unsafeResolveLockOptions {
 // complete adapts from the command line args to the data and client required.
 func (o *unsafeResolveLockOptions) complete(f factory.Factory) error {
 	ctx := context.GetDefaultContext()
-	o.pdAddr = f.GetPdAddr()
-	o.credential = f.GetCredential()
 	apiClient, err := f.APIV2Client()
 	if err != nil {
 		return err
