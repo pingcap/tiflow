@@ -1024,6 +1024,7 @@ func TestFilterDDLEvent(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	cf, _, _, _ := createChangefeed4Test(ctx, t, rc)
 	defer cf.Close(ctx)
-	res := cf.filterDDLEvent(ddlEvents)
+	res, err := cf.filterDDLEvent(ddlEvents)
+	require.Nil(t, err)
 	require.Equal(t, ddlEvents[:1], res)
 }

@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -272,6 +273,15 @@ type RowChangedEvent struct {
 	SplitTxn bool `json:"-" msg:"-"`
 	// Filtered marks this RowChangedEvent was filtered by filter in mounter.
 	Filtered bool `json:"-" msg:"-"`
+	// This filed is only used to help to determine whether
+	// this row changed event should be filtered out.
+	// Please set them to nil after we use it.
+	RowChangedDatums *RowChangedDatums `json:"-" msg:"-"`
+}
+
+type RowChangedDatums struct {
+	RowDatums    []types.Datum `json:"-" msg:"-"`
+	PreRowDatums []types.Datum `json:"-" msg:"-"`
 }
 
 // IsDelete returns true if the row is a delete event

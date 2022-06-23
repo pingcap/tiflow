@@ -178,8 +178,8 @@ func (n *sorterNode) start(
 					if err != nil {
 						return errors.Trace(err)
 					}
-					if msg.Row.Filtered {
-						log.Info("Row changed event ignored", zap.Uint64("startTs", msg.StartTs))
+					if msg.Row == nil {
+						log.Debug("message's row changed event is nil, it should be ignored", zap.Uint64("startTs", msg.StartTs))
 						continue
 					}
 					commitTs := msg.CRTs

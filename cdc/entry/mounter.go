@@ -111,10 +111,6 @@ func (m *mounterImpl) DecodeEvent(ctx context.Context, pEvent *model.Polymorphic
 	pEvent.Row = rowEvent
 	pEvent.RawKV.Value = nil
 	pEvent.RawKV.OldValue = nil
-	pEvent.Row.Filtered = m.filter.ShouldIgnoreDMLEvent(
-		pEvent.Row.StartTs,
-		pEvent.Row.Table.Schema,
-		pEvent.Row.Table.Table)
 	duration := time.Since(start)
 	if duration > time.Second {
 		m.metricMountDuration.Observe(duration.Seconds())
@@ -169,7 +165,23 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 			if rowKV == nil {
 				return nil, nil
 			}
-			return m.mountRowKVEntry(tableInfo, rowKV, raw.ApproximateDataSize())
+			row, err := m.mountRowKVEntry(tableInfo, rowKV, raw.ApproximateDataSize())
+			if err != nil {
+				return nil, err
+			}
+			// Now we need to filter a row here is because we need its tableInfo
+			ignore, err := m.filter.ShouldIgnoreDMLEvent(row, tableInfo.TableInfo)
+			if err != nil {
+				return nil, err
+			}
+			// TODO(dongmen): try to find better way to indicate this row has been filtered.
+			// Return a nil RowChangedEvent if this row should be ignored.
+			if ignore {
+				return nil, nil
+			}
+			// Set raw columns to nil here to release memory.
+			row.RowChangedDatums = nil
+			return row, nil
 		}
 		return nil, nil
 	}()
@@ -252,15 +264,17 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	return job, nil
 }
 
-func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool) ([]*model.Column, error) {
+// fizz: datums 的顺序重要吗？
+func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool) ([]*model.Column, []types.Datum, error) {
 	cols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
+	rawCols := make([]types.Datum, len(tableInfo.RowColumnsOffset))
 	for _, colInfo := range tableInfo.Columns {
 		colSize := 0
 		if !model.IsColCDCVisible(colInfo) {
 			continue
 		}
 		colName := colInfo.Name.O
-		colDatums, exist := datums[colInfo.ID]
+		colDatums, exist := datums[colInfo.ID] // fizz: 什么时候会不存在呢？
 		var colValue interface{}
 		if !exist && !fillWithDefaultValue {
 			continue
@@ -271,16 +285,17 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		if exist {
 			colValue, size, warn, err = formatColVal(colDatums, colInfo)
 		} else if fillWithDefaultValue {
-			colValue, size, warn, err = getDefaultOrZeroValue(colInfo)
+			colDatums, colValue, size, warn, err = getDefaultOrZeroValue(colInfo)
 		}
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, nil, errors.Trace(err)
 		}
 		if warn != "" {
 			log.Warn(warn, zap.String("table", tableInfo.TableName.String()), zap.String("column", colInfo.Name.String()))
 		}
 		defaultValue := getDDLDefaultDefinition(colInfo)
 		colSize += size
+		rawCols[tableInfo.RowColumnsOffset[colInfo.ID]] = colDatums
 		cols[tableInfo.RowColumnsOffset[colInfo.ID]] = &model.Column{
 			Name:    colName,
 			Type:    colInfo.GetType(),
@@ -292,13 +307,14 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 			ApproximateBytes: colSize + sizeOfEmptyColumn,
 		}
 	}
-	return cols, nil
+	return cols, rawCols, nil
 }
 
 func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, error) {
 	var err error
 	// Decode previous columns.
 	var preCols []*model.Column
+	var preRawCols []types.Datum
 	// Since we now always use old value internally,
 	// we need to control the output(sink will use the PreColumns field to determine whether to output old value).
 	// Normally old value is output when only enableOldValue is on,
@@ -307,7 +323,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 	if row.PreRowExist {
 		// FIXME(leoppro): using pre table info to mounter pre column datum
 		// the pre column and current column in one event may using different table info
-		preCols, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
+		preCols, preRawCols, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -325,8 +341,9 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 	}
 
 	var cols []*model.Column
+	var rawCols []types.Datum
 	if row.RowExist {
-		cols, err = datum2Column(tableInfo, row.Row, true)
+		cols, rawCols, err = datum2Column(tableInfo, row.Row, true)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -365,6 +382,10 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 		PreColumns:          preCols,
 		IndexColumns:        tableInfo.IndexColumnsOffset,
 		ApproximateDataSize: dataSize,
+		RowChangedDatums: &model.RowChangedDatums{
+			RowDatums:    rawCols,
+			PreRowDatums: preRawCols,
+		},
 	}, nil
 }
 
@@ -462,7 +483,7 @@ func formatColVal(datum types.Datum, col *timodel.ColumnInfo) (
 // https://github.com/golang/go/blob/go1.17.4/src/database/sql/driver/types.go#L236
 // Supported type is: nil, basic type(Int, Int8,..., Float32, Float64, String), Slice(uint8), other types not support
 // TODO: Check default expr support
-func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, error) {
+func getDefaultOrZeroValue(col *timodel.ColumnInfo) (types.Datum, interface{}, int, string, error) {
 	var d types.Datum
 	// NOTICE: SHOULD use OriginDefaultValue here, more info pls ref to
 	// https://github.com/pingcap/tiflow/issues/4048
@@ -472,7 +493,7 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, e
 	// Ref: https://github.com/pingcap/tidb/blob/d2c352980a43bb593db81fd1db996f47af596d91/table/column.go#L489
 	if col.GetOriginDefaultValue() != nil {
 		d = types.NewDatum(col.GetOriginDefaultValue())
-		return d.GetValue(), sizeOfDatum(d), "", nil
+		return d, d.GetValue(), sizeOfDatum(d), "", nil
 	}
 
 	if !mysql.HasNotNullFlag(col.GetFlag()) {
@@ -488,7 +509,7 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, e
 			// the default value is the first element of the enum list
 			d = types.NewDatum(col.FieldType.GetElem(0))
 		case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
-			return emptyBytes, sizeOfEmptyBytes, "", nil
+			return d, emptyBytes, sizeOfEmptyBytes, "", nil
 		default:
 			d = table.GetZeroValue(col)
 			if d.IsNull() {
@@ -496,9 +517,45 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, e
 			}
 		}
 	}
-
-	return formatColVal(d, col)
+	v, size, warn, err := formatColVal(d, col)
+	return d, v, size, warn, err
 }
+
+// func getDefaultDatum(col *timodel.ColumnInfo) types.Datum {
+// 	var d types.Datum
+// 	// NOTICE: SHOULD use OriginDefaultValue here, more info pls ref to
+// 	// https://github.com/pingcap/tiflow/issues/4048
+// 	// FIXME: Too many corner cases may hit here, like type truncate, timezone
+// 	// (1) If this column is uk(no pk), will cause data inconsistency in Scenarios(2)
+// 	// (2) If not fix here, will cause data inconsistency in Scenarios(3) directly
+// 	// Ref: https://github.com/pingcap/tidb/blob/d2c352980a43bb593db81fd1db996f47af596d91/table/column.go#L489
+// 	if col.GetOriginDefaultValue() != nil {
+// 		d = types.NewDatum(col.GetOriginDefaultValue())
+// 		return d
+// 	}
+// 	if !mysql.HasNotNullFlag(col.GetFlag()) {
+// 		// NOTICE: NotNullCheck need do after OriginDefaultValue check, as when TiDB meet "amend + add column default xxx",
+// 		// ref: https://github.com/pingcap/ticdc/issues/3929
+// 		// must use null if TiDB not write the column value when default value is null
+// 		// and the value is null, see https://github.com/pingcap/tidb/issues/9304
+// 		d = types.NewDatum(nil)
+// 	} else {
+// 		switch col.GetType() {
+// 		case mysql.TypeEnum:
+// 			// For enum type, if no default value and not null is set,
+// 			// the default value is the first element of the enum list
+// 			d = types.NewDatum(col.FieldType.GetElem(0))
+// 		case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
+// 			d = types.NewBytesDatum(emptyBytes)
+// 		default:
+// 			d = table.GetZeroValue(col)
+// 			if d.IsNull() {
+// 				log.Error("meet unsupported column type", zap.String("columnInfo", col.FieldType.String()))
+// 			}
+// 		}
+// 	}
+// 	return d
+// }
 
 func getDDLDefaultDefinition(col *timodel.ColumnInfo) interface{} {
 	defaultValue := col.GetDefaultValue()

@@ -111,7 +111,7 @@ func TestShouldIgnoreTxn(t *testing.T) {
 		})
 		require.Nil(t, err)
 		for _, tc := range ftc.cases {
-			require.Equal(t, filter.ShouldIgnoreDMLEvent(tc.ts, tc.schema, tc.table), tc.ignore)
+			require.Equal(t, filter.shouldIgnoreDMLEventByTable(tc.ts, tc.schema, tc.table), tc.ignore)
 			require.Equal(t, filter.ShouldIgnoreDDLEvent(tc.ts, model.ActionCreateTable, tc.schema, tc.table), tc.ignore)
 		}
 	}

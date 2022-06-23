@@ -597,7 +597,10 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		if err != nil {
 			return false, errors.Trace(err)
 		}
-		c.ddlEventCache = c.filterDDLEvent(ddlEvents)
+		c.ddlEventCache, err = c.filterDDLEvent(ddlEvents)
+		if err != nil {
+			return false, err
+		}
 		if c.redoManager.Enabled() {
 			for _, ddlEvent := range c.ddlEventCache {
 				err = c.redoManager.EmitDDLEvent(ctx, ddlEvent)
@@ -648,11 +651,16 @@ func (c *changefeed) asyncExecDDLEvent(ctx cdcContext.Context,
 	return done, nil
 }
 
-func (c *changefeed) filterDDLEvent(ddlEvents []*model.DDLEvent) []*model.DDLEvent {
+func (c *changefeed) filterDDLEvent(ddlEvents []*model.DDLEvent) ([]*model.DDLEvent, error) {
 	res := make([]*model.DDLEvent, 0)
 	// filter ddl event here
 	for _, ddlEvent := range ddlEvents {
-		if c.filter.ShouldIgnoreDDLEvent(ddlEvent.StartTs, ddlEvent.Type, ddlEvent.TableInfo.Schema, ddlEvent.TableInfo.Table) {
+		ignore, err := c.filter.ShouldIgnoreDDLEvent(ddlEvent)
+		// fizz: complete this err
+		if err != nil {
+			return nil, err
+		}
+		if ignore {
 			log.Info(
 				"DDL event ignored",
 				zap.String("query", ddlEvent.Query),
@@ -665,7 +673,7 @@ func (c *changefeed) filterDDLEvent(ddlEvents []*model.DDLEvent) []*model.DDLEve
 		}
 		res = append(res, ddlEvent)
 	}
-	return res
+	return res, nil
 }
 
 func (c *changefeed) updateMetrics(currentTs int64, checkpointTs, resolvedTs model.Ts) {
