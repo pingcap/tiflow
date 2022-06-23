@@ -119,13 +119,15 @@ func TestErrorFilterContextCanceled(t *testing.T) {
 	buffer.Reset()
 
 	ErrorFilterContextCanceled(log.L(), "the message", zap.Int("number", 123456),
-		zap.Ints("array", []int{7, 8, 9}), ShortError(errors.Annotate(context.Canceled, "extra info")))
+		zap.Ints("array", []int{7, 8, 9}),
+		ShortError(errors.Annotate(context.Canceled, "extra info")))
 	require.Equal(t, "", buffer.Stripped())
 	buffer.Reset()
 
 	ErrorFilterContextCanceled(log.L(), "the message", zap.Int("number", 123456),
 		zap.Ints("array", []int{7, 8, 9}))
-	require.Regexp(t, regexp.QuoteMeta("[\"the message\"] [number=123456] [array=\"[7,8,9]\"]"), buffer.Stripped())
+	require.Regexp(t, regexp.QuoteMeta("[\"the message\"]"+
+		" [number=123456] [array=\"[7,8,9]\"]"), buffer.Stripped())
 }
 
 func TestShortError(t *testing.T) {
@@ -135,7 +137,8 @@ func TestShortError(t *testing.T) {
 
 	err = cerrors.ErrMetaNotInRegion.GenWithStackByArgs("extra info")
 	log.L().Warn("short error", ShortError(err))
-	require.Regexp(t, regexp.QuoteMeta("[\"short error\"] [error=\"[CDC:ErrMetaNotInRegion]meta not exists in region"), buffer.Stripped())
+	require.Regexp(t, regexp.QuoteMeta("[\"short error\"] "+
+		"[error=\"[CDC:ErrMetaNotInRegion]meta not exists in region"), buffer.Stripped())
 	buffer.Reset()
 
 	log.L().Warn("short error", ShortError(nil))
