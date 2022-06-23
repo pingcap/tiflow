@@ -16,19 +16,18 @@ package cli
 import (
 	"context"
 
+	"github.com/pingcap/errors"
 	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/spf13/cobra"
 )
 
 // queryChangefeedOptions defines flags for the `cli changefeed query` command.
 type queryChangefeedOptions struct {
-	apiClient *apiv1client.APIV1Client
+	apiClient apiv1client.APIV1Interface
 
-	credential   *security.Credential
 	changefeedID string
 	simplified   bool
 }
@@ -48,7 +47,6 @@ func (o *queryChangefeedOptions) addFlags(cmd *cobra.Command) {
 
 // complete adapts from the command line args to the data and client required.
 func (o *queryChangefeedOptions) complete(f factory.Factory) error {
-	o.credential = f.GetCredential()
 	client, err := f.APIV1Client()
 	if err != nil {
 		return err
@@ -63,7 +61,7 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 	if o.simplified {
 		infos, err := o.apiClient.Changefeeds().List(ctx, "all")
 		if err != nil {
-			return nil
+			return errors.Trace(err)
 		}
 		for _, info := range *infos {
 			if info.ID == o.changefeedID {

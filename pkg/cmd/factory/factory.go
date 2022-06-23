@@ -31,8 +31,8 @@ type Factory interface {
 	ClientGetter
 	EtcdClient() (*etcd.CDCEtcdClient, error)
 	PdClient() (pd.Client, error)
-	APIV1Client() (*apiv1client.APIV1Client, error)
-	APIV2Client() (*apiv2client.APIV2Client, error)
+	APIV1Client() (apiv1client.APIV1Interface, error)
+	APIV2Client() (apiv2client.APIV2Interface, error)
 }
 
 // ClientGetter defines the client getter.

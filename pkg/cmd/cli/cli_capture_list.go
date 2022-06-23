@@ -30,7 +30,7 @@ type capture struct {
 
 // listCaptureOptions defines flags for the `cli capture list` command.
 type listCaptureOptions struct {
-	apiv1Client *apiv1client.APIV1Client
+	apiv1Client apiv1client.APIV1Interface
 }
 
 // newListCaptureOptions creates new listCaptureOptions for the `cli capture list` command.

@@ -35,7 +35,7 @@ type changefeedCommonInfo struct {
 
 // listChangefeedOptions defines flags for the `cli changefeed list` command.
 type listChangefeedOptions struct {
-	apiClient *apiv1client.APIV1Client
+	apiClient apiv1client.APIV1Interface
 
 	listAll bool
 }

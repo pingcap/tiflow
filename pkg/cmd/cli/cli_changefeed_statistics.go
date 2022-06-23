@@ -120,7 +120,7 @@ func (o *statisticsChangefeedOptions) run(cmd *cobra.Command) error {
 	tick := time.NewTicker(time.Duration(o.interval) * time.Second)
 	var lastTime time.Time
 	var lastCount uint64
-
+	_ = o.runCliWithAPIClient(ctx, cmd, &lastCount, &lastTime)
 	for {
 		select {
 		case <-ctx.Done():

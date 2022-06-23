@@ -25,7 +25,7 @@ import (
 
 // removeChangefeedOptions defines flags for the `cli changefeed remove` command.
 type removeChangefeedOptions struct {
-	apiClient    *apiv1client.APIV1Client
+	apiClient    apiv1client.APIV1Interface
 	changefeedID string
 }
 

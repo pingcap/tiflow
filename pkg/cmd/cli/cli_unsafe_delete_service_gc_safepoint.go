@@ -27,7 +27,7 @@ import (
 // unsafeDeleteServiceGcSafepointOptions defines flags
 // for the `cli unsafe delete-service-gc-safepoint` command.
 type unsafeDeleteServiceGcSafepointOptions struct {
-	apiClient        *apiv2client.APIV2Client
+	apiClient        apiv2client.APIV2Interface
 	upstreamPDAddrs  string
 	upstreamCaPath   string
 	upstreamCertPath string
