@@ -557,6 +557,7 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 	if err := s.FillSchemaName(job); err != nil {
 		return errors.Trace(err)
 	}
+	log.Info("handle DDL", zap.String("DDL", job.Query), zap.Stringer("job", job))
 	getWrapTableInfo := func(job *timodel.Job) *model.TableInfo {
 		return model.WrapTableInfo(job.SchemaID, job.SchemaName,
 			job.BinlogInfo.FinishedTS,
