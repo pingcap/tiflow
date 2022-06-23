@@ -171,6 +171,8 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 			m.logger.Info("", zap.String("failpoint", "SleepBeforeDumplingClose"))
 		})
 		dumpling.Close()
+	} else {
+		log.L().Warn("error occurred during NewDumper", zap.Error(err))
 	}
 	cancel()
 
