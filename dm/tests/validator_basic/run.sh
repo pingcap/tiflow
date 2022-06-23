@@ -648,26 +648,32 @@ function test_data_filter() {
 function test_validation_syncer_stopped() {
 	echo "--> validate when syncer is stopped"
 	insertCnt=5
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/mockValidatorDelay=return(2)"
 	prepare_for_standalone_test
 	run_sql_source1 "create table validator_basic.test(a int primary key, b int)"
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation stop test" \
-		"\"result\": true" 1
 	for ((k = 0; k < $insertCnt; k++)); do
+		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"pause-task test" \
+			"\"result\": true" 2
+		# catchup the last insert when the syncer is stopped
+		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"query-status test" \
+			"\"processedRowsStatus\": \"insert\/update\/delete: $k\/0\/0\"" 1 \
+			"new\/ignored\/resolved: 0\/0\/0" 1
 		run_sql_source1 "insert into validator_basic.test values($k, $k)"
+		trigger_checkpoint_flush
+		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"resume-task test" \
+			"\"result\": true" 2
+		# syncer synced but the validator delayed
+		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"query-status test" \
+			"\"synced\": true" 1 \
+			"\"processedRowsStatus\": \"insert\/update\/delete: $k\/0\/0\"" 1
 	done
-	trigger_checkpoint_flush
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"\"synced\": true" 1
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"validation start test" \
-		"\"result\": true" 1
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"pause-task test" \
-		"\"result\": true" 2
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"\"processedRowsStatus\": \"insert\/update\/delete: 5\/0\/0\"" 1 \
+		"\"processedRowsStatus\": \"insert\/update\/delete: $insertCnt\/0\/0\"" 1 \
 		"new\/ignored\/resolved: 0\/0\/0" 1
 }
 

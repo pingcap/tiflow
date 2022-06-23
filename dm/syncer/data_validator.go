@@ -689,6 +689,12 @@ func (v *DataValidator) doValidate() {
 			v.sendError(err)
 			return
 		}
+		failpoint.Inject("mockValidatorDelay", func(val failpoint.Value) {
+			if sec, ok := val.(int); ok {
+				v.L.Info("mock validator delay", zap.Int("second", sec))
+				time.Sleep(time.Duration(sec) * time.Second)
+			}
+		})
 		// update validator metric
 		v.updateValidatorBinlogMetric(currLoc)
 		v.updateValidatorBinlogLag(currLoc)

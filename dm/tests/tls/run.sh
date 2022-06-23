@@ -37,7 +37,7 @@ EOF
 	bin/tidb-server \
 		-P 4400 \
 		--path $WORK_DIR/tidb \
-		--store mocktikv \
+		--store unistore \
 		--config $WORK_DIR/tidb-tls-config.toml \
 		--log-file "$WORK_DIR/tidb.log" &
 
