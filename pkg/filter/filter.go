@@ -93,17 +93,17 @@ func (f *Filter) ShouldIgnoreDMLEvent(ts uint64, schema, table string) bool {
 
 // ShouldIgnoreDDLEvent removes DDLs that's not wanted by this changefeed.
 // CDC only supports filtering by database/table now.
-func (f *Filter) ShouldIgnoreDDLEvent(ts uint64, ddlType model.ActionType, schema, table string) bool {
+func (f *Filter) ShouldIgnoreDDLEvent(ddl *model.Job) bool {
 	var shouldIgnoreTableOrSchema bool
-	switch ddlType {
+	switch ddl.Type {
 	case model.ActionCreateSchema, model.ActionDropSchema,
 		model.ActionModifySchemaCharsetAndCollate:
-		shouldIgnoreTableOrSchema = !f.tableFilter.MatchSchema(schema)
+		shouldIgnoreTableOrSchema = !f.tableFilter.MatchSchema(ddl.SchemaName)
 	default:
-		shouldIgnoreTableOrSchema = f.ShouldIgnoreTable(schema, table)
+		shouldIgnoreTableOrSchema = f.ShouldIgnoreTable(ddl.SchemaName, ddl.TableName)
 	}
 
-	return f.shouldIgnoreStartTs(ts) || shouldIgnoreTableOrSchema
+	return f.shouldIgnoreStartTs(ddl.StartTS) || shouldIgnoreTableOrSchema
 }
 
 // ShouldDiscardDDL returns true if this DDL should be discarded.

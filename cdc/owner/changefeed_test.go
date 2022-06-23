@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
-	pfilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
@@ -190,9 +189,6 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T, config *config.
 		return &mockScheduler{}, nil
 	}
 	cf.upstream = up
-	f, err := pfilter.NewFilter(config)
-	require.Nil(t, err)
-	cf.filter = f
 	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
@@ -982,48 +978,4 @@ func TestExecDropViewsDDL(t *testing.T) {
 
 	execDropStmt(jobs[0], "DROP VIEW `test1`.`view2`")
 	execDropStmt(jobs[1], "DROP VIEW `test1`.`view1`")
-}
-
-func TestFilterDDLEvent(t *testing.T) {
-	ddlEvents := []*model.DDLEvent{
-		{
-			StartTs:  1000,
-			CommitTs: 1010,
-			TableInfo: &model.SimpleTableInfo{
-				Schema: "test",
-				Table:  "t1",
-			},
-			Type:  timodel.ActionAddColumn,
-			Query: "ALTER TABLE test.t1 ADD COLUMN a int",
-		},
-		{
-			StartTs:  1020,
-			CommitTs: 1030,
-			TableInfo: &model.SimpleTableInfo{
-				Schema: "test",
-				Table:  "t2",
-			},
-			Type:  timodel.ActionAddColumn,
-			Query: "ALTER TABLE test.t2 ADD COLUMN a int",
-		},
-		{
-			StartTs:  1020,
-			CommitTs: 1030,
-			TableInfo: &model.SimpleTableInfo{
-				Schema: "test",
-				Table:  "t3",
-			},
-			Type:  timodel.ActionAddColumn,
-			Query: "ALTER TABLE test.t3 ADD COLUMN a int",
-		},
-	}
-	rc := config.GetDefaultReplicaConfig()
-	rc.Filter = &config.FilterConfig{
-		Rules: []string{"test.t1"},
-	}
-	ctx := cdcContext.NewBackendContext4Test(true)
-	cf, _, _, _ := createChangefeed4Test(ctx, t, rc)
-	defer cf.Close(ctx)
-	res := cf.filterDDLEvent(ddlEvents)
-	require.Equal(t, ddlEvents[:1], res)
 }

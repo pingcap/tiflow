@@ -31,7 +31,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	pfilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
@@ -74,7 +73,6 @@ type changefeed struct {
 	schema      *schemaWrap4Owner
 	sink        DDLSink
 	ddlPuller   DDLPuller
-	filter      *pfilter.Filter
 	initialized bool
 	// isRemoved is true if the changefeed is removed
 	isRemoved bool
@@ -353,10 +351,6 @@ LOOP:
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.filter, err = pfilter.NewFilter(c.state.Info.Config)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
 
@@ -585,6 +579,7 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 				zap.Reflect("job", job), zap.Error(err))
 			return false, errors.Trace(err)
 		}
+		c.ddlEventCache = ddlEvents
 		// We can't use the latest schema directly,
 		// we need to make sure we receive the ddl before we start or stop broadcasting checkpoint ts.
 		// So let's remember the name of the table before processing and cache the DDL.
@@ -597,7 +592,6 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		if err != nil {
 			return false, errors.Trace(err)
 		}
-		c.ddlEventCache = c.filterDDLEvent(ddlEvents)
 		if c.redoManager.Enabled() {
 			for _, ddlEvent := range c.ddlEventCache {
 				err = c.redoManager.EmitDDLEvent(ctx, ddlEvent)
@@ -646,28 +640,6 @@ func (c *changefeed) asyncExecDDLEvent(ctx cdcContext.Context,
 	}
 
 	return done, nil
-}
-
-func (c *changefeed) filterDDLEvent(ddlEvents []*model.DDLEvent) []*model.DDLEvent {
-	res := make([]*model.DDLEvent, 0, len(ddlEvents))
-	// filter ddl event here
-	for _, ddlEvent := range ddlEvents {
-		if c.filter.ShouldIgnoreDDLEvent(
-			ddlEvent.StartTs, ddlEvent.Type,
-			ddlEvent.TableInfo.Schema, ddlEvent.TableInfo.Table) {
-			log.Info(
-				"DDL event ignored",
-				zap.String("query", ddlEvent.Query),
-				zap.Uint64("startTs", ddlEvent.StartTs),
-				zap.Uint64("commitTs", ddlEvent.CommitTs),
-				zap.String("namespace", c.id.Namespace),
-				zap.String("changefeed", c.id.ID),
-			)
-			continue
-		}
-		res = append(res, ddlEvent)
-	}
-	return res
 }
 
 func (c *changefeed) updateMetrics(currentTs int64, checkpointTs, resolvedTs model.Ts) {
