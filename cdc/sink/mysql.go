@@ -296,7 +296,10 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEve
 			log.Warn("execute DDL with error, retry later", zap.String("query", ddl.Query), zap.Error(err))
 		}
 		return err
-	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithBackoffMaxDelay(backoffMaxDelayInMs), retry.WithMaxTries(defaultDDLMaxRetryTime), retry.WithIsRetryableErr(cerror.IsRetryableError))
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
+		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
+		retry.WithMaxTries(defaultDDLMaxRetry),
+		retry.WithIsRetryableErr(cerror.IsRetryableError))
 }
 
 func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
@@ -491,13 +494,13 @@ func (s *mysqlSink) Barrier(ctx context.Context, tableID model.TableID) error {
 			maxResolvedTs, ok := s.tableMaxResolvedTs.Load(tableID)
 			log.Warn("Barrier doesn't return in time, may be stuck",
 				zap.Int64("tableID", tableID),
-				zap.Bool("has resolvedTs", ok),
+				zap.Bool("hasResolvedTs", ok),
 				zap.Any("resolvedTs", maxResolvedTs),
 				zap.Uint64("checkpointTs", s.getTableCheckpointTs(tableID)))
 		default:
 			v, ok := s.tableMaxResolvedTs.Load(tableID)
 			if !ok {
-				log.Info("No table resolvedTs is found", zap.Int64("table-id", tableID))
+				log.Info("No table resolvedTs is found", zap.Int64("tableID", tableID))
 				return nil
 			}
 			maxResolvedTs := v.(uint64)
@@ -604,7 +607,10 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 			zap.Int("num of Rows", dmls.rowCount),
 			zap.Int("bucket", bucket))
 		return nil
-	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithBackoffMaxDelay(backoffMaxDelayInMs), retry.WithMaxTries(defaultDMLMaxRetryTime), retry.WithIsRetryableErr(isRetryableDMLError))
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
+		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
+		retry.WithMaxTries(defaultDMLMaxRetry),
+		retry.WithIsRetryableErr(isRetryableDMLError))
 }
 
 type preparedDMLs struct {

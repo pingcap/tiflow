@@ -153,7 +153,7 @@ func logMiddleware() gin.HandlerFunc {
 			zap.String("ip", c.ClientIP()),
 			zap.String("user-agent", c.Request.UserAgent()),
 			zap.Error(stdErr),
-			zap.Duration("cost", cost),
+			zap.Duration("duration", cost),
 		)
 	}
 }

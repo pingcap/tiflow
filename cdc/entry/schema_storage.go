@@ -795,7 +795,7 @@ func (s *schemaStorageImpl) GetSnapshot(ctx context.Context, ts uint64) (*schema
 			logTime = now
 		}
 		return err
-	}, retry.WithBackoffBaseDelay(10), retry.WithInfiniteTries(), retry.WithIsRetryableErr(isRetryable))
+	}, retry.WithBackoffBaseDelay(10), retry.WithIsRetryableErr(isRetryable))
 
 	return snap, err
 }

@@ -116,7 +116,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	})
 	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
 	if err := c.tick(ctx, state, captures); err != nil {
-		log.Error("an error occurred in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
+		log.Error("an error occurred in Owner", zap.String("changefeed", c.state.ID), zap.Error(err))
 		var code string
 		if rfcCode, ok := cerror.RFCCode(err); ok {
 			code = string(rfcCode)
@@ -331,7 +331,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	cancel()
 	// We don't need to wait sink Close, pass a canceled context is ok
 	if err := c.sink.close(canceledCtx); err != nil {
-		log.Warn("Closing sink failed in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
+		log.Warn("Closing sink failed in Owner", zap.String("changefeed", c.state.ID), zap.Error(err))
 	}
 	c.wg.Wait()
 	c.scheduler.Close(ctx)
@@ -480,7 +480,7 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		}
 		c.feedStateManager.MarkFinished()
 	default:
-		log.Panic("Unknown barrier type", zap.Int("barrier type", int(barrierTp)))
+		log.Panic("Unknown barrier type", zap.Int("barrierType", int(barrierTp)))
 	}
 	return barrierTs, nil
 }

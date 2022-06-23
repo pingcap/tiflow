@@ -496,7 +496,7 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		if message.Length() > d.maxMessageBytes {
 			// `len(d.messageBuf) == 1` is implied
 			log.Debug("Event does not fit into max-message-bytes. Adjust relevant configurations to avoid service interruptions.",
-				zap.Int("event-len", message.Length()), zap.Int("max-message-bytes", d.maxMessageBytes))
+				zap.Int("eventLen", message.Length()), zap.Int("max-message-bytes", d.maxMessageBytes))
 		}
 		d.curBatchSize++
 	}

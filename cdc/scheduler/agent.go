@@ -222,7 +222,7 @@ func (a *BaseAgent) Tick(ctx context.Context) error {
 		if op.Epoch != a.getEpoch() {
 			a.logger.Info("dispatch request epoch does not match",
 				zap.String("epoch", op.Epoch),
-				zap.String("expected-epoch", a.getEpoch()))
+				zap.String("expectedEpoch", a.getEpoch()))
 			continue
 		}
 		if _, ok := a.tableOperations[op.TableID]; ok {
@@ -370,8 +370,8 @@ func (a *BaseAgent) OnOwnerDispatchedTask(
 ) {
 	if !a.updateOwnerInfo(ownerCaptureID, ownerRev) {
 		a.logger.Info("task from stale owner ignored",
-			zap.Int64("table-id", tableID),
-			zap.Bool("is-delete", isDelete))
+			zap.Int64("tableID", tableID),
+			zap.Bool("isDelete", isDelete))
 		return
 	}
 
@@ -388,8 +388,8 @@ func (a *BaseAgent) OnOwnerDispatchedTask(
 	a.pendingOps.PushBack(op)
 
 	a.logger.Info("OnOwnerDispatchedTask",
-		zap.String("ownerCapture-id", ownerCaptureID),
-		zap.Int64("owner-rev", ownerRev),
+		zap.String("ownerCaptureID", ownerCaptureID),
+		zap.Int64("ownerRev", ownerRev),
 		zap.Any("op", op))
 }
 
@@ -404,8 +404,8 @@ func (a *BaseAgent) OnOwnerAnnounce(
 ) {
 	if !a.updateOwnerInfo(ownerCaptureID, ownerRev) {
 		a.logger.Info("sync request from stale owner ignored",
-			zap.String("owner-capture-id", ownerCaptureID),
-			zap.Int64("owner-rev", ownerRev))
+			zap.String("ownerCaptureID", ownerCaptureID),
+			zap.Int64("ownerRev", ownerRev))
 		return
 	}
 
@@ -414,8 +414,8 @@ func (a *BaseAgent) OnOwnerAnnounce(
 	a.needSyncNow.Store(true)
 
 	a.logger.Info("OnOwnerAnnounce",
-		zap.String("owner-capture-id", ownerCaptureID),
-		zap.Int64("owner-rev", ownerRev))
+		zap.String("ownerCaptureID", ownerCaptureID),
+		zap.Int64("ownerRev", ownerRev))
 }
 
 // updateOwnerInfo tries to update the stored ownerInfo, and returns false if the
@@ -441,7 +441,7 @@ func (a *BaseAgent) updateOwnerInfo(ownerCaptureID model.CaptureID, ownerRev int
 		a.ownerHasChanged.Store(true)
 
 		a.logger.Info("owner updated",
-			zap.Any("new-owner-info", a.ownerInfo))
+			zap.Any("newOwner", a.ownerInfo))
 
 		// Resets the deque so that pending operations from the previous owner
 		// will not be processed.
@@ -455,11 +455,11 @@ func (a *BaseAgent) updateOwnerInfo(ownerCaptureID model.CaptureID, ownerRev int
 	if a.ownerInfo.OwnerRev > ownerRev {
 		// the owner where the message just came from is stale.
 		a.logger.Info("message received from stale owner",
-			zap.Any("old-owner", ownerInfo{
+			zap.Any("oldOwner", ownerInfo{
 				OwnerCaptureID: ownerCaptureID,
 				OwnerRev:       ownerRev,
 			}),
-			zap.Any("current-owner", a.ownerInfo))
+			zap.Any("currentOwner", a.ownerInfo))
 
 		// Returning false indicates that we should reject the owner,
 		// because it is stale.

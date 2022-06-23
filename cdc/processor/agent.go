@@ -316,8 +316,8 @@ func (a *agentImpl) Barrier(_ context.Context) (done bool) {
 		sinceLastAdvanced := a.clock.Since(a.barrierLastCleared)
 		if sinceLastAdvanced > barrierNotAdvancingWarnDuration && a.barrierLogRateLimiter.Allow() {
 			log.Warn("processor send barrier not advancing, report a bug if this log repeats",
-				zap.String("changefeed-id", a.changeFeed),
-				zap.String("owner-id", a.ownerCaptureID),
+				zap.String("changefeed", a.changeFeed),
+				zap.String("ownerID", a.ownerCaptureID),
 				zap.Duration("duration", sinceLastAdvanced))
 		}
 	}()
@@ -331,7 +331,7 @@ func (a *agentImpl) Barrier(_ context.Context) (done bool) {
 		// We need to wait for the sync request anyways, and
 		// there would not be any table to replicate for now.
 		log.Debug("waiting for owner to request sync",
-			zap.String("changefeed-id", a.changeFeed))
+			zap.String("changefeed", a.changeFeed))
 		return false
 	}
 
@@ -380,7 +380,7 @@ func (a *agentImpl) Close() error {
 	log.Debug("processor messenger: closing", zap.Stack("stack"))
 	if err := a.deregisterPeerMessageHandlers(); err != nil {
 		log.Warn("failed to deregister processor message handlers",
-			zap.String("changefeed-id", a.changeFeed),
+			zap.String("changefeed", a.changeFeed),
 			zap.Error(err))
 		return errors.Trace(err)
 	}
@@ -410,7 +410,7 @@ func (a *agentImpl) trySendMessage(
 		if cerror.ErrPeerMessageClientClosed.Equal(err) {
 			log.Warn("peer messaging client is closed while trying to send a message through it. "+
 				"Report a bug if this warning repeats",
-				zap.String("changefeed-id", a.changeFeed),
+				zap.String("changefeed", a.changeFeed),
 				zap.String("target", target))
 			return false, nil
 		}
@@ -494,5 +494,5 @@ func (a *agentImpl) printNoClientWarning(target model.CaptureID) {
 		return
 	}
 	log.Warn("processor: no message client found for owner, retry later",
-		zap.String("owner-id", target))
+		zap.String("ownerID", target))
 }

@@ -1121,11 +1121,11 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "avg(ticdc_processor_min_resolved_table_id{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}) by (capture)",
+              "expr": "ticdc_processor_min_resolved_table_id{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"})",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 2,
-              "legendFormat": "{{capture}}-table-id",
+              "legendFormat": "{{capture}}-{{changefeed}}-table-id",
               "refId": "A",
               "step": 10
             }
@@ -1220,11 +1220,11 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "avg(ticdc_processor_min_checkpoint_table_id{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"}) by (capture)",
+              "expr": "ticdc_processor_min_checkpoint_table_id{k8s_cluster=\"k8s_cluster\", tidb_cluster=\"$tidb_cluster\", capture=~\"$capture\"})",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 2,
-              "legendFormat": "{{capture}}-table-id",
+              "legendFormat": "{{capture}}-{{changefeed}}-table-id",
               "refId": "A",
               "step": 10
             }

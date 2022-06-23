@@ -413,7 +413,7 @@ func (w *worker) synchronize() {
 			// likely the workerpool has deadlocked, or there is a bug
 			// in the event handlers.
 			logWarn("synchronize is taking too long, report a bug",
-				zap.Duration("elapsed", time.Since(startTime)),
+				zap.Duration("duration", time.Since(startTime)),
 				zap.Stack("stacktrace"))
 		}
 	}
