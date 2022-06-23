@@ -150,7 +150,8 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 	}
 
 	if n.redoManager != nil && n.redoManager.Enabled() {
-		// redo log do not support batch resolve mode
+		// redo log do not support batch resolve mode, hence we
+		// use `ResolvedMark` to restore a normal resolved ts
 		resolved = model.NewResolvedTs(resolved.ResolvedMark())
 		err = n.redoManager.FlushLog(ctx, n.tableID, resolved.Ts)
 
@@ -160,6 +161,11 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 				zap.Int64("tableID", n.tableID),
 				zap.Uint64("redoTs", redoTs),
 				zap.Uint64("barrierTs", currentBarrierTs))
+		}
+
+		// Fixme(CharlesCheung): remove this check after refactoring redoManager
+		if resolved.Ts > redoTs {
+			resolved = model.NewResolvedTs(redoTs)
 		}
 	}
 
