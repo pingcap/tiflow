@@ -32,11 +32,11 @@ func TestGetTso(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	mockOwner := mock_owner.NewMockOwner(ctrl)
-	mockPDClient := &MockPDClient{}
+	mockPDClient := &mockPDClient{}
 	mockManager := upstream.NewManager4Test(mockPDClient)
 	cp := capture.NewCaptureWithManager4Test(mockOwner, mockManager)
 
-	apiV2 := NewOpenAPIV2ForTest(cp, &mockStubs{testUpstreamManager: mockManager})
+	apiV2 := NewOpenAPIV2ForTest(cp, &mockAPIV2Helpers{testUpstreamManager: mockManager})
 	router := newRouter(apiV2)
 	w := httptest.NewRecorder()
 

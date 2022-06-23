@@ -19,6 +19,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -81,10 +82,9 @@ var (
 //	return statusProvider
 //}
 
-type mockAPIV2Helper struct {
-	APIV2Helper
-
-	verifyCreateFunc func(context.Context, *ChangefeedConfig, pd.Client,
+type mockAPIV2Helpers struct {
+	verifyUpstreamFunc func(context.Context, *ChangefeedConfig, *model.ChangeFeedInfo) error
+	verifyCreateFunc   func(context.Context, *ChangefeedConfig, pd.Client,
 		owner.StatusProvider, string, tidbkv.Storage) (*model.ChangeFeedInfo, error)
 	verifyUpdateFunc func(context.Context, *ChangefeedConfig, *model.ChangeFeedInfo,
 		*model.UpstreamInfo) (*model.ChangeFeedInfo, *model.UpstreamInfo, error)
@@ -92,7 +92,12 @@ type mockAPIV2Helper struct {
 	//getKvStorageFunc func()
 }
 
-func (m mockAPIV2Helper) verifyCreateChangefeedConfig(
+// NewOpenAPIV2ForTest creates a new OpenAPIV2.
+func NewOpenAPIV2ForTest(capture api.CaptureInfoProvider, mockHelper mockAPIV2Helpers) OpenAPIV2 {
+	return OpenAPIV2{capture, mockHelper}
+}
+
+func (m mockAPIV2Helpers) verifyCreateChangefeedConfig(
 	ctx context.Context,
 	cfg *ChangefeedConfig,
 	pdClient pd.Client,
@@ -103,10 +108,10 @@ func (m mockAPIV2Helper) verifyCreateChangefeedConfig(
 	if m.verifyCreateFunc != nil {
 		return m.verifyCreateFunc(ctx, cfg, pdClient, statusProvider, ensureGCServiceID, kvStorage)
 	}
-	return APIV2HelperImpl{}.verifyCreateChangefeedConfig(ctx, cfg, pdClient, statusProvider, ensureGCServiceID, kvStorage)
+	return APIV2HelpersImpl{}.verifyCreateChangefeedConfig(ctx, cfg, pdClient, statusProvider, ensureGCServiceID, kvStorage)
 }
 
-func (m mockAPIV2Helper) verifyUpdateChangefeedConfig(
+func (m mockAPIV2Helpers) verifyUpdateChangefeedConfig(
 	ctx context.Context,
 	cfg *ChangefeedConfig,
 	oldInfo *model.ChangeFeedInfo,
@@ -115,25 +120,52 @@ func (m mockAPIV2Helper) verifyUpdateChangefeedConfig(
 	if m.verifyUpdateFunc != nil {
 		return m.verifyUpdateFunc(ctx, cfg, oldInfo, oldUpInfo)
 	}
-	return APIV2HelperImpl{}.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo)
+	return APIV2HelpersImpl{}.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo)
 }
 
-func (m mockAPIV2Helper) getPDClient(ctx context.Context,
+func (m mockAPIV2Helpers) verifyUpstream(
+	ctx context.Context,
+	config *ChangefeedConfig,
+	cfInfo *model.ChangeFeedInfo,
+) error {
+	if m.verifyUpdateFunc != nil {
+		return m.verifyUpstreamFunc(ctx, config, cfInfo)
+	}
+	return APIV2HelpersImpl{}.verifyUpstream(ctx, config, cfInfo)
+}
+
+func (m mockAPIV2Helpers) getPDClient(ctx context.Context,
 	pdAddrs []string,
 	credential *security.Credential,
 ) (pd.Client, error) {
 	if m.verifyUpdateFunc != nil {
 		return m.getPDClientFunc(ctx, pdAddrs, credential)
 	}
-	return APIV2HelperImpl{}.getPDClient(ctx, pdAddrs, credential)
+	return APIV2HelpersImpl{}.getPDClient(ctx, pdAddrs, credential)
 }
 
 // MockPDClient mocks pd.Client to facilitate unit testing.
-type MockPDClient struct {
+type mockPDClient struct {
 	pd.Client
+	logicTime int64
+	timestamp int64
 }
 
-func (m *MockPDClient) GetTS(_ context.Context) (int64, int64, error) {
+func (m *mockPdClient4Validator) UpdateServiceGCSafePoint(ctx context.Context, serviceID string,
+	ttl int64, safePoint uint64,
+) (uint64, error) {
+	return safePoint, nil
+}
+
+func (m *mockPdClient4Validator) GetTS(ctx context.Context) (int64, int64, error) {
+	return m.logicTime, m.timestamp, nil
+}
+
+func (m *mockPdClient4Validator) GetClusterID(ctx context.Context) uint64 {
+	return 123
+}
+
+func (m *mockPDClient) GetTS(context.Context) (int64, int64, error) {
 	return oracle.GetPhysical(time.Now()), 0, nil
 }
 
@@ -142,7 +174,7 @@ type MockEtcdClient struct {
 	etcd.CDCEtcdClient
 }
 
-func (*MockEtcdClient) CreateChangefeedInfo(_ ...interface{}) error {
+func (*MockEtcdClient) CreateChangefeedInfo(...interface{}) error {
 	return nil
 }
 

@@ -27,12 +27,13 @@ import (
 func TestWithUpstreamConfig(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	api := OpenAPIV2{capture: &capture.Capture{}}
-	api.capture.UpstreamManager = upstream.NewManager(ctx, "abc")
-	api.capture.UpstreamManager.AddUpstream(1,
+	cp := &capture.Capture{}
+	cp.UpstreamManager = upstream.NewManager(ctx, "abc")
+	cp.UpstreamManager.AddUpstream(1,
 		&model.UpstreamInfo{
 			PDEndpoints: "http://127.0.0.1:22379",
 		})
+	api := OpenAPIV2{capture: cp}
 	upstreamConfig := &UpstreamConfig{
 		ID: 1,
 	}

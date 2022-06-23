@@ -46,31 +46,17 @@ func (m *mockStatusProvider) GetChangeFeedStatus(ctx context.Context,
 	return m.changefeedStatus, m.err
 }
 
-func (m *mockPdClient) UpdateServiceGCSafePoint(ctx context.Context, serviceID string,
-	ttl int64, safePoint uint64,
-) (uint64, error) {
-	return safePoint, nil
-}
-
-func (m *mockPdClient) GetTS(ctx context.Context) (int64, int64, error) {
-	return m.logicTime, m.timestamp, nil
-}
-
-func (m *mockPdClient) GetClusterID(ctx context.Context) uint64 {
-	return 123
-}
-
 type mockStorage struct {
 	tidbkv.Storage
 }
 
 func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	ctx := context.Background()
-	pdClient := &mockPdClient{}
+	pdClient := &mockPdClient4Validator{}
 	storage := &mockStorage{}
 	provider := &mockStatusProvider{}
 	cfg := &ChangefeedConfig{}
-	h := &APIV2HelperImpl{}
+	h := &APIV2HelpersImpl{}
 	cfInfo, err := h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
 	require.Nil(t, cfInfo)
 	require.NotNil(t, err)
@@ -136,7 +122,7 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	cfg := &ChangefeedConfig{}
 	oldInfo := &model.ChangeFeedInfo{}
 	oldUpInfo := &model.UpstreamInfo{}
-	h := &APIV2HelperImpl{}
+	h := &APIV2HelpersImpl{}
 	newCfInfo, newUpInfo, err := h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo)
 	require.NotNil(t, err)
 	require.Nil(t, newCfInfo)

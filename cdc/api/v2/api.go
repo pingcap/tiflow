@@ -27,7 +27,13 @@ import (
 	pd "github.com/tikv/pd/client"
 )
 
-type APIV2Helper interface {
+type APIV2Helpers interface {
+	verifyUpstream(
+		context.Context,
+		*ChangefeedConfig,
+		*model.ChangeFeedInfo,
+	) error
+
 	verifyCreateChangefeedConfig(
 		context.Context,
 		*ChangefeedConfig,
@@ -37,29 +43,29 @@ type APIV2Helper interface {
 		tidbkv.Storage,
 	) (*model.ChangeFeedInfo, error)
 
-	getPDClient(context.Context, []string, *security.Credential) (pd.Client, error)
+	verifyUpdateChangefeedConfig(
+		context.Context,
+		*ChangefeedConfig,
+		*model.ChangeFeedInfo,
+		*model.UpstreamInfo,
+	) (*model.ChangeFeedInfo, *model.UpstreamInfo, error)
 
-	verifyUpdateChangefeedConfig(context.Context, *ChangefeedConfig, *model.ChangeFeedInfo,
-		*model.UpstreamInfo) (*model.ChangeFeedInfo, *model.UpstreamInfo, error)
+	getPDClient(context.Context, []string, *security.Credential) (pd.Client, error)
+	createTiStore([]string, *security.Credential) (tidbkv.Storage, error)
 }
 
-type APIV2HelperImpl struct{}
+type APIV2HelpersImpl struct{}
 
 // OpenAPIV2 provides CDC v2 APIs
 type OpenAPIV2 struct {
 	capture     api.CaptureInfoProvider
-	apiV2Helper APIV2Helper
+	apiV2Helper APIV2Helpers
 }
 
 // NewOpenAPIV2 creates a new OpenAPIV2.
 func NewOpenAPIV2(c *capture.Capture) OpenAPIV2 {
-	return OpenAPIV2{c, &APIV2HelperImpl{}}
+	return OpenAPIV2{c, &APIV2HelpersImpl{}}
 }
-
-// NewOpenAPIV2ForTest creates a new OpenAPIV2.
-//func NewOpenAPIV2ForTest(capture api.CaptureInfoProvider, stubs *mockStubs) OpenAPIV2 {
-//	return OpenAPIV2{capture, stubs}
-//}
 
 // RegisterOpenAPIV2Routes registers routes for OpenAPI
 func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {

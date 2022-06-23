@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/entry"
@@ -37,13 +36,11 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/backoff"
 )
 
 // verifyCreateChangefeedConfig verifies ChangefeedConfig and
 // returns a  changefeedInfo for create a changefeed.
-func (h APIV2HelperImpl) verifyCreateChangefeedConfig(
+func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	ctx context.Context,
 	cfg *ChangefeedConfig,
 	pdClient pd.Client,
@@ -183,39 +180,35 @@ func (h APIV2HelperImpl) verifyCreateChangefeedConfig(
 	}, nil
 }
 
-func (h APIV2HelperImpl) getPDClient(ctx context.Context,
-	pdAddrs []string,
-	credential *security.Credential,
-) (pd.Client, error) {
-	grpcTLSOption, err := credential.ToGRPCDialOption()
-	if err != nil {
-		return nil, errors.Trace(err)
+func (h APIV2HelpersImpl) verifyUpstream(ctx context.Context,
+	changefeedConfig *ChangefeedConfig,
+	cfInfo *model.ChangeFeedInfo,
+) error {
+	if len(changefeedConfig.PDAddrs) != 0 {
+		// check if the upstream cluster id changed
+		timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		pdClient, err := h.getPDClient(timeoutCtx, changefeedConfig.PDAddrs, &security.Credential{
+			CAPath:        changefeedConfig.CAPath,
+			CertPath:      changefeedConfig.CertPath,
+			KeyPath:       changefeedConfig.KeyPath,
+			CertAllowedCN: changefeedConfig.CertAllowedCN,
+		})
+		if err != nil {
+			return err
+		}
+		defer pdClient.Close()
+		if pdClient.GetClusterID(ctx) != cfInfo.UpstreamID {
+			return cerror.ErrUpstreamMissMatch.
+				GenWithStackByArgs(cfInfo.UpstreamID, pdClient.GetClusterID(ctx))
+		}
 	}
-
-	pdClient, err := pd.NewClientWithContext(
-		ctx, pdAddrs, credential.PDSecurityOption(),
-		pd.WithGRPCDialOptions(
-			grpcTLSOption,
-			grpc.WithBlock(),
-			grpc.WithConnectParams(grpc.ConnectParams{
-				Backoff: backoff.Config{
-					BaseDelay:  time.Second,
-					Multiplier: 1.1,
-					Jitter:     0.1,
-					MaxDelay:   3 * time.Second,
-				},
-				MinConnectTimeout: 3 * time.Second,
-			}),
-		))
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return pdClient, nil
+	return nil
 }
 
 // verifyUpdateChangefeedConfig verifies config to update
 // a changefeed and returns a changefeedInfo
-func (h APIV2HelperImpl) verifyUpdateChangefeedConfig(ctx context.Context,
+func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(ctx context.Context,
 	cfg *ChangefeedConfig, oldInfo *model.ChangeFeedInfo,
 	oldUpInfo *model.UpstreamInfo,
 ) (*model.ChangeFeedInfo, *model.UpstreamInfo, error) {

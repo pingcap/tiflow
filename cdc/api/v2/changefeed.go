@@ -20,13 +20,18 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
+	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 )
 
 const apiOpVarChangefeedID = "changefeed_id"
@@ -38,7 +43,7 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 	config := &ChangefeedConfig{ReplicaConfig: GetDefaultReplicaConfig()}
 
 	if err := c.BindJSON(&config); err != nil {
-		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
+		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err)) //todo: how to mock?
 		return
 	}
 	if len(config.PDAddrs) == 0 {
@@ -66,7 +71,7 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 	defer pdClient.Close()
 
 	// verify tables
-	kvStorage, err := kv.CreateTiStore(strings.Join(config.PDAddrs, ","), credential)
+	kvStorage, err := h.apiV2Helper.createTiStore(config.PDAddrs, credential)
 	if err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrInternalServerError, err))
 		return
@@ -134,7 +139,7 @@ func (h *OpenAPIV2) VerifyTable(c *gin.Context) {
 		credential.CertAllowedCN = cfg.CertAllowedCN
 	}
 
-	kvStore, err := kv.CreateTiStore(strings.Join(cfg.PDAddrs, ","), credential)
+	kvStore, err := h.apiV2Helper.createTiStore(cfg.PDAddrs, credential)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -207,7 +212,7 @@ func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
 		return
 	}
 
-	if err := h.verifyUpstream(ctx, changefeedConfig, cfInfo); err != nil {
+	if err := h.apiV2Helper.verifyUpstream(ctx, changefeedConfig, cfInfo); err != nil {
 		return
 	}
 
@@ -232,31 +237,6 @@ func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
 
 	c.JSON(http.StatusOK, newCfInfo)
 }
-func (h *OpenAPIV2) verifyUpstream(ctx context.Context,
-	changefeedConfig *ChangefeedConfig,
-	cfInfo *model.ChangeFeedInfo,
-) error {
-	if len(changefeedConfig.PDAddrs) != 0 {
-		// check if the upstream cluster id changed
-		timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		defer cancel()
-		pd, err := h.apiV2Helper.getPDClient(timeoutCtx, changefeedConfig.PDAddrs, &security.Credential{
-			CAPath:        changefeedConfig.CAPath,
-			CertPath:      changefeedConfig.CertPath,
-			KeyPath:       changefeedConfig.KeyPath,
-			CertAllowedCN: changefeedConfig.CertAllowedCN,
-		})
-		if err != nil {
-			return err
-		}
-		defer pd.Close()
-		if pd.GetClusterID(ctx) != cfInfo.UpstreamID {
-			return cerror.ErrUpstreamMissMatch.
-				GenWithStackByArgs(cfInfo.UpstreamID, pd.GetClusterID(ctx))
-		}
-	}
-	return nil
-}
 
 func (h *OpenAPIV2) GetChangeFeedMetaInfo(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -273,6 +253,41 @@ func (h *OpenAPIV2) GetChangeFeedMetaInfo(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, toAPIModel(info))
+}
+
+func (APIV2HelpersImpl) getPDClient(ctx context.Context,
+	pdAddrs []string,
+	credential *security.Credential,
+) (pd.Client, error) {
+	grpcTLSOption, err := credential.ToGRPCDialOption()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	pdClient, err := pd.NewClientWithContext(
+		ctx, pdAddrs, credential.PDSecurityOption(),
+		pd.WithGRPCDialOptions(
+			grpcTLSOption,
+			grpc.WithBlock(),
+			grpc.WithConnectParams(grpc.ConnectParams{
+				Backoff: backoff.Config{
+					BaseDelay:  time.Second,
+					Multiplier: 1.1,
+					Jitter:     0.1,
+					MaxDelay:   3 * time.Second,
+				},
+				MinConnectTimeout: 3 * time.Second,
+			}),
+		))
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return pdClient, nil
+}
+
+func (h APIV2HelpersImpl) createTiStore(pdAddrs []string,
+	credential *security.Credential) (tidbkv.Storage, error) {
+	return kv.CreateTiStore(strings.Join(pdAddrs, ","), credential)
 }
 
 func toAPIModel(info *model.ChangeFeedInfo) *ChangeFeedInfo {
