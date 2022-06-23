@@ -37,8 +37,7 @@ import (
 type ProcessorMessenger interface {
 	// FinishTableOperation notifies the owner that a table operation has finished.
 	FinishTableOperation(
-		ctx context.Context, tableID model.TableID, checkpointTs model.Ts,
-		epoch protocol.ProcessorEpoch,
+		ctx context.Context, tableID model.TableID, epoch protocol.ProcessorEpoch,
 	) (done bool, err error)
 	// SyncTaskStatuses informs the owner of the processor's current internal state.
 	SyncTaskStatuses(
@@ -143,11 +142,10 @@ const (
 )
 
 type agentOperation struct {
-	TableID   model.TableID
-	StartTs   model.Ts
-	IsDelete  bool
-	IsPrepare bool
-	Epoch     protocol.ProcessorEpoch
+	TableID  model.TableID
+	StartTs  model.Ts
+	IsDelete bool
+	Epoch    protocol.ProcessorEpoch
 
 	// FromOwnerID is for debugging purposesFromOwnerID
 	FromOwnerID model.CaptureID
@@ -266,18 +264,14 @@ func (a *Agent) sendSync(ctx context.Context) (bool, error) {
 
 // processOperations tries to make progress on each pending table operations.
 // It queries the executor for the current status of each table.
-func (a *Agent) processOperations(ctx context.Context) (err error) {
+func (a *Agent) processOperations(ctx context.Context) error {
 	for tableID, op := range a.tableOperations {
-		var (
-			done         bool
-			checkpointTs model.Ts
-		)
 		switch op.status {
 		case operationReceived:
 			a.logger.Info("Agent start processing operation", zap.Any("op", op))
 			if !op.IsDelete {
 				// add table
-				done, err = a.executor.AddTable(ctx, op.TableID, op.StartTs, op.IsPrepare)
+				done, err := a.executor.AddTable(ctx, op.TableID, op.StartTs, false)
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -286,7 +280,7 @@ func (a *Agent) processOperations(ctx context.Context) (err error) {
 				}
 			} else {
 				// delete table
-				done = a.executor.RemoveTable(ctx, op.TableID)
+				done := a.executor.RemoveTable(ctx, op.TableID)
 				if !done {
 					break
 				}
@@ -294,10 +288,11 @@ func (a *Agent) processOperations(ctx context.Context) (err error) {
 			op.status = operationProcessed
 			fallthrough
 		case operationProcessed:
+			var done bool
 			if !op.IsDelete {
-				done = a.executor.IsAddTableFinished(ctx, op.TableID, op.IsPrepare)
+				done = a.executor.IsAddTableFinished(ctx, op.TableID, false)
 			} else {
-				checkpointTs, done = a.executor.IsRemoveTableFinished(ctx, op.TableID)
+				_, done = a.executor.IsRemoveTableFinished(ctx, op.TableID)
 			}
 			if !done {
 				break
@@ -306,7 +301,7 @@ func (a *Agent) processOperations(ctx context.Context) (err error) {
 			fallthrough
 		case operationFinished:
 			a.logger.Info("Agent finish processing operation", zap.Any("op", op))
-			done, err = a.communicator.FinishTableOperation(ctx, op.TableID, checkpointTs, a.getEpoch())
+			done, err := a.communicator.FinishTableOperation(ctx, op.TableID, a.getEpoch())
 			if err != nil {
 				return errors.Trace(err)
 			}
