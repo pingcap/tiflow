@@ -140,7 +140,7 @@ func (m *streamModifier) Set(req *pb.HandleWorkerErrorRequest, events []*replica
 
 // Delete will delete an operator. `posStr` should be in the format of "binlog-file:pos".
 func (m *streamModifier) Delete(posStr string) error {
-	pos, err := binlog.PositionFromStr(posStr)
+	pos, err := binlog.PositionFromPosStr(posStr)
 	if err != nil {
 		return err
 	}

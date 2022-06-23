@@ -66,6 +66,9 @@ func (s *Syncer) HandleError(ctx context.Context, req *pb.HandleWorkerErrorReque
 		}
 		return string(commandsJSON), err1
 	}
+	if req.Op == pb.ErrorOp_Revert {
+		return "", s.streamerController.Delete(pos)
+	}
 
 	events := make([]*replication.BinlogEvent, 0)
 

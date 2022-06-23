@@ -74,7 +74,7 @@ func PositionFromPosStr(str string) (gmysql.Position, error) {
 	s := trimBrackets(str)
 	parsed := strings.Split(s, ", ")
 	if len(parsed) != 2 {
-		return gmysql.Position{}, terror.ErrBinlogParsePosFromStr.Generatef("invalid binlog pos, position string %s", str)
+		return gmysql.Position{}, terror.ErrBinlogParsePosFromStr.Generatef("invalid binlog pos, should be like (mysql-bin.000001, 2345), got %s", str)
 	}
 	pos, err := strconv.ParseUint(parsed[1], 10, 32)
 	if err != nil {

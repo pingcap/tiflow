@@ -149,14 +149,14 @@ func TestInvalidSet(t *testing.T) {
 	require.ErrorContains(t, err, "Inject op should have non-empty events")
 
 	err = m.Set(wrongReq, []*replication.BinlogEvent{{}, {}, {}})
-	require.ErrorContains(t, err, "the format should be filename:pos")
+	require.ErrorContains(t, err, "should be like (mysql-bin.000001, 2345)")
 
 	wrongReq = &pb.HandleWorkerErrorRequest{
 		Op:        pb.ErrorOp_Inject,
-		BinlogPos: "(mysql.000001, 1234)",
+		BinlogPos: "wrong format",
 	}
 	err = m.Set(wrongReq, []*replication.BinlogEvent{{}, {}, {}})
-	require.ErrorContains(t, err, "the format should be filename:pos")
+	require.ErrorContains(t, err, "should be like (mysql-bin.000001, 2345)")
 }
 
 func TestSet(t *testing.T) {
@@ -165,7 +165,7 @@ func TestSet(t *testing.T) {
 
 	req := &pb.HandleWorkerErrorRequest{
 		Op:        pb.ErrorOp_Skip,
-		BinlogPos: "mysql.000001:3000",
+		BinlogPos: "(mysql.000001, 3000)",
 	}
 	err := m.Set(req, nil)
 	require.NoError(t, err)
@@ -175,7 +175,7 @@ func TestSet(t *testing.T) {
 
 	req = &pb.HandleWorkerErrorRequest{
 		Op:        pb.ErrorOp_Inject,
-		BinlogPos: "mysql.000001:2000",
+		BinlogPos: "(mysql.000001, 2000)",
 	}
 	err = m.Set(req, []*replication.BinlogEvent{
 		{RawData: []byte("event1")},
@@ -199,7 +199,7 @@ func TestSet(t *testing.T) {
 
 	req = &pb.HandleWorkerErrorRequest{
 		Op:        pb.ErrorOp_Replace,
-		BinlogPos: "mysql.000001:1000",
+		BinlogPos: "(mysql.000001, 1000)",
 	}
 	// can Set before `front`
 	err = m.Set(req, []*replication.BinlogEvent{
@@ -225,7 +225,7 @@ func TestSet(t *testing.T) {
 	// test Set can overwrite an operator after the front
 	req = &pb.HandleWorkerErrorRequest{
 		Op:        pb.ErrorOp_Replace,
-		BinlogPos: "mysql.000001:3000",
+		BinlogPos: "(mysql.000001, 3000)",
 	}
 	err = m.Set(req, []*replication.BinlogEvent{
 		{RawData: []byte("event5")},
@@ -242,7 +242,7 @@ func TestSet(t *testing.T) {
 	// test Set can overwrite an operator before the front
 	req = &pb.HandleWorkerErrorRequest{
 		Op:        pb.ErrorOp_Skip,
-		BinlogPos: "mysql.000001:1000",
+		BinlogPos: "(mysql.000001, 1000)",
 	}
 	err = m.Set(req, []*replication.BinlogEvent{
 		{RawData: []byte("event5")},
@@ -262,7 +262,7 @@ func TestDelete(t *testing.T) {
 	m := newStreamModifier(log.L())
 
 	err := m.Delete("wrong format")
-	require.ErrorContains(t, err, "the format should be filename:pos")
+	require.ErrorContains(t, err, "should be like (mysql-bin.000001, 2345)")
 
 	opInject := &operator{
 		op:  pb.ErrorOp_Inject,
@@ -278,13 +278,13 @@ func TestDelete(t *testing.T) {
 	m.ops = []*operator{opInject, opSkip}
 
 	// too early
-	err = m.Delete("mysql.000001:1000")
+	err = m.Delete("(mysql.000001, 1000)")
 	require.ErrorContains(t, err, "error operator not exist")
 	// too late
-	err = m.Delete("mysql.000001:5000")
+	err = m.Delete("(mysql.000001, 5000)")
 	require.ErrorContains(t, err, "error operator not exist")
 	// not match
-	err = m.Delete("mysql.000001:1235")
+	err = m.Delete("(mysql.000001, 1235)")
 	require.ErrorContains(t, err, "error operator not exist")
 
 	m.next()
@@ -292,13 +292,13 @@ func TestDelete(t *testing.T) {
 	require.Equal(t, opSkip, op)
 
 	// Delete before front will raise error https://github.com/pingcap/dm/issues/1249
-	err = m.Delete("mysql.000001:1234")
+	err = m.Delete("(mysql.000001, 1234)")
 	require.ErrorContains(t, err, "error operator not exist")
 	op = m.front()
 	require.Equal(t, opSkip, op)
 
 	// Delete after front
-	err = m.Delete("mysql.000001:2345")
+	err = m.Delete("(mysql.000001, 2345)")
 	require.NoError(t, err)
 	op = m.front()
 	require.Nil(t, op)
