@@ -189,7 +189,7 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 	}
 
 	w.running.Store(true)
-	go w.runFlushToDisk(ctx, cfg.FlushIntervalInMs)
+	// go w.runFlushToDisk(ctx, cfg.FlushIntervalInMs)
 
 	return w, nil
 }
