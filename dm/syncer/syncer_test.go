@@ -1026,7 +1026,8 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	sourceSchemaFromCheckPoint, err := syncer.OperateSchema(ctx, &pb.OperateWorkerSchemaRequest{Op: pb.SchemaOp_GetSchema, Database: "test_1", Table: "t_1"})
 	c.Assert(err, IsNil)
 
-	syncer.tableRouter = &router.Table{}
+	syncer.tableRouter, err = router.NewTableRouter(false, nil)
+	c.Assert(err, IsNil)
 	c.Assert(syncer.tableRouter.AddRule(&router.TableRule{
 		SchemaPattern: "test_1",
 		TablePattern:  "t_1",
