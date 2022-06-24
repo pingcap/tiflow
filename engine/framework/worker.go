@@ -276,7 +276,7 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) (retErr error) {
 	initTime := w.clock.Mono()
 	rctx, ok := runtime.ToRuntimeCtx(ctx)
 	if ok {
-		initTime = clock.ToMono(rctx.SubmitTime())
+		initTime = rctx.SubmitTime()
 	}
 
 	w.masterClient = worker.NewMasterClient(

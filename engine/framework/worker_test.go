@@ -353,7 +353,7 @@ func TestWorkerSuicideAfterRuntimeDelay(t *testing.T) {
 	worker.On("Tick", mock.Anything).Return(nil)
 	worker.On("CloseImpl", mock.Anything).Return(nil)
 
-	ctx = runtime.NewRuntimeCtxWithSubmitTime(ctx, submitTime)
+	ctx = runtime.NewRuntimeCtxWithSubmitTime(ctx, clock.ToMono(submitTime))
 	err := worker.Init(ctx)
 	require.NoError(t, err)
 
