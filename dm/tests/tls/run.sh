@@ -41,7 +41,7 @@ EOF
 		--config $WORK_DIR/tidb-tls-config.toml \
 		--log-file "$WORK_DIR/tidb.log" 2>&1 &
 
-	sleep 3
+	sleep 5
 	# if execute failed, print tidb's log for debug
 	mysql -uroot -h127.0.0.1 -P4400 --default-character-set utf8 --ssl-ca $cur/conf/ca.pem --ssl-cert $cur/conf/dm.pem --ssl-key $cur/conf/dm.key -E -e "drop database if exists tls" || (cat $WORK_DIR/tidb.log && exit 1)
 	mysql -uroot -h127.0.0.1 -P4400 --default-character-set utf8 --ssl-ca $cur/conf/ca.pem --ssl-cert $cur/conf/dm.pem --ssl-key $cur/conf/dm.key -E -e "drop database if exists dm_meta"
