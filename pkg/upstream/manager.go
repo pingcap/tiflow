@@ -82,10 +82,10 @@ func NewManager4Test(pdClient pd.Client) *Manager {
 }
 
 // AddDefaultUpstream add the default upstream
-func (m *Manager) AddDefaultUpstream(pdEndpoint []string,
+func (m *Manager) AddDefaultUpstream(pdEndpoints []string,
 	conf *security.Credential,
 ) (*Upstream, error) {
-	up := newUpstream(pdEndpoint, conf)
+	up := newUpstream(pdEndpoints, conf)
 	if err := m.initUpstreamFunc(m.ctx, up, m.gcServiceID); err != nil {
 		return nil, err
 	}

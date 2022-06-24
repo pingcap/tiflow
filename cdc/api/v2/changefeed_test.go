@@ -100,7 +100,8 @@ func TestCreateChangefeed(t *testing.T) {
 		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
-	etcdClient.EXPECT().GetEnsureGCServiceID().
+	etcdClient.EXPECT().
+		GetEnsureGCServiceID().
 		Return(fmt.Sprintf("ticdc-%s-%d", "defalut", 0))
 	//	GetEtcdClient().GetEnsureGCServiceID()
 
