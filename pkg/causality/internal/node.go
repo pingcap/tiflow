@@ -31,45 +31,37 @@ const (
 
 var (
 	nextNodeID = atomic.NewInt64(0)
-	// Note: We are using generic Nodes, so that
-	// ideally we need one pool for each type parameter.
-	// But since we are using generics mainly for readability,
-	// it does not seem necessary.
-	// TODO think about whether to abandon generics.
-	nodePool = &sync.Pool{}
+	nodePool   = &sync.Pool{}
 )
 
-type Node[T any] struct {
+type Node struct {
 	id int64 // immutable
 
 	mu             sync.Mutex
 	conflictCounts map[workerID]int
-	dependers      map[nodeID]*Node[T]
+	dependers      map[nodeID]*Node
 	assignedTo     workerID
 	onResolved     func(id workerID)
 	resolved       atomic.Bool
-
-	data T
 }
 
-func NewNode[T any](data T) (ret *Node[T]) {
+func NewNode() (ret *Node) {
 	defer func() {
 		ret.id = nextNodeID.Add(1)
-		ret.data = data
 		ret.assignedTo = unassigned
 	}()
 
 	if obj := nodePool.Get(); obj != nil {
-		return obj.(*Node[T])
+		return obj.(*Node)
 	}
-	return new(Node[T])
+	return new(Node)
 }
 
-func (n *Node[T]) ID() int64 {
+func (n *Node) ID() int64 {
 	return n.id
 }
 
-func (n *Node[T]) Free() {
+func (n *Node) Free() {
 	if n.id == -1 {
 		panic("double free")
 	}
@@ -81,17 +73,10 @@ func (n *Node[T]) Free() {
 	n.onResolved = nil
 	n.resolved.Store(false)
 
-	var zeroData T
-	n.data = zeroData
-
 	nodePool.Put(n)
 }
 
-func (n *Node[T]) Data() T {
-	return n.data
-}
-
-func (n *Node[T]) DependOn(target *Node[T]) {
+func (n *Node) DependOn(target *Node) {
 	// Lock target first because we are always
 	// locking an earlier transaction first, so
 	// that there will be not deadlocking.
@@ -119,7 +104,7 @@ func (n *Node[T]) DependOn(target *Node[T]) {
 	n.conflictCounts[target.assignedTo]++
 }
 
-func (n *Node[T]) AssignTo(workerID int64) {
+func (n *Node) AssignTo(workerID int64) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
@@ -146,7 +131,7 @@ func (n *Node[T]) AssignTo(workerID int64) {
 	}
 }
 
-func (n *Node[T]) Remove() {
+func (n *Node) Remove() {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
@@ -169,11 +154,11 @@ func (n *Node[T]) Remove() {
 	}
 }
 
-func (n *Node[T]) Equals(other *Node[T]) bool {
+func (n *Node) Equals(other *Node) bool {
 	return n.id == other.id
 }
 
-func (n *Node[T]) OnNoConflict(fn func(id workerID)) {
+func (n *Node) OnNoConflict(fn func(id workerID)) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
@@ -192,7 +177,7 @@ func (n *Node[T]) OnNoConflict(fn func(id workerID)) {
 
 // notifyMaybeResolved must be called with n.mu taken.
 // It should be called if n.conflictCounts is updated.
-func (n *Node[T]) notifyMaybeResolved() {
+func (n *Node) notifyMaybeResolved() {
 	workerNum, ok := n.tryResolve()
 	if !ok {
 		return
@@ -209,7 +194,7 @@ func (n *Node[T]) notifyMaybeResolved() {
 // Returns (_, false) if there is a conflict,
 // returns (-1, true) if there is no conflict,
 // returns (N, true) if only worker N can be used.
-func (n *Node[T]) tryResolve() (int64, bool) {
+func (n *Node) tryResolve() (int64, bool) {
 	conflictNumber := len(n.conflictCounts)
 	if conflictNumber == 0 {
 		// No conflict at all
@@ -235,9 +220,9 @@ func (n *Node[T]) tryResolve() (int64, bool) {
 	return 0, false
 }
 
-func (n *Node[T]) lazyCreateMaps() {
+func (n *Node) lazyCreateMaps() {
 	if n.dependers == nil {
-		n.dependers = make(map[nodeID]*Node[T])
+		n.dependers = make(map[nodeID]*Node)
 	}
 	if n.conflictCounts == nil {
 		n.conflictCounts = make(map[workerID]int)
