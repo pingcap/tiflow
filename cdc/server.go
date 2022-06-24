@@ -73,7 +73,7 @@ type Server struct {
 func NewServer(pdEndpoints []string) (*Server, error) {
 	conf := config.GetGlobalServerConfig()
 	log.Info("creating CDC server",
-		zap.Strings("pd-addrs", pdEndpoints),
+		zap.Strings("pd", pdEndpoints),
 		zap.Stringer("config", conf),
 	)
 

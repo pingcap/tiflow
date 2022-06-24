@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
-	"github.com/pingcap/tiflow/pkg/pdtime"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 	"github.com/tikv/client-go/v2/tikv"
@@ -44,7 +44,7 @@ type GlobalVars struct {
 	EtcdClient       *etcd.CDCEtcdClient
 	GrpcPool         kv.GrpcPool
 	RegionCache      *tikv.RegionCache
-	TimeAcquirer     pdtime.TimeAcquirer
+	TimeAcquirer     pdutil.TimeAcquirer
 	TableActorSystem *system.System
 	SorterSystem     *ssystem.System
 
@@ -201,7 +201,7 @@ func NewContext4Test(baseCtx context.Context, withChangefeedVars bool) Context {
 			AdvertiseAddr: "127.0.0.1:0000",
 			Version:       version.ReleaseVersion,
 		},
-		TimeAcquirer: pdtime.NewTimeAcquirer4Test(),
+		TimeAcquirer: pdutil.NewTimeAcquirer4Test(),
 	})
 	if withChangefeedVars {
 		ctx = WithChangefeedVars(ctx, &ChangefeedVars{

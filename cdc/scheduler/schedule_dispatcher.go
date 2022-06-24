@@ -106,7 +106,7 @@ func NewBaseScheduleDispatcher(
 	checkpointTs model.Ts,
 ) *BaseScheduleDispatcher {
 	// logger is just the global logger with the `changefeed-id` field attached.
-	logger := log.L().With(zap.String("changefeed-id", changeFeedID))
+	logger := log.L().With(zap.String("changefeed", changeFeedID))
 
 	return &BaseScheduleDispatcher{
 		tables:               util.NewTableSet(),
@@ -228,7 +228,7 @@ func (s *BaseScheduleDispatcher) Tick(
 	for _, tableID := range toRemove {
 		record, ok := s.tables.GetTableRecord(tableID)
 		if !ok {
-			s.logger.Panic("table not found", zap.Int64("table-id", tableID))
+			s.logger.Panic("table not found", zap.Int64("tableID", tableID))
 		}
 		if record.Status != util.RunningTable {
 			// another operation is in progress
@@ -309,7 +309,7 @@ func (s *BaseScheduleDispatcher) syncCaptures(ctx context.Context) (capturesAllS
 			// removes expired captures from the captureSynced map
 			delete(s.captureStatus, captureID)
 			s.logger.Debug("syncCaptures: remove offline capture",
-				zap.String("capture-id", captureID))
+				zap.String("captureID", captureID))
 		}
 	}
 	for captureID := range s.captures {
@@ -333,7 +333,7 @@ func (s *BaseScheduleDispatcher) syncCaptures(ctx context.Context) (capturesAllS
 			if done {
 				s.captureStatus[captureID].SyncStatus = captureSyncSent
 				s.logger.Info("syncCaptures: sent sync request",
-					zap.String("capture-id", captureID))
+					zap.String("captureID", captureID))
 			}
 		case captureSyncFinished:
 			finishedCount++
@@ -359,8 +359,8 @@ func (s *BaseScheduleDispatcher) descheduleTablesFromDownCaptures() {
 			// gone capture.
 			removed := s.tables.RemoveTableRecordByCaptureID(captureID)
 			s.logger.Info("capture down, removing tables",
-				zap.String("capture-id", captureID),
-				zap.Any("removed-tables", removed))
+				zap.String("captureID", captureID),
+				zap.Any("removedTables", removed))
 			s.moveTableManager.OnCaptureRemoved(captureID)
 		}
 	}
@@ -421,7 +421,7 @@ func (s *BaseScheduleDispatcher) addTable(
 		CaptureID: target,
 		Status:    util.AddingTable,
 	}); !ok {
-		s.logger.Panic("duplicate table", zap.Int64("table-id", tableID))
+		s.logger.Panic("duplicate table", zap.Int64("tableID", tableID))
 	}
 	return true, nil
 }
@@ -432,7 +432,7 @@ func (s *BaseScheduleDispatcher) removeTable(
 ) (done bool, err error) {
 	record, ok := s.tables.GetTableRecord(tableID)
 	if !ok {
-		s.logger.Panic("table not found", zap.Int64("table-id", tableID))
+		s.logger.Panic("table not found", zap.Int64("tableID", tableID))
 	}
 	// need to delete table
 	captureID := record.CaptureID
@@ -455,8 +455,8 @@ func (s *BaseScheduleDispatcher) MoveTable(tableID model.TableID, target model.C
 	if !s.moveTableManager.Add(tableID, target) {
 		log.Info("Move Table command has been ignored, because the last user triggered"+
 			"move has not finished",
-			zap.Int64("table-id", tableID),
-			zap.String("target-capture", target))
+			zap.Int64("tableID", tableID),
+			zap.String("targetCapture", target))
 	}
 }
 
@@ -465,14 +465,14 @@ func (s *BaseScheduleDispatcher) handleMoveTableJobs(ctx context.Context) (bool,
 		func(ctx context.Context, tableID model.TableID, target model.CaptureID) (removeTableResult, error) {
 			_, ok := s.tables.GetTableRecord(tableID)
 			if !ok {
-				s.logger.Warn("table does not exist", zap.Int64("table-id", tableID))
+				s.logger.Warn("table does not exist", zap.Int64("tableID", tableID))
 				return removeTableResultGiveUp, nil
 			}
 
 			if _, ok := s.captures[target]; !ok {
 				s.logger.Warn("move table target does not exist",
-					zap.Int64("table-id", tableID),
-					zap.String("target-capture", target))
+					zap.Int64("tableID", tableID),
+					zap.String("targetCapture", target))
 				return removeTableResultGiveUp, nil
 			}
 
@@ -502,7 +502,7 @@ func (s *BaseScheduleDispatcher) rebalance(ctx context.Context) (done bool, err 
 	for _, record := range tablesToRemove {
 		if record.Status != util.RunningTable {
 			s.logger.DPanic("unexpected table status",
-				zap.Any("table-record", record))
+				zap.Any("tableRecord", record))
 		}
 
 		epoch := s.captureStatus[record.CaptureID].Epoch
@@ -533,8 +533,8 @@ func (s *BaseScheduleDispatcher) OnAgentFinishedTableOperation(
 	defer s.mu.Unlock()
 
 	logger := s.logger.With(
-		zap.String("capture-id", captureID),
-		zap.Int64("table-id", tableID),
+		zap.String("captureID", captureID),
+		zap.Int64("tableID", tableID),
 		zap.String("epoch", epoch),
 	)
 
@@ -589,9 +589,9 @@ func (s *BaseScheduleDispatcher) OnAgentSyncTaskStatuses(
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	logger := s.logger.With(zap.String("capture-id", captureID))
+	logger := s.logger.With(zap.String("captureID", captureID))
 	logger.Info("scheduler received sync",
-		zap.String("capture-id", captureID),
+		zap.String("captureID", captureID),
 		zap.String("epoch", epoch))
 
 	if ce := logger.Check(zap.DebugLevel, "OnAgentSyncTaskStatuses"); ce != nil {
@@ -609,31 +609,31 @@ func (s *BaseScheduleDispatcher) OnAgentSyncTaskStatuses(
 
 	if _, ok := s.captureStatus[captureID]; !ok {
 		logger.Warn("received sync from a capture not previously tracked, ignore",
-			zap.Any("capture-status", s.captureStatus))
+			zap.Any("captureStatus", s.captureStatus))
 		return
 	}
 
 	for _, tableID := range adding {
 		if record, ok := s.tables.GetTableRecord(tableID); ok {
 			logger.Panic("duplicate table tasks",
-				zap.Int64("table-id", tableID),
-				zap.String("actual-capture-id", record.CaptureID))
+				zap.Int64("tableID", tableID),
+				zap.String("actualCaptureID", record.CaptureID))
 		}
 		s.tables.AddTableRecord(&util.TableRecord{TableID: tableID, CaptureID: captureID, Status: util.AddingTable})
 	}
 	for _, tableID := range running {
 		if record, ok := s.tables.GetTableRecord(tableID); ok {
 			logger.Panic("duplicate table tasks",
-				zap.Int64("table-id", tableID),
-				zap.String("actual-capture-id", record.CaptureID))
+				zap.Int64("tableID", tableID),
+				zap.String("actualCaptureID", record.CaptureID))
 		}
 		s.tables.AddTableRecord(&util.TableRecord{TableID: tableID, CaptureID: captureID, Status: util.RunningTable})
 	}
 	for _, tableID := range removing {
 		if record, ok := s.tables.GetTableRecord(tableID); ok {
 			logger.Panic("duplicate table tasks",
-				zap.Int64("table-id", tableID),
-				zap.String("actual-capture-id", record.CaptureID))
+				zap.Int64("tableID", tableID),
+				zap.String("actualCaptureID", record.CaptureID))
 		}
 		s.tables.AddTableRecord(&util.TableRecord{TableID: tableID, CaptureID: captureID, Status: util.RemovingTable})
 	}
@@ -648,9 +648,9 @@ func (s *BaseScheduleDispatcher) OnAgentCheckpoint(captureID model.CaptureID, ch
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	logger := s.logger.With(zap.String("capture-id", captureID),
-		zap.Uint64("checkpoint-ts", checkpointTs),
-		zap.Uint64("resolved-ts", resolvedTs))
+	logger := s.logger.With(zap.String("captureID", captureID),
+		zap.Uint64("checkpointTs", checkpointTs),
+		zap.Uint64("resolvedTs", resolvedTs))
 
 	status, ok := s.captureStatus[captureID]
 	if !ok || status.SyncStatus != captureSyncFinished {
