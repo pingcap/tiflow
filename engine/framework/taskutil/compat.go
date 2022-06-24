@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package utils
+package taskutil
 
 import (
 	"github.com/pingcap/tiflow/engine/framework/internal/eventloop"

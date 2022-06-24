@@ -20,7 +20,7 @@ import (
 
 	"github.com/pingcap/tiflow/engine/client"
 	"github.com/pingcap/tiflow/engine/executor"
-	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
+	"github.com/pingcap/tiflow/engine/pkg/etcdutil"
 	"github.com/pingcap/tiflow/engine/servermaster"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/stretchr/testify/require"
@@ -39,7 +39,7 @@ func TestClientManager(t *testing.T) {
 	require.Nil(t, manager.MasterClient())
 
 	masterCfg := &servermaster.Config{
-		Etcd: &etcdutils.ConfigParams{
+		Etcd: &etcdutil.ConfigParams{
 			Name:    "master1",
 			DataDir: "/tmp/df",
 		},

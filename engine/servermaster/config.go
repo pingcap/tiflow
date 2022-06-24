@@ -38,7 +38,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/pkg/errors"
-	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
+	"github.com/pingcap/tiflow/engine/pkg/etcdutil"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/version"
@@ -72,7 +72,7 @@ var (
 // NewConfig creates a config for dm-master.
 func NewConfig() *Config {
 	cfg := &Config{
-		Etcd:          &etcdutils.ConfigParams{},
+		Etcd:          &etcdutil.ConfigParams{},
 		FrameMetaConf: NewFrameMetaConfig(),
 		UserMetaConf:  NewDefaultUserMetaConfig(),
 	}
@@ -120,7 +120,7 @@ type Config struct {
 	// etcd relative config items
 	// NOTE: we use `MasterAddr` to generate `ClientUrls` and `AdvertiseClientUrls`
 	// NOTE: more items will be add when adding leader election
-	Etcd *etcdutils.ConfigParams `toml:"etcd" json:"etcd"`
+	Etcd *etcdutil.ConfigParams `toml:"etcd" json:"etcd"`
 
 	FrameMetaConf *metaclient.StoreConfigParams `toml:"frame-metastore-conf" json:"frame-metastore-conf"`
 	UserMetaConf  *metaclient.StoreConfigParams `toml:"user-metastore-conf" json:"user-metastore-conf"`
