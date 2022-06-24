@@ -27,71 +27,16 @@ import (
 	mock_capture "github.com/pingcap/tiflow/cdc/capture/mock"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/etcd"
+	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
-	"go.etcd.io/etcd/api/v3/mvccpb"
 )
 
 var (
-	changeFeedID = model.DefaultChangeFeedID("test-changeFeed")
-	// captureID            = "test-capture"
-	// nonExistChangefeedID = model.DefaultChangeFeedID("non-exist-changefeed")
+	changeFeedID  = model.DefaultChangeFeedID("test-changeFeed")
 	blackHoleSink = "blackhole://"
 )
-
-type mockEtcdClient struct {
-	etcd.CDCEtcdClientForAPI
-	upstreamExists  bool
-	createOpSuccess bool
-	updateOpSuccess bool
-	// err             error
-}
-
-func (*mockEtcdClient) GetEnsureGCServiceID() string {
-	return "demo-gc-service-id"
-}
-
-func (m *mockEtcdClient) GetUpstreamInfo(
-	context.Context, model.UpstreamID, string,
-) (*model.UpstreamInfo, error) {
-	if m.upstreamExists {
-		return nil, nil
-	}
-	return nil, cerror.ErrUpstreamNotFound.FastGen("MockEtcdError")
-}
-
-func (m *mockEtcdClient) CreateChangefeedInfo(ctx context.Context,
-	upstreamInfo *model.UpstreamInfo,
-	info *model.ChangeFeedInfo,
-	changeFeedID model.ChangeFeedID,
-) error {
-	if m.createOpSuccess {
-		return nil
-	}
-	return cerror.ErrChangeFeedAlreadyExists.GenWithStackByArgs(changeFeedID)
-}
-
-func (m *mockEtcdClient) UpdateChangefeedAndUpstream(ctx context.Context,
-	upstreamInfo *model.UpstreamInfo,
-	changeFeedInfo *model.ChangeFeedInfo,
-	changeFeedID model.ChangeFeedID,
-) error {
-	if m.updateOpSuccess {
-		return nil
-	}
-	return cerror.ErrChangefeedUpdateFailedTransaction.GenWithStackByArgs(changeFeedID)
-}
-
-func (m *mockEtcdClient) GetAllCDCInfo(ctx context.Context) ([]*mvccpb.KeyValue, error) {
-	return nil, nil
-}
-
-func (m *mockEtcdClient) GetGCServiceID() string {
-	return fmt.Sprintf("ticdc-%s-%d", "defalut", 0)
-}
 
 func TestCreateChangefeed(t *testing.T) {
 	t.Parallel()
@@ -99,12 +44,14 @@ func TestCreateChangefeed(t *testing.T) {
 	pdClient := &mockPDClient{}
 	statusProvider := &mockStatusProvider{}
 	mockUpManager := upstream.NewManager4Test(pdClient)
-	mockEtcdCli := &mockEtcdClient{}
 
 	helperCtrl := gomock.NewController(t)
 	helper := NewMockAPIV2Helpers(helperCtrl)
 	captureCtrl := gomock.NewController(t)
 	cp := mock_capture.NewMockInfoForAPI(captureCtrl)
+	etcdCtrl := gomock.NewController(t)
+	etcdClient := mock_etcd.NewMockCDCEtcdClientForAPI(etcdCtrl)
+
 	apiV2 := NewOpenAPIV2ForTest(cp, helper)
 	router := newRouter(apiV2)
 
@@ -138,7 +85,7 @@ func TestCreateChangefeed(t *testing.T) {
 		Return(statusProvider)
 	cp.EXPECT().
 		GetEtcdClient().
-		Return(mockEtcdCli).AnyTimes()
+		Return(etcdClient).AnyTimes()
 	cp.EXPECT().
 		GetUpstreamManager().
 		Return(mockUpManager).AnyTimes()
@@ -149,8 +96,14 @@ func TestCreateChangefeed(t *testing.T) {
 		IsOwner().
 		Return(true)
 
-	// case 1: success
-	mockEtcdCli.upstreamExists, mockEtcdCli.createOpSuccess = true, true
+	etcdClient.EXPECT().
+		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil)
+
+	etcdClient.EXPECT().GetEnsureGCServiceID().
+		Return(fmt.Sprintf("ticdc-%s-%d", "defalut", 0))
+	//	GetEtcdClient().GetEnsureGCServiceID()
+
 	config1 := struct {
 		ID      string   `json:"changefeed_id"`
 		SinkURI string   `json:"sink_uri"`
