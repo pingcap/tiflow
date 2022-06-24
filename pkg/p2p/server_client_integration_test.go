@@ -25,10 +25,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
-	
+
 	"github.com/phayes/freeport"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/proto/p2p"
 )
@@ -97,7 +98,7 @@ func runP2PIntegrationTest(
 		defer wg.Done()
 		for {
 			err := server.Run(ctx)
-			if cerrors.ErrPeerMessageInjectedServerRestart.Equal(err) {
+			if cerror.ErrPeerMessageInjectedServerRestart.Equal(err) {
 				log.Warn("server restarted")
 				continue
 			}
@@ -304,7 +305,7 @@ func TestMessageClientBasicNonblocking(t *testing.T) {
 		)
 		require.Eventually(t, func() bool {
 			seq, err = client.TrySendMessage(ctx, "test-topic-1", content)
-			return !cerrors.ErrPeerMessageSendTryAgain.Equal(err)
+			return !cerror.ErrPeerMessageSendTryAgain.Equal(err)
 		}, time.Second*5, time.Millisecond*10)
 		require.NoError(t, err)
 		require.Equal(t, oldSeq+1, seq)

@@ -18,9 +18,9 @@ import (
 	"encoding/json"
 
 	"github.com/pingcap/errors"
-
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	derror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // DataSet is a generic layer for using CRUD patterns with KV-backed storage.
@@ -52,7 +52,7 @@ func (d *DataSet[E, T]) Get(ctx context.Context, id string) (T, error) {
 	}
 
 	if len(getResp.Kvs) == 0 {
-		return nil, cerrors.ErrDatasetEntryNotFound.GenWithStackByArgs(d.getKey(id))
+		return nil, derror.ErrDatasetEntryNotFound.GenWithStackByArgs(d.getKey(id))
 	}
 	rawBytes := getResp.Kvs[0].Value
 

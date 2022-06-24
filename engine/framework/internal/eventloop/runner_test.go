@@ -25,7 +25,7 @@ import (
 
 	"github.com/pingcap/errors"
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	derrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 type toyTaskStatus = int32
@@ -140,7 +140,7 @@ func TestRunnerForcefulExit(t *testing.T) {
 	task := newToyTask(t, true)
 	runner := NewRunner(task)
 
-	errIn := cerrors.ErrWorkerSuicide.GenWithStackByArgs()
+	errIn := derrors.ErrWorkerSuicide.GenWithStackByArgs()
 
 	task.On("Init", mock.Anything).Return(nil).Once()
 	task.On("Close", mock.Anything).Return(nil).Once()

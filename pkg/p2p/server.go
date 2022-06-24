@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -283,7 +283,7 @@ func (m *MessageServer) run(ctx context.Context) error {
 					zap.String("sender", task.sender.GetStreamMeta().SenderId),
 					zap.Int64("epoch", task.sender.GetStreamMeta().Epoch))
 				if err := m.registerPeer(ctx, task.sender, task.clientAddr); err != nil {
-					if cerrors.ErrPeerMessageStaleConnection.Equal(err) || cerrors.ErrPeerMessageDuplicateConnection.Equal(err) {
+					if cerror.ErrPeerMessageStaleConnection.Equal(err) || cerror.ErrPeerMessageDuplicateConnection.Equal(err) {
 						// These two errors should not affect other peers
 						if err1 := task.sender.Send(ctx, errorToRPCResponse(err)); err1 != nil {
 							return errors.Trace(err)
@@ -339,7 +339,7 @@ func (m *MessageServer) tick(ctx context.Context) {
 		})
 		if err != nil {
 			log.Warn("sending response to peer failed", zap.Error(err))
-			if cerrors.ErrPeerMessageInternalSenderClosed.Equal(err) {
+			if cerror.ErrPeerMessageInternalSenderClosed.Equal(err) {
 				peersToDeregister = append(peersToDeregister, peer)
 			}
 		}
@@ -385,7 +385,7 @@ func (m *MessageServer) SyncAddHandler(
 		return nil, errors.Trace(ctx.Err())
 	case <-doneCh:
 	case <-m.closeCh:
-		return nil, cerrors.ErrPeerMessageServerClosed.GenWithStackByArgs()
+		return nil, cerror.ErrPeerMessageServerClosed.GenWithStackByArgs()
 	}
 	return errCh, nil
 }
@@ -434,11 +434,11 @@ func (m *MessageServer) AddHandler(
 			// It is expected to happen only with extreme system latency or buggy code.
 			//
 			// Reports an error so that the receiver can gracefully exit.
-			return cerrors.ErrPeerMessageDataLost.GenWithStackByArgs(entry.Topic, lastAck+1)
+			return cerror.ErrPeerMessageDataLost.GenWithStackByArgs(entry.Topic, lastAck+1)
 		}
 
 		if err := unmarshalMessage(entry.Content, e); err != nil {
-			return cerrors.WrapError(cerrors.ErrPeerMessageDecodeError, err)
+			return cerror.WrapError(cerror.ErrPeerMessageDecodeError, err)
 		}
 
 		if err := fn(sm.SenderId, e); err != nil {
@@ -558,7 +558,7 @@ func (m *MessageServer) registerPeer(
 		peerCount := len(m.peers)
 		if peerCount > m.config.MaxPeerCount {
 			m.peerLock.Unlock()
-			return cerrors.ErrPeerMessageToManyPeers.GenWithStackByArgs(peerCount)
+			return cerror.ErrPeerMessageToManyPeers.GenWithStackByArgs(peerCount)
 		}
 		// no existing peer
 		m.peers[streamMeta.SenderId] = newCDCPeer(streamMeta.SenderId, streamMeta.Epoch, sender)
@@ -573,9 +573,9 @@ func (m *MessageServer) registerPeer(
 				zap.Int64("epoch", streamMeta.Epoch))
 
 			// the current stream is stale
-			return cerrors.ErrPeerMessageStaleConnection.GenWithStackByArgs(streamMeta.Epoch /* old */, peer.Epoch /* new */)
+			return cerror.ErrPeerMessageStaleConnection.GenWithStackByArgs(streamMeta.Epoch /* old */, peer.Epoch /* new */)
 		} else if peer.Epoch < streamMeta.Epoch {
-			err := cerrors.ErrPeerMessageStaleConnection.GenWithStackByArgs(peer.Epoch /* old */, streamMeta.Epoch /* new */)
+			err := cerror.ErrPeerMessageStaleConnection.GenWithStackByArgs(peer.Epoch /* old */, streamMeta.Epoch /* new */)
 			m.deregisterPeer(ctx, peer, err)
 			m.peerLock.Lock()
 			m.peers[streamMeta.SenderId] = newCDCPeer(streamMeta.SenderId, streamMeta.Epoch, sender)
@@ -586,7 +586,7 @@ func (m *MessageServer) registerPeer(
 				zap.String("addr", clientIP),
 				zap.Int64("epoch", streamMeta.Epoch))
 
-			return cerrors.ErrPeerMessageDuplicateConnection.GenWithStackByArgs(streamMeta.Epoch)
+			return cerror.ErrPeerMessageDuplicateConnection.GenWithStackByArgs(streamMeta.Epoch)
 		}
 	}
 
@@ -599,7 +599,7 @@ func (m *MessageServer) scheduleTask(ctx context.Context, task interface{}) erro
 		return errors.Trace(ctx.Err())
 	case m.taskQueue <- task:
 	default:
-		return cerrors.ErrPeerMessageTaskQueueCongested.GenWithStackByArgs()
+		return cerror.ErrPeerMessageTaskQueueCongested.GenWithStackByArgs()
 	}
 	return nil
 }
@@ -796,7 +796,7 @@ func (m *MessageServer) handleMessage(ctx context.Context, streamMeta *p2p.Strea
 		if len(pendingEntries) > m.config.MaxPendingMessageCountPerTopic {
 			log.Warn("Topic congested because no handler has been registered", zap.String("topic", topic))
 			delete(m.pendingMessages, pendingMessageKey)
-			m.deregisterPeer(ctx, peer, cerrors.ErrPeerMessageTopicCongested.FastGenByArgs())
+			m.deregisterPeer(ctx, peer, cerror.ErrPeerMessageTopicCongested.FastGenByArgs())
 			return nil
 		}
 		m.pendingMessages[pendingMessageKey] = append(pendingEntries, pendingMessageEntry{
@@ -822,11 +822,11 @@ func (m *MessageServer) handleMessage(ctx context.Context, streamMeta *p2p.Strea
 
 func (m *MessageServer) verifyStreamMeta(streamMeta *p2p.StreamMeta) error {
 	if streamMeta == nil {
-		return cerrors.ErrPeerMessageIllegalMeta.GenWithStackByArgs()
+		return cerror.ErrPeerMessageIllegalMeta.GenWithStackByArgs()
 	}
 
 	if streamMeta.ReceiverId != m.serverID {
-		return cerrors.ErrPeerMessageReceiverMismatch.GenWithStackByArgs(
+		return cerror.ErrPeerMessageReceiverMismatch.GenWithStackByArgs(
 			m.serverID,            // expected
 			streamMeta.ReceiverId, // actual
 		)
@@ -842,14 +842,14 @@ func (m *MessageServer) verifyStreamMeta(streamMeta *p2p.StreamMeta) error {
 		log.Error("MessageServer: semver failed to parse",
 			zap.String("ver", streamMeta.ClientVersion),
 			zap.Error(err))
-		return cerrors.ErrPeerMessageIllegalClientVersion.GenWithStackByArgs(streamMeta.ClientVersion)
+		return cerror.ErrPeerMessageIllegalClientVersion.GenWithStackByArgs(streamMeta.ClientVersion)
 	}
 
 	serverVer := semver.New(m.config.ServerVersion)
 
 	// Only allow clients with the same Major and Minor.
 	if serverVer.Major != clientVer.Major || serverVer.Minor != clientVer.Minor {
-		return cerrors.ErrVersionIncompatible.GenWithStackByArgs(m.config.ServerVersion)
+		return cerror.ErrVersionIncompatible.GenWithStackByArgs(m.config.ServerVersion)
 	}
 
 	return nil
@@ -866,19 +866,19 @@ type pendingMessageEntry struct {
 }
 
 func errorToRPCResponse(err error) p2p.SendMessageResponse {
-	if cerrors.ErrPeerMessageTopicCongested.Equal(err) ||
-		cerrors.ErrPeerMessageTaskQueueCongested.Equal(err) {
+	if cerror.ErrPeerMessageTopicCongested.Equal(err) ||
+		cerror.ErrPeerMessageTaskQueueCongested.Equal(err) {
 
 		return p2p.SendMessageResponse{
 			ExitReason:   p2p.ExitReason_CONGESTED,
 			ErrorMessage: err.Error(),
 		}
-	} else if cerrors.ErrPeerMessageStaleConnection.Equal(err) {
+	} else if cerror.ErrPeerMessageStaleConnection.Equal(err) {
 		return p2p.SendMessageResponse{
 			ExitReason:   p2p.ExitReason_STALE_CONNECTION,
 			ErrorMessage: err.Error(),
 		}
-	} else if cerrors.ErrPeerMessageReceiverMismatch.Equal(err) {
+	} else if cerror.ErrPeerMessageReceiverMismatch.Equal(err) {
 		return p2p.SendMessageResponse{
 			ExitReason:   p2p.ExitReason_CAPTURE_ID_MISMATCH,
 			ErrorMessage: err.Error(),

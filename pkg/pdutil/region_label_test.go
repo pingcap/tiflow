@@ -19,6 +19,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
 )
@@ -79,6 +80,6 @@ func TestMetaLabelFail(t *testing.T) {
 	require.Regexp(t, ".*404.*", err)
 
 	err = UpdateMetaLabel(ctx, mockClient)
-	require.ErrorIs(t, err, cerrors.ErrReachMaxTry)
+	require.ErrorIs(t, err, cerror.ErrReachMaxTry)
 	mockClient.testServer.Close()
 }
