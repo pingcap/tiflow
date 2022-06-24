@@ -43,7 +43,8 @@ const cycylicChangefeedInfo = `{"upstream-id":0,"sink-uri":"blackhole://","opts"
 "column-selectors":null,"schema-registry":""},"cyclic-replication":{"enable":true,"replica-id":0,
 "filter-replica-ids":[12,3],"id-buckets":0,"sync-ddl":true},
 "consistent":{"level":"none","max-log-size":64,"flush-interval":1000,"storage":""}},
-"state":"","error":null,"sync-point-enabled":false,"sync-point-interval":0,"creator-version":"v6.1.0"}
+"state":"","error":null,"sync-point-enabled":false,"sync-point-interval":0,
+"creator-version":"v6.1.0"}
 `
 
 func TestUnmarshal(t *testing.T) {
@@ -98,7 +99,8 @@ func TestMigration(t *testing.T) {
 	const oldStatusKeyBase = "/tidb/cdc/job/%s"
 
 	// 0 add v6.1.0 config with cyclic enabled
-	_, err = cli.Put(context.Background(), fmt.Sprintf(oldInfoKeyBase, "cyclic-test"), cycylicChangefeedInfo)
+	_, err = cli.Put(context.Background(),
+		fmt.Sprintf(oldInfoKeyBase, "cyclic-test"), cycylicChangefeedInfo)
 	require.NoError(t, err)
 
 	// 1.put old version meta data to etcd
@@ -214,7 +216,7 @@ func TestMigration(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, tc.status, status)
 	}
-	//check cyclic
+	// check cyclic
 	infoResp, err := cli.Get(context.Background(),
 		fmt.Sprintf("%s%s/%s", etcd.DefaultClusterAndNamespacePrefix,
 			etcd.ChangefeedInfoKey, "cyclic-test"))
