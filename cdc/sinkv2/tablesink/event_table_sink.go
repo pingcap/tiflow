@@ -38,7 +38,7 @@ type eventTableSink[E tableevent.TableEvent] struct {
 }
 
 func (e *eventTableSink[E]) AppendRowChangedEvents(rows ...*model.RowChangedEvent) {
-	e.eventAppender.Append(e.eventBuffer, rows...)
+	e.eventBuffer = e.eventAppender.Append(e.eventBuffer, rows...)
 }
 
 func (e *eventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) {
