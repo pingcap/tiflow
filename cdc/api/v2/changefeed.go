@@ -70,7 +70,7 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 	}
 	defer pdClient.Close()
 
-	// verify tables
+	// verify tables todo: del kvstore
 	kvStorage, err := h.helpers.CreateTiStore(config.PDAddrs, credential)
 	if err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrInternalServerError, err))
@@ -198,7 +198,8 @@ func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
 		up := h.capture.GetUpstreamManager().GetDefaultUpstream()
 		cfInfo.UpstreamID = up.ID
 	}
-	upInfo, err := h.capture.GetEtcdClient().GetUpstreamInfo(ctx, cfInfo.UpstreamID, cfInfo.Namespace)
+	upInfo, err := h.capture.GetEtcdClient().
+		GetUpstreamInfo(ctx, cfInfo.UpstreamID, cfInfo.Namespace)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -220,7 +221,8 @@ func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
 		zap.String("changefeedInfo", cfInfo.String()),
 		zap.Any("upstreamInfo", upInfo))
 
-	newCfInfo, newUpInfo, err := h.helpers.VerifyUpdateChangefeedConfig(ctx, changefeedConfig, cfInfo, upInfo)
+	newCfInfo, newUpInfo, err := h.helpers.
+		VerifyUpdateChangefeedConfig(ctx, changefeedConfig, cfInfo, upInfo)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -230,7 +232,8 @@ func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
 		zap.String("changefeedInfo", newCfInfo.String()),
 		zap.Any("upstreamInfo", newUpInfo))
 
-	err = h.capture.GetEtcdClient().UpdateChangefeedAndUpstream(ctx, newUpInfo, newCfInfo, changefeedID)
+	err = h.capture.GetEtcdClient().
+		UpdateChangefeedAndUpstream(ctx, newUpInfo, newCfInfo, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
 	}

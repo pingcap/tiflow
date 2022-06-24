@@ -22,8 +22,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/upstream"
 )
 
-// CaptureInfoProvider provides capture's info&getter used for api
-type CaptureInfoProvider interface {
+// InfoForAPI provides capture's info&getter used for api
+type InfoForAPI interface {
 	Info() (model.CaptureInfo, error)
 	IsOwner() bool
 	IsReady() bool

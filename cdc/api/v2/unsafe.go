@@ -101,7 +101,8 @@ func (h *OpenAPIV2) DeleteServiceGcSafePoint(c *gin.Context) {
 	}
 	err := h.withUpstreamConfig(c, upstreamConfig,
 		func(ctx context.Context, client pd.Client) error {
-			err := gc.RemoveServiceGCSafepoint(c, client, h.capture.GetEtcdClient().GetGCServiceID())
+			err := gc.RemoveServiceGCSafepoint(c, client,
+				h.capture.GetEtcdClient().GetGCServiceID())
 			if err != nil {
 				return cerror.WrapError(cerror.ErrInternalServerError, err)
 			}
@@ -130,12 +131,13 @@ func (h *OpenAPIV2) withUpstreamConfig(c context.Context,
 	} else if len(upstreamConfig.PDAddrs) > 0 {
 		timeoutCtx, cancel := context.WithTimeout(c, 30*time.Second)
 		defer cancel()
-		pdClient, err = h.helpers.GetPDClient(timeoutCtx, upstreamConfig.PDAddrs, &security.Credential{
-			CAPath:        upstreamConfig.CAPath,
-			CertPath:      upstreamConfig.CertPath,
-			KeyPath:       upstreamConfig.KeyPath,
-			CertAllowedCN: nil,
-		})
+		pdClient, err = h.helpers.
+			GetPDClient(timeoutCtx, upstreamConfig.PDAddrs, &security.Credential{
+				CAPath:        upstreamConfig.CAPath,
+				CertPath:      upstreamConfig.CertPath,
+				KeyPath:       upstreamConfig.KeyPath,
+				CertAllowedCN: nil,
+			})
 		if err != nil {
 			return cerror.WrapError(cerror.ErrInternalServerError, err)
 		}

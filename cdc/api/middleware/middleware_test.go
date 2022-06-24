@@ -25,7 +25,7 @@ import (
 )
 
 type testCaptureInfoProvider struct {
-	capture.CaptureInfoProvider
+	capture.InfoForAPI
 	ready bool
 }
 

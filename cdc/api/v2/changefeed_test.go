@@ -47,7 +47,7 @@ type mockEtcdClient struct {
 	upstreamExists  bool
 	createOpSuccess bool
 	updateOpSuccess bool
-	err             error
+	// err             error
 }
 
 func (*mockEtcdClient) GetEnsureGCServiceID() string {
@@ -104,7 +104,7 @@ func TestCreateChangefeed(t *testing.T) {
 	helperCtrl := gomock.NewController(t)
 	helper := NewMockAPIV2Helpers(helperCtrl)
 	captureCtrl := gomock.NewController(t)
-	cp := mock_capture.NewMockCaptureInfoProvider(captureCtrl)
+	cp := mock_capture.NewMockInfoForAPI(captureCtrl)
 	apiV2 := NewOpenAPIV2ForTest(cp, helper)
 	router := newRouter(apiV2)
 

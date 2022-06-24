@@ -21,7 +21,7 @@ import (
 
 // OpenAPIV2 provides CDC v2 APIs
 type OpenAPIV2 struct {
-	capture capture.CaptureInfoProvider
+	capture capture.InfoForAPI
 	helpers APIV2Helpers
 }
 
@@ -31,7 +31,7 @@ func NewOpenAPIV2(c *capture.Capture) OpenAPIV2 {
 }
 
 // NewOpenAPIV2ForTest creates a new OpenAPIV2.
-func NewOpenAPIV2ForTest(c capture.CaptureInfoProvider, h APIV2Helpers) OpenAPIV2 {
+func NewOpenAPIV2ForTest(c capture.InfoForAPI, h APIV2Helpers) OpenAPIV2 {
 	return OpenAPIV2{c, h}
 }
 

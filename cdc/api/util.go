@@ -150,7 +150,7 @@ func HandleOwnerScheduleTable(
 }
 
 // ForwardToOwner forwards an request to the owner
-func ForwardToOwner(c *gin.Context, p capture.CaptureInfoProvider) {
+func ForwardToOwner(c *gin.Context, p capture.InfoForAPI) {
 	ctx := c.Request.Context()
 	// every request can only forward to owner one time
 	if len(c.GetHeader(forwardFromCapture)) != 0 {
