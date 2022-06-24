@@ -14,10 +14,10 @@
 package tablesink
 
 import (
+	"github.com/pingcap/tiflow/cdc/sinkv2/tableevent"
 	"sort"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sinkv2/event"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"go.uber.org/atomic"
 )
@@ -26,12 +26,12 @@ import (
 var _ TableSink = (*eventTableSink[*model.RowChangedEvent])(nil)
 var _ TableSink = (*eventTableSink[*model.SingleTableTxn])(nil)
 
-type eventTableSink[E event.TableEvent] struct {
+type eventTableSink[E tableevent.TableEvent] struct {
 	eventID         uint64
 	maxResolvedTs   model.ResolvedTs
 	backendSink     eventsink.EventSink[E]
 	progressTracker *progressTracker
-	eventAppender   event.Appender[E]
+	eventAppender   tableevent.Appender[E]
 	// NOTICE: It is ordered by commitTs.
 	eventBuffer []E
 	TableStatus *atomic.Uint32
@@ -57,9 +57,9 @@ func (e *eventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) {
 	}
 	resolvedEvents := e.eventBuffer[:i]
 
-	resolvedTxnEvents := make([]*event.CallbackableEvent[E], 0, len(resolvedEvents))
+	resolvedTxnEvents := make([]*tableevent.CallbackableEvent[E], 0, len(resolvedEvents))
 	for _, ev := range resolvedEvents {
-		txnEvent := &event.CallbackableEvent[E]{
+		txnEvent := &tableevent.CallbackableEvent[E]{
 			Event: ev,
 			Callback: func() {
 				e.progressTracker.remove(e.eventID)

@@ -15,7 +15,6 @@ package txn
 
 import (
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sinkv2/event"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 )
 
@@ -26,7 +25,7 @@ var _ eventsink.EventSink[*model.SingleTableTxn] = (*Sink)(nil)
 type Sink struct{}
 
 // WriteEvents writes events to the sink.
-func (s *Sink) WriteEvents(rows ...*event.TxnCallbackableEvent) {
+func (s *Sink) WriteEvents(rows ...*tableevent.TxnCallbackableEvent) {
 	// TODO implement me
 	panic("implement me")
 }
