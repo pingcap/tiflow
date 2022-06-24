@@ -27,24 +27,17 @@ type scheduler interface {
 	) []*scheduleTask
 }
 
-type schedulerType int
+// schedulerPriority is the priority of each scheduler.
+// Lower value has higher priority.
+type schedulerPriority int
 
 const (
-	schedulerTypeBasic        schedulerType = 0
-	schedulerTypeBalance      schedulerType = 1
-	schedulerTypeMoveTable    schedulerType = 2
-	schedulerTypeRebalance    schedulerType = 3
-	schedulerTypeDrainCapture schedulerType = 4
+	// schedulerPriorityBasic has the highest priority.
+	schedulerPriorityBasic schedulerPriority = iota
+	// schedulerPriorityDrainCapture has higher priority than other schedulers.
+	schedulerPriorityDrainCapture
+	schedulerPriorityMoveTable
+	schedulerPriorityRebalance
+	schedulerPriorityBalance
+	schedulerPriorityMax
 )
-
-var schedulerTypeName = map[int]string{
-	0: "basic-scheduler",
-	1: "balance-scheduler",
-	2: "move-table-scheduler",
-	3: "rebalance-scheduler",
-	4: "drain-capture-scheduler",
-}
-
-func (s schedulerType) String() string {
-	return schedulerTypeName[int(s)]
-}

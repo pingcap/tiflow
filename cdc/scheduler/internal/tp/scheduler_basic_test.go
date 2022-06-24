@@ -85,6 +85,17 @@ func TestSchedulerBasic(t *testing.T) {
 	require.Equal(t, tasks[0].burstBalance.RemoveTables[0].TableID, model.TableID(5))
 }
 
+func TestSchedulerPriority(t *testing.T) {
+	t.Parallel()
+
+	// The basic scheduler have the highest priority.
+	require.Less(t, schedulerPriorityBasic, schedulerPriorityDrainCapture)
+	require.Less(t, schedulerPriorityBasic, schedulerPriorityBalance)
+	require.Less(t, schedulerPriorityBasic, schedulerPriorityMoveTable)
+	require.Less(t, schedulerPriorityBasic, schedulerPriorityRebalance)
+	require.Less(t, schedulerPriorityBasic, schedulerPriorityMax)
+}
+
 func benchmarkSchedulerBalance(
 	b *testing.B,
 	factory func(total int) (

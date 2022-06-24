@@ -46,7 +46,7 @@ func newDrainCaptureScheduler(concurrency int) *drainCaptureScheduler {
 }
 
 func (d *drainCaptureScheduler) Name() string {
-	return schedulerTypeDrainCapture.String()
+	return "drain-capture-scheduler"
 }
 
 func (d *drainCaptureScheduler) getTarget() model.CaptureID {
