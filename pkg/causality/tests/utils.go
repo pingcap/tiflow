@@ -16,8 +16,6 @@ package tests
 import (
 	"sync"
 
-	"github.com/pingcap/log"
-
 	"github.com/pingcap/tiflow/engine/pkg/containers"
 	"github.com/pingcap/tiflow/pkg/causality"
 )
@@ -82,7 +80,6 @@ outer:
 				continue outer
 			}
 
-			log.Info("transaction finished")
 			txn.Callback(nil)
 		}
 	}
