@@ -29,13 +29,15 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
-	"github.com/pingcap/tiflow/cdc/redo/common"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/uber-go/atomic"
 	pioutil "go.etcd.io/etcd/pkg/ioutil"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tiflow/cdc/redo/common"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
 const (
@@ -91,7 +93,8 @@ type FileWriterConfig struct {
 type Option func(writer *writerOptions)
 
 type writerOptions struct {
-	getLogFileName func() string
+	getLogFileName   func() string
+	getUUIDGenerator func() uuid.Generator
 }
 
 // WithLogFileName provide the Option for fileName
@@ -99,6 +102,15 @@ func WithLogFileName(f func() string) Option {
 	return func(o *writerOptions) {
 		if f != nil {
 			o.getLogFileName = f
+		}
+	}
+}
+
+// WithUUIDGenerator provides the Option for uuid generator
+func WithUUIDGenerator(f func() uuid.Generator) Option {
+	return func(o *writerOptions) {
+		if f != nil {
+			o.getUUIDGenerator = f
 		}
 	}
 }
@@ -117,10 +129,13 @@ type Writer struct {
 	gcRunning     atomic.Bool
 	size          int64
 	file          *os.File
-	bw            *pioutil.PageWriter
-	uint64buf     []byte
-	storage       storage.ExternalStorage
+	// record the filepath that is being written, and has not been flushed
+	ongoingFilePath string
+	bw              *pioutil.PageWriter
+	uint64buf       []byte
+	storage         storage.ExternalStorage
 	sync.RWMutex
+	uuidGenerator uuid.Generator
 
 	metricFsyncDuration    prometheus.Observer
 	metricFlushAllDuration prometheus.Observer
@@ -163,6 +178,11 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 		metricFlushAllDuration: redoFlushAllDurationHistogram.WithLabelValues(cfg.CaptureID, cfg.ChangeFeedID),
 		metricWriteBytes:       redoWriteBytesGauge.WithLabelValues(cfg.CaptureID, cfg.ChangeFeedID),
 	}
+	if w.op.getUUIDGenerator != nil {
+		w.uuidGenerator = w.op.getUUIDGenerator()
+	} else {
+		w.uuidGenerator = uuid.NewGenerator()
+	}
 
 	w.running.Store(true)
 	go w.runFlushToDisk(ctx, cfg.FlushIntervalInMs)
@@ -183,12 +203,12 @@ func (w *Writer) runFlushToDisk(ctx context.Context, flushIntervalInMs int64) {
 		case <-ctx.Done():
 			err := w.Close()
 			if err != nil {
-				log.Error("runFlushToDisk close fail", zap.String("changefeedID", w.cfg.ChangeFeedID), zap.Error(err))
+				log.Error("runFlushToDisk close fail", zap.String("changefeed", w.cfg.ChangeFeedID), zap.Error(err))
 			}
 		case <-ticker.C:
 			err := w.Flush()
 			if err != nil {
-				log.Error("redo log flush fail", zap.String("changefeedID", w.cfg.ChangeFeedID), zap.Error(err))
+				log.Error("redo log flush fail", zap.String("changefeed", w.cfg.ChangeFeedID), zap.Error(err))
 			}
 		}
 	}
@@ -308,7 +328,7 @@ func (w *Writer) close() error {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultS3Timeout)
 		defer cancel()
 
-		err = w.renameInS3(ctx, w.file.Name(), w.filePath())
+		err = w.renameInS3(ctx, w.file.Name(), w.ongoingFilePath)
 		if err != nil {
 			return cerror.WrapError(cerror.ErrS3StorageAPI, err)
 		}
@@ -331,11 +351,18 @@ func (w *Writer) getLogFileName() string {
 	if w.op != nil && w.op.getLogFileName != nil {
 		return w.op.getLogFileName()
 	}
-	return fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.CreateTime.Unix(), w.cfg.FileType, w.commitTS.Load(), common.LogEXT)
+	uid := w.uuidGenerator.NewString()
+	return fmt.Sprintf(common.RedoLogFileFormatV1,
+		w.cfg.CaptureID, w.cfg.ChangeFeedID, w.cfg.FileType,
+		w.commitTS.Load(), uid, common.LogEXT)
 }
 
+// filePath always creates a new, unique file path, note this function is not
+// thread-safe, writer needs to ensure lock is acquired when calling it.
 func (w *Writer) filePath() string {
-	return filepath.Join(w.cfg.Dir, w.getLogFileName())
+	fp := filepath.Join(w.cfg.Dir, w.getLogFileName())
+	w.ongoingFilePath = fp
+	return fp
 }
 
 func openTruncFile(name string) (*os.File, error) {
@@ -366,7 +393,10 @@ func (w *Writer) openNew() error {
 }
 
 func (w *Writer) openOrNew(writeLen int) error {
-	path := w.filePath()
+	path := w.ongoingFilePath
+	if path == "" {
+		return w.openNew()
+	}
 	info, err := os.Stat(path)
 	if os.IsNotExist(err) {
 		return w.openNew()
@@ -483,7 +513,7 @@ func (w *Writer) getShouldRemovedFiles(checkPointTs uint64) ([]os.FileInfo, erro
 		ret, err := w.shouldRemoved(checkPointTs, f)
 		if err != nil {
 			log.Warn("check removed log file fail",
-				zap.String("log file", f.Name()),
+				zap.String("logFile", f.Name()),
 				zap.Error(err))
 			continue
 		}

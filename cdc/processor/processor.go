@@ -106,7 +106,7 @@ func (p *processor) AddTable(ctx cdcContext.Context, tableID model.TableID) (boo
 	}
 
 	log.Info("adding table",
-		zap.Int64("table-id", tableID),
+		zap.Int64("tableID", tableID),
 		cdcContext.ZapFieldChangefeed(ctx))
 	err := p.addTable(ctx, tableID, &model.TableReplicaInfo{})
 	if err != nil {
@@ -664,20 +664,23 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	kvStorage := ctx.GlobalVars().KVStorage
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
+	kvCfg := config.GetGlobalServerConfig().KVClient
 	stdCtx := util.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = util.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
+	stdCtx = util.PutRoleInCtx(stdCtx, util.RoleProcessor)
 	ddlPuller := puller.NewPuller(
 		stdCtx,
 		ctx.GlobalVars().PDClient,
 		ctx.GlobalVars().GrpcPool,
 		ctx.GlobalVars().RegionCache,
 		ctx.GlobalVars().KVStorage,
-		checkpointTs, ddlspans, false)
+		checkpointTs, ddlspans, kvCfg)
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	schemaStorage, err := entry.NewSchemaStorage(meta, checkpointTs, p.filter, p.changefeed.Info.Config.ForceReplicate)
+	schemaStorage, err := entry.NewSchemaStorage(meta, checkpointTs, p.filter,
+		p.changefeed.Info.Config.ForceReplicate, ctx.ChangefeedVars().ID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

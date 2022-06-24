@@ -184,7 +184,7 @@ func openSelectedFiles(ctx context.Context, dir, fixedType string, startTs uint6
 		ret, err := shouldOpen(startTs, name, fixedType)
 		if err != nil {
 			log.Warn("check selected log file fail",
-				zap.String("log file", name),
+				zap.String("logFile", name),
 				zap.Error(err))
 			continue
 		}
