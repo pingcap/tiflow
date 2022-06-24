@@ -51,21 +51,21 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 		for i, schema := range allSchema {
 			schemaList[i] = schema.Name.String()
 		}
-		schemaListJSON, err := json.Marshal(schemaList)
-		if err != nil {
-			return "", terror.ErrSchemaTrackerMarshalJSON.Delegate(err, schemaList)
+		schemaListJSON, err2 := json.Marshal(schemaList)
+		if err2 != nil {
+			return "", terror.ErrSchemaTrackerMarshalJSON.Delegate(err2, schemaList)
 		}
-		return string(schemaListJSON), err
+		return string(schemaListJSON), err2
 	case pb.SchemaOp_ListTable:
-		tables, err := s.schemaTracker.ListSchemaTables(req.Database)
-		if err != nil {
-			return "", err
+		tables, err2 := s.schemaTracker.ListSchemaTables(req.Database)
+		if err2 != nil {
+			return "", err2
 		}
-		tableListJSON, err := json.Marshal(tables)
-		if err != nil {
-			return "", terror.ErrSchemaTrackerMarshalJSON.Delegate(err, tables)
+		tableListJSON, err2 := json.Marshal(tables)
+		if err2 != nil {
+			return "", terror.ErrSchemaTrackerMarshalJSON.Delegate(err2, tables)
 		}
-		return string(tableListJSON), err
+		return string(tableListJSON), err2
 	case pb.SchemaOp_GetSchema:
 		// when task is paused, schemaTracker is closed. We get the table structure from checkpoint.
 		ti := s.checkpoint.GetTableInfo(req.Database, req.Table)
