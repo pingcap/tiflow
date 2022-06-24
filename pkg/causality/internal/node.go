@@ -49,6 +49,9 @@ type Node[T any] struct {
 	onResolved     func(id workerID)
 	resolved       atomic.Bool
 
+	// debug only, will remove
+	dependees map[nodeID]*Node[T]
+
 	data T
 }
 
@@ -57,6 +60,7 @@ func NewNode[T any](data T) (ret *Node[T]) {
 		ret.id = nextNodeID.Add(1)
 		ret.data = data
 		ret.assignedTo = unassigned
+		ret.dependees = make(map[nodeID]*Node[T])
 	}()
 
 	if obj := nodePool.Get(); obj != nil {
@@ -114,6 +118,7 @@ func (n *Node[T]) DependOn(target *Node[T]) {
 
 	target.dependers[n.id] = n
 	n.conflictCounts[target.assignedTo]++
+	n.dependees[target.id] = target
 }
 
 func (n *Node[T]) AssignTo(workerID int64) {
@@ -147,7 +152,6 @@ func (n *Node[T]) AssignTo(workerID int64) {
 			if node.conflictCounts[unassigned] == 0 {
 				delete(node.conflictCounts, unassigned)
 			}
-
 			node.conflictCounts[workerID]++
 
 			cb = node.notifyMaybeResolved()
@@ -161,6 +165,10 @@ func (n *Node[T]) AssignTo(workerID int64) {
 func (n *Node[T]) Remove() {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+
+	if len(n.conflictCounts) != 0 {
+		panic("conflictNumber > 0")
+	}
 
 	for _, node := range n.dependers {
 		// Use a closure to make it possible to use deferred unlock.
@@ -180,6 +188,7 @@ func (n *Node[T]) Remove() {
 			if node.conflictCounts[n.assignedTo] == 0 {
 				delete(node.conflictCounts, n.assignedTo)
 			}
+			delete(node.dependees, n.id)
 
 			cb = node.notifyMaybeResolved()
 			if cb != nil {

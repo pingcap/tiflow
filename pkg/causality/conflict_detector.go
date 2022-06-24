@@ -25,9 +25,8 @@ import (
 )
 
 type ConflictDetector[Txn txnEvent, Worker worker[Txn]] struct {
-	workers     []Worker
-	workerLocks []sync.Mutex
-	slots       *internal.Slots[*internal.Node[Txn]]
+	workers []Worker
+	slots   *internal.Slots[*internal.Node[Txn]]
 
 	finishedTxnQueue *containers.SliceQueue[finishedTxn[Txn]]
 	resolvedTxnQueue *containers.SliceQueue[resolvedTxn[Txn]]
@@ -56,18 +55,11 @@ func NewConflictDetector[Txn txnEvent, Worker worker[Txn]](
 ) *ConflictDetector[Txn, Worker] {
 	ret := &ConflictDetector[Txn, Worker]{
 		workers:          workers,
-		workerLocks:      make([]sync.Mutex, len(workers)),
 		slots:            internal.NewSlots[*internal.Node[Txn]](numSlots),
 		finishedTxnQueue: containers.NewSliceQueue[finishedTxn[Txn]](),
 		resolvedTxnQueue: containers.NewSliceQueue[resolvedTxn[Txn]](),
 		closeCh:          make(chan struct{}),
 	}
-
-	ret.wg.Add(1)
-	go func() {
-		defer ret.wg.Done()
-		ret.runFinishHandler()
-	}()
 
 	ret.wg.Add(1)
 	go func() {
@@ -110,56 +102,38 @@ selectLoop:
 		case <-d.closeCh:
 			return
 		case <-d.resolvedTxnQueue.C:
-		}
+			log.Info("resolvedHandler run")
+			for {
+				resolvedTxn, ok := d.resolvedTxnQueue.Pop()
+				if !ok {
+					continue selectLoop
+				}
 
-		log.Info("resolvedHandler run")
-		for {
-			resolvedTxn, ok := d.resolvedTxnQueue.Pop()
-			if !ok {
-				continue selectLoop
+				d.sendToWorker(&OutTxnEvent[Txn]{
+					Txn: resolvedTxn.txn,
+					Callback: func(errIn error) {
+						log.Info("node finished", zap.Int64("node-id", resolvedTxn.node.ID()))
+						d.finishedTxnQueue.Push(finishedTxn[Txn]{
+							txn:  resolvedTxn.txn,
+							node: resolvedTxn.node,
+						})
+						resolvedTxn.txn.Finish(errIn)
+					},
+				}, resolvedTxn.node, resolvedTxn.workerID)
 			}
-
-			d.sendToWorker(&OutTxnEvent[Txn]{
-				Txn: resolvedTxn.txn,
-				Callback: func(errIn error) {
-					log.Info("node finished", zap.Int64("node-id", resolvedTxn.node.ID()))
-					d.finishedTxnQueue.Push(finishedTxn[Txn]{
-						txn:  resolvedTxn.txn,
-						node: resolvedTxn.node,
-					})
-					resolvedTxn.txn.Finish(errIn)
-				},
-			}, resolvedTxn.node, resolvedTxn.workerID)
-		}
-	}
-}
-
-func (d *ConflictDetector[Txn, Worker]) runFinishHandler() {
-	// TODO remove this
-	removedNodeIDSet := make(map[int64]struct{})
-selectLoop:
-	for {
-		select {
-		case <-d.closeCh:
-			return
 		case <-d.finishedTxnQueue.C:
-		}
+			log.Info("finishHandler run")
+			for {
+				finishedTxn, ok := d.finishedTxnQueue.Pop()
+				if !ok {
+					continue selectLoop
+				}
 
-		log.Info("finishHandler run")
-		for {
-			finishedTxn, ok := d.finishedTxnQueue.Pop()
-			if !ok {
-				continue selectLoop
+				log.Info("node removed", zap.Int64("node-id", finishedTxn.node.ID()))
+				d.slots.Remove(finishedTxn.node, finishedTxn.txn.ConflictKeys())
+				finishedTxn.node.Remove()
+				finishedTxn.node.Free()
 			}
-
-			if _, ok := removedNodeIDSet[finishedTxn.node.ID()]; ok {
-				panic("double remove")
-			}
-			removedNodeIDSet[finishedTxn.node.ID()] = struct{}{}
-			log.Info("node removed", zap.Int64("node-id", finishedTxn.node.ID()))
-			d.slots.Remove(finishedTxn.node, finishedTxn.txn.ConflictKeys())
-			finishedTxn.node.Remove()
-			finishedTxn.node.Free()
 		}
 	}
 }
@@ -169,9 +143,6 @@ func (d *ConflictDetector[Txn, Worker]) sendToWorker(txn *OutTxnEvent[Txn], node
 	if workerID == -1 {
 		workerID = d.nextWorkerID.Add(1) % int64(len(d.workers))
 	}
-
-	//d.workerLocks[workerID].Lock()
-	//defer d.workerLocks[workerID].Unlock()
 
 	node.AssignTo(workerID)
 	worker := d.workers[workerID]

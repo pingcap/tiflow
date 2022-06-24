@@ -44,10 +44,12 @@ func (s *Slots[E]) Add(elem E, keys []int64, onConflict func(dependee E)) {
 	defer s.mu.Unlock()
 
 	for _, key := range keys {
+		needInsert := true
 		if elemList, ok := s.slots[key%s.numSlots]; ok {
 			for e := elemList.Front(); e != nil; e = e.Next() {
 				e := e.Value.(E)
 				if e.Equals(elem) {
+					needInsert = false
 					continue
 				}
 				onConflict(e)
@@ -55,7 +57,10 @@ func (s *Slots[E]) Add(elem E, keys []int64, onConflict func(dependee E)) {
 		} else {
 			s.slots[key%s.numSlots] = list.New()
 		}
-		s.slots[key%s.numSlots].PushBack(elem)
+
+		if needInsert {
+			s.slots[key%s.numSlots].PushBack(elem)
+		}
 	}
 }
 
@@ -68,10 +73,14 @@ func (s *Slots[E]) Remove(elem E, keys []int64) {
 		if !ok {
 			panic("elem list is not found")
 		}
+		found := false
 		for e := elemList.Front(); e != nil; e = e.Next() {
 			if elem.Equals(e.Value.(E)) {
+				if found {
+					panic("found")
+				}
+				found = true
 				elemList.Remove(e)
-				break
 			}
 		}
 	}

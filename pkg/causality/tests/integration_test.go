@@ -27,7 +27,7 @@ func TestConflict(t *testing.T) {
 
 	const (
 		numWorkers     = 1
-		numSlots       = 4096
+		numSlots       = 1
 		workingSetSize = 1024
 		batchSize      = 8
 		totalRows      = 1000

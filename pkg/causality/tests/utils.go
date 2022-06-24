@@ -15,7 +15,6 @@ package tests
 
 import (
 	"sync"
-	"time"
 
 	"github.com/pingcap/log"
 
@@ -85,7 +84,6 @@ outer:
 
 			log.Info("transaction finished")
 			txn.Callback(nil)
-			time.Sleep(10 * time.Millisecond)
 		}
 	}
 }
