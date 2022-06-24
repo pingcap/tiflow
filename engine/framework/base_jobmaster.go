@@ -22,7 +22,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	derror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
 )
 
 // BaseJobMaster defines an interface that can work as a job master, it embeds
@@ -217,7 +218,7 @@ func (d *DefaultBaseJobMaster) Close(ctx context.Context) error {
 	d.closeOnce.Do(func() {
 		err := d.impl.CloseImpl(ctx)
 		if err != nil {
-			log.L().Error("Failed to close JobMasterImpl", zap.Error(err))
+			d.Logger().Error("Failed to close JobMasterImpl", zap.Error(err))
 		}
 	})
 
@@ -241,7 +242,7 @@ func (d *DefaultBaseJobMaster) NotifyExit(ctx context.Context, errIn error) (ret
 		d.Logger().Info("job master finished exiting",
 			zap.NamedError("caused", errIn),
 			zap.Duration("duration", duration),
-			log.ShortError(retErr))
+			logutil.ShortError(retErr))
 	}()
 
 	d.Logger().Info("worker start exiting", zap.NamedError("cause", errIn))

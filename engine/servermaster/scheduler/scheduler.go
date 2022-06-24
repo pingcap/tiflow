@@ -16,11 +16,11 @@ package scheduler
 import (
 	"context"
 
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/model"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 )
@@ -99,10 +99,10 @@ func (s *Scheduler) checkCostAllows(
 
 func (s *Scheduler) getConstraint(
 	ctx context.Context,
-	resources []resourcemeta.ResourceID,
+	resources []resModel.ResourceID,
 ) (model.ExecutorID, error) {
 	var (
-		lastResourceID resourcemeta.ResourceID
+		lastResourceID resModel.ResourceID
 		ret            model.ExecutorID
 	)
 	for _, resourceID := range resources {
