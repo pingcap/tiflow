@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/quotes"
-	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
