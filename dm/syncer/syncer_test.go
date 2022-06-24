@@ -56,12 +56,6 @@ import (
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	pmysql "github.com/pingcap/tidb/parser/mysql"
-<<<<<<< HEAD
-=======
-	"github.com/pingcap/tidb/util/filter"
-	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
-	router "github.com/pingcap/tidb/util/table-router"
->>>>>>> 1ba147108 (syncer(dm): fix different output format for operate-schema get (#5824))
 	"go.uber.org/zap"
 )
 
@@ -1030,8 +1024,6 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	testJobs.RUnlock()
 
 	cancel()
-<<<<<<< HEAD
-=======
 	<-resultCh // wait for the process to finish
 
 	// test OperateSchema starts
@@ -1041,7 +1033,8 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	sourceSchemaFromCheckPoint, err := syncer.OperateSchema(ctx, &pb.OperateWorkerSchemaRequest{Op: pb.SchemaOp_GetSchema, Database: "test_1", Table: "t_1"})
 	c.Assert(err, IsNil)
 
-	syncer.tableRouter = &regexprrouter.RouteTable{}
+	syncer.tableRouter, err = router.NewTableRouter(false, nil)
+	c.Assert(err, IsNil)
 	c.Assert(syncer.tableRouter.AddRule(&router.TableRule{
 		SchemaPattern: "test_1",
 		TablePattern:  "t_1",
@@ -1077,7 +1070,6 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	cancel()
 	// test OperateSchema ends
 
->>>>>>> 1ba147108 (syncer(dm): fix different output format for operate-schema get (#5824))
 	syncer.Close()
 	c.Assert(syncer.isClosed(), IsTrue)
 

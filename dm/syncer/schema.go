@@ -17,11 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-<<<<<<< HEAD
-=======
 	"fmt"
-	"regexp"
->>>>>>> 1ba147108 (syncer(dm): fix different output format for operate-schema get (#5824))
 	"strings"
 
 	"github.com/pingcap/tidb-tools/pkg/filter"
@@ -32,11 +28,8 @@ import (
 	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
-<<<<<<< HEAD
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
-=======
 	"github.com/pingcap/tiflow/pkg/quotes"
->>>>>>> 1ba147108 (syncer(dm): fix different output format for operate-schema get (#5824))
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
