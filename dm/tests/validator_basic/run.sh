@@ -651,10 +651,17 @@ function test_validation_syncer_stopped() {
 	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/mockValidatorDelay=return(2)"
 	prepare_for_standalone_test
 	run_sql_source1 "create table validator_basic.test(a int primary key, b int)"
-	for ((k = 0; k < $insertCnt; k++)); do
+	run_sql_source1 "insert into validator_basic.test values(0, 0)"
+	trigger_checkpoint_flush
+	# wait syncer to start so that validator can start
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"synced\": true" 1
+	for ((k = 1; k <= $insertCnt; k++)); do
 		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"pause-task test" \
 			"\"result\": true" 2
+		trigger_checkpoint_flush
 		# catchup the last insert when the syncer is stopped
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
@@ -673,7 +680,7 @@ function test_validation_syncer_stopped() {
 	done
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"\"processedRowsStatus\": \"insert\/update\/delete: $insertCnt\/0\/0\"" 1 \
+		"\"processedRowsStatus\": \"insert\/update\/delete: $(($insertCnt + 1))\/0\/0\"" 1 \
 		"new\/ignored\/resolved: 0\/0\/0" 1
 }
 
