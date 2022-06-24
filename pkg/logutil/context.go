@@ -22,14 +22,13 @@ import (
 
 type ctxLogKeyType struct{}
 
-// CtxLogKey indicates the context key for logger
-// public for test usage.
-var CtxLogKey = ctxLogKeyType{}
+// ctxLogKey indicates the context key for logger
+var ctxLogKey = ctxLogKeyType{}
 
 // FromContext return the logger in context, or return global logger
 // if logger not found in context
 func FromContext(ctx context.Context) *zap.Logger {
-	if ctxlogger, ok := ctx.Value(CtxLogKey).(*zap.Logger); ok {
+	if ctxlogger, ok := ctx.Value(ctxLogKey).(*zap.Logger); ok {
 		return ctxlogger
 	}
 
@@ -38,5 +37,5 @@ func FromContext(ctx context.Context) *zap.Logger {
 
 // NewContextWithLogger attaches a new logger to context and return the context
 func NewContextWithLogger(ctx context.Context, logger *zap.Logger) context.Context {
-	return context.WithValue(ctx, CtxLogKey, logger)
+	return context.WithValue(ctx, ctxLogKey, logger)
 }

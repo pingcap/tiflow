@@ -84,84 +84,95 @@ func SetLogLevel(level string) error {
 	return nil
 }
 
-// InitLoggerForCDC initializes logger for CDC, including grpc, sarma etc.
-func InitLoggerForCDC(cfg *Config) error {
-	if err := InitLogger(cfg); err != nil {
+type loggerOp struct {
+	isInitGRPCLogger   bool
+	isInitSaramaLogger bool
+	output             zapcore.WriteSyncer
+}
+
+func (op *loggerOp) applyOpts(opts []LoggerOpt) {
+	for _, opt := range opts {
+		opt(op)
+	}
+}
+
+type LoggerOpt func(*loggerOp)
+
+func WithInitGRPCLogger() LoggerOpt {
+	return func(op *loggerOp) {
+		op.isInitGRPCLogger = true
+	}
+}
+
+func WithInitSaramaLogger() LoggerOpt {
+	return func(op *loggerOp) {
+		op.isInitSaramaLogger = true
+	}
+}
+
+func WithOutputWriteSyncer(output zapcore.WriteSyncer) LoggerOpt {
+	return func(op *loggerOp) {
+		op.output = output
+	}
+}
+
+// InitLogger initializes logger for CDC, including grpc, sarma etc.
+func InitLogger(cfg *Config, opts ...LoggerOpt) error {
+	var op loggerOp
+	op.applyOpts(opts)
+
+	pclogConfig := &log.Config{
+		Level: cfg.Level,
+		File: log.FileLogConfig{
+			Filename:   cfg.File,
+			MaxSize:    cfg.FileMaxSize,
+			MaxDays:    cfg.FileMaxDays,
+			MaxBackups: cfg.FileMaxBackups,
+		},
+		ErrorOutputPath: cfg.ZapInternalErrOutput,
+	}
+
+	var lg *zap.Logger
+	var err error
+	if op.output == nil {
+		lg, globalP, err = log.InitLogger(pclogConfig)
+	} else {
+		lg, globalP, err = log.InitLoggerWithWriteSyncer(pclogConfig, op.output, nil)
+	}
+	if err != nil {
 		return err
 	}
 
+	// Do not log stack traces at all, as we'll get the stack trace from the
+	// error itself.
+	lg = lg.WithOptions(zap.AddStacktrace(zap.DPanicLevel))
+	log.ReplaceGlobals(lg, globalP)
+
+	return initOptionalComponent(&op, lg, cfg)
+}
+
+// initOptionalComponent initializes some optional components
+func initOptionalComponent(op *loggerOp, logger *zap.Logger, cfg *Config) error {
 	var level zapcore.Level
-	err := level.UnmarshalText([]byte(cfg.Level))
-	if err != nil {
-		return errors.Trace(err)
+	if op.isInitGRPCLogger || op.isInitSaramaLogger {
+		err := level.UnmarshalText([]byte(cfg.Level))
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
-	err = initGRPCLogger(level)
-	if err != nil {
-		return err
+	if op.isInitGRPCLogger {
+		if err := initGRPCLogger(level); err != nil {
+			return err
+		}
 	}
 
-	err = initSaramaLogger(level)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// InitLogger initializes logger
-func InitLogger(cfg *Config) error {
-	pclogConfig := &log.Config{
-		Level: cfg.Level,
-		File: log.FileLogConfig{
-			Filename:   cfg.File,
-			MaxSize:    cfg.FileMaxSize,
-			MaxDays:    cfg.FileMaxDays,
-			MaxBackups: cfg.FileMaxBackups,
-		},
-		ErrorOutputPath: cfg.ZapInternalErrOutput,
+	if op.isInitSaramaLogger {
+		if err := initSaramaLogger(level); err != nil {
+			return err
+		}
 	}
 
-	var lg *zap.Logger
-	var err error
-	lg, globalP, err = log.InitLogger(pclogConfig)
-	if err != nil {
-		return err
-	}
-
-	// Do not log stack traces at all, as we'll get the stack trace from the
-	// error itself.
-	lg = lg.WithOptions(zap.AddStacktrace(zap.DPanicLevel))
-
-	log.ReplaceGlobals(lg, globalP)
-	return nil
-}
-
-// InitLoggerWithWriteSyncer initializes a zap logger with specified write syncer.
-// For easy unit test when we use zaptest.Buffer for the zapcore.WriteSyncer
-func InitLoggerWithWriteSyncer(cfg *Config, output, errOutput zapcore.WriteSyncer) error {
-	pclogConfig := &log.Config{
-		Level: cfg.Level,
-		File: log.FileLogConfig{
-			Filename:   cfg.File,
-			MaxSize:    cfg.FileMaxSize,
-			MaxDays:    cfg.FileMaxDays,
-			MaxBackups: cfg.FileMaxBackups,
-		},
-		ErrorOutputPath: cfg.ZapInternalErrOutput,
-	}
-
-	var lg *zap.Logger
-	var err error
-	lg, globalP, err = log.InitLoggerWithWriteSyncer(pclogConfig, output, errOutput)
-	if err != nil {
-		return err
-	}
-
-	// Do not log stack traces at all, as we'll get the stack trace from the
-	// error itself.
-	lg = lg.WithOptions(zap.AddStacktrace(zap.DPanicLevel))
-
-	log.ReplaceGlobals(lg, globalP)
 	return nil
 }
 

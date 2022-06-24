@@ -110,7 +110,7 @@ func TestZapInternalErrorOutput(t *testing.T) {
 
 func TestErrorFilterContextCanceled(t *testing.T) {
 	var buffer zaptest.Buffer
-	err := InitLoggerWithWriteSyncer(&Config{Level: "info"}, &buffer, nil)
+	err := InitLogger(&Config{Level: "info"}, WithOutputWriteSyncer(&buffer))
 	require.NoError(t, err)
 
 	ErrorFilterContextCanceled(log.L(), "the message", zap.Int("number", 123456),
@@ -132,7 +132,7 @@ func TestErrorFilterContextCanceled(t *testing.T) {
 
 func TestShortError(t *testing.T) {
 	var buffer zaptest.Buffer
-	err := InitLoggerWithWriteSyncer(&Config{Level: "info"}, &buffer, nil)
+	err := InitLogger(&Config{Level: "info"}, WithOutputWriteSyncer(&buffer))
 	require.NoError(t, err)
 
 	err = cerrors.ErrMetaNotInRegion.GenWithStackByArgs("extra info")
@@ -148,4 +148,22 @@ func TestShortError(t *testing.T) {
 	log.L().Warn("short error", zap.Error(err))
 	require.Regexp(t, regexp.QuoteMeta("errors.AddStack"), buffer.Stripped())
 	buffer.Reset()
+}
+
+func TestLoggerOption(t *testing.T) {
+	t.Parallel()
+
+	var op loggerOp
+	require.False(t, op.isInitGRPCLogger)
+	require.False(t, op.isInitSaramaLogger)
+	require.Nil(t, op.output)
+
+	op.applyOpts([]LoggerOpt{WithInitGRPCLogger(), WithInitSaramaLogger()})
+	require.True(t, op.isInitGRPCLogger)
+	require.True(t, op.isInitSaramaLogger)
+	require.Nil(t, op.output)
+
+	var buffer zaptest.Buffer
+	op.applyOpts([]LoggerOpt{WithOutputWriteSyncer(&buffer)})
+	require.Equal(t, &buffer, op.output)
 }

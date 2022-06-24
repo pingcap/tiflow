@@ -26,9 +26,9 @@ func TestContextWithLogger(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.TODO()
-	require.Equal(t, FromContext(ctx), log.L())
+	require.Equal(t, log.L(), FromContext(ctx), log.L())
 
 	logger := log.L().With(zap.String("inner", "logger"))
 	ctx = NewContextWithLogger(ctx, logger)
-	require.Equal(t, FromContext(ctx), log.L().With(zap.String("inner", "logger")))
+	require.Equal(t, log.L().With(zap.String("inner", "logger")), FromContext(ctx))
 }
