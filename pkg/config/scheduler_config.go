@@ -21,8 +21,11 @@ import (
 
 // SchedulerConfig configs TiCDC scheduler.
 type SchedulerConfig struct {
-	HeartbeatTick        int          `toml:"heartbeat-tick" json:"heartbeat-tick"`
-	MaxTaskConcurrency   int          `toml:"max-task-concurrency" json:"max-task-concurrency"`
+	// HeartbeatTick is the number of owner tick to initial a heartbeat to captures.
+	HeartbeatTick int `toml:"heartbeat-tick" json:"heartbeat-tick"`
+	// MaxTaskConcurrency the maximum of concurrent running schedule tasks.
+	MaxTaskConcurrency int `toml:"max-task-concurrency" json:"max-task-concurrency"`
+	// CheckBalanceInterval the interval of balance tables between each capture.
 	CheckBalanceInterval TomlDuration `toml:"check-balance-interval" json:"check-balance-interval"`
 }
 
