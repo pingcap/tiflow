@@ -81,7 +81,7 @@ func convertDdlEventType(e *model.DDLEvent) canal.EventType {
 	case mm.ActionAddColumn, mm.ActionDropColumn, mm.ActionModifyColumn, mm.ActionRebaseAutoID,
 		mm.ActionSetDefaultValue, mm.ActionModifyTableComment, mm.ActionRenameIndex, mm.ActionAddTablePartition,
 		mm.ActionDropTablePartition, mm.ActionModifyTableCharsetAndCollate, mm.ActionTruncateTablePartition,
-		mm.ActionAddColumns, mm.ActionDropColumns:
+		mm.ActionMultiSchemaChange:
 		return canal.EventType_ALTER
 	case mm.ActionDropTable:
 		return canal.EventType_ERASE

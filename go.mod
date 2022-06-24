@@ -122,7 +122,7 @@ require (
 	github.com/apache/thrift v0.13.1-0.20201008052519-daf620915714 // indirect
 	github.com/ardielle/ardielle-go v1.5.2 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/blacktear23/go-proxyprotocol v0.0.0-20180807104634-af7a81e8dd0d // indirect
+	github.com/blacktear23/go-proxyprotocol v1.0.0 // indirect
 	github.com/cakturk/go-netstat v0.0.0-20200220111822-e5b49efee7a5 // indirect
 	github.com/carlmjohnson/flagext v0.21.0 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
@@ -289,3 +289,7 @@ replace github.com/dgrijalva/jwt-go v3.2.0+incompatible => github.com/golang-jwt
 
 // Fix https://github.com/pingcap/tiflow/issues/4961
 replace github.com/benbjohnson/clock v1.3.0 => github.com/benbjohnson/clock v1.1.0
+
+replace github.com/pingcap/tidb/parser => github.com/tangenta/tidb/parser v0.0.0-20220620081605-2871ee8c4f30
+
+replace github.com/pingcap/tidb => github.com/tangenta/tidb v1.1.0-beta.0.20220620081605-2871ee8c4f30
