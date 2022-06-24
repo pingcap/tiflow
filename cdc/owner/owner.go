@@ -583,6 +583,7 @@ func (o *ownerImpl) updateGCSafepoint(
 	ctx context.Context, state *orchestrator.GlobalReactorState,
 ) error {
 	minChekpoinTsMap, forceUpdateMap := o.calculateGCSafepoint(state)
+
 	for upstreamID, minCheckpointTs := range minChekpoinTsMap {
 		up, ok := o.upstreamManager.Get(upstreamID)
 		if !ok {
@@ -626,7 +627,7 @@ func (o *ownerImpl) calculateGCSafepoint(state *orchestrator.GlobalReactorState)
 			continue
 		}
 		switch changefeedState.Info.State {
-		case model.StateNormal, model.StateStopped, model.StateError:
+		case model.StateNormal, model.StateStopped, model.StateError, model.StateFailed:
 		default:
 			continue
 		}

@@ -215,7 +215,13 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 
 func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
 	c.state = state
-	c.feedStateManager.Tick(state)
+	adminJobPending := c.feedStateManager.Tick(state)
+	// If there are any pending admin jobs, skip this tick.
+	// The reason is that Info/Status/TaskPositions fields in ChangefeedReactorState is not
+	// updated until next tick. Otherwise, using the old fileds in this tick could be problematic.
+	if adminJobPending {
+		return nil
+	}
 
 	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
 	// check stale checkPointTs must be called before `feedStateManager.ShouldRunning()`
@@ -259,6 +265,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	if barrierTs < checkpointTs {
 		// This condition implies that the DDL resolved-ts has not yet reached checkpointTs,
 		// which implies that it would be premature to schedule tables or to update status.
@@ -352,6 +359,7 @@ LOOP:
 			return errors.Trace(err)
 		}
 	}
+	c.barriers = newBarriers()
 	if c.state.Info.SyncPointEnabled {
 		c.barriers.Update(syncPointBarrier, checkpointTs)
 	}
@@ -360,6 +368,7 @@ LOOP:
 	// the DDL barrier to the correct start point.
 	c.barriers.Update(ddlJobBarrier, checkpointTs-1)
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
+
 	var err error
 	// Note that (checkpointTs == ddl.FinishedTs) DOES NOT imply that the DDL has been completed executed.
 	// So we need to process all DDLs from the range [checkpointTs, ...), but since the semantics of start-ts requires
@@ -444,6 +453,8 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	}
 	c.wg.Wait()
 	c.scheduler.Close(ctx)
+	c.scheduler = nil
+	c.barriers = nil
 
 	changefeedCheckpointTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	changefeedCheckpointTsLagGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)

@@ -184,6 +184,7 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 		for {
 			select {
 			case <-stdCtx.Done():
+				log.Info("receive context done in puller run")
 				return stdCtx.Err()
 			case <-ticker.C:
 				duration := h.clock.Since(lastResolvedTsAdvancedTime)

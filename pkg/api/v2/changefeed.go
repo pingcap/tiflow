@@ -16,6 +16,7 @@ package v2
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	v2 "github.com/pingcap/tiflow/cdc/api/v2"
 	"github.com/pingcap/tiflow/pkg/api/internal/rest"
@@ -38,6 +39,8 @@ type ChangefeedInterface interface {
 	// Update updates a changefeed
 	Update(ctx context.Context, cfg *v2.ChangefeedConfig,
 		name string) (*v2.ChangeFeedInfo, error)
+	// Resume resumes a changefeed with given startTs if necessary
+	Resume(ctx context.Context, name string, startTs uint64) error
 }
 
 // changefeeds implements ChangefeedInterface
@@ -98,4 +101,13 @@ func (c *changefeeds) Update(ctx context.Context,
 		Do(ctx).
 		Into(result)
 	return result, err
+}
+
+// Resume a changefeed
+func (c *changefeeds) Resume(ctx context.Context, name string, startTs uint64) error {
+	u := fmt.Sprintf("changefeeds/%s/resume", name)
+	return c.client.Post().
+		WithURI(u).
+		WithParam("start_ts", strconv.FormatUint(startTs, 10)).
+		Do(ctx).Error()
 }

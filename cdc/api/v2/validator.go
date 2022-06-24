@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/r3labs/diff"
 	"github.com/tikv/client-go/v2/oracle"
@@ -281,4 +282,21 @@ func verifyUpdateChangefeedConfig(ctx context.Context,
 			GenWithStackByArgs("changefeed config is the same with the old one, do nothing")
 	}
 	return newInfo, newUpInfo, nil
+}
+
+func verifyResumeChangefeed(ctx context.Context,
+	changefeedID model.ChangeFeedID,
+	checkpointTs uint64,
+	upstream *upstream.Upstream,
+) error {
+	// TODO: gcSafePoint needs a force update here.
+	// At present, gcSafePoint is updated in gcManager.TryUpdateGCSafePoint every 1min.
+	// So when we try to resume the changefeed, gcManager.lastSafePointTs may not updated timely,
+	// And gcManager.CheckStaleCheckpointTs may not return error expectfully
+	err := upstream.GCManager.CheckStaleCheckpointTs(ctx, changefeedID, checkpointTs)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

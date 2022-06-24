@@ -15,7 +15,9 @@ package v2
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"go.uber.org/zap"
 )
 
@@ -292,6 +295,71 @@ func (h *OpenAPIV2) GetChangeFeedMetaInfo(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, toAPIModel(info))
+}
+
+// ResumeChangefeed handles update changefeed request.
+func (h *OpenAPIV2) ResumeChangefeed(c *gin.Context) {
+	if !h.capture.IsOwner() {
+		api.ForwardToOwner(c, h.capture)
+		return
+	}
+
+	ctx := c.Request.Context()
+	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
+	err := model.ValidateChangefeedID(changefeedID.ID)
+	if err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
+			changefeedID.ID))
+		return
+	}
+
+	var startTs uint64
+	startTsStr, ok := c.GetQuery("start_ts")
+	if ok {
+		startTs, err = strconv.ParseUint(startTsStr, 10, 64)
+		if err != nil {
+			_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid start_ts:% s",
+				startTsStr))
+			return
+		}
+	}
+
+	cfInfo, err := h.capture.StatusProvider().GetChangeFeedInfo(ctx, changefeedID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	var upstream *upstream.Upstream
+	if cfInfo.UpstreamID == 0 {
+		upstream = h.capture.UpstreamManager.GetDefaultUpstream()
+	} else {
+		upstream, ok = h.capture.UpstreamManager.Get(cfInfo.UpstreamID)
+		if !ok {
+			_ = c.Error(cerror.WrapError(cerror.ErrUpstreamNotFound,
+				fmt.Errorf("upstream %d not found", cfInfo.UpstreamID)))
+			return
+		}
+	}
+
+	if err := verifyResumeChangefeed(ctx, changefeedID, startTs, upstream); err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	job := model.AdminJob{
+		CfID: changefeedID,
+		Type: model.AdminResume,
+		Opts: &model.AdminJobOption{
+			StartTsForResume: startTs,
+		},
+	}
+
+	if err := api.HandleOwnerJob(ctx, h.capture, job); err != nil {
+		_ = c.Error(err)
+		return
+	}
+	c.Status(http.StatusAccepted)
 }
 
 func toAPIModel(info *model.ChangeFeedInfo) *ChangeFeedInfo {
