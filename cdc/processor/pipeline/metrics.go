@@ -46,7 +46,7 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "processor",
 			Name:      "sink_node_resolved_ts",
-			Help:      "xxx",
+			Help:      "resolved timestamp reported by sink node",
 		}, []string{"table"})
 )
 
