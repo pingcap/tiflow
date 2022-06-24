@@ -14,6 +14,7 @@
 package pipeline
 
 import (
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pipeline"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -77,9 +79,13 @@ type sinkNode struct {
 	rowBuffer   []*model.RowChangedEvent
 
 	flowController tableFlowController
+
+	resolvedTsOb prometheus.Gauge
+	flushSinkOb  prometheus.Observer
 }
 
 func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController) *sinkNode {
+	tid := fmt.Sprintf("%d", tableID)
 	return &sinkNode{
 		tableID:      tableID,
 		sink:         sink,
@@ -90,6 +96,9 @@ func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, target
 		barrierTs:    startTs,
 
 		flowController: flowController,
+
+		resolvedTsOb: sinkNodeResolvedTs.WithLabelValues(tid),
+		flushSinkOb:  flushSinkHistogram.WithLabelValues(tid),
 	}
 }
 
@@ -117,7 +126,9 @@ func (n *sinkNode) stop(ctx pipeline.NodeContext) (err error) {
 }
 
 func (n *sinkNode) flushSink(ctx pipeline.NodeContext, resolvedTs model.Ts) (err error) {
+	start := time.Now()
 	defer func() {
+		n.flushSinkOb.Observe(time.Since(start).Seconds())
 		if err != nil {
 			n.status.Store(TableStatusStopped)
 			return
@@ -330,6 +341,7 @@ func (n *sinkNode) Receive(ctx pipeline.NodeContext) error {
 				return errors.Trace(err)
 			}
 			atomic.StoreUint64(&n.resolvedTs, msg.PolymorphicEvent.CRTs)
+			n.resolvedTsOb.Set(float64(msg.PolymorphicEvent.CRTs))
 			return nil
 		}
 		if err := n.emitEvent(ctx, event); err != nil {

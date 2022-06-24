@@ -30,6 +30,9 @@ import (
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/common"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -43,8 +46,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util"
-	"github.com/prometheus/client_golang/prometheus"
-	"go.uber.org/zap"
 )
 
 const (
@@ -959,7 +960,26 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 			time.Sleep(time.Hour)
 		})
 
-		err := s.statistics.RecordBatchExecution(func() (int, error) {
+		err := s.statistics.RecordBatchExecution(func() (size int, retErr error) {
+			startTime := time.Now()
+			defer func() {
+				duration := time.Since(startTime)
+				if retErr != nil {
+					// We log execution duration for all error cases.
+					log.Info("Executing DML failed",
+						zap.Duration("duration", duration),
+						zap.Int("count", dmls.rowCount),
+						zap.Error(retErr))
+					return
+				}
+
+				if duration > 10*time.Second {
+					log.Info("Executing DML too long",
+						zap.Duration("duration", duration),
+						zap.Int("count", dmls.rowCount))
+				}
+			}()
+
 			tx, err := s.db.BeginTx(ctx, nil)
 			if err != nil {
 				return 0, logDMLTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
