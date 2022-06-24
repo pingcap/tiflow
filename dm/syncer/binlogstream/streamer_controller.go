@@ -292,19 +292,47 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 
 var mockRestarted = false
 
-// GetEvent returns binlog event from upstream binlog or streamModifier, should
-// only have one thread call this function.
-func (c *StreamerController) GetEvent(tctx *tcontext.Context) (event *replication.BinlogEvent, op pb.ErrorOp, err error) {
+// GetEvent returns binlog event from upstream binlog or streamModifier.
+// When return events from streamModifier, we should maintain these properties:
+// - Inject
+//   if we inject events [DDL1, DDL2] at (start) position 900, where start position
+//   900 has Insert1 event whose LogPos (end position) is 1000, we should return
+//   to caller like
+//   - DDL1, start position 900 LogPos 900, suffix 1
+//   - DDL2, start position 900 LogPos 900, suffix 2
+//   - Insert1, start position 900 LogPos 1000, suffix 0
+//   when DDL need shard resync, for example, after DDL2's shard group finished,
+//   caller should use (LogPos 900, suffix 2) to reset streamer, then the next
+//   event from upstream binlog is Insert1, and next event from streamModifier is
+//   unknown in this context.
+// - Replace
+//   if we replace events [DDL1, DDL2] at (start) position 900, where start position
+//   900 has DDL0 event whose LogPos (end position) is 1000, we should return to
+//   caller like
+//   - DDL1, start position 900 LogPos 900, suffix 1
+//   - DDL2, start position 900 LogPos 1000, suffix 0 (or 2?)
+//   for shard resync, caller should use end position to reset streamer as above
+// - Skip
+//   the skipped event will still be sent to caller, with op = pb.ErrorOp_Skip,
+//   to let caller track schema and save checkpoints.
+// TODO: start position and suffix is maintained in caller, after location recorder
+// is enabled we can maintain it inside StreamerController.
+func (c *StreamerController) GetEvent(tctx *tcontext.Context) (
+	event *replication.BinlogEvent,
+	suffix int,
+	op pb.ErrorOp,
+	err error,
+) {
 	failpoint.Inject("SyncerGetEventError", func(_ failpoint.Value) {
 		if !mockRestarted {
 			mockRestarted = true
 			c.meetError = true
 			tctx.L().Info("mock upstream instance restart", zap.String("failpoint", "SyncerGetEventError"))
-			failpoint.Return(nil, pb.ErrorOp_InvalidErrorOp, terror.ErrDBBadConn.Generate())
+			failpoint.Return(nil, 0, pb.ErrorOp_InvalidErrorOp, terror.ErrDBBadConn.Generate())
 		}
 	})
 
-	appendRelaySubDir := func() (*replication.BinlogEvent, pb.ErrorOp, error) {
+	appendRelaySubDir := func() (*replication.BinlogEvent, int, pb.ErrorOp, error) {
 		if ev, ok := event.Event.(*replication.RotateEvent); ok {
 			c.currBinlogFile = string(ev.NextLogName)
 			// if is local binlog but switch to remote on error, need to add uuid information in binlog's name
@@ -315,13 +343,13 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (event *replicatio
 			} else if c.relaySubDirSuffix != "" {
 				filename, err2 := binlog.ParseFilename(string(ev.NextLogName))
 				if err2 != nil {
-					return nil, pb.ErrorOp_InvalidErrorOp, terror.Annotate(err2, "fail to parse binlog file name from rotate event")
+					return nil, 0, pb.ErrorOp_InvalidErrorOp, terror.Annotate(err2, "fail to parse binlog file name from rotate event")
 				}
 				ev.NextLogName = []byte(binlog.ConstructFilenameWithUUIDSuffix(filename, c.relaySubDirSuffix))
 				event.Event = ev
 			}
 		}
-		return event, op, nil
+		return event, suffix, op, nil
 	}
 
 	c.RLock()
@@ -329,7 +357,10 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (event *replicatio
 	c.RUnlock()
 
 FORLOOP:
-	for frontOp := c.streamModifier.front(); frontOp != nil; {
+	for frontOp := c.streamModifier.front(); frontOp != nil; frontOp = c.streamModifier.front() {
+		op = pb.ErrorOp_InvalidErrorOp
+		suffix = 0
+
 		if c.lastEvent == nil {
 			c.lastEvent, err = streamer.GetEvent(tctx.Context())
 			failpoint.Inject("GetEventError", func() {
@@ -343,8 +374,15 @@ FORLOOP:
 					c.Unlock()
 				}
 
-				return nil, pb.ErrorOp_InvalidErrorOp, err
+				return nil, 0, pb.ErrorOp_InvalidErrorOp, err
 			}
+		}
+
+		// fake rotate. binlog recorder should handle it
+		if c.lastEvent.Header.LogPos == 0 {
+			event = c.lastEvent
+			c.lastEvent = nil
+			return
 		}
 
 		startPos := mysql.Position{
@@ -352,6 +390,9 @@ FORLOOP:
 			Pos:  c.lastEvent.Header.LogPos - c.lastEvent.Header.EventSize,
 		}
 		cmp := binlog.ComparePosition(startPos, frontOp.pos)
+		tctx.L().Debug("lance test",
+			zap.Stringer("startPos", startPos),
+			zap.Stringer("frontOp", frontOp.pos))
 		switch cmp {
 		case -1:
 			event = c.lastEvent
@@ -372,9 +413,19 @@ FORLOOP:
 				if c.streamModifier.nextEventInOp == len(frontOp.events) {
 					c.lastEvent = nil
 					c.streamModifier.next()
+					continue
 				}
+
 				event = frontOp.events[c.streamModifier.nextEventInOp]
 				c.streamModifier.nextEventInOp++
+
+				if c.streamModifier.nextEventInOp == len(frontOp.events) {
+					event.Header.LogPos = c.lastEvent.Header.LogPos
+					suffix = 0
+				} else {
+					event.Header.LogPos = startPos.Pos
+					suffix = c.streamModifier.nextEventInOp
+				}
 				op = pb.ErrorOp_Replace
 				// TODO: currently we let caller to modify Suffix, after location recorder
 				// binlog streamer itself can maintain it
@@ -388,6 +439,9 @@ FORLOOP:
 				}
 				event = frontOp.events[c.streamModifier.nextEventInOp]
 				c.streamModifier.nextEventInOp++
+
+				event.Header.LogPos = startPos.Pos
+				suffix = c.streamModifier.nextEventInOp
 				// inject and replace seems same to caller to maintain Suffix, maybe unify them?
 				op = pb.ErrorOp_Inject
 				break FORLOOP
@@ -406,7 +460,12 @@ FORLOOP:
 				op = pb.ErrorOp_Inject
 				break FORLOOP
 			default:
-				c.logger.DPanic("invalid error handle op", zap.Stringer("op", frontOp.op))
+				c.logger.Warn("mismatched handle op",
+					zap.Stringer("op", frontOp.op),
+					zap.Stringer("startPos", startPos),
+					zap.Stringer("frontOp", frontOp.pos),
+				)
+				c.streamModifier.next()
 			}
 		}
 	}
@@ -432,7 +491,7 @@ FORLOOP:
 			c.meetError = true
 			c.Unlock()
 		}
-		return nil, pb.ErrorOp_InvalidErrorOp, err
+		return nil, 0, pb.ErrorOp_InvalidErrorOp, err
 	}
 
 	return appendRelaySubDir()

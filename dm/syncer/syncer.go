@@ -1858,7 +1858,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 
 		for i := 0; i < n; {
-			e, _, err1 := s.streamerController.GetEvent(s.runCtx)
+			e, _, _, err1 := s.streamerController.GetEvent(s.runCtx)
 			if err1 != nil {
 				return err
 			}
@@ -1897,6 +1897,15 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 		// clone currentLocation's gtid set to avoid its gtid is transport to table checkpoint
 		// currently table checkpoint will save location's gtid set with shallow copy
+		gset := currentLocation.GetGTID()
+		if gset == nil {
+			gtidSet, err2 := gtid.ParserGTID(s.cfg.Flavor, currentGTID)
+			if err2 != nil {
+				return err2
+			}
+			return currentLocation.SetGTID(gtidSet)
+		}
+
 		newGTID := currentLocation.GetGTID().Clone()
 		err2 := newGTID.Update(currentGTID)
 		if err2 != nil {
@@ -2018,11 +2027,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 
 		startTime := time.Now()
-		var (
-			op                    pb.ErrorOp
-			injectOrReplaceSuffix int
-		)
-		e, op, err = s.streamerController.GetEvent(s.runCtx)
+		e, suffix, op, err := s.streamerController.GetEvent(s.runCtx)
 
 		failpoint.Inject("SafeModeExit", func(val failpoint.Value) {
 			if intVal, ok := val.(int); ok && intVal == 1 {
@@ -2119,17 +2124,16 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		failpoint.Inject("ProcessBinlogSlowDown", nil)
 
 		s.tctx.L().Debug("receive binlog event", zap.Reflect("header", e.Header))
+		s.tctx.L().Debug("lance test 3",
+			zap.Stringer("last location", lastLocation),
+			zap.Stringer("current location", currentLocation))
 
 		// support QueryEvent and RowsEvent
 		// we calculate startLocation and endLocation(currentLocation) for Query event here
 		// set startLocation empty for other events to avoid misuse
 		startLocation = binlog.Location{}
-		if _, ok := e.Event.(*replication.GenericEvent); !ok {
-			lastEvent = e
-		}
-
-		switch op {
-		case pb.ErrorOp_Replace, pb.ErrorOp_Inject:
+		switch e.Event.(type) {
+		case *replication.QueryEvent, *replication.RowsEvent:
 			startLocation = binlog.NewLocation(
 				mysql.Position{
 					Name: lastLocation.Position.Name,
@@ -2139,7 +2143,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			)
 			startLocation.Suffix = currentLocation.Suffix
 
-			injectOrReplaceSuffix++
 			currentLocation = binlog.NewLocation(
 				mysql.Position{
 					Name: lastLocation.Position.Name,
@@ -2147,16 +2150,14 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				},
 				currentLocation.GetGTID(),
 			)
-			currentLocation.Suffix = injectOrReplaceSuffix
-			// TODO: can be removed in the future
-			if queryEvent, ok := e.Event.(*replication.QueryEvent); ok {
-				err = currentLocation.SetGTID(queryEvent.GSet)
-				if err != nil {
-					return terror.Annotatef(err, "fail to record GTID %v", queryEvent.GSet)
-				}
-			}
+			currentLocation.Suffix = suffix
+		}
+		if _, ok := e.Event.(*replication.GenericEvent); !ok {
+			lastEvent = e
+		}
+
+		switch op {
 		case pb.ErrorOp_Skip:
-			injectOrReplaceSuffix = 0
 			// TODO: check type assertion!!
 			queryEvent := e.Event.(*replication.QueryEvent)
 			ec := eventContext{
@@ -2188,8 +2189,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				s.tctx.L().Info("flush jobs when handle-error skip")
 			}
 			continue
-		default:
-			injectOrReplaceSuffix = 0
 		}
 
 		// check pass SafeModeExitLoc and try disable safe mode, but not in sharding or replacing error
@@ -2225,6 +2224,9 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				return checkErr
 			}
 		}
+		s.tctx.L().Debug("lance test 4",
+			zap.Stringer("last location", lastLocation),
+			zap.Stringer("current location", currentLocation))
 		ec := eventContext{
 			tctx:                s.runCtx,
 			header:              e.Header,
@@ -2692,6 +2694,9 @@ func generateExtendColumn(data [][]interface{}, r *regexprrouter.RouteTable, tab
 }
 
 func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, originSQL string) (err error) {
+	s.tctx.L().Debug("lance test 5",
+		zap.Stringer("last location", ec.lastLocation),
+		zap.Stringer("current location", ec.currentLocation))
 	if originSQL == "BEGIN" {
 		failpoint.Inject("NotUpdateLatestGTID", func(_ failpoint.Value) {
 			// directly return nil without update latest GTID here

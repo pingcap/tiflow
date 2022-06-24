@@ -114,6 +114,9 @@ func (m *streamModifier) Set(req *pb.HandleWorkerErrorRequest, events []*replica
 
 	if toInsertIndex == len(m.ops) {
 		m.ops = append(m.ops, toInject)
+		m.logger.Info("set a new operator",
+			zap.Stringer("position", pos),
+			zap.Stringer("new operator", toInject))
 		return nil
 	}
 

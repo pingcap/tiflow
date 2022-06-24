@@ -640,7 +640,7 @@ func (v *DataValidator) doValidate() {
 	locationForFlush := currLoc.Clone()
 	v.lastFlushTime = time.Now()
 	for {
-		e, _, err := v.streamerController.GetEvent(v.tctx)
+		e, _, _, err := v.streamerController.GetEvent(v.tctx)
 		if err != nil {
 			switch {
 			case err == context.Canceled:
