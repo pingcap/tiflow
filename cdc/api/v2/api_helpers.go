@@ -26,6 +26,8 @@ import (
 // APIV2Helpers is a collections of helper functions of OpenAPIV2.
 // Defining it as an interface to make APIs more testable.
 type APIV2Helpers interface {
+	// VerifyCreateChangefeedConfig verifies the changefeedConfig,
+	// and yield an valid changefeedInfo or error
 	VerifyCreateChangefeedConfig(
 		context.Context,
 		*ChangefeedConfig,
@@ -35,6 +37,8 @@ type APIV2Helpers interface {
 		tidbkv.Storage,
 	) (*model.ChangeFeedInfo, error)
 
+	// VerifyUpdateChangefeedConfig verifies the changefeed update config,
+	// and returns a pair of valid changefeedInfo & upstreamInfo
 	VerifyUpdateChangefeedConfig(
 		context.Context,
 		*ChangefeedConfig,
@@ -42,15 +46,19 @@ type APIV2Helpers interface {
 		*model.UpstreamInfo,
 	) (*model.ChangeFeedInfo, *model.UpstreamInfo, error)
 
+	// VerifyUpstream verifies the upstreamConfig
 	VerifyUpstream(
 		context.Context,
 		*ChangefeedConfig,
 		*model.ChangeFeedInfo,
 	) error
 
+	// GetPDClient returns a PDClient given the PD cluster addresses and a credential
 	GetPDClient(context.Context, []string, *security.Credential) (pd.Client, error)
 
+	// CreateTiStore wrap the CreateTiStore method to increase testability
 	CreateTiStore([]string, *security.Credential) (tidbkv.Storage, error)
 }
 
+// APIV2HelpersImpl is an implementation of AVIV2Helpers interface
 type APIV2HelpersImpl struct{}

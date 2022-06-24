@@ -24,7 +24,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	tidbkv "github.com/pingcap/tidb/kv"
-	mock_v2 "github.com/pingcap/tiflow/cdc/api/v2/mock"
 	mock_capture "github.com/pingcap/tiflow/cdc/capture/mock"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
@@ -37,20 +36,11 @@ import (
 )
 
 var (
-	changeFeedID         = model.DefaultChangeFeedID("test-changeFeed")
-	captureID            = "test-capture"
-	nonExistChangefeedID = model.DefaultChangeFeedID("non-exist-changefeed")
-	blackHoleSink        = "blackhole://"
+	changeFeedID = model.DefaultChangeFeedID("test-changeFeed")
+	// captureID            = "test-capture"
+	// nonExistChangefeedID = model.DefaultChangeFeedID("non-exist-changefeed")
+	blackHoleSink = "blackhole://"
 )
-
-type mockUpstreamManager struct {
-	up *upstream.Upstream
-	x  upstream.Manager
-}
-
-func (m *mockUpstreamManager) GetDefaultUpstream() *upstream.Upstream {
-	return m.up
-}
 
 type mockEtcdClient struct {
 	etcd.CDCEtcdClientForAPI
@@ -106,16 +96,17 @@ func (m *mockEtcdClient) GetGCServiceID() string {
 func TestCreateChangefeed(t *testing.T) {
 	t.Parallel()
 
+	pdClient := &mockPDClient{}
+	statusProvider := &mockStatusProvider{}
+	mockUpManager := upstream.NewManager4Test(pdClient)
+	mockEtcdCli := &mockEtcdClient{}
+
 	helperCtrl := gomock.NewController(t)
-	helper := mock_v2.NewMockAPIV2Helpers(helperCtrl)
+	helper := NewMockAPIV2Helpers(helperCtrl)
 	captureCtrl := gomock.NewController(t)
 	cp := mock_capture.NewMockCaptureInfoProvider(captureCtrl)
 	apiV2 := NewOpenAPIV2ForTest(cp, helper)
 	router := newRouter(apiV2)
-
-	pdClient := &mockPDClient{}
-	statusProvider := &mockStatusProvider{}
-	mockUpManager := upstream.NewManager4Test(pdClient)
 
 	helper.EXPECT().
 		GetPDClient(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -142,11 +133,6 @@ func TestCreateChangefeed(t *testing.T) {
 			}, nil
 		})
 
-	mockEtcdCli := &mockEtcdClient{
-		upstreamExists:  true,
-		createOpSuccess: true,
-	}
-
 	cp.EXPECT().
 		StatusProvider().
 		Return(statusProvider)
@@ -156,18 +142,27 @@ func TestCreateChangefeed(t *testing.T) {
 	cp.EXPECT().
 		GetUpstreamManager().
 		Return(mockUpManager).AnyTimes()
-	cp.EXPECT().IsReady().Return(true)
-	cp.EXPECT().IsOwner().Return(true)
+	cp.EXPECT().
+		IsReady().
+		Return(true)
+	cp.EXPECT().
+		IsOwner().
+		Return(true)
 
-	// test succeed
+	// case 1: success
+	mockEtcdCli.upstreamExists, mockEtcdCli.createOpSuccess = true, true
 	config1 := struct {
 		ID      string   `json:"changefeed_id"`
 		SinkURI string   `json:"sink_uri"`
 		PDAddrs []string `json:"pd_addrs"`
-	}{ID: changeFeedID.ID, SinkURI: blackHoleSink, PDAddrs: []string{"http://127.0.0.1:2379"}}
-	b, err := json.Marshal(&config1)
+	}{
+		ID:      changeFeedID.ID,
+		SinkURI: blackHoleSink,
+		PDAddrs: []string{"http://127.0.0.1:2379"},
+	}
+	b1, err := json.Marshal(&config1)
 	require.Nil(t, err)
-	body := bytes.NewReader(b)
+	body := bytes.NewReader(b1)
 
 	case1 := testCase{url: "/api/v2/changefeeds", method: "POST"}
 	w := httptest.NewRecorder()

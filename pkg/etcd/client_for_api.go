@@ -20,8 +20,8 @@ import (
 	"go.etcd.io/etcd/api/v3/mvccpb"
 )
 
-// TODO: refactor CDCEtcdClient as interface, and use it for v1
 // CDCEtcdClientForAPI extracts CDCEtcdClients's method used for apiv2
+// TODO: refactor CDCEtcdClient as interface, and use it for v1
 type CDCEtcdClientForAPI interface {
 	CreateChangefeedInfo(context.Context, *model.UpstreamInfo,
 		*model.ChangeFeedInfo, model.ChangeFeedID) error

@@ -238,6 +238,7 @@ func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
 	c.JSON(http.StatusOK, newCfInfo)
 }
 
+// GetChangeFeedMetaInfo returns the metaInfo of a changefeed
 func (h *OpenAPIV2) GetChangeFeedMetaInfo(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -255,6 +256,7 @@ func (h *OpenAPIV2) GetChangeFeedMetaInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, toAPIModel(info))
 }
 
+// GetPDClient returns a PDClient given the PD cluster addresses and a credential
 func (APIV2HelpersImpl) GetPDClient(ctx context.Context,
 	pdAddrs []string,
 	credential *security.Credential,
@@ -285,6 +287,7 @@ func (APIV2HelpersImpl) GetPDClient(ctx context.Context,
 	return pdClient, nil
 }
 
+// CreateTiStore wrap the CreateTiStore method to increase testability
 func (h APIV2HelpersImpl) CreateTiStore(pdAddrs []string,
 	credential *security.Credential,
 ) (tidbkv.Storage, error) {

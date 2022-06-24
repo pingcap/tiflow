@@ -271,7 +271,7 @@ swagger-spec: tools/bin/swag
 
 generate_mock: tools/bin/mockgen
 	tools/bin/mockgen -source cdc/owner/owner.go -destination cdc/owner/mock/owner_mock.go
-	tools/bin/mockgen -source cdc/api/v2/api_helpers.go -destination cdc/api/v2/mock/api_helpers_mock.go
+	tools/bin/mockgen -source cdc/api/v2/api_helpers.go -destination cdc/api/v2/api_helpers_mock.go -package v2
 	tools/bin/mockgen -source cdc/capture/capture_info_provider.go -destination cdc/capture/mock/capture_info_provider_mock.go
 clean:
 	go clean -i ./...

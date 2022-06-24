@@ -180,6 +180,7 @@ func (APIV2HelpersImpl) VerifyCreateChangefeedConfig(
 	}, nil
 }
 
+// VerifyUpstream verifies the upstream config before updating a changefeed
 func (h APIV2HelpersImpl) VerifyUpstream(ctx context.Context,
 	changefeedConfig *ChangefeedConfig,
 	cfInfo *model.ChangeFeedInfo,
