@@ -38,10 +38,10 @@ type LoaderPath struct {
 
 // VerifyLoaderPath verify loader path, return Origin/Actual/Moved paths.
 // it should be no side effect and can be called repeatedly.
-// before v6.2 loader path is like:
+// before v6.1 loader path is like:
 // s3 --> user_set_dir + / + taskName + . + sourceID
 // local --> user_set_dir + . + taskName
-// after v6.2 loader path is like:
+// after v6.1 loader path is like:
 // s3 --> user_set_dir + / + taskName + . + sourceID
 // local --> user_set_dir + . + sourceID + . + taskName
 // For upgrade:
