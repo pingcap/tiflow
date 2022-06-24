@@ -298,6 +298,7 @@ func migrateGcServiceSafePoint(ctx context.Context,
 	for _, item := range gcServiceSafePoins.ServiceGCSafepoints {
 		if item.ServiceID == oldGcServiceID {
 			cdcGcSafePoint = item
+			break
 		}
 	}
 	if cdcGcSafePoint != nil {
