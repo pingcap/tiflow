@@ -24,7 +24,7 @@ import (
 
 type ConflictDetector[Worker worker[Txn], Txn txnEvent] struct {
 	workers []Worker
-	slots   *internal.Slots[*internal.Node[Txn]]
+	slots   *internal.Slots[*internal.Node]
 
 	finishedTxnQueue *containers.SliceQueue[finishedTxn[Txn]]
 	resolvedTxnQueue *containers.SliceQueue[resolvedTxn[Txn]]
@@ -37,12 +37,12 @@ type ConflictDetector[Worker worker[Txn], Txn txnEvent] struct {
 
 type finishedTxn[Txn txnEvent] struct {
 	txn  Txn
-	node *internal.Node[Txn]
+	node *internal.Node
 }
 
 type resolvedTxn[Txn txnEvent] struct {
 	txn      Txn
-	node     *internal.Node[Txn]
+	node     *internal.Node
 	workerID int64
 }
 
@@ -53,7 +53,7 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 ) *ConflictDetector[Worker, Txn] {
 	ret := &ConflictDetector[Worker, Txn]{
 		workers:          workers,
-		slots:            internal.NewSlots[*internal.Node[Txn]](numSlots),
+		slots:            internal.NewSlots[*internal.Node](numSlots),
 		finishedTxnQueue: containers.NewSliceQueue[finishedTxn[Txn]](),
 		resolvedTxnQueue: containers.NewSliceQueue[resolvedTxn[Txn]](),
 		closeCh:          make(chan struct{}),
@@ -70,8 +70,8 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 
 // Add pushes a transaction to the ConflictDetector.
 func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) error {
-	node := internal.NewNode(txn)
-	d.slots.Add(node, txn.ConflictKeys(), func(other *internal.Node[Txn]) {
+	node := internal.NewNode()
+	d.slots.Add(node, txn.ConflictKeys(), func(other *internal.Node) {
 		node.DependOn(other)
 	})
 	node.OnNoConflict(func(workerID int64) {
@@ -91,7 +91,6 @@ func (d *ConflictDetector[Worker, Txn]) Close() {
 }
 
 func (d *ConflictDetector[Worker, Txn]) runResolvedHandler() {
-selectLoop:
 	for {
 		select {
 		case <-d.closeCh:
@@ -100,7 +99,7 @@ selectLoop:
 			for {
 				resolvedTxn, ok := d.resolvedTxnQueue.Pop()
 				if !ok {
-					continue selectLoop
+					break
 				}
 
 				d.sendToWorker(&OutTxnEvent[Txn]{
@@ -118,7 +117,7 @@ selectLoop:
 			for {
 				finishedTxn, ok := d.finishedTxnQueue.Pop()
 				if !ok {
-					continue selectLoop
+					break
 				}
 
 				d.slots.Remove(finishedTxn.node, finishedTxn.txn.ConflictKeys())
@@ -130,7 +129,7 @@ selectLoop:
 }
 
 // sendToWorker should not call txn.Callback if it returns an error.
-func (d *ConflictDetector[Worker, Txn]) sendToWorker(txn *OutTxnEvent[Txn], node *internal.Node[Txn], workerID int64) {
+func (d *ConflictDetector[Worker, Txn]) sendToWorker(txn *OutTxnEvent[Txn], node *internal.Node, workerID int64) {
 	if workerID == -1 {
 		workerID = d.nextWorkerID.Add(1) % int64(len(d.workers))
 	}
