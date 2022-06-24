@@ -219,6 +219,34 @@ func NewDisabledManager() *ManagerImpl {
 	return &ManagerImpl{enabled: false}
 }
 
+// NewMockManager returns a mock redo manager instance, used in test only
+func NewMockManager(ctx context.Context) (*ManagerImpl, error) {
+	cfg := &config.ConsistentConfig{
+		Level:   string(ConsistentLevelEventual),
+		Storage: "blackhole://",
+	}
+	errCh := make(chan error, 1)
+	opts := &ManagerOptions{
+		EnableBgRunner: true,
+		ErrCh:          errCh,
+	}
+	logMgr, err := NewManager(ctx, cfg, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	go func() {
+		select {
+		case <-ctx.Done():
+			return
+		case err := <-errCh:
+			log.Panic("log manager error: ", zap.Error(err))
+		}
+	}()
+
+	return logMgr, err
+}
+
 // Enabled returns whether this log manager is enabled
 func (m *ManagerImpl) Enabled() bool {
 	return m.enabled
