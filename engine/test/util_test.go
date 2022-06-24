@@ -21,7 +21,7 @@ import (
 	"github.com/phayes/freeport"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tiflow/engine/executor"
-	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
+	"github.com/pingcap/tiflow/engine/pkg/etcdutil"
 	"github.com/pingcap/tiflow/engine/pkg/metadata"
 	"github.com/pingcap/tiflow/engine/servermaster"
 	"github.com/pingcap/tiflow/engine/test"
@@ -97,7 +97,7 @@ func (c *MiniCluster) Start1M1E(cc *C) (
 	masterAddr = fmt.Sprintf("127.0.0.1:%d", ports[0])
 	workerAddr = fmt.Sprintf("127.0.0.1:%d", ports[1])
 	masterCfg := &servermaster.Config{
-		Etcd: &etcdutils.ConfigParams{
+		Etcd: &etcdutil.ConfigParams{
 			Name:    "master1",
 			DataDir: "/tmp/df",
 		},

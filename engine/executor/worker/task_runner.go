@@ -73,7 +73,7 @@ func NewTaskRunner(inQueueSize int, initConcurrency int) *TaskRunner {
 // AddTask enqueues a naked task, and AddTask will wrap the task with internal.WrapRunnable.
 // Deprecated. TODO Will be removed once two-phase task dispatching is enabled.
 func (r *TaskRunner) AddTask(task Runnable) error {
-	wrappedTask := internal.WrapRunnable(task, r.clock.Now())
+	wrappedTask := internal.WrapRunnable(task, r.clock.Mono())
 	select {
 	case r.inQueue <- wrappedTask:
 		return nil

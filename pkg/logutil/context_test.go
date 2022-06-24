@@ -11,13 +11,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package internal
+package logutil
 
 import (
-	"github.com/pingcap/tiflow/engine/pkg/clock"
+	"context"
+	"testing"
+
+	"github.com/pingcap/log"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
-// RuntimeInfo records some information related to the runnable object
-type RuntimeInfo struct {
-	SubmitTime clock.MonotonicTime
+func TestContextWithLogger(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.TODO()
+	require.Equal(t, log.L(), FromContext(ctx), log.L())
+
+	logger := log.L().With(zap.String("inner", "logger"))
+	ctx = NewContextWithLogger(ctx, logger)
+	require.Equal(t, log.L().With(zap.String("inner", "logger")), FromContext(ctx))
 }
