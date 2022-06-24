@@ -268,7 +268,7 @@ func (jm *JobManagerImplV2) QueryJob(ctx context.Context, req *pb.QueryJobReques
 	if masterMeta, err := mcli.Load(ctx); err != nil {
 		log.L().Warn("failed to load master kv meta from meta store", zap.Any("id", req.JobId), zap.Error(err))
 	} else {
-		if masterMeta != nil {
+		if masterMeta != nil && masterMeta.StatusCode != frameModel.MasterStatusUninit {
 			resp := &pb.QueryJobResponse{
 				Tp:     int32(frame.MustConvertWorkerType2JobType(masterMeta.Tp)),
 				Config: masterMeta.Config,

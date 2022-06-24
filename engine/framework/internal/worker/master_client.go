@@ -189,7 +189,17 @@ func (m *MasterClient) HandleHeartbeat(sender p2p.NodeID, msg *frameModel.Heartb
 	if msg.IsFinished {
 		m.masterSideClosed.Store(true)
 	}
-	m.lastMasterAckedPingTime.Store(time.Duration(msg.SendTime))
+
+	// worker may receive stale heartbeat pong message from job master, stale
+	// message doesn't contribute to job master aliveness detection and even
+	// leads to false positive.
+	lastAckTime := m.lastMasterAckedPingTime.Load()
+	if lastAckTime > time.Duration(msg.SendTime) {
+		log.L().Info("received stale pong heartbeat",
+			zap.Any("msg", msg), zap.Int64("lastAckTime", int64(lastAckTime)))
+	} else {
+		m.lastMasterAckedPingTime.Store(time.Duration(msg.SendTime))
+	}
 }
 
 // CheckMasterTimeout checks whether the master has timed out, i.e. we have lost
@@ -228,13 +238,16 @@ func (m *MasterClient) SendHeartBeat(ctx context.Context, clock clock.Clock, isF
 		IsFinished:   isFinished,
 	}
 
-	log.L().Debug("sending heartbeat", zap.String("worker", m.workerID))
+	log.L().Debug("sending heartbeat", zap.String("worker", m.workerID),
+		zap.String("master-id", m.masterID),
+		zap.Int64("epoch", epoch), zap.Int64("sendTime", int64(sendTime)))
 	ok, err := m.messageSender.SendToNode(ctx, nodeID, frameModel.HeartbeatPingTopic(m.masterID), heartbeatMsg)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	log.L().Info("sending heartbeat success", zap.String("worker", m.workerID),
-		zap.String("master-id", m.masterID))
+		zap.String("master-id", m.masterID),
+		zap.Int64("epoch", epoch), zap.Int64("sendTime", int64(sendTime)))
 	if !ok {
 		// Reloads master info asynchronously.
 		// Not using `ctx` because the caller might cancel unexpectedly.

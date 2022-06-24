@@ -11,20 +11,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package servermaster
+package logutil
 
 import (
-	"net/http"
-	"net/http/pprof"
+	"context"
+	"testing"
+
+	"github.com/pingcap/log"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
-// getDebugHandler returns a HTTP handler to handle debug information.
-func getDebugHandler() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/debug/pprof/", pprof.Index)
-	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-	return mux
+func TestContextWithLogger(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.TODO()
+	require.Equal(t, log.L(), FromContext(ctx), log.L())
+
+	logger := log.L().With(zap.String("inner", "logger"))
+	ctx = NewContextWithLogger(ctx, logger)
+	require.Equal(t, log.L().With(zap.String("inner", "logger")), FromContext(ctx))
 }
