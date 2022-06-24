@@ -22,6 +22,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -277,7 +278,7 @@ func (s *lightningCpListSuite) SetUpTest(c *C) {
 	c.Assert(err, IsNil)
 
 	metaSchema := "dm_meta"
-	cpList := NewLightningCheckpointList(baseDB, "test_lightning", "source1", metaSchema)
+	cpList := NewLightningCheckpointList(baseDB, "test_lightning", "source1", metaSchema, log.L())
 
 	s.cpList = cpList
 }

@@ -18,6 +18,7 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/util/filter"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -95,7 +96,7 @@ create table t (
 
 	dbConn := dbconn.NewDBConn(&config.SubTaskConfig{}, s.baseConn)
 	for _, ca := range cases {
-		schemaTracker, err := schema.NewTracker(ctx, "unit-test", defaultTestSessionCfg, dbConn)
+		schemaTracker, err := schema.NewTracker(ctx, "unit-test", defaultTestSessionCfg, dbConn, log.L())
 		c.Assert(err, IsNil)
 		c.Assert(schemaTracker.CreateSchemaIfNotExists(dbName), IsNil)
 		c.Assert(schemaTracker.Exec(ctx, dbName, ca.tableStr), IsNil)
@@ -111,7 +112,7 @@ create table t (
 			},
 		}
 		sessCtx := utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
-		g := NewExprFilterGroup(sessCtx, exprConfig)
+		g := NewExprFilterGroup(tcontext.Background(), sessCtx, exprConfig)
 		exprs, err := g.GetInsertExprs(table, ti)
 		c.Assert(err, IsNil)
 		c.Assert(exprs, HasLen, 1)
@@ -358,7 +359,7 @@ create table t (
 	dbConn := dbconn.NewDBConn(&config.SubTaskConfig{}, s.baseConn)
 	for _, ca := range cases {
 		c.Log(ca.tableStr)
-		schemaTracker, err := schema.NewTracker(ctx, "unit-test", defaultTestSessionCfg, dbConn)
+		schemaTracker, err := schema.NewTracker(ctx, "unit-test", defaultTestSessionCfg, dbConn, log.L())
 		c.Assert(err, IsNil)
 		c.Assert(schemaTracker.CreateSchemaIfNotExists(dbName), IsNil)
 		c.Assert(schemaTracker.Exec(ctx, dbName, ca.tableStr), IsNil)
@@ -374,7 +375,7 @@ create table t (
 			},
 		}
 		sessCtx := utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
-		g := NewExprFilterGroup(sessCtx, exprConfig)
+		g := NewExprFilterGroup(tcontext.Background(), sessCtx, exprConfig)
 		exprs, err := g.GetInsertExprs(table, ti)
 		c.Assert(err, IsNil)
 		c.Assert(exprs, HasLen, 1)
@@ -412,7 +413,7 @@ create table t (
 	)
 
 	dbConn := dbconn.NewDBConn(&config.SubTaskConfig{}, s.baseConn)
-	schemaTracker, err := schema.NewTracker(ctx, "unit-test", defaultTestSessionCfg, dbConn)
+	schemaTracker, err := schema.NewTracker(ctx, "unit-test", defaultTestSessionCfg, dbConn, log.L())
 	c.Assert(err, IsNil)
 	c.Assert(schemaTracker.CreateSchemaIfNotExists(dbName), IsNil)
 	c.Assert(schemaTracker.Exec(ctx, dbName, tableStr), IsNil)
@@ -428,7 +429,7 @@ create table t (
 		},
 	}
 	sessCtx := utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
-	g := NewExprFilterGroup(sessCtx, exprConfig)
+	g := NewExprFilterGroup(tcontext.Background(), sessCtx, exprConfig)
 	exprs, err := g.GetInsertExprs(table, ti)
 	c.Assert(err, IsNil)
 	c.Assert(exprs, HasLen, 1)
