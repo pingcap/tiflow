@@ -109,6 +109,12 @@ func (n *Node[T]) DependOn(target *Node[T]) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
+	if _, ok := n.dependees[target.id]; ok {
+		// DependOn can be called repeatedly.
+		// We need to ensure idempotency.
+		return
+	}
+
 	// Make sure that the dependers and conflictCounts have
 	// been created.
 	// Creating these maps is done lazily because we want to

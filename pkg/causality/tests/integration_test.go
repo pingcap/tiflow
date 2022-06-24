@@ -26,8 +26,8 @@ func TestConflict(t *testing.T) {
 	defer cancel()
 
 	const (
-		numWorkers     = 1
-		numSlots       = 1
+		numWorkers     = 8
+		numSlots       = 128
 		workingSetSize = 1024
 		batchSize      = 8
 		totalRows      = 1000
