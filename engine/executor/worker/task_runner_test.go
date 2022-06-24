@@ -105,7 +105,7 @@ func TestTaskRunnerSubmitTime(t *testing.T) {
 	}()
 
 	require.Eventually(t, func() bool {
-		return worker.SubmitTime() == submitTime
+		return worker.SubmitTime() == clock.ToMono(submitTime)
 	}, 1*time.Second, 10*time.Millisecond)
 
 	cancel()
