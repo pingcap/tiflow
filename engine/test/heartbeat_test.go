@@ -20,7 +20,7 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/executor"
-	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
+	"github.com/pingcap/tiflow/engine/pkg/etcdutil"
 	"github.com/pingcap/tiflow/engine/servermaster"
 	"github.com/pingcap/tiflow/engine/test"
 )
@@ -55,7 +55,7 @@ func (t *testHeartbeatSuite) SetUpSuite(c *C) {
 
 func (t *testHeartbeatSuite) TestHeartbeatExecutorCrush(c *C) {
 	masterCfg := &servermaster.Config{
-		Etcd: &etcdutils.ConfigParams{
+		Etcd: &etcdutil.ConfigParams{
 			Name:    "master1",
 			DataDir: "/tmp/df",
 		},
