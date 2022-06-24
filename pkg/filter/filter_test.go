@@ -153,8 +153,7 @@ func TestShouldDiscardDDL(t *testing.T) {
 	require.False(t, filter.ShouldDiscardDDL(model.ActionModifySchemaCharsetAndCollate))
 	require.False(t, filter.ShouldDiscardDDL(model.ActionAddPrimaryKey))
 	require.False(t, filter.ShouldDiscardDDL(model.ActionDropPrimaryKey))
-	require.False(t, filter.ShouldDiscardDDL(model.ActionAddColumns))
-	require.False(t, filter.ShouldDiscardDDL(model.ActionDropColumns))
+	require.False(t, filter.ShouldDiscardDDL(model.ActionMultiSchemaChange))
 
 	// Discard sequence DDL.
 	require.True(t, filter.ShouldDiscardDDL(model.ActionCreateSequence))
