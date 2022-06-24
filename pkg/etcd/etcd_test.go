@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/concurrency"
@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/stretchr/testify/require"
 )
 
 type Captures []*model.CaptureInfo
@@ -177,7 +178,7 @@ func TestOpChangeFeedDetail(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = s.client.GetChangeFeedInfo(ctx, cfID)
-	require.True(t, cerrors.ErrChangeFeedNotExists.Equal(err))
+	require.True(t, cerror.ErrChangeFeedNotExists.Equal(err))
 }
 
 func TestGetAllChangeFeedInfo(t *testing.T) {
@@ -234,7 +235,7 @@ func putChangeFeedStatus(
 		return errors.Trace(err)
 	}
 	_, err = c.Client.Put(ctx, key, value)
-	return cerrors.WrapError(cerrors.ErrPDEtcdAPIError, err)
+	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 
 func TestGetAllChangeFeedStatus(t *testing.T) {
@@ -275,7 +276,7 @@ func TestCreateChangefeed(t *testing.T) {
 	require.NoError(t, err)
 
 	err = s.client.CreateChangefeedInfo(ctx, detail, model.DefaultChangeFeedID("test-id"))
-	require.True(t, cerrors.ErrChangeFeedAlreadyExists.Equal(err))
+	require.True(t, cerror.ErrChangeFeedAlreadyExists.Equal(err))
 }
 
 func TestGetAllCaptureLeases(t *testing.T) {
