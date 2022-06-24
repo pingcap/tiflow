@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/phayes/freeport"
-	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
+	"github.com/pingcap/tiflow/engine/pkg/etcdutil"
 	"github.com/stretchr/testify/require"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
@@ -45,17 +45,17 @@ func PrepareEtcd(t *testing.T, name string) (string, *embed.Etcd, *clientv3.Clie
 
 	masterAddr := allocTempURL(t)
 	advertiseAddr := masterAddr
-	cfgCluster := &etcdutils.ConfigParams{}
+	cfgCluster := &etcdutil.ConfigParams{}
 	cfgCluster.Name = name
 	cfgCluster.DataDir = dir
 	cfgCluster.PeerUrls = "http://" + allocTempURL(t)
 	cfgCluster.Adjust("", embed.ClusterStateFlagNew)
 
-	cfgClusterEtcd := etcdutils.GenEmbedEtcdConfigWithLogger("info")
-	cfgClusterEtcd, err = etcdutils.GenEmbedEtcdConfig(cfgClusterEtcd, masterAddr, advertiseAddr, cfgCluster)
+	cfgClusterEtcd := etcdutil.GenEmbedEtcdConfigWithLogger("info")
+	cfgClusterEtcd, err = etcdutil.GenEmbedEtcdConfig(cfgClusterEtcd, masterAddr, advertiseAddr, cfgCluster)
 	require.Nil(t, err)
 
-	etcd, err := etcdutils.StartEtcd(cfgClusterEtcd, nil, nil, time.Minute)
+	etcd, err := etcdutil.StartEtcd(cfgClusterEtcd, nil, nil, time.Minute)
 	require.Nil(t, err)
 
 	client, err := clientv3.New(clientv3.Config{
@@ -80,7 +80,7 @@ func PrepareEtcdCluster(t *testing.T, names []string) (
 	cleanFn func(),
 ) {
 	dirs := make([]string, 0, len(names))
-	cfgs := make([]*etcdutils.ConfigParams, 0, len(names))
+	cfgs := make([]*etcdutil.ConfigParams, 0, len(names))
 	initialCluster := make([]string, 0, len(names))
 	for _, name := range names {
 		dir, err := ioutil.TempDir("", name)
@@ -90,7 +90,7 @@ func PrepareEtcdCluster(t *testing.T, names []string) (
 		advertiseAddr := allocTempURL(t)
 		advertiseAddrs = append(advertiseAddrs, advertiseAddr)
 
-		cfgCluster := &etcdutils.ConfigParams{}
+		cfgCluster := &etcdutil.ConfigParams{}
 		cfgCluster.Name = name
 		cfgCluster.DataDir = dir
 		cfgCluster.PeerUrls = "http://" + allocTempURL(t)
@@ -103,12 +103,12 @@ func PrepareEtcdCluster(t *testing.T, names []string) (
 		cfg.InitialCluster = strings.Join(initialCluster, ",")
 		fmt.Printf("cfg: %+v\n", cfg)
 		cfg.Adjust("", embed.ClusterStateFlagNew)
-		cfgClusterEtcd := etcdutils.GenEmbedEtcdConfigWithLogger("info")
+		cfgClusterEtcd := etcdutil.GenEmbedEtcdConfigWithLogger("info")
 		addr := advertiseAddrs[idx]
-		cfgClusterEtcd, err := etcdutils.GenEmbedEtcdConfig(cfgClusterEtcd, addr, addr, cfg)
+		cfgClusterEtcd, err := etcdutil.GenEmbedEtcdConfig(cfgClusterEtcd, addr, addr, cfg)
 		require.Nil(t, err)
 		go func() {
-			etcd, err := etcdutils.StartEtcd(cfgClusterEtcd, nil, nil, time.Minute)
+			etcd, err := etcdutil.StartEtcd(cfgClusterEtcd, nil, nil, time.Minute)
 			require.Nil(t, err)
 			etcdCh <- etcd
 		}()

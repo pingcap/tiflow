@@ -48,7 +48,7 @@ upstreams:
   syncer-config-name: sync-01
   syncer: null
   syncer-thread: 0
-  #continuous-validator-config-name: validator-01
+  #validator-config-name: validator-01
 #- db-config:
 #    host: host.docker.internal
 #    port: 3307
@@ -76,7 +76,7 @@ upstreams:
 #  syncer-config-name: sync-01
 #  syncer: null
 #  syncer-thread: 0
-  #continuous-validator-config-name: validator-01
+  #validator-config-name: validator-01
 online-ddl: true
 shadow-table-rules: []
 trash-table-rules: []

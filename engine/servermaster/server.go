@@ -46,7 +46,7 @@ import (
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
-	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
+	engineEtcdutil "github.com/pingcap/tiflow/engine/pkg/etcdutil"
 	externRescManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcetypes"
@@ -56,7 +56,7 @@ import (
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
-	"github.com/pingcap/tiflow/engine/pkg/serverutils"
+	"github.com/pingcap/tiflow/engine/pkg/serverutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
@@ -103,7 +103,7 @@ type Server struct {
 	msgService      *p2p.MessageRPCService
 	p2pMsgRouter    p2p.MessageRouter
 	rpcLogRL        *rate.Limiter
-	discoveryKeeper *serverutils.DiscoveryKeepaliver
+	discoveryKeeper *serverutil.DiscoveryKeepaliver
 
 	metaStoreManager MetaStoreManager
 
@@ -487,7 +487,7 @@ func (s *Server) Run(ctx context.Context) (err error) {
 		return s.memberLoop(ctx)
 	})
 
-	s.discoveryKeeper = serverutils.NewDiscoveryKeepaliver(
+	s.discoveryKeeper = serverutil.NewDiscoveryKeepaliver(
 		s.info, s.etcdClient, int(defaultSessionTTL/time.Second),
 		defaultDiscoverTicker, s.p2pMsgRouter,
 	)
@@ -545,9 +545,9 @@ func (s *Server) startResourceManager() error {
 }
 
 func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
-	etcdCfg := etcdutils.GenEmbedEtcdConfigWithLogger(s.cfg.LogLevel)
+	etcdCfg := engineEtcdutil.GenEmbedEtcdConfigWithLogger(s.cfg.LogLevel)
 	// prepare to join an existing etcd cluster.
-	err = etcdutils.PrepareJoinEtcd(s.cfg.Etcd, s.cfg.MasterAddr)
+	err = engineEtcdutil.PrepareJoinEtcd(s.cfg.Etcd, s.cfg.MasterAddr)
 	if err != nil {
 		return
 	}
@@ -560,7 +560,7 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 	// no `String` method exists for embed.Config, and can not marshal it to join too.
 	// but when starting embed etcd server, the etcd pkg will log the config.
 	// https://github.com/etcd-io/etcd/blob/3cf2f69b5738fb702ba1a935590f36b52b18979b/embed/etcd.go#L299
-	etcdCfg, err = etcdutils.GenEmbedEtcdConfig(etcdCfg, s.cfg.MasterAddr, s.cfg.AdvertiseAddr, s.cfg.Etcd)
+	etcdCfg, err = engineEtcdutil.GenEmbedEtcdConfig(etcdCfg, s.cfg.MasterAddr, s.cfg.AdvertiseAddr, s.cfg.Etcd)
 	if err != nil {
 		return
 	}

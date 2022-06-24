@@ -37,7 +37,7 @@ import (
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/registry"
-	"github.com/pingcap/tiflow/engine/framework/utils"
+	"github.com/pingcap/tiflow/engine/framework/taskutil"
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
@@ -48,7 +48,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
-	"github.com/pingcap/tiflow/engine/pkg/serverutils"
+	"github.com/pingcap/tiflow/engine/pkg/serverutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
@@ -82,7 +82,7 @@ type Server struct {
 	metastores server.MetastoreManager
 
 	p2pMsgRouter    p2pImpl.MessageRouter
-	discoveryKeeper *serverutils.DiscoveryKeepaliver
+	discoveryKeeper *serverutil.DiscoveryKeepaliver
 	resourceBroker  broker.Broker
 	jobAPISrv       *jobAPIServer
 }
@@ -199,7 +199,7 @@ func (s *Server) makeTask(
 		s.jobAPISrv.initialize(jobID, jm.TriggerOpenAPIInitialize)
 	}
 
-	return utils.WrapWorker(newWorker), nil
+	return taskutil.WrapWorker(newWorker), nil
 }
 
 // PreDispatchTask implements Executor.PreDispatchTask
@@ -385,7 +385,7 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
-	s.discoveryKeeper = serverutils.NewDiscoveryKeepaliver(
+	s.discoveryKeeper = serverutil.NewDiscoveryKeepaliver(
 		s.info, s.metastores.ServiceDiscoveryStore(), s.cfg.SessionTTL, defaultDiscoverTicker,
 		s.p2pMsgRouter,
 	)

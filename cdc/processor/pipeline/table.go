@@ -14,6 +14,7 @@
 package pipeline
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -24,6 +25,60 @@ const (
 	// This is part of sink performance optimization
 	resolvedTsInterpolateInterval = 200 * time.Millisecond
 )
+
+// TableState is state of the table pipeline
+type TableState int32
+
+// TableState for table pipeline
+const (
+	TableStateUnknown TableState = iota
+	// TableStateAbsent means the table not found
+	TableStateAbsent
+	// TableStatePreparing indicate that the table is preparing connecting to regions
+	TableStatePreparing
+	// TableStatePrepared means the first `Resolved Ts` is received.
+	TableStatePrepared
+	// TableStateReplicating means that sink is consuming data from the sorter,
+	// and replicating it to downstream
+	TableStateReplicating
+	// TableStateStopping means the table is stopping, but not guaranteed yet.
+	// at the moment, this state is not used, only keep aligned with `schedulepb.TableStateStopping`
+	TableStateStopping
+	// TableStateStopped means sink stop all works, but the table resource not released yet.
+	TableStateStopped
+)
+
+var tableStatusStringMap = map[TableState]string{
+	TableStateUnknown:     "Unknown",
+	TableStateAbsent:      "Absent",
+	TableStatePreparing:   "Preparing",
+	TableStatePrepared:    "Prepared",
+	TableStateReplicating: "Replicating",
+	TableStateStopping:    "Stopping",
+	TableStateStopped:     "Stopped",
+}
+
+func (s TableState) String() string {
+	return tableStatusStringMap[s]
+}
+
+// Load TableState with THREAD-SAFE
+func (s *TableState) Load() TableState {
+	return TableState(atomic.LoadInt32((*int32)(s)))
+}
+
+// Store TableState with THREAD-SAFE
+func (s *TableState) Store(new TableState) {
+	atomic.StoreInt32((*int32)(s), int32(new))
+}
+
+// TableMeta is the metadata of a table.
+type TableMeta struct {
+	TableID      model.TableID
+	CheckpointTs model.Ts
+	ResolvedTs   model.Ts
+	State        TableState
+}
 
 // TablePipeline is a pipeline which capture the change log from tikv in a table
 type TablePipeline interface {
@@ -39,10 +94,14 @@ type TablePipeline interface {
 	UpdateBarrierTs(ts model.Ts)
 	// AsyncStop tells the pipeline to stop, and returns true is the pipeline is already stopped.
 	AsyncStop(targetTs model.Ts) bool
+
+	// Start the sink consume data from the given `ts`
+	Start(ts model.Ts)
+
 	// Workload returns the workload of this table
 	Workload() model.WorkloadInfo
-	// Status returns the status of this table pipeline
-	Status() TableStatus
+	// State returns the state of this table pipeline
+	State() TableState
 	// Cancel stops this table pipeline immediately and destroy all resources created by this table pipeline
 	Cancel()
 	// Wait waits for table pipeline destroyed

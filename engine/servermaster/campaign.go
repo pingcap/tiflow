@@ -27,7 +27,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/client"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
-	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
+	"github.com/pingcap/tiflow/engine/pkg/etcdutil"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	"github.com/pingcap/tiflow/engine/servermaster/cluster"
 	derrors "github.com/pingcap/tiflow/pkg/errors"
@@ -152,7 +152,7 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 //    - If it is, return retry=false and continue the leader campaign.
 func (s *Server) checkLeaderExists(ctx context.Context) (retry bool, err error) {
 	// step-1
-	key, data, rev, err := etcdutils.GetLeader(ctx, s.etcdClient, adapter.MasterCampaignKey.Path())
+	key, data, rev, err := etcdutil.GetLeader(ctx, s.etcdClient, adapter.MasterCampaignKey.Path())
 	if err != nil {
 		if errors.Cause(err) == context.Canceled {
 			return false, errors.Trace(err)
