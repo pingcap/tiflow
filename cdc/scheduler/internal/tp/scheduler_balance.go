@@ -37,7 +37,7 @@ func newBalanceScheduler(interval time.Duration) *balanceScheduler {
 }
 
 func (b *balanceScheduler) Name() string {
-	return schedulerTypeBalance.String()
+	return "balance-scheduler"
 }
 
 func (b *balanceScheduler) Schedule(
