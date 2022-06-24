@@ -31,7 +31,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
-	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -63,10 +62,6 @@ func newChangefeedCommonOptions() *changefeedCommonOptions {
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
 func (o *changefeedCommonOptions) addFlags(cmd *cobra.Command) {
-	if o == nil {
-		return
-	}
-
 	cmd.PersistentFlags().BoolVar(&o.noConfirm, "no-confirm", false, "Don't ask user whether to ignore ineligible table")
 	cmd.PersistentFlags().Uint64Var(&o.targetTs, "target-ts", 0, "Target ts of changefeed")
 	cmd.PersistentFlags().StringVar(&o.sinkURI, "sink-uri", "", "sink uri")
@@ -88,7 +83,6 @@ func (o *changefeedCommonOptions) addFlags(cmd *cobra.Command) {
 	_ = cmd.PersistentFlags().MarkHidden("sort-dir")
 	// we don't support specify these flags below when cdc version >= 6.2.0
 	_ = cmd.PersistentFlags().MarkHidden("sort-engine")
-	_ = cmd.PersistentFlags().MarkHidden("opts")
 	// we don't support specify there flags below when cdc version <= 6.3.0
 	_ = cmd.PersistentFlags().MarkHidden("upstream-pd")
 	_ = cmd.PersistentFlags().MarkHidden("upstream-ca")
@@ -111,10 +105,7 @@ func (o *changefeedCommonOptions) strictDecodeConfig(component string, cfg *conf
 // createChangefeedOptions defines common flags for the `cli changefeed crate` command.
 type createChangefeedOptions struct {
 	commonChangefeedOptions *changefeedCommonOptions
-	apiClient               *apiv2client.APIV2Client
-
-	pdAddr     string
-	credential *security.Credential
+	apiClient               apiv2client.APIV2Interface
 
 	changefeedID            string
 	disableGCSafePointCheck bool
@@ -134,9 +125,6 @@ func newCreateChangefeedOptions(commonChangefeedOptions *changefeedCommonOptions
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
 func (o *createChangefeedOptions) addFlags(cmd *cobra.Command) {
-	if o == nil {
-		return
-	}
 	o.commonChangefeedOptions.addFlags(cmd)
 	cmd.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	cmd.PersistentFlags().BoolVarP(&o.disableGCSafePointCheck, "disable-gc-check", "", false, "Disable GC safe point check")
@@ -148,8 +136,6 @@ func (o *createChangefeedOptions) addFlags(cmd *cobra.Command) {
 
 // complete adapts from the command line args to the data and client required.
 func (o *createChangefeedOptions) complete(ctx context.Context, f factory.Factory, cmd *cobra.Command) error {
-	o.pdAddr = f.GetPdAddr()
-	o.credential = f.GetCredential()
 	client, err := f.APIV2Client()
 	if err != nil {
 		return err

@@ -23,7 +23,6 @@ import (
 	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
-	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/r3labs/diff"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -32,9 +31,7 @@ import (
 
 // updateChangefeedOptions defines common flags for the `cli changefeed update` command.
 type updateChangefeedOptions struct {
-	apiV2Client *apiv2client.APIV2Client
-
-	credential *security.Credential
+	apiV2Client apiv2client.APIV2Interface
 
 	commonChangefeedOptions *changefeedCommonOptions
 	changefeedID            string
@@ -50,10 +47,6 @@ func newUpdateChangefeedOptions(commonChangefeedOptions *changefeedCommonOptions
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
 func (o *updateChangefeedOptions) addFlags(cmd *cobra.Command) {
-	if o == nil {
-		return
-	}
-
 	o.commonChangefeedOptions.addFlags(cmd)
 	cmd.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	_ = cmd.MarkPersistentFlagRequired("changefeed-id")
@@ -92,7 +85,6 @@ func (o *updateChangefeedOptions) complete(f factory.Factory) error {
 		return err
 	}
 	o.apiV2Client = apiClient
-	o.credential = f.GetCredential()
 	return nil
 }
 
@@ -189,8 +181,9 @@ func (o *updateChangefeedOptions) applyChanges(oldInfo *v2.ChangeFeedInfo,
 			// Do nothing, this is a flags from the cli command
 			// we don't use it to update.
 		case "pd", "log-level", "key", "cert", "ca":
-			// Do nothing, this is a flags from the cli command
-			// we don't use it to update, but we do use these flags.
+		// Do nothing, this is a flags from the cli command
+		// we don't use it to update, but we do use these flags.
+		case "upstream-pd", "upstream-ca", "upstream-cert", "upstream-key":
 		default:
 			// use this default branch to prevent new added parameter is not added
 			log.Warn("unsupported flag, please report a bug", zap.String("flagName", flag.Name))
@@ -199,7 +192,6 @@ func (o *updateChangefeedOptions) applyChanges(oldInfo *v2.ChangeFeedInfo,
 	if err != nil {
 		return nil, err
 	}
-
 	return newInfo, nil
 }
 

@@ -23,7 +23,9 @@ import (
 // We can create a fake api client which mocks TiCDC operations by implement this interface.
 type APIV2Interface interface {
 	RESTClient() rest.CDCRESTInterface
+	ChangefeedsGetter
 	TsoGetter
+	UnsafeGetter
 }
 
 // APIV2Client implements APIV1Interface and it is used to interact with cdc owner http api.

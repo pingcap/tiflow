@@ -31,10 +31,6 @@ func newCaptureOptions() *captureOptions {
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
 func (o *captureOptions) addFlags(cmd *cobra.Command) {
-	if o == nil {
-		return
-	}
-
 	cmd.PersistentFlags().BoolVar(&o.disableVersionCheck, "disable-version-check", false, "Disable version check")
 	_ = cmd.PersistentFlags().MarkHidden("disable-version-check")
 }
