@@ -39,7 +39,7 @@ func newRebalanceScheduler() *rebalanceScheduler {
 }
 
 func (r *rebalanceScheduler) Name() string {
-	return schedulerTypeRebalance.String()
+	return "rebalance-scheduler"
 }
 
 func (r *rebalanceScheduler) Schedule(

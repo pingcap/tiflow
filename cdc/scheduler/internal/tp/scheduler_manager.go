@@ -26,16 +26,16 @@ import (
 type schedulerManager struct {
 	changefeedID model.ChangeFeedID
 
-	schedulers   map[schedulerType]scheduler
+	schedulers   []scheduler
 	tasksCounter map[struct{ scheduler, task string }]int
 }
 
-func newSchedulerManager(changefeedID model.ChangeFeedID,
-	cfg *config.SchedulerConfig,
+func newSchedulerManager(
+	changefeedID model.ChangeFeedID, cfg *config.SchedulerConfig,
 ) *schedulerManager {
 	sm := &schedulerManager{
 		changefeedID: changefeedID,
-		schedulers:   make(map[schedulerType]scheduler),
+		schedulers:   make([]scheduler, schedulerPriorityMax),
 		tasksCounter: make(map[struct {
 			scheduler string
 			task      string
@@ -44,11 +44,11 @@ func newSchedulerManager(changefeedID model.ChangeFeedID,
 
 	balanceInterval := time.Duration(cfg.CheckBalanceInterval)
 
-	sm.schedulers[schedulerTypeBasic] = newBasicScheduler()
-	sm.schedulers[schedulerTypeBalance] = newBalanceScheduler(balanceInterval)
-	sm.schedulers[schedulerTypeMoveTable] = newMoveTableScheduler()
-	sm.schedulers[schedulerTypeRebalance] = newRebalanceScheduler()
-	sm.schedulers[schedulerTypeDrainCapture] = newDrainCaptureScheduler(cfg.MaxTaskConcurrency)
+	sm.schedulers[schedulerPriorityBasic] = newBasicScheduler()
+	sm.schedulers[schedulerPriorityDrainCapture] = newDrainCaptureScheduler(cfg.MaxTaskConcurrency)
+	sm.schedulers[schedulerPriorityBalance] = newBalanceScheduler(balanceInterval)
+	sm.schedulers[schedulerPriorityMoveTable] = newMoveTableScheduler()
+	sm.schedulers[schedulerPriorityRebalance] = newRebalanceScheduler()
 
 	return sm
 }
@@ -81,10 +81,7 @@ func (sm *schedulerManager) Schedule(
 }
 
 func (sm *schedulerManager) MoveTable(tableID model.TableID, target model.CaptureID) {
-	scheduler, ok := sm.schedulers[schedulerTypeMoveTable]
-	if !ok {
-		log.Panic("tpscheduler: move table scheduler not found")
-	}
+	scheduler := sm.schedulers[schedulerPriorityMoveTable]
 	moveTableScheduler, ok := scheduler.(*moveTableScheduler)
 	if !ok {
 		log.Panic("tpscheduler: invalid move table scheduler found")
@@ -100,10 +97,7 @@ func (sm *schedulerManager) MoveTable(tableID model.TableID, target model.Captur
 }
 
 func (sm *schedulerManager) Rebalance() {
-	scheduler, ok := sm.schedulers[schedulerTypeRebalance]
-	if !ok {
-		log.Panic("tpscheduler: rebalance scheduler not found")
-	}
+	scheduler := sm.schedulers[schedulerPriorityRebalance]
 	rebalanceScheduler, ok := scheduler.(*rebalanceScheduler)
 	if !ok {
 		log.Panic("tpscheduler: invalid rebalance scheduler found")
@@ -113,10 +107,7 @@ func (sm *schedulerManager) Rebalance() {
 }
 
 func (sm *schedulerManager) DrainCapture(target model.CaptureID) bool {
-	scheduler, ok := sm.schedulers[schedulerTypeDrainCapture]
-	if !ok {
-		log.Panic("tpscheduler: drain capture scheduler not found")
-	}
+	scheduler := sm.schedulers[schedulerPriorityDrainCapture]
 	drainCaptureScheduler, ok := scheduler.(*drainCaptureScheduler)
 	if !ok {
 		log.Panic("tpscheduler: invalid drain capture scheduler found")
@@ -126,7 +117,7 @@ func (sm *schedulerManager) DrainCapture(target model.CaptureID) bool {
 }
 
 func (sm *schedulerManager) DrainingTarget() model.CaptureID {
-	return sm.schedulers[schedulerTypeDrainCapture].(*drainCaptureScheduler).getTarget()
+	return sm.schedulers[schedulerPriorityDrainCapture].(*drainCaptureScheduler).getTarget()
 }
 
 func (sm *schedulerManager) CollectMetrics() {

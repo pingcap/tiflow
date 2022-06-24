@@ -27,9 +27,9 @@ func TestNewSchedulerManager(t *testing.T) {
 	m := newSchedulerManager(model.DefaultChangeFeedID("test-changefeed"),
 		config.NewDefaultSchedulerConfig())
 	require.NotNil(t, m)
-	require.NotNil(t, m.schedulers[schedulerTypeBasic])
-	require.NotNil(t, m.schedulers[schedulerTypeBalance])
-	require.NotNil(t, m.schedulers[schedulerTypeMoveTable])
-	require.NotNil(t, m.schedulers[schedulerTypeRebalance])
-	require.NotNil(t, m.schedulers[schedulerTypeDrainCapture])
+	require.NotNil(t, m.schedulers[schedulerPriorityBasic])
+	require.NotNil(t, m.schedulers[schedulerPriorityBalance])
+	require.NotNil(t, m.schedulers[schedulerPriorityMoveTable])
+	require.NotNil(t, m.schedulers[schedulerPriorityRebalance])
+	require.NotNil(t, m.schedulers[schedulerPriorityDrainCapture])
 }
