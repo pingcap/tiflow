@@ -180,8 +180,7 @@ func TestMessageClientBasics(t *testing.T) {
 	sender.AssertExpectations(t)
 
 	// Test point 7: Interrupt the connection
-	grpcStream.ExpectedCalls = nil
-	grpcStream.Calls = nil
+	grpcStream.ResetMock()
 
 	sender.ExpectedCalls = nil
 	sender.Calls = nil
