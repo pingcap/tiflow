@@ -17,6 +17,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/model"
+	derror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 const (
@@ -59,7 +60,7 @@ func (w *DAGWalker) doWalk(node *model.Node, depth int) error {
 	}
 
 	if depth > w.maximalDepth {
-		return cerrors.ErrPlannerDAGDepthExceeded.GenWithStackByArgs(depth)
+		return derror.ErrPlannerDAGDepthExceeded.GenWithStackByArgs(depth)
 	}
 
 	if err := w.onVertex(node); err != nil {
