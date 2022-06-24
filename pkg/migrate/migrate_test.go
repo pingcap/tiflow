@@ -343,7 +343,8 @@ func (m *mockPDClient) GetLeaderAddr() string {
 }
 
 func (m *mockPDClient) UpdateServiceGCSafePoint(ctx context.Context,
-	serviceID string, ttl int64, safePoint uint64) (uint64, error) {
+	serviceID string, ttl int64, safePoint uint64,
+) (uint64, error) {
 	return m.check(serviceID, ttl, safePoint)
 }
 
@@ -404,7 +405,7 @@ func TestMigrateGcServiceSafePoint(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, 2, ftimes)
 	require.Equal(t, 2, len(fParamters))
-	//set first then delete
+	// set first then delete
 	require.Equal(t, "abcd", fParamters[0].serviceID)
 	require.Equal(t, oldGcServiceID, fParamters[1].serviceID)
 	require.Equal(t, int64(10), fParamters[0].ttl)
