@@ -84,6 +84,7 @@ func SetLogLevel(level string) error {
 	return nil
 }
 
+// loggerOp is the op for logger control
 type loggerOp struct {
 	isInitGRPCLogger   bool
 	isInitSaramaLogger bool
@@ -96,27 +97,32 @@ func (op *loggerOp) applyOpts(opts []LoggerOpt) {
 	}
 }
 
+// LoggerOpt is the logger option
 type LoggerOpt func(*loggerOp)
 
+// WithInitGRPCLogger enables grpc logger initialization when initializes global logger
 func WithInitGRPCLogger() LoggerOpt {
 	return func(op *loggerOp) {
 		op.isInitGRPCLogger = true
 	}
 }
 
+// WithInitSaramaLogger enables sarama logger initialization when initializes global logger
 func WithInitSaramaLogger() LoggerOpt {
 	return func(op *loggerOp) {
 		op.isInitSaramaLogger = true
 	}
 }
 
+// WithOutputWriteSyncer will replace the WriteSyncer of global logger with customized WriteSyncer
+// Easy for test when using zaptest.Buffer as WriteSyncer
 func WithOutputWriteSyncer(output zapcore.WriteSyncer) LoggerOpt {
 	return func(op *loggerOp) {
 		op.output = output
 	}
 }
 
-// InitLogger initializes logger for CDC, including grpc, sarma etc.
+// InitLogger initializes logger
 func InitLogger(cfg *Config, opts ...LoggerOpt) error {
 	var op loggerOp
 	op.applyOpts(opts)
