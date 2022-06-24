@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/errors"
 
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 )
 
@@ -53,7 +52,7 @@ func (d *DataSet[E, T]) Get(ctx context.Context, id string) (T, error) {
 	}
 
 	if len(getResp.Kvs) == 0 {
-		return nil, derror.ErrDatasetEntryNotFound.GenWithStackByArgs(d.getKey(id))
+		return nil, cerrors.ErrDatasetEntryNotFound.GenWithStackByArgs(d.getKey(id))
 	}
 	rawBytes := getResp.Kvs[0].Value
 

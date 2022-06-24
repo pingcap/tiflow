@@ -20,7 +20,6 @@ import (
 	"strings"
 
 	"github.com/pingcap/log"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"go.uber.org/zap"
 )
@@ -45,7 +44,7 @@ func newChecker(db *sql.DB) *checker {
 func (c *checker) getCheckSum(ctx context.Context, db string, f *filter.Filter) (map[string]string, error) {
 	_, err := c.db.ExecContext(ctx, fmt.Sprintf("USE %s", db))
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrMySQLQueryError, err)
+		return nil, cerrors.WrapError(cerrors.ErrMySQLQueryError, err)
 	}
 
 	tables, err := c.getAllTables(ctx, db, f)
@@ -72,7 +71,7 @@ func (c *checker) getCheckSum(ctx context.Context, db string, f *filter.Filter) 
 func (c *checker) getAllDBs(ctx context.Context) ([]string, error) {
 	rows, err := c.db.QueryContext(ctx, "SHOW DATABASES")
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrMySQLQueryError, err)
+		return nil, cerrors.WrapError(cerrors.ErrMySQLQueryError, err)
 	}
 	defer func() {
 		if err = rows.Close(); err != nil {
@@ -84,7 +83,7 @@ func (c *checker) getAllDBs(ctx context.Context) ([]string, error) {
 	for rows.Next() {
 		var d string
 		if err = rows.Scan(&d); err != nil {
-			return dbs, cerror.WrapError(cerror.ErrMySQLQueryError, err)
+			return dbs, cerrors.WrapError(cerrors.ErrMySQLQueryError, err)
 		}
 
 		dbs = append(dbs, d)
@@ -96,7 +95,7 @@ func (c *checker) getAllDBs(ctx context.Context) ([]string, error) {
 func (c *checker) getAllTables(ctx context.Context, db string, f *filter.Filter) ([]string, error) {
 	rows, err := c.db.QueryContext(ctx, "SHOW TABLES")
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrMySQLQueryError, err)
+		return nil, cerrors.WrapError(cerrors.ErrMySQLQueryError, err)
 	}
 	defer func() {
 		if err = rows.Close(); err != nil {
@@ -108,7 +107,7 @@ func (c *checker) getAllTables(ctx context.Context, db string, f *filter.Filter)
 	for rows.Next() {
 		var t string
 		if err = rows.Scan(&t); err != nil {
-			return tables, cerror.WrapError(cerror.ErrMySQLQueryError, err)
+			return tables, cerrors.WrapError(cerrors.ErrMySQLQueryError, err)
 		}
 		if f.ShouldIgnoreTable(db, t) {
 			continue
@@ -131,7 +130,7 @@ type columnInfo struct {
 func (c *checker) getColumns(ctx context.Context, tableName string) ([]columnInfo, error) {
 	rows, err := c.db.QueryContext(ctx, fmt.Sprintf("SHOW COLUMNS FROM %s", tableName))
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrMySQLQueryError, err)
+		return nil, cerrors.WrapError(cerrors.ErrMySQLQueryError, err)
 	}
 	defer func() {
 		if err = rows.Close(); err != nil {
@@ -143,7 +142,7 @@ func (c *checker) getColumns(ctx context.Context, tableName string) ([]columnInf
 	for rows.Next() {
 		var t columnInfo
 		if err = rows.Scan(&t.Field, &t.Type, &t.Null, &t.Key, &t.Default, &t.Extra); err != nil {
-			return result, cerror.WrapError(cerror.ErrMySQLQueryError, err)
+			return result, cerrors.WrapError(cerrors.ErrMySQLQueryError, err)
 		}
 		result = append(result, t)
 	}
@@ -175,7 +174,7 @@ func (c *checker) doChecksum(ctx context.Context, columns []columnInfo, database
 		zap.String("query", query))
 	var checkSum string
 	err := c.db.QueryRowContext(ctx, query).Scan(&checkSum)
-	return checkSum, cerror.WrapError(cerror.ErrMySQLQueryError, err)
+	return checkSum, cerrors.WrapError(cerrors.ErrMySQLQueryError, err)
 }
 
 // TODO: use ADMIN CHECKSUM TABLE for tidb if needed

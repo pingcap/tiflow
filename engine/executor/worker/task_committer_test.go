@@ -23,7 +23,7 @@ import (
 	"github.com/pingcap/tiflow/engine/executor/worker/internal"
 	"github.com/pingcap/tiflow/engine/framework/utils"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 type mockWrappedTaskAdder struct {
@@ -155,7 +155,7 @@ func TestTaskCommitterFailToSubmit(t *testing.T) {
 	require.True(t, ok)
 
 	suite.Runner.On("addWrappedTask", mock.Anything).
-		Return(derror.ErrRuntimeIncomingQueueFull.GenWithStackByArgs())
+		Return(errors.ErrRuntimeIncomingQueueFull.GenWithStackByArgs())
 	ok, err := suite.Committer.ConfirmDispatchTask("request-1", "task-1")
 	require.False(t, ok)
 	require.Error(t, err)

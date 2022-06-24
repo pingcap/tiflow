@@ -19,7 +19,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/zap"
 )

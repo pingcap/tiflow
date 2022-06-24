@@ -20,10 +20,10 @@ import (
 	"google.golang.org/grpc"
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	"github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // DialTimeout is the default timeout for gRPC dialing

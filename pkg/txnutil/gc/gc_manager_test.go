@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/tikv/client-go/v2/oracle"
@@ -102,7 +101,7 @@ func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 
 	cfID := model.DefaultChangeFeedID("cfID")
 	err := gcManager.CheckStaleCheckpointTs(ctx, cfID, 10)
-	c.Assert(cerror.ErrGCTTLExceeded.Equal(errors.Cause(err)), check.IsTrue)
+	c.Assert(cerrors.ErrGCTTLExceeded.Equal(errors.Cause(err)), check.IsTrue)
 	c.Assert(cerror.ChangefeedFastFailError(err), check.IsTrue)
 
 	err = gcManager.CheckStaleCheckpointTs(ctx, cfID, oracle.GoTimeToTS(time.Now()))
@@ -113,6 +112,6 @@ func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 
 	err = gcManager.CheckStaleCheckpointTs(ctx, cfID, 10)
 
-	c.Assert(cerror.ErrSnapshotLostByGC.Equal(errors.Cause(err)), check.IsTrue)
+	c.Assert(cerrors.ErrSnapshotLostByGC.Equal(errors.Cause(err)), check.IsTrue)
 	c.Assert(cerror.ChangefeedFastFailError(err), check.IsTrue)
 }

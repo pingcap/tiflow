@@ -35,8 +35,8 @@ import (
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // Config records all configurations of cvs job
@@ -313,7 +313,7 @@ func (jm *JobMaster) OnWorkerOffline(worker framework.WorkerHandle, reason error
 	id := val.(int)
 	jm.Lock()
 	defer jm.Unlock()
-	if derrors.ErrWorkerFinish.Equal(reason) {
+	if cerrors.ErrWorkerFinish.Equal(reason) {
 		delete(jm.syncFilesInfo, id)
 		delete(jm.jobStatus.FileInfos, id)
 		log.L().Info("worker finished", zap.String("worker-id", worker.ID()), zap.Any("status", worker.Status()), zap.Error(reason))

@@ -27,9 +27,10 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
 	"github.com/pingcap/tiflow/engine/pkg/version"
+	"github.com/pingcap/tiflow/pkg/errors"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // SampleConfigFile is sample config file of dm-worker.
@@ -133,7 +134,7 @@ func (c *Config) Parse(arguments []string) error {
 	// Parse first to get config file.
 	err := c.flagSet.Parse(arguments)
 	if err != nil {
-		return errors.Wrap(errors.ErrExecutorConfigParseFlagSet, err)
+		return errors.Wrap(cerrors.ErrExecutorConfigParseFlagSet, err)
 	}
 
 	if c.printVersion {
@@ -152,11 +153,11 @@ func (c *Config) Parse(arguments []string) error {
 	// Parse again to replace with command line options.
 	err = c.flagSet.Parse(arguments)
 	if err != nil {
-		return errors.Wrap(errors.ErrExecutorConfigParseFlagSet, err)
+		return errors.Wrap(cerrors.ErrExecutorConfigParseFlagSet, err)
 	}
 
 	if len(c.flagSet.Args()) != 0 {
-		return errors.ErrExecutorConfigInvalidFlag.GenWithStackByArgs(c.flagSet.Arg(0))
+		return cerrors.ErrExecutorConfigInvalidFlag.GenWithStackByArgs(c.flagSet.Arg(0))
 	}
 
 	if c.KeepAliveIntervalStr == "" {
@@ -204,7 +205,7 @@ func (c *Config) Parse(arguments []string) error {
 func (c *Config) configFromFile(path string) error {
 	metaData, err := toml.DecodeFile(path, c)
 	if err != nil {
-		return errors.Wrap(errors.ErrExecutorDecodeConfigFile, err)
+		return errors.Wrap(cerrors.ErrExecutorDecodeConfigFile, err)
 	}
 	undecoded := metaData.Undecoded()
 	if len(undecoded) > 0 && err == nil {
@@ -212,7 +213,7 @@ func (c *Config) configFromFile(path string) error {
 		for _, item := range undecoded {
 			undecodedItems = append(undecodedItems, item.String())
 		}
-		return errors.ErrExecutorConfigUnknownItem.GenWithStackByArgs(strings.Join(undecodedItems, ","))
+		return cerrors.ErrExecutorConfigUnknownItem.GenWithStackByArgs(strings.Join(undecodedItems, ","))
 	}
 	return nil
 }

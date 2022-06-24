@@ -23,8 +23,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
@@ -32,7 +30,8 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
 )

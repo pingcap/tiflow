@@ -179,7 +179,7 @@ func (t *testTErrorSuite) TestTerrorWithOperate(c *check.C) {
 		workaround       = "please check your connection"
 		err              = New(code, class, scope, level, message, workaround)
 		arg              = "arg"
-		commonErr        = perrors.New("common error")
+		commonErr        = errors.New("common error")
 		errFormatWithArg = errBaseFormat + ", Message: %s: %s, Workaround: %s"
 	)
 

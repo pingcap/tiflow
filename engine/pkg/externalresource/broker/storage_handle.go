@@ -16,14 +16,14 @@ package broker
 import (
 	"context"
 
-	"github.com/pingcap/errors"
-	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	"go.uber.org/atomic"
 
+	"github.com/pingcap/errors"
+	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
+	derrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // Handle defines an interface for interact with framework

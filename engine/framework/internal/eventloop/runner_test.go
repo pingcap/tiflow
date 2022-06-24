@@ -19,13 +19,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 
+	"github.com/pingcap/errors"
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 type toyTaskStatus = int32
@@ -140,7 +140,7 @@ func TestRunnerForcefulExit(t *testing.T) {
 	task := newToyTask(t, true)
 	runner := NewRunner(task)
 
-	errIn := derrors.ErrWorkerSuicide.GenWithStackByArgs()
+	errIn := cerrors.ErrWorkerSuicide.GenWithStackByArgs()
 
 	task.On("Init", mock.Anything).Return(nil).Once()
 	task.On("Close", mock.Anything).Return(nil).Once()

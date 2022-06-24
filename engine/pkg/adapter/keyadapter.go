@@ -18,7 +18,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // Defines all key adapters

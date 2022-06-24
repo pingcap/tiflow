@@ -17,16 +17,16 @@ import (
 	"context"
 	"time"
 
-	perrors "github.com/pingcap/errors"
 	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
+	derrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 const (
@@ -109,7 +109,7 @@ func (s *EtcdSession) Campaign(ctx context.Context, timeout time.Duration) (
 	log.L().Info("start to campaign server master leader",
 		zap.String("name", s.config.Member))
 	leaderCtx, resignFn, err := s.election.Campaign(ctx, s.config.Member, timeout)
-	switch perrors.Cause(err) {
+	switch errors.Cause(err) {
 	case nil:
 	case context.Canceled:
 		return nil, nil, ctx.Err()
@@ -129,7 +129,7 @@ func (s *EtcdSession) CheckNeedReset(err error) (needReset bool) {
 		// detect the life cycle of session ends by active detection
 		needReset = true
 	default:
-		inErr, ok := perrors.Cause(err).(rpctypes.EtcdError)
+		inErr, ok := errors.Cause(err).(rpctypes.EtcdError)
 		// meet error `etcdserver: requested lease not found`
 		if ok && inErr.Code() == codes.NotFound {
 			needReset = true

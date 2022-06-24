@@ -24,7 +24,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	perrors "github.com/pingcap/errors"
+	"github.com/pingcap/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
@@ -46,8 +46,6 @@ import (
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
-	"github.com/pingcap/tiflow/engine/pkg/errors"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
 	externRescManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
@@ -64,6 +62,7 @@ import (
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
 )
 
@@ -292,7 +291,7 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 	if err != nil {
 		log.L().Logger.Error("add executor failed", zap.Error(err))
 		return &pb.RegisterExecutorResponse{
-			Err: derrors.ToPBError(err),
+			Err: cerrors.ToPBError(err),
 		}, nil
 	}
 	return &pb.RegisterExecutorResponse{
@@ -325,7 +324,7 @@ func (s *Server) ScheduleTask(ctx context.Context, req *pb.ScheduleTaskRequest) 
 		log.L().Warn("Executor is gone, RPC call needs retry",
 			zap.Any("request", req),
 			zap.String("executor-id", string(schedulerResp.ExecutorID)))
-		errOut := derrors.ErrUnknownExecutorID.GenWithStackByArgs(string(schedulerResp.ExecutorID))
+		errOut := cerrors.ErrUnknownExecutorID.GenWithStackByArgs(string(schedulerResp.ExecutorID))
 		return nil, status.Error(codes.Internal, errOut.Error())
 	}
 
@@ -602,9 +601,9 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 	// requests, the service register could have not been called.
 	select {
 	case <-ctx.Done():
-		return perrors.Trace(ctx.Err())
+		return errors.Trace(ctx.Err())
 	case <-time.After(etcdStartTimeout):
-		return errors.ErrMasterStartEmbedEtcdFail.GenWithStack("register grpc service timeout")
+		return cerrors.ErrMasterStartEmbedEtcdFail.GenWithStack("register grpc service timeout")
 	case <-registerDone:
 	}
 
@@ -776,7 +775,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 			select {
 			case <-errgCtx.Done():
 				// errgCtx is a leaderCtx actually
-				return perrors.Trace(errgCtx.Err())
+				return errors.Trace(errgCtx.Err())
 			case <-leaderTicker.C:
 				if err := s.jobManager.Poll(errgCtx); err != nil {
 					log.L().Warn("Polling JobManager failed", zap.Error(err))

@@ -22,10 +22,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/go-mysql-org/go-mysql/mysql"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zapcore"
+
+	. "github.com/pingcap/check"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	tidbddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/parser/ast"
-	"github.com/stretchr/testify/require"
-
+	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -36,15 +44,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
-
-	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/go-mysql-org/go-mysql/mysql"
-	. "github.com/pingcap/check"
-	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/util/dbutil"
-	"github.com/pingcap/tidb/util/filter"
-	"go.uber.org/zap/zapcore"
 )
 
 var (

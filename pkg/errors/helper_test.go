@@ -35,6 +35,9 @@ func TestWrapError(t *testing.T) {
 			{ErrDecodeFailed, nil, true, "", nil},
 			{ErrDecodeFailed, err, false, "[CDC:ErrDecodeFailed]decode failed: args data: cause error", []interface{}{"args data"}},
 			{ErrWriteTsConflict, err, false, "[CDC:ErrWriteTsConflict]write ts conflict: cause error", nil},
+			{ErrBuildJobFailed, nil, true, "", []interface{}{}},
+			{ErrBuildJobFailed, err, false, "[DFLOW:ErrBuildJobFailed]build job failed: test", []interface{}{}},
+			{ErrSubJobFailed, err, false, "[DFLOW:ErrSubJobFailed]executor e-1 job 2: test", []interface{}{"e-1", 2}},
 		}
 	)
 	for _, tc := range testCases {

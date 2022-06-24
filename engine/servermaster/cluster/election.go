@@ -18,16 +18,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
-
-	"github.com/pingcap/errors"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.etcd.io/etcd/server/v3/mvcc"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
+
+	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	derror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // Election is an interface that performs leader elections.

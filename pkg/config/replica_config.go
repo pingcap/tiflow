@@ -18,12 +18,12 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/pingcap/tiflow/pkg/config/outdated"
+	"go.uber.org/zap"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/config/outdated"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"go.uber.org/zap"
 )
 
 var defaultReplicaConfig = &ReplicaConfig{

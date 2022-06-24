@@ -34,7 +34,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
 )
 
@@ -178,7 +177,7 @@ func TestOpChangeFeedDetail(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = s.client.GetChangeFeedInfo(ctx, cfID)
-	require.True(t, cerror.ErrChangeFeedNotExists.Equal(err))
+	require.True(t, cerrors.ErrChangeFeedNotExists.Equal(err))
 }
 
 func TestGetAllChangeFeedInfo(t *testing.T) {
@@ -235,7 +234,7 @@ func putChangeFeedStatus(
 		return errors.Trace(err)
 	}
 	_, err = c.Client.Put(ctx, key, value)
-	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+	return cerrors.WrapError(cerrors.ErrPDEtcdAPIError, err)
 }
 
 func TestGetAllChangeFeedStatus(t *testing.T) {
@@ -276,7 +275,7 @@ func TestCreateChangefeed(t *testing.T) {
 	require.NoError(t, err)
 
 	err = s.client.CreateChangefeedInfo(ctx, detail, model.DefaultChangeFeedID("test-id"))
-	require.True(t, cerror.ErrChangeFeedAlreadyExists.Equal(err))
+	require.True(t, cerrors.ErrChangeFeedAlreadyExists.Equal(err))
 }
 
 func TestGetAllCaptureLeases(t *testing.T) {

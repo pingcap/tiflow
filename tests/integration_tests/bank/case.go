@@ -25,7 +25,6 @@ import (
 	_ "github.com/go-sql-driver/mysql" // MySQL driver
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -176,7 +175,7 @@ func (*sequenceTest) verify(ctx context.Context, db *sql.DB, accounts, tableID i
 		}
 
 		return nil
-	}, retry.WithBackoffMaxDelay(500), retry.WithBackoffMaxDelay(120*1000), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerror.IsRetryableError))
+	}, retry.WithBackoffMaxDelay(500), retry.WithBackoffMaxDelay(120*1000), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerrors.IsRetryableError))
 }
 
 // tryDropDB will drop table if data incorrect and panic error likes bad connect.
@@ -282,7 +281,7 @@ func (*bankTest) verify(ctx context.Context, db *sql.DB, accounts, tableID int, 
 			}
 
 			return nil
-		}, retry.WithBackoffMaxDelay(500), retry.WithBackoffMaxDelay(120*1000), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerror.IsRetryableError))
+		}, retry.WithBackoffMaxDelay(500), retry.WithBackoffMaxDelay(120*1000), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerrors.IsRetryableError))
 }
 
 // tryDropDB will drop table if data incorrect and panic error likes bad connect.
@@ -605,7 +604,7 @@ func getDownStreamSyncedEndTs(ctx context.Context, db *sql.DB, tableName string)
 }
 
 func tryGetEndTs(db *sql.DB, tableName string) (result string, ok bool) {
-	query := "select END_TIME from information_schema.ddl_jobs where table_name = ?"
+	query := "SELECT END_TIME FROM information_schema.ddl_jobs WHERE table_name = ?"
 	log.Info("try get end ts", zap.String("query", query))
 	var endTime string
 	row := db.QueryRow(query, tableName)

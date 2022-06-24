@@ -37,11 +37,11 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/version"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/zap"
 )

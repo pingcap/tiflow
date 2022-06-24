@@ -19,9 +19,9 @@ import (
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 type (
@@ -104,12 +104,12 @@ const (
 // ParseResourcePath returns the ResourceType and the path suffix.
 func ParseResourcePath(rpath ResourceID) (ResourceType, ResourceName, error) {
 	if !strings.HasPrefix(rpath, "/") {
-		return "", "", derror.ErrIllegalResourcePath.GenWithStackByArgs(rpath)
+		return "", "", errors.ErrIllegalResourcePath.GenWithStackByArgs(rpath)
 	}
 	rpath = strings.TrimPrefix(rpath, "/")
 	segments := strings.Split(rpath, "/")
 	if len(segments) == 0 {
-		return "", "", derror.ErrIllegalResourcePath.GenWithStackByArgs(rpath)
+		return "", "", errors.ErrIllegalResourcePath.GenWithStackByArgs(rpath)
 	}
 
 	var resourceType ResourceType
@@ -119,7 +119,7 @@ func ParseResourcePath(rpath ResourceID) (ResourceType, ResourceName, error) {
 	case "s3":
 		resourceType = ResourceTypeS3
 	default:
-		return "", "", derror.ErrIllegalResourcePath.GenWithStackByArgs(rpath)
+		return "", "", errors.ErrIllegalResourcePath.GenWithStackByArgs(rpath)
 	}
 
 	suffix := path.Join(segments[1:]...)

@@ -31,8 +31,8 @@ import (
 	"net/http"
 	"time"
 
-	perrors "github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/errors"
+	derrors "github.com/pingcap/tiflow/pkg/errors"
 	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/grpc"
 )
@@ -60,13 +60,13 @@ func startEtcd(
 
 	e, err := embed.StartEtcd(etcdCfg)
 	if err != nil {
-		return nil, errors.Wrap(errors.ErrMasterStartEmbedEtcdFail, err)
+		return nil, derrors.Wrap(derrors.ErrMasterStartEmbedEtcdFail, err)
 	}
 
 	select {
 	case <-ctx.Done():
 		e.Server.Stop()
-		return nil, perrors.Trace(ctx.Err())
+		return nil, errors.Trace(ctx.Err())
 	case <-e.Server.ReadyNotify():
 	case <-time.After(startTimeout):
 		// if fail to startup, the etcd server may be still blocking in
@@ -78,7 +78,7 @@ func startEtcd(
 		// so for `ReadyNotify` timeout, we choose to only call `e.Server.Stop()` now,
 		// and we should exit the DM-master process after returned with error from this function.
 		e.Server.Stop()
-		return nil, errors.ErrMasterStartEmbedEtcdFail.GenWithStack("start embed etcd timeout %v", startTimeout)
+		return nil, derrors.ErrMasterStartEmbedEtcdFail.GenWithStack("start embed etcd timeout %v", startTimeout)
 	}
 	return e, nil
 }
