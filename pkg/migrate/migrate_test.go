@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/stretchr/testify/require"
+	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
@@ -140,25 +141,13 @@ func TestMigration(t *testing.T) {
 
 	m := NewMigrator(&cdcCli, []string{}, config.GetGlobalServerConfig())
 	migrator := m.(*migrator)
-	migrator.migrateGcServiceSafePointFunc = func(ctx context.Context,
-		pdClient pd.Client, config *security.Credential,
-		gcServiceID string, ttl int64,
-	) error {
-		return nil
-	}
 	migrator.createPDClientFunc = func(ctx context.Context,
 		pdEndpoints []string, conf *security.Credential,
 	) (pd.Client, error) {
-		mock := gc.MockPDClient{
-			ClusterID: 1,
-			UpdateServiceGCSafePointFunc: func(ctx context.Context,
-				serviceID string, ttl int64,
-				safePoint uint64,
-			) (uint64, error) {
-				return 1, nil
-			},
-		}
-		return &mock, nil
+		mock := newMockPDClient(ctx, true)
+		mock.respData = "{}"
+		mock.clusterID = 1
+		return mock, nil
 	}
 
 	// 3. tow non-owner node wait for meta migrating done
@@ -368,6 +357,7 @@ type mockPDClient struct {
 	testServer *httptest.Server
 	url        string
 	respData   string
+	clusterID  uint64
 
 	check func(serviceID string, ttl int64, safePoint uint64) (uint64, error)
 }
@@ -376,10 +366,22 @@ func (m *mockPDClient) GetLeaderAddr() string {
 	return m.url
 }
 
+func (m *mockPDClient) Close() {}
+
 func (m *mockPDClient) UpdateServiceGCSafePoint(ctx context.Context,
 	serviceID string, ttl int64, safePoint uint64,
 ) (uint64, error) {
 	return m.check(serviceID, ttl, safePoint)
+}
+
+// GetClusterID gets the cluster ID from PD.
+func (m *mockPDClient) GetClusterID(ctx context.Context) uint64 {
+	return m.clusterID
+}
+
+// GetTS implements pd.Client.GetTS.
+func (m *mockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
+	return oracle.GetPhysical(time.Now()), 0, nil
 }
 
 func newMockPDClient(ctx context.Context, normal bool) *mockPDClient {
@@ -402,6 +404,7 @@ func newMockPDClient(ctx context.Context, normal bool) *mockPDClient {
 func TestMigrateGcServiceSafePoint(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	m := &migrator{}
 	mockClient := newMockPDClient(ctx, true)
 
 	data := &pdutil.ListServiceGCSafepoint{
@@ -435,7 +438,7 @@ func TestMigrateGcServiceSafePoint(t *testing.T) {
 		}{serviceID: serviceID, ttl: ttl, safePoint: safePoint})
 		return 0, nil
 	}
-	err = migrateGcServiceSafePoint(ctx, mockClient, &security.Credential{}, "abcd", 10)
+	err = m.migrateGcServiceSafePoint(ctx, mockClient, &security.Credential{}, "abcd", 10)
 	require.Nil(t, err)
 	require.Equal(t, 2, ftimes)
 	require.Equal(t, 2, len(fParamters))
@@ -454,6 +457,7 @@ func TestRemoveOldGcServiceSafePointFailed(t *testing.T) {
 	defer cancel()
 	mockClient := newMockPDClient(ctx, true)
 
+	m := &migrator{}
 	data := &pdutil.ListServiceGCSafepoint{
 		ServiceGCSafepoints: []*pdutil.ServiceSafePoint{
 			{
@@ -474,7 +478,7 @@ func TestRemoveOldGcServiceSafePointFailed(t *testing.T) {
 		}
 		return 0, nil
 	}
-	err = migrateGcServiceSafePoint(ctx, mockClient, &security.Credential{}, "abcd", 10)
+	err = m.migrateGcServiceSafePoint(ctx, mockClient, &security.Credential{}, "abcd", 10)
 	require.Nil(t, err)
 	require.Equal(t, 10, ftimes)
 	ftimes = 0
@@ -482,7 +486,7 @@ func TestRemoveOldGcServiceSafePointFailed(t *testing.T) {
 		ftimes++
 		return 0, errors.New("test")
 	}
-	err = migrateGcServiceSafePoint(ctx, mockClient, &security.Credential{}, "abcd", 10)
+	err = m.migrateGcServiceSafePoint(ctx, mockClient, &security.Credential{}, "abcd", 10)
 	require.Equal(t, 9, ftimes)
 	require.NotNil(t, err)
 	mockClient.testServer.Close()

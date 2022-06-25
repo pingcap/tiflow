@@ -90,12 +90,6 @@ type migrator struct {
 	createPDClientFunc func(ctx context.Context,
 		pdEndpoints []string,
 		conf *security.Credential) (pd.Client, error)
-
-	migrateGcServiceSafePointFunc func(ctx context.Context,
-		pdClient pd.Client,
-		config *security.Credential,
-		gcServiceID string,
-		ttl int64) error
 }
 
 // NewMigrator returns a cdc metadata
@@ -108,15 +102,14 @@ func NewMigrator(cli *etcd.CDCEtcdClient,
 		ClusterID: cli.ClusterID,
 	}
 	return &migrator{
-		newMetaVersion:                cdcMetaVersion,
-		metaVersionKey:                metaVersionCDCKey.String(),
-		oldOwnerKey:                   "/ticdc/cdc/owner",
-		cli:                           cli,
-		keyPrefixes:                   make(keys),
-		pdEndpoints:                   pdEndpoints,
-		config:                        serverConfig,
-		createPDClientFunc:            createPDClient,
-		migrateGcServiceSafePointFunc: migrateGcServiceSafePoint,
+		newMetaVersion:     cdcMetaVersion,
+		metaVersionKey:     metaVersionCDCKey.String(),
+		oldOwnerKey:        "/ticdc/cdc/owner",
+		cli:                cli,
+		keyPrefixes:        make(keys),
+		pdEndpoints:        pdEndpoints,
+		config:             serverConfig,
+		createPDClientFunc: createPDClient,
 	}
 }
 
@@ -265,7 +258,7 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 		return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
 	}
 
-	err = m.migrateGcServiceSafePointFunc(ctx, pdClient,
+	err = m.migrateGcServiceSafePoint(ctx, pdClient,
 		m.config.Security, m.cli.GetGCServiceID(), m.config.GcTTL)
 	if err != nil {
 		log.Error("update meta version failed, etcd meta data migration failed", zap.Error(err))
@@ -282,7 +275,7 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 	return nil
 }
 
-func migrateGcServiceSafePoint(ctx context.Context,
+func (m *migrator) migrateGcServiceSafePoint(ctx context.Context,
 	pdClient pd.Client,
 	config *security.Credential,
 	newGcServiceID string,
