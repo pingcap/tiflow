@@ -656,7 +656,8 @@ function test_validation_syncer_stopped() {
 	# wait syncer to start so that validator can start
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"\"synced\": true" 1
+		"\"synced\": true" 1 \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 1\/0\/0\"" 1
 	for ((k = 1; k <= $insertCnt; k++)); do
 		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"pause-task test" \
