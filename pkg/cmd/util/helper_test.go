@@ -180,7 +180,7 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 	require.Equal(t, &config.MounterConfig{
 		WorkerNum: 16,
 	}, cfg.Mounter)
-	err = cfg.Validate()
+	err = cfg.ValidateAndAdjust(nil)
 	require.Nil(t, err)
 	require.Equal(t, &config.SinkConfig{
 		DispatchRules: []*config.DispatchRule{

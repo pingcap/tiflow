@@ -166,7 +166,8 @@ const (
         ]
       }
     ],
-    "schema-registry": ""
+    "schema-registry": "",
+    "split-txn": false
   },
   "consistent": {
     "level": "none",

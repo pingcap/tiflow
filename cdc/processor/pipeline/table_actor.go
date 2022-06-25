@@ -282,7 +282,9 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		zap.String("tableName", t.tableName),
 		zap.Uint64("quota", t.memoryQuota))
 
-	flowController := flowcontrol.NewTableFlowController(t.memoryQuota, t.redoManager.Enabled())
+	splitTxn := t.replicaConfig.Sink.SplitTxn
+
+	flowController := flowcontrol.NewTableFlowController(t.memoryQuota, t.redoManager.Enabled(), splitTxn)
 	sorterNode := newSorterNode(t.tableName, t.tableID,
 		t.replicaInfo.StartTs, flowController,
 		t.mounter, t.replicaConfig, &t.state, t.changefeedID,

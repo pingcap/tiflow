@@ -15,6 +15,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -38,6 +39,7 @@ type SinkConfig struct {
 	Protocol        string            `toml:"protocol" json:"protocol"`
 	ColumnSelectors []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
 	SchemaRegistry  string            `toml:"schema-registry" json:"schema-registry"`
+	SplitTxn        bool              `toml:"split-txn" json:"split-txn"`
 }
 
 // DispatchRule represents partition rule for a table
@@ -57,7 +59,11 @@ type ColumnSelector struct {
 	Columns []string `toml:"columns" json:"columns"`
 }
 
-func (s *SinkConfig) validate(enableOldValue bool) error {
+func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) error {
+	if err := s.applyParameter(sinkURI); err != nil {
+		return err
+	}
+
 	if !enableOldValue {
 		for _, protocolStr := range ForceEnableOldValueProtocols {
 			if protocolStr == s.Protocol {
@@ -85,4 +91,44 @@ func (s *SinkConfig) validate(enableOldValue bool) error {
 	}
 
 	return nil
+}
+
+// applyParameter fill the `ReplicaConfig` and `SplitTxn` by sinkURI.
+func (s *SinkConfig) applyParameter(sinkURI *url.URL) error {
+	if sinkURI == nil {
+		return nil
+	}
+	params := sinkURI.Query()
+
+	splitTxn := params.Get("split-txn")
+	switch splitTxn {
+	case "":
+		fallthrough
+	case "false":
+		s.SplitTxn = false
+	case "true":
+		s.SplitTxn = true
+	default:
+		return cerror.ErrSinkURIInvalid.GenWithStackByArgs("invalid split-txn value: %s", s)
+	}
+
+	s.Protocol = params.Get(ProtocolKey)
+	if s.Protocol != "" && isMysqlScheme(sinkURI.Scheme) {
+		return cerror.ErrSinkURIInvalid.GenWithStackByArgs("protocol cannot be configured" +
+			"when using mysql related scheme")
+	}
+
+	// Only mysqlSink and open-protocol based MqSink support `split-txn=false`,
+	// set `split-txn` to true for other scenarios.
+	if !s.SplitTxn && s.Protocol != "" && s.Protocol != "defult" && s.Protocol != "open-protocol" {
+		log.Warn("The configuration of split-txn is incompatible with protocol",
+			zap.String("protocol", s.Protocol), zap.Bool("splitTxn", s.SplitTxn))
+		s.SplitTxn = true
+	}
+
+	return nil
+}
+
+func isMysqlScheme(schema string) bool {
+	return schema == "mysql" || schema == "mysql+ssl" || schema == "tidb" || schema == "tidb+ssl"
 }

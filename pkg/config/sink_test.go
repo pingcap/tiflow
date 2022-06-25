@@ -73,9 +73,9 @@ func TestValidate(t *testing.T) {
 			Protocol: tc.protocol,
 		}
 		if tc.expectedErr == "" {
-			require.Nil(t, cfg.validate(tc.enableOldValue))
+			require.Nil(t, cfg.validateAndAdjust(nil, tc.enableOldValue))
 		} else {
-			require.Regexp(t, tc.expectedErr, cfg.validate(tc.enableOldValue))
+			require.Regexp(t, tc.expectedErr, cfg.validateAndAdjust(nil, tc.enableOldValue))
 		}
 	}
 }

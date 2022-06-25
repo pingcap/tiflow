@@ -87,21 +87,21 @@ func TestReplicaConfigOutDated(t *testing.T) {
 func TestReplicaConfigValidate(t *testing.T) {
 	t.Parallel()
 	conf := GetDefaultReplicaConfig()
-	require.Nil(t, conf.Validate())
+	require.Nil(t, conf.ValidateAndAdjust(nil))
 
 	// Incorrect sink configuration.
 	conf = GetDefaultReplicaConfig()
 	conf.Sink.Protocol = "canal"
 	conf.EnableOldValue = false
 	require.Regexp(t, ".*canal protocol requires old value to be enabled.*",
-		conf.Validate())
+		conf.ValidateAndAdjust(nil))
 
 	conf = GetDefaultReplicaConfig()
 	conf.Sink.DispatchRules = []*DispatchRule{
 		{Matcher: []string{"a.b"}, DispatcherRule: "d1", PartitionRule: "r1"},
 	}
 	require.Regexp(t, ".*dispatcher and partition cannot be configured both.*",
-		conf.Validate())
+		conf.ValidateAndAdjust(nil))
 
 	// Correct sink configuration.
 	conf = GetDefaultReplicaConfig()
@@ -110,7 +110,7 @@ func TestReplicaConfigValidate(t *testing.T) {
 		{Matcher: []string{"a.c"}, PartitionRule: "p1"},
 		{Matcher: []string{"a.d"}},
 	}
-	err := conf.Validate()
+	err := conf.ValidateAndAdjust(nil)
 	require.Nil(t, err)
 	rules := conf.Sink.DispatchRules
 	require.Equal(t, "d1", rules[0].PartitionRule)
