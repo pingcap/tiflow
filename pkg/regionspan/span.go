@@ -22,7 +22,7 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/util/codec"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -188,7 +188,7 @@ func EndCompare(lhs []byte, rhs []byte) int {
 func Intersect(lhs ComparableSpan, rhs ComparableSpan) (span ComparableSpan, err error) {
 	if lhs.Start != nil && EndCompare(lhs.Start, rhs.End) >= 0 ||
 		rhs.Start != nil && EndCompare(rhs.Start, lhs.End) >= 0 {
-		return ComparableSpan{}, cerror.ErrIntersectNoOverlap.GenWithStackByArgs(lhs, rhs)
+		return ComparableSpan{}, errors.ErrIntersectNoOverlap.GenWithStackByArgs(lhs, rhs)
 	}
 
 	start := lhs.Start

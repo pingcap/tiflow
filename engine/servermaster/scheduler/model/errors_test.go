@@ -17,11 +17,11 @@ import (
 	"testing"
 
 	"github.com/gogo/status"
-	"github.com/pingcap/errors"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/errors"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 func TestConflictErrorToGRPCError(t *testing.T) {
@@ -39,7 +39,7 @@ func TestConflictErrorToGRPCError(t *testing.T) {
 
 func TestNotFoundErrorToGRPCError(t *testing.T) {
 	errIn := NewResourceNotFoundError("resource-1",
-		derrors.ErrResourceDoesNotExist.GenWithStackByArgs("resource-1"))
+		cerrors.ErrResourceDoesNotExist.GenWithStackByArgs("resource-1"))
 	errOut := SchedulerErrorToGRPCError(errors.Trace(errIn))
 	st := status.Convert(errOut)
 	require.Equal(t, codes.NotFound, st.Code())

@@ -32,8 +32,8 @@ import (
 	"github.com/pingcap/tiflow/engine/framework/registry"
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
-	"github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 const (

@@ -25,7 +25,7 @@ import (
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
+	derrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 const (

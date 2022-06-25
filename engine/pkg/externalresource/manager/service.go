@@ -18,15 +18,15 @@ import (
 	"sync"
 
 	"github.com/gogo/status"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // Service implements pb.ResourceManagerServer
@@ -107,7 +107,7 @@ func (s *Service) CreateResource(
 	}
 
 	err = s.metaclient.CreateResource(ctx, resourceRecord)
-	if derror.ErrDuplicateResourceID.Equal(err) {
+	if errors.ErrDuplicateResourceID.Equal(err) {
 		return nil, status.Error(codes.AlreadyExists, "resource manager error")
 	}
 	if err != nil {
@@ -175,20 +175,20 @@ func (s *Service) GetPlacementConstraint(
 	record, err := s.metaclient.GetResourceByID(ctx, id)
 	if err != nil {
 		if pkgOrm.IsNotFoundError(err) {
-			return "", false, derror.ErrResourceDoesNotExist.GenWithStackByArgs(id)
+			return "", false, errors.ErrResourceDoesNotExist.GenWithStackByArgs(id)
 		}
 		return "", false, err
 	}
 
 	if record.Deleted {
 		logger.Info("Resource meta is marked as deleted", zap.Any("record", record))
-		return "", false, derror.ErrResourceDoesNotExist.GenWithStackByArgs(id)
+		return "", false, errors.ErrResourceDoesNotExist.GenWithStackByArgs(id)
 	}
 
 	if !s.executors.HasExecutor(string(record.Executor)) {
 		logger.Info("Resource meta indicates a non-existent executor",
 			zap.String("executor-id", string(record.Executor)))
-		return "", false, derror.ErrResourceDoesNotExist.GenWithStackByArgs(id)
+		return "", false, errors.ErrResourceDoesNotExist.GenWithStackByArgs(id)
 	}
 
 	return record.Executor, true, nil
