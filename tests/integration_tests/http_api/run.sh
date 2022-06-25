@@ -15,7 +15,7 @@ function run() {
 		return
 	fi
 
-	sudo pip install -U requests==2.26.0
+	sudo python3 -m pip install -U requests==2.26.0
 
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
@@ -59,10 +59,10 @@ function run() {
 
 	SINK_URI="mysql://normal:123456@127.0.0.1:3306/"
 
-	python $CUR/util/test_case.py check_health $TLS_DIR
-	python $CUR/util/test_case.py get_status $TLS_DIR
+	python3 $CUR/util/test_case.py check_health $TLS_DIR
+	python3 $CUR/util/test_case.py get_status $TLS_DIR
 
-	python $CUR/util/test_case.py create_changefeed $TLS_DIR "$SINK_URI"
+	python3 $CUR/util/test_case.py create_changefeed $TLS_DIR "$SINK_URI"
 	# wait for changefeed created
 	sleep 2
 
@@ -105,7 +105,7 @@ function run() {
 	)
 
 	for case in ${sequential_cases[@]}; do
-		python $CUR/util/test_case.py "$case" $TLS_DIR
+		python3 $CUR/util/test_case.py "$case" $TLS_DIR
 	done
 
 	cleanup_process $CDC_BINARY
