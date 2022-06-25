@@ -359,6 +359,9 @@ func (m *migrator) Migrate(ctx context.Context) error {
 			return err
 		}
 		shouldMigrate = true
+	} else if version > newVersion {
+		log.Panic("meta version in etcd is greater than the meta version in TiCDC",
+			zap.Int("etcdMetaVersion", version), zap.Int("cdcMetaVersion", m.newMetaVersion))
 	} else {
 		oldVersion = version
 		shouldMigrate = oldVersion < newVersion

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -218,6 +219,36 @@ func TestMigration(t *testing.T) {
 
 	m.MarkMigrateDone()
 	require.True(t, m.IsMigrateDone())
+	key := etcd.CDCKey{Tp: etcd.CDCKeyTypeMetaVersion, ClusterID: "default"}
+	resp, err := cli.Get(ctx, key.String())
+	require.Nil(t, err)
+	v, err := strconv.ParseInt(string(resp.Kvs[0].Value), 10, 64)
+	require.Nil(t, err)
+	require.Equal(t, int64(1), v)
+
+	// migrate again
+	for i := 0; i < 10; i++ {
+		err = m.Migrate(ctx)
+		require.Nil(t, err)
+	}
+
+	_, err = cli.Put(ctx, key.String(), "2")
+	require.Nil(t, err)
+	require.Panics(t, func() {
+		_ = m.Migrate(ctx)
+	})
+	resp, err = cli.Get(ctx, key.String())
+	require.Nil(t, err)
+	v, err = strconv.ParseInt(string(resp.Kvs[0].Value), 10, 64)
+	require.Nil(t, err)
+	require.Equal(t, int64(2), v)
+
+	_, err = cli.Put(ctx, key.String(), "aaa")
+	require.Nil(t, err)
+	require.NotNil(t, m.Migrate(ctx))
+	resp, err = cli.Get(ctx, key.String())
+	require.Nil(t, err)
+	require.Equal(t, "aaa", string(resp.Kvs[0].Value))
 }
 
 func TestNoOpMigrator(t *testing.T) {
@@ -490,4 +521,37 @@ func TestRemoveOldGcServiceSafePointFailed(t *testing.T) {
 	require.Equal(t, 9, ftimes)
 	require.NotNil(t, err)
 	mockClient.testServer.Close()
+}
+
+func TestListServiceSafePointFailed(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	mockClient := newMockPDClient(ctx, true)
+
+	m := &migrator{}
+	mockClient.respData = "xxx"
+	err := m.migrateGcServiceSafePoint(ctx, mockClient, &security.Credential{}, "abcd", 10)
+	require.NotNil(t, err)
+}
+
+func TestNoServiceSafePoint(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	mockClient := newMockPDClient(ctx, true)
+
+	m := &migrator{}
+	data := &pdutil.ListServiceGCSafepoint{
+		ServiceGCSafepoints: []*pdutil.ServiceSafePoint{
+			{
+				ServiceID: "cccc",
+				SafePoint: 10,
+			},
+		},
+		GCSafePoint: 10,
+	}
+	buf, err := json.Marshal(data)
+	require.Nil(t, err)
+	mockClient.respData = string(buf)
+	err = m.migrateGcServiceSafePoint(ctx, mockClient, &security.Credential{}, "abcd", 10)
+	require.Nil(t, err)
 }
