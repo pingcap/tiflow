@@ -93,7 +93,8 @@ type DBConfig struct {
 // ValidateAndAdjust validates and adjusts the db configuration
 func (c *DBConfig) ValidateAndAdjust() error {
 	if c.Compression != "none" && c.Compression != "snappy" {
-		return errors.ErrIllegalSorterParameter.GenWithStackByArgs("sorter.leveldb.compression must be \"none\" or \"snappy\"")
+		return errors.ErrIllegalSorterParameter.GenWithStackByArgs(
+			"sorter.leveldb.compression must be \"none\" or \"snappy\"")
 	}
 
 	return nil

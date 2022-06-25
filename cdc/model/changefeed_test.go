@@ -738,7 +738,8 @@ func TestValidateChangefeedID(t *testing.T) {
 		if !tt.wantErr {
 			require.Nil(t, err, fmt.Sprintf("case:%s", tt.name))
 		} else {
-			require.True(t, errors.ErrInvalidChangefeedID.Equal(err), fmt.Sprintf("case:%s", tt.name))
+			require.True(t, errors.ErrInvalidChangefeedID.Equal(err),
+				fmt.Sprintf("case:%s", tt.name))
 		}
 	}
 }
