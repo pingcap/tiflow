@@ -24,6 +24,7 @@ import (
 
 	tidbddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/parser/ast"
+	dlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -83,7 +84,7 @@ func (s *testCheckpointSuite) SetUpSuite(c *C) {
 		}
 	)
 
-	s.tracker, err = schema.NewTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, nil)
+	s.tracker, err = schema.NewTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, nil, dlog.L())
 	c.Assert(err, IsNil)
 }
 
@@ -499,7 +500,7 @@ func TestRemoteCheckPointLoadIntoSchemaTracker(t *testing.T) {
 	dbConn, err := db.Conn(ctx)
 	require.NoError(t, err)
 	downstreamTrackConn := dbconn.NewDBConn(cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
-	schemaTracker, err := schema.NewTracker(ctx, cfg.Name, defaultTestSessionCfg, downstreamTrackConn)
+	schemaTracker, err := schema.NewTracker(ctx, cfg.Name, defaultTestSessionCfg, downstreamTrackConn, dlog.L())
 	require.NoError(t, err)
 	defer schemaTracker.Close() //nolint
 

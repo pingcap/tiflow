@@ -851,6 +851,16 @@ error = '''
 regions not completely left cover span, span %v regions: %v
 '''
 
+["CDC:ErrReplicationSetInconsistent"]
+error = '''
+replication set inconsistent: %s
+'''
+
+["CDC:ErrReplicationSetMultiplePrimaryError"]
+error = '''
+replication set multiple primary: %s
+'''
+
 ["CDC:ErrResolveLocks"]
 error = '''
 resolve locks failed
@@ -874,6 +884,11 @@ new s3 storage for redo log
 ["CDC:ErrScanLockFailed"]
 error = '''
 scan lock failed
+'''
+
+["CDC:ErrSchedulerRequestFailed"]
+error = '''
+scheduler request failed, %s
 '''
 
 ["CDC:ErrSchemaSnapshotNotFound"]
