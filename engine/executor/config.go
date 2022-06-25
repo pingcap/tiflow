@@ -133,7 +133,7 @@ func (c *Config) Parse(arguments []string) error {
 	// Parse first to get config file.
 	err := c.flagSet.Parse(arguments)
 	if err != nil {
-		return errors.Wrap(errors.ErrExecutorConfigParseFlagSet, err)
+		return errors.WrapError(errors.ErrExecutorConfigParseFlagSet, err)
 	}
 
 	if c.printVersion {
@@ -152,7 +152,7 @@ func (c *Config) Parse(arguments []string) error {
 	// Parse again to replace with command line options.
 	err = c.flagSet.Parse(arguments)
 	if err != nil {
-		return errors.Wrap(errors.ErrExecutorConfigParseFlagSet, err)
+		return errors.WrapError(errors.ErrExecutorConfigParseFlagSet, err)
 	}
 
 	if len(c.flagSet.Args()) != 0 {
@@ -204,7 +204,7 @@ func (c *Config) Parse(arguments []string) error {
 func (c *Config) configFromFile(path string) error {
 	metaData, err := toml.DecodeFile(path, c)
 	if err != nil {
-		return errors.Wrap(errors.ErrExecutorDecodeConfigFile, err)
+		return errors.WrapError(errors.ErrExecutorDecodeConfigFile, err)
 	}
 	undecoded := metaData.Undecoded()
 	if len(undecoded) > 0 && err == nil {

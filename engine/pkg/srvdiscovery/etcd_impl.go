@@ -141,7 +141,7 @@ func (d *EtcdSrvDiscovery) getSnapshot(ctx context.Context) (
 ) {
 	resp, err := d.etcdCli.Get(ctx, d.keyAdapter.Path(), clientv3.WithPrefix())
 	if err != nil {
-		return nil, errors.Wrap(errors.ErrEtcdAPIError, err)
+		return nil, errors.WrapError(errors.ErrEtcdAPIError, err)
 	}
 	snapshot := make(map[UUID]ServiceResource, resp.Count)
 	for _, kv := range resp.Kvs {
@@ -158,14 +158,14 @@ func (d *EtcdSrvDiscovery) getSnapshot(ctx context.Context) (
 func unmarshal(ka adapter.KeyAdapter, k, v []byte) (uuid UUID, resc ServiceResource, err error) {
 	keys, err1 := ka.Decode(string(k))
 	if err1 != nil {
-		err = errors.Wrap(errors.ErrDecodeEtcdKeyFail, err1, string(k))
+		err = errors.WrapError(errors.ErrDecodeEtcdKeyFail, err1, string(k))
 		return
 	}
 	uuid = keys[len(keys)-1]
 	resc = ServiceResource{}
 	err = json.Unmarshal(v, &resc)
 	if err != nil {
-		err = errors.Wrap(errors.ErrDecodeEtcdValueFail, err, string(v))
+		err = errors.WrapError(errors.ErrDecodeEtcdValueFail, err, string(v))
 		return
 	}
 	return

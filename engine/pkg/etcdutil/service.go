@@ -40,7 +40,7 @@ func StartEtcd(etcdCfg *embed.Config,
 
 	e, err := embed.StartEtcd(etcdCfg)
 	if err != nil {
-		return nil, errors.Wrap(errors.ErrMasterStartEmbedEtcdFail, err)
+		return nil, errors.WrapError(errors.ErrMasterStartEmbedEtcdFail, err)
 	}
 
 	select {
@@ -67,7 +67,7 @@ func GetLeader(ctx context.Context, cli *clientv3.Client, campKey string) (
 	opts := append([]clientv3.OpOption{clientv3.WithPrefix()}, clientv3.WithFirstCreate()...)
 	resp, err := cli.Get(ctx, campKey, opts...)
 	if err != nil {
-		err = errors.Wrap(errors.ErrEtcdAPIError, err)
+		err = errors.WrapError(errors.ErrEtcdAPIError, err)
 		return
 	}
 	if len(resp.Kvs) == 0 {

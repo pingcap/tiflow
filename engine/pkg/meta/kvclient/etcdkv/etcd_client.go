@@ -218,7 +218,7 @@ func (c *etcdImpl) Close() error {
 func (c *etcdImpl) GenEpoch(ctx context.Context) (int64, error) {
 	resp, err := c.cli.Put(ctx, FakeKey, FakeValue)
 	if err != nil {
-		return 0, etcdErrorFromOpFail(errors.Wrap(errors.ErrMasterEtcdEpochFail, err))
+		return 0, etcdErrorFromOpFail(errors.WrapError(errors.ErrMasterEtcdEpochFail, err))
 	}
 
 	return resp.Header.Revision, nil

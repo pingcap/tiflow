@@ -60,7 +60,7 @@ func startEtcd(
 
 	e, err := embed.StartEtcd(etcdCfg)
 	if err != nil {
-		return nil, derrors.Wrap(derrors.ErrMasterStartEmbedEtcdFail, err)
+		return nil, derrors.WrapError(derrors.ErrMasterStartEmbedEtcdFail, err)
 	}
 
 	select {

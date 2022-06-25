@@ -468,7 +468,7 @@ func (s *Server) initClients(ctx context.Context) (err error) {
 		// TODO: reuse connection with masterClient
 		conn, err := grpc.DialContext(ctx, addr, grpc.WithInsecure(), grpc.WithBlock())
 		if err != nil {
-			return nil, nil, errors.Wrap(cerrors.ErrGrpcBuildConn, err)
+			return nil, nil, errors.WrapError(cerrors.ErrGrpcBuildConn, err)
 		}
 		return pb.NewResourceManagerClient(conn), conn, nil
 	}
@@ -571,7 +571,7 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 			if err != nil {
 				log.L().Error("heartbeat rpc meet error", zap.Error(err))
 				if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
-					return errors.Wrap(cerrors.ErrHeartbeat, err, "rpc")
+					return errors.WrapError(cerrors.ErrHeartbeat, err, "rpc")
 				}
 				continue
 			}

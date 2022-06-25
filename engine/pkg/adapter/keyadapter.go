@@ -72,7 +72,7 @@ func (s keyHexEncoderDecoder) Decode(key string) ([]string, error) {
 	for i, k := range v {
 		dec, err := hex.DecodeString(k)
 		if err != nil {
-			return nil, errors.Wrap(errors.ErrDecodeEtcdKeyFail, err, k)
+			return nil, errors.WrapError(errors.ErrDecodeEtcdKeyFail, err, k)
 		}
 		v[i] = string(dec)
 	}

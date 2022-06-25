@@ -80,13 +80,13 @@ func (s *EtcdSession) Reset(ctx context.Context) error {
 	session, err := concurrency.NewSession(
 		s.etcdClient, concurrency.WithTTL(int(defaultSessionTTL.Seconds())))
 	if err != nil {
-		return derrors.Wrap(derrors.ErrMasterNewServer, err)
+		return derrors.WrapError(derrors.ErrMasterNewServer, err)
 	}
 
 	_, err = s.etcdClient.Put(ctx, s.config.Key, s.config.Value,
 		clientv3.WithLease(session.Lease()))
 	if err != nil {
-		return derrors.Wrap(derrors.ErrEtcdAPIError, err)
+		return derrors.WrapError(derrors.ErrEtcdAPIError, err)
 	}
 
 	election, err := NewEtcdElection(ctx, s.etcdClient, session, EtcdElectionConfig{
@@ -115,7 +115,7 @@ func (s *EtcdSession) Campaign(ctx context.Context, timeout time.Duration) (
 		return nil, nil, ctx.Err()
 	default:
 		log.L().Warn("campaign leader failed", zap.Error(err))
-		return nil, nil, derrors.Wrap(derrors.ErrMasterEtcdElectionCampaignFail, err)
+		return nil, nil, derrors.WrapError(derrors.ErrMasterEtcdElectionCampaignFail, err)
 	}
 	log.L().Info("campaign leader successfully",
 		zap.String("name", s.config.Member))

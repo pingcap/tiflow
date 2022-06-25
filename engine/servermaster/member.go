@@ -45,14 +45,14 @@ type EtcdMembership struct {
 func (em *EtcdMembership) getMasterNodes(ctx context.Context) (map[string]*model.NodeInfo, error) {
 	resp, err := em.etcdCli.Get(ctx, adapter.NodeInfoKeyAdapter.Path(), clientv3.WithPrefix())
 	if err != nil {
-		return nil, errors.Wrap(errors.ErrEtcdAPIError, err)
+		return nil, errors.WrapError(errors.ErrEtcdAPIError, err)
 	}
 	nodes := make(map[string]*model.NodeInfo, resp.Count)
 	for _, kv := range resp.Kvs {
 		info := &model.NodeInfo{}
 		err := json.Unmarshal(kv.Value, info)
 		if err != nil {
-			return nil, errors.Wrap(errors.ErrDecodeEtcdKeyFail, err)
+			return nil, errors.WrapError(errors.ErrDecodeEtcdKeyFail, err)
 		}
 		if info.Type == model.NodeTypeServerMaster {
 			id := string(info.ID)

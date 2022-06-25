@@ -36,7 +36,7 @@ import (
 func (s *Server) generateSessionConfig() (*cluster.EtcdSessionConfig, error) {
 	value, err := s.info.ToJSON()
 	if err != nil {
-		return nil, derrors.Wrap(derrors.ErrMasterNewServer, err)
+		return nil, derrors.WrapError(derrors.ErrMasterNewServer, err)
 	}
 
 	return &cluster.EtcdSessionConfig{

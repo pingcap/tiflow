@@ -70,7 +70,7 @@ var dialImpl = func(ctx context.Context, addr string) (pb.MasterClient, rpcutil.
 	defer cancel()
 	conn, err := grpc.DialContext(ctx, addr, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
-		return nil, nil, errors.Wrap(errors.ErrGrpcBuildConn, err)
+		return nil, nil, errors.WrapError(errors.ErrGrpcBuildConn, err)
 	}
 	return pb.NewMasterClient(conn), conn, nil
 }
@@ -78,7 +78,7 @@ var dialImpl = func(ctx context.Context, addr string) (pb.MasterClient, rpcutil.
 var mockDialImpl = func(ctx context.Context, addr string) (pb.MasterClient, rpcutil.CloseableConnIface, error) {
 	conn, err := mock.Dial(addr)
 	if err != nil {
-		return nil, nil, errors.Wrap(errors.ErrGrpcBuildConn, err)
+		return nil, nil, errors.WrapError(errors.ErrGrpcBuildConn, err)
 	}
 	return mock.NewMasterClient(conn), conn, nil
 }

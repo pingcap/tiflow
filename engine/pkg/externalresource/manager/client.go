@@ -30,7 +30,7 @@ var dialImpl = func(ctx context.Context, addr string) (pb.ResourceManagerClient,
 	defer cancel()
 	conn, err := grpc.DialContext(ctx, addr, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
-		return nil, nil, errors.Wrap(errors.ErrGrpcBuildConn, err)
+		return nil, nil, errors.WrapError(errors.ErrGrpcBuildConn, err)
 	}
 	return pb.NewResourceManagerClient(conn), conn, nil
 }
