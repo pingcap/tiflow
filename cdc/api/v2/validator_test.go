@@ -25,12 +25,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//type mockPdClient struct {
-//	pd.Client
-//	logicTime int64
-//	timestamp int64
-//}
-
 type mockStorage struct {
 	tidbkv.Storage
 }
