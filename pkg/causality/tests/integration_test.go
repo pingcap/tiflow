@@ -44,7 +44,7 @@ func BenchmarkLowConflicts(b *testing.B) {
 	defer cancel()
 
 	const (
-		numWorkers     = 32
+		numWorkers     = 8
 		numSlots       = 1024 * 1024
 		workingSetSize = 4096 * 4096
 		batchSize      = 8
@@ -63,7 +63,7 @@ func BenchmarkHighConflicts(b *testing.B) {
 	defer cancel()
 
 	const (
-		numWorkers     = 32
+		numWorkers     = 8
 		numSlots       = 1024 * 1024
 		workingSetSize = 4096
 		batchSize      = 8

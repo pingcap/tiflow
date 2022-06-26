@@ -240,6 +240,7 @@ require (
 	github.com/stathat/consistent v1.0.0 // indirect
 	github.com/stretchr/objx v0.2.0 // indirect
 	github.com/tiancaiamao/appdash v0.0.0-20181126055449-889f96f722a2 // indirect
+	github.com/tidwall/btree v1.3.1 // indirect
 	github.com/tklauser/go-sysconf v0.3.10 // indirect
 	github.com/tklauser/numcpus v0.4.0 // indirect
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20201229170055-e5319fda7802 // indirect

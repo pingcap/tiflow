@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/tidwall/btree"
 	"go.uber.org/atomic"
 )
 
@@ -39,7 +40,7 @@ type Node struct {
 
 	mu             sync.Mutex
 	conflictCounts map[workerID]int
-	dependers      map[nodeID]*Node
+	dependers      btree.Map[nodeID, *Node]
 	assignedTo     workerID
 	onResolved     func(id workerID)
 	resolved       atomic.Bool
@@ -68,7 +69,6 @@ func (n *Node) Free() {
 
 	n.id = -1
 	n.conflictCounts = nil
-	n.dependers = nil
 	n.assignedTo = unassigned
 	n.onResolved = nil
 	n.resolved.Store(false)
@@ -97,10 +97,10 @@ func (n *Node) DependOn(target *Node) {
 	target.lazyCreateMaps()
 	n.lazyCreateMaps()
 
-	if _, ok := target.dependers[n.id]; ok {
+	if _, ok := target.dependers.Get(n.id); ok {
 		return
 	}
-	target.dependers[n.id] = n
+	target.dependers.Set(n.id, n)
 	n.conflictCounts[target.assignedTo]++
 }
 
@@ -115,20 +115,19 @@ func (n *Node) AssignTo(workerID int64) {
 	}
 
 	n.assignedTo = workerID
-	for _, node := range n.dependers {
-		// Use a closure to make it possible to use deferred unlock.
-		func() {
-			node.mu.Lock()
-			defer node.mu.Unlock()
+	n.dependers.Scan(func(_ nodeID, node *Node) bool {
+		node.mu.Lock()
+		defer node.mu.Unlock()
 
-			node.conflictCounts[unassigned]--
-			if node.conflictCounts[unassigned] == 0 {
-				delete(node.conflictCounts, unassigned)
-			}
-			node.conflictCounts[workerID]++
-			node.notifyMaybeResolved()
-		}()
-	}
+		node.conflictCounts[unassigned]--
+		if node.conflictCounts[unassigned] == 0 {
+			delete(node.conflictCounts, unassigned)
+		}
+		node.conflictCounts[workerID]++
+		node.notifyMaybeResolved()
+
+		return true
+	})
 }
 
 func (n *Node) Remove() {
@@ -138,20 +137,19 @@ func (n *Node) Remove() {
 	if len(n.conflictCounts) != 0 {
 		panic("conflictNumber > 0")
 	}
+	n.dependers.Scan(func(_ nodeID, node *Node) bool {
+		node.mu.Lock()
+		defer node.mu.Unlock()
 
-	for _, node := range n.dependers {
-		// Use a closure to make it possible to use deferred unlock.
-		func() {
-			node.mu.Lock()
-			defer node.mu.Unlock()
+		node.conflictCounts[n.assignedTo]--
+		if node.conflictCounts[n.assignedTo] == 0 {
+			delete(node.conflictCounts, n.assignedTo)
+		}
+		node.notifyMaybeResolved()
+		return true
+	})
 
-			node.conflictCounts[n.assignedTo]--
-			if node.conflictCounts[n.assignedTo] == 0 {
-				delete(node.conflictCounts, n.assignedTo)
-			}
-			node.notifyMaybeResolved()
-		}()
-	}
+	n.dependers = btree.Map[nodeID, *Node]{}
 }
 
 func (n *Node) Equals(other *Node) bool {
@@ -221,9 +219,6 @@ func (n *Node) tryResolve() (int64, bool) {
 }
 
 func (n *Node) lazyCreateMaps() {
-	if n.dependers == nil {
-		n.dependers = make(map[nodeID]*Node)
-	}
 	if n.conflictCounts == nil {
 		n.conflictCounts = make(map[workerID]int)
 	}
