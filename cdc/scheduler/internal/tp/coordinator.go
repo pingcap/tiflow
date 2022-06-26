@@ -179,8 +179,9 @@ func (c *coordinator) DrainCapture(target model.CaptureID) int {
 	// the owner is the drain target. In the rolling upgrade scenario, owner should be drained
 	// at the last, this should be guaranteed by the caller, since it knows the draining order.
 	if target == c.captureID {
-		log.Warn("tpscheduler: manual drain capture, the target is the owner now",
+		log.Warn("tpscheduler: manual drain capture ignore, the target is the owner",
 			zap.String("target", target), zap.Int("tableCount", count))
+		return count
 	}
 
 	if !c.schedulerM.DrainCapture(target) {

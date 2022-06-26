@@ -720,7 +720,7 @@ func (h *OpenAPI) DrainCapture(c *gin.Context) {
 	}
 
 	// drain capture only work if there is at least two alive captures,
-	// it cannot work properly if has only one capture.
+	// it cannot work properly if it has only one capture.
 	if len(captures) <= 1 {
 		_ = c.Error(cerror.ErrSchedulerRequestFailed.
 			GenWithStackByArgs("only one capture alive"))
@@ -740,6 +740,18 @@ func (h *OpenAPI) DrainCapture(c *gin.Context) {
 
 	if !checkCaptureFound() {
 		_ = c.Error(cerror.ErrCaptureNotExist.GenWithStackByArgs(target))
+		return
+	}
+
+	ownerInfo, err := h.capture.GetOwnerCaptureInfo(ctx)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	if ownerInfo.ID == target {
+		_ = c.Error(cerror.ErrSchedulerRequestFailed.
+			GenWithStackByArgs("cannot drain the owner"))
 		return
 	}
 
