@@ -265,3 +265,13 @@ func (c *captureManager) CleanMetrics() {
 		captureTableGauge.DeleteLabelValues(cf.Namespace, cf.ID, capture.Addr)
 	}
 }
+
+// HasCaptureStopping return true if any capture is stopping.
+func (c *captureManager) HasCaptureStopping() bool {
+	for _, capture := range c.Captures {
+		if capture.State == CaptureStateStopping {
+			return true
+		}
+	}
+	return false
+}
