@@ -56,7 +56,7 @@ type APIV2Helpers interface {
 	// getPDClient returns a PDClient given the PD cluster addresses and a credential
 	getPDClient(context.Context, []string, *security.Credential) (pd.Client, error)
 
-	// createTiStore wrap the createTiStore method to increase testability
+	// createTiStore wraps the createTiStore method to increase testability
 	createTiStore([]string, *security.Credential) (tidbkv.Storage, error)
 }
 
