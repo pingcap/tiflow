@@ -15,7 +15,7 @@ package tableevent
 
 import (
 	"github.com/pingcap/tiflow/cdc/model"
-	"go.uber.org/atomic"
+	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 )
 
 // TableEvent is the interface for events which can be written to sink by TableSink.
@@ -32,7 +32,7 @@ type CallbackFunc func()
 type CallbackableEvent[E TableEvent] struct {
 	Event       E
 	Callback    CallbackFunc
-	TableStatus *atomic.Uint32
+	TableStatus *pipeline.TableState
 }
 
 // RowChangeCallbackableEvent is the row change event which can be callbacked.

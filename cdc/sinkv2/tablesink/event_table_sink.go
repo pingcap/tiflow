@@ -17,9 +17,9 @@ import (
 	"sort"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tableevent"
-	"go.uber.org/atomic"
 )
 
 // Assert TableSink implementation
@@ -34,7 +34,7 @@ type eventTableSink[E tableevent.TableEvent] struct {
 	eventAppender   tableevent.Appender[E]
 	// NOTICE: It is ordered by commitTs.
 	eventBuffer []E
-	TableStatus *atomic.Uint32
+	state       *pipeline.TableState
 }
 
 func (e *eventTableSink[E]) AppendRowChangedEvents(rows ...*model.RowChangedEvent) {
@@ -67,7 +67,7 @@ func (e *eventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) {
 			Callback: func() {
 				e.progressTracker.remove(e.eventID)
 			},
-			TableStatus: e.TableStatus,
+			TableStatus: e.state,
 		}
 		resolvedTxnEvents = append(resolvedTxnEvents, txnEvent)
 		e.progressTracker.addEvent(e.eventID)
@@ -84,6 +84,5 @@ func (e *eventTableSink[E]) GetCheckpointTs() model.ResolvedTs {
 }
 
 func (e *eventTableSink[E]) Close() {
-	// TODO implement me
-	panic("implement me")
+	e.state.Store(pipeline.TableStateStopped)
 }
