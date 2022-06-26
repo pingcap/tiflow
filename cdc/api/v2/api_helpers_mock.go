@@ -39,77 +39,77 @@ func (m *MockAPIV2Helpers) EXPECT() *MockAPIV2HelpersMockRecorder {
 	return m.recorder
 }
 
-// CreateTiStore mocks base method.
-func (m *MockAPIV2Helpers) CreateTiStore(arg0 []string, arg1 *security.Credential) (kv.Storage, error) {
+// createTiStore mocks base method.
+func (m *MockAPIV2Helpers) createTiStore(arg0 []string, arg1 *security.Credential) (kv.Storage, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateTiStore", arg0, arg1)
+	ret := m.ctrl.Call(m, "createTiStore", arg0, arg1)
 	ret0, _ := ret[0].(kv.Storage)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// CreateTiStore indicates an expected call of CreateTiStore.
-func (mr *MockAPIV2HelpersMockRecorder) CreateTiStore(arg0, arg1 interface{}) *gomock.Call {
+// createTiStore indicates an expected call of createTiStore.
+func (mr *MockAPIV2HelpersMockRecorder) createTiStore(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTiStore", reflect.TypeOf((*MockAPIV2Helpers)(nil).CreateTiStore), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "createTiStore", reflect.TypeOf((*MockAPIV2Helpers)(nil).createTiStore), arg0, arg1)
 }
 
-// GetPDClient mocks base method.
-func (m *MockAPIV2Helpers) GetPDClient(arg0 context.Context, arg1 []string, arg2 *security.Credential) (client.Client, error) {
+// getPDClient mocks base method.
+func (m *MockAPIV2Helpers) getPDClient(arg0 context.Context, arg1 []string, arg2 *security.Credential) (client.Client, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetPDClient", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "getPDClient", arg0, arg1, arg2)
 	ret0, _ := ret[0].(client.Client)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetPDClient indicates an expected call of GetPDClient.
-func (mr *MockAPIV2HelpersMockRecorder) GetPDClient(arg0, arg1, arg2 interface{}) *gomock.Call {
+// getPDClient indicates an expected call of getPDClient.
+func (mr *MockAPIV2HelpersMockRecorder) getPDClient(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPDClient", reflect.TypeOf((*MockAPIV2Helpers)(nil).GetPDClient), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getPDClient", reflect.TypeOf((*MockAPIV2Helpers)(nil).getPDClient), arg0, arg1, arg2)
 }
 
-// VerifyCreateChangefeedConfig mocks base method.
-func (m *MockAPIV2Helpers) VerifyCreateChangefeedConfig(arg0 context.Context, arg1 *ChangefeedConfig, arg2 client.Client, arg3 owner.StatusProvider, arg4 string, arg5 kv.Storage) (*model.ChangeFeedInfo, error) {
+// verifyCreateChangefeedConfig mocks base method.
+func (m *MockAPIV2Helpers) verifyCreateChangefeedConfig(arg0 context.Context, arg1 *ChangefeedConfig, arg2 client.Client, arg3 owner.StatusProvider, arg4 string, arg5 kv.Storage) (*model.ChangeFeedInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "VerifyCreateChangefeedConfig", arg0, arg1, arg2, arg3, arg4, arg5)
+	ret := m.ctrl.Call(m, "verifyCreateChangefeedConfig", arg0, arg1, arg2, arg3, arg4, arg5)
 	ret0, _ := ret[0].(*model.ChangeFeedInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// VerifyCreateChangefeedConfig indicates an expected call of VerifyCreateChangefeedConfig.
-func (mr *MockAPIV2HelpersMockRecorder) VerifyCreateChangefeedConfig(arg0, arg1, arg2, arg3, arg4, arg5 interface{}) *gomock.Call {
+// verifyCreateChangefeedConfig indicates an expected call of verifyCreateChangefeedConfig.
+func (mr *MockAPIV2HelpersMockRecorder) verifyCreateChangefeedConfig(arg0, arg1, arg2, arg3, arg4, arg5 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyCreateChangefeedConfig", reflect.TypeOf((*MockAPIV2Helpers)(nil).VerifyCreateChangefeedConfig), arg0, arg1, arg2, arg3, arg4, arg5)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "verifyCreateChangefeedConfig", reflect.TypeOf((*MockAPIV2Helpers)(nil).verifyCreateChangefeedConfig), arg0, arg1, arg2, arg3, arg4, arg5)
 }
 
-// VerifyUpdateChangefeedConfig mocks base method.
-func (m *MockAPIV2Helpers) VerifyUpdateChangefeedConfig(arg0 context.Context, arg1 *ChangefeedConfig, arg2 *model.ChangeFeedInfo, arg3 *model.UpstreamInfo) (*model.ChangeFeedInfo, *model.UpstreamInfo, error) {
+// verifyUpdateChangefeedConfig mocks base method.
+func (m *MockAPIV2Helpers) verifyUpdateChangefeedConfig(arg0 context.Context, arg1 *ChangefeedConfig, arg2 *model.ChangeFeedInfo, arg3 *model.UpstreamInfo) (*model.ChangeFeedInfo, *model.UpstreamInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "VerifyUpdateChangefeedConfig", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "verifyUpdateChangefeedConfig", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(*model.ChangeFeedInfo)
 	ret1, _ := ret[1].(*model.UpstreamInfo)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
 
-// VerifyUpdateChangefeedConfig indicates an expected call of VerifyUpdateChangefeedConfig.
-func (mr *MockAPIV2HelpersMockRecorder) VerifyUpdateChangefeedConfig(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+// verifyUpdateChangefeedConfig indicates an expected call of verifyUpdateChangefeedConfig.
+func (mr *MockAPIV2HelpersMockRecorder) verifyUpdateChangefeedConfig(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyUpdateChangefeedConfig", reflect.TypeOf((*MockAPIV2Helpers)(nil).VerifyUpdateChangefeedConfig), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "verifyUpdateChangefeedConfig", reflect.TypeOf((*MockAPIV2Helpers)(nil).verifyUpdateChangefeedConfig), arg0, arg1, arg2, arg3)
 }
 
-// VerifyUpstream mocks base method.
-func (m *MockAPIV2Helpers) VerifyUpstream(arg0 context.Context, arg1 *ChangefeedConfig, arg2 *model.ChangeFeedInfo) error {
+// verifyUpstream mocks base method.
+func (m *MockAPIV2Helpers) verifyUpstream(arg0 context.Context, arg1 *ChangefeedConfig, arg2 *model.ChangeFeedInfo) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "VerifyUpstream", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "verifyUpstream", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// VerifyUpstream indicates an expected call of VerifyUpstream.
-func (mr *MockAPIV2HelpersMockRecorder) VerifyUpstream(arg0, arg1, arg2 interface{}) *gomock.Call {
+// verifyUpstream indicates an expected call of verifyUpstream.
+func (mr *MockAPIV2HelpersMockRecorder) verifyUpstream(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyUpstream", reflect.TypeOf((*MockAPIV2Helpers)(nil).VerifyUpstream), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "verifyUpstream", reflect.TypeOf((*MockAPIV2Helpers)(nil).verifyUpstream), arg0, arg1, arg2)
 }

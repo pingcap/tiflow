@@ -93,7 +93,7 @@ func WriteData(w http.ResponseWriter, data interface{}) {
 
 // HandleOwnerJob enqueue the admin job
 func HandleOwnerJob(
-	ctx context.Context, capture *capture.Capture, job model.AdminJob,
+	ctx context.Context, capture capture.InfoForAPI, job model.AdminJob,
 ) error {
 	// Use buffered channel to prevent blocking owner from happening.
 	done := make(chan error, 1)
@@ -112,7 +112,7 @@ func HandleOwnerJob(
 
 // HandleOwnerBalance balance the changefeed tables
 func HandleOwnerBalance(
-	ctx context.Context, capture *capture.Capture, changefeedID model.ChangeFeedID,
+	ctx context.Context, capture capture.InfoForAPI, changefeedID model.ChangeFeedID,
 ) error {
 	// Use buffered channel to prevernt blocking owner.
 	done := make(chan error, 1)
@@ -131,7 +131,7 @@ func HandleOwnerBalance(
 
 // HandleOwnerScheduleTable schedule tables
 func HandleOwnerScheduleTable(
-	ctx context.Context, capture *capture.Capture,
+	ctx context.Context, capture capture.InfoForAPI,
 	changefeedID model.ChangeFeedID, captureID string, tableID int64,
 ) error {
 	// Use buffered channel to prevernt blocking owner.

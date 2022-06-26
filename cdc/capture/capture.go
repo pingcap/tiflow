@@ -54,7 +54,7 @@ type Capture struct {
 	processorManager *processor.Manager
 
 	pdEndpoints     []string
-	UpstreamManager *upstream.Manager
+	upstreamManager *upstream.Manager
 	ownerMu         sync.Mutex
 	owner           owner.Owner
 
@@ -124,7 +124,7 @@ func NewCapture4Test(o owner.Owner) *Capture {
 // NewCaptureWithManager4Test returns a new Capture instance for test.
 func NewCaptureWithManager4Test(o owner.Owner, m *upstream.Manager) *Capture {
 	res := &Capture{
-		UpstreamManager: m,
+		upstreamManager: m,
 		migrator:        &migrate.NoOpMigrator{},
 	}
 	res.owner = o
@@ -133,7 +133,7 @@ func NewCaptureWithManager4Test(o owner.Owner, m *upstream.Manager) *Capture {
 
 // GetUpstreamManager is a Getter of capture's upstream manager
 func (c *Capture) GetUpstreamManager() *upstream.Manager {
-	return c.UpstreamManager
+	return c.upstreamManager
 }
 
 // GetEtcdClient is a Getter of capture's Etcd client
@@ -159,18 +159,18 @@ func (c *Capture) reset(ctx context.Context) error {
 		Version:       version.ReleaseVersion,
 	}
 
-	if c.UpstreamManager != nil {
-		c.UpstreamManager.Close()
+	if c.upstreamManager != nil {
+		c.upstreamManager.Close()
 	}
-	c.UpstreamManager = upstream.NewManager(ctx, c.EtcdClient.GetGCServiceID())
-	_, err = c.UpstreamManager.AddDefaultUpstream(c.pdEndpoints, conf.Security)
+	c.upstreamManager = upstream.NewManager(ctx, c.EtcdClient.GetGCServiceID())
+	_, err = c.upstreamManager.AddDefaultUpstream(c.pdEndpoints, conf.Security)
 	if err != nil {
 		return errors.Annotate(
 			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
 			"add default upstream failed")
 	}
 
-	c.processorManager = c.newProcessorManager(c.UpstreamManager)
+	c.processorManager = c.newProcessorManager(c.upstreamManager)
 	if c.session != nil {
 		// It can't be handled even after it fails, so we ignore it.
 		_ = c.session.Close()
@@ -414,7 +414,7 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 			zap.String("captureID", c.info.ID),
 			zap.Int64("ownerRev", ownerRev))
 
-		owner := c.newOwner(c.UpstreamManager)
+		owner := c.newOwner(c.upstreamManager)
 		c.setOwner(owner)
 
 		globalState := orchestrator.NewGlobalState(c.EtcdClient.ClusterID)

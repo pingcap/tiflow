@@ -42,62 +42,62 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	provider := &mockStatusProvider{}
 	cfg := &ChangefeedConfig{}
 	h := &APIV2HelpersImpl{}
-	cfInfo, err := h.VerifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
+	cfInfo, err := h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
 	require.Nil(t, cfInfo)
 	require.NotNil(t, err)
 	cfg.SinkURI = "blackhole://"
 	// repliconfig is nil
 	require.Panics(t, func() {
-		_, _ = h.VerifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
+		_, _ = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
 	})
 	cfg.ReplicaConfig = GetDefaultReplicaConfig()
 	cfg.ReplicaConfig.ForceReplicate = true
 	cfg.ReplicaConfig.EnableOldValue = false
 	// disable old value but force replicate
-	cfInfo, err = h.VerifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
+	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
 	require.NotNil(t, err)
 	require.Nil(t, cfInfo)
 	cfg.ReplicaConfig.ForceReplicate = false
 	cfg.ReplicaConfig.IgnoreIneligibleTable = true
-	cfInfo, err = h.VerifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
+	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
 	require.Nil(t, err)
 	require.NotNil(t, cfInfo)
 	require.NotEqual(t, "", cfInfo.ID)
 	require.Equal(t, model.DefaultNamespace, cfInfo.Namespace)
 
 	cfg.ID = "abdc/sss"
-	cfInfo, err = h.VerifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
+	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
 	require.NotNil(t, err)
 	cfg.ID = ""
 	cfg.Namespace = "abdc/sss"
-	cfInfo, err = h.VerifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
+	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
 	require.NotNil(t, err)
 	cfg.ID = ""
 	cfg.Namespace = ""
 	// changefeed already exists
 	provider.changefeedStatus = &model.ChangeFeedStatus{}
-	cfInfo, err = h.VerifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
+	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
 	require.NotNil(t, err)
 	provider.changefeedStatus = nil
 	provider.err = cerror.ErrChangeFeedNotExists.GenWithStackByArgs("aaa")
-	cfInfo, err = h.VerifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
+	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
 	require.Nil(t, err)
 	require.Equal(t, uint64(123), cfInfo.UpstreamID)
 	cfg.TargetTs = 3
 	cfg.StartTs = 4
-	cfInfo, err = h.VerifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
+	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
 	require.NotNil(t, err)
 	cfg.TargetTs = 6
 	cfg.ReplicaConfig.EnableOldValue = false
 	cfg.SinkURI = "aaab://"
-	cfInfo, err = h.VerifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
+	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
 	require.NotNil(t, err)
 	cfg.SinkURI = string([]byte{0x7f, ' '})
-	cfInfo, err = h.VerifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
+	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
 	require.NotNil(t, err)
 	cfg.SinkURI = "blackhole://sss?protocol=canal"
 	cfg.ReplicaConfig.EnableOldValue = false
-	cfInfo, err = h.VerifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
+	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
 	require.Nil(t, err)
 	require.True(t, cfInfo.Config.EnableOldValue)
 }
@@ -108,14 +108,14 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	oldInfo := &model.ChangeFeedInfo{}
 	oldUpInfo := &model.UpstreamInfo{}
 	h := &APIV2HelpersImpl{}
-	newCfInfo, newUpInfo, err := h.VerifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo)
+	newCfInfo, newUpInfo, err := h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo)
 	require.NotNil(t, err)
 	require.Nil(t, newCfInfo)
 	require.Nil(t, newUpInfo)
 	// namespace and id can not be updated
 	cfg.Namespace = "abc"
 	cfg.ID = "1234"
-	newCfInfo, newUpInfo, err = h.VerifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo)
+	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo)
 	require.NotNil(t, err)
 	require.Nil(t, newCfInfo)
 	require.Nil(t, newUpInfo)
@@ -131,7 +131,7 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	cfg.KeyPath = "p3"
 	cfg.SinkURI = "blackhole://"
 	cfg.CertAllowedCN = []string{"c", "d"}
-	newCfInfo, newUpInfo, err = h.VerifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo)
+	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo)
 	require.Nil(t, err)
 	// startTs can not be updated
 	require.Equal(t, uint64(0), newCfInfo.StartTs)
@@ -148,6 +148,6 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	require.Equal(t, "blackhole://", newCfInfo.SinkURI)
 	oldInfo.StartTs = 10
 	cfg.TargetTs = 9
-	newCfInfo, newUpInfo, err = h.VerifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo)
+	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo)
 	require.NotNil(t, err)
 }

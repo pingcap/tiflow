@@ -33,4 +33,6 @@ type CDCEtcdClientForAPI interface {
 	GetAllCDCInfo(ctx context.Context) ([]*mvccpb.KeyValue, error)
 	GetGCServiceID() string
 	GetEnsureGCServiceID() string
+	SaveChangeFeedInfo(ctx context.Context, info *model.ChangeFeedInfo,
+		changeFeedID model.ChangeFeedID) error
 }

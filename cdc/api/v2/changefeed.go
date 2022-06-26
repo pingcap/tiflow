@@ -36,9 +36,9 @@ import (
 
 const apiOpVarChangefeedID = "changefeed_id"
 
-// CreateChangefeed handles create changefeed request,
+// createChangefeed handles create changefeed request,
 // it returns the changefeed's changefeedInfo that it just created
-func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
+func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
 	config := &ChangefeedConfig{ReplicaConfig: GetDefaultReplicaConfig()}
 
@@ -63,7 +63,7 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 	}
 	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	pdClient, err := h.helpers.GetPDClient(timeoutCtx, config.PDAddrs, credential)
+	pdClient, err := h.helpers.getPDClient(timeoutCtx, config.PDAddrs, credential)
 	if err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
@@ -71,15 +71,15 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 	defer pdClient.Close()
 
 	// verify tables todo: del kvstore
-	kvStorage, err := h.helpers.CreateTiStore(config.PDAddrs, credential)
+	kvStorage, err := h.helpers.createTiStore(config.PDAddrs, credential)
 	if err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrInternalServerError, err))
 		return
 	}
 	// We should not close kvStorage since all kvStorage in cdc is the same one.
-	// defer kvStorage.Close() TODO: ?
-
-	info, err := h.helpers.VerifyCreateChangefeedConfig(ctx, config, pdClient,
+	// defer kvStorage.Close()
+	// TODO: We should get a kvStorage from upstream instead of creating a new one
+	info, err := h.helpers.verifyCreateChangefeedConfig(ctx, config, pdClient,
 		h.capture.StatusProvider(), h.capture.GetEtcdClient().GetEnsureGCServiceID(),
 		kvStorage)
 	if err != nil {
@@ -115,8 +115,8 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 	c.JSON(http.StatusCreated, toAPIModel(info))
 }
 
-// VerifyTable verify table, return ineligibleTables and EligibleTables.
-func (h *OpenAPIV2) VerifyTable(c *gin.Context) {
+// verifyTable verify table, return ineligibleTables and EligibleTables.
+func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 	cfg := getDefaultVerifyTableConfig()
 	if err := c.BindJSON(cfg); err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
@@ -139,7 +139,7 @@ func (h *OpenAPIV2) VerifyTable(c *gin.Context) {
 		credential.CertAllowedCN = cfg.CertAllowedCN
 	}
 
-	kvStore, err := h.helpers.CreateTiStore(cfg.PDAddrs, credential)
+	kvStore, err := h.helpers.createTiStore(cfg.PDAddrs, credential)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -169,12 +169,12 @@ func (h *OpenAPIV2) VerifyTable(c *gin.Context) {
 	c.JSON(http.StatusOK, tables)
 }
 
-// UpdateChangefeed handles update changefeed request,
+// updateChangefeed handles update changefeed request,
 // it returns the updated changefeedInfo
 // Can only update a changefeed's: TargetTs, SinkURI,
 // ReplicaConfig, PDAddrs, CAPath, CertPath, KeyPath,
 // SyncPointEnabled, SyncPointInterval
-func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
+func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
@@ -213,7 +213,7 @@ func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
 		return
 	}
 
-	if err := h.helpers.VerifyUpstream(ctx, changefeedConfig, cfInfo); err != nil {
+	if err := h.helpers.verifyUpstream(ctx, changefeedConfig, cfInfo); err != nil {
 		return
 	}
 
@@ -222,7 +222,7 @@ func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
 		zap.Any("upstreamInfo", upInfo))
 
 	newCfInfo, newUpInfo, err := h.helpers.
-		VerifyUpdateChangefeedConfig(ctx, changefeedConfig, cfInfo, upInfo)
+		verifyUpdateChangefeedConfig(ctx, changefeedConfig, cfInfo, upInfo)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -241,8 +241,8 @@ func (h *OpenAPIV2) UpdateChangefeed(c *gin.Context) {
 	c.JSON(http.StatusOK, newCfInfo)
 }
 
-// GetChangeFeedMetaInfo returns the metaInfo of a changefeed
-func (h *OpenAPIV2) GetChangeFeedMetaInfo(c *gin.Context) {
+// getChangeFeedMetaInfo returns the metaInfo of a changefeed
+func (h *OpenAPIV2) getChangeFeedMetaInfo(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
@@ -259,8 +259,8 @@ func (h *OpenAPIV2) GetChangeFeedMetaInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, toAPIModel(info))
 }
 
-// GetPDClient returns a PDClient given the PD cluster addresses and a credential
-func (APIV2HelpersImpl) GetPDClient(ctx context.Context,
+// getPDClient returns a PDClient given the PD cluster addresses and a credential
+func (APIV2HelpersImpl) getPDClient(ctx context.Context,
 	pdAddrs []string,
 	credential *security.Credential,
 ) (pd.Client, error) {
@@ -290,8 +290,8 @@ func (APIV2HelpersImpl) GetPDClient(ctx context.Context,
 	return pdClient, nil
 }
 
-// CreateTiStore wrap the CreateTiStore method to increase testability
-func (h APIV2HelpersImpl) CreateTiStore(pdAddrs []string,
+// createTiStore wrap the createTiStore method to increase testability
+func (h APIV2HelpersImpl) createTiStore(pdAddrs []string,
 	credential *security.Credential,
 ) (tidbkv.Storage, error) {
 	return kv.CreateTiStore(strings.Join(pdAddrs, ","), credential)

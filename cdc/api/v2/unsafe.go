@@ -132,7 +132,7 @@ func (h *OpenAPIV2) withUpstreamConfig(c context.Context,
 		timeoutCtx, cancel := context.WithTimeout(c, 30*time.Second)
 		defer cancel()
 		pdClient, err = h.helpers.
-			GetPDClient(timeoutCtx, upstreamConfig.PDAddrs, &security.Credential{
+			getPDClient(timeoutCtx, upstreamConfig.PDAddrs, &security.Credential{
 				CAPath:        upstreamConfig.CAPath,
 				CertPath:      upstreamConfig.CertPath,
 				KeyPath:       upstreamConfig.KeyPath,

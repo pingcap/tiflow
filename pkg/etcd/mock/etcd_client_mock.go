@@ -108,6 +108,20 @@ func (mr *MockCDCEtcdClientForAPIMockRecorder) GetUpstreamInfo(ctx, upstreamID, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUpstreamInfo", reflect.TypeOf((*MockCDCEtcdClientForAPI)(nil).GetUpstreamInfo), ctx, upstreamID, namespace)
 }
 
+// SaveChangeFeedInfo mocks base method.
+func (m *MockCDCEtcdClientForAPI) SaveChangeFeedInfo(ctx context.Context, info *model.ChangeFeedInfo, changeFeedID model.ChangeFeedID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SaveChangeFeedInfo", ctx, info, changeFeedID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SaveChangeFeedInfo indicates an expected call of SaveChangeFeedInfo.
+func (mr *MockCDCEtcdClientForAPIMockRecorder) SaveChangeFeedInfo(ctx, info, changeFeedID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveChangeFeedInfo", reflect.TypeOf((*MockCDCEtcdClientForAPI)(nil).SaveChangeFeedInfo), ctx, info, changeFeedID)
+}
+
 // UpdateChangefeedAndUpstream mocks base method.
 func (m *MockCDCEtcdClientForAPI) UpdateChangefeedAndUpstream(ctx context.Context, upstreamInfo *model.UpstreamInfo, changeFeedInfo *model.ChangeFeedInfo, changeFeedID model.ChangeFeedID) error {
 	m.ctrl.T.Helper()

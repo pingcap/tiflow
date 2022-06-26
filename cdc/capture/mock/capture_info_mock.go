@@ -52,6 +52,21 @@ func (mr *MockInfoForAPIMockRecorder) GetEtcdClient() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEtcdClient", reflect.TypeOf((*MockInfoForAPI)(nil).GetEtcdClient))
 }
 
+// GetOwner mocks base method.
+func (m *MockInfoForAPI) GetOwner() (owner.Owner, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOwner")
+	ret0, _ := ret[0].(owner.Owner)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetOwner indicates an expected call of GetOwner.
+func (mr *MockInfoForAPIMockRecorder) GetOwner() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOwner", reflect.TypeOf((*MockInfoForAPI)(nil).GetOwner))
+}
+
 // GetOwnerCaptureInfo mocks base method.
 func (m *MockInfoForAPI) GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error) {
 	m.ctrl.T.Helper()

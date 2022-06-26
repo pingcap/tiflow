@@ -22,11 +22,12 @@ import (
 	"github.com/pingcap/tiflow/pkg/upstream"
 )
 
-// InfoForAPI provides capture's info&getter used for api
+// InfoForAPI provides capture's info and getters used for api
 type InfoForAPI interface {
 	Info() (model.CaptureInfo, error)
 	IsOwner() bool
 	IsReady() bool
+	GetOwner() (owner.Owner, error)
 	GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error)
 	StatusProvider() owner.StatusProvider
 	GetEtcdClient() etcd.CDCEtcdClientForAPI

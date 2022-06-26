@@ -38,9 +38,9 @@ import (
 	"go.uber.org/zap"
 )
 
-// VerifyCreateChangefeedConfig verifies ChangefeedConfig and
+// verifyCreateChangefeedConfig verifies ChangefeedConfig and
 // returns a changefeedInfo for create a changefeed.
-func (APIV2HelpersImpl) VerifyCreateChangefeedConfig(
+func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	ctx context.Context,
 	cfg *ChangefeedConfig,
 	pdClient pd.Client,
@@ -180,8 +180,8 @@ func (APIV2HelpersImpl) VerifyCreateChangefeedConfig(
 	}, nil
 }
 
-// VerifyUpstream verifies the upstream config before updating a changefeed
-func (h APIV2HelpersImpl) VerifyUpstream(ctx context.Context,
+// verifyUpstream verifies the upstream config before updating a changefeed
+func (h APIV2HelpersImpl) verifyUpstream(ctx context.Context,
 	changefeedConfig *ChangefeedConfig,
 	cfInfo *model.ChangeFeedInfo,
 ) error {
@@ -189,7 +189,7 @@ func (h APIV2HelpersImpl) VerifyUpstream(ctx context.Context,
 		// check if the upstream cluster id changed
 		timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
-		pdClient, err := h.GetPDClient(timeoutCtx, changefeedConfig.PDAddrs, &security.Credential{
+		pdClient, err := h.getPDClient(timeoutCtx, changefeedConfig.PDAddrs, &security.Credential{
 			CAPath:        changefeedConfig.CAPath,
 			CertPath:      changefeedConfig.CertPath,
 			KeyPath:       changefeedConfig.KeyPath,
@@ -207,9 +207,9 @@ func (h APIV2HelpersImpl) VerifyUpstream(ctx context.Context,
 	return nil
 }
 
-// VerifyUpdateChangefeedConfig verifies config to update
+// verifyUpdateChangefeedConfig verifies config to update
 // a changefeed and returns a changefeedInfo
-func (APIV2HelpersImpl) VerifyUpdateChangefeedConfig(ctx context.Context,
+func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(ctx context.Context,
 	cfg *ChangefeedConfig, oldInfo *model.ChangeFeedInfo,
 	oldUpInfo *model.UpstreamInfo,
 ) (*model.ChangeFeedInfo, *model.UpstreamInfo, error) {

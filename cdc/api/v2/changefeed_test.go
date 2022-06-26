@@ -56,13 +56,13 @@ func TestCreateChangefeed(t *testing.T) {
 	router := newRouter(apiV2)
 
 	helper.EXPECT().
-		GetPDClient(gomock.Any(), gomock.Any(), gomock.Any()).
+		getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(pdClient, nil)
 	helper.EXPECT().
-		CreateTiStore(gomock.Any(), gomock.Any()).
+		createTiStore(gomock.Any(), gomock.Any()).
 		Return(nil, nil)
 	helper.EXPECT().
-		VerifyCreateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(),
+		verifyCreateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(),
 			gomock.Any(), gomock.Any(), gomock.Any()).
 		DoAndReturn(func(ctx context.Context,
 			cfg *ChangefeedConfig,
@@ -103,7 +103,6 @@ func TestCreateChangefeed(t *testing.T) {
 	etcdClient.EXPECT().
 		GetEnsureGCServiceID().
 		Return(fmt.Sprintf("ticdc-%s-%d", "defalut", 0))
-	//	GetEtcdClient().GetEnsureGCServiceID()
 
 	config1 := struct {
 		ID      string   `json:"changefeed_id"`
