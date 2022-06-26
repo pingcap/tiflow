@@ -29,9 +29,9 @@ import (
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/statusutil"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	derror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 type workerManageTestSuite struct {

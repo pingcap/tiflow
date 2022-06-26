@@ -130,6 +130,9 @@ var defaultServerConfig = &ServerConfig{
 			IteratorSlowReadDuration:    256,
 		},
 		Messages: defaultMessageConfig.Clone(),
+
+		EnableTwoPhaseScheduler: false,
+		Scheduler:               NewDefaultSchedulerConfig(),
 	},
 }
 

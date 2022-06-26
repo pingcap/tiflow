@@ -274,8 +274,9 @@ type SubTaskConfig struct {
 	} `yaml:"experimental" toml:"experimental" json:"experimental"`
 
 	// below member are injected by dataflow engine
-	ExtStorage     extstorage.ExternalStorage `toml:"-" json:"-"`
-	MetricsFactory promutil.Factory           `toml:"-" json:"-"`
+	ExtStorage      extstorage.ExternalStorage `toml:"-" json:"-"`
+	MetricsFactory  promutil.Factory           `toml:"-" json:"-"`
+	FrameworkLogger *zap.Logger                `toml:"-" json:"-"`
 }
 
 // SampleSubtaskConfig is the content of subtask.toml in current folder.

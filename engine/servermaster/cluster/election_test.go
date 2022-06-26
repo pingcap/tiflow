@@ -23,7 +23,7 @@ import (
 
 	"github.com/pingcap/errors"
 
-	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
+	"github.com/pingcap/tiflow/engine/pkg/etcdutil"
 	"github.com/stretchr/testify/require"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
@@ -36,7 +36,7 @@ func setUpTest(t *testing.T) (newClient func() *clientv3.Client, close func()) {
 	err := os.Chmod(dir, 0o700)
 	require.NoError(t, err)
 
-	urls, server, err := etcdutils.SetupEmbedEtcd(dir)
+	urls, server, err := etcdutil.SetupEmbedEtcd(dir)
 	require.NoError(t, err)
 
 	var endpoints []string

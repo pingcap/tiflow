@@ -17,6 +17,7 @@ import (
 	"context"
 
 	"github.com/pingcap/errors"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 )
 
 // WrapError generates a new error based on given `*errors.Error`, wraps the err
@@ -92,4 +93,37 @@ func IsRetryableError(err error) bool {
 		return false
 	}
 	return true
+}
+
+// ToPBError translates go error to pb error.
+func ToPBError(err error) *pb.Error {
+	if err == nil {
+		return nil
+	}
+	rfcCode, ok := RFCCode(err)
+	if !ok {
+		return &pb.Error{
+			Code:    pb.ErrorCode_UnknownError,
+			Message: err.Error(),
+		}
+	}
+	pbErr := &pb.Error{}
+	switch rfcCode {
+	case ErrUnknownExecutorID.RFCCode():
+		pbErr.Code = pb.ErrorCode_UnknownExecutor
+	case ErrTombstoneExecutor.RFCCode():
+		pbErr.Code = pb.ErrorCode_TombstoneExecutor
+	case ErrSubJobFailed.RFCCode():
+		pbErr.Code = pb.ErrorCode_SubJobSubmitFailed
+	case ErrClusterResourceNotEnough.RFCCode():
+		pbErr.Code = pb.ErrorCode_NotEnoughResource
+	case ErrBuildJobFailed.RFCCode():
+		pbErr.Code = pb.ErrorCode_SubJobBuildFailed
+	case ErrGrpcBuildConn.RFCCode():
+		pbErr.Code = pb.ErrorCode_BuildGrpcConnFailed
+	default:
+		pbErr.Code = pb.ErrorCode_UnknownError
+	}
+	pbErr.Message = err.Error()
+	return pbErr
 }

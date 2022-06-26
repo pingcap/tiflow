@@ -16,10 +16,10 @@ package cli
 import (
 	"context"
 
-	"github.com/pingcap/errors"
 	"github.com/spf13/cobra"
 	"go.etcd.io/etcd/client/v3/concurrency"
 
+	"github.com/pingcap/errors"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"

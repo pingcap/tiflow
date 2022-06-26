@@ -33,8 +33,8 @@ import (
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 var _ framework.Worker = (*dummyWorker)(nil)
@@ -140,7 +140,7 @@ func (d *dummyWorker) Tick(ctx context.Context) error {
 	if d.statusRateLimiter.Allow() {
 		log.L().Info("FakeWorker: Tick", zap.String("worker-id", d.ID()), zap.Int64("tick", d.status.Tick))
 		err := d.BaseWorker.UpdateStatus(ctx, d.Status())
-		if derrors.ErrWorkerUpdateStatusTryAgain.Equal(err) {
+		if cerrors.ErrWorkerUpdateStatusTryAgain.Equal(err) {
 			log.L().Warn("update status try again later", zap.String("error", err.Error()))
 			return nil
 		}
