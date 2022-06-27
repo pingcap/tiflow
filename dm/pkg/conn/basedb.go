@@ -22,10 +22,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/util"
 	"go.uber.org/zap"
 
@@ -38,6 +36,8 @@ import (
 )
 
 var customID int64
+
+var netTimeout = utils.DefaultDBTimeout
 
 // DBProvider providers BaseDB instance.
 type DBProvider interface {
@@ -53,9 +53,6 @@ var DefaultDBProvider DBProvider
 func init() {
 	DefaultDBProvider = &DefaultDBProviderImpl{}
 }
-
-// mockDB is used in unit test.
-var mockDB sqlmock.Sqlmock
 
 // Apply will build BaseDB with DBConfig.
 func (d *DefaultDBProviderImpl) Apply(config *config.DBConfig) (*BaseDB, error) {
@@ -115,19 +112,10 @@ func (d *DefaultDBProviderImpl) Apply(config *config.DBConfig) (*BaseDB, error) 
 	if err != nil {
 		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 	}
-	failpoint.Inject("failDBPing", func(_ failpoint.Value) {
-		db.Close()
-		db, mockDB, _ = sqlmock.New()
-		mockDB.ExpectPing()
-		mockDB.ExpectClose()
-	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), utils.DefaultDBTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), netTimeout)
 	defer cancel()
 	err = db.PingContext(ctx)
-	failpoint.Inject("failDBPing", func(_ failpoint.Value) {
-		err = errors.New("injected error")
-	})
 	if err != nil {
 		db.Close()
 		doFuncInClose()
@@ -159,11 +147,9 @@ func NewBaseDB(db *sql.DB, doFuncInClose ...func()) *BaseDB {
 	return &BaseDB{DB: db, conns: conns, Retry: &retry.FiniteRetryStrategy{}, doFuncInClose: doFuncInClose}
 }
 
-var getConnTimeout = utils.DefaultDBTimeout
-
 // GetBaseConn retrieves *BaseConn which has own retryStrategy.
 func (d *BaseDB) GetBaseConn(ctx context.Context) (*BaseConn, error) {
-	ctx, cancel := context.WithTimeout(ctx, getConnTimeout)
+	ctx, cancel := context.WithTimeout(ctx, netTimeout)
 	defer cancel()
 	conn, err := d.DB.Conn(ctx)
 	if err != nil {

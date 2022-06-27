@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/phayes/freeport"
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/stretchr/testify/require"
 
@@ -67,24 +66,29 @@ func TestGetBaseConn(t *testing.T) {
 }
 
 func TestFailDBPing(t *testing.T) {
-	require.NoError(t, failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/conn/failDBPing", "return"))
-	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/conn/failDBPing")
+	netTimeout = time.Second
+	defer func() {
+		netTimeout = utils.DefaultDBTimeout
+	}()
+	port := freeport.GetPort()
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
 
-	cfg := &config.DBConfig{User: "root", Host: "127.0.0.1", Port: 3306}
-	cfg.Adjust()
-	db, err := DefaultDBProvider.Apply(cfg)
-	require.Error(t, err)
-	require.NotNil(t, db)
-
-	err = mockDB.ExpectationsWereMet()
+	l, err := net.Listen("tcp", addr)
 	require.NoError(t, err)
+	defer l.Close()
+
+	cfg := &config.DBConfig{User: "root", Host: "127.0.0.1", Port: port}
+	cfg.Adjust()
+	impl := &DefaultDBProviderImpl{}
+	db, err := impl.Apply(cfg)
+	require.Error(t, err)
+	require.Nil(t, db)
 }
 
 func TestGetBaseConnWontBlock(t *testing.T) {
-	getConnTimeout = time.Second
+	netTimeout = time.Second
 	defer func() {
-		getConnTimeout = utils.DefaultDBTimeout
+		netTimeout = utils.DefaultDBTimeout
 	}()
 	ctx := context.Background()
 
@@ -92,6 +96,7 @@ func TestGetBaseConnWontBlock(t *testing.T) {
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 
 	l, err := net.Listen("tcp", addr)
+	require.NoError(t, err)
 	defer l.Close()
 
 	// no such MySQL listening on port, so Conn will block
