@@ -15,6 +15,7 @@ package causality
 
 import (
 	"sync"
+	"time"
 
 	"go.uber.org/atomic"
 
@@ -71,7 +72,9 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 // Add pushes a transaction to the ConflictDetector.
 func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) error {
 	node := internal.NewNode()
+	conflictDegree := 0
 	d.slots.Add(node, txn.ConflictKeys(), func(other *internal.Node) {
+		conflictDegree++
 		node.DependOn(other)
 	})
 	node.OnNoConflict(func(workerID int64) {
@@ -81,6 +84,11 @@ func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) error {
 			workerID: workerID,
 		})
 	})
+
+	if conflictDegree > 1000 {
+		time.Sleep(time.Duration((conflictDegree-1000)/1000) * time.Millisecond)
+	}
+
 	return nil
 }
 
