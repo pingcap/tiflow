@@ -159,8 +159,12 @@ func NewBaseDB(db *sql.DB, doFuncInClose ...func()) *BaseDB {
 	return &BaseDB{DB: db, conns: conns, Retry: &retry.FiniteRetryStrategy{}, doFuncInClose: doFuncInClose}
 }
 
+var getConnTimeout = utils.DefaultDBTimeout
+
 // GetBaseConn retrieves *BaseConn which has own retryStrategy.
 func (d *BaseDB) GetBaseConn(ctx context.Context) (*BaseConn, error) {
+	ctx, cancel := context.WithTimeout(ctx, getConnTimeout)
+	defer cancel()
 	conn, err := d.DB.Conn(ctx)
 	if err != nil {
 		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
