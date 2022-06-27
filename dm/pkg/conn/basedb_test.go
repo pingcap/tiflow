@@ -94,7 +94,7 @@ func TestGetBaseConnWontBlock(t *testing.T) {
 	l, err := net.Listen("tcp", addr)
 	defer l.Close()
 
-	// no such MySQL listening on port 1234
+	// no such MySQL listening on port, so Conn will block
 	db, err := sql.Open("mysql", "root:@tcp("+addr+")/test")
 	require.NoError(t, err)
 
