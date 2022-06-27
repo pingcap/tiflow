@@ -111,8 +111,8 @@ function resume_changefeed_in_failed_state() {
 	fi
 
 	result=$(cdc cli changefeed resume --changefeed-id=$changefeed_id --pd=$pd_addr --overwrite-checkpoint-ts=100 --no-confirm=true 2>&1 || true)
-	if [[ $result != *"ErrGCTTLExceeded"* && $result != *"ErrSnapshotLostByGC"* ]]; then
-		echo "changefeeed resume result is expected to contain 'ErrGCTTLExceed' or 'ErrSnapshotLostByGC', \
+	if [[ $result != *"ErrStartTsBeforeGC"* ]]; then
+		echo "changefeeed resume result is expected to contain 'ErrStartTsBeforeGC', \
 			but actually got $result"
 		exit 1
 	fi
