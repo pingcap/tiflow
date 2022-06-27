@@ -104,16 +104,16 @@ function resume_changefeed_in_failed_state() {
 
 	cdc cli changefeed pause --changefeed-id=$changefeed_id --pd=$pd_addr
 	result=$(cdc cli changefeed resume --changefeed-id=$changefeed_id --pd=$pd_addr --overwrite-checkpoint-ts=18446744073709551615 --no-confirm=true 2>&1 || true)
-	if [[ $result != *"the overwrite-checkpoint-ts must be smaller than current TSO"* ]]; then
-		echo "changefeeed resume result is expected to contain 'the overwrite-checkpoint-ts must be smaller than current TSO', \
-            		but actually got $result"
+	if [[ $result != *"ErrCliCheckpointTsIsInFuture"* ]]; then
+		echo "changefeeed resume result is expected to contain 'ErrCliCheckpointTsIsInFuture', \
+          but actually got $result"
 		exit 1
 	fi
 
 	result=$(cdc cli changefeed resume --changefeed-id=$changefeed_id --pd=$pd_addr --overwrite-checkpoint-ts=100 --no-confirm=true 2>&1 || true)
 	if [[ $result != *"ErrStartTsBeforeGC"* ]]; then
 		echo "changefeeed resume result is expected to contain 'ErrStartTsBeforeGC', \
-			but actually got $result"
+			    but actually got $result"
 		exit 1
 	fi
 	cleanup_process $CDC_BINARY

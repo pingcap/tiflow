@@ -291,8 +291,11 @@ func verifyResumeChangefeed(ctx context.Context,
 	changefeedID model.ChangeFeedID,
 	checkpointTs uint64,
 ) error {
-	gcTTL := config.GetGlobalServerConfig().GcTTL
+	if checkpointTs == 0 {
+		return nil
+	}
 
+	gcTTL := config.GetGlobalServerConfig().GcTTL
 	err := gc.EnsureChangefeedStartTsSafety(
 		ctx,
 		upstream.PDClient,
