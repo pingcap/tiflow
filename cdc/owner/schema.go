@@ -185,10 +185,10 @@ func (s *schemaWrap4Owner) parseRenameTables(
 
 // BuildDDLEvents builds ddl events from a DDL job.
 // The result contains more than one DDLEvent for a rename tables job.
+// Note: If BuildDDLEvents return (nil, nil), it means the DDL Job should be ignored.
 func (s *schemaWrap4Owner) BuildDDLEvents(
 	job *timodel.Job,
 ) ([]*model.DDLEvent, error) {
-
 	if s.filter.ShouldIgnoreDDLEvent(job) {
 		log.Info(
 			"DDL event ignored",

@@ -330,7 +330,6 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 		})
 		return rows
 	}
-
 	mountAndCheckRow := func(rowsBytes [][]int, f func(key []byte, value []byte) *model.RawKVEntry) int {
 		partitionInfo := tableInfo.GetPartitionInfo()
 		if partitionInfo == nil {
@@ -964,5 +963,125 @@ func TestGetDefaultZeroValue(t *testing.T) {
 		require.Equal(t, tc.Res, val, tc.Name)
 		val = getDDLDefaultDefinition(&tc.ColInfo)
 		require.Equal(t, tc.Default, val, tc.Name)
+	}
+}
+
+// TestDecodeEventIgnoreRow tests a PolymorphicEvent.Row is nil
+// if this event should be filter out by filter.
+func TestDecodeEventIgnoreRow(t *testing.T) {
+	helper := NewSchemaTestHelper(t)
+	defer helper.Close()
+	helper.Tk().MustExec("use test;")
+
+	ddls := []string{
+		"create table test.student(id int primary key, name char(50), age int, gender char(10))",
+		"create table test.computer(id int primary key, brand char(50), price int)",
+		"create table test.poet(id int primary key, name char(50), works char(100))",
+	}
+
+	cfID := model.DefaultChangeFeedID("changefeed-test-ignore-event")
+
+	cfg := config.GetDefaultReplicaConfig()
+	cfg.Filter.Rules = []string{"test.student", "test.computer"}
+	filter, err := pfilter.NewFilter(cfg)
+	require.Nil(t, err)
+	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	require.Nil(t, err)
+	schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
+		ver.Ver, filter, false, cfID)
+	require.Nil(t, err)
+
+	// apply ddl to schemaStorage
+	for _, ddl := range ddls {
+		job := helper.DDL2Job(ddl)
+		err = schemaStorage.HandleDDLJob(job)
+		require.Nil(t, err)
+	}
+
+	ts := schemaStorage.GetLastSnapshot().CurrentTs()
+	schemaStorage.AdvanceResolvedTs(ver.Ver)
+	mounter := NewMounter(schemaStorage, cfID, time.Local, filter, true).(*mounterImpl)
+
+	type testCase struct {
+		schema  string
+		table   string
+		columns []interface{}
+		ignored bool
+	}
+
+	testCases := []testCase{
+		{
+			schema:  "test",
+			table:   "student",
+			columns: []interface{}{1, "dongmen", 20, "male"},
+			ignored: false,
+		},
+		{
+			schema:  "test",
+			table:   "computer",
+			columns: []interface{}{1, "apple", 19999},
+			ignored: false,
+		},
+		// This case should be ignored by its table name.
+		{
+			schema:  "test",
+			table:   "poet",
+			columns: []interface{}{1, "李白", "静夜思"},
+			ignored: true,
+		},
+	}
+
+	ignoredTables := make([]string, 0)
+	tables := make([]string, 0)
+	for _, tc := range testCases {
+		tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName(tc.schema, tc.table)
+		require.True(t, ok)
+		// TODO: add other dml event type
+		insertSQL := prepareInsertSQL(t, tableInfo, len(tc.columns))
+		if tc.ignored {
+			ignoredTables = append(ignoredTables, tc.table)
+		} else {
+			tables = append(tables, tc.table)
+		}
+		helper.tk.MustExec(insertSQL, tc.columns...)
+	}
+	ctx := context.Background()
+
+	decodeAndCheckRowInTable := func(tableID int64, f func(key []byte, value []byte) *model.RawKVEntry) int {
+		var rows int
+		walkTableSpanInStore(t, helper.Storage(), tableID, func(key []byte, value []byte) {
+			rawKV := f(key, value)
+			pEvent := model.NewPolymorphicEvent(rawKV)
+			log.Info("fizz", zap.String("rawKV", rawKV.String()))
+			err := mounter.DecodeEvent(ctx, pEvent)
+			require.Nil(t, err)
+			if pEvent.Row == nil {
+				return
+			}
+			row := pEvent.Row
+			rows++
+			require.Equal(t, row.Table.Schema, "test")
+			// Now we only allow filter dml event by table, so we only check row's table.
+			require.NotContains(t, ignoredTables, row.Table.Table)
+			require.Contains(t, tables, row.Table.Table)
+		})
+		return rows
+	}
+
+	toRawKV := func(key []byte, value []byte) *model.RawKVEntry {
+		return &model.RawKVEntry{
+			OpType:  model.OpTypePut,
+			Key:     key,
+			Value:   value,
+			StartTs: ts - 1,
+			CRTs:    ts + 1,
+		}
+	}
+
+	for _, tc := range testCases {
+		tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName(tc.schema, tc.table)
+		require.True(t, ok)
+		log.Info("fizz", zap.String("tableName", tc.table))
+		decodeAndCheckRowInTable(tableInfo.ID, toRawKV)
 	}
 }

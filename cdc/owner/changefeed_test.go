@@ -170,7 +170,7 @@ func (m *mockScheduler) DrainCapture(target model.CaptureID) int {
 // Close closes the scheduler and releases resources.
 func (m *mockScheduler) Close(ctx context.Context) {}
 
-func createChangefeed4Test(ctx cdcContext.Context, t *testing.T, config *config.ReplicaConfig) (
+func createChangefeed4Test(ctx cdcContext.Context, t *testing.T) (
 	*changefeed, *orchestrator.ChangefeedReactorState,
 	map[model.CaptureID]*model.CaptureInfo, *orchestrator.ReactorStateTester,
 ) {
@@ -209,7 +209,7 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T, config *config.
 
 func TestPreCheck(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	cf, state, captures, tester := createChangefeed4Test(ctx, t, config.GetDefaultReplicaConfig())
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
 	require.NotNil(t, state.Status)
@@ -229,7 +229,7 @@ func TestPreCheck(t *testing.T) {
 
 func TestInitialize(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	cf, state, captures, tester := createChangefeed4Test(ctx, t, config.GetDefaultReplicaConfig())
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	defer cf.Close(ctx)
 	// pre check
 	cf.Tick(ctx, state, captures)
@@ -243,7 +243,7 @@ func TestInitialize(t *testing.T) {
 
 func TestChangefeedHandleError(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	cf, state, captures, tester := createChangefeed4Test(ctx, t, config.GetDefaultReplicaConfig())
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	defer cf.Close(ctx)
 	// pre check
 	cf.Tick(ctx, state, captures)
@@ -285,7 +285,7 @@ func TestExecDDL(t *testing.T) {
 		},
 	})
 
-	cf, state, captures, tester := createChangefeed4Test(ctx, t, config.GetDefaultReplicaConfig())
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	cf.upstream.KVStorage = helper.Storage()
 	defer cf.Close(ctx)
 	tickThreeTime := func() {
@@ -375,7 +375,7 @@ func TestEmitCheckpointTs(t *testing.T) {
 		},
 	})
 
-	cf, state, captures, tester := createChangefeed4Test(ctx, t, config.GetDefaultReplicaConfig())
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	cf.upstream.KVStorage = helper.Storage()
 
 	defer cf.Close(ctx)
@@ -426,7 +426,7 @@ func TestSyncPoint(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx.ChangefeedVars().Info.SyncPointEnabled = true
 	ctx.ChangefeedVars().Info.SyncPointInterval = 1 * time.Second
-	cf, state, captures, tester := createChangefeed4Test(ctx, t, config.GetDefaultReplicaConfig())
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	defer cf.Close(ctx)
 
 	// pre check
@@ -456,7 +456,7 @@ func TestSyncPoint(t *testing.T) {
 func TestFinished(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx.ChangefeedVars().Info.TargetTs = ctx.ChangefeedVars().Info.StartTs + 1000
-	cf, state, captures, tester := createChangefeed4Test(ctx, t, config.GetDefaultReplicaConfig())
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	defer cf.Close(ctx)
 
 	// pre check
@@ -519,7 +519,7 @@ func testChangefeedReleaseResource(
 	redoLogDir string,
 	expectedInitialized bool,
 ) {
-	cf, state, captures, tester := createChangefeed4Test(ctx, t, config.GetDefaultReplicaConfig())
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 
 	// pre check
 	cf.Tick(ctx, state, captures)
@@ -785,7 +785,7 @@ func TestExecRenameTablesDDL(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 	ctx := cdcContext.NewBackendContext4Test(true)
-	cf, state, captures, tester := createChangefeed4Test(ctx, t, config.GetDefaultReplicaConfig())
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	defer cf.Close(ctx)
 	// pre check
 	cf.Tick(ctx, state, captures)
@@ -874,7 +874,7 @@ func TestExecDropTablesDDL(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 	ctx := cdcContext.NewBackendContext4Test(true)
-	cf, state, captures, tester := createChangefeed4Test(ctx, t, config.GetDefaultReplicaConfig())
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	defer cf.Close(ctx)
 
 	// pre check
@@ -928,7 +928,7 @@ func TestExecDropViewsDDL(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 	ctx := cdcContext.NewBackendContext4Test(true)
-	cf, state, captures, tester := createChangefeed4Test(ctx, t, config.GetDefaultReplicaConfig())
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	defer cf.Close(ctx)
 
 	// pre check
