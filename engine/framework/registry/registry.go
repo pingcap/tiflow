@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
+	derror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // WorkerConfig alias to framework.WorkerConfig

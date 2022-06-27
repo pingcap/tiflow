@@ -17,10 +17,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pingcap/errors"
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+
+	"github.com/pingcap/errors"
+	derror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 type (

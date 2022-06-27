@@ -32,9 +32,9 @@ package namespace
 import (
 	"context"
 
-	cerrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/meta/extension"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 type prefixError struct {
@@ -62,7 +62,7 @@ func NewPrefixKV(kv extension.KVEx, prefix string) metaclient.KV {
 
 func (kv *kvPrefix) Put(ctx context.Context, key, val string) (*metaclient.PutResponse, metaclient.Error) {
 	if len(key) == 0 {
-		return nil, prefixErrorFromOpFail(cerrors.ErrMetaEmptyKey.GenWithStackByArgs())
+		return nil, prefixErrorFromOpFail(errors.ErrMetaEmptyKey.GenWithStackByArgs())
 	}
 	op := kv.prefixOp(metaclient.OpPut(key, val))
 	r, err := kv.KVEx.Do(ctx, op)
@@ -76,7 +76,7 @@ func (kv *kvPrefix) Put(ctx context.Context, key, val string) (*metaclient.PutRe
 func (kv *kvPrefix) Get(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.GetResponse, metaclient.Error) {
 	// Forbid empty key to protect the namespace prefix key
 	if len(key) == 0 && !(metaclient.IsOptsWithFromKey(opts) || metaclient.IsOptsWithPrefix(opts) || metaclient.IsOptsWithRange(opts)) {
-		return nil, prefixErrorFromOpFail(cerrors.ErrMetaEmptyKey.GenWithStackByArgs())
+		return nil, prefixErrorFromOpFail(errors.ErrMetaEmptyKey.GenWithStackByArgs())
 	}
 	r, err := kv.KVEx.Do(ctx, kv.prefixOp(metaclient.OpGet(key, opts...)))
 	if err != nil {
@@ -90,7 +90,7 @@ func (kv *kvPrefix) Get(ctx context.Context, key string, opts ...metaclient.OpOp
 func (kv *kvPrefix) Delete(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.DeleteResponse, metaclient.Error) {
 	// Forbid empty key to protect the namespace prefix key
 	if len(key) == 0 && !(metaclient.IsOptsWithFromKey(opts) || metaclient.IsOptsWithPrefix(opts) || metaclient.IsOptsWithRange(opts)) {
-		return nil, prefixErrorFromOpFail(cerrors.ErrMetaEmptyKey.GenWithStackByArgs())
+		return nil, prefixErrorFromOpFail(errors.ErrMetaEmptyKey.GenWithStackByArgs())
 	}
 	r, err := kv.KVEx.Do(ctx, kv.prefixOp(metaclient.OpDelete(key, opts...)))
 	if err != nil {
@@ -103,7 +103,7 @@ func (kv *kvPrefix) Delete(ctx context.Context, key string, opts ...metaclient.O
 // [TODO] check the empty key
 func (kv *kvPrefix) Do(ctx context.Context, op metaclient.Op) (metaclient.OpResponse, metaclient.Error) {
 	if len(op.KeyBytes()) == 0 && !op.IsTxn() {
-		return metaclient.OpResponse{}, prefixErrorFromOpFail(cerrors.ErrMetaEmptyKey.GenWithStackByArgs())
+		return metaclient.OpResponse{}, prefixErrorFromOpFail(errors.ErrMetaEmptyKey.GenWithStackByArgs())
 	}
 	r, err := kv.KVEx.Do(ctx, kv.prefixOp(op))
 	if err != nil {

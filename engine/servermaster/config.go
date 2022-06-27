@@ -37,11 +37,11 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/etcdutil"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/version"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/zap"
 )
@@ -162,7 +162,7 @@ func (c *Config) Parse(arguments []string) error {
 	// Parse first to get config file.
 	err := c.flagSet.Parse(arguments)
 	if err != nil {
-		return errors.Wrap(errors.ErrMasterConfigParseFlagSet, err)
+		return errors.WrapError(errors.ErrMasterConfigParseFlagSet, err)
 	}
 
 	if c.printVersion {
@@ -181,7 +181,7 @@ func (c *Config) Parse(arguments []string) error {
 	// Parse again to replace with command line options.
 	err = c.flagSet.Parse(arguments)
 	if err != nil {
-		return errors.Wrap(errors.ErrMasterConfigParseFlagSet, err)
+		return errors.WrapError(errors.ErrMasterConfigParseFlagSet, err)
 	}
 
 	if len(c.flagSet.Args()) != 0 {
@@ -227,7 +227,7 @@ func (c *Config) adjust() (err error) {
 func (c *Config) configFromFile(path string) error {
 	metaData, err := toml.DecodeFile(path, c)
 	if err != nil {
-		return errors.Wrap(errors.ErrMasterDecodeConfigFile, err)
+		return errors.WrapError(errors.ErrMasterDecodeConfigFile, err)
 	}
 	return checkUndecodedItems(metaData)
 }
@@ -235,7 +235,7 @@ func (c *Config) configFromFile(path string) error {
 func (c *Config) configFromString(data string) error {
 	metaData, err := toml.Decode(data, c)
 	if err != nil {
-		return errors.Wrap(errors.ErrMasterDecodeConfigFile, err)
+		return errors.WrapError(errors.ErrMasterDecodeConfigFile, err)
 	}
 	return checkUndecodedItems(metaData)
 }
@@ -270,7 +270,7 @@ func parseURLs(s string) ([]url.URL, error) {
 		}
 		u, err := url.Parse(item)
 		if err != nil {
-			return nil, errors.Wrap(errors.ErrMasterParseURLFail, err, item)
+			return nil, errors.WrapError(errors.ErrMasterParseURLFail, err, item)
 		}
 		if strings.Index(u.Host, ":") == 0 {
 			u.Host = "0.0.0.0" + u.Host

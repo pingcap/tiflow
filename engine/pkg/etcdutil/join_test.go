@@ -24,7 +24,7 @@ import (
 
 	"github.com/phayes/freeport"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/server/v3/embed"
 )

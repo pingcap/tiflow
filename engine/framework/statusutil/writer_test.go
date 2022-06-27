@@ -21,9 +21,9 @@ import (
 
 	"github.com/pingcap/tiflow/engine/framework/internal/worker"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 type writerTestSuite struct {
@@ -124,7 +124,7 @@ func TestWriterSendRetry(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, 0, suite.masterInfo.RefreshCount())
-	suite.messageSender.InjectError(derror.ErrExecutorNotFoundForMessage.GenWithStackByArgs())
+	suite.messageSender.InjectError(errors.ErrExecutorNotFoundForMessage.GenWithStackByArgs())
 	err = suite.writer.UpdateStatus(ctx, st)
 	require.NoError(t, err)
 	require.Equal(t, 1, suite.masterInfo.RefreshCount())
