@@ -55,7 +55,7 @@ jobs:
           helm version
 
       - name: Build dataflow engine binary
-        run: make df-master df-executor df-chaos-case
+        run: make binary-tiflow df-chaos-case
 
       - name: Build Dataflow engine docker image
         run: |

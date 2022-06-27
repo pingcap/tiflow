@@ -14,6 +14,7 @@
 package servermaster
 
 import (
+	"io/ioutil"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -22,28 +23,35 @@ import (
 func TestMetaStoreConfig(t *testing.T) {
 	t.Parallel()
 
-	config := NewConfig()
-	err := config.Parse([]string{
-		"--master-addr",
-		"0.0.0.0:10240",
-		"--advertise-addr",
-		"server-master:10240",
-		"--peer-urls",
-		"http://127.0.0.1:8291",
-		"--advertise-peer-urls",
-		"http://server-master:8291",
-		"--frame-meta-endpoints",
-		"frame-etcd-standalone:1111",
-		"--frame-meta-user",
-		"root134",
-		"--frame-meta-password",
-		"root123",
-		"--user-meta-endpoints",
-		"user-etcd-standalone:2222",
-	})
+	testToml := `
+[frame-metastore-conf]
+endpoints = ["mysql-0:3306"]
+auth.user = "root"
+auth.passwd = "passwd"
+
+[user-metastore-conf]
+endpoints = ["metastore:12479"]
+`
+	fileName := mustWriteToTempFile(t, testToml)
+
+	config := GetDefaultMasterConfig()
+	err := config.ConfigFromFile(fileName)
 	require.Nil(t, err)
-	require.Regexp(t, "...:1111$", config.FrameMetaConf.Endpoints[0])
-	require.Regexp(t, "root134", config.FrameMetaConf.Auth.User)
-	require.Regexp(t, "root123", config.FrameMetaConf.Auth.Passwd)
-	require.Regexp(t, "...:2222$", config.UserMetaConf.Endpoints[0])
+	err = config.Adjust()
+	require.Nil(t, err)
+
+	require.Equal(t, "mysql-0:3306", config.FrameMetaConf.Endpoints[0])
+	require.Equal(t, "root", config.FrameMetaConf.Auth.User)
+	require.Equal(t, "passwd", config.FrameMetaConf.Auth.Passwd)
+	require.Equal(t, "metastore:12479", config.UserMetaConf.Endpoints[0])
+}
+
+func mustWriteToTempFile(t *testing.T, content string) (filePath string) {
+	dir := t.TempDir()
+	fd, err := ioutil.TempFile(dir, "*")
+	require.NoError(t, err)
+	_, err = fd.WriteString(content)
+	require.NoError(t, err)
+
+	return fd.Name()
 }

@@ -9,7 +9,7 @@
     --name={{ name }} \
     --data-dir={{ df_data_prefix }}/master \
     --log-file={{ df_data_prefix }}/master.log \
-    -L={{ log_level }} \
+    --log-level={{ log_level }} \
     --master-addr 0.0.0.0:{{ master_port}} \
     --advertise-addr {{ inventory_hostname }}:{{ master_port }} \
     --peer-urls 0.0.0.0:{{ master_peer_port }} \
