@@ -216,9 +216,6 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
 	c.state = state
 	adminJobPending := c.feedStateManager.Tick(state)
-	// If there are any pending admin jobs, skip this tick.
-	// The reason is that Info/Status/TaskPositions fields in ChangefeedReactorState is not
-	// updated until next tick. Otherwise, using the old fileds in this tick could be problematic.
 	if adminJobPending {
 		return nil
 	}
