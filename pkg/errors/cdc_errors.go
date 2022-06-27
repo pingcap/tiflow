@@ -1038,4 +1038,15 @@ var (
 		"cdc server is not ready",
 		errors.RFCCodeText("CDC:ErrServerIsNotReady"),
 	)
+
+	// cli error
+	ErrCliInvalidCheckpointTs = errors.Normalize(
+		"invalid overwrite-checkpoint-ts %s, "+
+			"overwrite-checkpoint-ts only accept 'now' or number",
+		errors.RFCCodeText("CDC:ErrCliInvalidCheckpointTs"),
+	)
+	ErrCliCheckpointTsIsInFuture = errors.Normalize(
+		"the overwrite-checkpoint-ts %d must be smaller than current TSO",
+		errors.RFCCodeText("CDC:ErrCliCheckpointTsIsInFuture"),
+	)
 )

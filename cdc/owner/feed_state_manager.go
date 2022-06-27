@@ -14,6 +14,7 @@
 package owner
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -201,6 +202,7 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		jobsPending = true
 		m.patchState(model.StateStopped)
 	case model.AdminRemove:
+
 		switch m.state.Info.State {
 		case model.StateNormal, model.StateError, model.StateFailed,
 			model.StateStopped, model.StateFinished, model.StateRemoved:
@@ -211,6 +213,8 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 				zap.String("changefeedState", string(m.state.Info.State)), zap.Any("job", job))
 			return
 		}
+		fmt.Println("setting shouldBeRuning to false")
+
 		m.shouldBeRunning = false
 		m.shouldBeRemoved = true
 		jobsPending = true

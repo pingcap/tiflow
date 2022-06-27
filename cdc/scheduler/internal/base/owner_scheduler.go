@@ -216,11 +216,6 @@ func (s *SchedulerV2) Close(ctx context.Context) {
 		zap.String("namespace", s.changeFeedID.Namespace),
 		zap.String("changefeedID", s.changeFeedID.ID))
 	s.deregisterPeerMessageHandlers(ctx)
-	s.ScheduleDispatcher = nil
-	s.messageRouter = nil
-	s.messageServer = nil
-	s.stats = nil
-	s.ownerRevision = 0
 }
 
 func (s *SchedulerV2) registerPeerMessageHandlers(ctx context.Context) (ret error) {

@@ -15,17 +15,16 @@ package cli
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"strings"
 
-	"github.com/pingcap/errors"
 	v2 "github.com/pingcap/tiflow/cdc/api/v2"
 	"github.com/pingcap/tiflow/cdc/model"
 	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
 	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -118,7 +117,6 @@ func (o *resumeChangefeedOptions) validateParams(ctx context.Context, cmd *cobra
 
 	tso, err := o.getTSO(ctx)
 	if err != nil {
-		fmt.Println("error occurs when getTSO")
 		return err
 	}
 	o.currentTso = tso
@@ -135,12 +133,11 @@ func (o *resumeChangefeedOptions) validateParams(ctx context.Context, cmd *cobra
 
 	checkpointTs, err := strconv.ParseUint(o.overwriteCheckpointTs, 10, 64)
 	if err != nil {
-		return errors.New("invalid overwrite-checkpoint-ts, " +
-			"overwrite-checkpoint-ts only accept 'now' or number")
+		return cerror.ErrCliInvalidCheckpointTs.GenWithStackByArgs(o.overwriteCheckpointTs)
 	}
 
 	if checkpointTs > oracle.ComposeTS(tso.Timestamp, tso.LogicTime) {
-		return errors.New("the overwrite-checkpoint-ts must be smaller than current TSO")
+		return cerror.ErrCliCheckpointTsIsInFuture.GenWithStackByArgs(checkpointTs)
 	}
 
 	o.checkpointTs = checkpointTs
