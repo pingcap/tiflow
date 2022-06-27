@@ -721,3 +721,8 @@ func (ls *Sorter) Output() <-chan *model.PolymorphicEvent {
 func (ls *Sorter) CleanupTask() actormsg.Message {
 	return actormsg.SorterMessage(message.NewCleanupTask(ls.uid, ls.tableID))
 }
+
+// ActorID returns the actor ID the Sorter.
+func (ls *Sorter) ActorID() actor.ID {
+	return ls.actorID
+}

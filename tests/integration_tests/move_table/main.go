@@ -244,9 +244,9 @@ func (c *cluster) refreshInfo(ctx context.Context) error {
 		}
 
 		log.Debug("retrieved processor details",
-			zap.String("changefeed-id", changefeed),
-			zap.String("capture-id", capture.ID),
-			zap.Any("processor-detail", processorDetails))
+			zap.String("changefeed", changefeed),
+			zap.String("captureID", capture.ID),
+			zap.Any("processorDetail", processorDetails))
 		for _, tableID := range processorDetails.Tables {
 			c.captures[capture.ID] = append(c.captures[capture.ID], &tableInfo{
 				ID:         tableID,

@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -120,6 +121,11 @@ type ManagerOptions struct {
 type cacheRows struct {
 	tableID model.TableID
 	rows    []*model.RowChangedEvent
+	// When calling FlushLog for a table, we must ensure that all data of this
+	// table has been written to underlying writer. Since the EmitRowChangedEvents
+	// and FlushLog of the same table can't be executed concurrently, we can
+	// insert a simple barrier data into data stream to achieve this goal.
+	flushCallback chan struct{}
 }
 
 // ManagerImpl manages redo log writer, buffers un-persistent redo logs, calculates
@@ -217,6 +223,9 @@ func (m *ManagerImpl) Enabled() bool {
 // error ErrBufferLogTimeout will be returned.
 // TODO: if the API is truly non-blocking, we should return an error immediately
 // when the log buffer channel is full.
+// TODO: After buffer sink in sink node is removed, there is no batch mechanism
+// before sending row changed events to redo manager, the original log buffer
+// design may have performance issue.
 func (m *ManagerImpl) EmitRowChangedEvents(
 	ctx context.Context,
 	tableID model.TableID,
@@ -251,6 +260,20 @@ func (m *ManagerImpl) FlushLog(
 		return nil
 	}
 	defer atomic.StoreInt64(&m.flushing, 0)
+
+	// Adding a barrier to data stream, to ensure all logs of this table has been
+	// written to underlying writer.
+	flushCallbackCh := make(chan struct{})
+	m.logBuffer <- cacheRows{
+		tableID:       tableID,
+		flushCallback: flushCallbackCh,
+	}
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	case <-flushCallbackCh:
+	}
+
 	return m.writer.FlushLog(ctx, tableID, resolvedTs)
 }
 
@@ -282,7 +305,7 @@ func (m *ManagerImpl) AddTable(tableID model.TableID, startTs uint64) {
 		return m.tableIDs[i] >= tableID
 	})
 	if i < len(m.tableIDs) && m.tableIDs[i] == tableID {
-		log.Warn("add duplicated table in redo log manager", zap.Int64("table-id", tableID))
+		log.Warn("add duplicated table in redo log manager", zap.Int64("tableID", tableID))
 		return
 	}
 	if i == len(m.tableIDs) {
@@ -306,7 +329,7 @@ func (m *ManagerImpl) RemoveTable(tableID model.TableID) {
 		m.tableIDs = m.tableIDs[:len(m.tableIDs)-1]
 		delete(m.rtsMap, tableID)
 	} else {
-		log.Warn("remove a table not maintained in redo log manager", zap.Int64("table-id", tableID))
+		log.Warn("remove a table not maintained in redo log manager", zap.Int64("tableID", tableID))
 	}
 }
 
@@ -325,8 +348,11 @@ func (m *ManagerImpl) updateTableResolvedTs(ctx context.Context) error {
 		return err
 	}
 	minResolvedTs := uint64(math.MaxUint64)
-	for tableID, rts := range rtsMap {
-		m.rtsMap[tableID] = rts
+	for tableID := range m.rtsMap {
+		if rts, ok := rtsMap[tableID]; ok {
+			m.rtsMap[tableID] = rts
+		}
+		rts := m.rtsMap[tableID]
 		if rts < minResolvedTs {
 			minResolvedTs = rts
 		}
@@ -362,6 +388,10 @@ func (m *ManagerImpl) bgWriteLog(ctx context.Context, errCh chan<- error) {
 		case <-ctx.Done():
 			return
 		case cache := <-m.logBuffer:
+			if cache.flushCallback != nil {
+				close(cache.flushCallback)
+				continue
+			}
 			logs := make([]*model.RedoRowChangedEvent, 0, len(cache.rows))
 			for _, row := range cache.rows {
 				logs = append(logs, RowToRedo(row))
