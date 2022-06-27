@@ -18,7 +18,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/log"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zapcore"
 )
 
 func TestConflict(t *testing.T) {
@@ -40,13 +42,16 @@ func TestConflict(t *testing.T) {
 }
 
 func BenchmarkLowConflicts(b *testing.B) {
+	log.SetLevel(zapcore.WarnLevel)
+	defer log.SetLevel(zapcore.InfoLevel)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
 	const (
 		numWorkers = 8
 		numSlots   = 1024 * 1024
-		// Expected conflict race = 0.00006
+		// Expected conflict rate = 0.00006
 		workingSetSize = 4096 * 4096
 		batchSize      = 8
 	)
@@ -60,13 +65,16 @@ func BenchmarkLowConflicts(b *testing.B) {
 }
 
 func BenchmarkMediumConflicts(b *testing.B) {
+	log.SetLevel(zapcore.WarnLevel)
+	defer log.SetLevel(zapcore.InfoLevel)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
 	const (
 		numWorkers = 8
 		numSlots   = 1024 * 1024
-		// Expected conflict race = 0.0155
+		// Expected conflict rate = 0.0155
 		workingSetSize = 4096
 		batchSize      = 8
 	)
@@ -80,13 +88,16 @@ func BenchmarkMediumConflicts(b *testing.B) {
 }
 
 func BenchmarkHighConflicts(b *testing.B) {
+	log.SetLevel(zapcore.WarnLevel)
+	defer log.SetLevel(zapcore.InfoLevel)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
 	const (
 		numWorkers = 8
 		numSlots   = 1024 * 1024
-		// Expected conflict race = 0.41
+		// Expected conflict rate = 0.41
 		workingSetSize = 128
 		batchSize      = 8
 	)
