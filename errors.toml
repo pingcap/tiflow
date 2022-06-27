@@ -181,6 +181,16 @@ error = '''
 check dir writable failed
 '''
 
+["CDC:ErrCliCheckpointTsIsInFuture"]
+error = '''
+the overwrite-checkpoint-ts %d must be smaller than current TSO
+'''
+
+["CDC:ErrCliInvalidCheckpointTs"]
+error = '''
+invalid overwrite-checkpoint-ts %s, overwrite-checkpoint-ts only accept 'now' or number
+'''
+
 ["CDC:ErrClusterIDMismatch"]
 error = '''
 cluster ID mismatch, tikv cluster ID is %d and request cluster ID is %d

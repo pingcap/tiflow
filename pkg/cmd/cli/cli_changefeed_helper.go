@@ -57,8 +57,8 @@ func confirmOverwriteCheckpointTs(
 	cmd *cobra.Command, changefeedID string, checkpointTs uint64,
 ) error {
 	cmd.Printf("You are overwriting the checkpoint of changefeed(%s) to %d,"+
-		" which may lead to data loss or data duplication.\n Confirm that you know what this command will do"+
-		" and use it at your own risk [Y/N]", changefeedID, checkpointTs)
+		" which may lead to data loss or data duplication.\n Confirm that you know"+
+		" what this command will do and use it at your own risk [Y/N]", changefeedID, checkpointTs)
 	var yOrN string
 	_, err := fmt.Scan(&yOrN)
 	if err != nil {

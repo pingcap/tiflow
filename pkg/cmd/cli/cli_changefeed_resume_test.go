@@ -116,8 +116,10 @@ func TestChangefeedResumeWithNewCheckpointTs(t *testing.T) {
 	f.tso.EXPECT().Query(gomock.Any(), gomock.Any()).Return(tso, nil).AnyTimes()
 	f.changefeedsv2.EXPECT().Resume(gomock.Any(), "abc",
 		oracle.ComposeTS(tso.Timestamp, tso.LogicTime)).Return(nil)
-	os.Args = []string{"resume", "--no-confirm=true", "--changefeed-id=abc",
-		"--overwrite-checkpoint-ts=now"}
+	os.Args = []string{
+		"resume", "--no-confirm=true", "--changefeed-id=abc",
+		"--overwrite-checkpoint-ts=now",
+	}
 	require.Nil(t, cmd.Execute())
 
 	// 2. test changefeed resume with invalid overwritten checkpointTs
@@ -129,8 +131,10 @@ func TestChangefeedResumeWithNewCheckpointTs(t *testing.T) {
 		RunningError:   nil,
 	}, nil)
 	f.tso.EXPECT().Query(gomock.Any(), gomock.Any()).Return(tso, nil).AnyTimes()
-	os.Args = []string{"resume", "--no-confirm=true", "--changefeed-id=abc",
-		"--overwrite-checkpoint-ts=Hello"}
+	os.Args = []string{
+		"resume", "--no-confirm=true", "--changefeed-id=abc",
+		"--overwrite-checkpoint-ts=Hello",
+	}
 	require.NotNil(t, cmd.Execute())
 
 	// 3. test changefeed resume with checkpointTs larger than current tso
@@ -142,8 +146,10 @@ func TestChangefeedResumeWithNewCheckpointTs(t *testing.T) {
 		RunningError:   nil,
 	}, nil)
 	f.tso.EXPECT().Query(gomock.Any(), gomock.Any()).Return(tso, nil).AnyTimes()
-	os.Args = []string{"resume", "--no-confirm=true", "--changefeed-id=abc",
-		"--overwrite-checkpoint-ts=18446744073709551615"}
+	os.Args = []string{
+		"resume", "--no-confirm=true", "--changefeed-id=abc",
+		"--overwrite-checkpoint-ts=18446744073709551615",
+	}
 	require.NotNil(t, cmd.Execute())
 
 	// 4. test changefeed resume with checkpointTs smaller than gcSafePoint
@@ -160,7 +166,9 @@ func TestChangefeedResumeWithNewCheckpointTs(t *testing.T) {
 	f.tso.EXPECT().Query(gomock.Any(), gomock.Any()).Return(tso, nil).AnyTimes()
 	f.changefeedsv2.EXPECT().Resume(gomock.Any(), "abc", uint64(262144)).
 		Return(cerror.ErrStartTsBeforeGC)
-	os.Args = []string{"resume", "--no-confirm=true", "--changefeed-id=abc",
-		"--overwrite-checkpoint-ts=262144"}
+	os.Args = []string{
+		"resume", "--no-confirm=true", "--changefeed-id=abc",
+		"--overwrite-checkpoint-ts=262144",
+	}
 	require.NotNil(t, cmd.Execute())
 }
