@@ -1,3 +1,0 @@
-[consistent]
-level = "eventual"
-storage = "nfs:///tmp/tidb_cdc_test/consistent_replicate_nfs/nfs/redo"
