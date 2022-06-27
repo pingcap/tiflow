@@ -30,10 +30,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	"github.com/pingcap/tiflow/engine/pkg/orm/model"
+	derror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 type tCase struct {

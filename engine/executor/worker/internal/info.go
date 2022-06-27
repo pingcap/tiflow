@@ -13,9 +13,11 @@
 
 package internal
 
-import "time"
+import (
+	"github.com/pingcap/tiflow/engine/pkg/clock"
+)
 
 // RuntimeInfo records some information related to the runnable object
 type RuntimeInfo struct {
-	SubmitTime time.Time
+	SubmitTime clock.MonotonicTime
 }

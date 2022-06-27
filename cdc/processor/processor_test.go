@@ -25,9 +25,10 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
-	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
+	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -42,7 +43,7 @@ var _ scheduler.TableExecutor = (*processor)(nil)
 func newProcessor4Test(
 	ctx cdcContext.Context,
 	t *testing.T,
-	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
+	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (pipeline.TablePipeline, error),
 ) *processor {
 	up := upstream.NewUpstream4Test(nil)
 	p := newProcessor(ctx, up)
@@ -93,15 +94,7 @@ func initProcessor4Test(ctx cdcContext.Context, t *testing.T) (*processor, *orch
     "sync-point-interval": 600000000000
 }
 `
-	p := newProcessor4Test(ctx, t, func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
-		return &mockTablePipeline{
-			tableID:      tableID,
-			name:         fmt.Sprintf("`test`.`table%d`", tableID),
-			status:       tablepipeline.TableStatusRunning,
-			resolvedTs:   replicaInfo.StartTs,
-			checkpointTs: replicaInfo.StartTs,
-		}, nil
-	})
+	p := newProcessor4Test(ctx, t, newMockTablePipeline)
 	p.changefeed = orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	changefeedID := ctx.ChangefeedVars().ID
@@ -117,6 +110,16 @@ func initProcessor4Test(ctx cdcContext.Context, t *testing.T) (*processor, *orch
 	})
 }
 
+func newMockTablePipeline(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (pipeline.TablePipeline, error) {
+	return &mockTablePipeline{
+		tableID:      tableID,
+		name:         fmt.Sprintf("`test`.`table%d`", tableID),
+		state:        pipeline.TableStatePreparing,
+		resolvedTs:   replicaInfo.StartTs,
+		checkpointTs: replicaInfo.StartTs,
+	}, nil
+}
+
 type mockTablePipeline struct {
 	tableID      model.TableID
 	name         string
@@ -124,8 +127,10 @@ type mockTablePipeline struct {
 	checkpointTs model.Ts
 	barrierTs    model.Ts
 	stopTs       model.Ts
-	status       tablepipeline.TableStatus
+	state        pipeline.TableState
 	canceled     bool
+
+	sinkStartTs model.Ts
 }
 
 func (m *mockTablePipeline) ID() (tableID int64, markTableID int64) {
@@ -157,8 +162,26 @@ func (m *mockTablePipeline) Workload() model.WorkloadInfo {
 	return model.WorkloadInfo{Workload: 1}
 }
 
-func (m *mockTablePipeline) Status() tablepipeline.TableStatus {
-	return m.status
+func (m *mockTablePipeline) State() pipeline.TableState {
+	if m.state == pipeline.TableStateStopped {
+		return m.state
+	}
+
+	if m.state == pipeline.TableStatePreparing {
+		// `resolvedTs` and `checkpointTs` is initialized by the same `start-ts`
+		// once `resolvedTs` > `checkpointTs`, is means the sorter received the first
+		// resolved event, let it become prepared.
+		if m.resolvedTs > m.checkpointTs {
+			m.state = pipeline.TableStatePrepared
+		}
+	}
+
+	if m.sinkStartTs != model.Ts(0) {
+		if m.checkpointTs > m.sinkStartTs {
+			m.state = pipeline.TableStateReplicating
+		}
+	}
+	return m.state
 }
 
 func (m *mockTablePipeline) Cancel() {
@@ -170,6 +193,10 @@ func (m *mockTablePipeline) Cancel() {
 
 func (m *mockTablePipeline) Wait() {
 	// do nothing
+}
+
+func (m *mockTablePipeline) Start(ts model.Ts) {
+	m.sinkStartTs = ts
 }
 
 // MemoryConsumption return the memory consumption in bytes
@@ -223,9 +250,13 @@ func (a *mockAgent) Close() error {
 	return nil
 }
 
-func TestTableExecutor(t *testing.T) {
+func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	p, tester := initProcessor4Test(ctx, t)
+
+	// since add table indirectly, `preparing` -> `prepared` -> `replicating`
+	// is only support by `SchedulerV3`, enable it.
+	config.GetGlobalServerConfig().Debug.EnableTwoPhaseScheduler = true
 
 	var err error
 	// init tick
@@ -244,42 +275,145 @@ func TestTableExecutor(t *testing.T) {
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
-	ok, err := p.AddTable(ctx, 1, 20)
-	require.Nil(t, err)
+	// table-1: `preparing` -> `prepared` -> `replicating`
+	ok, err := p.AddTable(ctx, 1, 20, true)
+	require.NoError(t, err)
 	require.True(t, ok)
-	ok, err = p.AddTable(ctx, 2, 20)
-	require.Nil(t, err)
-	require.True(t, ok)
-	ok, err = p.AddTable(ctx, 3, 20)
-	require.Nil(t, err)
-	require.True(t, ok)
-	ok, err = p.AddTable(ctx, 4, 20)
-	require.Nil(t, err)
-	require.True(t, ok)
-	require.Len(t, p.tables, 4)
+
+	table1 := p.tables[1].(*mockTablePipeline)
+	require.Equal(t, model.Ts(20), table1.resolvedTs)
+	require.Equal(t, model.Ts(20), table1.checkpointTs)
+	require.Equal(t, model.Ts(0), table1.sinkStartTs)
+
+	require.Len(t, p.tables, 1)
 
 	checkpointTs := p.agent.GetLastSentCheckpointTs()
-	require.Equal(t, checkpointTs, uint64(0))
+	require.Equal(t, checkpointTs, model.Ts(0))
 
-	done := p.IsAddTableFinished(ctx, 1)
+	done := p.IsAddTableFinished(ctx, 1, true)
 	require.False(t, done)
-	done = p.IsAddTableFinished(ctx, 2)
-	require.False(t, done)
-	done = p.IsAddTableFinished(ctx, 3)
-	require.False(t, done)
-	done = p.IsAddTableFinished(ctx, 4)
-	require.False(t, done)
-	require.Len(t, p.tables, 4)
+	require.Equal(t, pipeline.TableStatePreparing, table1.State())
+
+	// push the resolved ts, mock that sorterNode receive first resolved event
+	table1.resolvedTs = 101
 
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
-	// add table, push the resolvedTs, finished add table
+	done = p.IsAddTableFinished(ctx, 1, true)
+	require.True(t, done)
+	require.Equal(t, pipeline.TableStatePrepared, table1.State())
+
+	// no table is `replicating`
+	checkpointTs = p.agent.GetLastSentCheckpointTs()
+	require.Equal(t, checkpointTs, model.Ts(20))
+
+	ok, err = p.AddTable(ctx, 1, 30, true)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, model.Ts(0), table1.sinkStartTs)
+
+	ok, err = p.AddTable(ctx, 1, 30, false)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, model.Ts(30), table1.sinkStartTs)
+
+	table1.checkpointTs = 60
+
+	_, err = p.Tick(ctx, p.changefeed)
+	require.Nil(t, err)
+	tester.MustApplyPatches()
+
+	done = p.IsAddTableFinished(ctx, 1, false)
+	require.True(t, done)
+	require.Equal(t, pipeline.TableStateReplicating, table1.State())
+
+	checkpointTs = p.agent.GetLastSentCheckpointTs()
+	require.Equal(t, table1.CheckpointTs(), checkpointTs)
+
+	err = p.Close()
+	require.Nil(t, err)
+	require.Nil(t, p.agent)
+}
+
+func TestTableExecutorAddingTableDirectly(t *testing.T) {
+	ctx := cdcContext.NewBackendContext4Test(true)
+	p, tester := initProcessor4Test(ctx, t)
+
+	var err error
+	// init tick
+	_, err = p.Tick(ctx, p.changefeed)
+	require.NoError(t, err)
+	tester.MustApplyPatches()
+	p.changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+		status.CheckpointTs = 20
+		status.ResolvedTs = 20
+		return status, true, nil
+	})
+	tester.MustApplyPatches()
+
+	// no operation
+	_, err = p.Tick(ctx, p.changefeed)
+	require.NoError(t, err)
+	tester.MustApplyPatches()
+
+	ok, err := p.AddTable(ctx, 1, 20, false)
+	require.NoError(t, err)
+	require.True(t, ok)
+
 	table1 := p.tables[1].(*mockTablePipeline)
+	require.Equal(t, model.Ts(20), table1.sinkStartTs)
+	require.Equal(t, pipeline.TableStatePreparing, table1.state)
+	meta := p.GetTableMeta(model.TableID(1))
+	require.Equal(t, model.TableID(1), meta.TableID)
+	require.Equal(t, pipeline.TableStatePreparing, meta.State)
+
+	ok, err = p.AddTable(ctx, 2, 20, false)
+	require.NoError(t, err)
+	require.True(t, ok)
 	table2 := p.tables[2].(*mockTablePipeline)
+	require.Equal(t, model.Ts(20), table2.sinkStartTs)
+	require.Equal(t, pipeline.TableStatePreparing, table2.state)
+
+	ok, err = p.AddTable(ctx, 3, 20, false)
+	require.NoError(t, err)
+	require.True(t, ok)
 	table3 := p.tables[3].(*mockTablePipeline)
+	require.Equal(t, model.Ts(20), table3.sinkStartTs)
+	require.Equal(t, pipeline.TableStatePreparing, table3.state)
+
+	ok, err = p.AddTable(ctx, 4, 20, false)
+	require.NoError(t, err)
+	require.True(t, ok)
 	table4 := p.tables[4].(*mockTablePipeline)
+	require.Equal(t, model.Ts(20), table4.sinkStartTs)
+	require.Equal(t, pipeline.TableStatePreparing, table4.state)
+
+	require.Len(t, p.tables, 4)
+
+	checkpointTs := p.agent.GetLastSentCheckpointTs()
+	require.Equal(t, checkpointTs, model.Ts(0))
+
+	done := p.IsAddTableFinished(ctx, 1, false)
+	require.False(t, done)
+	require.Equal(t, pipeline.TableStatePreparing, table1.State())
+	done = p.IsAddTableFinished(ctx, 2, false)
+	require.False(t, done)
+	require.Equal(t, pipeline.TableStatePreparing, table2.State())
+	done = p.IsAddTableFinished(ctx, 3, false)
+	require.False(t, done)
+	require.Equal(t, pipeline.TableStatePreparing, table3.State())
+	done = p.IsAddTableFinished(ctx, 4, false)
+	require.False(t, done)
+	require.Equal(t, pipeline.TableStatePreparing, table4.State())
+	require.Len(t, p.tables, 4)
+
+	_, err = p.Tick(ctx, p.changefeed)
+	require.NoError(t, err)
+	tester.MustApplyPatches()
+
+	// push the resolved ts, mock that sorterNode receive first resolved event
 	table1.resolvedTs = 101
 	table2.resolvedTs = 101
 	table3.resolvedTs = 102
@@ -290,17 +424,21 @@ func TestTableExecutor(t *testing.T) {
 	table3.checkpointTs = 30
 	table4.checkpointTs = 30
 
-	done = p.IsAddTableFinished(ctx, 1)
+	done = p.IsAddTableFinished(ctx, 1, false)
 	require.True(t, done)
-	done = p.IsAddTableFinished(ctx, 2)
+	require.Equal(t, pipeline.TableStateReplicating, table1.State())
+	done = p.IsAddTableFinished(ctx, 2, false)
 	require.True(t, done)
-	done = p.IsAddTableFinished(ctx, 3)
+	require.Equal(t, pipeline.TableStateReplicating, table2.State())
+	done = p.IsAddTableFinished(ctx, 3, false)
 	require.True(t, done)
-	done = p.IsAddTableFinished(ctx, 4)
+	require.Equal(t, pipeline.TableStateReplicating, table3.State())
+	done = p.IsAddTableFinished(ctx, 4, false)
 	require.True(t, done)
+	require.Equal(t, pipeline.TableStateReplicating, table4.State())
 
 	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	tester.MustApplyPatches()
 
 	table1.checkpointTs = 75
@@ -309,68 +447,72 @@ func TestTableExecutor(t *testing.T) {
 	table4.checkpointTs = 75
 
 	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	tester.MustApplyPatches()
 
 	checkpointTs = p.agent.GetLastSentCheckpointTs()
-	require.Equal(t, checkpointTs, uint64(60))
+	require.Equal(t, table3.CheckpointTs(), checkpointTs)
 
 	updateChangeFeedPosition(t, tester, ctx.ChangefeedVars().ID, 103, 60)
 
 	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	tester.MustApplyPatches()
 
-	ok, err = p.RemoveTable(ctx, 3)
-	require.Nil(t, err)
+	ok = p.RemoveTable(ctx, 3)
 	require.True(t, ok)
 
 	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	tester.MustApplyPatches()
 
 	require.Len(t, p.tables, 4)
 	require.False(t, table3.canceled)
-	require.Equal(t, table3.stopTs, uint64(60))
+	require.Equal(t, model.Ts(60), table3.stopTs)
 
-	done = p.IsRemoveTableFinished(ctx, 3)
+	checkpointTs, done = p.IsRemoveTableFinished(ctx, 3)
 	require.False(t, done)
+	require.Equal(t, model.Ts(0), checkpointTs)
 
 	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	tester.MustApplyPatches()
 
 	checkpointTs = p.agent.GetLastSentCheckpointTs()
-	require.Equal(t, checkpointTs, uint64(60))
+	require.Equal(t, model.Ts(60), checkpointTs)
 
 	// finish remove operations
-	table3.status = tablepipeline.TableStatusStopped
+	table3.state = pipeline.TableStateStopped
 	table3.checkpointTs = 65
 
 	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	tester.MustApplyPatches()
 
 	require.Len(t, p.tables, 4)
 	require.False(t, table3.canceled)
 
-	done = p.IsRemoveTableFinished(ctx, 3)
+	checkpointTs, done = p.IsRemoveTableFinished(ctx, 3)
 	require.True(t, done)
+	require.Equal(t, model.Ts(65), checkpointTs)
+	meta = p.GetTableMeta(model.TableID(3))
+	require.Equal(t, model.TableID(3), meta.TableID)
+	require.Equal(t, pipeline.TableStateAbsent, meta.State)
 
 	require.Len(t, p.tables, 3)
 	require.True(t, table3.canceled)
 
 	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	tester.MustApplyPatches()
 
 	checkpointTs = p.agent.GetLastSentCheckpointTs()
-	require.Equal(t, checkpointTs, uint64(75))
+	require.Equal(t, model.Ts(75), checkpointTs)
 
 	err = p.Close()
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Nil(t, p.agent)
 }
 
@@ -445,10 +587,12 @@ func TestProcessorClose(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// add tables
-	err = p.addTable(ctx, model.TableID(1), &model.TableReplicaInfo{StartTs: 20})
+	done, err := p.AddTable(ctx, model.TableID(1), 20, false)
 	require.Nil(t, err)
-	err = p.addTable(ctx, model.TableID(2), &model.TableReplicaInfo{StartTs: 30})
+	require.True(t, done)
+	done, err = p.AddTable(ctx, model.TableID(2), 30, false)
 	require.Nil(t, err)
+	require.True(t, done)
 
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
@@ -483,10 +627,12 @@ func TestProcessorClose(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// add tables
-	err = p.addTable(ctx, model.TableID(1), &model.TableReplicaInfo{StartTs: 20})
+	done, err = p.AddTable(ctx, model.TableID(1), 20, false)
 	require.Nil(t, err)
-	err = p.addTable(ctx, model.TableID(2), &model.TableReplicaInfo{StartTs: 30})
+	require.True(t, done)
+	done, err = p.AddTable(ctx, model.TableID(2), 30, false)
 	require.Nil(t, err)
+	require.True(t, done)
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
@@ -513,24 +659,36 @@ func TestPositionDeleted(t *testing.T) {
 	p, tester := initProcessor4Test(ctx, t)
 	var err error
 	// add table
-	err = p.addTable(ctx, model.TableID(1), &model.TableReplicaInfo{StartTs: 30})
+	done, err := p.AddTable(ctx, model.TableID(1), 30, false)
 	require.Nil(t, err)
-	err = p.addTable(ctx, model.TableID(2), &model.TableReplicaInfo{StartTs: 40})
+	require.True(t, done)
+	done, err = p.AddTable(ctx, model.TableID(2), 40, false)
 	require.Nil(t, err)
+	require.True(t, done)
 	// init tick
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
+	table1 := p.tables[1].(*mockTablePipeline)
+	table2 := p.tables[2].(*mockTablePipeline)
+
+	table1.resolvedTs += 1
+	table2.resolvedTs += 1
+
+	table1.checkpointTs += 1
+	table2.checkpointTs += 1
+
 	// cal position
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
-	require.EqualValues(t, 30, p.checkpointTs)
-	require.EqualValues(t, 30, p.resolvedTs)
+
+	require.Equal(t, model.Ts(31), p.checkpointTs)
+	require.Equal(t, model.Ts(31), p.resolvedTs)
 	require.Contains(t, p.changefeed.TaskPositions, p.captureInfo.ID)
 
-	// some other delete the task position
+	// some others delete the task position
 	p.changefeed.PatchTaskPosition(p.captureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 		return nil, true, nil
 	})
@@ -545,8 +703,8 @@ func TestPositionDeleted(t *testing.T) {
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
-	require.EqualValues(t, 30, p.checkpointTs)
-	require.EqualValues(t, 30, p.resolvedTs)
+	require.Equal(t, model.Ts(31), p.checkpointTs)
+	require.Equal(t, model.Ts(31), p.resolvedTs)
 	require.Contains(t, p.changefeed.TaskPositions, p.captureInfo.ID)
 }
 
@@ -617,7 +775,8 @@ func TestUpdateBarrierTs(t *testing.T) {
 	})
 	p.schemaStorage.(*mockSchemaStorage).resolvedTs = 10
 
-	err := p.addTable(ctx, model.TableID(1), &model.TableReplicaInfo{StartTs: 5})
+	done, err := p.AddTable(ctx, model.TableID(1), 5, false)
+	require.True(t, done)
 	require.Nil(t, err)
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)

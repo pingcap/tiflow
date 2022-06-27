@@ -18,13 +18,13 @@ import (
 	"fmt"
 
 	"github.com/gogo/status"
-	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"google.golang.org/grpc/codes"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/model"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	derrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // ResourceNotFoundError happens when the resource id doesn't equal to any record

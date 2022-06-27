@@ -380,3 +380,56 @@ func TestMasterClientSendHeartbeatRefreshMaster(t *testing.T) {
 	require.Equal(t, "executor-2", nodeID)
 	require.Equal(t, frameModel.Epoch(2), epoch)
 }
+
+func TestMasterClientHeartbeatStalePong(t *testing.T) {
+	helper := newMasterClientTestHelper("master-1", "worker-1")
+	err := helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMetaKVData{
+		ID:         "master-1",
+		StatusCode: frameModel.MasterStatusInit,
+		NodeID:     "executor-1",
+		Addr:       "192.168.0.1:1234",
+		Epoch:      1,
+	})
+	require.NoError(t, err)
+
+	err = helper.Client.InitMasterInfoFromMeta(context.Background())
+	require.NoError(t, err)
+
+	clk := clock.NewMock()
+	sendTime1 := helper.InitTime.Add(1 * time.Second)
+	clk.Set(sendTime1)
+
+	err = helper.Client.SendHeartBeat(context.Background(), clk, false)
+	require.NoError(t, err)
+
+	ping := helper.PopHeartbeat(t)
+	require.Equal(t, &frameModel.HeartbeatPingMessage{
+		SendTime:     clock.ToMono(sendTime1),
+		FromWorkerID: "worker-1",
+		Epoch:        1,
+		IsFinished:   false,
+	}, ping)
+
+	sendTimeOld := helper.InitTime.Add(-30 * time.Second)
+	// master_client receives a stale pong heartbeat
+	helper.Client.HandleHeartbeat("executor-1", &frameModel.HeartbeatPongMessage{
+		SendTime:   clock.ToMono(sendTimeOld),
+		ReplyTime:  time.Now(),
+		ToWorkerID: "worker-1",
+		Epoch:      1,
+	})
+	require.Equal(t,
+		time.Duration(clock.ToMono(helper.InitTime)),
+		helper.Client.lastMasterAckedPingTime.Load())
+
+	// master_client receives a fresh pong heartbeat
+	helper.Client.HandleHeartbeat("executor-1", &frameModel.HeartbeatPongMessage{
+		SendTime:   clock.ToMono(sendTime1),
+		ReplyTime:  time.Now(),
+		ToWorkerID: "worker-1",
+		Epoch:      1,
+	})
+	require.Equal(t,
+		time.Duration(clock.ToMono(sendTime1)),
+		helper.Client.lastMasterAckedPingTime.Load())
+}

@@ -19,8 +19,8 @@ import (
 	"strings"
 	"sync"
 
-	cerrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	metaclient "github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 type mockTxn struct {
@@ -72,7 +72,7 @@ func (t *mockTxn) Commit() (*metaclient.TxnResponse, metaclient.Error) {
 			})
 		default:
 			return nil, &mockError{
-				caused: cerrors.ErrMetaOptionInvalid.Wrap(fmt.Errorf("unrecognized op type:%d", op.T)),
+				caused: errors.ErrMetaOptionInvalid.Wrap(fmt.Errorf("unrecognized op type:%d", op.T)),
 			}
 		}
 	}
@@ -190,7 +190,7 @@ func (m *MetaMock) doNoLock(ctx context.Context, op metaclient.Op) (metaclient.O
 	}
 
 	return metaclient.OpResponse{}, &mockError{
-		caused: cerrors.ErrMetaOptionInvalid.Wrap(fmt.Errorf("unrecognized op type:%d", op.T)),
+		caused: errors.ErrMetaOptionInvalid.Wrap(fmt.Errorf("unrecognized op type:%d", op.T)),
 	}
 }
 
