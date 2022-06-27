@@ -1,5 +1,0 @@
-{
-    "job-name": "test-fake-job-1",
-    "worker-count": 20,
-    "target-tick": 300
-}
