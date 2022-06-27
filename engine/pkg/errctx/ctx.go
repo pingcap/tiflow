@@ -16,45 +16,63 @@ package errctx
 import (
 	"context"
 	"sync"
+	"time"
 )
 
 type errCtx struct {
-	context.Context
-	center *ErrCenter
+	ctx context.Context
 
-	once   sync.Once
-	doneCh <-chan struct{}
+	mu     sync.Mutex
+	cancel context.CancelFunc
+	center *ErrCenter
+	err    error
 }
 
 func newErrCtx(parent context.Context, center *ErrCenter) *errCtx {
+	ctx, cancel := context.WithCancel(parent)
 	return &errCtx{
-		Context: parent,
-		center:  center,
+		ctx:    ctx,
+		cancel: cancel,
+		center: center,
 	}
+}
+
+func (c *errCtx) doCancel(removeFromCenter bool, err error) {
+	if err == nil {
+		panic("errctx: internal error: missing cancel error")
+	}
+
+	c.mu.Lock()
+	if c.err != nil {
+		c.mu.Unlock()
+		return // already canceled
+	}
+	c.err = err
+	c.cancel()
+	c.mu.Unlock()
+
+	if removeFromCenter {
+		c.center.removeChild(c)
+	}
+}
+
+func (c *errCtx) Deadline() (deadline time.Time, ok bool) {
+	return c.ctx.Deadline()
 }
 
 func (c *errCtx) Done() <-chan struct{} {
-	c.once.Do(func() {
-		doneCh := make(chan struct{})
-
-		go func() {
-			select {
-			case <-c.center.doneCh:
-			case <-c.Context.Done():
-			}
-
-			close(doneCh)
-		}()
-
-		c.doneCh = doneCh
-	})
-	return c.doneCh
+	return c.ctx.Done()
 }
 
 func (c *errCtx) Err() error {
-	if err := c.center.CheckError(); err != nil {
-		return err
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.err != nil {
+		return c.err
 	}
+	return c.ctx.Err()
+}
 
-	return c.Context.Err()
+func (c *errCtx) Value(key any) any {
+	return c.ctx.Value(key)
 }
