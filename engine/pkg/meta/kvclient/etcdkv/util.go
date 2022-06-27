@@ -16,12 +16,12 @@ package etcdkv
 import (
 	"strconv"
 
-	"github.com/pingcap/tiflow/pkg/errorutil"
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 
-	cerrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errorutil"
 )
 
 func makePutResp(etcdResp *clientv3.PutResponse) *metaclient.PutResponse {
@@ -122,6 +122,6 @@ func (e *etcdError) Error() string {
 func etcdErrorFromOpFail(err error) *etcdError {
 	return &etcdError{
 		cause:     err,
-		displayed: cerrors.ErrMetaOpFail.GenWithStackByArgs(err),
+		displayed: errors.ErrMetaOpFail.GenWithStackByArgs(err),
 	}
 }

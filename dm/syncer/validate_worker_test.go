@@ -529,7 +529,6 @@ func TestValidatorWorkerGetSourceRowsForCompare(t *testing.T) {
 func TestValidatorIsRetryableDBError(t *testing.T) {
 	require.True(t, isRetryableDBError(&gmysql.MySQLError{Number: errno.ErrPDServerTimeout}))
 	require.True(t, isRetryableDBError(gmysql.ErrInvalidConn))
-	require.True(t, isRetryableDBError(context.DeadlineExceeded))
 	require.True(t, isRetryableDBError(driver.ErrBadConn))
 	require.True(t, isRetryableDBError(errors.Annotate(driver.ErrBadConn, "test")))
 }

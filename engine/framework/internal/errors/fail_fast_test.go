@@ -18,7 +18,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
+	derrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 func TestFailFastWrap(t *testing.T) {

@@ -40,7 +40,7 @@ mysql-instances:
   syncer-config-name: sync-01
   syncer: null
   syncer-thread: 0
-  continuous-validator-config-name: validator-01
+  validator-config-name: validator-01
 - source-id: mysql-replica-02
   meta: null
   filter-rules: []
@@ -58,7 +58,7 @@ mysql-instances:
   syncer-config-name: sync-02
   syncer: null
   syncer-thread: 0
-  continuous-validator-config-name: validator-01
+  validator-config-name: validator-01
 online-ddl: false
 shadow-table-rules: []
 trash-table-rules: []
@@ -127,10 +127,10 @@ validators:
     validate-interval: 10s
     check-interval: 5s
     row-error-delay: 30m0s
-    meta-flush-interval: 1m0s
+    meta-flush-interval: 5m0s
     batch-query-size: 100
     max-pending-row-size: 500m
-    max-pending-row-count: 8000
+    max-pending-row-count: 2147483647
 clean-dump-file: false
 ansi-quotes: false
 remove-meta: false

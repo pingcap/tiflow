@@ -102,7 +102,13 @@ type DownstreamTableInfo struct {
 // NewTracker creates a new tracker. `sessionCfg` will be set as tracker's session variables if specified, or retrieve
 // some variable from downstream using `downstreamConn`.
 // NOTE **sessionCfg is a reference to caller**.
-func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, downstreamConn *dbconn.DBConn) (*Tracker, error) {
+func NewTracker(
+	ctx context.Context,
+	task string,
+	sessionCfg map[string]string,
+	downstreamConn *dbconn.DBConn,
+	logger log.Logger,
+) (*Tracker, error) {
 	var (
 		err       error
 		storePath string
@@ -133,9 +139,10 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 		sessionCfg = make(map[string]string)
 	}
 
-	tctx := tcontext.NewContext(ctx, log.With(zap.String("component", "schema-tracker"), zap.String("task", task)))
+	logger = logger.WithFields(zap.String("component", "schema-tracker"), zap.String("task", task))
+	tctx := tcontext.NewContext(ctx, logger)
 	// get variables if user doesn't specify
-	// all cfg in downstreamVars should be lower case
+	// all cfg in downstreamVars should be lowercase
 	for _, k := range downstreamVars {
 		if _, ok := sessionCfg[k]; !ok {
 			var ignoredColumn interface{}
@@ -257,10 +264,13 @@ func (tr *Tracker) Exec(ctx context.Context, db string, sql string) error {
 
 // GetTableInfo returns the schema associated with the table.
 func (tr *Tracker) GetTableInfo(table *filter.Table) (*model.TableInfo, error) {
-	dbName := model.NewCIStr(table.Schema)
-	tableName := model.NewCIStr(table.Name)
 	tr.RLock()
 	defer tr.RUnlock()
+	if tr.closed.Load() {
+		return nil, dmterror.ErrSchemaTrackerIsClosed.New("fail to get table info")
+	}
+	dbName := model.NewCIStr(table.Schema)
+	tableName := model.NewCIStr(table.Name)
 	t, err := tr.dom.InfoSchema().TableByName(dbName, tableName)
 	if err != nil {
 		return nil, err
@@ -375,6 +385,10 @@ func (tr *Tracker) Close() error {
 	if tr == nil {
 		return nil
 	}
+	// prevent SchemaTracker being closed when
+	// other components are getting/setting table info
+	tr.Lock()
+	defer tr.Unlock()
 	if !tr.closed.CAS(false, true) {
 		return nil
 	}

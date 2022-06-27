@@ -20,9 +20,8 @@ import (
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 
-	"github.com/pingcap/tiflow/engine/pkg/errors"
-	cerrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // Defines fake key/value pair which is used in aliveness check or epoch generation
@@ -59,7 +58,7 @@ func NewEtcdImpl(config *metaclient.StoreConfigParams) (*etcdImpl, error) {
 		// [TODO] LOG
 	})
 	if err != nil {
-		return nil, cerrors.ErrMetaNewClientFail.Wrap(err)
+		return nil, errors.ErrMetaNewClientFail.Wrap(err)
 	}
 
 	c := &etcdImpl{
@@ -118,7 +117,7 @@ func (c *etcdImpl) Get(ctx context.Context, key string, opts ...metaclient.OpOpt
 	op := metaclient.OpGet(key, opts...)
 	if err := op.CheckValidOp(); err != nil {
 		return nil, &etcdError{
-			displayed: cerrors.ErrMetaOptionInvalid.Wrap(err),
+			displayed: errors.ErrMetaOptionInvalid.Wrap(err),
 		}
 	}
 
@@ -135,7 +134,7 @@ func (c *etcdImpl) Delete(ctx context.Context, key string, opts ...metaclient.Op
 	op := metaclient.OpDelete(key, opts...)
 	if err := op.CheckValidOp(); err != nil {
 		return nil, &etcdError{
-			displayed: cerrors.ErrMetaOptionInvalid.Wrap(err),
+			displayed: errors.ErrMetaOptionInvalid.Wrap(err),
 		}
 	}
 
@@ -151,7 +150,7 @@ func (c *etcdImpl) Delete(ctx context.Context, key string, opts ...metaclient.Op
 func (c *etcdImpl) Do(ctx context.Context, op metaclient.Op) (metaclient.OpResponse, metaclient.Error) {
 	if err := op.CheckValidOp(); err != nil {
 		return metaclient.OpResponse{}, &etcdError{
-			displayed: cerrors.ErrMetaOptionInvalid.Wrap(err),
+			displayed: errors.ErrMetaOptionInvalid.Wrap(err),
 		}
 	}
 
@@ -181,7 +180,7 @@ func (c *etcdImpl) Do(ctx context.Context, op metaclient.Op) (metaclient.OpRespo
 	}
 
 	return metaclient.OpResponse{}, &etcdError{
-		displayed: cerrors.ErrMetaOptionInvalid.Wrap(fmt.Errorf("unrecognized op type:%d", op.T)),
+		displayed: errors.ErrMetaOptionInvalid.Wrap(fmt.Errorf("unrecognized op type:%d", op.T)),
 	}
 }
 
@@ -219,7 +218,7 @@ func (c *etcdImpl) Close() error {
 func (c *etcdImpl) GenEpoch(ctx context.Context) (int64, error) {
 	resp, err := c.cli.Put(ctx, FakeKey, FakeValue)
 	if err != nil {
-		return 0, etcdErrorFromOpFail(errors.Wrap(errors.ErrMasterEtcdEpochFail, err))
+		return 0, etcdErrorFromOpFail(errors.WrapError(errors.ErrMasterEtcdEpochFail, err))
 	}
 
 	return resp.Header.Revision, nil
@@ -234,7 +233,7 @@ func (t *etcdTxn) Do(ops ...metaclient.Op) metaclient.Txn {
 	}
 	if t.committed {
 		t.Err = &etcdError{
-			displayed: cerrors.ErrMetaCommittedTxn.GenWithStackByArgs(),
+			displayed: errors.ErrMetaCommittedTxn.GenWithStackByArgs(),
 		}
 		return t
 	}
@@ -243,7 +242,7 @@ func (t *etcdTxn) Do(ops ...metaclient.Op) metaclient.Txn {
 	for _, op := range ops {
 		if op.IsTxn() {
 			t.Err = &etcdError{
-				displayed: cerrors.ErrMetaNestedTxn.GenWithStackByArgs(),
+				displayed: errors.ErrMetaNestedTxn.GenWithStackByArgs(),
 			}
 			return t
 		}
@@ -262,7 +261,7 @@ func (t *etcdTxn) Commit() (*metaclient.TxnResponse, metaclient.Error) {
 	}
 	if t.committed {
 		t.Err = &etcdError{
-			displayed: cerrors.ErrMetaCommittedTxn.GenWithStackByArgs(),
+			displayed: errors.ErrMetaCommittedTxn.GenWithStackByArgs(),
 		}
 		t.mu.Unlock()
 		return nil, t.Err

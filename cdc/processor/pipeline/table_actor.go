@@ -60,6 +60,8 @@ type tableActor struct {
 	tableSink   sink.Sink
 	redoManager redo.LogManager
 
+	state TableState
+
 	pullerNode *pullerNode
 	sortNode   *sorterNode
 	sinkNode   *sinkNode
@@ -124,6 +126,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		wg:        wg,
 		cancel:    cancel,
 
+		state:         TableStatePreparing,
 		tableID:       tableID,
 		markTableID:   replicaInfo.MarkTableID,
 		tableName:     tableName,
@@ -282,7 +285,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	flowController := flowcontrol.NewTableFlowController(t.memoryQuota, t.redoManager.Enabled())
 	sorterNode := newSorterNode(t.tableName, t.tableID,
 		t.replicaInfo.StartTs, flowController,
-		t.mounter, t.replicaConfig,
+		t.mounter, t.replicaConfig, &t.state, t.changefeedID,
 	)
 	t.sortNode = sorterNode
 	sortActorNodeContext := newContext(sdtTableContext, t.tableName,
@@ -315,7 +318,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 
 	actorSinkNode := newSinkNode(t.tableID, t.tableSink,
 		t.replicaInfo.StartTs,
-		t.targetTs, flowController, t.redoManager)
+		t.targetTs, flowController, t.redoManager, &t.state, t.changefeedID)
 	actorSinkNode.initWithReplicaConfig(t.replicaConfig)
 	t.sinkNode = actorSinkNode
 
@@ -381,12 +384,12 @@ func (t *tableActor) handleError(err error) {
 	}
 }
 
-// ============ Implement TablePipline, must be threadsafe ============
+// ============ Implement TablePipeline, must be thread-safe ============
 
 // ResolvedTs returns the resolved ts in this table pipeline
 func (t *tableActor) ResolvedTs() model.Ts {
 	// TODO: after TiCDC introduces p2p based resolved ts mechanism, TiCDC nodes
-	// will be able to cooperate replication status directly. Then we will add
+	// will be able to cooperate replication state directly. Then we will add
 	// another replication barrier for consistent replication instead of reusing
 	// the global resolved-ts.
 	if t.redoManager.Enabled() {
@@ -430,7 +433,7 @@ func (t *tableActor) AsyncStop(targetTs model.Ts) bool {
 		if cerror.ErrActorNotFound.Equal(err) || cerror.ErrActorStopped.Equal(err) {
 			return true
 		}
-		log.Panic("send fails", zap.Reflect("msg", msg), zap.Error(err))
+		log.Panic("send fails", zap.Any("msg", msg), zap.Error(err))
 	}
 	return true
 }
@@ -441,9 +444,9 @@ func (t *tableActor) Workload() model.WorkloadInfo {
 	return workload
 }
 
-// Status returns the status of this table pipeline
-func (t *tableActor) Status() TableStatus {
-	return t.sinkNode.Status()
+// State returns the state of this table pipeline
+func (t *tableActor) State() TableState {
+	return t.state.Load()
 }
 
 // ID returns the ID of source table and mark table
@@ -459,7 +462,7 @@ func (t *tableActor) Name() string {
 // Cancel stops this table pipeline immediately and destroy all resources
 // created by this table pipeline
 func (t *tableActor) Cancel() {
-	// cancel wait group, release resource and mark the status as stopped
+	// cancel wait group, release resource and mark the state as stopped
 	t.stop(nil)
 	// actor is closed, tick actor to remove this actor router
 	msg := pmessage.TickMessage()
@@ -479,6 +482,13 @@ func (t *tableActor) Wait() {
 // MemoryConsumption return the memory consumption in bytes
 func (t *tableActor) MemoryConsumption() uint64 {
 	return t.sortNode.flowController.GetConsumption()
+}
+
+func (t *tableActor) Start(ts model.Ts) {
+	if atomic.CompareAndSwapInt32(&t.sortNode.started, 0, 1) {
+		t.sortNode.startTsCh <- ts
+		close(t.sortNode.startTsCh)
+	}
 }
 
 // for ut

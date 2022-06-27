@@ -8,7 +8,7 @@ WORK_DIR=$TEST_DIR/$TEST_NAME
 
 db_name=$TEST_NAME
 
-help_cnt=45
+help_cnt=46
 
 function run() {
 	# check dmctl output with help flag

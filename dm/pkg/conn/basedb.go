@@ -16,7 +16,6 @@ package conn
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -25,7 +24,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
-	perrors "github.com/pingcap/errors"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/util"
 	"go.uber.org/zap"
@@ -203,12 +202,12 @@ func (d *BaseDB) DoTxWithRetry(tctx *tcontext.Context, queries []string, args []
 		)
 		tx, err = d.DB.BeginTx(tctx.Ctx, nil)
 		if err != nil {
-			return nil, perrors.Trace(err)
+			return nil, errors.Trace(err)
 		}
 		defer func() {
 			if err != nil {
 				if rollbackErr := tx.Rollback(); rollbackErr != nil {
-					tctx.L().Warn("failed to rollback", zap.Error(perrors.Trace(rollbackErr)))
+					tctx.L().Warn("failed to rollback", zap.Error(errors.Trace(rollbackErr)))
 				}
 			} else {
 				err = tx.Commit()
@@ -222,10 +221,10 @@ func (d *BaseDB) DoTxWithRetry(tctx *tcontext.Context, queries []string, args []
 					zap.String("argument", utils.TruncateInterface(args[i], -1)))
 			}
 			if _, err = tx.ExecContext(tctx.Ctx, q, args[i]...); err != nil {
-				return nil, perrors.Trace(err)
+				return nil, errors.Trace(err)
 			}
 		}
-		return nil, perrors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
 	_, _, err := retryer.Apply(tctx, workFunc)

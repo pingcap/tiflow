@@ -434,11 +434,11 @@ func TestMasterClientHeartbeatStalePong(t *testing.T) {
 	err = helper.Client.InitMasterInfoFromMeta(context.Background())
 	require.NoError(t, err)
 
-	clk := clock.NewMock()
+	clk := helper.Clk
 	sendTime1 := helper.InitTime.Add(1 * time.Second)
 	clk.Set(sendTime1)
 
-	err = helper.Client.SendHeartBeat(context.Background(), clk, false)
+	err = helper.Client.SendHeartBeat(context.Background())
 	require.NoError(t, err)
 
 	ping := helper.PopHeartbeat(t)

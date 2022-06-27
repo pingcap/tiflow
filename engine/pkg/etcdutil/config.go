@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package etcdutils
+package etcdutil
 
 import (
 	"fmt"
@@ -19,7 +19,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/zap"
 )
@@ -78,28 +78,28 @@ func GenEmbedEtcdConfig(
 	var err error
 	cfg.LCUrls, err = parseURLs(addrs)
 	if err != nil {
-		return nil, errors.Wrap(errors.ErrMasterGenEmbedEtcdConfigFail, err, "invalid master-addr")
+		return nil, errors.WrapError(errors.ErrMasterGenEmbedEtcdConfigFail, err, "invalid master-addr")
 	}
 	cfg.ACUrls, err = parseURLs(advertiseAddrs)
 	if err != nil {
-		return nil, errors.Wrap(errors.ErrMasterGenEmbedEtcdConfigFail, err, "invalid advertise-addr")
+		return nil, errors.WrapError(errors.ErrMasterGenEmbedEtcdConfigFail, err, "invalid advertise-addr")
 	}
 
 	cfg.LPUrls, err = parseURLs(cp.PeerUrls)
 	if err != nil {
-		return nil, errors.Wrap(errors.ErrMasterGenEmbedEtcdConfigFail, err, "invalid peer-urls")
+		return nil, errors.WrapError(errors.ErrMasterGenEmbedEtcdConfigFail, err, "invalid peer-urls")
 	}
 
 	cfg.APUrls, err = parseURLs(cp.AdvertisePeerUrls)
 	if err != nil {
-		return nil, errors.Wrap(errors.ErrMasterGenEmbedEtcdConfigFail, err, "invalid advertise-peer-urls")
+		return nil, errors.WrapError(errors.ErrMasterGenEmbedEtcdConfigFail, err, "invalid advertise-peer-urls")
 	}
 
 	cfg.InitialCluster = cp.InitialCluster
 	cfg.ClusterState = cp.InitialClusterState
 	err = cfg.Validate() // verify & trigger the builder
 	if err != nil {
-		return nil, errors.Wrap(errors.ErrMasterGenEmbedEtcdConfigFail, err, "fail to validate embed etcd config")
+		return nil, errors.WrapError(errors.ErrMasterGenEmbedEtcdConfigFail, err, "fail to validate embed etcd config")
 	}
 
 	return cfg, nil
@@ -123,7 +123,7 @@ func parseURLs(s string) ([]url.URL, error) {
 		}
 		u, err := url.Parse(item)
 		if err != nil {
-			return nil, errors.Wrap(errors.ErrMasterParseURLFail, err, item)
+			return nil, errors.WrapError(errors.ErrMasterParseURLFail, err, item)
 		}
 		if strings.Index(u.Host, ":") == 0 {
 			u.Host = "0.0.0.0" + u.Host
