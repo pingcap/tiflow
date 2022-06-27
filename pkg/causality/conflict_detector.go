@@ -143,7 +143,9 @@ func (d *ConflictDetector[Worker, Txn]) runBackgroundTasks() {
 }
 
 // sendToWorker should not call txn.Callback if it returns an error.
-func (d *ConflictDetector[Worker, Txn]) sendToWorker(txn *OutTxnEvent[Txn], node *internal.Node, workerID int64) {
+func (d *ConflictDetector[Worker, Txn]) sendToWorker(
+	txn *OutTxnEvent[Txn], node *internal.Node, workerID int64,
+) {
 	if workerID == -1 {
 		workerID = d.nextWorkerID.Add(1) % int64(len(d.workers))
 	}

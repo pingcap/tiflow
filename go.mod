@@ -69,6 +69,7 @@ require (
 	github.com/swaggo/gin-swagger v1.2.0
 	github.com/swaggo/swag v1.6.6-0.20200529100950-7c765ddd0476
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
+	github.com/tidwall/btree v1.3.1
 	github.com/tikv/client-go/v2 v2.0.1-0.20220613112734-be31f33ba03b
 	github.com/tikv/pd v1.1.0-beta.0.20220303060546-3695d8164800
 	github.com/tikv/pd/client v0.0.0-20220307081149-841fa61e9710
@@ -88,6 +89,7 @@ require (
 	go.uber.org/multierr v1.8.0
 	go.uber.org/ratelimit v0.2.0
 	go.uber.org/zap v1.21.0
+	golang.org/x/exp v0.0.0-20220426173459-3bcf042a4bf5
 	golang.org/x/net v0.0.0-20220516155154-20f960328961
 	golang.org/x/sync v0.0.0-20220513210516-0976fa681c29
 	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a
@@ -101,11 +103,6 @@ require (
 	gorm.io/driver/sqlite v1.3.2
 	gorm.io/gorm v1.23.4
 	upper.io/db.v3 v3.7.1+incompatible
-)
-
-require (
-	github.com/tidwall/btree v1.3.1
-	golang.org/x/exp v0.0.0-20220516143420-24438e51023a
 )
 
 require (
