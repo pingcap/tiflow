@@ -318,7 +318,7 @@ func (t *testConfig) TestDBConfigClone(c *C) {
 	c.Assert(a.Security, Not(Equals), b.Security)
 }
 
-func (s *testConfig) TestFetchTZSetting(c *C) {
+func (t *testConfig) TestFetchTZSetting(c *C) {
 	db, mock, err := sqlmock.New()
 	c.Assert(err, IsNil)
 
