@@ -21,6 +21,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/failpoint"
@@ -35,12 +36,27 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
+	"golang.org/x/net/netutil"
+)
+
+const (
+	// maxHTTPConnection is used to limits the max concurrent connections of http server.
+	maxHTTPConnection = 1000
+	// httpConnectionTimeout is used to limits a connection max alive time of http server.
+	httpConnectionTimeout = 10 * time.Minute
 )
 
 // startStatusHTTP starts the HTTP server.
 // `lis` is a listener that gives us plain-text HTTP requests.
 // TODO can we decouple the HTTP server from the capture server?
 func (s *Server) startStatusHTTP(lis net.Listener) error {
+	// LimitListener returns a Listener that accepts at most n simultaneous
+	// connections from the provided Listener. Connections that exceed the
+	// limit will wait in a queue and no new goroutines will be created until
+	// a connection is processed.
+	// We use it here to limit the max concurrent connections of statusServer.
+	lis = netutil.LimitListener(lis, maxHTTPConnection)
+
 	conf := config.GetGlobalServerConfig()
 
 	// OpenAPI handling logic is injected here.
@@ -65,7 +81,12 @@ func (s *Server) startStatusHTTP(lis net.Listener) error {
 	router.Any("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// No need to configure TLS because it is already handled by `s.tcpServer`.
-	s.statusServer = &http.Server{Handler: router}
+	// Add ReadTimeout and WriteTimeout to avoid some abnormal connections never close.
+	s.statusServer = &http.Server{
+		Handler:      router,
+		ReadTimeout:  httpConnectionTimeout,
+		WriteTimeout: httpConnectionTimeout,
+	}
 
 	go func() {
 		log.Info("http server is running", zap.String("addr", conf.Addr))
