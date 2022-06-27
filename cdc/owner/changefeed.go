@@ -353,7 +353,7 @@ LOOP:
 		ensureTTL := int64(10 * 60)
 		err := gc.EnsureChangefeedStartTsSafety(
 			ctx, c.upstream.PDClient,
-			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(),
+			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceChecking),
 			c.state.ID, ensureTTL, checkpointTs)
 		if err != nil {
 			return errors.Trace(err)

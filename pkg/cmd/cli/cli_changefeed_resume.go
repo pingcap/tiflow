@@ -15,7 +15,9 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/pingcap/errors"
 	v2 "github.com/pingcap/tiflow/cdc/api/v2"
@@ -38,7 +40,7 @@ type resumeChangefeedOptions struct {
 	noConfirm             bool
 	overwriteCheckpointTs string
 	currentTso            *v2.Tso
-	startTs               uint64
+	checkpointTs          uint64
 }
 
 // newResumeChangefeedOptions creates new options for the `cli changefeed pause` command.
@@ -101,7 +103,7 @@ func (o *resumeChangefeedOptions) confirmResumeChangefeedCheck(ctx context.Conte
 				o.changefeedDetail.CheckpointTSO)
 		}
 
-		return confirmOverwriteCheckpointTs(cmd, o.changefeedID, o.startTs)
+		return confirmOverwriteCheckpointTs(cmd, o.changefeedID, o.checkpointTs)
 	}
 	return nil
 }
@@ -116,6 +118,7 @@ func (o *resumeChangefeedOptions) validateParams(ctx context.Context, cmd *cobra
 
 	tso, err := o.getTSO(ctx)
 	if err != nil {
+		fmt.Println("error occurs when getTSO")
 		return err
 	}
 	o.currentTso = tso
@@ -125,8 +128,8 @@ func (o *resumeChangefeedOptions) validateParams(ctx context.Context, cmd *cobra
 	}
 
 	// validate the --overwrite-checkpoint-ts parameter
-	if o.overwriteCheckpointTs == "now" {
-		o.startTs = oracle.ComposeTS(tso.Timestamp, tso.LogicTime)
+	if strings.ToLower(o.overwriteCheckpointTs) == "now" {
+		o.checkpointTs = oracle.ComposeTS(tso.Timestamp, tso.LogicTime)
 		return nil
 	}
 
@@ -140,7 +143,7 @@ func (o *resumeChangefeedOptions) validateParams(ctx context.Context, cmd *cobra
 		return errors.New("the overwrite-checkpoint-ts must be smaller than current TSO")
 	}
 
-	o.startTs = checkpointTs
+	o.checkpointTs = checkpointTs
 	return nil
 }
 
@@ -154,7 +157,7 @@ func (o *resumeChangefeedOptions) run(cmd *cobra.Command) error {
 	if err := o.confirmResumeChangefeedCheck(ctx, cmd); err != nil {
 		return err
 	}
-	err := o.apiV2Client.Changefeeds().Resume(ctx, o.changefeedID, o.startTs)
+	err := o.apiV2Client.Changefeeds().Resume(ctx, o.changefeedID, o.checkpointTs)
 
 	return err
 }

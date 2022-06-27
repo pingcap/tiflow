@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
@@ -285,16 +286,23 @@ func verifyUpdateChangefeedConfig(ctx context.Context,
 }
 
 func verifyResumeChangefeed(ctx context.Context,
+	capture *capture.Capture,
+	upstream *upstream.Upstream,
 	changefeedID model.ChangeFeedID,
 	checkpointTs uint64,
-	upstream *upstream.Upstream,
 ) error {
-	// TODO: gcSafePoint needs a force update here.
-	// At present, gcSafePoint is updated in gcManager.TryUpdateGCSafePoint every 1min.
-	// So when we try to resume the changefeed, gcManager.lastSafePointTs may not updated timely,
-	// And gcManager.CheckStaleCheckpointTs may not return error expectfully
-	err := upstream.GCManager.CheckStaleCheckpointTs(ctx, changefeedID, checkpointTs)
+	gcTTL := config.GetGlobalServerConfig().GcTTL
+
+	err := gc.EnsureChangefeedStartTsSafety(
+		ctx,
+		upstream.PDClient,
+		capture.EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
+		model.DefaultChangeFeedID(changefeedID.ID),
+		gcTTL, checkpointTs)
 	if err != nil {
+		if !cerror.ErrStartTsBeforeGC.Equal(err) {
+			return cerror.ErrPDEtcdAPIError.Wrap(err)
+		}
 		return err
 	}
 

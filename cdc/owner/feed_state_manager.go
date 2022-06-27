@@ -251,8 +251,8 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 			if info == nil {
 				return nil, changed, nil
 			}
-			if job.Opts != nil && job.Opts.StartTsForResume > 0 {
-				info.StartTs = job.Opts.StartTsForResume
+			if job.OverwriteCheckpointTs > 0 {
+				info.StartTs = job.OverwriteCheckpointTs
 				changed = true
 			}
 			if info.Error != nil {
@@ -263,11 +263,12 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		})
 
 		m.state.PatchStatus(func(status *model.ChangeFeedStatus) (
-			*model.ChangeFeedStatus, bool, error) {
-			if job.Opts != nil && job.Opts.StartTsForResume > 0 {
+			*model.ChangeFeedStatus, bool, error,
+		) {
+			if job.OverwriteCheckpointTs > 0 {
 				status = &model.ChangeFeedStatus{
-					ResolvedTs:   job.Opts.StartTsForResume,
-					CheckpointTs: job.Opts.StartTsForResume,
+					ResolvedTs:   job.OverwriteCheckpointTs,
+					CheckpointTs: job.OverwriteCheckpointTs,
 					AdminJobType: model.AdminNone,
 				}
 				return status, true, nil

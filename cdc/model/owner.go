@@ -24,17 +24,12 @@ import (
 // AdminJobType represents for admin job type, both used in owner and processor
 type AdminJobType int
 
-// AdminJobOption records addition options of an admin job
-type AdminJobOption struct {
-	StartTsForResume uint64
-}
-
 // AdminJob holds an admin job
 type AdminJob struct {
-	CfID  ChangeFeedID
-	Type  AdminJobType
-	Error *RunningError
-	Opts  *AdminJobOption
+	CfID                  ChangeFeedID
+	Type                  AdminJobType
+	Error                 *RunningError
+	OverwriteCheckpointTs uint64
 }
 
 // All AdminJob types

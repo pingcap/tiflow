@@ -138,11 +138,9 @@ func TestResumeChangefeedWithCheckpointTs(t *testing.T) {
 
 	// resume the changefeed in stopped state
 	manager.PushAdminJob(&model.AdminJob{
-		CfID: ctx.ChangefeedVars().ID,
-		Type: model.AdminResume,
-		Opts: &model.AdminJobOption{
-			StartTsForResume: 100,
-		},
+		CfID:                  ctx.ChangefeedVars().ID,
+		Type:                  model.AdminResume,
+		OverwriteCheckpointTs: 100,
 	})
 	manager.Tick(state)
 	tester.MustApplyPatches()
@@ -170,11 +168,9 @@ func TestResumeChangefeedWithCheckpointTs(t *testing.T) {
 
 	// resume the changefeed in failed state
 	manager.PushAdminJob(&model.AdminJob{
-		CfID: ctx.ChangefeedVars().ID,
-		Type: model.AdminResume,
-		Opts: &model.AdminJobOption{
-			StartTsForResume: 200,
-		},
+		CfID:                  ctx.ChangefeedVars().ID,
+		Type:                  model.AdminResume,
+		OverwriteCheckpointTs: 200,
 	})
 	manager.Tick(state)
 	tester.MustApplyPatches()

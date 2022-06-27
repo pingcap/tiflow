@@ -586,8 +586,8 @@ func (c CDCEtcdClient) GetGCServiceID() string {
 }
 
 // GetEnsureGCServiceID return the prefix for the gc service id when changefeed is creating
-func (c CDCEtcdClient) GetEnsureGCServiceID() string {
-	return c.GetGCServiceID() + "-creating-"
+func (c CDCEtcdClient) GetEnsureGCServiceID(tag string) string {
+	return c.GetGCServiceID() + tag
 }
 
 // GetUpstreamInfo get a upstreamInfo from etcd server

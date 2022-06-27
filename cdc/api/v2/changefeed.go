@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"go.uber.org/zap"
 )
@@ -84,8 +85,12 @@ func (h *OpenAPIV2) CreateChangefeed(c *gin.Context) {
 	// We should not close kvStorage since all kvStorage in cdc is the same one.
 	// defer kvStorage.Close()
 
-	info, err := verifyCreateChangefeedConfig(ctx, config, pdClient,
-		h.capture.StatusProvider(), h.capture.EtcdClient.GetEnsureGCServiceID(),
+	info, err := verifyCreateChangefeedConfig(
+		ctx,
+		config,
+		pdClient,
+		h.capture.StatusProvider(),
+		h.capture.EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
 		kvStorage)
 	if err != nil {
 		_ = c.Error(err)
@@ -313,13 +318,13 @@ func (h *OpenAPIV2) ResumeChangefeed(c *gin.Context) {
 		return
 	}
 
-	var startTs uint64
-	startTsStr, ok := c.GetQuery("start_ts")
+	var overwriteCheckpointTs uint64
+	overwriteCheckpointTsStr, ok := c.GetQuery("overwrite_checkpoint_ts")
 	if ok {
-		startTs, err = strconv.ParseUint(startTsStr, 10, 64)
+		overwriteCheckpointTs, err = strconv.ParseUint(overwriteCheckpointTsStr, 10, 64)
 		if err != nil {
 			_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid start_ts:% s",
-				startTsStr))
+				overwriteCheckpointTsStr))
 			return
 		}
 	}
@@ -342,17 +347,20 @@ func (h *OpenAPIV2) ResumeChangefeed(c *gin.Context) {
 		}
 	}
 
-	if err := verifyResumeChangefeed(ctx, changefeedID, startTs, upstream); err != nil {
+	if err := verifyResumeChangefeed(
+		ctx,
+		h.capture,
+		upstream,
+		changefeedID,
+		overwriteCheckpointTs); err != nil {
 		_ = c.Error(err)
 		return
 	}
 
 	job := model.AdminJob{
-		CfID: changefeedID,
-		Type: model.AdminResume,
-		Opts: &model.AdminJobOption{
-			StartTsForResume: startTs,
-		},
+		CfID:                  changefeedID,
+		Type:                  model.AdminResume,
+		OverwriteCheckpointTs: overwriteCheckpointTs,
 	}
 
 	if err := api.HandleOwnerJob(ctx, h.capture, job); err != nil {
