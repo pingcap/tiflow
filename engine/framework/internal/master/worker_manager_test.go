@@ -19,10 +19,11 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
+
+	"github.com/pingcap/tiflow/dm/pkg/log"
 
 	"github.com/pingcap/tiflow/engine/framework/config"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
