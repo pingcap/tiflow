@@ -105,14 +105,15 @@ func (m *mounterImpl) DecodeEvent(ctx context.Context, pEvent *model.Polymorphic
 		return nil
 	}
 	start := time.Now()
-	rowEvent, err := m.unmarshalAndMountRowChanged(ctx, pEvent.RawKV)
+	row, err := m.unmarshalAndMountRowChanged(ctx, pEvent.RawKV)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	pEvent.Row = rowEvent
 	if m.filter.ShouldIgnoreDMLEvent(
-		pEvent.Row.StartTs, pEvent.Row.Table.Schema, pEvent.Row.Table.Table) {
+		row.StartTs, row.Table.Schema, row.Table.Table) {
 		pEvent.Row = nil
+	} else {
+		pEvent.Row = row
 	}
 	pEvent.RawKV.Value = nil
 	pEvent.RawKV.OldValue = nil
