@@ -15,22 +15,47 @@ package conn
 
 import (
 	"context"
+	"testing"
 
-	. "github.com/pingcap/check"
-
-	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/DATA-DOG/go-sqlmock"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Suite(testUtilSuite{})
+func TestGetBinlogDB(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultDBTimeout)
+	defer cancel()
 
-type testUtilSuite struct{}
+	tctx := tcontext.NewContext(ctx, log.L())
 
-func (s testUtilSuite) TestFetchTZSetting(c *C) {
-	m := InitMockDB(c)
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	baseDB := NewBaseDB(db)
 
-	m.ExpectQuery("SELECT cast\\(TIMEDIFF\\(NOW\\(6\\), UTC_TIMESTAMP\\(6\\)\\) as time\\);").
-		WillReturnRows(m.NewRows([]string{""}).AddRow("01:00:00"))
-	tz, err := FetchTimeZoneSetting(context.Background(), &config.DBConfig{})
-	c.Assert(err, IsNil)
-	c.Assert(tz, Equals, "+01:00")
+	// 5 columns for MySQL
+	rows := mock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"}).AddRow(
+		"mysql-bin.000009", 11232, "do_db", "ignore_db", "074be7f4-f0f1-11ea-95bd-0242ac120002:1-699",
+	)
+	mock.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
+
+	binlogDoDB, binlogIgnoreDB, err := GetBinlogDB(tctx, baseDB, "mysql")
+	require.Nil(t, err)
+	require.Equal(t, binlogDoDB, "do_db")
+	require.Equal(t, binlogIgnoreDB, "ignore_db")
+	require.Nil(t, mock.ExpectationsWereMet())
+
+	// 4 columns for MariaDB
+	rows = mock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB"}).AddRow(
+		"mysql-bin.000009", 11232, "do_db", "ignore_db",
+	)
+	mock.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
+	rows = mock.NewRows([]string{"Variable_name", "Value"}).AddRow("gtid_binlog_pos", "1-2-100")
+	mock.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'gtid_binlog_pos'`).WillReturnRows(rows)
+
+	binlogDoDB, binlogIgnoreDB, err = GetBinlogDB(tctx, baseDB, "mariadb")
+	require.Nil(t, err)
+	require.Equal(t, binlogDoDB, "do_db")
+	require.Equal(t, binlogIgnoreDB, "ignore_db")
+	require.Nil(t, mock.ExpectationsWereMet())
 }

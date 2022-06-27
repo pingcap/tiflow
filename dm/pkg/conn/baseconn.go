@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // BaseConn is the basic connection we use in dm
@@ -97,16 +96,16 @@ func (conn *BaseConn) QuerySQL(tctx *tcontext.Context, query string, args ...int
 		return nil, terror.ErrDBUnExpect.Generate("database connection not valid")
 	}
 	tctx.L().Debug("query statement",
-		zap.String("query", utils.TruncateString(query, -1)),
-		zap.String("argument", utils.TruncateInterface(args, -1)))
+		zap.String("query", log.TruncateString(query, -1)),
+		zap.String("argument", log.TruncateInterface(args, -1)))
 
 	rows, err := conn.DBConn.QueryContext(tctx.Context(), query, args...)
 	if err != nil {
 		tctx.L().ErrorFilterContextCanceled("query statement failed",
-			zap.String("query", utils.TruncateString(query, -1)),
-			zap.String("argument", utils.TruncateInterface(args, -1)),
+			zap.String("query", log.TruncateString(query, -1)),
+			zap.String("argument", log.TruncateInterface(args, -1)),
 			log.ShortError(err))
-		return nil, terror.ErrDBQueryFailed.Delegate(err, utils.TruncateString(query, -1))
+		return nil, terror.ErrDBQueryFailed.Delegate(err, log.TruncateString(query, -1))
 	}
 	return rows, nil
 }
@@ -162,8 +161,8 @@ func (conn *BaseConn) ExecuteSQLWithIgnoreError(tctx *tcontext.Context, hVec *me
 		// avoid use TruncateInterface for all log level which will slow the speed of DML
 		if tctx.L().Core().Enabled(zap.DebugLevel) {
 			tctx.L().Debug("execute statement",
-				zap.String("query", utils.TruncateString(query, -1)),
-				zap.String("argument", utils.TruncateInterface(arg, -1)))
+				zap.String("query", log.TruncateString(query, -1)),
+				zap.String("argument", log.TruncateInterface(arg, -1)))
 		}
 
 		startTime = time.Now()
@@ -175,28 +174,28 @@ func (conn *BaseConn) ExecuteSQLWithIgnoreError(tctx *tcontext.Context, hVec *me
 		} else {
 			if ignoreErr != nil && ignoreErr(err) {
 				tctx.L().Warn("execute statement failed and will ignore this error",
-					zap.String("query", utils.TruncateString(query, -1)),
-					zap.String("argument", utils.TruncateInterface(arg, -1)),
+					zap.String("query", log.TruncateString(query, -1)),
+					zap.String("argument", log.TruncateInterface(arg, -1)),
 					log.ShortError(err))
 				continue
 			}
 
 			tctx.L().ErrorFilterContextCanceled("execute statement failed",
-				zap.String("query", utils.TruncateString(query, -1)),
-				zap.String("argument", utils.TruncateInterface(arg, -1)), log.ShortError(err))
+				zap.String("query", log.TruncateString(query, -1)),
+				zap.String("argument", log.TruncateInterface(arg, -1)), log.ShortError(err))
 
 			startTime = time.Now()
 			rerr := txn.Rollback()
 			if rerr != nil {
 				tctx.L().Error("rollback failed",
-					zap.String("query", utils.TruncateString(query, -1)),
-					zap.String("argument", utils.TruncateInterface(arg, -1)),
+					zap.String("query", log.TruncateString(query, -1)),
+					zap.String("argument", log.TruncateInterface(arg, -1)),
 					log.ShortError(rerr))
 			} else if hVec != nil {
 				hVec.WithLabelValues("rollback", task).Observe(time.Since(startTime).Seconds())
 			}
 			// we should return the exec err, instead of the rollback rerr.
-			return i, terror.ErrDBExecuteFailed.Delegate(err, utils.TruncateString(query, -1))
+			return i, terror.ErrDBExecuteFailed.Delegate(err, log.TruncateString(query, -1))
 		}
 	}
 	startTime = time.Now()

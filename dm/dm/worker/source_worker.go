@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -268,10 +269,11 @@ func (w *SourceWorker) updateSourceStatus(ctx context.Context, needLock bool) er
 	}
 	w.sourceDBMu.Unlock()
 
+	// TODO: write NewSourceStatusFromDB, so engine can easily to use
 	var status binlog.SourceStatus
 	ctx, cancel := context.WithTimeout(ctx, utils.DefaultDBTimeout)
 	defer cancel()
-	pos, gtidSet, err := utils.GetPosAndGs(ctx, w.sourceDB.DB, cfg.Flavor)
+	pos, gtidSet, err := conn.GetPosAndGs(tcontext.NewContext(ctx, log.L()), w.sourceDB, cfg.Flavor)
 	if err != nil {
 		return err
 	}

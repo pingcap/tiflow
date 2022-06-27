@@ -14,11 +14,12 @@
 package config
 
 import (
+	"context"
 	"reflect"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/util/filter"
-
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
@@ -315,4 +316,15 @@ func (t *testConfig) TestDBConfigClone(c *C) {
 	b = a.Clone()
 	c.Assert(a, DeepEquals, b)
 	c.Assert(a.Security, Not(Equals), b.Security)
+}
+
+func (s *testConfig) TestFetchTZSetting(c *C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, IsNil)
+
+	mock.ExpectQuery("SELECT cast\\(TIMEDIFF\\(NOW\\(6\\), UTC_TIMESTAMP\\(6\\)\\) as time\\);").
+		WillReturnRows(mock.NewRows([]string{""}).AddRow("01:00:00"))
+	tz, err := FetchTimeZoneSetting(context.Background(), db)
+	c.Assert(err, IsNil)
+	c.Assert(tz, Equals, "+01:00")
 }

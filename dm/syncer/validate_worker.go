@@ -41,7 +41,6 @@ import (
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
 
@@ -411,8 +410,8 @@ func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*sql.NullStrin
 			vw.L.Info("met retryable error", zap.Error(err))
 		} else {
 			vw.L.Error("failed to query",
-				zap.String("query", utils.TruncateString(rowsQuery, -1)),
-				zap.String("args", utils.TruncateInterface(cond.GetArgs(), -1)))
+				zap.String("query", log.TruncateString(rowsQuery, -1)),
+				zap.String("args", log.TruncateInterface(cond.GetArgs(), -1)))
 			err = errors.Trace(err)
 		}
 		return nil, err

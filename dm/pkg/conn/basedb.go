@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 var customID int64
@@ -122,7 +121,7 @@ func (d *DefaultDBProviderImpl) Apply(config *config.DBConfig) (*BaseDB, error) 
 		mockDB.ExpectClose()
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), utils.DefaultDBTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultDBTimeout)
 	defer cancel()
 	err = db.PingContext(ctx)
 	failpoint.Inject("failDBPing", func(_ failpoint.Value) {
@@ -176,20 +175,22 @@ func (d *BaseDB) GetBaseConn(ctx context.Context) (*BaseConn, error) {
 	return baseConn, nil
 }
 
+// TODO: retry can be done inside the BaseDB.
 func (d *BaseDB) ExecContext(tctx *tcontext.Context, query string, args ...interface{}) (sql.Result, error) {
 	if tctx.L().Core().Enabled(zap.DebugLevel) {
 		tctx.L().Debug("exec context",
-			zap.String("query", utils.TruncateString(query, -1)),
-			zap.String("argument", utils.TruncateInterface(args, -1)))
+			zap.String("query", log.TruncateString(query, -1)),
+			zap.String("argument", log.TruncateInterface(args, -1)))
 	}
 	return d.DB.ExecContext(tctx.Ctx, query, args...)
 }
 
+// TODO: retry can be done inside the BaseDB.
 func (d *BaseDB) QueryContext(tctx *tcontext.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	if tctx.L().Core().Enabled(zap.DebugLevel) {
 		tctx.L().Debug("query context",
-			zap.String("query", utils.TruncateString(query, -1)),
-			zap.String("argument", utils.TruncateInterface(args, -1)))
+			zap.String("query", log.TruncateString(query, -1)),
+			zap.String("argument", log.TruncateInterface(args, -1)))
 	}
 	return d.DB.QueryContext(tctx.Ctx, query, args...)
 }
@@ -217,8 +218,8 @@ func (d *BaseDB) DoTxWithRetry(tctx *tcontext.Context, queries []string, args []
 			q := queries[i]
 			if tctx.L().Core().Enabled(zap.DebugLevel) {
 				tctx.L().Debug("exec in tx",
-					zap.String("query", utils.TruncateString(q, -1)),
-					zap.String("argument", utils.TruncateInterface(args[i], -1)))
+					zap.String("query", log.TruncateString(q, -1)),
+					zap.String("argument", log.TruncateInterface(args[i], -1)))
 			}
 			if _, err = tx.ExecContext(tctx.Ctx, q, args[i]...); err != nil {
 				return nil, errors.Trace(err)

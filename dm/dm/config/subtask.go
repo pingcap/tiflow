@@ -15,6 +15,8 @@ package config
 
 import (
 	"bytes"
+	"context"
+	"database/sql"
 	_ "embed"
 	"encoding/json"
 	"flag"
@@ -26,6 +28,7 @@ import (
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
 	extstorage "github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
@@ -141,6 +144,16 @@ func (db *DBConfig) AdjustWithTimeZone(timeZone string) {
 		AdjustDBTimeZone(db, timeZone)
 	}
 	db.Adjust()
+}
+
+// FetchTimeZoneSetting fetch target db global time_zone setting.
+// TODO: move this function from TiDB to tiflow
+func FetchTimeZoneSetting(ctx context.Context, db *sql.DB) (string, error) {
+	dur, err := dbutil.GetTimeZoneOffset(ctx, db)
+	if err != nil {
+		return "", err
+	}
+	return dbutil.FormatTimeZoneOffset(dur), nil
 }
 
 // Clone returns a deep copy of DBConfig. This function only fixes data race when adjusting Session.
