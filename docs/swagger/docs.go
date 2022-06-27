@@ -1045,6 +1045,9 @@ var doc = `{
                 "is_owner": {
                     "type": "boolean"
                 },
+                "liveness": {
+                    "type": "integer"
+                },
                 "pid": {
                     "type": "integer"
                 },

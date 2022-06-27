@@ -80,7 +80,7 @@ func (c *CaptureStatus) handleHeartbeatResponse(
 		c.Epoch = epoch
 		c.State = CaptureStateInitialized
 	}
-	if resp.IsStopping {
+	if resp.Liveness == model.LivenessCaptureStopping {
 		c.State = CaptureStateStopping
 	}
 	c.Tables = resp.Tables
