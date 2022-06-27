@@ -309,6 +309,12 @@ func (s *Syncer) refreshCliArgs() {
 	s.Unlock()
 }
 
+func (s *Syncer) getCliArgs() *config.TaskCliArgs {
+	s.RLock()
+	defer s.RUnlock()
+	return s.cliArgs
+}
+
 func (s *Syncer) newJobChans() {
 	chanSize := calculateChanSize(s.cfg.QueueSize, s.cfg.WorkerCount, s.cfg.Compact)
 	s.dmlJobCh = make(chan *job, chanSize)
@@ -1271,8 +1277,8 @@ func (s *Syncer) afterFlushCheckpoint(task *checkpointFlushTask) error {
 
 	s.logAndClearFilteredStatistics()
 
-	if s.cliArgs != nil && s.cliArgs.StartTime != "" && s.cli != nil {
-		clone := *s.cliArgs
+	if cliArgs := s.getCliArgs(); cliArgs != nil && cliArgs.StartTime != "" && s.cli != nil {
+		clone := *cliArgs
 		clone.StartTime = ""
 		err2 := ha.PutTaskCliArgs(s.cli, s.cfg.Name, []string{s.cfg.SourceID}, clone)
 		if err2 != nil {
@@ -1492,8 +1498,8 @@ func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 		s.refreshCliArgs()
 
 		waitDuration := defaultMaxPauseOrStopWaitTime
-		if s.cliArgs != nil && s.cliArgs.WaitTimeOnStop != "" {
-			waitDuration, _ = time.ParseDuration(s.cliArgs.WaitTimeOnStop)
+		if cliArgs := s.getCliArgs(); cliArgs != nil && cliArgs.WaitTimeOnStop != "" {
+			waitDuration, _ = time.ParseDuration(cliArgs.WaitTimeOnStop)
 		}
 		prepareForWaitTime := time.Since(needToExitTime)
 		failpoint.Inject("recordAndIgnorePrepareTime", func() {
@@ -1609,8 +1615,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	// task command line arguments have the highest priority
 	skipLoadMeta := false
 	s.refreshCliArgs()
-	if s.cliArgs != nil && s.cliArgs.StartTime != "" {
-		err = s.setGlobalPointByTime(s.runCtx, s.cliArgs.StartTime)
+	if cliArgs := s.getCliArgs(); cliArgs != nil && cliArgs.StartTime != "" {
+		err = s.setGlobalPointByTime(s.runCtx, cliArgs.StartTime)
 		if terror.ErrConfigStartTimeTooLate.Equal(err) {
 			return err
 		}
@@ -2149,14 +2155,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			)
 			currentLocation.Suffix = endSuffix
 
-			// TODO: can be removed in the future
-			if queryEvent, ok := ev.(*replication.QueryEvent); ok {
-				err = currentLocation.SetGTID(queryEvent.GSet)
-				if err != nil {
-					return terror.Annotatef(err, "fail to record GTID %v", queryEvent.GSet)
-				}
-			}
-
 			if !s.isReplacingOrInjectingErr {
 				apply, op := s.errOperatorHolder.MatchAndApply(startLocation, currentLocation, e)
 				if apply {
@@ -2235,7 +2233,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 
 		// set exitSafeModeTS when meet first binlog
-		if s.firstMeetBinlogTS == nil && s.cliArgs != nil && s.cliArgs.SafeModeDuration != "" && int64(e.Header.Timestamp) != 0 && e.Header.EventType != replication.FORMAT_DESCRIPTION_EVENT {
+		if cliArgs := s.getCliArgs(); s.firstMeetBinlogTS == nil && cliArgs != nil && cliArgs.SafeModeDuration != "" && int64(e.Header.Timestamp) != 0 && e.Header.EventType != replication.FORMAT_DESCRIPTION_EVENT {
 			if checkErr := s.initSafeModeExitTS(int64(e.Header.Timestamp)); checkErr != nil {
 				return checkErr
 			}
@@ -2355,7 +2353,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 func (s *Syncer) initSafeModeExitTS(firstBinlogTS int64) error {
 	// see more in https://github.com/pingcap/tiflow/pull/4601#discussion_r814446628
-	duration, err := time.ParseDuration(s.cliArgs.SafeModeDuration)
+	duration, err := time.ParseDuration(s.getCliArgs().SafeModeDuration)
 	if err != nil {
 		return err
 	}
@@ -2376,7 +2374,7 @@ func (s *Syncer) checkAndExitSafeModeByBinlogTS(ctx *tcontext.Context, ts int64)
 			s.tctx.L().Info("safe-mode disable by task cli args", zap.Int64("ts in binlog", ts))
 		}
 		// delete cliArgs in etcd
-		clone := *s.cliArgs
+		clone := *s.getCliArgs()
 		clone.SafeModeDuration = ""
 		if err2 := ha.PutTaskCliArgs(s.cli, s.cfg.Name, []string{s.cfg.SourceID}, clone); err2 != nil {
 			s.tctx.L().Error("failed to clean safe-mode-duration in task cli args", zap.Error(err2))

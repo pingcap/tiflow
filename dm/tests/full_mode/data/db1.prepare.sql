@@ -14,7 +14,7 @@ update t1 set name = 'Catelyn S\"\n\ttark' where name = 'catelyn';
 
 -- test multi column index with generated column
 alter table t1 add column info json;
-alter table t1 add column gen_id int as (info->"$.id");
+alter table t1 add column gen_id int generated always as (json_extract(`info`, _utf8mb4'$.id')) virtual;
 alter table t1 add index multi_col(`id`, `gen_id`);
 insert into t1 (id, name, info) values (4, 'gentest', '{"id": 123}');
 insert into t1 (id, name, info) values (5, 'gentest', '{"id": 124}');

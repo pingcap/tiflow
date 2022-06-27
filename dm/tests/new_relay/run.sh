@@ -55,7 +55,7 @@ function test_restart_relay_status() {
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"list-member -n worker3" \
-		"relay" 1
+		"bound" 1
 
 	kill_dm_worker
 	kill_dm_master
@@ -84,8 +84,7 @@ function test_restart_relay_status() {
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"list-member --worker" \
-		"relay" 1 \
-		"bound" 2
+		"bound" 3
 
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>test test_restart_relay_status passed"
 }

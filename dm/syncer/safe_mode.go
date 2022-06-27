@@ -33,7 +33,7 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 	s.safeMode.Reset(tctx) // in initialization phase, reset first
 
 	// cliArgs has higher priority than config
-	if s.cliArgs != nil && s.cliArgs.SafeModeDuration != "" {
+	if cliArgs := s.getCliArgs(); cliArgs != nil && cliArgs.SafeModeDuration != "" {
 		s.enableSafeModeByTaskCliArgs(tctx)
 		return
 	}

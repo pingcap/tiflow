@@ -109,7 +109,7 @@ func (s *Server) KeepAlive() {
 
 		// TODO: report the error.
 		// when lost keepalive, stop the worker without graceful. this is to fix https://github.com/pingcap/tiflow/issues/3737
-		err := s.stopSourceWorker("", true, false)
+		err := s.stopAllWorkers(false, false)
 		if err != nil {
 			log.L().Error("fail to stop worker", zap.Error(err))
 			return // return if failed to stop the worker.

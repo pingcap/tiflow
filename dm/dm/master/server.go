@@ -2900,6 +2900,7 @@ func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationS
 			}
 			*newReq.GetValidationStatus = *req
 			newReq.GetValidationStatus.TaskName = taskName
+			newReq.GetValidationStatus.Sources = []string{sourceID}
 			sendValidationRequest(ctx, s, newReq, sourceID, &wg, &workerRespMu, &workerResps, "get validation status")
 		}
 	}
@@ -2962,6 +2963,7 @@ func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationEr
 			}
 			*newReq.GetValidationError = *req
 			newReq.GetValidationError.TaskName = taskName
+			newReq.GetValidationError.Sources = []string{sourceID}
 			sendValidationRequest(ctx, s, &newReq, sourceID, &wg, &workerRespMu, &workerResps, "get validator error")
 		}
 	}
@@ -3017,6 +3019,7 @@ func (s *Server) OperateValidationError(ctx context.Context, req *pb.OperateVali
 			}
 			*newReq.OperateValidationError = *req
 			newReq.OperateValidationError.TaskName = taskName
+			newReq.OperateValidationError.Sources = []string{sourceID}
 			sendValidationRequest(ctx, s, &newReq, sourceID, &wg, &workerRespMu, &workerResps, "operate validator")
 		}
 	}

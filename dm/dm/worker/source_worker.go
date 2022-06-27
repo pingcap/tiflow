@@ -30,6 +30,7 @@ import (
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/unit"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
@@ -1324,6 +1325,18 @@ func (w *SourceWorker) tryRefreshSubTaskAndSourceConfig(subTask *SubTask) error 
 		return checkErr
 	}
 	return w.UpdateSubTask(w.ctx, &cfg, false)
+}
+
+// nolint:unparam
+func (w *SourceWorker) getSourceProcessResult() *pb.ProcessResult {
+	if err := w.sourceError.Load(); err != nil {
+		return &pb.ProcessResult{
+			Errors: []*pb.ProcessError{
+				unit.NewProcessError(err),
+			},
+		}
+	}
+	return nil
 }
 
 // CheckCfgCanUpdated check if current subtask config can be updated.

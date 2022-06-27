@@ -93,10 +93,6 @@ function run() {
 		"operate-source create $WORK_DIR/source2.yaml -w wrong-worker" \
 		"\"result\": false" 1 \
 		"not exists" 1
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"operate-source create $WORK_DIR/source2.yaml -w worker1" \
-		"\"result\": false" 1 \
-		"not free" 1
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
 	# check wrong do-tables

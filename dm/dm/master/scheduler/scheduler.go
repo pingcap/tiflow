@@ -2070,12 +2070,14 @@ func (s *Scheduler) handleWorkerOnline(ev ha.WorkerEvent, toLock bool) error {
 	// 2. check whether is bound.
 	// also put identical relay config for this worker
 	relaySources := w.RelaySources()
+	unboundRelaySources := make([]string, 0, len(relaySources))
 	bounds := make([]ha.SourceBound, 0, len(relaySources))
 	for source := range relaySources {
 		bounds = append(bounds, ha.SourceBound{
 			Source: source,
 			Worker: w.baseInfo.Name,
 		})
+		unboundRelaySources = append(unboundRelaySources, source)
 	}
 	if len(bounds) > 0 {
 		// TODO: make sure dm-worker can retry and re-trigger handleWorkerOnline when this fails
@@ -2103,8 +2105,7 @@ func (s *Scheduler) handleWorkerOnline(ev ha.WorkerEvent, toLock bool) error {
 	}
 
 	// 3. change the stage (from Offline) to Free or Bound.
-	unboundRelaySources := make([]string, 0)
-	if len(w.RelaySources()) == 0 {
+	if len(unboundRelaySources) == 0 {
 		// when worker is removed (for example lost keepalive when master scheduler boots up), w.RelaySources() is
 		// of course nothing, so we try to bind unbound relay sources back to this worker
 		for source, workerM := range s.relayWorkers {
@@ -2158,7 +2159,7 @@ func (s *Scheduler) handleWorkerOffline(ev ha.WorkerEvent, toLock bool) error {
 	}
 
 	// 4. unbound for the source.
-	boundSourcesByWeight := s.balance.GetWorkerBoundsByWeight(w, s.relayWorkers, s.hasLoadTaskByWorkerAndSource)
+	boundSourcesByWeight := s.balance.GetWorkerBoundsByWeight(w, s.relayWorkers, s.sourceCfgs, s.hasLoadTaskByWorkerAndSource)
 	unbounds := make([]string, 0, len(boundSourcesByWeight))
 	for _, bound := range boundSourcesByWeight {
 		s.logger.Debug("unbound the worker for source", zap.String("source", bound.source), zap.Stringer("event", ev))
@@ -2732,7 +2733,7 @@ func (s *Scheduler) doRebalanceJob() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	victims := s.balance.FindVictims(len(s.sourceCfgs), s.workers, s.relayWorkers, s.hasLoadTaskByWorkerAndSource)
+	victims := s.balance.FindVictims(s.sourceCfgs, s.workers, s.relayWorkers, s.hasLoadTaskByWorkerAndSource)
 	for _, source := range victims {
 		w := s.pickBestWorkerForSource(source)
 		if w != nil {

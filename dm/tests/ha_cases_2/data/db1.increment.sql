@@ -5,7 +5,7 @@ update ta set name = 'Catelyn Stark' where name = 'catelyn';
 
 -- test multi column index with generated column
 alter table ta add column info json;
-alter table ta add column gen_id int as (info->"$.id");
+alter table ta add column gen_id int generated always as (json_extract(`info`, _utf8mb4'$.id')) virtual;
 alter table ta add index multi_col(`id`, `gen_id`);
 insert into ta (id, name, info) values (4, 'gentest', '{"id": 123}');
 insert into ta (id, name, info) values (5, 'gentest', '{"id": 124}');

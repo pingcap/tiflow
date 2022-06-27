@@ -21,11 +21,12 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
 const (
-	rebalanceInterval = 5 * time.Minute
+	rebalanceInterval = 2 * time.Second
 	hasLoadTaskWeight = 1e6
 )
 
@@ -34,7 +35,7 @@ type balancer interface {
 	// Removing these tables will make the workload more balanced.
 	FindVictims(
 		// if we want to support workload later, we can
-		totalWeight int,
+		sourceCfgs map[string]*config.SourceConfig,
 		workers map[string]*Worker,
 		relayWorkers map[string]map[string]struct{},
 		hasLoadTaskByWorkerAndSource func(string, string) bool,
@@ -42,7 +43,7 @@ type balancer interface {
 	// CanBalance returns true if the worker is balanced.
 	CanBalance(totalWeight int, workers map[string]*Worker, workerWeight int) bool
 	// GetWorkerBoundsByWeight returns the weight of the worker.
-	GetWorkerBoundsByWeight(w *Worker, relayWorkers map[string]map[string]struct{}, hasLoadTaskByWorkerAndSource func(string, string) bool) sourceHelper
+	GetWorkerBoundsByWeight(w *Worker, relayWorkers map[string]map[string]struct{}, sourceCfgs map[string]*config.SourceConfig, hasLoadTaskByWorkerAndSource func(string, string) bool) sourceHelper
 }
 
 func newTableNumberBalancer(pLogger *log.Logger) *tableNumberBalancer {
@@ -56,11 +57,12 @@ type tableNumberBalancer struct {
 }
 
 func (r *tableNumberBalancer) FindVictims(
-	sourceNumber int,
+	sourceCfgs map[string]*config.SourceConfig,
 	workers map[string]*Worker,
 	relayWorkers map[string]map[string]struct{},
 	hasLoadTaskByWorkerAndSource func(string, string) bool,
 ) []string {
+	sourceNumber := len(sourceCfgs)
 	workerNum := 0
 	for _, w := range workers {
 		if w.Stage() != WorkerOffline {
@@ -85,7 +87,7 @@ func (r *tableNumberBalancer) FindVictims(
 			continue
 		}
 
-		sourceList := r.GetWorkerBoundsByWeight(w, relayWorkers, hasLoadTaskByWorkerAndSource)
+		sourceList := r.GetWorkerBoundsByWeight(w, relayWorkers, sourceCfgs, hasLoadTaskByWorkerAndSource)
 
 		// here we pick `sourceNum2Remove` tables to delete,
 		for _, record := range sourceList {
@@ -107,7 +109,8 @@ func (r *tableNumberBalancer) FindVictims(
 	return victimSources
 }
 
-func (r *tableNumberBalancer) GetWorkerBoundsByWeight(w *Worker, relayWorkers map[string]map[string]struct{}, hasLoadTaskByWorkerAndSource func(string, string) bool) sourceHelper {
+func (r *tableNumberBalancer) GetWorkerBoundsByWeight(w *Worker, relayWorkers map[string]map[string]struct{},
+	sourceCfgs map[string]*config.SourceConfig, hasLoadTaskByWorkerAndSource func(string, string) bool) sourceHelper {
 	relaySources := w.RelaySources()
 	bounds := w.Bounds()
 
@@ -115,6 +118,11 @@ func (r *tableNumberBalancer) GetWorkerBoundsByWeight(w *Worker, relayWorkers ma
 	for source := range bounds {
 		var score float32
 		_, hasRelay := relaySources[source]
+		if !hasRelay {
+			if sourceCfg, ok := sourceCfgs[source]; ok {
+				hasRelay = sourceCfg.EnableRelay
+			}
+		}
 		switch {
 		// don't rebalance the source that has load task
 		case hasLoadTaskByWorkerAndSource(w.BaseInfo().Name, source):
@@ -122,7 +130,7 @@ func (r *tableNumberBalancer) GetWorkerBoundsByWeight(w *Worker, relayWorkers ma
 		case hasRelay:
 			score = 100 - float32(len(relayWorkers[source])) + rand.Float32()
 		default:
-			score = rand.Float32()
+			score = rand.Float32() - float32(len(relayWorkers[source])) // let workers with most relay workers to rebound other workers
 		}
 		sourceList = append(sourceList, sourceScore{score: score, source: source})
 	}

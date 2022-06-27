@@ -463,21 +463,22 @@ function run() {
 		"\"result\": true" 2
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" "resume-task $ILLEGAL_CHAR_NAME" "\"result\": true" 3
 
-	# restart dm-worker1
-	pkill -hup -f dm-worker1.toml 2>/dev/null || true
-	wait_pattern_exit dm-worker1.toml
-	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
-	# make sure worker1 have bound a source, and the source should same with bound before
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status $ILLEGAL_CHAR_NAME" \
-		"worker1" 1
-
+  # restart dm-worker2 first because dm-master will rebalance sources without relay first
 	# restart dm-worker2
 	pkill -hup -f dm-worker2.toml 2>/dev/null || true
 	wait_pattern_exit dm-worker2.toml
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+	# make sure worker1 have bound a source, and the source should same with bound before
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $ILLEGAL_CHAR_NAME" \
+		"worker2" 1
+
+	# restart dm-worker1
+	pkill -hup -f dm-worker1.toml 2>/dev/null || true
+	wait_pattern_exit dm-worker1.toml
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	check_metric $WORKER1_PORT "dm_worker_task_state{source_id=\"mysql-replica-01\",task=\"$ILLEGAL_CHAR_NAME\",worker=\"worker1\"}" 10 1 3
 	check_metric $WORKER2_PORT "dm_worker_task_state{source_id=\"mysql-replica-02\",task=\"$ILLEGAL_CHAR_NAME\",worker=\"worker2\"}" 10 1 3
 

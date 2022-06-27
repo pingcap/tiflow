@@ -417,6 +417,7 @@ message CheckSubtasksCanUpdateResponse {
 message GetValidationStatusRequest {
     string taskName = 1;
     Stage filterStatus = 2;
+    repeated string sources = 3; // TODO: support batch operations for master-worker
 }
 
 message ValidationStatus {
@@ -449,6 +450,7 @@ message GetValidationStatusResponse {
 message GetValidationErrorRequest {
     ValidateErrorState errState = 1;
     string taskName = 2;
+    repeated string sources = 3; // TODO: support batch operations for master-worker
 }
 
 message ValidationError {
@@ -482,6 +484,7 @@ message OperateValidationErrorRequest {
     bool isAllError = 2;
     string taskName = 3;
     uint64 errId = 4; // error-id
+    repeated string sources = 5; // TODO: support batch operations for master-worker
 }
 
 message OperateValidationErrorResponse {

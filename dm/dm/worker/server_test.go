@@ -573,7 +573,9 @@ func (t *testServer) testOperateWorker(c *C, s *Server, dir string, start bool) 
 			w := s.getWorkerBySource(sourceCfg.SourceID, true)
 			return w != nil && !w.closed.Load()
 		}), IsTrue)
-		c.Assert(s.getSourceProcessResult(sourceCfg.SourceID, true), IsNil)
+		w := s.getWorkerBySource(sourceCfg.SourceID, true)
+		c.Assert(w, NotNil)
+		c.Assert(w.getSourceProcessResult(), IsNil)
 	} else {
 		// worker should be started before stopped
 		w := s.getWorkerBySource(sourceCfg.SourceID, true)
@@ -588,7 +590,7 @@ func (t *testServer) testOperateWorker(c *C, s *Server, dir string, start bool) 
 			currentWorker := s.getWorkerBySource(sourceCfg.SourceID, true)
 			return currentWorker == nil && w.closed.Load()
 		}), IsTrue)
-		c.Assert(s.getSourceProcessResult(sourceCfg.SourceID, true), IsNil)
+		c.Assert(w.getSourceProcessResult(), IsNil)
 	}
 }
 

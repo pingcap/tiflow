@@ -1093,6 +1093,7 @@ function DM_RESYNC_NOT_FLUSHED_CASE() {
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/ReSyncExit=return(true)'
 	restart_worker1
 	restart_worker2
+	sleep 2 # wait for rebalance
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1,1);"
 	run_sql_source1 "insert into ${shardddl1}.${tb2} values(2,2);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(3,3);"
@@ -1159,6 +1160,7 @@ function DM_RESYNC_NOT_FLUSHED_CASE() {
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+	sleep 2 # wait for rebalance
 
 	run_sql_source2 "alter table ${shardddl1}.${tb2} add column d int not null;"
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(33,33,33);"
@@ -1181,6 +1183,7 @@ function DM_RESYNC_NOT_FLUSHED_CASE() {
 	export GO_FAILPOINTS=''
 	restart_worker1
 	restart_worker2
+	sleep 2 # wait for rebalance
 }
 
 function DM_RESYNC_NOT_FLUSHED() {
@@ -1197,6 +1200,7 @@ function DM_RESYNC_TXN_INTERRUPT_CASE() {
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/SleepInTxn=return(20)'
 	restart_worker1
 	restart_worker2
+	sleep 2 # wait for rebalance
 
 	run_sql_source2 "alter table shardddl1.tb2 change b c int;"
 	run_sql_with_txn "shardddl1.tb2" 2 1 10 $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
@@ -1219,6 +1223,7 @@ function DM_RESYNC_TXN_INTERRUPT_CASE() {
 	export GO_FAILPOINTS=""
 	restart_worker1
 	restart_worker2
+	sleep 2 # wait for rebalance
 
 	run_sql_source1 "alter table shardddl1.tb1 change c d int;"
 	source1worker=$($PWD/bin/dmctl.test DEVEL --master-addr "127.0.0.1:$MASTER_PORT1" operate-source show -s "mysql-replica-01" |

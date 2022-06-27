@@ -227,35 +227,41 @@ function run() {
 
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
+  # all sources can be created even if worker number < source number now
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"operate-source show" \
 		"\"result\": true" 3 \
-		'msg": "source is added but there is no online worker to bound"' 1 \
-		'"worker": "worker1"' 1
+		'"worker": "worker1"' 2
 
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $dm_worker2_conf
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+  # wait for rebalance
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"operate-source show" \
 		"\"result\": true" 3 \
 		'"worker": "worker1"' 1 \
 		'"worker": "worker2"' 1
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"operate-source show -s $SOURCE_ID1" \
+		"operate-source show -s $SOURCE_ID2" \
 		"\"result\": true" 2 \
-		'"worker": "worker1"' 1
+		'"worker": "worker' 1 # TODO: not sure worker1 or worker2 now, revert this after weight is supported
 
 	test_operate_task_bound_to_a_source
 
-	transfer_source_valid $SOURCE_ID1 worker1 # transfer to self
-	transfer_source_invalid $SOURCE_ID1 worker2
+	 # TODO: not sure source1's worker now, revert this after weight is supported
+	source1worker=$($PWD/bin/dmctl.test DEVEL --master-addr "127.0.0.1:$MASTER_PORT" query-status test -s mysql-replica-01 |
+                		grep 'worker' | awk -F: '{print $2}' | cut -d'"' -f 2)
+
+	transfer_source_valid $SOURCE_ID1 $source1worker # transfer to self
 
 	# test for start relay
 	echo "kill worker2"
 	kill_process worker2
 	check_port_offline $WORKER2_PORT 20
+
+	transfer_source_invalid $SOURCE_ID1 worker2 # transfer to offline worker
 
 	stop_relay_on_offline_worker
 	start_relay_on_offline_worker
@@ -264,8 +270,9 @@ function run() {
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $dm_worker2_conf
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
+  sleep 2
 	start_relay_success
-	start_relay_diff_worker_fail
+	start_relay_diff_worker_success
 	start_relay_without_worker_name_fail
 	stop_relay_without_worker_name_fail
 
@@ -338,7 +345,7 @@ function run() {
 	# update_task_not_paused $TASK_CONF
 
 	# stop relay because get_config_to_file will stop source
-	stop_relay_fail
+	stop_relay_not_exist
 	stop_relay_success
 
 	# stop worker to test query-status works well when no worker

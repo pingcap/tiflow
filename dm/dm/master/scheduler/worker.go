@@ -132,9 +132,9 @@ func (w *Worker) ToBound(bound ha.SourceBound) error {
 		return terror.ErrSchedulerWorkerInvalidTrans.Generate(w.BaseInfo(), WorkerOffline, WorkerBound)
 	}
 
-	w.reportMetrics()
 	w.bounds[bound.Source] = bound
 	w.stage = WorkerBound
+	w.reportMetrics()
 	return nil
 }
 
@@ -168,7 +168,10 @@ func (w *Worker) StartRelay(sources ...string) error {
 		w.relaySources[sourceID] = struct{}{}
 	}
 
-	w.stage = WorkerBound
+	if w.stage != WorkerOffline {
+		w.stage = WorkerBound
+	}
+	w.reportMetrics()
 	return nil
 }
 

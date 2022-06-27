@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
-	"github.com/pingcap/tiflow/dm/dm/unit"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
@@ -123,7 +122,7 @@ func (s *Server) Start() error {
 		return err
 	}
 
-	err = s.stopAllWorkers(false)
+	err = s.stopAllWorkers(false, true)
 	if err != nil {
 		return err
 	}
@@ -509,13 +508,13 @@ func (s *Server) doClose() {
 	}
 
 	// close listener at last, so we can get status from it if worker failed to close in previous step
-	if s.rootLis != nil {
-		err2 := s.rootLis.Close()
-		if err2 != nil && !common.IsErrNetClosing(err2) {
-			log.L().Error("fail to close net listener", log.ShortError(err2))
-		}
-	}
-	s.httpWg.Wait()
+	//if s.rootLis != nil {
+	//	err2 := s.rootLis.Close()
+	//	if err2 != nil && !common.IsErrNetClosing(err2) {
+	//		log.L().Error("fail to close net listener", log.ShortError(err2))
+	//	}
+	//}
+	//s.httpWg.Wait()
 
 	s.closed.Store(true)
 }
@@ -548,7 +547,7 @@ func (s *Server) getAllWorkers(needLock bool) map[string]*SourceWorker {
 	for source, w := range s.workers {
 		sws[source] = w
 	}
-	return s.workers
+	return sws
 }
 
 // if needLock is false, we should make sure Server has been locked in caller.
@@ -563,30 +562,12 @@ func (s *Server) addWorker(worker *SourceWorker, needLock bool) {
 }
 
 func (s *Server) delWorker(sourceID string, needLock bool) {
-	UpdateConditionHub(nil, sourceID, true)
+	UpdateConditionHub(nil, sourceID, false)
 	if needLock {
 		s.Lock()
 		defer s.Unlock()
 	}
 	delete(s.workers, sourceID)
-}
-
-// nolint:unparam
-func (s *Server) getSourceProcessResult(sourceID string, needLock bool) *pb.ProcessResult {
-	if needLock {
-		s.Lock()
-		defer s.Unlock()
-	}
-	if w := s.getWorkerBySource(sourceID, false); w != nil {
-		if err := w.sourceError.Load(); err != nil {
-			return &pb.ProcessResult{
-				Errors: []*pb.ProcessError{
-					unit.NewProcessError(err),
-				},
-			}
-		}
-	}
-	return nil
 }
 
 // TODO: move some call to addWorker/getOrStartWorker.
@@ -601,13 +582,13 @@ func (s *Server) setSourceError(source string, err error, needLock bool) {
 	}
 }
 
-func (s *Server) stopAllWorkers(onlyRelay bool) error {
-	workers := s.getAllWorkers(false)
+func (s *Server) stopAllWorkers(onlyRelay, graceful bool) error {
+	workers := s.getAllWorkers(true)
 	for source, w := range workers {
 		if onlyRelay && !w.relayEnabled.Load() {
 			continue
 		}
-		if err := s.stopSourceWorker(source, false, true); err != nil {
+		if err := s.stopSourceWorker(source, true, graceful); err != nil {
 			return err
 		}
 	}
@@ -846,10 +827,9 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (*
 	source := req.GetSource()
 	resp := &pb.QueryStatusResponse{
 		Result: true,
-		SourceStatus: &pb.SourceStatus{
-			Source: req.GetSource(),
-			Worker: s.cfg.Name,
-		},
+	}
+	resp.SourceStatus = &pb.SourceStatus{
+		Worker: s.cfg.Name,
 	}
 	if source == "" {
 		resp.Result = false
@@ -865,7 +845,8 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (*
 		return resp, nil
 	}
 
-	resp.SourceStatus.Result = s.getSourceProcessResult(source, true)
+	resp.SourceStatus.Result = w.getSourceProcessResult()
+	resp.SourceStatus.Source = req.GetSource()
 
 	var err error
 	resp.SubTaskStatus, resp.SourceStatus.RelayStatus, err = w.QueryStatus(ctx, req.Name)
@@ -1103,69 +1084,82 @@ func (s *Server) GetWorkerValidatorStatus(ctx context.Context, req *pb.GetValida
 	resp := &pb.GetValidationStatusResponse{
 		Result: true,
 	}
-	// FIXME
-	w := s.getWorkerBySource("", true)
-	if w == nil {
-		log.L().Warn("fail to call GetWorkerValidateStatus, because no mysql source is being handled in the worker")
-		resp.Result = false
-		resp.Msg = terror.ErrWorkerNoStart.Error()
-		return resp, nil
+	for _, source := range req.Sources {
+		w := s.getWorkerBySource(source, true)
+		if w == nil {
+			log.L().Warn("fail to call GetWorkerValidateStatus, because no mysql source is being handled in the worker")
+			resp.Result = false
+			resp.Msg = terror.ErrWorkerNoStart.Error()
+			resp.Validators = nil
+			resp.TableStatuses = nil
+			return resp, nil
+		}
+		validatorStatus, err := w.GetValidatorStatus(req.TaskName)
+		if err != nil {
+			resp.Validators = nil
+			resp.TableStatuses = nil
+			return resp, err
+		}
+		res, err := w.GetValidatorTableStatus(req.TaskName, req.FilterStatus)
+		if err != nil {
+			resp.Validators = nil
+			resp.TableStatuses = nil
+			return resp, err
+		}
+		resp.Validators = append(resp.Validators, validatorStatus)
+		resp.TableStatuses = append(resp.TableStatuses, res...)
 	}
-	validatorStatus, err := w.GetValidatorStatus(req.TaskName)
-	if err != nil {
-		return resp, err
-	}
-	res, err := w.GetValidatorTableStatus(req.TaskName, req.FilterStatus)
-	if err != nil {
-		return resp, err
-	}
-
-	resp.Validators = []*pb.ValidationStatus{validatorStatus}
-	resp.TableStatuses = res
 	return resp, nil
 }
 
 func (s *Server) GetValidatorError(ctx context.Context, req *pb.GetValidationErrorRequest) (*pb.GetValidationErrorResponse, error) {
-	// FIXME
-	w := s.getWorkerBySource("", true)
+	log.L().Info("", zap.String("request", "GetValidatorError"), zap.Stringer("payload", req))
+
 	resp := &pb.GetValidationErrorResponse{
 		Result: true,
 	}
-	if w == nil {
-		log.L().Warn("fail to get validator error, because no mysql source is being handled in the worker")
-		resp.Result = false
-		resp.Msg = terror.ErrWorkerNoStart.Error()
-		return resp, nil
-	}
-	validatorErrs, err := w.GetWorkerValidatorErr(req.TaskName, req.ErrState)
-	if err != nil {
-		resp.Msg = err.Error()
-		resp.Result = false
-	} else {
-		resp.Error = validatorErrs
+	for _, source := range req.Sources {
+		w := s.getWorkerBySource(source, true)
+		if w == nil {
+			log.L().Warn("fail to get validator error, because no mysql source is being handled in the worker")
+			resp.Result = false
+			resp.Msg = terror.ErrWorkerNoStart.Error()
+			resp.Error = nil
+			return resp, nil
+		}
+		validatorErrs, err := w.GetWorkerValidatorErr(req.TaskName, req.ErrState)
+		if err != nil {
+			resp.Msg = err.Error()
+			resp.Result = false
+			resp.Error = nil
+			return resp, nil
+		} else {
+			resp.Error = append(resp.Error, validatorErrs...)
+		}
 	}
 	return resp, nil
 }
 
 func (s *Server) OperateValidatorError(ctx context.Context, req *pb.OperateValidationErrorRequest) (*pb.OperateValidationErrorResponse, error) {
 	log.L().Info("operate validation error", zap.Stringer("payload", req))
-	// FIXME
-	w := s.getWorkerBySource("", true)
 	resp := &pb.OperateValidationErrorResponse{
 		Result: true,
 	}
-	if w == nil {
-		log.L().Warn("fail to operate validator error, because no mysql source is being handled in the worker")
-		resp.Result = false
-		resp.Msg = terror.ErrWorkerNoStart.Error()
-		return resp, nil
-	}
-	err := w.OperateWorkerValidatorErr(req.TaskName, req.Op, req.ErrId, req.IsAllError)
-	if err != nil {
-		resp.Result = false
-		resp.Msg = err.Error()
-		//nolint:nilerr
-		return resp, nil
+	for _, source := range req.Sources {
+		w := s.getWorkerBySource(source, true)
+		if w == nil {
+			log.L().Warn("fail to operate validator error, because no mysql source is being handled in the worker")
+			resp.Result = false
+			resp.Msg = terror.ErrWorkerNoStart.Error()
+			return resp, nil
+		}
+		err := w.OperateWorkerValidatorErr(req.TaskName, req.Op, req.ErrId, req.IsAllError)
+		if err != nil {
+			resp.Result = false
+			resp.Msg = err.Error()
+			//nolint:nilerr
+			return resp, nil
+		}
 	}
 	//nolint:nilerr
 	return resp, nil

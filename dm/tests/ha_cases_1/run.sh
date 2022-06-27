@@ -124,8 +124,8 @@ function test_kill_and_isolate_worker() {
 	isolate_worker 3 "isolate"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT1" \
 		"query-status test" \
-		"\"stage\": \"Running\"" 1 \
-		"\"result\": false" 1
+		"\"stage\": \"Running\"" 2 \
+		"\"worker\": \"worker1\"" 2
 
 	echo "disable isolate dm-worker4"
 	isolate_worker 4 "disable_isolate"

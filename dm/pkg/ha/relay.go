@@ -287,6 +287,18 @@ func WatchRelayConfig(ctx context.Context, cli *clientv3.Client,
 					bound.Source = string(ev.Kv.Value)
 					bound.IsDeleted = false
 				case mvccpb.DELETE:
+					keys, err := common.UpstreamRelayWorkerKeyAdapter.Decode(string(ev.Kv.Key))
+					if err == nil && len(keys) != 2 {
+						err = terror.ErrDecodeEtcdKeyFail.Generate("illegal key of UpstreamRelayWorkerKeyAdapter")
+					}
+					if err != nil {
+						select {
+						case errCh <- err:
+						case <-ctx.Done():
+						}
+						return
+					}
+					bound.Source = keys[1]
 					bound.IsDeleted = true
 				default:
 					// this should not happen.
