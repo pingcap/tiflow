@@ -33,8 +33,8 @@ func TestIteratorWithTableFilter(t *testing.T) {
 	defer func() { _ = db.Close() }()
 
 	// Put 7 table keys with CRTS=1, and then flush it to L0. The flush is required for generating table properties.
-	for table := 1; table <= 7; table++ {
-		key := encoding.EncodeTsKey(1, uint64(table), 1)
+	for tableID := 1; tableID <= 7; tableID++ {
+		key := encoding.EncodeTsKey(1, uint64(tableID), 1)
 		b := db.Batch(1024)
 		b.Put(key, []byte{'x'})
 		if err := b.Commit(); err != nil {
@@ -46,8 +46,8 @@ func TestIteratorWithTableFilter(t *testing.T) {
 	}
 
 	// Put 9 table keys with CRTS=3, and then flush it to L0.
-	for table := 1; table <= 9; table++ {
-		key := encoding.EncodeTsKey(1, uint64(table), 3)
+	for tableID := 1; tableID <= 9; tableID++ {
+		key := encoding.EncodeTsKey(1, uint64(tableID), 3)
 		b := db.Batch(1024)
 		b.Put(key, []byte{'x'})
 		if err := b.Commit(); err != nil {
