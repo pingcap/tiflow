@@ -15,7 +15,9 @@ package worker
 
 import (
 	"context"
+	"github.com/stretchr/testify/require"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -520,8 +522,6 @@ func (t *testSubTask) TestSubtaskFastQuit(c *C) {
 	}
 	c.Assert(st.Stage(), Equals, pb.Stage_Stopped)
 }
-<<<<<<< HEAD
-=======
 
 func TestGetValidatorError(t *testing.T) {
 	cfg := &config.SubTaskConfig{
@@ -597,4 +597,3 @@ func TestSubtaskRace(t *testing.T) {
 	st.markResultCanceled()
 	// this test is to test data race, so don't need assert here
 }
->>>>>>> 86780b1bd (syncer(dm): fix the data race issue (#5881))
