@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
 	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
@@ -157,7 +158,7 @@ func printError(err error) error {
 		errors.Cause(err) != context.DeadlineExceeded &&
 		!strings.Contains(err.Error(), "context canceled") &&
 		!strings.Contains(err.Error(), "context deadline exceeded") &&
-		cerrors.ErrWorkerPoolHandleCancelled.NotEqual(errors.Cause(err)) {
+		cerror.ErrWorkerPoolHandleCancelled.NotEqual(errors.Cause(err)) {
 
 		log.Warn("Unified Sorter: Error detected", zap.Error(err))
 	}
