@@ -84,7 +84,7 @@ func (r *progressTracker) remove(key uint64) {
 	defer r.lock.Unlock()
 	r.pendingEventAndResolvedTs.Remove(key)
 	iterator := r.pendingEventAndResolvedTs.Iterator()
-	if iterator.Next() {
+	for iterator.Next() {
 		// If the element is resolved ts,
 		// it means we can advance the progress.
 		if iterator.Value() != nil {
