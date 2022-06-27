@@ -44,19 +44,20 @@ func (b *balanceScheduler) Name() string {
 func (b *balanceScheduler) Schedule(
 	_ model.Ts,
 	currentTables []model.TableID,
-	captures map[model.CaptureID]*model.CaptureInfo,
-	replications map[model.TableID]*ReplicationSet,
-	hasCaptureStopping bool,
-) []*scheduleTask {
+	captures map[model.CaptureID]*CaptureStatus,
+	replications map[model.TableID]*ReplicationSet) []*scheduleTask {
 	now := time.Now()
 	if now.Sub(b.lastRebalanceTime) < b.checkBalanceInterval {
 		return nil
 	}
 	b.lastRebalanceTime = now
 
-	if hasCaptureStopping {
-		log.Debug("tpscheduler: capture is stopping, premature to balance table automatically")
-		return nil
+	for _, capture := range captures {
+		if capture.State == CaptureStateStopping {
+			log.Debug("tpscheduler: capture is stopping, " +
+				"premature to balance table automatically")
+			return nil
+		}
 	}
 
 	tasks := make([]*scheduleTask, 0)
@@ -70,7 +71,7 @@ func (b *balanceScheduler) Schedule(
 func buildBurstBalanceMoveTables(
 	random *rand.Rand,
 	currentTables []model.TableID,
-	captures map[model.CaptureID]*model.CaptureInfo,
+	captures map[model.CaptureID]*CaptureStatus,
 	replications map[model.TableID]*ReplicationSet,
 ) *scheduleTask {
 	captureTables := make(map[model.CaptureID][]model.TableID)

@@ -69,10 +69,8 @@ func (d *drainCaptureScheduler) setTarget(target model.CaptureID) bool {
 func (d *drainCaptureScheduler) Schedule(
 	_ model.Ts,
 	_ []model.TableID,
-	captures map[model.CaptureID]*model.CaptureInfo,
-	replications map[model.TableID]*ReplicationSet,
-	_ bool,
-) []*scheduleTask {
+	captures map[model.CaptureID]*CaptureStatus,
+	replications map[model.TableID]*ReplicationSet) []*scheduleTask {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 

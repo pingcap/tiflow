@@ -34,13 +34,13 @@ func TestSchedulerBalanceCaptureOnline(t *testing.T) {
 		1: {State: ReplicationSetStateReplicating, Primary: "a"},
 		2: {State: ReplicationSetStateReplicating, Primary: "a"},
 	}
-	tasks := sched.Schedule(0, currentTables, captures, replications, false)
+	tasks := sched.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
 	require.Len(t, tasks[0].burstBalance.MoveTables, 1)
 	require.Equal(t, tasks[0].burstBalance.MoveTables[0].TableID, model.TableID(1))
 
 	// New capture "b" online, but this time has capture is stopping
-	tasks = sched.Schedule(0, currentTables, captures, replications, true)
+	tasks = sched.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 
 	// New capture "b" online, but this time it not pass check balance interval.
@@ -51,7 +51,7 @@ func TestSchedulerBalanceCaptureOnline(t *testing.T) {
 		1: {State: ReplicationSetStateReplicating, Primary: "a"},
 		2: {State: ReplicationSetStateReplicating, Primary: "a"},
 	}
-	tasks = sched.Schedule(0, currentTables, captures, replications, false)
+	tasks = sched.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 
 	// TODO revise balance algorithm and enable the test case.

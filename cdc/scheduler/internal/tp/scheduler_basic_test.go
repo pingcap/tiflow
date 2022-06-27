@@ -31,7 +31,7 @@ func TestSchedulerBasic(t *testing.T) {
 	// AddTable only
 	replications := map[model.TableID]*ReplicationSet{}
 	b := newBasicScheduler()
-	tasks := b.Schedule(0, currentTables, captures, replications, false)
+	tasks := b.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
 	require.Len(t, tasks[0].burstBalance.AddTables, 4)
 	require.Equal(t, tasks[0].burstBalance.AddTables[0].TableID, model.TableID(1))
@@ -47,7 +47,7 @@ func TestSchedulerBasic(t *testing.T) {
 		3: {State: ReplicationSetStatePrepare, Primary: "a", Secondary: "b"},
 		4: {State: ReplicationSetStateAbsent},
 	}
-	tasks = b.Schedule(1, currentTables, captures, replications, false)
+	tasks = b.Schedule(1, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
 	require.Equal(t, tasks[0].burstBalance.AddTables[0].TableID, model.TableID(4))
 	require.Equal(t, tasks[0].burstBalance.AddTables[0].CheckpointTs, model.Ts(1))
@@ -60,7 +60,7 @@ func TestSchedulerBasic(t *testing.T) {
 		3: {State: ReplicationSetStatePrepare, Primary: "a", Secondary: "b"},
 		5: {State: ReplicationSetStateCommit, Primary: "a", Secondary: "b"},
 	}
-	tasks = b.Schedule(2, currentTables, captures, replications, false)
+	tasks = b.Schedule(2, currentTables, captures, replications)
 	require.Len(t, tasks, 2)
 	if tasks[0].burstBalance.AddTables != nil {
 		require.Equal(t, tasks[0].burstBalance.AddTables[0].TableID, model.TableID(4))
@@ -80,7 +80,7 @@ func TestSchedulerBasic(t *testing.T) {
 		4: {State: ReplicationSetStatePrepare, Primary: "a", Secondary: "b"},
 		5: {State: ReplicationSetStatePrepare, Secondary: "b"},
 	}
-	tasks = b.Schedule(3, currentTables, captures, replications, false)
+	tasks = b.Schedule(3, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
 	require.Equal(t, tasks[0].burstBalance.RemoveTables[0].TableID, model.TableID(5))
 }
@@ -112,7 +112,7 @@ func benchmarkSchedulerBalance(
 		b.ResetTimer()
 		b.Run(name, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				sched.Schedule(0, currentTables, captures, replications, false)
+				sched.Schedule(0, currentTables, captures, replications)
 			}
 		})
 		b.StopTimer()

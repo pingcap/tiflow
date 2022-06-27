@@ -45,10 +45,8 @@ func (r *rebalanceScheduler) Name() string {
 func (r *rebalanceScheduler) Schedule(
 	_ model.Ts,
 	currentTables []model.TableID,
-	captures map[model.CaptureID]*model.CaptureInfo,
-	replications map[model.TableID]*ReplicationSet,
-	_ bool,
-) []*scheduleTask {
+	captures map[model.CaptureID]*CaptureStatus,
+	replications map[model.TableID]*ReplicationSet) []*scheduleTask {
 	// rebalance is not triggered, or there is still some pending task,
 	// do not generate new tasks.
 	if atomic.LoadInt32(&r.rebalance) == 0 {
@@ -85,7 +83,7 @@ func (r *rebalanceScheduler) Schedule(
 func newBurstBalanceMoveTables(
 	accept callback,
 	random *rand.Rand,
-	captures map[model.CaptureID]*model.CaptureInfo,
+	captures map[model.CaptureID]*CaptureStatus,
 	replications map[model.TableID]*ReplicationSet,
 ) *scheduleTask {
 	tablesPerCapture := make(map[model.CaptureID]*tableSet)

@@ -50,10 +50,8 @@ func (b *basicScheduler) Name() string {
 func (b *basicScheduler) Schedule(
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
-	captures map[model.CaptureID]*model.CaptureInfo,
-	replications map[model.TableID]*ReplicationSet,
-	_ bool,
-) []*scheduleTask {
+	captures map[model.CaptureID]*CaptureStatus,
+	replications map[model.TableID]*ReplicationSet) []*scheduleTask {
 	tasks := make([]*scheduleTask, 0)
 	tablesLenEqual := len(currentTables) == len(replications)
 	tablesAllFind := true
