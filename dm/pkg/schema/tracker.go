@@ -418,10 +418,18 @@ func (tr *Tracker) Close() error {
 	if !tr.closed.CAS(false, true) {
 		return nil
 	}
-	tr.se.Close()
-	tr.dom.Close()
-	if err := tr.store.Close(); err != nil {
-		return err
+	// Build of the Tracker and the initialization is divided.
+	// these fields can possibly be nil if the Tracker is closed before the initialization.
+	if tr.se != nil {
+		tr.se.Close()
+	}
+	if tr.dom != nil {
+		tr.dom.Close()
+	}
+	if tr.store != nil {
+		if err := tr.store.Close(); err != nil {
+			return err
+		}
 	}
 	return os.RemoveAll(tr.storePath)
 }
