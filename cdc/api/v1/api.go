@@ -106,7 +106,7 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api OpenAPI) {
 	captureGroup := v1.Group("/captures")
 	captureGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
 	captureGroup.GET("", api.ListCapture)
-	captureGroup.POST("/drain", api.DrainCapture)
+	captureGroup.PUT("/drain", api.DrainCapture)
 }
 
 // ListChangefeed lists all changgefeeds in cdc cluster

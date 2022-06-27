@@ -457,7 +457,7 @@ func TestDrainCapture(t *testing.T) {
 	body := bytes.NewReader(b)
 	api := testCase{
 		url:    "/api/v1/captures/drain",
-		method: "POST",
+		method: "PUT",
 	}
 	request, err := http.NewRequestWithContext(context.Background(), api.method, api.url, body)
 	require.NoError(t, err)
