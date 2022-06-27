@@ -121,7 +121,8 @@ func (m *MockChangefeedInterface) Resume(
 
 // Resume indicates an expected call of Resume.
 func (mr *MockChangefeedInterfaceMockRecorder) Resume(ctx, name, 
-	overwriteCheckpointTs interface{}) *gomock.Call {
+	overwriteCheckpointTs interface{},
+) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resume", 
 		reflect.TypeOf((*MockChangefeedInterface)(nil).Resume), ctx, name, overwriteCheckpointTs)
@@ -129,7 +130,8 @@ func (mr *MockChangefeedInterfaceMockRecorder) Resume(ctx, name,
 
 // Update mocks base method.
 func (m *MockChangefeedInterface) Update(ctx context.Context, 
-	cfg *v2.ChangefeedConfig, name string) (*v2.ChangeFeedInfo, error) {
+	cfg *v2.ChangefeedConfig, name string,
+) (*v2.ChangeFeedInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Update", ctx, cfg, name)
 	ret0, _ := ret[0].(*v2.ChangeFeedInfo)
@@ -156,7 +158,8 @@ func (m *MockChangefeedInterface) VerifyTable(ctx context.Context,
 
 // VerifyTable indicates an expected call of VerifyTable.
 func (mr *MockChangefeedInterfaceMockRecorder) VerifyTable(ctx, 
-	cfg interface{}) *gomock.Call {
+	cfg interface{},
+) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyTable", 
 		reflect.TypeOf((*MockChangefeedInterface)(nil).VerifyTable), ctx, cfg)
