@@ -17,9 +17,8 @@ import (
 	"context"
 	"sync"
 
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
-
 	"github.com/edwingeng/deque"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // MockMessageSender defines a mock message sender
@@ -58,7 +57,7 @@ func (m *MockMessageSender) SendToNodeB(
 
 	// Handle mock offline nodes.
 	if _, exists := m.nodeBlackList[targetNodeID]; exists {
-		return derror.ErrExecutorNotFoundForMessage.GenWithStackByArgs()
+		return errors.ErrExecutorNotFoundForMessage.GenWithStackByArgs()
 	}
 
 	select {

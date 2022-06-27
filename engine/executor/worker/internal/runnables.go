@@ -15,13 +15,13 @@ package internal
 
 import (
 	"context"
-	"time"
 
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/clock"
 )
 
 // Workloader defines an interface to get Workload
@@ -56,7 +56,7 @@ type RunnableContainer struct {
 }
 
 // WrapRunnable creates a new RunnableContainer from a Runnable interface
-func WrapRunnable(runnable Runnable, submitTime time.Time) *RunnableContainer {
+func WrapRunnable(runnable Runnable, submitTime clock.MonotonicTime) *RunnableContainer {
 	return &RunnableContainer{
 		Runnable: runnable,
 		status:   *atomic.NewInt32(TaskSubmitted),

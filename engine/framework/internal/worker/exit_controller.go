@@ -22,7 +22,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 type (
@@ -139,7 +139,7 @@ func (c *ExitController) PollExit() error {
 	case workerNormal:
 		c.workerExitFsm.CAS(workerNormal, workerHalfExit)
 		c.halfExitTime.Store(c.clock.Now())
-		return derror.ErrWorkerHalfExit.FastGenByArgs()
+		return errors.ErrWorkerHalfExit.FastGenByArgs()
 	case workerHalfExit:
 		if c.masterClient.IsMasterSideClosed() {
 			c.workerExitFsm.Store(workerExited)
@@ -154,7 +154,7 @@ func (c *ExitController) PollExit() error {
 			c.logger.Warn("Exiting worker cannot get acknowledgement from master")
 			return err
 		}
-		return derror.ErrWorkerHalfExit.FastGenByArgs()
+		return errors.ErrWorkerHalfExit.FastGenByArgs()
 	case workerExited:
 		return err
 	default:

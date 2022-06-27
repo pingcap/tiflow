@@ -18,16 +18,16 @@ import (
 	"fmt"
 
 	"github.com/gogo/status"
-	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
+	derrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // ResourceManagerClient is a type alias for a client connecting to

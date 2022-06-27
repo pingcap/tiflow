@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/concurrency"
@@ -34,8 +34,8 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/stretchr/testify/require"
 )
 
 type Captures []*model.CaptureInfo

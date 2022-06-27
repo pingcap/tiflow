@@ -103,3 +103,25 @@ func TestKVClientConfigValidateAndAdjust(t *testing.T) {
 	conf.RegionRetryDuration = -TomlDuration(time.Second)
 	require.Error(t, conf.ValidateAndAdjust())
 }
+
+func TestSchedulerConfigValidateAndAdjust(t *testing.T) {
+	t.Parallel()
+	conf := GetDefaultServerConfig().Clone().Debug.Scheduler
+	require.Nil(t, conf.ValidateAndAdjust())
+
+	conf.HeartbeatTick = -1
+	require.Error(t, conf.ValidateAndAdjust())
+	conf.HeartbeatTick = 0
+	require.Error(t, conf.ValidateAndAdjust())
+	conf.HeartbeatTick = 1
+
+	conf.MaxTaskConcurrency = -1
+	require.Error(t, conf.ValidateAndAdjust())
+	conf.MaxTaskConcurrency = 0
+	require.Error(t, conf.ValidateAndAdjust())
+
+	conf.CheckBalanceInterval = -1
+	require.Error(t, conf.ValidateAndAdjust())
+	conf.CheckBalanceInterval = TomlDuration(time.Second)
+	require.Error(t, conf.ValidateAndAdjust())
+}

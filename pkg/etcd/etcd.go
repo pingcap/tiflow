@@ -20,8 +20,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/pd/pkg/tempurl"
 	"go.etcd.io/etcd/api/v3/mvccpb"
@@ -32,6 +30,8 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )

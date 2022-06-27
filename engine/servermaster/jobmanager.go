@@ -34,12 +34,12 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/ctxmu"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	resManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	derrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
@@ -268,7 +268,7 @@ func (jm *JobManagerImplV2) QueryJob(ctx context.Context, req *pb.QueryJobReques
 	if masterMeta, err := mcli.Load(ctx); err != nil {
 		log.L().Warn("failed to load master kv meta from meta store", zap.Any("id", req.JobId), zap.Error(err))
 	} else {
-		if masterMeta != nil {
+		if masterMeta != nil && masterMeta.StatusCode != frameModel.MasterStatusUninit {
 			resp := &pb.QueryJobResponse{
 				Tp:     int32(frame.MustConvertWorkerType2JobType(masterMeta.Tp)),
 				Config: masterMeta.Config,
