@@ -18,6 +18,7 @@ import (
 	"sync"
 )
 
+// Eq describes objects that can be compared for equality.
 type Eq[T any] interface {
 	Equals(other T) bool
 }
@@ -32,6 +33,7 @@ type Slots[E Eq[E]] struct {
 	numSlots int64
 }
 
+// NewSlots creates a new Slots.
 func NewSlots[E Eq[E]](numSlots int64) *Slots[E] {
 	return &Slots[E]{
 		slots:    make(map[int64]*list.List),
@@ -39,6 +41,10 @@ func NewSlots[E Eq[E]](numSlots int64) *Slots[E] {
 	}
 }
 
+// Add adds an elem to the slots and calls onConflict for each case
+// where elem is conflicting with an existing element.
+// Note that onConflict can be called multiple times with the same
+// dependee.
 func (s *Slots[E]) Add(elem E, keys []int64, onConflict func(dependee E)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -64,6 +70,7 @@ func (s *Slots[E]) Add(elem E, keys []int64, onConflict func(dependee E)) {
 	}
 }
 
+// Remove removes an element from the Slots.
 func (s *Slots[E]) Remove(elem E, keys []int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

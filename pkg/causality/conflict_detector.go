@@ -23,6 +23,10 @@ import (
 	"github.com/pingcap/tiflow/pkg/causality/internal"
 )
 
+// ConflictDetector implements a logic that dispatches transaction
+// to different workers in a way that transactions modifying the same
+// keys are never executed concurrently and have their original orders
+// preserved.
 type ConflictDetector[Worker worker[Txn], Txn txnEvent] struct {
 	workers []Worker
 	slots   *internal.Slots[*internal.Node]
@@ -63,7 +67,7 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 	ret.wg.Add(1)
 	go func() {
 		defer ret.wg.Done()
-		ret.runResolvedHandler()
+		ret.runBackgroundTasks()
 	}()
 
 	return ret
@@ -85,6 +89,8 @@ func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) error {
 		})
 	})
 
+	// Sleep for a short period of there are already too many
+	// transactions conflicting with the input.
 	if conflictDegree > 1000 {
 		time.Sleep(time.Duration((conflictDegree-1000)/1000) * time.Millisecond)
 	}
@@ -98,7 +104,7 @@ func (d *ConflictDetector[Worker, Txn]) Close() {
 	d.wg.Wait()
 }
 
-func (d *ConflictDetector[Worker, Txn]) runResolvedHandler() {
+func (d *ConflictDetector[Worker, Txn]) runBackgroundTasks() {
 	for {
 		select {
 		case <-d.closeCh:

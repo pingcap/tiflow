@@ -35,6 +35,8 @@ var (
 	nodePool   = &sync.Pool{}
 )
 
+// Node is a node in the dependency graph used
+// in conflict detection.
 type Node struct {
 	id int64 // immutable
 
@@ -46,6 +48,7 @@ type Node struct {
 	resolved       atomic.Bool
 }
 
+// NewNode creates a new node.
 func NewNode() (ret *Node) {
 	defer func() {
 		ret.id = nextNodeID.Add(1)
@@ -58,10 +61,13 @@ func NewNode() (ret *Node) {
 	return new(Node)
 }
 
+// ID returns the node's ID. For debug only.
 func (n *Node) ID() int64 {
 	return n.id
 }
 
+// Free must be called if a node is no longer used.
+// We are using sync.Pool to lessen the burden of GC.
 func (n *Node) Free() {
 	if n.id == -1 {
 		panic("double free")
@@ -76,6 +82,7 @@ func (n *Node) Free() {
 	nodePool.Put(n)
 }
 
+// DependOn marks n as dependent upon target.
 func (n *Node) DependOn(target *Node) {
 	// Lock target first because we are always
 	// locking an earlier transaction first, so
@@ -94,8 +101,8 @@ func (n *Node) DependOn(target *Node) {
 	// been created.
 	// Creating these maps is done lazily because we want to
 	// optimize for the case where there are little conflicts.
-	target.lazyCreateMaps()
-	n.lazyCreateMaps()
+	target.lazyCreateMap()
+	n.lazyCreateMap()
 
 	if _, ok := target.dependers.Get(n.id); ok {
 		return
@@ -104,6 +111,7 @@ func (n *Node) DependOn(target *Node) {
 	n.conflictCounts[target.assignedTo]++
 }
 
+// AssignTo assigns a node to a worker.
 func (n *Node) AssignTo(workerID int64) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -130,6 +138,8 @@ func (n *Node) AssignTo(workerID int64) {
 	})
 }
 
+// Remove should be called after the transaction corresponding
+// to the node is finished.
 func (n *Node) Remove() {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -152,10 +162,15 @@ func (n *Node) Remove() {
 	n.dependers = btree.Map[nodeID, *Node]{}
 }
 
+// Equals tells whether two pointers to nodes are equal.
 func (n *Node) Equals(other *Node) bool {
 	return n.id == other.id
 }
 
+// OnNoConflict guarantees that fn is called
+// when the node has either no unfinished dependencies
+// or all unfinished dependencies that the node has are
+// assigned to the same worker.
 func (n *Node) OnNoConflict(fn func(id workerID)) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -218,7 +233,7 @@ func (n *Node) tryResolve() (int64, bool) {
 	return 0, false
 }
 
-func (n *Node) lazyCreateMaps() {
+func (n *Node) lazyCreateMap() {
 	if n.conflictCounts == nil {
 		n.conflictCounts = make(map[workerID]int)
 	}
