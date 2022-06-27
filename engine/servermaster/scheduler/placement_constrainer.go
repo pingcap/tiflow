@@ -17,8 +17,8 @@ import (
 	"context"
 
 	"github.com/pingcap/tiflow/engine/model"
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // PlacementConstrainer describes an object that provides
@@ -41,7 +41,7 @@ func (c *MockPlacementConstrainer) GetPlacementConstraint(
 ) (resourcemeta.ExecutorID, bool, error) {
 	executorID, exists := c.ResourceList[id]
 	if !exists {
-		return "", false, derror.ErrResourceDoesNotExist.GenWithStackByArgs(id)
+		return "", false, errors.ErrResourceDoesNotExist.GenWithStackByArgs(id)
 	}
 	if executorID == "" {
 		return "", false, nil

@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -41,11 +42,12 @@ type ExprFilterGroup struct {
 	hasUpdateNewFilter map[string]struct{} // set(tableName)
 	hasDeleteFilter    map[string]struct{} // set(tableName)
 
-	ctx sessionctx.Context
+	tidbCtx sessionctx.Context
+	logCtx  *tcontext.Context
 }
 
 // NewExprFilterGroup creates an ExprFilterGroup.
-func NewExprFilterGroup(ctx sessionctx.Context, exprConfig []*config.ExpressionFilter) *ExprFilterGroup {
+func NewExprFilterGroup(logCtx *tcontext.Context, tidbCtx sessionctx.Context, exprConfig []*config.ExpressionFilter) *ExprFilterGroup {
 	ret := &ExprFilterGroup{
 		configs:            map[string][]*config.ExpressionFilter{},
 		insertExprs:        map[string][]expression.Expression{},
@@ -56,7 +58,8 @@ func NewExprFilterGroup(ctx sessionctx.Context, exprConfig []*config.ExpressionF
 		hasUpdateOldFilter: map[string]struct{}{},
 		hasUpdateNewFilter: map[string]struct{}{},
 		hasDeleteFilter:    map[string]struct{}{},
-		ctx:                ctx,
+		tidbCtx:            tidbCtx,
+		logCtx:             logCtx,
 	}
 	for _, c := range exprConfig {
 		tableName := dbutil.TableName(c.Schema, c.Table)
@@ -92,7 +95,7 @@ func (g *ExprFilterGroup) GetInsertExprs(table *filter.Table, ti *model.TableInf
 
 	for _, c := range g.configs[tableID] {
 		if c.InsertValueExpr != "" {
-			expr, err2 := getSimpleExprOfTable(g.ctx, c.InsertValueExpr, ti)
+			expr, err2 := getSimpleExprOfTable(g.tidbCtx, c.InsertValueExpr, ti, g.logCtx.L())
 			if err2 != nil {
 				// TODO: terror
 				return nil, err2
@@ -118,7 +121,7 @@ func (g *ExprFilterGroup) GetUpdateExprs(table *filter.Table, ti *model.TableInf
 	if _, ok := g.hasUpdateOldFilter[tableID]; ok {
 		for _, c := range g.configs[tableID] {
 			if c.UpdateOldValueExpr != "" {
-				expr, err := getSimpleExprOfTable(g.ctx, c.UpdateOldValueExpr, ti)
+				expr, err := getSimpleExprOfTable(g.tidbCtx, c.UpdateOldValueExpr, ti, g.logCtx.L())
 				if err != nil {
 					// TODO: terror
 					return nil, nil, err
@@ -133,7 +136,7 @@ func (g *ExprFilterGroup) GetUpdateExprs(table *filter.Table, ti *model.TableInf
 	if _, ok := g.hasUpdateNewFilter[tableID]; ok {
 		for _, c := range g.configs[tableID] {
 			if c.UpdateNewValueExpr != "" {
-				expr, err := getSimpleExprOfTable(g.ctx, c.UpdateNewValueExpr, ti)
+				expr, err := getSimpleExprOfTable(g.tidbCtx, c.UpdateNewValueExpr, ti, g.logCtx.L())
 				if err != nil {
 					// TODO: terror
 					return nil, nil, err
@@ -162,7 +165,7 @@ func (g *ExprFilterGroup) GetDeleteExprs(table *filter.Table, ti *model.TableInf
 
 	for _, c := range g.configs[tableID] {
 		if c.DeleteValueExpr != "" {
-			expr, err2 := getSimpleExprOfTable(g.ctx, c.DeleteValueExpr, ti)
+			expr, err2 := getSimpleExprOfTable(g.tidbCtx, c.DeleteValueExpr, ti, g.logCtx.L())
 			if err2 != nil {
 				// TODO: terror
 				return nil, err2
@@ -200,13 +203,13 @@ func SkipDMLByExpression(ctx sessionctx.Context, row []interface{}, expr express
 }
 
 // getSimpleExprOfTable returns an expression of given `expr` string, using the table structure that is tracked before.
-func getSimpleExprOfTable(ctx sessionctx.Context, expr string, ti *model.TableInfo) (expression.Expression, error) {
+func getSimpleExprOfTable(ctx sessionctx.Context, expr string, ti *model.TableInfo, logger log.Logger) (expression.Expression, error) {
 	// TODO: use upstream timezone?
 	e, err := expression.ParseSimpleExprWithTableInfo(ctx, expr, ti)
 	if err != nil {
 		// if expression contains an unknown column, we return an expression that skips nothing
 		if core.ErrUnknownColumn.Equal(err) {
-			log.L().Warn("meet unknown column when generating expression, return a FALSE expression instead",
+			logger.Warn("meet unknown column when generating expression, return a FALSE expression instead",
 				zap.String("expression", expr),
 				zap.Error(err))
 			e = expression.NewZero()

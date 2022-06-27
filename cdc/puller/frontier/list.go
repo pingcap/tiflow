@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"math"
 	"strings"
-
 	_ "unsafe" // required by go:linkname
 
 	"github.com/pingcap/log"

@@ -18,10 +18,9 @@ import (
 	"encoding/json"
 
 	"github.com/pingcap/errors"
-
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	derror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // DataSet is a generic layer for using CRUD patterns with KV-backed storage.

@@ -17,6 +17,7 @@ import (
 	"context"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 )
 
 // TableExecutor is an abstraction for "Processor".
@@ -25,10 +26,22 @@ import (
 // to adapt the current Processor implementation to it.
 // TODO find a way to make the semantics easier to understand.
 type TableExecutor interface {
-	AddTable(ctx context.Context, tableID model.TableID, startTs model.Ts) (done bool, err error)
-	RemoveTable(ctx context.Context, tableID model.TableID) (done bool, err error)
-	IsAddTableFinished(ctx context.Context, tableID model.TableID) (done bool)
-	IsRemoveTableFinished(ctx context.Context, tableID model.TableID) (done bool)
+	// AddTable add a new table with `startTs`
+	// if `isPrepare` is true, the 1st phase of the 2 phase scheduling protocol.
+	// if `isPrepare` is false, the 2nd phase.
+	AddTable(
+		ctx context.Context, tableID model.TableID, startTs model.Ts, isPrepare bool,
+	) (done bool, err error)
+
+	// IsAddTableFinished make sure the requested table is in the proper status
+	IsAddTableFinished(ctx context.Context, tableID model.TableID, isPrepare bool) (done bool)
+
+	// RemoveTable remove the table, return true if the table is already removed
+	RemoveTable(ctx context.Context, tableID model.TableID) (done bool)
+	// IsRemoveTableFinished convince the table is fully stopped.
+	// return false if table is not stopped
+	// return true and corresponding checkpoint otherwise.
+	IsRemoveTableFinished(ctx context.Context, tableID model.TableID) (model.Ts, bool)
 
 	// GetAllCurrentTables should return all tables that are being run,
 	// being added and being removed.
@@ -43,4 +56,7 @@ type TableExecutor interface {
 	// tables that would have been returned if GetAllCurrentTables had been
 	// called immediately before.
 	GetCheckpoint() (checkpointTs, resolvedTs model.Ts)
+
+	// GetTableMeta return the checkpoint and resolved ts for the given table
+	GetTableMeta(tableID model.TableID) pipeline.TableMeta
 }

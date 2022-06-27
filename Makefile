@@ -54,7 +54,7 @@ FAILPOINT_DISABLE := $$(echo $(FAILPOINT_DIR) | xargs $(FAILPOINT) disable >/dev
 
 RELEASE_VERSION =
 ifeq ($(RELEASE_VERSION),)
-	RELEASE_VERSION := v6.0.0-master
+	RELEASE_VERSION := v6.2.0-master
 	release_version_regex := ^v[0-9]\..*$$
 	release_branch_regex := "^release-[0-9]\.[0-9].*$$|^HEAD$$|^.*/*tags/v[0-9]\.[0-9]\..*$$"
 	ifneq ($(shell git rev-parse --abbrev-ref HEAD | egrep $(release_branch_regex)),)
@@ -198,10 +198,6 @@ terror_check:
 	@echo "check terror conflict"
 	@cd dm && _utils/terror_gen/check.sh
 
-check-engine-errdoc: tools/bin/errdoc-gen
-	@echo "generate engine errors.toml"
-	./engine/tools/check-errdoc.sh
-
 check-copyright:
 	@echo "check-copyright"
 	@./scripts/check-copyright.sh
@@ -246,7 +242,7 @@ check-static: tools/bin/golangci-lint
 	tools/bin/golangci-lint run --timeout 10m0s --skip-files kv_gen --skip-dirs dm,tests
 	cd dm && ../tools/bin/golangci-lint run --timeout 10m0s
 
-check: check-copyright fmt check-static tidy terror_check errdoc check-engine-errdoc check-leaktest-added check-merge-conflicts check-ticdc-dashboard check-diff-line-width swagger-spec
+check: check-copyright fmt check-static tidy terror_check errdoc check-leaktest-added check-merge-conflicts check-ticdc-dashboard check-diff-line-width swagger-spec
 	@git --no-pager diff --exit-code || echo "Please add changed files!"
 
 integration_test_coverage: tools/bin/gocovmerge tools/bin/goveralls
@@ -267,7 +263,7 @@ data-flow-diagram: docs/data-flow.dot
 	dot -Tsvg docs/data-flow.dot > docs/data-flow.svg
 
 swagger-spec: tools/bin/swag
-	tools/bin/swag init --parseVendor -generalInfo cdc/api/v1/api.go --output docs/swagger
+	tools/bin/swag init --exclude dm,engine --parseVendor -generalInfo cdc/api/v1/api.go --output docs/swagger
 
 generate_mock: tools/bin/mockgen
 	tools/bin/mockgen -source cdc/owner/owner.go -destination cdc/owner/mock/owner_mock.go
@@ -514,6 +510,9 @@ df-mock: tools/bin/mockgen
 
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))
+
+df-swagger-spec: tools/bin/swag
+	tools/bin/swag init --exclude cdc,dm  --parseVendor -generalInfo engine/servermaster/openapi.go --output engine/docs/swagger
 
 define run_engine_unit_test
 	@echo "running unit test for packages:" $(1)

@@ -15,9 +15,9 @@ package worker
 
 import (
 	"context"
-	"time"
 
 	"github.com/pingcap/tiflow/engine/executor/worker/internal"
+	"github.com/pingcap/tiflow/engine/pkg/clock"
 )
 
 type runtimeInfoKeyType int
@@ -46,7 +46,7 @@ func newRuntimeCtx(ctx context.Context, info internal.RuntimeInfo) *RuntimeConte
 // NewRuntimeCtxWithSubmitTime creates a RuntimeContext with a given submit-time.
 // This function is exposed for the purpose of unit-testing.
 // There is NO NEED to use this function in production code.
-func NewRuntimeCtxWithSubmitTime(ctx context.Context, submitTime time.Time) *RuntimeContext {
+func NewRuntimeCtxWithSubmitTime(ctx context.Context, submitTime clock.MonotonicTime) *RuntimeContext {
 	return newRuntimeCtx(ctx, internal.RuntimeInfo{SubmitTime: submitTime})
 }
 
@@ -62,6 +62,6 @@ func ToRuntimeCtx(ctx context.Context) (rctx *RuntimeContext, ok bool) {
 }
 
 // SubmitTime returns the time at which a task is submitted to the runtime's queue.
-func (c *RuntimeContext) SubmitTime() time.Time {
+func (c *RuntimeContext) SubmitTime() clock.MonotonicTime {
 	return c.info.SubmitTime
 }
