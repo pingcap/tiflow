@@ -52,13 +52,13 @@ func (s *Slots[E]) Add(elem E, keys []int64, onConflict func(dependee E)) {
 	for _, key := range keys {
 		needInsert := true
 		if elemList, ok := s.slots[key%s.numSlots]; ok {
-			for e := elemList.Front(); e != nil; e = e.Next() {
-				e := e.Value.(E)
-				if e.Equals(elem) {
+			if elemList.Len() > 0 {
+				lastElem := elemList.Back().Value.(E)
+				if lastElem.Equals(elem) {
 					needInsert = false
-					continue
+				} else {
+					onConflict(lastElem)
 				}
-				onConflict(e)
 			}
 		} else {
 			s.slots[key%s.numSlots] = list.New()
