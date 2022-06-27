@@ -80,14 +80,10 @@ func (s *Slots[E]) Remove(elem E, keys []int64) {
 		if !ok {
 			panic("elem list is not found")
 		}
-		found := false
 		for e := elemList.Front(); e != nil; e = e.Next() {
 			if elem.Equals(e.Value.(E)) {
-				if found {
-					panic("found")
-				}
-				found = true
 				elemList.Remove(e)
+				break
 			}
 		}
 	}

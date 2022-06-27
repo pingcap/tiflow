@@ -42,10 +42,12 @@ type Node struct {
 
 	mu             sync.Mutex
 	conflictCounts map[workerID]int
-	dependers      btree.Map[nodeID, *Node]
-	assignedTo     workerID
-	onResolved     func(id workerID)
-	resolved       atomic.Bool
+	// TODO maybe google's btree is better?
+	dependers  btree.Map[nodeID, *Node]
+	assignedTo workerID
+	onResolved func(id workerID)
+
+	resolved atomic.Bool
 }
 
 // NewNode creates a new node.
@@ -97,7 +99,7 @@ func (n *Node) DependOn(target *Node) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
-	// Make sure that the dependers and conflictCounts have
+	// Make sure that the conflictCounts have
 	// been created.
 	// Creating these maps is done lazily because we want to
 	// optimize for the case where there are little conflicts.
