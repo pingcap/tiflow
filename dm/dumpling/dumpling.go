@@ -58,9 +58,13 @@ type Dumpling struct {
 
 // NewDumpling creates a new Dumpling.
 func NewDumpling(cfg *config.SubTaskConfig) *Dumpling {
+	logger := log.L()
+	if cfg.FrameworkLogger != nil {
+		logger = log.Logger{Logger: cfg.FrameworkLogger}
+	}
 	m := &Dumpling{
 		cfg:    cfg,
-		logger: log.With(zap.String("task", cfg.Name), zap.String("unit", "dump")),
+		logger: logger.WithFields(zap.String("task", cfg.Name), zap.String("unit", "dump")),
 	}
 	return m
 }
@@ -171,6 +175,8 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 			m.logger.Info("", zap.String("failpoint", "SleepBeforeDumplingClose"))
 		})
 		dumpling.Close()
+	} else {
+		m.logger.Warn("error occurred during NewDumper", zap.Error(err))
 	}
 	cancel()
 

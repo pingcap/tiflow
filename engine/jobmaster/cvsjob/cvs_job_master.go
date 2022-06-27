@@ -35,8 +35,8 @@ import (
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	derrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // Config records all configurations of cvs job

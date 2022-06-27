@@ -28,12 +28,12 @@ import (
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
-	engineErr "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/dig"
 )
@@ -119,7 +119,7 @@ func TestWorker(t *testing.T) {
 
 	// Finished
 	unitHolder.On("Stage").Return(metadata.StageFinished, nil).Twice()
-	require.True(t, engineErr.ErrWorkerFinish.Equal(dmWorker.Tick(context.Background())))
+	require.True(t, cerrors.ErrWorkerFinish.Equal(dmWorker.Tick(context.Background())))
 
 	unitHolder.AssertExpectations(t)
 }

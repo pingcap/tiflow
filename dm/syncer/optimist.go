@@ -150,7 +150,7 @@ func (s *Syncer) handleQueryEventOptimistic(qec *queryEventContext) error {
 		op.DDLs = qec.needHandleDDLs
 		skipOp = true
 		if err = s.checkpoint.FlushPointsWithTableInfos(qec.tctx, []*filter.Table{upTable}, []*model.TableInfo{tiAfter}); err != nil {
-			log.L().Error("failed to flush create table info", zap.Stringer("table", upTable), zap.Strings("ddls", qec.needHandleDDLs), log.ShortError(err))
+			s.tctx.L().Error("failed to flush create table info", zap.Stringer("table", upTable), zap.Strings("ddls", qec.needHandleDDLs), log.ShortError(err))
 		}
 		if _, err = s.optimist.AddTable(info); err != nil {
 			return err

@@ -25,8 +25,8 @@ import (
 	"github.com/pingcap/tiflow/engine/executor/worker/internal"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // Re-export types for public use
@@ -73,14 +73,14 @@ func NewTaskRunner(inQueueSize int, initConcurrency int) *TaskRunner {
 // AddTask enqueues a naked task, and AddTask will wrap the task with internal.WrapRunnable.
 // Deprecated. TODO Will be removed once two-phase task dispatching is enabled.
 func (r *TaskRunner) AddTask(task Runnable) error {
-	wrappedTask := internal.WrapRunnable(task, r.clock.Now())
+	wrappedTask := internal.WrapRunnable(task, r.clock.Mono())
 	select {
 	case r.inQueue <- wrappedTask:
 		return nil
 	default:
 	}
 
-	return derror.ErrRuntimeIncomingQueueFull.GenWithStackByArgs()
+	return cerrors.ErrRuntimeIncomingQueueFull.GenWithStackByArgs()
 }
 
 // addWrappedTask enqueues a task already wrapped by internal.WrapRunnable.
@@ -92,7 +92,7 @@ func (r *TaskRunner) addWrappedTask(task *internal.RunnableContainer) error {
 	default:
 	}
 
-	return derror.ErrRuntimeIncomingQueueFull.GenWithStackByArgs()
+	return cerrors.ErrRuntimeIncomingQueueFull.GenWithStackByArgs()
 }
 
 // Run runs forever until context is canceled or task queue is closed.
@@ -106,7 +106,7 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 			return errors.Trace(ctx.Err())
 		case task := <-r.inQueue:
 			if task == nil {
-				return derror.ErrRuntimeIsClosed.GenWithStackByArgs()
+				return cerrors.ErrRuntimeIsClosed.GenWithStackByArgs()
 			}
 			if err := r.onNewTask(task); err != nil {
 				log.L().Warn("Failed to launch task",
@@ -180,13 +180,13 @@ func (r *TaskRunner) onNewTask(task *internal.RunnableContainer) (ret error) {
 	defer r.cancelMu.RUnlock()
 
 	if r.canceled {
-		return derror.ErrRuntimeClosed.GenWithStackByArgs()
+		return cerrors.ErrRuntimeClosed.GenWithStackByArgs()
 	}
 
 	_, exists := r.tasks.LoadOrStore(task.ID(), t)
 	if exists {
 		log.L().Warn("Duplicate Task ID", zap.String("id", task.ID()))
-		return derror.ErrRuntimeDuplicateTaskID.GenWithStackByArgs(task.ID())
+		return cerrors.ErrRuntimeDuplicateTaskID.GenWithStackByArgs(task.ID())
 	}
 
 	r.launchTask(rctx, t)

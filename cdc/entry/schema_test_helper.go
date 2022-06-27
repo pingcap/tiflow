@@ -83,6 +83,10 @@ func (s *SchemaTestHelper) Storage() kv.Storage {
 	return s.storage
 }
 
+func (s *SchemaTestHelper) Tk() *testkit.TestKit {
+	return s.tk
+}
+
 // GetCurrentMeta return the current meta snapshot
 func (s *SchemaTestHelper) GetCurrentMeta() *timeta.Meta {
 	ver, err := s.storage.CurrentVersion(oracle.GlobalTxnScope)

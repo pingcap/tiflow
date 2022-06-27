@@ -271,7 +271,7 @@ func (a *Agent) processOperations(ctx context.Context) error {
 			a.logger.Info("Agent start processing operation", zap.Any("op", op))
 			if !op.IsDelete {
 				// add table
-				done, err := a.executor.AddTable(ctx, op.TableID, op.StartTs)
+				done, err := a.executor.AddTable(ctx, op.TableID, op.StartTs, false)
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -280,10 +280,7 @@ func (a *Agent) processOperations(ctx context.Context) error {
 				}
 			} else {
 				// delete table
-				done, err := a.executor.RemoveTable(ctx, op.TableID)
-				if err != nil {
-					return errors.Trace(err)
-				}
+				done := a.executor.RemoveTable(ctx, op.TableID)
 				if !done {
 					break
 				}
@@ -293,9 +290,9 @@ func (a *Agent) processOperations(ctx context.Context) error {
 		case operationProcessed:
 			var done bool
 			if !op.IsDelete {
-				done = a.executor.IsAddTableFinished(ctx, op.TableID)
+				done = a.executor.IsAddTableFinished(ctx, op.TableID, false)
 			} else {
-				done = a.executor.IsRemoveTableFinished(ctx, op.TableID)
+				_, done = a.executor.IsRemoveTableFinished(ctx, op.TableID)
 			}
 			if !done {
 				break

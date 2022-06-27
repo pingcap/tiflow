@@ -31,11 +31,11 @@ import (
 	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/config"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
 	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 const (
@@ -128,7 +128,7 @@ func (c metastoreCreatorImpl) CreateEtcdCliForServiceDiscovery(
 		},
 	})
 	if err != nil {
-		return nil, derrors.ErrExecutorEtcdConnFail.Wrap(err)
+		return nil, cerrors.ErrExecutorEtcdConnFail.Wrap(err)
 	}
 	return etcdCli, nil
 }

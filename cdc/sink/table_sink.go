@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -29,7 +28,6 @@ type tableSink struct {
 	tableID     model.TableID
 	backendSink Sink
 	buffer      []*model.RowChangedEvent
-	redoManager redo.LogManager
 
 	metricsTableSinkTotalRows prometheus.Counter
 }
@@ -39,12 +37,11 @@ var _ Sink = (*tableSink)(nil)
 // NewTableSink creates a new table sink
 func NewTableSink(
 	s Sink, tableID model.TableID,
-	totalRowsCounter prometheus.Counter, redoManager redo.LogManager,
+	totalRowsCounter prometheus.Counter,
 ) (*tableSink, error) {
 	sink := &tableSink{
 		tableID:                   tableID,
 		backendSink:               s,
-		redoManager:               redoManager,
 		metricsTableSinkTotalRows: totalRowsCounter,
 	}
 
@@ -57,9 +54,6 @@ func NewTableSink(
 func (t *tableSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	t.buffer = append(t.buffer, rows...)
 	t.metricsTableSinkTotalRows.Add(float64(len(rows)))
-	if t.redoManager.Enabled() {
-		return t.redoManager.EmitRowChangedEvents(ctx, t.tableID, rows...)
-	}
 	return nil
 }
 
@@ -83,7 +77,7 @@ func (t *tableSink) FlushRowChangedEvents(
 		return t.buffer[i].CommitTs > resolvedTs
 	})
 	if i == 0 {
-		return t.flushResolvedTs(ctx, resolved)
+		return t.backendSink.FlushRowChangedEvents(ctx, t.tableID, resolved)
 	}
 	resolvedRows := t.buffer[:i]
 	t.buffer = append(make([]*model.RowChangedEvent, 0, len(t.buffer[i:])), t.buffer[i:]...)
@@ -92,31 +86,7 @@ func (t *tableSink) FlushRowChangedEvents(
 	if err != nil {
 		return model.NewResolvedTs(0), errors.Trace(err)
 	}
-	return t.flushResolvedTs(ctx, resolved)
-}
-
-func (t *tableSink) flushResolvedTs(
-	ctx context.Context, resolved model.ResolvedTs,
-) (model.ResolvedTs, error) {
-	if t.redoManager.Enabled() {
-		if resolved.IsBatchMode() {
-			return model.NewResolvedTs(0), nil
-		}
-		err := t.redoManager.FlushLog(ctx, t.tableID, resolved.Ts)
-		if err != nil {
-			return model.NewResolvedTs(0), errors.Trace(err)
-		}
-		redoTs := t.redoManager.GetMinResolvedTs()
-		if redoTs < resolved.Ts {
-			resolved.Ts = redoTs
-		}
-	}
-
-	checkpointTs, err := t.backendSink.FlushRowChangedEvents(ctx, t.tableID, resolved)
-	if err != nil {
-		return model.NewResolvedTs(0), errors.Trace(err)
-	}
-	return checkpointTs, nil
+	return t.backendSink.FlushRowChangedEvents(ctx, t.tableID, resolved)
 }
 
 func (t *tableSink) EmitCheckpointTs(_ context.Context, _ uint64, _ []model.TableName) error {

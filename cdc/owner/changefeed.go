@@ -29,9 +29,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	pfilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
@@ -44,17 +44,23 @@ import (
 // This function is factored out to facilitate unit testing.
 func newSchedulerV2FromCtx(
 	ctx cdcContext.Context, startTs uint64,
-) (scheduler.Scheduler, error) {
+) (ret scheduler.Scheduler, err error) {
 	changeFeedID := ctx.ChangefeedVars().ID
 	messageServer := ctx.GlobalVars().MessageServer
 	messageRouter := ctx.GlobalVars().MessageRouter
 	ownerRev := ctx.GlobalVars().OwnerRevision
-	ret, err := scheduler.NewScheduler(
-		ctx, changeFeedID, startTs, messageServer, messageRouter, ownerRev)
-	if err != nil {
-		return nil, errors.Trace(err)
+	captureID := ctx.GlobalVars().CaptureInfo.ID
+	cfg := config.GetGlobalServerConfig().Debug
+	if cfg.EnableTwoPhaseScheduler {
+		ret, err = scheduler.NewTpScheduler(
+			ctx, captureID, changeFeedID, startTs,
+			messageServer, messageRouter, ownerRev, cfg.Scheduler)
+	} else {
+		ret, err = scheduler.NewScheduler(
+			ctx, captureID, changeFeedID, startTs,
+			messageServer, messageRouter, ownerRev, cfg.Scheduler)
 	}
-	return ret, nil
+	return ret, errors.Trace(err)
 }
 
 func newScheduler(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error) {
@@ -74,7 +80,6 @@ type changefeed struct {
 	schema      *schemaWrap4Owner
 	sink        DDLSink
 	ddlPuller   DDLPuller
-	filter      *pfilter.Filter
 	initialized bool
 	// isRemoved is true if the changefeed is removed
 	isRemoved bool
@@ -353,10 +358,6 @@ LOOP:
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.filter, err = pfilter.NewFilter(c.state.Info.Config)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
 
@@ -585,6 +586,7 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 				zap.Reflect("job", job), zap.Error(err))
 			return false, errors.Trace(err)
 		}
+		c.ddlEventCache = ddlEvents
 		// We can't use the latest schema directly,
 		// we need to make sure we receive the ddl before we start or stop broadcasting checkpoint ts.
 		// So let's remember the name of the table before processing and cache the DDL.
@@ -596,10 +598,6 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		err = c.schema.HandleDDL(job)
 		if err != nil {
 			return false, errors.Trace(err)
-		}
-		c.ddlEventCache, err = c.filterDDLEvent(ddlEvents)
-		if err != nil {
-			return false, err
 		}
 		if c.redoManager.Enabled() {
 			for _, ddlEvent := range c.ddlEventCache {
@@ -649,31 +647,6 @@ func (c *changefeed) asyncExecDDLEvent(ctx cdcContext.Context,
 	}
 
 	return done, nil
-}
-
-func (c *changefeed) filterDDLEvent(ddlEvents []*model.DDLEvent) ([]*model.DDLEvent, error) {
-	res := make([]*model.DDLEvent, 0)
-	// filter ddl event here
-	for _, ddlEvent := range ddlEvents {
-		ignore, err := c.filter.ShouldIgnoreDDLEvent(ddlEvent)
-		// fizz: complete this err
-		if err != nil {
-			return nil, err
-		}
-		if ignore {
-			log.Info(
-				"DDL event ignored",
-				zap.String("query", ddlEvent.Query),
-				zap.Uint64("startTs", ddlEvent.StartTs),
-				zap.Uint64("commitTs", ddlEvent.CommitTs),
-				zap.String("namespace", c.id.Namespace),
-				zap.String("changefeed", c.id.ID),
-			)
-			continue
-		}
-		res = append(res, ddlEvent)
-	}
-	return res, nil
 }
 
 func (c *changefeed) updateMetrics(currentTs int64, checkpointTs, resolvedTs model.Ts) {

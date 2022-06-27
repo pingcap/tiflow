@@ -96,23 +96,23 @@ func (f *Filter) ShouldIgnoreDMLEvent(
 // 0. By startTs.
 // 1. By schema or table name.
 // 2. By type or query.
-func (f *Filter) ShouldIgnoreDDLEvent(ddl *model.DDLEvent) (bool, error) {
-	if f.shouldIgnoreStartTs(ddl.StartTs) {
+func (f *Filter) ShouldIgnoreDDLEvent(job *timodel.Job) (bool, error) {
+	if f.shouldIgnoreStartTs(job.StartTS) {
 		return true, nil
 	}
 
 	var shouldIgnoreTableOrSchema bool
-	switch ddl.Type {
+	switch job.Type {
 	case timodel.ActionCreateSchema, timodel.ActionDropSchema,
 		timodel.ActionModifySchemaCharsetAndCollate:
-		shouldIgnoreTableOrSchema = !f.tableFilter.MatchSchema(ddl.TableInfo.Schema)
+		shouldIgnoreTableOrSchema = !f.tableFilter.MatchSchema(job.SchemaName)
 	default:
-		shouldIgnoreTableOrSchema = f.ShouldIgnoreTable(ddl.TableInfo.Schema, ddl.TableInfo.Table)
+		shouldIgnoreTableOrSchema = f.ShouldIgnoreTable(job.SchemaName, job.TableName)
 	}
 	if shouldIgnoreTableOrSchema {
 		return true, nil
 	}
-	return f.sqlEventFilter.skipDDLEvent(ddl)
+	return f.sqlEventFilter.skipDDLJob(job)
 }
 
 // ShouldDiscardDDL returns true if this DDL should be discarded.

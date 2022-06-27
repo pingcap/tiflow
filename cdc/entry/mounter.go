@@ -98,17 +98,23 @@ func NewMounter(schemaStorage SchemaStorage,
 
 // DecodeEvent decode kv events using ddl puller's schemaStorage
 // this method could block indefinitely if the DDL puller is lagging.
+// Note: If pEvent.Row is nil after decode, it means this event should be ignored.
 func (m *mounterImpl) DecodeEvent(ctx context.Context, pEvent *model.PolymorphicEvent) error {
 	m.metricTotalRows.Inc()
 	if pEvent.IsResolved() {
 		return nil
 	}
 	start := time.Now()
-	rowEvent, err := m.unmarshalAndMountRowChanged(ctx, pEvent.RawKV)
+	row, err := m.unmarshalAndMountRowChanged(ctx, pEvent.RawKV)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	pEvent.Row = rowEvent
+	if m.filter.ShouldIgnoreDMLEvent(
+		row.StartTs, row.Table.Schema, row.Table.Table) {
+		pEvent.Row = nil
+	} else {
+		pEvent.Row = row
+	}
 	pEvent.RawKV.Value = nil
 	pEvent.RawKV.OldValue = nil
 	duration := time.Since(start)

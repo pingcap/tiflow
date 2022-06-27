@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
-	pfilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
@@ -163,10 +162,15 @@ func (m *mockScheduler) MoveTable(tableID model.TableID, target model.CaptureID)
 // Rebalance is used to trigger manual workload rebalances.
 func (m *mockScheduler) Rebalance() {}
 
+// DrainCapture implement scheduler interface
+func (m *mockScheduler) DrainCapture(target model.CaptureID) int {
+	return 0
+}
+
 // Close closes the scheduler and releases resources.
 func (m *mockScheduler) Close(ctx context.Context) {}
 
-func createChangefeed4Test(ctx cdcContext.Context, t *testing.T, config *config.ReplicaConfig) (
+func createChangefeed4Test(ctx cdcContext.Context, t *testing.T) (
 	*changefeed, *orchestrator.ChangefeedReactorState,
 	map[model.CaptureID]*model.CaptureInfo, *orchestrator.ReactorStateTester,
 ) {
@@ -190,9 +194,6 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T, config *config.
 		return &mockScheduler{}, nil
 	}
 	cf.upstream = up
-	f, err := pfilter.NewFilter(config)
-	require.Nil(t, err)
-	cf.filter = f
 	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
@@ -208,7 +209,7 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T, config *config.
 
 func TestPreCheck(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	cf, state, captures, tester := createChangefeed4Test(ctx, t, config.GetDefaultReplicaConfig())
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
 	require.NotNil(t, state.Status)
@@ -228,7 +229,7 @@ func TestPreCheck(t *testing.T) {
 
 func TestInitialize(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	cf, state, captures, tester := createChangefeed4Test(ctx, t, config.GetDefaultReplicaConfig())
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	defer cf.Close(ctx)
 	// pre check
 	cf.Tick(ctx, state, captures)
@@ -242,7 +243,7 @@ func TestInitialize(t *testing.T) {
 
 func TestChangefeedHandleError(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	cf, state, captures, tester := createChangefeed4Test(ctx, t, config.GetDefaultReplicaConfig())
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	defer cf.Close(ctx)
 	// pre check
 	cf.Tick(ctx, state, captures)
@@ -284,7 +285,7 @@ func TestExecDDL(t *testing.T) {
 		},
 	})
 
-	cf, state, captures, tester := createChangefeed4Test(ctx, t, config.GetDefaultReplicaConfig())
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	cf.upstream.KVStorage = helper.Storage()
 	defer cf.Close(ctx)
 	tickThreeTime := func() {
@@ -374,7 +375,7 @@ func TestEmitCheckpointTs(t *testing.T) {
 		},
 	})
 
-	cf, state, captures, tester := createChangefeed4Test(ctx, t, config.GetDefaultReplicaConfig())
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	cf.upstream.KVStorage = helper.Storage()
 
 	defer cf.Close(ctx)
@@ -425,7 +426,7 @@ func TestSyncPoint(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx.ChangefeedVars().Info.SyncPointEnabled = true
 	ctx.ChangefeedVars().Info.SyncPointInterval = 1 * time.Second
-	cf, state, captures, tester := createChangefeed4Test(ctx, t, config.GetDefaultReplicaConfig())
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	defer cf.Close(ctx)
 
 	// pre check
@@ -455,7 +456,7 @@ func TestSyncPoint(t *testing.T) {
 func TestFinished(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx.ChangefeedVars().Info.TargetTs = ctx.ChangefeedVars().Info.StartTs + 1000
-	cf, state, captures, tester := createChangefeed4Test(ctx, t, config.GetDefaultReplicaConfig())
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	defer cf.Close(ctx)
 
 	// pre check
@@ -518,7 +519,7 @@ func testChangefeedReleaseResource(
 	redoLogDir string,
 	expectedInitialized bool,
 ) {
-	cf, state, captures, tester := createChangefeed4Test(ctx, t, config.GetDefaultReplicaConfig())
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 
 	// pre check
 	cf.Tick(ctx, state, captures)
@@ -784,7 +785,7 @@ func TestExecRenameTablesDDL(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 	ctx := cdcContext.NewBackendContext4Test(true)
-	cf, state, captures, tester := createChangefeed4Test(ctx, t, config.GetDefaultReplicaConfig())
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	defer cf.Close(ctx)
 	// pre check
 	cf.Tick(ctx, state, captures)
@@ -873,7 +874,7 @@ func TestExecDropTablesDDL(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 	ctx := cdcContext.NewBackendContext4Test(true)
-	cf, state, captures, tester := createChangefeed4Test(ctx, t, config.GetDefaultReplicaConfig())
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	defer cf.Close(ctx)
 
 	// pre check
@@ -927,7 +928,7 @@ func TestExecDropViewsDDL(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 	ctx := cdcContext.NewBackendContext4Test(true)
-	cf, state, captures, tester := createChangefeed4Test(ctx, t, config.GetDefaultReplicaConfig())
+	cf, state, captures, tester := createChangefeed4Test(ctx, t)
 	defer cf.Close(ctx)
 
 	// pre check
@@ -982,49 +983,4 @@ func TestExecDropViewsDDL(t *testing.T) {
 
 	execDropStmt(jobs[0], "DROP VIEW `test1`.`view2`")
 	execDropStmt(jobs[1], "DROP VIEW `test1`.`view1`")
-}
-
-func TestFilterDDLEvent(t *testing.T) {
-	ddlEvents := []*model.DDLEvent{
-		{
-			StartTs:  1000,
-			CommitTs: 1010,
-			TableInfo: &model.SimpleTableInfo{
-				Schema: "test",
-				Table:  "t1",
-			},
-			Type:  timodel.ActionAddColumn,
-			Query: "ALTER TABLE test.t1 ADD COLUMN a int",
-		},
-		{
-			StartTs:  1020,
-			CommitTs: 1030,
-			TableInfo: &model.SimpleTableInfo{
-				Schema: "test",
-				Table:  "t2",
-			},
-			Type:  timodel.ActionAddColumn,
-			Query: "ALTER TABLE test.t2 ADD COLUMN a int",
-		},
-		{
-			StartTs:  1020,
-			CommitTs: 1030,
-			TableInfo: &model.SimpleTableInfo{
-				Schema: "test",
-				Table:  "t3",
-			},
-			Type:  timodel.ActionAddColumn,
-			Query: "ALTER TABLE test.t3 ADD COLUMN a int",
-		},
-	}
-	rc := config.GetDefaultReplicaConfig()
-	rc.Filter = &config.FilterConfig{
-		Rules: []string{"test.t1"},
-	}
-	ctx := cdcContext.NewBackendContext4Test(true)
-	cf, _, _, _ := createChangefeed4Test(ctx, t, rc)
-	defer cf.Close(ctx)
-	res, err := cf.filterDDLEvent(ddlEvents)
-	require.Nil(t, err)
-	require.Equal(t, ddlEvents[:1], res)
 }

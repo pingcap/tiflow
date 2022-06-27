@@ -19,14 +19,14 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
+	derrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/fsutil"
 )
 

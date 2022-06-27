@@ -271,8 +271,7 @@ type RowChangedEvent struct {
 
 	// SplitTxn marks this RowChangedEvent as the first line of a new txn.
 	SplitTxn bool `json:"-" msg:"-"`
-	// Filtered marks this RowChangedEvent was filtered by filter in mounter.
-	Filtered bool `json:"-" msg:"-"`
+
 	// This filed is only used to help to determine whether
 	// this row changed event should be filtered out.
 	// Please set them to nil after we use it.

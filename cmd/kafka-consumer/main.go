@@ -93,7 +93,10 @@ func init() {
 	err := logutil.InitLogger(&logutil.Config{
 		Level: logLevel,
 		File:  logPath,
-	})
+	},
+		logutil.WithInitGRPCLogger(),
+		logutil.WithInitSaramaLogger(),
+	)
 	if err != nil {
 		log.Panic("init logger failed", zap.Error(err))
 	}
