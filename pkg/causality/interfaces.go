@@ -22,6 +22,12 @@ type txnEvent interface {
 	Finish(errIn error)
 }
 
+// OutTxnEvent wraps a transaction and a callback.
+// The worker should call Callback when Txn is finished
+// executing.
+// This is temporary solution before the actual data structure
+// of and transaction is decided on.
+// TODO remove this.
 type OutTxnEvent[T txnEvent] struct {
 	Txn      T
 	Callback func(errIn error)
