@@ -743,7 +743,8 @@ func (h *OpenAPI) DrainCapture(c *gin.Context) {
 		return
 	}
 
-	ownerInfo, err := h.capture.GetOwnerCaptureInfo(ctx)
+	// only owner handle api request, so this must be the owner.
+	ownerInfo, err := h.capture.Info()
 	if err != nil {
 		_ = c.Error(err)
 		return

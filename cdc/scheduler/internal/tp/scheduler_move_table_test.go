@@ -34,11 +34,13 @@ func TestSchedulerMoveTable(t *testing.T) {
 	scheduler := newMoveTableScheduler()
 	require.Equal(t, "move-table-scheduler", scheduler.Name())
 
-	tasks := scheduler.Schedule(checkpointTs, currentTables, map[model.CaptureID]*model.CaptureInfo{}, replications, false)
+	tasks := scheduler.Schedule(checkpointTs, currentTables,
+		map[model.CaptureID]*model.CaptureInfo{}, replications, false)
 	require.Len(t, tasks, 0)
 
 	scheduler.addTask(model.TableID(0), "a")
-	tasks = scheduler.Schedule(checkpointTs, currentTables, map[model.CaptureID]*model.CaptureInfo{}, replications, false)
+	tasks = scheduler.Schedule(checkpointTs, currentTables,
+		map[model.CaptureID]*model.CaptureInfo{}, replications, false)
 	require.Len(t, tasks, 0)
 
 	// move a not exist table
@@ -53,7 +55,8 @@ func TestSchedulerMoveTable(t *testing.T) {
 
 	// move table not replicating
 	scheduler.addTask(model.TableID(1), "b")
-	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, map[model.TableID]*ReplicationSet{}, false)
+	tasks = scheduler.Schedule(checkpointTs, currentTables,
+		captures, map[model.TableID]*ReplicationSet{}, false)
 	require.Len(t, tasks, 0)
 
 	scheduler.addTask(model.TableID(1), "b")

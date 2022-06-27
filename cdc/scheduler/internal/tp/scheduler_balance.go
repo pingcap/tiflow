@@ -46,7 +46,8 @@ func (b *balanceScheduler) Schedule(
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
 	replications map[model.TableID]*ReplicationSet,
-	hasCaptureStopping bool) []*scheduleTask {
+	hasCaptureStopping bool,
+) []*scheduleTask {
 	now := time.Now()
 	if now.Sub(b.lastRebalanceTime) < b.checkBalanceInterval {
 		return nil
