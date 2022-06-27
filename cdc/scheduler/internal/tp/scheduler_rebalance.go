@@ -46,7 +46,8 @@ func (r *rebalanceScheduler) Schedule(
 	_ model.Ts,
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*CaptureStatus,
-	replications map[model.TableID]*ReplicationSet) []*scheduleTask {
+	replications map[model.TableID]*ReplicationSet,
+) []*scheduleTask {
 	// rebalance is not triggered, or there is still some pending task,
 	// do not generate new tasks.
 	if atomic.LoadInt32(&r.rebalance) == 0 {

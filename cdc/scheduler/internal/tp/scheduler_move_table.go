@@ -63,7 +63,8 @@ func (m *moveTableScheduler) Schedule(
 	_ model.Ts,
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*CaptureStatus,
-	replications map[model.TableID]*ReplicationSet) []*scheduleTask {
+	replications map[model.TableID]*ReplicationSet,
+) []*scheduleTask {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

@@ -70,7 +70,8 @@ func (d *drainCaptureScheduler) Schedule(
 	_ model.Ts,
 	_ []model.TableID,
 	captures map[model.CaptureID]*CaptureStatus,
-	replications map[model.TableID]*ReplicationSet) []*scheduleTask {
+	replications map[model.TableID]*ReplicationSet,
+) []*scheduleTask {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
