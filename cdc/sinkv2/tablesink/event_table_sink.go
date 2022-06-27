@@ -60,23 +60,23 @@ func (e *eventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) {
 	}
 	resolvedEvents := e.eventBuffer[:i]
 
-	resolvedTxnEvents := make([]*tableevent.CallbackableEvent[E], 0, len(resolvedEvents))
+	resolvedCallbackableEvents := make([]*tableevent.CallbackableEvent[E], 0, len(resolvedEvents))
 	for _, ev := range resolvedEvents {
-		txnEvent := &tableevent.CallbackableEvent[E]{
+		ce := &tableevent.CallbackableEvent[E]{
 			Event: ev,
 			Callback: func() {
 				e.progressTracker.remove(e.eventID)
 			},
 			TableStatus: e.state,
 		}
-		resolvedTxnEvents = append(resolvedTxnEvents, txnEvent)
+		resolvedCallbackableEvents = append(resolvedCallbackableEvents, ce)
 		e.progressTracker.addEvent(e.eventID)
 		e.eventID++
 	}
 	// Do not forget to add the resolvedTs to progressTracker.
 	e.progressTracker.addResolvedTs(e.eventID, resolvedTs)
 	e.eventID++
-	e.backendSink.WriteEvents(resolvedTxnEvents...)
+	e.backendSink.WriteEvents(resolvedCallbackableEvents...)
 }
 
 func (e *eventTableSink[E]) GetCheckpointTs() model.ResolvedTs {
