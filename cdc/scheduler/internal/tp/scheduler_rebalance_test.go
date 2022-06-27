@@ -43,7 +43,8 @@ func TestSchedulerRebalance(t *testing.T) {
 
 	atomic.StoreInt32(&scheduler.rebalance, 1)
 	// no captures
-	tasks = scheduler.Schedule(checkpointTs, currentTables, map[model.CaptureID]*model.CaptureInfo{}, replications, false)
+	tasks = scheduler.Schedule(checkpointTs, currentTables,
+		map[model.CaptureID]*model.CaptureInfo{}, replications, false)
 	require.Len(t, tasks, 0)
 
 	// table not in the replication set,
