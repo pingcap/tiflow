@@ -250,7 +250,8 @@ func (c *coordinator) poll(
 
 	// Generate schedule tasks based on the current status.
 	replications := c.replicationM.ReplicationSets()
-	allTasks := c.schedulerM.Schedule(checkpointTs, currentTables, aliveCaptures, replications)
+	allTasks := c.schedulerM.Schedule(checkpointTs, currentTables,
+		aliveCaptures, replications, c.captureM.HasCaptureStopping())
 
 	// Handle generated schedule tasks.
 	msgs, err = c.replicationM.HandleTasks(allTasks)
