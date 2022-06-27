@@ -25,13 +25,13 @@ function incremental_data() {
 			run_sql "INSERT INTO many_tables_db.t$i VALUES ($j,${j}000$j),($j,${j}001$j);" $MYSQL_PORT1 $MYSQL_PASSWORD1
 		done
 	done
-	run_sql "ALTER TABLE many_tables_db.t1 ADD x datetime DEFAULT current_timestamp;" $MYSQL_PORT1 $MYSQL_PASSWORD1
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"pause-task test" \
 		"\"result\": true" 2
 
-  sleep 1
+	run_sql "ALTER TABLE many_tables_db.t1 ADD x datetime DEFAULT current_timestamp;" $MYSQL_PORT1 $MYSQL_PASSWORD1
+	sleep 1
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"resume-task test" \
