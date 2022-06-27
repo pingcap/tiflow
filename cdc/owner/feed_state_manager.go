@@ -14,7 +14,6 @@
 package owner
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -213,7 +212,6 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 				zap.String("changefeedState", string(m.state.Info.State)), zap.Any("job", job))
 			return
 		}
-		fmt.Println("setting shouldBeRuning to false")
 
 		m.shouldBeRunning = false
 		m.shouldBeRemoved = true
