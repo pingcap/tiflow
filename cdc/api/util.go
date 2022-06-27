@@ -233,7 +233,7 @@ func ForwardToOwner(c *gin.Context, p capture.InfoForAPI) {
 
 // HandleOwnerDrainCapture schedule drain the target capture
 func HandleOwnerDrainCapture(
-	ctx context.Context, capture *capture.Capture, captureID string,
+	ctx context.Context, capture capture.InfoForAPI, captureID string,
 ) (*model.DrainCaptureResp, error) {
 	// Use buffered channel to prevent blocking owner.
 	done := make(chan error, 1)
