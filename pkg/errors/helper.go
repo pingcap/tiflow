@@ -74,11 +74,14 @@ func RFCCode(err error) (errors.RFCErrorCode, bool) {
 	if terr, ok := err.(rfcCoder); ok {
 		return terr.RFCCode(), true
 	}
-	err = errors.Cause(err)
-	if terr, ok := err.(rfcCoder); ok {
+	cause := errors.Unwrap(err)
+	if cause == nil {
+		return "", false
+	}
+	if terr, ok := cause.(rfcCoder); ok {
 		return terr.RFCCode(), true
 	}
-	return "", false
+	return RFCCode(cause)
 }
 
 // IsRetryableError check the error is safe or worth to retry
