@@ -40,9 +40,3 @@ type RowChangeCallbackableEvent = CallbackableEvent[*model.RowChangedEvent]
 
 // TxnCallbackableEvent is the txn event which can be callbacked.
 type TxnCallbackableEvent = CallbackableEvent[*model.SingleTableTxn]
-
-// Appender is the interface for appending events to buffer.
-type Appender[E TableEvent] interface {
-	// Append appends the event to buffer.
-	Append(buffer []E, rows ...*model.RowChangedEvent) []E
-}

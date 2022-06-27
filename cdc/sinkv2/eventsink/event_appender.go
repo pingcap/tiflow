@@ -9,11 +9,17 @@
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // See the License for the specific language governing permissions and
-// limitations under the License.
+// limitations under the License
 
 package eventsink
 
 import "github.com/pingcap/tiflow/cdc/model"
+
+// Appender is the interface for appending events to buffer.
+type Appender[E TableEvent] interface {
+	// Append appends the event to buffer.
+	Append(buffer []E, rows ...*model.RowChangedEvent) []E
+}
 
 // Assert Appender[E TableEvent] implementation
 var _ Appender[*model.RowChangedEvent] = (*RowChangeEventAppender)(nil)
@@ -27,4 +33,19 @@ func (r *RowChangeEventAppender) Append(
 	rows ...*model.RowChangedEvent,
 ) []*model.RowChangedEvent {
 	return append(buffer, rows...)
+}
+
+// Assert Appender[E TableEvent] implementation
+var _ Appender[*model.SingleTableTxn] = (*TxnEventAppender)(nil)
+
+// TxnEventAppender is the appender for SingleTableTxn.
+type TxnEventAppender struct{}
+
+// Append appends the given rows to the given txn buffer.
+func (t *TxnEventAppender) Append(
+	buffer []*model.SingleTableTxn,
+	rows ...*model.RowChangedEvent,
+) []*model.SingleTableTxn {
+	// TODO implement me
+	panic("implement me")
 }
