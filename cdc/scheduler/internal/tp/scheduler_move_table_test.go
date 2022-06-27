@@ -34,36 +34,36 @@ func TestSchedulerMoveTable(t *testing.T) {
 	scheduler := newMoveTableScheduler()
 	require.Equal(t, "move-table-scheduler", scheduler.Name())
 
-	tasks := scheduler.Schedule(checkpointTs, currentTables, map[model.CaptureID]*model.CaptureInfo{}, replications)
+	tasks := scheduler.Schedule(checkpointTs, currentTables, map[model.CaptureID]*model.CaptureInfo{}, replications, false)
 	require.Len(t, tasks, 0)
 
 	scheduler.addTask(model.TableID(0), "a")
-	tasks = scheduler.Schedule(checkpointTs, currentTables, map[model.CaptureID]*model.CaptureInfo{}, replications)
+	tasks = scheduler.Schedule(checkpointTs, currentTables, map[model.CaptureID]*model.CaptureInfo{}, replications, false)
 	require.Len(t, tasks, 0)
 
 	// move a not exist table
 	scheduler.addTask(model.TableID(0), "a")
-	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications, false)
 	require.Len(t, tasks, 0)
 
 	// move table to a not exist capture
 	scheduler.addTask(model.TableID(1), "c")
-	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications, false)
 	require.Len(t, tasks, 0)
 
 	// move table not replicating
 	scheduler.addTask(model.TableID(1), "b")
-	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, map[model.TableID]*ReplicationSet{})
+	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, map[model.TableID]*ReplicationSet{}, false)
 	require.Len(t, tasks, 0)
 
 	scheduler.addTask(model.TableID(1), "b")
 	replications[model.TableID(1)].State = ReplicationSetStatePrepare
-	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications, false)
 	require.Len(t, tasks, 0)
 
 	scheduler.addTask(model.TableID(1), "b")
 	replications[model.TableID(1)].State = ReplicationSetStateReplicating
-	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications, false)
 	require.Len(t, tasks, 1)
 	require.Equal(t, model.TableID(1), tasks[0].moveTable.TableID)
 	require.Equal(t, "b", tasks[0].moveTable.DestCapture)

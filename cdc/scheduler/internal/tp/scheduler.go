@@ -24,7 +24,7 @@ type scheduler interface {
 		currentTables []model.TableID,
 		aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 		replications map[model.TableID]*ReplicationSet,
-	) []*scheduleTask
+		hasCaptureStopping bool) []*scheduleTask
 }
 
 // schedulerPriority is the priority of each scheduler.

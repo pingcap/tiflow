@@ -38,20 +38,20 @@ func TestSchedulerRebalance(t *testing.T) {
 	scheduler := newRebalanceScheduler()
 	require.Equal(t, "rebalance-scheduler", scheduler.Name())
 	// rebalance is not triggered
-	tasks := scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks := scheduler.Schedule(checkpointTs, currentTables, captures, replications, false)
 	require.Len(t, tasks, 0)
 
 	atomic.StoreInt32(&scheduler.rebalance, 1)
 	// no captures
-	tasks = scheduler.Schedule(checkpointTs, currentTables, map[model.CaptureID]*model.CaptureInfo{}, replications)
+	tasks = scheduler.Schedule(checkpointTs, currentTables, map[model.CaptureID]*model.CaptureInfo{}, replications, false)
 	require.Len(t, tasks, 0)
 
 	// table not in the replication set,
-	tasks = scheduler.Schedule(checkpointTs, []model.TableID{0}, captures, replications)
+	tasks = scheduler.Schedule(checkpointTs, []model.TableID{0}, captures, replications, false)
 	require.Len(t, tasks, 0)
 
 	// not all tables are replicating,
-	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications, false)
 	require.Len(t, tasks, 0)
 
 	// table distribution is balanced, should have no task.
@@ -61,7 +61,7 @@ func TestSchedulerRebalance(t *testing.T) {
 		3: {State: ReplicationSetStateReplicating, Primary: "b"},
 		4: {State: ReplicationSetStateReplicating, Primary: "b"},
 	}
-	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications, false)
 	require.Len(t, tasks, 0)
 
 	// Imbalance.
@@ -75,7 +75,7 @@ func TestSchedulerRebalance(t *testing.T) {
 	}
 
 	scheduler.random = nil // disable random to make test easier.
-	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications, false)
 	require.Len(t, tasks, 1)
 	require.Contains(t, tasks[0].burstBalance.MoveTables, moveTable{
 		TableID: 1, DestCapture: "b",
@@ -86,6 +86,6 @@ func TestSchedulerRebalance(t *testing.T) {
 	require.EqualValues(t, 0, atomic.LoadInt32(&scheduler.rebalance))
 
 	// pending task is not consumed yet, this turn should have no tasks.
-	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications, false)
 	require.Len(t, tasks, 0)
 }

@@ -52,7 +52,7 @@ func (b *basicScheduler) Schedule(
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
 	replications map[model.TableID]*ReplicationSet,
-) []*scheduleTask {
+	_ bool) []*scheduleTask {
 	tasks := make([]*scheduleTask, 0)
 	tablesLenEqual := len(currentTables) == len(replications)
 	tablesAllFind := true

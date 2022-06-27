@@ -31,13 +31,13 @@ func TestDrainCapture(t *testing.T) {
 	currentTables := make([]model.TableID, 0)
 	replications := make(map[model.TableID]*ReplicationSet)
 
-	tasks := scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks := scheduler.Schedule(checkpointTs, currentTables, captures, replications, false)
 	require.Len(t, tasks, 0)
 
 	ok := scheduler.setTarget("a")
 	require.True(t, ok)
 
-	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications, false)
 	require.Len(t, tasks, 0)
 	// the target capture has no table at the beginning, so reset the target
 	require.Equal(t, captureIDNotDraining, scheduler.target)
@@ -46,7 +46,7 @@ func TestDrainCapture(t *testing.T) {
 	ok = scheduler.setTarget("b")
 	require.True(t, ok)
 
-	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications, false)
 	require.Len(t, tasks, 0)
 	// the target capture cannot be found in the latest captures
 	require.Equal(t, captureIDNotDraining, scheduler.target)
@@ -66,7 +66,7 @@ func TestDrainCapture(t *testing.T) {
 	ok = scheduler.setTarget("a")
 	require.True(t, ok)
 	// not all table is replicating, skip this tick.
-	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications, false)
 	require.Equal(t, "a", scheduler.target)
 	require.Len(t, tasks, 0)
 
@@ -79,13 +79,13 @@ func TestDrainCapture(t *testing.T) {
 		7: {State: ReplicationSetStateReplicating, Primary: "b"},
 	}
 
-	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications, false)
 	require.Equal(t, "a", scheduler.target)
 	require.Len(t, tasks, 3)
 
 	scheduler = newDrainCaptureScheduler(1)
 	require.True(t, scheduler.setTarget("a"))
-	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications, false)
 	require.Equal(t, "a", scheduler.target)
 	require.Len(t, tasks, 1)
 }

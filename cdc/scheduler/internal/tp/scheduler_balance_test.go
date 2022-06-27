@@ -34,7 +34,7 @@ func TestSchedulerBalanceCaptureOnline(t *testing.T) {
 		1: {State: ReplicationSetStateReplicating, Primary: "a"},
 		2: {State: ReplicationSetStateReplicating, Primary: "a"},
 	}
-	tasks := sched.Schedule(0, currentTables, captures, replications)
+	tasks := sched.Schedule(0, currentTables, captures, replications, false)
 	require.Len(t, tasks, 1)
 	require.Len(t, tasks[0].burstBalance.MoveTables, 1)
 	require.Equal(t, tasks[0].burstBalance.MoveTables[0].TableID, model.TableID(1))
@@ -47,7 +47,7 @@ func TestSchedulerBalanceCaptureOnline(t *testing.T) {
 		1: {State: ReplicationSetStateReplicating, Primary: "a"},
 		2: {State: ReplicationSetStateReplicating, Primary: "a"},
 	}
-	tasks = sched.Schedule(0, currentTables, captures, replications)
+	tasks = sched.Schedule(0, currentTables, captures, replications, false)
 	require.Len(t, tasks, 0)
 
 	// TODO revise balance algorithm and enable the test case.

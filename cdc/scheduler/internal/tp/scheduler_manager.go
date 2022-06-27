@@ -60,7 +60,7 @@ func (sm *schedulerManager) Schedule(
 	replications map[model.TableID]*ReplicationSet,
 ) []*scheduleTask {
 	for _, scheduler := range sm.schedulers {
-		tasks := scheduler.Schedule(checkpointTs, currentTables, aliveCaptures, replications)
+		tasks := scheduler.Schedule(checkpointTs, currentTables, aliveCaptures, replications, false)
 		for _, t := range tasks {
 			name := struct {
 				scheduler, task string
