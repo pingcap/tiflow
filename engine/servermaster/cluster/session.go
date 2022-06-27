@@ -17,16 +17,16 @@ import (
 	"context"
 	"time"
 
-	perrors "github.com/pingcap/errors"
 	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
+	derrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 const (
@@ -80,13 +80,13 @@ func (s *EtcdSession) Reset(ctx context.Context) error {
 	session, err := concurrency.NewSession(
 		s.etcdClient, concurrency.WithTTL(int(defaultSessionTTL.Seconds())))
 	if err != nil {
-		return derrors.Wrap(derrors.ErrMasterNewServer, err)
+		return derrors.WrapError(derrors.ErrMasterNewServer, err)
 	}
 
 	_, err = s.etcdClient.Put(ctx, s.config.Key, s.config.Value,
 		clientv3.WithLease(session.Lease()))
 	if err != nil {
-		return derrors.Wrap(derrors.ErrEtcdAPIError, err)
+		return derrors.WrapError(derrors.ErrEtcdAPIError, err)
 	}
 
 	election, err := NewEtcdElection(ctx, s.etcdClient, session, EtcdElectionConfig{
@@ -109,13 +109,13 @@ func (s *EtcdSession) Campaign(ctx context.Context, timeout time.Duration) (
 	log.L().Info("start to campaign server master leader",
 		zap.String("name", s.config.Member))
 	leaderCtx, resignFn, err := s.election.Campaign(ctx, s.config.Member, timeout)
-	switch perrors.Cause(err) {
+	switch errors.Cause(err) {
 	case nil:
 	case context.Canceled:
 		return nil, nil, ctx.Err()
 	default:
 		log.L().Warn("campaign leader failed", zap.Error(err))
-		return nil, nil, derrors.Wrap(derrors.ErrMasterEtcdElectionCampaignFail, err)
+		return nil, nil, derrors.WrapError(derrors.ErrMasterEtcdElectionCampaignFail, err)
 	}
 	log.L().Info("campaign leader successfully",
 		zap.String("name", s.config.Member))
@@ -129,7 +129,7 @@ func (s *EtcdSession) CheckNeedReset(err error) (needReset bool) {
 		// detect the life cycle of session ends by active detection
 		needReset = true
 	default:
-		inErr, ok := perrors.Cause(err).(rpctypes.EtcdError)
+		inErr, ok := errors.Cause(err).(rpctypes.EtcdError)
 		// meet error `etcdserver: requested lease not found`
 		if ok && inErr.Code() == codes.NotFound {
 			needReset = true

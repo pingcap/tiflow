@@ -30,7 +30,7 @@
 package metaclient
 
 import (
-	cerrors "github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 type opType int
@@ -158,7 +158,7 @@ func (op Op) CheckValidOp() error {
 	if op.IsOptsWithFromKey() && !(op.IsOptsWithPrefix() || op.IsOptsWithRange()) {
 		return nil
 	}
-	return cerrors.ErrMetaOptionConflict.GenWithStackByArgs()
+	return errors.ErrMetaOptionConflict.GenWithStackByArgs()
 }
 
 // OpGet returns "get" operation based on given key and operation options.

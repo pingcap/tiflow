@@ -17,7 +17,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/r3labs/diff"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"go.uber.org/zap"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -25,11 +28,8 @@ import (
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/security"
-	"github.com/r3labs/diff"
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
-	"go.uber.org/zap"
 )
 
 // updateChangefeedOptions defines common flags for the `cli changefeed update` command.

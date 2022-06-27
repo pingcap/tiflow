@@ -178,3 +178,13 @@ type Capture struct {
 	IsOwner       bool   `json:"is_owner"`
 	AdvertiseAddr string `json:"address"`
 }
+
+// DrainCaptureRequest is request for manual `DrainCapture`
+type DrainCaptureRequest struct {
+	CaptureID string `json:"capture_id"`
+}
+
+// DrainCaptureResp is response for manual `DrainCapture`
+type DrainCaptureResp struct {
+	CurrentTableCount int `json:"current_table_count"`
+}

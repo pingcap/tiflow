@@ -39,7 +39,6 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/logutil"
 	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
@@ -50,6 +49,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/engine/pkg/quota"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	derror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
@@ -353,22 +353,25 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 			log.L().Info("Heartbeat Ping received",
 				zap.Any("msg", msg),
 				zap.String("master-id", m.id))
+
+			replyMsg := &frameModel.HeartbeatPongMessage{
+				SendTime:   msg.SendTime,
+				ReplyTime:  m.clock.Now(),
+				ToWorkerID: msg.FromWorkerID,
+				Epoch:      m.currentEpoch.Load(),
+				IsFinished: msg.IsFinished,
+			}
 			ok, err := m.messageSender.SendToNode(
 				ctx,
 				sender,
 				frameModel.HeartbeatPongTopic(m.id, msg.FromWorkerID),
-				&frameModel.HeartbeatPongMessage{
-					SendTime:   msg.SendTime,
-					ReplyTime:  m.clock.Now(),
-					ToWorkerID: msg.FromWorkerID,
-					Epoch:      m.currentEpoch.Load(),
-					IsFinished: msg.IsFinished,
-				})
+				replyMsg)
 			if err != nil {
 				return err
 			}
 			if !ok {
-				// TODO add a retry mechanism
+				log.L().Warn("Sending Heartbeat Pong failed",
+					zap.Any("reply", replyMsg))
 				return nil
 			}
 			m.workerManager.HandleHeartbeat(msg, sender)
@@ -576,7 +579,7 @@ func (m *DefaultBaseMaster) CreateWorker(
 	quotaCtx, cancel := context.WithTimeout(ctx, createWorkerWaitQuotaTimeout)
 	defer cancel()
 	if err := m.createWorkerQuota.Consume(quotaCtx); err != nil {
-		return "", derror.Wrap(derror.ErrMasterConcurrencyExceeded, err)
+		return "", derror.WrapError(derror.ErrMasterConcurrencyExceeded, err)
 	}
 
 	configBytes, workerID, err := m.prepareWorkerConfig(workerType, config)
