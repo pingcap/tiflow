@@ -447,6 +447,7 @@ func TestTableActorStart(t *testing.T) {
 			StartTs:     0,
 			MarkTableID: 1,
 		},
+		replicaConfig: config.GetDefaultReplicaConfig(),
 	}
 	require.Nil(t, tbl.start(ctx))
 	require.Equal(t, 1, len(tbl.nodes))

@@ -14,12 +14,13 @@
 package config
 
 import (
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidate(t *testing.T) {
+func TestValidateOldValue(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
 		protocol       string
@@ -76,6 +77,95 @@ func TestValidate(t *testing.T) {
 			require.Nil(t, cfg.validateAndAdjust(nil, tc.enableOldValue))
 		} else {
 			require.Regexp(t, tc.expectedErr, cfg.validateAndAdjust(nil, tc.enableOldValue))
+		}
+	}
+}
+
+func TestValidateApplyParameter(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		sinkURI          string
+		expectedErr      string
+		expectedSplitTxn bool
+	}{
+		{
+			sinkURI:          "mysql://normal:123456@127.0.0.1:3306",
+			expectedErr:      "",
+			expectedSplitTxn: false,
+		},
+		{
+			sinkURI:          "mysql://normal:123456@127.0.0.1:3306?split-txn=true",
+			expectedErr:      "",
+			expectedSplitTxn: true,
+		},
+		{
+			sinkURI:          "mysql://normal:123456@127.0.0.1:3306?split-txn=false",
+			expectedErr:      "",
+			expectedSplitTxn: false,
+		},
+		{
+			sinkURI:     "mysql://normal:123456@127.0.0.1:3306?split-txn=invalid",
+			expectedErr: ".*invalid split-txn value.*",
+		},
+		{
+			sinkURI:     "tidb://normal:123456@127.0.0.1:3306?split-txn=true&protocol=canal",
+			expectedErr: ".*protocol cannot be configured when using tidb scheme.*",
+		},
+		{
+			sinkURI:          "blackhole://normal:123456@127.0.0.1:3306?split-txn=false",
+			expectedErr:      "",
+			expectedSplitTxn: false,
+		},
+		{
+			sinkURI:          "kafka://127.0.0.1:9092?split-txn=true&protocol=open-protocol",
+			expectedErr:      "",
+			expectedSplitTxn: true,
+		},
+		{
+			sinkURI:          "kafka://127.0.0.1:9092?split-txn=false&protocol=open-protocol",
+			expectedErr:      "",
+			expectedSplitTxn: false,
+		},
+		{
+			sinkURI:          "kafka://127.0.0.1:9092?split-txn=true&protocol=default",
+			expectedErr:      "",
+			expectedSplitTxn: true,
+		},
+		{
+			sinkURI:          "kafka://127.0.0.1:9092?split-txn=false&protocol=default",
+			expectedErr:      "",
+			expectedSplitTxn: false,
+		},
+		{
+			sinkURI:     "kafka://127.0.0.1:9092?split-txn=false",
+			expectedErr: ".*unknown .* protocol for Message Queue sink.*",
+		},
+		{
+			sinkURI:          "kafka://127.0.0.1:9092?protocol=canal-json",
+			expectedErr:      "",
+			expectedSplitTxn: true,
+		},
+		{
+			sinkURI:          "kafka://127.0.0.1:9092?protocol=avro&split-txn=false",
+			expectedErr:      "",
+			expectedSplitTxn: true,
+		},
+		{
+			sinkURI:          "kafka://127.0.0.1:9092?protocol=maxwell&split-txn=true",
+			expectedErr:      "",
+			expectedSplitTxn: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		cfg := SinkConfig{}
+		parsedSinkURI, err := url.Parse(tc.sinkURI)
+		require.Nil(t, err)
+		if tc.expectedErr == "" {
+			require.Nil(t, cfg.validateAndAdjust(parsedSinkURI, true))
+			require.Equal(t, tc.expectedSplitTxn, cfg.SplitTxn)
+		} else {
+			require.Regexp(t, tc.expectedErr, cfg.validateAndAdjust(parsedSinkURI, true))
 		}
 	}
 }

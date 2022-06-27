@@ -307,6 +307,8 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 	switch msg.Tp {
 	case pmessage.MessageTypePolymorphicEvent:
 		event := msg.PolymorphicEvent
+		n.checkSplitTxn(event)
+
 		if event.IsResolved() {
 			if n.state.Load() == TableStatePrepared {
 				n.state.Store(TableStateReplicating)
@@ -359,4 +361,20 @@ func (n *sinkNode) releaseResource(ctx context.Context) error {
 	n.state.Store(TableStateStopped)
 	n.flowController.Abort()
 	return n.sink.Close(ctx)
+}
+
+func (n *sinkNode) checkSplitTxn(e *model.PolymorphicEvent) {
+	if n.replicaConfig.Sink.SplitTxn {
+		return
+	}
+
+	if e.Resolved != nil && e.Resolved.IsBatchMode() {
+		log.Panic("batch mode resolved ts is not supported when sink.splitTxn is false",
+			zap.Any("event", e), zap.Any("replicaConfig", n.replicaConfig))
+	}
+
+	if e.Row != nil && e.Row.SplitTxn {
+		log.Panic("should not split txn when sink.splitTxn is false",
+			zap.Any("event", e), zap.Any("replicaConfig", n.replicaConfig))
+	}
 }

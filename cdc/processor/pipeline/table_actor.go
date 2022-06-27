@@ -284,7 +284,8 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 
 	splitTxn := t.replicaConfig.Sink.SplitTxn
 
-	flowController := flowcontrol.NewTableFlowController(t.memoryQuota, t.redoManager.Enabled(), splitTxn)
+	flowController := flowcontrol.NewTableFlowController(t.memoryQuota,
+		t.redoManager.Enabled(), splitTxn)
 	sorterNode := newSorterNode(t.tableName, t.tableID,
 		t.replicaInfo.StartTs, flowController,
 		t.mounter, t.replicaConfig, &t.state, t.changefeedID,

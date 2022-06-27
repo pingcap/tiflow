@@ -113,15 +113,22 @@ func (s *SinkConfig) applyParameter(sinkURI *url.URL) error {
 	}
 
 	s.Protocol = params.Get(ProtocolKey)
-	if s.Protocol != "" && isMysqlScheme(sinkURI.Scheme) {
-		return cerror.ErrSinkURIInvalid.GenWithStackByArgs("protocol cannot be configured" +
-			"when using mysql related scheme")
+	// validate that protocol is compatible with the scheme
+	if isMqScheme(sinkURI.Scheme) {
+		var protocol Protocol
+		err := protocol.FromString(s.Protocol)
+		if err != nil {
+			return err
+		}
+	} else if s.Protocol != "" {
+		return cerror.ErrSinkURIInvalid.GenWithStackByArgs(fmt.Sprintf("protocol cannot be configured "+
+			"when using %s scheme", sinkURI.Scheme))
 	}
 
 	// Only mysqlSink and open-protocol based MqSink support `split-txn=false`,
 	// set `split-txn` to true for other scenarios.
-	if !s.SplitTxn && s.Protocol != "" && s.Protocol != "defult" && s.Protocol != "open-protocol" {
-		log.Warn("The configuration of split-txn is incompatible with protocol",
+	if !s.SplitTxn && s.Protocol != "" && s.Protocol != "default" && s.Protocol != "open-protocol" {
+		log.Error("The configuration of split-txn is incompatible with protocol",
 			zap.String("protocol", s.Protocol), zap.Bool("splitTxn", s.SplitTxn))
 		s.SplitTxn = true
 	}
@@ -129,6 +136,7 @@ func (s *SinkConfig) applyParameter(sinkURI *url.URL) error {
 	return nil
 }
 
-func isMysqlScheme(schema string) bool {
-	return schema == "mysql" || schema == "mysql+ssl" || schema == "tidb" || schema == "tidb+ssl"
+func isMqScheme(scheme string) bool {
+	return scheme == "kafka" || scheme == "kafka+ssl" ||
+		scheme == "pulsar" || scheme == "pulsar+ssl"
 }
