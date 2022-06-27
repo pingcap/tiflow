@@ -110,15 +110,12 @@ function test_standalone_running() {
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-task $cur/conf/standalone-task2.yaml" \
-		"\"result\": false" 1
+		"\"result\": true" 2 \
+		"\"source\": \"$SOURCE_ID2\"" 1
 
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
-
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-task $cur/conf/standalone-task2.yaml" \
-		"\"result\": true" 2 \
-		"\"source\": \"$SOURCE_ID2\"" 1
+	sleep 2
 
 	worker=$($PWD/bin/dmctl.test DEVEL --master-addr "127.0.0.1:$MASTER_PORT" query-status test2 |
 		grep 'worker' | awk -F: '{print $2}')
@@ -135,19 +132,18 @@ function test_standalone_running() {
 	check_port_offline ${worker_ports[$worker_idx]} 20
 	rm -rf $WORK_DIR/worker${worker_idx}/relay-dir
 
-	# test running, test2 fail
+	# test running, test2 still works
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status" \
-		"\"stage\": \"Running\"" 1 \
-		"\"worker\": \"source not bound\"" 1
+		"query-status test2" \
+		"\"stage\": \"Running\"" 1
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-task test2" \
-		"\"result\": true" 1
+		"\"result\": true" 2
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-task $cur/conf/standalone-task2.yaml" \
-		"\"result\": false" 1
+		"\"result\": true" 2
 
 	# test should still running
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -297,12 +293,11 @@ function test_exclusive_relay() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"list-member --worker" \
-		"\"stage\": \"bound\"" 1 \
-		"\"stage\": \"relay\"" 1
+		"\"stage\": \"bound\"" 2
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"operate-source show -s $SOURCE_ID2" \
-		"\"msg\": \"source is added but there is no online worker to bound\"" 1
+		"\"result\": true" 2
 
 	cleanup
 	echo "[$(date)] <<<<<< finish test_exclusive_relay >>>>>>"
@@ -354,7 +349,7 @@ function test_exclusive_relay_2() {
 		"\"source\": \"mysql-replica-01\"" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT1" \
 		"list-member --name worker1" \
-		"\"stage\": \"relay\"" 1
+		"\"stage\": \"bound\"" 1
 
 	# kill worker2, source2 should not be bound
 	echo "kill dm-worker2"
@@ -363,14 +358,14 @@ function test_exclusive_relay_2() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"operate-source show -s $SOURCE_ID2" \
-		"\"msg\": \"source is added but there is no online worker to bound\"" 1
+		"\"result\": true" 2
 
 	# worker2 online, bound to source2
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT1" \
 		"list-member --name worker2" \
-		"\"source\": \"mysql-replica-02\"" 1
+		"\"stage\": \"bound\"" 1
 
 	cleanup
 	echo "[$(date)] <<<<<< finish test_exclusive_relay_2 >>>>>>"

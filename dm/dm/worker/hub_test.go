@@ -17,8 +17,7 @@ import (
 	. "github.com/pingcap/check"
 )
 
-func (t *testServer) testConidtionHub(c *C, s *Server) {
+func (t *testServer) testConditionHub(c *C, s *Server, sourceID string) {
 	// test condition hub
-	c.Assert(GetConditionHub(), NotNil)
-	c.Assert(GetConditionHub().w, DeepEquals, s.getSourceWorker(true))
+	c.Assert(GetConditionHubWorker(sourceID), DeepEquals, s.getWorkerBySource(sourceID, true))
 }

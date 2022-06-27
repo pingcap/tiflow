@@ -132,9 +132,9 @@ func (w *Worker) ToBound(bound ha.SourceBound) error {
 		return terror.ErrSchedulerWorkerInvalidTrans.Generate(w.BaseInfo(), WorkerOffline, WorkerBound)
 	}
 
-	w.reportMetrics()
 	w.bounds[bound.Source] = bound
 	w.stage = WorkerBound
+	w.reportMetrics()
 	return nil
 }
 
@@ -168,7 +168,10 @@ func (w *Worker) StartRelay(sources ...string) error {
 		w.relaySources[sourceID] = struct{}{}
 	}
 
-	w.stage = WorkerBound
+	if w.stage != WorkerOffline {
+		w.stage = WorkerBound
+	}
+	w.reportMetrics()
 	return nil
 }
 
@@ -236,9 +239,11 @@ func (w *Worker) reportMetrics() {
 	metrics.ReportWorkerStage(w.baseInfo.Name, s)
 }
 
-func (w *Worker) queryStatus(ctx context.Context) (*workerrpc.Response, error) {
+func (w *Worker) queryStatus(ctx context.Context, source string) (*workerrpc.Response, error) {
 	rpcTimeOut := time.Second * 10 // we relay on ctx.Done() to cancel the rpc, so just set a very long timeout
-	req := &workerrpc.Request{Type: workerrpc.CmdQueryStatus, QueryStatus: &pb.QueryStatusRequest{}}
+	req := &workerrpc.Request{Type: workerrpc.CmdQueryStatus, QueryStatus: &pb.QueryStatusRequest{
+		Source: source,
+	}}
 	failpoint.Inject("operateWorkerQueryStatus", func(v failpoint.Value) {
 		resp := &workerrpc.Response{Type: workerrpc.CmdQueryStatus, QueryStatus: &pb.QueryStatusResponse{}}
 		switch v.(string) {

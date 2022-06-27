@@ -54,19 +54,20 @@ func (t *testWorkerRPCSuite) TestGRPCClient(c *C) {
 	// replace the underlying DM-worker client.
 	workerCli := pbmock.NewMockWorkerClient(ctrl)
 	rpcCli.client = workerCli
+	source := "mysql01"
 
 	reqs := []*Request{
 		{
 			Type:        CmdQueryStatus,
-			QueryStatus: &pb.QueryStatusRequest{Name: "test"},
+			QueryStatus: &pb.QueryStatusRequest{Name: "test", Source: source},
 		},
 		{
 			Type:       CmdPurgeRelay,
-			PurgeRelay: &pb.PurgeRelayRequest{Inactive: true},
+			PurgeRelay: &pb.PurgeRelayRequest{Inactive: true, Source: source},
 		},
 		{
 			Type:          CmdOperateSchema,
-			OperateSchema: &pb.OperateWorkerSchemaRequest{Op: pb.SchemaOp_SetSchema},
+			OperateSchema: &pb.OperateWorkerSchemaRequest{Op: pb.SchemaOp_SetSchema, Source: source},
 		},
 		{
 			Type:          CmdOperateV1Meta,
@@ -74,7 +75,7 @@ func (t *testWorkerRPCSuite) TestGRPCClient(c *C) {
 		},
 		{
 			Type:        CmdHandleError,
-			HandleError: &pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Replace},
+			HandleError: &pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Replace, Source: source},
 		},
 	}
 

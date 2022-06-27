@@ -23,6 +23,7 @@ import (
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -197,51 +198,86 @@ func GetLastSourceBounds(cli *clientv3.Client) (map[string]SourceBound, int64, e
 	return sbm, resp.Header.Revision, nil
 }
 
+type zapBoundsMarshaller []SourceBound
+
+func (m zapBoundsMarshaller) MarshalLogArray(encoder zapcore.ArrayEncoder) error {
+	for _, b := range m {
+		encoder.AppendString(b.String())
+	}
+	return nil
+}
+
 // GetSourceBoundConfig gets the source bound relationship and relative source config at the same time
 // for the specified DM-worker. The index worker **must not be empty**:
 // if source bound is empty, will return an empty sourceBound and an empty source config
 // if source bound is not empty but sourceConfig is empty, will return an error
 // if the source bound is different for over retryNum times, will return an error.
-func GetSourceBoundConfig(cli *clientv3.Client, worker, source string) (SourceBound, *config.SourceConfig, int64, error) {
+func GetSourceBoundConfig(cli *clientv3.Client, worker, source string) ([]SourceBound, []*config.SourceConfig, int64, error) {
 	var (
-		bound    SourceBound
-		newBound SourceBound
-		cfg      *config.SourceConfig
-		ok       bool
-		retryNum = defaultGetSourceBoundConfigRetry
-		sbm      map[string]SourceBound
+		bounds    []SourceBound
+		newBounds []SourceBound
+		cfgs      []*config.SourceConfig
+		retryNum  = defaultGetSourceBoundConfigRetry
+		sbm       map[string]SourceBound
+		nsbm      map[string]SourceBound
 	)
 	wbm, rev, err := GetSourceBound(cli, worker, source)
 	if err != nil {
-		return bound, cfg, 0, err
+		return nil, nil, 0, err
 	}
-	if sbm, ok = wbm[worker]; !ok {
-		return bound, cfg, rev, nil
+	if sbm = wbm[worker]; len(sbm) == 0 {
+		return nil, nil, rev, nil
 	}
-	bound = GetSourceBoundFromMap(sbm)
+	appendGetUpstreamCfgOps := func(sources []SourceBound, ops []clientv3.Op) []clientv3.Op {
+		for _, bound := range sources {
+			ops = append(ops, clientv3.OpGet(common.UpstreamConfigKeyAdapter.Encode(bound.Source)))
+		}
+		return ops
+	}
+	sourceBoundMapEqual := func(sbm, nsbm map[string]SourceBound) bool {
+		if len(nsbm) != len(sbm) {
+			return false
+		}
+		for k := range sbm {
+			if _, ok := nsbm[k]; !ok {
+				return false
+			}
+		}
+		return true
+	}
+	sourceBoundMapToArray := func(sbm map[string]SourceBound) []SourceBound {
+		tmpBounds := make([]SourceBound, 0, len(sbm))
+		for _, b := range sbm {
+			tmpBounds = append(tmpBounds, b)
+		}
+		return tmpBounds
+	}
 
 	for retryCnt := 1; retryCnt <= retryNum; retryCnt++ {
-		txnResp, rev2, err2 := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(clientv3.OpGet(common.UpstreamBoundWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix()),
-			clientv3.OpGet(common.UpstreamConfigKeyAdapter.Encode(bound.Source))))
+		ops := make([]clientv3.Op, 1, len(sbm)+1)
+		ops[0] = clientv3.OpGet(common.UpstreamBoundWorkerKeyAdapter.Encode(worker), clientv3.WithPrefix())
+		bounds = sourceBoundMapToArray(sbm)
+		ops = appendGetUpstreamCfgOps(bounds, ops)
+		txnResp, rev2, err2 := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(ops...))
 		if err2 != nil {
-			return bound, cfg, 0, err2
+			return nil, nil, 0, err2
 		}
 
 		boundResp := txnResp.Responses[0].GetResponseRange()
 		sbm2, err2 := sourceBoundFromResp((*clientv3.GetResponse)(boundResp))
 		if err2 != nil {
-			return bound, cfg, 0, err2
+			return nil, nil, 0, err2
 		}
 
-		newBound, ok = sbm2[worker][bound.Source]
+		nsbm = sbm2[worker]
 		// when ok is false, newBound will be empty which means bound for this worker has been deleted in this turn
 		// if bound is not empty, we should wait for another turn to make sure bound is really deleted.
-		if newBound != bound {
-			log.L().Warn("source bound has been changed, will take a retry", zap.Stringer("oldBound", bound),
-				zap.Stringer("newBound", newBound), zap.Int("retryTime", retryCnt))
+		if !sourceBoundMapEqual(sbm, nsbm) {
+			log.L().Warn("source bound has been changed, will take a retry", zap.Array("oldBound", zapBoundsMarshaller(bounds)),
+				zap.Array("newBound", zapBoundsMarshaller(sourceBoundMapToArray(nsbm))), zap.Int("retryTime", retryCnt))
 			// if we are about to fail, don't update bound to save the last bound to error
 			if retryCnt != retryNum {
-				bound = newBound
+				sbm = nsbm
 			}
 			select {
 			case <-cli.Ctx().Done():
@@ -253,26 +289,31 @@ func GetSourceBoundConfig(cli *clientv3.Client, worker, source string) (SourceBo
 			continue
 		}
 		// ok == false and newBound == bound means this bound is truly deleted, we don't need source config anymore
-		if !ok {
-			return bound, cfg, rev2, nil
+		if len(nsbm) == 0 {
+			return nil, nil, rev2, nil
 		}
 
-		cfgResp := txnResp.Responses[1].GetResponseRange()
-		scm, err2 := sourceCfgFromResp(bound.Source, (*clientv3.GetResponse)(cfgResp))
-		if err2 != nil {
-			return bound, cfg, 0, err2
-		}
-		cfg, ok = scm[bound.Source]
-		// ok == false means we have got source bound but there is no source config, this shouldn't happen
-		if !ok {
-			// this should not happen.
-			return bound, cfg, 0, terror.ErrConfigMissingForBound.Generate(bound)
+		cfgs = make([]*config.SourceConfig, 0, len(sbm))
+		for i := 1; i < len(txnResp.Responses); i++ {
+			sourceID := bounds[i-1].Source
+			cfgResp := txnResp.Responses[i].GetResponseRange()
+			scm, err3 := sourceCfgFromResp(sourceID, (*clientv3.GetResponse)(cfgResp))
+			if err3 != nil {
+				return bounds, cfgs, 0, err3
+			}
+			cfg, ok := scm[sourceID]
+			// ok == false means we have got source bound but there is no source config, this shouldn't happen
+			if !ok || cfg == nil {
+				// this should not happen.
+				return nil, nil, 0, terror.ErrConfigMissingForBound.Generate(bounds)
+			}
+			cfgs = append(cfgs, cfg)
 		}
 
-		return bound, cfg, rev2, nil
+		return bounds, cfgs, rev2, nil
 	}
 
-	return bound, cfg, 0, terror.ErrMasterBoundChanging.Generate(bound, newBound)
+	return nil, nil, 0, terror.ErrMasterBoundChanging.Generate(bounds, newBounds)
 }
 
 // WatchSourceBound watches PUT & DELETE operations for the bound relationship of the specified DM-worker.

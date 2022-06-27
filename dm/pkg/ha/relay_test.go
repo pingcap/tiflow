@@ -23,17 +23,19 @@ func (t *testForEtcd) TestGetRelayConfigEtcd(c *C) {
 	defer clearTestInfoOperation(c)
 
 	var (
-		worker = "dm-worker-1"
-		source = "mysql-replica-1"
+		worker  = "dm-worker-1"
+		source  = "mysql-replica-1"
+		source2 = "mysql-replica-2"
 	)
 	cfg, err := config.LoadFromFile(sourceSampleFilePath)
 	c.Assert(err, IsNil)
 	cfg.SourceID = source
+	cfgs := map[string]*config.SourceConfig{source: cfg}
 	// no relay source and config
-	cfg1, rev1, err := GetRelayConfig(etcdTestCli, worker)
+	cfgs1, rev1, err := GetRelayConfig(etcdTestCli, worker)
 	c.Assert(err, IsNil)
 	c.Assert(rev1, Greater, int64(0))
-	c.Assert(cfg1, IsNil)
+	c.Assert(cfgs1, HasLen, 0)
 
 	rev2, err := PutRelayConfig(etcdTestCli, NewSourceBound(source, worker))
 	c.Assert(err, IsNil)
@@ -47,18 +49,37 @@ func (t *testForEtcd) TestGetRelayConfigEtcd(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(rev3, Greater, rev2)
 	// get relay source and config
-	cfg2, rev4, err := GetRelayConfig(etcdTestCli, worker)
+	cfgs2, rev4, err := GetRelayConfig(etcdTestCli, worker)
 	c.Assert(err, IsNil)
 	c.Assert(rev4, Equals, rev3)
-	c.Assert(cfg2, DeepEquals, cfg)
+	c.Assert(cfgs2, DeepEquals, cfgs)
 
-	rev5, err := DeleteRelayConfig(etcdTestCli, source, worker)
+	// put another relay into etcd, check whether can PutRelayConfig return two configs
+	rev5, err := PutRelayConfig(etcdTestCli, NewSourceBound(source2, worker))
 	c.Assert(err, IsNil)
 	c.Assert(rev5, Greater, rev4)
+	cfg2 := cfg.Clone()
+	cfg2.SourceID = source2
+	rev6, err := PutSourceCfg(etcdTestCli, cfg2)
+	c.Assert(err, IsNil)
+	c.Assert(rev6, Greater, rev5)
+	// get source bound and config with two sources
+	cfgs3, rev7, err := GetRelayConfig(etcdTestCli, worker)
+	c.Assert(err, IsNil)
+	c.Assert(rev7, Equals, rev6)
+	cfgs[source2] = cfg2
+	c.Assert(cfgs3, DeepEquals, cfgs3)
+
+	rev8, err := DeleteRelayConfig(etcdTestCli, source, worker)
+	c.Assert(err, IsNil)
+	c.Assert(rev8, Greater, rev7)
+	rev9, err := DeleteRelayConfig(etcdTestCli, source2, worker)
+	c.Assert(err, IsNil)
+	c.Assert(rev9, Greater, rev8)
 
 	// though source config is saved in etcd, relay source is deleted so return nothing
-	cfg3, rev6, err := GetRelayConfig(etcdTestCli, worker)
+	cfgs3, rev10, err := GetRelayConfig(etcdTestCli, worker)
 	c.Assert(err, IsNil)
-	c.Assert(rev6, Equals, rev5)
-	c.Assert(cfg3, IsNil)
+	c.Assert(rev10, Equals, rev9)
+	c.Assert(cfgs3, HasLen, 0)
 }

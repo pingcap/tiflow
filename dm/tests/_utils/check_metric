@@ -17,7 +17,7 @@ shift 3
 counter=0
 while [ $counter -lt $retry_count ]; do
 	metric=$(curl -s http://127.0.0.1:$port/metrics | grep $metric_name | grep -v "#" | awk '{printf("%d",$2)}')
-	if [ -n $metric ] && [ $lower -lt $metric ] && [ $metric -lt $upper ]; then
+	if [[ -n $metric ]] && [[ $lower -lt $metric ]] && [[ $metric -lt $upper ]]; then
 		exit 0
 	fi
 	((counter += 1))

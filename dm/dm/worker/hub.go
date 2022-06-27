@@ -13,21 +13,35 @@
 
 package worker
 
-var conditionHub *ConditionHub
+import (
+	"sync"
+)
 
-// ConditionHub holds a DM-worker and it is used for wait condition detection.
+var conditionHub = &ConditionHub{
+	workers: map[string]*SourceWorker{},
+}
+
+// ConditionHub holds a DM-workers map, and it is used for wait condition detection.
 type ConditionHub struct {
-	w *SourceWorker
+	lock    sync.RWMutex
+	workers map[string]*SourceWorker
 }
 
-// InitConditionHub inits the singleton instance of ConditionHub.
-func InitConditionHub(w *SourceWorker) {
-	conditionHub = &ConditionHub{
-		w: w,
+// UpdateConditionHub updates the singleton instance of ConditionHub.
+// add is true means adding, otherwise deleting
+func UpdateConditionHub(w *SourceWorker, sourceID string, add bool) {
+	conditionHub.lock.Lock()
+	if add {
+		conditionHub.workers[w.cfg.SourceID] = w
+	} else {
+		delete(conditionHub.workers, sourceID)
 	}
+	conditionHub.lock.Unlock()
 }
 
-// GetConditionHub returns singleton instance of ConditionHub.
-func GetConditionHub() *ConditionHub {
-	return conditionHub
+// GetConditionHubWorker returns worker with specifies worker name and from the singleton instance of ConditionHub.
+func GetConditionHubWorker(sourceID string) *SourceWorker {
+	conditionHub.lock.RLock()
+	defer conditionHub.lock.RUnlock()
+	return conditionHub.workers[sourceID]
 }

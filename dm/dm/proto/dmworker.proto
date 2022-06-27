@@ -43,6 +43,7 @@ enum TaskOp {
 
 message QueryStatusRequest {
     string name = 1; // sub task's name, empty for all sub tasks
+    string source = 2;
 }
 
 message CommonWorkerResponse {
@@ -326,6 +327,7 @@ message PurgeRelayRequest {
     int64 time = 2;
     string filename = 3;
     string subDir = 4;
+    string source = 5;
 }
 
 enum SchemaOp {
@@ -389,6 +391,7 @@ message HandleWorkerErrorRequest {
     string task = 2; // task name
     string binlogPos = 3; // binlog-pos (that's file:pos format)
     repeated string sqls = 4; // sqls (use for replace)
+    string source = 5;
 }
 
 message GetWorkerCfgRequest {
@@ -414,6 +417,7 @@ message CheckSubtasksCanUpdateResponse {
 message GetValidationStatusRequest {
     string taskName = 1;
     Stage filterStatus = 2;
+    repeated string sources = 3; // TODO: support batch operations for master-worker
 }
 
 message ValidationStatus {
@@ -446,6 +450,7 @@ message GetValidationStatusResponse {
 message GetValidationErrorRequest {
     ValidateErrorState errState = 1;
     string taskName = 2;
+    repeated string sources = 3; // TODO: support batch operations for master-worker
 }
 
 message ValidationError {
@@ -479,6 +484,7 @@ message OperateValidationErrorRequest {
     bool isAllError = 2;
     string taskName = 3;
     uint64 errId = 4; // error-id
+    repeated string sources = 5; // TODO: support batch operations for master-worker
 }
 
 message OperateValidationErrorResponse {

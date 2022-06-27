@@ -27,10 +27,10 @@ function stop_relay_with_worker_name_success() {
 		"\"result\": true" 1
 }
 
-function stop_relay_fail() {
+function stop_relay_not_exist() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-relay -s $SOURCE_ID1 worker2" \
-		"these workers \[worker2\] have started relay for another sources \[$SOURCE_ID2\] respectively" 1
+		"\"result\": true" 2
 }
 
 function stop_relay_with_worker_name_fail() {

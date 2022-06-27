@@ -99,6 +99,7 @@ function DM_101_CASE() {
 
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+	sleep 2 # wait for rebalance
 
 	run_sql_source2 "alter table ${shardddl1}.${tb2} add column new_col1 int;"
 

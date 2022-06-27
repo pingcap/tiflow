@@ -161,8 +161,16 @@ function run() {
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"transfer-source $SOURCE_ID2 worker2" \
+		"\"result\": true" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"transfer-source $SOURCE_ID1 worker1" \
+		"\"result\": true" 1
+
 	echo "make a dml job"
 	run_sql_source1 "insert into metrics.t1 (id, name, ts) values (1004, 'zmj4', '2022-05-11 12:01:05')"
+
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 	check_log_contain_with_retry 'no job in queue, update lag to zero' $WORK_DIR/worker1/log/dm-worker.log
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \

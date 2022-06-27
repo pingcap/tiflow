@@ -566,6 +566,7 @@ function DM_COMPACT() {
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+	sleep 2 # wait for rebalance
 
 	run_case COMPACT "single-source-no-sharding" \
 		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int unique, c int);\"" \
@@ -613,6 +614,7 @@ function DM_COMPACT_USE_DOWNSTREAM_SCHEMA() {
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+	sleep 2 # wait for rebalance
 
 	run_case COMPACT_USE_DOWNSTREAM_SCHEMA "single-source-no-sharding" \
 		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int unique not null, c int);\"; 
@@ -688,6 +690,7 @@ function DM_MULTIPLE_ROWS() {
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+	sleep 2 # wait for rebalance
 
 	run_case MULTIPLE_ROWS "single-source-no-sharding" \
 		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int unique, c int);\"" \
@@ -701,6 +704,7 @@ function DM_MULTIPLE_ROWS() {
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+	sleep 2 # wait for rebalance
 }
 
 function DM_CAUSALITY_CASE() {
@@ -768,6 +772,7 @@ function DM_DML_EXECUTE_ERROR() {
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+	sleep 2 # wait for rebalance
 
 	run_case DML_EXECUTE_ERROR "single-source-no-sharding" \
 		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int);\"" \

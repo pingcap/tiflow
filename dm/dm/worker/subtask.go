@@ -758,13 +758,13 @@ func (st *SubTask) unitTransWaitCondition(subTaskCtx context.Context) error {
 	cu := st.CurrUnit()
 	if pu != nil && pu.Type() == pb.UnitType_Load && cu.Type() == pb.UnitType_Sync {
 		st.l.Info("wait condition between two units", zap.Stringer("previous unit", pu.Type()), zap.Stringer("unit", cu.Type()))
-		hub := GetConditionHub()
+		w := GetConditionHubWorker(st.cfg.SourceID)
 
-		if !hub.w.relayEnabled.Load() {
+		if !w.relayEnabled.Load() {
 			return nil
 		}
 
-		ctxWait, cancelWait := context.WithTimeout(hub.w.ctx, waitRelayCatchupTimeout)
+		ctxWait, cancelWait := context.WithTimeout(w.ctx, waitRelayCatchupTimeout)
 		defer cancelWait()
 
 		loadStatus := pu.Status(nil).(*pb.LoadStatus)
@@ -783,7 +783,7 @@ func (st *SubTask) unitTransWaitCondition(subTaskCtx context.Context) error {
 		}
 
 		for {
-			relayStatus := hub.w.relayHolder.Status(nil)
+			relayStatus := w.relayHolder.Status(nil)
 
 			if cfg.EnableGTID {
 				gset2, err = gtid.ParserGTID(cfg.Flavor, relayStatus.RelayBinlogGtid)

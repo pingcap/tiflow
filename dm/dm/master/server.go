@@ -963,16 +963,6 @@ func (s *Server) PurgeWorkerRelay(ctx context.Context, req *pb.PurgeWorkerRelayR
 		return resp2, err2
 	}
 
-	workerReq := &workerrpc.Request{
-		Type: workerrpc.CmdPurgeRelay,
-		PurgeRelay: &pb.PurgeRelayRequest{
-			Inactive: req.Inactive,
-			Time:     req.Time,
-			Filename: req.Filename,
-			SubDir:   req.SubDir,
-		},
-	}
-
 	var (
 		workerResps  = make([]*pb.CommonWorkerResponse, 0, len(req.Sources))
 		workerRespMu sync.Mutex
@@ -1020,6 +1010,16 @@ func (s *Server) PurgeWorkerRelay(ctx context.Context, req *pb.PurgeWorkerRelayR
 			go func(worker *scheduler.Worker, source string) {
 				defer wg.Done()
 				var workerResp *pb.CommonWorkerResponse
+				workerReq := &workerrpc.Request{
+					Type: workerrpc.CmdPurgeRelay,
+					PurgeRelay: &pb.PurgeRelayRequest{
+						Inactive: req.Inactive,
+						Time:     req.Time,
+						Filename: req.Filename,
+						SubDir:   req.SubDir,
+						Source:   source,
+					},
+				}
 				resp, err3 := worker.SendRequest(ctx, workerReq, s.cfg.RPCTimeout)
 				if err3 != nil {
 					workerResp = errorCommonWorkerResponse(err3.Error(), source, worker.BaseInfo().Name)
@@ -1103,10 +1103,6 @@ func (s *Server) getTaskSourceNameList(taskName string) []string {
 func (s *Server) getStatusFromWorkers(
 	ctx context.Context, sources []string, taskName string, specifiedSource bool,
 ) []*pb.QueryStatusResponse {
-	workerReq := &workerrpc.Request{
-		Type:        workerrpc.CmdQueryStatus,
-		QueryStatus: &pb.QueryStatusRequest{Name: taskName},
-	}
 	var (
 		workerResps  = make([]*pb.QueryStatusResponse, 0, len(sources))
 		workerRespMu sync.Mutex
@@ -1173,6 +1169,10 @@ func (s *Server) getStatusFromWorkers(
 				w, _ := args[1].(*scheduler.Worker)
 
 				var workerStatus *pb.QueryStatusResponse
+				workerReq := &workerrpc.Request{
+					Type:        workerrpc.CmdQueryStatus,
+					QueryStatus: &pb.QueryStatusRequest{Name: taskName, Source: sourceID},
+				}
 				resp, err := w.SendRequest(ctx, workerReq, s.cfg.RPCTimeout)
 				if err != nil {
 					workerStatus = &pb.QueryStatusResponse{
@@ -1803,7 +1803,8 @@ func (s *Server) waitOperationOk(
 	req := &workerrpc.Request{
 		Type: workerrpc.CmdQueryStatus,
 		QueryStatus: &pb.QueryStatusRequest{
-			Name: taskName,
+			Name:   taskName,
+			Source: sourceID,
 		},
 	}
 
@@ -2488,17 +2489,6 @@ func (s *Server) HandleError(ctx context.Context, req *pb.HandleErrorRequest) (*
 			}, nil
 		}
 	}
-
-	workerReq := workerrpc.Request{
-		Type: workerrpc.CmdHandleError,
-		HandleError: &pb.HandleWorkerErrorRequest{
-			Op:        req.Op,
-			Task:      req.Task,
-			BinlogPos: req.BinlogPos,
-			Sqls:      req.Sqls,
-		},
-	}
-
 	workerRespCh := make(chan *pb.CommonWorkerResponse, len(sources))
 	var wg sync.WaitGroup
 	for _, source := range sources {
@@ -2511,6 +2501,17 @@ func (s *Server) HandleError(ctx context.Context, req *pb.HandleErrorRequest) (*
 				return
 			}
 			var workerResp *pb.CommonWorkerResponse
+			workerReq := workerrpc.Request{
+				Type: workerrpc.CmdHandleError,
+				HandleError: &pb.HandleWorkerErrorRequest{
+					Op:        req.Op,
+					Task:      req.Task,
+					BinlogPos: req.BinlogPos,
+					Sqls:      req.Sqls,
+					Source:    source,
+				},
+			}
+
 			resp, err := worker.SendRequest(ctx, &workerReq, s.cfg.RPCTimeout)
 			if err != nil {
 				workerResp = errorCommonWorkerResponse(err.Error(), source, worker.BaseInfo().Name)
@@ -2899,6 +2900,7 @@ func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationS
 			}
 			*newReq.GetValidationStatus = *req
 			newReq.GetValidationStatus.TaskName = taskName
+			newReq.GetValidationStatus.Sources = []string{sourceID}
 			sendValidationRequest(ctx, s, newReq, sourceID, &wg, &workerRespMu, &workerResps, "get validation status")
 		}
 	}
@@ -2961,6 +2963,7 @@ func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationEr
 			}
 			*newReq.GetValidationError = *req
 			newReq.GetValidationError.TaskName = taskName
+			newReq.GetValidationError.Sources = []string{sourceID}
 			sendValidationRequest(ctx, s, &newReq, sourceID, &wg, &workerRespMu, &workerResps, "get validator error")
 		}
 	}
@@ -3016,6 +3019,7 @@ func (s *Server) OperateValidationError(ctx context.Context, req *pb.OperateVali
 			}
 			*newReq.OperateValidationError = *req
 			newReq.OperateValidationError.TaskName = taskName
+			newReq.OperateValidationError.Sources = []string{sourceID}
 			sendValidationRequest(ctx, s, &newReq, sourceID, &wg, &workerRespMu, &workerResps, "operate validator")
 		}
 	}
