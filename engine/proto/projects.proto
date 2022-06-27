@@ -1,8 +1,0 @@
-syntax = "proto3";
-
-package enginepb;
-
-message ProjectInfo {
-    string tenant_id = 1;
-    string project_id = 2;
-}
