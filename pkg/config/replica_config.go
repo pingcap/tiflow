@@ -36,7 +36,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 	Mounter: &MounterConfig{
 		WorkerNum: 16,
 	},
-	Sink: &SinkConfig{SplitTxn: false},
+	Sink: &SinkConfig{TxnAtomicity: TableTxnAtomicity},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
 		MaxLogSize:        64,

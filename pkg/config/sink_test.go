@@ -86,74 +86,56 @@ func TestValidateApplyParameter(t *testing.T) {
 	testCases := []struct {
 		sinkURI          string
 		expectedErr      string
-		expectedSplitTxn bool
+		expectedSplitTxn AtomicityLevel
 	}{
 		{
 			sinkURI:          "mysql://normal:123456@127.0.0.1:3306",
 			expectedErr:      "",
-			expectedSplitTxn: false,
+			expectedSplitTxn: TableTxnAtomicity,
 		},
 		{
-			sinkURI:          "mysql://normal:123456@127.0.0.1:3306?split-txn=true",
+			sinkURI:          "mysql://normal:123456@127.0.0.1:3306?transaction-atomicity=table",
 			expectedErr:      "",
-			expectedSplitTxn: true,
+			expectedSplitTxn: TableTxnAtomicity,
 		},
 		{
-			sinkURI:          "mysql://normal:123456@127.0.0.1:3306?split-txn=false",
+			sinkURI:          "mysql://normal:123456@127.0.0.1:3306?transaction-atomicity=none",
 			expectedErr:      "",
-			expectedSplitTxn: false,
+			expectedSplitTxn: NoneTxnAtomicity,
 		},
 		{
-			sinkURI:     "mysql://normal:123456@127.0.0.1:3306?split-txn=invalid",
-			expectedErr: ".*invalid split-txn value.*",
+			sinkURI:     "mysql://normal:123456@127.0.0.1:3306?transaction-atomicity=global",
+			expectedErr: "global level atomicity is not supported by.*",
 		},
 		{
-			sinkURI:     "tidb://normal:123456@127.0.0.1:3306?split-txn=true&protocol=canal",
+			sinkURI:     "tidb://normal:123456@127.0.0.1:3306?protocol=canal",
 			expectedErr: ".*protocol cannot be configured when using tidb scheme.*",
 		},
 		{
-			sinkURI:          "blackhole://normal:123456@127.0.0.1:3306?split-txn=false",
+			sinkURI:          "blackhole://normal:123456@127.0.0.1:3306?transaction-atomicity=none",
 			expectedErr:      "",
-			expectedSplitTxn: false,
+			expectedSplitTxn: NoneTxnAtomicity,
 		},
 		{
-			sinkURI:          "kafka://127.0.0.1:9092?split-txn=true&protocol=open-protocol",
+			sinkURI: "kafka://127.0.0.1:9092?transaction-atomicity=none" +
+				"&protocol=open-protocol",
 			expectedErr:      "",
-			expectedSplitTxn: true,
+			expectedSplitTxn: NoneTxnAtomicity,
 		},
 		{
-			sinkURI:          "kafka://127.0.0.1:9092?split-txn=false&protocol=open-protocol",
+			sinkURI: "pulsar://127.0.0.1:9092?transaction-atomicity=table" +
+				"&protocol=open-protocol",
 			expectedErr:      "",
-			expectedSplitTxn: false,
+			expectedSplitTxn: NoneTxnAtomicity,
 		},
 		{
-			sinkURI:          "kafka://127.0.0.1:9092?split-txn=true&protocol=default",
+			sinkURI:          "kafka://127.0.0.1:9092?protocol=default",
 			expectedErr:      "",
-			expectedSplitTxn: true,
+			expectedSplitTxn: NoneTxnAtomicity,
 		},
 		{
-			sinkURI:          "kafka://127.0.0.1:9092?split-txn=false&protocol=default",
-			expectedErr:      "",
-			expectedSplitTxn: false,
-		},
-		{
-			sinkURI:     "kafka://127.0.0.1:9092?split-txn=false",
+			sinkURI:     "kafka://127.0.0.1:9092?transaction-atomicity=table",
 			expectedErr: ".*unknown .* protocol for Message Queue sink.*",
-		},
-		{
-			sinkURI:          "kafka://127.0.0.1:9092?protocol=canal-json",
-			expectedErr:      "",
-			expectedSplitTxn: true,
-		},
-		{
-			sinkURI:          "kafka://127.0.0.1:9092?protocol=avro&split-txn=false",
-			expectedErr:      "",
-			expectedSplitTxn: true,
-		},
-		{
-			sinkURI:          "kafka://127.0.0.1:9092?protocol=maxwell&split-txn=true",
-			expectedErr:      "",
-			expectedSplitTxn: true,
 		},
 	}
 
@@ -163,7 +145,7 @@ func TestValidateApplyParameter(t *testing.T) {
 		require.Nil(t, err)
 		if tc.expectedErr == "" {
 			require.Nil(t, cfg.validateAndAdjust(parsedSinkURI, true))
-			require.Equal(t, tc.expectedSplitTxn, cfg.SplitTxn)
+			require.Equal(t, tc.expectedSplitTxn, cfg.TxnAtomicity)
 		} else {
 			require.Regexp(t, tc.expectedErr, cfg.validateAndAdjust(parsedSinkURI, true))
 		}

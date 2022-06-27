@@ -364,8 +364,12 @@ func (n *sinkNode) releaseResource(ctx context.Context) error {
 }
 
 func (n *sinkNode) checkSplitTxn(e *model.PolymorphicEvent) {
-	if n.replicaConfig.Sink.SplitTxn {
+	if n.replicaConfig.Sink.TxnAtomicity == config.NoneTxnAtomicity {
 		return
+	}
+
+	if n.replicaConfig.Sink.TxnAtomicity != config.TableTxnAtomicity {
+		log.Panic("unsupported txn atomicity", zap.Any("replicaConfig", n.replicaConfig))
 	}
 
 	if e.Resolved != nil && e.Resolved.IsBatchMode() {

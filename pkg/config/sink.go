@@ -23,8 +23,21 @@ import (
 	"go.uber.org/zap"
 )
 
-// DefaultMaxMessageBytes sets the default value for max-message-bytes
+// DefaultMaxMessageBytes sets the default value for max-message-bytes.
 const DefaultMaxMessageBytes = 10 * 1024 * 1024 // 10M
+
+type AtomicityLevel int
+
+const (
+	UnknowTxnAtomicity AtomicityLevel = iota
+	// NoneTxnAtomicity means atomicity of transactions is not guaranteed
+	NoneTxnAtomicity
+	// TableTxnAtomicity means atomicity of single table transactions is guaranteed.
+	TableTxnAtomicity
+	// GlobalTxnAtomicity means atomicity of cross table transactions is guaranteed, which
+	// is currently not supported by TiCDC.
+	GlobalTxnAtomicity
+)
 
 // ForceEnableOldValueProtocols specifies which protocols need to be forced to enable old value.
 var ForceEnableOldValueProtocols = []string{
@@ -39,10 +52,10 @@ type SinkConfig struct {
 	Protocol        string            `toml:"protocol" json:"protocol"`
 	ColumnSelectors []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
 	SchemaRegistry  string            `toml:"schema-registry" json:"schema-registry"`
-	SplitTxn        bool              `toml:"split-txn" json:"split-txn"`
+	TxnAtomicity    AtomicityLevel    `toml:"transaction-atomicity" json:"transaction-atomicity"`
 }
 
-// DispatchRule represents partition rule for a table
+// DispatchRule represents partition rule for a table.
 type DispatchRule struct {
 	Matcher []string `toml:"matcher" json:"matcher"`
 	// Deprecated, please use PartitionRule.
@@ -93,23 +106,34 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) er
 	return nil
 }
 
-// applyParameter fill the `ReplicaConfig` and `SplitTxn` by sinkURI.
+// applyParameter fill the `ReplicaConfig` and `TxnAtomicity` by sinkURI.
 func (s *SinkConfig) applyParameter(sinkURI *url.URL) error {
 	if sinkURI == nil {
 		return nil
 	}
 	params := sinkURI.Query()
 
-	splitTxn := params.Get("split-txn")
-	switch splitTxn {
+	txnAtomicity := params.Get("transaction-atomicity")
+	switch txnAtomicity {
 	case "":
 		fallthrough
-	case "false":
-		s.SplitTxn = false
-	case "true":
-		s.SplitTxn = true
+	case "table":
+		s.TxnAtomicity = TableTxnAtomicity
+	case "none":
+		s.TxnAtomicity = NoneTxnAtomicity
 	default:
-		return cerror.ErrSinkURIInvalid.GenWithStackByArgs("invalid split-txn value: %s", s)
+		errMsg := fmt.Sprintf("%s level atomicity is not supported by %s scheme",
+			txnAtomicity, sinkURI.Scheme)
+		return cerror.ErrSinkURIInvalid.GenWithStackByArgs(errMsg)
+	}
+
+	// MqSink only support `NoneTxnAtomicity`.
+	if isMqScheme(sinkURI.Scheme) && s.TxnAtomicity != NoneTxnAtomicity {
+		log.Warn("The configuration of transaction-atomicity is incompatible with scheme",
+			zap.Any("txnAtomicity", s.TxnAtomicity),
+			zap.String("scheme", sinkURI.Scheme),
+			zap.String("protocol", s.Protocol))
+		s.TxnAtomicity = NoneTxnAtomicity
 	}
 
 	s.Protocol = params.Get(ProtocolKey)
@@ -123,14 +147,6 @@ func (s *SinkConfig) applyParameter(sinkURI *url.URL) error {
 	} else if s.Protocol != "" {
 		return cerror.ErrSinkURIInvalid.GenWithStackByArgs(fmt.Sprintf("protocol cannot be configured "+
 			"when using %s scheme", sinkURI.Scheme))
-	}
-
-	// Only mysqlSink and open-protocol based MqSink support `split-txn=false`,
-	// set `split-txn` to true for other scenarios.
-	if !s.SplitTxn && s.Protocol != "" && s.Protocol != "default" && s.Protocol != "open-protocol" {
-		log.Error("The configuration of split-txn is incompatible with protocol",
-			zap.String("protocol", s.Protocol), zap.Bool("splitTxn", s.SplitTxn))
-		s.SplitTxn = true
 	}
 
 	return nil

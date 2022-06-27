@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/flowcontrol"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/actor/message"
+	"github.com/pingcap/tiflow/pkg/config"
 	serverConfig "github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -282,7 +283,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		zap.String("tableName", t.tableName),
 		zap.Uint64("quota", t.memoryQuota))
 
-	splitTxn := t.replicaConfig.Sink.SplitTxn
+	splitTxn := t.replicaConfig.Sink.TxnAtomicity == config.NoneTxnAtomicity
 
 	flowController := flowcontrol.NewTableFlowController(t.memoryQuota,
 		t.redoManager.Enabled(), splitTxn)
