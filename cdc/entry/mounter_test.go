@@ -1052,7 +1052,6 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 		walkTableSpanInStore(t, helper.Storage(), tableID, func(key []byte, value []byte) {
 			rawKV := f(key, value)
 			pEvent := model.NewPolymorphicEvent(rawKV)
-			log.Info("fizz", zap.String("rawKV", rawKV.String()))
 			err := mounter.DecodeEvent(ctx, pEvent)
 			require.Nil(t, err)
 			if pEvent.Row == nil {
@@ -1081,7 +1080,6 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 	for _, tc := range testCases {
 		tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName(tc.schema, tc.table)
 		require.True(t, ok)
-		log.Info("fizz", zap.String("tableName", tc.table))
 		decodeAndCheckRowInTable(tableInfo.ID, toRawKV)
 	}
 }
