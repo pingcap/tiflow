@@ -39,6 +39,7 @@ type workerForTest struct {
 	txnQueue *containers.SliceQueue[*causality.OutTxnEvent[*txnForTest]]
 	wg       sync.WaitGroup
 	closeCh  chan struct{}
+	execFunc func(*txnForTest) error
 }
 
 func newWorkerForTest() *workerForTest {
@@ -80,7 +81,11 @@ outer:
 				continue outer
 			}
 
-			txn.Callback(nil)
+			if w.execFunc == nil {
+				txn.Callback(nil)
+			} else {
+				txn.Callback(w.execFunc(txn.Txn))
+			}
 		}
 	}
 }

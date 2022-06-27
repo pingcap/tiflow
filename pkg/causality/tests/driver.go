@@ -48,6 +48,13 @@ func newConflictTestDriver(
 	}
 }
 
+func (d *conflictTestDriver) WithExecFunc(fn func(txn *txnForTest) error) *conflictTestDriver {
+	for _, worker := range d.workers {
+		worker.execFunc = fn
+	}
+	return d
+}
+
 func (d *conflictTestDriver) Run(ctx context.Context, n int) error {
 	statusTicker := time.NewTicker(1 * time.Second)
 	defer statusTicker.Stop()

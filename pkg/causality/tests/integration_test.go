@@ -23,7 +23,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-func TestConflict(t *testing.T) {
+func TestConflictBasics(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -34,10 +34,19 @@ func TestConflict(t *testing.T) {
 		batchSize      = 32
 		totalBatches   = 10000
 	)
+
+	conflictArray := make([]int, workingSetSize)
 	driver := newConflictTestDriver(
-		numWorkers,
-		numSlots,
-		newUniformGenerator(workingSetSize, batchSize))
+		numWorkers, numSlots, newUniformGenerator(workingSetSize, batchSize),
+	).WithExecFunc(
+		func(txn *txnForTest) error {
+			for _, key := range txn.ConflictKeys() {
+				// Access a position in the array without synchronization,
+				// so that if causality check is buggy, the Go race detection would fail.
+				conflictArray[key]++
+			}
+			return nil
+		})
 
 	require.NoError(t, driver.Run(ctx, totalBatches))
 	require.NoError(t, driver.Wait(ctx))
