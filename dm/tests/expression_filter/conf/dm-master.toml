@@ -1,6 +1,0 @@
-# Master Configuration.
-master-addr = ":8261"
-advertise-addr = "127.0.0.1:8261"
-
-rpc-timeout = "30s"
-auto-compaction-retention = "3s"

@@ -1,7 +1,0 @@
-# Master Configuration.
-advertise-addr = "127.0.0.1:8361"
-join = "127.0.0.1:8261"
-master-addr = ":8361"
-name = "master2"
-peer-urls = "127.0.0.1:8292"
-openapi = true

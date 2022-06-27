@@ -1,8 +1,0 @@
-#!/bin/sh
-. "$(dirname "$0")/_/husky.sh"
-
-export PATH="$PATH:$(pwd)/dm/ui/node_modules/.bin"
-linter=$(pwd)/dm/ui/node_modules/.bin/lint-staged
-if test -f "$linter"; then
-	$linter --config $(pwd)/dm/ui/.lintstagedrc.js
-fi

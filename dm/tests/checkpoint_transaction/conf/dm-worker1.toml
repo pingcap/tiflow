@@ -1,4 +1,0 @@
-join = "127.0.0.1:8261"
-keepalive-ttl = 1
-name = "worker1"
-worker-addr = "127.0.0.1:8262"

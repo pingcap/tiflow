@@ -1,7 +1,0 @@
-# Master Configuration.
-advertise-addr = "127.0.0.1:8261"
-initial-cluster = "master1=http://127.0.0.1:8291"
-master-addr = ":8261"
-name = "master1"
-peer-urls = "127.0.0.1:8291"
-openapi = true
