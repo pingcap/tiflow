@@ -43,6 +43,8 @@ type unitHolder interface {
 
 // unitHolderImpl wrap the dm-worker unit.
 type unitHolderImpl struct {
+	tp   framework.WorkerType
+	cfg  *dmconfig.SubTaskConfig
 	unit unit.Unit
 
 	// use to access process(init/close/pause/resume)
@@ -57,22 +59,26 @@ type unitHolderImpl struct {
 
 // newUnitHolderImpl creates a UnitHolderImpl
 func newUnitHolderImpl(workerType framework.WorkerType, cfg *dmconfig.SubTaskConfig) *unitHolderImpl {
-	unitHolder := &unitHolderImpl{}
-	switch workerType {
-	case framework.WorkerDMDump:
-		unitHolder.unit = dumpling.NewDumpling(cfg)
-	case framework.WorkerDMLoad:
-		unitHolder.unit = loader.NewLightning(cfg, nil, "dataflow-worker")
-	case framework.WorkerDMSync:
-		unitHolder.unit = syncer.NewSyncer(cfg, nil, nil)
+	return &unitHolderImpl{
+		tp:  workerType,
+		cfg: cfg,
 	}
-	return unitHolder
 }
 
 // Init implement UnitHolder.Init
 func (u *unitHolderImpl) Init(ctx context.Context) error {
 	u.processMu.Lock()
 	defer u.processMu.Unlock()
+
+	// worker may inject logger, metrics, etc. to config in InitImpl, so postpone construction
+	switch u.tp {
+	case framework.WorkerDMDump:
+		u.unit = dumpling.NewDumpling(u.cfg)
+	case framework.WorkerDMLoad:
+		u.unit = loader.NewLightning(u.cfg, nil, "dataflow-worker")
+	case framework.WorkerDMSync:
+		u.unit = syncer.NewSyncer(u.cfg, nil, nil)
+	}
 
 	if err := u.unit.Init(ctx); err != nil {
 		return err

@@ -18,10 +18,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/errors"
 	"go.uber.org/dig"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework/config"
@@ -33,7 +33,6 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/logutil"
@@ -44,6 +43,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	derror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/workerpool"
 )
 
@@ -251,7 +251,7 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 	initTime := w.clock.Mono()
 	rctx, ok := runtime.ToRuntimeCtx(ctx)
 	if ok {
-		initTime = clock.ToMono(rctx.SubmitTime())
+		initTime = rctx.SubmitTime()
 	}
 
 	w.masterClient = worker.NewMasterClient(

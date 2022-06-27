@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"math"
 	"os"
 	"sort"
 	"strings"
@@ -67,11 +68,14 @@ const (
 	DefaultValidatorValidateInterval  = 10 * time.Second
 	DefaultValidatorCheckInterval     = 5 * time.Second
 	DefaultValidatorRowErrorDelay     = 30 * time.Minute
-	DefaultValidatorMetaFlushInterval = 1 * time.Minute
+	DefaultValidatorMetaFlushInterval = 5 * time.Minute
 	DefaultValidatorBatchQuerySize    = 100
 	DefaultValidatorMaxPendingRowSize = "500m"
 
-	ValidatorMaxAccumulatedRow = 500
+	ValidatorMaxAccumulatedRow = 100000
+	// PendingRow is substantial in this version (in sysbench test)
+	// set to MaxInt temporaly and reset in the future.
+	DefaultValidatorMaxPendingRow = math.MaxInt32
 )
 
 // default config item values.
@@ -155,7 +159,7 @@ type MySQLInstance struct {
 	// SyncerThread is alias for WorkerCount in SyncerConfig, and its priority is higher than WorkerCount
 	SyncerThread int `yaml:"syncer-thread"`
 
-	ContinuousValidatorConfigName string          `yaml:"continuous-validator-config-name"`
+	ContinuousValidatorConfigName string          `yaml:"validator-config-name"`
 	ContinuousValidator           ValidatorConfig `yaml:"-"`
 }
 
@@ -396,10 +400,7 @@ func (v *ValidatorConfig) Adjust() error {
 		return err
 	}
 	if v.MaxPendingRowCount == 0 {
-		// validator validates every ValidatorMaxAccumulatedRow rows.
-		// if after 4 validation on each worker, we still cannot reduce the row count,
-		// we take it as a signal that there are too many validation failures.
-		v.MaxPendingRowCount = v.WorkerCount * 4 * ValidatorMaxAccumulatedRow
+		v.MaxPendingRowCount = DefaultValidatorMaxPendingRow
 	}
 	return nil
 }

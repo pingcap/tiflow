@@ -16,14 +16,14 @@ package servermaster
 import (
 	"sync"
 
+	"go.uber.org/zap"
+
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
 	frame "github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	"github.com/pingcap/tiflow/engine/pkg/errors"
-
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.uber.org/zap"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 type jobHolder struct {

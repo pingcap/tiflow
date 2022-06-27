@@ -258,6 +258,29 @@ paths:
       summary: List captures
       tags:
       - capture
+  /api/v1/captures/drain:
+    post:
+      consumes:
+      - application/json
+      description: Drain all tables at the target captures in cdc cluster
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: ""
+        "202":
+          description: ""
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+      summary: Drain captures
+      tags:
+      - capture
   /api/v1/changefeeds:
     get:
       consumes:

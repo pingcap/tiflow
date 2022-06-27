@@ -149,9 +149,6 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 			return errors.Trace(err)
 		}
 		if job == nil {
-			log.Info("ddl job is nil after unmarshal",
-				zap.String("namespace", h.changefeedID.Namespace),
-				zap.String("changefeed", h.changefeedID.ID))
 			return nil
 		}
 		if h.filter.ShouldDiscardDDL(job.Type) {

@@ -61,6 +61,41 @@ var doc = `{
                 }
             }
         },
+        "/api/v1/captures/drain": {
+            "post": {
+                "description": "Drain all tables at the target captures in cdc cluster",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "capture"
+                ],
+                "summary": "Drain captures",
+                "responses": {
+                    "200": {
+                        "description": ""
+                    },
+                    "202": {
+                        "description": ""
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/changefeeds": {
             "get": {
                 "description": "list all changefeeds in cdc cluster",

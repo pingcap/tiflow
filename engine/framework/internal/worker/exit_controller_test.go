@@ -23,7 +23,7 @@ import (
 
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
+	derrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 func TestExitControllerHappyPath(t *testing.T) {

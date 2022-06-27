@@ -25,7 +25,7 @@ import (
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/migrate"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
@@ -116,7 +116,7 @@ func (b *bankReactor) Tick(ctx context.Context, state ReactorState) (nextState R
 	bankState.TransferRandomly(rand.Intn(b.accountNumber/5 + 2))
 	// there is a 20% chance of restarting etcd worker
 	if rand.Intn(10) < 2 {
-		err = cerror.ErrReactorFinished.GenWithStackByArgs()
+		err = errors.ErrReactorFinished.GenWithStackByArgs()
 	}
 	bankState.notFirstTick = true
 	return state, err

@@ -56,6 +56,10 @@ var (
 		"capture not exists, %s",
 		errors.RFCCodeText("CDC:ErrCaptureNotExist"),
 	)
+	ErrSchedulerRequestFailed = errors.Normalize(
+		"scheduler request failed, %s",
+		errors.RFCCodeText("CDC:ErrSchedulerRequestFailed"),
+	)
 	ErrGetAllStoresFailed = errors.Normalize(
 		"get stores from pd failed",
 		errors.RFCCodeText("CDC:ErrGetAllStoresFailed"),
@@ -1013,6 +1017,16 @@ var (
 	ErrUpstreamNotFound = errors.Normalize(
 		"upstream not found, cluster-id: %d",
 		errors.RFCCodeText("CDC:ErrUpstreamNotFound"),
+	)
+
+	// ReplicationSet error
+	ErrReplicationSetInconsistent = errors.Normalize(
+		"replication set inconsistent: %s",
+		errors.RFCCodeText("CDC:ErrReplicationSetInconsistent"),
+	)
+	ErrReplicationSetMultiplePrimaryError = errors.Normalize(
+		"replication set multiple primary: %s",
+		errors.RFCCodeText("CDC:ErrReplicationSetMultiplePrimaryError"),
 	)
 
 	ErrUpstreamMissMatch = errors.Normalize(

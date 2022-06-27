@@ -22,8 +22,7 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -396,7 +395,7 @@ func TestFixState(t *testing.T) {
 				AdminJobType: AdminNone,
 				State:        StateNormal,
 				Error: &RunningError{
-					Code: string(cerrors.ErrGCTTLExceeded.RFCCode()),
+					Code: string(errors.ErrGCTTLExceeded.RFCCode()),
 				},
 			},
 			expectedState: StateFailed,
@@ -406,7 +405,7 @@ func TestFixState(t *testing.T) {
 				AdminJobType: AdminResume,
 				State:        StateNormal,
 				Error: &RunningError{
-					Code: string(cerrors.ErrGCTTLExceeded.RFCCode()),
+					Code: string(errors.ErrGCTTLExceeded.RFCCode()),
 				},
 			},
 			expectedState: StateFailed,
@@ -416,7 +415,7 @@ func TestFixState(t *testing.T) {
 				AdminJobType: AdminNone,
 				State:        StateNormal,
 				Error: &RunningError{
-					Code: string(cerrors.ErrClusterIDMismatch.RFCCode()),
+					Code: string(errors.ErrClusterIDMismatch.RFCCode()),
 				},
 			},
 			expectedState: StateError,
@@ -426,7 +425,7 @@ func TestFixState(t *testing.T) {
 				AdminJobType: AdminResume,
 				State:        StateNormal,
 				Error: &RunningError{
-					Code: string(cerrors.ErrClusterIDMismatch.RFCCode()),
+					Code: string(errors.ErrClusterIDMismatch.RFCCode()),
 				},
 			},
 			expectedState: StateError,
@@ -739,7 +738,8 @@ func TestValidateChangefeedID(t *testing.T) {
 		if !tt.wantErr {
 			require.Nil(t, err, fmt.Sprintf("case:%s", tt.name))
 		} else {
-			require.True(t, cerror.ErrInvalidChangefeedID.Equal(err), fmt.Sprintf("case:%s", tt.name))
+			require.True(t, errors.ErrInvalidChangefeedID.Equal(err),
+				fmt.Sprintf("case:%s", tt.name))
 		}
 	}
 }
@@ -821,7 +821,7 @@ func TestValidateNamespace(t *testing.T) {
 		if !tt.wantErr {
 			require.Nil(t, err, fmt.Sprintf("case:%s", tt.name))
 		} else {
-			require.True(t, cerror.ErrInvalidNamespace.Equal(err),
+			require.True(t, errors.ErrInvalidNamespace.Equal(err),
 				fmt.Sprintf("case:%s", tt.name))
 		}
 	}

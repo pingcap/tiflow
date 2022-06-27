@@ -18,26 +18,25 @@ import (
 	"strings"
 	"time"
 
-	perrors "github.com/pingcap/errors"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/client"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
-	"github.com/pingcap/tiflow/engine/pkg/errors"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
-	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
+	"github.com/pingcap/tiflow/engine/pkg/etcdutil"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	"github.com/pingcap/tiflow/engine/servermaster/cluster"
+	derrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 func (s *Server) generateSessionConfig() (*cluster.EtcdSessionConfig, error) {
 	value, err := s.info.ToJSON()
 	if err != nil {
-		return nil, errors.Wrap(errors.ErrMasterNewServer, err)
+		return nil, derrors.WrapError(derrors.ErrMasterNewServer, err)
 	}
 
 	return &cluster.EtcdSessionConfig{
@@ -78,7 +77,7 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return perrors.Trace(ctx.Err())
+			return errors.Trace(ctx.Err())
 		default:
 		}
 
@@ -114,7 +113,7 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 			for {
 				select {
 				case <-leaderCtx.Done():
-					return perrors.Trace(ctx.Err())
+					return errors.Trace(ctx.Err())
 				case <-ticker.C:
 					if !s.isEtcdLeader() {
 						log.L().Info("etcd leader changed, resigns server master leader",
@@ -129,10 +128,10 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 		})
 		err = errg.Wait()
 		if err != nil {
-			if perrors.Cause(err) == context.Canceled ||
-				errors.ErrEtcdLeaderChanged.Equal(err) {
+			if errors.Cause(err) == context.Canceled ||
+				derrors.ErrEtcdLeaderChanged.Equal(err) {
 				log.L().Info("leader service exits", zap.Error(err))
-			} else if errors.ErrMasterSessionDone.Equal(err) {
+			} else if derrors.ErrMasterSessionDone.Equal(err) {
 				log.L().Info("server master session done, reset session now", zap.Error(err))
 				needResetSession = true
 			} else {
@@ -153,12 +152,12 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 //    - If it is, return retry=false and continue the leader campaign.
 func (s *Server) checkLeaderExists(ctx context.Context) (retry bool, err error) {
 	// step-1
-	key, data, rev, err := etcdutils.GetLeader(ctx, s.etcdClient, adapter.MasterCampaignKey.Path())
+	key, data, rev, err := etcdutil.GetLeader(ctx, s.etcdClient, adapter.MasterCampaignKey.Path())
 	if err != nil {
-		if perrors.Cause(err) == context.Canceled {
-			return false, perrors.Trace(err)
+		if errors.Cause(err) == context.Canceled {
+			return false, errors.Trace(err)
 		}
-		if !errors.ErrMasterNoLeader.Equal(err) {
+		if !derrors.ErrMasterNoLeader.Equal(err) {
 			log.L().Warn("get leader failed", zap.Error(err))
 			return true, nil
 		}
