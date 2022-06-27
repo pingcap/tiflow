@@ -1013,7 +1013,7 @@ start a stopped leveldb system
 
 ["CDC:ErrStartTsBeforeGC"]
 error = '''
-fail to create changefeed because start-ts %d is earlier than GC safepoint at %d
+fail to create or maintain changefeed because start-ts %d is earlier than GC safepoint at %d
 '''
 
 ["CDC:ErrSupportGetOnly"]
