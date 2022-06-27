@@ -24,20 +24,18 @@ type errCtx struct {
 
 	mu     sync.Mutex
 	cancel context.CancelFunc
-	center *ErrCenter
 	err    error
 }
 
-func newErrCtx(parent context.Context, center *ErrCenter) *errCtx {
+func newErrCtx(parent context.Context) *errCtx {
 	ctx, cancel := context.WithCancel(parent)
 	return &errCtx{
 		ctx:    ctx,
 		cancel: cancel,
-		center: center,
 	}
 }
 
-func (c *errCtx) doCancel(removeFromCenter bool, err error) {
+func (c *errCtx) doCancel(err error) {
 	if err == nil {
 		panic("errctx: internal error: missing cancel error")
 	}
@@ -50,10 +48,6 @@ func (c *errCtx) doCancel(removeFromCenter bool, err error) {
 	c.err = err
 	c.cancel()
 	c.mu.Unlock()
-
-	if removeFromCenter {
-		c.center.removeChild(c)
-	}
 }
 
 func (c *errCtx) Deadline() (deadline time.Time, ok bool) {
