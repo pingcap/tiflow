@@ -34,7 +34,10 @@ func TestConflict(t *testing.T) {
 		batchSize      = 32
 		totalBatches   = 10000
 	)
-	driver := newConflictTestDriver(numWorkers, numSlots, newUniformGenerator(workingSetSize, batchSize))
+	driver := newConflictTestDriver(
+		numWorkers,
+		numSlots,
+		newUniformGenerator(workingSetSize, batchSize))
 
 	require.NoError(t, driver.Run(ctx, totalBatches))
 	require.NoError(t, driver.Wait(ctx))
@@ -57,7 +60,10 @@ func BenchmarkLowConflicts(b *testing.B) {
 	)
 
 	totalBatches := b.N / 8
-	driver := newConflictTestDriver(numWorkers, numSlots, newUniformGenerator(workingSetSize, batchSize))
+	driver := newConflictTestDriver(
+		numWorkers,
+		numSlots,
+		newUniformGenerator(workingSetSize, batchSize))
 	if err := driver.Run(ctx, totalBatches); err != nil {
 		panic(err)
 	}
@@ -80,7 +86,10 @@ func BenchmarkMediumConflicts(b *testing.B) {
 	)
 
 	totalBatches := b.N / 8
-	driver := newConflictTestDriver(numWorkers, numSlots, newUniformGenerator(workingSetSize, batchSize))
+	driver := newConflictTestDriver(
+		numWorkers,
+		numSlots,
+		newUniformGenerator(workingSetSize, batchSize))
 	if err := driver.Run(ctx, totalBatches); err != nil {
 		panic(err)
 	}
@@ -103,7 +112,10 @@ func BenchmarkHighConflicts(b *testing.B) {
 	)
 
 	totalBatches := b.N / 8
-	driver := newConflictTestDriver(numWorkers, numSlots, newUniformGenerator(workingSetSize, batchSize))
+	driver := newConflictTestDriver(
+		numWorkers,
+		numSlots,
+		newUniformGenerator(workingSetSize, batchSize))
 	if err := driver.Run(ctx, totalBatches); err != nil {
 		panic(err)
 	}

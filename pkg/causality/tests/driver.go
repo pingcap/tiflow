@@ -33,7 +33,9 @@ type conflictTestDriver struct {
 	pendingCount atomic.Int64
 }
 
-func newConflictTestDriver(numWorkers int, numSlots int, workload workloadGenerator) *conflictTestDriver {
+func newConflictTestDriver(
+	numWorkers int, numSlots int, workload workloadGenerator,
+) *conflictTestDriver {
 	workers := make([]*workerForTest, 0, numWorkers)
 	for i := 0; i < numWorkers; i++ {
 		workers = append(workers, newWorkerForTest())
