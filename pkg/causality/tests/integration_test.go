@@ -44,9 +44,30 @@ func BenchmarkLowConflicts(b *testing.B) {
 	defer cancel()
 
 	const (
-		numWorkers     = 8
-		numSlots       = 1024 * 1024
+		numWorkers = 8
+		numSlots   = 1024 * 1024
+		// Expected conflict race = 0.00006
 		workingSetSize = 4096 * 4096
+		batchSize      = 8
+	)
+
+	totalBatches := b.N / 8
+	driver := newConflictTestDriver(numWorkers, numSlots, newUniformGenerator(workingSetSize, batchSize))
+	if err := driver.Run(ctx, totalBatches); err != nil {
+		panic(err)
+	}
+	driver.Close()
+}
+
+func BenchmarkMediumConflicts(b *testing.B) {
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	const (
+		numWorkers = 8
+		numSlots   = 1024 * 1024
+		// Expected conflict race = 0.0155
+		workingSetSize = 4096
 		batchSize      = 8
 	)
 
@@ -63,9 +84,10 @@ func BenchmarkHighConflicts(b *testing.B) {
 	defer cancel()
 
 	const (
-		numWorkers     = 8
-		numSlots       = 1024 * 1024
-		workingSetSize = 4096
+		numWorkers = 8
+		numSlots   = 1024 * 1024
+		// Expected conflict race = 0.41
+		workingSetSize = 128
 		batchSize      = 8
 	)
 
