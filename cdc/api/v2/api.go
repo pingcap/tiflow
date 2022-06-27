@@ -57,9 +57,9 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	// unsafe apis
 	unsafeGroup := v2.Group("/unsafe")
 	unsafeGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
-	unsafeGroup.GET("/unsafe/metadata", api.CDCMetaData)
-	unsafeGroup.POST("/unsafe/resolve_lock", api.ResolveLock)
-	unsafeGroup.DELETE("/unsafe/service_gc_safepoint", api.DeleteServiceGcSafePoint)
+	unsafeGroup.GET("/metadata", api.CDCMetaData)
+	unsafeGroup.POST("/resolve_lock", api.ResolveLock)
+	unsafeGroup.DELETE("/service_gc_safepoint", api.DeleteServiceGcSafePoint)
 
 	// common APIs
 	v2.POST("/tso", api.QueryTso)
