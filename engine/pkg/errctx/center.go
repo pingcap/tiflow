@@ -32,9 +32,7 @@ type ErrCenter struct {
 
 // NewErrCenter creates a new ErrCenter.
 func NewErrCenter() *ErrCenter {
-	return &ErrCenter{
-		children: map[*errCtx]struct{}{},
-	}
+	return &ErrCenter{}
 }
 
 func (c *ErrCenter) removeChild(child *errCtx) {
@@ -87,6 +85,9 @@ func (c *ErrCenter) WithCancelOnFirstError(ctx context.Context) context.Context 
 		// First error is received, cancel the context directly.
 		ec.doCancel(false, c.firstErr)
 	} else {
+		if c.children == nil {
+			c.children = make(map[*errCtx]struct{})
+		}
 		c.children[ec] = struct{}{}
 	}
 	return ec
