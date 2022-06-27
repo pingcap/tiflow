@@ -19,19 +19,18 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
-	"github.com/pingcap/tiflow/cdc/sinkv2/tableevent"
 )
 
 // Assert TableSink implementation
 var _ TableSink = (*eventTableSink[*model.RowChangedEvent])(nil)
 var _ TableSink = (*eventTableSink[*model.SingleTableTxn])(nil)
 
-type eventTableSink[E tableevent.TableEvent] struct {
+type eventTableSink[E eventsink.TableEvent] struct {
 	eventID         uint64
 	maxResolvedTs   model.ResolvedTs
 	backendSink     eventsink.EventSink[E]
 	progressTracker *progressTracker
-	eventAppender   tableevent.Appender[E]
+	eventAppender   eventsink.Appender[E]
 	// NOTICE: It is ordered by commitTs.
 	eventBuffer []E
 	state       *pipeline.TableState
@@ -60,9 +59,9 @@ func (e *eventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) {
 	}
 	resolvedEvents := e.eventBuffer[:i]
 
-	resolvedCallbackableEvents := make([]*tableevent.CallbackableEvent[E], 0, len(resolvedEvents))
+	resolvedCallbackableEvents := make([]*eventsink.CallbackableEvent[E], 0, len(resolvedEvents))
 	for _, ev := range resolvedEvents {
-		ce := &tableevent.CallbackableEvent[E]{
+		ce := &eventsink.CallbackableEvent[E]{
 			Event: ev,
 			Callback: func() {
 				e.progressTracker.remove(e.eventID)

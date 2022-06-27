@@ -11,21 +11,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tableevent
+package eventsink
 
 import "github.com/pingcap/tiflow/cdc/model"
 
 // Assert Appender[E TableEvent] implementation
-var _ Appender[*model.SingleTableTxn] = (*TxnEventAppender)(nil)
+var _ Appender[*model.RowChangedEvent] = (*RowChangeEventAppender)(nil)
 
-// TxnEventAppender is the appender for SingleTableTxn.
-type TxnEventAppender struct{}
+// RowChangeEventAppender is the builder for RowChangedEvent.
+type RowChangeEventAppender struct{}
 
-// Append appends the given rows to the given txn buffer.
-func (t *TxnEventAppender) Append(
-	buffer []*model.SingleTableTxn,
+// Append appends the given rows to the given buffer.
+func (r *RowChangeEventAppender) Append(
+	buffer []*model.RowChangedEvent,
 	rows ...*model.RowChangedEvent,
-) []*model.SingleTableTxn {
-	// TODO implement me
-	panic("implement me")
+) []*model.RowChangedEvent {
+	return append(buffer, rows...)
 }

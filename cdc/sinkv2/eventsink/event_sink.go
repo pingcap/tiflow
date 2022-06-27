@@ -13,13 +13,11 @@
 
 package eventsink
 
-import "github.com/pingcap/tiflow/cdc/sinkv2/tableevent"
-
 // EventSink is the interface for event sink.
-type EventSink[E tableevent.TableEvent] interface {
+type EventSink[E TableEvent] interface {
 	// WriteEvents writes events to the sink.
 	// This is an asynchronously and thread-safe method.
-	WriteEvents(rows ...*tableevent.CallbackableEvent[E])
+	WriteEvents(rows ...*CallbackableEvent[E])
 	// Close closes the sink.
 	Close() error
 }
