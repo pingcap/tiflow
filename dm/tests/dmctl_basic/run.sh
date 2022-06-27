@@ -227,7 +227,7 @@ function run() {
 
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
-  # all sources can be created even if worker number < source number now
+	# all sources can be created even if worker number < source number now
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"operate-source show" \
 		"\"result\": true" 3 \
@@ -236,7 +236,7 @@ function run() {
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $dm_worker2_conf
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
-  # wait for rebalance
+	# wait for rebalance
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"operate-source show" \
 		"\"result\": true" 3 \
@@ -250,9 +250,9 @@ function run() {
 
 	test_operate_task_bound_to_a_source
 
-	 # TODO: not sure source1's worker now, revert this after weight is supported
+	# TODO: not sure source1's worker now, revert this after weight is supported
 	source1worker=$($PWD/bin/dmctl.test DEVEL --master-addr "127.0.0.1:$MASTER_PORT" query-status test -s mysql-replica-01 |
-                		grep 'worker' | awk -F: '{print $2}' | cut -d'"' -f 2)
+		grep 'worker' | awk -F: '{print $2}' | cut -d'"' -f 2)
 
 	transfer_source_valid $SOURCE_ID1 $source1worker # transfer to self
 
@@ -270,7 +270,7 @@ function run() {
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $dm_worker2_conf
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
-  sleep 2
+	sleep 2
 	start_relay_success
 	start_relay_diff_worker_success
 	start_relay_without_worker_name_fail

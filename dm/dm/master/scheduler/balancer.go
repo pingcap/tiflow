@@ -26,6 +26,7 @@ import (
 )
 
 const (
+	// FIXME: just make it easy for test. Revert this to 5 minutes after we support
 	rebalanceInterval = 2 * time.Second
 	hasLoadTaskWeight = 1e6
 )

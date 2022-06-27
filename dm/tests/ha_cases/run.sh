@@ -115,7 +115,7 @@ function test_standalone_running() {
 
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
-  sleep 2
+	sleep 2
 
 	worker=$($PWD/bin/dmctl.test DEVEL --master-addr "127.0.0.1:$MASTER_PORT" query-status test2 |
 		grep 'worker' | awk -F: '{print $2}')
@@ -297,7 +297,7 @@ function test_exclusive_relay() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"operate-source show -s $SOURCE_ID2" \
-    "\"result\": true" 2
+		"\"result\": true" 2
 
 	cleanup
 	echo "[$(date)] <<<<<< finish test_exclusive_relay >>>>>>"

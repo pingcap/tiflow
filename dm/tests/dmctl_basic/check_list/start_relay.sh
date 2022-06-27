@@ -13,11 +13,11 @@ function start_relay_wrong_arg() {
 }
 
 function start_relay_success() {
-  # TODO: not sure source1's worker now, revert this after weight is supported
-  source1worker=$($PWD/bin/dmctl.test DEVEL --master-addr "127.0.0.1:$MASTER_PORT" query-status test -s $SOURCE_ID1 |
-                    grep 'worker' | awk -F: '{print $2}' | cut -d'"' -f 2)
-  source2worker=$($PWD/bin/dmctl.test DEVEL --master-addr "127.0.0.1:$MASTER_PORT" query-status test -s $SOURCE_ID2 |
-                    grep 'worker' | awk -F: '{print $2}' | cut -d'"' -f 2)
+	# TODO: not sure source1's worker now, revert this after weight is supported
+	source1worker=$($PWD/bin/dmctl.test DEVEL --master-addr "127.0.0.1:$MASTER_PORT" query-status test -s $SOURCE_ID1 |
+		grep 'worker' | awk -F: '{print $2}' | cut -d'"' -f 2)
+	source2worker=$($PWD/bin/dmctl.test DEVEL --master-addr "127.0.0.1:$MASTER_PORT" query-status test -s $SOURCE_ID2 |
+		grep 'worker' | awk -F: '{print $2}' | cut -d'"' -f 2)
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-relay -s $SOURCE_ID1 $source1worker" \
@@ -44,8 +44,8 @@ function start_relay_diff_worker_success() {
 		"\"result\": true" 2
 	# revert this change for the following test
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-  	"stop-relay -s $SOURCE_ID1 worker2" \
-  		"\"result\": true" 2
+		"stop-relay -s $SOURCE_ID1 worker2" \
+		"\"result\": true" 2
 }
 
 function start_relay_with_worker_name_fail() {

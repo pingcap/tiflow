@@ -463,7 +463,7 @@ function run() {
 		"\"result\": true" 2
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" "resume-task $ILLEGAL_CHAR_NAME" "\"result\": true" 3
 
-  # restart dm-worker2 first because dm-master will rebalance sources without relay first
+	# restart dm-worker2 first because dm-master will rebalance sources without relay first
 	# restart dm-worker2
 	pkill -hup -f dm-worker2.toml 2>/dev/null || true
 	wait_pattern_exit dm-worker2.toml

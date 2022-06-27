@@ -508,13 +508,13 @@ func (s *Server) doClose() {
 	}
 
 	// close listener at last, so we can get status from it if worker failed to close in previous step
-	//if s.rootLis != nil {
-	//	err2 := s.rootLis.Close()
-	//	if err2 != nil && !common.IsErrNetClosing(err2) {
-	//		log.L().Error("fail to close net listener", log.ShortError(err2))
-	//	}
-	//}
-	//s.httpWg.Wait()
+	if s.rootLis != nil {
+		err2 := s.rootLis.Close()
+		if err2 != nil && !common.IsErrNetClosing(err2) {
+			log.L().Error("fail to close net listener", log.ShortError(err2))
+		}
+	}
+	s.httpWg.Wait()
 
 	s.closed.Store(true)
 }

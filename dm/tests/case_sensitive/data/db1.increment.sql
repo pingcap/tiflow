@@ -8,7 +8,7 @@ insert into Do_Table (id, name, ts) values (102, 'Jet', '2021-05-31 13:01:00');
 use Upper_DB1;
 insert into Do_Table1 (id, name) values (3, 'third');
 alter table Do_Table1 add column info json;
-alter table Do_Table1 add column gen_id int generated always as (json_extract(`info`, _utf8mb4'$.id')) virtual;
+alter table Do_Table1 add column gen_id int as (info->'$.id');
 alter table Do_Table1 add index multi_col(`name`, `gen_id`);
 insert into Do_Table1 (id, name, info) values (4, 'gentest', '{"id": 123}');
 insert into Do_Table1 (id, name, info) values (5, 'gentest', '{"id": 124}');

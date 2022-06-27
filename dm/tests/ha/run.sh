@@ -116,7 +116,7 @@ function run() {
 		"$SOURCE_ID1" 1
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"transfer-source $SOURCE_ID2 worker2" \
+		"transfer-source $SOURCE_ID2 worker2"
 
 	echo "query-status from all dm-master"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT1" \
