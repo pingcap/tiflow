@@ -45,7 +45,7 @@ func (r *rebalanceScheduler) Name() string {
 func (r *rebalanceScheduler) Schedule(
 	_ model.Ts,
 	currentTables []model.TableID,
-	captures map[model.CaptureID]*model.CaptureInfo,
+	captures map[model.CaptureID]*CaptureStatus,
 	replications map[model.TableID]*ReplicationSet,
 ) []*scheduleTask {
 	// rebalance is not triggered, or there is still some pending task,
@@ -65,6 +65,7 @@ func (r *rebalanceScheduler) Schedule(
 			return nil
 		}
 		if rep.State != ReplicationSetStateReplicating {
+			log.Debug("tpscheduler: not all table replicating, premature to rebalance tables")
 			return nil
 		}
 	}
@@ -83,7 +84,7 @@ func (r *rebalanceScheduler) Schedule(
 func newBurstBalanceMoveTables(
 	accept callback,
 	random *rand.Rand,
-	captures map[model.CaptureID]*model.CaptureInfo,
+	captures map[model.CaptureID]*CaptureStatus,
 	replications map[model.TableID]*ReplicationSet,
 ) *scheduleTask {
 	tablesPerCapture := make(map[model.CaptureID]*tableSet)
