@@ -16,13 +16,13 @@ package scheduler
 import (
 	"context"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/model"
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // Scheduler is a full set of scheduling management, containing capacity provider,
@@ -67,7 +67,7 @@ func (s *Scheduler) ScheduleTask(
 	// Checks that the required executor has enough capacity to
 	// run the task.
 	if !s.checkCostAllows(request, constraint) {
-		return nil, derror.ErrClusterResourceNotEnough.GenWithStackByArgs()
+		return nil, errors.ErrClusterResourceNotEnough.GenWithStackByArgs()
 	}
 	return &schedModel.SchedulerResponse{ExecutorID: constraint}, nil
 }
@@ -81,7 +81,7 @@ func (s *Scheduler) scheduleByCostOnly(
 			ExecutorID: target,
 		}, nil
 	}
-	return nil, derror.ErrClusterResourceNotEnough.GenWithStackByArgs()
+	return nil, errors.ErrClusterResourceNotEnough.GenWithStackByArgs()
 }
 
 func (s *Scheduler) checkCostAllows(
@@ -108,7 +108,7 @@ func (s *Scheduler) getConstraint(
 	for _, resourceID := range resources {
 		executorID, hasConstraint, err := s.placementConstrainer.GetPlacementConstraint(ctx, resourceID)
 		if err != nil {
-			if derror.ErrResourceDoesNotExist.Equal(err) {
+			if errors.ErrResourceDoesNotExist.Equal(err) {
 				return "", schedModel.NewResourceNotFoundError(resourceID, err)
 			}
 			return "", err

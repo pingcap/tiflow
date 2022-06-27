@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package etcdutils
+package etcdutil
 
 import (
 	"fmt"
@@ -21,7 +21,7 @@ import (
 
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/zap"
 )
@@ -72,7 +72,7 @@ func PrepareJoinEtcd(cfg *ConfigParams, addr string) error {
 	joinFP := filepath.Join(cfg.DataDir, "join")
 	if s, err := os.ReadFile(joinFP); err != nil {
 		if !os.IsNotExist(err) {
-			return errors.Wrap(errors.ErrMasterJoinEmbedEtcdFail, err, "read persistent join data")
+			return errors.WrapError(errors.ErrMasterJoinEmbedEtcdFail, err, "read persistent join data")
 		}
 	} else {
 		cfg.InitialCluster = strings.TrimSpace(string(s))
@@ -84,14 +84,14 @@ func PrepareJoinEtcd(cfg *ConfigParams, addr string) error {
 	// if without previous data, we need a client to contact with the existing cluster.
 	client, err := etcdutil.CreateClient(strings.Split(cfg.Join, ","), nil)
 	if err != nil {
-		return errors.Wrap(errors.ErrMasterJoinEmbedEtcdFail, err, fmt.Sprintf("create etcd client for %s", cfg.Join))
+		return errors.WrapError(errors.ErrMasterJoinEmbedEtcdFail, err, fmt.Sprintf("create etcd client for %s", cfg.Join))
 	}
 	defer client.Close()
 
 	// `member list`
 	listResp, err := etcdutil.ListMembers(client)
 	if err != nil {
-		return errors.Wrap(errors.ErrMasterJoinEmbedEtcdFail, err, fmt.Sprintf("list member for %s", cfg.Join))
+		return errors.WrapError(errors.ErrMasterJoinEmbedEtcdFail, err, fmt.Sprintf("list member for %s", cfg.Join))
 	}
 
 	// check members
@@ -111,7 +111,7 @@ func PrepareJoinEtcd(cfg *ConfigParams, addr string) error {
 	// `member add`, a new/deleted DM-master joins to an existing cluster.
 	addResp, err := etcdutil.AddMember(client, strings.Split(cfg.AdvertisePeerUrls, ","))
 	if err != nil {
-		return errors.Wrap(errors.ErrMasterJoinEmbedEtcdFail, err, fmt.Sprintf("add member %s", cfg.AdvertisePeerUrls))
+		return errors.WrapError(errors.ErrMasterJoinEmbedEtcdFail, err, fmt.Sprintf("add member %s", cfg.AdvertisePeerUrls))
 	}
 
 	// generate `--initial-cluster`
@@ -139,10 +139,10 @@ func PrepareJoinEtcd(cfg *ConfigParams, addr string) error {
 
 	// save `--initial-cluster` in persist data
 	if err = os.MkdirAll(cfg.DataDir, privateDirMode); err != nil && !os.IsExist(err) {
-		return errors.Wrap(errors.ErrMasterJoinEmbedEtcdFail, err, "create directory")
+		return errors.WrapError(errors.ErrMasterJoinEmbedEtcdFail, err, "create directory")
 	}
 	if err = os.WriteFile(joinFP, []byte(cfg.InitialCluster), privateDirMode); err != nil {
-		return errors.Wrap(errors.ErrMasterJoinEmbedEtcdFail, err, "write persistent join data")
+		return errors.WrapError(errors.ErrMasterJoinEmbedEtcdFail, err, "write persistent join data")
 	}
 
 	return nil

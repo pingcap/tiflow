@@ -149,7 +149,7 @@ var changeFeedIDRe = regexp.MustCompile(`^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*$`)
 // the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", length no more than "changeFeedIDMaxLen", eg, "simple-changefeed-task".
 func ValidateChangefeedID(changefeedID string) error {
 	if !changeFeedIDRe.MatchString(changefeedID) || len(changefeedID) > changeFeedIDMaxLen {
-		return cerror.ErrInvalidChangefeedID.GenWithStackByArgs(changeFeedIDMaxLen)
+		return cerrors.ErrInvalidChangefeedID.GenWithStackByArgs(changeFeedIDMaxLen)
 	}
 	return nil
 }
@@ -230,7 +230,7 @@ func (info *ChangeFeedInfo) GetTargetTs() uint64 {
 // Marshal returns the json marshal format of a ChangeFeedInfo
 func (info *ChangeFeedInfo) Marshal() (string, error) {
 	data, err := json.Marshal(info)
-	return string(data), cerror.WrapError(cerror.ErrMarshalFailed, err)
+	return string(data), cerrors.WrapError(cerrors.ErrMarshalFailed, err)
 }
 
 // Unmarshal unmarshals into *ChangeFeedInfo from json marshal byte slice
@@ -238,7 +238,7 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, &info)
 	if err != nil {
 		return errors.Annotatef(
-			cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: %v", data)
+			cerrors.WrapError(cerrors.ErrUnmarshalFailed, err), "Unmarshal data: %v", data)
 	}
 	return nil
 }
@@ -388,5 +388,5 @@ func (info *ChangeFeedInfo) HasFastFailError() bool {
 	if info.Error == nil {
 		return false
 	}
-	return cerror.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
+	return cerrors.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
 }

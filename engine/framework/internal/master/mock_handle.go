@@ -21,8 +21,8 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // MockHandle implements WorkerHandle, it can work as either a RunningHandle or
@@ -81,7 +81,7 @@ func (h *MockHandle) ToPB() (*pb.WorkerInfo, error) {
 // SendMessage implements RunningHandle.SendMessage
 func (h *MockHandle) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error {
 	if h.IsTombstone {
-		return derror.ErrSendingMessageToTombstone.GenWithStackByCause(h.WorkerID)
+		return errors.ErrSendingMessageToTombstone.GenWithStackByCause(h.WorkerID)
 	}
 
 	h.sendMessageCount.Add(1)

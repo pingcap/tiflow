@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/httputil"
@@ -134,7 +135,7 @@ func HandleOwnerScheduleTable(
 	ctx context.Context, capture capture.InfoForAPI,
 	changefeedID model.ChangeFeedID, captureID string, tableID int64,
 ) error {
-	// Use buffered channel to prevernt blocking owner.
+	// Use buffered channel to prevent blocking owner.
 	done := make(chan error, 1)
 	o, err := capture.GetOwner()
 	if err != nil {
@@ -228,4 +229,30 @@ func ForwardToOwner(c *gin.Context, p capture.InfoForAPI) {
 		_ = c.Error(err)
 		return
 	}
+}
+
+// HandleOwnerDrainCapture schedule drain the target capture
+func HandleOwnerDrainCapture(
+	ctx context.Context, capture *capture.Capture, captureID string,
+) (*model.DrainCaptureResp, error) {
+	// Use buffered channel to prevent blocking owner.
+	done := make(chan error, 1)
+	o, err := capture.GetOwner()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	query := scheduler.Query{
+		CaptureID: captureID,
+	}
+
+	o.DrainCapture(&query, done)
+
+	select {
+	case <-ctx.Done():
+		err = ctx.Err()
+	case err = <-done:
+	}
+
+	return query.Resp.(*model.DrainCaptureResp), errors.Trace(err)
 }

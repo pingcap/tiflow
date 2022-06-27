@@ -20,9 +20,9 @@ import (
 	"time"
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	cerrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/orm/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -185,7 +185,7 @@ func TestProjectMock(t *testing.T) {
 			inputs: []interface{}{
 				"p113",
 			},
-			err: cerrors.ErrMetaEntryNotFound.GenWithStackByArgs(),
+			err: errors.ErrMetaEntryNotFound.GenWithStackByArgs(),
 		},
 	}
 
@@ -374,7 +374,7 @@ func TestJobMock(t *testing.T) {
 			inputs: []interface{}{
 				"j113",
 			},
-			err: cerrors.ErrMetaEntryNotFound.GenWithStackByArgs(),
+			err: errors.ErrMetaEntryNotFound.GenWithStackByArgs(),
 		},
 		{
 			// SELECT * FROM `master_meta_kv_data` WHERE project_id = '111-222-333'
@@ -550,7 +550,7 @@ func TestWorkerMock(t *testing.T) {
 				"j111",
 				"w225",
 			},
-			err: cerrors.ErrMetaEntryNotFound.GenWithStackByArgs(),
+			err: errors.ErrMetaEntryNotFound.GenWithStackByArgs(),
 		},
 		{
 			// SELECT * FROM `worker_statuses` WHERE project_id = '111-222-333' AND job_id = '111'
@@ -711,7 +711,7 @@ func TestResourceMock(t *testing.T) {
 			inputs: []interface{}{
 				"r335",
 			},
-			err: cerrors.ErrMetaEntryNotFound.GenWithStackByArgs(),
+			err: errors.ErrMetaEntryNotFound.GenWithStackByArgs(),
 		},
 		{
 			fn: "QueryResourcesByJobID",

@@ -11,14 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package etcdutils
+package etcdutil
 
 import (
 	"context"
 	"net/http"
 	"time"
 
-	"github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/grpc"
@@ -40,7 +40,7 @@ func StartEtcd(etcdCfg *embed.Config,
 
 	e, err := embed.StartEtcd(etcdCfg)
 	if err != nil {
-		return nil, errors.Wrap(errors.ErrMasterStartEmbedEtcdFail, err)
+		return nil, errors.WrapError(errors.ErrMasterStartEmbedEtcdFail, err)
 	}
 
 	select {
@@ -67,7 +67,7 @@ func GetLeader(ctx context.Context, cli *clientv3.Client, campKey string) (
 	opts := append([]clientv3.OpOption{clientv3.WithPrefix()}, clientv3.WithFirstCreate()...)
 	resp, err := cli.Get(ctx, campKey, opts...)
 	if err != nil {
-		err = errors.Wrap(errors.ErrEtcdAPIError, err)
+		err = errors.WrapError(errors.ErrEtcdAPIError, err)
 		return
 	}
 	if len(resp.Kvs) == 0 {
