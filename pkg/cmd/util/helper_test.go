@@ -151,14 +151,14 @@ func TestStrictDecodeInvalidFile(t *testing.T) {
 
 	configPath := filepath.Join(tmpDir, "ticdc.toml")
 	configContent := fmt.Sprintf(`
-unknown = "128.0.0.1:1234"
-data-dir = "%+v"
+	unknown = "128.0.0.1:1234"
+	data-dir = "%+v"
 
-[log.unkown]
-max-size = 200
-max-days = 1
-max-backups = 1
-`, dataDir)
+	[log.unkown]
+	max-size = 200
+	max-days = 1
+	max-backups = 1
+	`, dataDir)
 	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.Nil(t, err)
 
@@ -191,7 +191,8 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 			{Matcher: []string{"test1.*", "test2.*"}, Columns: []string{"column1", "column2"}},
 			{Matcher: []string{"test3.*", "test4.*"}, Columns: []string{"!a", "column3"}},
 		},
-		Protocol: "open-protocol",
+		Protocol:     "open-protocol",
+		TxnAtomicity: config.TableTxnAtomicity,
 	}, cfg.Sink)
 }
 
