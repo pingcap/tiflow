@@ -523,49 +523,6 @@ func (t *testSubTask) TestSubtaskFastQuit(c *C) {
 	c.Assert(st.Stage(), Equals, pb.Stage_Stopped)
 }
 
-func TestGetValidatorError(t *testing.T) {
-	cfg := &config.SubTaskConfig{
-		Name: "test-validate-error",
-		ValidatorCfg: config.ValidatorConfig{
-			Mode: config.ValidationFast,
-		},
-	}
-	st := NewSubTaskWithStage(cfg, pb.Stage_Paused, nil, "worker")
-	// validator == nil
-	validatorErrs, err := st.GetValidatorError(pb.ValidateErrorState_InvalidErr)
-	require.Nil(t, validatorErrs)
-	require.True(t, terror.ErrValidatorNotFound.Equal(err))
-	// validator != nil: will be tested in IT
-}
-
-func TestOperateValidatorError(t *testing.T) {
-	cfg := &config.SubTaskConfig{
-		Name: "test-validate-error",
-		ValidatorCfg: config.ValidatorConfig{
-			Mode: config.ValidationFast,
-		},
-	}
-	st := NewSubTaskWithStage(cfg, pb.Stage_Paused, nil, "worker")
-	// validator == nil
-	require.True(t, terror.ErrValidatorNotFound.Equal(st.OperateValidatorError(pb.ValidationErrOp_ClearErrOp, 0, true)))
-	// validator != nil: will be tested in IT
-}
-
-func TestValidatorStatus(t *testing.T) {
-	cfg := &config.SubTaskConfig{
-		Name: "test-validate-status",
-		ValidatorCfg: config.ValidatorConfig{
-			Mode: config.ValidationFast,
-		},
-	}
-	st := NewSubTaskWithStage(cfg, pb.Stage_Paused, nil, "worker")
-	// validator == nil
-	stats, err := st.GetValidatorStatus()
-	require.Nil(t, stats)
-	require.True(t, terror.ErrValidatorNotFound.Equal(err))
-	// validator != nil: will be tested in IT
-}
-
 func TestSubtaskRace(t *testing.T) {
 	// to test data race of Marshal() and markResultCanceled()
 	tempErrors := []*pb.ProcessError{}
