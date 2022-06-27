@@ -103,7 +103,6 @@ func (n *Node) DependOn(target *Node) {
 	// been created.
 	// Creating these maps is done lazily because we want to
 	// optimize for the case where there are little conflicts.
-	target.lazyCreateMap()
 	n.lazyCreateMap()
 
 	if _, ok := target.dependers.Get(n.id); ok {
@@ -237,6 +236,6 @@ func (n *Node) tryResolve() (int64, bool) {
 
 func (n *Node) lazyCreateMap() {
 	if n.conflictCounts == nil {
-		n.conflictCounts = make(map[workerID]int)
+		n.conflictCounts = make(map[workerID]int, 4)
 	}
 }
