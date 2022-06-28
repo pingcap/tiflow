@@ -34,6 +34,13 @@ func NewErrCenter() *ErrCenter {
 	return &ErrCenter{}
 }
 
+func (c *ErrCenter) removeChild(child *errCtx) {
+	c.rwm.Lock()
+	defer c.rwm.Unlock()
+
+	delete(c.children, child)
+}
+
 // OnError receivers an error, if the error center has received one, drops the
 // new error and records a warning log. Otherwise the error will be recorded and
 // doneCh will be closed to use as notification.
@@ -54,7 +61,7 @@ func (c *ErrCenter) OnError(err error) {
 	}
 	c.firstErr = err
 	for child := range c.children {
-		child.doCancel(c.firstErr)
+		child.doCancel(false /* removeSelf */, c.firstErr)
 	}
 	c.children = nil
 }
@@ -68,21 +75,22 @@ func (c *ErrCenter) CheckError() error {
 }
 
 // WithCancelOnFirstError creates an error context which will cancel the context when the first error is received.
-// TODO: returns a context.CancelFunc like context.WithCancel.
-func (c *ErrCenter) WithCancelOnFirstError(ctx context.Context) context.Context {
-	ec := newErrCtx(ctx)
+func (c *ErrCenter) WithCancelOnFirstError(ctx context.Context) (context.Context, context.CancelFunc) {
+	ec := newErrCtx(ctx, c)
 
 	c.rwm.Lock()
 	defer c.rwm.Unlock()
 
 	if c.firstErr != nil {
 		// First error is received, cancel the context directly.
-		ec.doCancel(c.firstErr)
+		ec.doCancel(false /* removeSelf */, c.firstErr)
 	} else {
 		if c.children == nil {
 			c.children = make(map[*errCtx]struct{})
 		}
 		c.children[ec] = struct{}{}
 	}
-	return ec
+	return ec, func() {
+		ec.doCancel(true /* removeSelf */, context.Canceled)
+	}
 }
