@@ -361,54 +361,59 @@ func (m *ManagerImpl) Cleanup(ctx context.Context) error {
 func (m *ManagerImpl) flushLog(
 	ctx context.Context,
 	tableRtsMap map[model.TableID]model.Ts,
-) (map[model.TableID]model.Ts, error) {
-	emptyRtsMap := make(map[model.TableID]model.Ts)
+	handleErr func(err error),
+) map[model.TableID]model.Ts {
 	if !atomic.CompareAndSwapInt64(&m.flushing, 0, 1) {
 		log.Warn("Fail to update flush flag, " +
 			"the previous flush operation hasn't finished yet")
-		return tableRtsMap, nil
-	}
-	defer atomic.StoreInt64(&m.flushing, 0)
-
-	err := m.writer.FlushLog(ctx, tableRtsMap)
-	if err != nil {
-		return emptyRtsMap, err
+		return tableRtsMap
 	}
 
-	m.rtsMapMu.Lock()
-	defer m.rtsMapMu.Unlock()
+	go func() {
+		defer atomic.StoreInt64(&m.flushing, 0)
 
-	minResolvedTs := uint64(math.MaxUint64)
-	for tableID := range m.rtsMap {
-		if newRts, ok := tableRtsMap[tableID]; ok {
-			if newRts < m.rtsMap[tableID] {
-				log.Panic("resolvedTs in redoManager regressed, report a bug",
-					zap.Int64("tableID", tableID),
-					zap.Uint64("oldResolvedTs", m.rtsMap[tableID]),
-					zap.Uint64("currentReolvedTs", newRts))
+		err := m.writer.FlushLog(ctx, tableRtsMap)
+		if err != nil {
+			handleErr(err)
+			return
+		}
+
+		m.rtsMapMu.Lock()
+		defer m.rtsMapMu.Unlock()
+		minResolvedTs := uint64(math.MaxUint64)
+		for tableID := range m.rtsMap {
+			if newRts, ok := tableRtsMap[tableID]; ok {
+				if newRts < m.rtsMap[tableID] {
+					log.Panic("resolvedTs in redoManager regressed, report a bug",
+						zap.Int64("tableID", tableID),
+						zap.Uint64("oldResolvedTs", m.rtsMap[tableID]),
+						zap.Uint64("currentReolvedTs", newRts))
+				}
+				m.rtsMap[tableID] = newRts
 			}
-			m.rtsMap[tableID] = newRts
-		}
 
-		rts := m.rtsMap[tableID]
-		if rts < minResolvedTs {
-			minResolvedTs = rts
+			rts := m.rtsMap[tableID]
+			if rts < minResolvedTs {
+				minResolvedTs = rts
+			}
 		}
-	}
-	atomic.StoreUint64(&m.minResolvedTs, minResolvedTs)
-	return emptyRtsMap, nil
+		atomic.StoreUint64(&m.minResolvedTs, minResolvedTs)
+	}()
+
+	emptyRtsMap := make(map[model.TableID]model.Ts)
+	return emptyRtsMap
 }
 
 func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
-	tableRtsMap := make(map[int64]uint64)
+	logErrCh := make(chan error, 1)
 	handleErr := func(err error) {
 		select {
-		case errCh <- err:
+		case logErrCh <- err:
 		default:
-			log.Error("err channel is full", zap.Error(err))
 		}
 	}
 
+	tableRtsMap := make(map[int64]uint64)
 	ticker := time.NewTicker(flushInterval)
 	defer ticker.Stop()
 
@@ -416,16 +421,19 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 		select {
 		case <-ctx.Done():
 			return
+		case err := <-logErrCh:
+			select {
+			case errCh <- err:
+			default:
+				log.Error("err channel in redoManager is full", zap.Error(err))
+			}
+			return
 		case <-ticker.C:
 			// interpolate tick message to flush writer if needed
 			// TODO: add log and metrics
 			log.Info("flushing redo log >>>>>>")
-			newTableRtsMap, err := m.flushLog(ctx, tableRtsMap)
+			newTableRtsMap := m.flushLog(ctx, tableRtsMap, handleErr)
 			tableRtsMap = newTableRtsMap
-			if err != nil {
-				handleErr(err)
-				return
-			}
 			log.Info("flushing done <<<<<<======")
 		case cache, ok := <-m.logBuffer.Out():
 			if !ok {
