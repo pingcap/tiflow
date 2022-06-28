@@ -20,7 +20,7 @@ import (
 	"github.com/gogo/status"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 

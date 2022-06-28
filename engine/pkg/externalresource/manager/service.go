@@ -18,10 +18,10 @@ import (
 	"sync"
 
 	"github.com/gogo/status"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
@@ -159,7 +159,7 @@ func (s *Service) GetPlacementConstraint(
 	ctx context.Context,
 	id resModel.ResourceID,
 ) (resModel.ExecutorID, bool, error) {
-	logger := log.L().WithFields(zap.String("resource-id", id))
+	logger := log.L().With(zap.String("resource-id", id))
 
 	rType, _, err := resModel.ParseResourcePath(id)
 	if err != nil {
