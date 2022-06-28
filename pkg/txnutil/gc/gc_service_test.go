@@ -16,67 +16,58 @@ package gc
 import (
 	"context"
 	"math"
+	"testing"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
 )
 
-type gcServiceSuite struct {
-	pdCli *mockPdClientForServiceGCSafePoint
-}
-
-var _ = check.Suite(&gcServiceSuite{
-	&mockPdClientForServiceGCSafePoint{serviceSafePoint: make(map[string]uint64)},
-})
-
-func (s *gcServiceSuite) TestCheckSafetyOfStartTs(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestCheckSafetyOfStartTs(t *testing.T) {
 	ctx := context.Background()
+	pdCli := &mockPdClientForServiceGCSafePoint{serviceSafePoint: make(map[string]uint64)}
 
 	TTL := int64(1)
 	// assume no pd leader switch
-	s.pdCli.UpdateServiceGCSafePoint(ctx, "service1", 10, 60) //nolint:errcheck
-	err := EnsureChangefeedStartTsSafety(ctx, s.pdCli,
+	pdCli.UpdateServiceGCSafePoint(ctx, "service1", 10, 60)
+	err := EnsureChangefeedStartTsSafety(ctx, pdCli,
 		model.DefaultChangeFeedID("changefeed1"), TTL, 50)
-	c.Assert(err.Error(), check.Equals, "[CDC:ErrStartTsBeforeGC]fail to create changefeed because start-ts 50 is earlier than GC safepoint at 60")
-	s.pdCli.UpdateServiceGCSafePoint(ctx, "service2", 10, 80) //nolint:errcheck
-	s.pdCli.UpdateServiceGCSafePoint(ctx, "service3", 10, 70) //nolint:errcheck
-	err = EnsureChangefeedStartTsSafety(ctx, s.pdCli,
+	require.Equal(t, "[CDC:ErrStartTsBeforeGC]fail to create changefeed"+
+		" because start-ts 50 is earlier than GC safepoint at 60", err.Error())
+	pdCli.UpdateServiceGCSafePoint(ctx, "service2", 10, 80)
+	pdCli.UpdateServiceGCSafePoint(ctx, "service3", 10, 70)
+	err = EnsureChangefeedStartTsSafety(ctx, pdCli,
 		model.DefaultChangeFeedID("changefeed2"), TTL, 65)
-	c.Assert(err, check.IsNil)
-	c.Assert(s.pdCli.serviceSafePoint, check.DeepEquals, map[string]uint64{
+	require.Nil(t, err)
+	require.Equal(t, map[string]uint64{
 		"service1":                           60,
 		"service2":                           80,
 		"service3":                           70,
 		"ticdc-creating-default_changefeed2": 65,
-	})
+	}, pdCli.serviceSafePoint)
 
-	s.pdCli.enableLeaderSwitch = true
-
-	s.pdCli.retryThreshold = 1
-	s.pdCli.retryCount = 0
-	err = EnsureChangefeedStartTsSafety(ctx, s.pdCli,
+	pdCli.enableLeaderSwitch = true
+	pdCli.retryThreshold = 1
+	pdCli.retryCount = 0
+	err = EnsureChangefeedStartTsSafety(ctx, pdCli,
 		model.DefaultChangeFeedID("changefeed2"), TTL, 65)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
-	s.pdCli.retryThreshold = gcServiceMaxRetries + 1
-	s.pdCli.retryCount = 0
-	err = EnsureChangefeedStartTsSafety(ctx, s.pdCli,
+	pdCli.retryThreshold = gcServiceMaxRetries + 1
+	pdCli.retryCount = 0
+	err = EnsureChangefeedStartTsSafety(ctx, pdCli,
 		model.DefaultChangeFeedID("changefeed2"), TTL, 65)
-	c.Assert(err, check.NotNil)
-	c.Assert(err.Error(), check.Equals,
-		"[CDC:ErrReachMaxTry]reach maximum try: 9, error: not pd leader: not pd leader")
+	require.NotNil(t, err)
+	require.Equal(t, "[CDC:ErrReachMaxTry]reach maximum try: 9, "+
+		"error: not pd leader: not pd leader", err.Error())
 
-	s.pdCli.retryThreshold = 3
-	s.pdCli.retryCount = 0
-	err = EnsureChangefeedStartTsSafety(ctx, s.pdCli,
+	pdCli.retryThreshold = 3
+	pdCli.retryCount = 0
+	err = EnsureChangefeedStartTsSafety(ctx, pdCli,
 		model.DefaultChangeFeedID("changefeed1"), TTL, 50)
-	c.Assert(err.Error(), check.Equals,
-		"[CDC:ErrStartTsBeforeGC]fail to create changefeed "+
-			"because start-ts 50 is earlier than GC safepoint at 60")
+	require.Equal(t, "[CDC:ErrStartTsBeforeGC]fail to create changefeed "+
+		"because start-ts 50 is earlier than GC safepoint at 60", err.Error())
 }
 
 type mockPdClientForServiceGCSafePoint struct {
