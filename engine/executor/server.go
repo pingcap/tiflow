@@ -28,13 +28,14 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/dm/common"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/server"
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework"
+	frameLog "github.com/pingcap/tiflow/engine/framework/logutil"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/registry"
 	"github.com/pingcap/tiflow/engine/framework/taskutil"
@@ -53,7 +54,7 @@ import (
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
 	"github.com/pingcap/tiflow/pkg/errors"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	p2pImpl "github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -161,7 +162,7 @@ func (s *Server) makeTask(
 	workerType frameModel.WorkerType,
 	workerConfig []byte,
 ) (worker.Runnable, error) {
-	dctx := dcontext.NewContext(ctx, log.L())
+	dctx := dcontext.NewContext(ctx)
 	dp, err := s.buildDeps()
 	if err != nil {
 		return nil, err
@@ -170,6 +171,9 @@ func (s *Server) makeTask(
 	dctx.Environ.NodeID = p2p.NodeID(s.info.ID)
 	dctx.Environ.Addr = s.info.Addr
 	dctx.ProjectInfo = tenant.NewProjectInfo(projectInfo.GetTenantId(), projectInfo.GetProjectId())
+
+	logger := frameLog.WithProjectInfo(logutil.FromContext(ctx), dctx.ProjectInfo)
+	logutil.NewContextWithLogger(dctx, logger)
 
 	// NOTICE: only take effect when job type is job master
 	masterMeta := &frameModel.MasterMetaKVData{
@@ -422,7 +426,7 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 	s.tcpServer = tcpServer
 	pb.RegisterExecutorServer(s.grpcSrv, s)
 	pb.RegisterBrokerServiceServer(s.grpcSrv, s.resourceBroker)
-	log.L().Logger.Info("listen address", zap.String("addr", s.cfg.WorkerAddr))
+	log.L().Info("listen address", zap.String("addr", s.cfg.WorkerAddr))
 
 	wg.Go(func() error {
 		return s.tcpServer.Run(ctx)
@@ -448,7 +452,7 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 		}
 		err := httpSrv.Serve(s.tcpServer.HTTP1Listener())
 		if err != nil && !common.IsErrNetClosing(err) && err != http.ErrServerClosed {
-			log.L().Error("http server returned", log.ShortError(err))
+			log.L().Error("http server returned", logutil.ShortError(err))
 		}
 		return err
 	})
@@ -468,7 +472,7 @@ func (s *Server) initClients(ctx context.Context) (err error) {
 		// TODO: reuse connection with masterClient
 		conn, err := grpc.DialContext(ctx, addr, grpc.WithInsecure(), grpc.WithBlock())
 		if err != nil {
-			return nil, nil, errors.WrapError(cerrors.ErrGrpcBuildConn, err)
+			return nil, nil, errors.WrapError(errors.ErrGrpcBuildConn, err)
 		}
 		return pb.NewResourceManagerClient(conn), conn, nil
 	}
@@ -528,7 +532,7 @@ func (s *Server) selfRegister(ctx context.Context) (err error) {
 		Addr:       s.cfg.AdvertiseAddr,
 		Capability: int(defaultCapability),
 	}
-	log.L().Logger.Info("register successful", zap.Any("info", s.info))
+	log.L().Info("register successful", zap.Any("info", s.info))
 	return nil
 }
 
@@ -557,7 +561,7 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 			return nil
 		case t := <-ticker.C:
 			if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
-				return cerrors.ErrHeartbeat.GenWithStack("heartbeat timeout")
+				return errors.ErrHeartbeat.GenWithStack("heartbeat timeout")
 			}
 			req := &pb.HeartbeatRequest{
 				ExecutorId: string(s.info.ID),
@@ -571,7 +575,7 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 			if err != nil {
 				log.L().Error("heartbeat rpc meet error", zap.Error(err))
 				if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
-					return errors.WrapError(cerrors.ErrHeartbeat, err, "rpc")
+					return errors.WrapError(errors.ErrHeartbeat, err, "rpc")
 				}
 				continue
 			}
@@ -579,7 +583,7 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 				log.L().Warn("heartbeat response meet error", zap.Stringer("code", resp.Err.GetCode()))
 				switch resp.Err.Code {
 				case pb.ErrorCode_UnknownExecutor, pb.ErrorCode_TombstoneExecutor:
-					return cerrors.ErrHeartbeat.GenWithStack("logic error: %s", resp.Err.GetMessage())
+					return errors.ErrHeartbeat.GenWithStack("logic error: %s", resp.Err.GetMessage())
 				case pb.ErrorCode_MasterNotReady:
 					s.lastHearbeatTime = t
 					if rl.Allow() {

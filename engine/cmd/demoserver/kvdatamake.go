@@ -27,10 +27,11 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/db"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -74,7 +75,7 @@ func main() {
 	}
 START:
 	fmt.Printf("starting demo, dir %s addr %s\n", demoDir, demoAddress)
-	err := log.InitLogger(&log.Config{
+	err := logutil.InitLogger(&logutil.Config{
 		Level: "info",
 		// File:  demoDir + "demo.log",
 	})
