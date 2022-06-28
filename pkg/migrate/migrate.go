@@ -272,7 +272,26 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 		return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
 	}
 	log.Info("etcd data migration successful")
+	cleanOldData(ctx, m.cli.Client)
+	log.Info("old etcd data clean successful")
 	return nil
+}
+
+func cleanOldData(ctx context.Context, client *etcd.Client) {
+	oldKeys := []string{
+		"/tidb/cdc/capture",
+		"/tidb/cdc/changefeed",
+		"/tidb/cdc/job",
+		"/tidb/cdc/task/position",
+		"tidb/cdc/owner",
+	}
+	for _, keyPrefix := range oldKeys {
+		if _, err := client.Delete(ctx, keyPrefix, clientV3.WithPrefix()); err != nil {
+			log.Warn("failed to delete old data",
+				zap.String("prefix", keyPrefix),
+				zap.Error(err))
+		}
+	}
 }
 
 func (m *migrator) migrateGcServiceSafePoint(ctx context.Context,
