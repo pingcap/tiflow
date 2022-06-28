@@ -17,7 +17,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -40,11 +39,11 @@ func newSQLEventFilter(caseSensitive bool, cfg *config.FilterConfig) (*sqlEventF
 	return &sqlEventFilter{binlogFilter: binlogFilter}, nil
 }
 
-// skipDDLEvent skips ddl job by its type and query.
-func (f *sqlEventFilter) skipDDLJob(job *timodel.Job) (bool, error) {
-	evenType := jobTypeToEventType(job.Type)
-	log.Info("fizz", zap.String("query", job.Query))
-	action, err := f.binlogFilter.Filter(job.SchemaName, job.TableName, evenType, job.Query)
+// skipDDLEvent skips ddl event by its type and query.
+func (f *sqlEventFilter) skipDDLJob(ddl *model.DDLEvent) (bool, error) {
+	evenType := jobTypeToEventType(ddl.Type)
+	log.Info("fizz", zap.String("query", ddl.Query))
+	action, err := f.binlogFilter.Filter(ddl.TableInfo.Schema, ddl.TableInfo.Table, evenType, ddl.Query)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
