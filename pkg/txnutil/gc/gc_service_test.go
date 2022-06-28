@@ -42,7 +42,9 @@ func (s *gcServiceSuite) TestCheckSafetyOfStartTs(c *check.C) {
 	err := EnsureChangefeedStartTsSafety(ctx, s.pdCli,
 		"ticdc-creating-",
 		model.DefaultChangeFeedID("changefeed1"), TTL, 50)
-	c.Assert(err.Error(), check.Equals, "[CDC:ErrStartTsBeforeGC]fail to create or maintain changefeed because start-ts 50 is earlier than GC safepoint at 60")
+	c.Assert(err.Error(), check.Equals,
+		"[CDC:ErrStartTsBeforeGC]fail to create or maintain changefeed "+
+			"because start-ts 50 is earlier than GC safepoint at 60")
 	s.pdCli.UpdateServiceGCSafePoint(ctx, "service2", 10, 80) //nolint:errcheck
 	s.pdCli.UpdateServiceGCSafePoint(ctx, "service3", 10, 70) //nolint:errcheck
 	err = EnsureChangefeedStartTsSafety(ctx, s.pdCli,

@@ -115,7 +115,9 @@ func (o *resumeChangefeedOptions) getUpstreamConfig() *v2.UpstreamConfig {
 	}
 }
 
-func (o *resumeChangefeedOptions) getResumeChangefeedConfig(cmd *cobra.Command) *v2.ResumeChangefeedConfig {
+func (o *resumeChangefeedOptions) getResumeChangefeedConfig(
+	cmd *cobra.Command,
+) *v2.ResumeChangefeedConfig {
 	upstreamConfig := o.getUpstreamConfig()
 	return &v2.ResumeChangefeedConfig{
 		OverwriteCheckpointTs: o.checkpointTs,

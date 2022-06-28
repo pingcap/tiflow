@@ -65,6 +65,7 @@ type ResumeChangefeedConfig struct {
 	OverwriteCheckpointTs uint64 `json:"overwrite_checkpoint_ts"`
 }
 
+// PDConfig is a configuration used to connect to pd
 type PDConfig struct {
 	PDAddrs       []string `json:"pd_addrs"`
 	CAPath        string   `json:"ca_path"`

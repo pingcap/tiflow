@@ -691,7 +691,8 @@ var (
 		errors.RFCCodeText("CDC:ErrUpdateServiceSafepointFailed"),
 	)
 	ErrStartTsBeforeGC = errors.Normalize(
-		"fail to create or maintain changefeed because start-ts %d is earlier than GC safepoint at %d",
+		"fail to create or maintain changefeed because start-ts %d "+
+			"is earlier than GC safepoint at %d",
 		errors.RFCCodeText("CDC:ErrStartTsBeforeGC"),
 	)
 	ErrTargetTsBeforeStartTs = errors.Normalize(
