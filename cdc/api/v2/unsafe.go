@@ -34,16 +34,16 @@ import (
 
 // CDCMetaData returns all etcd key values used by cdc
 func (h *OpenAPIV2) CDCMetaData(c *gin.Context) {
-	kvs, err := h.capture.EtcdClient.GetAllCDCInfo(c)
+	kvs, err := h.capture.GetEtcdClient().GetAllCDCInfo(c)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
 	resp := make([]EtcdData, 0, len(kvs))
-	for _, kv := range kvs {
+	for _, pair := range kvs {
 		resp = append(resp, EtcdData{
-			Key:   string(kv.Key),
-			Value: string(kv.Value),
+			Key:   string(pair.Key),
+			Value: string(pair.Value),
 		})
 	}
 	c.IndentedJSON(http.StatusOK, resp)
@@ -72,7 +72,7 @@ func (h *OpenAPIV2) ResolveLock(c *gin.Context) {
 			return
 		}
 	} else {
-		up := h.capture.UpstreamManager.GetDefaultUpstream()
+		up := h.capture.GetUpstreamManager().GetDefaultUpstream()
 		kvStorage = up.KVStorage
 	}
 
@@ -101,7 +101,8 @@ func (h *OpenAPIV2) DeleteServiceGcSafePoint(c *gin.Context) {
 	}
 	err := h.withUpstreamConfig(c, upstreamConfig,
 		func(ctx context.Context, client pd.Client) error {
-			err := gc.RemoveServiceGCSafepoint(c, client, h.capture.EtcdClient.GetGCServiceID())
+			err := gc.RemoveServiceGCSafepoint(c, client,
+				h.capture.GetEtcdClient().GetGCServiceID())
 			if err != nil {
 				return cerror.WrapError(cerror.ErrInternalServerError, err)
 			}
@@ -122,7 +123,7 @@ func (h *OpenAPIV2) withUpstreamConfig(c context.Context,
 		pdClient pd.Client
 	)
 	if upstreamConfig.ID > 0 {
-		up, ok := h.capture.UpstreamManager.Get(upstreamConfig.ID)
+		up, ok := h.capture.GetUpstreamManager().Get(upstreamConfig.ID)
 		if !ok {
 			return cerror.ErrUpstreamNotFound.GenWithStackByArgs(upstreamConfig.ID)
 		}
@@ -130,18 +131,19 @@ func (h *OpenAPIV2) withUpstreamConfig(c context.Context,
 	} else if len(upstreamConfig.PDAddrs) > 0 {
 		timeoutCtx, cancel := context.WithTimeout(c, 30*time.Second)
 		defer cancel()
-		pdClient, err = getPDClient(timeoutCtx, upstreamConfig.PDAddrs, &security.Credential{
-			CAPath:        upstreamConfig.CAPath,
-			CertPath:      upstreamConfig.CertPath,
-			KeyPath:       upstreamConfig.KeyPath,
-			CertAllowedCN: nil,
-		})
+		pdClient, err = h.helpers.
+			getPDClient(timeoutCtx, upstreamConfig.PDAddrs, &security.Credential{
+				CAPath:        upstreamConfig.CAPath,
+				CertPath:      upstreamConfig.CertPath,
+				KeyPath:       upstreamConfig.KeyPath,
+				CertAllowedCN: nil,
+			})
 		if err != nil {
 			return cerror.WrapError(cerror.ErrInternalServerError, err)
 		}
 		defer pdClient.Close()
 	} else {
-		up := h.capture.UpstreamManager.GetDefaultUpstream()
+		up := h.capture.GetUpstreamManager().GetDefaultUpstream()
 		pdClient = up.PDClient
 	}
 	return doWithClient(c, pdClient)

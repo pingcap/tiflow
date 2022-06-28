@@ -22,7 +22,7 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/framework/config"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -32,7 +32,16 @@ import (
 )
 
 const (
-	reloadMasterInfoTimeout = 10 * time.Second
+	reloadMasterInfoTimeout        = 10 * time.Second
+	workerExitWaitForMasterTimeout = time.Second * 15
+)
+
+type masterClientCloseState = int32
+
+const (
+	masterClientNormal = masterClientCloseState(iota + 1)
+	masterClientClosing
+	masterClientClosed
 )
 
 // MasterClient is used by the BaseWorker to communicate with
@@ -45,9 +54,8 @@ type MasterClient struct {
 
 	lastMasterAckedPingTime atomic.Duration
 
-	// masterSideClosed records whether the master
-	// has marked us as closed
-	masterSideClosed atomic.Bool
+	closeState atomic.Int32
+	closeCh    chan struct{}
 
 	// Immutable fields
 	workerID        frameModel.WorkerID
@@ -55,6 +63,8 @@ type MasterClient struct {
 	timeoutConfig   config.TimeoutConfig
 	messageSender   p2p.MessageSender
 	frameMetaClient pkgOrm.Client
+
+	clk clock.Clock
 }
 
 // NewMasterClient creates a new MasterClient.
@@ -64,6 +74,7 @@ func NewMasterClient(
 	messageSender p2p.MessageSender,
 	metaCli pkgOrm.Client,
 	initTime clock.MonotonicTime,
+	clk clock.Clock,
 ) *MasterClient {
 	return &MasterClient{
 		masterID:                masterID,
@@ -71,7 +82,10 @@ func NewMasterClient(
 		messageSender:           messageSender,
 		frameMetaClient:         metaCli,
 		lastMasterAckedPingTime: *atomic.NewDuration(time.Duration(initTime)),
+		closeState:              *atomic.NewInt32(masterClientNormal),
+		closeCh:                 make(chan struct{}),
 		timeoutConfig:           config.DefaultTimeoutConfig(),
+		clk:                     clk,
 	}
 }
 
@@ -187,7 +201,16 @@ func (m *MasterClient) HandleHeartbeat(sender p2p.NodeID, msg *frameModel.Heartb
 	}
 
 	if msg.IsFinished {
-		m.masterSideClosed.Store(true)
+		oldSt := m.closeState.Swap(masterClientClosed)
+		if oldSt == masterClientNormal {
+			// Jumping from Normal to Closed in unexpected
+			log.L().Panic("unexpected master client close state",
+				zap.String("master-id", m.masterID),
+				zap.String("worker-id", m.workerID))
+		}
+		if oldSt == masterClientClosing {
+			close(m.closeCh)
+		}
 	}
 
 	// worker may receive stale heartbeat pong message from job master, stale
@@ -204,10 +227,10 @@ func (m *MasterClient) HandleHeartbeat(sender p2p.NodeID, msg *frameModel.Heartb
 
 // CheckMasterTimeout checks whether the master has timed out, i.e. we have lost
 // contact with the master for a while.
-func (m *MasterClient) CheckMasterTimeout(clk clock.Clock) (ok bool, err error) {
+func (m *MasterClient) CheckMasterTimeout() (ok bool, err error) {
 	lastMasterAckedPingTime := clock.MonotonicTime(m.lastMasterAckedPingTime.Load())
 
-	sinceLastAcked := clk.Mono().Sub(lastMasterAckedPingTime)
+	sinceLastAcked := m.clk.Mono().Sub(lastMasterAckedPingTime)
 	if sinceLastAcked <= 2*m.timeoutConfig.WorkerHeartbeatInterval {
 		return true, nil
 	}
@@ -224,13 +247,15 @@ func (m *MasterClient) CheckMasterTimeout(clk clock.Clock) (ok bool, err error) 
 }
 
 // SendHeartBeat sends a heartbeat to the master.
-func (m *MasterClient) SendHeartBeat(ctx context.Context, clock clock.Clock, isFinished bool) error {
+func (m *MasterClient) SendHeartBeat(ctx context.Context) error {
 	nodeID, epoch := m.getMasterInfo()
 	// We use the monotonic time because we would like to serialize a local timestamp.
 	// The timestamp will be returned in a PONG for time-out check, so we need
 	// the timestamp to be a local monotonic timestamp, which is not exposed by the
 	// standard library `time`.
-	sendTime := clock.Mono()
+	sendTime := m.clk.Mono()
+	isFinished := m.closeState.Load() == masterClientClosing
+
 	heartbeatMsg := &frameModel.HeartbeatPingMessage{
 		SendTime:     sendTime,
 		FromWorkerID: m.workerID,
@@ -260,7 +285,45 @@ func (m *MasterClient) SendHeartBeat(ctx context.Context, clock clock.Clock, isF
 // It is used when the worker initiates an exit with an error, but the network
 // is fine.
 func (m *MasterClient) IsMasterSideClosed() bool {
-	return m.masterSideClosed.Load()
+	return m.closeState.Load() == masterClientClosed
+}
+
+// WaitClosed marks the current worker as exiting, and
+// blocks until the master has acknowledged the exit.
+// The caller should make sure that no concurrent calls to
+// WaitClosed happens.
+func (m *MasterClient) WaitClosed(ctx context.Context) error {
+	switch m.closeState.Load() {
+	case masterClientNormal:
+		if !m.closeState.CAS(masterClientNormal, masterClientClosing) {
+			log.L().Panic("Unexpected close state in master client, race?",
+				zap.String("master-id", m.masterID),
+				zap.String("worker-id", m.workerID))
+		}
+	case masterClientClosing:
+		break // breaks switch
+	case masterClientClosed:
+		return nil
+	}
+
+	timer := m.clk.Timer(workerExitWaitForMasterTimeout)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	case <-timer.C:
+		return errors.Trace(context.DeadlineExceeded)
+	case <-m.closeCh:
+	}
+
+	if m.closeState.Load() != masterClientClosed {
+		log.L().Panic("Unexpected close state in master client, bug?",
+			zap.String("master-id", m.masterID),
+			zap.String("worker-id", m.workerID))
+	}
+
+	return nil
 }
 
 // used in unit test only

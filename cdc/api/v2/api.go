@@ -21,12 +21,18 @@ import (
 
 // OpenAPIV2 provides CDC v2 APIs
 type OpenAPIV2 struct {
-	capture *capture.Capture
+	capture capture.InfoForAPI
+	helpers APIV2Helpers
 }
 
 // NewOpenAPIV2 creates a new OpenAPIV2.
 func NewOpenAPIV2(c *capture.Capture) OpenAPIV2 {
-	return OpenAPIV2{capture: c}
+	return OpenAPIV2{c, APIV2HelpersImpl{}}
+}
+
+// NewOpenAPIV2ForTest creates a new OpenAPIV2.
+func NewOpenAPIV2ForTest(c capture.InfoForAPI, h APIV2Helpers) OpenAPIV2 {
+	return OpenAPIV2{c, h}
 }
 
 // RegisterOpenAPIV2Routes registers routes for OpenAPI
@@ -39,17 +45,23 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 
 	// changefeed apis
 	changefeedGroup := v2.Group("/changefeeds")
-	changefeedGroup.POST("", api.CreateChangefeed)
-	changefeedGroup.PUT("/:changefeed_id", api.UpdateChangefeed)
-	changefeedGroup.GET("/:changefeed_id/meta_info", api.GetChangeFeedMetaInfo)
+
+	changefeedGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
+	changefeedGroup.POST("", api.createChangefeed)
+	changefeedGroup.PUT("/:changefeed_id", api.updateChangefeed)
+	changefeedGroup.GET("/:changefeed_id/meta_info", api.getChangeFeedMetaInfo)
 	changefeedGroup.POST("/:changefeed_id/resume", api.ResumeChangefeed)
 
-	v2.POST("/verify_table", api.VerifyTable)
+	verifyTableGroup := v2.Group("/verify_table")
+	verifyTableGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
+	verifyTableGroup.POST("", api.verifyTable)
 
 	// unsafe apis
-	v2.GET("/unsafe/metadata", api.CDCMetaData)
-	v2.POST("/unsafe/resolve_lock", api.ResolveLock)
-	v2.DELETE("/unsafe/service_gc_safepoint", api.DeleteServiceGcSafePoint)
+	unsafeGroup := v2.Group("/unsafe")
+	unsafeGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
+	unsafeGroup.GET("/metadata", api.CDCMetaData)
+	unsafeGroup.POST("/resolve_lock", api.ResolveLock)
+	unsafeGroup.DELETE("/service_gc_safepoint", api.DeleteServiceGcSafePoint)
 
 	// common APIs
 	v2.POST("/tso", api.QueryTso)

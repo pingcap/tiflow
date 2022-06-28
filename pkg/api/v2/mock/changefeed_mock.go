@@ -152,7 +152,7 @@ func (m *MockChangefeedInterface) VerifyTable(ctx context.Context,
 	cfg *v2.VerifyTableConfig,
 ) (*v2.Tables, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "VerifyTable", ctx, cfg)
+	ret := m.ctrl.Call(m, "verifyTable", ctx, cfg)
 	ret0, _ := ret[0].(*v2.Tables)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
@@ -163,6 +163,6 @@ func (mr *MockChangefeedInterfaceMockRecorder) VerifyTable(ctx,
 	cfg interface{},
 ) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyTable",
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "verifyTable",
 		reflect.TypeOf((*MockChangefeedInterface)(nil).VerifyTable), ctx, cfg)
 }

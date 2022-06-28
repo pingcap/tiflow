@@ -44,18 +44,18 @@ const (
 
 // OpenAPI provides capture APIs.
 type OpenAPI struct {
-	capture *capture.Capture
+	capture capture.InfoForAPI
 	// use for unit test only
 	testStatusProvider owner.StatusProvider
 }
 
 // NewOpenAPI creates a new OpenAPI.
-func NewOpenAPI(c *capture.Capture) OpenAPI {
+func NewOpenAPI(c capture.InfoForAPI) OpenAPI {
 	return OpenAPI{capture: c}
 }
 
 // NewOpenAPI4Test return a OpenAPI for test
-func NewOpenAPI4Test(c *capture.Capture, p owner.StatusProvider) OpenAPI {
+func NewOpenAPI4Test(c capture.InfoForAPI, p owner.StatusProvider) OpenAPI {
 	return OpenAPI{capture: c, testStatusProvider: p}
 }
 
@@ -107,7 +107,7 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api OpenAPI) {
 	captureGroup := v1.Group("/captures")
 	captureGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
 	captureGroup.GET("", api.ListCapture)
-	captureGroup.POST("/drain", api.DrainCapture)
+	captureGroup.PUT("/drain", api.DrainCapture)
 }
 
 // ListChangefeed lists all changgefeeds in cdc cluster
@@ -263,7 +263,7 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
-	up := h.capture.UpstreamManager.GetDefaultUpstream()
+	up := h.capture.GetUpstreamManager().GetDefaultUpstream()
 	info, err := VerifyCreateChangefeedConfig(ctx, changefeedConfig, h.capture)
 	if err != nil {
 		_ = c.Error(err)
@@ -283,7 +283,7 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		CAPath:        up.SecurityConfig.CAPath,
 		CertAllowedCN: up.SecurityConfig.CertAllowedCN,
 	}
-	err = h.capture.EtcdClient.CreateChangefeedInfo(ctx, upstreamInfo,
+	err = h.capture.GetEtcdClient().CreateChangefeedInfo(ctx, upstreamInfo,
 		info,
 		model.DefaultChangeFeedID(changefeedConfig.ID))
 	if err != nil {
@@ -419,7 +419,7 @@ func (h *OpenAPI) UpdateChangefeed(c *gin.Context) {
 		return
 	}
 
-	err = h.capture.EtcdClient.SaveChangeFeedInfo(ctx, newInfo, changefeedID)
+	err = h.capture.GetEtcdClient().SaveChangeFeedInfo(ctx, newInfo, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -737,7 +737,7 @@ func (h *OpenAPI) DrainCapture(c *gin.Context) {
 	}
 
 	// drain capture only work if there is at least two alive captures,
-	// it cannot work properly if has only one capture.
+	// it cannot work properly if it has only one capture.
 	if len(captures) <= 1 {
 		_ = c.Error(cerror.ErrSchedulerRequestFailed.
 			GenWithStackByArgs("only one capture alive"))
@@ -757,6 +757,19 @@ func (h *OpenAPI) DrainCapture(c *gin.Context) {
 
 	if !checkCaptureFound() {
 		_ = c.Error(cerror.ErrCaptureNotExist.GenWithStackByArgs(target))
+		return
+	}
+
+	// only owner handle api request, so this must be the owner.
+	ownerInfo, err := h.capture.Info()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	if ownerInfo.ID == target {
+		_ = c.Error(cerror.ErrSchedulerRequestFailed.
+			GenWithStackByArgs("cannot drain the owner"))
 		return
 	}
 

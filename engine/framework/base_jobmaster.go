@@ -15,12 +15,14 @@ package framework
 
 import (
 	"context"
+	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
@@ -31,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	derror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
 )
 
 // BaseJobMaster defines an interface that can work as a job master, it embeds
@@ -89,11 +92,7 @@ type DefaultBaseJobMaster struct {
 	worker    *DefaultBaseWorker
 	impl      JobMasterImpl
 	errCenter *errctx.ErrCenter
-}
-
-// NotifyExit implements BaseJobMaster interface
-func (d *DefaultBaseJobMaster) NotifyExit(ctx context.Context, errIn error) error {
-	return d.worker.NotifyExit(ctx, errIn)
+	closeOnce sync.Once
 }
 
 // JobMasterImpl is the implementation of a job master of dataflow engine.
@@ -216,16 +215,38 @@ func (d *DefaultBaseJobMaster) GetWorkers() map[frameModel.WorkerID]WorkerHandle
 
 // Close implements BaseJobMaster.Close
 func (d *DefaultBaseJobMaster) Close(ctx context.Context) error {
-	err := d.impl.CloseImpl(ctx)
-	// We don't return here if CloseImpl return error to ensure
-	// that we can close inner resources of the framework
-	if err != nil {
-		log.L().Error("Failed to close JobMasterImpl", zap.Error(err))
-	}
+	d.closeOnce.Do(func() {
+		err := d.impl.CloseImpl(ctx)
+		if err != nil {
+			d.Logger().Error("Failed to close JobMasterImpl", zap.Error(err))
+		}
+	})
 
 	d.master.doClose()
 	d.worker.doClose()
-	return errors.Trace(err)
+	return nil
+}
+
+// NotifyExit implements BaseJobMaster interface
+func (d *DefaultBaseJobMaster) NotifyExit(ctx context.Context, errIn error) (retErr error) {
+	d.closeOnce.Do(func() {
+		err := d.impl.CloseImpl(ctx)
+		if err != nil {
+			log.L().Error("Failed to close JobMasterImpl", zap.Error(err))
+		}
+	})
+
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime)
+		d.Logger().Info("job master finished exiting",
+			zap.NamedError("caused", errIn),
+			zap.Duration("duration", duration),
+			logutil.ShortError(retErr))
+	}()
+
+	d.Logger().Info("worker start exiting", zap.NamedError("cause", errIn))
+	return d.worker.masterClient.WaitClosed(ctx)
 }
 
 // OnError implements BaseJobMaster.OnError

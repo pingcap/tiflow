@@ -11,18 +11,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package api
+package mq
 
 import (
-	"context"
-
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 )
 
-// CaptureInfoProvider provides capture and its onwnership information
-type CaptureInfoProvider interface {
-	Info() (model.CaptureInfo, error)
-	IsOwner() bool
-	GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error)
-	IsReady() bool
+// Assert EventSink[E event.TableEvent] implementation
+var _ eventsink.EventSink[*model.RowChangedEvent] = (*Sink)(nil)
+
+// Sink is the mq sink.
+type Sink struct{}
+
+// WriteEvents writes events to the sink.
+func (s *Sink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) {
+	// TODO implement me
+	panic("implement me")
+}
+
+// Close closes the sink.
+func (s *Sink) Close() error {
+	// TODO implement me
+	panic("implement me")
 }

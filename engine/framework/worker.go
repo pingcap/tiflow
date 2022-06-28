@@ -22,10 +22,12 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework/config"
+	frameErrors "github.com/pingcap/tiflow/engine/framework/internal/errors"
 	"github.com/pingcap/tiflow/engine/framework/internal/worker"
+	frameLog "github.com/pingcap/tiflow/engine/framework/logutil"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/statusutil"
@@ -35,7 +37,6 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	"github.com/pingcap/tiflow/engine/pkg/logutil"
 	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
 	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
@@ -44,6 +45,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	derror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/workerpool"
 )
 
@@ -130,8 +132,7 @@ type DefaultBaseWorker struct {
 	cancelBgTasks context.CancelFunc
 	cancelPool    context.CancelFunc
 
-	exitController *worker.ExitController
-	closeImplOnce  sync.Once
+	closeImplOnce sync.Once
 
 	clock clock.Clock
 
@@ -173,6 +174,8 @@ func NewBaseWorker(
 			zap.Error(err))
 	}
 
+	logger := logutil.FromContext(*ctx)
+
 	return &DefaultBaseWorker{
 		Impl:                  impl,
 		messageHandlerManager: params.MessageHandlerManager,
@@ -197,20 +200,14 @@ func NewBaseWorker(
 		errCenter:        errctx.NewErrCenter(),
 		clock:            clock.New(),
 		userMetaKVClient: kvclient.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
-		logger:           logutil.NewLogger4Worker(ctx.ProjectInfo, masterID, workerID),
 		metricFactory:    promutil.NewFactory4Worker(ctx.ProjectInfo, MustConvertWorkerType2JobType(tp), masterID, workerID),
+		logger:           frameLog.WithWorkerID(frameLog.WithMasterID(logger, masterID), workerID),
 	}
 }
 
 // Workload implements BaseWorker.Workload
 func (w *DefaultBaseWorker) Workload() model.RescUnit {
 	return w.Impl.Workload()
-}
-
-// NotifyExit implements BaseWorker.NotifyExit
-func (w *DefaultBaseWorker) NotifyExit(ctx context.Context, errIn error) error {
-	// No-op for now.
-	return nil
 }
 
 // Init implements BaseWorker.Init
@@ -232,7 +229,38 @@ func (w *DefaultBaseWorker) Init(ctx context.Context) error {
 	return nil
 }
 
-func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
+// NotifyExit implements BaseWorker.NotifyExit
+func (w *DefaultBaseWorker) NotifyExit(ctx context.Context, errIn error) (retErr error) {
+	w.closeImplOnce.Do(func() {
+		// Must ensure that the business logic is
+		// notified before closing.
+		w.callCloseImpl()
+	})
+
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime)
+		w.logger.Info("worker finished exiting",
+			zap.NamedError("caused", errIn),
+			zap.Duration("duration", duration),
+			logutil.ShortError(retErr))
+	}()
+
+	w.logger.Info("worker start exiting", zap.NamedError("cause", errIn))
+	return w.masterClient.WaitClosed(ctx)
+}
+
+func (w *DefaultBaseWorker) doPreInit(ctx context.Context) (retErr error) {
+	defer func() {
+		if retErr != nil {
+			// Wraps the error as FailFast because errors
+			// that occurred during doPreInit may indicate
+			// a failure that's severe enough that it is not
+			// possible for the worker to correctly communicate
+			// with the master.
+			retErr = frameErrors.FailFast(retErr)
+		}
+	}()
 	// TODO refine this part
 	poolCtx, cancelPool := context.WithCancel(context.TODO())
 	w.cancelMu.Lock()
@@ -243,7 +271,7 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 	go func() {
 		defer w.wg.Done()
 		err := w.pool.Run(poolCtx)
-		log.L().Info("workerpool exited",
+		w.Logger().Info("workerpool exited",
 			zap.String("worker-id", w.id),
 			zap.Error(err))
 	}()
@@ -259,21 +287,8 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) error {
 		w.id,
 		w.messageSender,
 		w.frameMetaClient,
-		initTime)
-
-	w.exitController = worker.NewExitController(
-		w.masterClient,
-		w.errCenter,
-		worker.WithClock(w.clock),
-		// TODO use a logger passed down from the caller.
-		worker.WithLogger(log.L().WithFields(
-			zap.String("worker-id", w.id),
-			zap.String("master-id", w.masterID))),
-		worker.WithPrepareExitFunc(func() {
-			w.closeImplOnce.Do(func() {
-				w.callCloseImpl()
-			})
-		}))
+		initTime,
+		w.clock)
 
 	w.workerMetaClient = metadata.NewWorkerMetadataClient(w.masterID, w.frameMetaClient)
 
@@ -313,8 +328,7 @@ func (w *DefaultBaseWorker) doPostInit(ctx context.Context) error {
 }
 
 func (w *DefaultBaseWorker) doPoll(ctx context.Context) error {
-	err := w.exitController.PollExit()
-	if err != nil {
+	if err := w.errCenter.CheckError(); err != nil {
 		return err
 	}
 
@@ -330,14 +344,12 @@ func (w *DefaultBaseWorker) Poll(ctx context.Context) error {
 	ctx = w.errCenter.WithCancelOnFirstError(ctx)
 
 	if err := w.doPoll(ctx); err != nil {
-		if derror.ErrWorkerHalfExit.NotEqual(err) {
-			return err
-		}
-		return nil
+		return err
 	}
 
 	if err := w.Impl.Tick(ctx); err != nil {
 		w.errCenter.OnError(err)
+		return err
 	}
 	return nil
 }
@@ -364,7 +376,7 @@ func (w *DefaultBaseWorker) doClose() {
 	defer cancel()
 
 	if err := w.messageHandlerManager.Clean(closeCtx); err != nil {
-		log.L().Warn("cleaning message handlers failed",
+		w.Logger().Warn("cleaning message handlers failed",
 			zap.Error(err))
 	}
 
@@ -390,8 +402,9 @@ func (w *DefaultBaseWorker) callCloseImpl() {
 
 	err := w.Impl.CloseImpl(closeCtx)
 	if err != nil {
-		log.L().Warn("Failed to close worker",
-			zap.String("worker-id", w.id))
+		w.Logger().Warn("Failed to close worker",
+			zap.String("worker-id", w.id),
+			logutil.ShortError(err))
 	}
 }
 
@@ -411,8 +424,8 @@ func (w *DefaultBaseWorker) MetricFactory() promutil.Factory {
 }
 
 // Logger implements BaseMaster.Logger
-func (m *DefaultBaseWorker) Logger() *zap.Logger {
-	return m.logger
+func (w *DefaultBaseWorker) Logger() *zap.Logger {
+	return w.logger
 }
 
 // UpdateStatus updates the worker's status and tries to notify the master.
@@ -513,14 +526,7 @@ func (w *DefaultBaseWorker) runHeartbeatWorker(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case <-ticker.C:
-			isFinished := false
-			if w.exitController.IsExiting() {
-				// If we are in the state workerHalfExit,
-				// we need to notify the master so that the master
-				// marks us as exited.
-				isFinished = true
-			}
-			if err := w.masterClient.SendHeartBeat(ctx, w.clock, isFinished); err != nil {
+			if err := w.masterClient.SendHeartBeat(ctx); err != nil {
 				return errors.Trace(err)
 			}
 		}
@@ -536,13 +542,12 @@ func (w *DefaultBaseWorker) runWatchDog(ctx context.Context) error {
 		case <-ticker.C:
 		}
 
-		isNormal, err := w.masterClient.CheckMasterTimeout(w.clock)
+		isNormal, err := w.masterClient.CheckMasterTimeout()
 		if err != nil {
 			return errors.Trace(err)
 		}
 		if !isNormal {
 			errOut := derror.ErrWorkerSuicide.GenWithStackByArgs(w.masterClient.MasterID())
-			w.exitController.ForceExit(errOut)
 			return errOut
 		}
 	}
@@ -552,7 +557,7 @@ func (w *DefaultBaseWorker) initMessageHandlers(ctx context.Context) (retErr err
 	defer func() {
 		if retErr != nil {
 			if err := w.messageHandlerManager.Clean(context.Background()); err != nil {
-				log.L().Warn("Failed to clean up message handlers",
+				w.Logger().Warn("Failed to clean up message handlers",
 					zap.String("master-id", w.masterID),
 					zap.String("worker-id", w.id))
 			}
@@ -565,7 +570,7 @@ func (w *DefaultBaseWorker) initMessageHandlers(ctx context.Context) (retErr err
 		&frameModel.HeartbeatPongMessage{},
 		func(sender p2p.NodeID, value p2p.MessageValue) error {
 			msg := value.(*frameModel.HeartbeatPongMessage)
-			log.L().Info("heartbeat pong received",
+			w.Logger().Info("heartbeat pong received",
 				zap.String("master-id", w.masterID),
 				zap.Any("msg", msg))
 			w.masterClient.HandleHeartbeat(sender, msg)
@@ -575,7 +580,7 @@ func (w *DefaultBaseWorker) initMessageHandlers(ctx context.Context) (retErr err
 		return errors.Trace(err)
 	}
 	if !ok {
-		log.L().Panic("duplicate handler",
+		w.Logger().Panic("duplicate handler",
 			zap.String("topic", topic))
 	}
 
@@ -596,7 +601,7 @@ func (w *DefaultBaseWorker) initMessageHandlers(ctx context.Context) (retErr err
 		return errors.Trace(err)
 	}
 	if !ok {
-		log.L().Panic("duplicate handler", zap.String("topic", topic))
+		w.Logger().Panic("duplicate handler", zap.String("topic", topic))
 	}
 
 	return nil

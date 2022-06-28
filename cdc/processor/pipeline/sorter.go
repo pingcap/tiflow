@@ -210,17 +210,19 @@ func (n *sorterNode) start(
 
 				if msg.CRTs < startTs {
 					// Ignore messages are less than initial checkpoint ts.
-					log.Info("sorterNode: ignore sorter output event",
+					log.Debug("sorterNode: ignore sorter output event",
 						zap.Uint64("CRTs", msg.CRTs), zap.Uint64("startTs", startTs))
 					continue
 				}
 
 				if msg.RawKV.OpType != model.OpTypeResolved {
-					err := n.mounter.DecodeEvent(ctx, msg)
+					ignored, err := n.mounter.DecodeEvent(ctx, msg)
 					if err != nil {
 						return errors.Trace(err)
 					}
-
+					if ignored {
+						continue
+					}
 					commitTs := msg.CRTs
 					// We interpolate a resolved-ts if none has been sent for some time.
 					if time.Since(lastSendResolvedTsTime) > resolvedTsInterpolateInterval {

@@ -22,10 +22,10 @@ import (
 	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/checker"
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	ctlcommon "github.com/pingcap/tiflow/dm/dm/ctl/common"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework"
 	libMetadata "github.com/pingcap/tiflow/engine/framework/metadata"
@@ -39,6 +39,7 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/logutil"
 )
 
 // JobMaster defines job master of dm job
@@ -305,7 +306,7 @@ func (jm *JobMaster) preCheck(ctx context.Context) error {
 
 	msg, err := checker.CheckSyncConfigFunc(ctx, dmSubtaskCfgs, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
 	if err != nil {
-		log.L().Error("error when pre-checking", zap.String("id", jm.workerID), zap.String("jobmaster_id", jm.JobMasterID()), log.ShortError(err))
+		log.L().Error("error when pre-checking", zap.String("id", jm.workerID), zap.String("jobmaster_id", jm.JobMasterID()), logutil.ShortError(err))
 		return err
 	}
 	log.L().Info("finish pre-checking job config", zap.String("id", jm.workerID), zap.String("jobmaster_id", jm.JobMasterID()), zap.String("result", msg))
