@@ -59,8 +59,8 @@ func (conn *DBConn) querySQL(ctx *tcontext.Context, query string, args ...interf
 				err = conn.resetConn(ctx)
 				if err != nil {
 					ctx.L().Error("reset connection failed", zap.Int("retry", retryTime),
-						zap.String("query", log.TruncateInterface(query, -1)),
-						zap.String("arguments", log.TruncateInterface(args, -1)),
+						zap.String("query", utils.TruncateInterface(query, -1)),
+						zap.String("arguments", utils.TruncateInterface(args, -1)),
 						log.ShortError(err))
 					return false
 				}
@@ -68,8 +68,8 @@ func (conn *DBConn) querySQL(ctx *tcontext.Context, query string, args ...interf
 			}
 			if dbutil.IsRetryableError(err) {
 				ctx.L().Warn("query statement", zap.Int("retry", retryTime),
-					zap.String("query", log.TruncateString(query, -1)),
-					zap.String("argument", log.TruncateInterface(args, -1)),
+					zap.String("query", utils.TruncateString(query, -1)),
+					zap.String("argument", utils.TruncateInterface(args, -1)),
 					log.ShortError(err))
 				return true
 			}
@@ -94,16 +94,16 @@ func (conn *DBConn) querySQL(ctx *tcontext.Context, query string, args ...interf
 				if ds > 1 {
 					ctx.L().Warn("query statement too slow",
 						zap.Duration("cost time", cost),
-						zap.String("query", log.TruncateString(query, -1)),
-						zap.String("argument", log.TruncateInterface(args, -1)))
+						zap.String("query", utils.TruncateString(query, -1)),
+						zap.String("argument", utils.TruncateInterface(args, -1)))
 				}
 			}
 			return ret, err
 		})
 	if err != nil {
 		ctx.L().ErrorFilterContextCanceled("query statement failed after retry",
-			zap.String("query", log.TruncateString(query, -1)),
-			zap.String("argument", log.TruncateInterface(args, -1)),
+			zap.String("query", utils.TruncateString(query, -1)),
+			zap.String("argument", utils.TruncateInterface(args, -1)),
 			log.ShortError(err))
 		return nil, err
 	}
@@ -129,8 +129,8 @@ func (conn *DBConn) executeSQL(ctx *tcontext.Context, queries []string, args ...
 				err = conn.resetConn(ctx)
 				if err != nil {
 					ctx.L().Error("reset connection failed", zap.Int("retry", retryTime),
-						zap.String("queries", log.TruncateInterface(queries, -1)),
-						zap.String("arguments", log.TruncateInterface(args, -1)),
+						zap.String("queries", utils.TruncateInterface(queries, -1)),
+						zap.String("arguments", utils.TruncateInterface(args, -1)),
 						log.ShortError(err))
 					return false
 				}
@@ -138,8 +138,8 @@ func (conn *DBConn) executeSQL(ctx *tcontext.Context, queries []string, args ...
 			}
 			if dbutil.IsRetryableError(err) {
 				ctx.L().Warn("execute statements", zap.Int("retry", retryTime),
-					zap.String("queries", log.TruncateInterface(queries, -1)),
-					zap.String("arguments", log.TruncateInterface(args, -1)),
+					zap.String("queries", utils.TruncateInterface(queries, -1)),
+					zap.String("arguments", utils.TruncateInterface(args, -1)),
 					log.ShortError(err))
 				return true
 			}
@@ -171,16 +171,16 @@ func (conn *DBConn) executeSQL(ctx *tcontext.Context, queries []string, args ...
 				if ds > 1 {
 					ctx.L().Warn("execute transaction too slow",
 						zap.Duration("cost time", cost),
-						zap.String("query", log.TruncateInterface(queries, -1)),
-						zap.String("argument", log.TruncateInterface(args, -1)))
+						zap.String("query", utils.TruncateInterface(queries, -1)),
+						zap.String("argument", utils.TruncateInterface(args, -1)))
 				}
 			}
 			return nil, err
 		})
 	if err != nil {
 		ctx.L().ErrorFilterContextCanceled("execute statements failed after retry",
-			zap.String("queries", log.TruncateInterface(queries, -1)),
-			zap.String("arguments", log.TruncateInterface(args, -1)),
+			zap.String("queries", utils.TruncateInterface(queries, -1)),
+			zap.String("arguments", utils.TruncateInterface(args, -1)),
 			log.ShortError(err))
 	}
 

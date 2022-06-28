@@ -147,7 +147,7 @@ func (db *DBConfig) AdjustWithTimeZone(timeZone string) {
 }
 
 // FetchTimeZoneSetting fetch target db global time_zone setting.
-// TODO: move this function from TiDB to tiflow.
+// TODO: move GetTimeZoneOffset and FormatTimeZoneOffset from TiDB to tiflow.
 func FetchTimeZoneSetting(ctx context.Context, db *sql.DB) (string, error) {
 	dur, err := dbutil.GetTimeZoneOffset(ctx, db)
 	if err != nil {

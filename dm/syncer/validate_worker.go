@@ -32,6 +32,7 @@ import (
 	tidbmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -410,8 +411,8 @@ func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*sql.NullStrin
 			vw.L.Info("met retryable error", zap.Error(err))
 		} else {
 			vw.L.Error("failed to query",
-				zap.String("query", log.TruncateString(rowsQuery, -1)),
-				zap.String("args", log.TruncateInterface(cond.GetArgs(), -1)))
+				zap.String("query", utils.TruncateString(rowsQuery, -1)),
+				zap.String("args", utils.TruncateInterface(cond.GetArgs(), -1)))
 			err = errors.Trace(err)
 		}
 		return nil, err
