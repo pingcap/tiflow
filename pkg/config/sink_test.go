@@ -84,24 +84,24 @@ func TestValidateOldValue(t *testing.T) {
 func TestValidateApplyParameter(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
-		sinkURI          string
-		expectedErr      string
-		expectedSplitTxn AtomicityLevel
+		sinkURI       string
+		expectedErr   string
+		expectedLevel AtomicityLevel
 	}{
 		{
-			sinkURI:          "mysql://normal:123456@127.0.0.1:3306",
-			expectedErr:      "",
-			expectedSplitTxn: TableTxnAtomicity,
+			sinkURI:       "mysql://normal:123456@127.0.0.1:3306",
+			expectedErr:   "",
+			expectedLevel: tableTxnAtomicity,
 		},
 		{
-			sinkURI:          "mysql://normal:123456@127.0.0.1:3306?transaction-atomicity=table",
-			expectedErr:      "",
-			expectedSplitTxn: TableTxnAtomicity,
+			sinkURI:       "mysql://normal:123456@127.0.0.1:3306?transaction-atomicity=table",
+			expectedErr:   "",
+			expectedLevel: tableTxnAtomicity,
 		},
 		{
-			sinkURI:          "mysql://normal:123456@127.0.0.1:3306?transaction-atomicity=none",
-			expectedErr:      "",
-			expectedSplitTxn: NoneTxnAtomicity,
+			sinkURI:       "mysql://normal:123456@127.0.0.1:3306?transaction-atomicity=none",
+			expectedErr:   "",
+			expectedLevel: noneTxnAtomicity,
 		},
 		{
 			sinkURI:     "mysql://normal:123456@127.0.0.1:3306?transaction-atomicity=global",
@@ -112,26 +112,26 @@ func TestValidateApplyParameter(t *testing.T) {
 			expectedErr: ".*protocol cannot be configured when using tidb scheme.*",
 		},
 		{
-			sinkURI:          "blackhole://normal:123456@127.0.0.1:3306?transaction-atomicity=none",
-			expectedErr:      "",
-			expectedSplitTxn: NoneTxnAtomicity,
+			sinkURI:       "blackhole://normal:123456@127.0.0.1:3306?transaction-atomicity=none",
+			expectedErr:   "",
+			expectedLevel: noneTxnAtomicity,
 		},
 		{
 			sinkURI: "kafka://127.0.0.1:9092?transaction-atomicity=none" +
 				"&protocol=open-protocol",
-			expectedErr:      "",
-			expectedSplitTxn: NoneTxnAtomicity,
+			expectedErr:   "",
+			expectedLevel: noneTxnAtomicity,
 		},
 		{
 			sinkURI: "pulsar://127.0.0.1:9092?transaction-atomicity=table" +
 				"&protocol=open-protocol",
-			expectedErr:      "",
-			expectedSplitTxn: NoneTxnAtomicity,
+			expectedErr:   "",
+			expectedLevel: noneTxnAtomicity,
 		},
 		{
-			sinkURI:          "kafka://127.0.0.1:9092?protocol=default",
-			expectedErr:      "",
-			expectedSplitTxn: NoneTxnAtomicity,
+			sinkURI:       "kafka://127.0.0.1:9092?protocol=default",
+			expectedErr:   "",
+			expectedLevel: noneTxnAtomicity,
 		},
 		{
 			sinkURI:     "kafka://127.0.0.1:9092?transaction-atomicity=table",
@@ -145,7 +145,7 @@ func TestValidateApplyParameter(t *testing.T) {
 		require.Nil(t, err)
 		if tc.expectedErr == "" {
 			require.Nil(t, cfg.validateAndAdjust(parsedSinkURI, true))
-			require.Equal(t, tc.expectedSplitTxn, cfg.TxnAtomicity)
+			require.Equal(t, tc.expectedLevel, cfg.TxnAtomicity)
 		} else {
 			require.Regexp(t, tc.expectedErr, cfg.validateAndAdjust(parsedSinkURI, true))
 		}

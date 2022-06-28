@@ -39,6 +39,7 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	// test no change error
 	changefeedConfig = model.ChangefeedConfig{SinkURI: "blackhole://"}
 	oldInfo.SinkURI = "blackhole://"
+	oldInfo.Config.Sink.TxnAtomicity = "table"
 	newInfo, err = VerifyUpdateChangefeedConfig(ctx, changefeedConfig, oldInfo)
 	require.NotNil(t, err)
 	require.Regexp(t, ".*changefeed config is the same with the old one.*", err)

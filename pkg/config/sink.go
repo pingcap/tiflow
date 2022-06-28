@@ -27,19 +27,35 @@ import (
 const DefaultMaxMessageBytes = 10 * 1024 * 1024 // 10M
 
 // AtomicityLevel represents the atomicity level of a changefeed.
-type AtomicityLevel int
+type AtomicityLevel string
 
 const (
-	// UnknowTxnAtomicity is the default atomicity level, which is invalid.
-	UnknowTxnAtomicity AtomicityLevel = iota
-	// NoneTxnAtomicity means atomicity of transactions is not guaranteed
-	NoneTxnAtomicity
-	// TableTxnAtomicity means atomicity of single table transactions is guaranteed.
-	TableTxnAtomicity
-	// GlobalTxnAtomicity means atomicity of cross table transactions is guaranteed, which
+	// unknowTxnAtomicity is the default atomicity level, which is invalid and will
+	// be set to a valid value when initializing sink in processor.
+	unknowTxnAtomicity AtomicityLevel = ""
+
+	// noneTxnAtomicity means atomicity of transactions is not guaranteed
+	noneTxnAtomicity AtomicityLevel = "none"
+
+	// tableTxnAtomicity means atomicity of single table transactions is guaranteed.
+	tableTxnAtomicity AtomicityLevel = "table"
+
+	// globalTxnAtomicity means atomicity of cross table transactions is guaranteed, which
 	// is currently not supported by TiCDC.
-	GlobalTxnAtomicity
+	// globalTxnAtomicity AtomicityLevel = "global"
 )
+
+// ShouldSplitTxn returns whether the sink should split txn.
+func (l AtomicityLevel) ShouldSplitTxn() bool {
+	return l == noneTxnAtomicity
+}
+
+// Validate checks the AtomicityLevel is supported by TiCDC.
+func (l AtomicityLevel) Validate() {
+	if l != noneTxnAtomicity && l != tableTxnAtomicity {
+		log.Panic(fmt.Sprintf("unsupported transaction atomicity: %s", l))
+	}
+}
 
 // ForceEnableOldValueProtocols specifies which protocols need to be forced to enable old value.
 var ForceEnableOldValueProtocols = []string{
@@ -116,26 +132,31 @@ func (s *SinkConfig) applyParameter(sinkURI *url.URL) error {
 	params := sinkURI.Query()
 
 	txnAtomicity := params.Get("transaction-atomicity")
-	switch txnAtomicity {
-	case "":
-		fallthrough
-	case "table":
-		s.TxnAtomicity = TableTxnAtomicity
-	case "none":
-		s.TxnAtomicity = NoneTxnAtomicity
+	switch AtomicityLevel(txnAtomicity) {
+	case unknowTxnAtomicity:
+		// Set default value according to scheme.
+		if isMqScheme(sinkURI.Scheme) {
+			s.TxnAtomicity = noneTxnAtomicity
+		} else {
+			s.TxnAtomicity = tableTxnAtomicity
+		}
+	case noneTxnAtomicity:
+		s.TxnAtomicity = noneTxnAtomicity
+	case tableTxnAtomicity:
+		// MqSink only support `noneTxnAtomicity`.
+		if isMqScheme(sinkURI.Scheme) {
+			log.Warn("The configuration of transaction-atomicity is incompatible with scheme",
+				zap.Any("txnAtomicity", s.TxnAtomicity),
+				zap.String("scheme", sinkURI.Scheme),
+				zap.String("protocol", s.Protocol))
+			s.TxnAtomicity = noneTxnAtomicity
+		} else {
+			s.TxnAtomicity = tableTxnAtomicity
+		}
 	default:
 		errMsg := fmt.Sprintf("%s level atomicity is not supported by %s scheme",
 			txnAtomicity, sinkURI.Scheme)
 		return cerror.ErrSinkURIInvalid.GenWithStackByArgs(errMsg)
-	}
-
-	// MqSink only support `NoneTxnAtomicity`.
-	if isMqScheme(sinkURI.Scheme) && s.TxnAtomicity != NoneTxnAtomicity {
-		log.Warn("The configuration of transaction-atomicity is incompatible with scheme",
-			zap.Any("txnAtomicity", s.TxnAtomicity),
-			zap.String("scheme", sinkURI.Scheme),
-			zap.String("protocol", s.Protocol))
-		s.TxnAtomicity = NoneTxnAtomicity
 	}
 
 	s.Protocol = params.Get(ProtocolKey)

@@ -66,6 +66,10 @@ type txnSizeEntry struct {
 
 // NewTableFlowController creates a new TableFlowController
 func NewTableFlowController(quota uint64, redoLogEnabled bool, splitTxn bool) *TableFlowController {
+	log.Info("create table flow controller",
+		zap.Uint64("quota", quota),
+		zap.Bool("redoLogEnabled", redoLogEnabled),
+		zap.Bool("splitTxn", splitTxn))
 	maxSizePerTxn := uint64(defaultSizePerTxn)
 	if maxSizePerTxn > quota {
 		maxSizePerTxn = quota

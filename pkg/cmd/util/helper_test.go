@@ -191,8 +191,7 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 			{Matcher: []string{"test1.*", "test2.*"}, Columns: []string{"column1", "column2"}},
 			{Matcher: []string{"test3.*", "test4.*"}, Columns: []string{"!a", "column3"}},
 		},
-		Protocol:     "open-protocol",
-		TxnAtomicity: config.TableTxnAtomicity,
+		Protocol: "open-protocol",
 	}, cfg.Sink)
 }
 

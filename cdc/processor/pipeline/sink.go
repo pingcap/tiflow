@@ -364,14 +364,14 @@ func (n *sinkNode) releaseResource(ctx context.Context) error {
 }
 
 func (n *sinkNode) checkSplitTxn(e *model.PolymorphicEvent) {
-	if n.replicaConfig.Sink.TxnAtomicity == config.NoneTxnAtomicity {
+	ta := n.replicaConfig.Sink.TxnAtomicity
+	ta.Validate()
+	if ta.ShouldSplitTxn() {
 		return
 	}
 
-	if n.replicaConfig.Sink.TxnAtomicity != config.TableTxnAtomicity {
-		log.Panic("unsupported txn atomicity", zap.Any("replicaConfig", n.replicaConfig))
-	}
-
+	// Check that BatchResolved events and RowChangedEvent events with `SplitTxn==true`
+	// have not been received by sinkNode.
 	if e.Resolved != nil && e.Resolved.IsBatchMode() {
 		log.Panic("batch mode resolved ts is not supported when sink.splitTxn is false",
 			zap.Any("event", e), zap.Any("replicaConfig", n.replicaConfig))

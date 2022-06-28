@@ -127,11 +127,14 @@ func (s *mockCloseControlSink) Close(ctx context.Context) error {
 
 func TestState(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
+	config := config.GetDefaultReplicaConfig()
+	// tableTxnAtomicity
+	config.Sink.TxnAtomicity = "table"
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: model.DefaultChangeFeedID("changefeed-id-test-status"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
-			Config:  config.GetDefaultReplicaConfig(),
+			Config:  config,
 		},
 	})
 
@@ -270,11 +273,14 @@ func TestState(t *testing.T) {
 // until the underlying sink is closed
 func TestStopStatus(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
+	config := config.GetDefaultReplicaConfig()
+	// tableTxnAtomicity
+	config.Sink.TxnAtomicity = "table"
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: model.DefaultChangeFeedID("changefeed-id-test-state"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
-			Config:  config.GetDefaultReplicaConfig(),
+			Config:  config,
 		},
 	})
 
@@ -317,11 +323,14 @@ func TestStopStatus(t *testing.T) {
 
 func TestManyTs(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
+	config := config.GetDefaultReplicaConfig()
+	// tableTxnAtomicity
+	config.Sink.TxnAtomicity = "table"
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
-			Config:  config.GetDefaultReplicaConfig(),
+			Config:  config,
 		},
 	})
 	state := TableStatePrepared
@@ -492,11 +501,14 @@ func TestManyTs(t *testing.T) {
 
 func TestIgnoreEmptyRowChangeEvent(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
+	config := config.GetDefaultReplicaConfig()
+	// tableTxnAtomicity
+	config.Sink.TxnAtomicity = "table"
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
-			Config:  config.GetDefaultReplicaConfig(),
+			Config:  config,
 		},
 	})
 	state := TableStatePreparing
@@ -519,11 +531,14 @@ func TestIgnoreEmptyRowChangeEvent(t *testing.T) {
 
 func TestSplitUpdateEventWhenEnableOldValue(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
+	config := config.GetDefaultReplicaConfig()
+	// tableTxnAtomicity
+	config.Sink.TxnAtomicity = "table"
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
-			Config:  config.GetDefaultReplicaConfig(),
+			Config:  config,
 		},
 	})
 	state := TableStatePreparing
@@ -581,13 +596,15 @@ func TestSplitUpdateEventWhenEnableOldValue(t *testing.T) {
 
 func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
-	cfg := config.GetDefaultReplicaConfig()
-	cfg.EnableOldValue = false
+	config := config.GetDefaultReplicaConfig()
+	config.EnableOldValue = false
+	// tableTxnAtomicity
+	config.Sink.TxnAtomicity = "none"
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
-			Config:  cfg,
+			Config:  config,
 		},
 	})
 	state := TableStatePreparing
@@ -733,11 +750,14 @@ func TestFlushSinkReleaseFlowController(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.EnableOldValue = false
+	config := config.GetDefaultReplicaConfig()
+	// tableTxnAtomicity
+	config.Sink.TxnAtomicity = "table"
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
-			Config:  cfg,
+			Config:  config,
 		},
 	})
 	state := TableStatePreparing
