@@ -23,8 +23,8 @@ import (
 	"time"
 
 	"github.com/phayes/freeport"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/server/v3/embed"
 )
@@ -43,7 +43,7 @@ func allocTempURL(t *testing.T) string {
 // TODO: refactor to better table driven cases
 func TestPrepareJoinEtcd(t *testing.T) {
 	// initialized the logger to make genEmbedEtcdConfig working.
-	require.Nil(t, log.InitLogger(&log.Config{}))
+	require.Nil(t, logutil.InitLogger(&logutil.Config{}))
 
 	masterAddr1 := allocTempURL(t)
 	advertiseAddr1 := allocTempURL(t)

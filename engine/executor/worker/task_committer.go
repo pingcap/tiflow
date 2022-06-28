@@ -17,10 +17,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/log"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/executor/worker/internal"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 )
