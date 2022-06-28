@@ -11,18 +11,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package api
+package capture
 
 import (
 	"context"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/owner"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/upstream"
 )
 
-// CaptureInfoProvider provides capture and its onwnership information
-type CaptureInfoProvider interface {
+// InfoForAPI provides capture's info and getters used for api
+type InfoForAPI interface {
 	Info() (model.CaptureInfo, error)
 	IsOwner() bool
-	GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error)
 	IsReady() bool
+	GetOwner() (owner.Owner, error)
+	GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error)
+	StatusProvider() owner.StatusProvider
+	GetEtcdClient() etcd.CDCEtcdClientForAPI
+	GetUpstreamManager() *upstream.Manager
 }

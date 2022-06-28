@@ -39,10 +39,10 @@ import (
 func VerifyCreateChangefeedConfig(
 	ctx context.Context,
 	changefeedConfig model.ChangefeedConfig,
-	capture *capture.Capture,
+	capture capture.InfoForAPI,
 ) (*model.ChangeFeedInfo, error) {
 	// TODO(dongmen): we should pass ClusterID in ChangefeedConfig in the upcoming future
-	up := capture.UpstreamManager.GetDefaultUpstream()
+	up := capture.GetUpstreamManager().GetDefaultUpstream()
 
 	// verify sinkURI
 	if changefeedConfig.SinkURI == "" {
@@ -77,7 +77,7 @@ func VerifyCreateChangefeedConfig(
 	if err := gc.EnsureChangefeedStartTsSafety(
 		ctx,
 		up.PDClient,
-		capture.EtcdClient.GetEnsureGCServiceID(),
+		capture.GetEtcdClient().GetEnsureGCServiceID(),
 		model.DefaultChangeFeedID(changefeedConfig.ID),
 		ensureTTL, changefeedConfig.StartTS); err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {

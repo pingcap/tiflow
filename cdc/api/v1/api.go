@@ -44,18 +44,18 @@ const (
 
 // OpenAPI provides capture APIs.
 type OpenAPI struct {
-	capture *capture.Capture
+	capture capture.InfoForAPI
 	// use for unit test only
 	testStatusProvider owner.StatusProvider
 }
 
 // NewOpenAPI creates a new OpenAPI.
-func NewOpenAPI(c *capture.Capture) OpenAPI {
+func NewOpenAPI(c capture.InfoForAPI) OpenAPI {
 	return OpenAPI{capture: c}
 }
 
 // NewOpenAPI4Test return a OpenAPI for test
-func NewOpenAPI4Test(c *capture.Capture, p owner.StatusProvider) OpenAPI {
+func NewOpenAPI4Test(c capture.InfoForAPI, p owner.StatusProvider) OpenAPI {
 	return OpenAPI{capture: c, testStatusProvider: p}
 }
 
@@ -263,7 +263,7 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
-	up := h.capture.UpstreamManager.GetDefaultUpstream()
+	up := h.capture.GetUpstreamManager().GetDefaultUpstream()
 	info, err := VerifyCreateChangefeedConfig(ctx, changefeedConfig, h.capture)
 	if err != nil {
 		_ = c.Error(err)
@@ -283,7 +283,7 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		CAPath:        up.SecurityConfig.CAPath,
 		CertAllowedCN: up.SecurityConfig.CertAllowedCN,
 	}
-	err = h.capture.EtcdClient.CreateChangefeedInfo(ctx, upstreamInfo,
+	err = h.capture.GetEtcdClient().CreateChangefeedInfo(ctx, upstreamInfo,
 		info,
 		model.DefaultChangeFeedID(changefeedConfig.ID))
 	if err != nil {
@@ -419,7 +419,7 @@ func (h *OpenAPI) UpdateChangefeed(c *gin.Context) {
 		return
 	}
 
-	err = h.capture.EtcdClient.SaveChangeFeedInfo(ctx, newInfo, changefeedID)
+	err = h.capture.GetEtcdClient().SaveChangeFeedInfo(ctx, newInfo, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
 		return

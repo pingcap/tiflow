@@ -94,13 +94,14 @@ func NewUpstream4Test(pdClient pd.Client) *Upstream {
 		etcd.GcServiceIDForTest(),
 		pdClient, pdClock)
 	res := &Upstream{
-		ID:        testUpstreamID,
-		PDClient:  pdClient,
-		PDClock:   pdClock,
-		GCManager: gcManager,
-		status:    normal,
-		wg:        new(sync.WaitGroup),
-		clock:     clock.New(),
+		ID:             testUpstreamID,
+		PDClient:       pdClient,
+		PDClock:        pdClock,
+		GCManager:      gcManager,
+		status:         normal,
+		wg:             new(sync.WaitGroup),
+		clock:          clock.New(),
+		SecurityConfig: &config.SecurityConfig{},
 	}
 
 	return res

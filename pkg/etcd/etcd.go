@@ -428,7 +428,7 @@ func (c CDCEtcdClient) UpdateChangefeedAndUpstream(ctx context.Context,
 			zap.String("changefeed", changeFeedID.ID))
 		return cerror.ErrChangefeedUpdateFailedTransaction.GenWithStackByArgs(changeFeedID)
 	}
-	return errors.Trace(err)
+	return nil
 }
 
 // SaveChangeFeedInfo stores change feed info into etcd
