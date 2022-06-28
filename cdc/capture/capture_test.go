@@ -19,7 +19,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pingcap/tiflow/cdc/model"
+	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
+	mock_processor "github.com/pingcap/tiflow/cdc/processor/mock"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
@@ -75,9 +78,114 @@ func TestInfo(t *testing.T) {
 	require.NotPanics(t, func() { cp.Info() })
 }
 
-func TestDrain(t *testing.T) {
-	cp := NewCapture4Test(nil)
+func TestDrainImmediately(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	mm := mock_processor.NewMockManager(ctrl)
+	cp := &captureImpl{processorManager: mm}
 	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
-	cp.Drain()
+
+	// Drain completes immediately.
+	mm.EXPECT().
+		QueryTableCount(gomock.Any(), gomock.Any(), gomock.Any()).
+		Do(func(ctx context.Context, tableCh chan int, done chan<- error) {
+			tableCh <- 0
+			close(done)
+		})
+	done := cp.Drain(ctx)
 	require.Equal(t, model.LivenessCaptureStopping, cp.Liveness())
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		require.Fail(t, "timeout")
+	}
+}
+
+func TestDrainWaitsTables(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	mm := mock_processor.NewMockManager(ctrl)
+	cp := &captureImpl{processorManager: mm}
+	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
+
+	// Drain waits for moving out all tables.
+	calls := 0
+	t2 := mm.EXPECT().
+		QueryTableCount(gomock.Any(), gomock.Any(), gomock.Any()).
+		Do(func(ctx context.Context, tableCh chan int, done chan<- error) {
+			tableCh <- 2
+			calls = 1
+			close(done)
+		})
+	t1 := mm.EXPECT().
+		QueryTableCount(gomock.Any(), gomock.Any(), gomock.Any()).
+		Do(func(ctx context.Context, tableCh chan int, done chan<- error) {
+			tableCh <- 1
+			calls = 2
+			close(done)
+		}).After(t2)
+	mm.EXPECT().
+		QueryTableCount(gomock.Any(), gomock.Any(), gomock.Any()).
+		Do(func(ctx context.Context, tableCh chan int, done chan<- error) {
+			tableCh <- 0
+			calls = 3
+			close(done)
+		}).After(t1)
+	done := cp.Drain(ctx)
+	require.Equal(t, model.LivenessCaptureStopping, cp.Liveness())
+	select {
+	case <-done:
+		require.EqualValues(t, 3, calls)
+	case <-time.After(3 * time.Second):
+		require.Fail(t, "timeout")
+	}
+}
+
+func TestDrainWaitsOwnerResign(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	mo := mock_owner.NewMockOwner(ctrl)
+	mm := mock_processor.NewMockManager(ctrl)
+	cp := &captureImpl{processorManager: mm, owner: mo}
+	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
+
+	ownerStopCh := make(chan struct{}, 1)
+	mo.EXPECT().AsyncStop().Do(func() {
+		select {
+		case ownerStopCh <- struct{}{}:
+		default:
+		}
+	}).AnyTimes()
+	mm.EXPECT().
+		QueryTableCount(gomock.Any(), gomock.Any(), gomock.Any()).
+		Do(func(ctx context.Context, tableCh chan int, done chan<- error) {
+			tableCh <- 0
+			close(done)
+		})
+
+	done := cp.Drain(ctx)
+	require.Equal(t, model.LivenessCaptureStopping, cp.Liveness())
+
+	// Must wait owner resign by wait for async close.
+	select {
+	case <-ownerStopCh:
+		// Simulate owner has resigned.
+		cp.setOwner(nil)
+	case <-time.After(3 * time.Second):
+		require.Fail(t, "timeout")
+	case <-done:
+		require.Fail(t, "unexpected")
+	}
+
+	select {
+	case <-time.After(3 * time.Second):
+		require.Fail(t, "timeout")
+	case <-done:
+	}
 }
