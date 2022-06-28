@@ -460,7 +460,7 @@ func (w *DefaultBaseWorker) SendMessage(
 ) error {
 	var err error
 	ctx, cancel := w.errCenter.WithCancelOnFirstError(ctx)
-	cancel()
+	defer cancel()
 	if nonblocking {
 		_, err = w.messageSender.SendToNode(ctx, w.masterClient.MasterNode(), topic, message)
 	} else {

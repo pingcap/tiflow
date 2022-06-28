@@ -410,7 +410,7 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 // Poll implements BaseMaster.Poll
 func (m *DefaultBaseMaster) Poll(ctx context.Context) error {
 	ctx, cancel := m.errCenter.WithCancelOnFirstError(ctx)
-	cancel()
+	defer cancel()
 
 	if err := m.doPoll(ctx); err != nil {
 		return errors.Trace(err)
