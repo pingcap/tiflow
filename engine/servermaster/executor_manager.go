@@ -21,7 +21,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
@@ -89,7 +89,7 @@ func NewExecutorManagerImpl(initHeartbeatTTL, keepAliveInterval time.Duration, c
 func (e *ExecutorManagerImpl) removeExecutorImpl(id model.ExecutorID) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	log.L().Logger.Info("begin to remove executor", zap.String("id", string(id)))
+	log.L().Info("begin to remove executor", zap.String("id", string(id)))
 	_, ok := e.executors[id]
 	if !ok {
 		// This executor has been removed
@@ -97,7 +97,7 @@ func (e *ExecutorManagerImpl) removeExecutorImpl(id model.ExecutorID) error {
 	}
 	delete(e.executors, id)
 	e.rescMgr.Unregister(id)
-	log.L().Logger.Info("notify to offline exec")
+	log.L().Info("notify to offline exec")
 	if test.GetGlobalTestFlag() {
 		e.testContext.NotifyExecutorChange(&test.ExecutorChangeEvent{
 			Tp:   test.Delete,
@@ -115,7 +115,7 @@ func (e *ExecutorManagerImpl) removeExecutorImpl(id model.ExecutorID) error {
 // HandleHeartbeat implements pb interface,
 func (e *ExecutorManagerImpl) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
 	if e.logRL.Allow() {
-		log.L().Logger.Info("handle heart beat", zap.Stringer("req", req))
+		log.L().Info("handle heart beat", zap.Stringer("req", req))
 	}
 	e.mu.Lock()
 	execID := model.ExecutorID(req.ExecutorId)
@@ -164,7 +164,7 @@ func (e *ExecutorManagerImpl) RegisterExec(info *model.NodeInfo) {
 // AllocateNewExec allocates new executor info to a give RegisterExecutorRequest
 // and then registers the executor.
 func (e *ExecutorManagerImpl) AllocateNewExec(req *pb.RegisterExecutorRequest) (*model.NodeInfo, error) {
-	log.L().Logger.Info("allocate new executor", zap.Stringer("req", req))
+	log.L().Info("allocate new executor", zap.Stringer("req", req))
 
 	e.mu.Lock()
 	info := &model.NodeInfo{
@@ -215,7 +215,7 @@ type Executor struct {
 
 func (e *Executor) checkAlive() bool {
 	if e.logRL.Allow() {
-		log.L().Logger.Info("check alive", zap.String("exec", string(e.NodeInfo.ID)))
+		log.L().Info("check alive", zap.String("exec", string(e.NodeInfo.ID)))
 	}
 
 	e.mu.Lock()
@@ -257,14 +257,14 @@ func (e *ExecutorManagerImpl) Start(ctx context.Context) {
 		ticker := time.NewTicker(e.keepAliveInterval)
 		defer func() {
 			ticker.Stop()
-			log.L().Logger.Info("check executor alive finished")
+			log.L().Info("check executor alive finished")
 		}()
 		for {
 			select {
 			case <-ticker.C:
 				err := e.checkAliveImpl()
 				if err != nil {
-					log.L().Logger.Info("check alive meet error", zap.Error(err))
+					log.L().Info("check alive meet error", zap.Error(err))
 				}
 			case <-ctx.Done():
 				return

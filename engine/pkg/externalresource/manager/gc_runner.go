@@ -121,7 +121,7 @@ func (r *DefaultGCRunner) gcOnce(
 		return err
 	}
 
-	log.Info("start gc'ing resource", zap.Any("resource", res))
+	log.L().Info("start gc'ing resource", zap.Any("resource", res))
 	if !res.GCPending {
 		log.L().Panic("unexpected gc_pending = false")
 	}
