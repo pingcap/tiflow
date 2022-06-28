@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
-
 	"github.com/stretchr/testify/require"
 )
 
