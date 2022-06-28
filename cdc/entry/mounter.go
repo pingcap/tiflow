@@ -109,12 +109,7 @@ func (m *mounterImpl) DecodeEvent(ctx context.Context, pEvent *model.Polymorphic
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if m.filter.ShouldIgnoreDMLEvent(
-		row.StartTs, row.Table.Schema, row.Table.Table) {
-		pEvent.Row = nil
-	} else {
-		pEvent.Row = row
-	}
+	pEvent.Row = row
 	pEvent.RawKV.Value = nil
 	pEvent.RawKV.OldValue = nil
 	duration := time.Since(start)

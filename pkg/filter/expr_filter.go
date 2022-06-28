@@ -14,7 +14,9 @@
 package filter
 
 import (
-	"github.com/ngaut/log"
+	"context"
+
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb/expression"
 	timodel "github.com/pingcap/tidb/parser/model"
@@ -22,6 +24,8 @@ import (
 	"github.com/pingcap/tidb/util/chunk"
 	tifilter "github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tiflow/cdc/model"
+	dmcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -43,13 +47,21 @@ func newExprFilter(timezone string, cfg *config.FilterConfig) (*dmlExprFilter, e
 	if err != nil {
 		return nil, err
 	}
+
 	sessCtx := utils.NewSessionCtx(vars)
-	filterGroup := syncer.NewExprFilterGroup(sessCtx, filterGroupRules)
+	dmctx := dmcontext.NewContext(context.Background(),
+		dmlog.Logger{Logger: log.L()})
+
+	filterGroup := syncer.NewExprFilterGroup(dmctx, sessCtx, filterGroupRules)
 	log.Info("fizz: new expression filter successfully.")
 	return &dmlExprFilter{filterGroup: filterGroup, tables: make(map[string]*timodel.TableInfo)}, nil
 }
 
 func (f *dmlExprFilter) shouldSkipDML(row *model.RowChangedEvent, ti *timodel.TableInfo) (bool, error) {
+	// It only be nil in test.
+	if ti == nil {
+		return false, nil
+	}
 	tableName := dbutil.TableName(row.Table.Schema, row.Table.Table)
 	table := &tifilter.Table{Schema: row.Table.Schema, Name: row.Table.Table}
 

@@ -14,13 +14,16 @@
 package filter
 
 import (
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
 )
 
-// fizz:负责通过 ddl、dml 事件类型来过滤事件
 type sqlEventFilter struct {
 	binlogFilter *bf.BinlogEvent
 }
@@ -28,27 +31,27 @@ type sqlEventFilter struct {
 func newSQLEventFilter(caseSensitive bool, cfg *config.FilterConfig) (*sqlEventFilter, error) {
 	rule, err := configToBinlogEventRule(cfg)
 	if err != nil {
-		return nil, err
+		return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err)
 	}
 	binlogFilter, err := bf.NewBinlogEvent(caseSensitive, rule)
 	if err != nil {
-		return nil, err
+		return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err)
 	}
 	return &sqlEventFilter{binlogFilter: binlogFilter}, nil
 }
 
-// skipDDLEvent skips ddl job by its type and query
-func (f *sqlEventFilter) skipDDLEvent(event *model.DDLEvent) (bool, error) {
-	evenType := jobTypeToEventType(event.Type)
-	action, err := f.binlogFilter.Filter(event.TableInfo.Schema, event.TableInfo.Table, evenType, event.Query)
+// skipDDLEvent skips ddl job by its type and query.
+func (f *sqlEventFilter) skipDDLJob(job *timodel.Job) (bool, error) {
+	evenType := jobTypeToEventType(job.Type)
+	log.Info("fizz", zap.String("query", job.Query))
+	action, err := f.binlogFilter.Filter(job.SchemaName, job.TableName, evenType, job.Query)
 	if err != nil {
-		// fizz: complete this error
-		return false, err
+		return false, errors.Trace(err)
 	}
 	return action == bf.Ignore, nil
 }
 
-// skipDMLEvent skips dml event by its EventType.
+// skipDMLEvent skips dml event by its type.
 func (f *sqlEventFilter) skipDMLEvent(event *model.RowChangedEvent) (bool, error) {
 	var et bf.EventType
 	switch {
@@ -64,8 +67,7 @@ func (f *sqlEventFilter) skipDMLEvent(event *model.RowChangedEvent) (bool, error
 	}
 	action, err := f.binlogFilter.Filter(event.Table.Schema, event.Table.Table, et, "")
 	if err != nil {
-		// fizz: complete this error
-		return false, err
+		return false, errors.Trace(err)
 	}
 	return action == bf.Ignore, nil
 }

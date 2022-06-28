@@ -65,7 +65,7 @@ func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
 	}, nil
 }
 
-// ShouldIgnoreDMLEvent checks if a DML event should be ignore by conditions shown below:
+// ShouldIgnoreDMLEvent checks if a DML event should be ignore by conditions below:
 // 0. By startTs.
 // 1. By table name.
 // 2. By type.
@@ -92,11 +92,13 @@ func (f *Filter) ShouldIgnoreDMLEvent(
 	return f.dmlExprFilter.shouldSkipDML(dml, ti)
 }
 
-// ShouldIgnoreDDLEvent checks if a DML event should be ignore by conditions shown below:
+// ShouldIgnoreDDLJob checks if a DML job should be ignore by conditions below:
 // 0. By startTs.
-// 1. By schema or table name.
-// 2. By type or query.
-func (f *Filter) ShouldIgnoreDDLEvent(job *timodel.Job) (bool, error) {
+// 1. By schema name.
+// 2. By table name.
+// 3. By type.
+// 4. By query.
+func (f *Filter) ShouldIgnoreDDLJob(job *timodel.Job) (bool, error) {
 	if f.shouldIgnoreStartTs(job.StartTS) {
 		return true, nil
 	}
@@ -116,7 +118,7 @@ func (f *Filter) ShouldIgnoreDDLEvent(job *timodel.Job) (bool, error) {
 }
 
 // ShouldDiscardDDL returns true if this DDL should be discarded.
-// If a ddl should be discarded, it will not be applied to cdc't schema storage
+// If a ddl is discarded, it will not be applied to cdc't schema storage
 // and sent to downstream.
 func (f *Filter) ShouldDiscardDDL(ddlType timodel.ActionType) bool {
 	if !f.shouldDiscardByBuiltInDDLAllowlist(ddlType) {

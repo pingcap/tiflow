@@ -189,7 +189,11 @@ func (s *schemaWrap4Owner) parseRenameTables(
 func (s *schemaWrap4Owner) BuildDDLEvents(
 	job *timodel.Job,
 ) ([]*model.DDLEvent, error) {
-	if s.filter.ShouldIgnoreDDLEvent(job) {
+	ignore, err := s.filter.ShouldIgnoreDDLJob(job)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if ignore {
 		log.Info(
 			"DDL event ignored",
 			zap.String("query", job.Query),
@@ -202,7 +206,6 @@ func (s *schemaWrap4Owner) BuildDDLEvents(
 	}
 
 	var preTableInfo *model.TableInfo
-	var err error
 	ddlEvents := make([]*model.DDLEvent, 0)
 	switch job.Type {
 	case timodel.ActionRenameTables:
