@@ -14,65 +14,97 @@
 package conn
 
 import (
-	. "github.com/pingcap/check"
-	"github.com/pingcap/failpoint"
+	"context"
+	"database/sql"
+	"fmt"
+	"net"
+	"testing"
+	"time"
 
-	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	"github.com/phayes/freeport"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/stretchr/testify/require"
+
+	"github.com/DATA-DOG/go-sqlmock"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 )
 
-var _ = Suite(&testBaseDBSuite{})
-
-type testBaseDBSuite struct{}
-
-func (t *testBaseDBSuite) TestGetBaseConn(c *C) {
+func TestGetBaseConn(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 
 	baseDB := NewBaseDB(db)
 
 	tctx := tcontext.Background()
 
 	dbConn, err := baseDB.GetBaseConn(tctx.Context())
-	c.Assert(dbConn, NotNil)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
+	require.NotNil(t, dbConn)
 
 	mock.ExpectQuery("select 1").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("1"))
 	// nolint:sqlclosecheck
 	rows, err := dbConn.QuerySQL(tctx, "select 1")
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	ids := make([]int, 0, 1)
 	for rows.Next() {
 		var id int
 		err = rows.Scan(&id)
-		c.Assert(err, IsNil)
+		require.NoError(t, err)
 		ids = append(ids, id)
 	}
-	c.Assert(ids, HasLen, 1)
-	c.Assert(ids[0], Equals, 1)
+	require.Equal(t, []int{1}, ids)
 
 	mock.ExpectBegin()
 	mock.ExpectExec("create database test").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 	affected, err := dbConn.ExecuteSQL(tctx, testStmtHistogram, "test", []string{"create database test"})
-	c.Assert(err, IsNil)
-	c.Assert(affected, Equals, 1)
-	c.Assert(baseDB.Close(), IsNil)
+	require.NoError(t, err)
+	require.Equal(t, 1, affected)
+	require.NoError(t, baseDB.Close())
 }
 
-func (t *testBaseDBSuite) TestFailDBPing(c *C) {
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/conn/failDBPing", "return"), IsNil)
-	//nolint:errcheck
-	defer failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/conn/failDBPing")
+func TestFailDBPing(t *testing.T) {
+	netTimeout = time.Second
+	defer func() {
+		netTimeout = utils.DefaultDBTimeout
+	}()
+	port := freeport.GetPort()
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
 
-	cfg := &config.DBConfig{User: "root", Host: "127.0.0.1", Port: 3306}
+	l, err := net.Listen("tcp", addr)
+	require.NoError(t, err)
+	defer l.Close()
+
+	cfg := &config.DBConfig{User: "root", Host: "127.0.0.1", Port: port}
 	cfg.Adjust()
-	db, err := DefaultDBProvider.Apply(cfg)
-	c.Assert(db, IsNil)
-	c.Assert(err, NotNil)
+	impl := &DefaultDBProviderImpl{}
+	db, err := impl.Apply(cfg)
+	require.Error(t, err)
+	require.Nil(t, db)
+}
 
-	err = mockDB.ExpectationsWereMet()
-	c.Assert(err, IsNil)
+func TestGetBaseConnWontBlock(t *testing.T) {
+	netTimeout = time.Second
+	defer func() {
+		netTimeout = utils.DefaultDBTimeout
+	}()
+	ctx := context.Background()
+
+	port := freeport.GetPort()
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+
+	l, err := net.Listen("tcp", addr)
+	require.NoError(t, err)
+	defer l.Close()
+
+	// no such MySQL listening on port, so Conn will block
+	db, err := sql.Open("mysql", "root:@tcp("+addr+")/test")
+	require.NoError(t, err)
+
+	baseDB := NewBaseDB(db)
+
+	_, err = baseDB.GetBaseConn(ctx)
+	require.Error(t, err)
 }
