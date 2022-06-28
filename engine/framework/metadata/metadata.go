@@ -17,7 +17,7 @@ import (
 	"context"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"

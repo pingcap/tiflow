@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )

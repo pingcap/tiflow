@@ -18,7 +18,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"

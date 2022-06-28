@@ -19,14 +19,14 @@ import (
 	"time"
 
 	"github.com/phayes/freeport"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/pkg/etcdutil"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/server/v3/embed"
 )
 
 func init() {
-	err := log.InitLogger(&log.Config{Level: "warn"})
+	err := logutil.InitLogger(&logutil.Config{Level: "warn"})
 	if err != nil {
 		panic(err)
 	}
