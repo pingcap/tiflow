@@ -15,6 +15,7 @@ package binlog
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -318,7 +319,7 @@ func CompareLocation(location1, location2 Location, cmpGTID bool) int {
 			if cmp != 0 {
 				return cmp
 			}
-			return compareIndex(location1.Suffix, location2.Suffix)
+			return compareInjectSuffix(location1.Suffix, location2.Suffix)
 		}
 
 		// if can't compare by GTIDSet, then compare by position
@@ -329,7 +330,7 @@ func CompareLocation(location1, location2 Location, cmpGTID bool) int {
 	if cmp != 0 {
 		return cmp
 	}
-	return compareIndex(location1.Suffix, location2.Suffix)
+	return compareInjectSuffix(location1.Suffix, location2.Suffix)
 }
 
 // IsFreshPosition returns true when location1 is a fresh location without any info.
@@ -357,7 +358,7 @@ func IsFreshPosition(location Location, flavor string, cmpGTID bool) bool {
 	if cmp != 0 {
 		return cmp <= 0
 	}
-	return compareIndex(location.Suffix, zeroLocation.Suffix) <= 0
+	return compareInjectSuffix(location.Suffix, zeroLocation.Suffix) <= 0
 }
 
 // CompareGTID returns:
@@ -396,7 +397,15 @@ func CompareGTID(gSet1, gSet2 gmysql.GTIDSet) (int, bool) {
 	return 0, false
 }
 
-func compareIndex(lhs, rhs int) int {
+func compareInjectSuffix(lhs, rhs int) int {
+	// suffix 0 is largest
+	if lhs == 0 {
+		lhs = math.MaxInt32
+	}
+	if rhs == 0 {
+		rhs = math.MaxInt32
+	}
+
 	switch {
 	case lhs < rhs:
 		return -1

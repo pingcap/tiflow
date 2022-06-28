@@ -254,6 +254,8 @@ func TestGetEventWithSkip(t *testing.T) {
 }
 
 func checkGetEvent(t *testing.T, controller *StreamerController, expecteds []expectedInfo) {
+	t.Helper()
+
 	ctx := tcontext.Background()
 	for i, expected := range expecteds {
 		t.Logf("#%d", i)
