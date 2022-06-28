@@ -210,7 +210,7 @@ func (n *sorterNode) start(
 
 				if msg.CRTs < startTs {
 					// Ignore messages are less than initial checkpoint ts.
-					log.Info("sorterNode: ignore sorter output event",
+					log.Debug("sorterNode: ignore sorter output event",
 						zap.Uint64("CRTs", msg.CRTs), zap.Uint64("startTs", startTs))
 					continue
 				}

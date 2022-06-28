@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
@@ -26,22 +27,17 @@ import (
 
 func TestNewLogger(t *testing.T) {
 	var buffer zaptest.Buffer
-	lg, property, err := log.InitLoggerWithWriteSyncer(&log.Config{
-		Level:  "warn",
-		Format: "text",
-	}, &buffer, nil)
+	err := logutil.InitLogger(&logutil.Config{
+		Level: "warn",
+	}, logutil.WithOutputWriteSyncer(&buffer))
 	require.NoError(t, err)
-	log.ReplaceGlobals(lg, property)
 
-	logger := NewLogger4Framework()
-	logger.Warn("framework test", zap.String("type", "framework"))
-	require.Regexp(t, regexp.QuoteMeta("[\"framework test\"] [framework=true] [type=framework]"), buffer.Stripped())
-
-	logger = NewLogger4Master(tenant.NewProjectInfo("tenant1", "proj1"), "job1")
-	logger.Warn("master test", zap.String("type", "master"))
+	logger := WithProjectInfo(log.L(), tenant.NewProjectInfo("tenant1", "proj1"))
+	logger2 := WithMasterID(logger, "job1")
+	logger2.Warn("master test", zap.String("type", "master"))
 	require.Regexp(t, regexp.QuoteMeta("[\"master test\"] [tenant=tenant1] [project_id=proj1] [job_id=job1] [type=master]"), buffer.Stripped())
 
-	logger = NewLogger4Worker(tenant.NewProjectInfo("tenant1", "proj1"), "job1", "worker1")
-	logger.Warn("worker test", zap.String("type", "worker"))
+	logger3 := WithWorkerID(logger2, "worker1")
+	logger3.Warn("worker test", zap.String("type", "worker"))
 	require.Regexp(t, regexp.QuoteMeta("[\"worker test\"] [tenant=tenant1] [project_id=proj1] [job_id=job1] [worker_id=worker1] [type=worker]"), buffer.Stripped())
 }
