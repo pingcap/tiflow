@@ -565,10 +565,10 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 }
 
 // asyncExecDDLJob execute ddl job asynchronously, it returns true if the jod is done.
-// 0. build ddl events from job.
+// 0. Build ddl events from job.
 // 1. Apply ddl job to c.schema.
 // 2. Emit ddl event to redo manager.
-// 3. emit ddl event to ddl sink.
+// 3. Emit ddl event to ddl sink.
 func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 	job *timodel.Job,
 ) (bool, error) {

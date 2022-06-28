@@ -189,22 +189,7 @@ func (s *schemaWrap4Owner) parseRenameTables(
 func (s *schemaWrap4Owner) BuildDDLEvents(
 	job *timodel.Job,
 ) ([]*model.DDLEvent, error) {
-	ignore, err := s.filter.ShouldIgnoreDDLJob(job)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	if ignore {
-		log.Info(
-			"DDL event ignored",
-			zap.String("query", job.Query),
-			zap.Uint64("startTs", job.StartTS),
-			zap.Uint64("commitTs", job.BinlogInfo.FinishedTS),
-			zap.String("namespace", s.id.Namespace),
-			zap.String("changefeed", s.id.ID),
-		)
-		return nil, nil
-	}
-
+	var err error
 	var preTableInfo *model.TableInfo
 	ddlEvents := make([]*model.DDLEvent, 0)
 	switch job.Type {
@@ -228,8 +213,27 @@ func (s *schemaWrap4Owner) BuildDDLEvents(
 		event.FromJob(job, preTableInfo)
 		ddlEvents = append(ddlEvents, event)
 	}
-
-	return ddlEvents, nil
+	// filter out ddl here
+	res := make([]*model.DDLEvent, 0, len(ddlEvents))
+	for _, event := range ddlEvents {
+		ignored, err := s.filter.ShouldIgnoreDDLEvent(event)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if ignored {
+			log.Info(
+				"DDL event ignored",
+				zap.String("query", event.Query),
+				zap.Uint64("startTs", event.StartTs),
+				zap.Uint64("commitTs", event.CommitTs),
+				zap.String("namespace", s.id.Namespace),
+				zap.String("changefeed", s.id.ID),
+			)
+			continue
+		}
+		res = append(res, event)
+	}
+	return res, nil
 }
 
 func (s *schemaWrap4Owner) shouldIgnoreTable(t *model.TableInfo) bool {

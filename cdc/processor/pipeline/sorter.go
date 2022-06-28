@@ -216,12 +216,11 @@ func (n *sorterNode) start(
 				}
 
 				if msg.RawKV.OpType != model.OpTypeResolved {
-					err := n.mounter.DecodeEvent(ctx, msg)
+					ignored, err := n.mounter.DecodeEvent(ctx, msg)
 					if err != nil {
 						return errors.Trace(err)
 					}
-					if msg.Row == nil {
-						log.Debug("message's row changed event is nil, it should be ignored", zap.Uint64("startTs", msg.StartTs))
+					if ignored {
 						continue
 					}
 					commitTs := msg.CRTs

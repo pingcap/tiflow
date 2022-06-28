@@ -310,8 +310,9 @@ func TestShouldIgnoreDDL(t *testing.T) {
 		}
 		require.Nil(t, err)
 		for _, tc := range ftc.cases {
-			job := &timodel.Job{StartTS: tc.startTs, Type: tc.ddlType, SchemaName: tc.schema, TableName: tc.table, Query: tc.query}
-			ignore, err := filter.ShouldIgnoreDDLJob(job)
+			tableInfo := &model.SimpleTableInfo{Schema: tc.schema, Table: tc.table}
+			ddl := &model.DDLEvent{StartTs: tc.startTs, Type: tc.ddlType, TableInfo: tableInfo, Query: tc.query}
+			ignore, err := filter.ShouldIgnoreDDLEvent(ddl)
 			require.Nil(t, err)
 			require.Equal(t, tc.ignore, ignore, "%#v", tc)
 		}
