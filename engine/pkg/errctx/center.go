@@ -17,9 +17,8 @@ import (
 	"context"
 	"sync"
 
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
-
-	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
 // ErrCenter is used to receive errors and provide

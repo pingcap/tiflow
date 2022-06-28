@@ -28,7 +28,7 @@ func TestSchedulerBalanceCaptureOnline(t *testing.T) {
 	sched.random = nil
 
 	// New capture "b" online
-	captures := map[model.CaptureID]*model.CaptureInfo{"a": {}, "b": {}}
+	captures := map[model.CaptureID]*CaptureStatus{"a": {}, "b": {}}
 	currentTables := []model.TableID{1, 2}
 	replications := map[model.TableID]*ReplicationSet{
 		1: {State: ReplicationSetStateReplicating, Primary: "a"},
@@ -39,9 +39,14 @@ func TestSchedulerBalanceCaptureOnline(t *testing.T) {
 	require.Len(t, tasks[0].burstBalance.MoveTables, 1)
 	require.Equal(t, tasks[0].burstBalance.MoveTables[0].TableID, model.TableID(1))
 
+	// New capture "b" online, but this time has capture is stopping
+	captures["a"].State = CaptureStateStopping
+	tasks = sched.Schedule(0, currentTables, captures, replications)
+	require.Len(t, tasks, 0)
+
 	// New capture "b" online, but this time it not pass check balance interval.
 	sched.checkBalanceInterval = time.Hour
-	captures = map[model.CaptureID]*model.CaptureInfo{"a": {}, "b": {}}
+	captures = map[model.CaptureID]*CaptureStatus{"a": {}, "b": {}}
 	currentTables = []model.TableID{1, 2}
 	replications = map[model.TableID]*ReplicationSet{
 		1: {State: ReplicationSetStateReplicating, Primary: "a"},
