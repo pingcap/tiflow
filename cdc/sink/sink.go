@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/util"
 )
 
@@ -96,7 +95,6 @@ type sinkInitFunc func(
 	context.Context,
 	model.ChangeFeedID,
 	*url.URL,
-	*filter.Filter,
 	*config.ReplicaConfig,
 	chan error,
 ) (Sink, error)
@@ -105,7 +103,7 @@ func init() {
 	// register blackhole sink
 	sinkIniterMap["blackhole"] = func(
 		ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
-		filter *filter.Filter, config *config.ReplicaConfig,
+		config *config.ReplicaConfig,
 		errCh chan error,
 	) (Sink, error) {
 		return newBlackHoleSink(ctx), nil
@@ -113,11 +111,10 @@ func init() {
 
 	// register mysql sink
 	sinkIniterMap["mysql"] = func(
-		ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
-		filter *filter.Filter, config *config.ReplicaConfig,
+		ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL, config *config.ReplicaConfig,
 		errCh chan error,
 	) (Sink, error) {
-		return mysql.NewMySQLSink(ctx, changefeedID, sinkURI, filter, config)
+		return mysql.NewMySQLSink(ctx, changefeedID, sinkURI, config)
 	}
 	sinkIniterMap["tidb"] = sinkIniterMap["mysql"]
 	sinkIniterMap["mysql+ssl"] = sinkIniterMap["mysql"]
@@ -126,27 +123,27 @@ func init() {
 	// register kafka sink
 	sinkIniterMap["kafka"] = func(
 		ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
-		filter *filter.Filter, config *config.ReplicaConfig,
+		config *config.ReplicaConfig,
 		errCh chan error,
 	) (Sink, error) {
-		return mq.NewKafkaSaramaSink(ctx, sinkURI, filter, config, errCh)
+		return mq.NewKafkaSaramaSink(ctx, sinkURI, config, errCh)
 	}
 	sinkIniterMap["kafka+ssl"] = sinkIniterMap["kafka"]
 
 	// register pulsar sink
 	sinkIniterMap["pulsar"] = func(
 		ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
-		filter *filter.Filter, config *config.ReplicaConfig,
+		config *config.ReplicaConfig,
 		errCh chan error,
 	) (Sink, error) {
-		return mq.NewPulsarSink(ctx, sinkURI, filter, config, errCh)
+		return mq.NewPulsarSink(ctx, sinkURI, config, errCh)
 	}
 	sinkIniterMap["pulsar+ssl"] = sinkIniterMap["pulsar"]
 
 	failpoint.Inject("SimpleMySQLSinkTester", func() {
 		sinkIniterMap["simple-mysql"] = func(
 			ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
-			filter *filter.Filter, config *config.ReplicaConfig,
+			config *config.ReplicaConfig,
 			errCh chan error,
 		) (Sink, error) {
 			return mysql.NewSimpleMySQLSink(ctx, sinkURI, config)
@@ -157,7 +154,7 @@ func init() {
 // New creates a new sink with the sink-uri
 func New(
 	ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr string,
-	filter *filter.Filter, config *config.ReplicaConfig,
+	config *config.ReplicaConfig,
 	errCh chan error,
 ) (Sink, error) {
 	// parse sinkURI as a URI
@@ -166,22 +163,18 @@ func New(
 		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 	}
 	if newSink, ok := sinkIniterMap[strings.ToLower(sinkURI.Scheme)]; ok {
-		return newSink(ctx, changefeedID, sinkURI, filter, config, errCh)
+		return newSink(ctx, changefeedID, sinkURI, config, errCh)
 	}
 	return nil, cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", sinkURI.Scheme)
 }
 
 // Validate sink if given valid parameters.
 func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig) error {
-	sinkFilter, err := filter.NewFilter(cfg)
-	if err != nil {
-		return err
-	}
 	errCh := make(chan error)
 	// TODO: find a better way to verify a sinkURI is valid
 	ctx, cancel := context.WithCancel(contextutil.PutRoleInCtx(ctx, util.RoleClient))
 	s, err := New(ctx, model.DefaultChangeFeedID("sink-verify"),
-		sinkURI, sinkFilter, cfg, errCh)
+		sinkURI, cfg, errCh)
 	if err != nil {
 		cancel()
 		return err

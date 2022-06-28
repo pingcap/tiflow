@@ -564,6 +564,11 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 	return barrierTs, nil
 }
 
+// asyncExecDDLJob execute ddl job asynchronously, it returns true if the jod is done.
+// 0. Build ddl events from job.
+// 1. Apply ddl job to c.schema.
+// 2. Emit ddl event to redo manager.
+// 3. Emit ddl event to ddl sink.
 func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 	job *timodel.Job,
 ) (bool, error) {
@@ -574,12 +579,14 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 	}
 
 	if c.ddlEventCache == nil {
+		// We must build ddl events from job before we call c.schema.HandleDDL(job).
 		ddlEvents, err := c.schema.BuildDDLEvents(job)
 		if err != nil {
 			log.Error("build DDL event fail", zap.String("changefeed", c.id.ID),
 				zap.Reflect("job", job), zap.Error(err))
 			return false, errors.Trace(err)
 		}
+		c.ddlEventCache = ddlEvents
 		// We can't use the latest schema directly,
 		// we need to make sure we receive the ddl before we start or stop broadcasting checkpoint ts.
 		// So let's remember the name of the table before processing and cache the DDL.
@@ -587,13 +594,13 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
 		// refresh checkpointTs and currentTableNames when a ddl job is received
 		c.sink.emitCheckpointTs(checkpointTs, c.currentTableNames)
+		// we apply ddl to update changefeed schema here.
 		err = c.schema.HandleDDL(job)
 		if err != nil {
 			return false, errors.Trace(err)
 		}
-		c.ddlEventCache = ddlEvents
-		for _, ddlEvent := range ddlEvents {
-			if c.redoManager.Enabled() {
+		if c.redoManager.Enabled() {
+			for _, ddlEvent := range c.ddlEventCache {
 				err = c.redoManager.EmitDDLEvent(ctx, ddlEvent)
 				if err != nil {
 					return false, err
@@ -625,6 +632,9 @@ func (c *changefeed) asyncExecDDLEvent(ctx cdcContext.Context,
 	ddlEvent *model.DDLEvent,
 ) (done bool, err error) {
 	ddlEvent.Query, err = addSpecialComment(ddlEvent.Query)
+	if err != nil {
+		return false, err
+	}
 	if ddlEvent.TableInfo != nil &&
 		c.schema.IsIneligibleTableID(ddlEvent.TableInfo.TableID) {
 		log.Warn("ignore the DDL event of ineligible table",
