@@ -59,7 +59,11 @@ func TestWithUpstreamConfig(t *testing.T) {
 	require.NotNil(t, err)
 
 	// upStreamConfig.ID = 0, len(pdAddress) > 0 : failed to getPDClient
-	upstreamConfig = &UpstreamConfig{PDAddrs: []string{"http://127.0.0.1:22379"}}
+	upstreamConfig = &UpstreamConfig{
+		PDConfig: PDConfig{
+			PDAddrs: []string{"http://127.0.0.1:22379"},
+		},
+	}
 	helpers.EXPECT().
 		getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&mockPDClient{}, nil)
@@ -67,7 +71,11 @@ func TestWithUpstreamConfig(t *testing.T) {
 	require.Nil(t, err)
 
 	// upStreamConfig.ID = 0, len(pdAddress) > 0, get PDClient succeed
-	upstreamConfig = &UpstreamConfig{PDAddrs: []string{"http://127.0.0.1:22379"}}
+	upstreamConfig = &UpstreamConfig{
+		PDConfig: PDConfig{
+			PDAddrs: []string{"http://127.0.0.1:22379"},
+		},
+	}
 	helpers.EXPECT().
 		getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&mockPDClient{}, errors.New("getPDClient failed"))

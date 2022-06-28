@@ -342,10 +342,6 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 
 // UpstreamConfig contains info to connect to pd
 type UpstreamConfig struct {
-	ID            uint64   `json:"id"`
-	PDAddrs       []string `json:"pd_addrs"`
-	CAPath        string   `json:"ca_path"`
-	CertPath      string   `json:"cert_path"`
-	KeyPath       string   `json:"key_path"`
-	CertAllowedCN []string `json:"cert_allowed_cn"`
+	ID uint64 `json:"id"`
+	PDConfig
 }

@@ -251,12 +251,7 @@ func (o *createChangefeedOptions) getChangefeedConfig(cmd *cobra.Command) *v2.Ch
 		ReplicaConfig:     replicaConfig,
 		SyncPointEnabled:  o.commonChangefeedOptions.syncPointEnabled,
 		SyncPointInterval: o.commonChangefeedOptions.syncPointInterval,
-		PDConfig: v2.PDConfig{
-			PDAddrs:  upstreamConfig.PDAddrs,
-			CAPath:   upstreamConfig.CAPath,
-			CertPath: upstreamConfig.CertPath,
-			KeyPath:  upstreamConfig.KeyPath,
-		},
+		PDConfig:          upstreamConfig.PDConfig,
 	}
 }
 
@@ -274,11 +269,13 @@ func (o *createChangefeedOptions) getUpstreamConfig() *v2.UpstreamConfig {
 		keyPath = o.commonChangefeedOptions.upstreamKeyPath
 	}
 	return &v2.UpstreamConfig{
-		PDAddrs:       pdAddrs,
-		CAPath:        caPath,
-		CertPath:      certPath,
-		KeyPath:       keyPath,
-		CertAllowedCN: nil,
+		PDConfig: v2.PDConfig{
+			PDAddrs:       pdAddrs,
+			CAPath:        caPath,
+			CertPath:      certPath,
+			KeyPath:       keyPath,
+			CertAllowedCN: nil,
+		},
 	}
 }
 

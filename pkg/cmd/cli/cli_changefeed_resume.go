@@ -105,11 +105,13 @@ func (o *resumeChangefeedOptions) getUpstreamConfig() *v2.UpstreamConfig {
 		keyPath = o.upstreamKeyPath
 	}
 	return &v2.UpstreamConfig{
-		PDAddrs:       pdAddrs,
-		CAPath:        caPath,
-		CertPath:      certPath,
-		KeyPath:       keyPath,
-		CertAllowedCN: nil,
+		PDConfig: v2.PDConfig{
+			PDAddrs:       pdAddrs,
+			CAPath:        caPath,
+			CertPath:      certPath,
+			KeyPath:       keyPath,
+			CertAllowedCN: nil,
+		},
 	}
 }
 
@@ -117,12 +119,7 @@ func (o *resumeChangefeedOptions) getResumeChangefeedConfig(cmd *cobra.Command) 
 	upstreamConfig := o.getUpstreamConfig()
 	return &v2.ResumeChangefeedConfig{
 		OverwriteCheckpointTs: o.checkpointTs,
-		PDConfig: v2.PDConfig{
-			PDAddrs:  upstreamConfig.PDAddrs,
-			CAPath:   upstreamConfig.CAPath,
-			CertPath: upstreamConfig.CertPath,
-			KeyPath:  upstreamConfig.KeyPath,
-		},
+		PDConfig:              upstreamConfig.PDConfig,
 	}
 }
 
