@@ -37,7 +37,7 @@ type testCase struct {
 	method string
 }
 
-func newRouter(c *capture.Capture) *gin.Engine {
+func newRouter(c capture.Capture) *gin.Engine {
 	router := gin.New()
 	RegisterOpenAPIV2Routes(router, NewOpenAPIV2(c))
 	return router
