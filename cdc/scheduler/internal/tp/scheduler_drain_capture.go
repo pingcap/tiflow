@@ -66,6 +66,19 @@ func (d *drainCaptureScheduler) setTarget(target model.CaptureID) bool {
 	return true
 }
 
+func checkStoppingCapture(captures map[model.CaptureID]*CaptureStatus) model.CaptureID {
+	for id, cs := range captures {
+		if cs.IsOwner {
+			// Skip draining owner.
+			continue
+		}
+		if cs.State == CaptureStateStopping {
+			return id
+		}
+	}
+	return captureIDNotDraining
+}
+
 func (d *drainCaptureScheduler) Schedule(
 	_ model.Ts,
 	_ []model.TableID,
@@ -76,7 +89,14 @@ func (d *drainCaptureScheduler) Schedule(
 	defer d.mu.Unlock()
 
 	if d.target == captureIDNotDraining {
-		return nil
+		stopping := checkStoppingCapture(captures)
+		if stopping == captureIDNotDraining {
+			return nil
+		}
+		// Find a stopping capture, drain it.
+		d.target = stopping
+		log.Info("tpscheduler: drain a stopping capture",
+			zap.String("captureID", stopping))
 	}
 
 	var availableCaptureCount int
