@@ -745,6 +745,36 @@ func TestServerStatus(t *testing.T) {
 	require.False(t, resp.IsOwner)
 }
 
+func TestServerStatusLiveness(t *testing.T) {
+	t.Parallel()
+	// capture is owner
+	ctrl := gomock.NewController(t)
+	mo := mock_owner.NewMockOwner(ctrl)
+	cp := capture.NewCapture4Test(mo)
+	ownerRouter := newRouter(cp, newStatusProvider())
+	api := testCase{url: "/api/v1/status", method: "GET"}
+
+	// Alive.
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
+	ownerRouter.ServeHTTP(w, req)
+	require.Equal(t, 200, w.Code)
+	var resp model.ServerStatus
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.Nil(t, err)
+	require.EqualValues(t, model.LivenessCaptureAlive, resp.Liveness)
+
+	// Draining the capture.
+	cp.Drain()
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
+	ownerRouter.ServeHTTP(w, req)
+	require.Equal(t, 200, w.Code)
+	err = json.NewDecoder(w.Body).Decode(&resp)
+	require.Nil(t, err)
+	require.EqualValues(t, model.LivenessCaptureStopping, resp.Liveness)
+}
+
 func TestSetLogLevel(t *testing.T) {
 	t.Parallel()
 

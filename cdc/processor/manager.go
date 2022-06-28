@@ -48,18 +48,20 @@ type command struct {
 
 // Manager is a manager of processor, which maintains the state and behavior of processors
 type Manager struct {
+	liveness        *model.Liveness
 	processors      map[model.ChangeFeedID]*processor
 	commandQueue    chan *command
 	upstreamManager *upstream.Manager
 
-	newProcessor func(cdcContext.Context, *upstream.Upstream) *processor
+	newProcessor func(cdcContext.Context, *upstream.Upstream, *model.Liveness) *processor
 
 	metricProcessorCloseDuration prometheus.Observer
 }
 
 // NewManager creates a new processor manager
-func NewManager(upstreamManager *upstream.Manager) *Manager {
+func NewManager(upstreamManager *upstream.Manager, liveness *model.Liveness) *Manager {
 	return &Manager{
+		liveness:                     liveness,
 		processors:                   make(map[model.ChangeFeedID]*processor),
 		commandQueue:                 make(chan *command, 4),
 		upstreamManager:              upstreamManager,
@@ -94,7 +96,7 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 		if !exist {
 			up := m.upstreamManager.Get(changefeedState.Info.UpstreamID)
 			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
-			processor = m.newProcessor(ctx, up)
+			processor = m.newProcessor(ctx, up, m.liveness)
 			m.processors[changefeedID] = processor
 		}
 		if _, err := processor.Tick(ctx, changefeedState); err != nil {

@@ -704,7 +704,7 @@ func (h *OpenAPI) ListCapture(c *gin.Context) {
 // @Produce json
 // @Success 200,202
 // @Failure 500,400 {object} model.HTTPError
-// @Router	/api/v1/captures/drain [post]
+// @Router	/api/v1/captures/drain [put]
 func (h *OpenAPI) DrainCapture(c *gin.Context) {
 	var req model.DrainCaptureRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -775,18 +775,19 @@ func (h *OpenAPI) DrainCapture(c *gin.Context) {
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/status [get]
 func (h *OpenAPI) ServerStatus(c *gin.Context) {
-	status := model.ServerStatus{
-		Version: version.ReleaseVersion,
-		GitHash: version.GitHash,
-		Pid:     os.Getpid(),
-	}
 	info, err := h.capture.Info()
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
-	status.ID = info.ID
-	status.IsOwner = h.capture.IsOwner()
+	status := model.ServerStatus{
+		Version:  version.ReleaseVersion,
+		GitHash:  version.GitHash,
+		Pid:      os.Getpid(),
+		ID:       info.ID,
+		IsOwner:  h.capture.IsOwner(),
+		Liveness: h.capture.Liveness(),
+	}
 	c.IndentedJSON(http.StatusOK, status)
 }
 

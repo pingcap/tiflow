@@ -36,12 +36,13 @@ func TestCaptureStatusHandleHeartbeatResponse(t *testing.T) {
 
 	// Processor epoch mismatch
 	c.handleHeartbeatResponse(&schedulepb.HeartbeatResponse{
-		IsStopping: true,
+		Liveness: model.LivenessCaptureStopping,
 	}, schedulepb.ProcessorEpoch{Epoch: "unknown"})
 	require.Equal(t, CaptureStateInitialized, c.State)
 
 	// Initialized -> Stopping
-	c.handleHeartbeatResponse(&schedulepb.HeartbeatResponse{IsStopping: true}, epoch)
+	c.handleHeartbeatResponse(
+		&schedulepb.HeartbeatResponse{Liveness: model.LivenessCaptureStopping}, epoch)
 	require.Equal(t, CaptureStateStopping, c.State)
 	require.Equal(t, epoch, c.Epoch)
 }
