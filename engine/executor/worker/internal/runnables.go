@@ -16,10 +16,10 @@ package internal
 import (
 	"context"
 
+	"github.com/pingcap/log"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 )

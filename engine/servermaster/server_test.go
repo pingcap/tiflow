@@ -23,7 +23,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -32,13 +31,14 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	"github.com/pingcap/tiflow/engine/servermaster/cluster"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
+	"github.com/pingcap/tiflow/pkg/logutil"
 
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/require"
 )
 
 func init() {
-	err := log.InitLogger(&log.Config{Level: "warn"})
+	err := logutil.InitLogger(&logutil.Config{Level: "warn"})
 	if err != nil {
 		panic(err)
 	}

@@ -22,7 +22,7 @@ import (
 	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
 	frame "github.com/pingcap/tiflow/engine/framework"
@@ -40,6 +40,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	derrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
@@ -174,7 +175,7 @@ func (jm *JobManagerImplV2) DebugJob(ctx context.Context, req *pb.DebugJobReques
 			case <-time.After(100 * time.Millisecond):
 			}
 			if err := messageAgent.Tick(runCtx); err != nil {
-				log.L().Error("failed to run message agent tick", log.ShortError(err))
+				log.L().Error("failed to run message agent tick", logutil.ShortError(err))
 				return
 			}
 		}
@@ -296,7 +297,7 @@ func (jm *JobManagerImplV2) QueryJob(ctx context.Context, req *pb.QueryJobReques
 // SubmitJob processes "SubmitJobRequest".
 func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *pb.SubmitJobResponse {
 	// TODO call jm.notifier.Notify when we want to support "add job" event.
-	log.L().Logger.Info("submit job", zap.String("config", string(req.Config)))
+	log.L().Info("submit job", zap.String("config", string(req.Config)))
 	resp := &pb.SubmitJobResponse{}
 	var (
 		id  frameModel.WorkerID

@@ -27,7 +27,6 @@ import (
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/master"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 
@@ -49,6 +48,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/logutil"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -71,7 +71,7 @@ func (t *testDMJobmasterSuite) SetupSuite() {
 	WorkerNormalInterval = time.Hour
 	WorkerErrorInterval = 100 * time.Millisecond
 	runtime.HeartbeatInterval = 1 * time.Second
-	require.NoError(t.T(), log.InitLogger(&log.Config{Level: "debug"}))
+	require.NoError(t.T(), logutil.InitLogger(&logutil.Config{Level: "debug"}))
 	t.funcBackup = master.CheckAndAdjustSourceConfigFunc
 	master.CheckAndAdjustSourceConfigFunc = checkAndNoAdjustSourceConfigMock
 }

@@ -18,7 +18,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/zap"
@@ -144,14 +144,14 @@ func GenEmbedEtcdConfigWithLogger(logLevel string) *embed.Config {
 	// NOTE: `genEmbedEtcdConfig` can only be called after logger initialized.
 	// NOTE: if using zap logger for etcd, must build it before any concurrent gRPC calls,
 	// otherwise, DATA RACE occur in NewZapCoreLoggerBuilder and gRPC.
-	logger := log.L().WithFields(zap.String("component", "embed etcd"))
+	logger := log.L().With(zap.String("component", "embed etcd"))
 	// if logLevel is info, set etcd log level to WARN to reduce log
 	if strings.ToLower(logLevel) == "info" {
 		log.L().Info("Set log level of etcd to `warn`, if you want to log more message about etcd, change log-level to `debug` in master configuration file")
-		logger.Logger = logger.WithOptions(zap.IncreaseLevel(zap.WarnLevel))
+		logger = logger.WithOptions(zap.IncreaseLevel(zap.WarnLevel))
 	}
 
-	cfg.ZapLoggerBuilder = embed.NewZapCoreLoggerBuilder(logger.Logger, logger.Core(), log.Props().Syncer) // use global app props.
+	cfg.ZapLoggerBuilder = embed.NewZapLoggerBuilder(logger)
 	cfg.Logger = "zap"
 
 	// TODO: we run ZapLoggerBuilder to set SetLoggerV2 before we do some etcd operations
