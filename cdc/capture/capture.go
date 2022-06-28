@@ -570,8 +570,6 @@ func (c *captureImpl) AsyncClose() {
 
 // Drain removes tables in the current TiCDC instance.
 func (c *captureImpl) Drain(ctx context.Context) <-chan struct{} {
-	// Set liveness stopping, owners will move out all tables in the capture.
-	c.liveness.Store(model.LivenessCaptureStopping)
 	log.Info("draining capture, removing all tables in the capture")
 
 	const drainInterval = 100 * time.Millisecond
@@ -588,6 +586,9 @@ func (c *captureImpl) Drain(ctx context.Context) <-chan struct{} {
 			ticker.Reset(drainInterval)
 			select {
 			case <-ctx.Done():
+				// Give up when the context cancels. In the current
+				// implementation, it is caused TiCDC receives a second signal
+				// and begins force shutdown.
 				return
 			case <-ticker.C:
 			}
@@ -605,6 +606,8 @@ func (c *captureImpl) drainImpl(ctx context.Context) bool {
 		return false
 	}
 	// Step 2, wait for moving out all tables.
+	// Set liveness stopping, owners will move out all tables in the capture.
+	c.liveness.Store(model.LivenessCaptureStopping)
 	queryDone := make(chan error, 1)
 	tableCh := make(chan int, 1)
 	c.processorManager.QueryTableCount(ctx, tableCh, queryDone)

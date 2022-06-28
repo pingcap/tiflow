@@ -95,9 +95,9 @@ func TestDrainImmediately(t *testing.T) {
 			close(done)
 		})
 	done := cp.Drain(ctx)
-	require.Equal(t, model.LivenessCaptureStopping, cp.Liveness())
 	select {
 	case <-done:
+		require.Equal(t, model.LivenessCaptureStopping, cp.Liveness())
 	case <-time.After(time.Second):
 		require.Fail(t, "timeout")
 	}
@@ -136,9 +136,9 @@ func TestDrainWaitsTables(t *testing.T) {
 			close(done)
 		}).After(t1)
 	done := cp.Drain(ctx)
-	require.Equal(t, model.LivenessCaptureStopping, cp.Liveness())
 	select {
 	case <-done:
+		require.Equal(t, model.LivenessCaptureStopping, cp.Liveness())
 		require.EqualValues(t, 3, calls)
 	case <-time.After(3 * time.Second):
 		require.Fail(t, "timeout")
@@ -170,12 +170,12 @@ func TestDrainWaitsOwnerResign(t *testing.T) {
 		})
 
 	done := cp.Drain(ctx)
-	require.Equal(t, model.LivenessCaptureStopping, cp.Liveness())
 
 	// Must wait owner resign by wait for async close.
 	select {
 	case <-ownerStopCh:
 		// Simulate owner has resigned.
+		require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
 		cp.setOwner(nil)
 	case <-time.After(3 * time.Second):
 		require.Fail(t, "timeout")
@@ -187,5 +187,6 @@ func TestDrainWaitsOwnerResign(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		require.Fail(t, "timeout")
 	case <-done:
+		require.Equal(t, model.LivenessCaptureStopping, cp.Liveness())
 	}
 }
