@@ -133,7 +133,7 @@ type ManagerImpl struct {
 	writer        writer.RedoLogWriter
 	logBuffer     *chann.Chann[cacheEvents]
 	minResolvedTs uint64
-	needsFlush    chan struct{}
+	flushing      int64
 
 	rtsMap   map[model.TableID]model.Ts
 	rtsMapMu sync.RWMutex
@@ -155,7 +155,6 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 		storageType: consistentStorage(uri.Scheme),
 		rtsMap:      make(map[model.TableID]uint64),
 		logBuffer:   chann.New[cacheEvents](),
-		needsFlush:  make(chan struct{}, 1),
 	}
 
 	switch m.storageType {
@@ -201,7 +200,6 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 	}
 
 	if opts.EnableBgRunner {
-		go m.bgUpdateFlushFlag(ctx)
 		go m.bgUpdateLog(ctx, opts.ErrCh)
 	}
 	return m, nil
@@ -264,7 +262,7 @@ func (m *ManagerImpl) EmitRowChangedEvents(
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
-		return nil
+		return errors.Trace(ctx.Err())
 	case <-timer.C:
 		return cerror.ErrBufferLogTimeout.GenWithStackByArgs()
 	case m.logBuffer.In() <- cacheEvents{
@@ -361,9 +359,17 @@ func (m *ManagerImpl) Cleanup(ctx context.Context) error {
 }
 
 func (m *ManagerImpl) flushLog(
-	ctx context.Context, tableRtsMap map[model.TableID]model.Ts,
+	ctx context.Context,
+	tableRtsMap map[model.TableID]model.Ts,
 ) (map[model.TableID]model.Ts, error) {
 	emptyRtsMap := make(map[model.TableID]model.Ts)
+	if !atomic.CompareAndSwapInt64(&m.flushing, 0, 1) {
+		log.Warn("Fail to update flush flag, " +
+			"the previous flush operation hasn't finished yet")
+		return tableRtsMap, nil
+	}
+	defer atomic.StoreInt64(&m.flushing, 0)
+
 	err := m.writer.FlushLog(ctx, tableRtsMap)
 	if err != nil {
 		return emptyRtsMap, err
@@ -393,24 +399,6 @@ func (m *ManagerImpl) flushLog(
 	return emptyRtsMap, nil
 }
 
-func (m *ManagerImpl) bgUpdateFlushFlag(ctx context.Context) {
-	ticker := time.NewTicker(flushInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			select {
-			case m.needsFlush <- struct{}{}:
-			default:
-				log.Warn("Fail to update flush flag, " +
-					"the previous flush operation hasn't finished yet")
-			}
-		}
-	}
-}
-
 func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 	tableRtsMap := make(map[int64]uint64)
 	handleErr := func(err error) {
@@ -421,7 +409,7 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 		}
 	}
 
-	ticker := time.NewTicker(time.Millisecond * 500)
+	ticker := time.NewTicker(flushInterval)
 	defer ticker.Stop()
 
 	for {
@@ -429,7 +417,16 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			// interpolate tick message to prevent the flush opration from blocking
+			// interpolate tick message to flush writer if needed
+			// TODO: add log and metrics
+			log.Info("flushing redo log >>>>>>")
+			newTableRtsMap, err := m.flushLog(ctx, tableRtsMap)
+			tableRtsMap = newTableRtsMap
+			if err != nil {
+				handleErr(err)
+				return
+			}
+			log.Info("flushing done <<<<<<======")
 		case cache, ok := <-m.logBuffer.Out():
 			if !ok {
 				return // channel closed
@@ -459,23 +456,6 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 			default:
 				log.Debug("handle unknown event type")
 			}
-		}
-
-		// flush writer if needed
-		select {
-		case <-ctx.Done():
-			return
-		case <-m.needsFlush:
-			log.Info("flushing redo log >>>>>>")
-			var err error
-			tableRtsMap, err = m.flushLog(ctx, tableRtsMap)
-			log.Info("flushing done <<<<<<======")
-			if err != nil {
-				handleErr(err)
-				return
-			}
-		default:
-			log.Info("no need to flush log")
 		}
 	}
 }
