@@ -47,7 +47,7 @@ import (
 
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
 type Capture struct {
-	// captureMu is used to protect the capture info, processorManager and liveness.
+	// captureMu is used to protect the capture info and processorManager.
 	captureMu        sync.Mutex
 	info             *model.CaptureInfo
 	processorManager *processor.Manager
