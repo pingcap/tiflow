@@ -704,7 +704,7 @@ func (h *OpenAPI) ListCapture(c *gin.Context) {
 // @Produce json
 // @Success 200,202
 // @Failure 500,400 {object} model.HTTPError
-// @Router	/api/v1/captures/drain [post]
+// @Router	/api/v1/captures/drain [put]
 func (h *OpenAPI) DrainCapture(c *gin.Context) {
 	var req model.DrainCaptureRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
