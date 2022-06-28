@@ -52,6 +52,8 @@ type Capture struct {
 	info             *model.CaptureInfo
 	processorManager *processor.Manager
 
+	liveness model.Liveness
+
 	pdEndpoints     []string
 	UpstreamManager *upstream.Manager
 	ownerMu         sync.Mutex
@@ -81,13 +83,16 @@ type Capture struct {
 
 	cancel context.CancelFunc
 
-	newProcessorManager func(upstreamManager *upstream.Manager) *processor.Manager
-	newOwner            func(upstreamManager *upstream.Manager) owner.Owner
+	newProcessorManager func(
+		upstreamManager *upstream.Manager, liveness *model.Liveness,
+	) *processor.Manager
+	newOwner func(upstreamManager *upstream.Manager) owner.Owner
 }
 
 // NewCapture returns a new Capture instance
 func NewCapture(pdEnpoints []string, etcdClient *etcd.CDCEtcdClient, grpcService *p2p.ServerWrapper) *Capture {
 	return &Capture{
+		liveness:            model.LivenessCaptureAlive,
 		EtcdClient:          etcdClient,
 		grpcService:         grpcService,
 		cancel:              func() {},
@@ -144,7 +149,7 @@ func (c *Capture) reset(ctx context.Context) error {
 			"add default upstream failed")
 	}
 
-	c.processorManager = c.newProcessorManager(c.UpstreamManager)
+	c.processorManager = c.newProcessorManager(c.UpstreamManager, &c.liveness)
 	if c.session != nil {
 		// It can't be handled even after it fails, so we ignore it.
 		_ = c.session.Close()
@@ -534,6 +539,26 @@ func (c *Capture) AsyncClose() {
 		c.MessageRouter = nil
 	}
 	log.Info("message router closed")
+}
+
+// Drain removes tables in the current TiCDC instance.
+func (c *Capture) Drain() <-chan struct{} {
+	c.liveness.Store(model.LivenessCaptureStopping)
+	log.Info("draining the capture, removing all tables in the capture")
+
+	// Disable drain for now.
+	//
+	// TODO close done when
+	// 1. there is no table in the capture, and
+	// 2. the capture is not owner.
+	done := make(chan struct{})
+	close(done)
+	return done
+}
+
+// Liveness returns liveness of the capture.
+func (c *Capture) Liveness() model.Liveness {
+	return c.liveness.Load()
 }
 
 // WriteDebugInfo writes the debug info into writer.
