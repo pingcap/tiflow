@@ -28,11 +28,23 @@ import (
 // preserved.
 type ConflictDetector[Worker worker[Txn], Txn txnEvent] struct {
 	workers []Worker
-	slots   *internal.Slots[*internal.Node]
 
+	// slots are used to find all unfinished transactions
+	// conflicting with an incoming transactions.
+	slots *internal.Slots[*internal.Node]
+
+	// finishedTxnQueue is the queue for all transactions that
+	// are already finished, but still waiting to be processed
+	// by the conflict detector, because they need to be processed
+	// so that transactions conflicting with them can be unblocked.
 	finishedTxnQueue *containers.SliceQueue[finishedTxn[Txn]]
+
+	// resolvedTxnQueue is the queue for all transactions that
+	// have been "resolved" (i.e., conflict free) but are not yet
+	// sent to the workers.
 	resolvedTxnQueue *containers.SliceQueue[resolvedTxn[Txn]]
 
+	// nextWorkerID is used to dispatch transactions round-robin.
 	nextWorkerID atomic.Int64
 
 	wg      sync.WaitGroup
@@ -76,9 +88,19 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) error {
 	node := internal.NewNode()
 	d.slots.Add(node, txn.ConflictKeys(), func(other *internal.Node) {
+		// Construct a dependency map under the slots' lock.
 		node.DependOn(other)
 	})
 	node.OnNoConflict(func(workerID int64) {
+		// Push a resolved transaction to a queue,
+		// so that they can be processed asynchronously.
+		//
+		// DESIGN NOTE:
+		// If we were to call the next step synchronously, the
+		// locking problem would become intractable. Because
+		// resolving one transaction can cause another to be
+		// resolved too, thus incurring potential risk of
+		// deadlocking.
 		d.resolvedTxnQueue.Push(resolvedTxn[Txn]{
 			txn:      txn,
 			node:     node,
