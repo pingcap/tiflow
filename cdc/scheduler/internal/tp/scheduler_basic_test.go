@@ -24,7 +24,7 @@ import (
 func TestSchedulerBasic(t *testing.T) {
 	t.Parallel()
 
-	captures := map[model.CaptureID]*model.CaptureInfo{"a": {}, "b": {}}
+	captures := map[model.CaptureID]*CaptureStatus{"a": {}, "b": {}}
 	currentTables := []model.TableID{1, 2, 3, 4}
 
 	// Initial table dispatch.
@@ -101,7 +101,7 @@ func benchmarkSchedulerBalance(
 	factory func(total int) (
 		name string,
 		currentTables []model.TableID,
-		captures map[model.CaptureID]*model.CaptureInfo,
+		captures map[model.CaptureID]*CaptureStatus,
 		replications map[model.TableID]*ReplicationSet,
 		sched scheduler,
 	),
@@ -123,14 +123,14 @@ func BenchmarkSchedulerBasicAddTables(b *testing.B) {
 	benchmarkSchedulerBalance(b, func(total int) (
 		name string,
 		currentTables []model.TableID,
-		captures map[model.CaptureID]*model.CaptureInfo,
+		captures map[model.CaptureID]*CaptureStatus,
 		replications map[model.TableID]*ReplicationSet,
 		sched scheduler,
 	) {
 		const captureCount = 8
-		captures = map[model.CaptureID]*model.CaptureInfo{}
+		captures = map[model.CaptureID]*CaptureStatus{}
 		for i := 0; i < captureCount; i++ {
-			captures[fmt.Sprint(i)] = &model.CaptureInfo{}
+			captures[fmt.Sprint(i)] = &CaptureStatus{}
 		}
 		currentTables = make([]model.TableID, 0, total)
 		for i := 0; i < total; i++ {
@@ -147,14 +147,14 @@ func BenchmarkSchedulerBasicRemoveTables(b *testing.B) {
 	benchmarkSchedulerBalance(b, func(total int) (
 		name string,
 		currentTables []model.TableID,
-		captures map[model.CaptureID]*model.CaptureInfo,
+		captures map[model.CaptureID]*CaptureStatus,
 		replications map[model.TableID]*ReplicationSet,
 		sched scheduler,
 	) {
 		const captureCount = 8
-		captures = map[model.CaptureID]*model.CaptureInfo{}
+		captures = map[model.CaptureID]*CaptureStatus{}
 		for i := 0; i < captureCount; i++ {
-			captures[fmt.Sprint(i)] = &model.CaptureInfo{}
+			captures[fmt.Sprint(i)] = &CaptureStatus{}
 		}
 		currentTables = make([]model.TableID, 0, total)
 		replications = map[model.TableID]*ReplicationSet{}
@@ -173,14 +173,14 @@ func BenchmarkSchedulerBasicAddRemoveTables(b *testing.B) {
 	benchmarkSchedulerBalance(b, func(total int) (
 		name string,
 		currentTables []model.TableID,
-		captures map[model.CaptureID]*model.CaptureInfo,
+		captures map[model.CaptureID]*CaptureStatus,
 		replications map[model.TableID]*ReplicationSet,
 		sched scheduler,
 	) {
 		const captureCount = 8
-		captures = map[model.CaptureID]*model.CaptureInfo{}
+		captures = map[model.CaptureID]*CaptureStatus{}
 		for i := 0; i < captureCount; i++ {
-			captures[fmt.Sprint(i)] = &model.CaptureInfo{}
+			captures[fmt.Sprint(i)] = &CaptureStatus{}
 		}
 		currentTables = make([]model.TableID, 0, total)
 		for i := 0; i < total/2; i++ {
