@@ -15,9 +15,7 @@ package v2
 
 import (
 	"context"
-	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -25,13 +23,13 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
-	"github.com/pingcap/tiflow/pkg/upstream"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -83,14 +81,13 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	// We should not close kvStorage since all kvStorage in cdc is the same one.
 	// defer kvStorage.Close()
 	// TODO: We should get a kvStorage from upstream instead of creating a new one
-	info, err := verifyCreateChangefeedConfig(
+	info, err := h.helpers.verifyCreateChangefeedConfig(
 		ctx,
 		config,
 		pdClient,
 		h.capture.StatusProvider(),
-		h.capture.EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
+		h.capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
 		kvStorage)
-
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -268,13 +265,8 @@ func (h *OpenAPIV2) getChangeFeedMetaInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, toAPIModel(info))
 }
 
-// ResumeChangefeed handles update changefeed request.
-func (h *OpenAPIV2) ResumeChangefeed(c *gin.Context) {
-	if !h.capture.IsOwner() {
-		api.ForwardToOwner(c, h.capture)
-		return
-	}
-
+// resumeChangefeed handles update changefeed request.
+func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
 	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
 	err := model.ValidateChangefeedID(changefeedID.ID)
@@ -284,41 +276,44 @@ func (h *OpenAPIV2) ResumeChangefeed(c *gin.Context) {
 		return
 	}
 
-	var overwriteCheckpointTs uint64
-	overwriteCheckpointTsStr, ok := c.GetQuery("overwrite_checkpoint_ts")
-	if ok {
-		overwriteCheckpointTs, err = strconv.ParseUint(overwriteCheckpointTsStr, 10, 64)
-		if err != nil {
-			_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid start_ts:% s",
-				overwriteCheckpointTsStr))
-			return
-		}
-	}
-
-	cfInfo, err := h.capture.StatusProvider().GetChangeFeedInfo(ctx, changefeedID)
-	if err != nil {
-		_ = c.Error(err)
+	cfg := new(ResumeChangefeedConfig)
+	if err := c.BindJSON(&cfg); err != nil {
+		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
 	}
 
-	var upstream *upstream.Upstream
-	if cfInfo.UpstreamID == 0 {
-		upstream = h.capture.UpstreamManager.GetDefaultUpstream()
-	} else {
-		upstream, ok = h.capture.UpstreamManager.Get(cfInfo.UpstreamID)
-		if !ok {
-			_ = c.Error(cerror.WrapError(cerror.ErrUpstreamNotFound,
-				fmt.Errorf("upstream %d not found", cfInfo.UpstreamID)))
-			return
-		}
+	if len(cfg.PDAddrs) == 0 {
+		up := h.capture.GetUpstreamManager().GetDefaultUpstream()
+		cfg.PDAddrs = up.PdEndpoints
+		cfg.KeyPath = up.SecurityConfig.KeyPath
+		cfg.CAPath = up.SecurityConfig.CAPath
+		cfg.CertPath = up.SecurityConfig.CertPath
+	}
+	credential := &security.Credential{
+		CAPath:        cfg.CAPath,
+		CertPath:      cfg.CertPath,
+		KeyPath:       cfg.KeyPath,
+		CertAllowedCN: make([]string, 0),
+	}
+	if len(cfg.CertAllowedCN) != 0 {
+		credential.CertAllowedCN = cfg.CertAllowedCN
 	}
 
-	if err := verifyResumeChangefeed(
+	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	pdClient, err := h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
+	if err != nil {
+		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
+		return
+	}
+	defer pdClient.Close()
+
+	if err := h.helpers.verifyResumeChangefeed(
 		ctx,
-		h.capture,
-		upstream,
+		pdClient,
+		h.capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
 		changefeedID,
-		overwriteCheckpointTs); err != nil {
+		cfg.OverwriteCheckpointTs); err != nil {
 		_ = c.Error(err)
 		return
 	}
@@ -326,7 +321,7 @@ func (h *OpenAPIV2) ResumeChangefeed(c *gin.Context) {
 	job := model.AdminJob{
 		CfID:                  changefeedID,
 		Type:                  model.AdminResume,
-		OverwriteCheckpointTs: overwriteCheckpointTs,
+		OverwriteCheckpointTs: cfg.OverwriteCheckpointTs,
 	}
 
 	if err := api.HandleOwnerJob(ctx, h.capture, job); err != nil {

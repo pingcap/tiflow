@@ -251,10 +251,12 @@ func (o *createChangefeedOptions) getChangefeedConfig(cmd *cobra.Command) *v2.Ch
 		ReplicaConfig:     replicaConfig,
 		SyncPointEnabled:  o.commonChangefeedOptions.syncPointEnabled,
 		SyncPointInterval: o.commonChangefeedOptions.syncPointInterval,
-		PDAddrs:           upstreamConfig.PDAddrs,
-		CAPath:            upstreamConfig.CAPath,
-		CertPath:          upstreamConfig.CertPath,
-		KeyPath:           upstreamConfig.KeyPath,
+		PDConfig: v2.PDConfig{
+			PDAddrs:  upstreamConfig.PDAddrs,
+			CAPath:   upstreamConfig.CAPath,
+			CertPath: upstreamConfig.CertPath,
+			KeyPath:  upstreamConfig.KeyPath,
+		},
 	}
 }
 
@@ -300,11 +302,13 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 	createChangefeedCfg := o.getChangefeedConfig(cmd)
 
 	verifyTableConfig := &v2.VerifyTableConfig{
-		PDAddrs:       createChangefeedCfg.PDAddrs,
-		CAPath:        createChangefeedCfg.CAPath,
-		CertPath:      createChangefeedCfg.CertPath,
-		KeyPath:       createChangefeedCfg.KeyPath,
-		CertAllowedCN: createChangefeedCfg.CertAllowedCN,
+		PDConfig: v2.PDConfig{
+			PDAddrs:       createChangefeedCfg.PDAddrs,
+			CAPath:        createChangefeedCfg.CAPath,
+			CertPath:      createChangefeedCfg.CertPath,
+			KeyPath:       createChangefeedCfg.KeyPath,
+			CertAllowedCN: createChangefeedCfg.CertAllowedCN,
+		},
 		ReplicaConfig: createChangefeedCfg.ReplicaConfig,
 		StartTs:       createChangefeedCfg.StartTs,
 	}

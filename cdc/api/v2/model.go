@@ -48,12 +48,7 @@ type TableName struct {
 // VerifyTableConfig use to verify tables.
 // Only use by Open API v2.
 type VerifyTableConfig struct {
-	PDAddrs       []string `json:"pd_addrs"`
-	CAPath        string   `json:"ca_path"`
-	CertPath      string   `json:"cert_path"`
-	KeyPath       string   `json:"key_path"`
-	CertAllowedCN []string `json:"cert_allowed_cn"`
-
+	PDConfig
 	ReplicaConfig *ReplicaConfig `json:"replica_config"`
 	StartTs       uint64         `json:"start_ts"`
 }
@@ -62,6 +57,20 @@ func getDefaultVerifyTableConfig() *VerifyTableConfig {
 	return &VerifyTableConfig{
 		ReplicaConfig: GetDefaultReplicaConfig(),
 	}
+}
+
+// ResumeChangefeedConfig is used by resume changefeed api
+type ResumeChangefeedConfig struct {
+	PDConfig
+	OverwriteCheckpointTs uint64 `json:"overwrite_checkpoint_ts"`
+}
+
+type PDConfig struct {
+	PDAddrs       []string `json:"pd_addrs"`
+	CAPath        string   `json:"ca_path"`
+	CertPath      string   `json:"cert_path"`
+	KeyPath       string   `json:"key_path"`
+	CertAllowedCN []string `json:"cert_allowed_cn"`
 }
 
 // ChangefeedConfig use by create changefeed api
@@ -77,12 +86,7 @@ type ChangefeedConfig struct {
 
 	SyncPointEnabled  bool          `json:"sync_point_enabled"`
 	SyncPointInterval time.Duration `json:"sync_point_interval"`
-
-	PDAddrs       []string `json:"pd_addrs"`
-	CAPath        string   `json:"ca_path"`
-	CertPath      string   `json:"cert_path"`
-	KeyPath       string   `json:"key_path"`
-	CertAllowedCN []string `json:"cert_allowed_cn"`
+	PDConfig
 }
 
 // ReplicaConfig is a duplicate of  config.ReplicaConfig

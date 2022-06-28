@@ -16,7 +16,6 @@ package v2
 import (
 	"context"
 	"fmt"
-	"strconv"
 
 	v2 "github.com/pingcap/tiflow/cdc/api/v2"
 	"github.com/pingcap/tiflow/pkg/api/internal/rest"
@@ -39,8 +38,8 @@ type ChangefeedInterface interface {
 	// Update updates a changefeed
 	Update(ctx context.Context, cfg *v2.ChangefeedConfig,
 		name string) (*v2.ChangeFeedInfo, error)
-	// Resume resumes a changefeed with given overwriteCheckpointTs if necessary
-	Resume(ctx context.Context, name string, overwriteCheckpointTs uint64) error
+	// Resume resumes a changefeed with given config
+	Resume(ctx context.Context, cfg *v2.ResumeChangefeedConfig, name string) error
 }
 
 // changefeeds implements ChangefeedInterface
@@ -104,10 +103,12 @@ func (c *changefeeds) Update(ctx context.Context,
 }
 
 // Resume a changefeed
-func (c *changefeeds) Resume(ctx context.Context, name string, overwriteCheckpointTs uint64) error {
+func (c *changefeeds) Resume(ctx context.Context,
+	cfg *v2.ResumeChangefeedConfig, name string,
+) error {
 	u := fmt.Sprintf("changefeeds/%s/resume", name)
 	return c.client.Post().
 		WithURI(u).
-		WithParam("overwrite_checkpoint_ts", strconv.FormatUint(overwriteCheckpointTs, 10)).
+		WithBody(cfg).
 		Do(ctx).Error()
 }

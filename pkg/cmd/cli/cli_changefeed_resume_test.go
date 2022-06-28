@@ -46,7 +46,9 @@ func TestChangefeedResumeCli(t *testing.T) {
 	f.tso.EXPECT().Query(gomock.Any(), gomock.Any()).Return(&v2.Tso{
 		Timestamp: time.Now().Unix() * 1000,
 	}, nil).AnyTimes()
-	f.changefeedsv2.EXPECT().Resume(gomock.Any(), "abc", uint64(0)).Return(nil)
+	f.changefeedsv2.EXPECT().Resume(gomock.Any(), &v2.ResumeChangefeedConfig{
+		OverwriteCheckpointTs: 0,
+	}, "abc").Return(nil)
 	os.Args = []string{"resume", "--no-confirm=true", "--changefeed-id=abc"}
 	require.Nil(t, cmd.Execute())
 
@@ -114,8 +116,9 @@ func TestChangefeedResumeWithNewCheckpointTs(t *testing.T) {
 		Timestamp: time.Now().Unix() * 1000,
 	}
 	f.tso.EXPECT().Query(gomock.Any(), gomock.Any()).Return(tso, nil).AnyTimes()
-	f.changefeedsv2.EXPECT().Resume(gomock.Any(), "abc",
-		oracle.ComposeTS(tso.Timestamp, tso.LogicTime)).Return(nil)
+	f.changefeedsv2.EXPECT().Resume(gomock.Any(), &v2.ResumeChangefeedConfig{
+		OverwriteCheckpointTs: oracle.ComposeTS(tso.Timestamp, tso.LogicTime),
+	}, "abc").Return(nil)
 	os.Args = []string{
 		"resume", "--no-confirm=true", "--changefeed-id=abc",
 		"--overwrite-checkpoint-ts=now",
@@ -164,7 +167,9 @@ func TestChangefeedResumeWithNewCheckpointTs(t *testing.T) {
 		Timestamp: 1,
 	}
 	f.tso.EXPECT().Query(gomock.Any(), gomock.Any()).Return(tso, nil).AnyTimes()
-	f.changefeedsv2.EXPECT().Resume(gomock.Any(), "abc", uint64(262144)).
+	f.changefeedsv2.EXPECT().Resume(gomock.Any(), &v2.ResumeChangefeedConfig{
+		OverwriteCheckpointTs: 262144,
+	}, "abc").
 		Return(cerror.ErrStartTsBeforeGC)
 	os.Args = []string{
 		"resume", "--no-confirm=true", "--changefeed-id=abc",

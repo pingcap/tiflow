@@ -22,7 +22,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
@@ -32,7 +31,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
-	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/r3labs/diff"
 	"github.com/tikv/client-go/v2/oracle"
@@ -279,9 +277,9 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(ctx context.Context,
 	return newInfo, newUpInfo, nil
 }
 
-func verifyResumeChangefeed(ctx context.Context,
-	capture *capture.Capture,
-	upstream *upstream.Upstream,
+func (APIV2HelpersImpl) verifyResumeChangefeed(ctx context.Context,
+	pdClient pd.Client,
+	gcServiceID string,
 	changefeedID model.ChangeFeedID,
 	checkpointTs uint64,
 ) error {
@@ -292,8 +290,8 @@ func verifyResumeChangefeed(ctx context.Context,
 	gcTTL := config.GetGlobalServerConfig().GcTTL
 	err := gc.EnsureChangefeedStartTsSafety(
 		ctx,
-		upstream.PDClient,
-		capture.EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
+		pdClient,
+		gcServiceID,
 		model.DefaultChangeFeedID(changefeedID.ID),
 		gcTTL, checkpointTs)
 	if err != nil {
