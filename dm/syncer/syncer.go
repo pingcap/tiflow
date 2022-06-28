@@ -1884,6 +1884,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		return nil
 	}
 
+	var currEndGSet mysql.GTIDSet
 	advanceCurrentLocationGtidSet := func(e *replication.BinlogEvent) error {
 		if _, ok := e.Event.(*replication.MariadbGTIDEvent); ok {
 			gtidSet, err2 := gtid.ParserGTID(s.cfg.Flavor, currentGTID)
@@ -1906,14 +1907,10 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			return currentLocation.SetGTID(gtidSet)
 		}
 
-		newGTID := currentLocation.GetGTID().Clone()
-		err2 := newGTID.Update(currentGTID)
+		currEndGSet = currentLocation.GetGTID().Clone()
+		err2 := currEndGSet.Update(currentGTID)
 		if err2 != nil {
 			return terror.Annotatef(err2, "fail to update GTID %s", currentGTID)
-		}
-		err2 = currentLocation.SetGTID(newGTID)
-		if err2 != nil {
-			return terror.Annotatef(err2, "fail to set GTID %s", newGTID)
 		}
 		return nil
 	}
@@ -2143,12 +2140,19 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			)
 			startLocation.Suffix = currentLocation.Suffix
 
+			var currGSet mysql.GTIDSet
+			if suffix == 0 {
+				currGSet = currEndGSet
+			} else {
+				currGSet = lastLocation.GetGTID()
+			}
+
 			currentLocation = binlog.NewLocation(
 				mysql.Position{
 					Name: lastLocation.Position.Name,
 					Pos:  e.Header.LogPos,
 				},
-				currentLocation.GetGTID(),
+				currGSet,
 			)
 			currentLocation.Suffix = suffix
 		}

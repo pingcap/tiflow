@@ -310,7 +310,7 @@ var mockRestarted = false
 //   900 has DDL0 event whose LogPos (end position) is 1000, we should return to
 //   caller like
 //   - DDL1, start position 900 LogPos 900, suffix 1
-//   - DDL2, start position 900 LogPos 1000, suffix 0 (or 2?)
+//   - DDL2, start position 900 LogPos 1000, suffix 0
 //   for shard resync, caller should use end position to reset streamer as above
 // - Skip
 //   the skipped event will still be sent to caller, with op = pb.ErrorOp_Skip,
@@ -421,6 +421,8 @@ FORLOOP:
 
 				if c.streamModifier.nextEventInOp == len(frontOp.events) {
 					event.Header.LogPos = c.lastEvent.Header.LogPos
+					// TODO: for last event we should forward GTID set? let caller
+					// do it unless we merge location recorder
 					suffix = 0
 				} else {
 					event.Header.LogPos = startPos.Pos

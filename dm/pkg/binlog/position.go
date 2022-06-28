@@ -15,7 +15,6 @@ package binlog
 
 import (
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 
@@ -398,14 +397,6 @@ func CompareGTID(gSet1, gSet2 gmysql.GTIDSet) (int, bool) {
 }
 
 func compareInjectSuffix(lhs, rhs int) int {
-	// suffix 0 is largest
-	if lhs == 0 {
-		lhs = math.MaxInt32
-	}
-	if rhs == 0 {
-		rhs = math.MaxInt32
-	}
-
 	switch {
 	case lhs < rhs:
 		return -1

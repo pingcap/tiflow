@@ -63,7 +63,7 @@ func (s *Syncer) processOneDDL(qec *queryEventContext, sql string) ([]string, er
 		}
 	}
 
-	qec.tctx.L().Debug("will skip query event", zap.String("event", "query"), zap.String("statement", sql), zap.Stringer("ddlInfo", ddlInfo))
+	qec.tctx.L().Debug("will check skip query event", zap.String("event", "query"), zap.String("statement", sql), zap.Stringer("ddlInfo", ddlInfo))
 	shouldSkip, err := s.skipQueryEvent(qec, ddlInfo)
 	if err != nil {
 		return nil, err
