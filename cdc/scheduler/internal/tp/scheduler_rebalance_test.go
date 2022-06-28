@@ -75,6 +75,14 @@ func TestSchedulerRebalance(t *testing.T) {
 		Primary: "a",
 	}
 
+	// capture is stopping, ignore the request
+	captures["a"].State = CaptureStateStopping
+	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	require.Len(t, tasks, 0)
+	require.Equal(t, atomic.LoadInt32(&scheduler.rebalance), int32(0))
+
+	captures["a"].State = CaptureStateInitialized
+	atomic.StoreInt32(&scheduler.rebalance, 1)
 	scheduler.random = nil // disable random to make test easier.
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
