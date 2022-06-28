@@ -18,11 +18,10 @@ import (
 	"sync"
 	"time"
 
-	"go.uber.org/dig"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"go.uber.org/dig"
+	"go.uber.org/zap"
 
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework/config"
