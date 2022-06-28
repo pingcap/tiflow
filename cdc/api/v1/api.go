@@ -107,7 +107,7 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api OpenAPI) {
 	captureGroup := v1.Group("/captures")
 	captureGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
 	captureGroup.GET("", api.ListCapture)
-	captureGroup.POST("/drain", api.DrainCapture)
+	captureGroup.PUT("/drain", api.DrainCapture)
 }
 
 // ListChangefeed lists all changgefeeds in cdc cluster
@@ -737,7 +737,7 @@ func (h *OpenAPI) DrainCapture(c *gin.Context) {
 	}
 
 	// drain capture only work if there is at least two alive captures,
-	// it cannot work properly if has only one capture.
+	// it cannot work properly if it has only one capture.
 	if len(captures) <= 1 {
 		_ = c.Error(cerror.ErrSchedulerRequestFailed.
 			GenWithStackByArgs("only one capture alive"))
@@ -757,6 +757,19 @@ func (h *OpenAPI) DrainCapture(c *gin.Context) {
 
 	if !checkCaptureFound() {
 		_ = c.Error(cerror.ErrCaptureNotExist.GenWithStackByArgs(target))
+		return
+	}
+
+	// only owner handle api request, so this must be the owner.
+	ownerInfo, err := h.capture.Info()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	if ownerInfo.ID == target {
+		_ = c.Error(cerror.ErrSchedulerRequestFailed.
+			GenWithStackByArgs("cannot drain the owner"))
 		return
 	}
 
