@@ -27,6 +27,9 @@ SINK_TYPE=$1
 
 # This test mainly verfies CDC can handle manual scheduler request correctly.
 
+# drain the non-owner capture, move all it's tables to the owner
+# all tables should be replicating on the owner, and make progress.
+
 # 2. drain the non-owner capture, all tables should be moved to the owner.
 # 3. manually move table to the non-owner capture should not work, since the target is `stopping`
 # 4. manaully rebalance should not work also.
@@ -42,8 +45,7 @@ function run() {
 	cd $WORK_DIR
 
 	pd_addr="http://$UP_PD_HOST_1:$UP_PD_PORT_1"
-    
-    # 1. deploy 2 captures, and run workload to enable table scheduling, each capture has some table replicating.
+
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --pd $pd_addr --logsuffix 1 --addr "127.0.0.1:8300"
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --pd $pd_addr --logsuffix 2 --addr "127.0.0.1:8301"
 
@@ -51,37 +53,46 @@ function run() {
 	changefeed_id=$(cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI" 2>&1 | tail -n2 | head -n1 | awk '{print $2}')
 
 
-
-	run_sql "CREATE DATABASE capture_suicide_while_balance_table;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	for i in $(seq 1 4); do
-		run_sql "CREATE table capture_suicide_while_balance_table.t$i (id int primary key auto_increment)" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "CREATE DATABASE manual_scheduler_request;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	for i in $(seq 1 10); do
+		run_sql "CREATE table manual_scheduler_request.t$i (id int primary key auto_increment)" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	done
 
-	for i in $(seq 1 4); do
-		check_table_exists "capture_suicide_while_balance_table.t$i" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	for i in $(seq 1 10); do
+		check_table_exists "manual_scheduler_request.t$i" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	done
 
-	capture1_id=$(cdc cli capture list | jq -r '.[]|select(.address=="127.0.0.1:8300")|.id')
-	capture2_id=$(cdc cli capture list | jq -r '.[]|select(.address=="127.0.0.1:8301")|.id')
-	one_table_id=$(cdc cli processor query -c $changefeed_id -p $capture2_id | jq -r '.status.tables|keys[0]')
-	table_query=$(mysql -h${UP_TIDB_HOST} -P${UP_TIDB_PORT} -uroot -e "select table_name from information_schema.tables where tidb_table_id = ${one_table_id}\G")
-	table_name=$(echo $table_query | tail -n 1 | awk '{print $(NF)}')
-	run_sql "insert into capture_suicide_while_balance_table.${table_name} values (),(),(),(),()"
+	target_capture_id=$(cdc cli capture list | jq -r '.[] | select(."is-owner"==false)|.id')
+  owner_id=$(cdc cli capture list | jq -r '.[] | select(."is-owner"==true)|.id')
 
-	# sleep some time to wait global resolved ts forwarded
-	sleep 2
-	curl -X POST http://127.0.0.1:8300/capture/owner/move_table -d "cf-id=${changefeed_id}&target-cp-id=${capture1_id}&table-id=${one_table_id}"
-	# sleep some time to wait table balance job is written to etcd
-	sleep 2
+  curl -X POST http://127.0.0.1:8300/api/v1/captures/drain -d '{"capture_id":"'"${target_capture_id}"'"}' -i
 
-	# revoke lease of etcd capture key to simulate etcd session done
-	lease=$(ETCDCTL_API=3 etcdctl get /tidb/cdc/capture/${capture2_id} -w json | grep -o 'lease":[0-9]*' | awk -F: '{print $2}')
-	lease_hex=$(printf '%x\n' $lease)
-	ETCDCTL_API=3 etcdctl lease revoke $lease_hex
+  for i in $(seq 1 10); do
+    run_sql "insert into manual_scheduler_request.${table_name} values (),(),(),(),(),(),(),()"
+  done
 
-	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
-	export GO_FAILPOINTS=''
-	cleanup_process $CDC_BINARY
+  # check point make progress, and no table replicating on the target capture
+
+
+#	one_table_id=$(cdc cli processor query -c $changefeed_id -p $capture2_id | jq -r '.status.tables|keys[0]')
+#	table_query=$(mysql -h${UP_TIDB_HOST} -P${UP_TIDB_PORT} -uroot -e "select table_name from information_schema.tables where tidb_table_id = ${one_table_id}\G")
+#	table_name=$(echo $table_query | tail -n 1 | awk '{print $(NF)}')
+#	run_sql "insert into capture_suicide_while_balance_table.${table_name} values (),(),(),(),()"
+#
+#	# sleep some time to wait global resolved ts forwarded
+#	sleep 2
+#	curl -X POST http://127.0.0.1:8300/capture/owner/move_table -d "cf-id=${changefeed_id}&target-cp-id=${capture1_id}&table-id=${one_table_id}"
+#	# sleep some time to wait table balance job is written to etcd
+#	sleep 2
+#
+#	# revoke lease of etcd capture key to simulate etcd session done
+#	lease=$(ETCDCTL_API=3 etcdctl get /tidb/cdc/capture/${capture2_id} -w json | grep -o 'lease":[0-9]*' | awk -F: '{print $2}')
+#	lease_hex=$(printf '%x\n' $lease)
+#	ETCDCTL_API=3 etcdctl lease revoke $lease_hex
+#
+#	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
+#	export GO_FAILPOINTS=''
+#	cleanup_process $CDC_BINARY
 }
 
 trap stop_tidb_cluster EXIT
