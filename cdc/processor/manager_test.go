@@ -33,7 +33,7 @@ import (
 )
 
 type managerTester struct {
-	manager  *Manager
+	manager  *managerImpl
 	state    *orchestrator.GlobalReactorState
 	tester   *orchestrator.ReactorStateTester
 	liveness model.Liveness
@@ -44,8 +44,8 @@ func NewManager4Test(
 	t *testing.T,
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
 	liveness *model.Liveness,
-) *Manager {
-	m := NewManager(upstream.NewManager4Test(nil), liveness)
+) *managerImpl {
+	m := NewManager(upstream.NewManager4Test(nil), liveness).(*managerImpl)
 	m.newProcessor = func(
 		ctx cdcContext.Context, up *upstream.Upstream, liveness *model.Liveness,
 	) *processor {
@@ -220,7 +220,7 @@ func TestClose(t *testing.T) {
 
 func TestSendCommandError(t *testing.T) {
 	liveness := model.LivenessCaptureAlive
-	m := NewManager(nil, &liveness)
+	m := NewManager(nil, &liveness).(*managerImpl)
 	ctx, cancel := context.WithCancel(context.TODO())
 	cancel()
 	// Use unbuffered channel to stable test.
@@ -277,4 +277,27 @@ func TestManagerLiveness(t *testing.T) {
 	require.Equal(t, model.LivenessCaptureAlive, p.liveness.Load())
 	s.liveness.Store(model.LivenessCaptureStopping)
 	require.Equal(t, model.LivenessCaptureStopping, p.liveness.Load())
+}
+
+func TestQueryTableCount(t *testing.T) {
+	liveness := model.LivenessCaptureAlive
+	m := NewManager(nil, &liveness).(*managerImpl)
+	ctx := context.TODO()
+	// Add some tables to processor.
+	m.processors[model.ChangeFeedID{ID: "test"}] = &processor{
+		tables: map[model.TableID]tablepipeline.TablePipeline{1: nil, 2: nil},
+	}
+
+	done := make(chan error, 1)
+	tableCh := make(chan int, 1)
+	err := m.sendCommand(ctx, commandTpQueryTableCount, tableCh, done)
+	require.Nil(t, err)
+	err = m.handleCommand()
+	require.Nil(t, err)
+	select {
+	case count := <-tableCh:
+		require.Equal(t, 2, count)
+	case <-time.After(time.Second):
+		require.FailNow(t, "done must be closed")
+	}
 }
