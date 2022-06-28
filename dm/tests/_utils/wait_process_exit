@@ -16,5 +16,9 @@ while [ $WAIT_COUNT -lt 120 ]; do
 	((WAIT_COUNT++))
 done
 
+<<<<<<< HEAD
 echo "process $process didn't exit after 120 seconds, current processlist: $(pgrep $process)"
+=======
+echo "process $process didn't exit after 120 seconds, current processlist: $(ps aux | grep $process | grep -v 'grep')"
+>>>>>>> 65e67fc4b (test(dm): fix unstable tests (#5865))
 exit 1
