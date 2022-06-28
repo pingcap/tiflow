@@ -98,12 +98,41 @@ func TestTxnEventAppender(t *testing.T) {
 			CommitTs: 104,
 			StartTs:  102,
 		},
+		{
+			Table:    tableInfo,
+			CommitTs: 105,
+			StartTs:  103,
+			// Batch1
+			SplitTxn: true,
+		},
+		{
+			Table:    tableInfo,
+			CommitTs: 105,
+			StartTs:  103,
+		},
+		{
+			Table:    tableInfo,
+			CommitTs: 105,
+			StartTs:  103,
+		},
+		{
+			Table:    tableInfo,
+			CommitTs: 105,
+			StartTs:  103,
+			// Batch2
+			SplitTxn: true,
+		},
+		{
+			Table:    tableInfo,
+			CommitTs: 105,
+			StartTs:  103,
+		},
 	}
 	buffer = appender.Append(buffer, rows...)
-	require.Len(t, buffer, 5)
+	require.Len(t, buffer, 7)
 	// Make sure the order is correct.
 	require.Equal(t, uint64(101), buffer[0].GetCommitTs())
-	// Make sure grouped by startTs.
+	// Make sure grouped by startTs and batch.
 	require.Len(t, buffer[0].Rows, 1)
 
 	require.Equal(t, uint64(102), buffer[1].GetCommitTs())
@@ -117,6 +146,12 @@ func TestTxnEventAppender(t *testing.T) {
 
 	require.Equal(t, uint64(104), buffer[4].GetCommitTs())
 	require.Len(t, buffer[4].Rows, 1)
+
+	require.Equal(t, uint64(105), buffer[5].GetCommitTs())
+	require.Len(t, buffer[5].Rows, 3)
+
+	require.Equal(t, uint64(105), buffer[6].GetCommitTs())
+	require.Len(t, buffer[6].Rows, 2)
 
 	// Test the case which the commitTs is not strictly increasing.
 	rows = []*model.RowChangedEvent{
