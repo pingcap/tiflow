@@ -89,6 +89,9 @@ func (d *drainCaptureScheduler) Schedule(
 	defer d.mu.Unlock()
 
 	if d.target == captureIDNotDraining {
+		// There are two ways to make a capture "stopping",
+		// 1. PUT /api/v1/capture/drain
+		// 2. kill <TiCDC_PID>
 		stopping := checkStoppingCapture(captures)
 		if stopping == captureIDNotDraining {
 			return nil
@@ -145,7 +148,7 @@ func (d *drainCaptureScheduler) Schedule(
 	// 3. the target capture cannot be found in the latest captures
 	if len(victims) == 0 {
 		log.Info("tpscheduler: drain capture scheduler finished, since no table",
-			zap.String("target", d.target), zap.Any("captures", captures))
+			zap.String("target", d.target))
 		d.target = captureIDNotDraining
 		return nil
 	}

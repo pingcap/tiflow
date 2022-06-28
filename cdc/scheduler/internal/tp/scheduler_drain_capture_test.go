@@ -114,3 +114,22 @@ func TestDrainStoppingCapture(t *testing.T) {
 	require.EqualValues(t, "a", tasks[0].moveTable.DestCapture)
 	require.EqualValues(t, "b", scheduler.getTarget())
 }
+
+func TestDrainSkipOwner(t *testing.T) {
+	t.Parallel()
+
+	var checkpointTs model.Ts
+	currentTables := make([]model.TableID, 0)
+	captures := map[model.CaptureID]*CaptureStatus{
+		"a": {},
+		"b": {IsOwner: true, State: CaptureStateStopping},
+	}
+	replications := map[model.TableID]*ReplicationSet{
+		1: {State: ReplicationSetStateReplicating, Primary: "a"},
+		2: {State: ReplicationSetStateReplicating, Primary: "b"},
+	}
+	scheduler := newDrainCaptureScheduler(10)
+	tasks := scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	require.Len(t, tasks, 0)
+	require.EqualValues(t, captureIDNotDraining, scheduler.getTarget())
+}
