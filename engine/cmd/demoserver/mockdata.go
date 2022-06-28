@@ -20,7 +20,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"go.uber.org/zap"
 )

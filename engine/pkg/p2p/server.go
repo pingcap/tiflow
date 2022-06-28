@@ -19,7 +19,8 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	p2pImpl "github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/proto/p2p"
@@ -153,7 +154,7 @@ func (s *MessageRPCService) Serve(ctx context.Context, l net.Listener) error {
 	wg, ctx := errgroup.WithContext(ctx)
 
 	wg.Go(func() (err error) {
-		defer log.L().ErrorFilterContextCanceled("message server exited", zap.Error(err))
+		defer logutil.ErrorFilterContextCanceled(log.L(), "message server exited", zap.Error(err))
 		return errors.Trace(s.messageServer.Run(ctx))
 	})
 

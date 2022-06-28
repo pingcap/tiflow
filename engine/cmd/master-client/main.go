@@ -18,13 +18,13 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/ctl"
+	"github.com/pingcap/tiflow/pkg/logutil"
 )
 
 func main() {
 	ctx := context.Background()
-	err := log.InitLogger(&log.Config{
+	err := logutil.InitLogger(&logutil.Config{
 		Level: "info",
 	})
 	if err != nil {
