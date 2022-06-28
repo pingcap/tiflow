@@ -15,7 +15,9 @@ package migrate
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -278,20 +280,59 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 }
 
 func cleanOldData(ctx context.Context, client *etcd.Client) {
-	oldKeys := []string{
-		"/tidb/cdc/capture",
-		"/tidb/cdc/changefeed",
-		"/tidb/cdc/job",
-		"/tidb/cdc/task/position",
-		"tidb/cdc/owner",
+	resp, err := client.Get(ctx, "/tidb/cdc", clientV3.WithPrefix())
+	if err != nil {
+		log.Warn("query data from etcd failed",
+			zap.Error(err))
 	}
-	for _, keyPrefix := range oldKeys {
-		if _, err := client.Delete(ctx, keyPrefix, clientV3.WithPrefix()); err != nil {
-			log.Warn("failed to delete old data",
-				zap.String("prefix", keyPrefix),
-				zap.Error(err))
+	for _, kvPair := range resp.Kvs {
+		key := string(kvPair.Key)
+		if !strings.HasPrefix(key, "/tidb/cdc/default") {
+			if _, err := client.Delete(ctx, key); err != nil {
+				log.Warn("failed to delete old data",
+					zap.String("key", key),
+					zap.Error(err))
+			}
+			value := string(kvPair.Value)
+			if strings.HasPrefix(key, oldChangefeedPrefix) {
+				value = maskChangefeedInfo(kvPair.Value)
+			}
+			log.Info("delete old etcd data",
+				zap.String("key", key),
+				zap.String("value", value))
 		}
 	}
+}
+
+func maskChangefeedInfo(data []byte) string {
+	value := string(data)
+	oldConfig := map[string]any{}
+	err := json.Unmarshal(data, &oldConfig)
+	if err != nil {
+		log.Info("marshal oldConfig failed",
+			zap.Error(err))
+	}
+	sinkURI, ok := oldConfig["sink-uri"]
+	if ok {
+		sinkURIParsed, err := url.Parse(sinkURI.(string))
+		if err != nil {
+			log.Error("failed to parse sink URI", zap.Error(err))
+		}
+		if sinkURIParsed.User != nil && sinkURIParsed.User.String() != "" {
+			sinkURIParsed.User = url.UserPassword("username", "password")
+		}
+		if sinkURIParsed.Host != "" {
+			sinkURIParsed.Host = "***"
+		}
+		oldConfig["sink-uri"] = sinkURIParsed.String()
+		buf, err := json.Marshal(oldConfig)
+		if err != nil {
+			log.Info("marshal oldConfig failed",
+				zap.Error(err))
+		}
+		value = string(buf)
+	}
+	return value
 }
 
 func (m *migrator) migrateGcServiceSafePoint(ctx context.Context,
