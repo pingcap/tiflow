@@ -89,3 +89,28 @@ func TestDrainCapture(t *testing.T) {
 	require.Equal(t, "a", scheduler.target)
 	require.Len(t, tasks, 1)
 }
+
+func TestDrainStoppingCapture(t *testing.T) {
+	t.Parallel()
+
+	var checkpointTs model.Ts
+	captures := make(map[model.CaptureID]*CaptureStatus)
+	currentTables := make([]model.TableID, 0)
+	replications := make(map[model.TableID]*ReplicationSet)
+	scheduler := newDrainCaptureScheduler(10)
+
+	tasks := scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	require.Empty(t, tasks)
+
+	captures["a"] = &CaptureStatus{}
+	captures["b"] = &CaptureStatus{State: CaptureStateStopping}
+	replications = map[model.TableID]*ReplicationSet{
+		1: {State: ReplicationSetStateReplicating, Primary: "a"},
+		2: {State: ReplicationSetStateReplicating, Primary: "b"},
+	}
+	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	require.Len(t, tasks, 1)
+	require.EqualValues(t, 2, tasks[0].moveTable.TableID)
+	require.EqualValues(t, "a", tasks[0].moveTable.DestCapture)
+	require.EqualValues(t, "b", scheduler.getTarget())
+}
