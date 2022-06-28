@@ -124,4 +124,8 @@ func TestErrCtxManualCancel(t *testing.T) {
 	require.Error(t, ctx.Err())
 	require.EqualError(t, ctx.Err(), "context canceled")
 	require.Empty(t, center.children)
+
+	// Multiple cancels should not panic.
+	cancel()
+	cancel()
 }

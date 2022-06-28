@@ -61,7 +61,7 @@ func (c *ErrCenter) OnError(err error) {
 	}
 	c.firstErr = err
 	for child := range c.children {
-		child.doCancel(false /* removeSelf */, c.firstErr)
+		child.doCancel(c.firstErr)
 	}
 	c.children = nil
 }
@@ -76,14 +76,14 @@ func (c *ErrCenter) CheckError() error {
 
 // WithCancelOnFirstError creates an error context which will cancel the context when the first error is received.
 func (c *ErrCenter) WithCancelOnFirstError(ctx context.Context) (context.Context, context.CancelFunc) {
-	ec := newErrCtx(ctx, c)
+	ec := newErrCtx(ctx)
 
 	c.rwm.Lock()
 	defer c.rwm.Unlock()
 
 	if c.firstErr != nil {
 		// First error is received, cancel the context directly.
-		ec.doCancel(false /* removeSelf */, c.firstErr)
+		ec.doCancel(c.firstErr)
 	} else {
 		if c.children == nil {
 			c.children = make(map[*errCtx]struct{})
@@ -91,6 +91,7 @@ func (c *ErrCenter) WithCancelOnFirstError(ctx context.Context) (context.Context
 		c.children[ec] = struct{}{}
 	}
 	return ec, func() {
-		ec.doCancel(true /* removeSelf */, context.Canceled)
+		ec.doCancel(context.Canceled)
+		c.removeChild(ec)
 	}
 }
