@@ -16,11 +16,10 @@ package errctx
 import (
 	"context"
 	"sync"
-	"time"
 )
 
 type errCtx struct {
-	ctx context.Context
+	context.Context
 
 	mu     sync.Mutex
 	cancel context.CancelFunc
@@ -30,8 +29,8 @@ type errCtx struct {
 func newErrCtx(parent context.Context) *errCtx {
 	ctx, cancel := context.WithCancel(parent)
 	return &errCtx{
-		ctx:    ctx,
-		cancel: cancel,
+		Context: ctx,
+		cancel:  cancel,
 	}
 }
 
@@ -45,17 +44,14 @@ func (c *errCtx) doCancel(err error) {
 		c.mu.Unlock()
 		return // already canceled
 	}
+	if c.Context.Err() != nil {
+		c.err = c.Context.Err()
+		c.mu.Unlock()
+		return // parent is canceled
+	}
 	c.err = err
 	c.cancel()
 	c.mu.Unlock()
-}
-
-func (c *errCtx) Deadline() (deadline time.Time, ok bool) {
-	return c.ctx.Deadline()
-}
-
-func (c *errCtx) Done() <-chan struct{} {
-	return c.ctx.Done()
 }
 
 func (c *errCtx) Err() error {
@@ -64,9 +60,5 @@ func (c *errCtx) Err() error {
 	if c.err != nil {
 		return c.err
 	}
-	return c.ctx.Err()
-}
-
-func (c *errCtx) Value(key any) any {
-	return c.ctx.Value(key)
+	return c.Context.Err()
 }
