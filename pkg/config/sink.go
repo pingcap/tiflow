@@ -26,9 +26,11 @@ import (
 // DefaultMaxMessageBytes sets the default value for max-message-bytes.
 const DefaultMaxMessageBytes = 10 * 1024 * 1024 // 10M
 
+// AtomicityLevel represents the atomicity level of a changefeed.
 type AtomicityLevel int
 
 const (
+	// UnknowTxnAtomicity is the default atomicity level, which is invalid.
 	UnknowTxnAtomicity AtomicityLevel = iota
 	// NoneTxnAtomicity means atomicity of transactions is not guaranteed
 	NoneTxnAtomicity
