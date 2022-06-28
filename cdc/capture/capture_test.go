@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
@@ -72,4 +73,11 @@ func TestInfo(t *testing.T) {
 	cp := NewCapture4Test(nil)
 	cp.info = nil
 	require.NotPanics(t, func() { cp.Info() })
+}
+
+func TestDrain(t *testing.T) {
+	cp := NewCapture4Test(nil)
+	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
+	cp.Drain()
+	require.Equal(t, model.LivenessCaptureStopping, cp.Liveness())
 }
