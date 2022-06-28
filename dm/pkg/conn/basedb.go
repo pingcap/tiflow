@@ -24,6 +24,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/util"
 	"go.uber.org/zap"
 
@@ -116,6 +117,9 @@ func (d *DefaultDBProviderImpl) Apply(config *config.DBConfig) (*BaseDB, error) 
 	ctx, cancel := context.WithTimeout(context.Background(), netTimeout)
 	defer cancel()
 	err = db.PingContext(ctx)
+	failpoint.Inject("failDBPing", func(_ failpoint.Value) {
+		err = errors.New("injected error")
+	})
 	if err != nil {
 		db.Close()
 		doFuncInClose()
