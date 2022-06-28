@@ -14,9 +14,10 @@
 package filter
 
 import (
-	"github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/tidb/parser/model"
 	filterV1 "github.com/pingcap/tidb/util/filter"
 	filterV2 "github.com/pingcap/tidb/util/table-filter"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
@@ -26,7 +27,7 @@ type Filter struct {
 	// tableFilter is used to filter row event by table name.
 	tableFilter      filterV2.Filter
 	ignoreTxnStartTs []uint64
-	ddlAllowlist     []model.ActionType
+	ddlAllowlist     []timodel.ActionType
 }
 
 // VerifyRules checks the filter rules in the configuration
@@ -93,21 +94,21 @@ func (f *Filter) ShouldIgnoreDMLEvent(ts uint64, schema, table string) bool {
 
 // ShouldIgnoreDDLEvent removes DDLs that's not wanted by this changefeed.
 // CDC only supports filtering by database/table now.
-func (f *Filter) ShouldIgnoreDDLEvent(ddl *model.Job) bool {
+func (f *Filter) ShouldIgnoreDDLEvent(ddl *model.DDLEvent) bool {
 	var shouldIgnoreTableOrSchema bool
 	switch ddl.Type {
-	case model.ActionCreateSchema, model.ActionDropSchema,
-		model.ActionModifySchemaCharsetAndCollate:
-		shouldIgnoreTableOrSchema = !f.tableFilter.MatchSchema(ddl.SchemaName)
+	case timodel.ActionCreateSchema, timodel.ActionDropSchema,
+		timodel.ActionModifySchemaCharsetAndCollate:
+		shouldIgnoreTableOrSchema = !f.tableFilter.MatchSchema(ddl.TableInfo.Schema)
 	default:
-		shouldIgnoreTableOrSchema = f.ShouldIgnoreTable(ddl.SchemaName, ddl.TableName)
+		shouldIgnoreTableOrSchema = f.ShouldIgnoreTable(ddl.TableInfo.Schema, ddl.TableInfo.Table)
 	}
 
-	return f.shouldIgnoreStartTs(ddl.StartTS) || shouldIgnoreTableOrSchema
+	return f.shouldIgnoreStartTs(ddl.StartTs) || shouldIgnoreTableOrSchema
 }
 
 // ShouldDiscardDDL returns true if this DDL should be discarded.
-func (f *Filter) ShouldDiscardDDL(ddlType model.ActionType) bool {
+func (f *Filter) ShouldDiscardDDL(ddlType timodel.ActionType) bool {
 	if !f.shouldDiscardByBuiltInDDLAllowlist(ddlType) {
 		return false
 	}
@@ -119,7 +120,7 @@ func (f *Filter) ShouldDiscardDDL(ddlType model.ActionType) bool {
 	return true
 }
 
-func (f *Filter) shouldDiscardByBuiltInDDLAllowlist(ddlType model.ActionType) bool {
+func (f *Filter) shouldDiscardByBuiltInDDLAllowlist(ddlType timodel.ActionType) bool {
 	/* The following DDL will be filter:
 	ActionAddForeignKey                 ActionType = 9
 	ActionDropForeignKey                ActionType = 10
@@ -145,33 +146,33 @@ func (f *Filter) shouldDiscardByBuiltInDDLAllowlist(ddlType model.ActionType) bo
 	... Any Action which of value is greater than 46 ...
 	*/
 	switch ddlType {
-	case model.ActionCreateSchema,
-		model.ActionDropSchema,
-		model.ActionCreateTable,
-		model.ActionDropTable,
-		model.ActionAddColumn,
-		model.ActionDropColumn,
-		model.ActionAddIndex,
-		model.ActionDropIndex,
-		model.ActionTruncateTable,
-		model.ActionModifyColumn,
-		model.ActionRenameTable,
-		model.ActionRenameTables,
-		model.ActionSetDefaultValue,
-		model.ActionModifyTableComment,
-		model.ActionRenameIndex,
-		model.ActionAddTablePartition,
-		model.ActionDropTablePartition,
-		model.ActionCreateView,
-		model.ActionModifyTableCharsetAndCollate,
-		model.ActionTruncateTablePartition,
-		model.ActionDropView,
-		model.ActionRecoverTable,
-		model.ActionModifySchemaCharsetAndCollate,
-		model.ActionAddPrimaryKey,
-		model.ActionDropPrimaryKey,
-		model.ActionAddColumns,
-		model.ActionDropColumns:
+	case timodel.ActionCreateSchema,
+		timodel.ActionDropSchema,
+		timodel.ActionCreateTable,
+		timodel.ActionDropTable,
+		timodel.ActionAddColumn,
+		timodel.ActionDropColumn,
+		timodel.ActionAddIndex,
+		timodel.ActionDropIndex,
+		timodel.ActionTruncateTable,
+		timodel.ActionModifyColumn,
+		timodel.ActionRenameTable,
+		timodel.ActionRenameTables,
+		timodel.ActionSetDefaultValue,
+		timodel.ActionModifyTableComment,
+		timodel.ActionRenameIndex,
+		timodel.ActionAddTablePartition,
+		timodel.ActionDropTablePartition,
+		timodel.ActionCreateView,
+		timodel.ActionModifyTableCharsetAndCollate,
+		timodel.ActionTruncateTablePartition,
+		timodel.ActionDropView,
+		timodel.ActionRecoverTable,
+		timodel.ActionModifySchemaCharsetAndCollate,
+		timodel.ActionAddPrimaryKey,
+		timodel.ActionDropPrimaryKey,
+		timodel.ActionAddColumns,
+		timodel.ActionDropColumns:
 		return false
 	}
 	return true

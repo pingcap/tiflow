@@ -63,7 +63,8 @@ type rowKVEntry struct {
 type Mounter interface {
 	// DecodeEvent accepts `model.PolymorphicEvent` with `RawKVEntry` filled and
 	// decodes `RawKVEntry` into `RowChangedEvent`.
-	DecodeEvent(ctx context.Context, event *model.PolymorphicEvent) error
+	// If a `model.PolymorphicEvent` should be ignored, it will returns (false, nil).
+	DecodeEvent(ctx context.Context, event *model.PolymorphicEvent) (bool, error)
 }
 
 type mounterImpl struct {
@@ -99,29 +100,30 @@ func NewMounter(schemaStorage SchemaStorage,
 // DecodeEvent decode kv events using ddl puller's schemaStorage
 // this method could block indefinitely if the DDL puller is lagging.
 // Note: If pEvent.Row is nil after decode, it means this event should be ignored.
-func (m *mounterImpl) DecodeEvent(ctx context.Context, pEvent *model.PolymorphicEvent) error {
+func (m *mounterImpl) DecodeEvent(ctx context.Context, pEvent *model.PolymorphicEvent) (bool, error) {
 	m.metricTotalRows.Inc()
 	if pEvent.IsResolved() {
-		return nil
+		return true, nil
 	}
 	start := time.Now()
 	row, err := m.unmarshalAndMountRowChanged(ctx, pEvent.RawKV)
 	if err != nil {
-		return errors.Trace(err)
+		return false, errors.Trace(err)
 	}
-	if m.filter.ShouldIgnoreDMLEvent(
-		row.StartTs, row.Table.Schema, row.Table.Table) {
-		pEvent.Row = nil
-	} else {
-		pEvent.Row = row
-	}
+
+	pEvent.Row = row
 	pEvent.RawKV.Value = nil
 	pEvent.RawKV.OldValue = nil
 	duration := time.Since(start)
 	if duration > time.Second {
 		m.metricMountDuration.Observe(duration.Seconds())
 	}
-	return nil
+
+	ignored := m.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table)
+	if ignored {
+		log.Debug("message's row changed event is nil, it should be ignored", zap.Uint64("startTs", row.StartTs))
+	}
+	return ignored, nil
 }
 
 func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *model.RawKVEntry) (*model.RowChangedEvent, error) {
