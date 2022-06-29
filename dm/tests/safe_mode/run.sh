@@ -94,9 +94,7 @@ function safe_mode_recover() {
 		dmctl_start_task "$cur/conf/dm-task.yaml" "--remove-meta"
 		check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
-		pkill -hup dm-worker.test 2>/dev/null || true
-		check_port_offline $WORKER1_PORT 20
-		check_port_offline $WORKER2_PORT 20
+		kill_dm_worker
 
 		export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/SafeModeExit=return($i)"
 		run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
@@ -136,9 +134,7 @@ function safe_mode_recover() {
 				"\"result\": true" 2
 		fi
 
-		pkill -hup dm-worker.test 2>/dev/null || true
-		check_port_offline $WORKER1_PORT 20
-		check_port_offline $WORKER2_PORT 20
+		kill_dm_worker
 
 		compare="<"
 		if [ $i -lt 2 ]; then
