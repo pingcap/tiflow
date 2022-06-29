@@ -50,15 +50,14 @@ type TxnEventAppender struct{}
 // the commitTs and startTs of rows is **strictly increasing**.
 // 1. Txns ordered by commitTs and startTs.
 // 2. Rows grouped by startTs and big txn batch,
-// cause the StartTs is the unique identifier of the transaction.
+// cause the startTs is the unique identifier of the transaction.
 func (t *TxnEventAppender) Append(
 	buffer []*model.SingleTableTxn,
 	rows ...*model.RowChangedEvent,
 ) []*model.SingleTableTxn {
 	for _, row := range rows {
 		// This means no txn is in the buffer.
-		noTxn := len(buffer) == 0
-		if noTxn {
+		if len(buffer) == 0 {
 			txn := &model.SingleTableTxn{
 				StartTs:   row.StartTs,
 				CommitTs:  row.CommitTs,
