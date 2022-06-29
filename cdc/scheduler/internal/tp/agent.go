@@ -405,7 +405,7 @@ func (a *agent) handleOwnerInfo(id model.CaptureID, revision int64, version stri
 			zap.String("capture", a.captureID),
 			zap.String("namespace", a.changeFeedID.Namespace),
 			zap.String("changefeed", a.changeFeedID.ID),
-			zap.Any("owner", a.ownerInfo), zap.Any("agent", a))
+			zap.Stringer("owner", a.ownerInfo), zap.Stringer("agent", a))
 		return true
 	}
 
@@ -414,13 +414,13 @@ func (a *agent) handleOwnerInfo(id model.CaptureID, revision int64, version stri
 		zap.String("capture", a.captureID),
 		zap.String("namespace", a.changeFeedID.Namespace),
 		zap.String("changefeed", a.changeFeedID.ID),
-		zap.Any("staledOwner", ownerInfo{
+		zap.Stringer("staledOwner", ownerInfo{
 			captureID: id,
 			revision:  schedulepb.OwnerRevision{Revision: revision},
 			version:   version,
 		}),
-		zap.Any("owner", a.ownerInfo),
-		zap.Any("agent", a))
+		zap.Stringer("owner", a.ownerInfo),
+		zap.Stringer("agent", a))
 	return false
 }
 
