@@ -38,6 +38,7 @@ var httpBadRequestError = []*errors.Error{
 	cerror.ErrChangeFeedNotExists, cerror.ErrTargetTsBeforeStartTs, cerror.ErrTableIneligible,
 	cerror.ErrFilterRuleInvalid, cerror.ErrChangefeedUpdateRefused, cerror.ErrMySQLConnectionError,
 	cerror.ErrMySQLInvalidConfig, cerror.ErrCaptureNotExist, cerror.ErrSchedulerRequestFailed,
+	cerror.ErrAPIGetPDClientFailed, cerror.ErrChangeFeedAlreadyExists,
 }
 
 const (

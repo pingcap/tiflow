@@ -27,6 +27,9 @@ import (
 	mock_capture "github.com/pingcap/tiflow/cdc/capture/mock"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
 	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
@@ -40,28 +43,30 @@ var (
 
 func TestCreateChangefeed(t *testing.T) {
 	t.Parallel()
+	create := testCase{url: "/api/v2/changefeeds", method: "POST"}
 
 	pdClient := &mockPDClient{}
+	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
+	cp := mock_capture.NewMockInfoForAPI(gomock.NewController(t))
+	etcdClient := mock_etcd.NewMockCDCEtcdClientForAPI(gomock.NewController(t))
+	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
+	router := newRouter(apiV2)
+
 	statusProvider := &mockStatusProvider{}
 	mockUpManager := upstream.NewManager4Test(pdClient)
 
-	helperCtrl := gomock.NewController(t)
-	helper := NewMockAPIV2Helpers(helperCtrl)
-	captureCtrl := gomock.NewController(t)
-	cp := mock_capture.NewMockInfoForAPI(captureCtrl)
-	etcdCtrl := gomock.NewController(t)
-	etcdClient := mock_etcd.NewMockCDCEtcdClientForAPI(etcdCtrl)
-
-	apiV2 := NewOpenAPIV2ForTest(cp, helper)
-	router := newRouter(apiV2)
-
-	helper.EXPECT().
+	cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
+	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
+	cp.EXPECT().GetUpstreamManager().Return(mockUpManager).AnyTimes()
+	cp.EXPECT().IsReady().Return(true).AnyTimes()
+	cp.EXPECT().IsOwner().Return(true).AnyTimes()
+	helpers.EXPECT().
 		getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(pdClient, nil)
-	helper.EXPECT().
-		createTiStore(gomock.Any(), gomock.Any()).
-		Return(nil, nil)
-	helper.EXPECT().
+		Return(pdClient, nil).Times(4)
+	helpers.EXPECT().
+		callKVCreateTiStore(gomock.Any(), gomock.Any()).
+		Return(nil, nil).Times(3)
+	helpers.EXPECT().
 		verifyCreateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(),
 			gomock.Any(), gomock.Any(), gomock.Any()).
 		DoAndReturn(func(ctx context.Context,
@@ -78,52 +83,430 @@ func TestCreateChangefeed(t *testing.T) {
 				ID:         cfg.ID,
 				SinkURI:    cfg.SinkURI,
 			}, nil
-		})
-
-	cp.EXPECT().
-		StatusProvider().
-		Return(statusProvider)
-	cp.EXPECT().
-		GetEtcdClient().
-		Return(etcdClient).AnyTimes()
-	cp.EXPECT().
-		GetUpstreamManager().
-		Return(mockUpManager).AnyTimes()
-	cp.EXPECT().
-		IsReady().
-		Return(true)
-	cp.EXPECT().
-		IsOwner().
-		Return(true)
-
-	etcdClient.EXPECT().
-		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(nil)
-
+		}).Times(2)
 	etcdClient.EXPECT().
 		GetEnsureGCServiceID().
-		Return(fmt.Sprintf("ticdc-%s-%d", "defalut", 0))
+		Return(etcd.GcServiceIDForTest()).AnyTimes()
 
-	config1 := struct {
+	// case 1: success
+	etcdClient.EXPECT().
+		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil).Times(1)
+	cfConfig := struct {
+		ID      string `json:"changefeed_id"`
+		SinkURI string `json:"sink_uri"`
+	}{
+		ID:      changeFeedID.ID,
+		SinkURI: blackHoleSink,
+	}
+	body, err := json.Marshal(&cfConfig)
+	require.Nil(t, err)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequestWithContext(context.Background(), create.method,
+		create.url, bytes.NewReader(body))
+	router.ServeHTTP(w, req)
+	require.Equal(t, 201, w.Code)
+
+	// case 2: Failed at etcd operation
+	etcdClient.EXPECT().
+		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(cerrors.ErrPDEtcdAPIError).Times(1)
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), create.method,
+		create.url, bytes.NewReader(body))
+	router.ServeHTTP(w, req)
+	respErr := model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrPDEtcdAPIError")
+	require.Equal(t, http.StatusInternalServerError, w.Code)
+
+	// case 3: failed in verifyCreateChangefeedConfig()
+	helpers.EXPECT().
+		verifyCreateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(),
+			gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, cerrors.ErrSinkURIInvalid.GenWithStackByArgs(
+			"sink_uri is empty, can't not create a changefeed without sink_uri"))
+	cfConfig1 := struct {
 		ID      string   `json:"changefeed_id"`
 		SinkURI string   `json:"sink_uri"`
 		PDAddrs []string `json:"pd_addrs"`
 	}{
 		ID:      changeFeedID.ID,
-		SinkURI: blackHoleSink,
-		PDAddrs: []string{"http://127.0.0.1:2379"},
+		SinkURI: "",
+		PDAddrs: []string{"http://127.0.0.1:2379", "http://127.0.0.1:2382"},
 	}
-	b1, err := json.Marshal(&config1)
+	body1, err := json.Marshal(&cfConfig1)
 	require.Nil(t, err)
-	body := bytes.NewReader(b1)
 
-	case1 := testCase{url: "/api/v2/changefeeds", method: "POST"}
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequestWithContext(context.Background(), case1.method, case1.url, body)
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), create.method,
+		create.url, bytes.NewReader(body1))
 	router.ServeHTTP(w, req)
-	require.Equal(t, 201, w.Code)
-
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
 	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrSinkURIInvalid")
+	require.Equal(t, http.StatusBadRequest, w.Code)
+
+	// case 4: failed to create TiStore
+	helpers.EXPECT().
+		callKVCreateTiStore(gomock.Any(), gomock.Any()).
+		Return(nil, cerrors.ErrNewStore)
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), create.method,
+		create.url, bytes.NewReader(body))
+	router.ServeHTTP(w, req)
+	require.NotEqual(t, http.StatusOK, w.Code)
+
+	// case 5: failed to connect to pd
+	helpers.EXPECT().
+		getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, cerrors.ErrAPIGetPDClientFailed)
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), create.method,
+		create.url, bytes.NewReader(body))
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+
+	// case 5: json format mismatches with the spec
+	configErr := struct {
+		ID      string `json:"changefeed_id"`
+		SinkURI string `json:"sink_uri"`
+		PDAddrs string `json:"pd_addrs"` // should be an array
+	}{
+		ID:      changeFeedID.ID,
+		SinkURI: "",
+		PDAddrs: "http://127.0.0.1:2379",
+	}
+	bodyErr, err := json.Marshal(&configErr)
+	require.Nil(t, err)
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(),
+		create.method, create.url, bytes.NewReader(bodyErr))
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestUpdateChangefeed(t *testing.T) {}
+func TestUpdateChangefeed(t *testing.T) {
+	t.Parallel()
+	update := testCase{url: "/api/v2/changefeeds/%s", method: "PUT"}
+	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
+	cp := mock_capture.NewMockInfoForAPI(gomock.NewController(t))
+	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
+	router := newRouter(apiV2)
+
+	statusProvider := &mockStatusProvider{}
+	cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
+	cp.EXPECT().IsReady().Return(true).AnyTimes()
+	cp.EXPECT().IsOwner().Return(true).AnyTimes()
+
+	// case 1 invalid id
+	invalidID := "#Invalid_"
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequestWithContext(context.Background(), update.method,
+		fmt.Sprintf(update.url, invalidID), nil)
+	router.ServeHTTP(w, req)
+	respErr := model.HTTPError{}
+	err := json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrAPIInvalidParam")
+	require.Equal(t, http.StatusBadRequest, w.Code)
+
+	// case 2: failed to get get changefeedInfo
+	validID := changeFeedID.ID
+	statusProvider.err = cerrors.ErrChangeFeedNotExists.GenWithStackByArgs(validID)
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), update.method,
+		fmt.Sprintf(update.url, validID), nil)
+	router.ServeHTTP(w, req)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrChangeFeedNotExists")
+	require.Equal(t, http.StatusBadRequest, w.Code)
+
+	// case 3: changefeed not stopped
+	oldCfInfo := &model.ChangeFeedInfo{
+		ID:         validID,
+		State:      "normal",
+		UpstreamID: 1,
+		Namespace:  model.DefaultNamespace,
+		Config:     &config.ReplicaConfig{},
+	}
+	statusProvider.err = nil
+	statusProvider.changefeedInfo = oldCfInfo
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), update.method,
+		fmt.Sprintf(update.url, validID), nil)
+	router.ServeHTTP(w, req)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrChangefeedUpdateRefused")
+	require.Equal(t, http.StatusBadRequest, w.Code)
+
+	// case 4: changefeed stopped, but get upstream failed: not found
+	oldCfInfo.UpstreamID = 100
+	oldCfInfo.State = "stopped"
+	etcdClient := mock_etcd.NewMockCDCEtcdClientForAPI(gomock.NewController(t))
+	etcdClient.EXPECT().
+		GetUpstreamInfo(gomock.Any(), gomock.Eq(uint64(100)), gomock.Any()).
+		Return(nil, cerrors.ErrUpstreamNotFound).Times(1)
+	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
+
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), update.method,
+		fmt.Sprintf(update.url, validID), nil)
+	router.ServeHTTP(w, req)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrUpstreamNotFound")
+	require.Equal(t, http.StatusInternalServerError, w.Code)
+
+	// case 5: json failed
+	oldCfInfo.UpstreamID = 1
+	etcdClient.EXPECT().
+		GetUpstreamInfo(gomock.Any(), gomock.Eq(uint64(1)), gomock.Any()).
+		Return(nil, nil).AnyTimes()
+	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
+
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), update.method,
+		fmt.Sprintf(update.url, validID), nil)
+	router.ServeHTTP(w, req)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrAPIInvalidParam")
+	require.Equal(t, http.StatusBadRequest, w.Code)
+
+	// case 5: verify upstream failed
+	helpers.EXPECT().
+		verifyUpstream(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(cerrors.ErrUpstreamMissMatch).Times(1)
+	updateCfg := &ChangefeedConfig{}
+	body, err := json.Marshal(&updateCfg)
+	require.Nil(t, err)
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), update.method,
+		fmt.Sprintf(update.url, validID), bytes.NewReader(body))
+	router.ServeHTTP(w, req)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrUpstreamMissMatch")
+	require.Equal(t, http.StatusInternalServerError, w.Code)
+
+	// case 6: verify update changefeed info failed
+	helpers.EXPECT().
+		verifyUpstream(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil).AnyTimes()
+	helpers.EXPECT().
+		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&model.ChangeFeedInfo{}, &model.UpstreamInfo{}, cerrors.ErrChangefeedUpdateRefused).
+		Times(1)
+
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), update.method,
+		fmt.Sprintf(update.url, validID), bytes.NewReader(body))
+	router.ServeHTTP(w, req)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrChangefeedUpdateRefused")
+	require.Equal(t, http.StatusBadRequest, w.Code)
+
+	// case 7: update transaction failed
+	helpers.EXPECT().
+		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&model.ChangeFeedInfo{}, &model.UpstreamInfo{}, nil).
+		Times(1)
+	etcdClient.EXPECT().
+		UpdateChangefeedAndUpstream(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(cerrors.ErrEtcdAPIError).Times(1)
+
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), update.method,
+		fmt.Sprintf(update.url, validID), bytes.NewReader(body))
+	router.ServeHTTP(w, req)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrEtcdAPIError")
+	require.Equal(t, http.StatusInternalServerError, w.Code)
+
+	// case 8: success
+	helpers.EXPECT().
+		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(oldCfInfo, &model.UpstreamInfo{}, nil).
+		Times(1)
+	etcdClient.EXPECT().
+		UpdateChangefeedAndUpstream(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil).Times(1)
+
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), update.method,
+		fmt.Sprintf(update.url, validID), bytes.NewReader(body))
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestGetChangeFeedMetaInfo(t *testing.T) {
+	t.Parallel()
+
+	metaInfo := testCase{url: "/api/v2/changefeeds/%s/meta_info", method: "GET"}
+	statusProvider := &mockStatusProvider{}
+	cp := mock_capture.NewMockInfoForAPI(gomock.NewController(t))
+	cp.EXPECT().IsReady().Return(true).AnyTimes()
+	cp.EXPECT().IsOwner().Return(true).AnyTimes()
+
+	apiV2 := NewOpenAPIV2ForTest(cp, APIV2HelpersImpl{})
+	router := newRouter(apiV2)
+
+	// case 1: invalid id
+	w := httptest.NewRecorder()
+	invalidID := "@^Invalid"
+	req, _ := http.NewRequestWithContext(context.Background(),
+		metaInfo.method, fmt.Sprintf(metaInfo.url, invalidID), nil)
+	router.ServeHTTP(w, req)
+	respErr := model.HTTPError{}
+	err := json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrAPIInvalidParam")
+	// fmt.Sprintf("/api/v2/changefeeds/%s/meta_info", invalidID)
+
+	// validId but not exists
+	validID := "changefeed-valid-id"
+	statusProvider.err = cerrors.ErrChangeFeedNotExists.GenWithStackByArgs(validID)
+	cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
+
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(),
+		metaInfo.method, fmt.Sprintf(metaInfo.url, validID), nil)
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrChangeFeedNotExists")
+
+	// valid but changefeed contains runtime error
+	statusProvider.err = nil
+	statusProvider.changefeedInfo = &model.ChangeFeedInfo{
+		ID: validID,
+		Error: &model.RunningError{
+			Code: string(cerrors.ErrGCTTLExceeded.RFCCode()),
+		},
+	}
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(),
+		metaInfo.method, fmt.Sprintf(metaInfo.url, validID), nil)
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	resp := ChangeFeedInfo{}
+	err = json.NewDecoder(w.Body).Decode(&resp)
+	require.Nil(t, err)
+	require.Equal(t, resp.ID, validID)
+	require.Contains(t, resp.Error.Code, "ErrGCTTLExceeded")
+
+	// success
+	statusProvider.changefeedInfo = &model.ChangeFeedInfo{ID: validID}
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(),
+		metaInfo.method, fmt.Sprintf(metaInfo.url, validID), nil)
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	resp = ChangeFeedInfo{}
+	err = json.NewDecoder(w.Body).Decode(&resp)
+	require.Nil(t, err)
+	require.Equal(t, resp.ID, validID)
+	require.Nil(t, resp.Error)
+}
+
+func TestVerifyTable(t *testing.T) {
+	t.Parallel()
+
+	verify := &testCase{url: "/api/v2/verify_table", method: "POST"}
+
+	pdClient := &mockPDClient{}
+	upManager := upstream.NewManager4Test(pdClient)
+	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
+	cp := mock_capture.NewMockInfoForAPI(gomock.NewController(t))
+	// statusProvider := &mockStatusProvider{}
+	// cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
+	cp.EXPECT().GetUpstreamManager().Return(upManager).AnyTimes()
+	cp.EXPECT().IsOwner().Return(true).AnyTimes()
+	cp.EXPECT().IsReady().Return(true).AnyTimes()
+
+	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
+	router := newRouter(apiV2)
+
+	// case 1: json format error
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequestWithContext(context.Background(),
+		verify.method, verify.url, nil)
+	router.ServeHTTP(w, req)
+	respErr := model.HTTPError{}
+	err := json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrAPIInvalidParam")
+
+	// case 2: kv create failed
+	updateCfg := getDefaultVerifyTableConfig()
+	body, err := json.Marshal(&updateCfg)
+	require.Nil(t, err)
+	helpers.EXPECT().
+		callKVCreateTiStore(gomock.Any(), gomock.Any()).
+		Return(nil, cerrors.ErrNewStore).
+		Times(1)
+
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(),
+		verify.method, verify.url, bytes.NewReader(body))
+	router.ServeHTTP(w, req)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrNewStore")
+
+	// case 3: callEntryVerifTables failed
+	helpers.EXPECT().
+		callKVCreateTiStore(gomock.Any(), gomock.Any()).
+		Return(nil, nil).
+		AnyTimes()
+	helpers.EXPECT().callEntryVerifTables(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, nil, cerrors.ErrFilterRuleInvalid).
+		Times(1)
+
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(),
+		verify.method, verify.url, bytes.NewReader(body))
+	router.ServeHTTP(w, req)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrFilterRuleInvalid")
+
+	// case 4: success
+	eligible := []model.TableName{
+		{Schema: "test", Table: "validTable1"},
+		{Schema: "test", Table: "validTable2"},
+	}
+	ineligible := []model.TableName{
+		{Schema: "test", Table: "invalidTable"},
+	}
+	helpers.EXPECT().callEntryVerifTables(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(eligible, ineligible, nil)
+
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(),
+		verify.method, verify.url, bytes.NewReader(body))
+	router.ServeHTTP(w, req)
+	resp := Tables{}
+	err = json.NewDecoder(w.Body).Decode(&resp)
+	require.Nil(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+}

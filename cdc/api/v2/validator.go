@@ -51,7 +51,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	// verify sinkURI
 	if cfg.SinkURI == "" {
 		return nil, cerror.ErrSinkURIInvalid.GenWithStackByArgs(
-			"sink_uri is empty, can't not create a changefeed without sink_uri")
+			"sink_uri is empty, cannot create a changefeed without sink_uri")
 	}
 
 	// verify changefeedID

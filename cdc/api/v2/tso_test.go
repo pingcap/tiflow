@@ -38,7 +38,7 @@ func (m *mockPDClient4Tso) GetTS(context.Context) (int64, int64, error) {
 	return oracle.GetPhysical(time.Now()), 0, nil
 }
 
-func TestGetTso(t *testing.T) {
+func TestQueryTso(t *testing.T) {
 	t.Parallel()
 
 	ownerCtrl := gomock.NewController(t)

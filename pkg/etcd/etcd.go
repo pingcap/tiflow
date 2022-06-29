@@ -420,7 +420,7 @@ func (c CDCEtcdClient) UpdateChangefeedAndUpstream(ctx context.Context,
 
 	resp, err := c.Client.Txn(ctx, txnEmptyCmps, opsThen, TxnEmptyOpsElse)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+		return cerror.WrapError(cerror.ErrEtcdAPIError, err)
 	}
 	if !resp.Succeeded {
 		log.Warn("unexpected etcd transaction failure",

@@ -641,6 +641,10 @@ var (
 		"invalid api parameter",
 		errors.RFCCodeText("CDC:ErrAPIInvalidParam"),
 	)
+	ErrAPIGetPDClientFailed = errors.Normalize(
+		"failed to get PDClient to connect PD, please recheck",
+		errors.RFCCodeText("CDC:ErrAPIGetPDClientFailed"),
+	)
 	ErrRequestForwardErr = errors.Normalize(
 		"request forward error, an request can only forward to owner one time",
 		errors.RFCCodeText("ErrRequestForwardErr"),

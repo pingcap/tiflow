@@ -12,6 +12,7 @@ import (
 	kv "github.com/pingcap/tidb/kv"
 	model "github.com/pingcap/tiflow/cdc/model"
 	owner "github.com/pingcap/tiflow/cdc/owner"
+	config "github.com/pingcap/tiflow/pkg/config"
 	security "github.com/pingcap/tiflow/pkg/security"
 	client "github.com/tikv/pd/client"
 )
@@ -39,19 +40,35 @@ func (m *MockAPIV2Helpers) EXPECT() *MockAPIV2HelpersMockRecorder {
 	return m.recorder
 }
 
-// createTiStore mocks base method.
-func (m *MockAPIV2Helpers) createTiStore(arg0 []string, arg1 *security.Credential) (kv.Storage, error) {
+// callEntryVerifTables mocks base method.
+func (m *MockAPIV2Helpers) callEntryVerifTables(arg0 *config.ReplicaConfig, arg1 kv.Storage, arg2 uint64) ([]model.TableName, []model.TableName, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "createTiStore", arg0, arg1)
+	ret := m.ctrl.Call(m, "callEntryVerifTables", arg0, arg1, arg2)
+	ret0, _ := ret[0].([]model.TableName)
+	ret1, _ := ret[1].([]model.TableName)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// callEntryVerifTables indicates an expected call of callEntryVerifTables.
+func (mr *MockAPIV2HelpersMockRecorder) callEntryVerifTables(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "callEntryVerifTables", reflect.TypeOf((*MockAPIV2Helpers)(nil).callEntryVerifTables), arg0, arg1, arg2)
+}
+
+// callKVCreateTiStore mocks base method.
+func (m *MockAPIV2Helpers) callKVCreateTiStore(arg0 []string, arg1 *security.Credential) (kv.Storage, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "callKVCreateTiStore", arg0, arg1)
 	ret0, _ := ret[0].(kv.Storage)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// createTiStore indicates an expected call of createTiStore.
-func (mr *MockAPIV2HelpersMockRecorder) createTiStore(arg0, arg1 interface{}) *gomock.Call {
+// callKVCreateTiStore indicates an expected call of callKVCreateTiStore.
+func (mr *MockAPIV2HelpersMockRecorder) callKVCreateTiStore(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "createTiStore", reflect.TypeOf((*MockAPIV2Helpers)(nil).createTiStore), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "callKVCreateTiStore", reflect.TypeOf((*MockAPIV2Helpers)(nil).callKVCreateTiStore), arg0, arg1)
 }
 
 // getPDClient mocks base method.

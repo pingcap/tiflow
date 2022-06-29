@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
 	pd "github.com/tikv/pd/client"
@@ -40,30 +41,30 @@ const apiOpVarChangefeedID = "changefeed_id"
 // it returns the changefeed's changefeedInfo that it just created
 func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
-	config := &ChangefeedConfig{ReplicaConfig: GetDefaultReplicaConfig()}
+	cfg := &ChangefeedConfig{ReplicaConfig: GetDefaultReplicaConfig()}
 
-	if err := c.BindJSON(&config); err != nil {
+	if err := c.BindJSON(&cfg); err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
 	}
-	if len(config.PDAddrs) == 0 {
+	if len(cfg.PDAddrs) == 0 {
 		up := h.capture.GetUpstreamManager().GetDefaultUpstream()
-		config.PDAddrs = up.PdEndpoints
-		config.KeyPath = up.SecurityConfig.KeyPath
-		config.CAPath = up.SecurityConfig.CAPath
-		config.CertPath = up.SecurityConfig.CertPath
+		cfg.PDAddrs = up.PdEndpoints
+		cfg.KeyPath = up.SecurityConfig.KeyPath
+		cfg.CAPath = up.SecurityConfig.CAPath
+		cfg.CertPath = up.SecurityConfig.CertPath
 	}
 	credential := &security.Credential{
-		CAPath:   config.CAPath,
-		CertPath: config.CertPath,
-		KeyPath:  config.KeyPath,
+		CAPath:   cfg.CAPath,
+		CertPath: cfg.CertPath,
+		KeyPath:  cfg.KeyPath,
 	}
-	if len(config.CertAllowedCN) != 0 {
-		credential.CertAllowedCN = config.CertAllowedCN
+	if len(cfg.CertAllowedCN) != 0 {
+		credential.CertAllowedCN = cfg.CertAllowedCN
 	}
 	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	pdClient, err := h.helpers.getPDClient(timeoutCtx, config.PDAddrs, credential)
+	pdClient, err := h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
 	if err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
@@ -71,7 +72,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	defer pdClient.Close()
 
 	// verify tables todo: del kvstore
-	kvStorage, err := h.helpers.createTiStore(config.PDAddrs, credential)
+	kvStorage, err := h.helpers.callKVCreateTiStore(cfg.PDAddrs, credential)
 	if err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrInternalServerError, err))
 		return
@@ -79,7 +80,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	// We should not close kvStorage since all kvStorage in cdc is the same one.
 	// defer kvStorage.Close()
 	// TODO: We should get a kvStorage from upstream instead of creating a new one
-	info, err := h.helpers.verifyCreateChangefeedConfig(ctx, config, pdClient,
+	info, err := h.helpers.verifyCreateChangefeedConfig(ctx, cfg, pdClient,
 		h.capture.StatusProvider(), h.capture.GetEtcdClient().GetEnsureGCServiceID(),
 		kvStorage)
 	if err != nil {
@@ -88,11 +89,11 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	}
 	upstreamInfo := &model.UpstreamInfo{
 		ID:            info.UpstreamID,
-		PDEndpoints:   strings.Join(config.PDAddrs, ","),
-		KeyPath:       config.KeyPath,
-		CertPath:      config.CertPath,
-		CAPath:        config.CAPath,
-		CertAllowedCN: config.CertAllowedCN,
+		PDEndpoints:   strings.Join(cfg.PDAddrs, ","),
+		KeyPath:       cfg.KeyPath,
+		CertPath:      cfg.CertPath,
+		CAPath:        cfg.CAPath,
+		CertAllowedCN: cfg.CertAllowedCN,
 	}
 	infoStr, err := info.Marshal()
 	if err != nil {
@@ -139,13 +140,14 @@ func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 		credential.CertAllowedCN = cfg.CertAllowedCN
 	}
 
-	kvStore, err := h.helpers.createTiStore(cfg.PDAddrs, credential)
+	kvStore, err := h.helpers.callKVCreateTiStore(cfg.PDAddrs, credential)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
 	replicaCfg := cfg.ReplicaConfig.ToInternalReplicaConfig()
-	ineligibleTables, eligibleTables, err := entry.VerifyTables(replicaCfg, kvStore, cfg.StartTs)
+	ineligibleTables, eligibleTables, err := h.helpers.
+		callEntryVerifTables(replicaCfg, kvStore, cfg.StartTs)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -194,10 +196,6 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 			GenWithStackByArgs("can only update changefeed config when it is stopped"))
 		return
 	}
-	if cfInfo.UpstreamID == 0 {
-		up := h.capture.GetUpstreamManager().GetDefaultUpstream()
-		cfInfo.UpstreamID = up.ID
-	}
 	upInfo, err := h.capture.GetEtcdClient().
 		GetUpstreamInfo(ctx, cfInfo.UpstreamID, cfInfo.Namespace)
 	if err != nil {
@@ -205,15 +203,16 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		return
 	}
 
-	changefeedConfig := new(ChangefeedConfig)
-	changefeedConfig.SyncPointEnabled = cfInfo.SyncPointEnabled
-	changefeedConfig.ReplicaConfig = ToAPIReplicaConfig(cfInfo.Config)
-	if err = c.BindJSON(&changefeedConfig); err != nil {
+	updateCfConfig := &ChangefeedConfig{}
+	updateCfConfig.SyncPointEnabled = cfInfo.SyncPointEnabled
+	updateCfConfig.ReplicaConfig = ToAPIReplicaConfig(cfInfo.Config)
+	if err = c.BindJSON(updateCfConfig); err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
 	}
 
-	if err := h.helpers.verifyUpstream(ctx, changefeedConfig, cfInfo); err != nil {
+	if err = h.helpers.verifyUpstream(ctx, updateCfConfig, cfInfo); err != nil {
+		_ = c.Error(errors.Trace(err))
 		return
 	}
 
@@ -222,9 +221,9 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		zap.Any("upstreamInfo", upInfo))
 
 	newCfInfo, newUpInfo, err := h.helpers.
-		verifyUpdateChangefeedConfig(ctx, changefeedConfig, cfInfo, upInfo)
+		verifyUpdateChangefeedConfig(ctx, updateCfConfig, cfInfo, upInfo)
 	if err != nil {
-		_ = c.Error(err)
+		_ = c.Error(errors.Trace(err))
 		return
 	}
 
@@ -235,9 +234,9 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 	err = h.capture.GetEtcdClient().
 		UpdateChangefeedAndUpstream(ctx, newUpInfo, newCfInfo, changefeedID)
 	if err != nil {
-		_ = c.Error(err)
+		_ = c.Error(errors.Trace(err))
+		return
 	}
-
 	c.JSON(http.StatusOK, newCfInfo)
 }
 
@@ -285,16 +284,23 @@ func (APIV2HelpersImpl) getPDClient(ctx context.Context,
 			}),
 		))
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrAPIGetPDClientFailed, errors.Trace(err))
 	}
 	return pdClient, nil
 }
 
-// createTiStore wrap the createTiStore method to increase testability
-func (h APIV2HelpersImpl) createTiStore(pdAddrs []string,
+// callKVCreateTiStore wrap the callKVCreateTiStore method to increase testability
+func (h APIV2HelpersImpl) callKVCreateTiStore(pdAddrs []string,
 	credential *security.Credential,
 ) (tidbkv.Storage, error) {
 	return kv.CreateTiStore(strings.Join(pdAddrs, ","), credential)
+}
+
+func (h APIV2HelpersImpl) callEntryVerifTables(replicaConfig *config.ReplicaConfig,
+	storage tidbkv.Storage, startTs uint64) (ineligibleTables,
+	eligibleTables []model.TableName, err error,
+) {
+	return entry.VerifyTables(replicaConfig, storage, startTs)
 }
 
 func toAPIModel(info *model.ChangeFeedInfo) *ChangeFeedInfo {
