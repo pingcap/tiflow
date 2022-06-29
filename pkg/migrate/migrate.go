@@ -50,6 +50,9 @@ const (
 	migrationCampaignKey    = "ticdc-migration"
 	oldChangefeedPrefix     = "/tidb/cdc/changefeed/info"
 	oldGcServiceID          = "ticdc"
+
+	// data will be renamed to this key
+	backupKeyPrefix = "/tidb/cdc/__backup__/0"
 )
 
 type keys map[string]string
@@ -288,18 +291,22 @@ func cleanOldData(ctx context.Context, client *etcd.Client) {
 	for _, kvPair := range resp.Kvs {
 		key := string(kvPair.Key)
 		if shouldDelete(key) {
+			value := string(kvPair.Value)
+			if strings.HasPrefix(key, oldChangefeedPrefix) {
+				value = maskChangefeedInfo(kvPair.Value)
+			}
+			if _, err := client.Put(ctx, backupKeyPrefix+"/"+key,
+				string(kvPair.Value)); err != nil {
+				log.Info("rename old etcd data failed",
+					zap.String("key", key),
+					zap.String("value", value),
+					zap.Error(err))
+			}
 			if _, err := client.Delete(ctx, key); err != nil {
 				log.Warn("failed to delete old data",
 					zap.String("key", key),
 					zap.Error(err))
 			}
-			value := string(kvPair.Value)
-			if strings.HasPrefix(key, oldChangefeedPrefix) {
-				value = maskChangefeedInfo(kvPair.Value)
-			}
-			log.Info("delete old etcd data",
-				zap.String("key", key),
-				zap.String("value", value))
 		}
 	}
 }

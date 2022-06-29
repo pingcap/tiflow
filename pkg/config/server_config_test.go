@@ -53,6 +53,8 @@ func TestServerConfigValidateAndAdjust(t *testing.T) {
 	conf := new(ServerConfig)
 
 	require.Regexp(t, ".*bad cluster-id.*", conf.ValidateAndAdjust())
+	conf.ClusterID = "__backup__"
+	require.Regexp(t, ".*bad cluster-id.*", conf.ValidateAndAdjust())
 	conf.ClusterID = "default"
 	require.Regexp(t, ".*empty address", conf.ValidateAndAdjust())
 	conf.Addr = "cdc:1234"
