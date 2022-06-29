@@ -35,14 +35,16 @@ import (
 var _ internal.Agent = (*agent)(nil)
 
 type agent struct {
+	agentInfo
 	trans transport
 
 	tableM *tableManager
 
-	// owner's information
+	// agent maintain the owner's information to track owner switch.
 	ownerInfo ownerInfo
+}
 
-	// maintain the capture's information
+type agentInfo struct {
 	version      string
 	captureID    model.CaptureID
 	changeFeedID model.ChangeFeedID
@@ -50,8 +52,29 @@ type agent struct {
 
 	// Liveness of the capture.
 	//
-	// CaptureLivenessShuttingDown rejects all add table requests.
+	// LivenessCaptureStopping rejects all add table requests.
 	liveness model.Liveness
+}
+
+func (a agentInfo) String() string {
+	bytes, _ := json.Marshal(a)
+	return string(bytes)
+}
+
+func (a agentInfo) resetEpoch() {
+	a.epoch = schedulepb.ProcessorEpoch{Epoch: uuid.New().String()}
+}
+
+func newAgentInfo(changefeedID model.ChangeFeedID, captureID model.CaptureID) agentInfo {
+	result := agentInfo{
+		version:      version.ReleaseSemver(),
+		captureID:    captureID,
+		changeFeedID: changefeedID,
+		epoch:        schedulepb.ProcessorEpoch{},
+	}
+	result.resetEpoch()
+
+	return result
 }
 
 type ownerInfo struct {
@@ -74,17 +97,16 @@ func NewAgent(ctx context.Context,
 	etcdClient *etcd.CDCEtcdClient,
 	tableExecutor internal.TableExecutor,
 ) (internal.Agent, error) {
-	result := &agent{
-		version:      version.ReleaseSemver(),
-		captureID:    captureID,
-		changeFeedID: changeFeedID,
-		tableM:       newTableManager(tableExecutor),
-	}
 	trans, err := newTransport(ctx, changeFeedID, agentRole, messageServer, messageRouter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	result.trans = trans
+
+	result := &agent{
+		agentInfo: newAgentInfo(changeFeedID, captureID),
+		tableM:    newTableManager(tableExecutor),
+		trans:     trans,
+	}
 
 	etcdCliCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -126,7 +148,6 @@ func NewAgent(ctx context.Context,
 		return nil, err
 	}
 
-	result.resetEpoch()
 	result.ownerInfo = ownerInfo{
 		// owner's version can only be got by receiving heartbeat
 		version:   "",
@@ -384,7 +405,7 @@ func (a *agent) handleOwnerInfo(id model.CaptureID, revision int64, version stri
 			zap.String("capture", a.captureID),
 			zap.String("namespace", a.changeFeedID.Namespace),
 			zap.String("changefeed", a.changeFeedID.ID),
-			zap.Any("owner", a.ownerInfo))
+			zap.Any("owner", a.ownerInfo), zap.Any("agent", a))
 		return true
 	}
 
@@ -398,12 +419,9 @@ func (a *agent) handleOwnerInfo(id model.CaptureID, revision int64, version stri
 			revision:  schedulepb.OwnerRevision{Revision: revision},
 			version:   version,
 		}),
-		zap.Any("owner", a.ownerInfo))
+		zap.Any("owner", a.ownerInfo),
+		zap.Any("agent", a))
 	return false
-}
-
-func (a *agent) resetEpoch() {
-	a.epoch = schedulepb.ProcessorEpoch{Epoch: uuid.New().String()}
 }
 
 func (a *agent) recvMsgs(ctx context.Context) ([]*schedulepb.Message, error) {
