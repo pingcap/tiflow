@@ -32,7 +32,7 @@ type CallbackFunc func()
 type CallbackableEvent[E TableEvent] struct {
 	Event       E
 	Callback    CallbackFunc
-	TableStatus *pipeline.TableState
+	TableStatus pipeline.TableState
 }
 
 // RowChangeCallbackableEvent is the row change event which can be callbacked.

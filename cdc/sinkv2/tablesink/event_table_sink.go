@@ -33,7 +33,23 @@ type eventTableSink[E eventsink.TableEvent] struct {
 	eventAppender   eventsink.Appender[E]
 	// NOTICE: It is ordered by commitTs.
 	eventBuffer []E
-	state       *pipeline.TableState
+	state       pipeline.TableState
+}
+
+// New an eventTableSink with given backendSink and event appender.
+func New[E eventsink.TableEvent](
+	backendSink eventsink.EventSink[E],
+	appender eventsink.Appender[E],
+) *eventTableSink[E] {
+	return &eventTableSink[E]{
+		eventID:         0,
+		maxResolvedTs:   model.NewResolvedTs(0),
+		backendSink:     backendSink,
+		progressTracker: newProgressTracker(),
+		eventAppender:   appender,
+		eventBuffer:     make([]E, 0, 1024),
+		state:           pipeline.TableStatePreparing,
+	}
 }
 
 func (e *eventTableSink[E]) AppendRowChangedEvents(rows ...*model.RowChangedEvent) {
@@ -58,18 +74,22 @@ func (e *eventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) {
 		return
 	}
 	resolvedEvents := e.eventBuffer[:i]
+	e.eventBuffer = append(make([]E, 0, len(e.eventBuffer[i:])), e.eventBuffer[i:]...)
 
 	resolvedCallbackableEvents := make([]*eventsink.CallbackableEvent[E], 0, len(resolvedEvents))
+
 	for _, ev := range resolvedEvents {
+		// We have to record the event ID for the callback.
+		eventID := e.eventID
 		ce := &eventsink.CallbackableEvent[E]{
 			Event: ev,
 			Callback: func() {
-				e.progressTracker.remove(e.eventID)
+				e.progressTracker.remove(eventID)
 			},
 			TableStatus: e.state,
 		}
 		resolvedCallbackableEvents = append(resolvedCallbackableEvents, ce)
-		e.progressTracker.addEvent(e.eventID)
+		e.progressTracker.addEvent(eventID)
 		e.eventID++
 	}
 	// Do not forget to add the resolvedTs to progressTracker.
