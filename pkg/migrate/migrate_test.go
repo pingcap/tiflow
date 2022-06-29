@@ -223,11 +223,11 @@ func TestMigration(t *testing.T) {
 
 		// backup key is added
 		resp, err = cli.Get(context.Background(),
-			backupKeyPrefix+"/"+fmt.Sprintf(oldInfoKeyBase, tc.id))
+			backupKeyPrefix+fmt.Sprintf(oldInfoKeyBase, tc.id))
 		require.Nil(t, err)
 		require.Equal(t, int64(1), resp.Count)
 		resp, err = cli.Get(context.Background(),
-			backupKeyPrefix+"/"+fmt.Sprintf(oldStatusKeyBase, tc.id))
+			backupKeyPrefix+fmt.Sprintf(oldStatusKeyBase, tc.id))
 		require.Nil(t, err)
 		require.Equal(t, int64(1), resp.Count)
 	}

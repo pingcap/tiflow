@@ -278,7 +278,7 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 	}
 	log.Info("etcd data migration successful")
 	cleanOldData(ctx, m.cli.Client)
-	log.Info("old etcd data clean successful")
+	log.Info("clean old etcd data successful")
 	return nil
 }
 
@@ -295,11 +295,14 @@ func cleanOldData(ctx context.Context, client *etcd.Client) {
 			if strings.HasPrefix(key, oldChangefeedPrefix) {
 				value = maskChangefeedInfo(kvPair.Value)
 			}
-			if _, err := client.Put(ctx, backupKeyPrefix+"/"+key,
+			newKey := backupKeyPrefix + key
+			log.Info("renaming old etcd data",
+				zap.String("key", key),
+				zap.String("newKey", newKey),
+				zap.String("value", value))
+			if _, err := client.Put(ctx, newKey,
 				string(kvPair.Value)); err != nil {
-				log.Info("rename old etcd data failed",
-					zap.String("key", key),
-					zap.String("value", value),
+				log.Info("put new key failed", zap.String("key", key),
 					zap.Error(err))
 			}
 			if _, err := client.Delete(ctx, key); err != nil {
