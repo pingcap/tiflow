@@ -198,7 +198,7 @@ func (m *Manager) Tick(ctx context.Context,
 		}
 		// remove failed upstream
 		if up.Error() != nil {
-			log.Warn("upstream init failed, remove from upstream",
+			log.Warn("upstream init failed, remove it from manager",
 				zap.Uint64("id", up.ID),
 				zap.Error(up.Error()))
 			go up.Close()
