@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"math"
 	"net"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -29,6 +30,8 @@ import (
 )
 
 const (
+	// clusterIDMaxLen is the max length of cdc server cluster id
+	clusterIDMaxLen = 128
 	// DefaultSortDir is the default value of sort-dir, it will be s sub directory of data-dir.
 	DefaultSortDir = "/tmp/sorter"
 
@@ -41,6 +44,8 @@ const (
 	// DefaultTableMemoryQuota is the default memory quota for each table.
 	DefaultTableMemoryQuota = 10 * 1024 * 1024 // 10 MB
 )
+
+var clusterIDRe = regexp.MustCompile(`^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*$`)
 
 func init() {
 	StoreGlobalServerConfig(GetDefaultServerConfig())
@@ -206,6 +211,11 @@ func (c *ServerConfig) Clone() *ServerConfig {
 
 // ValidateAndAdjust validates and adjusts the server configuration
 func (c *ServerConfig) ValidateAndAdjust() error {
+	if !isValidClusterID(c.ClusterID) {
+		return cerror.ErrInvalidServerOption.GenWithStack("bad cluster-id" +
+			"please match the pattern \"^[a-zA-Z0-9]+(\\-[a-zA-Z0-9]+)*$\"" +
+			"eg, \"simple-cluster-id\"")
+	}
 	if c.Addr == "" {
 		return cerror.ErrInvalidServerOption.GenWithStack("empty address")
 	}
@@ -314,4 +324,12 @@ func (d *TomlDuration) UnmarshalJSON(b []byte) error {
 	}
 	*d = TomlDuration(stdDuration)
 	return nil
+}
+
+// isValidClusterID returns true if the cluster ID matches
+// the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", length no more than `clusterIDMaxLen`,
+// eg, "simple-cluster-id".
+func isValidClusterID(clusterID string) bool {
+	return clusterID != "" && len(clusterID) <= clusterIDMaxLen &&
+		clusterIDRe.MatchString(clusterID)
 }

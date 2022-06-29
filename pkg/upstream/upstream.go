@@ -261,6 +261,8 @@ func (up *Upstream) resetIdleTime() {
 	defer up.mu.Unlock()
 
 	if !up.idleTime.IsZero() {
+		log.Info("upstream idle time is set to 0",
+			zap.Uint64("id", up.ID))
 		up.idleTime = time.Time{}
 	}
 }
@@ -271,6 +273,8 @@ func (up *Upstream) trySetIdleTime() {
 	defer up.mu.Unlock()
 	// reset idleTime
 	if up.idleTime.IsZero() {
+		log.Info("upstream idle time is set to current time",
+			zap.Uint64("id", up.ID))
 		up.idleTime = up.clock.Now()
 	}
 }

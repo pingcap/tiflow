@@ -15,7 +15,9 @@ package migrate
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -48,6 +50,9 @@ const (
 	migrationCampaignKey    = "ticdc-migration"
 	oldChangefeedPrefix     = "/tidb/cdc/changefeed/info"
 	oldGcServiceID          = "ticdc"
+
+	// data will be renamed to this key, '__backup__' is not a valid cluster id
+	backupKeyPrefix = "/tidb/cdc/__backup__/0"
 )
 
 type keys map[string]string
@@ -272,7 +277,94 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 		return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
 	}
 	log.Info("etcd data migration successful")
+	cleanOldData(ctx, m.cli.Client)
+	log.Info("clean old etcd data successful")
 	return nil
+}
+
+func cleanOldData(ctx context.Context, client *etcd.Client) {
+	resp, err := client.Get(ctx, "/tidb/cdc", clientV3.WithPrefix())
+	if err != nil {
+		log.Warn("query data from etcd failed",
+			zap.Error(err))
+	}
+	for _, kvPair := range resp.Kvs {
+		key := string(kvPair.Key)
+		if shouldDelete(key) {
+			value := string(kvPair.Value)
+			if strings.HasPrefix(key, oldChangefeedPrefix) {
+				value = maskChangefeedInfo(kvPair.Value)
+			}
+			newKey := backupKeyPrefix + key
+			log.Info("renaming old etcd data",
+				zap.String("key", key),
+				zap.String("newKey", newKey),
+				zap.String("value", value))
+			if _, err := client.Put(ctx, newKey,
+				string(kvPair.Value)); err != nil {
+				log.Info("put new key failed", zap.String("key", key),
+					zap.Error(err))
+			}
+			if _, err := client.Delete(ctx, key); err != nil {
+				log.Warn("failed to delete old data",
+					zap.String("key", key),
+					zap.Error(err))
+			}
+		}
+	}
+}
+
+// old key prefix that should be remove
+var oldKeyPrefix = []string{
+	"/tidb/cdc/changefeed/info",
+	"/tidb/cdc/job",
+	"/tidb/cdc/meta/ticdc-delete-etcd-key-count",
+	"/tidb/cdc/owner",
+	"/tidb/cdc/capture",
+	"/tidb/cdc/task/workload",
+	"/tidb/cdc/task/position",
+	"/tidb/cdc/task/status",
+}
+
+// shouldDelete check if a key should be deleted
+func shouldDelete(key string) bool {
+	for _, prefix := range oldKeyPrefix {
+		if strings.HasPrefix(key, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func maskChangefeedInfo(data []byte) string {
+	value := string(data)
+	oldConfig := map[string]any{}
+	err := json.Unmarshal(data, &oldConfig)
+	if err != nil {
+		log.Info("marshal oldConfig failed",
+			zap.Error(err))
+	}
+	sinkURI, ok := oldConfig["sink-uri"]
+	if ok {
+		sinkURIParsed, err := url.Parse(sinkURI.(string))
+		if err != nil {
+			log.Error("failed to parse sink URI", zap.Error(err))
+		}
+		if sinkURIParsed.User != nil && sinkURIParsed.User.String() != "" {
+			sinkURIParsed.User = url.UserPassword("username", "password")
+		}
+		if sinkURIParsed.Host != "" {
+			sinkURIParsed.Host = "***"
+		}
+		oldConfig["sink-uri"] = sinkURIParsed.String()
+		buf, err := json.Marshal(oldConfig)
+		if err != nil {
+			log.Info("marshal oldConfig failed",
+				zap.Error(err))
+		}
+		value = string(buf)
+	}
+	return value
 }
 
 func (m *migrator) migrateGcServiceSafePoint(ctx context.Context,
