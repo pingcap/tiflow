@@ -583,6 +583,7 @@ func (o *ownerImpl) updateGCSafepoint(
 	ctx context.Context, state *orchestrator.GlobalReactorState,
 ) error {
 	minChekpoinTsMap, forceUpdateMap := o.calculateGCSafepoint(state)
+
 	for upstreamID, minCheckpointTs := range minChekpoinTsMap {
 		up, ok := o.upstreamManager.Get(upstreamID)
 		if !ok {

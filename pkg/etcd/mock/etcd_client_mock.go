@@ -66,17 +66,17 @@ func (mr *MockCDCEtcdClientForAPIMockRecorder) GetAllCDCInfo(ctx interface{}) *g
 }
 
 // GetEnsureGCServiceID mocks base method.
-func (m *MockCDCEtcdClientForAPI) GetEnsureGCServiceID() string {
+func (m *MockCDCEtcdClientForAPI) GetEnsureGCServiceID(tag string) string {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetEnsureGCServiceID")
+	ret := m.ctrl.Call(m, "GetEnsureGCServiceID", tag)
 	ret0, _ := ret[0].(string)
 	return ret0
 }
 
 // GetEnsureGCServiceID indicates an expected call of GetEnsureGCServiceID.
-func (mr *MockCDCEtcdClientForAPIMockRecorder) GetEnsureGCServiceID() *gomock.Call {
+func (mr *MockCDCEtcdClientForAPIMockRecorder) GetEnsureGCServiceID(tag interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEnsureGCServiceID", reflect.TypeOf((*MockCDCEtcdClientForAPI)(nil).GetEnsureGCServiceID))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEnsureGCServiceID", reflect.TypeOf((*MockCDCEtcdClientForAPI)(nil).GetEnsureGCServiceID), tag)
 }
 
 // GetGCServiceID mocks base method.

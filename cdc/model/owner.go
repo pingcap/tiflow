@@ -26,9 +26,10 @@ type AdminJobType int
 
 // AdminJob holds an admin job
 type AdminJob struct {
-	CfID  ChangeFeedID
-	Type  AdminJobType
-	Error *RunningError
+	CfID                  ChangeFeedID
+	Type                  AdminJobType
+	Error                 *RunningError
+	OverwriteCheckpointTs uint64
 }
 
 // All AdminJob types

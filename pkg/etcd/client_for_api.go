@@ -32,7 +32,7 @@ type CDCEtcdClientForAPI interface {
 		namespace string) (*model.UpstreamInfo, error)
 	GetAllCDCInfo(ctx context.Context) ([]*mvccpb.KeyValue, error)
 	GetGCServiceID() string
-	GetEnsureGCServiceID() string
+	GetEnsureGCServiceID(tag string) string
 	SaveChangeFeedInfo(ctx context.Context, info *model.ChangeFeedInfo,
 		changeFeedID model.ChangeFeedID) error
 }

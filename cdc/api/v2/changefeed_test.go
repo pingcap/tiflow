@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
 	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
+	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
@@ -101,7 +102,7 @@ func TestCreateChangefeed(t *testing.T) {
 		Return(nil)
 
 	etcdClient.EXPECT().
-		GetEnsureGCServiceID().
+		GetEnsureGCServiceID(gc.EnsureGCServiceCreating).
 		Return(fmt.Sprintf("ticdc-%s-%d", "defalut", 0))
 
 	config1 := struct {
