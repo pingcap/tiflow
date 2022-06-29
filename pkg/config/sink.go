@@ -43,6 +43,9 @@ const (
 	// globalTxnAtomicity means atomicity of cross table transactions is guaranteed, which
 	// is currently not supported by TiCDC.
 	// globalTxnAtomicity AtomicityLevel = "global"
+
+	defaultMqTxnAtomicity    AtomicityLevel = noneTxnAtomicity
+	defaultMysqlTxnAtomicity AtomicityLevel = tableTxnAtomicity
 )
 
 // ShouldSplitTxn returns whether the sink should split txn.
@@ -136,9 +139,9 @@ func (s *SinkConfig) applyParameter(sinkURI *url.URL) error {
 	case unknowTxnAtomicity:
 		// Set default value according to scheme.
 		if isMqScheme(sinkURI.Scheme) {
-			s.TxnAtomicity = noneTxnAtomicity
+			s.TxnAtomicity = defaultMqTxnAtomicity
 		} else {
-			s.TxnAtomicity = tableTxnAtomicity
+			s.TxnAtomicity = defaultMysqlTxnAtomicity
 		}
 	case noneTxnAtomicity:
 		s.TxnAtomicity = noneTxnAtomicity
@@ -149,7 +152,7 @@ func (s *SinkConfig) applyParameter(sinkURI *url.URL) error {
 				zap.Any("txnAtomicity", s.TxnAtomicity),
 				zap.String("scheme", sinkURI.Scheme),
 				zap.String("protocol", s.Protocol))
-			s.TxnAtomicity = noneTxnAtomicity
+			s.TxnAtomicity = defaultMqTxnAtomicity
 		} else {
 			s.TxnAtomicity = tableTxnAtomicity
 		}
