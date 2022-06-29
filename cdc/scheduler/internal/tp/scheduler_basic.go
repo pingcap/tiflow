@@ -86,8 +86,11 @@ func (b *basicScheduler) Schedule(
 
 		if len(captureIDs) == 0 {
 			// this should never happen, if no capture can be found
-			// the changefeed cannot make progress, it's irreversible, so let it panic.
-			log.Panic("tpscheduler: cannot found capture when add new table")
+			// the changefeed cannot make progress
+			// for a cluster with n captures, n should be at least 2
+			// only n - 1 captures can be in the `stopping` at the same time.
+			log.Warn("tpscheduler: cannot found capture when add new table",
+				zap.Any("allCaptureStatus", captures))
 		}
 
 		const logTableIDThreshold = 50
