@@ -277,7 +277,7 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(ctx context.Context,
 	return newInfo, newUpInfo, nil
 }
 
-func (APIV2HelpersImpl) verifyResumeChangefeed(ctx context.Context,
+func (APIV2HelpersImpl) verifyResumeChangefeedConfig(ctx context.Context,
 	pdClient pd.Client,
 	gcServiceID string,
 	changefeedID model.ChangeFeedID,

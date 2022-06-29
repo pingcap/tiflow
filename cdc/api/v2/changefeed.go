@@ -308,7 +308,7 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 	}
 	defer pdClient.Close()
 
-	if err := h.helpers.verifyResumeChangefeed(
+	if err := h.helpers.verifyResumeChangefeedConfig(
 		ctx,
 		pdClient,
 		h.capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceResuming),

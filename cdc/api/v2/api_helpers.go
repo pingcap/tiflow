@@ -53,7 +53,7 @@ type APIV2Helpers interface {
 		*model.ChangeFeedInfo,
 	) error
 
-	verifyResumeChangefeed(
+	verifyResumeChangefeedConfig(
 		context.Context,
 		pd.Client,
 		string,
