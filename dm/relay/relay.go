@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/util"
-	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -40,6 +39,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
 	binlogReader "github.com/pingcap/tiflow/dm/pkg/binlog/reader"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"

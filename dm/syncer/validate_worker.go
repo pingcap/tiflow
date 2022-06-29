@@ -32,7 +32,6 @@ import (
 	tidbmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -42,6 +41,7 @@ import (
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
 

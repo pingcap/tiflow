@@ -23,7 +23,6 @@ import (
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -31,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // BaseConn is the basic connection we use in dm

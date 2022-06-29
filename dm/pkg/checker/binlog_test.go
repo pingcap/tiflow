@@ -18,8 +18,9 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/tidb/util/dbutil"
-	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/stretchr/testify/require"
+
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 )
 
 func TestBinlogDB(t *testing.T) {

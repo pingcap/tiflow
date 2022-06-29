@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/util"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -34,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 var customID int64
