@@ -58,6 +58,15 @@ func (r *rebalanceScheduler) Schedule(
 		return nil
 	}
 
+	for _, capture := range captures {
+		if capture.State == CaptureStateStopping {
+			log.Debug("tpscheduler: capture is stopping, " +
+				"ignore manual rebalance request")
+			atomic.StoreInt32(&r.rebalance, 0)
+			return nil
+		}
+	}
+
 	// only rebalance when all tables are replicating
 	for _, tableID := range currentTables {
 		rep, ok := replications[tableID]

@@ -24,7 +24,11 @@ func TestSchedulerMoveTable(t *testing.T) {
 	t.Parallel()
 
 	var checkpointTs model.Ts
-	captures := map[model.CaptureID]*CaptureStatus{"a": {}, "b": {}}
+	captures := map[model.CaptureID]*CaptureStatus{"a": {
+		State: CaptureStateInitialized,
+	}, "b": {
+		State: CaptureStateInitialized,
+	}}
 	currentTables := []model.TableID{1, 2, 3, 4}
 
 	replications := map[model.TableID]*ReplicationSet{
@@ -34,13 +38,13 @@ func TestSchedulerMoveTable(t *testing.T) {
 	scheduler := newMoveTableScheduler()
 	require.Equal(t, "move-table-scheduler", scheduler.Name())
 
-	tasks := scheduler.Schedule(checkpointTs, currentTables,
-		map[model.CaptureID]*CaptureStatus{}, replications)
+	tasks := scheduler.Schedule(
+		checkpointTs, currentTables, map[model.CaptureID]*CaptureStatus{}, replications)
 	require.Len(t, tasks, 0)
 
 	scheduler.addTask(model.TableID(0), "a")
-	tasks = scheduler.Schedule(checkpointTs, currentTables,
-		map[model.CaptureID]*CaptureStatus{}, replications)
+	tasks = scheduler.Schedule(
+		checkpointTs, currentTables, map[model.CaptureID]*CaptureStatus{}, replications)
 	require.Len(t, tasks, 0)
 
 	// move a not exist table
@@ -55,7 +59,8 @@ func TestSchedulerMoveTable(t *testing.T) {
 
 	// move table not replicating
 	scheduler.addTask(model.TableID(1), "b")
-	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, map[model.TableID]*ReplicationSet{})
+	tasks = scheduler.Schedule(
+		checkpointTs, currentTables, captures, map[model.TableID]*ReplicationSet{})
 	require.Len(t, tasks, 0)
 
 	scheduler.addTask(model.TableID(1), "b")
@@ -70,4 +75,11 @@ func TestSchedulerMoveTable(t *testing.T) {
 	require.Equal(t, model.TableID(1), tasks[0].moveTable.TableID)
 	require.Equal(t, "b", tasks[0].moveTable.DestCapture)
 	require.Equal(t, scheduler.tasks[model.TableID(1)], tasks[0])
+
+	// the target capture is stopping
+	scheduler.addTask(model.TableID(1), "b")
+	captures["b"].State = CaptureStateStopping
+	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	require.Len(t, tasks, 0)
+	require.NotContains(t, scheduler.tasks, model.TableID(1))
 }

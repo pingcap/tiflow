@@ -19,8 +19,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/zap"

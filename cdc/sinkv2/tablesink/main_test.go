@@ -11,27 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package version
+package tablesink
 
 import (
 	"testing"
 
-	"github.com/pingcap/tiflow/pkg/logutil"
-	"github.com/stretchr/testify/require"
+	"github.com/pingcap/tiflow/pkg/leakutil"
 )
 
-func TestLogVersion(t *testing.T) {
-	t.Parallel()
-
-	noneInfo := `Release Version: None
-Git Commit Hash: None
-Git Branch: None
-UTC Build Time: None
-Go Version: None
-`
-
-	err := logutil.InitLogger(&logutil.Config{})
-	require.Nil(t, err)
-	require.Equal(t, noneInfo, GetRawInfo())
-	LogVersionInfo()
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(m)
 }

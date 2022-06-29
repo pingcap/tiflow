@@ -44,7 +44,6 @@ type progressTracker struct {
 // newProgressTracker is used to create a new progress tracker.
 // The last min resolved ts is set to 0.
 // It means that the table sink has not started yet.
-// nolint:deadcode
 func newProgressTracker() *progressTracker {
 	return &progressTracker{
 		pendingEventAndResolvedTs: linkedhashmap.New(),
@@ -56,6 +55,7 @@ func newProgressTracker() *progressTracker {
 }
 
 // addEvent is used to add the pending event key.
+// Notice: must hold the lock.
 func (r *progressTracker) addEvent(key uint64) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -63,6 +63,7 @@ func (r *progressTracker) addEvent(key uint64) {
 }
 
 // addResolvedTs is used to add the pending resolved ts.
+// Notice: must hold the lock.
 func (r *progressTracker) addResolvedTs(key uint64, resolvedTs model.ResolvedTs) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -79,29 +80,38 @@ func (r *progressTracker) addResolvedTs(key uint64, resolvedTs model.ResolvedTs)
 // If we are deleting the last value before resolved ts,
 // that means we can advance the progress,
 // and we will update lastMinResolvedTs.
+// Notice: must hold the lock.
 func (r *progressTracker) remove(key uint64) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	r.pendingEventAndResolvedTs.Remove(key)
+	// We chose to use an iterator here instead of a for loop
+	// because in most cases we will encounter some event before the last resolved ts.
 	iterator := r.pendingEventAndResolvedTs.Iterator()
+	var deleteKeys []any
 	for iterator.Next() {
 		// If the element is resolved ts,
 		// it means we can advance the progress.
 		if iterator.Value() != nil {
 			r.lastMinResolvedTs = iterator.Value().(model.ResolvedTs)
-			// Do not forget to remove the resolved ts.
-			r.pendingEventAndResolvedTs.Remove(iterator.Key())
+			deleteKeys = append(deleteKeys, iterator.Key())
 		} else {
 			// When we met the first event,
 			// we couldn't advance anymore.
-			return
+			break
 		}
+	}
+
+	// Do not forget to remove the resolved ts.
+	for _, key := range deleteKeys {
+		r.pendingEventAndResolvedTs.Remove(key)
 	}
 }
 
 // minTs returns the last min resolved ts.
 // This means that all data prior to this point has already been processed.
 // It can be considered as CheckpointTs of the table.
+// Notice: must hold the lock.
 func (r *progressTracker) minTs() model.ResolvedTs {
 	r.lock.Lock()
 	defer r.lock.Unlock()

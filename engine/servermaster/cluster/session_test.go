@@ -18,14 +18,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/test"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/stretchr/testify/require"
 )
 
 func init() {
 	// initialized the logger to make genEmbedEtcdConfig working.
-	err := log.InitLogger(&log.Config{})
+	err := logutil.InitLogger(&logutil.Config{})
 	if err != nil {
 		panic(err)
 	}

@@ -36,8 +36,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
@@ -289,7 +289,7 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 	// TODO: check leader, if not leader, return notLeader error.
 	execInfo, err := s.executorManager.AllocateNewExec(req)
 	if err != nil {
-		log.L().Logger.Error("add executor failed", zap.Error(err))
+		log.L().Error("add executor failed", zap.Error(err))
 		return &pb.RegisterExecutorResponse{
 			Err: cerrors.ToPBError(err),
 		}, nil
@@ -457,6 +457,7 @@ func (s *Server) Run(ctx context.Context) (err error) {
 		return s.startForTest(ctx)
 	}
 
+	// TODO: need context here to initialize the metastore connection
 	err = s.registerMetaStore()
 	if err != nil {
 		return err
@@ -545,7 +546,7 @@ func (s *Server) startResourceManager() error {
 }
 
 func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
-	etcdCfg := engineEtcdutil.GenEmbedEtcdConfigWithLogger(s.cfg.LogLevel)
+	etcdCfg := engineEtcdutil.GenEmbedEtcdConfigWithLogger(s.cfg.LogConf.Level)
 	// prepare to join an existing etcd cluster.
 	err = engineEtcdutil.PrepareJoinEtcd(s.cfg.Etcd, s.cfg.MasterAddr)
 	if err != nil {
@@ -588,7 +589,7 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
-	log.L().Logger.Info("start etcd successfully")
+	log.L().Info("start etcd successfully")
 
 	// start grpc server
 	s.etcdClient, err = etcdutil.CreateClient([]string{withHost(s.cfg.MasterAddr)}, nil)
@@ -664,7 +665,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
-	dctx := dcontext.NewContext(ctx, log.L())
+	dctx := dcontext.NewContext(ctx)
 	dctx.Environ.Addr = s.cfg.AdvertiseAddr
 	dctx.Environ.NodeID = s.name()
 	dctx.ProjectInfo = tenant.FrameProjectInfo
