@@ -580,9 +580,9 @@ func (m *DefaultBaseMaster) CreateWorker(
 		zap.Any("resources", resources),
 		zap.String("master-id", m.id))
 
-	ctx, cancel := m.errCenter.WithCancelOnFirstError(context.Background())
+	errCtx, cancel := m.errCenter.WithCancelOnFirstError(context.Background())
 	defer cancel()
-	quotaCtx, cancel := context.WithTimeout(ctx, createWorkerWaitQuotaTimeout)
+	quotaCtx, cancel := context.WithTimeout(errCtx, createWorkerWaitQuotaTimeout)
 	defer cancel()
 	if err := m.createWorkerQuota.Consume(quotaCtx); err != nil {
 		return "", derror.WrapError(derror.ErrMasterConcurrencyExceeded, err)
@@ -598,7 +598,9 @@ func (m *DefaultBaseMaster) CreateWorker(
 			m.createWorkerQuota.Release()
 		}()
 
-		requestCtx, cancel := context.WithTimeout(ctx, createWorkerTimeout)
+		errCtx, cancel := m.errCenter.WithCancelOnFirstError(context.Background())
+		defer cancel()
+		requestCtx, cancel := context.WithTimeout(errCtx, createWorkerTimeout)
 		defer cancel()
 
 		resp, err := m.serverMasterClient.ScheduleTask(requestCtx, &pb.ScheduleTaskRequest{
