@@ -287,7 +287,7 @@ func cleanOldData(ctx context.Context, client *etcd.Client) {
 	}
 	for _, kvPair := range resp.Kvs {
 		key := string(kvPair.Key)
-		if !strings.HasPrefix(key, "/tidb/cdc/default") {
+		if shouldDelete(key) {
 			if _, err := client.Delete(ctx, key); err != nil {
 				log.Warn("failed to delete old data",
 					zap.String("key", key),
@@ -302,6 +302,28 @@ func cleanOldData(ctx context.Context, client *etcd.Client) {
 				zap.String("value", value))
 		}
 	}
+}
+
+// old key prefix that should be remove
+var oldKeyPrefix = []string{
+	"/tidb/cdc/changefeed/info",
+	"/tidb/cdc/job",
+	"/tidb/cdc/meta/ticdc-delete-etcd-key-count",
+	"/tidb/cdc/owner",
+	"/tidb/cdc/capture",
+	"/tidb/cdc/task/workload",
+	"/tidb/cdc/task/position",
+	"/tidb/cdc/task/status",
+}
+
+// shouldDelete check if a key should be deleted
+func shouldDelete(key string) bool {
+	for _, prefix := range oldKeyPrefix {
+		if strings.HasPrefix(key, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func maskChangefeedInfo(data []byte) string {
