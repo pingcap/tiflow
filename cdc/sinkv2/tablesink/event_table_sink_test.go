@@ -17,9 +17,8 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/pingcap/tiflow/cdc/processor/pipeline"
-
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/stretchr/testify/require"
 )
