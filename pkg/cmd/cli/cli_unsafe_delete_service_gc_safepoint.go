@@ -89,11 +89,13 @@ func (o *unsafeDeleteServiceGcSafepointOptions) getUpstreamConfig() *v2.Upstream
 		pdAddrs = strings.Split(o.upstreamPDAddrs, ",")
 	}
 	return &v2.UpstreamConfig{
-		PDAddrs:       pdAddrs,
-		CAPath:        o.upstreamCaPath,
-		CertPath:      o.upstreamCertPath,
-		KeyPath:       o.upstreamKeyPath,
-		CertAllowedCN: nil,
+		PDConfig: v2.PDConfig{
+			PDAddrs:       pdAddrs,
+			CAPath:        o.upstreamCaPath,
+			CertPath:      o.upstreamCertPath,
+			KeyPath:       o.upstreamKeyPath,
+			CertAllowedCN: nil,
+		},
 	}
 }
 

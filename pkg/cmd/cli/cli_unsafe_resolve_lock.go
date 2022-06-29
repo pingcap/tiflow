@@ -58,10 +58,12 @@ func (o *unsafeResolveLockOptions) complete(f factory.Factory) error {
 			pdAddrs = strings.Split(o.upstreamPDAddrs, ",")
 		}
 		tso, err := apiClient.Tso().Query(ctx, &v2.UpstreamConfig{
-			PDAddrs:  pdAddrs,
-			CAPath:   o.upstreamCaPath,
-			CertPath: o.upstreamCertPath,
-			KeyPath:  o.upstreamKeyPath,
+			PDConfig: v2.PDConfig{
+				PDAddrs:  pdAddrs,
+				CAPath:   o.upstreamCaPath,
+				CertPath: o.upstreamCertPath,
+				KeyPath:  o.upstreamKeyPath,
+			},
 		})
 		if err != nil {
 			return err

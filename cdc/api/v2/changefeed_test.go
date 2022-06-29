@@ -31,6 +31,7 @@ import (
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
+	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"

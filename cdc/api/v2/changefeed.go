@@ -23,12 +23,14 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -80,8 +82,12 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	// We should not close kvStorage since all kvStorage in cdc is the same one.
 	// defer kvStorage.Close()
 	// TODO: We should get a kvStorage from upstream instead of creating a new one
-	info, err := h.helpers.verifyCreateChangefeedConfig(ctx, cfg, pdClient,
-		h.capture.StatusProvider(), h.capture.GetEtcdClient().GetEnsureGCServiceID(),
+	info, err := h.helpers.verifyCreateChangefeedConfig(
+		ctx,
+		config,
+		pdClient,
+		h.capture.StatusProvider(),
+		h.capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
 		kvStorage)
 	if err != nil {
 		_ = c.Error(err)
@@ -256,6 +262,72 @@ func (h *OpenAPIV2) getChangeFeedMetaInfo(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, toAPIModel(info))
+}
+
+// resumeChangefeed handles update changefeed request.
+func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
+	ctx := c.Request.Context()
+	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
+	err := model.ValidateChangefeedID(changefeedID.ID)
+	if err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
+			changefeedID.ID))
+		return
+	}
+
+	cfg := new(ResumeChangefeedConfig)
+	if err := c.BindJSON(&cfg); err != nil {
+		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
+		return
+	}
+
+	if len(cfg.PDAddrs) == 0 {
+		up := h.capture.GetUpstreamManager().GetDefaultUpstream()
+		cfg.PDAddrs = up.PdEndpoints
+		cfg.KeyPath = up.SecurityConfig.KeyPath
+		cfg.CAPath = up.SecurityConfig.CAPath
+		cfg.CertPath = up.SecurityConfig.CertPath
+	}
+	credential := &security.Credential{
+		CAPath:        cfg.CAPath,
+		CertPath:      cfg.CertPath,
+		KeyPath:       cfg.KeyPath,
+		CertAllowedCN: make([]string, 0),
+	}
+	if len(cfg.CertAllowedCN) != 0 {
+		credential.CertAllowedCN = cfg.CertAllowedCN
+	}
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	pdClient, err := h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
+	if err != nil {
+		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
+		return
+	}
+	defer pdClient.Close()
+
+	if err := h.helpers.verifyResumeChangefeedConfig(
+		ctx,
+		pdClient,
+		h.capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
+		changefeedID,
+		cfg.OverwriteCheckpointTs); err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	job := model.AdminJob{
+		CfID:                  changefeedID,
+		Type:                  model.AdminResume,
+		OverwriteCheckpointTs: cfg.OverwriteCheckpointTs,
+	}
+
+	if err := api.HandleOwnerJob(ctx, h.capture, job); err != nil {
+		_ = c.Error(err)
+		return
+	}
+	c.Status(http.StatusAccepted)
 }
 
 // getPDClient returns a PDClient given the PD cluster addresses and a credential

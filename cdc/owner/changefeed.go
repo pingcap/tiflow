@@ -71,8 +71,10 @@ type changefeed struct {
 	id    model.ChangeFeedID
 	state *orchestrator.ChangefeedReactorState
 
-	upstream         *upstream.Upstream
-	scheduler        scheduler.Scheduler
+	upstream  *upstream.Upstream
+	scheduler scheduler.Scheduler
+	// barriers will be created when a changefeed is initialized
+	// and will be destroyed when a changefeed is closed.
 	barriers         *barriers
 	feedStateManager *feedStateManager
 	redoManager      redo.LogManager
@@ -215,8 +217,7 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 
 func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
 	c.state = state
-	c.feedStateManager.Tick(state)
-
+	adminJobPending := c.feedStateManager.Tick(state)
 	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
 	// check stale checkPointTs must be called before `feedStateManager.ShouldRunning()`
 	// to ensure an error or stopped changefeed also be checked
@@ -227,6 +228,10 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	if !c.feedStateManager.ShouldRunning() {
 		c.isRemoved = c.feedStateManager.ShouldRemoved()
 		c.releaseResources(ctx)
+		return nil
+	}
+
+	if adminJobPending {
 		return nil
 	}
 
@@ -259,6 +264,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	if barrierTs < checkpointTs {
 		// This condition implies that the DDL resolved-ts has not yet reached checkpointTs,
 		// which implies that it would be premature to schedule tables or to update status.
@@ -346,12 +352,13 @@ LOOP:
 		ensureTTL := int64(10 * 60)
 		err := gc.EnsureChangefeedStartTsSafety(
 			ctx, c.upstream.PDClient,
-			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(),
+			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceChecking),
 			c.state.ID, ensureTTL, checkpointTs)
 		if err != nil {
 			return errors.Trace(err)
 		}
 	}
+	c.barriers = newBarriers()
 	if c.state.Info.SyncPointEnabled {
 		c.barriers.Update(syncPointBarrier, checkpointTs)
 	}
@@ -360,6 +367,7 @@ LOOP:
 	// the DDL barrier to the correct start point.
 	c.barriers.Update(ddlJobBarrier, checkpointTs-1)
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
+
 	var err error
 	// Note that (checkpointTs == ddl.FinishedTs) DOES NOT imply that the DDL has been completed executed.
 	// So we need to process all DDLs from the range [checkpointTs, ...), but since the semantics of start-ts requires
@@ -444,6 +452,8 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	}
 	c.wg.Wait()
 	c.scheduler.Close(ctx)
+	c.scheduler = nil
+	c.barriers = nil
 
 	changefeedCheckpointTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	changefeedCheckpointTsLagGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)

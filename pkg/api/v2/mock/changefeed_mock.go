@@ -47,8 +47,7 @@ func (m *MockChangefeedsGetter) Changefeeds() v20.ChangefeedInterface {
 // Changefeeds indicates an expected call of Changefeeds.
 func (mr *MockChangefeedsGetterMockRecorder) Changefeeds() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Changefeeds",
-		reflect.TypeOf((*MockChangefeedsGetter)(nil).Changefeeds))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Changefeeds", reflect.TypeOf((*MockChangefeedsGetter)(nil).Changefeeds))
 }
 
 // MockChangefeedInterface is a mock of ChangefeedInterface interface.
@@ -75,9 +74,7 @@ func (m *MockChangefeedInterface) EXPECT() *MockChangefeedInterfaceMockRecorder 
 }
 
 // Create mocks base method.
-func (m *MockChangefeedInterface) Create(ctx context.Context,
-	cfg *v2.ChangefeedConfig,
-) (*v2.ChangeFeedInfo, error) {
+func (m *MockChangefeedInterface) Create(ctx context.Context, cfg *v2.ChangefeedConfig) (*v2.ChangeFeedInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Create", ctx, cfg)
 	ret0, _ := ret[0].(*v2.ChangeFeedInfo)
@@ -88,14 +85,11 @@ func (m *MockChangefeedInterface) Create(ctx context.Context,
 // Create indicates an expected call of Create.
 func (mr *MockChangefeedInterfaceMockRecorder) Create(ctx, cfg interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create",
-		reflect.TypeOf((*MockChangefeedInterface)(nil).Create), ctx, cfg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockChangefeedInterface)(nil).Create), ctx, cfg)
 }
 
 // GetInfo mocks base method.
-func (m *MockChangefeedInterface) GetInfo(ctx context.Context,
-	name string,
-) (*v2.ChangeFeedInfo, error) {
+func (m *MockChangefeedInterface) GetInfo(ctx context.Context, name string) (*v2.ChangeFeedInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetInfo", ctx, name)
 	ret0, _ := ret[0].(*v2.ChangeFeedInfo)
@@ -106,14 +100,25 @@ func (m *MockChangefeedInterface) GetInfo(ctx context.Context,
 // GetInfo indicates an expected call of GetInfo.
 func (mr *MockChangefeedInterfaceMockRecorder) GetInfo(ctx, name interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetInfo",
-		reflect.TypeOf((*MockChangefeedInterface)(nil).GetInfo), ctx, name)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetInfo", reflect.TypeOf((*MockChangefeedInterface)(nil).GetInfo), ctx, name)
+}
+
+// Resume mocks base method.
+func (m *MockChangefeedInterface) Resume(ctx context.Context, cfg *v2.ResumeChangefeedConfig, name string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Resume", ctx, cfg, name)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Resume indicates an expected call of Resume.
+func (mr *MockChangefeedInterfaceMockRecorder) Resume(ctx, cfg, name interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Resume", reflect.TypeOf((*MockChangefeedInterface)(nil).Resume), ctx, cfg, name)
 }
 
 // Update mocks base method.
-func (m *MockChangefeedInterface) Update(ctx context.Context,
-	cfg *v2.ChangefeedConfig, name string,
-) (*v2.ChangeFeedInfo, error) {
+func (m *MockChangefeedInterface) Update(ctx context.Context, cfg *v2.ChangefeedConfig, name string) (*v2.ChangeFeedInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Update", ctx, cfg, name)
 	ret0, _ := ret[0].(*v2.ChangeFeedInfo)
@@ -124,26 +129,20 @@ func (m *MockChangefeedInterface) Update(ctx context.Context,
 // Update indicates an expected call of Update.
 func (mr *MockChangefeedInterfaceMockRecorder) Update(ctx, cfg, name interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update",
-		reflect.TypeOf((*MockChangefeedInterface)(nil).Update), ctx, cfg, name)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockChangefeedInterface)(nil).Update), ctx, cfg, name)
 }
 
 // VerifyTable mocks base method.
-func (m *MockChangefeedInterface) VerifyTable(ctx context.Context,
-	cfg *v2.VerifyTableConfig,
-) (*v2.Tables, error) {
+func (m *MockChangefeedInterface) VerifyTable(ctx context.Context, cfg *v2.VerifyTableConfig) (*v2.Tables, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "verifyTable", ctx, cfg)
+	ret := m.ctrl.Call(m, "VerifyTable", ctx, cfg)
 	ret0, _ := ret[0].(*v2.Tables)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // VerifyTable indicates an expected call of VerifyTable.
-func (mr *MockChangefeedInterfaceMockRecorder) VerifyTable(ctx,
-	cfg interface{},
-) *gomock.Call {
+func (mr *MockChangefeedInterfaceMockRecorder) VerifyTable(ctx, cfg interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "verifyTable",
-		reflect.TypeOf((*MockChangefeedInterface)(nil).VerifyTable), ctx, cfg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyTable", reflect.TypeOf((*MockChangefeedInterface)(nil).VerifyTable), ctx, cfg)
 }

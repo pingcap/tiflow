@@ -276,3 +276,30 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(ctx context.Context,
 	}
 	return newInfo, newUpInfo, nil
 }
+
+func (APIV2HelpersImpl) verifyResumeChangefeedConfig(ctx context.Context,
+	pdClient pd.Client,
+	gcServiceID string,
+	changefeedID model.ChangeFeedID,
+	checkpointTs uint64,
+) error {
+	if checkpointTs == 0 {
+		return nil
+	}
+
+	gcTTL := config.GetGlobalServerConfig().GcTTL
+	err := gc.EnsureChangefeedStartTsSafety(
+		ctx,
+		pdClient,
+		gcServiceID,
+		model.DefaultChangeFeedID(changefeedID.ID),
+		gcTTL, checkpointTs)
+	if err != nil {
+		if !cerror.ErrStartTsBeforeGC.Equal(err) {
+			return cerror.ErrPDEtcdAPIError.Wrap(err)
+		}
+		return err
+	}
+
+	return nil
+}

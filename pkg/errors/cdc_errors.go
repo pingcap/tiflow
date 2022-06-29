@@ -695,7 +695,8 @@ var (
 		errors.RFCCodeText("CDC:ErrUpdateServiceSafepointFailed"),
 	)
 	ErrStartTsBeforeGC = errors.Normalize(
-		"fail to create changefeed because start-ts %d is earlier than GC safepoint at %d",
+		"fail to create or maintain changefeed because start-ts %d "+
+			"is earlier than GC safepoint at %d",
 		errors.RFCCodeText("CDC:ErrStartTsBeforeGC"),
 	)
 	ErrTargetTsBeforeStartTs = errors.Normalize(
@@ -1041,5 +1042,16 @@ var (
 	ErrServerIsNotReady = errors.Normalize(
 		"cdc server is not ready",
 		errors.RFCCodeText("CDC:ErrServerIsNotReady"),
+	)
+
+	// cli error
+	ErrCliInvalidCheckpointTs = errors.Normalize(
+		"invalid overwrite-checkpoint-ts %s, "+
+			"overwrite-checkpoint-ts only accept 'now' or number",
+		errors.RFCCodeText("CDC:ErrCliInvalidCheckpointTs"),
+	)
+	ErrCliCheckpointTsIsInFuture = errors.Normalize(
+		"the overwrite-checkpoint-ts %d must be smaller than current TSO",
+		errors.RFCCodeText("CDC:ErrCliCheckpointTsIsInFuture"),
 	)
 )

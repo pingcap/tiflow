@@ -49,6 +49,7 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	changefeedGroup.POST("", api.createChangefeed)
 	changefeedGroup.PUT("/:changefeed_id", api.updateChangefeed)
 	changefeedGroup.GET("/:changefeed_id/meta_info", api.getChangeFeedMetaInfo)
+	changefeedGroup.POST("/:changefeed_id/resume", api.resumeChangefeed)
 
 	verifyTableGroup := v2.Group("/verify_table")
 	verifyTableGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
