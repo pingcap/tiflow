@@ -91,6 +91,7 @@ func (b *basicScheduler) Schedule(
 			// only n - 1 captures can be in the `stopping` at the same time.
 			log.Warn("tpscheduler: cannot found capture when add new table",
 				zap.Any("allCaptureStatus", captures))
+			return tasks
 		}
 
 		const logTableIDThreshold = 50
