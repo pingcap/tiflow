@@ -99,9 +99,9 @@ type DownstreamTableInfo struct {
 	WhereHandle *sqlmodel.WhereHandle
 }
 
-// NewDumpTracker simply returns an empty Tracker,
-// which should be followed by a subsequent initialization.
-func NewDumpTracker() *Tracker {
+// NewTracker simply returns an empty Tracker,
+// which should be followed by an initialization before used.
+func NewTracker() *Tracker {
 	return &Tracker{}
 }
 
@@ -261,15 +261,16 @@ func (tr *Tracker) Init(
 	return nil
 }
 
-// NewTracker creates a new tracker. It's preserved for test.
-func NewTracker(
+// NewTestTracker creates an empty Tracker and initializes it subsequently.
+// It is useful for test.
+func NewTestTracker(
 	ctx context.Context,
 	task string,
 	sessionCfg map[string]string,
 	downstreamConn *dbconn.DBConn,
 	logger log.Logger,
 ) (*Tracker, error) {
-	tr := NewDumpTracker()
+	tr := NewTracker()
 	err := tr.Init(ctx, task, sessionCfg, downstreamConn, logger)
 	if err != nil {
 		return nil, err

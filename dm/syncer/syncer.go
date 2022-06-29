@@ -392,7 +392,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	s.sessCtx = utils.NewSessionCtx(vars)
 	s.exprFilterGroup = NewExprFilterGroup(s.tctx, s.sessCtx, s.cfg.ExprFilter)
 	// create an empty Tracker and will be initialized in `Run`
-	s.schemaTracker = schema.NewDumpTracker()
+	s.schemaTracker = schema.NewTracker()
 
 	if len(s.cfg.ColumnMappingRules) > 0 {
 		s.columnMapping, err = cm.NewMapping(s.cfg.CaseSensitive, s.cfg.ColumnMappingRules)
@@ -1699,12 +1699,12 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	}
 
 	if s.schemaTracker == nil {
-		s.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, s.cfg.To.Session, s.downstreamTrackConn, s.tctx.L())
-	} else {
-		// prevent creating new Tracker on `Run` in order to avoid
-		// two different Trackers are invoked in the validator and the syncer.
-		err = s.schemaTracker.Init(ctx, s.cfg.Name, s.cfg.To.Session, s.downstreamTrackConn, s.tctx.L())
+		// some test will set their own schemaTracker and skip the syncer.Init
+		s.schemaTracker = schema.NewTracker()
 	}
+	// prevent creating new Tracker on `Run` in order to avoid
+	// two different Trackers are invoked in the validator and the syncer.
+	err = s.schemaTracker.Init(ctx, s.cfg.Name, s.cfg.To.Session, s.downstreamTrackConn, s.tctx.L())
 	if err != nil {
 		return terror.ErrSchemaTrackerInit.Delegate(err)
 	}
