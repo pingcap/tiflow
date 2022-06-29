@@ -73,9 +73,14 @@ func init() {
 
 // Tracker is used to track schema locally.
 type Tracker struct {
-	// we're using an embedded tidb, there's no need to sync operations on it, but we may recreate(drop and create)
-	// a table such as when checkpoint rollback, we need to make sure others(validator for now) can't see the table
-	// is deleted. so we add an extra layer of synchronization for GetTableInfo/RecreateTables for now.
+	// The Tracker is an embedded tidb in essence, where there was basically no parallel operation at the beginning.
+	// However, since the validator is introduced and heavily dependent on the Tracker, we need to make sure
+	// the synchronization between the reading from the validator and the modification from the syncer (e.g.
+	// when the checkpoint is being rolled back, we have to make sure the validator can still vision the original tables)
+	// From this point, we add an extra layer of the synchronization for the following operations:
+	// 1. GetTableInfo: the validator reads table infos.
+	// 2. Init: when the syncer restarts, it may re-initialize the Tracker while the validator may read the Tracker at the same time.
+	// 3. Close: Being similar as above, the validator can read the Tracker while the syncer is closing the Tracker.
 	sync.RWMutex
 	storePath string
 	store     kv.Storage
