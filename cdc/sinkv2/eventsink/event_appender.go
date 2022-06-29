@@ -56,25 +56,35 @@ func (t *TxnEventAppender) Append(
 	rows ...*model.RowChangedEvent,
 ) []*model.SingleTableTxn {
 	for _, row := range rows {
+		// This means no txn is in the buffer.
 		noTxn := len(buffer) == 0
+		if noTxn {
+			txn := &model.SingleTableTxn{
+				StartTs:   row.StartTs,
+				CommitTs:  row.CommitTs,
+				Table:     row.Table,
+				ReplicaID: row.ReplicaID,
+			}
+			txn.Append(row)
+			buffer = append(buffer, txn)
+			continue
+		}
 
-		if noTxn ||
-			// Normally, this means the commitTs grows.
-			buffer[len(buffer)-1].GetCommitTs() != row.CommitTs ||
+		currentLastTxn := buffer[len(buffer)-1]
+		// Normally, this means the commitTs grows.
+		if currentLastTxn.GetCommitTs() != row.CommitTs ||
 			// Normally, this means we meet a new big txn batch.
 			row.SplitTxn ||
 			// Normally, this means we meet a new txn.
-			buffer[len(buffer)-1].StartTs < row.StartTs {
-			// fail-fast check
-			commitTsDecreased := !noTxn &&
-				buffer[len(buffer)-1].GetCommitTs() > row.CommitTs
+			currentLastTxn.StartTs < row.StartTs {
+			// Fail-fast check
+			commitTsDecreased := currentLastTxn.GetCommitTs() > row.CommitTs
 			if commitTsDecreased {
 				log.Panic("The commitTs of the emit row is less than the received row",
 					zap.Uint64("lastReceivedCommitTs", buffer[len(buffer)-1].GetCommitTs()),
 					zap.Any("row", row))
 			}
-			startTsDecreased := !noTxn &&
-				!row.SplitTxn && buffer[len(buffer)-1].StartTs > row.StartTs
+			startTsDecreased := currentLastTxn.StartTs > row.StartTs
 			if startTsDecreased {
 				log.Panic("The startTs of the emit row is less than the received row",
 					zap.Any("lastReceivedStartTs", buffer[len(buffer)-1].GetCommitTs()),
