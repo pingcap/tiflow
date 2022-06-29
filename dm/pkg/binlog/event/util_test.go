@@ -34,6 +34,12 @@ type testCase struct {
 	err    error
 }
 
+type testCaseTimezone struct {
+	input  []byte
+	output string
+	err    error
+}
+
 func (t *testUtilSuite) TestStatusVarsToKV(c *C) {
 	testCases := []testCase{
 		// only Q_FLAGS2_CODE
@@ -125,6 +131,41 @@ func (t *testUtilSuite) TestStatusVarsToKV(c *C) {
 
 	for _, t := range testCases {
 		vars, err := statusVarsToKV(t.input)
+		if t.err != nil {
+			c.Assert(err.Error(), Equals, t.err.Error())
+		} else {
+			c.Assert(err, IsNil)
+		}
+		c.Assert(vars, DeepEquals, t.output)
+	}
+}
+
+func (t *testUtilSuite) TestGetTimezoneByStatusVars(c *C) {
+	testCases := []testCaseTimezone{
+		//+08:00
+		{
+			[]byte{0, 0, 0, 0, 0, 1, 32, 0, 160, 69, 0, 0, 0, 0, 6, 3, 115, 116, 100, 4, 8, 0, 8, 0, 46, 0, 5, 6, 43, 48, 56, 58, 48, 48, 12, 1, 109, 97, 110, 121, 95, 116, 97, 98, 108, 101, 115, 95, 116, 101, 115, 116, 0},
+			"+08:00",
+			nil,
+		},
+		//-06:00
+		{
+			[]byte{0, 0, 0, 0, 0, 1, 32, 0, 160, 69, 0, 0, 0, 0, 6, 3, 115, 116, 100, 4, 8, 0, 8, 0, 46, 0, 5, 6, 45, 48, 54, 58, 48, 48, 12, 1, 109, 97, 110, 121, 95, 116, 97, 98, 108, 101, 115, 95, 116, 101, 115, 116, 0},
+			"-06:00",
+			nil,
+		},
+		// SYSTEM
+		{
+			[]byte{0, 0, 0, 0, 0, 1, 32, 0, 160, 69, 0, 0, 0, 0, 6, 3, 115, 116, 100, 4, 8, 0, 8, 0, 46, 0, 5, 6, 83, 89, 83, 84, 69, 77, 12, 1, 109, 97, 110, 121, 95, 116, 97, 98, 108, 101, 115, 95, 116, 101, 115, 116, 0},
+			"+0:00",
+			nil,
+		},
+	}
+
+	for _, t := range testCases {
+		var upstreamTZStr string // to stimulate Syncer.upstreamTZ
+		upstreamTZStr = "+0:00"
+		vars, err := GetTimezoneByStatusVars(t.input, upstreamTZStr)
 		if t.err != nil {
 			c.Assert(err.Error(), Equals, t.err.Error())
 		} else {

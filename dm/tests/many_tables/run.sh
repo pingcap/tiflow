@@ -32,10 +32,6 @@ function incremental_data() {
 		"\"result\": true" 2
 
 	run_sql "ALTER TABLE many_tables_db.t1 ADD x datetime DEFAULT current_timestamp;" $MYSQL_PORT1 $MYSQL_PASSWORD1
-	#run_sql "set time_zone = '+10:00';" $MYSQL_PORT1 $MYSQL_PASSWORD1
-	#run_sql "ALTER TABLE many_tables_db.t2 ADD x datetime DEFAULT current_timestamp;" $MYSQL_PORT1 $MYSQL_PASSWORD1
-	#run_sql "set time_zone = '-8:00';" $MYSQL_PORT1 $MYSQL_PASSWORD1
-	#run_sql "ALTER TABLE many_tables_db.t3 ADD x datetime DEFAULT current_timestamp;" $MYSQL_PORT1 $MYSQL_PASSWORD1
 	sleep 1
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -51,7 +47,6 @@ function incremental_data_2() {
 }
 
 function run() {
-  #run_sql "set time_zone = '+8:00';" $MYSQL_PORT1 $MYSQL_PASSWORD1
 	echo "start prepare_data"
 	prepare_data
 	echo "finish prepare_data"
