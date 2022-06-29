@@ -408,7 +408,7 @@ func GetCharsetCodecByStatusVars(statusVars []byte) (encoding.Encoding, error) {
 	}
 }
 
-// GetTimezoneByStatusVars returns the timezone of upstream for 'datetime' type alter table commands
+// GetTimezoneByStatusVars returns the timezone of upstream for "datetime" type alter table commands
 // For "ALTER TABLE ADD x datetime", not for "ALTER TABLE ADD x timestamp".
 func GetTimezoneByStatusVars(statusVars []byte, upstreamTZStr string) (string, error) {
 	vars, err := statusVarsToKV(statusVars)
