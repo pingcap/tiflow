@@ -397,7 +397,10 @@ func (m *ManagerImpl) flushLog(
 				minResolvedTs = rts
 			}
 		}
-		atomic.StoreUint64(&m.minResolvedTs, minResolvedTs)
+
+		if minResolvedTs != uint64(math.MaxUint64) {
+			atomic.StoreUint64(&m.minResolvedTs, minResolvedTs)
+		}
 	}()
 
 	emptyRtsMap := make(map[model.TableID]model.Ts)
