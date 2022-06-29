@@ -51,7 +51,7 @@ const (
 	oldChangefeedPrefix     = "/tidb/cdc/changefeed/info"
 	oldGcServiceID          = "ticdc"
 
-	// data will be renamed to this key
+	// data will be renamed to this key, '__backup__' is not a valid cluster id
 	backupKeyPrefix = "/tidb/cdc/__backup__/0"
 )
 
