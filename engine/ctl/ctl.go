@@ -22,7 +22,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/engine/client"
 	"github.com/spf13/cobra"
@@ -61,7 +61,7 @@ Simply type ` + cmd.Name() + ` help [path to command] for full details.`,
 				e = cmd2.Help()
 			}
 			if e != nil {
-				log.L().Logger.Fatal("error occurs when printing help info", zap.Error(e))
+				log.L().Fatal("error occurs when printing help info", zap.Error(e))
 			}
 		},
 	}

@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
 	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
+	"github.com/pingcap/tiflow/cdc/scheduler"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -433,6 +434,112 @@ func TestRebalanceTables(t *testing.T) {
 	err = json.NewDecoder(w.Body).Decode(&respErr)
 	require.Nil(t, err)
 	require.Contains(t, respErr.Error, "changefeed not exists")
+}
+
+func TestDrainCapture(t *testing.T) {
+	t.Parallel()
+
+	statusProvider := newStatusProvider()
+
+	ctrl := gomock.NewController(t)
+	owner := mock_owner.NewMockOwner(ctrl)
+	capture := capture.NewCapture4Test(owner)
+	router := newRouter(capture, statusProvider)
+
+	captureInfo, err := capture.Info()
+	require.NoError(t, err)
+	data := model.DrainCaptureRequest{
+		CaptureID: captureInfo.ID,
+	}
+	b, err := json.Marshal(&data)
+	require.NoError(t, err)
+
+	body := bytes.NewReader(b)
+	api := testCase{
+		url:    "/api/v1/captures/drain",
+		method: "PUT",
+	}
+	request, err := http.NewRequestWithContext(context.Background(), api.method, api.url, body)
+	require.NoError(t, err)
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, request)
+	// only has one capture
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	respErr := model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Error, "CDC:ErrSchedulerRequestFailed")
+
+	statusProvider.ExpectedCalls = statusProvider.
+		ExpectedCalls[:len(statusProvider.ExpectedCalls)-1]
+
+	statusProvider.On("GetCaptures", mock.Anything).
+		Return([]*model.CaptureInfo{{ID: captureID}, {ID: captureInfo.ID}}, nil)
+
+	defer func() {
+		statusProvider.ExpectedCalls = statusProvider.
+			ExpectedCalls[:len(statusProvider.ExpectedCalls)-1]
+
+		statusProvider.On("GetCaptures", mock.Anything).
+			Return([]*model.CaptureInfo{{ID: captureID}}, nil)
+	}()
+
+	data = model.DrainCaptureRequest{CaptureID: "capture-not-found"}
+	b, err = json.Marshal(&data)
+	require.NoError(t, err)
+	body = bytes.NewReader(b)
+
+	request, err = http.NewRequestWithContext(context.Background(), api.method, api.url, body)
+	require.NoError(t, err)
+
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, request)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.NoError(t, err)
+	require.Contains(t, respErr.Error, "capture not exists")
+
+	data = model.DrainCaptureRequest{CaptureID: "capture-for-test"}
+	b, err = json.Marshal(&data)
+	require.NoError(t, err)
+	body = bytes.NewReader(b)
+	request, err = http.NewRequestWithContext(context.Background(), api.method, api.url, body)
+	require.NoError(t, err)
+
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, request)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.NoError(t, err)
+	require.Contains(t, respErr.Error, "cannot drain the owner")
+
+	data = model.DrainCaptureRequest{CaptureID: captureID}
+	b, err = json.Marshal(&data)
+	require.NoError(t, err)
+	body = bytes.NewReader(b)
+
+	request, err = http.NewRequestWithContext(context.Background(), api.method, api.url, body)
+	require.NoError(t, err)
+
+	owner.EXPECT().DrainCapture(gomock.Any(), gomock.Any()).
+		Do(func(query *scheduler.Query, done chan<- error) {
+			query.Resp = &model.DrainCaptureResp{
+				CurrentTableCount: 3,
+			}
+			close(done)
+		})
+
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, request)
+	require.Equal(t, http.StatusAccepted, w.Code)
+
+	var resp model.DrainCaptureResp
+	err = json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+	require.Equal(t, 3, resp.CurrentTableCount)
 }
 
 func TestMoveTable(t *testing.T) {

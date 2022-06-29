@@ -264,7 +264,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 	for _, tc := range testCases {
 		cache := newUnresolvedTxnCache()
 		for _, t := range tc {
-			cache.Append(nil, t.input...)
+			cache.Append(t.input...)
 			resolvedTsMap := sync.Map{}
 			expectedCheckpointTsMap := make(map[model.TableID]model.ResolvedTs)
 			for tableID, ts := range t.resolvedTsMap {

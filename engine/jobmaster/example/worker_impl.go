@@ -19,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/engine/framework"

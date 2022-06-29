@@ -25,7 +25,7 @@ func TestSchedulerRebalance(t *testing.T) {
 	t.Parallel()
 
 	var checkpointTs model.Ts
-	captures := map[model.CaptureID]*model.CaptureInfo{"a": {}, "b": {}}
+	captures := map[model.CaptureID]*CaptureStatus{"a": {}, "b": {}}
 	currentTables := []model.TableID{1, 2, 3, 4}
 
 	replications := map[model.TableID]*ReplicationSet{
@@ -43,7 +43,8 @@ func TestSchedulerRebalance(t *testing.T) {
 
 	atomic.StoreInt32(&scheduler.rebalance, 1)
 	// no captures
-	tasks = scheduler.Schedule(checkpointTs, currentTables, map[model.CaptureID]*model.CaptureInfo{}, replications)
+	tasks = scheduler.Schedule(
+		checkpointTs, currentTables, map[model.CaptureID]*CaptureStatus{}, replications)
 	require.Len(t, tasks, 0)
 
 	// table not in the replication set,
@@ -74,6 +75,14 @@ func TestSchedulerRebalance(t *testing.T) {
 		Primary: "a",
 	}
 
+	// capture is stopping, ignore the request
+	captures["a"].State = CaptureStateStopping
+	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	require.Len(t, tasks, 0)
+	require.Equal(t, atomic.LoadInt32(&scheduler.rebalance), int32(0))
+
+	captures["a"].State = CaptureStateInitialized
+	atomic.StoreInt32(&scheduler.rebalance, 1)
 	scheduler.random = nil // disable random to make test easier.
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Len(t, tasks, 1)

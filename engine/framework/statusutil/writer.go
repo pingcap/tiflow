@@ -22,7 +22,8 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
+
 	"github.com/pingcap/tiflow/engine/framework/internal/worker"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
