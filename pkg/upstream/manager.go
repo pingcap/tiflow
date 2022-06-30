@@ -75,6 +75,7 @@ func NewManager4Test(pdClient pd.Client) *Manager {
 		ups: new(sync.Map), ctx: context.Background(),
 		gcServiceID:     etcd.GcServiceIDForTest(),
 		defaultUpstream: up,
+		cancel:          func() {},
 	}
 	up.isDefaultUpstream = true
 	res.ups.Store(testUpstreamID, up)
