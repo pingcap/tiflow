@@ -20,6 +20,10 @@ import (
 	"strings"
 
 	"github.com/pingcap/tidb/util/dbutil"
+
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
@@ -183,14 +187,14 @@ func (pc *MySQLBinlogRowImageChecker) Name() string {
 
 // BinlogDBChecker checks if migrated dbs are in binlog_do_db or binlog_ignore_db.
 type BinlogDBChecker struct {
-	db            *sql.DB
+	db            *conn.BaseDB
 	dbinfo        *dbutil.DBConfig
 	schemas       map[string]struct{}
 	caseSensitive bool
 }
 
 // NewBinlogDBChecker returns a RealChecker.
-func NewBinlogDBChecker(db *sql.DB, dbinfo *dbutil.DBConfig, schemas map[string]struct{}, caseSensitive bool) RealChecker {
+func NewBinlogDBChecker(db *conn.BaseDB, dbinfo *dbutil.DBConfig, schemas map[string]struct{}, caseSensitive bool) RealChecker {
 	newSchemas := make(map[string]struct{}, len(schemas))
 	for schema := range schemas {
 		newSchemas[schema] = struct{}{}
@@ -207,12 +211,13 @@ func (c *BinlogDBChecker) Check(ctx context.Context) *Result {
 		Extra: fmt.Sprintf("address of db instance - %s:%d", c.dbinfo.Host, c.dbinfo.Port),
 	}
 
-	flavor, err := utils.GetFlavor(ctx, c.db)
+	flavor, err := utils.GetFlavor(ctx, c.db.DB)
 	if err != nil {
 		markCheckError(result, err)
 		return result
 	}
-	binlogDoDB, binlogIgnoreDB, err := utils.GetBinlogDB(ctx, c.db, flavor)
+	tctx := tcontext.NewContext(ctx, log.L())
+	binlogDoDB, binlogIgnoreDB, err := conn.GetBinlogDB(tctx, c.db, flavor)
 	if err != nil {
 		markCheckError(result, err)
 		return result
