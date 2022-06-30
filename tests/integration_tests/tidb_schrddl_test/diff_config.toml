@@ -1,0 +1,41 @@
+// Copyright 2022 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+# diff Configuration.
+check-thread-count = 4
+
+export-fix-sql = true
+
+check-struct-only = false
+
+[task]
+    output-dir = "/tmp/tidb_cdc_test/schrddl_test/sync_diff/output"
+
+    source-instances = ["tidb0"]
+
+    target-instance = "mysql1"
+
+    target-check-tables = ["test.?*"]
+
+[data-sources]
+[data-sources.tidb0]
+    host = "127.0.0.1"
+    port = 4000
+    user = "root"
+    password = ""
+
+[data-sources.mysql1]
+    host = "127.0.0.1"
+    port = 3306
+    user = "root"
+    password = ""
