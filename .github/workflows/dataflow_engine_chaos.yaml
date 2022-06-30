@@ -3,6 +3,12 @@ name: Dataflow Engine Chaos
 on:
   schedule:
     - cron: '0 17-23 * * *' # run at minute 0 every hour from 01:00 ~ 07:00 UTC+8
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'Which PR do you want to trigger (use PR number, such as 6127)'
+        required: true
+        default: ''
 
 # See: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency.
 concurrency:
