@@ -20,9 +20,12 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
+
+const defaultDialRetry = 3
 
 // CloseableConnIface defines an interface that supports Close(release resource)
 type CloseableConnIface interface {
@@ -98,11 +101,20 @@ func (c *FailoverRPCClients[T]) UpdateClients(ctx context.Context, urls []string
 
 		if _, ok := c.clients[addr]; !ok {
 			log.L().Info("add new server master client", zap.String("addr", addr))
-			cli, conn, err := c.dialer(ctx, addr)
+
+			var (
+				cli  T
+				conn CloseableConnIface
+			)
+			err := retry.Do(ctx, func() (err error) {
+				cli, conn, err = c.dialer(ctx, addr)
+				return err
+			}, retry.WithMaxTries(defaultDialRetry))
 			if err != nil {
 				log.L().Warn("dial to server master failed", zap.String("addr", addr), zap.Error(err))
 				continue
 			}
+
 			c.clients[addr] = &clientHolder[T]{
 				conn:   conn,
 				client: cli,
