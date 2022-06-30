@@ -672,7 +672,10 @@ func TestResourceMock(t *testing.T) {
 		{
 			fn: "DeleteResource",
 			inputs: []interface{}{
-				"r334",
+				ResourceKey{
+					JobID: "j111",
+					ID:    "r334",
+				},
 			},
 			output: &ormResult{
 				rowsAffected: 1,
@@ -681,7 +684,10 @@ func TestResourceMock(t *testing.T) {
 		{
 			fn: "DeleteResource",
 			inputs: []interface{}{
-				"r335",
+				ResourceKey{
+					JobID: "j111",
+					ID:    "r335",
+				},
 			},
 			output: &ormResult{
 				rowsAffected: 0,
@@ -690,7 +696,10 @@ func TestResourceMock(t *testing.T) {
 		{
 			fn: "GetResourceByID",
 			inputs: []interface{}{
-				"r333",
+				ResourceKey{
+					JobID: "j111",
+					ID:    "r333",
+				},
 			},
 			output: &resourcemeta.ResourceMeta{
 				Model: model.Model{
@@ -709,7 +718,10 @@ func TestResourceMock(t *testing.T) {
 		{
 			fn: "GetResourceByID",
 			inputs: []interface{}{
-				"r335",
+				ResourceKey{
+					JobID: "j111",
+					ID:    "r335",
+				},
 			},
 			err: errors.ErrMetaEntryNotFound.GenWithStackByArgs(),
 		},

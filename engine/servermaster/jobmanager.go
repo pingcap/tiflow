@@ -20,9 +20,9 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
 	frame "github.com/pingcap/tiflow/engine/framework"
@@ -386,6 +386,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 func (jm *JobManagerImplV2) GetJobStatuses(
 	ctx context.Context,
 ) (map[frameModel.MasterID]frameModel.MasterStatusCode, error) {
+	// BUG? NO filter in the implement
 	jobs, err := jm.frameMetaClient.QueryJobs(ctx)
 	if err != nil {
 		return nil, err
