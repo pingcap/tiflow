@@ -787,7 +787,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	}
 	syncer.ddlDBConn = dbconn.NewDBConn(s.cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
 	syncer.downstreamTrackConn = dbconn.NewDBConn(s.cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
-	syncer.schemaTracker, err = schema.NewTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.downstreamTrackConn, log.L())
+	syncer.schemaTracker, err = schema.NewTestTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.downstreamTrackConn, log.L())
 	c.Assert(err, IsNil)
 
 	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
@@ -1134,7 +1134,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
 			AddRow("t_1", "create table t_1(id int primary key, name varchar(24))"))
 
-	syncer.schemaTracker, err = schema.NewTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.ddlDBConn, log.L())
+	syncer.schemaTracker, err = schema.NewTestTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.ddlDBConn, log.L())
 	c.Assert(err, IsNil)
 	c.Assert(syncer.Type(), Equals, pb.UnitType_Sync)
 
@@ -1340,7 +1340,7 @@ func (s *testSyncerSuite) TestTrackDDL(c *C) {
 	}
 	syncer.ddlDBConn = dbconn.NewDBConn(s.cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
 	syncer.checkpoint.(*RemoteCheckPoint).dbConn = dbconn.NewDBConn(s.cfg, conn.NewBaseConn(checkPointDBConn, &retry.FiniteRetryStrategy{}))
-	syncer.schemaTracker, err = schema.NewTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.ddlDBConn, log.L())
+	syncer.schemaTracker, err = schema.NewTestTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.ddlDBConn, log.L())
 	c.Assert(err, IsNil)
 	defer syncer.schemaTracker.Close()
 	syncer.exprFilterGroup = NewExprFilterGroup(tcontext.Background(), utils.NewSessionCtx(nil), nil)
@@ -1658,7 +1658,7 @@ func (s *testSyncerSuite) TestTrackDownstreamTableWontOverwrite(c *C) {
 	baseConn := conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})
 	syncer.ddlDBConn = dbconn.NewDBConn(s.cfg, baseConn)
 	syncer.downstreamTrackConn = dbconn.NewDBConn(s.cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
-	syncer.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, defaultTestSessionCfg, syncer.downstreamTrackConn, log.L())
+	syncer.schemaTracker, err = schema.NewTestTracker(ctx, s.cfg.Name, defaultTestSessionCfg, syncer.downstreamTrackConn, log.L())
 	c.Assert(err, IsNil)
 	defer syncer.schemaTracker.Close()
 
@@ -1702,7 +1702,7 @@ func (s *testSyncerSuite) TestDownstreamTableHasAutoRandom(c *C) {
 	baseConn := conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})
 	syncer.ddlDBConn = dbconn.NewDBConn(s.cfg, baseConn)
 	syncer.downstreamTrackConn = dbconn.NewDBConn(s.cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
-	syncer.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, defaultTestSessionCfg, syncer.downstreamTrackConn, log.L())
+	syncer.schemaTracker, err = schema.NewTestTracker(ctx, s.cfg.Name, defaultTestSessionCfg, syncer.downstreamTrackConn, log.L())
 	c.Assert(err, IsNil)
 
 	schemaName := "test"
@@ -1743,7 +1743,7 @@ func (s *testSyncerSuite) TestDownstreamTableHasAutoRandom(c *C) {
 		schema.TiDBClusteredIndex: "ON",
 	}
 	c.Assert(syncer.schemaTracker.Close(), IsNil)
-	syncer.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, sessionCfg, syncer.downstreamTrackConn, log.L())
+	syncer.schemaTracker, err = schema.NewTestTracker(ctx, s.cfg.Name, sessionCfg, syncer.downstreamTrackConn, log.L())
 	c.Assert(err, IsNil)
 	defer syncer.schemaTracker.Close()
 	v, ok := syncer.schemaTracker.GetSystemVar(schema.TiDBClusteredIndex)
@@ -1925,7 +1925,7 @@ func TestSyncerGetTableInfo(t *testing.T) {
 	baseConn := conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})
 	syncer.ddlDBConn = dbconn.NewDBConn(cfg, baseConn)
 	syncer.downstreamTrackConn = dbconn.NewDBConn(cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
-	syncer.schemaTracker, err = schema.NewTracker(ctx, cfg.Name, defaultTestSessionCfg, syncer.downstreamTrackConn, log.L())
+	syncer.schemaTracker, err = schema.NewTestTracker(ctx, cfg.Name, defaultTestSessionCfg, syncer.downstreamTrackConn, log.L())
 	require.NoError(t, err)
 	defer syncer.schemaTracker.Close()
 
