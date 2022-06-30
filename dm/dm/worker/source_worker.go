@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -268,10 +269,11 @@ func (w *SourceWorker) updateSourceStatus(ctx context.Context, needLock bool) er
 	}
 	w.sourceDBMu.Unlock()
 
+	// TODO: write NewSourceStatusFromDB, so engine can easily to use
 	var status binlog.SourceStatus
 	ctx, cancel := context.WithTimeout(ctx, utils.DefaultDBTimeout)
 	defer cancel()
-	pos, gtidSet, err := utils.GetPosAndGs(ctx, w.sourceDB.DB, cfg.Flavor)
+	pos, gtidSet, err := conn.GetPosAndGs(tcontext.NewContext(ctx, log.L()), w.sourceDB, cfg.Flavor)
 	if err != nil {
 		return err
 	}
