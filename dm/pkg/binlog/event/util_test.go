@@ -17,16 +17,12 @@
 package event
 
 import (
+	"github.com/stretchr/testify/require"
 	"io"
-
-	. "github.com/pingcap/check"
+	"testing"
 
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
-
-var _ = Suite(&testUtilSuite{})
-
-type testUtilSuite struct{}
 
 type testCase struct {
 	input  []byte
@@ -40,7 +36,8 @@ type testCaseTimezone struct {
 	err    error
 }
 
-func (t *testUtilSuite) TestStatusVarsToKV(c *C) {
+func TestStatusVarsToKV(t *testing.T) {
+	t.Parallel()
 	testCases := []testCase{
 		// only Q_FLAGS2_CODE
 		{
@@ -129,18 +126,23 @@ func (t *testUtilSuite) TestStatusVarsToKV(c *C) {
 		},
 	}
 
-	for _, t := range testCases {
-		vars, err := statusVarsToKV(t.input)
-		if t.err != nil {
-			c.Assert(err.Error(), Equals, t.err.Error())
+	for _, test := range testCases {
+		vars, err := statusVarsToKV(test.input)
+		if test.err != nil {
+			require.Equal(t, test.err.Error(), err.Error())
+			//c.Assert(err.Error(), Equals, t.err.Error())
 		} else {
-			c.Assert(err, IsNil)
+			//c.Assert(err, IsNil)
+			require.Nil(t, err)
 		}
-		c.Assert(vars, DeepEquals, t.output)
+		//c.Assert(vars, DeepEquals, test.output)
+		require.Equal(t, vars, test.output)
+
 	}
 }
 
-func (t *testUtilSuite) TestGetTimezoneByStatusVars(c *C) {
+func TestGetTimezoneByStatusVars(t *testing.T) {
+	t.Parallel()
 	testCases := []testCaseTimezone{
 		//+08:00
 		{
@@ -162,15 +164,18 @@ func (t *testUtilSuite) TestGetTimezoneByStatusVars(c *C) {
 		},
 	}
 
-	for _, t := range testCases {
-		var upstreamTZStr string // to stimulate Syncer.upstreamTZ
+	for _, test := range testCases {
+		var upstreamTZStr string // to simulate Syncer.upstreamTZ
 		upstreamTZStr = "+0:00"
-		vars, err := GetTimezoneByStatusVars(t.input, upstreamTZStr)
-		if t.err != nil {
-			c.Assert(err.Error(), Equals, t.err.Error())
+		vars, err := GetTimezoneByStatusVars(test.input, upstreamTZStr)
+		if test.err != nil {
+			//c.Assert(err.Error(), Equals, t.err.Error())
+			require.Equal(t, test.err.Error(), err.Error())
 		} else {
-			c.Assert(err, IsNil)
+			//c.Assert(err, IsNil)
+			require.Nil(t, err)
 		}
-		c.Assert(vars, DeepEquals, t.output)
+		//c.Assert(vars, DeepEquals, test.output)
+		require.Equal(t, vars, test.output)
 	}
 }
