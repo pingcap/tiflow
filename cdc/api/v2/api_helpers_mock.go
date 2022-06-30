@@ -40,35 +40,19 @@ func (m *MockAPIV2Helpers) EXPECT() *MockAPIV2HelpersMockRecorder {
 	return m.recorder
 }
 
-// callEntryVerifTables mocks base method.
-func (m *MockAPIV2Helpers) callEntryVerifTables(arg0 *config.ReplicaConfig, arg1 kv.Storage, arg2 uint64) ([]model.TableName, []model.TableName, error) {
+// getKVTiStore mocks base method.
+func (m *MockAPIV2Helpers) getKVTiStore(arg0 []string, arg1 *security.Credential) (kv.Storage, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "callEntryVerifTables", arg0, arg1, arg2)
-	ret0, _ := ret[0].([]model.TableName)
-	ret1, _ := ret[1].([]model.TableName)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
-}
-
-// callEntryVerifTables indicates an expected call of callEntryVerifTables.
-func (mr *MockAPIV2HelpersMockRecorder) callEntryVerifTables(arg0, arg1, arg2 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "callEntryVerifTables", reflect.TypeOf((*MockAPIV2Helpers)(nil).callEntryVerifTables), arg0, arg1, arg2)
-}
-
-// callKVCreateTiStore mocks base method.
-func (m *MockAPIV2Helpers) callKVCreateTiStore(arg0 []string, arg1 *security.Credential) (kv.Storage, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "callKVCreateTiStore", arg0, arg1)
+	ret := m.ctrl.Call(m, "getKVTiStore", arg0, arg1)
 	ret0, _ := ret[0].(kv.Storage)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// callKVCreateTiStore indicates an expected call of callKVCreateTiStore.
-func (mr *MockAPIV2HelpersMockRecorder) callKVCreateTiStore(arg0, arg1 interface{}) *gomock.Call {
+// getKVTiStore indicates an expected call of getKVTiStore.
+func (mr *MockAPIV2HelpersMockRecorder) getKVTiStore(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "callKVCreateTiStore", reflect.TypeOf((*MockAPIV2Helpers)(nil).callKVCreateTiStore), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getKVTiStore", reflect.TypeOf((*MockAPIV2Helpers)(nil).getKVTiStore), arg0, arg1)
 }
 
 // getPDClient mocks base method.
@@ -84,6 +68,22 @@ func (m *MockAPIV2Helpers) getPDClient(arg0 context.Context, arg1 []string, arg2
 func (mr *MockAPIV2HelpersMockRecorder) getPDClient(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getPDClient", reflect.TypeOf((*MockAPIV2Helpers)(nil).getPDClient), arg0, arg1, arg2)
+}
+
+// getVerfiedTables mocks base method.
+func (m *MockAPIV2Helpers) getVerfiedTables(arg0 *config.ReplicaConfig, arg1 kv.Storage, arg2 uint64) ([]model.TableName, []model.TableName, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "getVerfiedTables", arg0, arg1, arg2)
+	ret0, _ := ret[0].([]model.TableName)
+	ret1, _ := ret[1].([]model.TableName)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// getVerfiedTables indicates an expected call of getVerfiedTables.
+func (mr *MockAPIV2HelpersMockRecorder) getVerfiedTables(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getVerfiedTables", reflect.TypeOf((*MockAPIV2Helpers)(nil).getVerfiedTables), arg0, arg1, arg2)
 }
 
 // verifyCreateChangefeedConfig mocks base method.

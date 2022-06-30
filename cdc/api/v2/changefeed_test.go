@@ -118,7 +118,7 @@ func TestCreateChangefeed(t *testing.T) {
 		getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(pdClient, nil).AnyTimes()
 	helpers.EXPECT().
-		callKVCreateTiStore(gomock.Any(), gomock.Any()).
+		getKVTiStore(gomock.Any(), gomock.Any()).
 		Return(nil, cerrors.ErrNewStore).
 		Times(1)
 	cfConfig.PDAddrs = []string{"http://127.0.0.1:2379", "http://127.0.0.1:2382"}
@@ -136,7 +136,7 @@ func TestCreateChangefeed(t *testing.T) {
 
 	// case 4: failed to verify tables
 	helpers.EXPECT().
-		callKVCreateTiStore(gomock.Any(), gomock.Any()).
+		getKVTiStore(gomock.Any(), gomock.Any()).
 		Return(nil, nil).
 		AnyTimes()
 	helpers.EXPECT().
@@ -159,7 +159,7 @@ func TestCreateChangefeed(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, w.Code)
 
 	// case 5:
-	helpers.EXPECT().callEntryVerifTables(gomock.Any(), gomock.Any(), gomock.Any()).
+	helpers.EXPECT().getVerfiedTables(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, nil, nil).
 		AnyTimes()
 	helpers.EXPECT().
@@ -484,7 +484,7 @@ func TestVerifyTable(t *testing.T) {
 	body, err := json.Marshal(&updateCfg)
 	require.Nil(t, err)
 	helpers.EXPECT().
-		callKVCreateTiStore(gomock.Any(), gomock.Any()).
+		getKVTiStore(gomock.Any(), gomock.Any()).
 		Return(nil, cerrors.ErrNewStore).
 		Times(1)
 
@@ -497,12 +497,12 @@ func TestVerifyTable(t *testing.T) {
 	require.Nil(t, err)
 	require.Contains(t, respErr.Code, "ErrNewStore")
 
-	// case 3: callEntryVerifTables failed
+	// case 3: getVerfiedTables failed
 	helpers.EXPECT().
-		callKVCreateTiStore(gomock.Any(), gomock.Any()).
+		getKVTiStore(gomock.Any(), gomock.Any()).
 		Return(nil, nil).
 		AnyTimes()
-	helpers.EXPECT().callEntryVerifTables(gomock.Any(), gomock.Any(), gomock.Any()).
+	helpers.EXPECT().getVerfiedTables(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, nil, cerrors.ErrFilterRuleInvalid).
 		Times(1)
 
@@ -523,7 +523,7 @@ func TestVerifyTable(t *testing.T) {
 	ineligible := []model.TableName{
 		{Schema: "test", Table: "invalidTable"},
 	}
-	helpers.EXPECT().callEntryVerifTables(gomock.Any(), gomock.Any(), gomock.Any()).
+	helpers.EXPECT().getVerfiedTables(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(eligible, ineligible, nil)
 
 	w = httptest.NewRecorder()

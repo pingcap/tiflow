@@ -65,11 +65,11 @@ type APIV2Helpers interface {
 	// getPDClient returns a PDClient given the PD cluster addresses and a credential
 	getPDClient(context.Context, []string, *security.Credential) (pd.Client, error)
 
-	// callKVCreateTiStore wraps kv.createTiStore method to increase testability
-	callKVCreateTiStore([]string, *security.Credential) (tidbkv.Storage, error)
+	// getKVCreateTiStore wraps kv.createTiStore method to increase testability
+	getKVTiStore([]string, *security.Credential) (tidbkv.Storage, error)
 
-	// callEntryVerifTables wraps entry.VerifyTables to increase testability
-	callEntryVerifTables(*config.ReplicaConfig, tidbkv.Storage,
+	// getVerfiedTables wraps entry.VerifyTables to increase testability
+	getVerfiedTables(*config.ReplicaConfig, tidbkv.Storage,
 		uint64) (ineligibleTables, eligibleTables []model.TableName, err error)
 }
 

@@ -59,14 +59,8 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		}
 		cfg.PDConfig = getUpstreamPDConfig(up)
 	}
-	credential := &security.Credential{
-		CAPath:   cfg.CAPath,
-		CertPath: cfg.CertPath,
-		KeyPath:  cfg.KeyPath,
-	}
-	if len(cfg.CertAllowedCN) != 0 {
-		credential.CertAllowedCN = cfg.CertAllowedCN
-	}
+	credential := cfg.PDConfig.toCredential()
+
 	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	pdClient, err := h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
@@ -77,7 +71,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	defer pdClient.Close()
 
 	// verify tables todo: del kvstore
-	kvStorage, err := h.helpers.callKVCreateTiStore(cfg.PDAddrs, credential)
+	kvStorage, err := h.helpers.getKVTiStore(cfg.PDAddrs, credential)
 	if err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrNewStore, err))
 		return
@@ -140,24 +134,16 @@ func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 		}
 		cfg.PDConfig = getUpstreamPDConfig(up)
 	}
-	credential := &security.Credential{
-		CAPath:        cfg.CAPath,
-		CertPath:      cfg.CertPath,
-		KeyPath:       cfg.KeyPath,
-		CertAllowedCN: make([]string, 0),
-	}
-	if len(cfg.CertAllowedCN) != 0 {
-		credential.CertAllowedCN = cfg.CertAllowedCN
-	}
+	credential := cfg.PDConfig.toCredential()
 
-	kvStore, err := h.helpers.callKVCreateTiStore(cfg.PDAddrs, credential)
+	kvStore, err := h.helpers.getKVTiStore(cfg.PDAddrs, credential)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
 	replicaCfg := cfg.ReplicaConfig.ToInternalReplicaConfig()
 	ineligibleTables, eligibleTables, err := h.helpers.
-		callEntryVerifTables(replicaCfg, kvStore, cfg.StartTs)
+		getVerfiedTables(replicaCfg, kvStore, cfg.StartTs)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -293,15 +279,7 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 		}
 		cfg.PDConfig = getUpstreamPDConfig(up)
 	}
-	credential := &security.Credential{
-		CAPath:        cfg.CAPath,
-		CertPath:      cfg.CertPath,
-		KeyPath:       cfg.KeyPath,
-		CertAllowedCN: make([]string, 0),
-	}
-	if len(cfg.CertAllowedCN) != 0 {
-		credential.CertAllowedCN = cfg.CertAllowedCN
-	}
+	credential := cfg.PDConfig.toCredential()
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -366,14 +344,14 @@ func (APIV2HelpersImpl) getPDClient(ctx context.Context,
 	return pdClient, nil
 }
 
-// callKVCreateTiStore wrap the callKVCreateTiStore method to increase testability
-func (h APIV2HelpersImpl) callKVCreateTiStore(pdAddrs []string,
+// getKVTiStore wrap the kv.createTiStore method to increase testability
+func (h APIV2HelpersImpl) getKVTiStore(pdAddrs []string,
 	credential *security.Credential,
 ) (tidbkv.Storage, error) {
 	return kv.CreateTiStore(strings.Join(pdAddrs, ","), credential)
 }
 
-func (h APIV2HelpersImpl) callEntryVerifTables(replicaConfig *config.ReplicaConfig,
+func (h APIV2HelpersImpl) getVerfiedTables(replicaConfig *config.ReplicaConfig,
 	storage tidbkv.Storage, startTs uint64) (ineligibleTables,
 	eligibleTables []model.TableName, err error,
 ) {
