@@ -162,6 +162,7 @@ func (m *Manager) Close() {
 	m.cancel()
 	m.ups.Range(func(k, v interface{}) bool {
 		v.(*Upstream).Close()
+		m.ups.Delete(k)
 		return true
 	})
 }
@@ -214,14 +215,9 @@ func (m *Manager) Tick(ctx context.Context,
 		log.Info("no active changefeed found, try to close upstream",
 			zap.Uint64("id", up.ID))
 		if up.shouldClose() {
-			log.Info("upstream should be closed",
+			log.Info("upstream should be closed ,remove it from manager",
 				zap.Uint64("id", up.ID))
 			go up.Close()
-		}
-
-		if up.IsClosed() {
-			log.Info("upstream is closed, remove it from manager",
-				zap.Uint64("id", up.ID))
 			m.ups.Delete(id)
 		}
 		return true
