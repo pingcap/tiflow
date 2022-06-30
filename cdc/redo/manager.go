@@ -35,7 +35,10 @@ import (
 	"go.uber.org/zap"
 )
 
-var flushIntervalInMs int64 = 2000 // 2 seconds
+var (
+	flushIntervalInMs int64 = 2000 // 2 seconds
+	flushTimeout            = time.Second * 20
+)
 
 // ConsistentLevelType is the level of redo log consistent level.
 type ConsistentLevelType string
@@ -125,19 +128,20 @@ type cacheEvents struct {
 // ManagerImpl manages redo log writer, buffers un-persistent redo logs, calculates
 // redo log resolved ts. It implements LogManager interface.
 type ManagerImpl struct {
-	enabled     bool
-	level       ConsistentLevelType
-	storageType consistentStorage
+	changeFeedID model.ChangeFeedID
+	enabled      bool
+	level        ConsistentLevelType
+	storageType  consistentStorage
+
+	rtsMap   map[model.TableID]model.Ts
+	rtsMapMu sync.RWMutex
 
 	writer        writer.RedoLogWriter
 	logBuffer     *chann.Chann[cacheEvents]
 	minResolvedTs uint64
 	flushing      int64
+	lastFlushTime time.Time
 
-	rtsMap   map[model.TableID]model.Ts
-	rtsMapMu sync.RWMutex
-
-	changeFeedID           model.ChangeFeedID
 	metricWriteLogDuration prometheus.Observer
 	metricFlushLogDuration prometheus.Observer
 }
@@ -375,13 +379,18 @@ func (m *ManagerImpl) flushLog(
 	if !atomic.CompareAndSwapInt64(&m.flushing, 0, 1) {
 		log.Debug("Fail to update flush flag, " +
 			"the previous flush operation hasn't finished yet")
+		if time.Since(m.lastFlushTime) > flushTimeout {
+			log.Warn("flushLog blocking too long, the redo manager may be stuck",
+				zap.Duration("duration", time.Since(m.lastFlushTime)),
+				zap.Any("changfeed", m.changeFeedID))
+		}
 		return tableRtsMap
 	}
 
+	m.lastFlushTime = time.Now()
 	go func() {
 		defer atomic.StoreInt64(&m.flushing, 0)
 
-		start := time.Now()
 		err := m.writer.FlushLog(ctx, tableRtsMap)
 		if err != nil {
 			handleErr(err)
@@ -409,7 +418,7 @@ func (m *ManagerImpl) flushLog(
 		}
 
 		atomic.StoreUint64(&m.minResolvedTs, minResolvedTs)
-		m.metricFlushLogDuration.Observe(time.Since(start).Seconds())
+		m.metricFlushLogDuration.Observe(time.Since(m.lastFlushTime).Seconds())
 	}()
 
 	emptyRtsMap := make(map[model.TableID]model.Ts)
