@@ -23,6 +23,7 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	derrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -38,10 +39,11 @@ type Handle interface {
 // It helps Dataflow Engine reuse the external storage facilities
 // implemented in Br.
 type LocalResourceHandle struct {
-	id         resModel.ResourceID
-	jobID      resModel.JobID
-	executorID resModel.ExecutorID
-	desc       *LocalFileResourceDescriptor
+	projectInfo tenant.ProjectInfo
+	id          resModel.ResourceID
+	jobID       resModel.JobID
+	executorID  resModel.ExecutorID
+	desc        *LocalFileResourceDescriptor
 
 	inner  brStorage.ExternalStorage
 	client *rpcutil.FailoverRPCClients[pb.ResourceManagerClient]
@@ -55,6 +57,7 @@ type LocalResourceHandle struct {
 }
 
 func newLocalResourceHandle(
+	projectInfo tenant.ProjectInfo,
 	resourceID resModel.ResourceID,
 	jobID resModel.JobID,
 	executorID resModel.ExecutorID,
@@ -68,9 +71,10 @@ func newLocalResourceHandle(
 	}
 
 	return &LocalResourceHandle{
-		id:         resourceID,
-		jobID:      jobID,
-		executorID: executorID,
+		projectInfo: projectInfo,
+		id:          resourceID,
+		jobID:       jobID,
+		executorID:  executorID,
 
 		inner:  ls,
 		client: client,
@@ -101,6 +105,7 @@ func (h *LocalResourceHandle) Persist(ctx context.Context) error {
 		ctx,
 		h.client,
 		&pb.CreateResourceRequest{
+			ProjectInfo:     &pb.ProjectInfo{TenantId: h.projectInfo.TenantID(), ProjectId: h.projectInfo.ProjectID()},
 			ResourceId:      h.id,
 			CreatorExecutor: string(h.executorID),
 			JobId:           h.jobID,
@@ -138,7 +143,10 @@ func (h *LocalResourceHandle) Discard(ctx context.Context) error {
 		_, err := rpcutil.DoFailoverRPC(ctx,
 			h.client,
 			&pb.RemoveResourceRequest{
-				ResourceId: h.id,
+				ResourceKey: &pb.ResourceKey{
+					JobId:      h.jobID,
+					ResourceId: h.id,
+				},
 			},
 			pb.ResourceManagerClient.RemoveResource)
 		if err != nil {

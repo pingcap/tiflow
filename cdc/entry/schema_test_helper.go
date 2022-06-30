@@ -78,11 +78,12 @@ func (s *SchemaTestHelper) DDL2Jobs(ddl string, jobCnt int) []*timodel.Job {
 	return jobs
 }
 
-// Storage return the tikv storage
+// Storage returns the tikv storage
 func (s *SchemaTestHelper) Storage() kv.Storage {
 	return s.storage
 }
 
+// Tk returns the TestKit
 func (s *SchemaTestHelper) Tk() *testkit.TestKit {
 	return s.tk
 }

@@ -24,7 +24,6 @@ import (
 
 	"github.com/phayes/freeport"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -35,11 +34,12 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/server"
 	"github.com/pingcap/tiflow/engine/executor/worker"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
 func init() {
-	err := log.InitLogger(&log.Config{Level: "warn"})
+	err := logutil.InitLogger(&logutil.Config{Level: "warn"})
 	if err != nil {
 		panic(err)
 	}

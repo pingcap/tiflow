@@ -22,15 +22,16 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"go.uber.org/atomic"
 	"go.uber.org/dig"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/config"
 	"github.com/pingcap/tiflow/engine/framework/internal/master"
+	frameLog "github.com/pingcap/tiflow/engine/framework/logutil"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/statusutil"
@@ -39,8 +40,7 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	"github.com/pingcap/tiflow/engine/pkg/logutil"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
 	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
@@ -50,6 +50,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/quota"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	derror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
@@ -121,7 +122,7 @@ type BaseMaster interface {
 		workerType WorkerType,
 		config WorkerConfig,
 		cost model.RescUnit,
-		resources ...resourcemeta.ResourceID,
+		resources ...resModel.ResourceID,
 	) (frameModel.WorkerID, error)
 }
 
@@ -233,6 +234,8 @@ func NewBaseMaster(
 		log.L().Panic("failed to provide dependencies", zap.Error(err))
 	}
 
+	logger := logutil.FromContext(*ctx)
+
 	return &DefaultBaseMaster{
 		Impl:                  impl,
 		messageHandlerManager: params.MessageHandlerManager,
@@ -259,8 +262,8 @@ func NewBaseMaster(
 
 		createWorkerQuota: quota.NewConcurrencyQuota(maxCreateWorkerConcurrency),
 		userMetaKVClient:  kvclient.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
-		logger:            logutil.NewLogger4Master(ctx.ProjectInfo, id),
 		metricFactory:     promutil.NewFactory4Master(ctx.ProjectInfo, MustConvertWorkerType2JobType(tp), id),
+		logger:            frameLog.WithMasterID(logger, id),
 
 		deps: ctx.Deps(),
 	}
@@ -283,7 +286,8 @@ func (m *DefaultBaseMaster) Logger() *zap.Logger {
 
 // Init implements BaseMaster.Init
 func (m *DefaultBaseMaster) Init(ctx context.Context) error {
-	ctx = m.errCenter.WithCancelOnFirstError(ctx)
+	ctx, cancel := m.errCenter.WithCancelOnFirstError(ctx)
+	defer cancel()
 
 	isInit, err := m.doInit(ctx)
 	if err != nil {
@@ -350,7 +354,7 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 		&frameModel.HeartbeatPingMessage{},
 		func(sender p2p.NodeID, value p2p.MessageValue) error {
 			msg := value.(*frameModel.HeartbeatPingMessage)
-			log.L().Info("Heartbeat Ping received",
+			m.Logger().Info("Heartbeat Ping received",
 				zap.Any("msg", msg),
 				zap.String("master-id", m.id))
 
@@ -381,7 +385,7 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 		return err
 	}
 	if !ok {
-		log.L().Panic("duplicate handler", zap.String("topic", frameModel.HeartbeatPingTopic(m.id)))
+		m.Logger().Panic("duplicate handler", zap.String("topic", frameModel.HeartbeatPingTopic(m.id)))
 	}
 
 	ok, err = m.messageHandlerManager.RegisterHandler(
@@ -397,7 +401,7 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 		return err
 	}
 	if !ok {
-		log.L().Panic("duplicate handler", zap.String("topic", statusutil.WorkerStatusTopic(m.id)))
+		m.Logger().Panic("duplicate handler", zap.String("topic", statusutil.WorkerStatusTopic(m.id)))
 	}
 
 	return nil
@@ -405,7 +409,8 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 
 // Poll implements BaseMaster.Poll
 func (m *DefaultBaseMaster) Poll(ctx context.Context) error {
-	ctx = m.errCenter.WithCancelOnFirstError(ctx)
+	ctx, cancel := m.errCenter.WithCancelOnFirstError(ctx)
+	defer cancel()
 
 	if err := m.doPoll(ctx); err != nil {
 		return errors.Trace(err)
@@ -457,7 +462,7 @@ func (m *DefaultBaseMaster) doClose() {
 	close(m.closeCh)
 	m.wg.Wait()
 	if err := m.messageHandlerManager.Clean(closeCtx); err != nil {
-		log.L().Warn("Failed to clean up message handlers",
+		m.Logger().Warn("Failed to clean up message handlers",
 			zap.String("master-id", m.id))
 	}
 	promutil.UnregisterWorkerMetrics(m.id)
@@ -469,7 +474,7 @@ func (m *DefaultBaseMaster) Close(ctx context.Context) error {
 	// We don't return here if CloseImpl return error to ensure
 	// that we can close inner resources of the framework
 	if err != nil {
-		log.L().Error("Failed to close MasterImpl", zap.Error(err))
+		m.Logger().Error("Failed to close MasterImpl", zap.Error(err))
 	}
 
 	m.doClose()
@@ -566,17 +571,18 @@ func (m *DefaultBaseMaster) CreateWorker(
 	workerType frameModel.WorkerType,
 	config WorkerConfig,
 	cost model.RescUnit,
-	resources ...resourcemeta.ResourceID,
+	resources ...resModel.ResourceID,
 ) (frameModel.WorkerID, error) {
-	log.L().Info("CreateWorker",
+	m.Logger().Info("CreateWorker",
 		zap.Int64("worker-type", int64(workerType)),
 		zap.Any("worker-config", config),
 		zap.Int("cost", int(cost)),
 		zap.Any("resources", resources),
 		zap.String("master-id", m.id))
 
-	ctx := m.errCenter.WithCancelOnFirstError(context.Background())
-	quotaCtx, cancel := context.WithTimeout(ctx, createWorkerWaitQuotaTimeout)
+	errCtx, cancel := m.errCenter.WithCancelOnFirstError(context.Background())
+	defer cancel()
+	quotaCtx, cancel := context.WithTimeout(errCtx, createWorkerWaitQuotaTimeout)
 	defer cancel()
 	if err := m.createWorkerQuota.Consume(quotaCtx); err != nil {
 		return "", derror.WrapError(derror.ErrMasterConcurrencyExceeded, err)
@@ -592,23 +598,25 @@ func (m *DefaultBaseMaster) CreateWorker(
 			m.createWorkerQuota.Release()
 		}()
 
-		requestCtx, cancel := context.WithTimeout(ctx, createWorkerTimeout)
+		errCtx, cancel := m.errCenter.WithCancelOnFirstError(context.Background())
+		defer cancel()
+		requestCtx, cancel := context.WithTimeout(errCtx, createWorkerTimeout)
 		defer cancel()
 
 		resp, err := m.serverMasterClient.ScheduleTask(requestCtx, &pb.ScheduleTaskRequest{
 			TaskId:               workerID,
 			Cost:                 int64(cost),
-			ResourceRequirements: resources,
+			ResourceRequirements: resModel.ToResourceRequirement(m.id, resources...),
 		},
 			// TODO (zixiong) remove this timeout.
 			time.Second*10)
 		if err != nil {
 			// TODO log the gRPC errors from a lower level such as by an interceptor.
-			log.L().Warn("ScheduleTask returned error", zap.Error(err))
+			m.Logger().Warn("ScheduleTask returned error", zap.Error(err))
 			m.workerManager.AbortCreatingWorker(workerID, err)
 			return
 		}
-		log.L().Debug("ScheduleTask succeeded", zap.Any("response", resp))
+		m.Logger().Debug("ScheduleTask succeeded", zap.Any("response", resp))
 
 		executorID := model.ExecutorID(resp.ExecutorId)
 
@@ -638,12 +646,12 @@ func (m *DefaultBaseMaster) CreateWorker(
 
 		if err != nil {
 			// All cleaning up should have been done in AbortCreatingWorker.
-			log.L().Info("DispatchTask failed",
+			m.Logger().Info("DispatchTask failed",
 				zap.Error(err))
 			return
 		}
 
-		log.L().Info("Dispatch Worker succeeded",
+		m.Logger().Info("Dispatch Worker succeeded",
 			zap.Any("args", dispatchArgs))
 	}()
 

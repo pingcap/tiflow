@@ -283,6 +283,11 @@ type RowChangedDatums struct {
 	PreRowDatums []types.Datum `json:"-" msg:"-"`
 }
 
+// GetCommitTs returns the commit timestamp of this event.
+func (r *RowChangedEvent) GetCommitTs() uint64 {
+	return r.CommitTs
+}
+
 // IsDelete returns true if the row is a delete event
 func (r *RowChangedEvent) IsDelete() bool {
 	return len(r.PreColumns) != 0 && len(r.Columns) == 0
@@ -620,6 +625,11 @@ type SingleTableTxn struct {
 	// FinishWg is a barrier txn, after this txn is received, the worker must
 	// flush cached txns and call FinishWg.Done() to mark txns have been flushed.
 	FinishWg *sync.WaitGroup
+}
+
+// GetCommitTs returns the commit timestamp of the transaction.
+func (t *SingleTableTxn) GetCommitTs() uint64 {
+	return t.CommitTs
 }
 
 // Append adds a row changed event into SingleTableTxn

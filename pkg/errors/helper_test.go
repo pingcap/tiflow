@@ -15,6 +15,7 @@ package errors
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/pingcap/errors"
@@ -64,6 +65,29 @@ func TestWrapError(t *testing.T) {
 			require.Equal(t, we.Error(), tc.expected)
 		}
 	}
+}
+
+func TestRFCCode(t *testing.T) {
+	t.Parallel()
+	rfc, ok := RFCCode(ErrAPIInvalidParam)
+	require.Equal(t, true, ok)
+	require.Contains(t, rfc, "ErrAPIInvalidParam")
+
+	err := fmt.Errorf("inner error: invalid request")
+	rfc, ok = RFCCode(err)
+	require.Equal(t, false, ok)
+	require.Equal(t, rfc, errors.RFCErrorCode(""))
+
+	rfcErr := ErrAPIInvalidParam
+	Err := WrapError(rfcErr, err)
+	rfc, ok = RFCCode(Err)
+	require.Equal(t, true, ok)
+	require.Contains(t, rfc, "ErrAPIInvalidParam")
+
+	anoErr := errors.Annotate(ErrEtcdTryAgain, "annotated Etcd Try again")
+	rfc, ok = RFCCode(anoErr)
+	require.Equal(t, true, ok)
+	require.Contains(t, rfc, "ErrEtcdTryAgain")
 }
 
 func TestIsRetryableError(t *testing.T) {

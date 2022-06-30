@@ -19,10 +19,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	derror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
 )
 
 // BaseJobMaster defines an interface that can work as a job master, it embeds
@@ -157,7 +158,8 @@ func (d *DefaultBaseJobMaster) Logger() *zap.Logger {
 
 // Init implements BaseJobMaster.Init
 func (d *DefaultBaseJobMaster) Init(ctx context.Context) error {
-	ctx = d.errCenter.WithCancelOnFirstError(ctx)
+	ctx, cancel := d.errCenter.WithCancelOnFirstError(ctx)
+	defer cancel()
 
 	if err := d.worker.doPreInit(ctx); err != nil {
 		return errors.Trace(err)
@@ -190,7 +192,8 @@ func (d *DefaultBaseJobMaster) Init(ctx context.Context) error {
 
 // Poll implements BaseJobMaster.Poll
 func (d *DefaultBaseJobMaster) Poll(ctx context.Context) error {
-	ctx = d.errCenter.WithCancelOnFirstError(ctx)
+	ctx, cancel := d.errCenter.WithCancelOnFirstError(ctx)
+	defer cancel()
 
 	if err := d.master.doPoll(ctx); err != nil {
 		return errors.Trace(err)
@@ -217,7 +220,7 @@ func (d *DefaultBaseJobMaster) Close(ctx context.Context) error {
 	d.closeOnce.Do(func() {
 		err := d.impl.CloseImpl(ctx)
 		if err != nil {
-			log.L().Error("Failed to close JobMasterImpl", zap.Error(err))
+			d.Logger().Error("Failed to close JobMasterImpl", zap.Error(err))
 		}
 	})
 
@@ -241,7 +244,7 @@ func (d *DefaultBaseJobMaster) NotifyExit(ctx context.Context, errIn error) (ret
 		d.Logger().Info("job master finished exiting",
 			zap.NamedError("caused", errIn),
 			zap.Duration("duration", duration),
-			log.ShortError(retErr))
+			logutil.ShortError(retErr))
 	}()
 
 	d.Logger().Info("worker start exiting", zap.NamedError("cause", errIn))
@@ -261,7 +264,8 @@ func (d *DefaultBaseJobMaster) CreateWorker(workerType WorkerType, config Worker
 
 // UpdateStatus delegates the UpdateStatus of inner worker
 func (d *DefaultBaseJobMaster) UpdateStatus(ctx context.Context, status frameModel.WorkerStatus) error {
-	ctx = d.errCenter.WithCancelOnFirstError(ctx)
+	ctx, cancel := d.errCenter.WithCancelOnFirstError(ctx)
+	defer cancel()
 
 	return d.worker.UpdateStatus(ctx, status)
 }
@@ -283,7 +287,8 @@ func (d *DefaultBaseJobMaster) JobMasterID() frameModel.MasterID {
 
 // UpdateJobStatus implements BaseJobMaster.UpdateJobStatus
 func (d *DefaultBaseJobMaster) UpdateJobStatus(ctx context.Context, status frameModel.WorkerStatus) error {
-	ctx = d.errCenter.WithCancelOnFirstError(ctx)
+	ctx, cancel := d.errCenter.WithCancelOnFirstError(ctx)
+	defer cancel()
 
 	return d.worker.UpdateStatus(ctx, status)
 }
@@ -299,7 +304,8 @@ func (d *DefaultBaseJobMaster) IsBaseJobMaster() {
 
 // SendMessage delegates the SendMessage or inner worker
 func (d *DefaultBaseJobMaster) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error {
-	ctx = d.errCenter.WithCancelOnFirstError(ctx)
+	ctx, cancel := d.errCenter.WithCancelOnFirstError(ctx)
+	defer cancel()
 
 	// master will use WorkerHandle to send message
 	return d.worker.SendMessage(ctx, topic, message, nonblocking)
@@ -312,7 +318,8 @@ func (d *DefaultBaseJobMaster) IsMasterReady() bool {
 
 // Exit implements BaseJobMaster.Exit
 func (d *DefaultBaseJobMaster) Exit(ctx context.Context, status frameModel.WorkerStatus, err error) error {
-	ctx = d.errCenter.WithCancelOnFirstError(ctx)
+	ctx, cancel := d.errCenter.WithCancelOnFirstError(ctx)
+	defer cancel()
 
 	var err1 error
 	switch status.Code {
