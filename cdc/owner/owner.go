@@ -574,7 +574,8 @@ func (o *ownerImpl) pushOwnerJob(job *ownerJob) {
 	o.ownerJobQueue.Lock()
 	defer o.ownerJobQueue.Unlock()
 	if atomic.LoadInt32(&o.closed) != 0 {
-		log.Info("reject owner job as owner has been closed")
+		log.Info("reject owner job as owner has been closed",
+			zap.Int("jobType", int(job.Tp)))
 		select {
 		case job.done <- cerror.ErrOwnerNotFound.GenWithStackByArgs():
 		default:
