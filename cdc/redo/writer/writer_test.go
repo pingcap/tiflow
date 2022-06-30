@@ -131,7 +131,7 @@ func TestLogWriterWriteLog(t *testing.T) {
 			rowWriter: mockWriter,
 			ddlWriter: mockWriter,
 			meta:      &common.LogMeta{ResolvedTsList: map[int64]uint64{}},
-			metricTotalRowsCount: redoTotalRowsCountGauge.
+			metricTotalRowsCount: common.RedoTotalRowsCountGauge.
 				WithLabelValues("default", ""),
 		}
 		if tt.name == "context cancel" {

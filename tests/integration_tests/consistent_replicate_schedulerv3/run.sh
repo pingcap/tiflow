@@ -56,7 +56,7 @@ function run() {
 	run_sql "insert into consistent_replicate_schedulerv3.USERTABLE2 select * from consistent_replicate_schedulerv3.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	# to ensure row changed events have been replicated to TiCDC
-	sleep 5
+	sleep 60
 
 	nfs_download_path=$WORK_DIR/cdc_data/redo/$changefeed_id
 	current_tso=$(cdc cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)

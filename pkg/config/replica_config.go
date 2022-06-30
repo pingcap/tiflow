@@ -40,7 +40,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 	Consistent: &ConsistentConfig{
 		Level:             "none",
 		MaxLogSize:        64,
-		FlushIntervalInMs: 1000,
+		FlushIntervalInMs: 2000,
 		Storage:           "",
 	},
 }

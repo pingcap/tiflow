@@ -95,7 +95,7 @@ func TestLogManagerInProcessor(t *testing.T) {
 	defer logMgr.Cleanup(ctx)
 
 	checkResovledTs := func(mgr LogManager, expectedRts uint64) {
-		time.Sleep(time.Millisecond*200 + flushInterval*2)
+		time.Sleep(time.Duration(flushIntervalInMs+200) * time.Millisecond)
 		resolvedTs := mgr.GetMinResolvedTs()
 		require.Equal(t, expectedRts, resolvedTs)
 	}

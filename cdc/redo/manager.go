@@ -26,17 +26,16 @@ import (
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
-var (
-	flushInterval    = time.Second * 2
-	logBufferTimeout = time.Minute * 10
-)
+var flushIntervalInMs int64 = 2000 // 2 seconds
 
 // ConsistentLevelType is the level of redo log consistent level.
 type ConsistentLevelType string
@@ -137,6 +136,10 @@ type ManagerImpl struct {
 
 	rtsMap   map[model.TableID]model.Ts
 	rtsMapMu sync.RWMutex
+
+	changeFeedID           model.ChangeFeedID
+	metricWriteLogDuration prometheus.Observer
+	metricFlushLogDuration prometheus.Observer
 }
 
 // NewManager creates a new Manager
@@ -145,16 +148,28 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 	if cfg == nil || ConsistentLevelType(cfg.Level) == ConsistentLevelNone {
 		return &ManagerImpl{enabled: false}, nil
 	}
+	if cfg.FlushIntervalInMs > flushIntervalInMs {
+		flushIntervalInMs = cfg.FlushIntervalInMs
+	}
+
 	uri, err := storage.ParseRawURL(cfg.Storage)
 	if err != nil {
 		return nil, err
 	}
+
+	changeFeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	m := &ManagerImpl{
-		enabled:     true,
-		level:       ConsistentLevelType(cfg.Level),
-		storageType: consistentStorage(uri.Scheme),
-		rtsMap:      make(map[model.TableID]uint64),
-		logBuffer:   chann.New[cacheEvents](),
+		changeFeedID:  changeFeedID,
+		enabled:       true,
+		level:         ConsistentLevelType(cfg.Level),
+		storageType:   consistentStorage(uri.Scheme),
+		rtsMap:        make(map[model.TableID]uint64),
+		logBuffer:     chann.New[cacheEvents](),
+		minResolvedTs: math.MaxInt64,
+		metricWriteLogDuration: common.RedoWriteLogDurationHistogram.
+			WithLabelValues(changeFeedID.Namespace, changeFeedID.ID),
+		metricFlushLogDuration: common.RedoFlushLogDurationHistogram.
+			WithLabelValues(changeFeedID.Namespace, changeFeedID.ID),
 	}
 
 	switch m.storageType {
@@ -162,7 +177,6 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 		m.writer = writer.NewBlackHoleWriter()
 	case consistentStorageLocal, consistentStorageNFS, consistentStorageS3:
 		globalConf := config.GetGlobalServerConfig()
-		changeFeedID := contextutil.ChangefeedIDFromCtx(ctx)
 		// We use a temporary dir to storage redo logs before flushing to other backends, such as S3
 		var redoDir string
 		if changeFeedID.Namespace == model.DefaultNamespace {
@@ -258,13 +272,9 @@ func (m *ManagerImpl) EmitRowChangedEvents(
 	tableID model.TableID,
 	rows ...*model.RowChangedEvent,
 ) error {
-	timer := time.NewTimer(logBufferTimeout)
-	defer timer.Stop()
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
-	case <-timer.C:
-		return cerror.ErrBufferLogTimeout.GenWithStackByArgs()
 	case m.logBuffer.In() <- cacheEvents{
 		tableID:   tableID,
 		rows:      rows,
@@ -280,13 +290,9 @@ func (m *ManagerImpl) FlushLog(
 	tableID model.TableID,
 	resolvedTs uint64,
 ) error {
-	timer := time.NewTimer(logBufferTimeout)
-	defer timer.Stop()
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
-	case <-timer.C:
-		return cerror.ErrBufferLogTimeout.GenWithStackByArgs()
 	case m.logBuffer.In() <- cacheEvents{
 		tableID:    tableID,
 		resolvedTs: resolvedTs,
@@ -311,7 +317,6 @@ func (m *ManagerImpl) GetResolvedTs(tableID model.TableID) model.Ts {
 
 // GetMinResolvedTs returns the minimum resolved ts of all tables in this redo log manager
 func (m *ManagerImpl) GetMinResolvedTs() model.Ts {
-	log.Error("", zap.Uint64("minResolvedTs", atomic.LoadUint64(&m.minResolvedTs)))
 	return atomic.LoadUint64(&m.minResolvedTs)
 }
 
@@ -334,6 +339,10 @@ func (m *ManagerImpl) AddTable(tableID model.TableID, startTs uint64) {
 		return
 	}
 	m.rtsMap[tableID] = startTs
+
+	if startTs < m.GetMinResolvedTs() {
+		atomic.StoreUint64(&m.minResolvedTs, startTs)
+	}
 }
 
 // RemoveTable removes a table from redo log manager
@@ -355,6 +364,10 @@ func (m *ManagerImpl) Cleanup(ctx context.Context) error {
 	for range m.logBuffer.Out() {
 		// Do nothing. We do not care about the data.
 	}
+	common.RedoWriteLogDurationHistogram.
+		DeleteLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
+	common.RedoFlushLogDurationHistogram.
+		DeleteLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
 	return m.writer.DeleteAllLogs(ctx)
 }
 
@@ -364,7 +377,7 @@ func (m *ManagerImpl) flushLog(
 	handleErr func(err error),
 ) map[model.TableID]model.Ts {
 	if !atomic.CompareAndSwapInt64(&m.flushing, 0, 1) {
-		log.Warn("Fail to update flush flag, " +
+		log.Debug("Fail to update flush flag, " +
 			"the previous flush operation hasn't finished yet")
 		return tableRtsMap
 	}
@@ -372,6 +385,7 @@ func (m *ManagerImpl) flushLog(
 	go func() {
 		defer atomic.StoreInt64(&m.flushing, 0)
 
+		start := time.Now()
 		err := m.writer.FlushLog(ctx, tableRtsMap)
 		if err != nil {
 			handleErr(err)
@@ -398,9 +412,8 @@ func (m *ManagerImpl) flushLog(
 			}
 		}
 
-		if minResolvedTs != uint64(math.MaxUint64) {
-			atomic.StoreUint64(&m.minResolvedTs, minResolvedTs)
-		}
+		atomic.StoreUint64(&m.minResolvedTs, minResolvedTs)
+		m.metricFlushLogDuration.Observe(time.Since(start).Seconds())
 	}()
 
 	emptyRtsMap := make(map[model.TableID]model.Ts)
@@ -417,7 +430,7 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 	}
 
 	tableRtsMap := make(map[int64]uint64)
-	ticker := time.NewTicker(flushInterval)
+	ticker := time.NewTicker(time.Duration(flushIntervalInMs) * time.Millisecond)
 	defer ticker.Stop()
 
 	for {
@@ -434,16 +447,15 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 		case <-ticker.C:
 			// interpolate tick message to flush writer if needed
 			// TODO: add log and metrics
-			log.Info("flushing redo log >>>>>>")
 			newTableRtsMap := m.flushLog(ctx, tableRtsMap, handleErr)
 			tableRtsMap = newTableRtsMap
-			log.Info("flushing done <<<<<<======")
 		case cache, ok := <-m.logBuffer.Out():
 			if !ok {
 				return // channel closed
 			}
 			switch cache.eventType {
 			case model.MqMessageTypeRow:
+				start := time.Now()
 				logs := make([]*model.RedoRowChangedEvent, 0, len(cache.rows))
 				for _, row := range cache.rows {
 					logs = append(logs, RowToRedo(row))
@@ -453,11 +465,12 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 					handleErr(err)
 					return
 				}
+				m.metricWriteLogDuration.Observe(time.Since(start).Seconds())
 			case model.MqMessageTypeResolved:
 				// handle resolved ts
 				if oldRts, ok := tableRtsMap[cache.tableID]; ok {
 					if cache.resolvedTs < oldRts {
-						log.Panic("resolvedTs in redoManager regressed, report a bug",
+						log.Panic("resolvedTs received by redoManager regressed, report a bug",
 							zap.Int64("tableID", cache.tableID),
 							zap.Uint64("oldResolvedTs", oldRts),
 							zap.Uint64("currentReolvedTs", cache.resolvedTs))
