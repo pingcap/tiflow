@@ -74,7 +74,7 @@ func TestSchedulerByConstraint(t *testing.T) {
 
 	resp, err := sched.ScheduleTask(context.Background(), &schedModel.SchedulerRequest{
 		Cost:              20,
-		ExternalResources: []resourcemeta.ResourceID{"resource-2"},
+		ExternalResources: []resourcemeta.ResourceKey{{JobID: "fakeJob", ID: "resource-2"}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, &schedModel.SchedulerResponse{ExecutorID: "executor-2"}, resp)
@@ -88,7 +88,7 @@ func TestSchedulerNoConstraint(t *testing.T) {
 	resp, err := sched.ScheduleTask(context.Background(), &schedModel.SchedulerRequest{
 		Cost: 35,
 		// resource-4 has no constraint, so scheduling by cost is used.
-		ExternalResources: []resourcemeta.ResourceID{"resource-4"},
+		ExternalResources: []resourcemeta.ResourceKey{{JobID: "fakeJob", ID: "resource-4"}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, &schedModel.SchedulerResponse{ExecutorID: "executor-1"}, resp)
@@ -102,7 +102,7 @@ func TestSchedulerResourceOwnerNoCapacity(t *testing.T) {
 	_, err := sched.ScheduleTask(context.Background(), &schedModel.SchedulerRequest{
 		Cost: 50,
 		// resource-3 requires executor-3, but it does not have the capacity
-		ExternalResources: []resourcemeta.ResourceID{"resource-3"},
+		ExternalResources: []resourcemeta.ResourceKey{{JobID: "fakeJob", ID: "resource-3"}},
 	})
 	require.Error(t, err)
 	require.Regexp(t, ".*ErrClusterResourceNotEnough.*", err)
@@ -116,7 +116,7 @@ func TestSchedulerResourceNotFound(t *testing.T) {
 	_, err := sched.ScheduleTask(context.Background(), &schedModel.SchedulerRequest{
 		Cost: 50,
 		// resource-blah DOES NOT exist
-		ExternalResources: []resourcemeta.ResourceID{"resource-blah"},
+		ExternalResources: []resourcemeta.ResourceKey{{JobID: "fakeJob", ID: "resource-blah"}},
 	})
 	require.Error(t, err)
 	require.Regexp(t, ".*Scheduler could not find resource resource-blah.*", err)
@@ -142,9 +142,15 @@ func TestSchedulerConstraintConflict(t *testing.T) {
 
 	_, err := sched.ScheduleTask(context.Background(), &schedModel.SchedulerRequest{
 		Cost: 10,
-		ExternalResources: []resourcemeta.ResourceID{
-			"resource-1",
-			"resource-2",
+		ExternalResources: []resourcemeta.ResourceKey{
+			{
+				JobID: "fakeJob",
+				ID:    "resource-1",
+			},
+			{
+				JobID: "fakeJob",
+				ID:    "resource-2",
+			},
 		},
 	})
 	require.Error(t, err)

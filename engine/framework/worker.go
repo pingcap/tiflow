@@ -468,7 +468,7 @@ func (w *DefaultBaseWorker) SendMessage(
 // OpenStorage implements BaseWorker.OpenStorage
 func (w *DefaultBaseWorker) OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error) {
 	ctx = w.errCenter.WithCancelOnFirstError(ctx)
-	return w.resourceBroker.OpenStorage(ctx, w.id, w.masterID, resourcePath)
+	return w.resourceBroker.OpenStorage(ctx, w.projectInfo, w.id, w.masterID, resourcePath)
 }
 
 // Exit implements BaseWorker.Exit

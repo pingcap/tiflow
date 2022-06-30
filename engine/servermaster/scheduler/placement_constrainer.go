@@ -26,7 +26,7 @@ import (
 type PlacementConstrainer interface {
 	GetPlacementConstraint(
 		ctx context.Context,
-		id resourcemeta.ResourceID,
+		resourceKey resourcemeta.ResourceKey,
 	) (resourcemeta.ExecutorID, bool, error)
 }
 
@@ -37,11 +37,12 @@ type MockPlacementConstrainer struct {
 
 // GetPlacementConstraint implements PlacementConstrainer.GetPlacementConstraint
 func (c *MockPlacementConstrainer) GetPlacementConstraint(
-	_ context.Context, id resourcemeta.ResourceID,
+	_ context.Context,
+	resourceKey resourcemeta.ResourceKey,
 ) (resourcemeta.ExecutorID, bool, error) {
-	executorID, exists := c.ResourceList[id]
+	executorID, exists := c.ResourceList[resourceKey.ID]
 	if !exists {
-		return "", false, errors.ErrResourceDoesNotExist.GenWithStackByArgs(id)
+		return "", false, errors.ErrResourceDoesNotExist.GenWithStackByArgs(resourceKey.ID)
 	}
 	if executorID == "" {
 		return "", false, nil
