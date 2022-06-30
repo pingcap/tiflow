@@ -88,7 +88,7 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 		Schema:    e.Table.Schema,
 		Table:     e.Table.Table,
 		Partition: partition,
-		Type:      model.MqMessageTypeRow,
+		Type:      model.MessageTypeRow,
 	}
 	value := &maxwellMessage{
 		Ts:       0,
@@ -218,7 +218,7 @@ func ddlEventtoMaxwellMessage(e *model.DDLEvent) (*mqMessageKey, *DdlMaxwellMess
 		Ts:     e.CommitTs,
 		Schema: e.TableInfo.Schema,
 		Table:  e.TableInfo.Table,
-		Type:   model.MqMessageTypeDDL,
+		Type:   model.MessageTypeDDL,
 	}
 	value := &DdlMaxwellMessage{
 		Ts:       e.CommitTs,
@@ -284,7 +284,7 @@ func (d *MaxwellEventBatchEncoder) Build() []*MQMessage {
 		return nil
 	}
 
-	ret := NewMQMessage(config.ProtocolMaxwell, d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0, model.MqMessageTypeRow, nil, nil)
+	ret := NewMQMessage(config.ProtocolMaxwell, d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0, model.MessageTypeRow, nil, nil)
 	ret.SetRowsCount(d.batchSize)
 	d.Reset()
 	return []*MQMessage{ret}

@@ -26,12 +26,12 @@ import (
 type MQMessage struct {
 	Key       []byte
 	Value     []byte
-	Ts        uint64              // reserved for possible output sorting
-	Schema    *string             // schema
-	Table     *string             // table
-	Type      model.MqMessageType // type
-	Protocol  config.Protocol     // protocol
-	rowsCount int                 // rows in one MQ Message
+	Ts        uint64            // reserved for possible output sorting
+	Schema    *string           // schema
+	Table     *string           // table
+	Type      model.MessageType // type
+	Protocol  config.Protocol   // protocol
+	rowsCount int               // rows in one MQ Message
 }
 
 // maximumRecordOverhead is used to calculate ProducerMessage's byteSize by sarama kafka client.
@@ -72,14 +72,14 @@ func newDDLMQMessage(proto config.Protocol, key, value []byte, event *model.DDLE
 		key,
 		value,
 		event.CommitTs,
-		model.MqMessageTypeDDL,
+		model.MessageTypeDDL,
 		&event.TableInfo.Schema,
 		&event.TableInfo.Table,
 	)
 }
 
 func newResolvedMQMessage(proto config.Protocol, key, value []byte, ts uint64) *MQMessage {
-	return NewMQMessage(proto, key, value, ts, model.MqMessageTypeResolved, nil, nil)
+	return NewMQMessage(proto, key, value, ts, model.MessageTypeResolved, nil, nil)
 }
 
 // NewMQMessage should be used when creating a MQMessage struct.
@@ -89,7 +89,7 @@ func NewMQMessage(
 	key []byte,
 	value []byte,
 	ts uint64,
-	ty model.MqMessageType,
+	ty model.MessageType,
 	schema, table *string,
 ) *MQMessage {
 	ret := &MQMessage{

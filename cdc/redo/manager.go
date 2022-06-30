@@ -98,7 +98,7 @@ type LogManager interface {
 	GetResolvedTs(tableID model.TableID) model.Ts
 	GetMinResolvedTs() uint64
 	EmitRowChangedEvents(ctx context.Context, tableID model.TableID, rows ...*model.RowChangedEvent) error
-	FlushLog(ctx context.Context, tableID model.TableID, resolvedTs uint64) error
+	UpdateResolvedTs(ctx context.Context, tableID model.TableID, resolvedTs uint64) error
 	FlushResolvedAndCheckpointTs(ctx context.Context, resolvedTs, checkpointTs uint64) (err error)
 
 	// EmitDDLEvent are called from owner only
@@ -119,7 +119,7 @@ type cacheEvents struct {
 	tableID    model.TableID
 	rows       []*model.RowChangedEvent
 	resolvedTs model.Ts
-	eventType  model.MqMessageType
+	eventType  model.MessageType
 }
 
 // ManagerImpl manages redo log writer, buffers un-persistent redo logs, calculates
@@ -259,11 +259,7 @@ func (m *ManagerImpl) Enabled() bool {
 
 // EmitRowChangedEvents sends row changed events to a log buffer, the log buffer
 // will be consumed by a background goroutine, which converts row changed events
-// to redo logs and sends to log writer. Note this function is non-blocking if
-// the channel is not full, otherwise if the channel is always full after timeout,
-// error ErrBufferLogTimeout will be returned.
-// TODO: if the API is truly non-blocking, we should return an error immediately
-// when the log buffer channel is full.
+// to redo logs and sends to log writer.
 // TODO: After buffer sink in sink node is removed, there is no batch mechanism
 // before sending row changed events to redo manager, the original log buffer
 // design may have performance issue.
@@ -278,14 +274,14 @@ func (m *ManagerImpl) EmitRowChangedEvents(
 	case m.logBuffer.In() <- cacheEvents{
 		tableID:   tableID,
 		rows:      rows,
-		eventType: model.MqMessageTypeRow,
+		eventType: model.MessageTypeRow,
 	}:
 	}
 	return nil
 }
 
-// FlushLog emits resolved ts of a single table
-func (m *ManagerImpl) FlushLog(
+// UpdateResolvedTs asynchronously updates resolved ts of a single table.
+func (m *ManagerImpl) UpdateResolvedTs(
 	ctx context.Context,
 	tableID model.TableID,
 	resolvedTs uint64,
@@ -296,7 +292,7 @@ func (m *ManagerImpl) FlushLog(
 	case m.logBuffer.In() <- cacheEvents{
 		tableID:    tableID,
 		resolvedTs: resolvedTs,
-		eventType:  model.MqMessageTypeResolved,
+		eventType:  model.MessageTypeResolved,
 	}:
 	}
 
@@ -454,7 +450,7 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 				return // channel closed
 			}
 			switch cache.eventType {
-			case model.MqMessageTypeRow:
+			case model.MessageTypeRow:
 				start := time.Now()
 				logs := make([]*model.RedoRowChangedEvent, 0, len(cache.rows))
 				for _, row := range cache.rows {
@@ -466,7 +462,7 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 					return
 				}
 				m.metricWriteLogDuration.Observe(time.Since(start).Seconds())
-			case model.MqMessageTypeResolved:
+			case model.MessageTypeResolved:
 				// handle resolved ts
 				if oldRts, ok := tableRtsMap[cache.tableID]; ok {
 					if cache.resolvedTs < oldRts {

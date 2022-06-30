@@ -94,7 +94,7 @@ func TestLogManagerInProcessor(t *testing.T) {
 	require.Nil(t, err)
 	defer logMgr.Cleanup(ctx)
 
-	checkResovledTs := func(mgr LogManager, expectedRts uint64) {
+	checkResolvedTs := func(mgr LogManager, expectedRts uint64) {
 		time.Sleep(time.Duration(flushIntervalInMs+200) * time.Millisecond)
 		resolvedTs := mgr.GetMinResolvedTs()
 		require.Equal(t, expectedRts, resolvedTs)
@@ -144,15 +144,14 @@ func TestLogManagerInProcessor(t *testing.T) {
 		err := logMgr.EmitRowChangedEvents(ctx, tc.tableID, tc.rows...)
 		require.Nil(t, err)
 	}
-	// checkResovledTs(logMgr, uint64(130))
 
-	// check FlushLog can move forward the resolved ts when there is not row event.
+	// check UpdateResolvedTs can move forward the resolved ts when there is not row event.
 	flushResolvedTs := uint64(150)
 	for _, tableID := range tables {
-		err := logMgr.FlushLog(ctx, tableID, flushResolvedTs)
+		err := logMgr.UpdateResolvedTs(ctx, tableID, flushResolvedTs)
 		require.Nil(t, err)
 	}
-	checkResovledTs(logMgr, flushResolvedTs)
+	checkResolvedTs(logMgr, flushResolvedTs)
 
 	// check remove table can work normally
 	removeTable := tables[len(tables)-1]
@@ -160,10 +159,10 @@ func TestLogManagerInProcessor(t *testing.T) {
 	logMgr.RemoveTable(removeTable)
 	flushResolvedTs = uint64(200)
 	for _, tableID := range tables {
-		err := logMgr.FlushLog(ctx, tableID, flushResolvedTs)
+		err := logMgr.UpdateResolvedTs(ctx, tableID, flushResolvedTs)
 		require.Nil(t, err)
 	}
-	checkResovledTs(logMgr, flushResolvedTs)
+	checkResolvedTs(logMgr, flushResolvedTs)
 
 	err = logMgr.FlushResolvedAndCheckpointTs(ctx, 200 /*resolvedTs*/, 120 /*CheckPointTs*/)
 	require.Nil(t, err)
@@ -241,7 +240,7 @@ func runBenchTest(ctx context.Context, b *testing.B) (LogManager, map[model.Tabl
 			rows := []*model.RowChangedEvent{}
 			for i := 0; i < maxRowCount; i++ {
 				if i%100 == 0 {
-					logMgr.FlushLog(ctx, tableID, *maxCommitTs)
+					logMgr.UpdateResolvedTs(ctx, tableID, *maxCommitTs)
 					// prepare new row change events
 					b.StopTimer()
 					*maxCommitTs += rand.Uint64() % 10

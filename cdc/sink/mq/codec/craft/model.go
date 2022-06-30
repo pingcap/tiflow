@@ -218,8 +218,8 @@ func (h *Headers) reset() {
 }
 
 // GetType returns type of event at given index
-func (h *Headers) GetType(index int) model.MqMessageType {
-	return model.MqMessageType(h.ty[index])
+func (h *Headers) GetType(index int) model.MessageType {
+	return model.MessageType(h.ty[index])
 }
 
 // GetTs returns timestamp of event at given index
@@ -471,7 +471,7 @@ func (b *RowChangedEventBuffer) AppendRowChangedEvent(ev *model.RowChangedEvent)
 	b.estimatedSize += b.headers.appendHeader(
 		b.allocator,
 		ev.CommitTs,
-		uint64(model.MqMessageTypeRow),
+		uint64(model.MessageTypeRow),
 		partition,
 		schema,
 		table,

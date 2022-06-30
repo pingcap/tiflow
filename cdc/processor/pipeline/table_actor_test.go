@@ -100,7 +100,7 @@ func TestTableActorInterface(t *testing.T) {
 	table.redoManager, _ = redo.NewMockManager(ctx)
 	table.redoManager.AddTable(table.tableID, 0)
 	require.Equal(t, model.Ts(0), table.ResolvedTs())
-	table.redoManager.FlushLog(ctx, table.tableID, model.Ts(6))
+	table.redoManager.UpdateResolvedTs(ctx, table.tableID, model.Ts(6))
 	require.Eventually(t, func() bool { return table.ResolvedTs() == model.Ts(6) },
 		time.Second*5, time.Millisecond*500)
 	table.redoManager.Cleanup(ctx)
