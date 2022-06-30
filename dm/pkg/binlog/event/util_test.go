@@ -130,12 +130,9 @@ func TestStatusVarsToKV(t *testing.T) {
 		vars, err := statusVarsToKV(test.input)
 		if test.err != nil {
 			require.Equal(t, test.err.Error(), err.Error())
-			//c.Assert(err.Error(), Equals, t.err.Error())
 		} else {
-			//c.Assert(err, IsNil)
 			require.Nil(t, err)
 		}
-		//c.Assert(vars, DeepEquals, test.output)
 		require.Equal(t, vars, test.output)
 
 	}
@@ -169,13 +166,10 @@ func TestGetTimezoneByStatusVars(t *testing.T) {
 		upstreamTZStr = "+0:00"
 		vars, err := GetTimezoneByStatusVars(test.input, upstreamTZStr)
 		if test.err != nil {
-			//c.Assert(err.Error(), Equals, t.err.Error())
 			require.Equal(t, test.err.Error(), err.Error())
 		} else {
-			//c.Assert(err, IsNil)
 			require.Nil(t, err)
 		}
-		//c.Assert(vars, DeepEquals, test.output)
 		require.Equal(t, vars, test.output)
 	}
 }
