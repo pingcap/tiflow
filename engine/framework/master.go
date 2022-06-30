@@ -601,7 +601,7 @@ func (m *DefaultBaseMaster) CreateWorker(
 		resp, err := m.serverMasterClient.ScheduleTask(requestCtx, &pb.ScheduleTaskRequest{
 			TaskId:               workerID,
 			Cost:                 int64(cost),
-			ResourceRequirements: resources,
+			ResourceRequirements: resModel.ToResourceRequirement(m.id, resources...),
 		},
 			// TODO (zixiong) remove this timeout.
 			time.Second*10)

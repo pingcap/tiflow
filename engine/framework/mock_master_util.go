@@ -91,7 +91,7 @@ func MockBaseMasterCreateWorker(
 	expectedSchedulerReq := &pb.ScheduleTaskRequest{
 		TaskId:               workerID,
 		Cost:                 int64(cost),
-		ResourceRequirements: resources,
+		ResourceRequirements: resourcemeta.ToResourceRequirement(masterID, resources...),
 	}
 	master.serverMasterClient.(*client.MockServerMasterClient).On(
 		"ScheduleTask",
