@@ -104,6 +104,7 @@ func NewUpstream4Test(pdClient pd.Client) *Upstream {
 		wg:             new(sync.WaitGroup),
 		clock:          clock.New(),
 		SecurityConfig: &config.SecurityConfig{},
+		cancel:         func() {},
 	}
 
 	return res
@@ -211,9 +212,7 @@ func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
 func (up *Upstream) Close() {
 	up.mu.Lock()
 	up.mu.Unlock()
-	if up.cancel != nil {
-		up.cancel()
-	}
+	up.cancel()
 	if atomic.LoadInt32(&up.status) == closed ||
 		atomic.LoadInt32(&up.status) == closing {
 		return
