@@ -108,7 +108,8 @@ func TestAddDefaultUpstream(t *testing.T) {
 	}
 	_, err := m.AddDefaultUpstream([]string{}, &security.Credential{})
 	require.NotNil(t, err)
-	require.Nil(t, m.GetDefaultUpstream())
+	up, _ := m.GetDefaultUpstream()
+	require.Nil(t, up)
 	m.initUpstreamFunc = func(ctx context.Context,
 		up *Upstream, gcID string,
 	) error {
@@ -117,7 +118,8 @@ func TestAddDefaultUpstream(t *testing.T) {
 	}
 	_, err = m.AddDefaultUpstream([]string{}, &security.Credential{})
 	require.Nil(t, err)
-	require.NotNil(t, m.GetDefaultUpstream())
+	up, _ = m.GetDefaultUpstream()
+	require.Nil(t, up)
 	up, ok := m.Get(uint64(2))
 	require.NotNil(t, up)
 	require.True(t, ok)

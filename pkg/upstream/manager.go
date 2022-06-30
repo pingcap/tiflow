@@ -87,7 +87,6 @@ func NewManager4Test(pdClient pd.Client) *Manager {
 func (m *Manager) AddDefaultUpstream(pdEndpoints []string,
 	conf *security.Credential,
 ) (*Upstream, error) {
-
 	up := newUpstream(pdEndpoints, conf)
 	if err := m.initUpstreamFunc(m.ctx, up, m.gcServiceID); err != nil {
 		return nil, err

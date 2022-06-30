@@ -1126,6 +1126,11 @@ error = '''
 updating service safepoint failed
 '''
 
+["CDC:ErrUpstreamManagerNotReady"]
+error = '''
+upstream manager not read
+'''
+
 ["CDC:ErrUpstreamMissMatch"]
 error = '''
 upstream missmatch,old: %d, new %d
