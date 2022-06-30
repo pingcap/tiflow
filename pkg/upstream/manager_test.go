@@ -152,7 +152,7 @@ func TestCloseManager(t *testing.T) {
 	up := &Upstream{
 		wg: new(sync.WaitGroup),
 	}
-	ctx, cancel = context.WithCancel(ctx)
+	_, cancel = context.WithCancel(ctx)
 	up.cancel = cancel
 	m.ups.Store(uint64(1), up)
 	m.Close()

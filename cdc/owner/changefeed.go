@@ -158,7 +158,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	}
 	if c.upstream.IsClosed() {
 		log.Panic("upstream is closed",
-			zap.Uint64("upstream-id", c.upstream.ID),
+			zap.Uint64("upstreamID", c.upstream.ID),
 			zap.String("namespace", c.id.Namespace),
 			zap.String("changefeed", c.id.ID))
 	}
