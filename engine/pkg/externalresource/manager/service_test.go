@@ -28,6 +28,7 @@ import (
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
 var _ pb.ResourceManagerServer = (*Service)(nil)
@@ -121,12 +122,14 @@ func (s *serviceTestSuite) LoadMockData() {
 }
 
 func TestServiceBasics(t *testing.T) {
+	fakeProjectInfo := tenant.NewProjectInfo("fakeTenant", "fakeProject")
 	suite := newServiceTestSuite(t)
 	suite.LoadMockData()
 	suite.Start()
 
 	ctx := context.Background()
 	_, err := suite.service.CreateResource(ctx, &pb.CreateResourceRequest{
+		ProjectInfo:     &pb.ProjectInfo{TenantId: fakeProjectInfo.TenantID(), ProjectId: fakeProjectInfo.ProjectID()},
 		ResourceId:      "/local/test/6",
 		CreatorExecutor: "executor-1",
 		JobId:           "test-job-1",
@@ -135,6 +138,7 @@ func TestServiceBasics(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = suite.service.CreateResource(ctx, &pb.CreateResourceRequest{
+		ProjectInfo:     &pb.ProjectInfo{TenantId: fakeProjectInfo.TenantID(), ProjectId: fakeProjectInfo.ProjectID()},
 		ResourceId:      "/local/test/6",
 		CreatorExecutor: "executor-1",
 		JobId:           "test-job-1",
@@ -143,22 +147,38 @@ func TestServiceBasics(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, codes.AlreadyExists, status.Convert(err).Code())
 
-	execID, ok, err := suite.service.GetPlacementConstraint(ctx, "/local/test/6")
+	execID, ok, err := suite.service.GetPlacementConstraint(ctx,
+		resModel.ResourceKey{
+			JobID: "test-job-1",
+			ID:    "/local/test/6",
+		})
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, "executor-1", string(execID))
 
-	execID, ok, err = suite.service.GetPlacementConstraint(ctx, "/local/test/1")
+	execID, ok, err = suite.service.GetPlacementConstraint(ctx,
+		resModel.ResourceKey{
+			JobID: "test-job-1",
+			ID:    "/local/test/1",
+		})
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, "executor-1", string(execID))
 
-	execID, ok, err = suite.service.GetPlacementConstraint(ctx, "/local/test/2")
+	execID, ok, err = suite.service.GetPlacementConstraint(ctx,
+		resModel.ResourceKey{
+			JobID: "test-job-1",
+			ID:    "/local/test/2",
+		})
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, "executor-1", string(execID))
 
-	resp, err := suite.service.QueryResource(ctx, &pb.QueryResourceRequest{ResourceId: "/local/test/2"})
+	resp, err := suite.service.QueryResource(ctx, &pb.QueryResourceRequest{
+		ResourceKey: &pb.ResourceKey{
+			JobId: "test-job-1", ResourceId: "/local/test/2",
+		},
+	})
 	require.NoError(t, err)
 	require.Equal(t, &pb.QueryResourceResponse{
 		CreatorExecutor: "executor-1",
@@ -166,24 +186,48 @@ func TestServiceBasics(t *testing.T) {
 		CreatorWorkerId: "test-worker-1",
 	}, resp)
 
-	_, err = suite.service.RemoveResource(ctx, &pb.RemoveResourceRequest{ResourceId: "/local/test/1"})
+	_, err = suite.service.RemoveResource(ctx, &pb.RemoveResourceRequest{
+		ResourceKey: &pb.ResourceKey{
+			JobId: "test-job-1", ResourceId: "/local/test/1",
+		},
+	})
 	require.NoError(t, err)
 
-	_, err = suite.service.RemoveResource(ctx, &pb.RemoveResourceRequest{ResourceId: "/local/test/2"})
+	_, err = suite.service.RemoveResource(ctx, &pb.RemoveResourceRequest{
+		ResourceKey: &pb.ResourceKey{
+			JobId: "test-job-1", ResourceId: "/local/test/2",
+		},
+	})
 	require.NoError(t, err)
 
-	_, err = suite.service.RemoveResource(ctx, &pb.RemoveResourceRequest{ResourceId: "/local/test/6"})
+	_, err = suite.service.RemoveResource(ctx, &pb.RemoveResourceRequest{
+		ResourceKey: &pb.ResourceKey{
+			JobId: "test-job-1", ResourceId: "/local/test/6",
+		},
+	})
 	require.NoError(t, err)
 
-	_, _, err = suite.service.GetPlacementConstraint(ctx, "/local/test/2")
+	_, _, err = suite.service.GetPlacementConstraint(ctx,
+		resModel.ResourceKey{
+			JobID: "test-job-1",
+			ID:    "/local/test/2",
+		})
 	require.Error(t, err)
 	require.Regexp(t, ".*ErrResourceDoesNotExist.*", err)
 
-	_, err = suite.service.QueryResource(ctx, &pb.QueryResourceRequest{ResourceId: "/local/test/2"})
+	_, err = suite.service.QueryResource(ctx, &pb.QueryResourceRequest{
+		ResourceKey: &pb.ResourceKey{
+			JobId: "test-job-1", ResourceId: "/local/test/2",
+		},
+	})
 	require.Error(t, err)
 	require.Equal(t, codes.NotFound, status.Convert(err).Code())
 
-	_, err = suite.service.QueryResource(ctx, &pb.QueryResourceRequest{ResourceId: "/local/test/non-existent"})
+	_, err = suite.service.QueryResource(ctx, &pb.QueryResourceRequest{
+		ResourceKey: &pb.ResourceKey{
+			JobId: "test-job-1", ResourceId: "/local/test/non-existent",
+		},
+	})
 	require.Error(t, err)
 	require.Equal(t, codes.NotFound, status.Convert(err).Code())
 
@@ -195,7 +239,11 @@ func TestServiceResourceTypeNoConstraint(t *testing.T) {
 	suite.LoadMockData()
 	suite.Start()
 
-	_, ok, err := suite.service.GetPlacementConstraint(context.Background(), "/s3/fake-s3-resource")
+	_, ok, err := suite.service.GetPlacementConstraint(context.Background(),
+		resModel.ResourceKey{
+			JobID: "test-job-1",
+			ID:    "/s3/fake-s3-resource",
+		})
 	require.NoError(t, err)
 	require.False(t, ok)
 
