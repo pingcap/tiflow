@@ -300,6 +300,8 @@ func (o *ownerImpl) Query(query *Query, done chan<- error) {
 func (o *ownerImpl) AsyncStop() {
 	atomic.StoreInt32(&o.closed, 1)
 	o.cleanStaleMetrics()
+
+	// FIXME: cleanup ownerJobQueue.
 }
 
 func (o *ownerImpl) cleanUpChangefeed(state *orchestrator.ChangefeedReactorState) {
