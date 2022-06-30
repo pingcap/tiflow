@@ -69,18 +69,19 @@ func (e *eventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) {
 	})
 	// Despite the lack of data, we have to move forward with progress.
 	if i == 0 {
-		e.progressTracker.addResolvedTs(e.eventID, resolvedTs)
-		e.eventID++
+		e.progressTracker.addResolvedTs(e.genEventID(), resolvedTs)
 		return
 	}
 	resolvedEvents := e.eventBuffer[:i]
 	e.eventBuffer = append(make([]E, 0, len(e.eventBuffer[i:])), e.eventBuffer[i:]...)
 
+	// We have to create a new slice for the rest of the elements,
+	// otherwise we cannot GC the flushed values as soon as possible.
 	resolvedCallbackableEvents := make([]*eventsink.CallbackableEvent[E], 0, len(resolvedEvents))
 
 	for _, ev := range resolvedEvents {
 		// We have to record the event ID for the callback.
-		eventID := e.eventID
+		eventID := e.genEventID()
 		ce := &eventsink.CallbackableEvent[E]{
 			Event: ev,
 			Callback: func() {
@@ -90,11 +91,9 @@ func (e *eventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) {
 		}
 		resolvedCallbackableEvents = append(resolvedCallbackableEvents, ce)
 		e.progressTracker.addEvent(eventID)
-		e.eventID++
 	}
 	// Do not forget to add the resolvedTs to progressTracker.
-	e.progressTracker.addResolvedTs(e.eventID, resolvedTs)
-	e.eventID++
+	e.progressTracker.addResolvedTs(e.genEventID(), resolvedTs)
 	e.backendSink.WriteEvents(resolvedCallbackableEvents...)
 }
 
@@ -104,4 +103,11 @@ func (e *eventTableSink[E]) GetCheckpointTs() model.ResolvedTs {
 
 func (e *eventTableSink[E]) Close() {
 	e.state.Store(pipeline.TableStateStopped)
+}
+
+// genEventID generates an unique ID for event.
+func (e *eventTableSink[E]) genEventID() uint64 {
+	res := e.eventID
+	e.eventID++
+	return res
 }
