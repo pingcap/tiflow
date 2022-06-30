@@ -68,7 +68,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	defer cancel()
 	pdClient, err := h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
 	if err != nil {
-		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
+		_ = c.Error(cerror.WrapError(cerror.ErrAPIGetPDClientFailed, err))
 		return
 	}
 	defer pdClient.Close()
@@ -76,7 +76,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	// verify tables todo: del kvstore
 	kvStorage, err := h.helpers.callKVCreateTiStore(cfg.PDAddrs, credential)
 	if err != nil {
-		_ = c.Error(cerror.WrapError(cerror.ErrInternalServerError, err))
+		_ = c.Error(cerror.WrapError(cerror.ErrNewStore, err))
 		return
 	}
 	// We should not close kvStorage since all kvStorage in cdc is the same one.
@@ -84,7 +84,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	// TODO: We should get a kvStorage from upstream instead of creating a new one
 	info, err := h.helpers.verifyCreateChangefeedConfig(
 		ctx,
-		config,
+		cfg,
 		pdClient,
 		h.capture.StatusProvider(),
 		h.capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
@@ -103,7 +103,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	}
 	infoStr, err := info.Marshal()
 	if err != nil {
-		_ = c.Error(err)
+		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
 	}
 

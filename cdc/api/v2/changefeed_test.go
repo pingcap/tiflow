@@ -31,7 +31,6 @@ import (
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
-	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
@@ -39,7 +38,8 @@ import (
 
 var (
 	changeFeedID  = model.DefaultChangeFeedID("test-changeFeed")
-	blackHoleSink = "blackhole://"
+	blackholeSink = "blackhole://"
+	mysqlSink     = "mysql://root:123456@127.0.0.1:3306"
 )
 
 func TestCreateChangefeed(t *testing.T) {
@@ -53,20 +53,115 @@ func TestCreateChangefeed(t *testing.T) {
 	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
 	router := newRouter(apiV2)
 
-	statusProvider := &mockStatusProvider{}
 	mockUpManager := upstream.NewManager4Test(pdClient)
-
+	statusProvider := &mockStatusProvider{}
+	etcdClient.EXPECT().
+		GetEnsureGCServiceID(gomock.Any()).
+		Return(etcd.GcServiceIDForTest()).AnyTimes()
 	cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
 	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
 	cp.EXPECT().GetUpstreamManager().Return(mockUpManager).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
 	cp.EXPECT().IsOwner().Return(true).AnyTimes()
+
+	// case 1: json format mismatches with the spec.
+	errConfig := struct {
+		ID      string `json:"changefeed_id"`
+		SinkURI string `json:"sink_uri"`
+		PDAddrs string `json:"pd_addrs"` // should be an array
+	}{
+		ID:      changeFeedID.ID,
+		SinkURI: blackholeSink,
+		PDAddrs: "http://127.0.0.1:2379",
+	}
+	bodyErr, err := json.Marshal(&errConfig)
+	require.Nil(t, err)
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequestWithContext(context.Background(),
+		create.method, create.url, bytes.NewReader(bodyErr))
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	respErr := model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrAPIInvalidParam")
+
+	cfConfig := struct {
+		ID      string   `json:"changefeed_id"`
+		SinkURI string   `json:"sink_uri"`
+		PDAddrs []string `json:"pd_addrs"`
+	}{
+		ID:      changeFeedID.ID,
+		SinkURI: blackholeSink,
+		PDAddrs: []string{},
+	}
+	body, err := json.Marshal(&cfConfig)
+	require.Nil(t, err)
+
+	// case 2: getPDClient failed, it may happen with wrong PDAddrs
 	helpers.EXPECT().
 		getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(pdClient, nil).Times(4)
+		Return(nil, cerrors.ErrAPIGetPDClientFailed).Times(1)
+
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), create.method,
+		create.url, bytes.NewReader(body))
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusInternalServerError, w.Code)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrAPIGetPDClientFailed")
+
+	// case 3: failed to create TiStore
+	helpers.EXPECT().
+		getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(pdClient, nil).AnyTimes()
 	helpers.EXPECT().
 		callKVCreateTiStore(gomock.Any(), gomock.Any()).
-		Return(nil, nil).Times(3)
+		Return(nil, cerrors.ErrNewStore).
+		Times(1)
+	cfConfig.PDAddrs = []string{"http://127.0.0.1:2379", "http://127.0.0.1:2382"}
+	body, err = json.Marshal(&cfConfig)
+	require.Nil(t, err)
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), create.method,
+		create.url, bytes.NewReader(body))
+	router.ServeHTTP(w, req)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrNewStore")
+	require.Equal(t, http.StatusInternalServerError, w.Code)
+
+	// case 4: failed to verify tables
+	helpers.EXPECT().
+		callKVCreateTiStore(gomock.Any(), gomock.Any()).
+		Return(nil, nil).
+		AnyTimes()
+	helpers.EXPECT().
+		verifyCreateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(),
+			gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, cerrors.ErrSinkURIInvalid.GenWithStackByArgs(
+			"sink_uri is empty, can't not create a changefeed without sink_uri"))
+	cfConfig.SinkURI = ""
+	body, err = json.Marshal(&cfConfig)
+	require.Nil(t, err)
+
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), create.method,
+		create.url, bytes.NewReader(body))
+	router.ServeHTTP(w, req)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrSinkURIInvalid")
+	require.Equal(t, http.StatusBadRequest, w.Code)
+
+	// case 5:
+	helpers.EXPECT().callEntryVerifTables(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, nil, nil).
+		AnyTimes()
 	helpers.EXPECT().
 		verifyCreateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(),
 			gomock.Any(), gomock.Any(), gomock.Any()).
@@ -78,116 +173,45 @@ func TestCreateChangefeed(t *testing.T) {
 			kvStorage tidbkv.Storage,
 		) (*model.ChangeFeedInfo, error) {
 			require.EqualValues(t, cfg.ID, changeFeedID.ID)
-			require.EqualValues(t, cfg.SinkURI, blackHoleSink)
+			require.EqualValues(t, cfg.SinkURI, mysqlSink)
 			return &model.ChangeFeedInfo{
-				UpstreamID: 0,
+				UpstreamID: 1,
 				ID:         cfg.ID,
 				SinkURI:    cfg.SinkURI,
 			}, nil
-		}).Times(2)
-	etcdClient.EXPECT().
-		GetEnsureGCServiceID().
-		Return(etcd.GcServiceIDForTest()).AnyTimes()
-
-	// case 1: success
-	etcdClient.EXPECT().
-		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(nil).Times(1)
-	cfConfig := struct {
-		ID      string `json:"changefeed_id"`
-		SinkURI string `json:"sink_uri"`
-	}{
-		ID:      changeFeedID.ID,
-		SinkURI: blackHoleSink,
-	}
-	body, err := json.Marshal(&cfConfig)
-	require.Nil(t, err)
-
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequestWithContext(context.Background(), create.method,
-		create.url, bytes.NewReader(body))
-	router.ServeHTTP(w, req)
-	require.Equal(t, 201, w.Code)
-
-	// case 2: Failed at etcd operation
+		}).AnyTimes()
 	etcdClient.EXPECT().
 		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(cerrors.ErrPDEtcdAPIError).Times(1)
+
+	cfConfig.SinkURI = mysqlSink
+	body, err = json.Marshal(&cfConfig)
+	require.Nil(t, err)
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), create.method,
 		create.url, bytes.NewReader(body))
 	router.ServeHTTP(w, req)
-	respErr := model.HTTPError{}
+	respErr = model.HTTPError{}
 	err = json.NewDecoder(w.Body).Decode(&respErr)
 	require.Nil(t, err)
 	require.Contains(t, respErr.Code, "ErrPDEtcdAPIError")
 	require.Equal(t, http.StatusInternalServerError, w.Code)
 
-	// case 3: failed in verifyCreateChangefeedConfig()
-	helpers.EXPECT().
-		verifyCreateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(),
-			gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(nil, cerrors.ErrSinkURIInvalid.GenWithStackByArgs(
-			"sink_uri is empty, can't not create a changefeed without sink_uri"))
-	cfConfig1 := struct {
-		ID      string   `json:"changefeed_id"`
-		SinkURI string   `json:"sink_uri"`
-		PDAddrs []string `json:"pd_addrs"`
-	}{
-		ID:      changeFeedID.ID,
-		SinkURI: "",
-		PDAddrs: []string{"http://127.0.0.1:2379", "http://127.0.0.1:2382"},
-	}
-	body1, err := json.Marshal(&cfConfig1)
-	require.Nil(t, err)
-
-	w = httptest.NewRecorder()
-	req, _ = http.NewRequestWithContext(context.Background(), create.method,
-		create.url, bytes.NewReader(body1))
-	router.ServeHTTP(w, req)
-	respErr = model.HTTPError{}
-	err = json.NewDecoder(w.Body).Decode(&respErr)
-	require.Nil(t, err)
-	require.Contains(t, respErr.Code, "ErrSinkURIInvalid")
-	require.Equal(t, http.StatusBadRequest, w.Code)
-
-	// case 4: failed to create TiStore
-	helpers.EXPECT().
-		callKVCreateTiStore(gomock.Any(), gomock.Any()).
-		Return(nil, cerrors.ErrNewStore)
+	// case 6: success
+	etcdClient.EXPECT().
+		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil).
+		AnyTimes()
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), create.method,
 		create.url, bytes.NewReader(body))
 	router.ServeHTTP(w, req)
-	require.NotEqual(t, http.StatusOK, w.Code)
-
-	// case 5: failed to connect to pd
-	helpers.EXPECT().
-		getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(nil, cerrors.ErrAPIGetPDClientFailed)
-	w = httptest.NewRecorder()
-	req, _ = http.NewRequestWithContext(context.Background(), create.method,
-		create.url, bytes.NewReader(body))
-	router.ServeHTTP(w, req)
-	require.Equal(t, http.StatusBadRequest, w.Code)
-
-	// case 5: json format mismatches with the spec
-	configErr := struct {
-		ID      string `json:"changefeed_id"`
-		SinkURI string `json:"sink_uri"`
-		PDAddrs string `json:"pd_addrs"` // should be an array
-	}{
-		ID:      changeFeedID.ID,
-		SinkURI: "",
-		PDAddrs: "http://127.0.0.1:2379",
-	}
-	bodyErr, err := json.Marshal(&configErr)
+	resp := ChangeFeedInfo{}
+	err = json.NewDecoder(w.Body).Decode(&resp)
 	require.Nil(t, err)
-	w = httptest.NewRecorder()
-	req, _ = http.NewRequestWithContext(context.Background(),
-		create.method, create.url, bytes.NewReader(bodyErr))
-	router.ServeHTTP(w, req)
-	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.Equal(t, cfConfig.ID, resp.ID)
+	require.Equal(t, mysqlSink, resp.SinkURI)
+	require.Equal(t, http.StatusCreated, w.Code)
 }
 
 func TestUpdateChangefeed(t *testing.T) {
