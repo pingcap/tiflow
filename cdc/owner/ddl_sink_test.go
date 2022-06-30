@@ -154,18 +154,6 @@ func TestExecDDLError(t *testing.T) {
 
 	ddlSink.run(ctx, ctx.ChangefeedVars().ID, ctx.ChangefeedVars().Info)
 
-	mSink.ddlError = cerror.ErrDDLEventIgnored.GenWithStackByArgs()
-	ddl1 := &model.DDLEvent{CommitTs: 1}
-	for {
-		done, err := ddlSink.emitDDLEvent(ctx, ddl1)
-		require.Nil(t, err)
-		if done {
-			require.Equal(t, mSink.GetDDL(), ddl1)
-			break
-		}
-	}
-	require.Nil(t, resultErr)
-
 	mSink.ddlError = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 	ddl2 := &model.DDLEvent{CommitTs: 2}
 	for {

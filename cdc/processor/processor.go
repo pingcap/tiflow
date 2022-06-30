@@ -636,7 +636,9 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	p.mounter = entry.NewMounter(p.schemaStorage,
 		p.changefeedID,
 		contextutil.TimezoneFromCtx(ctx),
-		p.changefeed.Info.Config.EnableOldValue)
+		p.filter,
+		p.changefeed.Info.Config.EnableOldValue,
+	)
 
 	log.Info("processor try new sink",
 		zap.String("namespace", p.changefeedID.Namespace),
@@ -647,7 +649,6 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		stdCtx,
 		p.changefeed.ID,
 		p.changefeed.Info.SinkURI,
-		p.filter,
 		p.changefeed.Info.Config,
 		errCh,
 	)
