@@ -170,6 +170,7 @@ func (d *BaseDB) GetBaseConn(ctx context.Context) (*BaseConn, error) {
 	return baseConn, nil
 }
 
+// TODO: retry can be done inside the BaseDB.
 func (d *BaseDB) ExecContext(tctx *tcontext.Context, query string, args ...interface{}) (sql.Result, error) {
 	if tctx.L().Core().Enabled(zap.DebugLevel) {
 		tctx.L().Debug("exec context",
@@ -179,6 +180,7 @@ func (d *BaseDB) ExecContext(tctx *tcontext.Context, query string, args ...inter
 	return d.DB.ExecContext(tctx.Ctx, query, args...)
 }
 
+// TODO: retry can be done inside the BaseDB.
 func (d *BaseDB) QueryContext(tctx *tcontext.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	if tctx.L().Core().Enabled(zap.DebugLevel) {
 		tctx.L().Debug("query context",

@@ -124,3 +124,24 @@ func TestFailToDialLeaderAfterwards(t *testing.T) {
 	require.ErrorIs(t, err, derror.ErrNoRPCClient)
 	t.Log(err.Error())
 }
+
+func getMockTimeoutDial(succEventually bool) DialFunc[*mockRPCClient] {
+	retryCount := 0
+	return func(_ context.Context, addr string) (*mockRPCClient, CloseableConnIface, error) {
+		retryCount++
+		if succEventually && retryCount == defaultDialRetry {
+			return &mockRPCClient{addr: addr}, &closer{}, nil
+		}
+		return nil, nil, errors.New("context deadline exceeded")
+	}
+}
+
+func TestTimeout(t *testing.T) {
+	ctx := context.Background()
+	clients, err := NewFailoverRPCClients(ctx, []string{"timeout"}, getMockTimeoutDial(true))
+	require.NoError(t, err)
+	require.Equal(t, "timeout", clients.GetLeaderClient().addr)
+
+	_, err = NewFailoverRPCClients(ctx, []string{"timeout"}, getMockTimeoutDial(false))
+	require.Regexp(t, ".*failed to dial to master.*", err)
+}
