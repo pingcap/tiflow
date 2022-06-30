@@ -53,10 +53,11 @@ type Capture struct {
 	info             *model.CaptureInfo
 	processorManager *processor.Manager
 
-	pdEndpoints     []string
-	upstreamManager *upstream.Manager
-	ownerMu         sync.Mutex
-	owner           owner.Owner
+	pdEndpoints       []string
+	ownerMu           sync.Mutex
+	owner             owner.Owner
+	upstreamManagerMu sync.RWMutex
+	upstreamManager   *upstream.Manager
 
 	// session keeps alive between the capture and etcd
 	session  *concurrency.Session
@@ -132,8 +133,13 @@ func NewCaptureWithManager4Test(o owner.Owner, m *upstream.Manager) *Capture {
 }
 
 // GetUpstreamManager is a Getter of capture's upstream manager
-func (c *Capture) GetUpstreamManager() *upstream.Manager {
-	return c.upstreamManager
+func (c *Capture) GetUpstreamManager() (*upstream.Manager, error) {
+	c.upstreamManagerMu.RLock()
+	defer c.upstreamManagerMu.RUnlock()
+	if c.upstreamManager == nil {
+		return nil, cerror.ErrUpstreamManagerNotReady
+	}
+	return c.upstreamManager, nil
 }
 
 // GetEtcdClient is a Getter of capture's Etcd client
@@ -159,6 +165,8 @@ func (c *Capture) reset(ctx context.Context) error {
 		Version:       version.ReleaseVersion,
 	}
 
+	c.upstreamManagerMu.Lock()
+
 	if c.upstreamManager != nil {
 		c.upstreamManager.Close()
 	}
@@ -177,6 +185,8 @@ func (c *Capture) reset(ctx context.Context) error {
 	}
 	c.session = sess
 	c.election = concurrency.NewElection(sess, etcd.CaptureOwnerKey(c.EtcdClient.ClusterID))
+
+	c.upstreamManagerMu.Unlock()
 
 	if c.tableActorSystem != nil {
 		c.tableActorSystem.Stop()
@@ -414,8 +424,10 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 			zap.String("captureID", c.info.ID),
 			zap.Int64("ownerRev", ownerRev))
 
+		c.upstreamManagerMu.RLock()
 		owner := c.newOwner(c.upstreamManager)
 		c.setOwner(owner)
+		c.upstreamManagerMu.RUnlock()
 
 		globalState := orchestrator.NewGlobalState(c.EtcdClient.ClusterID)
 

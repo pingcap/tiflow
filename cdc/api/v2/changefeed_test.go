@@ -60,7 +60,7 @@ func TestCreateChangefeed(t *testing.T) {
 		Return(etcd.GcServiceIDForTest()).AnyTimes()
 	cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
 	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
-	cp.EXPECT().GetUpstreamManager().Return(mockUpManager).AnyTimes()
+	cp.EXPECT().GetUpstreamManager().Return(mockUpManager, nil).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
 	cp.EXPECT().IsOwner().Return(true).AnyTimes()
 
@@ -462,7 +462,7 @@ func TestVerifyTable(t *testing.T) {
 	cp := mock_capture.NewMockInfoForAPI(gomock.NewController(t))
 	// statusProvider := &mockStatusProvider{}
 	// cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
-	cp.EXPECT().GetUpstreamManager().Return(upManager).AnyTimes()
+	cp.EXPECT().GetUpstreamManager().Return(upManager, nil).AnyTimes()
 	cp.EXPECT().IsOwner().Return(true).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
 

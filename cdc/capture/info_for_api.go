@@ -31,5 +31,5 @@ type InfoForAPI interface {
 	GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error)
 	StatusProvider() owner.StatusProvider
 	GetEtcdClient() etcd.CDCEtcdClientForAPI
-	GetUpstreamManager() *upstream.Manager
+	GetUpstreamManager() (*upstream.Manager, error)
 }

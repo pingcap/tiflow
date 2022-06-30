@@ -1024,6 +1024,11 @@ var (
 		errors.RFCCodeText("CDC:ErrUpstreamNotFound"),
 	)
 
+	ErrUpstreamManagerNotReady = errors.Normalize(
+		"upstream manager not read",
+		errors.RFCCodeText("CDC:ErrUpstreamManagerNotReady"),
+	)
+
 	// ReplicationSet error
 	ErrReplicationSetInconsistent = errors.Normalize(
 		"replication set inconsistent: %s",

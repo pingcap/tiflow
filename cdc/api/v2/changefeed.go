@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/api"
+	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -31,6 +32,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -50,11 +52,12 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		return
 	}
 	if len(cfg.PDAddrs) == 0 {
-		up := h.capture.GetUpstreamManager().GetDefaultUpstream()
-		cfg.PDAddrs = up.PdEndpoints
-		cfg.KeyPath = up.SecurityConfig.KeyPath
-		cfg.CAPath = up.SecurityConfig.CAPath
-		cfg.CertPath = up.SecurityConfig.CertPath
+		up, err := getCaptureDefaultUpstream(h.capture)
+		if err != nil {
+			_ = c.Error(err)
+			return
+		}
+		cfg.PDConfig = getUpstreamPDConfig(up)
 	}
 	credential := &security.Credential{
 		CAPath:   cfg.CAPath,
@@ -130,11 +133,12 @@ func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 		return
 	}
 	if len(cfg.PDAddrs) == 0 {
-		up := h.capture.GetUpstreamManager().GetDefaultUpstream()
-		cfg.PDAddrs = up.PdEndpoints
-		cfg.KeyPath = up.SecurityConfig.KeyPath
-		cfg.CAPath = up.SecurityConfig.CAPath
-		cfg.CertPath = up.SecurityConfig.CertPath
+		up, err := getCaptureDefaultUpstream(h.capture)
+		if err != nil {
+			_ = c.Error(err)
+			return
+		}
+		cfg.PDConfig = getUpstreamPDConfig(up)
 	}
 	credential := &security.Credential{
 		CAPath:        cfg.CAPath,
@@ -282,11 +286,12 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 	}
 
 	if len(cfg.PDAddrs) == 0 {
-		up := h.capture.GetUpstreamManager().GetDefaultUpstream()
-		cfg.PDAddrs = up.PdEndpoints
-		cfg.KeyPath = up.SecurityConfig.KeyPath
-		cfg.CAPath = up.SecurityConfig.CAPath
-		cfg.CertPath = up.SecurityConfig.CertPath
+		up, err := getCaptureDefaultUpstream(h.capture)
+		if err != nil {
+			_ = c.Error(err)
+			return
+		}
+		cfg.PDConfig = getUpstreamPDConfig(up)
 	}
 	credential := &security.Credential{
 		CAPath:        cfg.CAPath,
@@ -402,4 +407,25 @@ func toAPIModel(info *model.ChangeFeedInfo) *ChangeFeedInfo {
 		CreatorVersion:    info.CreatorVersion,
 	}
 	return apiInfoModel
+}
+
+func getCaptureDefaultUpstream(cp capture.InfoForAPI) (*upstream.Upstream, error) {
+	upManager, err := cp.GetUpstreamManager()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	up, err := upManager.GetDefaultUpstream()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return up, nil
+}
+
+func getUpstreamPDConfig(up *upstream.Upstream) PDConfig {
+	return PDConfig{
+		PDAddrs:  up.PdEndpoints,
+		KeyPath:  up.SecurityConfig.KeyPath,
+		CAPath:   up.SecurityConfig.CAPath,
+		CertPath: up.SecurityConfig.CertPath,
+	}
 }

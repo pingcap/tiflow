@@ -83,11 +83,12 @@ func (mr *MockInfoForAPIMockRecorder) GetOwnerCaptureInfo(ctx interface{}) *gomo
 }
 
 // GetUpstreamManager mocks base method.
-func (m *MockInfoForAPI) GetUpstreamManager() *upstream.Manager {
+func (m *MockInfoForAPI) GetUpstreamManager() (*upstream.Manager, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetUpstreamManager")
 	ret0, _ := ret[0].(*upstream.Manager)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GetUpstreamManager indicates an expected call of GetUpstreamManager.

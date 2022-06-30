@@ -42,7 +42,14 @@ func VerifyCreateChangefeedConfig(
 	capture capture.InfoForAPI,
 ) (*model.ChangeFeedInfo, error) {
 	// TODO(dongmen): we should pass ClusterID in ChangefeedConfig in the upcoming future
-	up := capture.GetUpstreamManager().GetDefaultUpstream()
+	upManager, err := capture.GetUpstreamManager()
+	if err != nil {
+		return nil, err
+	}
+	up, err := upManager.GetDefaultUpstream()
+	if err != nil {
+		return nil, err
+	}
 
 	// verify sinkURI
 	if changefeedConfig.SinkURI == "" {

@@ -53,7 +53,7 @@ func TestQueryTso(t *testing.T) {
 	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
 	cp.EXPECT().IsOwner().Return(true).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
-	cp.EXPECT().GetUpstreamManager().Return(mockManager).AnyTimes()
+	cp.EXPECT().GetUpstreamManager().Return(mockManager, nil).AnyTimes()
 
 	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
 	router := newRouter(apiV2)
