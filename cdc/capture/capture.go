@@ -70,8 +70,8 @@ type captureImpl struct {
 	captureMu        sync.Mutex
 	info             *model.CaptureInfo
 	processorManager processor.Manager
-
-	liveness model.Liveness
+	liveness         model.Liveness
+	config           *config.ServerConfig
 
 	pdEndpoints     []string
 	UpstreamManager *upstream.Manager
@@ -111,6 +111,7 @@ type captureImpl struct {
 // NewCapture returns a new Capture instance
 func NewCapture(pdEnpoints []string, etcdClient *etcd.CDCEtcdClient, grpcService *p2p.ServerWrapper) Capture {
 	return &captureImpl{
+		config:              config.GetGlobalServerConfig(),
 		liveness:            model.LivenessCaptureAlive,
 		EtcdClient:          etcdClient,
 		grpcService:         grpcService,
@@ -598,9 +599,31 @@ func (c *captureImpl) Drain(ctx context.Context) <-chan struct{} {
 }
 
 func (c *captureImpl) drainImpl(ctx context.Context) bool {
+	if !c.config.Debug.EnableTwoPhaseScheduler {
+		// Skip drain as two phase scheduler is disabled.
+		return true
+	}
+
 	// Step 1, resign ownership.
 	o, _ := c.GetOwner()
 	if o != nil {
+		doneCh := make(chan error, 1)
+		query := &owner.Query{Tp: owner.QueryCaptures, Data: []*model.CaptureInfo{}}
+		o.Query(query, doneCh)
+		select {
+		case <-ctx.Done():
+		case err := <-doneCh:
+			if err != nil {
+				log.Warn("query capture count failed, retry", zap.Error(err))
+				return false
+			}
+		}
+		if len(query.Data.([]*model.CaptureInfo)) <= 1 {
+			// There is only one capture, the owner itself. It's impossible to
+			// resign owner nor move out tables, give up drain.
+			log.Warn("there is only one capture, skip drain")
+			return true
+		}
 		o.AsyncStop()
 		// Make sure it's not the owner before step 2.
 		return false
@@ -615,7 +638,8 @@ func (c *captureImpl) drainImpl(ctx context.Context) bool {
 	case <-ctx.Done():
 	case err := <-queryDone:
 		if err != nil {
-			log.Warn("query table count failed", zap.Error(err))
+			log.Warn("query table count failed, retry", zap.Error(err))
+			return false
 		}
 	}
 	select {
