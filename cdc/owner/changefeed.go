@@ -156,6 +156,12 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		c.handleErr(ctx, err)
 		return
 	}
+	if c.upstream.IsClosed() {
+		log.Panic("upstream is closed",
+			zap.Uint64("upstreamID", c.upstream.ID),
+			zap.String("namespace", c.id.Namespace),
+			zap.String("changefeed", c.id.ID))
+	}
 	// skip this tick
 	if !c.upstream.IsNormal() {
 		return

@@ -20,6 +20,11 @@ import (
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
+	. "github.com/pingcap/check"
+	"github.com/pingcap/errors"
+	"github.com/stretchr/testify/require"
+	clientv3 "go.etcd.io/etcd/client/v3"
+
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
@@ -30,11 +35,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/relay"
 	"github.com/pingcap/tiflow/dm/syncer"
-	"github.com/stretchr/testify/require"
-
-	. "github.com/pingcap/check"
-	"github.com/pingcap/errors"
-	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 const (

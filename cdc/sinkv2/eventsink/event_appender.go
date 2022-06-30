@@ -13,7 +13,11 @@
 
 package eventsink
 
-import "github.com/pingcap/tiflow/cdc/model"
+import (
+	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
+	"go.uber.org/zap"
+)
 
 // Appender is the interface for appending events to buffer.
 type Appender[E TableEvent] interface {
@@ -42,10 +46,60 @@ var _ Appender[*model.SingleTableTxn] = (*TxnEventAppender)(nil)
 type TxnEventAppender struct{}
 
 // Append appends the given rows to the given txn buffer.
+// The callers of this function should **make sure** that
+// the commitTs and startTs of rows is **strictly increasing**.
+// 1. Txns ordered by commitTs and startTs.
+// 2. Rows grouped by startTs and big txn batch,
+// cause the startTs is the unique identifier of the transaction.
 func (t *TxnEventAppender) Append(
 	buffer []*model.SingleTableTxn,
 	rows ...*model.RowChangedEvent,
 ) []*model.SingleTableTxn {
-	// TODO implement me
-	panic("implement me")
+	for _, row := range rows {
+		// This means no txn is in the buffer.
+		if len(buffer) == 0 {
+			txn := &model.SingleTableTxn{
+				StartTs:   row.StartTs,
+				CommitTs:  row.CommitTs,
+				Table:     row.Table,
+				ReplicaID: row.ReplicaID,
+			}
+			txn.Append(row)
+			buffer = append(buffer, txn)
+			continue
+		}
+
+		lastTxn := buffer[len(buffer)-1]
+		// Normally, this means the commitTs grows.
+		if lastTxn.GetCommitTs() != row.CommitTs ||
+			// Normally, this means we meet a new big txn batch.
+			row.SplitTxn ||
+			// Normally, this means we meet a new txn.
+			lastTxn.StartTs < row.StartTs {
+			// Fail-fast check
+			commitTsDecreased := lastTxn.GetCommitTs() > row.CommitTs
+			if commitTsDecreased {
+				log.Panic("The commitTs of the emit row is less than the received row",
+					zap.Uint64("lastReceivedCommitTs", buffer[len(buffer)-1].GetCommitTs()),
+					zap.Any("row", row))
+			}
+			startTsDecreased := lastTxn.StartTs > row.StartTs
+			if startTsDecreased {
+				log.Panic("The startTs of the emit row is less than the received row",
+					zap.Any("lastReceivedStartTs", buffer[len(buffer)-1].GetCommitTs()),
+					zap.Any("row", row))
+			}
+
+			buffer = append(buffer, &model.SingleTableTxn{
+				StartTs:   row.StartTs,
+				CommitTs:  row.CommitTs,
+				Table:     row.Table,
+				ReplicaID: row.ReplicaID,
+			})
+		}
+
+		buffer[len(buffer)-1].Append(row)
+	}
+
+	return buffer
 }
