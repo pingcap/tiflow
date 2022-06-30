@@ -329,8 +329,13 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 	tz := m.cfg.Timezone
 	if len(tz) == 0 {
 		// use target db time_zone as default
+		baseDB, err2 := conn.DefaultDBProvider.Apply(&m.cfg.To)
+		if err2 != nil {
+			return nil, err2
+		}
+		defer baseDB.Close()
 		var err1 error
-		tz, err1 = conn.FetchTimeZoneSetting(ctx, &m.cfg.To)
+		tz, err1 = config.FetchTimeZoneSetting(ctx, baseDB.DB)
 		if err1 != nil {
 			return nil, err1
 		}
