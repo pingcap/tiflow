@@ -97,6 +97,7 @@ function run() {
 	check_table_exists test.simple1 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
 	sequential_cases=(
+		"get_owner"
 		"list_changefeed"
 		"get_changefeed"
 		"pause_changefeed"

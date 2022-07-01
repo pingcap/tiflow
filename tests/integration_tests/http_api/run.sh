@@ -75,6 +75,7 @@ function run() {
 
 	# make sure api works well after one owner was killed and another owner was elected
 	sequential_cases2=(
+		"get_owner"
 		"list_changefeed"
 		"get_changefeed"
 		"resume_changefeed"

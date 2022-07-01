@@ -230,6 +230,13 @@ def resign_owner():
 
     print("pass test: resign owner")
 
+def get_owner():
+    url = BASE_URL1 + "/owner"
+    resp = rq.get()
+    assert resp.status_code == rq.codes.ok
+
+    print("pass test: get owner")
+
 
 def list_capture():
     url = BASE_URL0 + "/captures"
@@ -334,6 +341,7 @@ if __name__ == "__main__":
         "set_log_level": set_log_level,
         "remove_changefeed": remove_changefeed,
         "resign_owner": resign_owner,
+        "get_owner": get_owner,
         "get_tso": get_tso
     }
 
