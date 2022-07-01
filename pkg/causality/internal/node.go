@@ -17,13 +17,12 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/tidwall/btree"
+	"github.com/google/btree"
 	"go.uber.org/atomic"
 )
 
 type (
 	workerID = int64
-	nodeID   = int64
 )
 
 const (
@@ -33,6 +32,13 @@ const (
 var (
 	nextNodeID = atomic.NewInt64(0)
 	nodePool   = &sync.Pool{}
+
+	// btreeFreeList is a shared free list used by all
+	// btrees in order to lessen the burden of GC.
+	//
+	// Experiment shows increasing the capacity beyond 1024 yields little
+	// performance improvement.
+	btreeFreeList = btree.NewFreeListG[*Node](1024)
 )
 
 // Node is a node in the dependency graph used
@@ -42,8 +48,20 @@ type Node struct {
 
 	mu             sync.Mutex
 	conflictCounts map[workerID]int
-	// TODO maybe google's btree is better?
-	dependers  btree.Map[nodeID, *Node]
+
+	// dependers is an ordered set for all nodes that
+	// conflict with the current node.
+	//
+	// Notes:
+	// (1) An ordered data structure is preferred because
+	//     if we can unblock conflicting transactions in the
+	//     order that they have come in, the out-of-order-ness
+	//     observed downstream will be less than what would have been
+	//     if an unordered set were used.
+	// (2) Google's btree package is selected because it seems to be
+	//     the most popular production-grade ordered set implementation in Go.
+	dependers *btree.BTreeG[*Node]
+
 	assignedTo workerID
 	onResolved func(id workerID)
 
@@ -105,10 +123,13 @@ func (n *Node) DependOn(target *Node) {
 	// optimize for the case where there are little conflicts.
 	n.lazyCreateMap()
 
-	if _, ok := target.dependers.Get(n.id); ok {
+	if _, ok := target.getOrCreateDependers().Get(n); ok {
 		return
 	}
-	target.dependers.Set(n.id, n)
+	if target.dependers.Has(n) {
+		return
+	}
+	target.dependers.ReplaceOrInsert(n)
 	n.conflictCounts[target.assignedTo]++
 }
 
@@ -124,19 +145,22 @@ func (n *Node) AssignTo(workerID int64) {
 	}
 
 	n.assignedTo = workerID
-	n.dependers.Scan(func(_ nodeID, node *Node) bool {
-		node.mu.Lock()
-		defer node.mu.Unlock()
 
-		node.conflictCounts[unassigned]--
-		if node.conflictCounts[unassigned] == 0 {
-			delete(node.conflictCounts, unassigned)
-		}
-		node.conflictCounts[workerID]++
-		node.notifyMaybeResolved()
+	if n.dependers != nil {
+		n.dependers.Ascend(func(node *Node) bool {
+			node.mu.Lock()
+			defer node.mu.Unlock()
 
-		return true
-	})
+			node.conflictCounts[unassigned]--
+			if node.conflictCounts[unassigned] == 0 {
+				delete(node.conflictCounts, unassigned)
+			}
+			node.conflictCounts[workerID]++
+			node.notifyMaybeResolved()
+
+			return true
+		})
+	}
 }
 
 // Remove should be called after the transaction corresponding
@@ -148,19 +172,21 @@ func (n *Node) Remove() {
 	if len(n.conflictCounts) != 0 {
 		panic("conflictNumber > 0")
 	}
-	n.dependers.Scan(func(_ nodeID, node *Node) bool {
-		node.mu.Lock()
-		defer node.mu.Unlock()
 
-		node.conflictCounts[n.assignedTo]--
-		if node.conflictCounts[n.assignedTo] == 0 {
-			delete(node.conflictCounts, n.assignedTo)
-		}
-		node.notifyMaybeResolved()
-		return true
-	})
+	if n.dependers != nil {
+		n.dependers.Ascend(func(node *Node) bool {
+			node.mu.Lock()
+			defer node.mu.Unlock()
 
-	n.dependers = btree.Map[nodeID, *Node]{}
+			node.conflictCounts[n.assignedTo]--
+			if node.conflictCounts[n.assignedTo] == 0 {
+				delete(node.conflictCounts, n.assignedTo)
+			}
+			node.notifyMaybeResolved()
+			return true
+		})
+		n.dependers.Clear(true)
+	}
 }
 
 // Equals tells whether two pointers to nodes are equal.
@@ -238,4 +264,13 @@ func (n *Node) lazyCreateMap() {
 	if n.conflictCounts == nil {
 		n.conflictCounts = make(map[workerID]int, 4)
 	}
+}
+
+func (n *Node) getOrCreateDependers() *btree.BTreeG[*Node] {
+	if n.dependers == nil {
+		n.dependers = btree.NewWithFreeListG(8, func(a, b *Node) bool {
+			return a.id < b.id
+		}, btreeFreeList)
+	}
+	return n.dependers
 }
