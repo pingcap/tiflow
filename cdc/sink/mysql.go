@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -100,16 +101,28 @@ func newMySQLSink(
 	// dsn format of the driver:
 	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
 	username := sinkURI.User.Username()
+<<<<<<< HEAD:cdc/sink/mysql.go
 	password, _ := sinkURI.User.Password()
 	port := sinkURI.Port()
+=======
+>>>>>>> 6d1341c93 (sink/mysql(ticdc): make mysql sink to handle ipv6 address correctly (#6141)):cdc/sink/mysql/mysql.go
 	if username == "" {
 		username = "root"
 	}
+	password, _ := sinkURI.User.Password()
+	hostName := sinkURI.Hostname()
+	port := sinkURI.Port()
 	if port == "" {
 		port = "4000"
 	}
 
+<<<<<<< HEAD:cdc/sink/mysql.go
 	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, sinkURI.Hostname(), port, params.tls)
+=======
+	// This will handle the IPv6 address format.
+	host := net.JoinHostPort(hostName, port)
+	dsnStr := fmt.Sprintf("%s:%s@tcp(%s)/%s", username, password, host, params.tls)
+>>>>>>> 6d1341c93 (sink/mysql(ticdc): make mysql sink to handle ipv6 address correctly (#6141)):cdc/sink/mysql/mysql.go
 	dsn, err := dmysql.ParseDSN(dsnStr)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
