@@ -19,7 +19,6 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
@@ -60,9 +59,8 @@ func TestUnifiedSorterFileLockConflict(t *testing.T) {
 func TestSorterResolvedTs(t *testing.T) {
 	t.Parallel()
 	state := TableStatePreparing
-	sn := newSorterNode("tableName", 1, 1, nil, nil,
-		&config.ReplicaConfig{Consistent: &config.ConsistentConfig{}}, &state,
-		model.DefaultChangeFeedID("changefeed-id-test"))
+	sn := newSorterNode("tableName", 1, 1, nil, nil, &state,
+		model.DefaultChangeFeedID("changefeed-id-test"), false)
 	sn.sorter = memory.NewEntrySorter()
 	require.Equal(t, model.Ts(1), sn.ResolvedTs())
 	require.Equal(t, TableStatePreparing, sn.State())
@@ -113,9 +111,8 @@ func TestSorterResolvedTsLessEqualBarrierTs(t *testing.T) {
 	sch := make(chan *model.PolymorphicEvent, 1)
 	s := &checkSorter{ch: sch}
 	state := TableStatePreparing
-	sn := newSorterNode("tableName", 1, 1, nil, nil,
-		&config.ReplicaConfig{Consistent: &config.ConsistentConfig{}}, &state,
-		model.DefaultChangeFeedID("changefeed-id-test"))
+	sn := newSorterNode("tableName", 1, 1, nil, nil, &state,
+		model.DefaultChangeFeedID("changefeed-id-test"), false)
 	sn.sorter = s
 
 	ch := make(chan pmessage.Message, 1)
@@ -156,7 +153,7 @@ func TestSorterResolvedTsLessEqualBarrierTs(t *testing.T) {
 	require.EqualValues(t, resolvedTs2.PolymorphicEvent, <-s.Output())
 
 	resolvedTs4 := pmessage.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 4))
-	sn.replConfig.Consistent.Level = string(redo.ConsistentLevelEventual)
+	sn.redoLogEnabled = true
 	ok, err = sn.TryHandleDataMessage(context.Background(), resolvedTs4)
 	require.True(t, ok)
 	require.Nil(t, err)

@@ -47,8 +47,9 @@ type sinkNode struct {
 	flowController tableFlowController
 	redoManager    redo.LogManager
 
-	replicaConfig *config.ReplicaConfig
-	splitTxn      bool
+	replicaConfig  *config.ReplicaConfig
+	enableOldValue bool
+	splitTxn       bool
 }
 
 func newSinkNode(
@@ -58,6 +59,7 @@ func newSinkNode(
 	redoManager redo.LogManager,
 	state *TableState,
 	changefeed model.ChangeFeedID,
+	enableOldValue bool,
 	splitTxn bool,
 ) *sinkNode {
 	sn := &sinkNode{
@@ -69,6 +71,7 @@ func newSinkNode(
 		changefeed:     changefeed,
 		flowController: flowController,
 		redoManager:    redoManager,
+		enableOldValue: enableOldValue,
 		splitTxn:       splitTxn,
 	}
 	sn.resolvedTs.Store(model.NewResolvedTs(startTs))
@@ -227,7 +230,7 @@ func (n *sinkNode) emitRowToSink(ctx context.Context, event *model.PolymorphicEv
 	// This indicates that it is an update event,
 	// and after enable old value internally by default(but disable in the configuration).
 	// We need to handle the update event to be compatible with the old format.
-	if !n.replicaConfig.EnableOldValue && colLen != 0 && preColLen != 0 && colLen == preColLen {
+	if !n.enableOldValue && colLen != 0 && preColLen != 0 && colLen == preColLen {
 		if shouldSplitUpdateEvent(event) {
 			deleteEvent, insertEvent, err := splitUpdateEvent(event)
 			if err != nil {
