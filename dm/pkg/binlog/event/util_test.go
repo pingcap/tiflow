@@ -17,9 +17,10 @@
 package event
 
 import (
-	"github.com/stretchr/testify/require"
 	"io"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
@@ -131,10 +132,9 @@ func TestStatusVarsToKV(t *testing.T) {
 		if test.err != nil {
 			require.Equal(t, test.err.Error(), err.Error())
 		} else {
-			require.Nil(t, err)
+			require.NoError(t, err)
 		}
-		require.Equal(t, vars, test.output)
-
+		require.Equal(t, test.output, vars)
 	}
 }
 
@@ -168,8 +168,8 @@ func TestGetTimezoneByStatusVars(t *testing.T) {
 		if test.err != nil {
 			require.Equal(t, test.err.Error(), err.Error())
 		} else {
-			require.Nil(t, err)
+			require.NoError(t, err)
 		}
-		require.Equal(t, vars, test.output)
+		require.Equal(t, test.output, vars)
 	}
 }
