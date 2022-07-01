@@ -37,12 +37,12 @@ type ConflictDetector[Worker worker[Txn], Txn txnEvent] struct {
 	// are already finished, but still waiting to be processed
 	// by the conflict detector, because they need to be processed
 	// so that transactions conflicting with them can be unblocked.
-	finishedTxnQueue *containers.SliceQueue[finishedTxn[Txn]]
+	finishedTxnQueue *containers.SliceQueue[txnFinishedEvent[Txn]]
 
 	// resolvedTxnQueue is the queue for all transactions that
 	// have been "resolved" (i.e., conflict free) but are not yet
 	// sent to the workers.
-	resolvedTxnQueue *containers.SliceQueue[resolvedTxn[Txn]]
+	resolvedTxnQueue *containers.SliceQueue[txnResolvedEvent[Txn]]
 
 	// nextWorkerID is used to dispatch transactions round-robin.
 	nextWorkerID atomic.Int64
@@ -51,12 +51,12 @@ type ConflictDetector[Worker worker[Txn], Txn txnEvent] struct {
 	closeCh chan struct{}
 }
 
-type finishedTxn[Txn txnEvent] struct {
+type txnFinishedEvent[Txn txnEvent] struct {
 	txn  Txn
 	node *internal.Node
 }
 
-type resolvedTxn[Txn txnEvent] struct {
+type txnResolvedEvent[Txn txnEvent] struct {
 	txn      Txn
 	node     *internal.Node
 	workerID int64
@@ -70,8 +70,8 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 	ret := &ConflictDetector[Worker, Txn]{
 		workers:          workers,
 		slots:            internal.NewSlots[*internal.Node](numSlots),
-		finishedTxnQueue: containers.NewSliceQueue[finishedTxn[Txn]](),
-		resolvedTxnQueue: containers.NewSliceQueue[resolvedTxn[Txn]](),
+		finishedTxnQueue: containers.NewSliceQueue[txnFinishedEvent[Txn]](),
+		resolvedTxnQueue: containers.NewSliceQueue[txnResolvedEvent[Txn]](),
 		closeCh:          make(chan struct{}),
 	}
 
@@ -101,7 +101,7 @@ func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) error {
 		// resolving one transaction can cause another to be
 		// resolved too, thus incurring potential risk of
 		// deadlocking.
-		d.resolvedTxnQueue.Push(resolvedTxn[Txn]{
+		d.resolvedTxnQueue.Push(txnResolvedEvent[Txn]{
 			txn:      txn,
 			node:     node,
 			workerID: workerID,
@@ -124,34 +124,34 @@ func (d *ConflictDetector[Worker, Txn]) runBackgroundTasks() {
 			return
 		case <-d.resolvedTxnQueue.C:
 			for {
-				resolvedTxn, ok := d.resolvedTxnQueue.Pop()
+				event, ok := d.resolvedTxnQueue.Pop()
 				if !ok {
 					break
 				}
 
 				unlock := func() {
-					d.finishedTxnQueue.Push(finishedTxn[Txn]{
-						txn:  resolvedTxn.txn,
-						node: resolvedTxn.node,
+					d.finishedTxnQueue.Push(txnFinishedEvent[Txn]{
+						txn:  event.txn,
+						node: event.node,
 					})
 				}
 				d.sendToWorker(
-					resolvedTxn.txn,
-					resolvedTxn.node,
+					event.txn,
+					event.node,
 					unlock,
-					resolvedTxn.workerID,
+					event.workerID,
 				)
 			}
 		case <-d.finishedTxnQueue.C:
 			for {
-				finishedTxn, ok := d.finishedTxnQueue.Pop()
+				event, ok := d.finishedTxnQueue.Pop()
 				if !ok {
 					break
 				}
 
-				d.slots.Remove(finishedTxn.node, finishedTxn.txn.ConflictKeys())
-				finishedTxn.node.Remove()
-				finishedTxn.node.Free()
+				d.slots.Remove(event.node, event.txn.ConflictKeys())
+				event.node.Remove()
+				event.node.Free()
 			}
 		}
 	}
