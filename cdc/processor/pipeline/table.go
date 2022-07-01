@@ -204,7 +204,10 @@ func NewTablePipeline(ctx cdcContext.Context,
 		zap.String("tableName", tableName),
 		zap.Int64("tableID", tableID),
 		zap.Uint64("quota", perTableMemoryQuota))
-	flowController := flowcontrol.NewTableFlowController(perTableMemoryQuota, redoLogEnabled)
+	splitTxn := replConfig.Sink.TxnAtomicity.ShouldSplitTxn()
+
+	flowController := flowcontrol.NewTableFlowController(perTableMemoryQuota,
+		redoLogEnabled, splitTxn)
 	config := ctx.ChangefeedVars().Info.Config
 	cyclicEnabled := config.Cyclic != nil && config.Cyclic.IsEnabled()
 	runnerSize := defaultRunnersSize
@@ -215,7 +218,7 @@ func NewTablePipeline(ctx cdcContext.Context,
 	p := pipeline.NewPipeline(ctx, 500*time.Millisecond, runnerSize, defaultOutputChannelSize)
 	sorterNode := newSorterNode(tableName, tableID, replicaInfo.StartTs,
 		flowController, mounter, replConfig)
-	sinkNode := newSinkNode(tableID, sink, replicaInfo.StartTs, targetTs, flowController)
+	sinkNode := newSinkNode(tableID, sink, replicaInfo.StartTs, targetTs, flowController, splitTxn)
 
 	p.AppendNode(ctx, "puller", newPullerNode(tableID, replicaInfo, tableName,
 		changefeed, upstream))

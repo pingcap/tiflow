@@ -15,6 +15,7 @@ package pipeline
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -81,9 +82,17 @@ type sinkNode struct {
 
 	replicaConfig    *config.ReplicaConfig
 	isTableActorMode bool
+	splitTxn         bool
 }
 
-func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController) *sinkNode {
+func newSinkNode(
+	tableID model.TableID,
+	sink sink.Sink,
+	startTs model.Ts,
+	targetTs model.Ts,
+	flowController tableFlowController,
+	splitTxn bool,
+) *sinkNode {
 	sn := &sinkNode{
 		tableID:   tableID,
 		sink:      sink,
@@ -92,6 +101,7 @@ func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, target
 		barrierTs: startTs,
 
 		flowController: flowController,
+		splitTxn:       splitTxn,
 	}
 	sn.resolvedTs.Store(model.NewResolvedTs(startTs))
 	sn.checkpointTs.Store(model.NewResolvedTs(startTs))
@@ -301,6 +311,10 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 	switch msg.Tp {
 	case pmessage.MessageTypePolymorphicEvent:
 		event := msg.PolymorphicEvent
+		if err := n.verifySplitTxn(event); err != nil {
+			return false, errors.Trace(err)
+		}
+
 		if event.IsResolved() {
 			if n.status.Load() == TableStatusInitializing {
 				n.status.Store(TableStatusRunning)
@@ -359,4 +373,26 @@ func (n *sinkNode) releaseResource(ctx context.Context) error {
 	n.status.Store(TableStatusStopped)
 	n.flowController.Abort()
 	return n.sink.Close(ctx)
+}
+
+// Verify that TxnAtomicity compatibility with BatchResolved event and RowChangedEvent
+// with `SplitTxn==true`.
+func (n *sinkNode) verifySplitTxn(e *model.PolymorphicEvent) error {
+	if n.splitTxn {
+		return nil
+	}
+
+	// Fail-fast check, this situation should never happen normally when split transactions
+	// are not supported.
+	if e.Resolved != nil && e.Resolved.IsBatchMode() {
+		msg := fmt.Sprintf("batch mode resolved ts is not supported "+
+			"when sink.splitTxn is %+v", n.splitTxn)
+		return cerror.ErrSinkInvalidConfig.GenWithStackByArgs(msg)
+	}
+
+	if e.Row != nil && e.Row.SplitTxn {
+		msg := fmt.Sprintf("should not split txn when sink.splitTxn is %+v", n.splitTxn)
+		return cerror.ErrSinkInvalidConfig.GenWithStackByArgs(msg)
+	}
+	return nil
 }

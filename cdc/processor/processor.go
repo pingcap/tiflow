@@ -813,7 +813,7 @@ func (p *processor) createTablePipelineImpl(
 			tableName,
 			replicaInfo,
 			s,
-			p.redoManager.Enabled(),
+			p.redoManager,
 			p.changefeed.Info.GetTargetTs())
 		if err != nil {
 			return nil, errors.Trace(err)

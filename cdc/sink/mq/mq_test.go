@@ -91,6 +91,7 @@ func TestKafkaSink(t *testing.T) {
 		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
+	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 	sink, err := NewKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
 	require.Nil(t, err)
 
@@ -187,6 +188,7 @@ func TestKafkaSinkFilter(t *testing.T) {
 		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
+	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 	sink, err := NewKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
 	require.Nil(t, err)
 
@@ -278,6 +280,7 @@ func TestFlushRowChangedEvents(t *testing.T) {
 		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
+	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 	sink, err := NewKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
 	require.Nil(t, err)
 

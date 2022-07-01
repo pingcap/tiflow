@@ -49,7 +49,7 @@ func TestAsyncStopFailed(t *testing.T) {
 		router:    tableActorRouter,
 		cancel:    func() {},
 		reportErr: func(err error) {},
-		sinkNode:  newSinkNode(1, &mockSink{}, 0, 0, &mockFlowController{}),
+		sinkNode:  newSinkNode(1, &mockSink{}, 0, 0, &mockFlowController{}, false),
 	}
 	require.True(t, tbl.AsyncStop(1))
 
@@ -358,7 +358,7 @@ func TestNewTableActor(t *testing.T) {
 		&model.TableReplicaInfo{
 			StartTs:     0,
 			MarkTableID: 1,
-		}, &mockSink{}, false, 10)
+		}, &mockSink{}, redo.NewDisabledManager(), 10)
 	require.NotNil(t, tbl)
 	require.Nil(t, err)
 	require.NotPanics(t, func() {
@@ -374,7 +374,7 @@ func TestNewTableActor(t *testing.T) {
 		&model.TableReplicaInfo{
 			StartTs:     0,
 			MarkTableID: 1,
-		}, &mockSink{}, false, 10)
+		}, &mockSink{}, redo.NewDisabledManager(), 10)
 	require.Nil(t, tbl)
 	require.NotNil(t, err)
 
@@ -414,6 +414,8 @@ func TestTableActorStart(t *testing.T) {
 			StartTs:     0,
 			MarkTableID: 1,
 		},
+		redoManager:   redo.NewDisabledManager(),
+		replicaConfig: config.GetDefaultReplicaConfig(),
 	}
 	require.Nil(t, tbl.start(ctx))
 	require.Equal(t, 1, len(tbl.nodes))
@@ -427,10 +429,12 @@ func TestTableActorStart(t *testing.T) {
 				Config: config.GetDefaultReplicaConfig(),
 			},
 		},
+		redoManager: redo.NewDisabledManager(),
 		replicaInfo: &model.TableReplicaInfo{
 			StartTs:     0,
 			MarkTableID: 1,
 		},
+		replicaConfig: config.GetDefaultReplicaConfig(),
 	}
 	tbl.cyclicEnabled = true
 	require.Nil(t, tbl.start(ctx))
