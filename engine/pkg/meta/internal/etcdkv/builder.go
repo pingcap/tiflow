@@ -3,15 +3,20 @@ package etcdkv
 import (
 	"github.com/hanfei1991/microcosm/pkg/meta/kvclient/etcdkv"
 	"github.com/pingcap/tiflow/engine/pkg/meta/internal/etcdkv/namespace"
+	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 )
 
-type EtcdKVClientBuilder struct{}
+func init() {
+	internal.MustRegister(&etcdKVClientBuilder{})
+}
 
-func (b *EtcdKVClientBuilder) ClientType() {
+type etcdKVClientBuilder struct{}
+
+func (b *etcdKVClientBuilder) ClientType() {
 	return metaclient.EtcdKVClientType
 }
 
-func (b *EtcdKVClientBuilder) NewKVClientWithNamespace(storeConf *metaclient.StoreConfigParams,
+func (b *etcdKVClientBuilder) NewKVClientWithNamespace(storeConf *metaclient.StoreConfigParams,
 	projectID metaclient.ProjectID, jobID metaclient.JobID) (metaclient.KVClient, error) {
 	cli := etcdkv.NewEtcdImpl(conf)
 	pfKV := namespace.NewPrefixKV(cli, namespace.MakeNamespacePrefix(projectID, jobID))
@@ -21,7 +26,7 @@ func (b *EtcdKVClientBuilder) NewKVClientWithNamespace(storeConf *metaclient.Sto
 	}
 }
 
-func (b *EtcdKVClientBuilder) NewEtcdKVClient(conf *metaclient.StoreConfigParams) (metaclient.KVClient, error) {
+func (b *etcdKVClientBuilder) NewKVClient(conf *metaclient.StoreConfigParams) (metaclient.KVClient, error) {
 	return etcdkv.NewEtcdImpl(conf)
 }
 

@@ -53,10 +53,6 @@ type etcdImpl struct {
 func NewEtcdImpl(config *metaclient.StoreConfigParams) (*etcdImpl, error) {
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints: config.Endpoints,
-		// [TODO] TLS
-		// Username: conf.Auth.Username,
-		// Password: conf.Auth.Password,
-		// [TODO] LOG
 	})
 	if err != nil {
 		return nil, cerrors.ErrMetaNewClientFail.Wrap(err)

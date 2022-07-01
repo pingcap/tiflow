@@ -16,40 +16,25 @@ package sqlutil
 import "time"
 
 const (
-	DefaultFrameMetaEndpoints = "127.0.0.1:3336"
-	DefaultFrameMetaUser      = "root"
-	DefaultFrameMetaPassword  = "123456"
-)
-
-const (
 	defaultConnMaxIdleTime = 30 * time.Second
 	defaultConnMaxLifeTime = 12 * time.Hour
 	defaultMaxIdleConns    = 3
 	defaultMaxOpenConns    = 10
-	defaultReadTimeout     = "3s"
-	defaultWriteTimeout    = "3s"
-	defaultDialTimeout     = "3s"
 	// Add more default params for mysql connection
 )
 
 // DBConfig defines some configuration used in database connection
 // refer to: https://pkg.go.dev/database/sql#SetConnMaxIdleTime
 type DBConfig struct {
-	ReadTimeout     string
-	WriteTimeout    string
-	DialTimeout     string
-	ConnMaxIdleTime time.Duration
-	ConnMaxLifeTime time.Duration
-	MaxIdleConns    int
-	MaxOpenConns    int
+	ConnMaxIdleTime time.Duration `toml:"conn-max-idle-time" json:"conn-max-idle-time"`
+	ConnMaxLifeTime time.Duration `toml:"conn-max-life-time" json:"conn-max-life-time"`
+	MaxIdleConns    int           `toml:"max-idle-conns" json:"max-idle-conns"`
+	MaxOpenConns    int           `toml:"max-open-conns" json:"max-open-conns"`
 }
 
 // GetDefaultDBConfig return an immutable default DBConfig
 func GetDefaultDBConfig() DBConfig {
 	return DBConfig{
-		ReadTimeout:     defaultReadTimeout,
-		WriteTimeout:    defaultWriteTimeout,
-		DialTimeout:     defaultDialTimeout,
 		ConnMaxIdleTime: defaultConnMaxIdleTime,
 		ConnMaxLifeTime: defaultConnMaxLifeTime,
 		MaxIdleConns:    defaultMaxIdleConns,

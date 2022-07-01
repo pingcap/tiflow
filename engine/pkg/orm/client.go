@@ -15,13 +15,9 @@ package orm
 
 import (
 	"context"
-	"database/sql"
 	gerrors "errors"
 	"time"
 
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
-	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
@@ -30,8 +26,6 @@ import (
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	"github.com/pingcap/tiflow/engine/pkg/orm/model"
-	"github.com/pingcap/tiflow/engine/pkg/sqlutil"
-	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
 var frameMetaModels = []interface{}{
@@ -128,37 +122,10 @@ type ResourceClient interface {
 }
 
 // NewClient return the client to operate framework metastore
-func NewClient(mc metaclient.StoreConfigParams, conf sqlutil.DBConfig) (Client, error) {
-	err := sqlutil.CreateDatabaseForProject(mc, tenant.FrameProjectInfo.UniqueID(), conf)
+func NewClient(mc *metaclient.StoreConfigParams) (Client, error) {
+	db, err := NewOrmDB(mc)
 	if err != nil {
 		return nil, err
-	}
-
-	dsn := sqlutil.GenerateDSNByParams(mc, tenant.FrameProjectInfo.UniqueID(), conf, true)
-	sqlDB, err := sqlutil.NewSQLDB("mysql", dsn, conf)
-	if err != nil {
-		return nil, err
-	}
-
-	cli, err := newClient(sqlDB)
-	if err != nil {
-		sqlDB.Close()
-	}
-
-	return cli, err
-}
-
-func newClient(sqlDB *sql.DB) (*metaOpsClient, error) {
-	db, err := gorm.Open(mysql.New(mysql.Config{
-		Conn:                      sqlDB,
-		SkipInitializeWithVersion: false,
-	}), &gorm.Config{
-		SkipDefaultTransaction: true,
-		// TODO: logger
-	})
-	if err != nil {
-		log.L().Error("create gorm client fail", zap.Error(err))
-		return nil, cerrors.ErrMetaNewClientFail.Wrap(err)
 	}
 
 	return &metaOpsClient{

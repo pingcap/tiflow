@@ -14,9 +14,15 @@
 package sqlkv
 
 import (
+	"database/sql"
+
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	cerrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	"github.com/pingcap/tiflow/pkg/errorutil"
+	"go.uber.org/zap"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
 )
 
 // sqlError wraps IsRetryable to etcd error.
@@ -65,5 +71,19 @@ func makeDelResponseOp(rsp *metaclient.DeleteResponse) metaclient.ResponseOp {
 		Response: &metaclient.ResponseOpResponseDelete{
 			ResponseDelete: rsp,
 		},
+	}
+}
+
+func NewOrmDB(sqlDB *sql.DB) *gorm.DB {
+	db, err := gorm.Open(mysql.New(mysql.Config{
+		Conn:                      sqlDB,
+		SkipInitializeWithVersion: false,
+	}), &gorm.Config{
+		SkipDefaultTransaction: true,
+		// TODO: logger
+	})
+	if err != nil {
+		log.L().Error("create gorm client fail", zap.Error(err))
+		return nil, cerrors.ErrMetaNewClientFail.Wrap(err)
 	}
 }

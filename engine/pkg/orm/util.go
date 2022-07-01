@@ -13,7 +13,17 @@
 
 package orm
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/pingcap/log"
+	cerrors "github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	"github.com/pingcap/tiflow/engine/pkg/sqlutil"
+	"go.uber.org/zap"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
+)
 
 // IsNotFoundError checks whether the error is ErrMetaEntryNotFound
 // TODO: refine me, need wrap error for api
@@ -22,4 +32,26 @@ func IsNotFoundError(err error) bool {
 		return false
 	}
 	return strings.Contains(err.Error(), "ErrMetaEntryNotFound")
+}
+
+func NewOrmDB(storeConf *metaclient.StoreConfigParams) (*gorm.DB, error) {
+	sqlDB, err := sqlutil.NewSQLDB(storeConf)
+	if err != nil {
+		return nil, err
+	}
+
+	db, err := gorm.Open(mysql.New(mysql.Config{
+		Conn:                      sqlDB,
+		SkipInitializeWithVersion: false,
+	}), &gorm.Config{
+		SkipDefaultTransaction: true,
+		// TODO: logger
+	})
+	if err != nil {
+		sqlDB.Close()
+		log.L().Error("create gorm client fail", zap.Error(err))
+		return nil, cerrors.ErrMetaNewClientFail.Wrap(err)
+	}
+
+	return db, nil
 }

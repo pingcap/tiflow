@@ -14,8 +14,9 @@
 package metaclient
 
 import (
-	"fmt"
 	"strings"
+
+	"github.com/pingcap/tiflow/engine/pkg/sqlutil"
 )
 
 // defines const variables used in metastore client
@@ -28,6 +29,12 @@ const (
 	DefaultFrameMetaPassword  = "123456"
 
 	DefaultUserMetaEndpoints = "127.0.0.1:12479"
+	DefaultUserMetaUser      = "root"
+	DefaultUserMetaPassword  = "123456"
+
+	DefaultReadTimeout  = "3s"
+	DefaultWriteTimeout = "3s"
+	DefaultDialTimeout  = "3s"
 )
 
 // AuthConfParams is basic password authentication configurations
@@ -36,27 +43,32 @@ type AuthConfParams struct {
 	Passwd string `toml:"passwd" json:"passwd"`
 }
 
-// StoreConfigParams is metastore connection configurations
-type StoreConfigParams struct {
+// StoreConfig is metastore connection configurations
+type StoreConfig struct {
 	// storeID is the unique readable identifier for a store
-	StoreID   string         `toml:"store-id" json:"store-id"`
-	Endpoints []string       `toml:"endpoints" json:"endpoints"`
-	Auth      AuthConfParams `toml:"auth" json:"auth"`
+	StoreID   string          `toml:"store-id" json:"store-id"`
+	Endpoints []string        `toml:"endpoints" json:"endpoints"`
+	Auth      *AuthConfParams `toml:"auth" json:"auth"`
+	// unique schema for a tiflow cluster
+	Schema       string `toml:"meta-schema" json:"meta-schema"`
+	ReadTimeout  string `toml:"read-timeout" json:"read-timeout"`
+	WriteTimeout string `toml:"write-timeout" json:"write-timeout"`
+	DialTimeout  string `toml:"dial-timeout" json:"dial-timeout"`
+	// DB configs for backend metastore
+	DBConf *sqlutil.DBConfig `toml:"meta-dbconfs" json:"meta-dbconfs"`
 }
 
-// SetEndpoints sets endpoints to StoreConfigParams
-func (s *StoreConfigParams) SetEndpoints(endpoints string) {
+func DefaultStoreConfig() StoreConfig {
+	return StoreConfig{
+		ReadTimeout:  DefaultReadTimeout,
+		WriteTimeout: DefaultWriteTimeout,
+		DialTimeout:  DefaultDialTimeout,
+	}
+}
+
+// SetEndpoints sets endpoints to StoreConfig
+func (s *StoreConfig) SetEndpoints(endpoints string) {
 	if endpoints != "" {
 		s.Endpoints = strings.Split(endpoints, ",")
 	}
-}
-
-// GenerateDsn generates dsn string from store config parameters
-// dsn format: [username[:password]@][protocol[(address)]]
-func (s *StoreConfigParams) GenerateDsn() string {
-	if len(s.Endpoints) == 0 {
-		return ""
-	}
-
-	return fmt.Sprintf("%s:%s@tcp(%s)", s.Auth.User, s.Auth.Passwd, s.Endpoints[0])
 }
