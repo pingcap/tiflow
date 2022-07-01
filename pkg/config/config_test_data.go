@@ -166,7 +166,8 @@ const (
         ]
       }
     ],
-    "schema-registry": ""
+    "schema-registry": "",
+    "transaction-atomicity": ""
   },
   "consistent": {
     "level": "none",

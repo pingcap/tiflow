@@ -127,18 +127,19 @@ func (s *mockCloseControlSink) Close(ctx context.Context) error {
 
 func TestState(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
+	config := config.GetDefaultReplicaConfig()
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: model.DefaultChangeFeedID("changefeed-id-test-status"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
-			Config:  config.GetDefaultReplicaConfig(),
+			Config:  config,
 		},
 	})
 
 	state := TableStatePrepared
 	// test stop at targetTs
 	node := newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{}, redo.NewDisabledManager(),
-		&state, ctx.ChangefeedVars().ID)
+		&state, ctx.ChangefeedVars().ID, false)
 	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil).
 		ChangefeedVars().Info.Config)
 	require.Equal(t, TableStatePrepared, node.State())
@@ -189,7 +190,7 @@ func TestState(t *testing.T) {
 	// test the stop at ts command
 	state = TableStatePrepared
 	node = newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{}, redo.NewDisabledManager(),
-		&state, ctx.ChangefeedVars().ID)
+		&state, ctx.ChangefeedVars().ID, false)
 	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
 		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
 	require.Equal(t, TableStatePrepared, node.State())
@@ -229,7 +230,7 @@ func TestState(t *testing.T) {
 	// test the stop at ts command is after then resolvedTs and checkpointTs is greater than stop ts
 	state = TableStatePrepared
 	node = newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{}, redo.NewDisabledManager(),
-		&state, ctx.ChangefeedVars().ID)
+		&state, ctx.ChangefeedVars().ID, false)
 	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
 		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
 	require.Equal(t, TableStatePrepared, node.State())
@@ -270,11 +271,12 @@ func TestState(t *testing.T) {
 // until the underlying sink is closed
 func TestStopStatus(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
+	config := config.GetDefaultReplicaConfig()
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: model.DefaultChangeFeedID("changefeed-id-test-state"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
-			Config:  config.GetDefaultReplicaConfig(),
+			Config:  config,
 		},
 	})
 
@@ -283,7 +285,7 @@ func TestStopStatus(t *testing.T) {
 	node := newSinkNode(1,
 		&mockCloseControlSink{mockSink: mockSink{}, closeCh: closeCh}, 0, 100,
 		&mockFlowController{}, redo.NewDisabledManager(),
-		&state, ctx.ChangefeedVars().ID)
+		&state, ctx.ChangefeedVars().ID, false)
 	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
 		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
 	require.Equal(t, TableStatePrepared, node.State())
@@ -317,17 +319,18 @@ func TestStopStatus(t *testing.T) {
 
 func TestManyTs(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
+	config := config.GetDefaultReplicaConfig()
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
-			Config:  config.GetDefaultReplicaConfig(),
+			Config:  config,
 		},
 	})
 	state := TableStatePrepared
 	sink := &mockSink{}
 	node := newSinkNode(1, sink, 0, 10, &mockFlowController{}, redo.NewDisabledManager(),
-		&state, ctx.ChangefeedVars().ID)
+		&state, ctx.ChangefeedVars().ID, false)
 	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
 		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
 	require.Equal(t, TableStatePrepared, node.State())
@@ -492,17 +495,18 @@ func TestManyTs(t *testing.T) {
 
 func TestIgnoreEmptyRowChangeEvent(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
+	config := config.GetDefaultReplicaConfig()
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
-			Config:  config.GetDefaultReplicaConfig(),
+			Config:  config,
 		},
 	})
 	state := TableStatePreparing
 	sink := &mockSink{}
 	node := newSinkNode(1, sink, 0, 10, &mockFlowController{}, redo.NewDisabledManager(),
-		&state, ctx.ChangefeedVars().ID)
+		&state, ctx.ChangefeedVars().ID, false)
 	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
 		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
 
@@ -519,17 +523,18 @@ func TestIgnoreEmptyRowChangeEvent(t *testing.T) {
 
 func TestSplitUpdateEventWhenEnableOldValue(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
+	config := config.GetDefaultReplicaConfig()
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
-			Config:  config.GetDefaultReplicaConfig(),
+			Config:  config,
 		},
 	})
 	state := TableStatePreparing
 	sink := &mockSink{}
 	node := newSinkNode(1, sink, 0, 10, &mockFlowController{}, redo.NewDisabledManager(),
-		&state, ctx.ChangefeedVars().ID)
+		&state, ctx.ChangefeedVars().ID, false)
 	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
 		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
 
@@ -581,19 +586,19 @@ func TestSplitUpdateEventWhenEnableOldValue(t *testing.T) {
 
 func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
-	cfg := config.GetDefaultReplicaConfig()
-	cfg.EnableOldValue = false
+	config := config.GetDefaultReplicaConfig()
+	config.EnableOldValue = false
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: model.DefaultChangeFeedID("changefeed-id-test"),
 		Info: &model.ChangeFeedInfo{
 			StartTs: oracle.GoTimeToTS(time.Now()),
-			Config:  cfg,
+			Config:  config,
 		},
 	})
 	state := TableStatePreparing
 	sink := &mockSink{}
 	node := newSinkNode(1, sink, 0, 10, &mockFlowController{}, redo.NewDisabledManager(),
-		&state, ctx.ChangefeedVars().ID)
+		&state, ctx.ChangefeedVars().ID, false)
 	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
 		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
 
@@ -745,7 +750,7 @@ func TestFlushSinkReleaseFlowController(t *testing.T) {
 	sink := &flushSink{}
 	// sNode is a sinkNode
 	sNode := newSinkNode(1, sink, 0, 10, flowController, redo.NewDisabledManager(),
-		&state, ctx.ChangefeedVars().ID)
+		&state, ctx.ChangefeedVars().ID, false)
 	sNode.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
 		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
 	sNode.barrierTs = 10
@@ -759,4 +764,60 @@ func TestFlushSinkReleaseFlowController(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, uint64(8), sNode.CheckpointTs())
 	require.Equal(t, 2, flowController.releaseCounter)
+}
+
+func TestSplitTxn(t *testing.T) {
+	ctx := cdcContext.NewContext(context.Background(), &cdcContext.GlobalVars{})
+	config := config.GetDefaultReplicaConfig()
+	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
+		ID: model.DefaultChangeFeedID("changefeed-id-test"),
+		Info: &model.ChangeFeedInfo{
+			StartTs: oracle.GoTimeToTS(time.Now()),
+			Config:  config,
+		},
+	})
+	state := TableStatePrepared
+	flowController := &flushFlowController{}
+	sink := &flushSink{}
+	// sNode is a sinkNode
+	sNode := newSinkNode(1, sink, 0, 10, flowController, redo.NewDisabledManager(),
+		&state, ctx.ChangefeedVars().ID, false)
+	sNode.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx,
+		pmessage.Message{}, nil).ChangefeedVars().Info.Config)
+	msg := pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
+		CRTs:  1,
+		RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved},
+		Row:   &model.RowChangedEvent{},
+	})
+	_, err := sNode.HandleMessage(ctx, msg)
+	require.Nil(t, err)
+
+	msg = pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
+		CRTs:  1,
+		RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
+		Row:   &model.RowChangedEvent{CommitTs: 2, SplitTxn: true},
+	})
+	_, err = sNode.HandleMessage(ctx, msg)
+	require.Regexp(t, ".*should not split txn when sink.splitTxn is.*", err)
+
+	msg = pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
+		CRTs:  1,
+		RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
+		Row:   &model.RowChangedEvent{CommitTs: 2},
+	})
+	_, err = sNode.HandleMessage(ctx, msg)
+	require.Nil(t, err)
+
+	msg = pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
+		CRTs: 7,
+		Resolved: &model.ResolvedTs{
+			Mode:    model.BatchResolvedMode,
+			Ts:      7,
+			BatchID: 1,
+		},
+		RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved},
+		Row:   &model.RowChangedEvent{},
+	})
+	_, err = sNode.HandleMessage(ctx, msg)
+	require.Regexp(t, ".*batch mode resolved ts is not supported.*", err)
 }
