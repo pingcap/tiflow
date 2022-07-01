@@ -60,8 +60,8 @@ func (r *rebalanceScheduler) Schedule(
 
 	for _, capture := range captures {
 		if capture.State == CaptureStateStopping {
-			log.Debug("tpscheduler: capture is stopping, " +
-				"ignore manual rebalance request")
+			log.Warn("tpscheduler: capture is stopping, " +
+				"ignore and drop manual rebalance request")
 			atomic.StoreInt32(&r.rebalance, 0)
 			return nil
 		}
