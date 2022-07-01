@@ -29,9 +29,9 @@
 
 package namespace
 
-// MakeNamespacePrefix adds separator to given tenantID to form a prefix
-func MakeNamespacePrefix(tenantID string) string {
-	return tenantID + "/"
+// MakeNamespacePrefix adds separator to given projectID and jobID to form a prefix
+func MakeNamespacePrefix(projectID string, jobID string) string {
+	return projectID + "/" + jobID
 }
 
 func prefixInterval(pfx string, key, end []byte) (pfxKey []byte, pfxEnd []byte) {

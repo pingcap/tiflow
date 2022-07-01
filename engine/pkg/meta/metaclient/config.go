@@ -39,8 +39,7 @@ type AuthConfParams struct {
 // StoreConfigParams is metastore connection configurations
 type StoreConfigParams struct {
 	// storeID is the unique readable identifier for a store
-	StoreID string `toml:"store-id" json:"store-id"`
-	// TODO: replace the slice when we migrate to db
+	StoreID   string         `toml:"store-id" json:"store-id"`
 	Endpoints []string       `toml:"endpoints" json:"endpoints"`
 	Auth      AuthConfParams `toml:"auth" json:"auth"`
 }

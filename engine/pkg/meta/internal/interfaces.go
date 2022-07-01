@@ -16,12 +16,13 @@ package extension
 import (
 	"context"
 
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 )
 
-// KVEx extends the KV interface with Do method to implement the intermediate
+// KVExt extends the KV interface with Do method to implement the intermediate
 // layer easier
-type KVEx interface {
+type KVExt interface {
 	metaclient.KV
 
 	// Do applies a single Op on KV without a transaction.
@@ -29,9 +30,9 @@ type KVEx interface {
 	Do(ctx context.Context, op metaclient.Op) (metaclient.OpResponse, metaclient.Error)
 }
 
-// KVClientEx extends the KVClient interface with Do method to implement the
-// intermediate layer easier
-type KVClientEx interface {
-	KVEx
-	metaclient.Client
+type ClientBuilder interface {
+	ClientType() metaclient.ClientType
+	NewKVClientWithNamespace(storeConf *metaclient.StoreConfigParams,
+		projectID tenant.projectID, jobID model.JobID) (metaclient.KVClient, error)
+	NewKVClient(storeConf *metaclient.StoreConfigParams) (metaclient.KVClient, error)
 }

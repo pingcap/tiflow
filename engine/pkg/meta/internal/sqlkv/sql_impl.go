@@ -15,26 +15,14 @@ package sqlkv
 
 import (
 	"context"
-	"database/sql"
 	"sync"
 
-	"github.com/pingcap/log"
 	cerrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
-	"github.com/pingcap/tiflow/engine/pkg/sqlutil"
-	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	"go.uber.org/zap"
-	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
-
-var userMetaModels = []interface{}{
-	// TODO: add soft-deleted flag
-	&metaclient.KeyValue{},
-	&ormModel.LogicEpoch{},
-}
 
 // sqlImpl is the mysql-compatible implement for KVClient
 type sqlImpl struct {
@@ -42,73 +30,18 @@ type sqlImpl struct {
 	db *gorm.DB
 }
 
-// NewSQLImpl return a sql implement of KVClient
-// TODO: Refine the metastore namespace layer
-// TODO: we will do it in another pr
-func NewSQLImpl(mc *metaclient.StoreConfigParams, projectID tenant.ProjectID, sqlConf sqlutil.DBConfig) (*sqlImpl, error) {
-	err := sqlutil.CreateDatabaseForProject(*mc, projectID, sqlConf)
-	if err != nil {
-		return nil, err
-	}
-
-	dsn := sqlutil.GenerateDSNByParams(*mc, projectID, sqlConf, true)
-	sqlDB, err := sqlutil.NewSQLDB("mysql", dsn, sqlConf)
-	if err != nil {
-		return nil, err
-	}
-
-	cli, err := newImpl(sqlDB)
-	if err != nil {
-		sqlDB.Close()
-	}
-
-	return cli, err
-}
-
-func newImpl(sqlDB *sql.DB) (*sqlImpl, error) {
-	db, err := gorm.Open(mysql.New(mysql.Config{
-		Conn:                      sqlDB,
-		SkipInitializeWithVersion: false,
-	}), &gorm.Config{
-		SkipDefaultTransaction: true,
-		// TODO: logger
-	})
-	if err != nil {
-		log.L().Error("create gorm client fail", zap.Error(err))
-		return nil, cerrors.ErrMetaNewClientFail.Wrap(err)
-	}
-
+func NewSQLImpl(db *gorm.DB) (*sqlImpl, error) {
 	return &sqlImpl{
 		db: db,
 	}, nil
 }
 
 func (c *sqlImpl) Close() error {
-	if c.db != nil {
-		impl, err := c.db.DB()
-		if err != nil {
-			return err
-		}
-		if impl != nil {
-			return cerrors.ErrMetaOpFail.Wrap(impl.Close())
-		}
-	}
-
 	return nil
 }
 
-// Initialize will create all related tables in SQL backend
-// TODO: What if we change the definition of orm??
-func (c *sqlImpl) Initialize(ctx context.Context) error {
-	if err := c.db.WithContext(ctx).AutoMigrate(userMetaModels...); err != nil {
-		return cerrors.ErrMetaOpFail.Wrap(err)
-	}
-
-	// check first record in logic_epochs
-	return ormModel.InitializeEpoch(ctx, c.db)
-}
-
 // GetEpoch implements GenEpoch interface of Client
+// NOTE: epoch_logic table SHOULD HAVE BEEN INITIALIZED
 func (c *sqlImpl) GenEpoch(ctx context.Context) (int64, error) {
 	return ormModel.GenEpoch(ctx, c.db)
 }
@@ -122,7 +55,8 @@ func (c *sqlImpl) Put(ctx context.Context, key, val string) (*metaclient.PutResp
 func (c *sqlImpl) doPut(ctx context.Context, db *gorm.DB, op *metaclient.Op) (*metaclient.PutResponse, metaclient.Error) {
 	if err := c.db.WithContext(ctx).Clauses(clause.OnConflict{
 		UpdateAll: true,
-	}).Create(&metaclient.KeyValue{
+	}).Create(&MetaKV{
+		JobID: c.jobID,
 		Key:   op.KeyBytes(),
 		Value: op.ValueBytes(),
 	}).Error; err != nil {
@@ -130,9 +64,7 @@ func (c *sqlImpl) doPut(ctx context.Context, db *gorm.DB, op *metaclient.Op) (*m
 	}
 
 	return &metaclient.PutResponse{
-		Header: &metaclient.ResponseHeader{
-			// TODO: clusterID
-		},
+		Header: &metaclient.ResponseHeader{},
 	}, nil
 }
 
@@ -160,7 +92,7 @@ func (c *sqlImpl) doGet(ctx context.Context, db *gorm.DB, op *metaclient.Op) (*m
 	db = db.WithContext(ctx)
 	switch {
 	case op.IsOptsWithRange():
-		err = db.Where("key >= ? && key < ?", key, op.RangeBytes()).Find(&kvs).Error
+		err = db.Where("key >= ? AND key < ?", key, op.RangeBytes()).Find(&kvs).Error
 	case op.IsOptsWithPrefix():
 		err = db.Where("key like ?%", key).Find(&kvs).Error
 	case op.IsOptsWithFromKey():
@@ -179,10 +111,8 @@ func (c *sqlImpl) doGet(ctx context.Context, db *gorm.DB, op *metaclient.Op) (*m
 	}
 
 	return &metaclient.GetResponse{
-		Header: &metaclient.ResponseHeader{
-			// TODO: clusterID
-		},
-		Kvs: kvs,
+		Header: &metaclient.ResponseHeader{},
+		Kvs:    kvs,
 	}, nil
 }
 
@@ -207,7 +137,7 @@ func (c *sqlImpl) doDelete(ctx context.Context, db *gorm.DB, op *metaclient.Op) 
 	db = db.WithContext(ctx)
 	switch {
 	case op.IsOptsWithRange():
-		err = db.Where("key >= ? && key < ?", key,
+		err = db.Where("key >= ? AND key < ?", key,
 			op.RangeBytes()).Delete(&metaclient.KeyValue{}).Error
 	case op.IsOptsWithPrefix():
 		err = db.Where("key like ?%", key).Delete(&metaclient.KeyValue{}).Error
@@ -221,9 +151,7 @@ func (c *sqlImpl) doDelete(ctx context.Context, db *gorm.DB, op *metaclient.Op) 
 	}
 
 	return &metaclient.DeleteResponse{
-		Header: &metaclient.ResponseHeader{
-			// TODO:
-		},
+		Header: &metaclient.ResponseHeader{},
 	}, nil
 }
 
@@ -286,7 +214,6 @@ func (t *sqlTxn) Commit() (*metaclient.TxnResponse, metaclient.Error) {
 
 	var txnRsp metaclient.TxnResponse
 	txnRsp.Responses = make([]metaclient.ResponseOp, 0, len(t.ops))
-	// TODO: inject error to check if the context can work well
 	err := t.impl.db.Transaction(func(tx *gorm.DB) error {
 		for _, op := range t.ops {
 			switch {

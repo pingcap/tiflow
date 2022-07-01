@@ -13,19 +13,40 @@
 
 package metaclient
 
-import "context"
+import (
+	"github.com/pingcap/tiflow/engine/pkg/meta/internal"
+	"github.com/pingcap/tiflow/engine/pkg/model"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
+)
 
-// Client defines some basice method used as a meta client
-type Client interface {
-	// Close is the method to close the client and release inner resources
-	Close() error
+type ClientType int
 
-	// GenEpoch generate the increasing epoch for user
-	GenEpoch(ctx context.Context) (int64, error)
+type (
+	ProjectID = tenant.ProjectID
+	JobID     = model.JobID
+)
+
+const (
+	UnKnownKVClientType = ClientType(iota)
+	EtcdKVClientType
+	SQLKVClientType
+)
+
+func NewKVClientWithNamespace(tp ClientType, storeConf *StoreConfigParams,
+	projectID ProjectID, jobID JobID) (KVClient, error) {
+	builder, err := internal.GetClientBuilder(tp)
+	if err != nil {
+		return nil, err
+	}
+
+	return builder.NewKVClientWithNamespace(storeConf, projectID, jobID)
 }
 
-// KVClient combines Client interface and KV interface
-type KVClient interface {
-	Client
-	KV
+func NewKVClient(tp ClientType, storeConf *StoreConfigParams) (KVClient, error) {
+	builder, err := internal.GetClientBuilder(tp)
+	if err != nil {
+		return nil, err
+	}
+
+	return builder.NewKVClient(storeConf)
 }

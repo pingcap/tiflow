@@ -23,26 +23,24 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	cerrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
-	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"go.uber.org/zap"
 )
 
-// CreateDatabaseForProject creates a database in the underlaying DB for project
-// TODO: check the projectID
-func CreateDatabaseForProject(mc metaclient.StoreConfigParams, projectID tenant.ProjectID, conf DBConfig) error {
-	dsn := GenerateDSNByParams(mc, projectID, conf, false)
-	log.L().Info("mysql connection", zap.String("dsn", dsn))
+// CreateSchemaIfNotExists creates a schema if not exists
+func CreateSchemaIfNotExists(ctx context.Context, storeConf *metaclient.StoreConfigParams, schema string) error {
+	dsn := GenerateDSNByParams(storeConf, projectID, nil, "")
+	logger := logutil.FromContext(ctx)
 
-	db, err := sql.Open("mysql", dsn)
+	tmpDB, err := sql.Open("mysql", dsn)
 	if err != nil {
-		log.L().Error("open dsn fail", zap.String("dsn", dsn), zap.Error(err))
+		logger.Error("open dsn fail", zap.String("dsn", dsn), zap.Error(err))
 		return cerrors.ErrMetaOpFail.Wrap(err)
 	}
-	defer db.Close()
+	defer tmpDB.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	query := fmt.Sprintf("CREATE DATABASE if not exists %s", projectID)
+	query := fmt.Sprintf("CREATE DATABASE if not exists %s", schema)
 	_, err = db.ExecContext(ctx, query)
 	if err != nil {
 		return cerrors.ErrMetaOpFail.Wrap(err)
@@ -51,46 +49,51 @@ func CreateDatabaseForProject(mc metaclient.StoreConfigParams, projectID tenant.
 	return nil
 }
 
-// GenerateDSNByParams will use projectID as DBName to achieve isolation.
-// Besides, it will add some default mysql params to the dsn
-func GenerateDSNByParams(mc metaclient.StoreConfigParams, projectID tenant.ProjectID,
-	conf DBConfig, withDB bool,
-) string {
+// GenerateDSNByParams generates a dsn string.
+// dsn format: [username[:password]@][protocol[(address)]]/
+func GenerateDSNByParams(storeConf *metaclient.StoreConfigParams,
+	dbConf *DBConfig, schemaName string) string {
+	if storeConf != nil {
+		return "invalid dsn"
+	}
+
 	dsnCfg := dmysql.NewConfig()
 	if dsnCfg.Params == nil {
 		dsnCfg.Params = make(map[string]string, 1)
 	}
-	dsnCfg.User = mc.Auth.User
-	dsnCfg.Passwd = mc.Auth.Passwd
+	dsnCfg.User = storeConf.Auth.User
+	dsnCfg.Passwd = storeConf.Auth.Passwd
 	dsnCfg.Net = "tcp"
-	dsnCfg.Addr = mc.Endpoints[0]
-	if withDB {
-		dsnCfg.DBName = projectID
+	dsnCfg.Addr = storeConf.Endpoints[0]
+	if schemaName != "" {
+		dsnCfg.DBName = schemaName
 	}
 	dsnCfg.InterpolateParams = true
 	// dsnCfg.MultiStatements = true
-	dsnCfg.Params["readTimeout"] = conf.ReadTimeout
-	dsnCfg.Params["writeTimeout"] = conf.WriteTimeout
-	dsnCfg.Params["timeout"] = conf.DialTimeout
 	dsnCfg.Params["parseTime"] = "true"
 	// TODO: check for timezone
 	dsnCfg.Params["loc"] = "Local"
 
-	// dsn format: [username[:password]@][protocol[(address)]]/
+	if dbConf {
+		dsnCfg.Params["readTimeout"] = dbConf.ReadTimeout
+		dsnCfg.Params["writeTimeout"] = dbConf.WriteTimeout
+		dsnCfg.Params["timeout"] = dbConf.DialTimeout
+	}
+
 	return dsnCfg.FormatDSN()
 }
 
 // NewSQLDB return sql.DB for specified driver and dsn
-func NewSQLDB(driver string, dsn string, conf DBConfig) (*sql.DB, error) {
+func NewSQLDB(driver string, dsn string, dbConf *DBConfig) (*sql.DB, error) {
 	db, err := sql.Open(driver, dsn)
 	if err != nil {
-		log.L().Error("open dsn fail", zap.String("dsn", dsn), zap.Any("config", conf), zap.Error(err))
+		log.L().Error("open dsn fail", zap.String("dsn", dsn), zap.Any("config", dbConf), zap.Error(err))
 		return nil, cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
-	db.SetConnMaxIdleTime(conf.ConnMaxIdleTime)
-	db.SetConnMaxLifetime(conf.ConnMaxLifeTime)
-	db.SetMaxIdleConns(conf.MaxIdleConns)
-	db.SetMaxOpenConns(conf.MaxOpenConns)
+	db.SetConnMaxIdleTime(dbConf.ConnMaxIdleTime)
+	db.SetConnMaxLifetime(dbConf.ConnMaxLifeTime)
+	db.SetMaxIdleConns(dbConf.MaxIdleConns)
+	db.SetMaxOpenConns(dbConf.MaxOpenConns)
 	return db, nil
 }

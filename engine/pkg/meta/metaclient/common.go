@@ -188,7 +188,7 @@ func (resp *TxnResponse) OpResponse() OpResponse {
 // KeyValue defines a key value byte slice pair
 type KeyValue struct {
 	// Key is the key in bytes. An empty key is not allowed.
-	Key []byte `gorm:"primaryKey;column:key;type:varbinary(2048) not null"`
+	Key []byte `gorm:"column:key;type:varbinary(2048) not null;uniqueIndex:uidx_jk,priority:2"`
 	// Value is the value held by the key, in bytes.
 	Value []byte `gorm:"column:value;type:blob"`
 }

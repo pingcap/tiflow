@@ -15,7 +15,6 @@ package sqlutil
 
 import "time"
 
-// TODO: split the config file
 const (
 	DefaultFrameMetaEndpoints = "127.0.0.1:3336"
 	DefaultFrameMetaUser      = "root"
@@ -30,7 +29,7 @@ const (
 	defaultReadTimeout     = "3s"
 	defaultWriteTimeout    = "3s"
 	defaultDialTimeout     = "3s"
-	// TODO: more params for mysql connection
+	// Add more default params for mysql connection
 )
 
 // DBConfig defines some configuration used in database connection
@@ -45,8 +44,8 @@ type DBConfig struct {
 	MaxOpenConns    int
 }
 
-// NewDefaultDBConfig creates a default DBConfig
-func NewDefaultDBConfig() DBConfig {
+// GetDefaultDBConfig return an immutable default DBConfig
+func GetDefaultDBConfig() DBConfig {
 	return DBConfig{
 		ReadTimeout:     defaultReadTimeout,
 		WriteTimeout:    defaultWriteTimeout,
