@@ -26,16 +26,18 @@ import (
 type schedulerManager struct {
 	changefeedID model.ChangeFeedID
 
-	schedulers   []scheduler
-	tasksCounter map[struct{ scheduler, task string }]int
+	schedulers         []scheduler
+	tasksCounter       map[struct{ scheduler, task string }]int
+	maxTaskConcurrency int
 }
 
 func newSchedulerManager(
 	changefeedID model.ChangeFeedID, cfg *config.SchedulerConfig,
 ) *schedulerManager {
 	sm := &schedulerManager{
-		changefeedID: changefeedID,
-		schedulers:   make([]scheduler, schedulerPriorityMax),
+		maxTaskConcurrency: cfg.MaxTaskConcurrency,
+		changefeedID:       changefeedID,
+		schedulers:         make([]scheduler, schedulerPriorityMax),
 		tasksCounter: make(map[struct {
 			scheduler string
 			task      string
@@ -58,8 +60,18 @@ func (sm *schedulerManager) Schedule(
 	currentTables []model.TableID,
 	aliveCaptures map[model.CaptureID]*CaptureStatus,
 	replications map[model.TableID]*ReplicationSet,
+	runTasking map[model.TableID]*scheduleTask,
 ) []*scheduleTask {
-	for _, scheduler := range sm.schedulers {
+	for sid, scheduler := range sm.schedulers {
+		// Basic scheduler bypasses max task check, because it handles the most
+		// critical scheduling, eg. add table via CREATE TABLE DDL.
+		if sid != int(schedulerPriorityBasic) {
+			if len(runTasking) >= sm.maxTaskConcurrency {
+				// Do not generate more scheduling tasks if there are too many
+				// running tasks.
+				return nil
+			}
+		}
 		tasks := scheduler.Schedule(checkpointTs, currentTables, aliveCaptures, replications)
 		for _, t := range tasks {
 			name := struct {
