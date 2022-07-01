@@ -15,7 +15,6 @@ package tp
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -41,13 +40,6 @@ type agent struct {
 	tableM *tableManager
 
 	ownerInfo ownerInfo
-}
-
-type agentInfo struct {
-	version      string
-	captureID    model.CaptureID
-	changeFeedID model.ChangeFeedID
-	epoch        schedulepb.ProcessorEpoch
 
 	// Liveness of the capture.
 	//
@@ -55,21 +47,23 @@ type agentInfo struct {
 	liveness model.Liveness
 }
 
-func (a agentInfo) String() string {
-	bytes, _ := json.Marshal(a)
-	return string(bytes)
+type agentInfo struct {
+	Version      string
+	CaptureID    model.CaptureID
+	ChangeFeedID model.ChangeFeedID
+	Epoch        schedulepb.ProcessorEpoch
 }
 
 func (a agentInfo) resetEpoch() {
-	a.epoch = schedulepb.ProcessorEpoch{Epoch: uuid.New().String()}
+	a.Epoch = schedulepb.ProcessorEpoch{Epoch: uuid.New().String()}
 }
 
 func newAgentInfo(changefeedID model.ChangeFeedID, captureID model.CaptureID) agentInfo {
 	result := agentInfo{
-		version:      version.ReleaseSemver(),
-		captureID:    captureID,
-		changeFeedID: changefeedID,
-		epoch:        schedulepb.ProcessorEpoch{},
+		Version:      version.ReleaseSemver(),
+		CaptureID:    captureID,
+		ChangeFeedID: changefeedID,
+		Epoch:        schedulepb.ProcessorEpoch{},
 	}
 	result.resetEpoch()
 
@@ -77,14 +71,9 @@ func newAgentInfo(changefeedID model.ChangeFeedID, captureID model.CaptureID) ag
 }
 
 type ownerInfo struct {
-	revision  schedulepb.OwnerRevision
-	version   string
-	captureID string
-}
-
-func (o ownerInfo) String() string {
-	bytes, _ := json.Marshal(o)
-	return string(bytes)
+	Revision  schedulepb.OwnerRevision
+	Version   string
+	CaptureID string
 }
 
 // NewAgent returns a new agent.
@@ -149,9 +138,9 @@ func NewAgent(ctx context.Context,
 
 	result.ownerInfo = ownerInfo{
 		// owner's version can only be got by receiving heartbeat
-		version:   "",
-		captureID: ownerCaptureID,
-		revision:  schedulepb.OwnerRevision{Revision: revision},
+		Version:   "",
+		CaptureID: ownerCaptureID,
+		Revision:  schedulepb.OwnerRevision{Revision: revision},
 	}
 	return result, nil
 }
@@ -221,9 +210,9 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) []*schedulepb.Message {
 			a.handleMessageDispatchTableRequest(message.DispatchTableRequest, processorEpoch)
 		default:
 			log.Warn("tpscheduler: unknown message received",
-				zap.String("capture", a.captureID),
-				zap.String("namespace", a.changeFeedID.Namespace),
-				zap.String("changefeed", a.changeFeedID.ID),
+				zap.String("capture", a.CaptureID),
+				zap.String("namespace", a.ChangeFeedID.Namespace),
+				zap.String("changefeed", a.ChangeFeedID.ID),
 				zap.Any("message", message))
 		}
 	}
@@ -261,9 +250,9 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) *schedulep
 	}
 
 	log.Debug("tpscheduler: agent generate heartbeat response",
-		zap.String("capture", a.captureID),
-		zap.String("namespace", a.changeFeedID.Namespace),
-		zap.String("changefeed", a.changeFeedID.ID),
+		zap.String("capture", a.CaptureID),
+		zap.String("namespace", a.ChangeFeedID.Namespace),
+		zap.String("changefeed", a.ChangeFeedID.ID),
 		zap.Any("message", message))
 
 	return message
@@ -289,14 +278,14 @@ func (a *agent) handleMessageDispatchTableRequest(
 	request *schedulepb.DispatchTableRequest,
 	epoch schedulepb.ProcessorEpoch,
 ) {
-	if a.epoch != epoch {
+	if a.Epoch != epoch {
 		log.Info("tpscheduler: agent receive dispatch table request "+
 			"epoch does not match, ignore it",
-			zap.String("capture", a.captureID),
-			zap.String("namespace", a.changeFeedID.Namespace),
-			zap.String("changefeed", a.changeFeedID.ID),
+			zap.String("capture", a.CaptureID),
+			zap.String("namespace", a.ChangeFeedID.Namespace),
+			zap.String("changefeed", a.ChangeFeedID.ID),
 			zap.String("epoch", epoch.Epoch),
-			zap.String("expected", a.epoch.Epoch))
+			zap.String("expected", a.Epoch.Epoch))
 		return
 	}
 	var (
@@ -310,9 +299,9 @@ func (a *agent) handleMessageDispatchTableRequest(
 	case *schedulepb.DispatchTableRequest_AddTable:
 		if a.liveness != model.LivenessCaptureAlive {
 			log.Info("tpscheduler: agent is stopping, and reject handle add table request",
-				zap.String("capture", a.captureID),
-				zap.String("namespace", a.changeFeedID.Namespace),
-				zap.String("changefeed", a.changeFeedID.ID),
+				zap.String("capture", a.CaptureID),
+				zap.String("namespace", a.ChangeFeedID.Namespace),
+				zap.String("changefeed", a.ChangeFeedID.ID),
 				zap.Any("request", request))
 			return
 		}
@@ -333,9 +322,9 @@ func (a *agent) handleMessageDispatchTableRequest(
 			log.Warn("tpscheduler: agent ignore remove table request,"+
 				"since the table not found",
 				zap.Any("tableID", tableID),
-				zap.String("capture", a.captureID),
-				zap.String("namespace", a.changeFeedID.Namespace),
-				zap.String("changefeed", a.changeFeedID.ID),
+				zap.String("capture", a.CaptureID),
+				zap.String("namespace", a.ChangeFeedID.Namespace),
+				zap.String("changefeed", a.ChangeFeedID.ID),
 				zap.Any("request", request))
 			return
 		}
@@ -347,9 +336,9 @@ func (a *agent) handleMessageDispatchTableRequest(
 		}
 	default:
 		log.Warn("tpscheduler: agent ignore unknown dispatch table request",
-			zap.String("capture", a.captureID),
-			zap.String("namespace", a.changeFeedID.Namespace),
-			zap.String("changefeed", a.changeFeedID.ID),
+			zap.String("capture", a.CaptureID),
+			zap.String("namespace", a.ChangeFeedID.Namespace),
+			zap.String("changefeed", a.ChangeFeedID.ID),
 			zap.Any("request", request))
 		return
 	}
@@ -365,9 +354,9 @@ func (a *agent) GetLastSentCheckpointTs() (checkpointTs model.Ts) {
 // Close implement agent interface
 func (a *agent) Close() error {
 	log.Debug("tpscheduler: agent closed",
-		zap.String("capture", a.captureID),
-		zap.String("namespace", a.changeFeedID.Namespace),
-		zap.String("changefeed", a.changeFeedID.ID))
+		zap.String("capture", a.CaptureID),
+		zap.String("namespace", a.ChangeFeedID.Namespace),
+		zap.String("changefeed", a.ChangeFeedID.ID))
 	return a.trans.Close()
 }
 
@@ -377,49 +366,49 @@ func (a *agent) Close() error {
 // revision: the incoming owner's revision as generated by Etcd election.
 // version: the incoming owner's semantic version string
 func (a *agent) handleOwnerInfo(id model.CaptureID, revision int64, version string) bool {
-	if a.ownerInfo.revision.Revision == revision {
-		if a.ownerInfo.captureID != id {
+	if a.ownerInfo.Revision.Revision == revision {
+		if a.ownerInfo.CaptureID != id {
 			// This panic will happen only if two messages have been received
 			// with the same ownerRev but with different ownerIDs.
 			// This should never happen unless the election via Etcd is buggy.
 			log.Panic("tpscheduler: owner IDs do not match",
-				zap.String("capture", a.captureID),
-				zap.String("namespace", a.changeFeedID.Namespace),
-				zap.String("changefeed", a.changeFeedID.ID),
-				zap.String("expected", a.ownerInfo.captureID),
+				zap.String("capture", a.CaptureID),
+				zap.String("namespace", a.ChangeFeedID.Namespace),
+				zap.String("changefeed", a.ChangeFeedID.ID),
+				zap.String("expected", a.ownerInfo.CaptureID),
 				zap.String("actual", id))
 		}
 		return true
 	}
 
 	// the current owner is staled
-	if a.ownerInfo.revision.Revision < revision {
-		a.ownerInfo.captureID = id
-		a.ownerInfo.revision.Revision = revision
-		a.ownerInfo.version = version
+	if a.ownerInfo.Revision.Revision < revision {
+		a.ownerInfo.CaptureID = id
+		a.ownerInfo.Revision.Revision = revision
+		a.ownerInfo.Version = version
 
 		a.resetEpoch()
 
 		log.Info("tpscheduler: new owner in power",
-			zap.String("capture", a.captureID),
-			zap.String("namespace", a.changeFeedID.Namespace),
-			zap.String("changefeed", a.changeFeedID.ID),
-			zap.Stringer("owner", a.ownerInfo), zap.Stringer("agent", a))
+			zap.String("capture", a.CaptureID),
+			zap.String("namespace", a.ChangeFeedID.Namespace),
+			zap.String("changefeed", a.ChangeFeedID.ID),
+			zap.Any("owner", a.ownerInfo), zap.Any("agent", a))
 		return true
 	}
 
 	// staled owner heartbeat, just ignore it.
 	log.Info("tpscheduler: message from staled owner",
-		zap.String("capture", a.captureID),
-		zap.String("namespace", a.changeFeedID.Namespace),
-		zap.String("changefeed", a.changeFeedID.ID),
-		zap.Stringer("staledOwner", ownerInfo{
-			captureID: id,
-			revision:  schedulepb.OwnerRevision{Revision: revision},
-			version:   version,
+		zap.String("capture", a.CaptureID),
+		zap.String("namespace", a.ChangeFeedID.Namespace),
+		zap.String("changefeed", a.ChangeFeedID.ID),
+		zap.Any("staledOwner", ownerInfo{
+			CaptureID: id,
+			Revision:  schedulepb.OwnerRevision{Revision: revision},
+			Version:   version,
 		}),
-		zap.Stringer("owner", a.ownerInfo),
-		zap.Stringer("agent", a))
+		zap.Any("owner", a.ownerInfo),
+		zap.Any("agent", a.agentInfo))
 	return false
 }
 
@@ -446,18 +435,18 @@ func (a *agent) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) error 
 		m := msgs[i]
 		if m.MsgType == schedulepb.MsgUnknown {
 			log.Panic("tpscheduler: invalid message no destination or unknown message type",
-				zap.String("capture", a.captureID),
-				zap.String("namespace", a.changeFeedID.Namespace),
-				zap.String("changefeed", a.changeFeedID.ID),
+				zap.String("capture", a.CaptureID),
+				zap.String("namespace", a.ChangeFeedID.Namespace),
+				zap.String("changefeed", a.ChangeFeedID.ID),
 				zap.Any("message", m))
 		}
 		m.Header = &schedulepb.Message_Header{
-			Version:        a.version,
-			OwnerRevision:  a.ownerInfo.revision,
-			ProcessorEpoch: a.epoch,
+			Version:        a.Version,
+			OwnerRevision:  a.ownerInfo.Revision,
+			ProcessorEpoch: a.Epoch,
 		}
-		m.From = a.captureID
-		m.To = a.ownerInfo.captureID
+		m.From = a.CaptureID
+		m.To = a.ownerInfo.CaptureID
 	}
 	return a.trans.Send(ctx, msgs)
 }
