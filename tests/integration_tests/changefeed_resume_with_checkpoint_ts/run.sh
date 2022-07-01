@@ -116,7 +116,8 @@ function resume_changefeed_in_failed_state() {
 }
 
 if [ "$SINK_TYPE" == "kafka" ]; then
-		exit 0
+	echo "[$(date)] <<<<<< skip test case $TEST_NAME for kafka sink! >>>>>>"
+	exit 0
 fi
 
 trap stop_tidb_cluster EXIT
