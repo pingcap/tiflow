@@ -28,16 +28,19 @@ import (
 )
 
 func newAgent4Test() *agent {
-	return &agent{
+	a := &agent{
 		ownerInfo: ownerInfo{
 			version:   "owner-version-1",
 			captureID: "owner-1",
 			revision:  schedulepb.OwnerRevision{Revision: 1},
 		},
-		version:   "agent-version-1",
-		epoch:     schedulepb.ProcessorEpoch{Epoch: "agent-epoch-1"},
-		captureID: "agent-1",
 	}
+
+	a.version = "agent-version-1"
+	a.epoch = schedulepb.ProcessorEpoch{Epoch: "agent-epoch-1"}
+	a.captureID = "agent-1"
+
+	return a
 }
 
 func TestAgentHandleMessageDispatchTable(t *testing.T) {

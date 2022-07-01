@@ -31,7 +31,16 @@ func TestSchedulerBasic(t *testing.T) {
 	// AddTable only
 	replications := map[model.TableID]*ReplicationSet{}
 	b := newBasicScheduler()
+
+	// all capture's stopping, cannot add table
+	captures["a"].State = CaptureStateStopping
+	captures["b"].State = CaptureStateStopping
 	tasks := b.Schedule(0, currentTables, captures, replications)
+	require.Len(t, tasks, 0)
+
+	captures["a"].State = CaptureStateInitialized
+	captures["b"].State = CaptureStateInitialized
+	tasks = b.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
 	require.Len(t, tasks[0].burstBalance.AddTables, 4)
 	require.Equal(t, tasks[0].burstBalance.AddTables[0].TableID, model.TableID(1))

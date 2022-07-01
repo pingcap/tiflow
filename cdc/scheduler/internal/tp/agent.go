@@ -40,7 +40,6 @@ type agent struct {
 
 	tableM *tableManager
 
-	// agent maintain the owner's information to track owner switch.
 	ownerInfo ownerInfo
 }
 
