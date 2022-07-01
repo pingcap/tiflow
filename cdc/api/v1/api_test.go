@@ -757,9 +757,8 @@ func TestServerStatusLiveness(t *testing.T) {
 	cp.EXPECT().Info().DoAndReturn(func() (model.CaptureInfo, error) {
 		return model.CaptureInfo{}, nil
 	}).AnyTimes()
-	cp.EXPECT().IsOwner().DoAndReturn(func() bool {
-		return true
-	}).AnyTimes()
+	cp.EXPECT().IsOwner().Return(true).AnyTimes()
+	cp.EXPECT().IsReady().Return(true).AnyTimes()
 
 	// Alive.
 	alive := cp.EXPECT().Liveness().DoAndReturn(func() model.Liveness {
