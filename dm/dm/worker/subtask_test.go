@@ -16,10 +16,7 @@ package worker
 import (
 	"context"
 	"strings"
-	"testing"
 	"time"
-
-	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
@@ -524,7 +521,7 @@ func (t *testSubTask) TestSubtaskFastQuit(c *C) {
 	c.Assert(st.Stage(), Equals, pb.Stage_Stopped)
 }
 
-func TestSubtaskRace(t *testing.T) {
+func (t *testSubTask) TestSubtaskRace(c *C) {
 	// to test data race of Marshal() and markResultCanceled()
 	tempErrors := []*pb.ProcessError{}
 	tempDetail := []byte{}
@@ -534,12 +531,11 @@ func TestSubtaskRace(t *testing.T) {
 		Detail:     tempDetail,
 	}
 	cfg := &config.SubTaskConfig{
-		Name: "test-subtask-race",
-		ValidatorCfg: config.ValidatorConfig{
-			Mode: config.ValidationFast,
-		},
+		Name: "testSubtaskScene",
+		Mode: config.ModeFull,
 	}
-	st := NewSubTaskWithStage(cfg, pb.Stage_Paused, nil, "worker")
+	st := NewSubTask(cfg, nil, "worker")
+	c.Assert(st.Stage(), DeepEquals, pb.Stage_New)
 	st.result = &tempProcessResult
 	tempQueryStatusResponse := pb.QueryStatusResponse{}
 	tempQueryStatusResponse.SubTaskStatus = make([]*pb.SubTaskStatus, 1)
