@@ -87,7 +87,7 @@ func (e *eventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) {
 			Callback: func() {
 				e.progressTracker.remove(eventID)
 			},
-			TableStatus: e.state,
+			TableStatus: &e.state,
 		}
 		resolvedCallbackableEvents = append(resolvedCallbackableEvents, ce)
 		e.progressTracker.addEvent(eventID)

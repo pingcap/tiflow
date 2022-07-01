@@ -48,18 +48,23 @@ func (m *mockEventSink) acknowledge(commitTs uint64) {
 		return
 	}
 	ackedEvents := m.events[:i]
+
+	for _, event := range ackedEvents {
+		if event.TableStatus.Load() != pipeline.TableStateStopped {
+			event.Callback()
+		} else {
+			// If the table is stopped, the event should be ignored.
+			return
+		}
+	}
+
+	// Remove the acked events from the event buffer.
 	m.events = append(
 		make([]*eventsink.TxnCallbackableEvent,
 			0,
 			len(m.events[i:])),
 		m.events[i:]...,
 	)
-
-	for _, event := range ackedEvents {
-		if event.TableStatus.Load() != pipeline.TableStateStopped {
-			event.Callback()
-		}
-	}
 }
 
 func getTestRows() []*model.RowChangedEvent {
@@ -246,7 +251,10 @@ func TestClose(t *testing.T) {
 	tb := New[*model.SingleTableTxn](sink, &eventsink.TxnEventAppender{})
 
 	tb.AppendRowChangedEvents(getTestRows()...)
-	tb.UpdateResolvedTs(model.NewResolvedTs(100))
+	tb.UpdateResolvedTs(model.NewResolvedTs(105))
+	require.Len(t, sink.events, 7, "all events should be flushed")
 	tb.Close()
 	require.Equal(t, pipeline.TableStateStopped, tb.state, "tableState should be closed")
+	sink.acknowledge(105)
+	require.Len(t, sink.events, 7, "no event should be acked")
 }
