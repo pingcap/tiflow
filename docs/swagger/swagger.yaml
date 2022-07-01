@@ -41,6 +41,8 @@ definitions:
         type: string
       schema-registry:
         type: string
+      transaction-atomicity:
+        type: string
     type: object
   model.Capture:
     properties:
@@ -606,6 +608,27 @@ paths:
       summary: Change TiCDC log level
       tags:
       - common
+  /api/v1/owner:
+    get:
+      consumes:
+      - application/json
+      description: get the capture information of the owner
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: ""
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+      summary: Get owner capture information
+      tags:
+      - owner
   /api/v1/owner/resign:
     post:
       consumes:

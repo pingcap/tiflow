@@ -595,6 +595,38 @@ var doc = `{
                 }
             }
         },
+        "/api/v1/owner": {
+            "get": {
+                "description": "get the capture information of the owner",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "owner"
+                ],
+                "summary": "Get owner capture information",
+                "responses": {
+                    "200": {
+                        "description": ""
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/owner/resign": {
             "post": {
                 "description": "notify the current owner to resign",
@@ -795,6 +827,9 @@ var doc = `{
                     "type": "string"
                 },
                 "schema-registry": {
+                    "type": "string"
+                },
+                "transaction-atomicity": {
                     "type": "string"
                 }
             }
