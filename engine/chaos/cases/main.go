@@ -25,7 +25,8 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.uber.org/zap"
 )
 
@@ -49,7 +50,7 @@ func main() {
 		return
 	}
 
-	err = log.InitLogger(&log.Config{
+	err = logutil.InitLogger(&logutil.Config{
 		Level: "info",
 	})
 	if err != nil {

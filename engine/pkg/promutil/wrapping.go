@@ -14,7 +14,7 @@
 package promutil
 
 import (
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )

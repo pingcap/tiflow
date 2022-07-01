@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
@@ -60,6 +60,7 @@ type (
 		framework.BaseWorker
 
 		init   bool
+		cancel context.CancelFunc
 		closed int32
 		status *dummyWorkerStatus
 		config *WorkerConfig
@@ -77,33 +78,33 @@ type (
 )
 
 type dummyWorkerStatus struct {
-	sync.RWMutex
+	rwm        sync.RWMutex
 	BusinessID int               `json:"business-id"`
 	Tick       int64             `json:"tick"`
 	Checkpoint *workerCheckpoint `json:"checkpoint"`
 }
 
 func (s *dummyWorkerStatus) tick() {
-	s.Lock()
-	defer s.Unlock()
+	s.rwm.Lock()
+	defer s.rwm.Unlock()
 	s.Tick++
 }
 
 func (s *dummyWorkerStatus) getEtcdCheckpoint() workerCheckpoint {
-	s.RLock()
-	defer s.RUnlock()
+	s.rwm.RLock()
+	defer s.rwm.RUnlock()
 	return *s.Checkpoint
 }
 
 func (s *dummyWorkerStatus) setEtcdCheckpoint(ckpt *workerCheckpoint) {
-	s.Lock()
-	defer s.Unlock()
+	s.rwm.Lock()
+	defer s.rwm.Unlock()
 	s.Checkpoint = ckpt
 }
 
 func (s *dummyWorkerStatus) Marshal() ([]byte, error) {
-	s.RLock()
-	defer s.RUnlock()
+	s.rwm.RLock()
+	defer s.rwm.RUnlock()
 	return json.Marshal(s)
 }
 
@@ -111,10 +112,13 @@ func (s *dummyWorkerStatus) Unmarshal(data []byte) error {
 	return json.Unmarshal(data, s)
 }
 
-func (d *dummyWorker) InitImpl(ctx context.Context) error {
+func (d *dummyWorker) InitImpl(_ context.Context) error {
 	if !d.init {
 		if d.config.EtcdWatchEnable {
+			// Don't use the ctx from the caller, because it may be cancelled by the caller after InitImpl() returns.
+			ctx, cancel := context.WithCancel(context.Background())
 			d.bgRunEtcdWatcher(ctx)
+			d.cancel = cancel
 		}
 		d.init = true
 		d.setStatusCode(frameModel.WorkerStatusNormal)
@@ -205,7 +209,11 @@ func (d *dummyWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue)
 }
 
 func (d *dummyWorker) CloseImpl(ctx context.Context) error {
-	atomic.StoreInt32(&d.closed, 1)
+	if atomic.CompareAndSwapInt32(&d.closed, 0, 1) {
+		if d.cancel != nil {
+			d.cancel()
+		}
+	}
 	return nil
 }
 

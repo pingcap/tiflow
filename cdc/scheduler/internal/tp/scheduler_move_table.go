@@ -62,7 +62,7 @@ func (m *moveTableScheduler) addTask(tableID model.TableID, target model.Capture
 func (m *moveTableScheduler) Schedule(
 	_ model.Ts,
 	currentTables []model.TableID,
-	captures map[model.CaptureID]*model.CaptureInfo,
+	captures map[model.CaptureID]*CaptureStatus,
 	replications map[model.TableID]*ReplicationSet,
 ) []*scheduleTask {
 	m.mu.Lock()
@@ -93,8 +93,9 @@ func (m *moveTableScheduler) Schedule(
 			delete(m.tasks, tableID)
 			continue
 		}
+
 		// the target capture may offline after manual move table triggered.
-		_, ok := captures[task.moveTable.DestCapture]
+		status, ok := captures[task.moveTable.DestCapture]
 		if !ok {
 			log.Info("tpscheduler: move table ignored, since the target capture cannot found",
 				zap.Int64("tableID", tableID),
@@ -102,6 +103,16 @@ func (m *moveTableScheduler) Schedule(
 			delete(m.tasks, tableID)
 			continue
 		}
+		if status.State != CaptureStateInitialized {
+			log.Warn("tpscheduler: move table ignored,"+
+				"since the target capture is not initialized",
+				zap.Int64("tableID", tableID),
+				zap.String("captureID", task.moveTable.DestCapture),
+				zap.Any("state", status.State))
+			delete(m.tasks, tableID)
+			continue
+		}
+
 		rep, ok := replications[tableID]
 		if !ok {
 			log.Warn("tpscheduler: move table ignored, "+

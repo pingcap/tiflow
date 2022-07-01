@@ -23,8 +23,8 @@ import (
 	"time"
 
 	"github.com/phayes/freeport"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/server/v3/embed"
 )
@@ -35,136 +35,150 @@ func allocTempURL(t *testing.T) string {
 	return fmt.Sprintf("127.0.0.1:%d", port)
 }
 
+// TestPrepareJoinEtcd tests join etcd one by one into a cluster
+// - start etcd-1 first
+// - join etcd-1 with etcd-2
+// - start etcd-2
+// - join etcd-3 with etcd-2
+// TODO: refactor to better table driven cases
 func TestPrepareJoinEtcd(t *testing.T) {
 	// initialized the logger to make genEmbedEtcdConfig working.
-	require.Nil(t, log.InitLogger(&log.Config{}))
+	require.Nil(t, logutil.InitLogger(&logutil.Config{}))
 
-	masterAddr := allocTempURL(t)
-	advertiseAddr := allocTempURL(t)
+	masterAddr1 := allocTempURL(t)
+	advertiseAddr1 := allocTempURL(t)
 
-	cfgCluster := &ConfigParams{} // used to start an etcd cluster
-	cfgCluster.Name = "dataflow-master-1"
-	cfgCluster.DataDir = t.TempDir()
-	cfgCluster.PeerUrls = "http://" + allocTempURL(t)
-	cfgCluster.Adjust("", embed.ClusterStateFlagNew)
+	cfgCluster1 := &ConfigParams{
+		Name:     "dataflow-master-1",
+		DataDir:  t.TempDir(),
+		PeerUrls: "http://" + allocTempURL(t),
+	}
+	cfgCluster1.Adjust("", embed.ClusterStateFlagNew)
 
-	cfgClusterEtcd := GenEmbedEtcdConfigWithLogger("info")
-	cfgClusterEtcd, err := GenEmbedEtcdConfig(cfgClusterEtcd, masterAddr, advertiseAddr, cfgCluster)
+	cfgClusterEtcd1 := GenEmbedEtcdConfigWithLogger("info")
+	cfgClusterEtcd1, err := GenEmbedEtcdConfig(cfgClusterEtcd1, masterAddr1, advertiseAddr1, cfgCluster1)
 	require.Nil(t, err)
 
-	cfgBefore := cloneConfig(cfgCluster) // before `prepareJoinEtcd` applied
-	cfgBefore.DataDir = t.TempDir()      // overwrite some config items
-	beforeMasterAddr := allocTempURL(t)
-	cfgBefore.PeerUrls = "http://" + allocTempURL(t)
-	cfgBefore.AdvertisePeerUrls = cfgBefore.PeerUrls
+	// cfgBefore is a configuration template
+	cfgBefore := &ConfigParams{
+		Name:     "dataflow-master-1",
+		DataDir:  t.TempDir(),
+		PeerUrls: "http://" + allocTempURL(t),
+	}
 	cfgBefore.Adjust("", embed.ClusterStateFlagNew)
+	cfgCluster2 := cloneConfig(cfgBefore) // after `prepareJoinEtcd applied
+	masterAddr2 := allocTempURL(t)
 
-	cfgAfter := cloneConfig(cfgBefore) // after `prepareJoinEtcd applied
+	// test some corner cases
+	{
+		// not set `join`, do nothing
+		require.Nil(t, PrepareJoinEtcd(cfgCluster2, masterAddr2))
+		require.Equal(t, cfgCluster2, cfgBefore)
 
-	// not set `join`, do nothing
-	require.Nil(t, PrepareJoinEtcd(cfgAfter, beforeMasterAddr))
-	require.Equal(t, cfgAfter, cfgBefore)
+		// try to join self
+		cfgCluster2.Join = masterAddr2
+		err = PrepareJoinEtcd(cfgCluster2, masterAddr2)
+		require.True(t, errors.ErrMasterJoinEmbedEtcdFail.Equal(err))
+		require.Regexp(t, ".*join self.*is forbidden.*", err)
 
-	// try to join self
-	cfgAfter.Join = beforeMasterAddr
-	err = PrepareJoinEtcd(cfgAfter, beforeMasterAddr)
-	require.True(t, errors.ErrMasterJoinEmbedEtcdFail.Equal(err))
-	require.Regexp(t, ".*join self.*is forbidden.*", err)
+		// update `join` to a valid item
+		joinCluster := masterAddr1
+		joinFP := filepath.Join(cfgBefore.DataDir, "join")
+		cfgBefore.Join = joinCluster
 
-	// update `join` to a valid item
-	joinCluster := masterAddr
-	joinFP := filepath.Join(cfgBefore.DataDir, "join")
-	cfgBefore.Join = joinCluster
+		// join with persistent data
+		require.Nil(t, os.WriteFile(joinFP, []byte(joinCluster), privateDirMode))
+		cfgCluster2 = cloneConfig(cfgBefore)
+		require.Nil(t, PrepareJoinEtcd(cfgCluster2, masterAddr2))
+		require.Equal(t, joinCluster, cfgCluster2.InitialCluster)
+		require.Equal(t, embed.ClusterStateFlagExisting, cfgCluster2.InitialClusterState)
+		require.Nil(t, os.Remove(joinFP)) // remove the persistent data
 
-	// join with persistent data
-	require.Nil(t, os.WriteFile(joinFP, []byte(joinCluster), privateDirMode))
-	cfgAfter = cloneConfig(cfgBefore)
-	require.Nil(t, PrepareJoinEtcd(cfgAfter, beforeMasterAddr))
-	require.Equal(t, joinCluster, cfgAfter.InitialCluster)
-	require.Equal(t, embed.ClusterStateFlagExisting, cfgAfter.InitialClusterState)
-	require.Nil(t, os.Remove(joinFP)) // remove the persistent data
+		require.Nil(t, os.Mkdir(joinFP, 0o700))
+		cfgCluster2 = cloneConfig(cfgBefore)
+		err = PrepareJoinEtcd(cfgCluster2, masterAddr2)
+		require.NotNil(t, err)
+		require.Regexp(t, ".*failed to join embed etcd: read persistent join data.*", err)
+		require.Nil(t, os.Remove(joinFP))        // remove the persistent data
+		require.Equal(t, cfgBefore, cfgCluster2) // not changed
 
-	require.Nil(t, os.Mkdir(joinFP, 0o700))
-	cfgAfter = cloneConfig(cfgBefore)
-	err = PrepareJoinEtcd(cfgAfter, beforeMasterAddr)
-	require.NotNil(t, err)
-	require.Regexp(t, ".*failed to join embed etcd: read persistent join data.*", err)
-	require.Nil(t, os.Remove(joinFP))     // remove the persistent data
-	require.Equal(t, cfgBefore, cfgAfter) // not changed
+		// restart with previous data
+		memberDP := filepath.Join(cfgBefore.DataDir, "member")
+		require.Nil(t, os.Mkdir(memberDP, 0o700))
+		require.Nil(t, os.Mkdir(filepath.Join(memberDP, "wal"), 0o700))
+		err = PrepareJoinEtcd(cfgCluster2, masterAddr2)
+		require.Nil(t, err)
+		require.Equal(t, "", cfgCluster2.InitialCluster)
+		require.Equal(t, embed.ClusterStateFlagExisting, cfgCluster2.InitialClusterState)
+		require.Nil(t, os.RemoveAll(memberDP)) // remove previous data
+	}
 
-	// restart with previous data
-	memberDP := filepath.Join(cfgBefore.DataDir, "member")
-	require.Nil(t, os.Mkdir(memberDP, 0o700))
-	require.Nil(t, os.Mkdir(filepath.Join(memberDP, "wal"), 0o700))
-	err = PrepareJoinEtcd(cfgAfter, beforeMasterAddr)
-	require.Nil(t, err)
-	require.Equal(t, "", cfgAfter.InitialCluster)
-	require.Equal(t, embed.ClusterStateFlagExisting, cfgAfter.InitialClusterState)
-	require.Nil(t, os.RemoveAll(memberDP)) // remove previous data
-
-	// start an etcd cluster
-	e1, err := StartEtcd(cfgClusterEtcd, nil, nil, time.Minute)
+	// start etcd cluster-1
+	e1, err := StartEtcd(cfgClusterEtcd1, nil, nil, time.Minute)
 	require.Nil(t, err)
 	defer e1.Close()
 
-	// same `name`, duplicate
-	cfgAfter = cloneConfig(cfgBefore)
-	err = PrepareJoinEtcd(cfgAfter, beforeMasterAddr)
-	require.NotNil(t, err)
-	require.Regexp(t, ".*failed to join embed etcd: missing data or joining a duplicate member.*", err)
-	require.Equal(t, cfgBefore, cfgAfter) // not changed
+	// test some failure cases
+	{
+		// same `name`, duplicate
+		cfgCluster2 = cloneConfig(cfgBefore)
+		err = PrepareJoinEtcd(cfgCluster2, masterAddr2)
+		require.NotNil(t, err)
+		require.Regexp(t, ".*failed to join embed etcd: missing data or joining a duplicate member.*", err)
+		require.Equal(t, cfgBefore, cfgCluster2) // not changed
 
-	// set a different name
-	cfgBefore.Name = "dataflow-master-2"
+		// set a different name
+		cfgBefore.Name = "dataflow-master-2"
 
-	// add member with invalid `advertise-peer-urls`
-	cfgAfter = cloneConfig(cfgBefore)
-	cfgAfter.AdvertisePeerUrls = "invalid-advertise-peer-urls"
-	err = PrepareJoinEtcd(cfgAfter, beforeMasterAddr)
-	require.NotNil(t, err)
-	require.Regexp(t, ".*failed to join embed etcd: add member.*", err)
+		// add member with invalid `advertise-peer-urls`
+		cfgCluster2 = cloneConfig(cfgBefore)
+		cfgCluster2.AdvertisePeerUrls = "invalid-advertise-peer-urls"
+		err = PrepareJoinEtcd(cfgCluster2, masterAddr2)
+		require.NotNil(t, err)
+		require.Regexp(t, ".*failed to join embed etcd: add member.*", err)
+	}
 
 	// join with existing cluster
-	cfgAfter = cloneConfig(cfgBefore)
-	require.Nil(t, PrepareJoinEtcd(cfgAfter, beforeMasterAddr))
-	require.Equal(t, embed.ClusterStateFlagExisting, cfgAfter.InitialClusterState)
+	cfgCluster2 = cloneConfig(cfgBefore)
+	require.Nil(t, PrepareJoinEtcd(cfgCluster2, masterAddr2))
+	require.Equal(t, embed.ClusterStateFlagExisting, cfgCluster2.InitialClusterState)
 
-	obtainClusters := strings.Split(cfgAfter.InitialCluster, ",")
+	obtainClusters := strings.Split(cfgCluster2.InitialCluster, ",")
 	sort.Strings(obtainClusters)
 	expectedClusters := []string{
-		cfgCluster.InitialCluster,
-		fmt.Sprintf("%s=%s", cfgAfter.Name, cfgAfter.PeerUrls),
+		cfgCluster1.InitialCluster,
+		fmt.Sprintf("%s=%s", cfgCluster2.Name, cfgCluster2.PeerUrls),
 	}
 	sort.Strings(expectedClusters)
 	require.Equal(t, expectedClusters, obtainClusters)
 
 	// join data should exist now
-	joinData, err := os.ReadFile(joinFP)
+	joinData, err := os.ReadFile(filepath.Join(cfgBefore.DataDir, "join"))
 	require.Nil(t, err)
-	require.Equal(t, cfgAfter.InitialCluster, string(joinData))
+	require.Equal(t, cfgCluster2.InitialCluster, string(joinData))
 
 	// prepare join done, but has not start the etcd to complete the join, can not join anymore.
-	cfgAfter2 := cloneConfig(cfgBefore)
-	cfgAfter2.Name = "dataflow-master-3" // overwrite some items
-	cfgAfter2.DataDir = t.TempDir()
-	after2MasterAddr := allocTempURL(t)
-	cfgAfter2.PeerUrls = "http://" + allocTempURL(t)
-	cfgAfter2.AdvertisePeerUrls = cfgAfter2.PeerUrls
-	err = PrepareJoinEtcd(cfgAfter2, after2MasterAddr)
+	cfgCluster3 := cloneConfig(cfgBefore)
+	cfgCluster3.Name = "dataflow-master-3" // overwrite some items
+	cfgCluster3.DataDir = t.TempDir()
+	masterAddr3 := allocTempURL(t)
+	cfgCluster3.PeerUrls = "http://" + allocTempURL(t)
+	cfgCluster3.AdvertisePeerUrls = cfgCluster3.PeerUrls
+	err = PrepareJoinEtcd(cfgCluster3, masterAddr3)
 	require.NotNil(t, err)
 	require.Regexp(t, ".*context deadline exceeded.*", err)
 
-	// start the joining etcd
-	cfgAfterEtcd := GenEmbedEtcdConfigWithLogger("info")
-	cfgAfterEtcd, err = GenEmbedEtcdConfig(cfgAfterEtcd, after2MasterAddr, after2MasterAddr, cfgAfter)
+	// start the joining etcd-2
+	cfgClusterEtcd2 := GenEmbedEtcdConfigWithLogger("info")
+	cfgClusterEtcd2, err = GenEmbedEtcdConfig(cfgClusterEtcd2, masterAddr2, masterAddr2, cfgCluster2)
 	require.Nil(t, err)
-	e2, err := StartEtcd(cfgAfterEtcd, nil, nil, time.Minute)
+	e2, err := StartEtcd(cfgClusterEtcd2, nil, nil, time.Minute)
 	require.Nil(t, err)
 	defer e2.Close()
 
-	// try join again
+	// try join etcd-3 again
 	for i := 0; i < 20; i++ {
-		cfgAfterEtcd, err = GenEmbedEtcdConfig(cfgAfterEtcd, after2MasterAddr, after2MasterAddr, cfgAfter)
+		err = PrepareJoinEtcd(cfgCluster3, masterAddr3)
 		if err == nil {
 			break
 		}

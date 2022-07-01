@@ -82,6 +82,7 @@ type processor struct {
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (pipeline.TablePipeline, error)
 	newAgent            func(ctx cdcContext.Context) (scheduler.Agent, error)
 
+	liveness     *model.Liveness
 	agent        scheduler.Agent
 	checkpointTs model.Ts
 	resolvedTs   model.Ts
@@ -400,7 +401,9 @@ func (p *processor) GetTableMeta(tableID model.TableID) pipeline.TableMeta {
 }
 
 // newProcessor creates a new processor
-func newProcessor(ctx cdcContext.Context, up *upstream.Upstream) *processor {
+func newProcessor(
+	ctx cdcContext.Context, up *upstream.Upstream, liveness *model.Liveness,
+) *processor {
 	changefeedID := ctx.ChangefeedVars().ID
 	p := &processor{
 		upstream:      up,
@@ -410,6 +413,7 @@ func newProcessor(ctx cdcContext.Context, up *upstream.Upstream) *processor {
 		captureInfo:   ctx.GlobalVars().CaptureInfo,
 		cancel:        func() {},
 		lastRedoFlush: time.Now(),
+		liveness:      liveness,
 
 		metricResolvedTsGauge: resolvedTsGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
@@ -553,7 +557,7 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 
 	p.doGCSchemaStorage(ctx)
 
-	if err := p.agent.Tick(ctx); err != nil {
+	if err := p.agent.Tick(ctx, p.liveness.Load()); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
@@ -636,7 +640,9 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	p.mounter = entry.NewMounter(p.schemaStorage,
 		p.changefeedID,
 		contextutil.TimezoneFromCtx(ctx),
-		p.changefeed.Info.Config.EnableOldValue)
+		p.filter,
+		p.changefeed.Info.Config.EnableOldValue,
+	)
 
 	log.Info("processor try new sink",
 		zap.String("namespace", p.changefeedID.Namespace),
@@ -647,7 +653,6 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		stdCtx,
 		p.changefeed.ID,
 		p.changefeed.Info.SinkURI,
-		p.filter,
 		p.changefeed.Info.Config,
 		errCh,
 	)

@@ -45,7 +45,7 @@ func (r *rebalanceScheduler) Name() string {
 func (r *rebalanceScheduler) Schedule(
 	_ model.Ts,
 	currentTables []model.TableID,
-	captures map[model.CaptureID]*model.CaptureInfo,
+	captures map[model.CaptureID]*CaptureStatus,
 	replications map[model.TableID]*ReplicationSet,
 ) []*scheduleTask {
 	// rebalance is not triggered, or there is still some pending task,
@@ -58,6 +58,15 @@ func (r *rebalanceScheduler) Schedule(
 		return nil
 	}
 
+	for _, capture := range captures {
+		if capture.State == CaptureStateStopping {
+			log.Debug("tpscheduler: capture is stopping, " +
+				"ignore manual rebalance request")
+			atomic.StoreInt32(&r.rebalance, 0)
+			return nil
+		}
+	}
+
 	// only rebalance when all tables are replicating
 	for _, tableID := range currentTables {
 		rep, ok := replications[tableID]
@@ -65,6 +74,7 @@ func (r *rebalanceScheduler) Schedule(
 			return nil
 		}
 		if rep.State != ReplicationSetStateReplicating {
+			log.Debug("tpscheduler: not all table replicating, premature to rebalance tables")
 			return nil
 		}
 	}
@@ -83,7 +93,7 @@ func (r *rebalanceScheduler) Schedule(
 func newBurstBalanceMoveTables(
 	accept callback,
 	random *rand.Rand,
-	captures map[model.CaptureID]*model.CaptureInfo,
+	captures map[model.CaptureID]*CaptureStatus,
 	replications map[model.TableID]*ReplicationSet,
 ) *scheduleTask {
 	tablesPerCapture := make(map[model.CaptureID]*tableSet)
