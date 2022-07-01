@@ -129,16 +129,18 @@ func (d *ConflictDetector[Worker, Txn]) runBackgroundTasks() {
 					break
 				}
 
-				d.sendToWorker(&OutTxnEvent[Txn]{
-					Txn: resolvedTxn.txn,
-					Callback: func(errIn error) {
-						d.finishedTxnQueue.Push(finishedTxn[Txn]{
-							txn:  resolvedTxn.txn,
-							node: resolvedTxn.node,
-						})
-						resolvedTxn.txn.Finish(errIn)
-					},
-				}, resolvedTxn.node, resolvedTxn.workerID)
+				unlock := func() {
+					d.finishedTxnQueue.Push(finishedTxn[Txn]{
+						txn:  resolvedTxn.txn,
+						node: resolvedTxn.node,
+					})
+				}
+				d.sendToWorker(
+					resolvedTxn.txn,
+					resolvedTxn.node,
+					unlock,
+					resolvedTxn.workerID,
+				)
 			}
 		case <-d.finishedTxnQueue.C:
 			for {
@@ -157,7 +159,7 @@ func (d *ConflictDetector[Worker, Txn]) runBackgroundTasks() {
 
 // sendToWorker should not call txn.Callback if it returns an error.
 func (d *ConflictDetector[Worker, Txn]) sendToWorker(
-	txn *OutTxnEvent[Txn], node *internal.Node, workerID int64,
+	txn Txn, node *internal.Node, unlock func(), workerID int64,
 ) {
 	if workerID == -1 {
 		workerID = d.nextWorkerID.Add(1) % int64(len(d.workers))
@@ -165,5 +167,5 @@ func (d *ConflictDetector[Worker, Txn]) sendToWorker(
 
 	node.AssignTo(workerID)
 	worker := d.workers[workerID]
-	worker.Add(txn)
+	worker.Add(txn, unlock)
 }

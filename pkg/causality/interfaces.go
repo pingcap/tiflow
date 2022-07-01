@@ -19,20 +19,8 @@ type (
 
 type txnEvent interface {
 	ConflictKeys() []conflictKey
-	Finish(errIn error)
-}
-
-// OutTxnEvent wraps a transaction and a callback.
-// The worker should call Callback when Txn is finished
-// executing.
-// This is temporary solution before the actual data structure
-// of and transaction is decided on.
-// TODO remove this.
-type OutTxnEvent[T txnEvent] struct {
-	Txn      T
-	Callback func(errIn error)
 }
 
 type worker[Txn txnEvent] interface {
-	Add(txn *OutTxnEvent[Txn])
+	Add(txn Txn, unlock func())
 }

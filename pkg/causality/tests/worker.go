@@ -16,8 +16,9 @@ package tests
 import (
 	"sync"
 
+	"github.com/pingcap/errors"
+
 	"github.com/pingcap/tiflow/engine/pkg/containers"
-	"github.com/pingcap/tiflow/pkg/causality"
 )
 
 type txnForTest struct {
@@ -35,8 +36,13 @@ func (t *txnForTest) Finish(err error) {
 	}
 }
 
+type txnWithUnlock struct {
+	*txnForTest
+	unlock func()
+}
+
 type workerForTest struct {
-	txnQueue *containers.SliceQueue[*causality.OutTxnEvent[*txnForTest]]
+	txnQueue *containers.SliceQueue[txnWithUnlock]
 	wg       sync.WaitGroup
 	closeCh  chan struct{}
 	execFunc func(*txnForTest) error
@@ -44,7 +50,7 @@ type workerForTest struct {
 
 func newWorkerForTest() *workerForTest {
 	ret := &workerForTest{
-		txnQueue: containers.NewSliceQueue[*causality.OutTxnEvent[*txnForTest]](),
+		txnQueue: containers.NewSliceQueue[txnWithUnlock](),
 		closeCh:  make(chan struct{}),
 	}
 
@@ -57,8 +63,8 @@ func newWorkerForTest() *workerForTest {
 	return ret
 }
 
-func (w *workerForTest) Add(txn *causality.OutTxnEvent[*txnForTest]) {
-	w.txnQueue.Push(txn)
+func (w *workerForTest) Add(txn *txnForTest, unlock func()) {
+	w.txnQueue.Push(txnWithUnlock{txnForTest: txn, unlock: unlock})
 }
 
 func (w *workerForTest) Close() {
@@ -81,11 +87,16 @@ outer:
 				continue outer
 			}
 
-			if w.execFunc == nil {
-				txn.Callback(nil)
-			} else {
-				txn.Callback(w.execFunc(txn.Txn))
+			var err error
+			if w.execFunc != nil {
+				err = errors.Trace(w.execFunc(txn.txnForTest))
 			}
+			txn.unlock()
+
+			// Finish must be called after unlock,
+			// because the conflictTestDriver needs to make sure
+			// that all conflicts have been resolved before exiting.
+			txn.Finish(err)
 		}
 	}
 }
