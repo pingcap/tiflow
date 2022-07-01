@@ -53,13 +53,6 @@ func (l AtomicityLevel) ShouldSplitTxn() bool {
 	return l == noneTxnAtomicity
 }
 
-// Validate checks the AtomicityLevel is supported by TiCDC.
-func (l AtomicityLevel) Validate() {
-	if l != noneTxnAtomicity && l != tableTxnAtomicity {
-		log.Panic(fmt.Sprintf("unsupported transaction atomicity: %s", l))
-	}
-}
-
 // ForceEnableOldValueProtocols specifies which protocols need to be forced to enable old value.
 var ForceEnableOldValueProtocols = []string{
 	ProtocolCanal.String(),
@@ -171,10 +164,13 @@ func (s *SinkConfig) applyParameter(sinkURI *url.URL) error {
 			return err
 		}
 	} else if s.Protocol != "" {
-		return cerror.ErrSinkURIInvalid.GenWithStackByArgs(fmt.Sprintf("protocol cannot be configured "+
-			"when using %s scheme", sinkURI.Scheme))
+		return cerror.ErrSinkURIInvalid.GenWithStackByArgs(fmt.Sprintf("protocol cannot "+
+			"be configured when using %s scheme", sinkURI.Scheme))
 	}
 
+	log.Info("succeed to parse parameter from sink uri",
+		zap.String("protocol", s.Protocol),
+		zap.String("txnAtomicity", string(s.TxnAtomicity)))
 	return nil
 }
 

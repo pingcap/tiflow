@@ -15,6 +15,7 @@ package pipeline
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -47,6 +48,7 @@ type sinkNode struct {
 	redoManager    redo.LogManager
 
 	replicaConfig *config.ReplicaConfig
+	splitTxn      bool
 }
 
 func newSinkNode(
@@ -56,6 +58,7 @@ func newSinkNode(
 	redoManager redo.LogManager,
 	state *TableState,
 	changefeed model.ChangeFeedID,
+	splitTxn bool,
 ) *sinkNode {
 	sn := &sinkNode{
 		tableID:        tableID,
@@ -66,6 +69,7 @@ func newSinkNode(
 		changefeed:     changefeed,
 		flowController: flowController,
 		redoManager:    redoManager,
+		splitTxn:       splitTxn,
 	}
 	sn.resolvedTs.Store(model.NewResolvedTs(startTs))
 	sn.checkpointTs.Store(model.NewResolvedTs(startTs))
@@ -307,7 +311,9 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 	switch msg.Tp {
 	case pmessage.MessageTypePolymorphicEvent:
 		event := msg.PolymorphicEvent
-		n.checkSplitTxn(event)
+		if err := n.verifySplitTxn(event); err != nil {
+			return false, errors.Trace(err)
+		}
 
 		if event.IsResolved() {
 			if n.state.Load() == TableStatePrepared {
@@ -363,22 +369,24 @@ func (n *sinkNode) releaseResource(ctx context.Context) error {
 	return n.sink.Close(ctx)
 }
 
-func (n *sinkNode) checkSplitTxn(e *model.PolymorphicEvent) {
-	ta := n.replicaConfig.Sink.TxnAtomicity
-	ta.Validate()
-	if ta.ShouldSplitTxn() {
-		return
+// Verify that TxnAtomicity compatibility with BatchResolved event and RowChangedEvent
+// with `SplitTxn==true`.
+func (n *sinkNode) verifySplitTxn(e *model.PolymorphicEvent) error {
+	if n.splitTxn {
+		return nil
 	}
 
-	// Check that BatchResolved events and RowChangedEvent events with `SplitTxn==true`
-	// have not been received by sinkNode.
+	// Fail-fast check, this situation should never happen normally when split transactions
+	// are not supported.
 	if e.Resolved != nil && e.Resolved.IsBatchMode() {
-		log.Panic("batch mode resolved ts is not supported when sink.splitTxn is false",
-			zap.Any("event", e), zap.Any("replicaConfig", n.replicaConfig))
+		msg := fmt.Sprintf("batch mode resolved ts is not supported "+
+			"when sink.splitTxn is %+v", n.splitTxn)
+		return cerror.ErrSinkInvalidConfig.GenWithStackByArgs(msg)
 	}
 
 	if e.Row != nil && e.Row.SplitTxn {
-		log.Panic("should not split txn when sink.splitTxn is false",
-			zap.Any("event", e), zap.Any("replicaConfig", n.replicaConfig))
+		msg := fmt.Sprintf("should not split txn when sink.splitTxn is %+v", n.splitTxn)
+		return cerror.ErrSinkInvalidConfig.GenWithStackByArgs(msg)
 	}
+	return nil
 }
