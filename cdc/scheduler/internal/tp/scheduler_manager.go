@@ -44,11 +44,10 @@ func newSchedulerManager(
 		}]int),
 	}
 
-	balanceInterval := time.Duration(cfg.CheckBalanceInterval)
-
 	sm.schedulers[schedulerPriorityBasic] = newBasicScheduler()
 	sm.schedulers[schedulerPriorityDrainCapture] = newDrainCaptureScheduler(cfg.MaxTaskConcurrency)
-	sm.schedulers[schedulerPriorityBalance] = newBalanceScheduler(balanceInterval)
+	sm.schedulers[schedulerPriorityBalance] = newBalanceScheduler(
+		time.Duration(cfg.CheckBalanceInterval), cfg.MaxTaskConcurrency)
 	sm.schedulers[schedulerPriorityMoveTable] = newMoveTableScheduler()
 	sm.schedulers[schedulerPriorityRebalance] = newRebalanceScheduler()
 
