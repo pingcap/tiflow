@@ -86,8 +86,8 @@ func TestKafkaSink(t *testing.T) {
 		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
+	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 	sink, err := NewKafkaSaramaSink(ctx, sinkURI, replicaConfig, errCh)
-
 	require.Nil(t, err)
 
 	encoder := sink.encoderBuilder.Build()
@@ -211,6 +211,7 @@ func TestFlushRowChangedEvents(t *testing.T) {
 		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
+	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 	sink, err := NewKafkaSaramaSink(ctx, sinkURI, replicaConfig, errCh)
 	require.Nil(t, err)
 
