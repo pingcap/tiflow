@@ -41,7 +41,6 @@ import (
 	cmdUtil "github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
-	cdcfilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -94,7 +93,10 @@ func init() {
 	err := logutil.InitLogger(&logutil.Config{
 		Level: logLevel,
 		File:  logPath,
-	})
+	},
+		logutil.WithInitGRPCLogger(),
+		logutil.WithInitSaramaLogger(),
+	)
 	if err != nil {
 		log.Panic("init logger failed", zap.Error(err))
 	}
@@ -383,10 +385,6 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 		return nil, errors.Annotate(err, "can not load timezone")
 	}
 	ctx = contextutil.PutTimezoneInCtx(ctx, tz)
-	filter, err := cdcfilter.NewFilter(config.GetDefaultReplicaConfig())
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 
 	c := new(Consumer)
 	c.fakeTableIDGenerator = &fakeTableIDGenerator{
@@ -419,7 +417,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	for i := 0; i < int(kafkaPartitionNum); i++ {
 		s, err := sink.New(ctx,
 			model.DefaultChangeFeedID("kafka-consumer"),
-			downstreamURIStr, filter, config.GetDefaultReplicaConfig(), errCh)
+			downstreamURIStr, config.GetDefaultReplicaConfig(), errCh)
 		if err != nil {
 			cancel()
 			return nil, errors.Trace(err)
@@ -428,7 +426,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	}
 	sink, err := sink.New(ctx,
 		model.DefaultChangeFeedID("kafka-consumer"),
-		downstreamURIStr, filter, config.GetDefaultReplicaConfig(), errCh)
+		downstreamURIStr, config.GetDefaultReplicaConfig(), errCh)
 	if err != nil {
 		cancel()
 		return nil, errors.Trace(err)

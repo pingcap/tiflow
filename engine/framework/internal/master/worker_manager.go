@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/engine/framework/config"
@@ -29,9 +29,9 @@ import (
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	derror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 type (
@@ -149,7 +149,8 @@ func (m *WorkerManager) InitAfterRecover(ctx context.Context) (retErr error) {
 		}
 	}()
 
-	ctx = m.errCenter.WithCancelOnFirstError(ctx)
+	ctx, cancel := m.errCenter.WithCancelOnFirstError(ctx)
+	defer cancel()
 
 	m.mu.Lock()
 	if m.state != workerManagerLoadingMeta {
@@ -297,7 +298,8 @@ func (m *WorkerManager) Tick(ctx context.Context) error {
 
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	ctx = m.errCenter.WithCancelOnFirstError(ctx)
+	ctx, cancel = m.errCenter.WithCancelOnFirstError(ctx)
+	defer cancel()
 
 	for {
 		var event *masterEvent

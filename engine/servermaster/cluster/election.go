@@ -18,16 +18,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
-
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.etcd.io/etcd/server/v3/mvcc"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
+
+	derror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // Election is an interface that performs leader elections.
@@ -100,7 +100,7 @@ func (e *EtcdElection) Campaign(ctx context.Context, selfID NodeID, timeout time
 	for {
 		select {
 		case <-ctx.Done():
-			return nil, nil, derror.Wrap(derror.ErrMasterEtcdElectionCampaignFail, ctx.Err())
+			return nil, nil, derror.WrapError(derror.ErrMasterEtcdElectionCampaignFail, ctx.Err())
 		default:
 		}
 
@@ -108,7 +108,7 @@ func (e *EtcdElection) Campaign(ctx context.Context, selfID NodeID, timeout time
 		if err != nil {
 			// rl.Wait() can return an unnamed error `rate: Wait(n=%d) exceeds limiter's burst %d` if
 			// ctx is canceled. This can be very confusing, so we must wrap it here.
-			return nil, nil, derror.Wrap(derror.ErrMasterEtcdElectionCampaignFail, err)
+			return nil, nil, derror.WrapError(derror.ErrMasterEtcdElectionCampaignFail, err)
 		}
 
 		retCtx, resign, err := e.doCampaign(ctx, selfID, timeout)
@@ -128,7 +128,7 @@ func (e *EtcdElection) doCampaign(ctx context.Context, selfID NodeID, timeout ti
 	defer cancel()
 	err := e.election.Campaign(cctx, selfID)
 	if err != nil {
-		return nil, nil, derror.Wrap(derror.ErrMasterEtcdElectionCampaignFail, err)
+		return nil, nil, derror.WrapError(derror.ErrMasterEtcdElectionCampaignFail, err)
 	}
 	retCtx := newLeaderCtx(ctx, e.session)
 	resignFn := func() {

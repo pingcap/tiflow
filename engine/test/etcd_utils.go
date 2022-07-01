@@ -14,18 +14,19 @@
 package test
 
 import (
+	"context"
 	"fmt"
-	"io/ioutil"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/phayes/freeport"
-	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
 	"github.com/stretchr/testify/require"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
+
+	"github.com/pingcap/tiflow/engine/pkg/etcdutil"
+	"github.com/pingcap/tiflow/pkg/retry"
 )
 
 func allocTempURL(t *testing.T) string {
@@ -39,37 +40,66 @@ func allocTempURL(t *testing.T) string {
 // - embed etcd server
 // - etcd client
 // - etcd cleanup function
-func PrepareEtcd(t *testing.T, name string) (string, *embed.Etcd, *clientv3.Client, func()) {
-	dir, err := ioutil.TempDir("", name)
+func PrepareEtcd(t *testing.T, name string) (
+	advertiseAddr string, etcd *embed.Etcd, client *clientv3.Client, cleanFn func(),
+) {
+	err := retry.Do(context.TODO(), func() error {
+		var err error
+		advertiseAddr, etcd, client, cleanFn, err = prepareEtcdOnce(t, name)
+		return err
+	},
+		retry.WithBackoffBaseDelay(1000 /* 1000 ms */),
+		retry.WithBackoffMaxDelay(3000 /* 3 seconds */),
+		retry.WithMaxTries(3 /* fail after 10 seconds*/),
+		retry.WithIsRetryableErr(func(err error) bool {
+			if strings.Contains(err.Error(), "address already in use") {
+				return true
+			}
+			return false
+		}),
+	)
 	require.Nil(t, err)
+	return
+}
+
+func prepareEtcdOnce(t *testing.T, name string) (
+	advertiseAddr string,
+	etcd *embed.Etcd,
+	client *clientv3.Client,
+	cleanFn func(),
+	err error,
+) {
+	dir := t.TempDir()
 
 	masterAddr := allocTempURL(t)
-	advertiseAddr := masterAddr
-	cfgCluster := &etcdutils.ConfigParams{}
+	advertiseAddr = masterAddr
+	cfgCluster := &etcdutil.ConfigParams{}
 	cfgCluster.Name = name
 	cfgCluster.DataDir = dir
 	cfgCluster.PeerUrls = "http://" + allocTempURL(t)
 	cfgCluster.Adjust("", embed.ClusterStateFlagNew)
 
-	cfgClusterEtcd := etcdutils.GenEmbedEtcdConfigWithLogger("info")
-	cfgClusterEtcd, err = etcdutils.GenEmbedEtcdConfig(cfgClusterEtcd, masterAddr, advertiseAddr, cfgCluster)
+	cfgClusterEtcd := etcdutil.GenEmbedEtcdConfigWithLogger("info")
+	cfgClusterEtcd, err = etcdutil.GenEmbedEtcdConfig(cfgClusterEtcd, masterAddr, advertiseAddr, cfgCluster)
 	require.Nil(t, err)
 
-	etcd, err := etcdutils.StartEtcd(cfgClusterEtcd, nil, nil, time.Minute)
+	etcd, err = etcdutil.StartEtcd(cfgClusterEtcd, nil, nil, time.Minute)
 	require.Nil(t, err)
 
-	client, err := clientv3.New(clientv3.Config{
+	client, err = clientv3.New(clientv3.Config{
 		Endpoints:   []string{advertiseAddr},
 		DialTimeout: 3 * time.Second,
 	})
+	if err != nil {
+		return
+	}
 	require.Nil(t, err)
 
-	cleanFn := func() {
-		os.RemoveAll(dir)
+	cleanFn = func() {
 		etcd.Close()
 	}
 
-	return advertiseAddr, etcd, client, cleanFn
+	return
 }
 
 // PrepareEtcdCluster creates an etcd cluster with multiple nodes
@@ -79,18 +109,43 @@ func PrepareEtcdCluster(t *testing.T, names []string) (
 	etcdCli *clientv3.Client,
 	cleanFn func(),
 ) {
+	err := retry.Do(context.TODO(), func() error {
+		var err error
+		advertiseAddrs, embedEtcds, etcdCli, cleanFn, err = prepareEtcdClusterOnce(t, names)
+		return err
+	},
+		retry.WithBackoffBaseDelay(1000 /* 1000 ms */),
+		retry.WithBackoffMaxDelay(3000 /* 3 seconds */),
+		retry.WithMaxTries(3 /* fail after 10 seconds*/),
+		retry.WithIsRetryableErr(func(err error) bool {
+			if strings.Contains(err.Error(), "address already in use") {
+				return true
+			}
+			return false
+		}),
+	)
+	require.Nil(t, err)
+	return
+}
+
+func prepareEtcdClusterOnce(t *testing.T, names []string) (
+	advertiseAddrs []string,
+	embedEtcds []*embed.Etcd,
+	etcdCli *clientv3.Client,
+	cleanFn func(),
+	err error,
+) {
 	dirs := make([]string, 0, len(names))
-	cfgs := make([]*etcdutils.ConfigParams, 0, len(names))
+	cfgs := make([]*etcdutil.ConfigParams, 0, len(names))
 	initialCluster := make([]string, 0, len(names))
 	for _, name := range names {
-		dir, err := ioutil.TempDir("", name)
-		require.Nil(t, err)
+		dir := t.TempDir()
 		dirs = append(dirs, dir)
 
 		advertiseAddr := allocTempURL(t)
 		advertiseAddrs = append(advertiseAddrs, advertiseAddr)
 
-		cfgCluster := &etcdutils.ConfigParams{}
+		cfgCluster := &etcdutil.ConfigParams{}
 		cfgCluster.Name = name
 		cfgCluster.DataDir = dir
 		cfgCluster.PeerUrls = "http://" + allocTempURL(t)
@@ -99,19 +154,26 @@ func PrepareEtcdCluster(t *testing.T, names []string) (
 		initialCluster = append(initialCluster, fmt.Sprintf("%s=%s", name, cfgCluster.PeerUrls))
 	}
 	etcdCh := make(chan *embed.Etcd)
+	startEtcdError := make(chan error)
 	for idx, cfg := range cfgs {
 		cfg.InitialCluster = strings.Join(initialCluster, ",")
-		fmt.Printf("cfg: %+v\n", cfg)
 		cfg.Adjust("", embed.ClusterStateFlagNew)
-		cfgClusterEtcd := etcdutils.GenEmbedEtcdConfigWithLogger("info")
+		cfgClusterEtcd := etcdutil.GenEmbedEtcdConfigWithLogger("info")
 		addr := advertiseAddrs[idx]
-		cfgClusterEtcd, err := etcdutils.GenEmbedEtcdConfig(cfgClusterEtcd, addr, addr, cfg)
+		cfgClusterEtcd, err := etcdutil.GenEmbedEtcdConfig(cfgClusterEtcd, addr, addr, cfg)
 		require.Nil(t, err)
 		go func() {
-			etcd, err := etcdutils.StartEtcd(cfgClusterEtcd, nil, nil, time.Minute)
-			require.Nil(t, err)
-			etcdCh <- etcd
+			etcd, err := etcdutil.StartEtcd(cfgClusterEtcd, nil, nil, time.Minute)
+			if err != nil {
+				startEtcdError <- err
+			} else {
+				etcdCh <- etcd
+			}
 		}()
+	}
+	startEtcdErrors := make([]error, 0)
+	checkFetchFinish := func() bool {
+		return len(startEtcdErrors)+len(embedEtcds) == len(names)
 	}
 fetchLoop:
 	for {
@@ -121,12 +183,20 @@ fetchLoop:
 			if len(embedEtcds) == len(names) {
 				break fetchLoop
 			}
+		case startErr := <-startEtcdError:
+			startEtcdErrors = append(startEtcdErrors, startErr)
 		case <-time.After(time.Minute):
 			t.Error("etcd doesn't start in time")
 		}
+		if checkFetchFinish() {
+			break fetchLoop
+		}
+	}
+	if len(startEtcdErrors) > 0 {
+		err = startEtcdErrors[0]
+		return
 	}
 
-	var err error
 	etcdCli, err = clientv3.New(clientv3.Config{
 		Endpoints:   advertiseAddrs,
 		DialTimeout: 3 * time.Second,
@@ -134,9 +204,6 @@ fetchLoop:
 	require.Nil(t, err)
 
 	cleanFn = func() {
-		for _, dir := range dirs {
-			os.RemoveAll(dir)
-		}
 		for _, etcd := range embedEtcds {
 			etcd.Close()
 		}

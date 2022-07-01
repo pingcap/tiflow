@@ -17,10 +17,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/log"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/executor/worker/internal"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 )
@@ -116,7 +116,7 @@ func (c *TaskCommitter) PreDispatchTask(rID requestID, task Runnable) (ok bool) 
 	}
 
 	// We use the current time as the submit time of the task.
-	taskWithSubmitTime := internal.WrapRunnable(task, c.clock.Now())
+	taskWithSubmitTime := internal.WrapRunnable(task, c.clock.Mono())
 
 	request := &requestEntry{
 		RequestID: rID,

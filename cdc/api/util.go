@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/httputil"
@@ -36,7 +37,7 @@ var httpBadRequestError = []*errors.Error{
 	cerror.ErrAPIInvalidParam, cerror.ErrSinkURIInvalid, cerror.ErrStartTsBeforeGC,
 	cerror.ErrChangeFeedNotExists, cerror.ErrTargetTsBeforeStartTs, cerror.ErrTableIneligible,
 	cerror.ErrFilterRuleInvalid, cerror.ErrChangefeedUpdateRefused, cerror.ErrMySQLConnectionError,
-	cerror.ErrMySQLInvalidConfig, cerror.ErrCaptureNotExist,
+	cerror.ErrMySQLInvalidConfig, cerror.ErrCaptureNotExist, cerror.ErrSchedulerRequestFailed,
 }
 
 const (
@@ -93,7 +94,7 @@ func WriteData(w http.ResponseWriter, data interface{}) {
 
 // HandleOwnerJob enqueue the admin job
 func HandleOwnerJob(
-	ctx context.Context, capture *capture.Capture, job model.AdminJob,
+	ctx context.Context, capture capture.Capture, job model.AdminJob,
 ) error {
 	// Use buffered channel to prevernt blocking owner.
 	done := make(chan error, 1)
@@ -112,7 +113,7 @@ func HandleOwnerJob(
 
 // HandleOwnerBalance balance the changefeed tables
 func HandleOwnerBalance(
-	ctx context.Context, capture *capture.Capture, changefeedID model.ChangeFeedID,
+	ctx context.Context, capture capture.Capture, changefeedID model.ChangeFeedID,
 ) error {
 	// Use buffered channel to prevernt blocking owner.
 	done := make(chan error, 1)
@@ -131,10 +132,10 @@ func HandleOwnerBalance(
 
 // HandleOwnerScheduleTable schedule tables
 func HandleOwnerScheduleTable(
-	ctx context.Context, capture *capture.Capture,
+	ctx context.Context, capture capture.Capture,
 	changefeedID model.ChangeFeedID, captureID string, tableID int64,
 ) error {
-	// Use buffered channel to prevernt blocking owner.
+	// Use buffered channel to prevent blocking owner.
 	done := make(chan error, 1)
 	o, err := capture.GetOwner()
 	if err != nil {
@@ -228,4 +229,30 @@ func ForwardToOwner(c *gin.Context, p CaptureInfoProvider) {
 		_ = c.Error(err)
 		return
 	}
+}
+
+// HandleOwnerDrainCapture schedule drain the target capture
+func HandleOwnerDrainCapture(
+	ctx context.Context, capture capture.Capture, captureID string,
+) (*model.DrainCaptureResp, error) {
+	// Use buffered channel to prevent blocking owner.
+	done := make(chan error, 1)
+	o, err := capture.GetOwner()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	query := scheduler.Query{
+		CaptureID: captureID,
+	}
+
+	o.DrainCapture(&query, done)
+
+	select {
+	case <-ctx.Done():
+		err = ctx.Err()
+	case err = <-done:
+	}
+
+	return query.Resp.(*model.DrainCaptureResp), errors.Trace(err)
 }

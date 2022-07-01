@@ -26,10 +26,11 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
 	"github.com/pingcap/tiflow/engine/pkg/version"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
 )
 
 // SampleConfigFile is sample config file of dm-worker.
@@ -56,10 +57,9 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.ConfigFile, "config", "", "path to config file")
 	fs.StringVar(&cfg.WorkerAddr, "worker-addr", "", "listen address for client traffic")
 	fs.StringVar(&cfg.AdvertiseAddr, "advertise-addr", "", `advertise address for client traffic (default "${worker-addr}")`)
-	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
-	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
-	fs.StringVar(&cfg.LogFormat, "log-format", "text", `the format of the log, "text" or "json"`)
-	// fs.StringVar(&cfg.LogRotate, "log-rotate", "day", "log file rotate type, hour/day")
+	fs.StringVar(&cfg.LogConf.Level, "L", "info", "log level: debug, info, warn, error, fatal")
+	fs.StringVar(&cfg.LogConf.File, "log-file", "", "log file path")
+	// fs.StringVar(&cfg.LogConf.LogRotate, "log-rotate", "day", "log file rotate type, hour/day")
 	// NOTE: add `advertise-addr` for dm-master if needed.
 	fs.StringVar(&cfg.Join, "join", "", `join to an existing cluster (usage: server masters' address)`)
 	fs.StringVar(&cfg.Name, "name", "", "human-readable name for executor")
@@ -73,10 +73,7 @@ type Config struct {
 	flagSet *flag.FlagSet
 	Name    string `toml:"name" json:"name"`
 
-	LogLevel  string `toml:"log-level" json:"log-level"`
-	LogFile   string `toml:"log-file" json:"log-file"`
-	LogFormat string `toml:"log-format" json:"log-format"`
-	LogRotate string `toml:"log-rotate" json:"log-rotate"`
+	LogConf logutil.Config `toml:"log" json:"log"`
 
 	Join          string `toml:"join" json:"join" `
 	WorkerAddr    string `toml:"worker-addr" json:"worker-addr"`
@@ -111,7 +108,7 @@ func (c *Config) Clone() *Config {
 func (c *Config) String() string {
 	cfg, err := json.Marshal(c)
 	if err != nil {
-		log.L().Error("fail to marshal config to json", log.ShortError(err))
+		log.L().Error("fail to marshal config to json", logutil.ShortError(err))
 	}
 	return string(cfg)
 }
@@ -122,7 +119,7 @@ func (c *Config) Toml() (string, error) {
 
 	err := toml.NewEncoder(&b).Encode(c)
 	if err != nil {
-		log.L().Error("fail to marshal config to toml", log.ShortError(err))
+		log.L().Error("fail to marshal config to toml", logutil.ShortError(err))
 	}
 
 	return b.String(), nil
@@ -133,7 +130,7 @@ func (c *Config) Parse(arguments []string) error {
 	// Parse first to get config file.
 	err := c.flagSet.Parse(arguments)
 	if err != nil {
-		return errors.Wrap(errors.ErrExecutorConfigParseFlagSet, err)
+		return errors.WrapError(errors.ErrExecutorConfigParseFlagSet, err)
 	}
 
 	if c.printVersion {
@@ -152,7 +149,7 @@ func (c *Config) Parse(arguments []string) error {
 	// Parse again to replace with command line options.
 	err = c.flagSet.Parse(arguments)
 	if err != nil {
-		return errors.Wrap(errors.ErrExecutorConfigParseFlagSet, err)
+		return errors.WrapError(errors.ErrExecutorConfigParseFlagSet, err)
 	}
 
 	if len(c.flagSet.Args()) != 0 {
@@ -204,7 +201,7 @@ func (c *Config) Parse(arguments []string) error {
 func (c *Config) configFromFile(path string) error {
 	metaData, err := toml.DecodeFile(path, c)
 	if err != nil {
-		return errors.Wrap(errors.ErrExecutorDecodeConfigFile, err)
+		return errors.WrapError(errors.ErrExecutorDecodeConfigFile, err)
 	}
 	undecoded := metaData.Undecoded()
 	if len(undecoded) > 0 && err == nil {

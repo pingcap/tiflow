@@ -18,16 +18,17 @@ import (
 	"fmt"
 
 	"github.com/gogo/status"
-	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	derrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // ResourceManagerClient is a type alias for a client connecting to
@@ -61,6 +62,7 @@ func NewBroker(
 // OpenStorage implements Broker.OpenStorage
 func (b *DefaultBroker) OpenStorage(
 	ctx context.Context,
+	projectInfo tenant.ProjectInfo,
 	workerID resModel.WorkerID,
 	jobID resModel.JobID,
 	resourcePath resModel.ResourceID,
@@ -72,7 +74,7 @@ func (b *DefaultBroker) OpenStorage(
 
 	switch tp {
 	case resModel.ResourceTypeLocalFile:
-		return b.newHandleForLocalFile(ctx, jobID, workerID, resourcePath)
+		return b.newHandleForLocalFile(ctx, projectInfo, jobID, workerID, resourcePath)
 	case resModel.ResourceTypeS3:
 		log.L().Panic("resource type s3 is not supported for now")
 	default:
@@ -130,6 +132,7 @@ func (b *DefaultBroker) RemoveResource(
 
 func (b *DefaultBroker) newHandleForLocalFile(
 	ctx context.Context,
+	projectInfo tenant.ProjectInfo,
 	jobID resModel.JobID,
 	workerID resModel.WorkerID,
 	resourceID resModel.ResourceID,
@@ -145,7 +148,7 @@ func (b *DefaultBroker) newHandleForLocalFile(
 		log.L().Panic("unexpected resource type", zap.String("type", string(tp)))
 	}
 
-	record, exists, err := b.checkForExistingResource(ctx, resourceID)
+	record, exists, err := b.checkForExistingResource(ctx, resModel.ResourceKey{JobID: jobID, ID: resourceID})
 	if err != nil {
 		return nil, err
 	}
@@ -173,22 +176,22 @@ func (b *DefaultBroker) newHandleForLocalFile(
 	filePath := desc.AbsolutePath()
 	log.L().Info("Using local storage with path", zap.String("path", filePath))
 
-	return newLocalResourceHandle(resourceID, jobID, b.executorID, b.fileManager, desc, b.client)
+	return newLocalResourceHandle(projectInfo, resourceID, jobID, b.executorID, b.fileManager, desc, b.client)
 }
 
 func (b *DefaultBroker) checkForExistingResource(
 	ctx context.Context,
-	resourceID resModel.ResourceID,
+	resourceKey resModel.ResourceKey,
 ) (*resModel.ResourceMeta, bool, error) {
 	resp, err := rpcutil.DoFailoverRPC(
 		ctx,
 		b.client,
-		&pb.QueryResourceRequest{ResourceId: resourceID},
+		&pb.QueryResourceRequest{ResourceKey: &pb.ResourceKey{JobId: resourceKey.JobID, ResourceId: resourceKey.ID}},
 		pb.ResourceManagerClient.QueryResource,
 	)
 	if err == nil {
 		return &resModel.ResourceMeta{
-			ID:       resourceID,
+			ID:       resourceKey.ID,
 			Job:      resp.GetJobId(),
 			Worker:   resp.GetCreatorWorkerId(),
 			Executor: resModel.ExecutorID(resp.GetCreatorExecutor()),

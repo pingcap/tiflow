@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -40,6 +41,7 @@ type ownerJobType int
 const (
 	ownerJobTypeRebalance ownerJobType = iota
 	ownerJobTypeScheduleTable
+	ownerJobTypeDrainCapture
 	ownerJobTypeAdminJob
 	ownerJobTypeDebugInfo
 	ownerJobTypeQuery
@@ -68,6 +70,9 @@ type ownerJob struct {
 	// for status provider
 	query *Query
 
+	// for scheduler related jobs
+	scheduleQuery *scheduler.Query
+
 	done chan<- error
 }
 
@@ -82,6 +87,7 @@ type Owner interface {
 		cfID model.ChangeFeedID, toCapture model.CaptureID,
 		tableID model.TableID, done chan<- error,
 	)
+	DrainCapture(query *scheduler.Query, done chan<- error)
 	WriteDebugInfo(w io.Writer, done chan<- error)
 	Query(query *Query, done chan<- error)
 	AsyncStop()
@@ -262,6 +268,16 @@ func (o *ownerImpl) ScheduleTable(
 	})
 }
 
+// DrainCapture removes all tables at the target capture
+// `done` must be buffered to prevent blocking owner.
+func (o *ownerImpl) DrainCapture(query *scheduler.Query, done chan<- error) {
+	o.pushOwnerJob(&ownerJob{
+		Tp:            ownerJobTypeDrainCapture,
+		scheduleQuery: query,
+		done:          done,
+	})
+}
+
 // WriteDebugInfo writes debug info into the specified http writer
 func (o *ownerImpl) WriteDebugInfo(w io.Writer, done chan<- error) {
 	o.pushOwnerJob(&ownerJob{
@@ -283,6 +299,8 @@ func (o *ownerImpl) Query(query *Query, done chan<- error) {
 // AsyncStop stops the owner asynchronously
 func (o *ownerImpl) AsyncStop() {
 	atomic.StoreInt32(&o.closed, 1)
+	// Must be called after setting closed.
+	o.cleanupOwnerJob()
 	o.cleanStaleMetrics()
 }
 
@@ -386,12 +404,31 @@ func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model
 	return true
 }
 
+func (o *ownerImpl) handleDrainCaptures(query *scheduler.Query, done chan<- error) {
+	changefeedWithTableCount := 0
+	totalTableCount := 0
+	for _, changefeed := range o.changefeeds {
+		count := changefeed.scheduler.DrainCapture(query.CaptureID)
+		if count > 0 {
+			changefeedWithTableCount++
+		}
+		totalTableCount += count
+	}
+	log.Info("owner handle drain capture",
+		zap.Int("changefeedWithTableCount", changefeedWithTableCount),
+		zap.Int("totalTableCount", totalTableCount))
+	query.Resp = &model.DrainCaptureResp{
+		CurrentTableCount: totalTableCount,
+	}
+	close(done)
+}
+
 func (o *ownerImpl) handleJobs() {
 	jobs := o.takeOwnerJobs()
 	for _, job := range jobs {
 		changefeedID := job.ChangefeedID
 		cfReactor, exist := o.changefeeds[changefeedID]
-		if !exist && job.Tp != ownerJobTypeQuery {
+		if !exist && (job.Tp != ownerJobTypeQuery && job.Tp != ownerJobTypeDrainCapture) {
 			log.Warn("changefeed not found when handle a job", zap.Reflect("job", job))
 			job.done <- cerror.ErrChangeFeedNotExists.FastGenByArgs(job.ChangefeedID)
 			close(job.done)
@@ -402,6 +439,9 @@ func (o *ownerImpl) handleJobs() {
 			cfReactor.feedStateManager.PushAdminJob(job.AdminJob)
 		case ownerJobTypeScheduleTable:
 			cfReactor.scheduler.MoveTable(job.TableID, job.TargetCaptureID)
+		case ownerJobTypeDrainCapture:
+			o.handleDrainCaptures(job.scheduleQuery, job.done)
+			continue // continue here to prevent close the done channel twice
 		case ownerJobTypeRebalance:
 			cfReactor.scheduler.Rebalance()
 		case ownerJobTypeQuery:
@@ -533,7 +573,29 @@ func (o *ownerImpl) takeOwnerJobs() []*ownerJob {
 func (o *ownerImpl) pushOwnerJob(job *ownerJob) {
 	o.ownerJobQueue.Lock()
 	defer o.ownerJobQueue.Unlock()
+	if atomic.LoadInt32(&o.closed) != 0 {
+		log.Info("reject owner job as owner has been closed",
+			zap.Int("jobType", int(job.Tp)))
+		select {
+		case job.done <- cerror.ErrOwnerNotFound.GenWithStackByArgs():
+		default:
+		}
+		close(job.done)
+		return
+	}
 	o.ownerJobQueue.queue = append(o.ownerJobQueue.queue, job)
+}
+
+func (o *ownerImpl) cleanupOwnerJob() {
+	log.Info("cleanup owner jobs as owner has been closed")
+	jobs := o.takeOwnerJobs()
+	for _, job := range jobs {
+		select {
+		case job.done <- cerror.ErrOwnerNotFound.GenWithStackByArgs():
+		default:
+		}
+		close(job.done)
+	}
 }
 
 func (o *ownerImpl) updateGCSafepoint(

@@ -19,10 +19,11 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"go.uber.org/atomic"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/clock"
 )
 
 type dummyWorker struct {
@@ -34,13 +35,13 @@ type dummyWorker struct {
 	blockCond *sync.Cond
 	blocked   bool
 
-	submitTime atomic.Time
+	submitTime atomic.Duration
 }
 
 func newDummyWorker(id RunnableID) *dummyWorker {
 	ret := &dummyWorker{
 		id:         id,
-		submitTime: *atomic.NewTime(time.Time{}),
+		submitTime: *atomic.NewDuration(0),
 	}
 	ret.blockCond = sync.NewCond(&ret.blockMu)
 	return ret
@@ -57,7 +58,7 @@ func (d *dummyWorker) Init(ctx context.Context) error {
 	if !ok {
 		log.L().Panic("A RuntimeContext is expected to be used in unit tests")
 	}
-	d.submitTime.Store(rctx.SubmitTime())
+	d.submitTime.Store(time.Duration(rctx.SubmitTime()))
 
 	return nil
 }
@@ -104,6 +105,6 @@ func (d *dummyWorker) UnblockInit() {
 	d.blockCond.Broadcast()
 }
 
-func (d *dummyWorker) SubmitTime() time.Time {
-	return d.submitTime.Load()
+func (d *dummyWorker) SubmitTime() clock.MonotonicTime {
+	return clock.MonotonicTime(d.submitTime.Load())
 }

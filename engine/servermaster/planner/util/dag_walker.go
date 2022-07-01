@@ -17,7 +17,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/model"
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
+	derror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 const (
@@ -51,7 +51,7 @@ func (w *DAGWalker) Walk(dag *model.DAG) error {
 
 func (w *DAGWalker) doWalk(node *model.Node, depth int) error {
 	if node == nil {
-		log.Panic("unexpected nil node")
+		log.L().Panic("unexpected nil node")
 		return nil // to make the linter happy
 	}
 

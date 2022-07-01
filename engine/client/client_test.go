@@ -18,15 +18,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/pingcap/tiflow/engine/client"
 	"github.com/pingcap/tiflow/engine/executor"
-	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
+	"github.com/pingcap/tiflow/engine/pkg/etcdutil"
 	"github.com/pingcap/tiflow/engine/servermaster"
 	"github.com/pingcap/tiflow/engine/test"
-	"github.com/stretchr/testify/require"
 )
 
 func TestClientManager(t *testing.T) {
+	t.Parallel()
+
 	test.SetGlobalTestFlag(true)
 	defer test.SetGlobalTestFlag(false)
 
@@ -39,7 +42,7 @@ func TestClientManager(t *testing.T) {
 	require.Nil(t, manager.MasterClient())
 
 	masterCfg := &servermaster.Config{
-		Etcd: &etcdutils.ConfigParams{
+		Etcd: &etcdutil.ConfigParams{
 			Name:    "master1",
 			DataDir: "/tmp/df",
 		},
@@ -78,4 +81,16 @@ func TestClientManager(t *testing.T) {
 	err = manager.AddExecutor("executor", "127.0.0.1:1993")
 	require.Nil(t, err)
 	require.NotNil(t, manager.ExecutorClient("executor"))
+}
+
+func TestAddNonExistentExecutor(t *testing.T) {
+	t.Parallel()
+
+	manager := client.NewClientManager()
+
+	startTime := time.Now()
+	// We don't care about the error for now.
+	// As long as it does not block, it's fine.
+	_ = manager.AddExecutor("executor", "127.0.0.1:1111") // Bad address
+	require.Less(t, time.Since(startTime), time.Second)
 }

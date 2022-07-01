@@ -247,7 +247,17 @@ type Syncer struct {
 
 // NewSyncer creates a new Syncer.
 func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay relay.Process) *Syncer {
-	logger := log.With(zap.String("task", cfg.Name), zap.String("unit", "binlog replication"))
+	logFields := []zap.Field{
+		zap.String("task", cfg.Name),
+		zap.String("unit", "binlog replication"),
+	}
+	var logger log.Logger
+	if cfg.FrameworkLogger != nil {
+		logger = log.Logger{Logger: cfg.FrameworkLogger.With(logFields...)}
+	} else {
+		logger = log.With(logFields...)
+	}
+
 	syncer := &Syncer{
 		pessimist: shardddl.NewPessimist(&logger, etcdClient, cfg.Name, cfg.SourceID),
 		optimist:  shardddl.NewOptimist(&logger, etcdClient, cfg.Name, cfg.SourceID),
@@ -380,7 +390,9 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		"time_zone": s.timezone.String(),
 	}
 	s.sessCtx = utils.NewSessionCtx(vars)
-	s.exprFilterGroup = NewExprFilterGroup(s.sessCtx, s.cfg.ExprFilter)
+	s.exprFilterGroup = NewExprFilterGroup(s.tctx, s.sessCtx, s.cfg.ExprFilter)
+	// create an empty Tracker and will be initialized in `Run`
+	s.schemaTracker = schema.NewTracker()
 
 	if len(s.cfg.ColumnMappingRules) > 0 {
 		s.columnMapping, err = cm.NewMapping(s.cfg.CaseSensitive, s.cfg.ColumnMappingRules)
@@ -410,7 +422,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		if err1 != nil {
 			return err1
 		}
-		schemaMap, tableMap = buildLowerCaseTableNamesMap(allTables)
+		schemaMap, tableMap = buildLowerCaseTableNamesMap(s.tctx.L(), allTables)
 	}
 
 	switch s.cfg.ShardMode {
@@ -478,7 +490,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 // Output: schema names map: lower_case_schema_name --> schema_name
 //         tables names map: lower_case_schema_name --> lower_case_table_name --> table_name
 // Note: the result will skip the schemas and tables that their lower_case_name are the same.
-func buildLowerCaseTableNamesMap(tables map[string][]string) (map[string]string, map[string]map[string]string) {
+func buildLowerCaseTableNamesMap(logger log.Logger, tables map[string][]string) (map[string]string, map[string]map[string]string) {
 	schemaMap := make(map[string]string)
 	tablesMap := make(map[string]map[string]string)
 	lowerCaseSchemaSet := make(map[string]string)
@@ -489,7 +501,7 @@ func buildLowerCaseTableNamesMap(tables map[string][]string) (map[string]string,
 		if rawSchema, ok := lowerCaseSchemaSet[lcSchema]; ok {
 			delete(schemaMap, lcSchema)
 			delete(tablesMap, lcSchema)
-			log.L().Warn("skip check schema with same lower case value",
+			logger.Warn("skip check schema with same lower case value",
 				zap.Strings("schemas", []string{schema, rawSchema}))
 			continue
 		}
@@ -504,7 +516,7 @@ func buildLowerCaseTableNamesMap(tables map[string][]string) (map[string]string,
 			lcTbl := strings.ToLower(tb)
 			if rawTbl, ok := lowerCaseTableSet[lcTbl]; ok {
 				delete(tblsMap, lcTbl)
-				log.L().Warn("skip check tables with same lower case value", zap.String("schema", schema),
+				logger.Warn("skip check tables with same lower case value", zap.String("schema", schema),
 					zap.Strings("table", []string{tb, rawTbl}))
 				continue
 			}
@@ -551,7 +563,7 @@ func (s *Syncer) initShardingGroups(ctx context.Context, needCheck bool) error {
 	}
 	if needCheck && s.SourceTableNamesFlavor == utils.LCTableNamesSensitive {
 		// try fix persistent data before init
-		schemaMap, tableMap := buildLowerCaseTableNamesMap(sourceTables)
+		schemaMap, tableMap := buildLowerCaseTableNamesMap(s.tctx.L(), sourceTables)
 		if err2 = s.sgk.CheckAndFix(loadMeta, schemaMap, tableMap); err2 != nil {
 			return err2
 		}
@@ -1686,7 +1698,13 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 	}
 
-	s.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, s.cfg.To.Session, s.downstreamTrackConn)
+	if s.schemaTracker == nil {
+		// some test will set their own schemaTracker and skip the syncer.Init
+		s.schemaTracker = schema.NewTracker()
+	}
+	// prevent creating new Tracker on `Run` in order to avoid
+	// two different Trackers are invoked in the validator and the syncer.
+	err = s.schemaTracker.Init(ctx, s.cfg.Name, s.cfg.To.Session, s.downstreamTrackConn, s.tctx.L())
 	if err != nil {
 		return terror.ErrSchemaTrackerInit.Delegate(err)
 	}
@@ -1929,7 +1947,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		failpoint.Inject("FakeRedirect", func(val failpoint.Value) {
 			if len(shardingReSyncCh) == 0 && shardingReSync == nil {
 				if strVal, ok := val.(string); ok {
-					pos, gtidSet, err2 := s.fromDB.GetMasterStatus(ctx, s.cfg.Flavor)
+					pos, gtidSet, err2 := s.fromDB.GetMasterStatus(s.tctx.WithContext(ctx), s.cfg.Flavor)
 					if err2 != nil {
 						s.tctx.L().Error("fail to get master status in failpoint FakeRedirect", zap.Error(err2))
 						os.Exit(1)
@@ -4165,4 +4183,8 @@ func (s *Syncer) getTrackedTableInfo(table *filter.Table) (*model.TableInfo, err
 
 func (s *Syncer) getDownStreamTableInfo(tctx *tcontext.Context, tableID string, originTI *model.TableInfo) (*schema.DownstreamTableInfo, error) {
 	return s.schemaTracker.GetDownStreamTableInfo(tctx, tableID, originTI)
+}
+
+func (s *Syncer) getTableInfoFromCheckpoint(table *filter.Table) *model.TableInfo {
+	return s.checkpoint.GetTableInfo(table.Schema, table.Name)
 }

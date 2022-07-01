@@ -20,9 +20,9 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
 	frame "github.com/pingcap/tiflow/engine/framework"
@@ -34,12 +34,13 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/ctxmu"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	resManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	derrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
@@ -174,7 +175,7 @@ func (jm *JobManagerImplV2) DebugJob(ctx context.Context, req *pb.DebugJobReques
 			case <-time.After(100 * time.Millisecond):
 			}
 			if err := messageAgent.Tick(runCtx); err != nil {
-				log.L().Error("failed to run message agent tick", log.ShortError(err))
+				log.L().Error("failed to run message agent tick", logutil.ShortError(err))
 				return
 			}
 		}
@@ -268,7 +269,7 @@ func (jm *JobManagerImplV2) QueryJob(ctx context.Context, req *pb.QueryJobReques
 	if masterMeta, err := mcli.Load(ctx); err != nil {
 		log.L().Warn("failed to load master kv meta from meta store", zap.Any("id", req.JobId), zap.Error(err))
 	} else {
-		if masterMeta != nil {
+		if masterMeta != nil && masterMeta.StatusCode != frameModel.MasterStatusUninit {
 			resp := &pb.QueryJobResponse{
 				Tp:     int32(frame.MustConvertWorkerType2JobType(masterMeta.Tp)),
 				Config: masterMeta.Config,
@@ -296,7 +297,7 @@ func (jm *JobManagerImplV2) QueryJob(ctx context.Context, req *pb.QueryJobReques
 // SubmitJob processes "SubmitJobRequest".
 func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *pb.SubmitJobResponse {
 	// TODO call jm.notifier.Notify when we want to support "add job" event.
-	log.L().Logger.Info("submit job", zap.String("config", string(req.Config)))
+	log.L().Info("submit job", zap.String("config", string(req.Config)))
 	resp := &pb.SubmitJobResponse{}
 	var (
 		id  frameModel.WorkerID
@@ -385,6 +386,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 func (jm *JobManagerImplV2) GetJobStatuses(
 	ctx context.Context,
 ) (map[frameModel.MasterID]frameModel.MasterStatusCode, error) {
+	// BUG? NO filter in the implement
 	jobs, err := jm.frameMetaClient.QueryJobs(ctx)
 	if err != nil {
 		return nil, err

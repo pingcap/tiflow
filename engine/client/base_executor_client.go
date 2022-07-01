@@ -17,15 +17,15 @@ import (
 	"context"
 
 	grpc_zap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	"github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // baseExecutorClient handles requests and responses at the gRPC method level.
@@ -61,14 +61,17 @@ func newBaseExecutorClient(addr string) (*baseExecutorClientImpl, error) {
 	if test.GetGlobalTestFlag() {
 		return newExecutorClientForTest(addr)
 	}
+	// NOTE We use a non-blocking dial (which is the default),
+	// so err could be nil even if an invalid address is given.
+	// TODO We need a way to 1) remove failed clients
+	// 2) prevent stale executor's client from being created
 	conn, err := grpc.Dial(
 		addr,
 		grpc.WithInsecure(),
 		grpc.WithConnectParams(grpc.ConnectParams{Backoff: backoff.DefaultConfig}),
-		grpc.WithBlock(),
 		// We log gRPC requests here to aid debugging
 		// TODO add a switch to turn off the gRPC request log.
-		grpc.WithUnaryInterceptor(grpc_zap.UnaryClientInterceptor(log.L().Logger)))
+		grpc.WithUnaryInterceptor(grpc_zap.UnaryClientInterceptor(log.L())))
 	if err != nil {
 		return nil, errors.ErrGrpcBuildConn.GenWithStackByArgs(addr)
 	}
@@ -92,7 +95,7 @@ func (c *baseExecutorClientImpl) Send(ctx context.Context, req *ExecutorRequest)
 		resp.Resp, err = c.brokerClient.RemoveResource(ctx, req.RemoveLocalResourceRequest())
 	}
 	if err != nil {
-		log.L().Logger.Error("send req meet error", zap.Error(err))
+		log.L().Error("send req meet error", zap.Error(err))
 	}
 	return resp, err
 }

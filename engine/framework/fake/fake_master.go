@@ -27,15 +27,15 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 /*
@@ -362,7 +362,7 @@ func (m *Master) tickedCheckStatus(ctx context.Context) error {
 		}
 		// update status via framework provided API
 		err := m.BaseJobMaster.UpdateJobStatus(ctx, m.Status())
-		if derrors.ErrWorkerUpdateStatusTryAgain.Equal(err) {
+		if cerrors.ErrWorkerUpdateStatusTryAgain.Equal(err) {
 			log.L().Warn("update status try again later", zap.String("error", err.Error()))
 			return nil
 		}
@@ -445,7 +445,7 @@ func (m *Master) OnWorkerOffline(worker framework.WorkerHandle, reason error) er
 	delete(m.bStatus.status, worker.ID())
 	m.bStatus.Unlock()
 
-	if derrors.ErrWorkerFinish.Equal(reason) {
+	if cerrors.ErrWorkerFinish.Equal(reason) {
 		log.L().Info("FakeMaster: OnWorkerOffline: worker finished", zap.String("worker-id", worker.ID()))
 		m.finishedSet[worker.ID()] = businessID
 		return nil

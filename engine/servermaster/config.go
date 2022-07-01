@@ -36,12 +36,13 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/engine/pkg/errors"
-	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
+	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/engine/pkg/etcdutil"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/version"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/zap"
 )
@@ -72,7 +73,7 @@ var (
 // NewConfig creates a config for dm-master.
 func NewConfig() *Config {
 	cfg := &Config{
-		Etcd:          &etcdutils.ConfigParams{},
+		Etcd:          &etcdutil.ConfigParams{},
 		FrameMetaConf: NewFrameMetaConfig(),
 		UserMetaConf:  NewDefaultUserMetaConfig(),
 	}
@@ -83,10 +84,9 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.ConfigFile, "config", "", "path to config file")
 	fs.StringVar(&cfg.MasterAddr, "master-addr", "", "master API server and status addr")
 	fs.StringVar(&cfg.AdvertiseAddr, "advertise-addr", "", `advertise address for client traffic (default "${master-addr}")`)
-	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
-	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
-	fs.StringVar(&cfg.LogFormat, "log-format", "text", `the format of the log, "text" or "json"`)
-	// fs.StringVar(&cfg.LogRotate, "log-rotate", "day", "log file rotate type, hour/day")
+	fs.StringVar(&cfg.LogConf.Level, "L", "info", "log level: debug, info, warn, error, fatal")
+	fs.StringVar(&cfg.LogConf.File, "log-file", "", "log file path")
+	// fs.StringVar(&cfg.LogConf.LogRotate, "log-rotate", "day", "log file rotate type, hour/day")
 
 	fs.StringVar(&cfg.Etcd.Name, "name", "", "human-readable name for this DF-master member")
 	fs.StringVar(&cfg.Etcd.DataDir, "data-dir", "", "data directory for etcd using")
@@ -107,10 +107,7 @@ func NewConfig() *Config {
 type Config struct {
 	flagSet *flag.FlagSet
 
-	LogLevel  string `toml:"log-level" json:"log-level"`
-	LogFile   string `toml:"log-file" json:"log-file"`
-	LogFormat string `toml:"log-format" json:"log-format"`
-	LogRotate string `toml:"log-rotate" json:"log-rotate"`
+	LogConf logutil.Config `toml:"log" json:"log"`
 
 	MasterAddr    string `toml:"master-addr" json:"master-addr"`
 	AdvertiseAddr string `toml:"advertise-addr" json:"advertise-addr"`
@@ -120,7 +117,7 @@ type Config struct {
 	// etcd relative config items
 	// NOTE: we use `MasterAddr` to generate `ClientUrls` and `AdvertiseClientUrls`
 	// NOTE: more items will be add when adding leader election
-	Etcd *etcdutils.ConfigParams `toml:"etcd" json:"etcd"`
+	Etcd *etcdutil.ConfigParams `toml:"etcd" json:"etcd"`
 
 	FrameMetaConf *metaclient.StoreConfigParams `toml:"frame-metastore-conf" json:"frame-metastore-conf"`
 	UserMetaConf  *metaclient.StoreConfigParams `toml:"user-metastore-conf" json:"user-metastore-conf"`
@@ -140,7 +137,7 @@ type Config struct {
 func (c *Config) String() string {
 	cfg, err := json.Marshal(c)
 	if err != nil {
-		log.L().Error("marshal to json", zap.Reflect("master config", c), log.ShortError(err))
+		log.L().Error("marshal to json", zap.Reflect("master config", c), logutil.ShortError(err))
 	}
 	return string(cfg)
 }
@@ -151,7 +148,7 @@ func (c *Config) Toml() (string, error) {
 
 	err := toml.NewEncoder(&b).Encode(c)
 	if err != nil {
-		log.L().Error("fail to marshal config to toml", log.ShortError(err))
+		log.L().Error("fail to marshal config to toml", logutil.ShortError(err))
 	}
 
 	return b.String(), nil
@@ -162,7 +159,7 @@ func (c *Config) Parse(arguments []string) error {
 	// Parse first to get config file.
 	err := c.flagSet.Parse(arguments)
 	if err != nil {
-		return errors.Wrap(errors.ErrMasterConfigParseFlagSet, err)
+		return errors.WrapError(errors.ErrMasterConfigParseFlagSet, err)
 	}
 
 	if c.printVersion {
@@ -181,7 +178,7 @@ func (c *Config) Parse(arguments []string) error {
 	// Parse again to replace with command line options.
 	err = c.flagSet.Parse(arguments)
 	if err != nil {
-		return errors.Wrap(errors.ErrMasterConfigParseFlagSet, err)
+		return errors.WrapError(errors.ErrMasterConfigParseFlagSet, err)
 	}
 
 	if len(c.flagSet.Args()) != 0 {
@@ -227,7 +224,7 @@ func (c *Config) adjust() (err error) {
 func (c *Config) configFromFile(path string) error {
 	metaData, err := toml.DecodeFile(path, c)
 	if err != nil {
-		return errors.Wrap(errors.ErrMasterDecodeConfigFile, err)
+		return errors.WrapError(errors.ErrMasterDecodeConfigFile, err)
 	}
 	return checkUndecodedItems(metaData)
 }
@@ -235,7 +232,7 @@ func (c *Config) configFromFile(path string) error {
 func (c *Config) configFromString(data string) error {
 	metaData, err := toml.Decode(data, c)
 	if err != nil {
-		return errors.Wrap(errors.ErrMasterDecodeConfigFile, err)
+		return errors.WrapError(errors.ErrMasterDecodeConfigFile, err)
 	}
 	return checkUndecodedItems(metaData)
 }
@@ -270,7 +267,7 @@ func parseURLs(s string) ([]url.URL, error) {
 		}
 		u, err := url.Parse(item)
 		if err != nil {
-			return nil, errors.Wrap(errors.ErrMasterParseURLFail, err, item)
+			return nil, errors.WrapError(errors.ErrMasterParseURLFail, err, item)
 		}
 		if strings.Index(u.Host, ":") == 0 {
 			u.Host = "0.0.0.0" + u.Host

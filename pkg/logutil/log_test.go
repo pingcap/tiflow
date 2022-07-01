@@ -19,13 +19,16 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest"
 )
 
 func TestInitLoggerAndSetLogLevel(t *testing.T) {
@@ -103,4 +106,64 @@ func TestZapInternalErrorOutput(t *testing.T) {
 			require.Nil(t, err)
 		}
 	}
+}
+
+func TestErrorFilterContextCanceled(t *testing.T) {
+	var buffer zaptest.Buffer
+	err := InitLogger(&Config{Level: "info"}, WithOutputWriteSyncer(&buffer))
+	require.NoError(t, err)
+
+	ErrorFilterContextCanceled(log.L(), "the message", zap.Int("number", 123456),
+		zap.Ints("array", []int{7, 8, 9}), zap.Error(context.Canceled))
+	require.Equal(t, "", buffer.Stripped())
+	buffer.Reset()
+
+	ErrorFilterContextCanceled(log.L(), "the message", zap.Int("number", 123456),
+		zap.Ints("array", []int{7, 8, 9}),
+		ShortError(errors.Annotate(context.Canceled, "extra info")))
+	require.Equal(t, "", buffer.Stripped())
+	buffer.Reset()
+
+	ErrorFilterContextCanceled(log.L(), "the message", zap.Int("number", 123456),
+		zap.Ints("array", []int{7, 8, 9}))
+	require.Regexp(t, regexp.QuoteMeta("[\"the message\"]"+
+		" [number=123456] [array=\"[7,8,9]\"]"), buffer.Stripped())
+}
+
+func TestShortError(t *testing.T) {
+	var buffer zaptest.Buffer
+	err := InitLogger(&Config{Level: "info"}, WithOutputWriteSyncer(&buffer))
+	require.NoError(t, err)
+
+	err = cerrors.ErrMetaNotInRegion.GenWithStackByArgs("extra info")
+	log.L().Warn("short error", ShortError(err))
+	require.Regexp(t, regexp.QuoteMeta("[\"short error\"] "+
+		"[error=\"[CDC:ErrMetaNotInRegion]meta not exists in region"), buffer.Stripped())
+	buffer.Reset()
+
+	log.L().Warn("short error", ShortError(nil))
+	require.Regexp(t, regexp.QuoteMeta("[\"short error\"] []"), buffer.Stripped())
+	buffer.Reset()
+
+	log.L().Warn("short error", zap.Error(err))
+	require.Regexp(t, regexp.QuoteMeta("errors.AddStack"), buffer.Stripped())
+	buffer.Reset()
+}
+
+func TestLoggerOption(t *testing.T) {
+	t.Parallel()
+
+	var op loggerOp
+	require.False(t, op.isInitGRPCLogger)
+	require.False(t, op.isInitSaramaLogger)
+	require.Nil(t, op.output)
+
+	op.applyOpts([]LoggerOpt{WithInitGRPCLogger(), WithInitSaramaLogger()})
+	require.True(t, op.isInitGRPCLogger)
+	require.True(t, op.isInitSaramaLogger)
+	require.Nil(t, op.output)
+
+	var buffer zaptest.Buffer
+	op.applyOpts([]LoggerOpt{WithOutputWriteSyncer(&buffer)})
+	require.Equal(t, &buffer, op.output)
 }

@@ -20,11 +20,11 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/worker"
 	"github.com/pingcap/tiflow/dm/pkg/backoff"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/registry"
@@ -36,6 +36,7 @@ import (
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -127,6 +128,7 @@ func (w *dmWorker) InitImpl(ctx context.Context) error {
 		}
 	}
 	w.cfg.MetricsFactory = w.MetricFactory()
+	w.cfg.FrameworkLogger = w.Logger()
 	return w.unitHolder.Init(ctx)
 }
 
@@ -165,12 +167,12 @@ func (w *dmWorker) CloseImpl(ctx context.Context) error {
 	var recordErr error
 	// unregister jobmaster client
 	if err := w.messageAgent.UpdateClient(w.masterID, nil); err != nil {
-		log.L().Error("failed to update message client", log.ShortError(err))
+		log.L().Error("failed to update message client", logutil.ShortError(err))
 		recordErr = err
 	}
 	w.unitHolder.Close(ctx)
 	if err := w.messageAgent.Close(ctx); err != nil {
-		log.L().Error("failed to close message client", log.ShortError(err))
+		log.L().Error("failed to close message client", logutil.ShortError(err))
 		recordErr = err
 	}
 	return recordErr

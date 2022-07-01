@@ -20,13 +20,13 @@ import (
 	"github.com/gogo/status"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	derrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 const preDispatchTaskRetryInterval = 1 * time.Second

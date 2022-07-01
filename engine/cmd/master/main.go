@@ -19,15 +19,16 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
+	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/pkg/version"
 	"github.com/pingcap/tiflow/engine/servermaster"
+	"github.com/pingcap/tiflow/pkg/logutil"
 )
 
 // 1. parse config
@@ -48,16 +49,15 @@ func main() {
 	}
 
 	// 2. init logger
-	err = log.InitLogger(&log.Config{
-		File:   cfg.LogFile,
-		Level:  strings.ToLower(cfg.LogLevel),
-		Format: cfg.LogFormat,
-	})
+	err = logutil.InitLogger(&cfg.LogConf)
 	if err != nil {
 		fmt.Printf("init logger failed: %s", err)
 		os.Exit(2)
 	}
 	version.LogVersionInfo()
+	if os.Getenv(gin.EnvGinMode) == "" {
+		gin.SetMode(gin.ReleaseMode)
+	}
 
 	// 3. start server
 	ctx, cancel := context.WithCancel(context.Background())

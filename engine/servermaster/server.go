@@ -22,8 +22,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	perrors "github.com/pingcap/errors"
+	"github.com/pingcap/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
@@ -35,8 +36,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
@@ -45,9 +46,7 @@ import (
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
-	"github.com/pingcap/tiflow/engine/pkg/errors"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
-	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
+	engineEtcdutil "github.com/pingcap/tiflow/engine/pkg/etcdutil"
 	externRescManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcetypes"
@@ -56,14 +55,14 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
-	"github.com/pingcap/tiflow/engine/pkg/serverutils"
+	"github.com/pingcap/tiflow/engine/pkg/serverutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
 )
 
@@ -104,7 +103,7 @@ type Server struct {
 	msgService      *p2p.MessageRPCService
 	p2pMsgRouter    p2p.MessageRouter
 	rpcLogRL        *rate.Limiter
-	discoveryKeeper *serverutils.DiscoveryKeepaliver
+	discoveryKeeper *serverutil.DiscoveryKeepaliver
 
 	metaStoreManager MetaStoreManager
 
@@ -290,9 +289,9 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 	// TODO: check leader, if not leader, return notLeader error.
 	execInfo, err := s.executorManager.AllocateNewExec(req)
 	if err != nil {
-		log.L().Logger.Error("add executor failed", zap.Error(err))
+		log.L().Error("add executor failed", zap.Error(err))
 		return &pb.RegisterExecutorResponse{
-			Err: derrors.ToPBError(err),
+			Err: cerrors.ToPBError(err),
 		}, nil
 	}
 	return &pb.RegisterExecutorResponse{
@@ -313,7 +312,7 @@ func (s *Server) ScheduleTask(ctx context.Context, req *pb.ScheduleTaskRequest) 
 
 	schedulerReq := &schedModel.SchedulerRequest{
 		Cost:              schedModel.ResourceUnit(req.GetCost()),
-		ExternalResources: req.GetResourceRequirements(),
+		ExternalResources: resModel.ToResourceKeys(req.GetResourceRequirements()),
 	}
 	schedulerResp, err := s.scheduler.ScheduleTask(ctx, schedulerReq)
 	if err != nil {
@@ -325,7 +324,7 @@ func (s *Server) ScheduleTask(ctx context.Context, req *pb.ScheduleTaskRequest) 
 		log.L().Warn("Executor is gone, RPC call needs retry",
 			zap.Any("request", req),
 			zap.String("executor-id", string(schedulerResp.ExecutorID)))
-		errOut := derrors.ErrUnknownExecutorID.GenWithStackByArgs(string(schedulerResp.ExecutorID))
+		errOut := cerrors.ErrUnknownExecutorID.GenWithStackByArgs(string(schedulerResp.ExecutorID))
 		return nil, status.Error(codes.Internal, errOut.Error())
 	}
 
@@ -458,6 +457,7 @@ func (s *Server) Run(ctx context.Context) (err error) {
 		return s.startForTest(ctx)
 	}
 
+	// TODO: need context here to initialize the metastore connection
 	err = s.registerMetaStore()
 	if err != nil {
 		return err
@@ -488,7 +488,7 @@ func (s *Server) Run(ctx context.Context) (err error) {
 		return s.memberLoop(ctx)
 	})
 
-	s.discoveryKeeper = serverutils.NewDiscoveryKeepaliver(
+	s.discoveryKeeper = serverutil.NewDiscoveryKeepaliver(
 		s.info, s.etcdClient, int(defaultSessionTTL/time.Second),
 		defaultDiscoverTicker, s.p2pMsgRouter,
 	)
@@ -546,9 +546,9 @@ func (s *Server) startResourceManager() error {
 }
 
 func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
-	etcdCfg := etcdutils.GenEmbedEtcdConfigWithLogger(s.cfg.LogLevel)
+	etcdCfg := engineEtcdutil.GenEmbedEtcdConfigWithLogger(s.cfg.LogConf.Level)
 	// prepare to join an existing etcd cluster.
-	err = etcdutils.PrepareJoinEtcd(s.cfg.Etcd, s.cfg.MasterAddr)
+	err = engineEtcdutil.PrepareJoinEtcd(s.cfg.Etcd, s.cfg.MasterAddr)
 	if err != nil {
 		return
 	}
@@ -561,7 +561,7 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 	// no `String` method exists for embed.Config, and can not marshal it to join too.
 	// but when starting embed etcd server, the etcd pkg will log the config.
 	// https://github.com/etcd-io/etcd/blob/3cf2f69b5738fb702ba1a935590f36b52b18979b/embed/etcd.go#L299
-	etcdCfg, err = etcdutils.GenEmbedEtcdConfig(etcdCfg, s.cfg.MasterAddr, s.cfg.AdvertiseAddr, s.cfg.Etcd)
+	etcdCfg, err = engineEtcdutil.GenEmbedEtcdConfig(etcdCfg, s.cfg.MasterAddr, s.cfg.AdvertiseAddr, s.cfg.Etcd)
 	if err != nil {
 		return
 	}
@@ -575,17 +575,21 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 		close(registerDone)
 	}
 
+	router := gin.New()
+	openapi := NewOpenAPI(s)
+	RegisterRoutes(router, openapi)
 	httpHandlers := map[string]http.Handler{
-		"/debug/":  getDebugHandler(),
-		"/metrics": promutil.HTTPHandlerForMetric(),
+		"/debug/":   router,
+		"/swagger/": router,
+		"/api/v1/":  router,
+		"/metrics":  router,
 	}
-
 	// generate grpcServer
 	s.etcd, err = startEtcd(ctx, etcdCfg, gRPCSvr, httpHandlers, etcdStartTimeout)
 	if err != nil {
 		return
 	}
-	log.L().Logger.Info("start etcd successfully")
+	log.L().Info("start etcd successfully")
 
 	// start grpc server
 	s.etcdClient, err = etcdutil.CreateClient([]string{withHost(s.cfg.MasterAddr)}, nil)
@@ -598,9 +602,9 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 	// requests, the service register could have not been called.
 	select {
 	case <-ctx.Done():
-		return perrors.Trace(ctx.Err())
+		return errors.Trace(ctx.Err())
 	case <-time.After(etcdStartTimeout):
-		return errors.ErrMasterStartEmbedEtcdFail.GenWithStack("register grpc service timeout")
+		return cerrors.ErrMasterStartEmbedEtcdFail.GenWithStack("register grpc service timeout")
 	case <-registerDone:
 	}
 
@@ -661,7 +665,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
-	dctx := dcontext.NewContext(ctx, log.L())
+	dctx := dcontext.NewContext(ctx)
 	dctx.Environ.Addr = s.cfg.AdvertiseAddr
 	dctx.Environ.NodeID = s.name()
 	dctx.ProjectInfo = tenant.FrameProjectInfo
@@ -772,7 +776,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 			select {
 			case <-errgCtx.Done():
 				// errgCtx is a leaderCtx actually
-				return perrors.Trace(errgCtx.Err())
+				return errors.Trace(errgCtx.Err())
 			case <-leaderTicker.C:
 				if err := s.jobManager.Poll(errgCtx); err != nil {
 					log.L().Warn("Polling JobManager failed", zap.Error(err))
@@ -838,4 +842,38 @@ func makeScheduler(
 		executorManager.CapacityProvider(),
 		externalResourceManager,
 	)
+}
+
+// IsLeader implements ServerInfoProvider.IsLeader.
+func (s *Server) IsLeader() bool {
+	leader, ok := s.leader.Load().(*rpcutil.Member)
+	if !ok || leader == nil {
+		return false
+	}
+	return leader.Name == s.id
+}
+
+// LeaderAddr implements ServerInfoProvider.LeaderAddr.
+func (s *Server) LeaderAddr() (string, bool) {
+	leader, ok := s.leader.Load().(*rpcutil.Member)
+	if !ok || leader == nil {
+		return "", false
+	}
+	return leader.AdvertiseAddr, true
+}
+
+// JobManager implements ServerInfoProvider.JobManager.
+func (s *Server) JobManager() (JobManager, bool) {
+	if s.leaderInitialized.Load() && s.jobManager != nil {
+		return s.jobManager, true
+	}
+	return nil, false
+}
+
+// ExecutorManager implements ServerInfoProvider.ExecutorManager.
+func (s *Server) ExecutorManager() (ExecutorManager, bool) {
+	if s.leaderInitialized.Load() && s.executorManager != nil {
+		return s.executorManager, true
+	}
+	return nil, false
 }
