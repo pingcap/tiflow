@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net"
 	"net/url"
 	"strings"
 	"sync"
@@ -67,7 +68,10 @@ func newSimpleMySQLSink(ctx context.Context, sinkURI *url.URL, config *config.Re
 		port = "4000"
 	}
 
-	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/?multiStatements=true", username, password, sinkURI.Hostname(), port)
+	// This will handle the IPv6 address format.
+	host := net.JoinHostPort(sinkURI.Hostname(), port)
+
+	dsnStr := fmt.Sprintf("%s:%s@tcp(%s)/?multiStatements=true", username, password, host)
 	dsn, err := dmysql.ParseDSN(dsnStr)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
