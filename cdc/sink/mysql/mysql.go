@@ -230,20 +230,20 @@ func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 // Concurrency Note: FlushRowChangedEvents is thread-safe.
 func (s *mysqlSink) FlushRowChangedEvents(
 	ctx context.Context, tableID model.TableID, resolved model.ResolvedTs,
-) (uint64, error) {
+) (model.ResolvedTs, error) {
 	if err := s.error.Load(); err != nil {
-		return 0, err
+		return model.NewResolvedTs(0), err
 	}
 
 	v, ok := s.getTableResolvedTs(tableID)
-	if !ok || v.Ts < resolved.Ts {
+	if !ok || v.Less(resolved) {
 		s.tableMaxResolvedTs.Store(tableID, resolved)
 	}
 
 	// check and throw error
 	select {
 	case <-ctx.Done():
-		return 0, ctx.Err()
+		return model.NewResolvedTs(0), ctx.Err()
 	case s.resolvedCh <- struct{}{}:
 		// Notify `flushRowChangedEvents` to asynchronously write data.
 	default:
@@ -291,8 +291,8 @@ outer:
 				continue outer
 			}
 		}
-		for tableID, resolvedTs := range checkpointTsMap {
-			s.tableCheckpointTs.Store(tableID, resolvedTs)
+		for tableID, resolved := range checkpointTsMap {
+			s.tableCheckpointTs.Store(tableID, resolved)
 		}
 	}
 }
@@ -531,10 +531,10 @@ func (s *mysqlSink) cleanTableResource(tableID model.TableID) {
 			zap.Int64("tableID", tableID),
 			zap.Uint64("resolvedTs", resolved.(model.ResolvedTs).Ts))
 	}
-	if checkpointTs, loaded := s.tableCheckpointTs.LoadAndDelete(tableID); loaded {
+	if checkpoint, loaded := s.tableCheckpointTs.LoadAndDelete(tableID); loaded {
 		log.Info("clean up table checkpoint ts in MySQL sink",
 			zap.Int64("tableID", tableID),
-			zap.Uint64("checkpointTs", checkpointTs.(uint64)))
+			zap.Uint64("checkpointTs", checkpoint.(model.ResolvedTs).Ts))
 	}
 	// try to remove table txn cache
 	s.txnCache.RemoveTableTxn(tableID)
@@ -559,11 +559,11 @@ func (s *mysqlSink) RemoveTable(ctx context.Context, tableID model.TableID) erro
 			return errors.Trace(ctx.Err())
 		case <-ticker.C:
 			maxResolved, ok := s.getTableResolvedTs(tableID)
-			log.Warn("Barrier doesn't return in time, may be stuck",
+			log.Warn("RemoveTable doesn't return in time, may be stuck",
 				zap.Int64("tableID", tableID),
 				zap.Bool("hasResolvedTs", ok),
 				zap.Any("resolvedTs", maxResolved.Ts),
-				zap.Uint64("checkpointTs", s.getTableCheckpointTs(tableID)))
+				zap.Uint64("checkpointTs", s.getTableCheckpointTs(tableID).Ts))
 		default:
 			if err := s.error.Load(); err != nil {
 				return err
@@ -573,15 +573,15 @@ func (s *mysqlSink) RemoveTable(ctx context.Context, tableID model.TableID) erro
 				log.Info("No table resolvedTs is found", zap.Int64("tableID", tableID))
 				return nil
 			}
-			tableCkpt := s.getTableCheckpointTs(tableID)
-			if tableCkpt >= maxResolved.Ts {
+			checkpoint := s.getTableCheckpointTs(tableID)
+			if checkpoint.EqualOrGreater(maxResolved) {
 				return nil
 			}
-			checkpointTs, err := s.FlushRowChangedEvents(ctx, tableID, maxResolved)
+			checkpoint, err := s.FlushRowChangedEvents(ctx, tableID, maxResolved)
 			if err != nil {
 				return err
 			}
-			if checkpointTs >= maxResolved.Ts {
+			if checkpoint.Ts >= maxResolved.Ts {
 				return nil
 			}
 			// short sleep to avoid cpu spin
@@ -590,12 +590,12 @@ func (s *mysqlSink) RemoveTable(ctx context.Context, tableID model.TableID) erro
 	}
 }
 
-func (s *mysqlSink) getTableCheckpointTs(tableID model.TableID) uint64 {
+func (s *mysqlSink) getTableCheckpointTs(tableID model.TableID) model.ResolvedTs {
 	v, ok := s.tableCheckpointTs.Load(tableID)
 	if ok {
-		return v.(uint64)
+		return v.(model.ResolvedTs)
 	}
-	return uint64(0)
+	return model.NewResolvedTs(0)
 }
 
 func (s *mysqlSink) getTableResolvedTs(tableID model.TableID) (model.ResolvedTs, bool) {
