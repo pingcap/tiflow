@@ -162,6 +162,9 @@ func New(
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 	}
+	if err := config.ValidateAndAdjust(sinkURI); err != nil {
+		return nil, err
+	}
 	if newSink, ok := sinkIniterMap[strings.ToLower(sinkURI.Scheme)]; ok {
 		return newSink(ctx, changefeedID, sinkURI, config, errCh)
 	}

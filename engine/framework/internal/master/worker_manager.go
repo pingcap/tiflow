@@ -149,7 +149,8 @@ func (m *WorkerManager) InitAfterRecover(ctx context.Context) (retErr error) {
 		}
 	}()
 
-	ctx = m.errCenter.WithCancelOnFirstError(ctx)
+	ctx, cancel := m.errCenter.WithCancelOnFirstError(ctx)
+	defer cancel()
 
 	m.mu.Lock()
 	if m.state != workerManagerLoadingMeta {
@@ -297,7 +298,8 @@ func (m *WorkerManager) Tick(ctx context.Context) error {
 
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	ctx = m.errCenter.WithCancelOnFirstError(ctx)
+	ctx, cancel = m.errCenter.WithCancelOnFirstError(ctx)
+	defer cancel()
 
 	for {
 		var event *masterEvent

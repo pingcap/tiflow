@@ -11,22 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package model
+package eventsink
 
 import (
-	"github.com/pingcap/tiflow/engine/model"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	"testing"
+
+	"github.com/pingcap/tiflow/pkg/leakutil"
 )
 
-// SchedulerRequest represents a request for an executor to run a given task.
-type SchedulerRequest struct {
-	TenantID string // reserved for future use.
-
-	Cost              ResourceUnit
-	ExternalResources []resourcemeta.ResourceKey
-}
-
-// SchedulerResponse represents a response to a task scheduling request.
-type SchedulerResponse struct {
-	ExecutorID model.ExecutorID
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(m)
 }
