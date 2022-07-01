@@ -24,9 +24,10 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/workerpool"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -189,7 +190,7 @@ func NewMessageAgentImpl(id string, commandHandler interface{}, messageHandlerMa
 			err := agent.onMessage(topic, msg)
 			if err != nil {
 				// Todo: handle error
-				log.L().Error("failed to handle message", log.ShortError(err))
+				log.L().Error("failed to handle message", logutil.ShortError(err))
 			}
 			return err
 		},

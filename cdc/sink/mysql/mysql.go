@@ -40,7 +40,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/errorutil"
-	tifilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/retry"
@@ -55,8 +54,6 @@ const (
 type mysqlSink struct {
 	db     *sql.DB
 	params *sinkParams
-
-	filter *tifilter.Filter
 
 	txnCache           *unresolvedTxnCache
 	workers            []*mysqlSinkWorker
@@ -87,7 +84,6 @@ func NewMySQLSink(
 	ctx context.Context,
 	changefeedID model.ChangeFeedID,
 	sinkURI *url.URL,
-	filter *tifilter.Filter,
 	replicaConfig *config.ReplicaConfig,
 ) (*mysqlSink, error) {
 	params, err := parseSinkURIToParams(ctx, changefeedID, sinkURI)
@@ -182,7 +178,6 @@ func NewMySQLSink(
 	sink := &mysqlSink{
 		db:                              db,
 		params:                          params,
-		filter:                          filter,
 		txnCache:                        newUnresolvedTxnCache(),
 		statistics:                      metrics.NewStatistics(ctx, metrics.SinkTypeDB),
 		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
@@ -207,7 +202,7 @@ func NewMySQLSink(
 // EmitRowChangedEvents appends row changed events to the txn cache.
 // Concurrency Note: EmitRowChangedEvents is thread-safe.
 func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
-	count := s.txnCache.Append(s.filter, rows...)
+	count := s.txnCache.Append(rows...)
 	s.statistics.AddRowsCount(count)
 	return nil
 }
@@ -291,15 +286,6 @@ func (s *mysqlSink) EmitCheckpointTs(_ context.Context, ts uint64, _ []model.Tab
 // EmitDDLEvent executes DDL event.
 // Concurrency Note: EmitDDLEvent is thread-safe.
 func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	if s.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.Type, ddl.TableInfo.Schema, ddl.TableInfo.Table) {
-		log.Info(
-			"DDL event ignored",
-			zap.String("query", ddl.Query),
-			zap.Uint64("startTs", ddl.StartTs),
-			zap.Uint64("commitTs", ddl.CommitTs),
-		)
-		return cerror.ErrDDLEventIgnored.GenWithStackByArgs()
-	}
 	s.statistics.AddDDLCount()
 	err := s.execDDLWithMaxRetries(ctx, ddl)
 	return errors.Trace(err)

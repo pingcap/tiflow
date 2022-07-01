@@ -592,3 +592,34 @@ func TestCalculateGCSafepointTs(t *testing.T) {
 	require.Equal(t, expectMinTsMap, minCheckpoinTsMap)
 	require.Equal(t, expectForceUpdateMap, forceUpdateMap)
 }
+
+// AsyncStop should cleanup jobs and reject.
+func TestAsyncStop(t *testing.T) {
+	t.Parallel()
+
+	owner := ownerImpl{}
+	done := make(chan error, 1)
+	owner.EnqueueJob(model.AdminJob{
+		CfID: model.DefaultChangeFeedID("test-changefeed1"),
+		Type: model.AdminResume,
+	}, done)
+	owner.AsyncStop()
+	select {
+	case err := <-done:
+		require.Error(t, err)
+	default:
+		require.Fail(t, "unexpected")
+	}
+
+	done = make(chan error, 1)
+	owner.EnqueueJob(model.AdminJob{
+		CfID: model.DefaultChangeFeedID("test-changefeed1"),
+		Type: model.AdminResume,
+	}, done)
+	select {
+	case err := <-done:
+		require.Error(t, err)
+	default:
+		require.Fail(t, "unexpected")
+	}
+}

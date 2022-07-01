@@ -22,7 +22,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -39,6 +38,8 @@ import (
 
 var customID int64
 
+var netTimeout = utils.DefaultDBTimeout
+
 // DBProvider providers BaseDB instance.
 type DBProvider interface {
 	Apply(config *config.DBConfig) (*BaseDB, error)
@@ -53,9 +54,6 @@ var DefaultDBProvider DBProvider
 func init() {
 	DefaultDBProvider = &DefaultDBProviderImpl{}
 }
-
-// mockDB is used in unit test.
-var mockDB sqlmock.Sqlmock
 
 // Apply will build BaseDB with DBConfig.
 func (d *DefaultDBProviderImpl) Apply(config *config.DBConfig) (*BaseDB, error) {
@@ -115,14 +113,8 @@ func (d *DefaultDBProviderImpl) Apply(config *config.DBConfig) (*BaseDB, error) 
 	if err != nil {
 		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 	}
-	failpoint.Inject("failDBPing", func(_ failpoint.Value) {
-		db.Close()
-		db, mockDB, _ = sqlmock.New()
-		mockDB.ExpectPing()
-		mockDB.ExpectClose()
-	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), utils.DefaultDBTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), netTimeout)
 	defer cancel()
 	err = db.PingContext(ctx)
 	failpoint.Inject("failDBPing", func(_ failpoint.Value) {
@@ -161,6 +153,8 @@ func NewBaseDB(db *sql.DB, doFuncInClose ...func()) *BaseDB {
 
 // GetBaseConn retrieves *BaseConn which has own retryStrategy.
 func (d *BaseDB) GetBaseConn(ctx context.Context) (*BaseConn, error) {
+	ctx, cancel := context.WithTimeout(ctx, netTimeout)
+	defer cancel()
 	conn, err := d.DB.Conn(ctx)
 	if err != nil {
 		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
@@ -176,6 +170,7 @@ func (d *BaseDB) GetBaseConn(ctx context.Context) (*BaseConn, error) {
 	return baseConn, nil
 }
 
+// TODO: retry can be done inside the BaseDB.
 func (d *BaseDB) ExecContext(tctx *tcontext.Context, query string, args ...interface{}) (sql.Result, error) {
 	if tctx.L().Core().Enabled(zap.DebugLevel) {
 		tctx.L().Debug("exec context",
@@ -185,6 +180,7 @@ func (d *BaseDB) ExecContext(tctx *tcontext.Context, query string, args ...inter
 	return d.DB.ExecContext(tctx.Ctx, query, args...)
 }
 
+// TODO: retry can be done inside the BaseDB.
 func (d *BaseDB) QueryContext(tctx *tcontext.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	if tctx.L().Core().Enabled(zap.DebugLevel) {
 		tctx.L().Debug("query context",

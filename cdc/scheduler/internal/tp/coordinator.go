@@ -86,7 +86,7 @@ func newCoordinator(
 		revision:     revision,
 		captureID:    captureID,
 		replicationM: newReplicationManager(cfg.MaxTaskConcurrency, changefeedID),
-		captureM:     newCaptureManager(changefeedID, revision, cfg.HeartbeatTick),
+		captureM:     newCaptureManager(captureID, changefeedID, revision, cfg.HeartbeatTick),
 		schedulerM:   newSchedulerManager(changefeedID, cfg),
 		changefeedID: changefeedID,
 	}
@@ -179,8 +179,9 @@ func (c *coordinator) DrainCapture(target model.CaptureID) int {
 	// the owner is the drain target. In the rolling upgrade scenario, owner should be drained
 	// at the last, this should be guaranteed by the caller, since it knows the draining order.
 	if target == c.captureID {
-		log.Warn("tpscheduler: manual drain capture, the target is the owner now",
+		log.Warn("tpscheduler: manual drain capture ignore, the target is the owner",
 			zap.String("target", target), zap.Int("tableCount", count))
+		return count
 	}
 
 	if !c.schedulerM.DrainCapture(target) {
@@ -249,7 +250,8 @@ func (c *coordinator) poll(
 
 	// Generate schedule tasks based on the current status.
 	replications := c.replicationM.ReplicationSets()
-	allTasks := c.schedulerM.Schedule(checkpointTs, currentTables, aliveCaptures, replications)
+	allTasks := c.schedulerM.Schedule(
+		checkpointTs, currentTables, c.captureM.Captures, replications)
 
 	// Handle generated schedule tasks.
 	msgs, err = c.replicationM.HandleTasks(allTasks)

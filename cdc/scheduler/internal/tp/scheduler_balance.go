@@ -17,6 +17,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
@@ -43,7 +44,7 @@ func (b *balanceScheduler) Name() string {
 func (b *balanceScheduler) Schedule(
 	_ model.Ts,
 	currentTables []model.TableID,
-	captures map[model.CaptureID]*model.CaptureInfo,
+	captures map[model.CaptureID]*CaptureStatus,
 	replications map[model.TableID]*ReplicationSet,
 ) []*scheduleTask {
 	now := time.Now()
@@ -51,6 +52,14 @@ func (b *balanceScheduler) Schedule(
 		return nil
 	}
 	b.lastRebalanceTime = now
+
+	for _, capture := range captures {
+		if capture.State == CaptureStateStopping {
+			log.Debug("tpscheduler: capture is stopping, " +
+				"premature to balance table automatically")
+			return nil
+		}
+	}
 
 	tasks := make([]*scheduleTask, 0)
 	task := buildBurstBalanceMoveTables(b.random, currentTables, captures, replications)
@@ -63,7 +72,7 @@ func (b *balanceScheduler) Schedule(
 func buildBurstBalanceMoveTables(
 	random *rand.Rand,
 	currentTables []model.TableID,
-	captures map[model.CaptureID]*model.CaptureInfo,
+	captures map[model.CaptureID]*CaptureStatus,
 	replications map[model.TableID]*ReplicationSet,
 ) *scheduleTask {
 	captureTables := make(map[model.CaptureID][]model.TableID)

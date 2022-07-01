@@ -66,17 +66,40 @@ func (d *drainCaptureScheduler) setTarget(target model.CaptureID) bool {
 	return true
 }
 
+func checkStoppingCapture(captures map[model.CaptureID]*CaptureStatus) model.CaptureID {
+	for id, cs := range captures {
+		if cs.IsOwner {
+			// Skip draining owner.
+			continue
+		}
+		if cs.State == CaptureStateStopping {
+			return id
+		}
+	}
+	return captureIDNotDraining
+}
+
 func (d *drainCaptureScheduler) Schedule(
 	_ model.Ts,
 	_ []model.TableID,
-	captures map[model.CaptureID]*model.CaptureInfo,
+	captures map[model.CaptureID]*CaptureStatus,
 	replications map[model.TableID]*ReplicationSet,
 ) []*scheduleTask {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
 	if d.target == captureIDNotDraining {
-		return nil
+		// There are two ways to make a capture "stopping",
+		// 1. PUT /api/v1/capture/drain
+		// 2. kill <TiCDC_PID>
+		stopping := checkStoppingCapture(captures)
+		if stopping == captureIDNotDraining {
+			return nil
+		}
+		// Find a stopping capture, drain it.
+		d.target = stopping
+		log.Info("tpscheduler: drain a stopping capture",
+			zap.String("captureID", stopping))
 	}
 
 	var availableCaptureCount int
@@ -125,7 +148,7 @@ func (d *drainCaptureScheduler) Schedule(
 	// 3. the target capture cannot be found in the latest captures
 	if len(victims) == 0 {
 		log.Info("tpscheduler: drain capture scheduler finished, since no table",
-			zap.String("target", d.target), zap.Any("captures", captures))
+			zap.String("target", d.target))
 		d.target = captureIDNotDraining
 		return nil
 	}

@@ -31,7 +31,8 @@ import (
 	"gorm.io/gorm/clause"
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	engineModel "github.com/pingcap/tiflow/engine/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	"github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
@@ -43,11 +44,18 @@ var globalModels = []interface{}{
 	&model.ProjectOperation{},
 	&frameModel.MasterMetaKVData{},
 	&frameModel.WorkerStatus{},
-	&resourcemeta.ResourceMeta{},
+	&resModel.ResourceMeta{},
 	&model.LogicEpoch{},
 }
 
 // TODO: retry and idempotent??
+
+type (
+	// ResourceMeta is the alias of resModel.ResourceMeta
+	ResourceMeta = resModel.ResourceMeta
+	// ResourceKey is the alias of resModel.ResourceKey
+	ResourceKey = resModel.ResourceKey
+)
 
 // TimeRange defines a time range with [start, end] time
 type TimeRange struct {
@@ -116,18 +124,21 @@ type WorkerClient interface {
 
 // ResourceClient defines interface that manages resource in metastore
 type ResourceClient interface {
-	CreateResource(ctx context.Context, resource *resourcemeta.ResourceMeta) error
-	UpsertResource(ctx context.Context, resource *resourcemeta.ResourceMeta) error
-	UpdateResource(ctx context.Context, resource *resourcemeta.ResourceMeta) error
-	DeleteResource(ctx context.Context, resourceID string) (Result, error)
-	GetResourceByID(ctx context.Context, resourceID string) (*resourcemeta.ResourceMeta, error)
-	QueryResources(ctx context.Context) ([]*resourcemeta.ResourceMeta, error)
-	QueryResourcesByJobID(ctx context.Context, jobID string) ([]*resourcemeta.ResourceMeta, error)
-	QueryResourcesByExecutorID(ctx context.Context, executorID string) ([]*resourcemeta.ResourceMeta, error)
-	SetGCPending(ctx context.Context, ids []resourcemeta.ResourceID) error
-	DeleteResourcesByExecutorID(ctx context.Context, executorID string) error
-	DeleteResources(ctx context.Context, resourceIDs []string) (Result, error)
-	GetOneResourceForGC(ctx context.Context) (*resourcemeta.ResourceMeta, error)
+	CreateResource(ctx context.Context, resource *ResourceMeta) error
+	UpsertResource(ctx context.Context, resource *ResourceMeta) error
+	UpdateResource(ctx context.Context, resource *ResourceMeta) error
+
+	GetResourceByID(ctx context.Context, resourceKey ResourceKey) (*ResourceMeta, error)
+	QueryResources(ctx context.Context) ([]*ResourceMeta, error)
+	QueryResourcesByJobID(ctx context.Context, jobID string) ([]*ResourceMeta, error)
+	QueryResourcesByExecutorID(ctx context.Context, executorID string) ([]*ResourceMeta, error)
+
+	SetGCPendingByJobs(ctx context.Context, jobIDs []engineModel.JobID) error
+	GetOneResourceForGC(ctx context.Context) (*ResourceMeta, error)
+
+	DeleteResource(ctx context.Context, resourceKey ResourceKey) (Result, error)
+	DeleteResourcesByExecutorID(ctx context.Context, executorID engineModel.ExecutorID) (Result, error)
+	DeleteResourcesByExecutorIDs(ctx context.Context, executorID []engineModel.ExecutorID) (Result, error)
 }
 
 // NewClient return the client to operate framework metastore
@@ -566,15 +577,15 @@ func (c *metaOpsClient) QueryWorkersByStatus(ctx context.Context, masterID strin
 
 /////////////////////////////// Resource Operation
 // UpsertResource upsert the ResourceMeta
-func (c *metaOpsClient) UpsertResource(ctx context.Context, resource *resourcemeta.ResourceMeta) error {
+func (c *metaOpsClient) UpsertResource(ctx context.Context, resource *resModel.ResourceMeta) error {
 	if resource == nil {
 		return errors.ErrMetaParamsInvalid.GenWithStackByArgs("input resource meta is nil")
 	}
 
 	if err := c.db.WithContext(ctx).
 		Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "id"}},
-			DoUpdates: clause.AssignmentColumns(resourcemeta.ResourceUpdateColumns),
+			Columns:   []clause.Column{{Name: "job_id"}, {Name: "id"}},
+			DoUpdates: clause.AssignmentColumns(resModel.ResourceUpdateColumns),
 		}).Create(resource).Error; err != nil {
 		return errors.ErrMetaOpFail.Wrap(err)
 	}
@@ -582,15 +593,17 @@ func (c *metaOpsClient) UpsertResource(ctx context.Context, resource *resourceme
 	return nil
 }
 
-func (c *metaOpsClient) CreateResource(ctx context.Context, resource *resourcemeta.ResourceMeta) error {
+// CreateResource insert a resource meta.
+// Return 'ErrDuplicateResourceID' error if it already exists.
+func (c *metaOpsClient) CreateResource(ctx context.Context, resource *resModel.ResourceMeta) error {
 	if resource == nil {
 		return errors.ErrMetaParamsInvalid.GenWithStackByArgs("input resource meta is nil")
 	}
 
 	err := c.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var count int64
-		err := tx.Model(&resourcemeta.ResourceMeta{}).
-			Where("id = ?", resource.ID).
+		err := tx.Model(&resModel.ResourceMeta{}).
+			Where("job_id = ? AND id = ?", resource.Job, resource.ID).
 			Count(&count).Error
 		if err != nil {
 			return err
@@ -611,15 +624,15 @@ func (c *metaOpsClient) CreateResource(ctx context.Context, resource *resourceme
 	return nil
 }
 
-// UpdateResource update the resourcemeta
-func (c *metaOpsClient) UpdateResource(ctx context.Context, resource *resourcemeta.ResourceMeta) error {
+// UpdateResource update the resModel
+func (c *metaOpsClient) UpdateResource(ctx context.Context, resource *resModel.ResourceMeta) error {
 	if resource == nil {
 		return errors.ErrMetaParamsInvalid.GenWithStackByArgs("input resource meta is nil")
 	}
 	// we don't use `Save` here to avoid user dealing with the basic model
 	if err := c.db.WithContext(ctx).
-		Model(&resourcemeta.ResourceMeta{}).
-		Where("id = ?", resource.ID).
+		Model(&resModel.ResourceMeta{}).
+		Where("job_id = ? AND id = ?", resource.Job, resource.ID).
 		Updates(resource.Map()).Error; err != nil {
 		return errors.ErrMetaOpFail.Wrap(err)
 	}
@@ -627,11 +640,11 @@ func (c *metaOpsClient) UpdateResource(ctx context.Context, resource *resourceme
 	return nil
 }
 
-// DeleteResource delete the specified model.frameModel.resourcemeta.ResourceMeta
-func (c *metaOpsClient) DeleteResource(ctx context.Context, resourceID string) (Result, error) {
+// DeleteResource delete the resource meta of specified resourceKey
+func (c *metaOpsClient) DeleteResource(ctx context.Context, resourceKey ResourceKey) (Result, error) {
 	result := c.db.WithContext(ctx).
-		Where("id = ?", resourceID).
-		Delete(&resourcemeta.ResourceMeta{})
+		Where("job_id = ? AND id = ?", resourceKey.JobID, resourceKey.ID).
+		Delete(&resModel.ResourceMeta{})
 	if result.Error != nil {
 		return nil, errors.ErrMetaOpFail.Wrap(result.Error)
 	}
@@ -639,23 +652,11 @@ func (c *metaOpsClient) DeleteResource(ctx context.Context, resourceID string) (
 	return &ormResult{rowsAffected: result.RowsAffected}, nil
 }
 
-// DeleteResources delete the specified resources
-func (c *metaOpsClient) DeleteResources(ctx context.Context, resourceIDs []string) (Result, error) {
-	result := c.db.WithContext(ctx).
-		Where("id in ?", resourceIDs).
-		Delete(&resourcemeta.ResourceMeta{})
-	if result.Error != nil {
-		return nil, errors.ErrMetaOpFail.Wrap(result.Error)
-	}
-
-	return &ormResult{rowsAffected: result.RowsAffected}, nil
-}
-
-// GetResourceByID query resource of the resource_id
-func (c *metaOpsClient) GetResourceByID(ctx context.Context, resourceID string) (*resourcemeta.ResourceMeta, error) {
-	var resource resourcemeta.ResourceMeta
+// GetResourceByID query resource of the resourceKey
+func (c *metaOpsClient) GetResourceByID(ctx context.Context, resourceKey ResourceKey) (*resModel.ResourceMeta, error) {
+	var resource resModel.ResourceMeta
 	if err := c.db.WithContext(ctx).
-		Where("id = ?", resourceID).
+		Where("job_id = ? AND id = ?", resourceKey.JobID, resourceKey.ID).
 		First(&resource).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, errors.ErrMetaEntryNotFound.Wrap(err)
@@ -667,8 +668,9 @@ func (c *metaOpsClient) GetResourceByID(ctx context.Context, resourceID string) 
 	return &resource, nil
 }
 
-func (c *metaOpsClient) QueryResources(ctx context.Context) ([]*resourcemeta.ResourceMeta, error) {
-	var resources []*resourcemeta.ResourceMeta
+// QueryResources get all resource meta
+func (c *metaOpsClient) QueryResources(ctx context.Context) ([]*resModel.ResourceMeta, error) {
+	var resources []*resModel.ResourceMeta
 	if err := c.db.WithContext(ctx).
 		Find(&resources).Error; err != nil {
 		return nil, errors.ErrMetaOpFail.Wrap(err)
@@ -678,8 +680,8 @@ func (c *metaOpsClient) QueryResources(ctx context.Context) ([]*resourcemeta.Res
 }
 
 // QueryResourcesByJobID query all resources of the jobID
-func (c *metaOpsClient) QueryResourcesByJobID(ctx context.Context, jobID string) ([]*resourcemeta.ResourceMeta, error) {
-	var resources []*resourcemeta.ResourceMeta
+func (c *metaOpsClient) QueryResourcesByJobID(ctx context.Context, jobID string) ([]*resModel.ResourceMeta, error) {
+	var resources []*resModel.ResourceMeta
 	if err := c.db.WithContext(ctx).
 		Where("job_id = ?", jobID).
 		Find(&resources).Error; err != nil {
@@ -690,8 +692,8 @@ func (c *metaOpsClient) QueryResourcesByJobID(ctx context.Context, jobID string)
 }
 
 // QueryResourcesByExecutorID query all resources of the executor_id
-func (c *metaOpsClient) QueryResourcesByExecutorID(ctx context.Context, executorID string) ([]*resourcemeta.ResourceMeta, error) {
-	var resources []*resourcemeta.ResourceMeta
+func (c *metaOpsClient) QueryResourcesByExecutorID(ctx context.Context, executorID string) ([]*resModel.ResourceMeta, error) {
+	var resources []*resModel.ResourceMeta
 	if err := c.db.WithContext(ctx).
 		Where("executor_id = ?", executorID).
 		Find(&resources).Error; err != nil {
@@ -702,21 +704,34 @@ func (c *metaOpsClient) QueryResourcesByExecutorID(ctx context.Context, executor
 }
 
 // DeleteResourcesByExecutorID delete all the resources of executorID
-func (c *metaOpsClient) DeleteResourcesByExecutorID(ctx context.Context, executorID string) error {
-	err := c.db.WithContext(ctx).
+func (c *metaOpsClient) DeleteResourcesByExecutorID(ctx context.Context, executorID engineModel.ExecutorID) (Result, error) {
+	result := c.db.WithContext(ctx).
 		Where("executor_id = ?", executorID).
-		Delete(&resourcemeta.ResourceMeta{}).Error
-	if err != nil {
-		return errors.ErrMetaOpFail.Wrap(err)
+		Delete(&resModel.ResourceMeta{})
+	if result.Error == nil {
+		return &ormResult{rowsAffected: result.RowsAffected}, nil
 	}
-	return nil
+
+	return nil, errors.ErrMetaOpFail.Wrap(result.Error)
 }
 
-// SetGCPending set the resourceIDs to the state `waiting to gc`
-func (c *metaOpsClient) SetGCPending(ctx context.Context, ids []resourcemeta.ResourceID) error {
+// DeleteResourcesByExecutorIDs delete all the resources of executorID
+func (c *metaOpsClient) DeleteResourcesByExecutorIDs(ctx context.Context, executorIDs []engineModel.ExecutorID) (Result, error) {
+	result := c.db.WithContext(ctx).
+		Where("executor_id in ?", executorIDs).
+		Delete(&resModel.ResourceMeta{})
+	if result.Error == nil {
+		return &ormResult{rowsAffected: result.RowsAffected}, nil
+	}
+
+	return nil, errors.ErrMetaOpFail.Wrap(result.Error)
+}
+
+// SetGCPendingByJobs set the resourceIDs to the state `waiting to gc`
+func (c *metaOpsClient) SetGCPendingByJobs(ctx context.Context, jobIDs []engineModel.JobID) error {
 	err := c.db.WithContext(ctx).
-		Model(&resourcemeta.ResourceMeta{}).
-		Where("id in ?", ids).
+		Model(&resModel.ResourceMeta{}).
+		Where("job_id in ?", jobIDs).
 		Update("gc_pending", true).Error
 	if err == nil {
 		return nil
@@ -725,8 +740,8 @@ func (c *metaOpsClient) SetGCPending(ctx context.Context, ids []resourcemeta.Res
 }
 
 // GetOneResourceForGC get one resource ready for gc
-func (c *metaOpsClient) GetOneResourceForGC(ctx context.Context) (*resourcemeta.ResourceMeta, error) {
-	var ret resourcemeta.ResourceMeta
+func (c *metaOpsClient) GetOneResourceForGC(ctx context.Context) (*resModel.ResourceMeta, error) {
+	var ret resModel.ResourceMeta
 	err := c.db.WithContext(ctx).
 		Order("updated_at asc").
 		Where("gc_pending = true").

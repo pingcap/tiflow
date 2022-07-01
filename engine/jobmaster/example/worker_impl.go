@@ -19,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/engine/framework"
@@ -79,7 +79,7 @@ func (w *exampleWorker) Tick(ctx context.Context) error {
 	count := w.work.tickCount
 	w.work.mu.Unlock()
 
-	storage, err := w.OpenStorage(nil, "/local/example")
+	storage, err := w.OpenStorage(ctx, "/local/example")
 	if err != nil {
 		return err
 	}

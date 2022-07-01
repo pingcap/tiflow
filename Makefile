@@ -267,6 +267,8 @@ swagger-spec: tools/bin/swag
 
 generate_mock: tools/bin/mockgen
 	tools/bin/mockgen -source cdc/owner/owner.go -destination cdc/owner/mock/owner_mock.go
+	tools/bin/mockgen -source cdc/processor/manager.go -destination cdc/processor/mock/manager_mock.go
+	tools/bin/mockgen -source cdc/capture/capture.go -destination cdc/capture/mock/capture_mock.go
 
 clean:
 	go clean -i ./...

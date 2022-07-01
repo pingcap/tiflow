@@ -109,7 +109,12 @@ func printServerVersion(tctx *tcontext.Context, db *conn.BaseDB, scope string) {
 func str2TimezoneOrFromDB(tctx *tcontext.Context, tzStr string, dbCfg *config.DBConfig) (*time.Location, error) {
 	var err error
 	if len(tzStr) == 0 {
-		tzStr, err = conn.FetchTimeZoneSetting(tctx.Ctx, dbCfg)
+		baseDB, err2 := conn.DefaultDBProvider.Apply(dbCfg)
+		if err2 != nil {
+			return nil, err2
+		}
+		defer baseDB.Close()
+		tzStr, err = config.FetchTimeZoneSetting(tctx.Ctx, baseDB.DB)
 		if err != nil {
 			return nil, err
 		}

@@ -50,7 +50,7 @@ func (b *basicScheduler) Name() string {
 func (b *basicScheduler) Schedule(
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
-	captures map[model.CaptureID]*model.CaptureInfo,
+	captures map[model.CaptureID]*CaptureStatus,
 	replications map[model.TableID]*ReplicationSet,
 ) []*scheduleTask {
 	tasks := make([]*scheduleTask, 0)
