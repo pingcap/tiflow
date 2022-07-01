@@ -10,10 +10,6 @@ SINK_TYPE=$1
 MAX_RETRIES=20
 
 function prepare() {
-	if [ "$SINK_TYPE" == "kafka" ]; then
-		return
-	fi
-
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 	start_tidb_cluster --workdir $WORK_DIR
 	cd $WORK_DIR
@@ -118,6 +114,10 @@ function resume_changefeed_in_failed_state() {
 	fi
 	cleanup_process $CDC_BINARY
 }
+
+if [ "$SINK_TYPE" == "kafka" ]; then
+		exit 0
+fi
 
 trap stop_tidb_cluster EXIT
 prepare
