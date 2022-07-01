@@ -24,17 +24,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type testCaptureInfoProvider struct {
-	capture.InfoForAPI
+type testCapture struct {
+	capture.Capture
 	ready bool
 }
 
-func (c *testCaptureInfoProvider) IsReady() bool {
+func (c *testCapture) IsReady() bool {
 	return c.ready
 }
 
 func TestCheckServerReadyMiddleware(t *testing.T) {
-	capture := &testCaptureInfoProvider{ready: false}
+	capture := &testCapture{ready: false}
 	router := gin.New()
 	router.Use(CheckServerReadyMiddleware(capture))
 	router.Use(LogMiddleware())

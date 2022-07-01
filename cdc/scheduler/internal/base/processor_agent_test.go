@@ -263,7 +263,7 @@ func TestAgentBasics(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test Point 2: First tick should sync the SyncMessage.
-	err = agent.Tick(suite.ctx)
+	err = agent.Tick(suite.ctx, model.LivenessCaptureAlive)
 	require.NoError(t, err)
 
 	select {
@@ -304,7 +304,7 @@ func TestAgentBasics(t *testing.T) {
 		Return(model.Ts(1000), model.Ts(1000))
 
 	require.Eventually(t, func() bool {
-		err = agent.Tick(suite.ctx)
+		err = agent.Tick(suite.ctx, model.LivenessCaptureAlive)
 		require.NoError(t, err)
 		if len(suite.tableExecutor.Running) != 1 {
 			return false
@@ -329,7 +329,7 @@ func TestAgentBasics(t *testing.T) {
 
 	suite.tableExecutor.On("GetCheckpoint").Return(model.Ts(1000), model.Ts(1000))
 	// Test Point 4: Accept an incoming DispatchTableMessage, and the AddTable method in TableExecutor can return true.
-	err = agent.Tick(suite.ctx)
+	err = agent.Tick(suite.ctx, model.LivenessCaptureAlive)
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
@@ -345,7 +345,7 @@ func TestAgentBasics(t *testing.T) {
 		default:
 		}
 
-		err = agent.Tick(suite.ctx)
+		err = agent.Tick(suite.ctx, model.LivenessCaptureAlive)
 		require.NoError(t, err)
 		return false
 	}, time.Second*3, time.Millisecond*10)
@@ -378,7 +378,7 @@ func TestAgentNoOwnerAtStartUp(t *testing.T) {
 
 	// Test Point 2: First ticks should not panic
 	for i := 0; i < 10; i++ {
-		err = agent.Tick(suite.ctx)
+		err = agent.Tick(suite.ctx, model.LivenessCaptureAlive)
 		require.NoError(t, err)
 	}
 
@@ -392,7 +392,7 @@ func TestAgentNoOwnerAtStartUp(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
-		err := agent.Tick(suite.ctx)
+		err := agent.Tick(suite.ctx, model.LivenessCaptureAlive)
 		require.NoError(t, err)
 		select {
 		case <-suite.ctx.Done():
@@ -452,7 +452,7 @@ func TestAgentTolerateClientClosed(t *testing.T) {
 
 	// Test Point 2: We should tolerate the error ErrPeerMessageClientClosed
 	for i := 0; i < 6; i++ {
-		err = agent.Tick(suite.ctx)
+		err = agent.Tick(suite.ctx, model.LivenessCaptureAlive)
 		require.NoError(t, err)
 	}
 
@@ -495,7 +495,7 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 
 	suite.BlockSync()
 
-	err = agent.Tick(suite.ctx)
+	err = agent.Tick(suite.ctx, model.LivenessCaptureAlive)
 	require.NoError(t, err)
 
 	_, err = suite.ownerMessageClient.SendMessage(suite.ctx,
@@ -541,7 +541,7 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 
 	start := time.Now()
 	for time.Since(start) < 100*time.Millisecond {
-		err := agent.Tick(suite.ctx)
+		err := agent.Tick(suite.ctx, model.LivenessCaptureAlive)
 		require.NoError(t, err)
 
 		select {
@@ -574,7 +574,7 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 		default:
 		}
 
-		err := agent.Tick(suite.ctx)
+		err := agent.Tick(suite.ctx, model.LivenessCaptureAlive)
 		require.NoError(t, err)
 		return false
 	}, 1*time.Second, 10*time.Millisecond)
@@ -588,7 +588,7 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 		default:
 		}
 
-		err := agent.Tick(suite.ctx)
+		err := agent.Tick(suite.ctx, model.LivenessCaptureAlive)
 		require.NoError(t, err)
 		return false
 	}, time.Second*3, time.Millisecond*10)
@@ -602,7 +602,7 @@ func TestNoFinishOperationBeforeSyncIsReceived(t *testing.T) {
 		default:
 		}
 
-		err := agent.Tick(suite.ctx)
+		err := agent.Tick(suite.ctx, model.LivenessCaptureAlive)
 		require.NoError(t, err)
 		return false
 	}, time.Second*3, time.Millisecond*10)

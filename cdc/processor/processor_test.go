@@ -44,9 +44,10 @@ func newProcessor4Test(
 	ctx cdcContext.Context,
 	t *testing.T,
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (pipeline.TablePipeline, error),
+	liveness *model.Liveness,
 ) *processor {
 	up := upstream.NewUpstream4Test(nil)
-	p := newProcessor(ctx, up)
+	p := newProcessor(ctx, up, liveness)
 	p.lazyInit = func(ctx cdcContext.Context) error {
 		p.agent = &mockAgent{executor: p}
 		return nil
@@ -57,7 +58,9 @@ func newProcessor4Test(
 	return p
 }
 
-func initProcessor4Test(ctx cdcContext.Context, t *testing.T) (*processor, *orchestrator.ReactorStateTester) {
+func initProcessor4Test(
+	ctx cdcContext.Context, t *testing.T, liveness *model.Liveness,
+) (*processor, *orchestrator.ReactorStateTester) {
 	changefeedInfo := `
 {
     "sink-uri": "blackhole://",
@@ -94,7 +97,7 @@ func initProcessor4Test(ctx cdcContext.Context, t *testing.T) (*processor, *orch
     "sync-point-interval": 600000000000
 }
 `
-	p := newProcessor4Test(ctx, t, newMockTablePipeline)
+	p := newProcessor4Test(ctx, t, newMockTablePipeline, liveness)
 	p.changefeed = orchestrator.NewChangefeedReactorState(
 		etcd.DefaultCDCClusterID, ctx.ChangefeedVars().ID)
 	captureID := ctx.GlobalVars().CaptureInfo.ID
@@ -232,10 +235,12 @@ type mockAgent struct {
 
 	executor         scheduler.TableExecutor
 	lastCheckpointTs model.Ts
+	lastLiveness     model.Liveness
 	isClosed         bool
 }
 
-func (a *mockAgent) Tick(_ context.Context) error {
+func (a *mockAgent) Tick(_ context.Context, liveness model.Liveness) error {
+	a.lastLiveness = liveness
 	if len(a.executor.GetAllCurrentTables()) == 0 {
 		return nil
 	}
@@ -254,7 +259,8 @@ func (a *mockAgent) Close() error {
 
 func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	p, tester := initProcessor4Test(ctx, t)
+	liveness := model.LivenessCaptureAlive
+	p, tester := initProcessor4Test(ctx, t, &liveness)
 
 	// since add table indirectly, `preparing` -> `prepared` -> `replicating`
 	// is only support by `SchedulerV3`, enable it.
@@ -341,7 +347,8 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 
 func TestTableExecutorAddingTableDirectly(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	p, tester := initProcessor4Test(ctx, t)
+	liveness := model.LivenessCaptureAlive
+	p, tester := initProcessor4Test(ctx, t, &liveness)
 
 	var err error
 	// init tick
@@ -520,7 +527,8 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 
 func TestProcessorError(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	p, tester := initProcessor4Test(ctx, t)
+	liveness := model.LivenessCaptureAlive
+	p, tester := initProcessor4Test(ctx, t, &liveness)
 	var err error
 	// init tick
 	_, err = p.Tick(ctx, p.changefeed)
@@ -540,7 +548,7 @@ func TestProcessorError(t *testing.T) {
 		},
 	})
 
-	p, tester = initProcessor4Test(ctx, t)
+	p, tester = initProcessor4Test(ctx, t, &liveness)
 	// init tick
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
@@ -558,7 +566,8 @@ func TestProcessorError(t *testing.T) {
 
 func TestProcessorExit(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	p, tester := initProcessor4Test(ctx, t)
+	liveness := model.LivenessCaptureAlive
+	p, tester := initProcessor4Test(ctx, t, &liveness)
 	var err error
 	// init tick
 	_, err = p.Tick(ctx, p.changefeed)
@@ -581,7 +590,8 @@ func TestProcessorExit(t *testing.T) {
 
 func TestProcessorClose(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	p, tester := initProcessor4Test(ctx, t)
+	liveness := model.LivenessCaptureAlive
+	p, tester := initProcessor4Test(ctx, t, &liveness)
 	var err error
 	// init tick
 	_, err = p.Tick(ctx, p.changefeed)
@@ -622,7 +632,7 @@ func TestProcessorClose(t *testing.T) {
 	require.True(t, p.tables[1].(*mockTablePipeline).canceled)
 	require.True(t, p.tables[2].(*mockTablePipeline).canceled)
 
-	p, tester = initProcessor4Test(ctx, t)
+	p, tester = initProcessor4Test(ctx, t, &liveness)
 	// init tick
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
@@ -658,7 +668,8 @@ func TestProcessorClose(t *testing.T) {
 
 func TestPositionDeleted(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	p, tester := initProcessor4Test(ctx, t)
+	liveness := model.LivenessCaptureAlive
+	p, tester := initProcessor4Test(ctx, t, &liveness)
 	var err error
 	// add table
 	done, err := p.AddTable(ctx, model.TableID(1), 30, false)
@@ -712,7 +723,8 @@ func TestPositionDeleted(t *testing.T) {
 
 func TestSchemaGC(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	p, tester := initProcessor4Test(ctx, t)
+	liveness := model.LivenessCaptureAlive
+	p, tester := initProcessor4Test(ctx, t, &liveness)
 
 	var err error
 	// init tick
@@ -770,7 +782,8 @@ func TestIgnorableError(t *testing.T) {
 
 func TestUpdateBarrierTs(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	p, tester := initProcessor4Test(ctx, t)
+	liveness := model.LivenessCaptureAlive
+	p, tester := initProcessor4Test(ctx, t, &liveness)
 	p.changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		status.CheckpointTs = 5
 		status.ResolvedTs = 10
@@ -803,4 +816,25 @@ func TestUpdateBarrierTs(t *testing.T) {
 	tester.MustApplyPatches()
 	tb = p.tables[model.TableID(1)].(*mockTablePipeline)
 	require.Equal(t, tb.barrierTs, uint64(15))
+}
+
+func TestProcessorLiveness(t *testing.T) {
+	ctx := cdcContext.NewBackendContext4Test(true)
+	liveness := model.LivenessCaptureAlive
+	p, tester := initProcessor4Test(ctx, t, &liveness)
+
+	// First tick for creating position.
+	_, err := p.Tick(ctx, p.changefeed)
+	require.Nil(t, err)
+	tester.MustApplyPatches()
+
+	// Second tick for init.
+	_, err = p.Tick(ctx, p.changefeed)
+	require.Nil(t, err)
+	require.Equal(t, model.LivenessCaptureAlive, p.agent.(*mockAgent).lastLiveness)
+
+	liveness.Store(model.LivenessCaptureStopping)
+	_, err = p.Tick(ctx, p.changefeed)
+	require.Nil(t, err)
+	require.Equal(t, model.LivenessCaptureStopping, p.agent.(*mockAgent).lastLiveness)
 }
