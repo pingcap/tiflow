@@ -83,8 +83,8 @@ func (h *gcTestHelper) GetError() error {
 	return <-h.errCh
 }
 
-func (h *gcTestHelper) IsGCPending(t *testing.T, resourceKey pkgOrm.ResourceKey) bool {
-	meta, err := h.Meta.GetResourceByID(context.Background(), resourceKey)
+func (h *gcTestHelper) IsGCPending(t *testing.T, id resModel.ResourceID) bool {
+	meta, err := h.Meta.GetResourceByID(context.Background(), id)
 	if err != nil {
 		require.NoError(t, err)
 	}
@@ -92,8 +92,8 @@ func (h *gcTestHelper) IsGCPending(t *testing.T, resourceKey pkgOrm.ResourceKey)
 	return meta.GCPending
 }
 
-func (h *gcTestHelper) IsRemoved(t *testing.T, resourceKey pkgOrm.ResourceKey) bool {
-	_, err := h.Meta.GetResourceByID(context.Background(), resourceKey)
+func (h *gcTestHelper) IsRemoved(t *testing.T, id resModel.ResourceID) bool {
+	_, err := h.Meta.GetResourceByID(context.Background(), id)
 	if pkgOrm.IsNotFoundError(err) {
 		return true
 	}
@@ -140,24 +140,24 @@ func TestGCCoordinatorRemoveExecutors(t *testing.T) {
 	helper.LoadDefaultMockData(t)
 	helper.Start()
 
-	require.False(t, helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-1", ID: "resource-1"}))
+	require.False(t, helper.IsGCPending(t, "resource-1"))
 	helper.ExecInfo.RemoveExecutor("executor-1")
 	require.Eventually(t, func() bool {
-		return helper.IsRemoved(t, pkgOrm.ResourceKey{JobID: "job-1", ID: "resource-1"})
+		return helper.IsRemoved(t, "resource-1")
 	}, 1*time.Second, 10*time.Millisecond)
 
 	time.Sleep(20 * time.Millisecond)
-	require.False(t, helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-2", ID: "resource-2"}))
+	require.False(t, helper.IsGCPending(t, "resource-2"))
 	helper.ExecInfo.RemoveExecutor("executor-2")
 	require.Eventually(t, func() bool {
-		return helper.IsRemoved(t, pkgOrm.ResourceKey{JobID: "job-2", ID: "resource-2"})
+		return helper.IsRemoved(t, "resource-2")
 	}, 1*time.Second, 10*time.Millisecond)
 
 	time.Sleep(20 * time.Millisecond)
-	require.False(t, helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-3", ID: "resource-3"}))
+	require.False(t, helper.IsGCPending(t, "resource-3"))
 	helper.ExecInfo.RemoveExecutor("executor-3")
 	require.Eventually(t, func() bool {
-		return helper.IsRemoved(t, pkgOrm.ResourceKey{JobID: "job-3", ID: "resource-3"})
+		return helper.IsRemoved(t, "resource-3")
 	}, 1*time.Second, 10*time.Millisecond)
 
 	helper.Close()
@@ -168,27 +168,27 @@ func TestGCCoordinatorRemoveJobs(t *testing.T) {
 	helper.LoadDefaultMockData(t)
 	helper.Start()
 
-	require.False(t, helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-1", ID: "resource-1"}))
+	require.False(t, helper.IsGCPending(t, "resource-1"))
 	helper.JobInfo.RemoveJob("job-1")
 	helper.Notifier.WaitNotify(t, 1*time.Second)
 	require.Eventually(t, func() bool {
-		return helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-1", ID: "resource-1"})
+		return helper.IsGCPending(t, "resource-1")
 	}, 1*time.Second, 10*time.Millisecond)
 
 	time.Sleep(20 * time.Millisecond)
-	require.False(t, helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-2", ID: "resource-2"}))
+	require.False(t, helper.IsGCPending(t, "resource-2"))
 	helper.JobInfo.RemoveJob("job-2")
 	helper.Notifier.WaitNotify(t, 1*time.Second)
 	require.Eventually(t, func() bool {
-		return helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-2", ID: "resource-2"})
+		return helper.IsGCPending(t, "resource-2")
 	}, 1*time.Second, 10*time.Millisecond)
 
 	time.Sleep(20 * time.Millisecond)
-	require.False(t, helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-3", ID: "resource-3"}))
+	require.False(t, helper.IsGCPending(t, "resource-3"))
 	helper.JobInfo.RemoveJob("job-3")
 	helper.Notifier.WaitNotify(t, 1*time.Second)
 	require.Eventually(t, func() bool {
-		return helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-3", ID: "resource-3"})
+		return helper.IsGCPending(t, "resource-3")
 	}, 1*time.Second, 10*time.Millisecond)
 
 	helper.Close()
@@ -199,18 +199,18 @@ func TestGCCoordinatorRemoveJobAndExecutor(t *testing.T) {
 	helper.LoadDefaultMockData(t)
 	helper.Start()
 
-	require.False(t, helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-1", ID: "resource-1"}))
-	require.False(t, helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-2", ID: "resource-2"}))
+	require.False(t, helper.IsGCPending(t, "resource-1"))
+	require.False(t, helper.IsGCPending(t, "resource-2"))
 
 	helper.JobInfo.RemoveJob("job-1")
 	helper.ExecInfo.RemoveExecutor("executor-2")
 
 	helper.Notifier.WaitNotify(t, 1*time.Second)
 	require.Eventually(t, func() bool {
-		return helper.IsGCPending(t, pkgOrm.ResourceKey{JobID: "job-1", ID: "resource-1"})
+		return helper.IsGCPending(t, "resource-1")
 	}, 1*time.Second, 10*time.Millisecond)
 	require.Eventually(t, func() bool {
-		return helper.IsRemoved(t, pkgOrm.ResourceKey{JobID: "job-2", ID: "resource-2"})
+		return helper.IsRemoved(t, "resource-2")
 	}, 1*time.Second, 10*time.Millisecond)
 
 	helper.Close()

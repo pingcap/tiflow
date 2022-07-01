@@ -150,7 +150,7 @@ func (r *DefaultGCRunner) gcOnce(
 		log.L().Info("remove resource rpc returns resource not found, which is ignorable", zap.Error(err))
 	}
 
-	result, err := r.client.DeleteResource(ctx, pkgOrm.ResourceKey{JobID: res.Job, ID: res.ID})
+	result, err := r.client.DeleteResource(ctx, res.ID)
 	if err != nil {
 		log.L().Warn("Failed to delete resource meta after GC",
 			zap.Any("resource", res),

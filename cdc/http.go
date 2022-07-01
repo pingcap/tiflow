@@ -37,7 +37,7 @@ import (
 // RegisterRoutes create a router for OpenAPI
 func RegisterRoutes(
 	router *gin.Engine,
-	capture capture.Capture,
+	capture *capture.Capture,
 	registry prometheus.Gatherer,
 ) {
 	// online docs

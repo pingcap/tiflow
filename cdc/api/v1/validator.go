@@ -39,7 +39,7 @@ import (
 func VerifyCreateChangefeedConfig(
 	ctx context.Context,
 	changefeedConfig model.ChangefeedConfig,
-	capture capture.Capture,
+	capture capture.InfoForAPI,
 ) (*model.ChangeFeedInfo, error) {
 	// TODO(dongmen): we should pass ClusterID in ChangefeedConfig in the upcoming future
 	up := capture.GetUpstreamManager().GetDefaultUpstream()

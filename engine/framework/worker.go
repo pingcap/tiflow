@@ -18,11 +18,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"go.uber.org/dig"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework/config"
 	frameErrors "github.com/pingcap/tiflow/engine/framework/internal/errors"
@@ -212,8 +212,7 @@ func (w *DefaultBaseWorker) Workload() model.RescUnit {
 
 // Init implements BaseWorker.Init
 func (w *DefaultBaseWorker) Init(ctx context.Context) error {
-	ctx, cancel := w.errCenter.WithCancelOnFirstError(ctx)
-	defer cancel()
+	ctx = w.errCenter.WithCancelOnFirstError(ctx)
 
 	if err := w.doPreInit(ctx); err != nil {
 		return errors.Trace(err)
@@ -342,8 +341,7 @@ func (w *DefaultBaseWorker) doPoll(ctx context.Context) error {
 
 // Poll implements BaseWorker.Poll
 func (w *DefaultBaseWorker) Poll(ctx context.Context) error {
-	ctx, cancel := w.errCenter.WithCancelOnFirstError(ctx)
-	defer cancel()
+	ctx = w.errCenter.WithCancelOnFirstError(ctx)
 
 	if err := w.doPoll(ctx); err != nil {
 		return err
@@ -438,8 +436,7 @@ func (w *DefaultBaseWorker) Logger() *zap.Logger {
 // Note that if the master cannot handle the notifications fast enough, notifications
 // can be lost.
 func (w *DefaultBaseWorker) UpdateStatus(ctx context.Context, status frameModel.WorkerStatus) error {
-	ctx, cancel := w.errCenter.WithCancelOnFirstError(ctx)
-	defer cancel()
+	ctx = w.errCenter.WithCancelOnFirstError(ctx)
 
 	w.workerStatus.Code = status.Code
 	w.workerStatus.ErrorMessage = status.ErrorMessage
@@ -459,8 +456,7 @@ func (w *DefaultBaseWorker) SendMessage(
 	nonblocking bool,
 ) error {
 	var err error
-	ctx, cancel := w.errCenter.WithCancelOnFirstError(ctx)
-	defer cancel()
+	ctx = w.errCenter.WithCancelOnFirstError(ctx)
 	if nonblocking {
 		_, err = w.messageSender.SendToNode(ctx, w.masterClient.MasterNode(), topic, message)
 	} else {
@@ -471,9 +467,8 @@ func (w *DefaultBaseWorker) SendMessage(
 
 // OpenStorage implements BaseWorker.OpenStorage
 func (w *DefaultBaseWorker) OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error) {
-	ctx, cancel := w.errCenter.WithCancelOnFirstError(ctx)
-	defer cancel()
-	return w.resourceBroker.OpenStorage(ctx, w.projectInfo, w.id, w.masterID, resourcePath)
+	ctx = w.errCenter.WithCancelOnFirstError(ctx)
+	return w.resourceBroker.OpenStorage(ctx, w.id, w.masterID, resourcePath)
 }
 
 // Exit implements BaseWorker.Exit

@@ -25,11 +25,9 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
-	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
 func TestStorageHandlePersistAndDiscard(t *testing.T) {
-	fakeProjectInfo := tenant.NewProjectInfo("fakeTenant", "fakeProject")
 	dir := t.TempDir()
 	fm := NewLocalFileManager(storagecfg.LocalFileConfig{BaseDir: dir})
 	mockManagerClient := &manager.MockClient{}
@@ -39,7 +37,6 @@ func TestStorageHandlePersistAndDiscard(t *testing.T) {
 	require.NoError(t, err)
 
 	handle, err := newLocalResourceHandle(
-		fakeProjectInfo,
 		"/local/test-resource",
 		"job-1",
 		"executor-1",
@@ -47,7 +44,6 @@ func TestStorageHandlePersistAndDiscard(t *testing.T) {
 	require.NoError(t, err)
 
 	mockManagerClient.On("CreateResource", mock.Anything, &pb.CreateResourceRequest{
-		ProjectInfo:     &pb.ProjectInfo{TenantId: fakeProjectInfo.TenantID(), ProjectId: fakeProjectInfo.ProjectID()},
 		ResourceId:      "/local/test-resource",
 		CreatorExecutor: "executor-1",
 		JobId:           "job-1",
@@ -63,10 +59,7 @@ func TestStorageHandlePersistAndDiscard(t *testing.T) {
 	require.NotNil(t, desc)
 
 	mockManagerClient.On("RemoveResource", mock.Anything, &pb.RemoveResourceRequest{
-		ResourceKey: &pb.ResourceKey{
-			JobId:      "job-1",
-			ResourceId: "/local/test-resource",
-		},
+		ResourceId: "/local/test-resource",
 	}, []grpc.CallOption(nil)).Return(&pb.RemoveResourceResponse{}, nil).Once()
 	err = handle.Discard(context.Background())
 	require.NoError(t, err)
@@ -89,7 +82,6 @@ func TestStorageHandlePersistAndDiscard(t *testing.T) {
 }
 
 func TestStorageHandleDiscardTemporaryResource(t *testing.T) {
-	fakeProjectInfo := tenant.NewProjectInfo("fakeTenant", "fakeProject")
 	dir := t.TempDir()
 	fm := NewLocalFileManager(storagecfg.LocalFileConfig{BaseDir: dir})
 	mockManagerClient := &manager.MockClient{}
@@ -99,7 +91,6 @@ func TestStorageHandleDiscardTemporaryResource(t *testing.T) {
 	require.NoError(t, err)
 
 	handle, err := newLocalResourceHandle(
-		fakeProjectInfo,
 		"/local/test-resource",
 		"job-1",
 		"executor-1",

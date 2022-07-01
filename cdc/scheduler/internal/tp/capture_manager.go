@@ -58,16 +58,10 @@ type CaptureStatus struct {
 	State    CaptureState
 	Tables   []schedulepb.TableStatus
 	Addr     string
-	IsOwner  bool
 }
 
-func newCaptureStatus(rev schedulepb.OwnerRevision, addr string, isOwner bool) *CaptureStatus {
-	return &CaptureStatus{
-		OwnerRev: rev,
-		State:    CaptureStateUninitialized,
-		Addr:     addr,
-		IsOwner:  isOwner,
-	}
+func newCaptureStatus(rev schedulepb.OwnerRevision, addr string) *CaptureStatus {
+	return &CaptureStatus{OwnerRev: rev, State: CaptureStateUninitialized, Addr: addr}
 }
 
 func (c *CaptureStatus) handleHeartbeatResponse(
@@ -86,7 +80,7 @@ func (c *CaptureStatus) handleHeartbeatResponse(
 		c.Epoch = epoch
 		c.State = CaptureStateInitialized
 	}
-	if resp.Liveness == model.LivenessCaptureStopping {
+	if resp.IsStopping {
 		c.State = CaptureStateStopping
 	}
 	c.Tables = resp.Tables
@@ -109,12 +103,10 @@ type captureManager struct {
 	heartbeatTick int
 
 	changefeedID model.ChangeFeedID
-	ownerID      model.CaptureID
 }
 
 func newCaptureManager(
-	ownerID model.CaptureID, changefeedID model.ChangeFeedID,
-	rev schedulepb.OwnerRevision, heartbeatTick int,
+	changefeedID model.ChangeFeedID, rev schedulepb.OwnerRevision, heartbeatTick int,
 ) *captureManager {
 	return &captureManager{
 		OwnerRev:      rev,
@@ -122,7 +114,6 @@ func newCaptureManager(
 		heartbeatTick: heartbeatTick,
 
 		changefeedID: changefeedID,
-		ownerID:      ownerID,
 	}
 }
 
@@ -202,8 +193,7 @@ func (c *captureManager) HandleAliveCaptureUpdate(
 	for id, info := range aliveCaptures {
 		if _, ok := c.Captures[id]; !ok {
 			// A new capture.
-			c.Captures[id] = newCaptureStatus(
-				c.OwnerRev, info.AdvertiseAddr, c.ownerID == id)
+			c.Captures[id] = newCaptureStatus(c.OwnerRev, info.AdvertiseAddr)
 			log.Info("tpscheduler: find a new capture", zap.String("capture", id))
 			msgs = append(msgs, &schedulepb.Message{
 				To:        id,

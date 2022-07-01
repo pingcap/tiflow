@@ -26,7 +26,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/capture"
-	mock_capture "github.com/pingcap/tiflow/cdc/capture/mock"
 	"github.com/pingcap/tiflow/cdc/model"
 	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
 	"github.com/pingcap/tiflow/cdc/scheduler"
@@ -92,7 +91,7 @@ func (p *mockStatusProvider) GetCaptures(ctx context.Context) ([]*model.CaptureI
 	return args.Get(0).([]*model.CaptureInfo), args.Error(1)
 }
 
-func newRouter(c capture.Capture, p *mockStatusProvider) *gin.Engine {
+func newRouter(c *capture.Capture, p *mockStatusProvider) *gin.Engine {
 	router := gin.New()
 	RegisterOpenAPIRoutes(router, NewOpenAPI4Test(c, p))
 	return router
@@ -744,46 +743,6 @@ func TestServerStatus(t *testing.T) {
 	err = json.NewDecoder(w.Body).Decode(&resp)
 	require.Nil(t, err)
 	require.False(t, resp.IsOwner)
-}
-
-func TestServerStatusLiveness(t *testing.T) {
-	t.Parallel()
-	// capture is owner
-	ctrl := gomock.NewController(t)
-	cp := mock_capture.NewMockCapture(ctrl)
-	ownerRouter := newRouter(cp, newStatusProvider())
-	api := testCase{url: "/api/v1/status", method: "GET"}
-
-	cp.EXPECT().Info().DoAndReturn(func() (model.CaptureInfo, error) {
-		return model.CaptureInfo{}, nil
-	}).AnyTimes()
-	cp.EXPECT().IsOwner().Return(true).AnyTimes()
-	cp.EXPECT().IsReady().Return(true).AnyTimes()
-
-	// Alive.
-	alive := cp.EXPECT().Liveness().DoAndReturn(func() model.Liveness {
-		return model.LivenessCaptureAlive
-	})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
-	ownerRouter.ServeHTTP(w, req)
-	require.Equal(t, 200, w.Code)
-	var resp model.ServerStatus
-	err := json.NewDecoder(w.Body).Decode(&resp)
-	require.Nil(t, err)
-	require.EqualValues(t, model.LivenessCaptureAlive, resp.Liveness)
-
-	// Draining the capture.
-	cp.EXPECT().Liveness().DoAndReturn(func() model.Liveness {
-		return model.LivenessCaptureStopping
-	}).After(alive)
-	w = httptest.NewRecorder()
-	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
-	ownerRouter.ServeHTTP(w, req)
-	require.Equal(t, 200, w.Code)
-	err = json.NewDecoder(w.Body).Decode(&resp)
-	require.Nil(t, err)
-	require.EqualValues(t, model.LivenessCaptureStopping, resp.Liveness)
 }
 
 func TestSetLogLevel(t *testing.T) {

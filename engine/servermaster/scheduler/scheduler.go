@@ -21,7 +21,6 @@ import (
 
 	"github.com/pingcap/tiflow/engine/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 )
@@ -100,15 +99,14 @@ func (s *Scheduler) checkCostAllows(
 
 func (s *Scheduler) getConstraint(
 	ctx context.Context,
-	resources []resourcemeta.ResourceKey,
+	resources []resModel.ResourceID,
 ) (model.ExecutorID, error) {
 	var (
 		lastResourceID resModel.ResourceID
 		ret            model.ExecutorID
 	)
-	for _, resource := range resources {
-		resourceID := resource.ID
-		executorID, hasConstraint, err := s.placementConstrainer.GetPlacementConstraint(ctx, resource)
+	for _, resourceID := range resources {
+		executorID, hasConstraint, err := s.placementConstrainer.GetPlacementConstraint(ctx, resourceID)
 		if err != nil {
 			if errors.ErrResourceDoesNotExist.Equal(err) {
 				return "", schedModel.NewResourceNotFoundError(resourceID, err)

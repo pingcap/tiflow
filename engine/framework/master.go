@@ -22,11 +22,11 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"go.uber.org/atomic"
 	"go.uber.org/dig"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/config"
@@ -286,8 +286,7 @@ func (m *DefaultBaseMaster) Logger() *zap.Logger {
 
 // Init implements BaseMaster.Init
 func (m *DefaultBaseMaster) Init(ctx context.Context) error {
-	ctx, cancel := m.errCenter.WithCancelOnFirstError(ctx)
-	defer cancel()
+	ctx = m.errCenter.WithCancelOnFirstError(ctx)
 
 	isInit, err := m.doInit(ctx)
 	if err != nil {
@@ -409,8 +408,7 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 
 // Poll implements BaseMaster.Poll
 func (m *DefaultBaseMaster) Poll(ctx context.Context) error {
-	ctx, cancel := m.errCenter.WithCancelOnFirstError(ctx)
-	defer cancel()
+	ctx = m.errCenter.WithCancelOnFirstError(ctx)
 
 	if err := m.doPoll(ctx); err != nil {
 		return errors.Trace(err)
@@ -580,9 +578,8 @@ func (m *DefaultBaseMaster) CreateWorker(
 		zap.Any("resources", resources),
 		zap.String("master-id", m.id))
 
-	errCtx, cancel := m.errCenter.WithCancelOnFirstError(context.Background())
-	defer cancel()
-	quotaCtx, cancel := context.WithTimeout(errCtx, createWorkerWaitQuotaTimeout)
+	ctx := m.errCenter.WithCancelOnFirstError(context.Background())
+	quotaCtx, cancel := context.WithTimeout(ctx, createWorkerWaitQuotaTimeout)
 	defer cancel()
 	if err := m.createWorkerQuota.Consume(quotaCtx); err != nil {
 		return "", derror.WrapError(derror.ErrMasterConcurrencyExceeded, err)
@@ -598,15 +595,13 @@ func (m *DefaultBaseMaster) CreateWorker(
 			m.createWorkerQuota.Release()
 		}()
 
-		errCtx, cancel := m.errCenter.WithCancelOnFirstError(context.Background())
-		defer cancel()
-		requestCtx, cancel := context.WithTimeout(errCtx, createWorkerTimeout)
+		requestCtx, cancel := context.WithTimeout(ctx, createWorkerTimeout)
 		defer cancel()
 
 		resp, err := m.serverMasterClient.ScheduleTask(requestCtx, &pb.ScheduleTaskRequest{
 			TaskId:               workerID,
 			Cost:                 int64(cost),
-			ResourceRequirements: resModel.ToResourceRequirement(m.id, resources...),
+			ResourceRequirements: resources,
 		},
 			// TODO (zixiong) remove this timeout.
 			time.Second*10)

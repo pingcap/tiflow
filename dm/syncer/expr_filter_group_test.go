@@ -96,7 +96,7 @@ create table t (
 
 	dbConn := dbconn.NewDBConn(&config.SubTaskConfig{}, s.baseConn)
 	for _, ca := range cases {
-		schemaTracker, err := schema.NewTestTracker(ctx, "unit-test", defaultTestSessionCfg, dbConn, log.L())
+		schemaTracker, err := schema.NewTracker(ctx, "unit-test", defaultTestSessionCfg, dbConn, log.L())
 		c.Assert(err, IsNil)
 		c.Assert(schemaTracker.CreateSchemaIfNotExists(dbName), IsNil)
 		c.Assert(schemaTracker.Exec(ctx, dbName, ca.tableStr), IsNil)
@@ -359,7 +359,7 @@ create table t (
 	dbConn := dbconn.NewDBConn(&config.SubTaskConfig{}, s.baseConn)
 	for _, ca := range cases {
 		c.Log(ca.tableStr)
-		schemaTracker, err := schema.NewTestTracker(ctx, "unit-test", defaultTestSessionCfg, dbConn, log.L())
+		schemaTracker, err := schema.NewTracker(ctx, "unit-test", defaultTestSessionCfg, dbConn, log.L())
 		c.Assert(err, IsNil)
 		c.Assert(schemaTracker.CreateSchemaIfNotExists(dbName), IsNil)
 		c.Assert(schemaTracker.Exec(ctx, dbName, ca.tableStr), IsNil)
@@ -413,7 +413,7 @@ create table t (
 	)
 
 	dbConn := dbconn.NewDBConn(&config.SubTaskConfig{}, s.baseConn)
-	schemaTracker, err := schema.NewTestTracker(ctx, "unit-test", defaultTestSessionCfg, dbConn, log.L())
+	schemaTracker, err := schema.NewTracker(ctx, "unit-test", defaultTestSessionCfg, dbConn, log.L())
 	c.Assert(err, IsNil)
 	c.Assert(schemaTracker.CreateSchemaIfNotExists(dbName), IsNil)
 	c.Assert(schemaTracker.Exec(ctx, dbName, tableStr), IsNil)

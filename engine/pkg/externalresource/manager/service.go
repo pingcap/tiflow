@@ -26,7 +26,6 @@ import (
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
-	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -73,8 +72,7 @@ func (s *Service) QueryResource(ctx context.Context, request *pb.QueryResourceRe
 		return resp2, err
 	}
 
-	record, err := s.metaclient.GetResourceByID(ctx,
-		pkgOrm.ResourceKey{JobID: request.GetResourceKey().GetJobId(), ID: request.GetResourceKey().GetResourceId()})
+	record, err := s.metaclient.GetResourceByID(ctx, request.GetResourceId())
 	if err != nil {
 		if pkgOrm.IsNotFoundError(err) {
 			return nil, status.Error(codes.NotFound, err.Error())
@@ -100,12 +98,12 @@ func (s *Service) CreateResource(
 	}
 
 	resourceRecord := &resModel.ResourceMeta{
-		ProjectID: tenant.NewProjectInfo(request.GetProjectInfo().TenantId, request.GetProjectInfo().ProjectId).UniqueID(),
-		ID:        request.GetResourceId(),
-		Job:       request.GetJobId(),
-		Worker:    request.GetCreatorWorkerId(),
-		Executor:  resModel.ExecutorID(request.GetCreatorExecutor()),
-		Deleted:   false,
+		// TODO: projectID
+		ID:       request.GetResourceId(),
+		Job:      request.GetJobId(),
+		Worker:   request.GetCreatorWorkerId(),
+		Executor: resModel.ExecutorID(request.GetCreatorExecutor()),
+		Deleted:  false,
 	}
 
 	err = s.metaclient.CreateResource(ctx, resourceRecord)
@@ -130,13 +128,11 @@ func (s *Service) RemoveResource(
 		return resp2, err
 	}
 
-	jobID := request.GetResourceKey().GetJobId()
-	resourceID := request.GetResourceKey().GetResourceId()
-	if jobID == "" || resourceID == "" {
-		return nil, status.Error(codes.InvalidArgument, "empty job-id or resource-id")
+	if request.GetResourceId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "empty resource-id")
 	}
 
-	res, err := s.metaclient.DeleteResource(ctx, pkgOrm.ResourceKey{JobID: jobID, ID: resourceID})
+	res, err := s.metaclient.DeleteResource(ctx, request.GetResourceId())
 	if err != nil {
 		return nil, status.Error(codes.Aborted, err.Error())
 	}
@@ -145,8 +141,7 @@ func (s *Service) RemoveResource(
 	}
 	if res.RowsAffected() > 1 {
 		log.L().Panic("unexpected RowsAffected",
-			zap.String("job-id", jobID),
-			zap.String("resource-id", resourceID))
+			zap.String("resource-id", request.GetResourceId()))
 	}
 
 	return &pb.RemoveResourceResponse{}, nil
@@ -162,38 +157,38 @@ func (s *Service) RemoveResource(
 // (4) Other errors: ("", false, err)
 func (s *Service) GetPlacementConstraint(
 	ctx context.Context,
-	resourceKey resModel.ResourceKey,
+	id resModel.ResourceID,
 ) (resModel.ExecutorID, bool, error) {
-	logger := log.L().With(zap.String("job-id", resourceKey.JobID), zap.String("resource-id", resourceKey.ID))
+	logger := log.L().With(zap.String("resource-id", id))
 
-	rType, _, err := resModel.ParseResourcePath(resourceKey.ID)
+	rType, _, err := resModel.ParseResourcePath(id)
 	if err != nil {
 		return "", false, err
 	}
 
 	if rType != resModel.ResourceTypeLocalFile {
 		logger.Info("Resource does not need a constraint",
-			zap.String("resource-id", resourceKey.ID), zap.String("type", string(rType)))
+			zap.String("resource-id", id), zap.String("type", string(rType)))
 		return "", false, nil
 	}
 
-	record, err := s.metaclient.GetResourceByID(ctx, pkgOrm.ResourceKey{JobID: resourceKey.JobID, ID: resourceKey.ID})
+	record, err := s.metaclient.GetResourceByID(ctx, id)
 	if err != nil {
 		if pkgOrm.IsNotFoundError(err) {
-			return "", false, errors.ErrResourceDoesNotExist.GenWithStackByArgs(resourceKey.ID)
+			return "", false, errors.ErrResourceDoesNotExist.GenWithStackByArgs(id)
 		}
 		return "", false, err
 	}
 
 	if record.Deleted {
 		logger.Info("Resource meta is marked as deleted", zap.Any("record", record))
-		return "", false, errors.ErrResourceDoesNotExist.GenWithStackByArgs(resourceKey.ID)
+		return "", false, errors.ErrResourceDoesNotExist.GenWithStackByArgs(id)
 	}
 
 	if !s.executors.HasExecutor(string(record.Executor)) {
 		logger.Info("Resource meta indicates a non-existent executor",
 			zap.String("executor-id", string(record.Executor)))
-		return "", false, errors.ErrResourceDoesNotExist.GenWithStackByArgs(resourceKey.ID)
+		return "", false, errors.ErrResourceDoesNotExist.GenWithStackByArgs(id)
 	}
 
 	return record.Executor, true, nil

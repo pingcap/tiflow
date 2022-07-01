@@ -153,10 +153,10 @@ func (t *table) handleRemoveTableTask(ctx context.Context) *schedulepb.Message {
 	return nil
 }
 
-func (t *table) handleAddTableTask(
-	ctx context.Context, liveness model.Liveness,
+func (t *table) handleAddTableTask(ctx context.Context,
+	stopping bool,
 ) (result *schedulepb.Message, err error) {
-	if liveness != model.LivenessCaptureAlive {
+	if stopping {
 		log.Info("tpscheduler: reject add table, since agent stopping",
 			zap.Int64("tableID", t.id), zap.Any("task", t.task))
 		t.task = nil
@@ -253,14 +253,14 @@ func (t *table) injectDispatchTableTask(task *dispatchTableTask) {
 		zap.Any("ignoredTask", task))
 }
 
-func (t *table) poll(ctx context.Context, liveness model.Liveness) (*schedulepb.Message, error) {
+func (t *table) poll(ctx context.Context, stopping bool) (*schedulepb.Message, error) {
 	if t.task == nil {
 		return nil, nil
 	}
 	if t.task.IsRemove {
 		return t.handleRemoveTableTask(ctx), nil
 	}
-	return t.handleAddTableTask(ctx, liveness)
+	return t.handleAddTableTask(ctx, stopping)
 }
 
 type tableManager struct {
@@ -275,12 +275,10 @@ func newTableManager(executor internal.TableExecutor) *tableManager {
 	}
 }
 
-func (tm *tableManager) poll(
-	ctx context.Context, liveness model.Liveness,
-) ([]*schedulepb.Message, error) {
+func (tm *tableManager) poll(ctx context.Context, stopping bool) ([]*schedulepb.Message, error) {
 	result := make([]*schedulepb.Message, 0)
 	for tableID, table := range tm.tables {
-		message, err := table.poll(ctx, liveness)
+		message, err := table.poll(ctx, stopping)
 		if err != nil {
 			return result, errors.Trace(err)
 		}

@@ -82,7 +82,6 @@ type processor struct {
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (pipeline.TablePipeline, error)
 	newAgent            func(ctx cdcContext.Context) (scheduler.Agent, error)
 
-	liveness     *model.Liveness
 	agent        scheduler.Agent
 	checkpointTs model.Ts
 	resolvedTs   model.Ts
@@ -401,9 +400,7 @@ func (p *processor) GetTableMeta(tableID model.TableID) pipeline.TableMeta {
 }
 
 // newProcessor creates a new processor
-func newProcessor(
-	ctx cdcContext.Context, up *upstream.Upstream, liveness *model.Liveness,
-) *processor {
+func newProcessor(ctx cdcContext.Context, up *upstream.Upstream) *processor {
 	changefeedID := ctx.ChangefeedVars().ID
 	p := &processor{
 		upstream:      up,
@@ -413,7 +410,6 @@ func newProcessor(
 		captureInfo:   ctx.GlobalVars().CaptureInfo,
 		cancel:        func() {},
 		lastRedoFlush: time.Now(),
-		liveness:      liveness,
 
 		metricResolvedTsGauge: resolvedTsGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
@@ -577,7 +573,7 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 
 	p.doGCSchemaStorage(ctx)
 
-	if err := p.agent.Tick(ctx, p.liveness.Load()); err != nil {
+	if err := p.agent.Tick(ctx); err != nil {
 		return errors.Trace(err)
 	}
 	return nil

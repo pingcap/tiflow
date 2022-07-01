@@ -31,7 +31,7 @@ type (
 	// only local type is available.
 	ResourceID = string
 	// JobID alias job id string
-	JobID = model.JobID
+	JobID = string
 	// ExecutorID alias model.ExecutorID
 	ExecutorID = model.ExecutorID
 )
@@ -47,44 +47,12 @@ var ResourceUpdateColumns = []string{
 	"deleted",
 }
 
-// ResourceKey is the unique identifier for the resource
-type ResourceKey struct {
-	JobID JobID
-	ID    ResourceID
-}
-
-// ToResourceKeys converts resource requirements in pb to resource keys
-func ToResourceKeys(requires []*pb.ResourceKey) []ResourceKey {
-	if requires == nil || len(requires) == 0 {
-		return nil
-	}
-	rks := make([]ResourceKey, 0, len(requires))
-	for _, require := range requires {
-		rks = append(rks, ResourceKey{JobID: require.GetJobId(), ID: require.GetResourceId()})
-	}
-
-	return rks
-}
-
-// ToResourceRequirement return the resource requirement of pb
-func ToResourceRequirement(jobID JobID, resourceIDs ...ResourceID) []*pb.ResourceKey {
-	if len(resourceIDs) == 0 {
-		return nil
-	}
-	ress := make([]*pb.ResourceKey, 0, len(resourceIDs))
-	for _, rid := range resourceIDs {
-		ress = append(ress, &pb.ResourceKey{JobId: jobID, ResourceId: rid})
-	}
-
-	return ress
-}
-
 // ResourceMeta is the records stored in the metastore.
 type ResourceMeta struct {
 	ormModel.Model
-	ProjectID tenant.ProjectID `json:"project-id" gorm:"column:project_id;type:varchar(64) not null;"`
-	ID        ResourceID       `json:"id" gorm:"column:id;type:varchar(64) not null;uniqueIndex:uidx_rid,priority:2;index:idx_rei,priority:2"`
-	Job       JobID            `json:"job" gorm:"column:job_id;type:varchar(64) not null;uniqueIndex:uidx_rid,priority:1"`
+	ProjectID tenant.ProjectID `json:"project-id" gorm:"column:project_id;type:varchar(64) not null"`
+	ID        ResourceID       `json:"id" gorm:"column:id;type:varchar(64) not null;uniqueIndex:uidx_rid;index:idx_rji,priority:2;index:idx_rei,priority:2"`
+	Job       JobID            `json:"job" gorm:"column:job_id;type:varchar(64) not null;index:idx_rji,priority:1"`
 	Worker    WorkerID         `json:"worker" gorm:"column:worker_id;type:varchar(64) not null"`
 	Executor  ExecutorID       `json:"executor" gorm:"column:executor_id;type:varchar(64) not null;index:idx_rei,priority:1"`
 	GCPending bool             `json:"gc-pending" gorm:"column:gc_pending;type:BOOLEAN"`

@@ -38,11 +38,11 @@ type status struct {
 }
 
 type statusAPI struct {
-	capture capture.Capture
+	capture *capture.Capture
 }
 
 // RegisterStatusAPIRoutes registers routes for status.
-func RegisterStatusAPIRoutes(router *gin.Engine, capture capture.Capture) {
+func RegisterStatusAPIRoutes(router *gin.Engine, capture *capture.Capture) {
 	statusAPI := statusAPI{capture: capture}
 	router.GET("/status", gin.WrapF(statusAPI.handleStatus))
 	router.GET("/debug/info", gin.WrapF(statusAPI.handleDebugInfo))
@@ -65,7 +65,7 @@ func (h *statusAPI) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	h.capture.WriteDebugInfo(ctx, w)
 	fmt.Fprintf(w, "\n\n*** etcd info ***:\n\n")
-	h.writeEtcdInfo(ctx, h.capture.GetEtcdClient(), w)
+	h.writeEtcdInfo(ctx, h.capture.EtcdClient, w)
 }
 
 func (h *statusAPI) handleStatus(w http.ResponseWriter, req *http.Request) {

@@ -44,18 +44,18 @@ const (
 
 // OpenAPI provides capture APIs.
 type OpenAPI struct {
-	capture capture.Capture
+	capture capture.InfoForAPI
 	// use for unit test only
 	testStatusProvider owner.StatusProvider
 }
 
 // NewOpenAPI creates a new OpenAPI.
-func NewOpenAPI(c capture.Capture) OpenAPI {
+func NewOpenAPI(c capture.InfoForAPI) OpenAPI {
 	return OpenAPI{capture: c}
 }
 
 // NewOpenAPI4Test return a OpenAPI for test
-func NewOpenAPI4Test(c capture.Capture, p owner.StatusProvider) OpenAPI {
+func NewOpenAPI4Test(c capture.InfoForAPI, p owner.StatusProvider) OpenAPI {
 	return OpenAPI{capture: c, testStatusProvider: p}
 }
 
@@ -283,8 +283,9 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		CAPath:        up.SecurityConfig.CAPath,
 		CertAllowedCN: up.SecurityConfig.CertAllowedCN,
 	}
-	err = h.capture.GetEtcdClient().CreateChangefeedInfo(
-		ctx, upstreamInfo, info, model.DefaultChangeFeedID(changefeedConfig.ID))
+	err = h.capture.GetEtcdClient().CreateChangefeedInfo(ctx, upstreamInfo,
+		info,
+		model.DefaultChangeFeedID(changefeedConfig.ID))
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -720,7 +721,7 @@ func (h *OpenAPI) ListCapture(c *gin.Context) {
 // @Produce json
 // @Success 200,202
 // @Failure 500,400 {object} model.HTTPError
-// @Router	/api/v1/captures/drain [put]
+// @Router	/api/v1/captures/drain [post]
 func (h *OpenAPI) DrainCapture(c *gin.Context) {
 	var req model.DrainCaptureRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -791,19 +792,18 @@ func (h *OpenAPI) DrainCapture(c *gin.Context) {
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/status [get]
 func (h *OpenAPI) ServerStatus(c *gin.Context) {
+	status := model.ServerStatus{
+		Version: version.ReleaseVersion,
+		GitHash: version.GitHash,
+		Pid:     os.Getpid(),
+	}
 	info, err := h.capture.Info()
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
-	status := model.ServerStatus{
-		Version:  version.ReleaseVersion,
-		GitHash:  version.GitHash,
-		Pid:      os.Getpid(),
-		ID:       info.ID,
-		IsOwner:  h.capture.IsOwner(),
-		Liveness: h.capture.Liveness(),
-	}
+	status.ID = info.ID
+	status.IsOwner = h.capture.IsOwner()
 	c.IndentedJSON(http.StatusOK, status)
 }
 

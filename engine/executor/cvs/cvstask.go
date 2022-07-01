@@ -131,8 +131,7 @@ func newCvsTask(ctx *dcontext.Context, _workerID frameModel.WorkerID, masterID f
 func (task *cvsTask) InitImpl(ctx context.Context) error {
 	log.L().Info("init the task  ", zap.Any("task id :", task.ID()))
 	task.setStatusCode(frameModel.WorkerStatusNormal)
-	// Don't use the ctx from the caller. Caller may cancel the ctx after InitImpl returns.
-	ctx, task.cancelFn = context.WithCancel(context.Background())
+	ctx, task.cancelFn = context.WithCancel(ctx)
 	go func() {
 		err := task.Receive(ctx)
 		if err != nil {

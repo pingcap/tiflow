@@ -27,7 +27,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func newAgent4Test() *agent {
+func newBaseAgent4Test() *agent {
 	return &agent{
 		ownerInfo: ownerInfo{
 			version:   "owner-version-1",
@@ -43,7 +43,7 @@ func newAgent4Test() *agent {
 func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	t.Parallel()
 
-	a := newAgent4Test()
+	a := newBaseAgent4Test()
 	mockTableExecutor := newMockTableExecutor()
 	a.tableM = newTableManager(mockTableExecutor)
 
@@ -59,7 +59,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	// remove table not exist
 	ctx := context.Background()
 	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
-	responses, err := a.tableM.poll(ctx, model.LivenessCaptureAlive)
+	responses, err := a.tableM.poll(ctx, a.stopping)
 	require.NoError(t, err)
 	require.Len(t, responses, 0)
 
@@ -73,18 +73,18 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	}
 
 	// stopping, addTableRequest should be ignored.
-	a.handleLivenessUpdate(model.LivenessCaptureStopping, livenessSourceTick)
+	a.stopping = true
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, model.LivenessCaptureAlive)
+	responses, err = a.tableM.poll(ctx, a.stopping)
 	require.NoError(t, err)
 	require.Len(t, responses, 0)
 
-	// Force set liveness to alive.
-	a.liveness = model.LivenessCaptureAlive
+	a.stopping = false
+
 	mockTableExecutor.On("AddTable", mock.Anything, mock.Anything,
 		mock.Anything, mock.Anything).Return(false, nil)
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, a.liveness)
+	responses, err = a.tableM.poll(ctx, a.stopping)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 
@@ -101,14 +101,14 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(false, nil)
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	_, err = a.tableM.poll(ctx, model.LivenessCaptureAlive)
+	_, err = a.tableM.poll(ctx, a.stopping)
 	require.NoError(t, err)
 
 	mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(true, nil)
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, model.LivenessCaptureAlive)
+	responses, err = a.tableM.poll(ctx, a.stopping)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 
@@ -129,7 +129,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		mock.Anything, mock.Anything).Return(false, nil)
 
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, model.LivenessCaptureAlive)
+	responses, err = a.tableM.poll(ctx, a.stopping)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 
@@ -144,7 +144,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(true, nil)
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, model.LivenessCaptureAlive)
+	responses, err = a.tableM.poll(ctx, a.stopping)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 
@@ -159,7 +159,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		Return(false)
 	// remove table in the replicating state failed, should still in replicating.
 	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, model.LivenessCaptureAlive)
+	responses, err = a.tableM.poll(ctx, a.stopping)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 	removeTableResponse, ok := responses[0].DispatchTableResponse.
@@ -176,7 +176,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		Return(3, false)
 	// remove table in the replicating state failed, should still in replicating.
 	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, model.LivenessCaptureAlive)
+	responses, err = a.tableM.poll(ctx, a.stopping)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 	removeTableResponse, ok = responses[0].DispatchTableResponse.
@@ -190,7 +190,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		Return(3, true)
 	// remove table in the replicating state success, should in stopped
 	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, model.LivenessCaptureAlive)
+	responses, err = a.tableM.poll(ctx, a.stopping)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 	removeTableResponse, ok = responses[0].DispatchTableResponse.
@@ -205,7 +205,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 func TestAgentHandleMessageHeartbeat(t *testing.T) {
 	t.Parallel()
 
-	a := newAgent4Test()
+	a := newBaseAgent4Test()
 	mockTableExecutor := newMockTableExecutor()
 	a.tableM = newTableManager(mockTableExecutor)
 
@@ -239,7 +239,7 @@ func TestAgentHandleMessageHeartbeat(t *testing.T) {
 
 	response := a.handleMessage([]*schedulepb.Message{heartbeat})
 	require.Len(t, response, 1)
-	require.Equal(t, model.LivenessCaptureAlive, response[0].GetHeartbeatResponse().Liveness)
+	require.False(t, response[0].GetHeartbeatResponse().IsStopping)
 
 	result := response[0].GetHeartbeatResponse().Tables
 	require.Len(t, result, 10)
@@ -264,23 +264,23 @@ func TestAgentHandleMessageHeartbeat(t *testing.T) {
 	})
 	require.Equal(t, schedulepb.TableStateStopping, result[1].State)
 
-	a.handleLivenessUpdate(model.LivenessCaptureStopping, livenessSourceTick)
+	a.stopping = true
 	response = a.handleMessage([]*schedulepb.Message{heartbeat})
 	require.Len(t, response, 1)
-	require.Equal(t, model.LivenessCaptureStopping, response[0].GetHeartbeatResponse().Liveness)
+	require.True(t, response[0].GetHeartbeatResponse().IsStopping)
 
-	a.handleLivenessUpdate(model.LivenessCaptureAlive, livenessSourceTick)
+	a.stopping = false
 
 	heartbeat.Heartbeat.IsStopping = true
 	response = a.handleMessage([]*schedulepb.Message{heartbeat})
-	require.Equal(t, model.LivenessCaptureStopping, response[0].GetHeartbeatResponse().Liveness)
-	require.Equal(t, model.LivenessCaptureStopping, a.liveness)
+	require.True(t, response[0].GetHeartbeatResponse().IsStopping)
+	require.True(t, a.stopping)
 }
 
 func TestAgentPermuteMessages(t *testing.T) {
 	t.Parallel()
 
-	a := newAgent4Test()
+	a := newBaseAgent4Test()
 	mockTableExecutor := newMockTableExecutor()
 	a.tableM = newTableManager(mockTableExecutor)
 
@@ -372,12 +372,12 @@ func TestAgentPermuteMessages(t *testing.T) {
 				message := inboundMessages[idx]
 				if message.MsgType == schedulepb.MsgHeartbeat {
 					trans.recvBuffer = append(trans.recvBuffer, message)
-					err := a.Tick(ctx, model.LivenessCaptureAlive)
+					err := a.Tick(ctx)
 					require.NoError(t, err)
 					require.Len(t, trans.sendBuffer, 1)
 					heartbeatResponse := trans.sendBuffer[0].HeartbeatResponse
 					trans.sendBuffer = trans.sendBuffer[:0]
-					require.Equal(t, model.LivenessCaptureAlive, heartbeatResponse.Liveness)
+					require.Equal(t, a.stopping, heartbeatResponse.IsStopping)
 
 					continue
 				}
@@ -392,7 +392,7 @@ func TestAgentPermuteMessages(t *testing.T) {
 								mock.Anything, mock.Anything).Return(ok1, nil)
 
 							trans.recvBuffer = append(trans.recvBuffer, message)
-							err := a.Tick(ctx, model.LivenessCaptureAlive)
+							err := a.Tick(ctx)
 							require.NoError(t, err)
 							trans.sendBuffer = trans.sendBuffer[:0]
 
@@ -408,7 +408,7 @@ func TestAgentPermuteMessages(t *testing.T) {
 							trans.recvBuffer = append(trans.recvBuffer, message)
 							mockTableExecutor.On("IsRemoveTableFinished",
 								mock.Anything, mock.Anything).Return(0, ok1)
-							err := a.Tick(ctx, model.LivenessCaptureAlive)
+							err := a.Tick(ctx)
 							require.NoError(t, err)
 							if len(trans.sendBuffer) != 0 {
 								require.Len(t, trans.sendBuffer, 1)
@@ -440,7 +440,7 @@ func TestAgentHandleMessage(t *testing.T) {
 
 	mockTableExecutor := newMockTableExecutor()
 	tableM := newTableManager(mockTableExecutor)
-	a := newAgent4Test()
+	a := newBaseAgent4Test()
 	a.tableM = tableM
 
 	heartbeat := &schedulepb.Message{
@@ -513,7 +513,7 @@ func TestAgentHandleMessage(t *testing.T) {
 func TestAgentUpdateOwnerInfo(t *testing.T) {
 	t.Parallel()
 
-	a := newAgent4Test()
+	a := newBaseAgent4Test()
 	ok := a.handleOwnerInfo("owner-1", 1, "version-1")
 	require.True(t, ok)
 
@@ -529,7 +529,7 @@ func TestAgentUpdateOwnerInfo(t *testing.T) {
 func TestAgentTick(t *testing.T) {
 	t.Parallel()
 
-	a := newAgent4Test()
+	a := newBaseAgent4Test()
 	trans := newMockTrans()
 	mockTableExecutor := newMockTableExecutor()
 	a.trans = trans
@@ -551,7 +551,7 @@ func TestAgentTick(t *testing.T) {
 	trans.recvBuffer = append(trans.recvBuffer, heartbeat)
 
 	ctx := context.Background()
-	require.NoError(t, a.Tick(ctx, model.LivenessCaptureAlive))
+	require.NoError(t, a.Tick(ctx))
 	require.Len(t, trans.sendBuffer, 1)
 	heartbeatResponse := trans.sendBuffer[0]
 	trans.sendBuffer = trans.sendBuffer[:0]
@@ -604,7 +604,7 @@ func TestAgentTick(t *testing.T) {
 		mock.Anything, mock.Anything, mock.Anything).Return(true, nil)
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(false, nil)
-	require.NoError(t, a.Tick(ctx, model.LivenessCaptureAlive))
+	require.NoError(t, a.Tick(ctx))
 	trans.sendBuffer = trans.sendBuffer[:0]
 
 	trans.recvBuffer = append(trans.recvBuffer, addTableRequest)
@@ -612,7 +612,7 @@ func TestAgentTick(t *testing.T) {
 	mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(true, nil)
-	require.NoError(t, a.Tick(ctx, model.LivenessCaptureAlive))
+	require.NoError(t, a.Tick(ctx))
 	responses := trans.sendBuffer[:len(trans.sendBuffer)]
 	trans.sendBuffer = trans.sendBuffer[:0]
 	require.Len(t, responses, 1)
@@ -623,44 +623,6 @@ func TestAgentTick(t *testing.T) {
 	require.Equal(t, schedulepb.TableStatePrepared, resp.AddTable.Status.State)
 
 	require.NoError(t, a.Close())
-}
-
-func TestAgentHandleLivenessUpdate(t *testing.T) {
-	t.Parallel()
-
-	// Test liveness via tick.
-	a := newAgent4Test()
-	a.handleLivenessUpdate(model.LivenessCaptureAlive, livenessSourceTick)
-	require.Equal(t, model.LivenessCaptureAlive, a.liveness)
-
-	a.handleLivenessUpdate(model.LivenessCaptureStopping, livenessSourceTick)
-	require.Equal(t, model.LivenessCaptureStopping, a.liveness)
-
-	a.handleLivenessUpdate(model.LivenessCaptureAlive, livenessSourceTick)
-	require.Equal(t, model.LivenessCaptureStopping, a.liveness)
-
-	// Test liveness via heartbeat.
-	mockTableExecutor := newMockTableExecutor()
-	tableM := newTableManager(mockTableExecutor)
-	a = newAgent4Test()
-	a.tableM = tableM
-	require.Equal(t, model.LivenessCaptureAlive, a.liveness)
-	a.handleMessage([]*schedulepb.Message{{
-		Header: &schedulepb.Message_Header{
-			Version:        a.ownerInfo.version,
-			OwnerRevision:  a.ownerInfo.revision,
-			ProcessorEpoch: a.epoch,
-		},
-		MsgType: schedulepb.MsgHeartbeat,
-		From:    a.ownerInfo.captureID,
-		Heartbeat: &schedulepb.Heartbeat{
-			IsStopping: true,
-		},
-	}})
-	require.Equal(t, model.LivenessCaptureStopping, a.liveness)
-
-	a.handleLivenessUpdate(model.LivenessCaptureAlive, livenessSourceTick)
-	require.Equal(t, model.LivenessCaptureStopping, a.liveness)
 }
 
 // MockTableExecutor is a mock implementation of TableExecutor.

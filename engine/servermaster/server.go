@@ -312,7 +312,7 @@ func (s *Server) ScheduleTask(ctx context.Context, req *pb.ScheduleTaskRequest) 
 
 	schedulerReq := &schedModel.SchedulerRequest{
 		Cost:              schedModel.ResourceUnit(req.GetCost()),
-		ExternalResources: resModel.ToResourceKeys(req.GetResourceRequirements()),
+		ExternalResources: req.GetResourceRequirements(),
 	}
 	schedulerResp, err := s.scheduler.ScheduleTask(ctx, schedulerReq)
 	if err != nil {

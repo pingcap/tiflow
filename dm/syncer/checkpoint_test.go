@@ -83,7 +83,7 @@ func (s *testCheckpointSuite) SetUpSuite(c *C) {
 		}
 	)
 
-	s.tracker, err = schema.NewTestTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, nil, dlog.L())
+	s.tracker, err = schema.NewTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, nil, dlog.L())
 	c.Assert(err, IsNil)
 }
 
@@ -499,7 +499,7 @@ func TestRemoteCheckPointLoadIntoSchemaTracker(t *testing.T) {
 	dbConn, err := db.Conn(ctx)
 	require.NoError(t, err)
 	downstreamTrackConn := dbconn.NewDBConn(cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
-	schemaTracker, err := schema.NewTestTracker(ctx, cfg.Name, defaultTestSessionCfg, downstreamTrackConn, dlog.L())
+	schemaTracker, err := schema.NewTracker(ctx, cfg.Name, defaultTestSessionCfg, downstreamTrackConn, dlog.L())
 	require.NoError(t, err)
 	defer schemaTracker.Close() //nolint
 

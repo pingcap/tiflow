@@ -26,9 +26,8 @@ func TestCaptureStatusHandleHeartbeatResponse(t *testing.T) {
 
 	rev := schedulepb.OwnerRevision{Revision: 1}
 	epoch := schedulepb.ProcessorEpoch{Epoch: "test"}
-	c := newCaptureStatus(rev, "", true)
+	c := newCaptureStatus(rev, "")
 	require.Equal(t, CaptureStateUninitialized, c.State)
-	require.True(t, c.IsOwner)
 
 	// Uninitialized -> Initialized
 	c.handleHeartbeatResponse(&schedulepb.HeartbeatResponse{}, epoch)
@@ -37,13 +36,12 @@ func TestCaptureStatusHandleHeartbeatResponse(t *testing.T) {
 
 	// Processor epoch mismatch
 	c.handleHeartbeatResponse(&schedulepb.HeartbeatResponse{
-		Liveness: model.LivenessCaptureStopping,
+		IsStopping: true,
 	}, schedulepb.ProcessorEpoch{Epoch: "unknown"})
 	require.Equal(t, CaptureStateInitialized, c.State)
 
 	// Initialized -> Stopping
-	c.handleHeartbeatResponse(
-		&schedulepb.HeartbeatResponse{Liveness: model.LivenessCaptureStopping}, epoch)
+	c.handleHeartbeatResponse(&schedulepb.HeartbeatResponse{IsStopping: true}, epoch)
 	require.Equal(t, CaptureStateStopping, c.State)
 	require.Equal(t, epoch, c.Epoch)
 }
@@ -52,7 +50,7 @@ func TestCaptureManagerHandleAliveCaptureUpdate(t *testing.T) {
 	t.Parallel()
 
 	rev := schedulepb.OwnerRevision{}
-	cm := newCaptureManager("1", model.ChangeFeedID{}, rev, 2)
+	cm := newCaptureManager(model.ChangeFeedID{}, rev, 2)
 	ms := map[model.CaptureID]*model.CaptureInfo{
 		"1": {}, "2": {}, "3": {},
 	}
@@ -67,9 +65,7 @@ func TestCaptureManagerHandleAliveCaptureUpdate(t *testing.T) {
 	require.False(t, cm.CheckAllCaptureInitialized())
 	require.Nil(t, cm.TakeChanges())
 	require.Contains(t, cm.Captures, "1")
-	require.True(t, cm.Captures["1"].IsOwner)
 	require.Contains(t, cm.Captures, "2")
-	require.False(t, cm.Captures["2"].IsOwner)
 	require.Contains(t, cm.Captures, "3")
 
 	// Remove one capture before init.
@@ -124,7 +120,7 @@ func TestCaptureManagerHandleMessages(t *testing.T) {
 		"1": {},
 		"2": {},
 	}
-	cm := newCaptureManager("", model.ChangeFeedID{}, rev, 2)
+	cm := newCaptureManager(model.ChangeFeedID{}, rev, 2)
 	require.False(t, cm.CheckAllCaptureInitialized())
 
 	// Initial handle alive captures.
@@ -172,7 +168,7 @@ func TestCaptureManagerTick(t *testing.T) {
 	t.Parallel()
 
 	rev := schedulepb.OwnerRevision{}
-	cm := newCaptureManager("", model.ChangeFeedID{}, rev, 2)
+	cm := newCaptureManager(model.ChangeFeedID{}, rev, 2)
 
 	// No heartbeat if there is no capture.
 	msgs := cm.Tick(nil, captureIDNotDraining)

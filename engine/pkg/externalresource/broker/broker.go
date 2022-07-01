@@ -27,7 +27,6 @@ import (
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
-	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	derrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -62,7 +61,6 @@ func NewBroker(
 // OpenStorage implements Broker.OpenStorage
 func (b *DefaultBroker) OpenStorage(
 	ctx context.Context,
-	projectInfo tenant.ProjectInfo,
 	workerID resModel.WorkerID,
 	jobID resModel.JobID,
 	resourcePath resModel.ResourceID,
@@ -74,7 +72,7 @@ func (b *DefaultBroker) OpenStorage(
 
 	switch tp {
 	case resModel.ResourceTypeLocalFile:
-		return b.newHandleForLocalFile(ctx, projectInfo, jobID, workerID, resourcePath)
+		return b.newHandleForLocalFile(ctx, jobID, workerID, resourcePath)
 	case resModel.ResourceTypeS3:
 		log.L().Panic("resource type s3 is not supported for now")
 	default:
@@ -132,7 +130,6 @@ func (b *DefaultBroker) RemoveResource(
 
 func (b *DefaultBroker) newHandleForLocalFile(
 	ctx context.Context,
-	projectInfo tenant.ProjectInfo,
 	jobID resModel.JobID,
 	workerID resModel.WorkerID,
 	resourceID resModel.ResourceID,
@@ -148,7 +145,7 @@ func (b *DefaultBroker) newHandleForLocalFile(
 		log.L().Panic("unexpected resource type", zap.String("type", string(tp)))
 	}
 
-	record, exists, err := b.checkForExistingResource(ctx, resModel.ResourceKey{JobID: jobID, ID: resourceID})
+	record, exists, err := b.checkForExistingResource(ctx, resourceID)
 	if err != nil {
 		return nil, err
 	}
@@ -176,22 +173,22 @@ func (b *DefaultBroker) newHandleForLocalFile(
 	filePath := desc.AbsolutePath()
 	log.L().Info("Using local storage with path", zap.String("path", filePath))
 
-	return newLocalResourceHandle(projectInfo, resourceID, jobID, b.executorID, b.fileManager, desc, b.client)
+	return newLocalResourceHandle(resourceID, jobID, b.executorID, b.fileManager, desc, b.client)
 }
 
 func (b *DefaultBroker) checkForExistingResource(
 	ctx context.Context,
-	resourceKey resModel.ResourceKey,
+	resourceID resModel.ResourceID,
 ) (*resModel.ResourceMeta, bool, error) {
 	resp, err := rpcutil.DoFailoverRPC(
 		ctx,
 		b.client,
-		&pb.QueryResourceRequest{ResourceKey: &pb.ResourceKey{JobId: resourceKey.JobID, ResourceId: resourceKey.ID}},
+		&pb.QueryResourceRequest{ResourceId: resourceID},
 		pb.ResourceManagerClient.QueryResource,
 	)
 	if err == nil {
 		return &resModel.ResourceMeta{
-			ID:       resourceKey.ID,
+			ID:       resourceID,
 			Job:      resp.GetJobId(),
 			Worker:   resp.GetCreatorWorkerId(),
 			Executor: resModel.ExecutorID(resp.GetCreatorExecutor()),

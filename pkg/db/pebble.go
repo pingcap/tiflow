@@ -190,7 +190,7 @@ func (p *pebbleDB) DeleteRange(start, end []byte) error {
 }
 
 func (p *pebbleDB) Compact(start, end []byte) error {
-	return p.db.Compact(start, end, true)
+	return p.db.Compact(start, end)
 }
 
 func (p *pebbleDB) Close() error {

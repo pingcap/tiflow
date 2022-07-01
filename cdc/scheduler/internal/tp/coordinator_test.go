@@ -74,7 +74,7 @@ func TestCoordinatorSendMsgs(t *testing.T) {
 		captureID: "0",
 		trans:     trans,
 	}
-	coord.captureM = newCaptureManager("", model.ChangeFeedID{}, coord.revision, 0)
+	coord.captureM = newCaptureManager(model.ChangeFeedID{}, coord.revision, 0)
 	coord.sendMsgs(
 		ctx, []*schedulepb.Message{{To: "1", MsgType: schedulepb.MsgDispatchTableRequest}})
 
@@ -342,7 +342,7 @@ func BenchmarkCoordinatorInit(b *testing.B) {
 			replicationM: newReplicationManager(10, model.ChangeFeedID{}),
 			// Disable heartbeat.
 			captureM: newCaptureManager(
-				"", model.ChangeFeedID{}, schedulepb.OwnerRevision{}, math.MaxInt),
+				model.ChangeFeedID{}, schedulepb.OwnerRevision{}, math.MaxInt),
 		}
 		name = fmt.Sprintf("InitTable %d", total)
 		return name, coord, currentTables, captures
@@ -360,7 +360,7 @@ func BenchmarkCoordinatorHeartbeat(b *testing.B) {
 		captures = map[model.CaptureID]*model.CaptureInfo{}
 		// Always heartbeat.
 		captureM := newCaptureManager(
-			"", model.ChangeFeedID{}, schedulepb.OwnerRevision{}, 0)
+			model.ChangeFeedID{}, schedulepb.OwnerRevision{}, 0)
 		captureM.initialized = true
 		for i := 0; i < captureCount; i++ {
 			captures[fmt.Sprint(i)] = &model.CaptureInfo{}
@@ -391,7 +391,7 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 		captures = map[model.CaptureID]*model.CaptureInfo{}
 		// Disable heartbeat.
 		captureM := newCaptureManager(
-			"", model.ChangeFeedID{}, schedulepb.OwnerRevision{}, math.MaxInt)
+			model.ChangeFeedID{}, schedulepb.OwnerRevision{}, math.MaxInt)
 		captureM.initialized = true
 		for i := 0; i < captureCount; i++ {
 			captures[fmt.Sprint(i)] = &model.CaptureInfo{}

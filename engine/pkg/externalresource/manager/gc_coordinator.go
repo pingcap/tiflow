@@ -25,7 +25,6 @@ import (
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
-	engineModel "github.com/pingcap/tiflow/engine/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
@@ -175,23 +174,23 @@ func (c *DefaultGCCoordinator) gcByStatusSnapshots(
 	}
 
 	var (
-		toGC []engineModel.JobID
+		toGC []resModel.ResourceID
 
 		// toRemove is used to remove meta records when
 		// the associated executors are offline.
 		// TODO adjust the mechanism when we implement S3 support.
-		toRemove []model.ExecutorID
+		toRemove []resModel.ResourceID
 	)
 	for _, resMeta := range resources {
 		if _, exists := jobSnapshot[resMeta.Job]; !exists {
 			// The resource belongs to a deleted job.
-			toGC = append(toGC, resMeta.Job)
+			toGC = append(toGC, resMeta.ID)
 			continue
 		}
 
 		if _, exists := executorSet[resMeta.Executor]; !exists {
 			// The resource belongs to an offlined executor.
-			toRemove = append(toRemove, resMeta.Executor)
+			toRemove = append(toRemove, resMeta.ID)
 			continue
 		}
 	}
@@ -199,7 +198,7 @@ func (c *DefaultGCCoordinator) gcByStatusSnapshots(
 	if len(toGC) > 0 {
 		log.L().Info("Adding resources to GC queue",
 			zap.Any("resource-ids", toGC))
-		if err := c.metaClient.SetGCPendingByJobs(ctx, toGC); err != nil {
+		if err := c.metaClient.SetGCPending(ctx, toGC); err != nil {
 			return err
 		}
 		c.notifier.GCNotify()
@@ -209,7 +208,7 @@ func (c *DefaultGCCoordinator) gcByStatusSnapshots(
 		log.L().Info("Removing stale resources for offlined executors",
 			zap.Any("resource-ids", toRemove))
 		// Note: soft delete has not been implemented for resources yet.
-		if _, err := c.metaClient.DeleteResourcesByExecutorIDs(ctx, toRemove); err != nil {
+		if _, err := c.metaClient.DeleteResources(ctx, toRemove); err != nil {
 			return err
 		}
 	}
@@ -218,9 +217,26 @@ func (c *DefaultGCCoordinator) gcByStatusSnapshots(
 }
 
 func (c *DefaultGCCoordinator) gcByOfflineJobID(ctx context.Context, jobID string) error {
-	log.L().Info("Added resources to GC queue of jobID", zap.String("job_id", jobID))
+	resources, err := c.metaClient.QueryResourcesByJobID(ctx, jobID)
+	if err != nil {
+		return err
+	}
 
-	if err := c.metaClient.SetGCPendingByJobs(ctx, []engineModel.JobID{jobID}); err != nil {
+	if len(resources) == 0 {
+		// If there is no resource associated to the job,
+		// we return early.
+		return nil
+	}
+
+	toGC := make([]resModel.ResourceID, 0, len(resources))
+	for _, resMeta := range resources {
+		toGC = append(toGC, resMeta.ID)
+	}
+
+	log.L().Info("Added resources to GC queue",
+		zap.Any("resource-ids", toGC))
+
+	if err := c.metaClient.SetGCPending(ctx, toGC); err != nil {
 		return err
 	}
 
@@ -237,6 +253,5 @@ func (c *DefaultGCCoordinator) gcByOfflineExecutorID(ctx context.Context, execut
 	// already gone.
 	// TODO Trigger GC for all resources and let the GCRunner decide whether to
 	// perform any action, or just remove the meta record.
-	_, err := c.metaClient.DeleteResourcesByExecutorID(ctx, executorID)
-	return err
+	return c.metaClient.DeleteResourcesByExecutorID(ctx, string(executorID))
 }

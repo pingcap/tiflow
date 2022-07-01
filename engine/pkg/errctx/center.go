@@ -24,74 +24,50 @@ import (
 // ErrCenter is used to receive errors and provide
 // ways to detect the error(s).
 type ErrCenter struct {
-	rwm      sync.RWMutex
-	firstErr error
-	children map[*errCtx]struct{}
+	errMu  sync.RWMutex
+	errVal error
+
+	doneCh chan struct{}
 }
 
 // NewErrCenter creates a new ErrCenter.
 func NewErrCenter() *ErrCenter {
-	return &ErrCenter{}
-}
-
-func (c *ErrCenter) removeChild(child *errCtx) {
-	c.rwm.Lock()
-	defer c.rwm.Unlock()
-
-	delete(c.children, child)
+	return &ErrCenter{
+		doneCh: make(chan struct{}),
+	}
 }
 
 // OnError receivers an error, if the error center has received one, drops the
 // new error and records a warning log. Otherwise the error will be recorded and
 // doneCh will be closed to use as notification.
 func (c *ErrCenter) OnError(err error) {
+	c.errMu.Lock()
+	defer c.errMu.Unlock()
+
 	if err == nil {
 		return
 	}
-
-	c.rwm.Lock()
-	defer c.rwm.Unlock()
-
-	if c.firstErr != nil {
+	if c.errVal != nil {
 		// OnError is no-op after the first call with
 		// a non-nil error.
 		log.L().Warn("More than one error is received",
 			zap.Error(err))
 		return
 	}
-	c.firstErr = err
-	for child := range c.children {
-		child.doCancel(c.firstErr)
-	}
-	c.children = nil
+	c.errVal = err
+
+	close(c.doneCh)
 }
 
 // CheckError retusn the recorded error
 func (c *ErrCenter) CheckError() error {
-	c.rwm.RLock()
-	defer c.rwm.RUnlock()
+	c.errMu.RLock()
+	defer c.errMu.RUnlock()
 
-	return c.firstErr
+	return c.errVal
 }
 
-// WithCancelOnFirstError creates an error context which will cancel the context when the first error is received.
-func (c *ErrCenter) WithCancelOnFirstError(ctx context.Context) (context.Context, context.CancelFunc) {
-	ec := newErrCtx(ctx)
-
-	c.rwm.Lock()
-	defer c.rwm.Unlock()
-
-	if c.firstErr != nil {
-		// First error is received, cancel the context directly.
-		ec.doCancel(c.firstErr)
-	} else {
-		if c.children == nil {
-			c.children = make(map[*errCtx]struct{})
-		}
-		c.children[ec] = struct{}{}
-	}
-	return ec, func() {
-		ec.doCancel(context.Canceled)
-		c.removeChild(ec)
-	}
+// WithCancelOnFirstError creates an error context which supports is cancelled on error
+func (c *ErrCenter) WithCancelOnFirstError(ctx context.Context) context.Context {
+	return newErrCtx(ctx, c)
 }

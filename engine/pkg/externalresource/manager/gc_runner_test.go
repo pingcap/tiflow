@@ -121,13 +121,13 @@ func newMockMetaClientErrOnce() *mockMetaClientErrOnce {
 	}
 }
 
-func (c *mockMetaClientErrOnce) DeleteResource(ctx context.Context, resourceKey pkgOrm.ResourceKey) (pkgOrm.Result, error) {
+func (c *mockMetaClientErrOnce) DeleteResource(ctx context.Context, resourceID string) (pkgOrm.Result, error) {
 	if _, erred := c.methodsAllReadyErred["DeleteResource"]; !erred {
 		c.methodsAllReadyErred["DeleteResource"] = struct{}{}
 		return nil, errors.New("injected error")
 	}
 
-	return c.ResourceClient.DeleteResource(ctx, resourceKey)
+	return c.ResourceClient.DeleteResource(ctx, resourceID)
 }
 
 func (c *mockMetaClientErrOnce) GetOneResourceForGC(ctx context.Context) (*resModel.ResourceMeta, error) {
@@ -188,10 +188,7 @@ func TestGCRunnerUnsupportedResourceType(t *testing.T) {
 
 		res, err := helper.Meta.GetResourceByID(
 			context.Background(),
-			pkgOrm.ResourceKey{
-				JobID: "job-1",
-				ID:    "/unsupported/resource-1",
-			})
+			"/unsupported/resource-1")
 		require.NoError(t, err)
 		require.True(t, res.GCPending)
 	}

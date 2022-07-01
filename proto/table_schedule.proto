@@ -103,7 +103,7 @@ message TableStatus {
 
 message HeartbeatResponse {
     repeated TableStatus tables = 1 [(gogoproto.nullable) = false];
-    int32 liveness = 2 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Liveness"];
+    bool is_stopping = 2;
 }
 
 enum MessageType {

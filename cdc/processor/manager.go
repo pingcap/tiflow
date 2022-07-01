@@ -37,9 +37,6 @@ const (
 	commandTpUnknow commandTp = iota //nolint:varcheck,deadcode
 	commandTpClose
 	commandTpWriteDebugInfo
-	// Query the number of tables in the manager.
-	// command payload is a buffer channel of int, make(chan int, 1).
-	commandTpQueryTableCount
 	processorLogsWarnDuration = 1 * time.Second
 )
 
@@ -50,29 +47,19 @@ type command struct {
 }
 
 // Manager is a manager of processor, which maintains the state and behavior of processors
-type Manager interface {
-	orchestrator.Reactor
-	QueryTableCount(ctx context.Context, tableCh chan int, done chan<- error)
-	WriteDebugInfo(ctx context.Context, w io.Writer, done chan<- error)
-	AsyncClose()
-}
-
-// managerImpl is a manager of processor, which maintains the state and behavior of processors
-type managerImpl struct {
-	liveness        *model.Liveness
+type Manager struct {
 	processors      map[model.ChangeFeedID]*processor
 	commandQueue    chan *command
 	upstreamManager *upstream.Manager
 
-	newProcessor func(cdcContext.Context, *upstream.Upstream, *model.Liveness) *processor
+	newProcessor func(cdcContext.Context, *upstream.Upstream) *processor
 
 	metricProcessorCloseDuration prometheus.Observer
 }
 
 // NewManager creates a new processor manager
-func NewManager(upstreamManager *upstream.Manager, liveness *model.Liveness) Manager {
-	return &managerImpl{
-		liveness:                     liveness,
+func NewManager(upstreamManager *upstream.Manager) *Manager {
+	return &Manager{
 		processors:                   make(map[model.ChangeFeedID]*processor),
 		commandQueue:                 make(chan *command, 4),
 		upstreamManager:              upstreamManager,
@@ -84,7 +71,7 @@ func NewManager(upstreamManager *upstream.Manager, liveness *model.Liveness) Man
 // Tick implements the `orchestrator.State` interface
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // the Tick function of Manager create or remove processor instances according to the specified `state`, or pass the `state` to processor instances
-func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
+func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	ctx := stdCtx.(cdcContext.Context)
 	globalState := state.(*orchestrator.GlobalReactorState)
 	if err := m.handleCommand(); err != nil {
@@ -111,7 +98,7 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 				up = m.upstreamManager.AddUpstream(upstreamInfo.ID, upstreamInfo)
 			}
 			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
-			processor = m.newProcessor(ctx, up, m.liveness)
+			processor = m.newProcessor(ctx, up)
 			m.processors[changefeedID] = processor
 		}
 		if _, err := processor.Tick(ctx, changefeedState); err != nil {
@@ -138,7 +125,7 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 	return state, nil
 }
 
-func (m *managerImpl) closeProcessor(changefeedID model.ChangeFeedID) {
+func (m *Manager) closeProcessor(changefeedID model.ChangeFeedID) {
 	if processor, exist := m.processors[changefeedID]; exist {
 		startTime := time.Now()
 		captureID := processor.captureInfo.ID
@@ -162,7 +149,7 @@ func (m *managerImpl) closeProcessor(changefeedID model.ChangeFeedID) {
 }
 
 // AsyncClose sends a signal to Manager to close all processors.
-func (m *managerImpl) AsyncClose() {
+func (m *Manager) AsyncClose() {
 	timeout := 3 * time.Second
 	ctx, cancel := context.WithTimeout(context.TODO(), timeout)
 	defer cancel()
@@ -173,18 +160,8 @@ func (m *managerImpl) AsyncClose() {
 	}
 }
 
-// QueryTableCount query the number of tables in the manager.
-func (m *managerImpl) QueryTableCount(
-	ctx context.Context, tableCh chan int, done chan<- error,
-) {
-	err := m.sendCommand(ctx, commandTpQueryTableCount, tableCh, done)
-	if err != nil {
-		log.Warn("send command commandTpQueryTableCount failed", zap.Error(err))
-	}
-}
-
 // WriteDebugInfo write the debug info to Writer
-func (m *managerImpl) WriteDebugInfo(
+func (m *Manager) WriteDebugInfo(
 	ctx context.Context, w io.Writer, done chan<- error,
 ) {
 	err := m.sendCommand(ctx, commandTpWriteDebugInfo, w, done)
@@ -195,7 +172,7 @@ func (m *managerImpl) WriteDebugInfo(
 
 // sendCommands sends command to manager.
 // `done` is closed upon command completion or sendCommand returns error.
-func (m *managerImpl) sendCommand(
+func (m *Manager) sendCommand(
 	ctx context.Context, tp commandTp, payload interface{}, done chan<- error,
 ) error {
 	cmd := &command{tp: tp, payload: payload, done: done}
@@ -209,7 +186,7 @@ func (m *managerImpl) sendCommand(
 	return nil
 }
 
-func (m *managerImpl) handleCommand() error {
+func (m *Manager) handleCommand() error {
 	var cmd *command
 	select {
 	case cmd = <-m.commandQueue:
@@ -227,22 +204,13 @@ func (m *managerImpl) handleCommand() error {
 	case commandTpWriteDebugInfo:
 		w := cmd.payload.(io.Writer)
 		m.writeDebugInfo(w)
-	case commandTpQueryTableCount:
-		count := 0
-		for _, p := range m.processors {
-			count += len(p.GetAllCurrentTables())
-		}
-		select {
-		case cmd.payload.(chan int) <- count:
-		default:
-		}
 	default:
 		log.Warn("Unknown command in processor manager", zap.Any("command", cmd))
 	}
 	return nil
 }
 
-func (m *managerImpl) writeDebugInfo(w io.Writer) {
+func (m *Manager) writeDebugInfo(w io.Writer) {
 	for changefeedID, processor := range m.processors {
 		fmt.Fprintf(w, "changefeedID: %s\n", changefeedID)
 		processor.WriteDebugInfo(w)

@@ -15,7 +15,6 @@ package model
 
 import (
 	"encoding/json"
-	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/tiflow/pkg/config"
@@ -60,45 +59,13 @@ func NewHTTPError(err error) HTTPError {
 	}
 }
 
-// Liveness is the liveness status of a capture.
-type Liveness int32
-
-const (
-	// LivenessCaptureAlive means the capture is alive, and ready to serve.
-	LivenessCaptureAlive Liveness = 0
-	// LivenessCaptureStopping means the capture is in the process of graceful shutdown.
-	LivenessCaptureStopping Liveness = 1
-)
-
-// Store the given liveness.
-func (l *Liveness) Store(v Liveness) {
-	atomic.StoreInt32((*int32)(l), int32(v))
-}
-
-// Load the liveness.
-func (l *Liveness) Load() Liveness {
-	return Liveness(atomic.LoadInt32((*int32)(l)))
-}
-
-func (l *Liveness) String() string {
-	switch *l {
-	case LivenessCaptureAlive:
-		return "Alive"
-	case LivenessCaptureStopping:
-		return "Stopping"
-	default:
-		return "unknown"
-	}
-}
-
 // ServerStatus holds some common information of a server
 type ServerStatus struct {
-	Version  string   `json:"version"`
-	GitHash  string   `json:"git_hash"`
-	ID       string   `json:"id"`
-	Pid      int      `json:"pid"`
-	IsOwner  bool     `json:"is_owner"`
-	Liveness Liveness `json:"liveness"`
+	Version string `json:"version"`
+	GitHash string `json:"git_hash"`
+	ID      string `json:"id"`
+	Pid     int    `json:"pid"`
+	IsOwner bool   `json:"is_owner"`
 }
 
 // ChangefeedCommonInfo holds some common usage information of a changefeed

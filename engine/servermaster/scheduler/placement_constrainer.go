@@ -17,7 +17,7 @@ import (
 	"context"
 
 	"github.com/pingcap/tiflow/engine/model"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -26,23 +26,22 @@ import (
 type PlacementConstrainer interface {
 	GetPlacementConstraint(
 		ctx context.Context,
-		resourceKey resModel.ResourceKey,
-	) (resModel.ExecutorID, bool, error)
+		id resourcemeta.ResourceID,
+	) (resourcemeta.ExecutorID, bool, error)
 }
 
 // MockPlacementConstrainer uses a resource executor binding map to implement PlacementConstrainer
 type MockPlacementConstrainer struct {
-	ResourceList map[resModel.ResourceKey]model.ExecutorID
+	ResourceList map[resourcemeta.ResourceID]model.ExecutorID
 }
 
 // GetPlacementConstraint implements PlacementConstrainer.GetPlacementConstraint
 func (c *MockPlacementConstrainer) GetPlacementConstraint(
-	_ context.Context,
-	resourceKey resModel.ResourceKey,
-) (resModel.ExecutorID, bool, error) {
-	executorID, exists := c.ResourceList[resourceKey]
+	_ context.Context, id resourcemeta.ResourceID,
+) (resourcemeta.ExecutorID, bool, error) {
+	executorID, exists := c.ResourceList[id]
 	if !exists {
-		return "", false, errors.ErrResourceDoesNotExist.GenWithStackByArgs(resourceKey.ID)
+		return "", false, errors.ErrResourceDoesNotExist.GenWithStackByArgs(id)
 	}
 	if executorID == "" {
 		return "", false, nil

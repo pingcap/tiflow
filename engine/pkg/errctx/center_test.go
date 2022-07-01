@@ -31,11 +31,10 @@ func TestErrCenterMultipleErrCtx(t *testing.T) {
 		go func() {
 			defer wg.Done()
 
-			ctx, cancel := center.WithCancelOnFirstError(context.Background())
-			defer cancel()
+			ctx := center.WithCancelOnFirstError(context.Background())
 			<-ctx.Done()
 			require.Error(t, ctx.Err())
-			require.EqualError(t, ctx.Err(), "fake error")
+			require.Regexp(t, ".*fake error.*", ctx.Err())
 		}()
 	}
 
@@ -43,14 +42,12 @@ func TestErrCenterMultipleErrCtx(t *testing.T) {
 	wg.Wait()
 
 	require.Error(t, center.CheckError())
-	require.EqualError(t, center.CheckError(), "fake error")
-	require.Empty(t, center.children)
+	require.Regexp(t, ".*fake error.*", center.CheckError())
 }
 
 func TestErrCenterSingleErrCtx(t *testing.T) {
 	center := NewErrCenter()
-	ctx, cancel := center.WithCancelOnFirstError(context.Background())
-	defer cancel()
+	ctx := center.WithCancelOnFirstError(context.Background())
 
 	var wg sync.WaitGroup
 	for i := 0; i < 10; i++ {
@@ -60,7 +57,7 @@ func TestErrCenterSingleErrCtx(t *testing.T) {
 
 			<-ctx.Done()
 			require.Error(t, ctx.Err())
-			require.EqualError(t, ctx.Err(), "fake error")
+			require.Regexp(t, ".*fake error.*", ctx.Err())
 		}()
 	}
 
@@ -68,14 +65,12 @@ func TestErrCenterSingleErrCtx(t *testing.T) {
 	wg.Wait()
 
 	require.Error(t, center.CheckError())
-	require.EqualError(t, center.CheckError(), "fake error")
-	require.Empty(t, center.children)
+	require.Regexp(t, ".*fake error.*", center.CheckError())
 }
 
 func TestErrCenterRepeatedErrors(t *testing.T) {
 	center := NewErrCenter()
-	ctx, cancel := center.WithCancelOnFirstError(context.Background())
-	defer cancel()
+	ctx := center.WithCancelOnFirstError(context.Background())
 
 	center.OnError(nil) // no-op
 	center.OnError(errors.New("first error"))
@@ -83,49 +78,29 @@ func TestErrCenterRepeatedErrors(t *testing.T) {
 
 	<-ctx.Done()
 	require.Error(t, ctx.Err())
-	require.EqualError(t, ctx.Err(), "first error")
+	require.Regexp(t, ".*first error.*", ctx.Err())
 
 	require.Error(t, center.CheckError())
-	require.EqualError(t, center.CheckError(), "first error")
-	require.Empty(t, center.children)
+	require.Regexp(t, ".*first error.*", center.CheckError())
 }
 
 func TestErrCtxPropagate(t *testing.T) {
 	center := NewErrCenter()
 	parentCtx, cancelParent := context.WithCancel(context.Background())
-	ctx, cancel := center.WithCancelOnFirstError(parentCtx)
-	defer cancel()
+	ctx := center.WithCancelOnFirstError(parentCtx)
 
 	cancelParent()
-	center.OnError(errors.New("fake error"))
 	<-ctx.Done()
 	require.Error(t, ctx.Err())
-	require.EqualError(t, ctx.Err(), "context canceled")
-	require.Empty(t, center.children)
+	require.Regexp(t, ".*context canceled.*", ctx.Err())
 }
 
 func TestErrCtxDoneChSame(t *testing.T) {
 	center := NewErrCenter()
-	ctx, cancel := center.WithCancelOnFirstError(context.Background())
-	cancel()
+	ctx := center.WithCancelOnFirstError(context.Background())
 
 	doneCh1 := ctx.Done()
 	doneCh2 := ctx.Done()
 
 	require.Equal(t, doneCh1, doneCh2)
-}
-
-func TestErrCtxManualCancel(t *testing.T) {
-	center := NewErrCenter()
-	ctx, cancel := center.WithCancelOnFirstError(context.Background())
-	cancel()
-
-	<-ctx.Done()
-	require.Error(t, ctx.Err())
-	require.EqualError(t, ctx.Err(), "context canceled")
-	require.Empty(t, center.children)
-
-	// Multiple cancels should not panic.
-	cancel()
-	cancel()
 }

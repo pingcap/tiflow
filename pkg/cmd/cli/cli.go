@@ -57,15 +57,8 @@ func NewCmdCli() *cobra.Command {
 		Short: "Manage replication task and TiCDC cluster",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			// Here we will initialize the logging configuration and set the current default context.
-			cancel := util.InitCmd(cmd, &logutil.Config{Level: cf.GetLogLevel()})
+			util.InitCmd(cmd, &logutil.Config{Level: cf.GetLogLevel()})
 			util.LogHTTPProxies()
-			// A notify that complete immediately, it skips the second signal essentially.
-			doneNotify := func() <-chan struct{} {
-				done := make(chan struct{})
-				close(done)
-				return done
-			}
-			util.InitSignalHandling(doneNotify, cancel)
 			return nil
 		},
 		Args: cobra.NoArgs,

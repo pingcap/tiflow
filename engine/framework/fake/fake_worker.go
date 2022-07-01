@@ -60,7 +60,6 @@ type (
 		framework.BaseWorker
 
 		init   bool
-		cancel context.CancelFunc
 		closed int32
 		status *dummyWorkerStatus
 		config *WorkerConfig
@@ -78,33 +77,33 @@ type (
 )
 
 type dummyWorkerStatus struct {
-	rwm        sync.RWMutex
+	sync.RWMutex
 	BusinessID int               `json:"business-id"`
 	Tick       int64             `json:"tick"`
 	Checkpoint *workerCheckpoint `json:"checkpoint"`
 }
 
 func (s *dummyWorkerStatus) tick() {
-	s.rwm.Lock()
-	defer s.rwm.Unlock()
+	s.Lock()
+	defer s.Unlock()
 	s.Tick++
 }
 
 func (s *dummyWorkerStatus) getEtcdCheckpoint() workerCheckpoint {
-	s.rwm.RLock()
-	defer s.rwm.RUnlock()
+	s.RLock()
+	defer s.RUnlock()
 	return *s.Checkpoint
 }
 
 func (s *dummyWorkerStatus) setEtcdCheckpoint(ckpt *workerCheckpoint) {
-	s.rwm.Lock()
-	defer s.rwm.Unlock()
+	s.Lock()
+	defer s.Unlock()
 	s.Checkpoint = ckpt
 }
 
 func (s *dummyWorkerStatus) Marshal() ([]byte, error) {
-	s.rwm.RLock()
-	defer s.rwm.RUnlock()
+	s.RLock()
+	defer s.RUnlock()
 	return json.Marshal(s)
 }
 
@@ -112,13 +111,10 @@ func (s *dummyWorkerStatus) Unmarshal(data []byte) error {
 	return json.Unmarshal(data, s)
 }
 
-func (d *dummyWorker) InitImpl(_ context.Context) error {
+func (d *dummyWorker) InitImpl(ctx context.Context) error {
 	if !d.init {
 		if d.config.EtcdWatchEnable {
-			// Don't use the ctx from the caller, because it may be cancelled by the caller after InitImpl() returns.
-			ctx, cancel := context.WithCancel(context.Background())
 			d.bgRunEtcdWatcher(ctx)
-			d.cancel = cancel
 		}
 		d.init = true
 		d.setStatusCode(frameModel.WorkerStatusNormal)
@@ -209,11 +205,7 @@ func (d *dummyWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue)
 }
 
 func (d *dummyWorker) CloseImpl(ctx context.Context) error {
-	if atomic.CompareAndSwapInt32(&d.closed, 0, 1) {
-		if d.cancel != nil {
-			d.cancel()
-		}
-	}
+	atomic.StoreInt32(&d.closed, 1)
 	return nil
 }
 

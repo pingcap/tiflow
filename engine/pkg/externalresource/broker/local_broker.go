@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
-	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
 // LocalBroker is a broker unit-testing other components
@@ -62,7 +61,6 @@ func NewBrokerForTesting(executorID resourcemeta.ExecutorID) *LocalBroker {
 // OpenStorage wraps broker.OpenStorage
 func (b *LocalBroker) OpenStorage(
 	ctx context.Context,
-	projectInfo tenant.ProjectInfo,
 	workerID resourcemeta.WorkerID,
 	jobID resourcemeta.JobID,
 	resourcePath resourcemeta.ResourceID,
@@ -72,13 +70,12 @@ func (b *LocalBroker) OpenStorage(
 
 	st := status.New(codes.NotFound, "resource manager error")
 
-	b.client.On("QueryResource", mock.Anything,
-		&pb.QueryResourceRequest{ResourceKey: &pb.ResourceKey{JobId: jobID, ResourceId: resourcePath}}, mock.Anything).
+	b.client.On("QueryResource", mock.Anything, &pb.QueryResourceRequest{ResourceId: resourcePath}, mock.Anything).
 		Return((*pb.QueryResourceResponse)(nil), st.Err())
 	defer func() {
 		b.client.ExpectedCalls = nil
 	}()
-	h, err := b.DefaultBroker.OpenStorage(ctx, projectInfo, workerID, jobID, resourcePath)
+	h, err := b.DefaultBroker.OpenStorage(ctx, workerID, jobID, resourcePath)
 	if err != nil {
 		return nil, err
 	}

@@ -23,7 +23,7 @@ type SchedulerRequest struct {
 	TenantID string // reserved for future use.
 
 	Cost              ResourceUnit
-	ExternalResources []resourcemeta.ResourceKey
+	ExternalResources []resourcemeta.ResourceID
 }
 
 // SchedulerResponse represents a response to a task scheduling request.

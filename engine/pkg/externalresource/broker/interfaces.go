@@ -19,7 +19,6 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
 // A Broker is created and maintained by the executor
@@ -30,7 +29,6 @@ type Broker interface {
 	// OpenStorage creates a storage Handle for a worker.
 	OpenStorage(
 		ctx context.Context,
-		projectInfo tenant.ProjectInfo,
 		workerID resModel.WorkerID,
 		jobID resModel.JobID,
 		resourcePath resModel.ResourceID,
