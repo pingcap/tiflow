@@ -95,6 +95,7 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api OpenAPI) {
 	ownerGroup := v1.Group("/owner")
 	ownerGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
 	ownerGroup.POST("/resign", api.ResignOwner)
+	ownerGroup.GET("", api.GetOwner)
 
 	// processor API
 	processorGroup := v1.Group("/processors")
@@ -549,6 +550,25 @@ func (h *OpenAPI) ResignOwner(c *gin.Context) {
 	}
 
 	c.Status(http.StatusAccepted)
+}
+
+// GetOwner return the current owner's information to the client
+// @Summary Get owner capture information
+// @Description get the capture information of the owner
+// @Tags owner
+// @Accept json
+// @Produce json
+// @Success 200
+// @Failure 500,400 {object} model.HTTPError
+// @Router	/api/v1/owner [get]
+func (h *OpenAPI) GetOwner(c *gin.Context) {
+	owner, err := h.capture.GetOwnerCaptureInfo(c.Request.Context())
+	if err != nil {
+		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		return
+	}
+
+	c.JSON(http.StatusOK, owner)
 }
 
 // GetProcessor gets the detailed info of a processor
