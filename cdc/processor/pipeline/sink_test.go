@@ -130,7 +130,7 @@ func TestState(t *testing.T) {
 	// test stop at targetTs
 	targetTs := model.Ts(10)
 	node := newSinkNode(1, &mockSink{}, 0, targetTs, &mockFlowController{}, redo.NewDisabledManager(),
-		&state, model.DefaultChangeFeedID("changefeed-id-test-status"), true, false)
+		&state, model.DefaultChangeFeedID("changefeed-id-test-status"), true, true)
 	require.Equal(t, TableStatePrepared, node.State())
 
 	ok, err := node.HandleMessage(ctx, pmessage.BarrierMessage(20))

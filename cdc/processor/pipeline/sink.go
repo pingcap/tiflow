@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sink"
-	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"go.uber.org/zap"
@@ -47,7 +46,6 @@ type sinkNode struct {
 	flowController tableFlowController
 	redoManager    redo.LogManager
 
-	replicaConfig  *config.ReplicaConfig
 	enableOldValue bool
 	splitTxn       bool
 }
@@ -90,10 +88,6 @@ func (n *sinkNode) getResolvedTs() model.ResolvedTs {
 
 func (n *sinkNode) getCheckpointTs() model.ResolvedTs {
 	return n.checkpointTs.Load().(model.ResolvedTs)
-}
-
-func (n *sinkNode) initWithReplicaConfig(replicaConfig *config.ReplicaConfig) {
-	n.replicaConfig = replicaConfig
 }
 
 // stop is called when sink receives a stop command or checkpointTs reaches targetTs.
