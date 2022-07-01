@@ -21,11 +21,11 @@ import (
 
 // OpenAPIV2 provides CDC v2 APIs
 type OpenAPIV2 struct {
-	capture *capture.Capture
+	capture capture.Capture
 }
 
 // NewOpenAPIV2 creates a new OpenAPIV2.
-func NewOpenAPIV2(c *capture.Capture) OpenAPIV2 {
+func NewOpenAPIV2(c capture.Capture) OpenAPIV2 {
 	return OpenAPIV2{capture: c}
 }
 
