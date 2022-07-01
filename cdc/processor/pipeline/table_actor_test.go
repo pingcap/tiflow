@@ -53,7 +53,7 @@ func TestAsyncStopFailed(t *testing.T) {
 		state:       TableStatePreparing,
 	}
 	tbl.sinkNode = newSinkNode(1, &mockSink{}, 0, 0, &mockFlowController{}, tbl.redoManager,
-		&tbl.state, model.DefaultChangeFeedID("changefeed-test"))
+		&tbl.state, model.DefaultChangeFeedID("changefeed-test"), false)
 	require.True(t, tbl.AsyncStop(1))
 
 	mb := actor.NewMailbox[pmessage.Message](actor.ID(1), 0)
@@ -447,6 +447,7 @@ func TestTableActorStart(t *testing.T) {
 			StartTs:     0,
 			MarkTableID: 1,
 		},
+		replicaConfig: config.GetDefaultReplicaConfig(),
 	}
 	require.Nil(t, tbl.start(ctx))
 	require.Equal(t, 1, len(tbl.nodes))
