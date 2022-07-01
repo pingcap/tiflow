@@ -101,7 +101,7 @@ func (c *TableFlowController) Consume(
 	commitTs := msg.CRTs
 	lastCommitTs := atomic.LoadUint64(&c.lastCommitTs)
 	blockingCallBack := func() (err error) {
-		if commitTs != lastCommitTs || c.splitTxn {
+		if commitTs > lastCommitTs || c.splitTxn {
 			// Call `callback` in two condition:
 			// 1. commitTs > lastCommitTs, handle new txn and send a normal resolved ts
 			// 2. commitTs == lastCommitTs && splitTxn = true, split the same txn and
