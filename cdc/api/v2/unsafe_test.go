@@ -37,7 +37,7 @@ func TestWithUpstreamConfig(t *testing.T) {
 			PDEndpoints: "http://127.0.0.1:22379",
 		})
 	cpCtrl := gomock.NewController(t)
-	cp := mock_capture.NewMockInfoForAPI(cpCtrl)
+	cp := mock_capture.NewMockCapture(cpCtrl)
 	hpCtrl := gomock.NewController(t)
 	helpers := NewMockAPIV2Helpers(hpCtrl)
 
@@ -90,7 +90,7 @@ func TestWithUpstreamConfig(t *testing.T) {
 
 	// success
 	upManager = upstream.NewManager4Test(&mockPDClient{})
-	cp = mock_capture.NewMockInfoForAPI(gomock.NewController(t))
+	cp = mock_capture.NewMockCapture(gomock.NewController(t))
 	cp.EXPECT().GetUpstreamManager().Return(upManager).AnyTimes()
 	api = NewOpenAPIV2ForTest(cp, helpers)
 	upstreamConfig = &UpstreamConfig{}
