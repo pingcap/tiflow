@@ -51,23 +51,43 @@ func InitCmd(cmd *cobra.Command, logCfg *logutil.Config) context.CancelFunc {
 	}
 	log.Info("init log", zap.String("file", logCfg.File), zap.String("level", logCfg.Level))
 
-	sc := make(chan os.Signal, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	cmdconetxt.SetDefaultContext(ctx)
+
+	return cancel
+}
+
+// shutdownNotify is a callback to notify caller that TiCDC is about to shutdown.
+// It returns a done channel which receive an empty struct when shutdown is complete.
+// It must be non-blocking.
+type shutdownNotify func() <-chan struct{}
+
+// InitSignalHandling initializes signal handling.
+// It must be called after InitCmd.
+func InitSignalHandling(shutdown shutdownNotify, cancel context.CancelFunc) {
+	// systemd and k8s send signals twice. The first is for graceful shutdown,
+	// and the second is for force shutdown.
+	// We use 2 for channel length to ease testing.
+	signalChanLen := 2
+	sc := make(chan os.Signal, signalChanLen)
 	signal.Notify(sc,
 		syscall.SIGHUP,
 		syscall.SIGINT,
 		syscall.SIGTERM,
 		syscall.SIGQUIT)
 
-	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		sig := <-sc
-		log.Info("got signal to exit", zap.Stringer("signal", sig))
+		log.Info("got signal, prepare to shutdown", zap.Stringer("signal", sig))
+		done := shutdown()
+		select {
+		case <-done:
+			log.Info("shutdown complete")
+		case sig = <-sc:
+			log.Info("got signal, force shutdown", zap.Stringer("signal", sig))
+		}
 		cancel()
 	}()
-
-	cmdconetxt.SetDefaultContext(ctx)
-
-	return cancel
 }
 
 // LogHTTPProxies logs HTTP proxy relative environment variables.

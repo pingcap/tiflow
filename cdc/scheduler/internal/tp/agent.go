@@ -48,8 +48,10 @@ type agent struct {
 	changeFeedID model.ChangeFeedID
 	epoch        schedulepb.ProcessorEpoch
 
-	// the capture is stopping, should reject all add table request
-	stopping bool
+	// Liveness of the capture.
+	//
+	// CaptureLivenessShuttingDown rejects all add table requests.
+	liveness model.Liveness
 }
 
 type ownerInfo struct {
@@ -135,15 +137,17 @@ func NewAgent(ctx context.Context,
 }
 
 // Tick implement agent interface
-func (a *agent) Tick(ctx context.Context) error {
+func (a *agent) Tick(ctx context.Context, liveness model.Liveness) error {
 	inboundMessages, err := a.recvMsgs(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
+	a.handleLivenessUpdate(liveness, livenessSourceTick)
+
 	outboundMessages := a.handleMessage(inboundMessages)
 
-	responses, err := a.tableM.poll(ctx, a.stopping)
+	responses, err := a.tableM.poll(ctx, a.liveness)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -155,6 +159,25 @@ func (a *agent) Tick(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+const (
+	livenessSourceTick      = "tick"
+	livenessSourceHeartbeat = "heartbeat"
+)
+
+func (a *agent) handleLivenessUpdate(liveness model.Liveness, source string) {
+	if a.liveness != liveness {
+		if a.liveness == model.LivenessCaptureStopping {
+			// No way to go back, once it becomes shutting down,
+			return
+		}
+		log.Info("tpscheduler: agent liveness changed",
+			zap.String("old", a.liveness.String()),
+			zap.String("new", liveness.String()),
+			zap.String("source", source))
+		a.liveness = liveness
+	}
 }
 
 func (a *agent) handleMessage(msg []*schedulepb.Message) []*schedulepb.Message {
@@ -204,10 +227,12 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) *schedulep
 		}
 	}
 
-	a.stopping = a.stopping || request.GetIsStopping()
+	if request.IsStopping {
+		a.handleLivenessUpdate(model.LivenessCaptureStopping, livenessSourceHeartbeat)
+	}
 	response := &schedulepb.HeartbeatResponse{
-		Tables:     result,
-		IsStopping: a.stopping,
+		Tables:   result,
+		Liveness: a.liveness,
 	}
 
 	message := &schedulepb.Message{
@@ -263,8 +288,8 @@ func (a *agent) handleMessageDispatchTableRequest(
 	// this should be guaranteed by the caller of this method.
 	switch req := request.Request.(type) {
 	case *schedulepb.DispatchTableRequest_AddTable:
-		if a.stopping {
-			log.Info("tpscheduler: agent is stopping, and decline handle add table request",
+		if a.liveness != model.LivenessCaptureAlive {
+			log.Info("tpscheduler: agent is stopping, and reject handle add table request",
 				zap.String("capture", a.captureID),
 				zap.String("namespace", a.changeFeedID.Namespace),
 				zap.String("changefeed", a.changeFeedID.ID),

@@ -5,6 +5,7 @@ package enginepb;
 import "error.proto";
 import "metastore.proto";
 import "projects.proto";
+import "resources.proto";
 
 // I'm trying to phase out the communication protocal.
 // - system level
@@ -150,7 +151,7 @@ message RegisterExecutorResponse {
 message ScheduleTaskRequest {
     string task_id = 1;
     int64 cost = 2;
-    repeated string resource_requirements = 3;
+    repeated ResourceKey resource_requirements = 3;
 }
 
 message ScheduleTaskResponse {
