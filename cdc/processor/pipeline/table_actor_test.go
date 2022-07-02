@@ -91,12 +91,15 @@ func TestTableActorInterface(t *testing.T) {
 	require.Equal(t, model.Ts(3), tbl.CheckpointTs())
 
 	require.Equal(t, model.Ts(5), tbl.ResolvedTs())
-	tbl.replicaConfig.Consistent.Level = string(redo.ConsistentLevelEventual)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	tbl.redoManager, _ = redo.NewMockManager(ctx)
-	sink.resolvedTs.Store(model.NewResolvedTs(6))
-	require.Equal(t, model.Ts(6), tbl.ResolvedTs())
+	tbl.redoManager.AddTable(tbl.tableID, 0)
+	require.Equal(t, model.Ts(0), tbl.ResolvedTs())
+	tbl.redoManager.UpdateResolvedTs(ctx, tbl.tableID, model.Ts(6))
+	require.Eventually(t, func() bool { return tbl.ResolvedTs() == model.Ts(6) },
+		time.Second*5, time.Millisecond*500)
+	tbl.redoManager.Cleanup(ctx)
 }
 
 func TestTableActorCancel(t *testing.T) {

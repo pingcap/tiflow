@@ -15,6 +15,7 @@ package pipeline
 
 import (
 	"context"
+	"math/rand"
 	"sync"
 	"testing"
 	"time"
@@ -136,7 +137,8 @@ func TestStatus(t *testing.T) {
 	})
 
 	// test stop at targetTs
-	node := newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{}, false, redo.NewDisabledManager())
+	targetTs := model.Ts(10)
+	node := newSinkNode(1, &mockSink{}, 0, targetTs, &mockFlowController{}, true, redo.NewDisabledManager())
 	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil)))
 	require.Equal(t, TableStatusInitializing, node.Status())
 
@@ -166,14 +168,31 @@ func TestStatus(t *testing.T) {
 	require.Nil(t, node.Receive(pipeline.MockNodeContext4Test(ctx, msg, nil)))
 	require.Equal(t, TableStatusRunning, node.Status())
 
+	batchResolved := model.ResolvedTs{
+		Mode:    model.BatchResolvedMode,
+		Ts:      targetTs,
+		BatchID: rand.Uint64() % 10,
+	}
+	msg = pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
+		CRTs:     targetTs,
+		Resolved: &batchResolved,
+		RawKV:    &model.RawKVEntry{OpType: model.OpTypeResolved},
+		Row:      &model.RowChangedEvent{},
+	})
+	ok, err := node.HandleMessage(ctx, msg)
+	require.Nil(t, err)
+	require.True(t, ok)
+	require.Equal(t, batchResolved, node.getResolvedTs())
+	require.Equal(t, batchResolved, node.getCheckpointTs())
+
 	msg = pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 		CRTs: 15, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved},
 		Row: &model.RowChangedEvent{},
 	})
-	err := node.Receive(pipeline.MockNodeContext4Test(ctx, msg, nil))
+	err = node.Receive(pipeline.MockNodeContext4Test(ctx, msg, nil))
 	require.True(t, cerrors.ErrTableProcessorStoppedSafely.Equal(err))
 	require.Equal(t, TableStatusStopped, node.Status())
-	require.Equal(t, uint64(10), node.CheckpointTs())
+	require.Equal(t, targetTs, node.CheckpointTs())
 
 	// test the stop at ts command
 	node = newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{}, false, redo.NewDisabledManager())

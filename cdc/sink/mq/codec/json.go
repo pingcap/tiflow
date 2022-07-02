@@ -205,12 +205,12 @@ func formatColumnVal(c column) column {
 
 type mqMessageKey struct {
 	// TODO: should we rename it to CRTs
-	Ts        uint64              `json:"ts"`
-	Schema    string              `json:"scm,omitempty"`
-	Table     string              `json:"tbl,omitempty"`
-	RowID     int64               `json:"rid,omitempty"`
-	Partition *int64              `json:"ptn,omitempty"`
-	Type      model.MqMessageType `json:"t"`
+	Ts        uint64            `json:"ts"`
+	Schema    string            `json:"scm,omitempty"`
+	Table     string            `json:"tbl,omitempty"`
+	RowID     int64             `json:"rid,omitempty"`
+	Partition *int64            `json:"ptn,omitempty"`
+	Type      model.MessageType `json:"t"`
 }
 
 func (m *mqMessageKey) Encode() ([]byte, error) {
@@ -269,7 +269,7 @@ func (m *mqMessageDDL) Decode(data []byte) error {
 func newResolvedMessage(ts uint64) *mqMessageKey {
 	return &mqMessageKey{
 		Ts:   ts,
-		Type: model.MqMessageTypeResolved,
+		Type: model.MessageTypeResolved,
 	}
 }
 
@@ -284,7 +284,7 @@ func rowEventToMqMessage(e *model.RowChangedEvent) (*mqMessageKey, *mqMessageRow
 		Table:     e.Table.Table,
 		RowID:     e.RowID,
 		Partition: partition,
-		Type:      model.MqMessageTypeRow,
+		Type:      model.MessageTypeRow,
 	}
 	value := &mqMessageRow{}
 	if e.IsDelete() {
@@ -356,7 +356,7 @@ func ddlEventtoMqMessage(e *model.DDLEvent) (*mqMessageKey, *mqMessageDDL) {
 		Ts:     e.CommitTs,
 		Schema: e.TableInfo.Schema,
 		Table:  e.TableInfo.Table,
-		Type:   model.MqMessageTypeDDL,
+		Type:   model.MessageTypeDDL,
 	}
 	value := &mqMessageDDL{
 		Query: e.Query,
@@ -461,7 +461,7 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(
 		versionHead := make([]byte, 8)
 		binary.BigEndian.PutUint64(versionHead, BatchVersion1)
 
-		d.messageBuf = append(d.messageBuf, NewMQMessage(config.ProtocolOpen, versionHead, nil, 0, model.MqMessageTypeRow, nil, nil))
+		d.messageBuf = append(d.messageBuf, NewMQMessage(config.ProtocolOpen, versionHead, nil, 0, model.MessageTypeRow, nil, nil))
 		d.curBatchSize = 0
 	}
 
@@ -554,7 +554,7 @@ type JSONEventBatchMixedDecoder struct {
 }
 
 // HasNext implements the EventBatchDecoder interface
-func (b *JSONEventBatchMixedDecoder) HasNext() (model.MqMessageType, bool, error) {
+func (b *JSONEventBatchMixedDecoder) HasNext() (model.MessageType, bool, error) {
 	if !b.hasNext() {
 		return 0, false, nil
 	}
@@ -572,7 +572,7 @@ func (b *JSONEventBatchMixedDecoder) NextResolvedEvent() (uint64, error) {
 		}
 	}
 	b.mixedBytes = b.mixedBytes[b.nextKeyLen+8:]
-	if b.nextKey.Type != model.MqMessageTypeResolved {
+	if b.nextKey.Type != model.MessageTypeResolved {
 		return 0, cerror.ErrJSONCodecInvalidData.GenWithStack("not found resolved event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.mixedBytes[:8])
@@ -590,7 +590,7 @@ func (b *JSONEventBatchMixedDecoder) NextRowChangedEvent() (*model.RowChangedEve
 		}
 	}
 	b.mixedBytes = b.mixedBytes[b.nextKeyLen+8:]
-	if b.nextKey.Type != model.MqMessageTypeRow {
+	if b.nextKey.Type != model.MessageTypeRow {
 		return nil, cerror.ErrJSONCodecInvalidData.GenWithStack("not found row event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.mixedBytes[:8])
@@ -613,7 +613,7 @@ func (b *JSONEventBatchMixedDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 		}
 	}
 	b.mixedBytes = b.mixedBytes[b.nextKeyLen+8:]
-	if b.nextKey.Type != model.MqMessageTypeDDL {
+	if b.nextKey.Type != model.MessageTypeDDL {
 		return nil, cerror.ErrJSONCodecInvalidData.GenWithStack("not found ddl event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.mixedBytes[:8])
@@ -655,7 +655,7 @@ type JSONEventBatchDecoder struct {
 }
 
 // HasNext implements the EventBatchDecoder interface
-func (b *JSONEventBatchDecoder) HasNext() (model.MqMessageType, bool, error) {
+func (b *JSONEventBatchDecoder) HasNext() (model.MessageType, bool, error) {
 	if !b.hasNext() {
 		return 0, false, nil
 	}
@@ -673,7 +673,7 @@ func (b *JSONEventBatchDecoder) NextResolvedEvent() (uint64, error) {
 		}
 	}
 	b.keyBytes = b.keyBytes[b.nextKeyLen+8:]
-	if b.nextKey.Type != model.MqMessageTypeResolved {
+	if b.nextKey.Type != model.MessageTypeResolved {
 		return 0, cerror.ErrJSONCodecInvalidData.GenWithStack("not found resolved event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
@@ -691,7 +691,7 @@ func (b *JSONEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, e
 		}
 	}
 	b.keyBytes = b.keyBytes[b.nextKeyLen+8:]
-	if b.nextKey.Type != model.MqMessageTypeRow {
+	if b.nextKey.Type != model.MessageTypeRow {
 		return nil, cerror.ErrJSONCodecInvalidData.GenWithStack("not found row event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
@@ -714,7 +714,7 @@ func (b *JSONEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 		}
 	}
 	b.keyBytes = b.keyBytes[b.nextKeyLen+8:]
-	if b.nextKey.Type != model.MqMessageTypeDDL {
+	if b.nextKey.Type != model.MessageTypeDDL {
 		return nil, cerror.ErrJSONCodecInvalidData.GenWithStack("not found ddl event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])

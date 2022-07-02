@@ -793,6 +793,10 @@ func (p *processor) createTablePipelineImpl(
 		return nil
 	})
 
+	if p.redoManager.Enabled() {
+		p.redoManager.AddTable(tableID, replicaInfo.StartTs)
+	}
+
 	tableName, err := p.getTableName(ctx, tableID, replicaInfo)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -830,10 +834,6 @@ func (p *processor) createTablePipelineImpl(
 			p.upStream,
 			p.redoManager,
 		)
-	}
-
-	if p.redoManager.Enabled() {
-		p.redoManager.AddTable(tableID, replicaInfo.StartTs)
 	}
 
 	log.Info("Add table pipeline", zap.Int64("tableID", tableID),

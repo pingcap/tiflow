@@ -437,7 +437,7 @@ func (t *tableActor) ResolvedTs() model.Ts {
 	// another replication barrier for consistent replication instead of reusing
 	// the global resolved-ts.
 	if t.redoManager.Enabled() {
-		return t.sinkNode.ResolvedTs()
+		return t.redoManager.GetResolvedTs(t.tableID)
 	}
 	return t.sortNode.ResolvedTs()
 }

@@ -163,17 +163,20 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 		}
 	}()
 
-	currentBarrierTs := atomic.LoadUint64(&n.barrierTs)
 	if resolved.Ts > n.targetTs {
 		resolved = model.NewResolvedTs(n.targetTs)
 	}
 
+	currentBarrierTs := atomic.LoadUint64(&n.barrierTs)
 	if n.redoManager != nil && n.redoManager.Enabled() {
 		// redo log do not support batch resolve mode, hence we
 		// use `ResolvedMark` to restore a normal resolved ts
 		resolved = model.NewResolvedTs(resolved.ResolvedMark())
-		err = n.redoManager.FlushLog(ctx, n.tableID, resolved.Ts)
+		err = n.redoManager.UpdateResolvedTs(ctx, n.tableID, resolved.Ts)
 
+		// fail fast check, the happens before relationship is:
+		// 1. sorter resolvedTs >= sink resolvedTs >= table redoTs == tableActor resolvedTs
+		// 2. tableActor resolvedTs >= processor resolvedTs >= global resolvedTs >= barrierTs
 		redoTs := n.redoManager.GetMinResolvedTs()
 		if redoTs < currentBarrierTs {
 			log.Debug("redoTs should not less than current barrierTs",
@@ -182,7 +185,7 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 				zap.Uint64("barrierTs", currentBarrierTs))
 		}
 
-		// Fixme(CharlesCheung): remove this check after refactoring redoManager
+		// TODO: remove this check after SchedulerV3 become the first choice.
 		if resolved.Ts > redoTs {
 			resolved = model.NewResolvedTs(redoTs)
 		}
