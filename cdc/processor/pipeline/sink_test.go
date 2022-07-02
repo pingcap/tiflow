@@ -141,7 +141,7 @@ func TestState(t *testing.T) {
 	// test stop at targetTs
 	targetTs := model.Ts(10)
 	node := newSinkNode(1, &mockSink{}, 0, targetTs, &mockFlowController{}, redo.NewDisabledManager(),
-		&state, ctx.ChangefeedVars().ID, false)
+		&state, ctx.ChangefeedVars().ID, true)
 	node.initWithReplicaConfig(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil).
 		ChangefeedVars().Info.Config)
 	require.Equal(t, TableStatePrepared, node.State())
