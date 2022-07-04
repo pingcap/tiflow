@@ -52,7 +52,7 @@ const (
   "consistent": {
     "level": "none",
     "max-log-size": 64,
-    "flush-interval": 1000,
+    "flush-interval": 2000,
     "storage": ""
   }
 }`
@@ -172,7 +172,7 @@ const (
   "consistent": {
     "level": "none",
     "max-log-size": 64,
-    "flush-interval": 1000,
+    "flush-interval": 2000,
     "storage": ""
   }
 }`
@@ -209,7 +209,7 @@ const (
   "consistent": {
     "level": "none",
     "max-log-size": 64,
-    "flush-interval": 1000,
+    "flush-interval": 2000,
     "storage": ""
   }
 }`
