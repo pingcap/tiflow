@@ -288,8 +288,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		t.redoManager.Enabled(), splitTxn)
 	sorterNode := newSorterNode(t.tableName, t.tableID,
 		t.replicaInfo.StartTs, flowController,
-		t.mounter, t.replicaConfig, &t.state, t.changefeedID,
-	)
+		t.mounter, &t.state, t.changefeedID, t.redoManager.Enabled())
 	t.sortNode = sorterNode
 	sortActorNodeContext := newContext(sdtTableContext, t.tableName,
 		t.globalVars.TableActorSystem.Router(),
@@ -302,7 +301,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		return err
 	}
 
-	pullerNode := newPullerNode(t.tableID, t.replicaInfo, t.tableName, t.changefeedVars.ID)
+	pullerNode := newPullerNode(t.tableID, t.replicaInfo.StartTs, t.tableName, t.changefeedVars.ID)
 	pullerActorNodeContext := newContext(sdtTableContext,
 		t.tableName,
 		t.globalVars.TableActorSystem.Router(),
@@ -320,9 +319,8 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	}
 
 	actorSinkNode := newSinkNode(t.tableID, t.tableSink,
-		t.replicaInfo.StartTs,
-		t.targetTs, flowController, t.redoManager, &t.state, t.changefeedID, splitTxn)
-	actorSinkNode.initWithReplicaConfig(t.replicaConfig)
+		t.replicaInfo.StartTs, t.targetTs, flowController, t.redoManager,
+		&t.state, t.changefeedID, t.replicaConfig.EnableOldValue, splitTxn)
 	t.sinkNode = actorSinkNode
 
 	// construct sink actor node, it gets message from sortNode
