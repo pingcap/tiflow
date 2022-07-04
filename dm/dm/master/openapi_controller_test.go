@@ -457,14 +457,14 @@ func (s *OpenAPIControllerSuite) TestTaskControllerWithInvalidTask() {
 
 	// create an invalid task
 	task, err := fixtures.GenNoShardErrNameOpenAPITaskForTest()
-	s.Nil(err)
+	s.NoError(err)
 
 	// create source for task
 	{
 		// add a mock worker
 		worker1Name := "worker1"
 		worker1Addr := "172.16.10.72:8262"
-		s.Nil(server.scheduler.AddWorker(worker1Name, worker1Addr))
+		s.NoError(server.scheduler.AddWorker(worker1Name, worker1Addr))
 		worker1 := server.scheduler.GetWorkerByName(worker1Name)
 		worker1.ToFree()
 
@@ -499,10 +499,10 @@ func (s *OpenAPIControllerSuite) TestTaskControllerWithInvalidTask() {
 		server.scheduler.SetWorkerClientForTest(worker1Name, newMockRPCClient(mockWorkerClient))
 
 		_, err := server.createSource(ctx, openapi.CreateSourceRequest{Source: *s.testSource, WorkerName: &worker1Name})
-		s.Nil(err)
+		s.NoError(err)
 		s.Equal(worker1.Stage(), scheduler.WorkerBound)
 		sourceList, err := server.listSource(ctx, openapi.DMAPIGetSourceListParams{})
-		s.Nil(err)
+		s.NoError(err)
 		s.Len(sourceList, 1)
 	}
 
@@ -510,7 +510,7 @@ func (s *OpenAPIControllerSuite) TestTaskControllerWithInvalidTask() {
 	{
 		createTaskReq := openapi.CreateTaskRequest{Task: task}
 		res, err := server.createTask(ctx, createTaskReq)
-		s.Nil(err)
+		s.NoError(err)
 		s.EqualValues(task, res.Task)
 	}
 
@@ -518,8 +518,8 @@ func (s *OpenAPIControllerSuite) TestTaskControllerWithInvalidTask() {
 	{
 		// start success
 		req := openapi.StartTaskRequest{}
-		s.Nil(server.enableSource(ctx, s.testSource.SourceName))
-		s.Nil(server.startTask(ctx, task.Name, req))
+		s.NoError(server.enableSource(ctx, s.testSource.SourceName))
+		s.NoError(server.startTask(ctx, task.Name, req))
 		s.Equal(server.scheduler.GetExpectSubTaskStage(task.Name, s.testSource.SourceName).Expect, pb.Stage_Running)
 
 		// get status
@@ -529,19 +529,19 @@ func (s *OpenAPIControllerSuite) TestTaskControllerWithInvalidTask() {
 			s.NoError(err)
 			s.Len(statusList, 1)
 			s.NotNil(statusList[0].ErrorMsg)
-			s.Contains(*statusList[0].ErrorMsg, "code=10006") // database error, will return an error message
+			s.Contains(*statusList[0].ErrorMsg, "Errno 1059: ") // database error, will return an error message
 		}
 
 		// stop success
-		s.Nil(server.stopTask(ctx, task.Name, openapi.StopTaskRequest{}))
+		s.NoError(server.stopTask(ctx, task.Name, openapi.StopTaskRequest{}))
 		s.Equal(server.scheduler.GetExpectSubTaskStage(task.Name, s.testSource.SourceName).Expect, pb.Stage_Stopped)
 	}
 
 	// delete
 	{
-		s.Nil(server.deleteTask(ctx, task.Name, true)) // delete with fore
+		s.NoError(server.deleteTask(ctx, task.Name, true)) // delete with fore
 		taskList, err := server.listTask(ctx, openapi.DMAPIGetTaskListParams{})
-		s.Nil(err)
+		s.NoError(err)
 		s.Len(taskList, 0)
 	}
 }
