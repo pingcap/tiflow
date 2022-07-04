@@ -205,11 +205,7 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) []*schedulepb.Message {
 			response := a.handleMessageHeartbeat(message.GetHeartbeat())
 			result = append(result, response)
 		case schedulepb.MsgDispatchTableRequest:
-			response := a.handleMessageDispatchTableRequest(
-				message.DispatchTableRequest, processorEpoch)
-			if response != nil {
-				result = append(result, response)
-			}
+			a.handleMessageDispatchTableRequest(message.DispatchTableRequest, processorEpoch)
 		default:
 			log.Warn("tpscheduler: unknown message received",
 				zap.String("capture", a.CaptureID),
@@ -279,7 +275,7 @@ type dispatchTableTask struct {
 func (a *agent) handleMessageDispatchTableRequest(
 	request *schedulepb.DispatchTableRequest,
 	epoch schedulepb.ProcessorEpoch,
-) *schedulepb.Message {
+) {
 	if a.Epoch != epoch {
 		log.Info("tpscheduler: agent receive dispatch table request "+
 			"epoch does not match, ignore it",
@@ -288,7 +284,7 @@ func (a *agent) handleMessageDispatchTableRequest(
 			zap.String("changefeed", a.ChangeFeedID.ID),
 			zap.String("epoch", epoch.Epoch),
 			zap.String("expected", a.Epoch.Epoch))
-		return nil
+		return
 	}
 	var (
 		table *table
@@ -320,7 +316,7 @@ func (a *agent) handleMessageDispatchTableRequest(
 				zap.String("namespace", a.ChangeFeedID.Namespace),
 				zap.String("changefeed", a.ChangeFeedID.ID),
 				zap.Any("request", request))
-			return nil
+			return
 		}
 		task = &dispatchTableTask{
 			TableID:  tableID,
@@ -334,10 +330,9 @@ func (a *agent) handleMessageDispatchTableRequest(
 			zap.String("namespace", a.ChangeFeedID.Namespace),
 			zap.String("changefeed", a.ChangeFeedID.ID),
 			zap.Any("request", request))
-		return nil
+		return
 	}
 	table.injectDispatchTableTask(task)
-	return nil
 }
 
 // GetLastSentCheckpointTs implement agent interface
