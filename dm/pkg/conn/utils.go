@@ -57,7 +57,8 @@ func GetGlobalVariable(ctx *tcontext.Context, db *BaseDB, variable string) (valu
 	if err != nil {
 		return "", terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 	}
-	defer conn.close()
+	// nolint:errcheck
+	defer db.CloseBaseConn(conn)
 	return getVariable(ctx, conn, variable, true)
 }
 
