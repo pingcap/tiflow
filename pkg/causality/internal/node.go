@@ -47,7 +47,9 @@ var (
 type Node struct {
 	id int64 // immutable
 
-	mu             sync.Mutex
+	mu sync.Mutex
+	// conflictCounts stores counts of nodes that the current node depend on,
+	// grouped by the worker ID they are assigned to.
 	conflictCounts map[workerID]int
 
 	// dependers is an ordered set for all nodes that
