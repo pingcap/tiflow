@@ -28,7 +28,11 @@ type balanceScheduler struct {
 	random               *rand.Rand
 	lastRebalanceTime    time.Time
 	checkBalanceInterval time.Duration
-	// keepBalance if the last time schedule tasks is not empty.
+	// keepBalance keeps the scheduler produces schedule tasks regardless of
+	// `checkBalanceInterval`.
+	// It is set to true when the last time `Schedule` produces some tasks,
+	// and it is likely there are more tasks will be produced in the next
+	// `Schedule`.
 	// It speeds up rebalance.
 	keepBalance bool
 
