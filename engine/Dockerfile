@@ -17,7 +17,6 @@ RUN make engine
 
 FROM alpine:3.16
 
-COPY --from=builder /dataflow-engine/bin/df-master /df-master
-COPY --from=builder /dataflow-engine/bin/df-executor /df-executor
+COPY --from=builder /dataflow-engine/bin/tiflow /tiflow
 COPY --from=builder /dataflow-engine/bin/df-master-client /df-master-client
 COPY --from=builder /dataflow-engine/bin/df-demoserver /df-demoserver
