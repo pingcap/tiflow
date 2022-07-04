@@ -38,6 +38,7 @@ func NewSQLDB(driver string, dsn string, dbConf *DBConfig) (*sql.DB, error) {
 }
 
 // GetSQLStrictMode return SQL strict mode for metastore
+// Use strict mode to avoid unexpected silent processing of meta data
 func GetSQLStrictMode() string {
 	needEnable := []string{
 		"STRICT_TRANS_TABLES",
