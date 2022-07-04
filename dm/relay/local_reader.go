@@ -196,13 +196,13 @@ func (r *BinlogReader) getPosByGTID(gset mysql.GTIDSet) (*mysql.Position, error)
 				return nil, err
 			}
 			if contain {
-				fileName, err := binlog.ParseFilename(file)
+				fileName, err := utils.ParseFilename(file)
 				if err != nil {
 					return nil, err
 				}
 				// Start at the beginning of the file
 				return &mysql.Position{
-					Name: binlog.ConstructFilenameWithUUIDSuffix(fileName, utils.SuffixIntToStr(suffix)),
+					Name: utils.ConstructFilenameWithUUIDSuffix(fileName, utils.SuffixIntToStr(suffix)),
 					Pos:  binlog.FileHeaderLen,
 				}, nil
 			}
@@ -525,9 +525,9 @@ func (r *BinlogReader) parseFile(
 			state.latestPos = int64(e.Header.LogPos)
 		case *replication.RotateEvent:
 			// add master UUID suffix to pos.Name
-			parsed, _ := binlog.ParseFilename(string(ev.NextLogName))
+			parsed, _ := utils.ParseFilename(string(ev.NextLogName))
 			uuidSuffix := utils.SuffixIntToStr(suffixInt) // current UUID's suffix, which will be added to binlog name
-			nameWithSuffix := binlog.ConstructFilenameWithUUIDSuffix(parsed, uuidSuffix)
+			nameWithSuffix := utils.ConstructFilenameWithUUIDSuffix(parsed, uuidSuffix)
 			ev.NextLogName = []byte(nameWithSuffix)
 
 			if e.Header.Timestamp != 0 && e.Header.LogPos != 0 {
