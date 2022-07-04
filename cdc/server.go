@@ -119,7 +119,6 @@ func (s *Server) Run(ctx context.Context) error {
 		LogConfig:   &logConfig,
 		DialTimeout: 5 * time.Second,
 		DialOptions: []grpc.DialOption{
-			grpcTLSOption,
 			grpc.WithBlock(),
 			grpc.WithConnectParams(grpc.ConnectParams{
 				Backoff: backoff.Config{

@@ -97,8 +97,22 @@ function sql_test() {
 	cleanup_process $CDC_BINARY
 }
 
+function region_label_test() {
+	i=0
+	while [ -z "$(curl -X GET http://127.0.0.1:2379/pd/api/v1/config/region-label/rules 2>/dev/null | grep 'meta')" ]; do
+		i=$((i + 1))
+		if [ "$i" -gt 5 ]; then
+			echo 'Failed to verify meta region labels'
+			exit 1
+		fi
+		sleep 1
+	done
+	echo 'succeed to verify meta placement rules'
+}
+
 trap stop_tidb_cluster EXIT
 prepare $*
+region_label_test $*
 sql_test $*
 check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

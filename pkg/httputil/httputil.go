@@ -14,8 +14,11 @@
 package httputil
 
 import (
+	"context"
+	"io"
 	"net/http"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/pkg/security"
 )
 
@@ -42,4 +45,35 @@ func NewClient(credential *security.Credential) (*Client, error) {
 	return &Client{
 		Client: http.Client{Transport: transport},
 	}, nil
+}
+
+// DoRequest sends an request and returns an HTTP response content.
+func (c *Client) DoRequest(
+	ctx context.Context, url, method string, headers http.Header, body io.Reader,
+) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	for key, values := range headers {
+		for _, v := range values {
+			req.Header.Add(key, v)
+		}
+	}
+
+	resp, err := c.Do(req)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	defer resp.Body.Close()
+
+	content, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Errorf("[%d] %s", resp.StatusCode, content)
+	}
+	return content, nil
 }

@@ -34,7 +34,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
-	"github.com/pingcap/tiflow/pkg/pdtime"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/version"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -60,7 +60,7 @@ type Capture struct {
 	kvStorage    tidbkv.Storage
 	etcdClient   *etcd.CDCEtcdClient
 	grpcPool     kv.GrpcPool
-	TimeAcquirer pdtime.TimeAcquirer
+	TimeAcquirer pdutil.TimeAcquirer
 
 	cancel context.CancelFunc
 
@@ -88,9 +88,17 @@ func NewCapture4Test() *Capture {
 }
 
 func (c *Capture) reset(ctx context.Context) error {
+	conf := config.GetGlobalServerConfig()
+	sess, err := concurrency.NewSession(c.etcdClient.Client.Unwrap(),
+		concurrency.WithTTL(conf.CaptureSessionTTL))
+	if err != nil {
+		return errors.Annotate(
+			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
+			"create capture session")
+	}
+
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
-	conf := config.GetGlobalServerConfig()
 	c.info = &model.CaptureInfo{
 		ID:            uuid.New().String(),
 		AdvertiseAddr: conf.AdvertiseAddr,
@@ -101,18 +109,14 @@ func (c *Capture) reset(ctx context.Context) error {
 		// It can't be handled even after it fails, so we ignore it.
 		_ = c.session.Close()
 	}
-	sess, err := concurrency.NewSession(c.etcdClient.Client.Unwrap(),
-		concurrency.WithTTL(conf.CaptureSessionTTL))
-	if err != nil {
-		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
-	}
+
 	c.session = sess
 	c.election = concurrency.NewElection(sess, etcd.CaptureOwnerKey)
 
 	if c.TimeAcquirer != nil {
 		c.TimeAcquirer.Stop()
 	}
-	c.TimeAcquirer = pdtime.NewTimeAcquirer(c.pdClient)
+	c.TimeAcquirer = pdutil.NewTimeAcquirer(c.pdClient)
 
 	if c.grpcPool != nil {
 		c.grpcPool.Close()
@@ -263,6 +267,14 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 			log.Warn("campaign owner failed", zap.Error(err))
 			// if campaign owner failed, restart capture
 			return cerror.ErrCaptureSuicide.GenWithStackByArgs()
+		}
+
+		// Update meta-region label to ensure that meta region isolated from data regions.
+		err = pdutil.UpdateMetaLabel(ctx, c.pdClient)
+		if err != nil {
+			log.Warn("Fail to verify region label rule",
+				zap.Error(err),
+				zap.String("captureID", c.info.ID))
 		}
 
 		log.Info("campaign owner successfully", zap.String("capture-id", c.info.ID))
