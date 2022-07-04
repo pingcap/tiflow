@@ -75,6 +75,7 @@ func NewManager4Test(pdClient pd.Client) *Manager {
 		ups: new(sync.Map), ctx: context.Background(),
 		gcServiceID:     etcd.GcServiceIDForTest(),
 		defaultUpstream: up,
+		cancel:          func() {},
 	}
 	up.isDefaultUpstream = true
 	res.ups.Store(testUpstreamID, up)
@@ -92,6 +93,7 @@ func (m *Manager) AddDefaultUpstream(pdEndpoints []string,
 	up.isDefaultUpstream = true
 	m.defaultUpstream = up
 	m.ups.Store(up.ID, up)
+	log.Info("default upstream is added", zap.Uint64("id", up.ID))
 	return up, nil
 }
 
@@ -127,6 +129,7 @@ func (m *Manager) add(upstreamID uint64,
 		up.err.Store(err)
 	}()
 	up.resetIdleTime()
+	log.Info("new upstream is added", zap.Uint64("id", up.ID))
 	return up
 }
 
@@ -160,6 +163,7 @@ func (m *Manager) Close() {
 	m.cancel()
 	m.ups.Range(func(k, v interface{}) bool {
 		v.(*Upstream).Close()
+		m.ups.Delete(k)
 		return true
 	})
 }
@@ -196,7 +200,7 @@ func (m *Manager) Tick(ctx context.Context,
 		}
 		// remove failed upstream
 		if up.Error() != nil {
-			log.Warn("upstream init failed, remove from upstream",
+			log.Warn("upstream init failed, remove it from manager",
 				zap.Uint64("id", up.ID),
 				zap.Error(up.Error()))
 			go up.Close()
@@ -209,11 +213,12 @@ func (m *Manager) Tick(ctx context.Context,
 		}
 
 		up.trySetIdleTime()
+		log.Info("no active changefeed found, try to close upstream",
+			zap.Uint64("id", up.ID))
 		if up.shouldClose() {
+			log.Info("upstream should be closed ,remove it from manager",
+				zap.Uint64("id", up.ID))
 			go up.Close()
-		}
-
-		if up.IsClosed() {
 			m.ups.Delete(id)
 		}
 		return true

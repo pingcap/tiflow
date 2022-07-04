@@ -113,16 +113,15 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	// fill replicaConfig
 	replicaCfg := cfg.ReplicaConfig.ToInternalReplicaConfig()
 	// verify replicaConfig
-	err = replicaCfg.Validate()
+	sinkURIParsed, err := url.Parse(cfg.SinkURI)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+	}
+	err = replicaCfg.ValidateAndAdjust(sinkURIParsed)
 	if err != nil {
 		return nil, err
 	}
 	if !replicaCfg.EnableOldValue {
-		sinkURIParsed, err := url.Parse(cfg.SinkURI)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
-		}
-
 		protocol := sinkURIParsed.Query().Get(config.ProtocolKey)
 		if protocol != "" {
 			replicaCfg.Sink.Protocol = protocol
@@ -275,4 +274,31 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(ctx context.Context,
 			GenWithStackByArgs("changefeed config is the same with the old one, do nothing")
 	}
 	return newInfo, newUpInfo, nil
+}
+
+func (APIV2HelpersImpl) verifyResumeChangefeedConfig(ctx context.Context,
+	pdClient pd.Client,
+	gcServiceID string,
+	changefeedID model.ChangeFeedID,
+	checkpointTs uint64,
+) error {
+	if checkpointTs == 0 {
+		return nil
+	}
+
+	gcTTL := config.GetGlobalServerConfig().GcTTL
+	err := gc.EnsureChangefeedStartTsSafety(
+		ctx,
+		pdClient,
+		gcServiceID,
+		model.DefaultChangeFeedID(changefeedID.ID),
+		gcTTL, checkpointTs)
+	if err != nil {
+		if !cerror.ErrStartTsBeforeGC.Equal(err) {
+			return cerror.ErrPDEtcdAPIError.Wrap(err)
+		}
+		return err
+	}
+
+	return nil
 }

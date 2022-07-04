@@ -101,6 +101,11 @@ func TestMigration(t *testing.T) {
 	const oldStatusKeyBase = "/tidb/cdc/job/%s"
 
 	// 0 add v6.1.0 config with cyclic enabled
+	otherClusterData := "/tidb/cdc/newcluster/default/upstream/1"
+	_, err = cli.Put(context.Background(), otherClusterData, "{}")
+	require.NoError(t, err)
+
+	// 0 add v6.1.0 config with cyclic enabled
 	_, err = cli.Put(context.Background(),
 		fmt.Sprintf(oldInfoKeyBase, "cyclic-test"), cycylicChangefeedInfo)
 	require.NoError(t, err)
@@ -205,6 +210,26 @@ func TestMigration(t *testing.T) {
 		err = status.Unmarshal(statusResp.Kvs[0].Value)
 		require.NoError(t, err)
 		require.Equal(t, tc.status, status)
+
+		// old key is deleted
+		resp, err := cli.Get(context.Background(),
+			fmt.Sprintf(oldInfoKeyBase, tc.id))
+		require.Nil(t, err)
+		require.Equal(t, int64(0), resp.Count)
+		resp, err = cli.Get(context.Background(),
+			fmt.Sprintf(oldStatusKeyBase, tc.id))
+		require.Nil(t, err)
+		require.Equal(t, int64(0), resp.Count)
+
+		// backup key is added
+		resp, err = cli.Get(context.Background(),
+			backupKeyPrefix+fmt.Sprintf(oldInfoKeyBase, tc.id))
+		require.Nil(t, err)
+		require.Equal(t, int64(1), resp.Count)
+		resp, err = cli.Get(context.Background(),
+			backupKeyPrefix+fmt.Sprintf(oldStatusKeyBase, tc.id))
+		require.Nil(t, err)
+		require.Equal(t, int64(1), resp.Count)
 	}
 	// check cyclic
 	infoResp, err := cli.Get(context.Background(),
@@ -217,10 +242,14 @@ func TestMigration(t *testing.T) {
 	require.Equal(t, uint64(1), info.UpstreamID)
 	require.Equal(t, model.DefaultNamespace, info.Namespace)
 
+	resp, err := cli.Get(context.Background(), otherClusterData)
+	require.Nil(t, err)
+	require.Equal(t, int64(1), resp.Count)
+
 	m.MarkMigrateDone()
 	require.True(t, m.IsMigrateDone())
 	key := etcd.CDCKey{Tp: etcd.CDCKeyTypeMetaVersion, ClusterID: "default"}
-	resp, err := cli.Get(ctx, key.String())
+	resp, err = cli.Get(ctx, key.String())
 	require.Nil(t, err)
 	v, err := strconv.ParseInt(string(resp.Kvs[0].Value), 10, 64)
 	require.Nil(t, err)
@@ -554,4 +583,20 @@ func TestNoServiceSafePoint(t *testing.T) {
 	mockClient.respData = string(buf)
 	err = m.migrateGcServiceSafePoint(ctx, mockClient, &security.Credential{}, "abcd", 10)
 	require.Nil(t, err)
+}
+
+func TestMaskChangefeedData(t *testing.T) {
+	info := model.ChangeFeedInfo{
+		SinkURI: "mysql://root:root@127.0.0.1:3306",
+		StartTs: 1, TargetTs: 100, State: model.StateNormal,
+	}
+	data, err := json.Marshal(&info)
+	require.Nil(t, err)
+	masked := maskChangefeedInfo(data)
+	maskedInfo := model.ChangeFeedInfo{}
+	err = json.Unmarshal([]byte(masked), &maskedInfo)
+	require.Nil(t, err)
+	require.Equal(t, "mysql://username:password@***", maskedInfo.SinkURI)
+	maskedInfo.SinkURI = "mysql://root:root@127.0.0.1:3306"
+	require.Equal(t, info, maskedInfo)
 }

@@ -46,8 +46,7 @@ func TestGetTso(t *testing.T) {
 	mockPDClient := &mockPDClient4Tso{}
 	mockManager := upstream.NewManager4Test(mockPDClient)
 	cp := capture.NewCaptureWithManager4Test(mockOwner, mockManager)
-	apiV2 := NewOpenAPIV2(cp)
-	router := newRouter(apiV2)
+	router := newRouter(cp)
 	w := httptest.NewRecorder()
 
 	tc := testCase{url: "/api/v2/tso", method: "POST"}

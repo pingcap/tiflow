@@ -24,6 +24,8 @@ import (
 	. "github.com/pingcap/check"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
@@ -79,7 +81,7 @@ func (s *testDBSuite) resetBinlogSyncer(c *C) {
 		s.syncer.Close()
 	}
 
-	pos, _, err := utils.GetPosAndGs(context.Background(), s.db, "mysql")
+	pos, _, err := conn.GetPosAndGs(tcontext.Background(), conn.NewBaseDB(s.db), "mysql")
 	c.Assert(err, IsNil)
 
 	s.syncer = replication.NewBinlogSyncer(cfg)

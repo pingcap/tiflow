@@ -21,17 +21,17 @@ import (
 
 // OpenAPIV2 provides CDC v2 APIs
 type OpenAPIV2 struct {
-	capture capture.InfoForAPI
+	capture capture.Capture
 	helpers APIV2Helpers
 }
 
 // NewOpenAPIV2 creates a new OpenAPIV2.
-func NewOpenAPIV2(c *capture.Capture) OpenAPIV2 {
+func NewOpenAPIV2(c capture.Capture) OpenAPIV2 {
 	return OpenAPIV2{c, APIV2HelpersImpl{}}
 }
 
 // NewOpenAPIV2ForTest creates a new OpenAPIV2.
-func NewOpenAPIV2ForTest(c capture.InfoForAPI, h APIV2Helpers) OpenAPIV2 {
+func NewOpenAPIV2ForTest(c capture.Capture, h APIV2Helpers) OpenAPIV2 {
 	return OpenAPIV2{c, h}
 }
 
@@ -49,6 +49,7 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	changefeedGroup.POST("", api.createChangefeed)
 	changefeedGroup.PUT("/:changefeed_id", api.updateChangefeed)
 	changefeedGroup.GET("/:changefeed_id/meta_info", api.getChangeFeedMetaInfo)
+	changefeedGroup.POST("/:changefeed_id/resume", api.resumeChangefeed)
 
 	verifyTableGroup := v2.Group("/verify_table")
 	verifyTableGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))

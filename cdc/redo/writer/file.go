@@ -175,11 +175,11 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 		uint64buf: make([]byte, 8),
 		storage:   s3storage,
 
-		metricFsyncDuration: redoFsyncDurationHistogram.
+		metricFsyncDuration: common.RedoFsyncDurationHistogram.
 			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
-		metricFlushAllDuration: redoFlushAllDurationHistogram.
+		metricFlushAllDuration: common.RedoFlushAllDurationHistogram.
 			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
-		metricWriteBytes: redoWriteBytesGauge.
+		metricWriteBytes: common.RedoWriteBytesGauge.
 			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
 	}
 	if w.op.getUUIDGenerator != nil {
@@ -189,38 +189,7 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 	}
 
 	w.running.Store(true)
-	go w.runFlushToDisk(ctx, cfg.FlushIntervalInMs)
-
 	return w, nil
-}
-
-func (w *Writer) runFlushToDisk(ctx context.Context, flushIntervalInMs int64) {
-	ticker := time.NewTicker(time.Duration(flushIntervalInMs) * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		if !w.IsRunning() {
-			return
-		}
-
-		select {
-		case <-ctx.Done():
-			err := w.Close()
-			if err != nil {
-				log.Error("runFlushToDisk close fail",
-					zap.String("namespace", w.cfg.ChangeFeedID.Namespace),
-					zap.String("changefeed", w.cfg.ChangeFeedID.ID),
-					zap.Error(err))
-			}
-		case <-ticker.C:
-			err := w.Flush()
-			if err != nil {
-				log.Error("redo log flush fail",
-					zap.String("namespace", w.cfg.ChangeFeedID.Namespace),
-					zap.String("changefeed", w.cfg.ChangeFeedID.ID), zap.Error(err))
-			}
-		}
-	}
 }
 
 // Write implement write interface
@@ -300,11 +269,11 @@ func (w *Writer) Close() error {
 		return nil
 	}
 
-	redoFlushAllDurationHistogram.
+	common.RedoFlushAllDurationHistogram.
 		DeleteLabelValues(w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID)
-	redoFsyncDurationHistogram.
+	common.RedoFsyncDurationHistogram.
 		DeleteLabelValues(w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID)
-	redoWriteBytesGauge.
+	common.RedoWriteBytesGauge.
 		DeleteLabelValues(w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID)
 
 	return w.close()

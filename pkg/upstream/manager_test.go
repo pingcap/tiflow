@@ -15,6 +15,7 @@ package upstream
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -138,4 +139,40 @@ func TestAddUpstream(t *testing.T) {
 	for up.Error() == nil {
 	}
 	require.NotNil(t, up.Error())
+}
+
+func TestCloseManager(t *testing.T) {
+	ctx := context.TODO()
+	m := &Manager{
+		ups: &sync.Map{},
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	m.ctx = ctx
+	m.cancel = cancel
+	up := &Upstream{
+		wg: new(sync.WaitGroup),
+	}
+	_, cancel = context.WithCancel(ctx)
+	up.cancel = cancel
+	m.ups.Store(uint64(1), up)
+	m.Close()
+	require.Equal(t, closed, up.status)
+	_, ok := m.ups.Load(uint64(1))
+	require.False(t, ok)
+}
+
+func TestRemoveThenAddAgain(t *testing.T) {
+	m := NewManager(context.Background(), "id")
+	m.initUpstreamFunc = func(ctx context.Context,
+		up *Upstream, gcID string,
+	) error {
+		return nil
+	}
+	up := m.AddUpstream(uint64(3), &model.UpstreamInfo{})
+	require.NotNil(t, up)
+	// test Tick
+	_ = m.Tick(context.Background(), &orchestrator.GlobalReactorState{})
+	require.False(t, up.idleTime.IsZero())
+	_ = m.AddUpstream(uint64(3), &model.UpstreamInfo{})
+	require.True(t, up.idleTime.IsZero())
 }

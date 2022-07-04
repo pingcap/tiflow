@@ -53,6 +53,14 @@ type APIV2Helpers interface {
 		*model.ChangeFeedInfo,
 	) error
 
+	verifyResumeChangefeedConfig(
+		context.Context,
+		pd.Client,
+		string,
+		model.ChangeFeedID,
+		uint64,
+	) error
+
 	// getPDClient returns a PDClient given the PD cluster addresses and a credential
 	getPDClient(context.Context, []string, *security.Credential) (pd.Client, error)
 

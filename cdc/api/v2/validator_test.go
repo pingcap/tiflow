@@ -89,11 +89,6 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	cfg.SinkURI = string([]byte{0x7f, ' '})
 	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
 	require.NotNil(t, err)
-	cfg.SinkURI = "blackhole://sss?protocol=canal"
-	cfg.ReplicaConfig.EnableOldValue = false
-	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
-	require.Nil(t, err)
-	require.True(t, cfInfo.Config.EnableOldValue)
 }
 
 func TestVerifyUpdateChangefeedConfig(t *testing.T) {
@@ -128,6 +123,8 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo)
 	require.Nil(t, err)
 	// startTs can not be updated
+	require.Equal(t, "table", string(newCfInfo.Config.Sink.TxnAtomicity))
+	newCfInfo.Config.Sink.TxnAtomicity = ""
 	require.Equal(t, uint64(0), newCfInfo.StartTs)
 	require.Equal(t, uint64(10), newCfInfo.TargetTs)
 	require.Equal(t, model.SortInMemory, newCfInfo.Engine)

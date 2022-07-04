@@ -84,6 +84,20 @@ func (mr *MockAPIV2HelpersMockRecorder) verifyCreateChangefeedConfig(arg0, arg1,
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "verifyCreateChangefeedConfig", reflect.TypeOf((*MockAPIV2Helpers)(nil).verifyCreateChangefeedConfig), arg0, arg1, arg2, arg3, arg4, arg5)
 }
 
+// verifyResumeChangefeedConfig mocks base method.
+func (m *MockAPIV2Helpers) verifyResumeChangefeedConfig(arg0 context.Context, arg1 client.Client, arg2 string, arg3 model.ChangeFeedID, arg4 uint64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "verifyResumeChangefeedConfig", arg0, arg1, arg2, arg3, arg4)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// verifyResumeChangefeedConfig indicates an expected call of verifyResumeChangefeedConfig.
+func (mr *MockAPIV2HelpersMockRecorder) verifyResumeChangefeedConfig(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "verifyResumeChangefeedConfig", reflect.TypeOf((*MockAPIV2Helpers)(nil).verifyResumeChangefeedConfig), arg0, arg1, arg2, arg3, arg4)
+}
+
 // verifyUpdateChangefeedConfig mocks base method.
 func (m *MockAPIV2Helpers) verifyUpdateChangefeedConfig(arg0 context.Context, arg1 *ChangefeedConfig, arg2 *model.ChangeFeedInfo, arg3 *model.UpstreamInfo) (*model.ChangeFeedInfo, *model.UpstreamInfo, error) {
 	m.ctrl.T.Helper()

@@ -26,6 +26,15 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	// EnsureGCServiceCreating is a tag of GC service id for changefeed creation
+	EnsureGCServiceCreating = "-creating-"
+	// EnsureGCServiceResuming is a tag of GC service id for changefeed resumption
+	EnsureGCServiceResuming = "-resuming-"
+	// EnsureGCServiceChecking is a tag of GC service id for changefeed initialization
+	EnsureGCServiceChecking = "-checking-"
+)
+
 // EnsureChangefeedStartTsSafety checks if the startTs less than the minimum of
 // service GC safepoint and this function will update the service GC to startTs
 func EnsureChangefeedStartTsSafety(

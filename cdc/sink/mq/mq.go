@@ -386,10 +386,6 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	if err := replicaConfig.ApplyProtocol(sinkURI).Validate(); err != nil {
-		return nil, errors.Trace(err)
-	}
-
 	saramaConfig, err := kafka.NewSaramaConfig(ctx, baseConfig)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -481,10 +477,6 @@ func NewPulsarSink(ctx context.Context, sinkURI *url.URL,
 	s := sinkURI.Query().Get(config.ProtocolKey)
 	if s != "" {
 		replicaConfig.Sink.Protocol = s
-	}
-	err := replicaConfig.Validate()
-	if err != nil {
-		return nil, err
 	}
 
 	var protocol config.Protocol

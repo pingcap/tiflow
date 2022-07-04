@@ -304,6 +304,8 @@ func (o *ownerImpl) Query(query *Query, done chan<- error) {
 // AsyncStop stops the owner asynchronously
 func (o *ownerImpl) AsyncStop() {
 	atomic.StoreInt32(&o.closed, 1)
+	// Must be called after setting closed.
+	o.cleanupOwnerJob()
 	o.cleanStaleMetrics()
 }
 
@@ -576,13 +578,36 @@ func (o *ownerImpl) takeOwnerJobs() []*ownerJob {
 func (o *ownerImpl) pushOwnerJob(job *ownerJob) {
 	o.ownerJobQueue.Lock()
 	defer o.ownerJobQueue.Unlock()
+	if atomic.LoadInt32(&o.closed) != 0 {
+		log.Info("reject owner job as owner has been closed",
+			zap.Int("jobType", int(job.Tp)))
+		select {
+		case job.done <- cerror.ErrOwnerNotFound.GenWithStackByArgs():
+		default:
+		}
+		close(job.done)
+		return
+	}
 	o.ownerJobQueue.queue = append(o.ownerJobQueue.queue, job)
+}
+
+func (o *ownerImpl) cleanupOwnerJob() {
+	log.Info("cleanup owner jobs as owner has been closed")
+	jobs := o.takeOwnerJobs()
+	for _, job := range jobs {
+		select {
+		case job.done <- cerror.ErrOwnerNotFound.GenWithStackByArgs():
+		default:
+		}
+		close(job.done)
+	}
 }
 
 func (o *ownerImpl) updateGCSafepoint(
 	ctx context.Context, state *orchestrator.GlobalReactorState,
 ) error {
 	minChekpoinTsMap, forceUpdateMap := o.calculateGCSafepoint(state)
+
 	for upstreamID, minCheckpointTs := range minChekpoinTsMap {
 		up, ok := o.upstreamManager.Get(upstreamID)
 		if !ok {

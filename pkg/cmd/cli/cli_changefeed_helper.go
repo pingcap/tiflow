@@ -51,6 +51,26 @@ func confirmLargeDataGap(cmd *cobra.Command, currentPhysical int64, startTs uint
 	return nil
 }
 
+// confirmOverwriteCheckpointTs prompts risk warnings when users are trying to
+// overwrite the checkpointTs
+func confirmOverwriteCheckpointTs(
+	cmd *cobra.Command, changefeedID string, checkpointTs uint64,
+) error {
+	cmd.Printf("You are overwriting the checkpoint of changefeed(%s) to %d,"+
+		" which may lead to data loss or data duplication.\n Confirm that you know"+
+		" what this command will do and use it at your own risk [Y/N]", changefeedID, checkpointTs)
+	var yOrN string
+	_, err := fmt.Scan(&yOrN)
+	if err != nil {
+		return err
+	}
+	if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
+		return errors.NewNoStackError("abort changefeed resume")
+	}
+
+	return nil
+}
+
 // confirmIgnoreIneligibleTables confirm if user need to ignore ineligible tables.
 // If ignore it will return true.
 func confirmIgnoreIneligibleTables(cmd *cobra.Command) (bool, error) {

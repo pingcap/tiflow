@@ -82,6 +82,7 @@ type processor struct {
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (pipeline.TablePipeline, error)
 	newAgent            func(ctx cdcContext.Context) (scheduler.Agent, error)
 
+	liveness     *model.Liveness
 	agent        scheduler.Agent
 	checkpointTs model.Ts
 	resolvedTs   model.Ts
@@ -400,7 +401,9 @@ func (p *processor) GetTableMeta(tableID model.TableID) pipeline.TableMeta {
 }
 
 // newProcessor creates a new processor
-func newProcessor(ctx cdcContext.Context, up *upstream.Upstream) *processor {
+func newProcessor(
+	ctx cdcContext.Context, up *upstream.Upstream, liveness *model.Liveness,
+) *processor {
 	changefeedID := ctx.ChangefeedVars().ID
 	p := &processor{
 		upstream:      up,
@@ -410,6 +413,7 @@ func newProcessor(ctx cdcContext.Context, up *upstream.Upstream) *processor {
 		captureInfo:   ctx.GlobalVars().CaptureInfo,
 		cancel:        func() {},
 		lastRedoFlush: time.Now(),
+		liveness:      liveness,
 
 		metricResolvedTsGauge: resolvedTsGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
@@ -474,6 +478,12 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	// check upstream error first
 	if err := p.upstream.Error(); err != nil {
 		return p.handleErr(ctx, state, err)
+	}
+	if p.upstream.IsClosed() {
+		log.Panic("upstream is closed",
+			zap.Uint64("upstreamID", p.upstream.ID),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID))
 	}
 	// skip this tick
 	if !p.upstream.IsNormal() {
@@ -567,7 +577,7 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 
 	p.doGCSchemaStorage(ctx)
 
-	if err := p.agent.Tick(ctx); err != nil {
+	if err := p.agent.Tick(ctx, p.liveness.Load()); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
@@ -901,6 +911,10 @@ func (p *processor) createTablePipelineImpl(
 		return nil
 	})
 
+	if p.redoManager.Enabled() {
+		p.redoManager.AddTable(tableID, replicaInfo.StartTs)
+	}
+
 	tableName := p.getTableName(ctx, tableID)
 
 	s, err := sink.NewTableSink(p.sink, tableID, p.metricsTableSinkTotalRows)
@@ -919,10 +933,6 @@ func (p *processor) createTablePipelineImpl(
 		p.changefeed.Info.GetTargetTs())
 	if err != nil {
 		return nil, errors.Trace(err)
-	}
-
-	if p.redoManager.Enabled() {
-		p.redoManager.AddTable(tableID, replicaInfo.StartTs)
 	}
 
 	log.Info("Add table pipeline", zap.Int64("tableID", tableID),
@@ -1049,6 +1059,7 @@ func (p *processor) Close() error {
 	sinkmetric.TableSinkTotalRowsCountCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	tableMemoryHistogram.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorMemoryGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	log.Info("processor is closed successfully")
 	return nil
 }
 

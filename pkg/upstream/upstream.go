@@ -66,7 +66,9 @@ type Upstream struct {
 	RegionCache *tikv.RegionCache
 	PDClock     pdutil.Clock
 	GCManager   gc.Manager
-	mu          sync.Mutex
+	// Only use in Close().
+	cancel func()
+	mu     sync.Mutex
 	// record the time when Upstream.hc becomes zero.
 	idleTime time.Time
 	// use clock to facilitate unit test
@@ -102,6 +104,7 @@ func NewUpstream4Test(pdClient pd.Client) *Upstream {
 		wg:             new(sync.WaitGroup),
 		clock:          clock.New(),
 		SecurityConfig: &config.SecurityConfig{},
+		cancel:         func() {},
 	}
 
 	return res
@@ -110,6 +113,8 @@ func NewUpstream4Test(pdClient pd.Client) *Upstream {
 // init initializes the upstream
 func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
 	log.Info("upstream is initializing", zap.Uint64("upstreamID", up.ID))
+	ctx, cancel := context.WithCancel(ctx)
+	up.cancel = cancel
 	grpcTLSOption, err := up.SecurityConfig.ToGRPCDialOption()
 	if err != nil {
 		up.err.Store(err)
@@ -207,7 +212,7 @@ func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
 func (up *Upstream) Close() {
 	up.mu.Lock()
 	up.mu.Unlock()
-
+	up.cancel()
 	if atomic.LoadInt32(&up.status) == closed ||
 		atomic.LoadInt32(&up.status) == closing {
 		return
@@ -261,6 +266,8 @@ func (up *Upstream) resetIdleTime() {
 	defer up.mu.Unlock()
 
 	if !up.idleTime.IsZero() {
+		log.Info("upstream idle time is set to 0",
+			zap.Uint64("id", up.ID))
 		up.idleTime = time.Time{}
 	}
 }
@@ -271,6 +278,8 @@ func (up *Upstream) trySetIdleTime() {
 	defer up.mu.Unlock()
 	// reset idleTime
 	if up.idleTime.IsZero() {
+		log.Info("upstream idle time is set to current time",
+			zap.Uint64("id", up.ID))
 		up.idleTime = up.clock.Now()
 	}
 }

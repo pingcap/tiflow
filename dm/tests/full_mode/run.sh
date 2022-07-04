@@ -150,7 +150,7 @@ function only_route_schema() {
 		"query-status test" \
 		"\"stage\": \"Finished\"" 1
 
-	run_sql_tidb_with_retry "SHOW DATABASES LIKE 'full_mode_test';" "Database: full_mode_test"
+	run_sql_tidb_with_retry "SHOW DATABASES LIKE 'full_mode_test';" ": full_mode_test"
 	cleanup_process $*
 	cleanup_data full_mode
 }
