@@ -66,10 +66,10 @@ func (mr *MockCaptureMockRecorder) Drain(ctx interface{}) *gomock.Call {
 }
 
 // GetEtcdClient mocks base method.
-func (m *MockCapture) GetEtcdClient() *etcd.CDCEtcdClient {
+func (m *MockCapture) GetEtcdClient() etcd.CDCEtcdClientForAPI {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetEtcdClient")
-	ret0, _ := ret[0].(*etcd.CDCEtcdClient)
+	ret0, _ := ret[0].(etcd.CDCEtcdClientForAPI)
 	return ret0
 }
 
@@ -110,11 +110,12 @@ func (mr *MockCaptureMockRecorder) GetOwnerCaptureInfo(ctx interface{}) *gomock.
 }
 
 // GetUpstreamManager mocks base method.
-func (m *MockCapture) GetUpstreamManager() *upstream.Manager {
+func (m *MockCapture) GetUpstreamManager() (*upstream.Manager, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetUpstreamManager")
 	ret0, _ := ret[0].(*upstream.Manager)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GetUpstreamManager indicates an expected call of GetUpstreamManager.

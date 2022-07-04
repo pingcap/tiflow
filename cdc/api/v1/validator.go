@@ -40,7 +40,14 @@ func verifyCreateChangefeedConfig(
 	changefeedConfig model.ChangefeedConfig,
 	capture capture.Capture,
 ) (*model.ChangeFeedInfo, error) {
-	up := capture.GetUpstreamManager().GetDefaultUpstream()
+	upManager, err := capture.GetUpstreamManager()
+	if err != nil {
+		return nil, err
+	}
+	up, err := upManager.GetDefaultUpstream()
+	if err != nil {
+		return nil, err
+	}
 
 	// verify sinkURI
 	if changefeedConfig.SinkURI == "" {

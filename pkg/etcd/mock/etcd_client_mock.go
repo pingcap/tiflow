@@ -65,6 +65,37 @@ func (mr *MockCDCEtcdClientForAPIMockRecorder) GetAllCDCInfo(ctx interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllCDCInfo", reflect.TypeOf((*MockCDCEtcdClientForAPI)(nil).GetAllCDCInfo), ctx)
 }
 
+// GetChangeFeedInfo mocks base method.
+func (m *MockCDCEtcdClientForAPI) GetChangeFeedInfo(ctx context.Context, id model.ChangeFeedID) (*model.ChangeFeedInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetChangeFeedInfo", ctx, id)
+	ret0, _ := ret[0].(*model.ChangeFeedInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetChangeFeedInfo indicates an expected call of GetChangeFeedInfo.
+func (mr *MockCDCEtcdClientForAPIMockRecorder) GetChangeFeedInfo(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChangeFeedInfo", reflect.TypeOf((*MockCDCEtcdClientForAPI)(nil).GetChangeFeedInfo), ctx, id)
+}
+
+// GetChangeFeedStatus mocks base method.
+func (m *MockCDCEtcdClientForAPI) GetChangeFeedStatus(ctx context.Context, id model.ChangeFeedID) (*model.ChangeFeedStatus, int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetChangeFeedStatus", ctx, id)
+	ret0, _ := ret[0].(*model.ChangeFeedStatus)
+	ret1, _ := ret[1].(int64)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetChangeFeedStatus indicates an expected call of GetChangeFeedStatus.
+func (mr *MockCDCEtcdClientForAPIMockRecorder) GetChangeFeedStatus(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChangeFeedStatus", reflect.TypeOf((*MockCDCEtcdClientForAPI)(nil).GetChangeFeedStatus), ctx, id)
+}
+
 // GetEnsureGCServiceID mocks base method.
 func (m *MockCDCEtcdClientForAPI) GetEnsureGCServiceID(tag string) string {
 	m.ctrl.T.Helper()

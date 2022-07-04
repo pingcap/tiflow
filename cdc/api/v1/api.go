@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -139,12 +140,26 @@ func (h *OpenAPI) ListChangefeed(c *gin.Context) {
 	}
 
 	resps := make([]*model.ChangefeedCommonInfo, 0)
-	for cfID, cfStatus := range statuses {
+	changefeeds := make([]model.ChangeFeedID, 0)
+
+	for cfID := range statuses {
+		changefeeds = append(changefeeds, cfID)
+	}
+	sort.Slice(changefeeds, func(i, j int) bool {
+		if changefeeds[i].Namespace == changefeeds[j].Namespace {
+			return changefeeds[i].ID < changefeeds[j].ID
+		}
+
+		return changefeeds[i].Namespace < changefeeds[j].Namespace
+	})
+
+	for _, cfID := range changefeeds {
 		cfInfo, exist := infos[cfID]
 		if !exist {
 			// If a changefeed info does not exists, skip it
 			continue
 		}
+		cfStatus := statuses[cfID]
 
 		if !cfInfo.State.IsNeeded(state) {
 			continue
@@ -263,7 +278,17 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
-	up := h.capture.GetUpstreamManager().GetDefaultUpstream()
+	upManager, err := h.capture.GetUpstreamManager()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	up, err := upManager.GetDefaultUpstream()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
 	info, err := verifyCreateChangefeedConfig(ctx, changefeedConfig, h.capture)
 	if err != nil {
 		_ = c.Error(err)

@@ -62,8 +62,8 @@ type Capture interface {
 	StatusProvider() owner.StatusProvider
 	WriteDebugInfo(ctx context.Context, w io.Writer)
 
-	GetUpstreamManager() *upstream.Manager
-	GetEtcdClient() *etcd.CDCEtcdClient
+	GetUpstreamManager() (*upstream.Manager, error)
+	GetEtcdClient() etcd.CDCEtcdClientForAPI
 
 	IsReady() bool
 }
@@ -77,9 +77,9 @@ type captureImpl struct {
 	config           *config.ServerConfig
 
 	pdEndpoints     []string
-	upstreamManager *upstream.Manager
 	ownerMu         sync.Mutex
 	owner           owner.Owner
+	upstreamManager *upstream.Manager
 
 	// session keeps alive between the capture and etcd
 	session  *concurrency.Session
@@ -114,10 +114,7 @@ type captureImpl struct {
 }
 
 // NewCapture returns a new Capture instance
-func NewCapture(pdEndpoints []string,
-	etcdClient *etcd.CDCEtcdClient,
-	grpcService *p2p.ServerWrapper,
-) Capture {
+func NewCapture(pdEndpoints []string, etcdClient *etcd.CDCEtcdClient, grpcService *p2p.ServerWrapper) Capture {
 	conf := config.GetGlobalServerConfig()
 	return &captureImpl{
 		config:              config.GetGlobalServerConfig(),
@@ -159,11 +156,14 @@ func NewCaptureWithManager4Test(o owner.Owner, m *upstream.Manager) *captureImpl
 }
 
 // GetUpstreamManager is a Getter of capture's upstream manager
-func (c *captureImpl) GetUpstreamManager() *upstream.Manager {
-	return c.upstreamManager
+func (c *captureImpl) GetUpstreamManager() (*upstream.Manager, error) {
+	if c.upstreamManager == nil {
+		return nil, cerror.ErrUpstreamManagerNotReady
+	}
+	return c.upstreamManager, nil
 }
 
-func (c *captureImpl) GetEtcdClient() *etcd.CDCEtcdClient {
+func (c *captureImpl) GetEtcdClient() etcd.CDCEtcdClientForAPI {
 	return c.EtcdClient
 }
 

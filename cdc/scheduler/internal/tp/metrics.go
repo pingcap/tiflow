@@ -53,6 +53,13 @@ var (
 			Name:      "task_accept",
 			Help:      "The total number of accepted scheduler tasks",
 		}, []string{"namespace", "changefeed", "task"})
+	runningScheduleTaskGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "scheduler",
+			Name:      "task_running",
+			Help:      "The total number of running scheduler tasks",
+		}, []string{"namespace", "changefeed"})
 	slowestTableIDGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -90,6 +97,7 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(captureTableGauge)
 	registry.MustRegister(tableStateGauge)
 	registry.MustRegister(acceptScheduleTaskCounter)
+	registry.MustRegister(runningScheduleTaskGauge)
 	registry.MustRegister(slowestTableIDGauge)
 	registry.MustRegister(slowestTableCheckpointTsGauge)
 	registry.MustRegister(slowestTableResolvedTsGauge)
