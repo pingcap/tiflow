@@ -24,7 +24,7 @@ import (
 func TestSchedulerBalanceCaptureOnline(t *testing.T) {
 	t.Parallel()
 
-	sched := newBalanceScheduler(time.Duration(0))
+	sched := newBalanceScheduler(time.Duration(0), 3)
 	sched.random = nil
 
 	// New capture "b" online
@@ -36,8 +36,8 @@ func TestSchedulerBalanceCaptureOnline(t *testing.T) {
 	}
 	tasks := sched.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
-	require.Len(t, tasks[0].burstBalance.MoveTables, 1)
-	require.Equal(t, tasks[0].burstBalance.MoveTables[0].TableID, model.TableID(1))
+	require.NotNil(t, tasks[0].moveTable)
+	require.Equal(t, tasks[0].moveTable.TableID, model.TableID(1))
 
 	// New capture "b" online, but this time has capture is stopping
 	captures["a"].State = CaptureStateStopping
@@ -54,20 +54,27 @@ func TestSchedulerBalanceCaptureOnline(t *testing.T) {
 	}
 	tasks = sched.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
+}
 
-	// TODO revise balance algorithm and enable the test case.
-	//
-	// Capture "c" online, and more tables
-	// captures = map[model.CaptureID]*model.CaptureInfo{"a": {}, "b": {}, "c": {}}
-	// currentTables = []model.TableID{1, 2, 3, 4}
-	// replications = map[model.TableID]*ReplicationSet{
-	// 	1: {State: ReplicationSetStateReplicating, Primary: "a"},
-	// 	2: {State: ReplicationSetStateReplicating, Primary: "b"},
-	// 	3: {State: ReplicationSetStateReplicating, Primary: "a"},
-	// 	4: {State: ReplicationSetStateReplicating, Primary: "b"},
-	// }
-	// tasks = b.Schedule(0, currentTables, captures, replications)
-	// require.Len(t, tasks, 1)
-	// require.Len(t, tasks[0].burstBalance.MoveTables, 1)
-	// require.Equal(t, tasks[0].burstBalance.MoveTables[0].TableID, model.TableID(1))
+func TestSchedulerBalanceTaskLimit(t *testing.T) {
+	t.Parallel()
+
+	sched := newBalanceScheduler(time.Duration(0), 2)
+	sched.random = nil
+
+	// New capture "b" online
+	captures := map[model.CaptureID]*CaptureStatus{"a": {}, "b": {}}
+	currentTables := []model.TableID{1, 2, 3, 4}
+	replications := map[model.TableID]*ReplicationSet{
+		1: {State: ReplicationSetStateReplicating, Primary: "a"},
+		2: {State: ReplicationSetStateReplicating, Primary: "a"},
+		3: {State: ReplicationSetStateReplicating, Primary: "a"},
+		4: {State: ReplicationSetStateReplicating, Primary: "a"},
+	}
+	tasks := sched.Schedule(0, currentTables, captures, replications)
+	require.Len(t, tasks, 2)
+
+	sched = newBalanceScheduler(time.Duration(0), 1)
+	tasks = sched.Schedule(0, currentTables, captures, replications)
+	require.Len(t, tasks, 1)
 }

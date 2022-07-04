@@ -33,3 +33,47 @@ func TestNewSchedulerManager(t *testing.T) {
 	require.NotNil(t, m.schedulers[schedulerPriorityRebalance])
 	require.NotNil(t, m.schedulers[schedulerPriorityDrainCapture])
 }
+
+func TestSchedulerManagerScheduler(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.NewDefaultSchedulerConfig()
+	cfg.MaxTaskConcurrency = 1
+	m := newSchedulerManager(model.DefaultChangeFeedID("test-changefeed"), cfg)
+
+	captures := map[model.CaptureID]*CaptureStatus{
+		"a": {State: CaptureStateInitialized},
+		"b": {State: CaptureStateInitialized},
+	}
+	currentTables := []model.TableID{1}
+
+	// schedulerPriorityBasic bypasses task check.
+	replications := map[model.TableID]*ReplicationSet{}
+	runningTasks := map[model.TableID]*scheduleTask{1: {}}
+	tasks := m.Schedule(0, currentTables, captures, replications, runningTasks)
+	require.Len(t, tasks, 1)
+
+	// No more task.
+	replications = map[model.TableID]*ReplicationSet{
+		1: {State: ReplicationSetStateReplicating, Primary: "a"},
+	}
+	tasks = m.Schedule(0, currentTables, captures, replications, runningTasks)
+	require.Len(t, tasks, 0)
+
+	// Move table is drop because of running tasks.
+	m.MoveTable(1, "b")
+	replications = map[model.TableID]*ReplicationSet{
+		1: {State: ReplicationSetStateReplicating, Primary: "a"},
+	}
+	tasks = m.Schedule(0, currentTables, captures, replications, runningTasks)
+	require.Len(t, tasks, 0)
+
+	// Move table can proceed after clean up tasks.
+	m.MoveTable(1, "b")
+	replications = map[model.TableID]*ReplicationSet{
+		1: {State: ReplicationSetStateReplicating, Primary: "a"},
+	}
+	runningTasks = map[model.TableID]*scheduleTask{}
+	tasks = m.Schedule(0, currentTables, captures, replications, runningTasks)
+	require.Len(t, tasks, 1)
+}
