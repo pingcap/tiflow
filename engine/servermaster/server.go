@@ -52,7 +52,6 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcetypes"
 	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
 	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
@@ -382,7 +381,7 @@ func (s *Server) QueryMetaStore(
 			Address: s.cfg.AdvertiseAddr,
 		}, nil
 	case pb.StoreType_SystemMetaStore:
-		return getStore(metaclient.FrameMetaID), nil
+		return getStore(FrameMetaID), nil
 	case pb.StoreType_AppMetaStore:
 		return &pb.QueryMetaStoreResponse{
 			Address: s.cfg.UserMetaConf.Endpoints[0],
@@ -507,7 +506,7 @@ func (s *Server) registerMetaStore() error {
 	}
 	var err error
 	// TODO: replace default db config
-	if s.frameMetaClient, err = pkgOrm.NewClient(*cfg.FrameMetaConf, pkgOrm.NewDefaultDBConfig()); err != nil {
+	if s.frameMetaClient, err = pkgOrm.NewClient(*cfg.FrameMetaConf, *(cfg.FrameMetaConf.DBConf)); err != nil {
 		log.L().Error("connect to framework metastore fail", zap.Any("config", cfg.FrameMetaConf), zap.Error(err))
 		return err
 	}

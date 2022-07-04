@@ -11,46 +11,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package orm
+package dbutil
 
 import "time"
 
-// TODO: split the config file
 const (
-	DefaultFrameMetaEndpoints = "127.0.0.1:3336"
-	DefaultFrameMetaUser      = "root"
-	DefaultFrameMetaPassword  = "123456"
-)
-
-const (
-	defaultConnMaxIdleTime = 30 * time.Second
+	defaultConnMaxIdleTime = 1 * time.Minute
 	defaultConnMaxLifeTime = 12 * time.Hour
-	defaultMaxIdleConns    = 3
-	defaultMaxOpenConns    = 10
-	defaultReadTimeout     = "3s"
-	defaultWriteTimeout    = "3s"
-	defaultDialTimeout     = "3s"
+	defaultMaxIdleConns    = 1
+	defaultMaxOpenConns    = 1
 	// TODO: more params for mysql connection
 )
 
 // DBConfig defines some configuration used in database connection
 // refer to: https://pkg.go.dev/database/sql#SetConnMaxIdleTime
 type DBConfig struct {
-	ReadTimeout     string
-	WriteTimeout    string
-	DialTimeout     string
 	ConnMaxIdleTime time.Duration
 	ConnMaxLifeTime time.Duration
 	MaxIdleConns    int
 	MaxOpenConns    int
 }
 
-// NewDefaultDBConfig creates a default DBConfig
-func NewDefaultDBConfig() DBConfig {
+// DefaultDBConfig creates a default DBConfig
+func DefaultDBConfig() DBConfig {
 	return DBConfig{
-		ReadTimeout:     defaultReadTimeout,
-		WriteTimeout:    defaultWriteTimeout,
-		DialTimeout:     defaultDialTimeout,
 		ConnMaxIdleTime: defaultConnMaxIdleTime,
 		ConnMaxLifeTime: defaultConnMaxLifeTime,
 		MaxIdleConns:    defaultMaxIdleConns,

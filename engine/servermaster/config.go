@@ -39,7 +39,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/pkg/etcdutil"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
-	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/version"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
@@ -59,6 +58,16 @@ const (
 
 	defaultPeerUrls            = "http://127.0.0.1:8291"
 	defaultInitialClusterState = embed.ClusterStateFlagNew
+
+	// DefaultUserMetaID is the ID for default user metastore
+	DefaultUserMetaID        = "_default"
+	defaultUserMetaEndpoints = "127.0.0.1:12479"
+
+	// FrameMetaID is the ID for frame metastore
+	FrameMetaID               = "_root"
+	defaultFrameMetaEndpoints = "127.0.0.1:3336"
+	defaultFrameMetaUser      = "root"
+	defaultFrameMetaPassword  = "123456"
 )
 
 var (
@@ -74,8 +83,8 @@ var (
 func NewConfig() *Config {
 	cfg := &Config{
 		Etcd:          &etcdutil.ConfigParams{},
-		FrameMetaConf: NewFrameMetaConfig(),
-		UserMetaConf:  NewDefaultUserMetaConfig(),
+		FrameMetaConf: newFrameMetaConfig(),
+		UserMetaConf:  newDefaultUserMetaConfig(),
 	}
 	cfg.flagSet = flag.NewFlagSet("dm-master", flag.ContinueOnError)
 	fs := cfg.flagSet
@@ -91,10 +100,12 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.Etcd.Name, "name", "", "human-readable name for this DF-master member")
 	fs.StringVar(&cfg.Etcd.DataDir, "data-dir", "", "data directory for etcd using")
 
-	fs.StringVar(&cfg.FrameMetaConf.Endpoints[0], "frame-meta-endpoints", pkgOrm.DefaultFrameMetaEndpoints, `framework metastore endpoint`)
-	fs.StringVar(&cfg.FrameMetaConf.Auth.User, "frame-meta-user", pkgOrm.DefaultFrameMetaUser, `framework metastore user`)
-	fs.StringVar(&cfg.FrameMetaConf.Auth.Passwd, "frame-meta-password", pkgOrm.DefaultFrameMetaPassword, `framework metastore password`)
-	fs.StringVar(&cfg.UserMetaConf.Endpoints[0], "user-meta-endpoints", metaclient.DefaultUserMetaEndpoints, `user metastore endpoint`)
+	fs.StringVar(&cfg.FrameMetaConf.Endpoints[0], "frame-meta-endpoints", defaultFrameMetaEndpoints, `framework metastore endpoint`)
+	fs.StringVar(&cfg.FrameMetaConf.Auth.User, "frame-meta-user", defaultFrameMetaUser, `framework metastore user`)
+	fs.StringVar(&cfg.FrameMetaConf.Auth.Passwd, "frame-meta-password", defaultFrameMetaPassword, `framework metastore password`)
+	fs.StringVar(&cfg.FrameMetaConf.Schema, "frame-meta-schema", "", `schema name for framework meta`)
+
+	fs.StringVar(&cfg.UserMetaConf.Endpoints[0], "user-meta-endpoints", defaultUserMetaEndpoints, `user metastore endpoint`)
 
 	fs.StringVar(&cfg.Etcd.InitialCluster, "initial-cluster", "", fmt.Sprintf("initial cluster configuration for bootstrapping, e.g. dm-master=%s", defaultPeerUrls))
 	fs.StringVar(&cfg.Etcd.PeerUrls, "peer-urls", defaultPeerUrls, "URLs for peer traffic")
@@ -119,8 +130,8 @@ type Config struct {
 	// NOTE: more items will be add when adding leader election
 	Etcd *etcdutil.ConfigParams `toml:"etcd" json:"etcd"`
 
-	FrameMetaConf *metaclient.StoreConfigParams `toml:"frame-metastore-conf" json:"frame-metastore-conf"`
-	UserMetaConf  *metaclient.StoreConfigParams `toml:"user-metastore-conf" json:"user-metastore-conf"`
+	FrameMetaConf *metaclient.StoreConfig `toml:"frame-metastore-conf" json:"frame-metastore-conf"`
+	UserMetaConf  *metaclient.StoreConfig `toml:"user-metastore-conf" json:"user-metastore-conf"`
 
 	KeepAliveTTLStr string `toml:"keepalive-ttl" json:"keepalive-ttl"`
 	// time interval string to check executor aliveness
@@ -275,4 +286,24 @@ func parseURLs(s string) ([]url.URL, error) {
 		urls = append(urls, *u)
 	}
 	return urls, nil
+}
+
+// newFrameMetaConfig return the default framework metastore config
+func newFrameMetaConfig() *metaclient.StoreConfig {
+	conf := metaclient.DefaultStoreConfig()
+	conf.StoreID = FrameMetaID
+	conf.Endpoints = append(conf.Endpoints, defaultFrameMetaEndpoints)
+	conf.Auth.User = defaultFrameMetaUser
+	conf.Auth.Passwd = defaultFrameMetaPassword
+
+	return &conf
+}
+
+// newDefaultUserMetaConfig return the default user metastore config
+func newDefaultUserMetaConfig() *metaclient.StoreConfig {
+	conf := metaclient.DefaultStoreConfig()
+	conf.StoreID = DefaultUserMetaID
+	conf.Endpoints = append(conf.Endpoints, defaultUserMetaEndpoints)
+
+	return &conf
 }

@@ -47,3 +47,15 @@ func TestMetaStoreConfig(t *testing.T) {
 	require.Regexp(t, "root123", config.FrameMetaConf.Auth.Passwd)
 	require.Regexp(t, "...:2222$", config.UserMetaConf.Endpoints[0])
 }
+
+func TestDefaultMetaStoreManager(t *testing.T) {
+	t.Parallel()
+
+	store := newFrameMetaConfig()
+	require.Equal(t, FrameMetaID, store.StoreID)
+	require.Equal(t, defaultFrameMetaEndpoints, store.Endpoints[0])
+
+	store = newDefaultUserMetaConfig()
+	require.Equal(t, DefaultUserMetaID, store.StoreID)
+	require.Equal(t, defaultUserMetaEndpoints, store.Endpoints[0])
+}
