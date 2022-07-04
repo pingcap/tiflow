@@ -24,7 +24,7 @@ spec:
     correlation: "25"
   duration: "30s"
   scheduler:
-    cron: "2-59/5 * * * *" # At every 5th minute from 2 through 59, (2, 7, 12, ...)
+    cron: "2-59/6 * * * *" # At every 6th minute from 2 through 59, (2, 8, 14, ...)
 
 
 # A Network Delay action causes delays in message sending
@@ -54,7 +54,7 @@ spec:
     jitter: "150ms"
   duration: "30s"
   scheduler:
-    cron: "3-59/5 * * * *" # At every 5th minute from 3 through 59, (3, 8, 13, ...)
+    cron: "3-59/6 * * * *" # At every 6th minute from 3 through 59, (3, 9, 15, ...)
 
 ---
 # A Network Duplicate action causes packet duplication
@@ -82,7 +82,7 @@ spec:
     correlation: "25"
   duration: "30s"
   scheduler:
-    cron: "4-59/5 * * * *" # At every 5th minute from 4 through 59, (4, 9, 14, ...)
+    cron: "4-59/6 * * * *" # At every 6th minute from 4 through 59, (4, 10, 16, ...)
 
 ---
 # A Network Corrupt action causes packet corruption
@@ -110,4 +110,4 @@ spec:
     correlation: "25"
   duration: "30s"
   scheduler:
-    cron: "5-59/5 * * * *" # At every 5th minute from 5 through 59, (5, 10, 15, ...)
+    cron: "5-59/6 * * * *" # At every 5th minute from 5 through 59, (5, 11, 17, ...)

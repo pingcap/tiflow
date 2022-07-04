@@ -23,7 +23,6 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/go-mysql-org/go-mysql/mysql"
 
-	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -184,7 +183,7 @@ func (lm *LocalMeta) AdjustWithStartPos(binlogName string, binlogGTID string, en
 		if len(binlogName) == 0 { // no meaningful start pos specified
 			binlogGTID = latestBinlogGTID
 			binlogName = latestBinlogName
-		} else if !binlog.VerifyFilename(binlogName) {
+		} else if !utils.VerifyFilename(binlogName) {
 			return false, terror.ErrRelayBinlogNameNotValid.Generate(binlogName)
 		}
 	}

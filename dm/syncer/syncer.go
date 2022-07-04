@@ -41,9 +41,6 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
-	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
-	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
-	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -62,14 +59,17 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
+	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/pessimism"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/streamer"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/relay"
+	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	operator "github.com/pingcap/tiflow/dm/syncer/err-operator"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 	sm "github.com/pingcap/tiflow/dm/syncer/safe-mode"
 	"github.com/pingcap/tiflow/dm/syncer/shardddl"
@@ -391,6 +391,8 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}
 	s.sessCtx = utils.NewSessionCtx(vars)
 	s.exprFilterGroup = NewExprFilterGroup(s.tctx, s.sessCtx, s.cfg.ExprFilter)
+	// create an empty Tracker and will be initialized in `Run`
+	s.schemaTracker = schema.NewTracker()
 
 	if len(s.cfg.ColumnMappingRules) > 0 {
 		s.columnMapping, err = cm.NewMapping(s.cfg.CaseSensitive, s.cfg.ColumnMappingRules)
@@ -1696,7 +1698,13 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 	}
 
-	s.schemaTracker, err = schema.NewTracker(ctx, s.cfg.Name, s.cfg.To.Session, s.downstreamTrackConn, s.tctx.L())
+	if s.schemaTracker == nil {
+		// some test will set their own schemaTracker and skip the syncer.Init
+		s.schemaTracker = schema.NewTracker()
+	}
+	// prevent creating new Tracker on `Run` in order to avoid
+	// two different Trackers are invoked in the validator and the syncer.
+	err = s.schemaTracker.Init(ctx, s.cfg.Name, s.cfg.To.Session, s.downstreamTrackConn, s.tctx.L())
 	if err != nil {
 		return terror.ErrSchemaTrackerInit.Delegate(err)
 	}
@@ -1939,7 +1947,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		failpoint.Inject("FakeRedirect", func(val failpoint.Value) {
 			if len(shardingReSyncCh) == 0 && shardingReSync == nil {
 				if strVal, ok := val.(string); ok {
-					pos, gtidSet, err2 := s.fromDB.GetMasterStatus(ctx, s.cfg.Flavor)
+					pos, gtidSet, err2 := s.fromDB.GetMasterStatus(s.tctx.WithContext(ctx), s.cfg.Flavor)
 					if err2 != nil {
 						s.tctx.L().Error("fail to get master status in failpoint FakeRedirect", zap.Error(err2))
 						os.Exit(1)
@@ -2116,7 +2124,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		startTime = time.Now() // reset start time for the next metric.
 
 		s.metricsProxies.Metrics.BinlogSyncerPosGauge.Set(float64(e.Header.LogPos))
-		index, err := binlog.GetFilenameIndex(lastLocation.Position.Name)
+		index, err := utils.GetFilenameIndex(lastLocation.Position.Name)
 		if err != nil {
 			s.tctx.L().Warn("fail to get index number of binlog file, may because only specify GTID and hasn't saved according binlog position", log.ShortError(err))
 		} else {
@@ -4116,7 +4124,7 @@ func (s *Syncer) setGlobalPointByTime(tctx *tcontext.Context, timeStr string) er
 		finder := binlog.NewLocalBinlogPosFinder(tctx, s.cfg.EnableGTID, s.cfg.Flavor, relayDir)
 		loc, posTp, err = finder.FindByTimestamp(t.Unix())
 	} else {
-		finder := binlog.NewRemoteBinlogPosFinder(tctx, s.fromDB.BaseDB.DB, s.syncCfg, s.cfg.EnableGTID)
+		finder := binlog.NewRemoteBinlogPosFinder(tctx, s.fromDB.BaseDB, s.syncCfg, s.cfg.EnableGTID)
 		loc, posTp, err = finder.FindByTimestamp(t.Unix())
 	}
 	if err != nil {

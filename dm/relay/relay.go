@@ -39,6 +39,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
 	binlogReader "github.com/pingcap/tiflow/dm/pkg/binlog/reader"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
@@ -596,7 +597,8 @@ func (r *Relay) handleEvents(
 					r.logger.Error("the requested binlog files have purged in the master server or the master server have switched, currently DM do no support to handle this error",
 						zap.String("db host", cfg.Host), zap.Int("db port", cfg.Port), zap.Stringer("last pos", lastPos), log.ShortError(err))
 					// log the status for debug
-					pos, gs, err2 := utils.GetPosAndGs(ctx, r.db.DB, r.cfg.Flavor)
+					tctx := tcontext.NewContext(ctx, r.logger)
+					pos, gs, err2 := conn.GetPosAndGs(tctx, r.db, r.cfg.Flavor)
 					if err2 == nil {
 						r.logger.Info("current master status", zap.Stringer("position", pos), log.WrapStringerField("GTID sets", gs))
 					}
@@ -698,7 +700,7 @@ func (r *Relay) handleEvents(
 
 		relayLogWriteSizeHistogram.Observe(float64(e.Header.EventSize))
 		relayLogPosGauge.WithLabelValues("relay").Set(float64(lastPos.Pos))
-		if index, err2 := binlog.GetFilenameIndex(lastPos.Name); err2 != nil {
+		if index, err2 := utils.GetFilenameIndex(lastPos.Name); err2 != nil {
 			r.logger.Error("parse binlog file name", zap.String("file name", lastPos.Name), log.ShortError(err2))
 		} else {
 			relayLogFileGauge.WithLabelValues("relay").Set(float64(index))
@@ -782,7 +784,8 @@ func (r *Relay) reSetupMeta(ctx context.Context) error {
 
 	var latestPosName, latestGTIDStr string
 	if (r.cfg.EnableGTID && len(r.cfg.BinlogGTID) == 0) || (!r.cfg.EnableGTID && len(r.cfg.BinLogName) == 0) {
-		latestPos, latestGTID, err2 := utils.GetPosAndGs(ctx, r.db.DB, r.cfg.Flavor)
+		tctx := tcontext.NewContext(ctx, r.logger)
+		latestPos, latestGTID, err2 := conn.GetPosAndGs(tctx, r.db, r.cfg.Flavor)
 		if err2 != nil {
 			return err2
 		}
@@ -862,14 +865,15 @@ func (r *Relay) doIntervalOps(ctx context.Context) {
 				return
 			}
 			ctx2, cancel2 := context.WithTimeout(ctx, utils.DefaultDBTimeout)
-			pos, _, err := utils.GetPosAndGs(ctx2, r.db.DB, r.cfg.Flavor)
+			tctx := tcontext.NewContext(ctx2, r.logger)
+			pos, _, err := conn.GetPosAndGs(tctx, r.db, r.cfg.Flavor)
 			cancel2()
 			if err != nil {
 				r.logger.Warn("get master status", zap.Error(err))
 				r.RUnlock()
 				continue
 			}
-			index, err := binlog.GetFilenameIndex(pos.Name)
+			index, err := utils.GetFilenameIndex(pos.Name)
 			if err != nil {
 				r.logger.Error("parse binlog file name", zap.String("file name", pos.Name), log.ShortError(err))
 				r.RUnlock()

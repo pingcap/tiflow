@@ -60,8 +60,8 @@ func (r *rebalanceScheduler) Schedule(
 
 	for _, capture := range captures {
 		if capture.State == CaptureStateStopping {
-			log.Debug("tpscheduler: capture is stopping, " +
-				"ignore manual rebalance request")
+			log.Warn("tpscheduler: capture is stopping, " +
+				"ignore and drop manual rebalance request")
 			atomic.StoreInt32(&r.rebalance, 0)
 			return nil
 		}
@@ -79,23 +79,27 @@ func (r *rebalanceScheduler) Schedule(
 		}
 	}
 
+	unlimited := math.MaxInt
+	tasks := newBalanceMoveTables(r.random, captures, replications, unlimited)
+	if len(tasks) == 0 {
+		return nil
+	}
 	accept := func() {
 		atomic.StoreInt32(&r.rebalance, 0)
 		log.Info("tpscheduler: manual rebalance request accepted")
 	}
-	task := newBurstBalanceMoveTables(accept, r.random, captures, replications)
-	if task == nil {
-		return nil
-	}
-	return []*scheduleTask{task}
+	return []*scheduleTask{{
+		burstBalance: &burstBalance{MoveTables: tasks},
+		accept:       accept,
+	}}
 }
 
-func newBurstBalanceMoveTables(
-	accept callback,
+func newBalanceMoveTables(
 	random *rand.Rand,
 	captures map[model.CaptureID]*CaptureStatus,
 	replications map[model.TableID]*ReplicationSet,
-) *scheduleTask {
+	maxTaskLimit int,
+) []moveTable {
 	tablesPerCapture := make(map[model.CaptureID]*tableSet)
 	for captureID := range captures {
 		tablesPerCapture[captureID] = newTableSet()
@@ -156,7 +160,7 @@ func newBurstBalanceMoveTables(
 	}
 	// for each victim table, find the target for it
 	moveTables := make([]moveTable, 0, len(victims))
-	for _, tableID := range victims {
+	for idx, tableID := range victims {
 		target := ""
 		minWorkload := math.MaxInt64
 
@@ -171,6 +175,10 @@ func newBurstBalanceMoveTables(
 			log.Panic("tpscheduler: rebalance meet unexpected min workload " +
 				"when try to the the target capture")
 		}
+		if idx >= maxTaskLimit {
+			// We have reached the task limit.
+			break
+		}
 
 		moveTables = append(moveTables, moveTable{
 			TableID:     tableID,
@@ -180,10 +188,7 @@ func newBurstBalanceMoveTables(
 		captureWorkload[target] = randomizeWorkload(random, tablesPerCapture[target].size())
 	}
 
-	return &scheduleTask{
-		burstBalance: &burstBalance{MoveTables: moveTables},
-		accept:       accept,
-	}
+	return moveTables
 }
 
 const (

@@ -32,12 +32,12 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/streamer"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/relay"
 )
 
@@ -268,25 +268,12 @@ func (w *SourceWorker) updateSourceStatus(ctx context.Context, needLock bool) er
 	}
 	w.sourceDBMu.Unlock()
 
-	var status binlog.SourceStatus
-	ctx, cancel := context.WithTimeout(ctx, utils.DefaultDBTimeout)
-	defer cancel()
-	pos, gtidSet, err := utils.GetPosAndGs(ctx, w.sourceDB.DB, cfg.Flavor)
+	status, err := binlog.GetSourceStatus(tcontext.NewContext(ctx, w.l), w.sourceDB, cfg.Flavor)
 	if err != nil {
 		return err
 	}
-	status.Location = binlog.NewLocation(pos, gtidSet)
-	ctx2, cancel2 := context.WithTimeout(ctx, utils.DefaultDBTimeout)
-	defer cancel2()
-	binlogs, err := binlog.GetBinaryLogs(ctx2, w.sourceDB.DB)
-	if err != nil {
-		return err
-	}
-	status.Binlogs = binlogs
 
-	status.UpdateTime = time.Now()
-
-	w.sourceStatus.Store(&status)
+	w.sourceStatus.Store(status)
 	return nil
 }
 

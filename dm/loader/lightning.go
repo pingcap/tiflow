@@ -149,8 +149,13 @@ func (l *LightningLoader) Init(ctx context.Context) (err error) {
 
 	timeZone := l.cfg.Timezone
 	if len(timeZone) == 0 {
+		baseDB, err2 := conn.DefaultDBProvider.Apply(&l.cfg.To)
+		if err2 != nil {
+			return err2
+		}
+		defer baseDB.Close()
 		var err1 error
-		timeZone, err1 = conn.FetchTimeZoneSetting(ctx, &l.cfg.To)
+		timeZone, err1 = config.FetchTimeZoneSetting(ctx, baseDB.DB)
 		if err1 != nil {
 			return err1
 		}

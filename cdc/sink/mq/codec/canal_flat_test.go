@@ -178,7 +178,7 @@ func TestNewCanalFlatEventBatchDecoder4RowMessage(t *testing.T) {
 			ty, hasNext, err := decoder.HasNext()
 			require.Nil(t, err)
 			require.True(t, hasNext)
-			require.Equal(t, model.MqMessageTypeRow, ty)
+			require.Equal(t, model.MessageTypeRow, ty)
 
 			consumed, err := decoder.NextRowChangedEvent()
 			require.Nil(t, err)
@@ -259,7 +259,7 @@ func TestNewCanalFlatEventBatchDecoder4DDLMessage(t *testing.T) {
 			ty, hasNext, err := decoder.HasNext()
 			require.Nil(t, err)
 			require.True(t, hasNext)
-			require.Equal(t, model.MqMessageTypeDDL, ty)
+			require.Equal(t, model.MessageTypeDDL, ty)
 
 			consumed, err := decoder.NextDDLEvent()
 			require.Nil(t, err)
@@ -276,7 +276,7 @@ func TestNewCanalFlatEventBatchDecoder4DDLMessage(t *testing.T) {
 			ty, hasNext, err = decoder.HasNext()
 			require.Nil(t, err)
 			require.False(t, hasNext)
-			require.Equal(t, model.MqMessageTypeUnknown, ty)
+			require.Equal(t, model.MessageTypeUnknown, ty)
 
 			consumed, err = decoder.NextDDLEvent()
 			require.NotNil(t, err)
@@ -338,19 +338,19 @@ func TestEncodeCheckpointEvent(t *testing.T) {
 		require.Nil(t, err)
 		if enable {
 			require.True(t, hasNext)
-			require.Equal(t, model.MqMessageTypeResolved, ty)
+			require.Equal(t, model.MessageTypeResolved, ty)
 			consumed, err := decoder.NextResolvedEvent()
 			require.Nil(t, err)
 			require.Equal(t, watermark, consumed)
 		} else {
 			require.False(t, hasNext)
-			require.Equal(t, model.MqMessageTypeUnknown, ty)
+			require.Equal(t, model.MessageTypeUnknown, ty)
 		}
 
 		ty, hasNext, err = decoder.HasNext()
 		require.Nil(t, err)
 		require.False(t, hasNext)
-		require.Equal(t, model.MqMessageTypeUnknown, ty)
+		require.Equal(t, model.MessageTypeUnknown, ty)
 	}
 }
 
