@@ -19,7 +19,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/cdc/processor"
 	"github.com/pingcap/tiflow/cdc/puller"
-	redowriter "github.com/pingcap/tiflow/cdc/redo/writer"
+	redo "github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	sink "github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
@@ -59,7 +59,7 @@ func init() {
 	memory.InitMetrics(registry)
 	unified.InitMetrics(registry)
 	leveldb.InitMetrics(registry)
-	redowriter.InitMetrics(registry)
+	redo.InitMetrics(registry)
 	db.InitMetrics(registry)
 	kafka.InitMetrics(registry)
 	scheduler.InitMetrics(registry)
