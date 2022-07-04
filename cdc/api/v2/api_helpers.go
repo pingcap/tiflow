@@ -48,47 +48,56 @@ type APIV2Helpers interface {
 	// verifyCreateChangefeedConfig verifies the changefeedConfig,
 	// and yield an valid changefeedInfo or error
 	verifyCreateChangefeedConfig(
-		context.Context,
-		*ChangefeedConfig,
-		pd.Client,
-		owner.StatusProvider,
-		string,
-		tidbkv.Storage,
+		ctx context.Context,
+		cfg *ChangefeedConfig,
+		pdClient pd.Client,
+		statusProvider owner.StatusProvider,
+		ensureGCServiceID string,
+		kvStorage tidbkv.Storage,
 	) (*model.ChangeFeedInfo, error)
 
 	// verifyUpdateChangefeedConfig verifies the changefeed update config,
 	// and returns a pair of valid changefeedInfo & upstreamInfo
 	verifyUpdateChangefeedConfig(
-		context.Context,
-		*ChangefeedConfig,
-		*model.ChangeFeedInfo,
-		*model.UpstreamInfo,
+		ctx context.Context,
+		cfg *ChangefeedConfig,
+		oldInfo *model.ChangeFeedInfo,
+		oldUpInfo *model.UpstreamInfo,
 	) (*model.ChangeFeedInfo, *model.UpstreamInfo, error)
 
 	// verifyUpstream verifies the upstreamConfig
 	verifyUpstream(
-		context.Context,
-		*ChangefeedConfig,
-		*model.ChangeFeedInfo,
+		ctx context.Context,
+		changefeedConfig *ChangefeedConfig,
+		cfInfo *model.ChangeFeedInfo,
 	) error
 
 	verifyResumeChangefeedConfig(
-		context.Context,
-		pd.Client,
-		string,
-		model.ChangeFeedID,
-		uint64,
+		ctx context.Context,
+		pdClient pd.Client,
+		gcServiceID string,
+		changefeedID model.ChangeFeedID,
+		checkpointTs uint64,
 	) error
 
 	// getPDClient returns a PDClient given the PD cluster addresses and a credential
-	getPDClient(context.Context, []string, *security.Credential) (pd.Client, error)
+	getPDClient(
+		ctx context.Context,
+		pdAddrs []string,
+		credential *security.Credential,
+	) (pd.Client, error)
 
 	// getKVCreateTiStore wraps kv.createTiStore method to increase testability
-	getTiStore([]string, *security.Credential) (tidbkv.Storage, error)
+	createTiStore(
+		pdAddrs []string,
+		credential *security.Credential,
+	) (tidbkv.Storage, error)
 
 	// getVerfiedTables wraps entry.VerifyTables to increase testability
-	getVerfiedTables(*config.ReplicaConfig, tidbkv.Storage,
-		uint64) (ineligibleTables, eligibleTables []model.TableName, err error)
+	getVerfiedTables(replicaConfig *config.ReplicaConfig,
+		storage tidbkv.Storage, startTs uint64) (ineligibleTables,
+		eligibleTables []model.TableName, err error,
+	)
 }
 
 // APIV2HelpersImpl is an implementation of AVIV2Helpers interface
@@ -146,7 +155,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 		cfg.StartTs = oracle.ComposeTS(ts, logical)
 	}
 
-	// Ensure the start ts is valid in the next 1 hour.
+	// Ensure the start ts is valid in the next 3600 seconds, aka 1 hour
 	const ensureTTL = 60 * 60
 	if err := gc.EnsureChangefeedStartTsSafety(
 		ctx,
@@ -245,24 +254,25 @@ func (h APIV2HelpersImpl) verifyUpstream(ctx context.Context,
 	changefeedConfig *ChangefeedConfig,
 	cfInfo *model.ChangeFeedInfo,
 ) error {
-	if len(changefeedConfig.PDAddrs) != 0 {
-		// check if the upstream cluster id changed
-		timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		defer cancel()
-		pdClient, err := h.getPDClient(timeoutCtx, changefeedConfig.PDAddrs, &security.Credential{
-			CAPath:        changefeedConfig.CAPath,
-			CertPath:      changefeedConfig.CertPath,
-			KeyPath:       changefeedConfig.KeyPath,
-			CertAllowedCN: changefeedConfig.CertAllowedCN,
-		})
-		if err != nil {
-			return err
-		}
-		defer pdClient.Close()
-		if pdClient.GetClusterID(ctx) != cfInfo.UpstreamID {
-			return cerror.ErrUpstreamMissMatch.
-				GenWithStackByArgs(cfInfo.UpstreamID, pdClient.GetClusterID(ctx))
-		}
+	if len(changefeedConfig.PDAddrs) == 0 {
+		return nil
+	}
+	// check if the upstream cluster id changed
+	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	pdClient, err := h.getPDClient(timeoutCtx, changefeedConfig.PDAddrs, &security.Credential{
+		CAPath:        changefeedConfig.CAPath,
+		CertPath:      changefeedConfig.CertPath,
+		KeyPath:       changefeedConfig.KeyPath,
+		CertAllowedCN: changefeedConfig.CertAllowedCN,
+	})
+	if err != nil {
+		return err
+	}
+	defer pdClient.Close()
+	if pdClient.GetClusterID(ctx) != cfInfo.UpstreamID {
+		return cerror.ErrUpstreamMissMatch.
+			GenWithStackByArgs(cfInfo.UpstreamID, pdClient.GetClusterID(ctx))
 	}
 	return nil
 }
@@ -396,7 +406,7 @@ func (APIV2HelpersImpl) getPDClient(ctx context.Context,
 }
 
 // getTiStore wrap the kv.createTiStore method to increase testability
-func (h APIV2HelpersImpl) getTiStore(pdAddrs []string,
+func (h APIV2HelpersImpl) createTiStore(pdAddrs []string,
 	credential *security.Credential,
 ) (tidbkv.Storage, error) {
 	return kv.CreateTiStore(strings.Join(pdAddrs, ","), credential)

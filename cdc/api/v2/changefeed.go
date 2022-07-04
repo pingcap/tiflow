@@ -63,7 +63,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	defer pdClient.Close()
 
 	// verify tables todo: del kvstore
-	kvStorage, err := h.helpers.getTiStore(cfg.PDAddrs, credential)
+	kvStorage, err := h.helpers.createTiStore(cfg.PDAddrs, credential)
 	if err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrNewStore, err))
 		return
@@ -128,7 +128,7 @@ func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 	}
 	credential := cfg.PDConfig.toCredential()
 
-	kvStore, err := h.helpers.getTiStore(cfg.PDAddrs, credential)
+	kvStore, err := h.helpers.createTiStore(cfg.PDAddrs, credential)
 	if err != nil {
 		_ = c.Error(err)
 		return

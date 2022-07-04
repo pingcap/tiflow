@@ -266,10 +266,12 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 	upManager, err := h.capture.GetUpstreamManager()
 	if err != nil {
 		_ = c.Error(err)
+		return
 	}
 	up, err := upManager.GetDefaultUpstream()
 	if err != nil {
 		_ = c.Error(err)
+		return
 	}
 
 	info, err := VerifyCreateChangefeedConfig(ctx, changefeedConfig, h.capture)

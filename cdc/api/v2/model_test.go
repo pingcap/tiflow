@@ -43,6 +43,7 @@ func TestToAPIReplicaConfig(t *testing.T) {
 			},
 		},
 		SchemaRegistry: "bbb",
+		TxnAtomicity:   "aa",
 	}
 	cfg.Consistent = &config.ConsistentConfig{
 		Level:             "1",
@@ -85,4 +86,32 @@ func TestChangefeedInfoClone(t *testing.T) {
 	require.Equal(t, cf1, cf2)
 	cf2.UpstreamID = 2
 	require.Equal(t, uint64(1), cf1.UpstreamID)
+}
+
+func TestToCredential(t *testing.T) {
+	t.Parallel()
+
+	pdCfg := &PDConfig{
+		PDAddrs:       nil,
+		CAPath:        "test-CAPath",
+		CertPath:      "test-CertPath",
+		KeyPath:       "test-KeyPath",
+		CertAllowedCN: nil,
+	}
+
+	credential := pdCfg.toCredential()
+	require.Equal(t, pdCfg.CertPath, credential.CertPath)
+	require.Equal(t, pdCfg.CAPath, credential.CAPath)
+	require.Equal(t, pdCfg.KeyPath, credential.KeyPath)
+	require.Equal(t, len(credential.CertAllowedCN), 0)
+
+	pdCfg.CertAllowedCN = []string{"test-CertAllowedCN"}
+	require.Equal(t, len(credential.CertAllowedCN), 0) // deep copy
+
+	credential = pdCfg.toCredential()
+	require.Equal(t, pdCfg.CertPath, credential.CertPath)
+	require.Equal(t, pdCfg.CAPath, credential.CAPath)
+	require.Equal(t, pdCfg.KeyPath, credential.KeyPath)
+	require.Equal(t, len(credential.CertAllowedCN), 1)
+	require.Equal(t, credential.CertAllowedCN[0], pdCfg.CertAllowedCN[0])
 }

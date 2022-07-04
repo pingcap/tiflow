@@ -1128,7 +1128,7 @@ updating service safepoint failed
 
 ["CDC:ErrUpstreamManagerNotReady"]
 error = '''
-upstream manager not read
+upstream manager not ready
 '''
 
 ["CDC:ErrUpstreamMissMatch"]

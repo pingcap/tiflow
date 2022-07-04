@@ -1025,7 +1025,7 @@ var (
 	)
 
 	ErrUpstreamManagerNotReady = errors.Normalize(
-		"upstream manager not read",
+		"upstream manager not ready",
 		errors.RFCCodeText("CDC:ErrUpstreamManagerNotReady"),
 	)
 

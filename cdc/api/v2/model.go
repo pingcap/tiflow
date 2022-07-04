@@ -148,6 +148,7 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 		res.Sink = &config.SinkConfig{
 			DispatchRules:   dispatchRules,
 			Protocol:        c.Sink.Protocol,
+			TxnAtomicity:    config.AtomicityLevel(c.Sink.TxnAtomicity),
 			ColumnSelectors: columnSelectors,
 			SchemaRegistry:  c.Sink.SchemaRegistry,
 		}
@@ -195,6 +196,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			SchemaRegistry:  cloned.Sink.SchemaRegistry,
 			DispatchRules:   dispatchRules,
 			ColumnSelectors: columnSelectors,
+			TxnAtomicity:    string(cloned.Sink.TxnAtomicity),
 		}
 	}
 	if cloned.Consistent != nil {
@@ -243,6 +245,7 @@ type SinkConfig struct {
 	SchemaRegistry  string            `json:"schema_registry"`
 	DispatchRules   []*DispatchRule   `json:"dispatchers"`
 	ColumnSelectors []*ColumnSelector `json:"column_selectors"`
+	TxnAtomicity    string            `json:"transaction-atomicity"`
 }
 
 // DispatchRule represents partition rule for a table
@@ -322,9 +325,8 @@ func (cfg *PDConfig) toCredential() *security.Credential {
 		CertPath: cfg.CertPath,
 		KeyPath:  cfg.KeyPath,
 	}
-	if len(cfg.CertAllowedCN) != 0 {
-		credential.CertAllowedCN = cfg.CertAllowedCN
-	}
+	credential.CertAllowedCN = make([]string, len(cfg.CertAllowedCN))
+	copy(credential.CertAllowedCN, cfg.CertAllowedCN)
 	return credential
 }
 
