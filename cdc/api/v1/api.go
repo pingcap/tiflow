@@ -146,13 +146,11 @@ func (h *OpenAPI) ListChangefeed(c *gin.Context) {
 		changefeeds = append(changefeeds, cfID)
 	}
 	sort.Slice(changefeeds, func(i, j int) bool {
-		sortedByNamespace := changefeeds[i].Namespace < changefeeds[j].Namespace
-
 		if changefeeds[i].Namespace == changefeeds[j].Namespace {
 			return changefeeds[i].ID < changefeeds[j].ID
 		}
 
-		return sortedByNamespace
+		return changefeeds[i].Namespace < changefeeds[j].Namespace
 	})
 
 	for _, cfID := range changefeeds {
