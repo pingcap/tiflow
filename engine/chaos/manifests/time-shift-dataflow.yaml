@@ -5,7 +5,8 @@ metadata:
   labels:
     app: time-shift-dataflow
 spec:
-  mode: one
+  mode: random-max-percent
+  value: 60
   duration: "30s"
   selector:
     pods:
