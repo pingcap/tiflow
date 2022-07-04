@@ -18,11 +18,17 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
+	"go.uber.org/zap"
+
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
 	"github.com/pingcap/tiflow/dm/dumpling"
 	"github.com/pingcap/tiflow/dm/loader"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/syncer"
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
@@ -47,6 +53,8 @@ type unitHolderImpl struct {
 	cfg  *dmconfig.SubTaskConfig
 	unit unit.Unit
 
+	upstreamDB *conn.BaseDB
+	logger     log.Logger
 	// use to access process(init/close/pause/resume)
 	processMu sync.RWMutex
 	processWg sync.WaitGroup
@@ -80,7 +88,16 @@ func (u *unitHolderImpl) Init(ctx context.Context) error {
 		u.unit = syncer.NewSyncer(u.cfg, nil, nil)
 	}
 
-	if err := u.unit.Init(ctx); err != nil {
+	var err error
+	if err = u.unit.Init(ctx); err != nil {
+		return err
+	}
+
+	u.logger = log.Logger{Logger: u.cfg.FrameworkLogger}.WithFields(
+		zap.String("task", u.cfg.Name), zap.String("sourceID", u.cfg.SourceID),
+	)
+	u.upstreamDB, err = conn.DefaultDBProvider.Apply(&u.cfg.From)
+	if err != nil {
 		return err
 	}
 
@@ -194,8 +211,18 @@ func (u *unitHolderImpl) Stage() (metadata.TaskStage, *pb.ProcessResult) {
 }
 
 // Status implement UnitHolder.Status
+// TODO: should periodically call Status, to update metrics
 func (u *unitHolderImpl) Status(ctx context.Context) interface{} {
-	return u.unit.Status(nil)
+	sourceStatus, err := binlog.GetSourceStatus(
+		tcontext.NewContext(ctx, u.logger),
+		u.upstreamDB,
+		u.cfg.Flavor,
+	)
+	if err != nil {
+		u.logger.Error("failed to get source status", zap.Error(err))
+	}
+	// nil sourceStatus is supported
+	return u.unit.Status(sourceStatus)
 }
 
 // Binlog implements the binlog api for syncer unit.
