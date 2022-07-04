@@ -76,11 +76,11 @@ func (c ChangefeedResp) MarshalJSON() ([]byte, error) {
 
 // ownerAPI provides owner APIs.
 type ownerAPI struct {
-	capture *capture.Capture
+	capture capture.Capture
 }
 
 // RegisterOwnerAPIRoutes registers routes for owner APIs.
-func RegisterOwnerAPIRoutes(router *gin.Engine, capture *capture.Capture) {
+func RegisterOwnerAPIRoutes(router *gin.Engine, capture capture.Capture) {
 	ownerAPI := ownerAPI{capture: capture}
 	owner := router.Group("/capture/owner")
 
@@ -228,13 +228,13 @@ func (h *ownerAPI) handleChangefeedQuery(w http.ResponseWriter, req *http.Reques
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	cfInfo, err := h.capture.EtcdClient.GetChangeFeedInfo(ctx, changefeedID)
+	cfInfo, err := h.capture.GetEtcdClient().GetChangeFeedInfo(ctx, changefeedID)
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		api.WriteError(w, http.StatusBadRequest,
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID))
 		return
 	}
-	cfStatus, _, err := h.capture.EtcdClient.GetChangeFeedStatus(ctx, changefeedID)
+	cfStatus, _, err := h.capture.GetEtcdClient().GetChangeFeedStatus(ctx, changefeedID)
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		api.WriteError(w, http.StatusBadRequest, err)
 		return

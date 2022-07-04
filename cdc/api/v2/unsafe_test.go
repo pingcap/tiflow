@@ -39,7 +39,7 @@ func TestCDCMetaData(t *testing.T) {
 
 	metaData := testCase{url: "/api/v2/unsafe/metadata", method: "GET"}
 
-	cp := mock_capture.NewMockInfoForAPI(gomock.NewController(t))
+	cp := mock_capture.NewMockCapture(gomock.NewController(t))
 	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
 	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
 	router := newRouter(apiV2)
@@ -88,7 +88,7 @@ func TestWithUpstreamConfig(t *testing.T) {
 			PDEndpoints: "http://127.0.0.1:22379",
 		})
 	cpCtrl := gomock.NewController(t)
-	cp := mock_capture.NewMockInfoForAPI(cpCtrl)
+	cp := mock_capture.NewMockCapture(cpCtrl)
 	hpCtrl := gomock.NewController(t)
 	helpers := NewMockAPIV2Helpers(hpCtrl)
 
@@ -140,7 +140,7 @@ func TestWithUpstreamConfig(t *testing.T) {
 
 	// success
 	upManager = upstream.NewManager4Test(&mockPDClient{})
-	cp = mock_capture.NewMockInfoForAPI(gomock.NewController(t))
+	cp = mock_capture.NewMockCapture(gomock.NewController(t))
 	cp.EXPECT().GetUpstreamManager().Return(upManager, nil).AnyTimes()
 	api = NewOpenAPIV2ForTest(cp, helpers)
 	upstreamConfig = &UpstreamConfig{}

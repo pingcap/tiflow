@@ -49,7 +49,7 @@ func TestQueryTso(t *testing.T) {
 
 	queryTso := testCase{url: "/api/v2/tso", method: "POST"}
 
-	cp := mock_capture.NewMockInfoForAPI(gomock.NewController(t))
+	cp := mock_capture.NewMockCapture(gomock.NewController(t))
 	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
 	cp.EXPECT().IsOwner().Return(true).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()

@@ -387,7 +387,7 @@ func toAPIModel(info *model.ChangeFeedInfo) *ChangeFeedInfo {
 	return apiInfoModel
 }
 
-func getCaptureDefaultUpstream(cp capture.InfoForAPI) (*upstream.Upstream, error) {
+func getCaptureDefaultUpstream(cp capture.Capture) (*upstream.Upstream, error) {
 	upManager, err := cp.GetUpstreamManager()
 	if err != nil {
 		return nil, errors.Trace(err)

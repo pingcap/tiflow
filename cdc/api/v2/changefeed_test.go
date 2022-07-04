@@ -48,7 +48,7 @@ func TestCreateChangefeed(t *testing.T) {
 
 	pdClient := &mockPDClient{}
 	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
-	cp := mock_capture.NewMockInfoForAPI(gomock.NewController(t))
+	cp := mock_capture.NewMockCapture(gomock.NewController(t))
 	etcdClient := mock_etcd.NewMockCDCEtcdClientForAPI(gomock.NewController(t))
 	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
 	router := newRouter(apiV2)
@@ -218,7 +218,7 @@ func TestUpdateChangefeed(t *testing.T) {
 	t.Parallel()
 	update := testCase{url: "/api/v2/changefeeds/%s", method: "PUT"}
 	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
-	cp := mock_capture.NewMockInfoForAPI(gomock.NewController(t))
+	cp := mock_capture.NewMockCapture(gomock.NewController(t))
 	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
 	router := newRouter(apiV2)
 
@@ -384,7 +384,7 @@ func TestGetChangeFeedMetaInfo(t *testing.T) {
 
 	metaInfo := testCase{url: "/api/v2/changefeeds/%s/meta_info", method: "GET"}
 	statusProvider := &mockStatusProvider{}
-	cp := mock_capture.NewMockInfoForAPI(gomock.NewController(t))
+	cp := mock_capture.NewMockCapture(gomock.NewController(t))
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
 	cp.EXPECT().IsOwner().Return(true).AnyTimes()
 
@@ -459,7 +459,7 @@ func TestVerifyTable(t *testing.T) {
 	pdClient := &mockPDClient{}
 	upManager := upstream.NewManager4Test(pdClient)
 	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
-	cp := mock_capture.NewMockInfoForAPI(gomock.NewController(t))
+	cp := mock_capture.NewMockCapture(gomock.NewController(t))
 	// statusProvider := &mockStatusProvider{}
 	// cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
 	cp.EXPECT().GetUpstreamManager().Return(upManager, nil).AnyTimes()

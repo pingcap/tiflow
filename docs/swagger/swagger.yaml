@@ -211,6 +211,8 @@ definitions:
         type: string
       is_owner:
         type: boolean
+      liveness:
+        type: integer
       pid:
         type: integer
       version:
@@ -259,7 +261,7 @@ paths:
       tags:
       - capture
   /api/v1/captures/drain:
-    post:
+    put:
       consumes:
       - application/json
       description: Drain all tables at the target captures in cdc cluster
