@@ -118,7 +118,7 @@ func TestCreateChangefeed(t *testing.T) {
 		getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(pdClient, nil).AnyTimes()
 	helpers.EXPECT().
-		getKVTiStore(gomock.Any(), gomock.Any()).
+		getTiStore(gomock.Any(), gomock.Any()).
 		Return(nil, cerrors.ErrNewStore).
 		Times(1)
 	cfConfig.PDAddrs = []string{"http://127.0.0.1:2379", "http://127.0.0.1:2382"}
@@ -136,7 +136,7 @@ func TestCreateChangefeed(t *testing.T) {
 
 	// case 4: failed to verify tables
 	helpers.EXPECT().
-		getKVTiStore(gomock.Any(), gomock.Any()).
+		getTiStore(gomock.Any(), gomock.Any()).
 		Return(nil, nil).
 		AnyTimes()
 	helpers.EXPECT().
@@ -484,7 +484,7 @@ func TestVerifyTable(t *testing.T) {
 	body, err := json.Marshal(&updateCfg)
 	require.Nil(t, err)
 	helpers.EXPECT().
-		getKVTiStore(gomock.Any(), gomock.Any()).
+		getTiStore(gomock.Any(), gomock.Any()).
 		Return(nil, cerrors.ErrNewStore).
 		Times(1)
 
@@ -499,7 +499,7 @@ func TestVerifyTable(t *testing.T) {
 
 	// case 3: getVerfiedTables failed
 	helpers.EXPECT().
-		getKVTiStore(gomock.Any(), gomock.Any()).
+		getTiStore(gomock.Any(), gomock.Any()).
 		Return(nil, nil).
 		AnyTimes()
 	helpers.EXPECT().getVerfiedTables(gomock.Any(), gomock.Any(), gomock.Any()).

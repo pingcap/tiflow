@@ -22,21 +22,13 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/capture"
-	"github.com/pingcap/tiflow/cdc/entry"
-	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
-	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/backoff"
 )
 
 const apiOpVarChangefeedID = "changefeed_id"
@@ -71,7 +63,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	defer pdClient.Close()
 
 	// verify tables todo: del kvstore
-	kvStorage, err := h.helpers.getKVTiStore(cfg.PDAddrs, credential)
+	kvStorage, err := h.helpers.getTiStore(cfg.PDAddrs, credential)
 	if err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrNewStore, err))
 		return
@@ -136,7 +128,7 @@ func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 	}
 	credential := cfg.PDConfig.toCredential()
 
-	kvStore, err := h.helpers.getKVTiStore(cfg.PDAddrs, credential)
+	kvStore, err := h.helpers.getTiStore(cfg.PDAddrs, credential)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -311,51 +303,6 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusAccepted)
-}
-
-// getPDClient returns a PDClient given the PD cluster addresses and a credential
-func (APIV2HelpersImpl) getPDClient(ctx context.Context,
-	pdAddrs []string,
-	credential *security.Credential,
-) (pd.Client, error) {
-	grpcTLSOption, err := credential.ToGRPCDialOption()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	pdClient, err := pd.NewClientWithContext(
-		ctx, pdAddrs, credential.PDSecurityOption(),
-		pd.WithGRPCDialOptions(
-			grpcTLSOption,
-			grpc.WithBlock(),
-			grpc.WithConnectParams(grpc.ConnectParams{
-				Backoff: backoff.Config{
-					BaseDelay:  time.Second,
-					Multiplier: 1.1,
-					Jitter:     0.1,
-					MaxDelay:   3 * time.Second,
-				},
-				MinConnectTimeout: 3 * time.Second,
-			}),
-		))
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrAPIGetPDClientFailed, errors.Trace(err))
-	}
-	return pdClient, nil
-}
-
-// getKVTiStore wrap the kv.createTiStore method to increase testability
-func (h APIV2HelpersImpl) getKVTiStore(pdAddrs []string,
-	credential *security.Credential,
-) (tidbkv.Storage, error) {
-	return kv.CreateTiStore(strings.Join(pdAddrs, ","), credential)
-}
-
-func (h APIV2HelpersImpl) getVerfiedTables(replicaConfig *config.ReplicaConfig,
-	storage tidbkv.Storage, startTs uint64) (ineligibleTables,
-	eligibleTables []model.TableName, err error,
-) {
-	return entry.VerifyTables(replicaConfig, storage, startTs)
 }
 
 func toAPIModel(info *model.ChangeFeedInfo) *ChangeFeedInfo {
