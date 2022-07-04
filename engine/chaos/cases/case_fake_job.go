@@ -114,7 +114,8 @@ func updateKeyAndCheck(
 			return err
 		}
 	}
-	finished := util.WaitSomething(60, time.Second*5, func() bool {
+	// retry 6 minutes at most
+	finished := util.WaitSomething(60, time.Second*6, func() bool {
 		for jobIdx := 0; jobIdx < workerCount; jobIdx++ {
 			err := cli.CheckFakeJobKey(ctx, jobID, jobIdx, expectedMvcc, updateValue)
 			if err != nil {
