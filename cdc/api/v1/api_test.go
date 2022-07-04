@@ -754,6 +754,7 @@ func TestServerStatusLiveness(t *testing.T) {
 	ownerRouter := newRouter(cp, newStatusProvider())
 	api := testCase{url: "/api/v1/status", method: "GET"}
 
+	cp.EXPECT().IsReady().Return(true).AnyTimes()
 	cp.EXPECT().Info().DoAndReturn(func() (model.CaptureInfo, error) {
 		return model.CaptureInfo{}, nil
 	}).AnyTimes()

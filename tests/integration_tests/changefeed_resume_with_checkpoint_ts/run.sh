@@ -11,7 +11,8 @@ MAX_RETRIES=20
 
 function prepare() {
 	if [ "$SINK_TYPE" == "kafka" ]; then
-		return
+		echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
+		exit 0
 	fi
 
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
