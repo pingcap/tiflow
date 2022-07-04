@@ -1819,7 +1819,6 @@ func (t *testMaster) TestOperateSource(c *check.C) {
 
 func (t *testMaster) TestOfflineMember(c *check.C) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
 
 	cfg1 := generateServerConfig(c, "dm-master-1")
 	cfg2 := generateServerConfig(c, "dm-master-2")
@@ -1834,7 +1833,10 @@ func (t *testMaster) TestOfflineMember(c *check.C) {
 
 	var wg sync.WaitGroup
 	s1 := NewServer(cfg1)
-	defer s1.Close()
+	defer func() {
+		cancel()
+		s1.Close()
+	}()
 	wg.Add(1)
 	go func() {
 		c.Assert(s1.Start(ctx), check.IsNil)
@@ -1842,7 +1844,10 @@ func (t *testMaster) TestOfflineMember(c *check.C) {
 	}()
 
 	s2 := NewServer(cfg2)
-	defer s2.Close()
+	defer func() {
+		cancel()
+		s2.Close()
+	}()
 	wg.Add(1)
 	go func() {
 		c.Assert(s2.Start(ctx), check.IsNil)
@@ -1852,8 +1857,10 @@ func (t *testMaster) TestOfflineMember(c *check.C) {
 	ctx3, cancel3 := context.WithCancel(ctx)
 	s3 := NewServer(cfg3)
 	c.Assert(s3.Start(ctx3), check.IsNil)
-	defer s3.Close()
-	defer cancel3()
+	defer func() {
+		cancel3()
+		s3.Close()
+	}()
 
 	wg.Wait()
 
