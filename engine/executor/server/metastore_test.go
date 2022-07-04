@@ -47,7 +47,7 @@ func TestMetastoreManagerBasics(t *testing.T) {
 	manager, mockCreator := newMetastoreManagerForTesting(ctrl)
 	ctx := context.Background()
 
-	var discoveryStoreParams metaclient.StoreConfigParams
+	var discoveryStoreParams metaclient.StoreConfig
 	discoveryStoreParams.SetEndpoints("embedded-etcd:1234")
 
 	mockServerMasterClient.On(
@@ -60,7 +60,7 @@ func TestMetastoreManagerBasics(t *testing.T) {
 			Address: "embedded-etcd:1234", // fake address
 		}, nil).Once()
 
-	var frameStoreParams metaclient.StoreConfigParams
+	var frameStoreParams metaclient.StoreConfig
 	frameStoreParams.SetEndpoints("127.0.0.1:3306")
 	frameParamBytes, err := json.Marshal(frameStoreParams)
 	require.NoError(t, err)
@@ -75,7 +75,7 @@ func TestMetastoreManagerBasics(t *testing.T) {
 			Address: string(frameParamBytes),
 		}, nil).Once()
 
-	var businessStoreParams metaclient.StoreConfigParams
+	var businessStoreParams metaclient.StoreConfig
 	businessStoreParams.SetEndpoints("127.0.0.1:12345")
 	businessParamBytes, err := json.Marshal(businessStoreParams)
 	require.NoError(t, err)

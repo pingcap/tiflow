@@ -69,7 +69,7 @@ func NewUTCli(
 		return nil, errors.Trace(err)
 	}
 
-	conf := metaclient.StoreConfigParams{Endpoints: userMetaAddrs}
+	conf := metaclient.StoreConfig{Endpoints: userMetaAddrs}
 	userRawKVClient, err := kvclient.NewKVClient(&conf)
 	if err != nil {
 		return nil, errors.Trace(err)

@@ -49,7 +49,7 @@ type etcdImpl struct {
 }
 
 // NewEtcdImpl creates a new etcdImpl instance
-func NewEtcdImpl(config *metaclient.StoreConfigParams) (*etcdImpl, error) {
+func NewEtcdImpl(config *metaclient.StoreConfig) (*etcdImpl, error) {
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints: config.Endpoints,
 		// [TODO] TLS
