@@ -37,7 +37,7 @@ func (a columnsArray) Swap(i, j int) {
 	a[i], a[j] = a[j], a[i]
 }
 
-func sortColumnsArrays(arrays ...[]*model.Column) {
+func sortColumnArrays(arrays ...[]*model.Column) {
 	for _, array := range arrays {
 		if array != nil {
 			sort.Sort(columnsArray(array))
@@ -51,7 +51,7 @@ type batchTester struct {
 	resolvedTsCases [][]uint64
 }
 
-func NewDefaultBatchTester() *batchTester {
+func newDefaultBatchTester() *batchTester {
 	return &batchTester{
 		rowCases:        codecRowCases,
 		ddlCases:        codecDDLCases,
@@ -75,7 +75,7 @@ func (s *batchTester) testBatchCodec(
 			require.Equal(t, model.MessageTypeRow, tp)
 			row, err := decoder.NextRowChangedEvent()
 			require.Nil(t, err)
-			sortColumnsArrays(row.Columns, row.PreColumns, cs[index].Columns, cs[index].PreColumns)
+			sortColumnArrays(row.Columns, row.PreColumns, cs[index].Columns, cs[index].PreColumns)
 			require.Equal(t, cs[index], row)
 			index++
 		}
@@ -243,9 +243,85 @@ func TestMaxBatchSize(t *testing.T) {
 	require.Equal(t, 10000, sum)
 }
 
-func TestDefaultEventBatchCodec(t *testing.T) {
+func TestOpenProtocolAppendRowChangedEventWithCallback(t *testing.T) {
+	t.Parallel()
+
+	cfg := NewConfig(config.ProtocolOpen)
+	// Set the max batch size to 2, so that we can test the callback.
+	cfg.maxBatchSize = 2
+	builder := &openProtocolBatchEncoderBuilder{config: cfg}
+	encoder, ok := builder.Build().(*OpenProtocolBatchEncoder)
+	require.True(t, ok)
+	require.Equal(t, cfg.maxBatchSize, encoder.maxBatchSize)
+
+	count := 0
+
+	row := &model.RowChangedEvent{
+		CommitTs: 1,
+		Table:    &model.TableName{Schema: "a", Table: "b"},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+	}
+
+	tests := []struct {
+		row      *model.RowChangedEvent
+		callback func()
+	}{
+		{
+			row: row,
+			callback: func() {
+				count += 1
+			},
+		},
+		{
+			row: row,
+			callback: func() {
+				count += 2
+			},
+		},
+		{
+			row: row,
+			callback: func() {
+				count += 3
+			},
+		},
+		{
+			row: row,
+			callback: func() {
+				count += 4
+			},
+		},
+		{
+			row: row,
+			callback: func() {
+				count += 5
+			},
+		},
+	}
+
+	// Empty build makes sure that the callback build logic not broken.
+	msgs := encoder.Build()
+	require.Len(t, msgs, 0, "no message should be built and no panic")
+
+	// Append the events.
+	for _, test := range tests {
+		err := encoder.AppendRowChangedEvent(context.Background(), "", test.row, test.callback)
+		require.Nil(t, err)
+	}
+	require.Equal(t, 0, count, "nothing should be called")
+
+	msgs = encoder.Build()
+	require.Len(t, msgs, 3, "expected 3 messages")
+	msgs[0].Callback()
+	require.Equal(t, 3, count, "expected 2 callbacks be called")
+	msgs[1].Callback()
+	require.Equal(t, 10, count, "expected 2 callbacks be called")
+	msgs[2].Callback()
+	require.Equal(t, 15, count, "expected 1 callback be called")
+}
+
+func TestOpenProtocolBatchCodec(t *testing.T) {
 	config := NewConfig(config.ProtocolOpen).WithMaxMessageBytes(8192)
 	config.maxBatchSize = 64
-	tester := NewDefaultBatchTester()
+	tester := newDefaultBatchTester()
 	tester.testBatchCodec(t, newJSONEventBatchEncoderBuilder(config), NewJSONEventBatchDecoder)
 }

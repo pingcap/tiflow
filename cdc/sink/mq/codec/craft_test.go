@@ -75,7 +75,7 @@ func testBatchCodec(
 	}
 
 	encoder := encoderBuilder.Build()
-	s := NewDefaultBatchTester()
+	s := newDefaultBatchTester()
 
 	for _, cs := range s.rowCases {
 		events := 0

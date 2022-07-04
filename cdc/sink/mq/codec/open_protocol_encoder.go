@@ -29,7 +29,9 @@ import (
 // OpenProtocolBatchEncoder encodes the events into the byte of a batch into.
 type OpenProtocolBatchEncoder struct {
 	messageBuf   []*MQMessage
+	callbackBuff []func()
 	curBatchSize int
+
 	// configs
 	maxMessageBytes int
 	maxBatchSize    int
@@ -43,33 +45,6 @@ func (d *OpenProtocolBatchEncoder) GetMaxMessageBytes() int {
 // GetMaxBatchSize is only for unit testing.
 func (d *OpenProtocolBatchEncoder) GetMaxBatchSize() int {
 	return d.maxBatchSize
-}
-
-// EncodeCheckpointEvent implements the EventBatchEncoder interface
-func (d *OpenProtocolBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
-	keyMsg := newResolvedMessage(ts)
-	key, err := keyMsg.encode()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	var keyLenByte [8]byte
-	binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
-	var valueLenByte [8]byte
-	binary.BigEndian.PutUint64(valueLenByte[:], 0)
-
-	keyBuf := new(bytes.Buffer)
-	var versionByte [8]byte
-	binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)
-	keyBuf.Write(versionByte[:])
-	keyBuf.Write(keyLenByte[:])
-	keyBuf.Write(key)
-
-	valueBuf := new(bytes.Buffer)
-	valueBuf.Write(valueLenByte[:])
-
-	ret := newResolvedMsg(config.ProtocolOpen, keyBuf.Bytes(), valueBuf.Bytes(), ts)
-	return ret, nil
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
@@ -106,11 +81,12 @@ func (d *OpenProtocolBatchEncoder) AppendRowChangedEvent(
 	if len(d.messageBuf) == 0 ||
 		d.curBatchSize >= d.maxBatchSize ||
 		d.messageBuf[len(d.messageBuf)-1].Length()+len(key)+len(value)+16 > d.maxMessageBytes {
-
+		// Before we create a new message, we should handle the previous callbacks.
+		d.tryBuildCallback()
 		versionHead := make([]byte, 8)
 		binary.BigEndian.PutUint64(versionHead, BatchVersion1)
-
-		d.messageBuf = append(d.messageBuf, newMsg(config.ProtocolOpen, versionHead, nil, 0, model.MessageTypeRow, nil, nil))
+		msg := newMsg(config.ProtocolOpen, versionHead, nil, 0, model.MessageTypeRow, nil, nil)
+		d.messageBuf = append(d.messageBuf, msg)
 		d.curBatchSize = 0
 	}
 
@@ -123,6 +99,10 @@ func (d *OpenProtocolBatchEncoder) AppendRowChangedEvent(
 	message.Schema = &e.Table.Schema
 	message.Table = &e.Table.Table
 	message.IncRowsCount()
+
+	if callback != nil {
+		d.callbackBuff = append(d.callbackBuff, callback)
+	}
 
 	d.curBatchSize++
 	return nil
@@ -160,11 +140,53 @@ func (d *OpenProtocolBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage
 	return ret, nil
 }
 
+// EncodeCheckpointEvent implements the EventBatchEncoder interface
+func (d *OpenProtocolBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
+	keyMsg := newResolvedMessage(ts)
+	key, err := keyMsg.encode()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	var keyLenByte [8]byte
+	binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
+	var valueLenByte [8]byte
+	binary.BigEndian.PutUint64(valueLenByte[:], 0)
+
+	keyBuf := new(bytes.Buffer)
+	var versionByte [8]byte
+	binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)
+	keyBuf.Write(versionByte[:])
+	keyBuf.Write(keyLenByte[:])
+	keyBuf.Write(key)
+
+	valueBuf := new(bytes.Buffer)
+	valueBuf.Write(valueLenByte[:])
+
+	ret := newResolvedMsg(config.ProtocolOpen, keyBuf.Bytes(), valueBuf.Bytes(), ts)
+	return ret, nil
+}
+
 // Build implements the EventBatchEncoder interface
 func (d *OpenProtocolBatchEncoder) Build() (mqMessages []*MQMessage) {
+	d.tryBuildCallback()
 	ret := d.messageBuf
 	d.messageBuf = make([]*MQMessage, 0)
 	return ret
+}
+
+// tryBuildCallback will collect all the callbacks into one message's callback.
+func (d *OpenProtocolBatchEncoder) tryBuildCallback() {
+	if len(d.messageBuf) != 0 && len(d.callbackBuff) != 0 {
+		lastMsg := d.messageBuf[len(d.messageBuf)-1]
+		callbacks := d.callbackBuff
+		lastMsg.Callback = func() {
+			for _, cb := range callbacks {
+				cb()
+			}
+		}
+		d.callbackBuff = make([]func(), 0)
+	}
 }
 
 type openProtocolBatchEncoderBuilder struct {
