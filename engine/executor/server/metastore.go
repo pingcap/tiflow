@@ -32,9 +32,8 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/config"
 	"github.com/pingcap/tiflow/engine/pkg/dbutil"
-	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
-	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	"github.com/pingcap/tiflow/engine/pkg/meta"
+	metaclient "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
@@ -61,7 +60,7 @@ type MetastoreManager interface {
 
 	ServiceDiscoveryStore() *clientv3.Client
 	FrameworkStore() pkgOrm.Client
-	BusinessStore() extkv.KVClientEx
+	BusinessStore() metaclient.KVClientEx
 }
 
 // NewMetastoreManager returns a new MetastoreManager.
@@ -80,7 +79,7 @@ type metastoreManagerImpl struct {
 
 	serviceDiscoveryStore *clientv3.Client
 	frameworkStore        pkgOrm.Client
-	businessStore         extkv.KVClientEx
+	businessStore         metaclient.KVClientEx
 
 	creator MetastoreCreator
 }
@@ -94,7 +93,7 @@ type MetastoreCreator interface {
 
 	CreateMetaKVClientForBusiness(
 		ctx context.Context, params metaclient.StoreConfig,
-	) (extkv.KVClientEx, error)
+	) (metaclient.KVClientEx, error)
 
 	CreateDBClientForFramework(
 		ctx context.Context, params metaclient.StoreConfig,
@@ -136,8 +135,8 @@ func (c metastoreCreatorImpl) CreateEtcdCliForServiceDiscovery(
 
 func (c metastoreCreatorImpl) CreateMetaKVClientForBusiness(
 	_ context.Context, params metaclient.StoreConfig,
-) (extkv.KVClientEx, error) {
-	metaKVClient, err := kvclient.NewKVClient(&params)
+) (metaclient.KVClientEx, error) {
+	metaKVClient, err := meta.NewKVClient(&params)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -265,7 +264,7 @@ func (m *metastoreManagerImpl) FrameworkStore() pkgOrm.Client {
 	return m.frameworkStore
 }
 
-func (m *metastoreManagerImpl) BusinessStore() extkv.KVClientEx {
+func (m *metastoreManagerImpl) BusinessStore() metaclient.KVClientEx {
 	if !m.initialized.Load() {
 		log.Panic("BusinessStore called before Init is successful")
 	}

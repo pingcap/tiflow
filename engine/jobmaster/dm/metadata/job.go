@@ -21,7 +21,7 @@ import (
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	metaclient "github.com/pingcap/tiflow/engine/pkg/meta/model"
 )
 
 // TaskStage represents internal stage of a task

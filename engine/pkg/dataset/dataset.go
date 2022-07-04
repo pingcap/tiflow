@@ -19,7 +19,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	metaclient "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	derror "github.com/pingcap/tiflow/pkg/errors"
 )
 

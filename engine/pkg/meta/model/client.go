@@ -11,27 +11,45 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package extension
+package common
 
 import (
 	"context"
-
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 )
+
+// Client defines some basic method used as a meta client
+type Client interface {
+	// Close is the method to close the client and release inner resources
+	Close() error
+
+	// GenEpoch generate the increasing epoch for user
+	GenEpoch(ctx context.Context) (int64, error)
+}
+
+// KVClient combines Client interface and KV interface
+type KVClient interface {
+	Client
+	KV
+}
+
+//===========================================================================
+// DO NOT USE these interface below.
+// We put these interfaces here temporary for directory adjustment
+// We will refine these interfaces in other pr.
 
 // KVEx extends the KV interface with Do method to implement the intermediate
 // layer easier
 type KVEx interface {
-	metaclient.KV
+	KV
 
 	// Do applies a single Op on KV without a transaction.
 	// Do is useful when adding intermidate layer to KV implement
-	Do(ctx context.Context, op metaclient.Op) (metaclient.OpResponse, metaclient.Error)
+	Do(ctx context.Context, op Op) (OpResponse, Error)
 }
 
 // KVClientEx extends the KVClient interface with Do method to implement the
 // intermediate layer easier
 type KVClientEx interface {
 	KVEx
-	metaclient.Client
+	Client
 }

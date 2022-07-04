@@ -26,8 +26,8 @@ import (
 	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/server/mocks"
-	kvMock "github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	kvMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	metaclient "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 )
 

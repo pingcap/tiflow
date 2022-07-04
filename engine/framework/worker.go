@@ -37,9 +37,8 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
-	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	"github.com/pingcap/tiflow/engine/pkg/meta"
+	metaclient "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
@@ -109,7 +108,7 @@ type DefaultBaseWorker struct {
 	// framework metastore client
 	frameMetaClient pkgOrm.Client
 	// user metastore raw kvclient
-	userRawKVClient extkv.KVClientEx
+	userRawKVClient metaclient.KVClientEx
 	resourceBroker  broker.Broker
 
 	masterClient *worker.MasterClient
@@ -156,7 +155,7 @@ type workerParams struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
 	FrameMetaClient       pkgOrm.Client
-	UserRawKVClient       extkv.KVClientEx
+	UserRawKVClient       metaclient.KVClientEx
 	ResourceBroker        broker.Broker
 }
 
@@ -199,7 +198,7 @@ func NewBaseWorker(
 
 		errCenter:        errctx.NewErrCenter(),
 		clock:            clock.New(),
-		userMetaKVClient: kvclient.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
+		userMetaKVClient: meta.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
 		metricFactory:    promutil.NewFactory4Worker(ctx.ProjectInfo, MustConvertWorkerType2JobType(tp), masterID, workerID),
 		logger:           frameLog.WithWorkerID(frameLog.WithMasterID(logger, masterID), workerID),
 	}

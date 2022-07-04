@@ -22,7 +22,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	metaclient "github.com/pingcap/tiflow/engine/pkg/meta/model"
 )
 
 // State represents the state which need to be stored in metadata.

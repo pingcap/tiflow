@@ -15,7 +15,7 @@ package metadata
 
 import (
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	metaclient "github.com/pingcap/tiflow/engine/pkg/meta/model"
 )
 
 // MetaData is the metadata of dm.

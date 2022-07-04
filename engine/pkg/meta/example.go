@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package kvclient
+package meta
 
 import (
 	"context"
@@ -19,9 +19,8 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-
-	mock "github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	metaclient "github.com/pingcap/tiflow/engine/pkg/meta/model"
 )
 
 // Backend KV store data:

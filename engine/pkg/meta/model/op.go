@@ -27,7 +27,7 @@
 
 // [Reference]:https://github.com/etcd-io/etcd/blob/20c89df5e5e2d738efb9c276d954d754eb86918b/client/v3/op.go
 
-package metaclient
+package common
 
 import (
 	"github.com/pingcap/tiflow/pkg/errors"

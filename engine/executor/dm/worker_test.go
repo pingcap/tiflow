@@ -20,6 +20,9 @@ import (
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/dig"
+
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/engine/framework"
@@ -29,13 +32,11 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
-	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
-	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
+	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	metaclient "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/dig"
 )
 
 type workerParamListForTest struct {
@@ -44,7 +45,7 @@ type workerParamListForTest struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
 	FrameMetaClient       pkgOrm.Client
-	UserRawKVClient       extkv.KVClientEx
+	UserRawKVClient       metaclient.KVClientEx
 	ResourceBroker        broker.Broker
 }
 

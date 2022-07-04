@@ -23,7 +23,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/pkg/etcdutil"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	metaclient "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/security"

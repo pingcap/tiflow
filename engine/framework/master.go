@@ -41,9 +41,8 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
-	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	"github.com/pingcap/tiflow/engine/pkg/meta"
+	metaclient "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
@@ -136,7 +135,7 @@ type DefaultBaseMaster struct {
 	// framework metastore client
 	frameMetaClient pkgOrm.Client
 	// user metastore raw kvclient
-	userRawKVClient       extkv.KVClientEx
+	userRawKVClient       metaclient.KVClientEx
 	executorClientManager client.ClientsManager
 	serverMasterClient    client.MasterClient
 
@@ -201,7 +200,7 @@ type masterParams struct {
 	// framework metastore client
 	FrameMetaClient pkgOrm.Client
 	// user metastore raw kvclient
-	UserRawKVClient       extkv.KVClientEx
+	UserRawKVClient       metaclient.KVClientEx
 	ExecutorClientManager client.ClientsManager
 	ServerMasterClient    client.MasterClient
 }
@@ -261,7 +260,7 @@ func NewBaseMaster(
 		masterProjectInfo: ctx.ProjectInfo,
 
 		createWorkerQuota: quota.NewConcurrencyQuota(maxCreateWorkerConcurrency),
-		userMetaKVClient:  kvclient.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
+		userMetaKVClient:  meta.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
 		metricFactory:     promutil.NewFactory4Master(ctx.ProjectInfo, MustConvertWorkerType2JobType(tp), id),
 		logger:            frameLog.WithMasterID(logger, id),
 

@@ -31,8 +31,8 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/fake"
 	engineModel "github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	"github.com/pingcap/tiflow/engine/pkg/meta"
+	metaclient "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
@@ -70,11 +70,11 @@ func NewUTCli(
 	}
 
 	conf := metaclient.StoreConfig{Endpoints: userMetaAddrs}
-	userRawKVClient, err := kvclient.NewKVClient(&conf)
+	userRawKVClient, err := meta.NewKVClient(&conf)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	metaCli := kvclient.NewPrefixKVClient(userRawKVClient, project.UniqueID())
+	metaCli := meta.NewPrefixKVClient(userRawKVClient, project.UniqueID())
 
 	fakeJobCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   userMetaAddrs,

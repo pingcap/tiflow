@@ -16,7 +16,7 @@ package servermaster
 import (
 	"testing"
 
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	metaclient "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/stretchr/testify/require"
 )
 
