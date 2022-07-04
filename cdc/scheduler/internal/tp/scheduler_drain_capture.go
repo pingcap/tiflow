@@ -186,7 +186,7 @@ func (d *drainCaptureScheduler) Schedule(
 				TableID:     tableID,
 				DestCapture: target,
 			},
-			accept: (callback)(nil), // We do not need to accept callback here.
+			accept: (callback)(nil), // No need for accept callback here.
 		})
 
 		captureWorkload[target] = randomizeWorkload(d.random, minWorkload+1)
