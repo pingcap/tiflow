@@ -117,14 +117,18 @@ func newStatusProvider() *mockStatusProvider {
 
 	statusProvider.On("GetAllChangeFeedStatuses", mock.Anything).
 		Return(map[model.ChangeFeedID]*model.ChangeFeedStatus{
-			model.DefaultChangeFeedID(changeFeedID.ID + "1"): {CheckpointTs: 1},
-			model.DefaultChangeFeedID(changeFeedID.ID + "2"): {CheckpointTs: 2},
+			model.ChangeFeedID4Test("ab", "123"):  {CheckpointTs: 1},
+			model.ChangeFeedID4Test("ab", "13"):   {CheckpointTs: 2},
+			model.ChangeFeedID4Test("abc", "123"): {CheckpointTs: 1},
+			model.ChangeFeedID4Test("def", "456"): {CheckpointTs: 2},
 		}, nil)
 
 	statusProvider.On("GetAllChangeFeedInfo", mock.Anything).
 		Return(map[model.ChangeFeedID]*model.ChangeFeedInfo{
-			model.DefaultChangeFeedID(changeFeedID.ID + "1"): {State: model.StateNormal},
-			model.DefaultChangeFeedID(changeFeedID.ID + "2"): {State: model.StateStopped},
+			model.ChangeFeedID4Test("ab", "123"):  {State: model.StateNormal},
+			model.ChangeFeedID4Test("ab", "13"):   {State: model.StateStopped},
+			model.ChangeFeedID4Test("abc", "123"): {State: model.StateNormal},
+			model.ChangeFeedID4Test("def", "456"): {State: model.StateStopped},
 		}, nil)
 
 	statusProvider.On("GetAllTaskStatuses", mock.Anything).
@@ -156,9 +160,18 @@ func TestListChangefeed(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, 200, w.Code)
 	var resp []model.ChangefeedCommonInfo
+	fmt.Println(w.Body.String())
 	err := json.NewDecoder(w.Body).Decode(&resp)
 	require.Nil(t, err)
-	require.Equal(t, 2, len(resp))
+	require.Equal(t, 4, len(resp))
+	require.Equal(t, "ab", resp[0].Namespace)
+	require.Equal(t, "123", resp[0].ID)
+	require.Equal(t, "ab", resp[1].Namespace)
+	require.Equal(t, "13", resp[1].ID)
+	require.Equal(t, "abc", resp[2].Namespace)
+	require.Equal(t, "123", resp[2].ID)
+	require.Equal(t, "def", resp[3].Namespace)
+	require.Equal(t, "456", resp[3].ID)
 
 	// test list changefeed with specific state
 	api = testCase{url: fmt.Sprintf("/api/v1/changefeeds?state=%s", "stopped"), method: "GET"}
@@ -169,9 +182,11 @@ func TestListChangefeed(t *testing.T) {
 	resp = []model.ChangefeedCommonInfo{}
 	err = json.NewDecoder(w.Body).Decode(&resp)
 	require.Nil(t, err)
-	require.Equal(t, 1, len(resp))
+	require.Equal(t, 2, len(resp))
 	require.Equal(t, model.StateStopped, resp[0].FeedState)
+	require.Equal(t, model.StateStopped, resp[1].FeedState)
 	require.Equal(t, uint64(0x2), resp[0].CheckpointTSO)
+	require.Equal(t, uint64(0x2), resp[1].CheckpointTSO)
 }
 
 func TestGetChangefeed(t *testing.T) {
