@@ -273,7 +273,7 @@ func (w *SourceWorker) updateSourceStatus(ctx context.Context, needLock bool) er
 		return err
 	}
 
-	w.sourceStatus.Store(&status)
+	w.sourceStatus.Store(status)
 	return nil
 }
 
