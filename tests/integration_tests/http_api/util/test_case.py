@@ -232,7 +232,7 @@ def resign_owner():
 
 def get_owner():
     url = BASE_URL1 + "/owner"
-    resp = rq.get()
+    resp = rq.get(url)
     assert resp.status_code == rq.codes.ok
 
     print("pass test: get owner")
