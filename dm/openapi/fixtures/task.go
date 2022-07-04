@@ -53,8 +53,45 @@ var (
 		  "user": "root"
 		},
 		"task_mode": "all"
-	  }
-`
+	}
+	`
+
+	noShardErrNameJSONStr = `
+	{
+		"enhance_online_schema_change": true,
+		"meta_schema": "dm_meta",
+		"name": "orders_netpay_pay_inf_nuccinterconn_zh_ext_2022_[6-12]",
+		"on_duplicate": "error",
+		"source_config": {
+		  "full_migrate_conf": {
+			"data_dir": "./exported_data",
+			"export_threads": 4,
+			"import_threads": 16
+		  },
+		  "incr_migrate_conf": { "repl_batch": 200, "repl_threads": 32 },
+		  "source_conf": [{ "source_name": "mysql-replica-01" }]
+		},
+		"table_migrate_rule": [
+		  {
+			"source": {
+			  "schema": "some_db",
+			  "source_name": "mysql-replica-01",
+			  "table": "*"
+			},
+			"target": { "schema": "new_name_db", "table": "*" }
+		  }
+		],
+		"target_config": {
+		  "host": "root",
+		  "password": "123456",
+		  "port": 4000,
+		  "security": null,
+		  "user": "root"
+		},
+		"task_mode": "all",
+		"ignore_checking_items": ["all"]
+	}
+	`
 
 	shardAndFilterTaskJSONStr = `
 	{
@@ -115,7 +152,7 @@ var (
 		  "user": "root"
 		},
 		"task_mode": "all"
-	  }
+	}
 	`
 )
 
@@ -123,6 +160,13 @@ var (
 func GenNoShardOpenAPITaskForTest() (openapi.Task, error) {
 	t := openapi.Task{}
 	err := json.Unmarshal([]byte(noShardTaskJSONStr), &t)
+	return t, err
+}
+
+// GenNoShardOpenAPITaskForTest generates a no-shard openapi.Task for test.
+func GenNoShardErrNameOpenAPITaskForTest() (openapi.Task, error) {
+	t := openapi.Task{}
+	err := json.Unmarshal([]byte(noShardErrNameJSONStr), &t)
 	return t, err
 }
 

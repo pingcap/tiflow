@@ -22,6 +22,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 
 	"github.com/pingcap/failpoint"
@@ -29,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/master/scheduler"
 	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/pbmock"
 	"github.com/pingcap/tiflow/dm/openapi"
 	"github.com/pingcap/tiflow/dm/openapi/fixtures"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -442,6 +444,105 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 		s.NotNil(taskCfg4)
 		s.EqualValues(task4, task3)
 		s.Equal(taskCfg4.String(), taskCfg3.String())
+	}
+}
+
+func (s *OpenAPIControllerSuite) TestTaskControllerWithInvalidTask() {
+	ctx, cancel := context.WithCancel(context.Background())
+	server := setupTestServer(ctx, s.T())
+	defer func() {
+		cancel()
+		server.Close()
+	}()
+
+	// create an invalid task
+	task, err := fixtures.GenNoShardErrNameOpenAPITaskForTest()
+	s.Nil(err)
+
+	// create source for task
+	{
+		// add a mock worker
+		worker1Name := "worker1"
+		worker1Addr := "172.16.10.72:8262"
+		s.Nil(server.scheduler.AddWorker(worker1Name, worker1Addr))
+		worker1 := server.scheduler.GetWorkerByName(worker1Name)
+		worker1.ToFree()
+
+		// create the corresponding mock worker
+		ctrl := gomock.NewController(s.T())
+		defer ctrl.Finish()
+		mockWorkerClient := pbmock.NewMockWorkerClient(ctrl)
+		queryResp := &pb.QueryStatusResponse{
+			Result: true,
+			Msg:    "",
+			SourceStatus: &pb.SourceStatus{
+				Source: s.testSource.SourceName,
+				Worker: worker1Name,
+			},
+			SubTaskStatus: [](*pb.SubTaskStatus){&pb.SubTaskStatus{
+				Result: &pb.ProcessResult{
+					Errors: [](*pb.ProcessError){&pb.ProcessError{
+						ErrCode:  10006,
+						ErrClass: "database",
+						ErrScope: "downstream",
+						ErrLevel: "high",
+						Message:  "fail to initialize unit Load of subtask orders_netpay_pay_inf_nuccinterconn_zh_ext_2022_[6-12] : execute statement failed: CREATE TABLE IF NOT EXISTS `dm_meta`.`orders_netpay_pay_inf_nuccinterconn_zh_ext_2022_[6-12]_lightning_checkpoint_list` (\n\t\ttask_name varchar(255) NOT NULL,\n\t\tsource_name varchar(255) NOT NULL,\n\t\tstatus varchar(10) NOT NULL DEFAULT 'init' COMMENT 'init,running,finished',\n\t\tPRIMARY KEY (task_name, source_name)\n\t);\n",
+						RawCause: "Error 1059: Identifier name 'orders_netpay_pay_inf_nuccinterconn_zh_ext_2022_[6-12]_lightning_checkpoint_list' is too long.",
+					}},
+				},
+			}},
+		}
+		mockWorkerClient.EXPECT().QueryStatus(
+			gomock.Any(),
+			gomock.Any(),
+		).Return(queryResp, nil).MaxTimes(maxRetryNum)
+		server.scheduler.SetWorkerClientForTest(worker1Name, newMockRPCClient(mockWorkerClient))
+
+		_, err := server.createSource(ctx, openapi.CreateSourceRequest{Source: *s.testSource, WorkerName: &worker1Name})
+		s.Nil(err)
+		s.Equal(worker1.Stage(), scheduler.WorkerBound)
+		sourceList, err := server.listSource(ctx, openapi.DMAPIGetSourceListParams{})
+		s.Nil(err)
+		s.Len(sourceList, 1)
+	}
+
+	// create
+	{
+		createTaskReq := openapi.CreateTaskRequest{Task: task}
+		res, err := server.createTask(ctx, createTaskReq)
+		s.Nil(err)
+		s.EqualValues(task, res.Task)
+	}
+
+	// start and stop
+	{
+		// start success
+		req := openapi.StartTaskRequest{}
+		s.Nil(server.enableSource(ctx, s.testSource.SourceName))
+		s.Nil(server.startTask(ctx, task.Name, req))
+		s.Equal(server.scheduler.GetExpectSubTaskStage(task.Name, s.testSource.SourceName).Expect, pb.Stage_Running)
+
+		// get status
+		{
+			params := openapi.DMAPIGetTaskStatusParams{}
+			statusList, err := server.getTaskStatus(ctx, task.Name, params)
+			s.NoError(err)
+			s.Len(statusList, 1)
+			s.NotNil(statusList[0].ErrorMsg)
+			s.Contains(*statusList[0].ErrorMsg, "code=10006") // database error, will return an error message
+		}
+
+		// stop success
+		s.Nil(server.stopTask(ctx, task.Name, openapi.StopTaskRequest{}))
+		s.Equal(server.scheduler.GetExpectSubTaskStage(task.Name, s.testSource.SourceName).Expect, pb.Stage_Stopped)
+	}
+
+	// delete
+	{
+		s.Nil(server.deleteTask(ctx, task.Name, true)) // delete with fore
+		taskList, err := server.listTask(ctx, openapi.DMAPIGetTaskListParams{})
+		s.Nil(err)
+		s.Len(taskList, 0)
 	}
 }
 
