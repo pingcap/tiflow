@@ -17,7 +17,6 @@ import (
 	"sync"
 
 	"go.uber.org/atomic"
-
 	"github.com/pingcap/tiflow/engine/pkg/containers"
 	"github.com/pingcap/tiflow/pkg/causality/internal"
 )
