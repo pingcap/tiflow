@@ -18,8 +18,8 @@ import "time"
 const (
 	defaultConnMaxIdleTime = 1 * time.Minute
 	defaultConnMaxLifeTime = 12 * time.Hour
-	defaultMaxIdleConns    = 1
-	defaultMaxOpenConns    = 1
+	defaultMaxIdleConns    = 3
+	defaultMaxOpenConns    = 7
 	// TODO: more params for mysql connection
 )
 
