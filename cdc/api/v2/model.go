@@ -27,8 +27,8 @@ import (
 
 // Tso contains timestamp get from PD
 type Tso struct {
-	Timestamp int64 `json:"timestamp"`
-	LogicTime int64 `json:"logic_time"`
+	Timestamp int64 `json:"timestamp,omitempty"`
+	LogicTime int64 `json:"logic_time,omitempty"`
 }
 
 // Tables contains IneligibleTables and EligibleTables
@@ -39,18 +39,18 @@ type Tables struct {
 
 // TableName contains table information
 type TableName struct {
-	Schema      string `json:"database_name"`
-	Table       string `json:"table_name"`
-	TableID     int64  `json:"table_id" `
-	IsPartition bool   `json:"is_partition"`
+	Schema      string `json:"database_name,omitempty"`
+	Table       string `json:"table_name,omitempty"`
+	TableID     int64  `json:"table_id,omitempty"`
+	IsPartition bool   `json:"is_partition,omitempty"`
 }
 
 // VerifyTableConfig use to verify tables.
 // Only use by Open API v2.
 type VerifyTableConfig struct {
 	PDConfig
-	ReplicaConfig *ReplicaConfig `json:"replica_config"`
-	StartTs       uint64         `json:"start_ts"`
+	ReplicaConfig *ReplicaConfig `json:"replica_config,omitempty"`
+	StartTs       uint64         `json:"start_ts,omitempty"`
 }
 
 func getDefaultVerifyTableConfig() *VerifyTableConfig {
@@ -62,44 +62,42 @@ func getDefaultVerifyTableConfig() *VerifyTableConfig {
 // ResumeChangefeedConfig is used by resume changefeed api
 type ResumeChangefeedConfig struct {
 	PDConfig
-	OverwriteCheckpointTs uint64 `json:"overwrite_checkpoint_ts"`
+	OverwriteCheckpointTs uint64 `json:"overwrite_checkpoint_ts,omitempty"`
 }
 
 // PDConfig is a configuration used to connect to pd
 type PDConfig struct {
-	PDAddrs       []string `json:"pd_addrs"`
-	CAPath        string   `json:"ca_path"`
-	CertPath      string   `json:"cert_path"`
-	KeyPath       string   `json:"key_path"`
-	CertAllowedCN []string `json:"cert_allowed_cn"`
+	PDAddrs       []string `json:"pd_addrs,omitempty"`
+	CAPath        string   `json:"ca_path,omitempty"`
+	CertPath      string   `json:"cert_path,omitempty"`
+	KeyPath       string   `json:"key_path,omitempty"`
+	CertAllowedCN []string `json:"cert_allowed_cn,omitempty"`
 }
 
 // ChangefeedConfig use by create changefeed api
 type ChangefeedConfig struct {
-	Namespace string `json:"namespace"`
-	ID        string `json:"changefeed_id"`
-	StartTs   uint64 `json:"start_ts"`
-	TargetTs  uint64 `json:"target_ts"`
-	SinkURI   string `json:"sink_uri"`
-	Engine    string `json:"engine"`
-
-	ReplicaConfig *ReplicaConfig `json:"replica_config"`
-
-	SyncPointEnabled  bool          `json:"sync_point_enabled"`
-	SyncPointInterval time.Duration `json:"sync_point_interval"`
+	Namespace         string         `json:"namespace,omitempty"`
+	ID                string         `json:"changefeed_id,omitempty"`
+	StartTs           uint64         `json:"start_ts,omitempty"`
+	TargetTs          uint64         `json:"target_ts,omitempty"`
+	SinkURI           string         `json:"sink_uri,omitempty"`
+	Engine            string         `json:"engine,omitempty"`
+	ReplicaConfig     *ReplicaConfig `json:"replica_config,omitempty"`
+	SyncPointEnabled  bool           `json:"sync_point_enabled,omitempty"`
+	SyncPointInterval time.Duration  `json:"sync_point_interval,omitempty"`
 	PDConfig
 }
 
 // ReplicaConfig is a duplicate of  config.ReplicaConfig
 type ReplicaConfig struct {
-	CaseSensitive         bool              `json:"case_sensitive"`
-	EnableOldValue        bool              `json:"enable_old_value"`
-	ForceReplicate        bool              `json:"force_replicate"`
-	IgnoreIneligibleTable bool              `json:"ignore_ineligible_table"`
-	CheckGCSafePoint      bool              `json:"check_gc_safe_point"`
-	Filter                *FilterConfig     `json:"filter"`
-	Sink                  *SinkConfig       `json:"sink"`
-	Consistent            *ConsistentConfig `json:"consistent"`
+	CaseSensitive         bool              `json:"case_sensitive,omitempty"`
+	EnableOldValue        bool              `json:"enable_old_value,omitempty"`
+	ForceReplicate        bool              `json:"force_replicate,omitempty"`
+	IgnoreIneligibleTable bool              `json:"ignore_ineligible_table,omitempty"`
+	CheckGCSafePoint      bool              `json:"check_gc_safe_point,omitempty"`
+	Filter                *FilterConfig     `json:"filter,omitempty"`
+	Sink                  *SinkConfig       `json:"sink,omitempty"`
+	Consistent            *ConsistentConfig `json:"consistent,omitempty"`
 }
 
 // ToInternalReplicaConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
@@ -111,9 +109,31 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 	res.CheckGCSafePoint = c.CheckGCSafePoint
 
 	if c.Filter != nil {
+		var mySQLReplicationRules *filter.MySQLReplicationRules
+		if c.Filter.MySQLReplicationRules != nil {
+			mySQLReplicationRules = &filter.MySQLReplicationRules{}
+			mySQLReplicationRules.DoDBs = c.Filter.DoDBs
+			mySQLReplicationRules.IgnoreDBs = c.Filter.IgnoreDBs
+			if c.Filter.MySQLReplicationRules.DoTables != nil {
+				for _, tbl := range c.Filter.MySQLReplicationRules.DoTables {
+					mySQLReplicationRules.DoTables = append(mySQLReplicationRules.DoTables,
+						&filter.Table{
+							Schema: tbl.Schema,
+							Name:   tbl.Name,
+						})
+				}
+				for _, tbl := range c.Filter.MySQLReplicationRules.IgnoreTables {
+					mySQLReplicationRules.IgnoreTables = append(mySQLReplicationRules.IgnoreTables,
+						&filter.Table{
+							Schema: tbl.Schema,
+							Name:   tbl.Name,
+						})
+				}
+			}
+		}
 		res.Filter = &config.FilterConfig{
 			Rules:                 c.Filter.Rules,
-			MySQLReplicationRules: c.Filter.MySQLReplicationRules,
+			MySQLReplicationRules: mySQLReplicationRules,
 			IgnoreTxnStartTs:      c.Filter.IgnoreTxnStartTs,
 			DDLAllowlist:          c.Filter.DDLAllowlist,
 		}
@@ -167,8 +187,30 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 	}
 
 	if cloned.Filter != nil {
+		var mySQLReplicationRules *MySQLReplicationRules
+		if c.Filter.MySQLReplicationRules != nil {
+			mySQLReplicationRules = &MySQLReplicationRules{}
+			mySQLReplicationRules.DoDBs = c.Filter.DoDBs
+			mySQLReplicationRules.IgnoreDBs = c.Filter.IgnoreDBs
+			if c.Filter.MySQLReplicationRules.DoTables != nil {
+				for _, tbl := range c.Filter.MySQLReplicationRules.DoTables {
+					mySQLReplicationRules.DoTables = append(mySQLReplicationRules.DoTables,
+						&Table{
+							Schema: tbl.Schema,
+							Name:   tbl.Name,
+						})
+				}
+				for _, tbl := range c.Filter.MySQLReplicationRules.IgnoreTables {
+					mySQLReplicationRules.IgnoreTables = append(mySQLReplicationRules.IgnoreTables,
+						&Table{
+							Schema: tbl.Schema,
+							Name:   tbl.Name,
+						})
+				}
+			}
+		}
 		res.Filter = &FilterConfig{
-			MySQLReplicationRules: cloned.Filter.MySQLReplicationRules,
+			MySQLReplicationRules: mySQLReplicationRules,
 			Rules:                 cloned.Filter.Rules,
 			IgnoreTxnStartTs:      cloned.Filter.IgnoreTxnStartTs,
 			DDLAllowlist:          cloned.Filter.DDLAllowlist,
@@ -231,44 +273,65 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 // FilterConfig represents filter config for a changefeed
 // This is a duplicate of config.FilterConfig
 type FilterConfig struct {
-	*filter.MySQLReplicationRules
-	Rules            []string               `json:"rules"`
-	IgnoreTxnStartTs []uint64               `json:"ignore_txn_start_ts"`
+	*MySQLReplicationRules
+	Rules            []string               `json:"rules,omitempty"`
+	IgnoreTxnStartTs []uint64               `json:"ignore_txn_start_ts,omitempty"`
 	DDLAllowlist     []tidbModel.ActionType `json:"ddl_allow_list,omitempty"`
+}
+
+// MySQLReplicationRules is a set of rules based on MySQL's replication tableFilter.
+type MySQLReplicationRules struct {
+	// DoTables is an allowlist of tables.
+	DoTables []*Table `json:"do_tables,omitempty"`
+	// DoDBs is an allowlist of schemas.
+	DoDBs []string `json:"do_dbs,omitempty"`
+
+	// IgnoreTables is a blocklist of tables.
+	IgnoreTables []*Table `json:"ignore_tables,omitempty"`
+	// IgnoreDBs is a blocklist of schemas.
+	IgnoreDBs []string `json:"ignore_dbs,omitempty"`
+}
+
+// Table represents a qualified table name.
+type Table struct {
+	// Schema is the name of the schema (database) containing this table.
+	Schema string `json:"database_name,omitempty"`
+	// Name is the unqualified table name.
+	Name string `json:"table_name,omitempty"`
 }
 
 // SinkConfig represents sink config for a changefeed
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
-	Protocol        string            `json:"protocol"`
-	SchemaRegistry  string            `json:"schema_registry"`
-	DispatchRules   []*DispatchRule   `json:"dispatchers"`
-	ColumnSelectors []*ColumnSelector `json:"column_selectors"`
-	TxnAtomicity    string            `json:"transaction-atomicity"`
+	Protocol        string            `json:"protocol,omitempty"`
+	SchemaRegistry  string            `json:"schema_registry,omitempty"`
+	DispatchRules   []*DispatchRule   `json:"dispatchers,omitempty,omitempty"`
+	ColumnSelectors []*ColumnSelector `json:"column_selectors,omitempty"`
+	TxnAtomicity    string            `json:"transaction_atomicity"`
 }
 
 // DispatchRule represents partition rule for a table
 // This is a duplicate of config.DispatchRule
 type DispatchRule struct {
-	Matcher       []string `json:"matcher"`
-	PartitionRule string   `json:"partition"`
-	TopicRule     string   `json:"topic"`
+	Matcher       []string `json:"matcher,omitempty"`
+	PartitionRule string   `json:"partition,omitempty"`
+	TopicRule     string   `json:"topic,omitempty"`
 }
 
 // ColumnSelector represents a column selector for a table.
 // This is a duplicate of config.ColumnSelector
 type ColumnSelector struct {
-	Matcher []string `json:"matcher"`
-	Columns []string `json:"columns"`
+	Matcher []string `json:"matcher,omitempty"`
+	Columns []string `json:"columns,omitempty"`
 }
 
 // ConsistentConfig represents replication consistency config for a changefeed
 // This is a duplicate of config.ConsistentConfig
 type ConsistentConfig struct {
-	Level             string `json:"level"`
-	MaxLogSize        int64  `json:"max_log_size"`
-	FlushIntervalInMs int64  `json:"flush_interval"`
-	Storage           string `json:"storage"`
+	Level             string `json:"level,omitempty"`
+	MaxLogSize        int64  `json:"max_log_size,omitempty"`
+	FlushIntervalInMs int64  `json:"flush_interval,omitempty"`
+	Storage           string `json:"storage,omitempty"`
 }
 
 // EtcdData contains key/value pair of etcd data
@@ -279,22 +342,18 @@ type EtcdData struct {
 
 // ResolveLockReq contains request parameter to resolve lock
 type ResolveLockReq struct {
-	RegionID      uint64   `json:"region_id,omitempty"`
-	Ts            uint64   `json:"ts,omitempty"`
-	PDAddrs       []string `json:"pd_addrs"`
-	CAPath        string   `json:"ca_path"`
-	CertPath      string   `json:"cert_path"`
-	KeyPath       string   `json:"key_path"`
-	CertAllowedCN []string `json:"cert_allowed_cn"`
+	RegionID uint64 `json:"region_id,omitempty,omitempty"`
+	Ts       uint64 `json:"ts,omitempty,omitempty"`
+	PDConfig
 }
 
 // ChangeFeedInfo describes the detail of a ChangeFeed
 type ChangeFeedInfo struct {
 	UpstreamID uint64    `json:"upstream_id,omitempty"`
 	Namespace  string    `json:"namespace,omitempty"`
-	ID         string    `json:"id,omitempty"`
+	ID         string    `json:"id,omitempty,omitempty"`
 	SinkURI    string    `json:"sink_uri,omitempty"`
-	CreateTime time.Time `json:"create_time"`
+	CreateTime time.Time `json:"create_time,omitempty"`
 	// Start sync at this commit ts if `StartTs` is specify or using the CreateTime of changefeed.
 	StartTs uint64 `json:"start_ts,omitempty"`
 	// The ChangeFeed will exits until sync to timestamp TargetTs
@@ -312,9 +371,9 @@ type ChangeFeedInfo struct {
 
 // RunningError represents some running error from cdc components, such as processor.
 type RunningError struct {
-	Addr    string `json:"addr"`
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Addr    string `json:"addr,omitempty"`
+	Code    string `json:"code,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 // Marshal returns the json marshal format of a ChangeFeedInfo
@@ -346,6 +405,6 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 
 // UpstreamConfig contains info to connect to pd
 type UpstreamConfig struct {
-	ID uint64 `json:"id"`
+	ID uint64 `json:"id,omitempty"`
 	PDConfig
 }
