@@ -163,7 +163,7 @@ func GenNoShardOpenAPITaskForTest() (openapi.Task, error) {
 	return t, err
 }
 
-// GenNoShardOpenAPITaskForTest generates a no-shard openapi.Task for test.
+// GenNoShardErrNameOpenAPITaskForTest generates a no-shard openapi.Task with task.Name out of length for test.
 func GenNoShardErrNameOpenAPITaskForTest() (openapi.Task, error) {
 	t := openapi.Task{}
 	err := json.Unmarshal([]byte(noShardErrNameJSONStr), &t)
