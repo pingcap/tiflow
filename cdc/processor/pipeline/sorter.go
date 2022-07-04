@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/leveldb"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
@@ -67,15 +66,14 @@ type sorterNode struct {
 	// startTsCh is used to receive start-ts for sink
 	startTsCh chan model.Ts
 
-	replConfig *config.ReplicaConfig
-
-	changefeed model.ChangeFeedID
+	redoLogEnabled bool
+	changefeed     model.ChangeFeedID
 }
 
 func newSorterNode(
 	tableName string, tableID model.TableID, startTs model.Ts,
 	flowController tableFlowController, mounter entry.Mounter,
-	replConfig *config.ReplicaConfig, state *TableState, changefeed model.ChangeFeedID,
+	state *TableState, changefeed model.ChangeFeedID, redoLogEnabled bool,
 ) *sorterNode {
 	return &sorterNode{
 		tableName:      tableName,
@@ -87,7 +85,7 @@ func newSorterNode(
 		state:          state,
 		preparedCh:     make(chan struct{}, 1),
 		startTsCh:      make(chan model.Ts, 1),
-		replConfig:     replConfig,
+		redoLogEnabled: redoLogEnabled,
 
 		changefeed: changefeed,
 	}
@@ -168,9 +166,9 @@ func (n *sorterNode) start(
 			if lastCRTs > lastSentResolvedTs && commitTs > lastCRTs {
 				lastSentResolvedTs = lastCRTs
 				lastSendResolvedTsTime = time.Now()
+				msg := model.NewResolvedPolymorphicEvent(0, lastSentResolvedTs)
+				ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
 			}
-			msg := model.NewResolvedPolymorphicEvent(0, lastSentResolvedTs)
-			ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
 		}
 
 		// once receive startTs, which means sink should start replicating data to downstream.
@@ -300,8 +298,7 @@ func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.Polymorphi
 		}
 		atomic.StoreUint64(&n.resolvedTs, rawKV.CRTs)
 
-		if resolvedTs > n.BarrierTs() &&
-			!redo.IsConsistentEnabled(n.replConfig.Consistent.Level) {
+		if resolvedTs > n.BarrierTs() && !n.redoLogEnabled {
 			// Do not send resolved ts events that is larger than
 			// barrier ts.
 			// When DDL puller stall, resolved events that outputted by

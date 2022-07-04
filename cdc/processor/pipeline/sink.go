@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sink"
-	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"go.uber.org/zap"
@@ -47,8 +46,8 @@ type sinkNode struct {
 	flowController tableFlowController
 	redoManager    redo.LogManager
 
-	replicaConfig *config.ReplicaConfig
-	splitTxn      bool
+	enableOldValue bool
+	splitTxn       bool
 }
 
 func newSinkNode(
@@ -58,6 +57,7 @@ func newSinkNode(
 	redoManager redo.LogManager,
 	state *TableState,
 	changefeed model.ChangeFeedID,
+	enableOldValue bool,
 	splitTxn bool,
 ) *sinkNode {
 	sn := &sinkNode{
@@ -69,6 +69,7 @@ func newSinkNode(
 		changefeed:     changefeed,
 		flowController: flowController,
 		redoManager:    redoManager,
+		enableOldValue: enableOldValue,
 		splitTxn:       splitTxn,
 	}
 	sn.resolvedTs.Store(model.NewResolvedTs(startTs))
@@ -87,10 +88,6 @@ func (n *sinkNode) getResolvedTs() model.ResolvedTs {
 
 func (n *sinkNode) getCheckpointTs() model.ResolvedTs {
 	return n.checkpointTs.Load().(model.ResolvedTs)
-}
-
-func (n *sinkNode) initWithReplicaConfig(replicaConfig *config.ReplicaConfig) {
-	n.replicaConfig = replicaConfig
 }
 
 // stop is called when sink receives a stop command or checkpointTs reaches targetTs.
@@ -124,17 +121,20 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 		}
 	}()
 
-	currentBarrierTs := atomic.LoadUint64(&n.barrierTs)
 	if resolved.Ts > n.targetTs {
 		resolved = model.NewResolvedTs(n.targetTs)
 	}
 
+	currentBarrierTs := atomic.LoadUint64(&n.barrierTs)
 	if n.redoManager != nil && n.redoManager.Enabled() {
 		// redo log do not support batch resolve mode, hence we
 		// use `ResolvedMark` to restore a normal resolved ts
 		resolved = model.NewResolvedTs(resolved.ResolvedMark())
-		err = n.redoManager.FlushLog(ctx, n.tableID, resolved.Ts)
+		err = n.redoManager.UpdateResolvedTs(ctx, n.tableID, resolved.Ts)
 
+		// fail fast check, the happens before relationship is:
+		// 1. sorter resolvedTs >= sink resolvedTs >= table redoTs == tableActor resolvedTs
+		// 2. tableActor resolvedTs >= processor resolvedTs >= global resolvedTs >= barrierTs
 		redoTs := n.redoManager.GetMinResolvedTs()
 		if redoTs < currentBarrierTs {
 			log.Debug("redoTs should not less than current barrierTs",
@@ -143,7 +143,7 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 				zap.Uint64("barrierTs", currentBarrierTs))
 		}
 
-		// Fixme(CharlesCheung): remove this check after refactoring redoManager
+		// TODO: remove this check after SchedulerV3 become the first choice.
 		if resolved.Ts > redoTs {
 			resolved = model.NewResolvedTs(redoTs)
 		}
@@ -224,7 +224,7 @@ func (n *sinkNode) emitRowToSink(ctx context.Context, event *model.PolymorphicEv
 	// This indicates that it is an update event,
 	// and after enable old value internally by default(but disable in the configuration).
 	// We need to handle the update event to be compatible with the old format.
-	if !n.replicaConfig.EnableOldValue && colLen != 0 && preColLen != 0 && colLen == preColLen {
+	if !n.enableOldValue && colLen != 0 && preColLen != 0 && colLen == preColLen {
 		if shouldSplitUpdateEvent(event) {
 			deleteEvent, insertEvent, err := splitUpdateEvent(event)
 			if err != nil {
