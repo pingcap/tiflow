@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/security"
 )
 
 // Tso contains timestamp get from PD
@@ -315,6 +316,18 @@ type RunningError struct {
 	Addr    string `json:"addr"`
 	Code    string `json:"code"`
 	Message string `json:"message"`
+}
+
+// toCredential generates a security.Credential from a PDConfig
+func (cfg *PDConfig) toCredential() *security.Credential {
+	credential := &security.Credential{
+		CAPath:   cfg.CAPath,
+		CertPath: cfg.CertPath,
+		KeyPath:  cfg.KeyPath,
+	}
+	credential.CertAllowedCN = make([]string, len(cfg.CertAllowedCN))
+	copy(credential.CertAllowedCN, cfg.CertAllowedCN)
+	return credential
 }
 
 // Marshal returns the json marshal format of a ChangeFeedInfo

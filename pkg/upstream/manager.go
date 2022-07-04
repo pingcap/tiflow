@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -98,8 +99,11 @@ func (m *Manager) AddDefaultUpstream(pdEndpoints []string,
 }
 
 // GetDefaultUpstream returns the default upstream
-func (m *Manager) GetDefaultUpstream() *Upstream {
-	return m.defaultUpstream
+func (m *Manager) GetDefaultUpstream() (*Upstream, error) {
+	if m.defaultUpstream == nil {
+		return nil, cerror.ErrUpstreamNotFound
+	}
+	return m.defaultUpstream, nil
 }
 
 func (m *Manager) add(upstreamID uint64,
