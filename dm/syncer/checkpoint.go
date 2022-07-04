@@ -105,7 +105,7 @@ func (b *binlogPoint) flush() {
 	b.flushedTI = b.ti
 }
 
-func (b *binlogPoint) rollback(schemaTracker *schema.Tracker, schema string) (isSchemaChanged bool) {
+func (b *binlogPoint) rollback() {
 	b.Lock()
 	defer b.Unlock()
 
@@ -120,18 +120,16 @@ func (b *binlogPoint) rollback(schemaTracker *schema.Tracker, schema string) (is
 
 	// NOTE: no `Equal` function for `model.TableInfo` exists now, so we compare `pointer` directly,
 	// and after a new DDL applied to the schema, the returned pointer of `model.TableInfo` changed now.
-	trackedTi, _ := schemaTracker.GetTableInfo(&filter.Table{Schema: schema, Name: b.ti.Name.O}) // ignore the returned error, only compare `trackerTi` is enough.
-	// may three versions of schema exist:
-	// - the one tracked in the TiDB-with-mockTiKV.
+	// there may be three versions of schema:
+	// - the one tracked in the schema tracker (TiDB-with-unistore).
 	// - the one in the checkpoint but not flushed.
 	// - the one in the checkpoint and flushed.
-	// if any of them are not equal, then we rollback them:
+	// schema tracker will be closed after task is paused, and it will load all schemas from checkpoint when task resumes.
+	// if the later two are not equal, then we rollback them:
 	// - set the one in the checkpoint but not flushed to the one flushed.
-	// - set the one tracked to the one in the checkpoint by the caller of this method (both flushed and not flushed are the same now)
-	if isSchemaChanged = (trackedTi != b.ti) || (b.ti != b.flushedTI); isSchemaChanged {
+	if b.ti != b.flushedTI {
 		b.ti = b.flushedTI
 	}
-	return
 }
 
 func (b *binlogPoint) outOfDate() bool {
@@ -237,6 +235,9 @@ type CheckPoint interface {
 	// TablePoint returns all table's stream checkpoint
 	TablePoint() map[string]map[string]binlog.Location
 
+	// GetTableInfo returns the saved table info from table checkpoint for the given table, return nil when not found
+	GetTableInfo(schema string, table string) *model.TableInfo
+
 	// FlushedGlobalPoint returns the flushed global binlog stream's checkpoint
 	// corresponding to to Meta.Pos and gtid
 	FlushedGlobalPoint() binlog.Location
@@ -250,13 +251,16 @@ type CheckPoint interface {
 	GetFlushedTableInfo(table *filter.Table) *model.TableInfo
 
 	// Rollback rolls global checkpoint and all table checkpoints back to flushed checkpoints
-	Rollback(schemaTracker *schema.Tracker)
+	Rollback()
 
 	// String return text of global position
 	String() string
 
 	// CheckAndUpdate check the checkpoint data consistency and try to fix them if possible
 	CheckAndUpdate(ctx context.Context, schemas map[string]string, tables map[string]map[string]string) error
+
+	// LoadIntoSchemaTracker loads table infos of all points into schema tracker.
+	LoadIntoSchemaTracker(ctx context.Context, schemaTracker *schema.Tracker) error
 }
 
 // RemoteCheckPoint implements CheckPoint
@@ -596,10 +600,16 @@ func (cp *RemoteCheckPoint) FlushPointWithTableInfo(tctx *tcontext.Context, tabl
 	args := make([][]interface{}, 0, 10)
 	point := newBinlogPoint(binlog.NewLocation(cp.cfg.Flavor), binlog.NewLocation(cp.cfg.Flavor), nil, nil, cp.cfg.EnableGTID)
 
-	if tablePoints, ok := cp.points[sourceSchema]; ok {
-		if p, ok2 := tablePoints[sourceTable]; ok2 {
-			point = p
-		}
+	tablePoints, ok := cp.points[sourceSchema]
+	if !ok {
+		tablePoints = map[string]*binlogPoint{}
+		cp.points[sourceSchema] = tablePoints
+	}
+	p, ok2 := tablePoints[sourceTable]
+	if ok2 {
+		point = p
+	} else {
+		tablePoints[sourceTable] = point
 	}
 
 	tiBytes, err := json.Marshal(ti)
@@ -676,6 +686,21 @@ func (cp *RemoteCheckPoint) TablePoint() map[string]map[string]binlog.Location {
 	return tablePoint
 }
 
+func (cp *RemoteCheckPoint) GetTableInfo(schema string, table string) *model.TableInfo {
+	cp.RLock()
+	defer cp.RUnlock()
+
+	tables, ok := cp.points[schema]
+	if !ok {
+		return nil
+	}
+	tablePoint, ok := tables[table]
+	if !ok {
+		return nil
+	}
+	return tablePoint.TableInfo()
+}
+
 // FlushedGlobalPoint implements CheckPoint.FlushedGlobalPoint.
 func (cp *RemoteCheckPoint) FlushedGlobalPoint() binlog.Location {
 	cp.RLock()
@@ -700,10 +725,10 @@ func (cp *RemoteCheckPoint) CheckGlobalPoint() bool {
 }
 
 // Rollback implements CheckPoint.Rollback.
-func (cp *RemoteCheckPoint) Rollback(schemaTracker *schema.Tracker) {
+func (cp *RemoteCheckPoint) Rollback() {
 	cp.RLock()
 	defer cp.RUnlock()
-	cp.globalPoint.rollback(schemaTracker, "")
+	cp.globalPoint.rollback()
 	for schemaName, mSchema := range cp.points {
 		for tableName, point := range mSchema {
 			table := &filter.Table{
@@ -712,38 +737,7 @@ func (cp *RemoteCheckPoint) Rollback(schemaTracker *schema.Tracker) {
 			}
 			logger := cp.logCtx.L().WithFields(zap.Stringer("table", table))
 			logger.Debug("try to rollback checkpoint", log.WrapStringerField("checkpoint", point))
-			from := point.MySQLLocation()
-			if point.rollback(schemaTracker, schemaName) {
-				logger.Info("rollback checkpoint", zap.Stringer("from", from), zap.Stringer("to", point.FlushedMySQLLocation()))
-				// schema changed
-				if err := schemaTracker.DropTable(table); err != nil {
-					logger.Warn("failed to drop table from schema tracker", log.ShortError(err))
-				}
-				if point.ti != nil {
-					// TODO: Figure out how to recover from errors.
-					if err := schemaTracker.CreateSchemaIfNotExists(schemaName); err != nil {
-						logger.Error("failed to rollback schema on schema tracker: cannot create schema", log.ShortError(err))
-					}
-					if err := schemaTracker.CreateTableIfNotExists(table, point.ti); err != nil {
-						logger.Error("failed to rollback schema on schema tracker: cannot create table", log.ShortError(err))
-					}
-				}
-			}
-		}
-	}
-
-	// drop any tables in the tracker if no corresponding checkpoint exists.
-	for _, schema := range schemaTracker.AllSchemas() {
-		_, ok1 := cp.points[schema.Name.O]
-		for _, table := range schema.Tables {
-			var ok2 bool
-			if ok1 {
-				_, ok2 = cp.points[schema.Name.O][table.Name.O]
-			}
-			if !ok2 {
-				err := schemaTracker.DropTable(&filter.Table{Schema: schema.Name.O, Name: table.Name.O})
-				cp.logCtx.L().Info("drop table in schema tracker because no checkpoint exists", zap.String("schema", schema.Name.O), zap.String("table", table.Name.O), log.ShortError(err))
-			}
+			point.rollback()
 		}
 	}
 }
@@ -897,6 +891,33 @@ func (cp *RemoteCheckPoint) Load(tctx *tcontext.Context) error {
 	}
 
 	return terror.WithScope(terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError), terror.ScopeDownstream)
+}
+
+// LoadIntoSchemaTracker loads table infos of all points into schema tracker.
+func (cp *RemoteCheckPoint) LoadIntoSchemaTracker(ctx context.Context, schemaTracker *schema.Tracker) error {
+	cp.RLock()
+	defer cp.RUnlock()
+
+	for cpSchema, mSchema := range cp.points {
+		err := schemaTracker.CreateSchemaIfNotExists(cpSchema)
+		if err != nil {
+			return err
+		}
+		for cpTable, point := range mSchema {
+			// for create database DDL, we'll create a table point with no table name and table info, need to skip.
+			if point.flushedTI == nil {
+				continue
+			}
+			cp.logCtx.L().Debug("will init table info in schema tracker",
+				zap.String("database", cpSchema),
+				zap.String("table", cpTable))
+			err := schemaTracker.CreateTableIfNotExists(&filter.Table{Schema: cpSchema, Name: cpTable}, point.flushedTI)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // CheckAndUpdate check the checkpoint data consistency and try to fix them if possible.

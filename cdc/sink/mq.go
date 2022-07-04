@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -53,12 +54,12 @@ type mqSink struct {
 	filter         *filter.Filter
 	protocol       codec.Protocol
 
-	partitionNum        int32
-	partitionInput      []chan mqEvent
-	partitionResolvedTs []uint64
-	tableCheckpointTs   map[model.TableID]uint64
-	resolvedNotifier    *notify.Notifier
-	resolvedReceiver    *notify.Receiver
+	partitionNum         int32
+	partitionInput       []chan mqEvent
+	partitionResolvedTs  []uint64
+	tableCheckpointTsMap sync.Map
+	resolvedNotifier     *notify.Notifier
+	resolvedReceiver     *notify.Receiver
 
 	statistics *Statistics
 
@@ -117,7 +118,6 @@ func newMqSink(
 		partitionNum:        partitionNum,
 		partitionInput:      partitionInput,
 		partitionResolvedTs: make([]uint64, partitionNum),
-		tableCheckpointTs:   make(map[model.TableID]uint64),
 		resolvedNotifier:    notifier,
 		resolvedReceiver:    resolvedReceiver,
 
@@ -168,7 +168,12 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 }
 
 func (k *mqSink) FlushRowChangedEvents(ctx context.Context, tableID model.TableID, resolvedTs uint64) (uint64, error) {
-	if checkpointTs, ok := k.tableCheckpointTs[tableID]; ok && resolvedTs <= checkpointTs {
+	var checkpointTs uint64
+	v, ok := k.tableCheckpointTsMap.Load(tableID)
+	if ok {
+		checkpointTs = v.(uint64)
+	}
+	if resolvedTs <= checkpointTs {
 		return checkpointTs, nil
 	}
 
@@ -202,7 +207,7 @@ flushLoop:
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
-	k.tableCheckpointTs[tableID] = resolvedTs
+	k.tableCheckpointTsMap.Store(tableID, resolvedTs)
 	k.statistics.PrintStatus(ctx)
 	return resolvedTs, nil
 }
@@ -255,9 +260,24 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	return errors.Trace(err)
 }
 
+func (k *mqSink) Init(tableID model.TableID) error {
+	// We need to clean up the old values of the table,
+	// otherwise when the table is dispatched back again,
+	// it may read the old values.
+	// See: https://github.com/pingcap/tiflow/issues/4464#issuecomment-1085385382.
+	if checkpointTs, loaded := k.tableCheckpointTsMap.LoadAndDelete(tableID); loaded {
+		log.Info("clean up table checkpoint ts in MQ sink",
+			zap.Int64("tableID", tableID),
+			zap.Uint64("checkpointTs", checkpointTs.(uint64)))
+	}
+
+	return nil
+}
+
+// Close the producer asynchronously, does not care closed successfully or not.
 func (k *mqSink) Close(ctx context.Context) error {
-	err := k.mqProducer.Close()
-	return errors.Trace(err)
+	go k.mqProducer.Close()
+	return nil
 }
 
 func (k *mqSink) Barrier(cxt context.Context, tableID model.TableID) error {

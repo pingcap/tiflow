@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller/frontier"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -75,6 +76,7 @@ func NewPuller(
 	checkpointTs uint64,
 	spans []regionspan.Span,
 	enableOldValue bool,
+	cfg *config.KVClientConfig,
 ) Puller {
 	tikvStorage, ok := kvStorage.(tikv.Storage)
 	if !ok {
@@ -88,7 +90,7 @@ func NewPuller(
 	// the initial ts for frontier to 0. Once the puller level resolved ts
 	// initialized, the ts should advance to a non-zero value.
 	tsTracker := frontier.NewFrontier(0, comparableSpans...)
-	kvCli := kv.NewCDCKVClient(ctx, pdCli, tikvStorage, grpcPool, changefeed)
+	kvCli := kv.NewCDCKVClient(ctx, pdCli, tikvStorage, grpcPool, changefeed, cfg)
 	p := &pullerImpl{
 		pdCli:          pdCli,
 		kvCli:          kvCli,
