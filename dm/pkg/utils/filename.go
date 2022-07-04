@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package binlog
+package utils
 
 import (
 	"fmt"
@@ -27,6 +27,15 @@ import (
 const (
 	// the binlog file name format is `base + '.' + seq`.
 	binlogFilenameSep = "."
+	// PosRelaySubDirSuffixSeparator is used to differ binlog position from multiple
+	// (switched) masters, we added a suffix which comes from relay log subdirectory
+	// into binlogPos.Name. And we also need support position with RelaySubDirSuffix
+	// should always > position without RelaySubDirSuffix, so we can continue from
+	// latter to former automatically. convertedPos.BinlogName =
+	//   originalPos.BinlogBaseName + PosRelaySubDirSuffixSeparator + RelaySubDirSuffix + binlogFilenameSep + originalPos.BinlogSeq
+	// eg. mysql-bin.000003 under folder c6ae5afe-c7a3-11e8-a19d-0242ac130006.000002 => mysql-bin|000002.000003
+	// when new relay log subdirectory is created, RelaySubDirSuffix should increase.
+	PosRelaySubDirSuffixSeparator = "|"
 )
 
 // Filename represents a binlog filename.
@@ -97,12 +106,12 @@ func ConstructFilename(baseName, seq string) string {
 
 // ConstructFilenameWithUUIDSuffix constructs a binlog filename with UUID suffix.
 func ConstructFilenameWithUUIDSuffix(originalName Filename, uuidSuffix string) string {
-	return fmt.Sprintf("%s%s%s%s%s", originalName.BaseName, posRelaySubDirSuffixSeparator, uuidSuffix, binlogFilenameSep, originalName.Seq)
+	return fmt.Sprintf("%s%s%s%s%s", originalName.BaseName, PosRelaySubDirSuffixSeparator, uuidSuffix, binlogFilenameSep, originalName.Seq)
 }
 
 // SplitFilenameWithUUIDSuffix analyzes a binlog filename with UUID suffix.
 func SplitFilenameWithUUIDSuffix(filename string) (baseName, uuidSuffix, seq string, err error) {
-	items1 := strings.Split(filename, posRelaySubDirSuffixSeparator)
+	items1 := strings.Split(filename, PosRelaySubDirSuffixSeparator)
 	if len(items1) != 2 {
 		return "", "", "", terror.ErrBinlogInvalidFilenameWithUUIDSuffix.Generate(filename)
 	}
@@ -120,7 +129,7 @@ func SplitFilenameWithUUIDSuffix(filename string) (baseName, uuidSuffix, seq str
 
 // ExtractRealName removes relay log uuid suffix if it exists and returns real binlog name.
 func ExtractRealName(name string) string {
-	if !strings.Contains(name, posRelaySubDirSuffixSeparator) {
+	if !strings.Contains(name, PosRelaySubDirSuffixSeparator) {
 		return name
 	}
 	baseName, _, seq, err := SplitFilenameWithUUIDSuffix(name)
