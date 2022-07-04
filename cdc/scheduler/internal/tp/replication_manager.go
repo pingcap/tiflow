@@ -247,7 +247,6 @@ func (r *replicationManager) HandleTasks(
 	for _, task := range tasks {
 		// Burst balance does not affect by maxTaskConcurrency.
 		if task.burstBalance != nil {
-			// TODO should also count add/remove/move task in burstBalance.
 			msgs, err := r.handleBurstBalanceTasks(task.burstBalance)
 			if err != nil {
 				return nil, errors.Trace(err)
@@ -414,9 +413,15 @@ func (r *replicationManager) handleBurstBalanceTasks(
 }
 
 // ReplicationSets return all tracking replication set
-// Caller must not modify the return replication sets.
+// Caller must not modify the returned map.
 func (r *replicationManager) ReplicationSets() map[model.TableID]*ReplicationSet {
 	return r.tables
+}
+
+// RunningTasks return running tasks.
+// Caller must not modify the returned map.
+func (r *replicationManager) RunningTasks() map[model.TableID]*scheduleTask {
+	return r.runningTasks
 }
 
 func (r *replicationManager) AdvanceCheckpoint(
@@ -474,6 +479,8 @@ func (r *replicationManager) CollectMetrics() {
 	r.acceptMoveTableTask = 0
 	metricAcceptScheduleTask.WithLabelValues("burstBalance").Add(float64(r.acceptBurstBalanceTask))
 	r.acceptBurstBalanceTask = 0
+	runningScheduleTaskGauge.
+		WithLabelValues(cf.Namespace, cf.ID).Set(float64(len(r.runningTasks)))
 	var stateCounters [6]int
 	for _, table := range r.tables {
 		switch table.State {
@@ -500,16 +507,12 @@ func (r *replicationManager) CollectMetrics() {
 
 func (r *replicationManager) CleanMetrics() {
 	cf := r.changefeedID
-	tableGauge.
-		DeleteLabelValues(cf.Namespace, cf.ID)
-	slowestTableIDGauge.
-		DeleteLabelValues(cf.Namespace, cf.ID)
-	slowestTableStateGauge.
-		DeleteLabelValues(cf.Namespace, cf.ID)
-	slowestTableCheckpointTsGauge.
-		DeleteLabelValues(cf.Namespace, cf.ID)
-	slowestTableResolvedTsGauge.
-		DeleteLabelValues(cf.Namespace, cf.ID)
+	tableGauge.DeleteLabelValues(cf.Namespace, cf.ID)
+	slowestTableIDGauge.DeleteLabelValues(cf.Namespace, cf.ID)
+	slowestTableStateGauge.DeleteLabelValues(cf.Namespace, cf.ID)
+	slowestTableCheckpointTsGauge.DeleteLabelValues(cf.Namespace, cf.ID)
+	slowestTableResolvedTsGauge.DeleteLabelValues(cf.Namespace, cf.ID)
+	runningScheduleTaskGauge.DeleteLabelValues(cf.Namespace, cf.ID)
 	metricAcceptScheduleTask := acceptScheduleTaskCounter.MustCurryWith(map[string]string{
 		"namespace": cf.Namespace, "changefeed": cf.ID,
 	})
