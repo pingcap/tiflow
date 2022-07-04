@@ -168,9 +168,9 @@ func (n *sorterNode) start(
 			if lastCRTs > lastSentResolvedTs && commitTs > lastCRTs {
 				lastSentResolvedTs = lastCRTs
 				lastSendResolvedTsTime = time.Now()
+				msg := model.NewResolvedPolymorphicEvent(0, lastSentResolvedTs)
+				ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
 			}
-			msg := model.NewResolvedPolymorphicEvent(0, lastSentResolvedTs)
-			ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
 		}
 
 		// once receive startTs, which means sink should start replicating data to downstream.

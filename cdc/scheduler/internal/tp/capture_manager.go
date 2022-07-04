@@ -170,7 +170,7 @@ func (c *captureManager) Tick(
 			Heartbeat: &schedulepb.Heartbeat{
 				TableIDs: tables[to],
 				// IsStopping let the receiver capture know that it should be stopping now.
-				// At the moment, this is trigger by `DrainCapture` scheduler.
+				// At the moment, this is triggered by `DrainCapture` scheduler.
 				IsStopping: drainingCapture == to,
 			},
 		})

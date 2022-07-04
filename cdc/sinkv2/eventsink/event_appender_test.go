@@ -21,6 +21,8 @@ import (
 )
 
 func TestRowChangeEventAppender(t *testing.T) {
+	t.Parallel()
+
 	tableInfo := &model.TableName{
 		Schema:      "test",
 		Table:       "t1",
@@ -53,6 +55,8 @@ func TestRowChangeEventAppender(t *testing.T) {
 }
 
 func TestTxnEventAppender(t *testing.T) {
+	t.Parallel()
+
 	tableInfo := &model.TableName{
 		Schema:      "test",
 		Table:       "t1",
