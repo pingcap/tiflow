@@ -282,7 +282,10 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		zap.String("tableName", t.tableName),
 		zap.Uint64("quota", t.memoryQuota))
 
-	flowController := flowcontrol.NewTableFlowController(t.memoryQuota, t.redoManager.Enabled())
+	splitTxn := t.replicaConfig.Sink.TxnAtomicity.ShouldSplitTxn()
+
+	flowController := flowcontrol.NewTableFlowController(t.memoryQuota,
+		t.redoManager.Enabled(), splitTxn)
 	sorterNode := newSorterNode(t.tableName, t.tableID,
 		t.replicaInfo.StartTs, flowController,
 		t.mounter, t.replicaConfig, &t.state, t.changefeedID,
@@ -318,7 +321,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 
 	actorSinkNode := newSinkNode(t.tableID, t.tableSink,
 		t.replicaInfo.StartTs,
-		t.targetTs, flowController, t.redoManager, &t.state, t.changefeedID)
+		t.targetTs, flowController, t.redoManager, &t.state, t.changefeedID, splitTxn)
 	actorSinkNode.initWithReplicaConfig(t.replicaConfig)
 	t.sinkNode = actorSinkNode
 
@@ -393,7 +396,7 @@ func (t *tableActor) ResolvedTs() model.Ts {
 	// another replication barrier for consistent replication instead of reusing
 	// the global resolved-ts.
 	if t.redoManager.Enabled() {
-		return t.sinkNode.ResolvedTs()
+		return t.redoManager.GetResolvedTs(t.tableID)
 	}
 	return t.sortNode.ResolvedTs()
 }

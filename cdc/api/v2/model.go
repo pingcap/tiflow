@@ -147,6 +147,7 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 		res.Sink = &config.SinkConfig{
 			DispatchRules:   dispatchRules,
 			Protocol:        c.Sink.Protocol,
+			TxnAtomicity:    config.AtomicityLevel(c.Sink.TxnAtomicity),
 			ColumnSelectors: columnSelectors,
 			SchemaRegistry:  c.Sink.SchemaRegistry,
 		}
@@ -194,6 +195,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			SchemaRegistry:  cloned.Sink.SchemaRegistry,
 			DispatchRules:   dispatchRules,
 			ColumnSelectors: columnSelectors,
+			TxnAtomicity:    string(cloned.Sink.TxnAtomicity),
 		}
 	}
 	if cloned.Consistent != nil {
@@ -242,6 +244,7 @@ type SinkConfig struct {
 	SchemaRegistry  string            `json:"schema_registry"`
 	DispatchRules   []*DispatchRule   `json:"dispatchers"`
 	ColumnSelectors []*ColumnSelector `json:"column_selectors"`
+	TxnAtomicity    string            `json:"transaction-atomicity"`
 }
 
 // DispatchRule represents partition rule for a table

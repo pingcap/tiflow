@@ -81,7 +81,7 @@ func ErrorHandleMiddleware() gin.HandlerFunc {
 
 // ForwardToOwnerMiddleware forward an request to owner if current server
 // is not owner, or handle it locally.
-func ForwardToOwnerMiddleware(p capture.InfoForAPI) gin.HandlerFunc {
+func ForwardToOwnerMiddleware(p capture.Capture) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		if !p.IsOwner() {
 			api.ForwardToOwner(ctx, p)
@@ -97,7 +97,7 @@ func ForwardToOwnerMiddleware(p capture.InfoForAPI) gin.HandlerFunc {
 }
 
 // CheckServerReadyMiddleware checks if the server is ready
-func CheckServerReadyMiddleware(capture capture.InfoForAPI) gin.HandlerFunc {
+func CheckServerReadyMiddleware(capture capture.Capture) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if capture.IsReady() {
 			c.Next()

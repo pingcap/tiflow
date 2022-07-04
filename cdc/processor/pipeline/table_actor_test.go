@@ -53,7 +53,7 @@ func TestAsyncStopFailed(t *testing.T) {
 		state:       TableStatePreparing,
 	}
 	tbl.sinkNode = newSinkNode(1, &mockSink{}, 0, 0, &mockFlowController{}, tbl.redoManager,
-		&tbl.state, model.DefaultChangeFeedID("changefeed-test"))
+		&tbl.state, model.DefaultChangeFeedID("changefeed-test"), false)
 	require.True(t, tbl.AsyncStop(1))
 
 	mb := actor.NewMailbox[pmessage.Message](actor.ID(1), 0)
@@ -95,12 +95,15 @@ func TestTableActorInterface(t *testing.T) {
 	require.Equal(t, model.Ts(3), table.CheckpointTs())
 
 	require.Equal(t, model.Ts(5), table.ResolvedTs())
-	table.replicaConfig.Consistent.Level = string(redo.ConsistentLevelEventual)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	table.redoManager, _ = redo.NewMockManager(ctx)
-	table.sinkNode.resolvedTs.Store(model.NewResolvedTs(6))
-	require.Equal(t, model.Ts(6), table.ResolvedTs())
+	table.redoManager.AddTable(table.tableID, 0)
+	require.Equal(t, model.Ts(0), table.ResolvedTs())
+	table.redoManager.UpdateResolvedTs(ctx, table.tableID, model.Ts(6))
+	require.Eventually(t, func() bool { return table.ResolvedTs() == model.Ts(6) },
+		time.Second*5, time.Millisecond*500)
+	table.redoManager.Cleanup(ctx)
 
 	table.sinkNode.state.Store(TableStateStopped)
 	require.Equal(t, TableStateStopped, table.State())
@@ -447,6 +450,7 @@ func TestTableActorStart(t *testing.T) {
 			StartTs:     0,
 			MarkTableID: 1,
 		},
+		replicaConfig: config.GetDefaultReplicaConfig(),
 	}
 	require.Nil(t, tbl.start(ctx))
 	require.Equal(t, 1, len(tbl.nodes))

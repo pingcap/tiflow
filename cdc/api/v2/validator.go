@@ -113,16 +113,15 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	// fill replicaConfig
 	replicaCfg := cfg.ReplicaConfig.ToInternalReplicaConfig()
 	// verify replicaConfig
-	err = replicaCfg.Validate()
+	sinkURIParsed, err := url.Parse(cfg.SinkURI)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+	}
+	err = replicaCfg.ValidateAndAdjust(sinkURIParsed)
 	if err != nil {
 		return nil, err
 	}
 	if !replicaCfg.EnableOldValue {
-		sinkURIParsed, err := url.Parse(cfg.SinkURI)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
-		}
-
 		protocol := sinkURIParsed.Query().Get(config.ProtocolKey)
 		if protocol != "" {
 			replicaCfg.Sink.Protocol = protocol
