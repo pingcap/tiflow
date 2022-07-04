@@ -42,8 +42,6 @@ type agent struct {
 	ownerInfo ownerInfo
 
 	// Liveness of the capture.
-	//
-	// LivenessCaptureStopping rejects all add table requests.
 	liveness model.Liveness
 }
 
@@ -156,7 +154,7 @@ func (a *agent) Tick(ctx context.Context, liveness model.Liveness) error {
 
 	outboundMessages := a.handleMessage(inboundMessages)
 
-	responses, err := a.tableM.poll(ctx, a.liveness)
+	responses, err := a.tableM.poll(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -297,14 +295,6 @@ func (a *agent) handleMessageDispatchTableRequest(
 	// this should be guaranteed by the caller of this method.
 	switch req := request.Request.(type) {
 	case *schedulepb.DispatchTableRequest_AddTable:
-		if a.liveness != model.LivenessCaptureAlive {
-			log.Info("tpscheduler: agent is stopping, and reject handle add table request",
-				zap.String("capture", a.CaptureID),
-				zap.String("namespace", a.ChangeFeedID.Namespace),
-				zap.String("changefeed", a.ChangeFeedID.ID),
-				zap.Any("request", request))
-			return
-		}
 		tableID := req.AddTable.GetTableID()
 		task = &dispatchTableTask{
 			TableID:   tableID,

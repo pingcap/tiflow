@@ -62,7 +62,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	// remove table not exist
 	ctx := context.Background()
 	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
-	responses, err := a.tableM.poll(ctx, model.LivenessCaptureAlive)
+	responses, err := a.tableM.poll(ctx)
 	require.NoError(t, err)
 	require.Len(t, responses, 0)
 
@@ -75,19 +75,12 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		},
 	}
 
-	// stopping, addTableRequest should be ignored.
+	// addTableRequest should be not ignored even if it's stopping.
 	a.handleLivenessUpdate(model.LivenessCaptureStopping, livenessSourceTick)
-	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, model.LivenessCaptureAlive)
-	require.NoError(t, err)
-	require.Len(t, responses, 0)
-
-	// Force set liveness to alive.
-	a.liveness = model.LivenessCaptureAlive
 	mockTableExecutor.On("AddTable", mock.Anything, mock.Anything,
 		mock.Anything, mock.Anything).Return(false, nil)
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, a.liveness)
+	responses, err = a.tableM.poll(ctx)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 
@@ -98,20 +91,22 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	require.Equal(t, schedulepb.TableStateAbsent, addTableResponse.AddTable.Status.State)
 	require.NotContains(t, a.tableM.tables, model.TableID(1))
 
+	// Force set liveness to alive.
+	a.liveness = model.LivenessCaptureAlive
 	mockTableExecutor.ExpectedCalls = nil
 	mockTableExecutor.On("AddTable", mock.Anything, mock.Anything,
 		mock.Anything, mock.Anything).Return(true, nil)
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(false, nil)
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	_, err = a.tableM.poll(ctx, model.LivenessCaptureAlive)
+	_, err = a.tableM.poll(ctx)
 	require.NoError(t, err)
 
 	mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(true, nil)
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, model.LivenessCaptureAlive)
+	responses, err = a.tableM.poll(ctx)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 
@@ -132,7 +127,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		mock.Anything, mock.Anything).Return(false, nil)
 
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, model.LivenessCaptureAlive)
+	responses, err = a.tableM.poll(ctx)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 
@@ -147,7 +142,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(true, nil)
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, model.LivenessCaptureAlive)
+	responses, err = a.tableM.poll(ctx)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 
@@ -162,7 +157,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		Return(false)
 	// remove table in the replicating state failed, should still in replicating.
 	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, model.LivenessCaptureAlive)
+	responses, err = a.tableM.poll(ctx)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 	removeTableResponse, ok := responses[0].DispatchTableResponse.
@@ -179,7 +174,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		Return(3, false)
 	// remove table in the replicating state failed, should still in replicating.
 	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, model.LivenessCaptureAlive)
+	responses, err = a.tableM.poll(ctx)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 	removeTableResponse, ok = responses[0].DispatchTableResponse.
@@ -193,7 +188,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		Return(3, true)
 	// remove table in the replicating state success, should in stopped
 	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, model.LivenessCaptureAlive)
+	responses, err = a.tableM.poll(ctx)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 	removeTableResponse, ok = responses[0].DispatchTableResponse.
@@ -664,6 +659,101 @@ func TestAgentHandleLivenessUpdate(t *testing.T) {
 
 	a.handleLivenessUpdate(model.LivenessCaptureAlive, livenessSourceTick)
 	require.Equal(t, model.LivenessCaptureStopping, a.liveness)
+}
+
+func TestAgentCommitAddTableDuringStopping(t *testing.T) {
+	t.Parallel()
+
+	a := newAgent4Test()
+	mockTableExecutor := newMockTableExecutor()
+	a.tableM = newTableManager(mockTableExecutor)
+	trans := newMockTrans()
+	a.trans = trans
+
+	prepareTableMsg := &schedulepb.Message{
+		Header: &schedulepb.Message_Header{
+			Version:        "owner-version-1",
+			OwnerRevision:  schedulepb.OwnerRevision{Revision: 1},
+			ProcessorEpoch: schedulepb.ProcessorEpoch{Epoch: "agent-epoch-1"},
+		},
+		To:      "agent-1",
+		From:    "owner-1",
+		MsgType: schedulepb.MsgDispatchTableRequest,
+		DispatchTableRequest: &schedulepb.DispatchTableRequest{
+			Request: &schedulepb.DispatchTableRequest_AddTable{
+				AddTable: &schedulepb.AddTableRequest{
+					TableID:     1,
+					IsSecondary: true,
+				},
+			},
+		},
+	}
+	trans.recvBuffer = []*schedulepb.Message{prepareTableMsg}
+
+	// Prepare add table is still in-progress.
+	mockTableExecutor.
+		On("AddTable", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Once()
+	mockTableExecutor.
+		On("IsAddTableFinished", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(false, nil).Once()
+	err := a.Tick(context.Background(), model.LivenessCaptureAlive)
+	require.Nil(t, err)
+	require.Len(t, trans.sendBuffer, 0)
+
+	mockTableExecutor.
+		On("AddTable", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Once()
+	mockTableExecutor.
+		On("IsAddTableFinished", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Once()
+	err = a.Tick(context.Background(), model.LivenessCaptureAlive)
+	require.Nil(t, err)
+	require.Len(t, trans.sendBuffer, 1)
+	require.Equal(t, trans.sendBuffer[0].MsgType, schedulepb.MsgDispatchTableResponse)
+
+	// Commit add table request should not be rejected.
+	commitTableMsg := &schedulepb.Message{
+		Header: &schedulepb.Message_Header{
+			Version:        "owner-version-1",
+			OwnerRevision:  schedulepb.OwnerRevision{Revision: 1},
+			ProcessorEpoch: schedulepb.ProcessorEpoch{Epoch: "agent-epoch-1"},
+		},
+		To:      "agent-1",
+		From:    "owner-1",
+		MsgType: schedulepb.MsgDispatchTableRequest,
+		DispatchTableRequest: &schedulepb.DispatchTableRequest{
+			Request: &schedulepb.DispatchTableRequest_AddTable{
+				AddTable: &schedulepb.AddTableRequest{
+					TableID:     1,
+					IsSecondary: false,
+				},
+			},
+		},
+	}
+	trans.recvBuffer = []*schedulepb.Message{commitTableMsg}
+	trans.sendBuffer = []*schedulepb.Message{}
+	mockTableExecutor.
+		On("AddTable", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Once()
+	mockTableExecutor.
+		On("IsAddTableFinished", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(false, nil).Once()
+	err = a.Tick(context.Background(), model.LivenessCaptureStopping)
+	require.Nil(t, err)
+	require.Len(t, trans.sendBuffer, 1)
+
+	trans.recvBuffer = []*schedulepb.Message{}
+	trans.sendBuffer = []*schedulepb.Message{}
+	mockTableExecutor.
+		On("IsAddTableFinished", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Once()
+	err = a.Tick(context.Background(), model.LivenessCaptureStopping)
+	require.Nil(t, err)
+	require.Len(t, trans.sendBuffer, 1)
+	require.Equal(t, schedulepb.MsgDispatchTableResponse, trans.sendBuffer[0].MsgType)
+	addTableResp := trans.sendBuffer[0].DispatchTableResponse.GetAddTable()
+	require.Equal(t, schedulepb.TableStateReplicating, addTableResp.Status.State)
 }
 
 // MockTableExecutor is a mock implementation of TableExecutor.
