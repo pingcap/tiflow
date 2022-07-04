@@ -17,7 +17,7 @@ import (
 	"sync"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -27,15 +27,15 @@ type MetaStoreManager interface {
 	// Register register specify backend store to manager with an unique id
 	// id can be some readable identifier, like `meta-test1`.
 	// Duplicate id will return an error
-	Register(id string, store *metaclient.StoreConfig) error
+	Register(id string, store *metaModel.StoreConfig) error
 	// UnRegister delete an existing backend store
 	UnRegister(id string)
 	// GetMetaStore get an existing backend store info
-	GetMetaStore(id string) *metaclient.StoreConfig
+	GetMetaStore(id string) *metaModel.StoreConfig
 }
 
 type metaStoreManagerImpl struct {
-	// From id to metaclient.StoreConfig
+	// From id to metaModel.StoreConfig
 	id2Store sync.Map
 }
 
@@ -45,7 +45,7 @@ func NewMetaStoreManager() MetaStoreManager {
 }
 
 // Register implements MetaStoreManager.Register
-func (m *metaStoreManagerImpl) Register(id string, store *metaclient.StoreConfig) error {
+func (m *metaStoreManagerImpl) Register(id string, store *metaModel.StoreConfig) error {
 	if _, exists := m.id2Store.LoadOrStore(id, store); exists {
 		log.Error("register metastore fail", zap.Any("config", store), zap.String("err", "Duplicate storeID"))
 		return errors.ErrMetaStoreIDDuplicate.GenWithStackByArgs()
@@ -60,9 +60,9 @@ func (m *metaStoreManagerImpl) UnRegister(id string) {
 }
 
 // GetMetaStore implements MetaStoreManager.GetMetaStore
-func (m *metaStoreManagerImpl) GetMetaStore(id string) *metaclient.StoreConfig {
+func (m *metaStoreManagerImpl) GetMetaStore(id string) *metaModel.StoreConfig {
 	if store, exists := m.id2Store.Load(id); exists {
-		return store.(*metaclient.StoreConfig)
+		return store.(*metaModel.StoreConfig)
 	}
 
 	return nil

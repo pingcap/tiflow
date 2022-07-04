@@ -41,9 +41,8 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
-	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	"github.com/pingcap/tiflow/engine/pkg/meta"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
@@ -107,7 +106,7 @@ type BaseMaster interface {
 	Master
 
 	// MetaKVClient return user metastore kv client
-	MetaKVClient() metaclient.KVClient
+	MetaKVClient() metaModel.KVClient
 	MetricFactory() promutil.Factory
 	Logger() *zap.Logger
 	MasterMeta() *frameModel.MasterMetaKVData
@@ -136,7 +135,7 @@ type DefaultBaseMaster struct {
 	// framework metastore client
 	frameMetaClient pkgOrm.Client
 	// user metastore raw kvclient
-	userRawKVClient       extkv.KVClientEx
+	userRawKVClient       metaModel.KVClientEx
 	executorClientManager client.ClientsManager
 	serverMasterClient    client.MasterClient
 
@@ -169,7 +168,7 @@ type DefaultBaseMaster struct {
 
 	// user metastore prefix kvclient
 	// Don't close it. It's just a prefix wrapper for underlying userRawKVClient
-	userMetaKVClient metaclient.KVClient
+	userMetaKVClient metaModel.KVClient
 
 	// metricFactory can produce metric with underlying project info and job info
 	metricFactory promutil.Factory
@@ -201,7 +200,7 @@ type masterParams struct {
 	// framework metastore client
 	FrameMetaClient pkgOrm.Client
 	// user metastore raw kvclient
-	UserRawKVClient       extkv.KVClientEx
+	UserRawKVClient       metaModel.KVClientEx
 	ExecutorClientManager client.ClientsManager
 	ServerMasterClient    client.MasterClient
 }
@@ -261,7 +260,7 @@ func NewBaseMaster(
 		masterProjectInfo: ctx.ProjectInfo,
 
 		createWorkerQuota: quota.NewConcurrencyQuota(maxCreateWorkerConcurrency),
-		userMetaKVClient:  kvclient.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
+		userMetaKVClient:  meta.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
 		metricFactory:     promutil.NewFactory4Master(ctx.ProjectInfo, MustConvertWorkerType2JobType(tp), id),
 		logger:            frameLog.WithMasterID(logger, id),
 
@@ -270,7 +269,7 @@ func NewBaseMaster(
 }
 
 // MetaKVClient returns the user space metaclient
-func (m *DefaultBaseMaster) MetaKVClient() metaclient.KVClient {
+func (m *DefaultBaseMaster) MetaKVClient() metaModel.KVClient {
 	return m.userMetaKVClient
 }
 

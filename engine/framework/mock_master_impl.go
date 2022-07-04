@@ -31,8 +31,8 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
-	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
-	mockkv "github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
+	mockkv "github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 )
@@ -89,7 +89,7 @@ type masterParamListForTest struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
 	FrameMetaClient       pkgOrm.Client
-	UserRawKVClient       extkv.KVClientEx
+	UserRawKVClient       metaModel.KVClientEx
 	ExecutorClientManager client.ClientsManager
 	ServerMasterClient    client.MasterClient
 	ResourceBroker        broker.Broker

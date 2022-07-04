@@ -21,11 +21,11 @@ import (
 )
 
 func TestRetryMockBackendEtcd(t *testing.T) {
-	_ = failpoint.Enable("github.com/pingcap/tiflow/engine/pkg/meta/kvclient/etcdkv/MockEtcdAddressAlreadyUse", "return(true)")
+	_ = failpoint.Enable("github.com/pingcap/tiflow/engine/pkg/meta/internal/etcdkv/MockEtcdAddressAlreadyUse", "return(true)")
 	_, _, err := RetryMockBackendEtcd()
 	require.Error(t, err)
 	require.Regexp(t, "address already in use", err)
-	_ = failpoint.Disable("github.com/pingcap/tiflow/engine/pkg/meta/kvclient/etcdkv/MockEtcdAddressAlreadyUse")
+	_ = failpoint.Disable("github.com/pingcap/tiflow/engine/pkg/meta/internal/etcdkv/MockEtcdAddressAlreadyUse")
 
 	svr, _, err := RetryMockBackendEtcd()
 	require.NoError(t, err)

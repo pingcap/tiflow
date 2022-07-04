@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package kvclient
+package meta
 
 import (
 	"context"
@@ -19,9 +19,8 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-
-	mock "github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 )
 
 // Backend KV store data:
@@ -42,10 +41,10 @@ func test(t *testing.T) {
 	defer cancel()
 	// nolint:typecheck
 	var (
-		putRsp *metaclient.PutResponse
-		getRsp *metaclient.GetResponse
-		delRsp *metaclient.DeleteResponse
-		txnRsp *metaclient.TxnResponse
+		putRsp *metaModel.PutResponse
+		getRsp *metaModel.GetResponse
+		delRsp *metaModel.DeleteResponse
+		txnRsp *metaModel.TxnResponse
 		err    error
 	)
 
@@ -60,7 +59,7 @@ func test(t *testing.T) {
 	// expect err == nil
 	// expect len(getRsp.Kvs) == 1
 	kv := getRsp.Kvs[0]
-	var _ *metaclient.KeyValue = kv
+	var _ *metaModel.KeyValue = kv
 	// expect kv.Key == []byte("TiDB")
 	// expect kv.Value == []byte("DistDB")
 
@@ -73,38 +72,38 @@ func test(t *testing.T) {
 	//
 	//	Options: Key Range/From Key/Key Prefix attributes
 	//
-	// Key Range, forbit Put using metaclient.WithRange
+	// Key Range, forbit Put using metaModel.WithRange
 	// current data:
 	//		apple  red
 	//		orange orange
 	//		ticdc  kv
 	//		dm	   DDL
-	getRsp, err = cli.Get(ctx, "ap", metaclient.WithRange("zz"))
+	getRsp, err = cli.Get(ctx, "ap", metaModel.WithRange("zz"))
 	// expect len(getRsp.Kvs) == 4(apple. orange, ticdc, dm)
-	getRsp, err = cli.Get(ctx, "ap", metaclient.WithRange("apple2"))
+	getRsp, err = cli.Get(ctx, "ap", metaModel.WithRange("apple2"))
 	// expect len(getRsp.Kvs) == 1(apple)
-	delRsp, err = cli.Delete(ctx, "dzst", metaclient.WithRange("panda"))
+	delRsp, err = cli.Delete(ctx, "dzst", metaModel.WithRange("panda"))
 	// delete key orange
 
-	// From Key, forbit Put using metaclient.WithFromKey
+	// From Key, forbit Put using metaModel.WithFromKey
 	// current data:
 	//		apple  red
 	//		ticdc  kv
 	//		dm	   DDL
-	getRsp, err = cli.Get(ctx, "data", metaclient.WithFromKey())
+	getRsp, err = cli.Get(ctx, "data", metaModel.WithFromKey())
 	// expect len(getRsp.Kvs) == 2(ticdc, dm)
-	delRsp, err = cli.Delete(ctx, "tian", metaclient.WithFromKey())
+	delRsp, err = cli.Delete(ctx, "tian", metaModel.WithFromKey())
 	// delete key ticdc
 
-	// Key Prefix, forbit Put using metaclient.WithPrefix
+	// Key Prefix, forbit Put using metaModel.WithPrefix
 	// current data:
 	//		apple  red
 	//		apple2  green
 	//		ticdc  kv
 	//		dm	   DDL
-	getRsp, err = cli.Get(ctx, "apple", metaclient.WithPrefix())
+	getRsp, err = cli.Get(ctx, "apple", metaModel.WithPrefix())
 	// expect len(getRsp.Kvs) == 2(apple, apple2)
-	delRsp, err = cli.Delete(ctx, "apple", metaclient.WithPrefix())
+	delRsp, err = cli.Delete(ctx, "apple", metaModel.WithPrefix())
 	// delete key apple, apple2
 
 	//
@@ -115,11 +114,11 @@ func test(t *testing.T) {
 	//		apple2  green
 	//		ticdc  kv
 	//		dm	   DDL
-	getOp := metaclient.OpGet("apple3", metaclient.WithRange("zz"))
+	getOp := metaModel.OpGet("apple3", metaModel.WithRange("zz"))
 	_ = getRsp
-	putOp := metaclient.OpPut("apple3", "t3")
+	putOp := metaModel.OpPut("apple3", "t3")
 	_ = putRsp
-	delOp := metaclient.OpDelete("apple3", metaclient.WithRange("ti"))
+	delOp := metaModel.OpDelete("apple3", metaModel.WithRange("ti"))
 	_ = delRsp
 	_ = err
 	txn := cli.Txn(ctx)
