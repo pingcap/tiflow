@@ -19,10 +19,9 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/causality"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
-
-	"github.com/pingcap/tiflow/pkg/causality"
 )
 
 type conflictTestDriver struct {

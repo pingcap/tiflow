@@ -26,7 +26,8 @@ type (
 )
 
 const (
-	unassigned = workerID(-1)
+	unassigned    = workerID(-1)
+	invalidNodeID = int64(-1)
 )
 
 var (
@@ -81,19 +82,14 @@ func NewNode() (ret *Node) {
 	return new(Node)
 }
 
-// ID returns the node's ID. For debug only.
-func (n *Node) ID() int64 {
-	return n.id
-}
-
 // Free must be called if a node is no longer used.
 // We are using sync.Pool to lessen the burden of GC.
 func (n *Node) Free() {
-	if n.id == -1 {
+	if n.id == invalidNodeID {
 		panic("double free")
 	}
 
-	n.id = -1
+	n.id = invalidNodeID
 	n.conflictCounts = nil
 	n.assignedTo = unassigned
 	n.onResolved = nil
@@ -123,12 +119,11 @@ func (n *Node) DependOn(target *Node) {
 	// optimize for the case where there are little conflicts.
 	n.lazyCreateMap()
 
-	if _, ok := target.getOrCreateDependers().Get(n); ok {
+	if target.getOrCreateDependers().Has(n) {
+		// Return here to ensure idempotency.
 		return
 	}
-	if target.dependers.Has(n) {
-		return
-	}
+
 	target.dependers.ReplaceOrInsert(n)
 	n.conflictCounts[target.assignedTo]++
 }
@@ -202,12 +197,13 @@ func (n *Node) OnNoConflict(fn func(id workerID)) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
-	if n.onResolved != nil {
+	if n.onResolved != nil || n.resolved.Load() {
 		panic("OnNoConflict is already called")
 	}
 
 	workerNum, ok := n.tryResolve()
 	if ok {
+		n.resolved.Store(true)
 		fn(workerNum)
 		return
 	}
@@ -273,4 +269,25 @@ func (n *Node) getOrCreateDependers() *btree.BTreeG[*Node] {
 		}, btreeFreeList)
 	}
 	return n.dependers
+}
+
+// dependerCount returns the number of dependers the node has.
+// NOTE: dependerCount is used for unit tests only.
+func (n *Node) dependerCount() int {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	if n.dependers == nil {
+		return 0
+	}
+	return n.dependers.Len()
+}
+
+// assignedWorkerID returns the worker ID that the node has been assigned to.
+// NOTE: assignedWorkerID is used for unit tests only.
+func (n *Node) assignedWorkerID() workerID {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	return n.assignedTo
 }
