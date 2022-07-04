@@ -529,7 +529,7 @@ func (s *OpenAPIControllerSuite) TestTaskControllerWithInvalidTask() {
 			s.NoError(err)
 			s.Len(statusList, 1)
 			s.NotNil(statusList[0].ErrorMsg)
-			s.Contains(*statusList[0].ErrorMsg, "Errno 1059: ") // database error, will return an error message
+			s.Contains(*statusList[0].ErrorMsg, "Error 1059: ") // database error, will return an error message
 		}
 
 		// stop success
