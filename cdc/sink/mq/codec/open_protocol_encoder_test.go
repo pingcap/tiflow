@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
@@ -116,7 +115,7 @@ func (s *batchTester) testBatchCodec(
 		encoder := encoderBuilder.Build()
 
 		for _, row := range cs {
-			err := encoder.AppendRowChangedEvent(context.Background(), "", row)
+			err := encoder.AppendRowChangedEvent(context.Background(), "", row, nil)
 			require.Nil(t, err)
 		}
 
@@ -158,8 +157,8 @@ func (s *batchTester) testBatchCodec(
 func TestBuildJSONEventBatchEncoder(t *testing.T) {
 	t.Parallel()
 	config := NewConfig(config.ProtocolOpen)
-	builder := &jsonEventBatchEncoderBuilder{config: config}
-	encoder, ok := builder.Build().(*JSONEventBatchEncoder)
+	builder := &openProtocolBatchEncoderBuilder{config: config}
+	encoder, ok := builder.Build().(*OpenProtocolBatchEncoder)
 	require.True(t, ok)
 	require.Equal(t, config.maxBatchSize, encoder.maxBatchSize)
 	require.Equal(t, config.maxMessageBytes, encoder.maxMessageBytes)
@@ -176,24 +175,24 @@ func TestMaxMessageBytes(t *testing.T) {
 
 	ctx := context.Background()
 	topic := ""
-	// for a single message, the overhead is 36(maximumRecordOverhead) + 8(versionHea) = 44, just can hold it.
+	// for a single message, the overhead is 36(maxRecordOverhead) + 8(versionHea) = 44, just can hold it.
 	a := 87 + 44
 	config := NewConfig(config.ProtocolOpen).WithMaxMessageBytes(a)
 	encoder := newJSONEventBatchEncoderBuilder(config).Build()
-	err := encoder.AppendRowChangedEvent(ctx, topic, testEvent)
+	err := encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
 	require.Nil(t, err)
 
 	// cannot hold a single message
 	config = config.WithMaxMessageBytes(a - 1)
 	encoder = newJSONEventBatchEncoderBuilder(config).Build()
-	err = encoder.AppendRowChangedEvent(ctx, topic, testEvent)
+	err = encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
 	require.NotNil(t, err)
 
 	// make sure each batch's `Length` not greater than `max-message-bytes`
 	config = config.WithMaxMessageBytes(256)
 	encoder = newJSONEventBatchEncoderBuilder(config).Build()
 	for i := 0; i < 10000; i++ {
-		err := encoder.AppendRowChangedEvent(ctx, topic, testEvent)
+		err := encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
 		require.Nil(t, err)
 	}
 
@@ -216,7 +215,7 @@ func TestMaxBatchSize(t *testing.T) {
 	}
 
 	for i := 0; i < 10000; i++ {
-		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent)
+		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent, nil)
 		require.Nil(t, err)
 	}
 
@@ -249,73 +248,4 @@ func TestDefaultEventBatchCodec(t *testing.T) {
 	config.maxBatchSize = 64
 	tester := NewDefaultBatchTester()
 	tester.testBatchCodec(t, newJSONEventBatchEncoderBuilder(config), NewJSONEventBatchDecoder)
-}
-
-func TestFormatCol(t *testing.T) {
-	t.Parallel()
-	row := &mqMessageRow{Update: map[string]column{"test": {
-		Type:  mysql.TypeString,
-		Value: "测",
-	}}}
-	rowEncode, err := row.Encode()
-	require.Nil(t, err)
-	row2 := new(mqMessageRow)
-	err = row2.Decode(rowEncode)
-	require.Nil(t, err)
-	require.Equal(t, row, row2)
-
-	row = &mqMessageRow{Update: map[string]column{"test": {
-		Type:  mysql.TypeBlob,
-		Value: []byte("测"),
-	}}}
-	rowEncode, err = row.Encode()
-	require.Nil(t, err)
-	row2 = new(mqMessageRow)
-	err = row2.Decode(rowEncode)
-	require.Nil(t, err)
-	require.Equal(t, row, row2)
-}
-
-func TestNonBinaryStringCol(t *testing.T) {
-	t.Parallel()
-	col := &model.Column{
-		Name:  "test",
-		Type:  mysql.TypeString,
-		Value: "value",
-	}
-	jsonCol := column{}
-	jsonCol.FromSinkColumn(col)
-	row := &mqMessageRow{Update: map[string]column{"test": jsonCol}}
-	rowEncode, err := row.Encode()
-	require.Nil(t, err)
-	row2 := new(mqMessageRow)
-	err = row2.Decode(rowEncode)
-	require.Nil(t, err)
-	require.Equal(t, row, row2)
-	jsonCol2 := row2.Update["test"]
-	col2 := jsonCol2.ToSinkColumn("test")
-	col2.Value = string(col2.Value.([]byte))
-	require.Equal(t, col, col2)
-}
-
-func TestVarBinaryCol(t *testing.T) {
-	t.Parallel()
-	col := &model.Column{
-		Name:  "test",
-		Type:  mysql.TypeString,
-		Flag:  model.BinaryFlag,
-		Value: []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
-	}
-	jsonCol := column{}
-	jsonCol.FromSinkColumn(col)
-	row := &mqMessageRow{Update: map[string]column{"test": jsonCol}}
-	rowEncode, err := row.Encode()
-	require.Nil(t, err)
-	row2 := new(mqMessageRow)
-	err = row2.Decode(rowEncode)
-	require.Nil(t, err)
-	require.Equal(t, row, row2)
-	jsonCol2 := row2.Update["test"]
-	col2 := jsonCol2.ToSinkColumn("test")
-	require.Equal(t, col, col2)
 }

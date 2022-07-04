@@ -80,7 +80,7 @@ func testBatchCodec(
 	for _, cs := range s.rowCases {
 		events := 0
 		for _, row := range cs {
-			err := encoder.AppendRowChangedEvent(context.Background(), "", row)
+			err := encoder.AppendRowChangedEvent(context.Background(), "", row, nil)
 			events++
 			require.Nil(t, err)
 		}
@@ -131,7 +131,7 @@ func TestCraftMaxMessageBytes(t *testing.T) {
 	}
 
 	for i := 0; i < 10000; i++ {
-		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent)
+		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent, nil)
 		require.Nil(t, err)
 	}
 
@@ -154,7 +154,7 @@ func TestCraftMaxBatchSize(t *testing.T) {
 	}
 
 	for i := 0; i < 10000; i++ {
-		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent)
+		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent, nil)
 		require.Nil(t, err)
 	}
 
