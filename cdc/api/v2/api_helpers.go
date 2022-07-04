@@ -19,6 +19,7 @@ import (
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/security"
 	pd "github.com/tikv/pd/client"
 )
@@ -64,8 +65,12 @@ type APIV2Helpers interface {
 	// getPDClient returns a PDClient given the PD cluster addresses and a credential
 	getPDClient(context.Context, []string, *security.Credential) (pd.Client, error)
 
-	// createTiStore wraps the createTiStore method to increase testability
-	createTiStore([]string, *security.Credential) (tidbkv.Storage, error)
+	// getKVCreateTiStore wraps kv.createTiStore method to increase testability
+	getKVTiStore([]string, *security.Credential) (tidbkv.Storage, error)
+
+	// getVerfiedTables wraps entry.VerifyTables to increase testability
+	getVerfiedTables(*config.ReplicaConfig, tidbkv.Storage,
+		uint64) (ineligibleTables, eligibleTables []model.TableName, err error)
 }
 
 // APIV2HelpersImpl is an implementation of AVIV2Helpers interface

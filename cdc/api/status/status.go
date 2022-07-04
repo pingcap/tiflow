@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/version"
-	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // status of cdc server
@@ -48,15 +47,14 @@ func RegisterStatusAPIRoutes(router *gin.Engine, capture capture.Capture) {
 	router.GET("/debug/info", gin.WrapF(statusAPI.handleDebugInfo))
 }
 
-func (h *statusAPI) writeEtcdInfo(ctx context.Context, cli *etcd.CDCEtcdClient, w io.Writer) {
-	resp, err := cli.Client.Get(ctx,
-		etcd.BaseKey(cli.ClusterID), clientv3.WithPrefix())
+func (h *statusAPI) writeEtcdInfo(ctx context.Context, cli etcd.CDCEtcdClientForAPI, w io.Writer) {
+	kvs, err := cli.GetAllCDCInfo(ctx)
 	if err != nil {
 		fmt.Fprintf(w, "failed to get info: %s\n\n", err.Error())
 		return
 	}
 
-	for _, kv := range resp.Kvs {
+	for _, kv := range kvs {
 		fmt.Fprintf(w, "%s\n\t%s\n\n", string(kv.Key), string(kv.Value))
 	}
 }

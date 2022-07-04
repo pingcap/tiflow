@@ -43,7 +43,6 @@ func TestToAPIReplicaConfig(t *testing.T) {
 			},
 		},
 		SchemaRegistry: "bbb",
-		TxnAtomicity:   "aa",
 	}
 	cfg.Consistent = &config.ConsistentConfig{
 		Level:             "1",

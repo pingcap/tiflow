@@ -25,10 +25,7 @@ import (
 // QueryTso request and returns a TSO from PD
 func (h *OpenAPIV2) QueryTso(c *gin.Context) {
 	ctx := c.Request.Context()
-	if h.capture.GetUpstreamManager() == nil {
-		c.Status(http.StatusServiceUnavailable)
-		return
-	}
+
 	upstreamConfig := &UpstreamConfig{}
 	if err := c.BindJSON(upstreamConfig); err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))

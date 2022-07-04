@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pingcap/errors"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -72,7 +73,11 @@ func (h *OpenAPIV2) ResolveLock(c *gin.Context) {
 			return
 		}
 	} else {
-		up := h.capture.GetUpstreamManager().GetDefaultUpstream()
+		up, err := getCaptureDefaultUpstream(h.capture)
+		if err != nil {
+			_ = c.Error(err)
+			return
+		}
 		kvStorage = up.KVStorage
 	}
 
@@ -123,7 +128,11 @@ func (h *OpenAPIV2) withUpstreamConfig(c context.Context,
 		pdClient pd.Client
 	)
 	if upstreamConfig.ID > 0 {
-		up, ok := h.capture.GetUpstreamManager().Get(upstreamConfig.ID)
+		upManager, err := h.capture.GetUpstreamManager()
+		if err != nil {
+			return errors.Trace(err)
+		}
+		up, ok := upManager.Get(upstreamConfig.ID)
 		if !ok {
 			return cerror.ErrUpstreamNotFound.GenWithStackByArgs(upstreamConfig.ID)
 		}
@@ -143,7 +152,10 @@ func (h *OpenAPIV2) withUpstreamConfig(c context.Context,
 		}
 		defer pdClient.Close()
 	} else {
-		up := h.capture.GetUpstreamManager().GetDefaultUpstream()
+		up, err := getCaptureDefaultUpstream(h.capture)
+		if err != nil {
+			return errors.Trace(err)
+		}
 		pdClient = up.PDClient
 	}
 	return doWithClient(c, pdClient)

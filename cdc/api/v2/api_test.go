@@ -17,7 +17,6 @@ import (
 	"context"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
 	pd "github.com/tikv/pd/client"
@@ -28,9 +27,9 @@ type testCase struct {
 	method string
 }
 
-func newRouter(c capture.Capture) *gin.Engine {
+func newRouter(apiV2 OpenAPIV2) *gin.Engine {
 	router := gin.New()
-	RegisterOpenAPIV2Routes(router, NewOpenAPIV2(c))
+	RegisterOpenAPIV2Routes(router, apiV2)
 	return router
 }
 

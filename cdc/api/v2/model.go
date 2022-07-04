@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/security"
 )
 
 // Tso contains timestamp get from PD
@@ -147,7 +148,6 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 		res.Sink = &config.SinkConfig{
 			DispatchRules:   dispatchRules,
 			Protocol:        c.Sink.Protocol,
-			TxnAtomicity:    config.AtomicityLevel(c.Sink.TxnAtomicity),
 			ColumnSelectors: columnSelectors,
 			SchemaRegistry:  c.Sink.SchemaRegistry,
 		}
@@ -195,7 +195,6 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			SchemaRegistry:  cloned.Sink.SchemaRegistry,
 			DispatchRules:   dispatchRules,
 			ColumnSelectors: columnSelectors,
-			TxnAtomicity:    string(cloned.Sink.TxnAtomicity),
 		}
 	}
 	if cloned.Consistent != nil {
@@ -244,7 +243,6 @@ type SinkConfig struct {
 	SchemaRegistry  string            `json:"schema_registry"`
 	DispatchRules   []*DispatchRule   `json:"dispatchers"`
 	ColumnSelectors []*ColumnSelector `json:"column_selectors"`
-	TxnAtomicity    string            `json:"transaction-atomicity"`
 }
 
 // DispatchRule represents partition rule for a table
@@ -315,6 +313,19 @@ type RunningError struct {
 	Addr    string `json:"addr"`
 	Code    string `json:"code"`
 	Message string `json:"message"`
+}
+
+// toCredential generates a security.Credential from a PDConfig
+func (cfg *PDConfig) toCredential() *security.Credential {
+	credential := &security.Credential{
+		CAPath:   cfg.CAPath,
+		CertPath: cfg.CertPath,
+		KeyPath:  cfg.KeyPath,
+	}
+	if len(cfg.CertAllowedCN) != 0 {
+		credential.CertAllowedCN = cfg.CertAllowedCN
+	}
+	return credential
 }
 
 // Marshal returns the json marshal format of a ChangeFeedInfo

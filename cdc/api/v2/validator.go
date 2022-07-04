@@ -51,7 +51,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	// verify sinkURI
 	if cfg.SinkURI == "" {
 		return nil, cerror.ErrSinkURIInvalid.GenWithStackByArgs(
-			"sink_uri is empty, can't not create a changefeed without sink_uri")
+			"sink_uri is empty, cannot create a changefeed without sink_uri")
 	}
 
 	// verify changefeedID
@@ -122,6 +122,11 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 		return nil, err
 	}
 	if !replicaCfg.EnableOldValue {
+		sinkURIParsed, err := url.Parse(cfg.SinkURI)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+		}
+
 		protocol := sinkURIParsed.Query().Get(config.ProtocolKey)
 		if protocol != "" {
 			replicaCfg.Sink.Protocol = protocol
