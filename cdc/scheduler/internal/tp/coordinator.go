@@ -86,7 +86,7 @@ func newCoordinator(
 		revision:     revision,
 		captureID:    captureID,
 		replicationM: newReplicationManager(cfg.MaxTaskConcurrency, changefeedID),
-		captureM:     newCaptureManager(changefeedID, revision, cfg.HeartbeatTick),
+		captureM:     newCaptureManager(captureID, changefeedID, revision, cfg.HeartbeatTick),
 		schedulerM:   newSchedulerManager(changefeedID, cfg),
 		changefeedID: changefeedID,
 	}
@@ -250,8 +250,9 @@ func (c *coordinator) poll(
 
 	// Generate schedule tasks based on the current status.
 	replications := c.replicationM.ReplicationSets()
+	runningTasks := c.replicationM.RunningTasks()
 	allTasks := c.schedulerM.Schedule(
-		checkpointTs, currentTables, c.captureM.Captures, replications)
+		checkpointTs, currentTables, c.captureM.Captures, replications, runningTasks)
 
 	// Handle generated schedule tasks.
 	msgs, err = c.replicationM.HandleTasks(allTasks)

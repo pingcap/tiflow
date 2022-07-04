@@ -486,7 +486,7 @@ func (d *CanalEventBatchEncoder) Build() []*MQMessage {
 	if err != nil {
 		log.Panic("Error when serializing Canal packet", zap.Error(err))
 	}
-	ret := NewMQMessage(config.ProtocolCanal, nil, value, 0, model.MqMessageTypeRow, nil, nil)
+	ret := NewMQMessage(config.ProtocolCanal, nil, value, 0, model.MessageTypeRow, nil, nil)
 	ret.SetRowsCount(rowCount)
 	d.messages.Reset()
 	d.resetPacket()

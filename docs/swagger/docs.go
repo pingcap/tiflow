@@ -62,7 +62,7 @@ var doc = `{
             }
         },
         "/api/v1/captures/drain": {
-            "post": {
+            "put": {
                 "description": "Drain all tables at the target captures in cdc cluster",
                 "consumes": [
                     "application/json"
@@ -1044,6 +1044,9 @@ var doc = `{
                 },
                 "is_owner": {
                     "type": "boolean"
+                },
+                "liveness": {
+                    "type": "integer"
                 },
                 "pid": {
                     "type": "integer"

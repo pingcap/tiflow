@@ -206,11 +206,6 @@ check-merge-conflicts:
 	@echo "check-merge-conflicts"
 	@./scripts/check-merge-conflicts.sh
 
-check-leaktest-added: tools/bin/gofumports
-	@echo "check leak test added in all unit tests"
-	# TODO: enable leaktest for DM tests.
-	./scripts/add-leaktest.sh $(TEST_FILES_WITHOUT_DM)
-
 check-ticdc-dashboard:
 	@echo "check-ticdc-dashboard"
 	@./scripts/check-ticdc-dashboard.sh
@@ -242,7 +237,7 @@ check-static: tools/bin/golangci-lint
 	tools/bin/golangci-lint run --timeout 10m0s --skip-files kv_gen --skip-dirs dm,tests
 	cd dm && ../tools/bin/golangci-lint run --timeout 10m0s
 
-check: check-copyright fmt check-static tidy terror_check errdoc check-leaktest-added check-merge-conflicts check-ticdc-dashboard check-diff-line-width swagger-spec
+check: check-copyright fmt check-static tidy terror_check errdoc check-merge-conflicts check-ticdc-dashboard check-diff-line-width swagger-spec
 	@git --no-pager diff --exit-code || echo "Please add changed files!"
 
 integration_test_coverage: tools/bin/gocovmerge tools/bin/goveralls
@@ -267,6 +262,8 @@ swagger-spec: tools/bin/swag
 
 generate_mock: tools/bin/mockgen
 	tools/bin/mockgen -source cdc/owner/owner.go -destination cdc/owner/mock/owner_mock.go
+	tools/bin/mockgen -source cdc/processor/manager.go -destination cdc/processor/mock/manager_mock.go
+	tools/bin/mockgen -source cdc/capture/capture.go -destination cdc/capture/mock/capture_mock.go
 
 clean:
 	go clean -i ./...
