@@ -31,7 +31,7 @@ func NewIgnoreValidationErrorCmd() *cobra.Command {
 		Short: "ignore validation error row change",
 		RunE:  operateValidationError(pb.ValidationErrOp_IgnoreErrOp),
 	}
-	cmd.Flags().Bool("all", false, "all task")
+	cmd.Flags().Bool("all", false, "all errors")
 	return cmd
 }
 
@@ -41,7 +41,7 @@ func NewResolveValidationErrorCmd() *cobra.Command {
 		Short: "resolve validation error row change",
 		RunE:  operateValidationError(pb.ValidationErrOp_ResolveErrOp),
 	}
-	cmd.Flags().Bool("all", false, "all task")
+	cmd.Flags().Bool("all", false, "all errors")
 	return cmd
 }
 
@@ -51,7 +51,7 @@ func NewClearValidationErrorCmd() *cobra.Command {
 		Short: "clear validation error row change",
 		RunE:  operateValidationError(pb.ValidationErrOp_ClearErrOp),
 	}
-	cmd.Flags().Bool("all", false, "all task")
+	cmd.Flags().Bool("all", false, "all errors")
 	return cmd
 }
 
