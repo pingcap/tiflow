@@ -56,10 +56,12 @@ func (bs *blackHoleWriter) WriteLog(_ context.Context, tableID model.TableID, lo
 	return
 }
 
-func (bs *blackHoleWriter) FlushLog(_ context.Context, tableID model.TableID, resolvedTs uint64) error {
+func (bs *blackHoleWriter) FlushLog(_ context.Context, rtsMap map[model.TableID]model.Ts) error {
 	bs.tableRtsMu.Lock()
 	defer bs.tableRtsMu.Unlock()
-	bs.tableRtsMap[tableID] = resolvedTs
+	for tableID, rts := range rtsMap {
+		bs.tableRtsMap[tableID] = rts
+	}
 	return nil
 }
 
@@ -76,18 +78,6 @@ func (bs *blackHoleWriter) EmitResolvedTs(_ context.Context, ts uint64) error {
 func (bs *blackHoleWriter) EmitCheckpointTs(_ context.Context, ts uint64) error {
 	bs.checkpointTs = ts
 	return nil
-}
-
-func (bs *blackHoleWriter) GetCurrentResolvedTs(_ context.Context, tableIDs []int64) (map[int64]uint64, error) {
-	bs.tableRtsMu.RLock()
-	defer bs.tableRtsMu.RUnlock()
-	rtsMap := make(map[int64]uint64, len(bs.tableRtsMap))
-	for _, tableID := range tableIDs {
-		if rts, ok := bs.tableRtsMap[tableID]; ok {
-			rtsMap[tableID] = rts
-		}
-	}
-	return rtsMap, nil
 }
 
 func (bs *blackHoleWriter) Close() error {
