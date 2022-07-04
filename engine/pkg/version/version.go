@@ -32,7 +32,7 @@ var (
 
 // LogVersionInfo prints the version information of tiflow master.
 func LogVersionInfo() {
-	log.L().Info("Welcome to Dataflow Engine",
+	log.Info("Welcome to Dataflow Engine",
 		zap.String("release-version", ReleaseVersion),
 		zap.String("git-hash", GitHash),
 		zap.String("git-branch", GitBranch),

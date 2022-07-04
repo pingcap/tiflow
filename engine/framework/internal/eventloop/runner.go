@@ -23,7 +23,7 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	frameErrors "github.com/pingcap/tiflow/engine/framework/internal/errors"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	derrors "github.com/pingcap/tiflow/pkg/errors"
@@ -68,7 +68,7 @@ func (r *Runner[R]) Run(ctx context.Context) error {
 	}
 
 	if closeErr := r.task.Close(context.Background()); closeErr != nil {
-		log.L().Warn("Closing task returned error", zap.String("label", r.task.ID()))
+		log.Warn("Closing task returned error", zap.String("label", r.task.ID()))
 	}
 
 	return err
@@ -100,7 +100,7 @@ func (r *Runner[R]) doGracefulExit(ctx context.Context, errIn error) {
 
 	err := r.task.NotifyExit(timeoutCtx, errIn)
 	if !gerrors.Is(err, context.Canceled) {
-		log.L().Error("an error is encountered when a task is already exiting",
+		log.Error("an error is encountered when a task is already exiting",
 			zap.Error(err), zap.NamedError("original-err", errIn))
 	}
 }

@@ -234,7 +234,7 @@ func (d *DefaultBaseJobMaster) NotifyExit(ctx context.Context, errIn error) (ret
 	d.closeOnce.Do(func() {
 		err := d.impl.CloseImpl(ctx)
 		if err != nil {
-			log.L().Error("Failed to close JobMasterImpl", zap.Error(err))
+			log.Error("Failed to close JobMasterImpl", zap.Error(err))
 		}
 	})
 
@@ -348,12 +348,12 @@ type jobMasterImplAsWorkerImpl struct {
 }
 
 func (j *jobMasterImplAsWorkerImpl) InitImpl(ctx context.Context) error {
-	log.L().Panic("unexpected Init call")
+	log.Panic("unexpected Init call")
 	return nil
 }
 
 func (j *jobMasterImplAsWorkerImpl) Tick(ctx context.Context) error {
-	log.L().Panic("unexpected Poll call")
+	log.Panic("unexpected Poll call")
 	return nil
 }
 
@@ -366,7 +366,7 @@ func (j *jobMasterImplAsWorkerImpl) OnMasterMessage(topic p2p.Topic, message int
 }
 
 func (j *jobMasterImplAsWorkerImpl) CloseImpl(ctx context.Context) error {
-	log.L().Panic("unexpected Close call")
+	log.Panic("unexpected Close call")
 	return nil
 }
 
@@ -379,12 +379,12 @@ func (j *jobMasterImplAsMasterImpl) OnWorkerStatusUpdated(worker WorkerHandle, n
 }
 
 func (j *jobMasterImplAsMasterImpl) Tick(ctx context.Context) error {
-	log.L().Panic("unexpected poll call")
+	log.Panic("unexpected poll call")
 	return nil
 }
 
 func (j *jobMasterImplAsMasterImpl) InitImpl(ctx context.Context) error {
-	log.L().Panic("unexpected init call")
+	log.Panic("unexpected init call")
 	return nil
 }
 
@@ -409,6 +409,6 @@ func (j *jobMasterImplAsMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p
 }
 
 func (j *jobMasterImplAsMasterImpl) CloseImpl(ctx context.Context) error {
-	log.L().Panic("unexpected Close call")
+	log.Panic("unexpected Close call")
 	return nil
 }

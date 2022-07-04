@@ -16,7 +16,7 @@ package framework
 import (
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/framework/internal/master"
 	"github.com/pingcap/tiflow/engine/framework/model"
 	engineModel "github.com/pingcap/tiflow/engine/model"
@@ -92,6 +92,6 @@ func MustConvertWorkerType2JobType(tp WorkerType) engineModel.JobType {
 		return engineModel.JobTypeCDC
 	}
 
-	log.L().Panic("unexpected fail when convert worker type to job type", zap.Int32("worker_type", int32(tp)))
+	log.Panic("unexpected fail when convert worker type to job type", zap.Int32("worker_type", int32(tp)))
 	return engineModel.JobTypeInvalid
 }

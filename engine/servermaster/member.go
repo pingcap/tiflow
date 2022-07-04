@@ -108,6 +108,6 @@ func (s *Server) updateServerMasterMembers(ctx context.Context) error {
 	s.members.Lock()
 	defer s.members.Unlock()
 	s.members.m = members
-	log.L().Info("update server master members", zap.Any("members", members))
+	log.Info("update server master members", zap.Any("members", members))
 	return nil
 }

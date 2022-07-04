@@ -106,7 +106,7 @@ func (d *TaskDispatcher) DispatchTask(
 			abortWorker(errOut)
 			return errOut
 		}
-		log.L().Warn("ConfirmDispatchTask encountered error, "+
+		log.Warn("ConfirmDispatchTask encountered error, "+
 			"but the server's state is undetermined",
 			zap.Error(err))
 		// We treat the undetermined state as success.
@@ -195,9 +195,9 @@ func (d *TaskDispatcher) preDispatchTaskOnce(
 			return "", false, errors.Trace(err)
 		case codes.AlreadyExists:
 			// Since we are generating unique UUIDs, this should not happen.
-			log.L().Panic("Unexpected error", zap.Error(err))
+			log.Panic("Unexpected error", zap.Error(err))
 		default:
-			log.L().Warn("PreDispatchTask encountered error, retrying", zap.Error(err))
+			log.Warn("PreDispatchTask encountered error, retrying", zap.Error(err))
 			return "", true, errors.Trace(err)
 		}
 	}

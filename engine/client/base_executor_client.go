@@ -95,7 +95,7 @@ func (c *baseExecutorClientImpl) Send(ctx context.Context, req *ExecutorRequest)
 		resp.Resp, err = c.brokerClient.RemoveResource(ctx, req.RemoveLocalResourceRequest())
 	}
 	if err != nil {
-		log.L().Error("send req meet error", zap.Error(err))
+		log.Error("send req meet error", zap.Error(err))
 	}
 	return resp, err
 }
