@@ -7,12 +7,13 @@ services:
                 volumes:
                         - ./config/master.toml:/config.toml
                 command:
-                        - "/df-master"
+                        - "/tiflow"
+                        - "master"
                         - "--name"
                         - "master0"
                         - "--config"
                         - "/config.toml"
-                        - "-L=debug"
+                        - "--log-level=debug"
                         - "--master-addr"
                         - "0.0.0.0:10240"
                         - "--advertise-addr"
@@ -39,12 +40,13 @@ services:
                 volumes:
                         - ./config/master.toml:/config.toml
                 command:
-                        - "/df-master"
+                        - "/tiflow"
+                        - "master"
                         - "--name"
                         - "master1"
                         - "--config"
                         - "/config.toml"
-                        - "-L=debug"
+                        - "--log-level=debug"
                         - "--master-addr"
                         - "0.0.0.0:10240"
                         - "--advertise-addr"
@@ -71,12 +73,13 @@ services:
                 volumes:
                         - ./config/master.toml:/config.toml
                 command:
-                        - "/df-master"
+                        - "/tiflow"
+                        - "master"
                         - "--name"
                         - "master2"
                         - "--config"
                         - "/config.toml"
-                        - "-L=debug"
+                        - "--log-level=debug"
                         - "--master-addr"
                         - "0.0.0.0:10240"
                         - "--advertise-addr"
@@ -104,10 +107,11 @@ services:
                         - ./config/executor.toml:/config.toml
                         - /tmp/dataflow:/tmp/dataflow
                 command:
-                        - "/df-executor"
+                        - "/tiflow"
+                        - "executor"
                         - "--config"
                         - "/config.toml"
-                        - "-L=debug"
+                        - "--log-level=debug"
                         - "--join"
                         - "server-master-0:10240,server-master-1:10240,server-master-2:10240"
                         - "--worker-addr"
@@ -128,10 +132,11 @@ services:
                         - ./config/executor.toml:/config.toml
                         - /tmp/dataflow:/tmp/dataflow
                 command:
-                        - "/df-executor"
+                        - "/tiflow"
+                        - "executor"
                         - "--config"
                         - "/config.toml"
-                        - "-L=debug"
+                        - "--log-level=debug"
                         - "--join"
                         - "server-master-0:10240,server-master-1:10240,server-master-2:10240"
                         - "--worker-addr"
@@ -152,10 +157,11 @@ services:
                         - ./config/executor.toml:/config.toml
                         - /tmp/dataflow:/tmp/dataflow
                 command:
-                        - "/df-executor"
+                        - "/tiflow"
+                        - "executor"
                         - "--config"
                         - "/config.toml"
-                        - "-L=debug"
+                        - "--log-level=debug"
                         - "--join"
                         - "server-master-0:10240,server-master-1:10240,server-master-2:10240"
                         - "--worker-addr"
@@ -169,7 +175,7 @@ services:
                 extra_hosts:
                         - "host.docker.internal:host-gateway"
         frame-mysql-standalone:
-                image: mysql:5.7 
+                image: mysql:5.7
                 platform: linux/amd64
                 container_name: frame-mysql-standalone
                 environment:
