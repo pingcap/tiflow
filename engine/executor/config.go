@@ -24,7 +24,6 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -43,24 +42,6 @@ var (
 	defaultCapability            int64 = 100 // TODO: make this configurable
 	defaultLocalStorageDirPrefix       = "/tmp/dfe-storage/"
 )
-
-var defaultExecutorConfig = &Config{
-	LogConf: logutil.Config{
-		Level: "info",
-		File:  "",
-	},
-	Name:                 "",
-	Join:                 "",
-	WorkerAddr:           "",
-	AdvertiseAddr:        "",
-	SessionTTL:           defaultSessionTTL,
-	KeepAliveTTLStr:      defaultKeepAliveTTL,
-	KeepAliveIntervalStr: defaultKeepAliveInterval,
-	RPCTimeoutStr:        defaultRPCTimeout,
-	Storage: storagecfg.Config{
-		Local: storagecfg.LocalFileConfig{BaseDir: ""},
-	},
-}
 
 // Config is the configuration.
 type Config struct {
@@ -90,20 +71,6 @@ type Config struct {
 	Security *security.Credential `toml:"security" json:"security"`
 }
 
-// Clone clones an executor config.
-func (c *Config) Clone() *Config {
-	data, err := json.Marshal(c)
-	if err != nil {
-		log.Panic("failed to marshal config", zap.Error(err))
-	}
-	clone := new(Config)
-	err = json.Unmarshal(data, &clone)
-	if err != nil {
-		log.Panic("failed to unmarshal config", zap.Error(err))
-	}
-	return clone
-}
-
 // String implements fmt.Stringer
 func (c *Config) String() string {
 	cfg, err := json.Marshal(c)
@@ -125,7 +92,7 @@ func (c *Config) Toml() (string, error) {
 	return b.String(), nil
 }
 
-// configFromFile loads config from file.
+// configFromFile loads config from file and merges items into Config.
 func (c *Config) configFromFile(path string) error {
 	metaData, err := toml.DecodeFile(path, c)
 	if err != nil {
@@ -183,5 +150,21 @@ func (c *Config) Adjust() (err error) {
 
 // GetDefaultExecutorConfig returns a default executor config
 func GetDefaultExecutorConfig() *Config {
-	return defaultExecutorConfig.Clone()
+	return &Config{
+		LogConf: logutil.Config{
+			Level: "info",
+			File:  "",
+		},
+		Name:                 "",
+		Join:                 "",
+		WorkerAddr:           "",
+		AdvertiseAddr:        "",
+		SessionTTL:           defaultSessionTTL,
+		KeepAliveTTLStr:      defaultKeepAliveTTL,
+		KeepAliveIntervalStr: defaultKeepAliveInterval,
+		RPCTimeoutStr:        defaultRPCTimeout,
+		Storage: storagecfg.Config{
+			Local: storagecfg.LocalFileConfig{BaseDir: ""},
+		},
+	}
 }

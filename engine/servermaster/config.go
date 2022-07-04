@@ -45,24 +45,6 @@ const (
 	defaultInitialClusterState = embed.ClusterStateFlagNew
 )
 
-var defaultMasterConfig = &Config{
-	LogConf: logutil.Config{
-		Level: "info",
-		File:  "",
-	},
-	MasterAddr:    "",
-	AdvertiseAddr: "",
-	Etcd: &etcdutil.ConfigParams{
-		PeerUrls:            defaultPeerUrls,
-		InitialClusterState: defaultInitialClusterState,
-	},
-	FrameMetaConf:        NewFrameMetaConfig(),
-	UserMetaConf:         NewDefaultUserMetaConfig(),
-	KeepAliveTTLStr:      defaultKeepAliveTTL,
-	KeepAliveIntervalStr: defaultKeepAliveInterval,
-	RPCTimeoutStr:        defaultRPCTimeout,
-}
-
 // Config is the configuration for dm-master.
 type Config struct {
 	LogConf logutil.Config `toml:"log" json:"log"`
@@ -112,20 +94,6 @@ func (c *Config) Toml() (string, error) {
 	return b.String(), nil
 }
 
-// Clone clones a master config
-func (c *Config) Clone() *Config {
-	data, err := json.Marshal(c)
-	if err != nil {
-		log.Panic("failed to marshal config", zap.Error(err))
-	}
-	clone := new(Config)
-	err = json.Unmarshal(data, &clone)
-	if err != nil {
-		log.Panic("failed to unmarshal config", zap.Error(err))
-	}
-	return clone
-}
-
 // Adjust adjusts the master configuration
 func (c *Config) Adjust() (err error) {
 	c.Etcd.Adjust(defaultPeerUrls, defaultInitialClusterState)
@@ -151,8 +119,8 @@ func (c *Config) Adjust() (err error) {
 	return nil
 }
 
-// ConfigFromFile loads config from file.
-func (c *Config) ConfigFromFile(path string) error {
+// configFromFile loads config from file and merges items into Config.
+func (c *Config) configFromFile(path string) error {
 	metaData, err := toml.DecodeFile(path, c)
 	if err != nil {
 		return errors.WrapError(errors.ErrMasterDecodeConfigFile, err)
@@ -170,7 +138,23 @@ func (c *Config) configFromString(data string) error {
 
 // GetDefaultMasterConfig returns a default master config
 func GetDefaultMasterConfig() *Config {
-	return defaultMasterConfig.Clone()
+	return &Config{
+		LogConf: logutil.Config{
+			Level: "info",
+			File:  "",
+		},
+		MasterAddr:    "",
+		AdvertiseAddr: "",
+		Etcd: &etcdutil.ConfigParams{
+			PeerUrls:            defaultPeerUrls,
+			InitialClusterState: defaultInitialClusterState,
+		},
+		FrameMetaConf:        NewFrameMetaConfig(),
+		UserMetaConf:         NewDefaultUserMetaConfig(),
+		KeepAliveTTLStr:      defaultKeepAliveTTL,
+		KeepAliveIntervalStr: defaultKeepAliveInterval,
+		RPCTimeoutStr:        defaultRPCTimeout,
+	}
 }
 
 func checkUndecodedItems(metaData toml.MetaData) error {

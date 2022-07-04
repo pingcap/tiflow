@@ -14,7 +14,8 @@
 package servermaster
 
 import (
-	"io/ioutil"
+	"fmt"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -35,7 +36,7 @@ endpoints = ["metastore:12479"]
 	fileName := mustWriteToTempFile(t, testToml)
 
 	config := GetDefaultMasterConfig()
-	err := config.ConfigFromFile(fileName)
+	err := config.configFromFile(fileName)
 	require.Nil(t, err)
 	err = config.Adjust()
 	require.Nil(t, err)
@@ -44,11 +45,12 @@ endpoints = ["metastore:12479"]
 	require.Equal(t, "root", config.FrameMetaConf.Auth.User)
 	require.Equal(t, "passwd", config.FrameMetaConf.Auth.Passwd)
 	require.Equal(t, "metastore:12479", config.UserMetaConf.Endpoints[0])
+	fmt.Printf("config: %+v\n", config)
 }
 
 func mustWriteToTempFile(t *testing.T, content string) (filePath string) {
 	dir := t.TempDir()
-	fd, err := ioutil.TempFile(dir, "*")
+	fd, err := os.CreateTemp(dir, "*")
 	require.NoError(t, err)
 	_, err = fd.WriteString(content)
 	require.NoError(t, err)
