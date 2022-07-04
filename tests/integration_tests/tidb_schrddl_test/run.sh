@@ -44,7 +44,7 @@ GO111MODULE=on go build -o ./schrddl github.com/PingCAP-QE/schrddl
 ./schrddl --mode=parallel --db="test" --time=30s --concurrency=5 --output='schrddl.out'
 # write fininsh mark
 mysql -h${UP_TIDB_HOST} -P${UP_TIDB_PORT} -uroot -e "create table test.finish_mark(id int)"
-check_table_exists 'test.finish_mark' ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 300
+check_table_exists 'test.finish_mark' ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 600
 check_sync_diff $WORK_DIR $CUR/diff_config.toml
 cleanup_process $CDC_BINARY
 check_logs $WORK_DIR
