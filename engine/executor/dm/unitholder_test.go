@@ -22,21 +22,29 @@ import (
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dumpling"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/syncer"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 )
 
 func TestUnitHolder(t *testing.T) {
-	unitHolder := &unitHolderImpl{}
+	unitHolder := &unitHolderImpl{
+		cfg: &config.SubTaskConfig{FrameworkLogger: zap.NewNop()},
+	}
 	u := &mockUnit{}
 	unitHolder.unit = u
+	_, _, err := conn.InitMockDBFull()
+	require.NoError(t, err)
+
 	u.On("Init").Return(errors.New("error")).Once()
 	require.Error(t, unitHolder.Init(context.Background()))
 	u.On("Init").Return(nil).Once()
