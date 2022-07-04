@@ -1,0 +1,25 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: TimeChaos
+metadata:
+  name: time-shift-dataflow
+  labels:
+    app: time-shift-dataflow
+spec:
+  mode: fixed
+  value: 5
+  duration: "30s"
+  selector:
+    pods:
+      default: # default namespace
+        - server-master-0
+        - server-master-1
+        - server-master-2
+        - executor-0
+        - executor-1
+        - executor-2
+        - executor-3
+  timeOffset: '-10m'
+  clockIds:
+    - CLOCK_REALTIME
+  scheduler:
+    cron: "@every 2m"
