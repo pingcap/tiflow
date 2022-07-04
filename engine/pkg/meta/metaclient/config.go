@@ -87,7 +87,6 @@ func GenerateDSNByParams(storeConf *StoreConfig) string {
 	dsnCfg.Addr = storeConf.Endpoints[0]
 	dsnCfg.DBName = storeConf.Schema
 	dsnCfg.InterpolateParams = true
-	// dsnCfg.MultiStatements = true
 	dsnCfg.Params["parseTime"] = "true"
 	// TODO: check for timezone
 	dsnCfg.Params["loc"] = "Local"
