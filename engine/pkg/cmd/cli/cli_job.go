@@ -53,7 +53,6 @@ func (o *jobGeneralOptions) addFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVar(&o.projectID, "project-id", "", "the project id")
 	cmd.PersistentFlags().StringSliceVar(&o.masterAddrs, "master-addrs", nil, "server master addresses")
 	cmd.PersistentFlags().DurationVar(&o.rpcTimeout, "rpc-timeout", time.Second*30, "default rpc timeout")
-
 }
 
 // validate checks that the provided job options are valid.
@@ -102,10 +101,7 @@ func newCmdJob() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmdcontext.GetDefaultContext()
-			if err := o.validate(ctx, cmd); err != nil {
-				return err
-			}
-			return nil
+			return o.validate(ctx, cmd)
 		},
 	}
 
