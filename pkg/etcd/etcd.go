@@ -91,7 +91,7 @@ func GetEtcdKeyJob(clusterID string, changeFeedID model.ChangeFeedID) string {
 
 // MigrateBackupKey is the key of backup data during a migration.
 func MigrateBackupKey(version int, backupKey string) string {
-	return fmt.Sprintf("%s/%d/%s", MigrateBackupPrefix, version, backupKey)
+	return fmt.Sprintf("%s/%d/%s", migrateBackupPrefix, version, backupKey)
 }
 
 // CDCEtcdClient is a wrap of etcd client
@@ -157,7 +157,7 @@ func (c CDCEtcdClient) CheckMultipleCDCClusterExist(ctx context.Context) error {
 	for _, kv := range resp.Kvs {
 		key := string(kv.Key)
 		if strings.HasPrefix(key, BaseKey(DefaultCDCClusterID)) ||
-			strings.HasPrefix(key, MigrateBackupPrefix) {
+			strings.HasPrefix(key, migrateBackupPrefix) {
 			continue
 		}
 		return cerror.ErrMultipleCDCClustersExist.GenWithStackByArgs()

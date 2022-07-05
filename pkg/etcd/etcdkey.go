@@ -47,7 +47,7 @@ const (
 	DefaultClusterAndMetaPrefix = "/tidb/cdc/default" + metaPrefix
 
 	// MigrateBackupPrefix is the prefix of backup keys during a migration
-	MigrateBackupPrefix = "/tidb/cdc/__backup__"
+	migrateBackupPrefix = "/tidb/cdc/__backup__"
 )
 
 // CDCKeyType is the type of etcd key
