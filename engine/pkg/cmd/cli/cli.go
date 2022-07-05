@@ -59,11 +59,13 @@ func NewCmdCli() *cobra.Command {
 			return nil
 		},
 		Args: cobra.NoArgs,
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			// Whether to run interactively or not.
 			if o.interact {
 				run()
+				return nil
 			}
+			return cmd.Help()
 		},
 	}
 

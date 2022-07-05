@@ -29,12 +29,14 @@ import (
 type jobGeneralOptions struct {
 	projectID string
 	tenantID  string
-	tenant    tenant.ProjectInfo
 
-	masterClient client.MasterClient
-	masterAddrs  []string
-	rpcTimeout   time.Duration
+	masterAddrs []string
+	rpcTimeout  time.Duration
 	// TODO: add tls support
+
+	// Following fields are generated from options
+	masterClient client.MasterClient
+	tenant       tenant.ProjectInfo
 }
 
 func newJobGeneralOptions() *jobGeneralOptions {
@@ -101,9 +103,9 @@ func newCmdJob() *cobra.Command {
 	}
 
 	o.addFlags(cmds)
-	cmds.AddCommand(newCmdCreateJob(o))
-	cmds.AddCommand(newCmdQueryJob(o))
-	cmds.AddCommand(newCmdPauseJob(o))
+	cmds.AddCommand(newCmdJobCreate(o))
+	cmds.AddCommand(newCmdJobQuery(o))
+	cmds.AddCommand(newCmdJobPause(o))
 
 	return cmds
 }

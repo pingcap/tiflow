@@ -23,21 +23,21 @@ import (
 	"go.uber.org/zap"
 )
 
-// queryJobOptions defines flags for job query.
-type queryJobOptions struct {
+// jobQueryOptions defines flags for job query.
+type jobQueryOptions struct {
 	generalOpts *jobGeneralOptions
 
 	jobID string
 }
 
-// newQueryJobOptions creates new query job options.
-func newQueryJobOptions(generalOpts *jobGeneralOptions) *queryJobOptions {
-	return &queryJobOptions{generalOpts: generalOpts}
+// newJobQueryOptions creates new query job options.
+func newJobQueryOptions(generalOpts *jobGeneralOptions) *jobQueryOptions {
+	return &jobQueryOptions{generalOpts: generalOpts}
 }
 
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
-func (o *queryJobOptions) addFlags(cmd *cobra.Command) {
+func (o *jobQueryOptions) addFlags(cmd *cobra.Command) {
 	if o == nil {
 		return
 	}
@@ -45,12 +45,12 @@ func (o *queryJobOptions) addFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.jobID, "job-id", "", "job id")
 }
 
-func (o *queryJobOptions) validate(ctx context.Context, cmd *cobra.Command) error {
+func (o *jobQueryOptions) validate(ctx context.Context, cmd *cobra.Command) error {
 	return o.generalOpts.validate(ctx, cmd)
 }
 
 // run the `cli job create` command.
-func (o *queryJobOptions) run(ctx context.Context, cmd *cobra.Command) error {
+func (o *jobQueryOptions) run(ctx context.Context, cmd *cobra.Command) error {
 	resp, err := o.generalOpts.masterClient.QueryJob(ctx, &enginepb.QueryJobRequest{
 		JobId: o.jobID,
 		ProjectInfo: &enginepb.ProjectInfo{
@@ -65,9 +65,9 @@ func (o *queryJobOptions) run(ctx context.Context, cmd *cobra.Command) error {
 	return nil
 }
 
-// newCmdQueryJob creates the `cli job create` command.
-func newCmdQueryJob(generalOpts *jobGeneralOptions) *cobra.Command {
-	o := newQueryJobOptions(generalOpts)
+// newCmdJobQuery creates the `cli job create` command.
+func newCmdJobQuery(generalOpts *jobGeneralOptions) *cobra.Command {
+	o := newJobQueryOptions(generalOpts)
 
 	command := &cobra.Command{
 		Use:   "query",

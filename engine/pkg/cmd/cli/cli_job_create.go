@@ -27,8 +27,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// createJobOptions defines flags for job create.
-type createJobOptions struct {
+// jobCreateOptions defines flags for job create.
+type jobCreateOptions struct {
 	generalOpts *jobGeneralOptions
 
 	jobTypeStr   string
@@ -38,14 +38,14 @@ type createJobOptions struct {
 	jobConfig []byte
 }
 
-// newCreateJobOptions creates new job options.
-func newCreateJobOptions(generalOpts *jobGeneralOptions) *createJobOptions {
-	return &createJobOptions{generalOpts: generalOpts}
+// newJobCreateOptions creates new job options.
+func newJobCreateOptions(generalOpts *jobGeneralOptions) *jobCreateOptions {
+	return &jobCreateOptions{generalOpts: generalOpts}
 }
 
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
-func (o *createJobOptions) addFlags(cmd *cobra.Command) {
+func (o *jobCreateOptions) addFlags(cmd *cobra.Command) {
 	if o == nil {
 		return
 	}
@@ -55,7 +55,7 @@ func (o *createJobOptions) addFlags(cmd *cobra.Command) {
 }
 
 // validate checks that the provided job options are valid.
-func (o *createJobOptions) validate(ctx context.Context, cmd *cobra.Command) error {
+func (o *jobCreateOptions) validate(ctx context.Context, cmd *cobra.Command) error {
 	if err := o.generalOpts.validate(ctx, cmd); err != nil {
 		return errors.WrapError(errors.ErrInvalidCliParameter, err)
 	}
@@ -86,7 +86,7 @@ func openFileAndReadString(path string) (content []byte, err error) {
 }
 
 // run the `cli job create` command.
-func (o *createJobOptions) run(ctx context.Context, cmd *cobra.Command) error {
+func (o *jobCreateOptions) run(ctx context.Context, cmd *cobra.Command) error {
 	resp, err := o.generalOpts.masterClient.SubmitJob(ctx, &enginepb.SubmitJobRequest{
 		Tp:     int32(o.jobType),
 		Config: o.jobConfig,
@@ -102,9 +102,9 @@ func (o *createJobOptions) run(ctx context.Context, cmd *cobra.Command) error {
 	return nil
 }
 
-// newCmdCreateJob creates the `cli job create` command.
-func newCmdCreateJob(generalOpts *jobGeneralOptions) *cobra.Command {
-	o := newCreateJobOptions(generalOpts)
+// newCmdJobCreate creates the `cli job create` command.
+func newCmdJobCreate(generalOpts *jobGeneralOptions) *cobra.Command {
+	o := newJobCreateOptions(generalOpts)
 
 	command := &cobra.Command{
 		Use:   "create",

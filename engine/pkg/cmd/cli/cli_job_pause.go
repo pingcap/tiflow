@@ -23,21 +23,21 @@ import (
 	"go.uber.org/zap"
 )
 
-// pauseJobOptions defines flags for job pause.
-type pauseJobOptions struct {
+// jobPauseOptions defines flags for job pause.
+type jobPauseOptions struct {
 	generalOpts *jobGeneralOptions
 
 	jobID string
 }
 
-// newPauseJobOptions creates new pause job options.
-func newPauseJobOptions(generalOpts *jobGeneralOptions) *pauseJobOptions {
-	return &pauseJobOptions{generalOpts: generalOpts}
+// newJobPauseOptions creates new pause job options.
+func newJobPauseOptions(generalOpts *jobGeneralOptions) *jobPauseOptions {
+	return &jobPauseOptions{generalOpts: generalOpts}
 }
 
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
-func (o *pauseJobOptions) addFlags(cmd *cobra.Command) {
+func (o *jobPauseOptions) addFlags(cmd *cobra.Command) {
 	if o == nil {
 		return
 	}
@@ -45,12 +45,12 @@ func (o *pauseJobOptions) addFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.jobID, "job-id", "", "job id")
 }
 
-func (o *pauseJobOptions) validate(ctx context.Context, cmd *cobra.Command) error {
+func (o *jobPauseOptions) validate(ctx context.Context, cmd *cobra.Command) error {
 	return o.generalOpts.validate(ctx, cmd)
 }
 
 // run the `cli job create` command.
-func (o *pauseJobOptions) run(ctx context.Context, cmd *cobra.Command) error {
+func (o *jobPauseOptions) run(ctx context.Context, cmd *cobra.Command) error {
 	resp, err := o.generalOpts.masterClient.PauseJob(ctx, &enginepb.PauseJobRequest{
 		JobId: o.jobID,
 		ProjectInfo: &enginepb.ProjectInfo{
@@ -65,9 +65,9 @@ func (o *pauseJobOptions) run(ctx context.Context, cmd *cobra.Command) error {
 	return nil
 }
 
-// newCmdPauseJob creates the `cli job create` command.
-func newCmdPauseJob(generalOpts *jobGeneralOptions) *cobra.Command {
-	o := newPauseJobOptions(generalOpts)
+// newCmdJobPause creates the `cli job create` command.
+func newCmdJobPause(generalOpts *jobGeneralOptions) *cobra.Command {
+	o := newJobPauseOptions(generalOpts)
 
 	command := &cobra.Command{
 		Use:   "pause",
