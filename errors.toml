@@ -588,7 +588,7 @@ meta not exists in region
 
 ["CDC:ErrMultipleCDCClustersExist"]
 error = '''
-multiple TiCDC clusters exist. Please specify
+multiple TiCDC clusters exist while using --pd
 '''
 
 ["CDC:ErrMySQLConnectionError"]
