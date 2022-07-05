@@ -1324,7 +1324,7 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 
 		// set timezone
 		if ddlJob.timezone != "" {
-			setTimezoneSQL := fmt.Sprintf("SET SESSION TIME_ZONE = %s", ddlJob.timezone)
+			setTimezoneSQL := fmt.Sprintf("SET SESSION TIME_ZONE = '%s'", ddlJob.timezone)
 			ddlJob.ddls = append([]string{setTimezoneSQL}, ddlJob.ddls...)
 			setTimezoneSQLDefault := fmt.Sprintf("SET SESSION TIME_ZONE = DEFAULT")
 			ddlJob.ddls = append(ddlJob.ddls, setTimezoneSQLDefault)
