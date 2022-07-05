@@ -700,7 +700,7 @@ func (r *Relay) handleEvents(
 
 		relayLogWriteSizeHistogram.Observe(float64(e.Header.EventSize))
 		relayLogPosGauge.WithLabelValues("relay").Set(float64(lastPos.Pos))
-		if index, err2 := binlog.GetFilenameIndex(lastPos.Name); err2 != nil {
+		if index, err2 := utils.GetFilenameIndex(lastPos.Name); err2 != nil {
 			r.logger.Error("parse binlog file name", zap.String("file name", lastPos.Name), log.ShortError(err2))
 		} else {
 			relayLogFileGauge.WithLabelValues("relay").Set(float64(index))
@@ -873,7 +873,7 @@ func (r *Relay) doIntervalOps(ctx context.Context) {
 				r.RUnlock()
 				continue
 			}
-			index, err := binlog.GetFilenameIndex(pos.Name)
+			index, err := utils.GetFilenameIndex(pos.Name)
 			if err != nil {
 				r.logger.Error("parse binlog file name", zap.String("file name", pos.Name), log.ShortError(err))
 				r.RUnlock()

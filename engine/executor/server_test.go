@@ -48,7 +48,7 @@ func init() {
 func TestStartTCPSrv(t *testing.T) {
 	t.Parallel()
 
-	cfg := NewConfig()
+	cfg := GetDefaultExecutorConfig()
 	port, err := freeport.GetFreePort()
 	require.Nil(t, err)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
@@ -107,7 +107,7 @@ func testPrometheusMetrics(t *testing.T, addr string) {
 
 func TestCollectMetric(t *testing.T) {
 	wg, ctx := errgroup.WithContext(context.Background())
-	cfg := NewConfig()
+	cfg := GetDefaultExecutorConfig()
 	port, err := freeport.GetFreePort()
 	require.Nil(t, err)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
@@ -168,7 +168,7 @@ func TestSelfRegister(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	cfg := NewConfig()
+	cfg := GetDefaultExecutorConfig()
 	port, err := freeport.GetFreePort()
 	require.Nil(t, err)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)

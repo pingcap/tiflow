@@ -90,6 +90,7 @@ type Server struct {
 
 // NewServer creates a new executor server instance
 func NewServer(cfg *Config, ctx *test.Context) *Server {
+	registerWorkerOnce.Do(registerWorkers)
 	s := Server{
 		cfg:         cfg,
 		testCtx:     ctx,

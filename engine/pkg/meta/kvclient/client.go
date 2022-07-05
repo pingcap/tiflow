@@ -40,6 +40,6 @@ func NewPrefixKVClient(cli extension.KVClientEx, tenantID string) metaclient.KVC
 }
 
 // NewKVClient return a kvclient without namespace for inner use
-func NewKVClient(conf *metaclient.StoreConfigParams) (extension.KVClientEx, error) {
+func NewKVClient(conf *metaclient.StoreConfig) (extension.KVClientEx, error) {
 	return etcdkv.NewEtcdImpl(conf)
 }

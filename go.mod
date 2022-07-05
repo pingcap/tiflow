@@ -33,7 +33,7 @@ require (
 	github.com/gogo/status v1.1.0
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.2
-	github.com/google/btree v1.0.1
+	github.com/google/btree v1.1.2
 	github.com/google/go-cmp v0.5.7
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/google/uuid v1.3.0
@@ -88,6 +88,7 @@ require (
 	go.uber.org/multierr v1.8.0
 	go.uber.org/ratelimit v0.2.0
 	go.uber.org/zap v1.21.0
+	golang.org/x/exp v0.0.0-20220426173459-3bcf042a4bf5
 	golang.org/x/net v0.0.0-20220516155154-20f960328961
 	golang.org/x/sync v0.0.0-20220513210516-0976fa681c29
 	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a
@@ -270,7 +271,6 @@ require (
 	go.opentelemetry.io/otel/trace v0.20.0 // indirect
 	go.opentelemetry.io/proto/otlp v0.7.0 // indirect
 	golang.org/x/crypto v0.0.0-20220214200702-86341886e292 // indirect
-	golang.org/x/exp v0.0.0-20220516143420-24438e51023a // indirect
 	golang.org/x/oauth2 v0.0.0-20220223155221-ee480838109b // indirect
 	golang.org/x/term v0.0.0-20220411215600-e5f449aeb171 // indirect
 	golang.org/x/xerrors v0.0.0-20220517211312-f3a8303e98df // indirect

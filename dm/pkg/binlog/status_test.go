@@ -14,22 +14,25 @@
 package binlog
 
 import (
-	"context"
+	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-sql-driver/mysql"
-	. "github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
+
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 )
 
-var _ = Suite(&testStatusSuite{})
+func TestGetBinaryLogs(t *testing.T) {
+	t.Parallel()
 
-type testStatusSuite struct{}
-
-func (t *testStatusSuite) TestGetBinaryLogs(c *C) {
 	db, mock, err := sqlmock.New()
-	c.Assert(err, IsNil)
-	ctx := context.Background()
+	require.NoError(t, err)
+
+	ctx := tcontext.Background()
+	baseDB := conn.NewBaseDB(db)
 
 	cases := []struct {
 		rows  *sqlmock.Rows
@@ -65,22 +68,22 @@ func (t *testStatusSuite) TestGetBinaryLogs(c *C) {
 
 	for _, ca := range cases {
 		mock.ExpectQuery("SHOW BINARY LOGS").WillReturnRows(ca.rows)
-		sizes, err2 := GetBinaryLogs(ctx, db)
-		c.Assert(err2, IsNil)
-		c.Assert(sizes, DeepEquals, ca.sizes)
-		c.Assert(mock.ExpectationsWereMet(), IsNil)
+		sizes, err2 := GetBinaryLogs(ctx, baseDB)
+		require.NoError(t, err2)
+		require.Equal(t, ca.sizes, sizes)
+		require.NoError(t, mock.ExpectationsWereMet())
 	}
 
 	mock.ExpectQuery("SHOW BINARY LOGS").WillReturnError(&mysql.MySQLError{
 		Number:  1227,
 		Message: "Access denied; you need (at least one of) the SUPER, REPLICATION CLIENT privilege(s) for this operation",
 	})
-	_, err2 := GetBinaryLogs(ctx, db)
-	c.Assert(err2, NotNil)
-	c.Assert(mock.ExpectationsWereMet(), IsNil)
+	_, err2 := GetBinaryLogs(ctx, baseDB)
+	require.Error(t, err2)
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func (t *testStatusSuite) TestBinlogSizesAfter(c *C) {
+func TestBinlogSizesAfter(t *testing.T) {
 	sizes := FileSizes{
 		{name: "mysql-bin.999999", size: 1},
 		{name: "mysql-bin.1000000", size: 2},
@@ -106,6 +109,6 @@ func (t *testStatusSuite) TestBinlogSizesAfter(c *C) {
 	}
 
 	for _, ca := range cases {
-		c.Assert(sizes.After(ca.position), Equals, ca.expected)
+		require.Equal(t, ca.expected, sizes.After(ca.position))
 	}
 }
