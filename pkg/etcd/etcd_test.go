@@ -229,7 +229,7 @@ func TestCheckMultipleCDCClusterExist(t *testing.T) {
 	require.NoError(t, err)
 
 	err = s.client.CheckMultipleCDCClusterExist(ctx)
-	require.NoError(t, err)
+	require.Error(t, err)
 	require.Contains(t, err.Error(), "ErrMultipleCDCClustersExist")
 }
 
