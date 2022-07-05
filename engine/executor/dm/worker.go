@@ -212,6 +212,9 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 
 	status := w.workerStatus()
 	if currentStage != metadata.StageFinished {
+		// update unit status periodically to update metrics
+		w.unitHolder.CheckAndUpdateStatus(ctx)
+
 		log.L().Info("update status", zap.String("task-id", w.taskID), zap.String("status", string(status.ExtBytes)))
 		return w.UpdateStatus(ctx, status)
 	}

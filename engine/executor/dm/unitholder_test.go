@@ -21,7 +21,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -166,16 +168,67 @@ func TestUnitHolderBinlogSchema(t *testing.T) {
 	require.Equal(t, "", msg)
 }
 
+func TestUnitHolderCheckAndUpdateStatus(t *testing.T) {
+	unitHolder := &unitHolderImpl{
+		cfg: &config.SubTaskConfig{
+			Flavor:          mysql.MySQLFlavor,
+			FrameworkLogger: zap.NewNop(),
+		},
+		logger: log.Logger{Logger: zap.NewNop()},
+	}
+	u := &mockUnit{}
+	unitHolder.unit = u
+	db, mock, err := conn.InitMockDBFull()
+	require.NoError(t, err)
+	unitHolder.upstreamDB = conn.NewBaseDB(db)
+	ctx := context.Background()
+
+	u.On("Status").Return(&pb.DumpStatus{})
+	mock.ExpectQuery("SHOW MASTER STATUS").WillReturnRows(
+		sqlmock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"}).
+			AddRow("mysql-bin.000001", "2345", "", "", ""),
+	)
+	mock.ExpectQuery("SHOW BINARY LOGS").WillReturnRows(
+		sqlmock.NewRows([]string{"File", "Position"}).AddRow("mysql-bin.000001", "2345"),
+	)
+	unitHolder.CheckAndUpdateStatus(ctx)
+	u.AssertExpectations(t)
+	require.NotNil(t, unitHolder.sourceStatus)
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	// the seconds time CheckAndUpdateStatus, will not query upstreamDB
+	unitHolder.upstreamDB = nil
+	u.On("Status").Return(&pb.DumpStatus{})
+	unitHolder.CheckAndUpdateStatus(ctx)
+	u.AssertExpectations(t)
+
+	// imitate pass refresh interval
+	backup := sourceStatusRefreshInterval
+	sourceStatusRefreshInterval = 0
+	defer func() {
+		sourceStatusRefreshInterval = backup
+	}()
+
+	unitHolder.upstreamDB = conn.NewBaseDB(db)
+	lastUpdateTime := unitHolder.sourceStatus.UpdateTime
+	mock.ExpectQuery("SHOW MASTER STATUS").WillReturnRows(
+		sqlmock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"}).
+			AddRow("mysql-bin.000001", "2345", "", "", ""),
+	)
+	mock.ExpectQuery("SHOW BINARY LOGS").WillReturnRows(
+		sqlmock.NewRows([]string{"File", "Position"}).AddRow("mysql-bin.000001", "2345"),
+	)
+	u.On("Status").Return(&pb.DumpStatus{})
+	unitHolder.CheckAndUpdateStatus(ctx)
+	u.AssertExpectations(t)
+	require.NoError(t, mock.ExpectationsWereMet())
+	require.NotEqual(t, lastUpdateTime, unitHolder.sourceStatus.UpdateTime)
+}
+
 type mockUnit struct {
 	sync.Mutex
 	mock.Mock
 	resultCh chan pb.ProcessResult
-}
-
-// mockUnitHolder implement Holder
-type mockUnitHolder struct {
-	sync.Mutex
-	mock.Mock
 }
 
 func (u *mockUnit) Init(ctx context.Context) error {
@@ -228,6 +281,14 @@ func (u *mockUnit) IsFreshTask(ctx context.Context) (bool, error) {
 	return false, nil
 }
 
+// mockUnitHolder implement Holder
+type mockUnitHolder struct {
+	sync.Mutex
+	mock.Mock
+}
+
+var _ unitHolder = &mockUnitHolder{}
+
 // Init implement Holder.Init
 func (m *mockUnitHolder) Init(ctx context.Context) error {
 	return nil
@@ -269,6 +330,13 @@ func (m *mockUnitHolder) Status(ctx context.Context) interface{} {
 	defer m.Unlock()
 	args := m.Called()
 	return args.Get(0)
+}
+
+// CheckAndUpdateStatus implement Holder.CheckAndUpdateStatus
+func (m *mockUnitHolder) CheckAndUpdateStatus(ctx context.Context) {
+	m.Lock()
+	defer m.Unlock()
+	m.Called()
 }
 
 // Binlog implement Holder.Binlog
