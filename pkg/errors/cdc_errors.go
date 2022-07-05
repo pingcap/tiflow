@@ -198,6 +198,10 @@ var (
 		"cluster ID mismatch, tikv cluster ID is %d and request cluster ID is %d",
 		errors.RFCCodeText("CDC:ErrClusterIDMismatch"),
 	)
+	ErrMultipleCDCClustersExist = errors.Normalize(
+		"multiple TiCDC clusters exist. Please specify",
+		errors.RFCCodeText("CDC:ErrMultipleCDCClustersExist"),
+	)
 	ErrCreateMarkTableFailed = errors.Normalize(
 		"create mark table failed",
 		errors.RFCCodeText("CDC:ErrCreateMarkTableFailed"),

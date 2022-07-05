@@ -295,7 +295,7 @@ func cleanOldData(ctx context.Context, client *etcd.Client) {
 			if strings.HasPrefix(key, oldChangefeedPrefix) {
 				value = maskChangefeedInfo(kvPair.Value)
 			}
-			newKey := backupKeyPrefix + key
+			newKey := etcd.MigrateBackupKey(0, key)
 			log.Info("renaming old etcd data",
 				zap.String("key", key),
 				zap.String("newKey", newKey),

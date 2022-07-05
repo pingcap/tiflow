@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/log"
 	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
 	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pd "github.com/tikv/pd/client"
 	etcdlogutil "go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -132,7 +133,7 @@ func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClient, error) {
 			"fail to open PD client, please check pd address \"%s\"", pdAddr)
 	}
 
-	client, err := etcd.NewCDCEtcdClient(ctx, etcdClient, "default")
+	client, err := etcd.NewCDCEtcdClient(ctx, etcdClient, etcd.DefaultCDCClusterID)
 	return &client, err
 }
 
@@ -224,6 +225,15 @@ func (f *factoryImpl) findServerAddr() (string, error) {
 	}
 
 	ctx := cmdconetxt.GetDefaultContext()
+	err = etcdClient.CheckMultipleCDCClusterExist(ctx)
+	if err != nil {
+		if err == cerror.ErrMultipleCDCClustersExist {
+			return "", errors.New("You are using multiple TiCDC clusters to replica this " +
+				"TiDB cluster. Please set the parameter --server to specify " +
+				"which cluster you want to operate.")
+		}
+		return "", err
+	}
 	ownerID, err := etcdClient.GetOwnerID(ctx)
 	if err != nil {
 		return "", err

@@ -89,6 +89,12 @@ func GetEtcdKeyJob(clusterID string, changeFeedID model.ChangeFeedID) string {
 	return ChangefeedStatusKeyPrefix(clusterID, changeFeedID.Namespace) + "/" + changeFeedID.ID
 }
 
+// MigrateBackupKey is the key of backup data during a migration.
+// '__backup__' is not a valid cluster id
+func MigrateBackupKey(version int, backupKey string) string {
+	return MigrateBackupPrefix + fmt.Sprintf("/%d/%s", version, backupKey)
+}
+
 // CDCEtcdClient is a wrap of etcd client
 type CDCEtcdClient struct {
 	Client        *Client
@@ -138,6 +144,25 @@ func (c CDCEtcdClient) GetAllCDCInfo(ctx context.Context) ([]*mvccpb.KeyValue, e
 		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 	return resp.Kvs, nil
+}
+
+// CheckCDCCluster
+func (c CDCEtcdClient) CheckMultipleCDCClusterExist(ctx context.Context) error {
+	resp, err := c.Client.Get(ctx, BaseKey(""),
+		clientv3.WithPrefix(),
+		clientv3.WithPrevKV())
+	if err != nil {
+		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+	}
+	for _, kv := range resp.Kvs {
+		key := string(kv.Key)
+		if strings.HasPrefix(key, BaseKey(DefaultCDCClusterID)) ||
+			strings.HasPrefix(key, MigrateBackupPrefix) {
+			continue
+		}
+		return cerror.ErrMultipleCDCClustersExist
+	}
+	return nil
 }
 
 // GetChangeFeeds returns kv revision and a map mapping from changefeedID to changefeed detail mvccpb.KeyValue
@@ -555,6 +580,21 @@ func (c CDCEtcdClient) DeleteCaptureInfo(ctx context.Context, id string) error {
 func (c CDCEtcdClient) GetOwnerID(ctx context.Context) (string, error) {
 	resp, err := c.Client.Get(ctx, CaptureOwnerKey(c.ClusterID),
 		clientv3.WithFirstCreate()...)
+	if err != nil {
+		return "", cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+	}
+	if len(resp.Kvs) == 0 {
+		return "", concurrency.ErrElectionNoLeader
+	}
+	return string(resp.Kvs[0].Value), nil
+}
+
+// GetOwnerID returns the owner id by querying etcd
+func (c CDCEtcdClient) CheckUniqueCluster(ctx context.Context) (string, error) {
+	resp, err := c.Client.Get(ctx, CaptureOwnerKey(c.ClusterID),
+		clientv3.WithKeysOnly(),
+		clientv3.WithPrefix(),
+		clientv3.WithLimit(2))
 	if err != nil {
 		return "", cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
