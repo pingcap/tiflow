@@ -218,18 +218,18 @@ func TestCheckMultipleCDCClusterExist(t *testing.T) {
 	rawEtcdClient := s.client.Client.cli
 	defaultClusterKey := DefaultClusterAndNamespacePrefix + "/test-key"
 	_, err := rawEtcdClient.Put(ctx, defaultClusterKey, "test-value")
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	err = s.client.CheckMultipleCDCClusterExist(ctx)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	newClusterKey := NamespacedPrefix("new-cluster", "new-namespace") +
 		"/test-key"
 	_, err = rawEtcdClient.Put(ctx, newClusterKey, "test-value")
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	err = s.client.CheckMultipleCDCClusterExist(ctx)
-	require.NotNil(t, err)
+	require.NoError(t, err)
 	require.Contains(t, err.Error(), "ErrMultipleCDCClustersExist")
 }
 
