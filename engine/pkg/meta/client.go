@@ -11,26 +11,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package kvclient
+package meta
 
 import (
-	"github.com/pingcap/tiflow/engine/pkg/meta/extension"
-	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient/etcdkv"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
-	"github.com/pingcap/tiflow/engine/pkg/meta/namespace"
+	"github.com/pingcap/tiflow/engine/pkg/meta/internal/etcdkv"
+	"github.com/pingcap/tiflow/engine/pkg/meta/internal/etcdkv/namespace"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 )
 
 // etcdKVClient is the implement of kv interface based on etcd
 // Support namespace isolation and all kv ability
 // etcdImpl -> kvPrefix+Closer -> etcdKVClient
 type etcdKVClient struct {
-	metaclient.Client
-	metaclient.KV
+	metaModel.Client
+	metaModel.KV
 	tenantID string
 }
 
 // NewPrefixKVClient return a kvclient with namespace
-func NewPrefixKVClient(cli extension.KVClientEx, tenantID string) metaclient.KVClient {
+func NewPrefixKVClient(cli metaModel.KVClientEx, tenantID string) metaModel.KVClient {
 	pfKV := namespace.NewPrefixKV(cli, namespace.MakeNamespacePrefix(tenantID))
 	return &etcdKVClient{
 		Client:   cli,
@@ -40,6 +39,6 @@ func NewPrefixKVClient(cli extension.KVClientEx, tenantID string) metaclient.KVC
 }
 
 // NewKVClient return a kvclient without namespace for inner use
-func NewKVClient(conf *metaclient.StoreConfig) (extension.KVClientEx, error) {
+func NewKVClient(conf *metaModel.StoreConfig) (metaModel.KVClientEx, error) {
 	return etcdkv.NewEtcdImpl(conf)
 }

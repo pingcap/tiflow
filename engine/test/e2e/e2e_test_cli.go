@@ -31,8 +31,8 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/fake"
 	engineModel "github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	"github.com/pingcap/tiflow/engine/pkg/meta"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
@@ -42,7 +42,7 @@ type ChaosCli struct {
 	// used to operate with server master, such as submit job
 	masterCli client.MasterClient
 	// used to query metadata which is stored from business logic
-	metaCli metaclient.KVClient
+	metaCli metaModel.KVClient
 	// masterEtcdCli is used to interact with embedded etcd in server master
 	masterEtcdCli *clientv3.Client
 	// used to write to etcd to simulate the business of fake job, this etcd client
@@ -69,12 +69,12 @@ func NewUTCli(
 		return nil, errors.Trace(err)
 	}
 
-	conf := metaclient.StoreConfig{Endpoints: userMetaAddrs}
-	userRawKVClient, err := kvclient.NewKVClient(&conf)
+	conf := metaModel.StoreConfig{Endpoints: userMetaAddrs}
+	userRawKVClient, err := meta.NewKVClient(&conf)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	metaCli := kvclient.NewPrefixKVClient(userRawKVClient, project.UniqueID())
+	metaCli := meta.NewPrefixKVClient(userRawKVClient, project.UniqueID())
 
 	fakeJobCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   userMetaAddrs,
