@@ -25,6 +25,8 @@ import (
 )
 
 // Validate sink if given valid parameters.
+// TODO: For now, we create a real sink instance and validate it.
+// Maybe we should support the dry-run mode to validate sink.
 func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig) error {
 	if err := preCheckSinkURI(sinkURI); err != nil {
 		return err
