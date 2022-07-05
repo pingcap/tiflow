@@ -34,14 +34,12 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 )
 
-// VerifyCreateChangefeedConfig verifies ChangefeedConfig for create a changefeed
-// This method is used by open api v1 only.
-func VerifyCreateChangefeedConfig(
+// verifyCreateChangefeedConfig verifies ChangefeedConfig for create a changefeed
+func verifyCreateChangefeedConfig(
 	ctx context.Context,
 	changefeedConfig model.ChangefeedConfig,
 	capture capture.Capture,
 ) (*model.ChangeFeedInfo, error) {
-	// TODO(dongmen): we should pass ClusterID in ChangefeedConfig in the upcoming future
 	upManager, err := capture.GetUpstreamManager()
 	if err != nil {
 		return nil, err
@@ -134,7 +132,7 @@ func VerifyCreateChangefeedConfig(
 
 	// init ChangefeedInfo
 	info := &model.ChangeFeedInfo{
-		UpstreamID:        up.PDClient.GetClusterID(ctx),
+		UpstreamID:        up.ID,
 		SinkURI:           changefeedConfig.SinkURI,
 		CreateTime:        time.Now(),
 		StartTs:           changefeedConfig.StartTS,

@@ -85,10 +85,12 @@ func (o *unsafeResolveLockOptions) run() error {
 	return o.apiClient.Unsafe().ResolveLock(ctx, &v2.ResolveLockReq{
 		RegionID: o.regionID,
 		Ts:       o.ts,
-		PDAddrs:  pdAddrs,
-		CAPath:   o.upstreamCaPath,
-		CertPath: o.upstreamCertPath,
-		KeyPath:  o.upstreamKeyPath,
+		PDConfig: v2.PDConfig{
+			PDAddrs:  pdAddrs,
+			CAPath:   o.upstreamCaPath,
+			CertPath: o.upstreamCertPath,
+			KeyPath:  o.upstreamKeyPath,
+		},
 	})
 }
 

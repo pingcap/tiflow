@@ -42,7 +42,7 @@ type Tables struct {
 type TableName struct {
 	Schema      string `json:"database_name"`
 	Table       string `json:"table_name"`
-	TableID     int64  `json:"table_id" `
+	TableID     int64  `json:"table_id"`
 	IsPartition bool   `json:"is_partition"`
 }
 
@@ -68,26 +68,24 @@ type ResumeChangefeedConfig struct {
 
 // PDConfig is a configuration used to connect to pd
 type PDConfig struct {
-	PDAddrs       []string `json:"pd_addrs"`
+	PDAddrs       []string `json:"pd_addrs,omitempty"`
 	CAPath        string   `json:"ca_path"`
 	CertPath      string   `json:"cert_path"`
 	KeyPath       string   `json:"key_path"`
-	CertAllowedCN []string `json:"cert_allowed_cn"`
+	CertAllowedCN []string `json:"cert_allowed_cn,omitempty"`
 }
 
 // ChangefeedConfig use by create changefeed api
 type ChangefeedConfig struct {
-	Namespace string `json:"namespace"`
-	ID        string `json:"changefeed_id"`
-	StartTs   uint64 `json:"start_ts"`
-	TargetTs  uint64 `json:"target_ts"`
-	SinkURI   string `json:"sink_uri"`
-	Engine    string `json:"engine"`
-
-	ReplicaConfig *ReplicaConfig `json:"replica_config"`
-
-	SyncPointEnabled  bool          `json:"sync_point_enabled"`
-	SyncPointInterval time.Duration `json:"sync_point_interval"`
+	Namespace         string         `json:"namespace"`
+	ID                string         `json:"changefeed_id"`
+	StartTs           uint64         `json:"start_ts"`
+	TargetTs          uint64         `json:"target_ts"`
+	SinkURI           string         `json:"sink_uri"`
+	Engine            string         `json:"engine"`
+	ReplicaConfig     *ReplicaConfig `json:"replica_config"`
+	SyncPointEnabled  bool           `json:"sync_point_enabled"`
+	SyncPointInterval time.Duration  `json:"sync_point_interval"`
 	PDConfig
 }
 
@@ -112,9 +110,31 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 	res.CheckGCSafePoint = c.CheckGCSafePoint
 
 	if c.Filter != nil {
+		var mySQLReplicationRules *filter.MySQLReplicationRules
+		if c.Filter.MySQLReplicationRules != nil {
+			mySQLReplicationRules = &filter.MySQLReplicationRules{}
+			mySQLReplicationRules.DoDBs = c.Filter.DoDBs
+			mySQLReplicationRules.IgnoreDBs = c.Filter.IgnoreDBs
+			if c.Filter.MySQLReplicationRules.DoTables != nil {
+				for _, tbl := range c.Filter.MySQLReplicationRules.DoTables {
+					mySQLReplicationRules.DoTables = append(mySQLReplicationRules.DoTables,
+						&filter.Table{
+							Schema: tbl.Schema,
+							Name:   tbl.Name,
+						})
+				}
+				for _, tbl := range c.Filter.MySQLReplicationRules.IgnoreTables {
+					mySQLReplicationRules.IgnoreTables = append(mySQLReplicationRules.IgnoreTables,
+						&filter.Table{
+							Schema: tbl.Schema,
+							Name:   tbl.Name,
+						})
+				}
+			}
+		}
 		res.Filter = &config.FilterConfig{
 			Rules:                 c.Filter.Rules,
-			MySQLReplicationRules: c.Filter.MySQLReplicationRules,
+			MySQLReplicationRules: mySQLReplicationRules,
 			IgnoreTxnStartTs:      c.Filter.IgnoreTxnStartTs,
 			DDLAllowlist:          c.Filter.DDLAllowlist,
 		}
@@ -168,8 +188,30 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 	}
 
 	if cloned.Filter != nil {
+		var mySQLReplicationRules *MySQLReplicationRules
+		if c.Filter.MySQLReplicationRules != nil {
+			mySQLReplicationRules = &MySQLReplicationRules{}
+			mySQLReplicationRules.DoDBs = c.Filter.DoDBs
+			mySQLReplicationRules.IgnoreDBs = c.Filter.IgnoreDBs
+			if c.Filter.MySQLReplicationRules.DoTables != nil {
+				for _, tbl := range c.Filter.MySQLReplicationRules.DoTables {
+					mySQLReplicationRules.DoTables = append(mySQLReplicationRules.DoTables,
+						&Table{
+							Schema: tbl.Schema,
+							Name:   tbl.Name,
+						})
+				}
+				for _, tbl := range c.Filter.MySQLReplicationRules.IgnoreTables {
+					mySQLReplicationRules.IgnoreTables = append(mySQLReplicationRules.IgnoreTables,
+						&Table{
+							Schema: tbl.Schema,
+							Name:   tbl.Name,
+						})
+				}
+			}
+		}
 		res.Filter = &FilterConfig{
-			MySQLReplicationRules: cloned.Filter.MySQLReplicationRules,
+			MySQLReplicationRules: mySQLReplicationRules,
 			Rules:                 cloned.Filter.Rules,
 			IgnoreTxnStartTs:      cloned.Filter.IgnoreTxnStartTs,
 			DDLAllowlist:          cloned.Filter.DDLAllowlist,
@@ -232,10 +274,31 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 // FilterConfig represents filter config for a changefeed
 // This is a duplicate of config.FilterConfig
 type FilterConfig struct {
-	*filter.MySQLReplicationRules
-	Rules            []string               `json:"rules"`
-	IgnoreTxnStartTs []uint64               `json:"ignore_txn_start_ts"`
+	*MySQLReplicationRules
+	Rules            []string               `json:"rules,omitempty"`
+	IgnoreTxnStartTs []uint64               `json:"ignore_txn_start_ts,omitempty"`
 	DDLAllowlist     []tidbModel.ActionType `json:"ddl_allow_list,omitempty"`
+}
+
+// MySQLReplicationRules is a set of rules based on MySQL's replication tableFilter.
+type MySQLReplicationRules struct {
+	// DoTables is an allowlist of tables.
+	DoTables []*Table `json:"do_tables,omitempty"`
+	// DoDBs is an allowlist of schemas.
+	DoDBs []string `json:"do_dbs,omitempty"`
+
+	// IgnoreTables is a blocklist of tables.
+	IgnoreTables []*Table `json:"ignore_tables,omitempty"`
+	// IgnoreDBs is a blocklist of schemas.
+	IgnoreDBs []string `json:"ignore_dbs,omitempty"`
+}
+
+// Table represents a qualified table name.
+type Table struct {
+	// Schema is the name of the schema (database) containing this table.
+	Schema string `json:"database_name"`
+	// Name is the unqualified table name.
+	Name string `json:"table_name"`
 }
 
 // SinkConfig represents sink config for a changefeed
@@ -243,15 +306,15 @@ type FilterConfig struct {
 type SinkConfig struct {
 	Protocol        string            `json:"protocol"`
 	SchemaRegistry  string            `json:"schema_registry"`
-	DispatchRules   []*DispatchRule   `json:"dispatchers"`
+	DispatchRules   []*DispatchRule   `json:"dispatchers,omitempty"`
 	ColumnSelectors []*ColumnSelector `json:"column_selectors"`
-	TxnAtomicity    string            `json:"transaction-atomicity"`
+	TxnAtomicity    string            `json:"transaction_atomicity"`
 }
 
 // DispatchRule represents partition rule for a table
 // This is a duplicate of config.DispatchRule
 type DispatchRule struct {
-	Matcher       []string `json:"matcher"`
+	Matcher       []string `json:"matcher,omitempty"`
 	PartitionRule string   `json:"partition"`
 	TopicRule     string   `json:"topic"`
 }
@@ -259,8 +322,8 @@ type DispatchRule struct {
 // ColumnSelector represents a column selector for a table.
 // This is a duplicate of config.ColumnSelector
 type ColumnSelector struct {
-	Matcher []string `json:"matcher"`
-	Columns []string `json:"columns"`
+	Matcher []string `json:"matcher,omitempty"`
+	Columns []string `json:"columns,omitempty"`
 }
 
 // ConsistentConfig represents replication consistency config for a changefeed
@@ -280,13 +343,9 @@ type EtcdData struct {
 
 // ResolveLockReq contains request parameter to resolve lock
 type ResolveLockReq struct {
-	RegionID      uint64   `json:"region_id,omitempty"`
-	Ts            uint64   `json:"ts,omitempty"`
-	PDAddrs       []string `json:"pd_addrs"`
-	CAPath        string   `json:"ca_path"`
-	CertPath      string   `json:"cert_path"`
-	KeyPath       string   `json:"key_path"`
-	CertAllowedCN []string `json:"cert_allowed_cn"`
+	RegionID uint64 `json:"region_id,omitempty"`
+	Ts       uint64 `json:"ts,omitempty"`
+	PDConfig
 }
 
 // ChangeFeedInfo describes the detail of a ChangeFeed
