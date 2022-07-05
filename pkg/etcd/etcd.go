@@ -151,7 +151,7 @@ func (c CDCEtcdClient) GetAllCDCInfo(ctx context.Context) ([]*mvccpb.KeyValue, e
 func (c CDCEtcdClient) CheckMultipleCDCClusterExist(ctx context.Context) error {
 	resp, err := c.Client.Get(ctx, BaseKey(""),
 		clientv3.WithPrefix(),
-		clientv3.WithPrevKV())
+		clientv3.WithKeysOnly())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
