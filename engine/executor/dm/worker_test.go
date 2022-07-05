@@ -95,6 +95,7 @@ func TestWorker(t *testing.T) {
 	require.NoError(t, dmWorker.Init(context.Background()))
 	// tick
 	unitHolder.On("Stage").Return(metadata.StageRunning, nil).Twice()
+	unitHolder.On("CheckAndUpdateStatus")
 	require.NoError(t, dmWorker.Tick(context.Background()))
 	unitHolder.On("Stage").Return(metadata.StageRunning, nil).Twice()
 	require.NoError(t, dmWorker.Tick(context.Background()))
