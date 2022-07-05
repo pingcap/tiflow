@@ -28,6 +28,11 @@ func TestPreCheckSinkURI(t *testing.T) {
 		err  string
 	}{
 		{
+			name: "valid domain MySQL URI",
+			uri:  "mysql://root:111@baidu.com:3306/",
+			err:  "",
+		},
+		{
 			name: "valid IPv4 MySQL URI",
 			uri:  "mysql://root:111@127.0.0.1:3306/",
 			err:  "",
