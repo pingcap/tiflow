@@ -56,6 +56,10 @@ func (o *createJobOptions) addFlags(cmd *cobra.Command) {
 
 // validate checks that the provided job options are valid.
 func (o *createJobOptions) validate(ctx context.Context, cmd *cobra.Command) error {
+	if err := o.generalOpts.validate(ctx, cmd); err != nil {
+		return errors.WrapError(errors.ErrInvalidCliParameter, err)
+	}
+
 	jobType, ok := engineModel.GetJobTypeByName(o.jobTypeStr)
 	if !ok {
 		return errors.ErrInvalidJobType.GenWithStackByArgs(o.jobType)
@@ -108,7 +112,6 @@ func newCmdCreateJob(generalOpts *jobGeneralOptions) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmdcontext.GetDefaultContext()
-
 			if err := o.validate(ctx, cmd); err != nil {
 				return err
 			}

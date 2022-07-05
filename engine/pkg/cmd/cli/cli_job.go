@@ -22,7 +22,6 @@ import (
 
 	"github.com/pingcap/tiflow/engine/client"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -99,10 +98,6 @@ func newCmdJob() *cobra.Command {
 		Use:   "job",
 		Short: "Manage job",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmdcontext.GetDefaultContext()
-			return o.validate(ctx, cmd)
-		},
 	}
 
 	o.addFlags(cmds)

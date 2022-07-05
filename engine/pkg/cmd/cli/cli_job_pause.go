@@ -45,6 +45,10 @@ func (o *pauseJobOptions) addFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.jobID, "job-id", "", "job id")
 }
 
+func (o *pauseJobOptions) validate(ctx context.Context, cmd *cobra.Command) error {
+	return o.generalOpts.validate(ctx, cmd)
+}
+
 // run the `cli job create` command.
 func (o *pauseJobOptions) run(ctx context.Context, cmd *cobra.Command) error {
 	resp, err := o.generalOpts.masterClient.PauseJob(ctx, &enginepb.PauseJobRequest{
@@ -71,6 +75,9 @@ func newCmdPauseJob(generalOpts *jobGeneralOptions) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmdcontext.GetDefaultContext()
+			if err := o.validate(ctx, cmd); err != nil {
+				return err
+			}
 			return o.run(ctx, cmd)
 		},
 	}
