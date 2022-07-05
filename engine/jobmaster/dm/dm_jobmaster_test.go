@@ -46,7 +46,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
@@ -91,7 +91,7 @@ type masterParamListForTest struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
 	FrameMetaClient       pkgOrm.Client
-	UserRawKVClient       metaclient.KVClientEx
+	UserRawKVClient       metaModel.KVClientEx
 	ExecutorClientManager client.ClientsManager
 	ServerMasterClient    client.MasterClient
 	ResourceBroker        broker.Broker
@@ -354,14 +354,14 @@ func (m *MockBaseJobmaster) GetWorkers() map[string]framework.WorkerHandle {
 	return args.Get(0).(map[string]framework.WorkerHandle)
 }
 
-func (m *MockBaseJobmaster) MetaKVClient() metaclient.KVClient {
+func (m *MockBaseJobmaster) MetaKVClient() metaModel.KVClient {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	args := m.Called()
-	return args.Get(0).(metaclient.KVClient)
+	return args.Get(0).(metaModel.KVClient)
 }
 
-func (m *MockBaseJobmaster) CreateWorker(workerType framework.WorkerType, config framework.WorkerConfig, cost model.RescUnit, resources ...resourcemeta.ResourceID) (frameModel.WorkerID, error) {
+func (m *MockBaseJobmaster) CreateWorker(workerType framework.WorkerType, config framework.WorkerConfig, cost model.RescUnit, resources ...resModel.ResourceID) (frameModel.WorkerID, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	args := m.Called()
