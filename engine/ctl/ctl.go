@@ -61,7 +61,7 @@ Simply type ` + cmd.Name() + ` help [path to command] for full details.`,
 				e = cmd2.Help()
 			}
 			if e != nil {
-				log.L().Fatal("error occurs when printing help info", zap.Error(e))
+				log.Fatal("error occurs when printing help info", zap.Error(e))
 			}
 		},
 	}
@@ -162,12 +162,12 @@ func Init(ctx context.Context, cfg *config) error {
 	endpoints := strings.Split(cfg.MasterAddrs, ",")
 	ctx1, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
-	log.L().Info("dialing master", zap.Any("addr", endpoints))
+	log.Info("dialing master", zap.Any("addr", endpoints))
 	err := cltManager.AddMasterClient(ctx1, endpoints)
 	if err != nil {
 		return err
 	}
-	log.L().Info("dialing master successfully")
+	log.Info("dialing master successfully")
 	return nil
 }
 

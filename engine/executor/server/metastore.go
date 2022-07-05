@@ -156,7 +156,7 @@ func (c metastoreCreatorImpl) CreateDBClientForFramework(
 
 func (m *metastoreManagerImpl) Init(ctx context.Context, servermasterClient client.MasterClient) (retErr error) {
 	if m.initialized.Load() {
-		log.L().Panic("MetastoreManager: double Init")
+		log.Panic("MetastoreManager: double Init")
 	}
 
 	defer func() {
@@ -198,7 +198,7 @@ func (m *metastoreManagerImpl) initServerDiscoveryStore(ctx context.Context, ser
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.L().Info("Obtained discovery metastore endpoint", zap.String("addr", resp.Address))
+	log.Info("Obtained discovery metastore endpoint", zap.String("addr", resp.Address))
 
 	conf := parseStoreConfig([]byte(resp.Address))
 	etcdCli, err := m.creator.CreateEtcdCliForServiceDiscovery(ctx, conf)
@@ -219,7 +219,7 @@ func (m *metastoreManagerImpl) initFrameworkStore(ctx context.Context, servermas
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.L().Info("Obtained framework metastore endpoint", zap.String("addr", resp.Address))
+	log.Info("Obtained framework metastore endpoint", zap.String("addr", resp.Address))
 
 	conf := parseStoreConfig([]byte(resp.Address))
 	dbCli, err := m.creator.CreateDBClientForFramework(ctx, conf)
@@ -240,7 +240,7 @@ func (m *metastoreManagerImpl) initBusinessStore(ctx context.Context, servermast
 	if err != nil {
 		return err
 	}
-	log.L().Info("Obtained business metastore endpoint", zap.String("addr", resp.Address))
+	log.Info("Obtained business metastore endpoint", zap.String("addr", resp.Address))
 
 	conf := parseStoreConfig([]byte(resp.Address))
 	metaKVClient, err := m.creator.CreateMetaKVClientForBusiness(ctx, conf)
@@ -253,21 +253,21 @@ func (m *metastoreManagerImpl) initBusinessStore(ctx context.Context, servermast
 
 func (m *metastoreManagerImpl) ServiceDiscoveryStore() *clientv3.Client {
 	if !m.initialized.Load() {
-		log.L().Panic("ServiceDiscoveryStore called before Init is successful")
+		log.Panic("ServiceDiscoveryStore called before Init is successful")
 	}
 	return m.serviceDiscoveryStore
 }
 
 func (m *metastoreManagerImpl) FrameworkStore() pkgOrm.Client {
 	if !m.initialized.Load() {
-		log.L().Panic("FrameworkStore called before Init is successful")
+		log.Panic("FrameworkStore called before Init is successful")
 	}
 	return m.frameworkStore
 }
 
 func (m *metastoreManagerImpl) BusinessStore() extkv.KVClientEx {
 	if !m.initialized.Load() {
-		log.L().Panic("BusinessStore called before Init is successful")
+		log.Panic("BusinessStore called before Init is successful")
 	}
 	return m.businessStore
 }
@@ -288,7 +288,7 @@ func (m *metastoreManagerImpl) Close() {
 		m.businessStore = nil
 	}
 
-	log.L().Info("MetastoreManager: Closed all metastores")
+	log.Info("MetastoreManager: Closed all metastores")
 }
 
 func parseStoreConfig(rawBytes []byte) metaclient.StoreConfig {
@@ -300,7 +300,7 @@ func parseStoreConfig(rawBytes []byte) metaclient.StoreConfig {
 		return conf
 	}
 
-	log.L().Info("Could not unmarshal metastore config, fallback to treating it as an endpoint list",
+	log.Info("Could not unmarshal metastore config, fallback to treating it as an endpoint list",
 		zap.ByteString("raw-bytes", rawBytes))
 
 	conf.SetEndpoints(string(rawBytes))

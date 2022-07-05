@@ -165,11 +165,11 @@ func NewClient(mc metaclient.StoreConfig, conf dbutil.DBConfig) (Client, error) 
 // TODO: check the projectID
 func createDatabaseForProject(mc metaclient.StoreConfig, projectID tenant.ProjectID, conf dbutil.DBConfig) error {
 	dsn := generateDSNByParams(mc, projectID, conf, false)
-	log.L().Info("mysql connection", zap.String("dsn", dsn))
+	log.Info("mysql connection", zap.String("dsn", dsn))
 
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
-		log.L().Error("open dsn fail", zap.String("dsn", dsn), zap.Error(err))
+		log.Error("open dsn fail", zap.String("dsn", dsn), zap.Error(err))
 		return errors.ErrMetaOpFail.Wrap(err)
 	}
 	defer db.Close()
@@ -226,7 +226,7 @@ func newClient(sqlDB *sql.DB) (*metaOpsClient, error) {
 		// TODO: logger
 	})
 	if err != nil {
-		log.L().Error("create gorm client fail", zap.Error(err))
+		log.Error("create gorm client fail", zap.Error(err))
 		return nil, errors.ErrMetaNewClientFail.Wrap(err)
 	}
 

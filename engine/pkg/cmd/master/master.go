@@ -105,7 +105,7 @@ func (o *options) run(cmd *cobra.Command) error {
 
 	err = server.Run(cmdconetxt.GetDefaultContext())
 	if err != nil && errors.Cause(err) != context.Canceled {
-		log.L().Error("run dataflow server master with error", zap.Error(err))
+		log.Error("run dataflow server master with error", zap.Error(err))
 		return errors.Trace(err)
 	}
 	log.Info("dataflow server master exits successfully")

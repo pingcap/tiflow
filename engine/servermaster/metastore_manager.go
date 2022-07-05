@@ -47,7 +47,7 @@ func NewMetaStoreManager() MetaStoreManager {
 // Register implements MetaStoreManager.Register
 func (m *metaStoreManagerImpl) Register(id string, store *metaclient.StoreConfig) error {
 	if _, exists := m.id2Store.LoadOrStore(id, store); exists {
-		log.L().Error("register metastore fail", zap.Any("config", store), zap.String("err", "Duplicate storeID"))
+		log.Error("register metastore fail", zap.Any("config", store), zap.String("err", "Duplicate storeID"))
 		return errors.ErrMetaStoreIDDuplicate.GenWithStackByArgs()
 	}
 	return nil
@@ -56,7 +56,7 @@ func (m *metaStoreManagerImpl) Register(id string, store *metaclient.StoreConfig
 // Unregister implements MetaStoreManager.Unregister
 func (m *metaStoreManagerImpl) UnRegister(id string) {
 	m.id2Store.Delete(id)
-	log.L().Info("unregister metastore", zap.String("storeID", id))
+	log.Info("unregister metastore", zap.String("storeID", id))
 }
 
 // GetMetaStore implements MetaStoreManager.GetMetaStore
