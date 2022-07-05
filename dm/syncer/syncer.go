@@ -1321,6 +1321,20 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 		if !ok {
 			return
 		}
+
+		// set timezone
+		if ddlJob.timezone != "" {
+			setTimezoneSQL := fmt.Sprintf("SET SESSION TIME_ZONE = %s", ddlJob.timezone)
+			ddlJob.ddls = append([]string{setTimezoneSQL}, ddlJob.ddls...)
+			setTimezoneSQLDefault := fmt.Sprintf("SET SESSION TIME_ZONE = DEFAULT")
+			ddlJob.ddls = append(ddlJob.ddls, setTimezoneSQLDefault)
+		}
+		// set timestamp
+		setTimestampSQL := fmt.Sprintf("SET TIMESTAMP = %d", ddlJob.timestamp)
+		ddlJob.ddls = append([]string{setTimestampSQL}, ddlJob.ddls...)
+		setTimestampSQLDefault := fmt.Sprintf("SET TIMESTAMP = DEFAULT")
+		ddlJob.ddls = append(ddlJob.ddls, setTimestampSQLDefault)
+
 		// add this ddl ts beacause we start to exec this ddl.
 		s.updateReplicationJobTS(ddlJob, ddlJobIdx)
 
@@ -2298,7 +2312,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 		case *replication.QueryEvent:
 			originSQL = strings.TrimSpace(string(ev.Query))
-			err2 = s.handleQueryEvent(ev, ec, originSQL)
+			err2 = s.handleQueryEvent(ev, ec, originSQL, e)
 		case *replication.XIDEvent:
 			// reset eventIndex and force safeMode flag here.
 			eventIndex = 0
@@ -2686,6 +2700,8 @@ type queryEventContext struct {
 	sourceTbls      map[string]map[string]struct{} // db name -> tb name
 	onlineDDLTable  *filter.Table
 	eventStatusVars []byte // binlog StatusVars
+	timestamp       uint32
+	timezone        string
 }
 
 func (qec *queryEventContext) String() string {
@@ -2731,7 +2747,7 @@ func generateExtendColumn(data [][]interface{}, r *regexprrouter.RouteTable, tab
 	return rows
 }
 
-func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, originSQL string) (err error) {
+func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, originSQL string, e *replication.BinlogEvent) (err error) {
 	if originSQL == "BEGIN" {
 		failpoint.Inject("NotUpdateLatestGTID", func(_ failpoint.Value) {
 			// directly return nil without update latest GTID here
@@ -2794,6 +2810,13 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 	if err != nil {
 		s.tctx.L().Warn("found error when get sql_mode from binlog status_vars", zap.Error(err))
 	}
+
+	qec.timezone, err = event.GetTimezoneByStatusVars(ev.StatusVars, s.upstreamTZ.String())
+	if err != nil {
+		s.tctx.L().Warn("found error when get timezone from binlog status_vars", zap.Error(err))
+	}
+
+	qec.timestamp = e.Header.Timestamp
 
 	stmt, err := parseOneStmt(qec)
 	if err != nil {

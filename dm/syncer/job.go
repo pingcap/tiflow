@@ -92,6 +92,8 @@ type job struct {
 	jobAddTime  time.Time       // job commit time
 	flushSeq    int64           // sequence number for sync and async flush job
 	flushWg     *sync.WaitGroup // wait group for sync, async and conflict job
+	timestamp   uint32
+	timezone    string
 }
 
 func (j *job) clone() *job {
@@ -165,6 +167,9 @@ func newDDLJob(qec *queryEventContext) *job {
 		j.sourceTbls = map[string][]*filter.Table{ddlInfo.sourceTables[0].Schema: {ddlInfo.sourceTables[0]}}
 		j.targetTable = ddlInfo.targetTables[0]
 	}
+
+	j.timestamp = qec.timestamp
+	j.timezone = qec.timezone
 
 	return j
 }
