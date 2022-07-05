@@ -33,6 +33,7 @@ function incremental_data() {
 		"\"result\": true" 2
 
 	run_sql "ALTER TABLE many_tables_db.t1 ADD x datetime DEFAULT current_timestamp;" $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql "ALTER TABLE many_tables_db.t2 ADD x timestamp DEFAULT current_timestamp;" $MYSQL_PORT1 $MYSQL_PASSWORD1
 	sleep 1
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -96,14 +97,13 @@ function run() {
 	echo "start incremental_data"
 	incremental_data
 	echo "finish incremental_data"
-	#read -p 123
-	echo "check diff 1"
+	echo "check diff 1" # to check data are synchronized after 'ALTER TABLE' command
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	run_sql "INSERT INTO many_tables_db.t1 (i, j) VALUES (1, 1001);" $MYSQL_PORT1 $MYSQL_PASSWORD1
-	echo "check diff 2"
+	run_sql "INSERT INTO many_tables_db.t2 (i, j) VALUES (2, 2002);" $MYSQL_PORT1 $MYSQL_PASSWORD1
+	echo "check diff 2" # to check timezone and timestamp have been set back to default
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-	read -p 123
 
 	# test https://github.com/pingcap/tiflow/issues/5344
 	kill_dm_worker
