@@ -34,8 +34,7 @@ func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig) er
 
 	errCh := make(chan error)
 	ctx, cancel := context.WithCancel(contextutil.PutRoleInCtx(ctx, util.RoleClient))
-	s, err := New(ctx, model.DefaultChangeFeedID("sink-verify"),
-		sinkURI, cfg, errCh)
+	s, err := New(ctx, model.DefaultChangeFeedID("sink-verify"), sinkURI, cfg, errCh)
 	if err != nil {
 		cancel()
 		return err
