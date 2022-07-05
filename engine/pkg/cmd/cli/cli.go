@@ -47,16 +47,13 @@ func (o *options) addFlags(c *cobra.Command) {
 
 // NewCmdCli creates the `cli` command.
 func NewCmdCli() *cobra.Command {
-	// TODO: Bind the certificate and log options.
-	// cf := factory.NewClientFlags()
-
 	o := newOptions()
 
 	cmds := &cobra.Command{
 		Use:   "cli",
 		Short: "Manage jobs and dataflow engine cluster",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			// Here we will initialize the logging configuration and set the current default context.
+			// Initialize signal handler set the current default context.
 			util.InitCmd(cmd)
 			ticdcutil.LogHTTPProxies()
 			return nil
