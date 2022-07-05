@@ -16,8 +16,6 @@ package servermaster
 import (
 	"bytes"
 	"encoding/json"
-	"flag"
-	"fmt"
 	"net/url"
 	"strings"
 	"time"
@@ -56,50 +54,6 @@ const (
 	defaultFrameMetaUser      = "root"
 	defaultFrameMetaPassword  = "123456"
 )
-
-var (
-	// EnableZap enable the zap logger in embed etcd.
-	EnableZap = false
-	// SampleConfigFile is sample config file of dm-master
-	// later we can read it from dm/master/dm-master.toml
-	// and assign it to SampleConfigFile while we build dm-master.
-	SampleConfigFile string
-)
-
-// NewConfig creates a config for dm-master.
-func NewConfig() *Config {
-	cfg := &Config{
-		Etcd:          &etcdutil.ConfigParams{},
-		FrameMetaConf: newFrameMetaConfig(),
-		UserMetaConf:  newDefaultUserMetaConfig(),
-	}
-	cfg.flagSet = flag.NewFlagSet("dm-master", flag.ContinueOnError)
-	fs := cfg.flagSet
-
-	fs.BoolVar(&cfg.printVersion, "V", false, "prints version and exit")
-	fs.StringVar(&cfg.ConfigFile, "config", "", "path to config file")
-	fs.StringVar(&cfg.MasterAddr, "master-addr", "", "master API server and status addr")
-	fs.StringVar(&cfg.AdvertiseAddr, "advertise-addr", "", `advertise address for client traffic (default "${master-addr}")`)
-	fs.StringVar(&cfg.LogConf.Level, "L", "info", "log level: debug, info, warn, error, fatal")
-	fs.StringVar(&cfg.LogConf.File, "log-file", "", "log file path")
-	// fs.StringVar(&cfg.LogConf.LogRotate, "log-rotate", "day", "log file rotate type, hour/day")
-
-	fs.StringVar(&cfg.Etcd.Name, "name", "", "human-readable name for this DF-master member")
-	fs.StringVar(&cfg.Etcd.DataDir, "data-dir", "", "data directory for etcd using")
-
-	fs.StringVar(&cfg.FrameMetaConf.Endpoints[0], "frame-meta-endpoints", defaultFrameMetaEndpoints, `framework metastore endpoint`)
-	fs.StringVar(&cfg.FrameMetaConf.Auth.User, "frame-meta-user", defaultFrameMetaUser, `framework metastore user`)
-	fs.StringVar(&cfg.FrameMetaConf.Auth.Passwd, "frame-meta-password", defaultFrameMetaPassword, `framework metastore password`)
-	fs.StringVar(&cfg.FrameMetaConf.Schema, "frame-meta-schema", "", `schema name for framework meta`)
-
-	fs.StringVar(&cfg.UserMetaConf.Endpoints[0], "user-meta-endpoints", defaultUserMetaEndpoints, `user metastore endpoint`)
-
-	fs.StringVar(&cfg.Etcd.InitialCluster, "initial-cluster", "", fmt.Sprintf("initial cluster configuration for bootstrapping, e.g. dm-master=%s", defaultPeerUrls))
-	fs.StringVar(&cfg.Etcd.PeerUrls, "peer-urls", defaultPeerUrls, "URLs for peer traffic")
-	fs.StringVar(&cfg.Etcd.AdvertisePeerUrls, "advertise-peer-urls", "", `advertise URLs for peer traffic (default "${peer-urls}")`)
-
-	return cfg
-}
 
 // Config is the configuration for dm-master.
 type Config struct {
@@ -205,8 +159,8 @@ func GetDefaultMasterConfig() *Config {
 			PeerUrls:            defaultPeerUrls,
 			InitialClusterState: defaultInitialClusterState,
 		},
-		FrameMetaConf:        NewFrameMetaConfig(),
-		UserMetaConf:         NewDefaultUserMetaConfig(),
+		FrameMetaConf:        newFrameMetaConfig(),
+		UserMetaConf:         newDefaultUserMetaConfig(),
 		KeepAliveTTLStr:      defaultKeepAliveTTL,
 		KeepAliveIntervalStr: defaultKeepAliveInterval,
 		RPCTimeoutStr:        defaultRPCTimeout,

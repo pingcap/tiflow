@@ -70,6 +70,7 @@ func (o *options) addFlags(cmd *cobra.Command) {
 	cmd.Flags().StringSliceVar(&o.masterConfig.FrameMetaConf.Endpoints, "frame-meta-endpoints", o.masterConfig.FrameMetaConf.Endpoints, "framework metastore endpoint")
 	cmd.Flags().StringVar(&o.masterConfig.FrameMetaConf.Auth.User, "frame-meta-user", o.masterConfig.FrameMetaConf.Auth.User, "framework metastore user")
 	cmd.Flags().StringVar(&o.masterConfig.FrameMetaConf.Auth.Passwd, "frame-meta-password", o.masterConfig.FrameMetaConf.Auth.Passwd, "framework metastore password")
+	cmd.Flags().StringVar(&o.masterConfig.FrameMetaConf.Schema, "frame-meta-schema", o.masterConfig.FrameMetaConf.Schema, `schema name for framework meta`)
 	cmd.Flags().StringSliceVar(&o.masterConfig.UserMetaConf.Endpoints, "user-meta-endpoints", o.masterConfig.UserMetaConf.Endpoints, "user metastore endpoint")
 
 	cmd.Flags().StringVar(&o.masterConfigFilePath, "config", "", "Path of the configuration file")
