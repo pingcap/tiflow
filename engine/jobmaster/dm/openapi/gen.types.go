@@ -21,9 +21,6 @@ const (
 
 // operation error
 type ErrorWithMessage struct {
-	// error code
-	ErrorCode int `json:"error_code"`
-
 	// error message
 	ErrorMsg string `json:"error_msg"`
 }
@@ -83,6 +80,9 @@ type DMAPIGetSchemaParams struct {
 
 	// table name
 	Table *string `json:"table,omitempty"`
+
+	// target table
+	Target *bool `json:"target,omitempty"`
 }
 
 // DMAPISetSchemaJSONBody defines parameters for DMAPISetSchema.

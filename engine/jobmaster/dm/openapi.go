@@ -103,6 +103,9 @@ func (jm *JobMaster) DMAPIOperateTask(c *gin.Context, taskName string) {
 		op = dmpkg.Pause
 	case openapi.OperateTaskRequestOpResume:
 		op = dmpkg.Resume
+	default:
+		_ = c.Error(errors.Errorf("unsupport op type '%s' for operate task", req.Op))
+		return
 	}
 
 	err := jm.OperateTask(c.Request.Context(), op, nil, []string{taskName})
@@ -154,6 +157,9 @@ func (jm *JobMaster) DMAPISetBinlogOperator(c *gin.Context, taskName string) {
 		r.Op = pb.ErrorOp_Skip
 	case openapi.SetBinlogOperatorRequestOpReplace:
 		r.Op = pb.ErrorOp_Replace
+	default:
+		_ = c.Error(errors.New("unsupport op type '' for set binlog operator"))
+		return
 	}
 	resp, err := jm.Binlog(c.Request.Context(), r)
 	if err != nil {
@@ -195,6 +201,8 @@ func (jm *JobMaster) DMAPIGetSchema(c *gin.Context, taskname string, params open
 		table = *params.Table
 	}
 	switch {
+	case params.Target != nil && *params.Target:
+		op = pb.SchemaOp_ListMigrateTargets
 	case database != "" && table != "":
 		op = pb.SchemaOp_GetSchema
 	case database != "" && table == "":
@@ -202,7 +210,7 @@ func (jm *JobMaster) DMAPIGetSchema(c *gin.Context, taskname string, params open
 	case database == "" && table == "":
 		op = pb.SchemaOp_ListSchema
 	default:
-		_ = c.Error(errors.New("invalid params"))
+		_ = c.Error(errors.New("invalid query params for get schema"))
 		return
 	}
 

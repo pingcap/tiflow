@@ -138,6 +138,12 @@ paths:
           required: false
           schema:
             type: string
+        - name: "target"
+          in: query
+          description: "target table"
+          required: false
+          schema:
+            type: boolean
       responses:
         "200":
           description: "success"
@@ -279,12 +285,8 @@ components:
         error_msg:
           type: string
           description: "error message"
-        error_code:
-          type: integer
-          description: "error code"
       required:
         - "error_msg"
-        - "error_code"
     UpdateJobConfigRequest:
       type: object
       properties:

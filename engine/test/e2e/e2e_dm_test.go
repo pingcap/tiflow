@@ -363,7 +363,7 @@ func getJobCfg(ctx context.Context, client http.Client, jobID string, t *testing
 func getBinlogOperator(ctx context.Context, client *http.Client, jobID string, task string, binlogPos string, t *testing.T) (*dmpkg.BinlogResponse, error) {
 	url := fmt.Sprintf(baseURL+"/binlog/tasks/%s", jobID, task)
 	if binlogPos != "" {
-		url += "?binlogPos=" + binlogPos
+		url += "?binlog_pos=" + binlogPos
 	}
 	resp, err := client.Get(url)
 	if err != nil {

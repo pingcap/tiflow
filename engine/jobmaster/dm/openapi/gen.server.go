@@ -62,6 +62,7 @@ type MiddlewareFunc func(c *gin.Context)
 
 // DMAPIDeleteBinlogOperator operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIDeleteBinlogOperator(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -78,6 +79,7 @@ func (siw *ServerInterfaceWrapper) DMAPIDeleteBinlogOperator(c *gin.Context) {
 
 	// ------------- Optional query parameter "binlog_pos" -------------
 	if paramValue := c.Query("binlog_pos"); paramValue != "" {
+
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "binlog_pos", c.Request.URL.Query(), &params.BinlogPos)
@@ -95,6 +97,7 @@ func (siw *ServerInterfaceWrapper) DMAPIDeleteBinlogOperator(c *gin.Context) {
 
 // DMAPIGetBinlogOperator operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetBinlogOperator(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -111,6 +114,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetBinlogOperator(c *gin.Context) {
 
 	// ------------- Optional query parameter "binlog_pos" -------------
 	if paramValue := c.Query("binlog_pos"); paramValue != "" {
+
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "binlog_pos", c.Request.URL.Query(), &params.BinlogPos)
@@ -128,6 +132,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetBinlogOperator(c *gin.Context) {
 
 // DMAPISetBinlogOperator operation middleware
 func (siw *ServerInterfaceWrapper) DMAPISetBinlogOperator(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -148,6 +153,7 @@ func (siw *ServerInterfaceWrapper) DMAPISetBinlogOperator(c *gin.Context) {
 
 // DMAPIGetJobConfig operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetJobConfig(c *gin.Context) {
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -157,6 +163,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetJobConfig(c *gin.Context) {
 
 // DMAPIUpdateJobConfig operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIUpdateJobConfig(c *gin.Context) {
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -166,6 +173,7 @@ func (siw *ServerInterfaceWrapper) DMAPIUpdateJobConfig(c *gin.Context) {
 
 // DMAPIGetSchema operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetSchema(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -182,6 +190,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSchema(c *gin.Context) {
 
 	// ------------- Optional query parameter "database" -------------
 	if paramValue := c.Query("database"); paramValue != "" {
+
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "database", c.Request.URL.Query(), &params.Database)
@@ -192,11 +201,23 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSchema(c *gin.Context) {
 
 	// ------------- Optional query parameter "table" -------------
 	if paramValue := c.Query("table"); paramValue != "" {
+
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "table", c.Request.URL.Query(), &params.Table)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"msg": fmt.Sprintf("Invalid format for parameter table: %s", err)})
+		return
+	}
+
+	// ------------- Optional query parameter "target" -------------
+	if paramValue := c.Query("target"); paramValue != "" {
+
+	}
+
+	err = runtime.BindQueryParameter("form", true, false, "target", c.Request.URL.Query(), &params.Target)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"msg": fmt.Sprintf("Invalid format for parameter target: %s", err)})
 		return
 	}
 
@@ -209,6 +230,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSchema(c *gin.Context) {
 
 // DMAPISetSchema operation middleware
 func (siw *ServerInterfaceWrapper) DMAPISetSchema(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -229,6 +251,7 @@ func (siw *ServerInterfaceWrapper) DMAPISetSchema(c *gin.Context) {
 
 // DMAPIGetJobStatus operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetJobStatus(c *gin.Context) {
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -238,6 +261,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetJobStatus(c *gin.Context) {
 
 // DMAPIGetTaskStatus operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetTaskStatus(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -258,6 +282,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTaskStatus(c *gin.Context) {
 
 // DMAPIOperateTask operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIOperateTask(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -319,22 +344,23 @@ func RegisterHandlersWithOptions(router *gin.Engine, si ServerInterface, options
 
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
-	"H4sIAAAAAAAC/+xYS4/bNhD+K8K0RyU22px0a5qiSIGgRTdFD4GxoOSRlrsSSXPIg2HovxccyrJlU463",
-	"yCaLJCfLfMzr++Yh7aDSndEKlSModkDVHXaCH3+zVtt/pbt7h0SiwbC2RqqsNE5qBQVog1aE5wzDWcjB",
-	"2LDmJLIEXr2t9Dpxl/cy3svBbQ1CAVI5bNBCnw9XO2rmbnaDUeNlclaqBvo+B4sbLy2uofhwJCg/tmc1",
-	"3tPlPVYu6PyT3cH3gh7+xo1HckH51CVt2DHluyDcIvku2GCEp2OhM8Zok1R8g+61VK1uogXazqov+dit",
-	"0fzvRFl+Yh09SAPBANOKKlgpFWs8NzMH2rQsUjrs0rKHBWGt2D7asRum1axba+FEKQiTimuru1vS3lYD",
-	"jWrhWwdFLVrCUWmpdYtCjRecsA266y7Qpk27LMo2ZdOJ86P1+xtRYiog/5i1cPiHLn/VqpbNbEAq3v64",
-	"6uHcuapwUKpaQ6F82wZmoBJGQgE/v1y+XDJl3R3rWkRSLZygB1rsws8LJTrsY/BadBiZPyT72zUU8Obd",
-	"L3+9fcObU+qyZCs6dGgJig+n2RvEZ0E88xEKtgNy4KW4/WLYPjjqrMd8qE3JoOyirI1Huz0IO8qWS7dX",
-	"QRUZrSgG/6flq/OqQ76qkCiA+Gq5HDByqBg8YUwrK47O4p7C+d2Rvh8t1lDAD4tDqV0MdXZxVmQZuanq",
-	"WsgW14w9+a4TdgvFAEwWXcz0IfpONCHuHElY9TkMaZDA7/fTunMO3rOF6HEQDPJ4IxHh5wZug+4aZI2m",
-	"OWhvPg7tZ8jLVTyM5F7r9faTxXW2XybiO+jPymBA/23RiK6hUZ/D4tBuLhaLsW/B08bxXpcxhok6HE3N",
-	"lHZZrb1KZc69LrNqb+fe2yCTc8bPOXjSm+FpuDszAfTTzh4Sa4asz5tynt27BEHgW1STnjguMjDOkV9q",
-	"xphq2Y99E00n7e1oNHyEZJ4iL4kdx8zvDfOQ9rTnxnmf9Bfa5Bek1FO3x+lb1/Ul5mvuh0mW0L4uOeE8",
-	"XdMHb+LJby/L3B1mlbcWlctiuDJd82oo78liz6f+R7F/L+hhjPPF7GxaXYq23WZeyY3HLJTdLH4yeJqk",
-	"/Y55xJxL7KMq7tFHtmeH6qcvxYlPil/LpBexRaYBOdFg4IQ4BinxrtGPS7vEzD9iGF8AUj14ijP0q/6/",
-	"AAAA//9XWeYawhYAAA==",
+
+	"H4sIAAAAAAAC/+xYTY/bNhD9K8K0RyU22px0a5qiSIGgRTdFD4GxoOSRVrsUSXPIg2HovxccyvIX5dhF",
+	"tjGyPa2XIt8M5735kDZQ6c5ohcoRFBug6gE7wT9/sVbbv1v38AGJRINhbYlU2da4VisoQBu0IvzOMOyF",
+	"HIwNa65FRuDV+46a06P8KOsG5Bzc2iAUQM62qoG+z8HiyrcWl1B82gNajFt1+YiVgz6H39kN/Cjo6U9c",
+	"eSQX7B26og07pHwX8CyS74JZIzzhHuiEfW2Shu/QvW2V1E30QNtJ8yVvuzea/zsylh95R0+tgeCAkaIK",
+	"XraKLZ66mQOtJEO2Drs09rAgrBXrqy92x3KYvNZSOFEKwqTh2urunrS31SCdWnjpoKiFJByNllpLFGo8",
+	"4IRt0F12gFYyfWVRypRPR5cfvd+eiIipgPxllsLhb7r8Wau6bSYDUvHjz5se9p2aChtbVWsolJcyKAOV",
+	"MC0U8OPr+es5S9Y9sK1ZFNXMCXqi2Sb8eaVEh30MnkSHUflDkr5fQgHvPvz0x/t3/PBQuoxsRYcOLUHx",
+	"6ThhA3wW4FmPULAfkAMvxcevhse7izrrMR9qSjIom4i18mjXO7C9bDl3ehFMkdGKYvB/mL85LTTkqwqJ",
+	"Aolv5vOBI4eKyRPGyLbi6MweKezf7Nn73mINBXw325XI2VAfZyfFkZk7NF2LVuKSuSffdcKuoRiIyeIV",
+	"M72LvhNNiDtHEhZ9DkMaJPj79bjunJJ3sxRdR8GAxw8SEb41cht0lzBrNE1Re/d5av+DvFzEzUjurV6u",
+	"v1hcJ/tlIr6D/awMDvQvS0Z0iYz6HGa7dnO2WIx9C543jo+6jDFM1OHoaqa0y2rtVSpzHnWZVVs/t7cN",
+	"mJwzfuqCR70Znke7ExNAf9jZQ2JNiPW2Jef5eucoCHqLZtITx1kFxjnya80Yh1a2Y9+BpaP2tjcaXoHM",
+	"U+Q52HHMvAYzzMPZ9mQalUfmBOw4K7/ERkxbzZ32X3+m/X5FqT532z18m7u8dH3LfTapEtrWOyecp0v6",
+	"613c+fKyzD1gVnlrUbkshivTNa+GtpFsIrzrXzSRj4Kexjifzc5G6lJIuc68alces1DOs/gp4nmS9n/O",
+	"I+dcYq+quHsf726O1S9fihOfKr+VCTJyiywDcqLBoAmxT1LiHaYflzaJd4mRw/hikerBhzxDv+j/CQAA",
+	"//8yjLZe0hYAAA==",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
@@ -369,7 +395,7 @@ func decodeSpecCached() func() ([]byte, error) {
 
 // Constructs a synthetic filesystem for resolving external references when loading openapi specifications.
 func PathToRawSpec(pathToFile string) map[string]func() ([]byte, error) {
-	res := make(map[string]func() ([]byte, error))
+	var res = make(map[string]func() ([]byte, error))
 	if len(pathToFile) > 0 {
 		res[pathToFile] = rawSpec
 	}
@@ -383,12 +409,12 @@ func PathToRawSpec(pathToFile string) map[string]func() ([]byte, error) {
 // Externally referenced files must be embedded in the corresponding golang packages.
 // Urls can be supported but this task was out of the scope.
 func GetSwagger() (swagger *openapi3.T, err error) {
-	resolvePath := PathToRawSpec("")
+	var resolvePath = PathToRawSpec("")
 
 	loader := openapi3.NewLoader()
 	loader.IsExternalRefsAllowed = true
 	loader.ReadFromURIFunc = func(loader *openapi3.Loader, url *url.URL) ([]byte, error) {
-		pathToFile := url.String()
+		var pathToFile = url.String()
 		pathToFile = path.Clean(pathToFile)
 		getSpec, ok := resolvePath[pathToFile]
 		if !ok {
