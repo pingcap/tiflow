@@ -14,6 +14,8 @@
 package v2
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	parserModel "github.com/pingcap/tidb/parser/model"
@@ -76,6 +78,9 @@ func TestToAPIReplicaConfig(t *testing.T) {
 	require.Equal(t, "", cfg2.Sink.DispatchRules[0].DispatcherRule)
 	cfg.Sink.DispatchRules[0].DispatcherRule = ""
 	require.Equal(t, cfg, cfg2)
+	cfgJSON, err := json.Marshal(ToAPIReplicaConfig(cfg))
+	require.Nil(t, err)
+	require.False(t, strings.Contains(string(cfgJSON), "-"))
 }
 
 func TestChangefeedInfoClone(t *testing.T) {
