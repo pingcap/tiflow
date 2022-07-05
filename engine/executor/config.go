@@ -45,6 +45,7 @@ var (
 
 // Config is the configuration.
 type Config struct {
+	// TODO: is executor name necessary, executor.Info.ID has similar effect
 	Name string `toml:"name" json:"name"`
 
 	LogConf logutil.Config `toml:"log" json:"log"`
