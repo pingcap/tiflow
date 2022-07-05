@@ -186,7 +186,7 @@ func (a *agentImpl) FinishTableOperation(
 	topic := protocol.SyncTopic(a.changeFeed)
 	if !a.Barrier(ctx) {
 		if _, exists := a.barrierSeqs[topic]; exists {
-			log.L().Info("Delay sending FinishTableOperation due to pending sync",
+			log.Info("Delay sending FinishTableOperation due to pending sync",
 				zap.String("namespace", a.changeFeed.Namespace),
 				zap.String("changefeedID", a.changeFeed.ID),
 				zap.String("ownerID", a.ownerCaptureID),

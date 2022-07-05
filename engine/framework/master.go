@@ -225,13 +225,13 @@ func NewBaseMaster(
 		metaBytes := ctx.Environ.MasterMetaBytes
 		err := errors.Trace(masterMeta.Unmarshal(metaBytes))
 		if err != nil {
-			log.L().Warn("invalid master meta", zap.ByteString("data", metaBytes), zap.Error(err))
+			log.Warn("invalid master meta", zap.ByteString("data", metaBytes), zap.Error(err))
 		}
 	}
 
 	if err := ctx.Deps().Fill(&params); err != nil {
 		// TODO more elegant error handling
-		log.L().Panic("failed to provide dependencies", zap.Error(err))
+		log.Panic("failed to provide dependencies", zap.Error(err))
 	}
 
 	logger := logutil.FromContext(*ctx)
@@ -374,7 +374,7 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 				return err
 			}
 			if !ok {
-				log.L().Warn("Sending Heartbeat Pong failed",
+				log.Warn("Sending Heartbeat Pong failed",
 					zap.Any("reply", replyMsg))
 				return nil
 			}

@@ -177,7 +177,7 @@ func (m *MockMasterImpl) Tick(ctx context.Context) error {
 	defer m.mu.Unlock()
 
 	m.tickCount.Add(1)
-	log.L().Info("tick")
+	log.Info("tick")
 
 	args := m.Called(ctx)
 	return args.Error(0)
@@ -200,7 +200,7 @@ func (m *MockMasterImpl) OnWorkerOnline(worker WorkerHandle) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	log.L().Info("OnWorkerOnline", zap.Any("worker-id", worker.ID()))
+	log.Info("OnWorkerOnline", zap.Any("worker-id", worker.ID()))
 	m.onlineWorkerCount.Add(1)
 
 	args := m.Called(worker)

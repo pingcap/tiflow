@@ -70,7 +70,7 @@ func TestWorkerExit(t *testing.T) {
 		for jobIdx := 0; jobIdx < cfg.WorkerCount; jobIdx++ {
 			err := cli.CheckFakeJobTick(ctx, jobID, jobIdx, targetTick)
 			if err != nil {
-				log.L().Warn("check fake job tick failed", zap.Error(err))
+				log.Warn("check fake job tick failed", zap.Error(err))
 				return false
 			}
 		}

@@ -47,19 +47,19 @@ func newQueryJob() *cobra.Command {
 func getProjectInfo(cmd *cobra.Command) tenant.ProjectInfo {
 	tenantID, err := cmd.Flags().GetString("tenant-id")
 	if err != nil {
-		log.L().Error("error in parse `--tenant-id`, use default tenant id", zap.Error(err))
+		log.Error("error in parse `--tenant-id`, use default tenant id", zap.Error(err))
 		tenantID = tenant.DefaultUserProjectInfo.TenantID()
 	} else if tenantID == "" {
-		log.L().Warn("tenant-id is empty, use default tenant id")
+		log.Warn("tenant-id is empty, use default tenant id")
 		tenantID = tenant.DefaultUserProjectInfo.TenantID()
 	}
 
 	projectID, err := cmd.Flags().GetString("project-id")
 	if err != nil {
-		log.L().Error("error in parse `--project-id`, use default project id", zap.Error(err))
+		log.Error("error in parse `--project-id`, use default project id", zap.Error(err))
 		projectID = tenant.DefaultUserProjectInfo.ProjectID()
 	} else if projectID == "" {
-		log.L().Warn("project-id is empty, use default project id")
+		log.Warn("project-id is empty, use default project id")
 		projectID = tenant.DefaultUserProjectInfo.ProjectID()
 	}
 
@@ -69,11 +69,11 @@ func getProjectInfo(cmd *cobra.Command) tenant.ProjectInfo {
 func runQueryJob(cmd *cobra.Command, _ []string) error {
 	id, err := cmd.Flags().GetString("job-id")
 	if err != nil {
-		log.L().Error("error in parse `--job-id`")
+		log.Error("error in parse `--job-id`")
 		return err
 	}
 	if id == "" {
-		log.L().Error("job-id should not be empty")
+		log.Error("job-id should not be empty")
 		return err
 	}
 
@@ -89,7 +89,7 @@ func runQueryJob(cmd *cobra.Command, _ []string) error {
 		},
 	})
 	if err != nil {
-		log.L().Error("failed to query job", zap.Error(err))
+		log.Error("failed to query job", zap.Error(err))
 		os.Exit(1)
 	}
 	switch engineModel.JobType(resp.Tp) {
@@ -99,19 +99,19 @@ func runQueryJob(cmd *cobra.Command, _ []string) error {
 			status := &frameModel.WorkerStatus{}
 			err = json.Unmarshal(statusBytes, status)
 			if err != nil {
-				log.L().Error("failed to query job", zap.Error(err))
+				log.Error("failed to query job", zap.Error(err))
 				os.Exit(1)
 			}
 			ext, err := strconv.ParseInt(string(status.ExtBytes), 10, 64)
 			if err != nil {
-				log.L().Error("failed to query job", zap.Error(err))
+				log.Error("failed to query job", zap.Error(err))
 				os.Exit(1)
 			}
-			log.L().Info("status ext info", zap.Int64("ext", ext))
+			log.Info("status ext info", zap.Int64("ext", ext))
 		}
 	default:
 	}
-	log.L().Info("query result", zap.String("resp", resp.String()))
+	log.Info("query result", zap.String("resp", resp.String()))
 	return nil
 }
 
@@ -174,10 +174,10 @@ func runSubmitJob(cmd *cobra.Command, _ []string) error {
 		},
 	})
 	if err != nil {
-		log.L().Error("failed to submit job", zap.Error(err))
+		log.Error("failed to submit job", zap.Error(err))
 		os.Exit(1)
 	}
-	log.L().Info("resp", zap.Any("resp", resp))
+	log.Info("resp", zap.Any("resp", resp))
 	return nil
 }
 
@@ -196,11 +196,11 @@ func newPauseJob() *cobra.Command {
 func runPauseJob(cmd *cobra.Command, _ []string) error {
 	id, err := cmd.Flags().GetString("job-id")
 	if err != nil {
-		log.L().Error("error in parse `--job-id`")
+		log.Error("error in parse `--job-id`")
 		return err
 	}
 	if id == "" {
-		log.L().Error("job-id should not be empty")
+		log.Error("job-id should not be empty")
 		return err
 	}
 	project := getProjectInfo(cmd)
@@ -215,9 +215,9 @@ func runPauseJob(cmd *cobra.Command, _ []string) error {
 		},
 	})
 	if err != nil {
-		log.L().Error("failed to query job", zap.Error(err))
+		log.Error("failed to query job", zap.Error(err))
 		os.Exit(1)
 	}
-	log.L().Info("pause result", zap.String("err", resp.Err.String()))
+	log.Info("pause result", zap.String("err", resp.Err.String()))
 	return nil
 }
