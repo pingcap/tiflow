@@ -209,6 +209,30 @@ func TestGetAllChangeFeedStatus(t *testing.T) {
 	require.Equal(t, statuses, changefeeds)
 }
 
+func TestCheckMultipleCDCClusterExist(t *testing.T) {
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
+
+	ctx := context.Background()
+	rawEtcdClient := s.client.Client.cli
+	defaultClusterKey := DefaultClusterAndNamespacePrefix + "/test-key"
+	_, err := rawEtcdClient.Put(ctx, defaultClusterKey, "test-value")
+	require.NoError(t, err)
+
+	err = s.client.CheckMultipleCDCClusterExist(ctx)
+	require.NoError(t, err)
+
+	newClusterKey := NamespacedPrefix("new-cluster", "new-namespace") +
+		"/test-key"
+	_, err = rawEtcdClient.Put(ctx, newClusterKey, "test-value")
+	require.NoError(t, err)
+
+	err = s.client.CheckMultipleCDCClusterExist(ctx)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "ErrMultipleCDCClustersExist")
+}
+
 func TestCreateChangefeed(t *testing.T) {
 	s := &Tester{}
 	s.SetUpTest(t)
