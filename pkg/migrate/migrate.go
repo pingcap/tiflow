@@ -50,9 +50,6 @@ const (
 	migrationCampaignKey    = "ticdc-migration"
 	oldChangefeedPrefix     = "/tidb/cdc/changefeed/info"
 	oldGcServiceID          = "ticdc"
-
-	// data will be renamed to this key, '__backup__' is not a valid cluster id
-	backupKeyPrefix = "/tidb/cdc/__backup__/0"
 )
 
 type keys map[string]string
@@ -295,6 +292,7 @@ func cleanOldData(ctx context.Context, client *etcd.Client) {
 			if strings.HasPrefix(key, oldChangefeedPrefix) {
 				value = maskChangefeedInfo(kvPair.Value)
 			}
+			// 0 is the backup verion. For now, we only support verion 0
 			newKey := etcd.MigrateBackupKey(0, key)
 			log.Info("renaming old etcd data",
 				zap.String("key", key),

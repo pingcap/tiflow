@@ -227,10 +227,10 @@ func (f *factoryImpl) findServerAddr() (string, error) {
 	ctx := cmdconetxt.GetDefaultContext()
 	err = etcdClient.CheckMultipleCDCClusterExist(ctx)
 	if err != nil {
-		if err == cerror.ErrMultipleCDCClustersExist {
-			return "", errors.New("You are using multiple TiCDC clusters to replica this " +
-				"TiDB cluster. Please set the parameter --server to specify " +
-				"which cluster you want to operate.")
+		if cerror.ErrMultipleCDCClustersExist.Equal(err) {
+			log.Error("You are using multiple TiCDC clusters to " +
+				"replicate this TiDB cluster. Please set the parameter --server " +
+				"to specify which cluster you want to operate on.")
 		}
 		return "", err
 	}

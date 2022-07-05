@@ -199,7 +199,7 @@ var (
 		errors.RFCCodeText("CDC:ErrClusterIDMismatch"),
 	)
 	ErrMultipleCDCClustersExist = errors.Normalize(
-		"multiple TiCDC clusters exist. Please specify",
+		"multiple TiCDC clusters exist while using --pd",
 		errors.RFCCodeText("CDC:ErrMultipleCDCClustersExist"),
 	)
 	ErrCreateMarkTableFailed = errors.Normalize(
