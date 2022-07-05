@@ -13,7 +13,10 @@
 
 package util
 
-import "strings"
+import (
+	"net"
+	"strings"
+)
 
 // IsValidIPv6AddressInURI reports whether hostPort is a valid IPv6 address in URI.
 // See: https://www.ietf.org/rfc/rfc2732.txt.
@@ -41,6 +44,10 @@ func IsValidIPv6AddressInURI(hostPort string) bool {
 // IsIPv6Address reports whether hostname is a IPv6 address.
 // Notice: There is hostname not host(host+port).
 func IsIPv6Address(hostname string) bool {
+	ip := net.ParseIP(hostname)
+	if ip == nil {
+		return false
+	}
 	return strings.Contains(hostname, ":")
 }
 
