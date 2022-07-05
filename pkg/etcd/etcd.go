@@ -146,7 +146,8 @@ func (c CDCEtcdClient) GetAllCDCInfo(ctx context.Context) ([]*mvccpb.KeyValue, e
 	return resp.Kvs, nil
 }
 
-// CheckCDCCluster
+// CheckMultipleCDCClusterExist checks if other cdc clusters exists,
+// and returns an error is so, and user should uses --server instead
 func (c CDCEtcdClient) CheckMultipleCDCClusterExist(ctx context.Context) error {
 	resp, err := c.Client.Get(ctx, BaseKey(""),
 		clientv3.WithPrefix(),
@@ -580,21 +581,6 @@ func (c CDCEtcdClient) DeleteCaptureInfo(ctx context.Context, id string) error {
 func (c CDCEtcdClient) GetOwnerID(ctx context.Context) (string, error) {
 	resp, err := c.Client.Get(ctx, CaptureOwnerKey(c.ClusterID),
 		clientv3.WithFirstCreate()...)
-	if err != nil {
-		return "", cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
-	}
-	if len(resp.Kvs) == 0 {
-		return "", concurrency.ErrElectionNoLeader
-	}
-	return string(resp.Kvs[0].Value), nil
-}
-
-// GetOwnerID returns the owner id by querying etcd
-func (c CDCEtcdClient) CheckUniqueCluster(ctx context.Context) (string, error) {
-	resp, err := c.Client.Get(ctx, CaptureOwnerKey(c.ClusterID),
-		clientv3.WithKeysOnly(),
-		clientv3.WithPrefix(),
-		clientv3.WithLimit(2))
 	if err != nil {
 		return "", cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}

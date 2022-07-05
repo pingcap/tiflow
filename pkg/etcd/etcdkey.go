@@ -46,7 +46,7 @@ const (
 	// DefaultClusterAndMetaPrefix is the default prefix of cluster meta
 	DefaultClusterAndMetaPrefix = "/tidb/cdc/default" + metaPrefix
 
-	// MigrateKeyPrefix is the prefix of backup keys during a migration
+	// MigrateBackupPrefix is the prefix of backup keys during a migration
 	MigrateBackupPrefix = "/tidb/cdc/__backup__"
 )
 
