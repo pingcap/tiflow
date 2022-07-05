@@ -179,8 +179,10 @@ type Syncer struct {
 	// the status of this track may change over time.
 	safeMode *sm.SafeMode
 
-	upstreamTZ *time.Location
-	timezone   *time.Location
+	upstreamTZ         *time.Location
+	timezone           *time.Location
+	timezone_last_time string
+	upstreamTZStr      string
 
 	binlogSizeCount     atomic.Int64
 	lastBinlogSizeCount atomic.Int64
@@ -347,11 +349,11 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}()
 
 	tctx := s.tctx.WithContext(ctx)
-	s.upstreamTZ, err = str2TimezoneOrFromDB(tctx, "", &s.cfg.From)
+	s.upstreamTZ, s.upstreamTZStr, err = str2TimezoneOrFromDB(tctx, "", &s.cfg.From)
 	if err != nil {
 		return
 	}
-	s.timezone, err = str2TimezoneOrFromDB(tctx, s.cfg.Timezone, &s.cfg.To)
+	s.timezone, _, err = str2TimezoneOrFromDB(tctx, s.cfg.Timezone, &s.cfg.To)
 	if err != nil {
 		return
 	}
@@ -1324,7 +1326,14 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 
 		// set timezone
 		if ddlJob.timezone != "" {
+			s.timezone_last_time = ddlJob.timezone
 			setTimezoneSQL := fmt.Sprintf("SET SESSION TIME_ZONE = '%s'", ddlJob.timezone)
+			ddlJob.ddls = append([]string{setTimezoneSQL}, ddlJob.ddls...)
+			setTimezoneSQLDefault := fmt.Sprintf("SET SESSION TIME_ZONE = DEFAULT")
+			ddlJob.ddls = append(ddlJob.ddls, setTimezoneSQLDefault)
+		} else {
+			// use last time's time zone
+			setTimezoneSQL := fmt.Sprintf("SET SESSION TIME_ZONE = '%s'", s.timezone_last_time)
 			ddlJob.ddls = append([]string{setTimezoneSQL}, ddlJob.ddls...)
 			setTimezoneSQLDefault := fmt.Sprintf("SET SESSION TIME_ZONE = DEFAULT")
 			ddlJob.ddls = append(ddlJob.ddls, setTimezoneSQLDefault)
@@ -2312,7 +2321,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 		case *replication.QueryEvent:
 			originSQL = strings.TrimSpace(string(ev.Query))
-			err2 = s.handleQueryEvent(ev, ec, originSQL, e)
+			err2 = s.handleQueryEvent(ev, ec, originSQL)
 		case *replication.XIDEvent:
 			// reset eventIndex and force safeMode flag here.
 			eventIndex = 0
@@ -2747,7 +2756,7 @@ func generateExtendColumn(data [][]interface{}, r *regexprrouter.RouteTable, tab
 	return rows
 }
 
-func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, originSQL string, e *replication.BinlogEvent) (err error) {
+func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, originSQL string) (err error) {
 	if originSQL == "BEGIN" {
 		failpoint.Inject("NotUpdateLatestGTID", func(_ failpoint.Value) {
 			// directly return nil without update latest GTID here
@@ -2811,12 +2820,12 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 		s.tctx.L().Warn("found error when get sql_mode from binlog status_vars", zap.Error(err))
 	}
 
-	qec.timezone, err = event.GetTimezoneByStatusVars(ev.StatusVars, s.upstreamTZ.String())
+	qec.timezone, err = event.GetTimezoneByStatusVars(ev.StatusVars, s.upstreamTZStr)
 	if err != nil {
 		s.tctx.L().Warn("found error when get timezone from binlog status_vars", zap.Error(err))
 	}
 
-	qec.timestamp = e.Header.Timestamp
+	qec.timestamp = ec.header.Timestamp
 
 	stmt, err := parseOneStmt(qec)
 	if err != nil {
@@ -3920,7 +3929,7 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 
 	// update timezone
 	if s.timezone == nil {
-		s.timezone, err = str2TimezoneOrFromDB(s.tctx.WithContext(ctx), s.cfg.Timezone, &s.cfg.To)
+		s.timezone, _, err = str2TimezoneOrFromDB(s.tctx.WithContext(ctx), s.cfg.Timezone, &s.cfg.To)
 		return err
 	}
 	// update syncer config

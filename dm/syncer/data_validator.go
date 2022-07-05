@@ -297,11 +297,11 @@ func (v *DataValidator) initialize() error {
 	failpoint.Inject("ValidatorMockUpstreamTZ", func() {
 		defaultUpstreamTZ = "UTC"
 	})
-	v.upstreamTZ, err = str2TimezoneOrFromDB(newCtx, defaultUpstreamTZ, &v.cfg.From)
+	v.upstreamTZ, _, err = str2TimezoneOrFromDB(newCtx, defaultUpstreamTZ, &v.cfg.From)
 	if err != nil {
 		return err
 	}
-	v.timezone, err = str2TimezoneOrFromDB(newCtx, v.cfg.Timezone, &v.cfg.To)
+	v.timezone, _, err = str2TimezoneOrFromDB(newCtx, v.cfg.Timezone, &v.cfg.To)
 	if err != nil {
 		return err
 	}
