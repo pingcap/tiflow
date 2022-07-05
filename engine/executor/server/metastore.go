@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/config"
+	"github.com/pingcap/tiflow/engine/pkg/dbutil"
 	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
 	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
@@ -88,22 +89,22 @@ type metastoreManagerImpl struct {
 // metastore clients.
 type MetastoreCreator interface {
 	CreateEtcdCliForServiceDiscovery(
-		ctx context.Context, params metaclient.StoreConfigParams,
+		ctx context.Context, params metaclient.StoreConfig,
 	) (*clientv3.Client, error)
 
 	CreateMetaKVClientForBusiness(
-		ctx context.Context, params metaclient.StoreConfigParams,
+		ctx context.Context, params metaclient.StoreConfig,
 	) (extkv.KVClientEx, error)
 
 	CreateDBClientForFramework(
-		ctx context.Context, params metaclient.StoreConfigParams,
+		ctx context.Context, params metaclient.StoreConfig,
 	) (pkgOrm.Client, error)
 }
 
 type metastoreCreatorImpl struct{}
 
 func (c metastoreCreatorImpl) CreateEtcdCliForServiceDiscovery(
-	ctx context.Context, params metaclient.StoreConfigParams,
+	ctx context.Context, params metaclient.StoreConfig,
 ) (*clientv3.Client, error) {
 	logConfig := logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
@@ -134,7 +135,7 @@ func (c metastoreCreatorImpl) CreateEtcdCliForServiceDiscovery(
 }
 
 func (c metastoreCreatorImpl) CreateMetaKVClientForBusiness(
-	_ context.Context, params metaclient.StoreConfigParams,
+	_ context.Context, params metaclient.StoreConfig,
 ) (extkv.KVClientEx, error) {
 	metaKVClient, err := kvclient.NewKVClient(&params)
 	if err != nil {
@@ -144,9 +145,9 @@ func (c metastoreCreatorImpl) CreateMetaKVClientForBusiness(
 }
 
 func (c metastoreCreatorImpl) CreateDBClientForFramework(
-	_ context.Context, params metaclient.StoreConfigParams,
+	_ context.Context, params metaclient.StoreConfig,
 ) (pkgOrm.Client, error) {
-	frameMetaClient, err := pkgOrm.NewClient(params, pkgOrm.NewDefaultDBConfig())
+	frameMetaClient, err := pkgOrm.NewClient(params, dbutil.DefaultDBConfig())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -199,7 +200,7 @@ func (m *metastoreManagerImpl) initServerDiscoveryStore(ctx context.Context, ser
 	}
 	log.L().Info("Obtained discovery metastore endpoint", zap.String("addr", resp.Address))
 
-	conf := parseStoreConfigParams([]byte(resp.Address))
+	conf := parseStoreConfig([]byte(resp.Address))
 	etcdCli, err := m.creator.CreateEtcdCliForServiceDiscovery(ctx, conf)
 	if err != nil {
 		return err
@@ -220,7 +221,7 @@ func (m *metastoreManagerImpl) initFrameworkStore(ctx context.Context, servermas
 	}
 	log.L().Info("Obtained framework metastore endpoint", zap.String("addr", resp.Address))
 
-	conf := parseStoreConfigParams([]byte(resp.Address))
+	conf := parseStoreConfig([]byte(resp.Address))
 	dbCli, err := m.creator.CreateDBClientForFramework(ctx, conf)
 	if err != nil {
 		return err
@@ -241,7 +242,7 @@ func (m *metastoreManagerImpl) initBusinessStore(ctx context.Context, servermast
 	}
 	log.L().Info("Obtained business metastore endpoint", zap.String("addr", resp.Address))
 
-	conf := parseStoreConfigParams([]byte(resp.Address))
+	conf := parseStoreConfig([]byte(resp.Address))
 	metaKVClient, err := m.creator.CreateMetaKVClientForBusiness(ctx, conf)
 	if err != nil {
 		return err
@@ -290,8 +291,8 @@ func (m *metastoreManagerImpl) Close() {
 	log.L().Info("MetastoreManager: Closed all metastores")
 }
 
-func parseStoreConfigParams(rawBytes []byte) metaclient.StoreConfigParams {
-	var conf metaclient.StoreConfigParams
+func parseStoreConfig(rawBytes []byte) metaclient.StoreConfig {
+	var conf metaclient.StoreConfig
 
 	// Try unmarshal as json first.
 	err := json.Unmarshal(rawBytes, &conf)

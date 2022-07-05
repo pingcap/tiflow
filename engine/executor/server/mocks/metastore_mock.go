@@ -39,7 +39,7 @@ func (m *MockMetastoreCreator) EXPECT() *MockMetastoreCreatorMockRecorder {
 }
 
 // CreateDBClientForFramework mocks base method.
-func (m *MockMetastoreCreator) CreateDBClientForFramework(arg0 context.Context, arg1 metaclient.StoreConfigParams) (orm.Client, error) {
+func (m *MockMetastoreCreator) CreateDBClientForFramework(arg0 context.Context, arg1 metaclient.StoreConfig) (orm.Client, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateDBClientForFramework", arg0, arg1)
 	ret0, _ := ret[0].(orm.Client)
@@ -54,7 +54,7 @@ func (mr *MockMetastoreCreatorMockRecorder) CreateDBClientForFramework(arg0, arg
 }
 
 // CreateEtcdCliForServiceDiscovery mocks base method.
-func (m *MockMetastoreCreator) CreateEtcdCliForServiceDiscovery(arg0 context.Context, arg1 metaclient.StoreConfigParams) (*clientv3.Client, error) {
+func (m *MockMetastoreCreator) CreateEtcdCliForServiceDiscovery(arg0 context.Context, arg1 metaclient.StoreConfig) (*clientv3.Client, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateEtcdCliForServiceDiscovery", arg0, arg1)
 	ret0, _ := ret[0].(*clientv3.Client)
@@ -69,7 +69,7 @@ func (mr *MockMetastoreCreatorMockRecorder) CreateEtcdCliForServiceDiscovery(arg
 }
 
 // CreateMetaKVClientForBusiness mocks base method.
-func (m *MockMetastoreCreator) CreateMetaKVClientForBusiness(arg0 context.Context, arg1 metaclient.StoreConfigParams) (extension.KVClientEx, error) {
+func (m *MockMetastoreCreator) CreateMetaKVClientForBusiness(arg0 context.Context, arg1 metaclient.StoreConfig) (extension.KVClientEx, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateMetaKVClientForBusiness", arg0, arg1)
 	ret0, _ := ret[0].(extension.KVClientEx)

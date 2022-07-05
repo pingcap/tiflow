@@ -196,7 +196,7 @@ func testTxnAction(ctx context.Context, t *testing.T, cli metaclient.KVClient, t
 }
 
 func (suite *SuiteTestEtcd) TestBasicKV() {
-	conf := &metaclient.StoreConfigParams{
+	conf := &metaclient.StoreConfig{
 		Endpoints: []string{suite.endpoints},
 	}
 	t := suite.T()
@@ -261,7 +261,7 @@ func (suite *SuiteTestEtcd) TestBasicKV() {
 }
 
 func (suite *SuiteTestEtcd) TestKeyRangeOption() {
-	conf := &metaclient.StoreConfigParams{
+	conf := &metaclient.StoreConfig{
 		Endpoints: []string{suite.endpoints},
 	}
 	t := suite.T()
@@ -375,7 +375,7 @@ func (suite *SuiteTestEtcd) TestKeyRangeOption() {
 }
 
 func (suite *SuiteTestEtcd) TestTxn() {
-	conf := &metaclient.StoreConfigParams{
+	conf := &metaclient.StoreConfig{
 		Endpoints: []string{suite.endpoints},
 	}
 	t := suite.T()
@@ -505,7 +505,7 @@ func (suite *SuiteTestEtcd) TestTxn() {
 }
 
 func (suite *SuiteTestEtcd) TestGenEpoch() {
-	conf := &metaclient.StoreConfigParams{
+	conf := &metaclient.StoreConfig{
 		Endpoints: []string{suite.endpoints},
 	}
 	t := suite.T()
