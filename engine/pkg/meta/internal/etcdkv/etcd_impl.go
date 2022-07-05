@@ -20,7 +20,7 @@ import (
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 
-	metaclient "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -49,7 +49,7 @@ type etcdImpl struct {
 }
 
 // NewEtcdImpl creates a new etcdImpl instance
-func NewEtcdImpl(config *metaclient.StoreConfig) (*etcdImpl, error) {
+func NewEtcdImpl(config *metaModel.StoreConfig) (*etcdImpl, error) {
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints: config.Endpoints,
 		// [TODO] TLS
@@ -67,7 +67,7 @@ func NewEtcdImpl(config *metaclient.StoreConfig) (*etcdImpl, error) {
 	return c, nil
 }
 
-func (c *etcdImpl) getEtcdOptions(op metaclient.Op) []clientv3.OpOption {
+func (c *etcdImpl) getEtcdOptions(op metaModel.Op) []clientv3.OpOption {
 	etcdOps := make([]clientv3.OpOption, 0, 1)
 	switch {
 	case op.IsOptsWithPrefix():
@@ -81,7 +81,7 @@ func (c *etcdImpl) getEtcdOptions(op metaclient.Op) []clientv3.OpOption {
 	return etcdOps
 }
 
-func (c *etcdImpl) getEtcdOp(op metaclient.Op) clientv3.Op {
+func (c *etcdImpl) getEtcdOp(op metaModel.Op) clientv3.Op {
 	opts := c.getEtcdOptions(op)
 	switch {
 	case op.IsGet():
@@ -102,8 +102,8 @@ func (c *etcdImpl) getEtcdOp(op metaclient.Op) clientv3.Op {
 	panic("unknown op type")
 }
 
-func (c *etcdImpl) Put(ctx context.Context, key, val string) (*metaclient.PutResponse, metaclient.Error) {
-	op := metaclient.OpPut(key, val)
+func (c *etcdImpl) Put(ctx context.Context, key, val string) (*metaModel.PutResponse, metaModel.Error) {
+	op := metaModel.OpPut(key, val)
 	etcdResp, err := c.cli.Do(ctx, c.getEtcdOp(op))
 	if err != nil {
 		return nil, etcdErrorFromOpFail(err)
@@ -113,8 +113,8 @@ func (c *etcdImpl) Put(ctx context.Context, key, val string) (*metaclient.PutRes
 	return makePutResp(putRsp), nil
 }
 
-func (c *etcdImpl) Get(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.GetResponse, metaclient.Error) {
-	op := metaclient.OpGet(key, opts...)
+func (c *etcdImpl) Get(ctx context.Context, key string, opts ...metaModel.OpOption) (*metaModel.GetResponse, metaModel.Error) {
+	op := metaModel.OpGet(key, opts...)
 	if err := op.CheckValidOp(); err != nil {
 		return nil, &etcdError{
 			displayed: errors.ErrMetaOptionInvalid.Wrap(err),
@@ -130,8 +130,8 @@ func (c *etcdImpl) Get(ctx context.Context, key string, opts ...metaclient.OpOpt
 	return makeGetResp(getRsp), nil
 }
 
-func (c *etcdImpl) Delete(ctx context.Context, key string, opts ...metaclient.OpOption) (*metaclient.DeleteResponse, metaclient.Error) {
-	op := metaclient.OpDelete(key, opts...)
+func (c *etcdImpl) Delete(ctx context.Context, key string, opts ...metaModel.OpOption) (*metaModel.DeleteResponse, metaModel.Error) {
+	op := metaModel.OpDelete(key, opts...)
 	if err := op.CheckValidOp(); err != nil {
 		return nil, &etcdError{
 			displayed: errors.ErrMetaOptionInvalid.Wrap(err),
@@ -147,16 +147,16 @@ func (c *etcdImpl) Delete(ctx context.Context, key string, opts ...metaclient.Op
 	return makeDeleteResp(delRsp), nil
 }
 
-func (c *etcdImpl) Do(ctx context.Context, op metaclient.Op) (metaclient.OpResponse, metaclient.Error) {
+func (c *etcdImpl) Do(ctx context.Context, op metaModel.Op) (metaModel.OpResponse, metaModel.Error) {
 	if err := op.CheckValidOp(); err != nil {
-		return metaclient.OpResponse{}, &etcdError{
+		return metaModel.OpResponse{}, &etcdError{
 			displayed: errors.ErrMetaOptionInvalid.Wrap(err),
 		}
 	}
 
 	etcdResp, err := c.cli.Do(ctx, c.getEtcdOp(op))
 	if err != nil {
-		return metaclient.OpResponse{}, etcdErrorFromOpFail(err)
+		return metaModel.OpResponse{}, etcdErrorFromOpFail(err)
 	}
 
 	switch {
@@ -179,7 +179,7 @@ func (c *etcdImpl) Do(ctx context.Context, op metaclient.Op) (metaclient.OpRespo
 	default:
 	}
 
-	return metaclient.OpResponse{}, &etcdError{
+	return metaModel.OpResponse{}, &etcdError{
 		displayed: errors.ErrMetaOptionInvalid.Wrap(fmt.Errorf("unrecognized op type:%d", op.T)),
 	}
 }
@@ -195,7 +195,7 @@ type etcdTxn struct {
 	committed bool
 }
 
-func (c *etcdImpl) Txn(ctx context.Context) metaclient.Txn {
+func (c *etcdImpl) Txn(ctx context.Context) metaModel.Txn {
 	return &etcdTxn{
 		Txn: c.cli.Txn(ctx),
 		kv:  c,
@@ -224,7 +224,7 @@ func (c *etcdImpl) GenEpoch(ctx context.Context) (int64, error) {
 	return resp.Header.Revision, nil
 }
 
-func (t *etcdTxn) Do(ops ...metaclient.Op) metaclient.Txn {
+func (t *etcdTxn) Do(ops ...metaModel.Op) metaModel.Txn {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -253,7 +253,7 @@ func (t *etcdTxn) Do(ops ...metaclient.Op) metaclient.Txn {
 	return t
 }
 
-func (t *etcdTxn) Commit() (*metaclient.TxnResponse, metaclient.Error) {
+func (t *etcdTxn) Commit() (*metaModel.TxnResponse, metaModel.Error) {
 	t.mu.Lock()
 	if t.Err != nil {
 		t.mu.Unlock()

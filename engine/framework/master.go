@@ -42,7 +42,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/meta"
-	metaclient "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
@@ -106,7 +106,7 @@ type BaseMaster interface {
 	Master
 
 	// MetaKVClient return user metastore kv client
-	MetaKVClient() metaclient.KVClient
+	MetaKVClient() metaModel.KVClient
 	MetricFactory() promutil.Factory
 	Logger() *zap.Logger
 	MasterMeta() *frameModel.MasterMetaKVData
@@ -135,7 +135,7 @@ type DefaultBaseMaster struct {
 	// framework metastore client
 	frameMetaClient pkgOrm.Client
 	// user metastore raw kvclient
-	userRawKVClient       metaclient.KVClientEx
+	userRawKVClient       metaModel.KVClientEx
 	executorClientManager client.ClientsManager
 	serverMasterClient    client.MasterClient
 
@@ -168,7 +168,7 @@ type DefaultBaseMaster struct {
 
 	// user metastore prefix kvclient
 	// Don't close it. It's just a prefix wrapper for underlying userRawKVClient
-	userMetaKVClient metaclient.KVClient
+	userMetaKVClient metaModel.KVClient
 
 	// metricFactory can produce metric with underlying project info and job info
 	metricFactory promutil.Factory
@@ -200,7 +200,7 @@ type masterParams struct {
 	// framework metastore client
 	FrameMetaClient pkgOrm.Client
 	// user metastore raw kvclient
-	UserRawKVClient       metaclient.KVClientEx
+	UserRawKVClient       metaModel.KVClientEx
 	ExecutorClientManager client.ClientsManager
 	ServerMasterClient    client.MasterClient
 }
@@ -269,7 +269,7 @@ func NewBaseMaster(
 }
 
 // MetaKVClient returns the user space metaclient
-func (m *DefaultBaseMaster) MetaKVClient() metaclient.KVClient {
+func (m *DefaultBaseMaster) MetaKVClient() metaModel.KVClient {
 	return m.userMetaKVClient
 }
 

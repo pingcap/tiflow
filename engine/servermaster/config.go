@@ -23,7 +23,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/pkg/etcdutil"
-	metaclient "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -69,8 +69,8 @@ type Config struct {
 	// NOTE: more items will be add when adding leader election
 	Etcd *etcdutil.ConfigParams `toml:"etcd" json:"etcd"`
 
-	FrameMetaConf *metaclient.StoreConfig `toml:"frame-metastore-conf" json:"frame-metastore-conf"`
-	UserMetaConf  *metaclient.StoreConfig `toml:"user-metastore-conf" json:"user-metastore-conf"`
+	FrameMetaConf *metaModel.StoreConfig `toml:"frame-metastore-conf" json:"frame-metastore-conf"`
+	UserMetaConf  *metaModel.StoreConfig `toml:"user-metastore-conf" json:"user-metastore-conf"`
 
 	KeepAliveTTLStr string `toml:"keepalive-ttl" json:"keepalive-ttl"`
 	// time interval string to check executor aliveness
@@ -208,8 +208,8 @@ func parseURLs(s string) ([]url.URL, error) {
 }
 
 // newFrameMetaConfig return the default framework metastore config
-func newFrameMetaConfig() *metaclient.StoreConfig {
-	conf := metaclient.DefaultStoreConfig()
+func newFrameMetaConfig() *metaModel.StoreConfig {
+	conf := metaModel.DefaultStoreConfig()
 	conf.StoreID = FrameMetaID
 	conf.Endpoints = append(conf.Endpoints, defaultFrameMetaEndpoints)
 	conf.Auth.User = defaultFrameMetaUser
@@ -219,8 +219,8 @@ func newFrameMetaConfig() *metaclient.StoreConfig {
 }
 
 // newDefaultUserMetaConfig return the default user metastore config
-func newDefaultUserMetaConfig() *metaclient.StoreConfig {
-	conf := metaclient.DefaultStoreConfig()
+func newDefaultUserMetaConfig() *metaModel.StoreConfig {
+	conf := metaModel.DefaultStoreConfig()
 	conf.StoreID = DefaultUserMetaID
 	conf.Endpoints = append(conf.Endpoints, defaultUserMetaEndpoints)
 

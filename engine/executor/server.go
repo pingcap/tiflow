@@ -44,7 +44,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
-	metaclient "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
@@ -124,7 +124,7 @@ func (s *Server) buildDeps() (*deps.Deps, error) {
 		return nil, err
 	}
 
-	err = deps.Provide(func() metaclient.KVClientEx {
+	err = deps.Provide(func() metaModel.KVClientEx {
 		return s.metastores.BusinessStore()
 	})
 	if err != nil {

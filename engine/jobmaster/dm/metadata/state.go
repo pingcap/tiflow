@@ -22,7 +22,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 
-	metaclient "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 )
 
 // State represents the state which need to be stored in metadata.
@@ -40,29 +40,29 @@ type TomlStore struct {
 	Store
 
 	state    State
-	kvClient metaclient.KVClient
+	kvClient metaModel.KVClient
 
 	mu sync.RWMutex
 }
 
 // NewTomlStore returns a new TomlStore instance
-func NewTomlStore(kvClient metaclient.KVClient) *TomlStore {
+func NewTomlStore(kvClient metaModel.KVClient) *TomlStore {
 	return &TomlStore{
 		kvClient: kvClient,
 	}
 }
 
-func (ds *TomlStore) putOp(state State) (metaclient.Op, error) {
+func (ds *TomlStore) putOp(state State) (metaModel.Op, error) {
 	var b bytes.Buffer
 	err := toml.NewEncoder(&b).Encode(state)
 	if err != nil {
-		return metaclient.Op{}, errors.Trace(err)
+		return metaModel.Op{}, errors.Trace(err)
 	}
-	return metaclient.OpPut(ds.Key(), b.String()), nil
+	return metaModel.OpPut(ds.Key(), b.String()), nil
 }
 
-func (ds *TomlStore) deleteOp() metaclient.Op {
-	return metaclient.OpDelete(ds.Key())
+func (ds *TomlStore) deleteOp() metaModel.Op {
+	return metaModel.OpDelete(ds.Key())
 }
 
 // checkAllFieldsIsPublic check all fields of a state is public.

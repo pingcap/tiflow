@@ -16,20 +16,20 @@ package meta
 import (
 	"github.com/pingcap/tiflow/engine/pkg/meta/internal/etcdkv"
 	"github.com/pingcap/tiflow/engine/pkg/meta/internal/etcdkv/namespace"
-	metaclient "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 )
 
 // etcdKVClient is the implement of kv interface based on etcd
 // Support namespace isolation and all kv ability
 // etcdImpl -> kvPrefix+Closer -> etcdKVClient
 type etcdKVClient struct {
-	metaclient.Client
-	metaclient.KV
+	metaModel.Client
+	metaModel.KV
 	tenantID string
 }
 
 // NewPrefixKVClient return a kvclient with namespace
-func NewPrefixKVClient(cli metaclient.KVClientEx, tenantID string) metaclient.KVClient {
+func NewPrefixKVClient(cli metaModel.KVClientEx, tenantID string) metaModel.KVClient {
 	pfKV := namespace.NewPrefixKV(cli, namespace.MakeNamespacePrefix(tenantID))
 	return &etcdKVClient{
 		Client:   cli,
@@ -39,6 +39,6 @@ func NewPrefixKVClient(cli metaclient.KVClientEx, tenantID string) metaclient.KV
 }
 
 // NewKVClient return a kvclient without namespace for inner use
-func NewKVClient(conf *metaclient.StoreConfig) (metaclient.KVClientEx, error) {
+func NewKVClient(conf *metaModel.StoreConfig) (metaModel.KVClientEx, error) {
 	return etcdkv.NewEtcdImpl(conf)
 }

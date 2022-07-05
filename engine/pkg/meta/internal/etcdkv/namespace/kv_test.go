@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
-	metaclient "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,7 +44,7 @@ const (
 
 type query struct {
 	key  string
-	opts []metaclient.OpOption
+	opts []metaModel.OpOption
 	err  error
 	// for txn: we only use expected
 	expected []kv
@@ -54,7 +54,7 @@ type action struct {
 	t optype
 	// do action
 	do   kv
-	opts []metaclient.OpOption
+	opts []metaModel.OpOption
 	// query action
 	q query
 }
@@ -65,7 +65,7 @@ type txnAction struct {
 	err error
 }
 
-func prepareData(ctx context.Context, t *testing.T, cli metaclient.KV, p prepare) {
+func prepareData(ctx context.Context, t *testing.T, cli metaModel.KV, p prepare) {
 	if p.kvs != nil {
 		for _, kv := range p.kvs {
 			prsp, perr := cli.Put(ctx, kv.key, kv.value)
@@ -75,7 +75,7 @@ func prepareData(ctx context.Context, t *testing.T, cli metaclient.KV, p prepare
 	}
 }
 
-func testAction(ctx context.Context, t *testing.T, cli metaclient.KV, acts []action) {
+func testAction(ctx context.Context, t *testing.T, cli metaModel.KV, acts []action) {
 	for _, act := range acts {
 		switch act.t {
 		case tGet:
@@ -114,17 +114,17 @@ func testAction(ctx context.Context, t *testing.T, cli metaclient.KV, acts []act
 	}
 }
 
-func testTxnAction(ctx context.Context, t *testing.T, cli metaclient.KV, txns []txnAction) {
+func testTxnAction(ctx context.Context, t *testing.T, cli metaModel.KV, txns []txnAction) {
 	for _, txn := range txns {
-		ops := make([]metaclient.Op, 0, len(txn.acts))
+		ops := make([]metaModel.Op, 0, len(txn.acts))
 		for _, act := range txn.acts {
 			switch act.t {
 			case tGet:
-				ops = append(ops, metaclient.OpGet(act.do.key, act.opts...))
+				ops = append(ops, metaModel.OpGet(act.do.key, act.opts...))
 			case tPut:
-				ops = append(ops, metaclient.OpPut(act.do.key, act.do.value))
+				ops = append(ops, metaModel.OpPut(act.do.key, act.do.value))
 			case tDel:
-				ops = append(ops, metaclient.OpDelete(act.do.key, act.opts...))
+				ops = append(ops, metaModel.OpDelete(act.do.key, act.opts...))
 			default:
 				require.FailNow(t, "unexpected action type")
 			}
@@ -181,17 +181,17 @@ func TestPrefixBasicKV(t *testing.T) {
 			t: tNone,
 			q: query{
 				key:      "hello",
-				opts:     []metaclient.OpOption{},
+				opts:     []metaModel.OpOption{},
 				expected: []kv{},
 			},
 		},
 		{
 			t:    tPut,
 			do:   kv{"hello", "world"},
-			opts: []metaclient.OpOption{},
+			opts: []metaModel.OpOption{},
 			q: query{
 				key:  "hello",
-				opts: []metaclient.OpOption{},
+				opts: []metaModel.OpOption{},
 				expected: []kv{
 					{"hello", "world"},
 				},
@@ -200,20 +200,20 @@ func TestPrefixBasicKV(t *testing.T) {
 		{
 			t:    tDel,
 			do:   kv{"hello", ""},
-			opts: []metaclient.OpOption{},
+			opts: []metaModel.OpOption{},
 			q: query{
 				key:      "hello",
-				opts:     []metaclient.OpOption{},
+				opts:     []metaModel.OpOption{},
 				expected: []kv{},
 			},
 		},
 		{
 			t:    tPut,
 			do:   kv{"hello", "new world"},
-			opts: []metaclient.OpOption{},
+			opts: []metaModel.OpOption{},
 			q: query{
 				key:  "hello",
-				opts: []metaclient.OpOption{},
+				opts: []metaModel.OpOption{},
 				expected: []kv{
 					{"hello", "new world"},
 				},
@@ -250,7 +250,7 @@ func TestTxn(t *testing.T) {
 				{
 					t:    tGet,
 					do:   kv{"hello1", ""},
-					opts: []metaclient.OpOption{},
+					opts: []metaModel.OpOption{},
 					q: query{
 						expected: []kv{
 							{"hello1", "world1"},
@@ -260,7 +260,7 @@ func TestTxn(t *testing.T) {
 				{
 					t:    tPut,
 					do:   kv{"hello3", "world3"},
-					opts: []metaclient.OpOption{},
+					opts: []metaModel.OpOption{},
 					q: query{
 						expected: []kv{},
 					},
@@ -268,7 +268,7 @@ func TestTxn(t *testing.T) {
 				{
 					t:    tPut,
 					do:   kv{"dataflow2", "engine2"},
-					opts: []metaclient.OpOption{},
+					opts: []metaModel.OpOption{},
 					q: query{
 						expected: []kv{},
 					},
@@ -276,7 +276,7 @@ func TestTxn(t *testing.T) {
 				{
 					t:    tDel,
 					do:   kv{"dataflow3", ""},
-					opts: []metaclient.OpOption{},
+					opts: []metaModel.OpOption{},
 					q: query{
 						expected: []kv{},
 					},

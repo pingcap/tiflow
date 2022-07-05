@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	metaclient "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,7 +44,7 @@ const (
 
 type query struct {
 	key  string
-	opts []metaclient.OpOption
+	opts []metaModel.OpOption
 	err  error
 	// for txn: we only use expected
 	expected []kv
@@ -54,12 +54,12 @@ type action struct {
 	t optype
 	// do action
 	do   kv
-	opts []metaclient.OpOption
+	opts []metaModel.OpOption
 	// query action
 	q query
 }
 
-func prepareData(ctx context.Context, t *testing.T, cli metaclient.KVClient, p prepare) {
+func prepareData(ctx context.Context, t *testing.T, cli metaModel.KVClient, p prepare) {
 	if p.kvs != nil {
 		for _, kv := range p.kvs {
 			prsp, perr := cli.Put(ctx, kv.key, kv.value)
@@ -69,7 +69,7 @@ func prepareData(ctx context.Context, t *testing.T, cli metaclient.KVClient, p p
 	}
 }
 
-func testAction(ctx context.Context, t *testing.T, cli metaclient.KVClient, acts []action) {
+func testAction(ctx context.Context, t *testing.T, cli metaModel.KVClient, acts []action) {
 	for _, act := range acts {
 		switch act.t {
 		case tGet:
@@ -124,17 +124,17 @@ func TestMockBasicKV(t *testing.T) {
 			t: tNone,
 			q: query{
 				key:      "hello",
-				opts:     []metaclient.OpOption{},
+				opts:     []metaModel.OpOption{},
 				expected: []kv{},
 			},
 		},
 		{
 			t:    tPut,
 			do:   kv{"hello", "world"},
-			opts: []metaclient.OpOption{},
+			opts: []metaModel.OpOption{},
 			q: query{
 				key:  "hello",
-				opts: []metaclient.OpOption{},
+				opts: []metaModel.OpOption{},
 				expected: []kv{
 					{"hello", "world"},
 				},
@@ -143,20 +143,20 @@ func TestMockBasicKV(t *testing.T) {
 		{
 			t:    tDel,
 			do:   kv{"hello", ""},
-			opts: []metaclient.OpOption{},
+			opts: []metaModel.OpOption{},
 			q: query{
 				key:      "hello",
-				opts:     []metaclient.OpOption{},
+				opts:     []metaModel.OpOption{},
 				expected: []kv{},
 			},
 		},
 		{
 			t:    tPut,
 			do:   kv{"hello", "new world"},
-			opts: []metaclient.OpOption{},
+			opts: []metaModel.OpOption{},
 			q: query{
 				key:  "hello",
-				opts: []metaclient.OpOption{},
+				opts: []metaModel.OpOption{},
 				expected: []kv{
 					{"hello", "new world"},
 				},
@@ -171,7 +171,7 @@ func TestMockBasicKV(t *testing.T) {
 	cli.Close()
 }
 
-func testGenerator(t *testing.T, kvcli metaclient.KVClient) {
+func testGenerator(t *testing.T, kvcli metaModel.KVClient) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	firstEpoch, err := kvcli.GenEpoch(ctx)
@@ -223,10 +223,10 @@ func TestMockTxn(t *testing.T) {
 	require.Nil(t, err)
 
 	txn := cli.Txn(ctx)
-	txn.Do(metaclient.OpGet("key1"))
-	txn.Do(metaclient.OpPut("key3", "value3"))
-	txn.Do(metaclient.OpDelete("key2"))
-	txn.Do(metaclient.OpGet("key2"))
+	txn.Do(metaModel.OpGet("key1"))
+	txn.Do(metaModel.OpPut("key3", "value3"))
+	txn.Do(metaModel.OpDelete("key2"))
+	txn.Do(metaModel.OpGet("key2"))
 	txnRsp, err := txn.Commit()
 	require.Nil(t, err)
 	require.Len(t, txnRsp.Responses, 4)
@@ -245,11 +245,11 @@ func TestMockTxn(t *testing.T) {
 	getRsp = txnRsp.Responses[3].GetResponseGet()
 	require.Len(t, getRsp.Kvs, 0)
 
-	rsp, err := cli.Txn(ctx).Do(metaclient.OpTxn([]metaclient.Op{metaclient.EmptyOp})).Commit()
+	rsp, err := cli.Txn(ctx).Do(metaModel.OpTxn([]metaModel.Op{metaModel.EmptyOp})).Commit()
 	require.Nil(t, rsp)
 	require.Error(t, err)
 
-	rsp, err = cli.Txn(ctx).Do(metaclient.EmptyOp).Commit()
+	rsp, err = cli.Txn(ctx).Do(metaModel.EmptyOp).Commit()
 	require.Nil(t, rsp)
 	require.Error(t, err)
 }

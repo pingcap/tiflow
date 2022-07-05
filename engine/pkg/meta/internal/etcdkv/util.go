@@ -19,14 +19,14 @@ import (
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 
-	metaclient "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 )
 
-func makePutResp(etcdResp *clientv3.PutResponse) *metaclient.PutResponse {
-	resp := &metaclient.PutResponse{
-		Header: &metaclient.ResponseHeader{
+func makePutResp(etcdResp *clientv3.PutResponse) *metaModel.PutResponse {
+	resp := &metaModel.PutResponse{
+		Header: &metaModel.ResponseHeader{
 			// [TODO] use another ClusterID
 			ClusterID: strconv.FormatUint(etcdResp.Header.ClusterId, 10),
 		},
@@ -35,16 +35,16 @@ func makePutResp(etcdResp *clientv3.PutResponse) *metaclient.PutResponse {
 	return resp
 }
 
-func makeGetResp(etcdResp *clientv3.GetResponse) *metaclient.GetResponse {
-	kvs := make([]*metaclient.KeyValue, 0, len(etcdResp.Kvs))
+func makeGetResp(etcdResp *clientv3.GetResponse) *metaModel.GetResponse {
+	kvs := make([]*metaModel.KeyValue, 0, len(etcdResp.Kvs))
 	for _, kv := range etcdResp.Kvs {
-		kvs = append(kvs, &metaclient.KeyValue{
+		kvs = append(kvs, &metaModel.KeyValue{
 			Key:   kv.Key,
 			Value: kv.Value,
 		})
 	}
-	resp := &metaclient.GetResponse{
-		Header: &metaclient.ResponseHeader{
+	resp := &metaModel.GetResponse{
+		Header: &metaModel.ResponseHeader{
 			ClusterID: strconv.FormatUint(etcdResp.Header.ClusterId, 10),
 		},
 		Kvs: kvs,
@@ -53,9 +53,9 @@ func makeGetResp(etcdResp *clientv3.GetResponse) *metaclient.GetResponse {
 	return resp
 }
 
-func makeDeleteResp(etcdResp *clientv3.DeleteResponse) *metaclient.DeleteResponse {
-	resp := &metaclient.DeleteResponse{
-		Header: &metaclient.ResponseHeader{
+func makeDeleteResp(etcdResp *clientv3.DeleteResponse) *metaModel.DeleteResponse {
+	resp := &metaModel.DeleteResponse{
+		Header: &metaModel.ResponseHeader{
 			ClusterID: strconv.FormatUint(etcdResp.Header.ClusterId, 10),
 		},
 	}
@@ -63,28 +63,28 @@ func makeDeleteResp(etcdResp *clientv3.DeleteResponse) *metaclient.DeleteRespons
 	return resp
 }
 
-func makeTxnResp(etcdResp *clientv3.TxnResponse) *metaclient.TxnResponse {
-	rsps := make([]metaclient.ResponseOp, 0, len(etcdResp.Responses))
+func makeTxnResp(etcdResp *clientv3.TxnResponse) *metaModel.TxnResponse {
+	rsps := make([]metaModel.ResponseOp, 0, len(etcdResp.Responses))
 	for _, eRsp := range etcdResp.Responses {
 		switch eRsp.Response.(type) {
 		case *etcdserverpb.ResponseOp_ResponseRange:
 			getRsp := makeGetResp((*clientv3.GetResponse)(eRsp.GetResponseRange()))
-			rsps = append(rsps, metaclient.ResponseOp{
-				Response: &metaclient.ResponseOpResponseGet{
+			rsps = append(rsps, metaModel.ResponseOp{
+				Response: &metaModel.ResponseOpResponseGet{
 					ResponseGet: getRsp,
 				},
 			})
 		case *etcdserverpb.ResponseOp_ResponsePut:
 			putRsp := makePutResp((*clientv3.PutResponse)(eRsp.GetResponsePut()))
-			rsps = append(rsps, metaclient.ResponseOp{
-				Response: &metaclient.ResponseOpResponsePut{
+			rsps = append(rsps, metaModel.ResponseOp{
+				Response: &metaModel.ResponseOpResponsePut{
 					ResponsePut: putRsp,
 				},
 			})
 		case *etcdserverpb.ResponseOp_ResponseDeleteRange:
 			delRsp := makeDeleteResp((*clientv3.DeleteResponse)(eRsp.GetResponseDeleteRange()))
-			rsps = append(rsps, metaclient.ResponseOp{
-				Response: &metaclient.ResponseOpResponseDelete{
+			rsps = append(rsps, metaModel.ResponseOp{
+				Response: &metaModel.ResponseOpResponseDelete{
 					ResponseDelete: delRsp,
 				},
 			})
@@ -93,8 +93,8 @@ func makeTxnResp(etcdResp *clientv3.TxnResponse) *metaclient.TxnResponse {
 		}
 	}
 
-	return &metaclient.TxnResponse{
-		Header: &metaclient.ResponseHeader{
+	return &metaModel.TxnResponse{
+		Header: &metaModel.ResponseHeader{
 			ClusterID: strconv.FormatUint(etcdResp.Header.ClusterId, 10),
 		},
 		Responses: rsps,

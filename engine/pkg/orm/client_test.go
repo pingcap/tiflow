@@ -33,7 +33,7 @@ import (
 	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/dbutil"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	metaclient "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/orm/model"
 	derror "github.com/pingcap/tiflow/pkg/errors"
 )
@@ -67,7 +67,7 @@ func (a anyTime) Match(v driver.Value) bool {
 func TestNewMetaOpsClient(t *testing.T) {
 	t.Parallel()
 
-	var store metaclient.StoreConfig
+	var store metaModel.StoreConfig
 	store.SetEndpoints("127.0.0.1:3306")
 	cli, err := NewClient(store, dbutil.DefaultDBConfig())
 	require.Nil(t, cli)

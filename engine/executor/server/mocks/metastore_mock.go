@@ -9,7 +9,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	common "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	model "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	orm "github.com/pingcap/tiflow/engine/pkg/orm"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
@@ -38,7 +38,7 @@ func (m *MockMetastoreCreator) EXPECT() *MockMetastoreCreatorMockRecorder {
 }
 
 // CreateDBClientForFramework mocks base method.
-func (m *MockMetastoreCreator) CreateDBClientForFramework(arg0 context.Context, arg1 common.StoreConfig) (orm.Client, error) {
+func (m *MockMetastoreCreator) CreateDBClientForFramework(arg0 context.Context, arg1 model.StoreConfig) (orm.Client, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateDBClientForFramework", arg0, arg1)
 	ret0, _ := ret[0].(orm.Client)
@@ -53,7 +53,7 @@ func (mr *MockMetastoreCreatorMockRecorder) CreateDBClientForFramework(arg0, arg
 }
 
 // CreateEtcdCliForServiceDiscovery mocks base method.
-func (m *MockMetastoreCreator) CreateEtcdCliForServiceDiscovery(arg0 context.Context, arg1 common.StoreConfig) (*clientv3.Client, error) {
+func (m *MockMetastoreCreator) CreateEtcdCliForServiceDiscovery(arg0 context.Context, arg1 model.StoreConfig) (*clientv3.Client, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateEtcdCliForServiceDiscovery", arg0, arg1)
 	ret0, _ := ret[0].(*clientv3.Client)
@@ -68,10 +68,10 @@ func (mr *MockMetastoreCreatorMockRecorder) CreateEtcdCliForServiceDiscovery(arg
 }
 
 // CreateMetaKVClientForBusiness mocks base method.
-func (m *MockMetastoreCreator) CreateMetaKVClientForBusiness(arg0 context.Context, arg1 common.StoreConfig) (common.KVClientEx, error) {
+func (m *MockMetastoreCreator) CreateMetaKVClientForBusiness(arg0 context.Context, arg1 model.StoreConfig) (model.KVClientEx, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateMetaKVClientForBusiness", arg0, arg1)
-	ret0, _ := ret[0].(common.KVClientEx)
+	ret0, _ := ret[0].(model.KVClientEx)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

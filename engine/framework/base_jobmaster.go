@@ -29,7 +29,7 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	metaclient "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	derror "github.com/pingcap/tiflow/pkg/errors"
@@ -43,7 +43,7 @@ type BaseJobMaster interface {
 	Worker
 
 	OnError(err error)
-	MetaKVClient() metaclient.KVClient
+	MetaKVClient() metaModel.KVClient
 	MetricFactory() promutil.Factory
 	Logger() *zap.Logger
 	GetWorkers() map[frameModel.WorkerID]WorkerHandle
@@ -142,7 +142,7 @@ func NewBaseJobMaster(
 }
 
 // MetaKVClient implements BaseJobMaster.MetaKVClient
-func (d *DefaultBaseJobMaster) MetaKVClient() metaclient.KVClient {
+func (d *DefaultBaseJobMaster) MetaKVClient() metaModel.KVClient {
 	return d.master.MetaKVClient()
 }
 

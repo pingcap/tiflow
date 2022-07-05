@@ -16,14 +16,14 @@ package servermaster
 import (
 	"testing"
 
-	metaclient "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMetaStoreManager(t *testing.T) {
 	t.Parallel()
 
-	storeConf := &metaclient.StoreConfig{
+	storeConf := &metaModel.StoreConfig{
 		Endpoints: []string{
 			"127.0.0.1",
 			"127.0.0.2",
@@ -34,7 +34,7 @@ func TestMetaStoreManager(t *testing.T) {
 	err := manager.Register("root", storeConf)
 	require.Nil(t, err)
 
-	err = manager.Register("root", &metaclient.StoreConfig{})
+	err = manager.Register("root", &metaModel.StoreConfig{})
 	require.Error(t, err)
 
 	store := manager.GetMetaStore("default")
