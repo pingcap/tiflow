@@ -28,13 +28,13 @@ type balanceScheduler struct {
 	random               *rand.Rand
 	lastRebalanceTime    time.Time
 	checkBalanceInterval time.Duration
-	// keepBalance keeps the scheduler produces schedule tasks regardless of
+	// forceBalance forces the scheduler to produce schedule tasks regardless of
 	// `checkBalanceInterval`.
 	// It is set to true when the last time `Schedule` produces some tasks,
 	// and it is likely there are more tasks will be produced in the next
 	// `Schedule`.
 	// It speeds up rebalance.
-	keepBalance bool
+	forceBalance bool
 
 	maxTaskConcurrency int
 }
@@ -57,7 +57,7 @@ func (b *balanceScheduler) Schedule(
 	captures map[model.CaptureID]*CaptureStatus,
 	replications map[model.TableID]*ReplicationSet,
 ) []*scheduleTask {
-	if !b.keepBalance {
+	if !b.forceBalance {
 		now := time.Now()
 		if now.Sub(b.lastRebalanceTime) < b.checkBalanceInterval {
 			// skip balance.
@@ -76,7 +76,7 @@ func (b *balanceScheduler) Schedule(
 
 	tasks := buildBalanceMoveTables(
 		b.random, currentTables, captures, replications, b.maxTaskConcurrency)
-	b.keepBalance = len(tasks) != 0
+	b.forceBalance = len(tasks) != 0
 	return tasks
 }
 

@@ -58,7 +58,7 @@ func TestSchedulerBalanceCaptureOnline(t *testing.T) {
 
 	// New capture "b" online, but this time it not pass check balance interval.
 	sched.checkBalanceInterval = time.Hour
-	sched.keepBalance = false
+	sched.forceBalance = false
 	captures = map[model.CaptureID]*CaptureStatus{"a": {}, "b": {}}
 	currentTables = []model.TableID{1, 2}
 	replications = map[model.TableID]*ReplicationSet{
