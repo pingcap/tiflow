@@ -23,21 +23,14 @@ import (
 	"sync"
 	"sync/atomic"
 
-<<<<<<< HEAD
-	"github.com/DATA-DOG/go-sqlmock"
-=======
 	"github.com/go-sql-driver/mysql"
-	"github.com/pingcap/errors"
->>>>>>> 6573fa81a (conn(dm): add timeout for Conn (#6055))
 	"github.com/pingcap/failpoint"
+	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
-
-	"github.com/go-sql-driver/mysql"
-	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
 )
 
 var customID int64
