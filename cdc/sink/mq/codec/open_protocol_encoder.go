@@ -75,7 +75,7 @@ func (d *OpenProtocolBatchEncoder) AppendRowChangedEvent(
 	if length > d.maxMessageBytes {
 		log.Warn("Single message too large",
 			zap.Int("max-message-size", d.maxMessageBytes), zap.Int("length", length), zap.Any("table", e.Table))
-		return cerror.ErrJSONCodecRowTooLarge.GenWithStackByArgs()
+		return cerror.ErrOpenProtocolCodecRowTooLarge.GenWithStackByArgs()
 	}
 
 	if len(d.messageBuf) == 0 ||
@@ -195,19 +195,19 @@ type openProtocolBatchEncoderBuilder struct {
 
 // Build a OpenProtocolBatchEncoder
 func (b *openProtocolBatchEncoderBuilder) Build() EventBatchEncoder {
-	encoder := newJSONEventBatchEncoder()
+	encoder := newOpenProtocolBatchEncoder()
 	encoder.(*OpenProtocolBatchEncoder).maxMessageBytes = b.config.maxMessageBytes
 	encoder.(*OpenProtocolBatchEncoder).maxBatchSize = b.config.maxBatchSize
 
 	return encoder
 }
 
-func newJSONEventBatchEncoderBuilder(config *Config) EncoderBuilder {
+func newOpenProtocolBatchEncoderBuilder(config *Config) EncoderBuilder {
 	return &openProtocolBatchEncoderBuilder{config: config}
 }
 
-// newJSONEventBatchEncoder creates a new OpenProtocolBatchEncoder.
-func newJSONEventBatchEncoder() EventBatchEncoder {
+// newOpenProtocolBatchEncoder creates a new OpenProtocolBatchEncoder.
+func newOpenProtocolBatchEncoder() EventBatchEncoder {
 	batch := &OpenProtocolBatchEncoder{}
 	return batch
 }

@@ -391,16 +391,6 @@ error = '''
 invalid task key: %s
 '''
 
-["CDC:ErrJSONCodecInvalidData"]
-error = '''
-json codec invalid data
-'''
-
-["CDC:ErrJSONCodecRowTooLarge"]
-error = '''
-json codec single row too large
-'''
-
 ["CDC:ErrKVStorageBackoffFailed"]
 error = '''
 backoff failed
@@ -609,6 +599,16 @@ this capture is not a owner
 ["CDC:ErrOldValueNotEnabled"]
 error = '''
 old value is not enabled
+'''
+
+["CDC:ErrOpenProtocolCodecInvalidData"]
+error = '''
+open-protocol codec invalid data
+'''
+
+["CDC:ErrOpenProtocolCodecRowTooLarge"]
+error = '''
+open-protocol codec single row too large
 '''
 
 ["CDC:ErrOperateOnClosedNotifier"]

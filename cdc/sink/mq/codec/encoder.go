@@ -49,7 +49,7 @@ type EncoderBuilder interface {
 func NewEventBatchEncoderBuilder(ctx context.Context, c *Config) (EncoderBuilder, error) {
 	switch c.protocol {
 	case config.ProtocolDefault, config.ProtocolOpen:
-		return newJSONEventBatchEncoderBuilder(c), nil
+		return newOpenProtocolBatchEncoderBuilder(c), nil
 	case config.ProtocolCanal:
 		return newCanalEventBatchEncoderBuilder(), nil
 	case config.ProtocolAvro:

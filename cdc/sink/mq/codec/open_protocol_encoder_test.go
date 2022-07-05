@@ -154,7 +154,7 @@ func (s *batchTester) testBatchCodec(
 	}
 }
 
-func TestBuildJSONEventBatchEncoder(t *testing.T) {
+func TestBuildOpenProtocolBatchEncoder(t *testing.T) {
 	t.Parallel()
 	config := NewConfig(config.ProtocolOpen)
 	builder := &openProtocolBatchEncoderBuilder{config: config}
@@ -178,19 +178,19 @@ func TestMaxMessageBytes(t *testing.T) {
 	// for a single message, the overhead is 36(maxRecordOverhead) + 8(versionHea) = 44, just can hold it.
 	a := 87 + 44
 	config := NewConfig(config.ProtocolOpen).WithMaxMessageBytes(a)
-	encoder := newJSONEventBatchEncoderBuilder(config).Build()
+	encoder := newOpenProtocolBatchEncoderBuilder(config).Build()
 	err := encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
 	require.Nil(t, err)
 
 	// cannot hold a single message
 	config = config.WithMaxMessageBytes(a - 1)
-	encoder = newJSONEventBatchEncoderBuilder(config).Build()
+	encoder = newOpenProtocolBatchEncoderBuilder(config).Build()
 	err = encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
 	require.NotNil(t, err)
 
 	// make sure each batch's `Length` not greater than `max-message-bytes`
 	config = config.WithMaxMessageBytes(256)
-	encoder = newJSONEventBatchEncoderBuilder(config).Build()
+	encoder = newOpenProtocolBatchEncoderBuilder(config).Build()
 	for i := 0; i < 10000; i++ {
 		err := encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
 		require.Nil(t, err)
@@ -206,7 +206,7 @@ func TestMaxBatchSize(t *testing.T) {
 	t.Parallel()
 	config := NewConfig(config.ProtocolOpen).WithMaxMessageBytes(1048576)
 	config.maxBatchSize = 64
-	encoder := newJSONEventBatchEncoderBuilder(config).Build()
+	encoder := newOpenProtocolBatchEncoderBuilder(config).Build()
 
 	testEvent := &model.RowChangedEvent{
 		CommitTs: 1,
@@ -222,7 +222,7 @@ func TestMaxBatchSize(t *testing.T) {
 	messages := encoder.Build()
 	sum := 0
 	for _, msg := range messages {
-		decoder, err := NewJSONEventBatchDecoder(msg.Key, msg.Value)
+		decoder, err := NewOpenProtocolBatchDecoder(msg.Key, msg.Value)
 		require.Nil(t, err)
 		count := 0
 		for {
@@ -323,5 +323,5 @@ func TestOpenProtocolBatchCodec(t *testing.T) {
 	config := NewConfig(config.ProtocolOpen).WithMaxMessageBytes(8192)
 	config.maxBatchSize = 64
 	tester := newDefaultBatchTester()
-	tester.testBatchCodec(t, newJSONEventBatchEncoderBuilder(config), NewJSONEventBatchDecoder)
+	tester.testBatchCodec(t, newOpenProtocolBatchEncoderBuilder(config), NewOpenProtocolBatchDecoder)
 }

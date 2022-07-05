@@ -220,7 +220,7 @@ func TestJsonVsCraftVsPB(t *testing.T) {
 		craftEncoder.(*CraftEventBatchEncoder).maxBatchSize = 64
 		craftMessages := encodeRowCase(t, craftEncoder, cs)
 
-		jsonEncoder := newJSONEventBatchEncoder()
+		jsonEncoder := newOpenProtocolBatchEncoder()
 		jsonEncoder.(*OpenProtocolBatchEncoder).maxMessageBytes = 8192
 		jsonEncoder.(*OpenProtocolBatchEncoder).maxBatchSize = 64
 		jsonMessages := encodeRowCase(t, jsonEncoder, cs)
@@ -373,7 +373,7 @@ func init() {
 		panic(err)
 	}
 
-	encoder = newJSONEventBatchEncoder()
+	encoder = newOpenProtocolBatchEncoder()
 	encoder.(*OpenProtocolBatchEncoder).maxMessageBytes = 8192
 	encoder.(*OpenProtocolBatchEncoder).maxBatchSize = 64
 	if codecJSONEncodedRowChanges, err = codecEncodeRowCase(encoder, codecBenchmarkRowChanges); err != nil {
@@ -394,7 +394,7 @@ func BenchmarkCraftEncoding(b *testing.B) {
 }
 
 func BenchmarkJsonEncoding(b *testing.B) {
-	encoder := newJSONEventBatchEncoder()
+	encoder := newOpenProtocolBatchEncoder()
 	encoder.(*OpenProtocolBatchEncoder).maxMessageBytes = 8192
 	encoder.(*OpenProtocolBatchEncoder).maxBatchSize = 64
 	for i := 0; i < b.N; i++ {
@@ -438,7 +438,7 @@ func BenchmarkCraftDecoding(b *testing.B) {
 func BenchmarkJsonDecoding(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		for _, message := range codecJSONEncodedRowChanges {
-			if decoder, err := NewJSONEventBatchDecoder(message.Key, message.Value); err != nil {
+			if decoder, err := NewOpenProtocolBatchDecoder(message.Key, message.Value); err != nil {
 				panic(err)
 			} else {
 				for {

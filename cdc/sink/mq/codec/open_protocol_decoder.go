@@ -21,15 +21,15 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
-// OpenProtocolEventBatchMixedDecoder decodes the byte of a batch into the original messages.
-type OpenProtocolEventBatchMixedDecoder struct {
+// OpenProtocolBatchMixedDecoder decodes the byte of a batch into the original messages.
+type OpenProtocolBatchMixedDecoder struct {
 	mixedBytes []byte
 	nextKey    *mqMessageKey
 	nextKeyLen uint64
 }
 
 // HasNext implements the EventBatchDecoder interface
-func (b *OpenProtocolEventBatchMixedDecoder) HasNext() (model.MessageType, bool, error) {
+func (b *OpenProtocolBatchMixedDecoder) HasNext() (model.MessageType, bool, error) {
 	if !b.hasNext() {
 		return 0, false, nil
 	}
@@ -40,7 +40,7 @@ func (b *OpenProtocolEventBatchMixedDecoder) HasNext() (model.MessageType, bool,
 }
 
 // NextResolvedEvent implements the EventBatchDecoder interface
-func (b *OpenProtocolEventBatchMixedDecoder) NextResolvedEvent() (uint64, error) {
+func (b *OpenProtocolBatchMixedDecoder) NextResolvedEvent() (uint64, error) {
 	if b.nextKey == nil {
 		if err := b.decodeNextKey(); err != nil {
 			return 0, err
@@ -48,7 +48,7 @@ func (b *OpenProtocolEventBatchMixedDecoder) NextResolvedEvent() (uint64, error)
 	}
 	b.mixedBytes = b.mixedBytes[b.nextKeyLen+8:]
 	if b.nextKey.Type != model.MessageTypeResolved {
-		return 0, cerror.ErrJSONCodecInvalidData.GenWithStack("not found resolved event message")
+		return 0, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found resolved event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.mixedBytes[:8])
 	b.mixedBytes = b.mixedBytes[valueLen+8:]
@@ -58,7 +58,7 @@ func (b *OpenProtocolEventBatchMixedDecoder) NextResolvedEvent() (uint64, error)
 }
 
 // NextRowChangedEvent implements the EventBatchDecoder interface
-func (b *OpenProtocolEventBatchMixedDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
+func (b *OpenProtocolBatchMixedDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if b.nextKey == nil {
 		if err := b.decodeNextKey(); err != nil {
 			return nil, err
@@ -66,7 +66,7 @@ func (b *OpenProtocolEventBatchMixedDecoder) NextRowChangedEvent() (*model.RowCh
 	}
 	b.mixedBytes = b.mixedBytes[b.nextKeyLen+8:]
 	if b.nextKey.Type != model.MessageTypeRow {
-		return nil, cerror.ErrJSONCodecInvalidData.GenWithStack("not found row event message")
+		return nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found row event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.mixedBytes[:8])
 	value := b.mixedBytes[8 : valueLen+8]
@@ -81,7 +81,7 @@ func (b *OpenProtocolEventBatchMixedDecoder) NextRowChangedEvent() (*model.RowCh
 }
 
 // NextDDLEvent implements the EventBatchDecoder interface
-func (b *OpenProtocolEventBatchMixedDecoder) NextDDLEvent() (*model.DDLEvent, error) {
+func (b *OpenProtocolBatchMixedDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	if b.nextKey == nil {
 		if err := b.decodeNextKey(); err != nil {
 			return nil, err
@@ -89,7 +89,7 @@ func (b *OpenProtocolEventBatchMixedDecoder) NextDDLEvent() (*model.DDLEvent, er
 	}
 	b.mixedBytes = b.mixedBytes[b.nextKeyLen+8:]
 	if b.nextKey.Type != model.MessageTypeDDL {
-		return nil, cerror.ErrJSONCodecInvalidData.GenWithStack("not found ddl event message")
+		return nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found ddl event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.mixedBytes[:8])
 	value := b.mixedBytes[8 : valueLen+8]
@@ -103,11 +103,11 @@ func (b *OpenProtocolEventBatchMixedDecoder) NextDDLEvent() (*model.DDLEvent, er
 	return ddlEvent, nil
 }
 
-func (b *OpenProtocolEventBatchMixedDecoder) hasNext() bool {
+func (b *OpenProtocolBatchMixedDecoder) hasNext() bool {
 	return len(b.mixedBytes) > 0
 }
 
-func (b *OpenProtocolEventBatchMixedDecoder) decodeNextKey() error {
+func (b *OpenProtocolBatchMixedDecoder) decodeNextKey() error {
 	keyLen := binary.BigEndian.Uint64(b.mixedBytes[:8])
 	key := b.mixedBytes[8 : keyLen+8]
 	// drop value bytes
@@ -121,8 +121,8 @@ func (b *OpenProtocolEventBatchMixedDecoder) decodeNextKey() error {
 	return nil
 }
 
-// OpenProtocolEventBatchDecoder decodes the byte of a batch into the original messages.
-type OpenProtocolEventBatchDecoder struct {
+// OpenProtocolBatchDecoder decodes the byte of a batch into the original messages.
+type OpenProtocolBatchDecoder struct {
 	keyBytes   []byte
 	valueBytes []byte
 	nextKey    *mqMessageKey
@@ -130,7 +130,7 @@ type OpenProtocolEventBatchDecoder struct {
 }
 
 // HasNext implements the EventBatchDecoder interface
-func (b *OpenProtocolEventBatchDecoder) HasNext() (model.MessageType, bool, error) {
+func (b *OpenProtocolBatchDecoder) HasNext() (model.MessageType, bool, error) {
 	if !b.hasNext() {
 		return 0, false, nil
 	}
@@ -141,7 +141,7 @@ func (b *OpenProtocolEventBatchDecoder) HasNext() (model.MessageType, bool, erro
 }
 
 // NextResolvedEvent implements the EventBatchDecoder interface
-func (b *OpenProtocolEventBatchDecoder) NextResolvedEvent() (uint64, error) {
+func (b *OpenProtocolBatchDecoder) NextResolvedEvent() (uint64, error) {
 	if b.nextKey == nil {
 		if err := b.decodeNextKey(); err != nil {
 			return 0, err
@@ -149,7 +149,7 @@ func (b *OpenProtocolEventBatchDecoder) NextResolvedEvent() (uint64, error) {
 	}
 	b.keyBytes = b.keyBytes[b.nextKeyLen+8:]
 	if b.nextKey.Type != model.MessageTypeResolved {
-		return 0, cerror.ErrJSONCodecInvalidData.GenWithStack("not found resolved event message")
+		return 0, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found resolved event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
 	b.valueBytes = b.valueBytes[valueLen+8:]
@@ -159,7 +159,7 @@ func (b *OpenProtocolEventBatchDecoder) NextResolvedEvent() (uint64, error) {
 }
 
 // NextRowChangedEvent implements the EventBatchDecoder interface
-func (b *OpenProtocolEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
+func (b *OpenProtocolBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if b.nextKey == nil {
 		if err := b.decodeNextKey(); err != nil {
 			return nil, err
@@ -167,7 +167,7 @@ func (b *OpenProtocolEventBatchDecoder) NextRowChangedEvent() (*model.RowChanged
 	}
 	b.keyBytes = b.keyBytes[b.nextKeyLen+8:]
 	if b.nextKey.Type != model.MessageTypeRow {
-		return nil, cerror.ErrJSONCodecInvalidData.GenWithStack("not found row event message")
+		return nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found row event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
 	value := b.valueBytes[8 : valueLen+8]
@@ -182,7 +182,7 @@ func (b *OpenProtocolEventBatchDecoder) NextRowChangedEvent() (*model.RowChanged
 }
 
 // NextDDLEvent implements the EventBatchDecoder interface
-func (b *OpenProtocolEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
+func (b *OpenProtocolBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	if b.nextKey == nil {
 		if err := b.decodeNextKey(); err != nil {
 			return nil, err
@@ -190,7 +190,7 @@ func (b *OpenProtocolEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) 
 	}
 	b.keyBytes = b.keyBytes[b.nextKeyLen+8:]
 	if b.nextKey.Type != model.MessageTypeDDL {
-		return nil, cerror.ErrJSONCodecInvalidData.GenWithStack("not found ddl event message")
+		return nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found ddl event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
 	value := b.valueBytes[8 : valueLen+8]
@@ -204,11 +204,11 @@ func (b *OpenProtocolEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) 
 	return ddlEvent, nil
 }
 
-func (b *OpenProtocolEventBatchDecoder) hasNext() bool {
+func (b *OpenProtocolBatchDecoder) hasNext() bool {
 	return len(b.keyBytes) > 0 && len(b.valueBytes) > 0
 }
 
-func (b *OpenProtocolEventBatchDecoder) decodeNextKey() error {
+func (b *OpenProtocolBatchDecoder) decodeNextKey() error {
 	keyLen := binary.BigEndian.Uint64(b.keyBytes[:8])
 	key := b.keyBytes[8 : keyLen+8]
 	msgKey := new(mqMessageKey)
@@ -221,20 +221,20 @@ func (b *OpenProtocolEventBatchDecoder) decodeNextKey() error {
 	return nil
 }
 
-// NewJSONEventBatchDecoder creates a new OpenProtocolEventBatchDecoder.
-func NewJSONEventBatchDecoder(key []byte, value []byte) (EventBatchDecoder, error) {
+// NewOpenProtocolBatchDecoder creates a new OpenProtocolBatchDecoder.
+func NewOpenProtocolBatchDecoder(key []byte, value []byte) (EventBatchDecoder, error) {
 	version := binary.BigEndian.Uint64(key[:8])
 	key = key[8:]
 	if version != BatchVersion1 {
-		return nil, cerror.ErrJSONCodecInvalidData.GenWithStack("unexpected key format version")
+		return nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("unexpected key format version")
 	}
 	// if only decode one byte slice, we choose MixedDecoder
 	if len(key) > 0 && len(value) == 0 {
-		return &OpenProtocolEventBatchMixedDecoder{
+		return &OpenProtocolBatchMixedDecoder{
 			mixedBytes: key,
 		}, nil
 	}
-	return &OpenProtocolEventBatchDecoder{
+	return &OpenProtocolBatchDecoder{
 		keyBytes:   key,
 		valueBytes: value,
 	}, nil
