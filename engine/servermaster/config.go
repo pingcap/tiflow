@@ -43,6 +43,16 @@ const (
 
 	defaultPeerUrls            = "http://127.0.0.1:8291"
 	defaultInitialClusterState = embed.ClusterStateFlagNew
+
+	// DefaultUserMetaID is the ID for default user metastore
+	DefaultUserMetaID        = "_default"
+	defaultUserMetaEndpoints = "127.0.0.1:12479"
+
+	// FrameMetaID is the ID for frame metastore
+	FrameMetaID               = "_root"
+	defaultFrameMetaEndpoints = "127.0.0.1:3336"
+	defaultFrameMetaUser      = "root"
+	defaultFrameMetaPassword  = "123456"
 )
 
 // Config is the configuration for dm-master.
@@ -59,8 +69,8 @@ type Config struct {
 	// NOTE: more items will be add when adding leader election
 	Etcd *etcdutil.ConfigParams `toml:"etcd" json:"etcd"`
 
-	FrameMetaConf *metaclient.StoreConfigParams `toml:"frame-metastore-conf" json:"frame-metastore-conf"`
-	UserMetaConf  *metaclient.StoreConfigParams `toml:"user-metastore-conf" json:"user-metastore-conf"`
+	FrameMetaConf *metaclient.StoreConfig `toml:"frame-metastore-conf" json:"frame-metastore-conf"`
+	UserMetaConf  *metaclient.StoreConfig `toml:"user-metastore-conf" json:"user-metastore-conf"`
 
 	KeepAliveTTLStr string `toml:"keepalive-ttl" json:"keepalive-ttl"`
 	// time interval string to check executor aliveness
@@ -77,7 +87,7 @@ type Config struct {
 func (c *Config) String() string {
 	cfg, err := json.Marshal(c)
 	if err != nil {
-		log.L().Error("marshal to json", zap.Reflect("master config", c), logutil.ShortError(err))
+		log.Error("marshal to json", zap.Reflect("master config", c), logutil.ShortError(err))
 	}
 	return string(cfg)
 }
@@ -88,7 +98,7 @@ func (c *Config) Toml() (string, error) {
 
 	err := toml.NewEncoder(&b).Encode(c)
 	if err != nil {
-		log.L().Error("fail to marshal config to toml", logutil.ShortError(err))
+		log.Error("fail to marshal config to toml", logutil.ShortError(err))
 	}
 
 	return b.String(), nil
@@ -149,8 +159,8 @@ func GetDefaultMasterConfig() *Config {
 			PeerUrls:            defaultPeerUrls,
 			InitialClusterState: defaultInitialClusterState,
 		},
-		FrameMetaConf:        NewFrameMetaConfig(),
-		UserMetaConf:         NewDefaultUserMetaConfig(),
+		FrameMetaConf:        newFrameMetaConfig(),
+		UserMetaConf:         newDefaultUserMetaConfig(),
 		KeepAliveTTLStr:      defaultKeepAliveTTL,
 		KeepAliveIntervalStr: defaultKeepAliveInterval,
 		RPCTimeoutStr:        defaultRPCTimeout,
@@ -195,4 +205,24 @@ func parseURLs(s string) ([]url.URL, error) {
 		urls = append(urls, *u)
 	}
 	return urls, nil
+}
+
+// newFrameMetaConfig return the default framework metastore config
+func newFrameMetaConfig() *metaclient.StoreConfig {
+	conf := metaclient.DefaultStoreConfig()
+	conf.StoreID = FrameMetaID
+	conf.Endpoints = append(conf.Endpoints, defaultFrameMetaEndpoints)
+	conf.Auth.User = defaultFrameMetaUser
+	conf.Auth.Passwd = defaultFrameMetaPassword
+
+	return &conf
+}
+
+// newDefaultUserMetaConfig return the default user metastore config
+func newDefaultUserMetaConfig() *metaclient.StoreConfig {
+	conf := metaclient.DefaultStoreConfig()
+	conf.StoreID = DefaultUserMetaID
+	conf.Endpoints = append(conf.Endpoints, defaultUserMetaEndpoints)
+
+	return &conf
 }

@@ -19,7 +19,6 @@ import (
 	gerrors "errors"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	dmysql "github.com/go-sql-driver/mysql"
@@ -32,6 +31,7 @@ import (
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	engineModel "github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/dbutil"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	"github.com/pingcap/tiflow/engine/pkg/orm/model"
@@ -142,14 +142,14 @@ type ResourceClient interface {
 }
 
 // NewClient return the client to operate framework metastore
-func NewClient(mc metaclient.StoreConfigParams, conf DBConfig) (Client, error) {
+func NewClient(mc metaclient.StoreConfig, conf dbutil.DBConfig) (Client, error) {
 	err := createDatabaseForProject(mc, tenant.FrameProjectInfo.UniqueID(), conf)
 	if err != nil {
 		return nil, err
 	}
 
 	dsn := generateDSNByParams(mc, tenant.FrameProjectInfo.UniqueID(), conf, true)
-	sqlDB, err := newSQLDB("mysql", dsn, conf)
+	sqlDB, err := dbutil.NewSQLDB("mysql", dsn, &conf)
 	if err != nil {
 		return nil, err
 	}
@@ -163,13 +163,13 @@ func NewClient(mc metaclient.StoreConfigParams, conf DBConfig) (Client, error) {
 }
 
 // TODO: check the projectID
-func createDatabaseForProject(mc metaclient.StoreConfigParams, projectID tenant.ProjectID, conf DBConfig) error {
+func createDatabaseForProject(mc metaclient.StoreConfig, projectID tenant.ProjectID, conf dbutil.DBConfig) error {
 	dsn := generateDSNByParams(mc, projectID, conf, false)
-	log.L().Info("mysql connection", zap.String("dsn", dsn))
+	log.Info("mysql connection", zap.String("dsn", dsn))
 
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
-		log.L().Error("open dsn fail", zap.String("dsn", dsn), zap.Error(err))
+		log.Error("open dsn fail", zap.String("dsn", dsn), zap.Error(err))
 		return errors.ErrMetaOpFail.Wrap(err)
 	}
 	defer db.Close()
@@ -187,15 +187,17 @@ func createDatabaseForProject(mc metaclient.StoreConfigParams, projectID tenant.
 
 // generateDSNByParams will use projectID as DBName to achieve isolation.
 // Besides, it will add some default mysql params to the dsn
-func generateDSNByParams(mc metaclient.StoreConfigParams, projectID tenant.ProjectID,
-	conf DBConfig, withDB bool,
+func generateDSNByParams(mc metaclient.StoreConfig, projectID tenant.ProjectID,
+	conf dbutil.DBConfig, withDB bool,
 ) string {
 	dsnCfg := dmysql.NewConfig()
 	if dsnCfg.Params == nil {
 		dsnCfg.Params = make(map[string]string, 1)
 	}
-	dsnCfg.User = mc.Auth.User
-	dsnCfg.Passwd = mc.Auth.Passwd
+	if mc.Auth != nil {
+		dsnCfg.User = mc.Auth.User
+		dsnCfg.Passwd = mc.Auth.Passwd
+	}
 	dsnCfg.Net = "tcp"
 	dsnCfg.Addr = mc.Endpoints[0]
 	if withDB {
@@ -203,42 +205,16 @@ func generateDSNByParams(mc metaclient.StoreConfigParams, projectID tenant.Proje
 	}
 	dsnCfg.InterpolateParams = true
 	// dsnCfg.MultiStatements = true
-	dsnCfg.Params["readTimeout"] = conf.ReadTimeout
-	dsnCfg.Params["writeTimeout"] = conf.WriteTimeout
-	dsnCfg.Params["timeout"] = conf.DialTimeout
+	dsnCfg.Params["readTimeout"] = mc.ReadTimeout
+	dsnCfg.Params["writeTimeout"] = mc.WriteTimeout
+	dsnCfg.Params["timeout"] = mc.DialTimeout
 	dsnCfg.Params["parseTime"] = "true"
 	// TODO: check for timezone
 	dsnCfg.Params["loc"] = "Local"
-	dsnCfg.Params["sql_mode"] = strconv.Quote(getSQLStrictMode())
+	dsnCfg.Params["sql_mode"] = strconv.Quote(dbutil.GetSQLStrictMode())
 
 	// dsn format: [username[:password]@][protocol[(address)]]/
 	return dsnCfg.FormatDSN()
-}
-
-// getSQLStrictMode return SQL strict mode for metastore
-func getSQLStrictMode() string {
-	needEnable := []string{
-		"STRICT_TRANS_TABLES",
-		"STRICT_ALL_TABLES",
-		"ERROR_FOR_DIVISION_BY_ZERO",
-	}
-
-	return strings.Join(needEnable, ",")
-}
-
-// newSqlDB return sql.DB for specified driver and dsn
-func newSQLDB(driver string, dsn string, conf DBConfig) (*sql.DB, error) {
-	db, err := sql.Open(driver, dsn)
-	if err != nil {
-		log.L().Error("open dsn fail", zap.String("dsn", dsn), zap.Any("config", conf), zap.Error(err))
-		return nil, errors.ErrMetaOpFail.Wrap(err)
-	}
-
-	db.SetConnMaxIdleTime(conf.ConnMaxIdleTime)
-	db.SetConnMaxLifetime(conf.ConnMaxLifeTime)
-	db.SetMaxIdleConns(conf.MaxIdleConns)
-	db.SetMaxOpenConns(conf.MaxOpenConns)
-	return db, nil
 }
 
 func newClient(sqlDB *sql.DB) (*metaOpsClient, error) {
@@ -250,7 +226,7 @@ func newClient(sqlDB *sql.DB) (*metaOpsClient, error) {
 		// TODO: logger
 	})
 	if err != nil {
-		log.L().Error("create gorm client fail", zap.Error(err))
+		log.Error("create gorm client fail", zap.Error(err))
 		return nil, errors.ErrMetaNewClientFail.Wrap(err)
 	}
 

@@ -57,3 +57,15 @@ func mustWriteToTempFile(t *testing.T, content string) (filePath string) {
 
 	return fd.Name()
 }
+
+func TestDefaultMetaStoreManager(t *testing.T) {
+	t.Parallel()
+
+	store := newFrameMetaConfig()
+	require.Equal(t, FrameMetaID, store.StoreID)
+	require.Equal(t, defaultFrameMetaEndpoints, store.Endpoints[0])
+
+	store = newDefaultUserMetaConfig()
+	require.Equal(t, DefaultUserMetaID, store.StoreID)
+	require.Equal(t, defaultUserMetaEndpoints, store.Endpoints[0])
+}

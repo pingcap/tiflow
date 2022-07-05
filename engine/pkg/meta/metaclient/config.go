@@ -14,46 +14,85 @@
 package metaclient
 
 import (
-	"fmt"
 	"strings"
+
+	dmysql "github.com/go-sql-driver/mysql"
+
+	"github.com/pingcap/tiflow/engine/pkg/dbutil"
 )
 
-// defines const variables used in metastore client
 const (
-	FrameMetaID       = "root"
-	DefaultUserMetaID = "default"
-
-	DefaultUserMetaEndpoints = "127.0.0.1:12479"
+	defaultReadTimeout  = "3s"
+	defaultWriteTimeout = "3s"
+	defaultDialTimeout  = "3s"
 )
 
-// AuthConfParams is basic password authentication configurations
+// AuthConfParams is basic authentication configurations
 type AuthConfParams struct {
 	User   string `toml:"user" json:"user"`
 	Passwd string `toml:"passwd" json:"passwd"`
 }
 
-// StoreConfigParams is metastore connection configurations
-type StoreConfigParams struct {
+// StoreConfig is metastore connection configurations
+type StoreConfig struct {
 	// storeID is the unique readable identifier for a store
-	StoreID string `toml:"store-id" json:"store-id"`
-	// TODO: replace the slice when we migrate to db
-	Endpoints []string       `toml:"endpoints" json:"endpoints"`
-	Auth      AuthConfParams `toml:"auth" json:"auth"`
+	StoreID   string          `toml:"store-id" json:"store-id"`
+	Endpoints []string        `toml:"endpoints" json:"endpoints"`
+	Auth      *AuthConfParams `toml:"auth" json:"auth"`
+	// Schema is the predefine schema name for cluster metastore
+	Schema       string `toml:"schema" json:"schema"`
+	ReadTimeout  string `toml:"read-timeout" json:"read-timeout"`
+	WriteTimeout string `toml:"write-timeout" json:"write-timeout"`
+	DialTimeout  string `toml:"dial-timeout" json:"dial-timeout"`
+	// DB configs if backend metastore is DB
+	DBConf *dbutil.DBConfig `toml:"meta-dbconfs" json:"meta-dbconfs"`
 }
 
-// SetEndpoints sets endpoints to StoreConfigParams
-func (s *StoreConfigParams) SetEndpoints(endpoints string) {
+// SetEndpoints sets endpoints to StoreConfig
+func (s *StoreConfig) SetEndpoints(endpoints string) {
 	if endpoints != "" {
 		s.Endpoints = strings.Split(endpoints, ",")
 	}
 }
 
-// GenerateDsn generates dsn string from store config parameters
-// dsn format: [username[:password]@][protocol[(address)]]
-func (s *StoreConfigParams) GenerateDsn() string {
-	if len(s.Endpoints) == 0 {
-		return ""
+// DefaultStoreConfig return a default StoreConfig
+func DefaultStoreConfig() StoreConfig {
+	dbConf := dbutil.DefaultDBConfig()
+	return StoreConfig{
+		Endpoints:    []string{},
+		Auth:         &AuthConfParams{},
+		ReadTimeout:  defaultReadTimeout,
+		WriteTimeout: defaultWriteTimeout,
+		DialTimeout:  defaultDialTimeout,
+		DBConf:       &dbConf,
+	}
+}
+
+// GenerateDSNByParams generates a dsn string.
+// dsn format: [username[:password]@][protocol[(address)]]/
+func GenerateDSNByParams(storeConf *StoreConfig) string {
+	if storeConf == nil {
+		return "invalid dsn"
 	}
 
-	return fmt.Sprintf("%s:%s@tcp(%s)", s.Auth.User, s.Auth.Passwd, s.Endpoints[0])
+	dsnCfg := dmysql.NewConfig()
+	if dsnCfg.Params == nil {
+		dsnCfg.Params = make(map[string]string, 1)
+	}
+	if storeConf.Auth != nil {
+		dsnCfg.User = storeConf.Auth.User
+		dsnCfg.Passwd = storeConf.Auth.Passwd
+	}
+	dsnCfg.Net = "tcp"
+	dsnCfg.Addr = storeConf.Endpoints[0]
+	dsnCfg.DBName = storeConf.Schema
+	dsnCfg.InterpolateParams = true
+	dsnCfg.Params["parseTime"] = "true"
+	// TODO: check for timezone
+	dsnCfg.Params["loc"] = "Local"
+	dsnCfg.Params["readTimeout"] = storeConf.ReadTimeout
+	dsnCfg.Params["writeTimeout"] = storeConf.WriteTimeout
+	dsnCfg.Params["timeout"] = storeConf.DialTimeout
+
+	return dsnCfg.FormatDSN()
 }

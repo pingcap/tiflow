@@ -170,7 +170,7 @@ func NewBaseWorker(
 ) BaseWorker {
 	var params workerParams
 	if err := ctx.Deps().Fill(&params); err != nil {
-		log.L().Panic("Failed to fill dependencies for BaseWorker",
+		log.Panic("Failed to fill dependencies for BaseWorker",
 			zap.Error(err))
 	}
 

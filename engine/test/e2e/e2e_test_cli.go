@@ -69,7 +69,7 @@ func NewUTCli(
 		return nil, errors.Trace(err)
 	}
 
-	conf := metaclient.StoreConfigParams{Endpoints: userMetaAddrs}
+	conf := metaclient.StoreConfig{Endpoints: userMetaAddrs}
 	userRawKVClient, err := kvclient.NewKVClient(&conf)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -248,20 +248,20 @@ func (cli *ChaosCli) GetRevision(ctx context.Context) (int64, error) {
 }
 
 func runCmdHandleError(cmd *exec.Cmd) []byte {
-	log.L().Info("Start executing command", zap.String("cmd", cmd.String()))
+	log.Info("Start executing command", zap.String("cmd", cmd.String()))
 	bytes, err := cmd.Output()
 	if err, ok := err.(*exec.ExitError); ok {
-		log.L().Info("Running command failed", zap.ByteString("stderr", err.Stderr))
+		log.Info("Running command failed", zap.ByteString("stderr", err.Stderr))
 	}
 
 	if err != nil {
-		log.L().Fatal("Running command failed",
+		log.Fatal("Running command failed",
 			zap.Error(err),
 			zap.String("command", cmd.String()),
 			zap.ByteString("output", bytes))
 	}
 
-	log.L().Info("Finished executing command", zap.String("cmd", cmd.String()), zap.ByteString("output", bytes))
+	log.Info("Finished executing command", zap.String("cmd", cmd.String()), zap.ByteString("output", bytes))
 	return bytes
 }
 
@@ -320,19 +320,19 @@ func (cli *ChaosCli) TransferEtcdLeader(ctx context.Context) error {
 func (cli *ChaosCli) ContainerRestart(name string) {
 	cmd := exec.Command("docker", "restart", name)
 	runCmdHandleError(cmd)
-	log.L().Info("Finished restarting container", zap.String("name", name))
+	log.Info("Finished restarting container", zap.String("name", name))
 }
 
 // ContainerStop stops a docker container
 func (cli *ChaosCli) ContainerStop(name string) {
 	cmd := exec.Command("docker", "stop", name)
 	runCmdHandleError(cmd)
-	log.L().Info("Finished stopping container", zap.String("name", name))
+	log.Info("Finished stopping container", zap.String("name", name))
 }
 
 // ContainerStart starts a docker container
 func (cli *ChaosCli) ContainerStart(name string) {
 	cmd := exec.Command("docker", "start", name)
 	runCmdHandleError(cmd)
-	log.L().Info("Finished starting container", zap.String("name", name))
+	log.Info("Finished starting container", zap.String("name", name))
 }
