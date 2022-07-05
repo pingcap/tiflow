@@ -72,11 +72,10 @@ func preCheckSinkURI(sinkURIStr string) error {
 	// Notice: We should not check the host name is empty or not,
 	// because we have blackhole sink which has empty host name.
 	// Also notice the host name different from host(host+port).
-	if util.IsIPv6Address(sinkURI.Hostname()) {
-		if !util.IsValidIPv6AddressInURI(sinkURI.Host) {
-			return cerror.ErrSinkURIInvalid.GenWithStack("sink uri host is not valid IPv6 address, " +
-				"when using IPv6 address in URI, please use [ipv6-address]:port")
-		}
+	if util.IsIPv6Address(sinkURI.Hostname()) &&
+		!util.IsValidIPv6AddressInURI(sinkURI.Host) {
+		return cerror.ErrSinkURIInvalid.GenWithStack("sink uri host is not valid IPv6 address, " +
+			"when using IPv6 address in URI, please use [ipv6-address]:port")
 	}
 
 	return nil
