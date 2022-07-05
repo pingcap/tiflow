@@ -518,7 +518,7 @@ func (s *Server) registerMetaStore() error {
 	if err != nil {
 		return err
 	}
-	if s.userMetaKVClient, err = kvclient.NewKVClient(cfg.UserMetaConf); err != nil {
+	if s.userMetaKVClient, err = meta.NewKVClient(cfg.UserMetaConf); err != nil {
 		log.Error("connect to user metastore fail", zap.Any("config", cfg.UserMetaConf), zap.Error(err))
 		return err
 	}
