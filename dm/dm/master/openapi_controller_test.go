@@ -20,6 +20,7 @@ package master
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -486,8 +487,8 @@ func (s *OpenAPIControllerSuite) TestTaskControllerWithInvalidTask() {
 						ErrClass: "database",
 						ErrScope: "downstream",
 						ErrLevel: "high",
-						Message:  "fail to initialize unit Load of subtask orders_netpay_pay_inf_nuccinterconn_zh_ext_2022_[6-12] : execute statement failed: CREATE TABLE IF NOT EXISTS `dm_meta`.`orders_netpay_pay_inf_nuccinterconn_zh_ext_2022_[6-12]_lightning_checkpoint_list` (\n\t\ttask_name varchar(255) NOT NULL,\n\t\tsource_name varchar(255) NOT NULL,\n\t\tstatus varchar(10) NOT NULL DEFAULT 'init' COMMENT 'init,running,finished',\n\t\tPRIMARY KEY (task_name, source_name)\n\t);\n",
-						RawCause: "Error 1059: Identifier name 'orders_netpay_pay_inf_nuccinterconn_zh_ext_2022_[6-12]_lightning_checkpoint_list' is too long.",
+						Message:  fmt.Sprintf("fail to initialize unit Load of %s : execute statement failed: CREATE TABLE IF NOT EXISTS `dm_meta`.`%s` (\n\t\ttask_name varchar(255) NOT NULL,\n\t\tsource_name varchar(255) NOT NULL,\n\t\tstatus varchar(10) NOT NULL DEFAULT 'init' COMMENT 'init,running,finished',\n\t\tPRIMARY KEY (task_name, source_name)\n\t);\n", task.Name, task.Name),
+						RawCause: fmt.Sprintf("Error 1059: Identifier name '%s' is too long.", task.Name),
 					}},
 				},
 			}},

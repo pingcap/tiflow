@@ -15,6 +15,7 @@ package fixtures
 
 import (
 	"encoding/json"
+	"math/rand"
 
 	"github.com/pingcap/tiflow/dm/openapi"
 )
@@ -60,7 +61,7 @@ var (
 	{
 		"enhance_online_schema_change": true,
 		"meta_schema": "dm_meta",
-		"name": "orders_netpay_pay_inf_nuccinterconn_zh_ext_2022_[6-12]",
+		"name": "a5fb4a7540d343fa853c55ade2d08e6d03681d9e05d6240c0",
 		"on_duplicate": "error",
 		"source_config": {
 		  "full_migrate_conf": {
@@ -165,8 +166,17 @@ func GenNoShardOpenAPITaskForTest() (openapi.Task, error) {
 
 // GenNoShardErrNameOpenAPITaskForTest generates a no-shard openapi.Task with task.Name out of length for test.
 func GenNoShardErrNameOpenAPITaskForTest() (openapi.Task, error) {
+	generateAnErrorNameFunc := func(length int) string {
+		allowedChars := []rune("1234567890abcdefghijklmnopqrstuvwxyz")
+		errNameString := make([]rune, length)
+		for i := range errNameString {
+			errNameString[i] = allowedChars[rand.Intn(len(allowedChars))]
+		}
+		return string(errNameString)
+	}
 	t := openapi.Task{}
 	err := json.Unmarshal([]byte(noShardErrNameJSONStr), &t)
+	t.Name = generateAnErrorNameFunc(65)
 	return t, err
 }
 
