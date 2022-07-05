@@ -129,7 +129,7 @@ func rowChangeColumns2MQColumns(cols []*model.Column) map[string]column {
 			continue
 		}
 		c := column{}
-		c.FromRowChangeColumn(col)
+		c.fromRowChangeColumn(col)
 		jsonCols[col.Name] = c
 	}
 	if len(jsonCols) == 0 {

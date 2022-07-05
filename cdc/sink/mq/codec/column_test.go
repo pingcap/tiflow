@@ -54,7 +54,7 @@ func TestNonBinaryStringCol(t *testing.T) {
 		Value: "value",
 	}
 	mqCol := column{}
-	mqCol.FromRowChangeColumn(col)
+	mqCol.fromRowChangeColumn(col)
 	row := &mqMessageRow{Update: map[string]column{"test": mqCol}}
 	rowEncode, err := row.encode()
 	require.Nil(t, err)
@@ -77,7 +77,7 @@ func TestVarBinaryCol(t *testing.T) {
 		Value: []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
 	}
 	mqCol := column{}
-	mqCol.FromRowChangeColumn(col)
+	mqCol.fromRowChangeColumn(col)
 	row := &mqMessageRow{Update: map[string]column{"test": mqCol}}
 	rowEncode, err := row.encode()
 	require.Nil(t, err)

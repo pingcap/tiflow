@@ -40,7 +40,7 @@ func newColumn(value any, tp byte) *column {
 	}
 }
 
-func (c *column) FromRowChangeColumn(col *model.Column) {
+func (c *column) fromRowChangeColumn(col *model.Column) {
 	c.Type = col.Type
 	c.Flag = col.Flag
 	if c.Flag.IsHandleKey() {
