@@ -13,7 +13,25 @@
 
 package model
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
+)
+
+type ClientType int
+
+type (
+	ProjectID = tenant.ProjectID
+	JobID     = model.JobID
+)
+
+const (
+	UnknownKVClientType = ClientType(iota)
+	EtcdKVClientType
+	SQLKVClientType
+)
 
 // ResponseHeader is common response header
 type ResponseHeader struct {

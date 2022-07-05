@@ -53,7 +53,7 @@ func RetryMockBackendEtcd() (s *embed.Etcd, addr string, err error) {
 		retry.WithMaxTries(3 /* fail after 10 seconds*/),
 		retry.WithIsRetryableErr(func(err error) bool {
 			if strings.Contains(err.Error(), "address already in use") {
-				log.Info("address already in use, retry again")
+				log.L().Info("address already in use, retry again")
 				return true
 			}
 			return false
@@ -80,7 +80,7 @@ func mockBackendEtcd() (*embed.Etcd, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	log.Info("Allocate server peer port", zap.String("peers", peers))
+	log.L().Info("Allocate server peer port", zap.String("peers", peers))
 	u, err := url.Parse(peers)
 	if err != nil {
 		return nil, "", err
@@ -90,7 +90,7 @@ func mockBackendEtcd() (*embed.Etcd, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	log.Info("Allocate server advertises port", zap.String("advertises", advertises))
+	log.L().Info("Allocate server advertises port", zap.String("advertises", advertises))
 	u, err = url.Parse(advertises)
 	if err != nil {
 		return nil, "", err
@@ -102,7 +102,7 @@ func mockBackendEtcd() (*embed.Etcd, string, error) {
 	}
 	select {
 	case <-svr.Server.ReadyNotify():
-		log.Info("Server is ready!")
+		log.L().Info("Server is ready!")
 	case <-time.After(60 * time.Second):
 		svr.Server.Stop() // trigger a shutdown
 		svr.Close()

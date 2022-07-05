@@ -215,7 +215,7 @@ func newFrameMetaConfig() *metaModel.StoreConfig {
 	conf.Auth.User = defaultFrameMetaUser
 	conf.Auth.Passwd = defaultFrameMetaPassword
 
-	return &conf
+	return conf
 }
 
 // newDefaultUserMetaConfig return the default user metastore config
@@ -224,5 +224,5 @@ func newDefaultUserMetaConfig() *metaModel.StoreConfig {
 	conf.StoreID = DefaultUserMetaID
 	conf.Endpoints = append(conf.Endpoints, defaultUserMetaEndpoints)
 
-	return &conf
+	return conf
 }

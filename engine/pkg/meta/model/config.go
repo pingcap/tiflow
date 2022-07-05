@@ -55,16 +55,15 @@ func (s *StoreConfig) SetEndpoints(endpoints string) {
 	}
 }
 
-// DefaultStoreConfig return a default StoreConfig
-func DefaultStoreConfig() StoreConfig {
-	dbConf := dbutil.DefaultDBConfig()
-	return StoreConfig{
+// DefaultStoreConfig return a default *StoreConfig
+func DefaultStoreConfig() *StoreConfig {
+	return &StoreConfig{
 		Endpoints:    []string{},
 		Auth:         &AuthConfParams{},
 		ReadTimeout:  defaultReadTimeout,
 		WriteTimeout: defaultWriteTimeout,
 		DialTimeout:  defaultDialTimeout,
-		DBConf:       &dbConf,
+		DBConf:       dbutil.DefaultDBConfig(),
 	}
 }
 

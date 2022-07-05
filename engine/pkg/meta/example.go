@@ -18,24 +18,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
-	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 )
 
 // Backend KV store data:
-//|		KEY		|		VALUE		|		TTL		|	REVISION	|
-//|		apple	|		 red		|		15		|		1		|
-//|		orange  |		orange		|		0		|		10		|
-//|		data	|		flow		|		0		|		5		|
+//|		KEY		|		VALUE	|		TTL		|	REVISION	|
+//|		apple	|		 red	|		15		|		1		|
+//|		orange  |		orange	|		0		|		10		|
+//|		data	|		flow	|		0		|		5		|
 //|		ticdc	|		kv		|		0		|		5		|
 //|		dm		|		DDL		|		0		|		18		|
 
 // nolint:deadcode, ineffassign
 func test(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	cli := mock.NewMockKVClient(ctrl)
+	cli := NewKVClient(metaModel.SQLKVClientType, metaModel.DefaultStoreConfig())
 	defer cli.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
