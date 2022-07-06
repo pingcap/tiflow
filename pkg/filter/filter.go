@@ -21,8 +21,20 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
-// Filter is an event filter implementation.
-type Filter struct {
+// All methods of Filter are safe for concurrent use.
+type Filter interface {
+	// ShouldIgnoreDMLEvent return true and nil if the DML event should be ignored.
+	ShouldIgnoreDMLEvent(dml *model.RowChangedEvent, tableInfo *timodel.TableInfo) (bool, error)
+	// ShouldIgnoreDDLEvent return true and nil if the DDL event should be ignored.
+	ShouldIgnoreDDLEvent(ddl *model.DDLEvent) (bool, error)
+	// ShouldDiscardDDL returns true if this DDL should be discarded.
+	ShouldDiscardDDL(ddlType timodel.ActionType) bool
+	// ShouldIgnoreTable return true if the table should be ignored.
+	ShouldIgnoreTable(schema, table string) bool
+}
+
+// filter implements Filter.
+type filter struct {
 	// tableFilter is used to filter in dml/ddl event by table name.
 	tableFilter tfilter.Filter
 	// dmlExprFilter is used to filter out dml event by its columns value.
@@ -35,7 +47,7 @@ type Filter struct {
 }
 
 // NewFilter creates a filter.
-func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
+func NewFilter(cfg *config.ReplicaConfig) (Filter, error) {
 	f, err := VerifyRules(cfg)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err)
@@ -45,7 +57,7 @@ func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
 		f = tfilter.CaseInsensitive(f)
 	}
 	// fizz: we need to set correct timezone
-	// fizz: we need to check if we should ne a dmlExprFilter
+	// fizz: we need to check if we should new a dmlExprFilter
 	dmlExprFilter, err := newExprFilter("system", cfg.Filter)
 	// fizz: we need to complete the error handler
 	if err != nil {
@@ -56,7 +68,7 @@ func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Filter{
+	return &filter{
 		tableFilter:      f,
 		dmlExprFilter:    dmlExprFilter,
 		sqlEventFilter:   sqlEventFilter,
@@ -70,7 +82,7 @@ func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
 // 1. By table name.
 // 2. By type.
 // 3. By columns value.
-func (f *Filter) ShouldIgnoreDMLEvent(
+func (f *filter) ShouldIgnoreDMLEvent(
 	dml *model.RowChangedEvent,
 	ti *timodel.TableInfo,
 ) (bool, error) {
@@ -82,7 +94,7 @@ func (f *Filter) ShouldIgnoreDMLEvent(
 		return true, nil
 	}
 
-	ignoreByEventType, err := f.sqlEventFilter.skipDMLEvent(dml)
+	ignoreByEventType, err := f.sqlEventFilter.shouldSkipDML(dml)
 	if err != nil {
 		return false, err
 	}
@@ -98,7 +110,7 @@ func (f *Filter) ShouldIgnoreDMLEvent(
 // 2. By table name.
 // 3. By type.
 // 4. By query.
-func (f *Filter) ShouldIgnoreDDLEvent(ddl *model.DDLEvent) (bool, error) {
+func (f *filter) ShouldIgnoreDDLEvent(ddl *model.DDLEvent) (bool, error) {
 	if f.shouldIgnoreStartTs(ddl.StartTs) {
 		return true, nil
 	}
@@ -114,13 +126,13 @@ func (f *Filter) ShouldIgnoreDDLEvent(ddl *model.DDLEvent) (bool, error) {
 	if shouldIgnoreTableOrSchema {
 		return true, nil
 	}
-	return f.sqlEventFilter.skipDDLJob(ddl)
+	return f.sqlEventFilter.shouldSkipDDL(ddl)
 }
 
 // ShouldDiscardDDL returns true if this DDL should be discarded.
 // If a ddl is discarded, it will not be applied to cdc't schema storage
 // and sent to downstream.
-func (f *Filter) ShouldDiscardDDL(ddlType timodel.ActionType) bool {
+func (f *filter) ShouldDiscardDDL(ddlType timodel.ActionType) bool {
 	if !f.shouldDiscardByBuiltInDDLAllowlist(ddlType) {
 		return false
 	}
@@ -132,7 +144,7 @@ func (f *Filter) ShouldDiscardDDL(ddlType timodel.ActionType) bool {
 	return true
 }
 
-func (f *Filter) shouldIgnoreStartTs(ts uint64) bool {
+func (f *filter) shouldIgnoreStartTs(ts uint64) bool {
 	for _, ignoreTs := range f.ignoreTxnStartTs {
 		if ignoreTs == ts {
 			return true
@@ -143,27 +155,27 @@ func (f *Filter) shouldIgnoreStartTs(ts uint64) bool {
 
 // ShouldIgnoreTable returns true if the specified table should be ignored by this change feed.
 // NOTICE: Set `tbl` to an empty string to test against the whole database.
-func (f *Filter) ShouldIgnoreTable(db, tbl string) bool {
+func (f *filter) ShouldIgnoreTable(db, tbl string) bool {
 	if isSysSchema(db) {
 		return true
 	}
 	return !f.tableFilter.MatchTable(db, tbl)
 }
 
-func (f *Filter) shouldDiscardByBuiltInDDLAllowlist(ddlType timodel.ActionType) bool {
+func (f *filter) shouldDiscardByBuiltInDDLAllowlist(ddlType timodel.ActionType) bool {
 	/* The following DDL will be filter:
-	ActionAddForeignKey                 ActionType = 9
-	ActionDropForeignKey                ActionType = 10
-	ActionRebaseAutoID                  ActionType = 13
-	ActionShardRowID                    ActionType = 16
-	ActionLockTable                     ActionType = 27
-	ActionUnlockTable                   ActionType = 28
-	ActionRepairTable                   ActionType = 29
-	ActionSetTiFlashReplica             ActionType = 30
-	ActionUpdateTiFlashReplicaStatus    ActionType = 31
-	ActionCreateSequence                ActionType = 34
-	ActionAlterSequence                 ActionType = 35
-	ActionDropSequence                  ActionType = 36
+	ActionAddForeignKey                 ActionType = 9   1  这些都是当前 cdc 白名单直接过滤掉的 ddl
+	ActionDropForeignKey                ActionType = 10  1
+	ActionRebaseAutoID                  ActionType = 13  1
+	ActionShardRowID                    ActionType = 16  1
+	ActionLockTable                     ActionType = 27  1
+	ActionUnlockTable                   ActionType = 28  1
+	ActionRepairTable                   ActionType = 29  1
+	ActionSetTiFlashReplica             ActionType = 30  1
+	ActionUpdateTiFlashReplicaStatus    ActionType = 31  1
+	ActionCreateSequence                ActionType = 34  1
+	ActionAlterSequence                 ActionType = 35  1
+	ActionDropSequence                  ActionType = 36  1
 	ActionModifyTableAutoIdCache        ActionType = 39
 	ActionRebaseAutoRandomBase          ActionType = 40
 	ActionAlterIndexVisibility          ActionType = 41
@@ -187,7 +199,7 @@ func (f *Filter) shouldDiscardByBuiltInDDLAllowlist(ddlType timodel.ActionType) 
 		timodel.ActionTruncateTable,
 		timodel.ActionModifyColumn,
 		timodel.ActionRenameTable,
-		timodel.ActionRenameTables,
+		timodel.ActionRenameTables, // 0
 		timodel.ActionSetDefaultValue,
 		timodel.ActionModifyTableComment,
 		timodel.ActionRenameIndex,
@@ -201,8 +213,8 @@ func (f *Filter) shouldDiscardByBuiltInDDLAllowlist(ddlType timodel.ActionType) 
 		timodel.ActionModifySchemaCharsetAndCollate,
 		timodel.ActionAddPrimaryKey,
 		timodel.ActionDropPrimaryKey,
-		timodel.ActionAddColumns,
-		timodel.ActionDropColumns:
+		timodel.ActionAddColumns,  // 0
+		timodel.ActionDropColumns: // 0  这些都是 spec 未定义的 ddl
 		return false
 	}
 	return true

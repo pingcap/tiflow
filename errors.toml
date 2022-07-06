@@ -266,6 +266,16 @@ error = '''
 exec DDL failed
 '''
 
+["CDC:ErrFailedToFilterDDL"]
+error = '''
+failed to filter ddl event: %v, please report a bug
+'''
+
+["CDC:ErrFailedToFilterDML"]
+error = '''
+failed to filter dml event: %v, please report a bug
+'''
+
 ["CDC:ErrFetchHandleValue"]
 error = '''
 can't find handle column, please check if the pk is handle

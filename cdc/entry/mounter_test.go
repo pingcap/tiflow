@@ -990,7 +990,6 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 	schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
 		ver.Ver, filter, false, cfID)
 	require.Nil(t, err)
-
 	// apply ddl to schemaStorage
 	for _, ddl := range ddls {
 		job := helper.DDL2Job(ddl)

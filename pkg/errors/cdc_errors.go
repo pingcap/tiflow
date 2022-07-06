@@ -1008,4 +1008,14 @@ var (
 		"replication set multiple primary: %s",
 		errors.RFCCodeText("CDC:ErrReplicationSetMultiplePrimaryError"),
 	)
+
+	// Filter error
+	ErrFailedToFilterDML = errors.Normalize(
+		"failed to filter dml event: %v, please report a bug",
+		errors.RFCCodeText("CDC:ErrFailedToFilterDML"),
+	)
+	ErrFailedToFilterDDL = errors.Normalize(
+		"failed to filter ddl event: %v, please report a bug",
+		errors.RFCCodeText("CDC:ErrFailedToFilterDDL"),
+	)
 )

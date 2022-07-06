@@ -72,8 +72,9 @@ func TestCompareCheckSum(t *testing.T) {
 		mockUpChecker.On("getCheckSum", mock.Anything, mock.Anything, mock.Anything).Return(tt.wantSource, tt.wantSourceErr)
 		mockDownChecker := &mockCheckSumChecker{}
 		mockDownChecker.On("getCheckSum", mock.Anything, mock.Anything, mock.Anything).Return(tt.wantSink, tt.wantSinkErr)
-
-		ret, err := compareCheckSum(context.Background(), mockUpChecker, mockDownChecker, &filter.Filter{})
+		f, err := filter.NewFilter(config.GetDefaultReplicaConfig())
+		require.Nil(t, err)
+		ret, err := compareCheckSum(context.Background(), mockUpChecker, mockDownChecker, f)
 		require.Equal(t, tt.wantRet, ret, tt.name)
 		if tt.wantDBErr != nil {
 			require.True(t, errors.ErrorEqual(err, tt.wantDBErr), tt.name)

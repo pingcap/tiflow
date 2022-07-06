@@ -272,12 +272,12 @@ type RowChangedEvent struct {
 	// SplitTxn marks this RowChangedEvent as the first line of a new txn.
 	SplitTxn bool `json:"-" msg:"-"`
 
-	// This filed is only used to help to determine whether
-	// this row changed event should be filtered out.
+	// This filed is only used by filter.
 	// Please set them to nil after we use it.
 	RowChangedDatums *RowChangedDatums `json:"-" msg:"-"`
 }
 
+// RowChangedDatums is used to store the changed datums of a row.
 type RowChangedDatums struct {
 	RowDatums    []types.Datum `json:"-" msg:"-"`
 	PreRowDatums []types.Datum `json:"-" msg:"-"`

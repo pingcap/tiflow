@@ -67,7 +67,7 @@ type processor struct {
 	schemaStorage entry.SchemaStorage
 	lastSchemaTs  model.Ts
 
-	filter        *filter.Filter
+	filter        filter.Filter
 	mounter       entry.Mounter
 	sink          sink.Sink
 	redoManager   redo.LogManager

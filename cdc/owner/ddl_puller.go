@@ -56,7 +56,7 @@ type DDLPuller interface {
 
 type ddlPullerImpl struct {
 	puller puller.Puller
-	filter *filter.Filter
+	filter filter.Filter
 
 	mu             sync.Mutex
 	resolvedTS     uint64

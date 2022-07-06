@@ -72,7 +72,7 @@ type mounterImpl struct {
 	tz                  *time.Location
 	enableOldValue      bool
 	changefeedID        model.ChangeFeedID
-	filter              *pfilter.Filter
+	filter              pfilter.Filter
 	metricMountDuration prometheus.Observer
 	metricTotalRows     prometheus.Gauge
 }
@@ -81,7 +81,7 @@ type mounterImpl struct {
 func NewMounter(schemaStorage SchemaStorage,
 	changefeedID model.ChangeFeedID,
 	tz *time.Location,
-	filter *pfilter.Filter,
+	filter pfilter.Filter,
 	enableOldValue bool,
 ) Mounter {
 	return &mounterImpl{
@@ -271,7 +271,6 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	return job, nil
 }
 
-// fizz: datums 的顺序重要吗？
 func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool) ([]*model.Column, []types.Datum, error) {
 	cols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
 	rawCols := make([]types.Datum, len(tableInfo.RowColumnsOffset))
@@ -281,7 +280,7 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 			continue
 		}
 		colName := colInfo.Name.O
-		colDatums, exist := datums[colInfo.ID] // fizz: 什么时候会不存在呢？
+		colDatums, exist := datums[colInfo.ID]
 		var colValue interface{}
 		if !exist && !fillWithDefaultValue {
 			continue
@@ -527,42 +526,6 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (types.Datum, interface{}, i
 	v, size, warn, err := formatColVal(d, col)
 	return d, v, size, warn, err
 }
-
-// func getDefaultDatum(col *timodel.ColumnInfo) types.Datum {
-// 	var d types.Datum
-// 	// NOTICE: SHOULD use OriginDefaultValue here, more info pls ref to
-// 	// https://github.com/pingcap/tiflow/issues/4048
-// 	// FIXME: Too many corner cases may hit here, like type truncate, timezone
-// 	// (1) If this column is uk(no pk), will cause data inconsistency in Scenarios(2)
-// 	// (2) If not fix here, will cause data inconsistency in Scenarios(3) directly
-// 	// Ref: https://github.com/pingcap/tidb/blob/d2c352980a43bb593db81fd1db996f47af596d91/table/column.go#L489
-// 	if col.GetOriginDefaultValue() != nil {
-// 		d = types.NewDatum(col.GetOriginDefaultValue())
-// 		return d
-// 	}
-// 	if !mysql.HasNotNullFlag(col.GetFlag()) {
-// 		// NOTICE: NotNullCheck need do after OriginDefaultValue check, as when TiDB meet "amend + add column default xxx",
-// 		// ref: https://github.com/pingcap/ticdc/issues/3929
-// 		// must use null if TiDB not write the column value when default value is null
-// 		// and the value is null, see https://github.com/pingcap/tidb/issues/9304
-// 		d = types.NewDatum(nil)
-// 	} else {
-// 		switch col.GetType() {
-// 		case mysql.TypeEnum:
-// 			// For enum type, if no default value and not null is set,
-// 			// the default value is the first element of the enum list
-// 			d = types.NewDatum(col.FieldType.GetElem(0))
-// 		case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
-// 			d = types.NewBytesDatum(emptyBytes)
-// 		default:
-// 			d = table.GetZeroValue(col)
-// 			if d.IsNull() {
-// 				log.Error("meet unsupported column type", zap.String("columnInfo", col.FieldType.String()))
-// 			}
-// 		}
-// 	}
-// 	return d
-// }
 
 func getDDLDefaultDefinition(col *timodel.ColumnInfo) interface{} {
 	defaultValue := col.GetDefaultValue()

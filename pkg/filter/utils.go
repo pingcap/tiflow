@@ -17,29 +17,21 @@ import (
 	"github.com/pingcap/log"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/util/filter"
+	tifilter "github.com/pingcap/tidb/util/filter"
 	tfilter "github.com/pingcap/tidb/util/table-filter"
-	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
-func configToBinlogEventRule(cfg *config.FilterConfig) ([]*bf.BinlogEventRule, error) {
-	return cfg.EventRules, nil
-}
-
-func configToExpressionRules(cfg *config.FilterConfig) ([]*dmconfig.ExpressionFilter, error) {
-	return cfg.ExpressionRules, nil
-}
-
 // isSysSchema returns true if the given schema is a system schema
 func isSysSchema(db string) bool {
-	return filter.IsSystemSchema(db)
+	return tifilter.IsSystemSchema(db)
 }
 
 // VerifyRules checks the filter rules in the configuration
-// and returns an invalid rule error if the verification fails, otherwise it will return the parsed filter.
+// and returns an invalid rule error if the verification fails,
+// otherwise it will return a table filter.
 func VerifyRules(cfg *config.ReplicaConfig) (tfilter.Filter, error) {
 	var f tfilter.Filter
 	var err error
@@ -72,7 +64,7 @@ func jobTypeToEventType(t timodel.ActionType) bf.EventType {
 		return bf.DropTable
 	case timodel.ActionTruncateTable:
 		return bf.TruncateTable
-	case timodel.ActionRenameTable:
+	case timodel.ActionRenameTable, timodel.ActionRenameTables:
 		return bf.RenameTable
 	case timodel.ActionAddIndex:
 		return bf.CreateIndex
@@ -83,6 +75,36 @@ func jobTypeToEventType(t timodel.ActionType) bf.EventType {
 		return bf.CreateView
 	case timodel.ActionDropView:
 		return bf.DropView
+	case timodel.ActionAddColumn, timodel.ActionAddColumns:
+		return bf.AddColumn
+	case timodel.ActionDropColumn, timodel.ActionDropColumns:
+		return bf.DropColumn
+	case timodel.ActionModifyColumn:
+		return bf.ModifyColumn
+	case timodel.ActionSetDefaultValue:
+		return bf.SetDefaultValue
+	case timodel.ActionModifyTableComment:
+		return bf.ModifyTableComment
+	case timodel.ActionRenameIndex:
+		return bf.RenameIndex
+	case timodel.ActionAddTablePartition:
+		return bf.AddTablePartition
+	case timodel.ActionDropTablePartition:
+		return bf.DropTablePartition
+	case timodel.ActionTruncateTablePartition:
+		return bf.TruncateTablePartition
+	case timodel.ActionModifyTableCharsetAndCollate:
+		return bf.ModifyTableCharsetAndCollate
+	case timodel.ActionModifySchemaCharsetAndCollate:
+		return bf.ModifySchemaCharsetAndCollate
+	case timodel.ActionRecoverTable:
+		return bf.RecoverTable
+	case timodel.ActionUpdateTiFlashReplicaStatus:
+		return bf.UpdateTiFlashReplicaStatus
+	case timodel.ActionAddPrimaryKey:
+		return bf.AddPrimaryKey
+	case timodel.ActionDropPrimaryKey:
+		return bf.DropPrimaryKey
 	}
 
 	switch t {
@@ -90,13 +112,9 @@ func jobTypeToEventType(t timodel.ActionType) bf.EventType {
 		timodel.ActionDropColumn,
 		timodel.ActionAddIndex,
 		timodel.ActionDropIndex,
-		timodel.ActionAddForeignKey,
-		timodel.ActionDropForeignKey,
 		timodel.ActionModifyColumn,
-		timodel.ActionRebaseAutoID,
 		timodel.ActionRenameTable,
 		timodel.ActionSetDefaultValue,
-		timodel.ActionShardRowID,
 		timodel.ActionModifyTableComment,
 		timodel.ActionRenameIndex,
 		timodel.ActionAddTablePartition,
@@ -104,34 +122,58 @@ func jobTypeToEventType(t timodel.ActionType) bf.EventType {
 		timodel.ActionCreateView,
 		timodel.ActionModifyTableCharsetAndCollate,
 		timodel.ActionTruncateTablePartition,
-		timodel.ActionLockTable,
-		timodel.ActionUnlockTable,
-		timodel.ActionSetTiFlashReplica,
 		timodel.ActionAddPrimaryKey,
 		timodel.ActionDropPrimaryKey,
 		timodel.ActionAddColumns,
 		timodel.ActionDropColumns,
-		timodel.ActionModifyTableAutoIdCache,
-		timodel.ActionRebaseAutoRandomBase,
-		timodel.ActionAlterIndexVisibility,
-		timodel.ActionExchangeTablePartition,
-		timodel.ActionAddCheckConstraint,
-		timodel.ActionDropCheckConstraint,
-		timodel.ActionAlterCheckConstraint,
 		timodel.ActionRenameTables,
-		timodel.ActionDropIndexes,
-		timodel.ActionAlterTableAttributes,
-		timodel.ActionAlterTablePartitionAttributes,
-		timodel.ActionAlterPlacementPolicy,
-		timodel.ActionAlterTablePartitionPlacement,
-		timodel.ActionAlterTablePlacement,
-		timodel.ActionAlterCacheTable,
-		timodel.ActionAlterTableStatsOptions,
-		timodel.ActionAlterNoCacheTable,
-		timodel.ActionMultiSchemaChange:
+		timodel.ActionDropIndexes:
 		return bf.AlertTable
 	default:
 		log.Info("binlog filter unsupported ddl type", zap.String("type", t.String()))
 		return bf.NullEvent
+	}
+}
+
+// fizz: for cli and api used.
+// getSupportedDDLJobTypes returns the supported event types for sqlEventFilter
+func getSupportEventType() []bf.EventType {
+	return []bf.EventType{
+		bf.AllDML,
+		bf.AllDDL,
+
+		// dml events
+		bf.InsertEvent,
+		bf.UpdateEvent,
+		bf.DeleteEvent,
+
+		// ddl events share by dm and ticdc
+		bf.CreateSchema,
+		bf.DropSchema,
+		bf.CreateTable,
+		bf.DropTable,
+		bf.TruncateTable,
+		bf.RenameTable,
+		bf.AddIndex,
+		bf.DropIndex,
+		bf.CreateView,
+		bf.DropView,
+
+		// ddl events used by ticdc only
+		bf.AddColumn,
+		bf.DropColumn,
+		bf.ModifyColumn,
+		bf.ModifyTableComment,
+		bf.RenameIndex,
+		bf.AddTablePartition,
+		bf.DropTablePartition,
+		bf.TruncateTablePartition,
+		bf.ModifyTableCharsetAndCollate,
+		bf.ModifySchemaCharsetAndCollate,
+		bf.RecoverTable,
+		bf.UpdateTiFlashReplicaStatus,
+		bf.AddPrimaryKey,
+		bf.DropPrimaryKey,
+		// bf.AlertTable,
 	}
 }

@@ -31,7 +31,7 @@ import (
 
 type schemaWrap4Owner struct {
 	schemaSnapshot         *schema.Snapshot
-	filter                 *filter.Filter
+	filter                 filter.Filter
 	config                 *config.ReplicaConfig
 	allPhysicalTablesCache []model.TableID
 	ddlHandledTs           model.Ts

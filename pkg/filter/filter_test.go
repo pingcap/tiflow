@@ -16,10 +16,8 @@ package filter
 import (
 	"testing"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	"go.uber.org/zap"
 
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	timodel "github.com/pingcap/tidb/parser/model"
@@ -56,6 +54,21 @@ func TestShouldUseCustomRules(t *testing.T) {
 	require.True(t, filter.ShouldIgnoreTable("ecom", "test"))
 	require.True(t, filter.ShouldIgnoreTable("sns", "log"))
 	require.True(t, filter.ShouldIgnoreTable("information_schema", ""))
+
+	f, err := NewFilter(&config.ReplicaConfig{
+		Filter: &config.FilterConfig{
+			// 1. match all schema and table
+			// 2. do not match test.season
+			// 3. match all table of schema school
+			// 4. do not match table school.teacher
+			Rules: []string{"*.*", "!test.season", "school.*", "!school.teacher"},
+		},
+	})
+	require.True(t, f.ShouldIgnoreTable("test", "season"))
+	require.False(t, f.ShouldIgnoreTable("other", ""))
+	require.False(t, f.ShouldIgnoreTable("school", "student"))
+	require.True(t, f.ShouldIgnoreTable("school", "teacher"))
+	require.Nil(t, err)
 }
 
 func TestShouldIgnoreDMLEvent(t *testing.T) {
@@ -183,9 +196,9 @@ func TestShouldIgnoreDDL(t *testing.T) {
 			ddlType timodel.ActionType
 			ignore  bool
 		}
-		rules      []string
-		ignoredTs  []uint64
-		eventRules []*bf.BinlogEventRule
+		rules        []string
+		ignoredTs    []uint64
+		eventFilters []*config.EventFilterRule
 	}{{
 		// Ignore by table name cases.
 		cases: []struct {
@@ -258,12 +271,12 @@ func TestShouldIgnoreDDL(t *testing.T) {
 			{1, "event", "May", "", timodel.ActionCreateTable, false},
 		},
 		rules: []string{"*.*"},
-		eventRules: []*bf.BinlogEventRule{
+		eventFilters: []*config.EventFilterRule{
 			{
-				SchemaPattern: "event",
-				TablePattern:  "*",
-				Action:        bf.Ignore,
-				Events:        []bf.EventType{bf.DropTable, bf.DropIndex},
+				Matcher: []string{"event.*"},
+				IgnoreEvent: []bf.EventType{
+					bf.DropTable, bf.DropIndex,
+				},
 			},
 		},
 	}, { // cases ignore by ddl query
@@ -287,12 +300,10 @@ func TestShouldIgnoreDDL(t *testing.T) {
 			{1, "sql_pattern", "t1", "ADD VIEW view_t1", timodel.ActionNone, true},
 		},
 		rules: []string{"*.*"},
-		eventRules: []*bf.BinlogEventRule{
+		eventFilters: []*config.EventFilterRule{
 			{
-				SchemaPattern: "sql_pattern",
-				TablePattern:  "*",
-				Action:        bf.Ignore,
-				SQLPattern:    []string{"^DROP TABLE", "^ADD VIEW", "^DROP DATABASE"},
+				Matcher:   []string{"sql_pattern.*"},
+				IgnoreSQL: []string{"^DROP TABLE", "^ADD VIEW", "^DROP DATABASE"},
 			},
 		},
 	}}
@@ -302,12 +313,9 @@ func TestShouldIgnoreDDL(t *testing.T) {
 			Filter: &config.FilterConfig{
 				Rules:            ftc.rules,
 				IgnoreTxnStartTs: ftc.ignoredTs,
-				EventRules:       ftc.eventRules,
+				EventFilters:     ftc.eventFilters,
 			},
 		})
-		if err != nil {
-			log.Info("fizz", zap.Any("event roles", ftc.rules))
-		}
 		require.Nil(t, err)
 		for _, tc := range ftc.cases {
 			tableInfo := &model.SimpleTableInfo{Schema: tc.schema, Table: tc.table}
