@@ -2,7 +2,7 @@
 .PHONY: build test check clean fmt cdc kafka_consumer coverage \
 	integration_test_build integration_test integration_test_mysql integration_test_kafka bank \
 	dm dm-master dm-worker dmctl dm-syncer dm_coverage \
-	engine tiflow df-master-client df-demo df-chaos-case
+	engine tiflow df-demo df-chaos-case
 
 PROJECT=tiflow
 P=3
@@ -479,16 +479,13 @@ failpoint-enable: check_failpoint_ctl
 failpoint-disable: check_failpoint_ctl
 	$(FAILPOINT_DISABLE)
 
-engine: tiflow df-master-client df-demo
+engine: tiflow df-demo
 
 tiflow:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/engine/main.go
 
 df-proto: tools/bin/protoc tools/bin/protoc-gen-gogofaster tools/bin/goimports
 	./engine/generate-proto.sh
-
-df-master-client:
-	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/df-master-client ./engine/cmd/master-client
 
 df-demo:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/df-demoserver ./engine/cmd/demoserver

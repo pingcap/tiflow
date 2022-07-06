@@ -31,8 +31,8 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/fake"
 	engineModel "github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	"github.com/pingcap/tiflow/engine/pkg/meta"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
@@ -42,7 +42,7 @@ type ChaosCli struct {
 	// used to operate with server master, such as submit job
 	masterCli client.MasterClient
 	// used to query metadata which is stored from business logic
-	metaCli metaclient.KVClient
+	metaCli metaModel.KVClient
 	// masterEtcdCli is used to interact with embedded etcd in server master
 	masterEtcdCli *clientv3.Client
 	// used to write to etcd to simulate the business of fake job, this etcd client
@@ -69,12 +69,12 @@ func NewUTCli(
 		return nil, errors.Trace(err)
 	}
 
-	conf := metaclient.StoreConfig{Endpoints: userMetaAddrs}
-	userRawKVClient, err := kvclient.NewKVClient(&conf)
+	conf := metaModel.StoreConfig{Endpoints: userMetaAddrs}
+	userRawKVClient, err := meta.NewKVClient(&conf)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	metaCli := kvclient.NewPrefixKVClient(userRawKVClient, project.UniqueID())
+	metaCli := meta.NewPrefixKVClient(userRawKVClient, project.UniqueID())
 
 	fakeJobCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   userMetaAddrs,
@@ -248,20 +248,20 @@ func (cli *ChaosCli) GetRevision(ctx context.Context) (int64, error) {
 }
 
 func runCmdHandleError(cmd *exec.Cmd) []byte {
-	log.L().Info("Start executing command", zap.String("cmd", cmd.String()))
+	log.Info("Start executing command", zap.String("cmd", cmd.String()))
 	bytes, err := cmd.Output()
 	if err, ok := err.(*exec.ExitError); ok {
-		log.L().Info("Running command failed", zap.ByteString("stderr", err.Stderr))
+		log.Info("Running command failed", zap.ByteString("stderr", err.Stderr))
 	}
 
 	if err != nil {
-		log.L().Fatal("Running command failed",
+		log.Fatal("Running command failed",
 			zap.Error(err),
 			zap.String("command", cmd.String()),
 			zap.ByteString("output", bytes))
 	}
 
-	log.L().Info("Finished executing command", zap.String("cmd", cmd.String()), zap.ByteString("output", bytes))
+	log.Info("Finished executing command", zap.String("cmd", cmd.String()), zap.ByteString("output", bytes))
 	return bytes
 }
 
@@ -320,19 +320,19 @@ func (cli *ChaosCli) TransferEtcdLeader(ctx context.Context) error {
 func (cli *ChaosCli) ContainerRestart(name string) {
 	cmd := exec.Command("docker", "restart", name)
 	runCmdHandleError(cmd)
-	log.L().Info("Finished restarting container", zap.String("name", name))
+	log.Info("Finished restarting container", zap.String("name", name))
 }
 
 // ContainerStop stops a docker container
 func (cli *ChaosCli) ContainerStop(name string) {
 	cmd := exec.Command("docker", "stop", name)
 	runCmdHandleError(cmd)
-	log.L().Info("Finished stopping container", zap.String("name", name))
+	log.Info("Finished stopping container", zap.String("name", name))
 }
 
 // ContainerStart starts a docker container
 func (cli *ChaosCli) ContainerStart(name string) {
 	cmd := exec.Command("docker", "start", name)
 	runCmdHandleError(cmd)
-	log.L().Info("Finished starting container", zap.String("name", name))
+	log.Info("Finished starting container", zap.String("name", name))
 }

@@ -32,9 +32,8 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/config"
 	"github.com/pingcap/tiflow/engine/pkg/dbutil"
-	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
-	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	"github.com/pingcap/tiflow/engine/pkg/meta"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
@@ -61,7 +60,7 @@ type MetastoreManager interface {
 
 	ServiceDiscoveryStore() *clientv3.Client
 	FrameworkStore() pkgOrm.Client
-	BusinessStore() extkv.KVClientEx
+	BusinessStore() metaModel.KVClientEx
 }
 
 // NewMetastoreManager returns a new MetastoreManager.
@@ -80,7 +79,7 @@ type metastoreManagerImpl struct {
 
 	serviceDiscoveryStore *clientv3.Client
 	frameworkStore        pkgOrm.Client
-	businessStore         extkv.KVClientEx
+	businessStore         metaModel.KVClientEx
 
 	creator MetastoreCreator
 }
@@ -89,22 +88,22 @@ type metastoreManagerImpl struct {
 // metastore clients.
 type MetastoreCreator interface {
 	CreateEtcdCliForServiceDiscovery(
-		ctx context.Context, params metaclient.StoreConfig,
+		ctx context.Context, params metaModel.StoreConfig,
 	) (*clientv3.Client, error)
 
 	CreateMetaKVClientForBusiness(
-		ctx context.Context, params metaclient.StoreConfig,
-	) (extkv.KVClientEx, error)
+		ctx context.Context, params metaModel.StoreConfig,
+	) (metaModel.KVClientEx, error)
 
 	CreateDBClientForFramework(
-		ctx context.Context, params metaclient.StoreConfig,
+		ctx context.Context, params metaModel.StoreConfig,
 	) (pkgOrm.Client, error)
 }
 
 type metastoreCreatorImpl struct{}
 
 func (c metastoreCreatorImpl) CreateEtcdCliForServiceDiscovery(
-	ctx context.Context, params metaclient.StoreConfig,
+	ctx context.Context, params metaModel.StoreConfig,
 ) (*clientv3.Client, error) {
 	logConfig := logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
@@ -135,9 +134,9 @@ func (c metastoreCreatorImpl) CreateEtcdCliForServiceDiscovery(
 }
 
 func (c metastoreCreatorImpl) CreateMetaKVClientForBusiness(
-	_ context.Context, params metaclient.StoreConfig,
-) (extkv.KVClientEx, error) {
-	metaKVClient, err := kvclient.NewKVClient(&params)
+	_ context.Context, params metaModel.StoreConfig,
+) (metaModel.KVClientEx, error) {
+	metaKVClient, err := meta.NewKVClient(&params)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -145,7 +144,7 @@ func (c metastoreCreatorImpl) CreateMetaKVClientForBusiness(
 }
 
 func (c metastoreCreatorImpl) CreateDBClientForFramework(
-	_ context.Context, params metaclient.StoreConfig,
+	_ context.Context, params metaModel.StoreConfig,
 ) (pkgOrm.Client, error) {
 	frameMetaClient, err := pkgOrm.NewClient(params, dbutil.DefaultDBConfig())
 	if err != nil {
@@ -156,7 +155,7 @@ func (c metastoreCreatorImpl) CreateDBClientForFramework(
 
 func (m *metastoreManagerImpl) Init(ctx context.Context, servermasterClient client.MasterClient) (retErr error) {
 	if m.initialized.Load() {
-		log.L().Panic("MetastoreManager: double Init")
+		log.Panic("MetastoreManager: double Init")
 	}
 
 	defer func() {
@@ -198,7 +197,7 @@ func (m *metastoreManagerImpl) initServerDiscoveryStore(ctx context.Context, ser
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.L().Info("Obtained discovery metastore endpoint", zap.String("addr", resp.Address))
+	log.Info("Obtained discovery metastore endpoint", zap.String("addr", resp.Address))
 
 	conf := parseStoreConfig([]byte(resp.Address))
 	etcdCli, err := m.creator.CreateEtcdCliForServiceDiscovery(ctx, conf)
@@ -219,7 +218,7 @@ func (m *metastoreManagerImpl) initFrameworkStore(ctx context.Context, servermas
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.L().Info("Obtained framework metastore endpoint", zap.String("addr", resp.Address))
+	log.Info("Obtained framework metastore endpoint", zap.String("addr", resp.Address))
 
 	conf := parseStoreConfig([]byte(resp.Address))
 	dbCli, err := m.creator.CreateDBClientForFramework(ctx, conf)
@@ -240,7 +239,7 @@ func (m *metastoreManagerImpl) initBusinessStore(ctx context.Context, servermast
 	if err != nil {
 		return err
 	}
-	log.L().Info("Obtained business metastore endpoint", zap.String("addr", resp.Address))
+	log.Info("Obtained business metastore endpoint", zap.String("addr", resp.Address))
 
 	conf := parseStoreConfig([]byte(resp.Address))
 	metaKVClient, err := m.creator.CreateMetaKVClientForBusiness(ctx, conf)
@@ -253,21 +252,21 @@ func (m *metastoreManagerImpl) initBusinessStore(ctx context.Context, servermast
 
 func (m *metastoreManagerImpl) ServiceDiscoveryStore() *clientv3.Client {
 	if !m.initialized.Load() {
-		log.L().Panic("ServiceDiscoveryStore called before Init is successful")
+		log.Panic("ServiceDiscoveryStore called before Init is successful")
 	}
 	return m.serviceDiscoveryStore
 }
 
 func (m *metastoreManagerImpl) FrameworkStore() pkgOrm.Client {
 	if !m.initialized.Load() {
-		log.L().Panic("FrameworkStore called before Init is successful")
+		log.Panic("FrameworkStore called before Init is successful")
 	}
 	return m.frameworkStore
 }
 
-func (m *metastoreManagerImpl) BusinessStore() extkv.KVClientEx {
+func (m *metastoreManagerImpl) BusinessStore() metaModel.KVClientEx {
 	if !m.initialized.Load() {
-		log.L().Panic("BusinessStore called before Init is successful")
+		log.Panic("BusinessStore called before Init is successful")
 	}
 	return m.businessStore
 }
@@ -288,11 +287,11 @@ func (m *metastoreManagerImpl) Close() {
 		m.businessStore = nil
 	}
 
-	log.L().Info("MetastoreManager: Closed all metastores")
+	log.Info("MetastoreManager: Closed all metastores")
 }
 
-func parseStoreConfig(rawBytes []byte) metaclient.StoreConfig {
-	var conf metaclient.StoreConfig
+func parseStoreConfig(rawBytes []byte) metaModel.StoreConfig {
+	var conf metaModel.StoreConfig
 
 	// Try unmarshal as json first.
 	err := json.Unmarshal(rawBytes, &conf)
@@ -300,7 +299,7 @@ func parseStoreConfig(rawBytes []byte) metaclient.StoreConfig {
 		return conf
 	}
 
-	log.L().Info("Could not unmarshal metastore config, fallback to treating it as an endpoint list",
+	log.Info("Could not unmarshal metastore config, fallback to treating it as an endpoint list",
 		zap.ByteString("raw-bytes", rawBytes))
 
 	conf.SetEndpoints(string(rawBytes))

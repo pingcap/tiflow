@@ -18,6 +18,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/pingcap/tiflow/engine/pkg/cmd/cli"
 	"github.com/pingcap/tiflow/engine/pkg/cmd/executor"
 	"github.com/pingcap/tiflow/engine/pkg/cmd/master"
 	"github.com/pingcap/tiflow/engine/pkg/cmd/version"
@@ -45,6 +46,7 @@ func Run() {
 	cmd.AddCommand(version.NewCmdVersion())
 	cmd.AddCommand(master.NewCmdMaster())
 	cmd.AddCommand(executor.NewCmdExecutor())
+	cmd.AddCommand(cli.NewCmdCli())
 
 	if err := cmd.Execute(); err != nil {
 		cmd.PrintErrln(err)

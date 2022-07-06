@@ -47,7 +47,7 @@ func updateKeyAndCheckOnce(
 		for jobIdx := 0; jobIdx < workerCount; jobIdx++ {
 			err := cli.CheckFakeJobKey(ctx, jobID, jobIdx, expectedMvcc, updateValue)
 			if err != nil {
-				log.L().Warn("check fake job failed", zap.Error(err))
+				log.Warn("check fake job failed", zap.Error(err))
 				return false
 			}
 		}
@@ -66,7 +66,7 @@ func TestNodeFailure(t *testing.T) {
 
 	seed := time.Now().Unix()
 	rand.Seed(seed)
-	log.L().Info("set random seed", zap.Int64("seed", seed))
+	log.Info("set random seed", zap.Int64("seed", seed))
 
 	ctx := context.Background()
 	cfg := &fake.Config{
@@ -98,7 +98,7 @@ func TestNodeFailure(t *testing.T) {
 		for jobIdx := 0; jobIdx < cfg.WorkerCount; jobIdx++ {
 			err := cli.CheckFakeJobTick(ctx, jobID, jobIdx, targetTick)
 			if err != nil {
-				log.L().Warn("check fake job tick failed", zap.Error(err))
+				log.Warn("check fake job tick failed", zap.Error(err))
 				return false
 			}
 		}
@@ -151,11 +151,11 @@ func TestNodeFailure(t *testing.T) {
 	require.Eventually(t, func() bool {
 		stopped, err := cli.CheckJobStatus(ctx, jobID, pb.QueryJobResponse_stopped)
 		if err != nil {
-			log.L().Warn("check job status failed", zap.Error(err))
+			log.Warn("check job status failed", zap.Error(err))
 			return false
 		}
 		if !stopped {
-			log.L().Info("job is not stopped")
+			log.Info("job is not stopped")
 			return false
 		}
 		return true
