@@ -37,6 +37,21 @@ func (m *MockMetastoreCreator) EXPECT() *MockMetastoreCreatorMockRecorder {
 	return m.recorder
 }
 
+// CreateClientConnForBusiness mocks base method.
+func (m *MockMetastoreCreator) CreateClientConnForBusiness(arg0 context.Context, arg1 model.StoreConfig) (model.ClientConn, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateClientConnForBusiness", arg0, arg1)
+	ret0, _ := ret[0].(model.ClientConn)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateClientConnForBusiness indicates an expected call of CreateClientConnForBusiness.
+func (mr *MockMetastoreCreatorMockRecorder) CreateClientConnForBusiness(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateClientConnForBusiness", reflect.TypeOf((*MockMetastoreCreator)(nil).CreateClientConnForBusiness), arg0, arg1)
+}
+
 // CreateDBClientForFramework mocks base method.
 func (m *MockMetastoreCreator) CreateDBClientForFramework(arg0 context.Context, arg1 model.StoreConfig) (orm.Client, error) {
 	m.ctrl.T.Helper()
@@ -65,19 +80,4 @@ func (m *MockMetastoreCreator) CreateEtcdCliForServiceDiscovery(arg0 context.Con
 func (mr *MockMetastoreCreatorMockRecorder) CreateEtcdCliForServiceDiscovery(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateEtcdCliForServiceDiscovery", reflect.TypeOf((*MockMetastoreCreator)(nil).CreateEtcdCliForServiceDiscovery), arg0, arg1)
-}
-
-// CreateMetaKVClientForBusiness mocks base method.
-func (m *MockMetastoreCreator) CreateMetaKVClientForBusiness(arg0 context.Context, arg1 model.StoreConfig) (model.KVClientEx, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateMetaKVClientForBusiness", arg0, arg1)
-	ret0, _ := ret[0].(model.KVClientEx)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// CreateMetaKVClientForBusiness indicates an expected call of CreateMetaKVClientForBusiness.
-func (mr *MockMetastoreCreatorMockRecorder) CreateMetaKVClientForBusiness(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateMetaKVClientForBusiness", reflect.TypeOf((*MockMetastoreCreator)(nil).CreateMetaKVClientForBusiness), arg0, arg1)
 }

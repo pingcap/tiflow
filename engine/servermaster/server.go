@@ -114,9 +114,8 @@ type Server struct {
 	testCtx *test.Context
 
 	// framework metastore client
-	frameMetaClient pkgOrm.Client
-	// user metastore kvclient
-	userMetaKVClient metaModel.KVClientEx
+	frameMetaClient    pkgOrm.Client
+	businessClientConn metaModel.ClientConn
 }
 
 // PersistResource implements pb.MasterServer.PersistResource
@@ -384,7 +383,7 @@ func (s *Server) QueryMetaStore(
 		return getStore(FrameMetaID), nil
 	case pb.StoreType_AppMetaStore:
 		return &pb.QueryMetaStoreResponse{
-			Address: s.cfg.UserMetaConf.Endpoints[0],
+			Address: s.cfg.BusinessMetaConf.Endpoints[0],
 		}, nil
 	default:
 		return &pb.QueryMetaStoreResponse{
@@ -445,8 +444,8 @@ func (s *Server) Stop() {
 	if s.frameMetaClient != nil {
 		s.frameMetaClient.Close()
 	}
-	if s.userMetaKVClient != nil {
-		s.userMetaKVClient.Close()
+	if s.businessClientConn != nil {
+		s.businessClientConn.Close()
 	}
 }
 
@@ -514,15 +513,16 @@ func (s *Server) registerMetaStore() error {
 	log.Info("register framework metastore successfully", zap.Any("metastore", cfg.FrameMetaConf))
 
 	// register metastore for user
-	err = s.metaStoreManager.Register(cfg.UserMetaConf.StoreID, cfg.UserMetaConf)
+	err = s.metaStoreManager.Register(cfg.BusinessMetaConf.StoreID, cfg.BusinessMetaConf)
 	if err != nil {
 		return err
 	}
-	if s.userMetaKVClient, err = meta.NewKVClient(cfg.UserMetaConf); err != nil {
-		log.Error("connect to user metastore fail", zap.Any("config", cfg.UserMetaConf), zap.Error(err))
+	s.businessClientConn, err = meta.NewClientConn(cfg.BusinessMetaConf)
+	if err != nil {
+		log.Error("connect to user metastore fail", zap.Any("config", cfg.BusinessMetaConf), zap.Error(err))
 		return err
 	}
-	log.Info("register user metastore successfully", zap.Any("metastore", cfg.UserMetaConf))
+	log.Info("register user metastore successfully", zap.Any("metastore", cfg.BusinessMetaConf))
 
 	return nil
 }
@@ -688,8 +688,8 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		return err
 	}
 
-	if err := dp.Provide(func() metaModel.KVClientEx {
-		return s.userMetaKVClient
+	if err := dp.Provide(func() metaModel.ClientConn {
+		return s.businessClientConn
 	}); err != nil {
 		return err
 	}

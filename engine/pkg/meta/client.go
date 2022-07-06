@@ -14,31 +14,28 @@
 package meta
 
 import (
-	"github.com/pingcap/tiflow/engine/pkg/meta/internal/etcdkv"
-	"github.com/pingcap/tiflow/engine/pkg/meta/internal/etcdkv/namespace"
+	"github.com/pingcap/tiflow/engine/pkg/meta/internal"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 )
 
-// etcdKVClient is the implement of kv interface based on etcd
-// Support namespace isolation and all kv ability
-// etcdImpl -> kvPrefix+Closer -> etcdKVClient
-type etcdKVClient struct {
-	metaModel.Client
-	metaModel.KV
-	tenantID string
-}
-
-// NewPrefixKVClient return a kvclient with namespace
-func NewPrefixKVClient(cli metaModel.KVClientEx, tenantID string) metaModel.KVClient {
-	pfKV := namespace.NewPrefixKV(cli, namespace.MakeNamespacePrefix(tenantID))
-	return &etcdKVClient{
-		Client:   cli,
-		KV:       pfKV,
-		tenantID: tenantID,
+// NewKVClientWithNamespace return a KVClient with namspace isolation
+func NewKVClientWithNamespace(cc metaModel.ClientConn, projectID metaModel.ProjectID,
+	jobID metaModel.JobID,
+) (metaModel.KVClient, error) {
+	builder, err := internal.GetClientBuilder(cc.ClientType())
+	if err != nil {
+		return nil, err
 	}
+
+	return builder.NewKVClientWithNamespace(cc, projectID, jobID)
 }
 
-// NewKVClient return a kvclient without namespace for inner use
-func NewKVClient(conf *metaModel.StoreConfig) (metaModel.KVClientEx, error) {
-	return etcdkv.NewEtcdImpl(conf)
+// NewKVClient return a KVClient without namespace isolation
+func NewKVClient(cc metaModel.ClientConn) (metaModel.KVClient, error) {
+	builder, err := internal.GetClientBuilder(cc.ClientType())
+	if err != nil {
+		return nil, err
+	}
+
+	return builder.NewKVClient(cc)
 }

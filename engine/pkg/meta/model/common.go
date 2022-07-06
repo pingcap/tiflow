@@ -13,7 +13,30 @@
 
 package model
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
+)
+
+// ClientType indicates the kvclient type
+type ClientType = int
+
+type (
+	// ProjectID is the alia of tenant.ProjectID
+	ProjectID = tenant.ProjectID
+	// JobID is the alias of model.JobID
+	JobID = model.JobID
+)
+
+// define client type
+const (
+	UnknownKVClientType = iota
+	MockKVClientType
+	EtcdKVClientType
+	SQLKVClientType
+)
 
 // ResponseHeader is common response header
 type ResponseHeader struct {

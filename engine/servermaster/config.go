@@ -44,15 +44,19 @@ const (
 	defaultPeerUrls            = "http://127.0.0.1:8291"
 	defaultInitialClusterState = embed.ClusterStateFlagNew
 
-	// DefaultUserMetaID is the ID for default user metastore
-	DefaultUserMetaID        = "_default"
-	defaultUserMetaEndpoints = "127.0.0.1:12479"
+	// DefaultBusinessMetaID is the ID for default user metastore
+	DefaultBusinessMetaID        = "_default"
+	defaultBusinessMetaEndpoints = "127.0.0.1:12479"
 
 	// FrameMetaID is the ID for frame metastore
 	FrameMetaID               = "_root"
 	defaultFrameMetaEndpoints = "127.0.0.1:3336"
 	defaultFrameMetaUser      = "root"
 	defaultFrameMetaPassword  = "123456"
+
+	defaultFrameworkStoreType = metaModel.StoreTypeSQL
+	// TODO: we will switch to StoreTypeSQL after we support sql implement
+	defaultUserStoreType = metaModel.StoreTypeEtcd
 )
 
 // Config is the configuration for dm-master.
@@ -69,8 +73,8 @@ type Config struct {
 	// NOTE: more items will be add when adding leader election
 	Etcd *etcdutil.ConfigParams `toml:"etcd" json:"etcd"`
 
-	FrameMetaConf *metaModel.StoreConfig `toml:"frame-metastore-conf" json:"frame-metastore-conf"`
-	UserMetaConf  *metaModel.StoreConfig `toml:"user-metastore-conf" json:"user-metastore-conf"`
+	FrameMetaConf    *metaModel.StoreConfig `toml:"frame-metastore-conf" json:"frame-metastore-conf"`
+	BusinessMetaConf *metaModel.StoreConfig `toml:"business-metastore-conf" json:"business-metastore-conf"`
 
 	KeepAliveTTLStr string `toml:"keepalive-ttl" json:"keepalive-ttl"`
 	// time interval string to check executor aliveness
@@ -126,7 +130,15 @@ func (c *Config) Adjust() (err error) {
 	if err != nil {
 		return err
 	}
+
+	c.adjustStoreConfig()
 	return nil
+}
+
+// adjustStoreConfig adjusts store configuration
+func (c *Config) adjustStoreConfig() {
+	strings.ToLower(strings.TrimSpace(c.FrameMetaConf.StoreType))
+	strings.ToLower(strings.TrimSpace(c.BusinessMetaConf.StoreType))
 }
 
 // configFromFile loads config from file and merges items into Config.
@@ -160,7 +172,7 @@ func GetDefaultMasterConfig() *Config {
 			InitialClusterState: defaultInitialClusterState,
 		},
 		FrameMetaConf:        newFrameMetaConfig(),
-		UserMetaConf:         newDefaultUserMetaConfig(),
+		BusinessMetaConf:     NewDefaultBusinessMetaConfig(),
 		KeepAliveTTLStr:      defaultKeepAliveTTL,
 		KeepAliveIntervalStr: defaultKeepAliveInterval,
 		RPCTimeoutStr:        defaultRPCTimeout,
@@ -211,18 +223,20 @@ func parseURLs(s string) ([]url.URL, error) {
 func newFrameMetaConfig() *metaModel.StoreConfig {
 	conf := metaModel.DefaultStoreConfig()
 	conf.StoreID = FrameMetaID
+	conf.StoreType = defaultFrameworkStoreType
 	conf.Endpoints = append(conf.Endpoints, defaultFrameMetaEndpoints)
 	conf.Auth.User = defaultFrameMetaUser
 	conf.Auth.Passwd = defaultFrameMetaPassword
 
-	return &conf
+	return conf
 }
 
-// newDefaultUserMetaConfig return the default user metastore config
-func newDefaultUserMetaConfig() *metaModel.StoreConfig {
+// NewDefaultBusinessMetaConfig return the default user metastore config
+func NewDefaultBusinessMetaConfig() *metaModel.StoreConfig {
 	conf := metaModel.DefaultStoreConfig()
-	conf.StoreID = DefaultUserMetaID
-	conf.Endpoints = append(conf.Endpoints, defaultUserMetaEndpoints)
+	conf.StoreID = DefaultBusinessMetaID
+	conf.StoreType = defaultUserStoreType
+	conf.Endpoints = append(conf.Endpoints, defaultBusinessMetaEndpoints)
 
-	return &conf
+	return conf
 }

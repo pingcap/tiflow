@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/meta"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	server "github.com/pingcap/tiflow/engine/servermaster"
 )
 
 // ChaosCli is used to interact with server master, fake job and provides ways
@@ -41,7 +42,10 @@ import (
 type ChaosCli struct {
 	// used to operate with server master, such as submit job
 	masterCli client.MasterClient
-	// used to query metadata which is stored from business logic
+	// cc is the client connection for user metastore
+	clientConn metaModel.ClientConn
+	// used to query metadata which is stored from business logic(job-level isolation)
+	// NEED to reinitialize the metaCli if we access to a different job
 	metaCli metaModel.KVClient
 	// masterEtcdCli is used to interact with embedded etcd in server master
 	masterEtcdCli *clientv3.Client
@@ -61,23 +65,23 @@ type FakeJobConfig struct {
 }
 
 // NewUTCli creates a new ChaosCli instance
-func NewUTCli(
-	ctx context.Context, masterAddrs, userMetaAddrs []string, project tenant.ProjectInfo, cfg *FakeJobConfig,
+func NewUTCli(ctx context.Context, masterAddrs, businessMetaAddrs []string, project tenant.ProjectInfo,
+	cfg *FakeJobConfig,
 ) (*ChaosCli, error) {
 	masterCli, err := client.NewMasterClient(ctx, masterAddrs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	conf := metaModel.StoreConfig{Endpoints: userMetaAddrs}
-	userRawKVClient, err := meta.NewKVClient(&conf)
+	conf := server.NewDefaultBusinessMetaConfig()
+	conf.Endpoints = businessMetaAddrs
+	cc, err := meta.NewClientConn(conf)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	metaCli := meta.NewPrefixKVClient(userRawKVClient, project.UniqueID())
 
 	fakeJobCli, err := clientv3.New(clientv3.Config{
-		Endpoints:   userMetaAddrs,
+		Endpoints:   businessMetaAddrs,
 		Context:     ctx,
 		DialTimeout: 3 * time.Second,
 		DialOptions: []grpc.DialOption{},
@@ -98,7 +102,7 @@ func NewUTCli(
 
 	return &ChaosCli{
 		masterCli:     masterCli,
-		metaCli:       metaCli,
+		clientConn:    cc,
 		masterEtcdCli: masterEtcdCli,
 		fakeJobCli:    fakeJobCli,
 		fakeJobCfg:    cfg,
@@ -335,4 +339,18 @@ func (cli *ChaosCli) ContainerStart(name string) {
 	cmd := exec.Command("docker", "start", name)
 	runCmdHandleError(cmd)
 	log.Info("Finished starting container", zap.String("name", name))
+}
+
+// InitializeMetaClient initializes the user kvclient
+func (cli *ChaosCli) InitializeMetaClient(jobID string) error {
+	if cli.metaCli != nil {
+		cli.metaCli.Close()
+	}
+	metaCli, err := meta.NewKVClientWithNamespace(cli.clientConn, cli.project.UniqueID(), jobID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	cli.metaCli = metaCli
+	return nil
 }

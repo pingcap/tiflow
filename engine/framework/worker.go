@@ -107,8 +107,6 @@ type DefaultBaseWorker struct {
 	messageSender         p2p.MessageSender
 	// framework metastore client
 	frameMetaClient pkgOrm.Client
-	// user metastore raw kvclient
-	userRawKVClient metaModel.KVClientEx
 	resourceBroker  broker.Broker
 
 	masterClient *worker.MasterClient
@@ -135,9 +133,8 @@ type DefaultBaseWorker struct {
 
 	clock clock.Clock
 
-	// user metastore prefix kvclient
-	// Don't close it. It's just a prefix wrapper for underlying userRawKVClient
-	userMetaKVClient metaModel.KVClient
+	// user metastore kvclient with namespace
+	businessMetaKVClient metaModel.KVClient
 
 	// metricFactory can produce metric with underlying project info and job info
 	metricFactory promutil.Factory
@@ -155,7 +152,7 @@ type workerParams struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
 	FrameMetaClient       pkgOrm.Client
-	UserRawKVClient       metaModel.KVClientEx
+	BusinessClientConn    metaModel.ClientConn
 	ResourceBroker        broker.Broker
 }
 
@@ -175,12 +172,17 @@ func NewBaseWorker(
 
 	logger := logutil.FromContext(*ctx)
 
+	cli, err := meta.NewKVClientWithNamespace(params.BusinessClientConn, ctx.ProjectInfo.UniqueID(), masterID)
+	if err != nil {
+		// TODO more elegant error handling
+		log.Panic("failed to create user kvclient", zap.Error(err))
+	}
+
 	return &DefaultBaseWorker{
 		Impl:                  impl,
 		messageHandlerManager: params.MessageHandlerManager,
 		messageSender:         params.MessageSender,
 		frameMetaClient:       params.FrameMetaClient,
-		userRawKVClient:       params.UserRawKVClient,
 		resourceBroker:        params.ResourceBroker,
 
 		masterID:    masterID,
@@ -196,11 +198,11 @@ func NewBaseWorker(
 
 		pool: workerpool.NewDefaultAsyncPool(1),
 
-		errCenter:        errctx.NewErrCenter(),
-		clock:            clock.New(),
-		userMetaKVClient: meta.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
-		metricFactory:    promutil.NewFactory4Worker(ctx.ProjectInfo, MustConvertWorkerType2JobType(tp), masterID, workerID),
-		logger:           frameLog.WithWorkerID(frameLog.WithMasterID(logger, masterID), workerID),
+		errCenter:            errctx.NewErrCenter(),
+		clock:                clock.New(),
+		businessMetaKVClient: cli,
+		metricFactory:        promutil.NewFactory4Worker(ctx.ProjectInfo, MustConvertWorkerType2JobType(tp), masterID, workerID),
+		logger:               frameLog.WithWorkerID(frameLog.WithMasterID(logger, masterID), workerID),
 	}
 }
 
@@ -383,6 +385,7 @@ func (w *DefaultBaseWorker) doClose() {
 
 	w.wg.Wait()
 	promutil.UnregisterWorkerMetrics(w.id)
+	w.businessMetaKVClient.Close()
 }
 
 // Close implements BaseWorker.Close
@@ -416,7 +419,7 @@ func (w *DefaultBaseWorker) ID() runtime.RunnableID {
 
 // MetaKVClient implements BaseWorker.MetaKVClient
 func (w *DefaultBaseWorker) MetaKVClient() metaModel.KVClient {
-	return w.userMetaKVClient
+	return w.businessMetaKVClient
 }
 
 // MetricFactory implements BaseWorker.MetricFactory
