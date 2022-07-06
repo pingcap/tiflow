@@ -16,9 +16,11 @@ package filter
 import (
 	"testing"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -345,6 +347,8 @@ func TestShouldSkipDMLError(t *testing.T) {
 		preRow  []interface{}
 		row     []interface{}
 		ignore  bool
+		err     error
+		errMsg  string
 	}
 
 	type testCase struct {
@@ -360,7 +364,7 @@ func TestShouldSkipDMLError(t *testing.T) {
 				EventFilters: []*config.EventFilterRule{
 					{
 						Matcher:                  []string{"test.student"},
-						IgnoreInsertValueExpr:    "age >= 20 or gender = 'female' or mather = 'dongdong'",
+						IgnoreInsertValueExpr:    "age >= 20 or gender = 'female' and mather='a'",
 						IgnoreDeleteValueExpr:    "age >= 32 and and age < 48",
 						IgnoreUpdateOldValueExpr: "gender = 'male' and error(age) > 20",
 						IgnoreUpdateNewValueExpr: "age > 28",
@@ -368,32 +372,42 @@ func TestShouldSkipDMLError(t *testing.T) {
 				},
 			},
 			cases: []innerCase{
-				{ // table name does not configure in matcher, no rule to filter it
-					schema: "test",
-					table:  "teacher",
-					columns: []*model.Column{
-						{Name: "none"},
-					},
-					row:    []interface{}{999, "Will", 39, "male"},
-					ignore: false,
-				},
-				{ // schema name does not configure in matcher, no rule to filter it
-					schema: "no",
-					table:  "student",
-					columns: []*model.Column{
-						{Name: "none"},
-					},
-					row:    []interface{}{888, "Li", 45, "male"},
-					ignore: false,
-				},
 				{ // insert
 					schema: "test",
 					table:  "student",
 					columns: []*model.Column{
 						{Name: "none"},
 					},
+					row:    []interface{}{999, "Will", 39, "male"},
+					ignore: false,
+					err:    cerror.ErrExpressionColumnNotFound,
+					errMsg: "Can not found column 'mather' from table 'student' in",
+				},
+				{ // update
+					schema: "test",
+					table:  "student",
+					preColumns: []*model.Column{
+						{Name: "none"},
+					},
+					preRow: []interface{}{876, "Li", 45, "female"},
+					columns: []*model.Column{
+						{Name: "none"},
+					},
 					row:    []interface{}{1, "Dongmen", 20, "male"},
-					ignore: true,
+					ignore: false,
+					err:    cerror.ErrExpressionParseFailed,
+					errMsg: "There is a syntax error in",
+				},
+				{ // delete
+					schema: "test",
+					table:  "student",
+					preColumns: []*model.Column{
+						{Name: "none"},
+					},
+					preRow: []interface{}{876, "Li", 45, "female"},
+					ignore: false,
+					err:    cerror.ErrExpressionParseFailed,
+					errMsg: "There is a syntax error in",
 				},
 			},
 		},
@@ -425,8 +439,9 @@ func TestShouldSkipDMLError(t *testing.T) {
 				PreColumns: c.preColumns,
 			}
 			ignore, err := f.shouldSkipDML(row, tableInfo)
-			require.Nil(t, err)
-			require.Equal(t, c.ignore, ignore, "case: %+v", c)
+			require.True(t, errors.ErrorEqual(c.err, err), "case: %+v", c, err)
+			require.Contains(t, err.Error(), c.errMsg)
+			require.Equal(t, c.ignore, ignore)
 		}
 	}
 }

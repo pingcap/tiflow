@@ -231,7 +231,6 @@ func VerifyTables(replicaConfig *config.ReplicaConfig, storage tidbkv.Storage, s
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
-
 	snap.IterTables(true, func(tableInfo *model.TableInfo) {
 		if filter.ShouldIgnoreTable(tableInfo.TableName.Schema, tableInfo.TableName.Table) {
 			return

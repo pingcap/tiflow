@@ -177,3 +177,61 @@ func getSupportEventType() []bf.EventType {
 		// bf.AlertTable,
 	}
 }
+
+func shouldDiscardByBuiltInDDLAllowlist(ddlType timodel.ActionType) bool {
+	/* The following DDL will be filter:
+	ActionAddForeignKey                 ActionType = 9
+	ActionDropForeignKey                ActionType = 10
+	ActionRebaseAutoID                  ActionType = 13
+	ActionShardRowID                    ActionType = 16
+	ActionLockTable                     ActionType = 27
+	ActionUnlockTable                   ActionType = 28
+	ActionRepairTable                   ActionType = 29
+	ActionSetTiFlashReplica             ActionType = 30
+	ActionUpdateTiFlashReplicaStatus    ActionType = 31
+	ActionCreateSequence                ActionType = 34
+	ActionAlterSequence                 ActionType = 35
+	ActionDropSequence                  ActionType = 36
+	ActionModifyTableAutoIdCache        ActionType = 39
+	ActionRebaseAutoRandomBase          ActionType = 40
+	ActionAlterIndexVisibility          ActionType = 41
+	ActionExchangeTablePartition        ActionType = 42
+	ActionAddCheckConstraint            ActionType = 43
+	ActionDropCheckConstraint           ActionType = 44
+	ActionAlterCheckConstraint          ActionType = 45
+	ActionAlterTableAlterPartition      ActionType = 46
+
+	... Any Action which of value is greater than 46 ...
+	*/
+	switch ddlType {
+	case timodel.ActionCreateSchema,
+		timodel.ActionDropSchema,
+		timodel.ActionCreateTable,
+		timodel.ActionDropTable,
+		timodel.ActionAddColumn,
+		timodel.ActionDropColumn,
+		timodel.ActionAddIndex,
+		timodel.ActionDropIndex,
+		timodel.ActionTruncateTable,
+		timodel.ActionModifyColumn,
+		timodel.ActionRenameTable,
+		timodel.ActionRenameTables,
+		timodel.ActionSetDefaultValue,
+		timodel.ActionModifyTableComment,
+		timodel.ActionRenameIndex,
+		timodel.ActionAddTablePartition,
+		timodel.ActionDropTablePartition,
+		timodel.ActionCreateView,
+		timodel.ActionModifyTableCharsetAndCollate,
+		timodel.ActionTruncateTablePartition,
+		timodel.ActionDropView,
+		timodel.ActionRecoverTable,
+		timodel.ActionModifySchemaCharsetAndCollate,
+		timodel.ActionAddPrimaryKey,
+		timodel.ActionDropPrimaryKey,
+		timodel.ActionAddColumns,
+		timodel.ActionDropColumns:
+		return false
+	}
+	return true
+}

@@ -31,6 +31,9 @@ type Filter interface {
 	ShouldDiscardDDL(ddlType timodel.ActionType) bool
 	// ShouldIgnoreTable return true if the table should be ignored.
 	ShouldIgnoreTable(schema, table string) bool
+	// Verify should only be called by create changefeed API handler.
+	// Its purpose is to verify the filter config and return an error if it is invalid.
+	Verify(tableInfos []*model.TableInfo) error
 }
 
 // filter implements Filter.
@@ -133,7 +136,7 @@ func (f *filter) ShouldIgnoreDDLEvent(ddl *model.DDLEvent) (bool, error) {
 // If a ddl is discarded, it will not be applied to cdc't schema storage
 // and sent to downstream.
 func (f *filter) ShouldDiscardDDL(ddlType timodel.ActionType) bool {
-	if !f.shouldDiscardByBuiltInDDLAllowlist(ddlType) {
+	if !shouldDiscardByBuiltInDDLAllowlist(ddlType) {
 		return false
 	}
 	for _, allowDDLType := range f.ddlAllowlist {
@@ -142,15 +145,6 @@ func (f *filter) ShouldDiscardDDL(ddlType timodel.ActionType) bool {
 		}
 	}
 	return true
-}
-
-func (f *filter) shouldIgnoreStartTs(ts uint64) bool {
-	for _, ignoreTs := range f.ignoreTxnStartTs {
-		if ignoreTs == ts {
-			return true
-		}
-	}
-	return false
 }
 
 // ShouldIgnoreTable returns true if the specified table should be ignored by this change feed.
@@ -162,60 +156,15 @@ func (f *filter) ShouldIgnoreTable(db, tbl string) bool {
 	return !f.tableFilter.MatchTable(db, tbl)
 }
 
-func (f *filter) shouldDiscardByBuiltInDDLAllowlist(ddlType timodel.ActionType) bool {
-	/* The following DDL will be filter:
-	ActionAddForeignKey                 ActionType = 9   1  这些都是当前 cdc 白名单直接过滤掉的 ddl
-	ActionDropForeignKey                ActionType = 10  1
-	ActionRebaseAutoID                  ActionType = 13  1
-	ActionShardRowID                    ActionType = 16  1
-	ActionLockTable                     ActionType = 27  1
-	ActionUnlockTable                   ActionType = 28  1
-	ActionRepairTable                   ActionType = 29  1
-	ActionSetTiFlashReplica             ActionType = 30  1
-	ActionUpdateTiFlashReplicaStatus    ActionType = 31  1
-	ActionCreateSequence                ActionType = 34  1
-	ActionAlterSequence                 ActionType = 35  1
-	ActionDropSequence                  ActionType = 36  1
-	ActionModifyTableAutoIdCache        ActionType = 39
-	ActionRebaseAutoRandomBase          ActionType = 40
-	ActionAlterIndexVisibility          ActionType = 41
-	ActionExchangeTablePartition        ActionType = 42
-	ActionAddCheckConstraint            ActionType = 43
-	ActionDropCheckConstraint           ActionType = 44
-	ActionAlterCheckConstraint          ActionType = 45
-	ActionAlterTableAlterPartition      ActionType = 46
+func (f *filter) Verify(tableInfos []*model.TableInfo) error {
+	return f.dmlExprFilter.verify(tableInfos)
+}
 
-	... Any Action which of value is greater than 46 ...
-	*/
-	switch ddlType {
-	case timodel.ActionCreateSchema,
-		timodel.ActionDropSchema,
-		timodel.ActionCreateTable,
-		timodel.ActionDropTable,
-		timodel.ActionAddColumn,
-		timodel.ActionDropColumn,
-		timodel.ActionAddIndex,
-		timodel.ActionDropIndex,
-		timodel.ActionTruncateTable,
-		timodel.ActionModifyColumn,
-		timodel.ActionRenameTable,
-		timodel.ActionRenameTables, // 0
-		timodel.ActionSetDefaultValue,
-		timodel.ActionModifyTableComment,
-		timodel.ActionRenameIndex,
-		timodel.ActionAddTablePartition,
-		timodel.ActionDropTablePartition,
-		timodel.ActionCreateView,
-		timodel.ActionModifyTableCharsetAndCollate,
-		timodel.ActionTruncateTablePartition,
-		timodel.ActionDropView,
-		timodel.ActionRecoverTable,
-		timodel.ActionModifySchemaCharsetAndCollate,
-		timodel.ActionAddPrimaryKey,
-		timodel.ActionDropPrimaryKey,
-		timodel.ActionAddColumns,  // 0
-		timodel.ActionDropColumns: // 0  这些都是 spec 未定义的 ddl
-		return false
+func (f *filter) shouldIgnoreStartTs(ts uint64) bool {
+	for _, ignoreTs := range f.ignoreTxnStartTs {
+		if ignoreTs == ts {
+			return true
+		}
 	}
-	return true
+	return false
 }

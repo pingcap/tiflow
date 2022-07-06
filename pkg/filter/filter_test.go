@@ -55,7 +55,7 @@ func TestShouldUseCustomRules(t *testing.T) {
 	require.True(t, filter.ShouldIgnoreTable("sns", "log"))
 	require.True(t, filter.ShouldIgnoreTable("information_schema", ""))
 
-	f, err := NewFilter(&config.ReplicaConfig{
+	filter, err = NewFilter(&config.ReplicaConfig{
 		Filter: &config.FilterConfig{
 			// 1. match all schema and table
 			// 2. do not match test.season
@@ -64,10 +64,10 @@ func TestShouldUseCustomRules(t *testing.T) {
 			Rules: []string{"*.*", "!test.season", "school.*", "!school.teacher"},
 		},
 	})
-	require.True(t, f.ShouldIgnoreTable("test", "season"))
-	require.False(t, f.ShouldIgnoreTable("other", ""))
-	require.False(t, f.ShouldIgnoreTable("school", "student"))
-	require.True(t, f.ShouldIgnoreTable("school", "teacher"))
+	require.True(t, filter.ShouldIgnoreTable("test", "season"))
+	require.False(t, filter.ShouldIgnoreTable("other", ""))
+	require.False(t, filter.ShouldIgnoreTable("school", "student"))
+	require.True(t, filter.ShouldIgnoreTable("school", "teacher"))
 	require.Nil(t, err)
 }
 

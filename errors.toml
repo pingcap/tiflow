@@ -266,6 +266,11 @@ error = '''
 exec DDL failed
 '''
 
+["CDC:ErrExpressionColumnNotFound"]
+error = '''
+invalid filter expressions. Can not found column '%s' from table '%s' in: %s
+'''
+
 ["CDC:ErrFailedToFilterDDL"]
 error = '''
 failed to filter ddl event: %v, please report a bug
@@ -374,6 +379,11 @@ invalid ddl job(%d)
 ["CDC:ErrInvalidEtcdKey"]
 error = '''
 invalid key: %s
+'''
+
+["CDC:ErrInvalidFilterExpression"]
+error = '''
+invalid filter expressions. There is a syntax error in: %s
 '''
 
 ["CDC:ErrInvalidHost"]

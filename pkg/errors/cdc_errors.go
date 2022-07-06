@@ -1018,4 +1018,12 @@ var (
 		"failed to filter ddl event: %v, please report a bug",
 		errors.RFCCodeText("CDC:ErrFailedToFilterDDL"),
 	)
+	ErrExpressionParseFailed = errors.Normalize(
+		"invalid filter expressions. There is a syntax error in: %s",
+		errors.RFCCodeText("CDC:ErrInvalidFilterExpression"),
+	)
+	ErrExpressionColumnNotFound = errors.Normalize(
+		"invalid filter expressions. Can not found column '%s' from table '%s' in: %s",
+		errors.RFCCodeText("CDC:ErrExpressionColumnNotFound"),
+	)
 )
