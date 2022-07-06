@@ -270,7 +270,7 @@ func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableI
 			return table.State() == pipeline.TableStatePrepared
 		}
 
-		if config.GetGlobalServerConfig().Debug.EnableTwoPhaseScheduler {
+		if config.GetGlobalServerConfig().Debug.EnableSchedulerV3 {
 			// The table is `replicating`, it's indicating that the `add table` must be finished.
 			return table.State() == pipeline.TableStateReplicating
 		}
@@ -688,8 +688,8 @@ func (p *processor) newAgentImpl(ctx cdcContext.Context) (ret scheduler.Agent, e
 	etcdClient := ctx.GlobalVars().EtcdClient
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	cfg := config.GetGlobalServerConfig().Debug
-	if cfg.EnableTwoPhaseScheduler {
-		ret, err = scheduler.NewTpAgent(
+	if cfg.EnableSchedulerV3 {
+		ret, err = scheduler.NewAgentV3(
 			ctx, captureID, messageServer, messageRouter, etcdClient, p, p.changefeedID)
 	} else {
 		ret, err = scheduler.NewAgent(

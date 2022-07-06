@@ -262,7 +262,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 
 	// since add table indirectly, `preparing` -> `prepared` -> `replicating`
 	// is only support by `SchedulerV3`, enable it.
-	config.GetGlobalServerConfig().Debug.EnableTwoPhaseScheduler = true
+	config.GetGlobalServerConfig().Debug.EnableSchedulerV3 = true
 
 	var err error
 	// init tick

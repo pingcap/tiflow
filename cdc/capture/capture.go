@@ -599,7 +599,7 @@ func (c *captureImpl) Drain(ctx context.Context) <-chan struct{} {
 }
 
 func (c *captureImpl) drainImpl(ctx context.Context) bool {
-	if !c.config.Debug.EnableTwoPhaseScheduler {
+	if !c.config.Debug.EnableSchedulerV3 {
 		// Skip drain as two phase scheduler is disabled.
 		return true
 	}

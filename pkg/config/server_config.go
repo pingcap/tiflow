@@ -131,8 +131,8 @@ var defaultServerConfig = &ServerConfig{
 		},
 		Messages: defaultMessageConfig.Clone(),
 
-		EnableTwoPhaseScheduler: false,
-		Scheduler:               NewDefaultSchedulerConfig(),
+		EnableSchedulerV3: true,
+		Scheduler:         NewDefaultSchedulerConfig(),
 	},
 }
 

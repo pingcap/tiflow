@@ -1,2 +1,2 @@
 [debug]
-enable-2phase-scheduler = true
+enable-scheduler-v3 = true
