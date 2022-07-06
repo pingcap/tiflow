@@ -50,7 +50,6 @@ message DispatchTableRequest {
 message AddTableResponse {
     TableStatus status = 1;
     Checkpoint checkpoint = 2 [(gogoproto.nullable) = false];
-    bool reject = 3;
 }
 
 message RemoveTableResponse {

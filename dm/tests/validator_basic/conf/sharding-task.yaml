@@ -1,0 +1,45 @@
+---
+name: test
+task-mode: all
+is-sharding: true
+shard-mode: "pessimistic"
+meta-schema: "dm_meta"
+ignore-checking-items: ["auto_increment_ID"]
+
+target-database:
+  host: "127.0.0.1"
+  port: 4000
+  user: "root"
+  password: ""
+
+mysql-instances:
+  - source-id: "mysql-replica-01"
+    block-allow-list:  "instance"
+    route-rules: ["global"]
+    validator-config-name: global
+  - source-id: "mysql-replica-02"
+    block-allow-list:  "instance"
+    route-rules: ["global"]
+    validator-config-name: global
+
+block-allow-list:
+  instance:
+    do-dbs: ["validator_basic"]
+
+routes:
+  global:
+    schema-pattern: "validator_basic"
+    table-pattern: "shard1"
+    target-schema: "validator_basic"
+    target-table: "shard"
+
+validators:
+  global:
+    mode: full
+    worker-count: 4
+    validate-interval: 1s
+    check-interval: 1s
+    row-error-delay: 1s
+    meta-flush-interval: 1s
+    max-pending-row-size: 500m
+    max-pending-row-count: 1000

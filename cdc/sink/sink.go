@@ -19,13 +19,11 @@ import (
 	"strings"
 
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/util"
 )
 
 // Sink is an abstraction for anything that a changefeed may emit into.
@@ -169,32 +167,4 @@ func New(
 		return newSink(ctx, changefeedID, sinkURI, config, errCh)
 	}
 	return nil, cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", sinkURI.Scheme)
-}
-
-// Validate sink if given valid parameters.
-func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig) error {
-	errCh := make(chan error)
-	// TODO: find a better way to verify a sinkURI is valid
-	ctx, cancel := context.WithCancel(contextutil.PutRoleInCtx(ctx, util.RoleClient))
-	s, err := New(ctx, model.DefaultChangeFeedID("sink-verify"),
-		sinkURI, cfg, errCh)
-	if err != nil {
-		cancel()
-		return err
-	}
-	// NOTICE: We have to cancel the context before we close it,
-	// otherwise we will write data to closed chan after sink closed.
-	cancel()
-	err = s.Close(ctx)
-	if err != nil {
-		return err
-	}
-	select {
-	case err = <-errCh:
-		if err != nil {
-			return err
-		}
-	default:
-	}
-	return nil
 }
