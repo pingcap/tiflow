@@ -67,7 +67,7 @@ type Client interface {
 	Close() error
 
 	// GenEpoch generate the increasing epoch for user
-	GenEpoch(ctx context.Context) (int64, Error)
+	GenEpoch(ctx context.Context) (int64, error)
 }
 
 // KVClient combines Client interface and KV interface

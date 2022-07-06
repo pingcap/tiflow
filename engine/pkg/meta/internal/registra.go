@@ -16,23 +16,23 @@ package internal
 import (
 	"sync"
 
-	"github.com/pingcap/tiflow/engine/pkg/errors"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 type clientBuilderRegistry struct {
 	mu  sync.Mutex
-	reg map[metaModel.ClientType]ClientBuilder
+	reg map[metaModel.ClientType]clientBuilder
 }
 
 // clientBuilderRegistra is the registra for client builder
 var clientBuilderRegistra clientBuilderRegistry
 
-// MustRegister must register a ClientBuilder to registra.
+// MustRegister must register a clientBuilder to registra.
 // Panic if it fail
-func MustRegister(builder ClientBuilder) {
+func MustRegister(builder clientBuilder) {
 	clientBuilderRegistra.mu.Lock()
-	defer clientBuilderRegistra.mu.UnLock()
+	defer clientBuilderRegistra.mu.Unlock()
 
 	if _, exists := clientBuilderRegistra.reg[builder.ClientType()]; exists {
 		panic("already exists build type")
@@ -41,10 +41,10 @@ func MustRegister(builder ClientBuilder) {
 	clientBuilderRegistra.reg[builder.ClientType()] = builder
 }
 
-// GetClientBuilder return the ClientBuilder of the client type
-func GetClientBuilder(tp metaModel.ClientType) (ClientBuilder, error) {
+// GetClientBuilder return the clientBuilder of the client type
+func GetClientBuilder(tp metaModel.ClientType) (clientBuilder, error) {
 	clientBuilderRegistra.mu.Lock()
-	defer clientBuilderRegistra.mu.UnLock()
+	defer clientBuilderRegistra.mu.Unlock()
 
 	builder, exists := clientBuilderRegistra.reg[tp]
 	if exists {

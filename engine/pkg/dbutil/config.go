@@ -32,9 +32,9 @@ type DBConfig struct {
 	MaxOpenConns    int
 }
 
-// DefaultDBConfig creates a default DBConfig
-func DefaultDBConfig() DBConfig {
-	return DBConfig{
+// DefaultDBConfig creates a default *DBConfig
+func DefaultDBConfig() *DBConfig {
+	return &DBConfig{
 		ConnMaxIdleTime: defaultConnMaxIdleTime,
 		ConnMaxLifeTime: defaultConnMaxLifeTime,
 		MaxIdleConns:    defaultMaxIdleConns,

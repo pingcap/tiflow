@@ -115,8 +115,6 @@ type Server struct {
 
 	// framework metastore client
 	frameMetaClient pkgOrm.Client
-	// user metastore kvclient
-	userMetaKVClient metaModel.KVClientEx
 }
 
 // PersistResource implements pb.MasterServer.PersistResource
@@ -445,9 +443,6 @@ func (s *Server) Stop() {
 	if s.frameMetaClient != nil {
 		s.frameMetaClient.Close()
 	}
-	if s.userMetaKVClient != nil {
-		s.userMetaKVClient.Close()
-	}
 }
 
 // Run the server master.
@@ -456,8 +451,7 @@ func (s *Server) Run(ctx context.Context) (err error) {
 		return s.startForTest(ctx)
 	}
 
-	// TODO: need context here to initialize the metastore connection
-	err = s.registerMetaStore()
+	err = s.registerMetaStore(ctx)
 	if err != nil {
 		return err
 	}
@@ -498,7 +492,7 @@ func (s *Server) Run(ctx context.Context) (err error) {
 	return wg.Wait()
 }
 
-func (s *Server) registerMetaStore() error {
+func (s *Server) registerMetaStore(ctx context.Context) error {
 	// register metastore for framework
 	cfg := s.cfg
 	if err := s.metaStoreManager.Register(cfg.FrameMetaConf.StoreID, cfg.FrameMetaConf); err != nil {
@@ -518,10 +512,11 @@ func (s *Server) registerMetaStore() error {
 	if err != nil {
 		return err
 	}
-	if s.userMetaKVClient, err = meta.NewKVClient(cfg.UserMetaConf); err != nil {
+	if userMetaKVClient, err = meta.NewKVClient(metaModel.EtcdKVClientType, cfg.UserMetaConf); err != nil {
 		log.Error("connect to user metastore fail", zap.Any("config", cfg.UserMetaConf), zap.Error(err))
 		return err
 	}
+	userMetaKVClient.Close()
 	log.Info("register user metastore successfully", zap.Any("metastore", cfg.UserMetaConf))
 
 	return nil
@@ -688,8 +683,8 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		return err
 	}
 
-	if err := dp.Provide(func() metaModel.KVClientEx {
-		return s.userMetaKVClient
+	if err := dp.Provide(func() metaModel.KVClient {
+		return nil
 	}); err != nil {
 		return err
 	}

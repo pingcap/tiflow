@@ -31,7 +31,7 @@ import (
 
 // nolint:deadcode, ineffassign
 func test(t *testing.T) {
-	cli := NewKVClient(metaModel.SQLKVClientType, metaModel.DefaultStoreConfig())
+	cli, _ := NewKVClient(metaModel.SQLKVClientType, metaModel.DefaultStoreConfig())
 	defer cli.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()

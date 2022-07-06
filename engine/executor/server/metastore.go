@@ -60,7 +60,7 @@ type MetastoreManager interface {
 
 	ServiceDiscoveryStore() *clientv3.Client
 	FrameworkStore() pkgOrm.Client
-	BusinessStore() metaModel.KVClientEx
+	BusinessStore() metaModel.KVClient
 }
 
 // NewMetastoreManager returns a new MetastoreManager.
@@ -79,7 +79,7 @@ type metastoreManagerImpl struct {
 
 	serviceDiscoveryStore *clientv3.Client
 	frameworkStore        pkgOrm.Client
-	businessStore         metaModel.KVClientEx
+	businessStore         metaModel.KVClient
 
 	creator MetastoreCreator
 }
@@ -93,7 +93,7 @@ type MetastoreCreator interface {
 
 	CreateMetaKVClientForBusiness(
 		ctx context.Context, params metaModel.StoreConfig,
-	) (metaModel.KVClientEx, error)
+	) (metaModel.KVClient, error)
 
 	CreateDBClientForFramework(
 		ctx context.Context, params metaModel.StoreConfig,
@@ -136,7 +136,8 @@ func (c metastoreCreatorImpl) CreateEtcdCliForServiceDiscovery(
 func (c metastoreCreatorImpl) CreateMetaKVClientForBusiness(
 	_ context.Context, params metaModel.StoreConfig,
 ) (metaModel.KVClientEx, error) {
-	metaKVClient, err := meta.NewKVClient(&params)
+	// TODO: need namespace here
+	metaKVClient, err := meta.NewKVClient(metaModel.EtcdKVClientType, &params)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
