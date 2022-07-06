@@ -1256,6 +1256,11 @@ error = '''
 resource path is illegal: %s
 '''
 
+["DFLOW:ErrInvalidCliParameter"]
+error = '''
+invalid cli parameters
+'''
+
 ["DFLOW:ErrInvalidJobType"]
 error = '''
 invalid job type: %s

@@ -28,12 +28,22 @@ type balanceScheduler struct {
 	random               *rand.Rand
 	lastRebalanceTime    time.Time
 	checkBalanceInterval time.Duration
+	// forceBalance forces the scheduler to produce schedule tasks regardless of
+	// `checkBalanceInterval`.
+	// It is set to true when the last time `Schedule` produces some tasks,
+	// and it is likely there are more tasks will be produced in the next
+	// `Schedule`.
+	// It speeds up rebalance.
+	forceBalance bool
+
+	maxTaskConcurrency int
 }
 
-func newBalanceScheduler(interval time.Duration) *balanceScheduler {
+func newBalanceScheduler(interval time.Duration, concurrency int) *balanceScheduler {
 	return &balanceScheduler{
 		random:               rand.New(rand.NewSource(time.Now().UnixNano())),
 		checkBalanceInterval: interval,
+		maxTaskConcurrency:   concurrency,
 	}
 }
 
@@ -47,11 +57,14 @@ func (b *balanceScheduler) Schedule(
 	captures map[model.CaptureID]*CaptureStatus,
 	replications map[model.TableID]*ReplicationSet,
 ) []*scheduleTask {
-	now := time.Now()
-	if now.Sub(b.lastRebalanceTime) < b.checkBalanceInterval {
-		return nil
+	if !b.forceBalance {
+		now := time.Now()
+		if now.Sub(b.lastRebalanceTime) < b.checkBalanceInterval {
+			// skip balance.
+			return nil
+		}
+		b.lastRebalanceTime = now
 	}
-	b.lastRebalanceTime = now
 
 	for _, capture := range captures {
 		if capture.State == CaptureStateStopping {
@@ -61,20 +74,19 @@ func (b *balanceScheduler) Schedule(
 		}
 	}
 
-	tasks := make([]*scheduleTask, 0)
-	task := buildBurstBalanceMoveTables(b.random, currentTables, captures, replications)
-	if task != nil {
-		tasks = append(tasks, task)
-	}
+	tasks := buildBalanceMoveTables(
+		b.random, currentTables, captures, replications, b.maxTaskConcurrency)
+	b.forceBalance = len(tasks) != 0
 	return tasks
 }
 
-func buildBurstBalanceMoveTables(
+func buildBalanceMoveTables(
 	random *rand.Rand,
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*CaptureStatus,
 	replications map[model.TableID]*ReplicationSet,
-) *scheduleTask {
+	maxTaskConcurrency int,
+) []*scheduleTask {
 	captureTables := make(map[model.CaptureID][]model.TableID)
 	for _, tableID := range currentTables {
 		rep, ok := replications[tableID]
@@ -89,7 +101,11 @@ func buildBurstBalanceMoveTables(
 		}
 	}
 
-	// We do not need to accept callback here.
-	accept := (callback)(nil)
-	return newBurstBalanceMoveTables(accept, random, captures, replications)
+	moves := newBalanceMoveTables(random, captures, replications, maxTaskConcurrency)
+	tasks := make([]*scheduleTask, 0, len(moves))
+	for i := 0; i < len(moves); i++ {
+		// No need for accept callback here.
+		tasks = append(tasks, &scheduleTask{moveTable: &moves[i]})
+	}
+	return tasks
 }

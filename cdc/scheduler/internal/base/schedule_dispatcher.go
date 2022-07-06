@@ -86,7 +86,7 @@ func NewBaseScheduleDispatcher(
 	checkpointTs model.Ts,
 ) *ScheduleDispatcher {
 	// logger is just the global logger with the `changefeed-id` field attached.
-	logger := log.L().With(
+	logger := log.With(
 		zap.String("namespace", changeFeedID.Namespace),
 		zap.String("changefeed", changeFeedID.ID))
 
