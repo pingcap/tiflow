@@ -179,10 +179,10 @@ type Syncer struct {
 	// the status of this track may change over time.
 	safeMode *sm.SafeMode
 
-	upstreamTZ         *time.Location
-	timezone           *time.Location
-	timezone_last_time string
-	upstreamTZStr      string
+	upstreamTZ       *time.Location
+	timezone         *time.Location
+	timezoneLastTime string
+	upstreamTZStr    string
 
 	binlogSizeCount     atomic.Int64
 	lastBinlogSizeCount atomic.Int64
@@ -1326,14 +1326,14 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 
 		// set timezone
 		if ddlJob.timezone != "" {
-			s.timezone_last_time = ddlJob.timezone
+			s.timezoneLastTime = ddlJob.timezone
 			setTimezoneSQL := fmt.Sprintf("SET SESSION TIME_ZONE = '%s'", ddlJob.timezone)
 			ddlJob.ddls = append([]string{setTimezoneSQL}, ddlJob.ddls...)
 			setTimezoneSQLDefault := fmt.Sprintf("SET SESSION TIME_ZONE = DEFAULT")
 			ddlJob.ddls = append(ddlJob.ddls, setTimezoneSQLDefault)
 		} else {
 			// use last time's time zone
-			setTimezoneSQL := fmt.Sprintf("SET SESSION TIME_ZONE = '%s'", s.timezone_last_time)
+			setTimezoneSQL := fmt.Sprintf("SET SESSION TIME_ZONE = '%s'", s.timezoneLastTime)
 			ddlJob.ddls = append([]string{setTimezoneSQL}, ddlJob.ddls...)
 			setTimezoneSQLDefault := fmt.Sprintf("SET SESSION TIME_ZONE = DEFAULT")
 			ddlJob.ddls = append(ddlJob.ddls, setTimezoneSQLDefault)

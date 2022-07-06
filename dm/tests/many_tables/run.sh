@@ -8,6 +8,11 @@ source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME
 TABLE_NUM=500
 
+function restore_timezone() {
+	run_sql_source1 "SET GLOBAL TIME_ZONE = SYSTEM"
+	run_sql_tidb "SET GLOBAL TIME_ZONE = SYSTEM"
+}
+
 function prepare_data() {
 	run_sql 'DROP DATABASE if exists many_tables_db;' $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql 'CREATE DATABASE many_tables_db;' $MYSQL_PORT1 $MYSQL_PASSWORD1
@@ -49,6 +54,14 @@ function incremental_data_2() {
 }
 
 function run() {
+	run_sql_source1 "SET GLOBAL TIME_ZONE = '+02:00'"
+	run_sql_source1 "SELECT cast(TIMEDIFF(NOW(6), UTC_TIMESTAMP(6)) as time) time"
+	check_contains "time: 02:00:00"
+	run_sql_tidb "SET GLOBAL TIME_ZONE = '+06:00'"
+	run_sql_tidb "SELECT cast(TIMEDIFF(NOW(6), UTC_TIMESTAMP(6)) as time) time"
+	check_contains "time: 06:00:00"
+	trap restore_timezone EXIT
+
 	echo "start prepare_data"
 	prepare_data
 	echo "finish prepare_data"
