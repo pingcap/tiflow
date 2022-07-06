@@ -21,6 +21,7 @@ import (
 	"time"
 
 	pcErrors "github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
@@ -28,7 +29,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
@@ -44,7 +44,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
-	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
@@ -124,7 +124,7 @@ func (s *Server) buildDeps() (*deps.Deps, error) {
 		return nil, err
 	}
 
-	err = deps.Provide(func() extkv.KVClientEx {
+	err = deps.Provide(func() metaModel.KVClientEx {
 		return s.metastores.BusinessStore()
 	})
 	if err != nil {

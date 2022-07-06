@@ -50,8 +50,8 @@ import (
 	externRescManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcetypes"
-	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
-	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
+	"github.com/pingcap/tiflow/engine/pkg/meta"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
@@ -116,7 +116,7 @@ type Server struct {
 	// framework metastore client
 	frameMetaClient pkgOrm.Client
 	// user metastore kvclient
-	userMetaKVClient extkv.KVClientEx
+	userMetaKVClient metaModel.KVClientEx
 }
 
 // PersistResource implements pb.MasterServer.PersistResource
@@ -518,7 +518,7 @@ func (s *Server) registerMetaStore() error {
 	if err != nil {
 		return err
 	}
-	if s.userMetaKVClient, err = kvclient.NewKVClient(cfg.UserMetaConf); err != nil {
+	if s.userMetaKVClient, err = meta.NewKVClient(cfg.UserMetaConf); err != nil {
 		log.Error("connect to user metastore fail", zap.Any("config", cfg.UserMetaConf), zap.Error(err))
 		return err
 	}
@@ -688,7 +688,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		return err
 	}
 
-	if err := dp.Provide(func() extkv.KVClientEx {
+	if err := dp.Provide(func() metaModel.KVClientEx {
 		return s.userMetaKVClient
 	}); err != nil {
 		return err

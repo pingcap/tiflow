@@ -116,6 +116,8 @@ func (o *options) complete(cmd *cobra.Command) error {
 
 	cmd.Flags().Visit(func(flag *pflag.Flag) {
 		switch flag.Name {
+		case "name":
+			cfg.Name = o.executorConfig.Name
 		case "worker-addr":
 			cfg.WorkerAddr = o.executorConfig.WorkerAddr
 		case "advertise-addr":
