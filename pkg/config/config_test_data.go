@@ -168,7 +168,8 @@ const (
         ]
       }
     ],
-    "schema-registry": ""
+    "schema-registry": "",
+    "transaction-atomicity": ""
   },
   "cyclic-replication": {
     "enable": false,

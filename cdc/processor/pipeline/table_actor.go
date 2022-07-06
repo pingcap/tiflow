@@ -57,7 +57,8 @@ type tableActor struct {
 	// backend mounter
 	mounter entry.Mounter
 	// backend tableSink
-	tableSink sink.Sink
+	tableSink   sink.Sink
+	redoManager redo.LogManager
 
 	pullerNode *pullerNode
 	sortNode   *sorterNode
@@ -103,6 +104,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	tableName string,
 	replicaInfo *model.TableReplicaInfo,
 	sink sink.Sink,
+	redoManager redo.LogManager,
 	targetTs model.Ts,
 ) (TablePipeline, error) {
 	config := cdcCtx.ChangefeedVars().Info.Config
@@ -134,6 +136,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		replicaInfo:   replicaInfo,
 		replicaConfig: config,
 		tableSink:     sink,
+		redoManager:   redoManager,
 		targetTs:      targetTs,
 		started:       false,
 
@@ -279,7 +282,10 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		zap.String("tableName", t.tableName),
 		zap.Uint64("quota", t.memoryQuota))
 
-	flowController := flowcontrol.NewTableFlowController(t.memoryQuota)
+	splitTxn := t.replicaConfig.Sink.TxnAtomicity.ShouldSplitTxn()
+
+	flowController := flowcontrol.NewTableFlowController(t.memoryQuota,
+		t.redoManager.Enabled(), splitTxn)
 	sorterNode := newSorterNode(t.tableName, t.tableID,
 		t.replicaInfo.StartTs, flowController,
 		t.mounter, t.replicaConfig,
@@ -318,7 +324,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 
 	actorSinkNode := newSinkNode(t.tableID, t.tableSink,
 		t.replicaInfo.StartTs,
-		t.targetTs, flowController)
+		t.targetTs, flowController, splitTxn)
 	actorSinkNode.initWithReplicaConfig(true, t.replicaConfig)
 	t.sinkNode = actorSinkNode
 
@@ -431,7 +437,7 @@ func (t *tableActor) ResolvedTs() model.Ts {
 	// another replication barrier for consistent replication instead of reusing
 	// the global resolved-ts.
 	if redo.IsConsistentEnabled(t.replicaConfig.Consistent.Level) {
-		return t.sinkNode.ResolvedTs().Ts
+		return t.sinkNode.ResolvedTs()
 	}
 	return t.sortNode.ResolvedTs()
 }

@@ -43,12 +43,12 @@ type mockFlowController struct{}
 func (c *mockFlowController) Consume(
 	msg *model.PolymorphicEvent,
 	size uint64,
-	blockCallBack func(bool) error,
+	blockCallBack func(uint64) error,
 ) error {
 	return nil
 }
 
-func (c *mockFlowController) Release(resolvedTs uint64) {
+func (c *mockFlowController) Release(resolved model.ResolvedTs) {
 }
 
 func (c *mockFlowController) Abort() {
@@ -78,12 +78,12 @@ func (s *mockSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 
 func (s *mockSink) FlushRowChangedEvents(
 	ctx context.Context, _ model.TableID, resolved model.ResolvedTs,
-) (uint64, error) {
+) (model.ResolvedTs, error) {
 	s.received = append(s.received, struct {
 		resolvedTs model.Ts
 		row        *model.RowChangedEvent
 	}{resolvedTs: resolved.Ts})
-	return resolved.Ts, nil
+	return resolved, nil
 }
 
 func (s *mockSink) EmitCheckpointTs(_ context.Context, _ uint64, _ []model.TableName) error {
@@ -135,7 +135,7 @@ func TestStatus(t *testing.T) {
 	})
 
 	// test stop at targetTs
-	node := newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{})
+	node := newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{}, false)
 	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil)))
 	require.Equal(t, TableStatusInitializing, node.Status())
 
@@ -175,7 +175,7 @@ func TestStatus(t *testing.T) {
 	require.Equal(t, uint64(10), node.CheckpointTs())
 
 	// test the stop at ts command
-	node = newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{})
+	node = newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{}, false)
 	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil)))
 	require.Equal(t, TableStatusInitializing, node.Status())
 
@@ -206,7 +206,7 @@ func TestStatus(t *testing.T) {
 	require.Equal(t, uint64(2), node.CheckpointTs())
 
 	// test the stop at ts command is after then resolvedTs and checkpointTs is greater than stop ts
-	node = newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{})
+	node = newSinkNode(1, &mockSink{}, 0, 10, &mockFlowController{}, false)
 	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil)))
 	require.Equal(t, TableStatusInitializing, node.Status())
 
@@ -249,7 +249,7 @@ func TestStopStatus(t *testing.T) {
 	})
 
 	closeCh := make(chan interface{}, 1)
-	node := newSinkNode(1, &mockCloseControlSink{mockSink: mockSink{}, closeCh: closeCh}, 0, 100, &mockFlowController{})
+	node := newSinkNode(1, &mockCloseControlSink{mockSink: mockSink{}, closeCh: closeCh}, 0, 100, &mockFlowController{}, false)
 	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil)))
 	require.Equal(t, TableStatusInitializing, node.Status())
 
@@ -287,7 +287,7 @@ func TestManyTs(t *testing.T) {
 		},
 	})
 	sink := &mockSink{}
-	node := newSinkNode(1, sink, 0, 10, &mockFlowController{})
+	node := newSinkNode(1, sink, 0, 10, &mockFlowController{}, false)
 	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil)))
 	require.Equal(t, TableStatusInitializing, node.Status())
 
@@ -422,7 +422,7 @@ func TestManyTs(t *testing.T) {
 		{resolvedTs: 1},
 	})
 	sink.Reset()
-	require.Equal(t, model.NewResolvedTs(uint64(2)), node.ResolvedTs())
+	require.Equal(t, model.NewResolvedTs(uint64(2)), node.getResolvedTs())
 	require.Equal(t, uint64(1), node.CheckpointTs())
 
 	require.Nil(t, node.Receive(
@@ -435,7 +435,7 @@ func TestManyTs(t *testing.T) {
 		{resolvedTs: 2},
 	})
 	sink.Reset()
-	require.Equal(t, model.NewResolvedTs(uint64(2)), node.ResolvedTs())
+	require.Equal(t, model.NewResolvedTs(uint64(2)), node.getResolvedTs())
 	require.Equal(t, uint64(2), node.CheckpointTs())
 }
 
@@ -449,7 +449,7 @@ func TestIgnoreEmptyRowChangeEvent(t *testing.T) {
 		},
 	})
 	sink := &mockSink{}
-	node := newSinkNode(1, sink, 0, 10, &mockFlowController{})
+	node := newSinkNode(1, sink, 0, 10, &mockFlowController{}, false)
 	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil)))
 
 	// empty row, no Columns and PreColumns.
@@ -471,7 +471,7 @@ func TestSplitUpdateEventWhenEnableOldValue(t *testing.T) {
 		},
 	})
 	sink := &mockSink{}
-	node := newSinkNode(1, sink, 0, 10, &mockFlowController{})
+	node := newSinkNode(1, sink, 0, 10, &mockFlowController{}, false)
 	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil)))
 
 	// nil row.
@@ -529,7 +529,7 @@ func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 		},
 	})
 	sink := &mockSink{}
-	node := newSinkNode(1, sink, 0, 10, &mockFlowController{})
+	node := newSinkNode(1, sink, 0, 10, &mockFlowController{}, false)
 	require.Nil(t, node.Init(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil)))
 
 	// nil row.
@@ -636,7 +636,7 @@ type flushFlowController struct {
 	releaseCounter int
 }
 
-func (c *flushFlowController) Release(resolvedTs uint64) {
+func (c *flushFlowController) Release(resolved model.ResolvedTs) {
 	c.releaseCounter++
 }
 
@@ -650,11 +650,11 @@ var fallBackResolvedTs = uint64(10)
 
 func (s *flushSink) FlushRowChangedEvents(
 	ctx context.Context, _ model.TableID, resolved model.ResolvedTs,
-) (uint64, error) {
+) (model.ResolvedTs, error) {
 	if resolved.Ts == fallBackResolvedTs {
-		return 0, nil
+		return model.NewResolvedTs(0), nil
 	}
-	return resolved.Ts, nil
+	return resolved, nil
 }
 
 // TestFlushSinkReleaseFlowController tests sinkNode.flushSink method will always
@@ -674,17 +674,17 @@ func TestFlushSinkReleaseFlowController(t *testing.T) {
 	flowController := &flushFlowController{}
 	sink := &flushSink{}
 	// sNode is a sinkNode
-	sNode := newSinkNode(1, sink, 0, 10, flowController)
+	sNode := newSinkNode(1, sink, 0, 10, flowController, false)
 	require.Nil(t, sNode.Init(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil)))
 	sNode.barrierTs = 10
 
 	err := sNode.flushSink(context.Background(), model.NewResolvedTs(uint64(8)))
 	require.Nil(t, err)
-	require.Equal(t, uint64(8), sNode.checkpointTs)
+	require.Equal(t, uint64(8), sNode.CheckpointTs())
 	require.Equal(t, 1, flowController.releaseCounter)
 	// resolvedTs will fall back in this call
 	err = sNode.flushSink(context.Background(), model.NewResolvedTs(uint64(10)))
 	require.Nil(t, err)
-	require.Equal(t, uint64(8), sNode.checkpointTs)
+	require.Equal(t, uint64(8), sNode.CheckpointTs())
 	require.Equal(t, 2, flowController.releaseCounter)
 }
