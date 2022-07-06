@@ -60,7 +60,6 @@ function run() {
 	run_sql_tidb "SET GLOBAL TIME_ZONE = '+06:00'"
 	run_sql_tidb "SELECT cast(TIMEDIFF(NOW(6), UTC_TIMESTAMP(6)) as time) time"
 	check_contains "time: 06:00:00"
-	trap restore_timezone EXIT
 
 	echo "start prepare_data"
 	prepare_data
@@ -152,6 +151,9 @@ cleanup_data many_tables_db
 cleanup_process
 
 run $*
+
+restore_timezone
+trap - EXIT
 
 cleanup_process
 
