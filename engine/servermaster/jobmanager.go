@@ -175,7 +175,7 @@ func (jm *JobManagerImplV2) DebugJob(ctx context.Context, req *pb.DebugJobReques
 			case <-time.After(100 * time.Millisecond):
 			}
 			if err := messageAgent.Tick(runCtx); err != nil {
-				log.L().Error("failed to run message agent tick", logutil.ShortError(err))
+				log.Error("failed to run message agent tick", logutil.ShortError(err))
 				return
 			}
 		}
@@ -246,7 +246,7 @@ func (jm *JobManagerImplV2) deleteJobMeta(ctx context.Context, jobID string) err
 		return err
 	}
 	if res.RowsAffected() == 0 {
-		log.L().Warn("Job not found in meta (or already deleted)",
+		log.Warn("Job not found in meta (or already deleted)",
 			zap.Any("job-id", jobID))
 	}
 
@@ -267,7 +267,7 @@ func (jm *JobManagerImplV2) QueryJob(ctx context.Context, req *pb.QueryJobReques
 	// TODO: refine the Load method here, seems strange
 	mcli := metadata.NewMasterMetadataClient(req.JobId, jm.frameMetaClient)
 	if masterMeta, err := mcli.Load(ctx); err != nil {
-		log.L().Warn("failed to load master kv meta from meta store", zap.Any("id", req.JobId), zap.Error(err))
+		log.Warn("failed to load master kv meta from meta store", zap.Any("id", req.JobId), zap.Error(err))
 	} else {
 		if masterMeta != nil && masterMeta.StatusCode != frameModel.MasterStatusUninit {
 			resp := &pb.QueryJobResponse{
@@ -282,7 +282,7 @@ func (jm *JobManagerImplV2) QueryJob(ctx context.Context, req *pb.QueryJobReques
 				resp.Status = pb.QueryJobResponse_stopped
 				return resp
 			default:
-				log.L().Warn("load master kv meta from meta store, but status is not expected",
+				log.Warn("load master kv meta from meta store, but status is not expected",
 					zap.Any("id", req.JobId), zap.Any("status", masterMeta.StatusCode), zap.Any("meta", masterMeta))
 			}
 		}
@@ -297,7 +297,7 @@ func (jm *JobManagerImplV2) QueryJob(ctx context.Context, req *pb.QueryJobReques
 // SubmitJob processes "SubmitJobRequest".
 func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) *pb.SubmitJobResponse {
 	// TODO call jm.notifier.Notify when we want to support "add job" event.
-	log.L().Info("submit job", zap.String("config", string(req.Config)))
+	log.Info("submit job", zap.String("config", string(req.Config)))
 	resp := &pb.SubmitJobResponse{}
 	var (
 		id  frameModel.WorkerID
@@ -353,7 +353,7 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 			req.GetProjectInfo().GetProjectId(),
 		))
 	} else {
-		log.L().Error("jobmanager don't have the 'SetProjectInfo' interface",
+		log.Error("jobmanager don't have the 'SetProjectInfo' interface",
 			zap.String("masterID", meta.ID),
 			zap.Any("projectInfo", tenant.NewProjectInfo(
 				req.GetProjectInfo().GetTenantId(),
@@ -369,10 +369,10 @@ func (jm *JobManagerImplV2) SubmitJob(ctx context.Context, req *pb.SubmitJobRequ
 		err2 := metadata.DeleteMasterMeta(ctx, jm.frameMetaClient, meta.ID)
 		if err2 != nil {
 			// TODO: add more GC mechanism if master meta is failed to delete
-			log.L().Error("failed to delete master meta", zap.Error(err2))
+			log.Error("failed to delete master meta", zap.Error(err2))
 		}
 
-		log.L().Error("create job master met error", zap.Error(err))
+		log.Error("create job master met error", zap.Error(err))
 		resp.Err = derrors.ToPBError(err)
 		return resp
 	}
@@ -464,7 +464,7 @@ func (jm *JobManagerImplV2) Tick(ctx context.Context) error {
 			return false, nil
 		}
 		if derrors.ErrMasterConcurrencyExceeded.Equal(err) {
-			log.L().Warn("create worker exceeds quota, retry later", zap.Error(err))
+			log.Warn("create worker exceeds quota, retry later", zap.Error(err))
 			return true, nil
 		}
 		return false, err
@@ -528,7 +528,7 @@ func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
 		InitProjectInfosAfterRecover([]*frameModel.MasterMetaKVData)
 	})
 	if !ok {
-		log.L().Panic("unfound interface for BaseMaster", zap.String("interface", "InitProjectInfosAfterRecover"))
+		log.Panic("unfound interface for BaseMaster", zap.String("interface", "InitProjectInfosAfterRecover"))
 		return derrors.ErrMasterInterfaceNotFound.GenWithStackByArgs()
 	}
 	impl.InitProjectInfosAfterRecover(jobs)
@@ -539,11 +539,11 @@ func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
 		}
 		// TODO: filter the job in backend
 		if job.StatusCode == frameModel.MasterStatusFinished || job.StatusCode == frameModel.MasterStatusStopped {
-			log.L().Info("skip finished or stopped job", zap.Any("job", job))
+			log.Info("skip finished or stopped job", zap.Any("job", job))
 			continue
 		}
 		jm.JobFsm.JobDispatched(job, true /*addFromFailover*/)
-		log.L().Info("recover job, move it to WaitAck job queue", zap.Any("job", job))
+		log.Info("recover job, move it to WaitAck job queue", zap.Any("job", job))
 	}
 	return nil
 }
@@ -551,7 +551,7 @@ func (jm *JobManagerImplV2) OnMasterRecovered(ctx context.Context) error {
 // OnWorkerDispatched implements frame.MasterImpl.OnWorkerDispatched
 func (jm *JobManagerImplV2) OnWorkerDispatched(worker framework.WorkerHandle, result error) error {
 	if result != nil {
-		log.L().Warn("dispatch worker met error", zap.Error(result))
+		log.Warn("dispatch worker met error", zap.Error(result))
 		return jm.JobFsm.JobDispatchFailed(worker)
 	}
 	return nil
@@ -559,7 +559,7 @@ func (jm *JobManagerImplV2) OnWorkerDispatched(worker framework.WorkerHandle, re
 
 // OnWorkerOnline implements frame.MasterImpl.OnWorkerOnline
 func (jm *JobManagerImplV2) OnWorkerOnline(worker framework.WorkerHandle) error {
-	log.L().Info("on worker online", zap.Any("id", worker.ID()))
+	log.Info("on worker online", zap.Any("id", worker.ID()))
 	return jm.JobFsm.JobOnline(worker)
 }
 
@@ -567,13 +567,13 @@ func (jm *JobManagerImplV2) OnWorkerOnline(worker framework.WorkerHandle) error 
 func (jm *JobManagerImplV2) OnWorkerOffline(worker framework.WorkerHandle, reason error) error {
 	needFailover := true
 	if derrors.ErrWorkerFinish.Equal(reason) {
-		log.L().Info("job master finished", zap.String("id", worker.ID()))
+		log.Info("job master finished", zap.String("id", worker.ID()))
 		needFailover = false
 	} else if derrors.ErrWorkerStop.Equal(reason) {
-		log.L().Info("job master stopped", zap.String("id", worker.ID()))
+		log.Info("job master stopped", zap.String("id", worker.ID()))
 		needFailover = false
 	} else {
-		log.L().Info("on worker offline", zap.Any("id", worker.ID()), zap.Any("reason", reason))
+		log.Info("on worker offline", zap.Any("id", worker.ID()), zap.Any("reason", reason))
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
@@ -586,13 +586,13 @@ func (jm *JobManagerImplV2) OnWorkerOffline(worker framework.WorkerHandle, reaso
 
 // OnWorkerMessage implements frame.MasterImpl.OnWorkerMessage
 func (jm *JobManagerImplV2) OnWorkerMessage(worker framework.WorkerHandle, topic p2p.Topic, message interface{}) error {
-	log.L().Info("on worker message", zap.Any("id", worker.ID()), zap.Any("topic", topic), zap.Any("message", message))
+	log.Info("on worker message", zap.Any("id", worker.ID()), zap.Any("topic", topic), zap.Any("message", message))
 	return nil
 }
 
 // OnWorkerStatusUpdated implements frame.MasterImpl.OnWorkerStatusUpdated
 func (jm *JobManagerImplV2) OnWorkerStatusUpdated(worker framework.WorkerHandle, newStatus *frameModel.WorkerStatus) error {
-	log.L().Info("on worker status updated", zap.String("worker-id", worker.ID()), zap.Any("status", newStatus))
+	log.Info("on worker status updated", zap.String("worker-id", worker.ID()), zap.Any("status", newStatus))
 	return nil
 }
 

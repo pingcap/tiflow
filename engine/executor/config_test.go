@@ -29,8 +29,10 @@ name = "executor-1"
 worker-addr = "0.0.0.0:10241"
 `
 	fileName := mustWriteToTempFile(t, testToml)
-	cfg := NewConfig()
-	err := cfg.Parse([]string{"-config", fileName})
+	cfg := GetDefaultExecutorConfig()
+	err := cfg.configFromFile(fileName)
+	require.NoError(t, err)
+	err = cfg.Adjust()
 	require.NoError(t, err)
 
 	expectedPath := "/tmp/dfe-storage/" + hex.EncodeToString([]byte("executor-1"))
@@ -46,8 +48,10 @@ func TestConfigDefaultLocalStoragePathNoName(t *testing.T) {
 worker-addr = "0.0.0.0:10241"
 `
 	fileName := mustWriteToTempFile(t, testToml)
-	cfg := NewConfig()
-	err := cfg.Parse([]string{"-config", fileName})
+	cfg := GetDefaultExecutorConfig()
+	err := cfg.configFromFile(fileName)
+	require.NoError(t, err)
+	err = cfg.Adjust()
 	require.NoError(t, err)
 
 	expectedPath := "/tmp/dfe-storage/" + hex.EncodeToString([]byte("executor-0.0.0.0:10241"))
@@ -66,8 +70,10 @@ worker-addr = "0.0.0.0:10241"
 local.base-dir = "/tmp/my-base-dir"
 `
 	fileName := mustWriteToTempFile(t, testToml)
-	cfg := NewConfig()
-	err := cfg.Parse([]string{"-config", fileName})
+	cfg := GetDefaultExecutorConfig()
+	err := cfg.configFromFile(fileName)
+	require.NoError(t, err)
+	err = cfg.Adjust()
 	require.NoError(t, err)
 
 	require.Equal(t, "/tmp/my-base-dir", cfg.Storage.Local.BaseDir)

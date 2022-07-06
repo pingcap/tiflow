@@ -64,7 +64,7 @@ func NewGCRunner(
 // Run runs the GCRunner. It blocks until ctx is canceled.
 func (r *DefaultGCRunner) Run(ctx context.Context) error {
 	defer func() {
-		log.L().Info("default gc runner exited")
+		log.Info("default gc runner exited")
 	}()
 	// TODO this will result in DB queries every 10 seconds.
 	// This is a very naive strategy, we will modify the
@@ -85,7 +85,7 @@ func (r *DefaultGCRunner) Run(ctx context.Context) error {
 		cancel()
 
 		if err != nil {
-			log.L().Warn("resource GC encountered error", zap.Error(err))
+			log.Warn("resource GC encountered error", zap.Error(err))
 		}
 	}
 }
@@ -121,9 +121,9 @@ func (r *DefaultGCRunner) gcOnce(
 		return err
 	}
 
-	log.L().Info("start gc'ing resource", zap.Any("resource", res))
+	log.Info("start gc'ing resource", zap.Any("resource", res))
 	if !res.GCPending {
-		log.L().Panic("unexpected gc_pending = false")
+		log.Panic("unexpected gc_pending = false")
 	}
 
 	tp, _, err := resModel.ParseResourcePath(res.ID)
@@ -133,7 +133,7 @@ func (r *DefaultGCRunner) gcOnce(
 
 	handler, exists := r.gcHandlers[tp]
 	if !exists {
-		log.L().Warn("no gc handler is found for given resource type",
+		log.Warn("no gc handler is found for given resource type",
 			zap.Any("resource-id", res.ID))
 		// Return nil here for potential backward compatibility when we do
 		// rolling upgrades online.
@@ -147,18 +147,18 @@ func (r *DefaultGCRunner) gcOnce(
 		}
 		// remove resource rpc returns resource not found, ignore this error and
 		// continue to delete resource from resourcemeta
-		log.L().Info("remove resource rpc returns resource not found, which is ignorable", zap.Error(err))
+		log.Info("remove resource rpc returns resource not found, which is ignorable", zap.Error(err))
 	}
 
 	result, err := r.client.DeleteResource(ctx, pkgOrm.ResourceKey{JobID: res.Job, ID: res.ID})
 	if err != nil {
-		log.L().Warn("Failed to delete resource meta after GC",
+		log.Warn("Failed to delete resource meta after GC",
 			zap.Any("resource", res),
 			zap.Error(err))
 		return err
 	}
 	if result.RowsAffected() == 0 {
-		log.L().Warn("Resource is deleted unexpectedly", zap.Any("resource", res))
+		log.Warn("Resource is deleted unexpectedly", zap.Any("resource", res))
 	}
 
 	return nil

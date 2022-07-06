@@ -53,16 +53,13 @@ type RedoLogWriter interface {
 	// FlushLog sends resolved-ts from table pipeline to log writer, it is
 	// essential to flush when a table doesn't have any row change event for
 	// some time, and the resolved ts of this table should be moved forward.
-	FlushLog(ctx context.Context, tableID int64, ts uint64) error
+	FlushLog(ctx context.Context, rtsMap map[model.TableID]model.Ts) error
 
 	// EmitCheckpointTs write CheckpointTs to meta file
 	EmitCheckpointTs(ctx context.Context, ts uint64) error
 
 	// EmitResolvedTs write ResolvedTs to meta file
 	EmitResolvedTs(ctx context.Context, ts uint64) error
-
-	// GetCurrentResolvedTs return all the ResolvedTs list for given tableIDs
-	GetCurrentResolvedTs(ctx context.Context, tableIDs []int64) (resolvedTsList map[int64]uint64, err error)
 
 	// DeleteAllLogs delete all log files related to the changefeed, called from owner only when delete changefeed
 	DeleteAllLogs(ctx context.Context) error
@@ -191,7 +188,7 @@ func NewLogWriter(
 		}
 	}
 
-	logWriter.metricTotalRowsCount = redoTotalRowsCountGauge.
+	logWriter.metricTotalRowsCount = common.RedoTotalRowsCountGauge.
 		WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID)
 	logWriters[cfg.ChangeFeedID] = logWriter
 	go logWriter.runGC(ctx)
@@ -382,7 +379,7 @@ func (l *LogWriter) SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error 
 }
 
 // FlushLog implement FlushLog api
-func (l *LogWriter) FlushLog(ctx context.Context, tableID int64, ts uint64) error {
+func (l *LogWriter) FlushLog(ctx context.Context, rtsMap map[model.TableID]model.Ts) error {
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
@@ -396,7 +393,9 @@ func (l *LogWriter) FlushLog(ctx context.Context, tableID int64, ts uint64) erro
 	if err := l.flush(); err != nil {
 		return err
 	}
-	l.setMaxCommitTs(tableID, ts)
+	for tableID, rts := range rtsMap {
+		l.setMaxCommitTs(tableID, rts)
+	}
 	return nil
 }
 
@@ -427,38 +426,6 @@ func (l *LogWriter) EmitResolvedTs(ctx context.Context, ts uint64) error {
 	}
 
 	return l.flushLogMeta(0, ts)
-}
-
-// GetCurrentResolvedTs implement GetCurrentResolvedTs api
-func (l *LogWriter) GetCurrentResolvedTs(ctx context.Context, tableIDs []int64) (map[int64]uint64, error) {
-	select {
-	case <-ctx.Done():
-		return nil, errors.Trace(ctx.Err())
-	default:
-	}
-
-	if len(tableIDs) == 0 {
-		return nil, nil
-	}
-
-	l.metaLock.RLock()
-	defer l.metaLock.RUnlock()
-
-	// need to make sure all data received got saved already
-	err := l.rowWriter.Flush()
-	if err != nil {
-		return nil, err
-	}
-
-	ret := map[int64]uint64{}
-	for i := 0; i < len(tableIDs); i++ {
-		id := tableIDs[i]
-		if v, ok := l.meta.ResolvedTsList[id]; ok {
-			ret[id] = v
-		}
-	}
-
-	return ret, nil
 }
 
 // DeleteAllLogs implement DeleteAllLogs api
@@ -557,7 +524,7 @@ var getAllFilesInS3 = func(ctx context.Context, l *LogWriter) ([]string, error) 
 
 // Close implements RedoLogWriter.Close.
 func (l *LogWriter) Close() error {
-	redoTotalRowsCountGauge.
+	common.RedoTotalRowsCountGauge.
 		DeleteLabelValues(l.cfg.ChangeFeedID.Namespace, l.cfg.ChangeFeedID.ID)
 
 	var err error

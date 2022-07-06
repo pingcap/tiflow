@@ -49,7 +49,7 @@ type LocalBroker struct {
 func NewBrokerForTesting(executorID resourcemeta.ExecutorID) *LocalBroker {
 	dir, err := ioutil.TempDir("/tmp", "*-localfiles")
 	if err != nil {
-		log.L().Panic("failed to make tempdir")
+		log.Panic("failed to make tempdir")
 	}
 	cfg := &storagecfg.Config{Local: storagecfg.LocalFileConfig{BaseDir: dir}}
 	client := manager.NewWrappedMockClient()

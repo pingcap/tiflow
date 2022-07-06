@@ -31,8 +31,8 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
-	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
-	mockkv "github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
+	mockkv "github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 )
@@ -89,7 +89,7 @@ type masterParamListForTest struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
 	FrameMetaClient       pkgOrm.Client
-	UserRawKVClient       extkv.KVClientEx
+	UserRawKVClient       metaModel.KVClientEx
 	ExecutorClientManager client.ClientsManager
 	ServerMasterClient    client.MasterClient
 	ResourceBroker        broker.Broker
@@ -177,7 +177,7 @@ func (m *MockMasterImpl) Tick(ctx context.Context) error {
 	defer m.mu.Unlock()
 
 	m.tickCount.Add(1)
-	log.L().Info("tick")
+	log.Info("tick")
 
 	args := m.Called(ctx)
 	return args.Error(0)
@@ -200,7 +200,7 @@ func (m *MockMasterImpl) OnWorkerOnline(worker WorkerHandle) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	log.L().Info("OnWorkerOnline", zap.Any("worker-id", worker.ID()))
+	log.Info("OnWorkerOnline", zap.Any("worker-id", worker.ID()))
 	m.onlineWorkerCount.Add(1)
 
 	args := m.Called(worker)

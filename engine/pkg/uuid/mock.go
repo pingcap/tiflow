@@ -28,7 +28,7 @@ func NewMock() *MockGenerator {
 // NewString implements Generator.NewString
 func (g *MockGenerator) NewString() (ret string) {
 	if len(g.list) == 0 {
-		log.L().Panic("Empty uuid list. Please use Push() to add a uuid to the list.")
+		log.Panic("Empty uuid list. Please use Push() to add a uuid to the list.")
 	}
 
 	ret, g.list = g.list[0], g.list[1:]

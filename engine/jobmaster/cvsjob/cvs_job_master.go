@@ -107,19 +107,19 @@ func NewCVSJobMaster(ctx *dcontext.Context, workerID frameModel.WorkerID, master
 	jm.statusRateLimiter = rate.NewLimiter(rate.Every(time.Second*2), 1)
 	jm.ctx = ctx.Context
 	jm.clocker = clock.New()
-	log.L().Info("new cvs jobmaster ", zap.Any("id :", jm.workerID))
+	log.Info("new cvs jobmaster ", zap.Any("id :", jm.workerID))
 	return jm
 }
 
 // InitImpl implements JobMasterImpl.InitImpl
 func (jm *JobMaster) InitImpl(ctx context.Context) (err error) {
-	log.L().Info("initializing the cvs jobmaster  ", zap.Any("id :", jm.workerID))
+	log.Info("initializing the cvs jobmaster  ", zap.Any("id :", jm.workerID))
 	jm.setStatusCode(frameModel.WorkerStatusInit)
 	filesNum := jm.jobStatus.Config.FileNum
 	if filesNum == 0 {
 		return errors.New("no file found under the folder")
 	}
-	log.L().Info("cvs jobmaster list file success", zap.Any("id", jm.workerID), zap.Any("file number", filesNum))
+	log.Info("cvs jobmaster list file success", zap.Any("id", jm.workerID), zap.Any("file number", filesNum))
 	// todo: store the jobmaster information into the metastore
 	for idx := 0; idx < filesNum; idx++ {
 		jm.jobStatus.FileInfos[idx] = &SyncFileInfo{Idx: idx}
@@ -148,7 +148,7 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 	jm.counter = 0
 	if !jm.IsMasterReady() {
 		if jm.statusRateLimiter.Allow() {
-			log.L().Info("jobmaster is not ready", zap.Any("master id", jm.workerID))
+			log.Info("jobmaster is not ready", zap.Any("master id", jm.workerID))
 		}
 		return nil
 	}
@@ -157,7 +157,7 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 	defer jm.Unlock()
 	if 0 == len(jm.jobStatus.FileInfos) {
 		jm.setStatusCode(frameModel.WorkerStatusFinished)
-		log.L().Info("cvs job master finished")
+		log.Info("cvs job master finished")
 		return jm.BaseJobMaster.Exit(ctx, jm.Status(), nil)
 	}
 	for idx, workerInfo := range jm.syncFilesInfo {
@@ -165,7 +165,7 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 		if workerInfo.needCreate.Load() {
 			workerID, err := jm.CreateWorker(framework.CvsTask, getTaskConfig(jm.jobStatus, idx), 10)
 			if err != nil {
-				log.L().Warn("create worker failed, try next time", zap.Any("master id", jm.workerID), zap.Error(err))
+				log.Warn("create worker failed, try next time", zap.Any("master id", jm.workerID), zap.Error(err))
 			} else {
 				jm.launchedWorkers.Store(workerID, idx)
 				workerInfo.needCreate.Store(false)
@@ -191,27 +191,27 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 			jm.jobStatus.FileInfos[idx].Location = taskStatus.CurrentLoc
 			jm.counter += taskStatus.Count
 
-			log.L().Debug("cvs job tmp num ", zap.Any("id", idx), zap.Any("status", string(status.ExtBytes)))
+			log.Debug("cvs job tmp num ", zap.Any("id", idx), zap.Any("status", string(status.ExtBytes)))
 		case frameModel.WorkerStatusError:
-			log.L().Error("sync file failed ", zap.Any("idx", idx))
+			log.Error("sync file failed ", zap.Any("idx", idx))
 		default:
-			log.L().Info("worker status abnormal", zap.Any("status", status))
+			log.Info("worker status abnormal", zap.Any("status", status))
 		}
 	}
 	if jm.statusRateLimiter.Allow() {
 		statsBytes, err := json.Marshal(jm.jobStatus)
 		if err != nil {
-			log.L().Warn("serialize job status failed, try next time", zap.Any("master id", jm.workerID), zap.Error(err))
+			log.Warn("serialize job status failed, try next time", zap.Any("master id", jm.workerID), zap.Error(err))
 			return err
 		}
 		_, err = jm.MetaKVClient().Put(ctx, jm.workerID, string(statsBytes))
 		if err != nil {
-			log.L().Warn("update job status failed, try next time", zap.Any("master id", jm.workerID), zap.Error(err))
+			log.Warn("update job status failed, try next time", zap.Any("master id", jm.workerID), zap.Error(err))
 		}
-		log.L().Info("cvs job master status", zap.Any("id", jm.workerID), zap.Int64("counter", jm.counter), zap.Any("status", jm.getStatusCode()))
+		log.Info("cvs job master status", zap.Any("id", jm.workerID), zap.Int64("counter", jm.counter), zap.Any("status", jm.getStatusCode()))
 	}
 	if jm.getStatusCode() == frameModel.WorkerStatusStopped {
-		log.L().Info("cvs job master stopped")
+		log.Info("cvs job master stopped")
 		return jm.BaseJobMaster.Exit(ctx, jm.Status(), nil)
 	}
 	return nil
@@ -219,18 +219,18 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 
 // OnMasterRecovered implements JobMasterImpl.OnMasterRecovered
 func (jm *JobMaster) OnMasterRecovered(ctx context.Context) (err error) {
-	log.L().Info("recovering job master", zap.Any("id", jm.ID()))
+	log.Info("recovering job master", zap.Any("id", jm.ID()))
 	// load self status
 	resp, err := jm.MetaKVClient().Get(ctx, jm.workerID)
 	if err != nil {
-		log.L().Warn("load status failed", zap.Any("master id", jm.ID), zap.Error(err))
+		log.Warn("load status failed", zap.Any("master id", jm.ID), zap.Error(err))
 		return err
 	}
 	if len(resp.Kvs) != 1 {
-		log.L().Error("jobmaster meta unexpected result", zap.Any("master id", jm.ID()), zap.Any("meta counts", len(resp.Kvs)))
+		log.Error("jobmaster meta unexpected result", zap.Any("master id", jm.ID()), zap.Any("meta counts", len(resp.Kvs)))
 	}
 	statusBytes := resp.Kvs[0].Value
-	log.L().Info("jobmaster recover from meta", zap.Any("master id", jm.ID()), zap.String("status", string(statusBytes)))
+	log.Info("jobmaster recover from meta", zap.Any("master id", jm.ID()), zap.String("status", string(statusBytes)))
 	err = json.Unmarshal(statusBytes, jm.jobStatus)
 	if err != nil {
 		return err
@@ -249,9 +249,9 @@ func (jm *JobMaster) OnWorkerDispatched(worker framework.WorkerHandle, err error
 		return nil
 	}
 	val, exist := jm.launchedWorkers.Load(worker.ID())
-	log.L().Warn("Worker Dispatched Fail", zap.Any("master id", jm.ID()), zap.Any("worker id", err), zap.Error(err))
+	log.Warn("Worker Dispatched Fail", zap.Any("master id", jm.ID()), zap.Any("worker id", err), zap.Error(err))
 	if !exist {
-		log.L().Panic("failed worker not found", zap.Any("worker", worker.ID()))
+		log.Panic("failed worker not found", zap.Any("worker", worker.ID()))
 	}
 	jm.launchedWorkers.Delete(worker.ID())
 	id := val.(int)
@@ -266,9 +266,9 @@ func (jm *JobMaster) OnWorkerDispatched(worker framework.WorkerHandle, err error
 func (jm *JobMaster) OnWorkerOnline(worker framework.WorkerHandle) error {
 	id, exist := jm.launchedWorkers.Load(worker.ID())
 	if !exist {
-		log.L().Info("job master recovering and get new worker", zap.Any("id", worker.ID()), zap.Any("master id", jm.ID()))
+		log.Info("job master recovering and get new worker", zap.Any("id", worker.ID()), zap.Any("master id", jm.ID()))
 		if jm.IsMasterReady() {
-			log.L().Panic("job master has ready and a new worker has been created, brain split occurs!")
+			log.Panic("job master has ready and a new worker has been created, brain split occurs!")
 		}
 		statusBytes := worker.Status().ExtBytes
 		status := cvsTask.Status{}
@@ -279,7 +279,7 @@ func (jm *JobMaster) OnWorkerOnline(worker framework.WorkerHandle) error {
 		}
 		id = status.TaskConfig.Idx
 	} else {
-		log.L().Info("worker online ", zap.Any("id", worker.ID()), zap.Any("master id", jm.ID()))
+		log.Info("worker online ", zap.Any("id", worker.ID()), zap.Any("master id", jm.ID()))
 	}
 	jm.Lock()
 	defer jm.Unlock()
@@ -305,9 +305,9 @@ func getTaskConfig(jobStatus *Status, id int) *cvsTask.Config {
 // 2. update checkpoint, but note that this operation might fail.
 func (jm *JobMaster) OnWorkerOffline(worker framework.WorkerHandle, reason error) error {
 	val, exist := jm.launchedWorkers.Load(worker.ID())
-	log.L().Info("on worker offline ", zap.Any("worker", worker.ID()))
+	log.Info("on worker offline ", zap.Any("worker", worker.ID()))
 	if !exist {
-		log.L().Panic("offline worker not found", zap.Any("worker", worker.ID()))
+		log.Panic("offline worker not found", zap.Any("worker", worker.ID()))
 	}
 	jm.launchedWorkers.Delete(worker.ID())
 	id := val.(int)
@@ -316,7 +316,7 @@ func (jm *JobMaster) OnWorkerOffline(worker framework.WorkerHandle, reason error
 	if derrors.ErrWorkerFinish.Equal(reason) {
 		delete(jm.syncFilesInfo, id)
 		delete(jm.jobStatus.FileInfos, id)
-		log.L().Info("worker finished", zap.String("worker-id", worker.ID()), zap.Any("status", worker.Status()), zap.Error(reason))
+		log.Info("worker finished", zap.String("worker-id", worker.ID()), zap.Any("status", worker.Status()), zap.Error(reason))
 		return nil
 	}
 	jm.syncFilesInfo[id].needCreate.Store(true)
@@ -356,7 +356,7 @@ func (jm *JobMaster) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) 
 
 // OnJobManagerMessage implements JobMasterImpl.OnJobManagerMessage
 func (jm *JobMaster) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageValue) error {
-	log.L().Info("cvs jobmaster: OnJobManagerMessage", zap.Any("message", message))
+	log.Info("cvs jobmaster: OnJobManagerMessage", zap.Any("message", message))
 	jm.Lock()
 	defer jm.Unlock()
 	switch msg := message.(type) {
@@ -384,17 +384,17 @@ func (jm *JobMaster) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageVal
 						cancel()
 						return err
 					}
-					log.L().Info("sent message to worker", zap.String("topic", topic), zap.Any("message", wMessage))
+					log.Info("sent message to worker", zap.String("topic", topic), zap.Any("message", wMessage))
 					cancel()
 				} else {
-					log.L().Info("skip sending message to tombstone worker", zap.String("worker-id", workerID))
+					log.Info("skip sending message to tombstone worker", zap.String("worker-id", workerID))
 				}
 			}
 		default:
-			log.L().Info("FakeMaster: ignore status change state", zap.Int32("state", int32(msg.ExpectState)))
+			log.Info("FakeMaster: ignore status change state", zap.Int32("state", int32(msg.ExpectState)))
 		}
 	default:
-		log.L().Info("unsupported message", zap.Any("message", message))
+		log.Info("unsupported message", zap.Any("message", message))
 	}
 
 	return nil
@@ -407,7 +407,7 @@ func (jm *JobMaster) OnOpenAPIInitialized(apiGroup *gin.RouterGroup) {}
 func (jm *JobMaster) Status() frameModel.WorkerStatus {
 	status, err := json.Marshal(jm.jobStatus)
 	if err != nil {
-		log.L().Panic("get status failed", zap.String("id", jm.workerID), zap.Error(err))
+		log.Panic("get status failed", zap.String("id", jm.workerID), zap.Error(err))
 	}
 	return frameModel.WorkerStatus{
 		Code:     jm.getStatusCode(),
