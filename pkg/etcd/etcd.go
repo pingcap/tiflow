@@ -89,6 +89,11 @@ func GetEtcdKeyJob(clusterID string, changeFeedID model.ChangeFeedID) string {
 	return ChangefeedStatusKeyPrefix(clusterID, changeFeedID.Namespace) + "/" + changeFeedID.ID
 }
 
+// MigrateBackupKey is the key of backup data during a migration.
+func MigrateBackupKey(version int, backupKey string) string {
+	return fmt.Sprintf("%s/%d/%s", migrateBackupPrefix, version, backupKey)
+}
+
 // CDCEtcdClient is a wrap of etcd client
 type CDCEtcdClient struct {
 	Client        *Client
@@ -138,6 +143,26 @@ func (c CDCEtcdClient) GetAllCDCInfo(ctx context.Context) ([]*mvccpb.KeyValue, e
 		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 	return resp.Kvs, nil
+}
+
+// CheckMultipleCDCClusterExist checks if other cdc clusters exists,
+// and returns an error is so, and user should uses --server instead
+func (c CDCEtcdClient) CheckMultipleCDCClusterExist(ctx context.Context) error {
+	resp, err := c.Client.Get(ctx, BaseKey(""),
+		clientv3.WithPrefix(),
+		clientv3.WithKeysOnly())
+	if err != nil {
+		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+	}
+	for _, kv := range resp.Kvs {
+		key := string(kv.Key)
+		if strings.HasPrefix(key, BaseKey(DefaultCDCClusterID)) ||
+			strings.HasPrefix(key, migrateBackupPrefix) {
+			continue
+		}
+		return cerror.ErrMultipleCDCClustersExist.GenWithStackByArgs()
+	}
+	return nil
 }
 
 // GetChangeFeeds returns kv revision and a map mapping from changefeedID to changefeed detail mvccpb.KeyValue

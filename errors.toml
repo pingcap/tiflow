@@ -586,6 +586,11 @@ error = '''
 meta not exists in region
 '''
 
+["CDC:ErrMultipleCDCClustersExist"]
+error = '''
+multiple TiCDC clusters exist while using --pd
+'''
+
 ["CDC:ErrMySQLConnectionError"]
 error = '''
 MySQL connection error

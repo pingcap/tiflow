@@ -126,9 +126,7 @@ func NewCapture(pdEndpoints []string, etcdClient *etcd.CDCEtcdClient, grpcServic
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
 
-		migrator: migrate.NewMigrator(
-			etcdClient,
-			pdEndpoints, conf),
+		migrator: migrate.NewMigrator(etcdClient, pdEndpoints, conf),
 	}
 }
 
