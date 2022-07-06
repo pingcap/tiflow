@@ -55,9 +55,7 @@ func TestIsIPv6Address(t *testing.T) {
 		want bool
 	}{
 		{"valid ipv6 address1", "::1", true},
-		{"valid ipv6 address2", "[::1]", true},
-		{"valid ipv6 address3", "1080:0:0:0:8:800:200C:417A", true},
-		{"valid ipv6 address4", "[1080:0:0:0:8:800:200C:417A]", true},
+		{"valid ipv6 address2", "1080:0:0:0:8:800:200C:417A", true},
 		{"ipv4 address", "127.0.0.1", false},
 		{"empty address", "", false},
 		{"not ip address", "emmmmmmmm", false},
