@@ -196,9 +196,8 @@ func TestUnitHolderCheckAndUpdateStatus(t *testing.T) {
 	require.NotNil(t, unitHolder.sourceStatus)
 	require.NoError(t, mock.ExpectationsWereMet())
 
-	// the seconds time CheckAndUpdateStatus, will not query upstreamDB
+	// the second time CheckAndUpdateStatus, will not query upstreamDB
 	unitHolder.upstreamDB = nil
-	u.On("Status").Return(&pb.DumpStatus{})
 	unitHolder.CheckAndUpdateStatus(ctx)
 	u.AssertExpectations(t)
 
