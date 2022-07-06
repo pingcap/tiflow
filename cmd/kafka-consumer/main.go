@@ -504,7 +504,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		)
 		switch c.protocol {
 		case config.ProtocolOpen, config.ProtocolDefault:
-			decoder, err = codec.NewJSONEventBatchDecoder(message.Key, message.Value)
+			decoder, err = codec.NewOpenProtocolBatchDecoder(message.Key, message.Value)
 		case config.ProtocolCanalJSON:
 			decoder = codec.NewCanalFlatEventBatchDecoder(message.Value, c.enableTiDBExtension)
 		default:
