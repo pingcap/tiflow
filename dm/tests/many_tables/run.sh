@@ -152,8 +152,6 @@ cleanup_process
 
 run $*
 
-restore_timezone
-trap - EXIT
 
 cleanup_process
 
