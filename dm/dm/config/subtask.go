@@ -34,7 +34,6 @@ import (
 	router "github.com/pingcap/tidb/util/table-router"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/pkg/dumpling"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -477,7 +476,7 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 	if _, err := column.NewMapping(c.CaseSensitive, c.ColumnMappingRules); err != nil {
 		return terror.ErrConfigGenColumnMapping.Delegate(err)
 	}
-	if _, err := dumpling.ParseFileSize(c.MydumperConfig.ChunkFilesize, 0); err != nil {
+	if _, err := utils.ParseFileSize(c.MydumperConfig.ChunkFilesize, 0); err != nil {
 		return terror.ErrConfigInvalidChunkFileSize.Generate(c.MydumperConfig.ChunkFilesize)
 	}
 

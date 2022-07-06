@@ -17,16 +17,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
 )
-
-func init() {
-	err := log.InitLogger(&log.Config{Level: "warn"})
-	if err != nil {
-		panic(err)
-	}
-}
 
 func TestPrepareEtcd(t *testing.T) {
 	t.Parallel()

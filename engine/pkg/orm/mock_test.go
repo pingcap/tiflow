@@ -819,7 +819,7 @@ func testInnerMock(t *testing.T, cli Client, c mCase) {
 			// require.True(t, res[0].Interface().(bool))
 		} else {
 			require.NotNil(t, result[0].Interface())
-			// log.L().Info("result", zap.Any("expect", c.output), zap.Any("actual", result[0].Interface()))
+			// log.Info("result", zap.Any("expect", c.output), zap.Any("actual", result[0].Interface()))
 			// FIXME: datetime is different from what we insert. Why??
 			// require.Equal(t, c.output, result[0].Interface())
 		}
