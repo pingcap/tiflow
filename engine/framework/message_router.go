@@ -84,7 +84,7 @@ func (r *MessageRouter) AppendMessage(topic p2p.Topic, msg p2p.MessageValue) {
 		default:
 			select {
 			case dropMsg := <-r.buffer:
-				log.L().Warn("drop message because of buffer is full",
+				log.Warn("drop message because of buffer is full",
 					zap.String("topic", dropMsg.topic), zap.Any("message", dropMsg.msg))
 			default:
 			}
@@ -96,7 +96,7 @@ func (r *MessageRouter) onError(err error) {
 	select {
 	case r.errCh <- err:
 	default:
-		log.L().Warn("error is dropped because errCh is full", zap.Error(err))
+		log.Warn("error is dropped because errCh is full", zap.Error(err))
 	}
 }
 

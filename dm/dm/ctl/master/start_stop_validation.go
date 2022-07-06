@@ -39,7 +39,7 @@ func NewStartValidationCmd() *cobra.Command {
 		RunE:  startValidation,
 	}
 	cmd.Flags().Bool("all-task", false, "whether applied to all tasks")
-	cmd.Flags().String("mode", "", "specify the mode of validation: full, fast")
+	cmd.Flags().String("mode", "full", "specify the mode of validation: full (default), fast; this flag will be ignored if the validation task has been ever enabled but currently paused")
 	cmd.Flags().String("start-time", "", "specify the start time of binlog for validation, e.g. '2021-10-21 00:01:00' or 2021-10-21T00:01:00")
 	return cmd
 }
@@ -50,7 +50,7 @@ func NewStopValidationCmd() *cobra.Command {
 		Short: "stop validating the completeness of the data",
 		RunE:  stopValidation,
 	}
-	cmd.Flags().Bool("all-task", false, "whether to all tasks")
+	cmd.Flags().Bool("all-task", false, "whether applied to all tasks")
 	return cmd
 }
 

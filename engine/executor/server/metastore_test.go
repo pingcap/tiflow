@@ -26,8 +26,8 @@ import (
 	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/server/mocks"
-	kvMock "github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	kvMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 )
 
@@ -47,7 +47,7 @@ func TestMetastoreManagerBasics(t *testing.T) {
 	manager, mockCreator := newMetastoreManagerForTesting(ctrl)
 	ctx := context.Background()
 
-	var discoveryStoreParams metaclient.StoreConfigParams
+	var discoveryStoreParams metaModel.StoreConfig
 	discoveryStoreParams.SetEndpoints("embedded-etcd:1234")
 
 	mockServerMasterClient.On(
@@ -60,7 +60,7 @@ func TestMetastoreManagerBasics(t *testing.T) {
 			Address: "embedded-etcd:1234", // fake address
 		}, nil).Once()
 
-	var frameStoreParams metaclient.StoreConfigParams
+	var frameStoreParams metaModel.StoreConfig
 	frameStoreParams.SetEndpoints("127.0.0.1:3306")
 	frameParamBytes, err := json.Marshal(frameStoreParams)
 	require.NoError(t, err)
@@ -75,7 +75,7 @@ func TestMetastoreManagerBasics(t *testing.T) {
 			Address: string(frameParamBytes),
 		}, nil).Once()
 
-	var businessStoreParams metaclient.StoreConfigParams
+	var businessStoreParams metaModel.StoreConfig
 	businessStoreParams.SetEndpoints("127.0.0.1:12345")
 	businessParamBytes, err := json.Marshal(businessStoreParams)
 	require.NoError(t, err)

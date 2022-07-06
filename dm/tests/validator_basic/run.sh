@@ -685,12 +685,42 @@ function test_validation_syncer_stopped() {
 		"new\/ignored\/resolved: 0\/0\/0" 1
 }
 
+function test_dup_autopk() {
+	# successfully validate sharding tables
+	# though the downstream table deletes the primary key
+	# because not null unique key can identify a row accurately.
+	echo "--> test duplicate auto-incr pk"
+	export GO_FAILPOINTS=""
+	prepare_dm_and_source
+	dmctl_operate_source create $cur/conf/source2.yaml $SOURCE_ID2
+	# auto_incr pk in both tables
+	run_sql_source1 "create table validator_basic.shard1(id int primary key auto_increment, ukey int not null unique key)"
+	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD1
+	run_sql_source2 "create table validator_basic.shard1(id int primary key auto_increment, ukey int not null unique key)"
+	# delete pk in tidb
+	run_sql_tidb "create database if not exists validator_basic"
+	run_sql_tidb "create table validator_basic.shard(id int, ukey int not null unique key)"
+	dmctl_start_task "$cur/conf/sharding-task.yaml" "--remove-meta"
+	run_sql_source1 "insert into validator_basic.shard1(ukey) values(1),(2),(3)"
+	run_sql_source2 "insert into validator_basic.shard1(ukey) values(4),(5),(6)"
+	sleep 1.5
+	run_sql_source2 "alter table $db_name.t1 comment 'a';" # trigger source2 flush
+	trigger_checkpoint_flush                               # trigger source1 flush
+	# validate pass
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 3\/0\/0\"" 2 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 2 \
+		"new\/ignored\/resolved: 0\/0\/0" 2
+}
+
 run_standalone $*
 validate_table_with_different_pk
 test_unsupported_table_status
 stopped_validator_fail_over
 test_data_filter
 test_validation_syncer_stopped
+test_dup_autopk
 cleanup_process $*
 cleanup_data $db_name
 cleanup_data_upstream $db_name

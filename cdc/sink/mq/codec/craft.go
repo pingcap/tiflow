@@ -37,7 +37,7 @@ type CraftEventBatchEncoder struct {
 
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
-	return newResolvedMQMessage(config.ProtocolCraft, nil, craft.NewResolvedEventEncoder(e.allocator, ts).Encode(), ts), nil
+	return newResolvedMsg(config.ProtocolCraft, nil, craft.NewResolvedEventEncoder(e.allocator, ts).Encode(), ts), nil
 }
 
 func (e *CraftEventBatchEncoder) flush() {
@@ -46,16 +46,17 @@ func (e *CraftEventBatchEncoder) flush() {
 	schema := headers.GetSchema(0)
 	table := headers.GetTable(0)
 	rowsCnt := e.rowChangedBuffer.RowsCount()
-	mqMessage := NewMQMessage(config.ProtocolCraft, nil, e.rowChangedBuffer.Encode(), ts, model.MqMessageTypeRow, &schema, &table)
+	mqMessage := newMsg(config.ProtocolCraft, nil, e.rowChangedBuffer.Encode(), ts, model.MessageTypeRow, &schema, &table)
 	mqMessage.SetRowsCount(rowsCnt)
 	e.messageBuf = append(e.messageBuf, mqMessage)
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) AppendRowChangedEvent(
-	ctx context.Context,
-	topic string,
+	_ context.Context,
+	_ string,
 	ev *model.RowChangedEvent,
+	_ func(),
 ) error {
 	rows, size := e.rowChangedBuffer.AppendRowChangedEvent(ev)
 	if size > e.maxMessageBytes || rows >= e.maxBatchSize {
@@ -66,7 +67,7 @@ func (e *CraftEventBatchEncoder) AppendRowChangedEvent(
 
 // EncodeDDLEvent implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) EncodeDDLEvent(ev *model.DDLEvent) (*MQMessage, error) {
-	return newDDLMQMessage(config.ProtocolCraft, nil, craft.NewDDLEventEncoder(e.allocator, ev).Encode(), ev), nil
+	return newDDLMsg(config.ProtocolCraft, nil, craft.NewDDLEventEncoder(e.allocator, ev).Encode(), ev), nil
 }
 
 // Build implements the EventBatchEncoder interface
@@ -123,9 +124,9 @@ type CraftEventBatchDecoder struct {
 }
 
 // HasNext implements the EventBatchDecoder interface
-func (b *CraftEventBatchDecoder) HasNext() (model.MqMessageType, bool, error) {
+func (b *CraftEventBatchDecoder) HasNext() (model.MessageType, bool, error) {
 	if b.index >= b.headers.Count() {
-		return model.MqMessageTypeUnknown, false, nil
+		return model.MessageTypeUnknown, false, nil
 	}
 	return b.headers.GetType(b.index), true, nil
 }
@@ -136,7 +137,7 @@ func (b *CraftEventBatchDecoder) NextResolvedEvent() (uint64, error) {
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
-	if !hasNext || ty != model.MqMessageTypeResolved {
+	if !hasNext || ty != model.MessageTypeResolved {
 		return 0, cerror.ErrCraftCodecInvalidData.GenWithStack("not found resolved event message")
 	}
 	ts := b.headers.GetTs(b.index)
@@ -150,7 +151,7 @@ func (b *CraftEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, 
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	if !hasNext || ty != model.MqMessageTypeRow {
+	if !hasNext || ty != model.MessageTypeRow {
 		return nil, cerror.ErrCraftCodecInvalidData.GenWithStack("not found row changed event message")
 	}
 	oldValue, newValue, err := b.decoder.RowChangedEvent(b.index)
@@ -188,7 +189,7 @@ func (b *CraftEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	if !hasNext || ty != model.MqMessageTypeDDL {
+	if !hasNext || ty != model.MessageTypeDDL {
 		return nil, cerror.ErrCraftCodecInvalidData.GenWithStack("not found ddl event message")
 	}
 	ddlType, query, err := b.decoder.DDLEvent(b.index)
