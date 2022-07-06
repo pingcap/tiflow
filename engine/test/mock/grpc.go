@@ -192,7 +192,7 @@ func (s *baseServer) Stop() {
 	container.mu.Lock()
 	defer container.mu.Unlock()
 	_, ok := container.servers[s.addr]
-	log.L().Info("server is cancelled", zap.String("ip", s.addr))
+	log.Info("server is cancelled", zap.String("ip", s.addr))
 	if ok {
 		delete(container.servers, s.addr)
 	}

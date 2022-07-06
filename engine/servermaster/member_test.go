@@ -104,7 +104,7 @@ func TestUpdateServerMembers(t *testing.T) {
 		require.Nil(t, err)
 	}
 
-	cfg := NewConfig()
+	cfg := GetDefaultMasterConfig()
 	cfg.Etcd.Name = etcdName
 	cfg.AdvertiseAddr = addr
 

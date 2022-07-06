@@ -44,8 +44,21 @@ func TestSchedulerBalanceCaptureOnline(t *testing.T) {
 	tasks = sched.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 
+	// New capture "b" online, it keeps balancing, even though it has not pass
+	// balance interval yet.
+	sched.checkBalanceInterval = time.Hour
+	captures = map[model.CaptureID]*CaptureStatus{"a": {}, "b": {}}
+	currentTables = []model.TableID{1, 2}
+	replications = map[model.TableID]*ReplicationSet{
+		1: {State: ReplicationSetStateReplicating, Primary: "a"},
+		2: {State: ReplicationSetStateReplicating, Primary: "a"},
+	}
+	tasks = sched.Schedule(0, currentTables, captures, replications)
+	require.Len(t, tasks, 1)
+
 	// New capture "b" online, but this time it not pass check balance interval.
 	sched.checkBalanceInterval = time.Hour
+	sched.forceBalance = false
 	captures = map[model.CaptureID]*CaptureStatus{"a": {}, "b": {}}
 	currentTables = []model.TableID{1, 2}
 	replications = map[model.TableID]*ReplicationSet{

@@ -463,4 +463,10 @@ var (
 		"local resource directory not writable",
 		errors.RFCCodeText("DFLOW:ErrLocalFileDirNotWritable"),
 	)
+
+	// cli related errors
+	ErrInvalidCliParameter = errors.Normalize(
+		"invalid cli parameters",
+		errors.RFCCodeText("DFLOW:ErrInvalidCliParameter"),
+	)
 )

@@ -31,7 +31,7 @@ func main() {
 
 	go func() {
 		defer wg.Done()
-		log.L().Info("Start http listen on :8083")
+		log.Info("Start http listen on :8083")
 		err := http.ListenAndServe(":8083", nil)
 		if err != nil {
 			return
@@ -40,12 +40,12 @@ func main() {
 
 	go func() {
 		defer wg.Done()
-		log.L().Info("Start scenarios simulator")
+		log.Info("Start scenarios simulator")
 		simulator(&wg)
 	}()
 
 	wg.Wait()
-	log.L().Info("Exit scenarios metric test")
+	log.Info("Exit scenarios metric test")
 }
 
 // simulator will simulate the usage of multi-projects/tasks prometheus metric,
@@ -85,11 +85,11 @@ func simulator(wg *sync.WaitGroup) {
 }
 
 func scenarios1OneServerOneExecutor(wg *sync.WaitGroup) {
-	log.L().Info("Start scenarios1OneServerOneExecutor simulation...")
+	log.Info("Start scenarios1OneServerOneExecutor simulation...")
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		// log.L().Info("Start scenarios1OneServerOneExecutor servermaster")
+		// log.Info("Start scenarios1OneServerOneExecutor servermaster")
 		// we create new registry here to simulate running an isolation process or container
 		reg := promutil.NewRegistry()
 		http.Handle("/metric1", promutil.HTTPHandlerForMetricImpl(reg))
@@ -115,7 +115,7 @@ func scenarios1OneServerOneExecutor(wg *sync.WaitGroup) {
 
 	go func() {
 		defer wg.Done()
-		// log.L().Info("Start scenarios1OneServerOneExecutor executor")
+		// log.Info("Start scenarios1OneServerOneExecutor executor")
 		// we create new registry here to simulate running an isolation process or container
 		reg := promutil.NewRegistry()
 		http.Handle("/metric2", promutil.HTTPHandlerForMetricImpl(reg))
@@ -141,12 +141,12 @@ func scenarios1OneServerOneExecutor(wg *sync.WaitGroup) {
 }
 
 func scenarios2OneServerMultiExecutor(wg *sync.WaitGroup) {
-	log.L().Info("Start scenarios2OneServerMultiExecutor simulation...")
+	log.Info("Start scenarios2OneServerMultiExecutor simulation...")
 	wg.Add(2)
 	// We already create a servermaster in scenarios1OneServerOneExecutor, so we don't create one here
 	go func() {
 		defer wg.Done()
-		// log.L().Info("Start scenarios2OneServerMultiExecutor executor0")
+		// log.Info("Start scenarios2OneServerMultiExecutor executor0")
 		// we create new registry here to simulate running an isolation process or container
 		reg := promutil.NewRegistry()
 		http.Handle("/metric3", promutil.HTTPHandlerForMetricImpl(reg))
@@ -172,7 +172,7 @@ func scenarios2OneServerMultiExecutor(wg *sync.WaitGroup) {
 
 	go func() {
 		defer wg.Done()
-		// log.L().Info("Start scenarios2OneServerMultiExecutor executor1")
+		// log.Info("Start scenarios2OneServerMultiExecutor executor1")
 		// we create new registry here to simulate running an isolation process or container
 		reg := promutil.NewRegistry()
 		http.Handle("/metric4", promutil.HTTPHandlerForMetricImpl(reg))
@@ -198,7 +198,7 @@ func scenarios2OneServerMultiExecutor(wg *sync.WaitGroup) {
 }
 
 func scenarios3OneJobmasterOneWorker(wg *sync.WaitGroup) {
-	log.L().Info("Start scenarios3OneJobmasterOneWorker simulation...")
+	log.Info("Start scenarios3OneJobmasterOneWorker simulation...")
 	wg.Add(1)
 
 	tenant := tenant.NewProjectInfo(
@@ -211,7 +211,7 @@ func scenarios3OneJobmasterOneWorker(wg *sync.WaitGroup) {
 
 	go func() {
 		defer wg.Done()
-		// log.L().Info("Start scenarios3OneJobmasterOneWorker jobmaster")
+		// log.Info("Start scenarios3OneJobmasterOneWorker jobmaster")
 		// we create new registry here to simulate running an isolation process or container
 		reg := promutil.NewRegistry()
 		http.Handle("/metric5", promutil.HTTPHandlerForMetricImpl(reg))
@@ -230,7 +230,7 @@ func scenarios3OneJobmasterOneWorker(wg *sync.WaitGroup) {
 		counter0.Add(5)
 
 		// one worker
-		// log.L().Info("Start scenarios3OneJobmasterOneWorker worker0")
+		// log.Info("Start scenarios3OneJobmasterOneWorker worker0")
 		factory = promutil.NewFactory4WorkerImpl(reg, tenant, jobType, jobID, workerID)
 		counter1 := factory.NewCounter(prometheus.CounterOpts{
 			Namespace: "dm",
@@ -258,11 +258,11 @@ func scenarios3OneJobmasterOneWorker(wg *sync.WaitGroup) {
 			"k3": "v3",
 		})
 		if err != nil {
-			log.L().Panic("curry with fail")
+			log.Panic("curry with fail")
 		}
 		counter2, err := curryCV.GetMetricWithLabelValues([]string{"v1", "v2"}...)
 		if err != nil {
-			log.L().Panic("GetMetricWithLabelValues")
+			log.Panic("GetMetricWithLabelValues")
 		}
 		counter2.Add(5)
 
@@ -276,7 +276,7 @@ func scenarios3OneJobmasterOneWorker(wg *sync.WaitGroup) {
 }
 
 func scenarios4OneJobmasterMultiWorker(wg *sync.WaitGroup) {
-	log.L().Info("Start scenarios4OneJobmasterMultiWorker simulation...")
+	log.Info("Start scenarios4OneJobmasterMultiWorker simulation...")
 	wg.Add(1)
 
 	tenant := tenant.NewProjectInfo(
@@ -288,7 +288,7 @@ func scenarios4OneJobmasterMultiWorker(wg *sync.WaitGroup) {
 
 	go func() {
 		defer wg.Done()
-		// log.L().Info("Start scenarios4OneJobmasterMultiWorker jobmaster")
+		// log.Info("Start scenarios4OneJobmasterMultiWorker jobmaster")
 		// we create new registry here to simulate running an isolation process or container
 		reg := promutil.NewRegistry()
 		http.Handle("/metric6", promutil.HTTPHandlerForMetricImpl(reg))
@@ -307,7 +307,7 @@ func scenarios4OneJobmasterMultiWorker(wg *sync.WaitGroup) {
 		counter0.Add(6)
 
 		// worker0
-		// log.L().Info("Start scenarios4OneJobmasterMultiWorker worker0")
+		// log.Info("Start scenarios4OneJobmasterMultiWorker worker0")
 		factory = promutil.NewFactory4WorkerImpl(reg, tenant, jobType, jobID, "worker0")
 		counter1 := factory.NewCounter(prometheus.CounterOpts{
 			Namespace: "dm",
@@ -321,7 +321,7 @@ func scenarios4OneJobmasterMultiWorker(wg *sync.WaitGroup) {
 		counter1.Add(6)
 
 		// worker1
-		// log.L().Info("Start scenarios4OneJobmasterMultiWorker worker1")
+		// log.Info("Start scenarios4OneJobmasterMultiWorker worker1")
 		factory = promutil.NewFactory4WorkerImpl(reg, tenant, jobType, jobID, "worker1")
 		counter2 := factory.NewCounter(prometheus.CounterOpts{
 			Namespace: "dm",
@@ -344,7 +344,7 @@ func scenarios4OneJobmasterMultiWorker(wg *sync.WaitGroup) {
 }
 
 func scenarios5MultiJobmasterMultiWorker(wg *sync.WaitGroup) {
-	log.L().Info("Start scenarios5MultiJobmasterMultiWorker simulation...")
+	log.Info("Start scenarios5MultiJobmasterMultiWorker simulation...")
 	wg.Add(1)
 
 	tenant := tenant.NewProjectInfo(
@@ -481,7 +481,7 @@ func scenarios5MultiJobmasterMultiWorker(wg *sync.WaitGroup) {
 }
 
 func scenarios6OneJobmasterOneExecutor(wg *sync.WaitGroup) {
-	log.L().Info("Start scenarios6OneJobmasterOneExecutor simulation...")
+	log.Info("Start scenarios6OneJobmasterOneExecutor simulation...")
 	wg.Add(1)
 
 	tenant := tenant.NewProjectInfo(
@@ -528,7 +528,7 @@ func scenarios6OneJobmasterOneExecutor(wg *sync.WaitGroup) {
 }
 
 func scenarios7MultiJobmasterMultiProjects(wg *sync.WaitGroup) {
-	log.L().Info("Start scenarios7MultiJobmasterMultiProjects simulation...")
+	log.Info("Start scenarios7MultiJobmasterMultiProjects simulation...")
 	wg.Add(1)
 
 	tenant0 := tenant.NewProjectInfo(
