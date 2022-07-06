@@ -165,7 +165,7 @@ func TestNewCanalFlatEventBatchDecoder4RowMessage(t *testing.T) {
 		encoder := &CanalFlatEventBatchEncoder{builder: NewCanalEntryBuilder(), enableTiDBExtension: encodeEnable}
 		require.NotNil(t, encoder)
 
-		err := encoder.AppendRowChangedEvent(context.Background(), "", testCaseInsert)
+		err := encoder.AppendRowChangedEvent(context.Background(), "", testCaseInsert, nil)
 		require.Nil(t, err)
 
 		mqMessages := encoder.Build()
@@ -294,7 +294,7 @@ func TestBatching(t *testing.T) {
 	for i := 1; i <= 1000; i++ {
 		ts := uint64(i)
 		updateCase.CommitTs = ts
-		err := encoder.AppendRowChangedEvent(context.Background(), "", &updateCase)
+		err := encoder.AppendRowChangedEvent(context.Background(), "", &updateCase, nil)
 		require.Nil(t, err)
 
 		if i%100 == 0 {
