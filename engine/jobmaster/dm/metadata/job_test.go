@@ -23,7 +23,7 @@ import (
 
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
-	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
+	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
 )
 
 const (

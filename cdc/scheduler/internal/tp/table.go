@@ -78,7 +78,7 @@ func (t *table) getTableStatus() schedulepb.TableStatus {
 	}
 }
 
-func newAddTableResponseMessage(status schedulepb.TableStatus, reject bool) *schedulepb.Message {
+func newAddTableResponseMessage(status schedulepb.TableStatus) *schedulepb.Message {
 	return &schedulepb.Message{
 		MsgType: schedulepb.MsgDispatchTableResponse,
 		DispatchTableResponse: &schedulepb.DispatchTableResponse{
@@ -86,7 +86,6 @@ func newAddTableResponseMessage(status schedulepb.TableStatus, reject bool) *sch
 				AddTable: &schedulepb.AddTableResponse{
 					Status:     &status,
 					Checkpoint: status.Checkpoint,
-					Reject:     reject,
 				},
 			},
 		},
@@ -153,16 +152,7 @@ func (t *table) handleRemoveTableTask(ctx context.Context) *schedulepb.Message {
 	return nil
 }
 
-func (t *table) handleAddTableTask(ctx context.Context,
-	stopping bool,
-) (result *schedulepb.Message, err error) {
-	if stopping {
-		log.Info("tpscheduler: reject add table, since agent stopping",
-			zap.Int64("tableID", t.id), zap.Any("task", t.task))
-		t.task = nil
-		return newAddTableResponseMessage(t.getTableStatus(), true), nil
-	}
-
+func (t *table) handleAddTableTask(ctx context.Context) (result *schedulepb.Message, err error) {
 	state, _ := t.getAndUpdateTableState()
 	changed := true
 	for changed {
@@ -175,7 +165,7 @@ func (t *table) handleAddTableTask(ctx context.Context,
 					zap.Any("task", t.task),
 					zap.Error(err))
 				status := t.getTableStatus()
-				return newAddTableResponseMessage(status, false), errors.Trace(err)
+				return newAddTableResponseMessage(status), errors.Trace(err)
 			}
 			state, changed = t.getAndUpdateTableState()
 		case schedulepb.TableStateReplicating:
@@ -183,14 +173,14 @@ func (t *table) handleAddTableTask(ctx context.Context,
 				zap.Int64("tableID", t.id), zap.Any("state", state))
 			t.task = nil
 			status := t.getTableStatus()
-			return newAddTableResponseMessage(status, false), nil
+			return newAddTableResponseMessage(status), nil
 		case schedulepb.TableStatePrepared:
 			if t.task.IsPrepare {
 				// `prepared` is a stable state, if the task was to prepare the table.
 				log.Info("tpscheduler: table is prepared",
 					zap.Int64("tableID", t.id), zap.Any("state", state))
 				t.task = nil
-				return newAddTableResponseMessage(t.getTableStatus(), false), nil
+				return newAddTableResponseMessage(t.getTableStatus()), nil
 			}
 
 			if t.task.status == dispatchTableTaskReceived {
@@ -200,14 +190,14 @@ func (t *table) handleAddTableTask(ctx context.Context,
 						zap.Int64("tableID", t.id), zap.Any("state", state),
 						zap.Error(err))
 					status := t.getTableStatus()
-					return newAddTableResponseMessage(status, false), errors.Trace(err)
+					return newAddTableResponseMessage(status), errors.Trace(err)
 				}
 				t.task.status = dispatchTableTaskProcessed
 			}
 
 			done := t.executor.IsAddTableFinished(ctx, t.task.TableID, false)
 			if !done {
-				return newAddTableResponseMessage(t.getTableStatus(), false), nil
+				return newAddTableResponseMessage(t.getTableStatus()), nil
 			}
 			state, changed = t.getAndUpdateTableState()
 		case schedulepb.TableStatePreparing:
@@ -224,7 +214,7 @@ func (t *table) handleAddTableTask(ctx context.Context,
 			schedulepb.TableStateStopped:
 			log.Warn("tpscheduler: ignore add table", zap.Int64("tableID", t.id))
 			t.task = nil
-			return newAddTableResponseMessage(t.getTableStatus(), false), nil
+			return newAddTableResponseMessage(t.getTableStatus()), nil
 		default:
 			log.Panic("tpscheduler: unknown table state", zap.Int64("tableID", t.id))
 		}
@@ -253,14 +243,14 @@ func (t *table) injectDispatchTableTask(task *dispatchTableTask) {
 		zap.Any("ignoredTask", task))
 }
 
-func (t *table) poll(ctx context.Context, stopping bool) (*schedulepb.Message, error) {
+func (t *table) poll(ctx context.Context) (*schedulepb.Message, error) {
 	if t.task == nil {
 		return nil, nil
 	}
 	if t.task.IsRemove {
 		return t.handleRemoveTableTask(ctx), nil
 	}
-	return t.handleAddTableTask(ctx, stopping)
+	return t.handleAddTableTask(ctx)
 }
 
 type tableManager struct {
@@ -275,10 +265,10 @@ func newTableManager(executor internal.TableExecutor) *tableManager {
 	}
 }
 
-func (tm *tableManager) poll(ctx context.Context, stopping bool) ([]*schedulepb.Message, error) {
+func (tm *tableManager) poll(ctx context.Context) ([]*schedulepb.Message, error) {
 	result := make([]*schedulepb.Message, 0)
 	for tableID, table := range tm.tables {
-		message, err := table.poll(ctx, stopping)
+		message, err := table.poll(ctx)
 		if err != nil {
 			return result, errors.Trace(err)
 		}

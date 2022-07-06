@@ -22,11 +22,11 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"go.uber.org/atomic"
 	"go.uber.org/dig"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/config"
@@ -41,9 +41,8 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
-	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	"github.com/pingcap/tiflow/engine/pkg/meta"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
@@ -107,7 +106,7 @@ type BaseMaster interface {
 	Master
 
 	// MetaKVClient return user metastore kv client
-	MetaKVClient() metaclient.KVClient
+	MetaKVClient() metaModel.KVClient
 	MetricFactory() promutil.Factory
 	Logger() *zap.Logger
 	MasterMeta() *frameModel.MasterMetaKVData
@@ -136,7 +135,7 @@ type DefaultBaseMaster struct {
 	// framework metastore client
 	frameMetaClient pkgOrm.Client
 	// user metastore raw kvclient
-	userRawKVClient       extkv.KVClientEx
+	userRawKVClient       metaModel.KVClientEx
 	executorClientManager client.ClientsManager
 	serverMasterClient    client.MasterClient
 
@@ -169,7 +168,7 @@ type DefaultBaseMaster struct {
 
 	// user metastore prefix kvclient
 	// Don't close it. It's just a prefix wrapper for underlying userRawKVClient
-	userMetaKVClient metaclient.KVClient
+	userMetaKVClient metaModel.KVClient
 
 	// metricFactory can produce metric with underlying project info and job info
 	metricFactory promutil.Factory
@@ -201,7 +200,7 @@ type masterParams struct {
 	// framework metastore client
 	FrameMetaClient pkgOrm.Client
 	// user metastore raw kvclient
-	UserRawKVClient       extkv.KVClientEx
+	UserRawKVClient       metaModel.KVClientEx
 	ExecutorClientManager client.ClientsManager
 	ServerMasterClient    client.MasterClient
 }
@@ -225,13 +224,13 @@ func NewBaseMaster(
 		metaBytes := ctx.Environ.MasterMetaBytes
 		err := errors.Trace(masterMeta.Unmarshal(metaBytes))
 		if err != nil {
-			log.L().Warn("invalid master meta", zap.ByteString("data", metaBytes), zap.Error(err))
+			log.Warn("invalid master meta", zap.ByteString("data", metaBytes), zap.Error(err))
 		}
 	}
 
 	if err := ctx.Deps().Fill(&params); err != nil {
 		// TODO more elegant error handling
-		log.L().Panic("failed to provide dependencies", zap.Error(err))
+		log.Panic("failed to provide dependencies", zap.Error(err))
 	}
 
 	logger := logutil.FromContext(*ctx)
@@ -261,7 +260,7 @@ func NewBaseMaster(
 		masterProjectInfo: ctx.ProjectInfo,
 
 		createWorkerQuota: quota.NewConcurrencyQuota(maxCreateWorkerConcurrency),
-		userMetaKVClient:  kvclient.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
+		userMetaKVClient:  meta.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
 		metricFactory:     promutil.NewFactory4Master(ctx.ProjectInfo, MustConvertWorkerType2JobType(tp), id),
 		logger:            frameLog.WithMasterID(logger, id),
 
@@ -270,7 +269,7 @@ func NewBaseMaster(
 }
 
 // MetaKVClient returns the user space metaclient
-func (m *DefaultBaseMaster) MetaKVClient() metaclient.KVClient {
+func (m *DefaultBaseMaster) MetaKVClient() metaModel.KVClient {
 	return m.userMetaKVClient
 }
 
@@ -286,7 +285,8 @@ func (m *DefaultBaseMaster) Logger() *zap.Logger {
 
 // Init implements BaseMaster.Init
 func (m *DefaultBaseMaster) Init(ctx context.Context) error {
-	ctx = m.errCenter.WithCancelOnFirstError(ctx)
+	ctx, cancel := m.errCenter.WithCancelOnFirstError(ctx)
+	defer cancel()
 
 	isInit, err := m.doInit(ctx)
 	if err != nil {
@@ -373,7 +373,7 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 				return err
 			}
 			if !ok {
-				log.L().Warn("Sending Heartbeat Pong failed",
+				log.Warn("Sending Heartbeat Pong failed",
 					zap.Any("reply", replyMsg))
 				return nil
 			}
@@ -408,7 +408,8 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 
 // Poll implements BaseMaster.Poll
 func (m *DefaultBaseMaster) Poll(ctx context.Context) error {
-	ctx = m.errCenter.WithCancelOnFirstError(ctx)
+	ctx, cancel := m.errCenter.WithCancelOnFirstError(ctx)
+	defer cancel()
 
 	if err := m.doPoll(ctx); err != nil {
 		return errors.Trace(err)
@@ -578,8 +579,9 @@ func (m *DefaultBaseMaster) CreateWorker(
 		zap.Any("resources", resources),
 		zap.String("master-id", m.id))
 
-	ctx := m.errCenter.WithCancelOnFirstError(context.Background())
-	quotaCtx, cancel := context.WithTimeout(ctx, createWorkerWaitQuotaTimeout)
+	errCtx, cancel := m.errCenter.WithCancelOnFirstError(context.Background())
+	defer cancel()
+	quotaCtx, cancel := context.WithTimeout(errCtx, createWorkerWaitQuotaTimeout)
 	defer cancel()
 	if err := m.createWorkerQuota.Consume(quotaCtx); err != nil {
 		return "", derror.WrapError(derror.ErrMasterConcurrencyExceeded, err)
@@ -595,7 +597,9 @@ func (m *DefaultBaseMaster) CreateWorker(
 			m.createWorkerQuota.Release()
 		}()
 
-		requestCtx, cancel := context.WithTimeout(ctx, createWorkerTimeout)
+		errCtx, cancel := m.errCenter.WithCancelOnFirstError(context.Background())
+		defer cancel()
+		requestCtx, cancel := context.WithTimeout(errCtx, createWorkerTimeout)
 		defer cancel()
 
 		resp, err := m.serverMasterClient.ScheduleTask(requestCtx, &pb.ScheduleTaskRequest{

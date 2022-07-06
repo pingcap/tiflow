@@ -31,7 +31,7 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
-	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
+	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	"github.com/stretchr/testify/require"
 )
 

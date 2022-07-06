@@ -23,7 +23,7 @@ import (
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
-	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 )
@@ -49,7 +49,7 @@ type workerParamListForTest struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
 	FrameMetaClient       pkgOrm.Client
-	UserRawKVClient       extkv.KVClientEx
+	UserRawKVClient       metaModel.KVClientEx
 	ResourceBroker        broker.Broker
 }
 

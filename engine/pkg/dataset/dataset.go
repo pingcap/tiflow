@@ -19,15 +19,15 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	derror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // DataSet is a generic layer for using CRUD patterns with KV-backed storage.
 // nolint:structcheck
 type DataSet[E any, T DataEntry[E]] struct {
-	metaclient metaclient.KV
-	keyPrefix  adapter.KeyAdapter
+	metaCli   metaModel.KV
+	keyPrefix adapter.KeyAdapter
 }
 
 // DataEntry is a type constraint for individual records.
@@ -37,16 +37,16 @@ type DataEntry[E any] interface {
 }
 
 // NewDataSet returns a new DataSet.
-func NewDataSet[E any, T DataEntry[E]](metaclient metaclient.KV, keyPrefix adapter.KeyAdapter) *DataSet[E, T] {
+func NewDataSet[E any, T DataEntry[E]](metaCli metaModel.KV, keyPrefix adapter.KeyAdapter) *DataSet[E, T] {
 	return &DataSet[E, T]{
-		metaclient: metaclient,
-		keyPrefix:  keyPrefix,
+		metaCli:   metaCli,
+		keyPrefix: keyPrefix,
 	}
 }
 
 // Get point-gets a record by ID.
 func (d *DataSet[E, T]) Get(ctx context.Context, id string) (T, error) {
-	getResp, kvErr := d.metaclient.Get(ctx, d.getKey(id))
+	getResp, kvErr := d.metaCli.Get(ctx, d.getKey(id))
 	if kvErr != nil {
 		return nil, errors.Trace(kvErr)
 	}
@@ -70,7 +70,7 @@ func (d *DataSet[E, T]) Upsert(ctx context.Context, entry T) error {
 		return errors.Trace(err)
 	}
 
-	if _, err := d.metaclient.Put(ctx, d.getKey(entry.GetID()), string(rawBytes)); err != nil {
+	if _, err := d.metaCli.Put(ctx, d.getKey(entry.GetID()), string(rawBytes)); err != nil {
 		return err
 	}
 	return nil
@@ -78,7 +78,7 @@ func (d *DataSet[E, T]) Upsert(ctx context.Context, entry T) error {
 
 // Delete removes a record.
 func (d *DataSet[E, T]) Delete(ctx context.Context, id string) error {
-	if _, err := d.metaclient.Delete(ctx, d.getKey(id)); err != nil {
+	if _, err := d.metaCli.Delete(ctx, d.getKey(id)); err != nil {
 		return err
 	}
 	return nil
@@ -86,7 +86,7 @@ func (d *DataSet[E, T]) Delete(ctx context.Context, id string) error {
 
 // LoadAll loads all records.
 func (d *DataSet[E, T]) LoadAll(ctx context.Context) ([]T, error) {
-	getResp, kvErr := d.metaclient.Get(ctx, d.keyPrefix.Path(), metaclient.WithPrefix())
+	getResp, kvErr := d.metaCli.Get(ctx, d.keyPrefix.Path(), metaModel.WithPrefix())
 	if kvErr != nil {
 		return nil, errors.Trace(kvErr)
 	}

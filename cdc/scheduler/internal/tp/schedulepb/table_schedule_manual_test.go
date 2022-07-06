@@ -29,8 +29,8 @@ func benchmarkMessageHeartbeatResponse(
 		msg := Message{
 			MsgType: MsgHeartbeatResponse,
 			HeartbeatResponse: &HeartbeatResponse{
-				Tables:     make([]TableStatus, 0, total),
-				IsStopping: false,
+				Tables:   make([]TableStatus, 0, total),
+				Liveness: model.LivenessCaptureAlive,
 			},
 		}
 

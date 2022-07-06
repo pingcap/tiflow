@@ -73,7 +73,7 @@ func (s *batchTester) testBatchCodec(
 			if !hasNext {
 				break
 			}
-			require.Equal(t, model.MqMessageTypeRow, tp)
+			require.Equal(t, model.MessageTypeRow, tp)
 			row, err := decoder.NextRowChangedEvent()
 			require.Nil(t, err)
 			sortColumnsArrays(row.Columns, row.PreColumns, cs[index].Columns, cs[index].PreColumns)
@@ -89,7 +89,7 @@ func (s *batchTester) testBatchCodec(
 			if !hasNext {
 				break
 			}
-			require.Equal(t, model.MqMessageTypeDDL, tp)
+			require.Equal(t, model.MessageTypeDDL, tp)
 			ddl, err := decoder.NextDDLEvent()
 			require.Nil(t, err)
 			require.Equal(t, cs[index], ddl)
@@ -104,7 +104,7 @@ func (s *batchTester) testBatchCodec(
 			if !hasNext {
 				break
 			}
-			require.Equal(t, model.MqMessageTypeResolved, tp)
+			require.Equal(t, model.MessageTypeResolved, tp)
 			ts, err := decoder.NextResolvedEvent()
 			require.Nil(t, err)
 			require.Equal(t, cs[index], ts)
@@ -233,7 +233,7 @@ func TestMaxBatchSize(t *testing.T) {
 				break
 			}
 
-			require.Equal(t, model.MqMessageTypeRow, v)
+			require.Equal(t, model.MessageTypeRow, v)
 			_, err = decoder.NextRowChangedEvent()
 			require.Nil(t, err)
 			count++

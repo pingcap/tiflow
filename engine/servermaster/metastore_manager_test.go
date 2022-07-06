@@ -16,15 +16,14 @@ package servermaster
 import (
 	"testing"
 
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
-	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMetaStoreManager(t *testing.T) {
 	t.Parallel()
 
-	storeConf := &metaclient.StoreConfigParams{
+	storeConf := &metaModel.StoreConfig{
 		Endpoints: []string{
 			"127.0.0.1",
 			"127.0.0.2",
@@ -35,7 +34,7 @@ func TestMetaStoreManager(t *testing.T) {
 	err := manager.Register("root", storeConf)
 	require.Nil(t, err)
 
-	err = manager.Register("root", &metaclient.StoreConfigParams{})
+	err = manager.Register("root", &metaModel.StoreConfig{})
 	require.Error(t, err)
 
 	store := manager.GetMetaStore("default")
@@ -48,16 +47,4 @@ func TestMetaStoreManager(t *testing.T) {
 	manager.UnRegister("root")
 	store = manager.GetMetaStore("root")
 	require.Nil(t, store)
-}
-
-func TestDefaultMetaStoreManager(t *testing.T) {
-	t.Parallel()
-
-	store := NewFrameMetaConfig()
-	require.Equal(t, metaclient.FrameMetaID, store.StoreID)
-	require.Equal(t, pkgOrm.DefaultFrameMetaEndpoints, store.Endpoints[0])
-
-	store = NewDefaultUserMetaConfig()
-	require.Equal(t, metaclient.DefaultUserMetaID, store.StoreID)
-	require.Equal(t, metaclient.DefaultUserMetaEndpoints, store.Endpoints[0])
 }

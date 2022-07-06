@@ -27,23 +27,26 @@ import (
 	"go.uber.org/zap"
 )
 
-func newBaseAgent4Test() *agent {
-	return &agent{
+func newAgent4Test() *agent {
+	a := &agent{
 		ownerInfo: ownerInfo{
-			version:   "owner-version-1",
-			captureID: "owner-1",
-			revision:  schedulepb.OwnerRevision{Revision: 1},
+			Version:   "owner-version-1",
+			CaptureID: "owner-1",
+			Revision:  schedulepb.OwnerRevision{Revision: 1},
 		},
-		version:   "agent-version-1",
-		epoch:     schedulepb.ProcessorEpoch{Epoch: "agent-epoch-1"},
-		captureID: "agent-1",
 	}
+
+	a.Version = "agent-version-1"
+	a.Epoch = schedulepb.ProcessorEpoch{Epoch: "agent-epoch-1"}
+	a.CaptureID = "agent-1"
+
+	return a
 }
 
 func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	t.Parallel()
 
-	a := newBaseAgent4Test()
+	a := newAgent4Test()
 	mockTableExecutor := newMockTableExecutor()
 	a.tableM = newTableManager(mockTableExecutor)
 
@@ -59,7 +62,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	// remove table not exist
 	ctx := context.Background()
 	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
-	responses, err := a.tableM.poll(ctx, a.stopping)
+	responses, err := a.tableM.poll(ctx)
 	require.NoError(t, err)
 	require.Len(t, responses, 0)
 
@@ -72,19 +75,12 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		},
 	}
 
-	// stopping, addTableRequest should be ignored.
-	a.stopping = true
-	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, a.stopping)
-	require.NoError(t, err)
-	require.Len(t, responses, 0)
-
-	a.stopping = false
-
+	// addTableRequest should be not ignored even if it's stopping.
+	a.handleLivenessUpdate(model.LivenessCaptureStopping, livenessSourceTick)
 	mockTableExecutor.On("AddTable", mock.Anything, mock.Anything,
 		mock.Anything, mock.Anything).Return(false, nil)
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, a.stopping)
+	responses, err = a.tableM.poll(ctx)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 
@@ -95,20 +91,22 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	require.Equal(t, schedulepb.TableStateAbsent, addTableResponse.AddTable.Status.State)
 	require.NotContains(t, a.tableM.tables, model.TableID(1))
 
+	// Force set liveness to alive.
+	a.liveness = model.LivenessCaptureAlive
 	mockTableExecutor.ExpectedCalls = nil
 	mockTableExecutor.On("AddTable", mock.Anything, mock.Anything,
 		mock.Anything, mock.Anything).Return(true, nil)
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(false, nil)
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	_, err = a.tableM.poll(ctx, a.stopping)
+	_, err = a.tableM.poll(ctx)
 	require.NoError(t, err)
 
 	mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(true, nil)
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, a.stopping)
+	responses, err = a.tableM.poll(ctx)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 
@@ -129,7 +127,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		mock.Anything, mock.Anything).Return(false, nil)
 
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, a.stopping)
+	responses, err = a.tableM.poll(ctx)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 
@@ -144,7 +142,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(true, nil)
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, a.stopping)
+	responses, err = a.tableM.poll(ctx)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 
@@ -159,7 +157,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		Return(false)
 	// remove table in the replicating state failed, should still in replicating.
 	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, a.stopping)
+	responses, err = a.tableM.poll(ctx)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 	removeTableResponse, ok := responses[0].DispatchTableResponse.
@@ -176,7 +174,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		Return(3, false)
 	// remove table in the replicating state failed, should still in replicating.
 	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, a.stopping)
+	responses, err = a.tableM.poll(ctx)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 	removeTableResponse, ok = responses[0].DispatchTableResponse.
@@ -190,7 +188,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		Return(3, true)
 	// remove table in the replicating state success, should in stopped
 	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, a.stopping)
+	responses, err = a.tableM.poll(ctx)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 	removeTableResponse, ok = responses[0].DispatchTableResponse.
@@ -205,7 +203,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 func TestAgentHandleMessageHeartbeat(t *testing.T) {
 	t.Parallel()
 
-	a := newBaseAgent4Test()
+	a := newAgent4Test()
 	mockTableExecutor := newMockTableExecutor()
 	a.tableM = newTableManager(mockTableExecutor)
 
@@ -239,7 +237,7 @@ func TestAgentHandleMessageHeartbeat(t *testing.T) {
 
 	response := a.handleMessage([]*schedulepb.Message{heartbeat})
 	require.Len(t, response, 1)
-	require.False(t, response[0].GetHeartbeatResponse().IsStopping)
+	require.Equal(t, model.LivenessCaptureAlive, response[0].GetHeartbeatResponse().Liveness)
 
 	result := response[0].GetHeartbeatResponse().Tables
 	require.Len(t, result, 10)
@@ -264,23 +262,23 @@ func TestAgentHandleMessageHeartbeat(t *testing.T) {
 	})
 	require.Equal(t, schedulepb.TableStateStopping, result[1].State)
 
-	a.stopping = true
+	a.handleLivenessUpdate(model.LivenessCaptureStopping, livenessSourceTick)
 	response = a.handleMessage([]*schedulepb.Message{heartbeat})
 	require.Len(t, response, 1)
-	require.True(t, response[0].GetHeartbeatResponse().IsStopping)
+	require.Equal(t, model.LivenessCaptureStopping, response[0].GetHeartbeatResponse().Liveness)
 
-	a.stopping = false
+	a.handleLivenessUpdate(model.LivenessCaptureAlive, livenessSourceTick)
 
 	heartbeat.Heartbeat.IsStopping = true
 	response = a.handleMessage([]*schedulepb.Message{heartbeat})
-	require.True(t, response[0].GetHeartbeatResponse().IsStopping)
-	require.True(t, a.stopping)
+	require.Equal(t, model.LivenessCaptureStopping, response[0].GetHeartbeatResponse().Liveness)
+	require.Equal(t, model.LivenessCaptureStopping, a.liveness)
 }
 
 func TestAgentPermuteMessages(t *testing.T) {
 	t.Parallel()
 
-	a := newBaseAgent4Test()
+	a := newAgent4Test()
 	mockTableExecutor := newMockTableExecutor()
 	a.tableM = newTableManager(mockTableExecutor)
 
@@ -291,13 +289,13 @@ func TestAgentPermuteMessages(t *testing.T) {
 	var inboundMessages []*schedulepb.Message
 	inboundMessages = append(inboundMessages, &schedulepb.Message{
 		Header: &schedulepb.Message_Header{
-			Version:        a.ownerInfo.version,
-			OwnerRevision:  a.ownerInfo.revision,
-			ProcessorEpoch: a.epoch,
+			Version:        a.ownerInfo.Version,
+			OwnerRevision:  a.ownerInfo.Revision,
+			ProcessorEpoch: a.Epoch,
 		},
 		MsgType: schedulepb.MsgDispatchTableRequest,
-		From:    a.ownerInfo.captureID,
-		To:      a.captureID,
+		From:    a.ownerInfo.CaptureID,
+		To:      a.CaptureID,
 		DispatchTableRequest: &schedulepb.DispatchTableRequest{
 			Request: &schedulepb.DispatchTableRequest_RemoveTable{
 				RemoveTable: &schedulepb.RemoveTableRequest{
@@ -309,13 +307,13 @@ func TestAgentPermuteMessages(t *testing.T) {
 	for _, isSecondary := range []bool{true, false} {
 		inboundMessages = append(inboundMessages, &schedulepb.Message{
 			Header: &schedulepb.Message_Header{
-				Version:        a.ownerInfo.version,
-				OwnerRevision:  a.ownerInfo.revision,
-				ProcessorEpoch: a.epoch,
+				Version:        a.ownerInfo.Version,
+				OwnerRevision:  a.ownerInfo.Revision,
+				ProcessorEpoch: a.Epoch,
 			},
 			MsgType: schedulepb.MsgDispatchTableRequest,
-			From:    a.ownerInfo.captureID,
-			To:      a.captureID,
+			From:    a.ownerInfo.CaptureID,
+			To:      a.CaptureID,
 			DispatchTableRequest: &schedulepb.DispatchTableRequest{
 				Request: &schedulepb.DispatchTableRequest_AddTable{
 					AddTable: &schedulepb.AddTableRequest{
@@ -331,7 +329,7 @@ func TestAgentPermuteMessages(t *testing.T) {
 		Header: &schedulepb.Message_Header{
 			Version:        "version-1",
 			OwnerRevision:  schedulepb.OwnerRevision{Revision: 1},
-			ProcessorEpoch: a.epoch,
+			ProcessorEpoch: a.Epoch,
 		},
 		MsgType: schedulepb.MsgHeartbeat,
 		From:    "owner-1",
@@ -372,12 +370,12 @@ func TestAgentPermuteMessages(t *testing.T) {
 				message := inboundMessages[idx]
 				if message.MsgType == schedulepb.MsgHeartbeat {
 					trans.recvBuffer = append(trans.recvBuffer, message)
-					err := a.Tick(ctx)
+					err := a.Tick(ctx, model.LivenessCaptureAlive)
 					require.NoError(t, err)
 					require.Len(t, trans.sendBuffer, 1)
 					heartbeatResponse := trans.sendBuffer[0].HeartbeatResponse
 					trans.sendBuffer = trans.sendBuffer[:0]
-					require.Equal(t, a.stopping, heartbeatResponse.IsStopping)
+					require.Equal(t, model.LivenessCaptureAlive, heartbeatResponse.Liveness)
 
 					continue
 				}
@@ -392,7 +390,7 @@ func TestAgentPermuteMessages(t *testing.T) {
 								mock.Anything, mock.Anything).Return(ok1, nil)
 
 							trans.recvBuffer = append(trans.recvBuffer, message)
-							err := a.Tick(ctx)
+							err := a.Tick(ctx, model.LivenessCaptureAlive)
 							require.NoError(t, err)
 							trans.sendBuffer = trans.sendBuffer[:0]
 
@@ -408,7 +406,7 @@ func TestAgentPermuteMessages(t *testing.T) {
 							trans.recvBuffer = append(trans.recvBuffer, message)
 							mockTableExecutor.On("IsRemoveTableFinished",
 								mock.Anything, mock.Anything).Return(0, ok1)
-							err := a.Tick(ctx)
+							err := a.Tick(ctx, model.LivenessCaptureAlive)
 							require.NoError(t, err)
 							if len(trans.sendBuffer) != 0 {
 								require.Len(t, trans.sendBuffer, 1)
@@ -440,16 +438,16 @@ func TestAgentHandleMessage(t *testing.T) {
 
 	mockTableExecutor := newMockTableExecutor()
 	tableM := newTableManager(mockTableExecutor)
-	a := newBaseAgent4Test()
+	a := newAgent4Test()
 	a.tableM = tableM
 
 	heartbeat := &schedulepb.Message{
 		Header: &schedulepb.Message_Header{
-			Version:       a.ownerInfo.version,
-			OwnerRevision: a.ownerInfo.revision,
+			Version:       a.ownerInfo.Version,
+			OwnerRevision: a.ownerInfo.Revision,
 		},
 		MsgType:   schedulepb.MsgHeartbeat,
-		From:      a.ownerInfo.captureID,
+		From:      a.ownerInfo.CaptureID,
 		Heartbeat: &schedulepb.Heartbeat{},
 	}
 
@@ -459,13 +457,13 @@ func TestAgentHandleMessage(t *testing.T) {
 
 	addTableRequest := &schedulepb.Message{
 		Header: &schedulepb.Message_Header{
-			Version:       a.ownerInfo.version,
-			OwnerRevision: a.ownerInfo.revision,
+			Version:       a.ownerInfo.Version,
+			OwnerRevision: a.ownerInfo.Revision,
 			// wrong epoch
 			ProcessorEpoch: schedulepb.ProcessorEpoch{Epoch: "wrong-agent-epoch-1"},
 		},
 		MsgType: schedulepb.MsgDispatchTableRequest,
-		From:    a.ownerInfo.captureID,
+		From:    a.ownerInfo.CaptureID,
 		DispatchTableRequest: &schedulepb.DispatchTableRequest{
 			Request: &schedulepb.DispatchTableRequest_AddTable{
 				AddTable: &schedulepb.AddTableRequest{
@@ -482,7 +480,7 @@ func TestAgentHandleMessage(t *testing.T) {
 	require.Len(t, responses, 0)
 
 	// correct epoch, processing.
-	addTableRequest.Header.ProcessorEpoch = a.epoch
+	addTableRequest.Header.ProcessorEpoch = a.Epoch
 	_ = a.handleMessage([]*schedulepb.Message{addTableRequest})
 	require.Contains(t, tableM.tables, model.TableID(1))
 
@@ -493,12 +491,12 @@ func TestAgentHandleMessage(t *testing.T) {
 	// this should never happen in real world
 	unknownMessage := &schedulepb.Message{
 		Header: &schedulepb.Message_Header{
-			Version:        a.ownerInfo.version,
+			Version:        a.ownerInfo.Version,
 			OwnerRevision:  schedulepb.OwnerRevision{Revision: 2},
-			ProcessorEpoch: a.epoch,
+			ProcessorEpoch: a.Epoch,
 		},
 		MsgType: schedulepb.MsgUnknown,
-		From:    a.ownerInfo.captureID,
+		From:    a.ownerInfo.CaptureID,
 	}
 
 	response = a.handleMessage([]*schedulepb.Message{unknownMessage})
@@ -513,7 +511,7 @@ func TestAgentHandleMessage(t *testing.T) {
 func TestAgentUpdateOwnerInfo(t *testing.T) {
 	t.Parallel()
 
-	a := newBaseAgent4Test()
+	a := newAgent4Test()
 	ok := a.handleOwnerInfo("owner-1", 1, "version-1")
 	require.True(t, ok)
 
@@ -529,7 +527,7 @@ func TestAgentUpdateOwnerInfo(t *testing.T) {
 func TestAgentTick(t *testing.T) {
 	t.Parallel()
 
-	a := newBaseAgent4Test()
+	a := newAgent4Test()
 	trans := newMockTrans()
 	mockTableExecutor := newMockTableExecutor()
 	a.trans = trans
@@ -537,13 +535,13 @@ func TestAgentTick(t *testing.T) {
 
 	heartbeat := &schedulepb.Message{
 		Header: &schedulepb.Message_Header{
-			Version:       a.ownerInfo.version,
-			OwnerRevision: a.ownerInfo.revision,
+			Version:       a.ownerInfo.Version,
+			OwnerRevision: a.ownerInfo.Revision,
 			// first heartbeat from the owner, no processor epoch
 			ProcessorEpoch: schedulepb.ProcessorEpoch{},
 		},
 		MsgType:   schedulepb.MsgHeartbeat,
-		From:      a.ownerInfo.captureID,
+		From:      a.ownerInfo.CaptureID,
 		Heartbeat: &schedulepb.Heartbeat{TableIDs: nil},
 	}
 
@@ -551,23 +549,23 @@ func TestAgentTick(t *testing.T) {
 	trans.recvBuffer = append(trans.recvBuffer, heartbeat)
 
 	ctx := context.Background()
-	require.NoError(t, a.Tick(ctx))
+	require.NoError(t, a.Tick(ctx, model.LivenessCaptureAlive))
 	require.Len(t, trans.sendBuffer, 1)
 	heartbeatResponse := trans.sendBuffer[0]
 	trans.sendBuffer = trans.sendBuffer[:0]
 
 	require.Equal(t, schedulepb.MsgHeartbeatResponse, heartbeatResponse.MsgType)
-	require.Equal(t, a.ownerInfo.captureID, heartbeatResponse.To)
-	require.Equal(t, a.captureID, heartbeatResponse.From)
+	require.Equal(t, a.ownerInfo.CaptureID, heartbeatResponse.To)
+	require.Equal(t, a.CaptureID, heartbeatResponse.From)
 
 	addTableRequest := &schedulepb.Message{
 		Header: &schedulepb.Message_Header{
-			Version:        a.ownerInfo.version,
-			OwnerRevision:  a.ownerInfo.revision,
-			ProcessorEpoch: a.epoch,
+			Version:        a.ownerInfo.Version,
+			OwnerRevision:  a.ownerInfo.Revision,
+			ProcessorEpoch: a.Epoch,
 		},
 		MsgType: schedulepb.MsgDispatchTableRequest,
-		From:    a.ownerInfo.captureID,
+		From:    a.ownerInfo.CaptureID,
 		DispatchTableRequest: &schedulepb.DispatchTableRequest{
 			Request: &schedulepb.DispatchTableRequest_AddTable{
 				AddTable: &schedulepb.AddTableRequest{
@@ -581,12 +579,12 @@ func TestAgentTick(t *testing.T) {
 
 	removeTableRequest := &schedulepb.Message{
 		Header: &schedulepb.Message_Header{
-			Version:        a.ownerInfo.version,
-			OwnerRevision:  a.ownerInfo.revision,
-			ProcessorEpoch: a.epoch,
+			Version:        a.ownerInfo.Version,
+			OwnerRevision:  a.ownerInfo.Revision,
+			ProcessorEpoch: a.Epoch,
 		},
 		MsgType: schedulepb.MsgDispatchTableRequest,
-		From:    a.ownerInfo.captureID,
+		From:    a.ownerInfo.CaptureID,
 		DispatchTableRequest: &schedulepb.DispatchTableRequest{
 			Request: &schedulepb.DispatchTableRequest_RemoveTable{
 				RemoveTable: &schedulepb.RemoveTableRequest{
@@ -604,7 +602,7 @@ func TestAgentTick(t *testing.T) {
 		mock.Anything, mock.Anything, mock.Anything).Return(true, nil)
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(false, nil)
-	require.NoError(t, a.Tick(ctx))
+	require.NoError(t, a.Tick(ctx, model.LivenessCaptureAlive))
 	trans.sendBuffer = trans.sendBuffer[:0]
 
 	trans.recvBuffer = append(trans.recvBuffer, addTableRequest)
@@ -612,7 +610,7 @@ func TestAgentTick(t *testing.T) {
 	mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(true, nil)
-	require.NoError(t, a.Tick(ctx))
+	require.NoError(t, a.Tick(ctx, model.LivenessCaptureAlive))
 	responses := trans.sendBuffer[:len(trans.sendBuffer)]
 	trans.sendBuffer = trans.sendBuffer[:0]
 	require.Len(t, responses, 1)
@@ -623,6 +621,139 @@ func TestAgentTick(t *testing.T) {
 	require.Equal(t, schedulepb.TableStatePrepared, resp.AddTable.Status.State)
 
 	require.NoError(t, a.Close())
+}
+
+func TestAgentHandleLivenessUpdate(t *testing.T) {
+	t.Parallel()
+
+	// Test liveness via tick.
+	a := newAgent4Test()
+	a.handleLivenessUpdate(model.LivenessCaptureAlive, livenessSourceTick)
+	require.Equal(t, model.LivenessCaptureAlive, a.liveness)
+
+	a.handleLivenessUpdate(model.LivenessCaptureStopping, livenessSourceTick)
+	require.Equal(t, model.LivenessCaptureStopping, a.liveness)
+
+	a.handleLivenessUpdate(model.LivenessCaptureAlive, livenessSourceTick)
+	require.Equal(t, model.LivenessCaptureStopping, a.liveness)
+
+	// Test liveness via heartbeat.
+	mockTableExecutor := newMockTableExecutor()
+	tableM := newTableManager(mockTableExecutor)
+	a = newAgent4Test()
+	a.tableM = tableM
+	require.Equal(t, model.LivenessCaptureAlive, a.liveness)
+	a.handleMessage([]*schedulepb.Message{{
+		Header: &schedulepb.Message_Header{
+			Version:        a.ownerInfo.Version,
+			OwnerRevision:  a.ownerInfo.Revision,
+			ProcessorEpoch: a.Epoch,
+		},
+		MsgType: schedulepb.MsgHeartbeat,
+		From:    a.ownerInfo.CaptureID,
+		Heartbeat: &schedulepb.Heartbeat{
+			IsStopping: true,
+		},
+	}})
+	require.Equal(t, model.LivenessCaptureStopping, a.liveness)
+
+	a.handleLivenessUpdate(model.LivenessCaptureAlive, livenessSourceTick)
+	require.Equal(t, model.LivenessCaptureStopping, a.liveness)
+}
+
+func TestAgentCommitAddTableDuringStopping(t *testing.T) {
+	t.Parallel()
+
+	a := newAgent4Test()
+	mockTableExecutor := newMockTableExecutor()
+	a.tableM = newTableManager(mockTableExecutor)
+	trans := newMockTrans()
+	a.trans = trans
+
+	prepareTableMsg := &schedulepb.Message{
+		Header: &schedulepb.Message_Header{
+			Version:        "owner-version-1",
+			OwnerRevision:  schedulepb.OwnerRevision{Revision: 1},
+			ProcessorEpoch: schedulepb.ProcessorEpoch{Epoch: "agent-epoch-1"},
+		},
+		To:      "agent-1",
+		From:    "owner-1",
+		MsgType: schedulepb.MsgDispatchTableRequest,
+		DispatchTableRequest: &schedulepb.DispatchTableRequest{
+			Request: &schedulepb.DispatchTableRequest_AddTable{
+				AddTable: &schedulepb.AddTableRequest{
+					TableID:     1,
+					IsSecondary: true,
+				},
+			},
+		},
+	}
+	trans.recvBuffer = []*schedulepb.Message{prepareTableMsg}
+
+	// Prepare add table is still in-progress.
+	mockTableExecutor.
+		On("AddTable", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Once()
+	mockTableExecutor.
+		On("IsAddTableFinished", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(false, nil).Once()
+	err := a.Tick(context.Background(), model.LivenessCaptureAlive)
+	require.Nil(t, err)
+	require.Len(t, trans.sendBuffer, 0)
+
+	mockTableExecutor.
+		On("AddTable", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Once()
+	mockTableExecutor.
+		On("IsAddTableFinished", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Once()
+	err = a.Tick(context.Background(), model.LivenessCaptureAlive)
+	require.Nil(t, err)
+	require.Len(t, trans.sendBuffer, 1)
+	require.Equal(t, trans.sendBuffer[0].MsgType, schedulepb.MsgDispatchTableResponse)
+
+	// Commit add table request should not be rejected.
+	commitTableMsg := &schedulepb.Message{
+		Header: &schedulepb.Message_Header{
+			Version:        "owner-version-1",
+			OwnerRevision:  schedulepb.OwnerRevision{Revision: 1},
+			ProcessorEpoch: schedulepb.ProcessorEpoch{Epoch: "agent-epoch-1"},
+		},
+		To:      "agent-1",
+		From:    "owner-1",
+		MsgType: schedulepb.MsgDispatchTableRequest,
+		DispatchTableRequest: &schedulepb.DispatchTableRequest{
+			Request: &schedulepb.DispatchTableRequest_AddTable{
+				AddTable: &schedulepb.AddTableRequest{
+					TableID:     1,
+					IsSecondary: false,
+				},
+			},
+		},
+	}
+	trans.recvBuffer = []*schedulepb.Message{commitTableMsg}
+	trans.sendBuffer = []*schedulepb.Message{}
+	mockTableExecutor.
+		On("AddTable", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Once()
+	mockTableExecutor.
+		On("IsAddTableFinished", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(false, nil).Once()
+	err = a.Tick(context.Background(), model.LivenessCaptureStopping)
+	require.Nil(t, err)
+	require.Len(t, trans.sendBuffer, 1)
+
+	trans.recvBuffer = []*schedulepb.Message{}
+	trans.sendBuffer = []*schedulepb.Message{}
+	mockTableExecutor.
+		On("IsAddTableFinished", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Once()
+	err = a.Tick(context.Background(), model.LivenessCaptureStopping)
+	require.Nil(t, err)
+	require.Len(t, trans.sendBuffer, 1)
+	require.Equal(t, schedulepb.MsgDispatchTableResponse, trans.sendBuffer[0].MsgType)
+	addTableResp := trans.sendBuffer[0].DispatchTableResponse.GetAddTable()
+	require.Equal(t, schedulepb.TableStateReplicating, addTableResp.Status.State)
 }
 
 // MockTableExecutor is a mock implementation of TableExecutor.

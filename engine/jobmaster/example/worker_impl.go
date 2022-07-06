@@ -66,20 +66,20 @@ func (w *exampleWorker) run() {
 }
 
 func (w *exampleWorker) InitImpl(ctx context.Context) error {
-	log.L().Info("InitImpl")
+	log.Info("InitImpl")
 	w.wg.Add(1)
 	go w.run()
 	return nil
 }
 
 func (w *exampleWorker) Tick(ctx context.Context) error {
-	log.L().Info("Tick")
+	log.Info("Tick")
 	w.work.mu.Lock()
 	w.work.tickCount++
 	count := w.work.tickCount
 	w.work.mu.Unlock()
 
-	storage, err := w.OpenStorage(nil, "/local/example")
+	storage, err := w.OpenStorage(ctx, "/local/example")
 	if err != nil {
 		return err
 	}
@@ -100,7 +100,7 @@ func (w *exampleWorker) Tick(ctx context.Context) error {
 }
 
 func (w *exampleWorker) Status() frameModel.WorkerStatus {
-	log.L().Info("Status")
+	log.Info("Status")
 	code := frameModel.WorkerStatusNormal
 	w.work.mu.Lock()
 	finished := w.work.finished
@@ -113,12 +113,12 @@ func (w *exampleWorker) Status() frameModel.WorkerStatus {
 }
 
 func (w *exampleWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
-	log.L().Info("OnMasterMessage", zap.Any("message", message))
+	log.Info("OnMasterMessage", zap.Any("message", message))
 	return nil
 }
 
 func (w *exampleWorker) CloseImpl(ctx context.Context) error {
-	log.L().Info("CloseImpl")
+	log.Info("CloseImpl")
 	w.wg.Wait()
 	return nil
 }

@@ -147,7 +147,7 @@ func (s *MessageRPCService) Serve(ctx context.Context, l net.Listener) error {
 		}
 		err := l.Close()
 		if err != nil {
-			log.L().Warn("failed to close Listener", zap.Error(err))
+			log.Warn("failed to close Listener", zap.Error(err))
 		}
 	}()
 
@@ -166,7 +166,7 @@ func (s *MessageRPCService) Serve(ctx context.Context, l net.Listener) error {
 	wg.Go(func() (err error) {
 		defer func() {
 			// TODO (zixiong) filter out expected harmless errors.
-			log.L().Debug("grpc server exited", zap.Error(err))
+			log.Debug("grpc server exited", zap.Error(err))
 		}()
 		return errors.Trace(s.grpcServer.Serve(l))
 	})
@@ -176,7 +176,7 @@ func (s *MessageRPCService) Serve(ctx context.Context, l net.Listener) error {
 	// support canceling by contexts, which is a more idiomatic way.
 	wg.Go(func() error {
 		<-ctx.Done()
-		log.L().Debug("context canceled, stopping the gRPC server")
+		log.Debug("context canceled, stopping the gRPC server")
 
 		s.grpcServer.Stop()
 		return nil

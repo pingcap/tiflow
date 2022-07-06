@@ -74,9 +74,26 @@ func (b *basicScheduler) Schedule(
 	// Build add table tasks.
 	if len(newTables) > 0 {
 		captureIDs := make([]model.CaptureID, 0, len(captures))
-		for captureID := range captures {
+		for captureID, status := range captures {
+			if status.State == CaptureStateStopping {
+				log.Warn("tpscheduler: capture is stopping, "+
+					"skip the capture when add new table",
+					zap.Any("captureStatus", status))
+				continue
+			}
 			captureIDs = append(captureIDs, captureID)
 		}
+
+		if len(captureIDs) == 0 {
+			// this should never happen, if no capture can be found
+			// the changefeed cannot make progress
+			// for a cluster with n captures, n should be at least 2
+			// only n - 1 captures can be in the `stopping` at the same time.
+			log.Warn("tpscheduler: cannot found capture when add new table",
+				zap.Any("allCaptureStatus", captures))
+			return tasks
+		}
+
 		const logTableIDThreshold = 50
 		tableField := zap.Skip()
 		if len(newTables) < logTableIDThreshold {

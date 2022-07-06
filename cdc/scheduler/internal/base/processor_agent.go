@@ -159,7 +159,7 @@ func NewAgent(
 	return ret, nil
 }
 
-func (a *agentImpl) Tick(ctx context.Context) error {
+func (a *agentImpl) Tick(ctx context.Context, liveness model.Liveness) error {
 	for _, errCh := range a.handlerErrChs {
 		select {
 		case <-ctx.Done():
@@ -186,7 +186,7 @@ func (a *agentImpl) FinishTableOperation(
 	topic := protocol.SyncTopic(a.changeFeed)
 	if !a.Barrier(ctx) {
 		if _, exists := a.barrierSeqs[topic]; exists {
-			log.L().Info("Delay sending FinishTableOperation due to pending sync",
+			log.Info("Delay sending FinishTableOperation due to pending sync",
 				zap.String("namespace", a.changeFeed.Namespace),
 				zap.String("changefeedID", a.changeFeed.ID),
 				zap.String("ownerID", a.ownerCaptureID),

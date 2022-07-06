@@ -18,11 +18,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"go.uber.org/dig"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework/config"
 	frameErrors "github.com/pingcap/tiflow/engine/framework/internal/errors"
@@ -37,9 +37,8 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
-	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	"github.com/pingcap/tiflow/engine/pkg/meta"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
@@ -86,7 +85,7 @@ type WorkerImpl interface {
 type BaseWorker interface {
 	Worker
 
-	MetaKVClient() metaclient.KVClient
+	MetaKVClient() metaModel.KVClient
 	MetricFactory() promutil.Factory
 	Logger() *zap.Logger
 	UpdateStatus(ctx context.Context, status frameModel.WorkerStatus) error
@@ -109,7 +108,7 @@ type DefaultBaseWorker struct {
 	// framework metastore client
 	frameMetaClient pkgOrm.Client
 	// user metastore raw kvclient
-	userRawKVClient extkv.KVClientEx
+	userRawKVClient metaModel.KVClientEx
 	resourceBroker  broker.Broker
 
 	masterClient *worker.MasterClient
@@ -138,7 +137,7 @@ type DefaultBaseWorker struct {
 
 	// user metastore prefix kvclient
 	// Don't close it. It's just a prefix wrapper for underlying userRawKVClient
-	userMetaKVClient metaclient.KVClient
+	userMetaKVClient metaModel.KVClient
 
 	// metricFactory can produce metric with underlying project info and job info
 	metricFactory promutil.Factory
@@ -156,7 +155,7 @@ type workerParams struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
 	FrameMetaClient       pkgOrm.Client
-	UserRawKVClient       extkv.KVClientEx
+	UserRawKVClient       metaModel.KVClientEx
 	ResourceBroker        broker.Broker
 }
 
@@ -170,7 +169,7 @@ func NewBaseWorker(
 ) BaseWorker {
 	var params workerParams
 	if err := ctx.Deps().Fill(&params); err != nil {
-		log.L().Panic("Failed to fill dependencies for BaseWorker",
+		log.Panic("Failed to fill dependencies for BaseWorker",
 			zap.Error(err))
 	}
 
@@ -199,7 +198,7 @@ func NewBaseWorker(
 
 		errCenter:        errctx.NewErrCenter(),
 		clock:            clock.New(),
-		userMetaKVClient: kvclient.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
+		userMetaKVClient: meta.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
 		metricFactory:    promutil.NewFactory4Worker(ctx.ProjectInfo, MustConvertWorkerType2JobType(tp), masterID, workerID),
 		logger:           frameLog.WithWorkerID(frameLog.WithMasterID(logger, masterID), workerID),
 	}
@@ -212,7 +211,8 @@ func (w *DefaultBaseWorker) Workload() model.RescUnit {
 
 // Init implements BaseWorker.Init
 func (w *DefaultBaseWorker) Init(ctx context.Context) error {
-	ctx = w.errCenter.WithCancelOnFirstError(ctx)
+	ctx, cancel := w.errCenter.WithCancelOnFirstError(ctx)
+	defer cancel()
 
 	if err := w.doPreInit(ctx); err != nil {
 		return errors.Trace(err)
@@ -341,7 +341,8 @@ func (w *DefaultBaseWorker) doPoll(ctx context.Context) error {
 
 // Poll implements BaseWorker.Poll
 func (w *DefaultBaseWorker) Poll(ctx context.Context) error {
-	ctx = w.errCenter.WithCancelOnFirstError(ctx)
+	ctx, cancel := w.errCenter.WithCancelOnFirstError(ctx)
+	defer cancel()
 
 	if err := w.doPoll(ctx); err != nil {
 		return err
@@ -414,7 +415,7 @@ func (w *DefaultBaseWorker) ID() runtime.RunnableID {
 }
 
 // MetaKVClient implements BaseWorker.MetaKVClient
-func (w *DefaultBaseWorker) MetaKVClient() metaclient.KVClient {
+func (w *DefaultBaseWorker) MetaKVClient() metaModel.KVClient {
 	return w.userMetaKVClient
 }
 
@@ -436,7 +437,8 @@ func (w *DefaultBaseWorker) Logger() *zap.Logger {
 // Note that if the master cannot handle the notifications fast enough, notifications
 // can be lost.
 func (w *DefaultBaseWorker) UpdateStatus(ctx context.Context, status frameModel.WorkerStatus) error {
-	ctx = w.errCenter.WithCancelOnFirstError(ctx)
+	ctx, cancel := w.errCenter.WithCancelOnFirstError(ctx)
+	defer cancel()
 
 	w.workerStatus.Code = status.Code
 	w.workerStatus.ErrorMessage = status.ErrorMessage
@@ -456,7 +458,8 @@ func (w *DefaultBaseWorker) SendMessage(
 	nonblocking bool,
 ) error {
 	var err error
-	ctx = w.errCenter.WithCancelOnFirstError(ctx)
+	ctx, cancel := w.errCenter.WithCancelOnFirstError(ctx)
+	defer cancel()
 	if nonblocking {
 		_, err = w.messageSender.SendToNode(ctx, w.masterClient.MasterNode(), topic, message)
 	} else {
@@ -467,7 +470,8 @@ func (w *DefaultBaseWorker) SendMessage(
 
 // OpenStorage implements BaseWorker.OpenStorage
 func (w *DefaultBaseWorker) OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error) {
-	ctx = w.errCenter.WithCancelOnFirstError(ctx)
+	ctx, cancel := w.errCenter.WithCancelOnFirstError(ctx)
+	defer cancel()
 	return w.resourceBroker.OpenStorage(ctx, w.projectInfo, w.id, w.masterID, resourcePath)
 }
 

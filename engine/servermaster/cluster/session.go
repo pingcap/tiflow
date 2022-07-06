@@ -106,7 +106,7 @@ func (s *EtcdSession) Reset(ctx context.Context) error {
 func (s *EtcdSession) Campaign(ctx context.Context, timeout time.Duration) (
 	context.Context, context.CancelFunc, error,
 ) {
-	log.L().Info("start to campaign server master leader",
+	log.Info("start to campaign server master leader",
 		zap.String("name", s.config.Member))
 	leaderCtx, resignFn, err := s.election.Campaign(ctx, s.config.Member, timeout)
 	switch errors.Cause(err) {
@@ -114,10 +114,10 @@ func (s *EtcdSession) Campaign(ctx context.Context, timeout time.Duration) (
 	case context.Canceled:
 		return nil, nil, ctx.Err()
 	default:
-		log.L().Warn("campaign leader failed", zap.Error(err))
+		log.Warn("campaign leader failed", zap.Error(err))
 		return nil, nil, derrors.WrapError(derrors.ErrMasterEtcdElectionCampaignFail, err)
 	}
-	log.L().Info("campaign leader successfully",
+	log.Info("campaign leader successfully",
 		zap.String("name", s.config.Member))
 	return leaderCtx, resignFn, nil
 }

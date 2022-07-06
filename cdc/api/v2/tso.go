@@ -24,11 +24,11 @@ import (
 // GetTso request and returns a TSO from PD
 func (h *OpenAPIV2) GetTso(c *gin.Context) {
 	ctx := c.Request.Context()
-	if h.capture.UpstreamManager == nil {
+	if h.capture.GetUpstreamManager() == nil {
 		c.Status(http.StatusServiceUnavailable)
 		return
 	}
-	pdClient := h.capture.UpstreamManager.Get(upstream.DefaultUpstreamID).PDClient
+	pdClient := h.capture.GetUpstreamManager().Get(upstream.DefaultUpstreamID).PDClient
 	if pdClient == nil {
 		c.Status(http.StatusServiceUnavailable)
 		return
