@@ -69,7 +69,7 @@ func TestPreCheckSinkURI(t *testing.T) {
 		},
 		{
 			name: "invalid IPv6 Kafka URI",
-			uri:  "kafka://3333:10:9:101::204]:9092/topic1",
+			uri:  "kafka://3333:10:9:101::204:9092/topic1",
 			err:  "sink uri host is not valid IPv6 address",
 		},
 	}

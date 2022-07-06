@@ -18,20 +18,14 @@ import (
 	"strings"
 )
 
-// IsValidIPv6AddressInURI reports whether hostPort is a valid IPv6 address in URI.
+// IsValidIPv6AddressFormatInURI reports whether hostPort is a valid IPv6 address in URI.
 // See: https://www.ietf.org/rfc/rfc2732.txt.
-func IsValidIPv6AddressInURI(hostPort string) bool {
+func IsValidIPv6AddressFormatInURI(hostPort string) bool {
 	hostname := hostPort
 
 	colon := strings.LastIndexByte(hostname, ':')
 	if colon != -1 && validOptionalPort(hostname[colon:]) {
 		hostname = hostname[:colon]
-	}
-
-	isIPv6 := IsIPv6Address(hostname)
-	if !isIPv6 {
-		// IPv6 address must have `:`.
-		return false
 	}
 
 	if !strings.HasPrefix(hostname, "[") || !strings.HasSuffix(hostname, "]") {
