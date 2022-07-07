@@ -405,6 +405,24 @@ func (m *ManagerImpl) prepareForFlush() (tableRtsMap map[model.TableID]model.Ts,
 		flushed := rts.getFlushed()
 		if unflushed > flushed {
 			tableRtsMap[tableID] = unflushed
+			flushed = unflushed
+		}  
+		
+		if flushed < minResolvedTs {
+			minResolvedTs = flushed
+		}
+		return true
+	})
+
+	if minResolvedTs == math.MaxUint64 {
+		minResolvedTs = 0
+	}
+		tableID := key.(model.TableID)
+		rts := value.(*statefulRts)
+		unflushed := rts.getUnflushed()
+		flushed := rts.getFlushed()
+		if unflushed > flushed {
+			tableRtsMap[tableID] = unflushed
 			if unflushed < minResolvedTs {
 				minResolvedTs = unflushed
 			}
