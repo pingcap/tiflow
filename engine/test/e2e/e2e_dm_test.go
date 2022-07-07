@@ -27,7 +27,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/tests/integration_tests/util"
 	"github.com/stretchr/testify/require"
 
@@ -35,8 +34,13 @@ import (
 	"github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
+	"github.com/pingcap/tiflow/engine/jobmaster/dm/openapi"
 	engineModel "github.com/pingcap/tiflow/engine/model"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+)
+
+const (
+	baseURL = "http://127.0.0.1:10245/api/v1/jobs/%s"
 )
 
 func TestDMJob(t *testing.T) {
@@ -119,6 +123,10 @@ func testSimpleAllModeTask(
 		require.NoError(t, err)
 	}
 
+	httpClient := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
 	noError(tidb.Exec("drop database if exists " + db))
 	noError(mysql.Exec("drop database if exists " + db))
 
@@ -177,93 +185,70 @@ func testSimpleAllModeTask(
 	// check query status
 	source1 := "mysql-replica-01"
 	source2 := "mysql-replica-02"
-	resp2, err := queryStatus(ctx, client, resp.JobId, []string{source1, source2}, t)
+	jobStatus, err := queryStatus(ctx, httpClient, resp.JobId, "", t)
 	require.NoError(t, err)
-	require.Nil(t, resp2.Err)
-	var jobStatus dm.JobStatus
-	require.NoError(t, json.Unmarshal([]byte(resp2.JsonRet), &jobStatus))
 	require.Equal(t, resp.JobId, jobStatus.JobMasterID)
 	require.Contains(t, string(jobStatus.TaskStatus[source1].Status.Status), "totalEvents")
+	jobStatus, err = queryStatus(ctx, httpClient, resp.JobId, source2, t)
+	require.NoError(t, err)
 	require.Contains(t, jobStatus.TaskStatus[source2].Status.ErrorMsg, fmt.Sprintf("task %s for job not found", source2))
 
 	// pause task
-	resp2, err = operateTask(ctx, client, resp.JobId, nil, dmpkg.Pause, t)
+	err = operateTask(ctx, httpClient, resp.JobId, source1, dmpkg.Pause, t)
 	require.NoError(t, err)
-	require.Nil(t, resp2.Err)
-	require.Equal(t, "null", resp2.JsonRet)
 
 	// eventually paused
 	require.Eventually(t, func() bool {
-		resp2, err = queryStatus(ctx, client, resp.JobId, []string{source1}, t)
+		jobStatus, err = queryStatus(ctx, httpClient, resp.JobId, source1, t)
 		require.NoError(t, err)
-		require.Nil(t, resp2.Err)
-		require.NoError(t, json.Unmarshal([]byte(resp2.JsonRet), &jobStatus))
 		return jobStatus.TaskStatus[source1].Status.Stage == metadata.StagePaused
 	}, time.Second*10, time.Second)
 
 	// binlog schema list
-	binlogSchemaReq := &dmpkg.BinlogSchemaRequest{
-		Op:      pb.SchemaOp_ListSchema,
-		Sources: []string{source1},
-	}
-	resp2, err = binlogSchema(ctx, client, resp.JobId, binlogSchemaReq, t)
+	binlogSchemaResp, err := getBinlogSchema(ctx, httpClient, resp.JobId, source1, "", "", t)
 	require.NoError(t, err)
-	require.Nil(t, resp2.Err)
-	var binlogSchemaResp dmpkg.BinlogSchemaResponse
-	require.NoError(t, json.Unmarshal([]byte(resp2.JsonRet), &binlogSchemaResp))
-	require.Equal(t, "", binlogSchemaResp.ErrorMsg)
 	require.Len(t, binlogSchemaResp.Results, 1)
 	require.Equal(t, fmt.Sprintf(`["%s"]`, db), binlogSchemaResp.Results[source1].Msg)
 	require.Equal(t, "", binlogSchemaResp.Results[source1].ErrorMsg)
 
 	// resume task
-	resp2, err = operateTask(ctx, client, resp.JobId, nil, dmpkg.Resume, t)
+	err = operateTask(ctx, httpClient, resp.JobId, source1, dmpkg.Resume, t)
 	require.NoError(t, err)
-	require.Nil(t, resp2.Err)
-	require.Equal(t, "null", resp2.JsonRet)
 
 	// eventually resumed
 	require.Eventually(t, func() bool {
-		resp2, err = queryStatus(ctx, client, resp.JobId, []string{source1}, t)
+		jobStatus, err = queryStatus(ctx, httpClient, resp.JobId, source1, t)
 		require.NoError(t, err)
-		require.Nil(t, resp2.Err)
-		require.NoError(t, json.Unmarshal([]byte(resp2.JsonRet), &jobStatus))
 		return jobStatus.TaskStatus[source1].Status.Stage == metadata.StageRunning
 	}, time.Second*10, time.Second)
 
 	// get job cfg
-	resp2, err = getJobCfg(ctx, client, resp.JobId, t)
+	jobCfg, err := getJobCfg(ctx, *httpClient, resp.JobId, t)
 	require.NoError(t, err)
-	require.Nil(t, resp2.Err)
-	require.Contains(t, resp2.JsonRet, `"flavor":"mysql"`)
+	require.Contains(t, jobCfg, `flavor: mysql`)
 
 	noError(mysql.Exec("alter table " + db + ".t1 add column new_col int unique"))
 	noError(mysql.Exec("insert into " + db + ".t1 values(4,4)"))
 
 	// eventually error
 	require.Eventually(t, func() bool {
-		resp2, err = queryStatus(ctx, client, resp.JobId, []string{source1}, t)
+		jobStatus, err = queryStatus(ctx, httpClient, resp.JobId, source1, t)
 		require.NoError(t, err)
-		require.Nil(t, resp2.Err)
-		require.NoError(t, json.Unmarshal([]byte(resp2.JsonRet), &jobStatus))
 		return jobStatus.TaskStatus[source1].Status.Stage == metadata.StageError &&
 			strings.Contains(jobStatus.TaskStatus[source1].Status.Result.Errors[0].RawCause,
 				`unsupported add column 'new_col' constraint UNIQUE KEY when altering`)
 	}, time.Second*10, time.Second)
 
 	// binlog replace
-	binlogReq := &dmpkg.BinlogRequest{
-		Op: pb.ErrorOp_Replace,
-		Sqls: []string{
+	binlogReq := &openapi.SetBinlogOperatorRequest{
+		Op: openapi.SetBinlogOperatorRequestOpReplace,
+		Sqls: &[]string{
 			"alter table " + db + ".t1 add column new_col int;",
 			"alter table " + db + ".t1 add unique(new_col);",
 		},
 	}
-	resp2, err = binlog(ctx, client, resp.JobId, binlogReq, t)
+	binlogResp, err := setBinlogOperator(ctx, httpClient, resp.JobId, source1, binlogReq, t)
 	require.NoError(t, err)
-	require.Nil(t, resp2.Err)
-	var binlogResp dmpkg.BinlogResponse
-	require.NoError(t, json.Unmarshal([]byte(resp2.JsonRet), &binlogResp))
 	require.Equal(t, "", binlogResp.ErrorMsg)
 	require.Len(t, binlogResp.Results, 1)
 	require.Equal(t, "", binlogResp.Results[source1].ErrorMsg)
@@ -271,60 +256,193 @@ func testSimpleAllModeTask(
 	waitRow("new_col = 4")
 
 	// binlog replace again
-	resp2, err = binlog(ctx, client, resp.JobId, binlogReq, t)
+	binlogResp, err = setBinlogOperator(ctx, httpClient, resp.JobId, source1, binlogReq, t)
 	require.NoError(t, err)
-	require.Nil(t, resp2.Err)
-	require.NoError(t, json.Unmarshal([]byte(resp2.JsonRet), &binlogResp))
 	require.Equal(t, "", binlogResp.ErrorMsg)
 	require.Len(t, binlogResp.Results, 1)
 	require.Equal(t, "", binlogResp.Results[source1].Msg)
 	require.Equal(t, fmt.Sprintf("source '%s' has no error", source1), binlogResp.Results[source1].ErrorMsg)
-}
 
-func queryStatus(ctx context.Context, client client.MasterClient, jobID string, tasks []string, t *testing.T) (*enginepb.DebugJobResponse, error) {
-	var args struct {
-		Tasks []string
+	// binlog get
+	binlogResp, err = getBinlogOperator(ctx, httpClient, resp.JobId, source1, "", t)
+	require.NoError(t, err)
+	require.Equal(t, "", binlogResp.ErrorMsg)
+	require.Len(t, binlogResp.Results, 1)
+	require.Equal(t, "", binlogResp.Results[source1].Msg)
+	require.Equal(t, fmt.Sprintf("source '%s' has no error", source1), binlogResp.Results[source1].ErrorMsg)
+
+	// binlog delete
+	binlogResp, err = deleteBinlogOperator(ctx, httpClient, resp.JobId, source1, t)
+	require.NoError(t, err)
+	require.Equal(t, "", binlogResp.ErrorMsg)
+	require.Len(t, binlogResp.Results, 1)
+	require.Equal(t, "", binlogResp.Results[source1].Msg)
+	require.Equal(t, fmt.Sprintf("source '%s' has no error", source1), binlogResp.Results[source1].ErrorMsg)
+
+	// pause task
+	err = operateTask(ctx, httpClient, resp.JobId, source1, dmpkg.Pause, t)
+	require.NoError(t, err)
+	// eventually paused
+	require.Eventually(t, func() bool {
+		jobStatus, err = queryStatus(ctx, httpClient, resp.JobId, source1, t)
+		require.NoError(t, err)
+		return jobStatus.TaskStatus[source1].Status.Stage == metadata.StagePaused
+	}, time.Second*10, time.Second)
+	// set binlog schema
+	fromSource := true
+	binlogSchemaReq := &openapi.SetBinlogSchemaRequest{
+		Database:   db,
+		Table:      "t1",
+		FromSource: &fromSource,
 	}
-	args.Tasks = tasks
-	jsonArg, err := json.Marshal(args)
+	binlogSchemaResp, err = setBinlogSchema(ctx, httpClient, resp.JobId, source1, binlogSchemaReq, t)
 	require.NoError(t, err)
-	ctx2, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	return client.DebugJob(ctx2, &enginepb.DebugJobRequest{JobId: jobID, Command: dmpkg.QueryStatus, JsonArg: string(jsonArg)})
+	require.Equal(t, "", binlogSchemaResp.ErrorMsg)
+	require.Equal(t, "", binlogSchemaResp.Results[source1].ErrorMsg)
+	require.Equal(t, "", binlogSchemaResp.Results[source1].Msg)
+	// get new binlog schema
+	binlogSchemaResp, err = getBinlogSchema(ctx, httpClient, resp.JobId, source1, db, "t1", t)
+	require.NoError(t, err)
+	require.Len(t, binlogSchemaResp.Results, 1)
+	require.Equal(t, "CREATE TABLE `t1` ( `c` int(11) NOT NULL, `new_col` int(11) DEFAULT NULL, PRIMARY KEY (`c`) /*T![clustered_index] CLUSTERED */, UNIQUE KEY `new_col` (`new_col`)) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin", binlogSchemaResp.Results[source1].Msg)
+	require.Equal(t, "", binlogSchemaResp.Results[source1].ErrorMsg)
 }
 
-func operateTask(ctx context.Context, client client.MasterClient, jobID string, tasks []string, op dmpkg.OperateType, t *testing.T) (*enginepb.DebugJobResponse, error) {
-	var args struct {
-		Tasks []string
-		Op    dmpkg.OperateType
+func queryStatus(ctx context.Context, client *http.Client, jobID string, task string, t *testing.T) (*dm.JobStatus, error) {
+	url := fmt.Sprintf(baseURL+"/status", jobID)
+	if task != "" {
+		url += fmt.Sprintf("/tasks/%s", task)
 	}
-	args.Tasks = tasks
-	args.Op = op
-	jsonArg, err := json.Marshal(args)
-	require.NoError(t, err)
-	ctx2, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	return client.DebugJob(ctx2, &enginepb.DebugJobRequest{JobId: jobID, Command: dmpkg.OperateTask, JsonArg: string(jsonArg)})
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, err
+	}
+
+	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	var jobStatus dm.JobStatus
+	err = json.Unmarshal(respBody, &jobStatus)
+	return &jobStatus, err
 }
 
-func getJobCfg(ctx context.Context, client client.MasterClient, jobID string, t *testing.T) (*enginepb.DebugJobResponse, error) {
-	ctx2, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	return client.DebugJob(ctx2, &enginepb.DebugJobRequest{JobId: jobID, Command: dmpkg.GetJobCfg})
+func operateTask(ctx context.Context, client *http.Client, jobID string, task string, op dmpkg.OperateType, t *testing.T) error {
+	operateTaskReq := &openapi.OperateTaskRequest{}
+	switch op {
+	case dmpkg.Pause:
+		operateTaskReq.Op = openapi.OperateTaskRequestOpPause
+	case dmpkg.Resume:
+		operateTaskReq.Op = openapi.OperateTaskRequestOpResume
+	}
+
+	bs, err := json.Marshal(operateTaskReq)
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf(baseURL+"/status/tasks/%s", jobID, task), bytes.NewReader(bs))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	_, err = client.Do(req)
+	return err
 }
 
-func binlog(ctx context.Context, client client.MasterClient, jobID string, req *dmpkg.BinlogRequest, t *testing.T) (*enginepb.DebugJobResponse, error) {
-	ctx2, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	jsonArg, err := json.Marshal(req)
-	require.NoError(t, err)
-	return client.DebugJob(ctx2, &enginepb.DebugJobRequest{JobId: jobID, Command: dmpkg.Binlog, JsonArg: string(jsonArg)})
+func getJobCfg(ctx context.Context, client http.Client, jobID string, t *testing.T) (string, error) {
+	resp, err := client.Get(fmt.Sprintf(baseURL+"/config", jobID))
+	if err != nil {
+		return "", err
+	}
+
+	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	var jobCfg string
+	err = json.Unmarshal(respBody, &jobCfg)
+	return jobCfg, err
 }
 
-func binlogSchema(ctx context.Context, client client.MasterClient, jobID string, req *dmpkg.BinlogSchemaRequest, t *testing.T) (*enginepb.DebugJobResponse, error) {
-	ctx2, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	jsonArg, err := json.Marshal(req)
+func getBinlogOperator(ctx context.Context, client *http.Client, jobID string, task string, binlogPos string, t *testing.T) (*dmpkg.BinlogResponse, error) {
+	url := fmt.Sprintf(baseURL+"/binlog/tasks/%s", jobID, task)
+	if binlogPos != "" {
+		url += "?binlogPos=" + binlogPos
+	}
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, err
+	}
+
+	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	var binlogResp dmpkg.BinlogResponse
+	err = json.Unmarshal(respBody, &binlogResp)
+	return &binlogResp, err
+}
+
+func setBinlogOperator(ctx context.Context, client *http.Client, jobID string, task string, req *openapi.SetBinlogOperatorRequest, t *testing.T) (*dmpkg.BinlogResponse, error) {
+	bs, err := json.Marshal(req)
 	require.NoError(t, err)
-	return client.DebugJob(ctx2, &enginepb.DebugJobRequest{JobId: jobID, Command: dmpkg.BinlogSchema, JsonArg: string(jsonArg)})
+	resp, err := client.Post(fmt.Sprintf(baseURL+"/binlog/tasks/%s", jobID, task), "application/json", bytes.NewReader(bs))
+	require.NoError(t, err)
+	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	var binlogResp dmpkg.BinlogResponse
+	err = json.Unmarshal(respBody, &binlogResp)
+	return &binlogResp, err
+}
+
+func deleteBinlogOperator(ctx context.Context, client *http.Client, jobID string, task string, t *testing.T) (*dmpkg.BinlogResponse, error) {
+	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf(baseURL+"/binlog/tasks/%s", jobID, task), nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	var binlogResp dmpkg.BinlogResponse
+	err = json.Unmarshal(respBody, &binlogResp)
+	return &binlogResp, err
+}
+
+func getBinlogSchema(ctx context.Context, client *http.Client, jobID string, task string, schema string, table string, t *testing.T) (*dmpkg.BinlogSchemaResponse, error) {
+	url := fmt.Sprintf(baseURL+"/schema/tasks/%s", jobID, task)
+	if schema != "" {
+		url += "?database=" + schema
+	}
+	if table != "" {
+		url += "&table=" + table
+	}
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, err
+	}
+
+	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	var binlogSchemaResp dmpkg.BinlogSchemaResponse
+	err = json.Unmarshal(respBody, &binlogSchemaResp)
+	return &binlogSchemaResp, err
+}
+
+func setBinlogSchema(ctx context.Context, client *http.Client, jobID string, task string, req *openapi.SetBinlogSchemaRequest, t *testing.T) (*dmpkg.BinlogSchemaResponse, error) {
+	url := fmt.Sprintf(baseURL+"/schema/tasks/%s", jobID, task)
+	bs, err := json.Marshal(req)
+	require.NoError(t, err)
+	binlogSchemaReq, err := http.NewRequest(http.MethodPut, url, bytes.NewReader(bs))
+	require.NoError(t, err)
+	binlogSchemaReq.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(binlogSchemaReq)
+	require.NoError(t, err)
+	respBody, err := ioutil.ReadAll(resp.Body)
+	require.NoError(t, err)
+	var binlogSchemaResp dmpkg.BinlogSchemaResponse
+	err = json.Unmarshal(respBody, &binlogSchemaResp)
+	return &binlogSchemaResp, err
 }

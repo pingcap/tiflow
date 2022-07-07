@@ -267,16 +267,6 @@ func (s *Server) PauseJob(ctx context.Context, req *pb.PauseJobRequest) (*pb.Pau
 	return s.jobManager.PauseJob(ctx, req), nil
 }
 
-// DebugJob implements pb.MasterServer.DebugJob
-func (s *Server) DebugJob(ctx context.Context, req *pb.DebugJobRequest) (*pb.DebugJobResponse, error) {
-	resp2 := &pb.DebugJobResponse{}
-	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
-	if shouldRet {
-		return resp2, err
-	}
-	return s.jobManager.DebugJob(ctx, req), nil
-}
-
 // RegisterExecutor implements grpc interface, and passes request onto executor manager.
 func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest) (*pb.RegisterExecutorResponse, error) {
 	resp2 := &pb.RegisterExecutorResponse{}

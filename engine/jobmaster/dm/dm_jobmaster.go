@@ -208,8 +208,8 @@ func (jm *JobMaster) OnJobManagerMessage(topic p2p.Topic, message interface{}) e
 }
 
 // OnOpenAPIInitialized implements JobMasterImpl.OnOpenAPIInitialized.
-func (jm *JobMaster) OnOpenAPIInitialized(apiGroup *gin.RouterGroup) {
-	// TODO: register openapi handlers to apiGroup.
+func (jm *JobMaster) OnOpenAPIInitialized(router *gin.RouterGroup) {
+	jm.initOpenAPI(router)
 }
 
 // OnWorkerMessage implements JobMasterImpl.OnWorkerMessage
