@@ -397,7 +397,6 @@ func (m *ManagerImpl) Cleanup(ctx context.Context) error {
 func (m *ManagerImpl) prepareForFlush() (tableRtsMap map[model.TableID]model.Ts, minResolvedTs model.Ts) {
 	tableRtsMap = make(map[model.TableID]model.Ts)
 	minResolvedTs = math.MaxUint64
-	var minFlushedTs uint64 = math.MaxUint64
 	m.rtsMap.Range(func(key interface{}, value interface{}) bool {
 		tableID := key.(model.TableID)
 		rts := value.(*statefulRts)
@@ -406,34 +405,13 @@ func (m *ManagerImpl) prepareForFlush() (tableRtsMap map[model.TableID]model.Ts,
 		if unflushed > flushed {
 			tableRtsMap[tableID] = unflushed
 			flushed = unflushed
-		}  
-		
+		}
 		if flushed < minResolvedTs {
 			minResolvedTs = flushed
 		}
 		return true
 	})
 
-	if minResolvedTs == math.MaxUint64 {
-		minResolvedTs = 0
-	}
-		tableID := key.(model.TableID)
-		rts := value.(*statefulRts)
-		unflushed := rts.getUnflushed()
-		flushed := rts.getFlushed()
-		if unflushed > flushed {
-			tableRtsMap[tableID] = unflushed
-			if unflushed < minResolvedTs {
-				minResolvedTs = unflushed
-			}
-		} else if flushed < minFlushedTs {
-			minFlushedTs = flushed
-		}
-		return true
-	})
-	if minResolvedTs > minFlushedTs {
-		minResolvedTs = minFlushedTs
-	}
 	if minResolvedTs == math.MaxUint64 {
 		minResolvedTs = 0
 	}
@@ -481,7 +459,10 @@ func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
 }
 
 func (m *ManagerImpl) onResolvedTsMsg(tableID model.TableID, resolvedTs model.Ts) {
-	value, _ := m.rtsMap.LoadOrStore(tableID, &statefulRts{flushed: 0, unflushed: 0})
+	value, loaded := m.rtsMap.Load(tableID)
+	if !loaded {
+		panic("onResolvedTsMsg is called for an invalid table")
+	}
 	value.(*statefulRts).checkAndSetUnflushed(resolvedTs)
 }
 

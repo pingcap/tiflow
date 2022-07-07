@@ -579,7 +579,7 @@ func (l *LogWriter) flushLogMeta(checkPointTs, resolvedTs uint64) error {
 	defer l.metaLock.Unlock()
 
 	if checkPointTs != 0 {
-		if l.meta.checkPointTs > checkPointTs {
+		if l.meta.CheckPointTs > checkPointTs {
 			return cerror.WrapError(cerror.ErrRedoFileOp, errors.New("checkpoint regress"))
 		}
 		l.meta.CheckPointTs = checkPointTs

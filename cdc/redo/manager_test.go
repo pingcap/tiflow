@@ -164,7 +164,7 @@ func TestLogManagerInProcessor(t *testing.T) {
 	}
 	checkResolvedTs(logMgr, flushResolvedTs)
 
-	err = logMgr.FlushResolvedAndCheckpointTs(ctx, 200 /*resolvedTs*/, 120 /*CheckPointTs*/)
+	err = logMgr.UpdateCheckpointTs(ctx, 120 /*CheckPointTs*/)
 	require.Nil(t, err)
 }
 
@@ -297,27 +297,19 @@ func TestManagerRtsMap(t *testing.T) {
 	logMgr.postFlush(tables, minTs)
 	require.Equal(t, uint64(20), logMgr.GetMinResolvedTs())
 
-	// Received some timestamps, some tables may not exist.
-	logMgr.onResolvedTsMsg(model.TableID(2), model.Ts(30))
-	logMgr.onResolvedTsMsg(model.TableID(3), model.Ts(30))
-	tables, minTs = logMgr.prepareForFlush()
-	require.Equal(t, 2, len(tables))
-	require.Equal(t, uint64(30), minTs)
-	logMgr.postFlush(tables, minTs)
-	require.Equal(t, uint64(30), logMgr.GetMinResolvedTs())
-
 	// Received some timestamps, some tables may not be updated.
-	logMgr.onResolvedTsMsg(model.TableID(3), model.Ts(40))
+	logMgr.AddTable(model.TableID(3), model.Ts(20))
+	logMgr.onResolvedTsMsg(model.TableID(2), model.Ts(30))
 	tables, minTs = logMgr.prepareForFlush()
 	require.Equal(t, 1, len(tables))
-	require.Equal(t, uint64(30), minTs)
+	require.Equal(t, uint64(20), minTs)
 	logMgr.postFlush(tables, minTs)
-	require.Equal(t, uint64(30), logMgr.GetMinResolvedTs())
+	require.Equal(t, uint64(20), logMgr.GetMinResolvedTs())
 
 	// GetMinResolvedTs can never regress.
 	logMgr.RemoveTable(model.TableID(2))
 	logMgr.RemoveTable(model.TableID(3))
 	tables, minTs = logMgr.prepareForFlush()
 	logMgr.postFlush(tables, minTs)
-	require.Equal(t, uint64(30), logMgr.GetMinResolvedTs())
+	require.Equal(t, uint64(20), logMgr.GetMinResolvedTs())
 }
