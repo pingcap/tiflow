@@ -6,19 +6,23 @@ package enginepb
 import (
 	context "context"
 	fmt "fmt"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+
 	proto "github.com/gogo/protobuf/proto"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-	io "io"
-	math "math"
-	math_bits "math/bits"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
-var _ = fmt.Errorf
-var _ = math.Inf
+
+var (
+	_ = fmt.Errorf
+	_ = math.Inf
+)
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
@@ -37,9 +41,11 @@ func (*GenerateDataRequest) ProtoMessage()    {}
 func (*GenerateDataRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_03dd23a8ba2c07e2, []int{0}
 }
+
 func (m *GenerateDataRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *GenerateDataRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_GenerateDataRequest.Marshal(b, m, deterministic)
@@ -52,12 +58,15 @@ func (m *GenerateDataRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte,
 		return b[:n], nil
 	}
 }
+
 func (m *GenerateDataRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_GenerateDataRequest.Merge(m, src)
 }
+
 func (m *GenerateDataRequest) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *GenerateDataRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_GenerateDataRequest.DiscardUnknown(m)
 }
@@ -88,9 +97,11 @@ func (*GenerateDataResponse) ProtoMessage()    {}
 func (*GenerateDataResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_03dd23a8ba2c07e2, []int{1}
 }
+
 func (m *GenerateDataResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *GenerateDataResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_GenerateDataResponse.Marshal(b, m, deterministic)
@@ -103,12 +114,15 @@ func (m *GenerateDataResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte
 		return b[:n], nil
 	}
 }
+
 func (m *GenerateDataResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_GenerateDataResponse.Merge(m, src)
 }
+
 func (m *GenerateDataResponse) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *GenerateDataResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_GenerateDataResponse.DiscardUnknown(m)
 }
@@ -132,9 +146,11 @@ func (*CheckDirRequest) ProtoMessage()    {}
 func (*CheckDirRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_03dd23a8ba2c07e2, []int{2}
 }
+
 func (m *CheckDirRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *CheckDirRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_CheckDirRequest.Marshal(b, m, deterministic)
@@ -147,12 +163,15 @@ func (m *CheckDirRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, err
 		return b[:n], nil
 	}
 }
+
 func (m *CheckDirRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_CheckDirRequest.Merge(m, src)
 }
+
 func (m *CheckDirRequest) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *CheckDirRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_CheckDirRequest.DiscardUnknown(m)
 }
@@ -177,9 +196,11 @@ func (*CheckDirResponse) ProtoMessage()    {}
 func (*CheckDirResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_03dd23a8ba2c07e2, []int{3}
 }
+
 func (m *CheckDirResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *CheckDirResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_CheckDirResponse.Marshal(b, m, deterministic)
@@ -192,12 +213,15 @@ func (m *CheckDirResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, er
 		return b[:n], nil
 	}
 }
+
 func (m *CheckDirResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_CheckDirResponse.Merge(m, src)
 }
+
 func (m *CheckDirResponse) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *CheckDirResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_CheckDirResponse.DiscardUnknown(m)
 }
@@ -218,8 +242,7 @@ func (m *CheckDirResponse) GetErrFileIdx() int32 {
 	return 0
 }
 
-type IsReadyRequest struct {
-}
+type IsReadyRequest struct{}
 
 func (m *IsReadyRequest) Reset()         { *m = IsReadyRequest{} }
 func (m *IsReadyRequest) String() string { return proto.CompactTextString(m) }
@@ -227,9 +250,11 @@ func (*IsReadyRequest) ProtoMessage()    {}
 func (*IsReadyRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_03dd23a8ba2c07e2, []int{4}
 }
+
 func (m *IsReadyRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *IsReadyRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_IsReadyRequest.Marshal(b, m, deterministic)
@@ -242,12 +267,15 @@ func (m *IsReadyRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, erro
 		return b[:n], nil
 	}
 }
+
 func (m *IsReadyRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_IsReadyRequest.Merge(m, src)
 }
+
 func (m *IsReadyRequest) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *IsReadyRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_IsReadyRequest.DiscardUnknown(m)
 }
@@ -264,9 +292,11 @@ func (*IsReadyResponse) ProtoMessage()    {}
 func (*IsReadyResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_03dd23a8ba2c07e2, []int{5}
 }
+
 func (m *IsReadyResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *IsReadyResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_IsReadyResponse.Marshal(b, m, deterministic)
@@ -279,12 +309,15 @@ func (m *IsReadyResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, err
 		return b[:n], nil
 	}
 }
+
 func (m *IsReadyResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_IsReadyResponse.Merge(m, src)
 }
+
 func (m *IsReadyResponse) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *IsReadyResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_IsReadyResponse.DiscardUnknown(m)
 }
@@ -298,8 +331,7 @@ func (m *IsReadyResponse) GetReady() bool {
 	return false
 }
 
-type ListFilesReq struct {
-}
+type ListFilesReq struct{}
 
 func (m *ListFilesReq) Reset()         { *m = ListFilesReq{} }
 func (m *ListFilesReq) String() string { return proto.CompactTextString(m) }
@@ -307,9 +339,11 @@ func (*ListFilesReq) ProtoMessage()    {}
 func (*ListFilesReq) Descriptor() ([]byte, []int) {
 	return fileDescriptor_03dd23a8ba2c07e2, []int{6}
 }
+
 func (m *ListFilesReq) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *ListFilesReq) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_ListFilesReq.Marshal(b, m, deterministic)
@@ -322,12 +356,15 @@ func (m *ListFilesReq) XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
 		return b[:n], nil
 	}
 }
+
 func (m *ListFilesReq) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ListFilesReq.Merge(m, src)
 }
+
 func (m *ListFilesReq) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *ListFilesReq) XXX_DiscardUnknown() {
 	xxx_messageInfo_ListFilesReq.DiscardUnknown(m)
 }
@@ -344,9 +381,11 @@ func (*ListFilesResponse) ProtoMessage()    {}
 func (*ListFilesResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_03dd23a8ba2c07e2, []int{7}
 }
+
 func (m *ListFilesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *ListFilesResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_ListFilesResponse.Marshal(b, m, deterministic)
@@ -359,12 +398,15 @@ func (m *ListFilesResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, e
 		return b[:n], nil
 	}
 }
+
 func (m *ListFilesResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ListFilesResponse.Merge(m, src)
 }
+
 func (m *ListFilesResponse) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *ListFilesResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_ListFilesResponse.DiscardUnknown(m)
 }
@@ -389,9 +431,11 @@ func (*ReadLinesRequest) ProtoMessage()    {}
 func (*ReadLinesRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_03dd23a8ba2c07e2, []int{8}
 }
+
 func (m *ReadLinesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *ReadLinesRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_ReadLinesRequest.Marshal(b, m, deterministic)
@@ -404,12 +448,15 @@ func (m *ReadLinesRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, er
 		return b[:n], nil
 	}
 }
+
 func (m *ReadLinesRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ReadLinesRequest.Merge(m, src)
 }
+
 func (m *ReadLinesRequest) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *ReadLinesRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_ReadLinesRequest.DiscardUnknown(m)
 }
@@ -443,9 +490,11 @@ func (*ReadLinesResponse) ProtoMessage()    {}
 func (*ReadLinesResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_03dd23a8ba2c07e2, []int{9}
 }
+
 func (m *ReadLinesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *ReadLinesResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_ReadLinesResponse.Marshal(b, m, deterministic)
@@ -458,12 +507,15 @@ func (m *ReadLinesResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, e
 		return b[:n], nil
 	}
 }
+
 func (m *ReadLinesResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ReadLinesResponse.Merge(m, src)
 }
+
 func (m *ReadLinesResponse) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *ReadLinesResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_ReadLinesResponse.DiscardUnknown(m)
 }
@@ -511,9 +563,11 @@ func (*WriteLinesRequest) ProtoMessage()    {}
 func (*WriteLinesRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_03dd23a8ba2c07e2, []int{10}
 }
+
 func (m *WriteLinesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *WriteLinesRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_WriteLinesRequest.Marshal(b, m, deterministic)
@@ -526,12 +580,15 @@ func (m *WriteLinesRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, e
 		return b[:n], nil
 	}
 }
+
 func (m *WriteLinesRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_WriteLinesRequest.Merge(m, src)
 }
+
 func (m *WriteLinesRequest) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *WriteLinesRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_WriteLinesRequest.DiscardUnknown(m)
 }
@@ -576,9 +633,11 @@ func (*WriteLinesResponse) ProtoMessage()    {}
 func (*WriteLinesResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_03dd23a8ba2c07e2, []int{11}
 }
+
 func (m *WriteLinesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *WriteLinesResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_WriteLinesResponse.Marshal(b, m, deterministic)
@@ -591,12 +650,15 @@ func (m *WriteLinesResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, 
 		return b[:n], nil
 	}
 }
+
 func (m *WriteLinesResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_WriteLinesResponse.Merge(m, src)
 }
+
 func (m *WriteLinesResponse) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *WriteLinesResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_WriteLinesResponse.DiscardUnknown(m)
 }
@@ -806,24 +868,28 @@ type DataRWServiceServer interface {
 }
 
 // UnimplementedDataRWServiceServer can be embedded to have forward compatible implementations.
-type UnimplementedDataRWServiceServer struct {
-}
+type UnimplementedDataRWServiceServer struct{}
 
 func (*UnimplementedDataRWServiceServer) ReadLines(req *ReadLinesRequest, srv DataRWService_ReadLinesServer) error {
 	return status.Errorf(codes.Unimplemented, "method ReadLines not implemented")
 }
+
 func (*UnimplementedDataRWServiceServer) WriteLines(srv DataRWService_WriteLinesServer) error {
 	return status.Errorf(codes.Unimplemented, "method WriteLines not implemented")
 }
+
 func (*UnimplementedDataRWServiceServer) GenerateData(ctx context.Context, req *GenerateDataRequest) (*GenerateDataResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GenerateData not implemented")
 }
+
 func (*UnimplementedDataRWServiceServer) ListFiles(ctx context.Context, req *ListFilesReq) (*ListFilesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListFiles not implemented")
 }
+
 func (*UnimplementedDataRWServiceServer) IsReady(ctx context.Context, req *IsReadyRequest) (*IsReadyResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method IsReady not implemented")
 }
+
 func (*UnimplementedDataRWServiceServer) CheckDir(ctx context.Context, req *CheckDirRequest) (*CheckDirResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CheckDir not implemented")
 }
@@ -1401,6 +1467,7 @@ func encodeVarintDatarw(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
+
 func (m *GenerateDataRequest) Size() (n int) {
 	if m == nil {
 		return 0
@@ -1580,9 +1647,11 @@ func (m *WriteLinesResponse) Size() (n int) {
 func sovDatarw(x uint64) (n int) {
 	return (math_bits.Len64(x|1) + 6) / 7
 }
+
 func sozDatarw(x uint64) (n int) {
 	return sovDatarw(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
+
 func (m *GenerateDataRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1671,6 +1740,7 @@ func (m *GenerateDataRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *GenerateDataResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1753,6 +1823,7 @@ func (m *GenerateDataResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *CheckDirRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1835,6 +1906,7 @@ func (m *CheckDirRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *CheckDirResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1936,6 +2008,7 @@ func (m *CheckDirResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *IsReadyRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1986,6 +2059,7 @@ func (m *IsReadyRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *IsReadyResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -2056,6 +2130,7 @@ func (m *IsReadyResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *ListFilesReq) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -2106,6 +2181,7 @@ func (m *ListFilesReq) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *ListFilesResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -2175,6 +2251,7 @@ func (m *ListFilesResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *ReadLinesRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -2278,6 +2355,7 @@ func (m *ReadLinesRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *ReadLinesResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -2448,6 +2526,7 @@ func (m *ReadLinesResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *WriteLinesRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -2617,6 +2696,7 @@ func (m *WriteLinesRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *WriteLinesResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -2699,6 +2779,7 @@ func (m *WriteLinesResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func skipDatarw(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
