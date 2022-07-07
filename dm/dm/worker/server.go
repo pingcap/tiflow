@@ -133,7 +133,7 @@ func (s *Server) Start() error {
 			return err
 		}
 
-		s.setWorker(nil, true)
+		s.setWorker(nil, false)
 
 		s.wg.Add(1)
 		go func() {
