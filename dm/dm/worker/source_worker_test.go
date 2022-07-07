@@ -122,7 +122,7 @@ func (t *testServer2) TestTaskAutoResume(c *C) {
 	s := NewServer(cfg)
 	defer s.Close()
 	go func() {
-		c.Assert(s.Start(), IsNil)
+		c.Assert(s.Start(context.Background()), IsNil)
 	}()
 	c.Assert(utils.WaitSomething(10, 100*time.Millisecond, func() bool {
 		if s.closed.Load() {
