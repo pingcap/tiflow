@@ -37,7 +37,7 @@ type CraftEventBatchEncoder struct {
 
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
-	return newResolvedMQMessage(config.ProtocolCraft, nil, craft.NewResolvedEventEncoder(e.allocator, ts).Encode(), ts), nil
+	return newResolvedMsg(config.ProtocolCraft, nil, craft.NewResolvedEventEncoder(e.allocator, ts).Encode(), ts), nil
 }
 
 func (e *CraftEventBatchEncoder) flush() {
@@ -46,16 +46,17 @@ func (e *CraftEventBatchEncoder) flush() {
 	schema := headers.GetSchema(0)
 	table := headers.GetTable(0)
 	rowsCnt := e.rowChangedBuffer.RowsCount()
-	mqMessage := NewMQMessage(config.ProtocolCraft, nil, e.rowChangedBuffer.Encode(), ts, model.MessageTypeRow, &schema, &table)
+	mqMessage := newMsg(config.ProtocolCraft, nil, e.rowChangedBuffer.Encode(), ts, model.MessageTypeRow, &schema, &table)
 	mqMessage.SetRowsCount(rowsCnt)
 	e.messageBuf = append(e.messageBuf, mqMessage)
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) AppendRowChangedEvent(
-	ctx context.Context,
-	topic string,
+	_ context.Context,
+	_ string,
 	ev *model.RowChangedEvent,
+	_ func(),
 ) error {
 	rows, size := e.rowChangedBuffer.AppendRowChangedEvent(ev)
 	if size > e.maxMessageBytes || rows >= e.maxBatchSize {
@@ -66,7 +67,7 @@ func (e *CraftEventBatchEncoder) AppendRowChangedEvent(
 
 // EncodeDDLEvent implements the EventBatchEncoder interface
 func (e *CraftEventBatchEncoder) EncodeDDLEvent(ev *model.DDLEvent) (*MQMessage, error) {
-	return newDDLMQMessage(config.ProtocolCraft, nil, craft.NewDDLEventEncoder(e.allocator, ev).Encode(), ev), nil
+	return newDDLMsg(config.ProtocolCraft, nil, craft.NewDDLEventEncoder(e.allocator, ev).Encode(), ev), nil
 }
 
 // Build implements the EventBatchEncoder interface
