@@ -398,6 +398,45 @@ func (m *ManagerImpl) Cleanup(ctx context.Context) error {
 	return m.writer.DeleteAllLogs(ctx)
 }
 
+func (m *ManagerImpl) prepareForFlush() (tableRtsMap map[model.TableID]model.Ts, minResolvedTs model.Ts) {
+	tableRtsMap = make(map[model.TableID]model.Ts)
+	minResolvedTs = math.MaxUint64
+	var minFlushedTs uint64 = math.MaxUint64
+	m.rtsMap.Range(func(key interface{}, value interface{}) bool {
+		tableID := key.(model.TableID)
+		rts := value.(*statefulRts)
+		unflushed := rts.getUnflushed()
+		flushed := rts.getFlushed()
+		if unflushed > flushed {
+			tableRtsMap[tableID] = unflushed
+			if unflushed < minResolvedTs {
+				minResolvedTs = unflushed
+			}
+		} else if flushed < minFlushedTs {
+			minFlushedTs = flushed
+		}
+		return true
+	})
+	if minResolvedTs > minFlushedTs {
+		minResolvedTs = minFlushedTs
+	}
+	if minResolvedTs == math.MaxUint64 {
+		minResolvedTs = 0
+	}
+	return
+}
+
+func (m *ManagerImpl) postFlush(tableRtsMap map[model.TableID]model.Ts, minResolvedTs model.Ts) {
+	if minResolvedTs > m.minResolvedTs {
+		atomic.StoreUint64(&m.minResolvedTs, minResolvedTs)
+	}
+	for tableID, flushed := range tableRtsMap {
+		if value, loaded := m.rtsMap.Load(tableID); loaded {
+			value.(*statefulRts).setFlushed(flushed)
+		}
+	}
+}
+
 func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
 	if !atomic.CompareAndSwapInt64(&m.flushing, 0, 1) {
 		log.Debug("Fail to update flush flag, " +
@@ -414,47 +453,22 @@ func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
 	go func() {
 		defer atomic.StoreInt64(&m.flushing, 0)
 
-		var minResolvedTs uint64 = math.MaxUint64
-		var maxFlushedTs uint64 = 0
-		tableRtsMap := make(map[model.TableID]model.Ts)
-		m.rtsMap.Range(func(key interface{}, value interface{}) bool {
-			tableID := key.(model.TableID)
-			rts := value.(*statefulRts)
-			unflushed := rts.getUnflushed()
-			flushed := rts.getFlushed()
-			if unflushed > flushed {
-				tableRtsMap[tableID] = unflushed
-				if unflushed < minResolvedTs {
-					minResolvedTs = unflushed
-				}
-			} else if flushed > maxFlushedTs {
-				maxFlushedTs = flushed
-			}
-			return true
-		})
-		if minResolvedTs > maxFlushedTs {
-			minResolvedTs = maxFlushedTs
-		}
-
+		tableRtsMap, minResolvedTs := m.prepareForFlush()
 		err := m.writer.FlushLog(ctx, tableRtsMap, minResolvedTs)
 		m.metricFlushLogDuration.Observe(time.Since(m.lastFlushTime).Seconds())
 		if err != nil {
 			handleErr(err)
 			return
 		}
-
-		if minResolvedTs > m.minResolvedTs {
-			atomic.StoreUint64(&m.minResolvedTs, minResolvedTs)
-		}
-		for tableID, flushed := range tableRtsMap {
-			if value, loaded := m.rtsMap.Load(tableID); loaded {
-				rts := value.(*statefulRts)
-				rts.setFlushed(flushed)
-			}
-		}
+		m.postFlush(tableRtsMap, minResolvedTs)
 	}()
 
 	return
+}
+
+func (m *ManagerImpl) onResolvedTsMsg(tableID model.TableID, resolvedTs model.Ts) {
+	value, _ := m.rtsMap.LoadOrStore(tableID, &statefulRts{flushed: 0, unflushed: 0})
+	value.(*statefulRts).checkAndSetUnflushed(resolvedTs)
 }
 
 func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
@@ -502,8 +516,7 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 				}
 				m.metricWriteLogDuration.Observe(time.Since(start).Seconds())
 			case model.MessageTypeResolved:
-				value, _ := m.rtsMap.LoadOrStore(cache.tableID, &statefulRts{flushed: 0, unflushed: 0})
-				value.(*statefulRts).checkAndSetUnflushed(cache.resolvedTs)
+				m.onResolvedTsMsg(cache.tableID, cache.resolvedTs)
 			default:
 				log.Debug("handle unknown event type")
 			}
