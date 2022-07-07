@@ -200,7 +200,7 @@ func (r *dmlExprFilterRule) getSimpleExprOfTable(expr string,
 ) (expression.Expression, error) {
 	e, err := expression.ParseSimpleExprWithTableInfo(r.sessCtx, expr, ti.TableInfo)
 	if err != nil {
-		// If an expression contains an unknown column, we return an expression that skips nothing.
+		// If an expression contains an unknown column, we return an error and stop the changefeed.
 		if core.ErrUnknownColumn.Equal(err) {
 			log.Error("meet unknown column when generating expression",
 				zap.String("expression", expr),

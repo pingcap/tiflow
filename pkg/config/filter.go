@@ -25,9 +25,7 @@ type FilterConfig struct {
 	*filter.MySQLReplicationRules
 	IgnoreTxnStartTs []uint64           `toml:"ignore-txn-start-ts" json:"ignore-txn-start-ts"`
 	DDLAllowlist     []model.ActionType `toml:"ddl-allow-list" json:"ddl-allow-list,omitempty"`
-	// ExpressionRules  []*dmconfig.ExpressionFilter `toml:"expression-rules" json:"expression-rules"`
-	// EventRules       []*bf.BinlogEventRule        `toml:"event-rules" json:"event-rules"`
-	EventFilters []*EventFilterRule `toml:"event-filters" json:"event-filters"`
+	EventFilters     []*EventFilterRule `toml:"event-filters" json:"event-filters"`
 }
 
 // EventFilterRule is used by sql event filter and expression filter
