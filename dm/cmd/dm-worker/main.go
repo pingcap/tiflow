@@ -14,7 +14,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -86,15 +85,12 @@ func main() {
 		os.Exit(2)
 	}
 
-	serverCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	go func() {
 		sig := <-sc
 		log.L().Info("got signal to exit", zap.Stringer("signal", sig))
-		cancel()
+		s.Close()
 	}()
-	err = s.Start(serverCtx)
+	err = s.Start()
 	if err != nil {
 		log.L().Error("fail to start dm-worker", zap.Error(err))
 	}
