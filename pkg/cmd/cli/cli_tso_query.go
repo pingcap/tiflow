@@ -62,7 +62,7 @@ func newCmdQueryTso(f factory.Factory) *cobra.Command {
 
 	command := &cobra.Command{
 		Use:   "query",
-		Short: "Get tso from PD",
+		Short: "Get tso from PD (should use --pd to specify PD cluster addresses)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := o.complete(f)

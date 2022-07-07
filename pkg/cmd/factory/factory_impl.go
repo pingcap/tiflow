@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/log"
 	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
 	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
+	"github.com/pingcap/tiflow/pkg/cmd/util"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pd "github.com/tikv/pd/client"
 	etcdlogutil "go.etcd.io/etcd/client/pkg/v3/logutil"
@@ -34,6 +35,10 @@ import (
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/version"
+)
+
+const (
+	maxGetPDClientRetryTimes = 3
 )
 
 type factoryImpl struct {
@@ -148,7 +153,17 @@ func (f factoryImpl) PdClient() (pd.Client, error) {
 	}
 
 	pdAddr := f.GetPdAddr()
+	if len(pdAddr) == 0 {
+		return nil, cerror.ErrInvalidServerOption.
+			GenWithStack("empty PD address, please use --pd to specify PD cluster addresses")
+	}
 	pdEndpoints := strings.Split(pdAddr, ",")
+	tlsEnabled := len(credential.KeyPath) != 0
+	for _, ep := range pdEndpoints {
+		if err := util.VerifyPdEndpoint(ep, tlsEnabled); err != nil {
+			return nil, cerror.ErrInvalidServerOption.Wrap(err).GenWithStackByArgs()
+		}
+	}
 
 	pdClient, err := pd.NewClientWithContext(
 		ctx, pdEndpoints, credential.PDSecurityOption(),
@@ -166,7 +181,8 @@ func (f factoryImpl) PdClient() (pd.Client, error) {
 				},
 				MinConnectTimeout: 3 * time.Second,
 			}),
-		))
+		),
+		pd.WithMaxErrorRetry(maxGetPDClientRetryTimes))
 	if err != nil {
 		return nil, errors.Annotatef(err,
 			"fail to open PD client, please check pd address \"%s\"", pdAddr)

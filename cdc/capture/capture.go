@@ -114,7 +114,10 @@ type captureImpl struct {
 }
 
 // NewCapture returns a new Capture instance
-func NewCapture(pdEndpoints []string, etcdClient *etcd.CDCEtcdClient, grpcService *p2p.ServerWrapper) Capture {
+func NewCapture(pdEndpoints []string,
+	etcdClient *etcd.CDCEtcdClient,
+	grpcService *p2p.ServerWrapper,
+) Capture {
 	conf := config.GetGlobalServerConfig()
 	return &captureImpl{
 		config:              config.GetGlobalServerConfig(),
