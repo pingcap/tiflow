@@ -554,8 +554,6 @@ func (l *LogWriter) flush(minResolvedTs uint64) error {
 	err1 := l.ddlWriter.Flush()
 	err2 := l.rowWriter.Flush()
 	err3 := l.flushLogMeta(0, minResolvedTs)
-	err2 := l.ddlWriter.Flush()
-	err3 := l.rowWriter.Flush()
 
 	err := multierr.Append(err1, err2)
 	err = multierr.Append(err, err3)
