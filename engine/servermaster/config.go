@@ -11,26 +11,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Copyright 2019 PingCAP, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package servermaster
 
 import (
 	"bytes"
 	"encoding/json"
-	"flag"
-	"fmt"
 	"net/url"
 	"strings"
 	"time"
@@ -38,11 +23,10 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/pkg/etcdutil"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
-	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
-	"github.com/pingcap/tiflow/engine/pkg/version"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
+	"github.com/pingcap/tiflow/pkg/security"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/zap"
 )
@@ -59,54 +43,20 @@ const (
 
 	defaultPeerUrls            = "http://127.0.0.1:8291"
 	defaultInitialClusterState = embed.ClusterStateFlagNew
+
+	// DefaultUserMetaID is the ID for default user metastore
+	DefaultUserMetaID        = "_default"
+	defaultUserMetaEndpoints = "127.0.0.1:12479"
+
+	// FrameMetaID is the ID for frame metastore
+	FrameMetaID               = "_root"
+	defaultFrameMetaEndpoints = "127.0.0.1:3336"
+	defaultFrameMetaUser      = "root"
+	defaultFrameMetaPassword  = "123456"
 )
-
-var (
-	// EnableZap enable the zap logger in embed etcd.
-	EnableZap = false
-	// SampleConfigFile is sample config file of dm-master
-	// later we can read it from dm/master/dm-master.toml
-	// and assign it to SampleConfigFile while we build dm-master.
-	SampleConfigFile string
-)
-
-// NewConfig creates a config for dm-master.
-func NewConfig() *Config {
-	cfg := &Config{
-		Etcd:          &etcdutil.ConfigParams{},
-		FrameMetaConf: NewFrameMetaConfig(),
-		UserMetaConf:  NewDefaultUserMetaConfig(),
-	}
-	cfg.flagSet = flag.NewFlagSet("dm-master", flag.ContinueOnError)
-	fs := cfg.flagSet
-
-	fs.BoolVar(&cfg.printVersion, "V", false, "prints version and exit")
-	fs.StringVar(&cfg.ConfigFile, "config", "", "path to config file")
-	fs.StringVar(&cfg.MasterAddr, "master-addr", "", "master API server and status addr")
-	fs.StringVar(&cfg.AdvertiseAddr, "advertise-addr", "", `advertise address for client traffic (default "${master-addr}")`)
-	fs.StringVar(&cfg.LogConf.Level, "L", "info", "log level: debug, info, warn, error, fatal")
-	fs.StringVar(&cfg.LogConf.File, "log-file", "", "log file path")
-	// fs.StringVar(&cfg.LogConf.LogRotate, "log-rotate", "day", "log file rotate type, hour/day")
-
-	fs.StringVar(&cfg.Etcd.Name, "name", "", "human-readable name for this DF-master member")
-	fs.StringVar(&cfg.Etcd.DataDir, "data-dir", "", "data directory for etcd using")
-
-	fs.StringVar(&cfg.FrameMetaConf.Endpoints[0], "frame-meta-endpoints", pkgOrm.DefaultFrameMetaEndpoints, `framework metastore endpoint`)
-	fs.StringVar(&cfg.FrameMetaConf.Auth.User, "frame-meta-user", pkgOrm.DefaultFrameMetaUser, `framework metastore user`)
-	fs.StringVar(&cfg.FrameMetaConf.Auth.Passwd, "frame-meta-password", pkgOrm.DefaultFrameMetaPassword, `framework metastore password`)
-	fs.StringVar(&cfg.UserMetaConf.Endpoints[0], "user-meta-endpoints", metaclient.DefaultUserMetaEndpoints, `user metastore endpoint`)
-
-	fs.StringVar(&cfg.Etcd.InitialCluster, "initial-cluster", "", fmt.Sprintf("initial cluster configuration for bootstrapping, e.g. dm-master=%s", defaultPeerUrls))
-	fs.StringVar(&cfg.Etcd.PeerUrls, "peer-urls", defaultPeerUrls, "URLs for peer traffic")
-	fs.StringVar(&cfg.Etcd.AdvertisePeerUrls, "advertise-peer-urls", "", `advertise URLs for peer traffic (default "${peer-urls}")`)
-
-	return cfg
-}
 
 // Config is the configuration for dm-master.
 type Config struct {
-	flagSet *flag.FlagSet
-
 	LogConf logutil.Config `toml:"log" json:"log"`
 
 	MasterAddr    string `toml:"master-addr" json:"master-addr"`
@@ -119,8 +69,8 @@ type Config struct {
 	// NOTE: more items will be add when adding leader election
 	Etcd *etcdutil.ConfigParams `toml:"etcd" json:"etcd"`
 
-	FrameMetaConf *metaclient.StoreConfigParams `toml:"frame-metastore-conf" json:"frame-metastore-conf"`
-	UserMetaConf  *metaclient.StoreConfigParams `toml:"user-metastore-conf" json:"user-metastore-conf"`
+	FrameMetaConf *metaModel.StoreConfig `toml:"frame-metastore-conf" json:"frame-metastore-conf"`
+	UserMetaConf  *metaModel.StoreConfig `toml:"user-metastore-conf" json:"user-metastore-conf"`
 
 	KeepAliveTTLStr string `toml:"keepalive-ttl" json:"keepalive-ttl"`
 	// time interval string to check executor aliveness
@@ -131,13 +81,13 @@ type Config struct {
 	KeepAliveInterval time.Duration `toml:"-" json:"-"`
 	RPCTimeout        time.Duration `toml:"-" json:"-"`
 
-	printVersion bool
+	Security *security.Credential `toml:"security" json:"security"`
 }
 
 func (c *Config) String() string {
 	cfg, err := json.Marshal(c)
 	if err != nil {
-		log.L().Error("marshal to json", zap.Reflect("master config", c), logutil.ShortError(err))
+		log.Error("marshal to json", zap.Reflect("master config", c), logutil.ShortError(err))
 	}
 	return string(cfg)
 }
@@ -148,71 +98,30 @@ func (c *Config) Toml() (string, error) {
 
 	err := toml.NewEncoder(&b).Encode(c)
 	if err != nil {
-		log.L().Error("fail to marshal config to toml", logutil.ShortError(err))
+		log.Error("fail to marshal config to toml", logutil.ShortError(err))
 	}
 
 	return b.String(), nil
 }
 
-// Parse parses flag definitions from the argument list.
-func (c *Config) Parse(arguments []string) error {
-	// Parse first to get config file.
-	err := c.flagSet.Parse(arguments)
-	if err != nil {
-		return errors.WrapError(errors.ErrMasterConfigParseFlagSet, err)
-	}
-
-	if c.printVersion {
-		fmt.Print(version.GetRawInfo())
-		return flag.ErrHelp
-	}
-
-	// Load config file if specified.
-	if c.ConfigFile != "" {
-		err = c.configFromFile(c.ConfigFile)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Parse again to replace with command line options.
-	err = c.flagSet.Parse(arguments)
-	if err != nil {
-		return errors.WrapError(errors.ErrMasterConfigParseFlagSet, err)
-	}
-
-	if len(c.flagSet.Args()) != 0 {
-		return errors.ErrMasterConfigInvalidFlag.GenWithStackByArgs(c.flagSet.Arg(0))
-	}
-	return c.adjust()
-}
-
-func (c *Config) adjust() (err error) {
+// Adjust adjusts the master configuration
+func (c *Config) Adjust() (err error) {
 	c.Etcd.Adjust(defaultPeerUrls, defaultInitialClusterState)
 
 	if c.AdvertiseAddr == "" {
 		c.AdvertiseAddr = c.MasterAddr
 	}
 
-	if c.KeepAliveIntervalStr == "" {
-		c.KeepAliveIntervalStr = defaultKeepAliveInterval
-	}
 	c.KeepAliveInterval, err = time.ParseDuration(c.KeepAliveIntervalStr)
 	if err != nil {
 		return err
 	}
 
-	if c.KeepAliveTTLStr == "" {
-		c.KeepAliveTTLStr = defaultKeepAliveTTL
-	}
 	c.KeepAliveTTL, err = time.ParseDuration(c.KeepAliveTTLStr)
 	if err != nil {
 		return err
 	}
 
-	if c.RPCTimeoutStr == "" {
-		c.RPCTimeoutStr = defaultRPCTimeout
-	}
 	c.RPCTimeout, err = time.ParseDuration(c.RPCTimeoutStr)
 	if err != nil {
 		return err
@@ -220,7 +129,7 @@ func (c *Config) adjust() (err error) {
 	return nil
 }
 
-// configFromFile loads config from file.
+// configFromFile loads config from file and merges items into Config.
 func (c *Config) configFromFile(path string) error {
 	metaData, err := toml.DecodeFile(path, c)
 	if err != nil {
@@ -235,6 +144,27 @@ func (c *Config) configFromString(data string) error {
 		return errors.WrapError(errors.ErrMasterDecodeConfigFile, err)
 	}
 	return checkUndecodedItems(metaData)
+}
+
+// GetDefaultMasterConfig returns a default master config
+func GetDefaultMasterConfig() *Config {
+	return &Config{
+		LogConf: logutil.Config{
+			Level: "info",
+			File:  "",
+		},
+		MasterAddr:    "",
+		AdvertiseAddr: "",
+		Etcd: &etcdutil.ConfigParams{
+			PeerUrls:            defaultPeerUrls,
+			InitialClusterState: defaultInitialClusterState,
+		},
+		FrameMetaConf:        newFrameMetaConfig(),
+		UserMetaConf:         newDefaultUserMetaConfig(),
+		KeepAliveTTLStr:      defaultKeepAliveTTL,
+		KeepAliveIntervalStr: defaultKeepAliveInterval,
+		RPCTimeoutStr:        defaultRPCTimeout,
+	}
 }
 
 func checkUndecodedItems(metaData toml.MetaData) error {
@@ -275,4 +205,24 @@ func parseURLs(s string) ([]url.URL, error) {
 		urls = append(urls, *u)
 	}
 	return urls, nil
+}
+
+// newFrameMetaConfig return the default framework metastore config
+func newFrameMetaConfig() *metaModel.StoreConfig {
+	conf := metaModel.DefaultStoreConfig()
+	conf.StoreID = FrameMetaID
+	conf.Endpoints = append(conf.Endpoints, defaultFrameMetaEndpoints)
+	conf.Auth.User = defaultFrameMetaUser
+	conf.Auth.Passwd = defaultFrameMetaPassword
+
+	return &conf
+}
+
+// newDefaultUserMetaConfig return the default user metastore config
+func newDefaultUserMetaConfig() *metaModel.StoreConfig {
+	conf := metaModel.DefaultStoreConfig()
+	conf.StoreID = DefaultUserMetaID
+	conf.Endpoints = append(conf.Endpoints, defaultUserMetaEndpoints)
+
+	return &conf
 }

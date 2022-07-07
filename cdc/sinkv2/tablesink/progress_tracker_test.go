@@ -21,6 +21,8 @@ import (
 )
 
 func TestNewProgressTracker(t *testing.T) {
+	t.Parallel()
+
 	tracker := newProgressTracker()
 	require.NotNil(
 		t,
@@ -36,6 +38,8 @@ func TestNewProgressTracker(t *testing.T) {
 }
 
 func TestAddEvent(t *testing.T) {
+	t.Parallel()
+
 	tracker := newProgressTracker()
 	tracker.addEvent(1)
 	tracker.addEvent(2)
@@ -44,6 +48,8 @@ func TestAddEvent(t *testing.T) {
 }
 
 func TestAddResolvedTs(t *testing.T) {
+	t.Parallel()
+
 	// There is no event in the tracker.
 	tracker := newProgressTracker()
 	tracker.addResolvedTs(1, model.NewResolvedTs(1))
@@ -62,6 +68,8 @@ func TestAddResolvedTs(t *testing.T) {
 }
 
 func TestRemove(t *testing.T) {
+	t.Parallel()
+
 	// Only event.
 	tracker := newProgressTracker()
 	tracker.addEvent(1)

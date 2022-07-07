@@ -65,7 +65,7 @@ func (w *Writer) UpdateStatus(ctx context.Context, newStatus *frameModel.WorkerS
 		if retErr == nil {
 			return
 		}
-		log.L().Warn("UpdateStatus failed",
+		log.Warn("UpdateStatus failed",
 			zap.String("worker-id", w.workerID),
 			zap.String("master-id", w.masterInfo.MasterID()),
 			zap.String("master-node", w.masterInfo.MasterNode()),
@@ -117,13 +117,13 @@ func (w *Writer) sendStatusMessageWithRetry(
 		if err != nil {
 			if derrors.ErrExecutorNotFoundForMessage.Equal(err) {
 				if err := w.masterInfo.SyncRefreshMasterInfo(ctx); err != nil {
-					log.L().Warn("failed to refresh master info",
+					log.Warn("failed to refresh master info",
 						zap.String("worker-id", w.workerID),
 						zap.String("master-id", w.masterInfo.MasterID()),
 						zap.Error(err))
 				}
 			}
-			log.L().Warn("failed to send status to master. Retrying...",
+			log.Warn("failed to send status to master. Retrying...",
 				zap.String("worker-id", w.workerID),
 				zap.String("master-id", w.masterInfo.MasterID()),
 				zap.Any("status", newStatus),

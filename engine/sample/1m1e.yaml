@@ -6,10 +6,11 @@ services:
                         - ./config/master.toml:/config.toml
                         - /tmp/df:/tmp/df
                 command:
-                        - "/df-master"
+                        - "/tiflow"
+                        - "master"
                         - "--config"
                         - "/config.toml"
-                        - "-L=debug"
+                        - "--log-level=debug"
                         - "--master-addr"
                         - "0.0.0.0:10240"
                         - "--advertise-addr"
@@ -35,10 +36,11 @@ services:
                         - ./config/executor.toml:/config.toml
                         - /tmp/dataflow:/tmp/dataflow
                 command:
-                        - "/df-executor"
+                        - "/tiflow"
+                        - "executor"
                         - "--config"
                         - "/config.toml"
-                        - "-L=debug"
+                        - "--log-level=debug"
                         - "--join"
                         - "server-master:10240"
                         - "--worker-addr"

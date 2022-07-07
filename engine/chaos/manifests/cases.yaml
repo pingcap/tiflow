@@ -10,7 +10,7 @@ spec:
           image: dataflow:chaos
           imagePullPolicy: IfNotPresent
           command:
-            - "/df-chaos-case"
+            - "/tiflow-chaos-case"
             - "--duration=20m"
       restartPolicy: Never
   backoffLimit: 0 # fail immediately

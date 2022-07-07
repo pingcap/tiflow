@@ -40,7 +40,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 	Consistent: &ConsistentConfig{
 		Level:             "none",
 		MaxLogSize:        64,
-		FlushIntervalInMs: 1000,
+		FlushIntervalInMs: 2000,
 		Storage:           "",
 	},
 }
@@ -114,24 +114,15 @@ func (c *replicaConfig) fillFromV1(v1 *outdated.ReplicaConfigV1) {
 	}
 }
 
-// Validate verifies that each parameter is valid.
-func (c *ReplicaConfig) Validate() error {
+// ValidateAndAdjust verifies and adjusts the replica configuration.
+func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 	if c.Sink != nil {
-		err := c.Sink.validate(c.EnableOldValue)
+		err := c.Sink.validateAndAdjust(sinkURI, c.EnableOldValue)
 		if err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-// ApplyProtocol sinkURI to fill the `ReplicaConfig`
-func (c *ReplicaConfig) ApplyProtocol(sinkURI *url.URL) *ReplicaConfig {
-	params := sinkURI.Query()
-	if s := params.Get(ProtocolKey); s != "" {
-		c.Sink.Protocol = s
-	}
-	return c
 }
 
 // GetDefaultReplicaConfig returns the default replica config.

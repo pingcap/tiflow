@@ -86,15 +86,15 @@ func TestKafkaSink(t *testing.T) {
 		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
+	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 	sink, err := NewKafkaSaramaSink(ctx, sinkURI, replicaConfig, errCh)
-
 	require.Nil(t, err)
 
 	encoder := sink.encoderBuilder.Build()
 
-	require.IsType(t, &codec.JSONEventBatchEncoder{}, encoder)
-	require.Equal(t, 1, encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize())
-	require.Equal(t, 1048576, encoder.(*codec.JSONEventBatchEncoder).GetMaxMessageBytes())
+	require.IsType(t, &codec.OpenProtocolBatchEncoder{}, encoder)
+	require.Equal(t, 1, encoder.(*codec.OpenProtocolBatchEncoder).GetMaxBatchSize())
+	require.Equal(t, 1048576, encoder.(*codec.OpenProtocolBatchEncoder).GetMaxMessageBytes())
 
 	// mock kafka broker processes 1 row changed event
 	tableID := model.TableID(1)
@@ -179,9 +179,9 @@ func TestPulsarSinkEncoderConfig(t *testing.T) {
 	require.Nil(t, err)
 
 	encoder := sink.encoderBuilder.Build()
-	require.IsType(t, &codec.JSONEventBatchEncoder{}, encoder)
-	require.Equal(t, 1, encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize())
-	require.Equal(t, 4194304, encoder.(*codec.JSONEventBatchEncoder).GetMaxMessageBytes())
+	require.IsType(t, &codec.OpenProtocolBatchEncoder{}, encoder)
+	require.Equal(t, 1, encoder.(*codec.OpenProtocolBatchEncoder).GetMaxBatchSize())
+	require.Equal(t, 4194304, encoder.(*codec.OpenProtocolBatchEncoder).GetMaxMessageBytes())
 
 	// FIXME: mock pulsar client doesn't support close,
 	// so we can't call sink.Close() to close it.
@@ -211,6 +211,7 @@ func TestFlushRowChangedEvents(t *testing.T) {
 		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
+	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 	sink, err := NewKafkaSaramaSink(ctx, sinkURI, replicaConfig, errCh)
 	require.Nil(t, err)
 

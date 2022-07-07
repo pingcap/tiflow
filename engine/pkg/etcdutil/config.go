@@ -144,10 +144,10 @@ func GenEmbedEtcdConfigWithLogger(logLevel string) *embed.Config {
 	// NOTE: `genEmbedEtcdConfig` can only be called after logger initialized.
 	// NOTE: if using zap logger for etcd, must build it before any concurrent gRPC calls,
 	// otherwise, DATA RACE occur in NewZapCoreLoggerBuilder and gRPC.
-	logger := log.L().With(zap.String("component", "embed etcd"))
+	logger := log.With(zap.String("component", "embed etcd"))
 	// if logLevel is info, set etcd log level to WARN to reduce log
 	if strings.ToLower(logLevel) == "info" {
-		log.L().Info("Set log level of etcd to `warn`, if you want to log more message about etcd, change log-level to `debug` in master configuration file")
+		log.Info("Set log level of etcd to `warn`, if you want to log more message about etcd, change log-level to `debug` in master configuration file")
 		logger = logger.WithOptions(zap.IncreaseLevel(zap.WarnLevel))
 	}
 

@@ -88,7 +88,7 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 		Schema:    e.Table.Schema,
 		Table:     e.Table.Table,
 		Partition: partition,
-		Type:      model.MqMessageTypeRow,
+		Type:      model.MessageTypeRow,
 	}
 	value := &maxwellMessage{
 		Ts:       0,
@@ -165,9 +165,10 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
 func (d *MaxwellEventBatchEncoder) AppendRowChangedEvent(
-	ctx context.Context,
-	topic string,
+	_ context.Context,
+	_ string,
 	e *model.RowChangedEvent,
+	_ func(),
 ) error {
 	_, valueMsg := rowEventToMaxwellMessage(e)
 	value, err := valueMsg.Encode()
@@ -218,7 +219,7 @@ func ddlEventtoMaxwellMessage(e *model.DDLEvent) (*mqMessageKey, *DdlMaxwellMess
 		Ts:     e.CommitTs,
 		Schema: e.TableInfo.Schema,
 		Table:  e.TableInfo.Table,
-		Type:   model.MqMessageTypeDDL,
+		Type:   model.MessageTypeDDL,
 	}
 	value := &DdlMaxwellMessage{
 		Ts:       e.CommitTs,
@@ -266,7 +267,7 @@ func ddlEventtoMaxwellMessage(e *model.DDLEvent) (*mqMessageKey, *DdlMaxwellMess
 // DDL message unresolved tso
 func (d *MaxwellEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error) {
 	keyMsg, valueMsg := ddlEventtoMaxwellMessage(e)
-	key, err := keyMsg.Encode()
+	key, err := keyMsg.encode()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -275,7 +276,7 @@ func (d *MaxwellEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage
 		return nil, errors.Trace(err)
 	}
 
-	return newDDLMQMessage(config.ProtocolMaxwell, key, value, e), nil
+	return newDDLMsg(config.ProtocolMaxwell, key, value, e), nil
 }
 
 // Build implements the EventBatchEncoder interface
@@ -284,7 +285,7 @@ func (d *MaxwellEventBatchEncoder) Build() []*MQMessage {
 		return nil
 	}
 
-	ret := NewMQMessage(config.ProtocolMaxwell, d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0, model.MqMessageTypeRow, nil, nil)
+	ret := newMsg(config.ProtocolMaxwell, d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0, model.MessageTypeRow, nil, nil)
 	ret.SetRowsCount(d.batchSize)
 	d.Reset()
 	return []*MQMessage{ret}

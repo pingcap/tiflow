@@ -58,7 +58,7 @@ func TestLeaderLoopSuccess(t *testing.T) {
 	}
 
 	// prepare server master
-	cfg := NewConfig()
+	cfg := GetDefaultMasterConfig()
 	cfg.Etcd.Name = name
 	cfg.AdvertiseAddr = addr
 	s := &Server{
@@ -116,7 +116,7 @@ func TestLeaderLoopMeetStaleData(t *testing.T) {
 		return ctx.Err()
 	}
 
-	cfg := NewConfig()
+	cfg := GetDefaultMasterConfig()
 	cfg.Etcd.Name = name
 	cfg.AdvertiseAddr = addr
 	id := genServerMasterUUID(name)
@@ -192,7 +192,7 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 	servers := make([]*Server, 0, serverCount)
 	sessions := make([]cluster.Session, 0, serverCount)
 	for i := range names {
-		cfg := NewConfig()
+		cfg := GetDefaultMasterConfig()
 		cfg.Etcd.Name = names[i]
 		cfg.AdvertiseAddr = addrs[i]
 		s := &Server{

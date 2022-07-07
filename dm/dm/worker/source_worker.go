@@ -38,7 +38,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/streamer"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/relay"
 )
 
@@ -269,26 +268,12 @@ func (w *SourceWorker) updateSourceStatus(ctx context.Context, needLock bool) er
 	}
 	w.sourceDBMu.Unlock()
 
-	// TODO: write NewSourceStatusFromDB, so engine can easily to use
-	var status binlog.SourceStatus
-	ctx, cancel := context.WithTimeout(ctx, utils.DefaultDBTimeout)
-	defer cancel()
-	pos, gtidSet, err := conn.GetPosAndGs(tcontext.NewContext(ctx, log.L()), w.sourceDB, cfg.Flavor)
+	status, err := binlog.GetSourceStatus(tcontext.NewContext(ctx, w.l), w.sourceDB, cfg.Flavor)
 	if err != nil {
 		return err
 	}
-	status.Location = binlog.NewLocation(pos, gtidSet)
-	ctx2, cancel2 := context.WithTimeout(ctx, utils.DefaultDBTimeout)
-	defer cancel2()
-	binlogs, err := binlog.GetBinaryLogs(ctx2, w.sourceDB.DB)
-	if err != nil {
-		return err
-	}
-	status.Binlogs = binlogs
 
-	status.UpdateTime = time.Now()
-
-	w.sourceStatus.Store(&status)
+	w.sourceStatus.Store(status)
 	return nil
 }
 
