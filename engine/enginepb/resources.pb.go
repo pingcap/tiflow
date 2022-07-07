@@ -6,23 +6,19 @@ package enginepb
 import (
 	context "context"
 	fmt "fmt"
-	io "io"
-	math "math"
-	math_bits "math/bits"
-
 	proto "github.com/gogo/protobuf/proto"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	io "io"
+	math "math"
+	math_bits "math/bits"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
-
-var (
-	_ = fmt.Errorf
-	_ = math.Inf
-)
+var _ = fmt.Errorf
+var _ = math.Inf
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
@@ -75,11 +71,9 @@ func (*CreateResourceRequest) ProtoMessage()    {}
 func (*CreateResourceRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_cf1b13971fe4c19d, []int{0}
 }
-
 func (m *CreateResourceRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-
 func (m *CreateResourceRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_CreateResourceRequest.Marshal(b, m, deterministic)
@@ -92,15 +86,12 @@ func (m *CreateResourceRequest) XXX_Marshal(b []byte, deterministic bool) ([]byt
 		return b[:n], nil
 	}
 }
-
 func (m *CreateResourceRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_CreateResourceRequest.Merge(m, src)
 }
-
 func (m *CreateResourceRequest) XXX_Size() int {
 	return m.Size()
 }
-
 func (m *CreateResourceRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_CreateResourceRequest.DiscardUnknown(m)
 }
@@ -142,7 +133,8 @@ func (m *CreateResourceRequest) GetCreatorWorkerId() string {
 	return ""
 }
 
-type CreateResourceResponse struct{}
+type CreateResourceResponse struct {
+}
 
 func (m *CreateResourceResponse) Reset()         { *m = CreateResourceResponse{} }
 func (m *CreateResourceResponse) String() string { return proto.CompactTextString(m) }
@@ -150,11 +142,9 @@ func (*CreateResourceResponse) ProtoMessage()    {}
 func (*CreateResourceResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_cf1b13971fe4c19d, []int{1}
 }
-
 func (m *CreateResourceResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-
 func (m *CreateResourceResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_CreateResourceResponse.Marshal(b, m, deterministic)
@@ -167,15 +157,12 @@ func (m *CreateResourceResponse) XXX_Marshal(b []byte, deterministic bool) ([]by
 		return b[:n], nil
 	}
 }
-
 func (m *CreateResourceResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_CreateResourceResponse.Merge(m, src)
 }
-
 func (m *CreateResourceResponse) XXX_Size() int {
 	return m.Size()
 }
-
 func (m *CreateResourceResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_CreateResourceResponse.DiscardUnknown(m)
 }
@@ -193,11 +180,9 @@ func (*ResourceKey) ProtoMessage()    {}
 func (*ResourceKey) Descriptor() ([]byte, []int) {
 	return fileDescriptor_cf1b13971fe4c19d, []int{2}
 }
-
 func (m *ResourceKey) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-
 func (m *ResourceKey) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_ResourceKey.Marshal(b, m, deterministic)
@@ -210,15 +195,12 @@ func (m *ResourceKey) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) 
 		return b[:n], nil
 	}
 }
-
 func (m *ResourceKey) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ResourceKey.Merge(m, src)
 }
-
 func (m *ResourceKey) XXX_Size() int {
 	return m.Size()
 }
-
 func (m *ResourceKey) XXX_DiscardUnknown() {
 	xxx_messageInfo_ResourceKey.DiscardUnknown(m)
 }
@@ -249,11 +231,9 @@ func (*QueryResourceRequest) ProtoMessage()    {}
 func (*QueryResourceRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_cf1b13971fe4c19d, []int{3}
 }
-
 func (m *QueryResourceRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-
 func (m *QueryResourceRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_QueryResourceRequest.Marshal(b, m, deterministic)
@@ -266,15 +246,12 @@ func (m *QueryResourceRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte
 		return b[:n], nil
 	}
 }
-
 func (m *QueryResourceRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_QueryResourceRequest.Merge(m, src)
 }
-
 func (m *QueryResourceRequest) XXX_Size() int {
 	return m.Size()
 }
-
 func (m *QueryResourceRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_QueryResourceRequest.DiscardUnknown(m)
 }
@@ -300,11 +277,9 @@ func (*QueryResourceResponse) ProtoMessage()    {}
 func (*QueryResourceResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_cf1b13971fe4c19d, []int{4}
 }
-
 func (m *QueryResourceResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-
 func (m *QueryResourceResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_QueryResourceResponse.Marshal(b, m, deterministic)
@@ -317,15 +292,12 @@ func (m *QueryResourceResponse) XXX_Marshal(b []byte, deterministic bool) ([]byt
 		return b[:n], nil
 	}
 }
-
 func (m *QueryResourceResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_QueryResourceResponse.Merge(m, src)
 }
-
 func (m *QueryResourceResponse) XXX_Size() int {
 	return m.Size()
 }
-
 func (m *QueryResourceResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_QueryResourceResponse.DiscardUnknown(m)
 }
@@ -363,11 +335,9 @@ func (*RemoveResourceRequest) ProtoMessage()    {}
 func (*RemoveResourceRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_cf1b13971fe4c19d, []int{5}
 }
-
 func (m *RemoveResourceRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-
 func (m *RemoveResourceRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_RemoveResourceRequest.Marshal(b, m, deterministic)
@@ -380,15 +350,12 @@ func (m *RemoveResourceRequest) XXX_Marshal(b []byte, deterministic bool) ([]byt
 		return b[:n], nil
 	}
 }
-
 func (m *RemoveResourceRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_RemoveResourceRequest.Merge(m, src)
 }
-
 func (m *RemoveResourceRequest) XXX_Size() int {
 	return m.Size()
 }
-
 func (m *RemoveResourceRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_RemoveResourceRequest.DiscardUnknown(m)
 }
@@ -402,7 +369,8 @@ func (m *RemoveResourceRequest) GetResourceKey() *ResourceKey {
 	return nil
 }
 
-type RemoveResourceResponse struct{}
+type RemoveResourceResponse struct {
+}
 
 func (m *RemoveResourceResponse) Reset()         { *m = RemoveResourceResponse{} }
 func (m *RemoveResourceResponse) String() string { return proto.CompactTextString(m) }
@@ -410,11 +378,9 @@ func (*RemoveResourceResponse) ProtoMessage()    {}
 func (*RemoveResourceResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_cf1b13971fe4c19d, []int{6}
 }
-
 func (m *RemoveResourceResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-
 func (m *RemoveResourceResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_RemoveResourceResponse.Marshal(b, m, deterministic)
@@ -427,15 +393,12 @@ func (m *RemoveResourceResponse) XXX_Marshal(b []byte, deterministic bool) ([]by
 		return b[:n], nil
 	}
 }
-
 func (m *RemoveResourceResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_RemoveResourceResponse.Merge(m, src)
 }
-
 func (m *RemoveResourceResponse) XXX_Size() int {
 	return m.Size()
 }
-
 func (m *RemoveResourceResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_RemoveResourceResponse.DiscardUnknown(m)
 }
@@ -453,11 +416,9 @@ func (*ResourceError) ProtoMessage()    {}
 func (*ResourceError) Descriptor() ([]byte, []int) {
 	return fileDescriptor_cf1b13971fe4c19d, []int{7}
 }
-
 func (m *ResourceError) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-
 func (m *ResourceError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_ResourceError.Marshal(b, m, deterministic)
@@ -470,15 +431,12 @@ func (m *ResourceError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error
 		return b[:n], nil
 	}
 }
-
 func (m *ResourceError) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ResourceError.Merge(m, src)
 }
-
 func (m *ResourceError) XXX_Size() int {
 	return m.Size()
 }
-
 func (m *ResourceError) XXX_DiscardUnknown() {
 	xxx_messageInfo_ResourceError.DiscardUnknown(m)
 }
@@ -614,16 +572,15 @@ type ResourceManagerServer interface {
 }
 
 // UnimplementedResourceManagerServer can be embedded to have forward compatible implementations.
-type UnimplementedResourceManagerServer struct{}
+type UnimplementedResourceManagerServer struct {
+}
 
 func (*UnimplementedResourceManagerServer) CreateResource(ctx context.Context, req *CreateResourceRequest) (*CreateResourceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateResource not implemented")
 }
-
 func (*UnimplementedResourceManagerServer) QueryResource(ctx context.Context, req *QueryResourceRequest) (*QueryResourceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QueryResource not implemented")
 }
-
 func (*UnimplementedResourceManagerServer) RemoveResource(ctx context.Context, req *RemoveResourceRequest) (*RemoveResourceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveResource not implemented")
 }
@@ -1013,7 +970,6 @@ func encodeVarintResources(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
-
 func (m *CreateResourceRequest) Size() (n int) {
 	if m == nil {
 		return 0
@@ -1144,11 +1100,9 @@ func (m *ResourceError) Size() (n int) {
 func sovResources(x uint64) (n int) {
 	return (math_bits.Len64(x|1) + 6) / 7
 }
-
 func sozResources(x uint64) (n int) {
 	return sovResources(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-
 func (m *CreateResourceRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1363,7 +1317,6 @@ func (m *CreateResourceRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *CreateResourceResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1414,7 +1367,6 @@ func (m *CreateResourceResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *ResourceKey) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1529,7 +1481,6 @@ func (m *ResourceKey) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *QueryResourceRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1616,7 +1567,6 @@ func (m *QueryResourceRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *QueryResourceResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1763,7 +1713,6 @@ func (m *QueryResourceResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RemoveResourceRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1850,7 +1799,6 @@ func (m *RemoveResourceRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RemoveResourceResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1901,7 +1849,6 @@ func (m *RemoveResourceResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *ResourceError) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -2003,7 +1950,6 @@ func (m *ResourceError) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-
 func skipResources(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0

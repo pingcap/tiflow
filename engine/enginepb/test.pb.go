@@ -6,23 +6,19 @@ package enginepb
 import (
 	context "context"
 	fmt "fmt"
-	io "io"
-	math "math"
-	math_bits "math/bits"
-
 	proto "github.com/gogo/protobuf/proto"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	io "io"
+	math "math"
+	math_bits "math/bits"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
-
-var (
-	_ = fmt.Errorf
-	_ = math.Inf
-)
+var _ = fmt.Errorf
+var _ = math.Inf
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
@@ -73,11 +69,9 @@ func (*Record) ProtoMessage()    {}
 func (*Record) Descriptor() ([]byte, []int) {
 	return fileDescriptor_c161fcfdc0c3ff1e, []int{0}
 }
-
 func (m *Record) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-
 func (m *Record) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_Record.Marshal(b, m, deterministic)
@@ -90,15 +84,12 @@ func (m *Record) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
-
 func (m *Record) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_Record.Merge(m, src)
 }
-
 func (m *Record) XXX_Size() int {
 	return m.Size()
 }
-
 func (m *Record) XXX_DiscardUnknown() {
 	xxx_messageInfo_Record.DiscardUnknown(m)
 }
@@ -164,11 +155,9 @@ func (*TestBinlogRequest) ProtoMessage()    {}
 func (*TestBinlogRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_c161fcfdc0c3ff1e, []int{1}
 }
-
 func (m *TestBinlogRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-
 func (m *TestBinlogRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_TestBinlogRequest.Marshal(b, m, deterministic)
@@ -181,15 +170,12 @@ func (m *TestBinlogRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, e
 		return b[:n], nil
 	}
 }
-
 func (m *TestBinlogRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_TestBinlogRequest.Merge(m, src)
 }
-
 func (m *TestBinlogRequest) XXX_Size() int {
 	return m.Size()
 }
-
 func (m *TestBinlogRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_TestBinlogRequest.DiscardUnknown(m)
 }
@@ -296,7 +282,8 @@ type TestServiceServer interface {
 }
 
 // UnimplementedTestServiceServer can be embedded to have forward compatible implementations.
-type UnimplementedTestServiceServer struct{}
+type UnimplementedTestServiceServer struct {
+}
 
 func (*UnimplementedTestServiceServer) FeedBinlog(req *TestBinlogRequest, srv TestService_FeedBinlogServer) error {
 	return status.Errorf(codes.Unimplemented, "method FeedBinlog not implemented")
@@ -459,7 +446,6 @@ func encodeVarintTest(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
-
 func (m *Record) Size() (n int) {
 	if m == nil {
 		return 0
@@ -510,11 +496,9 @@ func (m *TestBinlogRequest) Size() (n int) {
 func sovTest(x uint64) (n int) {
 	return (math_bits.Len64(x|1) + 6) / 7
 }
-
 func sozTest(x uint64) (n int) {
 	return sovTest(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-
 func (m *Record) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -772,7 +756,6 @@ func (m *Record) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *TestBinlogRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -842,7 +825,6 @@ func (m *TestBinlogRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-
 func skipTest(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0

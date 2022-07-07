@@ -26,15 +26,12 @@ import (
 
 // Suppress "imported and not used" errors
 var _ codes.Code
-
-var (
-	_ io.Reader
-	_ status.Status
-	_ = runtime.String
-	_ = utilities.NewDoubleArray
-	_ = descriptor.ForMessage
-	_ = metadata.Join
-)
+var _ io.Reader
+var _ status.Status
+var _ = runtime.String
+var _ = utilities.NewDoubleArray
+var _ = descriptor.ForMessage
+var _ = metadata.Join
 
 func request_Master_StartTask_0(ctx context.Context, marshaler runtime.Marshaler, client MasterClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq StartTaskRequest
@@ -50,6 +47,7 @@ func request_Master_StartTask_0(ctx context.Context, marshaler runtime.Marshaler
 
 	msg, err := client.StartTask(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
 	return msg, metadata, err
+
 }
 
 func local_request_Master_StartTask_0(ctx context.Context, marshaler runtime.Marshaler, server MasterServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
@@ -66,6 +64,7 @@ func local_request_Master_StartTask_0(ctx context.Context, marshaler runtime.Mar
 
 	msg, err := server.StartTask(ctx, &protoReq)
 	return msg, metadata, err
+
 }
 
 func request_Master_OperateTask_0(ctx context.Context, marshaler runtime.Marshaler, client MasterClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
@@ -100,6 +99,7 @@ func request_Master_OperateTask_0(ctx context.Context, marshaler runtime.Marshal
 
 	msg, err := client.OperateTask(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
 	return msg, metadata, err
+
 }
 
 func local_request_Master_OperateTask_0(ctx context.Context, marshaler runtime.Marshaler, server MasterServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
@@ -134,9 +134,12 @@ func local_request_Master_OperateTask_0(ctx context.Context, marshaler runtime.M
 
 	msg, err := server.OperateTask(ctx, &protoReq)
 	return msg, metadata, err
+
 }
 
-var filter_Master_QueryStatus_0 = &utilities.DoubleArray{Encoding: map[string]int{"name": 0}, Base: []int{1, 1, 0}, Check: []int{0, 1, 2}}
+var (
+	filter_Master_QueryStatus_0 = &utilities.DoubleArray{Encoding: map[string]int{"name": 0}, Base: []int{1, 1, 0}, Check: []int{0, 1, 2}}
+)
 
 func request_Master_QueryStatus_0(ctx context.Context, marshaler runtime.Marshaler, client MasterClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq QueryStatusListRequest
@@ -169,6 +172,7 @@ func request_Master_QueryStatus_0(ctx context.Context, marshaler runtime.Marshal
 
 	msg, err := client.QueryStatus(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
 	return msg, metadata, err
+
 }
 
 func local_request_Master_QueryStatus_0(ctx context.Context, marshaler runtime.Marshaler, server MasterServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
@@ -202,6 +206,7 @@ func local_request_Master_QueryStatus_0(ctx context.Context, marshaler runtime.M
 
 	msg, err := server.QueryStatus(ctx, &protoReq)
 	return msg, metadata, err
+
 }
 
 func request_Master_OperateSource_0(ctx context.Context, marshaler runtime.Marshaler, client MasterClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
@@ -218,6 +223,7 @@ func request_Master_OperateSource_0(ctx context.Context, marshaler runtime.Marsh
 
 	msg, err := client.OperateSource(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
 	return msg, metadata, err
+
 }
 
 func local_request_Master_OperateSource_0(ctx context.Context, marshaler runtime.Marshaler, server MasterServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
@@ -234,6 +240,7 @@ func local_request_Master_OperateSource_0(ctx context.Context, marshaler runtime
 
 	msg, err := server.OperateSource(ctx, &protoReq)
 	return msg, metadata, err
+
 }
 
 func request_Master_OfflineMember_0(ctx context.Context, marshaler runtime.Marshaler, client MasterClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
@@ -271,6 +278,7 @@ func request_Master_OfflineMember_0(ctx context.Context, marshaler runtime.Marsh
 
 	msg, err := client.OfflineMember(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
 	return msg, metadata, err
+
 }
 
 func local_request_Master_OfflineMember_0(ctx context.Context, marshaler runtime.Marshaler, server MasterServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
@@ -308,6 +316,7 @@ func local_request_Master_OfflineMember_0(ctx context.Context, marshaler runtime
 
 	msg, err := server.OfflineMember(ctx, &protoReq)
 	return msg, metadata, err
+
 }
 
 func request_Master_OperateLeader_0(ctx context.Context, marshaler runtime.Marshaler, client MasterClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
@@ -345,6 +354,7 @@ func request_Master_OperateLeader_0(ctx context.Context, marshaler runtime.Marsh
 
 	msg, err := client.OperateLeader(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
 	return msg, metadata, err
+
 }
 
 func local_request_Master_OperateLeader_0(ctx context.Context, marshaler runtime.Marshaler, server MasterServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
@@ -382,9 +392,12 @@ func local_request_Master_OperateLeader_0(ctx context.Context, marshaler runtime
 
 	msg, err := server.OperateLeader(ctx, &protoReq)
 	return msg, metadata, err
+
 }
 
-var filter_Master_ListMember_0 = &utilities.DoubleArray{Encoding: map[string]int{}, Base: []int(nil), Check: []int(nil)}
+var (
+	filter_Master_ListMember_0 = &utilities.DoubleArray{Encoding: map[string]int{}, Base: []int(nil), Check: []int(nil)}
+)
 
 func request_Master_ListMember_0(ctx context.Context, marshaler runtime.Marshaler, client MasterClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq ListMemberRequest
@@ -399,6 +412,7 @@ func request_Master_ListMember_0(ctx context.Context, marshaler runtime.Marshale
 
 	msg, err := client.ListMember(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
 	return msg, metadata, err
+
 }
 
 func local_request_Master_ListMember_0(ctx context.Context, marshaler runtime.Marshaler, server MasterServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
@@ -414,6 +428,7 @@ func local_request_Master_ListMember_0(ctx context.Context, marshaler runtime.Ma
 
 	msg, err := server.ListMember(ctx, &protoReq)
 	return msg, metadata, err
+
 }
 
 func request_Master_OperateSchema_0(ctx context.Context, marshaler runtime.Marshaler, client MasterClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
@@ -430,6 +445,7 @@ func request_Master_OperateSchema_0(ctx context.Context, marshaler runtime.Marsh
 
 	msg, err := client.OperateSchema(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
 	return msg, metadata, err
+
 }
 
 func local_request_Master_OperateSchema_0(ctx context.Context, marshaler runtime.Marshaler, server MasterServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
@@ -446,6 +462,7 @@ func local_request_Master_OperateSchema_0(ctx context.Context, marshaler runtime
 
 	msg, err := server.OperateSchema(ctx, &protoReq)
 	return msg, metadata, err
+
 }
 
 func request_Master_GetSubTaskCfg_0(ctx context.Context, marshaler runtime.Marshaler, client MasterClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
@@ -472,6 +489,7 @@ func request_Master_GetSubTaskCfg_0(ctx context.Context, marshaler runtime.Marsh
 
 	msg, err := client.GetSubTaskCfg(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
 	return msg, metadata, err
+
 }
 
 func local_request_Master_GetSubTaskCfg_0(ctx context.Context, marshaler runtime.Marshaler, server MasterServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
@@ -498,9 +516,12 @@ func local_request_Master_GetSubTaskCfg_0(ctx context.Context, marshaler runtime
 
 	msg, err := server.GetSubTaskCfg(ctx, &protoReq)
 	return msg, metadata, err
+
 }
 
-var filter_Master_GetCfg_0 = &utilities.DoubleArray{Encoding: map[string]int{"name": 0}, Base: []int{1, 1, 0}, Check: []int{0, 1, 2}}
+var (
+	filter_Master_GetCfg_0 = &utilities.DoubleArray{Encoding: map[string]int{"name": 0}, Base: []int{1, 1, 0}, Check: []int{0, 1, 2}}
+)
 
 func request_Master_GetCfg_0(ctx context.Context, marshaler runtime.Marshaler, client MasterClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
 	var protoReq GetCfgRequest
@@ -533,6 +554,7 @@ func request_Master_GetCfg_0(ctx context.Context, marshaler runtime.Marshaler, c
 
 	msg, err := client.GetCfg(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
 	return msg, metadata, err
+
 }
 
 func local_request_Master_GetCfg_0(ctx context.Context, marshaler runtime.Marshaler, server MasterServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
@@ -566,6 +588,7 @@ func local_request_Master_GetCfg_0(ctx context.Context, marshaler runtime.Marsha
 
 	msg, err := server.GetCfg(ctx, &protoReq)
 	return msg, metadata, err
+
 }
 
 func request_Master_HandleError_0(ctx context.Context, marshaler runtime.Marshaler, client MasterClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
@@ -582,6 +605,7 @@ func request_Master_HandleError_0(ctx context.Context, marshaler runtime.Marshal
 
 	msg, err := client.HandleError(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
 	return msg, metadata, err
+
 }
 
 func local_request_Master_HandleError_0(ctx context.Context, marshaler runtime.Marshaler, server MasterServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
@@ -598,6 +622,7 @@ func local_request_Master_HandleError_0(ctx context.Context, marshaler runtime.M
 
 	msg, err := server.HandleError(ctx, &protoReq)
 	return msg, metadata, err
+
 }
 
 // RegisterMasterHandlerServer registers the http handlers for service Master to "mux".
@@ -605,6 +630,7 @@ func local_request_Master_HandleError_0(ctx context.Context, marshaler runtime.M
 // StreamingRPC :currently unsupported pending https://github.com/grpc/grpc-go/issues/906.
 // Note that using this registration option will cause many gRPC library features to stop working. Consider using RegisterMasterHandlerFromEndpoint instead.
 func RegisterMasterHandlerServer(ctx context.Context, mux *runtime.ServeMux, server MasterServer) error {
+
 	mux.Handle("POST", pattern_Master_StartTask_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
@@ -625,6 +651,7 @@ func RegisterMasterHandlerServer(ctx context.Context, mux *runtime.ServeMux, ser
 		}
 
 		forward_Master_StartTask_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
 	})
 
 	mux.Handle("PUT", pattern_Master_OperateTask_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
@@ -647,6 +674,7 @@ func RegisterMasterHandlerServer(ctx context.Context, mux *runtime.ServeMux, ser
 		}
 
 		forward_Master_OperateTask_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
 	})
 
 	mux.Handle("GET", pattern_Master_QueryStatus_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
@@ -669,6 +697,7 @@ func RegisterMasterHandlerServer(ctx context.Context, mux *runtime.ServeMux, ser
 		}
 
 		forward_Master_QueryStatus_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
 	})
 
 	mux.Handle("PUT", pattern_Master_OperateSource_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
@@ -691,6 +720,7 @@ func RegisterMasterHandlerServer(ctx context.Context, mux *runtime.ServeMux, ser
 		}
 
 		forward_Master_OperateSource_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
 	})
 
 	mux.Handle("DELETE", pattern_Master_OfflineMember_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
@@ -713,6 +743,7 @@ func RegisterMasterHandlerServer(ctx context.Context, mux *runtime.ServeMux, ser
 		}
 
 		forward_Master_OfflineMember_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
 	})
 
 	mux.Handle("PUT", pattern_Master_OperateLeader_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
@@ -735,6 +766,7 @@ func RegisterMasterHandlerServer(ctx context.Context, mux *runtime.ServeMux, ser
 		}
 
 		forward_Master_OperateLeader_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
 	})
 
 	mux.Handle("GET", pattern_Master_ListMember_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
@@ -757,6 +789,7 @@ func RegisterMasterHandlerServer(ctx context.Context, mux *runtime.ServeMux, ser
 		}
 
 		forward_Master_ListMember_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
 	})
 
 	mux.Handle("PUT", pattern_Master_OperateSchema_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
@@ -779,6 +812,7 @@ func RegisterMasterHandlerServer(ctx context.Context, mux *runtime.ServeMux, ser
 		}
 
 		forward_Master_OperateSchema_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
 	})
 
 	mux.Handle("GET", pattern_Master_GetSubTaskCfg_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
@@ -801,6 +835,7 @@ func RegisterMasterHandlerServer(ctx context.Context, mux *runtime.ServeMux, ser
 		}
 
 		forward_Master_GetSubTaskCfg_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
 	})
 
 	mux.Handle("GET", pattern_Master_GetCfg_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
@@ -823,6 +858,7 @@ func RegisterMasterHandlerServer(ctx context.Context, mux *runtime.ServeMux, ser
 		}
 
 		forward_Master_GetCfg_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
 	})
 
 	mux.Handle("PUT", pattern_Master_HandleError_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
@@ -845,6 +881,7 @@ func RegisterMasterHandlerServer(ctx context.Context, mux *runtime.ServeMux, ser
 		}
 
 		forward_Master_HandleError_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
 	})
 
 	return nil
@@ -887,6 +924,7 @@ func RegisterMasterHandler(ctx context.Context, mux *runtime.ServeMux, conn *grp
 // doesn't go through the normal gRPC flow (creating a gRPC client etc.) then it will be up to the passed in
 // "MasterClient" to call the correct interceptors.
 func RegisterMasterHandlerClient(ctx context.Context, mux *runtime.ServeMux, client MasterClient) error {
+
 	mux.Handle("POST", pattern_Master_StartTask_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())
 		defer cancel()
@@ -904,6 +942,7 @@ func RegisterMasterHandlerClient(ctx context.Context, mux *runtime.ServeMux, cli
 		}
 
 		forward_Master_StartTask_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
 	})
 
 	mux.Handle("PUT", pattern_Master_OperateTask_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
@@ -923,6 +962,7 @@ func RegisterMasterHandlerClient(ctx context.Context, mux *runtime.ServeMux, cli
 		}
 
 		forward_Master_OperateTask_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
 	})
 
 	mux.Handle("GET", pattern_Master_QueryStatus_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
@@ -942,6 +982,7 @@ func RegisterMasterHandlerClient(ctx context.Context, mux *runtime.ServeMux, cli
 		}
 
 		forward_Master_QueryStatus_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
 	})
 
 	mux.Handle("PUT", pattern_Master_OperateSource_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
@@ -961,6 +1002,7 @@ func RegisterMasterHandlerClient(ctx context.Context, mux *runtime.ServeMux, cli
 		}
 
 		forward_Master_OperateSource_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
 	})
 
 	mux.Handle("DELETE", pattern_Master_OfflineMember_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
@@ -980,6 +1022,7 @@ func RegisterMasterHandlerClient(ctx context.Context, mux *runtime.ServeMux, cli
 		}
 
 		forward_Master_OfflineMember_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
 	})
 
 	mux.Handle("PUT", pattern_Master_OperateLeader_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
@@ -999,6 +1042,7 @@ func RegisterMasterHandlerClient(ctx context.Context, mux *runtime.ServeMux, cli
 		}
 
 		forward_Master_OperateLeader_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
 	})
 
 	mux.Handle("GET", pattern_Master_ListMember_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
@@ -1018,6 +1062,7 @@ func RegisterMasterHandlerClient(ctx context.Context, mux *runtime.ServeMux, cli
 		}
 
 		forward_Master_ListMember_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
 	})
 
 	mux.Handle("PUT", pattern_Master_OperateSchema_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
@@ -1037,6 +1082,7 @@ func RegisterMasterHandlerClient(ctx context.Context, mux *runtime.ServeMux, cli
 		}
 
 		forward_Master_OperateSchema_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
 	})
 
 	mux.Handle("GET", pattern_Master_GetSubTaskCfg_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
@@ -1056,6 +1102,7 @@ func RegisterMasterHandlerClient(ctx context.Context, mux *runtime.ServeMux, cli
 		}
 
 		forward_Master_GetSubTaskCfg_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
 	})
 
 	mux.Handle("GET", pattern_Master_GetCfg_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
@@ -1075,6 +1122,7 @@ func RegisterMasterHandlerClient(ctx context.Context, mux *runtime.ServeMux, cli
 		}
 
 		forward_Master_GetCfg_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
 	})
 
 	mux.Handle("PUT", pattern_Master_HandleError_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
@@ -1094,6 +1142,7 @@ func RegisterMasterHandlerClient(ctx context.Context, mux *runtime.ServeMux, cli
 		}
 
 		forward_Master_HandleError_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
 	})
 
 	return nil
