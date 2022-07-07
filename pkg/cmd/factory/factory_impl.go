@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/log"
 	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
 	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
+	"github.com/pingcap/tiflow/pkg/cmd/util"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pd "github.com/tikv/pd/client"
 	etcdlogutil "go.etcd.io/etcd/client/pkg/v3/logutil"
@@ -34,6 +35,10 @@ import (
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/version"
+)
+
+const (
+	maxGetPDClientRetryTimes = 3
 )
 
 type factoryImpl struct {
@@ -148,10 +153,20 @@ func (f factoryImpl) PdClient() (pd.Client, error) {
 	}
 
 	pdAddr := f.GetPdAddr()
+	if len(pdAddr) == 0 {
+		return nil, cerror.ErrInvalidServerOption.
+			GenWithStack("empty PD address, please use --pd to specify PD cluster addresses")
+	}
 	pdEndpoints := strings.Split(pdAddr, ",")
+	for _, ep := range pdEndpoints {
+		if err := util.VerifyPdEndpoint(ep, credential.IsTLSEnabled()); err != nil {
+			return nil, cerror.ErrInvalidServerOption.Wrap(err).GenWithStackByArgs()
+		}
+	}
 
 	pdClient, err := pd.NewClientWithContext(
 		ctx, pdEndpoints, credential.PDSecurityOption(),
+		pd.WithMaxErrorRetry(maxGetPDClientRetryTimes),
 		// TODO(hi-rustin): add gRPC metrics to Options.
 		// See also: https://github.com/pingcap/tiflow/pull/2341#discussion_r673032407.
 		pd.WithGRPCDialOptions(
