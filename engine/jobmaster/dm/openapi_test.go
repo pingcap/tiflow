@@ -23,6 +23,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
+	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	dmmaster "github.com/pingcap/tiflow/dm/dm/master"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
@@ -30,28 +31,26 @@ import (
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 const (
 	baseURL = "/api/v1/jobs/job-id/"
 )
 
-func terrorHTTPErrorHandler(c *gin.Context) {
-	c.Next()
-	gErr := c.Errors.Last()
-	if gErr == nil {
-		return
-	}
-	c.IndentedJSON(http.StatusBadRequest, openapi.ErrorWithMessage{ErrorMsg: gErr.Error()})
+func TestDMOpenAPISuite(t *testing.T) {
+	suite.Run(t, new(testDMOpenAPISuite))
 }
 
-func equalError(t *testing.T, expected string, body *bytes.Buffer) {
-	var e openapi.ErrorWithMessage
-	json.Unmarshal(body.Bytes(), &e)
-	require.Equal(t, expected, e.ErrorMsg)
+type testDMOpenAPISuite struct {
+	suite.Suite
+	jm           *JobMaster
+	engine       *gin.Engine
+	messageAgent *dmpkg.MockMessageAgent
+	funcBackup   func(ctx context.Context, cfg *dmconfig.SourceConfig) error
 }
 
-func TestInitOpenAPI(t *testing.T) {
+func (t *testDMOpenAPISuite) SetupSuite() {
 	var (
 		mockBaseJobmaster = &MockBaseJobmaster{}
 		mockMessageAgent  = &dmpkg.MockMessageAgent{}
@@ -70,73 +69,69 @@ func TestInitOpenAPI(t *testing.T) {
 	apiGroup := engine.Group(baseURL)
 	jm.initOpenAPI(apiGroup)
 
-	funcBackup := dmmaster.CheckAndAdjustSourceConfigFunc
+	t.funcBackup = dmmaster.CheckAndAdjustSourceConfigFunc
+	t.jm = jm
+	t.engine = engine
+	t.messageAgent = mockMessageAgent
 	dmmaster.CheckAndAdjustSourceConfigFunc = checkAndNoAdjustSourceConfigMock
-	defer func() {
-		dmmaster.CheckAndAdjustSourceConfigFunc = funcBackup
-	}()
-
-	testDMAPIGetJobConfig(t, engine, jm)
-	testDMAPIGetJobStatus(t, engine, jm)
-	testDMAPIOperateTask(t, engine, jm)
-	testDMAPIGetBinlogOperator(t, engine, jm, mockMessageAgent)
-	testDMAPISetBinlogOperator(t, engine, jm, mockMessageAgent)
-	testDMAPIDeleteBinlogOperator(t, engine, jm, mockMessageAgent)
-	testDMAPIGetSchema(t, engine, jm, mockMessageAgent)
 }
 
-func testDMAPIGetJobConfig(t *testing.T, engine *gin.Engine, jm *JobMaster) {
+func (t *testDMOpenAPISuite) TearDownSuite() {
+	dmmaster.CheckAndAdjustSourceConfigFunc = t.funcBackup
+}
+
+func (t *testDMOpenAPISuite) TestDMAPIGetJobConfig() {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/api/v1/jobs/job-not-exist/config", nil)
-	engine.ServeHTTP(w, r)
-	require.Equal(t, http.StatusNotFound, w.Code)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusNotFound, w.Code)
 
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("GET", baseURL+"config", nil)
-	engine.ServeHTTP(w, r)
-	require.Equal(t, http.StatusBadRequest, w.Code)
-	equalError(t, "state not found", w.Body)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusBadRequest, w.Code)
+	equalError(t.T(), "state not found", w.Body)
 
 	jobCfg := &config.JobCfg{}
-	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
-	require.NoError(t, jm.taskManager.OperateTask(context.Background(), dmpkg.Create, jobCfg, nil))
+	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
+	require.NoError(t.T(), t.jm.taskManager.OperateTask(context.Background(), dmpkg.Create, jobCfg, nil))
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("GET", baseURL+"config", nil)
-	engine.ServeHTTP(w, r)
-	require.Equal(t, http.StatusOK, w.Code)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusOK, w.Code)
 
 	var cfgStr string
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &cfgStr))
+	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &cfgStr))
 	bs, err := jobCfg.Yaml()
-	require.NoError(t, err)
-	require.Equal(t, sortString(string(bs)), sortString(cfgStr))
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), sortString(string(bs)), sortString(cfgStr))
 
-	require.NoError(t, jm.taskManager.OperateTask(context.Background(), dmpkg.Delete, nil, nil))
+	require.NoError(t.T(), t.jm.taskManager.OperateTask(context.Background(), dmpkg.Delete, nil, nil))
 }
 
-func testDMAPIGetJobStatus(t *testing.T, engine *gin.Engine, jm *JobMaster) {
+func (t *testDMOpenAPISuite) TestDMAPIGetJobStatus() {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/api/v1/jobs/job-not-exist/status", nil)
-	engine.ServeHTTP(w, r)
-	require.Equal(t, http.StatusNotFound, w.Code)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusNotFound, w.Code)
 
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("GET", baseURL+"status", nil)
-	engine.ServeHTTP(w, r)
-	require.Equal(t, http.StatusBadRequest, w.Code)
-	equalError(t, "state not found", w.Body)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusBadRequest, w.Code)
+	equalError(t.T(), "state not found", w.Body)
 
 	w = httptest.NewRecorder()
-	r = httptest.NewRequest("GET", baseURL+"status/tasks/"+"task", nil)
-	engine.ServeHTTP(w, r)
-	require.Equal(t, http.StatusBadRequest, w.Code)
-	equalError(t, "state not found", w.Body)
+	r = httptest.NewRequest("GET", baseURL+"status"+"?tasks=task", nil)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusBadRequest, w.Code)
+	equalError(t.T(), "state not found", w.Body)
 
-	require.NoError(t, jm.taskManager.OperateTask(context.Background(), dmpkg.Create, &config.JobCfg{}, nil))
+	require.NoError(t.T(), t.jm.taskManager.OperateTask(context.Background(), dmpkg.Create, &config.JobCfg{}, nil))
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("GET", baseURL+"status", nil)
-	engine.ServeHTTP(w, r)
-	require.Equal(t, http.StatusOK, w.Code)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusOK, w.Code)
 
 	jobStatus := JobStatus{
 		JobMasterID: "dm-jobmaster-id",
@@ -144,92 +139,96 @@ func testDMAPIGetJobStatus(t *testing.T, engine *gin.Engine, jm *JobMaster) {
 		TaskStatus:  map[string]TaskStatus{},
 	}
 	var jobStatus2 JobStatus
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &jobStatus2))
-	require.Equal(t, jobStatus, jobStatus2)
+	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &jobStatus2))
+	require.Equal(t.T(), jobStatus, jobStatus2)
 
 	w = httptest.NewRecorder()
-	r = httptest.NewRequest("GET", baseURL+"status/tasks/"+"task1", nil)
-	engine.ServeHTTP(w, r)
-	require.Equal(t, http.StatusOK, w.Code)
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &jobStatus2))
-	require.Equal(t, "task task1 for job not found", jobStatus2.TaskStatus["task1"].Status.ErrorMsg)
+	r = httptest.NewRequest("GET", baseURL+"status"+"?tasks=task1&tasks=task2", nil)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusOK, w.Code)
+	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &jobStatus2))
+	require.Equal(t.T(), "task task1 for job not found", jobStatus2.TaskStatus["task1"].Status.ErrorMsg)
+	require.Equal(t.T(), "task task2 for job not found", jobStatus2.TaskStatus["task2"].Status.ErrorMsg)
 
-	require.NoError(t, jm.taskManager.OperateTask(context.Background(), dmpkg.Delete, nil, nil))
+	require.NoError(t.T(), t.jm.taskManager.OperateTask(context.Background(), dmpkg.Delete, nil, nil))
 }
 
-func testDMAPIOperateTask(t *testing.T, engine *gin.Engine, jm *JobMaster) {
+func (t *testDMOpenAPISuite) TestDMAPIOperateJob() {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("PUT", "/api/v1/jobs/job-not-exist/status", nil)
-	engine.ServeHTTP(w, r)
-	require.Equal(t, http.StatusNotFound, w.Code)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusNotFound, w.Code)
 
 	w = httptest.NewRecorder()
-	r = httptest.NewRequest("PUT", baseURL+"status/tasks/"+"task", nil)
-	engine.ServeHTTP(w, r)
-	require.Equal(t, http.StatusBadRequest, w.Code)
-	equalError(t, "unsupport op type '' for operate task", w.Body)
+	r = httptest.NewRequest("PUT", baseURL+"status", nil)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusBadRequest, w.Code)
+	equalError(t.T(), "unsupport op type '' for operate task", w.Body)
 
-	req := openapi.OperateTaskRequest{
-		Op: openapi.OperateTaskRequestOpPause,
+	tasks := []string{"task"}
+	req := openapi.OperateJobRequest{
+		Op:    openapi.OperateJobRequestOpPause,
+		Tasks: &tasks,
 	}
 	bs, err := json.Marshal(req)
-	require.NoError(t, err)
+	require.NoError(t.T(), err)
 	w = httptest.NewRecorder()
-	r = httptest.NewRequest("PUT", baseURL+"status/tasks/"+"task", bytes.NewReader(bs))
+	r = httptest.NewRequest("PUT", baseURL+"status", bytes.NewReader(bs))
 	r.Header.Set("Content-Type", "application/json")
-	engine.ServeHTTP(w, r)
-	require.Equal(t, http.StatusBadRequest, w.Code)
-	equalError(t, "state not found", w.Body)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusBadRequest, w.Code)
+	equalError(t.T(), "state not found", w.Body)
 
 	jobCfg := &config.JobCfg{}
-	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
-	require.NoError(t, jm.taskManager.OperateTask(context.Background(), dmpkg.Create, jobCfg, nil))
-	req.Op = openapi.OperateTaskRequestOpResume
+	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
+	require.NoError(t.T(), t.jm.taskManager.OperateTask(context.Background(), dmpkg.Create, jobCfg, nil))
+	req.Op = openapi.OperateJobRequestOpResume
+	req.Tasks = nil
 	bs, err = json.Marshal(req)
-	require.NoError(t, err)
+	require.NoError(t.T(), err)
 	w = httptest.NewRecorder()
-	r = httptest.NewRequest("PUT", baseURL+"status/tasks/"+"mysql-replica-01", bytes.NewReader(bs))
+	r = httptest.NewRequest("PUT", baseURL+"status", bytes.NewReader(bs))
 	r.Header.Set("Content-Type", "application/json")
-	engine.ServeHTTP(w, r)
-	require.Equal(t, http.StatusOK, w.Code)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusOK, w.Code)
 
-	require.NoError(t, jm.taskManager.OperateTask(context.Background(), dmpkg.Delete, nil, nil))
+	require.NoError(t.T(), t.jm.taskManager.OperateTask(context.Background(), dmpkg.Delete, nil, nil))
 }
 
-func testDMAPIGetBinlogOperator(t *testing.T, engine *gin.Engine, jm *JobMaster, messageAgent *dmpkg.MockMessageAgent) {
+func (t *testDMOpenAPISuite) TestDMAPIGetBinlogOperator() {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/api/v1/jobs/job-not-exist/binlog", nil)
-	engine.ServeHTTP(w, r)
-	require.Equal(t, http.StatusNotFound, w.Code)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusNotFound, w.Code)
 
-	messageAgent.On("SendRequest").Return(nil, errors.New("binlog operator not found")).Once()
+	t.messageAgent.On("SendRequest").Return(nil, errors.New("binlog operator not found")).Once()
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("GET", baseURL+"binlog/tasks/"+"task1"+"?binlog_pos='mysql-bin.000001,4'", nil)
-	engine.ServeHTTP(w, r)
-	require.Equal(t, http.StatusOK, w.Code)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusOK, w.Code)
 	var binlogResp dmpkg.BinlogResponse
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &binlogResp))
-	require.Equal(t, "", binlogResp.ErrorMsg)
-	require.Equal(t, "binlog operator not found", binlogResp.Results["task1"].ErrorMsg)
+	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &binlogResp))
+	require.Equal(t.T(), "", binlogResp.ErrorMsg)
+	require.Equal(t.T(), "binlog operator not found", binlogResp.Results["task1"].ErrorMsg)
 }
 
-func testDMAPISetBinlogOperator(t *testing.T, engine *gin.Engine, jm *JobMaster, messageAgent *dmpkg.MockMessageAgent) {
+func (t *testDMOpenAPISuite) TestDMAPISetBinlogOperator() {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("POST", "/api/v1/jobs/job-not-exist/binlog", nil)
-	engine.ServeHTTP(w, r)
-	require.Equal(t, http.StatusNotFound, w.Code)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusNotFound, w.Code)
 
 	req := openapi.SetBinlogOperatorRequest{
 		Op: "wrong-op",
 	}
 	bs, err := json.Marshal(req)
-	require.NoError(t, err)
+	require.NoError(t.T(), err)
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("POST", baseURL+"binlog/tasks/"+"task1", bytes.NewReader(bs))
 	r.Header.Set("Content-Type", "application/json")
-	engine.ServeHTTP(w, r)
-	require.Equal(t, http.StatusBadRequest, w.Code)
-	equalError(t, "unsupport op type '' for set binlog operator", w.Body)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusBadRequest, w.Code)
+	equalError(t.T(), "unsupport op type '' for set binlog operator", w.Body)
 
 	pos := "mysql-bin.000001,4"
 	sqls := []string{"ALTER TABLE tb ADD COLUMN c int(11) UNIQUE;"}
@@ -239,129 +238,179 @@ func testDMAPISetBinlogOperator(t *testing.T, engine *gin.Engine, jm *JobMaster,
 		Sqls:      &sqls,
 	}
 	bs, err = json.Marshal(req)
-	require.NoError(t, err)
-	messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{
+	require.NoError(t.T(), err)
+	t.messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{
 		Msg: "binlog operator set success",
 	}, nil).Once()
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("POST", baseURL+"binlog/tasks/"+"task1", bytes.NewReader(bs))
 	r.Header.Set("Content-Type", "application/json")
-	engine.ServeHTTP(w, r)
-	require.Equal(t, http.StatusOK, w.Code)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusOK, w.Code)
 	var binlogResp dmpkg.BinlogResponse
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &binlogResp))
-	require.Equal(t, "", binlogResp.ErrorMsg)
-	require.Equal(t, "binlog operator set success", binlogResp.Results["task1"].Msg)
+	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &binlogResp))
+	require.Equal(t.T(), "", binlogResp.ErrorMsg)
+	require.Equal(t.T(), "binlog operator set success", binlogResp.Results["task1"].Msg)
 
 	req = openapi.SetBinlogOperatorRequest{
 		Op: openapi.SetBinlogOperatorRequestOpSkip,
 	}
 	bs, err = json.Marshal(req)
-	require.NoError(t, err)
-	messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{
+	require.NoError(t.T(), err)
+	t.messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{
 		ErrorMsg: "no binlog error",
 	}, nil).Once()
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("POST", baseURL+"binlog/tasks/"+"task1", bytes.NewReader(bs))
 	r.Header.Set("Content-Type", "application/json")
-	engine.ServeHTTP(w, r)
-	require.Equal(t, http.StatusOK, w.Code)
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &binlogResp))
-	require.Equal(t, "", binlogResp.ErrorMsg)
-	require.Equal(t, "no binlog error", binlogResp.Results["task1"].ErrorMsg)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusOK, w.Code)
+	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &binlogResp))
+	require.Equal(t.T(), "", binlogResp.ErrorMsg)
+	require.Equal(t.T(), "no binlog error", binlogResp.Results["task1"].ErrorMsg)
 
 	req = openapi.SetBinlogOperatorRequest{
 		Op: openapi.SetBinlogOperatorRequestOpInject,
 	}
 	bs, err = json.Marshal(req)
-	require.NoError(t, err)
-	messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{
+	require.NoError(t.T(), err)
+	t.messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{
 		ErrorMsg: "no binlog error",
 	}, nil).Once()
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("POST", baseURL+"binlog/tasks/"+"task1", bytes.NewReader(bs))
 	r.Header.Set("Content-Type", "application/json")
-	engine.ServeHTTP(w, r)
-	require.Equal(t, http.StatusOK, w.Code)
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &binlogResp))
-	require.Equal(t, "", binlogResp.ErrorMsg)
-	require.Equal(t, "no binlog error", binlogResp.Results["task1"].ErrorMsg)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusOK, w.Code)
+	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &binlogResp))
+	require.Equal(t.T(), "", binlogResp.ErrorMsg)
+	require.Equal(t.T(), "no binlog error", binlogResp.Results["task1"].ErrorMsg)
 }
 
-func testDMAPIDeleteBinlogOperator(t *testing.T, engine *gin.Engine, jm *JobMaster, messageAgent *dmpkg.MockMessageAgent) {
+func (t *testDMOpenAPISuite) TestDMAPIDeleteBinlogOperator() {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("DELETE", "/api/v1/jobs/job-not-exist/binlog", nil)
-	engine.ServeHTTP(w, r)
-	require.Equal(t, http.StatusNotFound, w.Code)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusNotFound, w.Code)
 
-	messageAgent.On("SendRequest").Return(nil, errors.New("binlog operator not found")).Once()
+	t.messageAgent.On("SendRequest").Return(nil, errors.New("binlog operator not found")).Once()
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("DELETE", baseURL+"binlog/tasks/"+"task1"+"?binlog_pos='mysql-bin.000001,4'", nil)
-	engine.ServeHTTP(w, r)
-	require.Equal(t, http.StatusOK, w.Code)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusOK, w.Code)
 	var binlogResp dmpkg.BinlogResponse
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &binlogResp))
-	require.Equal(t, "", binlogResp.ErrorMsg)
-	require.Equal(t, "binlog operator not found", binlogResp.Results["task1"].ErrorMsg)
+	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &binlogResp))
+	require.Equal(t.T(), "", binlogResp.ErrorMsg)
+	require.Equal(t.T(), "binlog operator not found", binlogResp.Results["task1"].ErrorMsg)
 }
 
-func testDMAPIGetSchema(t *testing.T, engine *gin.Engine, jm *JobMaster, messageAgent *dmpkg.MockMessageAgent) {
+func (t *testDMOpenAPISuite) TestDMAPIGetSchema() {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/api/v1/jobs/job-not-exist/schema", nil)
-	engine.ServeHTTP(w, r)
-	require.Equal(t, http.StatusNotFound, w.Code)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusNotFound, w.Code)
 
-	messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{
+	t.messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{
 		Msg: "targets",
 	}, nil).Once()
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("GET", baseURL+"schema/tasks/"+"task1"+"?target=true", nil)
-	engine.ServeHTTP(w, r)
-	require.Equal(t, http.StatusOK, w.Code)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusOK, w.Code)
 	var binlogSchemaResp dmpkg.BinlogSchemaResponse
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &binlogSchemaResp))
-	require.Equal(t, "", binlogSchemaResp.ErrorMsg)
-	require.Equal(t, "targets", binlogSchemaResp.Results["task1"].Msg)
+	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &binlogSchemaResp))
+	require.Equal(t.T(), "", binlogSchemaResp.ErrorMsg)
+	require.Equal(t.T(), "targets", binlogSchemaResp.Results["task1"].Msg)
 
-	messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{
+	t.messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{
 		Msg: "tables",
 	}, nil).Once()
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("GET", baseURL+"schema/tasks/"+"task1"+"?database='db'", nil)
-	engine.ServeHTTP(w, r)
-	require.Equal(t, http.StatusOK, w.Code)
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &binlogSchemaResp))
-	require.Equal(t, "", binlogSchemaResp.ErrorMsg)
-	require.Equal(t, "tables", binlogSchemaResp.Results["task1"].Msg)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusOK, w.Code)
+	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &binlogSchemaResp))
+	require.Equal(t.T(), "", binlogSchemaResp.ErrorMsg)
+	require.Equal(t.T(), "tables", binlogSchemaResp.Results["task1"].Msg)
 
-	messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{
+	t.messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{
 		Msg: "table",
 	}, nil).Once()
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("GET", baseURL+"schema/tasks/"+"task1"+"?database='db'&table='tb'", nil)
-	engine.ServeHTTP(w, r)
-	require.Equal(t, http.StatusOK, w.Code)
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &binlogSchemaResp))
-	require.Equal(t, "", binlogSchemaResp.ErrorMsg)
-	require.Equal(t, "table", binlogSchemaResp.Results["task1"].Msg)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusOK, w.Code)
+	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &binlogSchemaResp))
+	require.Equal(t.T(), "", binlogSchemaResp.ErrorMsg)
+	require.Equal(t.T(), "table", binlogSchemaResp.Results["task1"].Msg)
 
-	messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{
+	t.messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{
 		Msg: "databases",
 	}, nil).Once()
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("GET", baseURL+"schema/tasks/"+"task1", nil)
-	engine.ServeHTTP(w, r)
-	require.Equal(t, http.StatusOK, w.Code)
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &binlogSchemaResp))
-	require.Equal(t, "", binlogSchemaResp.ErrorMsg)
-	require.Equal(t, "databases", binlogSchemaResp.Results["task1"].Msg)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusOK, w.Code)
+	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &binlogSchemaResp))
+	require.Equal(t.T(), "", binlogSchemaResp.ErrorMsg)
+	require.Equal(t.T(), "databases", binlogSchemaResp.Results["task1"].Msg)
 
-	messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{
-		Msg: "databases",
-	}, nil).Once()
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("GET", baseURL+"schema/tasks/"+"task1"+"?table='tb'", nil)
-	engine.ServeHTTP(w, r)
-	require.Equal(t, http.StatusBadRequest, w.Code)
-	equalError(t, "invalid query parameter for get schema", w.Body)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusBadRequest, w.Code)
+	equalError(t.T(), "invalid query params for get schema", w.Body)
+}
+
+func (t *testDMOpenAPISuite) TestDMAPISetSchema() {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("PUT", "/api/v1/jobs/job-not-exist/schema", nil)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusNotFound, w.Code)
+
+	t.messageAgent.On("SendRequest").Return(nil, errors.New("task not paused")).Once()
+	from := true
+	req := openapi.SetBinlogSchemaRequest{Database: "db", Table: "tb", FromSource: &from}
+	bs, err := json.Marshal(req)
+	require.NoError(t.T(), err)
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest("PUT", baseURL+"schema/tasks/"+"task1", bytes.NewReader(bs))
+	r.Header.Set("Content-Type", "application/json")
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusOK, w.Code)
+	var binlogSchemaResp dmpkg.BinlogSchemaResponse
+	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &binlogSchemaResp))
+	require.Equal(t.T(), "", binlogSchemaResp.ErrorMsg)
+	require.Equal(t.T(), "task not paused", binlogSchemaResp.Results["task1"].ErrorMsg)
+
+	t.messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{
+		Msg: "success",
+	}, nil).Once()
+	req = openapi.SetBinlogSchemaRequest{Database: "db", Table: "tb", FromTarget: &from}
+	bs, err = json.Marshal(req)
+	require.NoError(t.T(), err)
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest("PUT", baseURL+"schema/tasks/"+"task1", bytes.NewReader(bs))
+	r.Header.Set("Content-Type", "application/json")
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusOK, w.Code)
+	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &binlogSchemaResp))
+	require.Equal(t.T(), "", binlogSchemaResp.ErrorMsg)
+	require.Equal(t.T(), "", binlogSchemaResp.Results["task1"].ErrorMsg)
+	require.Equal(t.T(), "success", binlogSchemaResp.Results["task1"].Msg)
+}
+
+func terrorHTTPErrorHandler(c *gin.Context) {
+	c.Next()
+	gErr := c.Errors.Last()
+	if gErr == nil {
+		return
+	}
+	c.IndentedJSON(http.StatusBadRequest, openapi.ErrorWithMessage{ErrorMsg: gErr.Error()})
+}
+
+func equalError(t *testing.T, expected string, body *bytes.Buffer) {
+	var e openapi.ErrorWithMessage
+	json.Unmarshal(body.Bytes(), &e)
+	require.Equal(t, expected, e.ErrorMsg)
 }

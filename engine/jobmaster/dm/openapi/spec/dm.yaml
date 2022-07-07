@@ -47,32 +47,15 @@ paths:
         - job
       summary: "get the current status of the job"
       operationId: "DMAPIGetJobStatus"
-      responses:
-        "200":
-          description: "success"
-          content:
-            "application/json":
-              schema:
-                type: json
-        "400":
-          description: "failed"
-          content:
-            "application/json":
-              schema:
-                $ref: "#/components/schemas/ErrorWithMessage"
-  /status/tasks/{task-name}:
-    get:
-      tags:
-        - task
-      summary: "get the current status of the task"
-      operationId: "DMAPIGetTaskStatus"
       parameters:
-        - name: "task-name"
-          in: path
+        - name: "tasks"
+          in: query
           description: "globally unique data source name"
-          required: true
+          required: false
           schema:
-            type: string
+            type: array
+            items:
+              type: string
       responses:
         "200":
           description: "success"
@@ -88,22 +71,15 @@ paths:
                 $ref: "#/components/schemas/ErrorWithMessage"
     put:
       tags:
-        - task
-      summary: "operate the stage of a data source"
-      operationId: "DMAPIOperateTask"
-      parameters:
-        - name: "task-name"
-          in: path
-          description: "globally unique data source name"
-          required: true
-          schema:
-            type: string
+        - job
+      summary: "operate the stage of the job"
+      operationId: "DMAPIOperateJob"
       requestBody:
         required: true
         content:
           "application/json":
             schema:
-              $ref: "#/components/schemas/OperateTaskRequest"
+              $ref: "#/components/schemas/OperateJobRequest"
       responses:
         "200":
           description: "success"
@@ -294,9 +270,13 @@ components:
           type: string
       required:
         - "config"
-    OperateTaskRequest:
+    OperateJobRequest:
       type: object
       properties:
+        tasks:
+          type: array
+          items:
+            type: string
         op:
           type: string
           enum:

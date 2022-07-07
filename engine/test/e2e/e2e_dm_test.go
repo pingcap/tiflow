@@ -185,21 +185,19 @@ func testSimpleAllModeTask(
 	// check query status
 	source1 := "mysql-replica-01"
 	source2 := "mysql-replica-02"
-	jobStatus, err := queryStatus(ctx, httpClient, resp.JobId, "", t)
+	jobStatus, err := queryStatus(ctx, httpClient, resp.JobId, []string{source1, source2}, t)
 	require.NoError(t, err)
 	require.Equal(t, resp.JobId, jobStatus.JobMasterID)
 	require.Contains(t, string(jobStatus.TaskStatus[source1].Status.Status), "totalEvents")
-	jobStatus, err = queryStatus(ctx, httpClient, resp.JobId, source2, t)
-	require.NoError(t, err)
 	require.Contains(t, jobStatus.TaskStatus[source2].Status.ErrorMsg, fmt.Sprintf("task %s for job not found", source2))
 
 	// pause task
-	err = operateTask(ctx, httpClient, resp.JobId, source1, dmpkg.Pause, t)
+	err = operateJob(ctx, httpClient, resp.JobId, []string{source1}, dmpkg.Pause, t)
 	require.NoError(t, err)
 
 	// eventually paused
 	require.Eventually(t, func() bool {
-		jobStatus, err = queryStatus(ctx, httpClient, resp.JobId, source1, t)
+		jobStatus, err = queryStatus(ctx, httpClient, resp.JobId, nil, t)
 		require.NoError(t, err)
 		return jobStatus.TaskStatus[source1].Status.Stage == metadata.StagePaused
 	}, time.Second*10, time.Second)
@@ -212,12 +210,12 @@ func testSimpleAllModeTask(
 	require.Equal(t, "", binlogSchemaResp.Results[source1].ErrorMsg)
 
 	// resume task
-	err = operateTask(ctx, httpClient, resp.JobId, source1, dmpkg.Resume, t)
+	err = operateJob(ctx, httpClient, resp.JobId, nil, dmpkg.Resume, t)
 	require.NoError(t, err)
 
 	// eventually resumed
 	require.Eventually(t, func() bool {
-		jobStatus, err = queryStatus(ctx, httpClient, resp.JobId, source1, t)
+		jobStatus, err = queryStatus(ctx, httpClient, resp.JobId, []string{source1}, t)
 		require.NoError(t, err)
 		return jobStatus.TaskStatus[source1].Status.Stage == metadata.StageRunning
 	}, time.Second*10, time.Second)
@@ -232,7 +230,7 @@ func testSimpleAllModeTask(
 
 	// eventually error
 	require.Eventually(t, func() bool {
-		jobStatus, err = queryStatus(ctx, httpClient, resp.JobId, source1, t)
+		jobStatus, err = queryStatus(ctx, httpClient, resp.JobId, nil, t)
 		require.NoError(t, err)
 		return jobStatus.TaskStatus[source1].Status.Stage == metadata.StageError &&
 			strings.Contains(jobStatus.TaskStatus[source1].Status.Result.Errors[0].RawCause,
@@ -280,11 +278,11 @@ func testSimpleAllModeTask(
 	require.Equal(t, fmt.Sprintf("source '%s' has no error", source1), binlogResp.Results[source1].ErrorMsg)
 
 	// pause task
-	err = operateTask(ctx, httpClient, resp.JobId, source1, dmpkg.Pause, t)
+	err = operateJob(ctx, httpClient, resp.JobId, []string{source1}, dmpkg.Pause, t)
 	require.NoError(t, err)
 	// eventually paused
 	require.Eventually(t, func() bool {
-		jobStatus, err = queryStatus(ctx, httpClient, resp.JobId, source1, t)
+		jobStatus, err = queryStatus(ctx, httpClient, resp.JobId, nil, t)
 		require.NoError(t, err)
 		return jobStatus.TaskStatus[source1].Status.Stage == metadata.StagePaused
 	}, time.Second*10, time.Second)
@@ -308,10 +306,15 @@ func testSimpleAllModeTask(
 	require.Equal(t, "", binlogSchemaResp.Results[source1].ErrorMsg)
 }
 
-func queryStatus(ctx context.Context, client *http.Client, jobID string, task string, t *testing.T) (*dm.JobStatus, error) {
+func queryStatus(ctx context.Context, client *http.Client, jobID string, tasks []string, t *testing.T) (*dm.JobStatus, error) {
 	url := fmt.Sprintf(baseURL+"/status", jobID)
-	if task != "" {
-		url += fmt.Sprintf("/tasks/%s", task)
+	for i, task := range tasks {
+		if i == 0 {
+			url += "?"
+		} else {
+			url += "&"
+		}
+		url += "tasks=" + task
 	}
 	resp, err := client.Get(url)
 	if err != nil {
@@ -327,18 +330,20 @@ func queryStatus(ctx context.Context, client *http.Client, jobID string, task st
 	return &jobStatus, err
 }
 
-func operateTask(ctx context.Context, client *http.Client, jobID string, task string, op dmpkg.OperateType, t *testing.T) error {
-	operateTaskReq := &openapi.OperateTaskRequest{}
+func operateJob(ctx context.Context, client *http.Client, jobID string, tasks []string, op dmpkg.OperateType, t *testing.T) error {
+	operateJobReq := &openapi.OperateJobRequest{
+		Tasks: &tasks,
+	}
 	switch op {
 	case dmpkg.Pause:
-		operateTaskReq.Op = openapi.OperateTaskRequestOpPause
+		operateJobReq.Op = openapi.OperateJobRequestOpPause
 	case dmpkg.Resume:
-		operateTaskReq.Op = openapi.OperateTaskRequestOpResume
+		operateJobReq.Op = openapi.OperateJobRequestOpResume
 	}
 
-	bs, err := json.Marshal(operateTaskReq)
+	bs, err := json.Marshal(operateJobReq)
 	require.NoError(t, err)
-	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf(baseURL+"/status/tasks/%s", jobID, task), bytes.NewReader(bs))
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf(baseURL+"/status", jobID), bytes.NewReader(bs))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
 	_, err = client.Do(req)

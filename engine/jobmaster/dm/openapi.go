@@ -44,24 +44,16 @@ func (jm *JobMaster) initOpenAPI(router *gin.RouterGroup) {
 
 	router.GET("/status", wrapper.DMAPIGetJobStatus)
 
-	router.GET("/status/tasks/:task-name", wrapper.DMAPIGetTaskStatus)
-
-	router.PUT("/status/tasks/:task-name", wrapper.DMAPIOperateTask)
+	router.PUT("/status", wrapper.DMAPIOperateJob)
 }
 
 // DMAPIGetJobStatus implements the api of get job status.
-func (jm *JobMaster) DMAPIGetJobStatus(c *gin.Context) {
-	resp, err := jm.QueryJobStatus(c.Request.Context(), nil)
-	if err != nil {
-		_ = c.Error(err)
-		return
+func (jm *JobMaster) DMAPIGetJobStatus(c *gin.Context, params openapi.DMAPIGetJobStatusParams) {
+	var tasks []string
+	if params.Tasks != nil {
+		tasks = *params.Tasks
 	}
-	c.IndentedJSON(http.StatusOK, resp)
-}
-
-// DMAPIGetTaskStatus implements the api of get task status.
-func (jm *JobMaster) DMAPIGetTaskStatus(c *gin.Context, taskName string) {
-	resp, err := jm.QueryJobStatus(c.Request.Context(), []string{taskName})
+	resp, err := jm.QueryJobStatus(c.Request.Context(), tasks)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -89,9 +81,9 @@ func (jm *JobMaster) DMAPIUpdateJobConfig(c *gin.Context) {
 	// TODO: support update job config
 }
 
-// DMAPIOperateTask implements the api of operate task.
-func (jm *JobMaster) DMAPIOperateTask(c *gin.Context, taskName string) {
-	var req openapi.OperateTaskRequest
+// DMAPIOperateJob implements the api of operate job.
+func (jm *JobMaster) DMAPIOperateJob(c *gin.Context) {
+	var req openapi.OperateJobRequest
 	if err := c.Bind(&req); err != nil {
 		_ = c.Error(err)
 		return
@@ -99,16 +91,20 @@ func (jm *JobMaster) DMAPIOperateTask(c *gin.Context, taskName string) {
 
 	var op dmpkg.OperateType
 	switch req.Op {
-	case openapi.OperateTaskRequestOpPause:
+	case openapi.OperateJobRequestOpPause:
 		op = dmpkg.Pause
-	case openapi.OperateTaskRequestOpResume:
+	case openapi.OperateJobRequestOpResume:
 		op = dmpkg.Resume
 	default:
 		_ = c.Error(errors.Errorf("unsupport op type '%s' for operate task", req.Op))
 		return
 	}
 
-	err := jm.OperateTask(c.Request.Context(), op, nil, []string{taskName})
+	var tasks []string
+	if req.Tasks != nil {
+		tasks = *req.Tasks
+	}
+	err := jm.OperateTask(c.Request.Context(), op, nil, tasks)
 	if err != nil {
 		_ = c.Error(err)
 		return
