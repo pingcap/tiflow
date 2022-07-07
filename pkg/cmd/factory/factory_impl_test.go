@@ -25,7 +25,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-func TestFactoryImpl_PdClient(t *testing.T) {
+func TestFactoryImplPdClient(t *testing.T) {
 	t.Parallel()
 	c := mock_factory.NewMockClientGetter(gomock.NewController(t))
 	f := factoryImpl{clientGetter: c}

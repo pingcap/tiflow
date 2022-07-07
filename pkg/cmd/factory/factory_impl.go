@@ -158,15 +158,15 @@ func (f factoryImpl) PdClient() (pd.Client, error) {
 			GenWithStack("empty PD address, please use --pd to specify PD cluster addresses")
 	}
 	pdEndpoints := strings.Split(pdAddr, ",")
-	tlsEnabled := len(credential.KeyPath) != 0
 	for _, ep := range pdEndpoints {
-		if err := util.VerifyPdEndpoint(ep, tlsEnabled); err != nil {
+		if err := util.VerifyPdEndpoint(ep, credential.IsTLSEnabled()); err != nil {
 			return nil, cerror.ErrInvalidServerOption.Wrap(err).GenWithStackByArgs()
 		}
 	}
 
 	pdClient, err := pd.NewClientWithContext(
 		ctx, pdEndpoints, credential.PDSecurityOption(),
+		pd.WithMaxErrorRetry(maxGetPDClientRetryTimes),
 		// TODO(hi-rustin): add gRPC metrics to Options.
 		// See also: https://github.com/pingcap/tiflow/pull/2341#discussion_r673032407.
 		pd.WithGRPCDialOptions(
@@ -181,8 +181,7 @@ func (f factoryImpl) PdClient() (pd.Client, error) {
 				},
 				MinConnectTimeout: 3 * time.Second,
 			}),
-		),
-		pd.WithMaxErrorRetry(maxGetPDClientRetryTimes))
+		))
 	if err != nil {
 		return nil, errors.Annotatef(err,
 			"fail to open PD client, please check pd address \"%s\"", pdAddr)
