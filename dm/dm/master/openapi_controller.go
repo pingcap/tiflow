@@ -517,6 +517,19 @@ func (s *Server) getTaskStatus(ctx context.Context, taskName string, req openapi
 	}
 	workerStatusList := s.getStatusFromWorkers(ctx, *req.SourceNameList, taskName, true)
 	subTaskStatusList := make([]openapi.SubTaskStatus, 0, len(workerStatusList))
+
+	handleProcessError := func(err *pb.ProcessError) string {
+		errorMsg := fmt.Sprintf("[code=%d:class=%s:scope=%s:level=%s], Message: %s", err.ErrCode, err.ErrClass, err.ErrScope, err.ErrLevel, err.Message)
+		if err.RawCause != "" {
+			errorMsg = fmt.Sprintf("%s, RawCause: %s", errorMsg, err.RawCause)
+		}
+		if err.Workaround != "" {
+			errorMsg = fmt.Sprintf("%s, Workaround: %s", errorMsg, err.Workaround)
+		}
+		errorMsg = fmt.Sprintf("%s.", errorMsg)
+		return errorMsg
+	}
+
 	for _, workerStatus := range workerStatusList {
 		if workerStatus == nil || workerStatus.SourceStatus == nil {
 			// this should not happen unless the rpc in the worker server has been modified
@@ -597,7 +610,7 @@ func (s *Server) getTaskStatus(ctx context.Context, taskName string, req openapi
 		if subTaskStatus.Result != nil && len(subTaskStatus.Result.Errors) > 0 {
 			var errorMsgs string
 			for _, err := range subTaskStatus.Result.Errors {
-				errorMsgs += fmt.Sprintf("%s\n", err.Message)
+				errorMsgs += fmt.Sprintf("%s\n", handleProcessError(err))
 			}
 			openapiSubTaskStatus.ErrorMsg = &errorMsgs
 		}
