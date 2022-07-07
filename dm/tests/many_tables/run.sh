@@ -118,6 +118,7 @@ function run() {
 	echo "check diff 2" # to check timezone and timestamp have been set back to default
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 	restore_timezone
+	trap - EXIT
 
 	# test https://github.com/pingcap/tiflow/issues/5344
 	kill_dm_worker
@@ -153,8 +154,6 @@ cleanup_data many_tables_db
 cleanup_process
 
 run $*
-
-trap - EXIT
 
 cleanup_process
 
