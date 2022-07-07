@@ -87,6 +87,7 @@ func main() {
 	}
 
 	serverCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	go func() {
 		sig := <-sc
@@ -106,7 +107,6 @@ func main() {
 	}
 
 	if err != nil || syncErr != nil {
-		cancel()
 		os.Exit(1)
 	}
 }
