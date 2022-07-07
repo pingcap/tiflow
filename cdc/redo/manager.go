@@ -510,7 +510,6 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 			return
 		case <-ticker.C:
 			// interpolate tick message to flush writer if needed
-			// TODO: add log and metrics
 			m.flushLog(ctx, handleErr)
 		case cache, ok := <-m.logBuffer.Out():
 			if !ok {
