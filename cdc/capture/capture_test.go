@@ -26,6 +26,7 @@ import (
 	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
 	mock_processor "github.com/pingcap/tiflow/cdc/processor/mock"
 	"github.com/pingcap/tiflow/pkg/config"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
@@ -340,4 +341,62 @@ func TestDrainErrors(t *testing.T) {
 	case <-done:
 		require.Equal(t, model.LivenessCaptureStopping, cp.Liveness())
 	}
+}
+
+type mockElection struct {
+	election
+	campaignRequestCh chan struct{}
+	campaignGrantCh   chan struct{}
+
+	campaignFlag, resignFlag bool
+}
+
+func (e *mockElection) campaign(ctx context.Context, key string) error {
+	e.campaignRequestCh <- struct{}{}
+	<-e.campaignGrantCh
+	e.campaignFlag = true
+	return nil
+}
+
+func (e *mockElection) resign(ctx context.Context) error {
+	e.resignFlag = true
+	return nil
+}
+
+func TestCampaignLiveness(t *testing.T) {
+	t.Parallel()
+
+	me := &mockElection{
+		campaignRequestCh: make(chan struct{}, 1),
+		campaignGrantCh:   make(chan struct{}, 1),
+	}
+	cp := &captureImpl{
+		config:   config.GetDefaultServerConfig(),
+		info:     &model.CaptureInfo{ID: "test"},
+		election: me,
+	}
+	ctx := cdcContext.NewContext4Test(context.Background(), true)
+
+	cp.liveness.Store(model.LivenessCaptureStopping)
+	err := cp.campaignOwner(ctx)
+	require.Nil(t, err)
+	require.False(t, me.campaignFlag)
+
+	cp.liveness.Store(model.LivenessCaptureAlive)
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		// Grant campaign
+		g := <-me.campaignRequestCh
+		// Set liveness to stopping
+		cp.liveness.Store(model.LivenessCaptureStopping)
+		me.campaignGrantCh <- g
+	}()
+	err = cp.campaignOwner(ctx)
+	require.Nil(t, err)
+	require.True(t, me.campaignFlag)
+	require.True(t, me.resignFlag)
+
+	wg.Wait()
 }
