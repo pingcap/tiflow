@@ -391,10 +391,13 @@ func (l *LogWriter) FlushLog(ctx context.Context, rtsMap map[model.TableID]model
 		return cerror.ErrRedoWriterStopped.GenWithStackByArgs()
 	}
 
-	var minResolvedTs uint64 = math.MaxUint64
-	for _, resolvedTs := range rtsMap {
-		if minResolvedTs > resolvedTs {
-			minResolvedTs = resolvedTs
+	var minResolvedTs uint64 = uint64(0)
+	if len(rtsMap) > 0 {
+		minResolvedTs := math.MaxUint64
+		for _, resolvedTs := range rtsMap {
+			if minResolvedTs > resolvedTs {
+				minResolvedTs = resolvedTs
+			}
 		}
 	}
 	if err := l.flush(minResolvedTs); err != nil {
