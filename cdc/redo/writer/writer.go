@@ -551,7 +551,9 @@ func (l *LogWriter) setMaxCommitTs(tableID int64, commitTs uint64) uint64 {
 
 // flush flushes all the buffered data to the disk.
 func (l *LogWriter) flush(minResolvedTs uint64) error {
-	err1 := l.flushLogMeta(0, minResolvedTs)
+	err1 := l.ddlWriter.Flush()
+	err2 := l.rowWriter.Flush()
+	err3 := l.flushLogMeta(0, minResolvedTs)
 	err2 := l.ddlWriter.Flush()
 	err3 := l.rowWriter.Flush()
 
