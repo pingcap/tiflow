@@ -89,12 +89,13 @@ func NewServer(cfg *Config) *Server {
 	return &s
 }
 
-// Start starts to serving.
+// Start starts to serving. It will block current goroutine until Server.Close or
+// input context canceled.
 // this function should only exit when can't dail DM-master, for other errors it should not exit.
-func (s *Server) Start() error {
+func (s *Server) Start(ctx context.Context) error {
 	log.L().Info("starting dm-worker server")
 	RegistryMetrics()
-	s.ctx, s.cancel = context.WithCancel(context.Background())
+	s.ctx, s.cancel = context.WithCancel(ctx)
 	tls, err := toolutils.NewTLS(s.cfg.SSLCA, s.cfg.SSLCert, s.cfg.SSLKey, s.cfg.AdvertiseAddr, s.cfg.CertAllowedCN)
 	if err != nil {
 		return terror.ErrWorkerTLSConfigNotValid.Delegate(err)
