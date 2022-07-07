@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -54,7 +53,7 @@ type RedoLogWriter interface {
 	// FlushLog sends resolved-ts from table pipeline to log writer, it is
 	// essential to flush when a table doesn't have any row change event for
 	// some time, and the resolved ts of this table should be moved forward.
-	FlushLog(ctx context.Context, rtsMap map[model.TableID]model.Ts) error
+	FlushLog(ctx context.Context, rtsMap map[model.TableID]model.Ts, minResolvedTs model.Ts) error
 
 	// EmitCheckpointTs write CheckpointTs to meta file
 	EmitCheckpointTs(ctx context.Context, ts uint64) error
@@ -380,7 +379,7 @@ func (l *LogWriter) SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error 
 }
 
 // FlushLog implement FlushLog api
-func (l *LogWriter) FlushLog(ctx context.Context, rtsMap map[model.TableID]model.Ts) error {
+func (l *LogWriter) FlushLog(ctx context.Context, rtsMap map[model.TableID]model.Ts, minResolvedTs model.Ts) error {
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
@@ -391,15 +390,6 @@ func (l *LogWriter) FlushLog(ctx context.Context, rtsMap map[model.TableID]model
 		return cerror.ErrRedoWriterStopped.GenWithStackByArgs()
 	}
 
-	var minResolvedTs uint64 = uint64(0)
-	if len(rtsMap) > 0 {
-		minResolvedTs := math.MaxUint64
-		for _, resolvedTs := range rtsMap {
-			if minResolvedTs > resolvedTs {
-				minResolvedTs = resolvedTs
-			}
-		}
-	}
 	if err := l.flush(minResolvedTs); err != nil {
 		return err
 	}

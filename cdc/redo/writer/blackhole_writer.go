@@ -56,7 +56,7 @@ func (bs *blackHoleWriter) WriteLog(_ context.Context, tableID model.TableID, lo
 	return
 }
 
-func (bs *blackHoleWriter) FlushLog(_ context.Context, rtsMap map[model.TableID]model.Ts) error {
+func (bs *blackHoleWriter) FlushLog(_ context.Context, rtsMap map[model.TableID]model.Ts, _ model.Ts) error {
 	bs.tableRtsMu.Lock()
 	defer bs.tableRtsMu.Unlock()
 	for tableID, rts := range rtsMap {

@@ -391,15 +391,30 @@ func (m *ManagerImpl) flushLog(
 	go func() {
 		defer atomic.StoreInt64(&m.flushing, 0)
 
-		err := m.writer.FlushLog(ctx, tableRtsMap)
+		var minResolvedTs uint64 = 0
+		if len(tableRtsMap) > 0 {
+			minResolvedTs = math.MaxUint64
+			for _, resolvedTs := range tableRtsMap {
+				if minResolvedTs > resolvedTs {
+					minResolvedTs = resolvedTs
+				}
+			}
+		}
+
+		err := m.writer.FlushLog(ctx, tableRtsMap, minResolvedTs)
+		m.metricFlushLogDuration.Observe(time.Since(m.lastFlushTime).Seconds())
 		if err != nil {
 			handleErr(err)
 			return
 		}
 
+		if minResolvedTs > m.minResolvedTs {
+			atomic.StoreUint64(&m.minResolvedTs, minResolvedTs)
+		}
+
+		// Update m.rtsMap.
 		m.rtsMapMu.Lock()
 		defer m.rtsMapMu.Unlock()
-		minResolvedTs := uint64(math.MaxUint64)
 		for tableID := range m.rtsMap {
 			if newRts, ok := tableRtsMap[tableID]; ok {
 				if newRts < m.rtsMap[tableID] {
@@ -410,15 +425,7 @@ func (m *ManagerImpl) flushLog(
 				}
 				m.rtsMap[tableID] = newRts
 			}
-
-			rts := m.rtsMap[tableID]
-			if rts < minResolvedTs {
-				minResolvedTs = rts
-			}
 		}
-
-		atomic.StoreUint64(&m.minResolvedTs, minResolvedTs)
-		m.metricFlushLogDuration.Observe(time.Since(m.lastFlushTime).Seconds())
 	}()
 
 	emptyRtsMap := make(map[model.TableID]model.Ts)
