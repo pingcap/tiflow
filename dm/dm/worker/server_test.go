@@ -128,12 +128,10 @@ func (t *testServer) TestServer(c *C) {
 		createUnits = createRealUnits
 	}()
 
-	ctx := context.Background()
-
 	s := NewServer(cfg)
 	defer s.Close()
 	go func() {
-		err1 := s.Start(ctx)
+		err1 := s.Start()
 		c.Assert(err1, IsNil)
 	}()
 
@@ -206,6 +204,7 @@ func (t *testServer) TestServer(c *C) {
 	// check update subtask cfg failed
 	tomlStr, tomlErr := subtaskCfg.Toml()
 	c.Assert(tomlErr, IsNil)
+	ctx := context.Background()
 	checkReq := &pb.CheckSubtasksCanUpdateRequest{SubtaskCfgTomlString: tomlStr}
 	checkResp, checkErr := s.CheckSubtasksCanUpdate(ctx, checkReq)
 	c.Assert(checkErr, IsNil)
@@ -236,7 +235,7 @@ func (t *testServer) TestServer(c *C) {
 	}), IsTrue)
 
 	dupServer := NewServer(cfg)
-	err = dupServer.Start(ctx)
+	err = dupServer.Start()
 	c.Assert(terror.ErrWorkerStartService.Equal(err), IsTrue)
 	c.Assert(err.Error(), Matches, ".*bind: address already in use.*")
 
@@ -297,7 +296,7 @@ func (t *testServer) TestHandleSourceBoundAfterError(c *C) {
 	s := NewServer(cfg)
 	defer s.Close()
 	go func() {
-		err1 := s.Start(context.Background())
+		err1 := s.Start()
 		c.Assert(err1, IsNil)
 	}()
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
