@@ -102,7 +102,7 @@ type LogManager interface {
 	GetMinResolvedTs() uint64
 	EmitRowChangedEvents(ctx context.Context, tableID model.TableID, rows ...*model.RowChangedEvent) error
 	UpdateResolvedTs(ctx context.Context, tableID model.TableID, resolvedTs uint64) error
-	FlushResolvedAndCheckpointTs(ctx context.Context, resolvedTs, checkpointTs uint64) (err error)
+	UpdateCheckpointTs(ctx context.Context, checkpointTs uint64) error
 
 	// EmitDDLEvent are called from owner only
 	EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
@@ -353,12 +353,8 @@ func (m *ManagerImpl) GetMinResolvedTs() model.Ts {
 	return atomic.LoadUint64(&m.minResolvedTs)
 }
 
-// FlushResolvedAndCheckpointTs flushes resolved-ts and checkpoint-ts to redo log writer
-func (m *ManagerImpl) FlushResolvedAndCheckpointTs(ctx context.Context, resolvedTs, checkpointTs uint64) (err error) {
-	err = m.writer.EmitResolvedTs(ctx, resolvedTs)
-	if err != nil {
-		return
-	}
+// UpdateCheckpointTs updates checkpoint-ts to redo log writer
+func (m *ManagerImpl) UpdateCheckpointTs(ctx context.Context, checkpointTs uint64) (err error) {
 	err = m.writer.EmitCheckpointTs(ctx, checkpointTs)
 	return
 }
