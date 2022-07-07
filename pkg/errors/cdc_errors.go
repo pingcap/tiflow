@@ -371,13 +371,13 @@ var (
 		"maxwell invalid data",
 		errors.RFCCodeText("CDC:ErrMaxwellInvalidData"),
 	)
-	ErrJSONCodecInvalidData = errors.Normalize(
-		"json codec invalid data",
-		errors.RFCCodeText("CDC:ErrJSONCodecInvalidData"),
+	ErrOpenProtocolCodecInvalidData = errors.Normalize(
+		"open-protocol codec invalid data",
+		errors.RFCCodeText("CDC:ErrOpenProtocolCodecInvalidData"),
 	)
-	ErrJSONCodecRowTooLarge = errors.Normalize(
-		"json codec single row too large",
-		errors.RFCCodeText("CDC:ErrJSONCodecRowTooLarge"),
+	ErrOpenProtocolCodecRowTooLarge = errors.Normalize(
+		"open-protocol codec single row too large",
+		errors.RFCCodeText("CDC:ErrOpenProtocolCodecRowTooLarge"),
 	)
 	ErrCanalDecodeFailed = errors.Normalize(
 		"canal decode failed",

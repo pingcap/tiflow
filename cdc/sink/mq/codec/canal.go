@@ -421,9 +421,10 @@ func (d *CanalEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, e
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) AppendRowChangedEvent(
-	ctx context.Context,
-	topic string,
+	_ context.Context,
+	_ string,
 	e *model.RowChangedEvent,
+	_ func(),
 ) error {
 	entry, err := d.entryBuilder.FromRowEvent(e)
 	if err != nil {
@@ -467,7 +468,7 @@ func (d *CanalEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, 
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
-	return newDDLMQMessage(config.ProtocolCanal, nil, b, e), nil
+	return newDDLMsg(config.ProtocolCanal, nil, b, e), nil
 }
 
 // Build implements the EventBatchEncoder interface
@@ -486,7 +487,7 @@ func (d *CanalEventBatchEncoder) Build() []*MQMessage {
 	if err != nil {
 		log.Panic("Error when serializing Canal packet", zap.Error(err))
 	}
-	ret := NewMQMessage(config.ProtocolCanal, nil, value, 0, model.MessageTypeRow, nil, nil)
+	ret := newMsg(config.ProtocolCanal, nil, value, 0, model.MessageTypeRow, nil, nil)
 	ret.SetRowsCount(rowCount)
 	d.messages.Reset()
 	d.resetPacket()
