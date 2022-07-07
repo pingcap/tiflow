@@ -345,7 +345,7 @@ func (m *ManagerImpl) GetResolvedTs(tableID model.TableID) model.Ts {
 	if value, ok := m.rtsMap.Load(tableID); ok {
 		return value.(*statefulRts).getFlushed()
 	}
-	return 0
+	panic("GetResolvedTs is called on an invalid table")
 }
 
 // GetMinResolvedTs returns the minimum resolved ts of all tables in this redo log manager
