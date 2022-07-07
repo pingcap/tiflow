@@ -414,7 +414,8 @@ func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
 	go func() {
 		defer atomic.StoreInt64(&m.flushing, 0)
 
-		var minResolvedTs uint64 = 0
+		var minResolvedTs uint64 = math.MaxUint64
+		var maxFlushedTs uint64 = 0
 		tableRtsMap := make(map[model.TableID]model.Ts)
 		m.rtsMap.Range(func(key interface{}, value interface{}) bool {
 			tableID := key.(model.TableID)
@@ -423,14 +424,17 @@ func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
 			flushed := rts.getFlushed()
 			if unflushed > flushed {
 				tableRtsMap[tableID] = unflushed
-				if unflushed < minResolvedTs || minResolvedTs == 0 {
+				if unflushed < minResolvedTs {
 					minResolvedTs = unflushed
 				}
-			} else if flushed < minResolvedTs || minResolvedTs == 0 {
-				minResolvedTs = flushed
+			} else if flushed > maxFlushedTs {
+				maxFlushedTs = flushed
 			}
 			return true
 		})
+		if minResolvedTs > maxFlushedTs {
+			minResolvedTs = maxFlushedTs
+		}
 
 		err := m.writer.FlushLog(ctx, tableRtsMap, minResolvedTs)
 		m.metricFlushLogDuration.Observe(time.Since(m.lastFlushTime).Seconds())
