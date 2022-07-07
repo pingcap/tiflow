@@ -59,7 +59,7 @@ type replicaConfig struct {
 	Consistent       *ConsistentConfig `toml:"consistent" json:"consistent"`
 }
 
-// Marshal returns the json marshal format of a ReplicationConfig
+// Marshal returns the json marshal form`at of a ReplicationConfig
 func (c *ReplicaConfig) Marshal() (string, error) {
 	cfg, err := json.Marshal(c)
 	if err != nil {

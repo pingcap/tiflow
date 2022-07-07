@@ -176,7 +176,7 @@ var (
 		errors.RFCCodeText("CDC:ErrDecodeFailed"),
 	)
 	ErrFilterRuleInvalid = errors.Normalize(
-		"filter rule is invalid",
+		"filter rule is invalid %s",
 		errors.RFCCodeText("CDC:ErrFilterRuleInvalid"),
 	)
 

@@ -24,11 +24,13 @@ import (
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/testkit"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
 
-// FilterTestHelper is a test helper for schema which creates an internal tidb instance to generate DDL jobs with meta information
+// FilterTestHelper is a test helper for filter which creates
+// an internal tidb instance to generate DDL jobs with meta information
 type FilterTestHelper struct {
 	t       *testing.T
 	tk      *testkit.TestKit
@@ -36,7 +38,7 @@ type FilterTestHelper struct {
 	domain  *domain.Domain
 }
 
-// NewFilterTestHelper creates a SchemaTestHelper
+// NewFilterTestHelper creates a FilterTestHelper
 func NewFilterTestHelper(t *testing.T) *FilterTestHelper {
 	store, err := mockstore.NewMockStore()
 	require.Nil(t, err)
@@ -67,28 +69,11 @@ func (s *FilterTestHelper) DDL2Job(ddl string) *timodel.Job {
 }
 
 // ExecDDL executes the DDL statement and returns the newest TableInfo of the table.
-func (s *FilterTestHelper) ExecDDL(ddl string) *timodel.TableInfo {
+func (s *FilterTestHelper) ExecDDL(ddl string) *model.TableInfo {
 	job := s.DDL2Job(ddl)
 	ti, err := s.GetCurrentMeta().GetTable(job.SchemaID, job.TableID)
 	require.Nil(s.t, err)
-	return ti
-}
-
-// DDL2Jobs executes the DDL statement and return the corresponding DDL jobs.
-// It is mainly used for "DROP TABLE" and "DROP VIEW" statement because
-// multiple jobs will be generated after executing these two types of
-// DDL statements.
-func (s *FilterTestHelper) DDL2Jobs(ddl string, jobCnt int) []*timodel.Job {
-	s.tk.MustExec(ddl)
-	jobs, err := s.GetCurrentMeta().GetLastNHistoryDDLJobs(jobCnt)
-	require.Nil(s.t, err)
-	require.Len(s.t, jobs, jobCnt)
-	return jobs
-}
-
-// Storage returns the tikv storage
-func (s *FilterTestHelper) Storage() kv.Storage {
-	return s.storage
+	return model.WrapTableInfo(job.ID, job.SchemaName, job.BinlogInfo.FinishedTS, ti)
 }
 
 // Tk returns the TestKit

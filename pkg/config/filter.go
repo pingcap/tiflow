@@ -37,11 +37,12 @@ type EventFilterRule struct {
 	Matcher     []string       `toml:"matcher" json:"matcher"`
 	IgnoreEvent []bf.EventType `toml:"ignore-event" json:"ignore-event"`
 	// regular expression
-	IgnoreSQL                []string `toml:"ignore-sql" json:"ignore-sql"`
-	IgnoreInsertValueExpr    string   `toml:"ignore-insert-value-expr" json:"ignore-insert-value-expr"`
-	IgnoreUpdateNewValueExpr string   `toml:"ignore-update-new-value-expr" json:"ignore-update-new-value-expr"`
-	IgnoreUpdateOldValueExpr string   `toml:"ignore-update-old-value-expr" json:"ignore-update-old-value-expr"`
-	IgnoreDeleteValueExpr    string   `toml:"ignore-delete-value-expr" json:"ignore-delete-value-expr"`
+	IgnoreSQL []string `toml:"ignore-sql" json:"ignore-sql"`
+	// sql expression
+	IgnoreInsertValueExpr    string `toml:"ignore-insert-value-expr" json:"ignore-insert-value-expr"`
+	IgnoreUpdateNewValueExpr string `toml:"ignore-update-new-value-expr" json:"ignore-update-new-value-expr"`
+	IgnoreUpdateOldValueExpr string `toml:"ignore-update-old-value-expr" json:"ignore-update-old-value-expr"`
+	IgnoreDeleteValueExpr    string `toml:"ignore-delete-value-expr" json:"ignore-delete-value-expr"`
 }
 
 // TableName represents a table name

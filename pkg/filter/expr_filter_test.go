@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -24,7 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestShouldSkipDML(t *testing.T) {
+func TestShouldSkipDMLBasic(t *testing.T) {
 	helper := NewFilterTestHelper(t)
 	defer helper.Close()
 	helper.Tk().MustExec("use test;")
@@ -331,6 +332,9 @@ func TestShouldSkipDML(t *testing.T) {
 	}
 }
 
+// This test case is for testing when there are syntax error
+// or unknown error in the expression the return error type and message
+// are as expected.
 func TestShouldSkipDMLError(t *testing.T) {
 	helper := NewFilterTestHelper(t)
 	defer helper.Close()
@@ -444,4 +448,328 @@ func TestShouldSkipDMLError(t *testing.T) {
 			require.Equal(t, c.ignore, ignore)
 		}
 	}
+}
+
+// This test case is for testing when a table is updated,
+// the filter will works as expected.
+func TestShouldSkipDMLTableUpdated(t *testing.T) {
+	helper := NewFilterTestHelper(t)
+	defer helper.Close()
+	helper.Tk().MustExec("use test;")
+
+	type innerCase struct {
+		schema    string
+		table     string
+		updateDDl string
+		// set preColumns to non nil to indicate this case is for update
+		preColumns []*model.Column
+		// set columns to non nil to indicate this case is for insert
+		// set columns to nil to indicate this case is for delete
+		columns []*model.Column
+		preRow  []interface{}
+		row     []interface{}
+		ignore  bool
+		err     error
+		errMsg  string
+	}
+
+	type testCase struct {
+		ddl   string
+		cfg   *config.FilterConfig
+		cases []innerCase
+	}
+
+	testCases := []testCase{
+		{ // add new column case.
+			ddl: "create table test.student(id int primary key, name char(50), age int, gender char(10))",
+			cfg: &config.FilterConfig{
+				EventFilters: []*config.EventFilterRule{
+					{
+						Matcher:                  []string{"test.student"},
+						IgnoreInsertValueExpr:    "age >= 20 and mather = 'Marisa'",
+						IgnoreDeleteValueExpr:    "age >= 32 and mather = 'Maria'",
+						IgnoreUpdateOldValueExpr: "gender = 'female'",
+						IgnoreUpdateNewValueExpr: "age > 28",
+					},
+				},
+			},
+			cases: []innerCase{
+				{ // insert
+					schema: "test",
+					table:  "student",
+					columns: []*model.Column{
+						{Name: "none"},
+					},
+					row:    []interface{}{999, "Will", 39, "male"},
+					ignore: false,
+					err:    cerror.ErrExpressionColumnNotFound,
+					errMsg: "Can not found column 'mather' from table 'student' in",
+				},
+				{ // insert
+					schema: "test",
+					table:  "student",
+					// we execute updateDDl to update the table info
+					updateDDl: "ALTER TABLE student ADD COLUMN mather char(50)",
+					columns: []*model.Column{
+						{Name: "none"},
+					},
+					row:    []interface{}{999, "Will", 39, "male", "Marry"},
+					ignore: false,
+				},
+				{ // update
+					schema: "test",
+					table:  "student",
+					preColumns: []*model.Column{
+						{Name: "none"},
+					},
+					preRow: []interface{}{876, "Li", 45, "female"},
+					columns: []*model.Column{
+						{Name: "none"},
+					},
+					row:    []interface{}{1, "Dongmen", 20, "male"},
+					ignore: true,
+				},
+				{ // delete
+					schema: "test",
+					table:  "student",
+					preColumns: []*model.Column{
+						{Name: "none"},
+					},
+					preRow: []interface{}{876, "Li", 45, "female", "Maria"},
+					ignore: true,
+				},
+			},
+		},
+		{ // drop column case
+			ddl: "create table test.worker(id int primary key, name char(50), age int, gender char(10), company char(50))",
+			cfg: &config.FilterConfig{
+				EventFilters: []*config.EventFilterRule{
+					{
+						Matcher:                  []string{"test.worker"},
+						IgnoreInsertValueExpr:    "age >= 20 and company = 'Apple'",
+						IgnoreDeleteValueExpr:    "age >= 32 and company = 'Google'",
+						IgnoreUpdateOldValueExpr: "gender = 'female'",
+						IgnoreUpdateNewValueExpr: "age > 28",
+					},
+				},
+			},
+			cases: []innerCase{
+				{ // insert
+					schema: "test",
+					table:  "worker",
+					columns: []*model.Column{
+						{Name: "none"},
+					},
+					row:    []interface{}{999, "Will", 39, "male", "Apple"},
+					ignore: true,
+				},
+				{ // insert
+					schema: "test",
+					table:  "worker",
+					columns: []*model.Column{
+						{Name: "none"},
+					},
+					row:    []interface{}{11, "Tom", 21, "male", "FaceBook"},
+					ignore: false,
+				},
+				{ // update
+					schema: "test",
+					table:  "worker",
+					preColumns: []*model.Column{
+						{Name: "none"},
+					},
+					preRow: []interface{}{876, "Li", 45, "female"},
+					columns: []*model.Column{
+						{Name: "none"},
+					},
+					row:    []interface{}{1, "Dongmen", 20, "male"},
+					ignore: true,
+				},
+				{ // delete
+					schema: "test",
+					table:  "worker",
+					preColumns: []*model.Column{
+						{Name: "none"},
+					},
+					preRow: []interface{}{876, "Li", 45, "female", "Google"},
+					ignore: true,
+				},
+				{ // insert
+					schema:    "test",
+					table:     "worker",
+					updateDDl: "ALTER TABLE worker DROP COLUMN company",
+					columns: []*model.Column{
+						{Name: "none"},
+					},
+					row:    []interface{}{999, "Will", 39, "male"},
+					ignore: false,
+					err:    cerror.ErrExpressionColumnNotFound,
+					errMsg: "Can not found column 'company' from table 'worker' in",
+				},
+			},
+		},
+	}
+
+	sessCtx := utils.NewSessionCtx(map[string]string{
+		"time_zone": "System",
+	})
+
+	for _, tc := range testCases {
+		tableInfo := helper.ExecDDL(tc.ddl)
+		f, err := newExprFilter("", tc.cfg)
+		require.Nil(t, err)
+		for _, c := range tc.cases {
+			if c.updateDDl != "" {
+				tableInfo = helper.ExecDDL(c.updateDDl)
+			}
+			rowDatums, err := utils.AdjustBinaryProtocolForDatum(sessCtx, c.row, tableInfo.Columns)
+			require.Nil(t, err)
+			preRowDatums, err := utils.AdjustBinaryProtocolForDatum(sessCtx, c.preRow, tableInfo.Columns)
+			require.Nil(t, err)
+			row := &model.RowChangedEvent{
+				Table: &model.TableName{
+					Schema: c.schema,
+					Table:  c.table,
+				},
+				RowChangedDatums: &model.RowChangedDatums{
+					RowDatums:    rowDatums,
+					PreRowDatums: preRowDatums,
+				},
+				Columns:    c.columns,
+				PreColumns: c.preColumns,
+			}
+			ignore, err := f.shouldSkipDML(row, tableInfo)
+			require.True(t, errors.ErrorEqual(c.err, err), "case: %+v", c, err)
+			if err != nil {
+				require.Contains(t, err.Error(), c.errMsg)
+			}
+			require.Equal(t, c.ignore, ignore, "case: %+v", c)
+		}
+	}
+}
+
+func TestVerify(t *testing.T) {
+	helper := NewFilterTestHelper(t)
+	defer helper.Close()
+	helper.Tk().MustExec("use test;")
+
+	type testCase struct {
+		ddls   []string
+		cfg    *config.FilterConfig
+		err    error
+		errMsg string
+	}
+
+	testCases := []testCase{
+		{
+			ddls: []string{
+				"create table test.worker(id int primary key, name char(50), age int, company char(50), gender char(50))",
+				"create table test.student(id int primary key, name char(50), age int, school char(50))",
+				"create table test.teacher(id int primary key, name char(50), age int, school char(50))",
+				"create table test.parent(id int primary key, name char(50), age int, company char(50))",
+			},
+			cfg: &config.FilterConfig{
+				EventFilters: []*config.EventFilterRule{
+					{
+						Matcher:                  []string{"test.worker"},
+						IgnoreInsertValueExpr:    "age >= 20 and company = 'Apple'",
+						IgnoreDeleteValueExpr:    "age >= 32 and company = 'Google'",
+						IgnoreUpdateOldValueExpr: "gender = 'female'",
+						IgnoreUpdateNewValueExpr: "age > 28",
+					},
+					{
+						Matcher:               []string{"test.student"},
+						IgnoreInsertValueExpr: "age < 20 and school = 'guanghua'",
+						IgnoreDeleteValueExpr: "age < 11 and school = 'dongfang'",
+					},
+					{
+						Matcher:               []string{"test.nonExist"},
+						IgnoreInsertValueExpr: "age < 20 or id > 100",
+						IgnoreDeleteValueExpr: "age > 100 or id < 20",
+					},
+					{
+						Matcher:                  []string{"test.parent"},
+						IgnoreUpdateNewValueExpr: "company = 'Apple'",
+					},
+					{
+						Matcher:                  []string{"*.*"},
+						IgnoreUpdateNewValueExpr: "id <= 100",
+					},
+				},
+			},
+		},
+		{
+			ddls: []string{
+				"create table test.child(id int primary key, name char(50), age int, parent_id int, school char(50))",
+			},
+			cfg: &config.FilterConfig{
+				EventFilters: []*config.EventFilterRule{
+					{
+						Matcher:               []string{"test.child"},
+						IgnoreInsertValueExpr: "company = 'Apple'",
+					},
+				},
+			},
+			err:    cerror.ErrExpressionColumnNotFound,
+			errMsg: "Can not found column 'company' from table 'child' in",
+		},
+		{
+			ddls: []string{
+				"create table test.fruit(id int primary key, name char(50), price int)",
+			},
+			cfg: &config.FilterConfig{
+				EventFilters: []*config.EventFilterRule{
+					{
+						Matcher:               []string{"test.fruit"},
+						IgnoreInsertValueExpr: "error(price) == null",
+					},
+				},
+			},
+			err:    cerror.ErrExpressionParseFailed,
+			errMsg: "There is a syntax error in",
+		},
+	}
+
+	for _, tc := range testCases {
+		var tableInfos []*model.TableInfo
+		for _, ddl := range tc.ddls {
+			ti := helper.ExecDDL(ddl)
+			tableInfos = append(tableInfos, ti)
+		}
+		f, err := newExprFilter("", tc.cfg)
+		require.Nil(t, err)
+		err = f.verify(tableInfos)
+		require.True(t, errors.ErrorEqual(tc.err, err), "case: %+v", tc, err)
+		if err != nil {
+			require.Contains(t, err.Error(), tc.errMsg)
+		}
+	}
+}
+
+func TestGetColumnFromError(t *testing.T) {
+	type testCase struct {
+		err      error
+		expected string
+	}
+
+	testCases := []testCase{
+		{
+			err:      core.ErrUnknownColumn.FastGenByArgs("mother", "expression"),
+			expected: "mother",
+		},
+		{
+			err:      core.ErrUnknownColumn.FastGenByArgs("company", "expression"),
+			expected: "company",
+		},
+		{
+			err:      errors.New("what ever"),
+			expected: "what ever",
+		},
+	}
+
+	for _, tc := range testCases {
+		column := getColumnFromError(tc.err)
+		require.Equal(t, tc.expected, column, "case: %+v", tc)
+	}
+
 }

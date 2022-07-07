@@ -177,7 +177,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 				return nil, err
 			}
 			// Now we need to filter a row here is because we need its tableInfo
-			ignore, err := m.filter.ShouldIgnoreDMLEvent(row, tableInfo.TableInfo)
+			ignore, err := m.filter.ShouldIgnoreDMLEvent(row, tableInfo)
 			if err != nil {
 				return nil, err
 			}

@@ -24,7 +24,7 @@ import (
 // All methods of Filter are safe for concurrent use.
 type Filter interface {
 	// ShouldIgnoreDMLEvent return true and nil if the DML event should be ignored.
-	ShouldIgnoreDMLEvent(dml *model.RowChangedEvent, tableInfo *timodel.TableInfo) (bool, error)
+	ShouldIgnoreDMLEvent(dml *model.RowChangedEvent, tableInfo *model.TableInfo) (bool, error)
 	// ShouldIgnoreDDLEvent return true and nil if the DDL event should be ignored.
 	ShouldIgnoreDDLEvent(ddl *model.DDLEvent) (bool, error)
 	// ShouldDiscardDDL returns true if this DDL should be discarded.
@@ -87,7 +87,7 @@ func NewFilter(cfg *config.ReplicaConfig) (Filter, error) {
 // 3. By columns value.
 func (f *filter) ShouldIgnoreDMLEvent(
 	dml *model.RowChangedEvent,
-	ti *timodel.TableInfo,
+	ti *model.TableInfo,
 ) (bool, error) {
 	if f.shouldIgnoreStartTs(dml.StartTs) {
 		return true, nil

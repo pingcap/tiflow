@@ -35,8 +35,9 @@ const (
 // TableInfo provides meta data describing a DB table.
 type TableInfo struct {
 	*model.TableInfo
-	SchemaID         int64
-	TableName        TableName
+	SchemaID  int64
+	TableName TableName
+	// TableInfoVersion record the tso of create the table info.
 	TableInfoVersion uint64
 	columnsOffset    map[int64]int
 	indicesOffset    map[int64]int
