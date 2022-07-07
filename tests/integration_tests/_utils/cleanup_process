@@ -16,6 +16,7 @@ while [ $counter -lt $retry_count ]; do
 	fi
 	((counter += 1))
 	sleep 0.5
+	killall $process || true
 	echo "wait process $process exit for $counter-th time..."
 done
 
