@@ -117,6 +117,7 @@ function run() {
 	run_sql "INSERT INTO many_tables_db.t2 (i, j) VALUES (2, 2002);" $MYSQL_PORT1 $MYSQL_PASSWORD1
 	echo "check diff 2" # to check timezone and timestamp have been set back to default
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	restore_timezone
 
 	# test https://github.com/pingcap/tiflow/issues/5344
 	kill_dm_worker
