@@ -14,8 +14,6 @@
 package config
 
 import (
-	"strings"
-
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb/parser/model"
 	filter "github.com/pingcap/tidb/util/table-filter"
@@ -43,23 +41,4 @@ type EventFilterRule struct {
 	IgnoreUpdateNewValueExpr string `toml:"ignore-update-new-value-expr" json:"ignore-update-new-value-expr"`
 	IgnoreUpdateOldValueExpr string `toml:"ignore-update-old-value-expr" json:"ignore-update-old-value-expr"`
 	IgnoreDeleteValueExpr    string `toml:"ignore-delete-value-expr" json:"ignore-delete-value-expr"`
-}
-
-// TableName represents a table name
-type TableName struct {
-	Schema string `toml:"schema" json:"schema"`
-	Table  string `toml:"table" json:"table"`
-}
-
-// GetTableNames returns the table names in the EventFilterRule's Matcher
-// TODO(dongmen): add unit test
-func (r EventFilterRule) GetTableNames() []TableName {
-	var tableNames []TableName
-	for _, m := range r.Matcher {
-		tableNames = append(tableNames, TableName{
-			Schema: m[0:strings.Index(m, ".")],
-			Table:  m[strings.Index(m, ".")+1:],
-		})
-	}
-	return tableNames
 }
