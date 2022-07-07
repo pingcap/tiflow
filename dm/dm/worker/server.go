@@ -63,6 +63,7 @@ type Server struct {
 	kaWg   sync.WaitGroup
 	httpWg sync.WaitGroup
 	closed atomic.Bool
+	inited bool
 	ctx    context.Context
 	cancel context.CancelFunc
 
@@ -94,129 +95,151 @@ func NewServer(cfg *Config) *Server {
 func (s *Server) Start() error {
 	log.L().Info("starting dm-worker server")
 	RegistryMetrics()
-	s.ctx, s.cancel = context.WithCancel(context.Background())
-	tls, err := toolutils.NewTLS(s.cfg.SSLCA, s.cfg.SSLCert, s.cfg.SSLKey, s.cfg.AdvertiseAddr, s.cfg.CertAllowedCN)
-	if err != nil {
-		return terror.ErrWorkerTLSConfigNotValid.Delegate(err)
-	}
 
-	rootLis, err := net.Listen("tcp", s.cfg.WorkerAddr)
-	if err != nil {
-		return terror.ErrWorkerStartService.Delegate(err)
-	}
-	s.rootLis = tls.WrapListener(rootLis)
+	var m cmux.CMux
 
-	s.etcdClient, err = clientv3.New(clientv3.Config{
-		Endpoints:            GetJoinURLs(s.cfg.Join),
-		DialTimeout:          dialTimeout,
-		DialKeepAliveTime:    keepaliveTime,
-		DialKeepAliveTimeout: keepaliveTimeout,
-		TLS:                  tls.TLSConfig(),
-		AutoSyncInterval:     syncMasterEndpointsTime,
-	})
-	if err != nil {
-		return err
-	}
+	// protect member from data race. some functions below like GetRelayConfig,
+	// GetSourceBoundConfig has a built-in timeout so it will not be stuck for a
+	// long time.
+	startErr := func() error {
+		s.Lock()
+		defer s.Unlock()
 
-	s.setWorker(nil, true)
-
-	s.wg.Add(1)
-	go func() {
-		s.runBackgroundJob(s.ctx)
-		s.wg.Done()
-	}()
-
-	s.startKeepAlive()
-
-	relaySource, revRelay, err := ha.GetRelayConfig(s.etcdClient, s.cfg.Name)
-	if err != nil {
-		return err
-	}
-	if relaySource != nil {
-		log.L().Warn("worker has been assigned relay before keepalive", zap.String("relay source", relaySource.SourceID))
-		if err2 := s.enableRelay(relaySource, true); err2 != nil {
-			return err2
+		if s.inited {
+			return terror.ErrWorkerAlreadyClosed.Generate()
 		}
-	}
 
-	s.wg.Add(1)
-	go func(ctx context.Context) {
-		defer s.wg.Done()
-		// TODO: handle fatal error from observeRelayConfig
-		//nolint:errcheck
-		s.observeRelayConfig(ctx, revRelay)
-	}(s.ctx)
-
-	bound, sourceCfg, revBound, err := ha.GetSourceBoundConfig(s.etcdClient, s.cfg.Name)
-	if err != nil {
-		return err
-	}
-	if !bound.IsEmpty() {
-		log.L().Warn("worker has been assigned source before keepalive", zap.Stringer("bound", bound), zap.Bool("is deleted", bound.IsDeleted))
-		if err2 := s.enableHandleSubtasks(sourceCfg, true); err2 != nil {
-			return err2
+		s.ctx, s.cancel = context.WithCancel(context.Background())
+		tls, err := toolutils.NewTLS(s.cfg.SSLCA, s.cfg.SSLCert, s.cfg.SSLKey, s.cfg.AdvertiseAddr, s.cfg.CertAllowedCN)
+		if err != nil {
+			return terror.ErrWorkerTLSConfigNotValid.Delegate(err)
 		}
-		log.L().Info("started to handle mysql source", zap.String("sourceCfg", sourceCfg.String()))
-	}
 
-	s.wg.Add(1)
-	go func(ctx context.Context) {
-		defer s.wg.Done()
-		for {
-			err1 := s.observeSourceBound(ctx, revBound)
-			if err1 == nil {
-				return
+		rootLis, err := net.Listen("tcp", s.cfg.WorkerAddr)
+		if err != nil {
+			return terror.ErrWorkerStartService.Delegate(err)
+		}
+		s.rootLis = tls.WrapListener(rootLis)
+
+		s.etcdClient, err = clientv3.New(clientv3.Config{
+			Endpoints:            GetJoinURLs(s.cfg.Join),
+			DialTimeout:          dialTimeout,
+			DialKeepAliveTime:    keepaliveTime,
+			DialKeepAliveTimeout: keepaliveTimeout,
+			TLS:                  tls.TLSConfig(),
+			AutoSyncInterval:     syncMasterEndpointsTime,
+		})
+		if err != nil {
+			return err
+		}
+
+		s.setWorker(nil, true)
+
+		s.wg.Add(1)
+		go func() {
+			s.runBackgroundJob(s.ctx)
+			s.wg.Done()
+		}()
+
+		s.startKeepAlive()
+
+		relaySource, revRelay, err := ha.GetRelayConfig(s.etcdClient, s.cfg.Name)
+		if err != nil {
+			return err
+		}
+		if relaySource != nil {
+			log.L().Warn("worker has been assigned relay before keepalive", zap.String("relay source", relaySource.SourceID))
+			if err2 := s.enableRelay(relaySource, true); err2 != nil {
+				return err2
 			}
-			s.restartKeepAlive()
 		}
-	}(s.ctx)
 
-	// create a cmux
-	m := cmux.New(s.rootLis)
+		s.wg.Add(1)
+		go func(ctx context.Context) {
+			defer s.wg.Done()
+			// TODO: handle fatal error from observeRelayConfig
+			//nolint:errcheck
+			s.observeRelayConfig(ctx, revRelay)
+		}(s.ctx)
 
-	m.SetReadTimeout(cmuxReadTimeout) // set a timeout, ref: https://github.com/pingcap/tidb-binlog/pull/352
-
-	// match connections in order: first gRPC, then HTTP
-	grpcL := m.MatchWithWriters(cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"))
-
-	httpL := m.Match(cmux.HTTP1Fast())
-
-	// NOTE: don't need to set tls config, because rootLis already use tls
-	s.svr = grpc.NewServer()
-	pb.RegisterWorkerServer(s.svr, s)
-
-	grpcExitCh := make(chan struct{}, 1)
-	s.wg.Add(1)
-	go func() {
-		err2 := s.svr.Serve(grpcL)
-		if err2 != nil && !common.IsErrNetClosing(err2) && err2 != cmux.ErrListenerClosed {
-			log.L().Error("gRPC server returned", log.ShortError(err2))
+		bound, sourceCfg, revBound, err := ha.GetSourceBoundConfig(s.etcdClient, s.cfg.Name)
+		if err != nil {
+			return err
 		}
-		grpcExitCh <- struct{}{}
-	}()
-	go func(ctx context.Context) {
-		defer s.wg.Done()
-		select {
-		case <-ctx.Done():
-			if s.svr != nil {
-				// GracefulStop can not cancel active stream RPCs
-				// and the stream RPC may block on Recv or Send
-				// so we use Stop instead to cancel all active RPCs
-				s.svr.Stop()
+		if !bound.IsEmpty() {
+			log.L().Warn("worker has been assigned source before keepalive", zap.Stringer("bound", bound), zap.Bool("is deleted", bound.IsDeleted))
+			if err2 := s.enableHandleSubtasks(sourceCfg, true); err2 != nil {
+				return err2
 			}
-		case <-grpcExitCh:
+			log.L().Info("started to handle mysql source", zap.String("sourceCfg", sourceCfg.String()))
 		}
-	}(s.ctx)
 
-	s.httpWg.Add(1)
-	go func() {
-		s.httpWg.Done()
-		InitStatus(httpL) // serve status
+		s.wg.Add(1)
+		go func(ctx context.Context) {
+			defer s.wg.Done()
+			for {
+				err1 := s.observeSourceBound(ctx, revBound)
+				if err1 == nil {
+					return
+				}
+				s.restartKeepAlive()
+			}
+		}(s.ctx)
+
+		// create a cmux
+		m = cmux.New(s.rootLis)
+
+		m.SetReadTimeout(cmuxReadTimeout) // set a timeout, ref: https://github.com/pingcap/tidb-binlog/pull/352
+
+		// match connections in order: first gRPC, then HTTP
+		grpcL := m.MatchWithWriters(cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"))
+
+		httpL := m.Match(cmux.HTTP1Fast())
+
+		// NOTE: don't need to set tls config, because rootLis already use tls
+		s.svr = grpc.NewServer()
+		pb.RegisterWorkerServer(s.svr, s)
+
+		grpcExitCh := make(chan struct{}, 1)
+		s.wg.Add(1)
+		go func() {
+			err2 := s.svr.Serve(grpcL)
+			if err2 != nil && !common.IsErrNetClosing(err2) && err2 != cmux.ErrListenerClosed {
+				log.L().Error("gRPC server returned", log.ShortError(err2))
+			}
+			grpcExitCh <- struct{}{}
+		}()
+		go func(ctx context.Context) {
+			defer s.wg.Done()
+			select {
+			case <-ctx.Done():
+				if s.svr != nil {
+					// GracefulStop can not cancel active stream RPCs
+					// and the stream RPC may block on Recv or Send
+					// so we use Stop instead to cancel all active RPCs
+					s.svr.Stop()
+				}
+			case <-grpcExitCh:
+			}
+		}(s.ctx)
+
+		s.httpWg.Add(1)
+		go func() {
+			s.httpWg.Done()
+			InitStatus(httpL) // serve status
+		}()
+
+		s.closed.Store(false)
+		s.inited = true
+		return nil
 	}()
 
-	s.closed.Store(false)
+	if startErr != nil {
+		return startErr
+	}
+
 	log.L().Info("listening gRPC API and status request", zap.String("address", s.cfg.WorkerAddr))
-	err = m.Serve()
+	err := m.Serve()
 	if err != nil && common.IsErrNetClosing(err) {
 		err = nil
 	}
@@ -453,6 +476,7 @@ func (s *Server) doClose() {
 	s.httpWg.Wait()
 
 	s.closed.Store(true)
+	s.inited = true
 }
 
 // Close close the RPC server, this function can be called multiple times.
