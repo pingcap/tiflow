@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -390,9 +391,16 @@ func (l *LogWriter) FlushLog(ctx context.Context, rtsMap map[model.TableID]model
 		return cerror.ErrRedoWriterStopped.GenWithStackByArgs()
 	}
 
-	if err := l.flush(); err != nil {
+	var minResolvedTs uint64 = math.MaxUint64
+	for _, resolvedTs := range rtsMap {
+		if minResolvedTs > resolvedTs {
+			minResolvedTs = resolvedTs
+		}
+	}
+	if err := l.flush(minResolvedTs); err != nil {
 		return err
 	}
+
 	for tableID, rts := range rtsMap {
 		l.setMaxCommitTs(tableID, rts)
 	}
@@ -549,8 +557,8 @@ func (l *LogWriter) setMaxCommitTs(tableID int64, commitTs uint64) uint64 {
 }
 
 // flush flushes all the buffered data to the disk.
-func (l *LogWriter) flush() error {
-	err1 := l.flushLogMeta(0, 0)
+func (l *LogWriter) flush(minResolvedTs uint64) error {
+	err1 := l.flushLogMeta(0, minResolvedTs)
 	err2 := l.ddlWriter.Flush()
 	err3 := l.rowWriter.Flush()
 
