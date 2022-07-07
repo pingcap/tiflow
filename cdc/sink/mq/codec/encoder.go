@@ -21,6 +21,11 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
+const (
+	// BatchVersion1 represents the version of batch format
+	BatchVersion1 uint64 = 1
+)
+
 // EventBatchEncoder is an abstraction for events encoder
 type EventBatchEncoder interface {
 	// EncodeCheckpointEvent appends a checkpoint event into the batch.
@@ -28,7 +33,7 @@ type EventBatchEncoder interface {
 	EncodeCheckpointEvent(ts uint64) (*MQMessage, error)
 	// AppendRowChangedEvent appends the calling context, a row changed event and the dispatch
 	// topic into the batch
-	AppendRowChangedEvent(context.Context, string, *model.RowChangedEvent) error
+	AppendRowChangedEvent(context.Context, string, *model.RowChangedEvent, func()) error
 	// EncodeDDLEvent appends a DDL event into the batch
 	EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error)
 	// Build builds the batch and returns the bytes of key and value.
@@ -44,7 +49,7 @@ type EncoderBuilder interface {
 func NewEventBatchEncoderBuilder(ctx context.Context, c *Config) (EncoderBuilder, error) {
 	switch c.protocol {
 	case config.ProtocolDefault, config.ProtocolOpen:
-		return newJSONEventBatchEncoderBuilder(c), nil
+		return newOpenProtocolBatchEncoderBuilder(c), nil
 	case config.ProtocolCanal:
 		return newCanalEventBatchEncoderBuilder(), nil
 	case config.ProtocolAvro:

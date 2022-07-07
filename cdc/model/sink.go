@@ -260,7 +260,6 @@ type RowChangedEvent struct {
 
 	TableInfoVersion uint64 `json:"table-info-version,omitempty" msg:"table-info-version"`
 
-	ReplicaID    uint64    `json:"replica-id" msg:"replica-id"`
 	Columns      []*Column `json:"columns" msg:"-"`
 	PreColumns   []*Column `json:"pre-columns" msg:"-"`
 	IndexColumns [][]int   `json:"-" msg:"index-columns"`
