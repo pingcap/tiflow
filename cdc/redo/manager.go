@@ -426,6 +426,8 @@ func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
 				if unflushed < minResolvedTs || minResolvedTs == 0 {
 					minResolvedTs = unflushed
 				}
+			} else if flushed < minResolvedTs || minResolvedTs == 0 {
+				minResolvedTs = flushed
 			}
 			return true
 		})
