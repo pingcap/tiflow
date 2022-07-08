@@ -176,7 +176,7 @@ var (
 		errors.RFCCodeText("CDC:ErrDecodeFailed"),
 	)
 	ErrFilterRuleInvalid = errors.Normalize(
-		"filter rule is invalid",
+		"filter rule is invalid %s",
 		errors.RFCCodeText("CDC:ErrFilterRuleInvalid"),
 	)
 
@@ -1007,5 +1007,23 @@ var (
 	ErrReplicationSetMultiplePrimaryError = errors.Normalize(
 		"replication set multiple primary: %s",
 		errors.RFCCodeText("CDC:ErrReplicationSetMultiplePrimaryError"),
+	)
+
+	// Filter error
+	ErrFailedToFilterDML = errors.Normalize(
+		"failed to filter dml event: %v, please report a bug",
+		errors.RFCCodeText("CDC:ErrFailedToFilterDML"),
+	)
+	ErrFailedToFilterDDL = errors.Normalize(
+		"failed to filter ddl event: %v, please report a bug",
+		errors.RFCCodeText("CDC:ErrFailedToFilterDDL"),
+	)
+	ErrExpressionParseFailed = errors.Normalize(
+		"invalid filter expressions. There is a syntax error in: %s",
+		errors.RFCCodeText("CDC:ErrInvalidFilterExpression"),
+	)
+	ErrExpressionColumnNotFound = errors.Normalize(
+		"invalid filter expressions. Can not found column '%s' from table '%s' in: %s",
+		errors.RFCCodeText("CDC:ErrExpressionColumnNotFound"),
 	)
 )
