@@ -177,8 +177,8 @@ func (d *drainCaptureScheduler) Schedule(
 		}
 
 		if minWorkload == math.MaxInt64 {
-			log.Panic("tpscheduler: drain capture meet unexpected min workload " +
-				"when try to the the target capture")
+			log.Panic("tpscheduler: drain capture meet unexpected min workload",
+				zap.Any("workload", captureWorkload))
 		}
 
 		result = append(result, &scheduleTask{
