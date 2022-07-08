@@ -965,7 +965,7 @@ func (p *processor) flushRedoLogMeta(ctx context.Context) error {
 	if p.redoManager.Enabled() &&
 		time.Since(p.lastRedoFlush).Milliseconds() > p.changefeed.Info.Config.Consistent.FlushIntervalInMs {
 		st := p.changefeed.Status
-		err := p.redoManager.FlushResolvedAndCheckpointTs(ctx, st.ResolvedTs, st.CheckpointTs)
+		err := p.redoManager.UpdateCheckpointTs(ctx, st.CheckpointTs)
 		if err != nil {
 			return err
 		}

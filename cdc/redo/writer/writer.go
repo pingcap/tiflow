@@ -46,20 +46,16 @@ type RedoLogWriter interface {
 	// WriteLog writer RedoRowChangedEvent to row log file
 	WriteLog(ctx context.Context, tableID int64, rows []*model.RedoRowChangedEvent) (resolvedTs uint64, err error)
 
-	// SendDDL EmitCheckpointTs and EmitResolvedTs are called from owner only
 	// SendDDL writer RedoDDLEvent to ddl log file
 	SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error
 
 	// FlushLog sends resolved-ts from table pipeline to log writer, it is
 	// essential to flush when a table doesn't have any row change event for
 	// some time, and the resolved ts of this table should be moved forward.
-	FlushLog(ctx context.Context, rtsMap map[model.TableID]model.Ts) error
+	FlushLog(ctx context.Context, rtsMap map[model.TableID]model.Ts, minResolvedTs model.Ts) error
 
 	// EmitCheckpointTs write CheckpointTs to meta file
 	EmitCheckpointTs(ctx context.Context, ts uint64) error
-
-	// EmitResolvedTs write ResolvedTs to meta file
-	EmitResolvedTs(ctx context.Context, ts uint64) error
 
 	// DeleteAllLogs delete all log files related to the changefeed, called from owner only when delete changefeed
 	DeleteAllLogs(ctx context.Context) error
@@ -379,7 +375,7 @@ func (l *LogWriter) SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error 
 }
 
 // FlushLog implement FlushLog api
-func (l *LogWriter) FlushLog(ctx context.Context, rtsMap map[model.TableID]model.Ts) error {
+func (l *LogWriter) FlushLog(ctx context.Context, rtsMap map[model.TableID]model.Ts, minResolvedTs model.Ts) error {
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
@@ -390,9 +386,10 @@ func (l *LogWriter) FlushLog(ctx context.Context, rtsMap map[model.TableID]model
 		return cerror.ErrRedoWriterStopped.GenWithStackByArgs()
 	}
 
-	if err := l.flush(); err != nil {
+	if err := l.flush(minResolvedTs); err != nil {
 		return err
 	}
+
 	for tableID, rts := range rtsMap {
 		l.setMaxCommitTs(tableID, rts)
 	}
@@ -411,21 +408,6 @@ func (l *LogWriter) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 		return cerror.ErrRedoWriterStopped.GenWithStackByArgs()
 	}
 	return l.flushLogMeta(ts, 0)
-}
-
-// EmitResolvedTs implement EmitResolvedTs api
-func (l *LogWriter) EmitResolvedTs(ctx context.Context, ts uint64) error {
-	select {
-	case <-ctx.Done():
-		return errors.Trace(ctx.Err())
-	default:
-	}
-
-	if l.isStopped() {
-		return cerror.ErrRedoWriterStopped.GenWithStackByArgs()
-	}
-
-	return l.flushLogMeta(0, ts)
 }
 
 // DeleteAllLogs implement DeleteAllLogs api
@@ -549,10 +531,10 @@ func (l *LogWriter) setMaxCommitTs(tableID int64, commitTs uint64) uint64 {
 }
 
 // flush flushes all the buffered data to the disk.
-func (l *LogWriter) flush() error {
-	err1 := l.flushLogMeta(0, 0)
-	err2 := l.ddlWriter.Flush()
-	err3 := l.rowWriter.Flush()
+func (l *LogWriter) flush(minResolvedTs uint64) error {
+	err1 := l.ddlWriter.Flush()
+	err2 := l.rowWriter.Flush()
+	err3 := l.flushLogMeta(0, minResolvedTs)
 
 	err := multierr.Append(err1, err2)
 	err = multierr.Append(err, err3)
