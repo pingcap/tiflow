@@ -60,8 +60,8 @@ func (b *blackHoleSink) FlushRowChangedEvents(
 	err := b.statistics.RecordBatchExecution(func() (int, error) {
 		// TODO: add some random replication latency
 		accumulated := atomic.LoadUint64(&b.accumulated)
-		batchSize := accumulated - atomic.LoadUint64(&b.lastAccumulated)
-		atomic.StoreUint64(&b.lastAccumulated, accumulated)
+		lastAccumulated := atomic.SwapUint64(&b.lastAccumulated, accumulated)
+		batchSize := accumulated - lastAccumulated
 		return int(batchSize), nil
 	})
 	b.statistics.PrintStatus(ctx)
