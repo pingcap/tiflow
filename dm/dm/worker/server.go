@@ -59,7 +59,7 @@ var (
 // dispatches requests to worker
 // sends responses to RPC client.
 type Server struct {
-	ctxMu  ctxmu.CtxMutex
+	ctxMu  *ctxmu.CtxMutex
 	wg     sync.WaitGroup
 	kaWg   sync.WaitGroup
 	httpWg sync.WaitGroup
@@ -85,7 +85,8 @@ type Server struct {
 // NewServer creates a new Server.
 func NewServer(cfg *Config) *Server {
 	s := Server{
-		cfg: cfg,
+		cfg:   cfg,
+		ctxMu: ctxmu.New(),
 	}
 	s.closed.Store(true) // not start yet
 	return &s
@@ -103,9 +104,8 @@ func (s *Server) Start() error {
 	// GetSourceBoundConfig has a built-in timeout so it will not be stuck for a
 	// long time.
 	startErr := func() error {
-		if ok := s.ctxMu.Lock(s.ctx); !ok {
-			return terror.ErrWorkerServerClosed.Generate()
-		}
+		// this lock acquisition should not fail
+		s.ctxMu.Lock(context.Background())
 		defer s.ctxMu.Unlock()
 
 		if s.inited {
@@ -462,9 +462,8 @@ func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 }
 
 func (s *Server) doClose() {
-	if ok := s.ctxMu.Lock(s.ctx); !ok {
-		return
-	}
+	// this lock acquisition should not fail
+	s.ctxMu.Lock(context.Background())
 	defer s.ctxMu.Unlock()
 
 	if s.closed.Load() {
