@@ -172,12 +172,12 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 			if rowKV == nil {
 				return nil, nil
 			}
-			row, err := m.mountRowKVEntry(tableInfo, rowKV, raw.ApproximateDataSize())
+			row, rawRow, err := m.mountRowKVEntry(tableInfo, rowKV, raw.ApproximateDataSize())
 			if err != nil {
 				return nil, err
 			}
 			// Now we need to filter a row here is because we need its tableInfo
-			ignore, err := m.filter.ShouldIgnoreDMLEvent(row, tableInfo)
+			ignore, err := m.filter.ShouldIgnoreDMLEvent(row, rawRow, tableInfo)
 			if err != nil {
 				return nil, err
 			}
@@ -186,8 +186,6 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 			if ignore {
 				return nil, nil
 			}
-			// Set raw columns to nil here to release memory.
-			row.RowChangedDatums = nil
 			return row, nil
 		}
 		return nil, nil
@@ -316,11 +314,12 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 	return cols, rawCols, nil
 }
 
-func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, error) {
+func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, model.RowChangedDatums, error) {
 	var err error
 	// Decode previous columns.
 	var preCols []*model.Column
 	var preRawCols []types.Datum
+	var rawRow model.RowChangedDatums
 	// Since we now always use old value internally,
 	// we need to control the output(sink will use the PreColumns field to determine whether to output old value).
 	// Normally old value is output when only enableOldValue is on,
@@ -331,7 +330,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 		// the pre column and current column in one event may using different table info
 		preCols, preRawCols, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, rawRow, errors.Trace(err)
 		}
 
 		// NOTICE: When the old Value feature is off,
@@ -351,7 +350,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 	if row.RowExist {
 		cols, rawCols, err = datum2Column(tableInfo, row.Row, true)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, rawRow, errors.Trace(err)
 		}
 	}
 
@@ -372,6 +371,8 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 
 	_, _, colInfos := tableInfo.GetRowColInfos()
 
+	rawRow.PreRowDatums = preRawCols
+	rawRow.RowDatums = rawCols
 	return &model.RowChangedEvent{
 		StartTs:          row.StartTs,
 		CommitTs:         row.CRTs,
@@ -388,11 +389,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 		PreColumns:          preCols,
 		IndexColumns:        tableInfo.IndexColumnsOffset,
 		ApproximateDataSize: dataSize,
-		RowChangedDatums: &model.RowChangedDatums{
-			RowDatums:    rawCols,
-			PreRowDatums: preRawCols,
-		},
-	}, nil
+	}, rawRow, nil
 }
 
 var emptyBytes = make([]byte, 0)
