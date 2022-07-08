@@ -156,7 +156,7 @@ func createPDClient(ctx context.Context,
 // 1. check and put metaVersion
 // 2. campaign old owner
 // 3. update keys
-// 4. check meta data consistency
+// 4. check metadata consistency
 // 5. update metaVersion
 func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersion int) error {
 	pdClient, err := m.createPDClientFunc(ctx,
@@ -292,7 +292,7 @@ func cleanOldData(ctx context.Context, client *etcd.Client) {
 			if strings.HasPrefix(key, oldChangefeedPrefix) {
 				value = maskChangefeedInfo(kvPair.Value)
 			}
-			// 0 is the backup verion. For now, we only support verion 0
+			// 0 is the backup version. For now, we only support version 0
 			newKey := etcd.MigrateBackupKey(0, key)
 			log.Info("renaming old etcd data",
 				zap.String("key", key),
@@ -312,7 +312,7 @@ func cleanOldData(ctx context.Context, client *etcd.Client) {
 	}
 }
 
-// old key prefix that should be remove
+// old key prefix that should be removed
 var oldKeyPrefix = []string{
 	"/tidb/cdc/changefeed/info",
 	"/tidb/cdc/job",
@@ -469,7 +469,7 @@ func (m *migrator) Migrate(ctx context.Context) error {
 	return m.migrate(ctx, version == noMetaVersion, oldVersion)
 }
 
-// ShouldMigrate checks if we should migrate etcd meta data
+// ShouldMigrate checks if we should migrate etcd metadata
 func (m *migrator) ShouldMigrate(ctx context.Context) (bool, error) {
 	version, err := getMetaVersion(ctx, m.cli.Client, m.cli.ClusterID)
 	if err != nil {
@@ -568,17 +568,17 @@ func getMetaVersion(ctx context.Context, cli *etcd.Client, clusterID string) (in
 type NoOpMigrator struct{}
 
 // ShouldMigrate checks if we need to migrate metadata
-func (f *NoOpMigrator) ShouldMigrate(ctx context.Context) (bool, error) {
+func (f *NoOpMigrator) ShouldMigrate(_ context.Context) (bool, error) {
 	return false, nil
 }
 
 // Migrate migrates the cdc metadata
-func (f *NoOpMigrator) Migrate(ctx context.Context) error {
+func (f *NoOpMigrator) Migrate(_ context.Context) error {
 	return nil
 }
 
 // WaitMetaVersionMatched wait util migration is done
-func (f *NoOpMigrator) WaitMetaVersionMatched(ctx context.Context) error {
+func (f *NoOpMigrator) WaitMetaVersionMatched(_ context.Context) error {
 	return nil
 }
 
