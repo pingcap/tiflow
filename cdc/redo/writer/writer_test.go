@@ -340,7 +340,7 @@ func TestLogWriterFlushLog(t *testing.T) {
 			cancel()
 			tt.args.ctx = ctx
 		}
-		err := writer.FlushLog(tt.args.ctx, map[int64]uint64{tt.args.tableID: tt.args.ts})
+		err := writer.FlushLog(tt.args.ctx, map[int64]uint64{tt.args.tableID: tt.args.ts}, tt.args.ts)
 		if tt.wantErr != nil {
 			require.True(t, errors.ErrorEqual(tt.wantErr, err), err.Error()+tt.wantErr.Error())
 		} else {
@@ -441,6 +441,7 @@ func TestLogWriterEmitCheckpointTs(t *testing.T) {
 	}
 }
 
+<<<<<<< HEAD
 func TestLogWriterEmitResolvedTs(t *testing.T) {
 	type arg struct {
 		ctx context.Context
@@ -532,6 +533,8 @@ func TestLogWriterEmitResolvedTs(t *testing.T) {
 	}
 }
 
+=======
+>>>>>>> a6569effe (cdc: flush meta correctly when flush log (#6207))
 func TestNewLogWriter(t *testing.T) {
 	_, err := NewLogWriter(context.Background(), nil)
 	require.NotNil(t, err)
