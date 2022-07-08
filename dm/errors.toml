@@ -2938,6 +2938,12 @@ description = ""
 workaround = ""
 tags = ["internal", "high"]
 
+[error.DM-dm-worker-40083]
+message = "worker server is closed"
+description = ""
+workaround = ""
+tags = ["internal", "low"]
+
 [error.DM-dm-tracer-42001]
 message = "parse dm-tracer config flag set"
 description = ""
