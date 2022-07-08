@@ -102,6 +102,12 @@ type LogManager interface {
 	AddTable(tableID model.TableID, startTs uint64)
 	RemoveTable(tableID model.TableID)
 	GetMinResolvedTs() uint64
+<<<<<<< HEAD
+=======
+	EmitRowChangedEvents(ctx context.Context, tableID model.TableID, rows ...*model.RowChangedEvent) error
+	UpdateResolvedTs(ctx context.Context, tableID model.TableID, resolvedTs uint64) error
+	UpdateCheckpointTs(ctx context.Context, checkpointTs uint64) error
+>>>>>>> a6569effe (cdc: flush meta correctly when flush log (#6207))
 
 	// EmitDDLEvent and FlushResolvedAndCheckpointTs are called from owner only
 	EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
@@ -128,6 +134,35 @@ type cacheRows struct {
 	flushCallback chan struct{}
 }
 
+type statefulRts struct {
+	flushed   model.Ts
+	unflushed model.Ts
+}
+
+func (s *statefulRts) getFlushed() model.Ts {
+	return atomic.LoadUint64(&s.flushed)
+}
+
+func (s *statefulRts) getUnflushed() model.Ts {
+	return atomic.LoadUint64(&s.unflushed)
+}
+
+func (s *statefulRts) setFlushed(flushed model.Ts) {
+	atomic.StoreUint64(&s.flushed, flushed)
+}
+
+func (s *statefulRts) checkAndSetUnflushed(unflushed model.Ts) {
+	for {
+		old := atomic.LoadUint64(&s.unflushed)
+		if old > unflushed {
+			panic("statefulRts.unflushed should never regress")
+		}
+		if atomic.CompareAndSwapUint64(&s.unflushed, old, unflushed) {
+			break
+		}
+	}
+}
+
 // ManagerImpl manages redo log writer, buffers un-persistent redo logs, calculates
 // redo log resolved ts. It implements LogManager interface.
 type ManagerImpl struct {
@@ -135,8 +170,16 @@ type ManagerImpl struct {
 	level       ConsistentLevelType
 	storageType consistentStorage
 
+<<<<<<< HEAD
 	logBuffer chan cacheRows
 	writer    writer.RedoLogWriter
+=======
+	// rtsMap stores flushed and unflushed resolved timestamps for all tables.
+	// it's just like map[tableID]*statefulRts.
+	// For a given statefulRts, unflushed is updated in routine bgUpdateLog,
+	// and flushed is updated in flushLog.
+	rtsMap sync.Map
+>>>>>>> a6569effe (cdc: flush meta correctly when flush log (#6207))
 
 	minResolvedTs uint64
 	tableIDs      []model.TableID
@@ -158,11 +201,25 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 		return nil, err
 	}
 	m := &ManagerImpl{
+<<<<<<< HEAD
 		enabled:     true,
 		level:       ConsistentLevelType(cfg.Level),
 		storageType: consistentStorage(uri.Scheme),
 		rtsMap:      make(map[model.TableID]uint64),
 		logBuffer:   make(chan cacheRows, logBufferChanSize),
+=======
+		changeFeedID:  changeFeedID,
+		enabled:       true,
+		level:         ConsistentLevelType(cfg.Level),
+		storageType:   consistentStorage(uri.Scheme),
+		rtsMap:        sync.Map{},
+		logBuffer:     chann.New[cacheEvents](),
+		minResolvedTs: math.MaxInt64,
+		metricWriteLogDuration: common.RedoWriteLogDurationHistogram.
+			WithLabelValues(changeFeedID.Namespace, changeFeedID.ID),
+		metricFlushLogDuration: common.RedoFlushLogDurationHistogram.
+			WithLabelValues(changeFeedID.Namespace, changeFeedID.ID),
+>>>>>>> a6569effe (cdc: flush meta correctly when flush log (#6207))
 	}
 
 	switch m.storageType {
@@ -282,23 +339,31 @@ func (m *ManagerImpl) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) err
 	return m.writer.SendDDL(ctx, DDLToRedo(ddl))
 }
 
+<<<<<<< HEAD
+=======
+// GetResolvedTs returns the resolved ts of a table
+func (m *ManagerImpl) GetResolvedTs(tableID model.TableID) model.Ts {
+	if value, ok := m.rtsMap.Load(tableID); ok {
+		return value.(*statefulRts).getFlushed()
+	}
+	panic("GetResolvedTs is called on an invalid table")
+}
+
+>>>>>>> a6569effe (cdc: flush meta correctly when flush log (#6207))
 // GetMinResolvedTs returns the minimum resolved ts of all tables in this redo log manager
 func (m *ManagerImpl) GetMinResolvedTs() uint64 {
 	return atomic.LoadUint64(&m.minResolvedTs)
 }
 
-// FlushResolvedAndCheckpointTs flushes resolved-ts and checkpoint-ts to redo log writer
-func (m *ManagerImpl) FlushResolvedAndCheckpointTs(ctx context.Context, resolvedTs, checkpointTs uint64) (err error) {
-	err = m.writer.EmitResolvedTs(ctx, resolvedTs)
-	if err != nil {
-		return
-	}
+// UpdateCheckpointTs updates checkpoint-ts to redo log writer
+func (m *ManagerImpl) UpdateCheckpointTs(ctx context.Context, checkpointTs uint64) (err error) {
 	err = m.writer.EmitCheckpointTs(ctx, checkpointTs)
 	return
 }
 
 // AddTable adds a new table in redo log manager
 func (m *ManagerImpl) AddTable(tableID model.TableID, startTs uint64) {
+<<<<<<< HEAD
 	m.rtsMapMu.Lock()
 	defer m.rtsMapMu.Unlock()
 	i := sort.Search(len(m.tableIDs), func(i int) bool {
@@ -313,12 +378,23 @@ func (m *ManagerImpl) AddTable(tableID model.TableID, startTs uint64) {
 	} else {
 		m.tableIDs = append(m.tableIDs[:i+1], m.tableIDs[i:]...)
 		m.tableIDs[i] = tableID
+=======
+	_, loaded := m.rtsMap.LoadOrStore(tableID, &statefulRts{flushed: startTs, unflushed: startTs})
+	if loaded {
+		log.Warn("add duplicated table in redo log manager", zap.Int64("tableID", tableID))
+		return
+	}
+
+	if startTs < m.GetMinResolvedTs() {
+		atomic.StoreUint64(&m.minResolvedTs, startTs)
+>>>>>>> a6569effe (cdc: flush meta correctly when flush log (#6207))
 	}
 	m.rtsMap[tableID] = startTs
 }
 
 // RemoveTable removes a table from redo log manager
 func (m *ManagerImpl) RemoveTable(tableID model.TableID) {
+<<<<<<< HEAD
 	m.rtsMapMu.Lock()
 	defer m.rtsMapMu.Unlock()
 	i := sort.Search(len(m.tableIDs), func(i int) bool {
@@ -329,6 +405,9 @@ func (m *ManagerImpl) RemoveTable(tableID model.TableID) {
 		m.tableIDs = m.tableIDs[:len(m.tableIDs)-1]
 		delete(m.rtsMap, tableID)
 	} else {
+=======
+	if _, loaded := m.rtsMap.LoadAndDelete(tableID); !loaded {
+>>>>>>> a6569effe (cdc: flush meta correctly when flush log (#6207))
 		log.Warn("remove a table not maintained in redo log manager", zap.Int64("tableID", tableID))
 	}
 }
@@ -338,6 +417,7 @@ func (m *ManagerImpl) Cleanup(ctx context.Context) error {
 	return m.writer.DeleteAllLogs(ctx)
 }
 
+<<<<<<< HEAD
 // updateTableResolvedTs reads rtsMap from redo log writer and calculate the minimum
 // resolved ts of all maintaining tables.
 func (m *ManagerImpl) updateTableResolvedTs(ctx context.Context) error {
@@ -359,6 +439,78 @@ func (m *ManagerImpl) updateTableResolvedTs(ctx context.Context) error {
 	}
 	atomic.StoreUint64(&m.minResolvedTs, minResolvedTs)
 	return nil
+=======
+func (m *ManagerImpl) prepareForFlush() (tableRtsMap map[model.TableID]model.Ts, minResolvedTs model.Ts) {
+	tableRtsMap = make(map[model.TableID]model.Ts)
+	minResolvedTs = math.MaxUint64
+	m.rtsMap.Range(func(key interface{}, value interface{}) bool {
+		tableID := key.(model.TableID)
+		rts := value.(*statefulRts)
+		unflushed := rts.getUnflushed()
+		flushed := rts.getFlushed()
+		if unflushed > flushed {
+			tableRtsMap[tableID] = unflushed
+			flushed = unflushed
+		}
+		if flushed < minResolvedTs {
+			minResolvedTs = flushed
+		}
+		return true
+	})
+
+	if minResolvedTs == math.MaxUint64 {
+		minResolvedTs = 0
+	}
+	return
+}
+
+func (m *ManagerImpl) postFlush(tableRtsMap map[model.TableID]model.Ts, minResolvedTs model.Ts) {
+	if minResolvedTs > m.minResolvedTs {
+		atomic.StoreUint64(&m.minResolvedTs, minResolvedTs)
+	}
+	for tableID, flushed := range tableRtsMap {
+		if value, loaded := m.rtsMap.Load(tableID); loaded {
+			value.(*statefulRts).setFlushed(flushed)
+		}
+	}
+}
+
+func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
+	if !atomic.CompareAndSwapInt64(&m.flushing, 0, 1) {
+		log.Debug("Fail to update flush flag, " +
+			"the previous flush operation hasn't finished yet")
+		if time.Since(m.lastFlushTime) > flushTimeout {
+			log.Warn("flushLog blocking too long, the redo manager may be stuck",
+				zap.Duration("duration", time.Since(m.lastFlushTime)),
+				zap.Any("changfeed", m.changeFeedID))
+		}
+		return
+	}
+
+	m.lastFlushTime = time.Now()
+	go func() {
+		defer atomic.StoreInt64(&m.flushing, 0)
+
+		tableRtsMap, minResolvedTs := m.prepareForFlush()
+		err := m.writer.FlushLog(ctx, tableRtsMap, minResolvedTs)
+		m.metricFlushLogDuration.Observe(time.Since(m.lastFlushTime).Seconds())
+		if err != nil {
+			handleErr(err)
+			return
+		}
+		m.postFlush(tableRtsMap, minResolvedTs)
+	}()
+
+	return
+}
+
+func (m *ManagerImpl) onResolvedTsMsg(tableID model.TableID, resolvedTs model.Ts) {
+	value, loaded := m.rtsMap.Load(tableID)
+	if !loaded {
+		panic("onResolvedTsMsg is called for an invalid table")
+	}
+	value.(*statefulRts).checkAndSetUnflushed(resolvedTs)
+>>>>>>> a6569effe (cdc: flush meta correctly when flush log (#6207))
 }
 
 func (m *ManagerImpl) bgUpdateResolvedTs(ctx context.Context, errCh chan<- error) {
@@ -382,7 +534,13 @@ func (m *ManagerImpl) bgUpdateResolvedTs(ctx context.Context, errCh chan<- error
 	}
 }
 
+<<<<<<< HEAD
 func (m *ManagerImpl) bgWriteLog(ctx context.Context, errCh chan<- error) {
+=======
+	ticker := time.NewTicker(time.Duration(flushIntervalInMs) * time.Millisecond)
+	defer ticker.Stop()
+
+>>>>>>> a6569effe (cdc: flush meta correctly when flush log (#6207))
 	for {
 		select {
 		case <-ctx.Done():
@@ -392,6 +550,7 @@ func (m *ManagerImpl) bgWriteLog(ctx context.Context, errCh chan<- error) {
 				close(cache.flushCallback)
 				continue
 			}
+<<<<<<< HEAD
 			logs := make([]*model.RedoRowChangedEvent, 0, len(cache.rows))
 			for _, row := range cache.rows {
 				logs = append(logs, RowToRedo(row))
@@ -404,6 +563,33 @@ func (m *ManagerImpl) bgWriteLog(ctx context.Context, errCh chan<- error) {
 					log.Error("err channel is full", zap.Error(err))
 				}
 				return
+=======
+			return
+		case <-ticker.C:
+			// interpolate tick message to flush writer if needed
+			m.flushLog(ctx, handleErr)
+		case cache, ok := <-m.logBuffer.Out():
+			if !ok {
+				return // channel closed
+			}
+			switch cache.eventType {
+			case model.MessageTypeRow:
+				start := time.Now()
+				logs := make([]*model.RedoRowChangedEvent, 0, len(cache.rows))
+				for _, row := range cache.rows {
+					logs = append(logs, RowToRedo(row))
+				}
+				_, err := m.writer.WriteLog(ctx, cache.tableID, logs)
+				if err != nil {
+					handleErr(err)
+					return
+				}
+				m.metricWriteLogDuration.Observe(time.Since(start).Seconds())
+			case model.MessageTypeResolved:
+				m.onResolvedTsMsg(cache.tableID, cache.resolvedTs)
+			default:
+				log.Debug("handle unknown event type")
+>>>>>>> a6569effe (cdc: flush meta correctly when flush log (#6207))
 			}
 		}
 	}

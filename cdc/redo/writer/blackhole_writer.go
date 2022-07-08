@@ -56,7 +56,11 @@ func (bs *blackHoleWriter) WriteLog(_ context.Context, tableID model.TableID, lo
 	return
 }
 
+<<<<<<< HEAD
 func (bs *blackHoleWriter) FlushLog(_ context.Context, tableID model.TableID, resolvedTs uint64) error {
+=======
+func (bs *blackHoleWriter) FlushLog(_ context.Context, rtsMap map[model.TableID]model.Ts, _ model.Ts) error {
+>>>>>>> a6569effe (cdc: flush meta correctly when flush log (#6207))
 	bs.tableRtsMu.Lock()
 	defer bs.tableRtsMu.Unlock()
 	bs.tableRtsMap[tableID] = resolvedTs
@@ -65,11 +69,6 @@ func (bs *blackHoleWriter) FlushLog(_ context.Context, tableID model.TableID, re
 
 func (bs *blackHoleWriter) SendDDL(_ context.Context, ddl *model.RedoDDLEvent) error {
 	log.Debug("send ddl event", zap.Any("ddl", ddl))
-	return nil
-}
-
-func (bs *blackHoleWriter) EmitResolvedTs(_ context.Context, ts uint64) error {
-	bs.resolvedTs = ts
 	return nil
 }
 

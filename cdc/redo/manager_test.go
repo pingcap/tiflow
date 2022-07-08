@@ -171,7 +171,7 @@ func TestLogManagerInProcessor(t *testing.T) {
 	}
 	checkResovledTs(logMgr, flushResolvedTs)
 
-	err = logMgr.FlushResolvedAndCheckpointTs(ctx, 200 /*resolvedTs*/, 120 /*CheckPointTs*/)
+	err = logMgr.UpdateCheckpointTs(ctx, 120 /*CheckPointTs*/)
 	require.Nil(t, err)
 }
 
@@ -342,4 +342,57 @@ func TestWriteLogFlushLogSequence(t *testing.T) {
 
 	cancel()
 	wg.Wait()
+}
+
+// TestManagerRtsMap tests whether Manager's internal rtsMap is managed correctly.
+func TestManagerRtsMap(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	logMgr, err := NewMockManager(ctx)
+	require.Nil(t, err)
+	defer logMgr.Cleanup(ctx)
+
+	var tables map[model.TableID]model.Ts
+	var minTs model.Ts
+
+	tables, minTs = logMgr.prepareForFlush()
+	require.Equal(t, 0, len(tables))
+	require.Equal(t, uint64(0), minTs)
+	logMgr.postFlush(tables, minTs)
+	require.Equal(t, uint64(math.MaxInt64), logMgr.GetMinResolvedTs())
+
+	// Add a table.
+	logMgr.AddTable(model.TableID(1), model.Ts(10))
+	logMgr.AddTable(model.TableID(2), model.Ts(20))
+	tables, minTs = logMgr.prepareForFlush()
+	require.Equal(t, 0, len(tables))
+	require.Equal(t, uint64(10), minTs)
+	logMgr.postFlush(tables, minTs)
+	require.Equal(t, uint64(10), logMgr.GetMinResolvedTs())
+
+	// Remove a table.
+	logMgr.RemoveTable(model.TableID(1))
+	tables, minTs = logMgr.prepareForFlush()
+	require.Equal(t, 0, len(tables))
+	require.Equal(t, uint64(20), minTs)
+	logMgr.postFlush(tables, minTs)
+	require.Equal(t, uint64(20), logMgr.GetMinResolvedTs())
+
+	// Received some timestamps, some tables may not be updated.
+	logMgr.AddTable(model.TableID(3), model.Ts(20))
+	logMgr.onResolvedTsMsg(model.TableID(2), model.Ts(30))
+	tables, minTs = logMgr.prepareForFlush()
+	require.Equal(t, 1, len(tables))
+	require.Equal(t, uint64(20), minTs)
+	logMgr.postFlush(tables, minTs)
+	require.Equal(t, uint64(20), logMgr.GetMinResolvedTs())
+
+	// GetMinResolvedTs can never regress.
+	logMgr.RemoveTable(model.TableID(2))
+	logMgr.RemoveTable(model.TableID(3))
+	tables, minTs = logMgr.prepareForFlush()
+	logMgr.postFlush(tables, minTs)
+	require.Equal(t, uint64(20), logMgr.GetMinResolvedTs())
 }
