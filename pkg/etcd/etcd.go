@@ -91,6 +91,9 @@ func GetEtcdKeyJob(clusterID string, changeFeedID model.ChangeFeedID) string {
 
 // MigrateBackupKey is the key of backup data during a migration.
 func MigrateBackupKey(version int, backupKey string) string {
+	if strings.HasPrefix(backupKey, "/") {
+		return fmt.Sprintf("%s/%d%s", migrateBackupPrefix, version, backupKey)
+	}
 	return fmt.Sprintf("%s/%d/%s", migrateBackupPrefix, version, backupKey)
 }
 

@@ -432,3 +432,10 @@ func TestExtractKeySuffix(t *testing.T) {
 		}
 	}
 }
+
+func TestMigrateBackupKey(t *testing.T) {
+	key := MigrateBackupKey(1, "/tidb/cdc/capture/abcd")
+	require.Equal(t, "/tidb/cdc/__backup__/1/tidb/cdc/capture/abcd", key)
+	key = MigrateBackupKey(1, "abcdc")
+	require.Equal(t, "/tidb/cdc/__backup__/1/abcdc", key)
+}
