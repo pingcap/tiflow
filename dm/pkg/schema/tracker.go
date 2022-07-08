@@ -494,8 +494,8 @@ func (tr *Tracker) CreateTableIfNotExists(table *filter.Table, ti *model.TableIn
 }
 
 // SplitBatchCreateTableAndHandle will split the batch if it exceeds the kv entry size limit.
-func (tr *Tracker) SplitBatchCreateTableAndHandle(schema model.CIStr, info *[]*model.TableInfo, l int, r int) error {
-	if err := tr.dom.DDL().BatchCreateTableWithInfo(tr.se, schema, (*info)[l:r], ddl.OnExistIgnore); err != nil {
+func (tr *Tracker) SplitBatchCreateTableAndHandle(schema model.CIStr, info []*model.TableInfo, l int, r int) error {
+	if err := tr.dom.DDL().BatchCreateTableWithInfo(tr.se, schema, info[l:r], ddl.OnExistIgnore); err != nil {
 		err = tr.SplitBatchCreateTableAndHandle(schema, info, l, (l+r)/2)
 		if err != nil {
 			return err
@@ -525,7 +525,7 @@ func (tr *Tracker) BatchCreateTableIfNotExist(tablesToCreate map[string]map[stri
 			cloneTis = append(cloneTis, cloneTi)
 		}
 		schemaName := model.NewCIStr(schema)
-		if err := tr.SplitBatchCreateTableAndHandle(schemaName, &cloneTis, 0, len(cloneTis)); err != nil {
+		if err := tr.SplitBatchCreateTableAndHandle(schemaName, cloneTis, 0, len(cloneTis)); err != nil {
 			return err
 		}
 	}
