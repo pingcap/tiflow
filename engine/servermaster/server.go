@@ -382,9 +382,7 @@ func (s *Server) QueryMetaStore(
 	case pb.StoreType_SystemMetaStore:
 		return getStore(FrameMetaID), nil
 	case pb.StoreType_AppMetaStore:
-		return &pb.QueryMetaStoreResponse{
-			Address: s.cfg.BusinessMetaConf.Endpoints[0],
-		}, nil
+		return getStore(DefaultBusinessMetaID), nil
 	default:
 		return &pb.QueryMetaStoreResponse{
 			Err: &pb.Error{
