@@ -118,17 +118,10 @@ function run() {
 	curl -X POST 127.0.0.1:$WORKER1_PORT/debug/pprof/goroutine?debug=2 >$WORK_DIR/goroutine.worker1
 	check_log_contains $WORK_DIR/goroutine.worker1 "chan send"
 
-	# try to kill, but can't kill (NOTE: the port will be shutdown, but the process still exists)
 	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
 	sleep 5
 	worker_cnt=$(ps aux | grep dm-worker | grep -v "grep" | wc -l)
-	if [ $worker_cnt -lt 1 ]; then
-		echo "some dm-workers exit, remain count ${worker_cnt}"
-		exit 2
-	fi
-
-	echo "force to restart dm-workers without errors"
-	ps aux | grep dm-worker | grep -v "grep" | awk '{print $2}' | xargs kill -9 || true
+	[ $worker_cnt -eq 0 ]
 
 	export GO_FAILPOINTS=''
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
