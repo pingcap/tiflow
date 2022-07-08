@@ -88,6 +88,7 @@ func NewServer(cfg *Config) *Server {
 		cfg:   cfg,
 		ctxMu: ctxmu.New(),
 	}
+	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.closed.Store(true) // not start yet
 	return &s
 }
@@ -104,15 +105,15 @@ func (s *Server) Start() error {
 	// GetSourceBoundConfig has a built-in timeout so it will not be stuck for a
 	// long time.
 	startErr := func() error {
-		// this lock acquisition should not fail
-		s.ctxMu.Lock(context.Background())
+		if ok := s.ctxMu.Lock(s.ctx); !ok {
+			return terror.ErrWorkerServerClosed
+		}
 		defer s.ctxMu.Unlock()
 
 		if s.inited {
 			return terror.ErrWorkerServerClosed.Generate()
 		}
 
-		s.ctx, s.cancel = context.WithCancel(context.Background())
 		tls, err := toolutils.NewTLS(s.cfg.SSLCA, s.cfg.SSLCert, s.cfg.SSLKey, s.cfg.AdvertiseAddr, s.cfg.CertAllowedCN)
 		if err != nil {
 			return terror.ErrWorkerTLSConfigNotValid.Delegate(err)
@@ -462,8 +463,9 @@ func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 }
 
 func (s *Server) doClose() {
-	// this lock acquisition should not fail
-	s.ctxMu.Lock(context.Background())
+	if ok := s.ctxMu.Lock(s.ctx); !ok {
+		return
+	}
 	defer s.ctxMu.Unlock()
 
 	if s.closed.Load() {
