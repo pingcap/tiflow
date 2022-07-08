@@ -219,6 +219,7 @@ func (r *dmlExprFilterRule) getSimpleExprOfTable(
 
 func (r *dmlExprFilterRule) shouldSkipDML(
 	row *model.RowChangedEvent,
+	rawRow model.RowChangedDatums,
 	ti *model.TableInfo,
 ) (bool, error) {
 	tableName := ti.TableName.String()
@@ -244,7 +245,7 @@ func (r *dmlExprFilterRule) shouldSkipDML(
 			return false, err
 		}
 		return r.skipDMLByExpression(
-			row.RowChangedDatums.RowDatums,
+			rawRow.RowDatums,
 			exprs,
 		)
 	case row.IsUpdate():
@@ -257,14 +258,14 @@ func (r *dmlExprFilterRule) shouldSkipDML(
 			return false, err
 		}
 		ignoreOld, err := r.skipDMLByExpression(
-			row.RowChangedDatums.PreRowDatums,
+			rawRow.PreRowDatums,
 			oldExprs,
 		)
 		if err != nil {
 			return false, err
 		}
 		ignoreNew, err := r.skipDMLByExpression(
-			row.RowChangedDatums.RowDatums,
+			rawRow.RowDatums,
 			newExprs,
 		)
 		if err != nil {
@@ -277,7 +278,7 @@ func (r *dmlExprFilterRule) shouldSkipDML(
 			return false, err
 		}
 		return r.skipDMLByExpression(
-			row.RowChangedDatums.PreRowDatums,
+			rawRow.PreRowDatums,
 			exprs,
 		)
 	default:
@@ -376,15 +377,16 @@ func (f *dmlExprFilter) getRules(schema, table string) []*dmlExprFilterRule {
 // shouldSkipDML skips dml event by sql expression.
 func (f *dmlExprFilter) shouldSkipDML(
 	row *model.RowChangedEvent,
+	rawRow model.RowChangedDatums,
 	ti *model.TableInfo,
 ) (bool, error) {
 	// for defense purpose, normally the row and ti should not be nil.
-	if ti == nil || row == nil {
+	if ti == nil || row == nil || rawRow.IsEmpty() {
 		return false, nil
 	}
 	rules := f.getRules(row.Table.Schema, row.Table.Table)
 	for _, rule := range rules {
-		ignore, err := rule.shouldSkipDML(row, ti)
+		ignore, err := rule.shouldSkipDML(row, rawRow, ti)
 		if err != nil {
 			return false, cerror.WrapError(cerror.ErrFailedToFilterDML, err, row)
 		}

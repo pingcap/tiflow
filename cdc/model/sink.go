@@ -21,7 +21,6 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -270,15 +269,6 @@ type RowChangedEvent struct {
 
 	// SplitTxn marks this RowChangedEvent as the first line of a new txn.
 	SplitTxn bool `json:"-" msg:"-"`
-	// This filed is only used by expression filter.
-	// It will be set to nil after used.
-	RowChangedDatums *RowChangedDatums `json:"-" msg:"-"`
-}
-
-// RowChangedDatums is used to store the changed datums of a row.
-type RowChangedDatums struct {
-	RowDatums    []types.Datum `json:"-" msg:"-"`
-	PreRowDatums []types.Datum `json:"-" msg:"-"`
 }
 
 // GetCommitTs returns the commit timestamp of this event.

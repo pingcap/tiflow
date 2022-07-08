@@ -318,14 +318,14 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 					Schema: c.schema,
 					Table:  c.table,
 				},
-				RowChangedDatums: &model.RowChangedDatums{
-					RowDatums:    rowDatums,
-					PreRowDatums: preRowDatums,
-				},
 				Columns:    c.columns,
 				PreColumns: c.preColumns,
 			}
-			ignore, err := f.shouldSkipDML(row, tableInfo)
+			rawRow := model.RowChangedDatums{
+				RowDatums:    rowDatums,
+				PreRowDatums: preRowDatums,
+			}
+			ignore, err := f.shouldSkipDML(row, rawRow, tableInfo)
 			require.Nil(t, err)
 			require.Equal(t, c.ignore, ignore, "case: %+v", c)
 		}
@@ -435,14 +435,14 @@ func TestShouldSkipDMLError(t *testing.T) {
 					Schema: c.schema,
 					Table:  c.table,
 				},
-				RowChangedDatums: &model.RowChangedDatums{
-					RowDatums:    rowDatums,
-					PreRowDatums: preRowDatums,
-				},
 				Columns:    c.columns,
 				PreColumns: c.preColumns,
 			}
-			ignore, err := f.shouldSkipDML(row, tableInfo)
+			rawRow := model.RowChangedDatums{
+				RowDatums:    rowDatums,
+				PreRowDatums: preRowDatums,
+			}
+			ignore, err := f.shouldSkipDML(row, rawRow, tableInfo)
 			require.True(t, errors.ErrorEqual(c.err, err), "case: %+v", c, err)
 			require.Contains(t, err.Error(), c.errMsg)
 			require.Equal(t, c.ignore, ignore)
@@ -631,14 +631,14 @@ func TestShouldSkipDMLTableUpdated(t *testing.T) {
 					Schema: c.schema,
 					Table:  c.table,
 				},
-				RowChangedDatums: &model.RowChangedDatums{
-					RowDatums:    rowDatums,
-					PreRowDatums: preRowDatums,
-				},
 				Columns:    c.columns,
 				PreColumns: c.preColumns,
 			}
-			ignore, err := f.shouldSkipDML(row, tableInfo)
+			rawRow := model.RowChangedDatums{
+				RowDatums:    rowDatums,
+				PreRowDatums: preRowDatums,
+			}
+			ignore, err := f.shouldSkipDML(row, rawRow, tableInfo)
 			require.True(t, errors.ErrorEqual(c.err, err), "case: %+v", c, err)
 			if err != nil {
 				require.Contains(t, err.Error(), c.errMsg)

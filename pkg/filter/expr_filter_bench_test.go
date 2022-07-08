@@ -134,16 +134,16 @@ func BenchmarkSkipDML(b *testing.B) {
 				Schema: c.schema,
 				Table:  c.table,
 			},
-			RowChangedDatums: &model.RowChangedDatums{
-				RowDatums:    rowDatums,
-				PreRowDatums: preRowDatums,
-			},
 			Columns:    c.columns,
 			PreColumns: c.preColumns,
 		}
+		rawRow := model.RowChangedDatums{
+			RowDatums:    rowDatums,
+			PreRowDatums: preRowDatums,
+		}
 		b.Run(c.name, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				ignore, err := f.shouldSkipDML(row, tableInfo)
+				ignore, err := f.shouldSkipDML(row, rawRow, tableInfo)
 				require.Equal(b, c.ignore, ignore)
 				require.Nil(b, err)
 			}
