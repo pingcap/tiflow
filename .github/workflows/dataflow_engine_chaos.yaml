@@ -51,6 +51,7 @@ jobs:
       - name: Create k8s Kind Cluster
         uses: helm/kind-action@v1.2.0
         with:
+          cluster_name: dataflow-engine-cluster
           config: ${{ github.workspace }}/engine/chaos/manifests/kind-cluster.yaml
 
       - name: Print cluster information
