@@ -8,6 +8,12 @@ WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
+stop() {
+	# to distinguish whether the test failed in the DML synchronization phase or the DDL synchronization phase
+	echo $(mysql -h${DOWN_TIDB_HOST} -P${DOWN_TIDB_PORT} -uroot -e "select count(*) from consistent_replicate_s3.USERTABLE;")
+	stop_tidb_cluster
+}
+
 # check resolved ts has been persisted in redo log meta
 function check_resolved_ts() {
 	changefeedid=$1
@@ -44,7 +50,7 @@ function run() {
 	go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=consistent_replicate_nfs
 	run_sql "CREATE table consistent_replicate_nfs.check1(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	check_table_exists "consistent_replicate_nfs.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	check_table_exists "consistent_replicate_nfs.check1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "consistent_replicate_nfs.check1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 120
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	# Inject the failpoint to prevent sink execution, but the global resolved can be moved forward.
@@ -68,7 +74,7 @@ function run() {
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 }
 
-trap stop_tidb_cluster EXIT
+trap stop EXIT
 run $*
 check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
