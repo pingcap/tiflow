@@ -493,5 +493,91 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 	rcp = cp.(*RemoteCheckPoint)
 	c.Assert(rcp.points[schemaName][tableName].TableInfo(), NotNil)
 	c.Assert(rcp.points[schemaName][tableName].flushedPoint.ti, NotNil)
+<<<<<<< HEAD
 	c.Assert(*rcp.safeModeExitPoint, DeepEquals, binlog.InitLocation(pos2, gs))
+=======
+	c.Assert(*rcp.safeModeExitPoint, DeepEquals, binlog.NewLocation(pos2, gs))
+}
+
+func TestRemoteCheckPointLoadIntoSchemaTracker(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	cfg.WorkerCount = 0
+	ctx := context.Background()
+
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	dbConn, err := db.Conn(ctx)
+	require.NoError(t, err)
+	downstreamTrackConn := dbconn.NewDBConn(cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
+	schemaTracker, err := schema.NewTestTracker(ctx, cfg.Name, defaultTestSessionCfg, downstreamTrackConn, dlog.L())
+	require.NoError(t, err)
+	defer schemaTracker.Close() //nolint
+
+	tbl1 := &filter.Table{Schema: "test", Name: "tbl1"}
+	tbl2 := &filter.Table{Schema: "test", Name: "tbl2"}
+
+	// before load
+	_, err = schemaTracker.GetTableInfo(tbl1)
+	require.Error(t, err)
+	_, err = schemaTracker.GetTableInfo(tbl2)
+	require.Error(t, err)
+
+	cp := NewRemoteCheckPoint(tcontext.Background(), cfg, nil, "1")
+	checkpoint := cp.(*RemoteCheckPoint)
+
+	parser, err := utils.GetParserFromSQLModeStr("")
+	require.NoError(t, err)
+	createNode, err := parser.ParseOneStmt("create table tbl1(id int)", "", "")
+	require.NoError(t, err)
+	ti, err := tidbddl.BuildTableInfoFromAST(createNode.(*ast.CreateTableStmt))
+	require.NoError(t, err)
+
+	tp1 := tablePoint{ti: ti}
+	tp2 := tablePoint{}
+	checkpoint.points[tbl1.Schema] = make(map[string]*binlogPoint)
+	checkpoint.points[tbl1.Schema][tbl1.Name] = &binlogPoint{flushedPoint: tp1}
+	checkpoint.points[tbl2.Schema][tbl2.Name] = &binlogPoint{flushedPoint: tp2}
+
+	// after load
+	err = checkpoint.LoadIntoSchemaTracker(ctx, schemaTracker)
+	require.NoError(t, err)
+	tableInfo, err := schemaTracker.GetTableInfo(tbl1)
+	require.NoError(t, err)
+	require.Len(t, tableInfo.Columns, 1)
+	_, err = schemaTracker.GetTableInfo(tbl2)
+	require.Error(t, err)
+
+	// test BatchCreateTableWithInfo will not meet kv entry too large error
+
+	// create 100K comment string
+	comment := make([]byte, 0, 100000)
+	for i := 0; i < 100000; i++ {
+		comment = append(comment, 'A')
+	}
+	ti.Comment = string(comment)
+
+	tp1 = tablePoint{ti: ti}
+	amount := 100
+	for i := 0; i < amount; i++ {
+		tableName := fmt.Sprintf("tbl_%d", i)
+		checkpoint.points[tbl1.Schema][tableName] = &binlogPoint{flushedPoint: tp1}
+	}
+	err = checkpoint.LoadIntoSchemaTracker(ctx, schemaTracker)
+	require.NoError(t, err)
+}
+
+func TestLastFlushOutdated(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	cfg.WorkerCount = 0
+	cfg.CheckpointFlushInterval = 1
+
+	cp := NewRemoteCheckPoint(tcontext.Background(), cfg, nil, "1")
+	checkpoint := cp.(*RemoteCheckPoint)
+	checkpoint.globalPointSaveTime = time.Now().Add(-2 * time.Second)
+
+	require.True(t, checkpoint.LastFlushOutdated())
+	require.Nil(t, checkpoint.Snapshot(true))
+	// though snapshot is nil, checkpoint is not outdated
+	require.False(t, checkpoint.LastFlushOutdated())
+>>>>>>> 4d685d194 (syncer(dm): batch processing error when too many tables (#6217))
 }
