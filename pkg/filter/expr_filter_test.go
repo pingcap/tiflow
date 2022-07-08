@@ -208,13 +208,13 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 				},
 			},
 		},
-		{
-			ddl: "create table test.poet(id int primary key, name char(50), works char(100))",
+		{ // test case for gbk charset
+			ddl: "create table test.poet(id int primary key, name varchar(50) CHARACTER SET GBK COLLATE gbk_bin, works char(100))",
 			cfg: &config.FilterConfig{
 				EventFilters: []*config.EventFilterRule{
 					{
 						Matcher:               []string{"*.*"},
-						IgnoreInsertValueExpr: "id <= 1",
+						IgnoreInsertValueExpr: "id <= 1 or name='辛弃疾' or works='离骚'",
 					},
 				},
 			},
@@ -236,6 +236,24 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 					},
 					row:    []interface{}{2, "杜甫", "石壕吏"},
 					ignore: false,
+				},
+				{ // insert
+					schema: "test",
+					table:  "poet",
+					columns: []*model.Column{
+						{Name: "none"},
+					},
+					row:    []interface{}{4, "屈原", "离骚"},
+					ignore: true,
+				},
+				{ // insert
+					schema: "test",
+					table:  "poet",
+					columns: []*model.Column{
+						{Name: "none"},
+					},
+					row:    []interface{}{3, "辛弃疾", "众里寻他千百度"},
+					ignore: true,
 				},
 			},
 		},
@@ -327,7 +345,7 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 			}
 			ignore, err := f.shouldSkipDML(row, rawRow, tableInfo)
 			require.Nil(t, err)
-			require.Equal(t, c.ignore, ignore, "case: %+v", c)
+			require.Equal(t, c.ignore, ignore, "case: %+v", c, rowDatums)
 		}
 	}
 }
