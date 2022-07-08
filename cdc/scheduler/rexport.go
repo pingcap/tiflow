@@ -18,8 +18,8 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/base"
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/tp"
+	v2 "github.com/pingcap/tiflow/cdc/scheduler/internal/v2"
+	v3 "github.com/pingcap/tiflow/cdc/scheduler/internal/v3"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
@@ -68,7 +68,7 @@ func NewAgent(
 	executor TableExecutor,
 	changefeedID model.ChangeFeedID,
 ) (Agent, error) {
-	return base.NewAgent(
+	return v2.NewAgent(
 		ctx, messageServer, messageRouter, etcdClient, executor, changefeedID)
 }
 
@@ -83,7 +83,7 @@ func NewScheduler(
 	ownerRevision int64,
 	cfg *config.SchedulerConfig,
 ) (Scheduler, error) {
-	return base.NewSchedulerV2(
+	return v2.NewSchedulerV2(
 		ctx, changeFeedID, checkpointTs, messageServer, messageRouter, ownerRevision)
 }
 
@@ -97,7 +97,7 @@ func NewTpAgent(
 	executor TableExecutor,
 	changefeedID model.ChangeFeedID,
 ) (Agent, error) {
-	return tp.NewAgent(
+	return v3.NewAgent(
 		ctx, captureID, changefeedID, messageServer, messageRouter, etcdClient, executor)
 }
 
@@ -112,12 +112,12 @@ func NewTpScheduler(
 	ownerRevision int64,
 	cfg *config.SchedulerConfig,
 ) (Scheduler, error) {
-	return tp.NewCoordinator(
+	return v3.NewCoordinator(
 		ctx, captureID, changeFeedID, checkpointTs,
 		messageServer, messageRouter, ownerRevision, cfg)
 }
 
 // InitMetrics registers all metrics used in scheduler
 func InitMetrics(registry *prometheus.Registry) {
-	tp.InitMetrics(registry)
+	v3.InitMetrics(registry)
 }

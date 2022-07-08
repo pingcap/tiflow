@@ -2,7 +2,7 @@
 .PHONY: build test check clean fmt cdc kafka_consumer coverage \
 	integration_test_build integration_test integration_test_mysql integration_test_kafka bank \
 	dm dm-master dm-worker dmctl dm-syncer dm_coverage \
-	engine tiflow df-master-client df-demo df-chaos-case
+	engine tiflow tiflow-demo tiflow-chaos-case
 
 PROJECT=tiflow
 P=3
@@ -179,7 +179,7 @@ integration_test_mysql:
 integration_test_kafka: check_third_party_binary
 	tests/integration_tests/run.sh kafka "$(CASE)" "$(START_AT)"
 
-fmt: tools/bin/gofumports tools/bin/shfmt generate_mock generate-msgp-code generate-protobuf
+fmt: tools/bin/gofumports tools/bin/shfmt generate_mock generate-msgp-code tiflow-generate-mock
 	@echo "gofmt (simplify)"
 	tools/bin/gofumports -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 	@echo "run shfmt"
@@ -237,7 +237,9 @@ check-static: tools/bin/golangci-lint
 	tools/bin/golangci-lint run --timeout 10m0s --skip-files kv_gen --skip-dirs dm,tests
 	cd dm && ../tools/bin/golangci-lint run --timeout 10m0s
 
-check: check-copyright fmt check-static tidy terror_check errdoc check-merge-conflicts check-ticdc-dashboard check-diff-line-width swagger-spec
+check: check-copyright fmt check-static tidy terror_check errdoc \
+	check-merge-conflicts check-ticdc-dashboard check-diff-line-width \
+	swagger-spec tiflow-swagger-spec
 	@git --no-pager diff --exit-code || echo "Please add changed files!"
 
 integration_test_coverage: tools/bin/gocovmerge tools/bin/goveralls
@@ -479,31 +481,28 @@ failpoint-enable: check_failpoint_ctl
 failpoint-disable: check_failpoint_ctl
 	$(FAILPOINT_DISABLE)
 
-engine: tiflow df-master-client df-demo
+engine: tiflow tiflow-demo
 
 tiflow:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/engine/main.go
 
-df-proto: tools/bin/protoc tools/bin/protoc-gen-gogofaster tools/bin/goimports
+tiflow-proto: tools/bin/protoc tools/bin/protoc-gen-gogofaster tools/bin/goimports
 	./engine/generate-proto.sh
 
-df-master-client:
-	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/df-master-client ./engine/cmd/master-client
+tiflow-demo:
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./engine/cmd/demoserver
+	cp ./bin/tiflow-demoserver ./engine/ansible/roles/common/files/demoserver.bin
 
-df-demo:
-	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/df-demoserver ./engine/cmd/demoserver
-	cp ./bin/df-demoserver ./engine/ansible/roles/common/files/demoserver.bin
+tiflow-chaos-case:
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-chaos-case ./engine/chaos/cases
 
-df-chaos-case:
-	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/df-chaos-case ./engine/chaos/cases
-
-df-mock: tools/bin/mockgen
+tiflow-generate-mock: tools/bin/mockgen
 	scripts/generate-engine-mock.sh
 
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))
 
-df-swagger-spec: tools/bin/swag
+tiflow-swagger-spec: tools/bin/swag
 	tools/bin/swag init --exclude cdc,dm  --parseVendor -generalInfo engine/servermaster/openapi.go --output engine/docs/swagger
 
 define run_engine_unit_test

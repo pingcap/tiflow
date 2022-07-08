@@ -87,7 +87,7 @@ func (k *DiscoveryKeepaliver) Keepalive(ctx context.Context) error {
 	executors := k.discoveryRunner.GetSnapshot()
 	for uuid, exec := range executors {
 		if k.p2pMsgRouter != nil {
-			log.L().Info("add peer",
+			log.Info("add peer",
 				zap.String("uuid", uuid),
 				zap.Any("exec", exec))
 			k.p2pMsgRouter.AddPeer(uuid, exec.Addr)
@@ -98,14 +98,14 @@ func (k *DiscoveryKeepaliver) Keepalive(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-session.Done():
-			log.L().Warn("metastore session is done", zap.String("executor-id", string(k.info.ID)))
+			log.Warn("metastore session is done", zap.String("executor-id", string(k.info.ID)))
 			session, err = k.discoveryRunner.ResetDiscovery(ctx, true /* resetSession*/)
 			if err != nil {
 				return err
 			}
 		case resp := <-k.discoveryRunner.GetWatcher():
 			if resp.Err != nil {
-				log.L().Warn("discovery watch met error", zap.Error(resp.Err))
+				log.Warn("discovery watch met error", zap.Error(resp.Err))
 				_, err = k.discoveryRunner.ResetDiscovery(ctx, false /* resetSession*/)
 				if err != nil {
 					return err
@@ -114,7 +114,7 @@ func (k *DiscoveryKeepaliver) Keepalive(ctx context.Context) error {
 			}
 			for uuid, add := range resp.AddSet {
 				if k.p2pMsgRouter != nil {
-					log.L().Info("add peer",
+					log.Info("add peer",
 						zap.String("uuid", uuid),
 						zap.Any("exec", add))
 					k.p2pMsgRouter.AddPeer(uuid, add.Addr)
@@ -122,7 +122,7 @@ func (k *DiscoveryKeepaliver) Keepalive(ctx context.Context) error {
 			}
 			for uuid := range resp.DelSet {
 				if k.p2pMsgRouter != nil {
-					log.L().Info("remove peer",
+					log.Info("remove peer",
 						zap.String("uuid", uuid))
 					k.p2pMsgRouter.RemovePeer(uuid)
 				}

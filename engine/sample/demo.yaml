@@ -5,7 +5,7 @@ services:
                 ports:
                         - "1234:1234"
                 command:
-                        - /df-demoserver
+                        - /tiflow-demoserver
                           # use following flags if you want to test locally.
                           #- -d 
                           #- /datax 

@@ -142,10 +142,10 @@ func (d *dummyWorker) Tick(ctx context.Context) error {
 	d.status.tick()
 
 	if d.statusRateLimiter.Allow() {
-		log.L().Info("FakeWorker: Tick", zap.String("worker-id", d.ID()), zap.Int64("tick", d.status.Tick))
+		log.Info("FakeWorker: Tick", zap.String("worker-id", d.ID()), zap.Int64("tick", d.status.Tick))
 		err := d.BaseWorker.UpdateStatus(ctx, d.Status())
 		if cerrors.ErrWorkerUpdateStatusTryAgain.Equal(err) {
-			log.L().Warn("update status try again later", zap.String("error", err.Error()))
+			log.Warn("update status try again later", zap.String("error", err.Error()))
 			return nil
 		}
 		return err
@@ -177,7 +177,7 @@ func (d *dummyWorker) Status() frameModel.WorkerStatus {
 	if d.init {
 		extBytes, err := d.status.Marshal()
 		if err != nil {
-			log.L().Panic("unexpected error", zap.Error(err))
+			log.Panic("unexpected error", zap.Error(err))
 		}
 		return frameModel.WorkerStatus{
 			Code:     d.getStatusCode(),
@@ -192,17 +192,17 @@ func (d *dummyWorker) Workload() model.RescUnit {
 }
 
 func (d *dummyWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
-	log.L().Info("fakeWorker: OnMasterMessage", zap.Any("message", message))
+	log.Info("fakeWorker: OnMasterMessage", zap.Any("message", message))
 	switch msg := message.(type) {
 	case *frameModel.StatusChangeRequest:
 		switch msg.ExpectState {
 		case frameModel.WorkerStatusStopped:
 			d.setStatusCode(frameModel.WorkerStatusStopped)
 		default:
-			log.L().Info("FakeWorker: ignore status change state", zap.Int32("state", int32(msg.ExpectState)))
+			log.Info("FakeWorker: ignore status change state", zap.Int32("state", int32(msg.ExpectState)))
 		}
 	default:
-		log.L().Info("unsupported message", zap.Any("message", message))
+		log.Info("unsupported message", zap.Any("message", message))
 	}
 
 	return nil
@@ -235,7 +235,7 @@ func (d *dummyWorker) bgRunEtcdWatcher(ctx context.Context) {
 			select {
 			case d.errCh <- err:
 			default:
-				log.L().Warn("duplicated error", zap.Error(err))
+				log.Warn("duplicated error", zap.Error(err))
 			}
 		}
 	}()
@@ -265,12 +265,12 @@ watchLoop:
 			opts = append(opts, clientv3.WithRev(revision+1))
 		}
 		ch := cli.Watch(ctx, key, opts...)
-		log.L().Info("start to watch etcd", zap.String("key", key),
+		log.Info("start to watch etcd", zap.String("key", key),
 			zap.Int64("revision", revision),
 			zap.Strings("endpoints", d.config.EtcdEndpoints))
 		for resp := range ch {
 			if resp.Err() != nil {
-				log.L().Warn("watch met error", zap.Error(resp.Err()))
+				log.Warn("watch met error", zap.Error(resp.Err()))
 				continue watchLoop
 			}
 			for _, event := range resp.Events {

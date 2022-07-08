@@ -156,7 +156,7 @@ func (m *WorkerManager) InitAfterRecover(ctx context.Context) (retErr error) {
 	if m.state != workerManagerLoadingMeta {
 		// InitAfterRecover should only be called if
 		// NewWorkerManager has been called with isInit as false.
-		log.L().Panic("Unreachable", zap.String("master-id", m.masterID))
+		log.Panic("Unreachable", zap.String("master-id", m.masterID))
 	}
 
 	// Unlock here because loading meta involves I/O, which can be long.
@@ -197,7 +197,7 @@ func (m *WorkerManager) InitAfterRecover(ctx context.Context) (retErr error) {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
 	case <-m.allWorkersReady:
-		log.L().Info("All workers have sent heartbeats after master failover. Resuming right now.",
+		log.Info("All workers have sent heartbeats after master failover. Resuming right now.",
 			zap.Duration("duration", m.clock.Since(startTime)))
 	case <-timer.C:
 		// Wait for the worker timeout to expire
@@ -230,7 +230,7 @@ func (m *WorkerManager) HandleHeartbeat(msg *frameModel.HeartbeatPingMessage, fr
 
 	entry, exists := m.workerEntries[msg.FromWorkerID]
 	if !exists {
-		log.L().Info("Message from stale worker dropped",
+		log.Info("Message from stale worker dropped",
 			zap.String("master-id", m.masterID),
 			zap.Any("message", msg),
 			zap.String("from-node", fromNode))
@@ -250,7 +250,7 @@ func (m *WorkerManager) HandleHeartbeat(msg *frameModel.HeartbeatPingMessage, fr
 			return
 		}
 
-		log.L().Info("Worker discovered", zap.String("master-id", m.masterID),
+		log.Info("Worker discovered", zap.String("master-id", m.masterID),
 			zap.Any("worker-entry", entry))
 		entry.MarkAsOnline(model.ExecutorID(fromNode), m.nextExpireTime())
 
@@ -263,7 +263,7 @@ func (m *WorkerManager) HandleHeartbeat(msg *frameModel.HeartbeatPingMessage, fr
 		}
 		if allReady {
 			close(m.allWorkersReady)
-			log.L().Info("All workers have sent heartbeats, sending signal to resume the master",
+			log.Info("All workers have sent heartbeats, sending signal to resume the master",
 				zap.String("master-id", m.masterID))
 		}
 	} else {
@@ -346,7 +346,7 @@ func (m *WorkerManager) BeforeStartingWorker(workerID frameModel.WorkerID, execu
 	defer m.mu.Unlock()
 
 	if _, exists := m.workerEntries[workerID]; exists {
-		log.L().Panic("worker already exists", zap.String("worker-id", workerID))
+		log.Panic("worker already exists", zap.String("worker-id", workerID))
 	}
 
 	m.workerEntries[workerID] = newWorkerEntry(
@@ -400,7 +400,7 @@ func (m *WorkerManager) OnWorkerStatusUpdateMessage(msg *statusutil.WorkerStatus
 
 	entry, exists := m.workerEntries[msg.Worker]
 	if !exists {
-		log.L().Info("WorkerStatusMessage dropped for unknown worker",
+		log.Info("WorkerStatusMessage dropped for unknown worker",
 			zap.String("master-id", m.masterID),
 			zap.Any("message", msg))
 		return
@@ -532,7 +532,7 @@ func (m *WorkerManager) runBackgroundChecker() error {
 	for {
 		select {
 		case <-m.closeCh:
-			log.L().Info("timeout checker exited", zap.String("master-id", m.masterID))
+			log.Info("timeout checker exited", zap.String("master-id", m.masterID))
 			return nil
 		case <-ticker.C:
 			if err := m.checkWorkerEntriesOnce(); err != nil {
@@ -553,14 +553,14 @@ func (m *WorkerManager) checkMasterEpochMatch(msgEpoch frameModel.Epoch) (ok boo
 		// we shouldn't be running.
 		// TODO We need to do some chaos testing to determining whether and how to
 		// handle this situation.
-		log.L().Panic("We are a stale master still running",
+		log.Panic("We are a stale master still running",
 			zap.String("master-id", m.masterID),
 			zap.Int64("msg-epoch", msgEpoch),
 			zap.Int64("own-epoch", m.epoch))
 	}
 
 	if msgEpoch < m.epoch {
-		log.L().Info("Message from smaller epoch dropped",
+		log.Info("Message from smaller epoch dropped",
 			zap.String("master-id", m.masterID),
 			zap.Int64("msg-epoch", msgEpoch),
 			zap.Int64("own-epoch", m.epoch))
@@ -597,7 +597,7 @@ func (m *WorkerManager) removeTombstoneEntry(id frameModel.WorkerID) {
 	}
 
 	if !entry.IsTombstone() {
-		log.L().Panic("Unreachable: not a tombstone", zap.Stringer("entry", entry))
+		log.Panic("Unreachable: not a tombstone", zap.Stringer("entry", entry))
 	}
 
 	delete(m.workerEntries, id)
