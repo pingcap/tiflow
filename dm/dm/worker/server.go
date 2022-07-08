@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer"
-	"github.com/pingcap/tiflow/engine/pkg/ctxmu"
 
 	"github.com/pingcap/errors"
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
@@ -59,12 +58,19 @@ var (
 // dispatches requests to worker
 // sends responses to RPC client.
 type Server struct {
-	ctxMu  *ctxmu.CtxMutex
+	// closeMu is used to protect 5 fields below
+	closeMu    sync.Mutex
+	closed     atomic.Bool
+	inited     bool
+	rootLis    net.Listener
+	svr        *grpc.Server
+	etcdClient *clientv3.Client
+	// end of closeMu
+
 	wg     sync.WaitGroup
 	kaWg   sync.WaitGroup
 	httpWg sync.WaitGroup
-	closed atomic.Bool
-	inited bool
+
 	ctx    context.Context
 	cancel context.CancelFunc
 
@@ -73,11 +79,10 @@ type Server struct {
 
 	cfg *Config
 
-	rootLis    net.Listener
-	svr        *grpc.Server
-	worker     *SourceWorker
-	etcdClient *clientv3.Client
-
+	// mu is used to protect worker and sourceStatus. closeMu should be locked first to avoid
+	// deadlock when closeMu and mu are both acquired.
+	mu     sync.Mutex
+	worker *SourceWorker
 	// relay status will never be put in server.sourceStatus
 	sourceStatus pb.SourceStatus
 }
@@ -85,8 +90,7 @@ type Server struct {
 // NewServer creates a new Server.
 func NewServer(cfg *Config) *Server {
 	s := Server{
-		cfg:   cfg,
-		ctxMu: ctxmu.New(),
+		cfg: cfg,
 	}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.closed.Store(true) // not start yet
@@ -105,10 +109,8 @@ func (s *Server) Start() error {
 	// GetSourceBoundConfig has a built-in timeout so it will not be stuck for a
 	// long time.
 	startErr := func() error {
-		if ok := s.ctxMu.Lock(s.ctx); !ok {
-			return terror.ErrWorkerServerClosed
-		}
-		defer s.ctxMu.Unlock()
+		s.closeMu.Lock()
+		defer s.closeMu.Unlock()
 
 		if s.inited {
 			return terror.ErrWorkerServerClosed.Generate()
@@ -137,7 +139,7 @@ func (s *Server) Start() error {
 			return err
 		}
 
-		s.setWorker(nil, false)
+		s.setWorker(nil, true)
 
 		s.wg.Add(1)
 		go func() {
@@ -153,7 +155,7 @@ func (s *Server) Start() error {
 		}
 		if relaySource != nil {
 			log.L().Warn("worker has been assigned relay before keepalive", zap.String("relay source", relaySource.SourceID))
-			if err2 := s.enableRelay(relaySource, false); err2 != nil {
+			if err2 := s.enableRelay(relaySource, true); err2 != nil {
 				return err2
 			}
 		}
@@ -172,7 +174,7 @@ func (s *Server) Start() error {
 		}
 		if !bound.IsEmpty() {
 			log.L().Warn("worker has been assigned source before keepalive", zap.Stringer("bound", bound), zap.Bool("is deleted", bound.IsDeleted))
-			if err2 := s.enableHandleSubtasks(sourceCfg, false); err2 != nil {
+			if err2 := s.enableHandleSubtasks(sourceCfg, true); err2 != nil {
 				return err2
 			}
 			log.L().Info("started to handle mysql source", zap.String("sourceCfg", sourceCfg.String()))
@@ -325,10 +327,8 @@ func (s *Server) observeRelayConfig(ctx context.Context, rev int64) error {
 						}
 					} else {
 						err2 := func() error {
-							if ok := s.ctxMu.Lock(s.ctx); !ok {
-								return terror.ErrWorkerServerClosed.Generate()
-							}
-							defer s.ctxMu.Unlock()
+							s.mu.Lock()
+							defer s.mu.Unlock()
 
 							if w := s.getSourceWorker(false); w != nil && w.cfg.SourceID == relaySource.SourceID {
 								// we may face both relay config and subtask bound changed in a compaction error, so here
@@ -416,10 +416,8 @@ func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 						}
 					} else {
 						err2 := func() error {
-							if ok := s.ctxMu.Lock(s.ctx); !ok {
-								return terror.ErrWorkerServerClosed.Generate()
-							}
-							defer s.ctxMu.Unlock()
+							s.mu.Lock()
+							defer s.mu.Unlock()
 
 							if w := s.getSourceWorker(false); w != nil && w.cfg.SourceID == bound.Source {
 								// we may face both relay config and subtask bound changed in a compaction error, so here
@@ -463,10 +461,8 @@ func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 }
 
 func (s *Server) doClose() {
-	if ok := s.ctxMu.Lock(s.ctx); !ok {
-		return
-	}
-	defer s.ctxMu.Unlock()
+	s.closeMu.Lock()
+	defer s.closeMu.Unlock()
 
 	if s.closed.Load() {
 		return
@@ -476,7 +472,7 @@ func (s *Server) doClose() {
 	s.wg.Wait()
 
 	// stop worker and wait for return(we already lock the whole Sever, so no need use lock to get source worker)
-	if w := s.getSourceWorker(false); w != nil {
+	if w := s.getSourceWorker(true); w != nil {
 		w.Stop(true)
 	}
 
@@ -493,7 +489,7 @@ func (s *Server) doClose() {
 	s.inited = true
 }
 
-// Close close the RPC server, this function can be called multiple times.
+// Close closes the RPC server, this function can be called multiple times.
 func (s *Server) Close() {
 	s.doClose() // we should stop current sync first, otherwise master may schedule task on new worker while we are closing
 	s.stopKeepAlive()
@@ -505,10 +501,8 @@ func (s *Server) Close() {
 // if needLock is false, we should make sure Server has been locked in caller.
 func (s *Server) getSourceWorker(needLock bool) *SourceWorker {
 	if needLock {
-		if ok := s.ctxMu.Lock(s.ctx); !ok {
-			return nil
-		}
-		defer s.ctxMu.Unlock()
+		s.mu.Lock()
+		defer s.mu.Unlock()
 	}
 	return s.worker
 }
@@ -516,10 +510,8 @@ func (s *Server) getSourceWorker(needLock bool) *SourceWorker {
 // if needLock is false, we should make sure Server has been locked in caller.
 func (s *Server) setWorker(worker *SourceWorker, needLock bool) {
 	if needLock {
-		if ok := s.ctxMu.Lock(s.ctx); !ok {
-			return
-		}
-		defer s.ctxMu.Unlock()
+		s.mu.Lock()
+		defer s.mu.Unlock()
 	}
 	s.worker = worker
 }
@@ -527,10 +519,8 @@ func (s *Server) setWorker(worker *SourceWorker, needLock bool) {
 // nolint:unparam
 func (s *Server) getSourceStatus(needLock bool) pb.SourceStatus {
 	if needLock {
-		if ok := s.ctxMu.Lock(s.ctx); !ok {
-			return pb.SourceStatus{}
-		}
-		defer s.ctxMu.Unlock()
+		s.mu.Lock()
+		defer s.mu.Unlock()
 	}
 	return s.sourceStatus
 }
@@ -538,10 +528,8 @@ func (s *Server) getSourceStatus(needLock bool) pb.SourceStatus {
 // TODO: move some call to setWorker/getOrStartWorker.
 func (s *Server) setSourceStatus(source string, err error, needLock bool) {
 	if needLock {
-		if ok := s.ctxMu.Lock(s.ctx); !ok {
-			return
-		}
-		defer s.ctxMu.Unlock()
+		s.mu.Lock()
+		defer s.mu.Unlock()
 	}
 	// now setSourceStatus will be concurrently called. skip setting a source status if worker has been closed
 	if s.getSourceWorker(false) == nil && source != "" {
@@ -564,10 +552,8 @@ func (s *Server) setSourceStatus(source string, err error, needLock bool) {
 // if sourceID is not "", we will check sourceID with w.cfg.SourceID.
 func (s *Server) stopSourceWorker(sourceID string, needLock, graceful bool) error {
 	if needLock {
-		if ok := s.ctxMu.Lock(s.ctx); !ok {
-			return terror.ErrWorkerServerClosed.Generate()
-		}
-		defer s.ctxMu.Unlock()
+		s.mu.Lock()
+		defer s.mu.Unlock()
 	}
 	w := s.getSourceWorker(false)
 	if w == nil {
@@ -676,10 +662,8 @@ func (s *Server) operateSourceBound(bound ha.SourceBound) error {
 
 func (s *Server) enableHandleSubtasks(sourceCfg *config.SourceConfig, needLock bool) error {
 	if needLock {
-		if ok := s.ctxMu.Lock(s.ctx); !ok {
-			return terror.ErrWorkerServerClosed.Generate()
-		}
-		defer s.ctxMu.Unlock()
+		s.mu.Lock()
+		defer s.mu.Unlock()
 	}
 
 	w, err := s.getOrStartWorker(sourceCfg, false)
@@ -708,10 +692,8 @@ func (s *Server) enableHandleSubtasks(sourceCfg *config.SourceConfig, needLock b
 }
 
 func (s *Server) disableHandleSubtasks(source string) error {
-	if ok := s.ctxMu.Lock(s.ctx); !ok {
-		return terror.ErrWorkerServerClosed.Generate()
-	}
-	defer s.ctxMu.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	w := s.getSourceWorker(false)
 	if w == nil {
 		log.L().Warn("worker has already stopped before DisableHandleSubtasks", zap.String("source", source))
@@ -752,10 +734,8 @@ func (s *Server) operateRelaySource(relaySource ha.RelaySource) error {
 
 func (s *Server) enableRelay(sourceCfg *config.SourceConfig, needLock bool) error {
 	if needLock {
-		if ok := s.ctxMu.Lock(s.ctx); !ok {
-			return terror.ErrWorkerServerClosed.Generate()
-		}
-		defer s.ctxMu.Unlock()
+		s.mu.Lock()
+		defer s.mu.Unlock()
 	}
 
 	w, err2 := s.getOrStartWorker(sourceCfg, false)
@@ -774,10 +754,8 @@ func (s *Server) enableRelay(sourceCfg *config.SourceConfig, needLock bool) erro
 }
 
 func (s *Server) disableRelay(source string) error {
-	if ok := s.ctxMu.Lock(s.ctx); !ok {
-		return terror.ErrWorkerServerClosed.Generate()
-	}
-	defer s.ctxMu.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	w := s.getSourceWorker(false)
 	if w == nil {
 		log.L().Warn("worker has already stopped before DisableRelay", zap.Any("relaySource", source))
@@ -869,10 +847,8 @@ func (s *Server) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 
 func (s *Server) getOrStartWorker(cfg *config.SourceConfig, needLock bool) (*SourceWorker, error) {
 	if needLock {
-		if ok := s.ctxMu.Lock(s.ctx); !ok {
-			return nil, terror.ErrWorkerServerClosed.Generate()
-		}
-		defer s.ctxMu.Unlock()
+		s.mu.Lock()
+		defer s.mu.Unlock()
 	}
 
 	if w := s.getSourceWorker(false); w != nil {
