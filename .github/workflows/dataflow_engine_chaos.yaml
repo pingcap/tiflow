@@ -31,6 +31,7 @@ jobs:
             "pod-kill-dataflow",
             "network-partition-dataflow",
             "network-emulation-dataflow",
+            "time-shift-dataflow",
           ]
 
     # Steps represent a sequence of tasks that will be executed as part of the job
@@ -61,7 +62,7 @@ jobs:
           helm version
 
       - name: Build dataflow engine binary
-        run: make df-master df-executor df-chaos-case
+        run: make tiflow tiflow-chaos-case
 
       - name: Build Dataflow engine docker image
         run: |

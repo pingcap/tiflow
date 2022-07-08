@@ -25,8 +25,8 @@ fi
 
 echo "generate dataflow engine mock code..."
 
-"$MOCKGEN" -package mock github.com/pingcap/tiflow/engine/pkg/meta/metaclient KVClient \
-	>engine/pkg/meta/kvclient/mock/client_mock.go
+"$MOCKGEN" -package mock github.com/pingcap/tiflow/engine/pkg/meta/model KVClient \
+	>engine/pkg/meta/mock/client_mock.go
 "$MOCKGEN" -package mocks github.com/pingcap/tiflow/engine/executor/server MetastoreCreator \
 	>engine/executor/server/mocks/metastore_mock.go
 

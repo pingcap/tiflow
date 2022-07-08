@@ -6,7 +6,8 @@ services:
                         - ./config/master.toml:/config.toml
                         - /tmp/df:/tmp/df
                 command:
-                        - "/df-master"
+                        - "/tiflow"
+                        - "master"
                         - "--config"
                         - "/config.toml"
                         - "--master-addr"
@@ -34,7 +35,8 @@ services:
                         - ./config/executor.toml:/config.toml
                         - /tmp/dataflow:/tmp/dataflow
                 command:
-                        - "/df-executor"
+                        - "/tiflow"
+                        - "executor"
                         - "--config"
                         - "/config.toml"
                         - "--join"
@@ -54,7 +56,8 @@ services:
                         - ./config/executor.toml:/config.toml
                         - /tmp/dataflow:/tmp/dataflow
                 command:
-                        - "/df-executor"
+                        - "/tiflow"
+                        - "executor"
                         - "--config"
                         - "/config.toml"
                         - "--join"
@@ -74,7 +77,8 @@ services:
                         - ./config/executor.toml:/config.toml
                         - /tmp/dataflow:/tmp/dataflow
                 command:
-                        - "/df-executor"
+                        - "/tiflow"
+                        - "executor"
                         - "--config"
                         - "/config.toml"
                         - "--join"

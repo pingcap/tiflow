@@ -29,17 +29,17 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 )
 
-// FilterTestHelper is a test helper for filter which creates
+// testHelper is a test helper for filter which creates
 // an internal tidb instance to generate DDL jobs with meta information
-type FilterTestHelper struct {
+type testHelper struct {
 	t       *testing.T
 	tk      *testkit.TestKit
 	storage kv.Storage
 	domain  *domain.Domain
 }
 
-// NewFilterTestHelper creates a FilterTestHelper
-func NewFilterTestHelper(t *testing.T) *FilterTestHelper {
+// newTestHelper creates a FilterTestHelper
+func newTestHelper(t *testing.T) *testHelper {
 	store, err := mockstore.NewMockStore()
 	require.Nil(t, err)
 	ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
@@ -51,7 +51,7 @@ func NewFilterTestHelper(t *testing.T) *FilterTestHelper {
 	require.Nil(t, err)
 	domain.SetStatsUpdating(true)
 	tk := testkit.NewTestKit(t, store)
-	return &FilterTestHelper{
+	return &testHelper{
 		t:       t,
 		tk:      tk,
 		storage: store,
@@ -59,37 +59,37 @@ func NewFilterTestHelper(t *testing.T) *FilterTestHelper {
 	}
 }
 
-// DDL2Job executes the DDL stmt and returns the DDL job
-func (s *FilterTestHelper) DDL2Job(ddl string) *timodel.Job {
+// ddlToJob executes the DDL stmt and returns the DDL job
+func (s *testHelper) ddlToJob(ddl string) *timodel.Job {
 	s.tk.MustExec(ddl)
-	jobs, err := s.GetCurrentMeta().GetLastNHistoryDDLJobs(1)
+	jobs, err := s.getCurrentMeta().GetLastNHistoryDDLJobs(1)
 	require.Nil(s.t, err)
 	require.Len(s.t, jobs, 1)
 	return jobs[0]
 }
 
-// ExecDDL executes the DDL statement and returns the newest TableInfo of the table.
-func (s *FilterTestHelper) ExecDDL(ddl string) *model.TableInfo {
-	job := s.DDL2Job(ddl)
-	ti, err := s.GetCurrentMeta().GetTable(job.SchemaID, job.TableID)
+// execDDL executes the DDL statement and returns the newest TableInfo of the table.
+func (s *testHelper) execDDL(ddl string) *model.TableInfo {
+	job := s.ddlToJob(ddl)
+	ti, err := s.getCurrentMeta().GetTable(job.SchemaID, job.TableID)
 	require.Nil(s.t, err)
 	return model.WrapTableInfo(job.ID, job.SchemaName, job.BinlogInfo.FinishedTS, ti)
 }
 
-// Tk returns the TestKit
-func (s *FilterTestHelper) Tk() *testkit.TestKit {
+// getTk returns the TestKit
+func (s *testHelper) getTk() *testkit.TestKit {
 	return s.tk
 }
 
-// GetCurrentMeta return the current meta snapshot
-func (s *FilterTestHelper) GetCurrentMeta() *timeta.Meta {
+// getCurrentMeta return the current meta snapshot
+func (s *testHelper) getCurrentMeta() *timeta.Meta {
 	ver, err := s.storage.CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(s.t, err)
 	return timeta.NewSnapshotMeta(s.storage.GetSnapshot(ver))
 }
 
-// Close closes the helper
-func (s *FilterTestHelper) Close() {
+// close closes the helper
+func (s *testHelper) close() {
 	s.domain.Close()
 	s.storage.Close() //nolint:errcheck
 }

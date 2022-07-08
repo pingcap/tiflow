@@ -52,7 +52,10 @@ type dmlExprFilterRule struct {
 	sessCtx sessionctx.Context
 }
 
-func newExprFilterRule(sessCtx sessionctx.Context, cfg *config.EventFilterRule) (*dmlExprFilterRule, error) {
+func newExprFilterRule(
+	sessCtx sessionctx.Context,
+	cfg *config.EventFilterRule,
+) (*dmlExprFilterRule, error) {
 	tf, err := tfilter.Parse(cfg.Matcher)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err, cfg.Matcher)
@@ -122,7 +125,9 @@ func (r *dmlExprFilterRule) resetExpr(tableName string) {
 
 // getInsertExprs returns the expression filter to filter INSERT events.
 // This function will lazy calculate expressions if not initialized.
-func (r *dmlExprFilterRule) getInsertExpr(ti *model.TableInfo) (expression.Expression, error) {
+func (r *dmlExprFilterRule) getInsertExpr(ti *model.TableInfo) (
+	expression.Expression, error,
+) {
 	tableName := ti.TableName.String()
 	if r.insertExprs[tableName] != nil {
 		return r.insertExprs[tableName], nil
@@ -137,7 +142,9 @@ func (r *dmlExprFilterRule) getInsertExpr(ti *model.TableInfo) (expression.Expre
 	return r.insertExprs[tableName], nil
 }
 
-func (r *dmlExprFilterRule) getUpdateOldExpr(ti *model.TableInfo) (expression.Expression, error) {
+func (r *dmlExprFilterRule) getUpdateOldExpr(ti *model.TableInfo) (
+	expression.Expression, error,
+) {
 	tableName := ti.TableName.String()
 	if r.updateOldExprs[tableName] != nil {
 		return r.updateOldExprs[tableName], nil
@@ -153,7 +160,9 @@ func (r *dmlExprFilterRule) getUpdateOldExpr(ti *model.TableInfo) (expression.Ex
 	return r.updateOldExprs[tableName], nil
 }
 
-func (r *dmlExprFilterRule) getUpdateNewExpr(ti *model.TableInfo) (expression.Expression, error) {
+func (r *dmlExprFilterRule) getUpdateNewExpr(ti *model.TableInfo) (
+	expression.Expression, error,
+) {
 	tableName := ti.TableName.String()
 	if r.updateNewExprs[tableName] != nil {
 		return r.updateNewExprs[tableName], nil
@@ -169,7 +178,9 @@ func (r *dmlExprFilterRule) getUpdateNewExpr(ti *model.TableInfo) (expression.Ex
 	return r.updateNewExprs[tableName], nil
 }
 
-func (r *dmlExprFilterRule) getDeleteExpr(ti *model.TableInfo) (expression.Expression, error) {
+func (r *dmlExprFilterRule) getDeleteExpr(ti *model.TableInfo) (
+	expression.Expression, error,
+) {
 	tableName := ti.TableName.String()
 	if r.deleteExprs[tableName] != nil {
 		return r.deleteExprs[tableName], nil
@@ -185,24 +196,32 @@ func (r *dmlExprFilterRule) getDeleteExpr(ti *model.TableInfo) (expression.Expre
 	return r.deleteExprs[tableName], nil
 }
 
-func (r *dmlExprFilterRule) getSimpleExprOfTable(expr string, ti *model.TableInfo) (expression.Expression, error) {
+func (r *dmlExprFilterRule) getSimpleExprOfTable(
+	expr string,
+	ti *model.TableInfo,
+) (expression.Expression, error) {
 	e, err := expression.ParseSimpleExprWithTableInfo(r.sessCtx, expr, ti.TableInfo)
 	if err != nil {
-		// If an expression contains an unknown column, we return an expression that skips nothing.
+		// If an expression contains an unknown column,
+		// we return an error and stop the changefeed.
 		if core.ErrUnknownColumn.Equal(err) {
 			log.Error("meet unknown column when generating expression",
 				zap.String("expression", expr),
 				zap.Error(err))
-			return nil, cerror.ErrExpressionColumnNotFound.FastGenByArgs(getColumnFromError(err), ti.TableName.Table, expr)
-		} else {
-			log.Error("failed to parse expression", zap.Error(err))
-			return nil, cerror.ErrExpressionParseFailed.FastGenByArgs(err, expr)
+			return nil, cerror.ErrExpressionColumnNotFound.
+				FastGenByArgs(getColumnFromError(err), ti.TableName.Table, expr)
 		}
+		log.Error("failed to parse expression", zap.Error(err))
+		return nil, cerror.ErrExpressionParseFailed.FastGenByArgs(err, expr)
 	}
 	return e, nil
 }
 
-func (r *dmlExprFilterRule) shouldSkipDML(row *model.RowChangedEvent, ti *model.TableInfo) (bool, error) {
+func (r *dmlExprFilterRule) shouldSkipDML(
+	row *model.RowChangedEvent,
+	rawRow model.RowChangedDatums,
+	ti *model.TableInfo,
+) (bool, error) {
 	tableName := ti.TableName.String()
 
 	r.mu.Lock()
@@ -225,7 +244,10 @@ func (r *dmlExprFilterRule) shouldSkipDML(row *model.RowChangedEvent, ti *model.
 		if err != nil {
 			return false, err
 		}
-		return r.skipDMLByExpression(row.RowChangedDatums.RowDatums, exprs)
+		return r.skipDMLByExpression(
+			rawRow.RowDatums,
+			exprs,
+		)
 	case row.IsUpdate():
 		oldExprs, err := r.getUpdateOldExpr(ti)
 		if err != nil {
@@ -235,11 +257,17 @@ func (r *dmlExprFilterRule) shouldSkipDML(row *model.RowChangedEvent, ti *model.
 		if err != nil {
 			return false, err
 		}
-		ignoreOld, err := r.skipDMLByExpression(row.RowChangedDatums.PreRowDatums, oldExprs)
+		ignoreOld, err := r.skipDMLByExpression(
+			rawRow.PreRowDatums,
+			oldExprs,
+		)
 		if err != nil {
 			return false, err
 		}
-		ignoreNew, err := r.skipDMLByExpression(row.RowChangedDatums.RowDatums, newExprs)
+		ignoreNew, err := r.skipDMLByExpression(
+			rawRow.RowDatums,
+			newExprs,
+		)
 		if err != nil {
 			return false, err
 		}
@@ -249,14 +277,20 @@ func (r *dmlExprFilterRule) shouldSkipDML(row *model.RowChangedEvent, ti *model.
 		if err != nil {
 			return false, err
 		}
-		return r.skipDMLByExpression(row.RowChangedDatums.PreRowDatums, exprs)
+		return r.skipDMLByExpression(
+			rawRow.PreRowDatums,
+			exprs,
+		)
 	default:
 		log.Warn("unknown row changed event type")
 		return false, nil
 	}
 }
 
-func (r *dmlExprFilterRule) skipDMLByExpression(rowData []types.Datum, expr expression.Expression) (bool, error) {
+func (r *dmlExprFilterRule) skipDMLByExpression(
+	rowData []types.Datum,
+	expr expression.Expression,
+) (bool, error) {
 	if len(rowData) == 0 || expr == nil {
 		return false, nil
 	}
@@ -278,7 +312,8 @@ func getColumnFromError(err error) string {
 	if !core.ErrUnknownColumn.Equal(err) {
 		return err.Error()
 	}
-	column := strings.TrimSpace(strings.TrimPrefix(err.Error(), "[planner:1054]Unknown column '"))
+	column := strings.TrimSpace(strings.TrimPrefix(err.Error(),
+		"[planner:1054]Unknown column '"))
 	column = strings.TrimSuffix(column, "' in 'expression'")
 	return column
 }
@@ -288,7 +323,10 @@ type dmlExprFilter struct {
 	rules []*dmlExprFilterRule
 }
 
-func newExprFilter(timezone string, cfg *config.FilterConfig) (*dmlExprFilter, error) {
+func newExprFilter(
+	timezone string,
+	cfg *config.FilterConfig,
+) (*dmlExprFilter, error) {
 	res := &dmlExprFilter{}
 	sessCtx := utils.NewSessionCtx(map[string]string{
 		"time_zone": timezone,
@@ -302,7 +340,10 @@ func newExprFilter(timezone string, cfg *config.FilterConfig) (*dmlExprFilter, e
 	return res, nil
 }
 
-func (f *dmlExprFilter) addRule(sessCtx sessionctx.Context, cfg *config.EventFilterRule) error {
+func (f *dmlExprFilter) addRule(
+	sessCtx sessionctx.Context,
+	cfg *config.EventFilterRule,
+) error {
 	rule, err := newExprFilterRule(sessCtx, cfg)
 	if err != nil {
 		return errors.Trace(err)
@@ -334,14 +375,18 @@ func (f *dmlExprFilter) getRules(schema, table string) []*dmlExprFilterRule {
 }
 
 // shouldSkipDML skips dml event by sql expression.
-func (f *dmlExprFilter) shouldSkipDML(row *model.RowChangedEvent, ti *model.TableInfo) (bool, error) {
+func (f *dmlExprFilter) shouldSkipDML(
+	row *model.RowChangedEvent,
+	rawRow model.RowChangedDatums,
+	ti *model.TableInfo,
+) (bool, error) {
 	// for defense purpose, normally the row and ti should not be nil.
-	if ti == nil || row == nil {
+	if ti == nil || row == nil || rawRow.IsEmpty() {
 		return false, nil
 	}
 	rules := f.getRules(row.Table.Schema, row.Table.Table)
 	for _, rule := range rules {
-		ignore, err := rule.shouldSkipDML(row, ti)
+		ignore, err := rule.shouldSkipDML(row, rawRow, ti)
 		if err != nil {
 			return false, cerror.WrapError(cerror.ErrFailedToFilterDML, err, row)
 		}

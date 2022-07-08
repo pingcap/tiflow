@@ -8,6 +8,12 @@ WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
+stop() {
+	# to distinguish whether the test failed in the DML synchronization phase or the DDL synchronization phase
+	echo $(mysql -h${DOWN_TIDB_HOST} -P${DOWN_TIDB_PORT} -uroot -e "select count(*) from consistent_replicate_s3.USERTABLE;")
+	stop_tidb_cluster
+}
+
 # check resolved ts has been persisted in redo log meta
 function check_resolved_ts() {
 	changefeedid=$1
@@ -56,11 +62,11 @@ function run() {
 	run_sql "insert into consistent_replicate_schedulerv3.USERTABLE2 select * from consistent_replicate_schedulerv3.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	# to ensure row changed events have been replicated to TiCDC
-	sleep 5
+	sleep 10
 
 	nfs_download_path=$WORK_DIR/cdc_data/redo/$changefeed_id
 	current_tso=$(cdc cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
-	ensure 20 check_resolved_ts $changefeed_id $current_tso $nfs_download_path
+	ensure 50 check_resolved_ts $changefeed_id $current_tso $nfs_download_path
 	cleanup_process $CDC_BINARY
 
 	export GO_FAILPOINTS=''
@@ -68,7 +74,7 @@ function run() {
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 }
 
-trap stop_tidb_cluster EXIT
+trap stop EXIT
 run $*
 check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

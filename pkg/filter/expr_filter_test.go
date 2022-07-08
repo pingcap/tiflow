@@ -26,9 +26,9 @@ import (
 )
 
 func TestShouldSkipDMLBasic(t *testing.T) {
-	helper := NewFilterTestHelper(t)
-	defer helper.Close()
-	helper.Tk().MustExec("use test;")
+	helper := newTestHelper(t)
+	defer helper.close()
+	helper.getTk().MustExec("use test;")
 
 	type innerCase struct {
 		schema string
@@ -208,13 +208,13 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 				},
 			},
 		},
-		{
-			ddl: "create table test.poet(id int primary key, name char(50), works char(100))",
+		{ // test case for gbk charset
+			ddl: "create table test.poet(id int primary key, name varchar(50) CHARACTER SET GBK COLLATE gbk_bin, works char(100))",
 			cfg: &config.FilterConfig{
 				EventFilters: []*config.EventFilterRule{
 					{
 						Matcher:               []string{"*.*"},
-						IgnoreInsertValueExpr: "id <= 1",
+						IgnoreInsertValueExpr: "id <= 1 or name='辛弃疾' or works='离骚'",
 					},
 				},
 			},
@@ -236,6 +236,24 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 					},
 					row:    []interface{}{2, "杜甫", "石壕吏"},
 					ignore: false,
+				},
+				{ // insert
+					schema: "test",
+					table:  "poet",
+					columns: []*model.Column{
+						{Name: "none"},
+					},
+					row:    []interface{}{4, "屈原", "离骚"},
+					ignore: true,
+				},
+				{ // insert
+					schema: "test",
+					table:  "poet",
+					columns: []*model.Column{
+						{Name: "none"},
+					},
+					row:    []interface{}{3, "辛弃疾", "众里寻他千百度"},
+					ignore: true,
 				},
 			},
 		},
@@ -305,7 +323,7 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 	})
 
 	for _, tc := range testCases {
-		tableInfo := helper.ExecDDL(tc.ddl)
+		tableInfo := helper.execDDL(tc.ddl)
 		f, err := newExprFilter("", tc.cfg)
 		require.Nil(t, err)
 		for _, c := range tc.cases {
@@ -318,16 +336,16 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 					Schema: c.schema,
 					Table:  c.table,
 				},
-				RowChangedDatums: &model.RowChangedDatums{
-					RowDatums:    rowDatums,
-					PreRowDatums: preRowDatums,
-				},
 				Columns:    c.columns,
 				PreColumns: c.preColumns,
 			}
-			ignore, err := f.shouldSkipDML(row, tableInfo)
+			rawRow := model.RowChangedDatums{
+				RowDatums:    rowDatums,
+				PreRowDatums: preRowDatums,
+			}
+			ignore, err := f.shouldSkipDML(row, rawRow, tableInfo)
 			require.Nil(t, err)
-			require.Equal(t, c.ignore, ignore, "case: %+v", c)
+			require.Equal(t, c.ignore, ignore, "case: %+v", c, rowDatums)
 		}
 	}
 }
@@ -336,9 +354,9 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 // or unknown error in the expression the return error type and message
 // are as expected.
 func TestShouldSkipDMLError(t *testing.T) {
-	helper := NewFilterTestHelper(t)
-	defer helper.Close()
-	helper.Tk().MustExec("use test;")
+	helper := newTestHelper(t)
+	defer helper.close()
+	helper.getTk().MustExec("use test;")
 
 	type innerCase struct {
 		schema string
@@ -422,7 +440,7 @@ func TestShouldSkipDMLError(t *testing.T) {
 	})
 
 	for _, tc := range testCases {
-		tableInfo := helper.ExecDDL(tc.ddl)
+		tableInfo := helper.execDDL(tc.ddl)
 		f, err := newExprFilter("", tc.cfg)
 		require.Nil(t, err)
 		for _, c := range tc.cases {
@@ -435,14 +453,14 @@ func TestShouldSkipDMLError(t *testing.T) {
 					Schema: c.schema,
 					Table:  c.table,
 				},
-				RowChangedDatums: &model.RowChangedDatums{
-					RowDatums:    rowDatums,
-					PreRowDatums: preRowDatums,
-				},
 				Columns:    c.columns,
 				PreColumns: c.preColumns,
 			}
-			ignore, err := f.shouldSkipDML(row, tableInfo)
+			rawRow := model.RowChangedDatums{
+				RowDatums:    rowDatums,
+				PreRowDatums: preRowDatums,
+			}
+			ignore, err := f.shouldSkipDML(row, rawRow, tableInfo)
 			require.True(t, errors.ErrorEqual(c.err, err), "case: %+v", c, err)
 			require.Contains(t, err.Error(), c.errMsg)
 			require.Equal(t, c.ignore, ignore)
@@ -453,9 +471,9 @@ func TestShouldSkipDMLError(t *testing.T) {
 // This test case is for testing when a table is updated,
 // the filter will works as expected.
 func TestShouldSkipDMLTableUpdated(t *testing.T) {
-	helper := NewFilterTestHelper(t)
-	defer helper.Close()
-	helper.Tk().MustExec("use test;")
+	helper := newTestHelper(t)
+	defer helper.close()
+	helper.getTk().MustExec("use test;")
 
 	type innerCase struct {
 		schema    string
@@ -615,12 +633,12 @@ func TestShouldSkipDMLTableUpdated(t *testing.T) {
 	})
 
 	for _, tc := range testCases {
-		tableInfo := helper.ExecDDL(tc.ddl)
+		tableInfo := helper.execDDL(tc.ddl)
 		f, err := newExprFilter("", tc.cfg)
 		require.Nil(t, err)
 		for _, c := range tc.cases {
 			if c.updateDDl != "" {
-				tableInfo = helper.ExecDDL(c.updateDDl)
+				tableInfo = helper.execDDL(c.updateDDl)
 			}
 			rowDatums, err := utils.AdjustBinaryProtocolForDatum(sessCtx, c.row, tableInfo.Columns)
 			require.Nil(t, err)
@@ -631,14 +649,14 @@ func TestShouldSkipDMLTableUpdated(t *testing.T) {
 					Schema: c.schema,
 					Table:  c.table,
 				},
-				RowChangedDatums: &model.RowChangedDatums{
-					RowDatums:    rowDatums,
-					PreRowDatums: preRowDatums,
-				},
 				Columns:    c.columns,
 				PreColumns: c.preColumns,
 			}
-			ignore, err := f.shouldSkipDML(row, tableInfo)
+			rawRow := model.RowChangedDatums{
+				RowDatums:    rowDatums,
+				PreRowDatums: preRowDatums,
+			}
+			ignore, err := f.shouldSkipDML(row, rawRow, tableInfo)
 			require.True(t, errors.ErrorEqual(c.err, err), "case: %+v", c, err)
 			if err != nil {
 				require.Contains(t, err.Error(), c.errMsg)
@@ -649,9 +667,9 @@ func TestShouldSkipDMLTableUpdated(t *testing.T) {
 }
 
 func TestVerify(t *testing.T) {
-	helper := NewFilterTestHelper(t)
-	defer helper.Close()
-	helper.Tk().MustExec("use test;")
+	helper := newTestHelper(t)
+	defer helper.close()
+	helper.getTk().MustExec("use test;")
 
 	type testCase struct {
 		ddls   []string
@@ -733,7 +751,7 @@ func TestVerify(t *testing.T) {
 	for _, tc := range testCases {
 		var tableInfos []*model.TableInfo
 		for _, ddl := range tc.ddls {
-			ti := helper.ExecDDL(ddl)
+			ti := helper.execDDL(ddl)
 			tableInfos = append(tableInfos, ti)
 		}
 		f, err := newExprFilter("", tc.cfg)
@@ -771,5 +789,4 @@ func TestGetColumnFromError(t *testing.T) {
 		column := getColumnFromError(tc.err)
 		require.Equal(t, tc.expected, column, "case: %+v", tc)
 	}
-
 }

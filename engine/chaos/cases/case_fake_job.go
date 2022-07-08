@@ -93,13 +93,13 @@ func runFakeJobCase(ctx context.Context, cfg *config) error {
 			return err
 		}
 		duration := time.Since(start)
-		log.L().Info("update key and check test", zap.Int("round", i), zap.Duration("duration", duration))
+		log.Info("update key and check test", zap.Int("round", i), zap.Duration("duration", duration))
 		if duration < interval {
 			time.Sleep(start.Add(interval).Sub(time.Now()))
 		}
 	}
 
-	log.L().Info("run fake job case successfully")
+	log.Info("run fake job case successfully")
 
 	return nil
 }
@@ -114,11 +114,12 @@ func updateKeyAndCheck(
 			return err
 		}
 	}
-	finished := util.WaitSomething(60, time.Second*5, func() bool {
+	// retry 6 minutes at most
+	finished := util.WaitSomething(60, time.Second*6, func() bool {
 		for jobIdx := 0; jobIdx < workerCount; jobIdx++ {
 			err := cli.CheckFakeJobKey(ctx, jobID, jobIdx, expectedMvcc, updateValue)
 			if err != nil {
-				log.L().Warn("check fail job failed", zap.Error(err))
+				log.Warn("check fail job failed", zap.Error(err))
 				return false
 			}
 		}

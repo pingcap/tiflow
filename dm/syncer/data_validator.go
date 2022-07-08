@@ -297,11 +297,11 @@ func (v *DataValidator) initialize() error {
 	failpoint.Inject("ValidatorMockUpstreamTZ", func() {
 		defaultUpstreamTZ = "UTC"
 	})
-	v.upstreamTZ, err = str2TimezoneOrFromDB(newCtx, defaultUpstreamTZ, &v.cfg.From)
+	v.upstreamTZ, _, err = str2TimezoneOrFromDB(newCtx, defaultUpstreamTZ, &v.cfg.From)
 	if err != nil {
 		return err
 	}
-	v.timezone, err = str2TimezoneOrFromDB(newCtx, v.cfg.Timezone, &v.cfg.To)
+	v.timezone, _, err = str2TimezoneOrFromDB(newCtx, v.cfg.Timezone, &v.cfg.To)
 	if err != nil {
 		return err
 	}
@@ -485,7 +485,7 @@ func (v *DataValidator) waitSyncerSynced(currLoc binlog.Location) error {
 
 func (v *DataValidator) updateValidatorBinlogMetric(currLoc binlog.Location) {
 	v.vmetric.BinlogPos.Set(float64(currLoc.Position.Pos))
-	index, err := binlog.GetFilenameIndex(currLoc.Position.Name)
+	index, err := utils.GetFilenameIndex(currLoc.Position.Name)
 	if err != nil {
 		v.L.Warn("fail to record validator binlog file index", zap.Error(err))
 	} else {
@@ -495,7 +495,7 @@ func (v *DataValidator) updateValidatorBinlogMetric(currLoc binlog.Location) {
 
 func (v *DataValidator) updateValidatorBinlogLag(currLoc binlog.Location) {
 	syncerLoc := v.syncer.getFlushedGlobalPoint()
-	index, err := binlog.GetFilenameIndex(currLoc.Position.Name)
+	index, err := utils.GetFilenameIndex(currLoc.Position.Name)
 	if err != nil {
 		v.L.Warn("fail to record validator binlog file index", zap.Error(err))
 	}
@@ -506,7 +506,7 @@ func (v *DataValidator) updateValidatorBinlogLag(currLoc binlog.Location) {
 	} else {
 		var syncerLogIdx int64
 		v.vmetric.LogPosLatency.Set(float64(0))
-		syncerLogIdx, err = binlog.GetFilenameIndex(syncerLoc.Position.Name)
+		syncerLogIdx, err = utils.GetFilenameIndex(syncerLoc.Position.Name)
 		if err == nil {
 			v.vmetric.LogFileLatency.Set(float64(syncerLogIdx - index))
 		} else {
@@ -541,7 +541,7 @@ func (v *DataValidator) getInitialBinlogPosition() (binlog.Location, error) {
 	case timeStr != "":
 		// already check it when set it, will not check it again
 		t, _ := utils.ParseStartTimeInLoc(timeStr, v.upstreamTZ)
-		finder := binlog.NewRemoteBinlogPosFinder(v.tctx, v.fromDB.DB, v.syncCfg, v.cfg.EnableGTID)
+		finder := binlog.NewRemoteBinlogPosFinder(v.tctx, v.fromDB, v.syncCfg, v.cfg.EnableGTID)
 		loc, posTp, err := finder.FindByTimestamp(t.Unix())
 		if err != nil {
 			v.L.Error("fail to find binlog position by timestamp",
@@ -596,7 +596,7 @@ func (v *DataValidator) doValidate() {
 			return
 		}
 		// when relay log enabled, binlog name may contain uuid suffix, so need to extract the real location
-		location.Position.Name = binlog.ExtractRealName(location.Position.Name)
+		location.Position.Name = utils.ExtractRealName(location.Position.Name)
 		// persist current location to make sure we start from the same location
 		// if fail-over happens before we flush checkpoint and data.
 		err = v.persistHelper.persist(v.tctx, location)
