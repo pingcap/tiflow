@@ -63,7 +63,7 @@ function run() {
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/owner/NewChangefeedRetryError=return(true)'
-	kill $capture_pid
+	kill_cdc_pid $capture_pid
 	ensure $MAX_RETRIES check_no_capture http://${UP_PD_HOST_1}:${UP_PD_PORT_1}
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} "error" "failpoint injected retriable error" ""

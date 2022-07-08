@@ -66,7 +66,7 @@ function run() {
 	done
 
 	# kill the cdc owner server
-	kill $owner_pid
+	kill_cdc_pid $owner_pid
 	# check that the new owner is elected
 	ensure $MAX_RETRIES "$CDC_BINARY cli capture list --disable-version-check 2>&1 |grep $capture_id -A1 | grep '\"is-owner\": true'"
 	# restart the old owner capture
