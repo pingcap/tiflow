@@ -57,17 +57,17 @@ func TestToAPIReplicaConfig(t *testing.T) {
 		Rules: []string{"a", "b", "c"},
 		MySQLReplicationRules: &filter.MySQLReplicationRules{
 			DoTables: []*filter.Table{{
-				Schema: "test",
-				Name:   "test",
+				Schema: "testdo",
+				Name:   "testgotable",
 			}},
-			DoDBs: []string{"a", "b"},
+			DoDBs: []string{"ad", "bdo"},
 			IgnoreTables: []*filter.Table{
 				{
-					Schema: "test",
-					Name:   "test",
+					Schema: "testignore",
+					Name:   "testaaaingore",
 				},
 			},
-			IgnoreDBs: []string{"a", "b"},
+			IgnoreDBs: []string{"aa", "b2"},
 		},
 		IgnoreTxnStartTs: []uint64{1, 2, 3},
 		DDLAllowlist: []parserModel.ActionType{

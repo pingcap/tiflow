@@ -64,7 +64,7 @@ type Capture interface {
 
 	GetUpstreamManager() (*upstream.Manager, error)
 	GetEtcdClient() etcd.CDCEtcdClientForAPI
-
+	// IsReady returns if the cdc server is ready
 	IsReady() bool
 }
 
@@ -756,7 +756,6 @@ func (c *captureImpl) StatusProvider() owner.StatusProvider {
 	return owner.NewStatusProvider(c.owner)
 }
 
-// IsReady returns if the cdc server is ready
 func (c *captureImpl) IsReady() bool {
 	return c.migrator.IsMigrateDone()
 }
