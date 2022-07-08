@@ -102,16 +102,16 @@ func (d *drainCaptureScheduler) Schedule(
 			zap.String("captureID", stopping))
 	}
 
-	var availableCaptureCount int
+	captureWorkload := make(map[model.CaptureID]int)
 	for id := range captures {
 		if id != d.target {
-			availableCaptureCount++
+			captureWorkload[id] = 0
 		}
 	}
 
 	// this may happen when inject the target, there is at least 2 alive captures
 	// but when schedule the task, only owner alive.
-	if availableCaptureCount == 0 {
+	if len(captureWorkload) == 0 {
 		log.Warn("schedulerv3: drain capture scheduler ignore drain target capture, "+
 			"since cannot found destination captures",
 			zap.String("target", d.target), zap.Any("captures", captures))
@@ -121,7 +121,6 @@ func (d *drainCaptureScheduler) Schedule(
 
 	// victims record all table instance should be dropped from the target capture
 	victims := make([]model.TableID, 0)
-	captureWorkload := make(map[model.CaptureID]int)
 	for tableID, rep := range replications {
 		if rep.State != ReplicationSetStateReplicating {
 			// only drain the target capture if all tables is replicating,
@@ -138,7 +137,7 @@ func (d *drainCaptureScheduler) Schedule(
 
 		// only calculate workload of other captures not the drain target.
 		if rep.Primary != d.target {
-			captureWorkload[rep.Primary] += 1
+			captureWorkload[rep.Primary]++
 		}
 	}
 
