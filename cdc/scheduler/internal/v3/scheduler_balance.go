@@ -68,7 +68,7 @@ func (b *balanceScheduler) Schedule(
 
 	for _, capture := range captures {
 		if capture.State == CaptureStateStopping {
-			log.Debug("tpscheduler: capture is stopping, " +
+			log.Debug("schedulerv3: capture is stopping, " +
 				"premature to balance table automatically")
 			return nil
 		}

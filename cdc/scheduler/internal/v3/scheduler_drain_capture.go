@@ -98,7 +98,7 @@ func (d *drainCaptureScheduler) Schedule(
 		}
 		// Find a stopping capture, drain it.
 		d.target = stopping
-		log.Info("tpscheduler: drain a stopping capture",
+		log.Info("schedulerv3: drain a stopping capture",
 			zap.String("captureID", stopping))
 	}
 
@@ -112,7 +112,7 @@ func (d *drainCaptureScheduler) Schedule(
 	// this may happen when inject the target, there is at least 2 alive captures
 	// but when schedule the task, only owner alive.
 	if availableCaptureCount == 0 {
-		log.Warn("tpscheduler: drain capture scheduler ignore drain target capture, "+
+		log.Warn("schedulerv3: drain capture scheduler ignore drain target capture, "+
 			"since cannot found destination captures",
 			zap.String("target", d.target), zap.Any("captures", captures))
 		d.target = captureIDNotDraining
@@ -125,7 +125,7 @@ func (d *drainCaptureScheduler) Schedule(
 	for tableID, rep := range replications {
 		if rep.State != ReplicationSetStateReplicating {
 			// only drain the target capture if all tables is replicating,
-			log.Debug("tpscheduler: drain capture scheduler skip this tick,"+
+			log.Debug("schedulerv3: drain capture scheduler skip this tick,"+
 				"not all table is replicating",
 				zap.String("target", d.target),
 				zap.Any("replication", rep))
@@ -147,7 +147,7 @@ func (d *drainCaptureScheduler) Schedule(
 	// 2. all tables moved from the target capture
 	// 3. the target capture cannot be found in the latest captures
 	if len(victims) == 0 {
-		log.Info("tpscheduler: drain capture scheduler finished, since no table",
+		log.Info("schedulerv3: drain capture scheduler finished, since no table",
 			zap.String("target", d.target))
 		d.target = captureIDNotDraining
 		return nil
@@ -177,7 +177,7 @@ func (d *drainCaptureScheduler) Schedule(
 		}
 
 		if minWorkload == math.MaxInt64 {
-			log.Panic("tpscheduler: drain capture meet unexpected min workload",
+			log.Panic("schedulerv3: drain capture meet unexpected min workload",
 				zap.Any("workload", captureWorkload))
 		}
 

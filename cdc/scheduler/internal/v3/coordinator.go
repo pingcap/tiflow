@@ -114,7 +114,7 @@ func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {
 	defer c.mu.Unlock()
 
 	if !c.captureM.CheckAllCaptureInitialized() {
-		log.Info("tpscheduler: manual move table task ignored, "+
+		log.Info("schedulerv3: manual move table task ignored, "+
 			"since not all captures initialized",
 			zap.Int64("tableID", tableID),
 			zap.String("targetCapture", target))
@@ -130,7 +130,7 @@ func (c *coordinator) Rebalance() {
 	defer c.mu.Unlock()
 
 	if !c.captureM.CheckAllCaptureInitialized() {
-		log.Info("tpscheduler: manual rebalance task ignored, " +
+		log.Info("schedulerv3: manual rebalance task ignored, " +
 			"since not all captures initialized")
 		return
 	}
@@ -152,7 +152,7 @@ func (c *coordinator) DrainCapture(target model.CaptureID) int {
 	}
 
 	if !c.captureM.CheckAllCaptureInitialized() {
-		log.Info("tpscheduler: manual drain capture task ignored, "+
+		log.Info("schedulerv3: manual drain capture task ignored, "+
 			"since not all captures initialized",
 			zap.String("target", target),
 			zap.Int("tableCount", count))
@@ -160,7 +160,7 @@ func (c *coordinator) DrainCapture(target model.CaptureID) int {
 	}
 
 	if count == 0 {
-		log.Info("tpscheduler: manual drain capture ignored, "+
+		log.Info("schedulerv3: manual drain capture ignored, "+
 			"since the target has no tables",
 			zap.String("target", target))
 		return count
@@ -169,7 +169,7 @@ func (c *coordinator) DrainCapture(target model.CaptureID) int {
 	// when draining the capture, tables need to be dispatched to other
 	// capture except the draining one, so at least should have 2 captures alive.
 	if len(c.captureM.Captures) <= 1 {
-		log.Warn("tpscheduler: manual drain capture ignored, "+
+		log.Warn("schedulerv3: manual drain capture ignored, "+
 			"since only one captures alive",
 			zap.String("target", target),
 			zap.Int("tableCount", count))
@@ -179,13 +179,13 @@ func (c *coordinator) DrainCapture(target model.CaptureID) int {
 	// the owner is the drain target. In the rolling upgrade scenario, owner should be drained
 	// at the last, this should be guaranteed by the caller, since it knows the draining order.
 	if target == c.captureID {
-		log.Warn("tpscheduler: manual drain capture ignore, the target is the owner",
+		log.Warn("schedulerv3: manual drain capture ignore, the target is the owner",
 			zap.String("target", target), zap.Int("tableCount", count))
 		return count
 	}
 
 	if !c.schedulerM.DrainCapture(target) {
-		log.Info("tpscheduler: manual drain capture task ignored,"+
+		log.Info("schedulerv3: manual drain capture task ignored,"+
 			"since there is capture draining",
 			zap.String("target", target),
 			zap.Int("tableCount", count))
@@ -203,7 +203,7 @@ func (c *coordinator) Close(ctx context.Context) {
 	c.replicationM.CleanMetrics()
 	c.schedulerM.CleanMetrics()
 
-	log.Info("tpscheduler: coordinator closed",
+	log.Info("schedulerv3: coordinator closed",
 		zap.Any("ownerRev", c.captureM.OwnerRev),
 		zap.String("namespace", c.changefeedID.Namespace),
 		zap.String("name", c.changefeedID.ID))
