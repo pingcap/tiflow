@@ -50,6 +50,9 @@ jobs:
 
       - name: Create k8s Kind Cluster
         uses: helm/kind-action@v1.2.0
+        with:
+          cluster_name: dataflow-engine-cluster
+          config: ${{ github.workspace }}/engine/chaos/manifests/kind-cluster.yaml
 
       - name: Print cluster information
         run: |
@@ -72,7 +75,7 @@ jobs:
 
       - name: Load docker image to kind cluster
         run: |
-          kind load docker-image dataflow:chaos --name chart-testing
+          kind load docker-image dataflow:chaos --name dataflow-engine-cluster
 
       # Set up metastore and basic services
       - name: Set up metastore and basic services
@@ -211,7 +214,7 @@ jobs:
         run: |
           mkdir ./logs
           kubectl get pods --no-headers -o custom-columns=":metadata.name"|grep -E "server-master|executor"|xargs -I{} sudo kubectl cp {}:/log ./logs || true
-          kind export logs ./logs/kind --name chart-testing
+          kind export logs ./logs/kind --name dataflow-engine-cluster
           sudo chown -R runner ./logs
 
       # Upload logs as artifact seems not stable, so we set `continue-on-error: true` here.
