@@ -121,7 +121,13 @@ function run() {
 	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
 	sleep 5
 	worker_cnt=$(ps aux | grep dm-worker | grep -v "grep" | wc -l)
-	[ $worker_cnt -eq 0 ]
+	if [ $worker_cnt -lt 1 ]; then
+		echo "some dm-workers exit, remain count ${worker_cnt}"
+		exit 2
+	fi
+
+	echo "force to restart dm-workers without errors"
+	ps aux | grep dm-worker | grep -v "grep" | awk '{print $2}' | xargs kill -9 || true
 
 	export GO_FAILPOINTS=''
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
