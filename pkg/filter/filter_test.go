@@ -132,7 +132,7 @@ func TestShouldIgnoreDMLEvent(t *testing.T) {
 				Table:   &model.TableName{Table: tc.table, Schema: tc.schema},
 				StartTs: tc.ts,
 			}
-			ignoreDML, err := filter.ShouldIgnoreDMLEvent(dml, nil)
+			ignoreDML, err := filter.ShouldIgnoreDMLEvent(dml, model.RowChangedDatums{}, nil)
 			require.Nil(t, err)
 			require.Equal(t, ignoreDML, tc.ignore)
 		}
