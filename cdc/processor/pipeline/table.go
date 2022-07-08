@@ -69,9 +69,10 @@ type tablePipelineImpl struct {
 	markTableID int64
 	tableName   string // quoted schema and table, used in metrics only
 
-	sorterNode *sorterNode
-	sinkNode   *sinkNode
-	cancel     context.CancelFunc
+	sorterNode  *sorterNode
+	sinkNode    *sinkNode
+	redoManager redo.LogManager
+	cancel      context.CancelFunc
 
 	replConfig *serverConfig.ReplicaConfig
 }
@@ -95,8 +96,8 @@ func (t *tablePipelineImpl) ResolvedTs() model.Ts {
 	// will be able to cooperate replication status directly. Then we will add
 	// another replication barrier for consistent replication instead of reusing
 	// the global resolved-ts.
-	if redo.IsConsistentEnabled(t.replConfig.Consistent.Level) {
-		return t.sinkNode.ResolvedTs()
+	if t.redoManager.Enabled() {
+		return t.redoManager.GetResolvedTs(t.tableID)
 	}
 	return t.sorterNode.ResolvedTs()
 }
@@ -195,6 +196,7 @@ func NewTablePipeline(ctx cdcContext.Context,
 		tableName:   tableName,
 		cancel:      cancel,
 		replConfig:  replConfig,
+		redoManager: redoManager,
 	}
 
 	perTableMemoryQuota := serverConfig.GetGlobalServerConfig().PerTableMemoryQuota
