@@ -221,7 +221,7 @@ func testSimpleAllModeTask(
 	}, time.Second*10, time.Second)
 
 	// get job cfg
-	jobCfg, err := getJobCfg(ctx, *httpClient, resp.JobId, t)
+	jobCfg, err := getJobCfg(ctx, httpClient, resp.JobId, t)
 	require.NoError(t, err)
 	require.Contains(t, jobCfg, `flavor: mysql`)
 
@@ -350,7 +350,7 @@ func operateJob(ctx context.Context, client *http.Client, jobID string, tasks []
 	return err
 }
 
-func getJobCfg(ctx context.Context, client http.Client, jobID string, t *testing.T) (string, error) {
+func getJobCfg(ctx context.Context, client *http.Client, jobID string, t *testing.T) (string, error) {
 	resp, err := client.Get(fmt.Sprintf(baseURL+"/config", jobID))
 	if err != nil {
 		return "", err
