@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -79,6 +80,7 @@ type sinkNode struct {
 	barrierTs    model.Ts
 
 	flowController tableFlowController
+	redoManager    redo.LogManager
 
 	replicaConfig    *config.ReplicaConfig
 	isTableActorMode bool
@@ -92,16 +94,17 @@ func newSinkNode(
 	targetTs model.Ts,
 	flowController tableFlowController,
 	splitTxn bool,
+	redoManager redo.LogManager,
 ) *sinkNode {
 	sn := &sinkNode{
-		tableID:   tableID,
-		sink:      sink,
-		status:    TableStatusInitializing,
-		targetTs:  targetTs,
-		barrierTs: startTs,
-
+		tableID:        tableID,
+		sink:           sink,
+		status:         TableStatusInitializing,
+		targetTs:       targetTs,
+		barrierTs:      startTs,
 		flowController: flowController,
 		splitTxn:       splitTxn,
+		redoManager:    redoManager,
 	}
 	sn.resolvedTs.Store(model.NewResolvedTs(startTs))
 	sn.checkpointTs.Store(model.NewResolvedTs(startTs))
@@ -159,17 +162,44 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 			err = n.stop(ctx)
 		}
 	}()
-	currentBarrierTs := atomic.LoadUint64(&n.barrierTs)
-	currentCheckpointTs := n.getCheckpointTs()
-	if resolved.Ts > currentBarrierTs {
-		resolved = model.NewResolvedTs(currentBarrierTs)
-	}
+
 	if resolved.Ts > n.targetTs {
 		resolved = model.NewResolvedTs(n.targetTs)
 	}
+
+	currentBarrierTs := atomic.LoadUint64(&n.barrierTs)
+	if n.redoManager != nil && n.redoManager.Enabled() {
+		// redo log do not support batch resolve mode, hence we
+		// use `ResolvedMark` to restore a normal resolved ts
+		resolved = model.NewResolvedTs(resolved.ResolvedMark())
+		err = n.redoManager.UpdateResolvedTs(ctx, n.tableID, resolved.Ts)
+
+		// fail fast check, the happens before relationship is:
+		// 1. sorter resolvedTs >= sink resolvedTs >= table redoTs == tableActor resolvedTs
+		// 2. tableActor resolvedTs >= processor resolvedTs >= global resolvedTs >= barrierTs
+		redoTs := n.redoManager.GetMinResolvedTs()
+		if redoTs < currentBarrierTs {
+			log.Debug("redoTs should not less than current barrierTs",
+				zap.Int64("tableID", n.tableID),
+				zap.Uint64("redoTs", redoTs),
+				zap.Uint64("barrierTs", currentBarrierTs))
+		}
+
+		// TODO: remove this check after SchedulerV3 become the first choice.
+		if resolved.Ts > redoTs {
+			resolved = model.NewResolvedTs(redoTs)
+		}
+	}
+
+	if resolved.Ts > currentBarrierTs {
+		resolved = model.NewResolvedTs(currentBarrierTs)
+	}
+
+	currentCheckpointTs := n.getCheckpointTs()
 	if currentCheckpointTs.EqualOrGreater(resolved) {
 		return nil
 	}
+
 	checkpoint, err := n.sink.FlushRowChangedEvents(ctx, n.tableID, resolved)
 	if err != nil {
 		return errors.Trace(err)
@@ -200,6 +230,16 @@ func (n *sinkNode) emitRowToSink(ctx context.Context, event *model.PolymorphicEv
 		panic("ProcessorSyncResolvedPreEmit")
 	})
 
+	emitRows := func(rows ...*model.RowChangedEvent) error {
+		if n.redoManager != nil && n.redoManager.Enabled() {
+			err := n.redoManager.EmitRowChangedEvents(ctx, n.tableID, rows...)
+			if err != nil {
+				return err
+			}
+		}
+		return n.sink.EmitRowChangedEvents(ctx, rows...)
+	}
+
 	if event == nil || event.Row == nil {
 		log.Warn("skip emit nil event", zap.Any("event", event))
 		return nil
@@ -225,13 +265,13 @@ func (n *sinkNode) emitRowToSink(ctx context.Context, event *model.PolymorphicEv
 				return errors.Trace(err)
 			}
 			// NOTICE: Please do not change the order, the delete event always comes before the insert event.
-			return n.sink.EmitRowChangedEvents(ctx, deleteEvent.Row, insertEvent.Row)
+			return emitRows(deleteEvent.Row, insertEvent.Row)
 		}
 		// If the handle key columns are not updated, PreColumns is directly ignored.
 		event.Row.PreColumns = nil
 	}
 
-	return n.sink.EmitRowChangedEvents(ctx, event.Row)
+	return emitRows(event.Row)
 }
 
 // shouldSplitUpdateEvent determines if the split event is needed to align the old format based on
@@ -323,11 +363,9 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 				failpoint.Return(false, errors.New("processor sync resolved injected error"))
 			})
 
-			var resolved model.ResolvedTs
+			resolved := model.NewResolvedTs(event.CRTs)
 			if event.Resolved != nil {
 				resolved = *(event.Resolved)
-			} else {
-				resolved = model.NewResolvedTs(event.CRTs)
 			}
 
 			if err := n.flushSink(ctx, resolved); err != nil {

@@ -535,7 +535,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 			}
 
 			switch tp {
-			case model.MqMessageTypeDDL:
+			case model.MessageTypeDDL:
 				// for some protocol, DDL would be dispatched to all partitions,
 				// Consider that DDL a, b, c received from partition-0, the latest DDL is c,
 				// if we receive `a` from partition-1, which would be seemed as DDL regression,
@@ -549,7 +549,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if partition == 0 {
 					c.appendDDL(ddl)
 				}
-			case model.MqMessageTypeRow:
+			case model.MessageTypeRow:
 				row, err := decoder.NextRowChangedEvent()
 				if err != nil {
 					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
@@ -593,7 +593,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					eventGroups[tableID] = group
 				}
 				group.Append(row)
-			case model.MqMessageTypeResolved:
+			case model.MessageTypeResolved:
 				ts, err := decoder.NextResolvedEvent()
 				if err != nil {
 					log.Panic("decode message value failed", zap.ByteString("value", message.Value))

@@ -793,12 +793,16 @@ func (p *processor) createTablePipelineImpl(
 		return nil
 	})
 
+	if p.redoManager.Enabled() {
+		p.redoManager.AddTable(tableID, replicaInfo.StartTs)
+	}
+
 	tableName, err := p.getTableName(ctx, tableID, replicaInfo)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	s, err := sink.NewTableSink(p.sink, tableID, p.metricsTableSinkTotalRows, p.redoManager)
+	s, err := sink.NewTableSink(p.sink, tableID, p.metricsTableSinkTotalRows)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -828,12 +832,8 @@ func (p *processor) createTablePipelineImpl(
 			s,
 			p.changefeed.Info.GetTargetTs(),
 			p.upStream,
-			p.redoManager.Enabled(),
+			p.redoManager,
 		)
-	}
-
-	if p.redoManager.Enabled() {
-		p.redoManager.AddTable(tableID, replicaInfo.StartTs)
 	}
 
 	log.Info("Add table pipeline", zap.Int64("tableID", tableID),

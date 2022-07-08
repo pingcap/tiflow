@@ -324,7 +324,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 
 	actorSinkNode := newSinkNode(t.tableID, t.tableSink,
 		t.replicaInfo.StartTs,
-		t.targetTs, flowController, splitTxn)
+		t.targetTs, flowController, splitTxn, t.redoManager)
 	actorSinkNode.initWithReplicaConfig(true, t.replicaConfig)
 	t.sinkNode = actorSinkNode
 
@@ -436,8 +436,8 @@ func (t *tableActor) ResolvedTs() model.Ts {
 	// will be able to cooperate replication status directly. Then we will add
 	// another replication barrier for consistent replication instead of reusing
 	// the global resolved-ts.
-	if redo.IsConsistentEnabled(t.replicaConfig.Consistent.Level) {
-		return t.sinkNode.ResolvedTs()
+	if t.redoManager.Enabled() {
+		return t.redoManager.GetResolvedTs(t.tableID)
 	}
 	return t.sortNode.ResolvedTs()
 }
