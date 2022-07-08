@@ -27,7 +27,7 @@ type RowChangedDatums struct {
 	PreRowDatums []types.Datum
 }
 
-// IsValid returns true if the RowChangeDatums is empty.
+// IsEmpty returns true if the RowChangeDatums is empty.
 func (r RowChangedDatums) IsEmpty() bool {
 	return len(r.RowDatums) == 0 && len(r.PreRowDatums) == 0
 }
