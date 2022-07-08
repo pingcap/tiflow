@@ -65,6 +65,7 @@ type Capture interface {
 	GetUpstreamManager() (*upstream.Manager, error)
 	GetEtcdClient() etcd.CDCEtcdClientForAPI
 	// IsReady returns if the cdc server is ready
+	// currently only check is ettcd data migration is done
 	IsReady() bool
 }
 
