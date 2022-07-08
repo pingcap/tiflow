@@ -123,6 +123,8 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 							Name:   tbl.Name,
 						})
 				}
+			}
+			if c.Filter.MySQLReplicationRules.IgnoreTables != nil {
 				for _, tbl := range c.Filter.MySQLReplicationRules.IgnoreTables {
 					mySQLReplicationRules.IgnoreTables = append(mySQLReplicationRules.IgnoreTables,
 						&filter.Table{
@@ -201,6 +203,8 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 							Name:   tbl.Name,
 						})
 				}
+			}
+			if c.Filter.MySQLReplicationRules.IgnoreTables != nil {
 				for _, tbl := range c.Filter.MySQLReplicationRules.IgnoreTables {
 					mySQLReplicationRules.IgnoreTables = append(mySQLReplicationRules.IgnoreTables,
 						&Table{

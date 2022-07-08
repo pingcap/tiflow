@@ -65,6 +65,35 @@ func TestStrictDecodeConfig(t *testing.T) {
 	require.Regexp(t, ".*CDC:ErrFilterRuleInvalid.*", err)
 }
 
+func TestTomlFileToApiModel(t *testing.T) {
+	cmd := new(cobra.Command)
+	o := newChangefeedCommonOptions()
+	o.addFlags(cmd)
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	content := `
+	[filter]
+	rules = ['*.*', '!test.*']
+    ignore-dbs = ["a", "b"]
+    do-dbs = ["c", "d"]
+    [[filter.ignore-tables]]
+    db-name = "demo-db"
+    tbl-name = "tbl"
+`
+	err := os.WriteFile(path, []byte(content), 0o644)
+	require.Nil(t, err)
+
+	require.Nil(t, cmd.ParseFlags([]string{fmt.Sprintf("--config=%s", path)}))
+
+	cfg := config.GetDefaultReplicaConfig()
+	err = o.strictDecodeConfig("cdc", cfg)
+	require.Nil(t, err)
+	apiModel := v2.ToAPIReplicaConfig(cfg)
+	cfg2 := apiModel.ToInternalReplicaConfig()
+	require.Equal(t, cfg, cfg2)
+}
+
 func TestInvalidSortEngine(t *testing.T) {
 	t.Parallel()
 
