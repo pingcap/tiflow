@@ -35,6 +35,7 @@ stop_minio() {
 }
 
 stop() {
+	# to distinguish whether the test failed in the DML synchronization phase or the DDL synchronization phase
 	echo $(mysql -h${DOWN_TIDB_HOST} -P${DOWN_TIDB_PORT} -uroot -e "select count(*) from consistent_replicate_s3.USERTABLE;")
 	stop_minio
 	stop_tidb_cluster
