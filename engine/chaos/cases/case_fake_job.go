@@ -50,16 +50,22 @@ func runFakeJobCase(ctx context.Context, cfg *config) error {
 		KeyPrefix:     jobCfg.EtcdWatchPrefix,
 	}
 
-	cfgBytes, err := json.Marshal(jobCfg)
-	if err != nil {
-		return err
-	}
-
 	cli, err := e2e.NewUTCli(ctx, serverMasterEndpoints, etcdEndpoints,
 		tenant.DefaultUserProjectInfo, e2eCfg)
 	if err != nil {
 		return err
 	}
+
+	revision, err := cli.GetRevision(ctx)
+	if err != nil {
+		return err
+	}
+	jobCfg.EtcdStartRevision = revision
+	cfgBytes, err := json.Marshal(jobCfg)
+	if err != nil {
+		return err
+	}
+
 	// retry to create a fake job, since chaos exists, the server master may be
 	// unavailable for sometime.
 	var jobID string
