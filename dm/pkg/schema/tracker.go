@@ -441,7 +441,11 @@ func (tr *Tracker) CreateTableIfNotExists(table *filter.Table, ti *model.TableIn
 
 // SplitBatchCreateTableAndHandle will split the batch if it exceeds the kv entry size limit.
 func (tr *Tracker) SplitBatchCreateTableAndHandle(schema model.CIStr, info []*model.TableInfo, l int, r int) error {
-	if err := tr.dom.DDL().BatchCreateTableWithInfo(tr.se, schema, info[l:r], ddl.OnExistIgnore); err != nil {
+	var err error
+	if err = tr.dom.DDL().BatchCreateTableWithInfo(tr.se, schema, info[l:r], ddl.OnExistIgnore); kv.ErrEntryTooLarge.Equal(err) {
+		if r-l == 1 {
+			return err
+		}
 		err = tr.SplitBatchCreateTableAndHandle(schema, info, l, (l+r)/2)
 		if err != nil {
 			return err
@@ -452,7 +456,7 @@ func (tr *Tracker) SplitBatchCreateTableAndHandle(schema model.CIStr, info []*mo
 		}
 		return nil
 	}
-	return nil
+	return err
 }
 
 // BatchCreateTableIfNotExist will batch creating tables per schema. If the schema does not exist, it will create it.
