@@ -70,11 +70,6 @@ func (bs *blackHoleWriter) SendDDL(_ context.Context, ddl *model.RedoDDLEvent) e
 	return nil
 }
 
-func (bs *blackHoleWriter) EmitResolvedTs(_ context.Context, ts uint64) error {
-	bs.resolvedTs = ts
-	return nil
-}
-
 func (bs *blackHoleWriter) EmitCheckpointTs(_ context.Context, ts uint64) error {
 	bs.checkpointTs = ts
 	return nil

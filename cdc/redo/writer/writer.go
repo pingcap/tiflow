@@ -46,7 +46,6 @@ type RedoLogWriter interface {
 	// WriteLog writer RedoRowChangedEvent to row log file
 	WriteLog(ctx context.Context, tableID int64, rows []*model.RedoRowChangedEvent) (resolvedTs uint64, err error)
 
-	// SendDDL EmitCheckpointTs and EmitResolvedTs are called from owner only
 	// SendDDL writer RedoDDLEvent to ddl log file
 	SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error
 
@@ -57,9 +56,6 @@ type RedoLogWriter interface {
 
 	// EmitCheckpointTs write CheckpointTs to meta file
 	EmitCheckpointTs(ctx context.Context, ts uint64) error
-
-	// EmitResolvedTs write ResolvedTs to meta file
-	EmitResolvedTs(ctx context.Context, ts uint64) error
 
 	// DeleteAllLogs delete all log files related to the changefeed, called from owner only when delete changefeed
 	DeleteAllLogs(ctx context.Context) error
@@ -414,21 +410,6 @@ func (l *LogWriter) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	return l.flushLogMeta(ts, 0)
 }
 
-// EmitResolvedTs implement EmitResolvedTs api
-func (l *LogWriter) EmitResolvedTs(ctx context.Context, ts uint64) error {
-	select {
-	case <-ctx.Done():
-		return errors.Trace(ctx.Err())
-	default:
-	}
-
-	if l.isStopped() {
-		return cerror.ErrRedoWriterStopped.GenWithStackByArgs()
-	}
-
-	return l.flushLogMeta(0, ts)
-}
-
 // DeleteAllLogs implement DeleteAllLogs api
 func (l *LogWriter) DeleteAllLogs(ctx context.Context) error {
 	err := l.Close()
@@ -579,15 +560,9 @@ func (l *LogWriter) flushLogMeta(checkPointTs, resolvedTs uint64) error {
 	defer l.metaLock.Unlock()
 
 	if checkPointTs != 0 {
-		if l.meta.CheckPointTs > checkPointTs {
-			return cerror.WrapError(cerror.ErrRedoFileOp, errors.New("checkpoint regress"))
-		}
 		l.meta.CheckPointTs = checkPointTs
 	}
 	if resolvedTs != 0 {
-		if l.meta.ResolvedTs > resolvedTs {
-			return cerror.WrapError(cerror.ErrRedoFileOp, errors.New("resolvedTs regress"))
-		}
 		l.meta.ResolvedTs = resolvedTs
 	}
 	data, err := l.meta.MarshalMsg(nil)
