@@ -341,6 +341,13 @@ func NewKafkaSaramaProducer(ctx context.Context, topic string, config *Config,
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
+	// we must close adminClient when this func return cause by an error
+	// otherwise the adminClient will never be closed and lead to an goroutine leak
+	defer func() {
+		if err != nil && admin != nil {
+			admin.Close()
+		}
+	}()
 
 	if err := validateAndCreateTopic(admin, topic, config, cfg, opts); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
