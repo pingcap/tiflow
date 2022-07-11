@@ -111,6 +111,7 @@ func NewDDLPuller(ctx context.Context,
 		clock:        clock.New(),
 		changefeedID: changefeed,
 	}, nil
+
 }
 
 func (h *ddlPullerImpl) handleRawDDL(rawDDL *model.RawKVEntry) error {
