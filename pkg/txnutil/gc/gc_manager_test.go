@@ -24,7 +24,7 @@ import (
 
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/pdtime"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
@@ -96,7 +96,7 @@ func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 	gcManager.isTiCDCBlockGC = true
 	ctx := context.Background()
 
-	TimeAcquirer, err := pdtime.NewTimeAcquirer(ctx, mockPDClient)
+	TimeAcquirer, err := pdutil.NewTimeAcquirer(ctx, mockPDClient)
 	c.Assert(err, check.IsNil)
 
 	go TimeAcquirer.Run(ctx)

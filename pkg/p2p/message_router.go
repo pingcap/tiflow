@@ -144,7 +144,7 @@ func (m *messageRouterImpl) GetClient(target NodeID) *MessageClient {
 		err := client.Run(ctx, "tcp", addr, target, m.credentials)
 		log.Warn("p2p client exited with error",
 			zap.String("addr", addr),
-			zap.String("target-capture", target),
+			zap.String("targetCapture", target),
 			zap.Error(err))
 
 		if errors.Cause(err) != context.Canceled {

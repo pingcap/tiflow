@@ -86,6 +86,7 @@ type DBActor struct {
 	deleteCount int
 	compact     *CompactScheduler
 
+	stopped  bool
 	closedWg *sync.WaitGroup
 
 	metricWriteDuration prometheus.Observer
@@ -131,11 +132,6 @@ func NewDBActor(
 		metricWriteDuration: sorterWriteDurationHistogram.WithLabelValues(captureAddr, idTag),
 		metricWriteBytes:    sorterWriteBytesHistogram.WithLabelValues(captureAddr, idTag),
 	}, mb, nil
-}
-
-func (ldb *DBActor) close(err error) {
-	log.Info("db actor quit", zap.Uint64("ID", uint64(ldb.id)), zap.Error(err))
-	ldb.closedWg.Done()
 }
 
 func (ldb *DBActor) maybeWrite(force bool) error {
@@ -195,7 +191,6 @@ func (ldb *DBActor) acquireIterators() {
 func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 	select {
 	case <-ctx.Done():
-		ldb.close(ctx.Err())
 		return false
 	default:
 	}
@@ -209,7 +204,6 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 		case actormsg.TypeSorterTask:
 			task = msg.SorterTask
 		case actormsg.TypeStop:
-			ldb.close(nil)
 			return false
 		default:
 			log.Panic("unexpected message", zap.Any("message", msg))
@@ -234,6 +228,9 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 			ldb.iterQ.push(task.UID, task.TableID, task.IterReq)
 			requireIter = true
 		}
+		if task.Test != nil {
+			time.Sleep(task.Test.Sleep)
+		}
 	}
 
 	// Force write only if there is a task requires an iterator.
@@ -243,4 +240,14 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message) bool {
 	ldb.acquireIterators()
 
 	return true
+}
+
+// OnClose releases DBActor resource.
+func (ldb *DBActor) OnClose() {
+	if ldb.stopped {
+		return
+	}
+	ldb.stopped = true
+	log.Info("db actor quit", zap.Uint64("ID", uint64(ldb.id)))
+	ldb.closedWg.Done()
 }

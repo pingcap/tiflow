@@ -153,7 +153,7 @@ func (s *TableSet) RemoveTableRecord(tableID model.TableID) bool {
 
 	captureIndexEntry, ok := s.captureIndex[record.CaptureID]
 	if !ok {
-		log.Panic("unreachable", zap.Int64("table-id", tableID))
+		log.Panic("unreachable", zap.Int64("tableID", tableID))
 	}
 	delete(captureIndexEntry, record.TableID)
 	if len(captureIndexEntry) == 0 {

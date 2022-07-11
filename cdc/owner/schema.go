@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -35,9 +36,12 @@ type schemaWrap4Owner struct {
 
 	allPhysicalTablesCache []model.TableID
 	ddlHandledTs           model.Ts
+
+	id model.ChangeFeedID
 }
 
-func newSchemaWrap4Owner(kvStorage tidbkv.Storage, startTs model.Ts, config *config.ReplicaConfig) (*schemaWrap4Owner, error) {
+func newSchemaWrap4Owner(kvStorage tidbkv.Storage, startTs model.Ts,
+	config *config.ReplicaConfig, id model.ChangeFeedID) (*schemaWrap4Owner, error) {
 	var meta *timeta.Meta
 	if kvStorage != nil {
 		var err error
@@ -59,6 +63,7 @@ func newSchemaWrap4Owner(kvStorage tidbkv.Storage, startTs model.Ts, config *con
 		filter:         f,
 		config:         config,
 		ddlHandledTs:   startTs,
+		id:             id,
 	}, nil
 }
 
@@ -92,8 +97,14 @@ func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
 	s.allPhysicalTablesCache = nil
 	err := s.schemaSnapshot.HandleDDL(job)
 	if err != nil {
+		log.Error("handle DDL failed", zap.String("DDL", job.Query),
+			zap.Stringer("job", job), zap.Error(err),
+			zap.Any("role", util.RoleOwner), zap.String("changefeed", s.id))
 		return errors.Trace(err)
 	}
+	log.Info("handle DDL", zap.String("DDL", job.Query), zap.Stringer("job", job),
+		zap.Any("role", util.RoleOwner), zap.String("changefeed", s.id))
+
 	s.ddlHandledTs = job.BinlogInfo.FinishedTS
 	return nil
 }
@@ -132,7 +143,9 @@ func (s *schemaWrap4Owner) shouldIgnoreTable(t *model.TableInfo) bool {
 		// See https://github.com/pingcap/tiflow/issues/4559
 		if !t.IsSequence() {
 			log.Warn("skip ineligible table",
-				zap.Int64("tableID", t.ID), zap.Stringer("tableName", t.TableName))
+				zap.Int64("tableID", t.ID),
+				zap.Stringer("tableName", t.TableName),
+				zap.String("changefeed", s.id))
 		}
 		return true
 	}

@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
+	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/regionspan"
@@ -70,12 +71,13 @@ func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	kvCfg := config.GetGlobalServerConfig().KVClient
 	var plr puller.Puller
 	kvStorage := ctx.GlobalVars().KVStorage
 	// kvStorage can be nil only in the test
 	if kvStorage != nil {
 		plr = puller.NewPuller(ctx, pdCli, ctx.GlobalVars().GrpcPool, ctx.GlobalVars().RegionCache, kvStorage, startTs,
-			[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, false)
+			[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, kvCfg)
 	}
 
 	return &ddlPullerImpl{
@@ -90,13 +92,14 @@ func newDDLPuller(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	h.cancel = cancel
-	log.Debug("DDL puller started", zap.String("changefeed-id", ctx.ChangefeedVars().ID))
+	log.Debug("DDL puller started", zap.String("changefeed", ctx.ChangefeedVars().ID))
 	stdCtx := util.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = util.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
-	errg, stdCtx := errgroup.WithContext(stdCtx)
-	lastResolvedTsAdanvcedTime := h.clock.Now()
+	stdCtx = util.PutRoleInCtx(stdCtx, util.RoleProcessor)
+	g, stdCtx := errgroup.WithContext(stdCtx)
+	lastResolvedTsAdvancedTime := h.clock.Now()
 
-	errg.Go(func() error {
+	g.Go(func() error {
 		return h.puller.Run(stdCtx)
 	})
 
@@ -110,7 +113,7 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 			h.mu.Lock()
 			defer h.mu.Unlock()
 			if rawDDL.CRTs > h.resolvedTS {
-				lastResolvedTsAdanvcedTime = h.clock.Now()
+				lastResolvedTsAdvancedTime = h.clock.Now()
 				h.resolvedTS = rawDDL.CRTs
 			}
 			return nil
@@ -140,18 +143,18 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 	ticker := h.clock.Ticker(ownerDDLPullerStuckWarnTimeout)
 	defer ticker.Stop()
 
-	errg.Go(func() error {
+	g.Go(func() error {
 		for {
 			select {
 			case <-stdCtx.Done():
 				return stdCtx.Err()
 			case <-ticker.C:
-				duration := h.clock.Since(lastResolvedTsAdanvcedTime)
+				duration := h.clock.Since(lastResolvedTsAdvancedTime)
 				if duration > ownerDDLPullerStuckWarnTimeout {
 					log.Warn("ddl puller resolved ts has not advanced",
-						zap.String("changefeed-id", ctx.ChangefeedVars().ID),
+						zap.String("changefeed", ctx.ChangefeedVars().ID),
 						zap.Duration("duration", duration),
-						zap.Uint64("resolved-ts", h.resolvedTS))
+						zap.Uint64("resolvedTs", h.resolvedTS))
 				}
 			case e := <-rawDDLCh:
 				if err := receiveDDL(e); err != nil {
@@ -161,7 +164,7 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 		}
 	})
 
-	return errg.Wait()
+	return g.Wait()
 }
 
 func (h *ddlPullerImpl) FrontDDL() (uint64, *timodel.Job) {

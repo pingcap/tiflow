@@ -55,8 +55,8 @@ function lazy_init_tracker() {
 	done
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 20
 
-	check_log_contains $WORK_DIR/worker1/log/dm-worker.log 'lazy init table info.*t50' 1
-	check_log_not_contains $WORK_DIR/worker1/log/dm-worker.log 'lazy init table info.*t51'
+	check_log_contains $WORK_DIR/worker1/log/dm-worker.log 'init table info.*t50' 1
+	check_log_not_contains $WORK_DIR/worker1/log/dm-worker.log 'init table info.*t51'
 
 	cleanup_data start_task
 	cleanup_process

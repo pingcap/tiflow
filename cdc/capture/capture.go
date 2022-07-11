@@ -44,7 +44,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/p2p"
-	"github.com/pingcap/tiflow/pkg/pdtime"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/version"
 )
 
@@ -66,7 +66,7 @@ type Capture struct {
 	etcdClient   *etcd.CDCEtcdClient
 	grpcPool     kv.GrpcPool
 	regionCache  *tikv.RegionCache
-	TimeAcquirer pdtime.TimeAcquirer
+	TimeAcquirer pdutil.TimeAcquirer
 	sorterSystem *ssystem.System
 
 	enableNewScheduler bool
@@ -143,7 +143,7 @@ func (c *Capture) reset(ctx context.Context) error {
 	if c.TimeAcquirer != nil {
 		c.TimeAcquirer.Stop()
 	}
-	c.TimeAcquirer, err = pdtime.NewTimeAcquirer(ctx, c.pdClient)
+	c.TimeAcquirer, err = pdutil.NewTimeAcquirer(ctx, c.pdClient)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -218,8 +218,8 @@ func (c *Capture) reset(ctx context.Context) error {
 	}
 
 	log.Info("init capture",
-		zap.String("capture-id", c.info.ID),
-		zap.String("capture-addr", c.info.AdvertiseAddr))
+		zap.String("captureID", c.info.ID),
+		zap.String("captureAddr", c.info.AdvertiseAddr))
 	return nil
 }
 
@@ -254,7 +254,7 @@ func (c *Capture) Run(ctx context.Context) error {
 		//   2. the parent context canceled, it means that the caller of the capture hope the capture to exit, and this loop will return in the above `select` block
 		// TODO: make sure the internal cancel should return the real error instead of context.Canceled
 		if cerror.ErrCaptureSuicide.Equal(err) || context.Canceled == errors.Cause(err) {
-			log.Info("capture recovered", zap.String("capture-id", c.info.ID))
+			log.Info("capture recovered", zap.String("captureID", c.info.ID))
 			continue
 		}
 		return errors.Trace(err)
@@ -413,9 +413,17 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 		newGlobalVars.OwnerRevision = ownerRev
 		ownerCtx := cdcContext.NewContext(ctx, newGlobalVars)
 
+		// Update meta-region label to ensure that meta region isolated from data regions.
+		err = pdutil.UpdateMetaLabel(ctx, c.pdClient)
+		if err != nil {
+			log.Warn("Fail to verify region label rule",
+				zap.Error(err),
+				zap.String("captureID", c.info.ID))
+		}
+
 		log.Info("campaign owner successfully",
-			zap.String("capture-id", c.info.ID),
-			zap.Int64("owner-rev", ownerRev))
+			zap.String("captureID", c.info.ID),
+			zap.Int64("ownerRev", ownerRev))
 
 		owner := c.newOwner(c.pdClient)
 		c.setOwner(owner)

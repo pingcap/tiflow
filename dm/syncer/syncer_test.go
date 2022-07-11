@@ -40,6 +40,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+	"github.com/pingcap/tiflow/pkg/errorutil"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
@@ -56,8 +57,6 @@ import (
 	"github.com/pingcap/tidb/parser/ast"
 	pmysql "github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
-
-	"github.com/pingcap/tiflow/pkg/errorutil"
 )
 
 var _ = Suite(&testSyncerSuite{})
@@ -776,6 +775,10 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	s.cfg.Batch = 1000
 	s.cfg.WorkerCount = 2
 	s.cfg.MaxRetry = 1
+	s.cfg.To.Session = map[string]string{
+		"sql_mode":             "ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION",
+		"tidb_skip_utf8_check": "0",
+	}
 
 	cfg, err := s.cfg.Clone()
 	c.Assert(err, IsNil)
@@ -799,9 +802,6 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
 			AddRow("t_1", "create table t_1(id int primary key, name varchar(24), KEY `index1` (`name`))"))
 	s.mockGetServerUnixTS(mock)
-	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_2`").WillReturnRows(
-		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow("t_2", "create table t_2(id int primary key, name varchar(24))"))
 	syncer.exprFilterGroup = NewExprFilterGroup(utils.NewSessionCtx(nil), nil)
 	c.Assert(err, IsNil)
 	c.Assert(syncer.Type(), Equals, pb.UnitType_Sync)
@@ -958,6 +958,13 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	mockDBProvider := conn.InitMockDB(c)
 	mockDBProvider.ExpectQuery("SELECT cast\\(TIMEDIFF\\(NOW\\(6\\), UTC_TIMESTAMP\\(6\\)\\) as time\\);").
 		WillReturnRows(sqlmock.NewRows([]string{""}).AddRow("01:00:00"))
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", pmysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_2`").WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("t_2", "create table t_2(id int primary key, name varchar(24))"))
+
 	c.Assert(syncer.Update(context.Background(), s.cfg), IsNil)
 	c.Assert(syncer.timezone.String(), Equals, "+01:00")
 
@@ -1017,6 +1024,52 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	testJobs.RUnlock()
 
 	cancel()
+	<-resultCh // wait for the process to finish
+
+	// test OperateSchema starts
+	ctx, cancel = context.WithCancel(context.Background())
+
+	syncer.sessCtx = utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
+	sourceSchemaFromCheckPoint, err := syncer.OperateSchema(ctx, &pb.OperateWorkerSchemaRequest{Op: pb.SchemaOp_GetSchema, Database: "test_1", Table: "t_1"})
+	c.Assert(err, IsNil)
+
+	syncer.tableRouter, err = router.NewTableRouter(false, nil)
+	c.Assert(err, IsNil)
+	c.Assert(syncer.tableRouter.AddRule(&router.TableRule{
+		SchemaPattern: "test_1",
+		TablePattern:  "t_1",
+		TargetSchema:  "test_1",
+		TargetTable:   "t_2",
+	}), IsNil)
+
+	syncer.checkpoint.(*RemoteCheckPoint).points = make(map[string]map[string]*binlogPoint)
+
+	showTableResultString := "CREATE TABLE `t_2` (\n" +
+		"  `id` int(11) NOT NULL,\n" +
+		"  `name` varchar(24) DEFAULT NULL,\n" +
+		"  PRIMARY KEY (`id`) /*T![clustered_index] NONCLUSTERED */,\n" +
+		"  KEY `index1` (`name`)\n" +
+		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+
+	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_2`").WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("t_2", showTableResultString))
+
+	sourceSchemaFromDownstream, err := syncer.OperateSchema(ctx, &pb.OperateWorkerSchemaRequest{Op: pb.SchemaOp_GetSchema, Database: "test_1", Table: "t_1"})
+	c.Assert(err, IsNil)
+
+	sourceSchemaExpected := "CREATE TABLE `t_1` (" +
+		" `id` int(11) NOT NULL," +
+		" `name` varchar(24) DEFAULT NULL," +
+		" PRIMARY KEY (`id`) /*T![clustered_index] NONCLUSTERED */," +
+		" KEY `index1` (`name`)" +
+		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+	c.Assert(sourceSchemaFromCheckPoint, Equals, sourceSchemaExpected)
+	c.Assert(sourceSchemaFromDownstream, Equals, sourceSchemaExpected)
+
+	cancel()
+	// test OperateSchema ends
+
 	syncer.Close()
 	c.Assert(syncer.isClosed(), IsTrue)
 
@@ -1048,6 +1101,10 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 		DoTables: []*filter.Table{
 			{Schema: "test_1", Name: "t_1"},
 		},
+	}
+	s.cfg.To.Session = map[string]string{
+		"sql_mode":             "ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION",
+		"tidb_skip_utf8_check": "0",
 	}
 
 	cfg, err := s.cfg.Clone()
@@ -1132,6 +1189,13 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 	// disable 1-minute safe mode
 	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/SafeModeInitPhaseSeconds", "return(0)"), IsNil)
 	go syncer.Process(ctx, resultCh)
+	go func() {
+		for r := range resultCh {
+			if len(r.Errors) > 0 {
+				c.Fatal(r.String())
+			}
+		}
+	}()
 
 	expectJobs := []*expectJob{
 		// now every ddl job will start with a flush job
