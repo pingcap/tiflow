@@ -501,6 +501,10 @@ tiflow-chaos-case:
 tiflow-generate-mock: tools/bin/mockgen
 	scripts/generate-engine-mock.sh
 
+engine_build: 
+	@which docker
+	cd engine && ./test/utils/run_dfe.sh build
+
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))
 
