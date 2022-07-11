@@ -408,7 +408,12 @@ LOOP:
 	c.sink.run(cancelCtx, cancelCtx.ChangefeedVars().ID, cancelCtx.ChangefeedVars().Info)
 
 	// Refer to the previous comment on why we use (checkpointTs-1).
-	c.ddlPuller, err = c.newDDLPuller(cancelCtx, c.upstream, checkpointTs-1)
+	c.ddlPuller, err = c.newDDLPuller(cancelCtx,
+		cancelCtx.ChangefeedVars().Info.Config,
+		c.upstream, checkpointTs-1,
+		model.NewChangefeedID(ctx.ChangefeedVars().ID.Namespace,
+			// Add "_ddl_puller" to make it different from table pullers.
+			ctx.ChangefeedVars().ID.ID+"_ddl_puller"))
 	if err != nil {
 		return errors.Trace(err)
 	}
