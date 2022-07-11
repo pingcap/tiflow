@@ -53,12 +53,12 @@ func newCDCReactorState() *cdcReactorState {
 func (s *cdcReactorState) Update(key util.EtcdKey, value []byte, isInit bool) error {
 	if key.String() == etcd.CaptureOwnerKey {
 		if value == nil {
-			log.Info("Owner lost", zap.String("old-owner", s.Owner))
+			log.Info("Owner lost", zap.String("oldOwner", s.Owner))
 			return nil
 		}
 
-		log.Info("Owner updated", zap.String("old-owner", s.Owner),
-			zap.ByteString("new-owner", value))
+		log.Info("Owner updated", zap.String("oldOwner", s.Owner),
+			zap.ByteString("newOwner", value))
 		s.Owner = string(value)
 		return nil
 	}
@@ -69,7 +69,7 @@ func (s *cdcReactorState) Update(key util.EtcdKey, value []byte, isInit bool) er
 		if value == nil {
 			log.Info("Capture deleted",
 				zap.String("captureID", captureID),
-				zap.Reflect("old-capture", s.Captures[captureID]))
+				zap.Reflect("oldCapture", s.Captures[captureID]))
 
 			delete(s.Captures, captureID)
 			return nil
@@ -84,12 +84,12 @@ func (s *cdcReactorState) Update(key util.EtcdKey, value []byte, isInit bool) er
 		if oldCaptureInfo, ok := s.Captures[captureID]; ok {
 			log.Info("Capture updated",
 				zap.String("captureID", captureID),
-				zap.Reflect("old-capture", oldCaptureInfo),
-				zap.Reflect("new-capture", newCaptureInfo))
+				zap.Reflect("oldCapture", oldCaptureInfo),
+				zap.Reflect("newCapture", newCaptureInfo))
 		} else {
 			log.Info("Capture added",
 				zap.String("captureID", captureID),
-				zap.Reflect("new-capture", newCaptureInfo))
+				zap.Reflect("newCapture", newCaptureInfo))
 		}
 
 		s.Captures[captureID] = &newCaptureInfo
@@ -101,8 +101,8 @@ func (s *cdcReactorState) Update(key util.EtcdKey, value []byte, isInit bool) er
 
 		if value == nil {
 			log.Info("Changefeed deleted",
-				zap.String("changefeedID", changefeedID),
-				zap.Reflect("old-changefeed", s.ChangefeedStatuses))
+				zap.String("changefeed", changefeedID),
+				zap.Reflect("oldChangefeed", s.ChangefeedStatuses))
 
 			delete(s.ChangefeedStatuses, changefeedID)
 			return nil
@@ -116,13 +116,13 @@ func (s *cdcReactorState) Update(key util.EtcdKey, value []byte, isInit bool) er
 
 		if oldChangefeedInfo, ok := s.ChangefeedStatuses[changefeedID]; ok {
 			log.Info("Changefeed updated",
-				zap.String("changefeedID", changefeedID),
-				zap.Reflect("old-changefeed", oldChangefeedInfo),
-				zap.Reflect("new-changefeed", newChangefeedStatus))
+				zap.String("changefeed", changefeedID),
+				zap.Reflect("oldChangefeed", oldChangefeedInfo),
+				zap.Reflect("newChangefeed", newChangefeedStatus))
 		} else {
 			log.Info("Changefeed added",
-				zap.String("changefeedID", changefeedID),
-				zap.Reflect("new-changefeed", newChangefeedStatus))
+				zap.String("changefeed", changefeedID),
+				zap.Reflect("newChangefeed", newChangefeedStatus))
 		}
 
 		s.ChangefeedStatuses[changefeedID] = &newChangefeedStatus
@@ -137,8 +137,8 @@ func (s *cdcReactorState) Update(key util.EtcdKey, value []byte, isInit bool) er
 		if value == nil {
 			log.Info("Position deleted",
 				zap.String("captureID", captureID),
-				zap.String("changefeedID", changefeedID),
-				zap.Reflect("old-position", s.TaskPositions[changefeedID][captureID]))
+				zap.String("changefeed", changefeedID),
+				zap.Reflect("oldPosition", s.TaskPositions[changefeedID][captureID]))
 
 			delete(s.TaskPositions[changefeedID], captureID)
 			if len(s.TaskPositions[changefeedID]) == 0 {
@@ -161,14 +161,14 @@ func (s *cdcReactorState) Update(key util.EtcdKey, value []byte, isInit bool) er
 		if position, ok := s.TaskPositions[changefeedID][captureID]; ok {
 			log.Info("Position updated",
 				zap.String("captureID", captureID),
-				zap.String("changefeedID", changefeedID),
-				zap.Reflect("old-position", position),
-				zap.Reflect("new-position", newTaskPosition))
+				zap.String("changefeed", changefeedID),
+				zap.Reflect("oldPosition", position),
+				zap.Reflect("newPosition", newTaskPosition))
 		} else {
 			log.Info("Position created",
 				zap.String("captureID", captureID),
-				zap.String("changefeedID", changefeedID),
-				zap.Reflect("new-position", newTaskPosition))
+				zap.String("changefeed", changefeedID),
+				zap.Reflect("newPosition", newTaskPosition))
 		}
 
 		s.TaskPositions[changefeedID][captureID] = &newTaskPosition
@@ -183,8 +183,8 @@ func (s *cdcReactorState) Update(key util.EtcdKey, value []byte, isInit bool) er
 		if value == nil {
 			log.Info("Status deleted",
 				zap.String("captureID", captureID),
-				zap.String("changefeedID", changefeedID),
-				zap.Reflect("old-status", s.TaskStatuses[changefeedID][captureID]))
+				zap.String("changefeed", changefeedID),
+				zap.Reflect("oldStatus", s.TaskStatuses[changefeedID][captureID]))
 
 			delete(s.TaskStatuses[changefeedID], captureID)
 			if len(s.TaskStatuses[changefeedID]) == 0 {
@@ -207,14 +207,14 @@ func (s *cdcReactorState) Update(key util.EtcdKey, value []byte, isInit bool) er
 		if status, ok := s.TaskStatuses[changefeedID][captureID]; ok {
 			log.Info("Status updated",
 				zap.String("captureID", captureID),
-				zap.String("changefeedID", changefeedID),
-				zap.Reflect("old-status", status),
-				zap.Reflect("new-status", newTaskStatus))
+				zap.String("changefeed", changefeedID),
+				zap.Reflect("oldStatus", status),
+				zap.Reflect("newStatus", newTaskStatus))
 		} else {
 			log.Info("Status updated",
 				zap.String("captureID", captureID),
-				zap.String("changefeedID", changefeedID),
-				zap.Reflect("new-status", newTaskStatus))
+				zap.String("changefeed", changefeedID),
+				zap.Reflect("newStatus", newTaskStatus))
 		}
 
 		s.TaskStatuses[changefeedID][captureID] = &newTaskStatus

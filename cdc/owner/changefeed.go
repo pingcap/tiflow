@@ -116,7 +116,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	})
 	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
 	if err := c.tick(ctx, state, captures); err != nil {
-		log.Error("an error occurred in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
+		log.Error("an error occurred in Owner", zap.String("changefeed", c.state.ID), zap.Error(err))
 		var code string
 		if rfcCode, ok := cerror.RFCCode(err); ok {
 			code = string(rfcCode)
@@ -184,6 +184,8 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		// This condition implies that the DDL resolved-ts has not yet reached checkpointTs,
 		// which implies that it would be premature to schedule tables or to update status.
 		// So we return here.
+		log.Debug("barrierTs < checkpointTs, premature to schedule tables or update status",
+			zap.Uint64("barrierTs", barrierTs), zap.Uint64("checkpointTs", checkpointTs))
 		return nil
 	}
 	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(ctx, c.state, c.schema.AllPhysicalTables(), captures)
@@ -269,7 +271,8 @@ LOOP:
 	// So we need to process all DDLs from the range [checkpointTs, ...), but since the semantics of start-ts requires
 	// the lower bound of an open interval, i.e. (startTs, ...), we pass checkpointTs-1 as the start-ts to initialize
 	// the schema cache.
-	c.schema, err = newSchemaWrap4Owner(ctx.GlobalVars().KVStorage, checkpointTs-1, c.state.Info.Config)
+	c.schema, err = newSchemaWrap4Owner(ctx.GlobalVars().KVStorage,
+		checkpointTs-1, c.state.Info.Config, ctx.ChangefeedVars().ID)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -331,7 +334,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	cancel()
 	// We don't need to wait sink Close, pass a canceled context is ok
 	if err := c.sink.close(canceledCtx); err != nil {
-		log.Warn("Closing sink failed in Owner", zap.String("changefeedID", c.state.ID), zap.Error(err))
+		log.Warn("Closing sink failed in Owner", zap.String("changefeed", c.state.ID), zap.Error(err))
 	}
 	c.wg.Wait()
 	c.scheduler.Close(ctx)
@@ -480,7 +483,7 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		}
 		c.feedStateManager.MarkFinished()
 	default:
-		log.Panic("Unknown barrier type", zap.Int("barrier type", int(barrierTp)))
+		log.Panic("Unknown barrier type", zap.Int("barrierType", int(barrierTp)))
 	}
 	return barrierTs, nil
 }

@@ -51,7 +51,8 @@ func TickMessage() Message {
 	}
 }
 
-// StopMessage creates the message of Stop
+// StopMessage creates the message of Stop.
+// After receiving a Stop message, actor will be closed.
 func StopMessage() Message {
 	return Message{
 		Tp: TypeStop,
