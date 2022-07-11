@@ -64,8 +64,10 @@ type ddlPullerImpl struct {
 	lastDDLJobID   int64
 	cancel         context.CancelFunc
 
-	clock        clock.Clock
 	changefeedID model.ChangeFeedID
+
+	clock                      clock.Clock
+	lastResolvedTsAdvancedTime time.Time
 }
 
 func newDDLPuller(ctx cdcContext.Context,
@@ -112,70 +114,65 @@ func newDDLPuller(ctx cdcContext.Context,
 	}, nil
 }
 
+func (h *ddlPullerImpl) handleRawDDL(rawDDL *model.RawKVEntry) error {
+	if rawDDL == nil {
+		return nil
+	}
+	if rawDDL.OpType == model.OpTypeResolved {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		if rawDDL.CRTs > h.resolvedTS {
+			h.lastResolvedTsAdvancedTime = h.clock.Now()
+			h.resolvedTS = rawDDL.CRTs
+		}
+		return nil
+	}
+	job, err := entry.UnmarshalDDL(rawDDL)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if job == nil {
+		return nil
+	}
+	if h.filter.ShouldDiscardDDL(job.Type) {
+		log.Info("discard the ddl job",
+			zap.String("namespace", h.changefeedID.Namespace),
+			zap.String("changefeed", h.changefeedID.ID),
+			zap.Int64("jobID", job.ID), zap.String("query", job.Query))
+		return nil
+	}
+	if job.ID == h.lastDDLJobID {
+		log.Warn("ignore duplicated DDL job",
+			zap.String("namespace", h.changefeedID.Namespace),
+			zap.String("changefeed", h.changefeedID.ID),
+			zap.Any("job", job))
+		return nil
+	}
+	log.Info("receive new ddl job",
+		zap.String("namespace", h.changefeedID.Namespace),
+		zap.String("changefeed", h.changefeedID.ID),
+		zap.Any("job", job))
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.pendingDDLJobs = append(h.pendingDDLJobs, job)
+	h.lastDDLJobID = job.ID
+	return nil
+}
+
 func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	h.cancel = cancel
-	log.Info("DDL puller started",
-		zap.String("namespace", h.changefeedID.Namespace),
-		zap.String("changefeed", h.changefeedID.ID),
-		zap.Uint64("resolvedTS", h.resolvedTS))
 	stdCtx := contextutil.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = contextutil.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
 	g, stdCtx := errgroup.WithContext(stdCtx)
-	lastResolvedTsAdvancedTime := h.clock.Now()
 
 	g.Go(func() error {
 		return h.puller.Run(stdCtx)
 	})
 
 	rawDDLCh := memory.SortOutput(stdCtx, h.puller.Output())
-
-	receiveDDL := func(rawDDL *model.RawKVEntry) error {
-		if rawDDL == nil {
-			return nil
-		}
-		if rawDDL.OpType == model.OpTypeResolved {
-			h.mu.Lock()
-			defer h.mu.Unlock()
-			if rawDDL.CRTs > h.resolvedTS {
-				lastResolvedTsAdvancedTime = h.clock.Now()
-				h.resolvedTS = rawDDL.CRTs
-			}
-			return nil
-		}
-		job, err := entry.UnmarshalDDL(rawDDL)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if job == nil {
-			return nil
-		}
-		if h.filter.ShouldDiscardDDL(job.Type) {
-			log.Info("discard the ddl job",
-				zap.String("namespace", h.changefeedID.Namespace),
-				zap.String("changefeed", h.changefeedID.ID),
-				zap.Int64("jobID", job.ID), zap.String("query", job.Query))
-			return nil
-		}
-		if job.ID == h.lastDDLJobID {
-			log.Warn("ignore duplicated DDL job",
-				zap.String("namespace", h.changefeedID.Namespace),
-				zap.String("changefeed", h.changefeedID.ID),
-				zap.Any("job", job))
-			return nil
-		}
-		log.Info("receive new ddl job",
-			zap.String("namespace", h.changefeedID.Namespace),
-			zap.String("changefeed", h.changefeedID.ID),
-			zap.Any("job", job))
-
-		h.mu.Lock()
-		defer h.mu.Unlock()
-		h.pendingDDLJobs = append(h.pendingDDLJobs, job)
-		h.lastDDLJobID = job.ID
-		return nil
-	}
 
 	ticker := h.clock.Ticker(ownerDDLPullerStuckWarnTimeout)
 	defer ticker.Stop()
@@ -186,7 +183,7 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 			case <-stdCtx.Done():
 				return stdCtx.Err()
 			case <-ticker.C:
-				duration := h.clock.Since(lastResolvedTsAdvancedTime)
+				duration := h.clock.Since(h.lastResolvedTsAdvancedTime)
 				if duration > ownerDDLPullerStuckWarnTimeout {
 					log.Warn("ddl puller resolved ts has not advanced",
 						zap.String("namespace", h.changefeedID.Namespace),
@@ -195,12 +192,17 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 						zap.Uint64("resolvedTs", h.resolvedTS))
 				}
 			case e := <-rawDDLCh:
-				if err := receiveDDL(e); err != nil {
+				if err := h.handleRawDDL(e); err != nil {
 					return errors.Trace(err)
 				}
 			}
 		}
 	})
+
+	log.Info("DDL puller started",
+		zap.String("namespace", h.changefeedID.Namespace),
+		zap.String("changefeed", h.changefeedID.ID),
+		zap.Uint64("resolvedTS", h.resolvedTS))
 
 	return g.Wait()
 }
