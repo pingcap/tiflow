@@ -158,7 +158,7 @@ func (m *MetaMock) getNoLock(ctx context.Context, key string, opts ...metaModel.
 	return ret, nil
 }
 
-// Do implements extension.KVClientEx.Do
+// Do implements Do of KVExt
 func (m *MetaMock) Do(ctx context.Context, op metaModel.Op) (metaModel.OpResponse, metaModel.Error) {
 	m.Lock()
 	defer m.Unlock()
