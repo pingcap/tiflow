@@ -215,6 +215,7 @@ func TestParseCfg(t *testing.T) {
 				CheckBalanceInterval: 60000000000,
 			},
 		},
+		ClusterID: "default",
 	}, o.serverConfig)
 }
 
@@ -371,6 +372,7 @@ check-balance-interval = "10s"
 				CheckBalanceInterval: config.TomlDuration(10 * time.Second),
 			},
 		},
+		ClusterID: "default",
 	}, o.serverConfig)
 }
 
@@ -519,6 +521,7 @@ cert-allowed-cn = ["dd","ee"]
 				CheckBalanceInterval: 60000000000,
 			},
 		},
+		ClusterID: "default",
 	}, o.serverConfig)
 }
 

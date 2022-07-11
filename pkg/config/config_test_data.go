@@ -135,7 +135,8 @@ const (
       "max-task-concurrency": 10,
       "check-balance-interval": 60000000000
     }
-  }
+  },
+  "cluster-id": "default"
 }`
 
 	testCfgTestReplicaConfigMarshal1 = `{
@@ -147,7 +148,8 @@ const (
     "rules": [
       "1.1"
     ],
-    "ignore-txn-start-ts": null
+    "ignore-txn-start-ts": null,
+    "event-filters": null
   },
   "mounter": {
     "worker-num": 3

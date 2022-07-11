@@ -66,10 +66,10 @@ func (mr *MockCaptureMockRecorder) Drain(ctx interface{}) *gomock.Call {
 }
 
 // GetEtcdClient mocks base method.
-func (m *MockCapture) GetEtcdClient() *etcd.CDCEtcdClient {
+func (m *MockCapture) GetEtcdClient() etcd.CDCEtcdClientForAPI {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetEtcdClient")
-	ret0, _ := ret[0].(*etcd.CDCEtcdClient)
+	ret0, _ := ret[0].(etcd.CDCEtcdClientForAPI)
 	return ret0
 }
 
@@ -110,11 +110,12 @@ func (mr *MockCaptureMockRecorder) GetOwnerCaptureInfo(ctx interface{}) *gomock.
 }
 
 // GetUpstreamManager mocks base method.
-func (m *MockCapture) GetUpstreamManager() *upstream.Manager {
+func (m *MockCapture) GetUpstreamManager() (*upstream.Manager, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetUpstreamManager")
 	ret0, _ := ret[0].(*upstream.Manager)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GetUpstreamManager indicates an expected call of GetUpstreamManager.
@@ -150,6 +151,20 @@ func (m *MockCapture) IsOwner() bool {
 func (mr *MockCaptureMockRecorder) IsOwner() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsOwner", reflect.TypeOf((*MockCapture)(nil).IsOwner))
+}
+
+// IsReady mocks base method.
+func (m *MockCapture) IsReady() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsReady")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsReady indicates an expected call of IsReady.
+func (mr *MockCaptureMockRecorder) IsReady() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsReady", reflect.TypeOf((*MockCapture)(nil).IsReady))
 }
 
 // Liveness mocks base method.

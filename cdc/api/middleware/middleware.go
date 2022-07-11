@@ -20,9 +20,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/api"
+	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
+
+// ClientVersionHeader is the header name of client version
+const ClientVersionHeader = "X-client-version"
 
 // LogMiddleware logs the api requests
 func LogMiddleware() gin.HandlerFunc {
@@ -39,14 +44,14 @@ func LogMiddleware() gin.HandlerFunc {
 		if err != nil {
 			stdErr = err.Err
 		}
-
+		version := c.Request.Header.Get(ClientVersionHeader)
 		log.Info(path,
 			zap.Int("status", c.Writer.Status()),
 			zap.String("method", c.Request.Method),
 			zap.String("path", path),
 			zap.String("query", query),
 			zap.String("ip", c.ClientIP()),
-			zap.String("user-agent", c.Request.UserAgent()),
+			zap.String("user-agent", c.Request.UserAgent()), zap.String("client-version", version),
 			zap.Error(stdErr),
 			zap.Duration("duration", cost),
 		)
@@ -76,7 +81,7 @@ func ErrorHandleMiddleware() gin.HandlerFunc {
 
 // ForwardToOwnerMiddleware forward an request to owner if current server
 // is not owner, or handle it locally.
-func ForwardToOwnerMiddleware(p api.CaptureInfoProvider) gin.HandlerFunc {
+func ForwardToOwnerMiddleware(p capture.Capture) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		if !p.IsOwner() {
 			api.ForwardToOwner(ctx, p)
@@ -88,5 +93,19 @@ func ForwardToOwnerMiddleware(p api.CaptureInfoProvider) gin.HandlerFunc {
 			return
 		}
 		ctx.Next()
+	}
+}
+
+// CheckServerReadyMiddleware checks if the server is ready
+func CheckServerReadyMiddleware(capture capture.Capture) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if capture.IsReady() {
+			c.Next()
+		} else {
+			c.IndentedJSON(http.StatusServiceUnavailable,
+				model.NewHTTPError(errors.ErrServerIsNotReady))
+			c.Abort()
+			return
+		}
 	}
 }
