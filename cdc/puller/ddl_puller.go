@@ -1,17 +1,4 @@
-// Copyright 2021 PingCAP, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-package owner
+package puller
 
 import (
 	"context"
@@ -25,14 +12,11 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/pkg/config"
-	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/upstream"
-	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -41,11 +25,9 @@ const (
 	ownerDDLPullerStuckWarnTimeout = 30 * time.Second
 )
 
-// DDLPuller is a wrapper of the Puller interface for the owner
-// DDLPuller starts a puller, listens to the DDL range, adds the received DDLs into an internal queue
 type DDLPuller interface {
 	// Run runs the DDLPuller
-	Run(ctx cdcContext.Context) error
+	Run(ctx context.Context) error
 	// FrontDDL returns the first DDL job in the internal queue
 	FrontDDL() (uint64, *timodel.Job)
 	// PopFrontDDL returns and pops the first DDL job in the internal queue
@@ -55,7 +37,7 @@ type DDLPuller interface {
 }
 
 type ddlPullerImpl struct {
-	puller puller.Puller
+	puller Puller
 	filter *filter.Filter
 
 	mu             sync.Mutex
@@ -70,49 +52,79 @@ type ddlPullerImpl struct {
 	lastResolvedTsAdvancedTime time.Time
 }
 
-func newDDLPuller(ctx cdcContext.Context,
-	up *upstream.Upstream, startTs uint64,
+func NewDDLPuller(ctx context.Context,
+	replicaConfig *config.ReplicaConfig,
+	up *upstream.Upstream,
+	startTs uint64,
+	changefeed model.ChangeFeedID,
 ) (DDLPuller, error) {
-	f, err := filter.NewFilter(ctx.ChangefeedVars().Info.Config)
+	f, err := filter.NewFilter(replicaConfig)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	kvCfg := config.GetGlobalServerConfig().KVClient
-	var plr puller.Puller
-	kvStorage := up.KVStorage
-	// kvStorage can be nil only in the test
-	if kvStorage != nil {
-		plr = puller.NewPuller(
+
+	var puller Puller
+	storage := up.KVStorage
+	// storage can be nil only in the test
+	if storage == nil {
+		puller = New(
 			ctx, up.PDClient,
 			up.GrpcPool,
 			up.RegionCache,
-			kvStorage,
+			storage,
 			up.PDClock,
-			// Add "_ddl_puller" to make it different from table pullers.
-			model.ChangeFeedID{
-				Namespace: ctx.ChangefeedVars().ID.Namespace,
-				// Add "_ddl_puller" to make it different from table pullers.
-				ID: ctx.ChangefeedVars().ID.ID + "_ddl_puller",
-			},
+			changefeed,
+			//// Add "_ddl_puller" to make it different from table pullers.
+			//model.ChangeFeedID{
+			//	Namespace: ctx.ChangefeedVars().ID.Namespace,
+			//	// Add "_ddl_puller" to make it different from table pullers.
+			//	ID: ctx.ChangefeedVars().ID.ID + "_ddl_puller",
+			//},
 			startTs,
 			[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()},
-			kvCfg,
+			config.GetGlobalServerConfig().KVClient,
 		)
 	}
 
 	return &ddlPullerImpl{
-		puller:     plr,
-		resolvedTS: startTs,
-		filter:     f,
-		cancel:     func() {},
-		clock:      clock.New(),
-		changefeedID: model.ChangeFeedID{
-			Namespace: ctx.ChangefeedVars().ID.Namespace,
-			// Add "_ddl_puller" to make it different from table pullers.
-			ID: ctx.ChangefeedVars().ID.ID + "_ddl_puller",
-		},
+		puller:       puller,
+		resolvedTS:   startTs,
+		filter:       f,
+		cancel:       func() {},
+		clock:        clock.New(),
+		changefeedID: changefeed,
 	}, nil
+
 }
+
+//func newDDLPuller(ctx cdcContext.Context,
+//	up *upstream.Upstream, startTs uint64,
+//) (DDLPuller, error) {
+//	f, err := filter.NewFilter(ctx.ChangefeedVars().Info.Config)
+//	if err != nil {
+//		return nil, errors.Trace(err)
+//	}
+//	kvCfg := config.GetGlobalServerConfig().KVClient
+//	var plr puller.Puller
+//	kvStorage := up.KVStorage
+//	// kvS
+//	if kvStorage != nil {
+
+//	}
+//
+//	return &ddlPullerImpl{
+//		puller:     plr,
+//		resolvedTS: startTs,
+//		filter:     f,
+//		cancel:     func() {},
+//		clock:      clock.New(),
+//		changefeedID: model.ChangeFeedID{
+//			Namespace: ctx.ChangefeedVars().ID.Namespace,
+//			// Add "_ddl_puller" to make it different from table pullers.
+//			ID: ctx.ChangefeedVars().ID.ID + "_ddl_puller",
+//		},
+//	}, nil
+//}
 
 func (h *ddlPullerImpl) handleRawDDL(rawDDL *model.RawKVEntry) error {
 	if rawDDL == nil {
@@ -160,19 +172,22 @@ func (h *ddlPullerImpl) handleRawDDL(rawDDL *model.RawKVEntry) error {
 	return nil
 }
 
-func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
-	ctx, cancel := cdcContext.WithCancel(ctx)
+func (h *ddlPullerImpl) Run(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
 	h.cancel = cancel
-	stdCtx := contextutil.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
-	stdCtx = contextutil.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
-	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
-	g, stdCtx := errgroup.WithContext(stdCtx)
+
+	ctx = contextutil.PutTableInfoInCtx(ctx, -1, DDLPullerTableName)
+	ctx = contextutil.PutChangefeedIDInCtx(ctx, h.changefeedID)
+
+	// ctx = contextutil.PutRoleInCtx(ctx, util.RoleProcessor)
+
+	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		return h.puller.Run(stdCtx)
+		return h.puller.Run(ctx)
 	})
 
-	rawDDLCh := memory.SortOutput(stdCtx, h.puller.Output())
+	rawDDLCh := memory.SortOutput(ctx, h.puller.Output())
 
 	ticker := h.clock.Ticker(ownerDDLPullerStuckWarnTimeout)
 	defer ticker.Stop()
@@ -180,8 +195,8 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 	g.Go(func() error {
 		for {
 			select {
-			case <-stdCtx.Done():
-				return stdCtx.Err()
+			case <-ctx.Done():
+				return ctx.Err()
 			case <-ticker.C:
 				duration := h.clock.Since(h.lastResolvedTsAdvancedTime)
 				if duration > ownerDDLPullerStuckWarnTimeout {

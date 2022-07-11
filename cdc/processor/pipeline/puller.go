@@ -73,7 +73,7 @@ func (n *pullerNode) start(ctx pipeline.NodeContext,
 	kvCfg := config.GetGlobalServerConfig().KVClient
 	// NOTICE: always pull the old value internally
 	// See also: https://github.com/pingcap/tiflow/issues/2301.
-	plr := puller.NewPuller(
+	plr := puller.New(
 		ctxC,
 		up.PDClient,
 		up.GrpcPool,

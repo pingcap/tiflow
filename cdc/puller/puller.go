@@ -64,9 +64,9 @@ type pullerImpl struct {
 	initialized  int64
 }
 
-// NewPuller create a new Puller fetch event start from checkpointTs
+// New create a new Puller fetch event start from checkpointTs
 // and put into buf.
-func NewPuller(
+func New(
 	ctx context.Context,
 	pdCli pd.Client,
 	grpcPool kv.GrpcPool,

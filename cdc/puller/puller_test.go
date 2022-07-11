@@ -125,7 +125,7 @@ func newPullerForTest(
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdCli)
 	defer regionCache.Close()
-	plr := NewPuller(
+	plr := New(
 		ctx, pdCli, grpcPool, regionCache, store, pdutil.NewClock4Test(),
 		model.DefaultChangeFeedID("changefeed-id-test"),
 		checkpointTs, spans, config.GetDefaultServerConfig().KVClient)

@@ -745,7 +745,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	stdCtx := contextutil.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = contextutil.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
-	ddlPuller := puller.NewPuller(
+	ddlPuller := puller.New(
 		stdCtx,
 		p.upstream.PDClient,
 		p.upstream.GrpcPool,
