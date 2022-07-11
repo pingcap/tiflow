@@ -96,7 +96,7 @@ func WriteData(w http.ResponseWriter, data interface{}) {
 func HandleOwnerJob(
 	ctx context.Context, capture capture.Capture, job model.AdminJob,
 ) error {
-	// Use buffered channel to prevernt blocking owner.
+	// Use buffered channel to prevent blocking owner from happening.
 	done := make(chan error, 1)
 	o, err := capture.GetOwner()
 	if err != nil {
@@ -151,7 +151,7 @@ func HandleOwnerScheduleTable(
 }
 
 // ForwardToOwner forwards an request to the owner
-func ForwardToOwner(c *gin.Context, p CaptureInfoProvider) {
+func ForwardToOwner(c *gin.Context, p capture.Capture) {
 	ctx := c.Request.Context()
 	// every request can only forward to owner one time
 	if len(c.GetHeader(forwardFromCapture)) != 0 {

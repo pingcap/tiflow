@@ -11,17 +11,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package api
+package internal
 
 import (
-	"context"
-
-	"github.com/pingcap/tiflow/cdc/model"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 )
 
-// CaptureInfoProvider provides capture and its onwnership information
-type CaptureInfoProvider interface {
-	Info() (model.CaptureInfo, error)
-	IsOwner() bool
-	GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error)
+type clientBuilder interface {
+	// ClientType return the type of client builder
+	ClientType() metaModel.ClientType
+
+	// NewKVClientWithNamespace new a kvclient with namespace
+	NewKVClientWithNamespace(cc metaModel.ClientConn, projectID metaModel.ProjectID,
+		jobID metaModel.JobID) (metaModel.KVClient, error)
 }
