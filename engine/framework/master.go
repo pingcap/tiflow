@@ -105,7 +105,7 @@ const (
 type BaseMaster interface {
 	Master
 
-	// MetaKVClient return user metastore kv client
+	// MetaKVClient return business metastore kv client
 	MetaKVClient() metaModel.KVClient
 	MetricFactory() promutil.Factory
 	Logger() *zap.Logger
@@ -133,9 +133,7 @@ type DefaultBaseMaster struct {
 	messageHandlerManager p2p.MessageHandlerManager
 	messageSender         p2p.MessageSender
 	// framework metastore client
-	frameMetaClient pkgOrm.Client
-	// user metastore raw kvclient
-	userRawKVClient       metaModel.KVClientEx
+	frameMetaClient       pkgOrm.Client
 	executorClientManager client.ClientsManager
 	serverMasterClient    client.MasterClient
 
@@ -166,9 +164,8 @@ type DefaultBaseMaster struct {
 	// masterProjectInfo is the projectInfo of itself
 	masterProjectInfo tenant.ProjectInfo
 
-	// user metastore prefix kvclient
-	// Don't close it. It's just a prefix wrapper for underlying userRawKVClient
-	userMetaKVClient metaModel.KVClient
+	// business kvclient with namespace
+	businessMetaKVClient metaModel.KVClient
 
 	// metricFactory can produce metric with underlying project info and job info
 	metricFactory promutil.Factory
@@ -198,9 +195,8 @@ type masterParams struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
 	// framework metastore client
-	FrameMetaClient pkgOrm.Client
-	// user metastore raw kvclient
-	UserRawKVClient       metaModel.KVClientEx
+	FrameMetaClient       pkgOrm.Client
+	BusinessClientConn    metaModel.ClientConn
 	ExecutorClientManager client.ClientsManager
 	ServerMasterClient    client.MasterClient
 }
@@ -235,12 +231,17 @@ func NewBaseMaster(
 
 	logger := logutil.FromContext(*ctx)
 
+	cli, err := meta.NewKVClientWithNamespace(params.BusinessClientConn, ctx.ProjectInfo.UniqueID(), id)
+	if err != nil {
+		// TODO more elegant error handling
+		log.Panic("failed to create business kvclient", zap.Error(err))
+	}
+
 	return &DefaultBaseMaster{
 		Impl:                  impl,
 		messageHandlerManager: params.MessageHandlerManager,
 		messageSender:         params.MessageSender,
 		frameMetaClient:       params.FrameMetaClient,
-		userRawKVClient:       params.UserRawKVClient,
 		executorClientManager: params.ExecutorClientManager,
 		serverMasterClient:    params.ServerMasterClient,
 		id:                    id,
@@ -259,18 +260,18 @@ func NewBaseMaster(
 		advertiseAddr:     advertiseAddr,
 		masterProjectInfo: ctx.ProjectInfo,
 
-		createWorkerQuota: quota.NewConcurrencyQuota(maxCreateWorkerConcurrency),
-		userMetaKVClient:  meta.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
-		metricFactory:     promutil.NewFactory4Master(ctx.ProjectInfo, MustConvertWorkerType2JobType(tp), id),
-		logger:            frameLog.WithMasterID(logger, id),
+		createWorkerQuota:    quota.NewConcurrencyQuota(maxCreateWorkerConcurrency),
+		businessMetaKVClient: cli,
+		metricFactory:        promutil.NewFactory4Master(ctx.ProjectInfo, MustConvertWorkerType2JobType(tp), id),
+		logger:               frameLog.WithMasterID(logger, id),
 
 		deps: ctx.Deps(),
 	}
 }
 
-// MetaKVClient returns the user space metaclient
+// MetaKVClient returns the business space metaclient
 func (m *DefaultBaseMaster) MetaKVClient() metaModel.KVClient {
-	return m.userMetaKVClient
+	return m.businessMetaKVClient
 }
 
 // MetricFactory implements BaseMaster.MetricFactory
@@ -465,6 +466,7 @@ func (m *DefaultBaseMaster) doClose() {
 			zap.String("master-id", m.id))
 	}
 	promutil.UnregisterWorkerMetrics(m.id)
+	m.businessMetaKVClient.Close()
 }
 
 // Close implements BaseMaster.Close

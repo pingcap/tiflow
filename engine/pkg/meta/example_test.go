@@ -18,56 +18,58 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
-	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	metaMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	"github.com/stretchr/testify/require"
 )
 
 // Backend KV store data:
-//|		KEY		|		VALUE		|		TTL		|	REVISION	|
-//|		apple	|		 red		|		15		|		1		|
-//|		orange  |		orange		|		0		|		10		|
-//|		data	|		flow		|		0		|		5		|
-//|		ticdc	|		kv		|		0		|		5		|
-//|		dm		|		DDL		|		0		|		18		|
+//|		KEY		|		VALUE	|
+//|		apple	|		 red	|
+//|		orange  |		orange	|
+//|		data	|		flow	|
+//|		ticdc	|		kv		|
+//|		dm		|		DDL		|
 
-// nolint:deadcode, ineffassign
-func test(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	cli := mock.NewMockKVClient(ctrl)
+// nolint: ineffassign
+func Test(t *testing.T) {
+	// clientConn, err := NewClientConn(metaModel.DefaultStoreConfig())
+	clientConn := metaMock.NewMockClientConn()
+	cli, _ := NewKVClientWithNamespace(clientConn, "fakeProject", "fakeJob")
 	defer cli.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	// nolint:typecheck
+
+	prepareData(ctx, cli)
+
 	var (
 		putRsp *metaModel.PutResponse
 		getRsp *metaModel.GetResponse
 		delRsp *metaModel.DeleteResponse
 		txnRsp *metaModel.TxnResponse
-		err    error
 	)
 
 	//
 	// Basic Put/Get/Delete
 	//
-	putRsp, err = cli.Put(ctx, "TiDB", "DistDB")
-	// expect err == nil
+	putRsp, err := cli.Put(ctx, "TiDB", "DistDB")
+	require.NoError(t, err)
 
 	// always get latest revision data
 	getRsp, err = cli.Get(ctx, "TiDB")
-	// expect err == nil
-	// expect len(getRsp.Kvs) == 1
+	require.NoError(t, err)
+	require.Len(t, getRsp.Kvs, 1)
+
 	kv := getRsp.Kvs[0]
-	var _ *metaModel.KeyValue = kv
-	// expect kv.Key == []byte("TiDB")
-	// expect kv.Value == []byte("DistDB")
+	require.Equal(t, []byte("TiDB"), kv.Key)
+	require.Equal(t, []byte("DistDB"), kv.Value)
 
 	delRsp, err = cli.Delete(ctx, "TiDB")
-	// expect err == nil
+	require.NoError(t, err)
+
 	getRsp, err = cli.Get(ctx, "TiDB")
-	// expect err == nil
-	// expect len(getRsp.Kvs) == 0
+	require.NoError(t, err)
+	require.Len(t, getRsp.Kvs, 0)
 
 	//
 	//	Options: Key Range/From Key/Key Prefix attributes
@@ -115,22 +117,30 @@ func test(t *testing.T) {
 	//		ticdc  kv
 	//		dm	   DDL
 	getOp := metaModel.OpGet("apple3", metaModel.WithRange("zz"))
-	_ = getRsp
 	putOp := metaModel.OpPut("apple3", "t3")
-	_ = putRsp
 	delOp := metaModel.OpDelete("apple3", metaModel.WithRange("ti"))
-	_ = delRsp
-	_ = err
 	txn := cli.Txn(ctx)
 	txnRsp, err = txn.Do(getOp).Do(putOp).Do(delOp).Commit()
-	_ = txnRsp
 	// When succeed, txnRsp will contain a getRsp, a putRsp and a delRsp
 	// txnRsp.ResponseOp[0].GetResponseGet()
 	// txnRsp.ResponseOp[1].GetResponsePut()
 	// txnRsp.ResponseOp[2].GetResponseDelete()
 	// When failed, all ops will take no effect.
 
-	epoch, err := cli.GenEpoch(ctx)
-	_ = epoch
+	epoch, _ := cli.GenEpoch(ctx)
 	// expect epoch is always an increasing int64
+
+	_ = epoch
+	_ = getRsp
+	_ = putRsp
+	_ = delRsp
+	_ = txnRsp
+}
+
+func prepareData(ctx context.Context, cli metaModel.KVClient) {
+	cli.Put(ctx, "apple", "red")
+	cli.Put(ctx, "orange", "orange")
+	cli.Put(ctx, "data", "flow")
+	cli.Put(ctx, "ticdc", "kv")
+	cli.Put(ctx, "dm", "DDL")
 }
