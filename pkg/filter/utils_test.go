@@ -60,19 +60,19 @@ recover table, modify schema charset and collate, add primary key, drop primary 
 func TestVerifyTableRules(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
-		cfg      *config.ReplicaConfig
+		cfg      *config.FilterConfig
 		hasError bool
 	}{
-		{&config.ReplicaConfig{Filter: &config.FilterConfig{Rules: []string{""}}}, false},
-		{&config.ReplicaConfig{Filter: &config.FilterConfig{Rules: []string{"*.*"}}}, false},
-		{&config.ReplicaConfig{Filter: &config.FilterConfig{Rules: []string{"test.*ms"}}}, false},
-		{&config.ReplicaConfig{Filter: &config.FilterConfig{Rules: []string{"*.889"}}}, false},
-		{&config.ReplicaConfig{Filter: &config.FilterConfig{Rules: []string{"test-a.*", "*.*.*"}}}, true},
-		{&config.ReplicaConfig{Filter: &config.FilterConfig{Rules: []string{"*.*", "*.*.*", "*.*.*.*"}}}, true},
+		{&config.FilterConfig{Rules: []string{""}}, false},
+		{&config.FilterConfig{Rules: []string{"*.*"}}, false},
+		{&config.FilterConfig{Rules: []string{"test.*ms"}}, false},
+		{&config.FilterConfig{Rules: []string{"*.889"}}, false},
+		{&config.FilterConfig{Rules: []string{"test-a.*", "*.*.*"}}, true},
+		{&config.FilterConfig{Rules: []string{"*.*", "*.*.*", "*.*.*.*"}}, true},
 	}
 	for _, c := range cases {
 		_, err := VerifyTableRules(c.cfg)
-		require.Equal(t, c.hasError, err != nil, "case: %s", c.cfg.Filter.Rules)
+		require.Equal(t, c.hasError, err != nil, "case: %s", c.cfg.Rules)
 	}
 }
 

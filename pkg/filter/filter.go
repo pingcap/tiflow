@@ -52,7 +52,7 @@ type filter struct {
 
 // NewFilter creates a filter.
 func NewFilter(cfg *config.ReplicaConfig) (Filter, error) {
-	f, err := VerifyTableRules(cfg)
+	f, err := VerifyTableRules(cfg.Filter)
 	if err != nil {
 		return nil, err
 	}

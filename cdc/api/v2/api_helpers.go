@@ -212,7 +212,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 				"if use force replicate, old value feature must be enabled")
 		}
 	}
-	_, err = filter.VerifyRules(replicaCfg.Filter)
+	_, err = filter.VerifyTableRules(replicaCfg.Filter)
 	if err != nil {
 		return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs(err.Error())
 	}

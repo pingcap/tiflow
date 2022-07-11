@@ -33,20 +33,20 @@ func isSysSchema(db string) bool {
 // VerifyTableRules checks the table filter rules in the configuration
 // and returns an invalid rule error if the verification fails,
 // otherwise it will return a table filter.
-func VerifyTableRules(cfg *config.ReplicaConfig) (tfilter.Filter, error) {
+func VerifyTableRules(cfg *config.FilterConfig) (tfilter.Filter, error) {
 	var f tfilter.Filter
 	var err error
-	if len(cfg.Filter.Rules) == 0 && cfg.Filter.MySQLReplicationRules != nil {
-		f, err = tfilter.ParseMySQLReplicationRules(cfg.Filter.MySQLReplicationRules)
+	if len(cfg.Rules) == 0 && cfg.MySQLReplicationRules != nil {
+		f, err = tfilter.ParseMySQLReplicationRules(cfg.MySQLReplicationRules)
 	} else {
-		rules := cfg.Filter.Rules
+		rules := cfg.Rules
 		if len(rules) == 0 {
 			rules = []string{"*.*"}
 		}
 		f, err = tfilter.Parse(rules)
 	}
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err, cfg.Filter)
+		return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err, cfg)
 	}
 
 	return f, nil
