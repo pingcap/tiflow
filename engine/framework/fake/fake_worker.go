@@ -264,15 +264,13 @@ watchLoop:
 		if revision > 0 {
 			opts = append(opts, clientv3.WithRev(revision+1))
 		}
-		cctx, cancel := context.WithTimeout(ctx, time.Minute)
-		ch := cli.Watch(cctx, key, opts...)
+		ch := cli.Watch(clientv3.WithRequireLeader(ctx), key, opts...)
 		log.Info("start to watch etcd", zap.String("key", key),
 			zap.Int64("revision", revision),
 			zap.Strings("endpoints", d.config.EtcdEndpoints))
 		for resp := range ch {
 			if resp.Err() != nil {
 				log.Warn("watch met error", zap.Error(resp.Err()))
-				cancel()
 				continue watchLoop
 			}
 			for _, event := range resp.Events {
@@ -290,7 +288,6 @@ watchLoop:
 				d.status.setEtcdCheckpoint(&ckpt)
 			}
 		}
-		cancel()
 	}
 }
 
