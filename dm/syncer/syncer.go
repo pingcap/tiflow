@@ -3740,6 +3740,18 @@ func (s *Syncer) Pause() {
 
 // Resume resumes the paused process.
 func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
+	var err error
+	defer func() {
+		if err != nil {
+			pr <- pb.ProcessResult{
+				IsCanceled: false,
+				Errors: []*pb.ProcessError{
+					unit.NewProcessError(err),
+				},
+			}
+			return
+		}
+	}()
 	if s.isClosed() {
 		s.tctx.L().Warn("try to resume, but already closed")
 		return
@@ -3748,15 +3760,19 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 	// continue the processing
 	s.reset()
 	// reset database conns
-	err := s.resetDBs(s.tctx.WithContext(ctx))
+	err = s.resetDBs(s.tctx.WithContext(ctx))
 	if err != nil {
-		pr <- pb.ProcessResult{
-			IsCanceled: false,
-			Errors: []*pb.ProcessError{
-				unit.NewProcessError(err),
-			},
-		}
 		return
+	}
+	duration, err := strconv.Atoi(s.cfg.SafeModeResumeDuration)
+	if err != nil {
+		return
+	}
+	if duration >= 0 {
+		if s.cliArgs == nil {
+			s.cliArgs = new(config.TaskCliArgs)
+		}
+		s.cliArgs.SafeModeDuration = s.cfg.SafeModeResumeDuration
 	}
 	s.Process(ctx, pr)
 }

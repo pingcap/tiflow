@@ -324,8 +324,9 @@ type SyncerConfig struct {
 	AutoFixGTID bool `yaml:"auto-fix-gtid" toml:"auto-fix-gtid" json:"auto-fix-gtid"`
 	EnableGTID  bool `yaml:"enable-gtid" toml:"enable-gtid" json:"enable-gtid"`
 	// deprecated
-	DisableCausality bool `yaml:"disable-detect" toml:"disable-detect" json:"disable-detect"`
-	SafeMode         bool `yaml:"safe-mode" toml:"safe-mode" json:"safe-mode"`
+	DisableCausality       bool   `yaml:"disable-detect" toml:"disable-detect" json:"disable-detect"`
+	SafeMode               bool   `yaml:"safe-mode" toml:"safe-mode" json:"safe-mode"`
+	SafeModeResumeDuration string `yaml:"safe-mode-resume-duration" toml:"safe-mode-resume-duration" json:"safe-mode-resume-duration"`
 	// deprecated, use `ansi-quotes` in top level config instead
 	EnableANSIQuotes bool `yaml:"enable-ansi-quotes" toml:"enable-ansi-quotes" json:"enable-ansi-quotes"`
 }
@@ -333,10 +334,9 @@ type SyncerConfig struct {
 // DefaultSyncerConfig return default syncer config for task.
 func DefaultSyncerConfig() SyncerConfig {
 	return SyncerConfig{
-		WorkerCount:             defaultWorkerCount,
-		Batch:                   defaultBatch,
-		QueueSize:               defaultQueueSize,
-		CheckpointFlushInterval: defaultCheckpointFlushInterval,
+		WorkerCount: defaultWorkerCount,
+		Batch:       defaultBatch,
+		QueueSize:   defaultQueueSize,
 	}
 }
 
@@ -791,6 +791,12 @@ func (c *TaskConfig) adjust() error {
 		if inst.SyncerThread != 0 {
 			inst.Syncer.WorkerCount = inst.SyncerThread
 		}
+		if inst.Syncer.SafeModeResumeDuration != "" {
+			duration, err := time.ParseDuration(inst.Syncer.SafeModeResumeDuration)
+			if err != nil || duration < -1 {
+				return terror.ErrConfigInvalidSafeModeResumeDuration.Generate(inst.Syncer.SafeModeResumeDuration, err)
+			}
+		}
 
 		inst.ContinuousValidator = defaultValidatorConfig()
 		if inst.ContinuousValidatorConfigName != "" {
@@ -1083,6 +1089,7 @@ type SyncerConfigForDowngrade struct {
 	EnableGTID              bool   `yaml:"enable-gtid"`
 	DisableCausality        bool   `yaml:"disable-detect"`
 	SafeMode                bool   `yaml:"safe-mode"`
+	SafeModeResumeDuration  string `yaml:"safe-mode-resume-duration"`
 	EnableANSIQuotes        bool   `yaml:"enable-ansi-quotes"`
 
 	Compact      bool `yaml:"compact,omitempty"`
@@ -1103,6 +1110,7 @@ func NewSyncerConfigsForDowngrade(syncerConfigs map[string]*SyncerConfig) map[st
 			EnableGTID:              syncerConfig.EnableGTID,
 			DisableCausality:        syncerConfig.DisableCausality,
 			SafeMode:                syncerConfig.SafeMode,
+			SafeModeResumeDuration:  syncerConfig.SafeModeResumeDuration,
 			EnableANSIQuotes:        syncerConfig.EnableANSIQuotes,
 			Compact:                 syncerConfig.Compact,
 			MultipleRows:            syncerConfig.MultipleRows,
