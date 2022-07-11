@@ -24,7 +24,4 @@ type clientBuilder interface {
 	// NewKVClientWithNamespace new a kvclient with namespace
 	NewKVClientWithNamespace(cc metaModel.ClientConn, projectID metaModel.ProjectID,
 		jobID metaModel.JobID) (metaModel.KVClient, error)
-
-	// NewKVClient new a kvclient without namespace
-	NewKVClient(cc metaModel.ClientConn) (metaModel.KVClient, error)
 }

@@ -55,21 +55,6 @@ func (b *ClientBuilderImpl) NewKVClientWithNamespace(cc metaModel.ClientConn,
 	}, nil
 }
 
-// NewKVClient implements NewKVClient of clientBuilder
-func (b *ClientBuilderImpl) NewKVClient(cc metaModel.ClientConn) (metaModel.KVClient, error) {
-	cli, err := cc.GetConn()
-	if err != nil {
-		return nil, err
-	}
-
-	etcdCli, ok := cli.(*clientv3.Client)
-	if !ok {
-		return nil, cerrors.ErrMetaParamsInvalid.GenWithStackByArgs(fmt.Sprintf("invalid ClientConn for etcd kvclient builder,"+
-			" client type:%d", cc.ClientType()))
-	}
-	return NewEtcdImpl(etcdCli)
-}
-
 // etcdKVClient is the implement of kv interface based on etcd
 // Support namespace isolation and all kv ability
 // etcdImpl -> kvPrefix+Closer -> etcdKVClient

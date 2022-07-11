@@ -29,13 +29,3 @@ func NewKVClientWithNamespace(cc metaModel.ClientConn, projectID metaModel.Proje
 
 	return builder.NewKVClientWithNamespace(cc, projectID, jobID)
 }
-
-// NewKVClient return a KVClient without namespace isolation
-func NewKVClient(cc metaModel.ClientConn) (metaModel.KVClient, error) {
-	builder, err := internal.GetClientBuilder(cc.ClientType())
-	if err != nil {
-		return nil, err
-	}
-
-	return builder.NewKVClient(cc)
-}

@@ -40,13 +40,3 @@ func (b *ClientBuilderImpl) NewKVClientWithNamespace(cc metaModel.ClientConn,
 
 	return metaMock.NewMetaMock(), nil
 }
-
-// NewKVClient implements NewKVClient of clientBuilder
-func (b *ClientBuilderImpl) NewKVClient(cc metaModel.ClientConn) (metaModel.KVClient, error) {
-	if cc.ClientType() != metaModel.MockKVClientType {
-		return nil, cerrors.ErrMetaParamsInvalid.GenWithStackByArgs(fmt.Sprintf("invalid ClientConn for etcd kvclient builder,"+
-			" client type:%d", cc.ClientType()))
-	}
-
-	return metaMock.NewMetaMock(), nil
-}
