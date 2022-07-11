@@ -58,7 +58,7 @@ var (
 // dispatches requests to worker
 // sends responses to RPC client.
 type Server struct {
-	// closeMu is used to protect 5 fields below
+	// closeMu is used to sync Start/Close and protect 5 fields below
 	closeMu    sync.Mutex
 	closed     atomic.Bool
 	inited     bool
