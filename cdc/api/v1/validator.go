@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package validator
+package v1
 
 import (
 	"context"
@@ -19,33 +19,35 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/contextutil"
-	"github.com/pingcap/tiflow/cdc/entry/schema"
-	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
-	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/r3labs/diff"
 	"github.com/tikv/client-go/v2/oracle"
 )
 
-// VerifyCreateChangefeedConfig verify ChangefeedConfig for create a changefeed
-func VerifyCreateChangefeedConfig(
+// verifyCreateChangefeedConfig verifies ChangefeedConfig for create a changefeed
+func verifyCreateChangefeedConfig(
 	ctx context.Context,
 	changefeedConfig model.ChangefeedConfig,
 	capture capture.Capture,
 ) (*model.ChangeFeedInfo, error) {
-	// TODO(dongmen): we should pass ClusterID in ChangefeedConfig in the upcoming future
-	up := capture.GetUpstreamManager().Get(upstream.DefaultUpstreamID)
-	defer up.Release()
+	upManager, err := capture.GetUpstreamManager()
+	if err != nil {
+		return nil, err
+	}
+	up, err := upManager.GetDefaultUpstream()
+	if err != nil {
+		return nil, err
+	}
 
 	// verify sinkURI
 	if changefeedConfig.SinkURI == "" {
@@ -80,6 +82,7 @@ func VerifyCreateChangefeedConfig(
 	if err := gc.EnsureChangefeedStartTsSafety(
 		ctx,
 		up.PDClient,
+		capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
 		model.DefaultChangeFeedID(changefeedConfig.ID),
 		ensureTTL, changefeedConfig.StartTS); err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {
@@ -129,6 +132,7 @@ func VerifyCreateChangefeedConfig(
 
 	// init ChangefeedInfo
 	info := &model.ChangeFeedInfo{
+		UpstreamID:        up.ID,
 		SinkURI:           changefeedConfig.SinkURI,
 		CreateTime:        time.Now(),
 		StartTs:           changefeedConfig.StartTS,
@@ -142,7 +146,8 @@ func VerifyCreateChangefeedConfig(
 	}
 
 	if !replicaConfig.ForceReplicate && !changefeedConfig.IgnoreIneligibleTable {
-		ineligibleTables, _, err := VerifyTables(replicaConfig, up.KVStorage, changefeedConfig.StartTS)
+		ineligibleTables, _, err := entry.VerifyTables(replicaConfig,
+			up.KVStorage, changefeedConfig.StartTS)
 		if err != nil {
 			return nil, err
 		}
@@ -214,37 +219,4 @@ func VerifyUpdateChangefeedConfig(ctx context.Context,
 	}
 
 	return newInfo, nil
-}
-
-// VerifyTables catalog tables specified by ReplicaConfig into
-// eligible (has an unique index or primary key) and ineligible tables.
-func VerifyTables(replicaConfig *config.ReplicaConfig, storage tidbkv.Storage, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
-	filter, err := filter.NewFilter(replicaConfig)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-	meta, err := kv.GetSnapshotMeta(storage, startTs)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-	snap, err := schema.NewSingleSnapshotFromMeta(meta, startTs, false /* explicitTables */)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-	snap.IterTables(true, func(tableInfo *model.TableInfo) {
-		if filter.ShouldIgnoreTable(tableInfo.TableName.Schema, tableInfo.TableName.Table) {
-			return
-		}
-		// Sequence is not supported yet, TiCDC needs to filter all sequence tables.
-		// See https://github.com/pingcap/tiflow/issues/4559
-		if tableInfo.IsSequence() {
-			return
-		}
-		if !tableInfo.IsEligible(false /* forceReplicate */) {
-			ineligibleTables = append(ineligibleTables, tableInfo.TableName)
-		} else {
-			eligibleTables = append(eligibleTables, tableInfo.TableName)
-		}
-	})
-	return
 }

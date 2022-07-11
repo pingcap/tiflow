@@ -133,3 +133,23 @@ func TestDrainSkipOwner(t *testing.T) {
 	require.Len(t, tasks, 0)
 	require.EqualValues(t, captureIDNotDraining, scheduler.getTarget())
 }
+
+func TestDrainImbalanceCluster(t *testing.T) {
+	t.Parallel()
+
+	var checkpointTs model.Ts
+	currentTables := make([]model.TableID, 0)
+	captures := map[model.CaptureID]*CaptureStatus{
+		"a": {State: CaptureStateInitialized},
+		"b": {IsOwner: true, State: CaptureStateInitialized},
+	}
+	replications := map[model.TableID]*ReplicationSet{
+		1: {State: ReplicationSetStateReplicating, Primary: "a"},
+		2: {State: ReplicationSetStateReplicating, Primary: "a"},
+	}
+	scheduler := newDrainCaptureScheduler(10)
+	scheduler.setTarget("a")
+	tasks := scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	require.Len(t, tasks, 2)
+	require.EqualValues(t, "a", scheduler.getTarget())
+}
