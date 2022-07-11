@@ -27,6 +27,7 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -81,7 +82,7 @@ type changefeed struct {
 
 	schema      *schemaWrap4Owner
 	sink        DDLSink
-	ddlPuller   DDLPuller
+	ddlPuller   puller.DDLPuller
 	initialized bool
 	// isRemoved is true if the changefeed is removed
 	isRemoved bool
@@ -113,11 +114,23 @@ type changefeed struct {
 	metricsChangefeedResolvedTsLagGauge   prometheus.Gauge
 	metricsChangefeedTickDuration         prometheus.Observer
 
-	newDDLPuller func(ctx cdcContext.Context,
-		up *upstream.Upstream, startTs uint64) (DDLPuller, error)
+	newDDLPuller func(ctx context.Context,
+		replicaConfig *config.ReplicaConfig,
+		up *upstream.Upstream,
+		startTs uint64,
+		changefeed model.ChangeFeedID,
+	) (puller.DDLPuller, error)
+
 	newSink      func() DDLSink
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error)
 }
+
+//// Add "_ddl_puller" to make it different from table pullers.
+//model.ChangeFeedID{
+//	Namespace: ctx.ChangefeedVars().ID.Namespace,
+//	// Add "_ddl_puller" to make it different from table pullers.
+//	ID: ctx.ChangefeedVars().ID.ID + "_ddl_puller",
+//},
 
 func newChangefeed(id model.ChangeFeedID, up *upstream.Upstream) *changefeed {
 	c := &changefeed{
@@ -131,7 +144,7 @@ func newChangefeed(id model.ChangeFeedID, up *upstream.Upstream) *changefeed {
 		errCh:  make(chan error, defaultErrChSize),
 		cancel: func() {},
 
-		newDDLPuller: newDDLPuller,
+		newDDLPuller: puller.NewDDLPuller,
 		newSink:      newDDLSink,
 	}
 	c.newScheduler = newScheduler
@@ -140,8 +153,12 @@ func newChangefeed(id model.ChangeFeedID, up *upstream.Upstream) *changefeed {
 
 func newChangefeed4Test(
 	id model.ChangeFeedID, up *upstream.Upstream,
-	newDDLPuller func(ctx cdcContext.Context,
-		up *upstream.Upstream, startTs uint64) (DDLPuller, error),
+	newDDLPuller func(ctx context.Context,
+		replicaConfig *config.ReplicaConfig,
+		up *upstream.Upstream,
+		startTs uint64,
+		changefeed model.ChangeFeedID,
+	) (puller.DDLPuller, error),
 	newSink func() DDLSink,
 ) *changefeed {
 	c := newChangefeed(id, up)

@@ -17,6 +17,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -74,12 +75,6 @@ func NewDDLPuller(ctx context.Context,
 			storage,
 			up.PDClock,
 			changefeed,
-			//// Add "_ddl_puller" to make it different from table pullers.
-			//model.ChangeFeedID{
-			//	Namespace: ctx.ChangefeedVars().ID.Namespace,
-			//	// Add "_ddl_puller" to make it different from table pullers.
-			//	ID: ctx.ChangefeedVars().ID.ID + "_ddl_puller",
-			//},
 			startTs,
 			[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()},
 			config.GetGlobalServerConfig().KVClient,
@@ -96,35 +91,6 @@ func NewDDLPuller(ctx context.Context,
 	}, nil
 
 }
-
-//func newDDLPuller(ctx cdcContext.Context,
-//	up *upstream.Upstream, startTs uint64,
-//) (DDLPuller, error) {
-//	f, err := filter.NewFilter(ctx.ChangefeedVars().Info.Config)
-//	if err != nil {
-//		return nil, errors.Trace(err)
-//	}
-//	kvCfg := config.GetGlobalServerConfig().KVClient
-//	var plr puller.Puller
-//	kvStorage := up.KVStorage
-//	// kvS
-//	if kvStorage != nil {
-
-//	}
-//
-//	return &ddlPullerImpl{
-//		puller:     plr,
-//		resolvedTS: startTs,
-//		filter:     f,
-//		cancel:     func() {},
-//		clock:      clock.New(),
-//		changefeedID: model.ChangeFeedID{
-//			Namespace: ctx.ChangefeedVars().ID.Namespace,
-//			// Add "_ddl_puller" to make it different from table pullers.
-//			ID: ctx.ChangefeedVars().ID.ID + "_ddl_puller",
-//		},
-//	}, nil
-//}
 
 func (h *ddlPullerImpl) handleRawDDL(rawDDL *model.RawKVEntry) error {
 	if rawDDL == nil {
@@ -178,8 +144,7 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 
 	ctx = contextutil.PutTableInfoInCtx(ctx, -1, DDLPullerTableName)
 	ctx = contextutil.PutChangefeedIDInCtx(ctx, h.changefeedID)
-
-	// ctx = contextutil.PutRoleInCtx(ctx, util.RoleProcessor)
+	ctx = contextutil.PutRoleInCtx(ctx, util.RoleOwner)
 
 	g, ctx := errgroup.WithContext(ctx)
 
