@@ -148,7 +148,8 @@ const (
     "rules": [
       "1.1"
     ],
-    "ignore-txn-start-ts": null
+    "ignore-txn-start-ts": null,
+    "event-filters": null
   },
   "mounter": {
     "worker-num": 3

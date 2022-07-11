@@ -180,7 +180,7 @@ var (
 		errors.RFCCodeText("CDC:ErrDecodeFailed"),
 	)
 	ErrFilterRuleInvalid = errors.Normalize(
-		"filter rule is invalid",
+		"filter rule is invalid %s",
 		errors.RFCCodeText("CDC:ErrFilterRuleInvalid"),
 	)
 
@@ -379,13 +379,13 @@ var (
 		"maxwell invalid data",
 		errors.RFCCodeText("CDC:ErrMaxwellInvalidData"),
 	)
-	ErrJSONCodecInvalidData = errors.Normalize(
-		"json codec invalid data",
-		errors.RFCCodeText("CDC:ErrJSONCodecInvalidData"),
+	ErrOpenProtocolCodecInvalidData = errors.Normalize(
+		"open-protocol codec invalid data",
+		errors.RFCCodeText("CDC:ErrOpenProtocolCodecInvalidData"),
 	)
-	ErrJSONCodecRowTooLarge = errors.Normalize(
-		"json codec single row too large",
-		errors.RFCCodeText("CDC:ErrJSONCodecRowTooLarge"),
+	ErrOpenProtocolCodecRowTooLarge = errors.Normalize(
+		"open-protocol codec single row too large",
+		errors.RFCCodeText("CDC:ErrOpenProtocolCodecRowTooLarge"),
 	)
 	ErrCanalDecodeFailed = errors.Normalize(
 		"canal decode failed",
@@ -1062,5 +1062,23 @@ var (
 	ErrCliCheckpointTsIsInFuture = errors.Normalize(
 		"the overwrite-checkpoint-ts %d must be smaller than current TSO",
 		errors.RFCCodeText("CDC:ErrCliCheckpointTsIsInFuture"),
+	)
+
+	// Filter error
+	ErrFailedToFilterDML = errors.Normalize(
+		"failed to filter dml event: %v, please report a bug",
+		errors.RFCCodeText("CDC:ErrFailedToFilterDML"),
+	)
+	ErrFailedToFilterDDL = errors.Normalize(
+		"failed to filter ddl event: %v, please report a bug",
+		errors.RFCCodeText("CDC:ErrFailedToFilterDDL"),
+	)
+	ErrExpressionParseFailed = errors.Normalize(
+		"invalid filter expressions. There is a syntax error in: %s",
+		errors.RFCCodeText("CDC:ErrInvalidFilterExpression"),
+	)
+	ErrExpressionColumnNotFound = errors.Normalize(
+		"invalid filter expressions. Can not found column '%s' from table '%s' in: %s",
+		errors.RFCCodeText("CDC:ErrExpressionColumnNotFound"),
 	)
 )

@@ -336,14 +336,15 @@ func (c *CanalFlatEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessag
 	if err != nil {
 		return nil, cerrors.WrapError(cerrors.ErrCanalEncodeFailed, err)
 	}
-	return newResolvedMQMessage(config.ProtocolCanalJSON, nil, value, ts), nil
+	return newResolvedMsg(config.ProtocolCanalJSON, nil, value, ts), nil
 }
 
 // AppendRowChangedEvent implements the interface EventBatchEncoder
 func (c *CanalFlatEventBatchEncoder) AppendRowChangedEvent(
-	ctx context.Context,
-	topic string,
+	_ context.Context,
+	_ string,
 	e *model.RowChangedEvent,
+	_ func(),
 ) error {
 	message, err := c.newFlatMessageForDML(e)
 	if err != nil {
@@ -360,7 +361,7 @@ func (c *CanalFlatEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessa
 	if err != nil {
 		return nil, cerrors.WrapError(cerrors.ErrCanalEncodeFailed, err)
 	}
-	return newDDLMQMessage(config.ProtocolCanalJSON, nil, value, e), nil
+	return newDDLMsg(config.ProtocolCanalJSON, nil, value, e), nil
 }
 
 // Build implements the EventBatchEncoder interface
@@ -375,7 +376,7 @@ func (c *CanalFlatEventBatchEncoder) Build() []*MQMessage {
 			log.Panic("CanalFlatEventBatchEncoder", zap.Error(err))
 			return nil
 		}
-		m := NewMQMessage(config.ProtocolCanalJSON, nil, value, msg.getTikvTs(), model.MessageTypeRow, msg.getSchema(), msg.getTable())
+		m := newMsg(config.ProtocolCanalJSON, nil, value, msg.getTikvTs(), model.MessageTypeRow, msg.getSchema(), msg.getTable())
 		m.IncRowsCount()
 		ret[i] = m
 	}
@@ -529,7 +530,7 @@ func canalFlatJSONColumnMap2SinkColumns(cols map[string]interface{}, mysqlType m
 		}
 		mysqlTypeStr = trimUnsignedFromMySQLType(mysqlTypeStr)
 		mysqlType := types.StrToType(mysqlTypeStr)
-		col := newColumn(value, mysqlType).decodeCanalJSONColumn(name, JavaSQLType(javaType))
+		col := newColumn(value, mysqlType).toCanalJSONFormatColumn(name, JavaSQLType(javaType))
 		result = append(result, col)
 	}
 	if len(result) == 0 {
