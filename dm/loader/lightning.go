@@ -78,13 +78,17 @@ type LightningLoader struct {
 // NewLightning creates a new Loader importing data with lightning.
 func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName string) *LightningLoader {
 	lightningCfg := makeGlobalConfig(cfg)
+	logger := log.L()
+	if cfg.FrameworkLogger != nil {
+		logger = log.Logger{Logger: cfg.FrameworkLogger}
+	}
 	loader := &LightningLoader{
 		cfg:                   cfg,
 		cli:                   cli,
 		workerName:            workerName,
 		lightningGlobalConfig: lightningCfg,
 		core:                  lightning.New(lightningCfg),
-		logger:                log.With(zap.String("task", cfg.Name), zap.String("unit", "lightning-load")),
+		logger:                logger.WithFields(zap.String("task", cfg.Name), zap.String("unit", "lightning-load")),
 	}
 	return loader
 }
@@ -130,7 +134,7 @@ func (l *LightningLoader) Init(ctx context.Context) (err error) {
 		return err
 	}
 
-	checkpointList := NewLightningCheckpointList(l.toDB, l.cfg.Name, l.cfg.SourceID, l.cfg.MetaSchema)
+	checkpointList := NewLightningCheckpointList(l.toDB, l.cfg.Name, l.cfg.SourceID, l.cfg.MetaSchema, l.logger)
 	err = checkpointList.Prepare(ctx)
 	if err == nil {
 		l.checkPointList = checkpointList
@@ -145,8 +149,13 @@ func (l *LightningLoader) Init(ctx context.Context) (err error) {
 
 	timeZone := l.cfg.Timezone
 	if len(timeZone) == 0 {
+		baseDB, err2 := conn.DefaultDBProvider.Apply(&l.cfg.To)
+		if err2 != nil {
+			return err2
+		}
+		defer baseDB.Close()
 		var err1 error
-		timeZone, err1 = conn.FetchTimeZoneSetting(ctx, &l.cfg.To)
+		timeZone, err1 = config.FetchTimeZoneSetting(ctx, baseDB.DB)
 		if err1 != nil {
 			return err1
 		}
@@ -237,6 +246,9 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 		opts = append(opts,
 			lightning.WithDumpFileStorage(l.cfg.ExtStorage),
 			lightning.WithCheckpointStorage(l.cfg.ExtStorage, lightningCheckpointFileName))
+	}
+	if l.cfg.FrameworkLogger != nil {
+		opts = append(opts, lightning.WithLogger(l.cfg.FrameworkLogger))
 	}
 
 	err = l.core.RunOnceWithOptions(taskCtx, cfg, opts...)

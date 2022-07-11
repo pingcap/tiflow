@@ -41,7 +41,6 @@ import (
 	cmdUtil "github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
-	cdcfilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -94,7 +93,10 @@ func init() {
 	err := logutil.InitLogger(&logutil.Config{
 		Level: logLevel,
 		File:  logPath,
-	})
+	},
+		logutil.WithInitGRPCLogger(),
+		logutil.WithInitSaramaLogger(),
+	)
 	if err != nil {
 		log.Panic("init logger failed", zap.Error(err))
 	}
@@ -192,7 +194,7 @@ func init() {
 				zap.Error(err),
 				zap.String("config", configFile))
 		}
-		if _, err := filter.VerifyRules(eventRouterReplicaConfig); err != nil {
+		if _, err := filter.VerifyRules(eventRouterReplicaConfig.Filter); err != nil {
 			log.Panic("verify rule failed", zap.Error(err))
 		}
 	}
@@ -383,10 +385,6 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 		return nil, errors.Annotate(err, "can not load timezone")
 	}
 	ctx = contextutil.PutTimezoneInCtx(ctx, tz)
-	filter, err := cdcfilter.NewFilter(config.GetDefaultReplicaConfig())
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 
 	c := new(Consumer)
 	c.fakeTableIDGenerator = &fakeTableIDGenerator{
@@ -419,7 +417,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	for i := 0; i < int(kafkaPartitionNum); i++ {
 		s, err := sink.New(ctx,
 			model.DefaultChangeFeedID("kafka-consumer"),
-			downstreamURIStr, filter, config.GetDefaultReplicaConfig(), errCh)
+			downstreamURIStr, config.GetDefaultReplicaConfig(), errCh)
 		if err != nil {
 			cancel()
 			return nil, errors.Trace(err)
@@ -428,7 +426,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	}
 	sink, err := sink.New(ctx,
 		model.DefaultChangeFeedID("kafka-consumer"),
-		downstreamURIStr, filter, config.GetDefaultReplicaConfig(), errCh)
+		downstreamURIStr, config.GetDefaultReplicaConfig(), errCh)
 	if err != nil {
 		cancel()
 		return nil, errors.Trace(err)
@@ -506,7 +504,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		)
 		switch c.protocol {
 		case config.ProtocolOpen, config.ProtocolDefault:
-			decoder, err = codec.NewJSONEventBatchDecoder(message.Key, message.Value)
+			decoder, err = codec.NewOpenProtocolBatchDecoder(message.Key, message.Value)
 		case config.ProtocolCanalJSON:
 			decoder = codec.NewCanalFlatEventBatchDecoder(message.Value, c.enableTiDBExtension)
 		default:
@@ -534,7 +532,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 			}
 
 			switch tp {
-			case model.MqMessageTypeDDL:
+			case model.MessageTypeDDL:
 				// for some protocol, DDL would be dispatched to all partitions,
 				// Consider that DDL a, b, c received from partition-0, the latest DDL is c,
 				// if we receive `a` from partition-1, which would be seemed as DDL regression,
@@ -548,7 +546,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if partition == 0 {
 					c.appendDDL(ddl)
 				}
-			case model.MqMessageTypeRow:
+			case model.MessageTypeRow:
 				row, err := decoder.NextRowChangedEvent()
 				if err != nil {
 					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
@@ -592,7 +590,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					eventGroups[tableID] = group
 				}
 				group.Append(row)
-			case model.MqMessageTypeResolved:
+			case model.MessageTypeResolved:
 				ts, err := decoder.NextResolvedEvent()
 				if err != nil {
 					log.Panic("decode message value failed", zap.ByteString("value", message.Value))

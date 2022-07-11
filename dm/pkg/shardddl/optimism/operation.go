@@ -22,7 +22,6 @@ import (
 	"go.etcd.io/etcd/client/v3/clientv3util"
 
 	"github.com/pingcap/errors"
-
 	"github.com/pingcap/tiflow/dm/dm/common"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/terror"

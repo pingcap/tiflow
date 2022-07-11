@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -40,7 +41,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/errorutil"
-	tifilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/retry"
@@ -55,8 +55,6 @@ const (
 type mysqlSink struct {
 	db     *sql.DB
 	params *sinkParams
-
-	filter *tifilter.Filter
 
 	txnCache           *unresolvedTxnCache
 	workers            []*mysqlSinkWorker
@@ -87,7 +85,6 @@ func NewMySQLSink(
 	ctx context.Context,
 	changefeedID model.ChangeFeedID,
 	sinkURI *url.URL,
-	filter *tifilter.Filter,
 	replicaConfig *config.ReplicaConfig,
 ) (*mysqlSink, error) {
 	params, err := parseSinkURIToParams(ctx, changefeedID, sinkURI)
@@ -100,17 +97,19 @@ func NewMySQLSink(
 	// dsn format of the driver:
 	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
 	username := sinkURI.User.Username()
-	password, _ := sinkURI.User.Password()
-	hostName := sinkURI.Hostname()
-	port := sinkURI.Port()
 	if username == "" {
 		username = "root"
 	}
+	password, _ := sinkURI.User.Password()
+	hostName := sinkURI.Hostname()
+	port := sinkURI.Port()
 	if port == "" {
 		port = "4000"
 	}
 
-	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, hostName, port, params.tls)
+	// This will handle the IPv6 address format.
+	host := net.JoinHostPort(hostName, port)
+	dsnStr := fmt.Sprintf("%s:%s@tcp(%s)/%s", username, password, host, params.tls)
 	dsn, err := dmysql.ParseDSN(dsnStr)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
@@ -182,7 +181,6 @@ func NewMySQLSink(
 	sink := &mysqlSink{
 		db:                              db,
 		params:                          params,
-		filter:                          filter,
 		txnCache:                        newUnresolvedTxnCache(),
 		statistics:                      metrics.NewStatistics(ctx, metrics.SinkTypeDB),
 		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
@@ -207,7 +205,7 @@ func NewMySQLSink(
 // EmitRowChangedEvents appends row changed events to the txn cache.
 // Concurrency Note: EmitRowChangedEvents is thread-safe.
 func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
-	count := s.txnCache.Append(s.filter, rows...)
+	count := s.txnCache.Append(rows...)
 	s.statistics.AddRowsCount(count)
 	return nil
 }
@@ -291,15 +289,6 @@ func (s *mysqlSink) EmitCheckpointTs(_ context.Context, ts uint64, _ []model.Tab
 // EmitDDLEvent executes DDL event.
 // Concurrency Note: EmitDDLEvent is thread-safe.
 func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	if s.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.Type, ddl.TableInfo.Schema, ddl.TableInfo.Table) {
-		log.Info(
-			"DDL event ignored",
-			zap.String("query", ddl.Query),
-			zap.Uint64("startTs", ddl.StartTs),
-			zap.Uint64("commitTs", ddl.CommitTs),
-		)
-		return cerror.ErrDDLEventIgnored.GenWithStackByArgs()
-	}
 	s.statistics.AddDDLCount()
 	err := s.execDDLWithMaxRetries(ctx, ddl)
 	return errors.Trace(err)

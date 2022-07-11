@@ -20,9 +20,9 @@ import (
 	"time"
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	cerrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/orm/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -185,7 +185,7 @@ func TestProjectMock(t *testing.T) {
 			inputs: []interface{}{
 				"p113",
 			},
-			err: cerrors.ErrMetaEntryNotFound.GenWithStackByArgs(),
+			err: errors.ErrMetaEntryNotFound.GenWithStackByArgs(),
 		},
 	}
 
@@ -374,7 +374,7 @@ func TestJobMock(t *testing.T) {
 			inputs: []interface{}{
 				"j113",
 			},
-			err: cerrors.ErrMetaEntryNotFound.GenWithStackByArgs(),
+			err: errors.ErrMetaEntryNotFound.GenWithStackByArgs(),
 		},
 		{
 			// SELECT * FROM `master_meta_kv_data` WHERE project_id = '111-222-333'
@@ -550,7 +550,7 @@ func TestWorkerMock(t *testing.T) {
 				"j111",
 				"w225",
 			},
-			err: cerrors.ErrMetaEntryNotFound.GenWithStackByArgs(),
+			err: errors.ErrMetaEntryNotFound.GenWithStackByArgs(),
 		},
 		{
 			// SELECT * FROM `worker_statuses` WHERE project_id = '111-222-333' AND job_id = '111'
@@ -672,7 +672,10 @@ func TestResourceMock(t *testing.T) {
 		{
 			fn: "DeleteResource",
 			inputs: []interface{}{
-				"r334",
+				ResourceKey{
+					JobID: "j111",
+					ID:    "r334",
+				},
 			},
 			output: &ormResult{
 				rowsAffected: 1,
@@ -681,7 +684,10 @@ func TestResourceMock(t *testing.T) {
 		{
 			fn: "DeleteResource",
 			inputs: []interface{}{
-				"r335",
+				ResourceKey{
+					JobID: "j111",
+					ID:    "r335",
+				},
 			},
 			output: &ormResult{
 				rowsAffected: 0,
@@ -690,7 +696,10 @@ func TestResourceMock(t *testing.T) {
 		{
 			fn: "GetResourceByID",
 			inputs: []interface{}{
-				"r333",
+				ResourceKey{
+					JobID: "j111",
+					ID:    "r333",
+				},
 			},
 			output: &resourcemeta.ResourceMeta{
 				Model: model.Model{
@@ -709,9 +718,12 @@ func TestResourceMock(t *testing.T) {
 		{
 			fn: "GetResourceByID",
 			inputs: []interface{}{
-				"r335",
+				ResourceKey{
+					JobID: "j111",
+					ID:    "r335",
+				},
 			},
-			err: cerrors.ErrMetaEntryNotFound.GenWithStackByArgs(),
+			err: errors.ErrMetaEntryNotFound.GenWithStackByArgs(),
 		},
 		{
 			fn: "QueryResourcesByJobID",
@@ -807,7 +819,7 @@ func testInnerMock(t *testing.T, cli Client, c mCase) {
 			// require.True(t, res[0].Interface().(bool))
 		} else {
 			require.NotNil(t, result[0].Interface())
-			// log.L().Info("result", zap.Any("expect", c.output), zap.Any("actual", result[0].Interface()))
+			// log.Info("result", zap.Any("expect", c.output), zap.Any("actual", result[0].Interface()))
 			// FIXME: datetime is different from what we insert. Why??
 			// require.Equal(t, c.output, result[0].Interface())
 		}

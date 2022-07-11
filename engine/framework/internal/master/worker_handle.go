@@ -16,7 +16,7 @@ package master
 import (
 	"context"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
@@ -76,7 +76,7 @@ func (h *runningHandleImpl) Status() *frameModel.WorkerStatus {
 
 	entry, exists := h.manager.workerEntries[h.workerID]
 	if !exists {
-		log.L().Panic("Using a stale handle", zap.String("worker-id", h.workerID))
+		log.Panic("Using a stale handle", zap.String("worker-id", h.workerID))
 	}
 
 	return entry.Status()
@@ -135,7 +135,7 @@ func (h *tombstoneHandleImpl) Status() *frameModel.WorkerStatus {
 
 	entry, exists := h.manager.workerEntries[h.workerID]
 	if !exists {
-		log.L().Panic("Using a stale handle", zap.String("worker-id", h.workerID))
+		log.Panic("Using a stale handle", zap.String("worker-id", h.workerID))
 	}
 
 	return entry.Status()
@@ -163,11 +163,11 @@ func (h *tombstoneHandleImpl) CleanTombstone(ctx context.Context) error {
 		return err
 	}
 	if !ok {
-		log.L().Info("Tombstone already cleaned", zap.String("worker-id", h.workerID))
+		log.Info("Tombstone already cleaned", zap.String("worker-id", h.workerID))
 		// Idempotent for robustness.
 		return nil
 	}
-	log.L().Info("Worker tombstone is cleaned", zap.String("worker-id", h.workerID))
+	log.Info("Worker tombstone is cleaned", zap.String("worker-id", h.workerID))
 	h.manager.removeTombstoneEntry(h.workerID)
 
 	return nil

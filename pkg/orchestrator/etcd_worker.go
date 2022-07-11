@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/chdelay"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/migrate"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
 	pkgutil "github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
@@ -42,14 +43,14 @@ const (
 	// When EtcdWorker commits a txn to etcd or ticks its reactor
 	// takes more than etcdWorkerLogsWarnDuration, it will print a log
 	etcdWorkerLogsWarnDuration = 1 * time.Second
-	deletionCounterKey         = "/meta/ticdc-delete-etcd-key-count"
 )
 
 // EtcdWorker handles all interactions with Etcd
 type EtcdWorker struct {
-	client  *etcd.Client
-	reactor Reactor
-	state   ReactorState
+	clusterID string
+	client    *etcd.Client
+	reactor   Reactor
+	state     ReactorState
 	// rawState is the local cache of the latest Etcd state.
 	rawState map[util.EtcdKey]rawStateEntry
 	// pendingUpdates stores Etcd updates that the Reactor has not been notified of.
@@ -71,8 +72,9 @@ type EtcdWorker struct {
 	// a `compare-and-swap` semantics, which is essential for implementing
 	// snapshot isolation for Reactor ticks.
 	deleteCounter int64
+	metrics       *etcdWorkerMetrics
 
-	metrics *etcdWorkerMetrics
+	migrator migrate.Migrator
 }
 
 type etcdWorkerMetrics struct {
@@ -96,14 +98,21 @@ type rawStateEntry struct {
 }
 
 // NewEtcdWorker returns a new EtcdWorker
-func NewEtcdWorker(client *etcd.Client, prefix string, reactor Reactor, initState ReactorState) (*EtcdWorker, error) {
+func NewEtcdWorker(client *etcd.CDCEtcdClient,
+	prefix string,
+	reactor Reactor,
+	initState ReactorState,
+	migrator migrate.Migrator,
+) (*EtcdWorker, error) {
 	return &EtcdWorker{
-		client:     client,
+		clusterID:  client.ClusterID,
+		client:     client.Client,
 		reactor:    reactor,
 		state:      initState,
 		rawState:   make(map[util.EtcdKey]rawStateEntry),
 		prefix:     util.NormalizePrefix(prefix),
 		barrierRev: -1, // -1 indicates no barrier
+		migrator:   migrator,
 	}, nil
 }
 
@@ -121,9 +130,18 @@ func (worker *EtcdWorker) initMetrics() {
 // And the specified etcd session is nil-safety.
 func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session, timerInterval time.Duration, role string) error {
 	defer worker.cleanUp()
+
+	// migrate data here
+	err := worker.checkAndMigrateMetaData(ctx, role)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	// migration is done, cdc server can serve http now
+	worker.migrator.MarkMigrateDone()
+
 	worker.initMetrics()
 
-	err := worker.syncRawState(ctx)
+	err = worker.syncRawState(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -397,12 +415,17 @@ func (worker *EtcdWorker) commitChangedState(ctx context.Context, changedState m
 	}
 
 	if hasDelete {
-		opsThen = append(opsThen, clientv3.OpPut(worker.prefix.String()+deletionCounterKey, fmt.Sprint(worker.deleteCounter+1)))
+		opsThen = append(opsThen, clientv3.OpPut(worker.prefix.String()+etcd.DeletionCounterKey,
+			fmt.Sprint(worker.deleteCounter+1)))
 	}
 	if worker.deleteCounter > 0 {
-		cmps = append(cmps, clientv3.Compare(clientv3.Value(worker.prefix.String()+deletionCounterKey), "=", fmt.Sprint(worker.deleteCounter)))
+		cmps = append(cmps, clientv3.Compare(clientv3.Value(worker.prefix.String()+
+			etcd.DeletionCounterKey),
+			"=", fmt.Sprint(worker.deleteCounter)))
 	} else if worker.deleteCounter == 0 {
-		cmps = append(cmps, clientv3.Compare(clientv3.CreateRevision(worker.prefix.String()+deletionCounterKey), "=", 0))
+		cmps = append(cmps, clientv3.Compare(clientv3.CreateRevision(worker.prefix.String()+
+			etcd.DeletionCounterKey),
+			"=", 0))
 	} else {
 		panic("unreachable")
 	}
@@ -488,7 +511,7 @@ func (worker *EtcdWorker) cleanUp() {
 }
 
 func (worker *EtcdWorker) isDeleteCounterKey(key []byte) bool {
-	return string(key) == worker.prefix.String()+deletionCounterKey
+	return string(key) == worker.prefix.String()+etcd.DeletionCounterKey
 }
 
 func (worker *EtcdWorker) handleDeleteCounter(value []byte) {
@@ -507,4 +530,26 @@ func (worker *EtcdWorker) handleDeleteCounter(value []byte) {
 	if worker.deleteCounter <= 0 {
 		log.Panic("unexpected delete counter", zap.Int64("value", worker.deleteCounter))
 	}
+}
+
+// checkAndMigrateMetaData check if should migrate meta, if we should, it will block
+// until migrate done
+func (worker *EtcdWorker) checkAndMigrateMetaData(
+	ctx context.Context, role string,
+) error {
+	shouldMigrate, err := worker.migrator.ShouldMigrate(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if !shouldMigrate {
+		return nil
+	}
+
+	if role != pkgutil.RoleOwner.String() {
+		err := worker.migrator.WaitMetaVersionMatched(ctx)
+		return errors.Trace(err)
+	}
+
+	err = worker.migrator.Migrate(ctx)
+	return err
 }

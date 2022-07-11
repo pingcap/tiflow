@@ -20,6 +20,9 @@ import (
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/dig"
+
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/engine/framework"
@@ -28,14 +31,12 @@ import (
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
-	engineErr "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
-	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
-	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
+	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/dig"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 type workerParamListForTest struct {
@@ -44,7 +45,7 @@ type workerParamListForTest struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
 	FrameMetaClient       pkgOrm.Client
-	UserRawKVClient       extkv.KVClientEx
+	UserRawKVClient       metaModel.KVClientEx
 	ResourceBroker        broker.Broker
 }
 
@@ -119,7 +120,7 @@ func TestWorker(t *testing.T) {
 
 	// Finished
 	unitHolder.On("Stage").Return(metadata.StageFinished, nil).Twice()
-	require.True(t, engineErr.ErrWorkerFinish.Equal(dmWorker.Tick(context.Background())))
+	require.True(t, cerrors.ErrWorkerFinish.Equal(dmWorker.Tick(context.Background())))
 
 	unitHolder.AssertExpectations(t)
 }

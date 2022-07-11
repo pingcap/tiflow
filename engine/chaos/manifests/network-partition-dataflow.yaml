@@ -18,9 +18,9 @@ spec:
       labelSelectors:
         "app": "executor"
     mode: one
-  duration: "30s"
+  duration: "20s"
   scheduler:
-    cron: "2-59/3 * * * *" # At every 3rd minute from 2 through 59, (2, 5, 8, ...)
+    cron: "2-59/4 * * * *" # At every 4th minute from 2 through 59, (2, 6, 10, ...)
 
 ---
 # network partition between dataflow server-master members
@@ -42,9 +42,9 @@ spec:
       labelSelectors:
         "app": "server-master"
     mode: one
-  duration: "30s"
+  duration: "20s"
   scheduler:
-    cron: "3-59/3 * * * *" # At every 3rd minute from 3 through 59, (3, 6, 9, ...)
+    cron: "3-59/4 * * * *" # At every 4th minute from 3 through 59, (3, 7, 11, ...)
 
 ---
 # network partition between dataflow executor members
@@ -66,6 +66,6 @@ spec:
       labelSelectors:
         "app": "executor"
     mode: one
-  duration: "30s"
+  duration: "20s"
   scheduler:
-    cron: "1-59/3 * * * *" # At every 3rd minute from 1 through 59, (1, 4, 7, ...)
+    cron: "1-59/4 * * * *" # At every 4th minute from 1 through 59, (1, 5, 9, ...)

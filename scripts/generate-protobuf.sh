@@ -31,7 +31,7 @@ if [ ! -f "$GOGO_FASTER" ]; then
 fi
 
 echo "generate canal..."
-[ ! -d ./proto/canal ] && mkdir ./proto/canal
+mkdir -p ./proto/canal
 $TOOLS_BIN_DIR/protoc -I"./proto" -I"$TOOLS_INCLUDE_DIR" \
 	--plugin=protoc-gen-gogofaster="$GOGO_FASTER" \
 	--gogofaster_out=./proto/canal ./proto/EntryProtocol.proto
@@ -40,13 +40,19 @@ $TOOLS_BIN_DIR/protoc -I"./proto" -I"$TOOLS_INCLUDE_DIR" \
 	--gogofaster_out=./proto/canal ./proto/CanalProtocol.proto
 
 echo "generate craft benchmark protocol..."
-[ ! -d ./proto/benchmark ] && mkdir ./proto/benchmark
+mkdir -p ./proto/benchmark
 $TOOLS_BIN_DIR/protoc -I"./proto" -I"$TOOLS_INCLUDE_DIR" \
 	--plugin=protoc-gen-gogofaster="$GOGO_FASTER" \
 	--gogofaster_out=./proto/benchmark ./proto/CraftBenchmark.proto
 
 echo "generate p2p..."
-[ ! -d ./proto/p2p ] && mkdir ./proto/p2p
+mkdir -p ./proto/p2p
 $TOOLS_BIN_DIR/protoc -I"./proto" -I"$TOOLS_INCLUDE_DIR" \
 	--plugin=protoc-gen-gogofaster="$GOGO_FASTER" \
 	--gogofaster_out=plugins=grpc:./proto/p2p ./proto/CDCPeerToPeer.proto
+
+echo "generate schedulepb..."
+mkdir -p ./cdc/scheduler/internal/v3/schedulepb
+$TOOLS_BIN_DIR/protoc -I"./proto" -I"$TOOLS_INCLUDE_DIR" \
+	--plugin=protoc-gen-gogofaster="$GOGO_FASTER" \
+	--gogofaster_out=plugins=grpc:./cdc/scheduler/internal/v3/schedulepb ./proto/table_schedule.proto

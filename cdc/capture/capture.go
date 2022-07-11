@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/migrate"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.etcd.io/etcd/server/v3/mvcc"
@@ -45,17 +46,41 @@ import (
 	"github.com/pingcap/tiflow/pkg/version"
 )
 
-// Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
-type Capture struct {
+// Capture represents a Capture server, it monitors the changefeed
+// information in etcd and schedules Task on it.
+type Capture interface {
+	Run(ctx context.Context) error
+	AsyncClose()
+	Drain(ctx context.Context) <-chan struct{}
+	Liveness() model.Liveness
+
+	GetOwner() (owner.Owner, error)
+	GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error)
+	IsOwner() bool
+
+	Info() (model.CaptureInfo, error)
+	StatusProvider() owner.StatusProvider
+	WriteDebugInfo(ctx context.Context, w io.Writer)
+
+	GetUpstreamManager() (*upstream.Manager, error)
+	GetEtcdClient() etcd.CDCEtcdClientForAPI
+	// IsReady returns if the cdc server is ready
+	// currently only check if ettcd data migration is done
+	IsReady() bool
+}
+
+type captureImpl struct {
 	// captureMu is used to protect the capture info and processorManager.
 	captureMu        sync.Mutex
 	info             *model.CaptureInfo
-	processorManager *processor.Manager
+	processorManager processor.Manager
+	liveness         model.Liveness
+	config           *config.ServerConfig
 
 	pdEndpoints     []string
-	UpstreamManager *upstream.Manager
 	ownerMu         sync.Mutex
 	owner           owner.Owner
+	upstreamManager *upstream.Manager
 
 	// session keeps alive between the capture and etcd
 	session  *concurrency.Session
@@ -81,41 +106,70 @@ type Capture struct {
 
 	cancel context.CancelFunc
 
-	newProcessorManager func(upstreamManager *upstream.Manager) *processor.Manager
-	newOwner            func(upstreamManager *upstream.Manager) owner.Owner
+	migrator migrate.Migrator
+
+	newProcessorManager func(
+		upstreamManager *upstream.Manager, liveness *model.Liveness,
+	) processor.Manager
+	newOwner func(upstreamManager *upstream.Manager) owner.Owner
 }
 
 // NewCapture returns a new Capture instance
-func NewCapture(pdEnpoints []string, etcdClient *etcd.CDCEtcdClient, grpcService *p2p.ServerWrapper) *Capture {
-	return &Capture{
+func NewCapture(pdEndpoints []string,
+	etcdClient *etcd.CDCEtcdClient,
+	grpcService *p2p.ServerWrapper,
+) Capture {
+	conf := config.GetGlobalServerConfig()
+	return &captureImpl{
+		config:              config.GetGlobalServerConfig(),
+		liveness:            model.LivenessCaptureAlive,
 		EtcdClient:          etcdClient,
 		grpcService:         grpcService,
 		cancel:              func() {},
-		pdEndpoints:         pdEnpoints,
+		pdEndpoints:         pdEndpoints,
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
+
+		migrator: migrate.NewMigrator(etcdClient, pdEndpoints, conf),
 	}
 }
 
 // NewCapture4Test returns a new Capture instance for test.
-func NewCapture4Test(o owner.Owner) *Capture {
-	res := &Capture{
-		info: &model.CaptureInfo{ID: "capture-for-test", AdvertiseAddr: "127.0.0.1", Version: "test"},
+func NewCapture4Test(o owner.Owner) *captureImpl {
+	res := &captureImpl{
+		info: &model.CaptureInfo{
+			ID:            "capture-for-test",
+			AdvertiseAddr: "127.0.0.1", Version: "test",
+		},
+		migrator: &migrate.NoOpMigrator{},
 	}
 	res.owner = o
 	return res
 }
 
 // NewCaptureWithManager4Test returns a new Capture instance for test.
-func NewCaptureWithManager4Test(o owner.Owner, m *upstream.Manager) *Capture {
-	res := &Capture{
-		UpstreamManager: m,
+func NewCaptureWithManager4Test(o owner.Owner, m *upstream.Manager) *captureImpl {
+	res := &captureImpl{
+		upstreamManager: m,
+		migrator:        &migrate.NoOpMigrator{},
 	}
 	res.owner = o
 	return res
 }
 
-func (c *Capture) reset(ctx context.Context) error {
+// GetUpstreamManager is a Getter of capture's upstream manager
+func (c *captureImpl) GetUpstreamManager() (*upstream.Manager, error) {
+	if c.upstreamManager == nil {
+		return nil, cerror.ErrUpstreamManagerNotReady
+	}
+	return c.upstreamManager, nil
+}
+
+func (c *captureImpl) GetEtcdClient() etcd.CDCEtcdClientForAPI {
+	return c.EtcdClient
+}
+
+func (c *captureImpl) reset(ctx context.Context) error {
 	conf := config.GetGlobalServerConfig()
 	sess, err := concurrency.NewSession(c.EtcdClient.Client.Unwrap(),
 		concurrency.WithTTL(conf.CaptureSessionTTL))
@@ -133,24 +187,24 @@ func (c *Capture) reset(ctx context.Context) error {
 		Version:       version.ReleaseVersion,
 	}
 
-	if c.UpstreamManager != nil {
-		c.UpstreamManager.Close()
+	if c.upstreamManager != nil {
+		c.upstreamManager.Close()
 	}
-	c.UpstreamManager = upstream.NewManager(ctx)
-	err = c.UpstreamManager.Add(upstream.DefaultUpstreamID, c.pdEndpoints, conf.Security)
+	c.upstreamManager = upstream.NewManager(ctx, c.EtcdClient.GetGCServiceID())
+	_, err = c.upstreamManager.AddDefaultUpstream(c.pdEndpoints, conf.Security)
 	if err != nil {
 		return errors.Annotate(
 			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
 			"add default upstream failed")
 	}
 
-	c.processorManager = c.newProcessorManager(c.UpstreamManager)
+	c.processorManager = c.newProcessorManager(c.upstreamManager, &c.liveness)
 	if c.session != nil {
 		// It can't be handled even after it fails, so we ignore it.
 		_ = c.session.Close()
 	}
 	c.session = sess
-	c.election = concurrency.NewElection(sess, etcd.CaptureOwnerKey)
+	c.election = concurrency.NewElection(sess, etcd.CaptureOwnerKey(c.EtcdClient.ClusterID))
 
 	if c.tableActorSystem != nil {
 		c.tableActorSystem.Stop()
@@ -210,7 +264,7 @@ func (c *Capture) reset(ctx context.Context) error {
 }
 
 // Run runs the capture
-func (c *Capture) Run(ctx context.Context) error {
+func (c *captureImpl) Run(ctx context.Context) error {
 	defer log.Info("the capture routine has exited")
 	// Limit the frequency of reset capture to avoid frequent recreating of resources
 	rl := rate.NewLimiter(0.05, 2)
@@ -247,7 +301,7 @@ func (c *Capture) Run(ctx context.Context) error {
 	}
 }
 
-func (c *Capture) run(stdCtx context.Context) error {
+func (c *captureImpl) run(stdCtx context.Context) error {
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
 		CaptureInfo:      c.info,
 		EtcdClient:       c.EtcdClient,
@@ -286,7 +340,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		conf := config.GetGlobalServerConfig()
 		processorFlushInterval := time.Duration(conf.ProcessorFlushInterval)
 
-		globalState := orchestrator.NewGlobalState()
+		globalState := orchestrator.NewGlobalState(c.EtcdClient.ClusterID)
 
 		globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
 			c.MessageRouter.AddPeer(captureID, addr)
@@ -322,7 +376,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 }
 
 // Info gets the capture info
-func (c *Capture) Info() (model.CaptureInfo, error) {
+func (c *captureImpl) Info() (model.CaptureInfo, error) {
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
 	// when c.reset has not been called yet, c.info is nil.
@@ -332,7 +386,7 @@ func (c *Capture) Info() (model.CaptureInfo, error) {
 	return model.CaptureInfo{}, cerror.ErrCaptureNotInitialized.GenWithStackByArgs()
 }
 
-func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
+func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 	// In most failure cases, we don't return error directly, just run another
 	// campaign loop. We treat campaign loop as a special background routine.
 	conf := config.GetGlobalServerConfig()
@@ -388,10 +442,10 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 			zap.String("captureID", c.info.ID),
 			zap.Int64("ownerRev", ownerRev))
 
-		owner := c.newOwner(c.UpstreamManager)
+		owner := c.newOwner(c.upstreamManager)
 		c.setOwner(owner)
 
-		globalState := orchestrator.NewGlobalState()
+		globalState := orchestrator.NewGlobalState(c.EtcdClient.ClusterID)
 
 		globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
 			c.MessageRouter.AddPeer(captureID, addr)
@@ -400,7 +454,9 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 			c.MessageRouter.RemovePeer(captureID)
 		})
 
-		err = c.runEtcdWorker(ownerCtx, owner, orchestrator.NewGlobalState(), ownerFlushInterval, util.RoleOwner.String())
+		err = c.runEtcdWorker(ownerCtx, owner,
+			orchestrator.NewGlobalState(c.EtcdClient.ClusterID),
+			ownerFlushInterval, util.RoleOwner.String())
 		c.setOwner(nil)
 		log.Info("run owner exited", zap.Error(err))
 		// if owner exits, resign the owner key
@@ -416,14 +472,15 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 	}
 }
 
-func (c *Capture) runEtcdWorker(
+func (c *captureImpl) runEtcdWorker(
 	ctx cdcContext.Context,
 	reactor orchestrator.Reactor,
 	reactorState orchestrator.ReactorState,
 	timerInterval time.Duration,
 	role string,
 ) error {
-	etcdWorker, err := orchestrator.NewEtcdWorker(ctx.GlobalVars().EtcdClient.Client, etcd.EtcdKeyBase, reactor, reactorState)
+	etcdWorker, err := orchestrator.NewEtcdWorker(ctx.GlobalVars().EtcdClient,
+		etcd.BaseKey(c.EtcdClient.ClusterID), reactor, reactorState, c.migrator)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -452,14 +509,14 @@ func (c *Capture) runEtcdWorker(
 	return nil
 }
 
-func (c *Capture) setOwner(owner owner.Owner) {
+func (c *captureImpl) setOwner(owner owner.Owner) {
 	c.ownerMu.Lock()
 	defer c.ownerMu.Unlock()
 	c.owner = owner
 }
 
 // GetOwner returns owner if it is the owner.
-func (c *Capture) GetOwner() (owner.Owner, error) {
+func (c *captureImpl) GetOwner() (owner.Owner, error) {
 	c.ownerMu.Lock()
 	defer c.ownerMu.Unlock()
 	if c.owner == nil {
@@ -469,7 +526,7 @@ func (c *Capture) GetOwner() (owner.Owner, error) {
 }
 
 // campaign to be an owner.
-func (c *Capture) campaign(ctx cdcContext.Context) error {
+func (c *captureImpl) campaign(ctx cdcContext.Context) error {
 	failpoint.Inject("capture-campaign-compacted-error", func() {
 		failpoint.Return(errors.Trace(mvcc.ErrCompacted))
 	})
@@ -477,7 +534,7 @@ func (c *Capture) campaign(ctx cdcContext.Context) error {
 }
 
 // resign lets an owner start a new election.
-func (c *Capture) resign(ctx cdcContext.Context) error {
+func (c *captureImpl) resign(ctx cdcContext.Context) error {
 	failpoint.Inject("capture-resign-failed", func() {
 		failpoint.Return(errors.New("capture resign failed"))
 	})
@@ -485,7 +542,7 @@ func (c *Capture) resign(ctx cdcContext.Context) error {
 }
 
 // register registers the capture information in etcd
-func (c *Capture) register(ctx cdcContext.Context) error {
+func (c *captureImpl) register(ctx cdcContext.Context) error {
 	err := ctx.GlobalVars().EtcdClient.PutCaptureInfo(ctx, c.info, c.session.Lease())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrCaptureRegister, err)
@@ -495,7 +552,7 @@ func (c *Capture) register(ctx cdcContext.Context) error {
 
 // AsyncClose closes the capture by deregister it from etcd
 // Note: this function should be reentrant
-func (c *Capture) AsyncClose() {
+func (c *captureImpl) AsyncClose() {
 	defer c.cancel()
 	// Safety: Here we mainly want to stop the owner
 	// and ignore it if the owner does not exist or is not set.
@@ -536,8 +593,97 @@ func (c *Capture) AsyncClose() {
 	log.Info("message router closed")
 }
 
+// Drain removes tables in the current TiCDC instance.
+func (c *captureImpl) Drain(ctx context.Context) <-chan struct{} {
+	log.Info("draining capture, removing all tables in the capture")
+
+	const drainInterval = 100 * time.Millisecond
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(drainInterval)
+		defer ticker.Stop()
+		for {
+			complete := c.drainImpl(ctx)
+			if complete {
+				return
+			}
+			ticker.Reset(drainInterval)
+			select {
+			case <-ctx.Done():
+				// Give up when the context cancels. In the current
+				// implementation, it is caused TiCDC receives a second signal
+				// and begins force shutdown.
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+	return done
+}
+
+func (c *captureImpl) drainImpl(ctx context.Context) bool {
+	if !c.config.Debug.EnableTwoPhaseScheduler {
+		// Skip drain as two phase scheduler is disabled.
+		return true
+	}
+
+	// Step 1, resign ownership.
+	o, _ := c.GetOwner()
+	if o != nil {
+		doneCh := make(chan error, 1)
+		query := &owner.Query{Tp: owner.QueryCaptures, Data: []*model.CaptureInfo{}}
+		o.Query(query, doneCh)
+		select {
+		case <-ctx.Done():
+		case err := <-doneCh:
+			if err != nil {
+				log.Warn("query capture count failed, retry", zap.Error(err))
+				return false
+			}
+		}
+		if len(query.Data.([]*model.CaptureInfo)) <= 1 {
+			// There is only one capture, the owner itself. It's impossible to
+			// resign owner nor move out tables, give up drain.
+			log.Warn("there is only one capture, skip drain")
+			return true
+		}
+		o.AsyncStop()
+		// Make sure it's not the owner before step 2.
+		return false
+	}
+	// Step 2, wait for moving out all tables.
+	// Set liveness stopping, owners will move out all tables in the capture.
+	c.liveness.Store(model.LivenessCaptureStopping)
+	queryDone := make(chan error, 1)
+	tableCh := make(chan int, 1)
+	c.processorManager.QueryTableCount(ctx, tableCh, queryDone)
+	select {
+	case <-ctx.Done():
+	case err := <-queryDone:
+		if err != nil {
+			log.Warn("query table count failed, retry", zap.Error(err))
+			return false
+		}
+	}
+	select {
+	case <-ctx.Done():
+	case tableCount := <-tableCh:
+		if tableCount == 0 {
+			log.Info("all tables removed, drain capture complete")
+			return true
+		}
+	}
+	return false
+}
+
+// Liveness returns liveness of the capture.
+func (c *captureImpl) Liveness() model.Liveness {
+	return c.liveness.Load()
+}
+
 // WriteDebugInfo writes the debug info into writer.
-func (c *Capture) WriteDebugInfo(ctx context.Context, w io.Writer) {
+func (c *captureImpl) WriteDebugInfo(ctx context.Context, w io.Writer) {
 	wait := func(done <-chan error) {
 		var err error
 		select {
@@ -575,14 +721,14 @@ func (c *Capture) WriteDebugInfo(ctx context.Context, w io.Writer) {
 }
 
 // IsOwner returns whether the capture is an owner
-func (c *Capture) IsOwner() bool {
+func (c *captureImpl) IsOwner() bool {
 	c.ownerMu.Lock()
 	defer c.ownerMu.Unlock()
 	return c.owner != nil
 }
 
 // GetOwnerCaptureInfo return the owner capture info of current TiCDC cluster
-func (c *Capture) GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error) {
+func (c *captureImpl) GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error) {
 	_, captureInfos, err := c.EtcdClient.GetCaptures(ctx)
 	if err != nil {
 		return nil, err
@@ -602,11 +748,15 @@ func (c *Capture) GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, 
 }
 
 // StatusProvider returns owner's StatusProvider.
-func (c *Capture) StatusProvider() owner.StatusProvider {
+func (c *captureImpl) StatusProvider() owner.StatusProvider {
 	c.ownerMu.Lock()
 	defer c.ownerMu.Unlock()
 	if c.owner == nil {
 		return nil
 	}
 	return owner.NewStatusProvider(c.owner)
+}
+
+func (c *captureImpl) IsReady() bool {
+	return c.migrator.IsMigrateDone()
 }

@@ -20,8 +20,10 @@ package master
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 
 	"github.com/pingcap/failpoint"
@@ -29,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/master/scheduler"
 	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/dm/pbmock"
 	"github.com/pingcap/tiflow/dm/openapi"
 	"github.com/pingcap/tiflow/dm/openapi/fixtures"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -442,6 +445,105 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 		s.NotNil(taskCfg4)
 		s.EqualValues(task4, task3)
 		s.Equal(taskCfg4.String(), taskCfg3.String())
+	}
+}
+
+func (s *OpenAPIControllerSuite) TestTaskControllerWithInvalidTask() {
+	ctx, cancel := context.WithCancel(context.Background())
+	server := setupTestServer(ctx, s.T())
+	defer func() {
+		cancel()
+		server.Close()
+	}()
+
+	// create an invalid task
+	task, err := fixtures.GenNoShardErrNameOpenAPITaskForTest()
+	s.NoError(err)
+
+	// create source for task
+	{
+		// add a mock worker
+		worker1Name := "worker1"
+		worker1Addr := "172.16.10.72:8262"
+		s.NoError(server.scheduler.AddWorker(worker1Name, worker1Addr))
+		worker1 := server.scheduler.GetWorkerByName(worker1Name)
+		worker1.ToFree()
+
+		// create the corresponding mock worker
+		ctrl := gomock.NewController(s.T())
+		defer ctrl.Finish()
+		mockWorkerClient := pbmock.NewMockWorkerClient(ctrl)
+		queryResp := &pb.QueryStatusResponse{
+			Result: true,
+			Msg:    "",
+			SourceStatus: &pb.SourceStatus{
+				Source: s.testSource.SourceName,
+				Worker: worker1Name,
+			},
+			SubTaskStatus: [](*pb.SubTaskStatus){&pb.SubTaskStatus{
+				Result: &pb.ProcessResult{
+					Errors: [](*pb.ProcessError){&pb.ProcessError{
+						ErrCode:  10006,
+						ErrClass: "database",
+						ErrScope: "downstream",
+						ErrLevel: "high",
+						Message:  fmt.Sprintf("fail to initialize unit Load of %s : execute statement failed: CREATE TABLE IF NOT EXISTS `dm_meta`.`%s` (\n\t\ttask_name varchar(255) NOT NULL,\n\t\tsource_name varchar(255) NOT NULL,\n\t\tstatus varchar(10) NOT NULL DEFAULT 'init' COMMENT 'init,running,finished',\n\t\tPRIMARY KEY (task_name, source_name)\n\t);\n", task.Name, task.Name),
+						RawCause: fmt.Sprintf("Error 1059: Identifier name '%s' is too long.", task.Name),
+					}},
+				},
+			}},
+		}
+		mockWorkerClient.EXPECT().QueryStatus(
+			gomock.Any(),
+			gomock.Any(),
+		).Return(queryResp, nil).MaxTimes(maxRetryNum)
+		server.scheduler.SetWorkerClientForTest(worker1Name, newMockRPCClient(mockWorkerClient))
+
+		_, err := server.createSource(ctx, openapi.CreateSourceRequest{Source: *s.testSource, WorkerName: &worker1Name})
+		s.NoError(err)
+		s.Equal(worker1.Stage(), scheduler.WorkerBound)
+		sourceList, err := server.listSource(ctx, openapi.DMAPIGetSourceListParams{})
+		s.NoError(err)
+		s.Len(sourceList, 1)
+	}
+
+	// create
+	{
+		createTaskReq := openapi.CreateTaskRequest{Task: task}
+		res, err := server.createTask(ctx, createTaskReq)
+		s.NoError(err)
+		s.EqualValues(task, res.Task)
+	}
+
+	// start and stop
+	{
+		// start success
+		req := openapi.StartTaskRequest{}
+		s.NoError(server.enableSource(ctx, s.testSource.SourceName))
+		s.NoError(server.startTask(ctx, task.Name, req))
+		s.Equal(server.scheduler.GetExpectSubTaskStage(task.Name, s.testSource.SourceName).Expect, pb.Stage_Running)
+
+		// get status
+		{
+			params := openapi.DMAPIGetTaskStatusParams{}
+			statusList, err := server.getTaskStatus(ctx, task.Name, params)
+			s.NoError(err)
+			s.Len(statusList, 1)
+			s.NotNil(statusList[0].ErrorMsg)
+			s.Contains(*statusList[0].ErrorMsg, "Error 1059: ") // database error, will return an error message
+		}
+
+		// stop success
+		s.NoError(server.stopTask(ctx, task.Name, openapi.StopTaskRequest{}))
+		s.Equal(server.scheduler.GetExpectSubTaskStage(task.Name, s.testSource.SourceName).Expect, pb.Stage_Stopped)
+	}
+
+	// delete
+	{
+		s.NoError(server.deleteTask(ctx, task.Name, true)) // delete with fore
+		taskList, err := server.listTask(ctx, openapi.DMAPIGetTaskListParams{})
+		s.NoError(err)
+		s.Len(taskList, 0)
 	}
 }
 

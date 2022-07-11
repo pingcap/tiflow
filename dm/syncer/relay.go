@@ -63,7 +63,7 @@ func (s *Syncer) setInitActiveRelayLog(ctx context.Context) error {
 		}
 	default:
 		// start from dumper or loader, get current pos from master
-		pos, _, err = s.fromDB.GetMasterStatus(ctx, s.cfg.Flavor)
+		pos, _, err = s.fromDB.GetMasterStatus(s.tctx.WithContext(ctx), s.cfg.Flavor)
 		if err != nil {
 			return terror.Annotatef(err, "get master status")
 		}

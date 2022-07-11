@@ -36,7 +36,7 @@ func testBatchCodec(
 			if !hasNext {
 				break
 			}
-			require.Equal(t, model.MqMessageTypeRow, tp)
+			require.Equal(t, model.MessageTypeRow, tp)
 			row, err := decoder.NextRowChangedEvent()
 			require.Nil(t, err)
 			require.Equal(t, cs[index], row)
@@ -51,7 +51,7 @@ func testBatchCodec(
 			if !hasNext {
 				break
 			}
-			require.Equal(t, model.MqMessageTypeDDL, tp)
+			require.Equal(t, model.MessageTypeDDL, tp)
 			ddl, err := decoder.NextDDLEvent()
 			require.Nil(t, err)
 			require.Equal(t, cs[index], ddl)
@@ -66,7 +66,7 @@ func testBatchCodec(
 			if !hasNext {
 				break
 			}
-			require.Equal(t, model.MqMessageTypeResolved, tp)
+			require.Equal(t, model.MessageTypeResolved, tp)
 			ts, err := decoder.NextResolvedEvent()
 			require.Nil(t, err)
 			require.Equal(t, cs[index], ts)
@@ -75,12 +75,12 @@ func testBatchCodec(
 	}
 
 	encoder := encoderBuilder.Build()
-	s := NewDefaultBatchTester()
+	s := newDefaultBatchTester()
 
 	for _, cs := range s.rowCases {
 		events := 0
 		for _, row := range cs {
-			err := encoder.AppendRowChangedEvent(context.Background(), "", row)
+			err := encoder.AppendRowChangedEvent(context.Background(), "", row, nil)
 			events++
 			require.Nil(t, err)
 		}
@@ -131,7 +131,7 @@ func TestCraftMaxMessageBytes(t *testing.T) {
 	}
 
 	for i := 0; i < 10000; i++ {
-		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent)
+		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent, nil)
 		require.Nil(t, err)
 	}
 
@@ -154,7 +154,7 @@ func TestCraftMaxBatchSize(t *testing.T) {
 	}
 
 	for i := 0; i < 10000; i++ {
-		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent)
+		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent, nil)
 		require.Nil(t, err)
 	}
 
@@ -171,7 +171,7 @@ func TestCraftMaxBatchSize(t *testing.T) {
 				break
 			}
 
-			require.Equal(t, model.MqMessageTypeRow, v)
+			require.Equal(t, model.MessageTypeRow, v)
 			_, err = decoder.NextRowChangedEvent()
 			require.Nil(t, err)
 			count++

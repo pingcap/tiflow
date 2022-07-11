@@ -18,11 +18,9 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
-	p2pImpl "github.com/pingcap/tiflow/pkg/p2p"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/security"
-
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 )
 
 // MessageSender is used to send a message of a given topic to a given node.
@@ -53,7 +51,7 @@ func (m *messageSenderImpl) SendToNodeB(
 ) error {
 	client := m.router.GetClient(targetNodeID)
 	if client == nil {
-		return derror.ErrExecutorNotFoundForMessage.GenWithStackByArgs()
+		return cerrors.ErrExecutorNotFoundForMessage.GenWithStackByArgs()
 	}
 
 	// TODO: blocking send in p2p library may have performance issue
@@ -69,7 +67,7 @@ func (m *messageSenderImpl) SendToNode(ctx context.Context, targetNodeID NodeID,
 
 	_, err := client.TrySendMessage(ctx, topic, message)
 	if err != nil {
-		if cerror.ErrPeerMessageSendTryAgain.Equal(err) {
+		if cerrors.ErrPeerMessageSendTryAgain.Equal(err) {
 			return false, nil
 		}
 		return false, errors.Trace(err)
@@ -77,10 +75,10 @@ func (m *messageSenderImpl) SendToNode(ctx context.Context, targetNodeID NodeID,
 	return true, nil
 }
 
-// MessageRouter alias to p2pImpl.MessageRouter
-type MessageRouter = p2pImpl.MessageRouter
+// MessageRouter alias to p2p.MessageRouter
+type MessageRouter = p2p.MessageRouter
 
-var defaultClientConfig = &p2pImpl.MessageClientConfig{
+var defaultClientConfig = &p2p.MessageClientConfig{
 	SendChannelSize:         128,
 	BatchSendInterval:       100 * time.Millisecond, // essentially disables flushing
 	MaxBatchBytes:           8 * 1024 * 1024,        // 8MB
@@ -93,7 +91,7 @@ var defaultClientConfig = &p2pImpl.MessageClientConfig{
 func NewMessageRouter(nodeID NodeID, advertisedAddr string) MessageRouter {
 	config := *defaultClientConfig // copy
 	config.AdvertisedAddr = advertisedAddr
-	return p2pImpl.NewMessageRouter(
+	return p2p.NewMessageRouter(
 		nodeID,
 		&security.Credential{ /* TLS not supported for now */ },
 		&config,

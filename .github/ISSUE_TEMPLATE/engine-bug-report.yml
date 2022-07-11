@@ -30,7 +30,7 @@ body:
     attributes:
       label: Versions of the cluster
       value: |-
-             Dataflow Engine version (run `df-master -V` or `df-executor -V`):
+             Dataflow Engine version (run `tiflow version`):
 
              ```console
              (paste Dataflow Engine version here)

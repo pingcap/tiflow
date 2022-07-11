@@ -26,8 +26,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	kafkap "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/stretchr/testify/require"
@@ -81,8 +79,6 @@ func TestKafkaSink(t *testing.T) {
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
-	fr, err := filter.NewFilter(replicaConfig)
-	require.Nil(t, err)
 	errCh := make(chan error, 1)
 
 	kafkap.NewAdminClientImpl = kafka.NewMockAdminClient
@@ -90,14 +86,15 @@ func TestKafkaSink(t *testing.T) {
 		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
-	sink, err := NewKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, errCh)
+	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
+	sink, err := NewKafkaSaramaSink(ctx, sinkURI, replicaConfig, errCh)
 	require.Nil(t, err)
 
 	encoder := sink.encoderBuilder.Build()
 
-	require.IsType(t, &codec.JSONEventBatchEncoder{}, encoder)
-	require.Equal(t, 1, encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize())
-	require.Equal(t, 1048576, encoder.(*codec.JSONEventBatchEncoder).GetMaxMessageBytes())
+	require.IsType(t, &codec.OpenProtocolBatchEncoder{}, encoder)
+	require.Equal(t, 1, encoder.(*codec.OpenProtocolBatchEncoder).GetMaxBatchSize())
+	require.Equal(t, 1048576, encoder.(*codec.OpenProtocolBatchEncoder).GetMaxMessageBytes())
 
 	// mock kafka broker processes 1 row changed event
 	tableID := model.TableID(1)
@@ -163,62 +160,6 @@ func TestKafkaSink(t *testing.T) {
 	}
 }
 
-func TestKafkaSinkFilter(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	leader, topic := initBroker(t, kafka.DefaultMockPartitionNum)
-	defer leader.Close()
-
-	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&auto-create-topic=false&protocol=open-protocol"
-	uri := fmt.Sprintf(uriTemplate, leader.Addr(), topic)
-	sinkURI, err := url.Parse(uri)
-	require.Nil(t, err)
-	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Filter = &config.FilterConfig{
-		Rules: []string{"test.*"},
-	}
-	fr, err := filter.NewFilter(replicaConfig)
-	require.Nil(t, err)
-	errCh := make(chan error, 1)
-
-	kafkap.NewAdminClientImpl = kafka.NewMockAdminClient
-	defer func() {
-		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
-	}()
-
-	sink, err := NewKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, errCh)
-	require.Nil(t, err)
-
-	row := &model.RowChangedEvent{
-		Table: &model.TableName{
-			Schema: "order",
-			Table:  "t1",
-		},
-		StartTs:  100,
-		CommitTs: 120,
-	}
-	err = sink.EmitRowChangedEvents(ctx, row)
-	require.Nil(t, err)
-	require.Equal(t, uint64(0), sink.statistics.TotalRowsCount())
-
-	ddl := &model.DDLEvent{
-		StartTs:  130,
-		CommitTs: 140,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "lineitem", Table: "t2",
-		},
-		Query: "create table lineitem.t2",
-		Type:  1,
-	}
-	err = sink.EmitDDLEvent(ctx, ddl)
-	require.True(t, cerror.ErrDDLEventIgnored.Equal(err))
-
-	cancel()
-	err = sink.Close(ctx)
-	if err != nil {
-		require.Equal(t, context.Canceled, errors.Cause(err))
-	}
-}
-
 func TestPulsarSinkEncoderConfig(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -232,17 +173,15 @@ func TestPulsarSinkEncoderConfig(t *testing.T) {
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
-	fr, err := filter.NewFilter(replicaConfig)
-	require.Nil(t, err)
 	errCh := make(chan error, 1)
 
-	sink, err := NewPulsarSink(ctx, sinkURI, fr, replicaConfig, errCh)
+	sink, err := NewPulsarSink(ctx, sinkURI, replicaConfig, errCh)
 	require.Nil(t, err)
 
 	encoder := sink.encoderBuilder.Build()
-	require.IsType(t, &codec.JSONEventBatchEncoder{}, encoder)
-	require.Equal(t, 1, encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize())
-	require.Equal(t, 4194304, encoder.(*codec.JSONEventBatchEncoder).GetMaxMessageBytes())
+	require.IsType(t, &codec.OpenProtocolBatchEncoder{}, encoder)
+	require.Equal(t, 1, encoder.(*codec.OpenProtocolBatchEncoder).GetMaxBatchSize())
+	require.Equal(t, 4194304, encoder.(*codec.OpenProtocolBatchEncoder).GetMaxMessageBytes())
 
 	// FIXME: mock pulsar client doesn't support close,
 	// so we can't call sink.Close() to close it.
@@ -265,8 +204,6 @@ func TestFlushRowChangedEvents(t *testing.T) {
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
-	fr, err := filter.NewFilter(replicaConfig)
-	require.Nil(t, err)
 	errCh := make(chan error, 1)
 
 	kafkap.NewAdminClientImpl = kafka.NewMockAdminClient
@@ -274,7 +211,8 @@ func TestFlushRowChangedEvents(t *testing.T) {
 		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
-	sink, err := NewKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, errCh)
+	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
+	sink, err := NewKafkaSaramaSink(ctx, sinkURI, replicaConfig, errCh)
 	require.Nil(t, err)
 
 	// mock kafka broker processes 1 row changed event

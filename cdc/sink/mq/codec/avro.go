@@ -60,14 +60,15 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(
 	ctx context.Context,
 	topic string,
 	e *model.RowChangedEvent,
+	_ func(),
 ) error {
 	log.Debug("AppendRowChangedEvent", zap.Any("rowChangedEvent", e))
-	mqMessage := NewMQMessage(
+	mqMessage := newMsg(
 		config.ProtocolAvro,
 		nil,
 		nil,
 		e.CommitTs,
-		model.MqMessageTypeRow,
+		model.MessageTypeRow,
 		&e.Table.Schema,
 		&e.Table.Table,
 	)
@@ -840,7 +841,7 @@ func (b *avroEventBatchEncoderBuilder) Build() EventBatchEncoder {
 	encoder.keySchemaManager = b.keySchemaManager
 	encoder.valueSchemaManager = b.valueSchemaManager
 	encoder.resultBuf = make([]*MQMessage, 0, 4096)
-	encoder.maxMessageBytes = b.config.MaxMessageBytes()
+	encoder.maxMessageBytes = b.config.maxMessageBytes
 	encoder.enableTiDBExtension = b.config.enableTiDBExtension
 	encoder.decimalHandlingMode = b.config.avroDecimalHandlingMode
 	encoder.bigintUnsignedHandlingMode = b.config.avroBigintUnsignedHandlingMode

@@ -15,20 +15,31 @@ package upstream
 
 import (
 	"context"
+	"strings"
 	"sync"
+	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/security"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
 
-// DefaultUpstreamID is a pseudo upstreamID for now. It will be removed in the future.
-const DefaultUpstreamID uint64 = 0
+// testUpstreamID is a pseudo upstreamID for now. It will be removed in the future.
+const testUpstreamID uint64 = 0
+
+// tickInterval is the minimum interval that upstream manager to check upstreams
+var tickInterval = 3 * time.Minute
 
 // Manager manages all upstream.
 type Manager struct {
+	// gcServiceID identify the cdc cluster gc service id
+	gcServiceID string
 	// upstreamID map to *Upstream.
 	ups *sync.Map
 	// all upstream should be spawn from this ctx.
@@ -37,55 +48,117 @@ type Manager struct {
 	cancel func()
 	// lock this mutex when add or delete a value of Manager.ups.
 	mu sync.Mutex
+
+	defaultUpstream *Upstream
+
+	lastTickTime time.Time
+
+	initUpstreamFunc func(ctx context.Context, up *Upstream, gcID string) error
 }
 
 // NewManager creates a new Manager.
 // ctx will be used to initialize upstream spawned by this Manager.
-func NewManager(ctx context.Context) *Manager {
+func NewManager(ctx context.Context, gcServiceID string) *Manager {
 	ctx, cancel := context.WithCancel(ctx)
-	return &Manager{ups: new(sync.Map), ctx: ctx, cancel: cancel}
+	return &Manager{
+		ups:              new(sync.Map),
+		ctx:              ctx,
+		cancel:           cancel,
+		gcServiceID:      gcServiceID,
+		initUpstreamFunc: initUpstream,
+	}
 }
 
 // NewManager4Test returns a Manager for unit test.
 func NewManager4Test(pdClient pd.Client) *Manager {
 	up := NewUpstream4Test(pdClient)
-	res := &Manager{ups: new(sync.Map), ctx: context.Background()}
-	res.ups.Store(DefaultUpstreamID, up)
+	res := &Manager{
+		ups: new(sync.Map), ctx: context.Background(),
+		gcServiceID:     etcd.GcServiceIDForTest(),
+		defaultUpstream: up,
+		cancel:          func() {},
+	}
+	up.isDefaultUpstream = true
+	res.ups.Store(testUpstreamID, up)
 	return res
 }
 
-// Add adds a upstream and init it.
-// TODO(dongmen): async init upstream and should not return any error in the future.
-func (m *Manager) Add(upstreamID uint64, pdEndpoints []string, securityConfig *config.SecurityConfig) error {
-	select {
-	case <-m.ctx.Done():
-		// This would not happen if there were no errors in the code logic.
-		panic("should not add a upstream to a closed upstream manager")
-	default:
+// AddDefaultUpstream add the default upstream
+func (m *Manager) AddDefaultUpstream(pdEndpoints []string,
+	conf *security.Credential,
+) (*Upstream, error) {
+	up := newUpstream(pdEndpoints, conf)
+	if err := m.initUpstreamFunc(m.ctx, up, m.gcServiceID); err != nil {
+		return nil, err
 	}
-	if _, ok := m.ups.Load(upstreamID); ok {
-		return nil
+	up.isDefaultUpstream = true
+	m.defaultUpstream = up
+	m.ups.Store(up.ID, up)
+	log.Info("default upstream is added", zap.Uint64("id", up.ID))
+	return up, nil
+}
+
+// GetDefaultUpstream returns the default upstream
+func (m *Manager) GetDefaultUpstream() (*Upstream, error) {
+	if m.defaultUpstream == nil {
+		return nil, cerror.ErrUpstreamNotFound
 	}
-	up := newUpstream(upstreamID, pdEndpoints, securityConfig)
-	err := up.init(m.ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
+	return m.defaultUpstream, nil
+}
+
+func (m *Manager) add(upstreamID uint64,
+	pdEndpoints []string, conf *config.SecurityConfig,
+) *Upstream {
 	m.mu.Lock()
+	defer m.mu.Unlock()
+	v, ok := m.ups.Load(upstreamID)
+	if ok {
+		up := v.(*Upstream)
+		up.resetIdleTime()
+		return up
+	}
+	securityConf := &security.Credential{}
+	if conf != nil {
+		securityConf = &security.Credential{
+			CAPath:        conf.CAPath,
+			CertPath:      conf.CertPath,
+			KeyPath:       conf.KeyPath,
+			CertAllowedCN: conf.CertAllowedCN,
+		}
+	}
+	up := newUpstream(pdEndpoints, securityConf)
 	m.ups.Store(upstreamID, up)
-	m.mu.Unlock()
-	return nil
+	go func() {
+		err := m.initUpstreamFunc(m.ctx, up, m.gcServiceID)
+		up.err.Store(err)
+	}()
+	up.resetIdleTime()
+	log.Info("new upstream is added", zap.Uint64("id", up.ID))
+	return up
+}
+
+// AddUpstream adds an upstream and init it.
+func (m *Manager) AddUpstream(upstreamID model.UpstreamID,
+	info *model.UpstreamInfo,
+) *Upstream {
+	return m.add(upstreamID,
+		strings.Split(info.PDEndpoints, ","),
+		&security.Credential{
+			CAPath:        info.CAPath,
+			CertPath:      info.CertPath,
+			KeyPath:       info.KeyPath,
+			CertAllowedCN: info.CertAllowedCN,
+		})
 }
 
 // Get gets a upstream by upstreamID.
-func (m *Manager) Get(upstreamID uint64) *Upstream {
+func (m *Manager) Get(upstreamID uint64) (*Upstream, bool) {
 	v, ok := m.ups.Load(upstreamID)
 	if !ok {
-		log.Panic("upstream not exists", zap.Uint64("upstreamID", upstreamID))
+		return nil, false
 	}
 	up := v.(*Upstream)
-	up.hold()
-	return up
+	return up, true
 }
 
 // Close closes all upstreams.
@@ -93,15 +166,28 @@ func (m *Manager) Get(upstreamID uint64) *Upstream {
 func (m *Manager) Close() {
 	m.cancel()
 	m.ups.Range(func(k, v interface{}) bool {
-		v.(*Upstream).close()
+		v.(*Upstream).Close()
+		m.ups.Delete(k)
 		return true
 	})
 }
 
 // Tick checks and frees upstream that have not been used
 // for a long time to save resources.
-// Tick should be only call in Owner.Tick().
-func (m *Manager) Tick(ctx context.Context) error {
+func (m *Manager) Tick(ctx context.Context,
+	globalState *orchestrator.GlobalReactorState,
+) error {
+	if time.Since(m.lastTickTime) < tickInterval {
+		return nil
+	}
+
+	activeUpstreams := make(map[uint64]struct{})
+	for _, cf := range globalState.Changefeeds {
+		activeUpstreams[cf.Info.UpstreamID] = struct{}{}
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	var err error
 	m.ups.Range(func(k, v interface{}) bool {
 		select {
@@ -113,16 +199,34 @@ func (m *Manager) Tick(ctx context.Context) error {
 		id := k.(uint64)
 
 		up := v.(*Upstream)
-		if up.shouldClose() {
-			go up.close()
+		if up.isDefaultUpstream {
+			return true
+		}
+		// remove failed upstream
+		if up.Error() != nil {
+			log.Warn("upstream init failed, remove it from manager",
+				zap.Uint64("id", up.ID),
+				zap.Error(up.Error()))
+			go up.Close()
+			m.ups.Delete(id)
+			return true
+		}
+		_, ok := activeUpstreams[id]
+		if ok {
+			return true
 		}
 
-		if up.IsClosed() {
-			m.mu.Lock()
+		up.trySetIdleTime()
+		log.Info("no active changefeed found, try to close upstream",
+			zap.Uint64("id", up.ID))
+		if up.shouldClose() {
+			log.Info("upstream should be closed ,remove it from manager",
+				zap.Uint64("id", up.ID))
+			go up.Close()
 			m.ups.Delete(id)
-			m.mu.Unlock()
 		}
 		return true
 	})
+	m.lastTickTime = time.Now()
 	return err
 }

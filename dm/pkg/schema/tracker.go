@@ -67,15 +67,20 @@ var (
 )
 
 func init() {
-	unistoreConfig.DefaultConf.Engine.VlogFileSize = 4 * units.MiB
+	unistoreConfig.DefaultConf.Engine.VlogFileSize = int64(kv.TxnEntrySizeLimit)
 	unistoreConfig.DefaultConf.Engine.L1Size = 128 * units.MiB
 }
 
 // Tracker is used to track schema locally.
 type Tracker struct {
-	// we're using an embedded tidb, there's no need to sync operations on it, but we may recreate(drop and create)
-	// a table such as when checkpoint rollback, we need to make sure others(validator for now) can't see the table
-	// is deleted. so we add an extra layer of synchronization for GetTableInfo/RecreateTables for now.
+	// The Tracker is an embedded tidb in essence, where there was basically no parallel operation at the beginning.
+	// However, since the validator is introduced and heavily dependent on the Tracker, we need to make sure
+	// the synchronization between the reading from the validator and the modification from the syncer (e.g.
+	// when the checkpoint is being rolled back, we have to make sure the validator can still vision the original tables)
+	// From this point, we add an extra layer of the synchronization for the following operations:
+	// 1. GetTableInfo: the validator reads table infos.
+	// 2. Init: when the syncer restarts, it may re-initialize the Tracker while the validator may read the Tracker at the same time.
+	// 3. Close: Being similar as above, the validator can read the Tracker while the syncer is closing the Tracker.
 	sync.RWMutex
 	storePath string
 	store     kv.Storage
@@ -99,10 +104,25 @@ type DownstreamTableInfo struct {
 	WhereHandle *sqlmodel.WhereHandle
 }
 
-// NewTracker creates a new tracker. `sessionCfg` will be set as tracker's session variables if specified, or retrieve
+// NewTracker simply returns an empty Tracker,
+// which should be followed by an initialization before used.
+func NewTracker() *Tracker {
+	return &Tracker{}
+}
+
+// Init initializes the Tracker. `sessionCfg` will be set as tracker's session variables if specified, or retrieve
 // some variable from downstream using `downstreamConn`.
 // NOTE **sessionCfg is a reference to caller**.
-func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, downstreamConn *dbconn.DBConn) (*Tracker, error) {
+func (tr *Tracker) Init(
+	ctx context.Context,
+	task string,
+	sessionCfg map[string]string,
+	downstreamConn *dbconn.DBConn,
+	logger log.Logger,
+) error {
+	if tr == nil {
+		return nil
+	}
 	var (
 		err       error
 		storePath string
@@ -133,36 +153,37 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 		sessionCfg = make(map[string]string)
 	}
 
-	tctx := tcontext.NewContext(ctx, log.With(zap.String("component", "schema-tracker"), zap.String("task", task)))
+	logger = logger.WithFields(zap.String("component", "schema-tracker"), zap.String("task", task))
+	tctx := tcontext.NewContext(ctx, logger)
 	// get variables if user doesn't specify
-	// all cfg in downstreamVars should be lower case
+	// all cfg in downstreamVars should be lowercase
 	for _, k := range downstreamVars {
 		if _, ok := sessionCfg[k]; !ok {
 			var ignoredColumn interface{}
 			rows, err2 := downstreamConn.QuerySQL(tctx, nil, fmt.Sprintf("SHOW VARIABLES LIKE '%s'", k))
 			if err2 != nil {
-				return nil, err2
+				return err2
 			}
 			if rows.Next() {
 				var value string
 				if err3 := rows.Scan(&ignoredColumn, &value); err3 != nil {
-					return nil, err3
+					return err3
 				}
 				sessionCfg[k] = value
 			}
 			// nolint:sqlclosecheck
 			if err2 = rows.Close(); err2 != nil {
-				return nil, err2
+				return err2
 			}
 			if err2 = rows.Err(); err2 != nil {
-				return nil, err2
+				return err2
 			}
 		}
 	}
 
 	storePath, err = newTmpFolderForTracker(task)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	rollbackHolder.Add(fr.FuncRollback{Name: "DeleteStorePath", Fn: func() {
 		_ = os.RemoveAll(storePath)
@@ -172,7 +193,7 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 		mockstore.WithStoreType(mockstore.EmbedUnistore),
 		mockstore.WithPath(storePath))
 	if err != nil {
-		return nil, err
+		return err
 	}
 	rollbackHolder.Add(fr.FuncRollback{Name: "CloseStore", Fn: func() {
 		_ = store.Close()
@@ -183,13 +204,13 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 
 	dom, err = session.BootstrapSession(store)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	rollbackHolder.Add(fr.FuncRollback{Name: "CloseDomain", Fn: dom.Close})
 
 	se, err = session.CreateSession(store)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	rollbackHolder.Add(fr.FuncRollback{Name: "CloseSession", Fn: se.Close})
 
@@ -209,13 +230,13 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 				log.L().Warn("can not set this variable", zap.Error(err))
 				continue
 			}
-			return nil, err
+			return err
 		}
 	}
 	for k, v := range globalVarsToSet {
 		err = se.GetSessionVars().SetSystemVarWithRelaxedValidation(k, v)
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 	// skip DDL test https://github.com/pingcap/tidb/pull/33079
@@ -226,7 +247,7 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 	// exist by default. So we need to drop it first.
 	err = dom.DDL().DropSchema(se, model.NewCIStr("test"))
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// init downstreamTracker
@@ -234,14 +255,32 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 		downstreamConn: downstreamConn,
 		tableInfos:     make(map[string]*DownstreamTableInfo),
 	}
+	tr.Lock()
+	defer tr.Unlock()
+	tr.storePath = storePath
+	tr.store = store
+	tr.dom = dom
+	tr.se = se
+	tr.dsTracker = dsTracker
+	tr.closed.Store(false)
+	return nil
+}
 
-	return &Tracker{
-		storePath: storePath,
-		store:     store,
-		dom:       dom,
-		se:        se,
-		dsTracker: dsTracker,
-	}, nil
+// NewTestTracker creates an empty Tracker and initializes it subsequently.
+// It is useful for test.
+func NewTestTracker(
+	ctx context.Context,
+	task string,
+	sessionCfg map[string]string,
+	downstreamConn *dbconn.DBConn,
+	logger log.Logger,
+) (*Tracker, error) {
+	tr := NewTracker()
+	err := tr.Init(ctx, task, sessionCfg, downstreamConn, logger)
+	if err != nil {
+		return nil, err
+	}
+	return tr, nil
 }
 
 func newTmpFolderForTracker(task string) (string, error) {
@@ -257,10 +296,13 @@ func (tr *Tracker) Exec(ctx context.Context, db string, sql string) error {
 
 // GetTableInfo returns the schema associated with the table.
 func (tr *Tracker) GetTableInfo(table *filter.Table) (*model.TableInfo, error) {
-	dbName := model.NewCIStr(table.Schema)
-	tableName := model.NewCIStr(table.Name)
 	tr.RLock()
 	defer tr.RUnlock()
+	if tr.closed.Load() {
+		return nil, dmterror.ErrSchemaTrackerIsClosed.New("fail to get table info")
+	}
+	dbName := model.NewCIStr(table.Schema)
+	tableName := model.NewCIStr(table.Name)
 	t, err := tr.dom.InfoSchema().TableByName(dbName, tableName)
 	if err != nil {
 		return nil, err
@@ -375,13 +417,25 @@ func (tr *Tracker) Close() error {
 	if tr == nil {
 		return nil
 	}
+	// prevent SchemaTracker being closed when
+	// other components are getting/setting table info
+	tr.Lock()
+	defer tr.Unlock()
 	if !tr.closed.CAS(false, true) {
 		return nil
 	}
-	tr.se.Close()
-	tr.dom.Close()
-	if err := tr.store.Close(); err != nil {
-		return err
+	// Build of the Tracker and the initialization is divided.
+	// these fields can possibly be nil if the Tracker is closed before the initialization.
+	if tr.se != nil {
+		tr.se.Close()
+	}
+	if tr.dom != nil {
+		tr.dom.Close()
+	}
+	if tr.store != nil {
+		if err := tr.store.Close(); err != nil {
+			return err
+		}
 	}
 	return os.RemoveAll(tr.storePath)
 }
@@ -439,6 +493,26 @@ func (tr *Tracker) CreateTableIfNotExists(table *filter.Table, ti *model.TableIn
 	return tr.dom.DDL().CreateTableWithInfo(tr.se, schemaName, ti, ddl.OnExistIgnore)
 }
 
+// SplitBatchCreateTableAndHandle will split the batch if it exceeds the kv entry size limit.
+func (tr *Tracker) SplitBatchCreateTableAndHandle(schema model.CIStr, info []*model.TableInfo, l int, r int) error {
+	var err error
+	if err = tr.dom.DDL().BatchCreateTableWithInfo(tr.se, schema, info[l:r], ddl.OnExistIgnore); kv.ErrEntryTooLarge.Equal(err) {
+		if r-l == 1 {
+			return err
+		}
+		err = tr.SplitBatchCreateTableAndHandle(schema, info, l, (l+r)/2)
+		if err != nil {
+			return err
+		}
+		err = tr.SplitBatchCreateTableAndHandle(schema, info, (l+r)/2, r)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	return err
+}
+
 // BatchCreateTableIfNotExist will batch creating tables per schema. If the schema does not exist, it will create it.
 // The argument is { database name -> { table name -> TableInfo } }.
 func (tr *Tracker) BatchCreateTableIfNotExist(tablesToCreate map[string]map[string]*model.TableInfo) error {
@@ -455,7 +529,7 @@ func (tr *Tracker) BatchCreateTableIfNotExist(tablesToCreate map[string]map[stri
 			cloneTis = append(cloneTis, cloneTi)
 		}
 		schemaName := model.NewCIStr(schema)
-		if err := tr.dom.DDL().BatchCreateTableWithInfo(tr.se, schemaName, cloneTis, ddl.OnExistIgnore); err != nil {
+		if err := tr.SplitBatchCreateTableAndHandle(schemaName, cloneTis, 0, len(cloneTis)); err != nil {
 			return err
 		}
 	}

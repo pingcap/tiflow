@@ -23,7 +23,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -32,13 +31,14 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	"github.com/pingcap/tiflow/engine/servermaster/cluster"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
+	"github.com/pingcap/tiflow/pkg/logutil"
 
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/require"
 )
 
 func init() {
-	err := log.InitLogger(&log.Config{Level: "warn"})
+	err := logutil.InitLogger(&logutil.Config{Level: "warn"})
 	if err != nil {
 		panic(err)
 	}
@@ -66,10 +66,10 @@ data-dir = "%s"
 peer-urls = "http://127.0.0.1:%d"
 initial-cluster = "%s=http://127.0.0.1:%d"`
 	cfgStr := fmt.Sprintf(cfgTpl, ports[0], ports[0], ports[0], ports[0], name, dir, ports[1], name, ports[1])
-	cfg := NewConfig()
+	cfg := GetDefaultMasterConfig()
 	err = cfg.configFromString(cfgStr)
 	require.Nil(t, err)
-	err = cfg.adjust()
+	err = cfg.Adjust()
 	require.Nil(t, err)
 
 	masterAddr := fmt.Sprintf("127.0.0.1:%d", ports[0])
@@ -117,10 +117,10 @@ data-dir = "%s"
 peer-urls = "http://127.0.0.1:%d"
 initial-cluster = "server-master-1=http://127.0.0.1:%d,server-master-2=http://127.0.0.1:%d"`
 	cfgStr := fmt.Sprintf(cfgTpl, ports[0], ports[0], ports[0], ports[0], dir, ports[1], ports[1], ports[2])
-	cfg := NewConfig()
+	cfg := GetDefaultMasterConfig()
 	err = cfg.configFromString(cfgStr)
 	require.Nil(t, err)
-	err = cfg.adjust()
+	err = cfg.Adjust()
 	require.Nil(t, err)
 
 	s := &Server{cfg: cfg}

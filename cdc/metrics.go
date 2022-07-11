@@ -19,7 +19,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/cdc/processor"
 	"github.com/pingcap/tiflow/cdc/puller"
-	redowriter "github.com/pingcap/tiflow/cdc/redo/writer"
+	redo "github.com/pingcap/tiflow/cdc/redo/common"
+	"github.com/pingcap/tiflow/cdc/scheduler"
 	sink "github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sorter"
@@ -54,14 +55,14 @@ func init() {
 	actor.InitMetrics(registry)
 	orchestrator.InitMetrics(registry)
 	p2p.InitMetrics(registry)
-	// Sorter metrics
 	sorter.InitMetrics(registry)
 	memory.InitMetrics(registry)
 	unified.InitMetrics(registry)
 	leveldb.InitMetrics(registry)
-	redowriter.InitMetrics(registry)
+	redo.InitMetrics(registry)
 	db.InitMetrics(registry)
 	kafka.InitMetrics(registry)
+	scheduler.InitMetrics(registry)
 	// TiKV client metrics, including metrics about resolved and region cache.
 	originalRegistry := prometheus.DefaultRegisterer
 	prometheus.DefaultRegisterer = registry

@@ -18,26 +18,25 @@ import (
 	"strings"
 	"time"
 
-	perrors "github.com/pingcap/errors"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/client"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
-	"github.com/pingcap/tiflow/engine/pkg/errors"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
-	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
+	"github.com/pingcap/tiflow/engine/pkg/etcdutil"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	"github.com/pingcap/tiflow/engine/servermaster/cluster"
+	derrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 func (s *Server) generateSessionConfig() (*cluster.EtcdSessionConfig, error) {
 	value, err := s.info.ToJSON()
 	if err != nil {
-		return nil, errors.Wrap(errors.ErrMasterNewServer, err)
+		return nil, derrors.WrapError(derrors.ErrMasterNewServer, err)
 	}
 
 	return &cluster.EtcdSessionConfig{
@@ -78,7 +77,7 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return perrors.Trace(ctx.Err())
+			return errors.Trace(ctx.Err())
 		default:
 		}
 
@@ -114,10 +113,10 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 			for {
 				select {
 				case <-leaderCtx.Done():
-					return perrors.Trace(ctx.Err())
+					return errors.Trace(ctx.Err())
 				case <-ticker.C:
 					if !s.isEtcdLeader() {
-						log.L().Info("etcd leader changed, resigns server master leader",
+						log.Info("etcd leader changed, resigns server master leader",
 							zap.String("old-leader-name", s.name()))
 						return derrors.ErrEtcdLeaderChanged.GenWithStackByArgs()
 					}
@@ -129,14 +128,14 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 		})
 		err = errg.Wait()
 		if err != nil {
-			if perrors.Cause(err) == context.Canceled ||
-				errors.ErrEtcdLeaderChanged.Equal(err) {
-				log.L().Info("leader service exits", zap.Error(err))
-			} else if errors.ErrMasterSessionDone.Equal(err) {
-				log.L().Info("server master session done, reset session now", zap.Error(err))
+			if errors.Cause(err) == context.Canceled ||
+				derrors.ErrEtcdLeaderChanged.Equal(err) {
+				log.Info("leader service exits", zap.Error(err))
+			} else if derrors.ErrMasterSessionDone.Equal(err) {
+				log.Info("server master session done, reset session now", zap.Error(err))
 				needResetSession = true
 			} else {
-				log.L().Error("run leader service failed", zap.Error(err))
+				log.Error("run leader service failed", zap.Error(err))
 			}
 		}
 	}
@@ -153,13 +152,13 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 //    - If it is, return retry=false and continue the leader campaign.
 func (s *Server) checkLeaderExists(ctx context.Context) (retry bool, err error) {
 	// step-1
-	key, data, rev, err := etcdutils.GetLeader(ctx, s.etcdClient, adapter.MasterCampaignKey.Path())
+	key, data, rev, err := etcdutil.GetLeader(ctx, s.etcdClient, adapter.MasterCampaignKey.Path())
 	if err != nil {
-		if perrors.Cause(err) == context.Canceled {
-			return false, perrors.Trace(err)
+		if errors.Cause(err) == context.Canceled {
+			return false, errors.Trace(err)
 		}
-		if !errors.ErrMasterNoLeader.Equal(err) {
-			log.L().Warn("get leader failed", zap.Error(err))
+		if !derrors.ErrMasterNoLeader.Equal(err) {
+			log.Warn("get leader failed", zap.Error(err))
 			return true, nil
 		}
 	}
@@ -171,7 +170,7 @@ func (s *Server) checkLeaderExists(ctx context.Context) (retry bool, err error) 
 		err = leader.Unmarshal(data)
 		// step-2, case-a
 		if err != nil {
-			log.L().Warn("unexpected leader data", zap.Error(err))
+			log.Warn("unexpected leader data", zap.Error(err))
 			return true, nil
 		}
 
@@ -182,11 +181,11 @@ func (s *Server) checkLeaderExists(ctx context.Context) (retry bool, err error) 
 			//   has the same advertise addr as current server
 			// Both of these two conditions indicate the existing information
 			// of leader campaign is stale, just delete it and campaign again.
-			log.L().Warn("found stale leader key, delete it and campaign later",
+			log.Warn("found stale leader key, delete it and campaign later",
 				zap.ByteString("key", key), zap.ByteString("val", data))
 			_, err := s.etcdClient.Delete(ctx, string(key))
 			if err != nil {
-				log.L().Error("failed to delete leader key",
+				log.Error("failed to delete leader key",
 					zap.ByteString("key", key), zap.ByteString("val", data))
 			}
 			return true, nil
@@ -195,15 +194,15 @@ func (s *Server) checkLeaderExists(ctx context.Context) (retry bool, err error) 
 		// step-3, case-c
 		leader.IsServLeader = true
 		leader.IsEtcdLeader = true
-		log.L().Info("start to watch server master leader",
+		log.Info("start to watch server master leader",
 			zap.String("leader-name", leader.Name), zap.String("addr", leader.AdvertiseAddr))
 		s.watchLeader(ctx, leader, rev)
-		log.L().Info("server master leader changed")
+		log.Info("server master leader changed")
 	}
 
 	// step-3
 	if !s.isEtcdLeader() {
-		log.L().Info("skip campaigning leader", zap.String("name", s.name()))
+		log.Info("skip campaigning leader", zap.String("name", s.name()))
 		return true, nil
 	}
 	return false, nil
@@ -219,14 +218,14 @@ func (s *Server) createLeaderClient(ctx context.Context, addrs []string) {
 	}
 	cli, err := client.NewMasterClient(ctx, endpoints)
 	if err != nil {
-		log.L().Error("create server master client failed", zap.Strings("addrs", addrs), zap.Error(err))
+		log.Error("create server master client failed", zap.Strings("addrs", addrs), zap.Error(err))
 		return
 	}
 	s.masterCli.Set(cli.FailoverRPCClients)
 
 	cli2, err := manager.NewResourceClient(ctx, endpoints)
 	if err != nil {
-		log.L().Error("create resource client failed", zap.Strings("addrs", addrs), zap.Error(err))
+		log.Error("create resource client failed", zap.Strings("addrs", addrs), zap.Error(err))
 		return
 	}
 	s.resourceCli.Set(cli2)
@@ -260,7 +259,7 @@ func (s *Server) watchLeader(ctx context.Context, m *Member, rev int64) {
 		rch := watcher.Watch(ctx, leaderPath, clientv3.WithPrefix(), clientv3.WithRev(rev))
 		for wresp := range rch {
 			if wresp.CompactRevision != 0 {
-				log.L().Warn("watch leader met compacted error",
+				log.Warn("watch leader met compacted error",
 					zap.Int64("required-revision", rev),
 					zap.Int64("compact-revision", wresp.CompactRevision),
 				)
@@ -268,14 +267,14 @@ func (s *Server) watchLeader(ctx context.Context, m *Member, rev int64) {
 				break
 			}
 			if wresp.Canceled {
-				log.L().Warn("leadership watcher is canceled",
+				log.Warn("leadership watcher is canceled",
 					zap.Int64("revision", rev), zap.String("leader-name", m.Name),
 					zap.Error(wresp.Err()))
 				return
 			}
 			for _, ev := range wresp.Events {
 				if ev.Type == mvccpb.DELETE {
-					log.L().Info("current leader is resigned", zap.String("leader-name", m.Name))
+					log.Info("current leader is resigned", zap.String("leader-name", m.Name))
 					return
 				}
 			}

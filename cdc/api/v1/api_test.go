@@ -26,8 +26,10 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/capture"
+	mock_capture "github.com/pingcap/tiflow/cdc/capture/mock"
 	"github.com/pingcap/tiflow/cdc/model"
 	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
+	"github.com/pingcap/tiflow/cdc/scheduler"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -90,7 +92,7 @@ func (p *mockStatusProvider) GetCaptures(ctx context.Context) ([]*model.CaptureI
 	return args.Get(0).([]*model.CaptureInfo), args.Error(1)
 }
 
-func newRouter(c *capture.Capture, p *mockStatusProvider) *gin.Engine {
+func newRouter(c capture.Capture, p *mockStatusProvider) *gin.Engine {
 	router := gin.New()
 	RegisterOpenAPIRoutes(router, NewOpenAPI4Test(c, p))
 	return router
@@ -115,14 +117,18 @@ func newStatusProvider() *mockStatusProvider {
 
 	statusProvider.On("GetAllChangeFeedStatuses", mock.Anything).
 		Return(map[model.ChangeFeedID]*model.ChangeFeedStatus{
-			model.DefaultChangeFeedID(changeFeedID.ID + "1"): {CheckpointTs: 1},
-			model.DefaultChangeFeedID(changeFeedID.ID + "2"): {CheckpointTs: 2},
+			model.ChangeFeedID4Test("ab", "123"):  {CheckpointTs: 1},
+			model.ChangeFeedID4Test("ab", "13"):   {CheckpointTs: 2},
+			model.ChangeFeedID4Test("abc", "123"): {CheckpointTs: 1},
+			model.ChangeFeedID4Test("def", "456"): {CheckpointTs: 2},
 		}, nil)
 
 	statusProvider.On("GetAllChangeFeedInfo", mock.Anything).
 		Return(map[model.ChangeFeedID]*model.ChangeFeedInfo{
-			model.DefaultChangeFeedID(changeFeedID.ID + "1"): {State: model.StateNormal},
-			model.DefaultChangeFeedID(changeFeedID.ID + "2"): {State: model.StateStopped},
+			model.ChangeFeedID4Test("ab", "123"):  {State: model.StateNormal},
+			model.ChangeFeedID4Test("ab", "13"):   {State: model.StateStopped},
+			model.ChangeFeedID4Test("abc", "123"): {State: model.StateNormal},
+			model.ChangeFeedID4Test("def", "456"): {State: model.StateStopped},
 		}, nil)
 
 	statusProvider.On("GetAllTaskStatuses", mock.Anything).
@@ -154,9 +160,18 @@ func TestListChangefeed(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, 200, w.Code)
 	var resp []model.ChangefeedCommonInfo
+	fmt.Println(w.Body.String())
 	err := json.NewDecoder(w.Body).Decode(&resp)
 	require.Nil(t, err)
-	require.Equal(t, 2, len(resp))
+	require.Equal(t, 4, len(resp))
+	require.Equal(t, "ab", resp[0].Namespace)
+	require.Equal(t, "123", resp[0].ID)
+	require.Equal(t, "ab", resp[1].Namespace)
+	require.Equal(t, "13", resp[1].ID)
+	require.Equal(t, "abc", resp[2].Namespace)
+	require.Equal(t, "123", resp[2].ID)
+	require.Equal(t, "def", resp[3].Namespace)
+	require.Equal(t, "456", resp[3].ID)
 
 	// test list changefeed with specific state
 	api = testCase{url: fmt.Sprintf("/api/v1/changefeeds?state=%s", "stopped"), method: "GET"}
@@ -167,9 +182,11 @@ func TestListChangefeed(t *testing.T) {
 	resp = []model.ChangefeedCommonInfo{}
 	err = json.NewDecoder(w.Body).Decode(&resp)
 	require.Nil(t, err)
-	require.Equal(t, 1, len(resp))
+	require.Equal(t, 2, len(resp))
 	require.Equal(t, model.StateStopped, resp[0].FeedState)
+	require.Equal(t, model.StateStopped, resp[1].FeedState)
 	require.Equal(t, uint64(0x2), resp[0].CheckpointTSO)
+	require.Equal(t, uint64(0x2), resp[1].CheckpointTSO)
 }
 
 func TestGetChangefeed(t *testing.T) {
@@ -435,6 +452,112 @@ func TestRebalanceTables(t *testing.T) {
 	require.Contains(t, respErr.Error, "changefeed not exists")
 }
 
+func TestDrainCapture(t *testing.T) {
+	t.Parallel()
+
+	statusProvider := newStatusProvider()
+
+	ctrl := gomock.NewController(t)
+	owner := mock_owner.NewMockOwner(ctrl)
+	capture := capture.NewCapture4Test(owner)
+	router := newRouter(capture, statusProvider)
+
+	captureInfo, err := capture.Info()
+	require.NoError(t, err)
+	data := model.DrainCaptureRequest{
+		CaptureID: captureInfo.ID,
+	}
+	b, err := json.Marshal(&data)
+	require.NoError(t, err)
+
+	body := bytes.NewReader(b)
+	api := testCase{
+		url:    "/api/v1/captures/drain",
+		method: "PUT",
+	}
+	request, err := http.NewRequestWithContext(context.Background(), api.method, api.url, body)
+	require.NoError(t, err)
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, request)
+	// only has one capture
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	respErr := model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Error, "CDC:ErrSchedulerRequestFailed")
+
+	statusProvider.ExpectedCalls = statusProvider.
+		ExpectedCalls[:len(statusProvider.ExpectedCalls)-1]
+
+	statusProvider.On("GetCaptures", mock.Anything).
+		Return([]*model.CaptureInfo{{ID: captureID}, {ID: captureInfo.ID}}, nil)
+
+	defer func() {
+		statusProvider.ExpectedCalls = statusProvider.
+			ExpectedCalls[:len(statusProvider.ExpectedCalls)-1]
+
+		statusProvider.On("GetCaptures", mock.Anything).
+			Return([]*model.CaptureInfo{{ID: captureID}}, nil)
+	}()
+
+	data = model.DrainCaptureRequest{CaptureID: "capture-not-found"}
+	b, err = json.Marshal(&data)
+	require.NoError(t, err)
+	body = bytes.NewReader(b)
+
+	request, err = http.NewRequestWithContext(context.Background(), api.method, api.url, body)
+	require.NoError(t, err)
+
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, request)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.NoError(t, err)
+	require.Contains(t, respErr.Error, "capture not exists")
+
+	data = model.DrainCaptureRequest{CaptureID: "capture-for-test"}
+	b, err = json.Marshal(&data)
+	require.NoError(t, err)
+	body = bytes.NewReader(b)
+	request, err = http.NewRequestWithContext(context.Background(), api.method, api.url, body)
+	require.NoError(t, err)
+
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, request)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.NoError(t, err)
+	require.Contains(t, respErr.Error, "cannot drain the owner")
+
+	data = model.DrainCaptureRequest{CaptureID: captureID}
+	b, err = json.Marshal(&data)
+	require.NoError(t, err)
+	body = bytes.NewReader(b)
+
+	request, err = http.NewRequestWithContext(context.Background(), api.method, api.url, body)
+	require.NoError(t, err)
+
+	owner.EXPECT().DrainCapture(gomock.Any(), gomock.Any()).
+		Do(func(query *scheduler.Query, done chan<- error) {
+			query.Resp = &model.DrainCaptureResp{
+				CurrentTableCount: 3,
+			}
+			close(done)
+		})
+
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, request)
+	require.Equal(t, http.StatusAccepted, w.Code)
+
+	var resp model.DrainCaptureResp
+	err = json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+	require.Equal(t, 3, resp.CurrentTableCount)
+}
+
 func TestMoveTable(t *testing.T) {
 	t.Parallel()
 
@@ -636,6 +759,48 @@ func TestServerStatus(t *testing.T) {
 	err = json.NewDecoder(w.Body).Decode(&resp)
 	require.Nil(t, err)
 	require.False(t, resp.IsOwner)
+}
+
+func TestServerStatusLiveness(t *testing.T) {
+	t.Parallel()
+	// capture is owner
+	ctrl := gomock.NewController(t)
+	cp := mock_capture.NewMockCapture(ctrl)
+	ownerRouter := newRouter(cp, newStatusProvider())
+	api := testCase{url: "/api/v1/status", method: "GET"}
+
+	cp.EXPECT().IsReady().Return(true).AnyTimes()
+	cp.EXPECT().Info().DoAndReturn(func() (model.CaptureInfo, error) {
+		return model.CaptureInfo{}, nil
+	}).AnyTimes()
+	cp.EXPECT().IsOwner().DoAndReturn(func() bool {
+		return true
+	}).AnyTimes()
+
+	// Alive.
+	alive := cp.EXPECT().Liveness().DoAndReturn(func() model.Liveness {
+		return model.LivenessCaptureAlive
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
+	ownerRouter.ServeHTTP(w, req)
+	require.Equal(t, 200, w.Code)
+	var resp model.ServerStatus
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.Nil(t, err)
+	require.EqualValues(t, model.LivenessCaptureAlive, resp.Liveness)
+
+	// Draining the capture.
+	cp.EXPECT().Liveness().DoAndReturn(func() model.Liveness {
+		return model.LivenessCaptureStopping
+	}).After(alive)
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
+	ownerRouter.ServeHTTP(w, req)
+	require.Equal(t, 200, w.Code)
+	err = json.NewDecoder(w.Body).Decode(&resp)
+	require.Nil(t, err)
+	require.EqualValues(t, model.LivenessCaptureStopping, resp.Liveness)
 }
 
 func TestSetLogLevel(t *testing.T) {

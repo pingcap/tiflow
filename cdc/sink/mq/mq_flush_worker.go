@@ -162,7 +162,7 @@ func (w *flushWorker) asyncSend(
 ) error {
 	for key, events := range partitionedRows {
 		for _, event := range events {
-			err := w.encoder.AppendRowChangedEvent(ctx, key.topic, event)
+			err := w.encoder.AppendRowChangedEvent(ctx, key.topic, event, nil)
 			if err != nil {
 				return err
 			}

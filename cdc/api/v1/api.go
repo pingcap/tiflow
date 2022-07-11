@@ -17,12 +17,13 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sort"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/api/middleware"
-	"github.com/pingcap/tiflow/cdc/api/validator"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
@@ -44,18 +45,18 @@ const (
 
 // OpenAPI provides capture APIs.
 type OpenAPI struct {
-	capture *capture.Capture
+	capture capture.Capture
 	// use for unit test only
 	testStatusProvider owner.StatusProvider
 }
 
 // NewOpenAPI creates a new OpenAPI.
-func NewOpenAPI(c *capture.Capture) OpenAPI {
+func NewOpenAPI(c capture.Capture) OpenAPI {
 	return OpenAPI{capture: c}
 }
 
 // NewOpenAPI4Test return a OpenAPI for test
-func NewOpenAPI4Test(c *capture.Capture, p owner.StatusProvider) OpenAPI {
+func NewOpenAPI4Test(c capture.Capture, p owner.StatusProvider) OpenAPI {
 	return OpenAPI{capture: c, testStatusProvider: p}
 }
 
@@ -70,6 +71,7 @@ func (h *OpenAPI) statusProvider() owner.StatusProvider {
 func RegisterOpenAPIRoutes(router *gin.Engine, api OpenAPI) {
 	v1 := router.Group("/api/v1")
 
+	v1.Use(middleware.CheckServerReadyMiddleware(api.capture))
 	v1.Use(middleware.LogMiddleware())
 	v1.Use(middleware.ErrorHandleMiddleware())
 
@@ -106,6 +108,7 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api OpenAPI) {
 	captureGroup := v1.Group("/captures")
 	captureGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
 	captureGroup.GET("", api.ListCapture)
+	captureGroup.PUT("/drain", api.DrainCapture)
 }
 
 // ListChangefeed lists all changgefeeds in cdc cluster
@@ -137,20 +140,35 @@ func (h *OpenAPI) ListChangefeed(c *gin.Context) {
 	}
 
 	resps := make([]*model.ChangefeedCommonInfo, 0)
-	for cfID, cfStatus := range statuses {
+	changefeeds := make([]model.ChangeFeedID, 0)
+
+	for cfID := range statuses {
+		changefeeds = append(changefeeds, cfID)
+	}
+	sort.Slice(changefeeds, func(i, j int) bool {
+		if changefeeds[i].Namespace == changefeeds[j].Namespace {
+			return changefeeds[i].ID < changefeeds[j].ID
+		}
+
+		return changefeeds[i].Namespace < changefeeds[j].Namespace
+	})
+
+	for _, cfID := range changefeeds {
 		cfInfo, exist := infos[cfID]
 		if !exist {
 			// If a changefeed info does not exists, skip it
 			continue
 		}
+		cfStatus := statuses[cfID]
 
 		if !cfInfo.State.IsNeeded(state) {
 			continue
 		}
 
 		resp := &model.ChangefeedCommonInfo{
-			Namespace: cfID.Namespace,
-			ID:        cfID.ID,
+			UpstreamID: cfInfo.UpstreamID,
+			Namespace:  cfID.Namespace,
+			ID:         cfID.ID,
 		}
 
 		if cfInfo != nil {
@@ -212,11 +230,16 @@ func (h *OpenAPI) GetChangefeed(c *gin.Context) {
 			for tableID := range status.Tables {
 				tables = append(tables, tableID)
 			}
-			taskStatus = append(taskStatus, model.CaptureTaskStatus{CaptureID: captureID, Tables: tables, Operation: status.Operation})
+			taskStatus = append(taskStatus,
+				model.CaptureTaskStatus{
+					CaptureID: captureID, Tables: tables,
+					Operation: status.Operation,
+				})
 		}
 	}
 
 	changefeedDetail := &model.ChangefeedDetail{
+		UpstreamID:     info.UpstreamID,
 		Namespace:      changefeedID.Namespace,
 		ID:             changefeedID.ID,
 		SinkURI:        info.SinkURI,
@@ -255,7 +278,18 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
-	info, err := validator.VerifyCreateChangefeedConfig(ctx, changefeedConfig, h.capture)
+	upManager, err := h.capture.GetUpstreamManager()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	up, err := upManager.GetDefaultUpstream()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	info, err := verifyCreateChangefeedConfig(ctx, changefeedConfig, h.capture)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -266,9 +300,17 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-
-	err = h.capture.EtcdClient.CreateChangefeedInfo(ctx, info,
-		model.DefaultChangeFeedID(changefeedConfig.ID))
+	upstreamInfo := &model.UpstreamInfo{
+		ID:            up.ID,
+		PDEndpoints:   strings.Join(up.PdEndpoints, ","),
+		KeyPath:       up.SecurityConfig.KeyPath,
+		CertPath:      up.SecurityConfig.CertPath,
+		CAPath:        up.SecurityConfig.CAPath,
+		CertAllowedCN: up.SecurityConfig.CertAllowedCN,
+	}
+	err = h.capture.GetEtcdClient().CreateChangefeedInfo(
+		ctx, upstreamInfo,
+		info, model.DefaultChangeFeedID(changefeedConfig.ID))
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -396,13 +438,13 @@ func (h *OpenAPI) UpdateChangefeed(c *gin.Context) {
 		return
 	}
 
-	newInfo, err := validator.VerifyUpdateChangefeedConfig(ctx, changefeedConfig, info)
+	newInfo, err := VerifyUpdateChangefeedConfig(ctx, changefeedConfig, info)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
 
-	err = h.capture.EtcdClient.SaveChangeFeedInfo(ctx, newInfo, changefeedID)
+	err = h.capture.GetEtcdClient().SaveChangeFeedInfo(ctx, newInfo, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -582,7 +624,8 @@ func (h *OpenAPI) GetProcessor(c *gin.Context) {
 	}
 	if info.State != model.StateNormal {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam,
-			fmt.Errorf("changefeed in abnormal state: %s, can't get processors of an abnormal changefeed",
+			fmt.Errorf("changefeed in abnormal state: %s, "+
+				"can't get processors of an abnormal changefeed",
 				string(info.State))))
 	}
 	// check if this captureID exist
@@ -695,6 +738,75 @@ func (h *OpenAPI) ListCapture(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, captures)
 }
 
+// DrainCapture remove all tables at the given capture.
+// @Summary Drain captures
+// @Description Drain all tables at the target captures in cdc cluster
+// @Tags capture
+// @Accept json
+// @Produce json
+// @Success 200,202
+// @Failure 500,400 {object} model.HTTPError
+// @Router	/api/v1/captures/drain [put]
+func (h *OpenAPI) DrainCapture(c *gin.Context) {
+	var req model.DrainCaptureRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.Wrap(err))
+		return
+	}
+
+	ctx := c.Request.Context()
+	captures, err := h.statusProvider().GetCaptures(ctx)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	// drain capture only work if there is at least two alive captures,
+	// it cannot work properly if it has only one capture.
+	if len(captures) <= 1 {
+		_ = c.Error(cerror.ErrSchedulerRequestFailed.
+			GenWithStackByArgs("only one capture alive"))
+		return
+	}
+
+	target := req.CaptureID
+	checkCaptureFound := func() bool {
+		// make sure the target capture exist
+		for _, capture := range captures {
+			if capture.ID == target {
+				return true
+			}
+		}
+		return false
+	}
+
+	if !checkCaptureFound() {
+		_ = c.Error(cerror.ErrCaptureNotExist.GenWithStackByArgs(target))
+		return
+	}
+
+	// only owner handle api request, so this must be the owner.
+	ownerInfo, err := h.capture.Info()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	if ownerInfo.ID == target {
+		_ = c.Error(cerror.ErrSchedulerRequestFailed.
+			GenWithStackByArgs("cannot drain the owner"))
+		return
+	}
+
+	resp, err := api.HandleOwnerDrainCapture(ctx, h.capture, target)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	c.JSON(http.StatusAccepted, resp)
+}
+
 // ServerStatus gets the status of server(capture)
 // @Summary Get server status
 // @Description get the status of a server(capture)
@@ -705,18 +817,19 @@ func (h *OpenAPI) ListCapture(c *gin.Context) {
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/status [get]
 func (h *OpenAPI) ServerStatus(c *gin.Context) {
-	status := model.ServerStatus{
-		Version: version.ReleaseVersion,
-		GitHash: version.GitHash,
-		Pid:     os.Getpid(),
-	}
 	info, err := h.capture.Info()
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
-	status.ID = info.ID
-	status.IsOwner = h.capture.IsOwner()
+	status := model.ServerStatus{
+		Version:  version.ReleaseVersion,
+		GitHash:  version.GitHash,
+		Pid:      os.Getpid(),
+		ID:       info.ID,
+		IsOwner:  h.capture.IsOwner(),
+		Liveness: h.capture.Liveness(),
+	}
 	c.IndentedJSON(http.StatusOK, status)
 }
 

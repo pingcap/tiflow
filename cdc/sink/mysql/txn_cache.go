@@ -19,7 +19,6 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/filter"
 	"go.uber.org/zap"
 )
 
@@ -38,10 +37,9 @@ func (t *txnsWithTheSameCommitTs) Append(row *model.RowChangedEvent) {
 	var txn *model.SingleTableTxn
 	if len(t.txns) == 0 || row.SplitTxn || t.txns[len(t.txns)-1].StartTs < row.StartTs {
 		txn = &model.SingleTableTxn{
-			StartTs:   row.StartTs,
-			CommitTs:  row.CommitTs,
-			Table:     row.Table,
-			ReplicaID: row.ReplicaID,
+			StartTs:  row.StartTs,
+			CommitTs: row.CommitTs,
+			Table:    row.Table,
 		}
 		t.txns = append(t.txns, txn)
 	} else if t.txns[len(t.txns)-1].StartTs == row.StartTs {
@@ -75,20 +73,16 @@ func (c *unresolvedTxnCache) RemoveTableTxn(tableID model.TableID) {
 }
 
 // Append adds unresolved rows to cache
-// the rows inputed into this function will go through the following handling logic
+// the rows inputted into this function will go through the following handling logic
 // 1. group by tableID from one input stream
 // 2. for each tableID stream, the callers of this function should **make sure** that the CommitTs of rows is **strictly increasing**
 // 3. group by CommitTs, according to CommitTs cut the rows into many group of rows in the same CommitTs
 // 4. group by StartTs, cause the StartTs is the unique identifier of the transaction, according to StartTs cut the rows into many txns
-func (c *unresolvedTxnCache) Append(filter *filter.Filter, rows ...*model.RowChangedEvent) int {
+func (c *unresolvedTxnCache) Append(rows ...*model.RowChangedEvent) int {
 	c.unresolvedTxnsMu.Lock()
 	defer c.unresolvedTxnsMu.Unlock()
 	appendRows := 0
 	for _, row := range rows {
-		if filter != nil && filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
-			log.Info("Row changed event ignored", zap.Uint64("startTs", row.StartTs))
-			continue
-		}
 		txns := c.unresolvedTxns[row.Table.TableID]
 		if len(txns) == 0 || txns[len(txns)-1].commitTs != row.CommitTs {
 			// fail-fast check

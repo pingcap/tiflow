@@ -20,7 +20,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"go.uber.org/zap"
 )
@@ -89,7 +89,7 @@ func (s *dataRWServiceMock) GenerateData(ctx context.Context, req *pb.GenerateDa
 	ready = make(chan struct{})
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	log.L().Info("Start to generate data ...")
+	log.Info("Start to generate data ...")
 	fileNum := int(req.FileNum)
 	origin := make(map[int]*memFile)
 	for i := 0; i < fileNum; i++ {
@@ -102,21 +102,21 @@ func (s *dataRWServiceMock) GenerateData(ctx context.Context, req *pb.GenerateDa
 	}
 	s.dbMap[demoDir] = origin
 
-	log.L().Info("files have been created", zap.Any("filenumber", fileNum))
+	log.Info("files have been created", zap.Any("filenumber", fileNum))
 	close(ready)
 	return &pb.GenerateDataResponse{}, nil
 }
 
 // ReadLines implements DataRWService.ReadLines
 func (s *dataRWServiceMock) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWService_ReadLinesServer) error {
-	log.L().Info("receive the request for reading file ", zap.Any("idx", req.FileIdx), zap.String("lineNo", string(req.LineNo)))
+	log.Info("receive the request for reading file ", zap.Any("idx", req.FileIdx), zap.String("lineNo", string(req.LineNo)))
 	s.mu.Lock()
 	db, ok := s.dbMap[demoDir][int(req.FileIdx)]
 	s.mu.Unlock()
 	if !ok {
 		return stream.Send(&pb.ReadLinesResponse{ErrMsg: fmt.Sprintf("file idx %d is out of range %d", req.FileIdx, len(s.dbMap[demoAddress])), IsEof: true})
 	}
-	log.L().Info("db reading", zap.Any("begin", db.start), zap.Any("end", db.end))
+	log.Info("db reading", zap.Any("begin", db.start), zap.Any("end", db.end))
 	seekByte := req.GetLineNo()
 	seek := 0
 	if len(seekByte) > 0 {
@@ -155,7 +155,7 @@ func (s *dataRWServiceMock) WriteLines(stream pb.DataRWService_WriteLinesServer)
 				dir = res.Dir
 				idx = int(res.FileIdx)
 				s.mu.Lock()
-				log.L().Info("first writing", zap.String("dir", dir), zap.Any("idx", idx))
+				log.Info("first writing", zap.String("dir", dir), zap.Any("idx", idx))
 				bucket, ok := s.dbMap[dir]
 				if !ok {
 					bucket = make(memDB)
@@ -169,28 +169,28 @@ func (s *dataRWServiceMock) WriteLines(stream pb.DataRWService_WriteLinesServer)
 				s.mu.Unlock()
 			} else {
 				if dir != res.Dir {
-					log.L().Error("Different writing dir in the same thread", zap.String("dir1", dir), zap.String("dir2", res.Dir))
+					log.Error("Different writing dir in the same thread", zap.String("dir1", dir), zap.String("dir2", res.Dir))
 					return stream.SendAndClose(&pb.WriteLinesResponse{ErrMsg: "wrong dir names"})
 				}
 				if idx != int(res.FileIdx) {
-					log.L().Error("Different file idx in the same thread", zap.Any("idx1", idx), zap.Any("idx2", res.FileIdx))
+					log.Error("Different file idx in the same thread", zap.Any("idx1", idx), zap.Any("idx2", res.FileIdx))
 					return stream.SendAndClose(&pb.WriteLinesResponse{ErrMsg: "wrong idx"})
 				}
 			}
 			v, err := strconv.Atoi(string(res.Key))
 			if err != nil {
-				log.L().Error("write wrong data v",
+				log.Error("write wrong data v",
 					zap.Error(err), zap.String("key", string(res.Key)))
 				return stream.SendAndClose(&pb.WriteLinesResponse{ErrMsg: err.Error()})
 			}
 			if !file.insert(v) {
-				log.L().Error("write incorrect value", zap.Int("end", file.end), zap.Int("insert", v))
+				log.Error("write incorrect value", zap.Int("end", file.end), zap.Int("insert", v))
 			}
 		} else if err == io.EOF {
-			log.L().Info("receive the eof")
+			log.Info("receive the eof")
 			return stream.SendAndClose(&pb.WriteLinesResponse{})
 		} else {
-			log.L().Error("write loop met error", zap.Error(err))
+			log.Error("write loop met error", zap.Error(err))
 			return err
 		}
 	}
@@ -214,7 +214,7 @@ func (s *dataRWServiceMock) CheckDir(ctx context.Context, req *pb.CheckDirReques
 			continue
 		}
 		err := fmt.Errorf("origin end is %d but target end is %d", originDB.end, targetDB.end)
-		log.L().Error("compare failed", zap.String("req dir", req.Dir), zap.Any("id", originID), zap.Error(err))
+		log.Error("compare failed", zap.String("req dir", req.Dir), zap.Any("id", originID), zap.Error(err))
 		return &pb.CheckDirResponse{ErrMsg: err.Error(), ErrFileIdx: int32(originID)}, nil
 	}
 	return &pb.CheckDirResponse{}, nil

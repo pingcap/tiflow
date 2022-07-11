@@ -3,6 +3,12 @@ name: Dataflow Engine Chaos
 on:
   schedule:
     - cron: '0 17-23 * * *' # run at minute 0 every hour from 01:00 ~ 07:00 UTC+8
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'Which PR do you want to trigger (use PR number, such as 6127)'
+        required: true
+        default: ''
 
 # See: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency.
 concurrency:
@@ -25,6 +31,7 @@ jobs:
             "pod-kill-dataflow",
             "network-partition-dataflow",
             "network-emulation-dataflow",
+            "time-shift-dataflow",
           ]
 
     # Steps represent a sequence of tasks that will be executed as part of the job
@@ -43,6 +50,9 @@ jobs:
 
       - name: Create k8s Kind Cluster
         uses: helm/kind-action@v1.2.0
+        with:
+          cluster_name: dataflow-engine-cluster
+          config: ${{ github.workspace }}/engine/chaos/manifests/kind-cluster.yaml
 
       - name: Print cluster information
         run: |
@@ -55,7 +65,7 @@ jobs:
           helm version
 
       - name: Build dataflow engine binary
-        run: make df-master df-executor df-chaos-case
+        run: make tiflow tiflow-chaos-case
 
       - name: Build Dataflow engine docker image
         run: |
@@ -65,7 +75,7 @@ jobs:
 
       - name: Load docker image to kind cluster
         run: |
-          kind load docker-image dataflow:chaos --name chart-testing
+          kind load docker-image dataflow:chaos --name dataflow-engine-cluster
 
       # Set up metastore and basic services
       - name: Set up metastore and basic services
@@ -204,7 +214,7 @@ jobs:
         run: |
           mkdir ./logs
           kubectl get pods --no-headers -o custom-columns=":metadata.name"|grep -E "server-master|executor"|xargs -I{} sudo kubectl cp {}:/log ./logs || true
-          kind export logs ./logs/kind --name chart-testing
+          kind export logs ./logs/kind --name dataflow-engine-cluster
           sudo chown -R runner ./logs
 
       # Upload logs as artifact seems not stable, so we set `continue-on-error: true` here.

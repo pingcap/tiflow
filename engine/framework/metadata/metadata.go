@@ -17,7 +17,7 @@ import (
 	"context"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -166,7 +166,7 @@ func StoreMasterMeta(
 	if err != nil {
 		return err
 	}
-	log.L().Warn("master meta exits, will be overwritten", zap.Any("old-meta", masterMeta), zap.Any("meta", meta))
+	log.Warn("master meta exits, will be overwritten", zap.Any("old-meta", masterMeta), zap.Any("meta", meta))
 
 	return metaCli.Store(ctx, meta)
 }

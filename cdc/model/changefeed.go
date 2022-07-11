@@ -30,9 +30,11 @@ import (
 	"go.uber.org/zap"
 )
 
-// DefaultNamespace is the default namespace value,
-// all the old changefeed will be put into default namespace
-const DefaultNamespace = "default"
+const (
+	// DefaultNamespace is the default namespace value,
+	// all the old changefeed will be put into default namespace
+	DefaultNamespace = "default"
+)
 
 // ChangeFeedID is the type for change feed ID
 type ChangeFeedID struct {
@@ -46,6 +48,14 @@ type ChangeFeedID struct {
 func DefaultChangeFeedID(id string) ChangeFeedID {
 	return ChangeFeedID{
 		Namespace: DefaultNamespace,
+		ID:        id,
+	}
+}
+
+// ChangeFeedID4Test returns `ChangefeedID` with given namespace and id
+func ChangeFeedID4Test(namespace, id string) ChangeFeedID {
+	return ChangeFeedID{
+		Namespace: namespace,
 		ID:        id,
 	}
 }
@@ -114,6 +124,8 @@ func (s FeedState) IsNeeded(need string) bool {
 // ChangeFeedInfo describes the detail of a ChangeFeed
 type ChangeFeedInfo struct {
 	UpstreamID uint64    `json:"upstream-id"`
+	Namespace  string    `json:"namespace"`
+	ID         string    `json:"changefeed-id"`
 	SinkURI    string    `json:"sink-uri"`
 	CreateTime time.Time `json:"create-time"`
 	// Start sync at this commit ts if `StartTs` is specify or using the CreateTime of changefeed.
@@ -145,7 +157,21 @@ var changeFeedIDRe = regexp.MustCompile(`^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*$`)
 // the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", length no more than "changeFeedIDMaxLen", eg, "simple-changefeed-task".
 func ValidateChangefeedID(changefeedID string) error {
 	if !changeFeedIDRe.MatchString(changefeedID) || len(changefeedID) > changeFeedIDMaxLen {
-		return cerror.ErrInvalidChangefeedID.GenWithStackByArgs(changeFeedIDMaxLen)
+		return cerrors.ErrInvalidChangefeedID.GenWithStackByArgs(changeFeedIDMaxLen)
+	}
+	return nil
+}
+
+const namespaceMaxLen = 128
+
+var namespaceRe = regexp.MustCompile(`^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*$`)
+
+// ValidateNamespace returns true if the namespace matches
+// the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$",
+// length no more than "changeFeedIDMaxLen", eg, "simple-changefeed-task".
+func ValidateNamespace(namespace string) error {
+	if !namespaceRe.MatchString(namespace) || len(namespace) > namespaceMaxLen {
+		return cerror.ErrInvalidNamespace.GenWithStackByArgs(namespaceRe)
 	}
 	return nil
 }
@@ -212,7 +238,7 @@ func (info *ChangeFeedInfo) GetTargetTs() uint64 {
 // Marshal returns the json marshal format of a ChangeFeedInfo
 func (info *ChangeFeedInfo) Marshal() (string, error) {
 	data, err := json.Marshal(info)
-	return string(data), cerror.WrapError(cerror.ErrMarshalFailed, err)
+	return string(data), cerrors.WrapError(cerrors.ErrMarshalFailed, err)
 }
 
 // Unmarshal unmarshals into *ChangeFeedInfo from json marshal byte slice
@@ -220,7 +246,7 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, &info)
 	if err != nil {
 		return errors.Annotatef(
-			cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: %v", data)
+			cerrors.WrapError(cerrors.ErrUnmarshalFailed, err), "Unmarshal data: %v", data)
 	}
 	return nil
 }
@@ -370,5 +396,5 @@ func (info *ChangeFeedInfo) HasFastFailError() bool {
 	if info.Error == nil {
 		return false
 	}
-	return cerror.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
+	return cerrors.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
 }

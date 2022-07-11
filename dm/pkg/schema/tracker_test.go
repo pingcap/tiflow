@@ -92,28 +92,28 @@ func (s *trackerSuite) TestTiDBAndSessionCfg(c *C) {
 	dbConn := dbconn.NewDBConn(s.cfg, baseConn)
 	// user give correct session config
 
-	t, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn)
+	t, err := NewTestTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn, dlog.L())
 	c.Assert(err, IsNil)
 	err = t.Close()
 	c.Assert(err, IsNil)
 
 	// user give wrong session session, will return error
 	sessionCfg := map[string]string{"sql_mode": "HaHa"}
-	_, err = NewTracker(context.Background(), "test-tracker", sessionCfg, dbConn)
+	_, err = NewTestTracker(context.Background(), "test-tracker", sessionCfg, dbConn, dlog.L())
 	c.Assert(err, NotNil)
 
 	// discover session config failed, will return error
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(
 		sqlmock.NewRows([]string{"Variable_name", "Value"}).
 			AddRow("sql_mode", "HaHa"))
-	_, err = NewTracker(context.Background(), "test-tracker", nil, dbConn)
+	_, err = NewTestTracker(context.Background(), "test-tracker", nil, dbConn, dlog.L())
 	c.Assert(err, NotNil)
 
 	// empty or default config in downstream
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(
 		sqlmock.NewRows([]string{"Variable_name", "Value"}).
 			AddRow("sql_mode", defaultTestSessionCfg["sql_mode"]))
-	tracker, err := NewTracker(context.Background(), "test-tracker", nil, dbConn)
+	tracker, err := NewTestTracker(context.Background(), "test-tracker", nil, dbConn, dlog.L())
 	c.Assert(err, IsNil)
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
 	err = tracker.Exec(context.Background(), "", "create database testdb;")
@@ -125,7 +125,7 @@ func (s *trackerSuite) TestTiDBAndSessionCfg(c *C) {
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(
 		sqlmock.NewRows([]string{"Variable_name", "Value"}).
 			AddRow("sql_mode", "ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE"))
-	tracker, err = NewTracker(context.Background(), "test-tracker", nil, dbConn)
+	tracker, err = NewTestTracker(context.Background(), "test-tracker", nil, dbConn, dlog.L())
 	c.Assert(err, IsNil)
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
 	c.Assert(tracker.se.GetSessionVars().SQLMode.HasOnlyFullGroupBy(), IsTrue)
@@ -144,7 +144,7 @@ func (s *trackerSuite) TestTiDBAndSessionCfg(c *C) {
 	// user set session config, get tracker config from downstream
 	// no `STRICT_TRANS_TABLES`, no error now
 	sessionCfg = map[string]string{"sql_mode": "NO_ZERO_DATE,NO_ZERO_IN_DATE,ANSI_QUOTES"}
-	tracker, err = NewTracker(context.Background(), "test-tracker", sessionCfg, dbConn)
+	tracker, err = NewTestTracker(context.Background(), "test-tracker", sessionCfg, dbConn, dlog.L())
 	c.Assert(err, IsNil)
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
 
@@ -179,7 +179,7 @@ func (s *trackerSuite) TestTiDBAndSessionCfg(c *C) {
 	err = tracker.Close()
 	c.Assert(err, IsNil)
 
-	tracker, err = NewTracker(context.Background(), "test-tracker", sessionCfg, dbConn)
+	tracker, err = NewTestTracker(context.Background(), "test-tracker", sessionCfg, dbConn, dlog.L())
 	c.Assert(err, IsNil)
 	defer func() {
 		err = tracker.Close()
@@ -203,7 +203,7 @@ func (s *trackerSuite) TestDDL(c *C) {
 		Name:   "foo",
 	}
 
-	tracker, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, s.dbConn)
+	tracker, err := NewTestTracker(context.Background(), "test-tracker", defaultTestSessionCfg, s.dbConn, dlog.L())
 	c.Assert(err, IsNil)
 	defer func() {
 		err = tracker.Close()
@@ -277,7 +277,7 @@ func (s *trackerSuite) TestDDL(c *C) {
 func (s *trackerSuite) TestGetSingleColumnIndices(c *C) {
 	log.SetLevel(zapcore.ErrorLevel)
 
-	tracker, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, s.dbConn)
+	tracker, err := NewTestTracker(context.Background(), "test-tracker", defaultTestSessionCfg, s.dbConn, dlog.L())
 	c.Assert(err, IsNil)
 	defer func() {
 		err = tracker.Close()
@@ -320,7 +320,7 @@ func (s *trackerSuite) TestGetSingleColumnIndices(c *C) {
 func (s *trackerSuite) TestCreateSchemaIfNotExists(c *C) {
 	log.SetLevel(zapcore.ErrorLevel)
 
-	tracker, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, s.dbConn)
+	tracker, err := NewTestTracker(context.Background(), "test-tracker", defaultTestSessionCfg, s.dbConn, dlog.L())
 	c.Assert(err, IsNil)
 	defer func() {
 		err = tracker.Close()
@@ -352,7 +352,7 @@ func (s *trackerSuite) TestCreateSchemaIfNotExists(c *C) {
 func (s *trackerSuite) TestMultiDrop(c *C) {
 	log.SetLevel(zapcore.ErrorLevel)
 
-	tracker, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, s.dbConn)
+	tracker, err := NewTestTracker(context.Background(), "test-tracker", defaultTestSessionCfg, s.dbConn, dlog.L())
 	c.Assert(err, IsNil)
 	defer func() {
 		err = tracker.Close()
@@ -404,7 +404,7 @@ func (s *trackerSuite) TestCreateTableIfNotExists(c *C) {
 		Name:   "foo",
 	}
 
-	tracker, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, s.dbConn)
+	tracker, err := NewTestTracker(context.Background(), "test-tracker", defaultTestSessionCfg, s.dbConn, dlog.L())
 	c.Assert(err, IsNil)
 	defer func() {
 		err = tracker.Close()
@@ -486,7 +486,7 @@ func (s *trackerSuite) TestCreateTableIfNotExists(c *C) {
 
 func (s *trackerSuite) TestBatchCreateTableIfNotExist(c *C) {
 	log.SetLevel(zapcore.ErrorLevel)
-	tracker, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, s.dbConn)
+	tracker, err := NewTestTracker(context.Background(), "test-tracker", defaultTestSessionCfg, s.dbConn, dlog.L())
 	c.Assert(err, IsNil)
 	defer func() {
 		err = tracker.Close()
@@ -554,16 +554,19 @@ func (s *trackerSuite) TestBatchCreateTableIfNotExist(c *C) {
 		_, err = tracker.GetTableInfo(tables[i])
 		c.Assert(err, ErrorMatches, `.*Table 'testdb.*\.foo.*' doesn't exist`) // drop table success
 	}
-	// 2. recover
+	// 2. test empty load
 	tablesToCreate := map[string]map[string]*model.TableInfo{}
 	tablesToCreate["testdb"] = map[string]*model.TableInfo{}
 	tablesToCreate["testdb2"] = map[string]*model.TableInfo{}
+	err = tracker.BatchCreateTableIfNotExist(tablesToCreate)
+	c.Assert(err, IsNil)
+	// 3. recover
 	for i := range tables {
 		tablesToCreate[tables[i].Schema][tables[i].Name] = tiInfos[i]
 	}
 	err = tracker.BatchCreateTableIfNotExist(tablesToCreate)
 	c.Assert(err, IsNil)
-	// 3. check all create success
+	// 4. check all create success
 	for i := range tables {
 		var ti *model.TableInfo
 		ti, err = tracker.GetTableInfo(tables[i])
@@ -604,7 +607,7 @@ func (s *trackerSuite) TestAllSchemas(c *C) {
 	log.SetLevel(zapcore.ErrorLevel)
 	ctx := context.Background()
 
-	tracker, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, s.dbConn)
+	tracker, err := NewTestTracker(context.Background(), "test-tracker", defaultTestSessionCfg, s.dbConn, dlog.L())
 	c.Assert(err, IsNil)
 	defer func() {
 		err = tracker.Close()
@@ -700,7 +703,7 @@ func (s *trackerSuite) TestNotSupportedVariable(c *C) {
 	oldSessionVar := map[string]string{
 		"tidb_enable_change_column_type": "ON",
 	}
-	tracker, err := NewTracker(context.Background(), "test-tracker", oldSessionVar, dbConn)
+	tracker, err := NewTestTracker(context.Background(), "test-tracker", oldSessionVar, dbConn, dlog.L())
 	c.Assert(err, IsNil)
 	defer func() {
 		err = tracker.Close()
@@ -720,7 +723,7 @@ func (s *trackerSuite) TestInitDownStreamSQLModeAndParser(c *C) {
 	baseConn := conn.NewBaseConn(con, nil)
 	dbConn := dbconn.NewDBConn(s.cfg, baseConn)
 
-	tracker, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn)
+	tracker, err := NewTestTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn, dlog.L())
 	c.Assert(err, IsNil)
 	defer func() {
 		err = tracker.Close()
@@ -757,7 +760,7 @@ func (s *trackerSuite) TestGetDownStreamIndexInfo(c *C) {
 	c.Assert(err, IsNil)
 	baseConn := conn.NewBaseConn(con, nil)
 	dbConn := dbconn.NewDBConn(s.cfg, baseConn)
-	tracker, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn)
+	tracker, err := NewTestTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn, dlog.L())
 	c.Assert(err, IsNil)
 	defer func() {
 		err = tracker.Close()
@@ -799,7 +802,7 @@ func (s *trackerSuite) TestReTrackDownStreamIndex(c *C) {
 	c.Assert(err, IsNil)
 	baseConn := conn.NewBaseConn(con, nil)
 	dbConn := dbconn.NewDBConn(s.cfg, baseConn)
-	tracker, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn)
+	tracker, err := NewTestTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn, dlog.L())
 	c.Assert(err, IsNil)
 	defer func() {
 		err = tracker.Close()
@@ -891,7 +894,7 @@ func (s *trackerSuite) TestVarchar20000(c *C) {
 	c.Assert(err, IsNil)
 	baseConn := conn.NewBaseConn(con, nil)
 	dbConn := dbconn.NewDBConn(s.cfg, baseConn)
-	tracker, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn)
+	tracker, err := NewTestTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn, dlog.L())
 	c.Assert(err, IsNil)
 	defer func() {
 		err = tracker.Close()
@@ -931,7 +934,7 @@ func (s *trackerSuite) TestPlacementRule(c *C) {
 	c.Assert(err, IsNil)
 	baseConn := conn.NewBaseConn(con, nil)
 	dbConn := dbconn.NewDBConn(s.cfg, baseConn)
-	tracker, err := NewTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn)
+	tracker, err := NewTestTracker(context.Background(), "test-tracker", defaultTestSessionCfg, dbConn, dlog.L())
 	c.Assert(err, IsNil)
 	defer func() {
 		err = tracker.Close()

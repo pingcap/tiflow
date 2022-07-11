@@ -483,3 +483,59 @@ func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 		},
 	})
 }
+
+func TestBuildIgnoredDDLJob(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	require.Nil(t, err)
+	cfg := config.GetDefaultReplicaConfig()
+	// only replicate ddl event of test.tb1 and test.tb2
+	cfg.Filter.Rules = []string{"test.tb1", "test.tb2"}
+	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
+		cfg, dummyChangeFeedID)
+	require.Nil(t, err)
+
+	// test case 1: Will not filter out create test.tb1 ddl.
+	job := helper.DDL2Job("create table test.tb1(id int primary key)")
+	events, err := schema.BuildDDLEvents(job)
+	require.Nil(t, err)
+	require.Len(t, events, 1)
+	require.Nil(t, schema.HandleDDL(job))
+
+	// test case 2: Will not filter out create test.tb2 ddl.
+	job = helper.DDL2Job("create table test.tb2(id int primary key)")
+	events, err = schema.BuildDDLEvents(job)
+	require.Nil(t, err)
+	require.Len(t, events, 1)
+	require.Nil(t, schema.HandleDDL(job))
+
+	// test case 3: Will not filter out alter test.tb1 ddl.
+	job = helper.DDL2Job("alter table test.tb1 add age int")
+	events, err = schema.BuildDDLEvents(job)
+	require.Nil(t, err)
+	require.Len(t, events, 1)
+	require.Nil(t, schema.HandleDDL(job))
+
+	// test case 4: Will not filter out alter test.tb2 ddl.
+	job = helper.DDL2Job("alter table test.tb2 add name char(10)")
+	events, err = schema.BuildDDLEvents(job)
+	require.Nil(t, err)
+	require.Len(t, events, 1)
+	require.Nil(t, schema.HandleDDL(job))
+
+	// test case 5: Will filter create test.tb3 ddl.
+	job = helper.DDL2Job("create table test.tb3(id int primary key)")
+	events, err = schema.BuildDDLEvents(job)
+	require.Nil(t, err)
+	require.Len(t, events, 0)
+	require.Nil(t, schema.HandleDDL(job))
+
+	// test case 5: Will filter out drop test.tb3 ddl.
+	job = helper.DDL2Job("alter table test.tb3 add location char(100)")
+	events, err = schema.BuildDDLEvents(job)
+	require.Nil(t, err)
+	require.Len(t, events, 0)
+	require.Nil(t, schema.HandleDDL(job))
+}

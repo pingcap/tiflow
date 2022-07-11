@@ -18,17 +18,16 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/executor"
-	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
+	"github.com/pingcap/tiflow/engine/pkg/etcdutil"
 	"github.com/pingcap/tiflow/engine/servermaster"
 	"github.com/pingcap/tiflow/engine/test"
+	"github.com/pingcap/tiflow/pkg/logutil"
 )
 
 func TestT(t *testing.T) {
-	err := log.InitLogger(&log.Config{
-		Level:  "debug",
-		Format: "text",
+	err := logutil.InitLogger(&logutil.Config{
+		Level: "debug",
 	})
 	if err != nil {
 		panic(err)
@@ -55,7 +54,7 @@ func (t *testHeartbeatSuite) SetUpSuite(c *C) {
 
 func (t *testHeartbeatSuite) TestHeartbeatExecutorCrush(c *C) {
 	masterCfg := &servermaster.Config{
-		Etcd: &etcdutils.ConfigParams{
+		Etcd: &etcdutil.ConfigParams{
 			Name:    "master1",
 			DataDir: "/tmp/df",
 		},

@@ -46,12 +46,12 @@ func TestCreate(t *testing.T) {
 		CommitTs: 5678,
 	}
 
-	msg := NewMQMessage(config.ProtocolOpen, []byte("key1"), []byte("value1"), rowEvent.CommitTs, model.MqMessageTypeRow, &rowEvent.Table.Schema, &rowEvent.Table.Table)
+	msg := newMsg(config.ProtocolOpen, []byte("key1"), []byte("value1"), rowEvent.CommitTs, model.MessageTypeRow, &rowEvent.Table.Schema, &rowEvent.Table.Table)
 
 	require.Equal(t, []byte("key1"), msg.Key)
 	require.Equal(t, []byte("value1"), msg.Value)
 	require.Equal(t, rowEvent.CommitTs, msg.Ts)
-	require.Equal(t, model.MqMessageTypeRow, msg.Type)
+	require.Equal(t, model.MessageTypeRow, msg.Type)
 	require.Equal(t, rowEvent.Table.Schema, *msg.Schema)
 	require.Equal(t, rowEvent.Table.Table, *msg.Table)
 	require.Equal(t, config.ProtocolOpen, msg.Protocol)
@@ -94,20 +94,20 @@ func TestCreate(t *testing.T) {
 	ddlEvent := &model.DDLEvent{}
 	ddlEvent.FromJob(job, preTableInfo)
 
-	msg = newDDLMQMessage(config.ProtocolMaxwell, nil, []byte("value1"), ddlEvent)
+	msg = newDDLMsg(config.ProtocolMaxwell, nil, []byte("value1"), ddlEvent)
 	require.Nil(t, msg.Key)
 	require.Equal(t, []byte("value1"), msg.Value)
 	require.Equal(t, ddlEvent.CommitTs, msg.Ts)
-	require.Equal(t, model.MqMessageTypeDDL, msg.Type)
+	require.Equal(t, model.MessageTypeDDL, msg.Type)
 	require.Equal(t, ddlEvent.TableInfo.Schema, *msg.Schema)
 	require.Equal(t, ddlEvent.TableInfo.Table, *msg.Table)
 	require.Equal(t, config.ProtocolMaxwell, msg.Protocol)
 
-	msg = newResolvedMQMessage(config.ProtocolCanal, []byte("key1"), nil, 1234)
+	msg = newResolvedMsg(config.ProtocolCanal, []byte("key1"), nil, 1234)
 	require.Equal(t, []byte("key1"), msg.Key)
 	require.Nil(t, msg.Value)
 	require.Equal(t, uint64(1234), msg.Ts)
-	require.Equal(t, model.MqMessageTypeResolved, msg.Type)
+	require.Equal(t, model.MessageTypeResolved, msg.Type)
 	require.Nil(t, msg.Schema)
 	require.Nil(t, msg.Table)
 	require.Equal(t, config.ProtocolCanal, msg.Protocol)

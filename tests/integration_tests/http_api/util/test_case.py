@@ -10,8 +10,14 @@ RETRY_TIME = 10
 BASE_URL0 = "http://127.0.0.1:8300/api/v1"
 BASE_URL1 = "http://127.0.0.1:8301/api/v1"
 
-V2_BASE_URL0 = "http://127.0.0.1:8300/api/v2"
 
+BASE_URL0_V2 = "http://127.0.0.1:8300/api/v2"
+BASE_URL1_V2 = "https://127.0.0.1:8301/api/v2"
+
+PD_ADDR = "http://127.0.0.1:2379"
+SINK_URI="mysql://normal:123456@127.0.0.1:3306/"
+
+physicalShiftBits = 18
 # we should write some SQLs in the run.sh after call create_changefeed
 def create_changefeed(sink_uri):
     url = BASE_URL1+"/changefeeds"
@@ -77,7 +83,7 @@ def get_changefeed():
     url = BASE_URL0+"/changefeeds/changefeed-test2"
     resp = rq.get(url)
     assert resp.status_code == rq.codes.ok
-    
+
     # test get changefeed failed
     url = BASE_URL0+"/changefeeds/changefeed-not-exists"
     resp = rq.get(url)
@@ -306,19 +312,39 @@ def set_log_level():
 
 def get_tso():
     # test state: all
-    url = V2_BASE_URL0+"/tso"
-    resp = rq.get(url)
+    url = BASE_URL0_V2+"/tso"
+    data = json.dumps({})
+    headers = {"Content-Type": "application/json"}
+    resp = rq.post(url, data=data, headers=headers)
     assert resp.status_code == rq.codes.ok
+
+    data = json.dumps({"pd_addrs": [PD_ADDR]})
+    headers = {"Content-Type": "application/json"}
+    resp = rq.post(url, data=data, headers=headers)
+    assert resp.status_code == rq.codes.ok
+
+    # wrong pd address
+    data = json.dumps({"pd_addrs": ["http://127.0.0.1:2233"]})
+    headers = {"Content-Type": "application/json"}
+    resp = rq.post(url, data=data, headers=headers)
+    assert resp.status_code != rq.codes.ok
 
     print("pass test: get tso")
 
+# util functions define belows
+
+# compose physical time and logical time into tso
+def compose_tso(ps, ls):
+    return (ps << physicalShiftBits) + ls
+
 # arg1: test case name
-# arg2: cetificates dir
+# arg2: certificates dir
 # arg3: sink uri
 if __name__ == "__main__":
 
     # test all the case as the order list in this map
     FUNC_MAP = {
+        # api v1
         "check_health": check_health,
         "get_status": get_status,
         "create_changefeed": create_changefeed,
@@ -334,6 +360,7 @@ if __name__ == "__main__":
         "set_log_level": set_log_level,
         "remove_changefeed": remove_changefeed,
         "resign_owner": resign_owner,
+        # api v2
         "get_tso": get_tso
     }
 
@@ -342,3 +369,4 @@ if __name__ == "__main__":
         func(*sys.argv[2:])
     else:
         func()
+

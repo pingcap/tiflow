@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
@@ -128,7 +128,7 @@ func (m *messageHandlerManagerImpl) CheckError(ctx context.Context) error {
 			if err == nil {
 				continue
 			}
-			log.L().Warn("handler error received",
+			log.Warn("handler error received",
 				zap.String("topic", topic))
 			return errors.Trace(err)
 		default:

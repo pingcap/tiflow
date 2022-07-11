@@ -15,7 +15,7 @@ package metadata
 
 import (
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 )
 
 // DDL represents the state of ddls.
@@ -33,7 +33,7 @@ type DDLStore struct {
 }
 
 // NewDDLStore returns a new DDLStore instance
-func NewDDLStore(id frameModel.MasterID, kvClient metaclient.KVClient) *DDLStore {
+func NewDDLStore(id frameModel.MasterID, kvClient metaModel.KVClient) *DDLStore {
 	ddlStore := &DDLStore{
 		TomlStore: NewTomlStore(kvClient),
 		id:        id,

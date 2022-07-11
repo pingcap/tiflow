@@ -14,7 +14,7 @@
 package promutil
 
 import (
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -112,7 +112,7 @@ func wrapOptsCommon(prefix string, constLabels prometheus.Labels, namespace *str
 	}
 	for name, value := range constLabels {
 		if _, exists := cls[name]; exists {
-			log.L().Panic("duplicate label name", zap.String("label", name))
+			log.Panic("duplicate label name", zap.String("label", name))
 		}
 		cls[name] = value
 	}

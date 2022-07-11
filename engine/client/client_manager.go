@@ -17,7 +17,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/model"
 	"go.uber.org/zap"
 )
@@ -79,7 +79,7 @@ func (c *Manager) AddExecutor(id model.ExecutorID, addr string) error {
 	if _, ok := c.executors[id]; ok {
 		return nil
 	}
-	log.L().Info("client manager adds executor", zap.String("id", string(id)), zap.String("addr", addr))
+	log.Info("client manager adds executor", zap.String("id", string(id)), zap.String("addr", addr))
 	client, err := newExecutorClient(addr)
 	if err != nil {
 		return err
