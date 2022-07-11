@@ -29,6 +29,7 @@ import (
 // canalBatchEncoder encodes the events into the byte of a batch into.
 type canalBatchEncoder struct {
 	messages     *canal.Messages
+	callbackBuf  []func()
 	packet       *canal.Packet
 	entryBuilder *canalEntryBuilder
 }
@@ -45,7 +46,7 @@ func (d *canalBatchEncoder) AppendRowChangedEvent(
 	_ context.Context,
 	_ string,
 	e *model.RowChangedEvent,
-	_ func(),
+	callback func(),
 ) error {
 	entry, err := d.entryBuilder.fromRowEvent(e)
 	if err != nil {
@@ -56,6 +57,9 @@ func (d *canalBatchEncoder) AppendRowChangedEvent(
 		return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 	d.messages.Messages = append(d.messages.Messages, b)
+	if callback != nil {
+		d.callbackBuf = append(d.callbackBuf, callback)
+	}
 	return nil
 }
 
@@ -112,6 +116,16 @@ func (d *canalBatchEncoder) Build() []*MQMessage {
 	ret.SetRowsCount(rowCount)
 	d.messages.Reset()
 	d.resetPacket()
+
+	if len(d.callbackBuf) > 0 {
+		callbacks := d.callbackBuf
+		ret.Callback = func() {
+			for _, cb := range callbacks {
+				cb()
+			}
+		}
+		d.callbackBuf = make([]func(), 0)
+	}
 	return []*MQMessage{ret}
 }
 
@@ -143,6 +157,7 @@ func (d *canalBatchEncoder) resetPacket() {
 func newCanalBatchEncoder() EventBatchEncoder {
 	encoder := &canalBatchEncoder{
 		messages:     &canal.Messages{},
+		callbackBuf:  make([]func(), 0),
 		entryBuilder: newCanalEntryBuilder(),
 	}
 

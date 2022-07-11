@@ -361,8 +361,14 @@ func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
 
 	msgs = encoder.Build()
 	require.Len(t, msgs, 5, "expected 5 messages")
-	for _, msg := range msgs {
-		msg.Callback()
-	}
-	require.Equal(t, 15, count, "expected all callbacks to be called")
+	msgs[0].Callback()
+	require.Equal(t, 1, count, "expected one callback be called")
+	msgs[1].Callback()
+	require.Equal(t, 3, count, "expected one callback be called")
+	msgs[2].Callback()
+	require.Equal(t, 6, count, "expected one callback be called")
+	msgs[3].Callback()
+	require.Equal(t, 10, count, "expected one callback be called")
+	msgs[4].Callback()
+	require.Equal(t, 15, count, "expected one callback be called")
 }
