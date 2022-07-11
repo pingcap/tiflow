@@ -1,4 +1,4 @@
-// Copyright 2022 PingCAP, Inc.
+// Copyright 2021 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,17 +11,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package api
+package cli
 
 import (
-	"context"
+	"os"
+	"testing"
 
-	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/require"
 )
 
-// CaptureInfoProvider provides capture and its onwnership information
-type CaptureInfoProvider interface {
-	Info() (model.CaptureInfo, error)
-	IsOwner() bool
-	GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error)
+func TestProcessorCli(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	f := newMockFactory(ctrl)
+
+	cmd := newCmdProcessor(f)
+	os.Args = []string{"processor"}
+	require.Nil(t, cmd.Execute())
 }

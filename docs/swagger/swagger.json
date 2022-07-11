@@ -838,6 +838,9 @@
                 },
                 "state": {
                     "type": "string"
+                },
+                "upstream_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -947,6 +950,9 @@
                     "items": {
                         "$ref": "#/definitions/model.CaptureTaskStatus"
                     }
+                },
+                "upstream_id": {
+                    "type": "integer"
                 }
             }
         },
