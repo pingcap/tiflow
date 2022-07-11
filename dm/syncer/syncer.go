@@ -3764,11 +3764,8 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 	if err != nil {
 		return
 	}
-	duration, err := strconv.Atoi(s.cfg.SafeModeResumeDuration)
-	if err != nil {
-		return
-	}
-	if duration >= 0 {
+
+	if s.cfg.SafeModeResumeDuration != "" {
 		if s.cliArgs == nil {
 			s.cliArgs = new(config.TaskCliArgs)
 		}
