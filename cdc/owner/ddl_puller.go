@@ -135,9 +135,6 @@ func (h *ddlPullerImpl) handleDDL(rawDDL *model.RawKVEntry) error {
 		return errors.Trace(err)
 	}
 	if job == nil {
-		log.Info("ddl job is nil after unmarshal",
-			zap.String("namespace", h.changefeedID.Namespace),
-			zap.String("changefeed", h.changefeedID.ID))
 		return nil
 	}
 	if h.filter.ShouldDiscardDDL(job.Type) {
@@ -166,6 +163,7 @@ func (h *ddlPullerImpl) handleDDL(rawDDL *model.RawKVEntry) error {
 	return nil
 }
 
+// Run the ddl puller, and add each ddl job into the internal queue
 func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	h.cancel = cancel
@@ -180,52 +178,6 @@ func (h *ddlPullerImpl) Run(ctx cdcContext.Context) error {
 	})
 
 	rawDDLCh := memory.SortOutput(stdCtx, h.puller.Output())
-
-	receiveDDL := func(rawDDL *model.RawKVEntry) error {
-		if rawDDL == nil {
-			return nil
-		}
-		if rawDDL.OpType == model.OpTypeResolved {
-			h.mu.Lock()
-			defer h.mu.Unlock()
-			if rawDDL.CRTs > h.resolvedTS {
-				lastResolvedTsAdvancedTime = h.clock.Now()
-				h.resolvedTS = rawDDL.CRTs
-			}
-			return nil
-		}
-		job, err := entry.UnmarshalDDL(rawDDL)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if job == nil {
-			return nil
-		}
-		if h.filter.ShouldDiscardDDL(job.Type) {
-			log.Info("discard the ddl job",
-				zap.String("namespace", h.changefeedID.Namespace),
-				zap.String("changefeed", h.changefeedID.ID),
-				zap.Int64("jobID", job.ID), zap.String("query", job.Query))
-			return nil
-		}
-		if job.ID == h.lastDDLJobID {
-			log.Warn("ignore duplicated DDL job",
-				zap.String("namespace", h.changefeedID.Namespace),
-				zap.String("changefeed", h.changefeedID.ID),
-				zap.Any("job", job))
-			return nil
-		}
-		log.Info("receive new ddl job",
-			zap.String("namespace", h.changefeedID.Namespace),
-			zap.String("changefeed", h.changefeedID.ID),
-			zap.Any("job", job))
-
-		h.mu.Lock()
-		defer h.mu.Unlock()
-		h.pendingDDLJobs = append(h.pendingDDLJobs, job)
-		h.lastDDLJobID = job.ID
-		return nil
-	}
 
 	ticker := h.clock.Ticker(ownerDDLPullerStuckWarnTimeout)
 	defer ticker.Stop()
