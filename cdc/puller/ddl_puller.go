@@ -39,6 +39,7 @@ const (
 	ownerDDLPullerStuckWarnTimeout = 30 * time.Second
 )
 
+// DDLPuller is the interface for DDL Puller, used by owner only.
 type DDLPuller interface {
 	// Run runs the DDLPuller
 	Run(ctx context.Context) error
@@ -66,6 +67,7 @@ type ddlPullerImpl struct {
 	lastResolvedTsAdvancedTime time.Time
 }
 
+// NewDDLPuller return a puller for DDL Event
 func NewDDLPuller(ctx context.Context,
 	replicaConfig *config.ReplicaConfig,
 	up *upstream.Upstream,
@@ -150,6 +152,7 @@ func (h *ddlPullerImpl) handleRawDDL(rawDDL *model.RawKVEntry) error {
 	return nil
 }
 
+// Run the ddl puller to receive DDL events
 func (h *ddlPullerImpl) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	h.cancel = cancel
@@ -199,6 +202,7 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
+// FrontDDL return the first pending DDL job
 func (h *ddlPullerImpl) FrontDDL() (uint64, *timodel.Job) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -209,6 +213,7 @@ func (h *ddlPullerImpl) FrontDDL() (uint64, *timodel.Job) {
 	return job.BinlogInfo.FinishedTS, job
 }
 
+// PopFrontDDL return the first pending DDL job and remove it from the pending list
 func (h *ddlPullerImpl) PopFrontDDL() (uint64, *timodel.Job) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -220,6 +225,7 @@ func (h *ddlPullerImpl) PopFrontDDL() (uint64, *timodel.Job) {
 	return job.BinlogInfo.FinishedTS, job
 }
 
+// Close the ddl puller, release all resources.
 func (h *ddlPullerImpl) Close() {
 	log.Info("Close the ddl puller",
 		zap.String("namespace", h.changefeedID.Namespace),
