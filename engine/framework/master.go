@@ -105,7 +105,7 @@ const (
 type BaseMaster interface {
 	Master
 
-	// MetaKVClient return user metastore kv client
+	// MetaKVClient return business metastore kv client
 	MetaKVClient() metaModel.KVClient
 	MetricFactory() promutil.Factory
 	Logger() *zap.Logger
@@ -164,7 +164,7 @@ type DefaultBaseMaster struct {
 	// masterProjectInfo is the projectInfo of itself
 	masterProjectInfo tenant.ProjectInfo
 
-	// user kvclient with namespace
+	// business kvclient with namespace
 	businessMetaKVClient metaModel.KVClient
 
 	// metricFactory can produce metric with underlying project info and job info
@@ -234,7 +234,7 @@ func NewBaseMaster(
 	cli, err := meta.NewKVClientWithNamespace(params.BusinessClientConn, ctx.ProjectInfo.UniqueID(), id)
 	if err != nil {
 		// TODO more elegant error handling
-		log.Panic("failed to create user kvclient", zap.Error(err))
+		log.Panic("failed to create business kvclient", zap.Error(err))
 	}
 
 	return &DefaultBaseMaster{
@@ -269,7 +269,7 @@ func NewBaseMaster(
 	}
 }
 
-// MetaKVClient returns the user space metaclient
+// MetaKVClient returns the business space metaclient
 func (m *DefaultBaseMaster) MetaKVClient() metaModel.KVClient {
 	return m.businessMetaKVClient
 }

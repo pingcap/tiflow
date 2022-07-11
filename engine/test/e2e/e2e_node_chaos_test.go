@@ -61,7 +61,7 @@ func TestNodeFailure(t *testing.T) {
 	var (
 		masterAddrs                  = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
 		businessMetaAddrs            = []string{"127.0.0.1:12479"}
-		businessMetaAddrsInContainer = []string{"user-etcd-standalone:2379"}
+		businessMetaAddrsInContainer = []string{"business-etcd-standalone:2379"}
 	)
 
 	seed := time.Now().Unix()
@@ -82,7 +82,7 @@ func TestNodeFailure(t *testing.T) {
 	require.NoError(t, err)
 
 	fakeJobCfg := &e2e.FakeJobConfig{
-		EtcdEndpoints: businessMetaAddrs, // reuse user meta KV endpoints
+		EtcdEndpoints: businessMetaAddrs, // reuse business meta KV endpoints
 		WorkerCount:   cfg.WorkerCount,
 		KeyPrefix:     cfg.EtcdWatchPrefix,
 	}

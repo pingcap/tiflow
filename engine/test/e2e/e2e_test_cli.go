@@ -42,7 +42,7 @@ import (
 type ChaosCli struct {
 	// used to operate with server master, such as submit job
 	masterCli client.MasterClient
-	// cc is the client connection for user metastore
+	// cc is the client connection for business metastore
 	clientConn metaModel.ClientConn
 	// used to query metadata which is stored from business logic(job-level isolation)
 	// NEED to reinitialize the metaCli if we access to a different job
@@ -50,7 +50,7 @@ type ChaosCli struct {
 	// masterEtcdCli is used to interact with embedded etcd in server master
 	masterEtcdCli *clientv3.Client
 	// used to write to etcd to simulate the business of fake job, this etcd client
-	// reuses the endpoints of user meta KV.
+	// reuses the endpoints of business meta KV.
 	fakeJobCli *clientv3.Client
 	fakeJobCfg *FakeJobConfig
 	// used to save project info
@@ -341,7 +341,7 @@ func (cli *ChaosCli) ContainerStart(name string) {
 	log.Info("Finished starting container", zap.String("name", name))
 }
 
-// InitializeMetaClient initializes the user kvclient
+// InitializeMetaClient initializes the business kvclient
 func (cli *ChaosCli) InitializeMetaClient(jobID string) error {
 	if cli.metaCli != nil {
 		cli.metaCli.Close()

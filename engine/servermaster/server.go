@@ -510,17 +510,17 @@ func (s *Server) registerMetaStore() error {
 
 	log.Info("register framework metastore successfully", zap.Any("metastore", cfg.FrameMetaConf))
 
-	// register metastore for user
+	// register metastore for business
 	err = s.metaStoreManager.Register(cfg.BusinessMetaConf.StoreID, cfg.BusinessMetaConf)
 	if err != nil {
 		return err
 	}
 	s.businessClientConn, err = meta.NewClientConn(cfg.BusinessMetaConf)
 	if err != nil {
-		log.Error("connect to user metastore fail", zap.Any("config", cfg.BusinessMetaConf), zap.Error(err))
+		log.Error("connect to business metastore fail", zap.Any("config", cfg.BusinessMetaConf), zap.Error(err))
 		return err
 	}
-	log.Info("register user metastore successfully", zap.Any("metastore", cfg.BusinessMetaConf))
+	log.Info("register business metastore successfully", zap.Any("metastore", cfg.BusinessMetaConf))
 
 	return nil
 }

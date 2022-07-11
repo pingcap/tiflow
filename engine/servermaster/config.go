@@ -44,7 +44,7 @@ const (
 	defaultPeerUrls            = "http://127.0.0.1:8291"
 	defaultInitialClusterState = embed.ClusterStateFlagNew
 
-	// DefaultBusinessMetaID is the ID for default user metastore
+	// DefaultBusinessMetaID is the ID for default business metastore
 	DefaultBusinessMetaID        = "_default"
 	defaultBusinessMetaEndpoints = "127.0.0.1:12479"
 
@@ -56,7 +56,7 @@ const (
 
 	defaultFrameworkStoreType = metaModel.StoreTypeSQL
 	// TODO: we will switch to StoreTypeSQL after we support sql implement
-	defaultUserStoreType = metaModel.StoreTypeEtcd
+	defaultbusinessStoreType = metaModel.StoreTypeEtcd
 )
 
 // Config is the configuration for dm-master.
@@ -231,11 +231,11 @@ func newFrameMetaConfig() *metaModel.StoreConfig {
 	return conf
 }
 
-// NewDefaultBusinessMetaConfig return the default user metastore config
+// NewDefaultBusinessMetaConfig return the default business metastore config
 func NewDefaultBusinessMetaConfig() *metaModel.StoreConfig {
 	conf := metaModel.DefaultStoreConfig()
 	conf.StoreID = DefaultBusinessMetaID
-	conf.StoreType = defaultUserStoreType
+	conf.StoreType = defaultbusinessStoreType
 	conf.Endpoints = append(conf.Endpoints, defaultBusinessMetaEndpoints)
 
 	return conf

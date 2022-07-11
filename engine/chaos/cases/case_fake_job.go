@@ -45,7 +45,7 @@ func runFakeJobCase(ctx context.Context, cfg *config) error {
 		EtcdWatchPrefix: "/fake-job/test/",
 	}
 	e2eCfg := &e2e.FakeJobConfig{
-		EtcdEndpoints: etcdEndpoints, // reuse user meta KV endpoints
+		EtcdEndpoints: etcdEndpoints, // reuse business meta KV endpoints
 		WorkerCount:   jobCfg.WorkerCount,
 		KeyPrefix:     jobCfg.EtcdWatchPrefix,
 	}

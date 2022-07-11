@@ -72,8 +72,8 @@ func (o *options) addFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.masterConfig.FrameMetaConf.Auth.Passwd, "frame-meta-password", o.masterConfig.FrameMetaConf.Auth.Passwd, "framework metastore password")
 	cmd.Flags().StringVar(&o.masterConfig.FrameMetaConf.Schema, "frame-meta-schema", o.masterConfig.FrameMetaConf.Schema, `schema name for framework meta`)
 
-	cmd.Flags().StringSliceVar(&o.masterConfig.BusinessMetaConf.Endpoints, "user-meta-endpoints", o.masterConfig.BusinessMetaConf.Endpoints, "user metastore endpoint")
-	cmd.Flags().StringVar(&o.masterConfig.BusinessMetaConf.StoreType, "user-meta-store-type", o.masterConfig.BusinessMetaConf.StoreType, "user metastore store type")
+	cmd.Flags().StringSliceVar(&o.masterConfig.BusinessMetaConf.Endpoints, "business-meta-endpoints", o.masterConfig.BusinessMetaConf.Endpoints, "business metastore endpoint")
+	cmd.Flags().StringVar(&o.masterConfig.BusinessMetaConf.StoreType, "business-meta-store-type", o.masterConfig.BusinessMetaConf.StoreType, "business metastore store type")
 
 	cmd.Flags().StringVar(&o.masterConfigFilePath, "config", "", "Path of the configuration file")
 
@@ -154,7 +154,7 @@ func (o *options) complete(cmd *cobra.Command) error {
 			cfg.FrameMetaConf.Auth.User = o.masterConfig.FrameMetaConf.Auth.User
 		case "frame-meta-password":
 			cfg.FrameMetaConf.Auth.Passwd = o.masterConfig.FrameMetaConf.Auth.Passwd
-		case "user-meta-endpoints":
+		case "business-meta-endpoints":
 			cfg.BusinessMetaConf.Endpoints = o.masterConfig.BusinessMetaConf.Endpoints
 		case "ca":
 			cfg.Security.CAPath = o.masterConfig.Security.CAPath

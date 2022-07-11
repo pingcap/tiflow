@@ -230,7 +230,7 @@ func (m *metastoreManagerImpl) initFrameworkStore(ctx context.Context, servermas
 }
 
 func (m *metastoreManagerImpl) initBusinessStore(ctx context.Context, servermasterClient client.MasterClient) error {
-	// fetch user metastore connection endpoint
+	// fetch business metastore connection endpoint
 	resp, err := servermasterClient.QueryMetaStore(
 		ctx,
 		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_AppMetaStore},

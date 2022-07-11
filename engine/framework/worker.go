@@ -133,7 +133,7 @@ type DefaultBaseWorker struct {
 
 	clock clock.Clock
 
-	// user metastore kvclient with namespace
+	// business metastore kvclient with namespace
 	businessMetaKVClient metaModel.KVClient
 
 	// metricFactory can produce metric with underlying project info and job info
@@ -175,7 +175,7 @@ func NewBaseWorker(
 	cli, err := meta.NewKVClientWithNamespace(params.BusinessClientConn, ctx.ProjectInfo.UniqueID(), masterID)
 	if err != nil {
 		// TODO more elegant error handling
-		log.Panic("failed to create user kvclient", zap.Error(err))
+		log.Panic("failed to create business kvclient", zap.Error(err))
 	}
 
 	return &DefaultBaseWorker{

@@ -16,5 +16,5 @@
     --advertise-peer-urls {{ inventory_hostname }}:{{ master_peer_port }} \
     --initial-cluster {{ cluster|join(',') }} \
     --frame-meta-endpoints {{ inventory_hostname }}:{{ etcd_peer_port }} \
-    --user-meta-endpoints {{ inventory_hostname }}:{{ etcd_peer_port }}
+    --business-meta-endpoints {{ inventory_hostname }}:{{ etcd_peer_port }}
     

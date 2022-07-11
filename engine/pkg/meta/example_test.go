@@ -35,7 +35,7 @@ import (
 func Test(t *testing.T) {
 	// clientConn, err := NewClientConn(metaModel.DefaultStoreConfig())
 	clientConn := metaMock.NewMockClientConn()
-	cli, _ := NewKVClient(clientConn)
+	cli, _ := NewKVClientWithNamespace(clientConn, "fakeProject", "fakeJob")
 	defer cli.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()

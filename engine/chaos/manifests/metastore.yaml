@@ -63,7 +63,7 @@ spec:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: metastore-user-etcd
+  name: metastore-business-etcd
   labels:
     app: metastore
 spec:
@@ -79,7 +79,7 @@ spec:
         app: metastore
     spec:
       containers:
-        - name: metastore-user-etcd
+        - name: metastore-business-etcd
           image: quay.io/coreos/etcd:v3.5.4
           imagePullPolicy: IfNotPresent
           ports:
@@ -88,16 +88,16 @@ spec:
           command:
             - "etcd"
           args:
-            - "--name=metastore-user-etcd"
+            - "--name=metastore-business-etcd"
             - "--advertise-client-urls=http://0.0.0.0:2479"
             - "--listen-client-urls=http://0.0.0.0:2479"
             - "--listen-peer-urls=http://127.0.0.1:2480"
             - "--initial-advertise-peer-urls=http://127.0.0.1:2480"
-            - "--initial-cluster=metastore-user-etcd=http://127.0.0.1:2480"
+            - "--initial-cluster=metastore-business-etcd=http://127.0.0.1:2480"
             - "--initial-cluster-state=new"
   volumeClaimTemplates:
     - metadata:
-        name: metastore-user-etcd
+        name: metastore-business-etcd
       spec:
         accessModes:
           - ReadWriteOnce
