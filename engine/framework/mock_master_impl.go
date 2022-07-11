@@ -31,7 +31,7 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
-	mockkv "github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	metaMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
@@ -57,7 +57,7 @@ type MockMasterImpl struct {
 	messageHandlerManager *p2p.MockMessageHandlerManager
 	messageSender         p2p.MessageSender
 	frameMetaClient       pkgOrm.Client
-	userRawKVClient       *mockkv.MetaMock
+	businessMetaKVClient  *metaMock.MetaMock
 	executorClientManager *client.Manager
 	serverMasterClient    *client.MockServerMasterClient
 }
@@ -76,7 +76,7 @@ func NewMockMasterImpl(masterID, id frameModel.MasterID) *MockMasterImpl {
 	ret.messageHandlerManager = ret.DefaultBaseMaster.messageHandlerManager.(*p2p.MockMessageHandlerManager)
 	ret.messageSender = ret.DefaultBaseMaster.messageSender
 	ret.frameMetaClient = ret.DefaultBaseMaster.frameMetaClient
-	ret.userRawKVClient = ret.DefaultBaseMaster.userRawKVClient.(*mockkv.MetaMock)
+	ret.businessMetaKVClient = ret.DefaultBaseMaster.businessMetaKVClient.(*metaMock.MetaMock)
 	ret.executorClientManager = ret.DefaultBaseMaster.executorClientManager.(*client.Manager)
 	ret.serverMasterClient = ret.DefaultBaseMaster.serverMasterClient.(*client.MockServerMasterClient)
 
@@ -89,7 +89,7 @@ type masterParamListForTest struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
 	FrameMetaClient       pkgOrm.Client
-	UserRawKVClient       metaModel.KVClientEx
+	BusinessClientConn    metaModel.ClientConn
 	ExecutorClientManager client.ClientsManager
 	ServerMasterClient    client.MasterClient
 	ResourceBroker        broker.Broker
@@ -115,7 +115,7 @@ func (m *MockMasterImpl) Reset() {
 			MessageHandlerManager: m.messageHandlerManager,
 			MessageSender:         m.messageSender,
 			FrameMetaClient:       m.frameMetaClient,
-			UserRawKVClient:       m.userRawKVClient,
+			BusinessClientConn:    metaMock.NewMockClientConn(),
 			ExecutorClientManager: m.executorClientManager,
 			ServerMasterClient:    m.serverMasterClient,
 			ResourceBroker:        broker.NewBrokerForTesting("executor-1"),

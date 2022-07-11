@@ -122,6 +122,6 @@ func (e *etcdError) Error() string {
 func etcdErrorFromOpFail(err error) *etcdError {
 	return &etcdError{
 		cause:     err,
-		displayed: errors.ErrMetaOpFail.GenWithStackByArgs(err),
+		displayed: errors.ErrMetaOpFail.Wrap(err),
 	}
 }
