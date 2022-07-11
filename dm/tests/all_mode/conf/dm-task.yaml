@@ -9,7 +9,7 @@ heartbeat-update-interval: 1
 heartbeat-report-interval: 1
 
 target-database:
-  host: "127.0.0.1"
+  host: "::1"
   port: 4000
   user: "root"
   password: ""
