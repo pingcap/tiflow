@@ -96,7 +96,7 @@ func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic string) (*EventRoute
 	for _, ruleConfig := range ruleConfigs {
 		f, err := filter.Parse(ruleConfig.Matcher)
 		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err)
+			return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err, ruleConfig.Matcher)
 		}
 		if !cfg.CaseSensitive {
 			f = filter.CaseInsensitive(f)

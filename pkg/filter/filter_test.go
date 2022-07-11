@@ -186,7 +186,6 @@ func TestShouldDiscardDDL(t *testing.T) {
 
 func TestShouldIgnoreDDL(t *testing.T) {
 	t.Parallel()
-
 	testCases := []struct {
 		cases []struct {
 			startTs uint64

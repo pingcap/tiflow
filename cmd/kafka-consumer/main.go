@@ -194,7 +194,7 @@ func init() {
 				zap.Error(err),
 				zap.String("config", configFile))
 		}
-		if _, err := filter.VerifyRules(eventRouterReplicaConfig); err != nil {
+		if _, err := filter.VerifyTableRules(eventRouterReplicaConfig); err != nil {
 			log.Panic("verify rule failed", zap.Error(err))
 		}
 	}

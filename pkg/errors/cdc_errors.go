@@ -176,7 +176,7 @@ var (
 		errors.RFCCodeText("CDC:ErrDecodeFailed"),
 	)
 	ErrFilterRuleInvalid = errors.Normalize(
-		"filter rule is invalid %s",
+		"filter rule is invalid %v",
 		errors.RFCCodeText("CDC:ErrFilterRuleInvalid"),
 	)
 
@@ -1025,5 +1025,9 @@ var (
 	ErrExpressionColumnNotFound = errors.Normalize(
 		"invalid filter expressions. Can not found column '%s' from table '%s' in: %s",
 		errors.RFCCodeText("CDC:ErrExpressionColumnNotFound"),
+	)
+	ErrInvalidIgnoreEventType = errors.Normalize(
+		"invalid ignore event type: %s",
+		errors.RFCCodeText("CDC:ErrInvalidIgnoreEventType"),
 	)
 )

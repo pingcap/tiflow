@@ -18,16 +18,17 @@ import (
 	tfilter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
-// All methods of Filter are safe for concurrent use.
+// Filter are safe for concurrent use.
 type Filter interface {
 	// ShouldIgnoreDMLEvent return true and nil if the DML event should be ignored.
 	ShouldIgnoreDMLEvent(dml *model.RowChangedEvent, rawRow model.RowChangedDatums, tableInfo *model.TableInfo) (bool, error)
 	// ShouldIgnoreDDLEvent return true and nil if the DDL event should be ignored.
 	ShouldIgnoreDDLEvent(ddl *model.DDLEvent) (bool, error)
 	// ShouldDiscardDDL returns true if this DDL should be discarded.
+	// If a ddl is discarded, it will not be applied to cdc't schema storage
+	// and sent to downstream.
 	ShouldDiscardDDL(ddlType timodel.ActionType) bool
 	// ShouldIgnoreTable return true if the table should be ignored.
 	ShouldIgnoreTable(schema, table string) bool
@@ -51,23 +52,20 @@ type filter struct {
 
 // NewFilter creates a filter.
 func NewFilter(cfg *config.ReplicaConfig) (Filter, error) {
-	f, err := VerifyRules(cfg)
+	f, err := VerifyTableRules(cfg)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err)
+		return nil, err
 	}
 
 	if !cfg.CaseSensitive {
 		f = tfilter.CaseInsensitive(f)
 	}
-	// fizz: we need to set correct timezone
-	// fizz: we need to check if we should new a dmlExprFilter
-	dmlExprFilter, err := newExprFilter("system", cfg.Filter)
-	// fizz: we need to complete the error handler
+
+	dmlExprFilter, err := newExprFilter(cfg.TimeZone, cfg.Filter)
 	if err != nil {
 		return nil, err
 	}
-	sqlEventFilter, err := newSQLEventFilter(cfg.CaseSensitive, cfg.Filter)
-	// fizz: we need to complete the error handler
+	sqlEventFilter, err := newSQLEventFilter(cfg.Filter)
 	if err != nil {
 		return nil, err
 	}

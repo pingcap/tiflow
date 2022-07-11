@@ -12,3 +12,351 @@
 // limitations under the License.
 
 package filter
+
+import (
+	"testing"
+
+	"github.com/pingcap/errors"
+	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
+	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/stretchr/testify/require"
+)
+
+func TestShouldSkipDDL(t *testing.T) {
+	type innerCase struct {
+		schema  string
+		table   string
+		query   string
+		jobType timodel.ActionType
+		skip    bool
+	}
+
+	type testCase struct {
+		cfg   *config.FilterConfig
+		cases []innerCase
+		err   error
+	}
+
+	testCases := []testCase{
+		{
+			cfg: &config.FilterConfig{
+				EventFilters: []*config.EventFilterRule{
+					{
+						Matcher:     []string{"test.t1"},
+						IgnoreEvent: []bf.EventType{bf.AllDDL},
+					},
+				},
+			},
+			cases: []innerCase{
+				{
+					schema:  "test",
+					table:   "t1",
+					query:   "",
+					jobType: timodel.ActionModifyColumn,
+					skip:    true,
+				},
+				{
+					schema:  "test",
+					table:   "t1",
+					query:   "",
+					jobType: timodel.ActionCreateTable,
+					skip:    true,
+				},
+				{
+					schema:  "test",
+					table:   "t2", // table name not match
+					query:   "",
+					jobType: timodel.ActionModifyColumn,
+					skip:    false,
+				},
+				{
+					schema:  "test2", // schema name not match
+					table:   "t1",
+					query:   "",
+					jobType: timodel.ActionModifyColumn,
+					skip:    false,
+				},
+				{
+					schema:  "test",
+					table:   "t1",
+					query:   "",
+					jobType: timodel.ActionAlterTablePlacement, // job type not support
+					skip:    false,
+				},
+			},
+		},
+		{
+			cfg: &config.FilterConfig{
+				EventFilters: []*config.EventFilterRule{
+					{
+						Matcher:     []string{"*.t1"},
+						IgnoreEvent: []bf.EventType{bf.DropColumn, bf.DropDatabase, bf.DropSchema},
+					},
+				},
+			},
+			cases: []innerCase{
+				{
+					schema:  "test",
+					table:   "t1",
+					query:   "",
+					jobType: timodel.ActionModifyColumn,
+					skip:    false,
+				},
+				{
+					schema:  "test",
+					table:   "t1",
+					query:   "",
+					jobType: timodel.ActionDropColumn,
+					skip:    true,
+				},
+				{
+					schema:  "test2",
+					table:   "t1",
+					query:   "",
+					jobType: timodel.ActionDropSchema,
+					skip:    true,
+				},
+				{
+					schema:  "test3",
+					table:   "t1",
+					query:   "",
+					jobType: timodel.ActionDropIndex,
+					skip:    false,
+				},
+			},
+		},
+		{
+			cfg: &config.FilterConfig{
+				EventFilters: []*config.EventFilterRule{
+					{
+						Matcher:   []string{"*.t1"},
+						IgnoreSQL: []string{"MODIFY COLUMN", "DROP COLUMN", "^DROP DATABASE"},
+					},
+				},
+			},
+			cases: []innerCase{
+				{
+					schema:  "test",
+					table:   "t1",
+					query:   "ALTER TABLE t1 MODIFY COLUMN age int(11) NOT NULL",
+					jobType: timodel.ActionModifyColumn,
+					skip:    true,
+				},
+				{
+					schema:  "test",
+					table:   "t1",
+					query:   "ALTER TABLE t1 DROP COLUMN age",
+					jobType: timodel.ActionDropColumn,
+					skip:    true,
+				},
+				{ // no table name
+					schema:  "test2",
+					query:   "DROP DATABASE test",
+					jobType: timodel.ActionDropSchema,
+					skip:    true,
+				},
+				{
+					schema:  "test3",
+					table:   "t1",
+					query:   "",
+					jobType: timodel.ActionDropIndex,
+					skip:    false,
+				},
+			},
+		},
+		{ // config error
+			cfg: &config.FilterConfig{
+				EventFilters: []*config.EventFilterRule{
+					{
+						Matcher:     []string{"*.t1"},
+						IgnoreEvent: []bf.EventType{bf.EventType("aa")},
+					},
+				},
+			},
+			err: cerror.ErrInvalidIgnoreEventType,
+		},
+		{
+			cfg: &config.FilterConfig{
+				EventFilters: []*config.EventFilterRule{
+					{
+						Matcher:   []string{"*.t1"},
+						IgnoreSQL: []string{"--6"}, // this is a valid regx
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		f, err := newSQLEventFilter(tc.cfg)
+		require.True(t, errors.ErrorEqual(err, tc.err), "case: %+s", err)
+		for _, c := range tc.cases {
+			ddl := &model.DDLEvent{
+				TableInfo: &model.SimpleTableInfo{
+					Schema: c.schema,
+					Table:  c.table,
+				},
+				Query: c.query,
+				Type:  c.jobType,
+			}
+			skip, err := f.shouldSkipDDL(ddl)
+			require.NoError(t, err)
+			require.Equal(t, c.skip, skip, "case: %+v", c)
+		}
+	}
+}
+
+func TestShouldSkipDML(t *testing.T) {
+	type innerCase struct {
+		schema     string
+		table      string
+		preColumns string
+		columns    string
+		skip       bool
+	}
+
+	type testCase struct {
+		cfg   *config.FilterConfig
+		cases []innerCase
+	}
+
+	testCases := []testCase{
+		{
+			cfg: &config.FilterConfig{
+				EventFilters: []*config.EventFilterRule{
+					{
+						Matcher:     []string{"test1.allDml"},
+						IgnoreEvent: []bf.EventType{bf.AllDML},
+					},
+					{
+						Matcher:     []string{"test2.insert"},
+						IgnoreEvent: []bf.EventType{bf.InsertEvent},
+					},
+					{
+						Matcher:     []string{"*.delete"},
+						IgnoreEvent: []bf.EventType{bf.DeleteEvent},
+					},
+				},
+			},
+			cases: []innerCase{
+				{ // match test1.allDML
+					schema:  "test1",
+					table:   "allDml",
+					columns: "insert",
+					skip:    true,
+				},
+				{
+					schema:     "test1",
+					table:      "allDml",
+					preColumns: "delete",
+					skip:       true,
+				},
+				{
+					schema:     "test1",
+					table:      "allDml",
+					preColumns: "update",
+					columns:    "update",
+					skip:       true,
+				},
+				{ // not match
+					schema:  "test",
+					table:   "t1",
+					columns: "insert",
+					skip:    false,
+				},
+				{ // match test2.insert
+					schema:  "test2",
+					table:   "insert",
+					columns: "insert",
+					skip:    true,
+				},
+				{
+					schema:     "test2",
+					table:      "insert",
+					preColumns: "delete",
+					skip:       false,
+				},
+				{
+					schema:     "test2",
+					table:      "insert",
+					preColumns: "update",
+					columns:    "update",
+					skip:       false,
+				},
+				{
+					schema:  "noMatter",
+					table:   "delete",
+					columns: "insert",
+					skip:    false,
+				},
+				{
+					schema:     "noMatter",
+					table:      "delete",
+					preColumns: "update",
+					columns:    "update",
+					skip:       false,
+				},
+				{
+					schema:     "noMatter",
+					table:      "delete",
+					preColumns: "delete",
+					skip:       true,
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		f, err := newSQLEventFilter(tc.cfg)
+		require.NoError(t, err)
+		for _, c := range tc.cases {
+			event := &model.RowChangedEvent{
+				Table: &model.TableName{
+					Schema: c.schema,
+					Table:  c.table,
+				},
+			}
+			if c.columns != "" {
+				event.Columns = []*model.Column{{Value: c.columns}}
+			}
+			if c.preColumns != "" {
+				event.PreColumns = []*model.Column{{Value: c.preColumns}}
+			}
+			skip, err := f.shouldSkipDML(event)
+			require.NoError(t, err)
+			require.Equal(t, c.skip, skip, "case: %+v", c)
+		}
+	}
+}
+
+func TestVerifyIgnoreEvents(t *testing.T) {
+	type testCase struct {
+		ignoreEvent []bf.EventType
+		err         error
+	}
+
+	cases := make([]testCase, len(supportedEventTypes))
+	for i, eventType := range supportedEventTypes {
+		cases[i] = testCase{
+			ignoreEvent: []bf.EventType{eventType},
+			err:         nil,
+		}
+	}
+
+	cases = append(cases, testCase{
+		ignoreEvent: []bf.EventType{bf.EventType("unknown")},
+		err:         cerror.ErrInvalidIgnoreEventType,
+	})
+
+	cases = append(cases, testCase{
+		ignoreEvent: []bf.EventType{bf.AlertTable},
+		err:         cerror.ErrInvalidIgnoreEventType,
+	})
+
+	for _, tc := range cases {
+		require.True(t, errors.ErrorEqual(tc.err, verifyIgnoreEvents(tc.ignoreEvent)))
+	}
+}
