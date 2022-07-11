@@ -14,12 +14,14 @@
 package owner
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/stretchr/testify/require"
 )
@@ -27,7 +29,8 @@ import (
 func TestHandleJob(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	manager := newFeedStateManager4Test()
-	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		require.Nil(t, info)
@@ -100,10 +103,89 @@ func TestHandleJob(t *testing.T) {
 	require.False(t, state.Exist())
 }
 
+func TestResumeChangefeedWithCheckpointTs(t *testing.T) {
+	ctx := cdcContext.NewBackendContext4Test(true)
+	manager := newFeedStateManager4Test()
+	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		ctx.ChangefeedVars().ID)
+	tester := orchestrator.NewReactorStateTester(t, state, nil)
+	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		require.Nil(t, info)
+		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
+	})
+	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+		require.Nil(t, status)
+		return &model.ChangeFeedStatus{}, true, nil
+	})
+	tester.MustApplyPatches()
+	manager.Tick(state)
+	tester.MustApplyPatches()
+	require.True(t, manager.ShouldRunning())
+
+	// stop a changefeed
+	manager.PushAdminJob(&model.AdminJob{
+		CfID: ctx.ChangefeedVars().ID,
+		Type: model.AdminStop,
+	})
+	manager.Tick(state)
+	tester.MustApplyPatches()
+
+	require.False(t, manager.ShouldRunning())
+	require.False(t, manager.ShouldRemoved())
+	require.Equal(t, state.Info.State, model.StateStopped)
+	require.Equal(t, state.Info.AdminJobType, model.AdminStop)
+	require.Equal(t, state.Status.AdminJobType, model.AdminStop)
+
+	// resume the changefeed in stopped state
+	manager.PushAdminJob(&model.AdminJob{
+		CfID:                  ctx.ChangefeedVars().ID,
+		Type:                  model.AdminResume,
+		OverwriteCheckpointTs: 100,
+	})
+	manager.Tick(state)
+	tester.MustApplyPatches()
+	require.True(t, manager.ShouldRunning())
+	require.False(t, manager.ShouldRemoved())
+	require.Equal(t, state.Info.State, model.StateNormal)
+	require.Equal(t, state.Info.AdminJobType, model.AdminNone)
+	require.Equal(t, state.Status.AdminJobType, model.AdminNone)
+
+	// mock a non-retryable error occurs for this changefeed
+	state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID,
+		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			return &model.TaskPosition{Error: &model.RunningError{
+				Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
+				Code:    "CDC:ErrGCTTLExceeded",
+				Message: "fake error for test",
+			}}, true, nil
+		})
+	tester.MustApplyPatches()
+	manager.Tick(state)
+	tester.MustApplyPatches()
+	require.Equal(t, state.Info.State, model.StateFailed)
+	require.Equal(t, state.Info.AdminJobType, model.AdminStop)
+	require.Equal(t, state.Status.AdminJobType, model.AdminStop)
+
+	// resume the changefeed in failed state
+	manager.PushAdminJob(&model.AdminJob{
+		CfID:                  ctx.ChangefeedVars().ID,
+		Type:                  model.AdminResume,
+		OverwriteCheckpointTs: 200,
+	})
+	manager.Tick(state)
+	tester.MustApplyPatches()
+	require.True(t, manager.ShouldRunning())
+	require.False(t, manager.ShouldRemoved())
+	require.Equal(t, state.Info.State, model.StateNormal)
+	require.Equal(t, state.Info.AdminJobType, model.AdminNone)
+	require.Equal(t, state.Status.AdminJobType, model.AdminNone)
+}
+
 func TestMarkFinished(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	manager := newFeedStateManager4Test()
-	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		require.Nil(t, info)
@@ -131,7 +213,8 @@ func TestMarkFinished(t *testing.T) {
 func TestCleanUpInfos(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	manager := newFeedStateManager4Test()
-	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		require.Nil(t, info)
@@ -141,9 +224,10 @@ func TestCleanUpInfos(t *testing.T) {
 		require.Nil(t, status)
 		return &model.ChangeFeedStatus{}, true, nil
 	})
-	state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-		return &model.TaskPosition{}, true, nil
-	})
+	state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID,
+		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			return &model.TaskPosition{}, true, nil
+		})
 	tester.MustApplyPatches()
 	require.Contains(t, state.TaskPositions, ctx.GlobalVars().CaptureInfo.ID)
 	manager.Tick(state)
@@ -163,7 +247,8 @@ func TestCleanUpInfos(t *testing.T) {
 func TestHandleError(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	manager := newFeedStateManager4Test()
-	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		require.Nil(t, info)
@@ -178,7 +263,6 @@ func TestHandleError(t *testing.T) {
 	manager.Tick(state)
 	tester.MustApplyPatches()
 
-	// the backoff will be stopped after 4600ms because 4600ms + 1600ms > 6000ms.
 	intervals := []time.Duration{200, 400, 800, 1600, 1600}
 	for i, d := range intervals {
 		intervals[i] = d * time.Millisecond
@@ -186,59 +270,45 @@ func TestHandleError(t *testing.T) {
 
 	for _, d := range intervals {
 		require.True(t, manager.ShouldRunning())
-		state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-			return &model.TaskPosition{Error: &model.RunningError{
-				Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
-				Code:    "[CDC:ErrEtcdSessionDone]",
-				Message: "fake error for test",
-			}}, true, nil
-		})
+		state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID,
+			func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+				return &model.TaskPosition{Error: &model.RunningError{
+					Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
+					Code:    "[CDC:ErrEtcdSessionDone]",
+					Message: "fake error for test",
+				}}, true, nil
+			})
 		tester.MustApplyPatches()
 		manager.Tick(state)
 		tester.MustApplyPatches()
 		require.False(t, manager.ShouldRunning())
+		require.Equal(t, state.Info.State, model.StateError)
+		require.Equal(t, state.Info.AdminJobType, model.AdminStop)
+		require.Equal(t, state.Status.AdminJobType, model.AdminStop)
 		time.Sleep(d)
 		manager.Tick(state)
 		tester.MustApplyPatches()
 	}
-
-	require.False(t, manager.ShouldRunning())
-	require.False(t, manager.ShouldRemoved())
-	require.Equal(t, state.Info.State, model.StateFailed)
-	require.Equal(t, state.Info.AdminJobType, model.AdminStop)
-	require.Equal(t, state.Status.AdminJobType, model.AdminStop)
-
-	// admin resume must retry changefeed immediately.
-	manager.PushAdminJob(&model.AdminJob{
-		CfID: ctx.ChangefeedVars().ID,
-		Type: model.AdminResume,
-		Opts: &model.AdminJobOption{ForceRemove: false},
-	})
-	manager.Tick(state)
-	tester.MustApplyPatches()
-	require.True(t, manager.ShouldRunning())
-	require.False(t, manager.ShouldRemoved())
-	require.Equal(t, state.Info.State, model.StateNormal)
-	require.Equal(t, state.Info.AdminJobType, model.AdminNone)
-	require.Equal(t, state.Status.AdminJobType, model.AdminNone)
 }
 
 func TestHandleFastFailError(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	manager := new(feedStateManager)
-	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		require.Nil(t, info)
 		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
 	})
-	state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-		return &model.TaskPosition{Error: &model.RunningError{
-			Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
-			Code:    "CDC:ErrGCTTLExceeded",
-			Message: "fake error for test",
-		}}, true, nil
-	})
+	state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID,
+		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			return &model.TaskPosition{Error: &model.RunningError{
+				Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
+				Code:    "CDC:ErrGCTTLExceeded",
+				Message: "fake error for test",
+			}}, true, nil
+		})
 	tester.MustApplyPatches()
 	manager.Tick(state)
 	// test handling fast failed error with non-nil ChangeFeedInfo
@@ -298,14 +368,19 @@ func TestChangefeedStatusNotExist(t *testing.T) {
 `
 	ctx := cdcContext.NewBackendContext4Test(true)
 	manager := newFeedStateManager4Test()
-	state := orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, map[string]string{
-		"/tidb/cdc/capture/d563bfc0-f406-4f34-bc7d-6dc2e35a44e5": `
+		fmt.Sprintf("%s/capture/d563bfc0-f406-4f34-bc7d-6dc2e35a44e5",
+			etcd.DefaultClusterAndMetaPrefix): `
 {"id":"d563bfc0-f406-4f34-bc7d-6dc2e35a44e5",
 "address":"172.16.6.147:8300","version":"v5.0.0-master-dirty"}`,
-		"/tidb/cdc/changefeed/info/" +
+		fmt.Sprintf("%s/changefeed/info/",
+			etcd.DefaultClusterAndNamespacePrefix) +
 			ctx.ChangefeedVars().ID.ID: changefeedInfo,
-		"/tidb/cdc/owner/156579d017f84a68": "d563bfc0-f406-4f34-bc7d-6dc2e35a44e5",
+		fmt.Sprintf("%s/owner/156579d017f84a68",
+			etcd.DefaultClusterAndMetaPrefix,
+		): "d563bfc0-f406-4f34-bc7d-6dc2e35a44e5",
 	})
 	manager.Tick(state)
 	require.False(t, manager.ShouldRunning())
@@ -315,7 +390,6 @@ func TestChangefeedStatusNotExist(t *testing.T) {
 	manager.PushAdminJob(&model.AdminJob{
 		CfID: ctx.ChangefeedVars().ID,
 		Type: model.AdminRemove,
-		Opts: &model.AdminJobOption{ForceRemove: true},
 	})
 	manager.Tick(state)
 	require.False(t, manager.ShouldRunning())

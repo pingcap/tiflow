@@ -72,8 +72,9 @@ func TestConfirmIgnoreIneligibleTables(t *testing.T) {
 		os.Stdin = stdin
 	}()
 
-	err = confirmIgnoreIneligibleTables(cmd)
+	ignore, err := confirmIgnoreIneligibleTables(cmd)
 	require.Regexp(t, "abort changefeed create or resume", err)
+	require.False(t, ignore)
 
 	// check start ts more than 1 day before current ts, and type Y when confirming
 	err = os.WriteFile(path, []byte("Y"), 0o644)
@@ -81,6 +82,7 @@ func TestConfirmIgnoreIneligibleTables(t *testing.T) {
 	f, err = os.Open(path)
 	require.Nil(t, err)
 	os.Stdin = f
-	err = confirmIgnoreIneligibleTables(cmd)
+	ignore, err = confirmIgnoreIneligibleTables(cmd)
 	require.Nil(t, err)
+	require.True(t, ignore)
 }

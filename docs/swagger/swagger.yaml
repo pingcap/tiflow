@@ -81,6 +81,8 @@ definitions:
         type: string
       state:
         type: string
+      upstream_id:
+        type: integer
     type: object
   model.ChangefeedConfig:
     properties:
@@ -155,6 +157,8 @@ definitions:
         items:
           $ref: '#/definitions/model.CaptureTaskStatus'
         type: array
+      upstream_id:
+        type: integer
     type: object
   model.HTTPError:
     properties:

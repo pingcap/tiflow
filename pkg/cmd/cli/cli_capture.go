@@ -14,9 +14,7 @@
 package cli
 
 import (
-	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
-	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/spf13/cobra"
 )
 
@@ -33,10 +31,6 @@ func newCaptureOptions() *captureOptions {
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
 func (o *captureOptions) addFlags(cmd *cobra.Command) {
-	if o == nil {
-		return
-	}
-
 	cmd.PersistentFlags().BoolVar(&o.disableVersionCheck, "disable-version-check", false, "Disable version check")
 	_ = cmd.PersistentFlags().MarkHidden("disable-version-check")
 }
@@ -45,16 +39,6 @@ func (o *captureOptions) addFlags(cmd *cobra.Command) {
 func (o *captureOptions) run(f factory.Factory) error {
 	if o.disableVersionCheck {
 		return nil
-	}
-	ctx := cmdcontext.GetDefaultContext()
-	etcdClient, err := f.EtcdClient()
-	if err != nil {
-		return err
-	}
-
-	_, err = util.VerifyAndGetTiCDCClusterVersion(ctx, etcdClient)
-	if err != nil {
-		return err
 	}
 	return nil
 }
