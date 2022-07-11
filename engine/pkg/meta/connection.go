@@ -14,18 +14,26 @@
 package meta
 
 import (
-	"github.com/pingcap/tiflow/engine/pkg/meta/internal"
+	"github.com/pingcap/tiflow/engine/pkg/meta/internal/etcdkv"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
-// NewKVClientWithNamespace return a KVClient with namspace isolation
-func NewKVClientWithNamespace(cc metaModel.ClientConn, projectID metaModel.ProjectID,
-	jobID metaModel.JobID,
-) (metaModel.KVClient, error) {
-	builder, err := internal.GetClientBuilder(cc.ClientType())
-	if err != nil {
+// NewClientConn new a client connection
+func NewClientConn(storeConf *metaModel.StoreConfig) (metaModel.ClientConn, error) {
+	var cc metaModel.ClientConn
+
+	switch storeConf.StoreType {
+	case metaModel.StoreTypeEtcd:
+		cc = etcdkv.NewClientConnImpl()
+	default:
+		return nil, cerrors.ErrMetaClientTypeNotSupport.
+			GenWithStackByArgs(metaModel.ToClientType(storeConf.StoreType))
+	}
+
+	if err := cc.Initialize(storeConf); err != nil {
 		return nil, err
 	}
 
-	return builder.NewKVClientWithNamespace(cc, projectID, jobID)
+	return cc, nil
 }

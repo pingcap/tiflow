@@ -11,21 +11,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package meta
+package internal
 
 import (
-	"github.com/pingcap/tiflow/engine/pkg/meta/internal"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 )
 
-// NewKVClientWithNamespace return a KVClient with namspace isolation
-func NewKVClientWithNamespace(cc metaModel.ClientConn, projectID metaModel.ProjectID,
-	jobID metaModel.JobID,
-) (metaModel.KVClient, error) {
-	builder, err := internal.GetClientBuilder(cc.ClientType())
-	if err != nil {
-		return nil, err
-	}
+type clientBuilder interface {
+	// ClientType return the type of client builder
+	ClientType() metaModel.ClientType
 
-	return builder.NewKVClientWithNamespace(cc, projectID, jobID)
+	// NewKVClientWithNamespace new a kvclient with namespace
+	NewKVClientWithNamespace(cc metaModel.ClientConn, projectID metaModel.ProjectID,
+		jobID metaModel.JobID) (metaModel.KVClient, error)
 }

@@ -11,21 +11,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package meta
+package model
 
 import (
-	"github.com/pingcap/tiflow/engine/pkg/meta/internal"
+	"context"
+
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 )
 
-// NewKVClientWithNamespace return a KVClient with namspace isolation
-func NewKVClientWithNamespace(cc metaModel.ClientConn, projectID metaModel.ProjectID,
-	jobID metaModel.JobID,
-) (metaModel.KVClient, error) {
-	builder, err := internal.GetClientBuilder(cc.ClientType())
-	if err != nil {
-		return nil, err
-	}
+// KVExt extends the KV interface with Do method to implement the intermediate
+type KVExt interface {
+	metaModel.KV
 
-	return builder.NewKVClientWithNamespace(cc, projectID, jobID)
+	// Do applies a single Op on KV without a transaction.
+	// Do is useful when adding intermidate layer to KV implement
+	Do(ctx context.Context, op metaModel.Op) (metaModel.OpResponse, metaModel.Error)
 }

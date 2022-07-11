@@ -34,7 +34,7 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	mockkv "github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	metaMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -54,7 +54,7 @@ func MockBaseMaster(id frameModel.MasterID, masterImpl MasterImpl) *DefaultBaseM
 			MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 			MessageSender:         p2p.NewMockMessageSender(),
 			FrameMetaClient:       cli,
-			UserRawKVClient:       mockkv.NewMetaMock(),
+			BusinessClientConn:    metaMock.NewMockClientConn(),
 			ExecutorClientManager: client.NewClientManager(),
 			ServerMasterClient:    &client.MockServerMasterClient{},
 		}
