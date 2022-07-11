@@ -192,11 +192,9 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 
 // AdvanceResolvedTs advances the resolved
 func (s *schemaStorageImpl) AdvanceResolvedTs(ts uint64) {
-	if ts <= s.ResolvedTs() {
-		return
+	if ts > s.ResolvedTs() {
+		atomic.StoreUint64(&s.resolvedTs, ts)
 	}
-
-	atomic.StoreUint64(&s.resolvedTs, ts)
 }
 
 // ResolvedTs returns the resolved ts of the schema storage
