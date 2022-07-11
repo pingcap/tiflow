@@ -154,10 +154,14 @@ func newCluster(ctx context.Context, pd string) (*cluster, error) {
 		return nil, errors.Trace(err)
 	}
 
+	cdcEtcdCli, err := etcd.NewCDCEtcdClient(ctx, etcdCli, etcd.DefaultCDCClusterID)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	ret := &cluster{
 		ownerAddr:  "",
 		captures:   nil,
-		cdcEtcdCli: etcd.NewCDCEtcdClient(ctx, etcdCli),
+		cdcEtcdCli: cdcEtcdCli,
 	}
 
 	log.Info("new cluster initialized")

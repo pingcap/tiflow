@@ -48,7 +48,6 @@ function run() {
 	run_sql "CREATE table test.simple2(id int primary key, val int);"
 	run_sql "INSERT INTO test.simple1(id, val) VALUES (1, 1);"
 	run_sql "INSERT INTO test.simple1(id, val) VALUES (2, 2);"
-
 	# wait for above sql done in the up source
 	sleep 2
 
@@ -68,7 +67,7 @@ function run() {
 	# kill the cdc owner server
 	kill_cdc_pid $owner_pid
 	# check that the new owner is elected
-	ensure $MAX_RETRIES "$CDC_BINARY cli capture list --disable-version-check 2>&1 |grep $capture_id -A1 | grep '\"is-owner\": true'"
+	ensure $MAX_RETRIES "$CDC_BINARY cli capture list --server http://127.0.0.1:8301 --disable-version-check 2>&1 |grep $capture_id -A1 | grep '\"is-owner\": true'"
 	# restart the old owner capture
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 	ensure $MAX_RETRIES "$CDC_BINARY cli capture list --disable-version-check 2>&1 | grep '\"address\": \"127.0.0.1:8300\"'"
@@ -86,6 +85,7 @@ function run() {
 		"set_log_level"
 		"remove_changefeed"
 		"resign_owner"
+		# api v2
 		"get_tso"
 	)
 

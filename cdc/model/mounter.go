@@ -17,8 +17,20 @@ import (
 	"math"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
 )
+
+// RowChangedDatums is used to store the changed datums of a row.
+type RowChangedDatums struct {
+	RowDatums    []types.Datum
+	PreRowDatums []types.Datum
+}
+
+// IsEmpty returns true if the RowChangeDatums is empty.
+func (r RowChangedDatums) IsEmpty() bool {
+	return len(r.RowDatums) == 0 && len(r.PreRowDatums) == 0
+}
 
 // PolymorphicEvent describes an event can be in multiple states.
 type PolymorphicEvent struct {

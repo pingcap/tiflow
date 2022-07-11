@@ -42,10 +42,14 @@ function run() {
 	esac
 
 	uuid="custom-changefeed-name"
-	run_cdc_cli changefeed create --start-ts=$start_ts --sort-engine=memory --sink-uri="$SINK_URI" --tz="Asia/Shanghai" -c="$uuid"
+	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --tz="Asia/Shanghai" -c="$uuid"
 	if [ "$SINK_TYPE" == "kafka" ]; then
 		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
 	fi
+
+	# Make sure changefeed is created.
+	check_table_exists test.simple ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists test."\`simple-dash\`" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
 	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $uuid "normal" "null" ""
 
@@ -66,8 +70,6 @@ function run() {
 	# Update changefeed failed because changefeed is running
 	cat - >"$WORK_DIR/changefeed.toml" <<EOF
 case-sensitive = false
-[mounter]
-worker-num = 4
 EOF
 	set +e
 	update_result=$(cdc cli changefeed update --pd=$pd_addr --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid)
@@ -78,42 +80,22 @@ EOF
 
 	# Pause changefeed
 	run_cdc_cli changefeed --changefeed-id $uuid pause && sleep 3
-	jobtype=$(run_cdc_cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]' | head -1)
-	if [[ $jobtype != 1 ]]; then
-		echo "[$(date)] <<<<< unexpect admin job type! expect 1 got ${jobtype} >>>>>"
-		exit 1
-	fi
 	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $uuid "stopped" "null" ""
 
 	# Update changefeed
 	run_cdc_cli changefeed update --pd=$pd_addr --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid
-	changefeed_info=$(run_cdc_cli changefeed query --changefeed-id $uuid 2>&1)
-	if [[ ! $changefeed_info == *"\"case-sensitive\": false"* ]]; then
+	changefeed_info=$(curl -X GET "http://127.0.0.1:8300/api/v2/changefeeds/$uuid/meta_info" 2>&1)
+	if [[ ! $changefeed_info == *"\"case_sensitive\":false"* ]]; then
 		echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
 		exit 1
 	fi
-	if [[ ! $changefeed_info == *"\"worker-num\": 4"* ]]; then
+	if [[ ! $changefeed_info == *"\"engine\":\"unified\""* ]]; then
 		echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
-		exit 1
-	fi
-	if [[ ! $changefeed_info == *"\"sort-engine\": \"memory\""* ]]; then
-		echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
-		exit 1
-	fi
-
-	jobtype=$(run_cdc_cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]' | head -1)
-	if [[ $jobtype != 1 ]]; then
-		echo "[$(date)] <<<<< unexpect admin job type! expect 1 got ${jobtype} >>>>>"
 		exit 1
 	fi
 
 	# Resume changefeed
 	run_cdc_cli changefeed --changefeed-id $uuid resume && sleep 3
-	jobtype=$(run_cdc_cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]' | head -1)
-	if [[ $jobtype != 0 ]]; then
-		echo "[$(date)] <<<<< unexpect admin job type! expect 0 got ${jobtype} >>>>>"
-		exit 1
-	fi
 	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $uuid "normal" "null" ""
 
 	# Remove changefeed
@@ -139,7 +121,7 @@ EOF
 
 	# Smoke test unsafe commands
 	echo "y" | run_cdc_cli unsafe delete-service-gc-safepoint
-	run_cdc_cli unsafe reset --no-confirm
+	run_cdc_cli unsafe reset --no-confirm --pd=$pd_addr
 	REGION_ID=$(pd-ctl -u=$pd_addr region | jq '.regions[0].id')
 	TS=$(cdc cli tso query --pd=$pd_addr)
 	run_cdc_cli unsafe resolve-lock --region=$REGION_ID

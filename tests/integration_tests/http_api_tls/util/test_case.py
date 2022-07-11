@@ -10,8 +10,13 @@ RETRY_TIME = 10
 BASE_URL0 = "https://127.0.0.1:8300/api/v1"
 BASE_URL1 = "https://127.0.0.1:8301/api/v1"
 
-V2_BASE_URL0 = "https://127.0.0.1:8300/api/v2"
+BASE_URL0_V2 = "https://127.0.0.1:8300/api/v2"
+BASE_URL1_V2 = "https://127.0.0.1:8301/api/v2"
 
+TLS_PD_ADDR = "https://127.0.0.1:2579"
+SINK_URI="mysql://normal:123456@127.0.0.1:3306/"
+
+physicalShiftBits = 18
 # we should write some SQLs in the run.sh after call create_changefeed
 def create_changefeed(sink_uri):
     url = BASE_URL1+"/changefeeds"
@@ -300,13 +305,166 @@ def set_log_level():
 
     print("pass test: set log level")
 
+def verify_table():
+    url = BASE_URL0_V2+"/tso"
+    # we need to retry since owner resign before this func call
+    i = 0
+    while i < 10:
+        try:
+            data = json.dumps({})
+            headers = {"Content-Type": "application/json"}
+            resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY, timeout=5)
+            if resp.status_code == rq.codes.ok:
+              break
+            else:
+                 continue
+        except rq.exceptions.RequestException:
+            i += 1
+    assert resp.status_code == rq.codes.ok
+
+    ps = resp.json()["timestamp"]
+    ls = resp.json()["logic_time"]
+    tso = compose_tso(ps,ls)
+
+    url = BASE_URL0_V2 + "/verify_table"
+    data = json.dumps({
+    "pd_addrs": [TLS_PD_ADDR],
+    "ca_path":CA_PEM_PATH,
+    "cert_path":CLIENT_PEM_PATH,
+    "key_path":CLIENT_KEY_PEM_PATH,
+    "cert_allowed_cn":["client"],
+    "start_ts": tso,
+    "replica_config": {
+        "filter": {
+            "rules": ["test.verify*"]
+            }
+        }
+    })
+    headers = {"Content-Type": "application/json"}
+    resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    assert resp.status_code == rq.codes.ok
+    eligible_table_name = resp.json()["eligible_tables"][0]["table_name"]
+    ineligible_table_name = resp.json()["ineligible_tables"][0]["table_name"]
+    assert eligible_table_name == "verify_table_eligible"
+    assert ineligible_table_name == "verify_table_ineligible"
+
+    print("pass test: verify table")
+
+
 def get_tso():
     # test state: all
-    url = V2_BASE_URL0+"/tso"
-    resp = rq.get(url, cert=CERT, verify=VERIFY)
+    url = BASE_URL0_V2+"/tso"
+    data = json.dumps({})
+    headers = {"Content-Type": "application/json"}
+    resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.ok
 
     print("pass test: get tso")
+
+def create_changefeed_v2():
+    url = BASE_URL1_V2+"/changefeeds"
+    # create changefeed 1
+    data = {
+        "changefeed_id": "changefeed-test-v2-black-hole-1",
+        "sink_uri": "blackhole://",
+        "replica_config":{
+            "ignore_ineligible_table": True
+            },
+        "pd_addrs": [TLS_PD_ADDR],
+        "ca_path":CA_PEM_PATH,
+        "cert_path":CLIENT_PEM_PATH,
+        "key_path":CLIENT_KEY_PEM_PATH,
+        "cert_allowed_cn":["client"],
+    }
+    data = json.dumps(data)
+    headers = {"Content-Type": "application/json"}
+    resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    assert resp.status_code == rq.codes.created
+
+    # create changefeed 2
+    data = {
+        "changefeed_id": "changefeed-test-v2-black-hole-2",
+        "sink_uri": SINK_URI,
+        "replica_config":{
+            "ignore_ineligible_table": True,
+            "filter": {
+            "rules": ["test.verify*"]
+            }
+        },
+        "pd_addrs": [TLS_PD_ADDR],
+        "ca_path":CA_PEM_PATH,
+        "cert_path":CLIENT_PEM_PATH,
+        "key_path":CLIENT_KEY_PEM_PATH,
+        "cert_allowed_cn":["client"],
+    }
+    data = json.dumps(data)
+    headers = {"Content-Type": "application/json"}
+    resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    assert resp.status_code == rq.codes.created
+
+    # create changefeed fail because sink_uri is invalid
+    data = json.dumps({
+        "changefeed_id": "changefeed-test",
+        "sink_uri": "mysql://127.0.0.1:1111",
+        "replica_config":{
+            "ignore_ineligible_table": True
+            },
+        "pd_addrs": [TLS_PD_ADDR],
+        "ca_path":CA_PEM_PATH,
+        "cert_path":CLIENT_PEM_PATH,
+        "key_path":CLIENT_KEY_PEM_PATH,
+        "cert_allowed_cn":["client"],
+    })
+    headers = {"Content-Type": "application/json"}
+    resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    assert resp.status_code == rq.codes.bad_request
+
+    print("pass test: create changefeed v2")
+
+def unsafe_apis():
+    url = BASE_URL1_V2+"/unsafe/metadata"
+    resp = rq.get(url, cert=CERT, verify=VERIFY)
+    assert resp.status_code == rq.codes.ok
+    print("status code", resp.status_code)
+    print("pass test: show metadata")
+
+    # service_gc_safepoint 1
+    url = BASE_URL1_V2+"/unsafe/service_gc_safepoint"
+    data = {
+        "pd_addrs": [TLS_PD_ADDR],
+        "ca_path":CA_PEM_PATH,
+        "cert_path":CLIENT_PEM_PATH,
+        "key_path":CLIENT_KEY_PEM_PATH,
+        "cert_allowed_cn":["client"],
+    }
+    data = json.dumps(data)
+    headers = {"Content-Type": "application/json"}
+    resp = rq.delete(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    print("status code", resp.status_code)
+    assert resp.status_code == 204
+
+    data = json.dumps({})
+    headers = {"Content-Type": "application/json"}
+    resp = rq.delete(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    print("status code", resp.status_code)
+    assert resp.status_code == 204
+    print("pass test: delete service_gc_safepoint")
+
+    # create changefeed fail because sink_uri is invalid
+    data = json.dumps({})
+    url = BASE_URL1_V2+"/unsafe/resolve_lock"
+    headers = {"Content-Type": "application/json"}
+    resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    print("status code", resp.status_code)
+    assert resp.status_code != rq.codes.not_found
+    print("pass test: resolve lock")
+
+
+# util functions define belows
+
+# compose physical time and logical time into tso
+def compose_tso(ps, ls):
+    return (ps << physicalShiftBits) + ls
 
 # arg1: test case name
 # arg2: cetificates dir
@@ -337,7 +495,11 @@ if __name__ == "__main__":
         "set_log_level": set_log_level,
         "remove_changefeed": remove_changefeed,
         "resign_owner": resign_owner,
-        "get_tso": get_tso
+        # api v2
+        "get_tso": get_tso,
+        "verify_table": verify_table,
+        "create_changefeed_v2": create_changefeed_v2,
+        "unsafe_apis": unsafe_apis
     }
 
     func = FUNC_MAP[sys.argv[1]]

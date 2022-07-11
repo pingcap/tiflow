@@ -25,6 +25,7 @@ import (
 
 // unsafeResetOptions defines flags for the `cli unsafe reset` command.
 type unsafeResetOptions struct {
+	clusterID  string
 	etcdClient *etcd.CDCEtcdClient
 	pdClient   pd.Client
 }
@@ -40,7 +41,7 @@ func (o *unsafeResetOptions) complete(f factory.Factory) error {
 	if err != nil {
 		return err
 	}
-
+	etcdClient.ClusterID = o.clusterID
 	o.etcdClient = etcdClient
 
 	pdClient, err := f.PdClient()
@@ -51,6 +52,10 @@ func (o *unsafeResetOptions) complete(f factory.Factory) error {
 	o.pdClient = pdClient
 
 	return nil
+}
+
+func (o *unsafeResetOptions) addFlags(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&o.clusterID, "cluster-id", "default", "cdc cluster id")
 }
 
 // run runs the `cli unsafe reset` command.
@@ -72,7 +77,7 @@ func (o *unsafeResetOptions) run(cmd *cobra.Command) error {
 		return errors.Trace(err)
 	}
 
-	err = gc.RemoveServiceGCSafepoint(ctx, o.pdClient, gc.CDCServiceSafePointID)
+	err = gc.RemoveServiceGCSafepoint(ctx, o.pdClient, o.etcdClient.GetGCServiceID())
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -103,6 +108,7 @@ func newCmdReset(f factory.Factory, commonOptions *unsafeCommonOptions) *cobra.C
 			return o.run(cmd)
 		},
 	}
+	o.addFlags(command)
 
 	return command
 }

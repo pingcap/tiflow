@@ -69,20 +69,6 @@ func (_m *MockRedoLogWriter) EmitCheckpointTs(ctx context.Context, ts uint64) er
 	return r0
 }
 
-// EmitResolvedTs provides a mock function with given fields: ctx, ts
-func (_m *MockRedoLogWriter) EmitResolvedTs(ctx context.Context, ts uint64) error {
-	ret := _m.Called(ctx, ts)
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, uint64) error); ok {
-		r0 = rf(ctx, ts)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
 // FlushLog provides a mock function with given fields: ctx, rtsMap
 func (_m *MockRedoLogWriter) FlushLog(ctx context.Context, rtsMap map[int64]uint64) error {
 	ret := _m.Called(ctx, rtsMap)
