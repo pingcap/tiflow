@@ -29,8 +29,9 @@ import (
 
 // canalJSONBatchEncoder encodes Canal json messages in JSON format
 type canalJSONBatchEncoder struct {
-	builder    *canalEntryBuilder
-	messageBuf []canalJSONMessageInterface
+	builder     *canalEntryBuilder
+	messageBuf  []canalJSONMessageInterface
+	callbackBuf []func()
 	// When it is true, canal-json would generate TiDB extension information
 	// which, at the moment, only includes `tidbWaterMarkType` and `_tidb` fields.
 	enableTiDBExtension bool
@@ -41,6 +42,7 @@ func newCanalJSONBatchEncoder() EventBatchEncoder {
 	return &canalJSONBatchEncoder{
 		builder:             newCanalEntryBuilder(),
 		messageBuf:          make([]canalJSONMessageInterface, 0),
+		callbackBuf:         make([]func(), 0),
 		enableTiDBExtension: false,
 	}
 }
@@ -194,13 +196,16 @@ func (c *canalJSONBatchEncoder) AppendRowChangedEvent(
 	_ context.Context,
 	_ string,
 	e *model.RowChangedEvent,
-	_ func(),
+	callback func(),
 ) error {
 	message, err := c.newJSONMessageForDML(e)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	c.messageBuf = append(c.messageBuf, message)
+	if callback != nil {
+		c.callbackBuf = append(c.callbackBuf, callback)
+	}
 	return nil
 }
 
@@ -231,6 +236,12 @@ func (c *canalJSONBatchEncoder) Build() []*MQMessage {
 		ret[i] = m
 	}
 	c.messageBuf = make([]canalJSONMessageInterface, 0)
+	if len(c.callbackBuf) != 0 && len(c.callbackBuf) == len(ret) {
+		for i, c := range c.callbackBuf {
+			ret[i].Callback = c
+		}
+		c.callbackBuf = make([]func(), 0)
+	}
 	return ret
 }
 

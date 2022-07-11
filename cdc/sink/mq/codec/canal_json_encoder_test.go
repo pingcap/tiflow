@@ -299,3 +299,70 @@ func TestDDLEventWithExtensionValueMarshal(t *testing.T) {
 }`
 	require.Equal(t, expectedJSON, string(rawBytes))
 }
+
+func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
+	encoder := &canalJSONBatchEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: true}
+	require.NotNil(t, encoder)
+
+	count := 0
+
+	row := &model.RowChangedEvent{
+		CommitTs: 1,
+		Table:    &model.TableName{Schema: "a", Table: "b"},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+	}
+
+	tests := []struct {
+		row      *model.RowChangedEvent
+		callback func()
+	}{
+		{
+			row: row,
+			callback: func() {
+				count += 1
+			},
+		},
+		{
+			row: row,
+			callback: func() {
+				count += 2
+			},
+		},
+		{
+			row: row,
+			callback: func() {
+				count += 3
+			},
+		},
+		{
+			row: row,
+			callback: func() {
+				count += 4
+			},
+		},
+		{
+			row: row,
+			callback: func() {
+				count += 5
+			},
+		},
+	}
+
+	// Empty build makes sure that the callback build logic not broken.
+	msgs := encoder.Build()
+	require.Len(t, msgs, 0, "no message should be built and no panic")
+
+	// Append the events.
+	for _, test := range tests {
+		err := encoder.AppendRowChangedEvent(context.Background(), "", test.row, test.callback)
+		require.Nil(t, err)
+	}
+	require.Equal(t, 0, count, "nothing should be called")
+
+	msgs = encoder.Build()
+	require.Len(t, msgs, 5, "expected 5 messages")
+	for _, msg := range msgs {
+		msg.Callback()
+	}
+	require.Equal(t, 15, count, "expected all callbacks to be called")
+}
