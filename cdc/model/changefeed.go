@@ -59,6 +59,14 @@ func ChangeFeedID4Test(namespace, id string) ChangeFeedID {
 	}
 }
 
+// NewChangefeedID return a new changefeed ID
+func NewChangefeedID(namespace, id string) ChangeFeedID {
+	return ChangeFeedID{
+		Namespace: namespace,
+		ID:        id,
+	}
+}
+
 // SortEngine is the sorter engine
 type SortEngine = string
 
