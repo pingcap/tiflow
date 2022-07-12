@@ -25,7 +25,7 @@ func NewCmdVersion() *cobra.Command {
 		Short: "Output version information",
 		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			cmd.Println(version.GetRawInfo())
+			cmd.Print(version.GetRawInfo())
 		},
 	}
 }

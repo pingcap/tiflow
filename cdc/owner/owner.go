@@ -127,7 +127,8 @@ func NewOwner(upstreamManager *upstream.Manager) Owner {
 
 // NewOwner4Test creates a new Owner for test
 func NewOwner4Test(
-	newDDLPuller func(ctx cdcContext.Context, up *upstream.Upstream, startTs uint64) (DDLPuller, error),
+	newDDLPuller func(ctx cdcContext.Context,
+		up *upstream.Upstream, startTs uint64) (DDLPuller, error),
 	newSink func() DDLSink,
 	pdClient pd.Client,
 ) Owner {
@@ -154,9 +155,6 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 		o.Bootstrap(state)
 		o.bootstrapped = true
 		return state, nil
-	}
-	if err := o.upstreamManager.Tick(stdCtx); err != nil {
-		return state, errors.Trace(err)
 	}
 
 	o.captures = state.Captures
@@ -196,7 +194,11 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 		})
 		cfReactor, exist := o.changefeeds[changefeedID]
 		if !exist {
-			up := o.upstreamManager.Get(changefeedState.Info.UpstreamID)
+			up, ok := o.upstreamManager.Get(changefeedState.Info.UpstreamID)
+			if !ok {
+				upstreamInfo := state.Upstreams[changefeedState.Info.UpstreamID]
+				up = o.upstreamManager.AddUpstream(upstreamInfo.ID, upstreamInfo)
+			}
 			cfReactor = o.newChangefeed(changefeedID, up)
 			o.changefeeds[changefeedID] = cfReactor
 		}
@@ -227,7 +229,10 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 		}
 		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 	}
-
+	// close upstream
+	if err := o.upstreamManager.Tick(stdCtx, state); err != nil {
+		return state, errors.Trace(err)
+	}
 	return state, nil
 }
 
@@ -601,9 +606,20 @@ func (o *ownerImpl) cleanupOwnerJob() {
 func (o *ownerImpl) updateGCSafepoint(
 	ctx context.Context, state *orchestrator.GlobalReactorState,
 ) error {
-	minChekpoinTsMap, forceUpdateMap := o.calculateGCSagepoint(state)
+	minChekpoinTsMap, forceUpdateMap := o.calculateGCSafepoint(state)
+
 	for upstreamID, minCheckpointTs := range minChekpoinTsMap {
-		up := o.upstreamManager.Get(upstreamID)
+		up, ok := o.upstreamManager.Get(upstreamID)
+		if !ok {
+			upstreamInfo := state.Upstreams[upstreamID]
+			up = o.upstreamManager.AddUpstream(upstreamInfo.ID, upstreamInfo)
+		}
+		if !up.IsNormal() {
+			log.Warn("upstream is not ready, skip",
+				zap.Uint64("id", up.ID),
+				zap.Strings("pd", up.PdEndpoints))
+			continue
+		}
 
 		// When the changefeed starts up, CDC will do a snapshot read at
 		// (checkpointTs - 1) from TiKV, so (checkpointTs - 1) should be an upper
@@ -623,8 +639,8 @@ func (o *ownerImpl) updateGCSafepoint(
 	return nil
 }
 
-// calculateGCSagepoint calculates GCSafepoint for different upstream.
-func (o *ownerImpl) calculateGCSagepoint(state *orchestrator.GlobalReactorState) (
+// calculateGCSafepoint calculates GCSafepoint for different upstream.
+func (o *ownerImpl) calculateGCSafepoint(state *orchestrator.GlobalReactorState) (
 	map[uint64]uint64, map[uint64]interface{},
 ) {
 	minCheckpointTsMap := make(map[uint64]uint64)

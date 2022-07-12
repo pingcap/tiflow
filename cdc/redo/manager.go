@@ -59,7 +59,7 @@ const (
 	consistentStorageBlackhole consistentStorage = "blackhole"
 )
 
-// IsValidConsistentLevel checks whether a give consistent level is valid
+// IsValidConsistentLevel checks whether a given consistent level is valid
 func IsValidConsistentLevel(level string) bool {
 	switch ConsistentLevelType(level) {
 	case ConsistentLevelNone, ConsistentLevelEventual:
@@ -100,7 +100,8 @@ type LogManager interface {
 	RemoveTable(tableID model.TableID)
 	GetResolvedTs(tableID model.TableID) model.Ts
 	GetMinResolvedTs() uint64
-	EmitRowChangedEvents(ctx context.Context, tableID model.TableID, rows ...*model.RowChangedEvent) error
+	EmitRowChangedEvents(ctx context.Context, tableID model.TableID,
+		rows ...*model.RowChangedEvent) error
 	UpdateResolvedTs(ctx context.Context, tableID model.TableID, resolvedTs uint64) error
 	UpdateCheckpointTs(ctx context.Context, checkpointTs uint64) error
 

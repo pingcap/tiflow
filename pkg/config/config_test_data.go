@@ -135,7 +135,8 @@ const (
       "max-task-concurrency": 10,
       "check-balance-interval": 60000000000
     }
-  }
+  },
+  "cluster-id": "default"
 }`
 
 	testCfgTestReplicaConfigMarshal1 = `{
