@@ -17,9 +17,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pingcap/tiflow/cdc/model"
-
 	"github.com/golang/protobuf/proto"
+	"github.com/pingcap/tiflow/cdc/model"
 	canal "github.com/pingcap/tiflow/proto/canal"
 	"github.com/stretchr/testify/require"
 )
