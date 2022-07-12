@@ -6,7 +6,7 @@ CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 DOCKER_COMPOSE_DIR=$(cd $CUR_DIR/../../deployments/docker-compose/ && pwd)
 export PATH=$PATH:$CUR_DIR/../utils
 
-OUT_DIR=/tmp/tiflow_dfe_test
+OUT_DIR=/tmp/tiflow_engine_test
 mkdir -p $OUT_DIR || true
 
 if [ "${1-}" = 'debug' ]; then
@@ -17,14 +17,14 @@ if [ "${1-}" = 'debug' ]; then
 		cnf="$DOCKER_COMPOSE_DIR/1m1e.yaml"
 	fi
 
-	trap "stop_dfe_cluster $cnf" EXIT
+	trap "stop_engine_cluster $cnf" EXIT
 	WORK_DIR=$OUT_DIR/debug
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
 	PATH="$PATH:$CUR_DIR/../utils" \
 		TEST_NAME="debug" \
 		DOCKER_COMPOSE_DIR=$DOCKER_COMPOSE_DIR \
-		start_dfe_cluster $cnf
+		start_engine_cluster $cnf
 
 	echo 'You may now debug from another terminal. Press [ENTER] to exit.'
 	read line
@@ -34,7 +34,7 @@ fi
 run_case() {
 	# cleanup test binaries and data, preserve logs, if we debug one case,
 	# these files will be preserved since no more case will be run.
-	find /tmp/tiflow_dfe_test/*/* -type d | xargs rm -rf || true
+	find /tmp/tiflow_engine_test/*/* -type d | xargs rm -rf || true
 	local case=$1
 	local script=$2
 	echo "=================>> Running test $script... <<================="

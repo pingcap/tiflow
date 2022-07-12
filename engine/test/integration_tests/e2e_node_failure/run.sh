@@ -1,5 +1,4 @@
 #!/bin/bash
-exit
 set -eu
 
 CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -9,11 +8,11 @@ CONFIG="$DOCKER_COMPOSE_DIR/3m3e.yaml"
 function run() {
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
-	start_dfe_cluster $CONFIG
+	start_engine_cluster $CONFIG
     go test -count=1 -v -run ^TestNodeFailure$ github.com/pingcap/tiflow/engine/test/e2e
 }
 
-trap "stop_dfe_cluster $CONFIG" EXIT
+trap "stop_engine_cluster $CONFIG" EXIT
 run $*
 # TODO: handle log properly
 # check_logs $WORK_DIR

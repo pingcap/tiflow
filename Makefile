@@ -503,7 +503,7 @@ tiflow-generate-mock: tools/bin/mockgen
 
 engine_build: 
 	@which docker
-	./engine/test/utils/run_dfe.sh build
+	./engine/test/utils/run_engine.sh build
 
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))

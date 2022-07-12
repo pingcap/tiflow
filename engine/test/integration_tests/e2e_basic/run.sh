@@ -9,11 +9,11 @@ CONFIG="$DOCKER_COMPOSE_DIR/3m3e.yaml $DOCKER_COMPOSE_DIR/demo.yaml"
 function run() {
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
-	start_dfe_cluster $CONFIG
+	start_engine_cluster $CONFIG
     go test -count=1 -v -run ^TestSubmitTest$ github.com/pingcap/tiflow/engine/test/e2e
 }
 
-trap "stop_dfe_cluster $CONFIG" EXIT
+trap "stop_engine_cluster $CONFIG" EXIT
 run $*
 # TODO: handle log properly
 # check_logs $WORK_DIR

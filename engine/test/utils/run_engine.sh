@@ -27,7 +27,7 @@ case $1 in
 	generate_flag $*
 	docker compose $flag up -d --force-recreate
 
-	echo -e "\n\n[$(date)] <<<<<< deploy dfe cluster success! >>>>>>"
+	echo -e "\n\n[$(date)] <<<<<< deploy engine cluster success! >>>>>>"
 	docker container ls
 	;;
 "stop")
@@ -35,7 +35,7 @@ case $1 in
 	generate_flag $*
 	docker compose $flag down
 
-	echo -e "\n\n[$(date)] <<<<<< stop dfe cluster success! >>>>>>"
+	echo -e "\n\n[$(date)] <<<<<< stop engine cluster success! >>>>>>"
 	docker container ls
 	;;
 *)

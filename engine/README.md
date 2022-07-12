@@ -87,17 +87,17 @@ cd ./deployments/docker-compose
 
 ### Build
 
-To build this repo, you can simply run `make engine_build` or `../run-dfe.sh build` in working directory.
+To build this repo, you can simply run `make engine_build` in tiflow directory or `../run-engine.sh build` in working directory.
 
-If you have build the binary on your local Linux, you can try `../run-dfe.sh build-local`.
+If you have build the binary on your local Linux, you can try `../run-engine.sh build-local`.
 
 ### Deploy
 
-There are several configure files to use. The file name suggests the number of running server-master and executor nodes. For example, `1m1e.yaml` means this file contains one server-master and one executor. Use `../run-dfe.sh deploy 1m1e.yaml` to deploy cluster.
+There are several configure files to use. The file name suggests the number of running server-master and executor nodes. For example, `1m1e.yaml` means this file contains one server-master and one executor. Use `../run-engine.sh deploy 1m1e.yaml` to deploy cluster.
 
 ### Destroy
 
-Use `../run-dfe.sh stop 1m1e.yaml` to destroy the cluster.
+Use `../run-engine.sh stop 1m1e.yaml` to destroy the cluster.
 
 ### Cleanup
 
@@ -107,7 +107,7 @@ sudo rm -rf /tmp/df/master
 
 ```bash
 sudo rm -rf /tmp/df/master
-../run-dfe.sh deploy ./3m3e.yaml ./demo.yaml
+../run-engine.sh deploy ./3m3e.yaml ./demo.yaml
 ```
 
 ## Contribute
