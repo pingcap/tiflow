@@ -125,13 +125,6 @@ type changefeed struct {
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error)
 }
 
-//// Add "_ddl_puller" to make it different from table pullers.
-//model.ChangeFeedID{
-//	Namespace: ctx.ChangefeedVars().ID.Namespace,
-//	// Add "_ddl_puller" to make it different from table pullers.
-//	ID: ctx.ChangefeedVars().ID.ID + "_ddl_puller",
-//},
-
 func newChangefeed(id model.ChangeFeedID, up *upstream.Upstream) *changefeed {
 	c := &changefeed{
 		id: id,
@@ -154,11 +147,11 @@ func newChangefeed(id model.ChangeFeedID, up *upstream.Upstream) *changefeed {
 func newChangefeed4Test(
 	id model.ChangeFeedID, up *upstream.Upstream,
 	newDDLPuller func(ctx context.Context,
-		replicaConfig *config.ReplicaConfig,
-		up *upstream.Upstream,
-		startTs uint64,
-		changefeed model.ChangeFeedID,
-	) (puller.DDLPuller, error),
+	replicaConfig *config.ReplicaConfig,
+	up *upstream.Upstream,
+	startTs uint64,
+	changefeed model.ChangeFeedID,
+) (puller.DDLPuller, error),
 	newSink func() DDLSink,
 ) *changefeed {
 	c := newChangefeed(id, up)
