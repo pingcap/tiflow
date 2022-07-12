@@ -286,6 +286,7 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 	c.streamer, err = c.streamerProducer.GenerateStreamer(location)
 	if err == nil {
 		c.streamModifier.reset(location)
+		c.lastEvent = nil
 	}
 	return err
 }
