@@ -59,9 +59,9 @@ func TestNodeFailure(t *testing.T) {
 	// TODO: make the following variables configurable, these variables keep the
 	// same in sample/3m3e.yaml
 	var (
-		masterAddrs              = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
-		userMetaAddrs            = []string{"127.0.0.1:12479"}
-		userMetaAddrsInContainer = []string{"user-etcd-standalone:2379"}
+		masterAddrs                  = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
+		businessMetaAddrs            = []string{"127.0.0.1:12479"}
+		businessMetaAddrsInContainer = []string{"business-etcd-standalone:2379"}
 	)
 
 	seed := time.Now().Unix()
@@ -75,21 +75,26 @@ func TestNodeFailure(t *testing.T) {
 		// use a large enough target tick to ensure the fake job long running
 		TargetTick:      10000000,
 		EtcdWatchEnable: true,
-		EtcdEndpoints:   userMetaAddrsInContainer,
+		EtcdEndpoints:   businessMetaAddrsInContainer,
 		EtcdWatchPrefix: "/fake-job/test/",
 	}
 	cfgBytes, err := json.Marshal(cfg)
 	require.NoError(t, err)
 
 	fakeJobCfg := &e2e.FakeJobConfig{
-		EtcdEndpoints: userMetaAddrs, // reuse user meta KV endpoints
+		EtcdEndpoints: businessMetaAddrs, // reuse business meta KV endpoints
 		WorkerCount:   cfg.WorkerCount,
 		KeyPrefix:     cfg.EtcdWatchPrefix,
 	}
-	cli, err := e2e.NewUTCli(ctx, masterAddrs, userMetaAddrs, tenant.DefaultUserProjectInfo, fakeJobCfg)
+
+	cli, err := e2e.NewUTCli(ctx, masterAddrs, businessMetaAddrs, tenant.DefaultUserProjectInfo,
+		fakeJobCfg)
 	require.NoError(t, err)
 
 	jobID, err := cli.CreateJob(ctx, engineModel.JobTypeFakeJob, cfgBytes)
+	require.NoError(t, err)
+
+	err = cli.InitializeMetaClient(jobID)
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
