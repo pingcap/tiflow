@@ -503,10 +503,14 @@ tiflow-generate-mock: tools/bin/mockgen
 
 engine_build: 
 	@which docker
-	cd engine && ./test/utils/run_dfe.sh build
+	./engine/test/utils/run_dfe.sh build
 
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))
+
+engine_integration_test: 
+	@which docker
+	./engine/test/integration_tests/run.sh "$(CASE)" "$(START_AT)"
 
 tiflow-swagger-spec: tools/bin/swag
 	tools/bin/swag init --exclude cdc,dm  --parseVendor -generalInfo engine/servermaster/openapi.go --output engine/docs/swagger

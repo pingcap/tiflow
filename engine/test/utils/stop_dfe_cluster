@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# cdc server is ran by binary cdc.test, kill cdc server first to avoid too much
+# noise in cdc logs.
+
+echo "stop dfe cluster..."
+
+run_dfe.sh stop $*
