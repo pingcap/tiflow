@@ -1157,9 +1157,9 @@ workaround = "Please check the `dir` config in task configuration file and you c
 tags = ["internal", "high"]
 
 [error.DM-config-20060]
-message = "safe-mode-resume-duration '%s' parsed failed: %v"
+message = "safe-mode-duration '%s' parsed failed: %v"
 description = ""
-workaround = "Please check the `safe-mode-resume-duration` is correct"
+workaround = "Please check the `safe-mode-duration` is correct."
 tags = ["internal", "medium"]
 
 [error.DM-binlog-op-22001]

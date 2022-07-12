@@ -262,9 +262,8 @@ type syncerConfig struct {
 	EnableGTID  bool `toml:"enable-gtid" json:"enable-gtid"`
 	AutoFixGTID bool `toml:"auto-fix-gtid" json:"auto-fix-gtid"`
 
-	SafeMode               bool   `toml:"safe-mode" json:"safe-mode"`
-	SafeModeResumeDuration string `toml:"safe-mode-resume-duration" json:"safe-mode-resume-duration"`
-	ConfigFile             string `json:"config-file"`
+	SafeMode   bool   `toml:"safe-mode" json:"safe-mode"`
+	ConfigFile string `json:"config-file"`
 
 	// NOTE: These four configs are all deprecated.
 	// We leave this items as comments to remind others there WERE old config items.
@@ -333,11 +332,10 @@ func (oc *syncerConfig) convertToNewFormat() (*config.SubTaskConfig, error) {
 		Flavor:     oc.Flavor,
 
 		SyncerConfig: config.SyncerConfig{
-			WorkerCount:            oc.WorkerCount,
-			Batch:                  oc.Batch,
-			EnableGTID:             oc.EnableGTID,
-			SafeMode:               oc.SafeMode,
-			SafeModeResumeDuration: oc.SafeModeResumeDuration,
+			WorkerCount: oc.WorkerCount,
+			Batch:       oc.Batch,
+			EnableGTID:  oc.EnableGTID,
+			SafeMode:    oc.SafeMode,
 		},
 
 		BAList: &filter.Rules{

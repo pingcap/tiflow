@@ -705,7 +705,7 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 				AutoFixGTID:             true,
 				EnableGTID:              true,
 				SafeMode:                true,
-				SafeModeResumeDuration:  "",
+				SafeModeDuration:        "",
 			},
 			ValidatorCfg:     validatorCfg,
 			CleanDumpFile:    true,

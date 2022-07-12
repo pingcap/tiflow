@@ -258,7 +258,7 @@ const (
 	codeConfigStartTimeTooLate
 	codeConfigLoaderDirInvalid
 	codeConfigLoaderS3NotSupport
-	codeConfigInvalidSafeModeResumeDuration
+	codeConfigInvalidSafeModeDuration
 )
 
 // Binlog operation error code list.
@@ -958,7 +958,7 @@ var (
 	ErrConfigStartTimeTooLate              = New(codeConfigStartTimeTooLate, ClassConfig, ScopeInternal, LevelHigh, "start-time %s is too late, no binlog location matches it", "Please check the `--start-time` is expected or try again later.")
 	ErrConfigLoaderDirInvalid              = New(codeConfigLoaderDirInvalid, ClassConfig, ScopeInternal, LevelHigh, "loader's dir %s is invalid", "Please check the `dir` config in task configuration file.")
 	ErrConfigLoaderS3NotSupport            = New(codeConfigLoaderS3NotSupport, ClassConfig, ScopeInternal, LevelHigh, "loader's dir %s is s3 dir, but s3 is not supported", "Please check the `dir` config in task configuration file and you can use `Lightning` by set config `import-mode` be `sql` which supports s3 instead.")
-	ErrConfigInvalidSafeModeResumeDuration = New(codeConfigInvalidSafeModeResumeDuration, ClassConfig, ScopeInternal, LevelMedium, "safe-mode-resume-duration '%s' parsed failed: %v", "Please check the `safe-mode-resume-duration` is correct")
+	ErrConfigInvalidSafeModeDuration       = New(codeConfigInvalidSafeModeDuration, ClassConfig, ScopeInternal, LevelMedium, "safe-mode-duration '%s' parsed failed: %v", "Please check the `safe-mode-duration` is correct.")
 
 	// Binlog operation error.
 	ErrBinlogExtractPosition = New(codeBinlogExtractPosition, ClassBinlogOp, ScopeInternal, LevelHigh, "", "")

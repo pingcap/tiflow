@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
@@ -449,6 +450,13 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 	}
 	if c.SyncerConfig.CheckpointFlushInterval == 0 {
 		c.SyncerConfig.CheckpointFlushInterval = defaultCheckpointFlushInterval
+	}
+	if c.SyncerConfig.SafeModeDuration == "" {
+		c.SyncerConfig.SafeModeDuration = defaultSafeModeDuration
+	}
+	_, err := time.ParseDuration(c.SyncerConfig.SafeModeDuration)
+	if err != nil {
+		return terror.ErrConfigInvalidSafeModeDuration.Generate(c.SyncerConfig.SafeModeDuration, err)
 	}
 
 	c.From.AdjustWithTimeZone(c.Timezone)

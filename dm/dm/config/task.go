@@ -98,8 +98,9 @@ var (
 	// SyncerConfig.
 	defaultWorkerCount             = 16
 	defaultBatch                   = 100
-	defaultQueueSize               = 1024 // do not give too large default value to avoid OOM
-	defaultCheckpointFlushInterval = 30   // in seconds
+	defaultQueueSize               = 1024  // do not give too large default value to avoid OOM
+	defaultCheckpointFlushInterval = 30    // in seconds
+	defaultSafeModeDuration        = "60s" // defaultCheckpointFlushInterval * 2
 
 	// TargetDBConfig.
 	defaultSessionCfg = []struct {
@@ -324,9 +325,9 @@ type SyncerConfig struct {
 	AutoFixGTID bool `yaml:"auto-fix-gtid" toml:"auto-fix-gtid" json:"auto-fix-gtid"`
 	EnableGTID  bool `yaml:"enable-gtid" toml:"enable-gtid" json:"enable-gtid"`
 	// deprecated
-	DisableCausality       bool   `yaml:"disable-detect" toml:"disable-detect" json:"disable-detect"`
-	SafeMode               bool   `yaml:"safe-mode" toml:"safe-mode" json:"safe-mode"`
-	SafeModeResumeDuration string `yaml:"safe-mode-resume-duration" toml:"safe-mode-resume-duration" json:"safe-mode-resume-duration"`
+	DisableCausality bool   `yaml:"disable-detect" toml:"disable-detect" json:"disable-detect"`
+	SafeMode         bool   `yaml:"safe-mode" toml:"safe-mode" json:"safe-mode"`
+	SafeModeDuration string `yaml:"safe-mode-duration" toml:"safe-mode-duration" json:"safe-mode-duration"`
 	// deprecated, use `ansi-quotes` in top level config instead
 	EnableANSIQuotes bool `yaml:"enable-ansi-quotes" toml:"enable-ansi-quotes" json:"enable-ansi-quotes"`
 }
@@ -334,9 +335,11 @@ type SyncerConfig struct {
 // DefaultSyncerConfig return default syncer config for task.
 func DefaultSyncerConfig() SyncerConfig {
 	return SyncerConfig{
-		WorkerCount: defaultWorkerCount,
-		Batch:       defaultBatch,
-		QueueSize:   defaultQueueSize,
+		WorkerCount:             defaultWorkerCount,
+		Batch:                   defaultBatch,
+		QueueSize:               defaultQueueSize,
+		CheckpointFlushInterval: defaultCheckpointFlushInterval,
+		SafeModeDuration:        defaultSafeModeDuration,
 	}
 }
 
@@ -788,14 +791,21 @@ func (c *TaskConfig) adjust() error {
 			defaultCfg := DefaultSyncerConfig()
 			inst.Syncer = &defaultCfg
 		}
+		if inst.Syncer.QueueSize == 0 {
+			inst.Syncer.QueueSize = defaultQueueSize
+		}
+		if inst.Syncer.CheckpointFlushInterval == 0 {
+			inst.Syncer.CheckpointFlushInterval = defaultCheckpointFlushInterval
+		}
+		if inst.Syncer.SafeModeDuration == "" {
+			inst.Syncer.SafeModeDuration = defaultSafeModeDuration
+		}
+		_, err := time.ParseDuration(inst.Syncer.SafeModeDuration)
+		if err != nil {
+			return terror.ErrConfigInvalidSafeModeDuration.Generate(inst.Syncer.SafeModeDuration, err)
+		}
 		if inst.SyncerThread != 0 {
 			inst.Syncer.WorkerCount = inst.SyncerThread
-		}
-		if inst.Syncer.SafeModeResumeDuration != "" {
-			duration, err := time.ParseDuration(inst.Syncer.SafeModeResumeDuration)
-			if err != nil || duration < -1 {
-				return terror.ErrConfigInvalidSafeModeResumeDuration.Generate(inst.Syncer.SafeModeResumeDuration, err)
-			}
 		}
 
 		inst.ContinuousValidator = defaultValidatorConfig()
@@ -1089,7 +1099,6 @@ type SyncerConfigForDowngrade struct {
 	EnableGTID              bool   `yaml:"enable-gtid"`
 	DisableCausality        bool   `yaml:"disable-detect"`
 	SafeMode                bool   `yaml:"safe-mode"`
-	SafeModeResumeDuration  string `yaml:"safe-mode-resume-duration"`
 	EnableANSIQuotes        bool   `yaml:"enable-ansi-quotes"`
 
 	Compact      bool `yaml:"compact,omitempty"`
@@ -1110,7 +1119,6 @@ func NewSyncerConfigsForDowngrade(syncerConfigs map[string]*SyncerConfig) map[st
 			EnableGTID:              syncerConfig.EnableGTID,
 			DisableCausality:        syncerConfig.DisableCausality,
 			SafeMode:                syncerConfig.SafeMode,
-			SafeModeResumeDuration:  syncerConfig.SafeModeResumeDuration,
 			EnableANSIQuotes:        syncerConfig.EnableANSIQuotes,
 			Compact:                 syncerConfig.Compact,
 			MultipleRows:            syncerConfig.MultipleRows,

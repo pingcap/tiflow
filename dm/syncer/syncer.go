@@ -3749,7 +3749,6 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 					unit.NewProcessError(err),
 				},
 			}
-			return
 		}
 	}()
 	if s.isClosed() {
@@ -3765,12 +3764,6 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 		return
 	}
 
-	if s.cfg.SafeModeResumeDuration != "" {
-		if s.cliArgs == nil {
-			s.cliArgs = new(config.TaskCliArgs)
-		}
-		s.cliArgs.SafeModeDuration = s.cfg.SafeModeResumeDuration
-	}
 	s.Process(ctx, pr)
 }
 
