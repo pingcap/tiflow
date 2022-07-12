@@ -143,8 +143,10 @@ type StreamerController struct {
 	streamerProducer StreamerProducer
 	*streamModifier
 
-	lastEvent      *replication.BinlogEvent
-	currBinlogFile string // TODO: should be replaced by location recorder
+	// lastEventFromUpstream is the last event from upstream, and not sent to caller
+	// yet. It should be set to nil after sent to caller.
+	lastEventFromUpstream *replication.BinlogEvent
+	currBinlogFile        string // TODO: should be replaced by location recorder
 
 	// meetError means meeting error when get binlog event
 	// if binlogType is local and meetError is true, then need to create remote binlog stream
@@ -286,7 +288,7 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 	c.streamer, err = c.streamerProducer.GenerateStreamer(location)
 	if err == nil {
 		c.streamModifier.reset(location)
-		c.lastEvent = nil
+		c.lastEventFromUpstream = nil
 	}
 	return err
 }
@@ -302,10 +304,12 @@ var mockRestarted = false
 //   - DDL1, start position 900 LogPos 900, suffix 1
 //   - DDL2, start position 900 LogPos 900, suffix 2
 //   - Insert1, start position 900 LogPos 1000, suffix 0
+//   The DDLs are placed before DML because user may want to use Inject to change
+//   table structure for DML.
 //   when DDL need shard resync, for example, after DDL2's shard group finished,
 //   caller should use (LogPos 900, suffix 2) to reset streamer, then the next
-//   event from upstream binlog is Insert1, and next event from streamModifier is
-//   unknown in this context.
+//   event from upstream binlog is Insert1 since upstream will ignore the suffix,
+//   and next event from streamModifier is unknown in this context.
 // - Replace
 //   if we replace events [DDL1, DDL2] at (start) position 900, where start position
 //   900 has DDL0 event whose LogPos (end position) is 1000, we should return to
@@ -357,13 +361,13 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (
 	streamer := c.streamer
 	c.RUnlock()
 
-FORLOOP:
+LOOP:
 	for frontOp := c.streamModifier.front(); frontOp != nil; frontOp = c.streamModifier.front() {
 		op = pb.ErrorOp_InvalidErrorOp
 		suffix = 0
 
-		if c.lastEvent == nil {
-			c.lastEvent, err = streamer.GetEvent(tctx.Context())
+		if c.lastEventFromUpstream == nil {
+			c.lastEventFromUpstream, err = streamer.GetEvent(tctx.Context())
 			failpoint.Inject("GetEventError", func() {
 				err = errors.New("go-mysql returned an error")
 			})
@@ -380,39 +384,40 @@ FORLOOP:
 		}
 
 		// fake rotate. binlog recorder should handle it
-		if c.lastEvent.Header.LogPos == 0 {
-			event = c.lastEvent
-			c.lastEvent = nil
+		if c.lastEventFromUpstream.Header.LogPos == 0 {
+			event = c.lastEventFromUpstream
+			c.lastEventFromUpstream = nil
 			return
 		}
 
 		startPos := mysql.Position{
 			Name: c.currBinlogFile,
-			Pos:  c.lastEvent.Header.LogPos - c.lastEvent.Header.EventSize,
+			Pos:  c.lastEventFromUpstream.Header.LogPos - c.lastEventFromUpstream.Header.EventSize,
 		}
 		cmp := binlog.ComparePosition(startPos, frontOp.pos)
-		tctx.L().Debug("lance test",
-			zap.Stringer("startPos", startPos),
-			zap.Stringer("frontOp", frontOp.pos))
 		switch cmp {
+		// when upstream event is earlier than any injected op.
 		case -1:
-			event = c.lastEvent
-			c.lastEvent = nil
-			break FORLOOP
+			event = c.lastEventFromUpstream
+			c.lastEventFromUpstream = nil
+			break LOOP
+		// when upstream event is at the same location as injected op.
 		case 0:
 			// TODO: check it's DDL
 			switch frontOp.op {
 			case pb.ErrorOp_Skip:
 				// skipped event and op should be sent to caller, to let schema
 				// tracker and checkpoint work
-				event = c.lastEvent
-				c.lastEvent = nil
+				event = c.lastEventFromUpstream
+				c.lastEventFromUpstream = nil
 				c.streamModifier.next()
 				op = pb.ErrorOp_Skip
-				break FORLOOP
+				break LOOP
 			case pb.ErrorOp_Replace:
+				// this op has been totally consumed, move to next op and also delete
+				// lastEventFromUpstream because it's Replace.
 				if c.streamModifier.nextEventInOp == len(frontOp.events) {
-					c.lastEvent = nil
+					c.lastEventFromUpstream = nil
 					c.streamModifier.next()
 					continue
 				}
@@ -420,9 +425,12 @@ FORLOOP:
 				event = frontOp.events[c.streamModifier.nextEventInOp]
 				c.streamModifier.nextEventInOp++
 
+				// for last event in Replace, we change the LogPos and EventSize
+				// to imitate the real event. otherwise, we use the LogPos from
+				// startPosition, zero EventSize and increase suffix.
 				if c.streamModifier.nextEventInOp == len(frontOp.events) {
-					event.Header.LogPos = c.lastEvent.Header.LogPos
-					event.Header.EventSize = c.lastEvent.Header.EventSize
+					event.Header.LogPos = c.lastEventFromUpstream.Header.LogPos
+					event.Header.EventSize = c.lastEventFromUpstream.Header.EventSize
 					// TODO: for last event we should forward GTID set? let caller
 					// do it unless we merge location recorder
 					suffix = 0
@@ -433,25 +441,30 @@ FORLOOP:
 				op = pb.ErrorOp_Replace
 				// TODO: currently we let caller to modify Suffix, after location recorder
 				// binlog streamer itself can maintain it
-				break FORLOOP
+				break LOOP
 			case pb.ErrorOp_Inject:
+				// this op has been totally consumed, move to next op and return
+				// original upstream event
 				if c.streamModifier.nextEventInOp == len(frontOp.events) {
 					c.streamModifier.next()
-					event = c.lastEvent
-					c.lastEvent = nil
-					break FORLOOP
+					event = c.lastEventFromUpstream
+					c.lastEventFromUpstream = nil
+					break LOOP
 				}
+
 				event = frontOp.events[c.streamModifier.nextEventInOp]
 				c.streamModifier.nextEventInOp++
 
 				event.Header.LogPos = startPos.Pos
 				suffix = c.streamModifier.nextEventInOp
-				// inject and replace seems same to caller to maintain Suffix, maybe unify them?
 				op = pb.ErrorOp_Inject
-				break FORLOOP
+				break LOOP
 			default:
 				c.logger.DPanic("invalid error handle op", zap.Stringer("op", frontOp.op))
 			}
+		// when upstream event is later than any injected op. Apart from Inject,
+		// This may happen when user use handle-error but forget to specify source,
+		// so all workers receive the handle-error command.
 		case 1:
 			switch frontOp.op {
 			case pb.ErrorOp_Inject:
@@ -462,7 +475,7 @@ FORLOOP:
 				event = frontOp.events[c.streamModifier.nextEventInOp]
 				c.streamModifier.nextEventInOp++
 				op = pb.ErrorOp_Inject
-				break FORLOOP
+				break LOOP
 			default:
 				c.logger.Warn("mismatched handle op",
 					zap.Stringer("op", frontOp.op),
@@ -478,9 +491,12 @@ FORLOOP:
 		return appendRelaySubDir()
 	}
 
-	if c.lastEvent != nil {
-		event = c.lastEvent
-		c.lastEvent = nil
+	// above loop will be terminated when streamModifier is empty. We still need
+	// to send the last event from upstream.
+
+	if c.lastEventFromUpstream != nil {
+		event = c.lastEventFromUpstream
+		c.lastEventFromUpstream = nil
 		return appendRelaySubDir()
 	}
 

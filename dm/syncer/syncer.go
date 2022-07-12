@@ -1884,6 +1884,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		return nil
 	}
 
+	// TODO: after location recorder, we can remove this
 	var currEndGSet mysql.GTIDSet
 	advanceCurrentLocationGtidSet := func(e *replication.BinlogEvent) error {
 		if _, ok := e.Event.(*replication.MariadbGTIDEvent); ok {
@@ -2121,9 +2122,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		failpoint.Inject("ProcessBinlogSlowDown", nil)
 
 		s.tctx.L().Debug("receive binlog event", zap.Reflect("header", e.Header))
-		s.tctx.L().Debug("lance test 3",
-			zap.Stringer("last location", lastLocation),
-			zap.Stringer("current location", currentLocation))
 
 		// support QueryEvent and RowsEvent
 		// we calculate startLocation and endLocation(currentLocation) for Query event here
@@ -2144,6 +2142,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			if suffix == 0 {
 				currGSet = currEndGSet
 			} else {
+				// if we are in injected events, don't forward GTID set
 				currGSet = lastLocation.GetGTID()
 			}
 
@@ -2162,8 +2161,11 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 		switch op {
 		case pb.ErrorOp_Skip:
-			// TODO: check type assertion!!
-			queryEvent := e.Event.(*replication.QueryEvent)
+			queryEvent, ok := e.Event.(*replication.QueryEvent)
+			if !ok {
+				s.tctx.L().Warn("can't skip an event which is not DDL", zap.Reflect("header", e.Header))
+				break
+			}
 			ec := eventContext{
 				tctx:            s.tctx,
 				header:          e.Header,
@@ -2228,9 +2230,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				return checkErr
 			}
 		}
-		s.tctx.L().Debug("lance test 4",
-			zap.Stringer("last location", lastLocation),
-			zap.Stringer("current location", currentLocation))
 		ec := eventContext{
 			tctx:                s.runCtx,
 			header:              e.Header,
@@ -2698,9 +2697,6 @@ func generateExtendColumn(data [][]interface{}, r *regexprrouter.RouteTable, tab
 }
 
 func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, originSQL string) (err error) {
-	s.tctx.L().Debug("lance test 5",
-		zap.Stringer("last location", ec.lastLocation),
-		zap.Stringer("current location", ec.currentLocation))
 	if originSQL == "BEGIN" {
 		failpoint.Inject("NotUpdateLatestGTID", func(_ failpoint.Value) {
 			// directly return nil without update latest GTID here
