@@ -212,7 +212,7 @@ func (h *ddlPullerImpl) FrontDDL() (uint64, *timodel.Job) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if len(h.pendingDDLJobs) == 0 {
-		return h.resolvedTS, nil
+		return atomic.LoadUint64(&h.resolvedTS), nil
 	}
 	job := h.pendingDDLJobs[0]
 	return job.BinlogInfo.FinishedTS, job
@@ -223,7 +223,7 @@ func (h *ddlPullerImpl) PopFrontDDL() (uint64, *timodel.Job) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if len(h.pendingDDLJobs) == 0 {
-		return h.resolvedTS, nil
+		return atomic.LoadUint64(&h.resolvedTS), nil
 	}
 	job := h.pendingDDLJobs[0]
 	h.pendingDDLJobs = h.pendingDDLJobs[1:]
