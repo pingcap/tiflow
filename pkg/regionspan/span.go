@@ -136,7 +136,6 @@ func KeyInSpans(k []byte, spans []ComparableSpan) bool {
 			return true
 		}
 	}
-	//
 	return false
 }
 
