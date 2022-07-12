@@ -86,7 +86,7 @@ type ClientConn interface {
 	ClientType() ClientType
 
 	// GetConn gets the underlying connection object
-	// we will return *clientv3.Client for storeTypeEtcd,
+	// We will return *clientv3.Client for storeTypeEtcd,
 	// and *sql.DB for storeTypeSQL
 	GetConn() (interface{}, error)
 
