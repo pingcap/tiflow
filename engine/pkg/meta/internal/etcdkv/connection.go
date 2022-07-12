@@ -21,53 +21,40 @@ import (
 	"github.com/pingcap/tiflow/pkg/errors"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.uber.org/atomic"
 )
 
 // NewClientConnImpl return a new clientConnImpl
-func NewClientConnImpl() *clientConnImpl {
-	return &clientConnImpl{
-		isInitialized: atomic.NewBool(false),
-	}
-}
-
-type clientConnImpl struct {
-	mu            sync.Mutex
-	isInitialized *atomic.Bool
-	cli           *clientv3.Client
-}
-
-// Initialize implements Initialize of ClientConn
-func (cc *clientConnImpl) Initialize(storeConf *metaModel.StoreConfig) error {
+func NewClientConnImpl(storeConf *metaModel.StoreConfig) (*clientConnImpl, error) {
 	if storeConf == nil {
-		return cerrors.ErrMetaParamsInvalid.GenWithStackByArgs("storeConf is nil")
+		return nil, cerrors.ErrMetaParamsInvalid.GenWithStackByArgs("store config is nil")
 	}
 
 	if storeConf.StoreType != metaModel.StoreTypeEtcd {
-		return cerrors.ErrMetaParamsInvalid.GenWithStackByArgs(fmt.Sprintf(
+		return nil, cerrors.ErrMetaParamsInvalid.GenWithStackByArgs(fmt.Sprintf(
 			"etcd conn but get unmatch type:%s", storeConf.StoreType))
-	}
-
-	cc.mu.Lock()
-	defer cc.mu.Unlock()
-
-	if cc.isInitialized.Load() {
-		return cerrors.ErrMetaOpFail.GenWithStackByArgs("already initialized")
 	}
 
 	etcdCli, err := NewEtcdClient(storeConf)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	cc.isInitialized.Store(true)
-	cc.cli = etcdCli
-	return nil
+	return &clientConnImpl{
+		cli: etcdCli,
+	}, nil
+}
+
+type clientConnImpl struct {
+	rwLock sync.RWMutex
+	cli    *clientv3.Client
 }
 
 // GetConn implements GetConn of ClientConn
 func (cc *clientConnImpl) GetConn() (interface{}, error) {
-	if cc.isInitialized.Load() == false {
+	cc.rwLock.RLock()
+	defer cc.rwLock.RUnlock()
+
+	if cc.cli == nil {
 		return nil, cerrors.ErrMetaOpFail.GenWithStackByArgs("connection is uninitialized")
 	}
 
@@ -76,10 +63,9 @@ func (cc *clientConnImpl) GetConn() (interface{}, error) {
 
 // Close implements Close of ClientConn
 func (cc *clientConnImpl) Close() error {
-	cc.mu.Lock()
-	defer cc.mu.Unlock()
+	cc.rwLock.Lock()
+	defer cc.rwLock.Unlock()
 
-	cc.isInitialized.Store(false)
 	if cc.cli != nil {
 		cc.cli.Close()
 		cc.cli = nil

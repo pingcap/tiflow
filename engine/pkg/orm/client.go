@@ -45,10 +45,10 @@ var globalModels = []interface{}{
 	&frameModel.MasterMetaKVData{},
 	&frameModel.WorkerStatus{},
 	&resModel.ResourceMeta{},
-	&model.LogicEpoch{},
 }
 
 // TODO: retry and idempotent??
+// TODO: split different client to module
 
 type (
 	// ResourceMeta is the alias of resModel.ResourceMeta
@@ -238,10 +238,12 @@ func newClient(sqlDB *sql.DB) (*metaOpsClient, error) {
 // metaOpsClient is the meta operations client for framework metastore
 type metaOpsClient struct {
 	// gorm claim to be thread safe
-	db *gorm.DB
+	db          *gorm.DB
+	epochClient model.EpochClient
 }
 
 func (c *metaOpsClient) Close() error {
+	c.epochClient.Close()
 	impl, err := c.db.DB()
 	if err != nil {
 		return err
@@ -257,6 +259,7 @@ func (c *metaOpsClient) Close() error {
 // Initialize will create all related tables in SQL backend
 // TODO: What happen if we upgrade the definition of model when rolling update?
 // TODO: need test: change column definition/add column/drop column?
+// TODO: refine the Initialize to decouple the model creation and client
 func (c *metaOpsClient) Initialize(ctx context.Context) error {
 	failpoint.InjectContext(ctx, "initializedDelay", nil)
 	if err := c.db.WithContext(ctx).
@@ -264,14 +267,23 @@ func (c *metaOpsClient) Initialize(ctx context.Context) error {
 		return errors.ErrMetaOpFail.Wrap(err)
 	}
 
-	// check first record in logic_epochs
-	return model.InitializeEpoch(ctx, c.db)
+	if err := model.InitializeEpochModel(ctx, c.db); err != nil {
+		return errors.ErrMetaOpFail.Wrap(err)
+	}
+
+	epCli, err := model.NewEpochClient("" /*jobID*/, c.db)
+	if err != nil {
+		return err
+	}
+	c.epochClient = epCli
+
+	return nil
 }
 
 /////////////////////////////// Logic Epoch
 func (c *metaOpsClient) GenEpoch(ctx context.Context) (frameModel.Epoch, error) {
 	failpoint.InjectContext(ctx, "genEpochDelay", nil)
-	return model.GenEpoch(ctx, c.db)
+	return c.epochClient.GenEpoch(ctx)
 }
 
 ///////////////////////// Project Operation

@@ -16,9 +16,11 @@ package orm
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/uuid"
 	"go.uber.org/zap"
@@ -28,6 +30,33 @@ import (
 
 func randomDBFile() string {
 	return uuid.NewGenerator().NewString() + ".db"
+}
+
+// NewMockEpochClient is the mock for EpochClient
+func NewMockEpochClient() model.EpochClient {
+	return &mockEpochClient{
+		epoch: 1,
+	}
+}
+
+type mockEpochClient struct {
+	sync.Mutex
+	epoch int64
+}
+
+func (m *mockEpochClient) Initialize(ctx context.Context) error {
+	return nil
+}
+
+func (m *mockEpochClient) Close() error {
+	return nil
+}
+
+func (m *mockEpochClient) GenEpoch(ctx context.Context) (int64, error) {
+	m.Lock()
+	defer m.Unlock()
+	m.epoch = m.epoch + 1
+	return m.epoch, nil
 }
 
 // NewMockClient creates a mock orm client
@@ -47,7 +76,8 @@ func NewMockClient() (Client, error) {
 	}
 
 	cli := &metaOpsClient{
-		db: db,
+		db:          db,
+		epochClient: NewMockEpochClient(),
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)

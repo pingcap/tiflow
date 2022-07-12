@@ -16,63 +16,110 @@ package model
 import (
 	"context"
 
+	"github.com/pingcap/tiflow/pkg/errors"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
 const (
-	defaultEpochPK  = 1
 	defaultMinEpoch = 1
 )
 
 // LogicEpoch is used to generate increasing epoch
+// We use union columns <JobID, Epoch> as uk to achieve job-level isolation
 type LogicEpoch struct {
 	Model
-	Epoch int64 `gorm:"type:bigint not null default 1"`
+	JobID string `gorm:"type:varchar(64) not null;uniqueIndex:uidx_jk"`
+	Epoch int64  `gorm:"type:bigint not null default 1"`
 }
 
-// InitializeEpoch insert the only record into the backend table `logic_epoches`
-func InitializeEpoch(ctx context.Context, db *gorm.DB) error {
+// EpochClient defines the client to generate epoch
+type EpochClient interface {
+	// GenEpoch increases the backend epoch by 1 and return the new epoch
+	GenEpoch(ctx context.Context) (int64, error)
+
+	// Close releases some inner resources
+	Close() error
+}
+
+// NewEpochClient news a EpochClient
+// Make Sure to call 'InitializeEpochModel' to create backend table before
+// calling 'NewEpochClient'
+func NewEpochClient(jobID string, db *gorm.DB) (*epochClient, error) {
+	if db == nil {
+		return nil, errors.ErrMetaParamsInvalid.GenWithStackByArgs("inner db is nil")
+	}
+
 	// Do nothing on conflict
-	// INSERT INTO `logic_epoches` (`created_at`,`updated_at`,`epoch`,`seq_id`) VALUES
-	// ('2022-05-04 14:02:08.624','2022-05-04 14:02:08.624',1,1) ON DUPLICATE KEY UPDATE `seq_id`=`seq_id`
-	return db.WithContext(ctx).
-		Clauses(clause.OnConflict{DoNothing: true}).
+	if err := db.Clauses(clause.OnConflict{DoNothing: true}).
 		Create(&LogicEpoch{
-			Model: Model{
-				SeqID: defaultEpochPK,
-			},
+			JobID: jobID,
 			Epoch: defaultMinEpoch,
-		}).Error
+		}).Error; err != nil {
+		return nil, errors.ErrMetaOpFail.Wrap(err)
+	}
+
+	return &epochClient{
+		jobID: jobID,
+		db:    db,
+	}, nil
 }
 
-// GenEpoch will increasing the backend epoch by 1 and return the new epoch
-func GenEpoch(ctx context.Context, db *gorm.DB) (int64, error) {
+type epochClient struct {
+	jobID string
+	db    *gorm.DB
+}
+
+// GenEpoch implements GenEpoch of EpochClient
+func (e *epochClient) GenEpoch(ctx context.Context) (int64, error) {
+	if e.db == nil {
+		return int64(0), errors.ErrMetaParamsInvalid.GenWithStackByArgs("inner db is nil")
+	}
+
 	var epoch int64
-	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		//(1)update epoch = epoch + 1
-		if err := tx.Model(&LogicEpoch{
-			Model: Model{
-				SeqID: defaultEpochPK,
-			},
-		}).Update("epoch", gorm.Expr("epoch + ?", 1)).Error; err != nil {
-			// return any error will rollback
-			return err
-		}
+	// every job owns its logic epoch
+	err := e.db.Where("job_id = ?", e.jobID).
+		WithContext(ctx).
+		Transaction(func(tx *gorm.DB) error {
+			//(1)update epoch = epoch + 1
+			if err := tx.Model(&LogicEpoch{}).
+				Update("epoch", gorm.Expr("epoch + ?", 1)).Error; err != nil {
+				// return any error will rollback
+				return err
+			}
 
-		//(2)select epoch
-		var logicEp LogicEpoch
-		if err := tx.First(&logicEp, defaultEpochPK).Error; err != nil {
-			return err
-		}
-		epoch = logicEp.Epoch
+			//(2)select epoch
+			var logicEp LogicEpoch
+			if err := tx.First(&logicEp).Error; err != nil {
+				return err
+			}
+			epoch = logicEp.Epoch
 
-		// return nil will commit the whole transaction
-		return nil
-	})
+			// return nil will commit the whole transaction
+			return nil
+		})
 	if err != nil {
 		return 0, err
 	}
 
 	return epoch, nil
+}
+
+// Close implements Close of EpochClient
+func (e *epochClient) Close() error {
+	return nil
+}
+
+// InitializeEpochModel creates the backend logic epoch table if not exists
+func InitializeEpochModel(ctx context.Context, db *gorm.DB) error {
+	if db == nil {
+		return errors.ErrMetaParamsInvalid.GenWithStackByArgs("inner db is nil")
+	}
+
+	if err := db.WithContext(ctx).
+		AutoMigrate(&LogicEpoch{}); err != nil {
+		return errors.ErrMetaOpFail.Wrap(err)
+	}
+
+	return nil
 }

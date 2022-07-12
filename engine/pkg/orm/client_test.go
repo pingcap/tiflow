@@ -1260,34 +1260,6 @@ func TestError(t *testing.T) {
 	require.True(t, e.Is(derror.ErrMetaEntryNotFound))
 }
 
-func TestLogicEpoch(t *testing.T) {
-	t.Parallel()
-
-	sqlDB, mock, err := mockGetDBConn(t, "test")
-	defer sqlDB.Close()
-	defer mock.ExpectClose()
-	require.Nil(t, err)
-	cli, err := newClient(sqlDB)
-	require.Nil(t, err)
-	require.NotNil(t, cli)
-
-	testCases := []tCase{
-		{
-			fn:     "GenEpoch",
-			inputs: []interface{}{},
-			err:    derror.ErrMetaOpFail.GenWithStackByArgs(),
-			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery("SELECT [*] FROM `logic_epoches`").WillReturnError(
-					errors.New("InitializeEpoch error"))
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		testInner(t, mock, cli, tc)
-	}
-}
-
 func TestContext(t *testing.T) {
 	t.Parallel()
 
