@@ -9,7 +9,7 @@ function run() {
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
 	start_engine_cluster $CONFIG
-    go test -count=1 -v -run ^TestNodeFailure$ github.com/pingcap/tiflow/engine/test/e2e
+	go test -count=1 -v -run ^TestNodeFailure$ github.com/pingcap/tiflow/engine/test/e2e
 }
 
 trap "stop_engine_cluster $CONFIG" EXIT

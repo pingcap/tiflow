@@ -17,10 +17,10 @@ while [ $i -le $retry_times ]; do
 done
 
 if [ $i -gt $retry_times ]; then
-    echo -e "\n\n[$(date)] <<<<<< fail to start engine cluster after $retry_times times >>>>>>"
-    exit 1
+	echo -e "\n\n[$(date)] <<<<<< fail to start engine cluster after $retry_times times >>>>>>"
+	exit 1
 else
-    # TODO: add check logic
-    # wait cluster ready
-    sleep 20
+	# TODO: add check logic
+	# wait cluster ready
+	sleep 20
 fi

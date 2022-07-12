@@ -13,7 +13,7 @@ if [ "${1-}" = 'debug' ]; then
 	shift
 	if [[ ${1} ]]; then
 		cnf=$*
-	else 
+	else
 		cnf="$DOCKER_COMPOSE_DIR/1m1e.yaml"
 	fi
 
