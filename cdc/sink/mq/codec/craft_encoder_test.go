@@ -1,4 +1,4 @@
-// Copyright 2021 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,6 +22,80 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
+
+func TestCraftMaxMessageBytes(t *testing.T) {
+	t.Parallel()
+	cfg := NewConfig(config.ProtocolCraft).WithMaxMessageBytes(256)
+	encoder := newCraftBatchEncoderBuilder(cfg).Build()
+
+	testEvent := &model.RowChangedEvent{
+		CommitTs: 1,
+		Table:    &model.TableName{Schema: "a", Table: "b"},
+		Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("aa")}},
+	}
+
+	for i := 0; i < 10000; i++ {
+		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent, nil)
+		require.Nil(t, err)
+	}
+
+	messages := encoder.Build()
+	for _, msg := range messages {
+		require.LessOrEqual(t, msg.Length(), 256)
+	}
+}
+
+func TestCraftMaxBatchSize(t *testing.T) {
+	t.Parallel()
+	cfg := NewConfig(config.ProtocolCraft).WithMaxMessageBytes(10485760)
+	cfg.maxBatchSize = 64
+	encoder := newCraftBatchEncoderBuilder(cfg).Build()
+
+	testEvent := &model.RowChangedEvent{
+		CommitTs: 1,
+		Table:    &model.TableName{Schema: "a", Table: "b"},
+		Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("aa")}},
+	}
+
+	for i := 0; i < 10000; i++ {
+		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent, nil)
+		require.Nil(t, err)
+	}
+
+	messages := encoder.Build()
+	sum := 0
+	for _, msg := range messages {
+		decoder, err := newCraftBatchDecoder(msg.Value)
+		require.Nil(t, err)
+		count := 0
+		for {
+			v, hasNext, err := decoder.HasNext()
+			require.Nil(t, err)
+			if !hasNext {
+				break
+			}
+
+			require.Equal(t, model.MessageTypeRow, v)
+			_, err = decoder.NextRowChangedEvent()
+			require.Nil(t, err)
+			count++
+		}
+		require.LessOrEqual(t, count, 64)
+		sum += count
+	}
+	require.Equal(t, 10000, sum)
+}
+
+func TestBuildCraftBatchEncoder(t *testing.T) {
+	t.Parallel()
+	cfg := NewConfig(config.ProtocolCraft)
+
+	builder := &craftBatchEncoderBuilder{config: cfg}
+	encoder, ok := builder.Build().(*craftBatchEncoder)
+	require.True(t, ok)
+	require.Equal(t, cfg.maxBatchSize, encoder.maxBatchSize)
+	require.Equal(t, cfg.maxMessageBytes, encoder.maxMessageBytes)
+}
 
 func testBatchCodec(
 	t *testing.T,
@@ -119,82 +193,8 @@ func testBatchCodec(
 	}
 }
 
-func TestCraftMaxMessageBytes(t *testing.T) {
-	t.Parallel()
-	config := NewConfig(config.ProtocolCraft).WithMaxMessageBytes(256)
-	encoder := newCraftEventBatchEncoderBuilder(config).Build()
-
-	testEvent := &model.RowChangedEvent{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("aa")}},
-	}
-
-	for i := 0; i < 10000; i++ {
-		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent, nil)
-		require.Nil(t, err)
-	}
-
-	messages := encoder.Build()
-	for _, msg := range messages {
-		require.LessOrEqual(t, msg.Length(), 256)
-	}
-}
-
-func TestCraftMaxBatchSize(t *testing.T) {
-	t.Parallel()
-	config := NewConfig(config.ProtocolCraft).WithMaxMessageBytes(10485760)
-	config.maxBatchSize = 64
-	encoder := newCraftEventBatchEncoderBuilder(config).Build()
-
-	testEvent := &model.RowChangedEvent{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("aa")}},
-	}
-
-	for i := 0; i < 10000; i++ {
-		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent, nil)
-		require.Nil(t, err)
-	}
-
-	messages := encoder.Build()
-	sum := 0
-	for _, msg := range messages {
-		decoder, err := NewCraftEventBatchDecoder(msg.Value)
-		require.Nil(t, err)
-		count := 0
-		for {
-			v, hasNext, err := decoder.HasNext()
-			require.Nil(t, err)
-			if !hasNext {
-				break
-			}
-
-			require.Equal(t, model.MessageTypeRow, v)
-			_, err = decoder.NextRowChangedEvent()
-			require.Nil(t, err)
-			count++
-		}
-		require.LessOrEqual(t, count, 64)
-		sum += count
-	}
-	require.Equal(t, 10000, sum)
-}
-
-func TestDefaultCraftEventBatchCodec(t *testing.T) {
-	config := NewConfig(config.ProtocolCraft).WithMaxMessageBytes(8192)
-	config.maxBatchSize = 64
-	testBatchCodec(t, newCraftEventBatchEncoderBuilder(config), NewCraftEventBatchDecoder)
-}
-
-func TestBuildCraftEventBatchEncoder(t *testing.T) {
-	t.Parallel()
-	config := NewConfig(config.ProtocolCraft)
-
-	builder := &craftEventBatchEncoderBuilder{config: config}
-	encoder, ok := builder.Build().(*CraftEventBatchEncoder)
-	require.True(t, ok)
-	require.Equal(t, config.maxBatchSize, encoder.maxBatchSize)
-	require.Equal(t, config.maxMessageBytes, encoder.maxMessageBytes)
+func TestDefaultCraftBatchCodec(t *testing.T) {
+	cfg := NewConfig(config.ProtocolCraft).WithMaxMessageBytes(8192)
+	cfg.maxBatchSize = 64
+	testBatchCodec(t, newCraftBatchEncoderBuilder(cfg), newCraftBatchDecoder)
 }
