@@ -185,7 +185,7 @@ func (c *coordinator) DrainCapture(target model.CaptureID) int {
 	}
 
 	if !c.schedulerM.DrainCapture(target) {
-		log.Info("tpscheduler: manual drain capture task ignored,"+
+		log.Info("tpscheduler: manual drain capture task ignored, "+
 			"since there is capture draining",
 			zap.String("target", target),
 			zap.Int("tableCount", count))
