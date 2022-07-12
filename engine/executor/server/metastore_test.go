@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/server/mocks"
-	kvMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	metaMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 )
@@ -93,7 +93,7 @@ func TestMetastoreManagerBasics(t *testing.T) {
 	fakeEtcdCli := clientv3.NewCtxClient(ctx)
 	fakeFrameStore, err := pkgOrm.NewMockClient()
 	require.NoError(t, err)
-	fakeBusinessStore := kvMock.NewMetaMock()
+	fakeBusinessClientConn := metaMock.NewMockClientConn()
 
 	mockCreator.
 		EXPECT().
@@ -105,8 +105,8 @@ func TestMetastoreManagerBasics(t *testing.T) {
 		Return(fakeFrameStore, nil)
 	mockCreator.
 		EXPECT().
-		CreateMetaKVClientForBusiness(gomock.Any(), gomock.Eq(businessStoreParams)).
-		Return(fakeBusinessStore, nil)
+		CreateClientConnForBusiness(gomock.Any(), gomock.Eq(businessStoreParams)).
+		Return(fakeBusinessClientConn, nil)
 	err = manager.Init(ctx, mockServerMasterClient)
 	require.NoError(t, err)
 
@@ -114,13 +114,13 @@ func TestMetastoreManagerBasics(t *testing.T) {
 
 	require.Equal(t, fakeEtcdCli, manager.ServiceDiscoveryStore())
 	require.Equal(t, fakeFrameStore, manager.FrameworkStore())
-	require.Equal(t, fakeBusinessStore, manager.BusinessStore())
+	require.Equal(t, fakeBusinessClientConn, manager.BusinessClientConn())
 
 	manager.Close()
 
 	require.Nil(t, manager.ServiceDiscoveryStore())
 	require.Nil(t, manager.FrameworkStore())
-	require.Nil(t, manager.BusinessStore())
+	require.Nil(t, manager.BusinessClientConn())
 }
 
 func TestMetastoreManagerUseBeforeInit(t *testing.T) {
@@ -138,6 +138,6 @@ func TestMetastoreManagerUseBeforeInit(t *testing.T) {
 		manager.FrameworkStore()
 	})
 	require.Panics(t, func() {
-		manager.BusinessStore()
+		manager.BusinessClientConn()
 	})
 }

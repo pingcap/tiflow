@@ -49,18 +49,7 @@ type etcdImpl struct {
 }
 
 // NewEtcdImpl creates a new etcdImpl instance
-func NewEtcdImpl(config *metaModel.StoreConfig) (*etcdImpl, error) {
-	cli, err := clientv3.New(clientv3.Config{
-		Endpoints: config.Endpoints,
-		// [TODO] TLS
-		// Username: conf.Auth.Username,
-		// Password: conf.Auth.Password,
-		// [TODO] LOG
-	})
-	if err != nil {
-		return nil, errors.ErrMetaNewClientFail.Wrap(err)
-	}
-
+func NewEtcdImpl(cli *clientv3.Client) (*etcdImpl, error) {
 	c := &etcdImpl{
 		cli: cli,
 	}
@@ -204,14 +193,6 @@ func (c *etcdImpl) Txn(ctx context.Context) metaModel.Txn {
 }
 
 func (c *etcdImpl) Close() error {
-	c.closeMu.Lock()
-	defer c.closeMu.Unlock()
-	if c.cli != nil {
-		err := c.cli.Close()
-		c.cli = nil
-		return err
-	}
-
 	return nil
 }
 
