@@ -55,7 +55,7 @@ func NewEventBatchEncoderBuilder(ctx context.Context, c *Config) (EncoderBuilder
 	case config.ProtocolAvro:
 		return newAvroEventBatchEncoderBuilder(ctx, c)
 	case config.ProtocolMaxwell:
-		return newMaxwellEventBatchEncoderBuilder(), nil
+		return newMaxwellBatchEncoderBuilder(), nil
 	case config.ProtocolCanalJSON:
 		return newCanalJSONBatchEncoderBuilder(c), nil
 	case config.ProtocolCraft:

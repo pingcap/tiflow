@@ -21,9 +21,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMaxwellEventBatchCodec(t *testing.T) {
+func TestMaxwellBatchCodec(t *testing.T) {
 	t.Parallel()
-	newEncoder := NewMaxwellEventBatchEncoder
+	newEncoder := newMaxwellBatchEncoder
 
 	rowCases := [][]*model.RowChangedEvent{{{
 		CommitTs: 1,
@@ -61,24 +61,4 @@ func TestMaxwellEventBatchCodec(t *testing.T) {
 			require.NotNil(t, msg)
 		}
 	}
-}
-
-func TestMaxwellFormatCol(t *testing.T) {
-	t.Parallel()
-	row := &maxwellMessage{
-		Ts:       1,
-		Database: "a",
-		Table:    "b",
-		Type:     "delete",
-		Xid:      1,
-		Xoffset:  1,
-		Position: "",
-		Gtid:     "",
-		Data: map[string]interface{}{
-			"id": "1",
-		},
-	}
-	rowEncode, err := row.Encode()
-	require.Nil(t, err)
-	require.NotNil(t, rowEncode)
 }
