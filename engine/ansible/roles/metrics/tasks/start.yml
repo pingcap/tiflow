@@ -1,8 +1,0 @@
-- name: start node_export 
-  shell: "nohup {{ df_bin_dir }}/node_exporter > {{ df_log_dir }}/node_exporter.log 2>&1 &"
-- name: start prometheus 
-  shell: "nohup {{ df_bin_dir }}/prometheus --config.file={{ df_config_dir }}/prometheus.yml --web.listen-address=0.0.0.0:{{ prom_port }} --storage.tsdb.path={{ prom_data_dir }} --storage.tsdb.retention=2d > {{ df_log_dir }}/prom.log 2>&1 &"
-  run_once: true
-  delegate_to: localhost
-
-#start grafana
