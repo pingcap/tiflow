@@ -281,11 +281,7 @@ dm_unit_test: check_failpoint_ctl
 	mkdir -p $(DM_TEST_DIR)
 	$(FAILPOINT_ENABLE)
 	@export log_level=error; \
-<<<<<<< HEAD
-	$(GOTEST) -timeout 5m -covermode=atomic -coverprofile="$(DM_TEST_DIR)/cov.unit_test.out" $(DM_PACKAGES) \
-=======
-	$(GOTEST) -timeout 10m -covermode=atomic -coverprofile="$(DM_TEST_DIR)/cov.unit_test.out" $(1) \
->>>>>>> 65e67fc4b (test(dm): fix unstable tests (#5865))
+	$(GOTEST) -timeout 10m -covermode=atomic -coverprofile="$(DM_TEST_DIR)/cov.unit_test.out" $(DM_PACKAGES) \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(FAILPOINT_DISABLE)
 
