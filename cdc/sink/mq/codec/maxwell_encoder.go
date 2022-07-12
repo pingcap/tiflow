@@ -25,9 +25,10 @@ import (
 
 // maxwellBatchEncoder is a maxwell format encoder implementation
 type maxwellBatchEncoder struct {
-	keyBuf    *bytes.Buffer
-	valueBuf  *bytes.Buffer
-	batchSize int
+	keyBuf      *bytes.Buffer
+	valueBuf    *bytes.Buffer
+	callbackBuf []func()
+	batchSize   int
 }
 
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
@@ -42,7 +43,7 @@ func (d *maxwellBatchEncoder) AppendRowChangedEvent(
 	_ context.Context,
 	_ string,
 	e *model.RowChangedEvent,
-	_ func(),
+	callback func(),
 ) error {
 	_, valueMsg := rowChangeToMaxwellMsg(e)
 	value, err := valueMsg.encode()
@@ -51,6 +52,9 @@ func (d *maxwellBatchEncoder) AppendRowChangedEvent(
 	}
 	d.valueBuf.Write(value)
 	d.batchSize++
+	if callback != nil {
+		d.callbackBuf = append(d.callbackBuf, callback)
+	}
 	return nil
 }
 
@@ -79,6 +83,15 @@ func (d *maxwellBatchEncoder) Build() []*MQMessage {
 	ret := newMsg(config.ProtocolMaxwell,
 		d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0, model.MessageTypeRow, nil, nil)
 	ret.SetRowsCount(d.batchSize)
+	if len(d.callbackBuf) != 0 && len(d.callbackBuf) == d.batchSize {
+		callbacks := d.callbackBuf
+		ret.Callback = func() {
+			for _, cb := range callbacks {
+				cb()
+			}
+		}
+		d.callbackBuf = make([]func(), 0)
+	}
 	d.reset()
 	return []*MQMessage{ret}
 }
@@ -96,8 +109,9 @@ func (d *maxwellBatchEncoder) reset() {
 // newMaxwellBatchEncoder creates a new maxwellBatchEncoder.
 func newMaxwellBatchEncoder() EventBatchEncoder {
 	batch := &maxwellBatchEncoder{
-		keyBuf:   &bytes.Buffer{},
-		valueBuf: &bytes.Buffer{},
+		keyBuf:      &bytes.Buffer{},
+		valueBuf:    &bytes.Buffer{},
+		callbackBuf: make([]func(), 0),
 	}
 	batch.reset()
 	return batch
