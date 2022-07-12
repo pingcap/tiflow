@@ -421,6 +421,7 @@ FORLOOP:
 
 				if c.streamModifier.nextEventInOp == len(frontOp.events) {
 					event.Header.LogPos = c.lastEvent.Header.LogPos
+					event.Header.EventSize = c.lastEvent.Header.EventSize
 					// TODO: for last event we should forward GTID set? let caller
 					// do it unless we merge location recorder
 					suffix = 0
