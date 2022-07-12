@@ -198,3 +198,75 @@ func TestDefaultCraftBatchCodec(t *testing.T) {
 	cfg.maxBatchSize = 64
 	testBatchCodec(t, newCraftBatchEncoderBuilder(cfg), newCraftBatchDecoder)
 }
+
+func TestCraftAppendRowChangedEventWithCallback(t *testing.T) {
+	t.Parallel()
+	cfg := NewConfig(config.ProtocolCraft).WithMaxMessageBytes(10485760)
+	cfg.maxBatchSize = 2
+	encoder := newCraftBatchEncoderBuilder(cfg).Build()
+	require.NotNil(t, encoder)
+
+	count := 0
+
+	row := &model.RowChangedEvent{
+		CommitTs: 1,
+		Table:    &model.TableName{Schema: "a", Table: "b"},
+		Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("aa")}},
+	}
+
+	tests := []struct {
+		row      *model.RowChangedEvent
+		callback func()
+	}{
+		{
+			row: row,
+			callback: func() {
+				count += 1
+			},
+		},
+		{
+			row: row,
+			callback: func() {
+				count += 2
+			},
+		},
+		{
+			row: row,
+			callback: func() {
+				count += 3
+			},
+		},
+		{
+			row: row,
+			callback: func() {
+				count += 4
+			},
+		},
+		{
+			row: row,
+			callback: func() {
+				count += 5
+			},
+		},
+	}
+
+	// Empty build makes sure that the callback build logic not broken.
+	msgs := encoder.Build()
+	require.Len(t, msgs, 0, "no message should be built and no panic")
+
+	// Append the events.
+	for _, test := range tests {
+		err := encoder.AppendRowChangedEvent(context.Background(), "", test.row, test.callback)
+		require.Nil(t, err)
+	}
+	require.Equal(t, 0, count, "nothing should be called")
+
+	msgs = encoder.Build()
+	require.Len(t, msgs, 3, "expected 3 messages")
+	msgs[0].Callback()
+	require.Equal(t, 3, count, "expected 2 callbacks to be called")
+	msgs[1].Callback()
+	require.Equal(t, 10, count, "expected 2 callbacks to be called")
+	msgs[2].Callback()
+	require.Equal(t, 15, count, "expected one callback to be called")
+}

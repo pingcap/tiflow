@@ -25,6 +25,7 @@ import (
 type craftBatchEncoder struct {
 	rowChangedBuffer *craft.RowChangedEventBuffer
 	messageBuf       []*MQMessage
+	callbackBuf      []func()
 
 	// configs
 	maxMessageBytes int
@@ -45,9 +46,12 @@ func (e *craftBatchEncoder) AppendRowChangedEvent(
 	_ context.Context,
 	_ string,
 	ev *model.RowChangedEvent,
-	_ func(),
+	callback func(),
 ) error {
 	rows, size := e.rowChangedBuffer.AppendRowChangedEvent(ev)
+	if callback != nil {
+		e.callbackBuf = append(e.callbackBuf, callback)
+	}
 	if size > e.maxMessageBytes || rows >= e.maxBatchSize {
 		e.flush()
 	}
@@ -80,6 +84,15 @@ func (e *craftBatchEncoder) flush() {
 	mqMessage := newMsg(config.ProtocolCraft,
 		nil, e.rowChangedBuffer.Encode(), ts, model.MessageTypeRow, &schema, &table)
 	mqMessage.SetRowsCount(rowsCnt)
+	if len(e.callbackBuf) != 0 && len(e.callbackBuf) == rowsCnt {
+		callbacks := e.callbackBuf
+		mqMessage.Callback = func() {
+			for _, cb := range callbacks {
+				cb()
+			}
+		}
+		e.callbackBuf = make([]func(), 0)
+	}
 	e.messageBuf = append(e.messageBuf, mqMessage)
 }
 
@@ -112,6 +125,7 @@ func newCraftBatchEncoderWithAllocator(allocator *craft.SliceAllocator) EventBat
 	return &craftBatchEncoder{
 		allocator:        allocator,
 		messageBuf:       make([]*MQMessage, 0, 2),
+		callbackBuf:      make([]func(), 0),
 		rowChangedBuffer: craft.NewRowChangedEventBuffer(allocator),
 	}
 }
