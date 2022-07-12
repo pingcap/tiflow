@@ -1,4 +1,18 @@
-#!/usr/bin/env bash
+#!/bin/bash
+# Copyright 2022 PingCAP, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+set -eu
 
 # If the environment variable is unset, GOPATH defaults
 # to a subdirectory named "go" in the user's home directory
@@ -8,9 +22,8 @@
 GOPATH=$(go env GOPATH)
 echo "using GOPATH=$GOPATH"
 
-CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-
-TOOLS_BIN_DIR=${CUR}/../tools/bin
+cd "$(dirname "${BASH_SOURCE[0]}")"/..
+TOOLS_BIN_DIR=$(pwd)/tools/bin
 
 case "$(uname)" in
 MINGW*)
@@ -23,7 +36,7 @@ esac
 
 # use `protoc-gen-gogofaster` rather than `protoc-gen-go`.
 GOGO_FASTER=$TOOLS_BIN_DIR/protoc-gen-gogofaster$EXE
-if [ ! -f ${GOGO_FASTER} ]; then
+if [ ! -f "${GOGO_FASTER}" ]; then
 	echo "${GOGO_FASTER} does not exist, please run 'make tools_setup' first"
 	exit 1
 fi
@@ -32,7 +45,7 @@ fi
 GO111MODULE=on go get -d github.com/gogo/protobuf
 GOGO_MOD=$(GO111MODULE=on go list -m github.com/gogo/protobuf)
 GOGO_PATH=$GOPATH/pkg/mod/${GOGO_MOD// /@}
-if [ ! -d ${GOGO_PATH} ]; then
+if [ ! -d "${GOGO_PATH}" ]; then
 	echo "${GOGO_PATH} does not exist, please ensure 'github.com/gogo/protobuf' is in go.mod"
 	exit 1
 fi
@@ -56,19 +69,20 @@ fi
 #    exit 1
 #fi
 
-cd ${CUR}/proto || exit 1
-
 echo "generate protobuf code..."
 
 #cp -r ${GAPI_PATH}/google ./
 
-${CUR}/../tools/bin/protoc -I. -I"${GOGO_PATH}" -I"${GOGO_PATH}/protobuf" --plugin=protoc-gen-gogofaster=${GOGO_FASTER} --gogofaster_out=plugins=grpc:../enginepb/ *.proto
+"${TOOLS_BIN_DIR}/protoc" \
+	-Iengine/proto/ -I"${GOGO_PATH}" -I"${GOGO_PATH}/protobuf" \
+	--plugin=protoc-gen-gogofaster="${GOGO_FASTER}" \
+	--gogofaster_out=plugins=grpc:engine/enginepb/ \
+	engine/proto/*.proto
 
 #chmod -R +w ./google  # permission is `-r--r--r--`
 #rm -r ./google
 
-cd ${CUR}/enginepb || exit 1
-sed -i.bak -E 's/import _ \"gogoproto\"//g' *.pb.go
-sed -i.bak -E 's/import fmt \"fmt\"//g' *.pb.go
-rm -f *.bak
-${CUR}/../tools/bin/goimports -w *.pb.go
+sed -i.bak -E 's/import _ \"gogoproto\"//g' engine/enginepb/*.pb.go
+sed -i.bak -E 's/import fmt \"fmt\"//g' engine/enginepb/*.pb.go
+rm -f engine/enginepb/*.bak
+"${TOOLS_BIN_DIR}/goimports" -w engine/enginepb/*.pb.go
