@@ -365,7 +365,7 @@ func TestNewWriter(t *testing.T) {
 	time.Sleep(time.Duration(defaultFlushIntervalInMs+1) * time.Millisecond)
 }
 
-func TestRotateFile(t *testing.T) {
+func TestRotateFileWithFileAllocator(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	_, err := NewWriter(ctx, nil)
@@ -374,19 +374,12 @@ func TestRotateFile(t *testing.T) {
 	controller := gomock.NewController(t)
 	mockStorage := mockstorage.NewMockExternalStorage(controller)
 
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_row_0_uuid-1.log.tmp",
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_row_0_uuid-1.log",
 		gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_row_0_uuid-2.log",
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_row_100_uuid-2.log",
 		gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_abcd_test_row_0_uuid-1.log.tmp").
-		Return(nil).Times(1)
-
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_row_0_uuid-3.log.tmp",
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_row_100_uuid-3.log",
 		gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_row_100_uuid-4.log",
-		gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_abcd_test_row_0_uuid-3.log.tmp").
-		Return(nil).Times(1)
 
 	dir := t.TempDir()
 	uuidGen := uuid.NewMock()
@@ -419,6 +412,7 @@ func TestRotateFile(t *testing.T) {
 		storage:       mockStorage,
 		uuidGenerator: uuidGen,
 	}
+	w.allocator = newFileAllocator(w.cfg.Dir, common.DefaultRowLogFileType, defaultMaxLogSize)
 
 	w.running.Store(true)
 	_, err = w.Write([]byte("test"))
@@ -432,4 +426,70 @@ func TestRotateFile(t *testing.T) {
 	require.Nil(t, err)
 	err = w.rotate()
 	require.Nil(t, err)
+
+	w.Close()
+}
+
+func TestRotateFileWithoutFileAllocator(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	_, err := NewWriter(ctx, nil)
+	require.NotNil(t, err)
+
+	controller := gomock.NewController(t)
+	mockStorage := mockstorage.NewMockExternalStorage(controller)
+
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_ddl_0_uuid-2.log",
+		gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_ddl_100_uuid-4.log",
+		gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_ddl_100_uuid-6.log",
+		gomock.Any()).Return(nil).Times(1)
+
+	dir := t.TempDir()
+	uuidGen := uuid.NewMock()
+	uuidGen.Push("uuid-1")
+	uuidGen.Push("uuid-2")
+	uuidGen.Push("uuid-3")
+	uuidGen.Push("uuid-4")
+	uuidGen.Push("uuid-5")
+	uuidGen.Push("uuid-6")
+	changefeed := model.ChangeFeedID{
+		Namespace: "abcd",
+		ID:        "test",
+	}
+	w := &Writer{
+		cfg: &FileWriterConfig{
+			Dir:          dir,
+			CaptureID:    "cp",
+			ChangeFeedID: changefeed,
+			FileType:     common.DefaultDDLLogFileType,
+			CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
+			S3Storage:    true,
+			MaxLogSize:   defaultMaxLogSize,
+		},
+		uint64buf: make([]byte, 8),
+		metricWriteBytes: common.RedoWriteBytesGauge.
+			WithLabelValues("default", "test"),
+		metricFsyncDuration: common.RedoFsyncDurationHistogram.
+			WithLabelValues("default", "test"),
+		metricFlushAllDuration: common.RedoFlushAllDurationHistogram.
+			WithLabelValues("default", "test"),
+		storage:       mockStorage,
+		uuidGenerator: uuidGen,
+	}
+	w.running.Store(true)
+	_, err = w.Write([]byte("test"))
+	require.Nil(t, err)
+
+	err = w.rotate()
+	require.Nil(t, err)
+
+	w.AdvanceTs(100)
+	_, err = w.Write([]byte("test"))
+	require.Nil(t, err)
+	err = w.rotate()
+	require.Nil(t, err)
+
+	w.Close()
 }

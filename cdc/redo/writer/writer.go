@@ -557,7 +557,6 @@ func (l *LogWriter) getMetafileName() string {
 
 func (l *LogWriter) flushLogMeta(checkPointTs, resolvedTs uint64) error {
 	l.metaLock.Lock()
-	defer l.metaLock.Unlock()
 
 	if checkPointTs != 0 {
 		l.meta.CheckPointTs = checkPointTs
@@ -567,34 +566,30 @@ func (l *LogWriter) flushLogMeta(checkPointTs, resolvedTs uint64) error {
 	}
 	data, err := l.meta.MarshalMsg(nil)
 	if err != nil {
+		l.metaLock.Unlock()
 		return cerror.WrapError(cerror.ErrMarshalFailed, err)
 	}
+	l.metaLock.Unlock()
 
 	err = os.MkdirAll(l.cfg.Dir, common.DefaultDirMode)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't make dir for new redo logfile"))
 	}
 
-	tmpFileName := l.filePath() + common.MetaTmpEXT
-	tmpFile, err := openTruncFile(tmpFileName)
+	metaFile, err := openTruncFile(l.filePath())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 
-	_, err = tmpFile.Write(data)
+	_, err = metaFile.Write(data)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
-	err = tmpFile.Sync()
+	err = metaFile.Sync()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
-	err = tmpFile.Close()
-	if err != nil {
-		return cerror.WrapError(cerror.ErrRedoFileOp, err)
-	}
-
-	err = os.Rename(tmpFileName, l.filePath())
+	err = metaFile.Close()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}

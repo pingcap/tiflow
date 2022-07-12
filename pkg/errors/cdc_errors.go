@@ -445,6 +445,9 @@ var (
 		"operate on a closed notifier",
 		errors.RFCCodeText("CDC:ErrOperateOnClosedNotifier"),
 	)
+	ErrDiskFull = errors.Normalize(
+		"failed to preallocate file because disk is full",
+		errors.RFCCodeText("CDC:ErrDiskFull"))
 
 	// encode/decode, data format and data integrity errors
 	ErrInvalidRecordKey = errors.Normalize(

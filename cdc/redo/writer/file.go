@@ -38,6 +38,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/fsutil"
 	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
@@ -45,10 +46,7 @@ const (
 	// pageBytes is the alignment for flushing records to the backing Writer.
 	// It should be a multiple of the minimum sector size so that log can safely
 	// distinguish between torn writes and ordinary data corruption.
-	pageBytes = 8 * common.MinSectorSize
-)
-
-const (
+	pageBytes                = 8 * common.MinSectorSize
 	defaultFlushIntervalInMs = 1000
 	defaultS3Timeout         = 3 * time.Second
 )
@@ -128,7 +126,8 @@ type Writer struct {
 	eventCommitTS atomic.Uint64
 	running       atomic.Bool
 	gcRunning     atomic.Bool
-	size          int64
+	curOff        int64
+	oldOff        int64
 	file          *os.File
 	// record the filepath that is being written, and has not been flushed
 	ongoingFilePath string
@@ -137,6 +136,7 @@ type Writer struct {
 	storage         storage.ExternalStorage
 	sync.RWMutex
 	uuidGenerator uuid.Generator
+	allocator     *fileAllocator
 
 	metricFsyncDuration    prometheus.Observer
 	metricFlushAllDuration prometheus.Observer
@@ -169,6 +169,7 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 	for _, opt := range opts {
 		opt(op)
 	}
+
 	w := &Writer{
 		cfg:       cfg,
 		op:        op,
@@ -188,6 +189,13 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 		w.uuidGenerator = uuid.NewGenerator()
 	}
 
+	// if we use S3 as the remote storage, and the file type is "row",
+	// a file allocator can be leveraged to pre-allocate files for us.
+	// TODO: test this improvement can be applied to NFS.
+	if cfg.S3Storage && cfg.FileType == common.DefaultRowLogFileType {
+		w.allocator = newFileAllocator(cfg.Dir, cfg.FileType, defaultMaxLogSize)
+	}
+
 	w.running.Store(true)
 	return w, nil
 }
@@ -204,16 +212,11 @@ func (w *Writer) Write(rawData []byte) (int, error) {
 	}
 
 	if w.file == nil {
-		if err := w.openOrNew(len(rawData)); err != nil {
+		if err := w.openNew(); err != nil {
 			return 0, err
 		}
 	}
 
-	if w.size+writeLen > w.cfg.MaxLogSize {
-		if err := w.rotate(); err != nil {
-			return 0, err
-		}
-	}
 	if w.maxCommitTS.Load() < w.eventCommitTS.Load() {
 		w.maxCommitTS.Store(w.eventCommitTS.Load())
 	}
@@ -228,9 +231,22 @@ func (w *Writer) Write(rawData []byte) (int, error) {
 	}
 
 	n, err := w.bw.Write(rawData)
+	if err != nil {
+		return 0, err
+	}
 	w.metricWriteBytes.Add(float64(n))
-	w.size += int64(n)
-	return n, err
+
+	offset, err := w.file.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return 0, err
+	}
+
+	w.curOff = offset
+	if offset < defaultMaxLogSize {
+		return n, nil
+	}
+
+	return 0, w.rotate()
 }
 
 // AdvanceTs implement Advance interface
@@ -265,6 +281,11 @@ func (w *Writer) Close() error {
 	// always set to false when closed, since if having err may not get fixed just by retry
 	defer w.running.Store(false)
 
+	if w.allocator != nil {
+		w.allocator.Close()
+		w.allocator = nil
+	}
+
 	if !w.IsRunning() {
 		return nil
 	}
@@ -292,8 +313,17 @@ func (w *Writer) close() error {
 	if w.file == nil {
 		return nil
 	}
-	err := w.flushAll()
+
+	off, err := w.file.Seek(0, io.SeekCurrent)
 	if err != nil {
+		return err
+	}
+
+	if err := w.file.Truncate(off); err != nil {
+		return err
+	}
+
+	if err := w.flush(); err != nil {
 		return err
 	}
 
@@ -305,12 +335,15 @@ func (w *Writer) close() error {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 
+	// We only write content to S3 before closing the local file.
+	// By this way, we no longer need renaming object in S3.
 	if w.cfg.S3Storage {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultS3Timeout)
 		defer cancel()
 
-		err = w.renameInS3(ctx, w.file.Name(), w.ongoingFilePath)
+		err = w.writeToS3(ctx, w.ongoingFilePath)
 		if err != nil {
+			w.file.Close()
 			return cerror.WrapError(cerror.ErrS3StorageAPI, err)
 		}
 	}
@@ -318,14 +351,6 @@ func (w *Writer) close() error {
 	err = w.file.Close()
 	w.file = nil
 	return cerror.WrapError(cerror.ErrRedoFileOp, err)
-}
-
-func (w *Writer) renameInS3(ctx context.Context, oldPath, newPath string) error {
-	err := w.writeToS3(ctx, newPath)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrS3StorageAPI, err)
-	}
-	return cerror.WrapError(cerror.ErrS3StorageAPI, w.storage.DeleteFile(ctx, filepath.Base(oldPath)))
 }
 
 func (w *Writer) getLogFileName() string {
@@ -362,47 +387,25 @@ func (w *Writer) openNew() error {
 	}
 
 	// reset ts used in file name when new file
-	w.commitTS.Store(w.eventCommitTS.Load())
-	w.maxCommitTS.Store(w.eventCommitTS.Load())
-	path := w.filePath() + common.TmpEXT
-	f, err := openTruncFile(path)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't open new redo logfile"))
+	var f *os.File
+	if w.allocator == nil {
+		w.commitTS.Store(w.eventCommitTS.Load())
+		w.maxCommitTS.Store(w.eventCommitTS.Load())
+		path := w.filePath() + common.TmpEXT
+		f, err = openTruncFile(path)
+		if err != nil {
+			return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't open new redolog file"))
+		}
+	} else {
+		// if there is a file allocator, we use the pre-created file
+		// supplied by the allocator to boost performance
+		f, err = w.allocator.Open()
+		if err != nil {
+			return cerror.WrapError(cerror.ErrRedoFileOp,
+				errors.Annotate(err, "can't open new redolog file with file allocator"))
+		}
 	}
 	w.file = f
-	w.size = 0
-	err = w.newPageWriter()
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (w *Writer) openOrNew(writeLen int) error {
-	path := w.ongoingFilePath
-	if path == "" {
-		return w.openNew()
-	}
-	info, err := os.Stat(path)
-	if os.IsNotExist(err) {
-		return w.openNew()
-	}
-	if err != nil {
-		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "error getting log file info"))
-	}
-
-	if info.Size()+int64(writeLen) >= w.cfg.MaxLogSize {
-		return w.rotate()
-	}
-
-	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, common.DefaultFileMode)
-	if err != nil {
-		// return err let the caller decide next move
-		return cerror.WrapError(cerror.ErrRedoFileOp, err)
-	}
-
-	w.file = file
-	w.size = info.Size()
 	err = w.newPageWriter()
 	if err != nil {
 		return err
@@ -512,8 +515,15 @@ func (w *Writer) getShouldRemovedFiles(checkPointTs uint64) ([]os.FileInfo, erro
 	return logFiles, nil
 }
 
-func (w *Writer) flushAll() error {
+// flushAndRotateFile flushes the file to disk and rotate it if S3 storage is used.
+func (w *Writer) flushAndRotateFile() error {
 	if w.file == nil {
+		return nil
+	}
+
+	// if the file is not changed since last flush,
+	// there is no need to flush.
+	if w.curOff == w.oldOff {
 		return nil
 	}
 
@@ -522,14 +532,20 @@ func (w *Writer) flushAll() error {
 	if err != nil {
 		return err
 	}
+	w.oldOff = w.curOff
+
 	if !w.cfg.S3Storage {
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), defaultS3Timeout)
-	defer cancel()
+	// for s3 storage, when the file is flushed to disk, we need an immediate
+	// file rotate. Otherwise, the existing file content would be repeatedly written to S3,
+	// which could cause considerable network bandwidth waste.
+	err = w.rotate()
+	if err != nil {
+		return nil
+	}
 
-	err = w.writeToS3(ctx, w.file.Name())
 	w.metricFlushAllDuration.Observe(time.Since(start).Seconds())
 
 	return err
@@ -540,7 +556,7 @@ func (w *Writer) Flush() error {
 	w.Lock()
 	defer w.Unlock()
 
-	return w.flushAll()
+	return w.flushAndRotateFile()
 }
 
 func (w *Writer) flush() error {
@@ -568,5 +584,18 @@ func (w *Writer) writeToS3(ctx context.Context, name string) error {
 	}
 
 	// Key in s3: aws.String(rs.options.Prefix + name), prefix should be changefeed name
-	return cerror.WrapError(cerror.ErrS3StorageAPI, w.storage.WriteFile(ctx, filepath.Base(name), fileData))
+	err = w.storage.WriteFile(ctx, filepath.Base(name), fileData)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrS3StorageAPI, err)
+	}
+
+	// in case the page cache piling up triggered the OS memory reclaming which may cause
+	// I/O latency spike, we mandatorily drop the page cache of the file when it is successfully
+	// written to S3.
+	err = fsutil.DropPageCache(name)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+	}
+
+	return nil
 }
