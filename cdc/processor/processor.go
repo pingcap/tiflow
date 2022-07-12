@@ -654,9 +654,6 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		return errors.Trace(err)
 	}
 
-	stdCtx := contextutil.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
-	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
-
 	p.mounter = entry.NewMounter(p.schemaStorage,
 		p.changefeedID,
 		contextutil.TimezoneFromCtx(ctx),
@@ -667,6 +664,9 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	log.Info("processor try new sink",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeed.ID.ID))
+
+	stdCtx := contextutil.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
+	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
 
 	start := time.Now()
 	p.sink, err = sink.New(
@@ -737,15 +737,13 @@ func (p *processor) handleErrorCh(ctx cdcContext.Context) error {
 	return cerror.ErrReactorFinished
 }
 
-func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.SchemaStorage, error) {
-	kvStorage := p.upstream.KVStorage
+func (p *processor) createAndDriveSchemaStorage(ctx context.Context) (entry.SchemaStorage, error) {
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
-	kvCfg := config.GetGlobalServerConfig().KVClient
-	stdCtx := contextutil.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
-	stdCtx = contextutil.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
-	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
+	ctx = contextutil.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
+	ctx = contextutil.PutChangefeedIDInCtx(ctx, p.changefeedID)
+	ctx = contextutil.PutRoleInCtx(ctx, util.RoleProcessor)
 	ddlPuller := puller.New(
-		stdCtx,
+		ctx,
 		p.upstream.PDClient,
 		p.upstream.GrpcPool,
 		p.upstream.RegionCache,
@@ -753,24 +751,28 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		p.upstream.PDClock,
 		checkpointTs,
 		regionspan.GetAllDDLSpan(),
-		kvCfg,
-		ctx.ChangefeedVars().ID,
+		config.GetGlobalServerConfig().KVClient,
+		p.changefeedID,
 	)
-	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
+
+	p.wg.Add(1)
+	go func() {
+		defer p.wg.Done()
+		p.sendError(ddlPuller.Run(ctx))
+	}()
+
+	ddlRawKVCh := memory.SortOutput(ctx, ddlPuller.Output())
+
+	meta, err := kv.GetSnapshotMeta(p.upstream.KVStorage, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	schemaStorage, err := entry.NewSchemaStorage(meta, checkpointTs, p.filter,
-		p.changefeed.Info.Config.ForceReplicate, ctx.ChangefeedVars().ID)
+		p.changefeed.Info.Config.ForceReplicate, p.changefeedID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
-		p.sendError(ddlPuller.Run(stdCtx))
-	}()
-	ddlRawKVCh := memory.SortOutput(ctx, ddlPuller.Output())
+
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
