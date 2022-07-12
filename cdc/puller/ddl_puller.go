@@ -16,6 +16,7 @@ package puller
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/benbjohnson/clock"
@@ -81,7 +82,7 @@ func NewDDLPuller(ctx context.Context,
 		return nil, errors.Trace(err)
 	}
 
-	// Add "_ddl_puller" to make it different from table pullers.
+	// add "_ddl_puller" to make it different from table pullers.
 	changefeed.ID += "_ddl_puller"
 
 	var puller Puller
@@ -117,11 +118,9 @@ func (h *ddlPullerImpl) handleRawDDL(rawDDL *model.RawKVEntry) error {
 		return nil
 	}
 	if rawDDL.OpType == model.OpTypeResolved {
-		h.mu.Lock()
-		defer h.mu.Unlock()
-		if rawDDL.CRTs > h.resolvedTS {
+		if rawDDL.CRTs > atomic.LoadUint64(&h.resolvedTS) {
 			h.lastResolvedTsAdvancedTime = h.clock.Now()
-			h.resolvedTS = rawDDL.CRTs
+			atomic.StoreUint64(&h.resolvedTS, rawDDL.CRTs)
 		}
 		return nil
 	}
@@ -190,7 +189,7 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 						zap.String("namespace", h.changefeedID.Namespace),
 						zap.String("changefeed", h.changefeedID.ID),
 						zap.Duration("duration", duration),
-						zap.Uint64("resolvedTs", h.resolvedTS))
+						zap.Uint64("resolvedTs", atomic.LoadUint64(&h.resolvedTS)))
 				}
 			case e := <-rawDDLCh:
 				if err := h.handleRawDDL(e); err != nil {
@@ -203,7 +202,7 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 	log.Info("DDL puller started",
 		zap.String("namespace", h.changefeedID.Namespace),
 		zap.String("changefeed", h.changefeedID.ID),
-		zap.Uint64("resolvedTS", h.resolvedTS))
+		zap.Uint64("resolvedTS", atomic.LoadUint64(&h.resolvedTS)))
 
 	return g.Wait()
 }
