@@ -1,2 +1,0 @@
-- name:  stop master
-  shell: "{{ df_script_dir }}/stop_master.sh"

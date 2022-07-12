@@ -490,11 +490,10 @@ tiflow:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/engine/main.go
 
 tiflow-proto: tools/bin/protoc tools/bin/protoc-gen-gogofaster tools/bin/goimports
-	./engine/generate-proto.sh
+	scripts/generate-engine-proto.sh
 
 tiflow-demo:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./engine/cmd/demoserver
-	cp ./bin/tiflow-demoserver ./engine/ansible/roles/common/files/demoserver.bin
 
 tiflow-chaos-case:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-chaos-case ./engine/chaos/cases

@@ -1,2 +1,0 @@
-- name: start executor
-  shell: "nohup {{ df_script_dir }}/start_executor.sh > {{ df_executor_std_log }} 2>&1 &"
