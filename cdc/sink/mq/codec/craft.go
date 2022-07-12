@@ -46,7 +46,7 @@ func (e *CraftEventBatchEncoder) flush() {
 	schema := headers.GetSchema(0)
 	table := headers.GetTable(0)
 	rowsCnt := e.rowChangedBuffer.RowsCount()
-	mqMessage := NewMQMessage(config.ProtocolCraft, nil, e.rowChangedBuffer.Encode(), ts, model.MqMessageTypeRow, &schema, &table)
+	mqMessage := NewMQMessage(config.ProtocolCraft, nil, e.rowChangedBuffer.Encode(), ts, model.MessageTypeRow, &schema, &table)
 	mqMessage.SetRowsCount(rowsCnt)
 	e.messageBuf = append(e.messageBuf, mqMessage)
 }
@@ -123,9 +123,9 @@ type CraftEventBatchDecoder struct {
 }
 
 // HasNext implements the EventBatchDecoder interface
-func (b *CraftEventBatchDecoder) HasNext() (model.MqMessageType, bool, error) {
+func (b *CraftEventBatchDecoder) HasNext() (model.MessageType, bool, error) {
 	if b.index >= b.headers.Count() {
-		return model.MqMessageTypeUnknown, false, nil
+		return model.MessageTypeUnknown, false, nil
 	}
 	return b.headers.GetType(b.index), true, nil
 }
@@ -136,7 +136,7 @@ func (b *CraftEventBatchDecoder) NextResolvedEvent() (uint64, error) {
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
-	if !hasNext || ty != model.MqMessageTypeResolved {
+	if !hasNext || ty != model.MessageTypeResolved {
 		return 0, cerror.ErrCraftCodecInvalidData.GenWithStack("not found resolved event message")
 	}
 	ts := b.headers.GetTs(b.index)
@@ -150,7 +150,7 @@ func (b *CraftEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, 
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	if !hasNext || ty != model.MqMessageTypeRow {
+	if !hasNext || ty != model.MessageTypeRow {
 		return nil, cerror.ErrCraftCodecInvalidData.GenWithStack("not found row changed event message")
 	}
 	oldValue, newValue, err := b.decoder.RowChangedEvent(b.index)
@@ -188,7 +188,7 @@ func (b *CraftEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	if !hasNext || ty != model.MqMessageTypeDDL {
+	if !hasNext || ty != model.MessageTypeDDL {
 		return nil, cerror.ErrCraftCodecInvalidData.GenWithStack("not found ddl event message")
 	}
 	ddlType, query, err := b.decoder.DDLEvent(b.index)

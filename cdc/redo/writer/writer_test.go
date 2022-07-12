@@ -131,7 +131,7 @@ func TestLogWriterWriteLog(t *testing.T) {
 			rowWriter: mockWriter,
 			ddlWriter: mockWriter,
 			meta:      &common.LogMeta{ResolvedTsList: map[int64]uint64{}},
-			metricTotalRowsCount: redoTotalRowsCountGauge.
+			metricTotalRowsCount: common.RedoTotalRowsCountGauge.
 				WithLabelValues("default", ""),
 		}
 		if tt.name == "context cancel" {
@@ -340,7 +340,7 @@ func TestLogWriterFlushLog(t *testing.T) {
 			cancel()
 			tt.args.ctx = ctx
 		}
-		err := writer.FlushLog(tt.args.ctx, tt.args.tableID, tt.args.ts)
+		err := writer.FlushLog(tt.args.ctx, map[int64]uint64{tt.args.tableID: tt.args.ts})
 		if tt.wantErr != nil {
 			require.True(t, errors.ErrorEqual(tt.wantErr, err), err.Error()+tt.wantErr.Error())
 		} else {
@@ -528,86 +528,6 @@ func TestLogWriterEmitResolvedTs(t *testing.T) {
 		} else {
 			require.Nil(t, err, tt.name)
 			require.Equal(t, tt.args.ts, writer.meta.ResolvedTs, tt.name)
-		}
-	}
-}
-
-func TestLogWriterGetCurrentResolvedTs(t *testing.T) {
-	type arg struct {
-		ctx      context.Context
-		ts       map[int64]uint64
-		tableIDs []int64
-	}
-	tests := []struct {
-		name    string
-		args    arg
-		wantTs  map[int64]uint64
-		wantErr error
-	}{
-		{
-			name: "happy",
-			args: arg{
-				ctx:      context.Background(),
-				ts:       map[int64]uint64{1: 1, 2: 2},
-				tableIDs: []int64{1, 2, 3},
-			},
-			wantTs: map[int64]uint64{1: 1, 2: 2},
-		},
-		{
-			name: "len(tableIDs)==0",
-			args: arg{
-				ctx: context.Background(),
-			},
-		},
-		{
-			name: "context cancel",
-			args: arg{
-				ctx: context.Background(),
-			},
-			wantErr: context.Canceled,
-		},
-	}
-
-	dir, err := ioutil.TempDir("", "redo-GetCurrentResolvedTs")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir)
-
-	for _, tt := range tests {
-		mockWriter := &mockFileWriter{}
-		mockWriter.On("Flush", mock.Anything).Return(nil)
-		mockWriter.On("IsRunning").Return(true)
-		cfg := &LogWriterConfig{
-			Dir:               dir,
-			ChangeFeedID:      model.DefaultChangeFeedID("test-cf"),
-			CaptureID:         "cp",
-			MaxLogSize:        10,
-			CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
-			FlushIntervalInMs: 5,
-		}
-		writer := LogWriter{
-			rowWriter: mockWriter,
-			ddlWriter: mockWriter,
-			meta:      &common.LogMeta{ResolvedTsList: map[int64]uint64{}},
-			cfg:       cfg,
-		}
-
-		if tt.name == "context cancel" {
-			ctx, cancel := context.WithCancel(context.Background())
-			cancel()
-			tt.args.ctx = ctx
-		}
-		for k, v := range tt.args.ts {
-			_ = writer.FlushLog(tt.args.ctx, k, v)
-		}
-		ret, err := writer.GetCurrentResolvedTs(tt.args.ctx, tt.args.tableIDs)
-		if tt.wantErr != nil {
-			require.True(t, errors.ErrorEqual(tt.wantErr, err), tt.name, err.Error())
-		} else {
-			require.Nil(t, err, tt.name)
-			require.Equal(t, len(ret), len(tt.wantTs))
-			for k, v := range tt.wantTs {
-				require.Equal(t, v, ret[k])
-			}
 		}
 	}
 }

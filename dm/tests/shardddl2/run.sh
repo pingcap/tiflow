@@ -54,7 +54,7 @@ function DM_037_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `new_col1` INT DEFAULT -1' 1 \
+			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `new_col1` INT DEFAULT' 1 \
 			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
@@ -126,7 +126,7 @@ function DM_040_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `col1` VARCHAR(10) CHARACTER SET UTF8MB4' 1 \
+			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `col1` VARCHAR(10) CHARACTER SET UTF8' 1 \
 			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
@@ -173,10 +173,10 @@ function DM_043_CASE() {
 	if [[ "$1" = "pessimistic" ]]; then
 		check_log_contain_with_retry "is different with" $WORK_DIR/master/log/dm-master.log
 	else
+		# can't make sure which MySQL comes first
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `new_col1` INT GENERATED ALWAYS AS(`id`+2) VIRTUAL' 1 \
-			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
+			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `new_col1` INT GENERATED ALWAYS AS' 1
 	fi
 }
 

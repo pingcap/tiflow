@@ -16,7 +16,6 @@ package pipeline
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -45,13 +44,14 @@ func TestAsyncStopFailed(t *testing.T) {
 	}()
 
 	tbl := &tableActor{
-		stopped:   0,
-		tableID:   1,
-		router:    tableActorRouter,
-		cancel:    func() {},
-		reportErr: func(err error) {},
-		sinkNode:  newSinkNode(1, &mockSink{}, 0, 0, &mockFlowController{}),
+		stopped:     0,
+		tableID:     1,
+		router:      tableActorRouter,
+		cancel:      func() {},
+		reportErr:   func(err error) {},
+		redoManager: redo.NewDisabledManager(),
 	}
+	tbl.sinkNode = newSinkNode(1, &mockSink{}, 0, 0, &mockFlowController{}, false, tbl.redoManager)
 	require.True(t, tbl.AsyncStop(1))
 
 	mb := actor.NewMailbox[pmessage.Message](actor.ID(1), 0)
@@ -68,6 +68,7 @@ func TestTableActorInterface(t *testing.T) {
 	tbl := &tableActor{
 		markTableID: 2,
 		tableID:     1,
+		redoManager: redo.NewDisabledManager(),
 		sinkNode:    sink,
 		sortNode:    sorter,
 		tableName:   "t1",
@@ -86,13 +87,19 @@ func TestTableActorInterface(t *testing.T) {
 	require.Equal(t, TableStatusStopped, tbl.Status())
 	require.Equal(t, uint64(1), tbl.Workload().Workload)
 
-	atomic.StoreUint64(&sink.checkpointTs, 3)
+	sink.checkpointTs.Store(model.NewResolvedTs(3))
 	require.Equal(t, model.Ts(3), tbl.CheckpointTs())
 
 	require.Equal(t, model.Ts(5), tbl.ResolvedTs())
-	tbl.replicaConfig.Consistent.Level = string(redo.ConsistentLevelEventual)
-	sink.resolvedTs.Store(model.NewResolvedTs(6))
-	require.Equal(t, model.Ts(6), tbl.ResolvedTs())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tbl.redoManager, _ = redo.NewMockManager(ctx)
+	tbl.redoManager.AddTable(tbl.tableID, 0)
+	require.Equal(t, model.Ts(0), tbl.ResolvedTs())
+	tbl.redoManager.UpdateResolvedTs(ctx, tbl.tableID, model.Ts(6))
+	require.Eventually(t, func() bool { return tbl.ResolvedTs() == model.Ts(6) },
+		time.Second*5, time.Millisecond*500)
+	tbl.redoManager.Cleanup(ctx)
 }
 
 func TestTableActorCancel(t *testing.T) {
@@ -106,11 +113,12 @@ func TestTableActorCancel(t *testing.T) {
 	}()
 
 	tbl := &tableActor{
-		stopped:   0,
-		tableID:   1,
-		router:    tableActorRouter,
-		cancel:    func() {},
-		reportErr: func(err error) {},
+		stopped:     0,
+		tableID:     1,
+		redoManager: redo.NewDisabledManager(),
+		router:      tableActorRouter,
+		cancel:      func() {},
+		reportErr:   func(err error) {},
 	}
 	mb := actor.NewMailbox[pmessage.Message](actor.ID(1), 0)
 	tbl.actorID = actor.ID(1)
@@ -123,7 +131,7 @@ func TestTableActorCancel(t *testing.T) {
 func TestTableActorWait(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	eg, _ := errgroup.WithContext(ctx)
-	tbl := &tableActor{wg: eg}
+	tbl := &tableActor{wg: eg, redoManager: redo.NewDisabledManager()}
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	stopped := false
@@ -141,6 +149,7 @@ func TestHandleError(t *testing.T) {
 	canceled := false
 	reporterErr := false
 	tbl := &tableActor{
+		redoManager: redo.NewDisabledManager(),
 		cancel: func() {
 			canceled = true
 		},
@@ -189,10 +198,10 @@ func TestPollTickMessage(t *testing.T) {
 		status:         TableStatusInitializing,
 		sink:           &mockSink{},
 		flowController: &mockFlowController{},
-		checkpointTs:   10,
 		targetTs:       11,
 	}
 	sn.resolvedTs.Store(model.NewResolvedTs(10))
+	sn.checkpointTs.Store(model.NewResolvedTs(10))
 
 	tbl := tableActor{
 		sinkNode:          sn,
@@ -239,11 +248,11 @@ func TestPollStopMessage(t *testing.T) {
 
 func TestPollBarrierTsMessage(t *testing.T) {
 	sn := &sinkNode{
-		targetTs:     10,
-		checkpointTs: 5,
-		barrierTs:    8,
+		targetTs:  10,
+		barrierTs: 8,
 	}
 	sn.resolvedTs.Store(model.NewResolvedTs(5))
+	sn.checkpointTs.Store(model.NewResolvedTs(5))
 
 	tbl := tableActor{
 		sinkNode: sn,
@@ -359,7 +368,7 @@ func TestNewTableActor(t *testing.T) {
 		&model.TableReplicaInfo{
 			StartTs:     0,
 			MarkTableID: 1,
-		}, &mockSink{}, 10)
+		}, &mockSink{}, redo.NewDisabledManager(), 10)
 	require.NotNil(t, tbl)
 	require.Nil(t, err)
 	require.NotPanics(t, func() {
@@ -375,7 +384,7 @@ func TestNewTableActor(t *testing.T) {
 		&model.TableReplicaInfo{
 			StartTs:     0,
 			MarkTableID: 1,
-		}, &mockSink{}, 10)
+		}, &mockSink{}, redo.NewDisabledManager(), 10)
 	require.Nil(t, tbl)
 	require.NotNil(t, err)
 
@@ -404,7 +413,8 @@ func TestTableActorStart(t *testing.T) {
 		return nil
 	}
 	tbl := &tableActor{
-		globalVars: globalVars,
+		redoManager: redo.NewDisabledManager(),
+		globalVars:  globalVars,
 		changefeedVars: &cdcContext.ChangefeedVars{
 			ID: model.DefaultChangeFeedID("changefeed-id-test"),
 			Info: &model.ChangeFeedInfo{
@@ -415,6 +425,7 @@ func TestTableActorStart(t *testing.T) {
 			StartTs:     0,
 			MarkTableID: 1,
 		},
+		replicaConfig: config.GetDefaultReplicaConfig(),
 	}
 	require.Nil(t, tbl.start(ctx))
 	require.Equal(t, 1, len(tbl.nodes))
@@ -428,10 +439,12 @@ func TestTableActorStart(t *testing.T) {
 				Config: config.GetDefaultReplicaConfig(),
 			},
 		},
+		redoManager: redo.NewDisabledManager(),
 		replicaInfo: &model.TableReplicaInfo{
 			StartTs:     0,
 			MarkTableID: 1,
 		},
+		replicaConfig: config.GetDefaultReplicaConfig(),
 	}
 	tbl.cyclicEnabled = true
 	require.Nil(t, tbl.start(ctx))
