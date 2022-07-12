@@ -22,7 +22,7 @@ type EventBatchDecoder interface {
 	//     1. the type of the next event
 	//     2. a bool if the next event is exist
 	//     3. error
-	HasNext() (model.MqMessageType, bool, error)
+	HasNext() (model.MessageType, bool, error)
 	// NextResolvedEvent returns the next resolved event if exists
 	NextResolvedEvent() (uint64, error)
 	// NextRowChangedEvent returns the next row changed event if exists

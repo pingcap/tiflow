@@ -69,9 +69,10 @@ type tablePipelineImpl struct {
 	markTableID int64
 	tableName   string // quoted schema and table, used in metrics only
 
-	sorterNode *sorterNode
-	sinkNode   *sinkNode
-	cancel     context.CancelFunc
+	sorterNode  *sorterNode
+	sinkNode    *sinkNode
+	redoManager redo.LogManager
+	cancel      context.CancelFunc
 
 	replConfig *serverConfig.ReplicaConfig
 }
@@ -79,8 +80,12 @@ type tablePipelineImpl struct {
 // TODO find a better name or avoid using an interface
 // We use an interface here for ease in unit testing.
 type tableFlowController interface {
-	Consume(msg *model.PolymorphicEvent, size uint64, blockCallBack func(batch bool) error) error
-	Release(resolvedTs uint64)
+	Consume(
+		msg *model.PolymorphicEvent,
+		size uint64,
+		blockCallBack func(batchID uint64) error,
+	) error
+	Release(resolved model.ResolvedTs)
 	Abort()
 	GetConsumption() uint64
 }
@@ -91,8 +96,8 @@ func (t *tablePipelineImpl) ResolvedTs() model.Ts {
 	// will be able to cooperate replication status directly. Then we will add
 	// another replication barrier for consistent replication instead of reusing
 	// the global resolved-ts.
-	if redo.IsConsistentEnabled(t.replConfig.Consistent.Level) {
-		return t.sinkNode.ResolvedTs().Ts
+	if t.redoManager.Enabled() {
+		return t.redoManager.GetResolvedTs(t.tableID)
 	}
 	return t.sorterNode.ResolvedTs()
 }
@@ -180,6 +185,7 @@ func NewTablePipeline(ctx cdcContext.Context,
 	sink sink.Sink,
 	targetTs model.Ts,
 	upstream *upstream.Upstream,
+	redoManager redo.LogManager,
 ) TablePipeline {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	changefeed := ctx.ChangefeedVars().ID
@@ -190,6 +196,7 @@ func NewTablePipeline(ctx cdcContext.Context,
 		tableName:   tableName,
 		cancel:      cancel,
 		replConfig:  replConfig,
+		redoManager: redoManager,
 	}
 
 	perTableMemoryQuota := serverConfig.GetGlobalServerConfig().PerTableMemoryQuota
@@ -199,7 +206,10 @@ func NewTablePipeline(ctx cdcContext.Context,
 		zap.String("tableName", tableName),
 		zap.Int64("tableID", tableID),
 		zap.Uint64("quota", perTableMemoryQuota))
-	flowController := flowcontrol.NewTableFlowController(perTableMemoryQuota)
+	splitTxn := replConfig.Sink.TxnAtomicity.ShouldSplitTxn()
+
+	flowController := flowcontrol.NewTableFlowController(perTableMemoryQuota,
+		redoManager.Enabled(), splitTxn)
 	config := ctx.ChangefeedVars().Info.Config
 	cyclicEnabled := config.Cyclic != nil && config.Cyclic.IsEnabled()
 	runnerSize := defaultRunnersSize
@@ -210,7 +220,8 @@ func NewTablePipeline(ctx cdcContext.Context,
 	p := pipeline.NewPipeline(ctx, 500*time.Millisecond, runnerSize, defaultOutputChannelSize)
 	sorterNode := newSorterNode(tableName, tableID, replicaInfo.StartTs,
 		flowController, mounter, replConfig)
-	sinkNode := newSinkNode(tableID, sink, replicaInfo.StartTs, targetTs, flowController)
+	sinkNode := newSinkNode(tableID, sink, replicaInfo.StartTs,
+		targetTs, flowController, splitTxn, redoManager)
 
 	p.AppendNode(ctx, "puller", newPullerNode(tableID, replicaInfo, tableName,
 		changefeed, upstream))
