@@ -62,7 +62,7 @@ func (fl *fileAllocator) Open() (f *os.File, err error) {
 	return f, err
 }
 
-// Close close the doneCh to notify the background goroutine to exist.
+// Close close the doneCh to notify the background goroutine to exit.
 func (fl *fileAllocator) Close() error {
 	close(fl.doneCh)
 	return <-fl.errCh

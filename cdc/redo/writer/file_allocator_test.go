@@ -37,5 +37,4 @@ func TestFileAllocateFailed(t *testing.T) {
 	f, err := fl.Open()
 	require.Nil(t, f)
 	require.NotNil(t, err)
-	fmt.Println(err)
 }
