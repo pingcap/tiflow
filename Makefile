@@ -487,13 +487,15 @@ failpoint-disable: check_failpoint_ctl
 engine: tiflow tiflow-demo
 
 tiflow:
-	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/engine/main.go
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
 
 tiflow-proto: tools/bin/protoc tools/bin/protoc-gen-gogofaster tools/bin/goimports
 	scripts/generate-engine-proto.sh
 
 tiflow-demo:
-	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./engine/cmd/demoserver
+
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./cmd/tiflow-demoserver
+	cp ./bin/tiflow-demoserver ./engine/ansible/roles/common/files/demoserver.bin
 
 tiflow-chaos-case:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-chaos-case ./engine/chaos/cases
