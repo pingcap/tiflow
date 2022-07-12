@@ -410,21 +410,36 @@ func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model
 }
 
 func (o *ownerImpl) handleDrainCaptures(query *scheduler.Query, done chan<- error) {
-	changefeedWithTableCount := 0
-	totalTableCount := 0
+	var (
+		changefeedWithTableCount int
+		totalTableCount          int
+		err                      error
+	)
 	for _, changefeed := range o.changefeeds {
-		count := changefeed.scheduler.DrainCapture(query.CaptureID)
+		count, e := changefeed.scheduler.DrainCapture(query.CaptureID)
 		if count > 0 {
 			changefeedWithTableCount++
 		}
 		totalTableCount += count
+		if err == nil {
+			err = e
+		}
 	}
-	log.Info("owner handle drain capture",
-		zap.Int("changefeedWithTableCount", changefeedWithTableCount),
-		zap.Int("totalTableCount", totalTableCount))
+
 	query.Resp = &model.DrainCaptureResp{
 		CurrentTableCount: totalTableCount,
 	}
+
+	if err != nil {
+		log.Info("owner handle drain capture failed", zap.Error(err))
+		done <- err
+		close(done)
+		return
+	}
+
+	log.Info("owner handle drain capture",
+		zap.Int("changefeedWithTableCount", changefeedWithTableCount),
+		zap.Int("totalTableCount", totalTableCount))
 	close(done)
 }
 

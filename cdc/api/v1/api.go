@@ -800,7 +800,7 @@ func (h *OpenAPI) DrainCapture(c *gin.Context) {
 
 	resp, err := api.HandleOwnerDrainCapture(ctx, h.capture, target)
 	if err != nil {
-		_ = c.Error(err)
+		_ = c.AbortWithError(http.StatusServiceUnavailable, err)
 		return
 	}
 
