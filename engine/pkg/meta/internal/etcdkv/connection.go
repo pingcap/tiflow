@@ -35,7 +35,6 @@ type clientConnImpl struct {
 	mu            sync.Mutex
 	isInitialized *atomic.Bool
 	cli           *clientv3.Client
-	storeConf     *metaModel.StoreConfig
 }
 
 // Initialize implements Initialize of ClientConn
