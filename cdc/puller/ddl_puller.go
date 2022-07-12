@@ -36,7 +36,9 @@ import (
 )
 
 const (
-	ownerDDLPullerStuckWarnTimeout = 30 * time.Second
+	ddlPullerStuckWarnTimeout = 30 * time.Second
+	// DDLPullerTableName is the fake table name for ddl puller
+	DDLPullerTableName = "DDL_PULLER"
 )
 
 // DDLPuller is the interface for DDL Puller, used by owner only.
@@ -79,20 +81,24 @@ func NewDDLPuller(ctx context.Context,
 		return nil, errors.Trace(err)
 	}
 
+	// Add "_ddl_puller" to make it different from table pullers.
+	changefeed.ID += "_ddl_puller"
+
 	var puller Puller
 	storage := up.KVStorage
 	// storage can be nil only in the test
-	if storage == nil {
+	if storage != nil {
 		puller = New(
-			ctx, up.PDClient,
+			ctx,
+			up.PDClient,
 			up.GrpcPool,
 			up.RegionCache,
 			storage,
 			up.PDClock,
-			changefeed,
 			startTs,
-			[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()},
+			regionspan.GetAllDDLSpan(),
 			config.GetGlobalServerConfig().KVClient,
+			changefeed,
 		)
 	}
 
@@ -169,7 +175,7 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 
 	rawDDLCh := memory.SortOutput(ctx, h.puller.Output())
 
-	ticker := h.clock.Ticker(ownerDDLPullerStuckWarnTimeout)
+	ticker := h.clock.Ticker(ddlPullerStuckWarnTimeout)
 	defer ticker.Stop()
 
 	g.Go(func() error {
@@ -179,7 +185,7 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 				return ctx.Err()
 			case <-ticker.C:
 				duration := h.clock.Since(h.lastResolvedTsAdvancedTime)
-				if duration > ownerDDLPullerStuckWarnTimeout {
+				if duration > ddlPullerStuckWarnTimeout {
 					log.Warn("ddl puller resolved ts has not advanced",
 						zap.String("namespace", h.changefeedID.Namespace),
 						zap.String("changefeed", h.changefeedID.ID),

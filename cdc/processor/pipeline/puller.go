@@ -80,10 +80,10 @@ func (n *pullerNode) start(ctx pipeline.NodeContext,
 		up.RegionCache,
 		up.KVStorage,
 		up.PDClock,
-		n.changefeed,
 		n.startTs,
 		n.tableSpan(ctx),
 		kvCfg,
+		n.changefeed,
 	)
 	n.wg.Go(func() error {
 		ctx.Throw(errors.Trace(plr.Run(ctxC)))

@@ -127,8 +127,8 @@ func newPullerForTest(
 	defer regionCache.Close()
 	plr := New(
 		ctx, pdCli, grpcPool, regionCache, store, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID("changefeed-id-test"),
-		checkpointTs, spans, config.GetDefaultServerConfig().KVClient)
+		checkpointTs, spans, config.GetDefaultServerConfig().KVClient,
+		model.DefaultChangeFeedID("changefeed-id-test"))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
