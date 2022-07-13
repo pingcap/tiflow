@@ -425,9 +425,6 @@ func (o *ownerImpl) handleDrainCaptures(query *scheduler.Query, done chan<- erro
 			changefeedWithTableCount++
 		}
 		totalTableCount += count
-		if err == nil {
-			err = e
-		}
 	}
 
 	query.Resp = &model.DrainCaptureResp{
