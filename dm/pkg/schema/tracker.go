@@ -39,6 +39,7 @@ import (
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/store/mockstore"
 	unistoreConfig "github.com/pingcap/tidb/store/mockstore/unistore/config"
+	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -245,7 +246,7 @@ func (tr *Tracker) Init(
 	// TiDB will unconditionally create an empty "test" schema.
 	// This interferes with MySQL/MariaDB upstream which such schema does not
 	// exist by default. So we need to drop it first.
-	err = dom.DDL().DropSchema(se, model.NewCIStr("test"))
+	err = tr.dropDatabase("test")
 	if err != nil {
 		return err
 	}
@@ -399,17 +400,25 @@ func IsTableNotExists(err error) bool {
 func (tr *Tracker) Reset() error {
 	tr.se.SetValue(sessionctx.QueryString, "skip")
 	allDBs := tr.dom.InfoSchema().AllSchemaNames()
-	ddl := tr.dom.DDL()
 	for _, db := range allDBs {
 		dbName := model.NewCIStr(db)
 		if filter.IsSystemSchema(dbName.L) {
 			continue
 		}
-		if err := ddl.DropSchema(tr.se, dbName); err != nil {
+		if err := tr.dropDatabase(dbName.L); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (tr *Tracker) dropDatabase(db string) error {
+	query := fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbutil.ColumnName(db))
+	stmt, err := tr.stmtFromQuery(query)
+	if err != nil {
+		return err
+	}
+	return tr.dom.DDL().DropSchema(tr.se, stmt.(*ast.DropDatabaseStmt))
 }
 
 // Close close a tracker.
@@ -443,21 +452,23 @@ func (tr *Tracker) Close() error {
 // DropTable drops a table from this tracker.
 func (tr *Tracker) DropTable(table *filter.Table) error {
 	tr.se.SetValue(sessionctx.QueryString, "skip")
-	tableIdent := ast.Ident{
-		Schema: model.NewCIStr(table.Schema),
-		Name:   model.NewCIStr(table.Name),
+	query := fmt.Sprintf("DROP TABLE IF EXISTS %s", table.String())
+	stmt, err := tr.stmtFromQuery(query)
+	if err != nil {
+		return err
 	}
-	return tr.dom.DDL().DropTable(tr.se, tableIdent)
+	return tr.dom.DDL().DropTable(tr.se, stmt.(*ast.DropTableStmt))
 }
 
 // DropIndex drops an index from this tracker.
 func (tr *Tracker) DropIndex(table *filter.Table, index string) error {
 	tr.se.SetValue(sessionctx.QueryString, "skip")
-	tableIdent := ast.Ident{
-		Schema: model.NewCIStr(table.Schema),
-		Name:   model.NewCIStr(table.Name),
+	query := fmt.Sprintf("ALTER TABLE %s DROP INDEX IF EXISTS %s", table.String(), dbutil.ColumnName(index))
+	stmt, err := tr.stmtFromQuery(query)
+	if err != nil {
+		return err
 	}
-	return tr.dom.DDL().DropIndex(tr.se, tableIdent, model.NewCIStr(index), true)
+	return tr.dom.DDL().DropIndex(tr.se, stmt.(*ast.DropIndexStmt))
 }
 
 // CreateSchemaIfNotExists creates a SCHEMA of the given name if it did not exist.
@@ -467,7 +478,20 @@ func (tr *Tracker) CreateSchemaIfNotExists(db string) error {
 	if tr.dom.InfoSchema().SchemaExists(dbName) {
 		return nil
 	}
-	return tr.dom.DDL().CreateSchema(tr.se, dbName, nil, nil)
+	query := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbutil.ColumnName(db))
+	stmt, err := tr.stmtFromQuery(query)
+	if err != nil {
+		return err
+	}
+	return tr.dom.DDL().CreateSchema(tr.se, stmt.(*ast.CreateDatabaseStmt))
+}
+
+func (tr *Tracker) stmtFromQuery(query string) (ast.StmtNode, error) {
+	stmts, _, err := parser.New().Parse(query, "", "")
+	if err != nil {
+		return nil, err
+	}
+	return stmts[0], err
 }
 
 // cloneTableInfo creates a clone of the TableInfo.
