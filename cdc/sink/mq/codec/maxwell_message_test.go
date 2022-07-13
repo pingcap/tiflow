@@ -11,14 +11,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package metadata
+package codec
 
 import (
 	"testing"
 
-	"github.com/pingcap/tiflow/engine/pkg/leakutil"
+	"github.com/stretchr/testify/require"
 )
 
-func TestMain(m *testing.M) {
-	leakutil.SetUpLeakTest(m)
+func TestMaxwellFormatCol(t *testing.T) {
+	t.Parallel()
+	row := &maxwellMessage{
+		Ts:       1,
+		Database: "a",
+		Table:    "b",
+		Type:     "delete",
+		Xid:      1,
+		Xoffset:  1,
+		Position: "",
+		Gtid:     "",
+		Data: map[string]interface{}{
+			"id": "1",
+		},
+	}
+	rowEncode, err := row.encode()
+	require.Nil(t, err)
+	require.NotNil(t, rowEncode)
 }
