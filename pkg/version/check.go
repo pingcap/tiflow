@@ -214,14 +214,14 @@ func (v *TiCDCClusterVersion) ShouldEnableUnifiedSorterByDefault() bool {
 	return !v.LessThan(*semver.New("4.0.13")) || (v.Major == 4 && v.Minor == 0 && v.Patch == 13)
 }
 
-// ShouldRunCliWithAPIClientByDefault returns whether to run cmd cli with api client by default
-func (v *TiCDCClusterVersion) ShouldRunCliWithAPIClientByDefault() bool {
+// ShouldRunCliWithOpenAPI returns whether to run cmd cli with open api
+func (v *TiCDCClusterVersion) ShouldRunCliWithOpenAPI() bool {
 	// we assume the unknown version to be the latest version
 	if v.Version == nil {
 		return true
 	}
 
-	return !v.LessThan(*semver.New("5.4.0")) || (v.Major == 5 && v.Minor == 4 && v.Patch == 0)
+	return !v.LessThan(*semver.New("6.2.0")) || (v.Major == 6 && v.Minor == 2 && v.Patch == 0)
 }
 
 // TiCDCClusterVersionUnknown is a read-only variable to represent the unknown cluster version

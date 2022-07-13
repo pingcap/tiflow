@@ -18,7 +18,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
@@ -287,7 +286,7 @@ func checkCDCVersion(client apiv1client.APIV1Interface) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if cdcVersion.LessThan(*semver.New("6.2.0-master")) {
+	if !cdcVersion.ShouldRunCliWithOpenAPI() {
 		return errors.New("Can’t operate the TiCDC cluster, " +
 			"the cluster version is too old. Only the version of this cluster " +
 			"larger or equal than v6.2.0 can be operated, " +

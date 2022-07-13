@@ -74,12 +74,12 @@ func TestFactoryImplPdClient(t *testing.T) {
 	require.Contains(t, err.Error(), "fail to open PD client")
 }
 
-type mockApiClient struct {
+type mockAPIClient struct {
 	apiv1client.APIV1Interface
 	status apiv1client.StatusInterface
 }
 
-func (c *mockApiClient) Status() apiv1client.StatusInterface {
+func (c *mockAPIClient) Status() apiv1client.StatusInterface {
 	return c.status
 }
 
@@ -87,11 +87,15 @@ func TestCheckCDCVersion(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	status := mock.NewMockStatusInterface(ctrl)
-	client := &mockApiClient{status: status}
+	client := &mockAPIClient{status: status}
 	status.EXPECT().Get(gomock.Any()).Return(nil, errors.New("test"))
 	require.NotNil(t, checkCDCVersion(client))
 	status.EXPECT().Get(gomock.Any()).Return(&model.ServerStatus{
 		Version: "",
+	}, nil)
+	require.NotNil(t, checkCDCVersion(client))
+	status.EXPECT().Get(gomock.Any()).Return(&model.ServerStatus{
+		Version: "b6.2.0",
 	}, nil)
 	require.NotNil(t, checkCDCVersion(client))
 	status.EXPECT().Get(gomock.Any()).Return(&model.ServerStatus{
