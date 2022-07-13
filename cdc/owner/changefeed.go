@@ -27,6 +27,7 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -81,7 +82,7 @@ type changefeed struct {
 
 	schema      *schemaWrap4Owner
 	sink        DDLSink
-	ddlPuller   DDLPuller
+	ddlPuller   puller.DDLPuller
 	initialized bool
 	// isRemoved is true if the changefeed is removed
 	isRemoved bool
@@ -113,8 +114,13 @@ type changefeed struct {
 	metricsChangefeedResolvedTsLagGauge   prometheus.Gauge
 	metricsChangefeedTickDuration         prometheus.Observer
 
-	newDDLPuller func(ctx cdcContext.Context,
-		up *upstream.Upstream, startTs uint64) (DDLPuller, error)
+	newDDLPuller func(ctx context.Context,
+		replicaConfig *config.ReplicaConfig,
+		up *upstream.Upstream,
+		startTs uint64,
+		changefeed model.ChangeFeedID,
+	) (puller.DDLPuller, error)
+
 	newSink      func() DDLSink
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error)
 }
@@ -131,7 +137,7 @@ func newChangefeed(id model.ChangeFeedID, up *upstream.Upstream) *changefeed {
 		errCh:  make(chan error, defaultErrChSize),
 		cancel: func() {},
 
-		newDDLPuller: newDDLPuller,
+		newDDLPuller: puller.NewDDLPuller,
 		newSink:      newDDLSink,
 	}
 	c.newScheduler = newScheduler
@@ -140,8 +146,12 @@ func newChangefeed(id model.ChangeFeedID, up *upstream.Upstream) *changefeed {
 
 func newChangefeed4Test(
 	id model.ChangeFeedID, up *upstream.Upstream,
-	newDDLPuller func(ctx cdcContext.Context,
-		up *upstream.Upstream, startTs uint64) (DDLPuller, error),
+	newDDLPuller func(ctx context.Context,
+		replicaConfig *config.ReplicaConfig,
+		up *upstream.Upstream,
+		startTs uint64,
+		changefeed model.ChangeFeedID,
+	) (puller.DDLPuller, error),
 	newSink func() DDLSink,
 ) *changefeed {
 	c := newChangefeed(id, up)
@@ -391,7 +401,10 @@ LOOP:
 	c.sink.run(cancelCtx, cancelCtx.ChangefeedVars().ID, cancelCtx.ChangefeedVars().Info)
 
 	// Refer to the previous comment on why we use (checkpointTs-1).
-	c.ddlPuller, err = c.newDDLPuller(cancelCtx, c.upstream, checkpointTs-1)
+	c.ddlPuller, err = c.newDDLPuller(cancelCtx,
+		cancelCtx.ChangefeedVars().Info.Config,
+		c.upstream, checkpointTs-1,
+		ctx.ChangefeedVars().ID)
 	if err != nil {
 		return errors.Trace(err)
 	}

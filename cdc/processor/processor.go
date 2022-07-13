@@ -739,23 +739,22 @@ func (p *processor) handleErrorCh(ctx cdcContext.Context) error {
 
 func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.SchemaStorage, error) {
 	kvStorage := p.upstream.KVStorage
-	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
 	kvCfg := config.GetGlobalServerConfig().KVClient
 	stdCtx := contextutil.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = contextutil.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
-	ddlPuller := puller.NewPuller(
+	ddlPuller := puller.New(
 		stdCtx,
 		p.upstream.PDClient,
 		p.upstream.GrpcPool,
 		p.upstream.RegionCache,
 		p.upstream.KVStorage,
 		p.upstream.PDClock,
-		ctx.ChangefeedVars().ID,
 		checkpointTs,
-		ddlspans,
+		regionspan.GetAllDDLSpan(),
 		kvCfg,
+		ctx.ChangefeedVars().ID,
 	)
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {
