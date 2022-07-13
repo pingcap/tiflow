@@ -30,7 +30,7 @@ import (
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
-	mockkv "github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	metaMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 )
@@ -160,7 +160,7 @@ func newBaseJobMasterForTests(impl JobMasterImpl) *DefaultBaseJobMaster {
 		MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 		MessageSender:         p2p.NewMockMessageSender(),
 		FrameMetaClient:       cli,
-		UserRawKVClient:       mockkv.NewMetaMock(),
+		BusinessClientConn:    metaMock.NewMockClientConn(),
 		ExecutorClientManager: client.NewClientManager(),
 		ServerMasterClient:    &client.MockServerMasterClient{},
 	}

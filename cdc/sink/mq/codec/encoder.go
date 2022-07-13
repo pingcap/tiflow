@@ -51,15 +51,15 @@ func NewEventBatchEncoderBuilder(ctx context.Context, c *Config) (EncoderBuilder
 	case config.ProtocolDefault, config.ProtocolOpen:
 		return newOpenProtocolBatchEncoderBuilder(c), nil
 	case config.ProtocolCanal:
-		return newCanalEventBatchEncoderBuilder(), nil
+		return newCanalBatchEncoderBuilder(), nil
 	case config.ProtocolAvro:
 		return newAvroEventBatchEncoderBuilder(ctx, c)
 	case config.ProtocolMaxwell:
-		return newMaxwellEventBatchEncoderBuilder(), nil
+		return newMaxwellBatchEncoderBuilder(), nil
 	case config.ProtocolCanalJSON:
-		return newCanalFlatEventBatchEncoderBuilder(c), nil
+		return newCanalJSONBatchEncoderBuilder(c), nil
 	case config.ProtocolCraft:
-		return newCraftEventBatchEncoderBuilder(c), nil
+		return newCraftBatchEncoderBuilder(c), nil
 	default:
 		return nil, cerror.ErrMQSinkUnknownProtocol.GenWithStackByArgs(c.protocol)
 	}
