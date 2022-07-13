@@ -57,10 +57,9 @@ type replicaConfig struct {
 	Mounter          *MounterConfig    `toml:"mounter" json:"mounter"`
 	Sink             *SinkConfig       `toml:"sink" json:"sink"`
 	Consistent       *ConsistentConfig `toml:"consistent" json:"consistent"`
-	TimeZone         string
 }
 
-// Marshal returns the json marshal form`at of a ReplicationConfig
+// Marshal returns the json marshal format of a ReplicationConfig
 func (c *ReplicaConfig) Marshal() (string, error) {
 	cfg, err := json.Marshal(c)
 	if err != nil {

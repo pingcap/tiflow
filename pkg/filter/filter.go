@@ -51,7 +51,7 @@ type filter struct {
 }
 
 // NewFilter creates a filter.
-func NewFilter(cfg *config.ReplicaConfig) (Filter, error) {
+func NewFilter(cfg *config.ReplicaConfig, tz string) (Filter, error) {
 	f, err := VerifyTableRules(cfg.Filter)
 	if err != nil {
 		return nil, err
@@ -61,7 +61,7 @@ func NewFilter(cfg *config.ReplicaConfig) (Filter, error) {
 		f = tfilter.CaseInsensitive(f)
 	}
 
-	dmlExprFilter, err := newExprFilter(cfg.TimeZone, cfg.Filter)
+	dmlExprFilter, err := newExprFilter(tz, cfg.Filter)
 	if err != nil {
 		return nil, err
 	}
@@ -138,6 +138,8 @@ func (f *filter) ShouldDiscardDDL(ddlType timodel.ActionType) bool {
 	if !shouldDiscardByBuiltInDDLAllowlist(ddlType) {
 		return false
 	}
+	// If a ddl is in BuildInDDLAllowList we should check if it was be
+	// added to filter's ddlAllowList by user.
 	for _, allowDDLType := range f.ddlAllowlist {
 		if allowDDLType == ddlType {
 			return false

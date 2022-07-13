@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	tidbModel "github.com/pingcap/tidb/parser/model"
 	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -134,14 +135,21 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 				}
 			}
 		}
+		var efs []*config.EventFilterRule
+		if len(c.Filter.EventFilters) != 0 {
+			efs = make([]*config.EventFilterRule, len(c.Filter.EventFilters))
+			for i, ef := range c.Filter.EventFilters {
+				efs[i] = ef.ToInternalEventFilterRule()
+			}
+		}
 		res.Filter = &config.FilterConfig{
 			Rules:                 c.Filter.Rules,
 			MySQLReplicationRules: mySQLReplicationRules,
 			IgnoreTxnStartTs:      c.Filter.IgnoreTxnStartTs,
 			DDLAllowlist:          c.Filter.DDLAllowlist,
+			EventFilters:          efs,
 		}
 	}
-
 	if c.Consistent != nil {
 		res.Consistent = &config.ConsistentConfig{
 			Level:             c.Consistent.Level,
@@ -214,11 +222,21 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				}
 			}
 		}
+
+		var efs []EventFilterRule
+		if len(c.Filter.EventFilters) != 0 {
+			efs = make([]EventFilterRule, len(c.Filter.EventFilters))
+			for i, ef := range c.Filter.EventFilters {
+				efs[i] = ToAPIEventFilterRule(ef)
+			}
+		}
+
 		res.Filter = &FilterConfig{
 			MySQLReplicationRules: mySQLReplicationRules,
 			Rules:                 cloned.Filter.Rules,
 			IgnoreTxnStartTs:      cloned.Filter.IgnoreTxnStartTs,
 			DDLAllowlist:          cloned.Filter.DDLAllowlist,
+			EventFilters:          efs,
 		}
 	}
 	if cloned.Sink != nil {
@@ -282,6 +300,56 @@ type FilterConfig struct {
 	Rules            []string               `json:"rules,omitempty"`
 	IgnoreTxnStartTs []uint64               `json:"ignore_txn_start_ts,omitempty"`
 	DDLAllowlist     []tidbModel.ActionType `json:"ddl_allow_list,omitempty"`
+	EventFilters     []EventFilterRule      `json:"event_filters"`
+}
+
+// EventFilterRule is used by sql event filter and expression filter
+type EventFilterRule struct {
+	Matcher     []string `json:"matcher"`
+	IgnoreEvent []string `json:"ignore_event"`
+	// regular expression
+	IgnoreSQL []string `toml:"ignore_sql" json:"ignore_sql"`
+	// sql expression
+	IgnoreInsertValueExpr    string `json:"ignore_insert_value_expr"`
+	IgnoreUpdateNewValueExpr string `json:"ignore_update_new_value_expr"`
+	IgnoreUpdateOldValueExpr string `json:"ignore_update_old_value_expr"`
+	IgnoreDeleteValueExpr    string `json:"ignore_delete_value_expr"`
+}
+
+func (e EventFilterRule) ToInternalEventFilterRule() *config.EventFilterRule {
+	res := &config.EventFilterRule{
+		Matcher:                  e.Matcher,
+		IgnoreSQL:                e.IgnoreSQL,
+		IgnoreInsertValueExpr:    e.IgnoreInsertValueExpr,
+		IgnoreUpdateNewValueExpr: e.IgnoreUpdateNewValueExpr,
+		IgnoreUpdateOldValueExpr: e.IgnoreUpdateOldValueExpr,
+		IgnoreDeleteValueExpr:    e.IgnoreDeleteValueExpr,
+	}
+	if len(e.IgnoreEvent) != 0 {
+		res.IgnoreEvent = make([]bf.EventType, len(e.IgnoreEvent))
+		for i, et := range e.IgnoreEvent {
+			res.IgnoreEvent[i] = bf.EventType(et)
+		}
+	}
+	return res
+}
+
+func ToAPIEventFilterRule(er *config.EventFilterRule) EventFilterRule {
+	res := EventFilterRule{
+		Matcher:                  er.Matcher,
+		IgnoreSQL:                er.IgnoreSQL,
+		IgnoreInsertValueExpr:    er.IgnoreInsertValueExpr,
+		IgnoreUpdateNewValueExpr: er.IgnoreUpdateNewValueExpr,
+		IgnoreUpdateOldValueExpr: er.IgnoreUpdateOldValueExpr,
+		IgnoreDeleteValueExpr:    er.IgnoreDeleteValueExpr,
+	}
+	if len(er.IgnoreEvent) != 0 {
+		res.IgnoreEvent = make([]string, len(er.IgnoreEvent))
+		for i, et := range er.IgnoreEvent {
+			res.IgnoreEvent[i] = string(et)
+		}
+	}
+	return res
 }
 
 // MySQLReplicationRules is a set of rules based on MySQL's replication tableFilter.

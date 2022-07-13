@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
+	"github.com/pingcap/tidb/parser"
 	timodel "github.com/pingcap/tidb/parser/model"
 	tifilter "github.com/pingcap/tidb/util/filter"
 	tfilter "github.com/pingcap/tidb/util/table-filter"
@@ -52,83 +53,14 @@ func VerifyTableRules(cfg *config.FilterConfig) (tfilter.Filter, error) {
 	return f, nil
 }
 
-// jobTypeToEventType converts ddl job action type to binlog filter event type
-func jobTypeToEventType(t timodel.ActionType) bf.EventType {
-	switch t {
-	case timodel.ActionCreateSchema:
-		return bf.CreateDatabase
-	case timodel.ActionDropSchema:
-		return bf.DropDatabase
-	case timodel.ActionCreateTable:
-		return bf.CreateTable
-	case timodel.ActionDropTable:
-		return bf.DropTable
-	case timodel.ActionTruncateTable:
-		return bf.TruncateTable
-	case timodel.ActionRenameTable, timodel.ActionRenameTables:
-		return bf.RenameTable
-	case timodel.ActionAddIndex:
-		return bf.CreateIndex
-	case timodel.ActionDropIndex:
-		return bf.DropIndex
-	case timodel.ActionCreateView:
-		return bf.CreateView
-	case timodel.ActionDropView:
-		return bf.DropView
-	case timodel.ActionAddColumn, timodel.ActionAddColumns:
-		return bf.AddColumn
-	case timodel.ActionDropColumn, timodel.ActionDropColumns:
-		return bf.DropColumn
-	case timodel.ActionModifyColumn:
-		return bf.ModifyColumn
-	case timodel.ActionSetDefaultValue:
-		return bf.SetDefaultValue
-	case timodel.ActionModifyTableComment:
-		return bf.ModifyTableComment
-	case timodel.ActionRenameIndex:
-		return bf.RenameIndex
-	case timodel.ActionAddTablePartition:
-		return bf.AddTablePartition
-	case timodel.ActionDropTablePartition:
-		return bf.DropTablePartition
-	case timodel.ActionTruncateTablePartition:
-		return bf.TruncateTablePartition
-	case timodel.ActionModifyTableCharsetAndCollate:
-		return bf.ModifyTableCharsetAndCollate
-	case timodel.ActionModifySchemaCharsetAndCollate:
-		return bf.ModifySchemaCharsetAndCollate
-	case timodel.ActionRecoverTable:
-		return bf.RecoverTable
-	case timodel.ActionAddPrimaryKey:
-		return bf.AddPrimaryKey
-	case timodel.ActionDropPrimaryKey:
-		return bf.DropPrimaryKey
-	default:
-		return bf.NullEvent
+// ddlToEventType get event type from ddl query.
+func ddlToEventType(p *parser.Parser, sql string) (bf.EventType, error) {
+	stmt, err := p.ParseOneStmt(sql, "", "")
+	if err != nil {
+		return bf.NullEvent, cerror.WrapError(cerror.ErrConvertDDLToEventTypeFailed, err, sql)
 	}
-
-	// Alter table:
-	// 	timodel.ActionDropColumn,
-	// 	timodel.ActionAddIndex,
-	// 	timodel.ActionDropIndex,
-	// 	timodel.ActionModifyColumn,
-	// 	timodel.ActionRenameTable,
-	// 	timodel.ActionSetDefaultValue,
-	// 	timodel.ActionModifyTableComment,
-	// 	timodel.ActionRenameIndex,
-	// 	timodel.ActionAddTablePartition,
-	// 	timodel.ActionDropTablePartition,
-	// 	timodel.ActionCreateView,
-	// 	timodel.ActionDropView,
-	// 	timodel.ActionModifyTableCharsetAndCollate,
-	// 	timodel.ActionTruncateTablePartition,
-	// 	timodel.ActionAddPrimaryKey,
-	// 	timodel.ActionDropPrimaryKey,
-	// 	timodel.ActionAddColumns,
-	// 	timodel.ActionDropColumns,
-	// 	timodel.ActionRenameTables,
-	// 	timodel.ActionDropIndexes:
-	// 	return bf.AlertTable
+	et := bf.AstToDDLEvent(stmt)
+	return et, nil
 }
 
 // SupportedEventWarnMessage returns the supported event types warning message

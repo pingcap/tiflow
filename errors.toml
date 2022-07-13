@@ -216,6 +216,11 @@ error = '''
 consistent storage (%s) not support
 '''
 
+["CDC:ErrConvertDDLToEventTypeFailed"]
+error = '''
+failed to convert ddl '%s' to filter event type
+'''
+
 ["CDC:ErrCraftCodecInvalidData"]
 error = '''
 craft codec invalid data

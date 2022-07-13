@@ -71,7 +71,9 @@ type ddlPullerImpl struct {
 func newDDLPuller(ctx cdcContext.Context,
 	up *upstream.Upstream, startTs uint64,
 ) (DDLPuller, error) {
-	f, err := filter.NewFilter(ctx.ChangefeedVars().Info.Config)
+	// It is no matter to use a empty as timezone here because DDLPuller
+	// doesn't use expression filter's method.
+	f, err := filter.NewFilter(ctx.ChangefeedVars().Info.Config, "")
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

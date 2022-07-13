@@ -1085,4 +1085,8 @@ var (
 		"invalid ignore event type: %s",
 		errors.RFCCodeText("CDC:ErrInvalidIgnoreEventType"),
 	)
+	ErrConvertDDLToEventTypeFailed = errors.Normalize(
+		"failed to convert ddl '%s' to filter event type",
+		errors.RFCCodeText("CDC:ErrConvertDDLToEventTypeFailed"),
+	)
 )

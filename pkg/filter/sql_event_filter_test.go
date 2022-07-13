@@ -18,7 +18,6 @@ import (
 
 	"github.com/pingcap/errors"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -27,11 +26,10 @@ import (
 
 func TestShouldSkipDDL(t *testing.T) {
 	type innerCase struct {
-		schema  string
-		table   string
-		query   string
-		jobType timodel.ActionType
-		skip    bool
+		schema string
+		table  string
+		query  string
+		skip   bool
 	}
 
 	type testCase struct {
@@ -52,39 +50,28 @@ func TestShouldSkipDDL(t *testing.T) {
 			},
 			cases: []innerCase{
 				{
-					schema:  "test",
-					table:   "t1",
-					query:   "",
-					jobType: timodel.ActionModifyColumn,
-					skip:    true,
+					schema: "test",
+					table:  "t1",
+					query:  "alter table t1 modify column age int",
+					skip:   true,
 				},
 				{
-					schema:  "test",
-					table:   "t1",
-					query:   "",
-					jobType: timodel.ActionCreateTable,
-					skip:    true,
+					schema: "test",
+					table:  "t1",
+					query:  "create table t1(id int primary key)",
+					skip:   true,
 				},
 				{
-					schema:  "test",
-					table:   "t2", // table name not match
-					query:   "",
-					jobType: timodel.ActionModifyColumn,
-					skip:    false,
+					schema: "test",
+					table:  "t2", // table name not match
+					query:  "alter table t2 modify column age int",
+					skip:   false,
 				},
 				{
-					schema:  "test2", // schema name not match
-					table:   "t1",
-					query:   "",
-					jobType: timodel.ActionModifyColumn,
-					skip:    false,
-				},
-				{
-					schema:  "test",
-					table:   "t1",
-					query:   "",
-					jobType: timodel.ActionAlterTablePlacement, // job type not support
-					skip:    false,
+					schema: "test2", // schema name not match
+					table:  "t1",
+					query:  "alter table t1 modify column age int",
+					skip:   false,
 				},
 			},
 		},
@@ -93,38 +80,34 @@ func TestShouldSkipDDL(t *testing.T) {
 				EventFilters: []*config.EventFilterRule{
 					{
 						Matcher:     []string{"*.t1"},
-						IgnoreEvent: []bf.EventType{bf.DropColumn, bf.DropDatabase, bf.DropSchema},
+						IgnoreEvent: []bf.EventType{bf.DropDatabase, bf.DropSchema},
 					},
 				},
 			},
 			cases: []innerCase{
 				{
-					schema:  "test",
-					table:   "t1",
-					query:   "",
-					jobType: timodel.ActionModifyColumn,
-					skip:    false,
+					schema: "test",
+					table:  "t1",
+					query:  "alter table t1 modify column age int",
+					skip:   false,
 				},
 				{
-					schema:  "test",
-					table:   "t1",
-					query:   "",
-					jobType: timodel.ActionDropColumn,
-					skip:    true,
+					schema: "test",
+					table:  "t1",
+					query:  "alter table t1 drop column age",
+					skip:   false,
 				},
 				{
-					schema:  "test2",
-					table:   "t1",
-					query:   "",
-					jobType: timodel.ActionDropSchema,
-					skip:    true,
+					schema: "test2",
+					table:  "t1",
+					query:  "drop database test2",
+					skip:   true,
 				},
 				{
-					schema:  "test3",
-					table:   "t1",
-					query:   "",
-					jobType: timodel.ActionDropIndex,
-					skip:    false,
+					schema: "test3",
+					table:  "t1",
+					query:  "drop index i3 on t1",
+					skip:   false,
 				},
 			},
 		},
@@ -139,31 +122,27 @@ func TestShouldSkipDDL(t *testing.T) {
 			},
 			cases: []innerCase{
 				{
-					schema:  "test",
-					table:   "t1",
-					query:   "ALTER TABLE t1 MODIFY COLUMN age int(11) NOT NULL",
-					jobType: timodel.ActionModifyColumn,
-					skip:    true,
+					schema: "test",
+					table:  "t1",
+					query:  "ALTER TABLE t1 MODIFY COLUMN age int(11) NOT NULL",
+					skip:   true,
 				},
 				{
-					schema:  "test",
-					table:   "t1",
-					query:   "ALTER TABLE t1 DROP COLUMN age",
-					jobType: timodel.ActionDropColumn,
-					skip:    true,
+					schema: "test",
+					table:  "t1",
+					query:  "ALTER TABLE t1 DROP COLUMN age",
+					skip:   true,
 				},
 				{ // no table name
-					schema:  "test2",
-					query:   "DROP DATABASE test",
-					jobType: timodel.ActionDropSchema,
-					skip:    true,
+					schema: "test2",
+					query:  "DROP DATABASE test",
+					skip:   true,
 				},
 				{
-					schema:  "test3",
-					table:   "t1",
-					query:   "",
-					jobType: timodel.ActionDropIndex,
-					skip:    false,
+					schema: "test3",
+					table:  "t1",
+					query:  "Drop Index i1 on test3.t1",
+					skip:   false,
 				},
 			},
 		},
@@ -200,7 +179,6 @@ func TestShouldSkipDDL(t *testing.T) {
 					Table:  c.table,
 				},
 				Query: c.query,
-				Type:  c.jobType,
 			}
 			skip, err := f.shouldSkipDDL(ddl)
 			require.NoError(t, err)
@@ -352,8 +330,8 @@ func TestVerifyIgnoreEvents(t *testing.T) {
 	})
 
 	cases = append(cases, testCase{
-		ignoreEvent: []bf.EventType{bf.AlertTable},
-		err:         cerror.ErrInvalidIgnoreEventType,
+		ignoreEvent: []bf.EventType{bf.AlterTable},
+		err:         nil,
 	})
 
 	for _, tc := range cases {

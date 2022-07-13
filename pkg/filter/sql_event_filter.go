@@ -17,6 +17,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
+	"github.com/pingcap/tidb/parser"
 	tfilter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -86,11 +87,14 @@ func verifyIgnoreEvents(types []bf.EventType) error {
 
 // sqlEventFilter is a filter that filters DDL/DML event by its type or query.
 type sqlEventFilter struct {
+	p     *parser.Parser
 	rules []*sqlEventRule
 }
 
 func newSQLEventFilter(cfg *config.FilterConfig) (*sqlEventFilter, error) {
-	res := &sqlEventFilter{}
+	res := &sqlEventFilter{
+		p: parser.New(),
+	}
 	for _, rule := range cfg.EventFilters {
 		if err := res.addRule(rule); err != nil {
 			return nil, errors.Trace(err)
@@ -126,7 +130,10 @@ func (f *sqlEventFilter) getRules(schema, table string) []*sqlEventRule {
 
 // skipDDLEvent skips ddl event by its type and query.
 func (f *sqlEventFilter) shouldSkipDDL(ddl *model.DDLEvent) (bool, error) {
-	evenType := jobTypeToEventType(ddl.Type)
+	evenType, err := ddlToEventType(f.p, ddl.Query)
+	if err != nil {
+		return false, err
+	}
 	if evenType == bf.NullEvent {
 		log.Warn("sql event filter unsupported ddl type, do nothing",
 			zap.String("type", ddl.Type.String()),
@@ -191,26 +198,12 @@ var supportedEventTypes = []bf.EventType{
 	bf.DropDatabase,
 	bf.CreateTable,
 	bf.DropTable,
-	bf.AddColumn,
-	bf.DropColumn,
 	bf.AddIndex,
 	bf.CreateIndex,
 	bf.DropIndex,
 	bf.TruncateTable,
-	bf.ModifyColumn,
 	bf.RenameTable,
-	bf.SetDefaultValue,
-	bf.ModifyTableComment,
-	bf.RenameIndex,
-	bf.AddTablePartition,
-	bf.DropTablePartition,
 	bf.CreateView,
-	bf.ModifyTableCharsetAndCollate,
-	bf.TruncateTablePartition,
 	bf.DropView,
-	bf.RecoverTable,
-	bf.ModifySchemaCharsetAndCollate,
-	bf.AddPrimaryKey,
-	bf.DropPrimaryKey,
-	// bf.AlertTable, // not supported yet
+	bf.AlterTable, // not supported yet
 }

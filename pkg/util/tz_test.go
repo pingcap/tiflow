@@ -41,3 +41,10 @@ func TestGetTimezoneFromZonefile(t *testing.T) {
 		}
 	}
 }
+
+func TestGetTimezoneName(t *testing.T) {
+	tz, err := GetTimezone("")
+	require.NoError(t, err)
+	require.True(t, len(GetTimeZoneName(tz)) != 0)
+	require.True(t, len(GetTimeZoneName(nil)) == 0)
+}

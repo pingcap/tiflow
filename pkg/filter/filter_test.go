@@ -27,7 +27,7 @@ import (
 func TestShouldUseDefaultRules(t *testing.T) {
 	t.Parallel()
 
-	filter, err := NewFilter(config.GetDefaultReplicaConfig())
+	filter, err := NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
 	require.True(t, filter.ShouldIgnoreTable("information_schema", ""))
 	require.True(t, filter.ShouldIgnoreTable("information_schema", "statistics"))
@@ -44,7 +44,7 @@ func TestShouldUseCustomRules(t *testing.T) {
 		Filter: &config.FilterConfig{
 			Rules: []string{"sns.*", "ecom.*", "!sns.log", "!ecom.test"},
 		},
-	})
+	}, "")
 	require.Nil(t, err)
 	require.True(t, filter.ShouldIgnoreTable("other", ""))
 	require.True(t, filter.ShouldIgnoreTable("other", "what"))
@@ -63,7 +63,7 @@ func TestShouldUseCustomRules(t *testing.T) {
 			// 4. do not match table school.teacher
 			Rules: []string{"*.*", "!test.season", "school.*", "!school.teacher"},
 		},
-	})
+	}, "")
 	require.True(t, filter.ShouldIgnoreTable("test", "season"))
 	require.False(t, filter.ShouldIgnoreTable("other", ""))
 	require.False(t, filter.ShouldIgnoreTable("school", "student"))
@@ -125,7 +125,7 @@ func TestShouldIgnoreDMLEvent(t *testing.T) {
 				IgnoreTxnStartTs: ftc.ignoreTxnStartTs,
 				Rules:            ftc.rules,
 			},
-		})
+		}, "")
 		require.Nil(t, err)
 		for _, tc := range ftc.cases {
 			dml := &model.RowChangedEvent{
@@ -147,7 +147,7 @@ func TestShouldDiscardDDL(t *testing.T) {
 			DDLAllowlist: []timodel.ActionType{timodel.ActionAddForeignKey},
 		},
 	}
-	filter, err := NewFilter(config)
+	filter, err := NewFilter(config, "")
 	require.Nil(t, err)
 	require.False(t, filter.ShouldDiscardDDL(timodel.ActionAddForeignKey))
 
@@ -210,7 +210,7 @@ func TestShouldIgnoreDDL(t *testing.T) {
 		}{
 			{1, "sns", "", "create database test", timodel.ActionCreateSchema, false},
 			{1, "sns", "", "drop database test", timodel.ActionDropSchema, false},
-			{1, "sns", "", "", timodel.ActionModifySchemaCharsetAndCollate, false},
+			{1, "sns", "", "ALTER DATABASE dbname CHARACTER SET utf8 COLLATE utf8_general_ci", timodel.ActionModifySchemaCharsetAndCollate, false},
 			{1, "ecom", "", "create database test", timodel.ActionCreateSchema, false},
 			{1, "ecom", "aa", "create table test.t1(a int primary key)", timodel.ActionCreateTable, false},
 			{1, "ecom", "", "create database test", timodel.ActionCreateSchema, false},
@@ -227,12 +227,12 @@ func TestShouldIgnoreDDL(t *testing.T) {
 			ddlType timodel.ActionType
 			ignore  bool
 		}{
-			{1, "schema", "", "", timodel.ActionCreateSchema, false},
-			{1, "schema", "", "", timodel.ActionDropSchema, false},
-			{1, "schema", "", "", timodel.ActionModifySchemaCharsetAndCollate, false},
-			{1, "schema", "aa", "", timodel.ActionCreateTable, true},
-			{1, "schema", "C1", "", timodel.ActionCreateTable, false},
-			{1, "schema", "", "", timodel.ActionCreateTable, true},
+			{1, "schema", "C1", "create database test", timodel.ActionCreateSchema, false},
+			{1, "schema", "", "drop database test", timodel.ActionDropSchema, true},
+			{1, "schema", "", "ALTER DATABASE dbname CHARACTER SET utf8 COLLATE utf8_general_ci", timodel.ActionModifySchemaCharsetAndCollate, true},
+			{1, "schema", "aa", "create table test.t1(a int primary key)", timodel.ActionCreateTable, true},
+			{1, "schema", "C1", "create table test.t1(a int primary key)", timodel.ActionCreateTable, false},
+			{1, "schema", "", "create table test.t1(a int primary key)", timodel.ActionCreateTable, true},
 		},
 		rules: []string{"schema.C1"},
 	}, { // cases ignore by startTs
@@ -244,12 +244,12 @@ func TestShouldIgnoreDDL(t *testing.T) {
 			ddlType timodel.ActionType
 			ignore  bool
 		}{
-			{1, "ts", "", "", timodel.ActionCreateSchema, true},
-			{2, "ts", "student", "", timodel.ActionDropSchema, true},
-			{3, "ts", "teacher", "", timodel.ActionModifySchemaCharsetAndCollate, true},
-			{4, "ts", "man", "", timodel.ActionCreateTable, false},
-			{5, "ts", "fruit", "", timodel.ActionCreateTable, false},
-			{6, "ts", "insect", "", timodel.ActionCreateTable, false},
+			{1, "ts", "", "create database test", timodel.ActionCreateSchema, true},
+			{2, "ts", "student", "drop database test", timodel.ActionDropSchema, true},
+			{3, "ts", "teacher", "ALTER DATABASE dbname CHARACTER SET utf8 COLLATE utf8_general_ci", timodel.ActionModifySchemaCharsetAndCollate, true},
+			{4, "ts", "man", "create table test.t1(a int primary key)", timodel.ActionCreateTable, false},
+			{5, "ts", "fruit", "create table test.t1(a int primary key)", timodel.ActionCreateTable, false},
+			{6, "ts", "insect", "create table test.t1(a int primary key)", timodel.ActionCreateTable, false},
 		},
 		rules:     []string{"*.*"},
 		ignoredTs: []uint64{1, 2, 3},
@@ -262,12 +262,12 @@ func TestShouldIgnoreDDL(t *testing.T) {
 			ddlType timodel.ActionType
 			ignore  bool
 		}{
-			{1, "event", "", "", timodel.ActionDropTable, true},
-			{1, "event", "January", "", timodel.ActionDropIndex, true},
-			{1, "event", "February", "", timodel.ActionDropIndexes, true},
-			{1, "event", "March", "", timodel.ActionCreateTable, false},
-			{1, "event", "April", "", timodel.ActionCreateTable, false},
-			{1, "event", "May", "", timodel.ActionCreateTable, false},
+			{1, "event", "", "drop table t1", timodel.ActionDropTable, true},
+			{1, "event", "January", "drop index i on t1", timodel.ActionAddIndex, true},
+			{1, "event", "February", "drop index x2 on t2", timodel.ActionDropIndex, true},
+			{1, "event", "March", "create table t2(age int)", timodel.ActionCreateTable, false},
+			{1, "event", "April", "create table t2(age int)", timodel.ActionCreateTable, false},
+			{1, "event", "May", "create table t2(age int)", timodel.ActionCreateTable, false},
 		},
 		rules: []string{"*.*"},
 		eventFilters: []*config.EventFilterRule{
@@ -287,22 +287,23 @@ func TestShouldIgnoreDDL(t *testing.T) {
 			ddlType timodel.ActionType
 			ignore  bool
 		}{
-			{1, "sql_pattern", "t1", "CREATE DATABASE sql-pattern", timodel.ActionNone, false},
-			{1, "sql_pattern", "t1", "DROP DATABASE sql-pattern", timodel.ActionNone, true},
+			{1, "sql_pattern", "t1", "CREATE DATABASE sql_pattern", timodel.ActionCreateSchema, false},
+			{1, "sql_pattern", "t1", "DROP DATABASE sql_pattern", timodel.ActionDropSchema, true},
 			{
 				1, "sql_pattern", "t1",
 				"ALTER DATABASE `test_db` CHARACTER SET 'utf8' COLLATE 'utf8_general_ci'",
-				timodel.ActionNone, false,
+				timodel.ActionModifySchemaCharsetAndCollate,
+				false,
 			},
-			{1, "sql_pattern", "t1", "CREATE TABLE t1(id int primary key)", timodel.ActionNone, false},
-			{1, "sql_pattern", "t1", "DROP TABLE t1", timodel.ActionNone, true},
-			{1, "sql_pattern", "t1", "ADD VIEW view_t1", timodel.ActionNone, true},
+			{1, "sql_pattern", "t1", "CREATE TABLE t1(id int primary key)", timodel.ActionCreateTable, false},
+			{1, "sql_pattern", "t1", "DROP TABLE t1", timodel.ActionDropTable, true},
+			{1, "sql_pattern", "t1", "CREATE VIEW test.v AS SELECT * FROM t", timodel.ActionCreateView, true},
 		},
 		rules: []string{"*.*"},
 		eventFilters: []*config.EventFilterRule{
 			{
 				Matcher:   []string{"sql_pattern.*"},
-				IgnoreSQL: []string{"^DROP TABLE", "^ADD VIEW", "^DROP DATABASE"},
+				IgnoreSQL: []string{"^DROP TABLE", "^CREATE VIEW", "^DROP DATABASE"},
 			},
 		},
 	}}
@@ -314,13 +315,13 @@ func TestShouldIgnoreDDL(t *testing.T) {
 				IgnoreTxnStartTs: ftc.ignoredTs,
 				EventFilters:     ftc.eventFilters,
 			},
-		})
+		}, "")
 		require.Nil(t, err)
 		for _, tc := range ftc.cases {
 			tableInfo := &model.SimpleTableInfo{Schema: tc.schema, Table: tc.table}
-			ddl := &model.DDLEvent{StartTs: tc.startTs, Type: tc.ddlType, TableInfo: tableInfo, Query: tc.query}
+			ddl := &model.DDLEvent{StartTs: tc.startTs, TableInfo: tableInfo, Query: tc.query}
 			ignore, err := filter.ShouldIgnoreDDLEvent(ddl)
-			require.Nil(t, err)
+			require.Nil(t, err, "%#v", tc)
 			require.Equal(t, tc.ignore, ignore, "%#v", tc)
 		}
 	}

@@ -61,3 +61,11 @@ func GetLocalTimezone() (*time.Location, error) {
 	str := timeutil.InferSystemTZ()
 	return GetTimezoneFromZonefile(str)
 }
+
+// GetTimeZoneName returns the timezone name in a time.Location.
+func GetTimeZoneName(tz *time.Location) string {
+	if tz == nil {
+		return ""
+	}
+	return tz.String()
+}

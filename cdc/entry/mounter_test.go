@@ -292,7 +292,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	require.Nil(t, err)
 	scheamStorage.AdvanceResolvedTs(ver.Ver)
 	config := config.GetDefaultReplicaConfig()
-	filter, err := pfilter.NewFilter(config)
+	filter, err := pfilter.NewFilter(config, "")
 	require.Nil(t, err)
 	mounter := NewMounter(scheamStorage,
 		model.DefaultChangeFeedID("c1"),
@@ -983,7 +983,7 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.Filter.Rules = []string{"test.student", "test.computer"}
-	filter, err := pfilter.NewFilter(cfg)
+	filter, err := pfilter.NewFilter(cfg, "")
 	require.Nil(t, err)
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
