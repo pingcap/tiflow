@@ -87,7 +87,7 @@ cd ./deployments/docker-compose
 
 ### Build
 
-To build this repo, you can simply run `make engine_build` in tiflow directory or `../run-engine.sh build` in working directory.
+To build this repo, you can simply run `make engine_image` in tiflow directory or `../run-engine.sh build` in working directory.
 
 If you have build the binary on your local Linux, you can try `../run-engine.sh build-local`.
 

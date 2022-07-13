@@ -28,7 +28,7 @@ jobs:
           go-version: 1.18
 
       - name: Build images
-        run: make engine_build
+        run: make engine_image
 
       - name: Run containers
         run: docker-compose -f $GITHUB_WORKSPACE/engine/deployments/docker-compose/3m3e.yaml -f $GITHUB_WORKSPACE/engine/deployments/docker-compose/demo.yaml up -d
@@ -68,7 +68,7 @@ jobs:
           go-version: 1.18
 
       - name: Build images
-        run: make engine_build
+        run: make engine_image
 
       - name: Run containers
         run: docker-compose -f $GITHUB_WORKSPACE/engine/deployments/docker-compose/3m3e.yaml up -d
@@ -108,7 +108,7 @@ jobs:
           go-version: 1.18
 
       - name: Build images
-        run: make engine_build
+        run: make engine_image
 
       - name: Run containers
         run: docker-compose -f $GITHUB_WORKSPACE/engine/deployments/docker-compose/3m3e.yaml up -d
@@ -148,7 +148,7 @@ jobs:
           go-version: 1.18
 
       - name: Build images
-        run:  make engine_build
+        run:  make engine_image
 
 
       - name: Run containers

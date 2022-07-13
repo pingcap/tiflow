@@ -501,7 +501,7 @@ tiflow-chaos-case:
 tiflow-generate-mock: tools/bin/mockgen
 	scripts/generate-engine-mock.sh
 
-engine_build: 
+engine_image: 
 	@which docker
 	./engine/test/utils/run_engine.sh build
 

@@ -9,7 +9,7 @@ Besides, make sure you have run the docker daemon. We recommend that you provide
 
 ## Run engine integration tests
 
-1. Run `make engine_build` to generate engine related image for integration test.
+1. Run `make engine_image` to generate engine related image for integration test.
 2. Run `make engine_integration_test` to execute the integration tests. This command will
 
    1. Check that all required executables exist.
