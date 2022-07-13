@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/unit"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 )
@@ -67,6 +68,9 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 				initPhaseSeconds = seconds
 				s.tctx.L().Info("set initPhaseSeconds", zap.String("failpoint", "SafeModeInitPhaseSeconds"), zap.String("value", seconds))
 			})
+			if initPhaseSeconds == "" {
+				initPhaseSeconds = config.DefaultSafeModeDuration
+			}
 			duration, err := time.ParseDuration(initPhaseSeconds)
 			if err != nil {
 				// send error to the fatal chan to interrupt the process

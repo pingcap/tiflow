@@ -452,7 +452,7 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		c.SyncerConfig.CheckpointFlushInterval = defaultCheckpointFlushInterval
 	}
 	if c.SyncerConfig.SafeModeDuration == "" {
-		c.SyncerConfig.SafeModeDuration = defaultSafeModeDuration
+		c.SyncerConfig.SafeModeDuration = DefaultSafeModeDuration
 	}
 	_, err := time.ParseDuration(c.SyncerConfig.SafeModeDuration)
 	if err != nil {
