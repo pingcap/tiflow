@@ -317,7 +317,9 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 	defer func() {
 		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		if err := ctx.GlobalVars().EtcdClient.DeleteCaptureInfo(timeoutCtx, c.info.ID); err != nil {
-			log.Warn("failed to delete capture info when capture exited", zap.Error(err))
+			log.Warn("failed to delete capture info when capture exited",
+				zap.String("captureID", c.info.ID),
+				zap.Error(err))
 		}
 		cancel()
 	}()
@@ -331,7 +333,9 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		// (recoverable errors are intercepted in the owner tick)
 		// so we should also stop the owner and let capture restart or exit
 		ownerErr = c.campaignOwner(ctx)
-		log.Info("the owner routine has exited", zap.Error(ownerErr))
+		log.Info("the owner routine has exited",
+			zap.String("captureID", c.info.ID),
+			zap.Error(ownerErr))
 	}()
 	wg.Add(1)
 	go func() {
@@ -353,7 +357,9 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		// (recoverable errors are intercepted in the processor tick)
 		// so we should also stop the processor and let capture restart or exit
 		processorErr = c.runEtcdWorker(ctx, c.processorManager, globalState, processorFlushInterval, util.RoleProcessor.String())
-		log.Info("the processor routine has exited", zap.Error(processorErr))
+		log.Info("the processor routine has exited",
+			zap.String("captureID", c.info.ID),
+			zap.Error(processorErr))
 	}()
 	wg.Add(1)
 	go func() {
@@ -418,7 +424,9 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 				// the revision we requested is compacted, just retry
 				continue
 			}
-			log.Warn("campaign owner failed", zap.Error(err))
+			log.Warn("campaign owner failed",
+				zap.String("captureID", c.info.ID),
+				zap.Error(err))
 			// if campaign owner failed, restart capture
 			return cerror.ErrCaptureSuicide.GenWithStackByArgs()
 		}
@@ -460,10 +468,18 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		c.setOwner(nil)
 		log.Info("run owner exited", zap.Error(err))
 		// if owner exits, resign the owner key
+		start := time.Now()
 		if resignErr := c.resign(ctx); resignErr != nil {
+			log.Info("owner resign failed",
+				zap.String("captureID", c.info.ID),
+				zap.Error(resignErr),
+				zap.Duration("duration", time.Since(start)))
 			// if resigning owner failed, return error to let capture exits
 			return errors.Annotatef(resignErr, "resign owner failed, capture: %s", c.info.ID)
 		}
+		log.Info("owner resigned successfully",
+			zap.String("captureID", c.info.ID),
+			zap.Duration("duration", time.Since(start)))
 		if err != nil {
 			// for errors, return error and let capture exits or restart
 			return errors.Trace(err)
