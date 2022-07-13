@@ -26,15 +26,15 @@ const (
 // DBConfig defines some configuration used in database connection
 // refer to: https://pkg.go.dev/database/sql#SetConnMaxIdleTime
 type DBConfig struct {
-	ConnMaxIdleTime time.Duration
-	ConnMaxLifeTime time.Duration
-	MaxIdleConns    int
-	MaxOpenConns    int
+	ConnMaxIdleTime time.Duration `toml:"conn-max-idle-time" json:"conn-max-idle-time"`
+	ConnMaxLifeTime time.Duration `toml:"conn-max-life-time" json:"conn-max-life-time"`
+	MaxIdleConns    int           `toml:"max-idle-conns" json:"max-idle-conns"`
+	MaxOpenConns    int           `toml:"max-open-conns" json:"max-open-conns"`
 }
 
 // DefaultDBConfig creates a default DBConfig
-func DefaultDBConfig() DBConfig {
-	return DBConfig{
+func DefaultDBConfig() *DBConfig {
+	return &DBConfig{
 		ConnMaxIdleTime: defaultConnMaxIdleTime,
 		ConnMaxLifeTime: defaultConnMaxLifeTime,
 		MaxIdleConns:    defaultMaxIdleConns,

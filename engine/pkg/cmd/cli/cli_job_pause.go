@@ -61,7 +61,7 @@ func (o *jobPauseOptions) run(ctx context.Context, cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	log.L().Info("pause job request is sent", zap.Any("resp", resp))
+	log.Info("pause job request is sent", zap.Any("resp", resp))
 	return nil
 }
 

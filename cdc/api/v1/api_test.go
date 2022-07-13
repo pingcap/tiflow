@@ -485,7 +485,8 @@ func TestDrainCapture(t *testing.T) {
 	respErr := model.HTTPError{}
 	err = json.NewDecoder(w.Body).Decode(&respErr)
 	require.Nil(t, err)
-	require.Contains(t, respErr.Error, "CDC:ErrSchedulerRequestFailed")
+	require.Contains(t, respErr.Code, "CDC:ErrSchedulerRequestFailed")
+	require.Contains(t, respErr.Error, "scheduler request failed")
 
 	statusProvider.ExpectedCalls = statusProvider.
 		ExpectedCalls[:len(statusProvider.ExpectedCalls)-1]
@@ -515,6 +516,7 @@ func TestDrainCapture(t *testing.T) {
 	respErr = model.HTTPError{}
 	err = json.NewDecoder(w.Body).Decode(&respErr)
 	require.NoError(t, err)
+	require.Contains(t, respErr.Code, "CDC:ErrCaptureNotExist")
 	require.Contains(t, respErr.Error, "capture not exists")
 
 	data = model.DrainCaptureRequest{CaptureID: "capture-for-test"}
@@ -530,6 +532,7 @@ func TestDrainCapture(t *testing.T) {
 	respErr = model.HTTPError{}
 	err = json.NewDecoder(w.Body).Decode(&respErr)
 	require.NoError(t, err)
+	require.Contains(t, respErr.Code, "CDC:ErrSchedulerRequestFailed")
 	require.Contains(t, respErr.Error, "cannot drain the owner")
 
 	data = model.DrainCaptureRequest{CaptureID: captureID}
