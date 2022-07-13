@@ -129,7 +129,7 @@ const (
       "server-ack-interval": 100000000,
       "server-worker-pool-size": 4
     },
-    "enable-2phase-scheduler": false,
+    "enable-scheduler-v3": true,
     "scheduler": {
       "heartbeat-tick": 2,
       "max-task-concurrency": 10,

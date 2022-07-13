@@ -62,7 +62,7 @@ stop_cdc() {
 	cdc_pid=$(ps -a | grep -m 1 "cdc.test" | awk '{print $1}')
 	echo "cdc pid is "$cdc_pid
 	sleep 60
-	kill -2 $cdc_pid
+	kill_cdc_pid $cdc_pid
 	sleep 30
 }
 

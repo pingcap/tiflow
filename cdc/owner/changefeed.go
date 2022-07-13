@@ -52,8 +52,8 @@ func newSchedulerV2FromCtx(
 	ownerRev := ctx.GlobalVars().OwnerRevision
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	cfg := config.GetGlobalServerConfig().Debug
-	if cfg.EnableTwoPhaseScheduler {
-		ret, err = scheduler.NewTpScheduler(
+	if cfg.EnableSchedulerV3 {
+		ret, err = scheduler.NewSchedulerV3(
 			ctx, captureID, changeFeedID, startTs,
 			messageServer, messageRouter, ownerRev, cfg.Scheduler)
 	} else {

@@ -57,7 +57,7 @@ function run() {
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	# kill capture
-	kill $owner_pid
+	kill_cdc_pid $owner_pid
 	ensure $MAX_RETRIES check_no_capture $pd_addr
 
 	# run another cdc server
