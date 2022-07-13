@@ -417,6 +417,10 @@ func (o *ownerImpl) handleDrainCaptures(query *scheduler.Query, done chan<- erro
 	)
 	for _, changefeed := range o.changefeeds {
 		count, e := changefeed.scheduler.DrainCapture(query.CaptureID)
+		if e != nil {
+			err = e
+			break
+		}
 		if count > 0 {
 			changefeedWithTableCount++
 		}
