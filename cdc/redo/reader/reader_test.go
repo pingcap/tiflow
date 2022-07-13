@@ -203,7 +203,10 @@ func TestLogReaderResetReader(t *testing.T) {
 			cfg:       &LogReaderConfig{Dir: dir},
 			rowReader: []fileReader{mockReader},
 			ddlReader: []fileReader{mockReader},
-			meta:      &common.LogMeta{CheckPointTs: tt.args.checkPointTs, ResolvedTs: tt.args.resolvedTs},
+			meta: &common.LogMeta{
+				CheckPointTs:   tt.args.checkPointTs,
+				ResolvedTsList: map[model.TableID]model.Ts{int64(1): tt.args.resolvedTs},
+			},
 		}
 
 		if tt.name == "context cancel" {
@@ -241,8 +244,8 @@ func TestLogReaderReadMeta(t *testing.T) {
 	f, err := os.Create(path)
 	require.Nil(t, err)
 	meta := &common.LogMeta{
-		CheckPointTs: 11,
-		ResolvedTs:   22,
+		CheckPointTs:   11,
+		ResolvedTsList: map[model.TableID]model.Ts{int64(1): uint64(22)},
 	}
 	data, err := meta.MarshalMsg(nil)
 	require.Nil(t, err)
@@ -256,8 +259,8 @@ func TestLogReaderReadMeta(t *testing.T) {
 	f, err = os.Create(path)
 	require.Nil(t, err)
 	meta = &common.LogMeta{
-		CheckPointTs: 111,
-		ResolvedTs:   21,
+		CheckPointTs:   12,
+		ResolvedTsList: map[model.TableID]model.Ts{int64(2): uint64(21)},
 	}
 	data, err = meta.MarshalMsg(nil)
 	require.Nil(t, err)
@@ -275,8 +278,8 @@ func TestLogReaderReadMeta(t *testing.T) {
 		{
 			name:             "happy",
 			dir:              dir,
-			wantCheckPointTs: meta.CheckPointTs,
-			wantResolvedTs:   meta.ResolvedTs,
+			wantCheckPointTs: 12,
+			wantResolvedTs:   21,
 		},
 		{
 			name:    "no meta file",
@@ -291,8 +294,8 @@ func TestLogReaderReadMeta(t *testing.T) {
 		{
 			name:             "context cancel",
 			dir:              dir,
-			wantCheckPointTs: meta.CheckPointTs,
-			wantResolvedTs:   meta.ResolvedTs,
+			wantCheckPointTs: 12,
+			wantResolvedTs:   21,
 			wantErr:          context.Canceled.Error(),
 		},
 	}
