@@ -1730,9 +1730,11 @@ func TestNewMySQLSinkWithIPv6Address(t *testing.T) {
 	sinkURI, err := url.Parse("mysql://[::1]:3306/?time-zone=UTC&worker-count=4")
 	require.Nil(t, err)
 	rc := config.GetDefaultReplicaConfig()
+	f, err := filter.NewFilter(rc)
+	require.Nil(t, err)
 	sink, err := NewMySQLSink(ctx,
 		changefeed,
-		sinkURI, rc)
+		sinkURI, f, rc, map[string]string{})
 	require.Nil(t, err)
 	err = sink.Close(ctx)
 	require.Nil(t, err)
