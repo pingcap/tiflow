@@ -91,7 +91,7 @@ type masterParamListForTest struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
 	FrameMetaClient       pkgOrm.Client
-	UserRawKVClient       metaModel.KVClientEx
+	BusinessClientConn    metaModel.ClientConn
 	ExecutorClientManager client.ClientsManager
 	ServerMasterClient    client.MasterClient
 	ResourceBroker        broker.Broker
@@ -107,7 +107,7 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 		MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 		MessageSender:         p2p.NewMockMessageSender(),
 		FrameMetaClient:       cli,
-		UserRawKVClient:       kvmock.NewMetaMock(),
+		BusinessClientConn:    kvmock.NewMockClientConn(),
 		ExecutorClientManager: mockExecutorClient,
 		ServerMasterClient:    mockServerMasterClient,
 		ResourceBroker:        nil,

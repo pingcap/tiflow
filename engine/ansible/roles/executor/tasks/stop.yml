@@ -1,2 +1,0 @@
-- name:  stop executor 
-  shell: "{{ df_script_dir }}/stop_executor.sh"
