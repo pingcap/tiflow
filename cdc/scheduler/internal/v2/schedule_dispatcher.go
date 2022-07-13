@@ -488,8 +488,8 @@ func (s *ScheduleDispatcher) Rebalance() {
 }
 
 // DrainCapture implement the scheduler interface.
-func (s *ScheduleDispatcher) DrainCapture(target model.CaptureID) int {
-	return 0
+func (s *ScheduleDispatcher) DrainCapture(target model.CaptureID) (int, error) {
+	return 0, nil
 }
 
 func (s *ScheduleDispatcher) rebalance(
