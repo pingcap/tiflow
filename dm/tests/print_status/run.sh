@@ -41,7 +41,7 @@ function run() {
 
 	run_sql_file $cur/data/db.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-	check_log_contains $WORK_DIR/worker1/log/dm-worker.log 'enable safe-mode because of task initialization.*"duration in seconds"=60'
+	check_log_contains $WORK_DIR/worker1/log/dm-worker.log 'enable safe-mode because of task initialization.*duration=60s'
 }
 
 function check_print_status() {
