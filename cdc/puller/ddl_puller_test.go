@@ -269,7 +269,7 @@ func TestResolvedTsStuck(t *testing.T) {
 	waitResolvedTsGrowing(t, p, 30)
 	require.Equal(t, logs.Len(), 0)
 
-	mockClock.Add(2 * ddlPullerStuckWarnTimeout)
+	mockClock.Add(2 * ddlPullerStuckWarnDuration)
 	for i := 0; i < 20; i++ {
 		mockClock.Add(time.Second)
 		if logs.Len() > 0 {

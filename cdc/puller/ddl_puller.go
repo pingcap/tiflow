@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	ddlPullerStuckWarnTimeout = 30 * time.Second
+	ddlPullerStuckWarnDuration = 30 * time.Second
 	// DDLPullerTableName is the fake table name for ddl puller
 	DDLPullerTableName = "DDL_PULLER"
 )
@@ -174,7 +174,7 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 
 	rawDDLCh := memory.SortOutput(ctx, h.puller.Output())
 
-	ticker := h.clock.Ticker(ddlPullerStuckWarnTimeout)
+	ticker := h.clock.Ticker(ddlPullerStuckWarnDuration)
 	defer ticker.Stop()
 
 	g.Go(func() error {
@@ -184,7 +184,7 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 				return ctx.Err()
 			case <-ticker.C:
 				duration := h.clock.Since(h.lastResolvedTsAdvancedTime)
-				if duration > ddlPullerStuckWarnTimeout {
+				if duration > ddlPullerStuckWarnDuration {
 					log.Warn("ddl puller resolved ts has not advanced",
 						zap.String("namespace", h.changefeedID.Namespace),
 						zap.String("changefeed", h.changefeedID.ID),
