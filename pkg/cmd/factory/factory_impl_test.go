@@ -18,6 +18,10 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/cdc/model"
+	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
+	"github.com/pingcap/tiflow/pkg/api/v1/mock"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	mock_factory "github.com/pingcap/tiflow/pkg/cmd/factory/mock"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -68,4 +72,44 @@ func TestFactoryImplPdClient(t *testing.T) {
 	pdClient, err = f.PdClient()
 	require.Nil(t, pdClient)
 	require.Contains(t, err.Error(), "fail to open PD client")
+}
+
+type mockApiClient struct {
+	apiv1client.APIV1Interface
+	status apiv1client.StatusInterface
+}
+
+func (c *mockApiClient) Status() apiv1client.StatusInterface {
+	return c.status
+}
+
+func TestCheckCDCVersion(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	status := mock.NewMockStatusInterface(ctrl)
+	client := &mockApiClient{status: status}
+	status.EXPECT().Get(gomock.Any()).Return(nil, errors.New("test"))
+	require.NotNil(t, checkCDCVersion(client))
+	status.EXPECT().Get(gomock.Any()).Return(&model.ServerStatus{
+		Version: "",
+	}, nil)
+	require.NotNil(t, checkCDCVersion(client))
+	status.EXPECT().Get(gomock.Any()).Return(&model.ServerStatus{
+		Version: "v6.2.0-master",
+	}, nil)
+	require.Nil(t, checkCDCVersion(client))
+	status.EXPECT().Get(gomock.Any()).Return(&model.ServerStatus{
+		Version: "v6.2.0-rc1",
+	}, nil)
+	require.Nil(t, checkCDCVersion(client))
+	status.EXPECT().Get(gomock.Any()).Return(&model.ServerStatus{
+		Version: "v6.3.0",
+	}, nil)
+	require.Nil(t, checkCDCVersion(client))
+	status.EXPECT().Get(gomock.Any()).Return(&model.ServerStatus{
+		Version: "v6.1.0",
+	}, nil)
+	err := checkCDCVersion(client)
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "the cluster version is too old")
 }
