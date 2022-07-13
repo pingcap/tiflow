@@ -349,6 +349,7 @@ ErrSyncerParseDDL,[code=36067:class=sync-unit:scope=internal:level=high], "Messa
 ErrSyncerUnsupportedStmt,[code=36068:class=sync-unit:scope=internal:level=high], "Message: `%s` statement not supported in %s mode"
 ErrSyncerGetEvent,[code=36069:class=sync-unit:scope=upstream:level=high], "Message: get binlog event error: %v, Workaround: Please check if the binlog file could be parsed by `mysqlbinlog`."
 ErrSyncerDownstreamTableNotFound,[code=36070:class=sync-unit:scope=internal:level=high], "Message: downstream table %s not found"
+ErrSyncerResumeWithSafeModeFail,[code=36071:class=sync-unit:scope=internal:level=medium], "Message: Your `safe-mode-duration` in task.yaml is set 0s, so you can't resume safe mode., Workaround: Please stop and re-start this task. If you want to resume task successfully, you need set `safe-mode-duration` > `0s`"
 ErrMasterSQLOpNilRequest,[code=38001:class=dm-master:scope=internal:level=medium], "Message: nil request not valid"
 ErrMasterSQLOpNotSupport,[code=38002:class=dm-master:scope=internal:level=medium], "Message: op %s not supported"
 ErrMasterSQLOpWithoutSharding,[code=38003:class=dm-master:scope=internal:level=medium], "Message: operate request without --sharding specified not valid"

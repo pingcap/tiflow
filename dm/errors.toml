@@ -2104,6 +2104,12 @@ description = ""
 workaround = ""
 tags = ["internal", "high"]
 
+[error.DM-sync-unit-36071]
+message = "Your `safe-mode-duration` in task.yaml is set 0s, so you can't resume safe mode."
+description = ""
+workaround = "Please stop and re-start this task. If you want to resume task successfully, you need set `safe-mode-duration` > `0s`"
+tags = ["internal", "medium"]
+
 [error.DM-dm-master-38001]
 message = "nil request not valid"
 description = ""

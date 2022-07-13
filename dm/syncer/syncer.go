@@ -3755,6 +3755,10 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 		s.tctx.L().Warn("try to resume, but already closed")
 		return
 	}
+	if s.cfg.SafeModeDuration == "0s" {
+		err = terror.ErrSyncerResumeWithSafeModeFail.Generate()
+		return
+	}
 
 	// continue the processing
 	s.reset()
