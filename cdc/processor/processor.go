@@ -649,7 +649,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		return errors.Trace(err)
 	}
 
-	p.schemaStorage, err = p.createAndDriveSchemaStorage(ctx)
+	err = p.createAndDriveSchemaStorage(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -737,8 +737,33 @@ func (p *processor) handleErrorCh(ctx cdcContext.Context) error {
 	return cerror.ErrReactorFinished
 }
 
-func (p *processor) createAndDriveSchemaStorage(ctx context.Context) (entry.SchemaStorage, error) {
-	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
+func (p *processor) globalCheckpoint() uint64 {
+	return p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
+}
+
+func (p *processor) newSchemaStorage(checkpoint uint64) error {
+	meta, err := kv.GetSnapshotMeta(p.upstream.KVStorage, checkpoint)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	schemaStorage, err := entry.NewSchemaStorage(meta, checkpoint, p.filter,
+		p.changefeed.Info.Config.ForceReplicate, p.changefeedID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	p.schemaStorage = schemaStorage
+	return nil
+}
+
+func (p *processor) createAndDriveSchemaStorage(ctx context.Context) error {
+	checkpointTs := p.globalCheckpoint()
+	// create the schema storage first, since it does not spawn any goroutine
+	if err := p.newSchemaStorage(checkpointTs); err != nil {
+		return errors.Trace(err)
+	}
+
 	ctx = contextutil.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	ctx = contextutil.PutChangefeedIDInCtx(ctx, p.changefeedID)
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleProcessor)
@@ -763,16 +788,6 @@ func (p *processor) createAndDriveSchemaStorage(ctx context.Context) (entry.Sche
 
 	ddlRawKVCh := memory.SortOutput(ctx, ddlPuller.Output())
 
-	meta, err := kv.GetSnapshotMeta(p.upstream.KVStorage, checkpointTs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	schemaStorage, err := entry.NewSchemaStorage(meta, checkpointTs, p.filter,
-		p.changefeed.Info.Config.ForceReplicate, p.changefeedID)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
@@ -788,7 +803,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx context.Context) (entry.Sche
 			}
 			failpoint.Inject("processorDDLResolved", nil)
 			if ddlRawKV.OpType == model.OpTypeResolved {
-				schemaStorage.AdvanceResolvedTs(ddlRawKV.CRTs)
+				p.schemaStorage.AdvanceResolvedTs(ddlRawKV.CRTs)
 			}
 			job, err := entry.UnmarshalDDL(ddlRawKV)
 			if err != nil {
@@ -798,13 +813,13 @@ func (p *processor) createAndDriveSchemaStorage(ctx context.Context) (entry.Sche
 			if job == nil {
 				continue
 			}
-			if err := schemaStorage.HandleDDLJob(job); err != nil {
+			if err := p.schemaStorage.HandleDDLJob(job); err != nil {
 				p.sendError(errors.Trace(err))
 				return
 			}
 		}
 	}()
-	return schemaStorage, nil
+	return nil
 }
 
 func (p *processor) sendError(err error) {
