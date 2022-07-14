@@ -76,7 +76,7 @@ func (b *basicScheduler) Schedule(
 		captureIDs := make([]model.CaptureID, 0, len(captures))
 		for captureID, status := range captures {
 			if status.State == CaptureStateStopping {
-				log.Warn("tpscheduler: capture is stopping, "+
+				log.Warn("schedulerv3: capture is stopping, "+
 					"skip the capture when add new table",
 					zap.Any("captureStatus", status))
 				continue
@@ -89,7 +89,7 @@ func (b *basicScheduler) Schedule(
 			// the changefeed cannot make progress
 			// for a cluster with n captures, n should be at least 2
 			// only n - 1 captures can be in the `stopping` at the same time.
-			log.Warn("tpscheduler: cannot found capture when add new table",
+			log.Warn("schedulerv3: cannot found capture when add new table",
 				zap.Any("allCaptureStatus", captures))
 			return tasks
 		}
@@ -99,7 +99,7 @@ func (b *basicScheduler) Schedule(
 		if len(newTables) < logTableIDThreshold {
 			tableField = zap.Int64s("tableIDs", newTables)
 		}
-		log.Info("tpscheduler: burst add table",
+		log.Info("schedulerv3: burst add table",
 			tableField, zap.Strings("captureIDs", captureIDs))
 		tasks = append(
 			tasks, newBurstBalanceAddTables(checkpointTs, newTables, captureIDs))
@@ -173,7 +173,7 @@ func newBurstBalanceRemoveTables(
 		} else if rep.Secondary != "" {
 			captureID = rep.Secondary
 		} else {
-			log.Warn("tpscheduler: primary or secondary not found for removed table",
+			log.Warn("schedulerv3: primary or secondary not found for removed table",
 				zap.Any("table", rep))
 			continue
 		}

@@ -60,7 +60,7 @@ func (r *rebalanceScheduler) Schedule(
 
 	for _, capture := range captures {
 		if capture.State == CaptureStateStopping {
-			log.Warn("tpscheduler: capture is stopping, " +
+			log.Warn("schedulerv3: capture is stopping, " +
 				"ignore and drop manual rebalance request")
 			atomic.StoreInt32(&r.rebalance, 0)
 			return nil
@@ -74,7 +74,7 @@ func (r *rebalanceScheduler) Schedule(
 			return nil
 		}
 		if rep.State != ReplicationSetStateReplicating {
-			log.Debug("tpscheduler: not all table replicating, premature to rebalance tables")
+			log.Debug("schedulerv3: not all table replicating, premature to rebalance tables")
 			return nil
 		}
 	}
@@ -86,7 +86,7 @@ func (r *rebalanceScheduler) Schedule(
 	}
 	accept := func() {
 		atomic.StoreInt32(&r.rebalance, 0)
-		log.Info("tpscheduler: manual rebalance request accepted")
+		log.Info("schedulerv3: manual rebalance request accepted")
 	}
 	return []*scheduleTask{{
 		burstBalance: &burstBalance{MoveTables: tasks},
@@ -172,7 +172,7 @@ func newBalanceMoveTables(
 		}
 
 		if minWorkload == math.MaxInt64 {
-			log.Panic("tpscheduler: rebalance meet unexpected min workload " +
+			log.Panic("schedulerv3: rebalance meet unexpected min workload " +
 				"when try to the the target capture")
 		}
 		if idx >= maxTaskLimit {
