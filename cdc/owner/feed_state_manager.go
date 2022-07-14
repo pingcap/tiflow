@@ -225,7 +225,7 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		m.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 			return nil, true, nil
 		})
-		checkpointTs := m.state.Info.GetCheckpointTs(m.state.Status)
+		checkpointTs := m.state.GlobalCheckpointTs()
 		log.Info("the changefeed is removed",
 			zap.String("namespace", m.state.ID.Namespace),
 			zap.String("changefeed", m.state.ID.ID),

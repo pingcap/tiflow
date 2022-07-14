@@ -847,8 +847,4 @@ func TestGetTs(t *testing.T) {
 	require.Equal(t, info.GetTargetTs(), uint64(math.MaxUint64))
 	info.TargetTs = targetTs
 	require.Equal(t, info.GetTargetTs(), targetTs)
-
-	require.Equal(t, info.GetCheckpointTs(nil), startTs)
-	status := &ChangeFeedStatus{CheckpointTs: checkpointTs}
-	require.Equal(t, info.GetCheckpointTs(status), checkpointTs)
 }

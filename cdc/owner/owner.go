@@ -678,7 +678,7 @@ func (o *ownerImpl) calculateGCSafepoint(state *orchestrator.GlobalReactorState)
 			continue
 		}
 
-		checkpointTs := changefeedState.Info.GetCheckpointTs(changefeedState.Status)
+		checkpointTs := changefeedState.GlobalCheckpointTs()
 		upstreamID := changefeedState.Info.UpstreamID
 
 		if _, exist := minCheckpointTsMap[upstreamID]; !exist {

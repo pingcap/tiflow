@@ -177,6 +177,15 @@ func NewChangefeedReactorState(clusterID string,
 	}
 }
 
+// GlobalCheckpointTs return the global checkpoint of the changefeed
+func (s *ChangefeedReactorState) GlobalCheckpointTs() uint64 {
+	if s.Status != nil {
+		return s.Status.CheckpointTs
+	}
+
+	return s.Info.GetStartTs()
+}
+
 // Update implements the ReactorState interface
 func (s *ChangefeedReactorState) Update(key util.EtcdKey, value []byte, _ bool) error {
 	k := new(etcd.CDCKey)

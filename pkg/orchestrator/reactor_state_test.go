@@ -42,6 +42,21 @@ func TestCheckCaptureAlive(t *testing.T) {
 	stateTester.MustApplyPatches()
 }
 
+func TestGlobalCheckpoint(t *testing.T) {
+	t.Parallel()
+
+	state := NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		model.DefaultChangeFeedID("test"))
+
+	startTs := uint64(418881574869139457)
+	state.Info = &model.ChangeFeedInfo{StartTs: startTs}
+	require.Equal(t, state.GlobalCheckpointTs(), startTs)
+
+	checkpoint := uint64(420874357546418177)
+	state.Status = &model.ChangeFeedStatus{CheckpointTs: checkpoint}
+	require.Equal(t, state.GlobalCheckpointTs(), checkpoint)
+}
+
 func TestChangefeedStateUpdate(t *testing.T) {
 	changefeedInfo := `
 {

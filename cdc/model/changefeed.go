@@ -218,14 +218,6 @@ func (info *ChangeFeedInfo) GetStartTs() uint64 {
 	return oracle.GoTimeToTS(info.CreateTime)
 }
 
-// GetCheckpointTs returns CheckpointTs if it's specified in ChangeFeedStatus, otherwise StartTs is returned.
-func (info *ChangeFeedInfo) GetCheckpointTs(status *ChangeFeedStatus) uint64 {
-	if status != nil {
-		return status.CheckpointTs
-	}
-	return info.GetStartTs()
-}
-
 // GetTargetTs returns TargetTs if it's specified, otherwise MaxUint64 is returned.
 func (info *ChangeFeedInfo) GetTargetTs() uint64 {
 	if info.TargetTs > 0 {

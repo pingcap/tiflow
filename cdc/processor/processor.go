@@ -738,7 +738,7 @@ func (p *processor) handleErrorCh(ctx cdcContext.Context) error {
 }
 
 func (p *processor) globalCheckpoint() uint64 {
-	return p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
+	return p.changefeed.GlobalCheckpointTs()
 }
 
 func (p *processor) newSchemaStorage(checkpoint uint64) error {
