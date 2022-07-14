@@ -831,11 +831,10 @@ func TestGetTs(t *testing.T) {
 	t.Parallel()
 
 	var (
-		startTs      uint64 = 418881574869139457
-		targetTs     uint64 = 420891571239139085
-		checkpointTs uint64 = 420874357546418177
-		createTime          = time.Now()
-		info                = &ChangeFeedInfo{
+		startTs    uint64 = 418881574869139457
+		targetTs   uint64 = 420891571239139085
+		createTime        = time.Now()
+		info              = &ChangeFeedInfo{
 			SinkURI:    "blackhole://",
 			CreateTime: createTime,
 		}
