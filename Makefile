@@ -502,14 +502,14 @@ tiflow-generate-mock: tools/bin/mockgen
 	scripts/generate-engine-mock.sh
 
 engine_image: 
-	@which docker
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
 	./engine/test/utils/run_engine.sh build
 
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))
 
 engine_integration_test: 
-	@which docker
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
 	./engine/test/integration_tests/run.sh "$(CASE)" "$(START_AT)"
 
 tiflow-swagger-spec: tools/bin/swag

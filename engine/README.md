@@ -87,7 +87,7 @@ cd ./deployments/docker-compose
 
 ### Build
 
-To build this repo, you can simply run `make engine_image` in tiflow directory or `../run-engine.sh build` in working directory.
+To build this repo, you can run `../run-engine.sh build` in working directory (or simply run `make engine_image` in root directory of tiflow project).
 
 If you have build the binary on your local Linux, you can try `../run-engine.sh build-local`.
 
@@ -108,6 +108,9 @@ sudo rm -rf /tmp/df/master
 ```bash
 sudo rm -rf /tmp/df/master
 ../run-engine.sh deploy ./3m3e.yaml ./demo.yaml
+
+cd ../../../ # root dir of tiflow
+./bin/tiflow cli job create --master-addrs ${$server-master-ip0}:${port0} --job-type CVSDemo --job-config ./engine/deployments/docker-compose/config/demo.json
 ```
 
 ## Contribute
