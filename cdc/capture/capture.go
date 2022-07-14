@@ -391,24 +391,6 @@ func (c *captureImpl) Info() (model.CaptureInfo, error) {
 	return model.CaptureInfo{}, cerror.ErrCaptureNotInitialized.GenWithStackByArgs()
 }
 
-func (c *captureImpl) campaignLoop(ctx cdcContext.Context) error {
-	for {
-		if err := c.campaign(ctx); err != nil {
-			switch errors.Cause(err) {
-			case context.Canceled:
-				time.Sleep(time.Second)
-				continue
-			case mvcc.ErrCompacted:
-				return err
-			}
-			// if campaign owner failed, restart capture
-			return cerror.ErrCaptureSuicide.GenWithStackByArgs()
-		}
-		break
-	}
-	return nil
-}
-
 func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 	// In most failure cases, we don't return error directly, just run another
 	// campaign loop. We treat campaign loop as a special background routine.
@@ -433,14 +415,17 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			return errors.Trace(err)
 		}
 
-		if err := c.campaignLoop(ctx); err != nil {
-			// the revision we requested is compacted, just retry
-			if errors.Cause(err) == mvcc.ErrCompacted {
+		if err := c.campaign(ctx); err != nil {
+			switch errors.Cause(err) {
+			case context.Canceled, mvcc.ErrCompacted:
+				time.Sleep(time.Second)
 				continue
+			default:
 			}
+			// if campaign owner failed, restart capture
 			log.Warn("campaign owner failed",
 				zap.String("captureID", c.info.ID), zap.Error(err))
-			return errors.Trace(err)
+			return cerror.ErrCaptureSuicide.GenWithStackByArgs()
 		}
 
 		ownerRev, err := c.EtcdClient.GetOwnerRevision(ctx, c.info.ID)
@@ -560,9 +545,19 @@ func (c *captureImpl) campaign(ctx cdcContext.Context) error {
 	failpoint.Inject("capture-campaign-compacted-error", func() {
 		failpoint.Return(errors.Trace(mvcc.ErrCompacted))
 	})
+
 	stdCtx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
-	return cerror.WrapError(cerror.ErrCaptureCampaignOwner, c.election.Campaign(stdCtx, c.info.ID))
+
+	err := c.election.Campaign(stdCtx, c.info.ID)
+	if err != nil {
+		if err != context.Canceled {
+			return cerror.WrapError(cerror.ErrCaptureCampaignOwner, err)
+		}
+		return err
+	}
+
+	return nil
 }
 
 // resign lets an owner start a new election.
