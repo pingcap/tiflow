@@ -538,6 +538,24 @@ func TestRemoteCheckPointLoadIntoSchemaTracker(t *testing.T) {
 	require.Len(t, tableInfo.Columns, 1)
 	_, err = schemaTracker.GetTableInfo(tbl2)
 	require.Error(t, err)
+
+	// test BatchCreateTableWithInfo will not meet kv entry too large error
+
+	// create 100K comment string
+	comment := make([]byte, 0, 100000)
+	for i := 0; i < 100000; i++ {
+		comment = append(comment, 'A')
+	}
+	ti.Comment = string(comment)
+
+	tp1 = tablePoint{ti: ti}
+	amount := 100
+	for i := 0; i < amount; i++ {
+		tableName := fmt.Sprintf("tbl_%d", i)
+		checkpoint.points[tbl1.Schema][tableName] = &binlogPoint{flushedPoint: tp1}
+	}
+	err = checkpoint.LoadIntoSchemaTracker(ctx, schemaTracker)
+	require.NoError(t, err)
 }
 
 func TestLastFlushOutdated(t *testing.T) {
