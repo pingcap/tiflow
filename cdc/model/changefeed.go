@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -157,7 +156,7 @@ var changeFeedIDRe = regexp.MustCompile(`^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*$`)
 // the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", length no more than "changeFeedIDMaxLen", eg, "simple-changefeed-task".
 func ValidateChangefeedID(changefeedID string) error {
 	if !changeFeedIDRe.MatchString(changefeedID) || len(changefeedID) > changeFeedIDMaxLen {
-		return cerrors.ErrInvalidChangefeedID.GenWithStackByArgs(changeFeedIDMaxLen)
+		return cerror.ErrInvalidChangefeedID.GenWithStackByArgs(changeFeedIDMaxLen)
 	}
 	return nil
 }
@@ -238,7 +237,7 @@ func (info *ChangeFeedInfo) GetTargetTs() uint64 {
 // Marshal returns the json marshal format of a ChangeFeedInfo
 func (info *ChangeFeedInfo) Marshal() (string, error) {
 	data, err := json.Marshal(info)
-	return string(data), cerrors.WrapError(cerrors.ErrMarshalFailed, err)
+	return string(data), cerror.WrapError(cerror.ErrMarshalFailed, err)
 }
 
 // Unmarshal unmarshals into *ChangeFeedInfo from json marshal byte slice
@@ -246,7 +245,7 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, &info)
 	if err != nil {
 		return errors.Annotatef(
-			cerrors.WrapError(cerrors.ErrUnmarshalFailed, err), "Unmarshal data: %v", data)
+			cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: %v", data)
 	}
 	return nil
 }
@@ -316,7 +315,7 @@ func (info *ChangeFeedInfo) fixState() {
 		// This corresponds to the case of failure or error.
 		case AdminNone, AdminResume:
 			if info.Error != nil {
-				if cerrors.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code)) {
+				if cerror.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code)) {
 					state = StateFailed
 				} else {
 					state = StateError
@@ -396,5 +395,5 @@ func (info *ChangeFeedInfo) HasFastFailError() bool {
 	if info.Error == nil {
 		return false
 	}
-	return cerrors.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
+	return cerror.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
 }

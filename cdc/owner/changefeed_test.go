@@ -28,6 +28,7 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
@@ -63,7 +64,7 @@ func (m *mockDDLPuller) PopFrontDDL() (uint64, *timodel.Job) {
 
 func (m *mockDDLPuller) Close() {}
 
-func (m *mockDDLPuller) Run(ctx cdcContext.Context) error {
+func (m *mockDDLPuller) Run(ctx context.Context) error {
 	<-ctx.Done()
 	return nil
 }
@@ -182,9 +183,12 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T) (
 	})
 
 	cf := newChangefeed4Test(ctx.ChangefeedVars().ID, up,
-		func(ctx cdcContext.Context, up *upstream.Upstream,
+		func(ctx context.Context,
+			replicaConfig *config.ReplicaConfig,
+			up *upstream.Upstream,
 			startTs uint64,
-		) (DDLPuller, error) {
+			changefeed model.ChangeFeedID,
+		) (puller.DDLPuller, error) {
 			return &mockDDLPuller{resolvedTs: startTs - 1}, nil
 		}, func() DDLSink {
 			return &mockDDLSink{

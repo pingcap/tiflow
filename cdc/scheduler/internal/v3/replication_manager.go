@@ -103,7 +103,7 @@ func (r *replicationManager) HandleCaptureChanges(
 ) ([]*schedulepb.Message, error) {
 	if changes.Init != nil {
 		if len(r.tables) != 0 {
-			log.Panic("tpscheduler: init again",
+			log.Panic("schedulerv3: init again",
 				zap.Any("init", changes.Init), zap.Any("tables", r.tables))
 		}
 		tableStatus := map[model.TableID]map[model.CaptureID]*schedulepb.TableStatus{}
@@ -163,7 +163,7 @@ func (r *replicationManager) HandleMessage(
 			}
 			sentMsgs = append(sentMsgs, msgs...)
 		default:
-			log.Warn("tpscheduler: ignore message",
+			log.Warn("schedulerv3: ignore message",
 				zap.Stringer("type", msg.MsgType), zap.Any("message", msg))
 		}
 	}
@@ -177,7 +177,7 @@ func (r *replicationManager) handleMessageHeartbeatResponse(
 	for _, status := range msg.Tables {
 		table, ok := r.tables[status.TableID]
 		if !ok {
-			log.Info("tpscheduler: ignore table status no table found",
+			log.Info("schedulerv3: ignore table status no table found",
 				zap.Any("message", status))
 			continue
 		}
@@ -186,7 +186,7 @@ func (r *replicationManager) handleMessageHeartbeatResponse(
 			return nil, errors.Trace(err)
 		}
 		if table.hasRemoved() {
-			log.Info("tpscheduler: table has removed", zap.Int64("tableID", status.TableID))
+			log.Info("schedulerv3: table has removed", zap.Int64("tableID", status.TableID))
 			delete(r.tables, status.TableID)
 		}
 		sentMsgs = append(sentMsgs, msgs...)
@@ -204,14 +204,14 @@ func (r *replicationManager) handleMessageDispatchTableResponse(
 	case *schedulepb.DispatchTableResponse_RemoveTable:
 		status = resp.RemoveTable.Status
 	default:
-		log.Warn("tpscheduler: ignore unknown dispatch table response",
+		log.Warn("schedulerv3: ignore unknown dispatch table response",
 			zap.Any("message", msg))
 		return nil, nil
 	}
 
 	table, ok := r.tables[status.TableID]
 	if !ok {
-		log.Info("tpscheduler: ignore table status no table found",
+		log.Info("schedulerv3: ignore table status no table found",
 			zap.Any("message", status))
 		return nil, nil
 	}
@@ -220,7 +220,7 @@ func (r *replicationManager) handleMessageDispatchTableResponse(
 		return nil, errors.Trace(err)
 	}
 	if table.hasRemoved() {
-		log.Info("tpscheduler: table has removed", zap.Int64("tableID", status.TableID))
+		log.Info("schedulerv3: table has removed", zap.Int64("tableID", status.TableID))
 		delete(r.tables, status.TableID)
 	}
 	return msgs, nil
@@ -260,7 +260,7 @@ func (r *replicationManager) HandleTasks(
 
 		// Check if accepting one more task exceeds maxTaskConcurrency.
 		if len(r.runningTasks) == r.maxTaskConcurrency {
-			log.Debug("tpscheduler: too many running task")
+			log.Debug("schedulerv3: too many running task")
 			// Does not use break, in case there is burst balance task
 			// in the remaining tasks.
 			continue
@@ -278,12 +278,12 @@ func (r *replicationManager) HandleTasks(
 		// Skip task if the table is already running a task,
 		// or the table has removed.
 		if _, ok := r.runningTasks[tableID]; ok {
-			log.Info("tpscheduler: ignore task, already exists",
+			log.Info("schedulerv3: ignore task, already exists",
 				zap.Any("task", task))
 			continue
 		}
 		if _, ok := r.tables[tableID]; !ok && task.addTable == nil {
-			log.Info("tpscheduler: ignore task, table not found",
+			log.Info("schedulerv3: ignore task, table not found",
 				zap.Any("task", task))
 			continue
 		}
@@ -331,7 +331,7 @@ func (r *replicationManager) handleRemoveTableTask(
 	r.acceptRemoveTableTask++
 	table := r.tables[task.TableID]
 	if table.hasRemoved() {
-		log.Info("tpscheduler: table has removed", zap.Int64("tableID", task.TableID))
+		log.Info("schedulerv3: table has removed", zap.Int64("tableID", task.TableID))
 		delete(r.tables, task.TableID)
 		return nil, nil
 	}
@@ -364,7 +364,7 @@ func (r *replicationManager) handleBurstBalanceTasks(
 	fields = append(fields, zap.Int("addTable", len(task.AddTables)))
 	fields = append(fields, zap.Int("removeTable", len(task.RemoveTables)))
 	fields = append(fields, zap.Int("moveTable", len(task.MoveTables)))
-	log.Info("tpscheduler: handle burst balance task", fields...)
+	log.Info("schedulerv3: handle burst balance task", fields...)
 
 	sentMsgs := make([]*schedulepb.Message, 0, len(task.AddTables))
 	for i := range task.AddTables {
@@ -433,7 +433,7 @@ func (r *replicationManager) AdvanceCheckpoint(
 		table, ok := r.tables[tableID]
 		if !ok {
 			// Can not advance checkpoint there is a table missing.
-			log.Warn("tpscheduler: cannot advance checkpoint since missing table",
+			log.Warn("schedulerv3: cannot advance checkpoint since missing table",
 				zap.Int64("tableID", tableID))
 			return checkpointCannotProceed, checkpointCannotProceed
 		}
