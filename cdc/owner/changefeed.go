@@ -545,13 +545,12 @@ func (c *changefeed) cleanupServiceGCSafePoints(ctx cdcContext.Context) {
 	if !c.isRemoved {
 		return
 	}
-	var serviceIDs []string
-	serviceIDs = append(serviceIDs,
-		ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceCreating))
-	serviceIDs = append(serviceIDs,
-		ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceResuming))
-	serviceIDs = append(serviceIDs,
-		ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceInitializing))
+
+	serviceIDs := []string{
+		ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
+		ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
+		ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceInitializing),
+	}
 
 	for _, serviceID := range serviceIDs {
 		err := gc.UndoEnsureChangefeedStartTsSafety(
