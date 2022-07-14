@@ -140,6 +140,8 @@ func (w *dmWorker) Tick(ctx context.Context) error {
 	if err := w.tryUpdateStatus(ctx); err != nil {
 		return err
 	}
+	// update unit status periodically to update metrics
+	w.unitHolder.CheckAndUpdateStatus(ctx)
 	return w.messageAgent.Tick(ctx)
 }
 
