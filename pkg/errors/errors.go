@@ -248,6 +248,9 @@ var (
 		"kafka broker config item not found",
 		errors.RFCCodeText("CDC:ErrKafkaBrokerConfigNotFound"),
 	)
+	ErrKafkaTopicNotExists = errors.Normalize("kafka topic not exists after creation",
+		errors.RFCCodeText("CDC:ErrKafkaTopicNotExists"),
+	)
 	ErrPulsarNewProducer = errors.Normalize(
 		"new pulsar producer",
 		errors.RFCCodeText("CDC:ErrPulsarNewProducer"),

@@ -448,12 +448,16 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	topicManager := manager.NewKafkaTopicManager(
+	topicManager, err := manager.NewKafkaTopicManager(
 		client,
 		adminClient,
 		baseConfig.DeriveTopicConfig(),
 	)
-	if _, err := topicManager.CreateTopic(topic); err != nil {
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	if _, err := topicManager.CreateTopicAndWaitUntilVisible(topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
 	}
 

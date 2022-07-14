@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -101,17 +102,19 @@ func NewMySQLSink(
 	// dsn format of the driver:
 	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
 	username := sinkURI.User.Username()
-	password, _ := sinkURI.User.Password()
-	hostName := sinkURI.Hostname()
-	port := sinkURI.Port()
 	if username == "" {
 		username = "root"
 	}
+	password, _ := sinkURI.User.Password()
+	hostName := sinkURI.Hostname()
+	port := sinkURI.Port()
 	if port == "" {
 		port = "4000"
 	}
 
-	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, hostName, port, params.tls)
+	// This will handle the IPv6 address format.
+	host := net.JoinHostPort(hostName, port)
+	dsnStr := fmt.Sprintf("%s:%s@tcp(%s)/%s", username, password, host, params.tls)
 	dsn, err := dmysql.ParseDSN(dsnStr)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)

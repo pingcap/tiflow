@@ -1698,6 +1698,48 @@ func TestNewMySQLSink(t *testing.T) {
 	require.Nil(t, err)
 }
 
+func TestNewMySQLSinkWithIPv6Address(t *testing.T) {
+	dbIndex := 0
+	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		require.Contains(t, dsnStr, "root@tcp([::1]:3306)")
+		defer func() {
+			dbIndex++
+		}()
+		if dbIndex == 0 {
+			// test db
+			db, err := mockTestDB(true)
+			require.Nil(t, err)
+			return db, nil
+		}
+		// normal db
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		mock.ExpectClose()
+		require.Nil(t, err)
+		return db, nil
+	}
+	backupGetDBConn := GetDBConnImpl
+	GetDBConnImpl = mockGetDBConn
+	defer func() {
+		GetDBConnImpl = backupGetDBConn
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	changefeed := model.DefaultChangeFeedID("test-changefeed")
+	// See https://www.ietf.org/rfc/rfc2732.txt, we have to use brackets to wrap IPv6 address.
+	sinkURI, err := url.Parse("mysql://[::1]:3306/?time-zone=UTC&worker-count=4")
+	require.Nil(t, err)
+	rc := config.GetDefaultReplicaConfig()
+	f, err := filter.NewFilter(rc)
+	require.Nil(t, err)
+	sink, err := NewMySQLSink(ctx,
+		changefeed,
+		sinkURI, f, rc, map[string]string{})
+	require.Nil(t, err)
+	err = sink.Close(ctx)
+	require.Nil(t, err)
+}
+
 func TestMySQLSinkClose(t *testing.T) {
 	dbIndex := 0
 	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
