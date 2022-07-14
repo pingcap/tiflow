@@ -62,6 +62,7 @@ function run() {
 	run_sql "insert into consistent_replicate_nfs.USERTABLE2 select * from consistent_replicate_nfs.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	# to ensure row changed events have been replicated to TiCDC
+    # TODO: revert it to 10 after https://github.com/pingcap/tiflow/issues/6277 has been resolved.
 	sleep 30
 
 	nfs_download_path=$WORK_DIR/cdc_data/redo/$changefeed_id
