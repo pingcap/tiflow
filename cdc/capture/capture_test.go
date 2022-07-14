@@ -90,7 +90,7 @@ func TestDrainImmediately(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mm := mock_processor.NewMockManager(ctrl)
 	cp := &captureImpl{processorManager: mm, config: config.GetDefaultServerConfig()}
-	cp.config.Debug.EnableTwoPhaseScheduler = true
+	cp.config.Debug.EnableSchedulerV3 = true
 	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
 
 	// Drain completes immediately.
@@ -116,7 +116,7 @@ func TestDrainWaitsTables(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mm := mock_processor.NewMockManager(ctrl)
 	cp := &captureImpl{processorManager: mm, config: config.GetDefaultServerConfig()}
-	cp.config.Debug.EnableTwoPhaseScheduler = true
+	cp.config.Debug.EnableSchedulerV3 = true
 	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
 
 	// Drain waits for moving out all tables.
@@ -160,7 +160,7 @@ func TestDrainWaitsOwnerResign(t *testing.T) {
 	mo := mock_owner.NewMockOwner(ctrl)
 	mm := mock_processor.NewMockManager(ctrl)
 	cp := &captureImpl{processorManager: mm, owner: mo, config: config.GetDefaultServerConfig()}
-	cp.config.Debug.EnableTwoPhaseScheduler = true
+	cp.config.Debug.EnableSchedulerV3 = true
 	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
 
 	ownerStopCh := make(chan struct{}, 1)
@@ -214,7 +214,7 @@ func TestDrainOneCapture(t *testing.T) {
 	mo := mock_owner.NewMockOwner(ctrl)
 	mm := mock_processor.NewMockManager(ctrl)
 	cp := &captureImpl{processorManager: mm, owner: mo, config: config.GetDefaultServerConfig()}
-	cp.config.Debug.EnableTwoPhaseScheduler = true
+	cp.config.Debug.EnableSchedulerV3 = true
 	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
 
 	mo.EXPECT().Query(gomock.Any(), gomock.Any()).Do(func(
@@ -242,7 +242,7 @@ func TestDrainErrors(t *testing.T) {
 	mo := mock_owner.NewMockOwner(ctrl)
 	mm := mock_processor.NewMockManager(ctrl)
 	cp := &captureImpl{processorManager: mm, owner: mo, config: config.GetDefaultServerConfig()}
-	cp.config.Debug.EnableTwoPhaseScheduler = true
+	cp.config.Debug.EnableSchedulerV3 = true
 	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
 
 	errQueryCall := mo.EXPECT().Query(gomock.Any(), gomock.Any()).Do(func(
