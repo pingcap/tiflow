@@ -20,6 +20,7 @@ import (
 	"math"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -100,7 +101,7 @@ var (
 	defaultBatch                   = 100
 	defaultQueueSize               = 1024  // do not give too large default value to avoid OOM
 	defaultCheckpointFlushInterval = 30    // in seconds
-	DefaultSafeModeDuration        = "60s" // defaultCheckpointFlushInterval * 2
+	defaultSafeModeDuration        = "60s" // defaultCheckpointFlushInterval * 2
 
 	// TargetDBConfig.
 	defaultSessionCfg = []struct {
@@ -339,7 +340,7 @@ func DefaultSyncerConfig() SyncerConfig {
 		Batch:                   defaultBatch,
 		QueueSize:               defaultQueueSize,
 		CheckpointFlushInterval: defaultCheckpointFlushInterval,
-		SafeModeDuration:        DefaultSafeModeDuration,
+		SafeModeDuration:        defaultSafeModeDuration,
 	}
 }
 
@@ -798,7 +799,7 @@ func (c *TaskConfig) adjust() error {
 			inst.Syncer.CheckpointFlushInterval = defaultCheckpointFlushInterval
 		}
 		if inst.Syncer.SafeModeDuration == "" {
-			inst.Syncer.SafeModeDuration = DefaultSafeModeDuration
+			inst.Syncer.SafeModeDuration = strconv.Itoa(2 * inst.Syncer.CheckpointFlushInterval)
 		}
 		_, err := time.ParseDuration(inst.Syncer.SafeModeDuration)
 		if err != nil {

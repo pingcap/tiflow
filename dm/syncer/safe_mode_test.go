@@ -52,7 +52,6 @@ func TestEnableSafeModeInitializationPhase(t *testing.T) {
 			Name: "test", SourceID: "test",
 			SyncerConfig: config.SyncerConfig{
 				CheckpointFlushInterval: 1,
-				SafeModeDuration:        "2s",
 			},
 		},
 	}
@@ -99,5 +98,24 @@ func TestEnableSafeModeInitializationPhase(t *testing.T) {
 	time.Sleep(time.Second) // wait for enableSafeModeInitializationPhase running
 	require.True(t, s.safeMode.Enable())
 	time.Sleep(time.Second * 2) // wait for enableSafeModeInitializationPhase exit
+	require.False(t, s.safeMode.Enable())
+
+	// test SafeModeDuration="3s"
+	s = &Syncer{
+		tctx:     tcontext.Background().WithLogger(l),
+		safeMode: mode.NewSafeMode(), cli: etcdTestCli,
+		cfg: &config.SubTaskConfig{
+			Name: "test", SourceID: "test",
+			SyncerConfig: config.SyncerConfig{
+				CheckpointFlushInterval: 1,
+				SafeModeDuration:        "3s",
+			},
+		},
+		checkpoint: &mockCheckpointForSafeMode{},
+	}
+	s.enableSafeModeInitializationPhase(s.tctx)
+	time.Sleep(time.Second * 2) // wait for enableSafeModeInitializationPhase running
+	require.True(t, s.safeMode.Enable())
+	time.Sleep(time.Second * 4) // wait for enableSafeModeInitializationPhase exit
 	require.False(t, s.safeMode.Enable())
 }
