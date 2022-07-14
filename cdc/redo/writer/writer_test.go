@@ -15,7 +15,6 @@ package writer
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"net/url"
 	"os"
@@ -140,7 +139,7 @@ func TestLogWriterWriteLog(t *testing.T) {
 			tt.args.ctx = ctx
 		}
 
-		_, err := writer.WriteLog(tt.args.ctx, tt.args.tableID, tt.args.rows)
+		err := writer.WriteLog(tt.args.ctx, tt.args.tableID, tt.args.rows)
 		if tt.wantErr != nil {
 			require.Truef(t, errors.ErrorEqual(tt.wantErr, err), tt.name)
 		} else {
@@ -338,7 +337,7 @@ func TestLogWriterFlushLog(t *testing.T) {
 			cancel()
 			tt.args.ctx = ctx
 		}
-		err := writer.FlushLog(tt.args.ctx, map[int64]uint64{tt.args.tableID: tt.args.ts}, tt.args.ts)
+		err := writer.FlushLog(tt.args.ctx, map[int64]uint64{tt.args.tableID: tt.args.ts})
 		if tt.wantErr != nil {
 			require.True(t, errors.ErrorEqual(tt.wantErr, err), err.Error()+tt.wantErr.Error())
 		} else {
@@ -480,20 +479,6 @@ func TestNewLogWriter(t *testing.T) {
 	require.NotSame(t, ll, ll2)
 
 	dir := t.TempDir()
-	fileName := fmt.Sprintf("%s_%s_%d_%s%s", "cp", "test-changefeed", time.Now().Unix(), common.DefaultMetaFileType, common.MetaEXT)
-	path := filepath.Join(dir, fileName)
-	f, err := os.Create(path)
-	require.Nil(t, err)
-
-	meta := &common.LogMeta{
-		CheckPointTs: 11,
-		ResolvedTs:   22,
-	}
-	data, err := meta.MarshalMsg(nil)
-	require.Nil(t, err)
-	_, err = f.Write(data)
-	require.Nil(t, err)
-
 	cfg = &LogWriterConfig{
 		Dir:               dir,
 		ChangeFeedID:      model.DefaultChangeFeedID("test-cf"),
@@ -506,11 +491,28 @@ func TestNewLogWriter(t *testing.T) {
 	require.Nil(t, err)
 	err = l.Close()
 	require.Nil(t, err)
+	path := l.filePath()
+	f, err := os.Create(path)
+	require.Nil(t, err)
+
+	meta := &common.LogMeta{
+		CheckPointTs:   11,
+		ResolvedTsList: map[model.TableID]model.Ts{int64(1): uint64(22)},
+	}
+	data, err := meta.MarshalMsg(nil)
+	require.Nil(t, err)
+	_, err = f.Write(data)
+	require.Nil(t, err)
+
+	l, err = NewLogWriter(ctx, cfg)
+	require.Nil(t, err)
+	err = l.Close()
+	require.Nil(t, err)
 	require.True(t, l.isStopped())
 	require.Equal(t, cfg.Dir, l.cfg.Dir)
 	require.Equal(t, meta.CheckPointTs, l.meta.CheckPointTs)
-	require.Equal(t, meta.ResolvedTs, l.meta.ResolvedTs)
-	require.Equal(t, map[int64]uint64{}, l.meta.ResolvedTsList)
+	require.Equal(t, meta.ResolvedTs(), l.meta.ResolvedTs())
+	require.Equal(t, meta.ResolvedTsList, l.meta.ResolvedTsList)
 	time.Sleep(time.Millisecond * time.Duration(math.Max(float64(defaultFlushIntervalInMs), float64(defaultGCIntervalInMs))+1))
 
 	origin := common.InitS3storage
