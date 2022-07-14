@@ -64,7 +64,12 @@ function run() {
 	run_sql "insert into consistent_replicate_nfs.USERTABLE2 select * from consistent_replicate_nfs.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	# to ensure row changed events have been replicated to TiCDC
+<<<<<<< HEAD
 	sleep 5
+=======
+	# TODO: revert it to 10 after https://github.com/pingcap/tiflow/issues/6277 has been resolved.
+	sleep 30
+>>>>>>> fd0cf3eb3 (cdc: change redo meta resolved timestamp correctly (#6243))
 
 	nfs_download_path=$WORK_DIR/cdc_data/redo/$changefeed_id
 	current_tso=$(cdc cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
