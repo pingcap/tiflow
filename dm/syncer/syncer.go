@@ -1618,6 +1618,9 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
+	if !fresh && s.cfg.SafeModeDuration == "0s" {
+		return terror.ErrSyncerReprocessWithSafeModeFail.Generate()
+	}
 
 	// task command line arguments have the highest priority
 	skipLoadMeta := false
@@ -3753,10 +3756,6 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 	}()
 	if s.isClosed() {
 		s.tctx.L().Warn("try to resume, but already closed")
-		return
-	}
-	if s.cfg.SafeModeDuration == "0s" {
-		err = terror.ErrSyncerResumeWithSafeModeFail.Generate()
 		return
 	}
 

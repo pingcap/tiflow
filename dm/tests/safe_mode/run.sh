@@ -183,9 +183,67 @@ function safe_mode_recover() {
 	done
 }
 
+function safe_mode_duration() {
+	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	check_contains 'Query OK, 2 rows affected'
+	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	check_contains 'Query OK, 3 rows affected'
+
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/SafeModeDurationIsZero=return(true)"
+	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+	# operate mysql config to worker
+	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
+	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
+	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
+	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
+	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
+	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
+
+	dmctl_start_task "$cur/conf/dm-task-safe-mode-duration.yaml" "--remove-meta"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	check_log_contains $WORK_DIR/worker1/log/dm-worker.log "failpoint: will not enter safe mode"
+
+	# restart workers
+	pkill -hup dm-worker.test 2>/dev/null || true
+	check_port_offline $WORKER1_PORT 20
+	check_port_offline $WORKER2_PORT 20
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+	# run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	# 	"start-task $cur/conf/dm-task.yaml" \
+	# 	"\"result\": true" 3
+
+	# DM-worker exit during re-sync after sharding group synced
+	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql_file $cur/data/db2.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"Your \`safe-mode-duration\` in task.yaml is set 0s" 1
+
+	# stop and start task success
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task test" \
+		"\"result\": true" 3
+
+	cp $cur/conf/dm-task-safe-mode-duration.yaml $WORK_DIR/dm-task-safe-mode-duration.yaml
+	sed -i "s/safe-mode-duration: \"0s\"/safe-mode-duration: \"10ms\"/" $WORK_DIR/dm-task-safe-mode-duration.yaml
+
+	dmctl_start_task "$WORK_DIR/dm-task-safe-mode-duration.yaml"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+}
+
 function run() {
 	consistency_none
 	safe_mode_recover
+	safe_mode_duration
 
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'

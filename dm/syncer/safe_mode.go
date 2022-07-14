@@ -14,7 +14,6 @@
 package syncer
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/pingcap/failpoint"
@@ -48,8 +47,34 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 		//nolint:errcheck
 		s.safeMode.Add(tctx, 1) // enable and will revert after pass SafeModeExitLoc
 		s.tctx.L().Info("enable safe-mode for safe mode exit point, will exit at", zap.Stringer("location", *s.checkpoint.SafeModeExitPoint()))
-		fmt.Printf("enable safe-")
 	} else {
+		initPhaseSeconds := s.cfg.SafeModeDuration
+
+		failpoint.Inject("SafeModeInitPhaseSeconds", func(val failpoint.Value) {
+			seconds, _ := val.(string)
+			initPhaseSeconds = seconds
+			s.tctx.L().Info("set initPhaseSeconds", zap.String("failpoint", "SafeModeInitPhaseSeconds"), zap.String("value", seconds))
+		})
+		var duration time.Duration
+		var err error
+		if initPhaseSeconds == "" {
+			duration = time.Second * time.Duration(2*s.cfg.CheckpointFlushInterval)
+		} else {
+			duration, err = time.ParseDuration(initPhaseSeconds)
+			if err != nil {
+				// send error to the fatal chan to interrupt the process
+				s.runFatalChan <- unit.NewProcessError(err)
+				s.tctx.L().Error("enable safe-mode failed due to duration parse failed", zap.Duration("duration", duration))
+				return
+			}
+		}
+		s.tctx.L().Info("enable safe-mode because of task initialization", zap.Duration("duration", duration))
+
+		failpoint.Inject("SafeModeDurationIsZero", func() {
+			if duration.String() == "0s" {
+				s.tctx.L().Debug("failpoint: will not enter safe mode")
+			}
+		})
 		//nolint:errcheck
 		s.safeMode.Add(tctx, 1) // enable and will revert after 2 * CheckpointFlushInterval
 		go func() {
@@ -64,28 +89,7 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 					s.tctx.L().Info("disable safe-mode after task initialization finished")
 				}
 			}()
-			initPhaseSeconds := s.cfg.SafeModeDuration
-			fmt.Printf("enable safe-mode because of task initialization, initPhaseSeconds: %s\n", initPhaseSeconds)
 
-			failpoint.Inject("SafeModeInitPhaseSeconds", func(val failpoint.Value) {
-				seconds, _ := val.(string)
-				initPhaseSeconds = seconds
-				s.tctx.L().Info("set initPhaseSeconds", zap.String("failpoint", "SafeModeInitPhaseSeconds"), zap.String("value", seconds))
-			})
-			var duration time.Duration
-			if initPhaseSeconds == "" {
-				duration = time.Second * time.Duration(2*s.cfg.CheckpointFlushInterval)
-			} else {
-				duration, err = time.ParseDuration(initPhaseSeconds)
-				if err != nil {
-					// send error to the fatal chan to interrupt the process
-					s.runFatalChan <- unit.NewProcessError(err)
-					s.tctx.L().Error("enable safe-mode failed due to duration parse failed", zap.Duration("duration", duration))
-					return
-				}
-			}
-			s.tctx.L().Info("enable safe-mode because of task initialization", zap.Duration("duration", duration))
-			fmt.Printf("enable safe-mode because of task initialization duration: %v, initPhaseSeconds: %s, CheckpointFlushInterval: %d\n", duration, initPhaseSeconds, s.cfg.CheckpointFlushInterval)
 			select {
 			case <-tctx.Context().Done():
 			case <-time.After(duration):

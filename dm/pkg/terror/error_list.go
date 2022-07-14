@@ -448,7 +448,7 @@ const (
 	codeSyncerUnsupportedStmt
 	codeSyncerGetEvent
 	codeSyncerDownstreamTableNotFound
-	codeSyncerResumeWithSafeModeFail
+	codeSyncerReprocessWithSafeModeFail
 )
 
 // DM-master error code.
@@ -1134,7 +1134,7 @@ var (
 	ErrSyncerUnsupportedStmt                = New(codeSyncerUnsupportedStmt, ClassSyncUnit, ScopeInternal, LevelHigh, "`%s` statement not supported in %s mode", "")
 	ErrSyncerGetEvent                       = New(codeSyncerGetEvent, ClassSyncUnit, ScopeUpstream, LevelHigh, "get binlog event error: %v", "Please check if the binlog file could be parsed by `mysqlbinlog`.")
 	ErrSyncerDownstreamTableNotFound        = New(codeSyncerDownstreamTableNotFound, ClassSyncUnit, ScopeInternal, LevelHigh, "downstream table %s not found", "")
-	ErrSyncerResumeWithSafeModeFail         = New(codeSyncerResumeWithSafeModeFail, ClassSyncUnit, ScopeInternal, LevelMedium, "Your `safe-mode-duration` in task.yaml is set 0s, so you can't resume safe mode.", "Please stop and re-start this task. If you want to resume task successfully, you need set `safe-mode-duration` > `0s`")
+	ErrSyncerReprocessWithSafeModeFail      = New(codeSyncerReprocessWithSafeModeFail, ClassSyncUnit, ScopeInternal, LevelMedium, "Your `safe-mode-duration` in task.yaml is set 0s, so you can't re-process with safe mode.", "Please stop and re-start this task. If you want to start task successfully, you need set `safe-mode-duration` > `0s`")
 
 	// DM-master error.
 	ErrMasterSQLOpNilRequest        = New(codeMasterSQLOpNilRequest, ClassDMMaster, ScopeInternal, LevelMedium, "nil request not valid", "")
