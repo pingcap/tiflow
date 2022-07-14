@@ -333,9 +333,8 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		// (recoverable errors are intercepted in the owner tick)
 		// so we should also stop the owner and let capture restart or exit
 		ownerErr = c.campaignOwner(ctx)
-		log.Info("the owner routine has exited",
-			zap.String("captureID", c.info.ID),
-			zap.Error(ownerErr))
+		log.Info("the owner routine exited",
+			zap.String("captureID", c.info.ID), zap.Error(err))
 	}()
 	wg.Add(1)
 	go func() {
@@ -392,6 +391,25 @@ func (c *captureImpl) Info() (model.CaptureInfo, error) {
 	return model.CaptureInfo{}, cerror.ErrCaptureNotInitialized.GenWithStackByArgs()
 }
 
+func (c *captureImpl) campaignLoop(ctx cdcContext.Context) error {
+	for {
+		if err := c.campaign(ctx); err != nil {
+			switch errors.Cause(err) {
+			case context.Canceled:
+				time.Sleep(time.Second)
+				continue
+			case mvcc.ErrCompacted:
+				// the revision we requested is compacted, exit the loop and enter the loop again
+				return nil
+			}
+			// if campaign owner failed, restart capture
+			return cerror.ErrCaptureSuicide.GenWithStackByArgs()
+		}
+		break
+	}
+	return nil
+}
+
 func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 	// In most failure cases, we don't return error directly, just run another
 	// campaign loop. We treat campaign loop as a special background routine.
@@ -408,7 +426,6 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			return nil
 		default:
 		}
-		start := time.Now()
 		err := rl.Wait(ctx)
 		if err != nil {
 			if errors.Cause(err) == context.Canceled {
@@ -416,28 +433,12 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			}
 			return errors.Trace(err)
 		}
-		log.Info("start campaign for the owner",
-			zap.String("captureID", c.info.ID),
-			zap.Duration("duration", time.Since(start)))
-		// Campaign to be an owner, it blocks until it becomes the owner
-		start = time.Now()
-		if err := c.campaign(ctx); err != nil {
-			switch errors.Cause(err) {
-			case context.Canceled:
-				return nil
-			case mvcc.ErrCompacted:
-				// the revision we requested is compacted, just retry
-				continue
-			}
+
+		if err := c.campaignLoop(ctx); err != nil {
 			log.Warn("campaign owner failed",
-				zap.String("captureID", c.info.ID),
-				zap.Error(err))
-			// if campaign owner failed, restart capture
-			return cerror.ErrCaptureSuicide.GenWithStackByArgs()
+				zap.String("captureID", c.info.ID), zap.Error(err))
+			return errors.Trace(err)
 		}
-		log.Info("campaign owner succeeded",
-			zap.String("captureID", c.info.ID),
-			zap.Duration("duration", time.Since(start)))
 
 		ownerRev, err := c.EtcdClient.GetOwnerRevision(ctx, c.info.ID)
 		if err != nil {
@@ -481,18 +482,15 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			log.Info("run owner exited normally", zap.String("captureID", c.info.ID))
 		}
 		// if owner exits, resign the owner key
-		start = time.Now()
 		if resignErr := c.resign(ctx); resignErr != nil {
 			log.Info("owner resign failed",
 				zap.String("captureID", c.info.ID),
-				zap.Error(resignErr),
-				zap.Duration("duration", time.Since(start)))
+				zap.Error(resignErr))
 			// if resigning owner failed, return error to let capture exits
 			return errors.Annotatef(resignErr, "resign owner failed, capture: %s", c.info.ID)
 		}
 		log.Info("owner resigned successfully",
-			zap.String("captureID", c.info.ID),
-			zap.Duration("duration", time.Since(start)))
+			zap.String("captureID", c.info.ID))
 		if err != nil {
 			// for errors, return error and let capture exits or restart
 			return errors.Trace(err)
@@ -559,7 +557,9 @@ func (c *captureImpl) campaign(ctx cdcContext.Context) error {
 	failpoint.Inject("capture-campaign-compacted-error", func() {
 		failpoint.Return(errors.Trace(mvcc.ErrCompacted))
 	})
-	return cerror.WrapError(cerror.ErrCaptureCampaignOwner, c.election.Campaign(ctx, c.info.ID))
+	stdCtx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	return cerror.WrapError(cerror.ErrCaptureCampaignOwner, c.election.Campaign(stdCtx, c.info.ID))
 }
 
 // resign lets an owner start a new election.
