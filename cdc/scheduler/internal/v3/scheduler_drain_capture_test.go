@@ -153,3 +153,31 @@ func TestDrainImbalanceCluster(t *testing.T) {
 	require.Len(t, tasks, 2)
 	require.EqualValues(t, "a", scheduler.getTarget())
 }
+
+func TestDrainEvenlyDistributedTables(t *testing.T) {
+	t.Parallel()
+
+	var checkpointTs model.Ts
+	currentTables := make([]model.TableID, 0)
+	captures := map[model.CaptureID]*CaptureStatus{
+		"a": {State: CaptureStateInitialized},
+		"b": {IsOwner: true, State: CaptureStateInitialized},
+		"c": {State: CaptureStateInitialized},
+	}
+	replications := map[model.TableID]*ReplicationSet{
+		1: {State: ReplicationSetStateReplicating, Primary: "a"},
+		2: {State: ReplicationSetStateReplicating, Primary: "a"},
+		3: {State: ReplicationSetStateReplicating, Primary: "a"},
+		6: {State: ReplicationSetStateReplicating, Primary: "b"},
+	}
+	scheduler := newDrainCaptureScheduler(10)
+	scheduler.setTarget("a")
+	tasks := scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	require.Len(t, tasks, 3)
+	taskMap := make(map[model.CaptureID]int)
+	for _, t := range tasks {
+		taskMap[t.moveTable.DestCapture]++
+	}
+	require.Equal(t, 1, taskMap["b"])
+	require.Equal(t, 2, taskMap["c"])
+}
