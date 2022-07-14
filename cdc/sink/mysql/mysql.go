@@ -696,7 +696,15 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 	replaces := make(map[string][][]interface{})
 	rowCount := 0
 	// translateToInsert control the update and insert behavior
-	translateToInsert := s.params.enableOldValue && !s.params.safeMode
+	translateToInsert := s.params.enableOldValue
+	for _, row := range rows {
+		if !translateToInsert {
+			break
+		}
+		// It can be translated in to INSERT, if the row is committed after
+		// we start replicating the table.
+		translateToInsert = row.CommitTs > row.ReplicatingTs
+	}
 
 	// flush cached batch replace or insert, to keep the sequence of DMLs
 	flushCacheDMLs := func() {
