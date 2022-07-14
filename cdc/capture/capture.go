@@ -399,8 +399,7 @@ func (c *captureImpl) campaignLoop(ctx cdcContext.Context) error {
 				time.Sleep(time.Second)
 				continue
 			case mvcc.ErrCompacted:
-				// the revision we requested is compacted, exit the loop and enter the loop again
-				return nil
+				return err
 			}
 			// if campaign owner failed, restart capture
 			return cerror.ErrCaptureSuicide.GenWithStackByArgs()
@@ -435,6 +434,10 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		}
 
 		if err := c.campaignLoop(ctx); err != nil {
+			// the revision we requested is compacted, just retry
+			if errors.Cause(err) == mvcc.ErrCompacted {
+				continue
+			}
 			log.Warn("campaign owner failed",
 				zap.String("captureID", c.info.ID), zap.Error(err))
 			return errors.Trace(err)
