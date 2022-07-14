@@ -56,7 +56,7 @@ type DDLPuller interface {
 
 type ddlPullerImpl struct {
 	puller Puller
-	filter *filter.Filter
+	filter filter.Filter
 
 	mu             sync.Mutex
 	resolvedTS     uint64
@@ -77,11 +77,12 @@ func NewDDLPuller(ctx context.Context,
 	startTs uint64,
 	changefeed model.ChangeFeedID,
 ) (DDLPuller, error) {
-	f, err := filter.NewFilter(replicaConfig)
+	// It is no matter to use a empty as timezone here because DDLPuller
+	// doesn't use expression filter's method.
+	f, err := filter.NewFilter(replicaConfig, "")
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-
 	// add "_ddl_puller" to make it different from table pullers.
 	changefeed.ID += "_ddl_puller"
 
