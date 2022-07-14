@@ -63,6 +63,7 @@ type APIV2Helpers interface {
 		cfg *ChangefeedConfig,
 		oldInfo *model.ChangeFeedInfo,
 		oldUpInfo *model.UpstreamInfo,
+		kvStorage tidbkv.Storage,
 	) (*model.ChangeFeedInfo, *model.UpstreamInfo, error)
 
 	// verifyUpstream verifies the upstreamConfig
@@ -212,13 +213,22 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 				"if use force replicate, old value feature must be enabled")
 		}
 	}
-	_, err = filter.VerifyTableRules(replicaCfg.Filter)
+	f, err := filter.NewFilter(replicaCfg, "")
 	if err != nil {
-		return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs(err.Error())
+		return nil, cerror.ErrChangefeedUpdateRefused.
+			GenWithStackByArgs(errors.Cause(err).Error())
 	}
-
+	tableInfos, ineligibleTables, _, err := entry.VerifyTables(f, kvStorage, cfg.StartTs)
+	if err != nil {
+		return nil, cerror.ErrChangefeedUpdateRefused.
+			GenWithStackByArgs(errors.Cause(err).Error())
+	}
+	err = f.Verify(tableInfos)
+	if err != nil {
+		return nil, cerror.ErrChangefeedUpdateRefused.
+			GenWithStackByArgs(errors.Cause(err).Error())
+	}
 	if !replicaCfg.ForceReplicate && !cfg.ReplicaConfig.IgnoreIneligibleTable {
-		ineligibleTables, _, err := entry.VerifyTables(replicaCfg, kvStorage, cfg.StartTs)
 		if err != nil {
 			return nil, err
 		}
@@ -279,9 +289,12 @@ func (h APIV2HelpersImpl) verifyUpstream(ctx context.Context,
 
 // verifyUpdateChangefeedConfig verifies config to update
 // a changefeed and returns a changefeedInfo
-func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(ctx context.Context,
-	cfg *ChangefeedConfig, oldInfo *model.ChangeFeedInfo,
+func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
+	ctx context.Context,
+	cfg *ChangefeedConfig,
+	oldInfo *model.ChangeFeedInfo,
 	oldUpInfo *model.UpstreamInfo,
+	kvStorage tidbkv.Storage,
 ) (*model.ChangeFeedInfo, *model.UpstreamInfo, error) {
 	newInfo, err := oldInfo.Clone()
 	if err != nil {
@@ -306,6 +319,18 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(ctx context.Context,
 
 	if cfg.ReplicaConfig != nil {
 		newInfo.Config = cfg.ReplicaConfig.ToInternalReplicaConfig()
+	}
+
+	f, err := filter.NewFilter(newInfo.Config, "")
+	if err != nil {
+		return nil, nil, cerror.ErrChangefeedUpdateRefused.
+			GenWithStackByArgs(errors.Cause(err).Error())
+	}
+	tableInfos, _, _, err := entry.VerifyTables(f, kvStorage, cfg.StartTs)
+	err = f.Verify(tableInfos)
+	if err != nil {
+		return nil, nil, cerror.ErrChangefeedUpdateRefused.
+			GenWithStackByArgs(errors.Cause(err).Error())
 	}
 
 	// verify SinkURI
@@ -416,5 +441,11 @@ func (h APIV2HelpersImpl) getVerfiedTables(replicaConfig *config.ReplicaConfig,
 	storage tidbkv.Storage, startTs uint64) (ineligibleTables,
 	eligibleTables []model.TableName, err error,
 ) {
-	return entry.VerifyTables(replicaConfig, storage, startTs)
+	f, err := filter.NewFilter(replicaConfig, "")
+	if err != nil {
+		return
+	}
+	_, ineligibleTables, eligibleTables, err = entry.
+		VerifyTables(f, storage, startTs)
+	return
 }

@@ -208,8 +208,13 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		zap.String("changefeedInfo", cfInfo.String()),
 		zap.Any("upstreamInfo", upInfo))
 
+	storage, err := h.helpers.createTiStore(updateCfConfig.PDAddrs,
+		updateCfConfig.toCredential())
+	if err != nil {
+		_ = c.Error(errors.Trace(err))
+	}
 	newCfInfo, newUpInfo, err := h.helpers.
-		verifyUpdateChangefeedConfig(ctx, updateCfConfig, cfInfo, upInfo)
+		verifyUpdateChangefeedConfig(ctx, updateCfConfig, cfInfo, upInfo, storage)
 	if err != nil {
 		_ = c.Error(errors.Trace(err))
 		return

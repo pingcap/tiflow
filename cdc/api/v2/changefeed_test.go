@@ -330,7 +330,11 @@ func TestUpdateChangefeed(t *testing.T) {
 		verifyUpstream(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).AnyTimes()
 	helpers.EXPECT().
-		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		createTiStore(gomock.Any(), gomock.Any()).
+		Return(nil, nil).
+		AnyTimes()
+	helpers.EXPECT().
+		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&model.ChangeFeedInfo{}, &model.UpstreamInfo{}, cerrors.ErrChangefeedUpdateRefused).
 		Times(1)
 
@@ -346,7 +350,7 @@ func TestUpdateChangefeed(t *testing.T) {
 
 	// case 7: update transaction failed
 	helpers.EXPECT().
-		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&model.ChangeFeedInfo{}, &model.UpstreamInfo{}, nil).
 		Times(1)
 	etcdClient.EXPECT().
@@ -365,7 +369,7 @@ func TestUpdateChangefeed(t *testing.T) {
 
 	// case 8: success
 	helpers.EXPECT().
-		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(oldCfInfo, &model.UpstreamInfo{}, nil).
 		Times(1)
 	etcdClient.EXPECT().

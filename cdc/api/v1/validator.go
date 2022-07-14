@@ -144,13 +144,20 @@ func verifyCreateChangefeedConfig(
 		SyncPointInterval: 10 * time.Minute,
 		CreatorVersion:    version.ReleaseVersion,
 	}
-
+	f, err := filter.NewFilter(replicaConfig, "")
+	if err != nil {
+		return nil, err
+	}
+	tableInfos, ineligibleTables, _, err := entry.VerifyTables(f,
+		up.KVStorage, changefeedConfig.StartTS)
+	if err != nil {
+		return nil, err
+	}
+	err = f.Verify(tableInfos)
+	if err != nil {
+		return nil, err
+	}
 	if !replicaConfig.ForceReplicate && !changefeedConfig.IgnoreIneligibleTable {
-		ineligibleTables, _, err := entry.VerifyTables(replicaConfig,
-			up.KVStorage, changefeedConfig.StartTS)
-		if err != nil {
-			return nil, err
-		}
 		if len(ineligibleTables) != 0 {
 			return nil, cerror.ErrTableIneligible.GenWithStackByArgs(ineligibleTables)
 		}

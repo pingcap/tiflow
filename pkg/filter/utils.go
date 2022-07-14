@@ -54,12 +54,26 @@ func VerifyTableRules(cfg *config.FilterConfig) (tfilter.Filter, error) {
 }
 
 // ddlToEventType get event type from ddl query.
-func ddlToEventType(p *parser.Parser, sql string) (bf.EventType, error) {
-	stmt, err := p.ParseOneStmt(sql, "", "")
+func ddlToEventType(p *parser.Parser, query string, jobType timodel.ActionType) (bf.EventType, error) {
+	switch jobType {
+	case timodel.ActionAddTablePartition:
+		return bf.AddTablePartition, nil
+	case timodel.ActionDropTablePartition:
+		return bf.DropTablePartition, nil
+	case timodel.ActionTruncateTablePartition:
+		return bf.TruncateTablePartition, nil
+	}
+	stmt, err := p.ParseOneStmt(query, "", "")
 	if err != nil {
-		return bf.NullEvent, cerror.WrapError(cerror.ErrConvertDDLToEventTypeFailed, err, sql)
+		return bf.NullEvent, cerror.WrapError(cerror.ErrConvertDDLToEventTypeFailed, err, query)
 	}
 	et := bf.AstToDDLEvent(stmt)
+	switch et {
+	case bf.DropIndex:
+		return bf.AlterTable, nil
+	case bf.CreateIndex:
+		return bf.AlterTable, nil
+	}
 	return et, nil
 }
 
@@ -130,4 +144,11 @@ func shouldDiscardByBuiltInDDLAllowlist(ddlType timodel.ActionType) bool {
 		return false
 	}
 	return true
+}
+
+func completeExpression(suffix string) string {
+	if suffix == "" {
+		return suffix
+	}
+	return fmt.Sprintf("select * from t where %s", suffix)
 }

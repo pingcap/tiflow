@@ -15,6 +15,7 @@ package errors
 
 import (
 	"context"
+	"strings"
 
 	"github.com/pingcap/errors"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
@@ -61,6 +62,27 @@ func ChangefeedFastFailError(err error) bool {
 func ChangefeedFastFailErrorCode(errCode errors.RFCErrorCode) bool {
 	for _, e := range ChangeFeedFastFailError {
 		if errCode == e.RFCCode() {
+			return true
+		}
+	}
+	return false
+}
+
+var changefeedNotRetryErrors = []*errors.Error{
+	ErrExpressionColumnNotFound, ErrExpressionParseFailed,
+}
+
+func ChangefeedNotRetryError(err error) bool {
+	for _, e := range changefeedNotRetryErrors {
+		if e.Equal(err) {
+			return true
+		}
+		if code, ok := RFCCode(err); ok {
+			if code == e.RFCCode() {
+				return true
+			}
+		}
+		if strings.Contains(err.Error(), string(e.RFCCode())) {
 			return true
 		}
 	}

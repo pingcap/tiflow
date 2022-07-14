@@ -130,7 +130,7 @@ func (f *sqlEventFilter) getRules(schema, table string) []*sqlEventRule {
 
 // skipDDLEvent skips ddl event by its type and query.
 func (f *sqlEventFilter) shouldSkipDDL(ddl *model.DDLEvent) (bool, error) {
-	evenType, err := ddlToEventType(f.p, ddl.Query)
+	evenType, err := ddlToEventType(f.p, ddl.Query, ddl.Type)
 	if err != nil {
 		return false, err
 	}
@@ -144,6 +144,7 @@ func (f *sqlEventFilter) shouldSkipDDL(ddl *model.DDLEvent) (bool, error) {
 	rules := f.getRules(ddl.TableInfo.Schema, ddl.TableInfo.Table)
 	for _, rule := range rules {
 		action, err := rule.bf.Filter(binlogFilterSchema, binlogFilterTable, evenType, ddl.Query)
+		log.Info("fizz:ddl filter", zap.String("query", ddl.Query), zap.String("event type", string(evenType)), zap.String("action", string(action)))
 		if err != nil {
 			return false, errors.Trace(err)
 		}
@@ -198,12 +199,12 @@ var supportedEventTypes = []bf.EventType{
 	bf.DropDatabase,
 	bf.CreateTable,
 	bf.DropTable,
-	bf.AddIndex,
-	bf.CreateIndex,
-	bf.DropIndex,
-	bf.TruncateTable,
 	bf.RenameTable,
+	bf.TruncateTable,
+	bf.AlterTable,
 	bf.CreateView,
 	bf.DropView,
-	bf.AlterTable, // not supported yet
+	bf.AddTablePartition,
+	bf.DropTablePartition,
+	bf.TruncateTablePartition,
 }

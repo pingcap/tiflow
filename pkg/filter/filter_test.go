@@ -263,7 +263,7 @@ func TestShouldIgnoreDDL(t *testing.T) {
 			ignore  bool
 		}{
 			{1, "event", "", "drop table t1", timodel.ActionDropTable, true},
-			{1, "event", "January", "drop index i on t1", timodel.ActionAddIndex, true},
+			{1, "event", "January", "drop index i on t1", timodel.ActionDropIndex, true},
 			{1, "event", "February", "drop index x2 on t2", timodel.ActionDropIndex, true},
 			{1, "event", "March", "create table t2(age int)", timodel.ActionCreateTable, false},
 			{1, "event", "April", "create table t2(age int)", timodel.ActionCreateTable, false},
@@ -274,7 +274,7 @@ func TestShouldIgnoreDDL(t *testing.T) {
 			{
 				Matcher: []string{"event.*"},
 				IgnoreEvent: []bf.EventType{
-					bf.DropTable, bf.DropIndex,
+					bf.AlterTable, bf.DropTable,
 				},
 			},
 		},

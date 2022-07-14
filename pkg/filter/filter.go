@@ -32,8 +32,8 @@ type Filter interface {
 	ShouldDiscardDDL(ddlType timodel.ActionType) bool
 	// ShouldIgnoreTable return true if the table should be ignored.
 	ShouldIgnoreTable(schema, table string) bool
-	// Verify should only be called by create changefeed API handler.
-	// Its purpose is to verify the filter config and return an error if it is invalid.
+	// Verify should only be called by create changefeed OpenAPI.
+	// Its purpose is to verify the expression filter config.
 	Verify(tableInfos []*model.TableInfo) error
 }
 

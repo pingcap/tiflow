@@ -18,21 +18,19 @@ import (
 	"testing"
 	"time"
 
-	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
-type mockStorage struct {
-	tidbkv.Storage
-}
-
 func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	ctx := context.Background()
 	pdClient := &mockPDClient{}
-	storage := &mockStorage{}
+	helper := entry.NewSchemaTestHelper(t)
+	helper.Tk().MustExec("use test;")
+	storage := helper.Storage()
 	provider := &mockStatusProvider{}
 	cfg := &ChangefeedConfig{}
 	h := &APIV2HelpersImpl{}
@@ -94,17 +92,22 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	ctx := context.Background()
 	cfg := &ChangefeedConfig{}
-	oldInfo := &model.ChangeFeedInfo{}
+	oldInfo := &model.ChangeFeedInfo{
+		Config: config.GetDefaultReplicaConfig(),
+	}
 	oldUpInfo := &model.UpstreamInfo{}
+	helper := entry.NewSchemaTestHelper(t)
+	helper.Tk().MustExec("use test;")
+	storage := helper.Storage()
 	h := &APIV2HelpersImpl{}
-	newCfInfo, newUpInfo, err := h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo)
+	newCfInfo, newUpInfo, err := h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage)
 	require.NotNil(t, err)
 	require.Nil(t, newCfInfo)
 	require.Nil(t, newUpInfo)
 	// namespace and id can not be updated
 	cfg.Namespace = "abc"
 	cfg.ID = "1234"
-	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo)
+	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage)
 	require.NotNil(t, err)
 	require.Nil(t, newCfInfo)
 	require.Nil(t, newUpInfo)
@@ -120,7 +123,7 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	cfg.KeyPath = "p3"
 	cfg.SinkURI = "blackhole://"
 	cfg.CertAllowedCN = []string{"c", "d"}
-	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo)
+	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage)
 	require.Nil(t, err)
 	// startTs can not be updated
 	require.Equal(t, "table", string(newCfInfo.Config.Sink.TxnAtomicity))
@@ -139,6 +142,6 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	require.Equal(t, "blackhole://", newCfInfo.SinkURI)
 	oldInfo.StartTs = 10
 	cfg.TargetTs = 9
-	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo)
+	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage)
 	require.NotNil(t, err)
 }

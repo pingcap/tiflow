@@ -47,10 +47,12 @@ func TestIsSchema(t *testing.T) {
 }
 
 func TestSupportedEventTypeString(t *testing.T) {
+	t.Parallel()
 	expected := `Invalid input, 'ignore-event' parameters can only accept 
 [all dml, all ddl, insert, update, delete, create schema, create database, 
-drop schema, drop database, create table, drop table, add index, create index, 
-drop index, truncate table, rename table, create view, drop view, alter table]`
+drop schema, drop database, create table, drop table, rename table, 
+truncate table, alter table, create view, drop view, add table partition, 
+drop table partition, truncate table partition]`
 	expected = strings.ReplaceAll(expected, "\n", "")
 	require.Equal(t, expected, SupportedEventWarnMessage())
 }
@@ -78,33 +80,36 @@ func TestDDLToEventType(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		ddl       string
+		jobType   timodel.ActionType
 		eventType bf.EventType
 		err       error
 	}{
-		{"CREATE DATABASE test", bf.CreateDatabase, nil},
-		{"DROP DATABASE test", bf.DropDatabase, nil},
-		{"CREATE TABLE test.t1(id int primary key)", bf.CreateTable, nil},
-		{"DROP TABLE test.t1", bf.DropTable, nil},
-		{"TRUNCATE TABLE test.t1", bf.TruncateTable, nil},
-		{"rename table s1.t1 to s2.t2", bf.RenameTable, nil},
-		{"rename table s1.t1 to s2.t2, test.t1 to test.t2", bf.RenameTable, nil},
-		{"create index i1 on test.t1 (age)", bf.CreateIndex, nil},
-		{"drop index i1 on test.t1", bf.DropIndex, nil},
-		{"CREATE VIEW test.v AS SELECT * FROM t", bf.CreateView, nil},
-		{"DROP view if exists test.v", bf.DropView, nil},
+		{"CREATE DATABASE test", timodel.ActionCreateSchema, bf.CreateDatabase, nil},
+		{"DROP DATABASE test", timodel.ActionDropSchema, bf.DropDatabase, nil},
+		{"CREATE TABLE test.t1(id int primary key)", timodel.ActionCreateTable, bf.CreateTable, nil},
+		{"DROP TABLE test.t1", timodel.ActionDropTable, bf.DropTable, nil},
+		{"TRUNCATE TABLE test.t1", timodel.ActionTruncateTable, bf.TruncateTable, nil},
+		{"rename table s1.t1 to s2.t2", timodel.ActionRenameTable, bf.RenameTable, nil},
+		{"rename table s1.t1 to s2.t2, test.t1 to test.t2", timodel.ActionRenameTables, bf.RenameTable, nil},
+		{"create index i1 on test.t1 (age)", timodel.ActionAddIndex, bf.AlterTable, nil},
+		{"drop index i1 on test.t1", timodel.ActionDropIndex, bf.AlterTable, nil},
+		{"CREATE VIEW test.v AS SELECT * FROM t", timodel.ActionCreateView, bf.CreateView, nil},
+		{"DROP view if exists test.v", timodel.ActionDropView, bf.DropView, nil},
 
-		{"alter table test.t1 add column name varchar(50)", bf.AlterTable, nil},
-		{"alter table test.t1 drop column name", bf.AlterTable, nil},
-		{"alter table test.t1 modify column name varchar(100)", bf.AlterTable, nil},
-		{"ALTER TABLE test.t1 CONVERT TO CHARACTER SET gbk", bf.AlterTable, nil},
-		{"alter table test add primary key(b)", bf.AlterTable, nil},
-		{"ALTER DATABASE dbname CHARACTER SET utf8 COLLATE utf8_general_ci;", bf.AlterDatabase, nil},
-		{"Alter table test.t1 drop partition t11", bf.AlterTable, nil},
-		{"alter table add i", bf.NullEvent, cerror.ErrConvertDDLToEventTypeFailed},
+		{"alter table test.t1 add column name varchar(50)", timodel.ActionAddColumn, bf.AlterTable, nil},
+		{"alter table test.t1 drop column name", timodel.ActionDropColumn, bf.AlterTable, nil},
+		{"alter table test.t1 modify column name varchar(100)", timodel.ActionModifyColumn, bf.AlterTable, nil},
+		{"ALTER TABLE test.t1 CONVERT TO CHARACTER SET gbk", timodel.ActionModifyTableCharsetAndCollate, bf.AlterTable, nil},
+		{"alter table test add primary key(b)", timodel.ActionAddIndex, bf.AlterTable, nil},
+		{"ALTER DATABASE dbname CHARACTER SET utf8 COLLATE utf8_general_ci;", timodel.ActionModifySchemaCharsetAndCollate, bf.AlterDatabase, nil},
+		{"Alter table test.t1 drop partition t11", timodel.ActionDropTablePartition, bf.DropTablePartition, nil},
+		{"Alter table test.t1 add partition (partition p3 values less than (2002))", timodel.ActionDropTablePartition, bf.DropTablePartition, nil},
+		{"Alter table test.t1 truncate partition t11", timodel.ActionDropTablePartition, bf.DropTablePartition, nil},
+		{"alter table add i", timodel.ActionAddIndex, bf.NullEvent, cerror.ErrConvertDDLToEventTypeFailed},
 	}
 	p := parser.New()
 	for _, c := range cases {
-		et, err := ddlToEventType(p, c.ddl)
+		et, err := ddlToEventType(p, c.ddl, c.jobType)
 		if c.err != nil {
 			errRFC, ok := cerror.RFCCode(err)
 			require.True(t, ok)

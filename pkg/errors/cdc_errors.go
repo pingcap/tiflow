@@ -1074,7 +1074,7 @@ var (
 		errors.RFCCodeText("CDC:ErrFailedToFilterDDL"),
 	)
 	ErrExpressionParseFailed = errors.Normalize(
-		"invalid filter expressions. There is a syntax error in: %s",
+		"invalid filter expressions. There is a syntax error in: '%s'",
 		errors.RFCCodeText("CDC:ErrInvalidFilterExpression"),
 	)
 	ErrExpressionColumnNotFound = errors.Normalize(
@@ -1082,7 +1082,7 @@ var (
 		errors.RFCCodeText("CDC:ErrExpressionColumnNotFound"),
 	)
 	ErrInvalidIgnoreEventType = errors.Normalize(
-		"invalid ignore event type: %s",
+		"invalid ignore event type: '%s'",
 		errors.RFCCodeText("CDC:ErrInvalidIgnoreEventType"),
 	)
 	ErrConvertDDLToEventTypeFailed = errors.Normalize(

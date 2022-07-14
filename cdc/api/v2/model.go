@@ -316,6 +316,7 @@ type EventFilterRule struct {
 	IgnoreDeleteValueExpr    string `json:"ignore_delete_value_expr"`
 }
 
+// ToInternalEventFilterRule converts EventFilterRule to *config.EventFilterRule
 func (e EventFilterRule) ToInternalEventFilterRule() *config.EventFilterRule {
 	res := &config.EventFilterRule{
 		Matcher:                  e.Matcher,
@@ -334,6 +335,7 @@ func (e EventFilterRule) ToInternalEventFilterRule() *config.EventFilterRule {
 	return res
 }
 
+// ToInternalEventFilterRule converts *config.EventFilterRule to EventFilterRule
 func ToAPIEventFilterRule(er *config.EventFilterRule) EventFilterRule {
 	res := EventFilterRule{
 		Matcher:                  er.Matcher,
