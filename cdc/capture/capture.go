@@ -408,6 +408,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			return nil
 		default:
 		}
+		start := time.Now()
 		err := rl.Wait(ctx)
 		if err != nil {
 			if errors.Cause(err) == context.Canceled {
@@ -415,7 +416,11 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			}
 			return errors.Trace(err)
 		}
+		log.Info("start campaign for the owner",
+			zap.String("captureID", c.info.ID),
+			zap.Duration("duration", time.Since(start)))
 		// Campaign to be an owner, it blocks until it becomes the owner
+		start = time.Now()
 		if err := c.campaign(ctx); err != nil {
 			switch errors.Cause(err) {
 			case context.Canceled:
@@ -430,6 +435,9 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			// if campaign owner failed, restart capture
 			return cerror.ErrCaptureSuicide.GenWithStackByArgs()
 		}
+		log.Info("campaign owner succeeded",
+			zap.String("captureID", c.info.ID),
+			zap.Duration("duration", time.Since(start)))
 
 		ownerRev, err := c.EtcdClient.GetOwnerRevision(ctx, c.info.ID)
 		if err != nil {
