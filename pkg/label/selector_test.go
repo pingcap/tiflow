@@ -128,6 +128,15 @@ func TestSelectorMatches(t *testing.T) {
 			labels:      map[Key]Value{"tenant": "abcdef", "node_type": "2"},
 			shouldMatch: false,
 		},
+		{
+			selector: Selector{
+				Key:    "tenant",
+				Target: "^(abc|def)$",
+				Op:     OpRegex,
+			},
+			labels:      map[Key]Value{"node_type": "2"},
+			shouldMatch: false,
+		},
 	}
 
 	for idx, tc := range cases {
@@ -187,7 +196,8 @@ func TestSelectorValidate(t *testing.T) {
 				Op:     OpEq,
 			},
 			checkErr: func(err error) {
-				require.EqualError(t, err, "invalid selector key: #@$!@#")
+				require.EqualError(t, err,
+					"validate selector key: label string has wrong format: #@$!@#")
 			},
 		},
 		{

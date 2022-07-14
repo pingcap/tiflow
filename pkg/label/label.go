@@ -13,6 +13,12 @@
 
 package label
 
+import (
+	"regexp"
+
+	"github.com/pingcap/errors"
+)
+
 type (
 	// Key is the type for a label key.
 	Key string
@@ -29,51 +35,44 @@ const (
 // NewKey creates a new Key from a string.
 // It will return legal = false if the input contains
 // illegal characters.
-func NewKey(str string) (key Key, legal bool) {
-	if !isLabelValid(str) {
-		return invalidLabelKey, false
+func NewKey(str string) (key Key, err error) {
+	if err := checkLabelStrValid(str); err != nil {
+		return invalidLabelKey, errors.Annotate(err, "new key")
 	}
-	return Key(str), true
+	return Key(str), nil
 }
 
 // NewValue creates a new Value from a string.
 // It will return legal = false if the input contains
 // illegal characters.
-func NewValue(str string) (Value, bool) {
-	if !isLabelValid(str) {
-		return invalidLabelValue, false
+func NewValue(str string) (value Value, err error) {
+	if err := checkLabelStrValid(str); err != nil {
+		return invalidLabelValue, errors.Annotate(err, "new value")
 	}
-	return Value(str), true
+	return Value(str), nil
 }
 
-func isLabelValid(str string) bool {
+const (
+	labelStrRegexStr string = `^[a-zA-Z0-9]([-\.a-zA-Z0-9]*[a-zA-Z0-9])?$`
+	maxLabelLength          = 63
+)
+
+var labelStrRegex = regexp.MustCompile(labelStrRegexStr)
+
+func checkLabelStrValid(str string) error {
 	if len(str) == 0 {
-		return false
+		return errors.New("empty label string")
 	}
 
-	for i := 0; i < len(str); i++ {
-		if !isLabelCharLegal(str[i]) {
-			return false
-		}
+	if len(str) > maxLabelLength {
+		return errors.Errorf("label string too long: %s", str)
 	}
 
-	return true
-}
+	if !labelStrRegex.MatchString(str) {
+		return errors.Errorf("label string has wrong format: %s", str)
+	}
 
-func isLabelCharLegal(c byte) bool {
-	if c >= 'a' && c <= 'z' {
-		return true
-	}
-	if c >= 'A' && c <= 'Z' {
-		return true
-	}
-	if c >= '0' && c <= '9' {
-		return true
-	}
-	if c == '_' || c == '-' || c == '.' {
-		return true
-	}
-	return false
+	return nil
 }
 
 // Set is a short name for map[Key]Value.

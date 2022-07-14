@@ -54,8 +54,8 @@ type Selector struct {
 // Validate returns whether the selector is valid.
 // Calling Matches on invalid selectors results in undefined behavior.
 func (s *Selector) Validate() error {
-	if !isLabelValid(string(s.Key)) {
-		return errors.Errorf("invalid selector key: %s", string(s.Key))
+	if err := checkLabelStrValid(string(s.Key)); err != nil {
+		return errors.Annotate(err, "validate selector key")
 	}
 
 	if s.Op != OpEq && s.Op != OpNeq && s.Op != OpRegex {
@@ -93,6 +93,11 @@ func (s *Selector) Matches(labelSet Set) bool {
 		}
 		return s.Target != string(value)
 	case OpRegex:
+		if !exists {
+			// OpRegex should fail if the specified key
+			// does not exist.
+			return false
+		}
 		regex, err := s.getRegex()
 		if err != nil {
 			log.Warn("illegal regular expression",

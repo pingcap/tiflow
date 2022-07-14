@@ -19,6 +19,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const longString = "a1234567890123456789012345678901234567890123456789012345678901234567890z"
+
 var cases = []struct {
 	str     string
 	allowed bool
@@ -33,15 +35,16 @@ var cases = []struct {
 	{str: "123abcABC", allowed: true},
 	{str: "abcABC", allowed: true},
 	{str: "09AZaz", allowed: true},
-	{str: "09AZaz-_.", allowed: true},
-	{str: "-", allowed: true},
-	{str: "_", allowed: true},
-	{str: ".", allowed: true},
+	{str: "09AZaz-_.", allowed: false},
+	{str: "-", allowed: false},
+	{str: "_", allowed: false},
+	{str: ".", allowed: false},
 	{str: ":", allowed: false},
 	{str: "~", allowed: false},
 	{str: string(invalidLabelKey), allowed: false},
 	{str: "你好", allowed: false},
 	{str: "", allowed: false},
+	{str: longString, allowed: false},
 }
 
 func TestNewKey(t *testing.T) {
@@ -49,11 +52,13 @@ func TestNewKey(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.str, func(t *testing.T) {
-			res, ok := NewKey(tc.str)
-			require.Equal(t, tc.allowed, ok)
-			if !ok {
-				require.Equal(t, invalidLabelKey, res)
+			res, err := NewKey(tc.str)
+			if tc.allowed {
+				require.NoError(t, err)
+				require.NotEqual(t, invalidLabelKey, res)
+				return
 			}
+			require.ErrorContains(t, err, "new key")
 		})
 	}
 }
@@ -63,11 +68,13 @@ func TestNewValue(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.str, func(t *testing.T) {
-			res, ok := NewValue(tc.str)
-			require.Equal(t, tc.allowed, ok)
-			if !ok {
-				require.Equal(t, invalidLabelValue, res)
+			res, err := NewValue(tc.str)
+			if tc.allowed {
+				require.NoError(t, err)
+				require.NotEqual(t, invalidLabelValue, res)
+				return
 			}
+			require.ErrorContains(t, err, "new value")
 		})
 	}
 }
