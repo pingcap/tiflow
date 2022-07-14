@@ -57,14 +57,14 @@ type DDLJobPuller interface {
 	UnmarshalDDL(rawKV *model.RawKVEntry) (*timodel.Job, error)
 }
 
-type ddlJobPullerImp struct {
+type ddlJobPullerImpl struct {
 	Puller
 
 	tableInfo *model.TableInfo
 	columnID  int64
 }
 
-func (p *ddlJobPullerImp) UnmarshalDDL(rawKV *model.RawKVEntry) (*timodel.Job, error) {
+func (p *ddlJobPullerImpl) UnmarshalDDL(rawKV *model.RawKVEntry) (*timodel.Job, error) {
 	return entry.ParseJob(p.tableInfo, rawKV, p.columnID)
 }
 
@@ -121,7 +121,7 @@ func NewDDLJobPuller(
 
 	spans = append(spans, regionspan.GetAllDDLSpan()...)
 
-	return &ddlJobPullerImp{
+	return &ddlJobPullerImpl{
 		Puller:    New(ctx, pdCli, grpcPool, regionCache, kvStorage, pdClock, checkpointTs, spans, cfg, changefeed),
 		tableInfo: tblInfo,
 		columnID:  colID,
