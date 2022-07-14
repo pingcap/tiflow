@@ -33,7 +33,7 @@ import (
 	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/dbutil"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -67,7 +67,7 @@ type TimeRange struct {
 // logic abstraction in metastore, including project, project op, job, worker
 // and resource
 type Client interface {
-	metaclient.Client
+	metaModel.Client
 	// project
 	ProjectClient
 	// project operation
@@ -142,7 +142,7 @@ type ResourceClient interface {
 }
 
 // NewClient return the client to operate framework metastore
-func NewClient(mc metaclient.StoreConfig, conf dbutil.DBConfig) (Client, error) {
+func NewClient(mc metaModel.StoreConfig, conf dbutil.DBConfig) (Client, error) {
 	err := createDatabaseForProject(mc, tenant.FrameProjectInfo.UniqueID(), conf)
 	if err != nil {
 		return nil, err
@@ -163,13 +163,13 @@ func NewClient(mc metaclient.StoreConfig, conf dbutil.DBConfig) (Client, error) 
 }
 
 // TODO: check the projectID
-func createDatabaseForProject(mc metaclient.StoreConfig, projectID tenant.ProjectID, conf dbutil.DBConfig) error {
+func createDatabaseForProject(mc metaModel.StoreConfig, projectID tenant.ProjectID, conf dbutil.DBConfig) error {
 	dsn := generateDSNByParams(mc, projectID, conf, false)
-	log.L().Info("mysql connection", zap.String("dsn", dsn))
+	log.Info("mysql connection", zap.String("dsn", dsn))
 
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
-		log.L().Error("open dsn fail", zap.String("dsn", dsn), zap.Error(err))
+		log.Error("open dsn fail", zap.String("dsn", dsn), zap.Error(err))
 		return errors.ErrMetaOpFail.Wrap(err)
 	}
 	defer db.Close()
@@ -187,7 +187,7 @@ func createDatabaseForProject(mc metaclient.StoreConfig, projectID tenant.Projec
 
 // generateDSNByParams will use projectID as DBName to achieve isolation.
 // Besides, it will add some default mysql params to the dsn
-func generateDSNByParams(mc metaclient.StoreConfig, projectID tenant.ProjectID,
+func generateDSNByParams(mc metaModel.StoreConfig, projectID tenant.ProjectID,
 	conf dbutil.DBConfig, withDB bool,
 ) string {
 	dsnCfg := dmysql.NewConfig()
@@ -226,7 +226,7 @@ func newClient(sqlDB *sql.DB) (*metaOpsClient, error) {
 		// TODO: logger
 	})
 	if err != nil {
-		log.L().Error("create gorm client fail", zap.Error(err))
+		log.Error("create gorm client fail", zap.Error(err))
 		return nil, errors.ErrMetaNewClientFail.Wrap(err)
 	}
 

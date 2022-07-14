@@ -148,10 +148,12 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "new etcd client")
 	}
-
-	cdcEtcdClient := etcd.NewCDCEtcdClient(ctx, etcdCli)
+	cdcEtcdClient, err := etcd.NewCDCEtcdClient(ctx, etcdCli, conf.ClusterID)
+	if err != nil {
+		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err),
+			"wrapper etcd client")
+	}
 	s.etcdClient = &cdcEtcdClient
-
 	err = s.initDir(ctx)
 	if err != nil {
 		return errors.Trace(err)

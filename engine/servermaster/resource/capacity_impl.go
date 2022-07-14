@@ -52,7 +52,7 @@ func (m *CapRescMgr) Register(id model.ExecutorID, addr string, capacity model.R
 		Capacity: capacity,
 		Addr:     addr,
 	}
-	log.L().Info("executor resource is registered",
+	log.Info("executor resource is registered",
 		zap.String("executor-id", string(id)), zap.Int("capacity", int(capacity)))
 }
 
@@ -61,7 +61,7 @@ func (m *CapRescMgr) Unregister(id model.ExecutorID) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.executors, id)
-	log.L().Info("executor resource is unregistered",
+	log.Info("executor resource is unregistered",
 		zap.String("executor-id", string(id)))
 }
 

@@ -407,6 +407,10 @@ var (
 		"meta entry already exists",
 		errors.RFCCodeText("DFLOW:ErrMetaEntryAlreadyExists"),
 	)
+	ErrMetaClientTypeNotSupport = errors.Normalize(
+		"meta client type not support:%d",
+		errors.RFCCodeText("DFLOW:ErrMetaClientTypeNotSupport"),
+	)
 
 	// DataSet errors
 	ErrDatasetEntryNotFound = errors.Normalize(
@@ -462,5 +466,11 @@ var (
 	ErrLocalFileDirNotWritable = errors.Normalize(
 		"local resource directory not writable",
 		errors.RFCCodeText("DFLOW:ErrLocalFileDirNotWritable"),
+	)
+
+	// cli related errors
+	ErrInvalidCliParameter = errors.Normalize(
+		"invalid cli parameters",
+		errors.RFCCodeText("DFLOW:ErrInvalidCliParameter"),
 	)
 )

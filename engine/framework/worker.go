@@ -37,9 +37,8 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
-	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	"github.com/pingcap/tiflow/engine/pkg/meta"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
@@ -86,7 +85,7 @@ type WorkerImpl interface {
 type BaseWorker interface {
 	Worker
 
-	MetaKVClient() metaclient.KVClient
+	MetaKVClient() metaModel.KVClient
 	MetricFactory() promutil.Factory
 	Logger() *zap.Logger
 	UpdateStatus(ctx context.Context, status frameModel.WorkerStatus) error
@@ -108,8 +107,6 @@ type DefaultBaseWorker struct {
 	messageSender         p2p.MessageSender
 	// framework metastore client
 	frameMetaClient pkgOrm.Client
-	// user metastore raw kvclient
-	userRawKVClient extkv.KVClientEx
 	resourceBroker  broker.Broker
 
 	masterClient *worker.MasterClient
@@ -136,9 +133,8 @@ type DefaultBaseWorker struct {
 
 	clock clock.Clock
 
-	// user metastore prefix kvclient
-	// Don't close it. It's just a prefix wrapper for underlying userRawKVClient
-	userMetaKVClient metaclient.KVClient
+	// business metastore kvclient with namespace
+	businessMetaKVClient metaModel.KVClient
 
 	// metricFactory can produce metric with underlying project info and job info
 	metricFactory promutil.Factory
@@ -156,7 +152,7 @@ type workerParams struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
 	FrameMetaClient       pkgOrm.Client
-	UserRawKVClient       extkv.KVClientEx
+	BusinessClientConn    metaModel.ClientConn
 	ResourceBroker        broker.Broker
 }
 
@@ -170,18 +166,23 @@ func NewBaseWorker(
 ) BaseWorker {
 	var params workerParams
 	if err := ctx.Deps().Fill(&params); err != nil {
-		log.L().Panic("Failed to fill dependencies for BaseWorker",
+		log.Panic("Failed to fill dependencies for BaseWorker",
 			zap.Error(err))
 	}
 
 	logger := logutil.FromContext(*ctx)
+
+	cli, err := meta.NewKVClientWithNamespace(params.BusinessClientConn, ctx.ProjectInfo.UniqueID(), masterID)
+	if err != nil {
+		// TODO more elegant error handling
+		log.Panic("failed to create business kvclient", zap.Error(err))
+	}
 
 	return &DefaultBaseWorker{
 		Impl:                  impl,
 		messageHandlerManager: params.MessageHandlerManager,
 		messageSender:         params.MessageSender,
 		frameMetaClient:       params.FrameMetaClient,
-		userRawKVClient:       params.UserRawKVClient,
 		resourceBroker:        params.ResourceBroker,
 
 		masterID:    masterID,
@@ -197,11 +198,11 @@ func NewBaseWorker(
 
 		pool: workerpool.NewDefaultAsyncPool(1),
 
-		errCenter:        errctx.NewErrCenter(),
-		clock:            clock.New(),
-		userMetaKVClient: kvclient.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
-		metricFactory:    promutil.NewFactory4Worker(ctx.ProjectInfo, MustConvertWorkerType2JobType(tp), masterID, workerID),
-		logger:           frameLog.WithWorkerID(frameLog.WithMasterID(logger, masterID), workerID),
+		errCenter:            errctx.NewErrCenter(),
+		clock:                clock.New(),
+		businessMetaKVClient: cli,
+		metricFactory:        promutil.NewFactory4Worker(ctx.ProjectInfo, MustConvertWorkerType2JobType(tp), masterID, workerID),
+		logger:               frameLog.WithWorkerID(frameLog.WithMasterID(logger, masterID), workerID),
 	}
 }
 
@@ -384,6 +385,7 @@ func (w *DefaultBaseWorker) doClose() {
 
 	w.wg.Wait()
 	promutil.UnregisterWorkerMetrics(w.id)
+	w.businessMetaKVClient.Close()
 }
 
 // Close implements BaseWorker.Close
@@ -416,8 +418,8 @@ func (w *DefaultBaseWorker) ID() runtime.RunnableID {
 }
 
 // MetaKVClient implements BaseWorker.MetaKVClient
-func (w *DefaultBaseWorker) MetaKVClient() metaclient.KVClient {
-	return w.userMetaKVClient
+func (w *DefaultBaseWorker) MetaKVClient() metaModel.KVClient {
+	return w.businessMetaKVClient
 }
 
 // MetricFactory implements BaseWorker.MetricFactory

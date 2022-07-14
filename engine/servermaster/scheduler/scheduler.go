@@ -118,11 +118,11 @@ func (s *Scheduler) getConstraint(
 		if !hasConstraint {
 			// TODO change this to Debug when this part of code
 			// has been stabilized.
-			log.L().Info("No constraint is found for resource",
+			log.Info("No constraint is found for resource",
 				zap.String("resource-id", resourceID))
 			continue
 		}
-		log.L().Info("Found resource constraint for resource",
+		log.Info("Found resource constraint for resource",
 			zap.String("resource-id", resourceID),
 			zap.String("executor-id", string(executorID)))
 
@@ -130,7 +130,7 @@ func (s *Scheduler) getConstraint(
 			// Conflicting constraints.
 			// We are forced to schedule the task to
 			// two different executors, which is impossible.
-			log.L().Warn("Conflicting resource constraints",
+			log.Warn("Conflicting resource constraints",
 				zap.Any("resources", resources))
 			return "", schedModel.NewResourceConflictError(
 				resourceID, executorID,

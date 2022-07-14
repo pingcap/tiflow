@@ -120,7 +120,7 @@ function test_hang_up_capture() {
 function test_expire_capture() {
 	echo "run test case test_expire_capture"
 	# start one server
-	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
+	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix test_expire_capture.server1
 
 	# ensure the server become the owner
 	ensure $MAX_RETRIES "$CDC_BINARY cli capture list --disable-version-check 2>&1 | grep '\"is-owner\": true'"
@@ -134,7 +134,7 @@ function test_expire_capture() {
 	echo "process status:" $(ps -h -p $owner_pid -o "s")
 
 	# ensure the session has expired
-	ensure $MAX_RETRIES "$CDC_BINARY cli capture list --disable-version-check 2>&1 | grep '\[\]'"
+	ensure $MAX_RETRIES "ETCDCTL_API=3 etcdctl get /tidb/cdc/default/__cdc_meta__/owner --prefix | grep -v '$owner_id'"
 
 	# resume the owner
 	kill -SIGCONT $owner_pid

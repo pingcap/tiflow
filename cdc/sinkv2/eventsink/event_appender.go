@@ -59,10 +59,9 @@ func (t *TxnEventAppender) Append(
 		// This means no txn is in the buffer.
 		if len(buffer) == 0 {
 			txn := &model.SingleTableTxn{
-				StartTs:   row.StartTs,
-				CommitTs:  row.CommitTs,
-				Table:     row.Table,
-				ReplicaID: row.ReplicaID,
+				StartTs:  row.StartTs,
+				CommitTs: row.CommitTs,
+				Table:    row.Table,
 			}
 			txn.Append(row)
 			buffer = append(buffer, txn)
@@ -91,10 +90,9 @@ func (t *TxnEventAppender) Append(
 			}
 
 			buffer = append(buffer, &model.SingleTableTxn{
-				StartTs:   row.StartTs,
-				CommitTs:  row.CommitTs,
-				Table:     row.Table,
-				ReplicaID: row.ReplicaID,
+				StartTs:  row.StartTs,
+				CommitTs: row.CommitTs,
+				Table:    row.Table,
 			})
 		}
 

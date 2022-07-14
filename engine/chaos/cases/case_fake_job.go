@@ -45,14 +45,17 @@ func runFakeJobCase(ctx context.Context, cfg *config) error {
 		EtcdWatchPrefix: "/fake-job/test/",
 	}
 	e2eCfg := &e2e.FakeJobConfig{
-		EtcdEndpoints: etcdEndpoints, // reuse user meta KV endpoints
+		EtcdEndpoints: etcdEndpoints, // reuse business meta KV endpoints
 		WorkerCount:   jobCfg.WorkerCount,
 		KeyPrefix:     jobCfg.EtcdWatchPrefix,
 	}
-	cli, err := e2e.NewUTCli(ctx, serverMasterEndpoints, etcdEndpoints, tenant.DefaultUserProjectInfo, e2eCfg)
+
+	cli, err := e2e.NewUTCli(ctx, serverMasterEndpoints, etcdEndpoints,
+		tenant.DefaultUserProjectInfo, e2eCfg)
 	if err != nil {
 		return err
 	}
+
 	revision, err := cli.GetRevision(ctx)
 	if err != nil {
 		return err
@@ -79,6 +82,11 @@ func runFakeJobCase(ctx context.Context, cfg *config) error {
 		return err
 	}
 
+	err = cli.InitializeMetaClient(jobID)
+	if err != nil {
+		return err
+	}
+
 	// update upstream etcd, and check fake job works normally every 60 seconds
 	// run 10 times, about 10 minutes totally.
 	mvcc := 0
@@ -93,13 +101,13 @@ func runFakeJobCase(ctx context.Context, cfg *config) error {
 			return err
 		}
 		duration := time.Since(start)
-		log.L().Info("update key and check test", zap.Int("round", i), zap.Duration("duration", duration))
+		log.Info("update key and check test", zap.Int("round", i), zap.Duration("duration", duration))
 		if duration < interval {
 			time.Sleep(start.Add(interval).Sub(time.Now()))
 		}
 	}
 
-	log.L().Info("run fake job case successfully")
+	log.Info("run fake job case successfully")
 
 	return nil
 }
@@ -119,7 +127,7 @@ func updateKeyAndCheck(
 		for jobIdx := 0; jobIdx < workerCount; jobIdx++ {
 			err := cli.CheckFakeJobKey(ctx, jobID, jobIdx, expectedMvcc, updateValue)
 			if err != nil {
-				log.L().Warn("check fail job failed", zap.Error(err))
+				log.Warn("check fail job failed", zap.Error(err))
 				return false
 			}
 		}

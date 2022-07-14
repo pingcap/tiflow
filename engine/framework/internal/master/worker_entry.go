@@ -120,7 +120,7 @@ func (e *workerEntry) MarkAsTombstone() {
 		return
 	}
 
-	log.L().Panic("Unreachable", zap.Stringer("entry", e))
+	log.Panic("Unreachable", zap.Stringer("entry", e))
 }
 
 func (e *workerEntry) IsTombstone() bool {
@@ -141,7 +141,7 @@ func (e *workerEntry) MarkAsOnline(executor model.ExecutorID, expireAt time.Time
 		return
 	}
 
-	log.L().Panic("Unreachable", zap.Stringer("entry", e))
+	log.Panic("Unreachable", zap.Stringer("entry", e))
 }
 
 func (e *workerEntry) MarkAsOffline() {
@@ -153,7 +153,7 @@ func (e *workerEntry) MarkAsOffline() {
 		return
 	}
 
-	log.L().Panic("Unreachable", zap.Stringer("entry", e))
+	log.Panic("Unreachable", zap.Stringer("entry", e))
 }
 
 func (e *workerEntry) Status() *frameModel.WorkerStatus {

@@ -80,7 +80,7 @@ func (e *ResourceConflictError) Error() string {
 // SchedulerErrorToGRPCError converts resource error to corresponding gRPC error
 func SchedulerErrorToGRPCError(errIn error) error {
 	if errIn == nil {
-		log.L().Panic("Invalid input to SchedulerErrorToGRPCError")
+		log.Panic("Invalid input to SchedulerErrorToGRPCError")
 	}
 
 	var (

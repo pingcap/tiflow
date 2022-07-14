@@ -45,6 +45,7 @@ var (
 
 // Config is the configuration.
 type Config struct {
+	// TODO: is executor name necessary, executor.Info.ID has similar effect
 	Name string `toml:"name" json:"name"`
 
 	LogConf logutil.Config `toml:"log" json:"log"`
@@ -75,7 +76,7 @@ type Config struct {
 func (c *Config) String() string {
 	cfg, err := json.Marshal(c)
 	if err != nil {
-		log.L().Error("fail to marshal config to json", logutil.ShortError(err))
+		log.Error("fail to marshal config to json", logutil.ShortError(err))
 	}
 	return string(cfg)
 }
@@ -86,7 +87,7 @@ func (c *Config) Toml() (string, error) {
 
 	err := toml.NewEncoder(&b).Encode(c)
 	if err != nil {
-		log.L().Error("fail to marshal config to toml", logutil.ShortError(err))
+		log.Error("fail to marshal config to toml", logutil.ShortError(err))
 	}
 
 	return b.String(), nil

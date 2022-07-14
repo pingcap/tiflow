@@ -109,7 +109,7 @@ func (c *TaskCommitter) PreDispatchTask(rID requestID, task Runnable) (ok bool) 
 
 	// We need to overwrite stale request for the same workerID.
 	if request, exists := c.requestsByTaskID[task.ID()]; exists {
-		log.L().Info("There exists a previous request with the same worker ID, overwriting it.",
+		log.Info("There exists a previous request with the same worker ID, overwriting it.",
 			zap.Any("request", request))
 
 		c.removeRequestByID(request.RequestID)
@@ -140,7 +140,7 @@ func (c *TaskCommitter) ConfirmDispatchTask(rID requestID, taskID RunnableID) (o
 
 	request, ok := c.pendingRequests[rID]
 	if !ok {
-		log.L().Warn("ConfirmDispatchTask: request not found",
+		log.Warn("ConfirmDispatchTask: request not found",
 			zap.String("request-id", rID),
 			zap.String("task-id", taskID))
 		return false, nil
@@ -189,7 +189,7 @@ func (c *TaskCommitter) checkTTLOnce() {
 	for rID, request := range c.pendingRequests {
 		expireAt := request.ExpireAt
 		if c.clock.Now().After(expireAt) {
-			log.L().Info("Pending request has expired.",
+			log.Info("Pending request has expired.",
 				zap.Any("request", request),
 				zap.String("task-id", request.TaskID()))
 			c.removeRequestByID(rID)
@@ -201,12 +201,12 @@ func (c *TaskCommitter) checkTTLOnce() {
 func (c *TaskCommitter) removeRequestByID(id requestID) {
 	request, ok := c.pendingRequests[id]
 	if !ok {
-		log.L().Panic("Unreachable", zap.String("request-id", id))
+		log.Panic("Unreachable", zap.String("request-id", id))
 	}
 
 	taskID := request.TaskID()
 	if _, ok := c.requestsByTaskID[taskID]; !ok {
-		log.L().Panic("Unreachable",
+		log.Panic("Unreachable",
 			zap.Any("request", request),
 			zap.String("task-id", taskID))
 	}

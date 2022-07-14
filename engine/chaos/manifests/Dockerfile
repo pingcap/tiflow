@@ -1,10 +1,10 @@
 FROM alpine:3.14
 
 ADD tiflow /tiflow
-ADD df-chaos-case /df-chaos-case
+ADD tiflow-chaos-case /tiflow-chaos-case
 ADD conf /conf
 
-RUN chmod a+x /tiflow /df-chaos-case
+RUN chmod a+x /tiflow /tiflow-chaos-case
 
 WORKDIR /
 

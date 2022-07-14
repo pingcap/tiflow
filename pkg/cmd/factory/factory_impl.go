@@ -19,7 +19,11 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/log"
+	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
+	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
+	"github.com/pingcap/tiflow/pkg/cmd/util"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pd "github.com/tikv/pd/client"
 	etcdlogutil "go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -27,15 +31,19 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 
-	"github.com/pingcap/tiflow/cdc/kv"
 	cmdconetxt "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/version"
 )
 
+const (
+	maxGetPDClientRetryTimes = 3
+)
+
 type factoryImpl struct {
-	clientGetter ClientGetter
+	clientGetter      ClientGetter
+	fetchedServerAddr string
 }
 
 // NewFactory creates a client build factory.
@@ -65,6 +73,11 @@ func (f *factoryImpl) GetPdAddr() string {
 	return f.clientGetter.GetPdAddr()
 }
 
+// GetServerAddr returns CDC server address.
+func (f *factoryImpl) GetServerAddr() string {
+	return f.clientGetter.GetServerAddr()
+}
+
 // GetLogLevel returns log level.
 func (f *factoryImpl) GetLogLevel() string {
 	return f.clientGetter.GetLogLevel()
@@ -78,7 +91,6 @@ func (f *factoryImpl) GetCredential() *security.Credential {
 // EtcdClient creates new cdc etcd client.
 func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClient, error) {
 	ctx := cmdconetxt.GetDefaultContext()
-
 	tlsConfig, err := f.ToTLSConfig()
 	if err != nil {
 		return nil, err
@@ -126,8 +138,8 @@ func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClient, error) {
 			"fail to open PD client, please check pd address \"%s\"", pdAddr)
 	}
 
-	client := etcd.NewCDCEtcdClient(ctx, etcdClient)
-	return &client, nil
+	client, err := etcd.NewCDCEtcdClient(ctx, etcdClient, etcd.DefaultCDCClusterID)
+	return &client, err
 }
 
 // PdClient creates new pd client.
@@ -141,10 +153,20 @@ func (f factoryImpl) PdClient() (pd.Client, error) {
 	}
 
 	pdAddr := f.GetPdAddr()
+	if len(pdAddr) == 0 {
+		return nil, cerror.ErrInvalidServerOption.
+			GenWithStack("empty PD address, please use --pd to specify PD cluster addresses")
+	}
 	pdEndpoints := strings.Split(pdAddr, ",")
+	for _, ep := range pdEndpoints {
+		if err := util.VerifyPdEndpoint(ep, credential.IsTLSEnabled()); err != nil {
+			return nil, cerror.ErrInvalidServerOption.Wrap(err).GenWithStackByArgs()
+		}
+	}
 
 	pdClient, err := pd.NewClientWithContext(
 		ctx, pdEndpoints, credential.PDSecurityOption(),
+		pd.WithMaxErrorRetry(maxGetPDClientRetryTimes),
 		// TODO(hi-rustin): add gRPC metrics to Options.
 		// See also: https://github.com/pingcap/tiflow/pull/2341#discussion_r673032407.
 		pd.WithGRPCDialOptions(
@@ -173,13 +195,73 @@ func (f factoryImpl) PdClient() (pd.Client, error) {
 	return pdClient, nil
 }
 
-func (f factoryImpl) KvStorage() (tidbkv.Storage, error) {
-	pdAddr := f.GetPdAddr()
-	credential := f.GetCredential()
-	kvStore, err := kv.CreateTiStore(pdAddr, credential)
+// APIV1Client returns cdc api v1 client.
+func (f *factoryImpl) APIV1Client() (apiv1client.APIV1Interface, error) {
+	serverAddr, err := f.findServerAddr()
 	if err != nil {
-		return nil, errors.Annotatef(err,
-			"fail to open KV storage client, please check pd address \"%s\"", pdAddr)
+		return nil, errors.Trace(err)
 	}
-	return kvStore, nil
+	log.Info(serverAddr)
+	return apiv1client.NewAPIClient(serverAddr, f.clientGetter.GetCredential())
+}
+
+// APIV2Client returns cdc api v2 client.
+func (f *factoryImpl) APIV2Client() (apiv2client.APIV2Interface, error) {
+	serverAddr, err := f.findServerAddr()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	log.Info(serverAddr)
+	return apiv2client.NewAPIClient(serverAddr, f.clientGetter.GetCredential())
+}
+
+func (f *factoryImpl) findServerAddr() (string, error) {
+	if f.fetchedServerAddr != "" {
+		return f.fetchedServerAddr, nil
+	}
+
+	pdAddr := f.clientGetter.GetPdAddr()
+	serverAddr := f.clientGetter.GetServerAddr()
+	if pdAddr == "" && serverAddr == "" {
+		return "http://127.0.0.1:8300", nil
+	}
+	if pdAddr != "" && serverAddr != "" {
+		return "", errors.New("Parameter --pd is deprecated, " +
+			"please use parameter --server instead. " +
+			"These two parameters cannot be specified at the same time.")
+	}
+	if f.clientGetter.GetServerAddr() != "" {
+		return f.clientGetter.GetServerAddr(), nil
+	}
+	// use pd to get server addr from etcd
+	etcdClient, err := f.EtcdClient()
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+
+	ctx := cmdconetxt.GetDefaultContext()
+	err = etcdClient.CheckMultipleCDCClusterExist(ctx)
+	if err != nil {
+		if cerror.ErrMultipleCDCClustersExist.Equal(err) {
+			log.Error("You are using multiple TiCDC clusters to " +
+				"replicate this TiDB cluster. Please set the parameter --server " +
+				"to specify which cluster you want to operate on.")
+		}
+		return "", err
+	}
+	ownerID, err := etcdClient.GetOwnerID(ctx)
+	if err != nil {
+		return "", err
+	}
+	_, captures, err := etcdClient.GetCaptures(ctx)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	for _, capture := range captures {
+		if capture.ID == ownerID {
+			f.fetchedServerAddr = capture.AdvertiseAddr
+			return capture.AdvertiseAddr, nil
+		}
+	}
+	return "", errors.New("no capture is found")
 }

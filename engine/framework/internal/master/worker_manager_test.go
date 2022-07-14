@@ -83,7 +83,7 @@ func (s *workerManageTestSuite) PutMeta(workerID frameModel.WorkerID, status *fr
 
 func (s *workerManageTestSuite) onWorkerOnline(ctx context.Context, handle WorkerHandle) error {
 	if event, exists := s.events[handle.ID()]; exists {
-		log.L().Warn("found unexpected event", zap.Any("event", event))
+		log.Warn("found unexpected event", zap.Any("event", event))
 		return errors.New("unexpected event already exists")
 	}
 	s.events[handle.ID()] = &masterEvent{
@@ -95,7 +95,7 @@ func (s *workerManageTestSuite) onWorkerOnline(ctx context.Context, handle Worke
 
 func (s *workerManageTestSuite) onWorkerOffline(ctx context.Context, handle WorkerHandle, err error) error {
 	if event, exists := s.events[handle.ID()]; exists {
-		log.L().Warn("found unexpected event", zap.Any("event", event))
+		log.Warn("found unexpected event", zap.Any("event", event))
 		return errors.New("unexpected event already exists")
 	}
 	s.events[handle.ID()] = &masterEvent{
@@ -108,7 +108,7 @@ func (s *workerManageTestSuite) onWorkerOffline(ctx context.Context, handle Work
 
 func (s *workerManageTestSuite) onWorkerStatusUpdated(ctx context.Context, handle WorkerHandle) error {
 	if event, exists := s.events[handle.ID()]; exists {
-		log.L().Warn("found unexpected event", zap.Any("event", event))
+		log.Warn("found unexpected event", zap.Any("event", event))
 		return errors.New("unexpected event already exists")
 	}
 	s.events[handle.ID()] = &masterEvent{
@@ -120,7 +120,7 @@ func (s *workerManageTestSuite) onWorkerStatusUpdated(ctx context.Context, handl
 
 func (s *workerManageTestSuite) onWorkerDispatched(ctx context.Context, handle WorkerHandle, err error) error {
 	if event, exists := s.events[handle.ID()]; exists {
-		log.L().Warn("found unexpected event", zap.Any("event", event))
+		log.Warn("found unexpected event", zap.Any("event", event))
 		return errors.New("unexpected event already exists")
 	}
 	s.events[handle.ID()] = &masterEvent{

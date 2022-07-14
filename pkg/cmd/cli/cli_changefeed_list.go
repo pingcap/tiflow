@@ -14,31 +14,28 @@
 package cli
 
 import (
-	"encoding/json"
+	"time"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/api/owner"
-	"github.com/pingcap/tiflow/cdc/model"
+	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
 	"github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
-	"github.com/pingcap/tiflow/pkg/etcd"
-	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/spf13/cobra"
-	"go.uber.org/zap"
 )
+
+const timeFormat = "2006-01-02 15:04:05.000"
 
 // changefeedCommonInfo holds some common used information of a changefeed.
 type changefeedCommonInfo struct {
-	ID      string                `json:"id"`
-	Summary *owner.ChangefeedResp `json:"summary"`
+	ID        string                `json:"id"`
+	Namespace string                `json:"namespace"`
+	Summary   *owner.ChangefeedResp `json:"summary"`
 }
 
 // listChangefeedOptions defines flags for the `cli changefeed list` command.
 type listChangefeedOptions struct {
-	etcdClient *etcd.CDCEtcdClient
-
-	credential *security.Credential
+	apiClient apiv1client.APIV1Interface
 
 	listAll bool
 }
@@ -56,59 +53,37 @@ func (o *listChangefeedOptions) addFlags(cmd *cobra.Command) {
 
 // complete adapts from the command line args to the data and client required.
 func (o *listChangefeedOptions) complete(f factory.Factory) error {
-	etcdClient, err := f.EtcdClient()
+	apiClient, err := f.APIV1Client()
 	if err != nil {
 		return err
 	}
-
-	o.etcdClient = etcdClient
-
-	o.credential = f.GetCredential()
-
+	o.apiClient = apiClient
 	return nil
 }
 
 // run the `cli changefeed list` command.
 func (o *listChangefeedOptions) run(cmd *cobra.Command) error {
 	ctx := context.GetDefaultContext()
-
-	_, raw, err := o.etcdClient.GetChangeFeeds(ctx)
+	state := ""
+	if o.listAll {
+		state = "all"
+	}
+	raw, err := o.apiClient.Changefeeds().List(ctx, state)
 	if err != nil {
 		return err
 	}
+	cfs := make([]*changefeedCommonInfo, 0, len(*raw))
 
-	changefeedIDs := make(map[model.ChangeFeedID]struct{}, len(raw))
-	for id := range raw {
-		changefeedIDs[id] = struct{}{}
-	}
-
-	if o.listAll {
-		statuses, err := o.etcdClient.GetAllChangeFeedStatus(ctx)
-		if err != nil {
-			return err
-		}
-		for cid := range statuses {
-			changefeedIDs[cid] = struct{}{}
-		}
-	}
-
-	cfs := make([]*changefeedCommonInfo, 0, len(changefeedIDs))
-
-	for id := range changefeedIDs {
-		cfci := &changefeedCommonInfo{ID: id.ID}
-
-		resp, err := sendOwnerChangefeedQuery(ctx, o.etcdClient, id, o.credential)
-		if err != nil {
-			// if no capture is available, the query will fail, just add a warning here
-			log.Warn("query changefeed info failed", zap.String("error", err.Error()))
-		} else {
-			info := &owner.ChangefeedResp{}
-			err = json.Unmarshal([]byte(resp), info)
-			if err != nil {
-				return err
-			}
-
-			cfci.Summary = info
+	for _, cf := range *raw {
+		cfci := &changefeedCommonInfo{
+			ID:        cf.ID,
+			Namespace: cf.Namespace,
+			Summary: &owner.ChangefeedResp{
+				FeedState:    string(cf.FeedState),
+				TSO:          cf.CheckpointTSO,
+				Checkpoint:   time.Time(cf.CheckpointTime).Format(timeFormat),
+				RunningError: cf.RunningError,
+			},
 		}
 		cfs = append(cfs, cfci)
 	}

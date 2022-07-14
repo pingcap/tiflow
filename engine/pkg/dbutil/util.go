@@ -26,7 +26,7 @@ import (
 func NewSQLDB(driver string, dsn string, dbConf *DBConfig) (*sql.DB, error) {
 	db, err := sql.Open(driver, dsn)
 	if err != nil {
-		log.L().Error("open dsn fail", zap.String("dsn", dsn), zap.Any("config", dbConf), zap.Error(err))
+		log.Error("open dsn fail", zap.String("dsn", dsn), zap.Any("config", dbConf), zap.Error(err))
 		return nil, cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
