@@ -207,7 +207,7 @@ function safe_mode_duration() {
 
 	dmctl_start_task "$cur/conf/dm-task-safe-mode-duration.yaml" "--remove-meta"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-	check_log_contains $WORK_DIR/worker1/log/dm-worker.log "failpoint: will not enter safe mode"
+	check_log_contains $WORK_DIR/worker1/log/dm-worker.log "failpoint: will not enter safe mode" 10
 
 	# restart workers
 	pkill -hup dm-worker.test 2>/dev/null || true
