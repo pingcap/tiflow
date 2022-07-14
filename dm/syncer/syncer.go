@@ -2479,6 +2479,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) (*f
 
 	if ec.shardingReSync != nil {
 		ec.shardingReSync.currLocation = *ec.currentLocation
+		// When current progress has passed the latest location in re-sync, we can stop re-sync now.
 		if binlog.CompareLocation(ec.shardingReSync.currLocation, ec.shardingReSync.latestLocation, s.cfg.EnableGTID) > 0 {
 			ec.tctx.L().Info("re-replicate shard group was completed", zap.String("event", "row"), zap.Stringer("re-shard", ec.shardingReSync))
 			return nil, ec.closeShardingResync()
