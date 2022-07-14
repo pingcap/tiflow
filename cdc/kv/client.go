@@ -788,7 +788,11 @@ func (s *eventFeedSession) requestRegionToStore(
 			s.addStream(rpcCtx.Addr, stream, streamCancel)
 
 			g.Go(func() error {
-				defer s.deleteStream(rpcCtx.Addr)
+				defer func() {
+					// TODO: add a random sleep, for test only
+					time.Sleep(time.Millisecond * time.Duration(rand.Intn(50)))
+					s.deleteStream(rpcCtx.Addr)
+				}()
 				return s.receiveFromStream(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream.client, pendingRegions)
 			})
 		}
@@ -824,9 +828,6 @@ func (s *eventFeedSession) requestRegionToStore(
 					zap.String("namespace", s.client.changefeed.Namespace),
 					zap.String("changefeed", s.client.changefeed.ID))
 			}
-			// Delete the stream from the map so that the next time the store is accessed, the stream will be
-			// re-established.
-			s.deleteStream(rpcCtx.Addr)
 			// Delete `pendingRegions` from `storePendingRegions` so that the next time a region of this store is
 			// requested, it will create a new one. So if the `receiveFromStream` goroutine tries to stop all
 			// pending regions, the new pending regions that are requested after reconnecting won't be stopped
@@ -1225,11 +1226,6 @@ func (s *eventFeedSession) receiveFromStream(
 			// needs time to recover, kv client doesn't need to retry frequently.
 			// TODO: add a better retry backoff or rate limitter
 			time.Sleep(time.Millisecond * time.Duration(rand.Intn(100)))
-
-			// TODO: better to closes the send direction of the stream to notify
-			// the other side, but it is not safe to call CloseSend concurrently
-			// with SendMsg, in future refactor we should refine the recv loop
-			s.deleteStream(addr)
 
 			// send nil regionStatefulEvent to signal worker exit
 			err = worker.sendEvents(ctx, []*regionStatefulEvent{nil})
