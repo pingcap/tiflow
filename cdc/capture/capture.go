@@ -466,7 +466,12 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			orchestrator.NewGlobalState(c.EtcdClient.ClusterID),
 			ownerFlushInterval, util.RoleOwner.String())
 		c.setOwner(nil)
-		log.Info("run owner exited", zap.Error(err))
+		if err != nil {
+			log.Warn("run owner exited with error",
+				zap.String("captureID", c.info.ID), zap.Error(err))
+		} else {
+			log.Info("run owner exited normally", zap.String("captureID", c.info.ID))
+		}
 		// if owner exits, resign the owner key
 		start := time.Now()
 		if resignErr := c.resign(ctx); resignErr != nil {
