@@ -15,8 +15,11 @@ package writer
 
 import (
 	"context"
+<<<<<<< HEAD
 	"fmt"
 	"io/ioutil"
+=======
+>>>>>>> fd0cf3eb3 (cdc: change redo meta resolved timestamp correctly (#6243))
 	"math"
 	"net/url"
 	"os"
@@ -139,7 +142,7 @@ func TestLogWriterWriteLog(t *testing.T) {
 			tt.args.ctx = ctx
 		}
 
-		_, err := writer.WriteLog(tt.args.ctx, tt.args.tableID, tt.args.rows)
+		err := writer.WriteLog(tt.args.ctx, tt.args.tableID, tt.args.rows)
 		if tt.wantErr != nil {
 			require.Truef(t, errors.ErrorEqual(tt.wantErr, err), tt.name)
 		} else {
@@ -337,7 +340,11 @@ func TestLogWriterFlushLog(t *testing.T) {
 			cancel()
 			tt.args.ctx = ctx
 		}
+<<<<<<< HEAD
 		err := writer.FlushLog(tt.args.ctx, tt.args.tableID, tt.args.ts)
+=======
+		err := writer.FlushLog(tt.args.ctx, map[int64]uint64{tt.args.tableID: tt.args.ts})
+>>>>>>> fd0cf3eb3 (cdc: change redo meta resolved timestamp correctly (#6243))
 		if tt.wantErr != nil {
 			require.True(t, errors.ErrorEqual(tt.wantErr, err), err.Error()+tt.wantErr.Error())
 		} else {
@@ -647,26 +654,17 @@ func TestNewLogWriter(t *testing.T) {
 	require.Nil(t, err)
 	require.NotSame(t, ll, ll2)
 
+<<<<<<< HEAD
 	dir, err := ioutil.TempDir("", "redo-NewLogWriter")
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
 	fileName := fmt.Sprintf("%s_%s_%d_%s%s", "cp", "test-changefeed", time.Now().Unix(), common.DefaultMetaFileType, common.MetaEXT)
 	path := filepath.Join(dir, fileName)
-	f, err := os.Create(path)
-	require.Nil(t, err)
-
-	meta := &common.LogMeta{
-		CheckPointTs: 11,
-		ResolvedTs:   22,
-	}
-	data, err := meta.MarshalMsg(nil)
-	require.Nil(t, err)
-	_, err = f.Write(data)
-	require.Nil(t, err)
-
+=======
+	dir := t.TempDir()
 	cfg = &LogWriterConfig{
 		Dir:               dir,
-		ChangeFeedID:      "test-cf",
+		ChangeFeedID:      model.DefaultChangeFeedID("test-cf"),
 		CaptureID:         "cp",
 		MaxLogSize:        10,
 		CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
@@ -676,11 +674,41 @@ func TestNewLogWriter(t *testing.T) {
 	require.Nil(t, err)
 	err = l.Close()
 	require.Nil(t, err)
+	path := l.filePath()
+>>>>>>> fd0cf3eb3 (cdc: change redo meta resolved timestamp correctly (#6243))
+	f, err := os.Create(path)
+	require.Nil(t, err)
+
+	meta := &common.LogMeta{
+		CheckPointTs:   11,
+		ResolvedTsList: map[model.TableID]model.Ts{int64(1): uint64(22)},
+	}
+	data, err := meta.MarshalMsg(nil)
+	require.Nil(t, err)
+	_, err = f.Write(data)
+	require.Nil(t, err)
+
+<<<<<<< HEAD
+	cfg = &LogWriterConfig{
+		Dir:               dir,
+		ChangeFeedID:      "test-cf",
+		CaptureID:         "cp",
+		MaxLogSize:        10,
+		CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
+		FlushIntervalInMs: 5,
+	}
+	l, err := NewLogWriter(ctx, cfg)
+=======
+	l, err = NewLogWriter(ctx, cfg)
+>>>>>>> fd0cf3eb3 (cdc: change redo meta resolved timestamp correctly (#6243))
+	require.Nil(t, err)
+	err = l.Close()
+	require.Nil(t, err)
 	require.True(t, l.isStopped())
 	require.Equal(t, cfg.Dir, l.cfg.Dir)
 	require.Equal(t, meta.CheckPointTs, l.meta.CheckPointTs)
-	require.Equal(t, meta.ResolvedTs, l.meta.ResolvedTs)
-	require.Equal(t, map[int64]uint64{}, l.meta.ResolvedTsList)
+	require.Equal(t, meta.ResolvedTs(), l.meta.ResolvedTs())
+	require.Equal(t, meta.ResolvedTsList, l.meta.ResolvedTsList)
 	time.Sleep(time.Millisecond * time.Duration(math.Max(float64(defaultFlushIntervalInMs), float64(defaultGCIntervalInMs))+1))
 
 	origin := common.InitS3storage
