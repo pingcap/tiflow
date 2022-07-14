@@ -398,13 +398,13 @@ func (c *captureImpl) campaignLoop(ctx cdcContext.Context) error {
 			return ctx.Err()
 		default:
 		}
+
 		err := c.campaign(ctx)
 		if err == nil {
 			return nil
 		}
-
 		switch errors.Cause(err) {
-		case context.Canceled:
+		case context.DeadlineExceeded:
 			time.Sleep(time.Second)
 			continue
 		case mvcc.ErrCompacted:
