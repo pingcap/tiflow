@@ -347,11 +347,15 @@ func (m *ManagerImpl) AddTable(tableID model.TableID, startTs uint64) {
 
 // RemoveTable removes a table from redo log manager
 func (m *ManagerImpl) RemoveTable(tableID model.TableID) {
+<<<<<<< HEAD
 	m.rtsMapMu.Lock()
 	defer m.rtsMapMu.Unlock()
 	if _, ok := m.rtsMap[tableID]; ok {
 		delete(m.rtsMap, tableID)
 	} else {
+=======
+	if _, ok := m.rtsMap.LoadAndDelete(tableID); !ok {
+>>>>>>> fd0cf3eb3 (cdc: change redo meta resolved timestamp correctly (#6243))
 		log.Warn("remove a table not maintained in redo log manager", zap.Int64("tableID", tableID))
 	}
 }
@@ -371,11 +375,55 @@ func (m *ManagerImpl) Cleanup(ctx context.Context) error {
 	return m.writer.DeleteAllLogs(ctx)
 }
 
+<<<<<<< HEAD
 func (m *ManagerImpl) flushLog(
 	ctx context.Context,
 	tableRtsMap map[model.TableID]model.Ts,
 	handleErr func(err error),
 ) map[model.TableID]model.Ts {
+=======
+func (m *ManagerImpl) prepareForFlush() (tableRtsMap map[model.TableID]model.Ts, minResolvedTs model.Ts) {
+	// FIXME: currently all table progresses are flushed into meta file. It can be an issue
+	// if there are lots of tables. If we can put table meta into row file, it's only necessary
+	// to take care updated tables.
+	tableRtsMap = make(map[model.TableID]model.Ts)
+	minResolvedTs = math.MaxUint64
+	m.rtsMap.Range(func(key interface{}, value interface{}) bool {
+		tableID := key.(model.TableID)
+		rts := value.(*statefulRts)
+		unflushed := rts.getUnflushed()
+		flushed := rts.getFlushed()
+		if unflushed > flushed {
+			flushed = unflushed
+		}
+		tableRtsMap[tableID] = flushed
+		if flushed < minResolvedTs {
+			minResolvedTs = flushed
+		}
+		return true
+	})
+
+	if minResolvedTs == math.MaxUint64 {
+		minResolvedTs = 0
+	}
+	return
+}
+
+func (m *ManagerImpl) postFlush(tableRtsMap map[model.TableID]model.Ts, minResolvedTs model.Ts) {
+	if minResolvedTs != 0 {
+		// m.minResolvedTs is only updated in flushLog, so no other one can change it.
+		atomic.StoreUint64(&m.minResolvedTs, minResolvedTs)
+	}
+
+	for tableID, flushed := range tableRtsMap {
+		if value, loaded := m.rtsMap.Load(tableID); loaded {
+			value.(*statefulRts).setFlushed(flushed)
+		}
+	}
+}
+
+func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
+>>>>>>> fd0cf3eb3 (cdc: change redo meta resolved timestamp correctly (#6243))
 	if !atomic.CompareAndSwapInt64(&m.flushing, 0, 1) {
 		log.Debug("Fail to update flush flag, " +
 			"the previous flush operation hasn't finished yet")
@@ -391,7 +439,13 @@ func (m *ManagerImpl) flushLog(
 	go func() {
 		defer atomic.StoreInt64(&m.flushing, 0)
 
+<<<<<<< HEAD
 		err := m.writer.FlushLog(ctx, tableRtsMap)
+=======
+		tableRtsMap, minResolvedTs := m.prepareForFlush()
+		err := m.writer.FlushLog(ctx, tableRtsMap)
+		m.metricFlushLogDuration.Observe(time.Since(m.lastFlushTime).Seconds())
+>>>>>>> fd0cf3eb3 (cdc: change redo meta resolved timestamp correctly (#6243))
 		if err != nil {
 			handleErr(err)
 			return
@@ -465,7 +519,7 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 				for _, row := range cache.rows {
 					logs = append(logs, RowToRedo(row))
 				}
-				_, err := m.writer.WriteLog(ctx, cache.tableID, logs)
+				err := m.writer.WriteLog(ctx, cache.tableID, logs)
 				if err != nil {
 					handleErr(err)
 					return

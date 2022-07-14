@@ -42,17 +42,16 @@ func NewBlackHoleWriter() *blackHoleWriter {
 	}
 }
 
-func (bs *blackHoleWriter) WriteLog(_ context.Context, tableID model.TableID, logs []*model.RedoRowChangedEvent) (resolvedTs uint64, err error) {
+func (bs *blackHoleWriter) WriteLog(_ context.Context, tableID model.TableID, logs []*model.RedoRowChangedEvent) (err error) {
 	bs.tableRtsMu.Lock()
 	defer bs.tableRtsMu.Unlock()
 	if len(logs) == 0 {
-		return bs.tableRtsMap[tableID], nil
+		return nil
 	}
-	resolvedTs = bs.tableRtsMap[tableID]
 	current := logs[len(logs)-1].Row.CommitTs
 	bs.tableRtsMap[tableID] = current
 	log.Debug("write row redo logs", zap.Int("count", len(logs)),
-		zap.Uint64("resolvedTs", resolvedTs), zap.Uint64("current", current))
+		zap.Uint64("current", current))
 	return
 }
 
