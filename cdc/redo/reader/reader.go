@@ -18,16 +18,19 @@ import (
 	"context"
 	"io"
 	"io/ioutil"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/multierr"
+	"go.uber.org/zap"
 )
 
 //go:generate mockery --name=RedoLogReader --inpackage
@@ -122,10 +125,12 @@ func (l *LogReader) ResetReader(ctx context.Context, startTs, endTs uint64) erro
 			return err
 		}
 	}
-	if startTs > endTs || startTs > l.meta.ResolvedTs || endTs <= l.meta.CheckPointTs {
+
+	minResolvedTs := l.meta.ResolvedTs()
+	if startTs > endTs || startTs > minResolvedTs || endTs <= l.meta.CheckPointTs {
 		return errors.Errorf(
 			"startTs, endTs (%d, %d] should match the boundary: (%d, %d]",
-			startTs, endTs, l.meta.CheckPointTs, l.meta.ResolvedTs)
+			startTs, endTs, l.meta.CheckPointTs, minResolvedTs)
 	}
 	return l.setUpReader(ctx, startTs, endTs)
 }
@@ -337,7 +342,7 @@ func (l *LogReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint
 	defer l.metaLock.Unlock()
 
 	if l.meta != nil {
-		return l.meta.CheckPointTs, l.meta.ResolvedTs, nil
+		return l.meta.CheckPointTs, l.meta.ResolvedTs(), nil
 	}
 
 	files, err := ioutil.ReadDir(l.cfg.Dir)
@@ -346,8 +351,11 @@ func (l *LogReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint
 	}
 
 	haveMeta := false
-	metaList := map[uint64]*common.LogMeta{}
-	var maxCheckPointTs uint64
+	var maxCheckPointTs uint64 = 0
+	var minResolvedTs uint64 = math.MaxUint64
+	rtsMap := make(map[model.TableID]model.Ts)
+	maxCheckPointTsFile := ""
+	var minResolvedTsTable model.TableID = 0
 	for _, file := range files {
 		if filepath.Ext(file.Name()) == common.MetaEXT {
 			path := filepath.Join(l.cfg.Dir, file.Name())
@@ -356,28 +364,52 @@ func (l *LogReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint
 				return 0, 0, cerror.WrapError(cerror.ErrRedoFileOp, err)
 			}
 
-			l.meta = &common.LogMeta{}
-			_, err = l.meta.UnmarshalMsg(fileData)
+			log.Debug("unmarshal redo meta", zap.Int("size", len(fileData)))
+			meta := common.LogMeta{}
+			_, err = meta.UnmarshalMsg(fileData)
 			if err != nil {
 				return 0, 0, cerror.WrapError(cerror.ErrRedoFileOp, err)
 			}
+			haveMeta = true
 
-			if !haveMeta {
-				haveMeta = true
+			if meta.CheckPointTs > maxCheckPointTs {
+				maxCheckPointTs = meta.CheckPointTs
+				maxCheckPointTsFile = file.Name()
 			}
-			metaList[l.meta.CheckPointTs] = l.meta
-			// since checkPointTs is guaranteed to increase always
-			if l.meta.CheckPointTs > maxCheckPointTs {
-				maxCheckPointTs = l.meta.CheckPointTs
+
+			// For every table, get the max resolved timestamp for it.
+			for tID, ts := range meta.ResolvedTsList {
+				got, ok := rtsMap[tID]
+				if !ok || got < ts {
+					rtsMap[tID] = ts
+				}
 			}
 		}
 	}
+
+	for tID, ts := range rtsMap {
+		if ts < minResolvedTs {
+			minResolvedTs = ts
+			minResolvedTsTable = tID
+		}
+	}
+
 	if !haveMeta {
 		return 0, 0, cerror.ErrRedoMetaFileNotFound.GenWithStackByArgs(l.cfg.Dir)
 	}
-
-	l.meta = metaList[maxCheckPointTs]
-	return l.meta.CheckPointTs, l.meta.ResolvedTs, nil
+	if minResolvedTs < maxCheckPointTs {
+		log.Fatal("in all meta files, minResolvedTs is less than maxCheckPointTs",
+			zap.Uint64("minResolvedTs", minResolvedTs),
+			zap.Uint64("maxCheckpointTs", maxCheckPointTs),
+			zap.Int64("minResolvedTsTable", minResolvedTsTable),
+			zap.String("maxCheckPointTsFile", maxCheckPointTsFile))
+	}
+	if minResolvedTs == math.MaxUint64 {
+		log.Warn("in all meta files, no valid ResolvedTs is found")
+		minResolvedTs = maxCheckPointTs
+	}
+	l.meta = &common.LogMeta{CheckPointTs: maxCheckPointTs, ResolvedTsList: rtsMap}
+	return l.meta.CheckPointTs, minResolvedTs, nil
 }
 
 func (l *LogReader) closeRowReader() error {
