@@ -144,7 +144,6 @@ func (f *sqlEventFilter) shouldSkipDDL(ddl *model.DDLEvent) (bool, error) {
 	rules := f.getRules(ddl.TableInfo.Schema, ddl.TableInfo.Table)
 	for _, rule := range rules {
 		action, err := rule.bf.Filter(binlogFilterSchema, binlogFilterTable, evenType, ddl.Query)
-		log.Info("fizz:ddl filter", zap.String("query", ddl.Query), zap.String("event type", string(evenType)), zap.String("action", string(action)))
 		if err != nil {
 			return false, errors.Trace(err)
 		}

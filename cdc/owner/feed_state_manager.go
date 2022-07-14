@@ -140,6 +140,11 @@ func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) (adm
 	case model.StateStopped, model.StateFailed, model.StateFinished:
 		m.shouldBeRunning = false
 		return
+	case model.StateError:
+		if m.state.Info.Error.IsChangefeedNotRetryError() {
+			m.shouldBeRunning = false
+			return
+		}
 	}
 	errs := m.errorsReportedByProcessors()
 	m.handleError(errs...)
@@ -406,6 +411,21 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 			})
 			m.shouldBeRunning = false
 			m.patchState(model.StateFailed)
+			return
+		}
+	}
+
+	for _, err := range errs {
+		if err.IsChangefeedNotRetryError() {
+			m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+				if info == nil {
+					return nil, false, nil
+				}
+				info.Error = err
+				return info, true, nil
+			})
+			m.shouldBeRunning = false
+			m.patchState(model.StateError)
 			return
 		}
 	}
