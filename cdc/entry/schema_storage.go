@@ -71,7 +71,7 @@ func NewSchemaStorage(
 ) (SchemaStorage, error) {
 	var snap *schema.Snapshot
 	var err error
-	var schemaVersion int64
+	var version int64
 	if meta == nil {
 		snap = schema.NewEmptySnapshot(forceReplicate)
 	} else {
@@ -79,7 +79,17 @@ func NewSchemaStorage(
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		schemaVersion, err = meta.GetSchemaVersion()
+		version, err = meta.GetSchemaVersion()
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		diff, err := meta.GetSchemaDiff(version)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if diff == nil {
+			version--
+		}
 	}
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -90,7 +100,7 @@ func NewSchemaStorage(
 		filter:         filter,
 		forceReplicate: forceReplicate,
 		id:             id,
-		schemaVersion:  schemaVersion,
+		schemaVersion:  version,
 	}
 	return schema, nil
 }
@@ -159,7 +169,7 @@ func (s *schemaStorageImpl) GetLastSnapshot() *schema.Snapshot {
 // HandleDDLJob creates a new snapshot in storage and handles the ddl job
 func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 	if s.skipJob(job) {
-		atomic.StoreInt64(&s.schemaVersion, job.BinlogInfo.SchemaVersion)
+		s.schemaVersion = job.BinlogInfo.SchemaVersion
 		s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
 		return nil
 	}
@@ -173,7 +183,10 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 				zap.String("DDL", job.Query),
 				zap.String("namespace", s.id.Namespace),
 				zap.String("changefeed", s.id.ID),
-				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
+				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
+				zap.Int64("schemaVersion", s.schemaVersion),
+				zap.Int64("jobSchemaVersion", job.BinlogInfo.SchemaVersion),
+			)
 			return nil
 		}
 		snap = lastSnap.Copy()
@@ -194,7 +207,7 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 		zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
 
 	s.snaps = append(s.snaps, snap)
-	atomic.StoreInt64(&s.schemaVersion, job.BinlogInfo.SchemaVersion)
+	s.schemaVersion = job.BinlogInfo.SchemaVersion
 	s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
 	return nil
 }

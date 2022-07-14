@@ -68,6 +68,36 @@ func (p *ddlJobPullerImpl) UnmarshalDDL(rawKV *model.RawKVEntry) (*timodel.Job, 
 	return entry.ParseJob(p.tableInfo, rawKV, p.columnID)
 }
 
+func findDBByName(dbs []*timodel.DBInfo, name string) (*timodel.DBInfo, error) {
+	for _, db := range dbs {
+		if db.Name.L == name {
+			return db, nil
+		}
+	}
+
+	return nil, errors.New("create NewDDLJobPuller fail, can't find schema")
+}
+
+func findTableByName(tbls []*timodel.TableInfo, name string) (*timodel.TableInfo, error) {
+	for _, t := range tbls {
+		if t.Name.L == name {
+			return t, nil
+		}
+	}
+
+	return nil, errors.New("create NewDDLJobPuller fail, can't find schema")
+}
+
+func findColumnByName(cols []*timodel.ColumnInfo, name string) (*timodel.ColumnInfo, error) {
+	for _, c := range cols {
+		if c.Name.L == name {
+			return c, nil
+		}
+	}
+
+	return nil, errors.New("create NewDDLJobPuller fail, can't find schema")
+}
+
 // NewDDLJobPuller create a new NewDDLJobPuller fetch event start from checkpointTs
 // and put into buf.
 func NewDDLJobPuller(
@@ -81,6 +111,7 @@ func NewDDLJobPuller(
 	cfg *config.KVClientConfig,
 	changefeed model.ChangeFeedID,
 ) (DDLJobPuller, error) {
+	// here, we assume tidb is upgrade before cdc, otherwise, we will get error
 	version, err := kvStorage.CurrentVersion(tidbkv.GlobalTxnScope)
 	if err != nil {
 		return nil, err
@@ -94,37 +125,33 @@ func NewDDLJobPuller(
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrMetaListDatabases, err)
 	}
-	spans := make([]regionspan.Span, 0, 3)
-	var tblInfo *model.TableInfo
-	var colID int64
-	for _, db := range dbInfos {
-		if db.Name.L == mysql.SystemDB {
-			tables, err := snap.ListTables(db.ID)
-			if err != nil {
-				return nil, cerror.WrapError(cerror.ErrMetaListDatabases, err)
-			}
-			for _, t := range tables {
-				if t.Name.L == "tidb_ddl_job" {
-					tblInfo = model.WrapTableInfo(db.ID, db.Name.L, 0, t)
-					spans = append(spans, regionspan.GetTableSpan(t.ID))
-					for _, col := range tblInfo.Columns {
-						if col.Name.L == "job_meta" {
-							colID = col.ID
-						}
-					}
-					break
-				}
-			}
-			break
-		}
+
+	db, err := findDBByName(dbInfos, mysql.SystemDB)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 
+	tbls, err := snap.ListTables(db.ID)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	tableInfo, err := findTableByName(tbls, "tidb_ddl_job")
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	col, err := findColumnByName(tableInfo.Columns, "job_meta")
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	spans := []regionspan.Span{regionspan.GetTableSpan(tableInfo.ID)}
 	spans = append(spans, regionspan.GetAllDDLSpan()...)
 
 	return &ddlJobPullerImpl{
 		Puller:    New(ctx, pdCli, grpcPool, regionCache, kvStorage, pdClock, checkpointTs, spans, cfg, changefeed),
-		tableInfo: tblInfo,
-		columnID:  colID,
+		tableInfo: model.WrapTableInfo(db.ID, db.Name.L, 0, tableInfo),
+		columnID:  col.ID,
 	}, nil
 }
 
@@ -148,7 +175,6 @@ type ddlPullerImpl struct {
 	resolvedTS     uint64
 	pendingDDLJobs []*timodel.Job
 	lastDDLJobID   int64
-	schemaVersion  int64
 	cancel         context.CancelFunc
 
 	changefeedID model.ChangeFeedID
@@ -175,7 +201,6 @@ func NewDDLPuller(ctx context.Context,
 	changefeed.ID += "_ddl_puller"
 
 	var puller DDLJobPuller
-	var schemaVersion int64
 	storage := up.KVStorage
 	// storage can be nil only in the test
 	if storage != nil {
@@ -193,14 +218,6 @@ func NewDDLPuller(ctx context.Context,
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		meta, err := kv.GetSnapshotMeta(storage, startTs)
-		if err != nil {
-			return nil, err
-		}
-		schemaVersion, err = meta.GetSchemaVersion()
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	return &ddlPullerImpl{
@@ -210,7 +227,6 @@ func NewDDLPuller(ctx context.Context,
 		cancel:        func() {},
 		clock:         clock.New(),
 		changefeedID:  changefeed,
-		schemaVersion: schemaVersion,
 		metricDiscardedDDLCounter: discardedDDLCounter.
 			WithLabelValues(changefeed.Namespace, changefeed.ID),
 	}, nil
@@ -242,7 +258,7 @@ func (h *ddlPullerImpl) handleRawDDL(rawDDL *model.RawKVEntry) error {
 			zap.Int64("jobID", job.ID), zap.String("query", job.Query))
 		return nil
 	}
-	if job.ID == h.lastDDLJobID || job.BinlogInfo.SchemaVersion <= h.schemaVersion {
+	if job.ID == h.lastDDLJobID {
 		log.Warn("ignore duplicated DDL job",
 			zap.String("namespace", h.changefeedID.Namespace),
 			zap.String("changefeed", h.changefeedID.ID),
@@ -258,7 +274,6 @@ func (h *ddlPullerImpl) handleRawDDL(rawDDL *model.RawKVEntry) error {
 	defer h.mu.Unlock()
 	h.pendingDDLJobs = append(h.pendingDDLJobs, job)
 	h.lastDDLJobID = job.ID
-	h.schemaVersion = job.BinlogInfo.SchemaVersion
 	return nil
 }
 

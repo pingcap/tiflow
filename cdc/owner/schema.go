@@ -31,12 +31,13 @@ import (
 )
 
 type schemaWrap4Owner struct {
-	schemaSnapshot              *schema.Snapshot
-	filter                      filter.Filter
-	config                      *config.ReplicaConfig
-	allPhysicalTablesCache      []model.TableID
-	ddlHandledTs                model.Ts
-	id                          model.ChangeFeedID
+	schemaSnapshot         *schema.Snapshot
+	filter                 filter.Filter
+	config                 *config.ReplicaConfig
+	allPhysicalTablesCache []model.TableID
+	ddlHandledTs           model.Ts
+	schemaVersion          int64
+	id                     model.ChangeFeedID
 	metricIgnoreDDLEventCounter prometheus.Counter
 }
 
@@ -45,11 +46,23 @@ func newSchemaWrap4Owner(
 	config *config.ReplicaConfig, id model.ChangeFeedID,
 ) (*schemaWrap4Owner, error) {
 	var meta *timeta.Meta
+	var version int64
 	if kvStorage != nil {
 		var err error
 		meta, err = kv.GetSnapshotMeta(kvStorage, startTs)
 		if err != nil {
 			return nil, errors.Trace(err)
+		}
+		version, err = meta.GetSchemaVersion()
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		diff, err := meta.GetSchemaDiff(version)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if diff == nil {
+			version--
 		}
 	}
 	schemaSnap, err := schema.NewSingleSnapshotFromMeta(meta, startTs, config.ForceReplicate)
@@ -67,6 +80,7 @@ func newSchemaWrap4Owner(
 		filter:         f,
 		config:         config,
 		ddlHandledTs:   startTs,
+		schemaVersion:  version,
 		id:             id,
 		metricIgnoreDDLEventCounter: changefeedIgnoredDDLEventCounter.
 			WithLabelValues(id.Namespace, id.ID),
@@ -108,12 +122,15 @@ func (s *schemaWrap4Owner) AllTableNames() []model.TableName {
 }
 
 func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
-	if job.BinlogInfo.FinishedTS <= s.ddlHandledTs {
+	if job.BinlogInfo.FinishedTS <= s.ddlHandledTs || job.BinlogInfo.SchemaVersion <= s.schemaVersion {
 		log.Warn("job finishTs is less than schema handleTs, discard invalid job",
 			zap.String("namespace", s.id.Namespace),
 			zap.String("changefeed", s.id.ID),
 			zap.Stringer("job", job),
-			zap.Any("ddlHandledTs", s.ddlHandledTs))
+			zap.Any("ddlHandledTs", s.ddlHandledTs),
+			zap.Int64("schemaVersion", s.schemaVersion),
+			zap.Int64("jobSchemaVersion", job.BinlogInfo.SchemaVersion),
+		)
 		return nil
 	}
 	s.allPhysicalTablesCache = nil
@@ -134,6 +151,7 @@ func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
 		zap.Any("role", util.RoleOwner))
 
 	s.ddlHandledTs = job.BinlogInfo.FinishedTS
+	s.schemaVersion = job.BinlogInfo.SchemaVersion
 	return nil
 }
 
