@@ -92,6 +92,12 @@ var doc = `{
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
                     }
                 }
             }

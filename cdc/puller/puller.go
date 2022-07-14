@@ -36,9 +36,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// DDLPullerTableName is the fake table name for ddl puller.
-const DDLPullerTableName = "DDL_PULLER"
-
 const (
 	defaultPullerEventChanSize  = 128
 	defaultPullerOutputChanSize = 128
@@ -64,19 +61,17 @@ type pullerImpl struct {
 	initialized  int64
 }
 
-// NewPuller create a new Puller fetch event start from checkpointTs
-// and put into buf.
-func NewPuller(
-	ctx context.Context,
+// New create a new Puller fetch event start from checkpointTs and put into buf.
+func New(ctx context.Context,
 	pdCli pd.Client,
 	grpcPool kv.GrpcPool,
 	regionCache *tikv.RegionCache,
 	kvStorage tidbkv.Storage,
 	pdClock pdutil.Clock,
-	changefeed model.ChangeFeedID,
 	checkpointTs uint64,
 	spans []regionspan.Span,
 	cfg *config.KVClientConfig,
+	changefeed model.ChangeFeedID,
 ) Puller {
 	tikvStorage, ok := kvStorage.(tikv.Storage)
 	if !ok {

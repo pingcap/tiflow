@@ -270,7 +270,7 @@ func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableI
 			return table.State() == pipeline.TableStatePrepared
 		}
 
-		if config.GetGlobalServerConfig().Debug.EnableTwoPhaseScheduler {
+		if config.GetGlobalServerConfig().Debug.EnableSchedulerV3 {
 			// The table is `replicating`, it's indicating that the `add table` must be finished.
 			return table.State() == pipeline.TableStateReplicating
 		}
@@ -709,8 +709,8 @@ func (p *processor) newAgentImpl(ctx cdcContext.Context) (ret scheduler.Agent, e
 	etcdClient := ctx.GlobalVars().EtcdClient
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	cfg := config.GetGlobalServerConfig().Debug
-	if cfg.EnableTwoPhaseScheduler {
-		ret, err = scheduler.NewTpAgent(
+	if cfg.EnableSchedulerV3 {
+		ret, err = scheduler.NewAgentV3(
 			ctx, captureID, messageServer, messageRouter, etcdClient, p, p.changefeedID)
 	} else {
 		ret, err = scheduler.NewAgent(
@@ -740,23 +740,22 @@ func (p *processor) handleErrorCh(ctx cdcContext.Context) error {
 
 func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.SchemaStorage, error) {
 	kvStorage := p.upstream.KVStorage
-	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
 	kvCfg := config.GetGlobalServerConfig().KVClient
 	stdCtx := contextutil.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = contextutil.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
-	ddlPuller := puller.NewPuller(
+	ddlPuller := puller.New(
 		stdCtx,
 		p.upstream.PDClient,
 		p.upstream.GrpcPool,
 		p.upstream.RegionCache,
 		p.upstream.KVStorage,
 		p.upstream.PDClock,
-		ctx.ChangefeedVars().ID,
 		checkpointTs,
-		ddlspans,
+		regionspan.GetAllDDLSpan(),
 		kvCfg,
+		ctx.ChangefeedVars().ID,
 	)
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {

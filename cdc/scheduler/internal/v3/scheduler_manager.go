@@ -79,7 +79,7 @@ func (sm *schedulerManager) Schedule(
 			sm.tasksCounter[name]++
 		}
 		if len(tasks) != 0 {
-			log.Info("tpscheduler: new schedule task",
+			log.Info("schedulerv3: new schedule task",
 				zap.String("namespace", sm.changefeedID.Namespace),
 				zap.String("changefeed", sm.changefeedID.ID),
 				zap.Int("task", len(tasks)),
@@ -95,10 +95,10 @@ func (sm *schedulerManager) MoveTable(tableID model.TableID, target model.Captur
 	scheduler := sm.schedulers[schedulerPriorityMoveTable]
 	moveTableScheduler, ok := scheduler.(*moveTableScheduler)
 	if !ok {
-		log.Panic("tpscheduler: invalid move table scheduler found")
+		log.Panic("schedulerv3: invalid move table scheduler found")
 	}
 	if !moveTableScheduler.addTask(tableID, target) {
-		log.Info("tpscheduler: manual move Table task ignored, "+
+		log.Info("schedulerv3: manual move Table task ignored, "+
 			"since the last triggered task not finished",
 			zap.String("namespace", sm.changefeedID.Namespace),
 			zap.String("changefeed", sm.changefeedID.ID),
@@ -111,7 +111,7 @@ func (sm *schedulerManager) Rebalance() {
 	scheduler := sm.schedulers[schedulerPriorityRebalance]
 	rebalanceScheduler, ok := scheduler.(*rebalanceScheduler)
 	if !ok {
-		log.Panic("tpscheduler: invalid rebalance scheduler found")
+		log.Panic("schedulerv3: invalid rebalance scheduler found")
 	}
 
 	atomic.StoreInt32(&rebalanceScheduler.rebalance, 1)
@@ -121,7 +121,7 @@ func (sm *schedulerManager) DrainCapture(target model.CaptureID) bool {
 	scheduler := sm.schedulers[schedulerPriorityDrainCapture]
 	drainCaptureScheduler, ok := scheduler.(*drainCaptureScheduler)
 	if !ok {
-		log.Panic("tpscheduler: invalid drain capture scheduler found")
+		log.Panic("schedulerv3: invalid drain capture scheduler found")
 	}
 
 	return drainCaptureScheduler.setTarget(target)

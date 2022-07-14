@@ -118,7 +118,7 @@ func newReplicationSet(
 	for captureID, table := range tableStatus {
 		if r.TableID != table.TableID {
 			return nil, r.inconsistentError(table, captureID,
-				"tpscheduler: table id inconsistent")
+				"schedulerv3: table id inconsistent")
 		}
 		r.updateCheckpoint(table.Checkpoint)
 
@@ -126,7 +126,7 @@ func newReplicationSet(
 		case schedulepb.TableStateReplicating:
 			if len(r.Primary) != 0 {
 				return nil, r.multiplePrimaryError(
-					table, captureID, "tpscheduler: multiple primary",
+					table, captureID, "schedulerv3: multiple primary",
 					zap.Any("primary", r.Primary),
 					zap.Any("status", tableStatus))
 			}
@@ -147,7 +147,7 @@ func newReplicationSet(
 			schedulepb.TableStateStopped:
 			// Ignore stop state.
 		default:
-			log.Warn("tpscheduler: unknown table state",
+			log.Warn("schedulerv3: unknown table state",
 				zap.Any("replicationSet", r),
 				zap.Int64("tableID", table.TableID),
 				zap.Any("status", tableStatus))
@@ -169,7 +169,7 @@ func newReplicationSet(
 	if len(r.Captures) == 0 {
 		r.State = ReplicationSetStateAbsent
 	}
-	log.Info("tpscheduler: initialize replication set",
+	log.Info("schedulerv3: initialize replication set",
 		zap.Any("replicationSet", r))
 
 	return r, nil
@@ -207,17 +207,17 @@ func (r *ReplicationSet) checkInvariant(
 ) error {
 	if r.TableID != input.TableID {
 		return r.inconsistentError(input, captureID,
-			"tpscheduler: tableID must be the same")
+			"schedulerv3: tableID must be the same")
 	}
 	if r.Primary == r.Secondary && r.Primary != "" {
 		return r.inconsistentError(input, captureID,
-			"tpscheduler: primary and secondary can not be the same")
+			"schedulerv3: primary and secondary can not be the same")
 	}
 	_, okP := r.Captures[r.Primary]
 	_, okS := r.Captures[r.Secondary]
 	if (!okP && r.Primary != "") || (!okS && r.Secondary != "") {
 		return r.inconsistentError(input, captureID,
-			"tpscheduler: capture inconsistent")
+			"schedulerv3: capture inconsistent")
 	}
 	return nil
 }
@@ -253,7 +253,7 @@ func (r *ReplicationSet) poll(
 			msg, stateChanged, err = r.pollOnRemoving(input, captureID)
 		default:
 			return nil, r.inconsistentError(
-				input, captureID, "tpscheduler: table state unknown")
+				input, captureID, "schedulerv3: table state unknown")
 		}
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -262,7 +262,7 @@ func (r *ReplicationSet) poll(
 			msgBuf = append(msgBuf, msg)
 		}
 		if stateChanged {
-			log.Info("tpscheduler: replication state transition, poll",
+			log.Info("schedulerv3: replication state transition, poll",
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID),
 				zap.Stringer("old", oldState), zap.Stringer("new", r.State))
@@ -279,7 +279,7 @@ func (r *ReplicationSet) pollOnAbsent(
 	case schedulepb.TableStateAbsent:
 		if r.Primary != "" || r.Secondary != "" {
 			return nil, false, r.inconsistentError(
-				input, captureID, "tpscheduler: there must be no primary or secondary")
+				input, captureID, "schedulerv3: there must be no primary or secondary")
 		}
 		r.State = ReplicationSetStatePrepare
 		r.Secondary = captureID
@@ -293,7 +293,7 @@ func (r *ReplicationSet) pollOnAbsent(
 		schedulepb.TableStateReplicating,
 		schedulepb.TableStateStopping:
 	}
-	log.Warn("tpscheduler: ignore input, unexpected replication set state",
+	log.Warn("schedulerv3: ignore input, unexpected replication set state",
 		zap.Stringer("tableState", input),
 		zap.String("captureID", captureID),
 		zap.Any("replicationSet", r))
@@ -340,7 +340,7 @@ func (r *ReplicationSet) pollOnPrepare(
 		if r.Primary == captureID {
 			// Primary is stopped, but we may still has secondary.
 			// Clear primary and promote secondary when it's prepared.
-			log.Info("tpscheduler: primary is stopped during Prepare",
+			log.Info("schedulerv3: primary is stopped during Prepare",
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID),
 				zap.Any("replicationSet", r))
@@ -348,7 +348,7 @@ func (r *ReplicationSet) pollOnPrepare(
 			delete(r.Captures, captureID)
 			return nil, false, nil
 		} else if r.Secondary == captureID {
-			log.Info("tpscheduler: capture is stopped during Prepare",
+			log.Info("schedulerv3: capture is stopped during Prepare",
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID),
 				zap.Any("replicationSet", r))
@@ -366,7 +366,7 @@ func (r *ReplicationSet) pollOnPrepare(
 			return nil, true, nil
 		}
 	}
-	log.Warn("tpscheduler: ignore input, unexpected replication set state",
+	log.Warn("schedulerv3: ignore input, unexpected replication set state",
 		zap.Stringer("tableState", input),
 		zap.String("captureID", captureID),
 		zap.Any("replicationSet", r))
@@ -395,7 +395,7 @@ func (r *ReplicationSet) pollOnCommit(
 			// No primary, promote secondary to primary.
 			r.Primary = r.Secondary
 			r.Secondary = ""
-			log.Info("tpscheduler: replication state promote secondary, no primary",
+			log.Info("schedulerv3: replication state promote secondary, no primary",
 				zap.Any("replicationSet", r),
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID))
@@ -425,7 +425,7 @@ func (r *ReplicationSet) pollOnCommit(
 			r.Primary = ""
 			if r.Secondary == "" {
 				// If there is no secondary, transit to Absent.
-				log.Info("tpscheduler: primary is stopped during Commit",
+				log.Info("schedulerv3: primary is stopped during Commit",
 					zap.Stringer("tableState", input),
 					zap.String("captureID", captureID),
 					zap.Any("replicationSet", r))
@@ -435,7 +435,7 @@ func (r *ReplicationSet) pollOnCommit(
 			// Primary is stopped, promote secondary to primary.
 			r.Primary = r.Secondary
 			r.Secondary = ""
-			log.Info("tpscheduler: replication state promote secondary",
+			log.Info("schedulerv3: replication state promote secondary",
 				zap.Any("replicationSet", r),
 				zap.Stringer("tableState", input),
 				zap.String("original", original),
@@ -457,7 +457,7 @@ func (r *ReplicationSet) pollOnCommit(
 			// As it sends RemoveTableRequest to the original primary
 			// upon entering Commit state. Do not change state and wait
 			// the original primary reports its table.
-			log.Info("tpscheduler: secondary is stopped during Commit",
+			log.Info("schedulerv3: secondary is stopped during Commit",
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID),
 				zap.Any("replicationSet", r))
@@ -497,7 +497,7 @@ func (r *ReplicationSet) pollOnCommit(
 			return nil, true, nil
 		}
 		return nil, false, r.multiplePrimaryError(
-			input, captureID, "tpscheduler: multiple primary")
+			input, captureID, "schedulerv3: multiple primary")
 
 	case schedulepb.TableStateStopping:
 		if r.Primary == captureID && r.Secondary != "" {
@@ -506,7 +506,7 @@ func (r *ReplicationSet) pollOnCommit(
 		}
 	case schedulepb.TableStatePreparing:
 	}
-	log.Warn("tpscheduler: ignore input, unexpected replication set state",
+	log.Warn("schedulerv3: ignore input, unexpected replication set state",
 		zap.Stringer("tableState", input),
 		zap.String("captureID", captureID),
 		zap.Any("replicationSet", r))
@@ -523,7 +523,7 @@ func (r *ReplicationSet) pollOnReplicating(
 			return nil, false, nil
 		}
 		return nil, false, r.multiplePrimaryError(
-			input, captureID, "tpscheduler: multiple primary")
+			input, captureID, "schedulerv3: multiple primary")
 
 	case schedulepb.TableStateAbsent:
 	case schedulepb.TableStatePreparing:
@@ -535,7 +535,7 @@ func (r *ReplicationSet) pollOnReplicating(
 
 			// Primary is stopped, but we still has secondary.
 			// Clear primary and promote secondary when it's prepared.
-			log.Info("tpscheduler: primary is stopped during Replicating",
+			log.Info("schedulerv3: primary is stopped during Replicating",
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID),
 				zap.Any("replicationSet", r))
@@ -545,7 +545,7 @@ func (r *ReplicationSet) pollOnReplicating(
 			return nil, true, nil
 		}
 	}
-	log.Warn("tpscheduler: ignore input, unexpected replication set state",
+	log.Warn("schedulerv3: ignore input, unexpected replication set state",
 		zap.Stringer("tableState", input),
 		zap.String("captureID", captureID),
 		zap.Any("replicationSet", r))
@@ -575,7 +575,7 @@ func (r *ReplicationSet) pollOnRemoving(
 			r.Secondary = ""
 		}
 		delete(r.Captures, captureID)
-		log.Info("tpscheduler: replication state remove capture",
+		log.Info("schedulerv3: replication state remove capture",
 			zap.Any("replicationSet", r),
 			zap.Stringer("tableState", input),
 			zap.String("captureID", captureID))
@@ -583,7 +583,7 @@ func (r *ReplicationSet) pollOnRemoving(
 	case schedulepb.TableStateStopping:
 		return nil, false, nil
 	}
-	log.Warn("tpscheduler: ignore input, unexpected replication set state",
+	log.Warn("schedulerv3: ignore input, unexpected replication set state",
 		zap.Stringer("tableState", input),
 		zap.String("captureID", captureID),
 		zap.Any("replicationSet", r))
@@ -601,14 +601,14 @@ func (r *ReplicationSet) handleAddTable(
 ) ([]*schedulepb.Message, error) {
 	// Ignore add table if it's not in Absent state.
 	if r.State != ReplicationSetStateAbsent {
-		log.Warn("tpscheduler: add table is ignored",
+		log.Warn("schedulerv3: add table is ignored",
 			zap.Any("replicationSet", r), zap.Int64("tableID", r.TableID))
 		return nil, nil
 	}
 	oldState := r.State
 	r.State = ReplicationSetStateAbsent
 	r.Captures[captureID] = struct{}{}
-	log.Info("tpscheduler: replication state transition, add table",
+	log.Info("schedulerv3: replication state transition, add table",
 		zap.Any("replicationSet", r),
 		zap.Stringer("old", oldState), zap.Stringer("new", r.State))
 	status := schedulepb.TableStatus{
@@ -624,7 +624,7 @@ func (r *ReplicationSet) handleMoveTable(
 ) ([]*schedulepb.Message, error) {
 	// Ignore move table if it has been removed already.
 	if r.hasRemoved() {
-		log.Warn("tpscheduler: move table is ignored",
+		log.Warn("schedulerv3: move table is ignored",
 			zap.Any("replicationSet", r), zap.Int64("tableID", r.TableID))
 		return nil, nil
 	}
@@ -632,7 +632,7 @@ func (r *ReplicationSet) handleMoveTable(
 	// 1) it's not in Replicating state or
 	// 2) the dest capture is the primary.
 	if r.State != ReplicationSetStateReplicating || r.Primary == dest {
-		log.Warn("tpscheduler: move table is ignored",
+		log.Warn("schedulerv3: move table is ignored",
 			zap.Any("replicationSet", r), zap.Int64("tableID", r.TableID))
 		return nil, nil
 	}
@@ -640,7 +640,7 @@ func (r *ReplicationSet) handleMoveTable(
 	r.State = ReplicationSetStatePrepare
 	r.Secondary = dest
 	r.Captures[dest] = struct{}{}
-	log.Info("tpscheduler: replication state transition, move table",
+	log.Info("schedulerv3: replication state transition, move table",
 		zap.Any("replicationSet", r),
 		zap.Stringer("old", oldState), zap.Stringer("new", r.State))
 	status := schedulepb.TableStatus{
@@ -654,19 +654,19 @@ func (r *ReplicationSet) handleMoveTable(
 func (r *ReplicationSet) handleRemoveTable() ([]*schedulepb.Message, error) {
 	// Ignore remove table if it has been removed already.
 	if r.hasRemoved() {
-		log.Warn("tpscheduler: remove table is ignored",
+		log.Warn("schedulerv3: remove table is ignored",
 			zap.Any("replicationSet", r), zap.Int64("tableID", r.TableID))
 		return nil, nil
 	}
 	// Ignore remove table if it's not in Replicating state.
 	if r.State != ReplicationSetStateReplicating {
-		log.Warn("tpscheduler: remove table is ignored",
+		log.Warn("schedulerv3: remove table is ignored",
 			zap.Any("replicationSet", r), zap.Int64("tableID", r.TableID))
 		return nil, nil
 	}
 	oldState := r.State
 	r.State = ReplicationSetStateRemoving
-	log.Info("tpscheduler: replication state transition, remove table",
+	log.Info("schedulerv3: replication state transition, remove table",
 		zap.Any("replicationSet", r),
 		zap.Stringer("old", oldState), zap.Stringer("new", r.State))
 	status := schedulepb.TableStatus{

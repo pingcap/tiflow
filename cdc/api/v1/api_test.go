@@ -485,7 +485,8 @@ func TestDrainCapture(t *testing.T) {
 	respErr := model.HTTPError{}
 	err = json.NewDecoder(w.Body).Decode(&respErr)
 	require.Nil(t, err)
-	require.Contains(t, respErr.Error, "CDC:ErrSchedulerRequestFailed")
+	require.Contains(t, respErr.Code, "CDC:ErrSchedulerRequestFailed")
+	require.Contains(t, respErr.Error, "scheduler request failed")
 
 	statusProvider.ExpectedCalls = statusProvider.
 		ExpectedCalls[:len(statusProvider.ExpectedCalls)-1]
@@ -515,6 +516,7 @@ func TestDrainCapture(t *testing.T) {
 	respErr = model.HTTPError{}
 	err = json.NewDecoder(w.Body).Decode(&respErr)
 	require.NoError(t, err)
+	require.Contains(t, respErr.Code, "CDC:ErrCaptureNotExist")
 	require.Contains(t, respErr.Error, "capture not exists")
 
 	data = model.DrainCaptureRequest{CaptureID: "capture-for-test"}
@@ -530,6 +532,7 @@ func TestDrainCapture(t *testing.T) {
 	respErr = model.HTTPError{}
 	err = json.NewDecoder(w.Body).Decode(&respErr)
 	require.NoError(t, err)
+	require.Contains(t, respErr.Code, "CDC:ErrSchedulerRequestFailed")
 	require.Contains(t, respErr.Error, "cannot drain the owner")
 
 	data = model.DrainCaptureRequest{CaptureID: captureID}
@@ -537,6 +540,28 @@ func TestDrainCapture(t *testing.T) {
 	require.NoError(t, err)
 	body = bytes.NewReader(b)
 
+	request, err = http.NewRequestWithContext(context.Background(), api.method, api.url, body)
+	require.NoError(t, err)
+
+	owner.EXPECT().DrainCapture(gomock.Any(), gomock.Any()).
+		Do(func(query *scheduler.Query, done chan<- error) {
+			query.Resp = &model.DrainCaptureResp{
+				CurrentTableCount: 3,
+			}
+			done <- cerror.ErrSchedulerRequestFailed.
+				GenWithStack("not all captures initialized")
+			close(done)
+		})
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, request)
+	require.Equal(t, http.StatusServiceUnavailable, w.Code)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.NoError(t, err)
+	require.Contains(t, respErr.Code, "CDC:ErrSchedulerRequestFailed")
+	require.Contains(t, respErr.Error, "not all captures initialized")
+
+	body = bytes.NewReader(b)
 	request, err = http.NewRequestWithContext(context.Background(), api.method, api.url, body)
 	require.NoError(t, err)
 
