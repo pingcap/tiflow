@@ -26,7 +26,7 @@ type InfoProvider interface {
 	// GetTaskPositions returns the task positions.
 	//
 	// TODO: Remove the API, as capture no longer has local checkpoint ts and
-	//       local resolved ts in tpscheduler.
+	//       local resolved ts in scheduler v3.
 	GetTaskPositions() (map[model.CaptureID]*model.TaskPosition, error)
 
 	// GetTotalTableCounts returns the number of tables associated
