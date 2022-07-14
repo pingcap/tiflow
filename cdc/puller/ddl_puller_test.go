@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/codec"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/retry"
@@ -40,6 +41,10 @@ type mockPuller struct {
 	inCh       chan *model.RawKVEntry
 	outCh      chan *model.RawKVEntry
 	resolvedTs model.Ts
+}
+
+func (m *mockPuller) UnmarshalDDL(rawKV *model.RawKVEntry) (*timodel.Job, error) {
+	return entry.ParseJob(nil, rawKV, 0)
 }
 
 func newMockPuller(t *testing.T, startTs model.Ts) *mockPuller {
@@ -143,14 +148,14 @@ func TestPuller(t *testing.T) {
 		Type:       timodel.ActionCreateTable,
 		StartTS:    5,
 		State:      timodel.JobStateDone,
-		BinlogInfo: &timodel.HistoryInfo{FinishedTS: 18},
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 2, FinishedTS: 18},
 	})
 	mockPuller.appendDDL(&timodel.Job{
 		ID:         1,
 		Type:       timodel.ActionCreateTable,
 		StartTS:    5,
 		State:      timodel.JobStateDone,
-		BinlogInfo: &timodel.HistoryInfo{FinishedTS: 16},
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 1, FinishedTS: 16},
 	})
 	resolvedTs, ddl = p.FrontDDL()
 	require.Equal(t, resolvedTs, uint64(15))
@@ -177,14 +182,14 @@ func TestPuller(t *testing.T) {
 		Type:       timodel.ActionCreateTable,
 		StartTS:    20,
 		State:      timodel.JobStateDone,
-		BinlogInfo: &timodel.HistoryInfo{FinishedTS: 25},
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 4, FinishedTS: 25},
 	})
 	mockPuller.appendDDL(&timodel.Job{
 		ID:         3,
 		Type:       timodel.ActionCreateTable,
 		StartTS:    20,
 		State:      timodel.JobStateDone,
-		BinlogInfo: &timodel.HistoryInfo{FinishedTS: 25},
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 4, FinishedTS: 25},
 	})
 	mockPuller.appendResolvedTs(30)
 	waitResolvedTsGrowing(t, p, 25)
@@ -206,14 +211,14 @@ func TestPuller(t *testing.T) {
 		Type:       timodel.ActionLockTable,
 		StartTS:    20,
 		State:      timodel.JobStateDone,
-		BinlogInfo: &timodel.HistoryInfo{FinishedTS: 35},
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 5, FinishedTS: 35},
 	})
 	mockPuller.appendDDL(&timodel.Job{
 		ID:         5,
 		Type:       timodel.ActionCreateTable,
 		StartTS:    20,
 		State:      timodel.JobStateCancelled,
-		BinlogInfo: &timodel.HistoryInfo{FinishedTS: 36},
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 6, FinishedTS: 36},
 	})
 	mockPuller.appendResolvedTs(40)
 	waitResolvedTsGrowing(t, p, 40)

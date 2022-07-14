@@ -41,7 +41,6 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
-	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -740,7 +739,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	stdCtx := contextutil.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = contextutil.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
-	ddlPuller := puller.New(
+	ddlPuller, err := puller.NewDDLJobPuller(
 		stdCtx,
 		p.upstream.PDClient,
 		p.upstream.GrpcPool,
@@ -748,10 +747,12 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		p.upstream.KVStorage,
 		p.upstream.PDClock,
 		checkpointTs,
-		regionspan.GetAllDDLSpan(),
 		kvCfg,
 		ctx.ChangefeedVars().ID,
 	)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -784,7 +785,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 			if ddlRawKV.OpType == model.OpTypeResolved {
 				schemaStorage.AdvanceResolvedTs(ddlRawKV.CRTs)
 			}
-			job, err := entry.UnmarshalDDL(ddlRawKV)
+			job, err := ddlPuller.UnmarshalDDL(ddlRawKV)
 			if err != nil {
 				p.sendError(errors.Trace(err))
 				return

@@ -22,17 +22,24 @@ import (
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	tidbkv "github.com/pingcap/tidb/kv"
 	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/tikv/client-go/v2/tikv"
+	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -42,6 +49,84 @@ const (
 	// DDLPullerTableName is the fake table name for ddl puller
 	DDLPullerTableName = "DDL_PULLER"
 )
+
+// DDLJobPuller is used to pull ddl job from TiKV.
+type DDLJobPuller interface {
+	Puller
+
+	UnmarshalDDL(rawKV *model.RawKVEntry) (*timodel.Job, error)
+}
+
+type ddlJobPullerImp struct {
+	Puller
+
+	tableInfo *model.TableInfo
+	columnID  int64
+}
+
+func (p *ddlJobPullerImp) UnmarshalDDL(rawKV *model.RawKVEntry) (*timodel.Job, error) {
+	return entry.ParseJob(p.tableInfo, rawKV, p.columnID)
+}
+
+// NewDDLJobPuller create a new NewDDLJobPuller fetch event start from checkpointTs
+// and put into buf.
+func NewDDLJobPuller(
+	ctx context.Context,
+	pdCli pd.Client,
+	grpcPool kv.GrpcPool,
+	regionCache *tikv.RegionCache,
+	kvStorage tidbkv.Storage,
+	pdClock pdutil.Clock,
+	checkpointTs uint64,
+	cfg *config.KVClientConfig,
+	changefeed model.ChangeFeedID,
+) (DDLJobPuller, error) {
+	version, err := kvStorage.CurrentVersion(tidbkv.GlobalTxnScope)
+	if err != nil {
+		return nil, err
+	}
+	snap, err := kv.GetSnapshotMeta(kvStorage, version.Ver)
+	if err != nil {
+		return nil, err
+	}
+
+	dbInfos, err := snap.ListDatabases()
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrMetaListDatabases, err)
+	}
+	spans := make([]regionspan.Span, 0, 3)
+	var tblInfo *model.TableInfo
+	var colID int64
+	for _, db := range dbInfos {
+		if db.Name.L == mysql.SystemDB {
+			tables, err := snap.ListTables(db.ID)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrMetaListDatabases, err)
+			}
+			for _, t := range tables {
+				if t.Name.L == "tidb_ddl_job" {
+					tblInfo = model.WrapTableInfo(db.ID, db.Name.L, 0, t)
+					spans = append(spans, regionspan.GetTableSpan(t.ID))
+					for _, col := range tblInfo.Columns {
+						if col.Name.L == "job_meta" {
+							colID = col.ID
+						}
+					}
+					break
+				}
+			}
+			break
+		}
+	}
+
+	spans = append(spans, regionspan.GetAllDDLSpan()...)
+
+	return &ddlJobPullerImp{
+		Puller:    New(ctx, pdCli, grpcPool, regionCache, kvStorage, pdClock, checkpointTs, spans, cfg, changefeed),
+		tableInfo: tblInfo,
+		columnID:  colID,
+	}, nil
+}
 
 // DDLPuller is the interface for DDL Puller, used by owner only.
 type DDLPuller interface {
@@ -56,13 +141,14 @@ type DDLPuller interface {
 }
 
 type ddlPullerImpl struct {
-	puller Puller
+	puller DDLJobPuller
 	filter filter.Filter
 
 	mu             sync.Mutex
 	resolvedTS     uint64
 	pendingDDLJobs []*timodel.Job
 	lastDDLJobID   int64
+	schemaVersion  int64
 	cancel         context.CancelFunc
 
 	changefeedID model.ChangeFeedID
@@ -88,11 +174,12 @@ func NewDDLPuller(ctx context.Context,
 	// add "_ddl_puller" to make it different from table pullers.
 	changefeed.ID += "_ddl_puller"
 
-	var puller Puller
+	var puller DDLJobPuller
+	var schemaVersion int64
 	storage := up.KVStorage
 	// storage can be nil only in the test
 	if storage != nil {
-		puller = New(
+		puller, err = NewDDLJobPuller(
 			ctx,
 			up.PDClient,
 			up.GrpcPool,
@@ -100,19 +187,30 @@ func NewDDLPuller(ctx context.Context,
 			storage,
 			up.PDClock,
 			startTs,
-			regionspan.GetAllDDLSpan(),
 			config.GetGlobalServerConfig().KVClient,
 			changefeed,
 		)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		meta, err := kv.GetSnapshotMeta(storage, startTs)
+		if err != nil {
+			return nil, err
+		}
+		schemaVersion, err = meta.GetSchemaVersion()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &ddlPullerImpl{
-		puller:       puller,
-		resolvedTS:   startTs,
-		filter:       f,
-		cancel:       func() {},
-		clock:        clock.New(),
-		changefeedID: changefeed,
+		puller:        puller,
+		resolvedTS:    startTs,
+		filter:        f,
+		cancel:        func() {},
+		clock:         clock.New(),
+		changefeedID:  changefeed,
+		schemaVersion: schemaVersion,
 		metricDiscardedDDLCounter: discardedDDLCounter.
 			WithLabelValues(changefeed.Namespace, changefeed.ID),
 	}, nil
@@ -129,7 +227,7 @@ func (h *ddlPullerImpl) handleRawDDL(rawDDL *model.RawKVEntry) error {
 		}
 		return nil
 	}
-	job, err := entry.UnmarshalDDL(rawDDL)
+	job, err := h.puller.UnmarshalDDL(rawDDL)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -144,7 +242,7 @@ func (h *ddlPullerImpl) handleRawDDL(rawDDL *model.RawKVEntry) error {
 			zap.Int64("jobID", job.ID), zap.String("query", job.Query))
 		return nil
 	}
-	if job.ID == h.lastDDLJobID {
+	if job.ID == h.lastDDLJobID || job.BinlogInfo.SchemaVersion <= h.schemaVersion {
 		log.Warn("ignore duplicated DDL job",
 			zap.String("namespace", h.changefeedID.Namespace),
 			zap.String("changefeed", h.changefeedID.ID),
@@ -160,6 +258,7 @@ func (h *ddlPullerImpl) handleRawDDL(rawDDL *model.RawKVEntry) error {
 	defer h.mu.Unlock()
 	h.pendingDDLJobs = append(h.pendingDDLJobs, job)
 	h.lastDDLJobID = job.ID
+	h.schemaVersion = job.BinlogInfo.SchemaVersion
 	return nil
 }
 

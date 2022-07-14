@@ -52,10 +52,11 @@ type SchemaStorage interface {
 }
 
 type schemaStorageImpl struct {
-	snaps      []*schema.Snapshot
-	snapsMu    sync.RWMutex
-	gcTs       uint64
-	resolvedTs uint64
+	snaps         []*schema.Snapshot
+	snapsMu       sync.RWMutex
+	gcTs          uint64
+	resolvedTs    uint64
+	schemaVersion int64
 
 	filter         filter.Filter
 	forceReplicate bool
@@ -70,10 +71,15 @@ func NewSchemaStorage(
 ) (SchemaStorage, error) {
 	var snap *schema.Snapshot
 	var err error
+	var schemaVersion int64
 	if meta == nil {
 		snap = schema.NewEmptySnapshot(forceReplicate)
 	} else {
 		snap, err = schema.NewSnapshotFromMeta(meta, startTs, forceReplicate)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		schemaVersion, err = meta.GetSchemaVersion()
 	}
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -84,6 +90,7 @@ func NewSchemaStorage(
 		filter:         filter,
 		forceReplicate: forceReplicate,
 		id:             id,
+		schemaVersion:  schemaVersion,
 	}
 	return schema, nil
 }
@@ -152,6 +159,7 @@ func (s *schemaStorageImpl) GetLastSnapshot() *schema.Snapshot {
 // HandleDDLJob creates a new snapshot in storage and handles the ddl job
 func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 	if s.skipJob(job) {
+		atomic.StoreInt64(&s.schemaVersion, job.BinlogInfo.SchemaVersion)
 		s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
 		return nil
 	}
@@ -160,7 +168,7 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 	var snap *schema.Snapshot
 	if len(s.snaps) > 0 {
 		lastSnap := s.snaps[len(s.snaps)-1]
-		if job.BinlogInfo.FinishedTS <= lastSnap.CurrentTs() {
+		if job.BinlogInfo.FinishedTS <= lastSnap.CurrentTs() || job.BinlogInfo.SchemaVersion <= s.schemaVersion {
 			log.Info("ignore foregone DDL", zap.Int64("jobID", job.ID),
 				zap.String("DDL", job.Query),
 				zap.String("namespace", s.id.Namespace),
@@ -186,6 +194,7 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 		zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
 
 	s.snaps = append(s.snaps, snap)
+	atomic.StoreInt64(&s.schemaVersion, job.BinlogInfo.SchemaVersion)
 	s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
 	return nil
 }

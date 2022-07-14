@@ -236,29 +236,38 @@ func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawKey []b
 	}, nil
 }
 
-const (
-	ddlJobListKey         = "DDLJobList"
-	ddlAddIndexJobListKey = "DDLJobAddIdxList"
-)
+// ParseJob parses the job from the raw KV entry.
+func ParseJob(tblInfo *model.TableInfo, rawKV *model.RawKVEntry, id int64) (*timodel.Job, error) {
+	if rawKV.OpType != model.OpTypePut {
+		return nil, nil
+	}
 
-// UnmarshalDDL unmarshals the ddl job from RawKVEntry
-func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
-	if raw.OpType != model.OpTypePut || !bytes.HasPrefix(raw.Key, metaPrefix) {
-		return nil, nil
+	var v []byte
+	if bytes.HasPrefix(rawKV.Key, metaPrefix) {
+		// old queue base job.
+		v = rawKV.Value
+	} else {
+		recordID, err := tablecodec.DecodeRowKey(rawKV.Key)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if len(rawKV.Value) == 0 {
+			return nil, nil
+		}
+		row, err := decodeRow(rawKV.Value, recordID, tblInfo, time.UTC)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		datum := row[id]
+		v = datum.GetBytes()
 	}
-	meta, err := decodeMetaKey(raw.Key)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	if meta.getType() != ListData {
-		return nil, nil
-	}
-	k := meta.(metaListData)
-	if k.key != ddlJobListKey && k.key != ddlAddIndexJobListKey {
-		return nil, nil
-	}
+
+	return parseJob(v, rawKV.StartTs, rawKV.CRTs)
+}
+
+func parseJob(v []byte, startTs, CRTs uint64) (*timodel.Job, error) {
 	job := &timodel.Job{}
-	err = json.Unmarshal(raw.Value, job)
+	err := json.Unmarshal(v, job)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -268,8 +277,8 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	}
 	// FinishedTS is only set when the job is synced,
 	// but we can use the entry's ts here
-	job.StartTS = raw.StartTs
-	job.BinlogInfo.FinishedTS = raw.CRTs
+	job.StartTS = startTs
+	job.BinlogInfo.FinishedTS = CRTs
 	return job, nil
 }
 
