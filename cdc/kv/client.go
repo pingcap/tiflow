@@ -790,7 +790,7 @@ func (s *eventFeedSession) requestRegionToStore(
 			g.Go(func() error {
 				defer func() {
 					// TODO: add a random sleep, for test only
-					time.Sleep(time.Millisecond * time.Duration(rand.Intn(50)))
+					// time.Sleep(time.Millisecond * time.Duration(rand.Intn(50)))
 					s.deleteStream(rpcCtx.Addr)
 				}()
 				return s.receiveFromStream(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream.client, pendingRegions)
