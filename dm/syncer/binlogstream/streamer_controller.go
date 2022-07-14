@@ -462,7 +462,7 @@ LOOP:
 			default:
 				c.logger.DPanic("invalid error handle op", zap.Stringer("op", frontOp.op))
 			}
-		// when upstream event is later than any injected op. Apart from Inject,
+		// when upstream event is later than front op. Apart from Inject,
 		// This may happen when user use handle-error but forget to specify source,
 		// so all workers receive the handle-error command.
 		case 1:
