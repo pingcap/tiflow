@@ -481,7 +481,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			log.Info("run owner exited normally", zap.String("captureID", c.info.ID))
 		}
 		// if owner exits, resign the owner key
-		start := time.Now()
+		start = time.Now()
 		if resignErr := c.resign(ctx); resignErr != nil {
 			log.Info("owner resign failed",
 				zap.String("captureID", c.info.ID),
