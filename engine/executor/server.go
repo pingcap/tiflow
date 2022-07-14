@@ -124,8 +124,8 @@ func (s *Server) buildDeps() (*deps.Deps, error) {
 		return nil, err
 	}
 
-	err = deps.Provide(func() metaModel.KVClientEx {
-		return s.metastores.BusinessStore()
+	err = deps.Provide(func() metaModel.ClientConn {
+		return s.metastores.BusinessClientConn()
 	})
 	if err != nil {
 		return nil, err

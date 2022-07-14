@@ -87,7 +87,7 @@ func (m *moveTableScheduler) Schedule(
 		// table may not in the all current tables
 		// if it was removed after manual move table triggered.
 		if !allTables.contain(tableID) {
-			log.Warn("tpscheduler: move table ignored, since the table cannot found",
+			log.Warn("schedulerv3: move table ignored, since the table cannot found",
 				zap.Int64("tableID", tableID),
 				zap.String("captureID", task.moveTable.DestCapture))
 			delete(m.tasks, tableID)
@@ -97,14 +97,14 @@ func (m *moveTableScheduler) Schedule(
 		// the target capture may offline after manual move table triggered.
 		status, ok := captures[task.moveTable.DestCapture]
 		if !ok {
-			log.Info("tpscheduler: move table ignored, since the target capture cannot found",
+			log.Info("schedulerv3: move table ignored, since the target capture cannot found",
 				zap.Int64("tableID", tableID),
 				zap.String("captureID", task.moveTable.DestCapture))
 			delete(m.tasks, tableID)
 			continue
 		}
 		if status.State != CaptureStateInitialized {
-			log.Warn("tpscheduler: move table ignored,"+
+			log.Warn("schedulerv3: move table ignored,"+
 				"since the target capture is not initialized",
 				zap.Int64("tableID", tableID),
 				zap.String("captureID", task.moveTable.DestCapture),
@@ -115,7 +115,7 @@ func (m *moveTableScheduler) Schedule(
 
 		rep, ok := replications[tableID]
 		if !ok {
-			log.Warn("tpscheduler: move table ignored, "+
+			log.Warn("schedulerv3: move table ignored, "+
 				"since the table cannot found in the replication set",
 				zap.Int64("tableID", tableID),
 				zap.String("captureID", task.moveTable.DestCapture))
@@ -124,7 +124,7 @@ func (m *moveTableScheduler) Schedule(
 		}
 		// only move replicating table.
 		if rep.State != ReplicationSetStateReplicating {
-			log.Info("tpscheduler: move table ignored, since the table is not replicating now",
+			log.Info("schedulerv3: move table ignored, since the table is not replicating now",
 				zap.Int64("tableID", tableID),
 				zap.String("captureID", task.moveTable.DestCapture),
 				zap.Any("replicationState", rep.State))

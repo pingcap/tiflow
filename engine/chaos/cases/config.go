@@ -23,7 +23,7 @@ type config struct {
 	*flag.FlagSet `toml:"-" yaml:"-" json:"-"`
 
 	MasterAddr string `toml:"master-addr" yaml:"master-addr" json:"master-addr"`
-	// reuse user metastore currently
+	// reuse business metastore currently
 	EtcdAddr string        `toml:"etcd-addr" yaml:"etcd-addr" json:"etcd-addr"`
 	Duration time.Duration `toml:"duration" yaml:"duration" json:"duration"`
 

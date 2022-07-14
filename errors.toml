@@ -1506,6 +1506,11 @@ error = '''
 peer message client is not found for worker: worker ID %s
 '''
 
+["DFLOW:ErrMetaClientTypeNotSupport"]
+error = '''
+meta client type not support:%d
+'''
+
 ["DFLOW:ErrMetaCommittedTxn"]
 error = '''
 meta already committed txn

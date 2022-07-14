@@ -98,7 +98,7 @@ func (o *jobCreateOptions) run(ctx context.Context, cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	log.L().Info("create job successfully", zap.Any("resp", resp))
+	log.Info("create job successfully", zap.Any("resp", resp))
 	return nil
 }
 

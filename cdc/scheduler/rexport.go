@@ -87,8 +87,8 @@ func NewScheduler(
 		ctx, changeFeedID, checkpointTs, messageServer, messageRouter, ownerRevision)
 }
 
-// NewTpAgent returns two-phase agent.
-func NewTpAgent(
+// NewAgentV3 returns two-phase agent.
+func NewAgentV3(
 	ctx context.Context,
 	captureID model.CaptureID,
 	messageServer *p2p.MessageServer,
@@ -101,8 +101,8 @@ func NewTpAgent(
 		ctx, captureID, changefeedID, messageServer, messageRouter, etcdClient, executor)
 }
 
-// NewTpScheduler returns two-phase scheduler.
-func NewTpScheduler(
+// NewSchedulerV3 returns two-phase scheduler.
+func NewSchedulerV3(
 	ctx context.Context,
 	captureID model.CaptureID,
 	changeFeedID model.ChangeFeedID,
