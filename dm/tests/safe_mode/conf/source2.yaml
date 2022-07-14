@@ -10,4 +10,4 @@ from:
   password: /Q7B9DizNLLTTfiZHv9WoEAKamfpIUs=
   port: 3307
 checker:
-  check-enable: true
+  check-enable: false
