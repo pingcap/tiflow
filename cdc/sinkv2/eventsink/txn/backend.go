@@ -14,16 +14,12 @@
 package txn
 
 import (
-	"github.com/prometheus/client_golang/prometheus"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
+	"github.com/pingcap/tiflow/pkg/notify"
 )
 
-var (
-	// BucketSizeCounter is the counter of bucket size.
-	BucketSizeCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "ticdc",
-			Subsystem: "sink",
-			Name:      "bucket_size",
-			Help:      "size of the DML bucket",
-		}, []string{"namespace", "changefeed", "bucket"})
-)
+type backend interface {
+	onTxnEvent(*eventsink.TxnCallbackableEvent) error
+	onNotify() error
+	notifier() *notify.Receiver
+}
