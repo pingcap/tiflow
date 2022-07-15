@@ -19,16 +19,23 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 )
 
-// Producer is the interface for message producer.
-type Producer interface {
-	// AsyncSendMessage sends a message asynchronously.
-	AsyncSendMessage(
-		ctx context.Context, topic string, partition int32, message *codec.MQMessage,
-	) error
+var _ Producer = (*mockProducer)(nil)
 
-	// Close closes the producer and client(s).
-	Close() error
+type mockProducer struct{}
+
+// NewMockProducer creates a mock producer.
+func NewMockProducer() Producer {
+	return &mockProducer{}
 }
 
-// NewProducerFunc is a function to create a producer.
-type NewProducerFunc func() Producer
+func (m *mockProducer) AsyncSendMessage(ctx context.Context, topic string,
+	partition int32, message *codec.MQMessage,
+) error {
+	// TODO implement me
+	panic("implement me")
+}
+
+func (m *mockProducer) Close() error {
+	// TODO implement me
+	panic("implement me")
+}

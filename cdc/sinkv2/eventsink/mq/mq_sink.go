@@ -32,6 +32,9 @@ import (
 	"go.uber.org/zap"
 )
 
+// newProducerImpl specifies the build method for the producer.
+var newProducerImpl producer.NewProducerFunc = producer.NewMockProducer
+
 // Assert EventSink[E event.TableEvent] implementation
 var _ eventsink.EventSink[*model.RowChangedEvent] = (*sink)(nil)
 
@@ -56,7 +59,6 @@ type sink struct {
 	encoderBuilder codec.EncoderBuilder
 }
 
-//nolint:deadcode
 func newSink(ctx context.Context,
 	producer producer.Producer,
 	topicManager manager.TopicManager,
