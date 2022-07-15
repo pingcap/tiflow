@@ -20,7 +20,9 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/unit"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 func (s *Syncer) enableSafeModeByTaskCliArgs(tctx *tcontext.Context) {
@@ -30,6 +32,17 @@ func (s *Syncer) enableSafeModeByTaskCliArgs(tctx *tcontext.Context) {
 }
 
 func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
+	var err error
+	defer func() {
+		if err != nil {
+			// send error to the fatal chan to interrupt the process
+			s.runFatalChan <- unit.NewProcessError(err)
+		}
+		if !s.safeMode.Enable() {
+			s.tctx.L().Warn("enable safe-mode failed")
+		}
+	}()
+
 	s.safeMode.Reset(tctx) // in initialization phase, reset first
 
 	// cliArgs has higher priority than config
@@ -43,10 +56,14 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 		s.safeMode.Add(tctx, 1) // add 1 but has no corresponding -1, so keeps enabled
 		s.tctx.L().Info("enable safe-mode by config")
 	}
-	if s.checkpoint.SafeModeExitPoint() != nil {
-		//nolint:errcheck
-		s.safeMode.Add(tctx, 1) // enable and will revert after pass SafeModeExitLoc
-		s.tctx.L().Info("enable safe-mode for safe mode exit point, will exit at", zap.Stringer("location", *s.checkpoint.SafeModeExitPoint()))
+	if exitPoint := s.checkpoint.SafeModeExitPoint(); exitPoint != nil {
+		if binlog.CompareLocation(*exitPoint, s.getInitExecutedLoc(), s.cfg.EnableGTID) > 0 {
+			//nolint:errcheck
+			s.safeMode.Add(tctx, 1) // enable and will revert after pass SafeModeExitLoc
+			s.tctx.L().Info("enable safe-mode for safe mode exit point, will exit at", zap.Stringer("location", *exitPoint))
+		} else {
+			s.tctx.L().Info("disable safe-mode because initExecutedLoc equal safeModeExitPoint")
+		}
 	} else {
 		initPhaseSeconds := s.cfg.SafeModeDuration
 
@@ -56,7 +73,6 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 			s.tctx.L().Info("set initPhaseSeconds", zap.String("failpoint", "SafeModeInitPhaseSeconds"), zap.String("value", seconds))
 		})
 		var duration time.Duration
-		var err error
 		if initPhaseSeconds == "" {
 			duration = time.Second * time.Duration(2*s.cfg.CheckpointFlushInterval)
 		} else {
@@ -95,5 +111,9 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 			case <-time.After(duration):
 			}
 		}()
+	}
+	fresh, err := s.IsFreshTask(s.runCtx.Ctx)
+	if err == nil && !fresh && s.safeMode.Enable() {
+		err = terror.ErrSyncerReprocessWithSafeModeFail.Generate()
 	}
 }
