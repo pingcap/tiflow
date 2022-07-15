@@ -335,7 +335,7 @@ func (e EventFilterRule) ToInternalEventFilterRule() *config.EventFilterRule {
 	return res
 }
 
-// ToInternalEventFilterRule converts *config.EventFilterRule to EventFilterRule
+// ToAPIEventFilterRule converts *config.EventFilterRule to API EventFilterRule
 func ToAPIEventFilterRule(er *config.EventFilterRule) EventFilterRule {
 	res := EventFilterRule{
 		Matcher:                  er.Matcher,

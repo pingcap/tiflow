@@ -72,6 +72,7 @@ var changefeedNotRetryErrors = []*errors.Error{
 	ErrExpressionColumnNotFound, ErrExpressionParseFailed,
 }
 
+// ChangefeedNotRetryError returns true if a error is a changefeed not retry error.
 func ChangefeedNotRetryError(err error) bool {
 	for _, e := range changefeedNotRetryErrors {
 		if e.Equal(err) {
