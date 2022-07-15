@@ -504,7 +504,7 @@ func (c *captureImpl) runEtcdWorker(
 	timerInterval time.Duration,
 	role string,
 ) error {
-	etcdWorker, err := orchestrator.NewEtcdWorker(ctx.GlobalVars().EtcdClient,
+	etcdWorker, err := orchestrator.NewEtcdWorker(c.EtcdClient,
 		etcd.BaseKey(c.EtcdClient.ClusterID), reactor, reactorState, c.migrator)
 	if err != nil {
 		return errors.Trace(err)
@@ -521,7 +521,7 @@ func (c *captureImpl) runEtcdWorker(
 			log.Warn("session is disconnected", zap.Error(err))
 			return cerror.ErrCaptureSuicide.GenWithStackByArgs()
 		}
-		lease, inErr := ctx.GlobalVars().EtcdClient.Client.TimeToLive(ctx, c.session.Lease())
+		lease, inErr := c.EtcdClient.Client.TimeToLive(ctx, c.session.Lease())
 		if inErr != nil {
 			return cerror.WrapError(cerror.ErrPDEtcdAPIError, inErr)
 		}
