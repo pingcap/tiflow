@@ -50,6 +50,16 @@ func (s *gcServiceSuite) TestCheckSafetyOfStartTs(c *check.C) {
 		"service3":                   70,
 		"ticdc-creating-changefeed2": 65,
 	})
+	err = UndoEnsureChangefeedStartTsSafety(ctx, pdCli,
+		"ticdc-creating-",
+		model.DefaultChangeFeedID("changefeed2"))
+	require.Nil(t, err)
+	require.Equal(t, pdCli.serviceSafePoint, map[string]uint64{
+		"service1":                           60,
+		"service2":                           80,
+		"service3":                           70,
+		"ticdc-creating-default_changefeed2": math.MaxUint64,
+	})
 
 	s.pdCli.enableLeaderSwitch = true
 
