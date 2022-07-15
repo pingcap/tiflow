@@ -381,6 +381,8 @@ github.com/go-logr/logr v0.1.0/go.mod h1:ixOQHD9gLJUVQQ2ZOR7zLEifBX6tGkNJF4QyIY7
 github.com/go-martini/martini v0.0.0-20170121215854-22fa46961aab/go.mod h1:/P9AEU963A2AYjv4d1V5eVL1CQbEJq6aCNHDDjibzu8=
 github.com/go-mysql-org/go-mysql v1.4.1-0.20220221114137-89145541e0d4 h1:6AopLIKxyLXWY8PRxIq0q33BedlkNNcJfgJSBZh6Bks=
 github.com/go-mysql-org/go-mysql v1.4.1-0.20220221114137-89145541e0d4/go.mod h1:TRs381neMzw+J5+bobjUY2ZsIMgvp4wBCRBW274gc68=
+github.com/go-mysql-org/go-mysql v1.6.1-0.20220715034203-e28aed33dd06 h1:3ptXjT693J/9fMz6EsquJUFsPjeVte9HO0RZ5GOJDrQ=
+github.com/go-mysql-org/go-mysql v1.6.1-0.20220715034203-e28aed33dd06/go.mod h1:GX0clmylJLdZEYAojPCDTCvwZxbTBrke93dV55715u0=
 github.com/go-ole/go-ole v1.2.4/go.mod h1:XCwSNxSkXRo4vlyPy93sltvi/qJq0jqQhjqQNIwKuxM=
 github.com/go-ole/go-ole v1.2.6 h1:/Fpf6oFPoeFik9ty7siob0G6Ke8QvQEuVcuChpwXzpY=
 github.com/go-ole/go-ole v1.2.6/go.mod h1:pprOEPIfldk/42T2oK7lQ4v4JSDwmV0As9GaiUsvbm0=
