@@ -24,6 +24,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -227,6 +228,12 @@ func TestCheckMultipleCDCClusterExist(t *testing.T) {
 		"/test-key"
 	_, err = rawEtcdClient.Put(ctx, newClusterKey, "test-value")
 	require.NoError(t, err)
+
+	for _, reserved := range config.ReservedClusterIDs {
+		newClusterKey = "/tidb/cdc/" + reserved
+		_, err = rawEtcdClient.Put(ctx, newClusterKey, "test-value")
+		require.NoError(t, err)
+	}
 
 	err = s.client.CheckMultipleCDCClusterExist(ctx)
 	require.Error(t, err)
