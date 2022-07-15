@@ -58,8 +58,8 @@ type sink struct {
 
 //nolint:deadcode
 func newSink(ctx context.Context,
-	topicManager manager.TopicManager,
 	producer producer.Producer,
+	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
 	encoderConfig *codec.Config,
 	errCh chan error,
@@ -73,7 +73,7 @@ func newSink(ctx context.Context,
 	}
 	encoder := encoderBuilder.Build()
 
-	w := newWorker(encoder, producer)
+	w := newWorker(changefeedID, encoder, producer)
 
 	s := &sink{
 		id:             changefeedID,
@@ -84,6 +84,8 @@ func newSink(ctx context.Context,
 		topicManager:   topicManager,
 		encoderBuilder: encoderBuilder,
 	}
+
+	// Spawn a goroutine to send messages by the worker.
 	go func() {
 		if err := s.worker.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
 			select {
@@ -103,6 +105,7 @@ func newSink(ctx context.Context,
 }
 
 // WriteEvents writes events to the sink.
+// This is an asynchronously and thread-safe method.
 func (s *sink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) error {
 	for _, row := range rows {
 		topic := s.eventRouter.GetTopicForRowChange(row.Event)
@@ -111,6 +114,7 @@ func (s *sink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) error 
 			return errors.Trace(err)
 		}
 		partition := s.eventRouter.GetPartitionForRowChange(row.Event, partitionNum)
+		// This never be blocked.
 		s.worker.msgChan.In() <- mqEvent{
 			key: mqv1.TopicPartitionKey{
 				Topic: topic, Partition: partition,

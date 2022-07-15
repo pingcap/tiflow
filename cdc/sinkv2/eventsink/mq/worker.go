@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
@@ -28,7 +29,7 @@ import (
 )
 
 // mqEvent is the event of the mq worker.
-// It carries the partition information of the message.
+// It carries the topic and partition information of the message.
 type mqEvent struct {
 	key mqv1.TopicPartitionKey
 	row *eventsink.RowChangeCallbackableEvent
@@ -36,23 +37,29 @@ type mqEvent struct {
 
 // worker will send messages to the Kafka producer on a batch basis.
 type worker struct {
+	// changeFeedID indicates this sink belongs to which processor(changefeed).
+	changeFeedID model.ChangeFeedID
 	// msgChan caches the messages to be sent.
+	// It is an unbounded channel.
 	msgChan *chann.Chann[mqEvent]
-	ticker  *time.Ticker
-
-	encoder  codec.EventBatchEncoder
+	// ticker used to force flush the messages when the interval is reached.
+	ticker *time.Ticker
+	// encoder is used to encode the messages.
+	encoder codec.EventBatchEncoder
+	// producer is used to send the messages to the Kafka/Pulsar broker.
 	producer producer.Producer
 }
 
 // newWorker creates a new flush worker.
-func newWorker(encoder codec.EventBatchEncoder,
+func newWorker(id model.ChangeFeedID, encoder codec.EventBatchEncoder,
 	producer producer.Producer,
 ) *worker {
 	w := &worker{
-		msgChan:  chann.New[mqEvent](),
-		ticker:   time.NewTicker(mqv1.FlushInterval),
-		encoder:  encoder,
-		producer: producer,
+		changeFeedID: id,
+		msgChan:      chann.New[mqEvent](),
+		ticker:       time.NewTicker(mqv1.FlushInterval),
+		encoder:      encoder,
+		producer:     producer,
 	}
 
 	return w
@@ -63,20 +70,25 @@ func newWorker(encoder codec.EventBatchEncoder,
 func (w *worker) run(ctx context.Context) (retErr error) {
 	defer func() {
 		w.ticker.Stop()
-		// TODO: log changefeed ID here
-		log.Info("flushWorker exited", zap.Error(retErr))
+		log.Info("flushWorker exited", zap.Error(retErr),
+			zap.String("namespace", w.changeFeedID.Namespace),
+			zap.String("changefeed", w.changeFeedID.ID))
 	}()
+	// Fixed size of the batch.
 	eventsBuf := make([]mqEvent, mqv1.FlushBatchSize)
 	for {
 		endIndex, err := w.batch(ctx, eventsBuf)
 		if err != nil {
 			return errors.Trace(err)
 		}
+
 		if endIndex == 0 {
 			continue
 		}
+
 		msgs := eventsBuf[:endIndex]
 		partitionedRows := w.group(msgs)
+
 		err = w.asyncSend(ctx, partitionedRows)
 		if err != nil {
 			return errors.Trace(err)
