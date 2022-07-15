@@ -84,10 +84,10 @@ func TestChunkQueue(t *testing.T) {
 	err := q.PushBack(10)
 	require.NoError(t, err)
 	require.Equal(t, q.Size(), 1)
-	v, ok := q.At(0)
-	require.Equal(t, v, 10)
+	ptr, ok := q.At(0)
+	require.Equal(t, *ptr, 10)
 	require.True(t, ok)
-	v, err = q.PopFront()
+	v, err := q.PopFront()
 	require.Equal(t, v, 10)
 	require.NoError(t, err)
 
@@ -107,8 +107,8 @@ func TestChunkQueue(t *testing.T) {
 
 	for i := 0; i < 1000; i++ {
 		x := rand.Intn(testCaseSize - 100)
-		v, ok := q.At(x)
-		require.Equal(t, x+100, v)
+		ptr, ok = q.At(x)
+		require.Equal(t, x+100, *ptr)
 		require.True(t, ok)
 	}
 
@@ -119,14 +119,14 @@ func TestChunkQueue(t *testing.T) {
 	}
 
 	require.Equal(t, 0, q.Size())
-	v, err = q.PopFront()
+	_, err = q.PopFront()
 	require.Error(t, err)
 
 	v2 := []int{1, 2, 3, 4, 5}
 	err = q.PushBackMany(v2...)
 	require.NoError(t, err)
 
-	vals, err = q.PopFrontMany(len(v2) + 1)
+	_, err = q.PopFrontMany(len(v2) + 1)
 	require.Error(t, err)
 
 	vals, err = q.PopFrontMany(len(v2))

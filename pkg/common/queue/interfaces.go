@@ -15,6 +15,7 @@ package queue
 
 import "github.com/pingcap/tiflow/pkg/common/iterator"
 
+// ChunkQueueInterface defines the interface of ChunkQueue
 type ChunkQueueInterface[T any] interface {
 	iterator.Iterator[T]
 
@@ -24,14 +25,18 @@ type ChunkQueueInterface[T any] interface {
 	Empty() bool
 
 	// Getters
-	At(idx int) *T
+	At(idx int) (*T, bool)
 	Front() iterator.Iterator[T]
 	Back() iterator.Iterator[T]
 
 	// Operations
-	Enqueue(v T)
-	Dequeue() T
+	Enqueue(v T) error
+	Dequeue() (T, error)
+	EnqueueMany(vals ...T) error
+	DequeueMany(n int) ([]T, error)
 
-	EnqueueMany(val ...T)
-	DequeueMany(n int) []T
+	PushBack(v T) error
+	PopFront() (T, error)
+	PushBackMany(vals ...T) error
+	PopFrontMany(n int) ([]T, error)
 }

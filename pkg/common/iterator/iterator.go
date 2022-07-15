@@ -13,11 +13,12 @@
 
 package iterator
 
+// Iterator is the interface of common iterable containers
 type Iterator[T any] interface {
 	Prev() Iterator[T]
 	Next() Iterator[T]
 	IsEnd() bool
-	Value() *T
+	Value() (*T, bool)
 }
 
 // TODO: define this interface properly
