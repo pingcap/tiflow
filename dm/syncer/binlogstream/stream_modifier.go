@@ -104,7 +104,7 @@ func (m *streamModifier) Set(req *pb.HandleWorkerErrorRequest, events []*replica
 		return terror.ErrSyncerEvent.Generatef("invalid error op: %s", req.Op.String())
 	}
 
-	pos, err := binlog.PositionFromStr(req.BinlogPos)
+	pos, err := binlog.PositionFromPosStr(req.BinlogPos)
 	if err != nil {
 		return err
 	}
@@ -114,6 +114,9 @@ func (m *streamModifier) Set(req *pb.HandleWorkerErrorRequest, events []*replica
 
 	if toInsertIndex == len(m.ops) {
 		m.ops = append(m.ops, toInject)
+		m.logger.Info("set a new operator",
+			zap.Stringer("position", pos),
+			zap.Stringer("new operator", toInject))
 		return nil
 	}
 
@@ -140,7 +143,7 @@ func (m *streamModifier) Set(req *pb.HandleWorkerErrorRequest, events []*replica
 
 // Delete will delete an operator. `posStr` should be in the format of "binlog-file:pos".
 func (m *streamModifier) Delete(posStr string) error {
-	pos, err := binlog.PositionFromStr(posStr)
+	pos, err := binlog.PositionFromPosStr(posStr)
 	if err != nil {
 		return err
 	}
@@ -169,7 +172,7 @@ func (m *streamModifier) ListEqualAndAfter(posStr string) []*pb.HandleWorkerErro
 	if posStr == "" {
 		matchedOps = m.ops
 	} else {
-		pos, err := binlog.PositionFromStr(posStr)
+		pos, err := binlog.PositionFromPosStr(posStr)
 		if err != nil {
 			m.logger.DPanic("invalid position, should be verified in caller",
 				zap.String("position", posStr))
@@ -216,6 +219,30 @@ func (m *streamModifier) front() *operator {
 func (m *streamModifier) next() {
 	m.nextOp++
 	m.nextEventInOp = 0
+}
+
+type getEventFromFrontOpStatus int
+
+const (
+	normal getEventFromFrontOpStatus = iota
+	lastEvent
+	eventsExhausted
+)
+
+// getEventFromFrontOp returns (next event in front op, status). Caller should
+// make sure front op is valid.
+func (m *streamModifier) getEventFromFrontOp() (*replication.BinlogEvent, getEventFromFrontOpStatus) {
+	events := m.front().events
+	if m.nextEventInOp >= len(events) {
+		return nil, eventsExhausted
+	}
+	op := normal
+	if m.nextEventInOp == len(events)-1 {
+		op = lastEvent
+	}
+	event := events[m.nextEventInOp]
+	m.nextEventInOp++
+	return event, op
 }
 
 // minIdxLargerOrEqual return an index of m.ops where m.ops[index:] are all equal
