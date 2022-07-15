@@ -21,7 +21,7 @@ import (
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 )
 
 // TaskStage represents internal stage of a task
@@ -85,7 +85,7 @@ type JobStore struct {
 }
 
 // NewJobStore creates a new JobStore instance
-func NewJobStore(id frameModel.MasterID, kvClient metaclient.KVClient) *JobStore {
+func NewJobStore(id frameModel.MasterID, kvClient metaModel.KVClient) *JobStore {
 	jobStore := &JobStore{
 		TomlStore: NewTomlStore(kvClient),
 		id:        id,

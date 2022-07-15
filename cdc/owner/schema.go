@@ -185,12 +185,12 @@ func (s *schemaWrap4Owner) parseRenameTables(
 
 // BuildDDLEvents builds ddl events from a DDL job.
 // The result contains more than one DDLEvent for a rename tables job.
+// Note: If BuildDDLEvents return (nil, nil), it means the DDL Job should be ignored.
 func (s *schemaWrap4Owner) BuildDDLEvents(
 	job *timodel.Job,
 ) ([]*model.DDLEvent, error) {
 	var preTableInfo *model.TableInfo
 	var err error
-
 	ddlEvents := make([]*model.DDLEvent, 0)
 	switch job.Type {
 	case timodel.ActionRenameTables:
@@ -213,8 +213,23 @@ func (s *schemaWrap4Owner) BuildDDLEvents(
 		event.FromJob(job, preTableInfo)
 		ddlEvents = append(ddlEvents, event)
 	}
-
-	return ddlEvents, nil
+	// filter out ddl here
+	res := make([]*model.DDLEvent, 0, len(ddlEvents))
+	for _, event := range ddlEvents {
+		if s.filter.ShouldIgnoreDDLEvent(event) {
+			log.Info(
+				"DDL event ignored",
+				zap.String("query", event.Query),
+				zap.Uint64("startTs", event.StartTs),
+				zap.Uint64("commitTs", event.CommitTs),
+				zap.String("namespace", s.id.Namespace),
+				zap.String("changefeed", s.id.ID),
+			)
+			continue
+		}
+		res = append(res, event)
+	}
+	return res, nil
 }
 
 func (s *schemaWrap4Owner) shouldIgnoreTable(t *model.TableInfo) bool {

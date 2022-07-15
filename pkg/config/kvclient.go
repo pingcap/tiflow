@@ -13,7 +13,7 @@
 
 package config
 
-import cerror "github.com/pingcap/tiflow/pkg/errors"
+import "github.com/pingcap/tiflow/pkg/errors"
 
 // KVClientConfig represents config for kv client
 type KVClientConfig struct {
@@ -30,15 +30,15 @@ type KVClientConfig struct {
 // ValidateAndAdjust validates and adjusts the kv client configuration
 func (c *KVClientConfig) ValidateAndAdjust() error {
 	if c.WorkerConcurrent <= 0 {
-		return cerror.ErrInvalidServerOption.GenWithStackByArgs(
+		return errors.ErrInvalidServerOption.GenWithStackByArgs(
 			"region-scan-limit should be at least 1")
 	}
 	if c.RegionScanLimit <= 0 {
-		return cerror.ErrInvalidServerOption.GenWithStackByArgs(
+		return errors.ErrInvalidServerOption.GenWithStackByArgs(
 			"region-scan-limit should be at least 1")
 	}
 	if c.RegionRetryDuration <= 0 {
-		return cerror.ErrInvalidServerOption.GenWithStackByArgs(
+		return errors.ErrInvalidServerOption.GenWithStackByArgs(
 			"region-scan-limit should be positive")
 	}
 	return nil

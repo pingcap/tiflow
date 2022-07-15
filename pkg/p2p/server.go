@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -32,7 +33,6 @@ import (
 	gRPCPeer "google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/workerpool"
 	"github.com/pingcap/tiflow/proto/p2p"
 )

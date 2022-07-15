@@ -13,7 +13,7 @@ target-database:
 mysql-instances:
   - source-id: "mysql-replica-01"
     block-allow-list:  "instance"
-    continuous-validator-config-name: global
+    validator-config-name: global
 
 block-allow-list:
   instance:

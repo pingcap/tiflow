@@ -19,14 +19,11 @@ import (
 	"strings"
 
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/filter"
-	"github.com/pingcap/tiflow/pkg/util"
 )
 
 // Sink is an abstraction for anything that a changefeed may emit into.
@@ -96,7 +93,6 @@ type sinkInitFunc func(
 	context.Context,
 	model.ChangeFeedID,
 	*url.URL,
-	*filter.Filter,
 	*config.ReplicaConfig,
 	chan error,
 ) (Sink, error)
@@ -105,7 +101,7 @@ func init() {
 	// register blackhole sink
 	sinkIniterMap["blackhole"] = func(
 		ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
-		filter *filter.Filter, config *config.ReplicaConfig,
+		config *config.ReplicaConfig,
 		errCh chan error,
 	) (Sink, error) {
 		return newBlackHoleSink(ctx), nil
@@ -113,11 +109,10 @@ func init() {
 
 	// register mysql sink
 	sinkIniterMap["mysql"] = func(
-		ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
-		filter *filter.Filter, config *config.ReplicaConfig,
+		ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL, config *config.ReplicaConfig,
 		errCh chan error,
 	) (Sink, error) {
-		return mysql.NewMySQLSink(ctx, changefeedID, sinkURI, filter, config)
+		return mysql.NewMySQLSink(ctx, changefeedID, sinkURI, config)
 	}
 	sinkIniterMap["tidb"] = sinkIniterMap["mysql"]
 	sinkIniterMap["mysql+ssl"] = sinkIniterMap["mysql"]
@@ -126,27 +121,27 @@ func init() {
 	// register kafka sink
 	sinkIniterMap["kafka"] = func(
 		ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
-		filter *filter.Filter, config *config.ReplicaConfig,
+		config *config.ReplicaConfig,
 		errCh chan error,
 	) (Sink, error) {
-		return mq.NewKafkaSaramaSink(ctx, sinkURI, filter, config, errCh)
+		return mq.NewKafkaSaramaSink(ctx, sinkURI, config, errCh)
 	}
 	sinkIniterMap["kafka+ssl"] = sinkIniterMap["kafka"]
 
 	// register pulsar sink
 	sinkIniterMap["pulsar"] = func(
 		ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
-		filter *filter.Filter, config *config.ReplicaConfig,
+		config *config.ReplicaConfig,
 		errCh chan error,
 	) (Sink, error) {
-		return mq.NewPulsarSink(ctx, sinkURI, filter, config, errCh)
+		return mq.NewPulsarSink(ctx, sinkURI, config, errCh)
 	}
 	sinkIniterMap["pulsar+ssl"] = sinkIniterMap["pulsar"]
 
 	failpoint.Inject("SimpleMySQLSinkTester", func() {
 		sinkIniterMap["simple-mysql"] = func(
 			ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
-			filter *filter.Filter, config *config.ReplicaConfig,
+			config *config.ReplicaConfig,
 			errCh chan error,
 		) (Sink, error) {
 			return mysql.NewSimpleMySQLSink(ctx, sinkURI, config)
@@ -157,7 +152,7 @@ func init() {
 // New creates a new sink with the sink-uri
 func New(
 	ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr string,
-	filter *filter.Filter, config *config.ReplicaConfig,
+	config *config.ReplicaConfig,
 	errCh chan error,
 ) (Sink, error) {
 	// parse sinkURI as a URI
@@ -165,40 +160,11 @@ func New(
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 	}
+	if err := config.ValidateAndAdjust(sinkURI); err != nil {
+		return nil, err
+	}
 	if newSink, ok := sinkIniterMap[strings.ToLower(sinkURI.Scheme)]; ok {
-		return newSink(ctx, changefeedID, sinkURI, filter, config, errCh)
+		return newSink(ctx, changefeedID, sinkURI, config, errCh)
 	}
 	return nil, cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", sinkURI.Scheme)
-}
-
-// Validate sink if given valid parameters.
-func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig) error {
-	sinkFilter, err := filter.NewFilter(cfg)
-	if err != nil {
-		return err
-	}
-	errCh := make(chan error)
-	// TODO: find a better way to verify a sinkURI is valid
-	ctx, cancel := context.WithCancel(contextutil.PutRoleInCtx(ctx, util.RoleClient))
-	s, err := New(ctx, model.DefaultChangeFeedID("sink-verify"),
-		sinkURI, sinkFilter, cfg, errCh)
-	if err != nil {
-		cancel()
-		return err
-	}
-	// NOTICE: We have to cancel the context before we close it,
-	// otherwise we will write data to closed chan after sink closed.
-	cancel()
-	err = s.Close(ctx)
-	if err != nil {
-		return err
-	}
-	select {
-	case err = <-errCh:
-		if err != nil {
-			return err
-		}
-	default:
-	}
-	return nil
 }

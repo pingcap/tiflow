@@ -1168,7 +1168,7 @@ func (cp *RemoteCheckPoint) CheckAndUpdate(ctx context.Context, schemas map[stri
 	cp.Unlock()
 
 	if hasChange {
-		tctx := tcontext.NewContext(ctx, log.L())
+		tctx := cp.logCtx.WithContext(ctx)
 		cpID := cp.Snapshot(true)
 		if cpID != nil {
 			return cp.FlushPointsExcept(tctx, cpID.id, nil, nil, nil)

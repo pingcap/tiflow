@@ -19,7 +19,7 @@ import (
 
 	"github.com/pingcap/errors"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
@@ -59,7 +59,7 @@ func NewSimpleWorkerFactory[T framework.WorkerImpl, Config any](
 		// It's okay to panic here.
 		// The developer who used this function mistakenly should
 		// be able to figure out what happened.
-		log.L().Panic("expect worker's config type to be a pointer")
+		log.Panic("expect worker's config type to be a pointer")
 	}
 	return &SimpleWorkerFactory[T, Config]{
 		constructor: constructor,

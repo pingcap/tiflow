@@ -19,9 +19,9 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"go.uber.org/atomic"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 )
@@ -56,7 +56,7 @@ func (d *dummyWorker) Init(ctx context.Context) error {
 
 	rctx, ok := ToRuntimeCtx(ctx)
 	if !ok {
-		log.L().Panic("A RuntimeContext is expected to be used in unit tests")
+		log.Panic("A RuntimeContext is expected to be used in unit tests")
 	}
 	d.submitTime.Store(time.Duration(rctx.SubmitTime()))
 

@@ -758,7 +758,7 @@ func (k *ShardingGroupKeeper) CheckAndFix(metas map[string]*shardmeta.ShardingMe
 	k.Lock()
 	defer k.Unlock()
 	for targetID, meta := range metas {
-		sqls, args, err := meta.CheckAndUpdate(targetID, schemaMap, tablesMap)
+		sqls, args, err := meta.CheckAndUpdate(k.tctx.L(), targetID, schemaMap, tablesMap)
 		if err != nil {
 			return err
 		}

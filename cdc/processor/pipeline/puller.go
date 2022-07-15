@@ -32,23 +32,24 @@ import (
 type pullerNode struct {
 	tableName string // quoted schema and table, used in metircs only
 
-	tableID     model.TableID
-	replicaInfo *model.TableReplicaInfo
-	changefeed  model.ChangeFeedID
-	cancel      context.CancelFunc
-	wg          *errgroup.Group
+	tableID    model.TableID
+	startTs    model.Ts
+	changefeed model.ChangeFeedID
+	cancel     context.CancelFunc
+	wg         *errgroup.Group
 }
 
 func newPullerNode(
-	tableID model.TableID, replicaInfo *model.TableReplicaInfo,
+	tableID model.TableID,
+	startTs model.Ts,
 	tableName string,
 	changefeed model.ChangeFeedID,
 ) *pullerNode {
 	return &pullerNode{
-		tableID:     tableID,
-		replicaInfo: replicaInfo,
-		tableName:   tableName,
-		changefeed:  changefeed,
+		tableID:    tableID,
+		startTs:    startTs,
+		tableName:  tableName,
+		changefeed: changefeed,
 	}
 }
 
@@ -72,17 +73,17 @@ func (n *pullerNode) start(ctx pipeline.NodeContext,
 	kvCfg := config.GetGlobalServerConfig().KVClient
 	// NOTICE: always pull the old value internally
 	// See also: https://github.com/pingcap/tiflow/issues/2301.
-	plr := puller.NewPuller(
+	plr := puller.New(
 		ctxC,
 		up.PDClient,
 		up.GrpcPool,
 		up.RegionCache,
 		up.KVStorage,
 		up.PDClock,
-		n.changefeed,
-		n.replicaInfo.StartTs,
+		n.startTs,
 		n.tableSpan(ctx),
 		kvCfg,
+		n.changefeed,
 	)
 	n.wg.Go(func() error {
 		ctx.Throw(errors.Trace(plr.Run(ctxC)))

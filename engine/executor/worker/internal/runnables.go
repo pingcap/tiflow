@@ -16,10 +16,10 @@ package internal
 import (
 	"context"
 
+	"github.com/pingcap/log"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 )
@@ -78,7 +78,7 @@ func (c *RunnableContainer) Info() RuntimeInfo {
 func (c *RunnableContainer) OnLaunched() {
 	oldStatus := c.status.Swap(TaskRunning)
 	if oldStatus != TaskSubmitted {
-		log.L().Panic("unexpected status", zap.Int32("status", oldStatus))
+		log.Panic("unexpected status", zap.Int32("status", oldStatus))
 	}
 }
 
@@ -86,6 +86,6 @@ func (c *RunnableContainer) OnLaunched() {
 func (c *RunnableContainer) OnStopped() {
 	oldStatus := c.status.Swap(TaskClosing)
 	if oldStatus != TaskRunning && oldStatus != TaskSubmitted {
-		log.L().Panic("unexpected status", zap.Int32("status", oldStatus))
+		log.Panic("unexpected status", zap.Int32("status", oldStatus))
 	}
 }

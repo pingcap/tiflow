@@ -15,7 +15,7 @@ mysql-instances:
   - source-id: "mysql-replica-01"
     block-allow-list:  "instance"
     filter-rules: ["global"]
-    continuous-validator-config-name: global
+    validator-config-name: global
 
 block-allow-list:
   instance:

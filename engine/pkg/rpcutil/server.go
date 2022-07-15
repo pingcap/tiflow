@@ -22,13 +22,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	"github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // Member stores server member information
@@ -82,7 +82,7 @@ func (l *LeaderClientWithLock[T]) Close() {
 	if l.inner != nil {
 		err := l.inner.Close()
 		if err != nil {
-			log.L().Warn("close leader client failed", zap.Error(err))
+			log.Warn("close leader client failed", zap.Error(err))
 		}
 		l.inner = nil
 	}
@@ -155,7 +155,7 @@ func (h PreRPCHook[T]) PreRPC(
 func (h PreRPCHook[T]) logRateLimit(methodName string, req interface{}) {
 	// TODO: rate limiter based on different sender
 	if h.limiter.Allow() {
-		log.L().Info("", zap.Any("payload", req), zap.String("request", methodName))
+		log.Info("", zap.Any("payload", req), zap.String("request", methodName))
 	}
 }
 
@@ -220,7 +220,7 @@ func (h PreRPCHook[T]) isLeaderAndNeedForward(ctx context.Context) (isLeader, ne
 
 		for !exist {
 			if retry == 0 {
-				log.L().Error("leader is not found, please retry later")
+				log.Error("leader is not found, please retry later")
 				return false, false
 			}
 			select {

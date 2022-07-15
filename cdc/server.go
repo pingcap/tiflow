@@ -64,7 +64,7 @@ const (
 // TODO: we need to make Server more unit testable and add more test cases.
 // Especially we need to decouple the HTTPServer out of Server.
 type Server struct {
-	capture      *capture.Capture
+	capture      capture.Capture
 	tcpServer    tcpserver.TCPServer
 	grpcService  *p2p.ServerWrapper
 	statusServer *http.Server
@@ -148,10 +148,12 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "new etcd client")
 	}
-
-	cdcEtcdClient := etcd.NewCDCEtcdClient(ctx, etcdCli)
+	cdcEtcdClient, err := etcd.NewCDCEtcdClient(ctx, etcdCli, conf.ClusterID)
+	if err != nil {
+		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err),
+			"wrapper etcd client")
+	}
 	s.etcdClient = &cdcEtcdClient
-
 	err = s.initDir(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -287,6 +289,12 @@ func (s *Server) run(ctx context.Context) (err error) {
 	}
 
 	return wg.Wait()
+}
+
+// Drain removes tables in the current TiCDC instance.
+// It's part of graceful shutdown, should be called before Close.
+func (s *Server) Drain(ctx context.Context) <-chan struct{} {
+	return s.capture.Drain(ctx)
 }
 
 // Close closes the server.

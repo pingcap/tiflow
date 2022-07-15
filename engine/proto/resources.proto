@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 package enginepb;
+import "projects.proto";
 
 service ResourceManager {
   rpc CreateResource(CreateResourceRequest) returns (CreateResourceResponse){}
@@ -12,26 +13,32 @@ service ResourceManager {
 }
 
 message CreateResourceRequest {
-  string resource_id = 1;
-  string creator_executor = 2;
-  string job_id = 3;
-  string creator_worker_id = 4;
+  ProjectInfo project_info = 1;
+  string resource_id = 2;
+  string creator_executor = 3;
+  string job_id = 4;
+  string creator_worker_id = 5;
 }
 
 message CreateResourceResponse {}
 
+message ResourceKey {
+    string job_id = 1;
+    string resource_id = 2;
+}
+
 message QueryResourceRequest {
-  string resource_id = 1;
+    ResourceKey resource_key = 1;
 }
 
 message QueryResourceResponse {
-  string creator_executor = 2;
-  string job_id = 3;
-  string creator_worker_id = 4;
+  string creator_executor = 1;
+  string job_id = 2;
+  string creator_worker_id = 3;
 }
 
 message RemoveResourceRequest {
-  string resource_id = 1;
+    ResourceKey resource_key = 1;
 }
 
 message RemoveResourceResponse {}
@@ -47,4 +54,3 @@ enum ResourceErrorCode {
   ResourceManagerInternalError = 2;
   ResourceNotFound = 3;
 }
-

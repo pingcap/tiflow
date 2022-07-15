@@ -57,7 +57,8 @@ spec:
             - containerPort: 10239
               name: port-mpeer
           command:
-            - "/df-master"
+            - "/tiflow"
+            - "master"
             - "--name=$(MY_POD_NAME)"
             - "--master-addr=0.0.0.0:10240"
             - "--advertise-addr=$(MY_POD_NAME).server-master.$(MY_POD_NAMESPACE):10240"

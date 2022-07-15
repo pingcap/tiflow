@@ -16,9 +16,8 @@ package version
 import (
 	"testing"
 
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/stretchr/testify/require"
-
-	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
 func TestLogVersion(t *testing.T) {
@@ -31,7 +30,7 @@ UTC Build Time: None
 Go Version: None
 `
 
-	err := log.InitLogger(&log.Config{})
+	err := logutil.InitLogger(&logutil.Config{})
 	require.Nil(t, err)
 	require.Equal(t, noneInfo, GetRawInfo())
 	LogVersionInfo()

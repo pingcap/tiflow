@@ -35,7 +35,7 @@ const (
 	//   originalPos.BinlogBaseName + posRelaySubDirSuffixSeparator + RelaySubDirSuffix + binlogFilenameSep + originalPos.BinlogSeq
 	// eg. mysql-bin.000003 under folder c6ae5afe-c7a3-11e8-a19d-0242ac130006.000002 => mysql-bin|000002.000003
 	// when new relay log subdirectory is created, RelaySubDirSuffix should increase.
-	posRelaySubDirSuffixSeparator = "|"
+	posRelaySubDirSuffixSeparator = utils.PosRelaySubDirSuffixSeparator
 	// MinRelaySubDirSuffix is same as relay.MinRelaySubDirSuffix.
 	MinRelaySubDirSuffix = 1
 	// FileHeaderLen is the length of binlog file header.
@@ -92,7 +92,7 @@ func PositionFromPosStr(str string) (gmysql.Position, error) {
 // `originalPos.BinlogBaseName + binlogFilenameSep + originalPos.BinlogSeq`.
 // if parsed failed returns the given position and the traced error.
 func RealMySQLPos(pos gmysql.Position) (gmysql.Position, error) {
-	parsed, err := ParseFilename(pos.Name)
+	parsed, err := utils.ParseFilename(pos.Name)
 	if err != nil {
 		return pos, err
 	}
@@ -104,7 +104,7 @@ func RealMySQLPos(pos gmysql.Position) (gmysql.Position, error) {
 			return pos, nil // pos is just the real pos
 		}
 		return gmysql.Position{
-			Name: ConstructFilename(parsed.BaseName[:sepIdx], parsed.Seq),
+			Name: utils.ConstructFilename(parsed.BaseName[:sepIdx], parsed.Seq),
 			Pos:  pos.Pos,
 		}, nil
 	}
@@ -117,7 +117,7 @@ func ExtractSuffix(name string) (int, error) {
 	if len(name) == 0 {
 		return MinRelaySubDirSuffix, nil
 	}
-	filename, err := ParseFilename(name)
+	filename, err := utils.ParseFilename(name)
 	if err != nil {
 		return 0, err
 	}
@@ -138,7 +138,7 @@ func ExtractPos(pos gmysql.Position, uuids []string) (uuidWithSuffix string, rel
 		return
 	}
 
-	parsed, err := ParseFilename(pos.Name)
+	parsed, err := utils.ParseFilename(pos.Name)
 	if err != nil {
 		return
 	}
@@ -158,7 +158,7 @@ func ExtractPos(pos gmysql.Position, uuids []string) (uuidWithSuffix string, rel
 			uuidWithSuffix = uuid
 			relaySubDirSuffix = masterRelaySubDirSuffix
 			realPos = gmysql.Position{
-				Name: ConstructFilename(realBaseName, parsed.Seq),
+				Name: utils.ConstructFilename(realBaseName, parsed.Seq),
 				Pos:  pos.Pos,
 			}
 		} else {

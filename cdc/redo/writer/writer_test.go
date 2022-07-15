@@ -15,7 +15,6 @@ package writer
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"net/url"
 	"os"
@@ -131,7 +130,7 @@ func TestLogWriterWriteLog(t *testing.T) {
 			rowWriter: mockWriter,
 			ddlWriter: mockWriter,
 			meta:      &common.LogMeta{ResolvedTsList: map[int64]uint64{}},
-			metricTotalRowsCount: redoTotalRowsCountGauge.
+			metricTotalRowsCount: common.RedoTotalRowsCountGauge.
 				WithLabelValues("default", ""),
 		}
 		if tt.name == "context cancel" {
@@ -140,7 +139,7 @@ func TestLogWriterWriteLog(t *testing.T) {
 			tt.args.ctx = ctx
 		}
 
-		_, err := writer.WriteLog(tt.args.ctx, tt.args.tableID, tt.args.rows)
+		err := writer.WriteLog(tt.args.ctx, tt.args.tableID, tt.args.rows)
 		if tt.wantErr != nil {
 			require.Truef(t, errors.ErrorEqual(tt.wantErr, err), tt.name)
 		} else {
@@ -338,7 +337,7 @@ func TestLogWriterFlushLog(t *testing.T) {
 			cancel()
 			tt.args.ctx = ctx
 		}
-		err := writer.FlushLog(tt.args.ctx, tt.args.tableID, tt.args.ts)
+		err := writer.FlushLog(tt.args.ctx, map[int64]uint64{tt.args.tableID: tt.args.ts})
 		if tt.wantErr != nil {
 			require.True(t, errors.ErrorEqual(tt.wantErr, err), err.Error()+tt.wantErr.Error())
 		} else {
@@ -437,173 +436,6 @@ func TestLogWriterEmitCheckpointTs(t *testing.T) {
 	}
 }
 
-func TestLogWriterEmitResolvedTs(t *testing.T) {
-	type arg struct {
-		ctx context.Context
-
-		ts uint64
-	}
-	tests := []struct {
-		name      string
-		args      arg
-		wantTs    uint64
-		isRunning bool
-		flushErr  error
-		wantErr   error
-	}{
-		{
-			name: "happy",
-			args: arg{
-				ctx: context.Background(),
-				ts:  1,
-			},
-			isRunning: true,
-			flushErr:  nil,
-		},
-		{
-			name: "isStopped",
-			args: arg{
-				ctx: context.Background(),
-				ts:  1,
-			},
-			flushErr:  cerror.ErrRedoWriterStopped,
-			isRunning: false,
-			wantErr:   cerror.ErrRedoWriterStopped,
-		},
-		{
-			name: "context cancel",
-			args: arg{
-				ctx: context.Background(),
-				ts:  1,
-			},
-			flushErr:  nil,
-			isRunning: true,
-			wantErr:   context.Canceled,
-		},
-	}
-
-	dir := t.TempDir()
-
-	for _, tt := range tests {
-		controller := gomock.NewController(t)
-		mockStorage := mockstorage.NewMockExternalStorage(controller)
-		if tt.isRunning && tt.name != "context cancel" {
-			mockStorage.EXPECT().WriteFile(gomock.Any(),
-				"cp_test-cf_meta.meta",
-				gomock.Any()).Return(nil).Times(1)
-		}
-		mockWriter := &mockFileWriter{}
-		mockWriter.On("IsRunning").Return(tt.isRunning)
-		cfg := &LogWriterConfig{
-			Dir:               dir,
-			ChangeFeedID:      model.DefaultChangeFeedID("test-cf"),
-			CaptureID:         "cp",
-			MaxLogSize:        10,
-			CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
-			FlushIntervalInMs: 5,
-			S3Storage:         true,
-		}
-		writer := LogWriter{
-			rowWriter: mockWriter,
-			ddlWriter: mockWriter,
-			meta:      &common.LogMeta{ResolvedTsList: map[int64]uint64{}},
-			cfg:       cfg,
-			storage:   mockStorage,
-		}
-
-		if tt.name == "context cancel" {
-			ctx, cancel := context.WithCancel(context.Background())
-			cancel()
-			tt.args.ctx = ctx
-		}
-		err := writer.EmitResolvedTs(tt.args.ctx, tt.args.ts)
-		if tt.wantErr != nil {
-			require.True(t, errors.ErrorEqual(tt.wantErr, err), tt.name)
-		} else {
-			require.Nil(t, err, tt.name)
-			require.Equal(t, tt.args.ts, writer.meta.ResolvedTs, tt.name)
-		}
-	}
-}
-
-func TestLogWriterGetCurrentResolvedTs(t *testing.T) {
-	type arg struct {
-		ctx      context.Context
-		ts       map[int64]uint64
-		tableIDs []int64
-	}
-	tests := []struct {
-		name    string
-		args    arg
-		wantTs  map[int64]uint64
-		wantErr error
-	}{
-		{
-			name: "happy",
-			args: arg{
-				ctx:      context.Background(),
-				ts:       map[int64]uint64{1: 1, 2: 2},
-				tableIDs: []int64{1, 2, 3},
-			},
-			wantTs: map[int64]uint64{1: 1, 2: 2},
-		},
-		{
-			name: "len(tableIDs)==0",
-			args: arg{
-				ctx: context.Background(),
-			},
-		},
-		{
-			name: "context cancel",
-			args: arg{
-				ctx: context.Background(),
-			},
-			wantErr: context.Canceled,
-		},
-	}
-
-	dir := t.TempDir()
-
-	for _, tt := range tests {
-		mockWriter := &mockFileWriter{}
-		mockWriter.On("Flush", mock.Anything).Return(nil)
-		mockWriter.On("IsRunning").Return(true)
-		cfg := &LogWriterConfig{
-			Dir:               dir,
-			ChangeFeedID:      model.DefaultChangeFeedID("test-cf"),
-			CaptureID:         "cp",
-			MaxLogSize:        10,
-			CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
-			FlushIntervalInMs: 5,
-		}
-		writer := LogWriter{
-			rowWriter: mockWriter,
-			ddlWriter: mockWriter,
-			meta:      &common.LogMeta{ResolvedTsList: map[int64]uint64{}},
-			cfg:       cfg,
-		}
-
-		if tt.name == "context cancel" {
-			ctx, cancel := context.WithCancel(context.Background())
-			cancel()
-			tt.args.ctx = ctx
-		}
-		for k, v := range tt.args.ts {
-			_ = writer.FlushLog(tt.args.ctx, k, v)
-		}
-		ret, err := writer.GetCurrentResolvedTs(tt.args.ctx, tt.args.tableIDs)
-		if tt.wantErr != nil {
-			require.True(t, errors.ErrorEqual(tt.wantErr, err), tt.name, err.Error())
-		} else {
-			require.Nil(t, err, tt.name)
-			require.Equal(t, len(ret), len(tt.wantTs))
-			for k, v := range tt.wantTs {
-				require.Equal(t, v, ret[k])
-			}
-		}
-	}
-}
-
 func TestNewLogWriter(t *testing.T) {
 	_, err := NewLogWriter(context.Background(), nil)
 	require.NotNil(t, err)
@@ -647,20 +479,6 @@ func TestNewLogWriter(t *testing.T) {
 	require.NotSame(t, ll, ll2)
 
 	dir := t.TempDir()
-	fileName := fmt.Sprintf("%s_%s_%d_%s%s", "cp", "test-changefeed", time.Now().Unix(), common.DefaultMetaFileType, common.MetaEXT)
-	path := filepath.Join(dir, fileName)
-	f, err := os.Create(path)
-	require.Nil(t, err)
-
-	meta := &common.LogMeta{
-		CheckPointTs: 11,
-		ResolvedTs:   22,
-	}
-	data, err := meta.MarshalMsg(nil)
-	require.Nil(t, err)
-	_, err = f.Write(data)
-	require.Nil(t, err)
-
 	cfg = &LogWriterConfig{
 		Dir:               dir,
 		ChangeFeedID:      model.DefaultChangeFeedID("test-cf"),
@@ -673,11 +491,28 @@ func TestNewLogWriter(t *testing.T) {
 	require.Nil(t, err)
 	err = l.Close()
 	require.Nil(t, err)
+	path := l.filePath()
+	f, err := os.Create(path)
+	require.Nil(t, err)
+
+	meta := &common.LogMeta{
+		CheckPointTs:   11,
+		ResolvedTsList: map[model.TableID]model.Ts{int64(1): uint64(22)},
+	}
+	data, err := meta.MarshalMsg(nil)
+	require.Nil(t, err)
+	_, err = f.Write(data)
+	require.Nil(t, err)
+
+	l, err = NewLogWriter(ctx, cfg)
+	require.Nil(t, err)
+	err = l.Close()
+	require.Nil(t, err)
 	require.True(t, l.isStopped())
 	require.Equal(t, cfg.Dir, l.cfg.Dir)
 	require.Equal(t, meta.CheckPointTs, l.meta.CheckPointTs)
-	require.Equal(t, meta.ResolvedTs, l.meta.ResolvedTs)
-	require.Equal(t, map[int64]uint64{}, l.meta.ResolvedTsList)
+	require.Equal(t, meta.ResolvedTs(), l.meta.ResolvedTs())
+	require.Equal(t, meta.ResolvedTsList, l.meta.ResolvedTsList)
 	time.Sleep(time.Millisecond * time.Duration(math.Max(float64(defaultFlushIntervalInMs), float64(defaultGCIntervalInMs))+1))
 
 	origin := common.InitS3storage

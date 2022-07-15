@@ -16,7 +16,6 @@ package model
 import (
 	"testing"
 
-	"github.com/pingcap/check"
 	"github.com/stretchr/testify/require"
 )
 
@@ -138,10 +137,6 @@ func TestTaskWorkloadMarshal(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, "{}", data)
 }
-
-type taskStatusSuite struct{}
-
-var _ = check.Suite(&taskStatusSuite{})
 
 func TestShouldBeDeepCopy(t *testing.T) {
 	t.Parallel()

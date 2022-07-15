@@ -525,7 +525,7 @@ func isRetryableDBError(err error) bool {
 		return true
 	}
 	switch err {
-	case driver.ErrBadConn, context.DeadlineExceeded, mysql.ErrInvalidConn:
+	case driver.ErrBadConn, mysql.ErrInvalidConn:
 		return true
 	}
 	return false

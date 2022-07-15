@@ -45,8 +45,6 @@ const (
 	OpVarTargetCaptureID = "target-cp-id"
 	// OpVarTableID is the key of table ID in HTTP API
 	OpVarTableID = "table-id"
-	// OpForceRemoveChangefeed is used when remove a changefeed
-	OpForceRemoveChangefeed = "force-remove"
 )
 
 type commonResp struct {
@@ -78,11 +76,11 @@ func (c ChangefeedResp) MarshalJSON() ([]byte, error) {
 
 // ownerAPI provides owner APIs.
 type ownerAPI struct {
-	capture *capture.Capture
+	capture capture.Capture
 }
 
 // RegisterOwnerAPIRoutes registers routes for owner APIs.
-func RegisterOwnerAPIRoutes(router *gin.Engine, capture *capture.Capture) {
+func RegisterOwnerAPIRoutes(router *gin.Engine, capture capture.Capture) {
 	ownerAPI := ownerAPI{capture: capture}
 	owner := router.Group("/capture/owner")
 
@@ -140,20 +138,9 @@ func (h *ownerAPI) handleChangefeedAdmin(w http.ResponseWriter, req *http.Reques
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid admin job type: %s", typeStr))
 		return
 	}
-	opts := &model.AdminJobOption{}
-	if forceRemoveStr := req.Form.Get(OpForceRemoveChangefeed); forceRemoveStr != "" {
-		forceRemoveOpt, err := strconv.ParseBool(forceRemoveStr)
-		if err != nil {
-			api.WriteError(w, http.StatusBadRequest,
-				cerror.ErrAPIInvalidParam.GenWithStack("invalid force remove option: %s", forceRemoveStr))
-			return
-		}
-		opts.ForceRemove = forceRemoveOpt
-	}
 	job := model.AdminJob{
 		CfID: model.DefaultChangeFeedID(req.Form.Get(OpVarChangefeedID)),
 		Type: model.AdminJobType(typ),
-		Opts: opts,
 	}
 
 	err = api.HandleOwnerJob(req.Context(), h.capture, job)
@@ -241,13 +228,13 @@ func (h *ownerAPI) handleChangefeedQuery(w http.ResponseWriter, req *http.Reques
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	cfInfo, err := h.capture.EtcdClient.GetChangeFeedInfo(ctx, changefeedID)
+	cfInfo, err := h.capture.GetEtcdClient().GetChangeFeedInfo(ctx, changefeedID)
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		api.WriteError(w, http.StatusBadRequest,
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID))
 		return
 	}
-	cfStatus, _, err := h.capture.EtcdClient.GetChangeFeedStatus(ctx, changefeedID)
+	cfStatus, _, err := h.capture.GetEtcdClient().GetChangeFeedStatus(ctx, changefeedID)
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		api.WriteError(w, http.StatusBadRequest, err)
 		return

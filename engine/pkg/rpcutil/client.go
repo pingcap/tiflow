@@ -18,11 +18,14 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
+
+const defaultDialRetry = 3
 
 // CloseableConnIface defines an interface that supports Close(release resource)
 type CloseableConnIface interface {
@@ -97,12 +100,21 @@ func (c *FailoverRPCClients[T]) UpdateClients(ctx context.Context, urls []string
 		delete(notFound, addr)
 
 		if _, ok := c.clients[addr]; !ok {
-			log.L().Info("add new server master client", zap.String("addr", addr))
-			cli, conn, err := c.dialer(ctx, addr)
+			log.Info("add new server master client", zap.String("addr", addr))
+
+			var (
+				cli  T
+				conn CloseableConnIface
+			)
+			err := retry.Do(ctx, func() (err error) {
+				cli, conn, err = c.dialer(ctx, addr)
+				return err
+			}, retry.WithMaxTries(defaultDialRetry))
 			if err != nil {
-				log.L().Warn("dial to server master failed", zap.String("addr", addr), zap.Error(err))
+				log.Warn("dial to server master failed", zap.String("addr", addr), zap.Error(err))
 				continue
 			}
+
 			c.clients[addr] = &clientHolder[T]{
 				conn:   conn,
 				client: cli,
@@ -112,7 +124,7 @@ func (c *FailoverRPCClients[T]) UpdateClients(ctx context.Context, urls []string
 
 	for k := range notFound {
 		if err := c.clients[k].conn.Close(); err != nil {
-			log.L().Warn("close server master client failed", zap.String("addr", k), zap.Error(err))
+			log.Warn("close server master client failed", zap.String("addr", k), zap.Error(err))
 		}
 		delete(c.clients, k)
 	}
@@ -165,7 +177,7 @@ func (c *FailoverRPCClients[T]) GetLeaderClient() T {
 
 	leader, ok := c.clients[c.leader]
 	if !ok {
-		log.L().Panic("leader client not found", zap.String("leader", c.leader))
+		log.Panic("leader client not found", zap.String("leader", c.leader))
 	}
 	return leader.client
 }

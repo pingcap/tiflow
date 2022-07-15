@@ -33,12 +33,20 @@ function run() {
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" -c $changefeedid
 
 	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} "failed" "ErrGCTTLExceeded" ""
-	run_cdc_cli changefeed remove -c $changefeedid
-	sleep 2
-	#result=$(curl -X GET "http://127.0.0.1:8300/api/v1/changefeeds")
-	result=$(cdc cli changefeed list)
-	if [[ ! "$result" == "[]" ]]; then
-		echo "changefeed remove failed"
+
+	# test changefeed remove
+	result=$(cdc cli changefeed remove -c $changefeedid)
+	if [[ $result != *"Changefeed remove successfully"* ]]; then
+		echo "changefeed remove result is expected to contains 'Changefeed remove successfully', \
+              but actually got $result"
+		exit 1
+	fi
+
+	# test changefeed remove twice
+	result=$(cdc cli changefeed remove -c $changefeedid)
+	if [[ $result != *"Changefeed not found"* ]]; then
+		echo "changefeeed remove result is expected to contains 'Changefeed not found', \
+            but actually got $result"
 		exit 1
 	fi
 

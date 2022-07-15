@@ -16,13 +16,20 @@ package dm
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/pingcap/errors"
+	"go.uber.org/zap"
+
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
 	"github.com/pingcap/tiflow/dm/dumpling"
 	"github.com/pingcap/tiflow/dm/loader"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/syncer"
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
@@ -37,14 +44,26 @@ type unitHolder interface {
 	Resume(ctx context.Context) error
 	Stage() (metadata.TaskStage, *pb.ProcessResult)
 	Status(ctx context.Context) interface{}
+	// CheckAndUpdateStatus checks if the last update of source status is outdated,
+	// if so, it will call Status.
+	CheckAndUpdateStatus(ctx context.Context)
 	Binlog(ctx context.Context, req *dmpkg.BinlogTaskRequest) (string, error)
 	BinlogSchema(ctx context.Context, req *dmpkg.BinlogSchemaTaskRequest) (string, error)
 }
 
+var sourceStatusRefreshInterval = 30 * time.Second
+
 // unitHolderImpl wrap the dm-worker unit.
 type unitHolderImpl struct {
+	tp   framework.WorkerType
+	cfg  *dmconfig.SubTaskConfig
 	unit unit.Unit
 
+	upstreamDB     *conn.BaseDB
+	sourceStatus   *binlog.SourceStatus
+	sourceStatusMu sync.RWMutex
+
+	logger log.Logger
 	// use to access process(init/close/pause/resume)
 	processMu sync.RWMutex
 	processWg sync.WaitGroup
@@ -55,18 +74,14 @@ type unitHolderImpl struct {
 	result    *pb.ProcessResult // TODO: check if framework can persist result
 }
 
+var _ unitHolder = &unitHolderImpl{}
+
 // newUnitHolderImpl creates a UnitHolderImpl
 func newUnitHolderImpl(workerType framework.WorkerType, cfg *dmconfig.SubTaskConfig) *unitHolderImpl {
-	unitHolder := &unitHolderImpl{}
-	switch workerType {
-	case framework.WorkerDMDump:
-		unitHolder.unit = dumpling.NewDumpling(cfg)
-	case framework.WorkerDMLoad:
-		unitHolder.unit = loader.NewLightning(cfg, nil, "dataflow-worker")
-	case framework.WorkerDMSync:
-		unitHolder.unit = syncer.NewSyncer(cfg, nil, nil)
+	return &unitHolderImpl{
+		tp:  workerType,
+		cfg: cfg,
 	}
-	return unitHolder
 }
 
 // Init implement UnitHolder.Init
@@ -74,7 +89,26 @@ func (u *unitHolderImpl) Init(ctx context.Context) error {
 	u.processMu.Lock()
 	defer u.processMu.Unlock()
 
-	if err := u.unit.Init(ctx); err != nil {
+	// worker may inject logger, metrics, etc. to config in InitImpl, so postpone construction
+	switch u.tp {
+	case framework.WorkerDMDump:
+		u.unit = dumpling.NewDumpling(u.cfg)
+	case framework.WorkerDMLoad:
+		u.unit = loader.NewLightning(u.cfg, nil, "dataflow-worker")
+	case framework.WorkerDMSync:
+		u.unit = syncer.NewSyncer(u.cfg, nil, nil)
+	}
+
+	var err error
+	if err = u.unit.Init(ctx); err != nil {
+		return err
+	}
+
+	u.logger = log.Logger{Logger: u.cfg.FrameworkLogger}.WithFields(
+		zap.String("task", u.cfg.Name), zap.String("sourceID", u.cfg.SourceID),
+	)
+	u.upstreamDB, err = conn.DefaultDBProvider.Apply(&u.cfg.From)
+	if err != nil {
 		return err
 	}
 
@@ -187,9 +221,34 @@ func (u *unitHolderImpl) Stage() (metadata.TaskStage, *pb.ProcessResult) {
 	}
 }
 
-// Status implement UnitHolder.Status
+// Status implement UnitHolder.Status. Each invocation will try to query upstream
+// once and calculate the status.
 func (u *unitHolderImpl) Status(ctx context.Context) interface{} {
-	return u.unit.Status(nil)
+	sourceStatus, err := binlog.GetSourceStatus(
+		tcontext.NewContext(ctx, u.logger),
+		u.upstreamDB,
+		u.cfg.Flavor,
+	)
+	if err != nil {
+		u.logger.Error("failed to get source status", zap.Error(err))
+	}
+	u.sourceStatusMu.Lock()
+	u.sourceStatus = sourceStatus
+	u.sourceStatusMu.Unlock()
+
+	// nil sourceStatus is supported
+	return u.unit.Status(sourceStatus)
+}
+
+// CheckAndUpdateStatus implement UnitHolder.CheckAndUpdateStatus.
+func (u *unitHolderImpl) CheckAndUpdateStatus(ctx context.Context) {
+	u.sourceStatusMu.RLock()
+	sourceStatus := u.sourceStatus
+	u.sourceStatusMu.RUnlock()
+
+	if sourceStatus == nil || time.Since(sourceStatus.UpdateTime) > sourceStatusRefreshInterval {
+		u.Status(ctx)
+	}
 }
 
 // Binlog implements the binlog api for syncer unit.

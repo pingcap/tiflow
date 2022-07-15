@@ -18,15 +18,12 @@ package event
 
 import (
 	"io"
+	"testing"
 
-	. "github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
-
-var _ = Suite(&testUtilSuite{})
-
-type testUtilSuite struct{}
 
 type testCase struct {
 	input  []byte
@@ -34,7 +31,14 @@ type testCase struct {
 	err    error
 }
 
-func (t *testUtilSuite) TestStatusVarsToKV(c *C) {
+type testCaseTimezone struct {
+	input  []byte
+	output string
+	err    error
+}
+
+func TestStatusVarsToKV(t *testing.T) {
+	t.Parallel()
 	testCases := []testCase{
 		// only Q_FLAGS2_CODE
 		{
@@ -123,13 +127,49 @@ func (t *testUtilSuite) TestStatusVarsToKV(c *C) {
 		},
 	}
 
-	for _, t := range testCases {
-		vars, err := statusVarsToKV(t.input)
-		if t.err != nil {
-			c.Assert(err.Error(), Equals, t.err.Error())
+	for _, test := range testCases {
+		vars, err := statusVarsToKV(test.input)
+		if test.err != nil {
+			require.Equal(t, test.err.Error(), err.Error())
 		} else {
-			c.Assert(err, IsNil)
+			require.NoError(t, err)
 		}
-		c.Assert(vars, DeepEquals, t.output)
+		require.Equal(t, test.output, vars)
+	}
+}
+
+func TestGetTimezoneByStatusVars(t *testing.T) {
+	t.Parallel()
+	testCases := []testCaseTimezone{
+		//+08:00
+		{
+			[]byte{0, 0, 0, 0, 0, 1, 32, 0, 160, 69, 0, 0, 0, 0, 6, 3, 115, 116, 100, 4, 8, 0, 8, 0, 46, 0, 5, 6, 43, 48, 56, 58, 48, 48, 12, 1, 109, 97, 110, 121, 95, 116, 97, 98, 108, 101, 115, 95, 116, 101, 115, 116, 0},
+			"+08:00",
+			nil,
+		},
+		//-06:00
+		{
+			[]byte{0, 0, 0, 0, 0, 1, 32, 0, 160, 69, 0, 0, 0, 0, 6, 3, 115, 116, 100, 4, 8, 0, 8, 0, 46, 0, 5, 6, 45, 48, 54, 58, 48, 48, 12, 1, 109, 97, 110, 121, 95, 116, 97, 98, 108, 101, 115, 95, 116, 101, 115, 116, 0},
+			"-06:00",
+			nil,
+		},
+		// SYSTEM
+		{
+			[]byte{0, 0, 0, 0, 0, 1, 32, 0, 160, 69, 0, 0, 0, 0, 6, 3, 115, 116, 100, 4, 8, 0, 8, 0, 46, 0, 5, 6, 83, 89, 83, 84, 69, 77, 12, 1, 109, 97, 110, 121, 95, 116, 97, 98, 108, 101, 115, 95, 116, 101, 115, 116, 0},
+			"+0:00",
+			nil,
+		},
+	}
+
+	for _, test := range testCases {
+		var upstreamTZStr string // to simulate Syncer.upstreamTZ
+		upstreamTZStr = "+0:00"
+		vars, err := GetTimezoneByStatusVars(test.input, upstreamTZStr)
+		if test.err != nil {
+			require.Equal(t, test.err.Error(), err.Error())
+		} else {
+			require.NoError(t, err)
+		}
+		require.Equal(t, test.output, vars)
 	}
 }

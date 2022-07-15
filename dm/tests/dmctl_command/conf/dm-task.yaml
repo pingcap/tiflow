@@ -20,14 +20,14 @@ mysql-instances:
     mydumper-config-name: "global"
     loader-config-name: "global"
     syncer-config-name: "global"
-    continuous-validator-config-name: global
+    validator-config-name: global
 
   - source-id: "mysql-replica-02"
     block-allow-list:  "instance"
     mydumper-config-name: "global"
     loader-config-name: "global"
     syncer-config-name: "global"
-    continuous-validator-config-name: global
+    validator-config-name: global
 
 block-allow-list:
   instance:

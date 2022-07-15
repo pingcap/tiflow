@@ -278,3 +278,6 @@ func RunWorkerPool(ctx context.Context) error {
 
 	return errors.Trace(errg.Wait())
 }
+
+// EmitStartTs implement sorter interface
+func (s *Sorter) EmitStartTs(ctx context.Context, ts uint64) {}

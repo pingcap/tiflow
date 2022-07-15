@@ -17,7 +17,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/model"
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
+	derror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 const (

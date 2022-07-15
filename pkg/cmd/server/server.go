@@ -62,6 +62,7 @@ func newOptions() *options {
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
 func (o *options) addFlags(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&o.serverConfig.ClusterID, "cluster-id", "default", "Set cdc cluster id")
 	cmd.Flags().StringVar(&o.serverConfig.Addr, "addr", o.serverConfig.Addr, "Set the listening address")
 	cmd.Flags().StringVar(&o.serverConfig.AdvertiseAddr, "advertise-addr", o.serverConfig.AdvertiseAddr, "Set the advertise listening address for client communication")
 
@@ -147,6 +148,11 @@ func (o *options) run(cmd *cobra.Command) error {
 	if err != nil {
 		return errors.Annotate(err, "new server")
 	}
+	// Drain the server before shutdown.
+	shutdownNotify := func() <-chan struct{} { return server.Drain(ctx) }
+	util.InitSignalHandling(shutdownNotify, cancel)
+
+	// Run TiCDC server.
 	err = server.Run(ctx)
 	if err != nil && errors.Cause(err) != context.Canceled {
 		log.Error("run server", zap.String("error", errors.ErrorStack(err)))
@@ -227,6 +233,8 @@ func (o *options) complete(cmd *cobra.Command) error {
 					"sort-dir will be set to `{data-dir}/tmp/sorter`. The sort-dir here will be no-op\n"))
 			}
 			cfg.Sorter.SortDir = config.DefaultSortDir
+		case "cluster-id":
+			cfg.ClusterID = o.serverConfig.ClusterID
 		case "pd", "config":
 			// do nothing
 		default:

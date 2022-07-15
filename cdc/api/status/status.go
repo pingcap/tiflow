@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/version"
-	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // status of cdc server
@@ -38,24 +37,24 @@ type status struct {
 }
 
 type statusAPI struct {
-	capture *capture.Capture
+	capture capture.Capture
 }
 
 // RegisterStatusAPIRoutes registers routes for status.
-func RegisterStatusAPIRoutes(router *gin.Engine, capture *capture.Capture) {
+func RegisterStatusAPIRoutes(router *gin.Engine, capture capture.Capture) {
 	statusAPI := statusAPI{capture: capture}
 	router.GET("/status", gin.WrapF(statusAPI.handleStatus))
 	router.GET("/debug/info", gin.WrapF(statusAPI.handleDebugInfo))
 }
 
-func (h *statusAPI) writeEtcdInfo(ctx context.Context, cli *etcd.CDCEtcdClient, w io.Writer) {
-	resp, err := cli.Client.Get(ctx, etcd.EtcdKeyBase, clientv3.WithPrefix())
+func (h *statusAPI) writeEtcdInfo(ctx context.Context, cli etcd.CDCEtcdClientForAPI, w io.Writer) {
+	kvs, err := cli.GetAllCDCInfo(ctx)
 	if err != nil {
 		fmt.Fprintf(w, "failed to get info: %s\n\n", err.Error())
 		return
 	}
 
-	for _, kv := range resp.Kvs {
+	for _, kv := range kvs {
 		fmt.Fprintf(w, "%s\n\t%s\n\n", string(kv.Key), string(kv.Value))
 	}
 }
@@ -64,7 +63,7 @@ func (h *statusAPI) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 	h.capture.WriteDebugInfo(ctx, w)
 	fmt.Fprintf(w, "\n\n*** etcd info ***:\n\n")
-	h.writeEtcdInfo(ctx, h.capture.EtcdClient, w)
+	h.writeEtcdInfo(ctx, h.capture.GetEtcdClient(), w)
 }
 
 func (h *statusAPI) handleStatus(w http.ResponseWriter, req *http.Request) {

@@ -597,14 +597,15 @@ func TestServerRepeatedMessages(t *testing.T) {
 	}()
 
 	var lastIndex int64
-	_ = mustAddHandler(ctx, t, server, "test-topic-1", &testTopicContent{}, func(senderID string, i interface{}) error {
-		require.Equal(t, "test-client-1", senderID)
-		require.IsType(t, &testTopicContent{}, i)
-		content := i.(*testTopicContent)
-		require.Equal(t, content.Index-1, atomic.LoadInt64(&lastIndex))
-		atomic.StoreInt64(&lastIndex, content.Index)
-		return nil
-	})
+	_ = mustAddHandler(ctx, t, server, "test-topic-1",
+		&testTopicContent{}, func(senderID string, i interface{}) error {
+			require.Equal(t, "test-client-1", senderID)
+			require.IsType(t, &testTopicContent{}, i)
+			content := i.(*testTopicContent)
+			require.Equal(t, content.Index-1, atomic.LoadInt64(&lastIndex))
+			atomic.StoreInt64(&lastIndex, content.Index)
+			return nil
+		})
 
 	client, closeClient := newClient()
 	defer closeClient()

@@ -25,11 +25,8 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/model"
 	cmdconetxt "github.com/pingcap/tiflow/pkg/cmd/context"
-	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/logutil"
-	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"golang.org/x/net/http/httpproxy"
@@ -44,30 +41,50 @@ const (
 // InitCmd initializes the logger, the default context and returns its cancel function.
 func InitCmd(cmd *cobra.Command, logCfg *logutil.Config) context.CancelFunc {
 	// Init log.
-	err := logutil.InitLogger(logCfg)
+	err := logutil.InitLogger(logCfg, logutil.WithInitGRPCLogger(), logutil.WithInitSaramaLogger())
 	if err != nil {
 		cmd.Printf("init logger error %v\n", errors.ErrorStack(err))
 		os.Exit(1)
 	}
 	log.Info("init log", zap.String("file", logCfg.File), zap.String("level", logCfg.Level))
 
-	sc := make(chan os.Signal, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	cmdconetxt.SetDefaultContext(ctx)
+
+	return cancel
+}
+
+// shutdownNotify is a callback to notify caller that TiCDC is about to shutdown.
+// It returns a done channel which receive an empty struct when shutdown is complete.
+// It must be non-blocking.
+type shutdownNotify func() <-chan struct{}
+
+// InitSignalHandling initializes signal handling.
+// It must be called after InitCmd.
+func InitSignalHandling(shutdown shutdownNotify, cancel context.CancelFunc) {
+	// systemd and k8s send signals twice. The first is for graceful shutdown,
+	// and the second is for force shutdown.
+	// We use 2 for channel length to ease testing.
+	signalChanLen := 2
+	sc := make(chan os.Signal, signalChanLen)
 	signal.Notify(sc,
 		syscall.SIGHUP,
 		syscall.SIGINT,
 		syscall.SIGTERM,
 		syscall.SIGQUIT)
 
-	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		sig := <-sc
-		log.Info("got signal to exit", zap.Stringer("signal", sig))
+		log.Info("got signal, prepare to shutdown", zap.Stringer("signal", sig))
+		done := shutdown()
+		select {
+		case <-done:
+			log.Info("shutdown complete")
+		case sig = <-sc:
+			log.Info("got signal, force shutdown", zap.Stringer("signal", sig))
+		}
 		cancel()
 	}()
-
-	cmdconetxt.SetDefaultContext(ctx)
-
-	return cancel
 }
 
 // LogHTTPProxies logs HTTP proxy relative environment variables.
@@ -164,32 +181,4 @@ func JSONPrint(cmd *cobra.Command, v interface{}) error {
 	}
 	cmd.Printf("%s\n", data)
 	return nil
-}
-
-// VerifyAndGetTiCDCClusterVersion verifies and gets the version of ticdc.
-// If it is an incompatible version, an error is returned.
-func VerifyAndGetTiCDCClusterVersion(
-	ctx context.Context, cdcEtcdCli *etcd.CDCEtcdClient,
-) (version.TiCDCClusterVersion, error) {
-	_, captureInfos, err := cdcEtcdCli.GetCaptures(ctx)
-	if err != nil {
-		return version.TiCDCClusterVersion{}, err
-	}
-
-	cdcClusterVer, err := version.GetTiCDCClusterVersion(model.ListVersionsFromCaptureInfos(captureInfos))
-	if err != nil {
-		return version.TiCDCClusterVersion{}, err
-	}
-
-	// Check TiCDC cluster version.
-	isUnknownVersion, err := version.CheckTiCDCClusterVersion(cdcClusterVer)
-	if err != nil {
-		return version.TiCDCClusterVersion{}, err
-	}
-
-	if isUnknownVersion {
-		return version.TiCDCClusterVersion{}, errors.NewNoStackError("TiCDC cluster is unknown, please start TiCDC cluster")
-	}
-
-	return cdcClusterVer, nil
 }

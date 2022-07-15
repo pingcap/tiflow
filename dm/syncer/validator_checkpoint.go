@@ -43,7 +43,7 @@ import (
 const (
 	maxRowKeyLength = 64
 
-	validationDBTimeout = queryTimeout
+	validationDBTimeout = queryTimeout * 5
 )
 
 var mapErrType2Str = map[validateFailedType]string{

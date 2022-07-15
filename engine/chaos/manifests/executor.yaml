@@ -50,7 +50,8 @@ spec:
             - containerPort: 10241
               name: executor
           command:
-            - "/df-executor"
+            - "/tiflow"
+            - "executor"
             - "--name=$(MY_POD_NAME)"
             - "--worker-addr=0.0.0.0:10241"
             - "--advertise-addr=$(MY_POD_NAME).executor.$(MY_POD_NAMESPACE):10241"

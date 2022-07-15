@@ -20,13 +20,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/servermaster/cluster"
 	"github.com/pingcap/tiflow/engine/test"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.uber.org/atomic"
@@ -34,7 +34,7 @@ import (
 
 func init() {
 	// initialized the logger to make genEmbedEtcdConfig working.
-	err := log.InitLogger(&log.Config{})
+	err := logutil.InitLogger(&logutil.Config{})
 	if err != nil {
 		panic(err)
 	}
@@ -58,7 +58,7 @@ func TestLeaderLoopSuccess(t *testing.T) {
 	}
 
 	// prepare server master
-	cfg := NewConfig()
+	cfg := GetDefaultMasterConfig()
 	cfg.Etcd.Name = name
 	cfg.AdvertiseAddr = addr
 	s := &Server{
@@ -116,7 +116,7 @@ func TestLeaderLoopMeetStaleData(t *testing.T) {
 		return ctx.Err()
 	}
 
-	cfg := NewConfig()
+	cfg := GetDefaultMasterConfig()
 	cfg.Etcd.Name = name
 	cfg.AdvertiseAddr = addr
 	id := genServerMasterUUID(name)
@@ -192,7 +192,7 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 	servers := make([]*Server, 0, serverCount)
 	sessions := make([]cluster.Session, 0, serverCount)
 	for i := range names {
-		cfg := NewConfig()
+		cfg := GetDefaultMasterConfig()
 		cfg.Etcd.Name = names[i]
 		cfg.AdvertiseAddr = addrs[i]
 		s := &Server{

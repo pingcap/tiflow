@@ -18,14 +18,13 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
-
 	"github.com/go-mysql-org/go-mysql/mysql"
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/pingcap/errors"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/tests/utils"
 )
 

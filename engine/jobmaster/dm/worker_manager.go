@@ -18,8 +18,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/log"
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/model"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"go.uber.org/zap"

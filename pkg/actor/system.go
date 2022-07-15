@@ -28,7 +28,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/actor/message"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -44,8 +44,8 @@ const (
 )
 
 var (
-	errActorStopped  = cerrors.ErrActorStopped.FastGenByArgs()
-	errActorNotFound = cerrors.ErrActorNotFound.FastGenByArgs()
+	errActorStopped  = errors.ErrActorStopped.FastGenByArgs()
+	errActorNotFound = errors.ErrActorNotFound.FastGenByArgs()
 )
 
 // procState is the state of a proc.
@@ -315,7 +315,7 @@ func (r *Router[T]) Broadcast(ctx context.Context, msg message.Message[T]) {
 func (r *Router[T]) insert(id ID, p *proc[T]) error {
 	_, exist := r.procs.LoadOrStore(id, p)
 	if exist {
-		return cerrors.ErrActorDuplicate.FastGenByArgs()
+		return errors.ErrActorDuplicate.FastGenByArgs()
 	}
 	return nil
 }

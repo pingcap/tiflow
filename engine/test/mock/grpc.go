@@ -18,7 +18,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
@@ -192,7 +192,7 @@ func (s *baseServer) Stop() {
 	container.mu.Lock()
 	defer container.mu.Unlock()
 	_, ok := container.servers[s.addr]
-	log.L().Logger.Info("server is cancelled", zap.String("ip", s.addr))
+	log.Info("server is cancelled", zap.String("ip", s.addr))
 	if ok {
 		delete(container.servers, s.addr)
 	}

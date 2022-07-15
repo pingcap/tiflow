@@ -19,14 +19,14 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
+	derrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/fsutil"
 )
 
@@ -104,7 +104,7 @@ func (m *LocalFileManager) GetPersistedResource(
 // RemoveTemporaryFiles cleans up all temporary files (i.e., unpersisted file resources),
 // created by `creator`.
 func (m *LocalFileManager) RemoveTemporaryFiles(creator frameModel.WorkerID) error {
-	log.L().Info("Start cleaning temporary files",
+	log.Info("Start cleaning temporary files",
 		zap.String("worker-id", creator))
 
 	creatorResourcePath := filepath.Join(m.config.BaseDir, creator)
@@ -113,7 +113,7 @@ func (m *LocalFileManager) RemoveTemporaryFiles(creator frameModel.WorkerID) err
 		// The directory not existing is expected if the worker
 		// has never created any local file resource.
 		if os.IsNotExist(err) {
-			log.L().Info("RemoveTemporaryFiles: no local files found for worker",
+			log.Info("RemoveTemporaryFiles: no local files found for worker",
 				zap.String("worker-id", creator))
 			return nil
 		}
@@ -142,13 +142,13 @@ func (m *LocalFileManager) RemoveTemporaryFiles(creator frameModel.WorkerID) err
 			return derrors.ErrCleaningLocalTempFiles.Wrap(err)
 		}
 
-		log.L().Info("temporary resource is removed",
+		log.Info("temporary resource is removed",
 			zap.String("resource-name", resName),
 			zap.String("full-path", fullPath))
 		return nil
 	})
 
-	log.L().Info("Finished cleaning temporary files",
+	log.Info("Finished cleaning temporary files",
 		zap.String("worker-id", creator))
 	return err
 }
@@ -157,7 +157,7 @@ func (m *LocalFileManager) RemoveTemporaryFiles(creator frameModel.WorkerID) err
 // NOTE the caller should handle ErrResourceDoesNotExist appropriately.
 func (m *LocalFileManager) RemoveResource(creator frameModel.WorkerID, resName resModel.ResourceName) error {
 	if creator == "" {
-		log.L().Panic("Empty creator ID is unexpected",
+		log.Panic("Empty creator ID is unexpected",
 			zap.String("resource-name", resName))
 	}
 
@@ -171,7 +171,7 @@ func (m *LocalFileManager) RemoveResource(creator frameModel.WorkerID, resName r
 		resName)
 	if _, err := os.Stat(filePath); err != nil {
 		if os.IsNotExist(err) {
-			log.L().Info("Trying to remove non-existing resource",
+			log.Info("Trying to remove non-existing resource",
 				zap.String("creator", creator),
 				zap.String("resource-name", resName))
 			return derrors.ErrResourceDoesNotExist.GenWithStackByArgs(resName)
@@ -184,7 +184,7 @@ func (m *LocalFileManager) RemoveResource(creator frameModel.WorkerID, resName r
 		return derrors.ErrRemovingLocalResource.Wrap(err)
 	}
 
-	log.L().Info("Local resource has been removed",
+	log.Info("Local resource has been removed",
 		zap.String("resource-id", resName))
 
 	m.mu.Lock()
@@ -264,7 +264,7 @@ func PreCheckConfig(config storagecfg.Config) error {
 	baseDir := config.Local.BaseDir
 
 	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
-		log.L().Info("Configured local file directory does not existing, try to create one",
+		log.Info("Configured local file directory does not existing, try to create one",
 			zap.String("dir", baseDir))
 		if err := os.MkdirAll(baseDir, 0o700); err != nil {
 			return errors.Annotate(err, "engine: failed to create local file directory")
@@ -279,7 +279,7 @@ func PreCheckConfig(config storagecfg.Config) error {
 	if err != nil {
 		return errors.Annotate(err, "engine: check local file directory failed")
 	}
-	log.L().Info("Local file directory disk info", zap.Any("disk-info", diskInfo))
+	log.Info("Local file directory disk info", zap.Any("disk-info", diskInfo))
 
 	// TODO implement a minimum disk space threshold.
 	return nil

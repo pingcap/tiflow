@@ -15,6 +15,8 @@ package config
 
 import (
 	"bytes"
+	"context"
+	"database/sql"
 	_ "embed"
 	"encoding/json"
 	"flag"
@@ -26,12 +28,12 @@ import (
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
 	extstorage "github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/pkg/dumpling"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -141,6 +143,16 @@ func (db *DBConfig) AdjustWithTimeZone(timeZone string) {
 		AdjustDBTimeZone(db, timeZone)
 	}
 	db.Adjust()
+}
+
+// FetchTimeZoneSetting fetch target db global time_zone setting.
+// TODO: move GetTimeZoneOffset and FormatTimeZoneOffset from TiDB to tiflow.
+func FetchTimeZoneSetting(ctx context.Context, db *sql.DB) (string, error) {
+	dur, err := dbutil.GetTimeZoneOffset(ctx, db)
+	if err != nil {
+		return "", err
+	}
+	return dbutil.FormatTimeZoneOffset(dur), nil
 }
 
 // Clone returns a deep copy of DBConfig. This function only fixes data race when adjusting Session.
@@ -274,8 +286,9 @@ type SubTaskConfig struct {
 	} `yaml:"experimental" toml:"experimental" json:"experimental"`
 
 	// below member are injected by dataflow engine
-	ExtStorage     extstorage.ExternalStorage `toml:"-" json:"-"`
-	MetricsFactory promutil.Factory           `toml:"-" json:"-"`
+	ExtStorage      extstorage.ExternalStorage `toml:"-" json:"-"`
+	MetricsFactory  promutil.Factory           `toml:"-" json:"-"`
+	FrameworkLogger *zap.Logger                `toml:"-" json:"-"`
 }
 
 // SampleSubtaskConfig is the content of subtask.toml in current folder.
@@ -463,7 +476,7 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 	if _, err := column.NewMapping(c.CaseSensitive, c.ColumnMappingRules); err != nil {
 		return terror.ErrConfigGenColumnMapping.Delegate(err)
 	}
-	if _, err := dumpling.ParseFileSize(c.MydumperConfig.ChunkFilesize, 0); err != nil {
+	if _, err := utils.ParseFileSize(c.MydumperConfig.ChunkFilesize, 0); err != nil {
 		return terror.ErrConfigInvalidChunkFileSize.Generate(c.MydumperConfig.ChunkFilesize)
 	}
 

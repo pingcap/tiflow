@@ -14,13 +14,13 @@
 package binlog
 
 import (
-	"context"
-	"database/sql"
 	"path"
 	"time"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
@@ -43,7 +43,7 @@ type binlogSize struct {
 type FileSizes []binlogSize
 
 // GetBinaryLogs returns binlog filename and size of upstream.
-func GetBinaryLogs(ctx context.Context, db *sql.DB) (FileSizes, error) {
+func GetBinaryLogs(ctx *tcontext.Context, db *conn.BaseDB) (FileSizes, error) {
 	query := "SHOW BINARY LOGS"
 	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
@@ -116,4 +116,25 @@ type SourceStatus struct {
 	Location   Location
 	Binlogs    FileSizes
 	UpdateTime time.Time
+}
+
+func GetSourceStatus(tctx *tcontext.Context, db *conn.BaseDB, flavor string) (*SourceStatus, error) {
+	ret := &SourceStatus{}
+	ctx, cancel := tctx.WithTimeout(conn.DefaultDBTimeout)
+	defer cancel()
+	pos, gtidSet, err := conn.GetPosAndGs(ctx, db, flavor)
+	if err != nil {
+		return nil, err
+	}
+	ret.Location = NewLocation(pos, gtidSet)
+	ctx2, cancel2 := tctx.WithTimeout(conn.DefaultDBTimeout)
+	defer cancel2()
+	binlogs, err := GetBinaryLogs(ctx2, db)
+	if err != nil {
+		return nil, err
+	}
+	ret.Binlogs = binlogs
+
+	ret.UpdateTime = time.Now()
+	return ret, nil
 }

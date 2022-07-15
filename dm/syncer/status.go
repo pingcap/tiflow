@@ -137,7 +137,7 @@ func (s *Syncer) printStatus(sourceStatus *binlog.SourceStatus) {
 	latestMasterPos := sourceStatus.Location.Position
 	latestMasterGTIDSet := sourceStatus.Location.GetGTID()
 	s.metricsProxies.Metrics.BinlogMasterPosGauge.Set(float64(latestMasterPos.Pos))
-	index, err := binlog.GetFilenameIndex(latestMasterPos.Name)
+	index, err := utils.GetFilenameIndex(latestMasterPos.Name)
 	if err != nil {
 		s.tctx.L().Error("fail to parse binlog file", log.ShortError(err))
 	} else {

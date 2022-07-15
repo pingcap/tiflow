@@ -24,15 +24,16 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
-// DefaultNamespace is the default namespace value,
-// all the old changefeed will be put into default namespace
-const DefaultNamespace = "default"
+const (
+	// DefaultNamespace is the default namespace value,
+	// all the old changefeed will be put into default namespace
+	DefaultNamespace = "default"
+)
 
 // ChangeFeedID is the type for change feed ID
 type ChangeFeedID struct {
@@ -46,6 +47,14 @@ type ChangeFeedID struct {
 func DefaultChangeFeedID(id string) ChangeFeedID {
 	return ChangeFeedID{
 		Namespace: DefaultNamespace,
+		ID:        id,
+	}
+}
+
+// ChangeFeedID4Test returns `ChangefeedID` with given namespace and id
+func ChangeFeedID4Test(namespace, id string) ChangeFeedID {
+	return ChangeFeedID{
+		Namespace: namespace,
 		ID:        id,
 	}
 }
@@ -114,6 +123,8 @@ func (s FeedState) IsNeeded(need string) bool {
 // ChangeFeedInfo describes the detail of a ChangeFeed
 type ChangeFeedInfo struct {
 	UpstreamID uint64    `json:"upstream-id"`
+	Namespace  string    `json:"namespace"`
+	ID         string    `json:"changefeed-id"`
 	SinkURI    string    `json:"sink-uri"`
 	CreateTime time.Time `json:"create-time"`
 	// Start sync at this commit ts if `StartTs` is specify or using the CreateTime of changefeed.
@@ -146,6 +157,20 @@ var changeFeedIDRe = regexp.MustCompile(`^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*$`)
 func ValidateChangefeedID(changefeedID string) error {
 	if !changeFeedIDRe.MatchString(changefeedID) || len(changefeedID) > changeFeedIDMaxLen {
 		return cerror.ErrInvalidChangefeedID.GenWithStackByArgs(changeFeedIDMaxLen)
+	}
+	return nil
+}
+
+const namespaceMaxLen = 128
+
+var namespaceRe = regexp.MustCompile(`^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*$`)
+
+// ValidateNamespace returns true if the namespace matches
+// the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$",
+// length no more than "changeFeedIDMaxLen", eg, "simple-changefeed-task".
+func ValidateNamespace(namespace string) error {
+	if !namespaceRe.MatchString(namespace) || len(namespace) > namespaceMaxLen {
+		return cerror.ErrInvalidNamespace.GenWithStackByArgs(namespaceRe)
 	}
 	return nil
 }
@@ -290,7 +315,7 @@ func (info *ChangeFeedInfo) fixState() {
 		// This corresponds to the case of failure or error.
 		case AdminNone, AdminResume:
 			if info.Error != nil {
-				if cerrors.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code)) {
+				if cerror.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code)) {
 					state = StateFailed
 				} else {
 					state = StateError

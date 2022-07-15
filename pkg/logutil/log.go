@@ -15,6 +15,7 @@ package logutil
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"strconv"
 	"strings"
@@ -27,8 +28,8 @@ import (
 	"google.golang.org/grpc/grpclog"
 )
 
-// _globalP is the global ZapProperties in log
-var _globalP *log.ZapProperties
+// globalP is the global ZapProperties in log
+var globalP *log.ZapProperties
 
 const (
 	defaultLogLevel   = "info"
@@ -83,8 +84,49 @@ func SetLogLevel(level string) error {
 	return nil
 }
 
+// loggerOp is the op for logger control
+type loggerOp struct {
+	isInitGRPCLogger   bool
+	isInitSaramaLogger bool
+	output             zapcore.WriteSyncer
+}
+
+func (op *loggerOp) applyOpts(opts []LoggerOpt) {
+	for _, opt := range opts {
+		opt(op)
+	}
+}
+
+// LoggerOpt is the logger option
+type LoggerOpt func(*loggerOp)
+
+// WithInitGRPCLogger enables grpc logger initialization when initializes global logger
+func WithInitGRPCLogger() LoggerOpt {
+	return func(op *loggerOp) {
+		op.isInitGRPCLogger = true
+	}
+}
+
+// WithInitSaramaLogger enables sarama logger initialization when initializes global logger
+func WithInitSaramaLogger() LoggerOpt {
+	return func(op *loggerOp) {
+		op.isInitSaramaLogger = true
+	}
+}
+
+// WithOutputWriteSyncer will replace the WriteSyncer of global logger with customized WriteSyncer
+// Easy for test when using zaptest.Buffer as WriteSyncer
+func WithOutputWriteSyncer(output zapcore.WriteSyncer) LoggerOpt {
+	return func(op *loggerOp) {
+		op.output = output
+	}
+}
+
 // InitLogger initializes logger
-func InitLogger(cfg *Config) error {
+func InitLogger(cfg *Config, opts ...LoggerOpt) error {
+	var op loggerOp
+	op.applyOpts(opts)
+
 	pclogConfig := &log.Config{
 		Level: cfg.Level,
 		File: log.FileLogConfig{
@@ -98,7 +140,11 @@ func InitLogger(cfg *Config) error {
 
 	var lg *zap.Logger
 	var err error
-	lg, _globalP, err = log.InitLogger(pclogConfig)
+	if op.output == nil {
+		lg, globalP, err = log.InitLogger(pclogConfig)
+	} else {
+		lg, globalP, err = log.InitLoggerWithWriteSyncer(pclogConfig, op.output, nil)
+	}
 	if err != nil {
 		return err
 	}
@@ -106,23 +152,31 @@ func InitLogger(cfg *Config) error {
 	// Do not log stack traces at all, as we'll get the stack trace from the
 	// error itself.
 	lg = lg.WithOptions(zap.AddStacktrace(zap.DPanicLevel))
+	log.ReplaceGlobals(lg, globalP)
 
-	log.ReplaceGlobals(lg, _globalP)
+	return initOptionalComponent(&op, lg, cfg)
+}
 
+// initOptionalComponent initializes some optional components
+func initOptionalComponent(op *loggerOp, logger *zap.Logger, cfg *Config) error {
 	var level zapcore.Level
-	err = level.UnmarshalText([]byte(cfg.Level))
-	if err != nil {
-		return errors.Trace(err)
+	if op.isInitGRPCLogger || op.isInitSaramaLogger {
+		err := level.UnmarshalText([]byte(cfg.Level))
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
-	err = initGRPCLogger(level)
-	if err != nil {
-		return err
+	if op.isInitGRPCLogger {
+		if err := initGRPCLogger(level); err != nil {
+			return err
+		}
 	}
 
-	err = initSaramaLogger(level)
-	if err != nil {
-		return err
+	if op.isInitSaramaLogger {
+		if err := initSaramaLogger(level); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -143,7 +197,7 @@ func ZapErrorFilter(err error, filterErrors ...error) zap.Field {
 func initSaramaLogger(level zapcore.Level) error {
 	// only available less than info level
 	if !zapcore.InfoLevel.Enabled(level) {
-		logger, err := zap.NewStdLogAt(log.L().With(zap.String("name", "sarama")), level)
+		logger, err := zap.NewStdLogAt(log.L().With(zap.String("component", "sarama")), level)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -196,7 +250,7 @@ func initGRPCLogger(level zapcore.Level) error {
 		return nil
 	}
 
-	logger := log.L().With(zap.String("name", "grpc"))
+	logger := log.L().With(zap.String("component", "grpc"))
 	// For gRPC 1.26.0, logging call stack:
 	//
 	// github.com/pingcap/tiflow/pkg/util.levelToFunc.func1
@@ -214,4 +268,32 @@ func initGRPCLogger(level zapcore.Level) error {
 	writer := &grpcLoggerWriter{logFunc: logFunc}
 	grpclog.SetLoggerV2(grpclog.NewLoggerV2WithVerbosity(writer, writer, writer, v))
 	return nil
+}
+
+// ErrorFilterContextCanceled log the msg and fields but do nothing if fields have cancel error
+func ErrorFilterContextCanceled(logger *zap.Logger, msg string, fields ...zap.Field) {
+	for _, field := range fields {
+		switch field.Type {
+		case zapcore.StringType:
+			if field.Key == "error" && strings.Contains(field.String, context.Canceled.Error()) {
+				return
+			}
+		case zapcore.ErrorType:
+			err, ok := field.Interface.(error)
+			if ok && errors.Cause(err) == context.Canceled {
+				return
+			}
+		}
+	}
+
+	logger.WithOptions(zap.AddCallerSkip(1)).Error(msg, fields...)
+}
+
+// ShortError contructs a field which only records the error message without the
+// verbose text (i.e. excludes the stack trace).
+func ShortError(err error) zap.Field {
+	if err == nil {
+		return zap.Skip()
+	}
+	return zap.String("error", err.Error())
 }
