@@ -226,6 +226,7 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 			return nil, true, nil
 		})
 		checkpointTs := m.state.Info.GetCheckpointTs(m.state.Status)
+
 		log.Info("the changefeed is removed",
 			zap.String("namespace", m.state.ID.Namespace),
 			zap.String("changefeed", m.state.ID.ID),
@@ -268,11 +269,18 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 			*model.ChangeFeedStatus, bool, error,
 		) {
 			if job.OverwriteCheckpointTs > 0 {
+				oldCheckpointTs := status.CheckpointTs
 				status = &model.ChangeFeedStatus{
 					ResolvedTs:   job.OverwriteCheckpointTs,
 					CheckpointTs: job.OverwriteCheckpointTs,
 					AdminJobType: model.AdminNone,
 				}
+				log.Info("overwriting the checkpoint ts",
+					zap.String("namespace", m.state.ID.Namespace),
+					zap.String("changefeed", m.state.ID.ID),
+					zap.Any("oldCheckpointTs", oldCheckpointTs),
+					zap.Any("newCheckpointTs", status.CheckpointTs),
+				)
 				return status, true, nil
 			}
 			return status, false, nil
