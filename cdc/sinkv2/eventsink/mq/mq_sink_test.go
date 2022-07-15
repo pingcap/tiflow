@@ -51,6 +51,8 @@ func initBroker(t *testing.T, partitionNum int) (*sarama.MockBroker, string) {
 }
 
 func TestWriteEvents(t *testing.T) {
+	t.Parallel()
+
 	kafkav1.NewAdminClientImpl = kafka.NewMockAdminClient
 	defer func() {
 		kafkav1.NewAdminClientImpl = kafka.NewSaramaAdminClient
@@ -76,8 +78,7 @@ func TestWriteEvents(t *testing.T) {
 	require.Nil(t, err)
 	require.NotNil(t, s)
 
-	count := 0
-	tableState := pipeline.TableStateReplicating
+	tableStatus := pipeline.TableStateReplicating
 	row := &model.RowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
@@ -87,11 +88,9 @@ func TestWriteEvents(t *testing.T) {
 	events := make([]*eventsink.RowChangeCallbackableEvent, 0, 3000)
 	for i := 0; i < 3000; i++ {
 		events = append(events, &eventsink.RowChangeCallbackableEvent{
-			Event: row,
-			Callback: func() {
-				count += 1
-			},
-			TableStatus: &tableState,
+			Event:       row,
+			Callback:    func() {},
+			TableStatus: &tableStatus,
 		})
 	}
 

@@ -16,6 +16,7 @@ package producer
 import (
 	"context"
 
+	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 )
 
@@ -23,19 +24,29 @@ var _ Producer = (*MockProducer)(nil)
 
 // MockProducer is a mock producer for test.
 type MockProducer struct {
-	events []*codec.MQMessage
+	events map[mqv1.TopicPartitionKey][]*codec.MQMessage
 }
 
 // NewMockProducer creates a mock producer.
 func NewMockProducer() Producer {
-	return &MockProducer{}
+	return &MockProducer{
+		events: make(map[mqv1.TopicPartitionKey][]*codec.MQMessage),
+	}
 }
 
 // AsyncSendMessage appends a message to the mock producer.
 func (m *MockProducer) AsyncSendMessage(ctx context.Context, topic string,
 	partition int32, message *codec.MQMessage,
 ) error {
-	m.events = append(m.events, message)
+	key := mqv1.TopicPartitionKey{
+		Topic:     topic,
+		Partition: partition,
+	}
+	if _, ok := m.events[key]; !ok {
+		m.events[key] = make([]*codec.MQMessage, 0)
+	}
+	m.events[key] = append(m.events[key], message)
+
 	return nil
 }
 
@@ -46,5 +57,14 @@ func (m *MockProducer) Close() error {
 
 // GetEvents returns the events received by the mock producer.
 func (m *MockProducer) GetEvents() []*codec.MQMessage {
-	return m.events
+	var events []*codec.MQMessage
+	for _, v := range m.events {
+		events = append(events, v...)
+	}
+	return events
+}
+
+// GetEvent returns the event filtered by the key.
+func (m *MockProducer) GetEvent(key mqv1.TopicPartitionKey) []*codec.MQMessage {
+	return m.events[key]
 }
