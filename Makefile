@@ -501,8 +501,16 @@ tiflow-chaos-case:
 tiflow-generate-mock: tools/bin/mockgen
 	scripts/generate-engine-mock.sh
 
+engine_image: 
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	./engine/test/utils/run_engine.sh build
+
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))
+
+engine_integration_test: 
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	./engine/test/integration_tests/run.sh "$(CASE)" "$(START_AT)"
 
 tiflow-swagger-spec: tools/bin/swag
 	tools/bin/swag init --exclude cdc,dm  --parseVendor -generalInfo engine/servermaster/openapi.go --output engine/docs/swagger
