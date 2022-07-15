@@ -22,15 +22,15 @@ import (
 
 // Filter are safe for concurrent use.
 type Filter interface {
-	// ShouldIgnoreDMLEvent return true and nil if the DML event should be ignored.
+	// ShouldIgnoreDMLEvent returns true and nil if the DML event should be ignored.
 	ShouldIgnoreDMLEvent(dml *model.RowChangedEvent, rawRow model.RowChangedDatums, tableInfo *model.TableInfo) (bool, error)
-	// ShouldIgnoreDDLEvent return true and nil if the DDL event should be ignored.
+	// ShouldIgnoreDDLEvent returns true and nil if the DDL event should be ignored.
 	ShouldIgnoreDDLEvent(ddl *model.DDLEvent) (bool, error)
 	// ShouldDiscardDDL returns true if this DDL should be discarded.
-	// If a ddl is discarded, it will not be applied to cdc't schema storage
-	// and sent to downstream.
+	// If a ddl is discarded, it will neither be applied to cdc't schema storage
+	// nor sent to downstream.
 	ShouldDiscardDDL(ddlType timodel.ActionType) bool
-	// ShouldIgnoreTable return true if the table should be ignored.
+	// ShouldIgnoreTable returns true if the table should be ignored.
 	ShouldIgnoreTable(schema, table string) bool
 	// Verify should only be called by create changefeed OpenAPI.
 	// Its purpose is to verify the expression filter config.

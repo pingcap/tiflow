@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"go.uber.org/zap"
@@ -208,8 +209,20 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		zap.String("changefeedInfo", cfInfo.String()),
 		zap.Any("upstreamInfo", upInfo))
 
-	storage, err := h.helpers.createTiStore(updateCfConfig.PDAddrs,
-		updateCfConfig.toCredential())
+	pdAddrs := strings.Split(upInfo.PDEndpoints, ",")
+	credentials := &security.Credential{
+		CAPath:        upInfo.CAPath,
+		CertPath:      upInfo.CertPath,
+		KeyPath:       upInfo.KeyPath,
+		CertAllowedCN: upInfo.CertAllowedCN,
+	}
+
+	if len(updateCfConfig.PDAddrs) != 0 {
+		pdAddrs = updateCfConfig.PDAddrs
+		credentials = updateCfConfig.PDConfig.toCredential()
+	}
+
+	storage, err := h.helpers.createTiStore(pdAddrs, credentials)
 	if err != nil {
 		_ = c.Error(errors.Trace(err))
 	}
