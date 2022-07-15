@@ -106,7 +106,7 @@ func TestKafkaSink(t *testing.T) {
 		},
 		StartTs:  100,
 		CommitTs: 120,
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+		Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("aa")}},
 	}
 	err = sink.EmitRowChangedEvents(ctx, row)
 	require.Nil(t, err)
@@ -225,7 +225,7 @@ func TestFlushRowChangedEvents(t *testing.T) {
 		},
 		StartTs:  100,
 		CommitTs: 120,
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+		Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("aa")}},
 	}
 	err = sink.EmitRowChangedEvents(ctx, row1)
 	require.Nil(t, err)
@@ -239,7 +239,7 @@ func TestFlushRowChangedEvents(t *testing.T) {
 		},
 		StartTs:  90,
 		CommitTs: 110,
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+		Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("aa")}},
 	}
 	err = sink.EmitRowChangedEvents(ctx, row2)
 	require.Nil(t, err)
@@ -253,7 +253,7 @@ func TestFlushRowChangedEvents(t *testing.T) {
 		},
 		StartTs:  110,
 		CommitTs: 130,
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+		Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("aa")}},
 	}
 
 	err = sink.EmitRowChangedEvents(ctx, row3)

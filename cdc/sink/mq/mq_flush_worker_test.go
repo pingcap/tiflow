@@ -15,6 +15,7 @@ package mq
 
 import (
 	"context"
+	"github.com/pingcap/tidb/parser/mysql"
 	"math"
 	"sync"
 	"testing"
@@ -125,7 +126,7 @@ func TestBatch(t *testing.T) {
 					row: &model.RowChangedEvent{
 						CommitTs: 1,
 						Table:    &model.TableName{Schema: "a", Table: "b"},
-						Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+						Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("aa")}},
 					},
 					key: key,
 				},
@@ -159,7 +160,7 @@ func TestBatch(t *testing.T) {
 					row: &model.RowChangedEvent{
 						CommitTs: 1,
 						Table:    &model.TableName{Schema: "a", Table: "b"},
-						Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+						Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("aa")}},
 					},
 					key: key,
 				},
@@ -232,7 +233,7 @@ func TestGroup(t *testing.T) {
 			row: &model.RowChangedEvent{
 				CommitTs: 1,
 				Table:    &model.TableName{Schema: "a", Table: "b"},
-				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+				Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("aa")}},
 			},
 			key: key1,
 		},
@@ -310,7 +311,7 @@ func TestAsyncSend(t *testing.T) {
 			row: &model.RowChangedEvent{
 				CommitTs: 1,
 				Table:    &model.TableName{Schema: "a", Table: "b"},
-				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+				Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("aa")}},
 			},
 			key: key1,
 		},
@@ -334,7 +335,7 @@ func TestAsyncSend(t *testing.T) {
 			row: &model.RowChangedEvent{
 				CommitTs: 2,
 				Table:    &model.TableName{Schema: "aa", Table: "bb"},
-				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+				Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("aa")}},
 			},
 			key: key2,
 		},
@@ -342,7 +343,7 @@ func TestAsyncSend(t *testing.T) {
 			row: &model.RowChangedEvent{
 				CommitTs: 2,
 				Table:    &model.TableName{Schema: "aaa", Table: "bbb"},
-				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+				Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("aa")}},
 			},
 			key: key3,
 		},
@@ -384,7 +385,7 @@ func TestFlush(t *testing.T) {
 			row: &model.RowChangedEvent{
 				CommitTs: 1,
 				Table:    &model.TableName{Schema: "a", Table: "b"},
-				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+				Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("aa")}},
 			},
 			key: key1,
 		},
@@ -489,7 +490,7 @@ func TestProducerError(t *testing.T) {
 		row: &model.RowChangedEvent{
 			CommitTs: 1,
 			Table:    &model.TableName{Schema: "a", Table: "b"},
-			Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+			Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("aa")}},
 		},
 		key: topicPartitionKey{
 			topic:     "test",
@@ -521,7 +522,7 @@ func TestWorker(t *testing.T) {
 		row: &model.RowChangedEvent{
 			CommitTs: 1,
 			Table:    &model.TableName{Schema: "a", Table: "b"},
-			Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+			Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("aa")}},
 		},
 		key: topicPartitionKey{
 			topic:     "test",
@@ -533,7 +534,7 @@ func TestWorker(t *testing.T) {
 		row: &model.RowChangedEvent{
 			CommitTs: 300,
 			Table:    &model.TableName{Schema: "a", Table: "b"},
-			Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+			Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("aa")}},
 		},
 		key: topicPartitionKey{
 			topic:     "test",
