@@ -131,7 +131,7 @@ func (s *mockRPCServer) MockRPCWithErrField(ctx context.Context, req *mockRPCReq
 // newMockRPCServer returns a mockRPCServer that is ready to use.
 func newMockRPCServer() *mockRPCServer {
 	serverID := "server1"
-	rpcLim := NewRPCLimiter(rate.NewLimiter(rate.Every(time.Second*5), 3), nil)
+	rpcLim := newRPCLimiter(rate.NewLimiter(rate.Every(time.Second*5), 3), nil)
 	h := &PreRPCHook[mockRPCClientIface]{
 		id:          serverID,
 		leader:      &atomic.Value{},
@@ -205,4 +205,20 @@ func TestCheckInitialized(t *testing.T) {
 	resp, err := s.MockRPCWithErrField(ctx, req)
 	require.NoError(t, err)
 	require.Equal(t, pb.ErrorCode_MasterNotReady, resp.Err.Code)
+}
+
+func TestRPCLimiter(t *testing.T) {
+	t.Parallel()
+
+	allowList := []string{"submit", "cancel"}
+	rl := rate.NewLimiter(rate.Every(time.Minute*10), 1)
+	rpcLim := newRPCLimiter(rl, allowList)
+	require.True(t, rpcLim.Allow(allowList[0]))
+	require.True(t, rpcLim.Allow(allowList[1]))
+	require.True(t, rpcLim.Allow("query"))
+	require.False(t, rpcLim.Allow("query"))
+	require.True(t, rpcLim.Allow(allowList[0]))
+	require.True(t, rpcLim.Allow(allowList[1]))
+	require.False(t, rpcLim.Allow("query"))
+	require.False(t, rpcLim.Allow("query"))
 }
