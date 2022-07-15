@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	cerrors "github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/uuid"
 	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
@@ -42,8 +42,8 @@ func NewMockClient() (Client, error) {
 		// TODO: logger
 	})
 	if err != nil {
-		log.L().Error("create gorm client fail", zap.Error(err))
-		return nil, cerrors.ErrMetaNewClientFail.Wrap(err)
+		log.Error("create gorm client fail", zap.Error(err))
+		return nil, errors.ErrMetaNewClientFail.Wrap(err)
 	}
 
 	cli := &metaOpsClient{

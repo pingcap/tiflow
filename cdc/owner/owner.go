@@ -24,6 +24,9 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/puller"
+	"github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -40,6 +43,7 @@ type ownerJobType int
 const (
 	ownerJobTypeRebalance ownerJobType = iota
 	ownerJobTypeScheduleTable
+	ownerJobTypeDrainCapture
 	ownerJobTypeAdminJob
 	ownerJobTypeDebugInfo
 	ownerJobTypeQuery
@@ -68,6 +72,9 @@ type ownerJob struct {
 	// for status provider
 	query *Query
 
+	// for scheduler related jobs
+	scheduleQuery *scheduler.Query
+
 	done chan<- error
 }
 
@@ -82,6 +89,7 @@ type Owner interface {
 		cfID model.ChangeFeedID, toCapture model.CaptureID,
 		tableID model.TableID, done chan<- error,
 	)
+	DrainCapture(query *scheduler.Query, done chan<- error)
 	WriteDebugInfo(w io.Writer, done chan<- error)
 	Query(query *Query, done chan<- error)
 	AsyncStop()
@@ -121,7 +129,12 @@ func NewOwner(upstreamManager *upstream.Manager) Owner {
 
 // NewOwner4Test creates a new Owner for test
 func NewOwner4Test(
-	newDDLPuller func(ctx cdcContext.Context, up *upstream.Upstream, startTs uint64) (DDLPuller, error),
+	newDDLPuller func(ctx context.Context,
+		replicaConfig *config.ReplicaConfig,
+		up *upstream.Upstream,
+		startTs uint64,
+		changefeed model.ChangeFeedID,
+	) (puller.DDLPuller, error),
 	newSink func() DDLSink,
 	pdClient pd.Client,
 ) Owner {
@@ -148,9 +161,6 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 		o.Bootstrap(state)
 		o.bootstrapped = true
 		return state, nil
-	}
-	if err := o.upstreamManager.Tick(stdCtx); err != nil {
-		return state, errors.Trace(err)
 	}
 
 	o.captures = state.Captures
@@ -190,7 +200,11 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 		})
 		cfReactor, exist := o.changefeeds[changefeedID]
 		if !exist {
-			up := o.upstreamManager.Get(changefeedState.Info.UpstreamID)
+			up, ok := o.upstreamManager.Get(changefeedState.Info.UpstreamID)
+			if !ok {
+				upstreamInfo := state.Upstreams[changefeedState.Info.UpstreamID]
+				up = o.upstreamManager.AddUpstream(upstreamInfo.ID, upstreamInfo)
+			}
 			cfReactor = o.newChangefeed(changefeedID, up)
 			o.changefeeds[changefeedID] = cfReactor
 		}
@@ -221,7 +235,10 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 		}
 		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 	}
-
+	// close upstream
+	if err := o.upstreamManager.Tick(stdCtx, state); err != nil {
+		return state, errors.Trace(err)
+	}
 	return state, nil
 }
 
@@ -262,6 +279,16 @@ func (o *ownerImpl) ScheduleTable(
 	})
 }
 
+// DrainCapture removes all tables at the target capture
+// `done` must be buffered to prevent blocking owner.
+func (o *ownerImpl) DrainCapture(query *scheduler.Query, done chan<- error) {
+	o.pushOwnerJob(&ownerJob{
+		Tp:            ownerJobTypeDrainCapture,
+		scheduleQuery: query,
+		done:          done,
+	})
+}
+
 // WriteDebugInfo writes debug info into the specified http writer
 func (o *ownerImpl) WriteDebugInfo(w io.Writer, done chan<- error) {
 	o.pushOwnerJob(&ownerJob{
@@ -283,6 +310,8 @@ func (o *ownerImpl) Query(query *Query, done chan<- error) {
 // AsyncStop stops the owner asynchronously
 func (o *ownerImpl) AsyncStop() {
 	atomic.StoreInt32(&o.closed, 1)
+	// Must be called after setting closed.
+	o.cleanupOwnerJob()
 	o.cleanStaleMetrics()
 }
 
@@ -386,12 +415,47 @@ func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model
 	return true
 }
 
+func (o *ownerImpl) handleDrainCaptures(query *scheduler.Query, done chan<- error) {
+	var (
+		changefeedWithTableCount int
+		totalTableCount          int
+		err                      error
+	)
+	for _, changefeed := range o.changefeeds {
+		count, e := changefeed.scheduler.DrainCapture(query.CaptureID)
+		if e != nil {
+			err = e
+			break
+		}
+		if count > 0 {
+			changefeedWithTableCount++
+		}
+		totalTableCount += count
+	}
+
+	query.Resp = &model.DrainCaptureResp{
+		CurrentTableCount: totalTableCount,
+	}
+
+	if err != nil {
+		log.Info("owner handle drain capture failed", zap.Error(err))
+		done <- err
+		close(done)
+		return
+	}
+
+	log.Info("owner handle drain capture",
+		zap.Int("changefeedWithTableCount", changefeedWithTableCount),
+		zap.Int("totalTableCount", totalTableCount))
+	close(done)
+}
+
 func (o *ownerImpl) handleJobs() {
 	jobs := o.takeOwnerJobs()
 	for _, job := range jobs {
 		changefeedID := job.ChangefeedID
 		cfReactor, exist := o.changefeeds[changefeedID]
-		if !exist && job.Tp != ownerJobTypeQuery {
+		if !exist && (job.Tp != ownerJobTypeQuery && job.Tp != ownerJobTypeDrainCapture) {
 			log.Warn("changefeed not found when handle a job", zap.Reflect("job", job))
 			job.done <- cerror.ErrChangeFeedNotExists.FastGenByArgs(job.ChangefeedID)
 			close(job.done)
@@ -402,6 +466,9 @@ func (o *ownerImpl) handleJobs() {
 			cfReactor.feedStateManager.PushAdminJob(job.AdminJob)
 		case ownerJobTypeScheduleTable:
 			cfReactor.scheduler.MoveTable(job.TableID, job.TargetCaptureID)
+		case ownerJobTypeDrainCapture:
+			o.handleDrainCaptures(job.scheduleQuery, job.done)
+			continue // continue here to prevent close the done channel twice
 		case ownerJobTypeRebalance:
 			cfReactor.scheduler.Rebalance()
 		case ownerJobTypeQuery:
@@ -533,15 +600,48 @@ func (o *ownerImpl) takeOwnerJobs() []*ownerJob {
 func (o *ownerImpl) pushOwnerJob(job *ownerJob) {
 	o.ownerJobQueue.Lock()
 	defer o.ownerJobQueue.Unlock()
+	if atomic.LoadInt32(&o.closed) != 0 {
+		log.Info("reject owner job as owner has been closed",
+			zap.Int("jobType", int(job.Tp)))
+		select {
+		case job.done <- cerror.ErrOwnerNotFound.GenWithStackByArgs():
+		default:
+		}
+		close(job.done)
+		return
+	}
 	o.ownerJobQueue.queue = append(o.ownerJobQueue.queue, job)
+}
+
+func (o *ownerImpl) cleanupOwnerJob() {
+	log.Info("cleanup owner jobs as owner has been closed")
+	jobs := o.takeOwnerJobs()
+	for _, job := range jobs {
+		select {
+		case job.done <- cerror.ErrOwnerNotFound.GenWithStackByArgs():
+		default:
+		}
+		close(job.done)
+	}
 }
 
 func (o *ownerImpl) updateGCSafepoint(
 	ctx context.Context, state *orchestrator.GlobalReactorState,
 ) error {
-	minChekpoinTsMap, forceUpdateMap := o.calculateGCSagepoint(state)
+	minChekpoinTsMap, forceUpdateMap := o.calculateGCSafepoint(state)
+
 	for upstreamID, minCheckpointTs := range minChekpoinTsMap {
-		up := o.upstreamManager.Get(upstreamID)
+		up, ok := o.upstreamManager.Get(upstreamID)
+		if !ok {
+			upstreamInfo := state.Upstreams[upstreamID]
+			up = o.upstreamManager.AddUpstream(upstreamInfo.ID, upstreamInfo)
+		}
+		if !up.IsNormal() {
+			log.Warn("upstream is not ready, skip",
+				zap.Uint64("id", up.ID),
+				zap.Strings("pd", up.PdEndpoints))
+			continue
+		}
 
 		// When the changefeed starts up, CDC will do a snapshot read at
 		// (checkpointTs - 1) from TiKV, so (checkpointTs - 1) should be an upper
@@ -561,8 +661,8 @@ func (o *ownerImpl) updateGCSafepoint(
 	return nil
 }
 
-// calculateGCSagepoint calculates GCSafepoint for different upstream.
-func (o *ownerImpl) calculateGCSagepoint(state *orchestrator.GlobalReactorState) (
+// calculateGCSafepoint calculates GCSafepoint for different upstream.
+func (o *ownerImpl) calculateGCSafepoint(state *orchestrator.GlobalReactorState) (
 	map[uint64]uint64, map[uint64]interface{},
 ) {
 	minCheckpointTsMap := make(map[uint64]uint64)

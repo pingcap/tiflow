@@ -17,15 +17,15 @@ import (
 	"encoding/json"
 	"testing"
 
-	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
 func TestChangefeedCommonInfoMarshalJSON(t *testing.T) {
 	runningErr := &RunningError{
 		"",
-		string(cerror.ErrProcessorUnknown.RFCCode()),
-		cerror.ErrProcessorUnknown.GetMsg(),
+		string(errors.ErrProcessorUnknown.RFCCode()),
+		errors.ErrProcessorUnknown.GetMsg(),
 	}
 	cfInfo := &ChangefeedCommonInfo{
 		ID:           "test",
@@ -35,20 +35,20 @@ func TestChangefeedCommonInfoMarshalJSON(t *testing.T) {
 	// when state is normal, the error code is not exist
 	cfInfoJSON, err := json.Marshal(cfInfo)
 	require.Nil(t, err)
-	require.NotContains(t, string(cfInfoJSON), string(cerror.ErrProcessorUnknown.RFCCode()))
+	require.NotContains(t, string(cfInfoJSON), string(errors.ErrProcessorUnknown.RFCCode()))
 
 	// when state is not normal, the error code is exist
 	cfInfo.FeedState = StateError
 	cfInfoJSON, err = json.Marshal(cfInfo)
 	require.Nil(t, err)
-	require.Contains(t, string(cfInfoJSON), string(cerror.ErrProcessorUnknown.RFCCode()))
+	require.Contains(t, string(cfInfoJSON), string(errors.ErrProcessorUnknown.RFCCode()))
 }
 
 func TestChangefeedDetailMarshalJSON(t *testing.T) {
 	runningErr := &RunningError{
 		"",
-		string(cerror.ErrProcessorUnknown.RFCCode()),
-		cerror.ErrProcessorUnknown.GetMsg(),
+		string(errors.ErrProcessorUnknown.RFCCode()),
+		errors.ErrProcessorUnknown.GetMsg(),
 	}
 	cfDetail := &ChangefeedDetail{
 		ID:           "test",
@@ -58,11 +58,11 @@ func TestChangefeedDetailMarshalJSON(t *testing.T) {
 	// when state is normal, the error code is not exist
 	cfInfoJSON, err := json.Marshal(cfDetail)
 	require.Nil(t, err)
-	require.NotContains(t, string(cfInfoJSON), string(cerror.ErrProcessorUnknown.RFCCode()))
+	require.NotContains(t, string(cfInfoJSON), string(errors.ErrProcessorUnknown.RFCCode()))
 
 	// when state is not normal, the error code is exist
 	cfDetail.FeedState = StateError
 	cfInfoJSON, err = json.Marshal(cfDetail)
 	require.Nil(t, err)
-	require.Contains(t, string(cfInfoJSON), string(cerror.ErrProcessorUnknown.RFCCode()))
+	require.Contains(t, string(cfInfoJSON), string(errors.ErrProcessorUnknown.RFCCode()))
 }

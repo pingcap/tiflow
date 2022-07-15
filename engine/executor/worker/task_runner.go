@@ -21,12 +21,12 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/executor/worker/internal"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // Re-export types for public use
@@ -73,14 +73,14 @@ func NewTaskRunner(inQueueSize int, initConcurrency int) *TaskRunner {
 // AddTask enqueues a naked task, and AddTask will wrap the task with internal.WrapRunnable.
 // Deprecated. TODO Will be removed once two-phase task dispatching is enabled.
 func (r *TaskRunner) AddTask(task Runnable) error {
-	wrappedTask := internal.WrapRunnable(task, r.clock.Now())
+	wrappedTask := internal.WrapRunnable(task, r.clock.Mono())
 	select {
 	case r.inQueue <- wrappedTask:
 		return nil
 	default:
 	}
 
-	return derror.ErrRuntimeIncomingQueueFull.GenWithStackByArgs()
+	return cerrors.ErrRuntimeIncomingQueueFull.GenWithStackByArgs()
 }
 
 // addWrappedTask enqueues a task already wrapped by internal.WrapRunnable.
@@ -92,7 +92,7 @@ func (r *TaskRunner) addWrappedTask(task *internal.RunnableContainer) error {
 	default:
 	}
 
-	return derror.ErrRuntimeIncomingQueueFull.GenWithStackByArgs()
+	return cerrors.ErrRuntimeIncomingQueueFull.GenWithStackByArgs()
 }
 
 // Run runs forever until context is canceled or task queue is closed.
@@ -106,10 +106,10 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 			return errors.Trace(ctx.Err())
 		case task := <-r.inQueue:
 			if task == nil {
-				return derror.ErrRuntimeIsClosed.GenWithStackByArgs()
+				return cerrors.ErrRuntimeIsClosed.GenWithStackByArgs()
 			}
 			if err := r.onNewTask(task); err != nil {
-				log.L().Warn("Failed to launch task",
+				log.Warn("Failed to launch task",
 					zap.String("id", task.ID()),
 					zap.Error(err))
 			}
@@ -152,7 +152,7 @@ func (r *TaskRunner) cancelAll() {
 		id := key.(RunnableID)
 		t := value.(*taskEntry)
 		t.cancel()
-		log.L().Info("Cancelling task", zap.String("id", id))
+		log.Info("Cancelling task", zap.String("id", id))
 		return true
 	})
 	r.cancelMu.Unlock()
@@ -180,13 +180,13 @@ func (r *TaskRunner) onNewTask(task *internal.RunnableContainer) (ret error) {
 	defer r.cancelMu.RUnlock()
 
 	if r.canceled {
-		return derror.ErrRuntimeClosed.GenWithStackByArgs()
+		return cerrors.ErrRuntimeClosed.GenWithStackByArgs()
 	}
 
 	_, exists := r.tasks.LoadOrStore(task.ID(), t)
 	if exists {
-		log.L().Warn("Duplicate Task ID", zap.String("id", task.ID()))
-		return derror.ErrRuntimeDuplicateTaskID.GenWithStackByArgs(task.ID())
+		log.Warn("Duplicate Task ID", zap.String("id", task.ID()))
+		return cerrors.ErrRuntimeDuplicateTaskID.GenWithStackByArgs(task.ID())
 	}
 
 	r.launchTask(rctx, t)
@@ -204,24 +204,24 @@ func (r *TaskRunner) launchTask(rctx *RuntimeContext, entry *taskEntry) {
 
 		var err error
 		defer func() {
-			log.L().Info("Task Closed",
+			log.Info("Task Closed",
 				zap.String("id", entry.ID()),
 				zap.Error(err),
 				zap.Int64("runtime-task-count", r.taskCount.Load()))
 			entry.OnStopped()
 			r.taskStopNotifier.Notify(entry.ID())
 			if _, ok := r.tasks.LoadAndDelete(entry.ID()); !ok {
-				log.L().Panic("Task does not exist", zap.String("id", entry.ID()))
+				log.Panic("Task does not exist", zap.String("id", entry.ID()))
 			}
 		}()
 
 		entry.OnLaunched()
-		log.L().Info("Launching task",
+		log.Info("Launching task",
 			zap.String("id", entry.ID()),
 			zap.Int64("runtime-task-count", r.taskCount.Load()))
 
 		err = entry.Run(rctx)
-		log.L().Info("Task stopped", zap.String("id", entry.ID()), zap.Error(err))
+		log.Info("Task stopped", zap.String("id", entry.ID()), zap.Error(err))
 	}()
 }
 

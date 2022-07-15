@@ -30,7 +30,7 @@ jobs:
         run: docker build -f ./dm/Dockerfile .
 
       - name: Build-engine
-        run: docker build -f ./engine/Dockerfile .
+        run: docker build -f ./engine/deployments/docker/Dockerfile .
 
   mac_build:
     name: Mac OS Build

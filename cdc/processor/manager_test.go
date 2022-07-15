@@ -27,25 +27,30 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
 )
 
 type managerTester struct {
-	manager *Manager
-	state   *orchestrator.GlobalReactorState
-	tester  *orchestrator.ReactorStateTester
+	manager  *managerImpl
+	state    *orchestrator.GlobalReactorState
+	tester   *orchestrator.ReactorStateTester
+	liveness model.Liveness
 }
 
 // NewManager4Test creates a new processor manager for test
 func NewManager4Test(
 	t *testing.T,
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
-) *Manager {
-	m := NewManager(upstream.NewManager4Test(nil))
-	m.newProcessor = func(ctx cdcContext.Context, up *upstream.Upstream) *processor {
-		return newProcessor4Test(ctx, t, createTablePipeline)
+	liveness *model.Liveness,
+) *managerImpl {
+	m := NewManager(upstream.NewManager4Test(nil), liveness).(*managerImpl)
+	m.newProcessor = func(
+		ctx cdcContext.Context, up *upstream.Upstream, liveness *model.Liveness,
+	) *processor {
+		return newProcessor4Test(ctx, t, createTablePipeline, m.liveness)
 	}
 	return m
 }
@@ -55,16 +60,18 @@ func (s *managerTester) resetSuit(ctx cdcContext.Context, t *testing.T) {
 		return &mockTablePipeline{
 			tableID:      tableID,
 			name:         fmt.Sprintf("`test`.`table%d`", tableID),
-			status:       tablepipeline.TableStatusRunning,
+			state:        tablepipeline.TableStateReplicating,
 			resolvedTs:   replicaInfo.StartTs,
 			checkpointTs: replicaInfo.StartTs,
 		}, nil
-	})
-	s.state = orchestrator.NewGlobalState()
+	}, &s.liveness)
+	s.state = orchestrator.NewGlobalState(etcd.DefaultCDCClusterID)
 	captureInfoBytes, err := ctx.GlobalVars().CaptureInfo.Marshal()
 	require.Nil(t, err)
 	s.tester = orchestrator.NewReactorStateTester(t, s.state, map[string]string{
-		fmt.Sprintf("/tidb/cdc/capture/%s", ctx.GlobalVars().CaptureInfo.ID): string(captureInfoBytes),
+		fmt.Sprintf("%s/capture/%s",
+			etcd.DefaultClusterAndMetaPrefix,
+			ctx.GlobalVars().CaptureInfo.ID): string(captureInfoBytes),
 	})
 }
 
@@ -80,7 +87,8 @@ func TestChangefeed(t *testing.T) {
 
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 	// an inactive changefeed
-	s.state.Changefeeds[changefeedID] = orchestrator.NewChangefeedReactorState(changefeedID)
+	s.state.Changefeeds[changefeedID] = orchestrator.NewChangefeedReactorState(
+		etcd.DefaultCDCClusterID, changefeedID)
 	_, err = s.manager.Tick(ctx, s.state)
 	s.tester.MustApplyPatches()
 	require.Nil(t, err)
@@ -132,7 +140,8 @@ func TestDebugInfo(t *testing.T) {
 
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 	// an active changefeed
-	s.state.Changefeeds[changefeedID] = orchestrator.NewChangefeedReactorState(changefeedID)
+	s.state.Changefeeds[changefeedID] = orchestrator.NewChangefeedReactorState(
+		etcd.DefaultCDCClusterID, changefeedID)
 	s.state.Changefeeds[changefeedID].PatchInfo(
 		func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 			return &model.ChangeFeedInfo{
@@ -186,7 +195,8 @@ func TestClose(t *testing.T) {
 
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 	// an active changefeed
-	s.state.Changefeeds[changefeedID] = orchestrator.NewChangefeedReactorState(changefeedID)
+	s.state.Changefeeds[changefeedID] = orchestrator.NewChangefeedReactorState(
+		etcd.DefaultCDCClusterID, changefeedID)
 	s.state.Changefeeds[changefeedID].PatchInfo(
 		func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 			return &model.ChangeFeedInfo{
@@ -215,7 +225,8 @@ func TestClose(t *testing.T) {
 }
 
 func TestSendCommandError(t *testing.T) {
-	m := NewManager(nil)
+	liveness := model.LivenessCaptureAlive
+	m := NewManager(nil, &liveness).(*managerImpl)
 	ctx, cancel := context.WithCancel(context.TODO())
 	cancel()
 	// Use unbuffered channel to stable test.
@@ -225,6 +236,74 @@ func TestSendCommandError(t *testing.T) {
 	require.Error(t, err)
 	select {
 	case <-done:
+	case <-time.After(time.Second):
+		require.FailNow(t, "done must be closed")
+	}
+}
+
+func TestManagerLiveness(t *testing.T) {
+	ctx := cdcContext.NewBackendContext4Test(false)
+	s := &managerTester{}
+	s.resetSuit(ctx, t)
+	var err error
+
+	changefeedID := model.DefaultChangeFeedID("test-changefeed")
+
+	// no changefeed
+	_, err = s.manager.Tick(ctx, s.state)
+	require.Nil(t, err)
+	// an inactive changefeed
+	s.state.Changefeeds[changefeedID] = orchestrator.NewChangefeedReactorState(
+		etcd.DefaultCDCClusterID, changefeedID)
+	_, err = s.manager.Tick(ctx, s.state)
+	s.tester.MustApplyPatches()
+	require.Nil(t, err)
+	require.Len(t, s.manager.processors, 0)
+	// an active changefeed
+	s.state.Changefeeds[changefeedID].PatchInfo(
+		func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+			return &model.ChangeFeedInfo{
+				SinkURI:    "blackhole://",
+				CreateTime: time.Now(),
+				StartTs:    0,
+				TargetTs:   math.MaxUint64,
+				Config:     config.GetDefaultReplicaConfig(),
+			}, true, nil
+		})
+	s.state.Changefeeds[changefeedID].PatchStatus(
+		func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+			return &model.ChangeFeedStatus{}, true, nil
+		})
+	s.tester.MustApplyPatches()
+	_, err = s.manager.Tick(ctx, s.state)
+	s.tester.MustApplyPatches()
+	require.Nil(t, err)
+	require.Len(t, s.manager.processors, 1)
+
+	p := s.manager.processors[changefeedID]
+	require.Equal(t, model.LivenessCaptureAlive, p.liveness.Load())
+	s.liveness.Store(model.LivenessCaptureStopping)
+	require.Equal(t, model.LivenessCaptureStopping, p.liveness.Load())
+}
+
+func TestQueryTableCount(t *testing.T) {
+	liveness := model.LivenessCaptureAlive
+	m := NewManager(nil, &liveness).(*managerImpl)
+	ctx := context.TODO()
+	// Add some tables to processor.
+	m.processors[model.ChangeFeedID{ID: "test"}] = &processor{
+		tables: map[model.TableID]tablepipeline.TablePipeline{1: nil, 2: nil},
+	}
+
+	done := make(chan error, 1)
+	tableCh := make(chan int, 1)
+	err := m.sendCommand(ctx, commandTpQueryTableCount, tableCh, done)
+	require.Nil(t, err)
+	err = m.handleCommand()
+	require.Nil(t, err)
+	select {
+	case count := <-tableCh:
+		require.Equal(t, 2, count)
 	case <-time.After(time.Second):
 		require.FailNow(t, "done must be closed")
 	}

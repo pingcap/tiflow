@@ -342,15 +342,15 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (
 			c.currBinlogFile = string(ev.NextLogName)
 			// if is local binlog but switch to remote on error, need to add uuid information in binlog's name
 			// nolint:dogsled
-			_, relaySubDirSuffix, _, _ := binlog.SplitFilenameWithUUIDSuffix(string(ev.NextLogName))
+			_, relaySubDirSuffix, _, _ := utils.SplitFilenameWithUUIDSuffix(string(ev.NextLogName))
 			if relaySubDirSuffix != "" {
 				c.relaySubDirSuffix = relaySubDirSuffix
 			} else if c.relaySubDirSuffix != "" {
-				filename, err2 := binlog.ParseFilename(string(ev.NextLogName))
+				filename, err2 := utils.ParseFilename(string(ev.NextLogName))
 				if err2 != nil {
 					return nil, 0, pb.ErrorOp_InvalidErrorOp, terror.Annotate(err2, "fail to parse binlog file name from rotate event")
 				}
-				ev.NextLogName = []byte(binlog.ConstructFilenameWithUUIDSuffix(filename, c.relaySubDirSuffix))
+				ev.NextLogName = []byte(utils.ConstructFilenameWithUUIDSuffix(filename, c.relaySubDirSuffix))
 				event.Event = ev
 			}
 		}
@@ -559,7 +559,7 @@ func (c *StreamerController) UpdateSyncCfg(syncCfg replication.BinlogSyncerConfi
 
 // check whether the uuid in binlog position's name is same with upstream.
 func (c *StreamerController) checkUUIDSameWithUpstream(ctx context.Context, pos mysql.Position, uuids []string) (bool, error) {
-	_, uuidSuffix, _, err := binlog.SplitFilenameWithUUIDSuffix(pos.Name)
+	_, uuidSuffix, _, err := utils.SplitFilenameWithUUIDSuffix(pos.Name)
 	if err != nil {
 		// don't contain uuid in position's name
 		// nolint:nilerr

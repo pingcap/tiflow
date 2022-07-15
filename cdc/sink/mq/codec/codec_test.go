@@ -215,14 +215,14 @@ func TestJsonVsCraftVsPB(t *testing.T) {
 		if len(cs) == 0 {
 			continue
 		}
-		craftEncoder := NewCraftEventBatchEncoder()
-		craftEncoder.(*CraftEventBatchEncoder).maxMessageBytes = 8192
-		craftEncoder.(*CraftEventBatchEncoder).maxBatchSize = 64
+		craftEncoder := newCraftBatchEncoder()
+		craftEncoder.(*craftBatchEncoder).maxMessageBytes = 8192
+		craftEncoder.(*craftBatchEncoder).maxBatchSize = 64
 		craftMessages := encodeRowCase(t, craftEncoder, cs)
 
-		jsonEncoder := NewJSONEventBatchEncoder()
-		jsonEncoder.(*JSONEventBatchEncoder).maxMessageBytes = 8192
-		jsonEncoder.(*JSONEventBatchEncoder).maxBatchSize = 64
+		jsonEncoder := newOpenProtocolBatchEncoder()
+		jsonEncoder.(*OpenProtocolBatchEncoder).maxMessageBytes = 8192
+		jsonEncoder.(*OpenProtocolBatchEncoder).maxBatchSize = 64
 		jsonMessages := encodeRowCase(t, jsonEncoder, cs)
 
 		protobuf1Messages := codecEncodeRowChangedPB1ToMessage(cs)
@@ -352,7 +352,7 @@ func codecEncodeRowChangedPB2(events []*model.RowChangedEvent) []byte {
 
 func codecEncodeRowCase(encoder EventBatchEncoder, events []*model.RowChangedEvent) ([]*MQMessage, error) {
 	for _, event := range events {
-		err := encoder.AppendRowChangedEvent(context.Background(), "", event)
+		err := encoder.AppendRowChangedEvent(context.Background(), "", event, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -366,16 +366,16 @@ func codecEncodeRowCase(encoder EventBatchEncoder, events []*model.RowChangedEve
 
 func init() {
 	var err error
-	encoder := NewCraftEventBatchEncoder()
-	encoder.(*CraftEventBatchEncoder).maxMessageBytes = 8192
-	encoder.(*CraftEventBatchEncoder).maxBatchSize = 64
+	encoder := newCraftBatchEncoder()
+	encoder.(*craftBatchEncoder).maxMessageBytes = 8192
+	encoder.(*craftBatchEncoder).maxBatchSize = 64
 	if codecCraftEncodedRowChanges, err = codecEncodeRowCase(encoder, codecBenchmarkRowChanges); err != nil {
 		panic(err)
 	}
 
-	encoder = NewJSONEventBatchEncoder()
-	encoder.(*JSONEventBatchEncoder).maxMessageBytes = 8192
-	encoder.(*JSONEventBatchEncoder).maxBatchSize = 64
+	encoder = newOpenProtocolBatchEncoder()
+	encoder.(*OpenProtocolBatchEncoder).maxMessageBytes = 8192
+	encoder.(*OpenProtocolBatchEncoder).maxBatchSize = 64
 	if codecJSONEncodedRowChanges, err = codecEncodeRowCase(encoder, codecBenchmarkRowChanges); err != nil {
 		panic(err)
 	}
@@ -385,18 +385,18 @@ func init() {
 
 func BenchmarkCraftEncoding(b *testing.B) {
 	allocator := craft.NewSliceAllocator(128)
-	encoder := NewCraftEventBatchEncoderWithAllocator(allocator)
-	encoder.(*CraftEventBatchEncoder).maxMessageBytes = 8192
-	encoder.(*CraftEventBatchEncoder).maxBatchSize = 64
+	encoder := newCraftBatchEncoderWithAllocator(allocator)
+	encoder.(*craftBatchEncoder).maxMessageBytes = 8192
+	encoder.(*craftBatchEncoder).maxBatchSize = 64
 	for i := 0; i < b.N; i++ {
 		_, _ = codecEncodeRowCase(encoder, codecBenchmarkRowChanges)
 	}
 }
 
 func BenchmarkJsonEncoding(b *testing.B) {
-	encoder := NewJSONEventBatchEncoder()
-	encoder.(*JSONEventBatchEncoder).maxMessageBytes = 8192
-	encoder.(*JSONEventBatchEncoder).maxBatchSize = 64
+	encoder := newOpenProtocolBatchEncoder()
+	encoder.(*OpenProtocolBatchEncoder).maxMessageBytes = 8192
+	encoder.(*OpenProtocolBatchEncoder).maxBatchSize = 64
 	for i := 0; i < b.N; i++ {
 		_, _ = codecEncodeRowCase(encoder, codecBenchmarkRowChanges)
 	}
@@ -418,7 +418,8 @@ func BenchmarkCraftDecoding(b *testing.B) {
 	allocator := craft.NewSliceAllocator(128)
 	for i := 0; i < b.N; i++ {
 		for _, message := range codecCraftEncodedRowChanges {
-			if decoder, err := NewCraftEventBatchDecoderWithAllocator(message.Value, allocator); err != nil {
+			if decoder, err := newCraftBatchDecoderWithAllocator(
+				message.Value, allocator); err != nil {
 				panic(err)
 			} else {
 				for {
@@ -438,7 +439,7 @@ func BenchmarkCraftDecoding(b *testing.B) {
 func BenchmarkJsonDecoding(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		for _, message := range codecJSONEncodedRowChanges {
-			if decoder, err := NewJSONEventBatchDecoder(message.Key, message.Value); err != nil {
+			if decoder, err := NewOpenProtocolBatchDecoder(message.Key, message.Value); err != nil {
 				panic(err)
 			} else {
 				for {

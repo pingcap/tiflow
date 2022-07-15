@@ -65,11 +65,11 @@ func TestWriterWrite(t *testing.T) {
 			},
 			uint64buf: make([]byte, 8),
 			running:   *atomic.NewBool(true),
-			metricWriteBytes: redoWriteBytesGauge.
+			metricWriteBytes: common.RedoWriteBytesGauge.
 				WithLabelValues("default", "test-cf"),
-			metricFsyncDuration: redoFsyncDurationHistogram.
+			metricFsyncDuration: common.RedoFsyncDurationHistogram.
 				WithLabelValues("default", "test-cf"),
-			metricFlushAllDuration: redoFlushAllDurationHistogram.
+			metricFlushAllDuration: common.RedoFlushAllDurationHistogram.
 				WithLabelValues("default", "test-cf"),
 			uuidGenerator: uuidGen,
 		}
@@ -157,11 +157,11 @@ func TestWriterWrite(t *testing.T) {
 			},
 			uint64buf: make([]byte, 8),
 			running:   *atomic.NewBool(true),
-			metricWriteBytes: redoWriteBytesGauge.
+			metricWriteBytes: common.RedoWriteBytesGauge.
 				WithLabelValues("default", "test-cf11"),
-			metricFsyncDuration: redoFsyncDurationHistogram.
+			metricFsyncDuration: common.RedoFsyncDurationHistogram.
 				WithLabelValues("default", "test-cf11"),
-			metricFlushAllDuration: redoFlushAllDurationHistogram.
+			metricFlushAllDuration: common.RedoFlushAllDurationHistogram.
 				WithLabelValues("default", "test-cf11"),
 			uuidGenerator: uuidGen,
 		}
@@ -240,11 +240,11 @@ func TestWriterGC(t *testing.T) {
 		cfg:       cfg,
 		uint64buf: make([]byte, 8),
 		storage:   mockStorage,
-		metricWriteBytes: redoWriteBytesGauge.
+		metricWriteBytes: common.RedoWriteBytesGauge.
 			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
-		metricFsyncDuration: redoFsyncDurationHistogram.
+		metricFsyncDuration: common.RedoFsyncDurationHistogram.
 			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
-		metricFlushAllDuration: redoFlushAllDurationHistogram.
+		metricFlushAllDuration: common.RedoFlushAllDurationHistogram.
 			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
 		uuidGenerator: uuidGen,
 	}
@@ -344,11 +344,11 @@ func TestNewWriter(t *testing.T) {
 		},
 		uint64buf: make([]byte, 8),
 		storage:   mockStorage,
-		metricWriteBytes: redoWriteBytesGauge.
+		metricWriteBytes: common.RedoWriteBytesGauge.
 			WithLabelValues("default", "test"),
-		metricFsyncDuration: redoFsyncDurationHistogram.
+		metricFsyncDuration: common.RedoFsyncDurationHistogram.
 			WithLabelValues("default", "test"),
-		metricFlushAllDuration: redoFlushAllDurationHistogram.
+		metricFlushAllDuration: common.RedoFlushAllDurationHistogram.
 			WithLabelValues("default", "test"),
 		uuidGenerator: uuidGen,
 	}
@@ -410,11 +410,11 @@ func TestRotateFile(t *testing.T) {
 			MaxLogSize:   defaultMaxLogSize,
 		},
 		uint64buf: make([]byte, 8),
-		metricWriteBytes: redoWriteBytesGauge.
+		metricWriteBytes: common.RedoWriteBytesGauge.
 			WithLabelValues("default", "test"),
-		metricFsyncDuration: redoFsyncDurationHistogram.
+		metricFsyncDuration: common.RedoFsyncDurationHistogram.
 			WithLabelValues("default", "test"),
-		metricFlushAllDuration: redoFlushAllDurationHistogram.
+		metricFlushAllDuration: common.RedoFlushAllDurationHistogram.
 			WithLabelValues("default", "test"),
 		storage:       mockStorage,
 		uuidGenerator: uuidGen,

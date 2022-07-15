@@ -14,18 +14,15 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
-	"github.com/pingcap/tiflow/pkg/etcd"
-
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/model"
+	v2 "github.com/pingcap/tiflow/cdc/api/v2"
+	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/r3labs/diff"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -34,9 +31,7 @@ import (
 
 // updateChangefeedOptions defines common flags for the `cli changefeed update` command.
 type updateChangefeedOptions struct {
-	etcdClient *etcd.CDCEtcdClient
-
-	credential *security.Credential
+	apiV2Client apiv2client.APIV2Interface
 
 	commonChangefeedOptions *changefeedCommonOptions
 	changefeedID            string
@@ -52,26 +47,44 @@ func newUpdateChangefeedOptions(commonChangefeedOptions *changefeedCommonOptions
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
 func (o *updateChangefeedOptions) addFlags(cmd *cobra.Command) {
-	if o == nil {
-		return
-	}
-
 	o.commonChangefeedOptions.addFlags(cmd)
 	cmd.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	_ = cmd.MarkPersistentFlagRequired("changefeed-id")
 }
 
+func (o *updateChangefeedOptions) getChangefeedConfig(cmd *cobra.Command,
+	info *v2.ChangeFeedInfo,
+) *v2.ChangefeedConfig {
+	replicaConfig := info.Config
+	res := &v2.ChangefeedConfig{
+		TargetTs:          info.TargetTs,
+		SinkURI:           info.SinkURI,
+		SyncPointEnabled:  info.SyncPointEnabled,
+		SyncPointInterval: info.SyncPointInterval,
+		ReplicaConfig:     replicaConfig,
+	}
+	cmd.Flags().Visit(func(flag *pflag.Flag) {
+		switch flag.Name {
+		case "upstream-pd":
+			res.PDAddrs = strings.Split(o.commonChangefeedOptions.upstreamPDAddrs, ",")
+		case "upstream-ca":
+			res.CAPath = o.commonChangefeedOptions.upstreamCaPath
+		case "upstream-cert":
+			res.CertPath = o.commonChangefeedOptions.upstreamCertPath
+		case "upstream-key":
+			res.KeyPath = o.commonChangefeedOptions.upstreamKeyPath
+		}
+	})
+	return res
+}
+
 // complete adapts from the command line args to the data and client required.
 func (o *updateChangefeedOptions) complete(f factory.Factory) error {
-	etcdClient, err := f.EtcdClient()
+	apiClient, err := f.APIV2Client()
 	if err != nil {
 		return err
 	}
-
-	o.etcdClient = etcdClient
-
-	o.credential = f.GetCredential()
-
+	o.apiV2Client = apiClient
 	return nil
 }
 
@@ -79,21 +92,7 @@ func (o *updateChangefeedOptions) complete(f factory.Factory) error {
 func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 	ctx := cmdcontext.GetDefaultContext()
 
-	resp, err := sendOwnerChangefeedQuery(ctx, o.etcdClient,
-		model.DefaultChangeFeedID(o.changefeedID),
-		o.credential)
-	// if no cdc owner exists, allow user to update changefeed config
-	if err != nil && errors.Cause(err) != cerror.ErrOwnerNotFound {
-		return err
-	}
-	// Note that the correctness of the logic here depends on the return value of `/capture/owner/changefeed/query` interface.
-	// TODO: Using error codes instead of string containing judgments
-	if err == nil && !strings.Contains(resp, `"state": "stopped"`) {
-		return errors.Errorf("can only update changefeed config when it is stopped\nstatus: %s", resp)
-	}
-
-	old, err := o.etcdClient.GetChangeFeedInfo(ctx,
-		model.DefaultChangeFeedID(o.changefeedID))
+	old, err := o.apiV2Client.Changefeeds().GetInfo(ctx, o.changefeedID)
 	if err != nil {
 		return err
 	}
@@ -129,12 +128,12 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 		}
 	}
 
-	err = o.etcdClient.SaveChangeFeedInfo(ctx, newInfo,
-		model.DefaultChangeFeedID(o.changefeedID))
+	changefeedConfig := o.getChangefeedConfig(cmd, newInfo)
+	info, err := o.apiV2Client.Changefeeds().Update(ctx, changefeedConfig, newInfo.ID)
 	if err != nil {
 		return err
 	}
-	infoStr, err := newInfo.Marshal()
+	infoStr, err := json.Marshal(info)
 	if err != nil {
 		return err
 	}
@@ -145,7 +144,9 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 }
 
 // applyChanges applies the new changes to the old changefeed.
-func (o *updateChangefeedOptions) applyChanges(oldInfo *model.ChangeFeedInfo, cmd *cobra.Command) (*model.ChangeFeedInfo, error) {
+func (o *updateChangefeedOptions) applyChanges(oldInfo *v2.ChangeFeedInfo,
+	cmd *cobra.Command,
+) (*v2.ChangeFeedInfo, error) {
 	newInfo, err := oldInfo.Clone()
 	if err != nil {
 		return nil, err
@@ -158,10 +159,11 @@ func (o *updateChangefeedOptions) applyChanges(oldInfo *model.ChangeFeedInfo, cm
 		case "sink-uri":
 			newInfo.SinkURI = o.commonChangefeedOptions.sinkURI
 		case "config":
-			cfg := newInfo.Config
+			cfg := newInfo.Config.ToInternalReplicaConfig()
 			if err = o.commonChangefeedOptions.strictDecodeConfig("TiCDC changefeed", cfg); err != nil {
 				log.Error("decode config file error", zap.Error(err))
 			}
+			newInfo.Config = v2.ToAPIReplicaConfig(cfg)
 		case "schema-registry":
 			newInfo.Config.Sink.SchemaRegistry = o.commonChangefeedOptions.schemaRegistry
 		case "sort-engine":
@@ -179,8 +181,9 @@ func (o *updateChangefeedOptions) applyChanges(oldInfo *model.ChangeFeedInfo, cm
 			// Do nothing, this is a flags from the cli command
 			// we don't use it to update.
 		case "pd", "log-level", "key", "cert", "ca":
-			// Do nothing, this is a flags from the cli command
-			// we don't use it to update, but we do use these flags.
+		// Do nothing, this is a flags from the cli command
+		// we don't use it to update, but we do use these flags.
+		case "upstream-pd", "upstream-ca", "upstream-cert", "upstream-key":
 		default:
 			// use this default branch to prevent new added parameter is not added
 			log.Warn("unsupported flag, please report a bug", zap.String("flagName", flag.Name))
@@ -189,7 +192,6 @@ func (o *updateChangefeedOptions) applyChanges(oldInfo *model.ChangeFeedInfo, cm
 	if err != nil {
 		return nil, err
 	}
-
 	return newInfo, nil
 }
 

@@ -18,7 +18,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
@@ -68,7 +67,7 @@ func (h *relayLogInfoHub) update(taskName, subDir, filename string) error {
 	if err != nil {
 		return err
 	}
-	if !binlog.VerifyFilename(filename) {
+	if !utils.VerifyFilename(filename) {
 		return terror.ErrBinlogInvalidFilename.Generatef("binlog filename %s not valid", filename)
 	}
 	h.mu.Lock()

@@ -216,7 +216,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				c.checkList = append(c.checkList, checker.NewOnlineDDLChecker(instance.sourceDB.DB, checkSchemas, c.onlineDDL, instance.baList))
 			}
 			if _, ok := c.checkingItems[config.BinlogDBChecking]; ok {
-				c.checkList = append(c.checkList, checker.NewBinlogDBChecker(instance.sourceDB.DB, instance.sourceDBinfo, checkSchemas, instance.cfg.CaseSensitive))
+				c.checkList = append(c.checkList, checker.NewBinlogDBChecker(instance.sourceDB, instance.sourceDBinfo, checkSchemas, instance.cfg.CaseSensitive))
 			}
 		}
 	}

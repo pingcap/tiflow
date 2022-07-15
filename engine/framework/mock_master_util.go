@@ -33,11 +33,11 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
-	"github.com/pingcap/tiflow/engine/pkg/errors"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	mockkv "github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
+	metaMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
@@ -54,7 +54,7 @@ func MockBaseMaster(id frameModel.MasterID, masterImpl MasterImpl) *DefaultBaseM
 			MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 			MessageSender:         p2p.NewMockMessageSender(),
 			FrameMetaClient:       cli,
-			UserRawKVClient:       mockkv.NewMetaMock(),
+			BusinessClientConn:    metaMock.NewMockClientConn(),
 			ExecutorClientManager: client.NewClientManager(),
 			ServerMasterClient:    &client.MockServerMasterClient{},
 		}
@@ -91,7 +91,7 @@ func MockBaseMasterCreateWorker(
 	expectedSchedulerReq := &pb.ScheduleTaskRequest{
 		TaskId:               workerID,
 		Cost:                 int64(cost),
-		ResourceRequirements: resources,
+		ResourceRequirements: resourcemeta.ToResourceRequirement(masterID, resources...),
 	}
 	master.serverMasterClient.(*client.MockServerMasterClient).On(
 		"ScheduleTask",

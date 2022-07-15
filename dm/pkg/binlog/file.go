@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // ReadSortedBinlogFromDir reads and returns all binlog files (sorted ascending by binlog filename and sequence number).
@@ -42,12 +43,12 @@ func ReadSortedBinlogFromDir(dirpath string) ([]string, error) {
 	// sorting bin.100000, ..., bin.1000000, ..., bin.999999
 	type tuple struct {
 		filename string
-		parsed   Filename
+		parsed   utils.Filename
 	}
 	tmp := make([]tuple, 0, len(names)-1)
 
 	for _, f := range names {
-		p, err2 := ParseFilename(f)
+		p, err2 := utils.ParseFilename(f)
 		if err2 != nil {
 			// may contain some file that can't be parsed, like relay meta. ignore them
 			log.L().Info("collecting binlog file, ignore invalid file", zap.String("file", f))

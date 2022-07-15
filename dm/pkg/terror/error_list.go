@@ -595,6 +595,7 @@ const (
 	codeWorkerRouteTableDupMatch
 	codeWorkerUpdateSubTaskConfig
 	codeWorkerValidatorNotPaused
+	codeWorkerServerClosed
 )
 
 // DM-tracer error code.
@@ -653,6 +654,7 @@ const (
 	codeSchemaTrackerCannotInitDownstreamParser
 	codeSchemaTrackerCannotMockDownstreamTable
 	codeSchemaTrackerCannotFetchDownstreamCreateTableStmt
+	codeSchemaTrackerIsClosed
 )
 
 // HA scheduler.
@@ -952,7 +954,7 @@ var (
 	ErrConfigInvalidLoadMode               = New(codeConfigInvalidLoadMode, ClassConfig, ScopeInternal, LevelMedium, "invalid load mode '%s'", "Please choose a valid value in ['sql', 'loader']")
 	ErrConfigInvalidDuplicateResolution    = New(codeConfigInvalidLoadDuplicateResolution, ClassConfig, ScopeInternal, LevelMedium, "invalid load on-duplicate '%s'", "Please choose a valid value in ['replace', 'error', 'ignore']")
 	ErrConfigValidationMode                = New(codeConfigValidationMode, ClassConfig, ScopeInternal, LevelHigh, "invalid validation mode", "Please check `validation-mode` config in task configuration file.")
-	ErrContinuousValidatorCfgNotFound      = New(codeContinuousValidatorCfgNotFound, ClassConfig, ScopeInternal, LevelMedium, "mysql-instance(%d)'s continuous validator config %s not exist", "Please check the `continuous-validator-config-name` config in task configuration file.")
+	ErrContinuousValidatorCfgNotFound      = New(codeContinuousValidatorCfgNotFound, ClassConfig, ScopeInternal, LevelMedium, "mysql-instance(%d)'s continuous validator config %s not exist", "Please check the `validator-config-name` config in task configuration file.")
 	ErrConfigStartTimeTooLate              = New(codeConfigStartTimeTooLate, ClassConfig, ScopeInternal, LevelHigh, "start-time %s is too late, no binlog location matches it", "Please check the `--start-time` is expected or try again later.")
 	ErrConfigLoaderDirInvalid              = New(codeConfigLoaderDirInvalid, ClassConfig, ScopeInternal, LevelHigh, "loader's dir %s is invalid", "Please check the `dir` config in task configuration file.")
 	ErrConfigLoaderS3NotSupport            = New(codeConfigLoaderS3NotSupport, ClassConfig, ScopeInternal, LevelHigh, "loader's dir %s is s3 dir, but s3 is not supported", "Please check the `dir` config in task configuration file and you can use `Lightning` by set config `import-mode` be `sql` which supports s3 instead.")
@@ -1280,6 +1282,7 @@ var (
 	ErrWorkerRelayConfigChanging            = New(codeWorkerRelayConfigChanging, ClassDMWorker, ScopeInternal, LevelLow, "relay config of worker %s is changed too frequently, last relay source %s:, new relay source %s", "Please try again later")
 	ErrWorkerRouteTableDupMatch             = New(codeWorkerRouteTableDupMatch, ClassDMWorker, ScopeInternal, LevelHigh, "table %s.%s matches more than one rule", "please check the route rules in the task config")
 	ErrWorkerValidatorNotPaused             = New(codeWorkerValidatorNotPaused, ClassDMWorker, ScopeInternal, LevelHigh, "current validator stage is %s but not paused, invalid", "")
+	ErrWorkerServerClosed                   = New(codeWorkerServerClosed, ClassDMWorker, ScopeInternal, LevelLow, "worker server is closed", "")
 
 	// etcd error.
 	ErrHAFailTxnOperation   = New(codeHAFailTxnOperation, ClassHA, ScopeInternal, LevelHigh, "fail to do etcd txn operation: %s", "Please check dm-master's node status and the network between this node and dm-master")
@@ -1342,7 +1345,7 @@ var (
 		"failed to mock downstream table by create table statement %v in schema tracker", "")
 	ErrSchemaTrackerCannotFetchDownstreamCreateTableStmt = New(codeSchemaTrackerCannotFetchDownstreamCreateTableStmt, ClassSchemaTracker, ScopeInternal, LevelHigh,
 		"failed to fetch downstream table %v by show create table statement in schema tracker", "")
-
+	ErrSchemaTrackerIsClosed = New(codeSchemaTrackerIsClosed, ClassSchemaTracker, ScopeInternal, LevelHigh, "schema tracker is closed", "")
 	// HA scheduler.
 	ErrSchedulerNotStarted                   = New(codeSchedulerNotStarted, ClassScheduler, ScopeInternal, LevelHigh, "the scheduler has not started", "")
 	ErrSchedulerStarted                      = New(codeSchedulerStarted, ClassScheduler, ScopeInternal, LevelMedium, "the scheduler has already started", "")

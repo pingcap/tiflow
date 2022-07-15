@@ -12,6 +12,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	model "github.com/pingcap/tiflow/cdc/model"
 	owner "github.com/pingcap/tiflow/cdc/owner"
+	scheduler "github.com/pingcap/tiflow/cdc/scheduler"
 	orchestrator "github.com/pingcap/tiflow/pkg/orchestrator"
 )
 
@@ -48,6 +49,18 @@ func (m *MockOwner) AsyncStop() {
 func (mr *MockOwnerMockRecorder) AsyncStop() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AsyncStop", reflect.TypeOf((*MockOwner)(nil).AsyncStop))
+}
+
+// DrainCapture mocks base method.
+func (m *MockOwner) DrainCapture(query *scheduler.Query, done chan<- error) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "DrainCapture", query, done)
+}
+
+// DrainCapture indicates an expected call of DrainCapture.
+func (mr *MockOwnerMockRecorder) DrainCapture(query, done interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DrainCapture", reflect.TypeOf((*MockOwner)(nil).DrainCapture), query, done)
 }
 
 // EnqueueJob mocks base method.

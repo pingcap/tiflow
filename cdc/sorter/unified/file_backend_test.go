@@ -21,7 +21,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -55,7 +55,7 @@ func TestNoSpace(t *testing.T) {
 	}
 
 	require.Regexp(t, ".*review the settings.*no space.*", err.Error())
-	require.True(t, cerrors.ErrUnifiedSorterIOError.Equal(err))
+	require.True(t, errors.ErrUnifiedSorterIOError.Equal(err))
 }
 
 func TestWrittenCount(t *testing.T) {

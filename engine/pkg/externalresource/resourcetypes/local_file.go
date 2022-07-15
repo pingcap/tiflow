@@ -18,8 +18,8 @@ import (
 
 	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // LocalFileResourceController defines operations specific to
@@ -45,7 +45,7 @@ func (r *LocalFileResourceController) removeFilesOnExecutor(ctx context.Context,
 		// TODO we should retry here.
 		// Ideally the retrying for unknown executors should reside in clientManager.
 		// We will deal with that later.
-		return derrors.ErrUnknownExecutorID.FastGenByArgs(resource.Executor)
+		return errors.ErrUnknownExecutorID.FastGenByArgs(resource.Executor)
 	}
 
 	return cli.RemoveLocalResource(ctx, &pb.RemoveLocalResourceRequest{

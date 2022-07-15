@@ -17,11 +17,11 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
-	"github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
+	"github.com/pingcap/tiflow/pkg/errors"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 )
@@ -45,14 +45,14 @@ type EtcdMembership struct {
 func (em *EtcdMembership) getMasterNodes(ctx context.Context) (map[string]*model.NodeInfo, error) {
 	resp, err := em.etcdCli.Get(ctx, adapter.NodeInfoKeyAdapter.Path(), clientv3.WithPrefix())
 	if err != nil {
-		return nil, errors.Wrap(errors.ErrEtcdAPIError, err)
+		return nil, errors.WrapError(errors.ErrEtcdAPIError, err)
 	}
 	nodes := make(map[string]*model.NodeInfo, resp.Count)
 	for _, kv := range resp.Kvs {
 		info := &model.NodeInfo{}
 		err := json.Unmarshal(kv.Value, info)
 		if err != nil {
-			return nil, errors.Wrap(errors.ErrDecodeEtcdKeyFail, err)
+			return nil, errors.WrapError(errors.ErrDecodeEtcdKeyFail, err)
 		}
 		if info.Type == model.NodeTypeServerMaster {
 			id := string(info.ID)
@@ -108,6 +108,6 @@ func (s *Server) updateServerMasterMembers(ctx context.Context) error {
 	s.members.Lock()
 	defer s.members.Unlock()
 	s.members.m = members
-	log.L().Info("update server master members", zap.Any("members", members))
+	log.Info("update server master members", zap.Any("members", members))
 	return nil
 }

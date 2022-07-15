@@ -14,6 +14,8 @@
 package executor
 
 import (
+	"sync"
+
 	cvstask "github.com/pingcap/tiflow/engine/executor/cvs"
 	dmtask "github.com/pingcap/tiflow/engine/executor/dm"
 	"github.com/pingcap/tiflow/engine/framework/registry"
@@ -21,7 +23,10 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm"
 )
 
-func init() {
+// registerWorkerOnce guards calling registerWorkers.
+var registerWorkerOnce sync.Once
+
+func registerWorkers() {
 	cvstask.RegisterWorker()
 	cvs.RegisterWorker()
 	dm.RegisterWorker()

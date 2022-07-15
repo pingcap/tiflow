@@ -27,10 +27,11 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/db"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -74,7 +75,7 @@ func main() {
 	}
 START:
 	fmt.Printf("starting demo, dir %s addr %s\n", demoDir, demoAddress)
-	err := log.InitLogger(&log.Config{
+	err := logutil.InitLogger(&logutil.Config{
 		Level: "info",
 		// File:  demoDir + "demo.log",
 	})
@@ -93,12 +94,12 @@ START:
 		select {
 		case <-ctx.Done():
 		case sig := <-sc:
-			log.L().Info("got signal to exit", zap.Stringer("signal", sig))
+			log.Info("got signal to exit", zap.Stringer("signal", sig))
 			cancel()
 		}
 	}()
 	startDataService(ctx)
-	log.L().Info("server exits normally")
+	log.Info("server exits normally")
 }
 
 // ErrorInfo wraps info
@@ -118,13 +119,13 @@ func (s *DataRWServer) GenerateData(ctx context.Context, req *pb.GenerateDataReq
 		for _, db := range bucket {
 			err := db.Close()
 			if err != nil {
-				log.L().Error(err.Error())
+				log.Error(err.Error())
 			}
 		}
 	}
 	s.dbMap = make(map[string]dbBuckets)
 	s.mu.Unlock()
-	log.L().Info("Start to generate data ...")
+	log.Info("Start to generate data ...")
 
 	fileNum := int(req.FileNum)
 	batches := make([]db.Batch, 0, fileNum)
@@ -158,7 +159,7 @@ func (s *DataRWServer) GenerateData(ctx context.Context, req *pb.GenerateDataReq
 	s.dbMap[demoDir] = bucket
 	s.mu.Unlock()
 
-	log.L().Info("files have been created", zap.Any("filenumber", fileNum))
+	log.Info("files have been created", zap.Any("filenumber", fileNum))
 	close(ready)
 	return &pb.GenerateDataResponse{}, nil
 }
@@ -177,13 +178,13 @@ func startDataService(ctx context.Context) {
 	}
 	lis, err := net.Listen("tcp", demoAddress) //nolint:gosec
 	if err != nil {
-		log.L().Panic("listen the port failed",
+		log.Panic("listen the port failed",
 			zap.String("error:", err.Error()))
 	}
 
 	wg, ctx := errgroup.WithContext(ctx)
 	wg.Go(func() error {
-		log.L().Info("grpc serving ..")
+		log.Info("grpc serving ..")
 		return grpcServer.Serve(lis)
 	})
 
@@ -196,21 +197,21 @@ func startDataService(ctx context.Context) {
 		if dataNum == 0 {
 			return nil
 		}
-		log.L().Info("preparing data...", zap.Any("num", dataNum))
+		log.Info("preparing data...", zap.Any("num", dataNum))
 		resp, _ := s.GenerateData(ctx, &pb.GenerateDataRequest{ // nolint: errcheck
 			FileNum:   10,
 			RecordNum: int32(dataNum),
 		})
 		if len(resp.ErrMsg) > 0 {
-			log.L().Error("generate data failed", zap.String("err", resp.ErrMsg))
+			log.Error("generate data failed", zap.String("err", resp.ErrMsg))
 			os.Exit(1)
 		}
-		log.L().Info("generate data finish")
+		log.Info("generate data finish")
 		return nil
 	})
 
 	if err := wg.Wait(); err != nil {
-		log.L().Error("run grpc server with error", zap.Error(err))
+		log.Error("run grpc server with error", zap.Error(err))
 	}
 }
 
@@ -304,7 +305,7 @@ func (s *DataRWServer) CheckDir(ctx context.Context, req *pb.CheckDirRequest) (*
 		}
 		err := s.compareDBs(originDB, targetDB)
 		if err != nil {
-			log.L().Error("compare failed", zap.String("req dir", req.Dir), zap.Any("id", originID), zap.Error(err))
+			log.Error("compare failed", zap.String("req dir", req.Dir), zap.Any("id", originID), zap.Error(err))
 			return &pb.CheckDirResponse{ErrMsg: err.Error(), ErrFileIdx: int32(originID)}, nil
 		}
 	}
@@ -313,7 +314,7 @@ func (s *DataRWServer) CheckDir(ctx context.Context, req *pb.CheckDirRequest) (*
 
 // ReadLines implements DataRWService.ReadLines
 func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWService_ReadLinesServer) error {
-	log.L().Info("receive the request for reading file ", zap.Any("idx", req.FileIdx), zap.String("lineNo", string(req.LineNo)))
+	log.Info("receive the request for reading file ", zap.Any("idx", req.FileIdx), zap.String("lineNo", string(req.LineNo)))
 	s.mu.Lock()
 	db, ok := s.dbMap[demoDir][int(req.FileIdx)]
 	s.mu.Unlock()
@@ -334,7 +335,7 @@ func (s *DataRWServer) ReadLines(req *pb.ReadLinesRequest, stream pb.DataRWServi
 				return stream.Send(&pb.ReadLinesResponse{ErrMsg: err.Error()})
 			}
 			if !iter.Valid() {
-				log.L().Info("reach the end of the file")
+				log.Info("reach the end of the file")
 				return stream.Send(&pb.ReadLinesResponse{IsEof: true})
 			}
 			err = stream.Send(&pb.ReadLinesResponse{Key: iter.Key(), Val: iter.Value(), IsEof: false})
@@ -363,7 +364,7 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 					dir = res.Dir
 					idx = int(res.FileIdx)
 					s.mu.Lock()
-					log.L().Info("first writing", zap.String("dir", dir), zap.Any("idx", idx))
+					log.Info("first writing", zap.String("dir", dir), zap.Any("idx", idx))
 					bucket, ok := s.dbMap[dir]
 					if !ok {
 						bucket = make(dbBuckets)
@@ -375,7 +376,7 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 							db.WithCache(256<<10))
 						if err != nil {
 							s.mu.Unlock()
-							log.L().Error("write line meet error", zap.String("request", res.String()), zap.Error(err))
+							log.Error("write line meet error", zap.String("request", res.String()), zap.Error(err))
 							return stream.SendAndClose(&pb.WriteLinesResponse{ErrMsg: err.Error()})
 						}
 						bucket[idx] = peddleDB
@@ -384,11 +385,11 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 					s.mu.Unlock()
 				} else {
 					if dir != res.Dir {
-						log.L().Error("Different writing dir in the same thread", zap.String("dir1", dir), zap.String("dir2", res.Dir))
+						log.Error("Different writing dir in the same thread", zap.String("dir1", dir), zap.String("dir2", res.Dir))
 						return stream.SendAndClose(&pb.WriteLinesResponse{ErrMsg: "wrong dir names"})
 					}
 					if idx != int(res.FileIdx) {
-						log.L().Error("Different file idx in the same thread", zap.Any("idx1", idx), zap.Any("idx2", res.FileIdx))
+						log.Error("Different file idx in the same thread", zap.Any("idx1", idx), zap.Any("idx2", res.FileIdx))
 						return stream.SendAndClose(&pb.WriteLinesResponse{ErrMsg: "wrong idx"})
 					}
 				}
@@ -396,15 +397,15 @@ func (s *DataRWServer) WriteLines(stream pb.DataRWService_WriteLinesServer) erro
 				batch.Put(res.Key, res.Value)
 				err := batch.Commit()
 				if err != nil {
-					log.L().Error("write data failed  ",
+					log.Error("write data failed  ",
 						zap.String("error   ", err.Error()))
 					return stream.SendAndClose(&pb.WriteLinesResponse{ErrMsg: err.Error()})
 				}
 			} else if err == io.EOF {
-				log.L().Info("receive the eof")
+				log.Info("receive the eof")
 				return stream.SendAndClose(&pb.WriteLinesResponse{})
 			} else {
-				log.L().Error("receive loop met error", zap.Error(err))
+				log.Error("receive loop met error", zap.Error(err))
 				return err
 			}
 		}

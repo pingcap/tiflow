@@ -18,15 +18,16 @@ import (
 	"sync"
 
 	"github.com/gogo/status"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // Service implements pb.ResourceManagerServer
@@ -72,7 +73,8 @@ func (s *Service) QueryResource(ctx context.Context, request *pb.QueryResourceRe
 		return resp2, err
 	}
 
-	record, err := s.metaclient.GetResourceByID(ctx, request.GetResourceId())
+	record, err := s.metaclient.GetResourceByID(ctx,
+		pkgOrm.ResourceKey{JobID: request.GetResourceKey().GetJobId(), ID: request.GetResourceKey().GetResourceId()})
 	if err != nil {
 		if pkgOrm.IsNotFoundError(err) {
 			return nil, status.Error(codes.NotFound, err.Error())
@@ -98,16 +100,16 @@ func (s *Service) CreateResource(
 	}
 
 	resourceRecord := &resModel.ResourceMeta{
-		// TODO: projectID
-		ID:       request.GetResourceId(),
-		Job:      request.GetJobId(),
-		Worker:   request.GetCreatorWorkerId(),
-		Executor: resModel.ExecutorID(request.GetCreatorExecutor()),
-		Deleted:  false,
+		ProjectID: tenant.NewProjectInfo(request.GetProjectInfo().TenantId, request.GetProjectInfo().ProjectId).UniqueID(),
+		ID:        request.GetResourceId(),
+		Job:       request.GetJobId(),
+		Worker:    request.GetCreatorWorkerId(),
+		Executor:  resModel.ExecutorID(request.GetCreatorExecutor()),
+		Deleted:   false,
 	}
 
 	err = s.metaclient.CreateResource(ctx, resourceRecord)
-	if derror.ErrDuplicateResourceID.Equal(err) {
+	if errors.ErrDuplicateResourceID.Equal(err) {
 		return nil, status.Error(codes.AlreadyExists, "resource manager error")
 	}
 	if err != nil {
@@ -128,11 +130,13 @@ func (s *Service) RemoveResource(
 		return resp2, err
 	}
 
-	if request.GetResourceId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "empty resource-id")
+	jobID := request.GetResourceKey().GetJobId()
+	resourceID := request.GetResourceKey().GetResourceId()
+	if jobID == "" || resourceID == "" {
+		return nil, status.Error(codes.InvalidArgument, "empty job-id or resource-id")
 	}
 
-	res, err := s.metaclient.DeleteResource(ctx, request.GetResourceId())
+	res, err := s.metaclient.DeleteResource(ctx, pkgOrm.ResourceKey{JobID: jobID, ID: resourceID})
 	if err != nil {
 		return nil, status.Error(codes.Aborted, err.Error())
 	}
@@ -140,8 +144,9 @@ func (s *Service) RemoveResource(
 		return nil, status.Error(codes.NotFound, "resource not found")
 	}
 	if res.RowsAffected() > 1 {
-		log.L().Panic("unexpected RowsAffected",
-			zap.String("resource-id", request.GetResourceId()))
+		log.Panic("unexpected RowsAffected",
+			zap.String("job-id", jobID),
+			zap.String("resource-id", resourceID))
 	}
 
 	return &pb.RemoveResourceResponse{}, nil
@@ -157,38 +162,38 @@ func (s *Service) RemoveResource(
 // (4) Other errors: ("", false, err)
 func (s *Service) GetPlacementConstraint(
 	ctx context.Context,
-	id resModel.ResourceID,
+	resourceKey resModel.ResourceKey,
 ) (resModel.ExecutorID, bool, error) {
-	logger := log.L().WithFields(zap.String("resource-id", id))
+	logger := log.With(zap.String("job-id", resourceKey.JobID), zap.String("resource-id", resourceKey.ID))
 
-	rType, _, err := resModel.ParseResourcePath(id)
+	rType, _, err := resModel.ParseResourcePath(resourceKey.ID)
 	if err != nil {
 		return "", false, err
 	}
 
 	if rType != resModel.ResourceTypeLocalFile {
 		logger.Info("Resource does not need a constraint",
-			zap.String("resource-id", id), zap.String("type", string(rType)))
+			zap.String("resource-id", resourceKey.ID), zap.String("type", string(rType)))
 		return "", false, nil
 	}
 
-	record, err := s.metaclient.GetResourceByID(ctx, id)
+	record, err := s.metaclient.GetResourceByID(ctx, pkgOrm.ResourceKey{JobID: resourceKey.JobID, ID: resourceKey.ID})
 	if err != nil {
 		if pkgOrm.IsNotFoundError(err) {
-			return "", false, derror.ErrResourceDoesNotExist.GenWithStackByArgs(id)
+			return "", false, errors.ErrResourceDoesNotExist.GenWithStackByArgs(resourceKey.ID)
 		}
 		return "", false, err
 	}
 
 	if record.Deleted {
 		logger.Info("Resource meta is marked as deleted", zap.Any("record", record))
-		return "", false, derror.ErrResourceDoesNotExist.GenWithStackByArgs(id)
+		return "", false, errors.ErrResourceDoesNotExist.GenWithStackByArgs(resourceKey.ID)
 	}
 
 	if !s.executors.HasExecutor(string(record.Executor)) {
 		logger.Info("Resource meta indicates a non-existent executor",
 			zap.String("executor-id", string(record.Executor)))
-		return "", false, derror.ErrResourceDoesNotExist.GenWithStackByArgs(id)
+		return "", false, errors.ErrResourceDoesNotExist.GenWithStackByArgs(resourceKey.ID)
 	}
 
 	return record.Executor, true, nil
@@ -200,7 +205,7 @@ func (s *Service) onExecutorOffline(executorID resModel.ExecutorID) error {
 		return nil
 	default:
 	}
-	log.L().Warn("Too many offlined executors, dropping event",
+	log.Warn("Too many offlined executors, dropping event",
 		zap.String("executor-id", string(executorID)))
 	return nil
 }
@@ -219,7 +224,7 @@ func (s *Service) StartBackgroundWorker() {
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
-		defer log.L().Info("Resource manager's background task exited")
+		defer log.Info("Resource manager's background task exited")
 		s.runBackgroundWorker(ctx)
 	}()
 }

@@ -225,6 +225,7 @@ func (conn *BaseConn) ApplyRetryStrategy(tctx *tcontext.Context, params retry.Pa
 	return conn.RetryStrategy.Apply(tctx, params, operateFn)
 }
 
+// close should not be used by functions other than BaseDB.CloseBaseConn.
 func (conn *BaseConn) close() error {
 	if conn == nil || conn.DBConn == nil {
 		return nil

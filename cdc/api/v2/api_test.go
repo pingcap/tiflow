@@ -15,30 +15,68 @@ package v2
 
 import (
 	"context"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pingcap/tiflow/cdc/capture"
-	"github.com/tikv/client-go/v2/oracle"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/owner"
 	pd "github.com/tikv/pd/client"
 )
-
-// MockPDClient mocks pd.Client to facilitate unit testing.
-type MockPDClient struct {
-	pd.Client
-}
-
-func (m *MockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
-	return oracle.GetPhysical(time.Now()), 0, nil
-}
 
 type testCase struct {
 	url    string
 	method string
 }
 
-func newRouter(c *capture.Capture) *gin.Engine {
+func newRouter(apiV2 OpenAPIV2) *gin.Engine {
 	router := gin.New()
-	RegisterOpenAPIV2Routes(router, NewOpenAPIV2(c))
+	RegisterOpenAPIV2Routes(router, apiV2)
 	return router
+}
+
+// mockPDClient mocks pd.Client to facilitate unit testing.
+type mockPDClient struct {
+	pd.Client
+	logicTime int64
+	timestamp int64
+}
+
+// UpdateServiceGCSafePoint mocks the corresponding method of a real PDClient
+func (m *mockPDClient) UpdateServiceGCSafePoint(ctx context.Context,
+	serviceID string, ttl int64, safePoint uint64,
+) (uint64, error) {
+	return safePoint, nil
+}
+
+// GetTS of mockPDClient returns a mock tso
+func (m *mockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
+	return m.logicTime, m.timestamp, nil
+}
+
+// GetClusterID of mockPDClient returns a mock ClusterID
+func (m *mockPDClient) GetClusterID(ctx context.Context) uint64 {
+	return 123
+}
+
+// Close mocks the Close() method of a PDClient
+func (c *mockPDClient) Close() {}
+
+type mockStatusProvider struct {
+	owner.StatusProvider
+	changefeedStatus *model.ChangeFeedStatus
+	changefeedInfo   *model.ChangeFeedInfo
+	err              error
+}
+
+// GetChangeFeedStatus returns a changefeeds' runtime status.
+func (m *mockStatusProvider) GetChangeFeedStatus(ctx context.Context,
+	changefeedID model.ChangeFeedID,
+) (*model.ChangeFeedStatus, error) {
+	return m.changefeedStatus, m.err
+}
+
+// GetChangeFeedStatus returns a mock changefeeds' info.
+func (m *mockStatusProvider) GetChangeFeedInfo(ctx context.Context,
+	changefeedID model.ChangeFeedID,
+) (*model.ChangeFeedInfo, error) {
+	return m.changefeedInfo, m.err
 }

@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mysql"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
@@ -94,14 +93,9 @@ func newDDLSink() DDLSink {
 type ddlSinkInitHandler func(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeFeedID, info *model.ChangeFeedInfo) error
 
 func ddlSinkInitializer(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeFeedID, info *model.ChangeFeedInfo) error {
-	filter, err := filter.NewFilter(info.Config)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
 	stdCtx := contextutil.PutChangefeedIDInCtx(ctx, id)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleOwner)
-	s, err := sink.New(stdCtx, id, info.SinkURI, filter, info.Config, a.errCh)
+	s, err := sink.New(stdCtx, id, info.SinkURI, info.Config, a.errCh)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -189,7 +183,7 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 				failpoint.Inject("InjectChangefeedDDLError", func() {
 					err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 				})
-				if err == nil || cerror.ErrDDLEventIgnored.Equal(errors.Cause(err)) {
+				if err == nil {
 					log.Info("Execute DDL succeeded",
 						zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
 						zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
@@ -269,7 +263,7 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 		log.Info("ddl is sent",
 			zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
 			zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
-			zap.Uint64("ddlSentTs", ddlSentTs))
+			zap.Uint64("ddlSentTs", ddl.CommitTs))
 	default:
 		log.Warn("ddl chan full, send it the next round",
 			zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),

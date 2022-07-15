@@ -13,7 +13,7 @@
 
 package config
 
-import cerror "github.com/pingcap/tiflow/pkg/errors"
+import "github.com/pingcap/tiflow/pkg/errors"
 
 // SorterConfig represents sorter config for a changefeed
 type SorterConfig struct {
@@ -34,22 +34,28 @@ type SorterConfig struct {
 // ValidateAndAdjust validates and adjusts the sorter configuration
 func (c *SorterConfig) ValidateAndAdjust() error {
 	if c.ChunkSizeLimit < 1*1024*1024 {
-		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("chunk-size-limit should be at least 1MB")
+		return errors.ErrIllegalSorterParameter.GenWithStackByArgs(
+			"chunk-size-limit should be at least 1MB")
 	}
 	if c.NumConcurrentWorker < 1 {
-		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("num-concurrent-worker should be at least 1")
+		return errors.ErrIllegalSorterParameter.GenWithStackByArgs(
+			"num-concurrent-worker should be at least 1")
 	}
 	if c.NumWorkerPoolGoroutine > 4096 {
-		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("num-workerpool-goroutine should be at most 4096")
+		return errors.ErrIllegalSorterParameter.GenWithStackByArgs(
+			"num-workerpool-goroutine should be at most 4096")
 	}
 	if c.NumConcurrentWorker > c.NumWorkerPoolGoroutine {
-		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("num-concurrent-worker larger than num-workerpool-goroutine is useless")
+		return errors.ErrIllegalSorterParameter.GenWithStackByArgs(
+			"num-concurrent-worker larger than num-workerpool-goroutine is useless")
 	}
 	if c.NumWorkerPoolGoroutine < 1 {
-		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("num-workerpool-goroutine should be at least 1, larger than 8 is recommended")
+		return errors.ErrIllegalSorterParameter.GenWithStackByArgs(
+			"num-workerpool-goroutine should be at least 1, larger than 8 is recommended")
 	}
 	if c.MaxMemoryPercentage <= 0 || c.MaxMemoryPercentage > 80 {
-		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("max-memory-percentage should be a percentage and within (0, 80]")
+		return errors.ErrIllegalSorterParameter.GenWithStackByArgs(
+			"max-memory-percentage should be a percentage and within (0, 80]")
 	}
 
 	return nil

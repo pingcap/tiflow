@@ -15,12 +15,14 @@ package framework
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
 
 	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework/config"
@@ -351,7 +353,7 @@ func TestWorkerSuicideAfterRuntimeDelay(t *testing.T) {
 	worker.On("Tick", mock.Anything).Return(nil)
 	worker.On("CloseImpl", mock.Anything).Return(nil)
 
-	ctx = runtime.NewRuntimeCtxWithSubmitTime(ctx, submitTime)
+	ctx = runtime.NewRuntimeCtxWithSubmitTime(ctx, clock.ToMono(submitTime))
 	err := worker.Init(ctx)
 	require.NoError(t, err)
 
@@ -385,9 +387,6 @@ func TestWorkerGracefulExit(t *testing.T) {
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
-	worker.On("Status").Return(frameModel.WorkerStatus{
-		Code: frameModel.WorkerStatusNormal,
-	}, nil)
 
 	err := worker.Init(ctx)
 	require.NoError(t, err)
@@ -396,10 +395,18 @@ func TestWorkerGracefulExit(t *testing.T) {
 		Return(errors.New("fake error")).Once()
 	worker.On("CloseImpl", mock.Anything).Return(nil).Once()
 
-	for {
-		err := worker.Poll(ctx)
-		require.NoError(t, err)
+	err = worker.Poll(ctx)
+	require.Error(t, err)
+	require.Regexp(t, ".*fake error.*", err)
 
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		require.NoError(t, worker.NotifyExit(ctx, err))
+	}()
+
+	for {
 		// Make the heartbeat worker tick.
 		worker.clock.(*clock.Mock).Add(time.Second)
 
@@ -428,9 +435,8 @@ func TestWorkerGracefulExit(t *testing.T) {
 		}
 	}
 
-	err = worker.Poll(ctx)
-	require.Error(t, err)
-	require.Regexp(t, ".*fake error.*", err)
+	wg.Wait()
+	worker.AssertExpectations(t)
 }
 
 func TestWorkerGracefulExitWhileTimeout(t *testing.T) {
@@ -450,9 +456,6 @@ func TestWorkerGracefulExitWhileTimeout(t *testing.T) {
 	})
 
 	worker.On("InitImpl", mock.Anything).Return(nil)
-	worker.On("Status").Return(frameModel.WorkerStatus{
-		Code: frameModel.WorkerStatusNormal,
-	}, nil)
 
 	err := worker.Init(ctx)
 	require.NoError(t, err)
@@ -461,10 +464,25 @@ func TestWorkerGracefulExitWhileTimeout(t *testing.T) {
 		Return(errors.New("fake error")).Once()
 	worker.On("CloseImpl", mock.Anything).Return(nil).Once()
 
-	for {
-		err := worker.Poll(ctx)
-		require.NoError(t, err)
+	err = worker.Poll(ctx)
+	require.Error(t, err)
+	require.Regexp(t, ".*fake error.*", err)
 
+	var (
+		done atomic.Bool
+		wg   sync.WaitGroup
+	)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer done.Store(true)
+		err := worker.NotifyExit(ctx, err)
+		require.Error(t, err)
+		require.Regexp(t, "context deadline exceeded", err)
+	}()
+
+	for {
 		// Make the heartbeat worker tick.
 		worker.clock.(*clock.Mock).Add(time.Second)
 
@@ -478,16 +496,12 @@ func TestWorkerGracefulExitWhileTimeout(t *testing.T) {
 		}
 	}
 
-	for {
-		err := worker.Poll(ctx)
+	for !done.Load() {
 		worker.clock.(*clock.Mock).Add(time.Second)
-
-		if err != nil {
-			require.Regexp(t, ".*fake error.*", err)
-			break
-		}
 		time.Sleep(10 * time.Millisecond)
 	}
+
+	wg.Wait()
 }
 
 func TestCloseBeforeInit(t *testing.T) {
@@ -530,41 +544,9 @@ func TestExitWithoutReturn(t *testing.T) {
 	worker.On("Tick", mock.Anything).Return(nil)
 	worker.On("CloseImpl", mock.Anything).Return(nil).Once()
 
-	worker.DefaultBaseWorker.Exit(ctx, frameModel.WorkerStatus{
+	_ = worker.DefaultBaseWorker.Exit(ctx, frameModel.WorkerStatus{
 		Code: frameModel.WorkerStatusFinished,
 	}, errors.New("Exit error"))
-
-	for {
-		err := worker.Poll(ctx)
-		require.NoError(t, err)
-
-		// Make the heartbeat worker tick.
-		worker.clock.(*clock.Mock).Add(time.Second)
-
-		rawMsg, ok := worker.messageSender.TryPop(masterNodeName, frameModel.HeartbeatPingTopic(masterName))
-		if !ok {
-			continue
-		}
-		msg := rawMsg.(*frameModel.HeartbeatPingMessage)
-		if msg.IsFinished {
-			pongMsg := &frameModel.HeartbeatPongMessage{
-				SendTime:   msg.SendTime,
-				ReplyTime:  time.Now(),
-				ToWorkerID: workerID1,
-				Epoch:      1,
-				IsFinished: true,
-			}
-
-			err := worker.messageHandlerManager.InvokeHandler(
-				t,
-				frameModel.HeartbeatPongTopic(masterName, workerID1),
-				masterNodeName,
-				pongMsg,
-			)
-			require.NoError(t, err)
-			break
-		}
-	}
 
 	err = worker.Poll(ctx)
 	require.Error(t, err)

@@ -19,11 +19,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	"github.com/pingcap/tiflow/pkg/logutil"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -46,7 +45,7 @@ func TestExampleMaster(t *testing.T) {
 	t.Parallel()
 
 	initLogger.Do(func() {
-		_ = log.InitLogger(&log.Config{
+		_ = logutil.InitLogger(&logutil.Config{
 			Level: "debug",
 		})
 	})

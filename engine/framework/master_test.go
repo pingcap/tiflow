@@ -25,9 +25,9 @@ import (
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/statusutil"
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
@@ -112,7 +112,7 @@ func TestMasterPollAndClose(t *testing.T) {
 		for {
 			err := master.Poll(ctx)
 			if err != nil {
-				if derror.ErrMasterClosed.Equal(err) {
+				if errors.ErrMasterClosed.Equal(err) {
 					return
 				}
 			}

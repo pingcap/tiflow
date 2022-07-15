@@ -13,15 +13,13 @@
 
 package config
 
-import (
-	cerror "github.com/pingcap/tiflow/pkg/errors"
-)
+import "github.com/pingcap/tiflow/pkg/errors"
 
 // DBConfig represents leveldb sorter config.
 type DBConfig struct {
 	// Count is the number of leveldb count.
 	//
-	// The default value is 16.
+	// The default value is 8.
 	Count int `toml:"count" json:"count"`
 	// Concurrency is the maximum write and read concurrency.
 	//
@@ -95,7 +93,8 @@ type DBConfig struct {
 // ValidateAndAdjust validates and adjusts the db configuration
 func (c *DBConfig) ValidateAndAdjust() error {
 	if c.Compression != "none" && c.Compression != "snappy" {
-		return cerror.ErrIllegalSorterParameter.GenWithStackByArgs("sorter.leveldb.compression must be \"none\" or \"snappy\"")
+		return errors.ErrIllegalSorterParameter.GenWithStackByArgs(
+			"sorter.leveldb.compression must be \"none\" or \"snappy\"")
 	}
 
 	return nil

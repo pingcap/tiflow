@@ -32,14 +32,17 @@ const (
 
 // TableFlowController provides a convenient interface to control the memory consumption of a per table event stream
 type TableFlowController struct {
-	memoryQuota    *tableMemoryQuota
-	redoLogEnabled bool
-	lastCommitTs   uint64
+	memoryQuota  *tableMemoryQuota
+	lastCommitTs uint64
 
 	queueMu struct {
 		sync.Mutex
 		queue deque.Deque
 	}
+
+	redoLogEnabled bool
+	splitTxn       bool
+
 	// batchGroupCount is the number of txnSizeEntries with same commitTs, which could be:
 	// 1. Different txns with same commitTs but different startTs
 	// 2. TxnSizeEntry split from the same txns which exceeds max rows or max size
@@ -62,24 +65,29 @@ type txnSizeEntry struct {
 }
 
 // NewTableFlowController creates a new TableFlowController
-func NewTableFlowController(quota uint64, redoLogEnabled bool) *TableFlowController {
+func NewTableFlowController(quota uint64, redoLogEnabled bool, splitTxn bool) *TableFlowController {
+	log.Info("create table flow controller",
+		zap.Uint64("quota", quota),
+		zap.Bool("redoLogEnabled", redoLogEnabled),
+		zap.Bool("splitTxn", splitTxn))
 	maxSizePerTxn := uint64(defaultSizePerTxn)
-	if maxSizePerTxn > quota && !redoLogEnabled {
+	if maxSizePerTxn > quota {
 		maxSizePerTxn = quota
 	}
 
 	return &TableFlowController{
-		memoryQuota:    newTableMemoryQuota(quota),
-		redoLogEnabled: redoLogEnabled,
+		memoryQuota: newTableMemoryQuota(quota),
 		queueMu: struct {
 			sync.Mutex
 			queue deque.Deque
 		}{
 			queue: deque.NewDeque(),
 		},
-		batchSize:     defaultBatchSize,
-		maxRowsPerTxn: defaultRowsPerTxn,
-		maxSizePerTxn: maxSizePerTxn,
+		redoLogEnabled: redoLogEnabled,
+		splitTxn:       splitTxn,
+		batchSize:      defaultBatchSize,
+		maxRowsPerTxn:  defaultRowsPerTxn,
+		maxSizePerTxn:  maxSizePerTxn,
 	}
 }
 
@@ -92,8 +100,14 @@ func (c *TableFlowController) Consume(
 ) error {
 	commitTs := msg.CRTs
 	lastCommitTs := atomic.LoadUint64(&c.lastCommitTs)
-	blockingCallBack := func() error {
-		err := callBack(c.batchID)
+	blockingCallBack := func() (err error) {
+		if commitTs > lastCommitTs || c.splitTxn {
+			// Call `callback` in two condition:
+			// 1. commitTs > lastCommitTs, handle new txn and send a normal resolved ts
+			// 2. commitTs == lastCommitTs && splitTxn = true, split the same txn and
+			// send a batch resolved ts
+			err = callBack(c.batchID)
+		}
 
 		if commitTs == lastCommitTs {
 			c.batchID++
@@ -108,11 +122,10 @@ func (c *TableFlowController) Consume(
 			zap.Uint64("lastCommitTs", c.lastCommitTs))
 	}
 
-	if commitTs == lastCommitTs && c.redoLogEnabled {
-		// Here commitTs == lastCommitTs, which means we are not crossing transaction
-		// boundaries, and redo log currently does not support split transactions, hence
-		// we use `forceConsume` to avoid deadlock.
-		// TODO: fix this after we figure out how to make redo log support split txn.
+	if commitTs == lastCommitTs && (c.redoLogEnabled || !c.splitTxn) {
+		// Here `commitTs == lastCommitTs` means we are not crossing transaction
+		// boundaries, `c.redoLogEnabled || !c.splitTxn` means batch resolved mode
+		// are not supported, hence we should use `forceConsume` to avoid deadlock.
 		if err := c.memoryQuota.forceConsume(size); err != nil {
 			return errors.Trace(err)
 		}
@@ -198,7 +211,9 @@ func (c *TableFlowController) addEntry(msg *model.PolymorphicEvent, size uint64)
 		rowCount: 1,
 		batchID:  c.batchID,
 	})
-	msg.Row.SplitTxn = true
+	if c.splitTxn {
+		msg.Row.SplitTxn = true
+	}
 }
 
 // resetBatch reset batchID and batchGroupCount if handling a new txn, Otherwise,

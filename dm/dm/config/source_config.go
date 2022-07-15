@@ -32,7 +32,6 @@ import (
 
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 
-	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -229,7 +228,7 @@ func (c *SourceConfig) Verify() error {
 
 	var err error
 	if len(c.RelayBinLogName) > 0 {
-		if !binlog.VerifyFilename(c.RelayBinLogName) {
+		if !utils.VerifyFilename(c.RelayBinLogName) {
 			return terror.ErrWorkerRelayBinlogName.Generate(c.RelayBinLogName)
 		}
 	}

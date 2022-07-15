@@ -22,13 +22,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/phayes/freeport"
-	"github.com/pingcap/failpoint"
-	"github.com/pingcap/log"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
+	"github.com/phayes/freeport"
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/proto/p2p"
@@ -87,9 +87,10 @@ func runP2PIntegrationTest(
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	server, addr, cancelServer := newServerForIntegrationTesting(t, "test-server-1", func(config *MessageServerConfig) {
-		config.AckInterval = time.Millisecond * 1
-	})
+	server, addr, cancelServer := newServerForIntegrationTesting(t, "test-server-1",
+		func(config *MessageServerConfig) {
+			config.AckInterval = time.Millisecond * 1
+		})
 	defer cancelServer()
 
 	var wg sync.WaitGroup
@@ -328,9 +329,10 @@ func TestMessageBackPressure(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
 	defer cancel()
 
-	server, addr, cancelServer := newServerForIntegrationTesting(t, "test-server-1", func(config *MessageServerConfig) {
-		config.MaxPendingTaskCount = 10
-	})
+	server, addr, cancelServer := newServerForIntegrationTesting(t,
+		"test-server-1", func(config *MessageServerConfig) {
+			config.MaxPendingTaskCount = 10
+		})
 	defer cancelServer()
 
 	var wg sync.WaitGroup
@@ -395,9 +397,10 @@ func TestTopicCongested(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
 	defer cancel()
 
-	server, addr, cancelServer := newServerForIntegrationTesting(t, "test-server-1", func(config *MessageServerConfig) {
-		config.MaxPendingMessageCountPerTopic = 10
-	})
+	server, addr, cancelServer := newServerForIntegrationTesting(t,
+		"test-server-1", func(config *MessageServerConfig) {
+			config.MaxPendingMessageCountPerTopic = 10
+		})
 	defer cancelServer()
 
 	var wg sync.WaitGroup
@@ -436,9 +439,10 @@ func TestTopicCongested(t *testing.T) {
 	}()
 
 	// No-op handler.
-	_ = mustAddHandler(ctx, t, server, "test-topic-1", &testTopicContent{}, func(senderID string, i interface{}) error {
-		return nil
-	})
+	_ = mustAddHandler(ctx, t, server, "test-topic-1",
+		&testTopicContent{}, func(senderID string, i interface{}) error {
+			return nil
+		})
 
 	time.Sleep(100 * time.Millisecond)
 	err := server.SyncRemoveHandler(ctx, "test-topic-1")
@@ -447,9 +451,10 @@ func TestTopicCongested(t *testing.T) {
 	time.Sleep(1000 * time.Millisecond)
 
 	// No-op handler.
-	_ = mustAddHandler(ctx, t, server, "test-topic-1", &testTopicContent{}, func(senderID string, i interface{}) error {
-		return nil
-	})
+	_ = mustAddHandler(ctx, t, server, "test-topic-1",
+		&testTopicContent{}, func(senderID string, i interface{}) error {
+			return nil
+		})
 
 	require.Eventually(t, func() bool {
 		latestAck, ok := client.CurrentAck("test-topic-1")
