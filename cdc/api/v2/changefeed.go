@@ -209,14 +209,17 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		zap.String("changefeedInfo", cfInfo.String()),
 		zap.Any("upstreamInfo", upInfo))
 
-	pdAddrs := strings.Split(upInfo.PDEndpoints, ",")
-	credentials := &security.Credential{
-		CAPath:        upInfo.CAPath,
-		CertPath:      upInfo.CertPath,
-		KeyPath:       upInfo.KeyPath,
-		CertAllowedCN: upInfo.CertAllowedCN,
+	var pdAddrs []string
+	var credentials *security.Credential
+	if upInfo != nil {
+		pdAddrs = strings.Split(upInfo.PDEndpoints, ",")
+		credentials = &security.Credential{
+			CAPath:        upInfo.CAPath,
+			CertPath:      upInfo.CertPath,
+			KeyPath:       upInfo.KeyPath,
+			CertAllowedCN: upInfo.CertAllowedCN,
+		}
 	}
-
 	if len(updateCfConfig.PDAddrs) != 0 {
 		pdAddrs = updateCfConfig.PDAddrs
 		credentials = updateCfConfig.PDConfig.toCredential()
