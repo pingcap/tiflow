@@ -58,10 +58,23 @@ var (
 // dispatches requests to worker
 // sends responses to RPC client.
 type Server struct {
-	sync.Mutex
+	// closeMu is used to sync Start/Close and protect 5 fields below
+	closeMu    sync.Mutex
+	closed     atomic.Bool
+	inited     bool
+	rootLis    net.Listener
+	svr        *grpc.Server
+	etcdClient *clientv3.Client
+	// end of closeMu
+
 	wg     sync.WaitGroup
 	kaWg   sync.WaitGroup
+<<<<<<< HEAD
 	closed atomic.Bool
+=======
+	httpWg sync.WaitGroup
+
+>>>>>>> 93435aecf (worker(dm): fix Server Start/Close race (#6213))
 	ctx    context.Context
 	cancel context.CancelFunc
 
@@ -70,11 +83,10 @@ type Server struct {
 
 	cfg *Config
 
-	rootLis    net.Listener
-	svr        *grpc.Server
-	worker     *SourceWorker
-	etcdClient *clientv3.Client
-
+	// mu is used to protect worker and sourceStatus. closeMu should be locked first to avoid
+	// deadlock when closeMu and mu are both acquired.
+	mu     sync.Mutex
+	worker *SourceWorker
 	// relay status will never be put in server.sourceStatus
 	sourceStatus pb.SourceStatus
 }
@@ -84,6 +96,7 @@ func NewServer(cfg *Config) *Server {
 	s := Server{
 		cfg: cfg,
 	}
+	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.closed.Store(true) // not start yet
 	return &s
 }
@@ -93,125 +106,150 @@ func NewServer(cfg *Config) *Server {
 func (s *Server) Start() error {
 	log.L().Info("starting dm-worker server")
 	RegistryMetrics()
-	s.ctx, s.cancel = context.WithCancel(context.Background())
-	tls, err := toolutils.NewTLS(s.cfg.SSLCA, s.cfg.SSLCert, s.cfg.SSLKey, s.cfg.AdvertiseAddr, s.cfg.CertAllowedCN)
-	if err != nil {
-		return terror.ErrWorkerTLSConfigNotValid.Delegate(err)
-	}
 
-	rootLis, err := net.Listen("tcp", s.cfg.WorkerAddr)
-	if err != nil {
-		return terror.ErrWorkerStartService.Delegate(err)
-	}
-	s.rootLis = tls.WrapListener(rootLis)
+	var m cmux.CMux
 
-	s.etcdClient, err = clientv3.New(clientv3.Config{
-		Endpoints:            GetJoinURLs(s.cfg.Join),
-		DialTimeout:          dialTimeout,
-		DialKeepAliveTime:    keepaliveTime,
-		DialKeepAliveTimeout: keepaliveTimeout,
-		TLS:                  tls.TLSConfig(),
-		AutoSyncInterval:     syncMasterEndpointsTime,
-	})
-	if err != nil {
-		return err
-	}
+	// protect member from data race. some functions below like GetRelayConfig,
+	// GetSourceBoundConfig has a built-in timeout so it will not be stuck for a
+	// long time.
+	startErr := func() error {
+		s.closeMu.Lock()
+		defer s.closeMu.Unlock()
 
-	s.setWorker(nil, true)
-
-	s.wg.Add(1)
-	go func() {
-		s.runBackgroundJob(s.ctx)
-		s.wg.Done()
-	}()
-
-	s.startKeepAlive()
-
-	relaySource, revRelay, err := ha.GetRelayConfig(s.etcdClient, s.cfg.Name)
-	if err != nil {
-		return err
-	}
-	if relaySource != nil {
-		log.L().Warn("worker has been assigned relay before keepalive", zap.String("relay source", relaySource.SourceID))
-		if err2 := s.enableRelay(relaySource, true); err2 != nil {
-			return err2
+		if s.inited {
+			return terror.ErrWorkerServerClosed.Generate()
 		}
-	}
 
-	s.wg.Add(1)
-	go func(ctx context.Context) {
-		defer s.wg.Done()
-		// TODO: handle fatal error from observeRelayConfig
-		//nolint:errcheck
-		s.observeRelayConfig(ctx, revRelay)
-	}(s.ctx)
-
-	bound, sourceCfg, revBound, err := ha.GetSourceBoundConfig(s.etcdClient, s.cfg.Name)
-	if err != nil {
-		return err
-	}
-	if !bound.IsEmpty() {
-		log.L().Warn("worker has been assigned source before keepalive", zap.Stringer("bound", bound), zap.Bool("is deleted", bound.IsDeleted))
-		if err2 := s.enableHandleSubtasks(sourceCfg, true); err2 != nil {
-			return err2
+		tls, err := toolutils.NewTLS(s.cfg.SSLCA, s.cfg.SSLCert, s.cfg.SSLKey, s.cfg.AdvertiseAddr, s.cfg.CertAllowedCN)
+		if err != nil {
+			return terror.ErrWorkerTLSConfigNotValid.Delegate(err)
 		}
-		log.L().Info("started to handle mysql source", zap.String("sourceCfg", sourceCfg.String()))
-	}
 
-	s.wg.Add(1)
-	go func(ctx context.Context) {
-		defer s.wg.Done()
-		for {
-			err1 := s.observeSourceBound(ctx, revBound)
-			if err1 == nil {
-				return
+		rootLis, err := net.Listen("tcp", s.cfg.WorkerAddr)
+		if err != nil {
+			return terror.ErrWorkerStartService.Delegate(err)
+		}
+		s.rootLis = tls.WrapListener(rootLis)
+
+		s.etcdClient, err = clientv3.New(clientv3.Config{
+			Endpoints:            GetJoinURLs(s.cfg.Join),
+			DialTimeout:          dialTimeout,
+			DialKeepAliveTime:    keepaliveTime,
+			DialKeepAliveTimeout: keepaliveTimeout,
+			TLS:                  tls.TLSConfig(),
+			AutoSyncInterval:     syncMasterEndpointsTime,
+		})
+		if err != nil {
+			return err
+		}
+
+		s.setWorker(nil, true)
+
+		s.wg.Add(1)
+		go func() {
+			s.runBackgroundJob(s.ctx)
+			s.wg.Done()
+		}()
+
+		s.startKeepAlive()
+
+		relaySource, revRelay, err := ha.GetRelayConfig(s.etcdClient, s.cfg.Name)
+		if err != nil {
+			return err
+		}
+		if relaySource != nil {
+			log.L().Warn("worker has been assigned relay before keepalive", zap.String("relay source", relaySource.SourceID))
+			if err2 := s.enableRelay(relaySource, true); err2 != nil {
+				return err2
 			}
-			s.restartKeepAlive()
 		}
-	}(s.ctx)
 
-	// create a cmux
-	m := cmux.New(s.rootLis)
+		s.wg.Add(1)
+		go func(ctx context.Context) {
+			defer s.wg.Done()
+			// TODO: handle fatal error from observeRelayConfig
+			//nolint:errcheck
+			s.observeRelayConfig(ctx, revRelay)
+		}(s.ctx)
 
-	m.SetReadTimeout(cmuxReadTimeout) // set a timeout, ref: https://github.com/pingcap/tidb-binlog/pull/352
-
-	// match connections in order: first gRPC, then HTTP
-	grpcL := m.MatchWithWriters(cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"))
-
-	httpL := m.Match(cmux.HTTP1Fast())
-
-	// NOTE: don't need to set tls config, because rootLis already use tls
-	s.svr = grpc.NewServer()
-	pb.RegisterWorkerServer(s.svr, s)
-
-	grpcExitCh := make(chan struct{}, 1)
-	s.wg.Add(1)
-	go func() {
-		err2 := s.svr.Serve(grpcL)
-		if err2 != nil && !common.IsErrNetClosing(err2) && err2 != cmux.ErrListenerClosed {
-			log.L().Error("gRPC server returned", log.ShortError(err2))
+		bound, sourceCfg, revBound, err := ha.GetSourceBoundConfig(s.etcdClient, s.cfg.Name)
+		if err != nil {
+			return err
 		}
-		grpcExitCh <- struct{}{}
-	}()
-	go func(ctx context.Context) {
-		defer s.wg.Done()
-		select {
-		case <-ctx.Done():
-			if s.svr != nil {
-				// GracefulStop can not cancel active stream RPCs
-				// and the stream RPC may block on Recv or Send
-				// so we use Stop instead to cancel all active RPCs
-				s.svr.Stop()
+		if !bound.IsEmpty() {
+			log.L().Warn("worker has been assigned source before keepalive", zap.Stringer("bound", bound), zap.Bool("is deleted", bound.IsDeleted))
+			if err2 := s.enableHandleSubtasks(sourceCfg, true); err2 != nil {
+				return err2
 			}
-		case <-grpcExitCh:
+			log.L().Info("started to handle mysql source", zap.String("sourceCfg", sourceCfg.String()))
 		}
-	}(s.ctx)
 
+		s.wg.Add(1)
+		go func(ctx context.Context) {
+			defer s.wg.Done()
+			for {
+				err1 := s.observeSourceBound(ctx, revBound)
+				if err1 == nil {
+					return
+				}
+				s.restartKeepAlive()
+			}
+		}(s.ctx)
+
+		// create a cmux
+		m = cmux.New(s.rootLis)
+
+		m.SetReadTimeout(cmuxReadTimeout) // set a timeout, ref: https://github.com/pingcap/tidb-binlog/pull/352
+
+		// match connections in order: first gRPC, then HTTP
+		grpcL := m.MatchWithWriters(cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"))
+
+		httpL := m.Match(cmux.HTTP1Fast())
+
+		// NOTE: don't need to set tls config, because rootLis already use tls
+		s.svr = grpc.NewServer()
+		pb.RegisterWorkerServer(s.svr, s)
+
+		grpcExitCh := make(chan struct{}, 1)
+		s.wg.Add(1)
+		go func() {
+			err2 := s.svr.Serve(grpcL)
+			if err2 != nil && !common.IsErrNetClosing(err2) && err2 != cmux.ErrListenerClosed {
+				log.L().Error("gRPC server returned", log.ShortError(err2))
+			}
+			grpcExitCh <- struct{}{}
+		}()
+		go func(ctx context.Context) {
+			defer s.wg.Done()
+			select {
+			case <-ctx.Done():
+				if s.svr != nil {
+					// GracefulStop can not cancel active stream RPCs
+					// and the stream RPC may block on Recv or Send
+					// so we use Stop instead to cancel all active RPCs
+					s.svr.Stop()
+				}
+			case <-grpcExitCh:
+			}
+		}(s.ctx)
+
+<<<<<<< HEAD
 	httpExitCh := make(chan struct{}, 1)
 	s.wg.Add(1)
 	go func() {
 		InitStatus(httpL) // serve status
 		httpExitCh <- struct{}{}
+=======
+		s.httpWg.Add(1)
+		go func() {
+			s.httpWg.Done()
+			InitStatus(httpL) // serve status
+		}()
+
+		s.closed.Store(false)
+		s.inited = true
+		return nil
+>>>>>>> 93435aecf (worker(dm): fix Server Start/Close race (#6213))
 	}()
 	go func(ctx context.Context) {
 		defer s.wg.Done()
@@ -227,9 +265,12 @@ func (s *Server) Start() error {
 		}
 	}(s.ctx)
 
-	s.closed.Store(false)
+	if startErr != nil {
+		return startErr
+	}
+
 	log.L().Info("listening gRPC API and status request", zap.String("address", s.cfg.WorkerAddr))
-	err = m.Serve()
+	err := m.Serve()
 	if err != nil && common.IsErrNetClosing(err) {
 		err = nil
 	}
@@ -311,8 +352,8 @@ func (s *Server) observeRelayConfig(ctx context.Context, rev int64) error {
 						}
 					} else {
 						err2 := func() error {
-							s.Lock()
-							defer s.Unlock()
+							s.mu.Lock()
+							defer s.mu.Unlock()
 
 							if w := s.getSourceWorker(false); w != nil && w.cfg.SourceID == relaySource.SourceID {
 								// we may face both relay config and subtask bound changed in a compaction error, so here
@@ -400,8 +441,8 @@ func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 						}
 					} else {
 						err2 := func() error {
-							s.Lock()
-							defer s.Unlock()
+							s.mu.Lock()
+							defer s.mu.Unlock()
 
 							if w := s.getSourceWorker(false); w != nil && w.cfg.SourceID == bound.Source {
 								// we may face both relay config and subtask bound changed in a compaction error, so here
@@ -424,6 +465,10 @@ func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 							return s.enableHandleSubtasks(cfg, false)
 						}()
 						if err2 != nil {
+							if terror.ErrWorkerServerClosed.Equal(err2) {
+								// return nil to exit the loop in caller
+								return nil
+							}
 							return err2
 						}
 					}
@@ -441,8 +486,8 @@ func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 }
 
 func (s *Server) doClose() {
-	s.Lock()
-	defer s.Unlock()
+	s.closeMu.Lock()
+	defer s.closeMu.Unlock()
 
 	if s.closed.Load() {
 		return
@@ -451,13 +496,14 @@ func (s *Server) doClose() {
 	s.cancel()
 	s.wg.Wait()
 	// stop worker and wait for return(we already lock the whole Sever, so no need use lock to get source worker)
-	if w := s.getSourceWorker(false); w != nil {
+	if w := s.getSourceWorker(true); w != nil {
 		w.Stop(true)
 	}
 	s.closed.Store(true)
+	s.inited = true
 }
 
-// Close close the RPC server, this function can be called multiple times.
+// Close closes the RPC server, this function can be called multiple times.
 func (s *Server) Close() {
 	s.doClose() // we should stop current sync first, otherwise master may schedule task on new worker while we are closing
 	s.stopKeepAlive()
@@ -469,8 +515,8 @@ func (s *Server) Close() {
 // if needLock is false, we should make sure Server has been locked in caller.
 func (s *Server) getSourceWorker(needLock bool) *SourceWorker {
 	if needLock {
-		s.Lock()
-		defer s.Unlock()
+		s.mu.Lock()
+		defer s.mu.Unlock()
 	}
 	return s.worker
 }
@@ -478,8 +524,8 @@ func (s *Server) getSourceWorker(needLock bool) *SourceWorker {
 // if needLock is false, we should make sure Server has been locked in caller.
 func (s *Server) setWorker(worker *SourceWorker, needLock bool) {
 	if needLock {
-		s.Lock()
-		defer s.Unlock()
+		s.mu.Lock()
+		defer s.mu.Unlock()
 	}
 	s.worker = worker
 }
@@ -487,8 +533,8 @@ func (s *Server) setWorker(worker *SourceWorker, needLock bool) {
 // nolint:unparam
 func (s *Server) getSourceStatus(needLock bool) pb.SourceStatus {
 	if needLock {
-		s.Lock()
-		defer s.Unlock()
+		s.mu.Lock()
+		defer s.mu.Unlock()
 	}
 	return s.sourceStatus
 }
@@ -496,8 +542,8 @@ func (s *Server) getSourceStatus(needLock bool) pb.SourceStatus {
 // TODO: move some call to setWorker/getOrStartWorker.
 func (s *Server) setSourceStatus(source string, err error, needLock bool) {
 	if needLock {
-		s.Lock()
-		defer s.Unlock()
+		s.mu.Lock()
+		defer s.mu.Unlock()
 	}
 	// now setSourceStatus will be concurrently called. skip setting a source status if worker has been closed
 	if s.getSourceWorker(false) == nil && source != "" {
@@ -520,8 +566,8 @@ func (s *Server) setSourceStatus(source string, err error, needLock bool) {
 // if sourceID is not "", we will check sourceID with w.cfg.SourceID.
 func (s *Server) stopSourceWorker(sourceID string, needLock, graceful bool) error {
 	if needLock {
-		s.Lock()
-		defer s.Unlock()
+		s.mu.Lock()
+		defer s.mu.Unlock()
 	}
 	w := s.getSourceWorker(false)
 	if w == nil {
@@ -630,8 +676,8 @@ func (s *Server) operateSourceBound(bound ha.SourceBound) error {
 
 func (s *Server) enableHandleSubtasks(sourceCfg *config.SourceConfig, needLock bool) error {
 	if needLock {
-		s.Lock()
-		defer s.Unlock()
+		s.mu.Lock()
+		defer s.mu.Unlock()
 	}
 
 	w, err := s.getOrStartWorker(sourceCfg, false)
@@ -660,8 +706,8 @@ func (s *Server) enableHandleSubtasks(sourceCfg *config.SourceConfig, needLock b
 }
 
 func (s *Server) disableHandleSubtasks(source string) error {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	w := s.getSourceWorker(false)
 	if w == nil {
 		log.L().Warn("worker has already stopped before DisableHandleSubtasks", zap.String("source", source))
@@ -702,8 +748,8 @@ func (s *Server) operateRelaySource(relaySource ha.RelaySource) error {
 
 func (s *Server) enableRelay(sourceCfg *config.SourceConfig, needLock bool) error {
 	if needLock {
-		s.Lock()
-		defer s.Unlock()
+		s.mu.Lock()
+		defer s.mu.Unlock()
 	}
 
 	w, err2 := s.getOrStartWorker(sourceCfg, false)
@@ -722,8 +768,8 @@ func (s *Server) enableRelay(sourceCfg *config.SourceConfig, needLock bool) erro
 }
 
 func (s *Server) disableRelay(source string) error {
-	s.Lock()
-	defer s.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	w := s.getSourceWorker(false)
 	if w == nil {
 		log.L().Warn("worker has already stopped before DisableRelay", zap.Any("relaySource", source))
@@ -812,8 +858,8 @@ func (s *Server) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 
 func (s *Server) getOrStartWorker(cfg *config.SourceConfig, needLock bool) (*SourceWorker, error) {
 	if needLock {
-		s.Lock()
-		defer s.Unlock()
+		s.mu.Lock()
+		defer s.mu.Unlock()
 	}
 
 	if w := s.getSourceWorker(false); w != nil {

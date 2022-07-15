@@ -2926,6 +2926,21 @@ description = ""
 workaround = ""
 tags = ["internal", "high"]
 
+<<<<<<< HEAD
+=======
+[error.DM-dm-worker-40082]
+message = "current validator stage is %s but not paused, invalid"
+description = ""
+workaround = ""
+tags = ["internal", "high"]
+
+[error.DM-dm-worker-40083]
+message = "worker server is closed"
+description = ""
+workaround = ""
+tags = ["internal", "low"]
+
+>>>>>>> 93435aecf (worker(dm): fix Server Start/Close race (#6213))
 [error.DM-dm-tracer-42001]
 message = "parse dm-tracer config flag set"
 description = ""
