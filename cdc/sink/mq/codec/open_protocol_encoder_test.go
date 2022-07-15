@@ -181,7 +181,7 @@ func TestMaxMessageBytes(t *testing.T) {
 	ctx := context.Background()
 	topic := ""
 	// for a single message, the overhead is 36(maxRecordOverhead) + 8(versionHea) = 44, just can hold it.
-	a := 87 + 44
+	a := 88 + 44
 	config := NewConfig(config.ProtocolOpen).WithMaxMessageBytes(a)
 	encoder := newOpenProtocolBatchEncoderBuilder(config).Build()
 	err := encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
