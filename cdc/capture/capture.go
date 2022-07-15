@@ -392,32 +392,6 @@ func (c *captureImpl) Info() (model.CaptureInfo, error) {
 	return model.CaptureInfo{}, cerror.ErrCaptureNotInitialized.GenWithStackByArgs()
 }
 
-func (c *captureImpl) campaignLoop(ctx context.Context) error {
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-
-		ctx, cancel := context.WithTimeout(ctx, time.Second)
-		err := c.campaign(ctx)
-		cancel()
-		if err == nil {
-			return nil
-		}
-		switch errors.Cause(err) {
-		case context.DeadlineExceeded:
-			time.Sleep(time.Second)
-			continue
-		case mvcc.ErrCompacted:
-			return err
-		default:
-		}
-		return err
-	}
-}
-
 func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 	// In most failure cases, we don't return error directly, just run another
 	// campaign loop. We treat campaign loop as a special background routine.
@@ -427,7 +401,8 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		ownerFlushInterval = time.Millisecond * time.Duration(val.(int))
 	})
 	// Limit the frequency of elections to avoid putting too much pressure on the etcd server
-	rl := rate.NewLimiter(0.05, 2)
+	// each 2 seconds allow the capture to campaign for the ownership.
+	rl := rate.NewLimiter(0.5, 2)
 	for {
 		select {
 		case <-ctx.Done():
@@ -441,17 +416,25 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			}
 			return errors.Trace(err)
 		}
-		// Campaign to be an owner, it blocks until it becomes the owner
-		if err := c.campaignLoop(ctx); err != nil {
+
+		// campaign for the ownership just wait for 1 second, if timeout, retry it.
+		campaignCtx, cancel := context.WithTimeout(ctx, time.Second)
+		err = c.campaign(campaignCtx)
+		cancel()
+		if err != nil {
+			log.Warn("failed to campaign", zap.String("captureID", c.info.ID), zap.Error(err))
 			switch errors.Cause(err) {
 			case context.Canceled:
 				return nil
+			case context.DeadlineExceeded:
+				// last campaigned timeout, just retry
+				continue
 			case mvcc.ErrCompacted:
 				// the revision we requested is compacted, just retry
 				continue
 			}
-			log.Warn("campaign owner failed", zap.Error(err))
-			// if campaign owner failed, restart capture
+			log.Warn("campaign owner failed",
+				zap.String("captureID", c.info.ID), zap.Error(err))
 			return cerror.ErrCaptureSuicide.GenWithStackByArgs()
 		}
 
