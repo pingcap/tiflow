@@ -88,7 +88,7 @@ func TestTxnSink(t *testing.T) {
 	for _, be := range bes {
 		atomic.StoreInt32(&be.(*blackhole).block, 0)
 	}
-	time.Sleep(time.Duration(100) * time.Millisecond)
+	time.Sleep(time.Second)
 	require.Equal(t, uint32(100), atomic.LoadUint32(&handled))
 
 	require.Nil(t, sink.Close())

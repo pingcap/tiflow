@@ -42,6 +42,7 @@ func newSink(bes []backend) Sink {
 	var workers []*worker = make([]*worker, 0, len(bes))
 	for i, be := range bes {
 		w := newWorker(i, be)
+		w.wg.Add(1)
 		go w.Run()
 		workers = append(workers, w)
 	}
