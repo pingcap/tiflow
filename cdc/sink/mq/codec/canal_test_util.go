@@ -363,13 +363,21 @@ var (
 			{{
 				CommitTs: 1,
 				Table:    &model.TableName{Schema: "a", Table: "b"},
-				Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("aa")}},
+				Columns: []*model.Column{{
+					Name:  "col1",
+					Type:  mysql.TypeVarchar,
+					Value: []byte("aa"),
+				}},
 			}},
 			{
 				{
 					CommitTs: 1,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("aa")}},
+					Columns: []*model.Column{{
+						Name:  "col1",
+						Type:  mysql.TypeVarchar,
+						Value: []byte("aa"),
+					}},
 				},
 				{
 					CommitTs: 2,

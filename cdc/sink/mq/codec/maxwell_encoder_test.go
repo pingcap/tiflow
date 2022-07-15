@@ -17,6 +17,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
 )
@@ -72,7 +73,11 @@ func TestMaxwellAppendRowChangedEventWithCallback(t *testing.T) {
 	row := &model.RowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("aa")}},
+		Columns: []*model.Column{{
+			Name:  "col1",
+			Type:  mysql.TypeVarchar,
+			Value: []byte("aa"),
+		}},
 	}
 
 	tests := []struct {
