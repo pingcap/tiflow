@@ -579,6 +579,13 @@ const (
 	codeWorkerFailConnectMaster
 	codeWorkerWaitRelayCatchupGTID
 	codeWorkerRelayConfigChanging
+<<<<<<< HEAD
+=======
+	codeWorkerRouteTableDupMatch
+	codeWorkerUpdateSubTaskConfig
+	codeWorkerValidatorNotPaused
+	codeWorkerServerClosed
+>>>>>>> 93435aecf (worker(dm): fix Server Start/Close race (#6213))
 )
 
 // DM-tracer error code.
@@ -1224,6 +1231,19 @@ var (
 	ErrWorkerTLSConfigNotValid              = New(codeWorkerTLSConfigNotValid, ClassDMWorker, ScopeInternal, LevelHigh, "TLS config not valid", "Please check the `ssl-ca`, `ssl-cert` and `ssl-key` config in worker configuration file.")
 	ErrWorkerFailConnectMaster              = New(codeWorkerFailConnectMaster, ClassDMWorker, ScopeInternal, LevelHigh, "cannot join with master endpoints: %v, error: %v", "Please check network connection of worker and check worker name is unique.")
 	ErrWorkerRelayConfigChanging            = New(codeWorkerRelayConfigChanging, ClassDMWorker, ScopeInternal, LevelLow, "relay config of worker %s is changed too frequently, last relay source %s:, new relay source %s", "Please try again later")
+<<<<<<< HEAD
+=======
+	ErrWorkerRouteTableDupMatch             = New(codeWorkerRouteTableDupMatch, ClassDMWorker, ScopeInternal, LevelHigh, "table %s.%s matches more than one rule", "please check the route rules in the task config")
+	ErrWorkerValidatorNotPaused             = New(codeWorkerValidatorNotPaused, ClassDMWorker, ScopeInternal, LevelHigh, "current validator stage is %s but not paused, invalid", "")
+	ErrWorkerServerClosed                   = New(codeWorkerServerClosed, ClassDMWorker, ScopeInternal, LevelLow, "worker server is closed", "")
+
+	// etcd error.
+	ErrHAFailTxnOperation   = New(codeHAFailTxnOperation, ClassHA, ScopeInternal, LevelHigh, "fail to do etcd txn operation: %s", "Please check dm-master's node status and the network between this node and dm-master")
+	ErrHAInvalidItem        = New(codeHAInvalidItem, ClassHA, ScopeInternal, LevelHigh, "meets invalid ha item: %s", "Please check if there is any compatible problem and invalid manual etcd operations")
+	ErrHAFailWatchEtcd      = New(codeHAFailWatchEtcd, ClassHA, ScopeInternal, LevelHigh, "fail to watch etcd: %s", "Please check dm-master's node status and the network between this node and dm-master")
+	ErrHAFailLeaseOperation = New(codeHAFailLeaseOperation, ClassHA, ScopeInternal, LevelHigh, "fail to do etcd lease operation: %s", "Please check dm-master's node status and the network between this node and dm-master")
+	ErrHAFailKeepalive      = New(codeHAFailKeepalive, ClassHA, ScopeInternal, LevelHigh, "fail to keepalive to etcd: %s", "Please check dm-master's node status and the network between this node and dm-master")
+>>>>>>> 93435aecf (worker(dm): fix Server Start/Close race (#6213))
 
 	// DM-tracer error.
 	ErrTracerParseFlagSet        = New(codeTracerParseFlagSet, ClassDMTracer, ScopeInternal, LevelMedium, "parse dm-tracer config flag set", "")
