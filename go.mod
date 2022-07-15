@@ -55,7 +55,7 @@ require (
 	github.com/pingcap/log v1.1.0
 	github.com/pingcap/tidb v1.1.0-beta.0.20220715063106-f47978c3c2bc
 	github.com/pingcap/tidb-tools v6.0.1-0.20220516050036-b3ea358e374a+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20220622125636-a2fe74fc92ed
+	github.com/pingcap/tidb/parser v0.0.0-20220715063106-f47978c3c2bc
 	github.com/prometheus/client_golang v1.12.2
 	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0
