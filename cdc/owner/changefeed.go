@@ -224,7 +224,30 @@ LOOP:
 		// See more gc doc.
 		ensureTTL := int64(10 * 60)
 		err := gc.EnsureChangefeedStartTsSafety(
+<<<<<<< HEAD
 			ctx, ctx.GlobalVars().PDClient, c.state.ID, ensureTTL, checkpointTs)
+=======
+			ctx, c.upstream.PDClient,
+			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceInitializing),
+			c.state.ID, ensureTTL, checkpointTs)
+>>>>>>> 5a4f4012e (cli(ticdc): Cleanup service GC safe point correctly (#6283))
+		if err != nil {
+			return errors.Trace(err)
+		}
+		// clean service GC safepoint '-creating-' and '-resuming-' if there are any.
+		err = gc.UndoEnsureChangefeedStartTsSafety(
+			ctx, c.upstream.PDClient,
+			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
+			ctx.ChangefeedVars().ID,
+		)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = gc.UndoEnsureChangefeedStartTsSafety(
+			ctx, c.upstream.PDClient,
+			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
+			ctx.ChangefeedVars().ID,
+		)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -276,6 +299,10 @@ LOOP:
 
 func (c *changefeed) releaseResources() {
 	if !c.initialized {
+<<<<<<< HEAD
+=======
+		c.cleanupRedoManager(ctx)
+>>>>>>> 5a4f4012e (cli(ticdc): Cleanup service GC safe point correctly (#6283))
 		return
 	}
 	log.Info("close changefeed", zap.String("changefeed", c.state.ID),
@@ -284,7 +311,13 @@ func (c *changefeed) releaseResources() {
 	c.cancel = func() {}
 	c.ddlPuller.Close()
 	c.schema = nil
+<<<<<<< HEAD
 	ctx, cancel := context.WithCancel(context.Background())
+=======
+	c.cleanupRedoManager(ctx)
+	c.cleanupServiceGCSafePoints(ctx)
+	canceledCtx, cancel := context.WithCancel(context.Background())
+>>>>>>> 5a4f4012e (cli(ticdc): Cleanup service GC safe point correctly (#6283))
 	cancel()
 	// We don't need to wait sink Close, pass a canceled context is ok
 	if err := c.sink.Close(ctx); err != nil {
@@ -305,6 +338,65 @@ func (c *changefeed) releaseResources() {
 	c.initialized = false
 }
 
+<<<<<<< HEAD
+=======
+// redoManagerCleanup cleanups redo logs if changefeed is removed and redo log is enabled
+func (c *changefeed) cleanupRedoManager(ctx context.Context) {
+	if c.isRemoved {
+		if c.state == nil || c.state.Info == nil || c.state.Info.Config == nil ||
+			c.state.Info.Config.Consistent == nil {
+			log.Warn("changefeed is removed, but state is not complete", zap.Any("state", c.state))
+			return
+		}
+		if !redo.IsConsistentEnabled(c.state.Info.Config.Consistent.Level) {
+			return
+		}
+		// when removing a paused changefeed, the redo manager is nil, create a new one
+		if c.redoManager == nil {
+			redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: false}
+			redoManager, err := redo.NewManager(ctx, c.state.Info.Config.Consistent, redoManagerOpts)
+			if err != nil {
+				log.Error("create redo manager failed",
+					zap.String("changefeed", c.id.ID),
+					zap.Error(err))
+				return
+			}
+			c.redoManager = redoManager
+		}
+		err := c.redoManager.Cleanup(ctx)
+		if err != nil {
+			log.Error("cleanup redo logs failed", zap.String("changefeed", c.id.ID), zap.Error(err))
+		}
+	}
+}
+
+func (c *changefeed) cleanupServiceGCSafePoints(ctx cdcContext.Context) {
+	if !c.isRemoved {
+		return
+	}
+
+	serviceIDs := []string{
+		ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
+		ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
+		ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceInitializing),
+	}
+
+	for _, serviceID := range serviceIDs {
+		err := gc.UndoEnsureChangefeedStartTsSafety(
+			ctx,
+			c.upstream.PDClient,
+			serviceID,
+			ctx.ChangefeedVars().ID)
+		if err != nil {
+			log.Error("failed to remove gc safepoint",
+				zap.String("namespace", c.state.ID.Namespace),
+				zap.String("changefeed", c.state.ID.ID),
+				zap.String("serviceID", serviceID))
+		}
+	}
+}
+
+>>>>>>> 5a4f4012e (cli(ticdc): Cleanup service GC safe point correctly (#6283))
 // preflightCheck makes sure that the metadata in Etcd is complete enough to run the tick.
 // If the metadata is not complete, such as when the ChangeFeedStatus is nil,
 // this function will reconstruct the lost metadata and skip this tick.

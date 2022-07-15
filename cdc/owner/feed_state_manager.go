@@ -121,8 +121,16 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 			return nil, true, nil
 		})
 		checkpointTs := m.state.Info.GetCheckpointTs(m.state.Status)
+<<<<<<< HEAD
 		log.Info("the changefeed is removed", zap.String("changefeed-id", m.state.ID), zap.Uint64("checkpoint-ts", checkpointTs))
 
+=======
+
+		log.Info("the changefeed is removed",
+			zap.String("namespace", m.state.ID.Namespace),
+			zap.String("changefeed", m.state.ID.ID),
+			zap.Uint64("checkpointTs", checkpointTs))
+>>>>>>> 5a4f4012e (cli(ticdc): Cleanup service GC safe point correctly (#6283))
 	case model.AdminResume:
 		switch m.state.Info.State {
 		case model.StateFailed, model.StateError, model.StateStopped, model.StateFinished:
@@ -138,8 +146,33 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 			if info.Error != nil || len(info.ErrorHis) != 0 {
 				info.Error = nil
+<<<<<<< HEAD
 				info.ErrorHis = nil
 				return info, true, nil
+=======
+				changed = true
+			}
+			return info, changed, nil
+		})
+
+		m.state.PatchStatus(func(status *model.ChangeFeedStatus) (
+			*model.ChangeFeedStatus, bool, error,
+		) {
+			if job.OverwriteCheckpointTs > 0 {
+				oldCheckpointTs := status.CheckpointTs
+				status = &model.ChangeFeedStatus{
+					ResolvedTs:   job.OverwriteCheckpointTs,
+					CheckpointTs: job.OverwriteCheckpointTs,
+					AdminJobType: model.AdminNone,
+				}
+				log.Info("overwriting the checkpoint ts",
+					zap.String("namespace", m.state.ID.Namespace),
+					zap.String("changefeed", m.state.ID.ID),
+					zap.Any("oldCheckpointTs", oldCheckpointTs),
+					zap.Any("newCheckpointTs", status.CheckpointTs),
+				)
+				return status, true, nil
+>>>>>>> 5a4f4012e (cli(ticdc): Cleanup service GC safe point correctly (#6283))
 			}
 			return info, false, nil
 		})
