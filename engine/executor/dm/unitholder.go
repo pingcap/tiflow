@@ -16,6 +16,7 @@ package dm
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/pingcap/errors"
 	"go.uber.org/zap"
@@ -43,9 +44,14 @@ type unitHolder interface {
 	Resume(ctx context.Context) error
 	Stage() (metadata.TaskStage, *pb.ProcessResult)
 	Status(ctx context.Context) interface{}
+	// CheckAndUpdateStatus checks if the last update of source status is outdated,
+	// if so, it will call Status.
+	CheckAndUpdateStatus(ctx context.Context)
 	Binlog(ctx context.Context, req *dmpkg.BinlogTaskRequest) (string, error)
 	BinlogSchema(ctx context.Context, req *dmpkg.BinlogSchemaTaskRequest) (string, error)
 }
+
+var sourceStatusRefreshInterval = 30 * time.Second
 
 // unitHolderImpl wrap the dm-worker unit.
 type unitHolderImpl struct {
@@ -53,8 +59,11 @@ type unitHolderImpl struct {
 	cfg  *dmconfig.SubTaskConfig
 	unit unit.Unit
 
-	upstreamDB *conn.BaseDB
-	logger     log.Logger
+	upstreamDB     *conn.BaseDB
+	sourceStatus   *binlog.SourceStatus
+	sourceStatusMu sync.RWMutex
+
+	logger log.Logger
 	// use to access process(init/close/pause/resume)
 	processMu sync.RWMutex
 	processWg sync.WaitGroup
@@ -64,6 +73,8 @@ type unitHolderImpl struct {
 	runCancel context.CancelFunc
 	result    *pb.ProcessResult // TODO: check if framework can persist result
 }
+
+var _ unitHolder = &unitHolderImpl{}
 
 // newUnitHolderImpl creates a UnitHolderImpl
 func newUnitHolderImpl(workerType framework.WorkerType, cfg *dmconfig.SubTaskConfig) *unitHolderImpl {
@@ -210,8 +221,8 @@ func (u *unitHolderImpl) Stage() (metadata.TaskStage, *pb.ProcessResult) {
 	}
 }
 
-// Status implement UnitHolder.Status
-// TODO: should periodically call Status, to update metrics
+// Status implement UnitHolder.Status. Each invocation will try to query upstream
+// once and calculate the status.
 func (u *unitHolderImpl) Status(ctx context.Context) interface{} {
 	sourceStatus, err := binlog.GetSourceStatus(
 		tcontext.NewContext(ctx, u.logger),
@@ -221,8 +232,23 @@ func (u *unitHolderImpl) Status(ctx context.Context) interface{} {
 	if err != nil {
 		u.logger.Error("failed to get source status", zap.Error(err))
 	}
+	u.sourceStatusMu.Lock()
+	u.sourceStatus = sourceStatus
+	u.sourceStatusMu.Unlock()
+
 	// nil sourceStatus is supported
 	return u.unit.Status(sourceStatus)
+}
+
+// CheckAndUpdateStatus implement UnitHolder.CheckAndUpdateStatus.
+func (u *unitHolderImpl) CheckAndUpdateStatus(ctx context.Context) {
+	u.sourceStatusMu.RLock()
+	sourceStatus := u.sourceStatus
+	u.sourceStatusMu.RUnlock()
+
+	if sourceStatus == nil || time.Since(sourceStatus.UpdateTime) > sourceStatusRefreshInterval {
+		u.Status(ctx)
+	}
 }
 
 // Binlog implements the binlog api for syncer unit.
