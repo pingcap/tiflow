@@ -39,7 +39,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/store/mockstore"
 	unistoreConfig "github.com/pingcap/tidb/store/mockstore/unistore/config"
-	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -413,13 +412,11 @@ func (tr *Tracker) Reset() error {
 }
 
 func dropDatabase(dom *domain.Domain, se session.Session, db string) error {
-	//
-	query := fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbutil.ColumnName(db))
-	stmt, err := stmtFromQuery(query)
-	if err != nil {
-		return err
+	stmt := &ast.DropDatabaseStmt{
+		Name:     model.NewCIStr(db),
+		IfExists: true,
 	}
-	return dom.DDL().DropSchema(se, stmt.(*ast.DropDatabaseStmt))
+	return dom.DDL().DropSchema(se, stmt)
 }
 
 // Close close a tracker.
@@ -453,23 +450,30 @@ func (tr *Tracker) Close() error {
 // DropTable drops a table from this tracker.
 func (tr *Tracker) DropTable(table *filter.Table) error {
 	tr.se.SetValue(sessionctx.QueryString, "skip")
-	query := fmt.Sprintf("DROP TABLE IF EXISTS %s", table.String())
-	stmt, err := stmtFromQuery(query)
-	if err != nil {
-		return err
+	stmt := &ast.DropTableStmt{
+		Tables: []*ast.TableName{
+			{
+				Schema: model.NewCIStr(table.Schema),
+				Name:   model.NewCIStr(table.Name),
+			},
+		},
+		IfExists: true,
 	}
-	return tr.dom.DDL().DropTable(tr.se, stmt.(*ast.DropTableStmt))
+	return tr.dom.DDL().DropTable(tr.se, stmt)
 }
 
 // DropIndex drops an index from this tracker.
 func (tr *Tracker) DropIndex(table *filter.Table, index string) error {
 	tr.se.SetValue(sessionctx.QueryString, "skip")
-	query := fmt.Sprintf("ALTER TABLE %s DROP INDEX IF EXISTS %s", table.String(), dbutil.ColumnName(index))
-	stmt, err := stmtFromQuery(query)
-	if err != nil {
-		return err
+	stmt := &ast.DropIndexStmt{
+		Table: &ast.TableName{
+			Schema: model.NewCIStr(table.Schema),
+			Name:   model.NewCIStr(table.Name),
+		},
+		IndexName: index,
+		IfExists:  true,
 	}
-	return tr.dom.DDL().DropIndex(tr.se, stmt.(*ast.DropIndexStmt))
+	return tr.dom.DDL().DropIndex(tr.se, stmt)
 }
 
 // CreateSchemaIfNotExists creates a SCHEMA of the given name if it did not exist.
@@ -479,20 +483,11 @@ func (tr *Tracker) CreateSchemaIfNotExists(db string) error {
 	if tr.dom.InfoSchema().SchemaExists(dbName) {
 		return nil
 	}
-	query := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbutil.ColumnName(db))
-	stmt, err := stmtFromQuery(query)
-	if err != nil {
-		return err
+	stmt := &ast.CreateDatabaseStmt{
+		Name:        dbName,
+		IfNotExists: true,
 	}
-	return tr.dom.DDL().CreateSchema(tr.se, stmt.(*ast.CreateDatabaseStmt))
-}
-
-func stmtFromQuery(query string) (ast.StmtNode, error) {
-	stmts, _, err := parser.New().Parse(query, "", "")
-	if err != nil {
-		return nil, err
-	}
-	return stmts[0], err
+	return tr.dom.DDL().CreateSchema(tr.se, stmt)
 }
 
 // cloneTableInfo creates a clone of the TableInfo.
