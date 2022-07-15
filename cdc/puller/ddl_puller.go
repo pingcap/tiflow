@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -68,6 +69,7 @@ type ddlPullerImpl struct {
 
 	clock                      clock.Clock
 	lastResolvedTsAdvancedTime time.Time
+	metricDiscardedDDLCounter  prometheus.Counter
 }
 
 // NewDDLPuller return a puller for DDL Event
@@ -111,6 +113,8 @@ func NewDDLPuller(ctx context.Context,
 		cancel:       func() {},
 		clock:        clock.New(),
 		changefeedID: changefeed,
+		metricDiscardedDDLCounter: discardedDDLCounter.
+			WithLabelValues(changefeed.Namespace, changefeed.ID),
 	}, nil
 }
 
@@ -133,6 +137,7 @@ func (h *ddlPullerImpl) handleRawDDL(rawDDL *model.RawKVEntry) error {
 		return nil
 	}
 	if h.filter.ShouldDiscardDDL(job.Type) {
+		h.metricDiscardedDDLCounter.Inc()
 		log.Info("discard the ddl job",
 			zap.String("namespace", h.changefeedID.Namespace),
 			zap.String("changefeed", h.changefeedID.ID),

@@ -26,16 +26,18 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
 type schemaWrap4Owner struct {
-	schemaSnapshot         *schema.Snapshot
-	filter                 filter.Filter
-	config                 *config.ReplicaConfig
-	allPhysicalTablesCache []model.TableID
-	ddlHandledTs           model.Ts
-	id                     model.ChangeFeedID
+	schemaSnapshot              *schema.Snapshot
+	filter                      filter.Filter
+	config                      *config.ReplicaConfig
+	allPhysicalTablesCache      []model.TableID
+	ddlHandledTs                model.Ts
+	id                          model.ChangeFeedID
+	metricIgnoreDDLEventCounter prometheus.Counter
 }
 
 func newSchemaWrap4Owner(
@@ -66,6 +68,8 @@ func newSchemaWrap4Owner(
 		config:         config,
 		ddlHandledTs:   startTs,
 		id:             id,
+		metricIgnoreDDLEventCounter: changefeedIgnoredDDLEventCounter.
+			WithLabelValues(id.Namespace, id.ID),
 	}, nil
 }
 
@@ -223,6 +227,7 @@ func (s *schemaWrap4Owner) BuildDDLEvents(
 			return nil, errors.Trace(err)
 		}
 		if ignored {
+			s.metricIgnoreDDLEventCounter.Inc()
 			log.Info(
 				"DDL event ignored",
 				zap.String("query", event.Query),

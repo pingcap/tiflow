@@ -418,7 +418,7 @@ invalid key: %s
 
 ["CDC:ErrInvalidFilterExpression"]
 error = '''
-invalid filter expressions. There is a syntax error in: %s
+invalid filter expressions. There is a syntax error in: '%s'
 '''
 
 ["CDC:ErrInvalidHost"]
@@ -428,7 +428,7 @@ host must be a URL or a host:port pair: %q
 
 ["CDC:ErrInvalidIgnoreEventType"]
 error = '''
-invalid ignore event type: %s
+invalid ignore event type: '%s'
 '''
 
 ["CDC:ErrInvalidNamespace"]

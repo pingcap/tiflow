@@ -68,13 +68,14 @@ type Mounter interface {
 }
 
 type mounterImpl struct {
-	schemaStorage       SchemaStorage
-	tz                  *time.Location
-	enableOldValue      bool
-	changefeedID        model.ChangeFeedID
-	filter              pfilter.Filter
-	metricMountDuration prometheus.Observer
-	metricTotalRows     prometheus.Gauge
+	schemaStorage                SchemaStorage
+	tz                           *time.Location
+	enableOldValue               bool
+	changefeedID                 model.ChangeFeedID
+	filter                       pfilter.Filter
+	metricMountDuration          prometheus.Observer
+	metricTotalRows              prometheus.Gauge
+	metricIgnoredDMLEventCounter prometheus.Counter
 }
 
 // NewMounter creates a mounter
@@ -92,6 +93,8 @@ func NewMounter(schemaStorage SchemaStorage,
 		metricMountDuration: mountDuration.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricTotalRows: totalRowsCountGauge.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricIgnoredDMLEventCounter: ignoredDMLEventCounter.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		tz: tz,
 	}
@@ -184,6 +187,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 			// TODO(dongmen): try to find better way to indicate this row has been filtered.
 			// Return a nil RowChangedEvent if this row should be ignored.
 			if ignore {
+				m.metricIgnoredDMLEventCounter.Inc()
 				return nil, nil
 			}
 			return row, nil
