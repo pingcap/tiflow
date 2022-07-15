@@ -34,7 +34,7 @@ const (
 
 func NewStartValidationCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "start [-s source ...] [--all-task] [task-name]",
+		Use:   "start [--all-task] [task-name]",
 		Short: "start to validate the completeness of the data",
 		RunE:  startValidation,
 	}
@@ -46,7 +46,7 @@ func NewStartValidationCmd() *cobra.Command {
 
 func NewStopValidationCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "stop [-s source ...] [--all-task] [task-name]",
+		Use:   "stop [--all-task] [task-name]",
 		Short: "stop validating the completeness of the data",
 		RunE:  stopValidation,
 	}
