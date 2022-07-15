@@ -422,7 +422,6 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		err = c.campaign(campaignCtx)
 		cancel()
 		if err != nil {
-			log.Warn("failed to campaign", zap.String("captureID", c.info.ID), zap.Error(err))
 			switch errors.Cause(err) {
 			case context.Canceled:
 				return nil
