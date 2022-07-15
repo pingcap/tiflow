@@ -355,8 +355,26 @@ LOOP:
 		failpoint.Return(errors.New("failpoint injected retriable error"))
 	})
 	if c.state.Info.Config.CheckGCSafePoint {
+		// Check TiDB GC safepoint does not exceed the checkpoint.
+		//
+		// We update TTL to 10 minutes,
+		//  1. to delete the service GC safepoint effectively,
+		//  2. in case owner update TiCDC service GC safepoint fails.
+		//
+		// Also it unblocks TiDB GC, because the service GC safepoint is set to
+		// 1 hour TTL during creating changefeed.
+		//
+		// See more gc doc.
+		ensureTTL := int64(10 * 60)
+		err := gc.EnsureChangefeedStartTsSafety(
+			ctx, c.upstream.PDClient,
+			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceInitializing),
+			c.state.ID, ensureTTL, checkpointTs)
+		if err != nil {
+			return errors.Trace(err)
+		}
 		// clean service GC safepoint '-creating-' and '-resuming-' if there are any.
-		err := gc.UndoEnsureChangefeedStartTsSafety(
+		err = gc.UndoEnsureChangefeedStartTsSafety(
 			ctx, c.upstream.PDClient,
 			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
 			ctx.ChangefeedVars().ID,
@@ -369,24 +387,6 @@ LOOP:
 			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
 			ctx.ChangefeedVars().ID,
 		)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		// Check TiDB GC safepoint does not exceed the checkpoint.
-		//
-		// We update TTL to 10 minutes,
-		//  1. to delete the service GC safepoint effectively,
-		//  2. in case owner update TiCDC service GC safepoint fails.
-		//
-		// Also it unblocks TiDB GC, because the service GC safepoint is set to
-		// 1 hour TTL during creating changefeed.
-		//
-		// See more gc doc.
-		ensureTTL := int64(10 * 60)
-		err = gc.EnsureChangefeedStartTsSafety(
-			ctx, c.upstream.PDClient,
-			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceInitializing),
-			c.state.ID, ensureTTL, checkpointTs)
 		if err != nil {
 			return errors.Trace(err)
 		}
