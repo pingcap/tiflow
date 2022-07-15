@@ -595,6 +595,7 @@ const (
 	codeWorkerRouteTableDupMatch
 	codeWorkerUpdateSubTaskConfig
 	codeWorkerValidatorNotPaused
+	codeWorkerServerClosed
 )
 
 // DM-tracer error code.
@@ -1281,6 +1282,7 @@ var (
 	ErrWorkerRelayConfigChanging            = New(codeWorkerRelayConfigChanging, ClassDMWorker, ScopeInternal, LevelLow, "relay config of worker %s is changed too frequently, last relay source %s:, new relay source %s", "Please try again later")
 	ErrWorkerRouteTableDupMatch             = New(codeWorkerRouteTableDupMatch, ClassDMWorker, ScopeInternal, LevelHigh, "table %s.%s matches more than one rule", "please check the route rules in the task config")
 	ErrWorkerValidatorNotPaused             = New(codeWorkerValidatorNotPaused, ClassDMWorker, ScopeInternal, LevelHigh, "current validator stage is %s but not paused, invalid", "")
+	ErrWorkerServerClosed                   = New(codeWorkerServerClosed, ClassDMWorker, ScopeInternal, LevelLow, "worker server is closed", "")
 
 	// etcd error.
 	ErrHAFailTxnOperation   = New(codeHAFailTxnOperation, ClassHA, ScopeInternal, LevelHigh, "fail to do etcd txn operation: %s", "Please check dm-master's node status and the network between this node and dm-master")
