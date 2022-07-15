@@ -246,7 +246,7 @@ func (tr *Tracker) Init(
 	// TiDB will unconditionally create an empty "test" schema.
 	// This interferes with MySQL/MariaDB upstream which such schema does not
 	// exist by default. So we need to drop it first.
-	err = tr.dropDatabase("test")
+	err = dropDatabase(dom, se, "test")
 	if err != nil {
 		return err
 	}
@@ -405,20 +405,21 @@ func (tr *Tracker) Reset() error {
 		if filter.IsSystemSchema(dbName.L) {
 			continue
 		}
-		if err := tr.dropDatabase(dbName.L); err != nil {
+		if err := dropDatabase(tr.dom, tr.se, dbName.L); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (tr *Tracker) dropDatabase(db string) error {
+func dropDatabase(dom *domain.Domain, se session.Session, db string) error {
+	//
 	query := fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbutil.ColumnName(db))
-	stmt, err := tr.stmtFromQuery(query)
+	stmt, err := stmtFromQuery(query)
 	if err != nil {
 		return err
 	}
-	return tr.dom.DDL().DropSchema(tr.se, stmt.(*ast.DropDatabaseStmt))
+	return dom.DDL().DropSchema(se, stmt.(*ast.DropDatabaseStmt))
 }
 
 // Close close a tracker.
@@ -453,7 +454,7 @@ func (tr *Tracker) Close() error {
 func (tr *Tracker) DropTable(table *filter.Table) error {
 	tr.se.SetValue(sessionctx.QueryString, "skip")
 	query := fmt.Sprintf("DROP TABLE IF EXISTS %s", table.String())
-	stmt, err := tr.stmtFromQuery(query)
+	stmt, err := stmtFromQuery(query)
 	if err != nil {
 		return err
 	}
@@ -464,7 +465,7 @@ func (tr *Tracker) DropTable(table *filter.Table) error {
 func (tr *Tracker) DropIndex(table *filter.Table, index string) error {
 	tr.se.SetValue(sessionctx.QueryString, "skip")
 	query := fmt.Sprintf("ALTER TABLE %s DROP INDEX IF EXISTS %s", table.String(), dbutil.ColumnName(index))
-	stmt, err := tr.stmtFromQuery(query)
+	stmt, err := stmtFromQuery(query)
 	if err != nil {
 		return err
 	}
@@ -479,14 +480,14 @@ func (tr *Tracker) CreateSchemaIfNotExists(db string) error {
 		return nil
 	}
 	query := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbutil.ColumnName(db))
-	stmt, err := tr.stmtFromQuery(query)
+	stmt, err := stmtFromQuery(query)
 	if err != nil {
 		return err
 	}
 	return tr.dom.DDL().CreateSchema(tr.se, stmt.(*ast.CreateDatabaseStmt))
 }
 
-func (tr *Tracker) stmtFromQuery(query string) (ast.StmtNode, error) {
+func stmtFromQuery(query string) (ast.StmtNode, error) {
 	stmts, _, err := parser.New().Parse(query, "", "")
 	if err != nil {
 		return nil, err
