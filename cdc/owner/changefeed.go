@@ -231,7 +231,30 @@ LOOP:
 		// See more gc doc.
 		ensureTTL := int64(10 * 60)
 		err := gc.EnsureChangefeedStartTsSafety(
+<<<<<<< HEAD
 			ctx, ctx.GlobalVars().PDClient, c.state.ID, ensureTTL, checkpointTs)
+=======
+			ctx, c.upstream.PDClient,
+			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceInitializing),
+			c.state.ID, ensureTTL, checkpointTs)
+>>>>>>> 5a4f4012e (cli(ticdc): Cleanup service GC safe point correctly (#6283))
+		if err != nil {
+			return errors.Trace(err)
+		}
+		// clean service GC safepoint '-creating-' and '-resuming-' if there are any.
+		err = gc.UndoEnsureChangefeedStartTsSafety(
+			ctx, c.upstream.PDClient,
+			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
+			ctx.ChangefeedVars().ID,
+		)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = gc.UndoEnsureChangefeedStartTsSafety(
+			ctx, c.upstream.PDClient,
+			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
+			ctx.ChangefeedVars().ID,
+		)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -291,7 +314,7 @@ LOOP:
 
 func (c *changefeed) releaseResources(ctx context.Context) {
 	if !c.initialized {
-		c.redoManagerCleanup(ctx)
+		c.cleanupRedoManager(ctx)
 		return
 	}
 	log.Info("close changefeed", zap.String("changefeed", c.state.ID),
@@ -300,8 +323,14 @@ func (c *changefeed) releaseResources(ctx context.Context) {
 	c.cancel = func() {}
 	c.ddlPuller.Close()
 	c.schema = nil
+<<<<<<< HEAD
 	c.redoManagerCleanup(ctx)
 	ctx, cancel := context.WithCancel(context.Background())
+=======
+	c.cleanupRedoManager(ctx)
+	c.cleanupServiceGCSafePoints(ctx)
+	canceledCtx, cancel := context.WithCancel(context.Background())
+>>>>>>> 5a4f4012e (cli(ticdc): Cleanup service GC safe point correctly (#6283))
 	cancel()
 	// We don't need to wait sink Close, pass a canceled context is ok
 	if err := c.sink.close(ctx); err != nil {
@@ -323,7 +352,7 @@ func (c *changefeed) releaseResources(ctx context.Context) {
 }
 
 // redoManagerCleanup cleanups redo logs if changefeed is removed and redo log is enabled
-func (c *changefeed) redoManagerCleanup(ctx context.Context) {
+func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 	if c.isRemoved {
 		if c.state == nil || c.state.Info == nil || c.state.Info.Config == nil ||
 			c.state.Info.Config.Consistent == nil {
@@ -346,6 +375,32 @@ func (c *changefeed) redoManagerCleanup(ctx context.Context) {
 		err := c.redoManager.Cleanup(ctx)
 		if err != nil {
 			log.Error("cleanup redo logs failed", zap.String("changefeed", c.id), zap.Error(err))
+		}
+	}
+}
+
+func (c *changefeed) cleanupServiceGCSafePoints(ctx cdcContext.Context) {
+	if !c.isRemoved {
+		return
+	}
+
+	serviceIDs := []string{
+		ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
+		ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
+		ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceInitializing),
+	}
+
+	for _, serviceID := range serviceIDs {
+		err := gc.UndoEnsureChangefeedStartTsSafety(
+			ctx,
+			c.upstream.PDClient,
+			serviceID,
+			ctx.ChangefeedVars().ID)
+		if err != nil {
+			log.Error("failed to remove gc safepoint",
+				zap.String("namespace", c.state.ID.Namespace),
+				zap.String("changefeed", c.state.ID.ID),
+				zap.String("serviceID", serviceID))
 		}
 	}
 }
