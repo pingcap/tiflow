@@ -16,26 +16,18 @@ package etcd
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"sort"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"go.etcd.io/etcd/client/pkg/v3/logutil"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.etcd.io/etcd/client/v3/concurrency"
-	"go.etcd.io/etcd/server/v3/embed"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"golang.org/x/sync/errgroup"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/util"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/client/v3/concurrency"
 )
 
 type Captures []*model.CaptureInfo
@@ -44,57 +36,11 @@ func (c Captures) Len() int           { return len(c) }
 func (c Captures) Less(i, j int) bool { return c[i].ID < c[j].ID }
 func (c Captures) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
 
-type etcdTester struct {
-	dir       string
-	etcd      *embed.Etcd
-	clientURL *url.URL
-	client    CDCEtcdClient
-	ctx       context.Context
-	cancel    context.CancelFunc
-	errg      *errgroup.Group
-}
-
-func (s *etcdTester) setUpTest(t *testing.T) {
-	var err error
-	s.dir = t.TempDir()
-	s.clientURL, s.etcd, err = SetupEmbedEtcd(s.dir)
-	require.Nil(t, err)
-	logConfig := logutil.DefaultZapLoggerConfig
-	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
-	client, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{s.clientURL.String()},
-		DialTimeout: 3 * time.Second,
-		LogConfig:   &logConfig,
-	})
-	require.NoError(t, err)
-	s.client = NewCDCEtcdClient(context.TODO(), client)
-	s.ctx, s.cancel = context.WithCancel(context.Background())
-	s.errg = util.HandleErrWithErrGroup(s.ctx, s.etcd.Err(), func(e error) { t.Log(e) })
-}
-
-func (s *etcdTester) tearDownTest(t *testing.T) {
-	s.etcd.Close()
-	s.cancel()
-logEtcdError:
-	for {
-		select {
-		case err, ok := <-s.etcd.Err():
-			if !ok {
-				break logEtcdError
-			}
-			t.Logf("etcd server error: %v", err)
-		default:
-			break logEtcdError
-		}
-	}
-	s.client.Close() //nolint:errcheck
-}
-
 func TestEmbedEtcd(t *testing.T) {
-	s := &etcdTester{}
-	s.setUpTest(t)
-	defer s.tearDownTest(t)
-	curl := s.clientURL.String()
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
+	curl := s.ClientURL.String()
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{curl},
 		DialTimeout: 3 * time.Second,
@@ -115,9 +61,9 @@ func TestEmbedEtcd(t *testing.T) {
 }
 
 func TestGetChangeFeeds(t *testing.T) {
-	s := &etcdTester{}
-	s.setUpTest(t)
-	defer s.tearDownTest(t)
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
 	testCases := []struct {
 		ids     []string
 		details []string
@@ -129,7 +75,8 @@ func TestGetChangeFeeds(t *testing.T) {
 	for _, tc := range testCases {
 		for i := 0; i < len(tc.ids); i++ {
 			_, err := s.client.Client.Put(context.Background(),
-				GetEtcdKeyChangeFeedInfo(model.DefaultChangeFeedID(tc.ids[i])),
+				GetEtcdKeyChangeFeedInfo(DefaultCDCClusterID,
+					model.DefaultChangeFeedID(tc.ids[i])),
 				tc.details[i])
 			require.NoError(t, err)
 		}
@@ -156,9 +103,9 @@ func TestGetChangeFeeds(t *testing.T) {
 }
 
 func TestOpChangeFeedDetail(t *testing.T) {
-	s := &etcdTester{}
-	s.setUpTest(t)
-	defer s.tearDownTest(t)
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
 	ctx := context.Background()
 	detail := &model.ChangeFeedInfo{
 		SinkURI: "root@tcp(127.0.0.1:3306)/mysql",
@@ -182,9 +129,9 @@ func TestOpChangeFeedDetail(t *testing.T) {
 }
 
 func TestGetAllChangeFeedInfo(t *testing.T) {
-	s := &etcdTester{}
-	s.setUpTest(t)
-	defer s.tearDownTest(t)
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
 	ctx := context.Background()
 	infos := []struct {
 		id   string
@@ -229,7 +176,7 @@ func putChangeFeedStatus(
 	changefeedID model.ChangeFeedID,
 	status *model.ChangeFeedStatus,
 ) error {
-	key := GetEtcdKeyJob(changefeedID)
+	key := GetEtcdKeyJob(DefaultCDCClusterID, changefeedID)
 	value, err := status.Marshal()
 	if err != nil {
 		return errors.Trace(err)
@@ -239,9 +186,9 @@ func putChangeFeedStatus(
 }
 
 func TestGetAllChangeFeedStatus(t *testing.T) {
-	s := &etcdTester{}
-	s.setUpTest(t)
-	defer s.tearDownTest(t)
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
 
 	changefeeds := map[model.ChangeFeedID]*model.ChangeFeedStatus{
 		model.DefaultChangeFeedID("cf1"): {
@@ -262,27 +209,86 @@ func TestGetAllChangeFeedStatus(t *testing.T) {
 	require.Equal(t, statuses, changefeeds)
 }
 
+func TestCheckMultipleCDCClusterExist(t *testing.T) {
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
+
+	ctx := context.Background()
+	rawEtcdClient := s.client.Client.cli
+	defaultClusterKey := DefaultClusterAndNamespacePrefix + "/test-key"
+	_, err := rawEtcdClient.Put(ctx, defaultClusterKey, "test-value")
+	require.NoError(t, err)
+
+	err = s.client.CheckMultipleCDCClusterExist(ctx)
+	require.NoError(t, err)
+
+	newClusterKey := NamespacedPrefix("new-cluster", "new-namespace") +
+		"/test-key"
+	_, err = rawEtcdClient.Put(ctx, newClusterKey, "test-value")
+	require.NoError(t, err)
+
+	err = s.client.CheckMultipleCDCClusterExist(ctx)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "ErrMultipleCDCClustersExist")
+}
+
 func TestCreateChangefeed(t *testing.T) {
-	s := &etcdTester{}
-	s.setUpTest(t)
-	defer s.tearDownTest(t)
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
 
 	ctx := context.Background()
 	detail := &model.ChangeFeedInfo{
 		SinkURI: "root@tcp(127.0.0.1:3306)/mysql",
 	}
 
-	err := s.client.CreateChangefeedInfo(ctx, detail, model.DefaultChangeFeedID("test-id"))
+	upstreamInfo := &model.UpstreamInfo{ID: 1}
+	err := s.client.CreateChangefeedInfo(ctx,
+		upstreamInfo, detail, model.DefaultChangeFeedID("test-id"))
 	require.NoError(t, err)
 
-	err = s.client.CreateChangefeedInfo(ctx, detail, model.DefaultChangeFeedID("test-id"))
+	err = s.client.CreateChangefeedInfo(ctx,
+		upstreamInfo, detail, model.DefaultChangeFeedID("test-id"))
 	require.True(t, cerror.ErrChangeFeedAlreadyExists.Equal(err))
 }
 
+func TestUpdateChangefeedAndUpstream(t *testing.T) {
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
+
+	ctx := context.Background()
+	upstreamInfo := &model.UpstreamInfo{
+		ID:          1,
+		PDEndpoints: "http://127.0.0.1:2385",
+	}
+	changeFeedID := model.DefaultChangeFeedID("test-update-cf-and-up")
+	changeFeedInfo := &model.ChangeFeedInfo{
+		ID:        changeFeedID.ID,
+		Namespace: changeFeedID.Namespace,
+		SinkURI:   "blackhole://",
+	}
+
+	err := s.client.UpdateChangefeedAndUpstream(ctx, upstreamInfo, changeFeedInfo, changeFeedID)
+	require.NoError(t, err)
+
+	var upstreamResult *model.UpstreamInfo
+	var changefeedResult *model.ChangeFeedInfo
+
+	upstreamResult, err = s.client.GetUpstreamInfo(ctx, 1, changeFeedID.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, upstreamInfo.PDEndpoints, upstreamResult.PDEndpoints)
+
+	changefeedResult, err = s.client.GetChangeFeedInfo(ctx, changeFeedID)
+	require.NoError(t, err)
+	require.Equal(t, changeFeedInfo.SinkURI, changefeedResult.SinkURI)
+}
+
 func TestGetAllCaptureLeases(t *testing.T) {
-	s := &etcdTester{}
-	s.setUpTest(t)
-	defer s.tearDownTest(t)
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -335,9 +341,9 @@ const (
 )
 
 func TestGetOwnerRevision(t *testing.T) {
-	s := &etcdTester{}
-	s.setUpTest(t)
-	defer s.tearDownTest(t)
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -365,7 +371,8 @@ func TestGetOwnerRevision(t *testing.T) {
 			sess, err := concurrency.NewSession(s.client.Client.Unwrap(),
 				concurrency.WithTTL(10 /* seconds */))
 			require.Nil(t, err)
-			election := concurrency.NewElection(sess, CaptureOwnerKey)
+			election := concurrency.NewElection(sess,
+				CaptureOwnerKey(DefaultCDCClusterID))
 
 			mockCaptureID := fmt.Sprintf("capture-%d", i)
 
@@ -424,4 +431,11 @@ func TestExtractKeySuffix(t *testing.T) {
 			require.Equal(t, tc.expect, key)
 		}
 	}
+}
+
+func TestMigrateBackupKey(t *testing.T) {
+	key := MigrateBackupKey(1, "/tidb/cdc/capture/abcd")
+	require.Equal(t, "/tidb/cdc/__backup__/1/tidb/cdc/capture/abcd", key)
+	key = MigrateBackupKey(1, "abcdc")
+	require.Equal(t, "/tidb/cdc/__backup__/1/abcdc", key)
 }

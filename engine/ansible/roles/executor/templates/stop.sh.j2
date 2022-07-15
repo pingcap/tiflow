@@ -1,3 +1,0 @@
-#!/bin/bash
-
-ps -ef | grep executor-{{ cluster_name }} | grep -v grep | awk '{ print $2 }' | xargs -r kill

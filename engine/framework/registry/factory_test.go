@@ -35,7 +35,7 @@ type paramList struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
 	FrameMetaClient       pkgOrm.Client
-	UserRawKVClient       metaModel.KVClientEx
+	BusinessClientConn    metaModel.ClientConn
 	ResourceBroker        broker.Broker
 }
 
@@ -48,7 +48,7 @@ func makeCtxWithMockDeps(t *testing.T) *dcontext.Context {
 			MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 			MessageSender:         p2p.NewMockMessageSender(),
 			FrameMetaClient:       cli,
-			UserRawKVClient:       mock.NewMetaMock(),
+			BusinessClientConn:    mock.NewMockClientConn(),
 			ResourceBroker:        broker.NewBrokerForTesting("executor-1"),
 		}
 	})

@@ -1,0 +1,18 @@
+#!/bin/bash
+set -eux
+
+# parameter 1: key_prefix
+# parameter 2: meta_message
+
+key_prefix=$1
+message=$2
+
+info=$(etcdctl get ${key_prefix} --prefix --keys-only)
+if [[ "$info" =~ "$message" ]]; then
+	echo "${message} contains in etcd ${info}"
+	echo "check failed"
+	exit 1
+fi
+
+echo "check pass"
+exit 0

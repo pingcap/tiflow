@@ -25,6 +25,12 @@ const (
 	defaultReadTimeout  = "3s"
 	defaultWriteTimeout = "3s"
 	defaultDialTimeout  = "3s"
+
+	defaultStoreType = StoreTypeSQL
+	// StoreTypeEtcd is the store type string for etcd
+	StoreTypeEtcd = "etcd"
+	// StoreTypeSQL is the store type string for SQL
+	StoreTypeSQL = "sql"
 )
 
 // AuthConfParams is basic authentication configurations
@@ -37,15 +43,16 @@ type AuthConfParams struct {
 type StoreConfig struct {
 	// storeID is the unique readable identifier for a store
 	StoreID   string          `toml:"store-id" json:"store-id"`
+	StoreType string          `toml:"store-type" json:"store-type"`
 	Endpoints []string        `toml:"endpoints" json:"endpoints"`
 	Auth      *AuthConfParams `toml:"auth" json:"auth"`
-	// Schema is the predefine schema name for cluster metastore
+	// Schema is the predefine schema name for mysql-compatible metastore
 	Schema       string `toml:"schema" json:"schema"`
 	ReadTimeout  string `toml:"read-timeout" json:"read-timeout"`
 	WriteTimeout string `toml:"write-timeout" json:"write-timeout"`
 	DialTimeout  string `toml:"dial-timeout" json:"dial-timeout"`
-	// DB configs if backend metastore is DB
-	DBConf *dbutil.DBConfig `toml:"meta-dbconfs" json:"meta-dbconfs"`
+	// DBConf is the db config for mysql-compatible metastore
+	DBConf *dbutil.DBConfig `toml:"dbconfs" json:"dbconfs"`
 }
 
 // SetEndpoints sets endpoints to StoreConfig
@@ -55,16 +62,16 @@ func (s *StoreConfig) SetEndpoints(endpoints string) {
 	}
 }
 
-// DefaultStoreConfig return a default StoreConfig
-func DefaultStoreConfig() StoreConfig {
-	dbConf := dbutil.DefaultDBConfig()
-	return StoreConfig{
+// DefaultStoreConfig return a default *StoreConfig
+func DefaultStoreConfig() *StoreConfig {
+	return &StoreConfig{
+		StoreType:    defaultStoreType,
 		Endpoints:    []string{},
 		Auth:         &AuthConfParams{},
 		ReadTimeout:  defaultReadTimeout,
 		WriteTimeout: defaultWriteTimeout,
 		DialTimeout:  defaultDialTimeout,
-		DBConf:       &dbConf,
+		DBConf:       dbutil.DefaultDBConfig(),
 	}
 }
 
@@ -95,4 +102,16 @@ func GenerateDSNByParams(storeConf *StoreConfig) string {
 	dsnCfg.Params["timeout"] = storeConf.DialTimeout
 
 	return dsnCfg.FormatDSN()
+}
+
+// ToClientType translates store type to client type
+func ToClientType(storeType string) ClientType {
+	switch storeType {
+	case StoreTypeEtcd:
+		return EtcdKVClientType
+	case StoreTypeSQL:
+		return SQLKVClientType
+	}
+
+	return UnknownKVClientType
 }

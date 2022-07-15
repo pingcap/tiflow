@@ -194,7 +194,7 @@ func init() {
 				zap.Error(err),
 				zap.String("config", configFile))
 		}
-		if _, err := filter.VerifyRules(eventRouterReplicaConfig); err != nil {
+		if _, err := filter.VerifyRules(eventRouterReplicaConfig.Filter); err != nil {
 			log.Panic("verify rule failed", zap.Error(err))
 		}
 	}
@@ -506,7 +506,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		case config.ProtocolOpen, config.ProtocolDefault:
 			decoder, err = codec.NewOpenProtocolBatchDecoder(message.Key, message.Value)
 		case config.ProtocolCanalJSON:
-			decoder = codec.NewCanalFlatEventBatchDecoder(message.Value, c.enableTiDBExtension)
+			decoder = codec.NewCanalJSONBatchDecoder(message.Value, c.enableTiDBExtension)
 		default:
 			log.Panic("Protocol not supported", zap.Any("Protocol", c.protocol))
 		}

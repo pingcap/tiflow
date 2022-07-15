@@ -27,20 +27,25 @@ import (
 )
 
 const (
-	// cdcChangefeedCreatingServiceGCSafePointID is service GC safe point ID
-	cdcChangefeedCreatingServiceGCSafePointID = "ticdc-creating-"
+	// EnsureGCServiceCreating is a tag of GC service id for changefeed creation
+	EnsureGCServiceCreating = "-creating-"
+	// EnsureGCServiceResuming is a tag of GC service id for changefeed resumption
+	EnsureGCServiceResuming = "-resuming-"
+	// EnsureGCServiceChecking is a tag of GC service id for changefeed initialization
+	EnsureGCServiceChecking = "-checking-"
 )
 
 // EnsureChangefeedStartTsSafety checks if the startTs less than the minimum of
 // service GC safepoint and this function will update the service GC to startTs
 func EnsureChangefeedStartTsSafety(
 	ctx context.Context, pdCli pd.Client,
+	gcServiceIDPrefix string,
 	changefeedID model.ChangeFeedID,
 	TTL int64, startTs uint64,
 ) error {
-	minServiceGCTs, err := setServiceGCSafepoint(
+	minServiceGCTs, err := SetServiceGCSafepoint(
 		ctx, pdCli,
-		cdcChangefeedCreatingServiceGCSafePointID+changefeedID.Namespace+"_"+changefeedID.ID,
+		gcServiceIDPrefix+changefeedID.Namespace+"_"+changefeedID.ID,
 		TTL, startTs)
 	if err != nil {
 		return errors.Trace(err)
@@ -59,8 +64,8 @@ const (
 	gcServiceMaxRetries   = 9
 )
 
-// setServiceGCSafepoint set a service safepoint to PD.
-func setServiceGCSafepoint(
+// SetServiceGCSafepoint set a service safepoint to PD.
+func SetServiceGCSafepoint(
 	ctx context.Context, pdCli pd.Client, serviceID string, TTL int64, safePoint uint64,
 ) (minServiceGCTs uint64, err error) {
 	err = retry.Do(ctx,

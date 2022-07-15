@@ -67,7 +67,7 @@ var (
 )
 
 func init() {
-	unistoreConfig.DefaultConf.Engine.VlogFileSize = 4 * units.MiB
+	unistoreConfig.DefaultConf.Engine.VlogFileSize = int64(kv.TxnEntrySizeLimit)
 	unistoreConfig.DefaultConf.Engine.L1Size = 128 * units.MiB
 }
 
@@ -493,6 +493,26 @@ func (tr *Tracker) CreateTableIfNotExists(table *filter.Table, ti *model.TableIn
 	return tr.dom.DDL().CreateTableWithInfo(tr.se, schemaName, ti, ddl.OnExistIgnore)
 }
 
+// SplitBatchCreateTableAndHandle will split the batch if it exceeds the kv entry size limit.
+func (tr *Tracker) SplitBatchCreateTableAndHandle(schema model.CIStr, info []*model.TableInfo, l int, r int) error {
+	var err error
+	if err = tr.dom.DDL().BatchCreateTableWithInfo(tr.se, schema, info[l:r], ddl.OnExistIgnore); kv.ErrEntryTooLarge.Equal(err) {
+		if r-l == 1 {
+			return err
+		}
+		err = tr.SplitBatchCreateTableAndHandle(schema, info, l, (l+r)/2)
+		if err != nil {
+			return err
+		}
+		err = tr.SplitBatchCreateTableAndHandle(schema, info, (l+r)/2, r)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	return err
+}
+
 // BatchCreateTableIfNotExist will batch creating tables per schema. If the schema does not exist, it will create it.
 // The argument is { database name -> { table name -> TableInfo } }.
 func (tr *Tracker) BatchCreateTableIfNotExist(tablesToCreate map[string]map[string]*model.TableInfo) error {
@@ -509,7 +529,7 @@ func (tr *Tracker) BatchCreateTableIfNotExist(tablesToCreate map[string]map[stri
 			cloneTis = append(cloneTis, cloneTi)
 		}
 		schemaName := model.NewCIStr(schema)
-		if err := tr.dom.DDL().BatchCreateTableWithInfo(tr.se, schemaName, cloneTis, ddl.OnExistIgnore); err != nil {
+		if err := tr.SplitBatchCreateTableAndHandle(schemaName, cloneTis, 0, len(cloneTis)); err != nil {
 			return err
 		}
 	}

@@ -26,10 +26,10 @@ services:
                         - "master0=http://server-master-0:8291,master1=http://server-master-1:8291,master2=http://server-master-2:8291"
                         - "--frame-meta-endpoints"
                         - "frame-mysql-standalone:3306"
-                        - "--user-meta-endpoints"
-                        - "user-etcd-standalone:2379"
+                        - "--business-meta-endpoints"
+                        - "business-etcd-standalone:2379"
                 depends_on:
-                  "user-etcd-standalone":
+                  "business-etcd-standalone":
                     condition: service_started
                   "frame-mysql-standalone":
                     condition: service_healthy
@@ -59,10 +59,10 @@ services:
                         - "master0=http://server-master-0:8291,master1=http://server-master-1:8291,master2=http://server-master-2:8291"
                         - "--frame-meta-endpoints"
                         - "frame-mysql-standalone:3306"
-                        - "--user-meta-endpoints"
-                        - "user-etcd-standalone:2379"
+                        - "--business-meta-endpoints"
+                        - "business-etcd-standalone:2379"
                 depends_on:
-                  "user-etcd-standalone":
+                  "business-etcd-standalone":
                     condition: service_started
                   "frame-mysql-standalone":
                     condition: service_healthy
@@ -92,10 +92,10 @@ services:
                         - "master0=http://server-master-0:8291,master1=http://server-master-1:8291,master2=http://server-master-2:8291"
                         - "--frame-meta-endpoints"
                         - "frame-mysql-standalone:3306"
-                        - "--user-meta-endpoints"
-                        - "user-etcd-standalone:2379"
+                        - "--business-meta-endpoints"
+                        - "business-etcd-standalone:2379"
                 depends_on:
-                  "user-etcd-standalone":
+                  "business-etcd-standalone":
                     condition: service_started
                   "frame-mysql-standalone":
                     condition: service_healthy
@@ -190,9 +190,9 @@ services:
                         interval: 10s
                         timeout: 600s
                         retries: 60
-        user-etcd-standalone:
+        business-etcd-standalone:
                 image: quay.io/coreos/etcd
-                container_name: user-etcd-standalone
+                container_name: business-etcd-standalone
                 volumes:
                         - ./config/etcd.yml:/etcd.yml
                 command:

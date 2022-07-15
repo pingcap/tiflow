@@ -270,7 +270,7 @@ func (p *processor) IsAddTableFinished(ctx context.Context, tableID model.TableI
 			return table.State() == pipeline.TableStatePrepared
 		}
 
-		if config.GetGlobalServerConfig().Debug.EnableTwoPhaseScheduler {
+		if config.GetGlobalServerConfig().Debug.EnableSchedulerV3 {
 			// The table is `replicating`, it's indicating that the `add table` must be finished.
 			return table.State() == pipeline.TableStateReplicating
 		}
@@ -475,8 +475,21 @@ func isProcessorIgnorableError(err error) bool {
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
 func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) (orchestrator.ReactorState, error) {
+	// check upstream error first
+	if err := p.upstream.Error(); err != nil {
+		return p.handleErr(ctx, state, err)
+	}
+	if p.upstream.IsClosed() {
+		log.Panic("upstream is closed",
+			zap.Uint64("upstreamID", p.upstream.ID),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID))
+	}
 	// skip this tick
 	if !p.upstream.IsNormal() {
+		log.Warn("upstream is not ready, skip",
+			zap.Uint64("id", p.upstream.ID),
+			zap.Strings("pd", p.upstream.PdEndpoints))
 		return state, nil
 	}
 	startTime := time.Now()
@@ -500,6 +513,13 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	if err == nil {
 		return state, nil
 	}
+	return p.handleErr(ctx, state, err)
+}
+
+func (p *processor) handleErr(ctx cdcContext.Context,
+	state *orchestrator.ChangefeedReactorState,
+	err error,
+) (orchestrator.ReactorState, error) {
 	if isProcessorIgnorableError(err) {
 		log.Info("processor exited", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
 		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
@@ -688,8 +708,8 @@ func (p *processor) newAgentImpl(ctx cdcContext.Context) (ret scheduler.Agent, e
 	etcdClient := ctx.GlobalVars().EtcdClient
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	cfg := config.GetGlobalServerConfig().Debug
-	if cfg.EnableTwoPhaseScheduler {
-		ret, err = scheduler.NewTpAgent(
+	if cfg.EnableSchedulerV3 {
+		ret, err = scheduler.NewAgentV3(
 			ctx, captureID, messageServer, messageRouter, etcdClient, p, p.changefeedID)
 	} else {
 		ret, err = scheduler.NewAgent(
@@ -719,23 +739,22 @@ func (p *processor) handleErrorCh(ctx cdcContext.Context) error {
 
 func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.SchemaStorage, error) {
 	kvStorage := p.upstream.KVStorage
-	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
 	kvCfg := config.GetGlobalServerConfig().KVClient
 	stdCtx := contextutil.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = contextutil.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
-	ddlPuller := puller.NewPuller(
+	ddlPuller := puller.New(
 		stdCtx,
 		p.upstream.PDClient,
 		p.upstream.GrpcPool,
 		p.upstream.RegionCache,
 		p.upstream.KVStorage,
 		p.upstream.PDClock,
-		ctx.ChangefeedVars().ID,
 		checkpointTs,
-		ddlspans,
+		regionspan.GetAllDDLSpan(),
 		kvCfg,
+		ctx.ChangefeedVars().ID,
 	)
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {
@@ -965,7 +984,7 @@ func (p *processor) flushRedoLogMeta(ctx context.Context) error {
 	if p.redoManager.Enabled() &&
 		time.Since(p.lastRedoFlush).Milliseconds() > p.changefeed.Info.Config.Consistent.FlushIntervalInMs {
 		st := p.changefeed.Status
-		err := p.redoManager.FlushResolvedAndCheckpointTs(ctx, st.ResolvedTs, st.CheckpointTs)
+		err := p.redoManager.UpdateCheckpointTs(ctx, st.CheckpointTs)
 		if err != nil {
 			return err
 		}
@@ -997,7 +1016,6 @@ func (p *processor) Close() error {
 	}
 	p.cancel()
 	p.wg.Wait()
-	p.upstream.Release()
 
 	if p.agent == nil {
 		return nil
@@ -1040,6 +1058,7 @@ func (p *processor) Close() error {
 	sinkmetric.TableSinkTotalRowsCountCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	tableMemoryHistogram.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorMemoryGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	log.Info("processor is closed successfully")
 	return nil
 }
 

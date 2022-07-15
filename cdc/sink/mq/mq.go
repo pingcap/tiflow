@@ -130,7 +130,7 @@ func (k *mqSink) AddTable(tableID model.TableID) error {
 	return nil
 }
 
-// EmitRowChangedEvents emits row changed events to the flush worker by paritition.
+// EmitRowChangedEvents emits row changed events to the flush worker by partition.
 // Concurrency Note: This method is thread-safe.
 func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	rowsCount := 0

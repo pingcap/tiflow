@@ -23,7 +23,9 @@ import (
 var _ Eq[*Node] = &Node{} // Asserts that *Node implements Eq[*Node].
 
 func TestNodeFree(t *testing.T) {
-	t.Parallel()
+	// This case should not be run parallel to
+	// others, for fear that the use-after-free
+	// will race with NewNode() in other cases.
 
 	nodeA := NewNode()
 	nodeA.Free()

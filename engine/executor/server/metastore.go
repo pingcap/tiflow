@@ -43,7 +43,7 @@ const (
 )
 
 // MetastoreManager maintains all metastore clients we need.
-// Except for ServiceDiscoveryStore, FrameworkStore and BusinessStore,
+// Except for ServiceDiscoveryStore, FrameworkStore and BusinessClientConn,
 // a MetastoreManager is not thread-safe.
 //
 // TODO refactor some code repetition together with servermaster.MetaStoreManager,
@@ -60,7 +60,7 @@ type MetastoreManager interface {
 
 	ServiceDiscoveryStore() *clientv3.Client
 	FrameworkStore() pkgOrm.Client
-	BusinessStore() metaModel.KVClientEx
+	BusinessClientConn() metaModel.ClientConn
 }
 
 // NewMetastoreManager returns a new MetastoreManager.
@@ -79,7 +79,7 @@ type metastoreManagerImpl struct {
 
 	serviceDiscoveryStore *clientv3.Client
 	frameworkStore        pkgOrm.Client
-	businessStore         metaModel.KVClientEx
+	businessClientConn    metaModel.ClientConn
 
 	creator MetastoreCreator
 }
@@ -91,9 +91,9 @@ type MetastoreCreator interface {
 		ctx context.Context, params metaModel.StoreConfig,
 	) (*clientv3.Client, error)
 
-	CreateMetaKVClientForBusiness(
+	CreateClientConnForBusiness(
 		ctx context.Context, params metaModel.StoreConfig,
-	) (metaModel.KVClientEx, error)
+	) (metaModel.ClientConn, error)
 
 	CreateDBClientForFramework(
 		ctx context.Context, params metaModel.StoreConfig,
@@ -133,20 +133,20 @@ func (c metastoreCreatorImpl) CreateEtcdCliForServiceDiscovery(
 	return etcdCli, nil
 }
 
-func (c metastoreCreatorImpl) CreateMetaKVClientForBusiness(
+func (c metastoreCreatorImpl) CreateClientConnForBusiness(
 	_ context.Context, params metaModel.StoreConfig,
-) (metaModel.KVClientEx, error) {
-	metaKVClient, err := meta.NewKVClient(&params)
+) (metaModel.ClientConn, error) {
+	cc, err := meta.NewClientConn(&params)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return metaKVClient, nil
+	return cc, nil
 }
 
 func (c metastoreCreatorImpl) CreateDBClientForFramework(
 	_ context.Context, params metaModel.StoreConfig,
 ) (pkgOrm.Client, error) {
-	frameMetaClient, err := pkgOrm.NewClient(params, dbutil.DefaultDBConfig())
+	frameMetaClient, err := pkgOrm.NewClient(params, *dbutil.DefaultDBConfig())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -230,7 +230,7 @@ func (m *metastoreManagerImpl) initFrameworkStore(ctx context.Context, servermas
 }
 
 func (m *metastoreManagerImpl) initBusinessStore(ctx context.Context, servermasterClient client.MasterClient) error {
-	// fetch user metastore connection endpoint
+	// fetch business metastore connection endpoint
 	resp, err := servermasterClient.QueryMetaStore(
 		ctx,
 		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_AppMetaStore},
@@ -242,33 +242,34 @@ func (m *metastoreManagerImpl) initBusinessStore(ctx context.Context, servermast
 	log.Info("Obtained business metastore endpoint", zap.String("addr", resp.Address))
 
 	conf := parseStoreConfig([]byte(resp.Address))
-	metaKVClient, err := m.creator.CreateMetaKVClientForBusiness(ctx, conf)
+	cc, err := m.creator.CreateClientConnForBusiness(ctx, conf)
 	if err != nil {
 		return err
 	}
-	m.businessStore = metaKVClient
+
+	m.businessClientConn = cc
 	return nil
 }
 
 func (m *metastoreManagerImpl) ServiceDiscoveryStore() *clientv3.Client {
 	if !m.initialized.Load() {
-		log.Panic("ServiceDiscoveryStore called before Init is successful")
+		log.Panic("ServiceDiscoveryStore is called before Init is successful")
 	}
 	return m.serviceDiscoveryStore
 }
 
 func (m *metastoreManagerImpl) FrameworkStore() pkgOrm.Client {
 	if !m.initialized.Load() {
-		log.Panic("FrameworkStore called before Init is successful")
+		log.Panic("FrameworkStore is called before Init is successful")
 	}
 	return m.frameworkStore
 }
 
-func (m *metastoreManagerImpl) BusinessStore() metaModel.KVClientEx {
+func (m *metastoreManagerImpl) BusinessClientConn() metaModel.ClientConn {
 	if !m.initialized.Load() {
-		log.Panic("BusinessStore called before Init is successful")
+		log.Panic("BusinessClientConn is called before Init is successful")
 	}
-	return m.businessStore
+	return m.businessClientConn
 }
 
 func (m *metastoreManagerImpl) Close() {
@@ -282,9 +283,9 @@ func (m *metastoreManagerImpl) Close() {
 		m.frameworkStore = nil
 	}
 
-	if m.businessStore != nil {
-		_ = m.businessStore.Close()
-		m.businessStore = nil
+	if m.businessClientConn != nil {
+		_ = m.businessClientConn.Close()
+		m.businessClientConn = nil
 	}
 
 	log.Info("MetastoreManager: Closed all metastores")

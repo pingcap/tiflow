@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
@@ -32,14 +33,15 @@ func TestUpdateGCSafePoint(t *testing.T) {
 
 	mockPDClient := &MockPDClient{}
 	pdClock := pdutil.NewClock4Test()
-	gcManager := NewManager(mockPDClient, pdClock).(*gcManager)
+	gcManager := NewManager(etcd.GcServiceIDForTest(),
+		mockPDClient, pdClock).(*gcManager)
 	ctx := cdcContext.NewBackendContext4Test(true)
 
 	startTs := oracle.GoTimeToTS(time.Now())
 	mockPDClient.UpdateServiceGCSafePointFunc = func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
 		require.Equal(t, startTs, safePoint)
 		require.Equal(t, gcManager.gcTTL, ttl)
-		require.Equal(t, CDCServiceSafePointID, serviceID)
+		require.Equal(t, etcd.GcServiceIDForTest(), serviceID)
 		return 0, nil
 	}
 	err := gcManager.TryUpdateGCSafePoint(ctx, startTs, false /* forceUpdate */)
@@ -57,7 +59,7 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	mockPDClient.UpdateServiceGCSafePointFunc = func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
 		require.Equal(t, startTs, safePoint)
 		require.Equal(t, gcManager.gcTTL, ttl)
-		require.Equal(t, CDCServiceSafePointID, serviceID)
+		require.Equal(t, etcd.GcServiceIDForTest(), serviceID)
 		return 0, nil
 	}
 	err = gcManager.TryUpdateGCSafePoint(ctx, startTs, false /* forceUpdate */)
@@ -69,7 +71,7 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	mockPDClient.UpdateServiceGCSafePointFunc = func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
 		require.Equal(t, startTs, safePoint)
 		require.Equal(t, gcManager.gcTTL, ttl)
-		require.Equal(t, CDCServiceSafePointID, serviceID)
+		require.Equal(t, etcd.GcServiceIDForTest(), serviceID)
 		ch <- struct{}{}
 		return 0, nil
 	}
@@ -87,7 +89,8 @@ func TestCheckStaleCheckpointTs(t *testing.T) {
 
 	mockPDClient := &MockPDClient{}
 	pdClock := pdutil.NewClock4Test()
-	gcManager := NewManager(mockPDClient, pdClock).(*gcManager)
+	gcManager := NewManager(etcd.GcServiceIDForTest(),
+		mockPDClient, pdClock).(*gcManager)
 	gcManager.isTiCDCBlockGC = true
 	ctx := context.Background()
 

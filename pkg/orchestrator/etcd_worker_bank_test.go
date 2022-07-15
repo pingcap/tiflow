@@ -26,6 +26,8 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/migrate"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -133,12 +135,15 @@ func TestEtcdBank(t *testing.T) {
 	newClient, closer := setUpTest(t)
 	defer closer()
 
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	cli := newClient()
+	cdcCli, err := etcd.NewCDCEtcdClient(ctx, cli.Unwrap(), "default")
+	require.Nil(t, err)
+
 	defer func() {
 		_ = cli.Unwrap().Close()
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	for i := 0; i < totalAccountNumber; i++ {
 		_, err := cli.Put(ctx, fmt.Sprintf("%s%d", bankTestPrefix, i), "0")
@@ -151,11 +156,12 @@ func TestEtcdBank(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for {
-				worker, err := NewEtcdWorker(cli, bankTestPrefix, &bankReactor{
+				worker, err := NewEtcdWorker(&cdcCli, bankTestPrefix, &bankReactor{
 					accountNumber: totalAccountNumber,
-				}, &bankReactorState{t: t, index: i, account: make([]int, totalAccountNumber)})
+				}, &bankReactorState{t: t, index: i, account: make([]int, totalAccountNumber)},
+					&migrate.NoOpMigrator{})
 				require.Nil(t, err)
-				err = worker.Run(ctx, nil, 100*time.Millisecond, "")
+				err = worker.Run(ctx, nil, 100*time.Millisecond, "owner")
 				if err == nil || err.Error() == "etcdserver: request timed out" {
 					continue
 				}

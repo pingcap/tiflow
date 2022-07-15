@@ -26,10 +26,12 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/api/middleware"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/version"
 	"go.uber.org/zap"
 )
 
@@ -85,6 +87,7 @@ func NewRequest(c *CDCRESTClient) *Request {
 		maxRetries: 1,
 	}
 	r.WithHeader("Accept", "application/json")
+	r.WithHeader(middleware.ClientVersionHeader, version.ReleaseVersion)
 	return r
 }
 
