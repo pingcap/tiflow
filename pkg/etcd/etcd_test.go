@@ -224,16 +224,18 @@ func TestCheckMultipleCDCClusterExist(t *testing.T) {
 	err = s.client.CheckMultipleCDCClusterExist(ctx)
 	require.NoError(t, err)
 
+	for _, reserved := range config.ReservedClusterIDs {
+		newClusterKey := "/tidb/cdc/" + reserved
+		_, err = rawEtcdClient.Put(ctx, newClusterKey, "test-value")
+		require.NoError(t, err)
+		err = s.client.CheckMultipleCDCClusterExist(ctx)
+		require.NoError(t, err)
+	}
+
 	newClusterKey := NamespacedPrefix("new-cluster", "new-namespace") +
 		"/test-key"
 	_, err = rawEtcdClient.Put(ctx, newClusterKey, "test-value")
 	require.NoError(t, err)
-
-	for _, reserved := range config.ReservedClusterIDs {
-		newClusterKey = "/tidb/cdc/" + reserved
-		_, err = rawEtcdClient.Put(ctx, newClusterKey, "test-value")
-		require.NoError(t, err)
-	}
 
 	err = s.client.CheckMultipleCDCClusterExist(ctx)
 	require.Error(t, err)

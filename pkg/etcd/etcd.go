@@ -167,7 +167,7 @@ func (c CDCEtcdClient) CheckMultipleCDCClusterExist(ctx context.Context) error {
 		// skip the reserved cluster id
 		isReserved := false
 		for _, reserved := range config.ReservedClusterIDs {
-			if strings.HasPrefix(key, reserved) {
+			if strings.HasPrefix(key, BaseKey(reserved)) {
 				isReserved = true
 				break
 			}
