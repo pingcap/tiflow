@@ -207,7 +207,8 @@ function safe_mode_duration() {
 
 	dmctl_start_task "$cur/conf/dm-task-safe-mode-duration.yaml" "--remove-meta"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-	check_log_contains $WORK_DIR/worker1/log/dm-worker.log "failpoint: will not enter safe mode" 10
+	sleep 1
+	check_log_contains $WORK_DIR/worker1/log/dm-worker.log "failpoint: will not enter safe mode"
 
 	# restart workers
 	pkill -hup dm-worker.test 2>/dev/null || true
@@ -217,9 +218,6 @@ function safe_mode_duration() {
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
-	# run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-	# 	"start-task $cur/conf/dm-task.yaml" \
-	# 	"\"result\": true" 3
 
 	# DM-worker exit during re-sync after sharding group synced
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
