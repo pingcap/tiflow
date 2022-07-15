@@ -39,7 +39,7 @@ var (
 			Subsystem: "mounter",
 			Name:      "ignored_dml_event_count",
 			Help:      "The total count of dml events that are ignored in mounter.",
-		}, []string{"type", "namespace", "changefeed"})
+		}, []string{"namespace", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file
