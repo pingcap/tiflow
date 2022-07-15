@@ -131,12 +131,13 @@ func (s *mockRPCServer) MockRPCWithErrField(ctx context.Context, req *mockRPCReq
 // newMockRPCServer returns a mockRPCServer that is ready to use.
 func newMockRPCServer() *mockRPCServer {
 	serverID := "server1"
+	rpcLim := NewRPCLimiter(rate.NewLimiter(rate.Every(time.Second*5), 3), nil)
 	h := &PreRPCHook[mockRPCClientIface]{
 		id:          serverID,
 		leader:      &atomic.Value{},
 		leaderCli:   &LeaderClientWithLock[mockRPCClientIface]{},
 		initialized: atomic.NewBool(true),
-		limiter:     rate.NewLimiter(rate.Every(time.Second*5), 3),
+		limiter:     rpcLim,
 	}
 	h.leader.Store(&Member{Name: serverID})
 	return &mockRPCServer{hook: h}

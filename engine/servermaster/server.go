@@ -65,6 +65,17 @@ import (
 	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
 )
 
+var masterRPCLimiterAllowList = []string{
+	"SubmitJob",
+	"CancelJob",
+	"ScheduleTask",
+}
+
+var resourceRPCLimiterAllowList = []string{
+	"CreateResource",
+	"RemoveResource",
+}
+
 // Server handles PRC requests for df master.
 type Server struct {
 	etcd *embed.Etcd
@@ -196,6 +207,7 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		server.masterCli,
 		&server.leaderInitialized,
 		server.rpcLogRL,
+		masterRPCLimiterAllowList,
 	)
 	server.masterRPCHook = masterRPCHook
 	return server, nil
@@ -532,6 +544,7 @@ func (s *Server) startResourceManager() error {
 		s.resourceCli,
 		&s.leaderInitialized,
 		s.rpcLogRL,
+		resourceRPCLimiterAllowList,
 	)
 	s.resourceManagerService = externRescManager.NewService(
 		s.frameMetaClient,
