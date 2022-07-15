@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -417,8 +418,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			return errors.Trace(err)
 		}
 
-		// campaign for the ownership just wait for 1 second, if timeout, retry it.
-		campaignCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		campaignCtx, cancel := context.WithTimeout(ctx, time.Second)
 		err = c.campaign(campaignCtx)
 		cancel()
 		if err != nil {
@@ -430,6 +430,9 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 				continue
 			case mvcc.ErrCompacted:
 				// the revision we requested is compacted, just retry
+				continue
+			}
+			if strings.Contains(err.Error(), "context deadline exceeded") {
 				continue
 			}
 			log.Warn("campaign owner failed",
