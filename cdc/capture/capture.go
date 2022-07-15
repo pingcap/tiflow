@@ -302,6 +302,20 @@ func (c *captureImpl) Run(ctx context.Context) error {
 }
 
 func (c *captureImpl) run(stdCtx context.Context) error {
+	err := c.register(stdCtx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer func() {
+		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := c.EtcdClient.DeleteCaptureInfo(timeoutCtx, c.info.ID); err != nil {
+			log.Warn("failed to delete capture info when capture exited",
+				zap.String("captureID", c.info.ID),
+				zap.Error(err))
+		}
+		cancel()
+	}()
+
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
 		CaptureInfo:      c.info,
 		EtcdClient:       c.EtcdClient,
@@ -310,19 +324,6 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		MessageServer:    c.MessageServer,
 		MessageRouter:    c.MessageRouter,
 	})
-	err := c.register(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	defer func() {
-		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		if err := ctx.GlobalVars().EtcdClient.DeleteCaptureInfo(timeoutCtx, c.info.ID); err != nil {
-			log.Warn("failed to delete capture info when capture exited",
-				zap.String("captureID", c.info.ID),
-				zap.Error(err))
-		}
-		cancel()
-	}()
 	wg := new(sync.WaitGroup)
 	var ownerErr, processorErr, messageServerErr error
 	wg.Add(1)
@@ -584,9 +585,9 @@ func (c *captureImpl) resign(ctx cdcContext.Context) error {
 	return cerror.WrapError(cerror.ErrCaptureResignOwner, c.election.Resign(ctx))
 }
 
-// register registers the capture information in etcd
-func (c *captureImpl) register(ctx cdcContext.Context) error {
-	err := ctx.GlobalVars().EtcdClient.PutCaptureInfo(ctx, c.info, c.session.Lease())
+// register the capture by put the capture's information in etcd
+func (c *captureImpl) register(ctx context.Context) error {
+	err := c.EtcdClient.PutCaptureInfo(ctx, c.info, c.session.Lease())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrCaptureRegister, err)
 	}
