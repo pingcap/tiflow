@@ -357,6 +357,23 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (
 		return event, suffix, op, nil
 	}
 
+	checkErr := func(err error) (shouldRet bool) {
+		failpoint.Inject("GetEventError", func() {
+			err = errors.New("go-mysql returned an error")
+		})
+		if err == nil {
+			return false
+		}
+
+		if err != context.Canceled && err != context.DeadlineExceeded {
+			c.Lock()
+			tctx.L().Error("meet error when get binlog event", zap.Error(err))
+			c.meetError = true
+			c.Unlock()
+		}
+		return true
+	}
+
 	c.RLock()
 	streamer := c.streamer
 	c.RUnlock()
@@ -365,20 +382,11 @@ LOOP:
 	for frontOp := c.streamModifier.front(); frontOp != nil; frontOp = c.streamModifier.front() {
 		op = pb.ErrorOp_InvalidErrorOp
 		suffix = 0
+		var status getEventFromFrontOpStatus
 
 		if c.lastEventFromUpstream == nil {
 			c.lastEventFromUpstream, err = streamer.GetEvent(tctx.Context())
-			failpoint.Inject("GetEventError", func() {
-				err = errors.New("go-mysql returned an error")
-			})
-			if err != nil {
-				if err != context.Canceled && err != context.DeadlineExceeded {
-					c.Lock()
-					tctx.L().Error("meet error when get binlog event", zap.Error(err))
-					c.meetError = true
-					c.Unlock()
-				}
-
+			if checkErr(err) {
 				return nil, 0, pb.ErrorOp_InvalidErrorOp, err
 			}
 		}
@@ -414,21 +422,19 @@ LOOP:
 				op = pb.ErrorOp_Skip
 				break LOOP
 			case pb.ErrorOp_Replace:
+				event, status = c.streamModifier.getEventFromFrontOp()
 				// this op has been totally consumed, move to next op and also delete
 				// lastEventFromUpstream because it's Replace.
-				if c.streamModifier.nextEventInOp == len(frontOp.events) {
+				if status == eventsExhausted {
 					c.lastEventFromUpstream = nil
 					c.streamModifier.next()
 					continue
 				}
 
-				event = frontOp.events[c.streamModifier.nextEventInOp]
-				c.streamModifier.nextEventInOp++
-
 				// for last event in Replace, we change the LogPos and EventSize
 				// to imitate the real event. otherwise, we use the LogPos from
 				// startPosition, zero EventSize and increase suffix.
-				if c.streamModifier.nextEventInOp == len(frontOp.events) {
+				if status == lastEvent {
 					event.Header.LogPos = c.lastEventFromUpstream.Header.LogPos
 					event.Header.EventSize = c.lastEventFromUpstream.Header.EventSize
 					// TODO: for last event we should forward GTID set? let caller
@@ -443,17 +449,15 @@ LOOP:
 				// binlog streamer itself can maintain it
 				break LOOP
 			case pb.ErrorOp_Inject:
+				event, status = c.streamModifier.getEventFromFrontOp()
 				// this op has been totally consumed, move to next op and return
 				// original upstream event
-				if c.streamModifier.nextEventInOp == len(frontOp.events) {
+				if status == eventsExhausted {
 					c.streamModifier.next()
 					event = c.lastEventFromUpstream
 					c.lastEventFromUpstream = nil
 					break LOOP
 				}
-
-				event = frontOp.events[c.streamModifier.nextEventInOp]
-				c.streamModifier.nextEventInOp++
 
 				event.Header.LogPos = startPos.Pos
 				suffix = c.streamModifier.nextEventInOp
@@ -501,16 +505,7 @@ LOOP:
 	}
 
 	event, err = streamer.GetEvent(tctx.Context())
-	failpoint.Inject("GetEventError", func() {
-		err = errors.New("go-mysql returned an error")
-	})
-	if err != nil {
-		if err != context.Canceled && err != context.DeadlineExceeded {
-			c.Lock()
-			tctx.L().Error("meet error when get binlog event", zap.Error(err))
-			c.meetError = true
-			c.Unlock()
-		}
+	if checkErr(err) {
 		return nil, 0, pb.ErrorOp_InvalidErrorOp, err
 	}
 

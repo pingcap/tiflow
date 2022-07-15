@@ -267,6 +267,7 @@ func checkGetEvent(t *testing.T, controller *StreamerController, expecteds []exp
 	}
 	ctx, cancel := ctx.WithTimeout(10 * time.Millisecond)
 	defer cancel()
+	// nolint:dogsled
 	_, _, _, err := controller.GetEvent(ctx)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 }

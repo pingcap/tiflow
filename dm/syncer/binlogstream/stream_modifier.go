@@ -221,6 +221,30 @@ func (m *streamModifier) next() {
 	m.nextEventInOp = 0
 }
 
+type getEventFromFrontOpStatus int
+
+const (
+	normal getEventFromFrontOpStatus = iota
+	lastEvent
+	eventsExhausted
+)
+
+// getEventFromFrontOp returns (next event in front op, status). Caller should
+// make sure front op is valid.
+func (m *streamModifier) getEventFromFrontOp() (*replication.BinlogEvent, getEventFromFrontOpStatus) {
+	events := m.front().events
+	if m.nextEventInOp >= len(events) {
+		return nil, eventsExhausted
+	}
+	op := normal
+	if m.nextEventInOp == len(events)-1 {
+		op = lastEvent
+	}
+	event := events[m.nextEventInOp]
+	m.nextEventInOp++
+	return event, op
+}
+
 // minIdxLargerOrEqual return an index of m.ops where m.ops[index:] are all equal
 // or larger than `pos` since m.ops are monotonous.
 func (m *streamModifier) minIdxLargerOrEqual(pos mysql.Position) int {
