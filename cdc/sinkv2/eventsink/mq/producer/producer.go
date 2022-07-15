@@ -11,13 +11,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package eventsink
+package producer
 
-// EventSink is the interface for event sink.
-type EventSink[E TableEvent] interface {
-	// WriteEvents writes events to the sink.
-	// This is an asynchronously and thread-safe method.
-	WriteEvents(rows ...*CallbackableEvent[E]) error
-	// Close closes the sink.
+import (
+	"context"
+
+	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
+)
+
+// Producer is the interface for message producer.
+type Producer interface {
+	// AsyncSendMessage sends a message asynchronously.
+	AsyncSendMessage(
+		ctx context.Context, topic string, partition int32, message *codec.MQMessage,
+	) error
+
+	// Close closes the producer and client(s).
 	Close() error
 }
