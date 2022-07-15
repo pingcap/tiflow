@@ -27,8 +27,17 @@ import (
 )
 
 const (
+<<<<<<< HEAD
 	// cdcChangefeedCreatingServiceGCSafePointID is service GC safe point ID
 	cdcChangefeedCreatingServiceGCSafePointID = "ticdc-creating-"
+=======
+	// EnsureGCServiceCreating is a tag of GC service id for changefeed creation
+	EnsureGCServiceCreating = "-creating-"
+	// EnsureGCServiceResuming is a tag of GC service id for changefeed resumption
+	EnsureGCServiceResuming = "-resuming-"
+	// EnsureGCServiceInitializing is a tag of GC service id for changefeed initialization
+	EnsureGCServiceInitializing = "-initializing-"
+>>>>>>> 5a4f4012e (cli(ticdc): Cleanup service GC safe point correctly (#6283))
 )
 
 // EnsureChangefeedStartTsSafety checks if the startTs less than the minimum of
@@ -48,6 +57,24 @@ func EnsureChangefeedStartTsSafety(
 	if startTs < minServiceGCTs {
 		return cerrors.ErrStartTsBeforeGC.GenWithStackByArgs(startTs, minServiceGCTs)
 	}
+	return nil
+}
+
+// UndoEnsureChangefeedStartTsSafety cleans the service GC safepoint of a changefeed
+// if something goes wrong after successfully calling EnsureChangefeedStartTsSafety().
+func UndoEnsureChangefeedStartTsSafety(
+	ctx context.Context, pdCli pd.Client,
+	gcServiceIDPrefix string,
+	changefeedID model.ChangeFeedID,
+) error {
+	err := RemoveServiceGCSafepoint(
+		ctx,
+		pdCli,
+		gcServiceIDPrefix+changefeedID.Namespace+"_"+changefeedID.ID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	return nil
 }
 
