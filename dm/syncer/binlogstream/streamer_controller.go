@@ -358,9 +358,6 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (
 	}
 
 	checkErr := func(err error) (shouldRet bool) {
-		failpoint.Inject("GetEventError", func() {
-			err = errors.New("go-mysql returned an error")
-		})
 		if err == nil {
 			return false
 		}
@@ -386,6 +383,9 @@ LOOP:
 
 		if c.lastEventFromUpstream == nil {
 			c.lastEventFromUpstream, err = streamer.GetEvent(tctx.Context())
+			failpoint.Inject("GetEventError", func() {
+				err = errors.New("go-mysql returned an error")
+			})
 			if checkErr(err) {
 				return nil, 0, pb.ErrorOp_InvalidErrorOp, err
 			}
@@ -472,12 +472,11 @@ LOOP:
 		case 1:
 			switch frontOp.op {
 			case pb.ErrorOp_Inject:
-				if c.streamModifier.nextEventInOp == len(frontOp.events) {
+				event, status = c.streamModifier.getEventFromFrontOp()
+				if status == eventsExhausted {
 					c.streamModifier.next()
 					continue
 				}
-				event = frontOp.events[c.streamModifier.nextEventInOp]
-				c.streamModifier.nextEventInOp++
 				op = pb.ErrorOp_Inject
 				break LOOP
 			default:
@@ -505,6 +504,9 @@ LOOP:
 	}
 
 	event, err = streamer.GetEvent(tctx.Context())
+	failpoint.Inject("GetEventError", func() {
+		err = errors.New("go-mysql returned an error")
+	})
 	if checkErr(err) {
 		return nil, 0, pb.ErrorOp_InvalidErrorOp, err
 	}
