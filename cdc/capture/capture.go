@@ -392,7 +392,7 @@ func (c *captureImpl) Info() (model.CaptureInfo, error) {
 	return model.CaptureInfo{}, cerror.ErrCaptureNotInitialized.GenWithStackByArgs()
 }
 
-func (c *captureImpl) campaignLoop(ctx cdcContext.Context) error {
+func (c *captureImpl) campaignLoop(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -400,7 +400,9 @@ func (c *captureImpl) campaignLoop(ctx cdcContext.Context) error {
 		default:
 		}
 
+		ctx, cancel := context.WithTimeout(ctx, time.Second)
 		err := c.campaign(ctx)
+		cancel()
 		if err == nil {
 			return nil
 		}
@@ -439,7 +441,6 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			}
 			return errors.Trace(err)
 		}
-
 		// Campaign to be an owner, it blocks until it becomes the owner
 		if err := c.campaignLoop(ctx); err != nil {
 			switch errors.Cause(err) {
@@ -567,18 +568,15 @@ func (c *captureImpl) GetOwner() (owner.Owner, error) {
 }
 
 // campaign to be an owner.
-func (c *captureImpl) campaign(ctx cdcContext.Context) error {
+func (c *captureImpl) campaign(ctx context.Context) error {
 	failpoint.Inject("capture-campaign-compacted-error", func() {
 		failpoint.Return(errors.Trace(mvcc.ErrCompacted))
 	})
-
-	stdCtx, cancel := context.WithTimeout(ctx, time.Second)
-	defer cancel()
-	return cerror.WrapError(cerror.ErrCaptureCampaignOwner, c.election.Campaign(stdCtx, c.info.ID))
+	return cerror.WrapError(cerror.ErrCaptureCampaignOwner, c.election.Campaign(ctx, c.info.ID))
 }
 
 // resign lets an owner start a new election.
-func (c *captureImpl) resign(ctx cdcContext.Context) error {
+func (c *captureImpl) resign(ctx context.Context) error {
 	failpoint.Inject("capture-resign-failed", func() {
 		failpoint.Return(errors.New("capture resign failed"))
 	})
