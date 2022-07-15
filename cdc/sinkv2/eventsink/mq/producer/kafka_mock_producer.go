@@ -19,23 +19,32 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 )
 
-var _ Producer = (*mockProducer)(nil)
+var _ Producer = (*MockProducer)(nil)
 
-type mockProducer struct{}
+// MockProducer is a mock producer for test.
+type MockProducer struct {
+	events []*codec.MQMessage
+}
 
 // NewMockProducer creates a mock producer.
 func NewMockProducer() Producer {
-	return &mockProducer{}
+	return &MockProducer{}
 }
 
-func (m *mockProducer) AsyncSendMessage(ctx context.Context, topic string,
+// AsyncSendMessage appends a message to the mock producer.
+func (m *MockProducer) AsyncSendMessage(ctx context.Context, topic string,
 	partition int32, message *codec.MQMessage,
 ) error {
-	// TODO implement me
-	panic("implement me")
+	m.events = append(m.events, message)
+	return nil
 }
 
-func (m *mockProducer) Close() error {
-	// TODO implement me
-	panic("implement me")
+// Close do nothing.
+func (m *MockProducer) Close() error {
+	return nil
+}
+
+// GetEvents returns the events received by the mock producer.
+func (m *MockProducer) GetEvents() []*codec.MQMessage {
+	return m.events
 }

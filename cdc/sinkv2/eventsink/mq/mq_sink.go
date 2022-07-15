@@ -124,6 +124,7 @@ func (s *sink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) error 
 			row: row,
 		}
 	}
+
 	return nil
 }
 

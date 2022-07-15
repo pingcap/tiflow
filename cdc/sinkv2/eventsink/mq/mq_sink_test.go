@@ -18,9 +18,14 @@ import (
 	"fmt"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	kafkav1 "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/producer"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/stretchr/testify/require"
@@ -70,4 +75,30 @@ func TestWriteEvents(t *testing.T) {
 	s, err := NewKafkaSink(ctx, sinkURI, replicaConfig, errCh)
 	require.Nil(t, err)
 	require.NotNil(t, s)
+
+	count := 0
+	tableState := pipeline.TableStateReplicating
+	row := &model.RowChangedEvent{
+		CommitTs: 1,
+		Table:    &model.TableName{Schema: "a", Table: "b"},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+	}
+
+	events := make([]*eventsink.RowChangeCallbackableEvent, 0, 3000)
+	for i := 0; i < 3000; i++ {
+		events = append(events, &eventsink.RowChangeCallbackableEvent{
+			Event: row,
+			Callback: func() {
+				count += 1
+			},
+			TableStatus: &tableState,
+		})
+	}
+
+	err = s.WriteEvents(events...)
+	// Wait for the events to be received by the worker.
+	time.Sleep(time.Second)
+	require.Nil(t, err)
+	require.Len(t, errCh, 0)
+	require.Len(t, s.worker.producer.(*producer.MockProducer).GetEvents(), 3000)
 }
