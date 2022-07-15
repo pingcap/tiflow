@@ -31,7 +31,11 @@ func TestCraftMaxMessageBytes(t *testing.T) {
 	testEvent := &model.RowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("aa")}},
+		Columns: []*model.Column{{
+			Name:  "col1",
+			Type:  mysql.TypeVarchar,
+			Value: []byte("aa"),
+		}},
 	}
 
 	for i := 0; i < 10000; i++ {
@@ -54,7 +58,11 @@ func TestCraftMaxBatchSize(t *testing.T) {
 	testEvent := &model.RowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("aa")}},
+		Columns: []*model.Column{{
+			Name:  "col1",
+			Type:  mysql.TypeVarchar,
+			Value: []byte("aa"),
+		}},
 	}
 
 	for i := 0; i < 10000; i++ {
@@ -211,7 +219,11 @@ func TestCraftAppendRowChangedEventWithCallback(t *testing.T) {
 	row := &model.RowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: []byte("aa")}},
+		Columns: []*model.Column{{
+			Name:  "col1",
+			Type:  mysql.TypeVarchar,
+			Value: []byte("aa"),
+		}},
 	}
 
 	tests := []struct {
