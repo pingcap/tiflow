@@ -62,9 +62,20 @@ func confirmLargeDataGap(cmd *cobra.Command, currentPhysical int64, startTs uint
 	return nil
 }
 
+<<<<<<< HEAD
 // confirmIgnoreIneligibleTables confirm if user need to ignore ineligible tables.
 func confirmIgnoreIneligibleTables(cmd *cobra.Command) error {
 	cmd.Printf("Could you agree to ignore those tables, and continue to replicate [Y/N]\n")
+=======
+// confirmOverwriteCheckpointTs prompts risk warnings when users are trying to
+// overwrite the checkpointTs
+func confirmOverwriteCheckpointTs(
+	cmd *cobra.Command, changefeedID string, checkpointTs uint64,
+) error {
+	cmd.Printf("You are overwriting the checkpoint of changefeed(%s) to %d,"+
+		" which may lead to data loss or data duplication.\nConfirm that you know"+
+		" what this command will do and use it at your own risk [Y/N]", changefeedID, checkpointTs)
+>>>>>>> 5a4f4012e (cli(ticdc): Cleanup service GC safe point correctly (#6283))
 	var yOrN string
 	_, err := fmt.Scan(&yOrN)
 	if err != nil {
