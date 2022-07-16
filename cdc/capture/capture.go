@@ -418,9 +418,8 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			return errors.Trace(err)
 		}
 
-		if resp, err := c.election.Leader(ctx); err == nil {
+		if resp, _ := c.election.Leader(ctx); resp != nil {
 			log.Warn("leader found", zap.Any("resp", resp))
-			continue
 		}
 
 		// campaign for the ownership just wait for 1 second, if timeout, retry it.
