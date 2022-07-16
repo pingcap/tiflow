@@ -317,20 +317,30 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		if newCheckpointTs > barrierTs {
 			newCheckpointTs = barrierTs
 		}
+		prevResolvedTs := c.state.Status.ResolvedTs
 		var flushedCheckpointTs, flushedResolvedTs model.Ts
-		c.redoManager.UpdateMeta(newCheckpointTs, newResolvedTs)
-		c.redoManager.GetFlushedMeta(&flushedCheckpointTs, &flushedResolvedTs)
-		if flushedCheckpointTs != 0 || flushedResolvedTs != 0 {
-			c.updateStatus(flushedCheckpointTs, flushedResolvedTs)
-			c.updateMetrics(currentTs, flushedCheckpointTs, flushedResolvedTs)
-			log.Info("owner state updates",
-				zap.Uint64("flushedResolvedTs", flushedResolvedTs),
-				zap.Uint64("flushedCheckpointTs", flushedCheckpointTs),
-				zap.Uint64("newResolvedTs", newResolvedTs),
-				zap.Uint64("newCheckpointTs", newCheckpointTs))
-		} else {
-			c.updateMetrics(currentTs, newCheckpointTs, newResolvedTs)
+		if c.redoManager.Enabled() {
+			c.redoManager.UpdateMeta(newCheckpointTs, newResolvedTs)
+			c.redoManager.GetFlushedMeta(&flushedCheckpointTs, &flushedResolvedTs)
+			if flushedResolvedTs != 0 {
+				log.Debug("owner gets flushed meta",
+					zap.Uint64("flushedResolvedTs", flushedResolvedTs),
+					zap.Uint64("flushedCheckpointTs", flushedCheckpointTs),
+					zap.Uint64("newResolvedTs", newResolvedTs),
+					zap.Uint64("newCheckpointTs", newCheckpointTs))
+				// Shouldn't replace newCheckpointTs with flushedCheckpointTs.
+				newResolvedTs = flushedResolvedTs
+			} else {
+				newResolvedTs = prevResolvedTs
+			}
 		}
+		if newCheckpointTs > newResolvedTs {
+			log.Panic("owner checkpoint > resolved",
+				zap.Uint64("newCheckpointTs", newCheckpointTs),
+				zap.Uint64("newResolvedTs", newResolvedTs))
+		}
+		c.updateStatus(newCheckpointTs, newResolvedTs)
+		c.updateMetrics(currentTs, newCheckpointTs, newResolvedTs)
 	} else if c.state.Status != nil {
 		// We should keep the metrics updated even if the scheduler cannot
 		// advance the watermarks for now.
