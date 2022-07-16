@@ -360,11 +360,13 @@ func (m *ManagerImpl) GetMinResolvedTs() model.Ts {
 	return atomic.LoadUint64(&m.minResolvedTs)
 }
 
+// UpdateMeta updates meta.
 func (m *ManagerImpl) UpdateMeta(checkpointTs, resolvedTs model.Ts) {
 	atomic.StoreUint64(&m.gotResolvedTs, resolvedTs)
 	atomic.StoreUint64(&m.gotCheckpointTs, checkpointTs)
 }
 
+// GetFlushedMeta gets flushed meta.
 func (m *ManagerImpl) GetFlushedMeta(checkpointTs, resolvedTs *model.Ts) {
 	*checkpointTs = atomic.LoadUint64(&m.flushedCheckpointTs)
 	*resolvedTs = atomic.LoadUint64(&m.flushedResolvedTs)
