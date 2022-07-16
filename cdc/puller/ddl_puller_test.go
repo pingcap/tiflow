@@ -44,7 +44,7 @@ type mockPuller struct {
 }
 
 func (m *mockPuller) UnmarshalDDL(rawKV *model.RawKVEntry) (*timodel.Job, error) {
-	return entry.ParseJob(nil, rawKV, 0)
+	return entry.ParseDDLJob(nil, rawKV, 0)
 }
 
 func newMockPuller(t *testing.T, startTs model.Ts) *mockPuller {

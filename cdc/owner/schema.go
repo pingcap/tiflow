@@ -45,14 +45,18 @@ func newSchemaWrap4Owner(
 	kvStorage tidbkv.Storage, startTs model.Ts,
 	config *config.ReplicaConfig, id model.ChangeFeedID,
 ) (*schemaWrap4Owner, error) {
-	var meta *timeta.Meta
-	var version int64
+	var (
+		meta    *timeta.Meta
+		version int64
+	)
 	if kvStorage != nil {
 		var err error
 		meta, err = kv.GetSnapshotMeta(kvStorage, startTs)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
+		// we should init the schema version from the startTs, if the diff corresponding to the version is not exists,
+		// it means the job is not committed yet, so we should make schema version -1.
 		version, err = meta.GetSchemaVersion()
 		if err != nil {
 			return nil, errors.Trace(err)

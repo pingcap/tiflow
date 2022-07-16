@@ -236,8 +236,8 @@ func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawKey []b
 	}, nil
 }
 
-// ParseJob parses the job from the raw KV entry.
-func ParseJob(tblInfo *model.TableInfo, rawKV *model.RawKVEntry, id int64) (*timodel.Job, error) {
+// ParseDDLJob parses the job from the raw KV entry. id is the column id of `job_meta`.
+func ParseDDLJob(tblInfo *model.TableInfo, rawKV *model.RawKVEntry, id int64) (*timodel.Job, error) {
 	if rawKV.OpType != model.OpTypePut {
 		return nil, nil
 	}
@@ -250,9 +250,6 @@ func ParseJob(tblInfo *model.TableInfo, rawKV *model.RawKVEntry, id int64) (*tim
 		recordID, err := tablecodec.DecodeRowKey(rawKV.Key)
 		if err != nil {
 			return nil, errors.Trace(err)
-		}
-		if len(rawKV.Value) == 0 {
-			return nil, nil
 		}
 		row, err := decodeRow(rawKV.Value, recordID, tblInfo, time.UTC)
 		if err != nil {

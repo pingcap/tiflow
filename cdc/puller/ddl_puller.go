@@ -65,7 +65,7 @@ type ddlJobPullerImpl struct {
 }
 
 func (p *ddlJobPullerImpl) UnmarshalDDL(rawKV *model.RawKVEntry) (*timodel.Job, error) {
-	return entry.ParseJob(p.tableInfo, rawKV, p.columnID)
+	return entry.ParseDDLJob(p.tableInfo, rawKV, p.columnID)
 }
 
 func findDBByName(dbs []*timodel.DBInfo, name string) (*timodel.DBInfo, error) {
@@ -75,7 +75,7 @@ func findDBByName(dbs []*timodel.DBInfo, name string) (*timodel.DBInfo, error) {
 		}
 	}
 
-	return nil, errors.New("create NewDDLJobPuller fail, can't find schema")
+	return nil, cerror.WrapError(cerror.ErrDDLSchemaNotFound, errors.Errorf("can't find schema %s", name))
 }
 
 func findTableByName(tbls []*timodel.TableInfo, name string) (*timodel.TableInfo, error) {
@@ -85,7 +85,7 @@ func findTableByName(tbls []*timodel.TableInfo, name string) (*timodel.TableInfo
 		}
 	}
 
-	return nil, errors.New("create NewDDLJobPuller fail, can't find schema")
+	return nil, cerror.WrapError(cerror.ErrDDLSchemaNotFound, errors.Errorf("can't find table %s", name))
 }
 
 func findColumnByName(cols []*timodel.ColumnInfo, name string) (*timodel.ColumnInfo, error) {
@@ -95,7 +95,7 @@ func findColumnByName(cols []*timodel.ColumnInfo, name string) (*timodel.ColumnI
 		}
 	}
 
-	return nil, errors.New("create NewDDLJobPuller fail, can't find schema")
+	return nil, cerror.WrapError(cerror.ErrDDLSchemaNotFound, errors.Errorf("can't find column %s", name))
 }
 
 // NewDDLJobPuller create a new NewDDLJobPuller fetch event start from checkpointTs
