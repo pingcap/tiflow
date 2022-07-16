@@ -317,8 +317,20 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		if newCheckpointTs > barrierTs {
 			newCheckpointTs = barrierTs
 		}
-		c.updateStatus(newCheckpointTs, newResolvedTs)
-		c.updateMetrics(currentTs, newCheckpointTs, newResolvedTs)
+		var flushedCheckpointTs, flushedResolvedTs model.Ts
+		c.redoManager.UpdateMeta(newCheckpointTs, newResolvedTs)
+		c.redoManager.GetFlushedMeta(&flushedCheckpointTs, &flushedResolvedTs)
+		if flushedCheckpointTs != 0 || flushedResolvedTs != 0 {
+			c.updateStatus(flushedCheckpointTs, flushedResolvedTs)
+			c.updateMetrics(currentTs, flushedCheckpointTs, flushedResolvedTs)
+			log.Info("owner state updates",
+				zap.Uint64("flushedResolvedTs", flushedResolvedTs),
+				zap.Uint64("flushedCheckpointTs", flushedCheckpointTs),
+				zap.Uint64("newResolvedTs", newResolvedTs),
+				zap.Uint64("newCheckpointTs", newCheckpointTs))
+		} else {
+			c.updateMetrics(currentTs, newCheckpointTs, newResolvedTs)
+		}
 	} else if c.state.Status != nil {
 		// We should keep the metrics updated even if the scheduler cannot
 		// advance the watermarks for now.

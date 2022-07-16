@@ -95,7 +95,7 @@ type LogManager interface {
 	// Enabled returns whether the log manager is enabled
 	Enabled() bool
 
-	// The following 6 APIs are called from processor only
+	// The following APIs are called from processor only
 	AddTable(tableID model.TableID, startTs uint64)
 	RemoveTable(tableID model.TableID)
 	GetResolvedTs(tableID model.TableID) model.Ts
@@ -103,10 +103,11 @@ type LogManager interface {
 	EmitRowChangedEvents(ctx context.Context, tableID model.TableID,
 		rows ...*model.RowChangedEvent) error
 	UpdateResolvedTs(ctx context.Context, tableID model.TableID, resolvedTs uint64) error
-	UpdateCheckpointTs(ctx context.Context, checkpointTs uint64) error
 
-	// EmitDDLEvent are called from owner only
+	// The following APIs are called from owner only
 	EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
+	UpdateMeta(checkpointTs, resolvedTs model.Ts)
+	GetFlushedMeta(checkpointTs, resolvedTs *model.Ts)
 
 	// Cleanup removes all redo logs
 	Cleanup(ctx context.Context) error
@@ -168,6 +169,11 @@ type ManagerImpl struct {
 	// For a given statefulRts, unflushed is updated in routine bgUpdateLog,
 	// and flushed is updated in flushLog.
 	rtsMap sync.Map
+
+	gotCheckpointTs     model.Ts
+	gotResolvedTs       model.Ts
+	flushedCheckpointTs model.Ts
+	flushedResolvedTs   model.Ts
 
 	writer        writer.RedoLogWriter
 	logBuffer     *chann.Chann[cacheEvents]
@@ -354,10 +360,14 @@ func (m *ManagerImpl) GetMinResolvedTs() model.Ts {
 	return atomic.LoadUint64(&m.minResolvedTs)
 }
 
-// UpdateCheckpointTs updates checkpoint-ts to redo log writer
-func (m *ManagerImpl) UpdateCheckpointTs(ctx context.Context, checkpointTs uint64) (err error) {
-	err = m.writer.EmitCheckpointTs(ctx, checkpointTs)
-	return
+func (m *ManagerImpl) UpdateMeta(checkpointTs, resolvedTs model.Ts) {
+	atomic.StoreUint64(&m.gotResolvedTs, resolvedTs)
+	atomic.StoreUint64(&m.gotCheckpointTs, checkpointTs)
+}
+
+func (m *ManagerImpl) GetFlushedMeta(checkpointTs, resolvedTs *model.Ts) {
+	*checkpointTs = atomic.LoadUint64(&m.flushedCheckpointTs)
+	*resolvedTs = atomic.LoadUint64(&m.flushedResolvedTs)
 }
 
 // AddTable adds a new table in redo log manager
@@ -451,14 +461,21 @@ func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
 	go func() {
 		defer atomic.StoreInt64(&m.flushing, 0)
 
+		// resolved must be loaded before checkpoint.
+		metaResolved := atomic.LoadUint64(&m.gotResolvedTs)
+		metaCheckpoint := atomic.LoadUint64(&m.gotCheckpointTs)
+
 		tableRtsMap, minResolvedTs := m.prepareForFlush()
-		err := m.writer.FlushLog(ctx, tableRtsMap)
+		err := m.writer.FlushLog(ctx, metaCheckpoint, metaResolved)
 		m.metricFlushLogDuration.Observe(time.Since(m.lastFlushTime).Seconds())
 		if err != nil {
 			handleErr(err)
 			return
 		}
 		m.postFlush(tableRtsMap, minResolvedTs)
+
+		atomic.StoreUint64(&m.flushedResolvedTs, metaResolved)
+		atomic.StoreUint64(&m.flushedCheckpointTs, metaCheckpoint)
 	}()
 
 	return
