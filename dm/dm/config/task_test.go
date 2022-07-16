@@ -595,7 +595,7 @@ func (t *testConfig) TestGenAndFromSubTaskConfigs(c *C) {
 		filterRule1 = bf.BinlogEventRule{
 			SchemaPattern: "db*",
 			TablePattern:  "tbl1*",
-			Events:        []bf.EventType{bf.CreateIndex, bf.AlterTable},
+			Events:        []bf.EventType{bf.CreateIndex, bf.AlertTable},
 			Action:        bf.Do,
 		}
 		filterRule2 = bf.BinlogEventRule{
