@@ -322,16 +322,19 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		if c.redoManager.Enabled() {
 			c.redoManager.UpdateMeta(newCheckpointTs, newResolvedTs)
 			c.redoManager.GetFlushedMeta(&flushedCheckpointTs, &flushedResolvedTs)
+			log.Debug("owner gets flushed meta",
+				zap.Uint64("flushedResolvedTs", flushedResolvedTs),
+				zap.Uint64("flushedCheckpointTs", flushedCheckpointTs),
+				zap.Uint64("newResolvedTs", newResolvedTs),
+				zap.Uint64("newCheckpointTs", newCheckpointTs))
 			if flushedResolvedTs != 0 {
-				log.Debug("owner gets flushed meta",
-					zap.Uint64("flushedResolvedTs", flushedResolvedTs),
-					zap.Uint64("flushedCheckpointTs", flushedCheckpointTs),
-					zap.Uint64("newResolvedTs", newResolvedTs),
-					zap.Uint64("newCheckpointTs", newCheckpointTs))
 				// Shouldn't replace newCheckpointTs with flushedCheckpointTs.
 				newResolvedTs = flushedResolvedTs
 			} else {
 				newResolvedTs = prevResolvedTs
+				if newResolvedTs < newCheckpointTs {
+					newResolvedTs = newCheckpointTs
+				}
 			}
 		}
 		if newCheckpointTs > newResolvedTs {
@@ -454,7 +457,7 @@ LOOP:
 	}()
 
 	stdCtx := contextutil.PutChangefeedIDInCtx(cancelCtx, c.id)
-	redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: false}
+	redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: true}
 	redoManager, err := redo.NewManager(stdCtx, c.state.Info.Config.Consistent, redoManagerOpts)
 	if err != nil {
 		return err
