@@ -418,6 +418,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			return errors.Trace(err)
 		}
 
+		// campaign for the ownership just wait for 1 second, if timeout, retry it.
 		campaignCtx, cancel := context.WithTimeout(ctx, time.Second)
 		err = c.campaign(campaignCtx)
 		cancel()
