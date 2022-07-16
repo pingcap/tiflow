@@ -113,33 +113,33 @@ func TestChangefeedFastFailError(t *testing.T) {
 	t.Parallel()
 	err := ErrGCTTLExceeded.FastGenByArgs()
 	rfcCode, _ := RFCCode(err)
-	require.Equal(t, true, ChangefeedFastFailError(err))
-	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+	require.Equal(t, true, IsChangefeedFastFailError(err))
+	require.Equal(t, true, IsChangefeedFastFailErrorCode(rfcCode))
 
 	err = ErrGCTTLExceeded.GenWithStack("aa")
 	rfcCode, _ = RFCCode(err)
-	require.Equal(t, true, ChangefeedFastFailError(err))
-	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+	require.Equal(t, true, IsChangefeedFastFailError(err))
+	require.Equal(t, true, IsChangefeedFastFailErrorCode(rfcCode))
 
 	err = ErrGCTTLExceeded.Wrap(errors.New("aa"))
 	rfcCode, _ = RFCCode(err)
-	require.Equal(t, true, ChangefeedFastFailError(err))
-	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+	require.Equal(t, true, IsChangefeedFastFailError(err))
+	require.Equal(t, true, IsChangefeedFastFailErrorCode(rfcCode))
 
 	err = ErrSnapshotLostByGC.FastGenByArgs()
 	rfcCode, _ = RFCCode(err)
-	require.Equal(t, true, ChangefeedFastFailError(err))
-	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+	require.Equal(t, true, IsChangefeedFastFailError(err))
+	require.Equal(t, true, IsChangefeedFastFailErrorCode(rfcCode))
 
 	err = ErrStartTsBeforeGC.FastGenByArgs()
 	rfcCode, _ = RFCCode(err)
-	require.Equal(t, true, ChangefeedFastFailError(err))
-	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+	require.Equal(t, true, IsChangefeedFastFailError(err))
+	require.Equal(t, true, IsChangefeedFastFailErrorCode(rfcCode))
 
 	err = ErrToTLSConfigFailed.FastGenByArgs()
 	rfcCode, _ = RFCCode(err)
-	require.Equal(t, false, ChangefeedFastFailError(err))
-	require.Equal(t, false, ChangefeedFastFailErrorCode(rfcCode))
+	require.Equal(t, false, IsChangefeedFastFailError(err))
+	require.Equal(t, false, IsChangefeedFastFailErrorCode(rfcCode))
 }
 
 func TestChangefeedNotRetryError(t *testing.T) {
@@ -171,6 +171,6 @@ func TestChangefeedNotRetryError(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		require.Equal(t, c.expected, ChangefeedNotRetryError(c.err))
+		require.Equal(t, c.expected, IsChangefeedNotRetryError(c.err))
 	}
 }
