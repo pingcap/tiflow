@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -25,12 +24,15 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
+	backuppb "github.com/pingcap/kvproto/pkg/brpb"
 	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
+	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/stretchr/testify/require"
+	"github.com/uber-go/atomic"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/pkg/uuid"
-	"github.com/stretchr/testify/require"
-	"github.com/uber-go/atomic"
 )
 
 func TestWriterWrite(t *testing.T) {
@@ -300,19 +302,25 @@ func TestNewWriter(t *testing.T) {
 	_, err := NewWriter(context.Background(), nil)
 	require.NotNil(t, err)
 
-	s3URI, err := url.Parse("s3://logbucket/test-changefeed?endpoint=http://111/")
-	require.Nil(t, err)
-
+	storageDir := t.TempDir()
 	dir := t.TempDir()
 
 	uuidGen := uuid.NewConstGenerator("const-uuid")
 	w, err := NewWriter(context.Background(), &FileWriterConfig{
 		Dir:       "sdfsf",
-		S3Storage: true,
-		S3URI:     *s3URI,
+		S3Storage: false,
 	},
 		WithUUIDGenerator(func() uuid.Generator { return uuidGen }),
 	)
+	require.Nil(t, err)
+	backend := &backuppb.StorageBackend{
+		Backend: &backuppb.StorageBackend_Local{Local: &backuppb.Local{Path: storageDir}},
+	}
+	localStorage, err := storage.New(context.Background(), backend, &storage.ExternalStorageOptions{
+		SendCredentials: false,
+		HTTPClient:      nil,
+	})
+	w.storage = localStorage
 	require.Nil(t, err)
 	time.Sleep(time.Duration(defaultFlushIntervalInMs+1) * time.Millisecond)
 	err = w.Close()
