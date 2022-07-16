@@ -403,7 +403,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 	})
 	// Limit the frequency of elections to avoid putting too much pressure on the etcd server
 	// each 2 seconds allow the capture to campaign for the ownership.
-	rl := rate.NewLimiter(0.5, 2)
+	rl := rate.NewLimiter(rate.Every(time.Second), 1)
 	for {
 		select {
 		case <-ctx.Done():
