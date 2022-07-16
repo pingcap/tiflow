@@ -140,6 +140,11 @@ func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) (adm
 	case model.StateStopped, model.StateFailed, model.StateFinished:
 		m.shouldBeRunning = false
 		return
+	case model.StateError:
+		if m.state.Info.Error.IsChangefeedNotRetryError() {
+			m.shouldBeRunning = false
+			return
+		}
 	}
 	errs := m.errorsReportedByProcessors()
 	m.handleError(errs...)

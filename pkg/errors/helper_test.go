@@ -141,3 +141,36 @@ func TestChangefeedFastFailError(t *testing.T) {
 	require.Equal(t, false, ChangefeedFastFailError(err))
 	require.Equal(t, false, ChangefeedFastFailErrorCode(rfcCode))
 }
+
+func TestChangefeedNotRetryError(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		err      error
+		expected bool
+	}{
+		{
+			err:      ErrInvalidIgnoreEventType.FastGenByArgs(),
+			expected: false,
+		},
+		{
+			err:      ErrExpressionColumnNotFound.FastGenByArgs(),
+			expected: true,
+		},
+		{
+			err:      ErrExpressionParseFailed.FastGenByArgs(),
+			expected: true,
+		},
+		{
+			err:      WrapError(ErrFilterRuleInvalid, ErrExpressionColumnNotFound.FastGenByArgs()),
+			expected: true,
+		},
+		{
+			err:      errors.New("CDC:ErrExpressionColumnNotFound"),
+			expected: true,
+		},
+	}
+
+	for _, c := range cases {
+		require.Equal(t, c.expected, ChangefeedNotRetryError(c.err))
+	}
+}
