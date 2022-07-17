@@ -332,15 +332,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 				newResolvedTs = flushedResolvedTs
 			} else {
 				newResolvedTs = prevResolvedTs
-				if newResolvedTs < newCheckpointTs {
-					newResolvedTs = newCheckpointTs
-				}
 			}
-		}
-		if newCheckpointTs > newResolvedTs {
-			log.Panic("owner checkpoint > resolved",
-				zap.Uint64("newCheckpointTs", newCheckpointTs),
-				zap.Uint64("newResolvedTs", newResolvedTs))
 		}
 		c.updateStatus(newCheckpointTs, newResolvedTs)
 		c.updateMetrics(currentTs, newCheckpointTs, newResolvedTs)
