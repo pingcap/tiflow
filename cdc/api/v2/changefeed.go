@@ -243,7 +243,7 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		_ = c.Error(errors.Trace(err))
 		return
 	}
-	c.JSON(http.StatusOK, newCfInfo)
+	c.JSON(http.StatusOK, toAPIModel(newCfInfo))
 }
 
 // getChangeFeedMetaInfo returns the metaInfo of a changefeed
