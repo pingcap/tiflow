@@ -170,10 +170,8 @@ type ManagerImpl struct {
 	// and flushed is updated in flushLog.
 	rtsMap sync.Map
 
-	gotCheckpointTs     model.Ts
-	gotResolvedTs       model.Ts
-	flushedCheckpointTs model.Ts
-	flushedResolvedTs   model.Ts
+	metaCheckpointTs statefulRts
+	metaResolvedTs   statefulRts
 
 	writer        writer.RedoLogWriter
 	logBuffer     *chann.Chann[cacheEvents]
@@ -362,14 +360,14 @@ func (m *ManagerImpl) GetMinResolvedTs() model.Ts {
 
 // UpdateMeta updates meta.
 func (m *ManagerImpl) UpdateMeta(checkpointTs, resolvedTs model.Ts) {
-	atomic.StoreUint64(&m.gotResolvedTs, resolvedTs)
-	atomic.StoreUint64(&m.gotCheckpointTs, checkpointTs)
+	atomic.StoreUint64(&m.metaResolvedTs.unflushed, resolvedTs)
+	atomic.StoreUint64(&m.metaCheckpointTs.unflushed, checkpointTs)
 }
 
 // GetFlushedMeta gets flushed meta.
 func (m *ManagerImpl) GetFlushedMeta(checkpointTs, resolvedTs *model.Ts) {
-	*checkpointTs = atomic.LoadUint64(&m.flushedCheckpointTs)
-	*resolvedTs = atomic.LoadUint64(&m.flushedResolvedTs)
+	*checkpointTs = atomic.LoadUint64(&m.metaCheckpointTs.flushed)
+	*resolvedTs = atomic.LoadUint64(&m.metaResolvedTs.flushed)
 }
 
 // AddTable adds a new table in redo log manager
@@ -447,6 +445,17 @@ func (m *ManagerImpl) postFlush(tableRtsMap map[model.TableID]model.Ts, minResol
 	}
 }
 
+func (m *ManagerImpl) prepareForFlushMeta() (metaCheckpoint, metaResolved model.Ts) {
+	metaCheckpoint = atomic.LoadUint64(&m.metaCheckpointTs.unflushed)
+	metaResolved = atomic.LoadUint64(&m.metaResolvedTs.unflushed)
+	return
+}
+
+func (m *ManagerImpl) postFlushMeta(metaCheckpoint, metaResolved model.Ts) {
+	atomic.StoreUint64(&m.metaResolvedTs.flushed, metaResolved)
+	atomic.StoreUint64(&m.metaCheckpointTs.flushed, metaCheckpoint)
+}
+
 func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
 	if !atomic.CompareAndSwapInt64(&m.flushing, 0, 1) {
 		log.Debug("Fail to update flush flag, " +
@@ -463,11 +472,8 @@ func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
 	go func() {
 		defer atomic.StoreInt64(&m.flushing, 0)
 
-		// resolved must be loaded before checkpoint.
-		metaResolved := atomic.LoadUint64(&m.gotResolvedTs)
-		metaCheckpoint := atomic.LoadUint64(&m.gotCheckpointTs)
-
 		tableRtsMap, minResolvedTs := m.prepareForFlush()
+		metaCheckpoint, metaResolved := m.prepareForFlushMeta()
 		err := m.writer.FlushLog(ctx, metaCheckpoint, metaResolved)
 		m.metricFlushLogDuration.Observe(time.Since(m.lastFlushTime).Seconds())
 		if err != nil {
@@ -475,9 +481,7 @@ func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
 			return
 		}
 		m.postFlush(tableRtsMap, minResolvedTs)
-
-		atomic.StoreUint64(&m.flushedResolvedTs, metaResolved)
-		atomic.StoreUint64(&m.flushedCheckpointTs, metaCheckpoint)
+		m.postFlushMeta(metaCheckpoint, metaResolved)
 	}()
 
 	return

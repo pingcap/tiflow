@@ -320,6 +320,8 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		prevResolvedTs := c.state.Status.ResolvedTs
 		var flushedCheckpointTs, flushedResolvedTs model.Ts
 		if c.redoManager.Enabled() {
+			// newResolvedTs can never exceed the barrier timestamp boundary. If redo is enabled,
+			// we can only upload it to etcd after it has been flushed into redo meta.
 			c.redoManager.UpdateMeta(newCheckpointTs, newResolvedTs)
 			c.redoManager.GetFlushedMeta(&flushedCheckpointTs, &flushedResolvedTs)
 			log.Debug("owner gets flushed meta",
@@ -328,7 +330,8 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 				zap.Uint64("newResolvedTs", newResolvedTs),
 				zap.Uint64("newCheckpointTs", newCheckpointTs))
 			if flushedResolvedTs != 0 {
-				// Shouldn't replace newCheckpointTs with flushedCheckpointTs.
+				// It's not necessary to replace newCheckpointTs with flushedResolvedTs,
+				// as cdc can ensure newCheckpointTs can never exceed prevResolvedTs.
 				newResolvedTs = flushedResolvedTs
 			} else {
 				newResolvedTs = prevResolvedTs
