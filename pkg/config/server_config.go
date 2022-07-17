@@ -15,6 +15,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
 	"net"
 	"regexp"
@@ -45,7 +46,17 @@ const (
 	DefaultTableMemoryQuota = 10 * 1024 * 1024 // 10 MB
 )
 
-var clusterIDRe = regexp.MustCompile(`^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*$`)
+var (
+	clusterIDRe = regexp.MustCompile(`^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*$`)
+
+	// ReservedClusterIDs contains a list of reserved cluster id,
+	// these words are the part of old cdc etcd key prefix
+	// like: /tidb/cdc/owner
+	ReservedClusterIDs = []string{
+		"owner", "capture", "task",
+		"changefeed", "job", "meta",
+	}
+)
 
 func init() {
 	StoreGlobalServerConfig(GetDefaultServerConfig())
@@ -212,9 +223,10 @@ func (c *ServerConfig) Clone() *ServerConfig {
 // ValidateAndAdjust validates and adjusts the server configuration
 func (c *ServerConfig) ValidateAndAdjust() error {
 	if !isValidClusterID(c.ClusterID) {
-		return cerror.ErrInvalidServerOption.GenWithStack("bad cluster-id" +
-			"please match the pattern \"^[a-zA-Z0-9]+(\\-[a-zA-Z0-9]+)*$\"" +
-			"eg, \"simple-cluster-id\"")
+		return cerror.ErrInvalidServerOption.GenWithStack(fmt.Sprintf("bad cluster-id"+
+			"please match the pattern \"^[a-zA-Z0-9]+(\\-[a-zA-Z0-9]+)*$\", and not the list of"+
+			" following reserved world: %s"+
+			"eg, \"simple-cluster-id\"", strings.Join(ReservedClusterIDs, ",")))
 	}
 	if c.Addr == "" {
 		return cerror.ErrInvalidServerOption.GenWithStack("empty address")
@@ -330,6 +342,15 @@ func (d *TomlDuration) UnmarshalJSON(b []byte) error {
 // the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", length no more than `clusterIDMaxLen`,
 // eg, "simple-cluster-id".
 func isValidClusterID(clusterID string) bool {
-	return clusterID != "" && len(clusterID) <= clusterIDMaxLen &&
+	valid := clusterID != "" && len(clusterID) <= clusterIDMaxLen &&
 		clusterIDRe.MatchString(clusterID)
+	if !valid {
+		return false
+	}
+	for _, reserved := range ReservedClusterIDs {
+		if reserved == clusterID {
+			return false
+		}
+	}
+	return true
 }
