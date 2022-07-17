@@ -548,6 +548,28 @@ func TestDrainCapture(t *testing.T) {
 			query.Resp = &model.DrainCaptureResp{
 				CurrentTableCount: 3,
 			}
+			done <- cerror.ErrSchedulerRequestFailed.
+				GenWithStack("not all captures initialized")
+			close(done)
+		})
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, request)
+	require.Equal(t, http.StatusServiceUnavailable, w.Code)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.NoError(t, err)
+	require.Contains(t, respErr.Code, "CDC:ErrSchedulerRequestFailed")
+	require.Contains(t, respErr.Error, "not all captures initialized")
+
+	body = bytes.NewReader(b)
+	request, err = http.NewRequestWithContext(context.Background(), api.method, api.url, body)
+	require.NoError(t, err)
+
+	owner.EXPECT().DrainCapture(gomock.Any(), gomock.Any()).
+		Do(func(query *scheduler.Query, done chan<- error) {
+			query.Resp = &model.DrainCaptureResp{
+				CurrentTableCount: 3,
+			}
 			close(done)
 		})
 

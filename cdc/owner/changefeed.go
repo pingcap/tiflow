@@ -27,6 +27,7 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -51,8 +52,8 @@ func newSchedulerV2FromCtx(
 	ownerRev := ctx.GlobalVars().OwnerRevision
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	cfg := config.GetGlobalServerConfig().Debug
-	if cfg.EnableTwoPhaseScheduler {
-		ret, err = scheduler.NewTpScheduler(
+	if cfg.EnableSchedulerV3 {
+		ret, err = scheduler.NewSchedulerV3(
 			ctx, captureID, changeFeedID, startTs,
 			messageServer, messageRouter, ownerRev, cfg.Scheduler)
 	} else {
@@ -81,7 +82,7 @@ type changefeed struct {
 
 	schema      *schemaWrap4Owner
 	sink        DDLSink
-	ddlPuller   DDLPuller
+	ddlPuller   puller.DDLPuller
 	initialized bool
 	// isRemoved is true if the changefeed is removed
 	isRemoved bool
@@ -113,8 +114,13 @@ type changefeed struct {
 	metricsChangefeedResolvedTsLagGauge   prometheus.Gauge
 	metricsChangefeedTickDuration         prometheus.Observer
 
-	newDDLPuller func(ctx cdcContext.Context,
-		up *upstream.Upstream, startTs uint64) (DDLPuller, error)
+	newDDLPuller func(ctx context.Context,
+		replicaConfig *config.ReplicaConfig,
+		up *upstream.Upstream,
+		startTs uint64,
+		changefeed model.ChangeFeedID,
+	) (puller.DDLPuller, error)
+
 	newSink      func() DDLSink
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error)
 }
@@ -131,7 +137,7 @@ func newChangefeed(id model.ChangeFeedID, up *upstream.Upstream) *changefeed {
 		errCh:  make(chan error, defaultErrChSize),
 		cancel: func() {},
 
-		newDDLPuller: newDDLPuller,
+		newDDLPuller: puller.NewDDLPuller,
 		newSink:      newDDLSink,
 	}
 	c.newScheduler = newScheduler
@@ -140,8 +146,12 @@ func newChangefeed(id model.ChangeFeedID, up *upstream.Upstream) *changefeed {
 
 func newChangefeed4Test(
 	id model.ChangeFeedID, up *upstream.Upstream,
-	newDDLPuller func(ctx cdcContext.Context,
-		up *upstream.Upstream, startTs uint64) (DDLPuller, error),
+	newDDLPuller func(ctx context.Context,
+		replicaConfig *config.ReplicaConfig,
+		up *upstream.Upstream,
+		startTs uint64,
+		changefeed model.ChangeFeedID,
+	) (puller.DDLPuller, error),
 	newSink func() DDLSink,
 ) *changefeed {
 	c := newChangefeed(id, up)
@@ -358,8 +368,25 @@ LOOP:
 		ensureTTL := int64(10 * 60)
 		err := gc.EnsureChangefeedStartTsSafety(
 			ctx, c.upstream.PDClient,
-			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceChecking),
+			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceInitializing),
 			c.state.ID, ensureTTL, checkpointTs)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		// clean service GC safepoint '-creating-' and '-resuming-' if there are any.
+		err = gc.UndoEnsureChangefeedStartTsSafety(
+			ctx, c.upstream.PDClient,
+			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
+			ctx.ChangefeedVars().ID,
+		)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = gc.UndoEnsureChangefeedStartTsSafety(
+			ctx, c.upstream.PDClient,
+			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
+			ctx.ChangefeedVars().ID,
+		)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -391,7 +418,10 @@ LOOP:
 	c.sink.run(cancelCtx, cancelCtx.ChangefeedVars().ID, cancelCtx.ChangefeedVars().Info)
 
 	// Refer to the previous comment on why we use (checkpointTs-1).
-	c.ddlPuller, err = c.newDDLPuller(cancelCtx, c.upstream, checkpointTs-1)
+	c.ddlPuller, err = c.newDDLPuller(cancelCtx,
+		cancelCtx.ChangefeedVars().Info.Config,
+		c.upstream, checkpointTs-1,
+		ctx.ChangefeedVars().ID)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -435,7 +465,7 @@ LOOP:
 
 func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	if !c.initialized {
-		c.redoManagerCleanup(ctx)
+		c.cleanupRedoManager(ctx)
 		return
 	}
 	log.Info("close changefeed",
@@ -446,7 +476,8 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.cancel = func() {}
 	c.ddlPuller.Close()
 	c.schema = nil
-	c.redoManagerCleanup(ctx)
+	c.cleanupRedoManager(ctx)
+	c.cleanupServiceGCSafePoints(ctx)
 	canceledCtx, cancel := context.WithCancel(context.Background())
 	cancel()
 	// We don't need to wait sink Close, pass a canceled context is ok
@@ -481,7 +512,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 }
 
 // redoManagerCleanup cleanups redo logs if changefeed is removed and redo log is enabled
-func (c *changefeed) redoManagerCleanup(ctx context.Context) {
+func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 	if c.isRemoved {
 		if c.state == nil || c.state.Info == nil || c.state.Info.Config == nil ||
 			c.state.Info.Config.Consistent == nil {
@@ -506,6 +537,32 @@ func (c *changefeed) redoManagerCleanup(ctx context.Context) {
 		err := c.redoManager.Cleanup(ctx)
 		if err != nil {
 			log.Error("cleanup redo logs failed", zap.String("changefeed", c.id.ID), zap.Error(err))
+		}
+	}
+}
+
+func (c *changefeed) cleanupServiceGCSafePoints(ctx cdcContext.Context) {
+	if !c.isRemoved {
+		return
+	}
+
+	serviceIDs := []string{
+		ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
+		ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
+		ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceInitializing),
+	}
+
+	for _, serviceID := range serviceIDs {
+		err := gc.UndoEnsureChangefeedStartTsSafety(
+			ctx,
+			c.upstream.PDClient,
+			serviceID,
+			ctx.ChangefeedVars().ID)
+		if err != nil {
+			log.Error("failed to remove gc safepoint",
+				zap.String("namespace", c.state.ID.Namespace),
+				zap.String("changefeed", c.state.ID.ID),
+				zap.String("serviceID", serviceID))
 		}
 	}
 }

@@ -117,7 +117,7 @@ func (d *canalBatchEncoder) Build() []*MQMessage {
 	d.messages.Reset()
 	d.resetPacket()
 
-	if len(d.callbackBuf) > 0 {
+	if len(d.callbackBuf) != 0 && len(d.callbackBuf) == rowCount {
 		callbacks := d.callbackBuf
 		ret.Callback = func() {
 			for _, cb := range callbacks {

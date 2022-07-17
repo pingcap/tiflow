@@ -86,7 +86,7 @@ jobs:
       - name: Wait for metastore ready
         run: |
           kubectl wait --for=condition=Ready pod/metastore-framework-mysql-0 --timeout=60s || true
-          kubectl wait --for=condition=Ready pod/metastore-user-etcd-0 --timeout=60s || true
+          kubectl wait --for=condition=Ready pod/metastore-business-etcd-0 --timeout=60s || true
 
           echo show pvc
           kubectl get pvc -l app=metastore -o wide
@@ -103,7 +103,7 @@ jobs:
           echo describe pvc
           kubectl describe pvc -l app=metastore
           kubectl wait --for=condition=Ready pod/metastore-framework-mysql-0 --timeout=0s
-          kubectl wait --for=condition=Ready pod/metastore-user-etcd-0 --timeout=0s
+          kubectl wait --for=condition=Ready pod/metastore-business-etcd-0 --timeout=0s
 
       - name: Set up server-master
         run: |

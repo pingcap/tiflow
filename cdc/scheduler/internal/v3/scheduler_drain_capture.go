@@ -15,9 +15,7 @@ package v3
 
 import (
 	"math"
-	"math/rand"
 	"sync"
-	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -32,7 +30,6 @@ var _ scheduler = &drainCaptureScheduler{}
 type drainCaptureScheduler struct {
 	mu     sync.Mutex
 	target model.CaptureID
-	random *rand.Rand
 
 	maxTaskConcurrency int
 }
@@ -40,7 +37,6 @@ type drainCaptureScheduler struct {
 func newDrainCaptureScheduler(concurrency int) *drainCaptureScheduler {
 	return &drainCaptureScheduler{
 		target:             captureIDNotDraining,
-		random:             rand.New(rand.NewSource(time.Now().UnixNano())),
 		maxTaskConcurrency: concurrency,
 	}
 }
@@ -98,10 +94,11 @@ func (d *drainCaptureScheduler) Schedule(
 		}
 		// Find a stopping capture, drain it.
 		d.target = stopping
-		log.Info("tpscheduler: drain a stopping capture",
+		log.Info("schedulerv3: drain a stopping capture",
 			zap.String("captureID", stopping))
 	}
 
+	// Currently, the workload is the number of tables in a capture.
 	captureWorkload := make(map[model.CaptureID]int)
 	for id := range captures {
 		if id != d.target {
@@ -112,19 +109,20 @@ func (d *drainCaptureScheduler) Schedule(
 	// this may happen when inject the target, there is at least 2 alive captures
 	// but when schedule the task, only owner alive.
 	if len(captureWorkload) == 0 {
-		log.Warn("tpscheduler: drain capture scheduler ignore drain target capture, "+
+		log.Warn("schedulerv3: drain capture scheduler ignore drain target capture, "+
 			"since cannot found destination captures",
 			zap.String("target", d.target), zap.Any("captures", captures))
 		d.target = captureIDNotDraining
 		return nil
 	}
 
-	// victims record all table instance should be dropped from the target capture
-	victims := make([]model.TableID, 0)
+	maxTaskConcurrency := d.maxTaskConcurrency
+	// victimTables record tables should be moved out from the target capture
+	victimTables := make([]model.TableID, 0, maxTaskConcurrency)
 	for tableID, rep := range replications {
 		if rep.State != ReplicationSetStateReplicating {
 			// only drain the target capture if all tables is replicating,
-			log.Debug("tpscheduler: drain capture scheduler skip this tick,"+
+			log.Debug("schedulerv3: drain capture scheduler skip this tick,"+
 				"not all table is replicating",
 				zap.String("target", d.target),
 				zap.Any("replication", rep))
@@ -132,7 +130,9 @@ func (d *drainCaptureScheduler) Schedule(
 		}
 
 		if rep.Primary == d.target {
-			victims = append(victims, tableID)
+			if len(victimTables) < maxTaskConcurrency {
+				victimTables = append(victimTables, tableID)
+			}
 		}
 
 		// only calculate workload of other captures not the drain target.
@@ -145,29 +145,18 @@ func (d *drainCaptureScheduler) Schedule(
 	// 1. the target capture has no table at the beginning
 	// 2. all tables moved from the target capture
 	// 3. the target capture cannot be found in the latest captures
-	if len(victims) == 0 {
-		log.Info("tpscheduler: drain capture scheduler finished, since no table",
+	if len(victimTables) == 0 {
+		log.Info("schedulerv3: drain capture scheduler finished, since no table",
 			zap.String("target", d.target))
 		d.target = captureIDNotDraining
 		return nil
 	}
 
-	for captureID, w := range captureWorkload {
-		captureWorkload[captureID] = randomizeWorkload(d.random, w)
-	}
-
-	maxTaskConcurrency := d.maxTaskConcurrency
-	if len(victims) < maxTaskConcurrency {
-		maxTaskConcurrency = len(victims)
-	}
-
-	// for each victim table, find the target for it
+	// For each victim table, find the target for it
 	result := make([]*scheduleTask, 0, maxTaskConcurrency)
-	for i := 0; i < maxTaskConcurrency; i++ {
-		tableID := victims[i]
+	for _, tableID := range victimTables {
 		target := ""
 		minWorkload := math.MaxInt64
-
 		for captureID, workload := range captureWorkload {
 			if workload < minWorkload {
 				minWorkload = workload
@@ -176,8 +165,8 @@ func (d *drainCaptureScheduler) Schedule(
 		}
 
 		if minWorkload == math.MaxInt64 {
-			log.Panic("tpscheduler: drain capture meet unexpected min workload " +
-				"when try to the the target capture")
+			log.Panic("schedulerv3: drain capture meet unexpected min workload",
+				zap.Any("workload", captureWorkload))
 		}
 
 		result = append(result, &scheduleTask{
@@ -188,7 +177,8 @@ func (d *drainCaptureScheduler) Schedule(
 			accept: (callback)(nil), // No need for accept callback here.
 		})
 
-		captureWorkload[target] = randomizeWorkload(d.random, minWorkload+1)
+		// Increase target workload to make sure tables are evenly distributed.
+		captureWorkload[target]++
 	}
 
 	return result
