@@ -19,6 +19,8 @@ package fsutil
 import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"golang.org/x/sys/unix"
+	"os"
+	"syscall"
 )
 
 // PreAllocate can allocate disk space beforehand in case of ENOSPC error occurs
@@ -39,5 +41,5 @@ func PreAllocate(f *os.File, size int64) error {
 		return cerror.ErrDiskFull
 	}
 
-	return errr
+	return err
 }

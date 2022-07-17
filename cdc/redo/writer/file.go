@@ -136,7 +136,7 @@ type Writer struct {
 	storage         storage.ExternalStorage
 	sync.RWMutex
 	uuidGenerator uuid.Generator
-	allocator     *fileAllocator
+	allocator     *fsutil.FileAllocator
 
 	metricFsyncDuration    prometheus.Observer
 	metricFlushAllDuration prometheus.Observer
@@ -193,7 +193,7 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 	// a file allocator can be leveraged to pre-allocate files for us.
 	// TODO: test this improvement can be applied to NFS.
 	if cfg.S3Storage && cfg.FileType == common.DefaultRowLogFileType {
-		w.allocator = newFileAllocator(cfg.Dir, cfg.FileType, defaultMaxLogSize)
+		w.allocator = fsutil.NewFileAllocator(cfg.Dir, cfg.FileType, defaultMaxLogSize)
 	}
 
 	w.running.Store(true)

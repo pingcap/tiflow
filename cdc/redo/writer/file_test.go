@@ -28,6 +28,7 @@ import (
 	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
+	"github.com/pingcap/tiflow/pkg/fsutil"
 	"github.com/pingcap/tiflow/pkg/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/atomic"
@@ -412,7 +413,7 @@ func TestRotateFileWithFileAllocator(t *testing.T) {
 		storage:       mockStorage,
 		uuidGenerator: uuidGen,
 	}
-	w.allocator = newFileAllocator(w.cfg.Dir, common.DefaultRowLogFileType, defaultMaxLogSize)
+	w.allocator = fsutil.NewFileAllocator(w.cfg.Dir, common.DefaultRowLogFileType, defaultMaxLogSize)
 
 	w.running.Store(true)
 	_, err = w.Write([]byte("test"))
