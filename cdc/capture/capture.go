@@ -268,7 +268,8 @@ func (c *captureImpl) reset(ctx context.Context) error {
 func (c *captureImpl) Run(ctx context.Context) error {
 	defer log.Info("the capture routine has exited")
 	// Limit the frequency of reset capture to avoid frequent recreating of resources
-	rl := rate.NewLimiter(0.05, 2)
+	rl := rate.NewLimiter(rate.Every(time.Second), 1)
+	//rl := rate.NewLimiter(0.05, 2)
 	for {
 		select {
 		case <-ctx.Done():
@@ -420,10 +421,12 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 
 		if resp, _ := c.election.Leader(ctx); resp != nil {
 			log.Warn("leader found", zap.Any("resp", resp))
+		} else {
+			log.Warn("leader error", zap.Error(err), zap.Any("resp", resp))
 		}
 
 		// campaign for the ownership just wait for 1 second, if timeout, retry it.
-		campaignCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		campaignCtx, cancel := context.WithTimeout(ctx, 1*time.Second)
 		err = c.campaign(campaignCtx)
 		cancel()
 		if err != nil {
