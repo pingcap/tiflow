@@ -360,14 +360,14 @@ func (m *ManagerImpl) GetMinResolvedTs() model.Ts {
 
 // UpdateMeta updates meta.
 func (m *ManagerImpl) UpdateMeta(checkpointTs, resolvedTs model.Ts) {
-	atomic.StoreUint64(&m.metaResolvedTs.unflushed, resolvedTs)
-	atomic.StoreUint64(&m.metaCheckpointTs.unflushed, checkpointTs)
+	m.metaResolvedTs.checkAndSetUnflushed(resolvedTs)
+	m.metaCheckpointTs.checkAndSetUnflushed(checkpointTs)
 }
 
 // GetFlushedMeta gets flushed meta.
 func (m *ManagerImpl) GetFlushedMeta(checkpointTs, resolvedTs *model.Ts) {
-	*checkpointTs = atomic.LoadUint64(&m.metaCheckpointTs.flushed)
-	*resolvedTs = atomic.LoadUint64(&m.metaResolvedTs.flushed)
+	*checkpointTs = m.metaCheckpointTs.getFlushed()
+	*resolvedTs = m.metaResolvedTs.getFlushed()
 }
 
 // AddTable adds a new table in redo log manager
@@ -446,14 +446,14 @@ func (m *ManagerImpl) postFlush(tableRtsMap map[model.TableID]model.Ts, minResol
 }
 
 func (m *ManagerImpl) prepareForFlushMeta() (metaCheckpoint, metaResolved model.Ts) {
-	metaCheckpoint = atomic.LoadUint64(&m.metaCheckpointTs.unflushed)
-	metaResolved = atomic.LoadUint64(&m.metaResolvedTs.unflushed)
+	metaCheckpoint = m.metaCheckpointTs.getUnflushed()
+	metaResolved = m.metaResolvedTs.getUnflushed()
 	return
 }
 
 func (m *ManagerImpl) postFlushMeta(metaCheckpoint, metaResolved model.Ts) {
-	atomic.StoreUint64(&m.metaResolvedTs.flushed, metaResolved)
-	atomic.StoreUint64(&m.metaCheckpointTs.flushed, metaCheckpoint)
+	m.metaResolvedTs.setFlushed(metaResolved)
+	m.metaCheckpointTs.setFlushed(metaCheckpoint)
 }
 
 func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {

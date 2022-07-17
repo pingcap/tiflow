@@ -504,7 +504,7 @@ func (l *LogWriter) getMetafileName() string {
 		common.DefaultMetaFileType, common.MetaEXT)
 }
 
-func (l *LogWriter) mergeMeta(checkpointTs, resolvedTs uint64) ([]byte, error) {
+func (l *LogWriter) maybeUpdateMeta(checkpointTs, resolvedTs uint64) ([]byte, error) {
 	l.metaLock.Lock()
 	defer l.metaLock.Unlock()
 
@@ -538,7 +538,7 @@ func (l *LogWriter) mergeMeta(checkpointTs, resolvedTs uint64) ([]byte, error) {
 }
 
 func (l *LogWriter) flushLogMeta(checkpointTs, resolvedTs uint64) error {
-	data, err := l.mergeMeta(checkpointTs, resolvedTs)
+	data, err := l.maybeUpdateMeta(checkpointTs, resolvedTs)
 	if err != nil {
 		return err
 	}
