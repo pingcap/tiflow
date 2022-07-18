@@ -73,7 +73,7 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 		initPhaseSeconds := s.cfg.SafeModeDuration
 
 		failpoint.Inject("SafeModeInitPhaseSeconds", func(val failpoint.Value) {
-			seconds, _ := val.(string)
+			seconds := val.(string)
 			initPhaseSeconds = seconds
 			s.tctx.L().Info("set initPhaseSeconds", zap.String("failpoint", "SafeModeInitPhaseSeconds"), zap.String("value", seconds))
 		})
