@@ -24,7 +24,9 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -127,8 +129,12 @@ func NewOwner(upstreamManager *upstream.Manager) Owner {
 
 // NewOwner4Test creates a new Owner for test
 func NewOwner4Test(
-	newDDLPuller func(ctx cdcContext.Context,
-		up *upstream.Upstream, startTs uint64) (DDLPuller, error),
+	newDDLPuller func(ctx context.Context,
+		replicaConfig *config.ReplicaConfig,
+		up *upstream.Upstream,
+		startTs uint64,
+		changefeed model.ChangeFeedID,
+	) (puller.DDLPuller, error),
 	newSink func() DDLSink,
 	pdClient pd.Client,
 ) Owner {
@@ -410,21 +416,37 @@ func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model
 }
 
 func (o *ownerImpl) handleDrainCaptures(query *scheduler.Query, done chan<- error) {
-	changefeedWithTableCount := 0
-	totalTableCount := 0
+	var (
+		changefeedWithTableCount int
+		totalTableCount          int
+		err                      error
+	)
 	for _, changefeed := range o.changefeeds {
-		count := changefeed.scheduler.DrainCapture(query.CaptureID)
+		count, e := changefeed.scheduler.DrainCapture(query.CaptureID)
+		if e != nil {
+			err = e
+			break
+		}
 		if count > 0 {
 			changefeedWithTableCount++
 		}
 		totalTableCount += count
 	}
-	log.Info("owner handle drain capture",
-		zap.Int("changefeedWithTableCount", changefeedWithTableCount),
-		zap.Int("totalTableCount", totalTableCount))
+
 	query.Resp = &model.DrainCaptureResp{
 		CurrentTableCount: totalTableCount,
 	}
+
+	if err != nil {
+		log.Info("owner handle drain capture failed", zap.Error(err))
+		done <- err
+		close(done)
+		return
+	}
+
+	log.Info("owner handle drain capture",
+		zap.Int("changefeedWithTableCount", changefeedWithTableCount),
+		zap.Int("totalTableCount", totalTableCount))
 	close(done)
 }
 

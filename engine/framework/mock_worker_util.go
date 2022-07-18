@@ -27,7 +27,7 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
-	mockkv "github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	metaMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 )
@@ -55,7 +55,7 @@ func MockBaseWorker(
 		MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 		MessageSender:         p2p.NewMockMessageSender(),
 		FrameMetaClient:       cli,
-		UserRawKVClient:       mockkv.NewMetaMock(),
+		BusinessClientConn:    metaMock.NewMockClientConn(),
 		ResourceBroker:        resourceBroker,
 	}
 	err = dp.Provide(func() workerParamListForTest {

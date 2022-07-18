@@ -140,6 +140,11 @@ func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) (adm
 	case model.StateStopped, model.StateFailed, model.StateFinished:
 		m.shouldBeRunning = false
 		return
+	case model.StateError:
+		if m.state.Info.Error.IsChangefeedNotRetryError() {
+			m.shouldBeRunning = false
+			return
+		}
 	}
 	errs := m.errorsReportedByProcessors()
 	m.handleError(errs...)
@@ -226,6 +231,7 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 			return nil, true, nil
 		})
 		checkpointTs := m.state.Info.GetCheckpointTs(m.state.Status)
+
 		log.Info("the changefeed is removed",
 			zap.String("namespace", m.state.ID.Namespace),
 			zap.String("changefeed", m.state.ID.ID),
@@ -268,11 +274,18 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 			*model.ChangeFeedStatus, bool, error,
 		) {
 			if job.OverwriteCheckpointTs > 0 {
+				oldCheckpointTs := status.CheckpointTs
 				status = &model.ChangeFeedStatus{
 					ResolvedTs:   job.OverwriteCheckpointTs,
 					CheckpointTs: job.OverwriteCheckpointTs,
 					AdminJobType: model.AdminNone,
 				}
+				log.Info("overwriting the checkpoint ts",
+					zap.String("namespace", m.state.ID.Namespace),
+					zap.String("changefeed", m.state.ID.ID),
+					zap.Any("oldCheckpointTs", oldCheckpointTs),
+					zap.Any("newCheckpointTs", status.CheckpointTs),
+				)
 				return status, true, nil
 			}
 			return status, false, nil
@@ -396,7 +409,7 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 	// if there are a fastFail error in errs, we can just fastFail the changefeed
 	// and no need to patch other error to the changefeed info
 	for _, err := range errs {
-		if cerrors.ChangefeedFastFailErrorCode(errors.RFCErrorCode(err.Code)) {
+		if cerrors.IsChangefeedFastFailErrorCode(errors.RFCErrorCode(err.Code)) {
 			m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 				if info == nil {
 					return nil, false, nil

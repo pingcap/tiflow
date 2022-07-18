@@ -45,7 +45,7 @@ type workerParamListForTest struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
 	FrameMetaClient       pkgOrm.Client
-	UserRawKVClient       metaModel.KVClientEx
+	BusinessClientConn    metaModel.ClientConn
 	ResourceBroker        broker.Broker
 }
 
@@ -61,7 +61,7 @@ func TestFactory(t *testing.T) {
 		MessageHandlerManager: messageHandlerManager,
 		MessageSender:         p2p.NewMockMessageSender(),
 		FrameMetaClient:       cli,
-		UserRawKVClient:       kvmock.NewMetaMock(),
+		BusinessClientConn:    kvmock.NewMockClientConn(),
 		ResourceBroker:        broker.NewBrokerForTesting("exector-id"),
 	}
 	require.NoError(t, dp.Provide(func() workerParamListForTest {
@@ -96,6 +96,7 @@ func TestWorker(t *testing.T) {
 	require.NoError(t, dmWorker.Init(context.Background()))
 	// tick
 	unitHolder.On("Stage").Return(metadata.StageRunning, nil).Twice()
+	unitHolder.On("CheckAndUpdateStatus")
 	require.NoError(t, dmWorker.Tick(context.Background()))
 	unitHolder.On("Stage").Return(metadata.StageRunning, nil).Twice()
 	require.NoError(t, dmWorker.Tick(context.Background()))

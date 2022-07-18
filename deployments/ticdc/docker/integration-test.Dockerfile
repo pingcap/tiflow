@@ -35,6 +35,8 @@ RUN yum install -y \
     curl \
     tar \
     musl-dev \
+	sudo \
+	python3 \
     psmisc
 RUN wget http://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
 RUN yum install -y epel-release-latest-7.noarch.rpm

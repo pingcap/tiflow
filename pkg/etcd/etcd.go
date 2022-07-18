@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/pd/pkg/tempurl"
 	"go.etcd.io/etcd/api/v3/mvccpb"
@@ -161,6 +162,19 @@ func (c CDCEtcdClient) CheckMultipleCDCClusterExist(ctx context.Context) error {
 		key := string(kv.Key)
 		if strings.HasPrefix(key, BaseKey(DefaultCDCClusterID)) ||
 			strings.HasPrefix(key, migrateBackupPrefix) {
+			continue
+		}
+		// skip the reserved cluster id
+		isReserved := false
+		for _, reserved := range config.ReservedClusterIDs {
+			if strings.HasPrefix(key, BaseKey(reserved)) {
+				isReserved = true
+				break
+			}
+		}
+		if isReserved {
+			log.Warn("found etcd key with reserved cluster id",
+				zap.String("key", key))
 			continue
 		}
 		return cerror.ErrMultipleCDCClustersExist.GenWithStackByArgs()

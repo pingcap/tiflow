@@ -86,7 +86,7 @@ jobs:
       - name: Wait for metastore ready
         run: |
           kubectl wait --for=condition=Ready pod/metastore-framework-mysql-0 --timeout=60s || true
-          kubectl wait --for=condition=Ready pod/metastore-user-etcd-0 --timeout=60s || true
+          kubectl wait --for=condition=Ready pod/metastore-business-etcd-0 --timeout=60s || true
 
           echo show pvc
           kubectl get pvc -l app=metastore -o wide
@@ -103,7 +103,7 @@ jobs:
           echo describe pvc
           kubectl describe pvc -l app=metastore
           kubectl wait --for=condition=Ready pod/metastore-framework-mysql-0 --timeout=0s
-          kubectl wait --for=condition=Ready pod/metastore-user-etcd-0 --timeout=0s
+          kubectl wait --for=condition=Ready pod/metastore-business-etcd-0 --timeout=0s
 
       - name: Set up server-master
         run: |
@@ -206,6 +206,8 @@ jobs:
       - name: Dump goroutines
         if: ${{ failure() }}
         run: |
+          # Add a delay if test fails, to check whether the cluster can recover after chaos is removed
+          sleep 60
           kubectl get pods --no-headers -o custom-columns=":metadata.name"|grep -E "server-master"|xargs -I{} kubectl exec -it {} -- wget http://127.0.0.1:10240/debug/pprof/goroutine?debug=2 -O /log/{}_goroutines.log || true
           kubectl get pods --no-headers -o custom-columns=":metadata.name"|grep -E "executor"|xargs -I{} kubectl exec -it {} -- wget http://127.0.0.1:10241/debug/pprof/goroutine?debug=2 -O /log/{}_goroutines.log || true
 

@@ -490,11 +490,10 @@ tiflow:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/engine/main.go
 
 tiflow-proto: tools/bin/protoc tools/bin/protoc-gen-gogofaster tools/bin/goimports
-	./engine/generate-proto.sh
+	scripts/generate-engine-proto.sh
 
 tiflow-demo:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./engine/cmd/demoserver
-	cp ./bin/tiflow-demoserver ./engine/ansible/roles/common/files/demoserver.bin
 
 tiflow-chaos-case:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-chaos-case ./engine/chaos/cases
@@ -502,8 +501,16 @@ tiflow-chaos-case:
 tiflow-generate-mock: tools/bin/mockgen
 	scripts/generate-engine-mock.sh
 
+engine_image: 
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	./engine/test/utils/run_engine.sh build
+
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))
+
+engine_integration_test: 
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	./engine/test/integration_tests/run.sh "$(CASE)" "$(START_AT)"
 
 tiflow-swagger-spec: tools/bin/swag
 	tools/bin/swag init --exclude cdc,dm  --parseVendor -generalInfo engine/servermaster/openapi.go --output engine/docs/swagger

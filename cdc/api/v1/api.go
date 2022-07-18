@@ -745,7 +745,7 @@ func (h *OpenAPI) ListCapture(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Success 200,202
-// @Failure 500,400 {object} model.HTTPError
+// @Failure 503,500,400 {object} model.HTTPError
 // @Router	/api/v1/captures/drain [put]
 func (h *OpenAPI) DrainCapture(c *gin.Context) {
 	var req model.DrainCaptureRequest
@@ -800,7 +800,7 @@ func (h *OpenAPI) DrainCapture(c *gin.Context) {
 
 	resp, err := api.HandleOwnerDrainCapture(ctx, h.capture, target)
 	if err != nil {
-		_ = c.Error(err)
+		_ = c.AbortWithError(http.StatusServiceUnavailable, err)
 		return
 	}
 

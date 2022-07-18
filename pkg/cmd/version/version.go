@@ -14,54 +14,18 @@
 package version
 
 import (
-	"fmt"
-
-	"github.com/pingcap/log"
-	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
-	"github.com/pingcap/tiflow/pkg/cmd/factory"
-	"github.com/pingcap/tiflow/pkg/cmd/util"
-	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/spf13/cobra"
-	"go.uber.org/zap"
 )
 
 // NewCmdVersion creates the `version` command.
 func NewCmdVersion() *cobra.Command {
-	cf := factory.NewClientFlags()
-	// Construct the client construction factory.
-	f := factory.NewFactory(cf)
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "version",
 		Short: "Output version information",
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			// Here we will initialize the logging configuration
-			// and set the current default context.
-			util.InitCmd(cmd, &logutil.Config{Level: cf.GetLogLevel()})
-			util.LogHTTPProxies()
-			return nil
-		},
-		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cmd.Println("cli version:")
-			cmd.Println(version.GetRawInfo())
-			apiClient, err := f.APIV1Client()
-			if err != nil {
-				return err
-			}
-			ctx := cmdcontext.GetDefaultContext()
-			status, err := apiClient.Status().Get(ctx)
-			if err != nil {
-				log.Warn("get server version failed", zap.Error(err))
-				return nil
-			}
-			cmd.Println("server version:")
-			cmd.Println(fmt.Sprintf(
-				"Release Version: %s\n"+
-					"Git Commit Hash: %s\n", status.Version, status.GitHash))
-			return nil
+		Args:  cobra.NoArgs,
+		Run: func(cmd *cobra.Command, args []string) {
+			cmd.Print(version.GetRawInfo())
 		},
 	}
-	cf.AddFlags(cmd)
-	return cmd
 }

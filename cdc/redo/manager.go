@@ -95,7 +95,7 @@ type LogManager interface {
 	// Enabled returns whether the log manager is enabled
 	Enabled() bool
 
-	// The following 6 APIs are called from processor only
+	// The following APIs are called from processor only
 	AddTable(tableID model.TableID, startTs uint64)
 	RemoveTable(tableID model.TableID)
 	GetResolvedTs(tableID model.TableID) model.Ts
@@ -103,10 +103,11 @@ type LogManager interface {
 	EmitRowChangedEvents(ctx context.Context, tableID model.TableID,
 		rows ...*model.RowChangedEvent) error
 	UpdateResolvedTs(ctx context.Context, tableID model.TableID, resolvedTs uint64) error
-	UpdateCheckpointTs(ctx context.Context, checkpointTs uint64) error
 
-	// EmitDDLEvent are called from owner only
+	// The following APIs are called from owner only
 	EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
+	UpdateMeta(checkpointTs, resolvedTs model.Ts)
+	GetFlushedMeta(checkpointTs, resolvedTs *model.Ts)
 
 	// Cleanup removes all redo logs
 	Cleanup(ctx context.Context) error
@@ -168,6 +169,9 @@ type ManagerImpl struct {
 	// For a given statefulRts, unflushed is updated in routine bgUpdateLog,
 	// and flushed is updated in flushLog.
 	rtsMap sync.Map
+
+	metaCheckpointTs statefulRts
+	metaResolvedTs   statefulRts
 
 	writer        writer.RedoLogWriter
 	logBuffer     *chann.Chann[cacheEvents]
@@ -354,10 +358,16 @@ func (m *ManagerImpl) GetMinResolvedTs() model.Ts {
 	return atomic.LoadUint64(&m.minResolvedTs)
 }
 
-// UpdateCheckpointTs updates checkpoint-ts to redo log writer
-func (m *ManagerImpl) UpdateCheckpointTs(ctx context.Context, checkpointTs uint64) (err error) {
-	err = m.writer.EmitCheckpointTs(ctx, checkpointTs)
-	return
+// UpdateMeta updates meta.
+func (m *ManagerImpl) UpdateMeta(checkpointTs, resolvedTs model.Ts) {
+	m.metaResolvedTs.checkAndSetUnflushed(resolvedTs)
+	m.metaCheckpointTs.checkAndSetUnflushed(checkpointTs)
+}
+
+// GetFlushedMeta gets flushed meta.
+func (m *ManagerImpl) GetFlushedMeta(checkpointTs, resolvedTs *model.Ts) {
+	*checkpointTs = m.metaCheckpointTs.getFlushed()
+	*resolvedTs = m.metaResolvedTs.getFlushed()
 }
 
 // AddTable adds a new table in redo log manager
@@ -375,7 +385,7 @@ func (m *ManagerImpl) AddTable(tableID model.TableID, startTs uint64) {
 
 // RemoveTable removes a table from redo log manager
 func (m *ManagerImpl) RemoveTable(tableID model.TableID) {
-	if _, loaded := m.rtsMap.LoadAndDelete(tableID); !loaded {
+	if _, ok := m.rtsMap.LoadAndDelete(tableID); !ok {
 		log.Warn("remove a table not maintained in redo log manager", zap.Int64("tableID", tableID))
 	}
 }
@@ -396,6 +406,9 @@ func (m *ManagerImpl) Cleanup(ctx context.Context) error {
 }
 
 func (m *ManagerImpl) prepareForFlush() (tableRtsMap map[model.TableID]model.Ts, minResolvedTs model.Ts) {
+	// FIXME: currently all table progresses are flushed into meta file. It can be an issue
+	// if there are lots of tables. If we can put table meta into row file, it's only necessary
+	// to take care updated tables.
 	tableRtsMap = make(map[model.TableID]model.Ts)
 	minResolvedTs = math.MaxUint64
 	m.rtsMap.Range(func(key interface{}, value interface{}) bool {
@@ -404,9 +417,9 @@ func (m *ManagerImpl) prepareForFlush() (tableRtsMap map[model.TableID]model.Ts,
 		unflushed := rts.getUnflushed()
 		flushed := rts.getFlushed()
 		if unflushed > flushed {
-			tableRtsMap[tableID] = unflushed
 			flushed = unflushed
 		}
+		tableRtsMap[tableID] = flushed
 		if flushed < minResolvedTs {
 			minResolvedTs = flushed
 		}
@@ -420,14 +433,27 @@ func (m *ManagerImpl) prepareForFlush() (tableRtsMap map[model.TableID]model.Ts,
 }
 
 func (m *ManagerImpl) postFlush(tableRtsMap map[model.TableID]model.Ts, minResolvedTs model.Ts) {
-	if minResolvedTs > m.minResolvedTs {
+	if minResolvedTs != 0 {
+		// m.minResolvedTs is only updated in flushLog, so no other one can change it.
 		atomic.StoreUint64(&m.minResolvedTs, minResolvedTs)
 	}
+
 	for tableID, flushed := range tableRtsMap {
 		if value, loaded := m.rtsMap.Load(tableID); loaded {
 			value.(*statefulRts).setFlushed(flushed)
 		}
 	}
+}
+
+func (m *ManagerImpl) prepareForFlushMeta() (metaCheckpoint, metaResolved model.Ts) {
+	metaCheckpoint = m.metaCheckpointTs.getUnflushed()
+	metaResolved = m.metaResolvedTs.getUnflushed()
+	return
+}
+
+func (m *ManagerImpl) postFlushMeta(metaCheckpoint, metaResolved model.Ts) {
+	m.metaResolvedTs.setFlushed(metaResolved)
+	m.metaCheckpointTs.setFlushed(metaCheckpoint)
 }
 
 func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
@@ -447,13 +473,15 @@ func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
 		defer atomic.StoreInt64(&m.flushing, 0)
 
 		tableRtsMap, minResolvedTs := m.prepareForFlush()
-		err := m.writer.FlushLog(ctx, tableRtsMap, minResolvedTs)
+		metaCheckpoint, metaResolved := m.prepareForFlushMeta()
+		err := m.writer.FlushLog(ctx, metaCheckpoint, metaResolved)
 		m.metricFlushLogDuration.Observe(time.Since(m.lastFlushTime).Seconds())
 		if err != nil {
 			handleErr(err)
 			return
 		}
 		m.postFlush(tableRtsMap, minResolvedTs)
+		m.postFlushMeta(metaCheckpoint, metaResolved)
 	}()
 
 	return
@@ -504,7 +532,7 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 				for _, row := range cache.rows {
 					logs = append(logs, RowToRedo(row))
 				}
-				_, err := m.writer.WriteLog(ctx, cache.tableID, logs)
+				err := m.writer.WriteLog(ctx, cache.tableID, logs)
 				if err != nil {
 					handleErr(err)
 					return

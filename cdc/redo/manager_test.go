@@ -163,9 +163,6 @@ func TestLogManagerInProcessor(t *testing.T) {
 		require.Nil(t, err)
 	}
 	checkResolvedTs(logMgr, flushResolvedTs)
-
-	err = logMgr.UpdateCheckpointTs(ctx, 120 /*CheckPointTs*/)
-	require.Nil(t, err)
 }
 
 // TestLogManagerInOwner tests how redo log manager is used in owner,
@@ -284,7 +281,7 @@ func TestManagerRtsMap(t *testing.T) {
 	logMgr.AddTable(model.TableID(1), model.Ts(10))
 	logMgr.AddTable(model.TableID(2), model.Ts(20))
 	tables, minTs = logMgr.prepareForFlush()
-	require.Equal(t, 0, len(tables))
+	require.Equal(t, 2, len(tables))
 	require.Equal(t, uint64(10), minTs)
 	logMgr.postFlush(tables, minTs)
 	require.Equal(t, uint64(10), logMgr.GetMinResolvedTs())
@@ -292,7 +289,7 @@ func TestManagerRtsMap(t *testing.T) {
 	// Remove a table.
 	logMgr.RemoveTable(model.TableID(1))
 	tables, minTs = logMgr.prepareForFlush()
-	require.Equal(t, 0, len(tables))
+	require.Equal(t, 1, len(tables))
 	require.Equal(t, uint64(20), minTs)
 	logMgr.postFlush(tables, minTs)
 	require.Equal(t, uint64(20), logMgr.GetMinResolvedTs())
@@ -301,7 +298,7 @@ func TestManagerRtsMap(t *testing.T) {
 	logMgr.AddTable(model.TableID(3), model.Ts(20))
 	logMgr.onResolvedTsMsg(model.TableID(2), model.Ts(30))
 	tables, minTs = logMgr.prepareForFlush()
-	require.Equal(t, 1, len(tables))
+	require.Equal(t, 2, len(tables))
 	require.Equal(t, uint64(20), minTs)
 	logMgr.postFlush(tables, minTs)
 	require.Equal(t, uint64(20), logMgr.GetMinResolvedTs())
