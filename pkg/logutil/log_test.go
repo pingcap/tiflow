@@ -16,7 +16,6 @@ package logutil
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -32,7 +31,7 @@ import (
 )
 
 func TestInitLoggerAndSetLogLevel(t *testing.T) {
-	f, err := ioutil.TempFile("", "init-logger-test")
+	f, err := os.CreateTemp("", "init-logger-test")
 	require.Nil(t, err)
 	defer os.Remove(f.Name())
 

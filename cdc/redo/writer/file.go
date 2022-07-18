@@ -19,7 +19,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -488,7 +487,7 @@ func (w *Writer) shouldRemoved(checkPointTs uint64, f os.FileInfo) (bool, error)
 }
 
 func (w *Writer) getShouldRemovedFiles(checkPointTs uint64) ([]os.FileInfo, error) {
-	files, err := ioutil.ReadDir(w.cfg.Dir)
+	files, err := os.ReadDir(w.cfg.Dir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			log.Warn("check removed log dir fail", zap.Error(err))
@@ -499,16 +498,23 @@ func (w *Writer) getShouldRemovedFiles(checkPointTs uint64) ([]os.FileInfo, erro
 
 	logFiles := []os.FileInfo{}
 	for _, f := range files {
-		ret, err := w.shouldRemoved(checkPointTs, f)
+		fileInfo, err := f.Info()
+		if err != nil {
+			log.Warn("get file info failed",
+				zap.String("dirEntry", f.Name()),
+				zap.Error(err))
+			continue
+		}
+		ret, err := w.shouldRemoved(checkPointTs, fileInfo)
 		if err != nil {
 			log.Warn("check removed log file fail",
-				zap.String("logFile", f.Name()),
+				zap.String("logFile", fileInfo.Name()),
 				zap.Error(err))
 			continue
 		}
 
 		if ret {
-			logFiles = append(logFiles, f)
+			logFiles = append(logFiles, fileInfo)
 		}
 	}
 

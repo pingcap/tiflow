@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/binary"
 	"io"
-	"io/ioutil"
 	"math"
 	"net/url"
 	"os"
@@ -156,7 +155,7 @@ func downLoadToLocal(ctx context.Context, dir string, s3storage storage.External
 				return cerror.WrapError(cerror.ErrRedoFileOp, err)
 			}
 			path := filepath.Join(dir, f)
-			err = ioutil.WriteFile(path, data, common.DefaultFileMode)
+			err = os.WriteFile(path, data, common.DefaultFileMode)
 			return cerror.WrapError(cerror.ErrRedoFileOp, err)
 		})
 	}
@@ -165,7 +164,7 @@ func downLoadToLocal(ctx context.Context, dir string, s3storage storage.External
 }
 
 func openSelectedFiles(ctx context.Context, dir, fixedType string, startTs uint64, workerNum int) ([]io.ReadCloser, error) {
-	files, err := ioutil.ReadDir(dir)
+	files, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotatef(err, "can't read log file directory: %s", dir))
 	}
