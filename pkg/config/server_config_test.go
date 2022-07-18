@@ -129,3 +129,28 @@ func TestSchedulerConfigValidateAndAdjust(t *testing.T) {
 	conf.CheckBalanceInterval = TomlDuration(time.Second)
 	require.Error(t, conf.ValidateAndAdjust())
 }
+
+func TestIsValidClusterID(t *testing.T) {
+	cases := []struct {
+		id    string
+		valid bool
+	}{
+		{"owner", false},
+		{"capture", false},
+		{"task", false},
+		{"changefeed", false},
+		{"job", false},
+		{"meta", false},
+		{"__backup__", false},
+		{"", false},
+		{"12345678901234567890123456789012345678901234567890123456789012345678901234567890" +
+			"1234567890123456789012345678901234567890123456789", false},
+		{"12345678901234567890123456789012345678901234567890123456789012345678901234567890" +
+			"123456789012345678901234567890123456789012345678", true},
+		{"default", true},
+	}
+	for _, c := range cases {
+		println(c.id)
+		require.Equal(t, c.valid, isValidClusterID(c.id))
+	}
+}
