@@ -159,9 +159,10 @@ var (
 )
 
 type testMaster struct {
-	workerClients   map[string]workerrpc.Client
-	saveMaxRetryNum int
-	testT           *testing.T
+	workerClients     map[string]workerrpc.Client
+	saveMaxRetryNum   int
+	electionTTLBackup int
+	testT             *testing.T
 
 	testEtcdCluster *integration.ClusterV3
 	etcdTestCli     *clientv3.Client
@@ -190,12 +191,15 @@ func (t *testMaster) SetUpSuite(c *check.C) {
 	c.Assert(err, check.IsNil)
 	t.workerClients = make(map[string]workerrpc.Client)
 	t.saveMaxRetryNum = maxRetryNum
+	t.electionTTLBackup = electionTTL
+	electionTTL = 3
 	maxRetryNum = 2
 	checkAndAdjustSourceConfigForDMCtlFunc = checkAndNoAdjustSourceConfigMock
 }
 
 func (t *testMaster) TearDownSuite(c *check.C) {
 	maxRetryNum = t.saveMaxRetryNum
+	electionTTL = t.electionTTLBackup
 	checkAndAdjustSourceConfigForDMCtlFunc = checkAndAdjustSourceConfig
 }
 
