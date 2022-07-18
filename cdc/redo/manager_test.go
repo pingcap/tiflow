@@ -163,9 +163,6 @@ func TestLogManagerInProcessor(t *testing.T) {
 		require.Nil(t, err)
 	}
 	checkResolvedTs(logMgr, flushResolvedTs)
-
-	err = logMgr.UpdateCheckpointTs(ctx, 120 /*CheckPointTs*/)
-	require.Nil(t, err)
 }
 
 // TestLogManagerInOwner tests how redo log manager is used in owner,
