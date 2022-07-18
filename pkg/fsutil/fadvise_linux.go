@@ -31,9 +31,6 @@ func DropPageCache(name string) error {
 	}
 	defer f.Close()
 
-	if err = unix.Fadvise(int(f.Fd()), 0, 0, unix.FADV_DONTNEED); err != nil {
-		return err
-	}
-
-	return nil
+	err = unix.Fadvise(int(f.Fd()), 0, 0, unix.FADV_DONTNEED)
+	return err
 }
