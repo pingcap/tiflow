@@ -88,6 +88,8 @@ func (l *LeaderClientWithLock[T]) Close() {
 	}
 }
 
+// rpcLimiter is a customed rate limiter, which delegates Allow of rate.Limiter,
+// and provides an allow list with a higher priority.
 type rpcLimiter struct {
 	limiter   *rate.Limiter
 	allowList []string
@@ -176,9 +178,8 @@ func (h PreRPCHook[T]) PreRPC(
 }
 
 func (h PreRPCHook[T]) logRateLimit(methodName string, req interface{}) {
-	// TODO: rate limiter based on different sender
 	if h.limiter.Allow(methodName) {
-		log.Info("", zap.Any("payload", req), zap.String("request", methodName))
+		log.Info("Executing rpc", zap.String("request", methodName), zap.Any("payload", req))
 	}
 }
 
