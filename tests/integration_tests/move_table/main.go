@@ -21,7 +21,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"strings"
 	"time"
@@ -269,7 +268,7 @@ func queryProcessor(
 			errors.Errorf("HTTP API returned error status: %d, url: %s", resp.StatusCode, requestURL))
 	}
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
