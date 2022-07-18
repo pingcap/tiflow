@@ -308,27 +308,27 @@ func (w *Writer) close() error {
 		return err
 	}
 
-	off, err := w.file.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return err
-	}
-
-	// offset equals to 0 means that no written happened for current file,
-	// we can simply return
-	if off == 0 {
-		return nil
-	}
-
-	// a file created by a file allocator needs to be truncated
-	// to save disk space and network bandwidth.
-	if err := w.file.Truncate(off); err != nil {
-		return err
+	if w.cfg.S3Storage {
+		off, err := w.file.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return err
+		}
+		// offset equals to 0 means that no written happened for current file,
+		// we can simply return
+		if off == 0 {
+			return nil
+		}
+		// a file created by a file allocator needs to be truncated
+		// to save disk space and network bandwidth.
+		if err := w.file.Truncate(off); err != nil {
+			return err
+		}
 	}
 
 	// rename the file name from commitTs.log.tmp to maxCommitTS.log if closed safely
 	// after rename, the file name could be used for search, since the ts is the max ts for all events in the file.
 	w.commitTS.Store(w.maxCommitTS.Load())
-	err = os.Rename(w.file.Name(), w.filePath())
+	err := os.Rename(w.file.Name(), w.filePath())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
