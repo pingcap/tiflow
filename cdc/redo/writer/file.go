@@ -138,7 +138,6 @@ type Writer struct {
 	metricFsyncDuration    prometheus.Observer
 	metricFlushAllDuration prometheus.Observer
 	metricWriteBytes       prometheus.Gauge
-	metricS3UploadBytes    prometheus.Gauge
 }
 
 // NewWriter return a file rotated writer, TODO: extract to a common rotate Writer
@@ -176,8 +175,6 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 		metricFlushAllDuration: common.RedoFlushAllDurationHistogram.
 			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
 		metricWriteBytes: common.RedoWriteBytesGauge.
-			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
-		metricS3UploadBytes: common.RedoS3UploadBytesGauge.
 			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
 	}
 	if w.op.getUUIDGenerator != nil {
@@ -588,7 +585,6 @@ func (w *Writer) writeToS3(ctx context.Context, name string) error {
 	if err != nil {
 		return cerror.WrapError(cerror.ErrS3StorageAPI, err)
 	}
-	w.metricS3UploadBytes.Add(float64(len(fileData)))
 
 	// in case the page cache piling up triggered the OS memory reclaming which may cause
 	// I/O latency spike, we mandatorily drop the page cache of the file when it is successfully
