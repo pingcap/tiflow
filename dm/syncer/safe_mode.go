@@ -68,7 +68,7 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 			s.safeMode.Add(tctx, 1) // enable and will revert after pass SafeModeExitLoc
 			s.tctx.L().Info("enable safe-mode for safe mode exit point, will exit at", zap.Stringer("location", *exitPoint))
 		} else {
-			s.tctx.L().Info("disable safe-mode because initExecutedLoc equal safeModeExitPoint")
+			s.tctx.L().Info("disable safe-mode because beginLocation equal safeModeExitPoint")
 		}
 	} else {
 		initPhaseSeconds := s.cfg.SafeModeDuration

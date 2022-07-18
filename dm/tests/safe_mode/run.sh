@@ -150,6 +150,7 @@ function safe_mode_recover() {
 		check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 		check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
+		sleep 1
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"resume-task test" \
 			"\"result\": true" 3
