@@ -346,6 +346,23 @@ func TestLogWriterFlushLog(t *testing.T) {
 	}
 }
 
+// checkpoint or meta regress should be ignored correctly.
+func TestLogWriterRegress(t *testing.T) {
+	dir := t.TempDir()
+	writer, err := NewLogWriter(context.Background(), &LogWriterConfig{
+		Dir:          dir,
+		ChangeFeedID: model.DefaultChangeFeedID("test-log-writer-regress"),
+		CaptureID:    "cp",
+		S3Storage:    false,
+	})
+	require.Nil(t, err)
+	require.Nil(t, writer.FlushLog(context.Background(), 2, 4))
+	require.Nil(t, writer.FlushLog(context.Background(), 1, 3))
+	require.Equal(t, uint64(2), writer.meta.CheckpointTs)
+	require.Equal(t, uint64(4), writer.meta.ResolvedTs)
+	_ = writer.Close()
+}
+
 func TestNewLogWriter(t *testing.T) {
 	_, err := NewLogWriter(context.Background(), nil)
 	require.NotNil(t, err)
