@@ -507,12 +507,13 @@ func (l *LogWriter) maybeUpdateMeta(checkpointTs, resolvedTs uint64) ([]byte, er
 	l.metaLock.Lock()
 	defer l.metaLock.Unlock()
 
+	// NOTE: both checkpoint and resolved can regress if a cdc instance restarts.
 	hasChange := false
 	if checkpointTs > l.meta.CheckpointTs {
 		l.meta.CheckpointTs = checkpointTs
 		hasChange = true
 	} else if checkpointTs > 0 && checkpointTs != l.meta.CheckpointTs {
-		log.Panic("flushLogMeta with a regressed checkpoint ts",
+		log.Warn("flushLogMeta with a regressed checkpoint ts, ignore",
 			zap.Uint64("currCheckpointTs", l.meta.CheckpointTs),
 			zap.Uint64("recvCheckpointTs", checkpointTs))
 	}
@@ -520,7 +521,7 @@ func (l *LogWriter) maybeUpdateMeta(checkpointTs, resolvedTs uint64) ([]byte, er
 		l.meta.ResolvedTs = resolvedTs
 		hasChange = true
 	} else if resolvedTs > 0 && resolvedTs != l.meta.ResolvedTs {
-		log.Panic("flushLogMeta with a regressed resolved ts",
+		log.Warn("flushLogMeta with a regressed resolved ts, ignore",
 			zap.Uint64("currCheckpointTs", l.meta.ResolvedTs),
 			zap.Uint64("recvCheckpointTs", resolvedTs))
 	}
