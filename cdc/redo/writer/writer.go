@@ -514,7 +514,7 @@ func (l *LogWriter) maybeUpdateMeta(checkpointTs, resolvedTs uint64) ([]byte, er
 		l.meta.CheckpointTs = checkpointTs
 		hasChange = true
 	} else if checkpointTs > 0 && checkpointTs != l.meta.CheckpointTs {
-		log.Warn("flushLogMeta with a regressed checkpoint ts, skip",
+		log.Warn("flushLogMeta with a regressed checkpoint ts, ignore",
 			zap.Uint64("currCheckpointTs", l.meta.CheckpointTs),
 			zap.Uint64("recvCheckpointTs", checkpointTs))
 	}
@@ -522,7 +522,7 @@ func (l *LogWriter) maybeUpdateMeta(checkpointTs, resolvedTs uint64) ([]byte, er
 		l.meta.ResolvedTs = resolvedTs
 		hasChange = true
 	} else if resolvedTs > 0 && resolvedTs != l.meta.ResolvedTs {
-		log.Warn("flushLogMeta with a regressed resolved ts, skip",
+		log.Warn("flushLogMeta with a regressed resolved ts, ignore",
 			zap.Uint64("currCheckpointTs", l.meta.ResolvedTs),
 			zap.Uint64("recvCheckpointTs", resolvedTs))
 	}
