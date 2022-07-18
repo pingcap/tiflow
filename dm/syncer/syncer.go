@@ -236,6 +236,8 @@ type Syncer struct {
 	locations *locationRecorder
 	// initial executed binlog location, set once for each instance of syncer.
 	initExecutedLoc *binlog.Location
+	// beginLocation is the beginning location when syncer start/resume.
+	beginLocation *binlog.Location
 
 	relay                      relay.Process
 	charsetAndDefaultCollation map[string]string
@@ -1851,6 +1853,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	s.lastTime.Store(now)
 
 	s.initInitExecutedLoc()
+	s.initBeginLocation()
 	s.running.Store(true)
 	defer s.running.Store(false)
 
@@ -4183,6 +4186,11 @@ func (s *Syncer) initInitExecutedLoc() {
 		p := s.checkpoint.GlobalPoint()
 		s.initExecutedLoc = &p
 	}
+}
+
+func (s *Syncer) initBeginLocation() {
+	p := s.checkpoint.GlobalPoint()
+	s.beginLocation = &p
 }
 
 func (s *Syncer) getTrackedTableInfo(table *filter.Table) (*model.TableInfo, error) {

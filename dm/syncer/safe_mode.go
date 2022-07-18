@@ -62,8 +62,8 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 		exitPoint = nil
 	})
 	if exitPoint != nil {
-		s.tctx.L().Info("compare exitPoint and initExecutedLoc", zap.Stringer("exit point", *exitPoint), zap.Stringer("init executed location", s.getInitExecutedLoc()))
-		if binlog.CompareLocation(*exitPoint, s.getInitExecutedLoc(), s.cfg.EnableGTID) > 0 {
+		s.tctx.L().Info("compare exitPoint and beginLocation", zap.Stringer("exit point", *exitPoint), zap.Stringer("init executed location", s.beginLocation))
+		if binlog.CompareLocation(*exitPoint, *s.beginLocation, s.cfg.EnableGTID) > 0 {
 			//nolint:errcheck
 			s.safeMode.Add(tctx, 1) // enable and will revert after pass SafeModeExitLoc
 			s.tctx.L().Info("enable safe-mode for safe mode exit point, will exit at", zap.Stringer("location", *exitPoint))
