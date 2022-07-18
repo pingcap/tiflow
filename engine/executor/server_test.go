@@ -16,7 +16,7 @@ package executor
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -86,7 +86,7 @@ func testPprof(t *testing.T, addr string) {
 		require.Nil(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
-		_, err = ioutil.ReadAll(resp.Body)
+		_, err = io.ReadAll(resp.Body)
 		require.Nil(t, err)
 	}
 }
@@ -100,7 +100,7 @@ func testPrometheusMetrics(t *testing.T, addr string) {
 		require.Nil(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
-		_, err = ioutil.ReadAll(resp.Body)
+		_, err = io.ReadAll(resp.Body)
 		require.Nil(t, err)
 	}
 }
@@ -134,7 +134,7 @@ func testCustomedPrometheusMetrics(t *testing.T, addr string) {
 		require.Nil(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		require.Nil(t, err)
 		metric := string(body)
 		return strings.Contains(metric, "dataflow_executor_task_num")
