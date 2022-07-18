@@ -121,7 +121,7 @@ func (s *sink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) error 
 			key: mqv1.TopicPartitionKey{
 				Topic: topic, Partition: partition,
 			},
-			row: row,
+			rowEvent: row,
 		}
 	}
 

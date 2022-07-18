@@ -29,7 +29,7 @@ import (
 )
 
 func newTestWorker(t *testing.T) (*worker, producer.Producer) {
-	// 200 is about the size of a row change.
+	// 200 is about the size of a rowEvent change.
 	encoderConfig := codec.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(200)
 	builder, err := codec.NewEventBatchEncoderBuilder(context.Background(), encoderConfig)
 	require.Nil(t, err)
@@ -62,7 +62,7 @@ func TestBatch(t *testing.T) {
 	for i := 0; i < 512; i++ {
 		events = append(events, mqEvent{
 			key: key,
-			row: &eventsink.RowChangeCallbackableEvent{
+			rowEvent: &eventsink.RowChangeCallbackableEvent{
 				Event:       row,
 				Callback:    func() {},
 				TableStatus: &tableStatus,
@@ -112,7 +112,7 @@ func TestGroup(t *testing.T) {
 
 	events := []mqEvent{
 		{
-			row: &eventsink.RowChangeCallbackableEvent{
+			rowEvent: &eventsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs: 1,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
@@ -124,7 +124,7 @@ func TestGroup(t *testing.T) {
 			key: key1,
 		},
 		{
-			row: &eventsink.RowChangeCallbackableEvent{
+			rowEvent: &eventsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs: 2,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
@@ -136,7 +136,7 @@ func TestGroup(t *testing.T) {
 			key: key1,
 		},
 		{
-			row: &eventsink.RowChangeCallbackableEvent{
+			rowEvent: &eventsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs: 3,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
@@ -148,7 +148,7 @@ func TestGroup(t *testing.T) {
 			key: key1,
 		},
 		{
-			row: &eventsink.RowChangeCallbackableEvent{
+			rowEvent: &eventsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs: 2,
 					Table:    &model.TableName{Schema: "aa", Table: "bb"},
@@ -160,7 +160,7 @@ func TestGroup(t *testing.T) {
 			key: key2,
 		},
 		{
-			row: &eventsink.RowChangeCallbackableEvent{
+			rowEvent: &eventsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs: 2,
 					Table:    &model.TableName{Schema: "aaa", Table: "bbb"},
@@ -208,7 +208,7 @@ func TestAsyncSend(t *testing.T) {
 	defer worker.close()
 	events := []mqEvent{
 		{
-			row: &eventsink.RowChangeCallbackableEvent{
+			rowEvent: &eventsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs: 1,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
@@ -220,7 +220,7 @@ func TestAsyncSend(t *testing.T) {
 			key: key1,
 		},
 		{
-			row: &eventsink.RowChangeCallbackableEvent{
+			rowEvent: &eventsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs: 2,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
@@ -232,7 +232,7 @@ func TestAsyncSend(t *testing.T) {
 			key: key1,
 		},
 		{
-			row: &eventsink.RowChangeCallbackableEvent{
+			rowEvent: &eventsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs: 3,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
@@ -244,7 +244,7 @@ func TestAsyncSend(t *testing.T) {
 			key: key1,
 		},
 		{
-			row: &eventsink.RowChangeCallbackableEvent{
+			rowEvent: &eventsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs: 2,
 					Table:    &model.TableName{Schema: "aa", Table: "bb"},
@@ -256,7 +256,7 @@ func TestAsyncSend(t *testing.T) {
 			key: key2,
 		},
 		{
-			row: &eventsink.RowChangeCallbackableEvent{
+			rowEvent: &eventsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs: 2,
 					Table:    &model.TableName{Schema: "aaa", Table: "bbb"},
@@ -268,7 +268,7 @@ func TestAsyncSend(t *testing.T) {
 			key: key3,
 		},
 		{
-			row: &eventsink.RowChangeCallbackableEvent{
+			rowEvent: &eventsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs: 3,
 					Table:    &model.TableName{Schema: "aaa", Table: "bbb"},
@@ -289,6 +289,63 @@ func TestAsyncSend(t *testing.T) {
 	require.Len(t, mp.GetEvent(key1), 3)
 	require.Len(t, mp.GetEvent(key2), 1)
 	require.Len(t, mp.GetEvent(key3), 2)
+}
+
+func TestAsyncSendWhenTableStopped(t *testing.T) {
+	t.Parallel()
+
+	key1 := mqv1.TopicPartitionKey{
+		Topic:     "test",
+		Partition: 1,
+	}
+	worker, p := newTestWorker(t)
+	defer worker.close()
+	replicatingStatus := pipeline.TableStateReplicating
+	stoopedStatus := pipeline.TableStateStopped
+	events := []mqEvent{
+		{
+			rowEvent: &eventsink.RowChangeCallbackableEvent{
+				Event: &model.RowChangedEvent{
+					CommitTs: 1,
+					Table:    &model.TableName{Schema: "a", Table: "b"},
+					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+				},
+				Callback:    func() {},
+				TableStatus: &replicatingStatus,
+			},
+			key: key1,
+		},
+		{
+			rowEvent: &eventsink.RowChangeCallbackableEvent{
+				Event: &model.RowChangedEvent{
+					CommitTs: 2,
+					Table:    &model.TableName{Schema: "a", Table: "b"},
+					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+				},
+				Callback:    func() {},
+				TableStatus: &replicatingStatus,
+			},
+			key: key1,
+		},
+		{
+			rowEvent: &eventsink.RowChangeCallbackableEvent{
+				Event: &model.RowChangedEvent{
+					CommitTs: 3,
+					Table:    &model.TableName{Schema: "a", Table: "b"},
+					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
+				},
+				Callback:    func() {},
+				TableStatus: &stoopedStatus,
+			},
+			key: key1,
+		},
+	}
+
+	paritionedRows := worker.group(events)
+	err := worker.asyncSend(context.Background(), paritionedRows)
+	require.NoError(t, err)
+	mp := p.(*producer.MockProducer)
+	require.Len(t, mp.GetEvents(), 2)
 }
 
 func TestAbort(t *testing.T) {

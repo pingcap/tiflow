@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
@@ -31,8 +32,8 @@ import (
 // mqEvent is the event of the mq worker.
 // It carries the topic and partition information of the message.
 type mqEvent struct {
-	key mqv1.TopicPartitionKey
-	row *eventsink.RowChangeCallbackableEvent
+	key      mqv1.TopicPartitionKey
+	rowEvent *eventsink.RowChangeCallbackableEvent
 }
 
 // worker will send messages to the Kafka producer on a batch basis.
@@ -112,7 +113,7 @@ func (w *worker) batch(
 			log.Warn("MQ sink flush worker channel closed")
 			return index, nil
 		}
-		if msg.row != nil {
+		if msg.rowEvent != nil {
 			events[index] = msg
 			index++
 		}
@@ -130,7 +131,7 @@ func (w *worker) batch(
 				return index, nil
 			}
 
-			if msg.row != nil {
+			if msg.rowEvent != nil {
 				events[index] = msg
 				index++
 			}
@@ -153,7 +154,7 @@ func (w *worker) group(
 		if _, ok := partitionedRows[event.key]; !ok {
 			partitionedRows[event.key] = make([]*eventsink.RowChangeCallbackableEvent, 0)
 		}
-		partitionedRows[event.key] = append(partitionedRows[event.key], event.row)
+		partitionedRows[event.key] = append(partitionedRows[event.key], event.rowEvent)
 	}
 	return partitionedRows
 }
@@ -165,6 +166,12 @@ func (w *worker) asyncSend(
 ) error {
 	for key, events := range partitionedRows {
 		for _, event := range events {
+			// Skip this event when the table is stopped.
+			if event.TableStatus.Load() == pipeline.TableStateStopped {
+				event.Callback()
+				log.Debug("skip event of stopped table", zap.Any("event", event))
+				continue
+			}
 			err := w.encoder.AppendRowChangedEvent(ctx, key.Topic, event.Event, event.Callback)
 			if err != nil {
 				return err
