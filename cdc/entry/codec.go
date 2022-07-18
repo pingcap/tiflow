@@ -31,14 +31,15 @@ import (
 var (
 	tablePrefix  = []byte{'t'}
 	recordPrefix = []byte("_r")
-	metaPrefix   = []byte("m")
+	// MetaPrefix is the prefix for meta key.
+	MetaPrefix = []byte("m")
 )
 
 var (
 	intLen            = 8
 	tablePrefixLen    = len(tablePrefix)
 	recordPrefixLen   = len(recordPrefix)
-	metaPrefixLen     = len(metaPrefix)
+	metaPrefixLen     = len(MetaPrefix)
 	prefixTableIDLen  = tablePrefixLen + intLen  /*tableID*/
 	prefixRecordIDLen = recordPrefixLen + intLen /*recordID*/
 )
@@ -118,7 +119,7 @@ func decodeRecordID(key []byte) (rest []byte, recordID int64, err error) {
 }
 
 func decodeMetaKey(ek []byte) (meta, error) {
-	if !bytes.HasPrefix(ek, metaPrefix) {
+	if !bytes.HasPrefix(ek, MetaPrefix) {
 		return nil, cerror.ErrInvalidRecordKey.GenWithStackByArgs(ek)
 	}
 

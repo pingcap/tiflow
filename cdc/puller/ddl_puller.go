@@ -14,6 +14,7 @@
 package puller
 
 import (
+	"bytes"
 	"context"
 	"sync"
 	"sync/atomic"
@@ -60,11 +61,60 @@ type DDLJobPuller interface {
 type ddlJobPullerImpl struct {
 	Puller
 
+	kvStorage tidbkv.Storage
 	tableInfo *model.TableInfo
 	columnID  int64
 }
 
+func (p *ddlJobPullerImpl) initJobTableMeta() error {
+	version, err := p.kvStorage.CurrentVersion(tidbkv.GlobalTxnScope)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	snap, err := kv.GetSnapshotMeta(p.kvStorage, version.Ver)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	dbInfos, err := snap.ListDatabases()
+	if err != nil {
+		return cerror.WrapError(cerror.ErrMetaListDatabases, err)
+	}
+
+	db, err := findDBByName(dbInfos, mysql.SystemDB)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	tbls, err := snap.ListTables(db.ID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	tableInfo, err := findTableByName(tbls, "tidb_ddl_job")
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	col, err := findColumnByName(tableInfo.Columns, "job_meta")
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	p.tableInfo = model.WrapTableInfo(db.ID, db.Name.L, 0, tableInfo)
+	p.columnID = col.ID
+	return nil
+}
+
 func (p *ddlJobPullerImpl) UnmarshalDDL(rawKV *model.RawKVEntry) (*timodel.Job, error) {
+	if rawKV.OpType != model.OpTypePut {
+		return nil, nil
+	}
+	if p.tableInfo == nil && !bytes.HasPrefix(rawKV.Key, entry.MetaPrefix) {
+		err := p.initJobTableMeta()
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
 	return entry.ParseDDLJob(p.tableInfo, rawKV, p.columnID)
 }
 
@@ -111,47 +161,9 @@ func NewDDLJobPuller(
 	cfg *config.KVClientConfig,
 	changefeed model.ChangeFeedID,
 ) (DDLJobPuller, error) {
-	// here, we assume tidb is upgrade before cdc, otherwise, we will get error
-	version, err := kvStorage.CurrentVersion(tidbkv.GlobalTxnScope)
-	if err != nil {
-		return nil, err
-	}
-	snap, err := kv.GetSnapshotMeta(kvStorage, version.Ver)
-	if err != nil {
-		return nil, err
-	}
-
-	dbInfos, err := snap.ListDatabases()
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrMetaListDatabases, err)
-	}
-
-	db, err := findDBByName(dbInfos, mysql.SystemDB)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	tbls, err := snap.ListTables(db.ID)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	tableInfo, err := findTableByName(tbls, "tidb_ddl_job")
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	col, err := findColumnByName(tableInfo.Columns, "job_meta")
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	spans := []regionspan.Span{regionspan.GetTableSpan(tableInfo.ID)}
-	spans = append(spans, regionspan.GetAllDDLSpan()...)
-
 	return &ddlJobPullerImpl{
-		Puller:    New(ctx, pdCli, grpcPool, regionCache, kvStorage, pdClock, checkpointTs, spans, cfg, changefeed),
-		tableInfo: model.WrapTableInfo(db.ID, db.Name.L, 0, tableInfo),
-		columnID:  col.ID,
+		Puller:    New(ctx, pdCli, grpcPool, regionCache, kvStorage, pdClock, checkpointTs, regionspan.GetAllDDLSpan(), cfg, changefeed),
+		kvStorage: kvStorage,
 	}, nil
 }
 

@@ -238,12 +238,8 @@ func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawKey []b
 
 // ParseDDLJob parses the job from the raw KV entry. id is the column id of `job_meta`.
 func ParseDDLJob(tblInfo *model.TableInfo, rawKV *model.RawKVEntry, id int64) (*timodel.Job, error) {
-	if rawKV.OpType != model.OpTypePut {
-		return nil, nil
-	}
-
 	var v []byte
-	if bytes.HasPrefix(rawKV.Key, metaPrefix) {
+	if bytes.HasPrefix(rawKV.Key, MetaPrefix) {
 		// old queue base job.
 		v = rawKV.Value
 	} else {
