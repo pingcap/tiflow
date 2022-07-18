@@ -74,7 +74,7 @@ func PositionFromPosStr(str string) (gmysql.Position, error) {
 	s := trimBrackets(str)
 	parsed := strings.Split(s, ", ")
 	if len(parsed) != 2 {
-		return gmysql.Position{}, terror.ErrBinlogParsePosFromStr.Generatef("invalid binlog pos, position string %s", str)
+		return gmysql.Position{}, terror.ErrBinlogParsePosFromStr.Generatef("invalid binlog pos, should be like (mysql-bin.000001, 2345), got %s", str)
 	}
 	pos, err := strconv.ParseUint(parsed[1], 10, 32)
 	if err != nil {
@@ -318,7 +318,7 @@ func CompareLocation(location1, location2 Location, cmpGTID bool) int {
 			if cmp != 0 {
 				return cmp
 			}
-			return compareIndex(location1.Suffix, location2.Suffix)
+			return compareInjectSuffix(location1.Suffix, location2.Suffix)
 		}
 
 		// if can't compare by GTIDSet, then compare by position
@@ -329,7 +329,7 @@ func CompareLocation(location1, location2 Location, cmpGTID bool) int {
 	if cmp != 0 {
 		return cmp
 	}
-	return compareIndex(location1.Suffix, location2.Suffix)
+	return compareInjectSuffix(location1.Suffix, location2.Suffix)
 }
 
 // IsFreshPosition returns true when location1 is a fresh location without any info.
@@ -357,7 +357,7 @@ func IsFreshPosition(location Location, flavor string, cmpGTID bool) bool {
 	if cmp != 0 {
 		return cmp <= 0
 	}
-	return compareIndex(location.Suffix, zeroLocation.Suffix) <= 0
+	return compareInjectSuffix(location.Suffix, zeroLocation.Suffix) <= 0
 }
 
 // CompareGTID returns:
@@ -396,7 +396,7 @@ func CompareGTID(gSet1, gSet2 gmysql.GTIDSet) (int, bool) {
 	return 0, false
 }
 
-func compareIndex(lhs, rhs int) int {
+func compareInjectSuffix(lhs, rhs int) int {
 	switch {
 	case lhs < rhs:
 		return -1
