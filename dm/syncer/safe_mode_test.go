@@ -103,6 +103,7 @@ func TestEnableSafeModeInitializationPhase(t *testing.T) {
 	require.True(t, s.safeMode.Enable())
 
 	// test enable by initPhaseSeconds
+	s.checkpoint = &mockCheckpointForSafeMode{}
 	s.enableSafeModeInitializationPhase(s.tctx)
 	time.Sleep(time.Second) // wait for enableSafeModeInitializationPhase running
 	require.True(t, s.safeMode.Enable())
