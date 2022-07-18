@@ -113,31 +113,64 @@ func TestChangefeedFastFailError(t *testing.T) {
 	t.Parallel()
 	err := ErrGCTTLExceeded.FastGenByArgs()
 	rfcCode, _ := RFCCode(err)
-	require.Equal(t, true, ChangefeedFastFailError(err))
-	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+	require.Equal(t, true, IsChangefeedFastFailError(err))
+	require.Equal(t, true, IsChangefeedFastFailErrorCode(rfcCode))
 
 	err = ErrGCTTLExceeded.GenWithStack("aa")
 	rfcCode, _ = RFCCode(err)
-	require.Equal(t, true, ChangefeedFastFailError(err))
-	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+	require.Equal(t, true, IsChangefeedFastFailError(err))
+	require.Equal(t, true, IsChangefeedFastFailErrorCode(rfcCode))
 
 	err = ErrGCTTLExceeded.Wrap(errors.New("aa"))
 	rfcCode, _ = RFCCode(err)
-	require.Equal(t, true, ChangefeedFastFailError(err))
-	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+	require.Equal(t, true, IsChangefeedFastFailError(err))
+	require.Equal(t, true, IsChangefeedFastFailErrorCode(rfcCode))
 
 	err = ErrSnapshotLostByGC.FastGenByArgs()
 	rfcCode, _ = RFCCode(err)
-	require.Equal(t, true, ChangefeedFastFailError(err))
-	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+	require.Equal(t, true, IsChangefeedFastFailError(err))
+	require.Equal(t, true, IsChangefeedFastFailErrorCode(rfcCode))
 
 	err = ErrStartTsBeforeGC.FastGenByArgs()
 	rfcCode, _ = RFCCode(err)
-	require.Equal(t, true, ChangefeedFastFailError(err))
-	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+	require.Equal(t, true, IsChangefeedFastFailError(err))
+	require.Equal(t, true, IsChangefeedFastFailErrorCode(rfcCode))
 
 	err = ErrToTLSConfigFailed.FastGenByArgs()
 	rfcCode, _ = RFCCode(err)
-	require.Equal(t, false, ChangefeedFastFailError(err))
-	require.Equal(t, false, ChangefeedFastFailErrorCode(rfcCode))
+	require.Equal(t, false, IsChangefeedFastFailError(err))
+	require.Equal(t, false, IsChangefeedFastFailErrorCode(rfcCode))
+}
+
+func TestChangefeedNotRetryError(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		err      error
+		expected bool
+	}{
+		{
+			err:      ErrInvalidIgnoreEventType.FastGenByArgs(),
+			expected: false,
+		},
+		{
+			err:      ErrExpressionColumnNotFound.FastGenByArgs(),
+			expected: true,
+		},
+		{
+			err:      ErrExpressionParseFailed.FastGenByArgs(),
+			expected: true,
+		},
+		{
+			err:      WrapError(ErrFilterRuleInvalid, ErrExpressionColumnNotFound.FastGenByArgs()),
+			expected: true,
+		},
+		{
+			err:      errors.New("CDC:ErrExpressionColumnNotFound"),
+			expected: true,
+		},
+	}
+
+	for _, c := range cases {
+		require.Equal(t, c.expected, IsChangefeedNotRetryError(c.err))
+	}
 }

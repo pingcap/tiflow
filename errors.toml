@@ -216,6 +216,11 @@ error = '''
 consistent storage (%s) not support
 '''
 
+["CDC:ErrConvertDDLToEventTypeFailed"]
+error = '''
+failed to convert ddl '%s' to filter event type
+'''
+
 ["CDC:ErrCraftCodecInvalidData"]
 error = '''
 craft codec invalid data
@@ -328,7 +333,7 @@ rawData size %d exceeds maximum file size %d
 
 ["CDC:ErrFilterRuleInvalid"]
 error = '''
-filter rule is invalid %s
+filter rule is invalid %v
 '''
 
 ["CDC:ErrFlowControllerAborted"]
@@ -418,12 +423,17 @@ invalid key: %s
 
 ["CDC:ErrInvalidFilterExpression"]
 error = '''
-invalid filter expressions. There is a syntax error in: %s
+invalid filter expressions. There is a syntax error in: '%s'
 '''
 
 ["CDC:ErrInvalidHost"]
 error = '''
 host must be a URL or a host:port pair: %q
+'''
+
+["CDC:ErrInvalidIgnoreEventType"]
+error = '''
+invalid ignore event type: '%s'
 '''
 
 ["CDC:ErrInvalidNamespace"]
