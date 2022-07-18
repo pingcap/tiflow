@@ -38,7 +38,7 @@ sub_help() {
 
 sub_init() {
 	sudo docker exec -it ticdc_controller_1 sh -c "
-  /cdc cli changefeed create --pd=\"http://upstream-pd:2379\" --sink-uri=\"kafka://kafka:9092/testdb_test?protocol=avro\" --opts \"registry=http://schema-registry:8081\"
+  /cdc cli changefeed create --pd=\"http://upstream-pd:2379\" --sink-uri=\"kafka://kafka:9092/testdb_test?protocol=avro\"
   curl -X POST -H \"Content-Type: application/json\" -d @/config/jdbc-sink-connector.json http://kafka-connect-01:8083/connectors
   "
 }

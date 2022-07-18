@@ -18,13 +18,15 @@ import (
 	"sync"
 
 	"github.com/edwingeng/deque"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // MockMessageSender defines a mock message sender
 type MockMessageSender struct {
-	mu        sync.Mutex
-	msgBox    map[msgBoxIndex]deque.Deque
-	isBlocked bool
+	mu            sync.Mutex
+	msgBox        map[msgBoxIndex]deque.Deque
+	nodeBlackList map[NodeID]struct{}
+	isBlocked     bool
 
 	injectedErrCh chan error
 }
@@ -33,6 +35,7 @@ type MockMessageSender struct {
 func NewMockMessageSender() *MockMessageSender {
 	return &MockMessageSender{
 		msgBox:        make(map[msgBoxIndex]deque.Deque),
+		nodeBlackList: make(map[NodeID]struct{}),
 		injectedErrCh: make(chan error, 1),
 	}
 }
@@ -51,6 +54,11 @@ func (m *MockMessageSender) SendToNodeB(
 ) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	// Handle mock offline nodes.
+	if _, exists := m.nodeBlackList[targetNodeID]; exists {
+		return errors.ErrExecutorNotFoundForMessage.GenWithStackByArgs()
+	}
 
 	select {
 	case err := <-m.injectedErrCh:
@@ -73,6 +81,11 @@ func (m *MockMessageSender) SendToNode(
 ) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	// Handle mock offline nodes.
+	if _, exists := m.nodeBlackList[targetNodeID]; exists {
+		return false, nil
+	}
 
 	select {
 	case err := <-m.injectedErrCh:
@@ -129,4 +142,22 @@ func (m *MockMessageSender) SetBlocked(isBlocked bool) {
 // InjectError injects error to simulate error scenario
 func (m *MockMessageSender) InjectError(err error) {
 	m.injectedErrCh <- err
+}
+
+// MarkNodeOffline marks a node as offline.
+func (m *MockMessageSender) MarkNodeOffline(nodeID NodeID) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.nodeBlackList[nodeID] = struct{}{}
+}
+
+// MarkNodeOnline marks a node as online.
+// Note that by default all nodes are treated as online
+// to facilitate testing.
+func (m *MockMessageSender) MarkNodeOnline(nodeID NodeID) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	delete(m.nodeBlackList, nodeID)
 }

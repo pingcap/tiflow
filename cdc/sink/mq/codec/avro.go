@@ -60,14 +60,15 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(
 	ctx context.Context,
 	topic string,
 	e *model.RowChangedEvent,
+	_ func(),
 ) error {
 	log.Debug("AppendRowChangedEvent", zap.Any("rowChangedEvent", e))
-	mqMessage := NewMQMessage(
+	mqMessage := newMsg(
 		config.ProtocolAvro,
 		nil,
 		nil,
 		e.CommitTs,
-		model.MqMessageTypeRow,
+		model.MessageTypeRow,
 		&e.Table.Schema,
 		&e.Table.Table,
 	)
@@ -163,7 +164,7 @@ func (a *AvroEventBatchEncoder) avroEncode(
 		operation           string
 	)
 	if isKey {
-		cols, colInfos = e.PrimaryKeyColInfos()
+		cols, colInfos = e.HandleKeyColInfos()
 		enableTiDBExtension = false
 		schemaManager = a.keySchemaManager
 	} else {
@@ -541,7 +542,7 @@ func columnToAvroSchema(
 			Parameters: map[string]string{tidbType: tt},
 		}, nil
 	case mysql.TypeBit:
-		displayFlen := ft.Flen
+		displayFlen := ft.GetFlen()
 		if displayFlen == -1 {
 			displayFlen, _ = mysql.GetDefaultFieldLengthAndDecimal(col.Type)
 		}
@@ -554,8 +555,8 @@ func columnToAvroSchema(
 		}, nil
 	case mysql.TypeNewDecimal:
 		if decimalHandlingMode == decimalHandlingModePrecise {
-			defaultFlen, defaultDecimal := mysql.GetDefaultFieldLengthAndDecimal(ft.Tp)
-			displayFlen, displayDecimal := ft.Flen, ft.Decimal
+			defaultFlen, defaultDecimal := mysql.GetDefaultFieldLengthAndDecimal(ft.GetType())
+			displayFlen, displayDecimal := ft.GetFlen(), ft.GetDecimal()
 			// length not specified, set it to system type default
 			if displayFlen == -1 {
 				displayFlen = defaultFlen
@@ -598,8 +599,8 @@ func columnToAvroSchema(
 			Parameters: map[string]string{tidbType: tt},
 		}, nil
 	case mysql.TypeEnum, mysql.TypeSet:
-		es := make([]string, 0, len(ft.Elems))
-		for _, e := range ft.Elems {
+		es := make([]string, 0, len(ft.GetElems()))
+		for _, e := range ft.GetElems() {
 			e = escapeEnumAndSetOptions(e)
 			es = append(es, e)
 		}
@@ -742,7 +743,7 @@ func columnToAvroData(
 		if v, ok := col.Value.(string); ok {
 			return v, "string", nil
 		}
-		enumVar, err := types.ParseEnumValue(ft.Elems, col.Value.(uint64))
+		enumVar, err := types.ParseEnumValue(ft.GetElems(), col.Value.(uint64))
 		if err != nil {
 			return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
 		}
@@ -751,7 +752,7 @@ func columnToAvroData(
 		if v, ok := col.Value.(string); ok {
 			return v, "string", nil
 		}
-		setVar, err := types.ParseSetValue(ft.Elems, col.Value.(uint64))
+		setVar, err := types.ParseSetValue(ft.GetElems(), col.Value.(uint64))
 		if err != nil {
 			return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
 		}
@@ -840,7 +841,7 @@ func (b *avroEventBatchEncoderBuilder) Build() EventBatchEncoder {
 	encoder.keySchemaManager = b.keySchemaManager
 	encoder.valueSchemaManager = b.valueSchemaManager
 	encoder.resultBuf = make([]*MQMessage, 0, 4096)
-	encoder.maxMessageBytes = b.config.MaxMessageBytes()
+	encoder.maxMessageBytes = b.config.maxMessageBytes
 	encoder.enableTiDBExtension = b.config.enableTiDBExtension
 	encoder.decimalHandlingMode = b.config.avroDecimalHandlingMode
 	encoder.bigintUnsignedHandlingMode = b.config.avroBigintUnsignedHandlingMode

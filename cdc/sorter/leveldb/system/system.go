@@ -138,7 +138,8 @@ func (s *System) Start(ctx context.Context) error {
 	memInBytePerDB := float64(totalMemory) * s.memPercentage / float64(s.cfg.Count)
 	for id := 0; id < s.cfg.Count; id++ {
 		// Open db.
-		db, err := db.OpenPebble(ctx, id, s.dir, int(memInBytePerDB), s.cfg)
+		db, err := db.OpenPebble(
+			ctx, id, s.dir, s.cfg, db.WithCache(int(memInBytePerDB)), db.WithTableCRTsCollectors())
 		if err != nil {
 			return errors.Trace(err)
 		}

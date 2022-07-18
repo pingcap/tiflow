@@ -20,12 +20,13 @@ import (
 	"github.com/gogo/status"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 
-	"github.com/pingcap/tiflow/engine/pb"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	derrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 const preDispatchTaskRetryInterval = 1 * time.Second
@@ -51,6 +52,7 @@ func newTaskDispatcher(client baseExecutorClient) *TaskDispatcher {
 
 // DispatchTaskArgs contains the required parameters for creating a worker.
 type DispatchTaskArgs struct {
+	ProjectInfo  tenant.ProjectInfo
 	WorkerID     string
 	MasterID     string
 	WorkerType   int64
@@ -85,6 +87,7 @@ func (d *TaskDispatcher) DispatchTask(
 ) error {
 	requestID, err := d.preDispatchTaskWithRetry(ctx, args)
 	if err != nil {
+		abortWorker(err)
 		return derrors.ErrExecutorPreDispatchFailed.Wrap(err)
 	}
 
@@ -103,7 +106,7 @@ func (d *TaskDispatcher) DispatchTask(
 			abortWorker(errOut)
 			return errOut
 		}
-		log.L().Warn("ConfirmDispatchTask encountered error, "+
+		log.Warn("ConfirmDispatchTask encountered error, "+
 			"but the server's state is undetermined",
 			zap.Error(err))
 		// We treat the undetermined state as success.
@@ -163,6 +166,10 @@ func (d *TaskDispatcher) preDispatchTaskOnce(
 	_, err := d.client.Send(ctx, &ExecutorRequest{
 		Cmd: CmdPreDispatchTask,
 		Req: &pb.PreDispatchTaskRequest{
+			ProjectInfo: &pb.ProjectInfo{
+				TenantId:  args.ProjectInfo.TenantID(),
+				ProjectId: args.ProjectInfo.ProjectID(),
+			},
 			TaskTypeId: args.WorkerType,
 			TaskConfig: args.WorkerConfig,
 			MasterId:   args.MasterID,
@@ -188,9 +195,9 @@ func (d *TaskDispatcher) preDispatchTaskOnce(
 			return "", false, errors.Trace(err)
 		case codes.AlreadyExists:
 			// Since we are generating unique UUIDs, this should not happen.
-			log.L().Panic("Unexpected error", zap.Error(err))
+			log.Panic("Unexpected error", zap.Error(err))
 		default:
-			log.L().Warn("PreDispatchTask encountered error, retrying", zap.Error(err))
+			log.Warn("PreDispatchTask encountered error, retrying", zap.Error(err))
 			return "", true, errors.Trace(err)
 		}
 	}

@@ -18,12 +18,12 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/pingcap/tiflow/pkg/config/outdated"
+	"go.uber.org/zap"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/config/outdated"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"go.uber.org/zap"
 )
 
 var defaultReplicaConfig = &ReplicaConfig{
@@ -37,13 +37,10 @@ var defaultReplicaConfig = &ReplicaConfig{
 		WorkerNum: 16,
 	},
 	Sink: &SinkConfig{},
-	Cyclic: &CyclicConfig{
-		Enable: false,
-	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
 		MaxLogSize:        64,
-		FlushIntervalInMs: 1000,
+		FlushIntervalInMs: 2000,
 		Storage:           "",
 	},
 }
@@ -59,7 +56,6 @@ type replicaConfig struct {
 	Filter           *FilterConfig     `toml:"filter" json:"filter"`
 	Mounter          *MounterConfig    `toml:"mounter" json:"mounter"`
 	Sink             *SinkConfig       `toml:"sink" json:"sink"`
-	Cyclic           *CyclicConfig     `toml:"cyclic-replication" json:"cyclic-replication"`
 	Consistent       *ConsistentConfig `toml:"consistent" json:"consistent"`
 }
 
@@ -70,11 +66,6 @@ func (c *ReplicaConfig) Marshal() (string, error) {
 		return "", cerror.WrapError(cerror.ErrEncodeFailed, errors.Annotatef(err, "Unmarshal data: %v", c))
 	}
 	return string(cfg), nil
-}
-
-// Unmarshal unmarshals into *ReplicationConfig from json marshal byte slice
-func (c *ReplicaConfig) Unmarshal(data []byte) error {
-	return c.UnmarshalJSON(data)
 }
 
 // UnmarshalJSON unmarshals into *ReplicationConfig from json marshal byte slice
@@ -103,7 +94,7 @@ func (c *ReplicaConfig) Clone() *ReplicaConfig {
 			zap.Error(cerror.WrapError(cerror.ErrDecodeFailed, err)))
 	}
 	clone := new(ReplicaConfig)
-	err = clone.Unmarshal([]byte(str))
+	err = clone.UnmarshalJSON([]byte(str))
 	if err != nil {
 		log.Panic("failed to unmarshal replica config",
 			zap.Error(cerror.WrapError(cerror.ErrDecodeFailed, err)))
@@ -123,24 +114,15 @@ func (c *replicaConfig) fillFromV1(v1 *outdated.ReplicaConfigV1) {
 	}
 }
 
-// Validate verifies that each parameter is valid.
-func (c *ReplicaConfig) Validate() error {
+// ValidateAndAdjust verifies and adjusts the replica configuration.
+func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 	if c.Sink != nil {
-		err := c.Sink.validate(c.EnableOldValue)
+		err := c.Sink.validateAndAdjust(sinkURI, c.EnableOldValue)
 		if err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-// ApplyProtocol sinkURI to fill the `ReplicaConfig`
-func (c *ReplicaConfig) ApplyProtocol(sinkURI *url.URL) *ReplicaConfig {
-	params := sinkURI.Query()
-	if s := params.Get(ProtocolKey); s != "" {
-		c.Sink.Protocol = s
-	}
-	return c
 }
 
 // GetDefaultReplicaConfig returns the default replica config.

@@ -20,10 +20,12 @@ import (
 	"strings"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/go-mysql-org/go-mysql/mysql"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"go.uber.org/zap"
 
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
@@ -113,7 +115,7 @@ func (s *testDDLSuite) TestCommentQuote(c *C) {
 	qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
 	c.Assert(err, IsNil)
 
-	syncer := NewSyncer(&config.SubTaskConfig{}, nil, nil)
+	syncer := NewSyncer(&config.SubTaskConfig{Flavor: mysql.MySQLFlavor}, nil, nil)
 	syncer.tctx = tctx
 	c.Assert(syncer.genRouter(), IsNil)
 
@@ -211,6 +213,7 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestResolveDDLSQL")))
 
 	cfg := &config.SubTaskConfig{
+		Flavor: mysql.MySQLFlavor,
 		BAList: &filter.Rules{
 			DoDBs: []string{"s1"},
 		},
@@ -219,6 +222,7 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 	syncer := NewSyncer(cfg, nil, nil)
 	syncer.tctx = tctx
 	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
 	c.Assert(err, IsNil)
 
 	syncer.tableRouter, err = regexprrouter.NewRegExprRouter(false, []*router.TableRule{
@@ -377,7 +381,7 @@ func (s *testDDLSuite) TestResolveGeneratedColumnSQL(c *C) {
 	}
 
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestResolveGeneratedColumnSQL")))
-	syncer := NewSyncer(&config.SubTaskConfig{}, nil, nil)
+	syncer := NewSyncer(&config.SubTaskConfig{Flavor: mysql.MySQLFlavor}, nil, nil)
 	syncer.tctx = tctx
 	c.Assert(syncer.genRouter(), IsNil)
 	p := parser.New()
@@ -456,7 +460,7 @@ func (s *testDDLSuite) TestResolveOnlineDDL(c *C) {
 
 	var qec *queryEventContext
 	for _, ca := range cases {
-		plugin, err := onlineddl.NewRealOnlinePlugin(tctx, cfg)
+		plugin, err := onlineddl.NewRealOnlinePlugin(tctx, cfg, nil)
 		c.Assert(err, IsNil)
 		syncer := NewSyncer(cfg, nil, nil)
 		syncer.tctx = tctx
@@ -535,7 +539,7 @@ func (s *testDDLSuite) TestMistakeOnlineDDLRegex(c *C) {
 	dbCfg.Password = ""
 	cfg := s.newSubTaskCfg(dbCfg)
 	for _, ca := range cases {
-		plugin, err := onlineddl.NewRealOnlinePlugin(tctx, cfg)
+		plugin, err := onlineddl.NewRealOnlinePlugin(tctx, cfg, nil)
 		c.Assert(err, IsNil)
 		syncer := NewSyncer(cfg, nil, nil)
 		c.Assert(syncer.genRouter(), IsNil)
@@ -666,7 +670,10 @@ func (s *testDDLSuite) TestAdjustDatabaseCollation(c *C) {
 	}
 
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestAdjustTableCollation")))
-	syncer := NewSyncer(&config.SubTaskConfig{CollationCompatible: config.StrictCollationCompatible}, nil, nil)
+	syncer := NewSyncer(&config.SubTaskConfig{
+		Flavor:              mysql.MySQLFlavor,
+		CollationCompatible: config.StrictCollationCompatible,
+	}, nil, nil)
 	syncer.tctx = tctx
 	p := parser.New()
 	tab := &filter.Table{
@@ -740,7 +747,10 @@ func (s *testDDLSuite) TestAdjustCollation(c *C) {
 	}
 
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestAdjustTableCollation")))
-	syncer := NewSyncer(&config.SubTaskConfig{CollationCompatible: config.StrictCollationCompatible}, nil, nil)
+	syncer := NewSyncer(&config.SubTaskConfig{
+		Flavor:              mysql.MySQLFlavor,
+		CollationCompatible: config.StrictCollationCompatible,
+	}, nil, nil)
 	syncer.tctx = tctx
 	p := parser.New()
 	tab := &filter.Table{

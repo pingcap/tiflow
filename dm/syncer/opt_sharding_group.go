@@ -69,19 +69,50 @@ func (s *OptShardingGroup) Remove(sourceTableIDs []string) {
 }
 
 // OptShardingGroupKeeper used to keep OptShardingGroup.
+// It's used to keep sharding group meta data to make sure optimistic sharding resync redirection works correctly.
+//                                                    newer
+//   │                       ───────────────────────► time
+//   │
+//   │ tb1 conflict DDL1     │  ▲      │
+//   │                       │  │      │
+//   │       ...             │  │      │
+//   │                       │  │      │
+//   │ tb1 conflict DDL2     │  │      │  ▲     │
+//   │                       │  │      │  │     │
+//   │       ...             │  │      │  │     │
+//   │                       │  │      │  │     │
+//   │ tb2 conflict DDL1     ▼  │      │  │     │
+//   │                                 │  │     │
+//   │       ...           redirect    │  │     │
+//   │                                 │  │     │
+//   │ tb2 conflict DDL2               ▼  │     │
+//   │                                          │
+//   │       ...                     redirect   │
+//   │                                          │
+//   │  other dml events                        ▼
+//   │
+//   │                                       continue
+//   ▼                                      replicating
+//
+// newer
+// binlog
+// One redirection example is listed as above.
 type OptShardingGroupKeeper struct {
 	sync.RWMutex
 	groups map[string]*OptShardingGroup // target table ID -> ShardingGroup
 	cfg    *config.SubTaskConfig
 	tctx   *tcontext.Context
+	// shardingReSyncs is used to save the shardingResyncs' redirect locations that are resolved but not finished
+	shardingReSyncs map[string]binlog.Location
 }
 
 // NewOptShardingGroupKeeper creates a new OptShardingGroupKeeper.
 func NewOptShardingGroupKeeper(tctx *tcontext.Context, cfg *config.SubTaskConfig) *OptShardingGroupKeeper {
 	return &OptShardingGroupKeeper{
-		groups: make(map[string]*OptShardingGroup),
-		cfg:    cfg,
-		tctx:   tctx.WithLogger(tctx.L().WithFields(zap.String("component", "optimistic shard group keeper"))),
+		groups:          make(map[string]*OptShardingGroup),
+		cfg:             cfg,
+		tctx:            tctx.WithLogger(tctx.L().WithFields(zap.String("component", "optimistic shard group keeper"))),
+		shardingReSyncs: make(map[string]binlog.Location),
 	}
 }
 
@@ -139,19 +170,42 @@ func (k *OptShardingGroupKeeper) appendConflictTable(sourceTable, targetTable *f
 	return !ok
 }
 
+func (k *OptShardingGroupKeeper) addShardingReSync(shardingReSync *ShardingReSync) {
+	if shardingReSync != nil {
+		k.shardingReSyncs[shardingReSync.targetTable.String()] = shardingReSync.currLocation
+	}
+}
+
+func (k *OptShardingGroupKeeper) removeShardingReSync(shardingReSync *ShardingReSync) {
+	if shardingReSync != nil {
+		delete(k.shardingReSyncs, shardingReSync.targetTable.String())
+	}
+}
+
+func (k *OptShardingGroupKeeper) getShardingResyncs() map[string]binlog.Location {
+	return k.shardingReSyncs
+}
+
 func (k *OptShardingGroupKeeper) lowestFirstLocationInGroups() *binlog.Location {
 	k.RLock()
 	defer k.RUnlock()
 	var lowest *binlog.Location
 	for _, group := range k.groups {
-		location := group.firstConflictLocation.CloneWithFlavor(k.cfg.Flavor)
-		if lowest == nil {
-			lowest = &location
-		} else if binlog.CompareLocation(*lowest, location, k.cfg.EnableGTID) > 0 {
-			lowest = &location
+		if lowest == nil || binlog.CompareLocation(*lowest, group.firstConflictLocation, k.cfg.EnableGTID) > 0 {
+			lowest = &group.firstConflictLocation
 		}
 	}
-	return lowest
+	for _, currLocation := range k.shardingReSyncs {
+		if lowest == nil || binlog.CompareLocation(*lowest, currLocation, k.cfg.EnableGTID) > 0 {
+			loc := currLocation // make sure lowest can point to correct variable
+			lowest = &loc
+		}
+	}
+	if lowest == nil {
+		return nil
+	}
+	loc := lowest.Clone()
+	return &loc
 }
 
 // AdjustGlobalLocation adjusts globalLocation with sharding groups' lowest first point.

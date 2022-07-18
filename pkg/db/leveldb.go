@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/errors"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/syndtr/goleveldb/leveldb"
@@ -87,7 +86,7 @@ type levelDB struct {
 
 var _ DB = (*levelDB)(nil)
 
-func (p *levelDB) Iterator(lowerBound, upperBound []byte) Iterator {
+func (p *levelDB) Iterator(lowerBound, upperBound []byte, _, _ uint64) Iterator {
 	return leveldbIter{Iterator: p.db.NewIterator(&util.Range{
 		Start: lowerBound,
 		Limit: upperBound,
@@ -102,7 +101,7 @@ func (p *levelDB) Batch(cap int) Batch {
 }
 
 func (p *levelDB) DeleteRange(start, end []byte) error {
-	return errors.ErrUnimplemented.FastGenByArgs("leveldb.DeleteRange")
+	return cerrors.ErrUnimplemented.FastGenByArgs("leveldb.DeleteRange")
 }
 
 func (p *levelDB) Compact(start, end []byte) error {

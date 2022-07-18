@@ -14,6 +14,7 @@
 package kafka
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/Shopify/sarama"
@@ -26,6 +27,8 @@ const (
 	DefaultMockPartitionNum = 3
 	// defaultMockControllerID specifies the default mock controller ID.
 	defaultMockControllerID = 1
+	// topic replication factor must be 3 for Confluent Cloud Kafka.
+	defaultReplicationFactor = 3
 )
 
 const (
@@ -48,9 +51,14 @@ var (
 	MinInSyncReplicas = defaultMinInsyncReplicas
 )
 
+type topicDetail struct {
+	sarama.TopicDetail
+	fetchesRemainingUntilVisible int
+}
+
 // ClusterAdminClientMockImpl mock implements the admin client interface.
 type ClusterAdminClientMockImpl struct {
-	topics map[string]sarama.TopicDetail
+	topics map[string]*topicDetail
 	// Cluster controller ID.
 	controllerID  int32
 	brokerConfigs []sarama.ConfigEntry
@@ -58,13 +66,16 @@ type ClusterAdminClientMockImpl struct {
 
 // NewClusterAdminClientMockImpl news a ClusterAdminClientMockImpl struct with default configurations.
 func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
-	topics := make(map[string]sarama.TopicDetail)
+	topics := make(map[string]*topicDetail)
 	configEntries := make(map[string]*string)
 	configEntries[TopicMaxMessageBytesConfigName] = &TopicMaxMessageBytes
 	configEntries[MinInsyncReplicasConfigName] = &MinInSyncReplicas
-	topics[DefaultMockTopicName] = sarama.TopicDetail{
-		NumPartitions: 3,
-		ConfigEntries: configEntries,
+	topics[DefaultMockTopicName] = &topicDetail{
+		fetchesRemainingUntilVisible: 0,
+		TopicDetail: sarama.TopicDetail{
+			NumPartitions: 3,
+			ConfigEntries: configEntries,
+		},
 	}
 
 	brokerConfigs := []sarama.ConfigEntry{
@@ -87,7 +98,11 @@ func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 
 // ListTopics returns all topics directly.
 func (c *ClusterAdminClientMockImpl) ListTopics() (map[string]sarama.TopicDetail, error) {
-	return c.topics, nil
+	topicsDetailsMap := make(map[string]sarama.TopicDetail)
+	for topic, detail := range c.topics {
+		topicsDetailsMap[topic] = detail.TopicDetail
+	}
+	return topicsDetailsMap, nil
 }
 
 // DescribeCluster returns the controller ID.
@@ -108,9 +123,76 @@ func (c *ClusterAdminClientMockImpl) DescribeConfig(resource sarama.ConfigResour
 	return result, nil
 }
 
+// SetRemainingFetchesUntilTopicVisible is used to control the visibility of a specific topic.
+// It is used to mock the topic creation delay.
+func (c *ClusterAdminClientMockImpl) SetRemainingFetchesUntilTopicVisible(topicName string,
+	fetchesRemainingUntilVisible int,
+) error {
+	topic, ok := c.topics[topicName]
+	if !ok {
+		return fmt.Errorf("No such topic as %s", topicName)
+	}
+
+	topic.fetchesRemainingUntilVisible = fetchesRemainingUntilVisible
+	return nil
+}
+
+// DescribeTopics fetches metadata from some topics.
+func (c *ClusterAdminClientMockImpl) DescribeTopics(topics []string) (
+	metadata []*sarama.TopicMetadata, err error,
+) {
+	topicDescriptions := make(map[string]*sarama.TopicMetadata)
+
+	for _, requestedTopic := range topics {
+		for topicName, topicDetail := range c.topics {
+			if topicName == requestedTopic {
+				if topicDetail.fetchesRemainingUntilVisible > 0 {
+					topicDetail.fetchesRemainingUntilVisible--
+				} else {
+					topicDescriptions[topicName] = &sarama.TopicMetadata{
+						Name:       topicName,
+						Partitions: make([]*sarama.PartitionMetadata, topicDetail.NumPartitions),
+					}
+					break
+				}
+			}
+		}
+
+		if _, ok := topicDescriptions[requestedTopic]; !ok {
+			topicDescriptions[requestedTopic] = &sarama.TopicMetadata{
+				Name: requestedTopic,
+				Err:  sarama.ErrUnknownTopicOrPartition,
+			}
+		}
+	}
+
+	metadataRes := make([]*sarama.TopicMetadata, 0)
+	for _, meta := range topicDescriptions {
+		metadataRes = append(metadataRes, meta)
+	}
+
+	return metadataRes, nil
+}
+
 // CreateTopic adds topic into map.
 func (c *ClusterAdminClientMockImpl) CreateTopic(topic string, detail *sarama.TopicDetail, _ bool) error {
-	c.topics[topic] = *detail
+	minInsyncReplicaConfigFound := false
+
+	for _, config := range c.brokerConfigs {
+		if config.Name == MinInsyncReplicasConfigName {
+			minInsyncReplicaConfigFound = true
+		}
+	}
+	// For Confluent Cloud, min.insync.replica is invisible and replication factor must be 3.
+	// Otherwise, ErrPolicyViolation is expected to be returned.
+	if !minInsyncReplicaConfigFound &&
+		detail.ReplicationFactor != defaultReplicationFactor {
+		return sarama.ErrPolicyViolation
+	}
+
+	c.topics[topic] = &topicDetail{
+		TopicDetail: *detail,
+	}
 	return nil
 }
 
@@ -148,6 +230,15 @@ func (c *ClusterAdminClientMockImpl) GetTopicMaxMessageBytes() int {
 }
 
 // DropBrokerConfig remove all broker level configuration for test purpose.
-func (c *ClusterAdminClientMockImpl) DropBrokerConfig() {
-	c.brokerConfigs = c.brokerConfigs[:0]
+func (c *ClusterAdminClientMockImpl) DropBrokerConfig(configName string) {
+	targetIdx := 0
+	for i, config := range c.brokerConfigs {
+		if config.Name == configName {
+			targetIdx = i
+		}
+	}
+
+	if targetIdx != 0 {
+		c.brokerConfigs = append(c.brokerConfigs[:targetIdx], c.brokerConfigs[targetIdx+1:]...)
+	}
 }

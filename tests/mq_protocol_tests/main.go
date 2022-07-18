@@ -42,6 +42,7 @@ func testAvro() {
 		cases.NewManyTypesCase(task),
 		cases.NewUnsignedCase(task),
 		cases.NewCompositePKeyCase(task),
+		cases.NewHandleKeyCase(task),
 	}
 
 	runTests(testCases, env)

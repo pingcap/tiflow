@@ -94,6 +94,45 @@ func (t *testCheckSuite) TestShardingTablesChecker(c *tc.C) {
 	c.Assert(result.State, tc.Equals, StateFailure)
 	c.Assert(result.Errors, tc.HasLen, 1)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
+
+	// 4. test tiflow#5759
+	checker = NewShardingTablesChecker("test-name",
+		map[string]*sql.DB{"test-source": db},
+		map[string][]*filter.Table{"test-source": {
+			{Schema: "test-db", Name: "test-table-1"},
+			{Schema: "test-db", Name: "test-table-2"},
+			{Schema: "test-db", Name: "test-table-3"},
+			{Schema: "test-db", Name: "test-table-4"},
+		}},
+		false,
+		1)
+	mock = initShardingMock(mock)
+	createTableRow2 = sqlmock.NewRows([]string{"Table", "Create Table"}).
+		AddRow("test-table-2", `CREATE TABLE "test-table-2" (
+  "c" varchar(20) NOT NULL,
+  PRIMARY KEY ("c")
+) ENGINE=InnoDB DEFAULT CHARSET=latin1`)
+	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-2`").WillReturnRows(createTableRow2)
+	createTableRow3 := sqlmock.NewRows([]string{"Table", "Create Table"}).
+		AddRow("test-table-3", `CREATE TABLE "test-table-3" (
+  "c" varchar(20) NOT NULL,
+  "c2" INT,
+  PRIMARY KEY ("c")
+) ENGINE=InnoDB DEFAULT CHARSET=latin1`)
+	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-3`").WillReturnRows(createTableRow3)
+	createTableRow4 := sqlmock.NewRows([]string{"Table", "Create Table"}).
+		AddRow("test-table-4", `CREATE TABLE "test-table-4" (
+  "c" varchar(20) NOT NULL,
+  "c2" INT,
+  "c3" INT,
+  PRIMARY KEY ("c")
+) ENGINE=InnoDB DEFAULT CHARSET=latin1`)
+	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-4`").WillReturnRows(createTableRow4)
+
+	// in tiflow#5759, this function will enter deadlock
+	result = checker.Check(ctx)
+	c.Assert(result.State, tc.Equals, StateFailure)
+	c.Assert(result.Errors, tc.HasLen, 3)
 }
 
 func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
@@ -174,6 +213,41 @@ func (t *testCheckSuite) TestTablesChecker(c *tc.C) {
 	c.Assert(result.State, tc.Equals, StateFailure)
 	c.Assert(result.Errors, tc.HasLen, 1)
 	c.Assert(mock.ExpectationsWereMet(), tc.IsNil)
+
+	// test #5759
+	maxConnectionsRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("max_connections", "2")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(maxConnectionsRow)
+	sqlModeRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("sql_mode", "ANSI_QUOTES")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
+	createTableRow1 := sqlmock.NewRows([]string{"Table", "Create Table"}).
+		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
+  "c" int(11) NOT NULL
+) ENGINE=InnoDB`)
+	createTableRow2 := sqlmock.NewRows([]string{"Table", "Create Table"}).
+		AddRow("test-table-2", `CREATE TABLE "test-table-2" (
+  "c" int(11) NOT NULL
+) ENGINE=InnoDB`)
+	createTableRow3 := sqlmock.NewRows([]string{"Table", "Create Table"}).
+		AddRow("test-table-3", `CREATE TABLE "test-table-3" (
+  "c" int(11) NOT NULL
+) ENGINE=InnoDB`)
+	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow1)
+	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-2`").WillReturnRows(createTableRow2)
+	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-3`").WillReturnRows(createTableRow3)
+
+	checker = NewTablesChecker(
+		map[string]*sql.DB{"test-source": db},
+		map[string][]*filter.Table{"test-source": {
+			{Schema: "test-db", Name: "test-table-1"},
+			{Schema: "test-db", Name: "test-table-2"},
+			{Schema: "test-db", Name: "test-table-3"},
+		}},
+		1)
+	result = checker.Check(ctx)
+	c.Assert(result.State, tc.Equals, StateFailure)
+	c.Assert(result.Errors, tc.HasLen, 3)
 }
 
 func (t *testCheckSuite) TestOptimisticShardingTablesChecker(c *tc.C) {

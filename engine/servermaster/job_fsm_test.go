@@ -18,9 +18,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/pingcap/tiflow/engine/lib/master"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
-	"github.com/pingcap/tiflow/engine/pb"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 )
 
 func TestJobFsmStateTrans(t *testing.T) {
@@ -29,7 +29,7 @@ func TestJobFsmStateTrans(t *testing.T) {
 	fsm := NewJobFsm()
 
 	id := "fsm-test-job-master-1"
-	job := &libModel.MasterMetaKVData{
+	job := &frameModel.MasterMetaKVData{
 		ID:     id,
 		Config: []byte("simple config"),
 	}
@@ -38,7 +38,7 @@ func TestJobFsmStateTrans(t *testing.T) {
 
 	// Failover, job fsm loads tombstone job master
 	fsm.JobDispatched(job, true)
-	err := fsm.IterWaitAckJobs(func(job *libModel.MasterMetaKVData) (string, error) {
+	err := fsm.IterWaitAckJobs(func(job *frameModel.MasterMetaKVData) (string, error) {
 		createWorkerCount++
 		return id, nil
 	})
@@ -47,7 +47,7 @@ func TestJobFsmStateTrans(t *testing.T) {
 	require.Equal(t, 1, fsm.JobCount(pb.QueryJobResponse_dispatched))
 
 	// job that is not added from failover won't be processed
-	err = fsm.IterWaitAckJobs(func(job *libModel.MasterMetaKVData) (string, error) {
+	err = fsm.IterWaitAckJobs(func(job *frameModel.MasterMetaKVData) (string, error) {
 		createWorkerCount++
 		return id, nil
 	})
@@ -55,9 +55,9 @@ func TestJobFsmStateTrans(t *testing.T) {
 	require.Equal(t, 1, createWorkerCount)
 
 	// OnWorkerOnline, WaitAck -> Online
-	err = fsm.JobOnline(&master.MockHandle{
+	err = fsm.JobOnline(&framework.MockHandle{
 		WorkerID:     id,
-		WorkerStatus: &libModel.WorkerStatus{Code: libModel.WorkerStatusNormal},
+		WorkerStatus: &frameModel.WorkerStatus{Code: frameModel.WorkerStatusNormal},
 		ExecutorID:   "executor-1",
 	})
 	require.Nil(t, err)
@@ -65,17 +65,17 @@ func TestJobFsmStateTrans(t *testing.T) {
 	require.Equal(t, 1, fsm.JobCount(pb.QueryJobResponse_online))
 
 	// OnWorkerOffline, Online -> Pending
-	fsm.JobOffline(&master.MockHandle{
+	fsm.JobOffline(&framework.MockHandle{
 		WorkerID:     id,
-		WorkerStatus: &libModel.WorkerStatus{Code: libModel.WorkerStatusNormal},
+		WorkerStatus: &frameModel.WorkerStatus{Code: frameModel.WorkerStatusNormal},
 		IsTombstone:  true,
 	}, true /* needFailover */)
 	require.Equal(t, 0, fsm.JobCount(pb.QueryJobResponse_online))
 	require.Equal(t, 1, fsm.JobCount(pb.QueryJobResponse_pending))
 
 	// Tick, process pending jobs, Pending -> WaitAck
-	dispatchedJobs := make([]*libModel.MasterMetaKVData, 0)
-	err = fsm.IterPendingJobs(func(job *libModel.MasterMetaKVData) (string, error) {
+	dispatchedJobs := make([]*frameModel.MasterMetaKVData, 0)
+	err = fsm.IterPendingJobs(func(job *frameModel.MasterMetaKVData) (string, error) {
 		dispatchedJobs = append(dispatchedJobs, job)
 		return id, nil
 	})
@@ -84,9 +84,9 @@ func TestJobFsmStateTrans(t *testing.T) {
 	require.Equal(t, 1, fsm.JobCount(pb.QueryJobResponse_dispatched))
 
 	// Dispatch job meets error, WaitAck -> Pending
-	err = fsm.JobDispatchFailed(&master.MockHandle{
+	err = fsm.JobDispatchFailed(&framework.MockHandle{
 		WorkerID:     id,
-		WorkerStatus: &libModel.WorkerStatus{Code: libModel.WorkerStatusNormal},
+		WorkerStatus: &frameModel.WorkerStatus{Code: frameModel.WorkerStatusNormal},
 		IsTombstone:  true,
 	})
 	require.Nil(t, err)
@@ -94,23 +94,23 @@ func TestJobFsmStateTrans(t *testing.T) {
 	require.Equal(t, 0, fsm.JobCount(pb.QueryJobResponse_dispatched))
 
 	// Tick, Pending -> WaitAck
-	err = fsm.IterPendingJobs(func(job *libModel.MasterMetaKVData) (string, error) {
+	err = fsm.IterPendingJobs(func(job *frameModel.MasterMetaKVData) (string, error) {
 		return id, nil
 	})
 	require.Nil(t, err)
 	require.Equal(t, 1, fsm.JobCount(pb.QueryJobResponse_dispatched))
 	// job finished
-	fsm.JobOffline(&master.MockHandle{
+	fsm.JobOffline(&framework.MockHandle{
 		WorkerID:     id,
-		WorkerStatus: &libModel.WorkerStatus{Code: libModel.WorkerStatusNormal},
+		WorkerStatus: &frameModel.WorkerStatus{Code: frameModel.WorkerStatusNormal},
 		IsTombstone:  true,
 	}, false /*needFailover*/)
 	require.Equal(t, 0, fsm.JobCount(pb.QueryJobResponse_dispatched))
 
 	// offline invalid job, will do nothing
-	invalidWorker := &master.MockHandle{
+	invalidWorker := &framework.MockHandle{
 		WorkerID:     id + "invalid",
-		WorkerStatus: &libModel.WorkerStatus{Code: libModel.WorkerStatusNormal},
+		WorkerStatus: &frameModel.WorkerStatus{Code: frameModel.WorkerStatusNormal},
 		ExecutorID:   "executor-1",
 	}
 

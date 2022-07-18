@@ -17,12 +17,12 @@ import (
 	"math"
 	"time"
 
+	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tidb/sessionctx"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/syncer/metrics"
 )
 
 // causality provides a simple mechanism to improve the concurrency of SQLs execution under the premise of ensuring correctness.
@@ -38,22 +38,24 @@ type causality struct {
 	sessCtx     sessionctx.Context
 	workerCount int
 
-	// for metrics
-	task   string
-	source string
+	// for MetricsProxies
+	task          string
+	source        string
+	metricProxies *metrics.Proxies
 }
 
 // causalityWrap creates and runs a causality instance.
 func causalityWrap(inCh chan *job, syncer *Syncer) chan *job {
 	causality := &causality{
-		relation:    newCausalityRelation(),
-		task:        syncer.cfg.Name,
-		source:      syncer.cfg.SourceID,
-		logger:      syncer.tctx.Logger.WithFields(zap.String("component", "causality")),
-		inCh:        inCh,
-		outCh:       make(chan *job, syncer.cfg.QueueSize),
-		sessCtx:     syncer.sessCtx,
-		workerCount: syncer.cfg.WorkerCount,
+		relation:      newCausalityRelation(),
+		task:          syncer.cfg.Name,
+		source:        syncer.cfg.SourceID,
+		metricProxies: syncer.metricsProxies,
+		logger:        syncer.tctx.Logger.WithFields(zap.String("component", "causality")),
+		inCh:          inCh,
+		outCh:         make(chan *job, syncer.cfg.QueueSize),
+		sessCtx:       syncer.sessCtx,
+		workerCount:   syncer.cfg.WorkerCount,
 	}
 
 	go func() {
@@ -68,7 +70,7 @@ func causalityWrap(inCh chan *job, syncer *Syncer) chan *job {
 // When meet conflict, sends a conflict job.
 func (c *causality) run() {
 	for j := range c.inCh {
-		metrics.QueueSizeGauge.WithLabelValues(c.task, "causality_input", c.source).Set(float64(len(c.inCh)))
+		c.metricProxies.QueueSizeGauge.WithLabelValues(c.task, "causality_input", c.source).Set(float64(len(c.inCh)))
 
 		startTime := time.Now()
 
@@ -91,7 +93,7 @@ func (c *causality) run() {
 			j.dmlQueueKey = c.add(keys)
 			c.logger.Debug("key for keys", zap.String("key", j.dmlQueueKey), zap.Strings("keys", keys))
 		}
-		metrics.ConflictDetectDurationHistogram.WithLabelValues(c.task, c.source).Observe(time.Since(startTime).Seconds())
+		c.metricProxies.Metrics.ConflictDetectDurationHistogram.Observe(time.Since(startTime).Seconds())
 
 		c.outCh <- j
 	}

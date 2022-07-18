@@ -11,19 +11,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Copyright 2022 PingCAP, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package main
 
 import (
@@ -38,7 +25,8 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.uber.org/zap"
 )
 
@@ -62,8 +50,7 @@ func main() {
 		return
 	}
 
-	err = log.InitLogger(&log.Config{
-		File:  "chaos-case.log",
+	err = logutil.InitLogger(&logutil.Config{
 		Level: "info",
 	})
 	if err != nil {
@@ -90,14 +77,14 @@ func main() {
 		syscall.SIGQUIT)
 	go func() {
 		sig := <-sc
-		log.L().Info("got signal to exit", zap.Stringer("signal", sig))
+		log.Info("got signal to exit", zap.Stringer("signal", sig))
 		cancel()
 	}()
 
 	// run tests cases
-	err = runCases(ctx)
+	err = runCases(ctx, cfg)
 	if err != nil {
-		log.L().Error("run cases failed", zap.Error(err))
+		log.Error("run cases failed", zap.Error(err))
 		code = 2
 		return
 	}

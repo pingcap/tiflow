@@ -14,36 +14,32 @@
 package dumpling
 
 import (
-	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/dumpling/export"
-	"github.com/prometheus/client_golang/prometheus"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
-// should alert.
-var dumplingExitWithErrorCounter = metricsproxy.NewCounterVec(
-	prometheus.CounterOpts{
-		Namespace: "dm",
-		Subsystem: "dumpling",
-		Name:      "exit_with_error_count",
-		Help:      "counter for dumpling exit with error",
-	}, []string{"task", "source_id"})
+type metricProxies struct {
+	dumplingExitWithErrorCounter *metricsproxy.CounterVecProxy
+}
+
+var defaultMetricProxies = &metricProxies{
+	dumplingExitWithErrorCounter: metricsproxy.NewCounterVec(
+		&promutil.PromFactory{},
+		prometheus.CounterOpts{
+			Namespace: "dm",
+			Subsystem: "dumpling",
+			Name:      "exit_with_error_count",
+			Help:      "counter for dumpling exit with error",
+		}, []string{"task", "source_id"}),
+}
 
 // RegisterMetrics registers metrics and saves the given registry for later use.
 func RegisterMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(dumplingExitWithErrorCounter)
-	export.InitMetricsVector(prometheus.Labels{"task": "", "source_id": ""})
-	export.RegisterMetrics(registry)
+	registry.MustRegister(defaultMetricProxies.dumplingExitWithErrorCounter)
 }
 
 func (m *Dumpling) removeLabelValuesWithTaskInMetrics(task, source string) {
 	labels := prometheus.Labels{"task": task, "source_id": source}
-	dumplingExitWithErrorCounter.DeleteAllAboutLabels(labels)
-	failpoint.Inject("SkipRemovingDumplingMetrics", func(_ failpoint.Value) {
-		m.logger.Info("", zap.String("failpoint", "SkipRemovingDumplingMetrics"))
-		failpoint.Return()
-	})
-	export.RemoveLabelValuesWithTaskInMetrics(labels)
+	m.metricProxies.dumplingExitWithErrorCounter.DeleteAllAboutLabels(labels)
 }

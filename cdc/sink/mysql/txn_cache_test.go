@@ -264,9 +264,11 @@ func TestSplitResolvedTxn(test *testing.T) {
 	for _, tc := range testCases {
 		cache := newUnresolvedTxnCache()
 		for _, t := range tc {
-			cache.Append(nil, t.input...)
+			cache.Append(t.input...)
 			resolvedTsMap := sync.Map{}
+			expectedCheckpointTsMap := make(map[model.TableID]model.ResolvedTs)
 			for tableID, ts := range t.resolvedTsMap {
+				expectedCheckpointTsMap[tableID] = model.NewResolvedTs(ts)
 				resolvedTsMap.Store(tableID, model.NewResolvedTs(ts))
 			}
 			checkpointTsMap, resolvedTxn := cache.Resolved(&resolvedTsMap)
@@ -280,7 +282,7 @@ func TestSplitResolvedTxn(test *testing.T) {
 				resolvedTxn[tableID] = txns
 			}
 			require.Equal(test, t.expected, resolvedTxn, cmp.Diff(resolvedTxn, t.expected))
-			require.Equal(test, t.resolvedTsMap, checkpointTsMap)
+			require.Equal(test, expectedCheckpointTsMap, checkpointTsMap)
 		}
 	}
 }

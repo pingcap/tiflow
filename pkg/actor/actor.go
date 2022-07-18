@@ -18,10 +18,10 @@ import (
 	"sync/atomic"
 
 	"github.com/pingcap/tiflow/pkg/actor/message"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
-var errMailboxFull = cerrors.ErrMailboxFull.FastGenByArgs()
+var errMailboxFull = errors.ErrMailboxFull.FastGenByArgs()
 
 // ID is ID for actors.
 type ID uint64

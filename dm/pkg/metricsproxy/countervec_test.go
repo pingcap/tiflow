@@ -18,6 +18,7 @@ import (
 	"time"
 
 	. "github.com/pingcap/check"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -25,13 +26,14 @@ import (
 func (t *testMetricsProxySuite) TestCounterVecProxy(c *C) {
 	rand.Seed(time.Now().UnixNano())
 	for _, oneCase := range testCases {
-		counter := NewCounterVec(prometheus.CounterOpts{
-			Namespace:   "dm",
-			Subsystem:   "metricsProxy",
-			Name:        "Test_Counter",
-			Help:        "dm counter metrics proxy test",
-			ConstLabels: nil,
-		}, oneCase.LabelsNames)
+		counter := NewCounterVec(&promutil.PromFactory{},
+			prometheus.CounterOpts{
+				Namespace:   "dm",
+				Subsystem:   "metricsProxy",
+				Name:        "Test_Counter",
+				Help:        "dm counter metrics proxy test",
+				ConstLabels: nil,
+			}, oneCase.LabelsNames)
 		for _, aArgs := range oneCase.AddArgs {
 			if rand.Intn(199)%2 == 0 {
 				counter.WithLabelValues(aArgs...).Add(float64(rand.Intn(199)))

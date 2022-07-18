@@ -15,8 +15,6 @@ package etcd
 
 import (
 	"context"
-	"io/ioutil"
-	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -119,12 +117,9 @@ func TestRetry(t *testing.T) {
 
 func TestDelegateLease(t *testing.T) {
 	ctx := context.Background()
-	dir, err := ioutil.TempDir("", "delegate-lease-test")
-	require.Nil(t, err)
-	url, server, err := SetupEmbedEtcd(dir)
+	url, server, err := SetupEmbedEtcd(t.TempDir())
 	defer func() {
 		server.Close()
-		os.RemoveAll(dir)
 	}()
 	require.Nil(t, err)
 	cli, err := clientv3.New(clientv3.Config{

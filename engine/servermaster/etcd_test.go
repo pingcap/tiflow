@@ -15,19 +15,18 @@ package servermaster
 
 import (
 	"fmt"
-	"io/ioutil"
 	"testing"
 	"time"
 
 	"github.com/phayes/freeport"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
+	"github.com/pingcap/tiflow/engine/pkg/etcdutil"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/server/v3/embed"
 )
 
 func init() {
-	err := log.InitLogger(&log.Config{Level: "warn"})
+	err := logutil.InitLogger(&logutil.Config{Level: "warn"})
 	if err != nil {
 		panic(err)
 	}
@@ -44,24 +43,26 @@ func TestStartEtcdTimeout(t *testing.T) {
 
 	name1 := "test-start-etcd-timeout-1"
 	name2 := "test-start-etcd-timeout-2"
-	dir, err := ioutil.TempDir("", name1)
-	require.Nil(t, err)
 
 	masterAddr := allocTempURL(t)
 	advertiseAddr := masterAddr
-	cfgCluster := &etcdutils.ConfigParams{}
+	cfgCluster := &etcdutil.ConfigParams{}
 	cfgCluster.Name = name1
-	cfgCluster.DataDir = dir
+	cfgCluster.DataDir = t.TempDir()
 	peer1 := allocTempURL(t)
-	peer2 := allocTempURL(t)
+	peer2 := peer1
+	require.Eventually(t, func() bool {
+		peer2 = allocTempURL(t)
+		return peer2 != peer1
+	}, time.Second, time.Millisecond*10)
 	cfgCluster.PeerUrls = "http://" + peer1
 	cfgCluster.InitialCluster = fmt.Sprintf("%s=http://%s,%s=http://%s", name1, peer1, name2, peer2)
 	cfgCluster.Adjust("", embed.ClusterStateFlagNew)
 
-	cfgClusterEtcd := etcdutils.GenEmbedEtcdConfigWithLogger("info")
-	cfgClusterEtcd, err = etcdutils.GenEmbedEtcdConfig(cfgClusterEtcd, masterAddr, advertiseAddr, cfgCluster)
+	cfgClusterEtcd := etcdutil.GenEmbedEtcdConfigWithLogger("info")
+	cfgClusterEtcd, err := etcdutil.GenEmbedEtcdConfig(cfgClusterEtcd, masterAddr, advertiseAddr, cfgCluster)
 	require.Nil(t, err)
 
-	_, err = etcdutils.StartEtcd(cfgClusterEtcd, nil, nil, time.Millisecond*100)
+	_, err = etcdutil.StartEtcd(cfgClusterEtcd, nil, nil, time.Millisecond*100)
 	require.EqualError(t, err, "[DFLOW:ErrMasterStartEmbedEtcdFail]start embed etcd timeout 100ms")
 }

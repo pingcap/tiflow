@@ -42,9 +42,9 @@ type testLocationSuite struct {
 
 	loc binlog.Location
 
-	prevGSet gtid.Set
-	lastGTID gtid.Set
-	currGSet gtid.Set
+	prevGSet mysql.GTIDSet
+	lastGTID mysql.GTIDSet
+	currGSet mysql.GTIDSet
 }
 
 func (s *testLocationSuite) SetUpTest(c *C) {
@@ -71,7 +71,7 @@ func (s *testLocationSuite) SetUpTest(c *C) {
 			Pos:  s.binlogPos,
 		},
 	}
-	prevGSet := s.prevGSet.Origin()
+	prevGSet := s.prevGSet
 	c.Assert(s.loc.SetGTID(prevGSet), IsNil)
 
 	s.eventsGenerator, err = event.NewGenerator(s.flavor, s.serverID, s.binlogPos, s.lastGTID, s.prevGSet, 0)
@@ -142,9 +142,9 @@ func (s *testLocationSuite) updateLastEventGSet(c *C, events []*replication.Binl
 	e := events[len(events)-1]
 	switch v := e.Event.(type) {
 	case *replication.XIDEvent:
-		v.GSet = s.currGSet.Origin()
+		v.GSet = s.currGSet
 	case *replication.QueryEvent:
-		v.GSet = s.currGSet.Origin()
+		v.GSet = s.currGSet
 	default:
 		c.Fatalf("last event is not expected, type %v", e.Header.EventType)
 	}
@@ -237,14 +237,14 @@ func (s *testLocationSuite) TestDMLUpdateLocationsGTID(c *C) {
 
 	expected := s.generateExpectedLocations(s.loc, events)
 
-	c.Assert(expected[8].SetGTID(s.currGSet.Origin()), IsNil)
+	c.Assert(expected[8].SetGTID(s.currGSet), IsNil)
 
 	s.checkOneTxnEvents(c, events, expected)
 }
 
 func (s *testLocationSuite) TestDMLUpdateLocationsPos(c *C) {
 	loc := s.loc
-	err := loc.SetGTID(nil)
+	err := loc.SetGTID(gtid.MustZeroGTIDSet(mysql.MySQLFlavor))
 	c.Assert(err, IsNil)
 
 	events := s.generateDMLEvents(c)
@@ -270,14 +270,14 @@ func (s *testLocationSuite) TestDDLUpdateLocationsGTID(c *C) {
 
 	expected := s.generateExpectedLocations(s.loc, events)
 
-	c.Assert(expected[5].SetGTID(s.currGSet.Origin()), IsNil)
+	c.Assert(expected[5].SetGTID(s.currGSet), IsNil)
 
 	s.checkOneTxnEvents(c, events, expected)
 }
 
 func (s *testLocationSuite) TestDDLUpdateLocationsPos(c *C) {
 	loc := s.loc
-	err := loc.SetGTID(nil)
+	err := loc.SetGTID(gtid.MustZeroGTIDSet(mysql.MySQLFlavor))
 	c.Assert(err, IsNil)
 
 	events := s.generateDDLEvents(c)
@@ -318,7 +318,7 @@ func (s *testLocationSuite) TestDMLQueryUpdateLocationsGTID(c *C) {
 
 	expected := s.generateExpectedLocations(s.loc, events)
 
-	c.Assert(expected[7].SetGTID(s.currGSet.Origin()), IsNil)
+	c.Assert(expected[7].SetGTID(s.currGSet), IsNil)
 
 	s.checkOneTxnEvents(c, events, expected)
 }
@@ -364,7 +364,7 @@ func (s *testLocationSuite) TestRotateEvent(c *C) {
 	c.Assert(events[6].Header.EventType, Equals, replication.PREVIOUS_GTIDS_EVENT)
 	expected[7].Position.Pos = 4
 
-	c.Assert(expected[12].SetGTID(s.currGSet.Origin()), IsNil)
+	c.Assert(expected[12].SetGTID(s.currGSet), IsNil)
 
 	s.checkOneTxnEvents(c, events[:4], expected[:5])
 	s.checkOneTxnEvents(c, events[4:], expected[4:])

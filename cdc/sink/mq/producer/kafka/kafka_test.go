@@ -328,10 +328,13 @@ func TestAdjustConfigMinInsyncReplicas(t *testing.T) {
 	)
 
 	// topic not exist, and `min.insync.replicas` not found in broker's configuration
-	adminClient.DropBrokerConfig()
+	adminClient.DropBrokerConfig(kafka.MinInsyncReplicasConfigName)
+	topicName := "no-topic-no-min-insync-replicas"
 	err = AdjustConfig(adminClient, config, saramaConfig, "no-topic-no-min-insync-replicas")
-	require.Regexp(t, ".*cannot find the `min.insync.replicas` from the broker's configuration",
-		errors.Cause(err))
+	require.Nil(t, err)
+	err = adminClient.CreateTopic(topicName, &sarama.TopicDetail{ReplicationFactor: 1}, false)
+	require.Regexp(t, ".*kafka server: Request parameters do not satisfy the configured policy.",
+		err.Error())
 
 	// Report an error if the replication-factor is less than min.insync.replicas
 	// when the topic does exist.
@@ -339,12 +342,14 @@ func TestAdjustConfigMinInsyncReplicas(t *testing.T) {
 	require.Nil(t, err)
 
 	// topic exist, but `min.insync.replicas` not found in topic and broker configuration
-	topicName := "topic-no-config-entry"
-	err = adminClient.CreateTopic(topicName, &sarama.TopicDetail{}, false)
+	topicName = "topic-no-config-entry"
+	err = adminClient.CreateTopic(topicName, &sarama.TopicDetail{
+		ReplicationFactor: 3,
+		NumPartitions:     3,
+	}, false)
 	require.Nil(t, err)
 	err = AdjustConfig(adminClient, config, saramaConfig, topicName)
-	require.Regexp(t, ".*cannot find the `min.insync.replicas` from the broker's configuration",
-		errors.Cause(err))
+	require.Nil(t, err)
 
 	// topic found, and have `min.insync.replicas`, but set to 2, larger than `replication-factor`.
 	adminClient.SetMinInsyncReplicas("2")

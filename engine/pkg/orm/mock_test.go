@@ -19,10 +19,10 @@ import (
 	"testing"
 	"time"
 
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
-	cerrors "github.com/pingcap/tiflow/engine/pkg/errors"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/orm/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -185,7 +185,7 @@ func TestProjectMock(t *testing.T) {
 			inputs: []interface{}{
 				"p113",
 			},
-			err: cerrors.ErrMetaEntryNotFound.GenWithStackByArgs(),
+			err: errors.ErrMetaEntryNotFound.GenWithStackByArgs(),
 		},
 	}
 
@@ -298,7 +298,7 @@ func TestJobMock(t *testing.T) {
 		{
 			fn: "UpsertJob",
 			inputs: []interface{}{
-				&libModel.MasterMetaKVData{
+				&frameModel.MasterMetaKVData{
 					Model: model.Model{
 						CreatedAt: createdAt,
 						UpdatedAt: updatedAt,
@@ -317,7 +317,7 @@ func TestJobMock(t *testing.T) {
 		{
 			fn: "UpsertJob",
 			inputs: []interface{}{
-				&libModel.MasterMetaKVData{
+				&frameModel.MasterMetaKVData{
 					ProjectID:  "p111",
 					ID:         "j111",
 					Tp:         1,
@@ -353,7 +353,7 @@ func TestJobMock(t *testing.T) {
 			inputs: []interface{}{
 				"j111",
 			},
-			output: &libModel.MasterMetaKVData{
+			output: &frameModel.MasterMetaKVData{
 				Model: model.Model{
 					SeqID:     1,
 					CreatedAt: createdAt,
@@ -374,7 +374,7 @@ func TestJobMock(t *testing.T) {
 			inputs: []interface{}{
 				"j113",
 			},
-			err: cerrors.ErrMetaEntryNotFound.GenWithStackByArgs(),
+			err: errors.ErrMetaEntryNotFound.GenWithStackByArgs(),
 		},
 		{
 			// SELECT * FROM `master_meta_kv_data` WHERE project_id = '111-222-333'
@@ -382,7 +382,7 @@ func TestJobMock(t *testing.T) {
 			inputs: []interface{}{
 				"p111",
 			},
-			output: []*libModel.MasterMetaKVData{
+			output: []*frameModel.MasterMetaKVData{
 				{
 					Model: model.Model{
 						SeqID:     1,
@@ -405,7 +405,7 @@ func TestJobMock(t *testing.T) {
 			inputs: []interface{}{
 				"p113",
 			},
-			output: []*libModel.MasterMetaKVData{},
+			output: []*frameModel.MasterMetaKVData{},
 		},
 		{
 			//  SELECT * FROM `master_meta_kv_data` WHERE project_id = '111-222-333' AND job_status = 1
@@ -414,7 +414,7 @@ func TestJobMock(t *testing.T) {
 				"j111",
 				2,
 			},
-			output: []*libModel.MasterMetaKVData{
+			output: []*frameModel.MasterMetaKVData{
 				{
 					Model: model.Model{
 						SeqID:     1,
@@ -438,7 +438,7 @@ func TestJobMock(t *testing.T) {
 				"j113",
 				1,
 			},
-			output: []*libModel.MasterMetaKVData{},
+			output: []*frameModel.MasterMetaKVData{},
 		},
 	}
 
@@ -467,7 +467,7 @@ func TestWorkerMock(t *testing.T) {
 			// '111-222-333','111','222',1,1,'error','<binary>',1)
 			fn: "UpsertWorker",
 			inputs: []interface{}{
-				&libModel.WorkerStatus{
+				&frameModel.WorkerStatus{
 					Model: model.Model{
 						CreatedAt: createdAt,
 						UpdatedAt: updatedAt,
@@ -485,7 +485,7 @@ func TestWorkerMock(t *testing.T) {
 		{
 			fn: "UpsertWorker",
 			inputs: []interface{}{
-				&libModel.WorkerStatus{
+				&frameModel.WorkerStatus{
 					Model: model.Model{
 						CreatedAt: createdAt,
 						UpdatedAt: updatedAt,
@@ -529,7 +529,7 @@ func TestWorkerMock(t *testing.T) {
 				"j111",
 				"w222",
 			},
-			output: &libModel.WorkerStatus{
+			output: &frameModel.WorkerStatus{
 				Model: model.Model{
 					SeqID:     1,
 					CreatedAt: createdAt,
@@ -550,7 +550,7 @@ func TestWorkerMock(t *testing.T) {
 				"j111",
 				"w225",
 			},
-			err: cerrors.ErrMetaEntryNotFound.GenWithStackByArgs(),
+			err: errors.ErrMetaEntryNotFound.GenWithStackByArgs(),
 		},
 		{
 			// SELECT * FROM `worker_statuses` WHERE project_id = '111-222-333' AND job_id = '111'
@@ -558,7 +558,7 @@ func TestWorkerMock(t *testing.T) {
 			inputs: []interface{}{
 				"j111",
 			},
-			output: []*libModel.WorkerStatus{
+			output: []*frameModel.WorkerStatus{
 				{
 					Model: model.Model{
 						SeqID:     1,
@@ -580,7 +580,7 @@ func TestWorkerMock(t *testing.T) {
 			inputs: []interface{}{
 				"j113",
 			},
-			output: []*libModel.WorkerStatus{},
+			output: []*frameModel.WorkerStatus{},
 		},
 		{
 			// SELECT * FROM `worker_statuses` WHERE project_id = '111-222-333' AND job_id = '111' AND worker_statuses = 1
@@ -589,7 +589,7 @@ func TestWorkerMock(t *testing.T) {
 				"j111",
 				1,
 			},
-			output: []*libModel.WorkerStatus{
+			output: []*frameModel.WorkerStatus{
 				{
 					Model: model.Model{
 						SeqID:     1,
@@ -612,7 +612,7 @@ func TestWorkerMock(t *testing.T) {
 				"j111",
 				4,
 			},
-			output: []*libModel.WorkerStatus{},
+			output: []*frameModel.WorkerStatus{},
 		},
 	}
 
@@ -672,7 +672,10 @@ func TestResourceMock(t *testing.T) {
 		{
 			fn: "DeleteResource",
 			inputs: []interface{}{
-				"r334",
+				ResourceKey{
+					JobID: "j111",
+					ID:    "r334",
+				},
 			},
 			output: &ormResult{
 				rowsAffected: 1,
@@ -681,7 +684,10 @@ func TestResourceMock(t *testing.T) {
 		{
 			fn: "DeleteResource",
 			inputs: []interface{}{
-				"r335",
+				ResourceKey{
+					JobID: "j111",
+					ID:    "r335",
+				},
 			},
 			output: &ormResult{
 				rowsAffected: 0,
@@ -690,7 +696,10 @@ func TestResourceMock(t *testing.T) {
 		{
 			fn: "GetResourceByID",
 			inputs: []interface{}{
-				"r333",
+				ResourceKey{
+					JobID: "j111",
+					ID:    "r333",
+				},
 			},
 			output: &resourcemeta.ResourceMeta{
 				Model: model.Model{
@@ -709,9 +718,12 @@ func TestResourceMock(t *testing.T) {
 		{
 			fn: "GetResourceByID",
 			inputs: []interface{}{
-				"r335",
+				ResourceKey{
+					JobID: "j111",
+					ID:    "r335",
+				},
 			},
-			err: cerrors.ErrMetaEntryNotFound.GenWithStackByArgs(),
+			err: errors.ErrMetaEntryNotFound.GenWithStackByArgs(),
 		},
 		{
 			fn: "QueryResourcesByJobID",
@@ -807,7 +819,7 @@ func testInnerMock(t *testing.T, cli Client, c mCase) {
 			// require.True(t, res[0].Interface().(bool))
 		} else {
 			require.NotNil(t, result[0].Interface())
-			// log.L().Info("result", zap.Any("expect", c.output), zap.Any("actual", result[0].Interface()))
+			// log.Info("result", zap.Any("expect", c.output), zap.Any("actual", result[0].Interface()))
 			// FIXME: datetime is different from what we insert. Why??
 			// require.Equal(t, c.output, result[0].Interface())
 		}

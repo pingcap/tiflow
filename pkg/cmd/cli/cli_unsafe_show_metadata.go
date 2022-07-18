@@ -15,15 +15,15 @@ package cli
 
 import (
 	"github.com/pingcap/errors"
+	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	"github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
-	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/spf13/cobra"
 )
 
 // unsafeShowMetadataOptions defines flags for the `cli unsafe show-metadata` command.
 type unsafeShowMetadataOptions struct {
-	etcdClient *etcd.CDCEtcdClient
+	apiClient apiv2client.APIV2Interface
 }
 
 // newUnsafeShowMetadataOptions creates new unsafeShowMetadataOptions
@@ -34,13 +34,11 @@ func newUnsafeShowMetadataOptions() *unsafeShowMetadataOptions {
 
 // complete adapts from the command line args to the data and client required.
 func (o *unsafeShowMetadataOptions) complete(f factory.Factory) error {
-	etcdClient, err := f.EtcdClient()
+	apiClient, err := f.APIV2Client()
 	if err != nil {
 		return err
 	}
-
-	o.etcdClient = etcdClient
-
+	o.apiClient = apiClient
 	return nil
 }
 
@@ -48,15 +46,15 @@ func (o *unsafeShowMetadataOptions) complete(f factory.Factory) error {
 func (o *unsafeShowMetadataOptions) run(cmd *cobra.Command) error {
 	ctx := context.GetDefaultContext()
 
-	kvs, err := o.etcdClient.GetAllCDCInfo(ctx)
+	kvs, err := o.apiClient.Unsafe().Metadata(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	for _, kv := range kvs {
-		cmd.Printf("Key: %s, Value: %s\n", string(kv.Key), string(kv.Value))
+	for _, kv := range *kvs {
+		cmd.Printf("Key: %s, Value: %s\n", kv.Key, kv.Value)
 	}
-	cmd.Printf("Show %d KVs\n", len(kvs))
+	cmd.Printf("Show %d KVs\n", len(*kvs))
 
 	return nil
 }

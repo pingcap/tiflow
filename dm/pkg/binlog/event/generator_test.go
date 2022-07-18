@@ -121,7 +121,7 @@ func (t *testGeneratorSuite) TestGenerateForMariaDB(c *C) {
 	t.testGenerate(c, flavor, serverID, latestGTID, previousGTIDSet, latestXID)
 }
 
-func (t *testGeneratorSuite) testGenerate(c *C, flavor string, serverID uint32, latestGTID gtid.Set, previousGTIDSet gtid.Set, latestXID uint64) {
+func (t *testGeneratorSuite) testGenerate(c *C, flavor string, serverID uint32, latestGTID gmysql.GTIDSet, previousGTIDSet gmysql.GTIDSet, latestXID uint64) {
 	// write some events to file
 	dir := c.MkDir()
 	filename := filepath.Join(dir, "mysql-bin-test.000001")

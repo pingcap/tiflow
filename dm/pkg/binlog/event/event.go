@@ -23,7 +23,6 @@ import (
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 
-	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
@@ -200,18 +199,13 @@ func GenRotateEvent(header *replication.EventHeader, latestPos uint32, nextLogNa
 // we ref:
 //   a. https://github.com/vitessio/vitess/blob/28e7e5503a6c3d3b18d4925d95f23ebcb6f25c8e/go/mysql/binlog_event_mysql56.go#L56
 //   b. https://dev.mysql.com/doc/internals/en/com-binlog-dump-gtid.html
-func GenPreviousGTIDsEvent(header *replication.EventHeader, latestPos uint32, gSet gtid.Set) (*replication.BinlogEvent, error) {
+func GenPreviousGTIDsEvent(header *replication.EventHeader, latestPos uint32, gSet gmysql.GTIDSet) (*replication.BinlogEvent, error) {
 	if gSet == nil {
 		return nil, terror.ErrBinlogEmptyGTID.Generate()
 	}
 
-	origin := gSet.Origin()
-	if origin == nil {
-		return nil, terror.ErrBinlogGTIDMySQLNotValid.Generate(gSet.String())
-	}
-
 	// event payload, GTID set encoded in it
-	payload := origin.Encode()
+	payload := gSet.Encode()
 
 	buf := new(bytes.Buffer)
 	event := &replication.PreviousGTIDsEvent{}
@@ -720,16 +714,12 @@ func GenXIDEvent(header *replication.EventHeader, latestPos uint32, xid uint64) 
 
 // GenMariaDBGTIDListEvent generates a MariadbGTIDListEvent.
 // ref: https://mariadb.com/kb/en/library/gtid_list_event/
-func GenMariaDBGTIDListEvent(header *replication.EventHeader, latestPos uint32, gSet gtid.Set) (*replication.BinlogEvent, error) {
+func GenMariaDBGTIDListEvent(header *replication.EventHeader, latestPos uint32, gSet gmysql.GTIDSet) (*replication.BinlogEvent, error) {
 	if gSet == nil || len(gSet.String()) == 0 {
 		return nil, terror.ErrBinlogEmptyGTID.Generate()
 	}
 
-	origin := gSet.Origin()
-	if origin == nil {
-		return nil, terror.ErrBinlogGTIDMariaDBNotValid.Generate(gSet.String())
-	}
-	mariaDBGSet, ok := origin.(*gmysql.MariadbGTIDSet)
+	mariaDBGSet, ok := gSet.(*gmysql.MariadbGTIDSet)
 	if !ok {
 		return nil, terror.ErrBinlogGTIDMariaDBNotValid.Generate(gSet.String())
 	}

@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net"
 	"net/url"
 	"strings"
 	"sync"
@@ -58,7 +59,10 @@ func NewSimpleMySQLSink(
 		port = "4000"
 	}
 
-	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/?multiStatements=true", username, password, sinkURI.Hostname(), port)
+	// This will handle the IPv6 address format.
+	host := net.JoinHostPort(sinkURI.Hostname(), port)
+
+	dsnStr := fmt.Sprintf("%s:%s@tcp(%s)/?multiStatements=true", username, password, host)
 	dsn, err := dmysql.ParseDSN(dsnStr)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
@@ -179,7 +183,7 @@ func (s *simpleMySQLSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent)
 // TiCDC guarantees that all of Event which of commitTs less than or equal to `resolvedTs` are sent to Sink through `EmitRowChangedEvents`
 func (s *simpleMySQLSink) FlushRowChangedEvents(
 	ctx context.Context, _ model.TableID, resolved model.ResolvedTs,
-) (uint64, error) {
+) (model.ResolvedTs, error) {
 	s.rowsBufferLock.Lock()
 	defer s.rowsBufferLock.Unlock()
 	newBuffer := make([]*model.RowChangedEvent, 0, len(s.rowsBuffer))
@@ -187,14 +191,14 @@ func (s *simpleMySQLSink) FlushRowChangedEvents(
 		if row.CommitTs <= resolved.Ts {
 			err := s.executeRowChangedEvents(ctx, row)
 			if err != nil {
-				return 0, err
+				return model.NewResolvedTs(0), err
 			}
 		} else {
 			newBuffer = append(newBuffer, row)
 		}
 	}
 	s.rowsBuffer = newBuffer
-	return resolved.Ts, nil
+	return resolved, nil
 }
 
 // EmitCheckpointTs sends CheckpointTs to Sink

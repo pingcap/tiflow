@@ -320,7 +320,7 @@ func (w *Worker) dispatchSQL(ctx context.Context, file string, offset int64, tab
 		})
 
 		if err2 != nil {
-			w.logger.Error("fail to initial checkpoint", zap.String("data file", file), zap.Int64("offset", offset), log.ShortError(err2))
+			w.logger.Error("fail to initialize checkpoint", zap.String("data file", file), zap.Int64("offset", offset), log.ShortError(err2))
 			return err2
 		}
 	}
@@ -540,8 +540,13 @@ func (l *Loader) Init(ctx context.Context) (err error) {
 	}
 	timeZone := l.cfg.Timezone
 	if len(timeZone) == 0 {
+		baseDB, err2 := conn.DefaultDBProvider.Apply(&l.cfg.To)
+		if err2 != nil {
+			return err2
+		}
+		defer baseDB.Close()
 		var err1 error
-		timeZone, err1 = conn.FetchTimeZoneSetting(ctx, &lcfg.To)
+		timeZone, err1 = config.FetchTimeZoneSetting(ctx, baseDB.DB)
 		if err1 != nil {
 			return err1
 		}

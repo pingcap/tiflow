@@ -30,8 +30,8 @@ type Generator struct {
 	Flavor        string
 	ServerID      uint32
 	LatestPos     uint32
-	LatestGTID    gtid.Set
-	ExecutedGTIDs gtid.Set
+	LatestGTID    gmysql.GTIDSet
+	ExecutedGTIDs gmysql.GTIDSet
 	LatestXID     uint64
 
 	GenGTID       bool
@@ -39,7 +39,7 @@ type Generator struct {
 }
 
 // NewGenerator creates a new instance of Generator.
-func NewGenerator(flavor string, serverID uint32, latestPos uint32, latestGTID gtid.Set, previousGTIDs gtid.Set, latestXID uint64) (*Generator, error) {
+func NewGenerator(flavor string, serverID uint32, latestPos uint32, latestGTID gmysql.GTIDSet, previousGTIDs gmysql.GTIDSet, latestXID uint64) (*Generator, error) {
 	return newGenerator(flavor, "5.7.0", serverID, latestPos, latestGTID, previousGTIDs, latestXID, true)
 }
 
@@ -49,12 +49,7 @@ func NewGeneratorV2(flavor, version, latestGTIDStr string, enableGTID bool) (*Ge
 	return newGenerator(flavor, version, 1, 0, latestGTID, previousGTIDSet, 0, enableGTID)
 }
 
-func newGenerator(flavor, version string, serverID uint32, latestPos uint32, latestGTID gtid.Set, previousGTIDs gtid.Set, latestXID uint64, genGTID bool) (*Generator, error) {
-	prevOrigin := previousGTIDs.Origin()
-	if prevOrigin == nil {
-		return nil, terror.ErrPreviousGTIDsNotValid.Generate(previousGTIDs)
-	}
-
+func newGenerator(flavor, version string, serverID uint32, latestPos uint32, latestGTID gmysql.GTIDSet, previousGTIDs gmysql.GTIDSet, latestXID uint64, genGTID bool) (*Generator, error) {
 	singleGTID, err := verifySingleGTID(flavor, latestGTID)
 	if err != nil {
 		return nil, terror.Annotate(err, "verify single latest GTID in set")
@@ -63,7 +58,7 @@ func newGenerator(flavor, version string, serverID uint32, latestPos uint32, lat
 	switch flavor {
 	case gmysql.MySQLFlavor:
 		uuidSet := singleGTID.(*gmysql.UUIDSet)
-		prevGSet, ok := prevOrigin.(*gmysql.MysqlGTIDSet)
+		prevGSet, ok := previousGTIDs.(*gmysql.MysqlGTIDSet)
 		if !ok || prevGSet == nil {
 			return nil, terror.ErrBinlogGTIDMySQLNotValid.Generate(previousGTIDs)
 		}
@@ -88,7 +83,7 @@ func newGenerator(flavor, version string, serverID uint32, latestPos uint32, lat
 			return nil, terror.ErrBinlogMariaDBServerIDMismatch.Generate(mariaGTID.ServerID, serverID)
 		}
 		// latestGTID should be one of previousGTIDs
-		prevGSet, ok := prevOrigin.(*gmysql.MariadbGTIDSet)
+		prevGSet, ok := previousGTIDs.(*gmysql.MariadbGTIDSet)
 		if !ok || prevGSet == nil {
 			return nil, terror.ErrBinlogGTIDMariaDBNotValid.Generate(previousGTIDs)
 		}
@@ -220,7 +215,7 @@ func (g *Generator) Rotate(nextName string, ts int64) (*replication.BinlogEvent,
 	return ev, ev.RawData, nil
 }
 
-func (g *Generator) updateLatestPosGTID(latestPos uint32, latestGTID gtid.Set) {
+func (g *Generator) updateLatestPosGTID(latestPos uint32, latestGTID gmysql.GTIDSet) {
 	g.LatestPos = latestPos
 	if latestGTID != nil {
 		g.LatestGTID = latestGTID

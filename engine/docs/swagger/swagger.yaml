@@ -1,0 +1,115 @@
+info:
+  contact: {}
+paths:
+  /api/v1/jobs:
+    get:
+      consumes:
+      - application/json
+      description: lists all jobs in servermaster
+      parameters:
+      - description: tenant id
+        in: query
+        name: tenant
+        type: string
+      - description: project id
+        in: query
+        name: project
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: ""
+        "400":
+          description: ""
+        "500":
+          description: ""
+      summary: List jobs
+      tags:
+      - jobs
+    post:
+      consumes:
+      - application/json
+      description: submits a new job
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: ""
+        "400":
+          description: ""
+        "500":
+          description: ""
+      summary: Submit a job
+      tags:
+      - jobs
+  /api/v1/jobs/{job_id}:
+    get:
+      consumes:
+      - application/json
+      description: query detail information of a job
+      parameters:
+      - description: job id
+        in: path
+        name: job_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: ""
+        "400":
+          description: ""
+        "500":
+          description: ""
+      summary: Query a job
+      tags:
+      - jobs
+  /api/v1/jobs/{job_id}/cancel:
+    post:
+      consumes:
+      - application/json
+      description: cancel a job
+      parameters:
+      - description: job id
+        in: path
+        name: job_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: ""
+        "400":
+          description: ""
+        "500":
+          description: ""
+      summary: Cancel a job
+      tags:
+      - jobs
+  /api/v1/jobs/{job_id}/pause:
+    post:
+      consumes:
+      - application/json
+      description: pause a job
+      parameters:
+      - description: job id
+        in: path
+        name: job_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: ""
+        "400":
+          description: ""
+        "500":
+          description: ""
+      summary: Pause a job
+      tags:
+      - jobs
+swagger: "2.0"

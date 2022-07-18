@@ -19,11 +19,11 @@ import (
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/replication"
-	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
 	"github.com/pingcap/tidb/br/pkg/version"
 	"github.com/pingcap/tidb/dumpling/export"
 	dlog "github.com/pingcap/tidb/dumpling/log"
 	"github.com/pingcap/tidb/parser/ast"
+	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/zap"
 
@@ -33,27 +33,7 @@ import (
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
-	"github.com/pingcap/tiflow/dm/relay"
 )
-
-func toBinlogType(relay relay.Process) BinlogType {
-	if relay != nil {
-		return LocalBinlog
-	}
-
-	return RemoteBinlog
-}
-
-func binlogTypeToString(binlogType BinlogType) string {
-	switch binlogType {
-	case RemoteBinlog:
-		return "remote"
-	case LocalBinlog:
-		return "local"
-	default:
-		return "unknown"
-	}
-}
 
 // getTableByDML gets table from INSERT/UPDATE/DELETE statement.
 func getTableByDML(dml ast.DMLNode) (*filter.Table, error) {
@@ -126,21 +106,26 @@ func printServerVersion(tctx *tcontext.Context, db *conn.BaseDB, scope string) {
 	version.ParseServerInfo(versionInfo)
 }
 
-func str2TimezoneOrFromDB(tctx *tcontext.Context, tzStr string, dbCfg *config.DBConfig) (*time.Location, error) {
+func str2TimezoneOrFromDB(tctx *tcontext.Context, tzStr string, dbCfg *config.DBConfig) (*time.Location, string, error) {
 	var err error
 	if len(tzStr) == 0 {
-		tzStr, err = conn.FetchTimeZoneSetting(tctx.Ctx, dbCfg)
+		baseDB, err2 := conn.DefaultDBProvider.Apply(dbCfg)
+		if err2 != nil {
+			return nil, "", err2
+		}
+		defer baseDB.Close()
+		tzStr, err = config.FetchTimeZoneSetting(tctx.Ctx, baseDB.DB)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 	}
 	loc, err := utils.ParseTimeZone(tzStr)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	tctx.L().Info("use timezone", zap.String("location", loc.String()),
 		zap.String("host", dbCfg.Host), zap.Int("port", dbCfg.Port))
-	return loc, nil
+	return loc, tzStr, nil
 }
 
 func subtaskCfg2BinlogSyncerCfg(cfg *config.SubTaskConfig, timezone *time.Location) (replication.BinlogSyncerConfig, error) {
@@ -150,7 +135,7 @@ func subtaskCfg2BinlogSyncerCfg(cfg *config.SubTaskConfig, timezone *time.Locati
 		if loadErr := cfg.From.Security.LoadTLSContent(); loadErr != nil {
 			return replication.BinlogSyncerConfig{}, terror.ErrCtlLoadTLSCfg.Delegate(loadErr)
 		}
-		tlsConfig, err = toolutils.ToTLSConfigWithVerifyByRawbytes(cfg.From.Security.SSLCABytes,
+		tlsConfig, err = util.ToTLSConfigWithVerifyByRawbytes(cfg.From.Security.SSLCABytes,
 			cfg.From.Security.SSLCertBytes, cfg.From.Security.SSLKEYBytes, cfg.From.Security.CertAllowedCN)
 		if err != nil {
 			return replication.BinlogSyncerConfig{}, terror.ErrConnInvalidTLSConfig.Delegate(err)
@@ -175,4 +160,14 @@ func subtaskCfg2BinlogSyncerCfg(cfg *config.SubTaskConfig, timezone *time.Locati
 	// will exit when meet error, and then auto resume by DM itself.
 	common.SetDefaultReplicationCfg(&syncCfg, 1)
 	return syncCfg, nil
+}
+
+func safeToRedirect(e *replication.BinlogEvent) bool {
+	if e != nil {
+		switch e.Event.(type) {
+		case *replication.GTIDEvent, *replication.MariadbGTIDEvent:
+			return true
+		}
+	}
+	return false
 }

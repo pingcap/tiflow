@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
-	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -51,8 +50,8 @@ func NewUpStreamConn(dbCfg *config.DBConfig) (*UpStreamConn, error) {
 }
 
 // GetMasterStatus returns binlog location that extracted from SHOW MASTER STATUS.
-func (conn *UpStreamConn) GetMasterStatus(ctx context.Context, flavor string) (mysql.Position, gtid.Set, error) {
-	pos, gtidSet, err := utils.GetPosAndGs(ctx, conn.BaseDB.DB, flavor)
+func (c *UpStreamConn) GetMasterStatus(ctx *tcontext.Context, flavor string) (mysql.Position, mysql.GTIDSet, error) {
+	pos, gtidSet, err := conn.GetPosAndGs(ctx, c.BaseDB, flavor)
 
 	failpoint.Inject("GetMasterStatusFailed", func(val failpoint.Value) {
 		err = tmysql.NewErr(uint16(val.(int)))
@@ -63,16 +62,16 @@ func (conn *UpStreamConn) GetMasterStatus(ctx context.Context, flavor string) (m
 }
 
 // GetServerUUID returns upstream server UUID.
-func (conn *UpStreamConn) GetServerUUID(ctx context.Context, flavor string) (string, error) {
-	return utils.GetServerUUID(ctx, conn.BaseDB.DB, flavor)
+func (c *UpStreamConn) GetServerUUID(ctx context.Context, flavor string) (string, error) {
+	return utils.GetServerUUID(ctx, c.BaseDB.DB, flavor)
 }
 
 // GetServerUnixTS returns the result of current timestamp in upstream.
-func (conn *UpStreamConn) GetServerUnixTS(ctx context.Context) (int64, error) {
-	return utils.GetServerUnixTS(ctx, conn.BaseDB.DB)
+func (c *UpStreamConn) GetServerUnixTS(ctx context.Context) (int64, error) {
+	return utils.GetServerUnixTS(ctx, c.BaseDB.DB)
 }
 
-// GetCharsetAndDefaultCollation returns charset and collation info.
+// GetCharsetAndCollationInfo returns charset and collation info.
 func GetCharsetAndCollationInfo(tctx *tcontext.Context, conn *DBConn) (map[string]string, map[int]string, error) {
 	charsetAndDefaultCollation := make(map[string]string)
 	idAndCollationMap := make(map[int]string)
@@ -93,7 +92,7 @@ func GetCharsetAndCollationInfo(tctx *tcontext.Context, conn *DBConn) (map[strin
 		+----------------------------+--------------------+-----+------------+
 	*/
 
-	rows, err := conn.QuerySQL(tctx, "SELECT COLLATION_NAME,CHARACTER_SET_NAME,ID,IS_DEFAULT from INFORMATION_SCHEMA.COLLATIONS")
+	rows, err := conn.QuerySQL(tctx, nil, "SELECT COLLATION_NAME,CHARACTER_SET_NAME,ID,IS_DEFAULT from INFORMATION_SCHEMA.COLLATIONS")
 	if err != nil {
 		return nil, nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 	}
@@ -118,18 +117,18 @@ func GetCharsetAndCollationInfo(tctx *tcontext.Context, conn *DBConn) (map[strin
 }
 
 // GetParser returns the parser with correct flag for upstream.
-func (conn *UpStreamConn) GetParser(ctx context.Context) (*parser.Parser, error) {
-	return utils.GetParser(ctx, conn.BaseDB.DB)
+func (c *UpStreamConn) GetParser(ctx context.Context) (*parser.Parser, error) {
+	return utils.GetParser(ctx, c.BaseDB.DB)
 }
 
 // KillConn kills a connection in upstream.
-func (conn *UpStreamConn) KillConn(ctx context.Context, connID uint32) error {
-	return utils.KillConn(ctx, conn.BaseDB.DB, connID)
+func (c *UpStreamConn) KillConn(ctx context.Context, connID uint32) error {
+	return utils.KillConn(ctx, c.BaseDB.DB, connID)
 }
 
 // FetchAllDoTables returns tables matches allow-list.
-func (conn *UpStreamConn) FetchAllDoTables(ctx context.Context, bw *filter.Filter) (map[string][]string, error) {
-	return utils.FetchAllDoTables(ctx, conn.BaseDB.DB, bw)
+func (c *UpStreamConn) FetchAllDoTables(ctx context.Context, bw *filter.Filter) (map[string][]string, error) {
+	return utils.FetchAllDoTables(ctx, c.BaseDB.DB, bw)
 }
 
 // CloseUpstreamConn closes the UpStreamConn.

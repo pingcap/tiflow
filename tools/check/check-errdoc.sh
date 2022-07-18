@@ -17,5 +17,5 @@ set -euo pipefail
 cd -P .
 
 cp errors.toml /tmp/errors.toml.before
-./tools/bin/errdoc-gen --source . --module github.com/pingcap/tiflow --output errors.toml --ignore proto,dm,deployments
+./tools/bin/errdoc-gen --source . --module github.com/pingcap/tiflow --output errors.toml --ignore proto,dm,deployments,engine,cdc/scheduler/internal
 diff -q errors.toml /tmp/errors.toml.before

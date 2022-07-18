@@ -185,7 +185,7 @@ func RenameDDLTable(stmt ast.StmtNode, targetTables []*filter.Table) (string, er
 	var b []byte
 	bf := bytes.NewBuffer(b)
 	err := stmt.Restore(&format.RestoreCtx{
-		Flags: format.DefaultRestoreFlags | format.RestoreTiDBSpecialComment,
+		Flags: format.DefaultRestoreFlags | format.RestoreTiDBSpecialComment | format.RestoreStringWithoutDefaultCharset,
 		In:    bf,
 	})
 	if err != nil {
@@ -203,7 +203,7 @@ func SplitDDL(stmt ast.StmtNode, schema string) (sqls []string, err error) {
 		schemaName = model.NewCIStr(schema) // fill schema name
 		bf         = new(bytes.Buffer)
 		ctx        = &format.RestoreCtx{
-			Flags: format.DefaultRestoreFlags | format.RestoreTiDBSpecialComment,
+			Flags: format.DefaultRestoreFlags | format.RestoreTiDBSpecialComment | format.RestoreStringWithoutDefaultCharset,
 			In:    bf,
 		}
 	)

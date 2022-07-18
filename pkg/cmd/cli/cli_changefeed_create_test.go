@@ -17,59 +17,85 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
-	"github.com/pingcap/check"
+	"github.com/golang/mock/gomock"
+	v2 "github.com/pingcap/tiflow/cdc/api/v2"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
-	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/require"
 )
 
-func TestChangefeedSuite(t *testing.T) { check.TestingT(t) }
+func TestStrictDecodeConfig(t *testing.T) {
+	t.Parallel()
 
-type changefeedSuite struct{}
-
-var _ = check.Suite(&changefeedSuite{})
-
-func (s *changefeedSuite) TestStrictDecodeConfig(c *check.C) {
-	defer testleak.AfterTest(c)()
 	cmd := new(cobra.Command)
 	o := newChangefeedCommonOptions()
 	o.addFlags(cmd)
 
-	dir := c.MkDir()
+	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	content := `
 	[filter]
 	rules = ['*.*', '!test.*']`
 	err := os.WriteFile(path, []byte(content), 0o644)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
-	c.Assert(cmd.ParseFlags([]string{fmt.Sprintf("--config=%s", path)}), check.IsNil)
+	require.Nil(t, cmd.ParseFlags([]string{fmt.Sprintf("--config=%s", path)}))
 
 	cfg := config.GetDefaultReplicaConfig()
 	err = o.strictDecodeConfig("cdc", cfg)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	path = filepath.Join(dir, "config1.toml")
 	content = `
 	[filter]
 	rules = ['*.*', '!test.*','rtest1']`
 	err = os.WriteFile(path, []byte(content), 0o644)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
-	c.Assert(cmd.ParseFlags([]string{fmt.Sprintf("--config=%s", path)}), check.IsNil)
+	require.Nil(t, cmd.ParseFlags([]string{fmt.Sprintf("--config=%s", path)}))
 
 	cfg = config.GetDefaultReplicaConfig()
 	err = o.strictDecodeConfig("cdc", cfg)
-	c.Assert(err, check.NotNil)
-	c.Assert(err, check.ErrorMatches, ".*CDC:ErrFilterRuleInvalid.*")
+	require.NotNil(t, err)
+	require.Regexp(t, ".*CDC:ErrFilterRuleInvalid.*", err)
 }
 
-func (s *changefeedSuite) TestInvalidSortEngine(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestTomlFileToApiModel(t *testing.T) {
+	cmd := new(cobra.Command)
+	o := newChangefeedCommonOptions()
+	o.addFlags(cmd)
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	content := `
+	[filter]
+	rules = ['*.*', '!test.*']
+    ignore-dbs = ["a", "b"]
+    do-dbs = ["c", "d"]
+    [[filter.ignore-tables]]
+    db-name = "demo-db"
+    tbl-name = "tbl"
+`
+	err := os.WriteFile(path, []byte(content), 0o644)
+	require.Nil(t, err)
+
+	require.Nil(t, cmd.ParseFlags([]string{fmt.Sprintf("--config=%s", path)}))
+
+	cfg := config.GetDefaultReplicaConfig()
+	err = o.strictDecodeConfig("cdc", cfg)
+	require.Nil(t, err)
+	apiModel := v2.ToAPIReplicaConfig(cfg)
+	cfg2 := apiModel.ToInternalReplicaConfig()
+	require.Equal(t, cfg, cfg2)
+}
+
+func TestInvalidSortEngine(t *testing.T) {
+	t.Parallel()
 
 	cases := []struct {
 		input  string
@@ -91,11 +117,64 @@ func (s *changefeedSuite) TestInvalidSortEngine(c *check.C) {
 		cmd := new(cobra.Command)
 		o := newChangefeedCommonOptions()
 		o.addFlags(cmd)
-		c.Assert(cmd.ParseFlags([]string{"--sort-engine=" + cs.input}), check.IsNil)
+		require.Nil(t, cmd.ParseFlags([]string{"--sort-engine=" + cs.input}))
 		opt := newCreateChangefeedOptions(o)
-		err := opt.completeCfg(cmd,
-			[]*model.CaptureInfo{{Version: version.MinTiCDCVersion.String()}})
-		c.Assert(err, check.IsNil)
-		c.Assert(opt.commonChangefeedOptions.sortEngine, check.Equals, cs.expect)
+		err := opt.validate(cmd)
+		require.Nil(t, err)
+		require.Equal(t, cs.expect, opt.commonChangefeedOptions.sortEngine)
 	}
+}
+
+func TestChangefeedCreateCli(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	f := newMockFactory(ctrl)
+
+	cmd := newCmdCreateChangefeed(f)
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "cf.toml")
+	err := os.WriteFile(configPath, []byte("enable-old-value=false\r\n"), 0o644)
+	require.Nil(t, err)
+	os.Args = []string{
+		"create",
+		"--config=" + configPath,
+		"--no-confirm=false",
+		"--target-ts=10",
+		"--sink-uri=blackhole://sss?protocol=canal",
+		"--schema-registry=a",
+		"--sort-engine=memory",
+		"--sync-point=true",
+		"--sync-interval=1s",
+		"--changefeed-id=abc",
+		"--upstream-pd=pd",
+		"--upstream-ca=ca",
+		"--upstream-cert=cer",
+		"--upstream-key=key",
+	}
+
+	path := filepath.Join(dir, "confirm.txt")
+	err = os.WriteFile(path, []byte("y"), 0o644)
+	require.Nil(t, err)
+	file, err := os.Open(path)
+	require.Nil(t, err)
+	stdin := os.Stdin
+	os.Stdin = file
+	defer func() {
+		os.Stdin = stdin
+	}()
+	f.tso.EXPECT().Query(gomock.Any(), gomock.Any()).Return(&v2.Tso{
+		Timestamp: time.Now().Unix() * 1000,
+	}, nil)
+	f.changefeedsv2.EXPECT().VerifyTable(gomock.Any(), gomock.Any()).Return(&v2.Tables{
+		IneligibleTables: []v2.TableName{{}},
+	}, nil)
+	f.changefeedsv2.EXPECT().Create(gomock.Any(), gomock.Any()).Return(&v2.ChangeFeedInfo{}, nil)
+	require.Nil(t, cmd.Execute())
+
+	cmd = newCmdCreateChangefeed(f)
+	os.Args = []string{
+		"create",
+		"--sort-dir=false",
+	}
+	require.True(t, strings.Contains(cmd.Execute().Error(), "sort-dir"))
 }

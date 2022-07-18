@@ -22,11 +22,38 @@ DB6=pes_sharding2
 TBL1=T1
 TBL2=t2
 TBL3=T3
+TBL4=t4
+TBL5=t5
 TBL_LOWER1=t1
 TBL_LOWER3=t3
+PRE_VER=${PRE_VER:-v1.0.7}
 
 function exec_sql() {
 	echo $3 | mysql -h $1 -P $2
+}
+
+function run_sql_tidb_with_retry() {
+	rc=0
+	for ((k = 1; k < 11; k++)); do
+		# in retry scenario sometimes run_sql_tidb will fail because "table not exist", we should keep retrying so turn
+		# off the error option temporarily.
+		set +e
+		echo $1 | mysql -h tidb -P 4000 >"/tmp/res.txt"
+		set -e
+		if grep -Fq "$2" "/tmp/res.txt"; then
+			rc=1
+			break
+		fi
+		echo "run tidb sql failed $k-th time, retry later"
+		sleep 2
+	done
+	if [[ $rc = 0 ]]; then
+		echo "TEST FAILED: OUTPUT DOES NOT CONTAIN '$2'"
+		echo "____________________________________"
+		cat "/tmp/res.txt"
+		echo "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+		exit 1
+	fi
 }
 
 function install_sync_diff() {
@@ -98,8 +125,19 @@ function exec_incremental_stage1() {
 	# prepare optimistic incremental data
 	exec_sql mysql1 3306 "INSERT INTO $DB3.$TBL_LOWER1 (c1, c2) VALUES (101, '101');"
 	exec_sql mysql1 3306 "INSERT INTO $DB3.$TBL2 (c1, c2) VALUES (102, '102');"
+	# v2.0.0 has bug with create/drop table
+	if [[ "$PRE_VER" != "v2.0.0" ]]; then
+		exec_sql mysql1 3306 "CREATE TABLE $DB3.$TBL5(c1 INT PRIMARY KEY, c2 TEXT);"
+		exec_sql mysql1 3306 "INSERT INTO $DB3.$TBL5 (c1, c2) VALUES (1000, 1000);"
+	fi
 	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL2 (c1, c2) VALUES (111, '111');"
 	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL_LOWER3 (c1, c2) VALUES (112, '112');"
+
+	if [[ "$PRE_VER" != "v2.0.0" ]]; then
+		exec_sql mariadb2 3306 "CREATE TABLE $DB4.$TBL4(c1 INT PRIMARY KEY, c2 TEXT);"
+		exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL4 (c1, c2) VALUES (115, '115');"
+		exec_sql mysql1 3306 "DROP TABLE $DB3.$TBL5;"
+	fi
 
 	# optimistic shard ddls
 	exec_sql mysql1 3306 "ALTER TABLE $DB3.$TBL_LOWER1 ADD COLUMN c3 INT;"
@@ -112,6 +150,9 @@ function exec_incremental_stage1() {
 	exec_sql mysql1 3306 "INSERT INTO $DB3.$TBL2 (c1, c2, c4) VALUES (104, '104', 104);"
 	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL2 (c1, c2, c3) VALUES (113, '113', 113);"
 	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL_LOWER3 (c1, c2, c4) VALUES (114, '114', 114);"
+	if [[ "$PRE_VER" != "v2.0.0" ]]; then
+		exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL4 (c1, c2) VALUES (116, '116');"
+	fi
 
 	# prepare pessimistic incremental data
 	exec_sql mysql1 3306 "INSERT INTO $DB5.$TBL1 (c1, c2) VALUES (101, '101');"
@@ -149,11 +190,19 @@ function exec_incremental_stage2() {
 	exec_sql mariadb2 3306 "ALTER TABLE $DB4.$TBL2 ADD COLUMN c4 INT;"
 	exec_sql mariadb2 3306 "ALTER TABLE $DB4.$TBL_LOWER3 ADD COLUMN c3 INT AFTER c2;"
 
+	if [[ "$PRE_VER" != "v2.0.0" ]]; then
+		exec_sql mariadb2 3306 "ALTER TABLE $DB4.$TBL4 ADD COLUMN c4 INT;"
+		exec_sql mariadb2 3306 "ALTER TABLE $DB4.$TBL4 ADD COLUMN c3 INT AFTER c2;"
+	fi
+
 	# prepare optimistic incremental data
 	exec_sql mysql1 3306 "INSERT INTO $DB3.$TBL_LOWER1 (c1, c2, c3, c4) VALUES (203, '203', 203, 203);"
 	exec_sql mysql1 3306 "INSERT INTO $DB3.$TBL2 (c1, c2, c3, c4) VALUES (204, '204', 204, 204);"
 	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL2 (c1, c2, c3, c4) VALUES (213, '213', 213, 213);"
 	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL_LOWER3 (c1, c2, c3, c4) VALUES (214, '214', 214, 214);"
+	if [[ "$PRE_VER" != "v2.0.0" ]]; then
+		exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL4 (c1, c2, c3, c4) VALUES (215, '215', 215, 215);"
+	fi
 
 	# prepare pessimistic incremental data
 	exec_sql mysql1 3306 "INSERT INTO $DB5.$TBL1 (c1, c2, c3) VALUES (201, '201', 201);"
@@ -184,6 +233,9 @@ function exec_incremental_stage3() {
 	exec_sql mysql1 3306 "INSERT INTO $DB3.$TBL2 (c1, c2, c3, c4) VALUES (302, '302', 302, 302);"
 	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL2 (c1, c2, c3, c4) VALUES (311, '311', 311, 311);"
 	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL_LOWER3 (c1, c2, c3, c4) VALUES (312, '312', 312, 312);"
+	if [[ "$PRE_VER" != "v2.0.0" ]]; then
+		exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL4 (c1, c2, c3, c4) VALUES (313, '313', 313, 313);"
+	fi
 
 	# prepare pessimistic incremental data
 	exec_sql mysql1 3306 "INSERT INTO $DB5.$TBL1 (c1, c2, c3) VALUES (303, '303', 303);"
@@ -204,6 +256,9 @@ function exec_incremental_stage4() {
 	exec_sql mysql1 3306 "INSERT INTO $DB3.$TBL2 (c1, c2, c3, c4) VALUES (402, '402', 402, 402);"
 	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL2 (c1, c2, c3, c4) VALUES (411, '411', 411, 411);"
 	exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL_LOWER3 (c1, c2, c3, c4) VALUES (412, '412', 412, 412);"
+	if [[ "$PRE_VER" != "v2.0.0" ]]; then
+		exec_sql mariadb2 3306 "INSERT INTO $DB4.$TBL4 (c1, c2, c3, c4) VALUES (413, '413', 413, 413);"
+	fi
 
 	# prepare pessimistic incremental data
 	exec_sql mysql1 3306 "INSERT INTO $DB5.$TBL1 (c1, c2, c3) VALUES (403, '403', 403);"

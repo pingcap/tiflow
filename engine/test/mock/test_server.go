@@ -19,7 +19,7 @@ import (
 	"io"
 	"sync/atomic"
 
-	"github.com/pingcap/tiflow/engine/pb"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )

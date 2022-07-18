@@ -18,10 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-sql-driver/mysql"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/errno"
 	"github.com/pingcap/tidb/util/dbutil"
 	"go.uber.org/zap"
 
@@ -29,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -84,7 +82,12 @@ func (conn *DBConn) ResetConn(tctx *tcontext.Context) error {
 }
 
 // QuerySQL does one query.
-func (conn *DBConn) QuerySQL(tctx *tcontext.Context, query string, args ...interface{}) (*sql.Rows, error) {
+func (conn *DBConn) QuerySQL(
+	tctx *tcontext.Context,
+	metricProxies *metrics.Proxies,
+	query string,
+	args ...interface{},
+) (*sql.Rows, error) {
 	if conn == nil || conn.baseConn == nil {
 		return nil, terror.ErrDBUnExpect.Generate("database base connection not valid")
 	}
@@ -103,7 +106,6 @@ func (conn *DBConn) QuerySQL(tctx *tcontext.Context, query string, args ...inter
 						log.ShortError(err))
 					return false
 				}
-				metrics.SQLRetriesTotal.WithLabelValues("query", conn.cfg.Name).Add(1)
 				return true
 			}
 			if dbutil.IsRetryableError(err) {
@@ -111,7 +113,6 @@ func (conn *DBConn) QuerySQL(tctx *tcontext.Context, query string, args ...inter
 					zap.String("query", utils.TruncateString(query, -1)),
 					zap.String("argument", utils.TruncateInterface(args, -1)),
 					log.ShortError(err))
-				metrics.SQLRetriesTotal.WithLabelValues("query", conn.cfg.Name).Add(1)
 				return true
 			}
 			return false
@@ -131,7 +132,9 @@ func (conn *DBConn) QuerySQL(tctx *tcontext.Context, query string, args ...inter
 				cost := time.Since(startTime)
 				// duration seconds
 				ds := cost.Seconds()
-				metrics.QueryHistogram.WithLabelValues(conn.cfg.Name, conn.cfg.WorkerName, conn.cfg.SourceID).Observe(ds)
+				if metricProxies != nil {
+					metricProxies.Metrics.QueryHistogram.Observe(ds)
+				}
 				if ds > 1 {
 					ctx.L().Warn("query statement too slow",
 						zap.Duration("cost time", cost),
@@ -153,7 +156,13 @@ func (conn *DBConn) QuerySQL(tctx *tcontext.Context, query string, args ...inter
 }
 
 // ExecuteSQLWithIgnore do some SQL executions and can ignore some error by `ignoreError`.
-func (conn *DBConn) ExecuteSQLWithIgnore(tctx *tcontext.Context, ignoreError func(error) bool, queries []string, args ...[]interface{}) (int, error) {
+func (conn *DBConn) ExecuteSQLWithIgnore(
+	tctx *tcontext.Context,
+	metricProxies *metrics.Proxies,
+	ignoreError func(error) bool,
+	queries []string,
+	args ...[]interface{},
+) (int, error) {
 	failpoint.Inject("ExecuteSQLWithIgnoreFailed", func(val failpoint.Value) {
 		queryPattern := val.(string)
 		if len(queries) == 1 && strings.Contains(queries[0], queryPattern) {
@@ -187,7 +196,6 @@ func (conn *DBConn) ExecuteSQLWithIgnore(tctx *tcontext.Context, ignoreError fun
 				}
 				tctx.L().Warn("execute sql failed by connection error", zap.Int("retry", retryTime),
 					zap.Error(err))
-				metrics.SQLRetriesTotal.WithLabelValues("stmt_exec", conn.cfg.Name).Add(1)
 				return true
 			}
 			if dbutil.IsRetryableError(err) {
@@ -197,11 +205,9 @@ func (conn *DBConn) ExecuteSQLWithIgnore(tctx *tcontext.Context, ignoreError fun
 					log.ShortError(err))
 				tctx.L().Warn("execute sql failed by retryable error", zap.Int("retry", retryTime),
 					zap.Error(err))
-				metrics.SQLRetriesTotal.WithLabelValues("stmt_exec", conn.cfg.Name).Add(1)
 				return true
 			}
-			// TODO: move it to above IsRetryableError
-			return isRetryableError(err)
+			return false
 		},
 	}
 
@@ -210,15 +216,23 @@ func (conn *DBConn) ExecuteSQLWithIgnore(tctx *tcontext.Context, ignoreError fun
 		params,
 		func(ctx *tcontext.Context) (interface{}, error) {
 			startTime := time.Now()
-			ret, err := conn.baseConn.ExecuteSQLWithIgnoreError(ctx, metrics.StmtHistogram, conn.cfg.Name, ignoreError, queries, args...)
+			var histProxy *metricsproxy.HistogramVecProxy
+			if metricProxies != nil {
+				histProxy = metricProxies.StmtHistogram
+			}
+			ret, err := conn.baseConn.ExecuteSQLWithIgnoreError(ctx, histProxy, conn.cfg.Name, ignoreError, queries, args...)
 			if err == nil {
 				cost := time.Since(startTime)
 				// duration seconds
 				ds := cost.Seconds()
-				metrics.TxnHistogram.WithLabelValues(conn.cfg.Name, conn.cfg.WorkerName, conn.cfg.SourceID).Observe(ds)
+				if metricProxies != nil {
+					metricProxies.Metrics.TxnHistogram.Observe(ds)
+				}
 				// calculate idealJobCount metric: connection count * 1 / (one sql cost time)
 				qps := float64(conn.cfg.WorkerCount) / (cost.Seconds() / float64(len(queries)))
-				metrics.IdealQPS.WithLabelValues(conn.cfg.Name, conn.cfg.WorkerName, conn.cfg.SourceID).Set(qps)
+				if metricProxies != nil {
+					metricProxies.Metrics.IdealQPS.Set(qps)
+				}
 				if ds > 1 {
 					ctx.L().Warn("execute transaction too slow",
 						zap.Duration("cost time", cost),
@@ -238,19 +252,14 @@ func (conn *DBConn) ExecuteSQLWithIgnore(tctx *tcontext.Context, ignoreError fun
 	return ret.(int), nil
 }
 
-func isRetryableError(err error) bool {
-	err = errors.Cause(err) // check the original error
-	mysqlErr, ok := err.(*mysql.MySQLError)
-	if !ok {
-		return false
-	}
-
-	return mysqlErr.Number == errno.ErrKeyColumnDoesNotExits
-}
-
 // ExecuteSQL does some SQL executions.
-func (conn *DBConn) ExecuteSQL(tctx *tcontext.Context, queries []string, args ...[]interface{}) (int, error) {
-	return conn.ExecuteSQLWithIgnore(tctx, nil, queries, args...)
+func (conn *DBConn) ExecuteSQL(
+	tctx *tcontext.Context,
+	metricProxies *metrics.Proxies,
+	queries []string,
+	args ...[]interface{},
+) (int, error) {
+	return conn.ExecuteSQLWithIgnore(tctx, metricProxies, nil, queries, args...)
 }
 
 // CreateConns returns a opened DB from dbCfg and number of `count` connections of that DB.

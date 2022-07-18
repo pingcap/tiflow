@@ -28,7 +28,13 @@ for ((k = 0; k < 10; k++)); do
 		expected=${!j}
 		got=$(sed "s/$value/$value\n/g" $dmctl_log | grep -c "$value")
 		echo "got=$got expected=$expected"
-		if [ "$got" != "$expected" ]; then
+		if [ "$expected" == "1+" ]; then
+			if [ "$got" == "0" ]; then
+				echo "command: $cmd $value count: $got 0, expect 1+, failed the $k-th time, will retry again"
+				all_matched=false
+				break
+			fi
+		elif [ "$got" != "$expected" ]; then
 			echo "command: $cmd $value count: $got != expected: $expected, failed the $k-th time, will retry again"
 			all_matched=false
 			break

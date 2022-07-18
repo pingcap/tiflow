@@ -54,7 +54,6 @@ func (t *dummyTask) GetCDCProfile() *framework.CDCProfile {
 	return &framework.CDCProfile{
 		PDUri:      framework.UpstreamPD,
 		SinkURI:    "mysql://downstream-tidb:4000/testdb",
-		Opts:       map[string]string{},
 		ConfigFile: "",
 	}
 }

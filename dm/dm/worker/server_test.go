@@ -670,21 +670,21 @@ func getFakeLocForSubTask(ctx context.Context, subTaskCfg config.SubTaskConfig) 
 	gset1, _ := gtid.ParserGTID(mysql.MySQLFlavor, "ba8f633f-1f15-11eb-b1c7-0242ac110001:1-30")
 	gset2, _ := gtid.ParserGTID(mysql.MySQLFlavor, "ba8f633f-1f15-11eb-b1c7-0242ac110001:1-50")
 	gset3, _ := gtid.ParserGTID(mysql.MySQLFlavor, "ba8f633f-1f15-11eb-b1c7-0242ac110001:1-50,ba8f633f-1f15-11eb-b1c7-0242ac110002:1")
-	loc1 := binlog.InitLocation(
+	loc1 := binlog.NewLocation(
 		mysql.Position{
 			Name: "mysql-binlog.00001",
 			Pos:  123,
 		},
 		gset1,
 	)
-	loc2 := binlog.InitLocation(
+	loc2 := binlog.NewLocation(
 		mysql.Position{
 			Name: "mysql-binlog.00001",
 			Pos:  12,
 		},
 		gset2,
 	)
-	loc3 := binlog.InitLocation(
+	loc3 := binlog.NewLocation(
 		mysql.Position{
 			Name: "mysql-binlog.00003",
 		},

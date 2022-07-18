@@ -1,0 +1,27 @@
+#!/bin/bash
+# parameter 1: stdout file
+# parameter 2: should_contain true: cmd is valid and usage tips should be printed, false: otherwise
+stdout_file=$1
+should_contain=$2
+contain=
+set +e
+
+## check stdout
+if [ ! -f "$stdout_file" ]; then
+	echo "stdout log file does not exist"
+	exit 0
+fi
+
+grep -q 'Usage:' "$stdout_file"
+if [[ $? -eq 0 ]]; then
+	contain="false"
+else
+	contain="true"
+fi
+
+if [[ "$contain" == "$should_contain" ]]; then
+	exit 0
+else
+	echo "Check Usage Tips Failed!"
+	exit 1
+fi

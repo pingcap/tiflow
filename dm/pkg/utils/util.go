@@ -101,14 +101,18 @@ var (
 	builtInSkipDDLPatterns *regexp.Regexp
 
 	passwordPatterns = `(password: (\\")?)(.*?)((\\")?\\n)`
-	passwordRegexp   *regexp.Regexp
+	sslPatterns      = `(ssl-(ca|key|cert)-bytes:)((\\n\s{4}-\s\d+)+)`
+
+	passwordRegexp *regexp.Regexp
+	sslRegexp      *regexp.Regexp
 )
 
 func init() {
 	OsExit = os.Exit
 	builtInSkipDDLPatterns = regexp.MustCompile("(?i)" + strings.Join(builtInSkipDDLs, "|"))
 	passwordRegexp = regexp.MustCompile(passwordPatterns)
-	pb.HidePwdFunc = HidePassword
+	sslRegexp = regexp.MustCompile(sslPatterns)
+	pb.HideSensitiveFunc = HideSensitive
 }
 
 // DecodeBinlogPosition parses a mysql.Position from string format.
@@ -172,9 +176,10 @@ func IsBuildInSkipDDL(sql string) bool {
 	return builtInSkipDDLPatterns.FindStringIndex(sql) != nil
 }
 
-// HidePassword replace password with ******.
-func HidePassword(input string) string {
+// HideSensitive replace password with ******.
+func HideSensitive(input string) string {
 	output := passwordRegexp.ReplaceAllString(input, "$1******$4")
+	output = sslRegexp.ReplaceAllString(output, "$1 \"******\"")
 	return output
 }
 

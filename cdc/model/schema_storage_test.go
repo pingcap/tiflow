@@ -22,201 +22,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(t *testing.T) {
-	t.Parallel()
-
-	tbl := timodel.TableInfo{
-		Columns: []*timodel.ColumnInfo{
-			{
-				Name: timodel.CIStr{O: "group"},
-				FieldType: parser_types.FieldType{
-					Flag: mysql.NotNullFlag,
-				},
-				State: timodel.StatePublic,
-			},
-			{
-				Name: timodel.CIStr{O: "name"},
-				FieldType: parser_types.FieldType{
-					Flag: mysql.NotNullFlag,
-				},
-				State: timodel.StatePublic,
-			},
-			{
-				Name:  timodel.CIStr{O: "id"},
-				State: timodel.StatePublic,
-			},
-		},
-		Indices: []*timodel.IndexInfo{
-			{
-				Name: timodel.CIStr{
-					O: "group",
-				},
-				Columns: []*timodel.IndexColumn{
-					{
-						Name:   timodel.CIStr{O: "group"},
-						Offset: 0,
-					},
-				},
-				Unique: false,
-			},
-			{
-				Name: timodel.CIStr{
-					O: "name",
-				},
-				Columns: []*timodel.IndexColumn{
-					{
-						Name:   timodel.CIStr{O: "name"},
-						Offset: 0,
-					},
-				},
-				Unique: true,
-			},
-			{
-				Name: timodel.CIStr{
-					O: "PRIMARY",
-				},
-				Columns: []*timodel.IndexColumn{
-					{
-						Name:   timodel.CIStr{O: "id"},
-						Offset: 1,
-					},
-				},
-				Primary: true,
-			},
-		},
-		IsCommonHandle: true,
-		PKIsHandle:     false,
-	}
-	info := WrapTableInfo(1, "", 0, &tbl)
-	cols := info.GetUniqueKeys()
-	require.Equal(t, [][]string{
-		{"id"}, {"name"},
-	}, cols)
-}
-
-func TestPKShouldBeInTheFirstPlaceWhenPKIsHandle(t *testing.T) {
-	t.Parallel()
-
-	tbl := timodel.TableInfo{
-		Indices: []*timodel.IndexInfo{
-			{
-				Name: timodel.CIStr{
-					O: "uniq_job",
-				},
-				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "job"}},
-				},
-				Unique: true,
-			},
-		},
-		Columns: []*timodel.ColumnInfo{
-			{
-				Name: timodel.CIStr{
-					O: "job",
-				},
-				FieldType: parser_types.FieldType{
-					Flag: mysql.NotNullFlag,
-				},
-				State: timodel.StatePublic,
-			},
-			{
-				Name: timodel.CIStr{
-					O: "uid",
-				},
-				FieldType: parser_types.FieldType{
-					Flag: mysql.PriKeyFlag,
-				},
-				State: timodel.StatePublic,
-			},
-		},
-		PKIsHandle: true,
-	}
-	info := WrapTableInfo(1, "", 0, &tbl)
-	cols := info.GetUniqueKeys()
-	require.Equal(t, [][]string{
-		{"uid"}, {"job"},
-	}, cols)
-}
-
-func TestUniqueKeyIsHandle(t *testing.T) {
-	t.Parallel()
-
-	tbl := timodel.TableInfo{
-		Columns: []*timodel.ColumnInfo{
-			{
-				Name: timodel.CIStr{O: "group"},
-				FieldType: parser_types.FieldType{
-					Flag: mysql.NotNullFlag,
-				},
-				State: timodel.StatePublic,
-			},
-			{
-				Name: timodel.CIStr{O: "name"},
-				FieldType: parser_types.FieldType{
-					Flag: mysql.NotNullFlag,
-				},
-				State: timodel.StatePublic,
-			},
-		},
-		Indices: []*timodel.IndexInfo{
-			{
-				Name: timodel.CIStr{
-					O: "group",
-				},
-				Columns: []*timodel.IndexColumn{
-					{
-						Name:   timodel.CIStr{O: "group"},
-						Offset: 0,
-					},
-				},
-				Unique: false,
-			},
-			{
-				Name: timodel.CIStr{
-					O: "name",
-				},
-				Columns: []*timodel.IndexColumn{
-					{
-						Name:   timodel.CIStr{O: "name"},
-						Offset: 0,
-					},
-				},
-				Unique: true,
-			},
-		},
-		IsCommonHandle: false,
-		PKIsHandle:     false,
-	}
-	info := WrapTableInfo(1, "", 0, &tbl)
-	cols := info.GetUniqueKeys()
-	require.Equal(t, [][]string{{"name"}}, cols)
-}
-
 func TestHandleKeyPriority(t *testing.T) {
 	t.Parallel()
+	ftNull := parser_types.NewFieldType(mysql.TypeUnspecified)
+	ftNull.SetFlag(mysql.NotNullFlag)
+
+	ftNotNull := parser_types.NewFieldType(mysql.TypeUnspecified)
+	ftNotNull.SetFlag(mysql.NotNullFlag | mysql.MultipleKeyFlag)
 
 	tbl := timodel.TableInfo{
 		Columns: []*timodel.ColumnInfo{
 			{
-				Name: timodel.CIStr{O: "a"},
-				FieldType: parser_types.FieldType{
-					Flag: mysql.NotNullFlag | mysql.MultipleKeyFlag,
-				},
-				State: timodel.StatePublic,
+				Name:      timodel.CIStr{O: "a"},
+				FieldType: *ftNotNull,
+				State:     timodel.StatePublic,
 			},
 			{
-				Name: timodel.CIStr{O: "b"},
-				FieldType: parser_types.FieldType{
-					Flag: mysql.NotNullFlag | mysql.MultipleKeyFlag,
-				},
-				State: timodel.StatePublic,
+				Name:      timodel.CIStr{O: "b"},
+				FieldType: *ftNotNull,
+				State:     timodel.StatePublic,
 			},
 			{
-				Name: timodel.CIStr{O: "c"},
-				FieldType: parser_types.FieldType{
-					Flag: mysql.NotNullFlag | mysql.UniqueKeyFlag,
-				},
-				State: timodel.StatePublic,
+				Name:      timodel.CIStr{O: "c"},
+				FieldType: *ftNotNull,
+				State:     timodel.StatePublic,
 			},
 			{
 				Name:      timodel.CIStr{O: "d"},
@@ -227,11 +56,9 @@ func TestHandleKeyPriority(t *testing.T) {
 				State: timodel.StatePublic,
 			},
 			{
-				Name: timodel.CIStr{O: "e"},
-				FieldType: parser_types.FieldType{
-					Flag: mysql.NotNullFlag,
-				},
-				State: timodel.StatePublic,
+				Name:      timodel.CIStr{O: "e"},
+				FieldType: *ftNull,
+				State:     timodel.StatePublic,
 				// test virtual generated column is not treated as unique key
 				GeneratedExprString: "as d",
 				GeneratedStored:     false,
@@ -294,44 +121,43 @@ func TestHandleKeyPriority(t *testing.T) {
 		PKIsHandle:     false,
 	}
 	info := WrapTableInfo(1, "", 0, &tbl)
-	cols := info.GetUniqueKeys()
 	require.Equal(t, int64(8), info.HandleIndexID)
-	require.Equal(t, [][]string{{"a", "b"}, {"c"}, {"b"}}, cols)
 }
 
 func TestTableInfoGetterFuncs(t *testing.T) {
 	t.Parallel()
+
+	ftNull := parser_types.NewFieldType(mysql.TypeUnspecified)
+	ftNull.SetFlag(mysql.NotNullFlag)
+
+	ftNotNull := parser_types.NewFieldType(mysql.TypeUnspecified)
+	ftNotNull.SetFlag(mysql.NotNullFlag | mysql.MultipleKeyFlag)
+
+	ftNotNullBinCharset := parser_types.NewFieldType(mysql.TypeUnspecified)
+	ftNotNullBinCharset.SetFlag(mysql.NotNullFlag | mysql.MultipleKeyFlag)
+	ftNotNullBinCharset.SetCharset("binary")
 
 	tbl := timodel.TableInfo{
 		ID:   1071,
 		Name: timodel.CIStr{O: "t1"},
 		Columns: []*timodel.ColumnInfo{
 			{
-				ID:   0,
-				Name: timodel.CIStr{O: "a"},
-				FieldType: parser_types.FieldType{
-					// test binary flag
-					Flag:    mysql.NotNullFlag | mysql.BinaryFlag,
-					Charset: "binary",
-				},
-				State: timodel.StatePublic,
+				ID:        0,
+				Name:      timodel.CIStr{O: "a"},
+				FieldType: *ftNotNullBinCharset,
+				State:     timodel.StatePublic,
 			},
 			{
-				ID:   1,
-				Name: timodel.CIStr{O: "b"},
-				FieldType: parser_types.FieldType{
-					// test unsigned flag
-					Flag: mysql.NotNullFlag | mysql.UnsignedFlag,
-				},
-				State: timodel.StatePublic,
+				ID:        1,
+				Name:      timodel.CIStr{O: "b"},
+				FieldType: *ftNotNull,
+				State:     timodel.StatePublic,
 			},
 			{
-				ID:   2,
-				Name: timodel.CIStr{O: "c"},
-				FieldType: parser_types.FieldType{
-					Flag: mysql.NotNullFlag,
-				},
-				State: timodel.StatePublic,
+				ID:        2,
+				Name:      timodel.CIStr{O: "c"},
+				FieldType: *ftNull,
+				State:     timodel.StatePublic,
 			},
 		},
 		Indices: []*timodel.IndexInfo{
@@ -359,19 +185,11 @@ func TestTableInfoGetterFuncs(t *testing.T) {
 
 	require.Equal(t, "TableInfo, ID: 1071, Name:test.t1, ColNum: 3, IdxNum: 1, PKIsHandle: false", info.String())
 
-	idx, exists := info.GetIndexInfo(0)
-	require.True(t, exists)
-	require.Equal(t, "c", idx.Name.O)
-	_, exists = info.GetIndexInfo(1)
-	require.False(t, exists)
-
 	handleColIDs, fts, colInfos := info.GetRowColInfos()
 	require.Equal(t, []int64{-1}, handleColIDs)
 	require.Equal(t, 3, len(fts))
 	require.Equal(t, 3, len(colInfos))
 
-	require.False(t, info.IsColumnUnique(0))
-	require.True(t, info.IsColumnUnique(2))
 	require.True(t, info.ExistTableUniqueColumn())
 
 	// check IsEligible
@@ -420,18 +238,17 @@ func TestTableInfoGetterFuncs(t *testing.T) {
 
 func TestTableInfoClone(t *testing.T) {
 	t.Parallel()
-
+	ft := parser_types.NewFieldType(mysql.TypeUnspecified)
+	ft.SetFlag(mysql.NotNullFlag)
 	tbl := timodel.TableInfo{
 		ID:   1071,
 		Name: timodel.CIStr{O: "t1"},
 		Columns: []*timodel.ColumnInfo{
 			{
-				ID:   0,
-				Name: timodel.CIStr{O: "c"},
-				FieldType: parser_types.FieldType{
-					Flag: mysql.NotNullFlag,
-				},
-				State: timodel.StatePublic,
+				ID:        0,
+				Name:      timodel.CIStr{O: "c"},
+				FieldType: *ft,
+				State:     timodel.StatePublic,
 			},
 		},
 		Indices: []*timodel.IndexInfo{

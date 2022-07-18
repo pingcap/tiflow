@@ -20,7 +20,7 @@ import (
 
 	"github.com/stretchr/testify/mock"
 
-	"github.com/pingcap/tiflow/engine/pb"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 )
 
 // MockExecutorClient is a mock implement of ExecutorClient interface
@@ -52,6 +52,15 @@ func (c *MockExecutorClient) DispatchTask(
 
 	retArgs := c.Mock.Called(ctx, args, startWorkerTimer, abortWorker)
 	return retArgs.Error(0)
+}
+
+// RemoveLocalResource implements ExecutorClient.RemoveLocalResource
+func (c *MockExecutorClient) RemoveLocalResource(ctx context.Context, req *pb.RemoveLocalResourceRequest) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	args := c.Mock.Called(ctx, req)
+	return args.Error(0)
 }
 
 // MockServerMasterClient mocks server master gRPC client
@@ -137,6 +146,15 @@ func (c *MockServerMasterClient) CancelJob(ctx context.Context, req *pb.CancelJo
 
 	args := c.Mock.Called(ctx, req)
 	return args.Get(0).(*pb.CancelJobResponse), args.Error(1)
+}
+
+// DebugJob implements MasterClient.DebugJob
+func (c *MockServerMasterClient) DebugJob(ctx context.Context, req *pb.DebugJobRequest) (resp *pb.DebugJobResponse, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	args := c.Mock.Called(ctx, req)
+	return args.Get(0).(*pb.DebugJobResponse), args.Error(1)
 }
 
 // QueryMetaStore implements MasterClient.QueryMetaStore

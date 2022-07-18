@@ -20,9 +20,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/engine/pkg/clock"
-
 	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
+
+	"github.com/pingcap/tiflow/engine/framework/taskutil"
+	"github.com/pingcap/tiflow/engine/pkg/clock"
 )
 
 const (
@@ -43,7 +45,7 @@ func TestTaskRunnerBasics(t *testing.T) {
 		defer wg.Done()
 		err := tr.Run(ctx)
 		require.Error(t, err)
-		require.Regexp(t, ".*context canceled.*", err.Error())
+		require.Regexp(t, "context canceled", err.Error())
 	}()
 
 	var workers []*dummyWorker
@@ -52,13 +54,13 @@ func TestTaskRunnerBasics(t *testing.T) {
 			id: fmt.Sprintf("worker-%d", i),
 		}
 		workers = append(workers, worker)
-		err := tr.AddTask(worker)
+		err := tr.AddTask(taskutil.WrapWorker(worker))
 		require.NoError(t, err)
 	}
 
 	require.Eventually(t, func() bool {
 		t.Logf("taskNum %d", tr.Workload())
-		return tr.Workload() == workerNum
+		return tr.WorkerCount() == workerNum
 	}, 1*time.Second, 10*time.Millisecond)
 
 	for _, worker := range workers {
@@ -66,52 +68,8 @@ func TestTaskRunnerBasics(t *testing.T) {
 	}
 
 	require.Eventually(t, func() bool {
-		return tr.Workload() == 0
+		return tr.WorkerCount() == 0
 	}, 1*time.Second, 100*time.Millisecond)
-
-	cancel()
-	wg.Wait()
-}
-
-func TestTaskRunnerInitBlocked(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	tr := NewTaskRunner(10, 10)
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err := tr.Run(ctx)
-		require.Error(t, err)
-		require.Regexp(t, ".*context canceled.*", err.Error())
-	}()
-
-	var workers []*dummyWorker
-	for i := 0; i < 21; i++ {
-		worker := newDummyWorker(fmt.Sprintf("worker-%d", i))
-		worker.BlockInit()
-		workers = append(workers, worker)
-
-		require.Eventually(t, func() bool {
-			err := tr.AddTask(worker)
-			return err == nil
-		}, 100*time.Millisecond, 1*time.Millisecond)
-	}
-
-	worker := newDummyWorker("my-worker")
-	err := tr.AddTask(worker)
-	require.Error(t, err)
-	require.Regexp(t, ".*ErrRuntimeIncomingQueueFull.*", err.Error())
-
-	for _, worker := range workers {
-		worker.UnblockInit()
-	}
-
-	require.Eventually(t, func() bool {
-		t.Logf("taskNum %d", tr.Workload())
-		return tr.Workload() == 21
-	}, 1*time.Second, 10*time.Millisecond)
 
 	cancel()
 	wg.Wait()
@@ -131,7 +89,7 @@ func TestTaskRunnerSubmitTime(t *testing.T) {
 	// We call AddTask before calling Run to make sure that the submitTime
 	// is recorded during the execution of the AddTask call.
 	worker := newDummyWorker("my-worker")
-	err := tr.AddTask(worker)
+	err := tr.AddTask(taskutil.WrapWorker(worker))
 	require.NoError(t, err)
 
 	// Advance the internal clock
@@ -143,12 +101,69 @@ func TestTaskRunnerSubmitTime(t *testing.T) {
 		defer wg.Done()
 		err := tr.Run(ctx)
 		require.Error(t, err)
-		require.Regexp(t, ".*context canceled.*", err.Error())
+		require.Regexp(t, "context canceled", err.Error())
 	}()
 
 	require.Eventually(t, func() bool {
-		return worker.SubmitTime() == submitTime
+		return worker.SubmitTime() == clock.ToMono(submitTime)
 	}, 1*time.Second, 10*time.Millisecond)
+
+	cancel()
+	wg.Wait()
+}
+
+func TestTaskStopReceiver(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	tr := NewTaskRunner(workerNum+1, 1)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := tr.Run(ctx)
+		require.Error(t, err)
+		require.Regexp(t, "context canceled", err.Error())
+	}()
+
+	var (
+		workers []*dummyWorker
+		running sync.Map
+	)
+	for i := 0; i < workerNum; i++ {
+		worker := &dummyWorker{
+			id: fmt.Sprintf("worker-%d", i),
+		}
+		running.Store(worker.id, struct{}{})
+		workers = append(workers, worker)
+		err := tr.AddTask(taskutil.WrapWorker(worker))
+		require.NoError(t, err)
+	}
+
+	receiver := tr.TaskStopReceiver()
+	stopped := atomic.NewInt32(0)
+	wg.Add(1)
+	go func() {
+		defer func() {
+			receiver.Close()
+			wg.Done()
+		}()
+		for id := range receiver.C {
+			_, ok := running.LoadAndDelete(id)
+			require.True(t, ok, "worker %s has already stopped", id)
+			if stopped.Inc() == workerNum {
+				break
+			}
+		}
+	}()
+
+	for _, worker := range workers {
+		worker.SetFinished()
+	}
+
+	require.Eventually(t, func() bool {
+		return stopped.Load() == workerNum
+	}, time.Second, 100*time.Millisecond)
 
 	cancel()
 	wg.Wait()

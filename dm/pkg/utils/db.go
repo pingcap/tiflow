@@ -33,7 +33,6 @@ import (
 	"github.com/pingcap/tidb/util/dbutil"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
@@ -168,125 +167,6 @@ func GetSlaveServerID(ctx context.Context, db *sql.DB) (map[uint32]struct{}, err
 	return serverIDs, nil
 }
 
-// GetPosAndGs get binlog position and gtid.Set from `show master status`.
-func GetPosAndGs(ctx context.Context, db *sql.DB, flavor string) (
-	binlogPos gmysql.Position,
-	gs gtid.Set,
-	err error,
-) {
-	binlogName, pos, _, _, gtidStr, err := GetMasterStatus(ctx, db, flavor)
-	if err != nil {
-		return
-	}
-	binlogPos = gmysql.Position{
-		Name: binlogName,
-		Pos:  pos,
-	}
-
-	gs, err = gtid.ParserGTID(flavor, gtidStr)
-	return
-}
-
-// GetBinlogDB get binlog_do_db and binlog_ignore_db from `show master status`.
-func GetBinlogDB(ctx context.Context, db *sql.DB, flavor string) (string, string, error) {
-	// nolint:dogsled
-	_, _, binlogDoDB, binlogIgnoreDB, _, err := GetMasterStatus(ctx, db, flavor)
-	return binlogDoDB, binlogIgnoreDB, err
-}
-
-// GetMasterStatus gets status from master.
-// When the returned error is nil, the gtid.Set must be not nil.
-func GetMasterStatus(ctx context.Context, db *sql.DB, flavor string) (
-	string, uint32, string, string, string, error,
-) {
-	var (
-		binlogName     string
-		pos            uint32
-		binlogDoDB     string
-		binlogIgnoreDB string
-		gtidStr        string
-		err            error
-	)
-	// need REPLICATION SLAVE privilege
-	rows, err := db.QueryContext(ctx, `SHOW MASTER STATUS`)
-	if err != nil {
-		err = terror.DBErrorAdapt(err, terror.ErrDBDriverError)
-		return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		err = terror.ErrNoMasterStatus.Generate()
-		return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
-	}
-	// Show an example.
-	/*
-		MySQL [test]> SHOW MASTER STATUS;
-		+-----------+----------+--------------+------------------+--------------------------------------------+
-		| File      | Position | Binlog_Do_DB | Binlog_Ignore_DB | Executed_Gtid_Set                          |
-		+-----------+----------+--------------+------------------+--------------------------------------------+
-		| ON.000001 |     4822 |              |                  | 85ab69d1-b21f-11e6-9c5e-64006a8978d2:1-46
-		+-----------+----------+--------------+------------------+--------------------------------------------+
-	*/
-	/*
-		For MariaDB,SHOW MASTER STATUS:
-		+--------------------+----------+--------------+------------------+
-		| File               | Position | Binlog_Do_DB | Binlog_Ignore_DB |
-		+--------------------+----------+--------------+------------------+
-		| mariadb-bin.000016 |      475 |              |                  |
-		+--------------------+----------+--------------+------------------+
-		SELECT @@global.gtid_binlog_pos;
-		+--------------------------+
-		| @@global.gtid_binlog_pos |
-		+--------------------------+
-		| 0-1-2                    |
-		+--------------------------+
-	*/
-	if flavor == gmysql.MySQLFlavor {
-		err = rows.Scan(&binlogName, &pos, &binlogDoDB, &binlogIgnoreDB, &gtidStr)
-	} else {
-		err = rows.Scan(&binlogName, &pos, &binlogDoDB, &binlogIgnoreDB)
-	}
-	if err != nil {
-		err = terror.DBErrorAdapt(err, terror.ErrDBDriverError)
-		return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
-	}
-	if flavor == gmysql.MariaDBFlavor {
-		gtidStr, err = GetGlobalVariable(ctx, db, "gtid_binlog_pos")
-		if err != nil {
-			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
-		}
-	}
-
-	if rows.Next() {
-		log.L().Warn("SHOW MASTER STATUS returns more than one row, will only use first row")
-	}
-	if rows.Close() != nil {
-		err = terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
-		return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
-	}
-	if rows.Err() != nil {
-		err = terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
-		return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
-	}
-
-	return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
-}
-
-// GetMariaDBGTID gets MariaDB's `gtid_binlog_pos`
-// it can not get by `SHOW MASTER STATUS`.
-func GetMariaDBGTID(ctx context.Context, db *sql.DB) (gtid.Set, error) {
-	gtidStr, err := GetGlobalVariable(ctx, db, "gtid_binlog_pos")
-	if err != nil {
-		return nil, err
-	}
-	gs, err := gtid.ParserGTID(gmysql.MariaDBFlavor, gtidStr)
-	if err != nil {
-		return nil, err
-	}
-	return gs, nil
-}
-
 // GetGlobalVariable gets server's global variable.
 func GetGlobalVariable(ctx context.Context, db *sql.DB, variable string) (value string, err error) {
 	failpoint.Inject("GetGlobalVariableFailed", func(val failpoint.Value) {
@@ -405,49 +285,6 @@ func GetServerUnixTS(ctx context.Context, db *sql.DB) (int64, error) {
 	return ts, err
 }
 
-// GetSchemaList gets db schema list with `SHOW DATABASES`.
-func GetSchemaList(ctx context.Context, db *sql.DB) ([]string, error) {
-	schemaList := []string{}
-	rows, err := db.QueryContext(ctx, "SHOW DATABASES")
-	if err != nil {
-		return schemaList, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
-	}
-	if rows.Err() != nil {
-		return nil, terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var schema string
-		if scanErr := rows.Scan(&schema); scanErr != nil {
-			return nil, terror.DBErrorAdapt(scanErr, terror.ErrDBDriverError)
-		}
-		schemaList = append(schemaList, schema)
-	}
-	return schemaList, err
-}
-
-// GetTableList gets db schema list with `SHOW TABLES FROM`.
-func GetTableList(ctx context.Context, db *sql.DB, schemaName string) ([]string, error) {
-	tableList := []string{}
-	sql := "SHOW TABLES FROM " + schemaName
-	rows, err := db.QueryContext(ctx, sql)
-	if err != nil {
-		return tableList, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
-	}
-	if rows.Err() != nil {
-		return nil, terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var table string
-		if scanErr := rows.Scan(&table); scanErr != nil {
-			return nil, terror.DBErrorAdapt(scanErr, terror.ErrDBDriverError)
-		}
-		tableList = append(tableList, table)
-	}
-	return tableList, err
-}
-
 // GetMariaDBUUID gets equivalent `server_uuid` for MariaDB
 // `gtid_domain_id` joined `server_id` with domainServerIDSeparator.
 func GetMariaDBUUID(ctx context.Context, db *sql.DB) (string, error) {
@@ -545,8 +382,8 @@ func ExtractTiDBVersion(version string) (*semver.Version, error) {
 // because it doesn't cover all gtid_purged. The error of using it will be
 // ERROR 1236 (HY000): The slave is connecting using CHANGE MASTER TO MASTER_AUTO_POSITION = 1, but the master has purged binary logs containing GTIDs that the slave requires.
 // so we add gtid_purged to it.
-func AddGSetWithPurged(ctx context.Context, gset gtid.Set, conn *sql.Conn) (gtid.Set, error) {
-	if _, ok := gset.(*gtid.MariadbGTIDSet); ok {
+func AddGSetWithPurged(ctx context.Context, gset gmysql.GTIDSet, conn *sql.Conn) (gmysql.GTIDSet, error) {
+	if _, ok := gset.(*gmysql.MariadbGTIDSet); ok {
 		return gset, nil
 	}
 
@@ -572,14 +409,12 @@ func AddGSetWithPurged(ctx context.Context, gset gtid.Set, conn *sql.Conn) (gtid
 		return gset, nil
 	}
 
-	newGset := gset.Origin()
-	err = newGset.Update(gtidStr)
+	cloned := gset.Clone()
+	err = cloned.Update(gtidStr)
 	if err != nil {
 		return nil, err
 	}
-	ret := &gtid.MySQLGTIDSet{}
-	_ = ret.Set(newGset)
-	return ret, nil
+	return cloned, nil
 }
 
 // AdjustSQLModeCompatible adjust downstream sql mode to compatible.

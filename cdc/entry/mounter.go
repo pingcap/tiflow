@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	pfilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -62,19 +63,16 @@ type rowKVEntry struct {
 type Mounter interface {
 	// DecodeEvent accepts `model.PolymorphicEvent` with `RawKVEntry` filled and
 	// decodes `RawKVEntry` into `RowChangedEvent`.
-	DecodeEvent(ctx context.Context, event *model.PolymorphicEvent) error
+	// If a `model.PolymorphicEvent` should be ignored, it will returns (false, nil).
+	DecodeEvent(ctx context.Context, event *model.PolymorphicEvent) (bool, error)
 }
 
 type mounterImpl struct {
-	schemaStorage  SchemaStorage
-	tz             *time.Location
-	workerNum      int
-	enableOldValue bool
-	changefeedID   model.ChangeFeedID
-
-	// index is an atomic variable to dispatch input events to workers.
-	index int64
-
+	schemaStorage       SchemaStorage
+	tz                  *time.Location
+	enableOldValue      bool
+	changefeedID        model.ChangeFeedID
+	filter              *pfilter.Filter
 	metricMountDuration prometheus.Observer
 	metricTotalRows     prometheus.Gauge
 }
@@ -83,12 +81,14 @@ type mounterImpl struct {
 func NewMounter(schemaStorage SchemaStorage,
 	changefeedID model.ChangeFeedID,
 	tz *time.Location,
+	filter *pfilter.Filter,
 	enableOldValue bool,
 ) Mounter {
 	return &mounterImpl{
 		schemaStorage:  schemaStorage,
 		changefeedID:   changefeedID,
 		enableOldValue: enableOldValue,
+		filter:         filter,
 		metricMountDuration: mountDuration.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricTotalRows: totalRowsCountGauge.
@@ -99,24 +99,31 @@ func NewMounter(schemaStorage SchemaStorage,
 
 // DecodeEvent decode kv events using ddl puller's schemaStorage
 // this method could block indefinitely if the DDL puller is lagging.
-func (m *mounterImpl) DecodeEvent(ctx context.Context, pEvent *model.PolymorphicEvent) error {
+// Note: If pEvent.Row is nil after decode, it means this event should be ignored.
+func (m *mounterImpl) DecodeEvent(ctx context.Context, pEvent *model.PolymorphicEvent) (bool, error) {
 	m.metricTotalRows.Inc()
 	if pEvent.IsResolved() {
-		return nil
+		return true, nil
 	}
 	start := time.Now()
-	rowEvent, err := m.unmarshalAndMountRowChanged(ctx, pEvent.RawKV)
+	row, err := m.unmarshalAndMountRowChanged(ctx, pEvent.RawKV)
 	if err != nil {
-		return errors.Trace(err)
+		return false, errors.Trace(err)
 	}
-	pEvent.Row = rowEvent
+
+	pEvent.Row = row
 	pEvent.RawKV.Value = nil
 	pEvent.RawKV.OldValue = nil
 	duration := time.Since(start)
 	if duration > time.Second {
 		m.metricMountDuration.Observe(duration.Seconds())
 	}
-	return nil
+
+	ignored := m.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table)
+	if ignored {
+		log.Debug("message's row changed event is nil, it should be ignored", zap.Uint64("startTs", row.StartTs))
+	}
+	return ignored, nil
 }
 
 func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *model.RawKVEntry) (*model.RowChangedEvent, error) {
@@ -126,6 +133,12 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 	key, physicalTableID, err := decodeTableID(raw.Key)
 	if err != nil {
 		return nil, err
+	}
+	if len(raw.OldValue) == 0 && len(raw.Value) == 0 {
+		log.Warn("empty value and old value",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Any("row", raw))
 	}
 	baseInfo := baseKVEntry{
 		StartTs:         raw.StartTs,
@@ -274,8 +287,8 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		colSize += size
 		cols[tableInfo.RowColumnsOffset[colInfo.ID]] = &model.Column{
 			Name:    colName,
-			Type:    colInfo.Tp,
-			Charset: colInfo.Charset,
+			Type:    colInfo.GetType(),
+			Charset: colInfo.GetCharset(),
 			Value:   colValue,
 			Default: defaultValue,
 			Flag:    tableInfo.ColumnsFlag[colInfo.ID],
@@ -389,7 +402,7 @@ func formatColVal(datum types.Datum, col *timodel.ColumnInfo) (
 	if datum.IsNull() {
 		return nil, 0, "", nil
 	}
-	switch col.Tp {
+	switch col.GetType() {
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
 		v := datum.GetMysqlTime().String()
 		return v, sizeOfString(v), "", nil
@@ -466,24 +479,24 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, e
 		return d.GetValue(), sizeOfDatum(d), "", nil
 	}
 
-	if !mysql.HasNotNullFlag(col.Flag) {
+	if !mysql.HasNotNullFlag(col.GetFlag()) {
 		// NOTICE: NotNullCheck need do after OriginDefaultValue check, as when TiDB meet "amend + add column default xxx",
 		// ref: https://github.com/pingcap/ticdc/issues/3929
 		// must use null if TiDB not write the column value when default value is null
 		// and the value is null, see https://github.com/pingcap/tidb/issues/9304
 		d = types.NewDatum(nil)
 	} else {
-		switch col.Tp {
+		switch col.GetType() {
 		case mysql.TypeEnum:
 			// For enum type, if no default value and not null is set,
 			// the default value is the first element of the enum list
-			d = types.NewDatum(col.FieldType.Elems[0])
+			d = types.NewDatum(col.FieldType.GetElem(0))
 		case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
 			return emptyBytes, sizeOfEmptyBytes, "", nil
 		default:
 			d = table.GetZeroValue(col)
 			if d.IsNull() {
-				log.Error("meet unsupported column type", zap.String("columnInfo", col.String()))
+				log.Error("meet unsupported column type", zap.String("columnInfo", col.FieldType.String()))
 			}
 		}
 	}

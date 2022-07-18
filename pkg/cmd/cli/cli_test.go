@@ -15,29 +15,26 @@ package cli
 
 import (
 	"os"
+	"testing"
 
-	"github.com/pingcap/check"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type cliSuite struct{}
+func TestCliCmdNoArgs(t *testing.T) {
+	t.Parallel()
 
-var _ = check.Suite(&cliSuite{})
-
-func (s *cliSuite) TestCliCmdNoArgs(c *check.C) {
-	defer testleak.AfterTest(c)
 	cmd := NewCmdCli()
 	// There is a DBC space before the flag pd.
 	flags := []string{"--log-level=info", "　--pd="}
 	os.Args = flags
 	err := cmd.Execute()
-	c.Assert(err, check.NotNil)
-	c.Assert(err, check.ErrorMatches, ".*unknown command.*u3000--pd.*for.*cli.*")
+	require.NotNil(t, err)
+	require.Regexp(t, ".*unknown command.*u3000--pd.*for.*cli.*", err)
 
 	// There is an unknown args "aa".
 	flags = []string{"--log-level=info", "aa"}
 	os.Args = flags
 	err = cmd.Execute()
-	c.Assert(err, check.NotNil)
-	c.Assert(err, check.ErrorMatches, ".*unknown command.*aa.*for.*cli.*")
+	require.NotNil(t, err)
+	require.Regexp(t, ".*unknown command.*aa.*for.*cli.*", err)
 }

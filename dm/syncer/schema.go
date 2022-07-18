@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -28,13 +29,12 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/pkg/quotes"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/openapi"
-	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 )
@@ -76,7 +76,9 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 			s.tctx.L().Info("table schema is not in checkpoint, fetch from downstream",
 				zap.String("table", sourceTable.String()))
 			targetTable := s.route(sourceTable)
-			return dbconn.GetTableCreateSQL(s.tctx.WithContext(ctx), s.downstreamTrackConn, targetTable.String())
+			result, err2 := dbconn.GetTableCreateSQL(s.tctx.WithContext(ctx), s.downstreamTrackConn, targetTable.String())
+			result = strings.Replace(result, fmt.Sprintf("CREATE TABLE %s", quotes.QuoteName(targetTable.Name)), fmt.Sprintf("CREATE TABLE %s", quotes.QuoteName(sourceTable.Name)), 1)
+			return utils.CreateTableSQLToOneRow(result), err2
 		}
 
 		result := bytes.NewBuffer(make([]byte, 0, 512))
@@ -140,21 +142,21 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 		}
 
 		s.tctx.L().Info("flush table info", zap.String("table info", newSQL))
-		err = s.checkpoint.FlushPointsWithTableInfos(tcontext.NewContext(ctx, log.L()), []*filter.Table{sourceTable}, []*model.TableInfo{ti})
+		err = s.checkpoint.FlushPointsWithTableInfos(s.tctx.WithContext(ctx), []*filter.Table{sourceTable}, []*model.TableInfo{ti})
 		if err != nil {
 			return "", err
 		}
 
 		if req.Sync {
 			if s.cfg.ShardMode != config.ShardOptimistic {
-				log.L().Info("ignore --sync flag", zap.String("shard mode", s.cfg.ShardMode))
+				s.tctx.L().Info("ignore --sync flag", zap.String("shard mode", s.cfg.ShardMode))
 				break
 			}
 			targetTable := s.route(sourceTable)
 			// use new table info as tableInfoBefore, we can also use the origin table from schemaTracker
 			info := s.optimist.ConstructInfo(req.Database, req.Table, targetTable.Schema, targetTable.Name, []string{""}, ti, []*model.TableInfo{ti})
 			info.IgnoreConflict = true
-			log.L().Info("sync info with operate-schema", zap.String("info", info.ShortString()))
+			s.tctx.L().Info("sync info with operate-schema", zap.String("info", info.ShortString()))
 			_, err = s.optimist.PutInfo(info)
 			if err != nil {
 				return "", err

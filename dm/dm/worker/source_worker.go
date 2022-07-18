@@ -32,12 +32,12 @@ import (
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/streamer"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/relay"
 )
 
@@ -268,25 +268,12 @@ func (w *SourceWorker) updateSourceStatus(ctx context.Context, needLock bool) er
 	}
 	w.sourceDBMu.Unlock()
 
-	var status binlog.SourceStatus
-	ctx, cancel := context.WithTimeout(ctx, utils.DefaultDBTimeout)
-	defer cancel()
-	pos, gtidSet, err := utils.GetPosAndGs(ctx, w.sourceDB.DB, cfg.Flavor)
+	status, err := binlog.GetSourceStatus(tcontext.NewContext(ctx, w.l), w.sourceDB, cfg.Flavor)
 	if err != nil {
 		return err
 	}
-	status.Location = binlog.InitLocation(pos, gtidSet)
-	ctx2, cancel2 := context.WithTimeout(ctx, utils.DefaultDBTimeout)
-	defer cancel2()
-	binlogs, err := binlog.GetBinaryLogs(ctx2, w.sourceDB.DB)
-	if err != nil {
-		return err
-	}
-	status.Binlogs = binlogs
 
-	status.UpdateTime = time.Now()
-
-	w.sourceStatus.Store(&status)
+	w.sourceStatus.Store(status)
 	return nil
 }
 
@@ -351,7 +338,7 @@ func (w *SourceWorker) EnableRelay(startBySourceCfg bool) (err error) {
 	} else {
 		// set UUIDSuffix even not checkpoint exist
 		// so we will still remove relay dir
-		w.cfg.UUIDSuffix = binlog.MinUUIDSuffix
+		w.cfg.UUIDSuffix = binlog.MinRelaySubDirSuffix
 	}
 
 	// 2. initial relay holder, the cfg's password need decrypt
@@ -1000,7 +987,7 @@ func (w *SourceWorker) PurgeRelay(ctx context.Context, req *pb.PurgeRelayRequest
 	if !w.subTaskEnabled.Load() {
 		w.l.Info("worker received purge-relay but didn't handling subtasks, read global checkpoint to decided active relay log")
 
-		uuid := w.relayHolder.Status(nil).RelaySubDir
+		subDir := w.relayHolder.Status(nil).RelaySubDir
 
 		_, _, subTaskCfgs, _, err := w.fetchSubTasksAndAdjust()
 		if err != nil {
@@ -1013,9 +1000,9 @@ func (w *SourceWorker) PurgeRelay(ctx context.Context, req *pb.PurgeRelayRequest
 			}
 			w.l.Info("update active relay log with",
 				zap.String("task name", subTaskCfg.Name),
-				zap.String("uuid", uuid),
+				zap.String("subDir", subDir),
 				zap.String("binlog name", loc.Position.Name))
-			if err3 := streamer.GetReaderHub().UpdateActiveRelayLog(subTaskCfg.Name, uuid, loc.Position.Name); err3 != nil {
+			if err3 := streamer.GetReaderHub().UpdateActiveRelayLog(subTaskCfg.Name, subDir, loc.Position.Name); err3 != nil {
 				w.l.Error("Error when update active relay log", zap.Error(err3))
 			}
 		}
@@ -1275,12 +1262,12 @@ func (w *SourceWorker) operateValidatorStage(stage ha.Stage) error {
 		if err != nil {
 			return err
 		}
-		if _, ok := subTaskCfg[stage.Task]; !ok {
+		targetCfg, ok := subTaskCfg[stage.Task]
+		if !ok {
 			log.L().Error("failed to get subtask config", zap.Reflect("stage", stage))
 			return errors.New("failed to get subtask config")
 		}
-
-		subtask.SetCfg(subTaskCfg[stage.Task])
+		subtask.UpdateValidatorCfg(targetCfg.ValidatorCfg)
 		subtask.StartValidator(stage.Expect, false)
 	default:
 		// should not happen

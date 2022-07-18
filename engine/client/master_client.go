@@ -19,11 +19,11 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/pingcap/tiflow/engine/pb"
-	"github.com/pingcap/tiflow/engine/pkg/errors"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // DialTimeout is the default timeout for gRPC dialing
@@ -43,6 +43,7 @@ type MasterClient interface {
 	QueryJob(ctx context.Context, req *pb.QueryJobRequest) (resp *pb.QueryJobResponse, err error)
 	PauseJob(ctx context.Context, req *pb.PauseJobRequest) (resp *pb.PauseJobResponse, err error)
 	CancelJob(ctx context.Context, req *pb.CancelJobRequest) (resp *pb.CancelJobResponse, err error)
+	DebugJob(ctx context.Context, req *pb.DebugJobRequest) (resp *pb.DebugJobResponse, err error)
 	QueryMetaStore(
 		ctx context.Context, req *pb.QueryMetaStoreRequest, timeout time.Duration,
 	) (resp *pb.QueryMetaStoreResponse, err error)
@@ -69,7 +70,7 @@ var dialImpl = func(ctx context.Context, addr string) (pb.MasterClient, rpcutil.
 	defer cancel()
 	conn, err := grpc.DialContext(ctx, addr, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
-		return nil, nil, errors.Wrap(errors.ErrGrpcBuildConn, err)
+		return nil, nil, errors.WrapError(errors.ErrGrpcBuildConn, err)
 	}
 	return pb.NewMasterClient(conn), conn, nil
 }
@@ -77,7 +78,7 @@ var dialImpl = func(ctx context.Context, addr string) (pb.MasterClient, rpcutil.
 var mockDialImpl = func(ctx context.Context, addr string) (pb.MasterClient, rpcutil.CloseableConnIface, error) {
 	conn, err := mock.Dial(addr)
 	if err != nil {
-		return nil, nil, errors.Wrap(errors.ErrGrpcBuildConn, err)
+		return nil, nil, errors.WrapError(errors.ErrGrpcBuildConn, err)
 	}
 	return mock.NewMasterClient(conn), conn, nil
 }
@@ -123,6 +124,11 @@ func (c *MasterClientImpl) PauseJob(ctx context.Context, req *pb.PauseJobRequest
 // CancelJob implemeents MasterClient.CancelJob
 func (c *MasterClientImpl) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (resp *pb.CancelJobResponse, err error) {
 	return rpcutil.DoFailoverRPC(ctx, c.FailoverRPCClients, req, pb.MasterClient.CancelJob)
+}
+
+// DebugJob implemeents MasterClient.DebugJob
+func (c *MasterClientImpl) DebugJob(ctx context.Context, req *pb.DebugJobRequest) (resp *pb.DebugJobResponse, err error) {
+	return rpcutil.DoFailoverRPC(ctx, c.FailoverRPCClients, req, pb.MasterClient.DebugJob)
 }
 
 // QueryMetaStore implemeents MasterClient.QueryMetaStore

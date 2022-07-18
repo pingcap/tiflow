@@ -63,7 +63,7 @@ type kafkaSaramaProducer struct {
 	mu struct {
 		sync.Mutex
 		inflight  int64
-		flushDown chan struct{}
+		flushDone chan struct{}
 	}
 
 	failpointCh chan error
@@ -163,13 +163,13 @@ func (k *kafkaSaramaProducer) SyncBroadcastMessage(
 // otherwise Flush will not work as expected. It may never finish or flush the wrong message.
 // Because inflight will be modified by mistake.
 func (k *kafkaSaramaProducer) Flush(ctx context.Context) error {
-	down := make(chan struct{}, 1)
+	done := make(chan struct{}, 1)
 
 	k.mu.Lock()
 	inflight := k.mu.inflight
 	immediateFlush := inflight == 0
 	if !immediateFlush {
-		k.mu.flushDown = down
+		k.mu.flushDone = done
 	}
 	k.mu.Unlock()
 
@@ -183,7 +183,7 @@ func (k *kafkaSaramaProducer) Flush(ctx context.Context) error {
 		return cerror.ErrKafkaFlushUnfinished.GenWithStackByArgs()
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-down:
+	case <-done:
 		return nil
 	}
 }
@@ -312,9 +312,9 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 		if ack != nil {
 			k.mu.Lock()
 			k.mu.inflight--
-			if k.mu.inflight == 0 && k.mu.flushDown != nil {
-				k.mu.flushDown <- struct{}{}
-				k.mu.flushDown = nil
+			if k.mu.inflight == 0 && k.mu.flushDone != nil {
+				k.mu.flushDone <- struct{}{}
+				k.mu.flushDone = nil
 			}
 			k.mu.Unlock()
 		}
@@ -507,6 +507,10 @@ func validateMinInsyncReplicas(
 
 	minInsyncReplicasStr, exists, err := minInsyncReplicasConfigGetter()
 	if err != nil {
+		// 'min.insync.replica' is invisible to us in Confluent Cloud Kafka.
+		if cerror.ErrKafkaBrokerConfigNotFound.Equal(err) {
+			return nil
+		}
 		return err
 	}
 	minInsyncReplicas, err := strconv.Atoi(minInsyncReplicasStr)
@@ -551,8 +555,9 @@ func getBrokerConfig(admin kafka.ClusterAdminClient, brokerConfigName string) (s
 	}
 
 	if len(configEntries) == 0 || configEntries[0].Name != brokerConfigName {
-		return "", errors.New(fmt.Sprintf(
-			"cannot find the `%s` from the broker's configuration", brokerConfigName))
+		log.Warn("Kafka config item not found", zap.String("configName", brokerConfigName))
+		return "", cerror.ErrKafkaBrokerConfigNotFound.GenWithStack(
+			"cannot find the `%s` from the broker's configuration", brokerConfigName)
 	}
 
 	return configEntries[0].Value, nil

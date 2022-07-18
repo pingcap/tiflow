@@ -21,8 +21,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/engine/executor/worker/internal"
+	"github.com/pingcap/tiflow/engine/framework/taskutil"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
-	derror "github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 type mockWrappedTaskAdder struct {
@@ -64,12 +65,12 @@ func TestTaskCommitterSuccessCase(t *testing.T) {
 	submitTime := time.Now()
 	suite.Clock.Set(submitTime)
 	task := newDummyWorker("task-1")
-	ok := suite.Committer.PreDispatchTask("request-1", task)
+	ok := suite.Committer.PreDispatchTask("request-1", taskutil.WrapWorker(task))
 	require.True(t, ok)
 
 	suite.Runner.On("addWrappedTask",
 		mock.MatchedBy(func(arg *internal.RunnableContainer) bool {
-			return arg.ID() == "task-1" && arg.Info().SubmitTime == submitTime
+			return arg.ID() == "task-1" && arg.Info().SubmitTime == clock.ToMono(submitTime)
 		})).Return(nil)
 	ok, err := suite.Committer.ConfirmDispatchTask("request-1", "task-1")
 	require.True(t, ok)
@@ -83,7 +84,7 @@ func TestTaskCommitterNoConfirmUntilTTL(t *testing.T) {
 	suite := newTaskCommitterTestSuite(preDispatchTTLForTest)
 
 	task := newDummyWorker("task-1")
-	ok := suite.Committer.PreDispatchTask("request-1", task)
+	ok := suite.Committer.PreDispatchTask("request-1", taskutil.WrapWorker(task))
 	require.True(t, ok)
 
 	oldCount := suite.Committer.cleanUpCount()
@@ -106,13 +107,13 @@ func TestTaskCommitterSameTaskIDOverwrites(t *testing.T) {
 	task := newDummyWorker("task-1")
 	submitTime1 := time.Now()
 	suite.Clock.Set(submitTime1)
-	ok := suite.Committer.PreDispatchTask("request-1", task)
+	ok := suite.Committer.PreDispatchTask("request-1", taskutil.WrapWorker(task))
 	require.True(t, ok)
 
 	anotherTask := newDummyWorker("task-1")
 	submitTime2 := submitTime1.Add(time.Second)
 	suite.Clock.Set(submitTime2)
-	ok = suite.Committer.PreDispatchTask("request-2", anotherTask)
+	ok = suite.Committer.PreDispatchTask("request-2", taskutil.WrapWorker(anotherTask))
 	require.True(t, ok)
 
 	ok, err := suite.Committer.ConfirmDispatchTask("request-1", "task-1")
@@ -121,7 +122,7 @@ func TestTaskCommitterSameTaskIDOverwrites(t *testing.T) {
 
 	suite.Runner.On("addWrappedTask",
 		mock.MatchedBy(func(arg *internal.RunnableContainer) bool {
-			return arg.ID() == "task-1" && arg.Info().SubmitTime == submitTime2
+			return arg.ID() == "task-1" && arg.Info().SubmitTime == clock.ToMono(submitTime2)
 		})).Return(nil)
 	ok, err = suite.Committer.ConfirmDispatchTask("request-2", "task-1")
 	require.True(t, ok)
@@ -135,10 +136,10 @@ func TestTaskCommitterDuplicatePreDispatch(t *testing.T) {
 	suite := newTaskCommitterTestSuite(preDispatchTTLForTest)
 
 	task := newDummyWorker("task-1")
-	ok := suite.Committer.PreDispatchTask("request-1", task)
+	ok := suite.Committer.PreDispatchTask("request-1", taskutil.WrapWorker(task))
 	require.True(t, ok)
 
-	ok = suite.Committer.PreDispatchTask("request-1", task)
+	ok = suite.Committer.PreDispatchTask("request-1", taskutil.WrapWorker(task))
 	require.False(t, ok)
 
 	suite.Close()
@@ -150,11 +151,11 @@ func TestTaskCommitterFailToSubmit(t *testing.T) {
 	submitTime := time.Now()
 	suite.Clock.Set(submitTime)
 	task := newDummyWorker("task-1")
-	ok := suite.Committer.PreDispatchTask("request-1", task)
+	ok := suite.Committer.PreDispatchTask("request-1", taskutil.WrapWorker(task))
 	require.True(t, ok)
 
 	suite.Runner.On("addWrappedTask", mock.Anything).
-		Return(derror.ErrRuntimeIncomingQueueFull.GenWithStackByArgs())
+		Return(errors.ErrRuntimeIncomingQueueFull.GenWithStackByArgs())
 	ok, err := suite.Committer.ConfirmDispatchTask("request-1", "task-1")
 	require.False(t, ok)
 	require.Error(t, err)

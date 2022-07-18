@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -313,7 +314,8 @@ func prepareTxnData(
 	t *testing.T, r *reader, txnCount, txnSize int,
 ) db.DB {
 	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
-	db, err := db.OpenPebble(context.Background(), 1, t.TempDir(), 0, cfg)
+	db, err := db.OpenPebble(
+		context.Background(), 1, t.TempDir(), cfg, db.WithTableCRTsCollectors())
 	require.Nil(t, err)
 	wb := db.Batch(0)
 	for i := 1; i < txnCount+1; i++ { // txns.
@@ -492,7 +494,8 @@ func TestReaderOutputIterEvents(t *testing.T) {
 
 		iter := db.Iterator(
 			encoding.EncodeTsKey(r.uid, r.tableID, 0),
-			encoding.EncodeTsKey(r.uid, r.tableID, cs.maxResolvedTs+1))
+			encoding.EncodeTsKey(r.uid, r.tableID, cs.maxResolvedTs+1),
+			0, math.MaxUint64)
 		iter.Seek([]byte{})
 		require.Nil(t, iter.Error(), "case #%d, %v", i, cs)
 		hasReadLastNext, exhaustedRTs, err := r.outputIterEvents(
@@ -554,7 +557,7 @@ func TestReaderStateIterator(t *testing.T) {
 	// Send iterator.
 	require.Nil(t, sema.Acquire(ctx, 1))
 	req.IterCallback(&message.LimitedIterator{
-		Iterator: db.Iterator([]byte{}, []byte{}),
+		Iterator: db.Iterator([]byte{}, []byte{}, 0, math.MaxUint64),
 		Sema:     sema,
 	})
 	// Must notify reader
@@ -577,7 +580,7 @@ func TestReaderStateIterator(t *testing.T) {
 	// Release an outdated iterator.
 	require.Nil(t, sema.Acquire(ctx, 1))
 	state.iter = &message.LimitedIterator{
-		Iterator: db.Iterator([]byte{}, []byte{0xff}),
+		Iterator: db.Iterator([]byte{}, []byte{0xff}, 0, math.MaxUint64),
 		Sema:     sema,
 	}
 	require.True(t, state.iter.Seek([]byte{}))
@@ -595,7 +598,7 @@ func TestReaderStateIterator(t *testing.T) {
 	require.NotNil(t, req3)
 	require.Nil(t, sema.Acquire(ctx, 1))
 	req3.IterCallback(&message.LimitedIterator{
-		Iterator: db.Iterator([]byte{}, []byte{}),
+		Iterator: db.Iterator([]byte{}, []byte{}, 0, math.MaxUint64),
 		Sema:     sema,
 	})
 	// Must notify reader
@@ -864,7 +867,7 @@ func newIterator(
 		require.Nil(t, sema.Acquire(ctx, 1))
 		fmt.Printf("newIterator %s %s\n", message.Key(rg[0]), message.Key(rg[1]))
 		return &message.LimitedIterator{
-			Iterator: db.Iterator(rg[0], rg[1]),
+			Iterator: db.Iterator(rg[0], rg[1], 0, math.MaxUint64),
 			Sema:     sema,
 		}
 	}
@@ -876,7 +879,7 @@ func newEmptyIterator(
 	return func(rg [2][]byte) *message.LimitedIterator {
 		require.Nil(t, sema.Acquire(ctx, 1))
 		return &message.LimitedIterator{
-			Iterator: db.Iterator([]byte{}, []byte{}),
+			Iterator: db.Iterator([]byte{}, []byte{}, 0, math.MaxUint64),
 			Sema:     sema,
 		}
 	}

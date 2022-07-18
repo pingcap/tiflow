@@ -21,10 +21,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/engine/executor/worker/internal"
+	"github.com/pingcap/tiflow/engine/pkg/clock"
 )
 
 func TestToRuntimeCtxFromDerivedStdCtx(t *testing.T) {
-	rtInfo := internal.RuntimeInfo{SubmitTime: time.Unix(1, 1)}
+	rtInfo := internal.RuntimeInfo{SubmitTime: clock.ToMono(time.Unix(1, 1))}
 	rctx := newRuntimeCtx(context.Background(), rtInfo)
 
 	ctx1, cancel := context.WithCancel(rctx)

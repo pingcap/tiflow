@@ -15,22 +15,22 @@ package broker
 
 import (
 	"context"
-	"io/ioutil"
-	"path/filepath"
+	"os"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/gogo/status"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 
-	"github.com/pingcap/tiflow/engine/pb"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
 // LocalBroker is a broker unit-testing other components
@@ -47,11 +47,11 @@ type LocalBroker struct {
 
 // NewBrokerForTesting creates a LocalBroker instance for testing only
 func NewBrokerForTesting(executorID resourcemeta.ExecutorID) *LocalBroker {
-	dir, err := ioutil.TempDir("/tmp", "*-localfiles")
+	dir, err := os.MkdirTemp("/tmp", "*-localfiles")
 	if err != nil {
-		log.L().Panic("failed to make tempdir")
+		log.Panic("failed to make tempdir")
 	}
-	cfg := &storagecfg.Config{Local: &storagecfg.LocalFileConfig{BaseDir: dir}}
+	cfg := &storagecfg.Config{Local: storagecfg.LocalFileConfig{BaseDir: dir}}
 	client := manager.NewWrappedMockClient()
 	return &LocalBroker{
 		DefaultBroker: NewBroker(cfg, executorID, client),
@@ -62,6 +62,7 @@ func NewBrokerForTesting(executorID resourcemeta.ExecutorID) *LocalBroker {
 // OpenStorage wraps broker.OpenStorage
 func (b *LocalBroker) OpenStorage(
 	ctx context.Context,
+	projectInfo tenant.ProjectInfo,
 	workerID resourcemeta.WorkerID,
 	jobID resourcemeta.JobID,
 	resourcePath resourcemeta.ResourceID,
@@ -71,12 +72,13 @@ func (b *LocalBroker) OpenStorage(
 
 	st := status.New(codes.NotFound, "resource manager error")
 
-	b.client.On("QueryResource", mock.Anything, &pb.QueryResourceRequest{ResourceId: resourcePath}, mock.Anything).
+	b.client.On("QueryResource", mock.Anything,
+		&pb.QueryResourceRequest{ResourceKey: &pb.ResourceKey{JobId: jobID, ResourceId: resourcePath}}, mock.Anything).
 		Return((*pb.QueryResourceResponse)(nil), st.Err())
 	defer func() {
 		b.client.ExpectedCalls = nil
 	}()
-	h, err := b.DefaultBroker.OpenStorage(ctx, workerID, jobID, resourcePath)
+	h, err := b.DefaultBroker.OpenStorage(ctx, projectInfo, workerID, jobID, resourcePath)
 	if err != nil {
 		return nil, err
 	}
@@ -107,8 +109,7 @@ func (b *LocalBroker) AssertFileExists(
 	fileName string,
 ) {
 	suffix := strings.TrimPrefix(resourceID, "/local/")
-	filePath := filepath.Join(b.config.Local.BaseDir, workerID, suffix, fileName)
-	require.FileExists(t, filePath)
+	AssertLocalFileExists(t, b.config.Local.BaseDir, workerID, suffix, fileName)
 }
 
 type brExternalStorageHandleForTesting struct {

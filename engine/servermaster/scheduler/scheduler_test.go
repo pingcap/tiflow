@@ -20,7 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/engine/model"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 )
 
@@ -47,11 +47,11 @@ func getMockCapacityDataForScheduler() CapacityProvider {
 }
 
 func getMockResourceConstraintForScheduler() PlacementConstrainer {
-	return &MockPlacementConstrainer{ResourceList: map[resourcemeta.ResourceID]model.ExecutorID{
-		"resource-1": "executor-1",
-		"resource-2": "executor-2",
-		"resource-3": "executor-3",
-		"resource-4": "", // no constraint
+	return &MockPlacementConstrainer{ResourceList: map[resModel.ResourceKey]model.ExecutorID{
+		{JobID: "fakeJob", ID: "resource-1"}: "executor-1",
+		{JobID: "fakeJob", ID: "resource-2"}: "executor-2",
+		{JobID: "fakeJob", ID: "resource-3"}: "executor-3",
+		{JobID: "fakeJob", ID: "resource-4"}: "", // no constraint
 	}}
 }
 
@@ -74,7 +74,7 @@ func TestSchedulerByConstraint(t *testing.T) {
 
 	resp, err := sched.ScheduleTask(context.Background(), &schedModel.SchedulerRequest{
 		Cost:              20,
-		ExternalResources: []resourcemeta.ResourceID{"resource-2"},
+		ExternalResources: []resModel.ResourceKey{{JobID: "fakeJob", ID: "resource-2"}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, &schedModel.SchedulerResponse{ExecutorID: "executor-2"}, resp)
@@ -88,7 +88,7 @@ func TestSchedulerNoConstraint(t *testing.T) {
 	resp, err := sched.ScheduleTask(context.Background(), &schedModel.SchedulerRequest{
 		Cost: 35,
 		// resource-4 has no constraint, so scheduling by cost is used.
-		ExternalResources: []resourcemeta.ResourceID{"resource-4"},
+		ExternalResources: []resModel.ResourceKey{{JobID: "fakeJob", ID: "resource-4"}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, &schedModel.SchedulerResponse{ExecutorID: "executor-1"}, resp)
@@ -102,7 +102,7 @@ func TestSchedulerResourceOwnerNoCapacity(t *testing.T) {
 	_, err := sched.ScheduleTask(context.Background(), &schedModel.SchedulerRequest{
 		Cost: 50,
 		// resource-3 requires executor-3, but it does not have the capacity
-		ExternalResources: []resourcemeta.ResourceID{"resource-3"},
+		ExternalResources: []resModel.ResourceKey{{JobID: "fakeJob", ID: "resource-3"}},
 	})
 	require.Error(t, err)
 	require.Regexp(t, ".*ErrClusterResourceNotEnough.*", err)
@@ -116,7 +116,7 @@ func TestSchedulerResourceNotFound(t *testing.T) {
 	_, err := sched.ScheduleTask(context.Background(), &schedModel.SchedulerRequest{
 		Cost: 50,
 		// resource-blah DOES NOT exist
-		ExternalResources: []resourcemeta.ResourceID{"resource-blah"},
+		ExternalResources: []resModel.ResourceKey{{JobID: "fakeJob", ID: "resource-blah"}},
 	})
 	require.Error(t, err)
 	require.Regexp(t, ".*Scheduler could not find resource resource-blah.*", err)
@@ -142,9 +142,15 @@ func TestSchedulerConstraintConflict(t *testing.T) {
 
 	_, err := sched.ScheduleTask(context.Background(), &schedModel.SchedulerRequest{
 		Cost: 10,
-		ExternalResources: []resourcemeta.ResourceID{
-			"resource-1",
-			"resource-2",
+		ExternalResources: []resModel.ResourceKey{
+			{
+				JobID: "fakeJob",
+				ID:    "resource-1",
+			},
+			{
+				JobID: "fakeJob",
+				ID:    "resource-2",
+			},
 		},
 	})
 	require.Error(t, err)

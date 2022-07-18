@@ -20,16 +20,18 @@ import (
 	"testing"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
 )
 
 type mockProducer struct {
-	mqEvent map[topicPartitionKey][]*codec.MQMessage
-	flushed bool
+	mqEvent      map[topicPartitionKey][]*codec.MQMessage
+	flushedTimes int
 
 	mockErr chan error
 }
@@ -61,7 +63,7 @@ func (m *mockProducer) SyncBroadcastMessage(
 }
 
 func (m *mockProducer) Flush(ctx context.Context) error {
-	m.flushed = true
+	m.flushedTimes += 1
 	return nil
 }
 
@@ -103,6 +105,7 @@ func TestBatch(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	worker, _ := newTestWorker(ctx)
+	defer worker.close()
 	key := topicPartitionKey{
 		topic:     "test",
 		partition: 1,
@@ -117,13 +120,17 @@ func TestBatch(t *testing.T) {
 			name: "Normal batching",
 			events: []mqEvent{
 				{
-					resolved: model.NewResolvedTs(0),
+					flush: nil,
 				},
 				{
 					row: &model.RowChangedEvent{
 						CommitTs: 1,
 						Table:    &model.TableName{Schema: "a", Table: "b"},
-						Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+						Columns: []*model.Column{{
+							Name:  "col1",
+							Type:  mysql.TypeVarchar,
+							Value: []byte("aa"),
+						}},
 					},
 					key: key,
 				},
@@ -142,7 +149,10 @@ func TestBatch(t *testing.T) {
 			name: "No row change events",
 			events: []mqEvent{
 				{
-					resolved: model.NewResolvedTs(1),
+					flush: &flushEvent{
+						resolvedTs: model.NewResolvedTs(1),
+						flushed:    make(chan struct{}),
+					},
 				},
 			},
 			expectedN: 0,
@@ -154,12 +164,19 @@ func TestBatch(t *testing.T) {
 					row: &model.RowChangedEvent{
 						CommitTs: 1,
 						Table:    &model.TableName{Schema: "a", Table: "b"},
-						Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+						Columns: []*model.Column{{
+							Name:  "col1",
+							Type:  mysql.TypeVarchar,
+							Value: []byte("aa"),
+						}},
 					},
 					key: key,
 				},
 				{
-					resolved: model.NewResolvedTs(1),
+					flush: &flushEvent{
+						resolvedTs: model.NewResolvedTs(1),
+						flushed:    make(chan struct{}),
+					},
 				},
 				{
 					row: &model.RowChangedEvent{
@@ -187,16 +204,12 @@ func TestBatch(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, test.expectedN, endIndex)
 			}()
-
+			wg.Add(1)
 			go func() {
+				defer wg.Done()
 				for _, event := range test.events {
 					err := worker.addEvent(ctx, event)
-					if event.row != nil && event.row.CommitTs == math.MaxUint64 {
-						// For unprocessed events, addEvent returns after ctx has been cancelled.
-						require.Regexp(t, ".*context canceled.*", err)
-					} else {
-						require.NoError(t, err)
-					}
+					require.NoError(t, err)
 				}
 			}()
 			wg.Wait()
@@ -222,13 +235,17 @@ func TestGroup(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	worker, _ := newTestWorker(ctx)
-
+	defer worker.close()
 	events := []mqEvent{
 		{
 			row: &model.RowChangedEvent{
 				CommitTs: 1,
 				Table:    &model.TableName{Schema: "a", Table: "b"},
-				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+				Columns: []*model.Column{{
+					Name:  "col1",
+					Type:  mysql.TypeVarchar,
+					Value: []byte("aa"),
+				}},
 			},
 			key: key1,
 		},
@@ -300,12 +317,17 @@ func TestAsyncSend(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	worker, producer := newTestWorker(ctx)
+	defer worker.close()
 	events := []mqEvent{
 		{
 			row: &model.RowChangedEvent{
 				CommitTs: 1,
 				Table:    &model.TableName{Schema: "a", Table: "b"},
-				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+				Columns: []*model.Column{{
+					Name:  "col1",
+					Type:  mysql.TypeVarchar,
+					Value: []byte("aa"),
+				}},
 			},
 			key: key1,
 		},
@@ -329,7 +351,11 @@ func TestAsyncSend(t *testing.T) {
 			row: &model.RowChangedEvent{
 				CommitTs: 2,
 				Table:    &model.TableName{Schema: "aa", Table: "bb"},
-				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+				Columns: []*model.Column{{
+					Name:  "col1",
+					Type:  mysql.TypeVarchar,
+					Value: []byte("aa"),
+				}},
 			},
 			key: key2,
 		},
@@ -337,7 +363,11 @@ func TestAsyncSend(t *testing.T) {
 			row: &model.RowChangedEvent{
 				CommitTs: 2,
 				Table:    &model.TableName{Schema: "aaa", Table: "bbb"},
-				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+				Columns: []*model.Column{{
+					Name:  "col1",
+					Type:  mysql.TypeVarchar,
+					Value: []byte("aa"),
+				}},
 			},
 			key: key3,
 		},
@@ -371,13 +401,19 @@ func TestFlush(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	worker, producer := newTestWorker(ctx)
-
+	defer worker.close()
+	flushedChan := make(chan struct{})
+	flushed := atomic.NewBool(false)
 	events := []mqEvent{
 		{
 			row: &model.RowChangedEvent{
 				CommitTs: 1,
 				Table:    &model.TableName{Schema: "a", Table: "b"},
-				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+				Columns: []*model.Column{{
+					Name:  "col1",
+					Type:  mysql.TypeVarchar,
+					Value: []byte("aa"),
+				}},
 			},
 			key: key1,
 		},
@@ -398,11 +434,23 @@ func TestFlush(t *testing.T) {
 			key: key1,
 		},
 		{
-			resolved: model.NewResolvedTs(1),
+			flush: &flushEvent{
+				resolvedTs: model.NewResolvedTs(1),
+				flushed:    flushedChan,
+			},
 		},
 	}
 
 	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		select {
+		case <-flushedChan:
+			flushed.Store(true)
+		}
+	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -411,13 +459,13 @@ func TestFlush(t *testing.T) {
 		endIndex, err := worker.batch(ctx, batchBuf)
 		require.NoError(t, err)
 		require.Equal(t, 3, endIndex)
-		require.True(t, worker.needSyncFlush)
+		require.NotNil(t, worker.needsFlush)
 		msgs := batchBuf[:endIndex]
 		paritionedRows := worker.group(msgs)
 		err = worker.asyncSend(ctx, paritionedRows)
 		require.NoError(t, err)
-		require.True(t, producer.flushed)
-		require.False(t, worker.needSyncFlush)
+		require.Equal(t, 1, producer.flushedTimes)
+		require.Nil(t, worker.needsFlush)
 	}()
 
 	for _, event := range events {
@@ -426,6 +474,8 @@ func TestFlush(t *testing.T) {
 	}
 
 	wg.Wait()
+	// Make sure the flush event is processed and notify the flushedChan.
+	require.True(t, flushed.Load())
 }
 
 func TestAbort(t *testing.T) {
@@ -433,6 +483,7 @@ func TestAbort(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	worker, _ := newTestWorker(ctx)
+	defer worker.close()
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -452,6 +503,7 @@ func TestProducerError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	worker, prod := newTestWorker(ctx)
+	defer worker.close()
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -462,12 +514,15 @@ func TestProducerError(t *testing.T) {
 		require.Regexp(t, ".*fake.*", err.Error())
 	}()
 
-	prod.InjectError(errors.New("fake"))
 	err := worker.addEvent(ctx, mqEvent{
 		row: &model.RowChangedEvent{
 			CommitTs: 1,
 			Table:    &model.TableName{Schema: "a", Table: "b"},
-			Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+			Columns: []*model.Column{{
+				Name:  "col1",
+				Type:  mysql.TypeVarchar,
+				Value: []byte("aa"),
+			}},
 		},
 		key: topicPartitionKey{
 			topic:     "test",
@@ -475,15 +530,96 @@ func TestProducerError(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	err = worker.addEvent(ctx, mqEvent{resolved: model.NewResolvedTs(100)})
+	err = worker.addEvent(ctx, mqEvent{flush: &flushEvent{
+		resolvedTs: model.NewResolvedTs(100),
+		flushed:    make(chan struct{}),
+	}})
 	require.NoError(t, err)
+	prod.InjectError(errors.New("fake"))
+	wg.Wait()
+}
+
+func TestWorker(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker, producer := newTestWorker(ctx)
+	defer worker.close()
+	go func() {
+		_ = worker.run(ctx)
+	}()
+
+	err := worker.addEvent(ctx, mqEvent{
+		row: &model.RowChangedEvent{
+			CommitTs: 1,
+			Table:    &model.TableName{Schema: "a", Table: "b"},
+			Columns: []*model.Column{{
+				Name:  "col1",
+				Type:  mysql.TypeVarchar,
+				Value: []byte("aa"),
+			}},
+		},
+		key: topicPartitionKey{
+			topic:     "test",
+			partition: 1,
+		},
+	})
+	require.NoError(t, err)
+	err = worker.addEvent(ctx, mqEvent{
+		row: &model.RowChangedEvent{
+			CommitTs: 300,
+			Table:    &model.TableName{Schema: "a", Table: "b"},
+			Columns: []*model.Column{{
+				Name:  "col1",
+				Type:  mysql.TypeVarchar,
+				Value: []byte("aa"),
+			}},
+		},
+		key: topicPartitionKey{
+			topic:     "test",
+			partition: 1,
+		},
+	})
+	require.NoError(t, err)
+	var wg sync.WaitGroup
+
+	flushedChan1 := make(chan struct{})
+	flushed1 := atomic.NewBool(false)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		select {
+		case <-flushedChan1:
+			flushed1.Store(true)
+		}
+	}()
+	err = worker.addEvent(ctx, mqEvent{flush: &flushEvent{
+		resolvedTs: model.NewResolvedTs(100),
+		flushed:    flushedChan1,
+	}})
+	require.NoError(t, err)
+
+	flushedChan2 := make(chan struct{})
+	flushed2 := atomic.NewBool(false)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		select {
+		case <-flushedChan2:
+			flushed2.Store(true)
+		}
+	}()
+	err = worker.addEvent(ctx, mqEvent{flush: &flushEvent{
+		resolvedTs: model.NewResolvedTs(200),
+		flushed:    flushedChan2,
+	}})
+	require.NoError(t, err)
+
 	wg.Wait()
 
-	err = worker.addEvent(ctx, mqEvent{resolved: model.NewResolvedTs(200)})
-	require.Error(t, err)
-	require.Regexp(t, ".*fake.*", err.Error())
-
-	err = worker.addEvent(ctx, mqEvent{resolved: model.NewResolvedTs(300)})
-	require.Error(t, err)
-	require.Regexp(t, ".*ErrMQWorkerClosed.*", err.Error())
+	// Make sure we don't get a block even if we flush multiple times.
+	require.Equal(t, 2, producer.flushedTimes)
+	require.True(t, flushed1.Load())
+	require.True(t, flushed2.Load())
 }

@@ -75,88 +75,6 @@ func (t *testDBSuite) TestGetRandomServerID(c *C) {
 	c.Assert(serverID, Not(Equals), 101)
 }
 
-func TestGetPosAndGs(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), DefaultDBTimeout)
-	defer cancel()
-
-	db, mock, err := sqlmock.New()
-	require.Nil(t, err)
-
-	// 5 columns for MySQL
-	rows := mock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"}).AddRow(
-		"mysql-bin.000009", 11232, "do_db", "ignore_db", "074be7f4-f0f1-11ea-95bd-0242ac120002:1-699",
-	)
-	mock.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
-
-	pos, gs, err := GetPosAndGs(ctx, db, "mysql")
-	require.Nil(t, err)
-	require.Equal(t, pos, gmysql.Position{
-		Name: "mysql-bin.000009",
-		Pos:  11232,
-	})
-	require.Equal(t, gs.String(), "074be7f4-f0f1-11ea-95bd-0242ac120002:1-699")
-	require.Nil(t, mock.ExpectationsWereMet())
-
-	// 4 columns for MariaDB
-	rows = mock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB"}).AddRow(
-		"mysql-bin.000009", 11232, "do_db", "ignore_db",
-	)
-	mock.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
-	rows = mock.NewRows([]string{"Variable_name", "Value"}).AddRow("gtid_binlog_pos", "1-2-100")
-	mock.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'gtid_binlog_pos'`).WillReturnRows(rows)
-
-	pos, gs, err = GetPosAndGs(ctx, db, "mariadb")
-	require.Nil(t, err)
-	require.Equal(t, pos, gmysql.Position{
-		Name: "mysql-bin.000009",
-		Pos:  11232,
-	})
-	require.Equal(t, gs.String(), "1-2-100")
-	require.Nil(t, mock.ExpectationsWereMet())
-
-	// some upstream (maybe a polarDB secondary node)
-	rows = mock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB"})
-	mock.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
-
-	_, gs, err = GetPosAndGs(ctx, db, "mysql")
-	require.Nil(t, gs)
-	require.NotNil(t, err)
-}
-
-func TestGetBinlogDB(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), DefaultDBTimeout)
-	defer cancel()
-
-	db, mock, err := sqlmock.New()
-	require.Nil(t, err)
-
-	// 5 columns for MySQL
-	rows := mock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"}).AddRow(
-		"mysql-bin.000009", 11232, "do_db", "ignore_db", "074be7f4-f0f1-11ea-95bd-0242ac120002:1-699",
-	)
-	mock.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
-
-	binlogDoDB, binlogIgnoreDB, err := GetBinlogDB(ctx, db, "mysql")
-	require.Nil(t, err)
-	require.Equal(t, binlogDoDB, "do_db")
-	require.Equal(t, binlogIgnoreDB, "ignore_db")
-	require.Nil(t, mock.ExpectationsWereMet())
-
-	// 4 columns for MariaDB
-	rows = mock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB"}).AddRow(
-		"mysql-bin.000009", 11232, "do_db", "ignore_db",
-	)
-	mock.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
-	rows = mock.NewRows([]string{"Variable_name", "Value"}).AddRow("gtid_binlog_pos", "1-2-100")
-	mock.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'gtid_binlog_pos'`).WillReturnRows(rows)
-
-	binlogDoDB, binlogIgnoreDB, err = GetBinlogDB(ctx, db, "mariadb")
-	require.Nil(t, err)
-	require.Equal(t, binlogDoDB, "do_db")
-	require.Equal(t, binlogIgnoreDB, "ignore_db")
-	require.Nil(t, mock.ExpectationsWereMet())
-}
-
 func (t *testDBSuite) TestGetMariaDBGtidDomainID(c *C) {
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultDBTimeout)
 	defer cancel()
@@ -212,40 +130,6 @@ func (t *testDBSuite) TestGetServerUnixTS(c *C) {
 	ts2, err := GetServerUnixTS(ctx, db)
 	c.Assert(err, IsNil)
 	c.Assert(ts, Equals, ts2)
-	c.Assert(mock.ExpectationsWereMet(), IsNil)
-}
-
-func (t *testDBSuite) TestGetSchemaList(c *C) {
-	ctx := context.Background()
-
-	db, mock, err := sqlmock.New()
-	c.Assert(err, IsNil)
-
-	schemaName := "information_schema"
-	rows := sqlmock.NewRows([]string{"Database"}).AddRow(schemaName)
-	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(rows)
-
-	schemaList, err := GetSchemaList(ctx, db)
-	c.Assert(err, IsNil)
-	c.Assert(schemaName, Equals, schemaList[0])
-	c.Assert(mock.ExpectationsWereMet(), IsNil)
-}
-
-func (t *testDBSuite) TestGetTableList(c *C) {
-	ctx := context.Background()
-
-	db, mock, err := sqlmock.New()
-	c.Assert(err, IsNil)
-
-	schemaName := "information_schema"
-	tableName := "CHARACTER_SETS"
-	sql := "SHOW TABLES FROM " + schemaName
-	rows := sqlmock.NewRows([]string{"Tables_in_information_schema"}).AddRow(tableName)
-	mock.ExpectQuery(sql).WillReturnRows(rows)
-
-	tableList, err := GetTableList(ctx, db, schemaName)
-	c.Assert(err, IsNil)
-	c.Assert(tableName, Equals, tableList[0])
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
 }
 
@@ -421,7 +305,7 @@ func (t *testDBSuite) TestTiDBVersion(c *C) {
 	}
 }
 
-func getGSetFromString(c *C, s string) gtid.Set {
+func getGSetFromString(c *C, s string) gmysql.GTIDSet {
 	gSet, err := gtid.ParserGTID("mysql", s)
 	c.Assert(err, IsNil)
 	return gSet
@@ -438,9 +322,9 @@ func (t *testDBSuite) TestAddGSetWithPurged(c *C) {
 	c.Assert(err, IsNil)
 
 	testCases := []struct {
-		originGSet  gtid.Set
-		purgedSet   gtid.Set
-		expectedSet gtid.Set
+		originGSet  gmysql.GTIDSet
+		purgedSet   gmysql.GTIDSet
+		expectedSet gmysql.GTIDSet
 		err         error
 	}{
 		{

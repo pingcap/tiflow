@@ -18,11 +18,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-)
-
-const (
-	StartTimeFormat  = "2006-01-02 15:04:05"
-	StartTimeFormat2 = "2006-01-02T15:04:05"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // TaskCliArgs is the task command line arguments, these arguments have higher priority than the config file and
@@ -51,11 +47,8 @@ func (t *TaskCliArgs) Decode(data []byte) error {
 // Verify checks if all fields are legal.
 func (t *TaskCliArgs) Verify() error {
 	if t.StartTime != "" {
-		if _, err := time.Parse(StartTimeFormat, t.StartTime); err != nil {
-			_, err = time.Parse(StartTimeFormat2, t.StartTime)
-			if err != nil {
-				return terror.Annotate(err, "error while parse start-time, expected in the format like '2006-01-02 15:04:05' or '2006-01-02T15:04:05'")
-			}
+		if _, err := utils.ParseStartTime(t.StartTime); err != nil {
+			return terror.Annotate(err, "error while parse start-time, expected in the format like '2006-01-02 15:04:05' or '2006-01-02T15:04:05'")
 		}
 	}
 

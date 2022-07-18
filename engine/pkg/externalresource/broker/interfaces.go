@@ -16,9 +16,10 @@ package broker
 import (
 	"context"
 
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
-	"github.com/pingcap/tiflow/engine/pb"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
 // A Broker is created and maintained by the executor
@@ -29,6 +30,7 @@ type Broker interface {
 	// OpenStorage creates a storage Handle for a worker.
 	OpenStorage(
 		ctx context.Context,
+		projectInfo tenant.ProjectInfo,
 		workerID resModel.WorkerID,
 		jobID resModel.JobID,
 		resourcePath resModel.ResourceID,
@@ -48,24 +50,24 @@ type Broker interface {
 // a Broker needs to perform.
 type FileManager interface {
 	CreateResource(
-		creator libModel.WorkerID,
+		creator frameModel.WorkerID,
 		resName resModel.ResourceName,
-	) (*resModel.LocalFileResourceDescriptor, error)
+	) (*LocalFileResourceDescriptor, error)
 
 	GetPersistedResource(
-		creator libModel.WorkerID,
+		creator frameModel.WorkerID,
 		resName resModel.ResourceName,
-	) (*resModel.LocalFileResourceDescriptor, error)
+	) (*LocalFileResourceDescriptor, error)
 
-	RemoveTemporaryFiles(creator libModel.WorkerID) error
+	RemoveTemporaryFiles(creator frameModel.WorkerID) error
 
 	RemoveResource(
-		creator libModel.WorkerID,
+		creator frameModel.WorkerID,
 		resName resModel.ResourceName,
 	) error
 
 	SetPersisted(
-		creator libModel.WorkerID,
+		creator frameModel.WorkerID,
 		resName resModel.ResourceName,
 	)
 }

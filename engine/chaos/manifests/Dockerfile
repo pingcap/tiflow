@@ -1,11 +1,10 @@
 FROM alpine:3.14
 
-ADD master /df-server-master
-ADD executor /df-executor
-ADD df-chaos-case /df-chaos-case
+ADD tiflow /tiflow
+ADD tiflow-chaos-case /tiflow-chaos-case
 ADD conf /conf
 
-RUN chmod a+x /df-server-master /df-executor /df-chaos-case
+RUN chmod a+x /tiflow /tiflow-chaos-case
 
 WORKDIR /
 

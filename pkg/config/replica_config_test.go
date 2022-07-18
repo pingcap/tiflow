@@ -46,7 +46,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, testCfgTestReplicaConfigMarshal1, mustIndentJSON(t, b))
 	conf2 := new(ReplicaConfig)
-	err = conf2.Unmarshal([]byte(testCfgTestReplicaConfigMarshal2))
+	err = conf2.UnmarshalJSON([]byte(testCfgTestReplicaConfigMarshal2))
 	require.Nil(t, err)
 	require.Equal(t, conf, conf2)
 }
@@ -67,7 +67,7 @@ func TestReplicaConfigClone(t *testing.T) {
 func TestReplicaConfigOutDated(t *testing.T) {
 	t.Parallel()
 	conf2 := new(ReplicaConfig)
-	err := conf2.Unmarshal([]byte(testCfgTestReplicaConfigOutDated))
+	err := conf2.UnmarshalJSON([]byte(testCfgTestReplicaConfigOutDated))
 	require.Nil(t, err)
 
 	conf := GetDefaultReplicaConfig()
@@ -81,27 +81,28 @@ func TestReplicaConfigOutDated(t *testing.T) {
 		{Matcher: []string{"a.c"}, DispatcherRule: "r2"},
 		{Matcher: []string{"a.d"}, DispatcherRule: "r2"},
 	}
+	conf.Sink.TxnAtomicity = unknowTxnAtomicity
 	require.Equal(t, conf, conf2)
 }
 
 func TestReplicaConfigValidate(t *testing.T) {
 	t.Parallel()
 	conf := GetDefaultReplicaConfig()
-	require.Nil(t, conf.Validate())
+	require.Nil(t, conf.ValidateAndAdjust(nil))
 
 	// Incorrect sink configuration.
 	conf = GetDefaultReplicaConfig()
 	conf.Sink.Protocol = "canal"
 	conf.EnableOldValue = false
 	require.Regexp(t, ".*canal protocol requires old value to be enabled.*",
-		conf.Validate())
+		conf.ValidateAndAdjust(nil))
 
 	conf = GetDefaultReplicaConfig()
 	conf.Sink.DispatchRules = []*DispatchRule{
 		{Matcher: []string{"a.b"}, DispatcherRule: "d1", PartitionRule: "r1"},
 	}
 	require.Regexp(t, ".*dispatcher and partition cannot be configured both.*",
-		conf.Validate())
+		conf.ValidateAndAdjust(nil))
 
 	// Correct sink configuration.
 	conf = GetDefaultReplicaConfig()
@@ -110,7 +111,7 @@ func TestReplicaConfigValidate(t *testing.T) {
 		{Matcher: []string{"a.c"}, PartitionRule: "p1"},
 		{Matcher: []string{"a.d"}},
 	}
-	err := conf.Validate()
+	err := conf.ValidateAndAdjust(nil)
 	require.Nil(t, err)
 	rules := conf.Sink.DispatchRules
 	require.Equal(t, "d1", rules[0].PartitionRule)

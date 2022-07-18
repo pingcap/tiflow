@@ -22,14 +22,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
+	"github.com/pingcap/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -39,31 +36,33 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/engine/client"
-	"github.com/pingcap/tiflow/engine/lib"
-	"github.com/pingcap/tiflow/engine/lib/metadata"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/framework"
+	"github.com/pingcap/tiflow/engine/framework/metadata"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pb"
-	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
-	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
+	engineEtcdutil "github.com/pingcap/tiflow/engine/pkg/etcdutil"
 	externRescManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
-	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
-	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcetypes"
+	"github.com/pingcap/tiflow/engine/pkg/meta"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
-	"github.com/pingcap/tiflow/engine/pkg/serverutils"
+	"github.com/pingcap/tiflow/engine/pkg/serverutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	"github.com/pingcap/tiflow/engine/servermaster/cluster"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
 )
 
 // Server handles PRC requests for df master.
@@ -71,12 +70,9 @@ type Server struct {
 	etcd *embed.Etcd
 
 	etcdClient *clientv3.Client
-	session    *concurrency.Session
-	election   cluster.Election
-	leaderCtx  context.Context
-	resignFn   context.CancelFunc
-	leader     atomic.Value
-	members    struct {
+
+	leader  atomic.Value
+	members struct {
 		sync.RWMutex
 		m []*Member
 	}
@@ -92,7 +88,10 @@ type Server struct {
 	resourceManagerService *externRescManager.Service
 	scheduler              *scheduler.Scheduler
 
-	//
+	// file resource GC
+	gcRunner      externRescManager.GCRunner
+	gcCoordinator externRescManager.GCCoordinator
+
 	cfg     *Config
 	info    *model.NodeInfo
 	metrics *serverMasterMetric
@@ -103,7 +102,7 @@ type Server struct {
 	msgService      *p2p.MessageRPCService
 	p2pMsgRouter    p2p.MessageRouter
 	rpcLogRL        *rate.Limiter
-	discoveryKeeper *serverutils.DiscoveryKeepaliver
+	discoveryKeeper *serverutil.DiscoveryKeepaliver
 
 	metaStoreManager MetaStoreManager
 
@@ -115,9 +114,8 @@ type Server struct {
 	testCtx *test.Context
 
 	// framework metastore client
-	frameMetaClient pkgOrm.Client
-	// user metastore kvclient
-	userMetaKVClient extkv.KVClientEx
+	frameMetaClient    pkgOrm.Client
+	businessClientConn metaModel.ClientConn
 }
 
 // PersistResource implements pb.MasterServer.PersistResource
@@ -268,6 +266,16 @@ func (s *Server) PauseJob(ctx context.Context, req *pb.PauseJobRequest) (*pb.Pau
 	return s.jobManager.PauseJob(ctx, req), nil
 }
 
+// DebugJob implements pb.MasterServer.DebugJob
+func (s *Server) DebugJob(ctx context.Context, req *pb.DebugJobRequest) (*pb.DebugJobResponse, error) {
+	resp2 := &pb.DebugJobResponse{}
+	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
+	if shouldRet {
+		return resp2, err
+	}
+	return s.jobManager.DebugJob(ctx, req), nil
+}
+
 // RegisterExecutor implements grpc interface, and passes request onto executor manager.
 func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest) (*pb.RegisterExecutorResponse, error) {
 	resp2 := &pb.RegisterExecutorResponse{}
@@ -279,9 +287,9 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 	// TODO: check leader, if not leader, return notLeader error.
 	execInfo, err := s.executorManager.AllocateNewExec(req)
 	if err != nil {
-		log.L().Logger.Error("add executor failed", zap.Error(err))
+		log.Error("add executor failed", zap.Error(err))
 		return &pb.RegisterExecutorResponse{
-			Err: derrors.ToPBError(err),
+			Err: cerrors.ToPBError(err),
 		}, nil
 	}
 	return &pb.RegisterExecutorResponse{
@@ -302,7 +310,7 @@ func (s *Server) ScheduleTask(ctx context.Context, req *pb.ScheduleTaskRequest) 
 
 	schedulerReq := &schedModel.SchedulerRequest{
 		Cost:              schedModel.ResourceUnit(req.GetCost()),
-		ExternalResources: req.GetResourceRequirements(),
+		ExternalResources: resModel.ToResourceKeys(req.GetResourceRequirements()),
 	}
 	schedulerResp, err := s.scheduler.ScheduleTask(ctx, schedulerReq)
 	if err != nil {
@@ -311,10 +319,10 @@ func (s *Server) ScheduleTask(ctx context.Context, req *pb.ScheduleTaskRequest) 
 
 	addr, ok := s.executorManager.GetAddr(schedulerResp.ExecutorID)
 	if !ok {
-		log.L().Warn("Executor is gone, RPC call needs retry",
+		log.Warn("Executor is gone, RPC call needs retry",
 			zap.Any("request", req),
 			zap.String("executor-id", string(schedulerResp.ExecutorID)))
-		errOut := derrors.ErrUnknownExecutorID.GenWithStackByArgs(string(schedulerResp.ExecutorID))
+		errOut := cerrors.ErrUnknownExecutorID.GenWithStackByArgs(string(schedulerResp.ExecutorID))
 		return nil, status.Error(codes.Internal, errOut.Error())
 	}
 
@@ -372,11 +380,9 @@ func (s *Server) QueryMetaStore(
 			Address: s.cfg.AdvertiseAddr,
 		}, nil
 	case pb.StoreType_SystemMetaStore:
-		return getStore(metaclient.FrameMetaID), nil
+		return getStore(FrameMetaID), nil
 	case pb.StoreType_AppMetaStore:
-		return &pb.QueryMetaStoreResponse{
-			Address: s.cfg.UserMetaConf.Endpoints[0],
-		}, nil
+		return getStore(DefaultBusinessMetaID), nil
 	default:
 		return &pb.QueryMetaStoreResponse{
 			Err: &pb.Error{
@@ -392,9 +398,9 @@ func (s *Server) ReportExecutorWorkload(
 	ctx context.Context, req *pb.ExecWorkloadRequest,
 ) (*pb.ExecWorkloadResponse, error) {
 	// TODO: pass executor workload to capacity manager
-	log.L().Debug("receive workload report", zap.String("executor", req.ExecutorId))
+	log.Debug("receive workload report", zap.String("executor", req.ExecutorId))
 	for _, res := range req.GetWorkloads() {
-		log.L().Debug("workload", zap.Int32("type", int32(res.GetTp())), zap.Int32("usage", res.GetUsage()))
+		log.Debug("workload", zap.Int32("type", res.GetTp()), zap.Int32("usage", res.GetUsage()))
 	}
 	return &pb.ExecWorkloadResponse{}, nil
 }
@@ -436,8 +442,8 @@ func (s *Server) Stop() {
 	if s.frameMetaClient != nil {
 		s.frameMetaClient.Close()
 	}
-	if s.userMetaKVClient != nil {
-		s.userMetaKVClient.Close()
+	if s.businessClientConn != nil {
+		s.businessClientConn.Close()
 	}
 }
 
@@ -447,8 +453,7 @@ func (s *Server) Run(ctx context.Context) (err error) {
 		return s.startForTest(ctx)
 	}
 
-	registerMetrics()
-
+	// TODO: need context here to initialize the metastore connection
 	err = s.registerMetaStore()
 	if err != nil {
 		return err
@@ -461,10 +466,6 @@ func (s *Server) Run(ctx context.Context) (err error) {
 	}
 
 	err = s.startGrpcSrv(ctx)
-	if err != nil {
-		return
-	}
-	err = s.reset(ctx)
 	if err != nil {
 		return
 	}
@@ -483,7 +484,7 @@ func (s *Server) Run(ctx context.Context) (err error) {
 		return s.memberLoop(ctx)
 	})
 
-	s.discoveryKeeper = serverutils.NewDiscoveryKeepaliver(
+	s.discoveryKeeper = serverutil.NewDiscoveryKeepaliver(
 		s.info, s.etcdClient, int(defaultSessionTTL/time.Second),
 		defaultDiscoverTicker, s.p2pMsgRouter,
 	)
@@ -502,23 +503,24 @@ func (s *Server) registerMetaStore() error {
 	}
 	var err error
 	// TODO: replace default db config
-	if s.frameMetaClient, err = pkgOrm.NewClient(*cfg.FrameMetaConf, pkgOrm.NewDefaultDBConfig()); err != nil {
-		log.L().Error("connect to framework metastore fail", zap.Any("config", cfg.FrameMetaConf), zap.Error(err))
+	if s.frameMetaClient, err = pkgOrm.NewClient(*cfg.FrameMetaConf, *(cfg.FrameMetaConf.DBConf)); err != nil {
+		log.Error("connect to framework metastore fail", zap.Any("config", cfg.FrameMetaConf), zap.Error(err))
 		return err
 	}
 
-	log.L().Info("register framework metastore successfully", zap.Any("metastore", cfg.FrameMetaConf))
+	log.Info("register framework metastore successfully", zap.Any("metastore", cfg.FrameMetaConf))
 
-	// register metastore for user
-	err = s.metaStoreManager.Register(cfg.UserMetaConf.StoreID, cfg.UserMetaConf)
+	// register metastore for business
+	err = s.metaStoreManager.Register(cfg.BusinessMetaConf.StoreID, cfg.BusinessMetaConf)
 	if err != nil {
 		return err
 	}
-	if s.userMetaKVClient, err = kvclient.NewKVClient(cfg.UserMetaConf); err != nil {
-		log.L().Error("connect to user metastore fail", zap.Any("config", cfg.UserMetaConf), zap.Error(err))
+	s.businessClientConn, err = meta.NewClientConn(cfg.BusinessMetaConf)
+	if err != nil {
+		log.Error("connect to business metastore fail", zap.Any("config", cfg.BusinessMetaConf), zap.Error(err))
 		return err
 	}
-	log.L().Info("register user metastore successfully", zap.Any("metastore", cfg.UserMetaConf))
+	log.Info("register business metastore successfully", zap.Any("metastore", cfg.BusinessMetaConf))
 
 	return nil
 }
@@ -541,13 +543,13 @@ func (s *Server) startResourceManager() error {
 }
 
 func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
-	etcdCfg := etcdutils.GenEmbedEtcdConfigWithLogger(s.cfg.LogLevel)
+	etcdCfg := engineEtcdutil.GenEmbedEtcdConfigWithLogger(s.cfg.LogConf.Level)
 	// prepare to join an existing etcd cluster.
-	err = etcdutils.PrepareJoinEtcd(s.cfg.Etcd, s.cfg.MasterAddr)
+	err = engineEtcdutil.PrepareJoinEtcd(s.cfg.Etcd, s.cfg.MasterAddr)
 	if err != nil {
 		return
 	}
-	log.L().Info("config after join prepared", zap.Stringer("config", s.cfg))
+	log.Info("config after join prepared", zap.Stringer("config", s.cfg))
 
 	// generates embed etcd config before any concurrent gRPC calls.
 	// potential concurrent gRPC calls:
@@ -556,32 +558,53 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 	// no `String` method exists for embed.Config, and can not marshal it to join too.
 	// but when starting embed etcd server, the etcd pkg will log the config.
 	// https://github.com/etcd-io/etcd/blob/3cf2f69b5738fb702ba1a935590f36b52b18979b/embed/etcd.go#L299
-	etcdCfg, err = etcdutils.GenEmbedEtcdConfig(etcdCfg, s.cfg.MasterAddr, s.cfg.AdvertiseAddr, s.cfg.Etcd)
+	etcdCfg, err = engineEtcdutil.GenEmbedEtcdConfig(etcdCfg, s.cfg.MasterAddr, s.cfg.AdvertiseAddr, s.cfg.Etcd)
 	if err != nil {
 		return
 	}
 
+	registerDone := make(chan struct{})
 	gRPCSvr := func(gs *grpc.Server) {
 		pb.RegisterMasterServer(gs, s)
 		pb.RegisterResourceManagerServer(gs, s.resourceManagerService)
 		s.msgService = p2p.NewMessageRPCServiceWithRPCServer(s.name(), nil, gs)
 		p2pProtocol.RegisterCDCPeerToPeerServer(gs, s.msgService.GetMessageServer())
+		close(registerDone)
 	}
 
+	router := gin.New()
+	openapi := NewOpenAPI(s)
+	RegisterRoutes(router, openapi)
 	httpHandlers := map[string]http.Handler{
-		"/debug/":  getDebugHandler(),
-		"/metrics": promhttp.Handler(),
+		"/debug/":   router,
+		"/swagger/": router,
+		"/api/v1/":  router,
+		"/metrics":  router,
 	}
-
 	// generate grpcServer
 	s.etcd, err = startEtcd(ctx, etcdCfg, gRPCSvr, httpHandlers, etcdStartTimeout)
 	if err != nil {
 		return
 	}
-	log.L().Logger.Info("start etcd successfully")
+	log.Info("start etcd successfully")
 
 	// start grpc server
 	s.etcdClient, err = etcdutil.CreateClient([]string{withHost(s.cfg.MasterAddr)}, nil)
+	if err != nil {
+		return
+	}
+	s.membership = &EtcdMembership{etcdCli: s.etcdClient}
+
+	// etcd server.ReadyNotify() only ensures server is ready to serve client
+	// requests, the service register could have not been called.
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	case <-time.After(etcdStartTimeout):
+		return cerrors.ErrMasterStartEmbedEtcdFail.GenWithStack("register grpc service timeout")
+	case <-registerDone:
+	}
+
 	return
 }
 
@@ -603,45 +626,11 @@ func (s *Server) name() string {
 	return s.id
 }
 
-func (s *Server) reset(ctx context.Context) error {
-	sess, err := concurrency.NewSession(
-		s.etcdClient, concurrency.WithTTL(int(defaultSessionTTL.Seconds())))
-	if err != nil {
-		return derrors.Wrap(derrors.ErrMasterNewServer, err)
-	}
-
-	// register NodeInfo key used in service discovery
-	value, err := s.info.ToJSON()
-	if err != nil {
-		return derrors.Wrap(derrors.ErrMasterNewServer, err)
-	}
-	_, err = s.etcdClient.Put(ctx, s.info.EtcdKey(), value, clientv3.WithLease(sess.Lease()))
-	if err != nil {
-		return derrors.Wrap(derrors.ErrEtcdAPIError, err)
-	}
-
-	s.session = sess
-	s.election, err = cluster.NewEtcdElection(ctx, s.etcdClient, sess, cluster.EtcdElectionConfig{
-		CreateSessionTimeout: s.cfg.RPCTimeout, // FIXME (zixiong): use a separate timeout here
-		TTL:                  s.cfg.KeepAliveTTL,
-		Prefix:               adapter.MasterCampaignKey.Path(),
-	})
-	if err != nil {
-		return err
-	}
-	s.membership = &EtcdMembership{etcdCli: s.etcdClient}
-	err = s.updateServerMasterMembers(ctx)
-	if err != nil {
-		log.L().Warn("failed to update server master members", zap.Error(err))
-	}
-	return nil
-}
-
 func (s *Server) initializedBackendMeta(ctx context.Context) error {
 	bctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	if err := s.frameMetaClient.Initialize(bctx); err != nil {
-		log.L().Error("framework metastore initialized all backend tables fail", zap.Error(err))
+		log.Error("framework metastore initialized all backend tables fail", zap.Error(err))
 		return err
 	}
 
@@ -662,24 +651,26 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	}
 
 	// start background managers
-	s.executorManager.Start(ctx)
 	s.resourceManagerService.StartBackgroundWorker()
 	defer func() {
 		s.resourceManagerService.Stop()
+		log.Info("resource manager exited")
 	}()
+
 	clients := client.NewClientManager()
 	err = clients.AddMasterClient(ctx, []string{s.cfg.MasterAddr})
 	if err != nil {
 		return
 	}
-	dctx := dcontext.NewContext(ctx, log.L())
+	dctx := dcontext.NewContext(ctx)
 	dctx.Environ.Addr = s.cfg.AdvertiseAddr
 	dctx.Environ.NodeID = s.name()
+	dctx.ProjectInfo = tenant.FrameProjectInfo
 
-	masterMeta := &libModel.MasterMetaKVData{
-		ProjectID: tenant.FrameTenantID,
+	masterMeta := &frameModel.MasterMetaKVData{
+		ProjectID: tenant.FrameProjectInfo.UniqueID(),
 		ID:        metadata.JobManagerUUID,
-		Tp:        lib.JobManager,
+		Tp:        framework.JobManager,
 		// TODO: add other infos
 	}
 	masterMetaBytes, err := masterMeta.Marshal()
@@ -695,8 +686,8 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		return err
 	}
 
-	if err := dp.Provide(func() extkv.KVClientEx {
-		return s.userMetaKVClient
+	if err := dp.Provide(func() metaModel.ClientConn {
+		return s.businessClientConn
 	}); err != nil {
 		return err
 	}
@@ -734,7 +725,6 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	defer func() {
 		s.leaderInitialized.Store(false)
 		s.leader.Store(&Member{})
-		s.resign()
 	}()
 
 	dctx = dctx.WithDeps(dp)
@@ -745,35 +735,59 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	defer func() {
 		err := s.jobManager.Close(ctx)
 		if err != nil {
-			log.L().Warn("job manager close with error", zap.Error(err))
+			log.Warn("job manager close with error", zap.Error(err))
 		}
+		log.Info("job manager exited")
 	}()
+
+	s.gcRunner = externRescManager.NewGCRunner(s.frameMetaClient, map[resModel.ResourceType]externRescManager.GCHandlerFunc{
+		"local": resourcetypes.NewLocalFileResourceType(clients).GCHandler(),
+	})
+	s.gcCoordinator = externRescManager.NewGCCoordinator(s.executorManager, s.jobManager, s.frameMetaClient, s.gcRunner)
+
+	// TODO refactor this method to make it more readable and maintainable.
+	errg, errgCtx := errgroup.WithContext(ctx)
+
+	errg.Go(func() error {
+		return s.gcRunner.Run(errgCtx)
+	})
+	errg.Go(func() error {
+		return s.gcCoordinator.Run(errgCtx)
+	})
+
+	errg.Go(func() error {
+		defer func() {
+			s.executorManager.Stop()
+			log.Info("executor manager exited")
+		}()
+		s.executorManager.Start(errgCtx)
+		return nil
+	})
+
+	errg.Go(func() error {
+		metricTicker := time.NewTicker(defaultMetricInterval)
+		defer metricTicker.Stop()
+		leaderTicker := time.NewTicker(time.Millisecond * 200)
+		defer leaderTicker.Stop()
+		for {
+			select {
+			case <-errgCtx.Done():
+				// errgCtx is a leaderCtx actually
+				return errors.Trace(errgCtx.Err())
+			case <-leaderTicker.C:
+				if err := s.jobManager.Poll(errgCtx); err != nil {
+					log.Warn("Polling JobManager failed", zap.Error(err))
+					return err
+				}
+			case <-leaderTicker.C:
+				s.collectLeaderMetric()
+			}
+		}
+	})
+
 	s.leaderInitialized.Store(true)
 
-	metricTicker := time.NewTicker(defaultMetricInterval)
-	defer metricTicker.Stop()
-	leaderTicker := time.NewTicker(time.Millisecond * 200)
-	defer leaderTicker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			// ctx is a leaderCtx actually
-			return ctx.Err()
-		case <-leaderTicker.C:
-			if !s.isEtcdLeader() {
-				log.L().Info("etcd leader changed, resigns server master leader",
-					zap.String("old-leader-name", s.name()))
-				return derrors.ErrEtcdLeaderChanged.GenWithStackByArgs()
-			}
-			err := s.jobManager.Poll(ctx)
-			if err != nil {
-				log.L().Warn("Polling JobManager failed", zap.Error(err))
-				return err
-			}
-		case <-leaderTicker.C:
-			s.collectLeaderMetric()
-		}
-	}
+	return errg.Wait()
 }
 
 func withHost(addr string) string {
@@ -798,7 +812,7 @@ func (s *Server) memberLoop(ctx context.Context) error {
 			return nil
 		case <-ticker.C:
 			if err := s.updateServerMasterMembers(ctx); err != nil {
-				log.L().Warn("update server master members failed", zap.Error(err))
+				log.Warn("update server master members failed", zap.Error(err))
 			}
 		}
 	}
@@ -825,4 +839,38 @@ func makeScheduler(
 		executorManager.CapacityProvider(),
 		externalResourceManager,
 	)
+}
+
+// IsLeader implements ServerInfoProvider.IsLeader.
+func (s *Server) IsLeader() bool {
+	leader, ok := s.leader.Load().(*rpcutil.Member)
+	if !ok || leader == nil {
+		return false
+	}
+	return leader.Name == s.id
+}
+
+// LeaderAddr implements ServerInfoProvider.LeaderAddr.
+func (s *Server) LeaderAddr() (string, bool) {
+	leader, ok := s.leader.Load().(*rpcutil.Member)
+	if !ok || leader == nil {
+		return "", false
+	}
+	return leader.AdvertiseAddr, true
+}
+
+// JobManager implements ServerInfoProvider.JobManager.
+func (s *Server) JobManager() (JobManager, bool) {
+	if s.leaderInitialized.Load() && s.jobManager != nil {
+		return s.jobManager, true
+	}
+	return nil, false
+}
+
+// ExecutorManager implements ServerInfoProvider.ExecutorManager.
+func (s *Server) ExecutorManager() (ExecutorManager, bool) {
+	if s.leaderInitialized.Load() && s.executorManager != nil {
+		return s.executorManager, true
+	}
+	return nil, false
 }

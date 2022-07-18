@@ -24,10 +24,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 
-	"github.com/pingcap/tiflow/engine/pb"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
 // DefaultBroker must implement Broker.
@@ -36,19 +37,21 @@ var _ Broker = (*DefaultBroker)(nil)
 func newBroker(t *testing.T) (*DefaultBroker, *rpcutil.FailoverRPCClients[pb.ResourceManagerClient], string) {
 	tmpDir := t.TempDir()
 	client := manager.NewWrappedMockClient()
-	broker := NewBroker(&storagecfg.Config{Local: &storagecfg.LocalFileConfig{BaseDir: tmpDir}},
+	broker := NewBroker(&storagecfg.Config{Local: storagecfg.LocalFileConfig{BaseDir: tmpDir}},
 		"executor-1",
 		client)
 	return broker, client, tmpDir
 }
 
 func TestBrokerOpenNewStorage(t *testing.T) {
+	fakeProjectInfo := tenant.NewProjectInfo("fakeTenant", "fakeProject")
 	brk, client, dir := newBroker(t)
 
 	innerClient := client.GetLeaderClient().(*manager.MockClient)
-	innerClient.On("QueryResource", mock.Anything, &pb.QueryResourceRequest{ResourceId: "/local/test-1"}, mock.Anything).
+	innerClient.On("QueryResource", mock.Anything,
+		&pb.QueryResourceRequest{ResourceKey: &pb.ResourceKey{JobId: "job-1", ResourceId: "/local/test-1"}}, mock.Anything).
 		Return((*pb.QueryResourceResponse)(nil), status.Error(codes.NotFound, "resource manager error"))
-	hdl, err := brk.OpenStorage(context.Background(), "worker-1", "job-1", "/local/test-1")
+	hdl, err := brk.OpenStorage(context.Background(), fakeProjectInfo, "worker-1", "job-1", "/local/test-1")
 	require.NoError(t, err)
 	require.Equal(t, "/local/test-1", hdl.ID())
 
@@ -62,6 +65,7 @@ func TestBrokerOpenNewStorage(t *testing.T) {
 	require.NoError(t, err)
 
 	innerClient.On("CreateResource", mock.Anything, &pb.CreateResourceRequest{
+		ProjectInfo:     &pb.ProjectInfo{TenantId: fakeProjectInfo.TenantID(), ProjectId: fakeProjectInfo.ProjectID()},
 		ResourceId:      "/local/test-1",
 		CreatorExecutor: "executor-1",
 		JobId:           "job-1",
@@ -73,17 +77,19 @@ func TestBrokerOpenNewStorage(t *testing.T) {
 
 	innerClient.AssertExpectations(t)
 
-	fileName := filepath.Join(dir, "worker-1", "test-1", "1.txt")
-	require.FileExists(t, fileName)
+	AssertLocalFileExists(t, dir, "worker-1", "test-1", "1.txt")
 }
 
 func TestBrokerOpenExistingStorage(t *testing.T) {
+	fakeProjectInfo := tenant.NewProjectInfo("fakeTenant", "fakeProject")
 	brk, client, dir := newBroker(t)
 
 	innerClient := client.GetLeaderClient().(*manager.MockClient)
-	innerClient.On("QueryResource", mock.Anything, &pb.QueryResourceRequest{ResourceId: "/local/test-2"}, mock.Anything).
+	innerClient.On("QueryResource", mock.Anything,
+		&pb.QueryResourceRequest{ResourceKey: &pb.ResourceKey{JobId: "job-1", ResourceId: "/local/test-2"}}, mock.Anything).
 		Return((*pb.QueryResourceResponse)(nil), status.Error(codes.NotFound, "resource manager error")).Once()
 	innerClient.On("CreateResource", mock.Anything, &pb.CreateResourceRequest{
+		ProjectInfo:     &pb.ProjectInfo{TenantId: fakeProjectInfo.TenantID(), ProjectId: fakeProjectInfo.ProjectID()},
 		ResourceId:      "/local/test-2",
 		CreatorExecutor: "executor-1",
 		JobId:           "job-1",
@@ -93,6 +99,7 @@ func TestBrokerOpenExistingStorage(t *testing.T) {
 
 	hdl, err := brk.OpenStorage(
 		context.Background(),
+		fakeProjectInfo,
 		"worker-2",
 		"job-1",
 		"/local/test-2")
@@ -101,14 +108,15 @@ func TestBrokerOpenExistingStorage(t *testing.T) {
 	err = hdl.Persist(context.Background())
 	require.NoError(t, err)
 
-	innerClient.On("QueryResource", mock.Anything, &pb.QueryResourceRequest{ResourceId: "/local/test-2"}, mock.Anything).
+	innerClient.On("QueryResource", mock.Anything,
+		&pb.QueryResourceRequest{ResourceKey: &pb.ResourceKey{JobId: "job-1", ResourceId: "/local/test-2"}}, mock.Anything).
 		Return(&pb.QueryResourceResponse{
 			CreatorExecutor: "executor-1",
 			JobId:           "job-1",
 			CreatorWorkerId: "worker-2",
 		}, nil)
 
-	hdl, err = brk.OpenStorage(context.Background(), "worker-1", "job-1", "/local/test-2")
+	hdl, err = brk.OpenStorage(context.Background(), fakeProjectInfo, "worker-1", "job-1", "/local/test-2")
 	require.NoError(t, err)
 	require.Equal(t, "/local/test-2", hdl.ID())
 
@@ -120,14 +128,13 @@ func TestBrokerOpenExistingStorage(t *testing.T) {
 	err = f.Close(context.Background())
 	require.NoError(t, err)
 
-	fileName := filepath.Join(dir, "worker-2", "test-2", "1.txt")
-	require.FileExists(t, fileName)
+	AssertLocalFileExists(t, dir, "worker-2", "test-2", "1.txt")
 }
 
 func TestBrokerRemoveResource(t *testing.T) {
 	brk, _, dir := newBroker(t)
 
-	resPath := filepath.Join(dir, "worker-1", "resource-1")
+	resPath := filepath.Join(dir, "worker-1", resourceNameToFilePathName("resource-1"))
 	err := os.MkdirAll(resPath, 0o700)
 	require.NoError(t, err)
 

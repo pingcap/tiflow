@@ -21,14 +21,48 @@ type (
 )
 
 // tenant const variables
-const (
-	FrameTenantID       = "dfe_root"
-	TestTenantID        = "dfe_test"
-	DefaultUserTenantID = "def_default_user"
+var (
+	FrameProjectInfo = ProjectInfo{
+		tenantID:  "dfe_tenant_root",
+		projectID: "dfe_proj_root",
+	}
+	TestProjectInfo = ProjectInfo{
+		tenantID:  "dfe_tenant_test",
+		projectID: "dfe_proj_test",
+	}
+	DefaultUserProjectInfo = ProjectInfo{
+		tenantID:  "dfe_tenant_default",
+		projectID: "dfe_proj_default",
+	}
 )
+
+// NewProjectInfo return an immutable ProjectInfo
+func NewProjectInfo(tenant string, project string) ProjectInfo {
+	return ProjectInfo{
+		tenantID:  tenant,
+		projectID: project,
+	}
+}
 
 // ProjectInfo is the tenant/project information which is consistent with cloud service provider
 type ProjectInfo struct {
-	TenantID  Tenant
-	ProjectID ProjectID
+	tenantID  Tenant
+	projectID ProjectID
+}
+
+// UniqueID get the unique id for project
+// Theoretically, ProjectID is global uniqueness and can used as the identifier
+// We offer this method here to hide the implementation of getting a unique ID
+func (p ProjectInfo) UniqueID() string {
+	return p.projectID
+}
+
+// TenantID return tenant id
+func (p ProjectInfo) TenantID() string {
+	return p.tenantID
+}
+
+// ProjectID return project id
+func (p ProjectInfo) ProjectID() string {
+	return p.projectID
 }

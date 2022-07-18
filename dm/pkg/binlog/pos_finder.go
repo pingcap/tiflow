@@ -14,7 +14,6 @@
 package binlog
 
 import (
-	"database/sql"
 	"path"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
@@ -25,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/reader"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -41,7 +41,7 @@ type binlogPosFinder struct {
 	flavor     string
 
 	// fields used for remote mode
-	db      *sql.DB
+	db      *conn.BaseDB
 	syncCfg replication.BinlogSyncerConfig
 
 	// fields used for local relay
@@ -95,7 +95,7 @@ func NewLocalBinlogPosFinder(tctx *tcontext.Context, enableGTID bool, flavor str
 	}
 }
 
-func NewRemoteBinlogPosFinder(tctx *tcontext.Context, db *sql.DB, syncCfg replication.BinlogSyncerConfig, enableGTID bool) *binlogPosFinder {
+func NewRemoteBinlogPosFinder(tctx *tcontext.Context, db *conn.BaseDB, syncCfg replication.BinlogSyncerConfig, enableGTID bool) *binlogPosFinder {
 	// make sure raw mode enabled, and MaxReconnectAttempts set
 	syncCfg.RawModeEnabled = true
 	if syncCfg.MaxReconnectAttempts == 0 {
@@ -120,7 +120,7 @@ func NewRemoteBinlogPosFinder(tctx *tcontext.Context, db *sql.DB, syncCfg replic
 
 func (r *binlogPosFinder) getBinlogFiles() (FileSizes, error) {
 	if r.remote {
-		return GetBinaryLogs(r.tctx.Ctx, r.db)
+		return GetBinaryLogs(r.tctx, r.db)
 	}
 	return GetLocalBinaryLogs(r.relayDir)
 }
@@ -214,7 +214,7 @@ func (r *binlogPosFinder) initTargetBinlogFile(ts int64) error {
 	return nil
 }
 
-func (r *binlogPosFinder) processGTIDRelatedEvent(ev *replication.BinlogEvent, prevSet gtid.Set) (gtid.Set, error) {
+func (r *binlogPosFinder) processGTIDRelatedEvent(ev *replication.BinlogEvent, prevSet mysql.GTIDSet) (mysql.GTIDSet, error) {
 	ev, err := r.parser.Parse(ev.RawData)
 	if err != nil {
 		return nil, err
@@ -305,7 +305,10 @@ func (r *binlogPosFinder) FindByTimestamp(ts int64) (*Location, PosType, error) 
 
 	targetTS := uint32(ts)
 	position := mysql.Position{Name: r.targetBinlog.name, Pos: FileHeaderLen}
-	gtidSet := gtid.MinGTIDSet(r.flavor)
+	gtidSet, err := gtid.ZeroGTIDSet(r.flavor)
+	if err != nil {
+		return nil, InvalidBinlogPos, err
+	}
 
 	binlogReader, err := r.startSync(position)
 	if err != nil {
@@ -362,9 +365,9 @@ func (r *binlogPosFinder) FindByTimestamp(ts int64) (*Location, PosType, error) 
 	}
 	if r.tsBeforeFirstBinlog {
 		// always return the position of the first event in target binlog
-		loc := InitLocation(mysql.Position{Name: r.targetBinlog.name, Pos: FileHeaderLen}, gtidSet)
+		loc := NewLocation(mysql.Position{Name: r.targetBinlog.name, Pos: FileHeaderLen}, gtidSet)
 		return &loc, BelowLowerBoundBinlogPos, nil
 	}
-	loc := InitLocation(position, gtidSet)
+	loc := NewLocation(position, gtidSet)
 	return &loc, InRangeBinlogPos, nil
 }

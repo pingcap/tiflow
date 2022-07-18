@@ -31,9 +31,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/pulsar"
+	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -44,23 +44,16 @@ type resolvedTsEvent struct {
 	resolved model.ResolvedTs
 }
 
-const (
-	// Depend on this size, `resolvedBuffer` will take
-	// approximately 2 KiB memory.
-	defaultResolvedTsEventBufferSize = 128
-)
-
 type mqSink struct {
 	mqProducer     producer.Producer
 	eventRouter    *dispatcher.EventRouter
 	encoderBuilder codec.EncoderBuilder
-	filter         *filter.Filter
 	protocol       config.Protocol
 
 	topicManager         manager.TopicManager
 	flushWorker          *flushWorker
 	tableCheckpointTsMap sync.Map
-	resolvedBuffer       chan resolvedTsEvent
+	resolvedBuffer       *chann.Chann[resolvedTsEvent]
 
 	statistics *metrics.Statistics
 
@@ -72,7 +65,6 @@ func newMqSink(
 	ctx context.Context,
 	topicManager manager.TopicManager,
 	mqProducer producer.Producer,
-	filter *filter.Filter,
 	defaultTopic string,
 	replicaConfig *config.ReplicaConfig, encoderConfig *codec.Config,
 	errCh chan error,
@@ -98,11 +90,10 @@ func newMqSink(
 		mqProducer:     mqProducer,
 		eventRouter:    eventRouter,
 		encoderBuilder: encoderBuilder,
-		filter:         filter,
 		protocol:       encoderConfig.Protocol(),
 		topicManager:   topicManager,
 		flushWorker:    flushWorker,
-		resolvedBuffer: make(chan resolvedTsEvent, defaultResolvedTsEventBufferSize),
+		resolvedBuffer: chann.New[resolvedTsEvent](),
 		statistics:     statistics,
 		role:           role,
 		id:             changefeedID,
@@ -130,28 +121,20 @@ func (k *mqSink) AddTable(tableID model.TableID) error {
 	// otherwise when the table is dispatched back again,
 	// it may read the old values.
 	// See: https://github.com/pingcap/tiflow/issues/4464#issuecomment-1085385382.
-	if checkpointTs, loaded := k.tableCheckpointTsMap.LoadAndDelete(tableID); loaded {
+	if checkpoint, loaded := k.tableCheckpointTsMap.LoadAndDelete(tableID); loaded {
 		log.Info("clean up table checkpoint ts in MQ sink",
 			zap.Int64("tableID", tableID),
-			zap.Uint64("checkpointTs", checkpointTs.(uint64)))
+			zap.Uint64("checkpointTs", checkpoint.(model.ResolvedTs).Ts))
 	}
 
 	return nil
 }
 
-// EmitRowChangedEvents emits row changed events to the flush worker by paritition.
+// EmitRowChangedEvents emits row changed events to the flush worker by partition.
 // Concurrency Note: This method is thread-safe.
 func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	rowsCount := 0
 	for _, row := range rows {
-		if k.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
-			log.Info("Row changed event ignored",
-				zap.Uint64("startTs", row.StartTs),
-				zap.String("namespace", k.id.Namespace),
-				zap.String("changefeed", k.id.ID),
-				zap.Any("role", k.role))
-			continue
-		}
 		topic := k.eventRouter.GetTopicForRowChange(row)
 		partitionNum, err := k.topicManager.GetPartitionNum(topic)
 		if err != nil {
@@ -179,25 +162,21 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 // FlushRowChangedEvents is thread-safe.
 func (k *mqSink) FlushRowChangedEvents(
 	ctx context.Context, tableID model.TableID, resolved model.ResolvedTs,
-) (uint64, error) {
-	var checkpointTs uint64
-	v, ok := k.tableCheckpointTsMap.Load(tableID)
-	if ok {
-		checkpointTs = v.(uint64)
-	}
-	if resolved.Ts <= checkpointTs {
-		return checkpointTs, nil
+) (model.ResolvedTs, error) {
+	checkpoint := k.getTableCheckpointTs(tableID)
+	if checkpoint.EqualOrGreater(resolved) {
+		return checkpoint, nil
 	}
 	select {
 	case <-ctx.Done():
-		return 0, ctx.Err()
-	case k.resolvedBuffer <- resolvedTsEvent{
+		return model.NewResolvedTs(0), ctx.Err()
+	case k.resolvedBuffer.In() <- resolvedTsEvent{
 		tableID:  tableID,
-		resolved: model.NewResolvedTs(resolved.Ts),
+		resolved: resolved,
 	}:
 	}
 	k.statistics.PrintStatus(ctx)
-	return checkpointTs, nil
+	return checkpoint, nil
 }
 
 // bgFlushTs flush resolvedTs to workers and flush the mqProducer
@@ -206,7 +185,14 @@ func (k *mqSink) bgFlushTs(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case msg := <-k.resolvedBuffer:
+		case msg, ok := <-k.resolvedBuffer.Out():
+			if !ok {
+				log.Warn("resolved ts buffer is closed",
+					zap.String("namespace", k.id.Namespace),
+					zap.String("changefeed", k.id.ID),
+					zap.Any("role", k.role))
+				return nil
+			}
 			resolved := msg.resolved
 			err := k.flushTsToWorker(ctx, resolved)
 			if err != nil {
@@ -215,19 +201,30 @@ func (k *mqSink) bgFlushTs(ctx context.Context) error {
 			// Since CDC does not guarantee exactly once semantic, it won't cause any problem
 			// here even if the table was moved or removed.
 			// ref: https://github.com/pingcap/tiflow/pull/4356#discussion_r787405134
-			k.tableCheckpointTsMap.Store(msg.tableID, resolved.Ts)
+			k.tableCheckpointTsMap.Store(msg.tableID, resolved)
 		}
 	}
 }
 
-func (k *mqSink) flushTsToWorker(ctx context.Context, resolved model.ResolvedTs) error {
-	if err := k.flushWorker.addEvent(ctx, mqEvent{resolved: resolved}); err != nil {
+func (k *mqSink) flushTsToWorker(ctx context.Context, resolvedTs model.ResolvedTs) error {
+	flushed := make(chan struct{})
+	flush := &flushEvent{
+		resolvedTs: resolvedTs,
+		flushed:    flushed,
+	}
+	if err := k.flushWorker.addEvent(ctx, mqEvent{flush: flush}); err != nil {
 		if errors.Cause(err) != context.Canceled {
 			log.Warn("failed to flush TS to worker", zap.Error(err))
 		} else {
 			log.Debug("flushing TS to worker has been canceled", zap.Error(err))
 		}
 		return err
+	}
+	// We must wait until all messages have been acked before returning.
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	case <-flushed:
 	}
 	return nil
 }
@@ -278,19 +275,6 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []model
 // EmitDDLEvent sends a DDL event to the default topic or the table's corresponding topic.
 // Concurrency Note: EmitDDLEvent is thread-safe.
 func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	if k.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.Type, ddl.TableInfo.Schema, ddl.TableInfo.Table) {
-		log.Info(
-			"DDL event ignored",
-			zap.String("query", ddl.Query),
-			zap.Uint64("startTs", ddl.StartTs),
-			zap.Uint64("commitTs", ddl.CommitTs),
-			zap.String("namespace", k.id.Namespace),
-			zap.String("changefeed", k.id.ID),
-			zap.Any("role", k.role),
-		)
-		return cerror.ErrDDLEventIgnored.GenWithStackByArgs()
-	}
-
 	encoder := k.encoderBuilder.Build()
 	msg, err := encoder.EncodeDDLEvent(ddl)
 	if err != nil {
@@ -329,8 +313,21 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	return errors.Trace(err)
 }
 
-// Close the producer asynchronously, does not care closed successfully or not.
+// Close closes the sink.
+// It is only called in the processor, and the processor destroys the
+// table sinks before closing it. So there is no writing after closing.
 func (k *mqSink) Close(ctx context.Context) error {
+	k.resolvedBuffer.Close()
+	// We must finish consuming the data here,
+	// otherwise it will cause the channel to not close properly.
+	for range k.resolvedBuffer.Out() {
+		// Do nothing. We do not care about the data.
+	}
+	// NOTICE: We must close the resolved buffer before closing the flush worker.
+	// Otherwise, bgFlushTs method will panic.
+	k.flushWorker.close()
+	// We need to close it asynchronously.
+	// Otherwise, we might get stuck with it in an unhealthy state of kafka.
 	go k.mqProducer.Close()
 	return nil
 }
@@ -339,6 +336,14 @@ func (k *mqSink) RemoveTable(cxt context.Context, tableID model.TableID) error {
 	// RemoveTable does nothing because FlushRowChangedEvents in mq sink had flushed
 	// all buffered events by force.
 	return nil
+}
+
+func (k *mqSink) getTableCheckpointTs(tableID model.TableID) model.ResolvedTs {
+	v, ok := k.tableCheckpointTsMap.Load(tableID)
+	if ok {
+		return v.(model.ResolvedTs)
+	}
+	return model.NewResolvedTs(0)
 }
 
 func (k *mqSink) run(ctx context.Context) error {
@@ -366,8 +371,8 @@ func (k *mqSink) asyncFlushToPartitionZero(
 
 // NewKafkaSaramaSink creates a new Kafka mqSink.
 func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
-	filter *filter.Filter, replicaConfig *config.ReplicaConfig,
-	opts map[string]string, errCh chan error,
+	replicaConfig *config.ReplicaConfig,
+	errCh chan error,
 ) (*mqSink, error) {
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
@@ -379,10 +384,6 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 	baseConfig := kafka.NewConfig()
 	if err := baseConfig.Apply(sinkURI); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-
-	if err := replicaConfig.ApplyProtocol(sinkURI).Validate(); err != nil {
-		return nil, errors.Trace(err)
 	}
 
 	saramaConfig, err := kafka.NewSaramaConfig(ctx, baseConfig)
@@ -429,12 +430,16 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	topicManager := manager.NewKafkaTopicManager(
+	topicManager, err := manager.NewKafkaTopicManager(
 		client,
 		adminClient,
 		baseConfig.DeriveTopicConfig(),
 	)
-	if _, err := topicManager.CreateTopic(topic); err != nil {
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	if _, err := topicManager.CreateTopicAndWaitUntilVisible(topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
 	}
 
@@ -454,7 +459,6 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		ctx,
 		topicManager,
 		sProducer,
-		filter,
 		topic,
 		replicaConfig,
 		encoderConfig,
@@ -467,16 +471,12 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 }
 
 // NewPulsarSink creates a new Pulsar mqSink.
-func NewPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
-	replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error,
+func NewPulsarSink(ctx context.Context, sinkURI *url.URL,
+	replicaConfig *config.ReplicaConfig, errCh chan error,
 ) (*mqSink, error) {
 	s := sinkURI.Query().Get(config.ProtocolKey)
 	if s != "" {
 		replicaConfig.Sink.Protocol = s
-	}
-	err := replicaConfig.Validate()
-	if err != nil {
-		return nil, err
 	}
 
 	var protocol config.Protocol
@@ -505,7 +505,6 @@ func NewPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 		ctx,
 		fakeTopicManager,
 		producer,
-		filter,
 		"",
 		replicaConfig,
 		encoderConfig,

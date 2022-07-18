@@ -58,7 +58,6 @@ type mockInjectedPuller struct {
 func newMockCDCKVClient(
 	ctx context.Context,
 	pd pd.Client,
-	kvStorage tikv.Storage,
 	grpcPool kv.GrpcPool,
 	regionCache *tikv.RegionCache,
 	pdClock pdutil.Clock,
@@ -126,10 +125,10 @@ func newPullerForTest(
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdCli)
 	defer regionCache.Close()
-	plr := NewPuller(
+	plr := New(
 		ctx, pdCli, grpcPool, regionCache, store, pdutil.NewClock4Test(),
-		model.DefaultChangeFeedID("changefeed-id-test"),
-		checkpointTs, spans, config.GetDefaultServerConfig().KVClient)
+		checkpointTs, spans, config.GetDefaultServerConfig().KVClient,
+		model.DefaultChangeFeedID("changefeed-id-test"))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

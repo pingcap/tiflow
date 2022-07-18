@@ -17,12 +17,14 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"math"
 	"os"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/coreos/go-semver/semver"
+	"github.com/docker/go-units"
 	"github.com/dustin/go-humanize"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
@@ -66,8 +68,14 @@ const (
 	DefaultValidatorValidateInterval  = 10 * time.Second
 	DefaultValidatorCheckInterval     = 5 * time.Second
 	DefaultValidatorRowErrorDelay     = 30 * time.Minute
-	DefaultValidatorMetaFlushInterval = 1 * time.Minute
+	DefaultValidatorMetaFlushInterval = 5 * time.Minute
 	DefaultValidatorBatchQuerySize    = 100
+	DefaultValidatorMaxPendingRowSize = "500m"
+
+	ValidatorMaxAccumulatedRow = 100000
+	// PendingRow is substantial in this version (in sysbench test)
+	// set to MaxInt temporaly and reset in the future.
+	DefaultValidatorMaxPendingRow = math.MaxInt32
 )
 
 // default config item values.
@@ -151,7 +159,7 @@ type MySQLInstance struct {
 	// SyncerThread is alias for WorkerCount in SyncerConfig, and its priority is higher than WorkerCount
 	SyncerThread int `yaml:"syncer-thread"`
 
-	ContinuousValidatorConfigName string          `yaml:"continuous-validator-config-name"`
+	ContinuousValidatorConfigName string          `yaml:"validator-config-name"`
 	ContinuousValidator           ValidatorConfig `yaml:"-"`
 }
 
@@ -346,13 +354,16 @@ func (m *SyncerConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 }
 
 type ValidatorConfig struct {
-	Mode              string   `yaml:"mode" toml:"mode" json:"mode"`
-	WorkerCount       int      `yaml:"worker-count" toml:"worker-count" json:"worker-count"`
-	ValidateInterval  Duration `yaml:"validate-interval" toml:"validate-interval" json:"validate-interval"`
-	CheckInterval     Duration `yaml:"check-interval" toml:"check-interval" json:"check-interval"`
-	RowErrorDelay     Duration `yaml:"row-error-delay" toml:"row-error-delay" json:"row-error-delay"`
-	MetaFlushInterval Duration `yaml:"meta-flush-interval" toml:"meta-flush-interval" json:"meta-flush-interval"`
-	BatchQuerySize    int      `yaml:"batch-query-size" toml:"batch-query-size" json:"batch-query-size"`
+	Mode               string   `yaml:"mode" toml:"mode" json:"mode"`
+	WorkerCount        int      `yaml:"worker-count" toml:"worker-count" json:"worker-count"`
+	ValidateInterval   Duration `yaml:"validate-interval" toml:"validate-interval" json:"validate-interval"`
+	CheckInterval      Duration `yaml:"check-interval" toml:"check-interval" json:"check-interval"`
+	RowErrorDelay      Duration `yaml:"row-error-delay" toml:"row-error-delay" json:"row-error-delay"`
+	MetaFlushInterval  Duration `yaml:"meta-flush-interval" toml:"meta-flush-interval" json:"meta-flush-interval"`
+	BatchQuerySize     int      `yaml:"batch-query-size" toml:"batch-query-size" json:"batch-query-size"`
+	MaxPendingRowSize  string   `yaml:"max-pending-row-size" toml:"max-pending-row-size" json:"max-pending-row-size"`
+	MaxPendingRowCount int      `yaml:"max-pending-row-count" toml:"max-pending-row-count" json:"max-pending-row-count"`
+	StartTime          string   `yaml:"-" toml:"start-time" json:"-"`
 }
 
 func (v *ValidatorConfig) Adjust() error {
@@ -379,6 +390,17 @@ func (v *ValidatorConfig) Adjust() error {
 	}
 	if v.BatchQuerySize == 0 {
 		v.BatchQuerySize = DefaultValidatorBatchQuerySize
+	}
+	if v.MaxPendingRowSize == "" {
+		v.MaxPendingRowSize = DefaultValidatorMaxPendingRowSize
+	}
+
+	_, err := units.RAMInBytes(v.MaxPendingRowSize)
+	if err != nil {
+		return err
+	}
+	if v.MaxPendingRowCount == 0 {
+		v.MaxPendingRowCount = DefaultValidatorMaxPendingRow
 	}
 	return nil
 }
@@ -660,11 +682,12 @@ func (c *TaskConfig) adjust() error {
 			}
 		case ModeIncrement:
 			if inst.Meta == nil {
-				return terror.ErrConfigMetadataNotSet.Generate(inst.SourceID, c.TaskMode)
-			}
-			err := inst.Meta.Verify()
-			if err != nil {
-				return terror.Annotatef(err, "mysql-instance: %d", i)
+				log.L().Warn("mysql-instance doesn't set meta for incremental mode, user should specify start_time to start task.", zap.String("sourceID", inst.SourceID))
+			} else {
+				err := inst.Meta.Verify()
+				if err != nil {
+					return terror.Annotatef(err, "mysql-instance: %d", i)
+				}
 			}
 		}
 

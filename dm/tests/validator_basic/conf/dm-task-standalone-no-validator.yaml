@@ -1,0 +1,29 @@
+---
+name: test
+task-mode: all
+heartbeat-update-interval: 1
+heartbeat-report-interval: 1
+
+target-database:
+  host: "127.0.0.1"
+  port: 4000
+  user: "root"
+  password: ""
+
+mysql-instances:
+  - source-id: "mysql-replica-01"
+    block-allow-list:  "instance"
+    validator-config-name: global
+
+block-allow-list:
+  instance:
+    do-dbs: ["validator_basic"]
+
+validators:
+  global:
+    mode: none
+    worker-count: 1
+    validate-interval: 1s
+    check-interval: 1s
+    row-error-delay: 1s
+    meta-flush-interval: 1s

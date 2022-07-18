@@ -55,7 +55,6 @@ func (c *SingleTableTask) GetCDCProfile() *framework.CDCProfile {
 	return &framework.CDCProfile{
 		PDUri:      framework.UpstreamPD,
 		SinkURI:    sinkURI,
-		Opts:       map[string]string{"force-handle-key-pkey": "true", "support-txn": "true"},
 		ConfigFile: "/configs/canal-test-config.toml",
 	}
 }

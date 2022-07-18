@@ -50,12 +50,14 @@ spec:
             - containerPort: 10241
               name: executor
           command:
-            - "/df-executor"
+            - "/tiflow"
+            - "executor"
             - "--name=$(MY_POD_NAME)"
             - "--worker-addr=0.0.0.0:10241"
             - "--advertise-addr=$(MY_POD_NAME).executor.$(MY_POD_NAMESPACE):10241"
             - "--join=server-master-0.server-master.$(MY_POD_NAMESPACE):10240,server-master-1.server-master.$(MY_POD_NAMESPACE):10240,server-master-2.server-master.$(MY_POD_NAMESPACE):10240"
             - "--config=/conf/executor.toml"
+            - "--log-file=/log/$(MY_POD_NAME).log"
           readinessProbe:
             httpGet:
               port: 10241

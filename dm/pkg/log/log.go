@@ -183,3 +183,8 @@ func WrapStringerField(message string, object fmt.Stringer) zap.Field {
 
 	return zap.Stringer(message, object)
 }
+
+// WithCtx adds fields from ctx to the logger.
+func WithCtx(ctx context.Context) Logger {
+	return Logger{appLogger.With(getZapFieldsFromCtx(ctx)...)}
+}

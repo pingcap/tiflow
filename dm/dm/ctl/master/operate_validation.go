@@ -28,30 +28,30 @@ import (
 func NewIgnoreValidationErrorCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ignore-error <task-name> <error-id|--all>",
-		Short: "ignore validation error",
+		Short: "ignore validation error row change",
 		RunE:  operateValidationError(pb.ValidationErrOp_IgnoreErrOp),
 	}
-	cmd.Flags().Bool("all", false, "all task")
+	cmd.Flags().Bool("all", false, "all errors")
 	return cmd
 }
 
 func NewResolveValidationErrorCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "make-resolve <task-name> <error-id|--all>",
-		Short: "resolve validation error",
+		Use:   "resolve-error <task-name> <error-id|--all>",
+		Short: "resolve validation error row change",
 		RunE:  operateValidationError(pb.ValidationErrOp_ResolveErrOp),
 	}
-	cmd.Flags().Bool("all", false, "all task")
+	cmd.Flags().Bool("all", false, "all errors")
 	return cmd
 }
 
 func NewClearValidationErrorCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "clear <task-name> <error-id|--all>",
-		Short: "clear validation error",
+		Use:   "clear-error <task-name> <error-id|--all>",
+		Short: "clear validation error row change",
 		RunE:  operateValidationError(pb.ValidationErrOp_ClearErrOp),
 	}
-	cmd.Flags().Bool("all", false, "all task")
+	cmd.Flags().Bool("all", false, "all errors")
 	return cmd
 }
 

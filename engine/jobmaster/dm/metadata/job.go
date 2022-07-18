@@ -18,10 +18,10 @@ import (
 
 	"github.com/pingcap/errors"
 
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 )
 
 // TaskStage represents internal stage of a task
@@ -30,10 +30,12 @@ type TaskStage int
 
 // These stages may updated in later pr.
 const (
-	StageInit TaskStage = iota
+	StageInit TaskStage = iota + 1
 	StageRunning
 	StagePaused
 	StageFinished
+	StageError
+	StagePausing
 	// UnScheduled means the task is not scheduled.
 	// This usually happens when the worker is offline.
 	StageUnscheduled
@@ -49,7 +51,7 @@ type Job struct {
 
 // NewJob creates a new Job instance
 func NewJob(jobCfg *config.JobCfg) *Job {
-	taskCfgs := jobCfg.ToTaskConfigs()
+	taskCfgs := jobCfg.ToTaskCfgs()
 	job := &Job{
 		Tasks: make(map[string]*Task, len(taskCfgs)),
 	}
@@ -79,11 +81,11 @@ func NewTask(taskCfg *config.TaskCfg) *Task {
 type JobStore struct {
 	*TomlStore
 
-	id libModel.MasterID
+	id frameModel.MasterID
 }
 
 // NewJobStore creates a new JobStore instance
-func NewJobStore(id libModel.MasterID, kvClient metaclient.KVClient) *JobStore {
+func NewJobStore(id frameModel.MasterID, kvClient metaModel.KVClient) *JobStore {
 	jobStore := &JobStore{
 		TomlStore: NewTomlStore(kvClient),
 		id:        id,
@@ -110,6 +112,11 @@ func (jobStore *JobStore) UpdateStages(ctx context.Context, taskIDs []string, st
 	}
 
 	job := state.(*Job)
+	if len(taskIDs) == 0 {
+		for task := range job.Tasks {
+			taskIDs = append(taskIDs, task)
+		}
+	}
 	for _, taskID := range taskIDs {
 		if _, ok := job.Tasks[taskID]; !ok {
 			return errors.Errorf("task %s not found", taskID)

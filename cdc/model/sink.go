@@ -29,18 +29,18 @@ import (
 
 //go:generate msgp
 
-// MqMessageType is the type of message
-type MqMessageType int
+// MessageType is the type of message, which is used by MqSink and RedoLog.
+type MessageType int
 
 const (
-	// MqMessageTypeUnknown is unknown type of message key
-	MqMessageTypeUnknown MqMessageType = iota
-	// MqMessageTypeRow is row type of message key
-	MqMessageTypeRow
-	// MqMessageTypeDDL is ddl type of message key
-	MqMessageTypeDDL
-	// MqMessageTypeResolved is resolved type of message key
-	MqMessageTypeResolved
+	// MessageTypeUnknown is unknown type of message key
+	MessageTypeUnknown MessageType = iota
+	// MessageTypeRow is row type of message key
+	MessageTypeRow
+	// MessageTypeDDL is ddl type of message key
+	MessageTypeDDL
+	// MessageTypeResolved is resolved type of message key
+	MessageTypeResolved
 )
 
 // ColumnFlagType is for encapsulating the flag operations for different flags.
@@ -259,7 +259,6 @@ type RowChangedEvent struct {
 
 	TableInfoVersion uint64 `json:"table-info-version,omitempty" msg:"table-info-version"`
 
-	ReplicaID    uint64    `json:"replica-id" msg:"replica-id"`
 	Columns      []*Column `json:"columns" msg:"-"`
 	PreColumns   []*Column `json:"pre-columns" msg:"-"`
 	IndexColumns [][]int   `json:"-" msg:"index-columns"`
@@ -270,6 +269,11 @@ type RowChangedEvent struct {
 
 	// SplitTxn marks this RowChangedEvent as the first line of a new txn.
 	SplitTxn bool `json:"-" msg:"-"`
+}
+
+// GetCommitTs returns the commit timestamp of this event.
+func (r *RowChangedEvent) GetCommitTs() uint64 {
+	return r.CommitTs
 }
 
 // IsDelete returns true if the row is a delete event
@@ -325,15 +329,12 @@ func (r *RowChangedEvent) HandleKeyColumns() []*Column {
 		}
 	}
 
-	if len(pkeyCols) == 0 {
-		log.Panic("Cannot find handle key columns.", zap.Any("event", r))
-	}
-
+	// It is okay not to have handle keys, so the empty array is an acceptable result
 	return pkeyCols
 }
 
-// PrimaryKeyColInfos returns the column(s) and colInfo(s) corresponding to the primary key(s)
-func (r *RowChangedEvent) PrimaryKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
+// HandleKeyColInfos returns the column(s) and colInfo(s) corresponding to the handle key(s)
+func (r *RowChangedEvent) HandleKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
 	pkeyCols := make([]*Column, 0)
 	pkeyColInfos := make([]rowcodec.ColInfo, 0)
 
@@ -345,13 +346,13 @@ func (r *RowChangedEvent) PrimaryKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
 	}
 
 	for i, col := range cols {
-		if col != nil && col.Flag.IsPrimaryKey() {
+		if col != nil && col.Flag.IsHandleKey() {
 			pkeyCols = append(pkeyCols, col)
 			pkeyColInfos = append(pkeyColInfos, r.ColInfos[i])
 		}
 	}
 
-	// It is okay not to have primary keys, so the empty array is an acceptable result
+	// It is okay not to have handle keys, so the empty array is an acceptable result
 	return pkeyCols, pkeyColInfos
 }
 
@@ -471,7 +472,7 @@ type ColumnInfo struct {
 
 // FromTiColumnInfo populates cdc's ColumnInfo from TiDB's model.ColumnInfo
 func (c *ColumnInfo) FromTiColumnInfo(tiColumnInfo *model.ColumnInfo) {
-	c.Type = tiColumnInfo.Tp
+	c.Type = tiColumnInfo.GetType()
 	c.Name = tiColumnInfo.Name.O
 }
 
@@ -612,6 +613,11 @@ type SingleTableTxn struct {
 	// FinishWg is a barrier txn, after this txn is received, the worker must
 	// flush cached txns and call FinishWg.Done() to mark txns have been flushed.
 	FinishWg *sync.WaitGroup
+}
+
+// GetCommitTs returns the commit timestamp of the transaction.
+func (t *SingleTableTxn) GetCommitTs() uint64 {
+	return t.CommitTs
 }
 
 // Append adds a row changed event into SingleTableTxn

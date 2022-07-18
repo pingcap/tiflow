@@ -49,17 +49,10 @@ const (
     ],
     "protocol": "open-protocol"
   },
-  "cyclic-replication": {
-    "enable": false,
-    "replica-id": 0,
-    "filter-replica-ids": null,
-    "id-buckets": 0,
-    "sync-ddl": false
-  },
   "consistent": {
     "level": "none",
     "max-log-size": 64,
-    "flush-interval": 1000,
+    "flush-interval": 2000,
     "storage": ""
   }
 }`
@@ -102,10 +95,9 @@ const (
     "worker-concurrent": 8,
     "worker-pool-size": 0,
     "region-scan-limit": 40,
-    "region-retry-duration": 25000000000
+    "region-retry-duration": 60000000000
   },
   "debug": {
-    "enable-table-actor": true,
     "table-actor": {
       "event-batch-size": 32
     },
@@ -136,8 +128,15 @@ const (
       "server-max-pending-message-count": 102400,
       "server-ack-interval": 100000000,
       "server-worker-pool-size": 4
+    },
+    "enable-scheduler-v3": true,
+    "scheduler": {
+      "heartbeat-tick": 2,
+      "max-task-concurrency": 10,
+      "check-balance-interval": 60000000000
     }
-  }
+  },
+  "cluster-id": "default"
 }`
 
 	testCfgTestReplicaConfigMarshal1 = `{
@@ -149,7 +148,8 @@ const (
     "rules": [
       "1.1"
     ],
-    "ignore-txn-start-ts": null
+    "ignore-txn-start-ts": null,
+    "event-filters": null
   },
   "mounter": {
     "worker-num": 3
@@ -168,19 +168,13 @@ const (
         ]
       }
     ],
-    "schema-registry": ""
-  },
-  "cyclic-replication": {
-    "enable": false,
-    "replica-id": 0,
-    "filter-replica-ids": null,
-    "id-buckets": 0,
-    "sync-ddl": false
+    "schema-registry": "",
+    "transaction-atomicity": ""
   },
   "consistent": {
     "level": "none",
     "max-log-size": 64,
-    "flush-interval": 1000,
+    "flush-interval": 2000,
     "storage": ""
   }
 }`
@@ -214,17 +208,10 @@ const (
       }
     ]
   },
-  "cyclic-replication": {
-    "enable": false,
-    "replica-id": 0,
-    "filter-replica-ids": null,
-    "id-buckets": 0,
-    "sync-ddl": false
-  },
   "consistent": {
     "level": "none",
     "max-log-size": 64,
-    "flush-interval": 1000,
+    "flush-interval": 2000,
     "storage": ""
   }
 }`

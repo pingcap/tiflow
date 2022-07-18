@@ -22,8 +22,7 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -34,9 +33,6 @@ func TestFillV1(t *testing.T) {
 	v1Config := `
 {
     "sink-uri":"blackhole://",
-    "opts":{
-
-    },
     "start-ts":417136892416622595,
     "target-ts":0,
     "admin-job-type":0,
@@ -95,16 +91,6 @@ func TestFillV1(t *testing.T) {
                     "rule":"rowid"
                 }
             ]
-        },
-        "cyclic-replication":{
-            "enable":true,
-            "replica-id":1,
-            "filter-replica-ids":[
-                2,
-                3
-            ],
-            "id-buckets":4,
-            "sync-ddl":true
         }
     }
 }
@@ -114,9 +100,6 @@ func TestFillV1(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, &ChangeFeedInfo{
 		SinkURI: "blackhole://",
-		Opts: map[string]string{
-			"_cyclic_relax_sql_mode": `{"enable":true,"replica-id":1,"filter-replica-ids":[2,3],"id-buckets":4,"sync-ddl":true}`,
-		},
 		StartTs: 417136892416622595,
 		Engine:  "memory",
 		SortDir: ".",
@@ -153,13 +136,6 @@ func TestFillV1(t *testing.T) {
 					{Matcher: []string{"test.tbl4"}, DispatcherRule: "rowid"},
 				},
 			},
-			Cyclic: &config.CyclicConfig{
-				Enable:          true,
-				ReplicaID:       1,
-				FilterReplicaID: []uint64{2, 3},
-				IDBuckets:       4,
-				SyncDDL:         true,
-			},
 		},
 	}, cfg)
 }
@@ -169,7 +145,6 @@ func TestVerifyAndComplete(t *testing.T) {
 
 	info := &ChangeFeedInfo{
 		SinkURI: "blackhole://",
-		Opts:    map[string]string{},
 		StartTs: 417257993615179777,
 		Config: &config.ReplicaConfig{
 			CaseSensitive:    true,
@@ -420,7 +395,7 @@ func TestFixState(t *testing.T) {
 				AdminJobType: AdminNone,
 				State:        StateNormal,
 				Error: &RunningError{
-					Code: string(cerrors.ErrGCTTLExceeded.RFCCode()),
+					Code: string(errors.ErrGCTTLExceeded.RFCCode()),
 				},
 			},
 			expectedState: StateFailed,
@@ -430,7 +405,7 @@ func TestFixState(t *testing.T) {
 				AdminJobType: AdminResume,
 				State:        StateNormal,
 				Error: &RunningError{
-					Code: string(cerrors.ErrGCTTLExceeded.RFCCode()),
+					Code: string(errors.ErrGCTTLExceeded.RFCCode()),
 				},
 			},
 			expectedState: StateFailed,
@@ -440,7 +415,7 @@ func TestFixState(t *testing.T) {
 				AdminJobType: AdminNone,
 				State:        StateNormal,
 				Error: &RunningError{
-					Code: string(cerrors.ErrClusterIDMismatch.RFCCode()),
+					Code: string(errors.ErrClusterIDMismatch.RFCCode()),
 				},
 			},
 			expectedState: StateError,
@@ -450,7 +425,7 @@ func TestFixState(t *testing.T) {
 				AdminJobType: AdminResume,
 				State:        StateNormal,
 				Error: &RunningError{
-					Code: string(cerrors.ErrClusterIDMismatch.RFCCode()),
+					Code: string(errors.ErrClusterIDMismatch.RFCCode()),
 				},
 			},
 			expectedState: StateError,
@@ -621,7 +596,6 @@ func TestChangeFeedInfoClone(t *testing.T) {
 
 	info := &ChangeFeedInfo{
 		SinkURI: "blackhole://",
-		Opts:    map[string]string{},
 		StartTs: 417257993615179777,
 		Config: &config.ReplicaConfig{
 			CaseSensitive:    true,
@@ -764,7 +738,91 @@ func TestValidateChangefeedID(t *testing.T) {
 		if !tt.wantErr {
 			require.Nil(t, err, fmt.Sprintf("case:%s", tt.name))
 		} else {
-			require.True(t, cerror.ErrInvalidChangefeedID.Equal(err), fmt.Sprintf("case:%s", tt.name))
+			require.True(t, errors.ErrInvalidChangefeedID.Equal(err),
+				fmt.Sprintf("case:%s", tt.name))
+		}
+	}
+}
+
+func TestValidateNamespace(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		id      string
+		wantErr bool
+	}{
+		{
+			name:    "alphabet",
+			id:      "testTtTT",
+			wantErr: false,
+		},
+		{
+			name:    "number",
+			id:      "01131323",
+			wantErr: false,
+		},
+		{
+			name:    "mixed",
+			id:      "9ff52acaA-aea6-4022-8eVc4-fbee3fD2c7890",
+			wantErr: false,
+		},
+		{
+			name: "len==128",
+			id: "1234567890-1234567890-1234567890-1234567890-" +
+				"1234567890-1234567890-1234567890-1234567890-" +
+				"1234567890123456789012345678901234567890",
+			wantErr: false,
+		},
+		{
+			name:    "empty string 1",
+			id:      "",
+			wantErr: true,
+		},
+		{
+			name:    "empty string 2",
+			id:      "   ",
+			wantErr: true,
+		},
+		{
+			name:    "test_task",
+			id:      "test_task ",
+			wantErr: true,
+		},
+		{
+			name:    "job$",
+			id:      "job$ ",
+			wantErr: true,
+		},
+		{
+			name:    "test-",
+			id:      "test-",
+			wantErr: true,
+		},
+		{
+			name:    "-",
+			id:      "-",
+			wantErr: true,
+		},
+		{
+			name:    "-sfsdfdf1",
+			id:      "-sfsdfdf1",
+			wantErr: true,
+		},
+		{
+			name: "len==129",
+			id: "1234567890-1234567890-1234567890-1234567890-1234567890-1234567890-" +
+				"1234567890-1234567890-1234567890-123456789012345678901234567890",
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		err := ValidateNamespace(tt.id)
+		if !tt.wantErr {
+			require.Nil(t, err, fmt.Sprintf("case:%s", tt.name))
+		} else {
+			require.True(t, errors.ErrInvalidNamespace.Equal(err),
+				fmt.Sprintf("case:%s", tt.name))
 		}
 	}
 }

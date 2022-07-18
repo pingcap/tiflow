@@ -35,7 +35,7 @@ type DDLItem struct {
 	DDLs          []string        `json:"ddls"`   // DDLs, these ddls are in the same QueryEvent
 	Source        string          `json:"source"` // source table ID
 
-	// just used for json's marshal and unmarshal, because gtid.Set in FirstLocation is interface,
+	// just used for json's marshal and unmarshal, because gtid set in FirstLocation is interface,
 	// can't be marshal and unmarshal
 	FirstPosition mysql.Position `json:"first-position"`
 	FirstGTIDSet  string         `json:"first-gtid-set"`
@@ -85,7 +85,7 @@ func (seq *ShardingSequence) IsPrefixSequence(other *ShardingSequence) bool {
 func (seq *ShardingSequence) String() string {
 	jsonSeq, err := json.Marshal(seq.Items)
 	if err != nil {
-		log.L().Error("fail to marshal ShardingSequence to json", zap.Reflect("shard sequence", seq))
+		log.L().DPanic("fail to marshal ShardingSequence to json", zap.Reflect("shard sequence", seq))
 	}
 	return string(jsonSeq)
 }
@@ -127,7 +127,7 @@ func (meta *ShardingMeta) RestoreFromData(sourceTableID string, activeIdx int, i
 		if err1 != nil {
 			return err1
 		}
-		item.FirstLocation = binlog.InitLocation(
+		item.FirstLocation = binlog.NewLocation(
 			item.FirstPosition,
 			gset,
 		)
@@ -284,7 +284,7 @@ func (meta *ShardingMeta) genRemoveSQL(sourceID, tableID string) (string, []inte
 }
 
 // CheckAndUpdate check and fix schema and table names for all the sharding groups.
-func (meta *ShardingMeta) CheckAndUpdate(targetID string, schemaMap map[string]string, tablesMap map[string]map[string]string) ([]string, [][]interface{}, error) {
+func (meta *ShardingMeta) CheckAndUpdate(logger log.Logger, targetID string, schemaMap map[string]string, tablesMap map[string]map[string]string) ([]string, [][]interface{}, error) {
 	if len(schemaMap) == 0 && len(tablesMap) == 0 {
 		return nil, nil, nil
 	}
@@ -341,7 +341,7 @@ func (meta *ShardingMeta) CheckAndUpdate(targetID string, schemaMap map[string]s
 			sqls = append(sqls, removeSQL)
 			args = append(args, arg)
 		}
-		log.L().Info("fix sharding meta", zap.String("old", oldID), zap.String("new", newID))
+		logger.Info("fix sharding meta", zap.String("old", oldID), zap.String("new", newID))
 		fixedSQLs, fixedArgs := meta.FlushData(newID, targetID)
 		sqls = append(sqls, fixedSQLs...)
 		args = append(args, fixedArgs...)

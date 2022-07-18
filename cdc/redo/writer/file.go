@@ -19,7 +19,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -29,15 +28,16 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/uber-go/atomic"
 	pioutil "go.etcd.io/etcd/pkg/v3/ioutil"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
 const (
@@ -93,7 +93,8 @@ type FileWriterConfig struct {
 type Option func(writer *writerOptions)
 
 type writerOptions struct {
-	getLogFileName func() string
+	getLogFileName   func() string
+	getUUIDGenerator func() uuid.Generator
 }
 
 // WithLogFileName provide the Option for fileName
@@ -101,6 +102,15 @@ func WithLogFileName(f func() string) Option {
 	return func(o *writerOptions) {
 		if f != nil {
 			o.getLogFileName = f
+		}
+	}
+}
+
+// WithUUIDGenerator provides the Option for uuid generator
+func WithUUIDGenerator(f func() uuid.Generator) Option {
+	return func(o *writerOptions) {
+		if f != nil {
+			o.getUUIDGenerator = f
 		}
 	}
 }
@@ -119,10 +129,13 @@ type Writer struct {
 	gcRunning     atomic.Bool
 	size          int64
 	file          *os.File
-	bw            *pioutil.PageWriter
-	uint64buf     []byte
-	storage       storage.ExternalStorage
+	// record the filepath that is being written, and has not been flushed
+	ongoingFilePath string
+	bw              *pioutil.PageWriter
+	uint64buf       []byte
+	storage         storage.ExternalStorage
 	sync.RWMutex
+	uuidGenerator uuid.Generator
 
 	metricFsyncDuration    prometheus.Observer
 	metricFlushAllDuration prometheus.Observer
@@ -161,47 +174,21 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 		uint64buf: make([]byte, 8),
 		storage:   s3storage,
 
-		metricFsyncDuration: redoFsyncDurationHistogram.
+		metricFsyncDuration: common.RedoFsyncDurationHistogram.
 			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
-		metricFlushAllDuration: redoFlushAllDurationHistogram.
+		metricFlushAllDuration: common.RedoFlushAllDurationHistogram.
 			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
-		metricWriteBytes: redoWriteBytesGauge.
+		metricWriteBytes: common.RedoWriteBytesGauge.
 			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
+	}
+	if w.op.getUUIDGenerator != nil {
+		w.uuidGenerator = w.op.getUUIDGenerator()
+	} else {
+		w.uuidGenerator = uuid.NewGenerator()
 	}
 
 	w.running.Store(true)
-	go w.runFlushToDisk(ctx, cfg.FlushIntervalInMs)
-
 	return w, nil
-}
-
-func (w *Writer) runFlushToDisk(ctx context.Context, flushIntervalInMs int64) {
-	ticker := time.NewTicker(time.Duration(flushIntervalInMs) * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		if !w.IsRunning() {
-			return
-		}
-
-		select {
-		case <-ctx.Done():
-			err := w.Close()
-			if err != nil {
-				log.Error("runFlushToDisk close fail",
-					zap.String("namespace", w.cfg.ChangeFeedID.Namespace),
-					zap.String("changefeed", w.cfg.ChangeFeedID.ID),
-					zap.Error(err))
-			}
-		case <-ticker.C:
-			err := w.Flush()
-			if err != nil {
-				log.Error("redo log flush fail",
-					zap.String("namespace", w.cfg.ChangeFeedID.Namespace),
-					zap.String("changefeed", w.cfg.ChangeFeedID.ID), zap.Error(err))
-			}
-		}
-	}
 }
 
 // Write implement write interface
@@ -281,11 +268,11 @@ func (w *Writer) Close() error {
 		return nil
 	}
 
-	redoFlushAllDurationHistogram.
+	common.RedoFlushAllDurationHistogram.
 		DeleteLabelValues(w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID)
-	redoFsyncDurationHistogram.
+	common.RedoFsyncDurationHistogram.
 		DeleteLabelValues(w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID)
-	redoWriteBytesGauge.
+	common.RedoWriteBytesGauge.
 		DeleteLabelValues(w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID)
 
 	return w.close()
@@ -321,7 +308,7 @@ func (w *Writer) close() error {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultS3Timeout)
 		defer cancel()
 
-		err = w.renameInS3(ctx, w.file.Name(), w.filePath())
+		err = w.renameInS3(ctx, w.file.Name(), w.ongoingFilePath)
 		if err != nil {
 			return cerror.WrapError(cerror.ErrS3StorageAPI, err)
 		}
@@ -344,18 +331,23 @@ func (w *Writer) getLogFileName() string {
 	if w.op != nil && w.op.getLogFileName != nil {
 		return w.op.getLogFileName()
 	}
+	uid := w.uuidGenerator.NewString()
 	if model.DefaultNamespace == w.cfg.ChangeFeedID.Namespace {
-		return fmt.Sprintf("%s_%s_%d_%s_%d%s", w.cfg.CaptureID,
-			w.cfg.ChangeFeedID.ID,
-			w.cfg.CreateTime.Unix(), w.cfg.FileType, w.commitTS.Load(), common.LogEXT)
+		return fmt.Sprintf(common.RedoLogFileFormatV1,
+			w.cfg.CaptureID, w.cfg.ChangeFeedID.ID, w.cfg.FileType,
+			w.commitTS.Load(), uid, common.LogEXT)
 	}
-	return fmt.Sprintf("%s_%s_%s_%d_%s_%d%s", w.cfg.CaptureID,
-		w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID,
-		w.cfg.CreateTime.Unix(), w.cfg.FileType, w.commitTS.Load(), common.LogEXT)
+	return fmt.Sprintf(common.RedoLogFileFormatV2,
+		w.cfg.CaptureID, w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID,
+		w.cfg.FileType, w.commitTS.Load(), uid, common.LogEXT)
 }
 
+// filePath always creates a new, unique file path, note this function is not
+// thread-safe, writer needs to ensure lock is acquired when calling it.
 func (w *Writer) filePath() string {
-	return filepath.Join(w.cfg.Dir, w.getLogFileName())
+	fp := filepath.Join(w.cfg.Dir, w.getLogFileName())
+	w.ongoingFilePath = fp
+	return fp
 }
 
 func openTruncFile(name string) (*os.File, error) {
@@ -386,7 +378,10 @@ func (w *Writer) openNew() error {
 }
 
 func (w *Writer) openOrNew(writeLen int) error {
-	path := w.filePath()
+	path := w.ongoingFilePath
+	if path == "" {
+		return w.openNew()
+	}
 	info, err := os.Stat(path)
 	if os.IsNotExist(err) {
 		return w.openNew()
@@ -489,7 +484,7 @@ func (w *Writer) shouldRemoved(checkPointTs uint64, f os.FileInfo) (bool, error)
 }
 
 func (w *Writer) getShouldRemovedFiles(checkPointTs uint64) ([]os.FileInfo, error) {
-	files, err := ioutil.ReadDir(w.cfg.Dir)
+	files, err := os.ReadDir(w.cfg.Dir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			log.Warn("check removed log dir fail", zap.Error(err))
@@ -500,16 +495,23 @@ func (w *Writer) getShouldRemovedFiles(checkPointTs uint64) ([]os.FileInfo, erro
 
 	logFiles := []os.FileInfo{}
 	for _, f := range files {
-		ret, err := w.shouldRemoved(checkPointTs, f)
+		fileInfo, err := f.Info()
+		if err != nil {
+			log.Warn("get file info failed",
+				zap.String("dirEntry", f.Name()),
+				zap.Error(err))
+			continue
+		}
+		ret, err := w.shouldRemoved(checkPointTs, fileInfo)
 		if err != nil {
 			log.Warn("check removed log file fail",
-				zap.String("logFile", f.Name()),
+				zap.String("logFile", fileInfo.Name()),
 				zap.Error(err))
 			continue
 		}
 
 		if ret {
-			logFiles = append(logFiles, f)
+			logFiles = append(logFiles, fileInfo)
 		}
 	}
 

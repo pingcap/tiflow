@@ -116,7 +116,7 @@ func getPKIsHandleIdx(ti *model.TableInfo) *model.IndexInfo {
 func allColsNotNull(idx *model.IndexInfo, cols []*model.ColumnInfo) bool {
 	for _, idxCol := range idx.Columns {
 		col := cols[idxCol.Offset]
-		if !mysql.HasNotNullFlag(col.Flag) {
+		if !mysql.HasNotNullFlag(col.GetFlag()) {
 			return false
 		}
 	}

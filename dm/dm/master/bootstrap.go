@@ -22,9 +22,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/errors"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/master/scheduler"
 	"github.com/pingcap/tiflow/dm/dm/master/workerrpc"

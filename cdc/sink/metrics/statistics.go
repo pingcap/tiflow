@@ -26,9 +26,6 @@ import (
 )
 
 const (
-	// OptCaptureAddr is the key for capture address.
-	OptCaptureAddr = "_capture_addr"
-
 	printStatusInterval  = 10 * time.Minute
 	flushMetricsInterval = 5 * time.Second
 )
@@ -55,10 +52,10 @@ func (t sinkType) String() string {
 // NewStatistics creates a statistics
 func NewStatistics(ctx context.Context, t sinkType) *Statistics {
 	statistics := &Statistics{
-		sinkType:            t,
-		changefeedID:        contextutil.ChangefeedIDFromCtx(ctx),
-		lastPrintStatusTime: time.Now(),
+		sinkType:     t,
+		changefeedID: contextutil.ChangefeedIDFromCtx(ctx),
 	}
+	statistics.lastPrintStatusTime.Store(time.Now())
 
 	s := t.String()
 	statistics.metricExecTxnHis = ExecTxnHistogram.
@@ -102,6 +99,7 @@ func NewStatistics(ctx context.Context, t sinkType) *Statistics {
 }
 
 // Statistics maintains some status and metrics of the Sink
+// Note: All methods of Statistics should be thread-safe.
 type Statistics struct {
 	sinkType         sinkType
 	changefeedID     model.ChangeFeedID
@@ -110,7 +108,7 @@ type Statistics struct {
 	totalDDLCount    uint64
 
 	lastPrintStatusTotalRows uint64
-	lastPrintStatusTime      time.Time
+	lastPrintStatusTime      atomic.Value
 
 	metricExecTxnHis   prometheus.Observer
 	metricExecDDLHis   prometheus.Observer
@@ -178,19 +176,19 @@ func (b *Statistics) RecordDDLExecution(executor func() error) error {
 
 // PrintStatus prints the status of the Sink
 func (b *Statistics) PrintStatus(ctx context.Context) {
-	since := time.Since(b.lastPrintStatusTime)
+	since := time.Since(b.lastPrintStatusTime.Load().(time.Time))
 	if since < printStatusInterval {
 		return
 	}
 	totalRows := atomic.LoadUint64(&b.totalRows)
-	count := totalRows - b.lastPrintStatusTotalRows
+	count := totalRows - atomic.LoadUint64(&b.lastPrintStatusTotalRows)
 	seconds := since.Seconds()
 	var qps uint64
 	if seconds > 0 {
 		qps = count / uint64(seconds)
 	}
-	b.lastPrintStatusTime = time.Now()
-	b.lastPrintStatusTotalRows = totalRows
+	b.lastPrintStatusTime.Store(time.Now())
+	atomic.StoreUint64(&b.lastPrintStatusTotalRows, totalRows)
 
 	totalDDLCount := atomic.LoadUint64(&b.totalDDLCount)
 	atomic.StoreUint64(&b.totalDDLCount, 0)

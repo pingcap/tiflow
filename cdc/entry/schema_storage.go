@@ -125,6 +125,7 @@ func (s *schemaStorageImpl) GetSnapshot(ctx context.Context, ts uint64) (*schema
 		now := time.Now()
 		if now.Sub(logTime) >= 30*time.Second && isRetryable(err) {
 			log.Warn("GetSnapshot is taking too long, DDL puller stuck?",
+				zap.Error(err),
 				zap.Uint64("ts", ts),
 				zap.Duration("duration", now.Sub(startTime)),
 				zap.String("namespace", s.id.Namespace),
@@ -189,15 +190,11 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 	return nil
 }
 
-// AdvanceResolvedTs advances the resolved
+// AdvanceResolvedTs advances the resolved. Not thread safe.
+// NOTE: SHOULD NOT call it concurrently
 func (s *schemaStorageImpl) AdvanceResolvedTs(ts uint64) {
-	var swapped bool
-	for !swapped {
-		oldResolvedTs := atomic.LoadUint64(&s.resolvedTs)
-		if ts < oldResolvedTs {
-			return
-		}
-		swapped = atomic.CompareAndSwapUint64(&s.resolvedTs, oldResolvedTs, ts)
+	if ts > s.ResolvedTs() {
+		atomic.StoreUint64(&s.resolvedTs, ts)
 	}
 }
 

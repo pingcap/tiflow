@@ -79,7 +79,7 @@ func (t *testShardingGroupSuite) SetUpSuite(c *C) {
 }
 
 func (t *testShardingGroupSuite) TestLowestFirstPosInGroups(c *C) {
-	k := NewShardingGroupKeeper(tcontext.Background(), t.cfg)
+	k := NewShardingGroupKeeper(tcontext.Background(), t.cfg, nil)
 
 	g1 := NewShardingGroup(k.cfg.SourceID, k.shardMetaSchema, k.shardMetaTable, []string{"db1.tbl1", "db1.tbl2"}, nil, false, "", false)
 	// nolint:dogsled
@@ -105,7 +105,7 @@ func (t *testShardingGroupSuite) TestLowestFirstPosInGroups(c *C) {
 }
 
 func (t *testShardingGroupSuite) TestMergeAndLeave(c *C) {
-	k := NewShardingGroupKeeper(tcontext.Background(), t.cfg)
+	k := NewShardingGroupKeeper(tcontext.Background(), t.cfg, nil)
 	g1 := NewShardingGroup(k.cfg.SourceID, k.shardMetaSchema, k.shardMetaTable, []string{source1, source2}, nil, false, "", false)
 	c.Assert(g1.Sources(), DeepEquals, map[string]bool{source1: false, source2: false})
 
@@ -146,7 +146,7 @@ func (t *testShardingGroupSuite) TestMergeAndLeave(c *C) {
 }
 
 func (t *testShardingGroupSuite) TestSync(c *C) {
-	k := NewShardingGroupKeeper(tcontext.Background(), t.cfg)
+	k := NewShardingGroupKeeper(tcontext.Background(), t.cfg, nil)
 	g1 := NewShardingGroup(k.cfg.SourceID, k.shardMetaSchema, k.shardMetaTable, []string{source1, source2}, nil, false, "", false)
 	synced, active, remain, err := g1.TrySync(source1, pos11, endPos11, ddls1)
 	c.Assert(err, IsNil)
@@ -235,7 +235,7 @@ func (t *testShardingGroupSuite) TestTableID(c *C) {
 }
 
 func (t *testShardingGroupSuite) TestKeeper(c *C) {
-	k := NewShardingGroupKeeper(tcontext.Background(), t.cfg)
+	k := NewShardingGroupKeeper(tcontext.Background(), t.cfg, nil)
 	k.clear()
 	db, mock, err := sqlmock.New()
 	c.Assert(err, IsNil)

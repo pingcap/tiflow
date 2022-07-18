@@ -18,9 +18,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/cdc/processor"
-	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/puller"
-	redowriter "github.com/pingcap/tiflow/cdc/redo/writer"
+	redo "github.com/pingcap/tiflow/cdc/redo/common"
+	"github.com/pingcap/tiflow/cdc/scheduler"
 	sink "github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sorter"
@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	tikvmetrics "github.com/tikv/client-go/v2/metrics"
 )
 
@@ -40,28 +41,28 @@ var registry = prometheus.NewRegistry()
 
 func init() {
 	registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
-	registry.MustRegister(prometheus.NewGoCollector())
+	registry.MustRegister(prometheus.NewGoCollector(
+		collectors.WithGoCollections(collectors.GoRuntimeMemStatsCollection | collectors.GoRuntimeMetricsCollection)))
 
 	kv.InitMetrics(registry)
 	puller.InitMetrics(registry)
 	sink.InitMetrics(registry)
 	entry.InitMetrics(registry)
 	processor.InitMetrics(registry)
-	tablepipeline.InitMetrics(registry)
 	owner.InitMetrics(registry)
 	etcd.InitMetrics(registry)
 	initServerMetrics(registry)
 	actor.InitMetrics(registry)
 	orchestrator.InitMetrics(registry)
 	p2p.InitMetrics(registry)
-	// Sorter metrics
 	sorter.InitMetrics(registry)
 	memory.InitMetrics(registry)
 	unified.InitMetrics(registry)
 	leveldb.InitMetrics(registry)
-	redowriter.InitMetrics(registry)
+	redo.InitMetrics(registry)
 	db.InitMetrics(registry)
 	kafka.InitMetrics(registry)
+	scheduler.InitMetrics(registry)
 	// TiKV client metrics, including metrics about resolved and region cache.
 	originalRegistry := prometheus.DefaultRegisterer
 	prometheus.DefaultRegisterer = registry

@@ -95,6 +95,7 @@ func NewTablesChecker(dbs map[string]*sql.DB, tableMap map[string][]*filter.Tabl
 		tableMap:    tableMap,
 		dumpThreads: dumpThreads,
 	}
+	log.L().Logger.Debug("check table structure", zap.Int("channel pool size", dumpThreads))
 	c.inCh = make(chan *checkItem, dumpThreads)
 	c.optCh = make(chan *incompatibilityOption, dumpThreads)
 	return c
@@ -120,10 +121,12 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 			return c.checkTable(checkCtx)
 		})
 	}
-
-	dispatchTableItem(checkCtx, c.tableMap, c.inCh)
+	// start consuming results before dispatching
+	// or the dispatching thread could be blocked when
+	// the output channel is full.
 	c.wg.Add(1)
 	go c.handleOpts(ctx, r)
+	dispatchTableItem(checkCtx, c.tableMap, c.inCh)
 	if err := eg.Wait(); err != nil {
 		c.reMu.Lock()
 		markCheckError(r, err)
@@ -188,6 +191,7 @@ func (c *TablesChecker) checkTable(ctx context.Context) error {
 				return nil
 			}
 			table := checkItem.table
+			log.L().Logger.Debug("checking table", zap.String("db", table.Schema), zap.String("table", table.Name))
 			if len(sourceID) == 0 || sourceID != checkItem.sourceID {
 				sourceID = checkItem.sourceID
 				p, err = dbutil.GetParserForDB(ctx, c.dbs[sourceID])
@@ -214,6 +218,7 @@ func (c *TablesChecker) checkTable(ctx context.Context) error {
 				opt.tableID = table.String()
 				c.optCh <- opt
 			}
+			log.L().Logger.Debug("finish checking table", zap.String("db", table.Schema), zap.String("table", table.Name))
 		}
 	}
 }
@@ -456,7 +461,9 @@ func (c *ShardingTablesChecker) checkShardingTable(ctx context.Context, r *Resul
 				r.Extra = fmt.Sprintf("error on sharding %s", c.targetTableID)
 				r.Instruction = "please set same table structure for sharding tables"
 				c.reMu.Unlock()
-				return nil
+				// shouldn't return error
+				// it's feasible to check more sharding tables and
+				// able to inform users of as many as possible incompatible tables
 			}
 		}
 	}

@@ -17,18 +17,33 @@ import (
 	"context"
 	"testing"
 
+	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
+	dmmaster "github.com/pingcap/tiflow/dm/dm/master"
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
-	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
+	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
 )
 
 const (
 	jobTemplatePath = "../config/job_template.yaml"
 )
 
+func checkAndNoAdjustSourceConfigMock(ctx context.Context, cfg *dmconfig.SourceConfig) error {
+	if _, err := cfg.Yaml(); err != nil {
+		return err
+	}
+	return cfg.Verify()
+}
+
 func TestJobStore(t *testing.T) {
+	funcBackup := dmmaster.CheckAndAdjustSourceConfigFunc
+	dmmaster.CheckAndAdjustSourceConfigFunc = checkAndNoAdjustSourceConfigMock
+	defer func() {
+		dmmaster.CheckAndAdjustSourceConfigFunc = funcBackup
+	}()
+
 	var (
 		source1 = "mysql-replica-01"
 		source2 = "mysql-replica-02"
@@ -71,7 +86,7 @@ func TestJobStore(t *testing.T) {
 	require.Equal(t, job.Tasks[source1].Stage, StageRunning)
 	require.Equal(t, job.Tasks[source2].Stage, StageRunning)
 
-	require.NoError(t, jobStore.UpdateStages(context.Background(), []string{source1, source2}, StagePaused))
+	require.NoError(t, jobStore.UpdateStages(context.Background(), nil, StagePaused))
 	require.Equal(t, job.Tasks[source1].Stage, StageRunning)
 	require.Equal(t, job.Tasks[source2].Stage, StageRunning)
 	state, _ = jobStore.Get(context.Background())

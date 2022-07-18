@@ -17,7 +17,7 @@ import (
 	"errors"
 	"testing"
 
-	cerrors "github.com/pingcap/tiflow/engine/pkg/errors"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 

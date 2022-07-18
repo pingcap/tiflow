@@ -22,7 +22,7 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/util/codec"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -97,14 +97,19 @@ func GetTableSpan(tableID int64) Span {
 	}
 }
 
-// GetDDLSpan returns the span to watch for DDL related events
-func GetDDLSpan() Span {
+// getDDLSpan returns the span to watch for DDL related events
+func getDDLSpan() Span {
 	return getMetaListKey("DDLJobList")
 }
 
-// GetAddIndexDDLSpan returns the span to watch for Add Index DDL related events
-func GetAddIndexDDLSpan() Span {
+// getAddIndexDDLSpan returns the span to watch for Add Index DDL related events
+func getAddIndexDDLSpan() Span {
 	return getMetaListKey("DDLJobAddIdxList")
+}
+
+// GetAllDDLSpan return all cdc interested spans for DDL.
+func GetAllDDLSpan() []Span {
+	return []Span{getDDLSpan(), getAddIndexDDLSpan()}
 }
 
 func getMetaListKey(key string) Span {
@@ -131,7 +136,6 @@ func KeyInSpans(k []byte, spans []ComparableSpan) bool {
 			return true
 		}
 	}
-
 	return false
 }
 
@@ -188,7 +192,7 @@ func EndCompare(lhs []byte, rhs []byte) int {
 func Intersect(lhs ComparableSpan, rhs ComparableSpan) (span ComparableSpan, err error) {
 	if lhs.Start != nil && EndCompare(lhs.Start, rhs.End) >= 0 ||
 		rhs.Start != nil && EndCompare(rhs.Start, lhs.End) >= 0 {
-		return ComparableSpan{}, cerror.ErrIntersectNoOverlap.GenWithStackByArgs(lhs, rhs)
+		return ComparableSpan{}, errors.ErrIntersectNoOverlap.GenWithStackByArgs(lhs, rhs)
 	}
 
 	start := lhs.Start

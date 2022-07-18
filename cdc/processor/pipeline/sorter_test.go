@@ -19,7 +19,6 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
@@ -28,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestUnifiedSorterFileLockConflict(t *testing.T) {
@@ -51,25 +51,26 @@ func TestUnifiedSorterFileLockConflict(t *testing.T) {
 	ctx.ChangefeedVars().Info.Engine = model.SortUnified
 	ctx.ChangefeedVars().Info.SortDir = dir
 	sorter := sorterNode{}
-	err = sorter.Init(pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil))
+	nodeCtx := pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil)
+	err = sorter.start(nodeCtx, &errgroup.Group{}, 0, nil)
 	require.True(t, strings.Contains(err.Error(), "file lock conflict"))
 }
 
 func TestSorterResolvedTs(t *testing.T) {
 	t.Parallel()
-	sn := newSorterNode("tableName", 1, 1, nil, nil, &config.ReplicaConfig{
-		Consistent: &config.ConsistentConfig{},
-	})
+	state := TableStatePreparing
+	sn := newSorterNode("tableName", 1, 1, nil, nil, &state,
+		model.DefaultChangeFeedID("changefeed-id-test"), false)
 	sn.sorter = memory.NewEntrySorter()
-	require.EqualValues(t, 1, sn.ResolvedTs())
-	nctx := pipeline.NewNodeContext(
-		cdcContext.NewContext(context.Background(), nil),
-		pmessage.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 2)),
-		nil,
-	)
-	err := sn.Receive(nctx)
+	require.Equal(t, model.Ts(1), sn.ResolvedTs())
+	require.Equal(t, TableStatePreparing, sn.State())
+
+	msg := pmessage.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 2))
+	ok, err := sn.TryHandleDataMessage(context.Background(), msg)
+	require.True(t, ok)
 	require.Nil(t, err)
-	require.EqualValues(t, 2, sn.ResolvedTs())
+	require.EqualValues(t, model.Ts(2), sn.ResolvedTs())
+	require.Equal(t, TableStatePrepared, sn.State())
 }
 
 type checkSorter struct {
@@ -101,57 +102,60 @@ func (c *checkSorter) Output() <-chan *model.PolymorphicEvent {
 	return c.ch
 }
 
+func (c *checkSorter) EmitStartTs(ctx context.Context, ts uint64) {
+	panic("unimplemented")
+}
+
 func TestSorterResolvedTsLessEqualBarrierTs(t *testing.T) {
 	t.Parallel()
 	sch := make(chan *model.PolymorphicEvent, 1)
 	s := &checkSorter{ch: sch}
-	sn := newSorterNode("tableName", 1, 1, nil, nil, &config.ReplicaConfig{
-		Consistent: &config.ConsistentConfig{},
-	})
+	state := TableStatePreparing
+	sn := newSorterNode("tableName", 1, 1, nil, nil, &state,
+		model.DefaultChangeFeedID("changefeed-id-test"), false)
 	sn.sorter = s
 
 	ch := make(chan pmessage.Message, 1)
-	require.EqualValues(t, 1, sn.ResolvedTs())
+	require.Equal(t, model.Ts(1), sn.ResolvedTs())
 
 	// Resolved ts must not regress even if there is no barrier ts message.
 	resolvedTs1 := pmessage.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 1))
-	nctx := pipeline.NewNodeContext(
-		cdcContext.NewContext(context.Background(), nil), resolvedTs1, ch)
-	err := sn.Receive(nctx)
+	ok, err := sn.TryHandleDataMessage(context.Background(), resolvedTs1)
+	require.True(t, ok)
 	require.Nil(t, err)
 	require.EqualValues(t, model.NewResolvedPolymorphicEvent(0, 1), <-sch)
+	require.Equal(t, TableStatePrepared, sn.State())
 
 	// Advance barrier ts.
-	nctx = pipeline.NewNodeContext(
+	nctx := pipeline.NewNodeContext(
 		cdcContext.NewContext(context.Background(), nil),
 		pmessage.BarrierMessage(2),
 		ch,
 	)
-	err = sn.Receive(nctx)
+	msg := nctx.Message()
+	ok, err = sn.TryHandleDataMessage(nctx, msg)
+	require.True(t, ok)
 	require.Nil(t, err)
 	require.EqualValues(t, 2, sn.BarrierTs())
 	// Barrier message must be passed to the next node.
 	require.EqualValues(t, pmessage.BarrierMessage(2), <-ch)
 
 	resolvedTs2 := pmessage.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 2))
-	nctx = pipeline.NewNodeContext(
-		cdcContext.NewContext(context.Background(), nil), resolvedTs2, nil)
-	err = sn.Receive(nctx)
+	ok, err = sn.TryHandleDataMessage(context.Background(), resolvedTs2)
+	require.True(t, ok)
 	require.Nil(t, err)
 	require.EqualValues(t, resolvedTs2.PolymorphicEvent, <-s.Output())
 
 	resolvedTs3 := pmessage.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 3))
-	nctx = pipeline.NewNodeContext(
-		cdcContext.NewContext(context.Background(), nil), resolvedTs3, nil)
-	err = sn.Receive(nctx)
+	ok, err = sn.TryHandleDataMessage(context.Background(), resolvedTs3)
+	require.True(t, ok)
 	require.Nil(t, err)
 	require.EqualValues(t, resolvedTs2.PolymorphicEvent, <-s.Output())
 
 	resolvedTs4 := pmessage.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 4))
-	sn.replConfig.Consistent.Level = string(redo.ConsistentLevelEventual)
-	nctx = pipeline.NewNodeContext(
-		cdcContext.NewContext(context.Background(), nil), resolvedTs4, nil)
-	err = sn.Receive(nctx)
+	sn.redoLogEnabled = true
+	ok, err = sn.TryHandleDataMessage(context.Background(), resolvedTs4)
+	require.True(t, ok)
 	require.Nil(t, err)
 	resolvedTs4 = pmessage.PolymorphicEventMessage(model.NewResolvedPolymorphicEvent(0, 4))
 	require.EqualValues(t, resolvedTs4.PolymorphicEvent, <-s.Output())

@@ -15,19 +15,14 @@ package internal
 
 import (
 	"context"
-	"time"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/clock"
 )
-
-// Closer defines an interface to support Close
-type Closer interface {
-	Close(ctx context.Context) error
-}
 
 // Workloader defines an interface to get Workload
 type Workloader interface {
@@ -37,13 +32,10 @@ type Workloader interface {
 // RunnableID is a unique id for the runnable
 type RunnableID = string
 
-// Runnable defines an interface that can be ran in task runner
+// Runnable defines an interface that can be run in task runner
 type Runnable interface {
-	Init(ctx context.Context) error
-	Poll(ctx context.Context) error
+	Run(ctx context.Context) error
 	ID() RunnableID
-
-	Closer
 }
 
 // RunnableStatus is the runtime container status
@@ -64,7 +56,7 @@ type RunnableContainer struct {
 }
 
 // WrapRunnable creates a new RunnableContainer from a Runnable interface
-func WrapRunnable(runnable Runnable, submitTime time.Time) *RunnableContainer {
+func WrapRunnable(runnable Runnable, submitTime clock.MonotonicTime) *RunnableContainer {
 	return &RunnableContainer{
 		Runnable: runnable,
 		status:   *atomic.NewInt32(TaskSubmitted),
@@ -82,11 +74,11 @@ func (c *RunnableContainer) Info() RuntimeInfo {
 	return c.info
 }
 
-// OnInitialized is the callback when the runnable instance is initialized
-func (c *RunnableContainer) OnInitialized() {
+// OnLaunched is the callback when the runnable instance is launched.
+func (c *RunnableContainer) OnLaunched() {
 	oldStatus := c.status.Swap(TaskRunning)
 	if oldStatus != TaskSubmitted {
-		log.L().Panic("unexpected status", zap.Int32("status", oldStatus))
+		log.Panic("unexpected status", zap.Int32("status", oldStatus))
 	}
 }
 
@@ -94,6 +86,6 @@ func (c *RunnableContainer) OnInitialized() {
 func (c *RunnableContainer) OnStopped() {
 	oldStatus := c.status.Swap(TaskClosing)
 	if oldStatus != TaskRunning && oldStatus != TaskSubmitted {
-		log.L().Panic("unexpected status", zap.Int32("status", oldStatus))
+		log.Panic("unexpected status", zap.Int32("status", oldStatus))
 	}
 }

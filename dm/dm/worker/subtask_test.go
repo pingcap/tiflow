@@ -19,6 +19,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-mysql-org/go-mysql/mysql"
+	. "github.com/pingcap/check"
+	"github.com/pingcap/errors"
+	"github.com/stretchr/testify/require"
+	clientv3 "go.etcd.io/etcd/client/v3"
+
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
 	"github.com/pingcap/tiflow/dm/dm/unit"
@@ -29,11 +35,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/relay"
 	"github.com/pingcap/tiflow/dm/syncer"
-	"github.com/stretchr/testify/require"
-
-	. "github.com/pingcap/check"
-	"github.com/pingcap/errors"
-	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 const (
@@ -48,7 +49,8 @@ var _ = Suite(&testSubTask{})
 
 func (t *testSubTask) TestCreateUnits(c *C) {
 	cfg := &config.SubTaskConfig{
-		Mode: "xxx",
+		Mode:   "xxx",
+		Flavor: mysql.MySQLFlavor,
 	}
 	worker := "worker"
 	c.Assert(createUnits(cfg, nil, worker, nil), HasLen, 0)
@@ -569,4 +571,36 @@ func TestValidatorStatus(t *testing.T) {
 	require.Nil(t, stats)
 	require.True(t, terror.ErrValidatorNotFound.Equal(err))
 	// validator != nil: will be tested in IT
+}
+
+func TestSubtaskRace(t *testing.T) {
+	// to test data race of Marshal() and markResultCanceled()
+	tempErrors := []*pb.ProcessError{}
+	tempDetail := []byte{}
+	tempProcessResult := pb.ProcessResult{
+		IsCanceled: false,
+		Errors:     tempErrors,
+		Detail:     tempDetail,
+	}
+	cfg := &config.SubTaskConfig{
+		Name: "test-subtask-race",
+		ValidatorCfg: config.ValidatorConfig{
+			Mode: config.ValidationFast,
+		},
+	}
+	st := NewSubTaskWithStage(cfg, pb.Stage_Paused, nil, "worker")
+	st.result = &tempProcessResult
+	tempQueryStatusResponse := pb.QueryStatusResponse{}
+	tempQueryStatusResponse.SubTaskStatus = make([]*pb.SubTaskStatus, 1)
+	tempSubTaskStatus := pb.SubTaskStatus{}
+	tempSubTaskStatus.Result = st.Result()
+	tempQueryStatusResponse.SubTaskStatus[0] = &tempSubTaskStatus
+	st.result.IsCanceled = false
+	go func() {
+		for i := 0; i < 10; i++ {
+			_, _ = tempQueryStatusResponse.Marshal()
+		}
+	}()
+	st.markResultCanceled()
+	// this test is to test data race, so don't need assert here
 }

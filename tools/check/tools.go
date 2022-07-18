@@ -34,6 +34,7 @@ import (
 	_ "github.com/swaggo/swag"
 	_ "github.com/tinylib/msgp"
 	_ "github.com/zhouqiang-cl/gocovmerge"
+	_ "golang.org/x/tools/cmd/goimports"
 	_ "mvdan.cc/gofumpt"
 	_ "mvdan.cc/sh/v3/cmd/shfmt"
 )

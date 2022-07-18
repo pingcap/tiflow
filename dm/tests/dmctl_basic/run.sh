@@ -279,7 +279,9 @@ function run() {
 
 	echo "dmctl_check_task"
 	check_task_pass $TASK_CONF
+	check_task_wrong_no_source_meta $cur/conf/dm-task7.yaml
 	check_task_wrong_start_time_format $cur/conf/dm-task3.yaml
+	check_task_no_source_meta_but_start_time $cur/conf/dm-task7.yaml
 	check_task_not_pass $cur/conf/dm-task2.yaml
 	check_task_error_count $cur/conf/dm-task3.yaml
 	check_task_not_pass_with_message $cur/conf/dm-task5.yaml "please use \`shard-mode\` only."
@@ -310,6 +312,14 @@ function run() {
 
 	echo "dmctl_start_task"
 	start_task_wrong_start_time_format $cur/conf/dm-task3.yaml
+	start_task_wrong_no_source_meta $cur/conf/dm-task7.yaml
+	# start no source meta task with start time
+	start_task_no_source_meta_but_start_time $cur/conf/dm-task7.yaml
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task $cur/conf/dm-task7.yaml" \
+		"\"result\": true" 3
+	run_sql_tidb "DROP DATABASE if exists dmctl;"
+	# start task
 	dmctl_start_task
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \

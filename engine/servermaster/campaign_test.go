@@ -20,13 +20,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/servermaster/cluster"
 	"github.com/pingcap/tiflow/engine/test"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.uber.org/atomic"
@@ -34,7 +34,7 @@ import (
 
 func init() {
 	// initialized the logger to make genEmbedEtcdConfig working.
-	err := log.InitLogger(&log.Config{})
+	err := logutil.InitLogger(&logutil.Config{})
 	if err != nil {
 		panic(err)
 	}
@@ -58,7 +58,7 @@ func TestLeaderLoopSuccess(t *testing.T) {
 	}
 
 	// prepare server master
-	cfg := NewConfig()
+	cfg := GetDefaultMasterConfig()
 	cfg.Etcd.Name = name
 	cfg.AdvertiseAddr = addr
 	s := &Server{
@@ -67,6 +67,7 @@ func TestLeaderLoopSuccess(t *testing.T) {
 		etcdClient:      client,
 		leaderServiceFn: mockLeaderService,
 		info:            &model.NodeInfo{ID: model.DeployNodeID(name)},
+		membership:      &EtcdMembership{etcdCli: client},
 	}
 	preRPCHook := rpcutil.NewPreRPCHook[pb.MasterClient](
 		s.id,
@@ -76,7 +77,11 @@ func TestLeaderLoopSuccess(t *testing.T) {
 		s.rpcLogRL,
 	)
 	s.masterRPCHook = preRPCHook
-	err := s.reset(ctx)
+	sessionCfg, err := s.generateSessionConfig()
+	require.Nil(t, err)
+	session, err := cluster.NewEtcdSession(ctx, client, sessionCfg)
+	require.Nil(t, err)
+	err = session.Reset(ctx)
 	require.Nil(t, err)
 
 	// start to run leader loop
@@ -111,7 +116,7 @@ func TestLeaderLoopMeetStaleData(t *testing.T) {
 		return ctx.Err()
 	}
 
-	cfg := NewConfig()
+	cfg := GetDefaultMasterConfig()
 	cfg.Etcd.Name = name
 	cfg.AdvertiseAddr = addr
 	id := genServerMasterUUID(name)
@@ -122,6 +127,7 @@ func TestLeaderLoopMeetStaleData(t *testing.T) {
 		etcdClient:      client,
 		leaderServiceFn: mockLeaderService,
 		info:            &model.NodeInfo{ID: model.DeployNodeID(name)},
+		membership:      &EtcdMembership{etcdCli: client},
 	}
 	preRPCHook := rpcutil.NewPreRPCHook[pb.MasterClient](
 		s.id,
@@ -136,15 +142,18 @@ func TestLeaderLoopMeetStaleData(t *testing.T) {
 	sess, err := concurrency.NewSession(client, concurrency.WithTTL(10))
 	require.Nil(t, err)
 	election, err := cluster.NewEtcdElection(ctx, client, sess, cluster.EtcdElectionConfig{
-		CreateSessionTimeout: time.Second * 3,
-		TTL:                  time.Second * 10,
-		Prefix:               adapter.MasterCampaignKey.Path(),
+		TTL:    time.Second * 10,
+		Prefix: adapter.MasterCampaignKey.Path(),
 	})
 	require.Nil(t, err)
 	_, _, err = election.Campaign(ctx, s.member(), time.Second*3)
 	require.Nil(t, err)
 
-	err = s.reset(ctx)
+	sessionCfg, err := s.generateSessionConfig()
+	require.Nil(t, err)
+	session, err := cluster.NewEtcdSession(ctx, client, sessionCfg)
+	require.Nil(t, err)
+	err = session.Reset(ctx)
 	require.Nil(t, err)
 
 	var wg sync.WaitGroup
@@ -181,8 +190,9 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 	}
 
 	servers := make([]*Server, 0, serverCount)
+	sessions := make([]cluster.Session, 0, serverCount)
 	for i := range names {
-		cfg := NewConfig()
+		cfg := GetDefaultMasterConfig()
 		cfg.Etcd.Name = names[i]
 		cfg.AdvertiseAddr = addrs[i]
 		s := &Server{
@@ -193,6 +203,7 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 			info:        &model.NodeInfo{ID: model.DeployNodeID(names[i])},
 			masterCli:   &rpcutil.LeaderClientWithLock[pb.MasterClient]{},
 			resourceCli: &rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]{},
+			membership:  &EtcdMembership{etcdCli: client},
 		}
 		preRPCHook := rpcutil.NewPreRPCHook[pb.MasterClient](
 			s.id,
@@ -204,6 +215,12 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 		s.masterRPCHook = preRPCHook
 		s.leaderServiceFn = mockLeaderServiceFn
 		servers = append(servers, s)
+
+		sessionCfg, err := s.generateSessionConfig()
+		require.Nil(t, err)
+		session, err := cluster.NewEtcdSession(ctx, client, sessionCfg)
+		require.Nil(t, err)
+		sessions = append(sessions, session)
 	}
 
 	leaderIndex := -1
@@ -220,9 +237,10 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 	wg.Add(serverCount)
 	go func() {
 		defer wg.Done()
-		leaderServer := servers[leaderIndex]
-		err := leaderServer.reset(ctx)
+		session := sessions[leaderIndex]
+		err := session.Reset(ctx)
 		require.Nil(t, err)
+		leaderServer := servers[leaderIndex]
 		err = leaderServer.leaderLoop(ctx)
 		require.EqualError(t, err, context.Canceled.Error())
 	}()
@@ -231,9 +249,10 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 			continue
 		}
 		s := servers[i]
+		session := sessions[i]
 		go func() {
 			defer wg.Done()
-			err := s.reset(ctx)
+			err := session.Reset(ctx)
 			require.Nil(t, err)
 
 			// check masterCli is not set

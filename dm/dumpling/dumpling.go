@@ -15,6 +15,7 @@ package dumpling
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -22,10 +23,14 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/dumpling/export"
+	tidbpromutil "github.com/pingcap/tidb/util/promutil"
 	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/pb"
@@ -41,7 +46,8 @@ import (
 
 // Dumpling dumps full data from a MySQL-compatible database.
 type Dumpling struct {
-	cfg *config.SubTaskConfig
+	cfg           *config.SubTaskConfig
+	metricProxies *metricProxies
 
 	logger log.Logger
 
@@ -53,9 +59,13 @@ type Dumpling struct {
 
 // NewDumpling creates a new Dumpling.
 func NewDumpling(cfg *config.SubTaskConfig) *Dumpling {
+	logger := log.L()
+	if cfg.FrameworkLogger != nil {
+		logger = log.Logger{Logger: cfg.FrameworkLogger}
+	}
 	m := &Dumpling{
 		cfg:    cfg,
-		logger: log.With(zap.String("task", cfg.Name), zap.String("unit", "dump")),
+		logger: logger.WithFields(zap.String("task", cfg.Name), zap.String("unit", "dump")),
 	}
 	return m
 }
@@ -66,13 +76,47 @@ func (m *Dumpling) Init(ctx context.Context) error {
 	if m.dumpConfig, err = m.constructArgs(ctx); err != nil {
 		return err
 	}
+	if m.cfg.MetricsFactory != nil {
+		// this branch means dataflow engine has set a Factory, the Factory itself
+		// will register and deregister metrics, so we must use NoopRegistry
+		// to avoid duplicated registration.
+		m.metricProxies = &metricProxies{}
+		m.metricProxies.dumplingExitWithErrorCounter = metricsproxy.NewCounterVec(
+			m.cfg.MetricsFactory,
+			prometheus.CounterOpts{
+				Namespace: "dm",
+				Subsystem: "dumpling",
+				Name:      "exit_with_error_count",
+				Help:      "counter for dumpling exit with error",
+			}, []string{"task", "source_id"},
+		)
+		m.dumpConfig.PromFactory = promutil.NewWrappingFactory(
+			m.cfg.MetricsFactory,
+			"",
+			prometheus.Labels{
+				"task": m.cfg.Name, "source_id": m.cfg.SourceID,
+			},
+		)
+		m.dumpConfig.PromRegistry = tidbpromutil.NewNoopRegistry()
+	} else {
+		m.metricProxies = defaultMetricProxies
+		m.dumpConfig.PromFactory = promutil.NewWrappingFactory(
+			promutil.NewPromFactory(),
+			"",
+			prometheus.Labels{
+				"task": m.cfg.Name, "source_id": m.cfg.SourceID,
+			},
+		)
+		m.dumpConfig.PromRegistry = prometheus.DefaultGatherer.(prometheus.Registerer)
+	}
+
 	m.logger.Info("create dumpling", zap.Stringer("config", m.dumpConfig))
 	return nil
 }
 
 // Process implements Unit.Process.
 func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
-	dumplingExitWithErrorCounter.WithLabelValues(m.cfg.Name, m.cfg.SourceID).Add(0)
+	m.metricProxies.dumplingExitWithErrorCounter.WithLabelValues(m.cfg.Name, m.cfg.SourceID).Add(0)
 
 	failpoint.Inject("dumpUnitProcessWithError", func(val failpoint.Value) {
 		m.logger.Info("dump unit runs with injected error", zap.String("failpoint", "dumpUnitProcessWithError"), zap.Reflect("error", val))
@@ -132,7 +176,14 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 			m.logger.Info("long dump unit")
 			time.Sleep(10 * time.Second)
 		})
+		failpoint.Inject("SleepBeforeDumplingClose", func(val failpoint.Value) {
+			t := val.(int)
+			time.Sleep(time.Second * time.Duration(t))
+			m.logger.Info("", zap.String("failpoint", "SleepBeforeDumplingClose"))
+		})
 		dumpling.Close()
+	} else {
+		m.logger.Warn("error occurred during NewDumper", zap.Error(err))
 	}
 	cancel()
 
@@ -140,7 +191,7 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		if utils.IsContextCanceledError(err) {
 			m.logger.Info("filter out error caused by user cancel")
 		} else {
-			dumplingExitWithErrorCounter.WithLabelValues(m.cfg.Name, m.cfg.SourceID).Inc()
+			m.metricProxies.dumplingExitWithErrorCounter.WithLabelValues(m.cfg.Name, m.cfg.SourceID).Inc()
 			errs = append(errs, unit.NewProcessError(terror.ErrDumpUnitRuntime.Delegate(err, "")))
 		}
 	}
@@ -220,6 +271,10 @@ func (m *Dumpling) Status(_ *binlog.SourceStatus) interface{} {
 	if m.core == nil {
 		return &pb.DumpStatus{}
 	}
+	return m.status()
+}
+
+func (m *Dumpling) status() *pb.DumpStatus {
 	mid := m.core.GetParameters()
 	s := &pb.DumpStatus{
 		TotalTables:       mid.TotalTables,
@@ -228,6 +283,19 @@ func (m *Dumpling) Status(_ *binlog.SourceStatus) interface{} {
 		FinishedRows:      mid.FinishedRows,
 		EstimateTotalRows: mid.EstimateTotalRows,
 	}
+	var estimateProgress string
+	if s.FinishedRows >= s.EstimateTotalRows {
+		estimateProgress = "100.00%"
+	} else {
+		estimateProgress = fmt.Sprintf("%.2f %%", s.FinishedRows/s.EstimateTotalRows*100)
+	}
+	m.logger.Info("progress status of dumpling",
+		zap.Int64("total_tables", s.TotalTables),
+		zap.Int64("finished_tables", int64(s.CompletedTables)),
+		zap.Int64("estimated_total_rows", int64(s.EstimateTotalRows)),
+		zap.Int64("finished_rows", int64(s.FinishedRows)),
+		zap.String("estimated_progress", estimateProgress),
+	)
 	return s
 }
 
@@ -268,8 +336,13 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 	tz := m.cfg.Timezone
 	if len(tz) == 0 {
 		// use target db time_zone as default
+		baseDB, err2 := conn.DefaultDBProvider.Apply(&m.cfg.To)
+		if err2 != nil {
+			return nil, err2
+		}
+		defer baseDB.Close()
 		var err1 error
-		tz, err1 = conn.FetchTimeZoneSetting(ctx, &m.cfg.To)
+		tz, err1 = config.FetchTimeZoneSetting(ctx, baseDB.DB)
 		if err1 != nil {
 			return nil, err1
 		}
@@ -282,7 +355,7 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 		dumpConfig.Threads = cfg.Threads
 	}
 	if cfg.ChunkFilesize != "" {
-		dumpConfig.FileSize, err = dutils.ParseFileSize(cfg.ChunkFilesize, export.UnspecifiedSize)
+		dumpConfig.FileSize, err = utils.ParseFileSize(cfg.ChunkFilesize, export.UnspecifiedSize)
 		if err != nil {
 			m.logger.Warn("parsed some unsupported arguments", zap.Error(err))
 			return nil, err
@@ -332,7 +405,6 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 		dumpConfig.TableFilter = filter.CaseInsensitive(dumpConfig.TableFilter)
 	}
 
-	dumpConfig.Labels = prometheus.Labels{"task": m.cfg.Name, "source_id": m.cfg.SourceID}
 	// update sql_mode if needed
 	m.detectSQLMode(ctx, dumpConfig)
 	dumpConfig.ExtStorage = cfg.ExtStorage

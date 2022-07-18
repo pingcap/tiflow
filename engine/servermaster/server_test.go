@@ -16,35 +16,36 @@ package servermaster
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/engine/lib"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pb"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
+	"github.com/pingcap/tiflow/engine/pkg/notifier"
+	"github.com/pingcap/tiflow/engine/servermaster/cluster"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
+	"github.com/pingcap/tiflow/pkg/logutil"
 
 	"github.com/phayes/freeport"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
 )
 
 func init() {
-	err := log.InitLogger(&log.Config{Level: "warn"})
+	err := logutil.InitLogger(&logutil.Config{Level: "warn"})
 	if err != nil {
 		panic(err)
 	}
 }
 
-func prepareServerEnv(t *testing.T, name string) (string, *Config, func()) {
-	dir, err := ioutil.TempDir("", name)
-	require.Nil(t, err)
+func prepareServerEnv(t *testing.T, name string) (string, *Config) {
+	dir := t.TempDir()
 
 	ports, err := freeport.GetFreePorts(2)
 	require.Nil(t, err)
@@ -55,8 +56,8 @@ advertise-addr = "127.0.0.1:%d"
 store-id = "root"
 endpoints = ["127.0.0.1:%d"]
 [frame-metastore-conf.auth]
-user = "root" 
-[user-metastore-conf]
+user = "root"
+[business-metastore-conf]
 store-id = "default"
 endpoints = ["127.0.0.1:%d"]
 [etcd]
@@ -65,28 +66,23 @@ data-dir = "%s"
 peer-urls = "http://127.0.0.1:%d"
 initial-cluster = "%s=http://127.0.0.1:%d"`
 	cfgStr := fmt.Sprintf(cfgTpl, ports[0], ports[0], ports[0], ports[0], name, dir, ports[1], name, ports[1])
-	cfg := NewConfig()
+	cfg := GetDefaultMasterConfig()
 	err = cfg.configFromString(cfgStr)
 	require.Nil(t, err)
-	err = cfg.adjust()
+	err = cfg.Adjust()
 	require.Nil(t, err)
 
-	cleanupFn := func() {
-		os.RemoveAll(dir)
-	}
 	masterAddr := fmt.Sprintf("127.0.0.1:%d", ports[0])
 
-	return masterAddr, cfg, cleanupFn
+	return masterAddr, cfg
 }
 
 // Disable parallel run for this case, because prometheus http handler will meet
 // data race if parallel run is enabled
 func TestStartGrpcSrv(t *testing.T) {
-	masterAddr, cfg, cleanup := prepareServerEnv(t, "test-start-grpc-srv")
-	defer cleanup()
+	masterAddr, cfg := prepareServerEnv(t, "test-start-grpc-srv")
 
 	s := &Server{cfg: cfg}
-	registerMetrics()
 	ctx := context.Background()
 	err := s.startGrpcSrv(ctx)
 	require.Nil(t, err)
@@ -101,9 +97,7 @@ func TestStartGrpcSrv(t *testing.T) {
 func TestStartGrpcSrvCancelable(t *testing.T) {
 	t.Parallel()
 
-	dir, err := ioutil.TempDir("", "test-start-grpc-srv-cancelable")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 	ports, err := freeport.GetFreePorts(3)
 	require.Nil(t, err)
 	cfgTpl := `
@@ -113,8 +107,8 @@ advertise-addr = "127.0.0.1:%d"
 store-id = "root"
 endpoints = ["127.0.0.1:%d"]
 [frame-metastore-conf.auth]
-user = "root" 
-[user-metastore-conf]
+user = "root"
+[business-metastore-conf]
 store-id = "default"
 endpoints = ["127.0.0.1:%d"]
 [etcd]
@@ -123,10 +117,10 @@ data-dir = "%s"
 peer-urls = "http://127.0.0.1:%d"
 initial-cluster = "server-master-1=http://127.0.0.1:%d,server-master-2=http://127.0.0.1:%d"`
 	cfgStr := fmt.Sprintf(cfgTpl, ports[0], ports[0], ports[0], ports[0], dir, ports[1], ports[1], ports[2])
-	cfg := NewConfig()
+	cfg := GetDefaultMasterConfig()
 	err = cfg.configFromString(cfgStr)
 	require.Nil(t, err)
-	err = cfg.adjust()
+	err = cfg.Adjust()
 	require.Nil(t, err)
 
 	s := &Server{cfg: cfg}
@@ -163,7 +157,7 @@ func testPprof(t *testing.T, addr string) {
 		require.Nil(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
-		_, err = ioutil.ReadAll(resp.Body)
+		_, err = io.ReadAll(resp.Body)
 		require.Nil(t, err)
 	}
 }
@@ -173,7 +167,7 @@ func testPrometheusMetrics(t *testing.T, addr string) {
 	require.Nil(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	_, err = ioutil.ReadAll(resp.Body)
+	_, err = io.ReadAll(resp.Body)
 	require.Nil(t, err)
 }
 
@@ -187,8 +181,7 @@ func testPrometheusMetrics(t *testing.T, addr string) {
 // FIXME: disable this test temporary for no proper mock of frame metastore
 // nolint: deadcode
 func testRunLeaderService(t *testing.T) {
-	_, cfg, cleanup := prepareServerEnv(t, "test-run-leader-service")
-	defer cleanup()
+	_, cfg := prepareServerEnv(t, "test-run-leader-service")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -204,7 +197,9 @@ func testRunLeaderService(t *testing.T) {
 	err = s.startGrpcSrv(ctx)
 	require.Nil(t, err)
 
-	err = s.reset(ctx)
+	sessionCfg, err := s.generateSessionConfig()
+	require.Nil(t, err)
+	session, err := cluster.NewEtcdSession(ctx, s.etcdClient, sessionCfg)
 	require.Nil(t, err)
 
 	var wg sync.WaitGroup
@@ -214,7 +209,7 @@ func testRunLeaderService(t *testing.T) {
 		s.msgService.GetMessageServer().Run(ctx)
 	}()
 
-	err = s.campaign(ctx, time.Second)
+	_, _, err = session.Campaign(ctx, time.Second)
 	require.Nil(t, err)
 
 	ctx1, cancel1 := context.WithTimeout(ctx, time.Second)
@@ -223,7 +218,7 @@ func testRunLeaderService(t *testing.T) {
 	require.EqualError(t, err, context.DeadlineExceeded.Error())
 
 	// runLeaderService exits, try to campaign to be leader and run leader servcie again
-	err = s.campaign(ctx, time.Second)
+	_, _, err = session.Campaign(ctx, time.Second)
 	require.Nil(t, err)
 	ctx2, cancel2 := context.WithTimeout(ctx, time.Second)
 	defer cancel2()
@@ -235,7 +230,7 @@ func testRunLeaderService(t *testing.T) {
 }
 
 type mockJobManager struct {
-	lib.BaseMaster
+	framework.BaseMaster
 	jobMu sync.RWMutex
 	jobs  map[pb.QueryJobResponse_JobStatus]int
 }
@@ -262,13 +257,30 @@ func (m *mockJobManager) PauseJob(ctx context.Context, req *pb.PauseJobRequest) 
 	panic("not implemented")
 }
 
-func (m *mockJobManager) GetJobStatuses(ctx context.Context) (map[libModel.MasterID]libModel.MasterStatusCode, error) {
+func (m *mockJobManager) DebugJob(ctx context.Context, req *pb.DebugJobRequest) *pb.DebugJobResponse {
 	panic("not implemented")
+}
+
+func (m *mockJobManager) GetJobStatuses(ctx context.Context) (map[frameModel.MasterID]frameModel.MasterStatusCode, error) {
+	panic("not implemented")
+}
+
+func (m *mockJobManager) WatchJobStatuses(
+	ctx context.Context,
+) (manager.JobStatusesSnapshot, *notifier.Receiver[manager.JobStatusChangeEvent], error) {
+	// TODO implement me
+	panic("implement me")
 }
 
 type mockExecutorManager struct {
 	executorMu sync.RWMutex
 	count      map[model.ExecutorStatus]int
+}
+
+func (m *mockExecutorManager) WatchExecutors(
+	ctx context.Context,
+) ([]model.ExecutorID, *notifier.Receiver[model.ExecutorStatusChange], error) {
+	panic("implement me")
 }
 
 func (m *mockExecutorManager) GetAddr(executorID model.ExecutorID) (string, bool) {
@@ -295,6 +307,10 @@ func (m *mockExecutorManager) Start(ctx context.Context) {
 	panic("not implemented")
 }
 
+func (m *mockExecutorManager) Stop() {
+	panic("not implemented")
+}
+
 func (m *mockExecutorManager) HasExecutor(executorID string) bool {
 	panic("not implemented")
 }
@@ -310,10 +326,8 @@ func (m *mockExecutorManager) ExecutorCount(status model.ExecutorStatus) int {
 }
 
 func TestCollectMetric(t *testing.T) {
-	masterAddr, cfg, cleanup := prepareServerEnv(t, "test-collect-metric")
-	defer cleanup()
+	masterAddr, cfg := prepareServerEnv(t, "test-collect-metric")
 
-	registerMetrics()
 	s := &Server{
 		cfg:     cfg,
 		metrics: newServerMasterMetric(),
@@ -349,7 +363,7 @@ func testCustomedPrometheusMetrics(t *testing.T, addr string) {
 		require.Nil(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		require.Nil(t, err)
 		metric := string(body)
 		return strings.Contains(metric, "dataflow_server_master_job_num") &&

@@ -33,7 +33,7 @@ func GetTableCreateSQL(tctx *tcontext.Context, conn *DBConn, tableID string) (sq
 	querySQL := fmt.Sprintf("SHOW CREATE TABLE %s", tableID)
 	var table, createStr string
 
-	rows, err := conn.QuerySQL(tctx, querySQL)
+	rows, err := conn.QuerySQL(tctx, nil, querySQL)
 	if err != nil {
 		return "", terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 	}
@@ -81,7 +81,7 @@ func getSessionVariable(tctx *tcontext.Context, conn *DBConn, variable string) (
 	})
 	template := "SHOW VARIABLES LIKE '%s'"
 	query := fmt.Sprintf(template, variable)
-	rows, err := conn.QuerySQL(tctx, query)
+	rows, err := conn.QuerySQL(tctx, nil, query)
 	if err != nil {
 		return "", terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 	}

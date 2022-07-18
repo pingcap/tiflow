@@ -14,14 +14,14 @@
 package utils
 
 import (
-	. "github.com/pingcap/check"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Suite(&testStringSuite{})
+func TestTruncateString(t *testing.T) {
+	t.Parallel()
 
-type testStringSuite struct{}
-
-func (t *testStringSuite) TestTruncateString(c *C) {
 	cases := []struct {
 		s      string
 		n      int
@@ -38,11 +38,13 @@ func (t *testStringSuite) TestTruncateString(c *C) {
 	}
 
 	for _, cs := range cases {
-		c.Assert(TruncateString(cs.s, cs.n), Equals, cs.expect)
+		require.Equal(t, cs.expect, TruncateString(cs.s, cs.n))
 	}
 }
 
-func (t *testStringSuite) TestTruncateInterface(c *C) {
+func TestTruncateInterface(t *testing.T) {
+	t.Parallel()
+
 	type compose struct {
 		b bool
 		i int
@@ -82,6 +84,6 @@ func (t *testStringSuite) TestTruncateInterface(c *C) {
 	}
 
 	for _, cs := range cases {
-		c.Assert(TruncateInterface(cs.v, cs.n), Equals, cs.expect)
+		require.Equal(t, cs.expect, TruncateInterface(cs.v, cs.n))
 	}
 }

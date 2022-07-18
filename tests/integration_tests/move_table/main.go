@@ -21,7 +21,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"strings"
 	"time"
@@ -154,10 +153,14 @@ func newCluster(ctx context.Context, pd string) (*cluster, error) {
 		return nil, errors.Trace(err)
 	}
 
+	cdcEtcdCli, err := etcd.NewCDCEtcdClient(ctx, etcdCli, etcd.DefaultCDCClusterID)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	ret := &cluster{
 		ownerAddr:  "",
 		captures:   nil,
-		cdcEtcdCli: etcd.NewCDCEtcdClient(ctx, etcdCli),
+		cdcEtcdCli: cdcEtcdCli,
 	}
 
 	log.Info("new cluster initialized")
@@ -177,38 +180,11 @@ func (c *cluster) moveAllTables(ctx context.Context, sourceCapture, targetCaptur
 		log.Info("moved table successful", zap.Int64("tableID", table.ID))
 	}
 
-	for counter := 0; counter < maxCheckSourceEmptyRetries; counter++ {
-		err := retry.Do(ctx, func() error {
-			return c.refreshInfo(ctx)
-		}, retry.WithBackoffBaseDelay(100), retry.WithMaxTries(5+1), retry.WithIsRetryableErr(cerrors.IsRetryableError))
-		if err != nil {
-			log.Warn("error refreshing cluster info", zap.Error(err))
-		}
-
-		tables, ok := c.captures[sourceCapture]
-		if !ok {
-			log.Warn("source capture is gone", zap.String("sourceCapture", sourceCapture))
-			return errors.New("source capture is gone")
-		}
-
-		if len(tables) == 0 {
-			log.Info("source capture is now empty", zap.String("sourceCapture", sourceCapture))
-			break
-		}
-
-		if counter != maxCheckSourceEmptyRetries {
-			log.Debug("source capture is not empty, will try again", zap.String("sourceCapture", sourceCapture))
-			time.Sleep(time.Second * 10)
-		} else {
-			return errors.New("source capture is not empty after retries")
-		}
-	}
-
 	return nil
 }
 
 func (c *cluster) refreshInfo(ctx context.Context) error {
-	ownerID, err := c.cdcEtcdCli.GetOwnerID(ctx, etcd.CaptureOwnerKey)
+	ownerID, err := c.cdcEtcdCli.GetOwnerID(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -292,7 +268,7 @@ func queryProcessor(
 			errors.Errorf("HTTP API returned error status: %d, url: %s", resp.StatusCode, requestURL))
 	}
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

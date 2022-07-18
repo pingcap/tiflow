@@ -1,8 +1,12 @@
 ---
-name: test
-task-mode: full
+name: test2
+task-mode: all
+is-sharding: false
 meta-schema: "dm_meta"
-enable-heartbeat: false
+# enable-heartbeat: true
+heartbeat-update-interval: 1
+heartbeat-report-interval: 1
+remove-meta: true
 
 target-database:
   host: "127.0.0.1"
@@ -25,14 +29,11 @@ mysql-instances:
 
 block-allow-list:
   instance:
-    do-dbs: ["dmctl_conn"]
-    do-tables:
-    -  db-name: "dmctl_conn"
-       tbl-name: "*"
+    do-dbs: ["dmctl_command"]
 
 mydumpers:
   global:
-    threads: 10
+    threads: 4
     chunk-filesize: 64
     skip-tz-utc: true
     extra-args: ""
@@ -40,14 +41,10 @@ mydumpers:
 loaders:
   global:
     pool-size: 16
-    import-mode: "loader"
     dir: "./dumped_data"
 
 syncers:
   global:
     worker-count: 16
     batch: 100
-    checkpoint-flush-interval: 1
-    compact: true
-    multiple-rows: true
 

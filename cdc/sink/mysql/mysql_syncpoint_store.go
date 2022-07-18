@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net"
 	"net/url"
 	"strings"
 
@@ -25,14 +26,17 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
 	"go.uber.org/zap"
 )
 
-// SyncpointTableName is the name of table where all syncpoint maps sit
-const syncpointTableName string = "syncpoint_v1"
+const (
+	// syncpointTableName is the name of table where all syncpoint maps sit
+	syncpointTableName string = "syncpoint_v1"
+	// schemaName is the name of database where syncpoint maps sit
+	schemaName = "tidb_cdc"
+)
 
 type mysqlSyncpointStore struct {
 	db *sql.DB
@@ -91,16 +95,19 @@ func newMySQLSyncpointStore(ctx context.Context,
 	// dsn format of the driver:
 	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
 	username := sinkURI.User.Username()
-	password, _ := sinkURI.User.Password()
-	port := sinkURI.Port()
 	if username == "" {
 		username = "root"
 	}
+	password, _ := sinkURI.User.Password()
+	port := sinkURI.Port()
 	if port == "" {
 		port = "4000"
 	}
 
-	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, sinkURI.Hostname(), port, tlsParam)
+	// This will handle the IPv6 address format.
+	host := net.JoinHostPort(sinkURI.Hostname(), port)
+
+	dsnStr := fmt.Sprintf("%s:%s@tcp(%s)/%s", username, password, host, tlsParam)
 	dsn, err := dmysql.ParseDSN(dsnStr)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -137,7 +144,7 @@ func newMySQLSyncpointStore(ctx context.Context,
 }
 
 func (s *mysqlSyncpointStore) CreateSynctable(ctx context.Context) error {
-	database := mark.SchemaName
+	database := schemaName
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		log.Error("create sync table: begin Tx fail", zap.Error(err))
@@ -191,7 +198,7 @@ func (s *mysqlSyncpointStore) SinkSyncpoint(ctx context.Context,
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
-	query := "insert ignore into " + mark.SchemaName + "." + syncpointTableName +
+	query := "insert ignore into " + schemaName + "." + syncpointTableName +
 		"(cf, primary_ts, secondary_ts) VALUES (?,?,?)"
 	_, err = tx.Exec(query, id.Namespace+"_"+id.ID, checkpointTs, secondaryTs)
 	if err != nil {

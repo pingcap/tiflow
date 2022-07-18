@@ -731,10 +731,10 @@ func AddDifferentFieldLenColumns(lockID, ddl string, oldJoined, newJoined schema
 		newJoinedCols := schemacmp.DecodeColumnFieldTypes(newJoined)
 		oldCol, ok1 := oldJoinedCols[col]
 		newCol, ok2 := newJoinedCols[col]
-		if ok1 && ok2 && newCol.Flen != oldCol.Flen {
+		if ok1 && ok2 && newCol.GetFlen() != oldCol.GetFlen() {
 			return col, terror.ErrShardDDLOptimismAddNotFullyDroppedColumn.Generate(
 				lockID, fmt.Sprintf("add columns with different field lengths. "+
-					"ddl: %s, origLen: %d, newLen: %d", ddl, oldCol.Flen, newCol.Flen))
+					"ddl: %s, origLen: %d, newLen: %d", ddl, oldCol.GetFlen(), newCol.GetFlen()))
 		}
 	}
 	return col, nil

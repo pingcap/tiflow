@@ -53,7 +53,7 @@ func CheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, 
 	c := NewChecker(cfgs, checkingItems, errCnt, warnCnt)
 
 	if err := c.Init(ctx); err != nil {
-		return "", terror.Annotate(err, "fail to initial checker")
+		return "", terror.Annotate(err, "fail to initialize checker")
 	}
 	defer c.Close()
 

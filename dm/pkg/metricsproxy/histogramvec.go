@@ -16,6 +16,7 @@ package metricsproxy // nolint:dupl
 import (
 	"sync"
 
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -30,11 +31,11 @@ type HistogramVecProxy struct {
 
 // NewHistogramVec creates a new HistogramVec based on the provided HistogramOpts and
 // partitioned by the given label names.
-func NewHistogramVec(opts prometheus.HistogramOpts, labelNames []string) *HistogramVecProxy {
+func NewHistogramVec(f promutil.Factory, opts prometheus.HistogramOpts, labelNames []string) *HistogramVecProxy {
 	histogramVecProxy := &HistogramVecProxy{
 		LabelNamesIndex: make(map[string]int),
 		Labels:          make(map[string][]string),
-		HistogramVec:    prometheus.NewHistogramVec(opts, labelNames),
+		HistogramVec:    f.NewHistogramVec(opts, labelNames),
 	}
 	for idx, v := range labelNames {
 		histogramVecProxy.LabelNamesIndex[v] = idx

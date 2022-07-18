@@ -17,20 +17,18 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"testing"
 
-	"github.com/pingcap/check"
+	"github.com/golang/mock/gomock"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/model"
+	v2 "github.com/pingcap/tiflow/cdc/api/v2"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
-type changefeedUpdateSuite struct{}
-
-var _ = check.Suite(&changefeedUpdateSuite{})
-
-func (s *changefeedUpdateSuite) TestApplyChanges(c *check.C) {
-	defer testleak.AfterTest(c)()
+func TestApplyChanges(t *testing.T) {
+	t.Parallel()
 
 	cmd := NewCmdCli()
 	commonChangefeedOptions := newChangefeedCommonOptions()
@@ -38,56 +36,45 @@ func (s *changefeedUpdateSuite) TestApplyChanges(c *check.C) {
 	o.addFlags(cmd)
 
 	// Test normal update.
-	oldInfo := &model.ChangeFeedInfo{SinkURI: "blackhole://"}
-	c.Assert(cmd.ParseFlags([]string{"--sink-uri=mysql://root@downstream-tidb:4000"}), check.IsNil)
+	oldInfo := &v2.ChangeFeedInfo{SinkURI: "blackhole://"}
+	require.Nil(t, cmd.ParseFlags([]string{"--sink-uri=mysql://root@downstream-tidb:4000"}))
 	newInfo, err := o.applyChanges(oldInfo, cmd)
-	c.Assert(err, check.IsNil)
-	c.Assert(newInfo.SinkURI, check.Equals, "mysql://root@downstream-tidb:4000")
+	require.Nil(t, err)
+	require.Equal(t, "mysql://root@downstream-tidb:4000", newInfo.SinkURI)
 
 	// Test for cli command flags that should be ignored.
-	oldInfo = &model.ChangeFeedInfo{SortDir: "."}
-	c.Assert(cmd.ParseFlags([]string{"--interact"}), check.IsNil)
+	oldInfo = &v2.ChangeFeedInfo{SinkURI: "blackhole://"}
+	require.Nil(t, cmd.ParseFlags([]string{"--interact"}))
 	_, err = o.applyChanges(oldInfo, cmd)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
-	oldInfo = &model.ChangeFeedInfo{SortDir: "."}
-	c.Assert(cmd.ParseFlags([]string{"--pd=http://127.0.0.1:2379"}), check.IsNil)
+	oldInfo = &v2.ChangeFeedInfo{SinkURI: "blackhole://"}
+	require.Nil(t, cmd.ParseFlags([]string{"--pd=http://127.0.0.1:2379"}))
 	_, err = o.applyChanges(oldInfo, cmd)
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
-	dir := c.MkDir()
+	dir := t.TempDir()
 	filename := filepath.Join(dir, "log.txt")
 	reset, err := initTestLogger(filename)
 	defer reset()
-	c.Assert(err, check.IsNil)
+	require.Nil(t, err)
 
 	// Test for flag that cannot be updated.
-	oldInfo = &model.ChangeFeedInfo{SortDir: "."}
-	c.Assert(cmd.ParseFlags([]string{"--sort-dir=/home"}), check.IsNil)
+	oldInfo = &v2.ChangeFeedInfo{SinkURI: "blackhole://"}
+	require.Nil(t, cmd.ParseFlags([]string{"--sort-dir=/home"}))
 	newInfo, err = o.applyChanges(oldInfo, cmd)
-	c.Assert(err, check.IsNil)
-	c.Assert(newInfo.SortDir, check.Equals, ".")
+	require.Nil(t, err)
 	file, err := os.ReadFile(filename)
-	c.Assert(err, check.IsNil)
-	c.Assert(
-		strings.Contains(string(file), "this flag cannot be updated and will be ignored"),
-		check.IsTrue,
-	)
+	require.Nil(t, err)
+	require.True(t, strings.Contains(string(file), "this flag cannot be updated and will be ignored"))
 
 	// Test schema registry update
-	oldInfo = &model.ChangeFeedInfo{Config: config.GetDefaultReplicaConfig()}
-	c.Assert(oldInfo.Config.Sink.SchemaRegistry, check.Equals, "")
-	c.Assert(
-		cmd.ParseFlags([]string{"--schema-registry=https://username:password@localhost:8081"}),
-		check.IsNil,
-	)
+	oldInfo = &v2.ChangeFeedInfo{Config: v2.ToAPIReplicaConfig(config.GetDefaultReplicaConfig())}
+	require.Equal(t, "", oldInfo.Config.Sink.SchemaRegistry)
+	require.Nil(t, cmd.ParseFlags([]string{"--schema-registry=https://username:password@localhost:8081"}))
 	newInfo, err = o.applyChanges(oldInfo, cmd)
-	c.Assert(err, check.IsNil)
-	c.Assert(
-		newInfo.Config.Sink.SchemaRegistry,
-		check.Equals,
-		"https://username:password@localhost:8081",
-	)
+	require.Nil(t, err)
+	require.Equal(t, "https://username:password@localhost:8081", newInfo.Config.Sink.SchemaRegistry)
 }
 
 func initTestLogger(filename string) (func(), error) {
@@ -108,4 +95,77 @@ func initTestLogger(filename string) (func(), error) {
 		logger, props, _ := log.InitLogger(conf)
 		log.ReplaceGlobals(logger, props)
 	}, nil
+}
+
+func TestChangefeedUpdateCli(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	f := newMockFactory(ctrl)
+
+	cmd := newCmdUpdateChangefeed(f)
+	f.changefeedsv2.EXPECT().GetInfo(gomock.Any(), "abc").Return(nil, errors.New("test"))
+	os.Args = []string{"update", "--no-confirm=true", "--changefeed-id=abc"}
+	require.NotNil(t, cmd.Execute())
+
+	f.changefeedsv2.EXPECT().GetInfo(gomock.Any(), "abc").
+		Return(&v2.ChangeFeedInfo{
+			ID: "abc",
+			Config: &v2.ReplicaConfig{
+				Sink: &v2.SinkConfig{},
+			},
+		}, nil)
+	f.changefeedsv2.EXPECT().Update(gomock.Any(), gomock.Any(), "abc").
+		Return(&v2.ChangeFeedInfo{}, nil)
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "cf.toml")
+	err := os.WriteFile(configPath, []byte(""), 0o644)
+	require.Nil(t, err)
+	os.Args = []string{
+		"update",
+		"--config=" + configPath,
+		"--no-confirm=false",
+		"--target-ts=10",
+		"--sink-uri=abcd",
+		"--schema-registry=a",
+		"--sort-engine=memory",
+		"--sync-point=true",
+		"--sync-interval=1s",
+		"--changefeed-id=abc",
+		"--sort-dir=a",
+		"--upstream-pd=pd",
+		"--upstream-ca=ca",
+		"--upstream-cert=cer",
+		"--upstream-key=key",
+	}
+
+	path := filepath.Join(dir, "confirm.txt")
+	err = os.WriteFile(path, []byte("y"), 0o644)
+	require.Nil(t, err)
+	file, err := os.Open(path)
+	require.Nil(t, err)
+	stdin := os.Stdin
+	os.Stdin = file
+	defer func() {
+		os.Stdin = stdin
+	}()
+	require.Nil(t, cmd.Execute())
+
+	// no diff
+	cmd = newCmdUpdateChangefeed(f)
+	f.changefeedsv2.EXPECT().GetInfo(gomock.Any(), "abc").
+		Return(&v2.ChangeFeedInfo{}, nil)
+	os.Args = []string{"update", "--no-confirm=true", "-c", "abc"}
+	require.Nil(t, cmd.Execute())
+
+	cmd = newCmdUpdateChangefeed(f)
+	f.changefeedsv2.EXPECT().GetInfo(gomock.Any(), "abc").
+		Return(&v2.ChangeFeedInfo{ID: "abc"}, nil)
+	f.changefeedsv2.EXPECT().Update(gomock.Any(), gomock.Any(), "abc").
+		Return(nil, errors.New("test"))
+	os.Args = []string{
+		"update", "--no-confirm=true",
+		"--sort-engine=memory",
+		"-c", "abc",
+	}
+	require.NotNil(t, cmd.Execute())
 }

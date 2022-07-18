@@ -17,11 +17,11 @@ import (
 	"context"
 	"sync"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/engine/lib"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 )
 
@@ -31,18 +31,18 @@ const (
 	exampleWorkerCost = 100
 )
 
-var _ lib.Master = &exampleMaster{}
+var _ framework.Master = &exampleMaster{}
 
 type exampleMaster struct {
-	*lib.DefaultBaseMaster
+	*framework.DefaultBaseMaster
 
 	worker struct {
 		mu sync.Mutex
 
-		id          libModel.WorkerID
-		handle      lib.WorkerHandle
+		id          frameModel.WorkerID
+		handle      framework.WorkerHandle
 		online      bool
-		statusCode  libModel.WorkerStatusCode
+		statusCode  frameModel.WorkerStatusCode
 		receivedErr error
 	}
 
@@ -50,7 +50,7 @@ type exampleMaster struct {
 }
 
 func (e *exampleMaster) InitImpl(ctx context.Context) (err error) {
-	log.L().Info("InitImpl")
+	log.Info("InitImpl")
 	e.worker.mu.Lock()
 	e.worker.id, err = e.CreateWorker(exampleWorkerType, exampleWorkerCfg, exampleWorkerCost)
 	e.worker.mu.Unlock()
@@ -58,7 +58,7 @@ func (e *exampleMaster) InitImpl(ctx context.Context) (err error) {
 }
 
 func (e *exampleMaster) Tick(ctx context.Context) error {
-	log.L().Info("Tick")
+	log.Info("Tick")
 	e.tickCount++
 
 	e.worker.mu.Lock()
@@ -68,17 +68,17 @@ func (e *exampleMaster) Tick(ctx context.Context) error {
 		return nil
 	}
 	e.worker.statusCode = handle.Status().Code
-	log.L().Info("status", zap.Any("status", handle.Status()))
+	log.Info("status", zap.Any("status", handle.Status()))
 	return nil
 }
 
 func (e *exampleMaster) OnMasterRecovered(ctx context.Context) error {
-	log.L().Info("OnMasterRecovered")
+	log.Info("OnMasterRecovered")
 	return nil
 }
 
-func (e *exampleMaster) OnWorkerDispatched(worker lib.WorkerHandle, result error) error {
-	log.L().Info("OnWorkerDispatched")
+func (e *exampleMaster) OnWorkerDispatched(worker framework.WorkerHandle, result error) error {
+	log.Info("OnWorkerDispatched")
 	e.worker.mu.Lock()
 	e.worker.handle = worker
 	e.worker.receivedErr = result
@@ -86,8 +86,8 @@ func (e *exampleMaster) OnWorkerDispatched(worker lib.WorkerHandle, result error
 	return nil
 }
 
-func (e *exampleMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
-	log.L().Info("OnWorkerOnline")
+func (e *exampleMaster) OnWorkerOnline(worker framework.WorkerHandle) error {
+	log.Info("OnWorkerOnline")
 	e.worker.mu.Lock()
 	e.worker.handle = worker
 	e.worker.online = true
@@ -95,22 +95,22 @@ func (e *exampleMaster) OnWorkerOnline(worker lib.WorkerHandle) error {
 	return nil
 }
 
-func (e *exampleMaster) OnWorkerOffline(worker lib.WorkerHandle, reason error) error {
-	log.L().Info("OnWorkerOffline")
+func (e *exampleMaster) OnWorkerOffline(worker framework.WorkerHandle, reason error) error {
+	log.Info("OnWorkerOffline")
 	return nil
 }
 
-func (e *exampleMaster) OnWorkerMessage(worker lib.WorkerHandle, topic p2p.Topic, message interface{}) error {
-	log.L().Info("OnWorkerMessage")
+func (e *exampleMaster) OnWorkerMessage(worker framework.WorkerHandle, topic p2p.Topic, message interface{}) error {
+	log.Info("OnWorkerMessage")
 	return nil
 }
 
 func (e *exampleMaster) CloseImpl(ctx context.Context) error {
-	log.L().Info("CloseImpl")
+	log.Info("CloseImpl")
 	return nil
 }
 
-func (e *exampleMaster) OnWorkerStatusUpdated(worker lib.WorkerHandle, newStatus *libModel.WorkerStatus) error {
-	log.L().Info("OnWorkerStatusUpdated")
+func (e *exampleMaster) OnWorkerStatusUpdated(worker framework.WorkerHandle, newStatus *frameModel.WorkerStatus) error {
+	log.Info("OnWorkerStatusUpdated")
 	return nil
 }

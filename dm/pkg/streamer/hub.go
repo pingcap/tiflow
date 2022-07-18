@@ -18,7 +18,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
@@ -30,17 +29,17 @@ var (
 
 // RelayLogInfo represents information for relay log.
 type RelayLogInfo struct {
-	TaskName   string
-	UUID       string
-	UUIDSuffix int
-	Filename   string
+	TaskName     string
+	SubDir       string
+	SubDirSuffix int
+	Filename     string
 }
 
 // Earlier checks whether this relay log file is earlier than the other.
 func (info *RelayLogInfo) Earlier(other *RelayLogInfo) bool {
-	if info.UUIDSuffix < other.UUIDSuffix {
+	if info.SubDirSuffix < other.SubDirSuffix {
 		return true
-	} else if info.UUIDSuffix > other.UUIDSuffix {
+	} else if info.SubDirSuffix > other.SubDirSuffix {
 		return false
 	}
 	return strings.Compare(info.Filename, other.Filename) < 0
@@ -48,7 +47,7 @@ func (info *RelayLogInfo) Earlier(other *RelayLogInfo) bool {
 
 // String implements Stringer.String.
 func (info *RelayLogInfo) String() string {
-	return filepath.Join(info.UUID, info.Filename)
+	return filepath.Join(info.SubDir, info.Filename)
 }
 
 // relayLogInfoHub holds information for all active relay logs.
@@ -63,21 +62,21 @@ func newRelayLogInfoHub() *relayLogInfoHub {
 	}
 }
 
-func (h *relayLogInfoHub) update(taskName, uuid, filename string) error {
-	_, suffix, err := utils.ParseSuffixForUUID(uuid)
+func (h *relayLogInfoHub) update(taskName, subDir, filename string) error {
+	_, suffix, err := utils.ParseRelaySubDir(subDir)
 	if err != nil {
 		return err
 	}
-	if !binlog.VerifyFilename(filename) {
+	if !utils.VerifyFilename(filename) {
 		return terror.ErrBinlogInvalidFilename.Generatef("binlog filename %s not valid", filename)
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.logs[taskName] = RelayLogInfo{
-		TaskName:   taskName,
-		UUID:       uuid,
-		UUIDSuffix: suffix,
-		Filename:   filename,
+		TaskName:     taskName,
+		SubDir:       subDir,
+		SubDirSuffix: suffix,
+		Filename:     filename,
 	}
 	return nil
 }
@@ -123,8 +122,8 @@ func GetReaderHub() *ReaderHub {
 }
 
 // UpdateActiveRelayLog updates active relay log for taskName.
-func (h *ReaderHub) UpdateActiveRelayLog(taskName, uuid, filename string) error {
-	return h.rlih.update(taskName, uuid, filename)
+func (h *ReaderHub) UpdateActiveRelayLog(taskName, subDir, filename string) error {
+	return h.rlih.update(taskName, subDir, filename)
 }
 
 // RemoveActiveRelayLog removes active relay log for taskName.

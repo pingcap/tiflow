@@ -30,22 +30,17 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/engine/client"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
-	extKV "github.com/pingcap/tiflow/engine/pkg/meta/extension"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
 // Context is used to in dm to record some context field like
 // * go context
-// * logger.
 type Context struct {
 	context.Context
-	Logger       log.Logger
-	Dependencies RuntimeDependencies // Deprecated
-	Environ      Environment
+	Environ     Environment
+	ProjectInfo tenant.ProjectInfo
 
 	deps *deps.Deps
 }
@@ -54,15 +49,13 @@ type Context struct {
 func Background() *Context {
 	return &Context{
 		Context: context.Background(),
-		Logger:  log.L(),
 	}
 }
 
 // NewContext return a new Context.
-func NewContext(ctx context.Context, logger log.Logger) *Context {
+func NewContext(ctx context.Context) *Context {
 	return &Context{
 		Context: ctx,
-		Logger:  logger,
 	}
 }
 
@@ -70,7 +63,6 @@ func NewContext(ctx context.Context, logger log.Logger) *Context {
 func (c *Context) WithContext(ctx context.Context) *Context {
 	return &Context{
 		Context: ctx,
-		Logger:  c.Logger,
 	}
 }
 
@@ -79,47 +71,23 @@ func (c *Context) WithTimeout(timeout time.Duration) (*Context, context.CancelFu
 	ctx, cancel := context.WithTimeout(c, timeout)
 	return &Context{
 		Context: ctx,
-		Logger:  c.Logger,
 	}, cancel
-}
-
-// WithLogger set logger.
-func (c *Context) WithLogger(logger log.Logger) *Context {
-	return &Context{
-		Context: c.Context,
-		Logger:  logger,
-	}
 }
 
 // WithDeps puts a built dependency container into the context.
 func (c *Context) WithDeps(deps *deps.Deps) *Context {
 	return &Context{
-		Context:      c.Context,
-		Logger:       c.Logger,
-		Dependencies: c.Dependencies,
-		Environ:      c.Environ,
-		deps:         deps,
+		Context:     c.Context,
+		Environ:     c.Environ,
+		ProjectInfo: c.ProjectInfo,
+
+		deps: deps,
 	}
 }
 
 // Deps returns a handle used for dependency injection.
 func (c *Context) Deps() *deps.Deps {
 	return c.deps
-}
-
-// L returns real logger.
-func (c *Context) L() log.Logger {
-	return c.Logger
-}
-
-// RuntimeDependencies contains useful clients or management tools
-type RuntimeDependencies struct {
-	MessageHandlerManager p2p.MessageHandlerManager
-	MessageRouter         p2p.MessageSender
-	MetaKVClient          metaclient.KVClient
-	UserRawKVClient       extKV.KVClientEx
-	ExecutorClientManager *client.Manager
-	ServerMasterClient    client.MasterClient
 }
 
 // Environment contains some configuration related environ values

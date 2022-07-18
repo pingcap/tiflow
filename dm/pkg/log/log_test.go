@@ -150,3 +150,37 @@ func (s *testLogSuite) TestInitSlowQueryLoggerNotInDebugLevel(c *C) {
 	c.Assert(output[0], Matches, ".*this is from applogger.*")
 	c.Assert(output[1], Equals, "") // no output
 }
+
+func (s *testLogSuite) TestWithCtx(c *C) {
+	// test slow query logger can write debug log
+	logLevel := "debug"
+	cfg := &Config{Level: logLevel, Format: "json"}
+	cfg.Adjust()
+
+	ctx := context.Background()
+	ctx = AppendZapFieldToCtx(ctx, zap.String("key1", "value1"))
+	ctx = AppendZapFieldToCtx(ctx, zap.String("key2", "value2"))
+
+	output, err := captureStdout(func() {
+		c.Assert(InitLogger(cfg), IsNil)
+		WithCtx(ctx).Info("test1")
+	})
+	c.Assert(err, IsNil)
+	c.Assert(output[0], Matches, ".*test1.*key1.*value1.*key2.*value2.*")
+}
+
+func BenchmarkBaseline(b *testing.B) {
+	logger := L().With(zap.String("key1", "value1"))
+	for i := 0; i < b.N; i++ {
+		subLogger := logger.With(zap.String("key2", "value2"))
+		subLogger.Info("test-test-test")
+	}
+}
+
+func BenchmarkWithCtx(b *testing.B) {
+	ctx := AppendZapFieldToCtx(context.Background(), zap.String("key1", "value1"))
+	for i := 0; i < b.N; i++ {
+		subCtx := AppendZapFieldToCtx(ctx, zap.String("key2", "value2"))
+		WithCtx(subCtx).Info("test-test-test")
+	}
+}

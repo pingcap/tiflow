@@ -18,24 +18,28 @@ import (
 	"fmt"
 
 	"github.com/gogo/status"
-	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
-	"github.com/pingcap/tiflow/engine/pb"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	derrors "github.com/pingcap/tiflow/pkg/errors"
 )
+
+// ResourceManagerClient is a type alias for a client connecting to
+// the resource manager (which is part of the Servermaster).
+type ResourceManagerClient = *rpcutil.FailoverRPCClients[pb.ResourceManagerClient]
 
 // DefaultBroker implements the Broker interface
 type DefaultBroker struct {
 	config     *storagecfg.Config
 	executorID resModel.ExecutorID
-	client     *rpcutil.FailoverRPCClients[pb.ResourceManagerClient]
+	client     ResourceManagerClient
 
 	fileManager FileManager
 }
@@ -44,9 +48,9 @@ type DefaultBroker struct {
 func NewBroker(
 	config *storagecfg.Config,
 	executorID resModel.ExecutorID,
-	client *rpcutil.FailoverRPCClients[pb.ResourceManagerClient],
+	client ResourceManagerClient,
 ) *DefaultBroker {
-	fm := NewLocalFileManager(*config.Local)
+	fm := NewLocalFileManager(config.Local)
 	return &DefaultBroker{
 		config:      config,
 		executorID:  executorID,
@@ -58,6 +62,7 @@ func NewBroker(
 // OpenStorage implements Broker.OpenStorage
 func (b *DefaultBroker) OpenStorage(
 	ctx context.Context,
+	projectInfo tenant.ProjectInfo,
 	workerID resModel.WorkerID,
 	jobID resModel.JobID,
 	resourcePath resModel.ResourceID,
@@ -69,14 +74,13 @@ func (b *DefaultBroker) OpenStorage(
 
 	switch tp {
 	case resModel.ResourceTypeLocalFile:
-		return b.newHandleForLocalFile(ctx, jobID, workerID, resourcePath)
+		return b.newHandleForLocalFile(ctx, projectInfo, jobID, workerID, resourcePath)
 	case resModel.ResourceTypeS3:
-		log.L().Panic("resource type s3 is not supported for now")
+		log.Panic("resource type s3 is not supported for now")
 	default:
+		log.Panic("unsupported resource type", zap.String("resource-path", resourcePath))
 	}
-
-	log.L().Panic("unsupported resource type", zap.String("resource-path", resourcePath))
-	panic("unreachable")
+	return nil, errors.New("unreachable")
 }
 
 // OnWorkerClosed implements Broker.OnWorkerClosed
@@ -87,7 +91,7 @@ func (b *DefaultBroker) OnWorkerClosed(ctx context.Context, workerID resModel.Wo
 		// to report this.
 		// However, since an error here is unlikely to indicate a correctness
 		// problem, we do not take further actions.
-		log.L().Warn("Failed to remove temporary files for worker",
+		log.Warn("Failed to remove temporary files for worker",
 			zap.String("worker-id", workerID),
 			zap.String("job-id", jobID),
 			zap.Error(err))
@@ -127,6 +131,7 @@ func (b *DefaultBroker) RemoveResource(
 
 func (b *DefaultBroker) newHandleForLocalFile(
 	ctx context.Context,
+	projectInfo tenant.ProjectInfo,
 	jobID resModel.JobID,
 	workerID resModel.WorkerID,
 	resourceID resModel.ResourceID,
@@ -139,22 +144,18 @@ func (b *DefaultBroker) newHandleForLocalFile(
 		return nil, err
 	}
 	if tp != resModel.ResourceTypeLocalFile {
-		log.L().Panic("unexpected resource type", zap.String("type", string(tp)))
+		log.Panic("unexpected resource type", zap.String("type", string(tp)))
 	}
 
-	record, exists, err := b.checkForExistingResource(ctx, resourceID)
+	record, exists, err := b.checkForExistingResource(ctx, resModel.ResourceKey{JobID: jobID, ID: resourceID})
 	if err != nil {
 		return nil, err
 	}
 
-	var (
-		res             *resModel.LocalFileResourceDescriptor
-		creatorWorkerID libModel.WorkerID
-	)
+	var desc *LocalFileResourceDescriptor
 
 	if !exists {
-		creatorWorkerID = workerID
-		res, err = b.fileManager.CreateResource(workerID, resName)
+		desc, err = b.fileManager.CreateResource(workerID, resName)
 		if err != nil {
 			return nil, err
 		}
@@ -165,47 +166,31 @@ func (b *DefaultBroker) newHandleForLocalFile(
 			}
 		}()
 	} else {
-		creatorWorkerID = record.Worker
-		res, err = b.fileManager.GetPersistedResource(record.Worker, resName)
+		desc, err = b.fileManager.GetPersistedResource(record.Worker, resName)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	filePath := res.AbsolutePath()
-	log.L().Info("Using local storage with path", zap.String("path", filePath))
+	filePath := desc.AbsolutePath()
+	log.Info("Using local storage with path", zap.String("path", filePath))
 
-	ls, err := newBrStorageForLocalFile(filePath)
-	if err != nil {
-		return nil, err
-	}
-
-	return &BrExternalStorageHandle{
-		inner:  ls,
-		client: b.client,
-
-		id:          resourceID,
-		name:        resName,
-		jobID:       jobID,
-		workerID:    creatorWorkerID,
-		executorID:  b.executorID,
-		fileManager: b.fileManager,
-	}, nil
+	return newLocalResourceHandle(projectInfo, resourceID, jobID, b.executorID, b.fileManager, desc, b.client)
 }
 
 func (b *DefaultBroker) checkForExistingResource(
 	ctx context.Context,
-	resourceID resModel.ResourceID,
+	resourceKey resModel.ResourceKey,
 ) (*resModel.ResourceMeta, bool, error) {
 	resp, err := rpcutil.DoFailoverRPC(
 		ctx,
 		b.client,
-		&pb.QueryResourceRequest{ResourceId: resourceID},
+		&pb.QueryResourceRequest{ResourceKey: &pb.ResourceKey{JobId: resourceKey.JobID, ResourceId: resourceKey.ID}},
 		pb.ResourceManagerClient.QueryResource,
 	)
 	if err == nil {
 		return &resModel.ResourceMeta{
-			ID:       resourceID,
+			ID:       resourceKey.ID,
 			Job:      resp.GetJobId(),
 			Worker:   resp.GetCreatorWorkerId(),
 			Executor: resModel.ExecutorID(resp.GetCreatorExecutor()),

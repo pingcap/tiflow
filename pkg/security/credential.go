@@ -36,7 +36,12 @@ type Credential struct {
 
 // IsTLSEnabled checks whether TLS is enabled or not.
 func (s *Credential) IsTLSEnabled() bool {
-	return len(s.CAPath) != 0
+	return len(s.CAPath) != 0 && len(s.CertPath) != 0 && len(s.KeyPath) != 0
+}
+
+// IsEmpty checks whether Credential is empty or not.
+func (s *Credential) IsEmpty() bool {
+	return len(s.CAPath) == 0 && len(s.CertPath) == 0 && len(s.KeyPath) == 0
 }
 
 // PDSecurityOption creates a new pd SecurityOption from Security

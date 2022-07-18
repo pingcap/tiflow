@@ -54,7 +54,6 @@ func (t *dummyTask) GetCDCProfile() *framework.CDCProfile {
 	return &framework.CDCProfile{
 		PDUri:      framework.UpstreamPD,
 		SinkURI:    "kafka://kafka:9092/testdb?protocol=canal",
-		Opts:       map[string]string{"force-handle-key-pkey": "true"},
 		ConfigFile: "/configs/canal-test-config.toml",
 	}
 }

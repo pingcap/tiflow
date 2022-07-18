@@ -92,6 +92,8 @@ type job struct {
 	jobAddTime  time.Time       // job commit time
 	flushSeq    int64           // sequence number for sync and async flush job
 	flushWg     *sync.WaitGroup // wait group for sync, async and conflict job
+	timestamp   uint32
+	timezone    string
 }
 
 func (j *job) clone() *job {
@@ -166,20 +168,10 @@ func newDDLJob(qec *queryEventContext) *job {
 		j.targetTable = ddlInfo.targetTables[0]
 	}
 
-	return j
-}
+	j.timestamp = qec.timestamp
+	j.timezone = qec.timezone
 
-func getDDLJobSourceTable(j *job) *filter.Table {
-	if j.tp != ddl || len(j.sourceTbls) != 1 {
-		return nil
-	}
-	for _, tb := range j.sourceTbls {
-		if len(tb) != 1 {
-			return nil
-		}
-		return tb[0]
-	}
-	return nil
+	return j
 }
 
 func newSkipJob(ec *eventContext) *job {
@@ -246,7 +238,7 @@ func newConflictJob(workerCount int) *job {
 	}
 }
 
-// newCompactJob is only used for metrics.
+// newCompactJob is only used for MetricsProxies.
 func newCompactJob(targetTable *filter.Table) *job {
 	return &job{
 		tp:          compact,

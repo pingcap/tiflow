@@ -477,92 +477,6 @@ func testDoDDLAndCheck(t *testing.T, snap *schema.Snapshot, job *timodel.Job, is
 	require.Equal(t, err != nil, isErr)
 }
 
-func TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(t *testing.T) {
-	tblInfo := timodel.TableInfo{
-		Columns: []*timodel.ColumnInfo{
-			{
-				Name: timodel.CIStr{O: "name"},
-				FieldType: types.FieldType{
-					Flag: mysql.NotNullFlag,
-				},
-			},
-			{Name: timodel.CIStr{O: "id"}},
-		},
-		Indices: []*timodel.IndexInfo{
-			{
-				Name: timodel.CIStr{
-					O: "name",
-				},
-				Columns: []*timodel.IndexColumn{
-					{
-						Name:   timodel.CIStr{O: "name"},
-						Offset: 0,
-					},
-				},
-				Unique: true,
-			},
-			{
-				Name: timodel.CIStr{
-					O: "PRIMARY",
-				},
-				Columns: []*timodel.IndexColumn{
-					{
-						Name:   timodel.CIStr{O: "id"},
-						Offset: 1,
-					},
-				},
-				Primary: true,
-			},
-		},
-		PKIsHandle: false,
-	}
-	info := model.WrapTableInfo(1, "", 0, &tblInfo)
-	cols := info.GetUniqueKeys()
-	require.Equal(t, cols, [][]string{
-		{"id"}, {"name"},
-	})
-}
-
-func TestPKShouldBeInTheFirstPlaceWhenPKIsHandle(t *testing.T) {
-	tblInfo := timodel.TableInfo{
-		Indices: []*timodel.IndexInfo{
-			{
-				Name: timodel.CIStr{
-					O: "uniq_job",
-				},
-				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "job"}},
-				},
-				Unique: true,
-			},
-		},
-		Columns: []*timodel.ColumnInfo{
-			{
-				Name: timodel.CIStr{
-					O: "job",
-				},
-				FieldType: types.FieldType{
-					Flag: mysql.NotNullFlag,
-				},
-			},
-			{
-				Name: timodel.CIStr{
-					O: "uid",
-				},
-				FieldType: types.FieldType{
-					Flag: mysql.PriKeyFlag,
-				},
-			},
-		},
-		PKIsHandle: true,
-	}
-	info := model.WrapTableInfo(1, "", 0, &tblInfo)
-	cols := info.GetUniqueKeys()
-	require.Equal(t, cols, [][]string{
-		{"uid"}, {"job"},
-	})
-}
-
 func TestMultiVersionStorage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	dbName := timodel.NewCIStr("Test")
@@ -818,7 +732,7 @@ func TestExplicitTables(t *testing.T) {
 	require.GreaterOrEqual(t, snap2.TableCount(false), 4)
 
 	require.Equal(t, snap3.TableCount(true)-snap1.TableCount(true), 5)
-	require.Equal(t, snap3.TableCount(false), 36)
+	require.Equal(t, snap3.TableCount(false), 37)
 }
 
 /*

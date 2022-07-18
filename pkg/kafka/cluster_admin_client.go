@@ -26,6 +26,8 @@ type ClusterAdminClient interface {
 	DescribeCluster() (brokers []*sarama.Broker, controllerID int32, err error)
 	// DescribeConfig gets the configuration for the specified resources.
 	DescribeConfig(resource sarama.ConfigResource) ([]sarama.ConfigEntry, error)
+	// DescribeTopics fetches metadata from some topics.
+	DescribeTopics(topics []string) (metadata []*sarama.TopicMetadata, err error)
 	// CreateTopic creates a new topic.
 	CreateTopic(topic string, detail *sarama.TopicDetail, validateOnly bool) error
 	// Close shuts down the admin and closes underlying client.

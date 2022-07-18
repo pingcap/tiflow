@@ -176,7 +176,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	for _, instance := range c.instances {
 		// init online ddl for checker
 		if instance.cfg.OnlineDDL && c.onlineDDL == nil {
-			c.onlineDDL, err = onlineddl.NewRealOnlinePlugin(c.tctx, instance.cfg)
+			c.onlineDDL, err = onlineddl.NewRealOnlinePlugin(c.tctx, instance.cfg, nil)
 			if err != nil {
 				return err
 			}
@@ -239,7 +239,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				c.checkList = append(c.checkList, checker.NewOnlineDDLChecker(instance.sourceDB.DB, checkSchemas, c.onlineDDL, instance.baList))
 			}
 			if _, ok := c.checkingItems[config.BinlogDBChecking]; ok {
-				c.checkList = append(c.checkList, checker.NewBinlogDBChecker(instance.sourceDB.DB, instance.sourceDBinfo, checkSchemas, instance.cfg.CaseSensitive))
+				c.checkList = append(c.checkList, checker.NewBinlogDBChecker(instance.sourceDB, instance.sourceDBinfo, checkSchemas, instance.cfg.CaseSensitive))
 			}
 		}
 	}

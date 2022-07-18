@@ -22,29 +22,29 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/go-mysql-org/go-mysql/mysql"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zapcore"
+
+	. "github.com/pingcap/check"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	tidbddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/parser/ast"
-	"github.com/stretchr/testify/require"
-
+	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	dlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
-
-	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/go-mysql-org/go-mysql/mysql"
-	. "github.com/pingcap/check"
-	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/util/dbutil"
-	"github.com/pingcap/tidb/util/filter"
-	"go.uber.org/zap/zapcore"
 )
 
 var (
@@ -83,7 +83,7 @@ func (s *testCheckpointSuite) SetUpSuite(c *C) {
 		}
 	)
 
-	s.tracker, err = schema.NewTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, nil)
+	s.tracker, err = schema.NewTestTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, nil, dlog.L())
 	c.Assert(err, IsNil)
 }
 
@@ -106,7 +106,7 @@ func (s *testCheckpointSuite) prepareCheckPointSQL() {
 func (s *testCheckpointSuite) TestCheckPoint(c *C) {
 	tctx := tcontext.Background()
 
-	cp := NewRemoteCheckPoint(tctx, s.cfg, cpid)
+	cp := NewRemoteCheckPoint(tctx, s.cfg, nil, cpid)
 	defer func() {
 		s.mock.ExpectClose()
 		cp.Close()
@@ -263,9 +263,7 @@ func (s *testCheckpointSuite) testGlobalCheckPoint(c *C, cp CheckPoint) {
 	c.Assert(cp.FlushedGlobalPoint().Position, Equals, binlog.MinPosition)
 
 	// try load from mydumper's output
-	dir, err := os.MkdirTemp("", "test_global_checkpoint")
-	c.Assert(err, IsNil)
-	defer os.RemoveAll(dir)
+	dir := c.MkDir()
 
 	filename := filepath.Join(dir, "metadata")
 	err = os.WriteFile(filename, []byte(
@@ -484,11 +482,11 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 			AddRow(schemaName, tableName, pos2.Name, pos2.Pos, gs.String(), "", 0, "", tiBytes, false))
 	err = cp.Load(tctx)
 	c.Assert(err, IsNil)
-	c.Assert(cp.GlobalPoint(), DeepEquals, binlog.InitLocation(pos2, gs))
+	c.Assert(cp.GlobalPoint(), DeepEquals, binlog.NewLocation(pos2, gs))
 	rcp = cp.(*RemoteCheckPoint)
 	c.Assert(rcp.points[schemaName][tableName].TableInfo(), NotNil)
 	c.Assert(rcp.points[schemaName][tableName].flushedPoint.ti, NotNil)
-	c.Assert(*rcp.safeModeExitPoint, DeepEquals, binlog.InitLocation(pos2, gs))
+	c.Assert(*rcp.safeModeExitPoint, DeepEquals, binlog.NewLocation(pos2, gs))
 }
 
 func TestRemoteCheckPointLoadIntoSchemaTracker(t *testing.T) {
@@ -501,7 +499,7 @@ func TestRemoteCheckPointLoadIntoSchemaTracker(t *testing.T) {
 	dbConn, err := db.Conn(ctx)
 	require.NoError(t, err)
 	downstreamTrackConn := dbconn.NewDBConn(cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
-	schemaTracker, err := schema.NewTracker(ctx, cfg.Name, defaultTestSessionCfg, downstreamTrackConn)
+	schemaTracker, err := schema.NewTestTracker(ctx, cfg.Name, defaultTestSessionCfg, downstreamTrackConn, dlog.L())
 	require.NoError(t, err)
 	defer schemaTracker.Close() //nolint
 
@@ -514,7 +512,7 @@ func TestRemoteCheckPointLoadIntoSchemaTracker(t *testing.T) {
 	_, err = schemaTracker.GetTableInfo(tbl2)
 	require.Error(t, err)
 
-	cp := NewRemoteCheckPoint(tcontext.Background(), cfg, "1")
+	cp := NewRemoteCheckPoint(tcontext.Background(), cfg, nil, "1")
 	checkpoint := cp.(*RemoteCheckPoint)
 
 	parser, err := utils.GetParserFromSQLModeStr("")
@@ -538,6 +536,24 @@ func TestRemoteCheckPointLoadIntoSchemaTracker(t *testing.T) {
 	require.Len(t, tableInfo.Columns, 1)
 	_, err = schemaTracker.GetTableInfo(tbl2)
 	require.Error(t, err)
+
+	// test BatchCreateTableWithInfo will not meet kv entry too large error
+
+	// create 100K comment string
+	comment := make([]byte, 0, 100000)
+	for i := 0; i < 100000; i++ {
+		comment = append(comment, 'A')
+	}
+	ti.Comment = string(comment)
+
+	tp1 = tablePoint{ti: ti}
+	amount := 100
+	for i := 0; i < amount; i++ {
+		tableName := fmt.Sprintf("tbl_%d", i)
+		checkpoint.points[tbl1.Schema][tableName] = &binlogPoint{flushedPoint: tp1}
+	}
+	err = checkpoint.LoadIntoSchemaTracker(ctx, schemaTracker)
+	require.NoError(t, err)
 }
 
 func TestLastFlushOutdated(t *testing.T) {
@@ -545,7 +561,7 @@ func TestLastFlushOutdated(t *testing.T) {
 	cfg.WorkerCount = 0
 	cfg.CheckpointFlushInterval = 1
 
-	cp := NewRemoteCheckPoint(tcontext.Background(), cfg, "1")
+	cp := NewRemoteCheckPoint(tcontext.Background(), cfg, nil, "1")
 	checkpoint := cp.(*RemoteCheckPoint)
 	checkpoint.globalPointSaveTime = time.Now().Add(-2 * time.Second)
 

@@ -87,7 +87,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		if IsColCDCVisible(col) {
 			ti.RowColumnsOffset[col.ID] = rowColumnsCurrentOffset
 			rowColumnsCurrentOffset++
-			pkIsHandle = (ti.PKIsHandle && mysql.HasPriKeyFlag(col.Flag)) || col.ID == model.ExtraHandleID
+			pkIsHandle = (ti.PKIsHandle && mysql.HasPriKeyFlag(col.GetFlag())) || col.ID == model.ExtraHandleID
 			if pkIsHandle {
 				// pk is handle
 				ti.handleColID = []int64{col.ID}
@@ -173,28 +173,28 @@ func (ti *TableInfo) findHandleIndex() {
 func (ti *TableInfo) initColumnsFlag() {
 	for _, colInfo := range ti.Columns {
 		var flag ColumnFlagType
-		if colInfo.Charset == "binary" {
+		if colInfo.GetCharset() == "binary" {
 			flag.SetIsBinary()
 		}
 		if colInfo.IsGenerated() {
 			flag.SetIsGeneratedColumn()
 		}
-		if mysql.HasPriKeyFlag(colInfo.Flag) {
+		if mysql.HasPriKeyFlag(colInfo.GetFlag()) {
 			flag.SetIsPrimaryKey()
 			if ti.HandleIndexID == HandleIndexPKIsHandle {
 				flag.SetIsHandleKey()
 			}
 		}
-		if mysql.HasUniKeyFlag(colInfo.Flag) {
+		if mysql.HasUniKeyFlag(colInfo.GetFlag()) {
 			flag.SetIsUniqueKey()
 		}
-		if !mysql.HasNotNullFlag(colInfo.Flag) {
+		if !mysql.HasNotNullFlag(colInfo.GetFlag()) {
 			flag.SetIsNullable()
 		}
-		if mysql.HasMultipleKeyFlag(colInfo.Flag) {
+		if mysql.HasMultipleKeyFlag(colInfo.GetFlag()) {
 			flag.SetIsMultipleKey()
 		}
-		if mysql.HasUnsignedFlag(colInfo.Flag) {
+		if mysql.HasUnsignedFlag(colInfo.GetFlag()) {
 			flag.SetIsUnsigned()
 		}
 		ti.ColumnsFlag[colInfo.ID] = flag
@@ -241,15 +241,6 @@ func (ti *TableInfo) String() string {
 	return fmt.Sprintf("TableInfo, ID: %d, Name:%s, ColNum: %d, IdxNum: %d, PKIsHandle: %t", ti.ID, ti.TableName, len(ti.Columns), len(ti.Indices), ti.PKIsHandle)
 }
 
-// GetIndexInfo returns the index info by ID
-func (ti *TableInfo) GetIndexInfo(indexID int64) (info *model.IndexInfo, exist bool) {
-	indexOffset, exist := ti.indicesOffset[indexID]
-	if !exist {
-		return nil, false
-	}
-	return ti.Indices[indexOffset], true
-}
-
 // GetRowColInfos returns all column infos for rowcodec
 func (ti *TableInfo) GetRowColInfos() ([]int64, map[int64]*types.FieldType, []rowcodec.ColInfo) {
 	return ti.handleColID, ti.rowColFieldTps, ti.rowColInfos
@@ -262,40 +253,6 @@ func IsColCDCVisible(col *model.ColumnInfo) bool {
 		return false
 	}
 	return col.State == model.StatePublic
-}
-
-// GetUniqueKeys returns all unique keys of the table as a slice of column names
-func (ti *TableInfo) GetUniqueKeys() [][]string {
-	var uniqueKeys [][]string
-	if ti.PKIsHandle {
-		for _, col := range ti.Columns {
-			if mysql.HasPriKeyFlag(col.Flag) {
-				// Prepend to make sure the primary key ends up at the front
-				uniqueKeys = [][]string{{col.Name.O}}
-				break
-			}
-		}
-	}
-	for _, idx := range ti.Indices {
-		if ti.IsIndexUnique(idx) {
-			colNames := make([]string, 0, len(idx.Columns))
-			for _, col := range idx.Columns {
-				colNames = append(colNames, col.Name.O)
-			}
-			if idx.Primary {
-				uniqueKeys = append([][]string{colNames}, uniqueKeys...)
-			} else {
-				uniqueKeys = append(uniqueKeys, colNames)
-			}
-		}
-	}
-	return uniqueKeys
-}
-
-// IsColumnUnique returns whether the column is unique
-func (ti *TableInfo) IsColumnUnique(colID int64) bool {
-	_, exist := ti.uniqueColumns[colID]
-	return exist
 }
 
 // ExistTableUniqueColumn returns whether the table has a unique column
@@ -327,7 +284,7 @@ func (ti *TableInfo) IsIndexUnique(indexInfo *model.IndexInfo) bool {
 	if indexInfo.Unique {
 		for _, col := range indexInfo.Columns {
 			colInfo := ti.Columns[col.Offset]
-			if !mysql.HasNotNullFlag(colInfo.Flag) {
+			if !mysql.HasNotNullFlag(colInfo.GetFlag()) {
 				return false
 			}
 			// this column is a virtual generated column

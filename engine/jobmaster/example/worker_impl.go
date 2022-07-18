@@ -19,15 +19,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/engine/lib"
-	libModel "github.com/pingcap/tiflow/engine/lib/model"
+	"github.com/pingcap/tiflow/engine/framework"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 )
 
-var _ lib.Worker = &exampleWorker{}
+var _ framework.Worker = &exampleWorker{}
 
 var (
 	tickKey   = "tick_count"
@@ -36,7 +36,7 @@ var (
 )
 
 type exampleWorker struct {
-	lib.BaseWorker
+	framework.BaseWorker
 
 	work struct {
 		mu        sync.Mutex
@@ -62,24 +62,24 @@ func (w *exampleWorker) run() {
 	w.work.mu.Unlock()
 
 	// nolint:errcheck
-	_, _ = w.BaseWorker.SendMessage(context.TODO(), testTopic, testMsg)
+	_ = w.BaseWorker.SendMessage(context.TODO(), testTopic, testMsg, true)
 }
 
 func (w *exampleWorker) InitImpl(ctx context.Context) error {
-	log.L().Info("InitImpl")
+	log.Info("InitImpl")
 	w.wg.Add(1)
 	go w.run()
 	return nil
 }
 
 func (w *exampleWorker) Tick(ctx context.Context) error {
-	log.L().Info("Tick")
+	log.Info("Tick")
 	w.work.mu.Lock()
 	w.work.tickCount++
 	count := w.work.tickCount
 	w.work.mu.Unlock()
 
-	storage, err := w.OpenStorage(nil, "/local/example")
+	storage, err := w.OpenStorage(ctx, "/local/example")
 	if err != nil {
 		return err
 	}
@@ -99,31 +99,26 @@ func (w *exampleWorker) Tick(ctx context.Context) error {
 	return storage.Persist(ctx)
 }
 
-func (w *exampleWorker) Status() libModel.WorkerStatus {
-	log.L().Info("Status")
-	code := libModel.WorkerStatusNormal
+func (w *exampleWorker) Status() frameModel.WorkerStatus {
+	log.Info("Status")
+	code := frameModel.WorkerStatusNormal
 	w.work.mu.Lock()
 	finished := w.work.finished
 	w.work.mu.Unlock()
 
 	if finished {
-		code = libModel.WorkerStatusFinished
+		code = frameModel.WorkerStatusFinished
 	}
-	return libModel.WorkerStatus{Code: code}
-}
-
-func (w *exampleWorker) OnMasterFailover(reason lib.MasterFailoverReason) error {
-	log.L().Info("OnMasterFailover")
-	return nil
+	return frameModel.WorkerStatus{Code: code}
 }
 
 func (w *exampleWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
-	log.L().Info("OnMasterMessage", zap.Any("message", message))
+	log.Info("OnMasterMessage", zap.Any("message", message))
 	return nil
 }
 
 func (w *exampleWorker) CloseImpl(ctx context.Context) error {
-	log.L().Info("CloseImpl")
+	log.Info("CloseImpl")
 	w.wg.Wait()
 	return nil
 }

@@ -247,24 +247,24 @@ func unflatten(datum types.Datum, ft *types.FieldType, loc *time.Location) (type
 	if datum.IsNull() {
 		return datum, nil
 	}
-	switch ft.Tp {
+	switch ft.GetType() {
 	case mysql.TypeFloat:
 		datum.SetFloat32(float32(datum.GetFloat64()))
 		return datum, nil
 	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTinyBlob,
 		mysql.TypeMediumBlob, mysql.TypeBlob, mysql.TypeLongBlob:
-		datum.SetString(datum.GetString(), ft.Collate)
+		datum.SetString(datum.GetString(), ft.GetCollate())
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeYear, mysql.TypeInt24,
 		mysql.TypeLong, mysql.TypeLonglong, mysql.TypeDouble:
 		return datum, nil
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
-		t := types.NewTime(types.ZeroCoreTime, ft.Tp, ft.Decimal)
+		t := types.NewTime(types.ZeroCoreTime, ft.GetType(), ft.GetDecimal())
 		var err error
 		err = t.FromPackedUint(datum.GetUint64())
 		if err != nil {
 			return datum, cerror.WrapError(cerror.ErrDatumUnflatten, err)
 		}
-		if ft.Tp == mysql.TypeTimestamp && !t.IsZero() {
+		if ft.GetType() == mysql.TypeTimestamp && !t.IsZero() {
 			err = t.ConvertTimeZone(time.UTC, loc)
 			if err != nil {
 				return datum, cerror.WrapError(cerror.ErrDatumUnflatten, err)
@@ -274,27 +274,27 @@ func unflatten(datum types.Datum, ft *types.FieldType, loc *time.Location) (type
 		datum.SetMysqlTime(t)
 		return datum, nil
 	case mysql.TypeDuration: // duration should read fsp from column meta data
-		dur := types.Duration{Duration: time.Duration(datum.GetInt64()), Fsp: ft.Decimal}
+		dur := types.Duration{Duration: time.Duration(datum.GetInt64()), Fsp: ft.GetDecimal()}
 		datum.SetMysqlDuration(dur)
 		return datum, nil
 	case mysql.TypeEnum:
 		// ignore error deliberately, to read empty enum value.
-		enum, err := types.ParseEnumValue(ft.Elems, datum.GetUint64())
+		enum, err := types.ParseEnumValue(ft.GetElems(), datum.GetUint64())
 		if err != nil {
 			enum = types.Enum{}
 		}
-		datum.SetMysqlEnum(enum, ft.Collate)
+		datum.SetMysqlEnum(enum, ft.GetCollate())
 		return datum, nil
 	case mysql.TypeSet:
-		set, err := types.ParseSetValue(ft.Elems, datum.GetUint64())
+		set, err := types.ParseSetValue(ft.GetElems(), datum.GetUint64())
 		if err != nil {
 			return datum, cerror.WrapError(cerror.ErrDatumUnflatten, err)
 		}
-		datum.SetMysqlSet(set, ft.Collate)
+		datum.SetMysqlSet(set, ft.GetCollate())
 		return datum, nil
 	case mysql.TypeBit:
 		val := datum.GetUint64()
-		byteSize := (ft.Flen + 7) >> 3
+		byteSize := (ft.GetFlen() + 7) >> 3
 		datum.SetUint64(0)
 		datum.SetMysqlBit(types.NewBinaryLiteralFromUint(val, byteSize))
 	}

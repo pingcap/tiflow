@@ -24,6 +24,9 @@ import (
 	"github.com/pingcap/tidb/br/pkg/lightning"
 	"github.com/pingcap/tidb/br/pkg/lightning/checkpoints"
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
+	tidbpromutil "github.com/pingcap/tidb/util/promutil"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
+	"github.com/prometheus/client_golang/prometheus"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -75,13 +78,17 @@ type LightningLoader struct {
 // NewLightning creates a new Loader importing data with lightning.
 func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName string) *LightningLoader {
 	lightningCfg := makeGlobalConfig(cfg)
+	logger := log.L()
+	if cfg.FrameworkLogger != nil {
+		logger = log.Logger{Logger: cfg.FrameworkLogger}
+	}
 	loader := &LightningLoader{
 		cfg:                   cfg,
 		cli:                   cli,
 		workerName:            workerName,
 		lightningGlobalConfig: lightningCfg,
 		core:                  lightning.New(lightningCfg),
-		logger:                log.With(zap.String("task", cfg.Name), zap.String("unit", "lightning-load")),
+		logger:                logger.WithFields(zap.String("task", cfg.Name), zap.String("unit", "lightning-load")),
 	}
 	return loader
 }
@@ -127,7 +134,7 @@ func (l *LightningLoader) Init(ctx context.Context) (err error) {
 		return err
 	}
 
-	checkpointList := NewLightningCheckpointList(l.toDB, l.cfg.Name, l.cfg.SourceID, l.cfg.MetaSchema)
+	checkpointList := NewLightningCheckpointList(l.toDB, l.cfg.Name, l.cfg.SourceID, l.cfg.MetaSchema, l.logger)
 	err = checkpointList.Prepare(ctx)
 	if err == nil {
 		l.checkPointList = checkpointList
@@ -142,8 +149,13 @@ func (l *LightningLoader) Init(ctx context.Context) (err error) {
 
 	timeZone := l.cfg.Timezone
 	if len(timeZone) == 0 {
+		baseDB, err2 := conn.DefaultDBProvider.Apply(&l.cfg.To)
+		if err2 != nil {
+			return err2
+		}
+		defer baseDB.Close()
 		var err1 error
-		timeZone, err1 = conn.FetchTimeZoneSetting(ctx, &l.cfg.To)
+		timeZone, err1 = config.FetchTimeZoneSetting(ctx, baseDB.DB)
 		if err1 != nil {
 			return err1
 		}
@@ -202,11 +214,43 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 	}
 
 	var opts []lightning.Option
+	if l.cfg.MetricsFactory != nil {
+		// this branch means dataflow engine has set a Factory, the Factory itself
+		// will register and deregister metrics, so we must use NoopRegistry
+		// to avoid duplicated registration.
+		opts = append(opts,
+			lightning.WithPromFactory(
+				promutil.NewWrappingFactory(
+					l.cfg.MetricsFactory,
+					"",
+					prometheus.Labels{"task": l.cfg.Name, "source_id": l.cfg.SourceID},
+				)),
+			lightning.WithPromRegistry(tidbpromutil.NewNoopRegistry()))
+	} else {
+		registry := prometheus.DefaultGatherer.(prometheus.Registerer)
+		failpoint.Inject("DontUnregister", func() {
+			registry = promutil.NewOnlyRegRegister(registry)
+		})
+
+		opts = append(opts,
+			lightning.WithPromFactory(
+				promutil.NewWrappingFactory(
+					tidbpromutil.NewDefaultFactory(),
+					"",
+					prometheus.Labels{"task": l.cfg.Name, "source_id": l.cfg.SourceID},
+				),
+			),
+			lightning.WithPromRegistry(registry))
+	}
 	if l.cfg.ExtStorage != nil {
 		opts = append(opts,
 			lightning.WithDumpFileStorage(l.cfg.ExtStorage),
 			lightning.WithCheckpointStorage(l.cfg.ExtStorage, lightningCheckpointFileName))
 	}
+	if l.cfg.FrameworkLogger != nil {
+		opts = append(opts, lightning.WithLogger(l.cfg.FrameworkLogger))
+	}
+
 	err = l.core.RunOnceWithOptions(taskCtx, cfg, opts...)
 	failpoint.Inject("LoadDataSlowDown", nil)
 	failpoint.Inject("LoadDataSlowDownByTask", func(val failpoint.Value) {
@@ -400,6 +444,11 @@ func (l *LightningLoader) Update(ctx context.Context, cfg *config.SubTaskConfig)
 func (l *LightningLoader) status() *pb.LoadStatus {
 	finished, total := l.core.Status()
 	progress := percent(finished, total, l.finish.Load())
+	l.logger.Info("progress status of lightning",
+		zap.Int64("finished_bytes", finished),
+		zap.Int64("total_bytes", total),
+		zap.String("progress", progress),
+	)
 	s := &pb.LoadStatus{
 		FinishedBytes:  finished,
 		TotalBytes:     total,

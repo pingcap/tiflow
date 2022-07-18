@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
@@ -36,7 +37,7 @@ var _ = Suite(&testBaseConnSuite{})
 
 type testBaseConnSuite struct{}
 
-var testStmtHistogram = metricsproxy.NewHistogramVec(
+var testStmtHistogram = metricsproxy.NewHistogramVec(&promutil.PromFactory{},
 	prometheus.HistogramOpts{
 		Namespace: "dm",
 		Subsystem: "conn",
