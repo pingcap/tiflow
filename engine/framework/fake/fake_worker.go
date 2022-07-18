@@ -264,7 +264,7 @@ watchLoop:
 		if revision > 0 {
 			opts = append(opts, clientv3.WithRev(revision+1))
 		}
-		ch := cli.Watch(ctx, key, opts...)
+		ch := cli.Watch(clientv3.WithRequireLeader(ctx), key, opts...)
 		log.Info("start to watch etcd", zap.String("key", key),
 			zap.Int64("revision", revision),
 			zap.Strings("endpoints", d.config.EtcdEndpoints))

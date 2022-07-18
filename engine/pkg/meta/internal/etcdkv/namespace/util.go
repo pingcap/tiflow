@@ -16,9 +16,11 @@
 
 package namespace
 
+import "fmt"
+
 // MakeNamespacePrefix adds separator to given tenantID to form a prefix
-func MakeNamespacePrefix(tenantID string) string {
-	return tenantID + "/"
+func MakeNamespacePrefix(projectID string, jobID string) string {
+	return fmt.Sprintf("%s/%s/", projectID, jobID)
 }
 
 func prefixInterval(pfx string, key, end []byte) (pfxKey []byte, pfxEnd []byte) {

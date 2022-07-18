@@ -19,6 +19,7 @@ package namespace
 import (
 	"context"
 
+	etcdImplModel "github.com/pingcap/tiflow/engine/pkg/meta/internal/etcdkv/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 )
@@ -36,13 +37,13 @@ func (p *prefixError) Error() string {
 }
 
 type kvPrefix struct {
-	metaModel.KVEx
+	etcdImplModel.KVExt
 	pfx string
 }
 
-// NewPrefixKV wraps a KVEx instance so that all requests
+// NewPrefixKV wraps a KVExt instance so that all requests
 // are prefixed with a given string.
-func NewPrefixKV(kv metaModel.KVEx, prefix string) metaModel.KV {
+func NewPrefixKV(kv etcdImplModel.KVExt, prefix string) metaModel.KV {
 	return &kvPrefix{kv, prefix}
 }
 
@@ -51,7 +52,7 @@ func (kv *kvPrefix) Put(ctx context.Context, key, val string) (*metaModel.PutRes
 		return nil, prefixErrorFromOpFail(errors.ErrMetaEmptyKey.GenWithStackByArgs())
 	}
 	op := kv.prefixOp(metaModel.OpPut(key, val))
-	r, err := kv.KVEx.Do(ctx, op)
+	r, err := kv.KVExt.Do(ctx, op)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +65,7 @@ func (kv *kvPrefix) Get(ctx context.Context, key string, opts ...metaModel.OpOpt
 	if len(key) == 0 && !(metaModel.IsOptsWithFromKey(opts) || metaModel.IsOptsWithPrefix(opts) || metaModel.IsOptsWithRange(opts)) {
 		return nil, prefixErrorFromOpFail(errors.ErrMetaEmptyKey.GenWithStackByArgs())
 	}
-	r, err := kv.KVEx.Do(ctx, kv.prefixOp(metaModel.OpGet(key, opts...)))
+	r, err := kv.KVExt.Do(ctx, kv.prefixOp(metaModel.OpGet(key, opts...)))
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +79,7 @@ func (kv *kvPrefix) Delete(ctx context.Context, key string, opts ...metaModel.Op
 	if len(key) == 0 && !(metaModel.IsOptsWithFromKey(opts) || metaModel.IsOptsWithPrefix(opts) || metaModel.IsOptsWithRange(opts)) {
 		return nil, prefixErrorFromOpFail(errors.ErrMetaEmptyKey.GenWithStackByArgs())
 	}
-	r, err := kv.KVEx.Do(ctx, kv.prefixOp(metaModel.OpDelete(key, opts...)))
+	r, err := kv.KVExt.Do(ctx, kv.prefixOp(metaModel.OpDelete(key, opts...)))
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +92,7 @@ func (kv *kvPrefix) Do(ctx context.Context, op metaModel.Op) (metaModel.OpRespon
 	if len(op.KeyBytes()) == 0 && !op.IsTxn() {
 		return metaModel.OpResponse{}, prefixErrorFromOpFail(errors.ErrMetaEmptyKey.GenWithStackByArgs())
 	}
-	r, err := kv.KVEx.Do(ctx, kv.prefixOp(op))
+	r, err := kv.KVExt.Do(ctx, kv.prefixOp(op))
 	if err != nil {
 		return r, err
 	}
@@ -110,7 +111,7 @@ type txnPrefix struct {
 }
 
 func (kv *kvPrefix) Txn(ctx context.Context) metaModel.Txn {
-	return &txnPrefix{kv.KVEx.Txn(ctx), kv}
+	return &txnPrefix{kv.KVExt.Txn(ctx), kv}
 }
 
 // [TODO] check the empty key

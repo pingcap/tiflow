@@ -190,15 +190,11 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 	return nil
 }
 
-// AdvanceResolvedTs advances the resolved
+// AdvanceResolvedTs advances the resolved. Not thread safe.
+// NOTE: SHOULD NOT call it concurrently
 func (s *schemaStorageImpl) AdvanceResolvedTs(ts uint64) {
-	var swapped bool
-	for !swapped {
-		oldResolvedTs := atomic.LoadUint64(&s.resolvedTs)
-		if ts < oldResolvedTs {
-			return
-		}
-		swapped = atomic.CompareAndSwapUint64(&s.resolvedTs, oldResolvedTs, ts)
+	if ts > s.ResolvedTs() {
+		atomic.StoreUint64(&s.resolvedTs, ts)
 	}
 }
 

@@ -30,7 +30,7 @@ endpoints = ["mysql-0:3306"]
 auth.user = "root"
 auth.passwd = "passwd"
 
-[user-metastore-conf]
+[business-metastore-conf]
 endpoints = ["metastore:12479"]
 `
 	fileName := mustWriteToTempFile(t, testToml)
@@ -44,7 +44,7 @@ endpoints = ["metastore:12479"]
 	require.Equal(t, "mysql-0:3306", config.FrameMetaConf.Endpoints[0])
 	require.Equal(t, "root", config.FrameMetaConf.Auth.User)
 	require.Equal(t, "passwd", config.FrameMetaConf.Auth.Passwd)
-	require.Equal(t, "metastore:12479", config.UserMetaConf.Endpoints[0])
+	require.Equal(t, "metastore:12479", config.BusinessMetaConf.Endpoints[0])
 	fmt.Printf("config: %+v\n", config)
 }
 
@@ -65,7 +65,7 @@ func TestDefaultMetaStoreManager(t *testing.T) {
 	require.Equal(t, FrameMetaID, store.StoreID)
 	require.Equal(t, defaultFrameMetaEndpoints, store.Endpoints[0])
 
-	store = newDefaultUserMetaConfig()
-	require.Equal(t, DefaultUserMetaID, store.StoreID)
-	require.Equal(t, defaultUserMetaEndpoints, store.Endpoints[0])
+	store = NewDefaultBusinessMetaConfig()
+	require.Equal(t, DefaultBusinessMetaID, store.StoreID)
+	require.Equal(t, defaultBusinessMetaEndpoints, store.Endpoints[0])
 }

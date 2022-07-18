@@ -92,6 +92,12 @@ var doc = `{
                         "schema": {
                             "$ref": "#/definitions/model.HTTPError"
                         }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
                     }
                 }
             }
@@ -857,6 +863,9 @@ var doc = `{
                 },
                 "state": {
                     "type": "string"
+                },
+                "upstream_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -966,6 +975,9 @@ var doc = `{
                     "items": {
                         "$ref": "#/definitions/model.CaptureTaskStatus"
                     }
+                },
+                "upstream_id": {
+                    "type": "integer"
                 }
             }
         },

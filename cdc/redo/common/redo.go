@@ -15,6 +15,10 @@
 
 package common
 
+import (
+	"github.com/pingcap/tiflow/cdc/model"
+)
+
 const (
 	// MinSectorSize is minimum sector size used when flushing log so that log can safely
 	// distinguish between torn writes and ordinary data corruption.
@@ -52,7 +56,20 @@ const (
 
 // LogMeta is used for store meta info.
 type LogMeta struct {
-	CheckPointTs   uint64           `msg:"checkPointTs"`
-	ResolvedTs     uint64           `msg:"resolvedTs"`
-	ResolvedTsList map[int64]uint64 `msg:"-"`
+	CheckpointTs uint64 `msg:"checkpointTs"`
+	ResolvedTs   uint64 `msg:"resolvedTs"`
+}
+
+// ParseMeta parses meta.
+func ParseMeta(metas []*LogMeta, checkpointTs, resolvedTs *model.Ts) {
+	*checkpointTs = 0
+	*resolvedTs = 0
+	for _, meta := range metas {
+		if *checkpointTs < meta.CheckpointTs {
+			*checkpointTs = meta.CheckpointTs
+		}
+		if *resolvedTs < meta.ResolvedTs {
+			*resolvedTs = meta.ResolvedTs
+		}
+	}
 }

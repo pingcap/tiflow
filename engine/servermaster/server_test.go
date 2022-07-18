@@ -57,7 +57,7 @@ store-id = "root"
 endpoints = ["127.0.0.1:%d"]
 [frame-metastore-conf.auth]
 user = "root"
-[user-metastore-conf]
+[business-metastore-conf]
 store-id = "default"
 endpoints = ["127.0.0.1:%d"]
 [etcd]
@@ -108,7 +108,7 @@ store-id = "root"
 endpoints = ["127.0.0.1:%d"]
 [frame-metastore-conf.auth]
 user = "root"
-[user-metastore-conf]
+[business-metastore-conf]
 store-id = "default"
 endpoints = ["127.0.0.1:%d"]
 [etcd]

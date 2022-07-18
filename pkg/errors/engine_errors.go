@@ -407,6 +407,10 @@ var (
 		"meta entry already exists",
 		errors.RFCCodeText("DFLOW:ErrMetaEntryAlreadyExists"),
 	)
+	ErrMetaClientTypeNotSupport = errors.Normalize(
+		"meta client type not support:%d",
+		errors.RFCCodeText("DFLOW:ErrMetaClientTypeNotSupport"),
+	)
 
 	// DataSet errors
 	ErrDatasetEntryNotFound = errors.Normalize(

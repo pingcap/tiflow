@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -44,22 +43,15 @@ type RedoLogWriter interface {
 	io.Closer
 
 	// WriteLog writer RedoRowChangedEvent to row log file
-	WriteLog(ctx context.Context, tableID int64, rows []*model.RedoRowChangedEvent) (resolvedTs uint64, err error)
+	WriteLog(ctx context.Context, tableID int64, rows []*model.RedoRowChangedEvent) error
 
-	// SendDDL EmitCheckpointTs and EmitResolvedTs are called from owner only
 	// SendDDL writer RedoDDLEvent to ddl log file
 	SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error
 
 	// FlushLog sends resolved-ts from table pipeline to log writer, it is
 	// essential to flush when a table doesn't have any row change event for
 	// some time, and the resolved ts of this table should be moved forward.
-	FlushLog(ctx context.Context, rtsMap map[model.TableID]model.Ts) error
-
-	// EmitCheckpointTs write CheckpointTs to meta file
-	EmitCheckpointTs(ctx context.Context, ts uint64) error
-
-	// EmitResolvedTs write ResolvedTs to meta file
-	EmitResolvedTs(ctx context.Context, ts uint64) error
+	FlushLog(ctx context.Context, checkpointTs, resolvedTs model.Ts) error
 
 	// DeleteAllLogs delete all log files related to the changefeed, called from owner only when delete changefeed
 	DeleteAllLogs(ctx context.Context) error
@@ -98,8 +90,10 @@ type LogWriter struct {
 	rowWriter fileWriter
 	ddlWriter fileWriter
 	storage   storage.ExternalStorage
-	meta      *common.LogMeta
-	metaLock  sync.RWMutex
+
+	// Fields are protected by metaLock.
+	meta     *common.LogMeta
+	metaLock sync.RWMutex
 
 	metricTotalRowsCount prometheus.Gauge
 }
@@ -234,31 +228,21 @@ func (l *LogWriter) initMeta(ctx context.Context) error {
 	default:
 	}
 
-	l.meta = &common.LogMeta{ResolvedTsList: map[int64]uint64{}}
-	files, err := ioutil.ReadDir(l.cfg.Dir)
+	l.meta = &common.LogMeta{}
+
+	data, err := os.ReadFile(l.filePath())
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return cerror.WrapError(cerror.ErrRedoMetaInitialize, errors.Annotate(err, "can't read log file directory"))
+		return cerror.WrapError(cerror.ErrRedoMetaInitialize, errors.Annotate(err, "read meta file fail"))
 	}
 
-	for _, file := range files {
-		if filepath.Ext(file.Name()) == common.MetaEXT {
-			path := filepath.Join(l.cfg.Dir, file.Name())
-			fileData, err := os.ReadFile(path)
-			if err != nil {
-				return cerror.WrapError(cerror.ErrRedoMetaInitialize, err)
-			}
-
-			_, err = l.meta.UnmarshalMsg(fileData)
-			if err != nil {
-				l.meta = &common.LogMeta{ResolvedTsList: map[int64]uint64{}}
-				return cerror.WrapError(cerror.ErrRedoMetaInitialize, err)
-			}
-			break
-		}
+	_, err = l.meta.UnmarshalMsg(data)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrRedoMetaInitialize, err)
 	}
+
 	return nil
 }
 
@@ -292,7 +276,7 @@ func (l *LogWriter) runGC(ctx context.Context) {
 
 func (l *LogWriter) gc() error {
 	l.metaLock.RLock()
-	ts := l.meta.CheckPointTs
+	ts := l.meta.CheckpointTs
 	l.metaLock.RUnlock()
 
 	var err error
@@ -302,21 +286,20 @@ func (l *LogWriter) gc() error {
 }
 
 // WriteLog implement WriteLog api
-func (l *LogWriter) WriteLog(ctx context.Context, tableID int64, rows []*model.RedoRowChangedEvent) (uint64, error) {
+func (l *LogWriter) WriteLog(ctx context.Context, tableID int64, rows []*model.RedoRowChangedEvent) error {
 	select {
 	case <-ctx.Done():
-		return 0, errors.Trace(ctx.Err())
+		return errors.Trace(ctx.Err())
 	default:
 	}
 
 	if l.isStopped() {
-		return 0, cerror.ErrRedoWriterStopped.GenWithStackByArgs()
+		return cerror.ErrRedoWriterStopped.GenWithStackByArgs()
 	}
 	if len(rows) == 0 {
-		return 0, nil
+		return nil
 	}
 
-	maxCommitTs := l.setMaxCommitTs(tableID, 0)
 	for i, r := range rows {
 		if r == nil || r.Row == nil {
 			continue
@@ -329,22 +312,20 @@ func (l *LogWriter) WriteLog(ctx context.Context, tableID int64, rows []*model.R
 		// TODO: crc check
 		data, err := rl.MarshalMsg(nil)
 		if err != nil {
-			// TODO: just return 0 if err ?
-			return maxCommitTs, cerror.WrapError(cerror.ErrMarshalFailed, err)
+			return cerror.WrapError(cerror.ErrMarshalFailed, err)
 		}
 
 		l.rowWriter.AdvanceTs(r.Row.CommitTs)
 		_, err = l.rowWriter.Write(data)
 		if err != nil {
 			l.metricTotalRowsCount.Add(float64(i))
-			return maxCommitTs, err
+			return err
 		}
 
-		maxCommitTs = l.setMaxCommitTs(tableID, r.Row.CommitTs)
 		redoLogPool.Put(rl)
 	}
 	l.metricTotalRowsCount.Add(float64(len(rows)))
-	return maxCommitTs, nil
+	return nil
 }
 
 // SendDDL implement SendDDL api
@@ -379,7 +360,7 @@ func (l *LogWriter) SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error 
 }
 
 // FlushLog implement FlushLog api
-func (l *LogWriter) FlushLog(ctx context.Context, rtsMap map[model.TableID]model.Ts) error {
+func (l *LogWriter) FlushLog(ctx context.Context, checkpointTs, resolvedTs model.Ts) error {
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
@@ -390,42 +371,7 @@ func (l *LogWriter) FlushLog(ctx context.Context, rtsMap map[model.TableID]model
 		return cerror.ErrRedoWriterStopped.GenWithStackByArgs()
 	}
 
-	if err := l.flush(); err != nil {
-		return err
-	}
-	for tableID, rts := range rtsMap {
-		l.setMaxCommitTs(tableID, rts)
-	}
-	return nil
-}
-
-// EmitCheckpointTs implement EmitCheckpointTs api
-func (l *LogWriter) EmitCheckpointTs(ctx context.Context, ts uint64) error {
-	select {
-	case <-ctx.Done():
-		return errors.Trace(ctx.Err())
-	default:
-	}
-
-	if l.isStopped() {
-		return cerror.ErrRedoWriterStopped.GenWithStackByArgs()
-	}
-	return l.flushLogMeta(ts, 0)
-}
-
-// EmitResolvedTs implement EmitResolvedTs api
-func (l *LogWriter) EmitResolvedTs(ctx context.Context, ts uint64) error {
-	select {
-	case <-ctx.Done():
-		return errors.Trace(ctx.Err())
-	default:
-	}
-
-	if l.isStopped() {
-		return cerror.ErrRedoWriterStopped.GenWithStackByArgs()
-	}
-
-	return l.flushLogMeta(0, ts)
+	return l.flush(checkpointTs, resolvedTs)
 }
 
 // DeleteAllLogs implement DeleteAllLogs api
@@ -533,26 +479,11 @@ func (l *LogWriter) Close() error {
 	return err
 }
 
-func (l *LogWriter) setMaxCommitTs(tableID int64, commitTs uint64) uint64 {
-	l.metaLock.Lock()
-	defer l.metaLock.Unlock()
-
-	if v, ok := l.meta.ResolvedTsList[tableID]; ok {
-		if v < commitTs {
-			l.meta.ResolvedTsList[tableID] = commitTs
-		}
-	} else {
-		l.meta.ResolvedTsList[tableID] = commitTs
-	}
-
-	return l.meta.ResolvedTsList[tableID]
-}
-
 // flush flushes all the buffered data to the disk.
-func (l *LogWriter) flush() error {
-	err1 := l.flushLogMeta(0, 0)
-	err2 := l.ddlWriter.Flush()
-	err3 := l.rowWriter.Flush()
+func (l *LogWriter) flush(checkpointTs, resolvedTs model.Ts) error {
+	err1 := l.ddlWriter.Flush()
+	err2 := l.rowWriter.Flush()
+	err3 := l.flushLogMeta(checkpointTs, resolvedTs)
 
 	err := multierr.Append(err1, err2)
 	err = multierr.Append(err, err3)
@@ -573,19 +504,46 @@ func (l *LogWriter) getMetafileName() string {
 		common.DefaultMetaFileType, common.MetaEXT)
 }
 
-func (l *LogWriter) flushLogMeta(checkPointTs, resolvedTs uint64) error {
+func (l *LogWriter) maybeUpdateMeta(checkpointTs, resolvedTs uint64) ([]byte, error) {
 	l.metaLock.Lock()
 	defer l.metaLock.Unlock()
 
-	if checkPointTs != 0 {
-		l.meta.CheckPointTs = checkPointTs
+	hasChange := false
+	if checkpointTs > l.meta.CheckpointTs {
+		l.meta.CheckpointTs = checkpointTs
+		hasChange = true
+	} else if checkpointTs > 0 && checkpointTs != l.meta.CheckpointTs {
+		log.Panic("flushLogMeta with a regressed checkpoint ts",
+			zap.Uint64("currCheckpointTs", l.meta.CheckpointTs),
+			zap.Uint64("recvCheckpointTs", checkpointTs))
 	}
-	if resolvedTs != 0 {
+	if resolvedTs > l.meta.ResolvedTs {
 		l.meta.ResolvedTs = resolvedTs
+		hasChange = true
+	} else if resolvedTs > 0 && resolvedTs != l.meta.ResolvedTs {
+		log.Panic("flushLogMeta with a regressed resolved ts",
+			zap.Uint64("currCheckpointTs", l.meta.ResolvedTs),
+			zap.Uint64("recvCheckpointTs", resolvedTs))
 	}
+
+	if !hasChange {
+		return nil, nil
+	}
+
 	data, err := l.meta.MarshalMsg(nil)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrMarshalFailed, err)
+		err = cerror.WrapError(cerror.ErrMarshalFailed, err)
+	}
+	return data, err
+}
+
+func (l *LogWriter) flushLogMeta(checkpointTs, resolvedTs uint64) error {
+	data, err := l.maybeUpdateMeta(checkpointTs, resolvedTs)
+	if err != nil {
+		return err
+	}
+	if len(data) == 0 {
+		return nil
 	}
 
 	err = os.MkdirAll(l.cfg.Dir, common.DefaultDirMode)

@@ -52,6 +52,10 @@ func TestServerConfigValidateAndAdjust(t *testing.T) {
 	t.Parallel()
 	conf := new(ServerConfig)
 
+	require.Regexp(t, ".*bad cluster-id.*", conf.ValidateAndAdjust())
+	conf.ClusterID = "__backup__"
+	require.Regexp(t, ".*bad cluster-id.*", conf.ValidateAndAdjust())
+	conf.ClusterID = "default"
 	require.Regexp(t, ".*empty address", conf.ValidateAndAdjust())
 	conf.Addr = "cdc:1234"
 	require.Regexp(t, ".*empty GC TTL is not allowed", conf.ValidateAndAdjust())
@@ -124,4 +128,29 @@ func TestSchedulerConfigValidateAndAdjust(t *testing.T) {
 	require.Error(t, conf.ValidateAndAdjust())
 	conf.CheckBalanceInterval = TomlDuration(time.Second)
 	require.Error(t, conf.ValidateAndAdjust())
+}
+
+func TestIsValidClusterID(t *testing.T) {
+	cases := []struct {
+		id    string
+		valid bool
+	}{
+		{"owner", false},
+		{"capture", false},
+		{"task", false},
+		{"changefeed", false},
+		{"job", false},
+		{"meta", false},
+		{"__backup__", false},
+		{"", false},
+		{"12345678901234567890123456789012345678901234567890123456789012345678901234567890" +
+			"1234567890123456789012345678901234567890123456789", false},
+		{"12345678901234567890123456789012345678901234567890123456789012345678901234567890" +
+			"123456789012345678901234567890123456789012345678", true},
+		{"default", true},
+	}
+	for _, c := range cases {
+		println(c.id)
+		require.Equal(t, c.valid, isValidClusterID(c.id))
+	}
 }
