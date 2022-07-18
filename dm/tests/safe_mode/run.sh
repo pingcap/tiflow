@@ -222,7 +222,7 @@ function safe_mode_duration() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"Your \`safe-mode-duration\` in task.yaml is set 0s" 1
+		"your \`safe-mode-duration\` in task.yaml is set to 0s" 1
 
 	# stop and start task success
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \

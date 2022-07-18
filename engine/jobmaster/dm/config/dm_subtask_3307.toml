@@ -59,7 +59,6 @@ ansi-quotes = false
   port = 3307
   user = "root"
   password = "******"
-  syncer-config-name = "sync-01"
   [from.session]
 
 [to]
