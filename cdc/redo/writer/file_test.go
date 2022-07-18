@@ -357,8 +357,6 @@ func TestRotateFileWithFileAllocator(t *testing.T) {
 		gomock.Any()).Return(nil).Times(1)
 	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_row_100_uuid-2.log",
 		gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_row_100_uuid-3.log",
-		gomock.Any()).Return(nil).Times(1)
 
 	dir := t.TempDir()
 	uuidGen := uuid.NewMock()
@@ -421,8 +419,6 @@ func TestRotateFileWithoutFileAllocator(t *testing.T) {
 	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_ddl_0_uuid-2.log",
 		gomock.Any()).Return(nil).Times(1)
 	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_ddl_100_uuid-4.log",
-		gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_ddl_100_uuid-6.log",
 		gomock.Any()).Return(nil).Times(1)
 
 	dir := t.TempDir()
