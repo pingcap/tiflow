@@ -379,11 +379,12 @@ func (l *LogWriter) DeleteAllLogs(ctx context.Context) error {
 		return err
 	}
 
+	err = os.RemoveAll(l.cfg.Dir)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+	}
+
 	if !l.cfg.S3Storage {
-		err = os.RemoveAll(l.cfg.Dir)
-		if err != nil {
-			return cerror.WrapError(cerror.ErrRedoFileOp, err)
-		}
 		// after delete logs, rm the LogWriter since it is already closed
 		l.cleanUpLogWriter()
 		return nil
