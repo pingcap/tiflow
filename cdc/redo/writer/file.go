@@ -340,6 +340,7 @@ func (w *Writer) close() error {
 		err = w.writeToS3(ctx, w.ongoingFilePath)
 		if err != nil {
 			w.file.Close()
+			w.file = nil
 			return cerror.WrapError(cerror.ErrS3StorageAPI, err)
 		}
 	}
