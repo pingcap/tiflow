@@ -317,6 +317,26 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		if newCheckpointTs > barrierTs {
 			newCheckpointTs = barrierTs
 		}
+		prevResolvedTs := c.state.Status.ResolvedTs
+		var flushedCheckpointTs, flushedResolvedTs model.Ts
+		if c.redoManager.Enabled() {
+			// newResolvedTs can never exceed the barrier timestamp boundary. If redo is enabled,
+			// we can only upload it to etcd after it has been flushed into redo meta.
+			c.redoManager.UpdateMeta(newCheckpointTs, newResolvedTs)
+			c.redoManager.GetFlushedMeta(&flushedCheckpointTs, &flushedResolvedTs)
+			log.Debug("owner gets flushed meta",
+				zap.Uint64("flushedResolvedTs", flushedResolvedTs),
+				zap.Uint64("flushedCheckpointTs", flushedCheckpointTs),
+				zap.Uint64("newResolvedTs", newResolvedTs),
+				zap.Uint64("newCheckpointTs", newCheckpointTs))
+			if flushedResolvedTs != 0 {
+				// It's not necessary to replace newCheckpointTs with flushedResolvedTs,
+				// as cdc can ensure newCheckpointTs can never exceed prevResolvedTs.
+				newResolvedTs = flushedResolvedTs
+			} else {
+				newResolvedTs = prevResolvedTs
+			}
+		}
 		c.updateStatus(newCheckpointTs, newResolvedTs)
 		c.updateMetrics(currentTs, newCheckpointTs, newResolvedTs)
 	} else if c.state.Status != nil {
@@ -368,8 +388,25 @@ LOOP:
 		ensureTTL := int64(10 * 60)
 		err := gc.EnsureChangefeedStartTsSafety(
 			ctx, c.upstream.PDClient,
-			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceChecking),
+			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceInitializing),
 			c.state.ID, ensureTTL, checkpointTs)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		// clean service GC safepoint '-creating-' and '-resuming-' if there are any.
+		err = gc.UndoEnsureChangefeedStartTsSafety(
+			ctx, c.upstream.PDClient,
+			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
+			ctx.ChangefeedVars().ID,
+		)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = gc.UndoEnsureChangefeedStartTsSafety(
+			ctx, c.upstream.PDClient,
+			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
+			ctx.ChangefeedVars().ID,
+		)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -415,7 +452,7 @@ LOOP:
 	}()
 
 	stdCtx := contextutil.PutChangefeedIDInCtx(cancelCtx, c.id)
-	redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: false}
+	redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: true}
 	redoManager, err := redo.NewManager(stdCtx, c.state.Info.Config.Consistent, redoManagerOpts)
 	if err != nil {
 		return err
@@ -448,7 +485,7 @@ LOOP:
 
 func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	if !c.initialized {
-		c.redoManagerCleanup(ctx)
+		c.cleanupRedoManager(ctx)
 		return
 	}
 	log.Info("close changefeed",
@@ -459,7 +496,8 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.cancel = func() {}
 	c.ddlPuller.Close()
 	c.schema = nil
-	c.redoManagerCleanup(ctx)
+	c.cleanupRedoManager(ctx)
+	c.cleanupServiceGCSafePoints(ctx)
 	canceledCtx, cancel := context.WithCancel(context.Background())
 	cancel()
 	// We don't need to wait sink Close, pass a canceled context is ok
@@ -494,7 +532,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 }
 
 // redoManagerCleanup cleanups redo logs if changefeed is removed and redo log is enabled
-func (c *changefeed) redoManagerCleanup(ctx context.Context) {
+func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 	if c.isRemoved {
 		if c.state == nil || c.state.Info == nil || c.state.Info.Config == nil ||
 			c.state.Info.Config.Consistent == nil {
@@ -519,6 +557,32 @@ func (c *changefeed) redoManagerCleanup(ctx context.Context) {
 		err := c.redoManager.Cleanup(ctx)
 		if err != nil {
 			log.Error("cleanup redo logs failed", zap.String("changefeed", c.id.ID), zap.Error(err))
+		}
+	}
+}
+
+func (c *changefeed) cleanupServiceGCSafePoints(ctx cdcContext.Context) {
+	if !c.isRemoved {
+		return
+	}
+
+	serviceIDs := []string{
+		ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
+		ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
+		ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceInitializing),
+	}
+
+	for _, serviceID := range serviceIDs {
+		err := gc.UndoEnsureChangefeedStartTsSafety(
+			ctx,
+			c.upstream.PDClient,
+			serviceID,
+			ctx.ChangefeedVars().ID)
+		if err != nil {
+			log.Error("failed to remove gc safepoint",
+				zap.String("namespace", c.state.ID.Namespace),
+				zap.String("changefeed", c.state.ID.ID),
+				zap.String("serviceID", serviceID))
 		}
 	}
 }

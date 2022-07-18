@@ -16,7 +16,6 @@ package writer
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -259,7 +258,7 @@ func TestWriterGC(t *testing.T) {
 	_, err = w.Write([]byte("t3333"))
 	require.Nil(t, err)
 
-	files, err := ioutil.ReadDir(w.cfg.Dir)
+	files, err := os.ReadDir(w.cfg.Dir)
 	require.Nil(t, err)
 	require.Equal(t, 3, len(files), "should have 3 log file")
 
@@ -269,7 +268,7 @@ func TestWriterGC(t *testing.T) {
 	err = w.Close()
 	require.Nil(t, err)
 	require.False(t, w.IsRunning())
-	files, err = ioutil.ReadDir(w.cfg.Dir)
+	files, err = os.ReadDir(w.cfg.Dir)
 	require.Nil(t, err)
 	require.Equal(t, 1, len(files), "should have 1 log left after GC")
 

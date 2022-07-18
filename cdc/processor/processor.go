@@ -67,11 +67,10 @@ type processor struct {
 	schemaStorage entry.SchemaStorage
 	lastSchemaTs  model.Ts
 
-	filter        *filter.Filter
-	mounter       entry.Mounter
-	sink          sink.Sink
-	redoManager   redo.LogManager
-	lastRedoFlush time.Time
+	filter      *filter.Filter
+	mounter     entry.Mounter
+	sink        sink.Sink
+	redoManager redo.LogManager
 
 	initialized bool
 	errCh       chan error
@@ -406,14 +405,13 @@ func newProcessor(
 ) *processor {
 	changefeedID := ctx.ChangefeedVars().ID
 	p := &processor{
-		upstream:      up,
-		tables:        make(map[model.TableID]pipeline.TablePipeline),
-		errCh:         make(chan error, 1),
-		changefeedID:  changefeedID,
-		captureInfo:   ctx.GlobalVars().CaptureInfo,
-		cancel:        func() {},
-		lastRedoFlush: time.Now(),
-		liveness:      liveness,
+		upstream:     up,
+		tables:       make(map[model.TableID]pipeline.TablePipeline),
+		errCh:        make(chan error, 1),
+		changefeedID: changefeedID,
+		captureInfo:  ctx.GlobalVars().CaptureInfo,
+		cancel:       func() {},
+		liveness:     liveness,
 
 		metricResolvedTsGauge: resolvedTsGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
@@ -564,9 +562,6 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	}
 	if err := p.lazyInit(ctx); err != nil {
 		return errors.Trace(err)
-	}
-	if err := p.flushRedoLogMeta(ctx); err != nil {
-		return err
 	}
 	// it is no need to check the error here, because we will use
 	// local time when an error return, which is acceptable
@@ -977,20 +972,6 @@ func (p *processor) doGCSchemaStorage(ctx cdcContext.Context) {
 		cdcContext.ZapFieldChangefeed(ctx))
 	lastSchemaPhysicalTs := oracle.ExtractPhysical(lastSchemaTs)
 	p.metricSchemaStorageGcTsGauge.Set(float64(lastSchemaPhysicalTs))
-}
-
-// flushRedoLogMeta flushes redo log meta, including resolved-ts and checkpoint-ts
-func (p *processor) flushRedoLogMeta(ctx context.Context) error {
-	if p.redoManager.Enabled() &&
-		time.Since(p.lastRedoFlush).Milliseconds() > p.changefeed.Info.Config.Consistent.FlushIntervalInMs {
-		st := p.changefeed.Status
-		err := p.redoManager.UpdateCheckpointTs(ctx, st.CheckpointTs)
-		if err != nil {
-			return err
-		}
-		p.lastRedoFlush = time.Now()
-	}
-	return nil
 }
 
 func (p *processor) refreshMetrics() {
