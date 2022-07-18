@@ -504,6 +504,7 @@ func (l *LogWriter) getMetafileName() string {
 
 func (l *LogWriter) maybeUpdateMeta(checkpointTs, resolvedTs uint64) ([]byte, error) {
 	l.metaLock.Lock()
+	defer l.metaLock.Unlock()
 
 	hasChange := false
 	if checkpointTs > l.meta.CheckpointTs {
@@ -542,7 +543,6 @@ func (l *LogWriter) flushLogMeta(checkpointTs, resolvedTs uint64) error {
 	if len(data) == 0 {
 		return nil
 	}
-	l.metaLock.Unlock()
 
 	err = os.MkdirAll(l.cfg.Dir, common.DefaultDirMode)
 	if err != nil {
