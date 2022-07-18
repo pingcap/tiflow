@@ -19,8 +19,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -95,7 +96,7 @@ func TestDMJob(t *testing.T) {
 	for _, metricsURL := range metricsURLs {
 		resp, err := http.Get(metricsURL)
 		require.NoError(t, err)
-		content, err := ioutil.ReadAll(resp.Body)
+		content, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		matched := re.FindAllSubmatch(content, -1)
 		for _, m := range matched {
@@ -127,7 +128,7 @@ func testSimpleAllModeTask(
 	noError(mysql.Exec("create table " + db + ".t1(c int primary key)"))
 	noError(mysql.Exec("insert into " + db + ".t1 values(1)"))
 
-	dmJobCfg, err := ioutil.ReadFile("./dm-job.yaml")
+	dmJobCfg, err := os.ReadFile("./dm-job.yaml")
 	require.NoError(t, err)
 	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("<placeholder>"), []byte(db))
 	var resp *enginepb.SubmitJobResponse

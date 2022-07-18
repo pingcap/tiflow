@@ -55,22 +55,14 @@ func (bs *blackHoleWriter) WriteLog(_ context.Context, tableID model.TableID, lo
 	return
 }
 
-func (bs *blackHoleWriter) FlushLog(_ context.Context, rtsMap map[model.TableID]model.Ts) error {
+func (bs *blackHoleWriter) FlushLog(_ context.Context, checkpointTs, resolvedTs model.Ts) error {
 	bs.tableRtsMu.Lock()
 	defer bs.tableRtsMu.Unlock()
-	for tableID, rts := range rtsMap {
-		bs.tableRtsMap[tableID] = rts
-	}
 	return nil
 }
 
 func (bs *blackHoleWriter) SendDDL(_ context.Context, ddl *model.RedoDDLEvent) error {
 	log.Debug("send ddl event", zap.Any("ddl", ddl))
-	return nil
-}
-
-func (bs *blackHoleWriter) EmitCheckpointTs(_ context.Context, ts uint64) error {
-	bs.checkpointTs = ts
 	return nil
 }
 

@@ -17,8 +17,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -71,7 +71,7 @@ func mockBackendEtcd() (*embed.Etcd, string, error) {
 
 	cfg := embed.NewConfig()
 	tmpDir := "embedded-etcd"
-	dir, err := ioutil.TempDir("", tmpDir)
+	dir, err := os.MkdirTemp("", tmpDir)
 	if err != nil {
 		return nil, "", err
 	}

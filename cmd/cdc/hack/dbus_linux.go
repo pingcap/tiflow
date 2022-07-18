@@ -18,7 +18,6 @@ package hack
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/user"
 	"path"
@@ -67,7 +66,7 @@ func canDiscoverDbusSessionBusAddress() bool {
 			// text file // containing the address of the socket, e.g.:
 			// DBUS_SESSION_BUS_ADDRESS=unix:abstract=/tmp/dbus-E1c73yNqrG
 
-			if f, err := ioutil.ReadFile(runUserSessionDbusFile); err == nil {
+			if f, err := os.ReadFile(runUserSessionDbusFile); err == nil {
 				fileContent := string(f)
 
 				prefix := fmt.Sprintf("%s=", dbusSessionEnvName)
