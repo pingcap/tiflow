@@ -525,10 +525,12 @@ func (l *LogWriter) mergeMeta(checkPointTs uint64, rtsMap map[model.TableID]mode
 	l.metaLock.Lock()
 	defer l.metaLock.Unlock()
 
+	// NOTE: both checkpoint and resolved can regress if a cdc instance restarts.
 	hasChange := false
 	if checkPointTs > l.meta.CheckPointTs {
 		l.meta.CheckPointTs = checkPointTs
 		hasChange = true
+<<<<<<< HEAD
 	} else if checkPointTs > 0 && checkPointTs != l.meta.CheckPointTs {
 		log.Panic("flushLogMeta with a regressed checkpoint ts",
 			zap.Uint64("currCheckPointTs", l.meta.CheckPointTs),
@@ -562,10 +564,23 @@ func (l *LogWriter) mergeMeta(checkPointTs uint64, rtsMap map[model.TableID]mode
 				garbageTIDs = append(garbageTIDs, tID)
 			}
 		}
+=======
+	} else if checkpointTs > 0 && checkpointTs != l.meta.CheckpointTs {
+		log.Warn("flushLogMeta with a regressed checkpoint ts, ignore",
+			zap.Uint64("currCheckpointTs", l.meta.CheckpointTs),
+			zap.Uint64("recvCheckpointTs", checkpointTs))
+>>>>>>> e351bacc5 (cdc: ignore redo log meta regress for restarting (#6320))
 	}
 	for _, tID := range garbageTIDs {
 		delete(l.meta.ResolvedTsList, tID)
 		hasChange = true
+<<<<<<< HEAD
+=======
+	} else if resolvedTs > 0 && resolvedTs != l.meta.ResolvedTs {
+		log.Warn("flushLogMeta with a regressed resolved ts, ignore",
+			zap.Uint64("currCheckpointTs", l.meta.ResolvedTs),
+			zap.Uint64("recvCheckpointTs", resolvedTs))
+>>>>>>> e351bacc5 (cdc: ignore redo log meta regress for restarting (#6320))
 	}
 
 	if !hasChange {
