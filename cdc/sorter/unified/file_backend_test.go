@@ -15,7 +15,6 @@ package unified
 
 import (
 	"io"
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -59,7 +58,7 @@ func TestNoSpace(t *testing.T) {
 }
 
 func TestWrittenCount(t *testing.T) {
-	f, err := ioutil.TempFile("", "writer-test")
+	f, err := os.CreateTemp("", "writer-test")
 	require.Nil(t, err)
 	defer os.Remove(f.Name())
 
@@ -75,7 +74,7 @@ func TestWrittenCount(t *testing.T) {
 }
 
 func TestDataSize(t *testing.T) {
-	f, err := ioutil.TempFile("", "writer-test")
+	f, err := os.CreateTemp("", "writer-test")
 	require.Nil(t, err)
 	defer os.Remove(f.Name())
 

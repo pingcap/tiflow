@@ -32,20 +32,20 @@ func WrapError(rfcError *errors.Error, err error, args ...interface{}) error {
 	return rfcError.Wrap(err).GenWithStackByArgs(args...)
 }
 
-// ChangeFeedFastFailError is read only.
+// changeFeedFastFailError is read only.
 // If this type of error occurs in a changefeed, it means that the data it
 // wants to replicate has been or will be GC. So it makes no sense to try to
 // resume the changefeed, and the changefeed should immediately be failed.
-var ChangeFeedFastFailError = []*errors.Error{
+var changeFeedFastFailError = []*errors.Error{
 	ErrGCTTLExceeded, ErrSnapshotLostByGC, ErrStartTsBeforeGC,
 }
 
-// ChangefeedFastFailError checks if an error is a ChangefeedFastFailError
-func ChangefeedFastFailError(err error) bool {
+// IsChangefeedFastFailError checks if an error is a ChangefeedFastFailError
+func IsChangefeedFastFailError(err error) bool {
 	if err == nil {
 		return false
 	}
-	for _, e := range ChangeFeedFastFailError {
+	for _, e := range changeFeedFastFailError {
 		if e.Equal(err) {
 			return true
 		}
@@ -57,10 +57,10 @@ func ChangefeedFastFailError(err error) bool {
 	return false
 }
 
-// ChangefeedFastFailErrorCode checks the error code, returns true if it is a
+// IsChangefeedFastFailErrorCode checks the error code, returns true if it is a
 // ChangefeedFastFailError code
-func ChangefeedFastFailErrorCode(errCode errors.RFCErrorCode) bool {
-	for _, e := range ChangeFeedFastFailError {
+func IsChangefeedFastFailErrorCode(errCode errors.RFCErrorCode) bool {
+	for _, e := range changeFeedFastFailError {
 		if errCode == e.RFCCode() {
 			return true
 		}
@@ -72,8 +72,8 @@ var changefeedNotRetryErrors = []*errors.Error{
 	ErrExpressionColumnNotFound, ErrExpressionParseFailed,
 }
 
-// ChangefeedNotRetryError returns true if a error is a changefeed not retry error.
-func ChangefeedNotRetryError(err error) bool {
+// IsChangefeedNotRetryError returns true if a error is a changefeed not retry error.
+func IsChangefeedNotRetryError(err error) bool {
 	for _, e := range changefeedNotRetryErrors {
 		if e.Equal(err) {
 			return true

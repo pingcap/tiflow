@@ -83,6 +83,22 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
+	needRemoveGCSafePoint := false
+	defer func() {
+		if !needRemoveGCSafePoint {
+			return
+		}
+		err := gc.UndoEnsureChangefeedStartTsSafety(
+			ctx,
+			pdClient,
+			h.capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
+			model.DefaultChangeFeedID(cfg.ID),
+		)
+		if err != nil {
+			_ = c.Error(err)
+			return
+		}
+	}()
 	upstreamInfo := &model.UpstreamInfo{
 		ID:            info.UpstreamID,
 		PDEndpoints:   strings.Join(cfg.PDAddrs, ","),
@@ -93,6 +109,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	}
 	infoStr, err := info.Marshal()
 	if err != nil {
+		needRemoveGCSafePoint = true
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
 	}
@@ -102,6 +119,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		info,
 		model.DefaultChangeFeedID(info.ID))
 	if err != nil {
+		needRemoveGCSafePoint = true
 		_ = c.Error(err)
 		return
 	}
@@ -284,6 +302,12 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 		return
 	}
 
+	_, err = h.capture.StatusProvider().GetChangeFeedInfo(ctx, changefeedID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
 	cfg := new(ResumeChangefeedConfig)
 	if err := c.BindJSON(&cfg); err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
@@ -318,6 +342,22 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
+	needRemoveGCSafePoint := false
+	defer func() {
+		if !needRemoveGCSafePoint {
+			return
+		}
+		err := gc.UndoEnsureChangefeedStartTsSafety(
+			ctx,
+			pdClient,
+			h.capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
+			changefeedID,
+		)
+		if err != nil {
+			_ = c.Error(err)
+			return
+		}
+	}()
 
 	job := model.AdminJob{
 		CfID:                  changefeedID,
@@ -326,10 +366,13 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 	}
 
 	if err := api.HandleOwnerJob(ctx, h.capture, job); err != nil {
+		if cfg.OverwriteCheckpointTs > 0 {
+			needRemoveGCSafePoint = true
+		}
 		_ = c.Error(err)
 		return
 	}
-	c.Status(http.StatusAccepted)
+	c.Status(http.StatusOK)
 }
 
 func toAPIModel(info *model.ChangeFeedInfo) *ChangeFeedInfo {
