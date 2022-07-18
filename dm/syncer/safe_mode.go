@@ -55,6 +55,7 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 		//nolint:errcheck
 		s.safeMode.Add(tctx, 1) // add 1 but has no corresponding -1, so keeps enabled
 		s.tctx.L().Info("enable safe-mode by config")
+		return
 	}
 	exitPoint := s.checkpoint.SafeModeExitPoint()
 	failpoint.Inject("SafeModeDurationIsZero", func() {
@@ -108,7 +109,7 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 				}
 			}()
 		} else {
-			fresh, err2 := s.IsFreshTask(s.runCtx.Ctx)
+			fresh, err2 := s.IsFreshTask(tctx.Ctx)
 			if err2 != nil {
 				err = err2
 			} else if !fresh && !s.safeMode.Enable() {

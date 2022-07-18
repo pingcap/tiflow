@@ -32,10 +32,15 @@ type mockCheckpointForSafeMode struct {
 	CheckPoint
 
 	safeModeExitPoint *binlog.Location
+	globalPoint       binlog.Location
 }
 
 func (c *mockCheckpointForSafeMode) SafeModeExitPoint() *binlog.Location {
 	return c.safeModeExitPoint
+}
+
+func (c *mockCheckpointForSafeMode) GlobalPoint() binlog.Location {
+	return c.globalPoint
 }
 
 func TestEnableSafeModeInitializationPhase(t *testing.T) {
@@ -82,6 +87,7 @@ func TestEnableSafeModeInitializationPhase(t *testing.T) {
 	// test enable by config
 	s.cliArgs = nil
 	s.cfg.SafeMode = true
+	s.cfg.SafeModeDuration = "0" // test safeMode's priority higher than SafeModeDuration's
 	mockCheckpoint := &mockCheckpointForSafeMode{}
 	s.checkpoint = mockCheckpoint
 	s.enableSafeModeInitializationPhase(s.tctx)
@@ -89,7 +95,10 @@ func TestEnableSafeModeInitializationPhase(t *testing.T) {
 
 	// test enable by SafeModeExitPoint (disable is tested in it test)
 	s.cfg.SafeMode = false
+	s.cfg.SafeModeDuration = ""
 	mockCheckpoint.safeModeExitPoint = &binlog.Location{Position: mysql.Position{Name: "mysql-bin.000123", Pos: 123}}
+	mockCheckpoint.globalPoint = binlog.Location{Position: mysql.Position{Name: "mysql-bin.000123", Pos: 120}}
+	s.initInitExecutedLoc()
 	s.enableSafeModeInitializationPhase(s.tctx)
 	require.True(t, s.safeMode.Enable())
 
