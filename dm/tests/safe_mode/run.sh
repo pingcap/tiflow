@@ -213,9 +213,6 @@ function safe_mode_duration() {
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql_file $cur/data/db2.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 
-	# check_log_contains $WORK_DIR/worker1/log/dm-worker.log "disable safe-mode because initExecutedLoc equal safeModeExitPoint"
-	# check_log_contains $WORK_DIR/worker2/log/dm-worker.log "disable safe-mode because initExecutedLoc equal safeModeExitPoint"
-
 	# restart workers
 	kill_dm_worker
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
@@ -232,8 +229,6 @@ function safe_mode_duration() {
 		"stop-task test" \
 		"\"result\": true" 3
 
-	# run_sql_file $cur/data/db1.increment2.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
-	# run_sql_file $cur/data/db2.increment2.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	cp $cur/conf/dm-task-safe-mode-duration.yaml $WORK_DIR/dm-task-safe-mode-duration.yaml
 	sed -i "s/safe-mode-duration: \"0s\"/safe-mode-duration: \"30s\"/" $WORK_DIR/dm-task-safe-mode-duration.yaml
 
@@ -247,8 +242,8 @@ function safe_mode_duration() {
 }
 
 function run() {
-	# consistency_none
-	# safe_mode_recover
+	consistency_none
+	safe_mode_recover
 	safe_mode_duration
 
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
