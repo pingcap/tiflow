@@ -15,7 +15,6 @@ package server
 
 import (
 	"context"
-	"os"
 	"strings"
 	"time"
 
@@ -122,9 +121,6 @@ func (o *options) run(cmd *cobra.Command) error {
 		ZapInternalErrOutput: o.serverConfig.Log.InternalErrOutput,
 	})
 	defer cancel()
-
-	os.Setenv("AWS_SECRET_ACCESS_KEY", "minioadmin")
-	os.Setenv("AWS_ACCESS_KEY_ID", "minioadmin")
 
 	tz, err := ticdcutil.GetTimezone(o.serverConfig.TZ)
 	if err != nil {

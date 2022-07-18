@@ -212,7 +212,6 @@ func (w *Writer) Write(rawData []byte) (int, error) {
 	}
 
 	if w.size+writeLen > w.cfg.MaxLogSize {
-		fmt.Println("before calling rotate()")
 		if err := w.rotate(); err != nil {
 			return 0, err
 		}
@@ -328,7 +327,6 @@ func (w *Writer) close() error {
 	// rename the file name from commitTs.log.tmp to maxCommitTS.log if closed safely
 	// after rename, the file name could be used for search, since the ts is the max ts for all events in the file.
 	w.commitTS.Store(w.maxCommitTS.Load())
-	fmt.Println("before calling rename")
 	err = os.Rename(w.file.Name(), w.filePath())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
@@ -575,7 +573,6 @@ func (w *Writer) flush() error {
 }
 
 func (w *Writer) writeToS3(ctx context.Context, name string) error {
-	fmt.Printf("file name:%s\n", name)
 	fileData, err := os.ReadFile(name)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
