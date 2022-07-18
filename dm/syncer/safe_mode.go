@@ -97,7 +97,7 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 			go func() {
 				defer func() {
 					err = s.safeMode.Add(tctx, -1)
-					if err != nil && !s.safeMode.Enable() {
+					if err == nil && !s.safeMode.Enable() {
 						s.tctx.L().Info("disable safe-mode after task initialization finished")
 					}
 				}()
