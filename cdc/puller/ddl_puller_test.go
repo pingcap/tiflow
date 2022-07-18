@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package owner
+package puller
 
 import (
 	"context"
@@ -108,7 +108,8 @@ func TestPuller(t *testing.T) {
 	mockPuller := newMockPuller(t, startTs)
 	ctx := cdcContext.NewBackendContext4Test(true)
 	up := upstream.NewUpstream4Test(nil)
-	p, err := newDDLPuller(ctx, up, startTs)
+	p, err := NewDDLPuller(
+		ctx, ctx.ChangefeedVars().Info.Config, up, startTs, ctx.ChangefeedVars().ID)
 	require.Nil(t, err)
 	p.(*ddlPullerImpl).puller = mockPuller
 	var wg sync.WaitGroup
@@ -235,7 +236,8 @@ func TestResolvedTsStuck(t *testing.T) {
 	mockPuller := newMockPuller(t, startTs)
 	ctx := cdcContext.NewBackendContext4Test(true)
 	up := upstream.NewUpstream4Test(nil)
-	p, err := newDDLPuller(ctx, up, startTs)
+	p, err := NewDDLPuller(
+		ctx, ctx.ChangefeedVars().Info.Config, up, startTs, ctx.ChangefeedVars().ID)
 	require.Nil(t, err)
 
 	mockClock := clock.NewMock()
@@ -267,7 +269,7 @@ func TestResolvedTsStuck(t *testing.T) {
 	waitResolvedTsGrowing(t, p, 30)
 	require.Equal(t, logs.Len(), 0)
 
-	mockClock.Add(2 * ownerDDLPullerStuckWarnTimeout)
+	mockClock.Add(2 * ddlPullerStuckWarnDuration)
 	for i := 0; i < 20; i++ {
 		mockClock.Add(time.Second)
 		if logs.Len() > 0 {

@@ -15,17 +15,15 @@ package v3
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"testing"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
 	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zapcore"
 )
 
 func TestMain(m *testing.M) {
@@ -297,153 +295,51 @@ func TestCoordinatorRemoveCapture(t *testing.T) {
 	require.EqualValues(t, 3, msgs[0].DispatchTableRequest.GetAddTable().TableID)
 }
 
-func benchmarkCoordinator(
-	b *testing.B,
-	factory func(total int) (
-		name string,
-		coord *coordinator,
-		currentTables []model.TableID,
-		captures map[model.CaptureID]*model.CaptureInfo,
-	),
-) {
-	log.SetLevel(zapcore.DPanicLevel)
-	ctx := context.Background()
-	size := 131072 // 2^17
-	for total := 1; total <= size; total *= 2 {
-		name, coord, currentTables, captures := factory(total)
-		b.ResetTimer()
-		b.Run(name, func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				coord.poll(ctx, 0, currentTables, captures)
-			}
-		})
-		b.StopTimer()
+func TestCoordinatorDrainCapture(t *testing.T) {
+	t.Parallel()
+
+	coord := coordinator{
+		version:   "6.2.0",
+		revision:  schedulepb.OwnerRevision{Revision: 3},
+		captureID: "a",
 	}
-}
+	coord.captureM = newCaptureManager("", model.ChangeFeedID{}, coord.revision, 0)
 
-func BenchmarkCoordinatorInit(b *testing.B) {
-	benchmarkCoordinator(b, func(total int) (
-		name string,
-		coord *coordinator,
-		currentTables []model.TableID,
-		captures map[model.CaptureID]*model.CaptureInfo,
-	) {
-		const captureCount = 8
-		captures = map[model.CaptureID]*model.CaptureInfo{}
-		for i := 0; i < captureCount; i++ {
-			captures[fmt.Sprint(i)] = &model.CaptureInfo{}
-		}
-		currentTables = make([]model.TableID, 0, total)
-		for i := 0; i < total; i++ {
-			currentTables = append(currentTables, int64(10000+i))
-		}
-		coord = &coordinator{
-			trans:        &mockTrans{},
-			replicationM: newReplicationManager(10, model.ChangeFeedID{}),
-			// Disable heartbeat.
-			captureM: newCaptureManager(
-				"", model.ChangeFeedID{}, schedulepb.OwnerRevision{}, math.MaxInt),
-		}
-		name = fmt.Sprintf("InitTable %d", total)
-		return name, coord, currentTables, captures
-	})
-}
+	coord.captureM.initialized = true
+	coord.captureM.Captures["a"] = &CaptureStatus{State: CaptureStateUninitialized}
+	count, err := coord.DrainCapture("a")
+	require.ErrorIs(t, err, cerror.ErrSchedulerRequestFailed)
+	require.Equal(t, 0, count)
 
-func BenchmarkCoordinatorHeartbeat(b *testing.B) {
-	benchmarkCoordinator(b, func(total int) (
-		name string,
-		coord *coordinator,
-		currentTables []model.TableID,
-		captures map[model.CaptureID]*model.CaptureInfo,
-	) {
-		const captureCount = 8
-		captures = map[model.CaptureID]*model.CaptureInfo{}
-		// Always heartbeat.
-		captureM := newCaptureManager(
-			"", model.ChangeFeedID{}, schedulepb.OwnerRevision{}, 0)
-		captureM.initialized = true
-		for i := 0; i < captureCount; i++ {
-			captures[fmt.Sprint(i)] = &model.CaptureInfo{}
-			captureM.Captures[fmt.Sprint(i)] = &CaptureStatus{State: CaptureStateInitialized}
-		}
-		currentTables = make([]model.TableID, 0, total)
-		for i := 0; i < total; i++ {
-			currentTables = append(currentTables, int64(10000+i))
-		}
-		coord = &coordinator{
-			trans:        &mockTrans{},
-			replicationM: newReplicationManager(10, model.ChangeFeedID{}),
-			captureM:     captureM,
-		}
-		name = fmt.Sprintf("Heartbeat %d", total)
-		return name, coord, currentTables, captures
-	})
-}
+	coord.captureM.Captures["a"] = &CaptureStatus{State: CaptureStateInitialized}
+	coord.replicationM = newReplicationManager(10, model.ChangeFeedID{})
+	count, err = coord.DrainCapture("a")
+	require.NoError(t, err)
+	require.Equal(t, 0, count)
 
-func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
-	benchmarkCoordinator(b, func(total int) (
-		name string,
-		coord *coordinator,
-		currentTables []model.TableID,
-		captures map[model.CaptureID]*model.CaptureInfo,
-	) {
-		const captureCount = 8
-		captures = map[model.CaptureID]*model.CaptureInfo{}
-		// Disable heartbeat.
-		captureM := newCaptureManager(
-			"", model.ChangeFeedID{}, schedulepb.OwnerRevision{}, math.MaxInt)
-		captureM.initialized = true
-		for i := 0; i < captureCount; i++ {
-			captures[fmt.Sprint(i)] = &model.CaptureInfo{}
-			captureM.Captures[fmt.Sprint(i)] = &CaptureStatus{State: CaptureStateInitialized}
-		}
-		replicationM := newReplicationManager(10, model.ChangeFeedID{})
-		currentTables = make([]model.TableID, 0, total)
-		heartbeatResp := make(map[model.CaptureID]*schedulepb.Message)
-		for i := 0; i < total; i++ {
-			tableID := int64(10000 + i)
-			currentTables = append(currentTables, tableID)
-			captureID := fmt.Sprint(i % captureCount)
-			rep, err := newReplicationSet(tableID, 0, map[string]*schedulepb.TableStatus{
-				captureID: {
-					TableID: tableID,
-					State:   schedulepb.TableStateReplicating,
-				},
-			})
-			if err != nil {
-				b.Fatal(err)
-			}
-			replicationM.tables[tableID] = rep
-			_, ok := heartbeatResp[captureID]
-			if !ok {
-				heartbeatResp[captureID] = &schedulepb.Message{
-					Header:            &schedulepb.Message_Header{},
-					From:              captureID,
-					MsgType:           schedulepb.MsgHeartbeatResponse,
-					HeartbeatResponse: &schedulepb.HeartbeatResponse{},
-				}
-			}
-			heartbeatResp[captureID].HeartbeatResponse.Tables = append(
-				heartbeatResp[captureID].HeartbeatResponse.Tables,
-				schedulepb.TableStatus{
-					TableID: tableID,
-					State:   schedulepb.TableStateReplicating,
-				})
-		}
-		recvMsgs := make([]*schedulepb.Message, 0, len(heartbeatResp))
-		for _, resp := range heartbeatResp {
-			recvMsgs = append(recvMsgs, resp)
-		}
-		trans := &mockTrans{
-			recvBuffer:     recvMsgs,
-			keepRecvBuffer: true,
-		}
-		coord = &coordinator{
-			trans:        trans,
-			replicationM: replicationM,
-			captureM:     captureM,
-		}
-		name = fmt.Sprintf("HeartbeatResponse %d", total)
-		return name, coord, currentTables, captures
-	})
+	coord.replicationM.tables[1] = &ReplicationSet{
+		TableID: 1,
+		State:   ReplicationSetStateReplicating,
+		Primary: "a",
+	}
+
+	count, err = coord.DrainCapture("a")
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+
+	coord.captureM.Captures["b"] = &CaptureStatus{State: CaptureStateInitialized}
+	coord.replicationM.tables[2] = &ReplicationSet{
+		TableID: 2,
+		State:   ReplicationSetStateReplicating,
+		Primary: "b",
+	}
+
+	count, err = coord.DrainCapture("a")
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+
+	coord.schedulerM = newSchedulerManager(model.ChangeFeedID{}, config.NewDefaultSchedulerConfig())
+	count, err = coord.DrainCapture("b")
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
 }
