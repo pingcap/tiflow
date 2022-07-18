@@ -620,7 +620,6 @@ func (c *captureImpl) Drain(ctx context.Context) <-chan struct{} {
 	const drainInterval = 100 * time.Millisecond
 	done := make(chan struct{})
 	go func() {
-		defer close(done)
 		defer func() {
 			lease := c.session.Lease()
 			c.EtcdClient.Client.Revoke(ctx, lease)
