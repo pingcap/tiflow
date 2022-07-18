@@ -230,6 +230,10 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 			return err
 		}
 		cfg := lcfg.NewConfig()
+		// TableConcurrency is adjusted to the value of RegionConcurrency
+		// when using TiDB backend.
+		// TODO: should we set the TableConcurrency separately.
+		cfg.App.RegionConcurrency = l.cfg.LoaderConfig.PoolSize
 		if err = cfg.LoadFromGlobal(l.lightningGlobalConfig); err != nil {
 			return err
 		}
