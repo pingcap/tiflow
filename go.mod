@@ -26,7 +26,7 @@ require (
 	github.com/gavv/monotime v0.0.0-20190418164738-30dba4353424
 	github.com/getkin/kin-openapi v0.80.0
 	github.com/gin-gonic/gin v1.7.4
-	github.com/go-mysql-org/go-mysql v1.6.1-0.20220715034203-e28aed33dd06
+	github.com/go-mysql-org/go-mysql v1.6.1-0.20220718092400-c855c26b37bd
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/gogo/gateway v1.1.0
 	github.com/gogo/protobuf v1.3.2
