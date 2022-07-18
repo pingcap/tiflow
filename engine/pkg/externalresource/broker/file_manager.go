@@ -14,7 +14,6 @@
 package broker
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
@@ -239,7 +238,7 @@ func (m *LocalFileManager) isPersisted(
 
 // iterOverResourceDirectories iterates over all subdirectories in `path`.
 func iterOverResourceDirectories(path string, fn func(relPath string) error) error {
-	infos, err := ioutil.ReadDir(path)
+	infos, err := os.ReadDir(path)
 	if err != nil {
 		return derrors.ErrReadLocalFileDirectoryFailed.Wrap(err)
 	}
