@@ -56,7 +56,7 @@ const (
 
 // LogMeta is used for store meta info.
 type LogMeta struct {
-	CheckpointTs uint64 `msg:"checkPointTs"`
+	CheckpointTs uint64 `msg:"checkpointTs"`
 	ResolvedTs   uint64 `msg:"resolvedTs"`
 }
 
