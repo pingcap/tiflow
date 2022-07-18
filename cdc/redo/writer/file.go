@@ -177,7 +177,7 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
 		metricWriteBytes: common.RedoWriteBytesGauge.
 			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
-		metricS3UploadBytes: common.RedoWriteBytesGauge.
+		metricS3UploadBytes: common.RedoS3UploadBytesGauge.
 			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
 	}
 	if w.op.getUUIDGenerator != nil {

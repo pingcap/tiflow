@@ -31,7 +31,7 @@ var (
 		Help:      "Total number of bytes redo log written",
 	}, []string{"namespace", "changefeed"})
 
-	// RedoS3UploadBytesGauge records the total number of bytes written to s3.
+	// RedoS3UploadBytesGauge records the total number of bytes uploaded to s3.
 	RedoS3UploadBytesGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Subsystem: subsystem,
