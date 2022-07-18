@@ -100,4 +100,6 @@ func TestWriteEvents(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, errCh, 0)
 	require.Len(t, s.worker.producer.(*producer.MockProducer).GetEvents(), 3000)
+	err = s.Close()
+	require.Nil(t, err)
 }

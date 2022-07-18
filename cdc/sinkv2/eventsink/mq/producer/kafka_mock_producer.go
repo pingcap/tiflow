@@ -15,6 +15,7 @@ package producer
 
 import (
 	"context"
+	"sync"
 
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
@@ -24,6 +25,7 @@ var _ Producer = (*MockProducer)(nil)
 
 // MockProducer is a mock producer for test.
 type MockProducer struct {
+	mu     sync.Mutex
 	events map[mqv1.TopicPartitionKey][]*codec.MQMessage
 }
 
@@ -38,6 +40,8 @@ func NewMockProducer() Producer {
 func (m *MockProducer) AsyncSendMessage(ctx context.Context, topic string,
 	partition int32, message *codec.MQMessage,
 ) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	key := mqv1.TopicPartitionKey{
 		Topic:     topic,
 		Partition: partition,
@@ -57,6 +61,8 @@ func (m *MockProducer) Close() error {
 
 // GetEvents returns the events received by the mock producer.
 func (m *MockProducer) GetEvents() []*codec.MQMessage {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	var events []*codec.MQMessage
 	for _, v := range m.events {
 		events = append(events, v...)
@@ -66,5 +72,7 @@ func (m *MockProducer) GetEvents() []*codec.MQMessage {
 
 // GetEvent returns the event filtered by the key.
 func (m *MockProducer) GetEvent(key mqv1.TopicPartitionKey) []*codec.MQMessage {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return m.events[key]
 }
