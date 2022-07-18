@@ -85,7 +85,7 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 			if err != nil {
 				// send error to the fatal chan to interrupt the process
 				s.runFatalChan <- unit.NewProcessError(err)
-				s.tctx.L().Error("enable safe-mode failed due to duration parse failed", zap.Duration("duration", duration))
+				s.tctx.L().Error("enable safe-mode failed due to duration parse failed", zap.String("duration", initPhaseSeconds))
 				return
 			}
 		}
@@ -95,14 +95,9 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 			//nolint:errcheck
 			s.safeMode.Add(tctx, 1) // enable and will revert after 2 * CheckpointFlushInterval
 			go func() {
-				var err error
 				defer func() {
 					err = s.safeMode.Add(tctx, -1)
-					if err != nil {
-						// send error to the fatal chan to interrupt the process
-						s.runFatalChan <- unit.NewProcessError(err)
-					}
-					if !s.safeMode.Enable() {
+					if err != nil && !s.safeMode.Enable() {
 						s.tctx.L().Info("disable safe-mode after task initialization finished")
 					}
 				}()
