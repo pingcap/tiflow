@@ -16,7 +16,6 @@ package schema
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"strings"
@@ -284,7 +283,7 @@ func NewTestTracker(
 }
 
 func newTmpFolderForTracker(task string) (string, error) {
-	return ioutil.TempDir("./", url.PathEscape(task)+"-tracker")
+	return os.MkdirTemp("./", url.PathEscape(task)+"-tracker")
 }
 
 // Exec runs an SQL (DDL) statement.
