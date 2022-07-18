@@ -17,10 +17,11 @@
 package fsutil
 
 import (
-	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"golang.org/x/sys/unix"
 	"os"
 	"syscall"
+
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"golang.org/x/sys/unix"
 )
 
 // PreAllocate can allocate disk space beforehand in case of ENOSPC error occurs

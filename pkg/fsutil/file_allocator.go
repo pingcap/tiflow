@@ -22,22 +22,26 @@ import (
 	"github.com/pingcap/tiflow/cdc/redo/common"
 )
 
-// ref: https://github.com/etcd-io/etcd/pull/4785
 // FileAllocator has two functionalities:
-// 1. create new file or reuse the existing file in advance
-//    before it will be written.
+// 1. create new file or reuse the existing file (the existing tmp file will be cleared)
+//    in advance before it will be written.
 // 2. pre-allocate disk space to mitigate the overhead of file metadata updating.
+//
+// ref: https://github.com/etcd-io/etcd/pull/4785
 type FileAllocator struct {
 	dir    string
 	prefix string
 	size   int64
 	count  int
 	wg     sync.WaitGroup
+	// fileCh is unbuffered because we want only one file to be written next,
+	// and another file to be standby.
 	fileCh chan *os.File
 	doneCh chan struct{}
 	errCh  chan error
 }
 
+// NewFileAllocator creates a file allocator and starts a background file allocation goroutine.
 func NewFileAllocator(dir string, prefix string, size int64) *FileAllocator {
 	allocator := &FileAllocator{
 		dir:    dir,

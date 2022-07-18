@@ -389,7 +389,8 @@ func TestRotateFileWithFileAllocator(t *testing.T) {
 		storage:       mockStorage,
 		uuidGenerator: uuidGen,
 	}
-	w.allocator = fsutil.NewFileAllocator(w.cfg.Dir, common.DefaultRowLogFileType, defaultMaxLogSize)
+	w.allocator = fsutil.NewFileAllocator(
+		w.cfg.Dir, common.DefaultRowLogFileType, defaultMaxLogSize)
 
 	w.running.Store(true)
 	_, err = w.Write([]byte("test"))

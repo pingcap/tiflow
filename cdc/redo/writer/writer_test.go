@@ -513,7 +513,8 @@ func TestNewLogWriter(t *testing.T) {
 	require.Equal(t, meta.CheckPointTs, l.meta.CheckPointTs)
 	require.Equal(t, meta.ResolvedTs(), l.meta.ResolvedTs())
 	require.Equal(t, meta.ResolvedTsList, l.meta.ResolvedTsList)
-	time.Sleep(time.Millisecond * time.Duration(math.Max(float64(1000), float64(defaultGCIntervalInMs))+1))
+	time.Sleep(time.Millisecond * time.Duration(math.Max(float64(1000),
+		float64(defaultGCIntervalInMs))+1))
 
 	origin := common.InitS3storage
 	defer func() {

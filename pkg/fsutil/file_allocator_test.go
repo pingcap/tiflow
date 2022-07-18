@@ -48,12 +48,13 @@ func benchmarkWriteData(b *testing.B, size int, useFileAlloctor bool) {
 		fl := NewFileAllocator(b.TempDir(), "bench", 64*1024*1024)
 		defer fl.Close()
 
-		f, err = fl.Open()
+		f, err := fl.Open()
 		require.NotNil(b, f)
 		require.Nil(b, err)
 	} else {
 		f, err = os.OpenFile(filepath.Join(b.TempDir(), "bench"),
 			os.O_CREATE|os.O_WRONLY, 0o420)
+		require.Nil(b, err)
 	}
 
 	data := make([]byte, size)
@@ -70,7 +71,8 @@ func benchmarkWriteData(b *testing.B, size int, useFileAlloctor bool) {
 	}
 }
 
-// go test -bench ^BenchmarkWrite100EntryWithAllocator$ -benchtime=30000x github.com/pingcap/tiflow/pkg/fsutil
+// go test -bench ^BenchmarkWrite100EntryWithAllocator$ \
+// -benchtime=30000x github.com/pingcap/tiflow/pkg/fsutil
 // goos: linux
 // goarch: amd64
 // pkg: github.com/pingcap/tiflow/pkg/fsutil
@@ -80,7 +82,8 @@ func BenchmarkWrite100EntryWithAllocator(b *testing.B) {
 	benchmarkWriteData(b, 100, true)
 }
 
-// go test -bench ^BenchmarkWrite100EntryWithoutAllocator$ -benchtime=30000x github.com/pingcap/tiflow/pkg/fsutil
+// go test -bench ^BenchmarkWrite100EntryWithoutAllocator$ \
+// -benchtime=30000x github.com/pingcap/tiflow/pkg/fsutil
 // goos: linux
 // goarch: amd64
 // pkg: github.com/pingcap/tiflow/pkg/fsutil
@@ -90,7 +93,8 @@ func BenchmarkWrite100EntryWithoutAllocator(b *testing.B) {
 	benchmarkWriteData(b, 100, false)
 }
 
-// go test -bench ^BenchmarkWrite1000EntryWithAllocator$ -benchtime=30000x github.com/pingcap/tiflow/pkg/fsutil
+// go test -bench ^BenchmarkWrite1000EntryWithAllocator$ \
+// -benchtime=30000x github.com/pingcap/tiflow/pkg/fsutil
 // goos: linux
 // goarch: amd64
 // pkg: github.com/pingcap/tiflow/pkg/fsutil
@@ -100,7 +104,8 @@ func BenchmarkWrite1000EntryWithAllocator(b *testing.B) {
 	benchmarkWriteData(b, 1000, true)
 }
 
-// go test -bench ^BenchmarkWrite1000EntryWithoutAllocator$ -benchtime=30000x github.com/pingcap/tiflow/pkg/fsutil
+// go test -bench ^BenchmarkWrite1000EntryWithoutAllocator$ \
+// -benchtime=30000x github.com/pingcap/tiflow/pkg/fsutil
 // goos: linux
 // goarch: amd64
 // pkg: github.com/pingcap/tiflow/pkg/fsutil
@@ -110,7 +115,8 @@ func BenchmarkWrite1000EntryWithoutAllocator(b *testing.B) {
 	benchmarkWriteData(b, 1000, false)
 }
 
-// go test -bench ^BenchmarkWrite10000EntryWithAllocator$ -benchtime=30000x github.com/pingcap/tiflow/pkg/fsutil
+// go test -bench ^BenchmarkWrite10000EntryWithAllocator$ \
+// -benchtime=30000x github.com/pingcap/tiflow/pkg/fsutil
 // goos: linux
 // goarch: amd64
 // pkg: github.com/pingcap/tiflow/pkg/fsutil
@@ -120,7 +126,8 @@ func BenchmarkWrite10000EntryWithAllocator(b *testing.B) {
 	benchmarkWriteData(b, 10000, true)
 }
 
-// go test -bench ^BenchmarkWrite10000EntryWithoutAllocator$ -benchtime=30000x github.com/pingcap/tiflow/pkg/fsutil
+// go test -bench ^BenchmarkWrite10000EntryWithoutAllocator$ \
+// -benchtime=30000x github.com/pingcap/tiflow/pkg/fsutil
 // goos: linux
 // goarch: amd64
 // pkg: github.com/pingcap/tiflow/pkg/fsutil

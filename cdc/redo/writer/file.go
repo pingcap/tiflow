@@ -138,6 +138,7 @@ type Writer struct {
 	metricFsyncDuration    prometheus.Observer
 	metricFlushAllDuration prometheus.Observer
 	metricWriteBytes       prometheus.Gauge
+	metricS3UploadBytes    prometheus.Gauge
 }
 
 // NewWriter return a file rotated writer, TODO: extract to a common rotate Writer
@@ -175,6 +176,8 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 		metricFlushAllDuration: common.RedoFlushAllDurationHistogram.
 			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
 		metricWriteBytes: common.RedoWriteBytesGauge.
+			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
+		metricS3UploadBytes: common.RedoWriteBytesGauge.
 			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
 	}
 	if w.op.getUUIDGenerator != nil {
@@ -380,7 +383,8 @@ func openTruncFile(name string) (*os.File, error) {
 func (w *Writer) openNew() error {
 	err := os.MkdirAll(w.cfg.Dir, common.DefaultDirMode)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotatef(err, "can't make dir: %s for new redo logfile", w.cfg.Dir))
+		return cerror.WrapError(cerror.ErrRedoFileOp,
+			errors.Annotatef(err, "can't make dir: %s for new redo logfile", w.cfg.Dir))
 	}
 
 	// reset ts used in file name when new file
@@ -391,7 +395,8 @@ func (w *Writer) openNew() error {
 		path := w.filePath() + common.TmpEXT
 		f, err = openTruncFile(path)
 		if err != nil {
-			return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't open new redolog file"))
+			return cerror.WrapError(cerror.ErrRedoFileOp,
+				errors.Annotate(err, "can't open new redolog file"))
 		}
 	} else {
 		// if there is a file allocator, we use the pre-created file
@@ -583,6 +588,7 @@ func (w *Writer) writeToS3(ctx context.Context, name string) error {
 	if err != nil {
 		return cerror.WrapError(cerror.ErrS3StorageAPI, err)
 	}
+	w.metricS3UploadBytes.Add(float64(len(fileData)))
 
 	// in case the page cache piling up triggered the OS memory reclaming which may cause
 	// I/O latency spike, we mandatorily drop the page cache of the file when it is successfully

@@ -31,6 +31,14 @@ var (
 		Help:      "Total number of bytes redo log written",
 	}, []string{"namespace", "changefeed"})
 
+	// RedoS3UploadBytesGauge records the total number of bytes written to s3.
+	RedoS3UploadBytesGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "s3_upload_bytes_total",
+		Help:      "Total number of bytes redo log uploaded to s3",
+	}, []string{"namespace", "changefeed"})
+
 	// RedoFsyncDurationHistogram records the latency distributions of fsync called by redo writer.
 	RedoFsyncDurationHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: namespace,
@@ -82,6 +90,7 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(RedoFsyncDurationHistogram)
 	registry.MustRegister(RedoTotalRowsCountGauge)
 	registry.MustRegister(RedoWriteBytesGauge)
+	registry.MustRegister(RedoS3UploadBytesGauge)
 	registry.MustRegister(RedoFlushAllDurationHistogram)
 	registry.MustRegister(RedoWriteLogDurationHistogram)
 	registry.MustRegister(RedoFlushLogDurationHistogram)
