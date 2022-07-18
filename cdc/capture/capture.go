@@ -267,7 +267,6 @@ func (c *captureImpl) reset(ctx context.Context) error {
 func (c *captureImpl) Run(ctx context.Context) error {
 	defer log.Info("the capture routine has exited")
 	// Limit the frequency of reset capture to avoid frequent recreating of resources
-	// campaign for the ownership for each 20 seconds.
 	rl := rate.NewLimiter(0.05, 2)
 	for {
 		select {
@@ -417,7 +416,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			}
 			return errors.Trace(err)
 		}
-
+		// Campaign to be an owner, it blocks until it becomes the owner
 		if err := c.campaign(ctx); err != nil {
 			switch errors.Cause(err) {
 			case context.Canceled:

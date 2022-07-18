@@ -131,8 +131,6 @@ func TestDrainImmediately(t *testing.T) {
 }
 
 func TestDrainWaitsTables(t *testing.T) {
-	//t.Parallel()
-
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	mm := mock_processor.NewMockManager(ctrl)
@@ -271,7 +269,7 @@ func TestDrainOneCapture(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mo := mock_owner.NewMockOwner(ctrl)
 	mm := mock_processor.NewMockManager(ctrl)
-	
+
 	endpoint, etcdServer, err := etcd.SetupEmbedEtcd(t.TempDir())
 	defer etcdServer.Close()
 	require.NoError(t, err)
