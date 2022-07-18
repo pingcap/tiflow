@@ -32,9 +32,10 @@ func PreAllocate(f *os.File, size int64) error {
 		return nil
 	}
 
+	// fallocate is supported for xfs/ext4/btrfs, etc.
 	err := unix.Fallocate(int(f.Fd()), 0, 0, size)
 	if err == unix.ENOTSUP || err == syscall.EINTR {
-		// fallback to use truncate.
+		// if not supported, then fallback to use truncate.
 		return f.Truncate(size)
 	}
 
