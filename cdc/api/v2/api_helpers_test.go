@@ -100,14 +100,14 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	helper.Tk().MustExec("use test;")
 	storage := helper.Storage()
 	h := &APIV2HelpersImpl{}
-	newCfInfo, newUpInfo, err := h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage)
+	newCfInfo, newUpInfo, err := h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage, 0)
 	require.NotNil(t, err)
 	require.Nil(t, newCfInfo)
 	require.Nil(t, newUpInfo)
 	// namespace and id can not be updated
 	cfg.Namespace = "abc"
 	cfg.ID = "1234"
-	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage)
+	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage, 0)
 	require.NotNil(t, err)
 	require.Nil(t, newCfInfo)
 	require.Nil(t, newUpInfo)
@@ -123,7 +123,7 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	cfg.KeyPath = "p3"
 	cfg.SinkURI = "blackhole://"
 	cfg.CertAllowedCN = []string{"c", "d"}
-	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage)
+	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage, 0)
 	require.Nil(t, err)
 	// startTs can not be updated
 	require.Equal(t, "table", string(newCfInfo.Config.Sink.TxnAtomicity))
@@ -142,6 +142,6 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	require.Equal(t, "blackhole://", newCfInfo.SinkURI)
 	oldInfo.StartTs = 10
 	cfg.TargetTs = 9
-	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage)
+	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage, 0)
 	require.NotNil(t, err)
 }

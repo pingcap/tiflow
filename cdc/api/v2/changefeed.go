@@ -185,6 +185,12 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 			GenWithStackByArgs("can only update changefeed config when it is stopped"))
 		return
 	}
+	cfStatus, err := h.capture.StatusProvider().GetChangeFeedStatus(ctx, changefeedID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
 	upInfo, err := h.capture.GetEtcdClient().
 		GetUpstreamInfo(ctx, cfInfo.UpstreamID, cfInfo.Namespace)
 	if err != nil {
@@ -230,7 +236,7 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		_ = c.Error(errors.Trace(err))
 	}
 	newCfInfo, newUpInfo, err := h.helpers.
-		verifyUpdateChangefeedConfig(ctx, updateCfConfig, cfInfo, upInfo, storage)
+		verifyUpdateChangefeedConfig(ctx, updateCfConfig, cfInfo, upInfo, storage, cfStatus.CheckpointTs)
 	if err != nil {
 		_ = c.Error(errors.Trace(err))
 		return
@@ -246,7 +252,7 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		_ = c.Error(errors.Trace(err))
 		return
 	}
-	c.JSON(http.StatusOK, newCfInfo)
+	c.JSON(http.StatusOK, toAPIModel(newCfInfo))
 }
 
 // getChangeFeedMetaInfo returns the metaInfo of a changefeed

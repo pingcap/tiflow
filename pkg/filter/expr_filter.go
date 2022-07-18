@@ -415,6 +415,9 @@ func (f *dmlExprFilter) shouldSkipDML(
 	for _, rule := range rules {
 		ignore, err := rule.shouldSkipDML(row, rawRow, ti)
 		if err != nil {
+			if cerror.ChangefeedNotRetryError(err) {
+				return false, err
+			}
 			return false, cerror.WrapError(cerror.ErrFailedToFilterDML, err, row)
 		}
 		if ignore {

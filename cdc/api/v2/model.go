@@ -338,12 +338,18 @@ func (e EventFilterRule) ToInternalEventFilterRule() *config.EventFilterRule {
 // ToAPIEventFilterRule converts *config.EventFilterRule to API EventFilterRule
 func ToAPIEventFilterRule(er *config.EventFilterRule) EventFilterRule {
 	res := EventFilterRule{
-		Matcher:                  er.Matcher,
-		IgnoreSQL:                er.IgnoreSQL,
 		IgnoreInsertValueExpr:    er.IgnoreInsertValueExpr,
 		IgnoreUpdateNewValueExpr: er.IgnoreUpdateNewValueExpr,
 		IgnoreUpdateOldValueExpr: er.IgnoreUpdateOldValueExpr,
 		IgnoreDeleteValueExpr:    er.IgnoreDeleteValueExpr,
+	}
+	if len(er.Matcher) != 0 {
+		res.Matcher = make([]string, len(er.Matcher))
+		copy(res.Matcher, er.Matcher)
+	}
+	if len(er.IgnoreSQL) != 0 {
+		res.IgnoreSQL = make([]string, len(er.IgnoreSQL))
+		copy(res.IgnoreSQL, er.IgnoreSQL)
 	}
 	if len(er.IgnoreEvent) != 0 {
 		res.IgnoreEvent = make([]string, len(er.IgnoreEvent))
