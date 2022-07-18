@@ -64,6 +64,7 @@ type APIV2Helpers interface {
 		oldInfo *model.ChangeFeedInfo,
 		oldUpInfo *model.UpstreamInfo,
 		kvStorage tidbkv.Storage,
+		checkpointTs uint64,
 	) (*model.ChangeFeedInfo, *model.UpstreamInfo, error)
 
 	// verifyUpstream verifies the upstreamConfig
@@ -295,6 +296,7 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 	oldInfo *model.ChangeFeedInfo,
 	oldUpInfo *model.UpstreamInfo,
 	kvStorage tidbkv.Storage,
+	checkpointTs uint64,
 ) (*model.ChangeFeedInfo, *model.UpstreamInfo, error) {
 	newInfo, err := oldInfo.Clone()
 	if err != nil {
@@ -326,7 +328,12 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 		return nil, nil, cerror.ErrChangefeedUpdateRefused.
 			GenWithStackByArgs(errors.Cause(err).Error())
 	}
-	tableInfos, _, _, err := entry.VerifyTables(f, kvStorage, cfg.StartTs)
+
+	tableInfos, _, _, err := entry.VerifyTables(f, kvStorage, checkpointTs)
+	if err != nil {
+		return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
+	}
+
 	err = f.Verify(tableInfos)
 	if err != nil {
 		return nil, nil, cerror.ErrChangefeedUpdateRefused.
