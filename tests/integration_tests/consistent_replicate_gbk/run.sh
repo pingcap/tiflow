@@ -90,8 +90,7 @@ function run() {
 	run_sql "insert into consistent_replicate_gbk.GBKTABLE2 select * from consistent_replicate_gbk.GBKTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	# to ensure row changed events have been replicated to TiCDC
-	# TODO: revert it to 5 after https://github.com/pingcap/tiflow/issues/6277 has been resolved.
-	sleep 30
+	sleep 5
 
 	current_tso=$(cdc cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
 	ensure 20 check_resolved_ts $changefeed_id $current_tso $WORK_DIR/redo/meta
