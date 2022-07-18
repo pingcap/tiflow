@@ -319,6 +319,8 @@ func (w *Writer) close() error {
 		return nil
 	}
 
+	// a file created by a file allocator needs to be truncated
+	// to save disk space and network bandwidth.
 	if err := w.file.Truncate(off); err != nil {
 		return err
 	}

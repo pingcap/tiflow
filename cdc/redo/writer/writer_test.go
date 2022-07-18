@@ -15,7 +15,6 @@ package writer
 
 import (
 	"context"
-	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -438,7 +437,7 @@ func TestNewLogWriter(t *testing.T) {
 	require.Equal(t, cfg.Dir, l.cfg.Dir)
 	require.Equal(t, meta.CheckpointTs, l.meta.CheckpointTs)
 	require.Equal(t, meta.ResolvedTs, l.meta.ResolvedTs)
-	time.Sleep(time.Millisecond * time.Duration(math.Max(float64(1000), float64(defaultGCIntervalInMs))+1))
+	time.Sleep(time.Millisecond * time.Duration(float64(defaultGCIntervalInMs)))
 
 	origin := common.InitS3storage
 	defer func() {
