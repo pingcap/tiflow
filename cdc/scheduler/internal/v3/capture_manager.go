@@ -62,7 +62,9 @@ type CaptureStatus struct {
 	IsOwner  bool
 }
 
-func newCaptureStatus(rev schedulepb.OwnerRevision, id model.CaptureID, addr string, isOwner bool) *CaptureStatus {
+func newCaptureStatus(
+	rev schedulepb.OwnerRevision, id model.CaptureID, addr string, isOwner bool,
+) *CaptureStatus {
 	return &CaptureStatus{
 		OwnerRev: rev,
 		State:    CaptureStateUninitialized,

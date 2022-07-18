@@ -622,8 +622,13 @@ func (c *captureImpl) Drain(ctx context.Context) <-chan struct{} {
 	go func() {
 		defer func() {
 			lease := c.session.Lease()
-			c.EtcdClient.Client.Revoke(ctx, lease)
-			log.Info("draining capture, session lease revoked", zap.Any("lease", lease))
+			_, err := c.EtcdClient.Client.Revoke(ctx, lease)
+			if err != nil {
+				log.Warn("drain capture, revoke lease error",
+					zap.Any("lease", lease), zap.Error(err))
+			} else {
+				log.Info("draining capture, lease revoked", zap.Any("lease", lease))
+			}
 			close(done)
 		}()
 		ticker := time.NewTicker(drainInterval)

@@ -30,6 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -89,7 +90,27 @@ func TestDrainImmediately(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	mm := mock_processor.NewMockManager(ctrl)
-	cp := &captureImpl{processorManager: mm, config: config.GetDefaultServerConfig()}
+
+	endpoint, etcdServer, err := etcd.SetupEmbedEtcd(t.TempDir())
+	defer etcdServer.Close()
+	require.NoError(t, err)
+
+	etcdCli, err := clientv3.New(clientv3.Config{
+		Endpoints: []string{endpoint.String()},
+	})
+	require.NoError(t, err)
+
+	client, err := etcd.NewCDCEtcdClient(ctx, etcdCli, etcd.DefaultCDCClusterID)
+	defer client.Close()
+	require.NoError(t, err)
+
+	cp := &captureImpl{
+		session:          &concurrency.Session{},
+		EtcdClient:       &client,
+		processorManager: mm,
+		config:           config.GetDefaultServerConfig(),
+	}
+
 	cp.config.Debug.EnableSchedulerV3 = true
 	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
 
@@ -110,12 +131,31 @@ func TestDrainImmediately(t *testing.T) {
 }
 
 func TestDrainWaitsTables(t *testing.T) {
-	t.Parallel()
+	//t.Parallel()
 
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	mm := mock_processor.NewMockManager(ctrl)
-	cp := &captureImpl{processorManager: mm, config: config.GetDefaultServerConfig()}
+
+	endpoint, etcdServer, err := etcd.SetupEmbedEtcd(t.TempDir())
+	defer etcdServer.Close()
+	require.NoError(t, err)
+
+	etcdCli, err := clientv3.New(clientv3.Config{
+		Endpoints: []string{endpoint.String()},
+	})
+	require.NoError(t, err)
+
+	client, err := etcd.NewCDCEtcdClient(ctx, etcdCli, etcd.DefaultCDCClusterID)
+	defer client.Close()
+	require.NoError(t, err)
+
+	cp := &captureImpl{
+		session:          &concurrency.Session{},
+		EtcdClient:       &client,
+		processorManager: mm,
+		config:           config.GetDefaultServerConfig(),
+	}
 	cp.config.Debug.EnableSchedulerV3 = true
 	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
 
@@ -153,13 +193,31 @@ func TestDrainWaitsTables(t *testing.T) {
 }
 
 func TestDrainWaitsOwnerResign(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	mo := mock_owner.NewMockOwner(ctrl)
 	mm := mock_processor.NewMockManager(ctrl)
-	cp := &captureImpl{processorManager: mm, owner: mo, config: config.GetDefaultServerConfig()}
+
+	endpoint, etcdServer, err := etcd.SetupEmbedEtcd(t.TempDir())
+	defer etcdServer.Close()
+	require.NoError(t, err)
+
+	etcdCli, err := clientv3.New(clientv3.Config{
+		Endpoints: []string{endpoint.String()},
+	})
+	require.NoError(t, err)
+
+	client, err := etcd.NewCDCEtcdClient(ctx, etcdCli, etcd.DefaultCDCClusterID)
+	defer client.Close()
+	require.NoError(t, err)
+
+	cp := &captureImpl{
+		session:          &concurrency.Session{},
+		EtcdClient:       &client,
+		processorManager: mm,
+		owner:            mo,
+		config:           config.GetDefaultServerConfig(),
+	}
 	cp.config.Debug.EnableSchedulerV3 = true
 	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
 
@@ -213,7 +271,28 @@ func TestDrainOneCapture(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mo := mock_owner.NewMockOwner(ctrl)
 	mm := mock_processor.NewMockManager(ctrl)
-	cp := &captureImpl{processorManager: mm, owner: mo, config: config.GetDefaultServerConfig()}
+	
+	endpoint, etcdServer, err := etcd.SetupEmbedEtcd(t.TempDir())
+	defer etcdServer.Close()
+	require.NoError(t, err)
+
+	etcdCli, err := clientv3.New(clientv3.Config{
+		Endpoints: []string{endpoint.String()},
+	})
+	require.NoError(t, err)
+
+	client, err := etcd.NewCDCEtcdClient(ctx, etcdCli, etcd.DefaultCDCClusterID)
+	defer client.Close()
+	require.NoError(t, err)
+
+	cp := &captureImpl{
+		session:          &concurrency.Session{},
+		EtcdClient:       &client,
+		processorManager: mm,
+		owner:            mo,
+		config:           config.GetDefaultServerConfig(),
+	}
+
 	cp.config.Debug.EnableSchedulerV3 = true
 	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
 
@@ -235,13 +314,32 @@ func TestDrainOneCapture(t *testing.T) {
 }
 
 func TestDrainErrors(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	mo := mock_owner.NewMockOwner(ctrl)
 	mm := mock_processor.NewMockManager(ctrl)
-	cp := &captureImpl{processorManager: mm, owner: mo, config: config.GetDefaultServerConfig()}
+
+	endpoint, etcdServer, err := etcd.SetupEmbedEtcd(t.TempDir())
+	defer etcdServer.Close()
+	require.NoError(t, err)
+
+	etcdCli, err := clientv3.New(clientv3.Config{
+		Endpoints: []string{endpoint.String()},
+	})
+	require.NoError(t, err)
+
+	client, err := etcd.NewCDCEtcdClient(ctx, etcdCli, etcd.DefaultCDCClusterID)
+	defer client.Close()
+	require.NoError(t, err)
+
+	cp := &captureImpl{
+		session:          &concurrency.Session{},
+		EtcdClient:       &client,
+		processorManager: mm,
+		owner:            mo,
+		config:           config.GetDefaultServerConfig(),
+	}
+
 	cp.config.Debug.EnableSchedulerV3 = true
 	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
 
