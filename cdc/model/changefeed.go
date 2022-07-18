@@ -315,7 +315,7 @@ func (info *ChangeFeedInfo) fixState() {
 		// This corresponds to the case of failure or error.
 		case AdminNone, AdminResume:
 			if info.Error != nil {
-				if cerror.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code)) {
+				if cerror.IsChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code)) {
 					state = StateFailed
 				} else {
 					state = StateError
@@ -395,5 +395,5 @@ func (info *ChangeFeedInfo) HasFastFailError() bool {
 	if info.Error == nil {
 		return false
 	}
-	return cerror.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
+	return cerror.IsChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
 }

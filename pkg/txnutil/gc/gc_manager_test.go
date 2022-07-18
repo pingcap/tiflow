@@ -99,7 +99,7 @@ func TestCheckStaleCheckpointTs(t *testing.T) {
 	cfID := model.DefaultChangeFeedID("cfID")
 	err := gcManager.CheckStaleCheckpointTs(ctx, cfID, 10)
 	require.True(t, cerror.ErrGCTTLExceeded.Equal(errors.Cause(err)))
-	require.True(t, cerror.ChangefeedFastFailError(err))
+	require.True(t, cerror.IsChangefeedFastFailError(err))
 
 	err = gcManager.CheckStaleCheckpointTs(ctx, cfID, oracle.GoTimeToTS(time.Now()))
 	require.Nil(t, err)
@@ -110,5 +110,5 @@ func TestCheckStaleCheckpointTs(t *testing.T) {
 	err = gcManager.CheckStaleCheckpointTs(ctx, cfID, 10)
 
 	require.True(t, cerror.ErrSnapshotLostByGC.Equal(errors.Cause(err)))
-	require.True(t, cerror.ChangefeedFastFailError(err))
+	require.True(t, cerror.IsChangefeedFastFailError(err))
 }
