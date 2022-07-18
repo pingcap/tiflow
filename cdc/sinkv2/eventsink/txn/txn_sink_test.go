@@ -44,13 +44,12 @@ func (b *blackhole) onTxnEvent(e *eventsink.TxnCallbackableEvent) error {
 	return nil
 }
 
-func (b *blackhole) onNotify() error {
-	return nil
+func (b *blackhole) timer() *time.Timer {
+	return time.NewTimer(time.Second * time.Duration(1000000))
 }
 
-func (b *blackhole) notifier() *notify.Receiver {
-	receiver, _ := b.n.NewReceiver(time.Second * time.Duration(1000000))
-	return receiver
+func (b *blackhole) onTimeout() error {
+	return nil
 }
 
 func TestTxnSink(t *testing.T) {
@@ -60,7 +59,7 @@ func TestTxnSink(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		bes = append(bes, &blackhole{block: int32(1), n: notify.Notifier{}})
 	}
-	sink := newSink(bes)
+	sink := newSink(bes, defaultConflictDetectorSlots)
 
 	// Test `WriteEvents` shouldn't be blocked by slow workers.
 	var handled uint32 = 0

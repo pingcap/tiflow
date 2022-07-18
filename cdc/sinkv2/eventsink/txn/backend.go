@@ -14,12 +14,16 @@
 package txn
 
 import (
+	"time"
+
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
-	"github.com/pingcap/tiflow/pkg/notify"
 )
 
+// backend indicates a transaction backend like MySQL, TiDB, ...
 type backend interface {
+	// onTxnEvent handles one TxnCallbackableEvent.
 	onTxnEvent(*eventsink.TxnCallbackableEvent) error
-	onNotify() error
-	notifier() *notify.Receiver
+	// timer gets a timer so that onTimeout can be called periodcally.
+	timer() *time.Timer
+	onTimeout() error
 }

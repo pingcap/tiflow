@@ -22,43 +22,45 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/pkg/causality"
+	"github.com/pingcap/tiflow/pkg/chann"
 	"go.uber.org/zap"
 )
 
 const (
-	conflictDetectorSlots int64 = 1024 * 1024
+	defaultConflictDetectorSlots int64        = 1024 * 1024
+	crcTable                     *crc64.Table = crc64.MakeTable(crc64.ISO)
 )
 
 // Assert EventSink[E event.TableEvent] implementation
-var _ eventsink.EventSink[*model.SingleTableTxn] = (*Sink)(nil)
+var _ eventsink.EventSink[*model.SingleTableTxn] = (*sink)(nil)
 
-// Sink is the sink for SingleTableTxn.
-type Sink struct {
-	conflictDetector *causality.ConflictDetector[*worker, txnEvent]
+// sink is the sink for SingleTableTxn.
+type sink struct {
+	conflictDetector *causality.ConflictDetector[*worker, *txnEvent]
 	workers          []*worker
 }
 
-func newSink(bes []backend) Sink {
-	var workers []*worker = make([]*worker, 0, len(bes))
-	for i, be := range bes {
-		w := newWorker(i, be)
+func newSink(backends []backend, conflictDetectorSlots int64) sink {
+	workers := make([]*worker, 0, len(backends))
+	for i, backend := range backends {
+		w := newWorker(i, backend)
 		w.wg.Add(1)
 		go w.Run()
 		workers = append(workers, w)
 	}
-	detector := causality.NewConflictDetector[*worker, txnEvent](workers, conflictDetectorSlots)
-	return Sink{detector, workers}
+	detector := causality.NewConflictDetector[*worker, *txnEvent](workers, conflictDetectorSlots)
+	return sink{detector, workers}
 }
 
 // WriteEvents writes events to the sink.
-func (s *Sink) WriteEvents(rows ...*eventsink.TxnCallbackableEvent) {
+func (s *sink) WriteEvents(rows ...*eventsink.TxnCallbackableEvent) {
 	for _, row := range rows {
-		_ = s.conflictDetector.Add(txnEvent{row})
+		_ = s.conflictDetector.Add(&txnEvent{row, nil})
 	}
 }
 
-// Close closes the sink. It won't wait for all pending items be handled.
-func (s *Sink) Close() error {
+// Close closes the sink. It won't wait for all pending items backend handled.
+func (s *sink) Close() error {
 	for _, w := range s.workers {
 		w.Close()
 	}
@@ -68,69 +70,74 @@ func (s *Sink) Close() error {
 
 type txnEvent struct {
 	*eventsink.TxnCallbackableEvent
+	conflictKeys []int64
 }
 
 // ConflictKeys implements causality.txnEvent interface.
-func (e txnEvent) ConflictKeys() (sums []int64) {
+func (e *txnEvent) ConflictKeys() (sums []int64) {
+	if len(e.conflictKeys) > 0 {
+		return e.conflictKeys
+	}
+
 	keys := genTxnKeys(e.TxnCallbackableEvent.Event)
 	sums = make([]int64, 0, len(keys))
 	for _, key := range keys {
-		hasher := crc64.New(crc64.MakeTable(crc64.ISO))
+		hasher := crc64.New(crcTable)
 		if _, err := hasher.Write(key); err != nil {
 			log.Panic("crc64 hasher fail")
 		}
 		sums = append(sums, int64(hasher.Sum64()))
 	}
+	e.conflictKeys = sums
 	return
 }
 
 type worker struct {
 	ID      int
-	txnCh   chan txnWithNotifier
+	txnCh   *chann.Chann[txnWithNotifier]
 	stopped chan struct{}
 	wg      sync.WaitGroup
 
-	be backend
+	backend backend
 }
 
 type txnWithNotifier struct {
-	txnEvent
+	*txnEvent
 	wantMore func()
 }
 
-func newWorker(ID int, be backend) *worker {
+func newWorker(ID int, backend backend) *worker {
 	return &worker{
 		ID:      ID,
-		txnCh:   make(chan txnWithNotifier, 1),
-		stopped: make(chan struct{}, 1),
-		be:      be,
+		txnCh:   chann.New[txnWithNotifier](chann.Cap(-1)),
+		stopped: make(chan struct{}),
+		backend: backend,
 	}
 }
 
-func (w *worker) Add(txn txnEvent, unlock func()) {
-	w.txnCh <- txnWithNotifier{txn, unlock}
+func (w *worker) Add(txn *txnEvent, unlock func()) {
+	w.txnCh.In() <- txnWithNotifier{txn, unlock}
 }
 
 func (w *worker) Close() {
-	w.stopped <- struct{}{}
+	close(w.stopped)
 	w.wg.Wait()
 }
 
 func (w *worker) Run() {
 	defer w.wg.Done()
-	notifier := w.be.notifier()
 	for {
 		select {
 		case <-w.stopped:
 			return
-		case txn := <-w.txnCh:
+		case txn := <-w.txnCh.Out():
 			txn.wantMore()
-			if err := w.be.onTxnEvent(txn.txnEvent.TxnCallbackableEvent); err != nil {
+			if err := w.backend.onTxnEvent(txn.txnEvent.TxnCallbackableEvent); err != nil {
 				// TODO: handle errors.
 				return
 			}
-		case <-notifier.C:
-			if err := w.be.onNotify(); err != nil {
+		case <-w.backend.timer().C:
+			if err := w.backend.onTimeout(); err != nil {
 				// TODO: handle errors.
 				return
 			}
