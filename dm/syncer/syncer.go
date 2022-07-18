@@ -3128,10 +3128,6 @@ func (s *Syncer) handleQueryEventPessimistic(qec *queryEventContext) error {
 
 	if needShardingHandle {
 		s.metricsProxies.UnsyncedTableGauge.WithLabelValues(s.cfg.Name, ddlInfo.targetTables[0].String(), s.cfg.SourceID).Set(float64(remain))
-		err = s.safeMode.IncrForTable(qec.tctx, ddlInfo.targetTables[0]) // try enable safe-mode when starting syncing for sharding group
-		if err != nil {
-			return err
-		}
 
 		// save checkpoint in memory, don't worry, if error occurred, we can rollback it
 		// for non-last sharding DDL's table, this checkpoint will be used to skip binlog event when re-syncing
@@ -3156,10 +3152,7 @@ func (s *Syncer) handleQueryEventPessimistic(qec *queryEventContext) error {
 			zap.String("sourceTableID", sourceTableID),
 			zap.Stringer("start location", startLocation),
 			log.WrapStringerField("end location", currentLocation))
-		err = s.safeMode.DescForTable(qec.tctx, ddlInfo.targetTables[0]) // try disable safe-mode after sharding group synced
-		if err != nil {
-			return err
-		}
+
 		// maybe multi-groups' sharding DDL synced in this for-loop (one query-event, multi tables)
 		if cap(*qec.shardingReSyncCh) < len(needHandleDDLs) {
 			*qec.shardingReSyncCh = make(chan *ShardingReSync, len(needHandleDDLs))
