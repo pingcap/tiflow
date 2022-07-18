@@ -799,7 +799,7 @@ func (c *TaskConfig) adjust() error {
 			inst.Syncer.CheckpointFlushInterval = defaultCheckpointFlushInterval
 		}
 		if inst.Syncer.SafeModeDuration == "" {
-			inst.Syncer.SafeModeDuration = strconv.Itoa(2 * inst.Syncer.CheckpointFlushInterval)
+			inst.Syncer.SafeModeDuration = strconv.Itoa(2*inst.Syncer.CheckpointFlushInterval) + "s"
 		}
 		_, err := time.ParseDuration(inst.Syncer.SafeModeDuration)
 		if err != nil {

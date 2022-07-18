@@ -56,7 +56,11 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 		s.safeMode.Add(tctx, 1) // add 1 but has no corresponding -1, so keeps enabled
 		s.tctx.L().Info("enable safe-mode by config")
 	}
-	if exitPoint := s.checkpoint.SafeModeExitPoint(); exitPoint != nil {
+	exitPoint := s.checkpoint.SafeModeExitPoint()
+	failpoint.Inject("SafeModeDurationIsZero", func() {
+		exitPoint = nil
+	})
+	if exitPoint != nil {
 		if binlog.CompareLocation(*exitPoint, s.getInitExecutedLoc(), s.cfg.EnableGTID) > 0 {
 			//nolint:errcheck
 			s.safeMode.Add(tctx, 1) // enable and will revert after pass SafeModeExitLoc
@@ -86,34 +90,34 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 		}
 		s.tctx.L().Info("enable safe-mode because of task initialization", zap.Duration("duration", duration))
 
-		failpoint.Inject("SafeModeDurationIsZero", func() {
-			if duration.String() == "0s" {
-				s.tctx.L().Debug("failpoint: will not enter safe mode")
-			}
-		})
-		//nolint:errcheck
-		s.safeMode.Add(tctx, 1) // enable and will revert after 2 * CheckpointFlushInterval
-		go func() {
-			var err error
-			defer func() {
-				err = s.safeMode.Add(tctx, -1)
-				if err != nil {
-					// send error to the fatal chan to interrupt the process
-					s.runFatalChan <- unit.NewProcessError(err)
-				}
-				if !s.safeMode.Enable() {
-					s.tctx.L().Info("disable safe-mode after task initialization finished")
+		if int64(duration) > 0 {
+			//nolint:errcheck
+			s.safeMode.Add(tctx, 1) // enable and will revert after 2 * CheckpointFlushInterval
+			go func() {
+				var err error
+				defer func() {
+					err = s.safeMode.Add(tctx, -1)
+					if err != nil {
+						// send error to the fatal chan to interrupt the process
+						s.runFatalChan <- unit.NewProcessError(err)
+					}
+					if !s.safeMode.Enable() {
+						s.tctx.L().Info("disable safe-mode after task initialization finished")
+					}
+				}()
+
+				select {
+				case <-tctx.Context().Done():
+				case <-time.After(duration):
 				}
 			}()
-
-			select {
-			case <-tctx.Context().Done():
-			case <-time.After(duration):
+		} else {
+			fresh, err2 := s.IsFreshTask(s.runCtx.Ctx)
+			if err2 != nil {
+				err = err2
+			} else if !fresh && !s.safeMode.Enable() {
+				err = terror.ErrSyncerReprocessWithSafeModeFail.Generate()
 			}
-		}()
-	}
-	fresh, err := s.IsFreshTask(s.runCtx.Ctx)
-	if err == nil && !fresh && s.safeMode.Enable() {
-		err = terror.ErrSyncerReprocessWithSafeModeFail.Generate()
+		}
 	}
 }

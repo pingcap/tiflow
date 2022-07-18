@@ -189,7 +189,7 @@ function safe_mode_duration() {
 	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	check_contains 'Query OK, 3 rows affected'
 
-	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/SafeModeDurationIsZero=return(true)"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/SafeModeDurationIsZero=return()"
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 	# worker1 -> source1
@@ -208,20 +208,20 @@ function safe_mode_duration() {
 	dmctl_start_task "$cur/conf/dm-task-safe-mode-duration.yaml" "--remove-meta"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 	sleep 1
-	check_log_contains $WORK_DIR/worker1/log/dm-worker.log "failpoint: will not enter safe mode"
-
-	# restart workers
-	pkill -hup dm-worker.test 2>/dev/null || true
-	check_port_offline $WORKER1_PORT 20
-	check_port_offline $WORKER2_PORT 20
-	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
-	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
 	# DM-worker exit during re-sync after sharding group synced
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql_file $cur/data/db2.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+
+	# check_log_contains $WORK_DIR/worker1/log/dm-worker.log "disable safe-mode because initExecutedLoc equal safeModeExitPoint"
+	# check_log_contains $WORK_DIR/worker2/log/dm-worker.log "disable safe-mode because initExecutedLoc equal safeModeExitPoint"
+
+	# restart workers
+	kill_dm_worker
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
@@ -232,8 +232,10 @@ function safe_mode_duration() {
 		"stop-task test" \
 		"\"result\": true" 3
 
+	# run_sql_file $cur/data/db1.increment2.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	# run_sql_file $cur/data/db2.increment2.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	cp $cur/conf/dm-task-safe-mode-duration.yaml $WORK_DIR/dm-task-safe-mode-duration.yaml
-	sed -i "s/safe-mode-duration: \"0s\"/safe-mode-duration: \"10ms\"/" $WORK_DIR/dm-task-safe-mode-duration.yaml
+	sed -i "s/safe-mode-duration: \"0s\"/safe-mode-duration: \"30s\"/" $WORK_DIR/dm-task-safe-mode-duration.yaml
 
 	dmctl_start_task "$WORK_DIR/dm-task-safe-mode-duration.yaml"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
@@ -301,7 +303,7 @@ function run() {
 		# DM-worker1 is sharding lock owner and exits
 		if [ "$(check_port_return $WORKER1_PORT)" == "0" ]; then
 			echo "DM-worker1 is sharding lock owner and detects it offline"
-			export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/SafeModeInitPhaseSeconds=return(\"0s\")"
+			export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/SafeModeInitPhaseSeconds=return(\"1s\")"
 			run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 			check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 			check_instance_id="1"
@@ -311,7 +313,7 @@ function run() {
 		# DM-worker2 is sharding lock owner and exits
 		if [ "$(check_port_return $WORKER2_PORT)" == "0" ]; then
 			echo "DM-worker2 is sharding lock owner and detects it offline"
-			export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/SafeModeInitPhaseSeconds=return(\"0s\")"
+			export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/SafeModeInitPhaseSeconds=return(\"1s\")"
 			run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 			check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 			check_instance_id="2"
