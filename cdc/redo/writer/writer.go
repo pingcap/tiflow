@@ -122,26 +122,24 @@ func NewLogWriter(
 	var err error
 	var logWriter *LogWriter
 	rowCfg := &FileWriterConfig{
-		Dir:               cfg.Dir,
-		ChangeFeedID:      cfg.ChangeFeedID,
-		CaptureID:         cfg.CaptureID,
-		FileType:          common.DefaultRowLogFileType,
-		CreateTime:        cfg.CreateTime,
-		MaxLogSize:        cfg.MaxLogSize,
-		FlushIntervalInMs: cfg.FlushIntervalInMs,
-		S3Storage:         cfg.S3Storage,
-		S3URI:             cfg.S3URI,
+		Dir:          cfg.Dir,
+		ChangeFeedID: cfg.ChangeFeedID,
+		CaptureID:    cfg.CaptureID,
+		FileType:     common.DefaultRowLogFileType,
+		CreateTime:   cfg.CreateTime,
+		MaxLogSize:   cfg.MaxLogSize,
+		S3Storage:    cfg.S3Storage,
+		S3URI:        cfg.S3URI,
 	}
 	ddlCfg := &FileWriterConfig{
-		Dir:               cfg.Dir,
-		ChangeFeedID:      cfg.ChangeFeedID,
-		CaptureID:         cfg.CaptureID,
-		FileType:          common.DefaultDDLLogFileType,
-		CreateTime:        cfg.CreateTime,
-		MaxLogSize:        cfg.MaxLogSize,
-		FlushIntervalInMs: cfg.FlushIntervalInMs,
-		S3Storage:         cfg.S3Storage,
-		S3URI:             cfg.S3URI,
+		Dir:          cfg.Dir,
+		ChangeFeedID: cfg.ChangeFeedID,
+		CaptureID:    cfg.CaptureID,
+		FileType:     common.DefaultDDLLogFileType,
+		CreateTime:   cfg.CreateTime,
+		MaxLogSize:   cfg.MaxLogSize,
+		S3Storage:    cfg.S3Storage,
+		S3URI:        cfg.S3URI,
 	}
 	logWriter = &LogWriter{
 		cfg: cfg,

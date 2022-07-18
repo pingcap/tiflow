@@ -43,7 +43,7 @@ func NewFileAllocator(dir string, prefix string, size int64) *FileAllocator {
 		dir:    dir,
 		prefix: prefix,
 		size:   size,
-		fileCh: make(chan *os.File, 1),
+		fileCh: make(chan *os.File),
 		errCh:  make(chan error, 1),
 		doneCh: make(chan struct{}),
 	}

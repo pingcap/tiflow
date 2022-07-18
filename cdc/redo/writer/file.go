@@ -46,9 +46,8 @@ const (
 	// pageBytes is the alignment for flushing records to the backing Writer.
 	// It should be a multiple of the minimum sector size so that log can safely
 	// distinguish between torn writes and ordinary data corruption.
-	pageBytes                = 8 * common.MinSectorSize
-	defaultFlushIntervalInMs = 1000
-	defaultS3Timeout         = 3 * time.Second
+	pageBytes        = 8 * common.MinSectorSize
+	defaultS3Timeout = 3 * time.Second
 )
 
 var (
@@ -82,10 +81,9 @@ type FileWriterConfig struct {
 	FileType     string
 	CreateTime   time.Time
 	// MaxLogSize is the maximum size of log in megabyte, defaults to defaultMaxLogSize.
-	MaxLogSize        int64
-	FlushIntervalInMs int64
-	S3Storage         bool
-	S3URI             url.URL
+	MaxLogSize int64
+	S3Storage  bool
+	S3URI      url.URL
 }
 
 // Option define the writerOptions
@@ -126,8 +124,7 @@ type Writer struct {
 	eventCommitTS atomic.Uint64
 	running       atomic.Bool
 	gcRunning     atomic.Bool
-	curOff        int64
-	oldOff        int64
+	size          int64
 	file          *os.File
 	// record the filepath that is being written, and has not been flushed
 	ongoingFilePath string
@@ -149,9 +146,6 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 		return nil, cerror.WrapError(cerror.ErrRedoConfigInvalid, errors.New("FileWriterConfig can not be nil"))
 	}
 
-	if cfg.FlushIntervalInMs == 0 {
-		cfg.FlushIntervalInMs = defaultFlushIntervalInMs
-	}
 	cfg.MaxLogSize *= megabyte
 	if cfg.MaxLogSize == 0 {
 		cfg.MaxLogSize = defaultMaxLogSize
@@ -189,10 +183,10 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 		w.uuidGenerator = uuid.NewGenerator()
 	}
 
-	// if we use S3 as the remote storage, and the file type is "row",
-	// a file allocator can be leveraged to pre-allocate files for us.
-	// TODO: test this improvement can be applied to NFS.
-	if cfg.S3Storage && cfg.FileType == common.DefaultRowLogFileType {
+	// if we use S3 as the remote storage, a file allocator can be leveraged to
+	// pre-allocate files for us.
+	// TODO: test whether this improvement can also be applied to NFS.
+	if cfg.S3Storage {
 		w.allocator = fsutil.NewFileAllocator(cfg.Dir, cfg.FileType, defaultMaxLogSize)
 	}
 
@@ -217,6 +211,13 @@ func (w *Writer) Write(rawData []byte) (int, error) {
 		}
 	}
 
+	if w.size+writeLen > w.cfg.MaxLogSize {
+		fmt.Println("before calling rotate()")
+		if err := w.rotate(); err != nil {
+			return 0, err
+		}
+	}
+
 	if w.maxCommitTS.Load() < w.eventCommitTS.Load() {
 		w.maxCommitTS.Store(w.eventCommitTS.Load())
 	}
@@ -235,18 +236,9 @@ func (w *Writer) Write(rawData []byte) (int, error) {
 		return 0, err
 	}
 	w.metricWriteBytes.Add(float64(n))
+	w.size += int64(n)
 
-	offset, err := w.file.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return 0, err
-	}
-
-	w.curOff = offset
-	if offset < defaultMaxLogSize {
-		return n, nil
-	}
-
-	return 0, w.rotate()
+	return n, err
 }
 
 // AdvanceTs implement Advance interface
@@ -314,22 +306,29 @@ func (w *Writer) close() error {
 		return nil
 	}
 
+	if err := w.flush(); err != nil {
+		return err
+	}
+
 	off, err := w.file.Seek(0, io.SeekCurrent)
 	if err != nil {
 		return err
+	}
+
+	// offset equals to 0 means that no written happened for current file,
+	// we can simply return
+	if off == 0 {
+		return nil
 	}
 
 	if err := w.file.Truncate(off); err != nil {
 		return err
 	}
 
-	if err := w.flush(); err != nil {
-		return err
-	}
-
 	// rename the file name from commitTs.log.tmp to maxCommitTS.log if closed safely
 	// after rename, the file name could be used for search, since the ts is the max ts for all events in the file.
 	w.commitTS.Store(w.maxCommitTS.Load())
+	fmt.Println("before calling rename")
 	err = os.Rename(w.file.Name(), w.filePath())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
@@ -406,6 +405,7 @@ func (w *Writer) openNew() error {
 		}
 	}
 	w.file = f
+	w.size = 0
 	err = w.newPageWriter()
 	if err != nil {
 		return err
@@ -521,20 +521,17 @@ func (w *Writer) flushAndRotateFile() error {
 		return nil
 	}
 
-	// if the file is not changed since last flush,
-	// there is no need to flush.
-	if w.curOff == w.oldOff {
-		return nil
-	}
-
 	start := time.Now()
 	err := w.flush()
 	if err != nil {
 		return err
 	}
-	w.oldOff = w.curOff
 
 	if !w.cfg.S3Storage {
+		return nil
+	}
+
+	if w.size == 0 {
 		return nil
 	}
 
@@ -578,6 +575,7 @@ func (w *Writer) flush() error {
 }
 
 func (w *Writer) writeToS3(ctx context.Context, name string) error {
+	fmt.Printf("file name:%s\n", name)
 	fileData, err := os.ReadFile(name)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)

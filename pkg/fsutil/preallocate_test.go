@@ -15,6 +15,7 @@ package fsutil
 
 import (
 	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -22,6 +23,7 @@ import (
 
 func TestPreAllocate(t *testing.T) {
 	f, err := ioutil.TempFile("", "preallocate-test")
+	defer os.Remove(f.Name())
 	require.Nil(t, err)
 
 	size := int64(64 * 1024 * 1024)

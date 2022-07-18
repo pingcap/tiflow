@@ -200,26 +200,12 @@ func TestWriterGC(t *testing.T) {
 	uuidGen := uuid.NewConstGenerator("const-uuid")
 	controller := gomock.NewController(t)
 	mockStorage := mockstorage.NewMockExternalStorage(controller)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_row_1_const-uuid.log.tmp",
-		gomock.Any()).Return(nil).Times(1)
 	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_row_1_const-uuid.log",
-		gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_row_1_const-uuid.log.tmp").
-		Return(nil).Times(1)
-
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_row_2_const-uuid.log.tmp",
 		gomock.Any()).Return(nil).Times(1)
 	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_row_2_const-uuid.log",
 		gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_row_2_const-uuid.log.tmp").
-		Return(nil).Times(1)
-
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_row_3_const-uuid.log.tmp",
-		gomock.Any()).Return(nil).Times(1)
 	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_row_3_const-uuid.log",
 		gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_row_3_const-uuid.log.tmp").
-		Return(nil).Times(1)
 
 	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_row_1_const-uuid.log").
 		Return(errors.New("ignore err")).Times(1)
@@ -228,14 +214,13 @@ func TestWriterGC(t *testing.T) {
 
 	megabyte = 1
 	cfg := &FileWriterConfig{
-		Dir:               dir,
-		ChangeFeedID:      model.DefaultChangeFeedID("test"),
-		CaptureID:         "cp",
-		MaxLogSize:        10,
-		FileType:          common.DefaultRowLogFileType,
-		CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
-		FlushIntervalInMs: 5,
-		S3Storage:         true,
+		Dir:          dir,
+		ChangeFeedID: model.DefaultChangeFeedID("test"),
+		CaptureID:    "cp",
+		MaxLogSize:   10,
+		FileType:     common.DefaultRowLogFileType,
+		CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
+		S3Storage:    true,
 	}
 	w := &Writer{
 		cfg:       cfg,
@@ -315,19 +300,14 @@ func TestNewWriter(t *testing.T) {
 		WithUUIDGenerator(func() uuid.Generator { return uuidGen }),
 	)
 	require.Nil(t, err)
-	time.Sleep(time.Duration(defaultFlushIntervalInMs+1) * time.Millisecond)
 	err = w.Close()
 	require.Nil(t, err)
 	require.False(t, w.IsRunning())
 
 	controller := gomock.NewController(t)
 	mockStorage := mockstorage.NewMockExternalStorage(controller)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_ddl_0_const-uuid.log.tmp",
-		gomock.Any()).Return(nil).Times(2)
 	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_ddl_0_const-uuid.log",
 		gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_abcd_test_ddl_0_const-uuid.log.tmp").
-		Return(nil).Times(1)
 
 	changefeed := model.ChangeFeedID{
 		Namespace: "abcd",
@@ -356,14 +336,12 @@ func TestNewWriter(t *testing.T) {
 	w.running.Store(true)
 	_, err = w.Write([]byte("test"))
 	require.Nil(t, err)
-	//
 	err = w.Flush()
 	require.Nil(t, err)
 
 	err = w.Close()
 	require.Nil(t, err)
 	require.Equal(t, w.running.Load(), false)
-	time.Sleep(time.Duration(defaultFlushIntervalInMs+1) * time.Millisecond)
 }
 
 func TestRotateFileWithFileAllocator(t *testing.T) {
