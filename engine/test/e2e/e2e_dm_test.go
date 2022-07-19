@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -307,16 +308,13 @@ func testSimpleAllModeTask(
 }
 
 func queryStatus(ctx context.Context, client *http.Client, jobID string, tasks []string, t *testing.T) (*dm.JobStatus, error) {
-	url := fmt.Sprintf(baseURL+"/status", jobID)
-	for i, task := range tasks {
-		if i == 0 {
-			url += "?"
-		} else {
-			url += "&"
-		}
-		url += "tasks=" + task
+	u := fmt.Sprintf(baseURL+"/status", jobID)
+	v := url.Values{}
+	for _, task := range tasks {
+		v.Add("tasks", task)
 	}
-	resp, err := client.Get(url)
+	u += "?" + v.Encode()
+	resp, err := client.Get(u)
 	if err != nil {
 		return nil, err
 	}
@@ -366,11 +364,13 @@ func getJobCfg(ctx context.Context, client *http.Client, jobID string, t *testin
 }
 
 func getBinlogOperator(ctx context.Context, client *http.Client, jobID string, task string, binlogPos string, t *testing.T) (*dmpkg.BinlogResponse, error) {
-	url := fmt.Sprintf(baseURL+"/binlog/tasks/%s", jobID, task)
+	u := fmt.Sprintf(baseURL+"/binlog/tasks/%s", jobID, task)
+	v := url.Values{}
 	if binlogPos != "" {
-		url += "?binlog_pos=" + binlogPos
+		v.Add("binlog_pos", binlogPos)
 	}
-	resp, err := client.Get(url)
+	u += "?" + v.Encode()
+	resp, err := client.Get(u)
 	if err != nil {
 		return nil, err
 	}
@@ -415,14 +415,16 @@ func deleteBinlogOperator(ctx context.Context, client *http.Client, jobID string
 }
 
 func getBinlogSchema(ctx context.Context, client *http.Client, jobID string, task string, schema string, table string, t *testing.T) (*dmpkg.BinlogSchemaResponse, error) {
-	url := fmt.Sprintf(baseURL+"/schema/tasks/%s", jobID, task)
+	u := fmt.Sprintf(baseURL+"/schema/tasks/%s", jobID, task)
+	v := url.Values{}
 	if schema != "" {
-		url += "?database=" + schema
+		v.Add("database", schema)
 	}
 	if table != "" {
-		url += "&table=" + table
+		v.Add("table", table)
 	}
-	resp, err := client.Get(url)
+	u += "?" + v.Encode()
+	resp, err := client.Get(u)
 	if err != nil {
 		return nil, err
 	}

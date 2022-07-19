@@ -154,7 +154,7 @@ func (jm *JobMaster) DMAPISetBinlogOperator(c *gin.Context, taskName string) {
 	case openapi.SetBinlogOperatorRequestOpReplace:
 		r.Op = pb.ErrorOp_Replace
 	default:
-		_ = c.Error(errors.New("unsupport op type '' for set binlog operator"))
+		_ = c.Error(errors.New("unsupported op type '' for set binlog operator"))
 		return
 	}
 	resp, err := jm.Binlog(c.Request.Context(), r)
