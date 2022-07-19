@@ -610,18 +610,17 @@ func (c *captureImpl) AsyncClose() {
 		c.MessageRouter.Wait()
 		c.MessageRouter = nil
 	}
-	log.Info("message router closed", zap.String("captureID", c.info.ID)
+	log.Info("message router closed", zap.String("captureID", c.info.ID))
 
 	if c.session != nil {
 		lease := c.session.Lease()
 		_, err := c.EtcdClient.Client.Revoke(context.Background(), lease)
 		if err != nil {
-			log.Warn("drain capture, revoke lease error",
-				zap.String("captureID", c.info.ID),
+			log.Warn("revoke etcd lease error", zap.String("captureID", c.info.ID),
 				zap.Any("lease", lease), zap.Error(err))
 		} else {
-			log.Info("draining capture, lease revoked",
-				zap.String("captureID", c.info.ID), zap.Any("lease", lease))
+			log.Info("etcd lease revoked", zap.String("captureID", c.info.ID),
+				zap.Any("lease", lease))
 		}
 	}
 }
