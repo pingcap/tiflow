@@ -29,6 +29,7 @@ type connAmountChecker struct {
 
 	getConfigConn func(stCfgs []*config.SubTaskConfig) int
 	workerName    string
+	unlimitedConn bool
 }
 
 func newConnAmountChecker(targetDB *conn.BaseDB, stCfgs []*config.SubTaskConfig, fn func(stCfgs []*config.SubTaskConfig) int, workerName string) connAmountChecker {
@@ -70,7 +71,9 @@ func (c *connAmountChecker) check(ctx context.Context, checkerName string) *Resu
 		}
 	}
 	neededConn := c.getConfigConn(c.stCfgs)
-	if maxConn != 0 && neededConn > maxConn {
+	switch {
+	case maxConn != 0 && neededConn > maxConn:
+		// nonzero max_connections and needed connections exceed max_connections
 		// FYI: https://github.com/pingcap/tidb/pull/35453
 		// currently, TiDB's max_connections is set to 0 representing unlimited connections,
 		// while for MySQL, 0 is not a legal value (never retrieve from it).
@@ -80,7 +83,13 @@ func (c *connAmountChecker) check(ctx context.Context, checkerName string) *Resu
 		)
 		result.Instruction = "set larger max_connections or reduce the pool size of dm"
 		result.State = StateFailure
-	} else {
+	case maxConn == 0:
+		// zero max_connections means unlimited connections
+		// we shouldn't report a warning.
+		c.unlimitedConn = true
+		result.State = StateSuccess
+	default:
+		// nonzero max_connections and needed connections are less than or equal to max_connections
 		result.State = StateSuccess
 	}
 	return result
@@ -109,14 +118,16 @@ func (l *LoaderConnAmountChecker) Name() string {
 
 func (l *LoaderConnAmountChecker) Check(ctx context.Context) *Result {
 	result := l.check(ctx, l.Name())
-	for _, stCfg := range l.stCfgs {
-		if stCfg.NeedUseLightning() {
-			result.Errors = append(
-				result.Errors,
-				NewWarn("task precheck cannot accurately check the amount of connection needed for Lightning, please set a sufficiently large connections for TiDB"),
-			)
-			result.State = StateWarning
-			break
+	if !l.unlimitedConn && result.State == StateSuccess {
+		for _, stCfg := range l.stCfgs {
+			if stCfg.NeedUseLightning() {
+				result.Errors = append(
+					result.Errors,
+					NewWarn("task precheck cannot accurately check the amount of connection needed for Lightning, please set a sufficiently large connections for TiDB"),
+				)
+				result.State = StateWarning
+				break
+			}
 		}
 	}
 	return result

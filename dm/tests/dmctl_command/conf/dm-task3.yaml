@@ -37,6 +37,6 @@ mydumpers:
 
 loaders:
   global:
-    pool-size: 16
+    pool-size: 5
     import-mode: "loader"
     dir: "./dumped_data"
