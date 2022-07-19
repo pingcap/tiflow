@@ -270,8 +270,8 @@ func (ddl *ShardDDL) HandleQueryEvent(ev *replication.QueryEvent, ec eventContex
 		}
 
 		// pre-filter of sharding
-		if filter, err := ddl.strategy.preFilter(ddlInfo, qec, sourceTable, targetTable); err != nil {
-			return err
+		if filter, err2 := ddl.strategy.preFilter(ddlInfo, qec, sourceTable, targetTable); err2 != nil {
+			return err2
 		} else if filter {
 			continue
 		}
