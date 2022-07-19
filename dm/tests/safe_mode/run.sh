@@ -48,12 +48,11 @@ function consistency_none() {
 	name1=$(grep "Log: " $WORK_DIR/worker1/dumped_data.test/metadata | tail -1 | awk -F: '{print $2}' | tr -d ' ')
 	pos1=$(grep "Pos: " $WORK_DIR/worker1/dumped_data.test/metadata | tail -1 | awk -F: '{print $2}' | tr -d ' ')
 	gtid1=$(grep "GTID:" $WORK_DIR/worker1/dumped_data.test/metadata | tail -1 | awk -F: '{print $2,":",$3}' | tr -d ' ')
-	check_log_contain_with_retry "\[\"compare exitPoint and beginLocation\"\] \[task=test\] \[unit=\"binlog replication\"\] \[\"exit point\"=\"position: ($name1, $pos1), gtid-set: $gtid1\"\]" $WORK_DIR/worker1/log/dm-worker.log
+	check_log_contain_with_retry "\[\"enable safe-mode for safe mode exit point, will exit at\"\] \[task=test\] \[unit=\"binlog replication\"\] \[location=\"position: ($name1, $pos1), gtid-set: $gtid1\"\]" $WORK_DIR/worker1/log/dm-worker.log
 	name2=$(grep "Log: " $WORK_DIR/worker2/dumped_data.test/metadata | tail -1 | awk -F: '{print $2}' | tr -d ' ')
 	pos2=$(grep "Pos: " $WORK_DIR/worker2/dumped_data.test/metadata | tail -1 | awk -F: '{print $2}' | tr -d ' ')
 	gtid2=$(grep "GTID:" $WORK_DIR/worker2/dumped_data.test/metadata | tail -1 | awk -F: '{print $2,":",$3}' | tr -d ' ')
-	check_log_contain_with_retry "\[\"compare exitPoint and beginLocation\"\] \[task=test\] \[unit=\"binlog replication\"\] \[\"exit point\"=\"position: ($name2, $pos2), gtid-set: $gtid2\"\]" $WORK_DIR/worker2/log/dm-worker.log
-
+	check_log_contain_with_retry "\[\"enable safe-mode for safe mode exit point, will exit at\"\] \[task=test\] \[unit=\"binlog replication\"\] \[location=\"position: ($name2, $pos2), gtid-set: $gtid2\"\]" $WORK_DIR/worker2/log/dm-worker.log
 	run_sql_source2 "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
 	cleanup_process $*
 	cleanup_data safe_mode_target
@@ -150,7 +149,7 @@ function safe_mode_recover() {
 		check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 		check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
-		sleep 1
+		sleep 3
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"resume-task test" \
 			"\"result\": true" 3
@@ -230,13 +229,28 @@ function safe_mode_duration() {
 		"stop-task test" \
 		"\"result\": true" 3
 
+	export GO_FAILPOINTS=""
+	# restart workers
+	kill_dm_worker
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
 	cp $cur/conf/dm-task-safe-mode-duration.yaml $WORK_DIR/dm-task-safe-mode-duration.yaml
 	sed -i "s/safe-mode-duration: \"0s\"/safe-mode-duration: \"30s\"/" $WORK_DIR/dm-task-safe-mode-duration.yaml
 
 	dmctl_start_task "$WORK_DIR/dm-task-safe-mode-duration.yaml"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
-	export GO_FAILPOINTS=""
+	sed -i "s/safe-mode-duration: \"30s\"/safe-mode-duration: \"0s\"/" $WORK_DIR/dm-task-safe-mode-duration.yaml
+	# stop and start task success
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task test" \
+		"\"result\": true" 3
+	dmctl_start_task "$WORK_DIR/dm-task-safe-mode-duration.yaml"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+
 	echo "finish running safe mode duration case"
 	cleanup_process $*
 	cleanup_data safe_mode_target

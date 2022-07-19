@@ -16,6 +16,7 @@ package syncer
 import (
 	"time"
 
+	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/failpoint"
 	"go.uber.org/zap"
 
@@ -57,39 +58,33 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 		s.tctx.L().Info("enable safe-mode by config")
 		return
 	}
+
+	var duration time.Duration
+	initPhaseSeconds := s.cfg.SafeModeDuration
+
+	failpoint.Inject("SafeModeInitPhaseSeconds", func(val failpoint.Value) {
+		seconds := val.(string)
+		initPhaseSeconds = seconds
+		s.tctx.L().Info("set initPhaseSeconds", zap.String("failpoint", "SafeModeInitPhaseSeconds"), zap.String("value", seconds))
+	})
+	if initPhaseSeconds == "" {
+		duration = time.Second * time.Duration(2*s.cfg.CheckpointFlushInterval)
+	} else {
+		duration, err = time.ParseDuration(initPhaseSeconds)
+		if err != nil {
+			s.tctx.L().Error("enable safe-mode failed due to duration parse failed", zap.String("duration", initPhaseSeconds))
+			return
+		}
+	}
 	exitPoint := s.checkpoint.SafeModeExitPoint()
 	failpoint.Inject("SafeModeDurationIsZero", func() {
-		exitPoint = nil
+		*s.beginLocation = binlog.MustZeroLocation(mysql.MySQLFlavor)
 	})
 	if exitPoint != nil {
-		s.tctx.L().Info("compare exitPoint and beginLocation", zap.Stringer("exit point", *exitPoint), zap.Stringer("init executed location", s.beginLocation))
-		if binlog.CompareLocation(*exitPoint, *s.beginLocation, s.cfg.EnableGTID) > 0 {
-			//nolint:errcheck
-			s.safeMode.Add(tctx, 1) // enable and will revert after pass SafeModeExitLoc
-			s.tctx.L().Info("enable safe-mode for safe mode exit point, will exit at", zap.Stringer("location", *exitPoint))
-		} else {
-			s.tctx.L().Info("disable safe-mode because beginLocation equal safeModeExitPoint")
-		}
+		//nolint:errcheck
+		s.safeMode.Add(tctx, 1) // enable and will revert after pass SafeModeExitLoc
+		s.tctx.L().Info("enable safe-mode for safe mode exit point, will exit at", zap.Stringer("location", *exitPoint))
 	} else {
-		initPhaseSeconds := s.cfg.SafeModeDuration
-
-		failpoint.Inject("SafeModeInitPhaseSeconds", func(val failpoint.Value) {
-			seconds := val.(string)
-			initPhaseSeconds = seconds
-			s.tctx.L().Info("set initPhaseSeconds", zap.String("failpoint", "SafeModeInitPhaseSeconds"), zap.String("value", seconds))
-		})
-		var duration time.Duration
-		if initPhaseSeconds == "" {
-			duration = time.Second * time.Duration(2*s.cfg.CheckpointFlushInterval)
-		} else {
-			duration, err = time.ParseDuration(initPhaseSeconds)
-			if err != nil {
-				// send error to the fatal chan to interrupt the process
-				s.runFatalChan <- unit.NewProcessError(err)
-				s.tctx.L().Error("enable safe-mode failed due to duration parse failed", zap.String("duration", initPhaseSeconds))
-				return
-			}
-		}
 		s.tctx.L().Info("enable safe-mode because of task initialization", zap.Duration("duration", duration))
 
 		if int64(duration) > 0 {
@@ -108,13 +103,21 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 				case <-time.After(duration):
 				}
 			}()
-		} else {
-			fresh, err2 := s.IsFreshTask(tctx.Ctx)
-			if err2 != nil {
-				err = err2
-			} else if !fresh && !s.safeMode.Enable() {
-				err = terror.ErrSyncerReprocessWithSafeModeFail.Generate()
-			}
+		}
+	}
+
+	// when exitPoint equal beginLocation, it means safe mode doesn't enable
+	// because safe mode will disable quickly in the syncer main logic
+	if exitPoint != nil && binlog.CompareLocation(*exitPoint, *s.beginLocation, s.cfg.EnableGTID) == 0 {
+		s.tctx.L().Info("safe-mode: exitPoint equal to beginLocation")
+		return
+	}
+	if s.safeMode.Enable() && int64(duration) == 0 {
+		fresh, err2 := s.IsFreshTask(tctx.Ctx)
+		if err2 != nil {
+			err = err2
+		} else if !fresh {
+			err = terror.ErrSyncerReprocessWithSafeModeFail.Generate()
 		}
 	}
 }
