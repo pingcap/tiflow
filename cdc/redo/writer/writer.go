@@ -119,26 +119,24 @@ func NewLogWriter(
 	var err error
 	var logWriter *LogWriter
 	rowCfg := &FileWriterConfig{
-		Dir:               cfg.Dir,
-		ChangeFeedID:      cfg.ChangeFeedID,
-		CaptureID:         cfg.CaptureID,
-		FileType:          common.DefaultRowLogFileType,
-		CreateTime:        cfg.CreateTime,
-		MaxLogSize:        cfg.MaxLogSize,
-		FlushIntervalInMs: cfg.FlushIntervalInMs,
-		S3Storage:         cfg.S3Storage,
-		S3URI:             cfg.S3URI,
+		Dir:          cfg.Dir,
+		ChangeFeedID: cfg.ChangeFeedID,
+		CaptureID:    cfg.CaptureID,
+		FileType:     common.DefaultRowLogFileType,
+		CreateTime:   cfg.CreateTime,
+		MaxLogSize:   cfg.MaxLogSize,
+		S3Storage:    cfg.S3Storage,
+		S3URI:        cfg.S3URI,
 	}
 	ddlCfg := &FileWriterConfig{
-		Dir:               cfg.Dir,
-		ChangeFeedID:      cfg.ChangeFeedID,
-		CaptureID:         cfg.CaptureID,
-		FileType:          common.DefaultDDLLogFileType,
-		CreateTime:        cfg.CreateTime,
-		MaxLogSize:        cfg.MaxLogSize,
-		FlushIntervalInMs: cfg.FlushIntervalInMs,
-		S3Storage:         cfg.S3Storage,
-		S3URI:             cfg.S3URI,
+		Dir:          cfg.Dir,
+		ChangeFeedID: cfg.ChangeFeedID,
+		CaptureID:    cfg.CaptureID,
+		FileType:     common.DefaultDDLLogFileType,
+		CreateTime:   cfg.CreateTime,
+		MaxLogSize:   cfg.MaxLogSize,
+		S3Storage:    cfg.S3Storage,
+		S3URI:        cfg.S3URI,
 	}
 	logWriter = &LogWriter{
 		cfg: cfg,
@@ -381,11 +379,12 @@ func (l *LogWriter) DeleteAllLogs(ctx context.Context) error {
 		return err
 	}
 
+	err = os.RemoveAll(l.cfg.Dir)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+	}
+
 	if !l.cfg.S3Storage {
-		err = os.RemoveAll(l.cfg.Dir)
-		if err != nil {
-			return cerror.WrapError(cerror.ErrRedoFileOp, err)
-		}
 		// after delete logs, rm the LogWriter since it is already closed
 		l.cleanUpLogWriter()
 		return nil
@@ -508,12 +507,13 @@ func (l *LogWriter) maybeUpdateMeta(checkpointTs, resolvedTs uint64) ([]byte, er
 	l.metaLock.Lock()
 	defer l.metaLock.Unlock()
 
+	// NOTE: both checkpoint and resolved can regress if a cdc instance restarts.
 	hasChange := false
 	if checkpointTs > l.meta.CheckpointTs {
 		l.meta.CheckpointTs = checkpointTs
 		hasChange = true
 	} else if checkpointTs > 0 && checkpointTs != l.meta.CheckpointTs {
-		log.Panic("flushLogMeta with a regressed checkpoint ts",
+		log.Warn("flushLogMeta with a regressed checkpoint ts, ignore",
 			zap.Uint64("currCheckpointTs", l.meta.CheckpointTs),
 			zap.Uint64("recvCheckpointTs", checkpointTs))
 	}
@@ -521,7 +521,7 @@ func (l *LogWriter) maybeUpdateMeta(checkpointTs, resolvedTs uint64) ([]byte, er
 		l.meta.ResolvedTs = resolvedTs
 		hasChange = true
 	} else if resolvedTs > 0 && resolvedTs != l.meta.ResolvedTs {
-		log.Panic("flushLogMeta with a regressed resolved ts",
+		log.Warn("flushLogMeta with a regressed resolved ts, ignore",
 			zap.Uint64("currCheckpointTs", l.meta.ResolvedTs),
 			zap.Uint64("recvCheckpointTs", resolvedTs))
 	}
@@ -551,26 +551,20 @@ func (l *LogWriter) flushLogMeta(checkpointTs, resolvedTs uint64) error {
 		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't make dir for new redo logfile"))
 	}
 
-	tmpFileName := l.filePath() + common.MetaTmpEXT
-	tmpFile, err := openTruncFile(tmpFileName)
+	metaFile, err := openTruncFile(l.filePath())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 
-	_, err = tmpFile.Write(data)
+	_, err = metaFile.Write(data)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
-	err = tmpFile.Sync()
+	err = metaFile.Sync()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
-	err = tmpFile.Close()
-	if err != nil {
-		return cerror.WrapError(cerror.ErrRedoFileOp, err)
-	}
-
-	err = os.Rename(tmpFileName, l.filePath())
+	err = metaFile.Close()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
