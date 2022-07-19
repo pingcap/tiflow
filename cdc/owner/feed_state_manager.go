@@ -67,6 +67,8 @@ func newFeedStateManager() *feedStateManager {
 	f.errBackoff.MaxInterval = defaultBackoffMaxInterval
 	f.errBackoff.Multiplier = defaultBackoffMultiplier
 	f.errBackoff.RandomizationFactor = defaultBackoffRandomizationFactor
+	// MaxElapsedTime=0 means the backoff never stops
+	f.errBackoff.MaxElapsedTime = 0
 
 	f.resetErrBackoff()
 	f.lastErrorTime = time.Unix(0, 0)
@@ -459,6 +461,8 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 		m.patchState(model.StateError)
 	} else {
 		oldBackoffInterval := m.backoffInterval
+		// NextBackOff will never return -1 because the backoff never stops
+		// with `MaxElapsedTime=0`
 		m.backoffInterval = m.errBackoff.NextBackOff()
 		m.lastErrorTime = time.Unix(0, 0)
 
