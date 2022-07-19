@@ -227,7 +227,7 @@ var testCases = []testCase{
 		[]string{"ALTER TABLE `test`.`t1` ADD CONSTRAINT `fk_t2_id` FOREIGN KEY IF NOT EXISTS (`t2_id`) REFERENCES `t2`(`id`)"},
 		[][]*filter.Table{{genTableName("test", "t1")}},
 		[][]*filter.Table{{genTableName("xtest", "xt1")}},
-		[]string{"ALTER TABLE `xtest`.`xt1` ADD CONSTRAINT `fk_t2_id` FOREIGN KEY IF NOT EXISTS (`t2_id`) REFERENCES `xtest`.`xt2`(`id`)"},
+		[]string{"ALTER TABLE `xtest`.`xt1` ADD CONSTRAINT `fk_t2_id` FOREIGN KEY IF NOT EXISTS (`t2_id`) REFERENCES `t2`(`id`)"},
 	},
 	{
 		"create index if not exists i1 on `t1`(`c1`)",
