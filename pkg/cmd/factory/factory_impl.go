@@ -202,7 +202,11 @@ func (f *factoryImpl) APIV1Client() (apiv1client.APIV1Interface, error) {
 		return nil, errors.Trace(err)
 	}
 	log.Info(serverAddr)
-	return apiv1client.NewAPIClient(serverAddr, f.clientGetter.GetCredential())
+	client, err := apiv1client.NewAPIClient(serverAddr, f.clientGetter.GetCredential())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return client, checkCDCVersion(client)
 }
 
 // APIV2Client returns cdc api v2 client.
@@ -212,6 +216,13 @@ func (f *factoryImpl) APIV2Client() (apiv2client.APIV2Interface, error) {
 		return nil, errors.Trace(err)
 	}
 	log.Info(serverAddr)
+	client, err := apiv1client.NewAPIClient(serverAddr, f.clientGetter.GetCredential())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if err := checkCDCVersion(client); err != nil {
+		return nil, errors.Trace(err)
+	}
 	return apiv2client.NewAPIClient(serverAddr, f.clientGetter.GetCredential())
 }
 
@@ -264,4 +275,22 @@ func (f *factoryImpl) findServerAddr() (string, error) {
 		}
 	}
 	return "", errors.New("no capture is found")
+}
+
+func checkCDCVersion(client apiv1client.APIV1Interface) error {
+	serverStatus, err := client.Status().Get(cmdconetxt.GetDefaultContext())
+	if err != nil {
+		return errors.Trace(err)
+	}
+	cdcVersion, err := version.GetTiCDCClusterVersion([]string{serverStatus.Version})
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if !cdcVersion.ShouldRunCliWithOpenAPI() {
+		return errors.New("Can’t operate the TiCDC cluster, " +
+			"the cluster version is too old. Only the version of this cluster " +
+			"larger or equal than v6.2.0 can be operated, " +
+			"please make sure the server version and the cli-tools version are matched.")
+	}
+	return nil
 }

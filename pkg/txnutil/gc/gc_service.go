@@ -31,8 +31,8 @@ const (
 	EnsureGCServiceCreating = "-creating-"
 	// EnsureGCServiceResuming is a tag of GC service id for changefeed resumption
 	EnsureGCServiceResuming = "-resuming-"
-	// EnsureGCServiceChecking is a tag of GC service id for changefeed initialization
-	EnsureGCServiceChecking = "-checking-"
+	// EnsureGCServiceInitializing is a tag of GC service id for changefeed initialization
+	EnsureGCServiceInitializing = "-initializing-"
 )
 
 // EnsureChangefeedStartTsSafety checks if the startTs less than the minimum of
@@ -53,6 +53,24 @@ func EnsureChangefeedStartTsSafety(
 	if startTs < minServiceGCTs {
 		return cerrors.ErrStartTsBeforeGC.GenWithStackByArgs(startTs, minServiceGCTs)
 	}
+	return nil
+}
+
+// UndoEnsureChangefeedStartTsSafety cleans the service GC safepoint of a changefeed
+// if something goes wrong after successfully calling EnsureChangefeedStartTsSafety().
+func UndoEnsureChangefeedStartTsSafety(
+	ctx context.Context, pdCli pd.Client,
+	gcServiceIDPrefix string,
+	changefeedID model.ChangeFeedID,
+) error {
+	err := RemoveServiceGCSafepoint(
+		ctx,
+		pdCli,
+		gcServiceIDPrefix+changefeedID.Namespace+"_"+changefeedID.ID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	return nil
 }
 
