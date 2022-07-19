@@ -222,7 +222,7 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 	return err
 }
 
-func (l *LightningLoader) setLightningConfig() (*lcfg.Config, error) {
+func (l *LightningLoader) getLightningConfig() (*lcfg.Config, error) {
 	cfg := lcfg.NewConfig()
 	if err := cfg.LoadFromGlobal(l.lightningGlobalConfig); err != nil {
 		return nil, err
@@ -274,7 +274,8 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		if err = l.checkPointList.RegisterCheckPoint(ctx); err != nil {
 			return err
 		}
-		cfg, err := l.setLightningConfig()
+		var cfg *lcfg.Config
+		cfg, err = l.getLightningConfig()
 		if err != nil {
 			return err
 		}
@@ -282,6 +283,10 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		if err == nil {
 			l.finish.Store(true)
 			err = l.checkPointList.UpdateStatus(ctx, lightningStatusFinished)
+			if err != nil {
+				l.logger.Error("failed to update checkpoint status", zap.Error(err))
+				return err
+			}
 		} else {
 			l.logger.Error("failed to runlightning", zap.Error(err))
 		}

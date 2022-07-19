@@ -27,7 +27,7 @@ func TestSetLightningConfig(t *testing.T) {
 		},
 	}
 	l := NewLightning(stCfg, nil, "")
-	cfg, err := l.setLightningConfig()
+	cfg, err := l.getLightningConfig()
 	require.NoError(t, err)
 	require.Equal(t, stCfg.LoaderConfig.PoolSize, cfg.App.RegionConcurrency)
 }
