@@ -17,6 +17,7 @@ import (
 	"encoding/binary"
 	"hash/crc64"
 	"sync"
+	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -61,10 +62,10 @@ func (s *sink) WriteEvents(rows ...*eventsink.TxnCallbackableEvent) {
 
 // Close closes the sink. It won't wait for all pending items backend handled.
 func (s *sink) Close() error {
+	s.conflictDetector.Close()
 	for _, w := range s.workers {
 		w.Close()
 	}
-	s.conflictDetector.Close()
 	return nil
 }
 
@@ -97,8 +98,10 @@ type worker struct {
 	txnCh   *chann.Chann[txnWithNotifier]
 	stopped chan struct{}
 	wg      sync.WaitGroup
-
 	backend backend
+
+	// Fields only used in the background loop.
+	timer *time.Timer
 }
 
 type txnWithNotifier struct {
@@ -113,10 +116,6 @@ func newWorker(ID int, backend backend) *worker {
 		stopped: make(chan struct{}),
 		backend: backend,
 	}
-}
-
-func (w *worker) runBackground() {
-	go w.Run()
 }
 
 func (w *worker) Add(txn *txnEvent, unlock func()) {
@@ -134,24 +133,38 @@ func (w *worker) Run() {
 	w.wg.Add(1)
 	go func() {
 		defer w.wg.Done()
+		w.timer = time.NewTimer(w.backend.maxFlushInterval())
 		for {
 			select {
 			case <-w.stopped:
 				return
-			case txn := <-w.txnCh.Out():
-				txn.wantMore()
-				if err := w.backend.onTxnEvent(txn.txnEvent.TxnCallbackableEvent); err != nil {
-					// TODO: handle errors.
-					return
+			case txn, ok := <-w.txnCh.Out():
+				if !ok {
+					break
 				}
-			case <-w.backend.timer().C:
-				if err := w.backend.onTimeout(); err != nil {
-					// TODO: handle errors.
-					return
+				txn.wantMore()
+				if w.backend.onTxnEvent(txn.txnEvent.TxnCallbackableEvent) && w.doFlush() {
+					break
+				}
+			case <-w.timer.C:
+				if w.doFlush() {
+					break
 				}
 			}
 		}
 	}()
+}
+
+func (w *worker) doFlush() bool {
+	if err := w.backend.flush(); err != nil {
+		// TODO: handle err.
+		return true
+	}
+	if !w.timer.Stop() {
+		<-w.timer.C
+	}
+	w.timer.Reset(w.backend.maxFlushInterval())
+	return false
 }
 
 func genTxnKeys(txn *model.SingleTableTxn) [][]byte {

@@ -22,8 +22,11 @@ import (
 // backend indicates a transaction backend like MySQL, TiDB, ...
 type backend interface {
 	// onTxnEvent handles one TxnCallbackableEvent.
-	onTxnEvent(*eventsink.TxnCallbackableEvent) error
-	// timer gets a timer so that onTimeout can be called periodcally.
-	timer() *time.Timer
-	onTimeout() error
+	onTxnEvent(*eventsink.TxnCallbackableEvent) (needFlush bool)
+
+	// Flush pending events in the backend.
+	flush() error
+
+	// To reduce latency for low throughput cases.
+	maxFlushInterval() time.Duration
 }
