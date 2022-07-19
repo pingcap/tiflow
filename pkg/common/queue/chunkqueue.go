@@ -17,33 +17,40 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 )
 
 const (
+	// the size of each chunk is 1024 bytes (1Kb) by default
 	defaultSizePerChunk = 1024
+	// the minimum length of each chunk is 16
+	minimumChunkLen      = 16
+	initialPitchArrayLen = 32
 )
 
 // ChunkQueue is a generic, efficient and GC-friendly queue
 type ChunkQueue[T any] struct {
-	// [head, tail] is the section of chunks in use
+	// [head, tail) is the section of chunks in use
 	head int
 	tail int
+
+	// size is number of elements in queue
 	size int
 
-	chunks       []*chunk[T]
+	// chunks is an array storing ptr
+	chunks []*chunk[T]
+	// chunkSize is the max number of elements stored in every chunk
 	chunkSize    int
 	chunkPool    sync.Pool
 	defaultValue T
 }
 
-func (q *ChunkQueue[T]) headChunk() *chunk[T] {
+func (q *ChunkQueue[T]) firstChunk() *chunk[T] {
 	return q.chunks[q.head]
 }
 
-func (q *ChunkQueue[T]) tailChunk() *chunk[T] {
-	return q.chunks[q.tail]
+func (q *ChunkQueue[T]) lastChunk() *chunk[T] {
+	return q.chunks[q.tail-1]
 }
 
 // NewChunkQueue creates a new ChunkQueue
@@ -56,17 +63,18 @@ func NewChunkQueue[T any]() *ChunkQueue[T] {
 // to the cap argument when making a slice using make([]T, len, cap)
 func NewChunkQueueLeastCapacity[T any](minCapacity int) *ChunkQueue[T] {
 	if unsafe.Sizeof(*new(T)) == 0 {
-		log.Panic("Cannot create queue of type that size == 0")
+		log.Error("Cannot create a queue of type")
+		return nil
 	}
 
 	chunkSize := defaultSizePerChunk / int(unsafe.Sizeof(*new(T)))
-	if chunkSize < 16 {
-		chunkSize = 16
+	if chunkSize < minimumChunkLen {
+		chunkSize = minimumChunkLen
 	}
 
 	q := &ChunkQueue[T]{
 		head:      0,
-		tail:      -1, // temporary be negative
+		tail:      0,
 		size:      0,
 		chunkSize: chunkSize,
 	}
@@ -76,7 +84,7 @@ func NewChunkQueueLeastCapacity[T any](minCapacity int) *ChunkQueue[T] {
 		},
 	}
 
-	q.chunks = make([]*chunk[T], 32, 32)
+	q.chunks = make([]*chunk[T], initialPitchArrayLen, initialPitchArrayLen)
 	q.expandSpace(minCapacity)
 	return q
 }
@@ -89,10 +97,10 @@ func (q *ChunkQueue[T]) Size() int {
 // Cap() returns the capacity of the queue. The queue can hold more elements
 // than that number by automatic expansion
 func (q *ChunkQueue[T]) Cap() int {
-	return q.chunkSize*(q.tail-q.head) - q.chunks[q.head].l - 1
+	return q.chunkSize*(q.tail-q.head) - q.chunks[q.head].l
 }
 
-// Empty returns if the queue is empty now
+// Empty() indicates whether the queue is empty
 func (q *ChunkQueue[T]) Empty() bool {
 	return q.size == 0
 }
@@ -101,7 +109,7 @@ func (q *ChunkQueue[T]) Empty() bool {
 
 // At() returns the pointer to an element
 func (q *ChunkQueue[T]) At(idx int) (*T, bool) {
-	if q == nil || idx < 0 || idx > q.size {
+	if idx < 0 || idx >= q.size {
 		return new(T), false
 	}
 	i := q.chunks[q.head].l + idx
@@ -113,67 +121,46 @@ func (q *ChunkQueue[T]) Head() (*T, bool) {
 	if q.Empty() {
 		return nil, false
 	}
-	headChunk := q.headChunk()
-	return &headChunk.data[headChunk.l], true
+	c := q.firstChunk()
+	return &c.data[c.l], true
 }
 
-// Tail() returns the pointer to the first element in queue and nil if empty
+// Tail() returns the pointer to the last element in queue and nil if empty
 func (q *ChunkQueue[T]) Tail() (*T, bool) {
 	if q.Empty() {
 		return nil, false
 	}
-	tailChunk := q.headChunk()
-	return &tailChunk.data[tailChunk.r-1], true
+	c := q.lastChunk()
+	return &c.data[c.r-1], true
 }
 
-// Begin() gives the first iterator of the queue
-func (q *ChunkQueue[T]) Begin() *ChunkQueueIterator[T] {
-	return &ChunkQueueIterator[T]{
-		chunk:      q.headChunk(),
-		idxInChunk: q.headChunk().l,
-	}
-}
-
-// End() creates an special iterator of the queue representing the end
-func (q *ChunkQueue[T]) End() *ChunkQueueIterator[T] {
-	return &ChunkQueueIterator[T]{
-		chunk:      q.tailChunk(),
-		idxInChunk: -1,
-	}
-}
-
-// Operations
+// expandSpace extends the space by adding chunk(s) to the queue
 func (q *ChunkQueue[T]) expandSpace(n int) {
 	if n <= 0 {
 		n = 1
 	}
 	chunksNum := (n + q.chunkSize - 1) / q.chunkSize
 
-	if len(q.chunks)-q.tail-chunksNum <= 4 {
+	if len(q.chunks)-q.tail-chunksNum <= 1 {
 		q.expandPitch(chunksNum)
 	}
 
 	for i := 0; i < chunksNum; i++ {
-		idx := i + q.tail + 1
 		c := q.chunkPool.Get().(*chunk[T])
-
-		// c := new(chunk[T])
-		// c.data = make([]T, q.chunkSize, q.chunkSize)
-
-		if idx > 0 {
-			c.prevCk = q.chunks[idx-1]
-			q.chunks[idx-1].nextCk = c
+		c.queue = q
+		q.chunks[q.tail] = c
+		if q.tail > q.head {
+			c.prevCk = q.chunks[q.tail-1]
+			q.chunks[q.tail-1].nextCk = c
 		}
-		q.chunks[idx] = c
-	}
-	if q.tail < 0 {
-		q.tail = 0
+		q.tail++
 	}
 }
 
+// expandPitch extends the []chunks array in which there are pointers to chunks
 func (q *ChunkQueue[T]) expandPitch(x int) {
 	n := len(q.chunks)
-	used := q.tail - q.head + 1
+	used := q.tail - q.head
 	for {
 		if n < 1024 {
 			n *= 2
@@ -185,118 +172,109 @@ func (q *ChunkQueue[T]) expandPitch(x int) {
 		}
 	}
 	newChunks := make([]*chunk[T], n, n)
-	copy(newChunks, q.chunks[q.head:q.tail+1])
+	copy(newChunks[:used], q.chunks[q.head:q.tail])
 	q.tail -= q.head
 	q.head = 0
 	q.chunks = newChunks
 }
 
 // PushBack() pushes an element to tail
-func (q *ChunkQueue[T]) PushBack(v T) error {
-	tailChunk := q.tailChunk()
-	if tailChunk.r < q.chunkSize {
-		tailChunk.data[tailChunk.r] = v
-		tailChunk.r++
-	} else {
-		if tailChunk.nextCk == nil {
-			q.expandSpace(1)
-		}
-		tailChunk = tailChunk.nextCk
-		tailChunk.data[tailChunk.r] = v
-		tailChunk.r++
-		q.tail++
+func (q *ChunkQueue[T]) Enqueue(v T) {
+	c := q.lastChunk()
+	if c.r == q.chunkSize {
+		q.expandSpace(1)
+		c = q.lastChunk()
 	}
+
+	c.data[c.r] = v
+	c.r++
 	q.size++
-	return nil
 }
 
 // PopFront() pops an element from head
-func (q *ChunkQueue[T]) PopFront() (T, error) {
+func (q *ChunkQueue[T]) Dequeue() (T, bool) {
 	if q.Empty() {
-		return *new(T), errors.New("empty queue")
+		return *new(T), false
 	}
 
-	headChunk := q.headChunk()
-	v := headChunk.data[headChunk.l]
-	headChunk.data[headChunk.l] = q.defaultValue
-	headChunk.l++
+	c := q.firstChunk()
+	v := c.data[c.l]
+	c.data[c.l] = q.defaultValue
+	c.l++
 	q.size--
 
-	if headChunk.l == q.chunkSize {
+	if c.l == q.chunkSize {
 		q.popChunk()
 	}
-
-	return v, nil
+	return v, true
 }
 
 func (q *ChunkQueue[T]) popChunk() {
-	headChunk := q.headChunk()
-	if headChunk.nextCk == nil {
+	c := q.firstChunk()
+	if c.nextCk == nil {
 		q.expandSpace(1)
 	}
-
 	q.chunks[q.head] = nil
 	q.head++
-
 	q.chunks[q.head].prevCk = nil
-	headChunk.reset()
-	q.chunkPool.Put(headChunk)
-	if q.Empty() {
-		q.tail = q.head
-	}
+
+	c.reset()
+	q.chunkPool.Put(c)
 }
 
 // Enqueue() enques a single element to the tail
-func (q *ChunkQueue[T]) Enqueue(v T) error {
-	return q.PushBack(v)
+func (q *ChunkQueue[T]) PushBack(v T) {
+	q.Enqueue(v)
 }
 
 // Dequeue() deques a single element from the head
-func (q *ChunkQueue[T]) Dequeue() (T, error) {
-	return q.PopFront()
-}
-
-// EnqueueMany() pushes multiple elements to the tail at a time
-func (q *ChunkQueue[T]) EnqueueMany(vals ...T) error {
-	return q.PushBackMany(vals...)
+func (q *ChunkQueue[T]) PopFront() (T, bool) {
+	return q.Dequeue()
 }
 
 // PushBackMany() pushes multiple elements to the tail at a time
-func (q *ChunkQueue[T]) PushBackMany(vals ...T) error {
+func (q *ChunkQueue[T]) PushBackMany(vals ...T) {
+	q.EnqueueMany(vals...)
+}
+
+// EnqueueMany() enqueues multiple elements at a time
+func (q *ChunkQueue[T]) EnqueueMany(vals ...T) {
 	if q.Cap()-q.Size() < len(vals) {
-		q.expandSpace(len(vals) + 1)
+		q.expandSpace(len(vals))
 	}
 
 	for _, val := range vals {
-		if err := q.PushBack(val); err != nil {
-			return err
-		}
+		q.Enqueue(val)
 	}
-	return nil
 }
 
-// DequeueMany() deques n elements from head.
-func (q *ChunkQueue[T]) DequeueMany(n int) ([]T, error) {
-	return q.PopFrontMany(n)
+// PopFrontMany() deques n elements from the head.
+func (q *ChunkQueue[T]) PopFrontMany(n int) ([]T, bool) {
+	return q.DequeueMany(n)
 }
 
-// PopFrontMany() deques n elements from head.
-func (q *ChunkQueue[T]) PopFrontMany(n int) ([]T, error) {
+// DequeueMany() deques n elements from the head.
+func (q *ChunkQueue[T]) DequeueMany(n int) ([]T, bool) {
 	if n < 0 {
-		return nil, errors.New("could not pop elements of a negative number")
+		return nil, false
 	}
+
+	ok := n <= q.size
 	if q.size < n {
-		return nil, errors.New("not enough elements to pop")
+		n = q.size
 	}
 
 	res := make([]T, n, n)
 	cnt := 0
-	for i := q.head; i <= q.tail && cnt < n; i++ {
+	//emptyChunk := make([]T, q.chunkSize, q.chunkSize)
+	for i := q.head; i < q.tail && cnt < n; i++ {
 		c := q.chunks[i]
 		popLen := c.len()
 		if n-cnt < popLen {
 			popLen = n - cnt
 		}
+		//copy(res[cnt:cnt+popLen], c.data[c.l:c.l+popLen])
+		//copy(c.data[c.l:c.l+popLen], emptyChunk[:popLen])
 		for j := 0; j < popLen; j++ {
 			res[cnt+j] = c.data[c.l+j]
 			c.data[c.l+j] = q.defaultValue
@@ -309,5 +287,18 @@ func (q *ChunkQueue[T]) PopFrontMany(n int) ([]T, error) {
 			q.popChunk()
 		}
 	}
-	return res, nil
+	return res, ok
+}
+
+func (q *ChunkQueue[T]) Clear() {
+	if q.Empty() {
+		return
+	}
+
+	emptyChunk := make([]T, q.chunkSize, q.chunkSize)
+	for i := q.head; i < q.tail; i++ {
+		q.size -= q.chunks[i].len()
+		copy(q.chunks[i].data[:], emptyChunk[:])
+		q.popChunk()
+	}
 }

@@ -54,6 +54,7 @@ func (c *chunk[T]) reset() {
 	c.r = 0
 	c.prevCk = nil
 	c.nextCk = nil
+	c.queue = nil
 }
 
 func newChunk[T any](sz int, q *ChunkQueue[T]) *chunk[T] {
