@@ -291,7 +291,7 @@ func TestAsyncSend(t *testing.T) {
 	require.Len(t, mp.GetEvent(key3), 2)
 }
 
-func TestAsyncSendWhenTableStopped(t *testing.T) {
+func TestAsyncSendWhenTableStopping(t *testing.T) {
 	t.Parallel()
 
 	key1 := mqv1.TopicPartitionKey{
@@ -301,7 +301,7 @@ func TestAsyncSendWhenTableStopped(t *testing.T) {
 	worker, p := newTestWorker(t)
 	defer worker.close()
 	replicatingStatus := pipeline.TableStateReplicating
-	stoopedStatus := pipeline.TableStateStopped
+	stoopedStatus := pipeline.TableStateStopping
 	events := []mqEvent{
 		{
 			rowEvent: &eventsink.RowChangeCallbackableEvent{
