@@ -463,6 +463,7 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 		oldBackoffInterval := m.backoffInterval
 		// NextBackOff will never return -1 because the backoff never stops
 		// with `MaxElapsedTime=0`
+		// ref: https://github.com/cenkalti/backoff/blob/v4/exponential.go#L121-L123
 		m.backoffInterval = m.errBackoff.NextBackOff()
 		m.lastErrorTime = time.Unix(0, 0)
 
