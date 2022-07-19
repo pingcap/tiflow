@@ -177,7 +177,7 @@ function checktask_full_mode_conn() {
 }
 
 function check_task_lightning() {
-	run_dm_ctl  $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"check-task $cur/conf/dm-task2.yaml" \
 		"task precheck cannot accurately check the amount of connection needed for Lightning, please set a sufficently large connections for TiDB" 1
 }

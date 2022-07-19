@@ -43,7 +43,7 @@ func newConnAmountChecker(targetDB *conn.BaseDB, stCfgs []*config.SubTaskConfig,
 func (c *connAmountChecker) check(ctx context.Context, checkerName string) *Result {
 	result := &Result{
 		Name:  checkerName,
-		Desc:  "check if user-specified amount of connection exceeds downstream's maximum",
+		Desc:  "check if user-specified amount of connection exceeds database's maximum",
 		State: StateFailure,
 	}
 	baseConn, err := c.targetDB.GetBaseConn(ctx)
@@ -70,7 +70,10 @@ func (c *connAmountChecker) check(ctx context.Context, checkerName string) *Resu
 		}
 	}
 	neededConn := c.getConfigConn(c.stCfgs)
-	if neededConn > maxConn {
+	if maxConn != 0 && neededConn > maxConn {
+		// FYI: https://github.com/pingcap/tidb/pull/35453
+		// currently, TiDB's max_connections is set to 0 representing unlimited connections,
+		// while for MySQL, 0 is not a legal value (never retrieve from it).
 		result.Errors = append(
 			result.Errors,
 			NewError("database's max_connections: %d is less than the amount %s needs: %d", maxConn, c.workerName, neededConn),
@@ -110,7 +113,7 @@ func (l *LoaderConnAmountChecker) Check(ctx context.Context) *Result {
 		if stCfg.NeedUseLightning() {
 			result.Errors = append(
 				result.Errors,
-				NewWarn("task precheck cannot accurately check the amount of connection needed for Lightning, please set a sufficently large connections for TiDB"),
+				NewWarn("task precheck cannot accurately check the amount of connection needed for Lightning, please set a sufficiently large connections for TiDB"),
 			)
 			result.State = StateWarning
 			break
