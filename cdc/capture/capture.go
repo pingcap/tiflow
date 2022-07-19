@@ -475,11 +475,17 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		// if owner exits, resign the owner key,
 		// use a new context to prevent the context from being cancelled.
 		if resignErr := c.resign(context.Background()); resignErr != nil {
-			log.Info("owner resign failed",
-				zap.String("captureID", c.info.ID), zap.Int64("ownerRev", ownerRev),
-				zap.Error(resignErr))
-			// if resigning owner failed, return error to let capture exits
-			return errors.Annotatef(resignErr, "resign owner failed, capture: %s", c.info.ID)
+			if errors.Cause(err) == context.DeadlineExceeded {
+				log.Warn("owner resign timeout", zap.String("captureID", c.info.ID),
+					zap.Int64("ownerRev", ownerRev), zap.Error(resignErr))
+			} else {
+				log.Info("owner resign failed",
+					zap.String("captureID", c.info.ID), zap.Int64("ownerRev", ownerRev),
+					zap.Error(resignErr))
+				// if resigning owner failed, return error to let capture exits
+				return errors.Annotatef(resignErr,
+					"resign owner failed, capture: %s", c.info.ID)
+			}
 		}
 		log.Info("owner resigned successfully",
 			zap.String("captureID", c.info.ID), zap.Int64("ownerRev", ownerRev))
@@ -557,6 +563,8 @@ func (c *captureImpl) resign(ctx context.Context) error {
 	failpoint.Inject("capture-resign-failed", func() {
 		failpoint.Return(errors.New("capture resign failed"))
 	})
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	return cerror.WrapError(cerror.ErrCaptureResignOwner, c.election.Resign(ctx))
 }
 
@@ -614,7 +622,9 @@ func (c *captureImpl) AsyncClose() {
 
 	if c.session != nil {
 		lease := c.session.Lease()
-		_, err := c.EtcdClient.Client.Revoke(context.Background(), lease)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_, err := c.EtcdClient.Client.Revoke(ctx, lease)
 		if err != nil {
 			log.Warn("revoke etcd lease error", zap.String("captureID", c.info.ID),
 				zap.Any("lease", lease), zap.Error(err))
