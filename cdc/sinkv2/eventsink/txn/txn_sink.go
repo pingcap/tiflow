@@ -27,9 +27,10 @@ import (
 )
 
 const (
-	defaultConflictDetectorSlots int64        = 1024 * 1024
-	crcTable                     *crc64.Table = crc64.MakeTable(crc64.ISO)
+	defaultConflictDetectorSlots int64 = 1024 * 1024
 )
+
+var crcTable *crc64.Table = crc64.MakeTable(crc64.ISO)
 
 // Assert EventSink[E event.TableEvent] implementation
 var _ eventsink.EventSink[*model.SingleTableTxn] = (*sink)(nil)
@@ -44,12 +45,11 @@ func newSink(backends []backend, conflictDetectorSlots int64) sink {
 	workers := make([]*worker, 0, len(backends))
 	for i, backend := range backends {
 		w := newWorker(i, backend)
-		w.wg.Add(1)
-		go w.Run()
+		w.Run()
 		workers = append(workers, w)
 	}
 	detector := causality.NewConflictDetector[*worker, *txnEvent](workers, conflictDetectorSlots)
-	return sink{detector, workers}
+	return sink{conflictDetector: detector, workers: workers}
 }
 
 // WriteEvents writes events to the sink.
@@ -109,10 +109,14 @@ type txnWithNotifier struct {
 func newWorker(ID int, backend backend) *worker {
 	return &worker{
 		ID:      ID,
-		txnCh:   chann.New[txnWithNotifier](chann.Cap(-1)),
+		txnCh:   chann.New[txnWithNotifier](chann.Cap(-1 /*unbounded*/)),
 		stopped: make(chan struct{}),
 		backend: backend,
 	}
+}
+
+func (w *worker) runBackground() {
+	go w.Run()
 }
 
 func (w *worker) Add(txn *txnEvent, unlock func()) {
@@ -122,27 +126,32 @@ func (w *worker) Add(txn *txnEvent, unlock func()) {
 func (w *worker) Close() {
 	close(w.stopped)
 	w.wg.Wait()
+	w.txnCh.Close()
 }
 
+// Run a background loop.
 func (w *worker) Run() {
-	defer w.wg.Done()
-	for {
-		select {
-		case <-w.stopped:
-			return
-		case txn := <-w.txnCh.Out():
-			txn.wantMore()
-			if err := w.backend.onTxnEvent(txn.txnEvent.TxnCallbackableEvent); err != nil {
-				// TODO: handle errors.
+	w.wg.Add(1)
+	go func() {
+		defer w.wg.Done()
+		for {
+			select {
+			case <-w.stopped:
 				return
-			}
-		case <-w.backend.timer().C:
-			if err := w.backend.onTimeout(); err != nil {
-				// TODO: handle errors.
-				return
+			case txn := <-w.txnCh.Out():
+				txn.wantMore()
+				if err := w.backend.onTxnEvent(txn.txnEvent.TxnCallbackableEvent); err != nil {
+					// TODO: handle errors.
+					return
+				}
+			case <-w.backend.timer().C:
+				if err := w.backend.onTimeout(); err != nil {
+					// TODO: handle errors.
+					return
+				}
 			}
 		}
-	}
+	}()
 }
 
 func genTxnKeys(txn *model.SingleTableTxn) [][]byte {
