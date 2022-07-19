@@ -193,7 +193,7 @@ function check_full_mode_conn() {
 	# TODO: currently, pool-size are not efficacious for Lightning
 	# which simply determines the concurrency by hardware conditions.
 	# This should be solved in the future.
-	run_sql_tidb "set @@GLOBAL.max_connections=151;" # set to default
+	run_sql_tidb "set @@GLOBAL.max_connections=151;"
 	run_sql_source1 "set @@GLOBAL.max_connections=151;"
 	run_sql_source2 "set @@GLOBAL.max_connections=151;"
 	run_sql_tidb "drop database if exists dmctl_conn"
@@ -752,6 +752,7 @@ function run_check_task() {
 	check_task_lightning
 	check_full_mode_conn
 	checktask_full_mode_conn
+	run_sql_tidb "set @@GLOBAL.max_connections=0;" # set default (unlimited), or other tests will fail
 }
 
 function run_validator_cmd_error() {
