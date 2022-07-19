@@ -610,7 +610,20 @@ func (c *captureImpl) AsyncClose() {
 		c.MessageRouter.Wait()
 		c.MessageRouter = nil
 	}
-	log.Info("message router closed", zap.String("captureID", c.info.ID))
+	log.Info("message router closed", zap.String("captureID", c.info.ID)
+
+	if c.session != nil {
+		lease := c.session.Lease()
+		_, err := c.EtcdClient.Client.Revoke(context.Background(), lease)
+		if err != nil {
+			log.Warn("drain capture, revoke lease error",
+				zap.String("captureID", c.info.ID),
+				zap.Any("lease", lease), zap.Error(err))
+		} else {
+			log.Info("draining capture, lease revoked",
+				zap.String("captureID", c.info.ID), zap.Any("lease", lease))
+		}
+	}
 }
 
 // Drain removes tables in the current TiCDC instance.
@@ -621,19 +634,7 @@ func (c *captureImpl) Drain(ctx context.Context) <-chan struct{} {
 	const drainInterval = 100 * time.Millisecond
 	done := make(chan struct{})
 	go func() {
-		defer func() {
-			lease := c.session.Lease()
-			_, err := c.EtcdClient.Client.Revoke(ctx, lease)
-			if err != nil {
-				log.Warn("drain capture, revoke lease error",
-					zap.String("captureID", c.info.ID),
-					zap.Any("lease", lease), zap.Error(err))
-			} else {
-				log.Info("draining capture, lease revoked",
-					zap.String("captureID", c.info.ID), zap.Any("lease", lease))
-			}
-			close(done)
-		}()
+		defer close(done)
 		ticker := time.NewTicker(drainInterval)
 		defer ticker.Stop()
 		for {
