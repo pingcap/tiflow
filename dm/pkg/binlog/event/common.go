@@ -51,15 +51,28 @@ func GenCommonFileHeader(flavor string, serverID uint32, gSet gmysql.GTIDSet, ge
 			ServerID:  serverID,
 			Flags:     defaultHeaderFlags,
 		}
-		latestPos   = uint32(len(replication.BinLogFileHeader))
+		latestPos   uint32
 		prevGTIDsEv *replication.BinlogEvent
+		buf         bytes.Buffer
+		events      []*replication.BinlogEvent
 	)
+
+	_, err := buf.Write(replication.BinLogFileHeader)
+	if err != nil {
+		return nil, nil, terror.ErrBinlogWriteDataToBuffer.AnnotateDelegate(err, "write binlog file header % X", replication.BinLogFileHeader)
+	}
+	latestPos += uint32(len(replication.BinLogFileHeader))
 
 	formatDescEv, err := GenFormatDescriptionEvent(header, latestPos)
 	if err != nil {
 		return nil, nil, terror.Annotate(err, "generate FormatDescriptionEvent")
 	}
+	_, err = buf.Write(formatDescEv.RawData)
+	if err != nil {
+		return nil, nil, terror.ErrBinlogWriteDataToBuffer.AnnotateDelegate(err, "write FormatDescriptionEvent % X", formatDescEv.RawData)
+	}
 	latestPos += uint32(len(formatDescEv.RawData)) // update latestPos
+	events = append(events, formatDescEv)
 
 	if genGTID {
 		switch flavor {
@@ -73,22 +86,7 @@ func GenCommonFileHeader(flavor string, serverID uint32, gSet gmysql.GTIDSet, ge
 		if err != nil {
 			return nil, nil, terror.Annotate(err, "generate PreviousGTIDsEvent/MariadbGTIDListEvent")
 		}
-	}
 
-	var buf bytes.Buffer
-	_, err = buf.Write(replication.BinLogFileHeader)
-	if err != nil {
-		return nil, nil, terror.ErrBinlogWriteDataToBuffer.AnnotateDelegate(err, "write binlog file header % X", replication.BinLogFileHeader)
-	}
-
-	var events []*replication.BinlogEvent
-	_, err = buf.Write(formatDescEv.RawData)
-	if err != nil {
-		return nil, nil, terror.ErrBinlogWriteDataToBuffer.AnnotateDelegate(err, "write FormatDescriptionEvent % X", formatDescEv.RawData)
-	}
-	events = append(events, formatDescEv)
-
-	if genGTID {
 		_, err = buf.Write(prevGTIDsEv.RawData)
 		if err != nil {
 			return nil, nil, terror.ErrBinlogWriteDataToBuffer.AnnotateDelegate(err, "write PreviousGTIDsEvent/MariadbGTIDListEvent % X", prevGTIDsEv.RawData)
