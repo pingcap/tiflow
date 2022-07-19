@@ -169,28 +169,7 @@ type regionWorker struct {
 func newRegionWorker(
 	changefeedID model.ChangeFeedID, s *eventFeedSession, addr string,
 ) *regionWorker {
-	metrics := &regionWorkerMetrics{}
-	metrics.metricReceivedEventSize = eventSize.WithLabelValues("received")
-	metrics.metricDroppedEventSize = eventSize.WithLabelValues("dropped")
-	metrics.metricPullEventInitializedCounter = pullEventCounter.
-		WithLabelValues(cdcpb.Event_INITIALIZED.String(), changefeedID)
-	metrics.metricPullEventCommittedCounter = pullEventCounter.
-		WithLabelValues(cdcpb.Event_COMMITTED.String(), changefeedID)
-	metrics.metricPullEventCommitCounter = pullEventCounter.
-		WithLabelValues(cdcpb.Event_COMMIT.String(), changefeedID)
-	metrics.metricPullEventPrewriteCounter = pullEventCounter.
-		WithLabelValues(cdcpb.Event_PREWRITE.String(), changefeedID)
-	metrics.metricPullEventRollbackCounter = pullEventCounter.
-		WithLabelValues(cdcpb.Event_ROLLBACK.String(), changefeedID)
-	metrics.metricSendEventResolvedCounter = sendEventCounter.
-		WithLabelValues("native-resolved", changefeedID)
-	metrics.metricSendEventCommitCounter = sendEventCounter.
-		WithLabelValues("commit", changefeedID)
-	metrics.metricSendEventCommittedCounter = sendEventCounter.
-		WithLabelValues("committed", changefeedID)
-
 	cfg := config.GetGlobalServerConfig().KVClient
-
 	return &regionWorker{
 		session:       s,
 		inputCh:       make(chan []*regionStatefulEvent, regionWorkerInputChanSize),
@@ -201,7 +180,6 @@ func newRegionWorker(
 		rtsUpdateCh:   make(chan *regionTsInfo, 1024),
 		storeAddr:     addr,
 		concurrent:    cfg.WorkerConcurrent,
-		metrics:       metrics,
 		inputPending:  0,
 		inputCalcSlot: func(regionID uint64) int { return int(regionID) % cfg.WorkerConcurrent },
 		inputSlots:    cfg.WorkerConcurrent,
