@@ -175,18 +175,6 @@ function checktask_full_mode_conn() {
 	run_sql_source2 "set @@GLOBAL.max_connections=151;"
 }
 
-function checktask_incr_mode_conn() {
-	# all mode
-	# syncers: (16 + 5) * 2 = 42
-	run_sql "set @@GLOBAL.max_connections=41;" $TIDB_PORT $TIDB_PASSWORD
-	check_task_not_pass $cur/conf/dm-task3.yaml # not enough connections for syncer
-	run_sql "set @@GLOBAL.max_connections=42;" $TIDB_PORT $TIDB_PASSWORD
-	check_task_pass $cur/conf/dm-task3.yaml # pass
-
-	# set to default
-	run_sql "set @@GLOBAL.max_connections=151;" $TIDB_PORT $TIDB_PASSWORD
-}
-
 function check_full_mode_conn() {
 	# TODO: currently, pool-size are not efficacious for Lightning
 	# which simply determines the concurrency by hardware conditions.
@@ -207,19 +195,6 @@ function check_full_mode_conn() {
 	run_sql_tidb 'SHOW PROCESSLIST;'
 	check_rows_equal 35 # (16 + 1) * 2 + 1 for SHOW PROCESSLIST= 35
 
-	dmctl_stop_task "test"
-	run_sql_tidb "drop database if exists dm_meta" # cleanup checkpoint
-	run_sql_tidb "drop database if exists dmctl_conn"
-}
-
-function check_incr_mode_conn() {
-	run_sql_tidb "drop database if exists dmctl_conn"
-	run_sql_both_source "drop database if exists dmctl_conn"
-	run_sql_both_source "create database dmctl_conn"
-	dmctl_start_task "$cur/conf/dm-task3.yaml" --remove-meta
-
-	run_sql_tidb 'SHOW PROCESSLIST;'
-	check_rows_equal 43 # (16 + 5) * 2 + 1 for show processlist
 	dmctl_stop_task "test"
 	run_sql_tidb "drop database if exists dm_meta" # cleanup checkpoint
 	run_sql_tidb "drop database if exists dmctl_conn"
@@ -755,10 +730,8 @@ function run_check_task() {
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
-	check_incr_mode_conn
 	check_full_mode_conn
 	checktask_full_mode_conn
-	checktask_incr_mode_conn
 }
 
 function run_validator_cmd_error() {

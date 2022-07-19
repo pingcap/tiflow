@@ -470,40 +470,6 @@ func (s *testCheckerSuite) TestSameTargetTableDetection(c *tc.C) {
 	c.Assert(len(msg), tc.Equals, 0)
 }
 
-func (s *testCheckerSuite) TestIncrModeConnAmount(c *tc.C) {
-	// Only test incremental mode in UT
-	// because multiple units are involved in full mode and all mode
-	// and checker will check them concurrently
-	// which will make unit tests unstable.
-	// They will be tested in IT.
-	var (
-		msg string
-		err error
-	)
-	cfgs := []*config.SubTaskConfig{
-		{
-			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.ConnAmountChecking: {}}),
-			Mode:                config.ModeIncrement,
-			SyncerConfig: config.SyncerConfig{
-				WorkerCount: 16,
-			},
-		},
-	}
-	mock := initMockDB(c)
-	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("max_connections", 20))
-	_, err = CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
-	c.Assert(err, tc.NotNil)
-	c.Assert(err, tc.ErrorMatches, "(.|\n)*is less than the amount syncer(.|\n)*")
-
-	mock = initMockDB(c)
-	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("max_connections", 21))
-	msg, err = CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
-	c.Assert(err, tc.IsNil)
-	c.Assert(msg, tc.Equals, CheckTaskSuccess)
-}
-
 func initMockDB(c *tc.C) sqlmock.Sqlmock {
 	mock := conn.InitMockDB(c)
 	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"DATABASE"}).AddRow(schema))

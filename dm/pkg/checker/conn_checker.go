@@ -59,11 +59,11 @@ func (c *connAmountChecker) check(ctx context.Context, checkerName string) *Resu
 	}
 	defer rows.Close()
 	var (
-		maxConn   int
-		_variable string
+		maxConn  int
+		variable string
 	)
 	for rows.Next() {
-		err = rows.Scan(&_variable, &maxConn)
+		err = rows.Scan(&variable, &maxConn)
 		if err != nil {
 			markCheckError(result, err)
 			return result
@@ -73,7 +73,7 @@ func (c *connAmountChecker) check(ctx context.Context, checkerName string) *Resu
 	if neededConn > maxConn {
 		result.Errors = append(
 			result.Errors,
-			NewError("downstream's max_connections: %d is less than the amount %s needs: %d", maxConn, c.workerName, neededConn),
+			NewError("database's max_connections: %d is less than the amount %s needs: %d", maxConn, c.workerName, neededConn),
 		)
 		result.Instruction = "set larger max_connections or reduce the pool size of dm"
 		result.State = StateFailure
@@ -81,39 +81,6 @@ func (c *connAmountChecker) check(ctx context.Context, checkerName string) *Resu
 		result.State = StateSuccess
 	}
 	return result
-}
-
-type SyncerConnAmountChecker struct {
-	connAmountChecker
-}
-
-func NewSyncerConnAmountCheker(targetDB *conn.BaseDB, stCfgs []*config.SubTaskConfig) RealChecker {
-	return &SyncerConnAmountChecker{
-		connAmountChecker: newConnAmountChecker(targetDB, stCfgs, func(stCfgs []*config.SubTaskConfig) int {
-			syncerConn := 0
-			for _, stCfg := range stCfgs {
-				// 1. worker count
-				// 2. checkpoint
-				// 3. ddl connection
-				// 4. downstream tracker
-				// 5. shard group keeper (shard group keeps one conn)
-				// 6. online ddl
-				syncerConn += stCfg.SyncerConfig.WorkerCount + 4
-				if stCfg.ShardMode != "" {
-					syncerConn += 1
-				}
-			}
-			return syncerConn
-		}, "syncer"),
-	}
-}
-
-func (s *SyncerConnAmountChecker) Name() string {
-	return "syncer_conn_amount_checker"
-}
-
-func (s *SyncerConnAmountChecker) Check(ctx context.Context) *Result {
-	return s.check(ctx, s.Name())
 }
 
 type LoaderConnAmountChecker struct {
