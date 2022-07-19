@@ -126,7 +126,7 @@ func (s *Server) Run(ctx context.Context) error {
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 
 	// we does not pass a `context` to the etcd client,
-	// to prevent it's cancelled when the server is closed.
+	// to prevent it's cancelled when the server is closing.
 	// For example, when the non-owner node goes offline,
 	// it would resign the campaign key which was put by call `campaign`,
 	// if this is not done due to the passed context cancelled,
