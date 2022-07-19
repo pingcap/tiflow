@@ -54,7 +54,12 @@ function DM_037_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
+<<<<<<< HEAD
 			"because schema conflict detected" 1
+=======
+			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `new_col1` INT DEFAULT' 1 \
+			"\`${shardddl1}\`.\`${tb1}\`\"" 1
+>>>>>>> 8ce1e4c98 (test(dm): fix unstable test for two concurrent sources (#6316))
 	fi
 }
 
