@@ -17,7 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -122,7 +122,7 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 	dctx = dctx.WithDeps(dp)
 
 	// submit-job
-	cfgBytes, err := ioutil.ReadFile(jobTemplatePath)
+	cfgBytes, err := os.ReadFile(jobTemplatePath)
 	require.NoError(t.T(), err)
 	jobmaster, err := registry.GlobalWorkerRegistry().CreateWorker(dctx, framework.DMJobMaster, "dm-jobmaster", libMetadata.JobManagerUUID, cfgBytes)
 	require.NoError(t.T(), err)

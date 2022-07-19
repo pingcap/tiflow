@@ -15,7 +15,6 @@ package writer
 
 import (
 	"context"
-	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -129,7 +128,7 @@ func TestLogWriterWriteLog(t *testing.T) {
 		writer := LogWriter{
 			rowWriter: mockWriter,
 			ddlWriter: mockWriter,
-			meta:      &common.LogMeta{ResolvedTsList: map[int64]uint64{}},
+			meta:      &common.LogMeta{},
 			metricTotalRowsCount: common.RedoTotalRowsCountGauge.
 				WithLabelValues("default", ""),
 		}
@@ -225,7 +224,7 @@ func TestLogWriterSendDDL(t *testing.T) {
 		writer := LogWriter{
 			rowWriter: mockWriter,
 			ddlWriter: mockWriter,
-			meta:      &common.LogMeta{ResolvedTsList: map[int64]uint64{}},
+			meta:      &common.LogMeta{},
 		}
 
 		if tt.name == "context cancel" {
@@ -327,7 +326,7 @@ func TestLogWriterFlushLog(t *testing.T) {
 		writer := LogWriter{
 			rowWriter: mockWriter,
 			ddlWriter: mockWriter,
-			meta:      &common.LogMeta{ResolvedTsList: map[int64]uint64{}},
+			meta:      &common.LogMeta{},
 			cfg:       cfg,
 			storage:   mockStorage,
 		}
@@ -337,103 +336,30 @@ func TestLogWriterFlushLog(t *testing.T) {
 			cancel()
 			tt.args.ctx = ctx
 		}
-		err := writer.FlushLog(tt.args.ctx, map[int64]uint64{tt.args.tableID: tt.args.ts})
+		err := writer.FlushLog(tt.args.ctx, 0, tt.args.ts)
 		if tt.wantErr != nil {
 			require.True(t, errors.ErrorEqual(tt.wantErr, err), err.Error()+tt.wantErr.Error())
 		} else {
 			require.Nil(t, err, tt.name)
-			require.Equal(t, tt.args.ts, writer.meta.ResolvedTsList[tt.args.tableID], tt.name)
 		}
 	}
 }
 
-func TestLogWriterEmitCheckpointTs(t *testing.T) {
-	type arg struct {
-		ctx context.Context
-		ts  uint64
-	}
-	tests := []struct {
-		name      string
-		args      arg
-		wantTs    uint64
-		isRunning bool
-		flushErr  error
-		wantErr   error
-	}{
-		{
-			name: "happy",
-			args: arg{
-				ctx: context.Background(),
-				ts:  1,
-			},
-			isRunning: true,
-			flushErr:  nil,
-		},
-		{
-			name: "isStopped",
-			args: arg{
-				ctx: context.Background(),
-				ts:  1,
-			},
-			flushErr:  cerror.ErrRedoWriterStopped,
-			isRunning: false,
-			wantErr:   cerror.ErrRedoWriterStopped,
-		},
-		{
-			name: "context cancel",
-			args: arg{
-				ctx: context.Background(),
-				ts:  1,
-			},
-			flushErr:  nil,
-			isRunning: true,
-			wantErr:   context.Canceled,
-		},
-	}
-
+// checkpoint or meta regress should be ignored correctly.
+func TestLogWriterRegress(t *testing.T) {
 	dir := t.TempDir()
-
-	for _, tt := range tests {
-		controller := gomock.NewController(t)
-		mockStorage := mockstorage.NewMockExternalStorage(controller)
-		if tt.isRunning && tt.name != "context cancel" {
-			mockStorage.EXPECT().WriteFile(gomock.Any(),
-				"cp_test-cf_meta.meta",
-				gomock.Any()).Return(nil).Times(1)
-		}
-
-		mockWriter := &mockFileWriter{}
-		mockWriter.On("IsRunning").Return(tt.isRunning)
-		cfg := &LogWriterConfig{
-			Dir:               dir,
-			ChangeFeedID:      model.DefaultChangeFeedID("test-cf"),
-			CaptureID:         "cp",
-			MaxLogSize:        10,
-			CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
-			FlushIntervalInMs: 5,
-			S3Storage:         true,
-		}
-		writer := LogWriter{
-			rowWriter: mockWriter,
-			ddlWriter: mockWriter,
-			meta:      &common.LogMeta{ResolvedTsList: map[int64]uint64{}},
-			cfg:       cfg,
-			storage:   mockStorage,
-		}
-
-		if tt.name == "context cancel" {
-			ctx, cancel := context.WithCancel(context.Background())
-			cancel()
-			tt.args.ctx = ctx
-		}
-		err := writer.EmitCheckpointTs(tt.args.ctx, tt.args.ts)
-		if tt.wantErr != nil {
-			require.True(t, errors.ErrorEqual(tt.wantErr, err), tt.name)
-		} else {
-			require.Nil(t, err, tt.name)
-			require.Equal(t, tt.args.ts, writer.meta.CheckPointTs, tt.name)
-		}
-	}
+	writer, err := NewLogWriter(context.Background(), &LogWriterConfig{
+		Dir:          dir,
+		ChangeFeedID: model.DefaultChangeFeedID("test-log-writer-regress"),
+		CaptureID:    "cp",
+		S3Storage:    false,
+	})
+	require.Nil(t, err)
+	require.Nil(t, writer.FlushLog(context.Background(), 2, 4))
+	require.Nil(t, writer.FlushLog(context.Background(), 1, 3))
+	require.Equal(t, uint64(2), writer.meta.CheckpointTs)
+	require.Equal(t, uint64(4), writer.meta.ResolvedTs)
+	_ = writer.Close()
 }
 
 func TestNewLogWriter(t *testing.T) {
@@ -456,7 +382,6 @@ func TestNewLogWriter(t *testing.T) {
 	)
 	require.Nil(t, err)
 	time.Sleep(time.Duration(defaultGCIntervalInMs+1) * time.Millisecond)
-	require.Equal(t, map[int64]uint64{}, ll.meta.ResolvedTsList)
 
 	ll2, err := NewLogWriter(ctx, cfg)
 	require.Nil(t, err)
@@ -496,8 +421,8 @@ func TestNewLogWriter(t *testing.T) {
 	require.Nil(t, err)
 
 	meta := &common.LogMeta{
-		CheckPointTs:   11,
-		ResolvedTsList: map[model.TableID]model.Ts{int64(1): uint64(22)},
+		CheckpointTs: 11,
+		ResolvedTs:   22,
 	}
 	data, err := meta.MarshalMsg(nil)
 	require.Nil(t, err)
@@ -510,10 +435,9 @@ func TestNewLogWriter(t *testing.T) {
 	require.Nil(t, err)
 	require.True(t, l.isStopped())
 	require.Equal(t, cfg.Dir, l.cfg.Dir)
-	require.Equal(t, meta.CheckPointTs, l.meta.CheckPointTs)
-	require.Equal(t, meta.ResolvedTs(), l.meta.ResolvedTs())
-	require.Equal(t, meta.ResolvedTsList, l.meta.ResolvedTsList)
-	time.Sleep(time.Millisecond * time.Duration(math.Max(float64(defaultFlushIntervalInMs), float64(defaultGCIntervalInMs))+1))
+	require.Equal(t, meta.CheckpointTs, l.meta.CheckpointTs)
+	require.Equal(t, meta.ResolvedTs, l.meta.ResolvedTs)
+	time.Sleep(time.Millisecond * time.Duration(float64(defaultGCIntervalInMs)))
 
 	origin := common.InitS3storage
 	defer func() {
@@ -586,7 +510,7 @@ func TestWriterRedoGC(t *testing.T) {
 		writer := LogWriter{
 			rowWriter: mockWriter,
 			ddlWriter: mockWriter,
-			meta:      &common.LogMeta{ResolvedTsList: map[int64]uint64{}},
+			meta:      &common.LogMeta{},
 			cfg:       cfg,
 		}
 		go writer.runGC(context.Background())
@@ -700,7 +624,7 @@ func TestDeleteAllLogs(t *testing.T) {
 		writer := LogWriter{
 			rowWriter: mockWriter,
 			ddlWriter: mockWriter,
-			meta:      &common.LogMeta{ResolvedTsList: map[int64]uint64{}},
+			meta:      &common.LogMeta{},
 			cfg:       cfg,
 			storage:   mockStorage,
 		}

@@ -841,6 +841,7 @@ func (st *SubTask) fail(err error) {
 
 // HandleError handle error for syncer unit.
 func (st *SubTask) HandleError(ctx context.Context, req *pb.HandleWorkerErrorRequest, relay relay.Process) (string, error) {
+	// TODO: do we need lock here?
 	syncUnit, ok := st.currUnit.(*syncer.Syncer)
 	if !ok {
 		return "", terror.ErrWorkerOperSyncUnitOnly.Generate(st.currUnit.Type())
