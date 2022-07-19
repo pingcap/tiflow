@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package entry
+package filter
 
 import (
 	"testing"
@@ -27,18 +27,21 @@ import (
 	"github.com/pingcap/tidb/testkit"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
+
+	"github.com/pingcap/tiflow/cdc/model"
 )
 
-// SchemaTestHelper is a test helper for schema which creates an internal tidb instance to generate DDL jobs with meta information
-type SchemaTestHelper struct {
+// testHelper is a test helper for filter which creates
+// an internal tidb instance to generate DDL jobs with meta information
+type testHelper struct {
 	t       *testing.T
 	tk      *testkit.TestKit
 	storage kv.Storage
 	domain  *domain.Domain
 }
 
-// NewSchemaTestHelper creates a SchemaTestHelper
-func NewSchemaTestHelper(t *testing.T) *SchemaTestHelper {
+// newTestHelper creates a FilterTestHelper
+func newTestHelper(t *testing.T) *testHelper {
 	store, err := mockstore.NewMockStore()
 	require.Nil(t, err)
 	ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
@@ -50,7 +53,7 @@ func NewSchemaTestHelper(t *testing.T) *SchemaTestHelper {
 	require.Nil(t, err)
 	domain.SetStatsUpdating(true)
 	tk := testkit.NewTestKit(t, store)
-	return &SchemaTestHelper{
+	return &testHelper{
 		t:       t,
 		tk:      tk,
 		storage: store,
@@ -58,41 +61,37 @@ func NewSchemaTestHelper(t *testing.T) *SchemaTestHelper {
 	}
 }
 
-// DDL2Job executes the DDL stmt and returns the DDL job
-func (s *SchemaTestHelper) DDL2Job(ddl string) *timodel.Job {
+// ddlToJob executes the DDL stmt and returns the DDL job
+func (s *testHelper) ddlToJob(ddl string) *timodel.Job {
 	s.tk.MustExec(ddl)
-	jobs, err := tiddl.GetLastNHistoryDDLJobs(s.GetCurrentMeta(), 1)
+	jobs, err := tiddl.GetLastNHistoryDDLJobs(s.getCurrentMeta(), 1)
 	require.Nil(s.t, err)
 	require.Len(s.t, jobs, 1)
 	return jobs[0]
 }
 
-// DDL2Jobs executes the DDL statement and return the corresponding DDL jobs.
-// It is mainly used for "DROP TABLE" and "DROP VIEW" statement because
-// multiple jobs will be generated after executing these two types of
-// DDL statements.
-func (s *SchemaTestHelper) DDL2Jobs(ddl string, jobCnt int) []*timodel.Job {
-	s.tk.MustExec(ddl)
-	jobs, err := tiddl.GetLastNHistoryDDLJobs(s.GetCurrentMeta(), jobCnt)
+// execDDL executes the DDL statement and returns the newest TableInfo of the table.
+func (s *testHelper) execDDL(ddl string) *model.TableInfo {
+	job := s.ddlToJob(ddl)
+	ti, err := s.getCurrentMeta().GetTable(job.SchemaID, job.TableID)
 	require.Nil(s.t, err)
-	require.Len(s.t, jobs, jobCnt)
-	return jobs
+	return model.WrapTableInfo(job.ID, job.SchemaName, job.BinlogInfo.FinishedTS, ti)
 }
 
-// Storage return the tikv storage
-func (s *SchemaTestHelper) Storage() kv.Storage {
-	return s.storage
+// getTk returns the TestKit
+func (s *testHelper) getTk() *testkit.TestKit {
+	return s.tk
 }
 
-// GetCurrentMeta return the current meta snapshot
-func (s *SchemaTestHelper) GetCurrentMeta() *timeta.Meta {
+// getCurrentMeta return the current meta snapshot
+func (s *testHelper) getCurrentMeta() *timeta.Meta {
 	ver, err := s.storage.CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(s.t, err)
 	return timeta.NewSnapshotMeta(s.storage.GetSnapshot(ver))
 }
 
-// Close closes the helper
-func (s *SchemaTestHelper) Close() {
+// close closes the helper
+func (s *testHelper) close() {
 	s.domain.Close()
 	s.storage.Close() //nolint:errcheck
 }
