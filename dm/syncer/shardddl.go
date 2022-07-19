@@ -45,6 +45,7 @@ type ShardDDL struct {
 
 	strategy ShardDDLStrategy
 
+	// TODO: Take it out.
 	s *Syncer
 }
 
