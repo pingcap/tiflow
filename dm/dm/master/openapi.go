@@ -19,8 +19,14 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+<<<<<<< HEAD:dm/dm/master/openapi.go
+=======
+	"fmt"
+	"net"
+>>>>>>> b4bbb8623 (db(dm): use `net.JoinHostPort` to generate host-port part of URI (#6248)):dm/dm/master/openapi_view.go
 	"net/http"
 	"net/http/httputil"
+	"strconv"
 
 	"github.com/pingcap/failpoint"
 
@@ -114,6 +120,22 @@ func (s *Server) InitOpenAPIHandles(tlsCfg *tls.Config) error {
 
 // GetDocJSON url is:(GET /api/v1/dm.json).
 func (s *Server) GetDocJSON(c *gin.Context) {
+<<<<<<< HEAD:dm/dm/master/openapi.go
+=======
+	var masterURL string
+	if info, err := s.getClusterInfo(c.Request.Context()); err != nil {
+		_ = c.Error(err)
+		return
+	} else if info.Topology.MasterTopologyList != nil && len(*info.Topology.MasterTopologyList) > 0 {
+		masterTopos := *info.Topology.MasterTopologyList
+		protocol := "http"
+		if useTLS.Load() {
+			protocol = "https"
+		}
+		hostPort := net.JoinHostPort(masterTopos[0].Host, strconv.Itoa(masterTopos[0].Port))
+		masterURL = fmt.Sprintf("%s://%s", protocol, hostPort)
+	}
+>>>>>>> b4bbb8623 (db(dm): use `net.JoinHostPort` to generate host-port part of URI (#6248)):dm/dm/master/openapi_view.go
 	swagger, err := openapi.GetSwagger()
 	if err != nil {
 		_ = c.Error(err)
