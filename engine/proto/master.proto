@@ -7,39 +7,9 @@ import "metastore.proto";
 import "projects.proto";
 import "resources.proto";
 
-// I'm trying to phase out the communication protocal.
-// - system level
-//   - Register Executor. After a executor bootstrapped, it has to register itself to join the cluster.
-
-
-service Master {
+service Discovery {
     rpc RegisterExecutor(RegisterExecutorRequest) returns(RegisterExecutorResponse) {}
-
-    rpc SubmitJob(SubmitJobRequest) returns(SubmitJobResponse) {
-        // TODO: Support HTTP api
-        //option (google.api.http) = {
-        //    post: "/apis/v1/jobs"
-        //    body: "*"
-        //};
-    }
-
-    rpc QueryJob(QueryJobRequest) returns(QueryJobResponse) {}
-
-    rpc PauseJob(PauseJobRequest) returns(PauseJobResponse) {}
-
-    rpc CancelJob(CancelJobRequest) returns(CancelJobResponse) {}
-
-    rpc DebugJob(DebugJobRequest) returns(DebugJobResponse) {}
-
-    //GetMembers returns the available master members
-    //rpc GetMembers(GetMembersRequest) {}
-
     rpc Heartbeat(HeartbeatRequest) returns(HeartbeatResponse) {}
-    // TODO: Support more interface.
-
-    // - PutClusterConfig
-
-    rpc ScheduleTask(ScheduleTaskRequest) returns(ScheduleTaskResponse) {}
 
     /* Metastore manager API */
     // RegisterMetaStore is called from backend metastore and
@@ -49,14 +19,27 @@ service Master {
     // QueryMetaStore queries metastore manager and returns
     // the information of a matching metastore
     rpc QueryMetaStore(QueryMetaStoreRequest) returns(QueryMetaStoreResponse) {}
+}
+
+service TaskScheduler {
+    rpc ScheduleTask(ScheduleTaskRequest) returns(ScheduleTaskResponse) {}
 
     // ReportExecutorWorkload is called from executor to server master to report
     // resource usage in executor.
     rpc ReportExecutorWorkload(ExecWorkloadRequest) returns(ExecWorkloadResponse) {}
+}
 
-    // PersistResource is called from executor to indicate some workers on it wants
-    // to persist resource files.
-    rpc PersistResource(PersistResourceRequest) returns(PersistResourceResponse) {}
+service JobManager {
+    rpc SubmitJob(SubmitJobRequest) returns(SubmitJobResponse) {
+    }
+
+    rpc QueryJob(QueryJobRequest) returns(QueryJobResponse) {}
+
+    rpc PauseJob(PauseJobRequest) returns(PauseJobResponse) {}
+
+    rpc CancelJob(CancelJobRequest) returns(CancelJobResponse) {}
+
+    rpc DebugJob(DebugJobRequest) returns(DebugJobResponse) {}
 }
 
 message HeartbeatRequest {
