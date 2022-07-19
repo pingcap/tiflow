@@ -105,7 +105,18 @@ func (l *LoaderConnAmountChecker) Name() string {
 }
 
 func (l *LoaderConnAmountChecker) Check(ctx context.Context) *Result {
-	return l.check(ctx, l.Name())
+	result := l.check(ctx, l.Name())
+	for _, stCfg := range l.stCfgs {
+		if stCfg.NeedUseLightning() {
+			result.Errors = append(
+				result.Errors,
+				NewWarn("task precheck cannot accurately check the amount of connection needed for Lightning, please set a sufficently large connections for TiDB"),
+			)
+			result.State = StateWarning
+			break
+		}
+	}
+	return result
 }
 
 func NewDumperConnAmountChecker(sourceDB *conn.BaseDB, dumperThreads int) RealChecker {

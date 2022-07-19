@@ -157,39 +157,49 @@ function run() {
 
 function checktask_full_mode_conn() {
 	# full mode
-	# dumpers: (10 + 2) for each
+	# dumpers: (2 + 2) for each
 	# loaders: (16 + 1) * 2 = 34
-	run_sql_source1 "set @@GLOBAL.max_connections=11;"
-	run_sql_source2 "set @@GLOBAL.max_connections=11;"
-	check_task_not_pass $cur/conf/dm-task2.yaml # dumper threads too few
-	run_sql_source1 "set @@GLOBAL.max_connections=12;"
-	run_sql_source2 "set @@GLOBAL.max_connections=12;"
-	check_task_pass $cur/conf/dm-task2.yaml
+	run_sql_source1 "set @@GLOBAL.max_connections=3;"
+	run_sql_source2 "set @@GLOBAL.max_connections=3;"
+	check_task_not_pass $cur/conf/dm-task3.yaml # dumper threads too few
+	run_sql_source1 "set @@GLOBAL.max_connections=4;"
+	run_sql_source2 "set @@GLOBAL.max_connections=4;"
+	check_task_pass $cur/conf/dm-task3.yaml
 
 	run_sql "set @@GLOBAL.max_connections=33;" $TIDB_PORT $TIDB_PASSWORD # loader threads too few
-	check_task_not_pass $cur/conf/dm-task2.yaml
+	check_task_not_pass $cur/conf/dm-task3.yaml
 	run_sql "set @@GLOBAL.max_connections=34;" $TIDB_PORT $TIDB_PASSWORD
-	check_task_pass $cur/conf/dm-task2.yaml
+	check_task_pass $cur/conf/dm-task3.yaml
 
 	run_sql_source1 "set @@GLOBAL.max_connections=151;"
 	run_sql_source2 "set @@GLOBAL.max_connections=151;"
+	run_sql_tidb "set @@GLOBAL.max_connections=151;"
+}
+
+function check_task_lightning() {
+	run_dm_ctl  $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"check-task $cur/conf/dm-task2.yaml" \
+		"task precheck cannot accurately check the amount of connection needed for Lightning, please set a sufficently large connections for TiDB" 1
 }
 
 function check_full_mode_conn() {
 	# TODO: currently, pool-size are not efficacious for Lightning
 	# which simply determines the concurrency by hardware conditions.
 	# This should be solved in the future.
+	run_sql_tidb "set @@GLOBAL.max_connections=151;" # set to default
+	run_sql_source1 "set @@GLOBAL.max_connections=151;"
+	run_sql_source2 "set @@GLOBAL.max_connections=151;"
 	run_sql_tidb "drop database if exists dmctl_conn"
 	run_sql_both_source "drop database if exists dmctl_conn"
 	run_sql_both_source "create database dmctl_conn"
 	# ref: many_tables/run.sh
-	for ((i = 0; i <= 500; ++i)); do
+	for ((i = 0; i <= 1000; ++i)); do
 		run_sql_source1 "create table dmctl_conn.test_$i(id int primary key)"
-		run_sql_source1 "insert into dmctl_conn.test_$i values (1)"
+		run_sql_source1 "insert into dmctl_conn.test_$i values (1),(2),(3),(4),(5)"
 	done
-	dmctl_start_task "$cur/conf/dm-task2.yaml" --remove-meta
+	dmctl_start_task "$cur/conf/dm-task3.yaml" --remove-meta
 	run_sql_source1 'SHOW PROCESSLIST;'
-	check_rows_equal 13 # 12 + 1 for SHOWPROCESSLIST
+	check_rows_equal 5 # 4 + 1 for SHOWPROCESSLIST
 
 	sleep 5
 	run_sql_tidb 'SHOW PROCESSLIST;'
@@ -732,6 +742,7 @@ function run_check_task() {
 
 	check_full_mode_conn
 	checktask_full_mode_conn
+	check_task_lightning
 }
 
 function run_validator_cmd_error() {

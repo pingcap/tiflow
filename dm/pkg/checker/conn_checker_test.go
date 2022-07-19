@@ -38,24 +38,11 @@ func TestConnAmountChecker(t *testing.T) {
 		},
 	}
 	baseDB := conn.NewBaseDB(db, func() {})
-	// test syncer
-	dbMock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("max_connections", 14))
-	syncerChecker := NewSyncerConnAmountCheker(baseDB, stCfgs)
-	result := syncerChecker.Check(context.Background())
-	require.Equal(t, 1, len(result.Errors))
-	require.Equal(t, StateFailure, result.State)
-	require.Regexp(t, "(.|\n)*is less than the amount syncer(.|\n)*", result.Errors[0].ShortErr)
-	dbMock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("max_connections", 15))
-	result = syncerChecker.Check(context.Background())
-	require.Equal(t, 0, len(result.Errors))
-	require.Equal(t, StateSuccess, result.State)
 	// test loader
 	dbMock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("max_connections", 16))
 	loaderChecker := NewLoaderConnAmountChecker(baseDB, stCfgs)
-	result = loaderChecker.Check(context.Background())
+	result := loaderChecker.Check(context.Background())
 	require.Equal(t, 1, len(result.Errors))
 	require.Equal(t, StateFailure, result.State)
 	require.Regexp(t, "(.|\n)*is less than the amount loader(.|\n)*", result.Errors[0].ShortErr)
