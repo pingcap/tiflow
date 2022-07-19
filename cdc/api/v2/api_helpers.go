@@ -216,18 +216,15 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	}
 	f, err := filter.NewFilter(replicaCfg, "")
 	if err != nil {
-		return nil, cerror.ErrChangefeedUpdateRefused.
-			GenWithStackByArgs(errors.Cause(err).Error())
+		return nil, errors.Cause(err)
 	}
 	tableInfos, ineligibleTables, _, err := entry.VerifyTables(f, kvStorage, cfg.StartTs)
 	if err != nil {
-		return nil, cerror.ErrChangefeedUpdateRefused.
-			GenWithStackByArgs(errors.Cause(err).Error())
+		return nil, errors.Cause(err)
 	}
 	err = f.Verify(tableInfos)
 	if err != nil {
-		return nil, cerror.ErrChangefeedUpdateRefused.
-			GenWithStackByArgs(errors.Cause(err).Error())
+		return nil, errors.Cause(err)
 	}
 	if !replicaCfg.ForceReplicate && !cfg.ReplicaConfig.IgnoreIneligibleTable {
 		if err != nil {
