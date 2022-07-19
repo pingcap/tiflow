@@ -56,7 +56,6 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 		//nolint:errcheck
 		s.safeMode.Add(tctx, 1) // add 1 but has no corresponding -1, so keeps enabled
 		s.tctx.L().Info("enable safe-mode by config")
-		return
 	}
 
 	var duration time.Duration
@@ -81,6 +80,12 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 		*s.beginLocation = binlog.MustZeroLocation(mysql.MySQLFlavor)
 	})
 	if exitPoint != nil {
+		s.tctx.L().Info("compare exitPoint and beginLocation", zap.Stringer("exit point", exitPoint), zap.Stringer("begin location", s.beginLocation))
+		if binlog.CompareLocation(*exitPoint, *s.beginLocation, s.cfg.EnableGTID) == 0 {
+			s.tctx.L().Info("exitPoint equal to beginLocation, so disable the safe mode")
+			return
+		}
+
 		//nolint:errcheck
 		s.safeMode.Add(tctx, 1) // enable and will revert after pass SafeModeExitLoc
 		s.tctx.L().Info("enable safe-mode for safe mode exit point, will exit at", zap.Stringer("location", *exitPoint))
@@ -108,11 +113,17 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 
 	// when exitPoint equal beginLocation, it means safe mode doesn't enable
 	// because safe mode will disable quickly in the syncer main logic
-	if exitPoint != nil && binlog.CompareLocation(*exitPoint, *s.beginLocation, s.cfg.EnableGTID) == 0 {
-		s.tctx.L().Info("safe-mode: exitPoint equal to beginLocation")
-		return
-	}
+	// if exitPoint != nil && binlog.CompareLocation(*exitPoint, *s.beginLocation, s.cfg.EnableGTID) == 0 {
+	// 	s.tctx.L().Info("safe-mode: exitPoint equal to beginLocation")
+	// 	return
+	// }
 	if s.safeMode.Enable() && int64(duration) == 0 {
+		failpoint.Inject("SafeModeInitPhaseSeconds", func(val failpoint.Value) {
+			seconds := val.(string)
+			if seconds == "0s" {
+				failpoint.Return()
+			}
+		})
 		fresh, err2 := s.IsFreshTask(tctx.Ctx)
 		if err2 != nil {
 			err = err2
