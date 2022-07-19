@@ -401,7 +401,6 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		ownerFlushInterval = time.Millisecond * time.Duration(val.(int))
 	})
 	// Limit the frequency of elections to avoid putting too much pressure on the etcd server
-	// each 2 seconds allow the capture to campaign for the ownership.
 	rl := rate.NewLimiter(rate.Every(time.Second), 1)
 	for {
 		select {
@@ -473,8 +472,9 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			log.Info("run owner exited normally",
 				zap.String("captureID", c.info.ID), zap.Int64("ownerRev", ownerRev))
 		}
-		// if owner exits, resign the owner key
-		if resignErr := c.resign(ctx); resignErr != nil {
+		// if owner exits, resign the owner key,
+		// use a new context to prevent the context from being cancelled.
+		if resignErr := c.resign(context.Background()); resignErr != nil {
 			log.Info("owner resign failed",
 				zap.String("captureID", c.info.ID), zap.Int64("ownerRev", ownerRev),
 				zap.Error(resignErr))
@@ -578,7 +578,7 @@ func (c *captureImpl) AsyncClose() {
 	o, _ := c.GetOwner()
 	if o != nil {
 		o.AsyncStop()
-		log.Info("owner closed")
+		log.Info("owner closed", zap.String("captureID", c.info.ID))
 	}
 
 	c.captureMu.Lock()
@@ -586,22 +586,23 @@ func (c *captureImpl) AsyncClose() {
 	if c.processorManager != nil {
 		c.processorManager.AsyncClose()
 	}
-	log.Info("processor manager closed")
+	log.Info("processor manager closed", zap.String("captureID", c.info.ID))
 
 	if c.tableActorSystem != nil {
 		c.tableActorSystem.Stop()
 		c.tableActorSystem = nil
 	}
-	log.Info("table actor system closed")
+	log.Info("table actor system closed", zap.String("captureID", c.info.ID))
 
 	if c.sorterSystem != nil {
 		err := c.sorterSystem.Stop()
 		if err != nil {
-			log.Warn("stop sorter system failed", zap.Error(err))
+			log.Warn("stop sorter system failed",
+				zap.String("captureID", c.info.ID), zap.Error(err))
 		}
 		c.sorterSystem = nil
 	}
-	log.Info("sorter actor system closed")
+	log.Info("sorter actor system closed", zap.String("captureID", c.info.ID))
 
 	c.grpcService.Reset(nil)
 	if c.MessageRouter != nil {
@@ -609,12 +610,13 @@ func (c *captureImpl) AsyncClose() {
 		c.MessageRouter.Wait()
 		c.MessageRouter = nil
 	}
-	log.Info("message router closed")
+	log.Info("message router closed", zap.String("captureID", c.info.ID))
 }
 
 // Drain removes tables in the current TiCDC instance.
 func (c *captureImpl) Drain(ctx context.Context) <-chan struct{} {
-	log.Info("draining capture, removing all tables in the capture")
+	log.Info("draining capture, removing all tables in the capture",
+		zap.String("captureID", c.info.ID))
 
 	const drainInterval = 100 * time.Millisecond
 	done := make(chan struct{})
@@ -624,9 +626,11 @@ func (c *captureImpl) Drain(ctx context.Context) <-chan struct{} {
 			_, err := c.EtcdClient.Client.Revoke(ctx, lease)
 			if err != nil {
 				log.Warn("drain capture, revoke lease error",
+					zap.String("captureID", c.info.ID),
 					zap.Any("lease", lease), zap.Error(err))
 			} else {
-				log.Info("draining capture, lease revoked", zap.Any("lease", lease))
+				log.Info("draining capture, lease revoked",
+					zap.String("captureID", c.info.ID), zap.Any("lease", lease))
 			}
 			close(done)
 		}()
