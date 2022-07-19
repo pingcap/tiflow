@@ -696,7 +696,8 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 	replaces := make(map[string][][]interface{})
 	rowCount := 0
 	// translateToInsert control the update and insert behavior
-	translateToInsert := s.params.enableOldValue
+	// FIXME: turn on safe-mode when mysql sink meets error.
+	translateToInsert := s.params.enableOldValue && !s.params.safeMode
 	for _, row := range rows {
 		if !translateToInsert {
 			break
