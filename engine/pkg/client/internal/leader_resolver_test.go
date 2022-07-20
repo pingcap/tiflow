@@ -121,3 +121,40 @@ func TestLeaderResolverFrequentUpdate(t *testing.T) {
 
 	mockConn.AssertExpectations(t)
 }
+
+func TestLeaderResolverUpdateAfterClose(t *testing.T) {
+	t.Parallel()
+
+	mockConn := &mockResolverClientConn{}
+	leaderResolver := newLeaderResolverWithFollowerSorter(map[string]bool{
+		"leader":     true,
+		"follower-1": false,
+		"follower-2": false,
+	}, orderedFollowerSorter)
+
+	mockConn.On("UpdateState", mock.MatchedBy(func(state resolver.State) bool {
+		return reflect.DeepEqual(state.Addresses, []resolver.Address{
+			{Addr: "leader"},
+			{Addr: "follower-1"},
+			{Addr: "follower-2"},
+		})
+	})).Return(nil)
+	mockConn.On("ParseServiceConfig", `{"loadBalancingPolicy": "pick_first"}`).
+		Return(&serviceconfig.ParseResult{}).Once()
+
+	_, err := leaderResolver.Build(resolver.Target{}, mockConn, resolver.BuildOptions{})
+	require.NoError(t, err)
+
+	// Close the resolver now.
+	leaderResolver.Close()
+
+	// Updating the server list after the resolver is closed
+	// should not panic or deadlock.
+	for i := 0; i < 1000; i++ {
+		leaderResolver.UpdateServerList(map[string]bool{
+			"leader":     true,
+			"follower-1": false,
+			"follower-2": false,
+		})
+	}
+}

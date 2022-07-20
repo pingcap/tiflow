@@ -37,6 +37,11 @@ type taskSchedulerClient struct {
 	cli enginepb.TaskSchedulerClient
 }
 
+// NewTaskSchedulerClient returns a TaskSchedulerClient.
+func NewTaskSchedulerClient(cli enginepb.TaskSchedulerClient) TaskSchedulerClient {
+	return &taskSchedulerClient{cli: cli}
+}
+
 func (c *taskSchedulerClient) ScheduleTask(
 	ctx context.Context,
 	request *enginepb.ScheduleTaskRequest,

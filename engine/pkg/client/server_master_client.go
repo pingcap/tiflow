@@ -13,5 +13,71 @@
 
 package client
 
+import (
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pkg/client/internal"
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
+)
+
+type (
+	// MasterServerList is an alias for map[string]bool.
+	// It is a mapping from servers' address to whether they are the leader.
+	MasterServerList = internal.MasterServerList
+)
+
+// ServerMasterClient is a client for connecting to the server master.
 type ServerMasterClient interface {
+	TaskSchedulerClient
+	DiscoveryClient
+
+	// Close closes the gRPC connection used to create the client.
+	Close()
+}
+
+// ServerMasterClientWithFailOver implements ServerMasterClient.
+// It maintains an updatable list of servers and records the leader's address.
+type ServerMasterClientWithFailOver struct {
+	TaskSchedulerClient
+	DiscoveryClient
+
+	conn     *grpc.ClientConn
+	resolver *internal.LeaderResolver
+}
+
+// NewServerMasterClientWithFailOver creates a new ServerMasterClientWithFailOver.
+// It is recommended that we use a singleton pattern here: Create one ServerMasterClientWithFailOver
+// in each executor process.
+func NewServerMasterClientWithFailOver(
+	serverList MasterServerList,
+) (*ServerMasterClientWithFailOver, error) {
+	leaderResolver := internal.NewLeaderResolver(serverList)
+	conn, err := grpc.Dial(
+		"tiflow_masters:///", // Dummy
+		grpc.WithResolvers(leaderResolver))
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return &ServerMasterClientWithFailOver{
+		TaskSchedulerClient: NewTaskSchedulerClient(enginepb.NewTaskSchedulerClient(conn)),
+		DiscoveryClient:     NewDiscoveryClient(enginepb.NewDiscoveryClient(conn)),
+		conn:                conn,
+		resolver:            leaderResolver,
+	}, nil
+}
+
+// Close closes the NewServerMasterClientWithFailOver.
+func (c *ServerMasterClientWithFailOver) Close() {
+	if err := c.conn.Close(); err != nil {
+		log.L().Warn("failed to close client", zap.Error(err))
+	}
+}
+
+// UpdateServerList updates the server list maintained by the client.
+// It is thread-safe.
+func (c *ServerMasterClientWithFailOver) UpdateServerList(serverList MasterServerList) {
+	c.resolver.UpdateServerList(serverList)
 }

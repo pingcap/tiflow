@@ -58,6 +58,11 @@ type discoveryClient struct {
 	cli enginepb.DiscoveryClient
 }
 
+// NewDiscoveryClient returns a DiscoveryClient.
+func NewDiscoveryClient(cli enginepb.DiscoveryClient) DiscoveryClient {
+	return &discoveryClient{cli: cli}
+}
+
 func (c *discoveryClient) RegisterExecutor(
 	ctx context.Context,
 	request *enginepb.RegisterExecutorRequest,
