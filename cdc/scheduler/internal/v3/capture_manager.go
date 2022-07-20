@@ -57,14 +57,18 @@ type CaptureStatus struct {
 	Epoch    schedulepb.ProcessorEpoch
 	State    CaptureState
 	Tables   []schedulepb.TableStatus
+	ID       model.CaptureID
 	Addr     string
 	IsOwner  bool
 }
 
-func newCaptureStatus(rev schedulepb.OwnerRevision, addr string, isOwner bool) *CaptureStatus {
+func newCaptureStatus(
+	rev schedulepb.OwnerRevision, id model.CaptureID, addr string, isOwner bool,
+) *CaptureStatus {
 	return &CaptureStatus{
 		OwnerRev: rev,
 		State:    CaptureStateUninitialized,
+		ID:       id,
 		Addr:     addr,
 		IsOwner:  isOwner,
 	}
@@ -85,9 +89,11 @@ func (c *CaptureStatus) handleHeartbeatResponse(
 	if c.State == CaptureStateUninitialized {
 		c.Epoch = epoch
 		c.State = CaptureStateInitialized
+		log.Info("schedulerv3: capture initialized", zap.String("capture", c.ID))
 	}
 	if resp.Liveness == model.LivenessCaptureStopping {
 		c.State = CaptureStateStopping
+		log.Info("schedulerv3: capture stopping", zap.String("capture", c.ID))
 	}
 	c.Tables = resp.Tables
 }
@@ -203,7 +209,7 @@ func (c *captureManager) HandleAliveCaptureUpdate(
 		if _, ok := c.Captures[id]; !ok {
 			// A new capture.
 			c.Captures[id] = newCaptureStatus(
-				c.OwnerRev, info.AdvertiseAddr, c.ownerID == id)
+				c.OwnerRev, id, info.AdvertiseAddr, c.ownerID == id)
 			log.Info("schedulerv3: find a new capture", zap.String("capture", id))
 			msgs = append(msgs, &schedulepb.Message{
 				To:        id,
