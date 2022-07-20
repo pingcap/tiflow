@@ -423,6 +423,9 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 		}
 	}
 
+	// we need to patch changefeed unretryable error to the changefeed info,
+	// so we have to iterate all errs here to check wether it is a unretryable
+	// error in errs
 	for _, err := range errs {
 		if err.IsChangefeedUnRetryableError() {
 			m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {

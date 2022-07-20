@@ -14,6 +14,7 @@
 package filter
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/pingcap/errors"
@@ -25,6 +26,7 @@ import (
 )
 
 func TestShouldSkipDDL(t *testing.T) {
+	t.Parallel()
 	type innerCase struct {
 		schema string
 		table  string
@@ -188,6 +190,7 @@ func TestShouldSkipDDL(t *testing.T) {
 }
 
 func TestShouldSkipDML(t *testing.T) {
+	t.Parallel()
 	type innerCase struct {
 		schema     string
 		table      string
@@ -288,29 +291,32 @@ func TestShouldSkipDML(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		f, err := newSQLEventFilter(tc.cfg)
-		require.NoError(t, err)
-		for _, c := range tc.cases {
-			event := &model.RowChangedEvent{
-				Table: &model.TableName{
-					Schema: c.schema,
-					Table:  c.table,
-				},
-			}
-			if c.columns != "" {
-				event.Columns = []*model.Column{{Value: c.columns}}
-			}
-			if c.preColumns != "" {
-				event.PreColumns = []*model.Column{{Value: c.preColumns}}
-			}
-			skip, err := f.shouldSkipDML(event)
+		t.Run(fmt.Sprintf("%+v", tc.cfg), func(t *testing.T) {
+			f, err := newSQLEventFilter(tc.cfg)
 			require.NoError(t, err)
-			require.Equal(t, c.skip, skip, "case: %+v", c)
-		}
+			for _, c := range tc.cases {
+				event := &model.RowChangedEvent{
+					Table: &model.TableName{
+						Schema: c.schema,
+						Table:  c.table,
+					},
+				}
+				if c.columns != "" {
+					event.Columns = []*model.Column{{Value: c.columns}}
+				}
+				if c.preColumns != "" {
+					event.PreColumns = []*model.Column{{Value: c.preColumns}}
+				}
+				skip, err := f.shouldSkipDML(event)
+				require.NoError(t, err)
+				require.Equal(t, c.skip, skip, "case: %+v", c)
+			}
+		})
 	}
 }
 
 func TestVerifyIgnoreEvents(t *testing.T) {
+	t.Parallel()
 	type testCase struct {
 		ignoreEvent []bf.EventType
 		err         error

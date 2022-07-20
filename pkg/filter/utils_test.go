@@ -14,7 +14,6 @@
 package filter
 
 import (
-	"strings"
 	"testing"
 
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
@@ -48,13 +47,7 @@ func TestIsSchema(t *testing.T) {
 
 func TestSupportedEventTypeString(t *testing.T) {
 	t.Parallel()
-	expected := `Invalid input, 'ignore-event' parameters can only accept 
-[all dml, all ddl, insert, update, delete, create schema, create database, 
-drop schema, drop database, create table, drop table, rename table, 
-truncate table, alter table, create view, drop view, add table partition, 
-drop table partition, truncate table partition]`
-	expected = strings.ReplaceAll(expected, "\n", "")
-	require.Equal(t, expected, SupportedEventWarnMessage())
+	require.Equal(t, supportedEventTypes, SupportedEventTypes())
 }
 
 func TestVerifyTableRules(t *testing.T) {

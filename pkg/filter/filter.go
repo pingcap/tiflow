@@ -21,13 +21,16 @@ import (
 )
 
 // Filter are safe for concurrent use.
+// TODO: find a better way to abstract this interface.
 type Filter interface {
 	// ShouldIgnoreDMLEvent returns true and nil if the DML event should be ignored.
 	ShouldIgnoreDMLEvent(dml *model.RowChangedEvent, rawRow model.RowChangedDatums, tableInfo *model.TableInfo) (bool, error)
 	// ShouldIgnoreDDLEvent returns true and nil if the DDL event should be ignored.
+	// If a ddl is ignored, it will applied to cdc's schema storage,
+	// but not sent to downstream.
 	ShouldIgnoreDDLEvent(ddl *model.DDLEvent) (bool, error)
 	// ShouldDiscardDDL returns true if this DDL should be discarded.
-	// If a ddl is discarded, it will neither be applied to cdc't schema storage
+	// If a ddl is discarded, it will neither be applied to cdc's schema storage
 	// nor sent to downstream.
 	ShouldDiscardDDL(ddlType timodel.ActionType) bool
 	// ShouldIgnoreTable returns true if the table should be ignored.
@@ -106,7 +109,7 @@ func (f *filter) ShouldIgnoreDMLEvent(
 	return f.dmlExprFilter.shouldSkipDML(dml, rawRow, ti)
 }
 
-// ShouldIgnoreDDLJob checks if a DDL Event should be ignore by conditions below:
+// ShouldIgnoreDDLEvent checks if a DDL Event should be ignore by conditions below:
 // 0. By startTs.
 // 1. By schema name.
 // 2. By table name.
@@ -132,7 +135,7 @@ func (f *filter) ShouldIgnoreDDLEvent(ddl *model.DDLEvent) (bool, error) {
 }
 
 // ShouldDiscardDDL returns true if this DDL should be discarded.
-// If a ddl is discarded, it will not be applied to cdc't schema storage
+// If a ddl is discarded, it will not be applied to cdc's schema storage
 // and sent to downstream.
 func (f *filter) ShouldDiscardDDL(ddlType timodel.ActionType) bool {
 	if !shouldDiscardByBuiltInDDLAllowlist(ddlType) {

@@ -15,7 +15,6 @@ package filter
 
 import (
 	"fmt"
-	"strings"
 
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb/parser"
@@ -55,6 +54,8 @@ func VerifyTableRules(cfg *config.FilterConfig) (tfilter.Filter, error) {
 
 // ddlToEventType get event type from ddl query.
 func ddlToEventType(p *parser.Parser, query string, jobType timodel.ActionType) (bf.EventType, error) {
+	// Since `Parser` will return a AlterTable type `ast.StmtNode` for table partition related DDL,
+	// we need to check the ActionType of a ddl at first.
 	switch jobType {
 	case timodel.ActionAddTablePartition:
 		return bf.AddTablePartition, nil
@@ -68,6 +69,10 @@ func ddlToEventType(p *parser.Parser, query string, jobType timodel.ActionType) 
 		return bf.NullEvent, cerror.WrapError(cerror.ErrConvertDDLToEventTypeFailed, err, query)
 	}
 	et := bf.AstToDDLEvent(stmt)
+	// `Parser` will return a `AlterTable` type `ast.StmtNode` for a query like:
+	// `alter table t1 add index (xxx)` and will return a `CreateIndex` type
+	// `ast.StmtNode` for a query like: `create index i on t1 (xxx)`.
+	// So we cast index related DDL to `AlterTable` event type for the sake of simplicity.
 	switch et {
 	case bf.DropIndex:
 		return bf.AlterTable, nil
@@ -77,15 +82,9 @@ func ddlToEventType(p *parser.Parser, query string, jobType timodel.ActionType) 
 	return et, nil
 }
 
-// SupportedEventWarnMessage returns the supported event types warning message
-// for API or Cli use.
-func SupportedEventWarnMessage() string {
-	eventTypesStr := make([]string, 0, len(supportedEventTypes))
-	for _, eventType := range supportedEventTypes {
-		eventTypesStr = append(eventTypesStr, string(eventType))
-	}
-	return fmt.Sprintf("Invalid input, 'ignore-event' parameters can only accept [%s]",
-		strings.Join(eventTypesStr, ", "))
+// SupportedEventTypes returns the supported event types.
+func SupportedEventTypes() []bf.EventType {
+	return supportedEventTypes
 }
 
 func shouldDiscardByBuiltInDDLAllowlist(ddlType timodel.ActionType) bool {

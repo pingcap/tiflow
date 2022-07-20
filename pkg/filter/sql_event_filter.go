@@ -26,10 +26,14 @@ import (
 )
 
 const (
-	// binlogFilterSchema is a place holder for schema name in binlog filter.
-	binlogFilterSchema = "binlogFilterSchema"
-	// binlogFilterTable is a place holder for table name in binlog filter.
-	binlogFilterTable = "binlogFilterTable"
+	// binlogFilterSchemaPlaceholder is a place holder for schema name in binlog filter.
+	// Since we use table filter in rule as a matcher to match a dml/ddl event's schema and table,
+	// so we don't need to care about schema name when we calling binlog filter's method,
+	// we just use this place holder to call binlog filter's method whenever we need pass a schema.
+	binlogFilterSchemaPlaceholder = "binlogFilterSchema"
+	// binlogFilterTablePlaceholder is a place holder for table name in binlog filter.
+	// The reason we need it is the same as binlogFilterSchemaPlaceholder.
+	binlogFilterTablePlaceholder = "binlogFilterTable"
 	// dmlQuery is a place holder to call binlog filter to filter dml event.
 	dmlQuery = ""
 	// caseSensitive is use to create bf.BinlogEvent.
@@ -38,6 +42,9 @@ const (
 
 // sqlEventRule only be used by sqlEventFilter.
 type sqlEventRule struct {
+	// we use table filter to match a dml/ddl event's schema and table.
+	// since binlog filter does not support syntax like `!test.t1`,
+	// which means not match `test.t1`.
 	tf tfilter.Filter
 	bf *bf.BinlogEvent
 }
@@ -57,8 +64,8 @@ func newSQLEventFilterRule(cfg *config.EventFilterRule) (*sqlEventRule, error) {
 	}
 
 	bfRule := &bf.BinlogEventRule{
-		SchemaPattern: binlogFilterSchema,
-		TablePattern:  binlogFilterTable,
+		SchemaPattern: binlogFilterSchemaPlaceholder,
+		TablePattern:  binlogFilterTablePlaceholder,
 		Events:        cfg.IgnoreEvent,
 		SQLPattern:    cfg.IgnoreSQL,
 		Action:        bf.Ignore,
@@ -143,7 +150,7 @@ func (f *sqlEventFilter) shouldSkipDDL(ddl *model.DDLEvent) (bool, error) {
 
 	rules := f.getRules(ddl.TableInfo.Schema, ddl.TableInfo.Table)
 	for _, rule := range rules {
-		action, err := rule.bf.Filter(binlogFilterSchema, binlogFilterTable, evenType, ddl.Query)
+		action, err := rule.bf.Filter(binlogFilterSchemaPlaceholder, binlogFilterTablePlaceholder, evenType, ddl.Query)
 		if err != nil {
 			return false, errors.Trace(err)
 		}
@@ -171,7 +178,7 @@ func (f *sqlEventFilter) shouldSkipDML(event *model.RowChangedEvent) (bool, erro
 	}
 	rules := f.getRules(event.Table.Schema, event.Table.Table)
 	for _, rule := range rules {
-		action, err := rule.bf.Filter(binlogFilterSchema, binlogFilterTable, et, dmlQuery)
+		action, err := rule.bf.Filter(binlogFilterSchemaPlaceholder, binlogFilterTablePlaceholder, et, dmlQuery)
 		if err != nil {
 			return false, cerror.WrapError(cerror.ErrFailedToFilterDML, err, event)
 		}
