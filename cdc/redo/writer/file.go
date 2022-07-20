@@ -183,6 +183,12 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 		w.uuidGenerator = uuid.NewGenerator()
 	}
 
+	err := os.MkdirAll(cfg.Dir, common.DefaultDirMode)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrRedoFileOp,
+			errors.Annotatef(err, "can't make dir: %s for redo writing", cfg.Dir))
+	}
+
 	// if we use S3 as the remote storage, a file allocator can be leveraged to
 	// pre-allocate files for us.
 	// TODO: test whether this improvement can also be applied to NFS.
