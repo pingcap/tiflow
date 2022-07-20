@@ -28,7 +28,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/tests/integration_tests/util"
 	"github.com/stretchr/testify/require"
 
