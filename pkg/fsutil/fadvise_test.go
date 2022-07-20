@@ -10,28 +10,24 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-package v3
+package fsutil
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
-	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
 	"github.com/stretchr/testify/require"
 )
 
-func TestTableManager(t *testing.T) {
+func TestDropPageCache(t *testing.T) {
 	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "file.test")
 
-	// pretend there are 4 tables
-	mockTableExecutor := newMockTableExecutor()
+	err := os.WriteFile(path, []byte("hello world"), 0o600)
+	require.Nil(t, err)
 
-	tableM := newTableManager(model.ChangeFeedID{}, mockTableExecutor)
-
-	tableM.addTable(model.TableID(1))
-	require.Equal(t, schedulepb.TableStateAbsent, tableM.tables[model.TableID(1)].state)
-
-	tableM.dropTable(model.TableID(1))
-	require.NotContains(t, tableM.tables, model.TableID(1))
+	err = DropPageCache(path)
+	require.Nil(t, err)
 }

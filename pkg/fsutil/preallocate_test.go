@@ -10,28 +10,27 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-package v3
+//
+package fsutil
 
 import (
+	"io/ioutil"
+	"os"
 	"testing"
 
-	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
 	"github.com/stretchr/testify/require"
 )
 
-func TestTableManager(t *testing.T) {
-	t.Parallel()
+func TestPreAllocate(t *testing.T) {
+	f, err := ioutil.TempFile("", "preallocate-test")
+	defer os.Remove(f.Name())
+	require.Nil(t, err)
 
-	// pretend there are 4 tables
-	mockTableExecutor := newMockTableExecutor()
+	size := int64(64 * 1024 * 1024)
+	err = PreAllocate(f, size)
+	require.Nil(t, err)
 
-	tableM := newTableManager(model.ChangeFeedID{}, mockTableExecutor)
-
-	tableM.addTable(model.TableID(1))
-	require.Equal(t, schedulepb.TableStateAbsent, tableM.tables[model.TableID(1)].state)
-
-	tableM.dropTable(model.TableID(1))
-	require.NotContains(t, tableM.tables, model.TableID(1))
+	stat, err := f.Stat()
+	require.Nil(t, err)
+	require.Equal(t, size, stat.Size())
 }

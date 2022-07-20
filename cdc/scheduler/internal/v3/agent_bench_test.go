@@ -26,7 +26,7 @@ func benchmarkHeartbeatResponse(b *testing.B, bench func(b *testing.B, a *agent)
 	for size := 1; size <= upperBound; size *= 2 {
 		tableExec := newMockTableExecutor()
 		a := &agent{
-			tableM: newTableManager(tableExec),
+			tableM: newTableManager(model.ChangeFeedID{}, tableExec),
 		}
 
 		for j := 0; j < size; j++ {
