@@ -22,6 +22,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"go.uber.org/zap"
 )
 
 var _ scheduler = &rebalanceScheduler{}
@@ -29,12 +30,15 @@ var _ scheduler = &rebalanceScheduler{}
 type rebalanceScheduler struct {
 	rebalance int32
 	random    *rand.Rand
+
+	changefeedID model.ChangeFeedID
 }
 
-func newRebalanceScheduler() *rebalanceScheduler {
+func newRebalanceScheduler(changefeed model.ChangeFeedID) *rebalanceScheduler {
 	return &rebalanceScheduler{
-		rebalance: 0,
-		random:    rand.New(rand.NewSource(time.Now().UnixNano())),
+		rebalance:    0,
+		random:       rand.New(rand.NewSource(time.Now().UnixNano())),
+		changefeedID: changefeed,
 	}
 }
 
@@ -60,8 +64,9 @@ func (r *rebalanceScheduler) Schedule(
 
 	for _, capture := range captures {
 		if capture.State == CaptureStateStopping {
-			log.Warn("schedulerv3: capture is stopping, " +
-				"ignore and drop manual rebalance request")
+			log.Warn("schedulerv3: capture is stopping, ignore manual rebalance request",
+				zap.String("namespace", r.changefeedID.Namespace),
+				zap.String("changefeed", r.changefeedID.ID))
 			atomic.StoreInt32(&r.rebalance, 0)
 			return nil
 		}
@@ -74,19 +79,23 @@ func (r *rebalanceScheduler) Schedule(
 			return nil
 		}
 		if rep.State != ReplicationSetStateReplicating {
-			log.Debug("schedulerv3: not all table replicating, premature to rebalance tables")
+			log.Debug("schedulerv3: not all table replicating, premature to rebalance tables",
+				zap.String("namespace", r.changefeedID.Namespace),
+				zap.String("changefeed", r.changefeedID.ID))
 			return nil
 		}
 	}
 
 	unlimited := math.MaxInt
-	tasks := newBalanceMoveTables(r.random, captures, replications, unlimited)
+	tasks := newBalanceMoveTables(r.random, captures, replications, unlimited, r.changefeedID)
 	if len(tasks) == 0 {
 		return nil
 	}
 	accept := func() {
 		atomic.StoreInt32(&r.rebalance, 0)
-		log.Info("schedulerv3: manual rebalance request accepted")
+		log.Info("schedulerv3: manual rebalance request accepted",
+			zap.String("namespace", r.changefeedID.Namespace),
+			zap.String("changefeed", r.changefeedID.ID))
 	}
 	return []*scheduleTask{{
 		burstBalance: &burstBalance{MoveTables: tasks},
@@ -99,6 +108,7 @@ func newBalanceMoveTables(
 	captures map[model.CaptureID]*CaptureStatus,
 	replications map[model.TableID]*ReplicationSet,
 	maxTaskLimit int,
+	changefeedID model.ChangeFeedID,
 ) []moveTable {
 	tablesPerCapture := make(map[model.CaptureID]*tableSet)
 	for captureID := range captures {
@@ -172,8 +182,10 @@ func newBalanceMoveTables(
 		}
 
 		if minWorkload == math.MaxInt64 {
-			log.Panic("schedulerv3: rebalance meet unexpected min workload " +
-				"when try to the the target capture")
+			log.Panic("schedulerv3: rebalance meet unexpected min workload "+
+				"when try to the the target capture",
+				zap.String("namespace", changefeedID.Namespace),
+				zap.String("changefeed", changefeedID.ID))
 		}
 		if idx >= maxTaskLimit {
 			// We have reached the task limit.
