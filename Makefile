@@ -493,7 +493,6 @@ tiflow-proto: tools/bin/protoc tools/bin/protoc-gen-gogofaster tools/bin/goimpor
 	scripts/generate-engine-proto.sh
 
 tiflow-demo:
-
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./cmd/tiflow-demoserver
 	cp ./bin/tiflow-demoserver ./engine/ansible/roles/common/files/demoserver.bin
 
