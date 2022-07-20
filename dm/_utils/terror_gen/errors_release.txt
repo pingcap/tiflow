@@ -192,6 +192,7 @@ ErrConfigStartTimeTooLate,[code=20057:class=config:scope=internal:level=high], "
 ErrConfigLoaderDirInvalid,[code=20058:class=config:scope=internal:level=high], "Message: loader's dir %s is invalid, Workaround: Please check the `dir` config in task configuration file."
 ErrConfigLoaderS3NotSupport,[code=20059:class=config:scope=internal:level=high], "Message: loader's dir %s is s3 dir, but s3 is not supported, Workaround: Please check the `dir` config in task configuration file and you can use `Lightning` by set config `import-mode` be `sql` which supports s3 instead."
 ErrConfigInvalidSafeModeDuration,[code=20060:class=config:scope=internal:level=medium], "Message: safe-mode-duration '%s' parsed failed: %v, Workaround: Please check the `safe-mode-duration` is correct."
+ErrConfigConfictSafeModeDurationAndSafeMode,[code=20061:class=config:scope=internal:level=low], "Message: safe-mode(true) conflicts with safe-mode-duration(0s), Workaround: Please set safe-mode to false or safe-mode-duration to non-zero."
 ErrBinlogExtractPosition,[code=22001:class=binlog-op:scope=internal:level=high]
 ErrBinlogInvalidFilename,[code=22002:class=binlog-op:scope=internal:level=high], "Message: invalid binlog filename"
 ErrBinlogParsePosFromStr,[code=22003:class=binlog-op:scope=internal:level=high]

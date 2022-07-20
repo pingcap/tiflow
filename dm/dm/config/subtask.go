@@ -455,8 +455,10 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 	if c.SyncerConfig.SafeModeDuration == "" {
 		c.SyncerConfig.SafeModeDuration = strconv.Itoa(2*c.SyncerConfig.CheckpointFlushInterval) + "s"
 	}
-	if _, err := time.ParseDuration(c.SyncerConfig.SafeModeDuration); err != nil {
+	if duration, err := time.ParseDuration(c.SyncerConfig.SafeModeDuration); err != nil {
 		return terror.ErrConfigInvalidSafeModeDuration.Generate(c.SyncerConfig.SafeModeDuration, err)
+	} else if c.SyncerConfig.SafeMode && duration == 0 {
+		return terror.ErrConfigConfictSafeModeDurationAndSafeMode.Generate()
 	}
 
 	c.From.AdjustWithTimeZone(c.Timezone)

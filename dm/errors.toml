@@ -1162,6 +1162,12 @@ description = ""
 workaround = "Please check the `safe-mode-duration` is correct."
 tags = ["internal", "medium"]
 
+[error.DM-config-20061]
+message = "safe-mode(true) conflicts with safe-mode-duration(0s)"
+description = ""
+workaround = "Please set safe-mode to false or safe-mode-duration to non-zero."
+tags = ["internal", "low"]
+
 [error.DM-binlog-op-22001]
 message = ""
 description = ""
