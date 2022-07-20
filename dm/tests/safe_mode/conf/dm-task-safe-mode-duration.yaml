@@ -50,7 +50,7 @@ mydumpers:
     threads: 4
     chunk-filesize: 64
     skip-tz-utc: true
-    extra-args: ""
+    extra-args: "--consistency lock"
 
 loaders:
   global:

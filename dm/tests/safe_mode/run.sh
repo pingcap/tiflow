@@ -267,8 +267,8 @@ function safe_mode_duration() {
 }
 
 function run() {
-	# consistency_none
-	# safe_mode_recover
+	consistency_none
+	safe_mode_recover
 	safe_mode_duration
 
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1

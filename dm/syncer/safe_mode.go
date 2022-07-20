@@ -14,15 +14,18 @@
 package syncer
 
 import (
+	"strings"
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/dumpling/export"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/unit"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/dumpling"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
@@ -59,7 +62,23 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 	}
 
 	var duration time.Duration
-	initPhaseSeconds := s.cfg.SafeModeDuration
+
+	exportCfg := export.DefaultConfig()
+	logger := tctx.L()
+
+	err = dumpling.ParseExtraArgs(&logger, exportCfg, strings.Fields(s.cfg.MydumperConfig.ExtraArgs))
+	if err != nil {
+		return
+	}
+	fresh, err := s.IsFreshTask(tctx.Ctx)
+	if err != nil {
+		return
+	}
+	var initPhaseSeconds string
+	// SafeModeDuration doesn't work when task start first with consistency is none
+	if !(exportCfg.Consistency == "none" && fresh) {
+		initPhaseSeconds = s.cfg.SafeModeDuration
+	}
 
 	failpoint.Inject("SafeModeInitPhaseSeconds", func(val failpoint.Value) {
 		initPhaseSeconds = val.(string)
@@ -123,10 +142,7 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 				failpoint.Return()
 			}
 		})
-		fresh, err2 := s.IsFreshTask(tctx.Ctx)
-		if err2 != nil {
-			err = err2
-		} else if !fresh {
+		if !fresh {
 			err = terror.ErrSyncerReprocessWithSafeModeFail.Generate()
 		}
 	}
