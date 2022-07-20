@@ -33,6 +33,7 @@ type mockCheckpointForSafeMode struct {
 
 	safeModeExitPoint *binlog.Location
 	globalPoint       binlog.Location
+	tablePoint        map[string]map[string]binlog.Location
 }
 
 func (c *mockCheckpointForSafeMode) SafeModeExitPoint() *binlog.Location {
@@ -41,6 +42,10 @@ func (c *mockCheckpointForSafeMode) SafeModeExitPoint() *binlog.Location {
 
 func (c *mockCheckpointForSafeMode) GlobalPoint() binlog.Location {
 	return c.globalPoint
+}
+
+func (c *mockCheckpointForSafeMode) TablePoint() map[string]map[string]binlog.Location {
+	return c.tablePoint
 }
 
 func TestEnableSafeModeInitializationPhase(t *testing.T) {
@@ -89,6 +94,8 @@ func TestEnableSafeModeInitializationPhase(t *testing.T) {
 	s.cfg.SafeMode = true
 	s.cfg.SafeModeDuration = "0" // test safeMode's priority higher than SafeModeDuration's
 	mockCheckpoint := &mockCheckpointForSafeMode{}
+	mockCheckpoint.globalPoint = binlog.Location{}
+	mockCheckpoint.tablePoint = make(map[string]map[string]binlog.Location)
 	s.checkpoint = mockCheckpoint
 	s.enableSafeModeInitializationPhase(s.tctx)
 	require.True(t, s.safeMode.Enable())
