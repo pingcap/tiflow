@@ -55,18 +55,9 @@ func newSchemaWrap4Owner(
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		// we should init the schema version from the startTs, if the diff corresponding to the version is not exists,
-		// it means the job is not committed yet, so we should make schema version -1.
-		version, err = meta.GetSchemaVersion()
+		version, err = schema.GetSchemaVersion(meta)
 		if err != nil {
 			return nil, errors.Trace(err)
-		}
-		diff, err := meta.GetSchemaDiff(version)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		if diff == nil {
-			version--
 		}
 	}
 	schemaSnap, err := schema.NewSingleSnapshotFromMeta(meta, startTs, config.ForceReplicate)
