@@ -246,7 +246,7 @@ function safe_mode_duration() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-task test" \
 		"\"result\": true" 3
-	
+
 	export GO_FAILPOINTS=""
 	# restart workers
 	kill_dm_worker
