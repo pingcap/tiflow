@@ -313,6 +313,7 @@ func TestManagerRtsMap(t *testing.T) {
 	require.Equal(t, uint64(20), logMgr.GetMinResolvedTs())
 }
 
+// TestManagerError tests whether internal error in bgUpdateLog could be managed correctly.
 func TestManagerError(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
@@ -357,5 +358,15 @@ func TestManagerError(t *testing.T) {
 		t.Fatal("bgUpdateLog should return error before context is done")
 	case err := <-errCh:
 		require.Regexp(t, ".*invalid black hole writer.*", err)
+		require.Regexp(t, ".*WriteLog.*", err)
+	}
+
+	go logMgr.bgUpdateLog(ctx, errCh)
+	select {
+	case <-ctx.Done():
+		t.Fatal("bgUpdateLog should return error before context is done")
+	case err := <-errCh:
+		require.Regexp(t, ".*invalid black hole writer.*", err)
+		require.Regexp(t, ".*FlushLog.*", err)
 	}
 }

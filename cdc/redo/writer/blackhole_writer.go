@@ -71,18 +71,25 @@ func (bs *blackHoleWriter) Close() error {
 	return nil
 }
 
-type InvalidBlackHoleWriter struct {
+type invalidBlackHoleWriter struct {
 	*blackHoleWriter
 }
 
-func NewInvalidBlackHoleWriter(rl RedoLogWriter) *InvalidBlackHoleWriter {
-	return &InvalidBlackHoleWriter{
+// NewInvalidBlackHoleWriter creates a invalid blackHole writer
+func NewInvalidBlackHoleWriter(rl RedoLogWriter) *invalidBlackHoleWriter {
+	return &invalidBlackHoleWriter{
 		blackHoleWriter: rl.(*blackHoleWriter),
 	}
 }
 
-func (ibs *InvalidBlackHoleWriter) WriteLog(
+func (ibs *invalidBlackHoleWriter) WriteLog(
 	_ context.Context, _ model.TableID, _ []*model.RedoRowChangedEvent,
 ) (err error) {
 	return errors.New("[WriteLog] invalid black hole writer")
+}
+
+func (ibs *invalidBlackHoleWriter) FlushLog(
+	_ context.Context, _, _ model.Ts,
+) error {
+	return errors.New("[FlushLog] invalid black hole writer")
 }
