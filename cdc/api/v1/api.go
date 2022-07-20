@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/owner"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -487,6 +488,28 @@ func (h *OpenAPI) RemoveChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
+
+	// Owner needs at least tow ticks to remove a changefeed,
+	// we need to wait for it.
+	err = retry.Do(ctx, func() error {
+		_, err := h.statusProvider().GetChangeFeedStatus(ctx, changefeedID)
+		if err != nil {
+			if strings.Contains(err.Error(), "ErrChangeFeedNotExists") {
+				return nil
+			}
+			return err
+		}
+		return cerror.ErrChangeFeedDeletionUnfinished.GenWithStackByArgs(changefeedID)
+	},
+		retry.WithMaxTries(100),         // max retry duration is 1 minute
+		retry.WithBackoffBaseDelay(600), // default owner tick interval is 200ms
+		retry.WithIsRetryableErr(cerror.IsRetryableError))
+
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
 	c.Status(http.StatusAccepted)
 }
 

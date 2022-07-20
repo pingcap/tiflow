@@ -44,12 +44,13 @@ func newSchedulerManager(
 		}]int),
 	}
 
-	sm.schedulers[schedulerPriorityBasic] = newBasicScheduler()
-	sm.schedulers[schedulerPriorityDrainCapture] = newDrainCaptureScheduler(cfg.MaxTaskConcurrency)
+	sm.schedulers[schedulerPriorityBasic] = newBasicScheduler(changefeedID)
+	sm.schedulers[schedulerPriorityDrainCapture] = newDrainCaptureScheduler(
+		cfg.MaxTaskConcurrency, changefeedID)
 	sm.schedulers[schedulerPriorityBalance] = newBalanceScheduler(
 		time.Duration(cfg.CheckBalanceInterval), cfg.MaxTaskConcurrency)
-	sm.schedulers[schedulerPriorityMoveTable] = newMoveTableScheduler()
-	sm.schedulers[schedulerPriorityRebalance] = newRebalanceScheduler()
+	sm.schedulers[schedulerPriorityMoveTable] = newMoveTableScheduler(changefeedID)
+	sm.schedulers[schedulerPriorityRebalance] = newRebalanceScheduler(changefeedID)
 
 	return sm
 }
@@ -95,7 +96,9 @@ func (sm *schedulerManager) MoveTable(tableID model.TableID, target model.Captur
 	scheduler := sm.schedulers[schedulerPriorityMoveTable]
 	moveTableScheduler, ok := scheduler.(*moveTableScheduler)
 	if !ok {
-		log.Panic("schedulerv3: invalid move table scheduler found")
+		log.Panic("schedulerv3: invalid move table scheduler found",
+			zap.String("namespace", sm.changefeedID.Namespace),
+			zap.String("changefeed", sm.changefeedID.ID))
 	}
 	if !moveTableScheduler.addTask(tableID, target) {
 		log.Info("schedulerv3: manual move Table task ignored, "+
@@ -111,7 +114,9 @@ func (sm *schedulerManager) Rebalance() {
 	scheduler := sm.schedulers[schedulerPriorityRebalance]
 	rebalanceScheduler, ok := scheduler.(*rebalanceScheduler)
 	if !ok {
-		log.Panic("schedulerv3: invalid rebalance scheduler found")
+		log.Panic("schedulerv3: invalid rebalance scheduler found",
+			zap.String("namespace", sm.changefeedID.Namespace),
+			zap.String("changefeed", sm.changefeedID.ID))
 	}
 
 	atomic.StoreInt32(&rebalanceScheduler.rebalance, 1)
@@ -121,7 +126,9 @@ func (sm *schedulerManager) DrainCapture(target model.CaptureID) bool {
 	scheduler := sm.schedulers[schedulerPriorityDrainCapture]
 	drainCaptureScheduler, ok := scheduler.(*drainCaptureScheduler)
 	if !ok {
-		log.Panic("schedulerv3: invalid drain capture scheduler found")
+		log.Panic("schedulerv3: invalid drain capture scheduler found",
+			zap.String("namespace", sm.changefeedID.Namespace),
+			zap.String("changefeed", sm.changefeedID.ID))
 	}
 
 	return drainCaptureScheduler.setTarget(target)
