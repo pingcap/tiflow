@@ -340,6 +340,17 @@ func (w *Writer) close() error {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 
+	dirFile, err := os.Open(w.cfg.Dir)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+	}
+	defer dirFile.Close()
+	// sync the dir so as to guarantee the renamed file is persisted to disk.
+	err = dirFile.Sync()
+	if err != nil {
+		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+	}
+
 	// We only write content to S3 before closing the local file.
 	// By this way, we no longer need renaming object in S3.
 	if w.cfg.S3Storage {
