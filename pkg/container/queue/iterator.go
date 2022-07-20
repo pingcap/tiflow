@@ -35,19 +35,19 @@ func (q *ChunkQueue[T]) Begin() *ChunkQueueIterator[T] {
 func (q *ChunkQueue[T]) End() *ChunkQueueIterator[T] {
 	return &ChunkQueueIterator[T]{
 		chunk:      q.lastChunk(),
-		idxInChunk: q.chunkSize,
+		idxInChunk: q.chunkLength,
 	}
 }
 
 // GetIterator() returns a iterator given the index, and nil if out of range
 func (q *ChunkQueue[T]) GetIterator(idx int) *ChunkQueueIterator[T] {
-	if q.Empty() || idx < 0 || idx > q.size {
+	if q.Empty() || idx < 0 || idx >= q.size {
 		return nil
 	}
 	idx += q.chunks[q.head].l
 	return &ChunkQueueIterator[T]{
-		chunk:      q.chunks[q.head+idx/q.chunkSize],
-		idxInChunk: idx % q.chunkSize,
+		chunk:      q.chunks[q.head+idx/q.chunkLength],
+		idxInChunk: idx % q.chunkLength,
 	}
 }
 
@@ -108,8 +108,8 @@ func (it *ChunkQueueIterator[T]) Next() *ChunkQueueIterator[T] {
 
 	nextCk := it.chunk.nextCk
 	q := it.chunk.queue
-	if it.chunk.r < q.chunkSize || nextCk == nil || nextCk.empty() {
-		it.idxInChunk = q.chunkSize
+	if it.chunk.r < q.chunkLength || nextCk == nil || nextCk.empty() {
+		it.idxInChunk = q.chunkLength
 		return it
 	}
 

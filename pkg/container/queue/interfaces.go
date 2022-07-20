@@ -13,7 +13,9 @@
 
 package queue
 
-import "github.com/pingcap/tiflow/pkg/common/iterator"
+import (
+	"github.com/pingcap/tiflow/pkg/container/iterator"
+)
 
 // ChunkQueueInterface defines the interface of ChunkQueue
 type ChunkQueueInterface[T any] interface {

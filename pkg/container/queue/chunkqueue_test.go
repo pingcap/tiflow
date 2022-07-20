@@ -62,7 +62,7 @@ func BenchmarkDequeueMany(b *testing.B) {
 		for i := 0; i < x; i++ {
 			q.Enqueue(i)
 		}
-		ls := []int{x / 4, x / 4, x / 4, x - x/4*3}
+		ls := []int{x / 5, x / 5, x / 5, x / 5, x - x/5*4}
 		b.ResetTimer()
 		for _, l := range ls {
 			vals, ok := q.DequeueMany(l)
@@ -78,7 +78,7 @@ func BenchmarkDequeueMany(b *testing.B) {
 		for i := 0; i < x; i++ {
 			q = append(q, i)
 		}
-		ls := []int{x / 4, x / 4, x / 4, x - x/4*3}
+		ls := []int{x / 5, x / 5, x / 5, x / 5, x - x/5*4}
 		b.ResetTimer()
 		for _, l := range ls {
 			_ = q[:l]
@@ -161,9 +161,9 @@ func TestChunkQueueExpand(t *testing.T) {
 
 		freeSpace := q.Cap() - q.Size()
 		if q.Empty() {
-			require.True(t, freeSpace > 0 && freeSpace <= q.chunkSize)
+			require.True(t, freeSpace > 0 && freeSpace <= q.chunkLength)
 		} else {
-			require.True(t, freeSpace >= 0 && freeSpace < q.chunkSize)
+			require.True(t, freeSpace >= 0 && freeSpace < q.chunkLength)
 		}
 
 		p, ok := q.PopFront()
@@ -196,9 +196,9 @@ func TestChunkQueueDequeueMany(t *testing.T) {
 
 		freeSpace := q.Cap() - q.Size()
 		if q.Empty() {
-			require.True(t, freeSpace > 0 && freeSpace <= q.chunkSize)
+			require.True(t, freeSpace > 0 && freeSpace <= q.chunkLength)
 		} else {
-			require.True(t, freeSpace >= 0 && freeSpace < q.chunkSize)
+			require.True(t, freeSpace >= 0 && freeSpace < q.chunkLength)
 		}
 	}
 	require.Equal(t, f, testCaseSize)

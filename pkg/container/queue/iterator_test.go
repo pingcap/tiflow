@@ -20,9 +20,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	iterTestSize = 10<<17 + 10007
+)
+
 func TestChunkQueueIteratorPrevNext(t *testing.T) {
 	q := NewChunkQueue[int]()
-	for i := 0; i < testCaseSize; i++ {
+	for i := 0; i < iterTestSize; i++ {
 		q.PushBack(i)
 	}
 
@@ -43,15 +47,6 @@ func TestChunkQueueIteratorPrevNext(t *testing.T) {
 		require.Equal(t, i, *v)
 		i--
 	}
-
-	//it = q.Begin()
-	//require.True(t, )
-	//q.Dequeue()
-	//require.True(t, it.Next())
-	//q.DequeueMany(q.Size()/2)
-	//
-	//
-
 }
 
 func BenchmarkChunkQueueIterator_Next(b *testing.B) {
@@ -89,19 +84,19 @@ func BenchmarkChunkQueueIterator_Next(b *testing.B) {
 func TestChunkQueueGetIterator(t *testing.T) {
 	q := NewChunkQueue[int]()
 
-	for i := 0; i < testCaseSize; i++ {
+	for i := 0; i < iterTestSize; i++ {
 		q.PushBack(i)
 	}
 	var it *ChunkQueueIterator[int]
 	it = q.GetIterator(-1)
 	require.Nil(t, it)
-	it = q.GetIterator(testCaseSize)
+	it = q.GetIterator(iterTestSize)
 	require.Nil(t, it)
 
 	require.True(t, q.End().Index() < 0)
 	require.True(t, q.Begin().Prev().Index() < 0)
 
-	for i := 0; i < testCaseSize; i++ {
+	for i := 0; i < iterTestSize; i++ {
 		it = q.GetIterator(i)
 		p1, ok := it.Value()
 		require.True(t, ok)
@@ -117,7 +112,7 @@ func TestChunkQueueGetIterator(t *testing.T) {
 	for !q.Empty() {
 		n := rand.Intn(q.Size())
 		if n == 0 {
-			n = 1 + q.Size()/10
+			n = testCaseSize/20 + 1
 		}
 		it := q.Begin()
 		require.NotNil(t, it)
@@ -130,7 +125,7 @@ func TestChunkQueueGetIterator(t *testing.T) {
 		require.Nil(t, q.Begin().chunk.prevCk)
 		cnt += n
 		v, ok := q.Begin().Value()
-		if cnt >= testCaseSize {
+		if cnt >= iterTestSize {
 			require.False(t, ok)
 		} else {
 			require.Equal(t, cnt, *v)
@@ -138,3 +133,5 @@ func TestChunkQueueGetIterator(t *testing.T) {
 		}
 	}
 }
+
+// todo: add more random tests
