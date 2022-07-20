@@ -603,11 +603,10 @@ func (d *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
 //msgp:ignore SingleTableTxn
 type SingleTableTxn struct {
 	// data fields of SingleTableTxn
-	Table     *TableName
-	StartTs   uint64
-	CommitTs  uint64
-	Rows      []*RowChangedEvent
-	ReplicaID uint64
+	Table    *TableName
+	StartTs  uint64
+	CommitTs uint64
+	Rows     []*RowChangedEvent
 
 	// control fields of SingleTableTxn
 	// FinishWg is a barrier txn, after this txn is received, the worker must
