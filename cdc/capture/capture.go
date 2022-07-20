@@ -468,9 +468,20 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 
 		// if owner exits, resign the owner key,
 		// use a new context to prevent the context from being cancelled.
-		if resignErr := c.resign(context.Background()); resignErr != nil {
-			return errors.Trace(resignErr)
+		resignCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if resignErr := c.resign(resignCtx); resignErr != nil {
+			if errors.Cause(err) != context.DeadlineExceeded {
+				log.Info("owner resign failed", zap.String("captureID", c.info.ID),
+					zap.Error(err), zap.Int64("ownerRev", ownerRev))
+				cancel()
+				return errors.Trace(err)
+			}
+
+			log.Warn("owner resign timeout", zap.String("captureID", c.info.ID),
+				zap.Error(err), zap.Int64("ownerRev", ownerRev))
 		}
+		cancel()
+
 		log.Info("owner resigned successfully",
 			zap.String("captureID", c.info.ID), zap.Int64("ownerRev", ownerRev))
 		if err != nil {
@@ -552,23 +563,7 @@ func (c *captureImpl) resign(ctx context.Context) error {
 	failpoint.Inject("capture-resign-failed", func() {
 		failpoint.Return(errors.New("capture resign failed"))
 	})
-
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	err := c.election.Resign(ctx)
-	if err == nil {
-		return nil
-	}
-
-	if errors.Cause(err) == context.DeadlineExceeded {
-		log.Warn("owner resign timeout",
-			zap.String("captureID", c.info.ID), zap.Error(err))
-		return nil
-	}
-
-	log.Info("owner resign failed", zap.String("captureID", c.info.ID), zap.Error(err))
-	return cerror.WrapError(cerror.ErrCaptureResignOwner, err)
+	return cerror.WrapError(cerror.ErrCaptureResignOwner, c.election.Resign(ctx))
 }
 
 // register the capture by put the capture's information in etcd
