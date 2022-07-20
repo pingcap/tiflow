@@ -76,7 +76,7 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 	}
 	var initPhaseSeconds string
 	// SafeModeDuration doesn't work when task start first with consistency is none
-	if !(exportCfg.Consistency == "none" && fresh) {
+	if !(exportCfg.Consistency == export.ConsistencyTypeNone && fresh) {
 		initPhaseSeconds = s.cfg.SafeModeDuration
 	}
 
@@ -103,7 +103,7 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 		beginLocation = binlog.MustZeroLocation(mysql.MySQLFlavor)
 	})
 	if exitPoint != nil {
-		s.tctx.L().Info("compare exitPoint and beginLocation", zap.Stringer("exit point", exitPoint), zap.Stringer("begin location", beginLocation))
+		s.tctx.L().Info("compare exitPoint and beginLocation", zap.Stringer("exitPoint", exitPoint), zap.Stringer("beginLocation", beginLocation))
 		if binlog.CompareLocation(*exitPoint, beginLocation, s.cfg.EnableGTID) == 0 {
 			s.tctx.L().Info("exitPoint equal to beginLocation, so disable the safe mode")
 			s.checkpoint.SaveSafeModeExitPoint(nil)
