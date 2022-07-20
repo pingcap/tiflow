@@ -61,6 +61,7 @@ const (
 	httpConnectionTimeout = 10 * time.Minute
 )
 
+// Server is the interface for the TiCDC server
 type Server interface {
 	// Run runs the server.
 	Run(ctx context.Context) error
@@ -70,7 +71,7 @@ type Server interface {
 	Drain(ctx context.Context) <-chan struct{}
 }
 
-// server is the capture server
+// server implement the TiCDC Server interface
 // TODO: we need to make server more unit testable and add more test cases.
 // Especially we need to decouple the HTTPServer out of server.
 type server struct {
