@@ -116,7 +116,7 @@ func (s *sink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) error 
 			return errors.Trace(err)
 		}
 		partition := s.eventRouter.GetPartitionForRowChange(row.Event, partitionNum)
-		// This never be blocked.
+		// This never be blocked because this is an unbounded channel.
 		s.worker.msgChan.In() <- mqEvent{
 			key: mqv1.TopicPartitionKey{
 				Topic: topic, Partition: partition,
