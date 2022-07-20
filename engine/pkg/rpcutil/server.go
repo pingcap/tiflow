@@ -88,7 +88,7 @@ func (l *LeaderClientWithLock[T]) Close() {
 	}
 }
 
-// rpcLimiter is a customed rate limiter, which delegates Allow of rate.Limiter,
+// rpcLimiter is a customized rate limiter, which delegates Allow of rate.Limiter,
 // and provides an allow list with a higher priority.
 type rpcLimiter struct {
 	limiter   *rate.Limiter

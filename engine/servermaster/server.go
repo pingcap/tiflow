@@ -65,6 +65,8 @@ import (
 	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
 )
 
+// use a slice instead of map because in small data size, slice search is faster
+// than map search.
 var masterRPCLimiterAllowList = []string{
 	"SubmitJob",
 	"CancelJob",
