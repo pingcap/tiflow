@@ -401,7 +401,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		ownerFlushInterval = time.Millisecond * time.Duration(val.(int))
 	})
 	// Limit the frequency of elections to avoid putting too much pressure on the etcd server
-	rl := rate.NewLimiter(rate.Every(time.Second), 1)
+	rl := rate.NewLimiter(rate.Every(time.Second), 1 /* burst */)
 	for {
 		select {
 		case <-ctx.Done():
