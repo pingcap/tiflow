@@ -91,25 +91,25 @@ func NewChunkQueueLeastCapacity[T any](minCapacity int) *ChunkQueue[T] {
 	return q
 }
 
-// Size() returns the number of elements in queue
+// Size returns the number of elements in queue
 func (q *ChunkQueue[T]) Size() int {
 	return q.size
 }
 
-// Cap() returns the capacity of the queue. The queue can hold more elements
+// Cap returns the capacity of the queue. The queue can hold more elements
 // than that number by automatic expansion
 func (q *ChunkQueue[T]) Cap() int {
 	return q.chunkLength*(q.tail-q.head) - q.chunks[q.head].l
 }
 
-// Empty() indicates whether the queue is empty
+// Empty indicates whether the queue is empty
 func (q *ChunkQueue[T]) Empty() bool {
 	return q.size == 0
 }
 
 // Getters
 
-// At() returns the pointer to an element
+// At returns the pointer to an element
 func (q *ChunkQueue[T]) At(idx int) (*T, bool) {
 	if idx < 0 || idx >= q.size {
 		return new(T), false
@@ -118,7 +118,7 @@ func (q *ChunkQueue[T]) At(idx int) (*T, bool) {
 	return &q.chunks[q.head+i/q.chunkLength].data[i%q.chunkLength], true
 }
 
-// Head() returns the pointer to the first element in queue and nil if empty
+// Head returns the pointer to the first element in queue and nil if empty
 func (q *ChunkQueue[T]) Head() (*T, bool) {
 	if q.Empty() {
 		return nil, false
@@ -182,7 +182,7 @@ func (q *ChunkQueue[T]) reallocateChunksArray(x int) {
 	q.head = 0
 }
 
-// PushBack() pushes an element to tail
+// PushBack pushes an element to tail
 func (q *ChunkQueue[T]) Enqueue(v T) {
 	c := q.lastChunk()
 	if c.r == q.chunkLength {
@@ -195,7 +195,7 @@ func (q *ChunkQueue[T]) Enqueue(v T) {
 	q.size++
 }
 
-// PopFront() pops an element from head
+// PopFront pops an element from head
 func (q *ChunkQueue[T]) Dequeue() (T, bool) {
 	if q.Empty() {
 		return q.defaultValue, false
@@ -270,15 +270,15 @@ func (q *ChunkQueue[T]) DequeueMany(n int) ([]T, bool) {
 
 	res := make([]T, n, n)
 	cnt := 0
-	//emptyChunk := make([]T, q.chunkLength, q.chunkLength)
+	// emptyChunk := make([]T, q.chunkLength, q.chunkLength)
 	for i := q.head; i < q.tail && cnt < n; i++ {
 		c := q.chunks[i]
 		popLen := c.len()
 		if n-cnt < popLen {
 			popLen = n - cnt
 		}
-		//copy(res[cnt:cnt+popLen], c.data[c.l:c.l+popLen])
-		//copy(c.data[c.l:c.l+popLen], emptyChunk[:popLen])
+		// copy(res[cnt:cnt+popLen], c.data[c.l:c.l+popLen])
+		// copy(c.data[c.l:c.l+popLen], emptyChunk[:popLen])
 		for j := 0; j < popLen; j++ {
 			res[cnt+j] = c.data[c.l+j]
 			c.data[c.l+j] = q.defaultValue

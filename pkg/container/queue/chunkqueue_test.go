@@ -110,6 +110,7 @@ func TestChunkQueueSimpleWorkflow(t *testing.T) {
 	q.EnqueueMany(adds...)
 	require.Equal(t, testCaseSize, q.Size())
 	vals, ok := q.DequeueMany(testCaseSize * 3 / 4)
+	require.True(t, ok)
 	for i, v := range vals {
 		require.Equal(t, adds[i], v)
 	}
