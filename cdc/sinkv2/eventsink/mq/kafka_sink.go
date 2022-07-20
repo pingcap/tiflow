@@ -18,11 +18,10 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
-
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
+	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/pkg/config"
