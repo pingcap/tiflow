@@ -166,9 +166,7 @@ type regionWorker struct {
 	inputSlots int
 }
 
-func newRegionWorker(
-	changefeedID model.ChangeFeedID, s *eventFeedSession, addr string,
-) *regionWorker {
+func newRegionWorker(s *eventFeedSession, addr string) *regionWorker {
 	cfg := config.GetGlobalServerConfig().KVClient
 	return &regionWorker{
 		session:       s,
