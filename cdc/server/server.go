@@ -68,6 +68,7 @@ type Server interface {
 	// Close closes the server.
 	Close()
 	// Drain removes tables in the current TiCDC instance.
+	// It's part of graceful shutdown, should be called before Close.
 	Drain(ctx context.Context) <-chan struct{}
 }
 
