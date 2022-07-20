@@ -143,8 +143,8 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 		partition := k.eventRouter.GetPartitionForRowChange(row, partitionNum)
 		err = k.flushWorker.addEvent(ctx, mqEvent{
 			row: row,
-			key: topicPartitionKey{
-				topic: topic, partition: partition,
+			key: TopicPartitionKey{
+				Topic: topic, Partition: partition,
 			},
 		})
 		if err != nil {
