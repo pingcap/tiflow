@@ -160,6 +160,9 @@ func TestShouldDiscardDDL(t *testing.T) {
 	require.False(t, filter.ShouldDiscardDDL(timodel.ActionDropPrimaryKey))
 	require.False(t, filter.ShouldDiscardDDL(timodel.ActionAddColumns))
 	require.False(t, filter.ShouldDiscardDDL(timodel.ActionDropColumns))
+	require.False(t, filter.ShouldDiscardDDL(timodel.ActionRebaseAutoID))
+	require.False(t, filter.ShouldDiscardDDL(timodel.ActionAlterIndexVisibility))
+	require.False(t, filter.ShouldDiscardDDL(timodel.ActionMultiSchemaChange))
 
 	// Discard sequence DDL.
 	require.True(t, filter.ShouldDiscardDDL(timodel.ActionCreateSequence))
