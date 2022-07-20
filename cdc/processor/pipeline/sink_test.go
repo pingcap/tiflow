@@ -161,6 +161,9 @@ func TestState(t *testing.T) {
 		CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved},
 		Row: &model.RowChangedEvent{},
 	})
+	// resolve event handled by the sink, which means also handled by the sorter
+	// it's time to make the sorter node become replicating.
+	state = TableStateReplicating
 	ok, err = node.HandleMessage(ctx, msg)
 	require.Nil(t, err)
 	require.True(t, ok)
@@ -210,6 +213,7 @@ func TestState(t *testing.T) {
 		CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved},
 		Row: &model.RowChangedEvent{},
 	})
+	state = TableStateReplicating
 	ok, err = node.HandleMessage(ctx, msg)
 	require.Nil(t, err)
 	require.True(t, ok)
@@ -247,6 +251,7 @@ func TestState(t *testing.T) {
 		CRTs: 7, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved},
 		Row: &model.RowChangedEvent{},
 	})
+	state = TableStateReplicating
 	ok, err = node.HandleMessage(ctx, msg)
 	require.Nil(t, err)
 	require.True(t, ok)
@@ -286,6 +291,7 @@ func TestStopStatus(t *testing.T) {
 		CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved},
 		Row: &model.RowChangedEvent{},
 	})
+	state = TableStateReplicating
 	ok, err := node.HandleMessage(ctx, msg)
 	require.Nil(t, err)
 	require.True(t, ok)
@@ -366,6 +372,7 @@ func TestManyTs(t *testing.T) {
 		CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved},
 		Row: &model.RowChangedEvent{},
 	})
+	state = TableStateReplicating
 	ok, err = node.HandleMessage(ctx, msg)
 	require.Nil(t, err)
 	require.True(t, ok)
