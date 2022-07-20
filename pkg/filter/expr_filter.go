@@ -236,7 +236,7 @@ func (r *dmlExprFilterRule) getSimpleExprOfTable(
 				zap.String("expression", expr),
 				zap.Error(err))
 			return nil, cerror.ErrExpressionColumnNotFound.
-				FastGenByArgs(getColumnFromError(err), ti.TableName.Table, expr)
+				FastGenByArgs(getColumnFromError(err), ti.TableName.String(), expr)
 		}
 		log.Error("failed to parse expression", zap.Error(err))
 		return nil, cerror.ErrExpressionParseFailed.FastGenByArgs(err, expr)
@@ -415,7 +415,7 @@ func (f *dmlExprFilter) shouldSkipDML(
 	for _, rule := range rules {
 		ignore, err := rule.shouldSkipDML(row, rawRow, ti)
 		if err != nil {
-			if cerror.IsChangefeedNotRetryError(err) {
+			if cerror.IsChangefeedUnRetryableError(err) {
 				return false, err
 			}
 			return false, cerror.WrapError(cerror.ErrFailedToFilterDML, err, row)

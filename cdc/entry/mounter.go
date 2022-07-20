@@ -179,7 +179,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 			if err != nil {
 				return nil, err
 			}
-			// Now we need to filter a row here is because we need its tableInfo
+			// We need to filter a row here because we need its tableInfo.
 			ignore, err := m.filter.ShouldIgnoreDMLEvent(row, rawRow, tableInfo)
 			if err != nil {
 				return nil, err
@@ -194,7 +194,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 		}
 		return nil, nil
 	}()
-	if err != nil && !cerror.IsChangefeedNotRetryError(err) {
+	if err != nil && !cerror.IsChangefeedUnRetryableError(err) {
 		log.Error("failed to mount and unmarshals entry, start to print debug info", zap.Error(err))
 		snap.PrintStatus(log.Error)
 	}
