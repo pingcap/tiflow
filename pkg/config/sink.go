@@ -159,10 +159,10 @@ func (s *SinkConfig) applyParameter(sinkURI *url.URL) error {
 	if protocolFromURI != "" {
 		if s.Protocol != "" {
 			log.Warn(
-				"protocol is specified in both sink URI and config file"+
-					"the value in sink URI will be used",
-				zap.String("protocol in sink URI", protocolFromURI),
-				zap.String("protocol in config file", s.Protocol))
+				fmt.Sprintf("protocol is specified in both sink URI and config file"+
+					"the value in sink URI will be used"+
+					"protocol in sink URI:%s, protocol in config file:%s",
+					protocolFromURI, s.Protocol))
 		}
 		s.Protocol = protocolFromURI
 	}
