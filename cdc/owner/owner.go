@@ -438,13 +438,15 @@ func (o *ownerImpl) handleDrainCaptures(query *scheduler.Query, done chan<- erro
 	}
 
 	if err != nil {
-		log.Info("owner handle drain capture failed", zap.Error(err))
+		log.Info("owner handle drain capture failed",
+			zap.String("target", query.CaptureID), zap.Error(err))
 		done <- err
 		close(done)
 		return
 	}
 
 	log.Info("owner handle drain capture",
+		zap.String("target", query.CaptureID),
 		zap.Int("changefeedWithTableCount", changefeedWithTableCount),
 		zap.Int("totalTableCount", totalTableCount))
 	close(done)
