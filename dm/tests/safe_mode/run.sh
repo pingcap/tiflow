@@ -209,7 +209,6 @@ function safe_mode_duration() {
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 	sleep 1
 
-	# DM-worker exit during re-sync after sharding group synced
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql_file $cur/data/db2.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 
@@ -247,18 +246,29 @@ function safe_mode_duration() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-task test" \
 		"\"result\": true" 3
+	
+	export GO_FAILPOINTS=""
+	# restart workers
+	kill_dm_worker
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
+	run_sql_file $cur/data/db1.increment2.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql_file $cur/data/db2.increment2.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+
 	dmctl_start_task "$WORK_DIR/dm-task-safe-mode-duration.yaml"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
-	export GO_FAILPOINTS=""
 	echo "finish running safe mode duration case"
 	cleanup_process $*
 	cleanup_data safe_mode_target
 }
 
 function run() {
-	consistency_none
-	safe_mode_recover
+	# consistency_none
+	# safe_mode_recover
 	safe_mode_duration
 
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
