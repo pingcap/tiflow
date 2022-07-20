@@ -39,7 +39,7 @@ jobs:
       - uses: actions/checkout@v2
 
       - name: check out code by workerflow dispatch PR
-        if ${{ github.event.inputs.pr != '' }}
+        if: ${{ github.event.inputs.pr != '' }}
         uses: actions/checkout@v2
         with:
           ref: refs/pull/${{ github.event.inputs.pr }}/head
