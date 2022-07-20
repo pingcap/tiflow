@@ -18,6 +18,8 @@ import (
 
 	"github.com/pingcap/errors"
 	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
+	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
+
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -26,8 +28,8 @@ import (
 
 // queryChangefeedOptions defines flags for the `cli changefeed query` command.
 type queryChangefeedOptions struct {
-	apiClient apiv1client.APIV1Interface
-
+	apiClient    apiv1client.APIV1Interface
+	apiClientV2  apiv2client.APIV2Interface
 	changefeedID string
 	simplified   bool
 }
@@ -47,11 +49,16 @@ func (o *queryChangefeedOptions) addFlags(cmd *cobra.Command) {
 
 // complete adapts from the command line args to the data and client required.
 func (o *queryChangefeedOptions) complete(f factory.Factory) error {
-	client, err := f.APIV1Client()
+	clientV1, err := f.APIV1Client()
 	if err != nil {
 		return err
 	}
-	o.apiClient = client
+	o.apiClient = clientV1
+	clientV2, err := f.APIV2Client()
+	if err != nil {
+		return err
+	}
+	o.apiClientV2 = clientV2
 	return nil
 }
 
@@ -74,6 +81,13 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return err
 	}
+
+	info, err := o.apiClientV2.Changefeeds().GetInfo(ctx, o.changefeedID)
+	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
+		return err
+	}
+	detail.Config = info.Config
+
 	return util.JSONPrint(cmd, detail)
 }
 
