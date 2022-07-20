@@ -14,7 +14,6 @@
 package puller
 
 import (
-	"bytes"
 	"context"
 	"sync"
 	"sync/atomic"
@@ -109,7 +108,7 @@ func (p *ddlJobPullerImpl) UnmarshalDDL(rawKV *model.RawKVEntry) (*timodel.Job, 
 	if rawKV.OpType != model.OpTypePut {
 		return nil, nil
 	}
-	if p.tableInfo == nil && !bytes.HasPrefix(rawKV.Key, entry.MetaPrefix) {
+	if p.tableInfo == nil && !entry.IsLegacyFormatJob(rawKV) {
 		err := p.initJobTableMeta()
 		if err != nil {
 			return nil, errors.Trace(err)

@@ -49,8 +49,8 @@ func TestDecodeListData(t *testing.T) {
 }
 
 func buildMetaKey(key []byte, index int64) []byte {
-	ek := make([]byte, 0, len(MetaPrefix)+len(key)+36)
-	ek = append(ek, MetaPrefix...)
+	ek := make([]byte, 0, len(metaPrefix)+len(key)+36)
+	ek = append(ek, metaPrefix...)
 	ek = codec.EncodeBytes(ek, key)
 	ek = codec.EncodeUint(ek, uint64(ListData))
 	return codec.EncodeInt(ek, index)
