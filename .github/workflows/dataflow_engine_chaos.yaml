@@ -38,6 +38,12 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+      - name: check out code by workerflow dispatch PR
+        if ${{ github.event.inputs.pr != '' }}
+        uses: actions/checkout@v2
+        with:
+          ref: refs/pull/${{ github.event.inputs.pr }}/head
+
       - uses: actions/setup-go@v3
         with:
           go-version: 1.18
