@@ -180,6 +180,8 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 	var snap *schema.Snapshot
 	if len(s.snaps) > 0 {
 		lastSnap := s.snaps[len(s.snaps)-1]
+		// we use schemaVersion to check if there are any already executed DDL received again,
+		// the newer DDL job has bigger schemaVersion.
 		if job.BinlogInfo.FinishedTS <= lastSnap.CurrentTs() || job.BinlogInfo.SchemaVersion <= s.schemaVersion {
 			log.Info("ignore foregone DDL", zap.Int64("jobID", job.ID),
 				zap.String("DDL", job.Query),

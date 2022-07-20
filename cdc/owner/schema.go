@@ -126,6 +126,8 @@ func (s *schemaWrap4Owner) AllTableNames() []model.TableName {
 }
 
 func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
+	// we use schemaVersion to check if there are any already executed DDL received again,
+	// the newer DDL job has bigger schemaVersion.
 	if job.BinlogInfo.FinishedTS <= s.ddlHandledTs || job.BinlogInfo.SchemaVersion <= s.schemaVersion {
 		log.Warn("job finishTs is less than schema handleTs, discard invalid job",
 			zap.String("namespace", s.id.Namespace),
