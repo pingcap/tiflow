@@ -117,6 +117,8 @@ func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {
 	if !c.captureM.CheckAllCaptureInitialized() {
 		log.Info("schedulerv3: manual move table task ignored, "+
 			"since not all captures initialized",
+			zap.String("namespace", c.changefeedID.Namespace),
+			zap.String("changefeed", c.changefeedID.ID),
 			zap.Int64("tableID", tableID),
 			zap.String("targetCapture", target))
 		return
@@ -131,8 +133,10 @@ func (c *coordinator) Rebalance() {
 	defer c.mu.Unlock()
 
 	if !c.captureM.CheckAllCaptureInitialized() {
-		log.Info("schedulerv3: manual rebalance task ignored, " +
-			"since not all captures initialized")
+		log.Info("schedulerv3: manual rebalance task ignored, "+
+			"since not all captures initialized",
+			zap.String("namespace", c.changefeedID.Namespace),
+			zap.String("changefeed", c.changefeedID.ID))
 		return
 	}
 
@@ -148,7 +152,9 @@ func (c *coordinator) DrainCapture(target model.CaptureID) (int, error) {
 	if !c.captureM.CheckAllCaptureInitialized() {
 		log.Info("schedulerv3: drain capture request ignored, "+
 			"since not all captures initialized",
-			zap.String("target", target))
+			zap.String("target", target),
+			zap.String("namespace", c.changefeedID.Namespace),
+			zap.String("changefeed", c.changefeedID.ID))
 		// return false to let client retry.
 		return 0, cerror.ErrSchedulerRequestFailed.
 			GenWithStack("not all captures initialized")
@@ -164,6 +170,8 @@ func (c *coordinator) DrainCapture(target model.CaptureID) (int, error) {
 	if count == 0 {
 		log.Info("schedulerv3: drain capture request ignored, "+
 			"the target capture has no replicating table",
+			zap.String("namespace", c.changefeedID.Namespace),
+			zap.String("changefeed", c.changefeedID.ID),
 			zap.String("target", target))
 		return count, nil
 	}
@@ -173,6 +181,8 @@ func (c *coordinator) DrainCapture(target model.CaptureID) (int, error) {
 	if len(c.captureM.Captures) <= 1 {
 		log.Warn("schedulerv3: drain capture request ignored, "+
 			"only one captures alive",
+			zap.String("namespace", c.changefeedID.Namespace),
+			zap.String("changefeed", c.changefeedID.ID),
 			zap.String("target", target),
 			zap.Int("tableCount", count))
 		return count, nil
@@ -183,6 +193,8 @@ func (c *coordinator) DrainCapture(target model.CaptureID) (int, error) {
 	if target == c.captureID {
 		log.Warn("schedulerv3: drain capture request ignored, "+
 			"the target is the owner",
+			zap.String("namespace", c.changefeedID.Namespace),
+			zap.String("changefeed", c.changefeedID.ID),
 			zap.String("target", target), zap.Int("tableCount", count))
 		return count, nil
 	}
@@ -190,6 +202,8 @@ func (c *coordinator) DrainCapture(target model.CaptureID) (int, error) {
 	if !c.schedulerM.DrainCapture(target) {
 		log.Info("schedulerv3: drain capture request ignored, "+
 			"since there is capture draining",
+			zap.String("namespace", c.changefeedID.Namespace),
+			zap.String("changefeed", c.changefeedID.ID),
 			zap.String("target", target),
 			zap.Int("tableCount", count))
 	}
@@ -209,7 +223,7 @@ func (c *coordinator) Close(ctx context.Context) {
 	log.Info("schedulerv3: coordinator closed",
 		zap.Any("ownerRev", c.captureM.OwnerRev),
 		zap.String("namespace", c.changefeedID.Namespace),
-		zap.String("name", c.changefeedID.ID))
+		zap.String("changefeed", c.changefeedID.ID))
 }
 
 // ===========
@@ -300,6 +314,8 @@ func (c *coordinator) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) 
 		// Correctness check.
 		if len(m.To) == 0 || m.MsgType == schedulepb.MsgUnknown {
 			log.Panic("invalid message no destination or unknown message type",
+				zap.String("namespace", c.changefeedID.Namespace),
+				zap.String("changefeed", c.changefeedID.ID),
 				zap.Any("message", m))
 		}
 
