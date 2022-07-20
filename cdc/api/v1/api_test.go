@@ -345,7 +345,15 @@ func TestRemoveChangefeed(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mo := mock_owner.NewMockOwner(ctrl)
 	cp := capture.NewCapture4Test(mo)
-	router := newRouter(cp, newStatusProvider())
+
+	statusProvider := &mockStatusProvider{}
+	statusProvider.On("GetChangeFeedStatus", mock.Anything, changeFeedID).
+		Return(&model.ChangeFeedStatus{CheckpointTs: 1}, nil).Once()
+	statusProvider.On("GetChangeFeedStatus", mock.Anything, changeFeedID).
+		Return(new(model.ChangeFeedStatus),
+			cerror.ErrChangeFeedNotExists.FastGenByArgs(changeFeedID)).Once()
+
+	router1 := newRouter(cp, statusProvider)
 
 	// test remove changefeed succeeded
 	mo.EXPECT().
@@ -358,10 +366,11 @@ func TestRemoveChangefeed(t *testing.T) {
 	api := testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s", changeFeedID.ID), method: "DELETE"}
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
-	router.ServeHTTP(w, req)
+	router1.ServeHTTP(w, req)
 	require.Equal(t, 202, w.Code)
 
-	// test remove changefeed failed from owner size
+	router2 := newRouter(cp, newStatusProvider())
+	// test remove changefeed failed from owner side
 	mo.EXPECT().
 		EnqueueJob(gomock.Any(), gomock.Any()).
 		Do(func(adminJob model.AdminJob, done chan<- error) {
@@ -371,7 +380,7 @@ func TestRemoveChangefeed(t *testing.T) {
 	api = testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s", changeFeedID.ID), method: "DELETE"}
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
-	router.ServeHTTP(w, req)
+	router2.ServeHTTP(w, req)
 	require.Equal(t, 400, w.Code)
 	respErr := model.HTTPError{}
 	err := json.NewDecoder(w.Body).Decode(&respErr)
@@ -385,7 +394,7 @@ func TestRemoveChangefeed(t *testing.T) {
 	}
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
-	router.ServeHTTP(w, req)
+	router2.ServeHTTP(w, req)
 	require.Equal(t, 400, w.Code)
 	respErr = model.HTTPError{}
 	err = json.NewDecoder(w.Body).Decode(&respErr)

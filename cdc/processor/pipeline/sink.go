@@ -316,9 +316,6 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 		}
 
 		if event.IsResolved() {
-			if n.state.Load() == TableStatePrepared {
-				n.state.Store(TableStateReplicating)
-			}
 			failpoint.Inject("ProcessorSyncResolvedError", func() {
 				failpoint.Return(false, errors.New("processor sync resolved injected error"))
 			})
