@@ -357,7 +357,8 @@ func (APIV2HelpersImpl) verifyResumeChangefeedConfig(ctx context.Context,
 		return nil
 	}
 
-	gcTTL := config.GetGlobalServerConfig().GcTTL
+	// 1h is enough for resuming a changefeed.
+	gcTTL := int64(60 * 60)
 	err := gc.EnsureChangefeedStartTsSafety(
 		ctx,
 		pdClient,

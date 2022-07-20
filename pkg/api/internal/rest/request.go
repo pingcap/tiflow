@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path"
@@ -313,7 +312,7 @@ func (r *Request) Do(ctx context.Context) (res *Result) {
 			}
 			// close the body to let the TCP connection be reused after reconnecting
 			// see https://github.com/golang/go/blob/go1.18.1/src/net/http/response.go#L62-L64
-			_, _ = io.Copy(ioutil.Discard, resp.Body)
+			_, _ = io.Copy(io.Discard, resp.Body)
 			resp.Body.Close()
 		}()
 
@@ -347,7 +346,7 @@ func (r *Request) Do(ctx context.Context) (res *Result) {
 func (r *Request) checkResponse(resp *http.Response) *Result {
 	var body []byte
 	if resp.Body != nil {
-		data, err := ioutil.ReadAll(resp.Body)
+		data, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return &Result{err: err}
 		}

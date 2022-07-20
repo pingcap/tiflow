@@ -15,7 +15,9 @@ package tablesink
 
 import (
 	"sort"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline"
@@ -41,21 +43,21 @@ func (m *mockEventSink) Close() error {
 }
 
 // acknowledge the txn events by call the callback function.
-func (m *mockEventSink) acknowledge(commitTs uint64) {
+func (m *mockEventSink) acknowledge(commitTs uint64) []*eventsink.TxnCallbackableEvent {
+	var droppedEvents []*eventsink.TxnCallbackableEvent
 	i := sort.Search(len(m.events), func(i int) bool {
 		return m.events[i].Event.GetCommitTs() > commitTs
 	})
 	if i == 0 {
-		return
+		return droppedEvents
 	}
 	ackedEvents := m.events[:i]
-
 	for _, event := range ackedEvents {
-		if event.TableStatus.Load() != pipeline.TableStateStopped {
+		if event.TableStatus.Load() != pipeline.TableStateStopping {
 			event.Callback()
 		} else {
-			// If the table is stopped, the event should be ignored.
-			return
+			event.Callback()
+			droppedEvents = append(droppedEvents, event)
 		}
 	}
 
@@ -66,6 +68,8 @@ func (m *mockEventSink) acknowledge(commitTs uint64) {
 			len(m.events[i:])),
 		m.events[i:]...,
 	)
+
+	return droppedEvents
 }
 
 func getTestRows() []*model.RowChangedEvent {
@@ -254,8 +258,19 @@ func TestClose(t *testing.T) {
 	tb.AppendRowChangedEvents(getTestRows()...)
 	tb.UpdateResolvedTs(model.NewResolvedTs(105))
 	require.Len(t, sink.events, 7, "all events should be flushed")
-	tb.Close()
-	require.Equal(t, pipeline.TableStateStopped, tb.state, "tableState should be closed")
-	sink.acknowledge(105)
-	require.Len(t, sink.events, 7, "no event should be acked")
+	var wg sync.WaitGroup
+	go func() {
+		wg.Add(1)
+		tb.Close()
+		wg.Done()
+	}()
+	require.Eventually(t, func() bool {
+		return pipeline.TableStateStopping == tb.state.Load()
+	}, time.Second, time.Millisecond*10, "table should be stopping")
+	droppedEvents := sink.acknowledge(105)
+	require.Len(t, droppedEvents, 7, "all events should be dropped")
+	wg.Wait()
+	require.Eventually(t, func() bool {
+		return pipeline.TableStateStopped == tb.state.Load()
+	}, time.Second, time.Millisecond*10, "table should be closed")
 }

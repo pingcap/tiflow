@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/stretchr/testify/require"
@@ -397,4 +398,90 @@ func TestChangefeedStatusNotExist(t *testing.T) {
 	tester.MustApplyPatches()
 	require.Nil(t, state.Info)
 	require.False(t, state.Exist())
+}
+
+func TestChangefeedNotRetry(t *testing.T) {
+	ctx := cdcContext.NewBackendContext4Test(true)
+	manager := newFeedStateManager4Test()
+	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		ctx.ChangefeedVars().ID)
+	tester := orchestrator.NewReactorStateTester(t, state, nil)
+
+	// changefeed state normal
+	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		require.Nil(t, info)
+		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}, State: model.StateNormal}, true, nil
+	})
+	tester.MustApplyPatches()
+	manager.Tick(state)
+	require.True(t, manager.ShouldRunning())
+
+	// changefeed in error state but error can be retried
+	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		return &model.ChangeFeedInfo{
+			SinkURI: "123",
+			Config:  &config.ReplicaConfig{},
+			State:   model.StateError,
+			Error: &model.RunningError{
+				Addr: "127.0.0.1",
+				Code: "CDC:ErrPipelineTryAgain",
+				Message: "pipeline is full, please try again. Internal use only, " +
+					"report a bug if seen externally",
+			},
+		}, true, nil
+	})
+	tester.MustApplyPatches()
+	manager.Tick(state)
+	require.True(t, manager.ShouldRunning())
+
+	// changefeed in error state and error can't be retried
+	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		return &model.ChangeFeedInfo{
+			SinkURI: "123",
+			Config:  &config.ReplicaConfig{},
+			State:   model.StateError,
+			Error: &model.RunningError{
+				Addr:    "127.0.0.1",
+				Code:    "CDC:ErrExpressionColumnNotFound",
+				Message: "what ever",
+			},
+		}, true, nil
+	})
+	tester.MustApplyPatches()
+	manager.Tick(state)
+	require.False(t, manager.ShouldRunning())
+
+	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		return &model.ChangeFeedInfo{
+			SinkURI: "123",
+			Config:  &config.ReplicaConfig{},
+			State:   model.StateError,
+			Error: &model.RunningError{
+				Addr:    "127.0.0.1",
+				Code:    string(cerror.ErrExpressionColumnNotFound.RFCCode()),
+				Message: cerror.ErrExpressionColumnNotFound.Error(),
+			},
+		}, true, nil
+	})
+	tester.MustApplyPatches()
+	manager.Tick(state)
+	// should be false
+	require.False(t, manager.ShouldRunning())
+
+	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		return &model.ChangeFeedInfo{
+			SinkURI: "123",
+			Config:  &config.ReplicaConfig{},
+			State:   model.StateError,
+			Error: &model.RunningError{
+				Addr:    "127.0.0.1",
+				Code:    string(cerror.ErrExpressionParseFailed.RFCCode()),
+				Message: cerror.ErrExpressionParseFailed.Error(),
+			},
+		}, true, nil
+	})
+	tester.MustApplyPatches()
+	manager.Tick(state)
+	// should be false
+	require.False(t, manager.ShouldRunning())
 }
