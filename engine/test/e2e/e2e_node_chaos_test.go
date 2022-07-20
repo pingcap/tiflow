@@ -122,15 +122,6 @@ func TestNodeFailure(t *testing.T) {
 		updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, value, mvccCount)
 	}
 
-	// transfer etcd leader to a random node for several times
-	for i := 0; i < nodeCount; i++ {
-		err := cli.TransferEtcdLeader(ctx)
-		require.NoError(t, err)
-		mvccCount++
-		value := fmt.Sprintf("transfer-etcd-leader-value-%d", i)
-		updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, value, mvccCount)
-	}
-
 	// restart all executors and check fake job is running normally
 	for i := 0; i < nodeCount; i++ {
 		cli.ContainerRestart(executorContainerName(i))

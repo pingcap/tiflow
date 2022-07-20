@@ -4,7 +4,7 @@ name: Dataflow Engine e2e tests
 # events but only for the master branch
 on:
   push:
-    branches: [ master ]
+    branches: [ master, remove-embedded-etcd ] # Enable on remove-embedded-etcd for testing temporarily.
   pull_request:
     branches: [ master ]
     paths:
@@ -148,7 +148,7 @@ jobs:
           go-version: 1.18
 
       - name: Build images
-        run:  make engine_image
+        run: make engine_image
 
 
       - name: Run containers

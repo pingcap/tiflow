@@ -18,17 +18,18 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/client"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	"github.com/pingcap/tiflow/engine/pkg/etcdutil"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
+	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/servermaster/cluster"
 	derrors "github.com/pingcap/tiflow/pkg/errors"
 )
@@ -51,7 +52,6 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 	var (
 		leaderResignFn context.CancelFunc
 
-		checkEtcdLeader  = time.Millisecond * 200
 		retryInterval    = time.Millisecond * 200
 		needResetSession = false
 	)
@@ -66,10 +66,6 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 		return err
 	}
 	session, err := cluster.NewEtcdSession(ctx, s.etcdClient, sessionCfg)
-	if err != nil {
-		return err
-	}
-	err = s.updateServerMasterMembers(ctx)
 	if err != nil {
 		return err
 	}
@@ -104,22 +100,11 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 		leaderResignFn = newResignFn
 
 		errg, leaderCtx := errgroup.WithContext(newCtx)
-		// Note there isn't any correctness issue if server master leader is
-		// different from the etcd leader. But in order to reduce the maintenance
-		// cost, we evict server master leader actively if etcd leader changes.
 		errg.Go(func() error {
-			ticker := time.NewTicker(checkEtcdLeader)
-			defer ticker.Stop()
 			for {
 				select {
 				case <-leaderCtx.Done():
 					return errors.Trace(ctx.Err())
-				case <-ticker.C:
-					if !s.isEtcdLeader() {
-						log.Info("etcd leader changed, resigns server master leader",
-							zap.String("old-leader-name", s.name()))
-						return derrors.ErrEtcdLeaderChanged.GenWithStackByArgs()
-					}
 				}
 			}
 		})
@@ -164,9 +149,9 @@ func (s *Server) checkLeaderExists(ctx context.Context) (retry bool, err error) 
 	}
 
 	// step-2
-	var leader *Member
+	var leader *rpcutil.Member
 	if len(data) > 0 {
-		leader = &Member{}
+		leader = &rpcutil.Member{}
 		err = leader.Unmarshal(data)
 		// step-2, case-a
 		if err != nil {
@@ -192,19 +177,13 @@ func (s *Server) checkLeaderExists(ctx context.Context) (retry bool, err error) 
 		}
 
 		// step-3, case-c
-		leader.IsServLeader = true
-		leader.IsEtcdLeader = true
+		leader.IsLeader = true
 		log.Info("start to watch server master leader",
 			zap.String("leader-name", leader.Name), zap.String("addr", leader.AdvertiseAddr))
 		s.watchLeader(ctx, leader, rev)
 		log.Info("server master leader changed")
 	}
 
-	// step-3
-	if !s.isEtcdLeader() {
-		log.Info("skip campaigning leader", zap.String("name", s.name()))
-		return true, nil
-	}
 	return false, nil
 }
 
@@ -236,16 +215,11 @@ func (s *Server) closeLeaderClient() {
 	s.resourceCli.Close()
 }
 
-func (s *Server) isEtcdLeader() bool {
-	return s.etcd.Server.Lead() == uint64(s.etcd.Server.ID())
-}
-
-func (s *Server) watchLeader(ctx context.Context, m *Member, rev int64) {
-	m.IsServLeader = true
-	m.IsEtcdLeader = true
+func (s *Server) watchLeader(ctx context.Context, m *rpcutil.Member, rev int64) {
+	m.IsLeader = true
 	s.leader.Store(m)
 	s.createLeaderClient(ctx, []string{m.AdvertiseAddr})
-	defer s.leader.Store(&Member{})
+	defer s.leader.Store(&rpcutil.Member{})
 
 	watcher := clientv3.NewWatcher(s.etcdClient)
 	defer watcher.Close()
