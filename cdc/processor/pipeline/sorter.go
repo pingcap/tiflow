@@ -33,7 +33,6 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
-	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -191,11 +190,6 @@ func (n *sorterNode) start(
 		case <-stdCtx.Done():
 			return nil
 		case startTs = <-n.startTsCh:
-			phy, logic, err := n.pdClient.GetTS(ctx)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			replicateTs = oracle.ComposeTS(phy, logic)
 			log.Info("table is replicating",
 				zap.Int64("tableID", n.tableID),
 				zap.String("tableName", n.tableName),

@@ -118,7 +118,7 @@ func TestPrepareDML(t *testing.T) {
 	defer cancel()
 	ms := newMySQLSink4Test(ctx, t)
 	for _, tc := range testCases {
-		dmls := ms.prepareDMLs(tc.input, 0, 0)
+		dmls := ms.prepareDMLs(tc.input, 0)
 		require.Equal(t, tc.expected, dmls)
 	}
 }
@@ -1333,7 +1333,7 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 
 	require.Nil(t, err)
 
-	err = sink.execDMLs(ctx, rows, 1 /* replicaID */, 1 /* bucket */)
+	err = sink.execDMLs(ctx, rows, 1 /* bucket */)
 	require.Equal(t, errDatabaseNotExists, errors.Cause(err))
 
 	err = sink.Close(ctx)
@@ -1410,7 +1410,7 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 
 	require.Nil(t, err)
 
-	err = sink.execDMLs(ctx, rows, 1 /* replicaID */, 1 /* bucket */)
+	err = sink.execDMLs(ctx, rows, 1 /* bucket */)
 	require.Equal(t, errTableNotExists, errors.Cause(err))
 
 	err = sink.Close(ctx)
@@ -1492,7 +1492,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 
 	require.Nil(t, err)
 
-	err = sink.execDMLs(ctx, rows, 1 /* replicaID */, 1 /* bucket */)
+	err = sink.execDMLs(ctx, rows, 1 /* bucket */)
 	require.Equal(t, errLockDeadlock, errors.Cause(err))
 
 	err = sink.Close(ctx)
@@ -2353,7 +2353,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 	ms.params.safeMode = false
 	ms.params.enableOldValue = true
 	for _, tc := range testCases {
-		dmls := ms.prepareDMLs(tc.input, 0, 0)
+		dmls := ms.prepareDMLs(tc.input, 0)
 		require.Equal(t, tc.expected, dmls, tc.name)
 	}
 }
