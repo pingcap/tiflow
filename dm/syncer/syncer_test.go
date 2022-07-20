@@ -780,7 +780,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	c.Assert(err, IsNil)
 	syncer := NewSyncer(cfg, nil, nil)
 	syncer.cfg.CheckpointFlushInterval = 30 // defaultCheckpointFlushInterval
-	syncer.cfg.SafeModeDuration = "60s"     // defaultSafeModeDuration
+	syncer.cfg.SafeModeDuration = "60s"     // defaultCheckpointFlushInterval * 2
 	syncer.fromDB = &dbconn.UpStreamConn{BaseDB: conn.NewBaseDB(db)}
 	syncer.toDBConns = []*dbconn.DBConn{
 		dbconn.NewDBConn(s.cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})),

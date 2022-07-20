@@ -99,9 +99,8 @@ var (
 	// SyncerConfig.
 	defaultWorkerCount             = 16
 	defaultBatch                   = 100
-	defaultQueueSize               = 1024  // do not give too large default value to avoid OOM
-	defaultCheckpointFlushInterval = 30    // in seconds
-	defaultSafeModeDuration        = "60s" // defaultCheckpointFlushInterval * 2
+	defaultQueueSize               = 1024 // do not give too large default value to avoid OOM
+	defaultCheckpointFlushInterval = 30   // in seconds
 
 	// TargetDBConfig.
 	defaultSessionCfg = []struct {
@@ -340,7 +339,7 @@ func DefaultSyncerConfig() SyncerConfig {
 		Batch:                   defaultBatch,
 		QueueSize:               defaultQueueSize,
 		CheckpointFlushInterval: defaultCheckpointFlushInterval,
-		SafeModeDuration:        defaultSafeModeDuration,
+		SafeModeDuration:        strconv.Itoa(2*defaultCheckpointFlushInterval) + "s",
 	}
 }
 
