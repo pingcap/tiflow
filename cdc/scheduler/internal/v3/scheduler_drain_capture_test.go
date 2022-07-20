@@ -23,7 +23,7 @@ import (
 func TestDrainCapture(t *testing.T) {
 	t.Parallel()
 
-	scheduler := newDrainCaptureScheduler(10)
+	scheduler := newDrainCaptureScheduler(10, model.ChangeFeedID{})
 	require.Equal(t, "drain-capture-scheduler", scheduler.Name())
 
 	var checkpointTs model.Ts
@@ -83,7 +83,7 @@ func TestDrainCapture(t *testing.T) {
 	require.Equal(t, "a", scheduler.target)
 	require.Len(t, tasks, 3)
 
-	scheduler = newDrainCaptureScheduler(1)
+	scheduler = newDrainCaptureScheduler(1, model.ChangeFeedID{})
 	require.True(t, scheduler.setTarget("a"))
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Equal(t, "a", scheduler.target)
@@ -97,7 +97,7 @@ func TestDrainStoppingCapture(t *testing.T) {
 	captures := make(map[model.CaptureID]*CaptureStatus)
 	currentTables := make([]model.TableID, 0)
 	replications := make(map[model.TableID]*ReplicationSet)
-	scheduler := newDrainCaptureScheduler(10)
+	scheduler := newDrainCaptureScheduler(10, model.ChangeFeedID{})
 
 	tasks := scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Empty(t, tasks)
@@ -128,7 +128,7 @@ func TestDrainSkipOwner(t *testing.T) {
 		1: {State: ReplicationSetStateReplicating, Primary: "a"},
 		2: {State: ReplicationSetStateReplicating, Primary: "b"},
 	}
-	scheduler := newDrainCaptureScheduler(10)
+	scheduler := newDrainCaptureScheduler(10, model.ChangeFeedID{})
 	tasks := scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 	require.EqualValues(t, captureIDNotDraining, scheduler.getTarget())
@@ -147,7 +147,7 @@ func TestDrainImbalanceCluster(t *testing.T) {
 		1: {State: ReplicationSetStateReplicating, Primary: "a"},
 		2: {State: ReplicationSetStateReplicating, Primary: "a"},
 	}
-	scheduler := newDrainCaptureScheduler(10)
+	scheduler := newDrainCaptureScheduler(10, model.ChangeFeedID{})
 	scheduler.setTarget("a")
 	tasks := scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Len(t, tasks, 2)
@@ -170,7 +170,7 @@ func TestDrainEvenlyDistributedTables(t *testing.T) {
 		3: {State: ReplicationSetStateReplicating, Primary: "a"},
 		6: {State: ReplicationSetStateReplicating, Primary: "b"},
 	}
-	scheduler := newDrainCaptureScheduler(10)
+	scheduler := newDrainCaptureScheduler(10, model.ChangeFeedID{})
 	scheduler.setTarget("a")
 	tasks := scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Len(t, tasks, 3)

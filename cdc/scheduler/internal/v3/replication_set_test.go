@@ -207,7 +207,7 @@ func TestNewReplicationSet(t *testing.T) {
 		status := tc.tableStatus
 		checkpoint := tc.checkpoint
 
-		output, err := newReplicationSet(0, checkpoint, status)
+		output, err := newReplicationSet(0, checkpoint, status, model.ChangeFeedID{})
 		if set == nil {
 			require.Error(t, err)
 		} else {
@@ -251,7 +251,7 @@ func TestReplicationSetPoll(t *testing.T) {
 				Checkpoint: schedulepb.Checkpoint{},
 			}
 		}
-		r, _ := newReplicationSet(1, 0, status)
+		r, _ := newReplicationSet(1, 0, status, model.ChangeFeedID{})
 		var tableStates []int
 		for state := range schedulepb.TableState_name {
 			tableStates = append(tableStates, int(state))
@@ -288,7 +288,7 @@ func TestReplicationSetPollUnknownCapture(t *testing.T) {
 			State:      schedulepb.TableStateReplicating,
 			Checkpoint: schedulepb.Checkpoint{},
 		},
-	})
+	}, model.ChangeFeedID{})
 	require.Nil(t, err)
 
 	msgs, err := r.poll(&schedulepb.TableStatus{
@@ -318,7 +318,7 @@ func TestReplicationSetAddTable(t *testing.T) {
 
 	from := "1"
 	tableID := model.TableID(1)
-	r, err := newReplicationSet(tableID, 0, nil)
+	r, err := newReplicationSet(tableID, 0, nil, model.ChangeFeedID{})
 	require.Nil(t, err)
 
 	// Absent -> Prepare
@@ -462,7 +462,7 @@ func TestReplicationSetRemoveTable(t *testing.T) {
 
 	from := "1"
 	tableID := model.TableID(1)
-	r, err := newReplicationSet(tableID, 0, nil)
+	r, err := newReplicationSet(tableID, 0, nil, model.ChangeFeedID{})
 	require.Nil(t, err)
 
 	// Ignore removing table if it's not in replicating.
@@ -540,7 +540,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	t.Parallel()
 
 	tableID := model.TableID(1)
-	r, err := newReplicationSet(tableID, 0, nil)
+	r, err := newReplicationSet(tableID, 0, nil, model.ChangeFeedID{})
 	require.Nil(t, err)
 
 	source := "1"
@@ -772,7 +772,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 
 	from := "1"
 	tableID := model.TableID(1)
-	r, err := newReplicationSet(tableID, 0, nil)
+	r, err := newReplicationSet(tableID, 0, nil, model.ChangeFeedID{})
 	require.Nil(t, err)
 
 	// Add table, Absent -> Prepare
@@ -1065,7 +1065,7 @@ func TestReplicationSetMoveTableWithHeartbeatResponse(t *testing.T) {
 	t.Parallel()
 
 	tableID := model.TableID(1)
-	r, err := newReplicationSet(tableID, 0, nil)
+	r, err := newReplicationSet(tableID, 0, nil, model.ChangeFeedID{})
 	require.Nil(t, err)
 
 	source := "1"
@@ -1153,7 +1153,7 @@ func TestReplicationSetMoveTableSameDestCapture(t *testing.T) {
 	t.Parallel()
 
 	tableID := model.TableID(1)
-	r, err := newReplicationSet(tableID, 0, nil)
+	r, err := newReplicationSet(tableID, 0, nil, model.ChangeFeedID{})
 	require.Nil(t, err)
 
 	source := "1"
