@@ -14,7 +14,6 @@
 package filter
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/pingcap/errors"
@@ -200,12 +199,14 @@ func TestShouldSkipDML(t *testing.T) {
 	}
 
 	type testCase struct {
+		name  string
 		cfg   *config.FilterConfig
 		cases []innerCase
 	}
 
 	testCases := []testCase{
 		{
+			name: "dml-filter-test",
 			cfg: &config.FilterConfig{
 				EventFilters: []*config.EventFilterRule{
 					{
@@ -291,7 +292,7 @@ func TestShouldSkipDML(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run(fmt.Sprintf("%+v", tc.cfg), func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			f, err := newSQLEventFilter(tc.cfg)
 			require.NoError(t, err)
 			for _, c := range tc.cases {
