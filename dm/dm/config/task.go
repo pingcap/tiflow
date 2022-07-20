@@ -800,9 +800,10 @@ func (c *TaskConfig) adjust() error {
 		if inst.Syncer.SafeModeDuration == "" {
 			inst.Syncer.SafeModeDuration = strconv.Itoa(2*inst.Syncer.CheckpointFlushInterval) + "s"
 		}
-		_, err := time.ParseDuration(inst.Syncer.SafeModeDuration)
-		if err != nil {
+		if duration, err := time.ParseDuration(inst.Syncer.SafeModeDuration); err != nil {
 			return terror.ErrConfigInvalidSafeModeDuration.Generate(inst.Syncer.SafeModeDuration, err)
+		} else if inst.Syncer.SafeMode && duration == 0 {
+			return terror.ErrConfigConfictSafeModeDurationAndSafeMode.Generate()
 		}
 		if inst.SyncerThread != 0 {
 			inst.Syncer.WorkerCount = inst.SyncerThread
