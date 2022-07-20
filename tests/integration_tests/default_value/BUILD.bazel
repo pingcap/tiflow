@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "default_value_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/pingcap/tidb/tests/integration_tests/default_value",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_google_uuid//:uuid",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//pkg/workerpool:go_default_library",
+        "@com_github_pingcap_tiflow//tests/integration_tests/util:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_binary(
+    name = "default_value",
+    embed = [":default_value_lib"],
+    visibility = ["//visibility:public"],
+)

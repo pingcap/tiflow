@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "filter",
+    srcs = ["filter.go"],
+    importpath = "github.com/pingcap/tidb/pkg/filter",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_tidb//util/filter:go_default_library",
+        "@com_github_pingcap_tidb//util/table-filter:go_default_library",
+        "@com_github_pingcap_tidb_parser//model:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/config:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+    ],
+)
+
+go_test(
+    name = "filter_test",
+    srcs = [
+        "filter_test.go",
+        "main_test.go",
+    ],
+    embed = [":filter"],
+    deps = [
+        "@com_github_pingcap_tidb_parser//model:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/config:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/leakutil:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

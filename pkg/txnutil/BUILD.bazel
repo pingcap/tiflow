@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "txnutil",
+    srcs = ["lock_resolver.go"],
+    importpath = "github.com/pingcap/tidb/pkg/txnutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_kvproto//pkg/kvrpcpb",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/util:go_default_library",
+        "@com_github_tikv_client_go_v2//error",
+        "@com_github_tikv_client_go_v2//tikv",
+        "@com_github_tikv_client_go_v2//tikvrpc",
+        "@com_github_tikv_client_go_v2//txnkv",
+        "@org_uber_go_zap//:zap",
+    ],
+)

@@ -1,0 +1,57 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "puller",
+    srcs = [
+        "metrics.go",
+        "puller.go",
+    ],
+    importpath = "github.com/pingcap/tidb/cdc/puller",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tidb//kv:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/contextutil:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/kv:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/puller/frontier:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/config:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/pdutil:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/regionspan:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/txnutil:go_default_library",
+        "@com_github_prometheus_client_golang//prometheus",
+        "@com_github_tikv_client_go_v2//oracle",
+        "@com_github_tikv_client_go_v2//tikv",
+        "@com_github_tikv_pd_client//:client",
+        "@org_golang_x_sync//errgroup",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "puller_test",
+    srcs = [
+        "main_test.go",
+        "puller_test.go",
+    ],
+    embed = [":puller"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tidb//kv:go_default_library",
+        "@com_github_pingcap_tidb//store/mockstore:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/kv:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/config:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/leakutil:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/pdutil:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/regionspan:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/retry:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/security:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/txnutil:go_default_library",
+        "@com_github_stretchr_testify//require",
+        "@com_github_tikv_client_go_v2//tikv",
+        "@com_github_tikv_pd_client//:client",
+    ],
+)

@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "ui",
+    srcs = [
+        "empty_asserts.go",
+        "server.go",
+    ],
+    importpath = "github.com/pingcap/tidb/dm/ui",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_gin_gonic_gin//:gin",
+        "@com_github_pingcap_tiflow//dm/openapi:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)

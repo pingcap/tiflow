@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "encrypt",
+    srcs = ["encrypt.go"],
+    importpath = "github.com/pingcap/tidb/dm/pkg/encrypt",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library"],
+)
+
+go_test(
+    name = "encrypt_test",
+    srcs = ["encrypt_test.go"],
+    embed = [":encrypt"],
+    deps = ["@com_github_pingcap_check//:check"],
+)

@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "quotes",
+    srcs = ["quotes.go"],
+    importpath = "github.com/pingcap/tidb/pkg/quotes",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "quotes_test",
+    srcs = [
+        "main_test.go",
+        "quotes_test.go",
+    ],
+    embed = [":quotes"],
+    deps = [
+        "@com_github_pingcap_tiflow//pkg/leakutil:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

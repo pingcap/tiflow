@@ -1,0 +1,33 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "frontier",
+    srcs = [
+        "frontier.go",
+        "heap.go",
+        "list.go",
+    ],
+    importpath = "github.com/pingcap/tidb/cdc/puller/frontier",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//pkg/regionspan:go_default_library",
+    ],
+)
+
+go_test(
+    name = "frontier_test",
+    srcs = [
+        "frontier_bench_test.go",
+        "frontier_test.go",
+        "heap_test.go",
+        "list_test.go",
+        "main_test.go",
+    ],
+    embed = [":frontier"],
+    deps = [
+        "@com_github_pingcap_tiflow//pkg/leakutil:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/regionspan:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

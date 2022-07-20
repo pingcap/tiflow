@@ -1,0 +1,62 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "leveldb",
+    srcs = [
+        "buffer.go",
+        "compactor.go",
+        "leveldb.go",
+        "metrics.go",
+        "reader.go",
+        "sorter.go",
+        "writer.go",
+    ],
+    importpath = "github.com/pingcap/tidb/cdc/sorter/leveldb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//cdc/contextutil:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sorter:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sorter/encoding:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sorter/leveldb/message:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/actor:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/actor/message:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/config:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/db:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_prometheus_client_golang//prometheus",
+        "@org_golang_x_sync//semaphore",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "leveldb_test",
+    srcs = [
+        "buffer_test.go",
+        "compactor_test.go",
+        "leveldb_test.go",
+        "reader_test.go",
+        "sorter_test.go",
+        "writer_test.go",
+    ],
+    embed = [":leveldb"],
+    deps = [
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sorter:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sorter/encoding:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sorter/leveldb/message:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/actor:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/actor/message:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/config:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/db:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/leakutil:go_default_library",
+        "@com_github_prometheus_client_golang//prometheus",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_sync//semaphore",
+        "@org_uber_go_goleak//:goleak",
+    ],
+)

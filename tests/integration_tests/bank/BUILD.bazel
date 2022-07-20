@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "bank_lib",
+    srcs = [
+        "bank.go",
+        "case.go",
+    ],
+    importpath = "github.com/pingcap/tidb/tests/integration_tests/bank",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_go_sql_driver_mysql//:mysql",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/retry:go_default_library",
+        "@com_github_spf13_cobra//:cobra",
+        "@org_golang_x_sync//errgroup",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_binary(
+    name = "bank",
+    embed = [":bank_lib"],
+    visibility = ["//visibility:public"],
+)

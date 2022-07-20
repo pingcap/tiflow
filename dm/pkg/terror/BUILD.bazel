@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "terror",
+    srcs = [
+        "adapter.go",
+        "error_list.go",
+        "terror.go",
+    ],
+    importpath = "github.com/pingcap/tidb/dm/pkg/terror",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_go_sql_driver_mysql//:mysql",
+        "@com_github_pingcap_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "terror_test",
+    srcs = [
+        "adapter_test.go",
+        "terror_test.go",
+    ],
+    embed = [":terror"],
+    deps = [
+        "@com_github_go_sql_driver_mysql//:mysql",
+        "@com_github_pingcap_check//:check",
+        "@com_github_pingcap_errors//:errors",
+    ],
+)

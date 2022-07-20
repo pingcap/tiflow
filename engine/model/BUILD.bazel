@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "model",
+    srcs = [
+        "cluster.go",
+        "job.go",
+        "subjob.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/model",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_pingcap_tiflow//engine/pkg/adapter:go_default_library"],
+)
+
+go_test(
+    name = "model_test",
+    srcs = ["job_test.go"],
+    embed = [":model"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

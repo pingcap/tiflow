@@ -1,0 +1,38 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "owner",
+    srcs = ["owner.go"],
+    importpath = "github.com/pingcap/tidb/cdc/api/owner",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_gin_gonic_gin//:gin",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//cdc/api:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/api/middleware:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/capture:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/logutil:go_default_library",
+        "@com_github_tikv_client_go_v2//oracle",
+        "@io_etcd_go_etcd_client_v3//concurrency",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "owner_test",
+    srcs = [
+        "main_test.go",
+        "owner_test.go",
+    ],
+    embed = [":owner"],
+    deps = [
+        "@com_github_gin_gonic_gin//:gin",
+        "@com_github_pingcap_tiflow//pkg/httputil:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/leakutil:go_default_library",
+        "@com_github_stretchr_testify//require",
+        "@io_etcd_go_etcd_client_v3//concurrency",
+    ],
+)

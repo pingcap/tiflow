@@ -1,0 +1,35 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "metricsproxy",
+    srcs = [
+        "countervec.go",
+        "gaugevec.go",
+        "histogramvec.go",
+        "proxy.go",
+        "summaryvec.go",
+    ],
+    importpath = "github.com/pingcap/tidb/dm/pkg/metricsproxy",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_tiflow//engine/pkg/promutil:go_default_library",
+        "@com_github_prometheus_client_golang//prometheus",
+    ],
+)
+
+go_test(
+    name = "metricsproxy_test",
+    srcs = [
+        "countervec_test.go",
+        "gaugevec_test.go",
+        "histogramvec_test.go",
+        "proxy_test.go",
+        "summaryvec_test.go",
+    ],
+    embed = [":metricsproxy"],
+    deps = [
+        "@com_github_pingcap_check//:check",
+        "@com_github_pingcap_tiflow//engine/pkg/promutil:go_default_library",
+        "@com_github_prometheus_client_golang//prometheus",
+    ],
+)

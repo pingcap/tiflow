@@ -1,0 +1,39 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "api",
+    srcs = [
+        "api.go",
+        "changefeed.go",
+        "model.go",
+        "tso.go",
+    ],
+    importpath = "github.com/pingcap/tidb/cdc/api/v2",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_gin_gonic_gin//:gin",
+        "@com_github_pingcap_tiflow//cdc/api/middleware:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/capture:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/upstream:go_default_library",
+    ],
+)
+
+go_test(
+    name = "api_test",
+    srcs = [
+        "api_test.go",
+        "tso_test.go",
+    ],
+    embed = [":api"],
+    deps = [
+        "@com_github_gin_gonic_gin//:gin",
+        "@com_github_golang_mock//gomock",
+        "@com_github_pingcap_tiflow//cdc/capture:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/owner/mock:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/upstream:go_default_library",
+        "@com_github_stretchr_testify//require",
+        "@com_github_tikv_client_go_v2//oracle",
+        "@com_github_tikv_pd_client//:client",
+    ],
+)

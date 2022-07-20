@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "ctl",
+    srcs = ["ctl.go"],
+    importpath = "github.com/pingcap/tidb/dm/dm/ctl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_chzyer_readline//:readline",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tiflow//dm/dm/ctl/common:go_default_library",
+        "@com_github_pingcap_tiflow//dm/dm/ctl/master:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/utils:go_default_library",
+        "@com_github_spf13_cobra//:cobra",
+        "@org_uber_go_zap//zapcore",
+    ],
+)

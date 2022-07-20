@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "mcp",
+    srcs = [
+        "errors.go",
+        "mcp.go",
+        "uk.go",
+    ],
+    importpath = "github.com/pingcap/tidb/dm/simulator/internal/mcp",
+    visibility = ["//dm/simulator:__subpackages__"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "mcp_test",
+    srcs = [
+        "mcp_test.go",
+        "uk_test.go",
+    ],
+    embed = [":mcp"],
+    deps = [
+        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@com_github_stretchr_testify//suite",
+    ],
+)

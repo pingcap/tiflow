@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "dm-master_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/pingcap/tidb/dm/cmd/dm-master",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tiflow//dm/dm/ctl/common:go_default_library",
+        "@com_github_pingcap_tiflow//dm/dm/master:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/utils:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_binary(
+    name = "dm-master",
+    embed = [":dm-master_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "dm-master_test",
+    srcs = ["main_test.go"],
+    embed = [":dm-master_lib"],
+    deps = ["@com_github_pingcap_tiflow//dm/pkg/printinit:go_default_library"],
+)

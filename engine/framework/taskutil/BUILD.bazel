@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "taskutil",
+    srcs = ["compat.go"],
+    importpath = "github.com/pingcap/tidb/engine/framework/taskutil",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_pingcap_tiflow//engine/framework/internal/eventloop:go_default_library"],
+)

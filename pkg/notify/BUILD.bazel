@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "notify",
+    srcs = ["notify.go"],
+    importpath = "github.com/pingcap/tidb/pkg/notify",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_pingcap_tiflow//pkg/errors:go_default_library"],
+)
+
+go_test(
+    name = "notify_test",
+    srcs = [
+        "main_test.go",
+        "notify_test.go",
+    ],
+    embed = [":notify"],
+    deps = [
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/leakutil:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

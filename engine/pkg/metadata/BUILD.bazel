@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "metadata",
+    srcs = [
+        "kv.go",
+        "kv_etcd.go",
+        "kv_mock.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/pkg/metadata",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@io_etcd_go_etcd_api_v3//etcdserverpb",
+        "@io_etcd_go_etcd_api_v3//mvccpb",
+        "@io_etcd_go_etcd_client_v3//:client",
+    ],
+)
+
+go_test(
+    name = "metadata_test",
+    srcs = ["main_test.go"],
+    embed = [":metadata"],
+    deps = ["@com_github_pingcap_tiflow//engine/pkg/leakutil:go_default_library"],
+)

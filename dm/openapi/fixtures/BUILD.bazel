@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "fixtures",
+    srcs = [
+        "source.go",
+        "task.go",
+    ],
+    importpath = "github.com/pingcap/tidb/dm/openapi/fixtures",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_pingcap_tiflow//dm/openapi:go_default_library"],
+)

@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "dm-ctl_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/pingcap/tidb/dm/cmd/dm-ctl",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_pingcap_tiflow//dm/dm/ctl:go_default_library",
+        "@com_github_pingcap_tiflow//dm/dm/ctl/common:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/utils:go_default_library",
+    ],
+)
+
+go_binary(
+    name = "dm-ctl",
+    embed = [":dm-ctl_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "dm-ctl_test",
+    srcs = ["main_test.go"],
+    embed = [":dm-ctl_lib"],
+)

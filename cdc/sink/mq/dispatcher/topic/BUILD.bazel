@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "topic",
+    srcs = [
+        "dispatcher.go",
+        "expression.go",
+    ],
+    importpath = "github.com/pingcap/tidb/cdc/sink/mq/dispatcher/topic",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_pingcap_tiflow//pkg/errors:go_default_library"],
+)
+
+go_test(
+    name = "topic_test",
+    srcs = [
+        "dispatcher_test.go",
+        "expression_test.go",
+        "main_test.go",
+    ],
+    embed = [":topic"],
+    deps = [
+        "@com_github_pingcap_tiflow//pkg/leakutil:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

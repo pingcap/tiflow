@@ -1,0 +1,31 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "runtime",
+    srcs = [
+        "task_status.go",
+        "worker_status.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/jobmaster/dm/runtime",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_tiflow//engine/framework:go_default_library",
+        "@com_github_pingcap_tiflow//engine/framework/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/jobmaster/dm/metadata:go_default_library",
+    ],
+)
+
+go_test(
+    name = "runtime_test",
+    srcs = [
+        "task_status_test.go",
+        "worker_status_test.go",
+    ],
+    embed = [":runtime"],
+    deps = [
+        "@com_github_pingcap_tiflow//engine/framework:go_default_library",
+        "@com_github_pingcap_tiflow//engine/framework/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/jobmaster/dm/metadata:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

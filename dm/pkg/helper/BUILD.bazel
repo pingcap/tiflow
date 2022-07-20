@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "helper",
+    srcs = ["value.go"],
+    importpath = "github.com/pingcap/tidb/dm/pkg/helper",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "helper_test",
+    srcs = ["value_test.go"],
+    embed = [":helper"],
+    deps = ["@com_github_pingcap_check//:check"],
+)

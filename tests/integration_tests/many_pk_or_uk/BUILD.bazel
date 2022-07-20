@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "many_pk_or_uk_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/pingcap/tidb/tests/integration_tests/many_pk_or_uk",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//tests/integration_tests/util:go_default_library",
+    ],
+)
+
+go_binary(
+    name = "many_pk_or_uk",
+    embed = [":many_pk_or_uk_lib"],
+    visibility = ["//visibility:public"],
+)

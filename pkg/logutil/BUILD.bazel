@@ -1,0 +1,37 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "logutil",
+    srcs = [
+        "context.go",
+        "log.go",
+    ],
+    importpath = "github.com/pingcap/tidb/pkg/logutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_shopify_sarama//:sarama",
+        "@org_golang_google_grpc//grpclog",
+        "@org_uber_go_zap//:zap",
+        "@org_uber_go_zap//zapcore",
+    ],
+)
+
+go_test(
+    name = "logutil_test",
+    srcs = [
+        "context_test.go",
+        "log_test.go",
+    ],
+    embed = [":logutil"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_stretchr_testify//require",
+        "@org_uber_go_zap//:zap",
+        "@org_uber_go_zap//zapcore",
+        "@org_uber_go_zap//zaptest",
+    ],
+)

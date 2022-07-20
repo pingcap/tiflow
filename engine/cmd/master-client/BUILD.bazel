@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "master-client_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/pingcap/tidb/engine/cmd/master-client",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@com_github_pingcap_tiflow//engine/ctl:go_default_library",
+    ],
+)
+
+go_binary(
+    name = "master-client",
+    embed = [":master-client_lib"],
+    visibility = ["//visibility:public"],
+)

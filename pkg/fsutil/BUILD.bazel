@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "fsutil",
+    srcs = [
+        "disk_info_freebsd.go",
+        "disk_info_generic.go",
+        "filelock.go",
+        "fileutil.go",
+    ],
+    importpath = "github.com/pingcap/tidb/pkg/fsutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+    ],
+)
+
+go_test(
+    name = "fsutil_test",
+    srcs = [
+        "filelock_test.go",
+        "fileutil_test.go",
+    ],
+    embed = [":fsutil"],
+    deps = [
+        "@com_github_pingcap_tiflow//pkg/leakutil:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "sorter_stress_test_lib",
+    srcs = ["sorter_stress.go"],
+    importpath = "github.com/pingcap/tidb/tests/utils/sorter_stress_test",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_pingcap_failpoint//:failpoint",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sorter:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sorter/unified:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/config:go_default_library",
+        "@org_golang_x_sync//errgroup",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_binary(
+    name = "sorter_stress_test",
+    embed = [":sorter_stress_test_lib"],
+    visibility = ["//visibility:public"],
+)

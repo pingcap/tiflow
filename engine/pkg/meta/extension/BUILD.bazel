@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "extension",
+    srcs = ["interface.go"],
+    importpath = "github.com/pingcap/tidb/engine/pkg/meta/extension",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_pingcap_tiflow//engine/pkg/meta/metaclient:go_default_library"],
+)

@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "flags",
+    srcs = ["urls.go"],
+    importpath = "github.com/pingcap/tidb/pkg/flags",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tiflow//pkg/types:go_default_library",
+    ],
+)
+
+go_test(
+    name = "flags_test",
+    srcs = [
+        "main_test.go",
+        "urls_test.go",
+    ],
+    embed = [":flags"],
+    deps = [
+        "@com_github_pingcap_tiflow//pkg/leakutil:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

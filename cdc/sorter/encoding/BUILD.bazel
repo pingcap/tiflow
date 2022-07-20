@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "encoding",
+    srcs = [
+        "key.go",
+        "value.go",
+    ],
+    importpath = "github.com/pingcap/tidb/cdc/sorter/encoding",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "encoding_test",
+    srcs = ["key_test.go"],
+    embed = [":encoding"],
+    deps = [
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

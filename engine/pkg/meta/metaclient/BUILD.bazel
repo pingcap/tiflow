@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "metaclient",
+    srcs = [
+        "client.go",
+        "common.go",
+        "config.go",
+        "kv.go",
+        "op.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/pkg/meta/metaclient",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_pingcap_tiflow//engine/pkg/errors:go_default_library"],
+)
+
+go_test(
+    name = "metaclient_test",
+    srcs = [
+        "common_test.go",
+        "op_test.go",
+    ],
+    embed = [":metaclient"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

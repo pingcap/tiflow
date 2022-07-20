@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "message",
+    srcs = ["task.go"],
+    importpath = "github.com/pingcap/tidb/cdc/sorter/leveldb/message",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sorter/encoding:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/db:go_default_library",
+        "@org_golang_x_sync//semaphore",
+    ],
+)
+
+go_test(
+    name = "message_test",
+    srcs = ["task_test.go"],
+    embed = [":message"],
+    deps = [
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sorter/encoding:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)
