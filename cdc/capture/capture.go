@@ -302,6 +302,20 @@ func (c *captureImpl) Run(ctx context.Context) error {
 }
 
 func (c *captureImpl) run(stdCtx context.Context) error {
+	err := c.register(stdCtx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer func() {
+		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := c.EtcdClient.DeleteCaptureInfo(timeoutCtx, c.info.ID); err != nil {
+			log.Warn("failed to delete capture info when capture exited",
+				zap.String("captureID", c.info.ID),
+				zap.Error(err))
+		}
+		cancel()
+	}()
+
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
 		CaptureInfo:      c.info,
 		EtcdClient:       c.EtcdClient,
@@ -310,17 +324,6 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		MessageServer:    c.MessageServer,
 		MessageRouter:    c.MessageRouter,
 	})
-	err := c.register(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	defer func() {
-		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		if err := ctx.GlobalVars().EtcdClient.DeleteCaptureInfo(timeoutCtx, c.info.ID); err != nil {
-			log.Warn("failed to delete capture info when capture exited", zap.Error(err))
-		}
-		cancel()
-	}()
 	wg := new(sync.WaitGroup)
 	var ownerErr, processorErr, messageServerErr error
 	wg.Add(1)
@@ -331,7 +334,8 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		// (recoverable errors are intercepted in the owner tick)
 		// so we should also stop the owner and let capture restart or exit
 		ownerErr = c.campaignOwner(ctx)
-		log.Info("the owner routine has exited", zap.Error(ownerErr))
+		log.Info("the owner routine exited",
+			zap.String("captureID", c.info.ID), zap.Error(err))
 	}()
 	wg.Add(1)
 	go func() {
@@ -353,7 +357,9 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		// (recoverable errors are intercepted in the processor tick)
 		// so we should also stop the processor and let capture restart or exit
 		processorErr = c.runEtcdWorker(ctx, c.processorManager, globalState, processorFlushInterval, util.RoleProcessor.String())
-		log.Info("the processor routine has exited", zap.Error(processorErr))
+		log.Info("the processor routine has exited",
+			zap.String("captureID", c.info.ID),
+			zap.Error(processorErr))
 	}()
 	wg.Add(1)
 	go func() {
@@ -409,8 +415,9 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			}
 			return errors.Trace(err)
 		}
-		// Campaign to be an owner, it blocks until it becomes the owner
+		// Campaign to be the owner, it blocks until it been elected.
 		if err := c.campaign(ctx); err != nil {
+			log.Warn("campaign owner failed", zap.String("captureID", c.info.ID), zap.Error(err))
 			switch errors.Cause(err) {
 			case context.Canceled:
 				return nil
@@ -418,8 +425,8 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 				// the revision we requested is compacted, just retry
 				continue
 			}
-			log.Warn("campaign owner failed", zap.Error(err))
-			// if campaign owner failed, restart capture
+			log.Warn("campaign owner failed",
+				zap.String("captureID", c.info.ID), zap.Error(err))
 			return cerror.ErrCaptureSuicide.GenWithStackByArgs()
 		}
 
@@ -458,17 +465,35 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			orchestrator.NewGlobalState(c.EtcdClient.ClusterID),
 			ownerFlushInterval, util.RoleOwner.String())
 		c.setOwner(nil)
-		log.Info("run owner exited", zap.Error(err))
-		// if owner exits, resign the owner key
-		if resignErr := c.resign(ctx); resignErr != nil {
-			// if resigning owner failed, return error to let capture exits
-			return errors.Annotatef(resignErr, "resign owner failed, capture: %s", c.info.ID)
+
+		// if owner exits, resign the owner key,
+		// use a new context to prevent the context from being cancelled.
+		resignCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if resignErr := c.resign(resignCtx); resignErr != nil {
+			if errors.Cause(err) != context.DeadlineExceeded {
+				log.Info("owner resign failed", zap.String("captureID", c.info.ID),
+					zap.Error(err), zap.Int64("ownerRev", ownerRev))
+				cancel()
+				return errors.Trace(err)
+			}
+
+			log.Warn("owner resign timeout", zap.String("captureID", c.info.ID),
+				zap.Error(err), zap.Int64("ownerRev", ownerRev))
 		}
+		cancel()
+
+		log.Info("owner resigned successfully",
+			zap.String("captureID", c.info.ID), zap.Int64("ownerRev", ownerRev))
 		if err != nil {
+			log.Warn("run owner exited with error",
+				zap.String("captureID", c.info.ID), zap.Int64("ownerRev", ownerRev),
+				zap.Error(err))
 			// for errors, return error and let capture exits or restart
 			return errors.Trace(err)
 		}
 		// if owner exits normally, continue the campaign loop and try to election owner again
+		log.Info("run owner exited normally",
+			zap.String("captureID", c.info.ID), zap.Int64("ownerRev", ownerRev))
 	}
 }
 
@@ -479,7 +504,7 @@ func (c *captureImpl) runEtcdWorker(
 	timerInterval time.Duration,
 	role string,
 ) error {
-	etcdWorker, err := orchestrator.NewEtcdWorker(ctx.GlobalVars().EtcdClient,
+	etcdWorker, err := orchestrator.NewEtcdWorker(c.EtcdClient,
 		etcd.BaseKey(c.EtcdClient.ClusterID), reactor, reactorState, c.migrator)
 	if err != nil {
 		return errors.Trace(err)
@@ -496,7 +521,7 @@ func (c *captureImpl) runEtcdWorker(
 			log.Warn("session is disconnected", zap.Error(err))
 			return cerror.ErrCaptureSuicide.GenWithStackByArgs()
 		}
-		lease, inErr := ctx.GlobalVars().EtcdClient.Client.TimeToLive(ctx, c.session.Lease())
+		lease, inErr := c.EtcdClient.Client.TimeToLive(ctx, c.session.Lease())
 		if inErr != nil {
 			return cerror.WrapError(cerror.ErrPDEtcdAPIError, inErr)
 		}
@@ -526,7 +551,7 @@ func (c *captureImpl) GetOwner() (owner.Owner, error) {
 }
 
 // campaign to be an owner.
-func (c *captureImpl) campaign(ctx cdcContext.Context) error {
+func (c *captureImpl) campaign(ctx context.Context) error {
 	failpoint.Inject("capture-campaign-compacted-error", func() {
 		failpoint.Return(errors.Trace(mvcc.ErrCompacted))
 	})
@@ -534,16 +559,16 @@ func (c *captureImpl) campaign(ctx cdcContext.Context) error {
 }
 
 // resign lets an owner start a new election.
-func (c *captureImpl) resign(ctx cdcContext.Context) error {
+func (c *captureImpl) resign(ctx context.Context) error {
 	failpoint.Inject("capture-resign-failed", func() {
 		failpoint.Return(errors.New("capture resign failed"))
 	})
 	return cerror.WrapError(cerror.ErrCaptureResignOwner, c.election.Resign(ctx))
 }
 
-// register registers the capture information in etcd
-func (c *captureImpl) register(ctx cdcContext.Context) error {
-	err := ctx.GlobalVars().EtcdClient.PutCaptureInfo(ctx, c.info, c.session.Lease())
+// register the capture by put the capture's information in etcd
+func (c *captureImpl) register(ctx context.Context) error {
+	err := c.EtcdClient.PutCaptureInfo(ctx, c.info, c.session.Lease())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrCaptureRegister, err)
 	}
@@ -559,7 +584,7 @@ func (c *captureImpl) AsyncClose() {
 	o, _ := c.GetOwner()
 	if o != nil {
 		o.AsyncStop()
-		log.Info("owner closed")
+		log.Info("owner closed", zap.String("captureID", c.info.ID))
 	}
 
 	c.captureMu.Lock()
@@ -567,22 +592,23 @@ func (c *captureImpl) AsyncClose() {
 	if c.processorManager != nil {
 		c.processorManager.AsyncClose()
 	}
-	log.Info("processor manager closed")
+	log.Info("processor manager closed", zap.String("captureID", c.info.ID))
 
 	if c.tableActorSystem != nil {
 		c.tableActorSystem.Stop()
 		c.tableActorSystem = nil
 	}
-	log.Info("table actor system closed")
+	log.Info("table actor system closed", zap.String("captureID", c.info.ID))
 
 	if c.sorterSystem != nil {
 		err := c.sorterSystem.Stop()
 		if err != nil {
-			log.Warn("stop sorter system failed", zap.Error(err))
+			log.Warn("stop sorter system failed",
+				zap.String("captureID", c.info.ID), zap.Error(err))
 		}
 		c.sorterSystem = nil
 	}
-	log.Info("sorter actor system closed")
+	log.Info("sorter actor system closed", zap.String("captureID", c.info.ID))
 
 	c.grpcService.Reset(nil)
 	if c.MessageRouter != nil {
@@ -590,12 +616,13 @@ func (c *captureImpl) AsyncClose() {
 		c.MessageRouter.Wait()
 		c.MessageRouter = nil
 	}
-	log.Info("message router closed")
+	log.Info("message router closed", zap.String("captureID", c.info.ID))
 }
 
 // Drain removes tables in the current TiCDC instance.
 func (c *captureImpl) Drain(ctx context.Context) <-chan struct{} {
-	log.Info("draining capture, removing all tables in the capture")
+	log.Info("draining capture, removing all tables on the capture",
+		zap.String("captureID", c.info.ID))
 
 	const drainInterval = 100 * time.Millisecond
 	done := make(chan struct{})

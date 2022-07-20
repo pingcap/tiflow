@@ -137,7 +137,7 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 					TableID: tableID,
 					State:   schedulepb.TableStateReplicating,
 				},
-			})
+			}, model.ChangeFeedID{})
 			if err != nil {
 				b.Fatal(err)
 			}

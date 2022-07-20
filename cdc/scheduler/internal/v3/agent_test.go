@@ -48,7 +48,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 
 	a := newAgent4Test()
 	mockTableExecutor := newMockTableExecutor()
-	a.tableM = newTableManager(mockTableExecutor)
+	a.tableM = newTableManager(model.ChangeFeedID{}, mockTableExecutor)
 
 	removeTableRequest := &schedulepb.DispatchTableRequest{
 		Request: &schedulepb.DispatchTableRequest_RemoveTable{
@@ -205,7 +205,7 @@ func TestAgentHandleMessageHeartbeat(t *testing.T) {
 
 	a := newAgent4Test()
 	mockTableExecutor := newMockTableExecutor()
-	a.tableM = newTableManager(mockTableExecutor)
+	a.tableM = newTableManager(model.ChangeFeedID{}, mockTableExecutor)
 
 	for i := 0; i < 5; i++ {
 		a.tableM.addTable(model.TableID(i))
@@ -280,7 +280,7 @@ func TestAgentPermuteMessages(t *testing.T) {
 
 	a := newAgent4Test()
 	mockTableExecutor := newMockTableExecutor()
-	a.tableM = newTableManager(mockTableExecutor)
+	a.tableM = newTableManager(model.ChangeFeedID{}, mockTableExecutor)
 
 	trans := newMockTrans()
 	a.trans = trans
@@ -437,7 +437,7 @@ func TestAgentHandleMessage(t *testing.T) {
 	t.Parallel()
 
 	mockTableExecutor := newMockTableExecutor()
-	tableM := newTableManager(mockTableExecutor)
+	tableM := newTableManager(model.ChangeFeedID{}, mockTableExecutor)
 	a := newAgent4Test()
 	a.tableM = tableM
 
@@ -531,7 +531,7 @@ func TestAgentTick(t *testing.T) {
 	trans := newMockTrans()
 	mockTableExecutor := newMockTableExecutor()
 	a.trans = trans
-	a.tableM = newTableManager(mockTableExecutor)
+	a.tableM = newTableManager(model.ChangeFeedID{}, mockTableExecutor)
 
 	heartbeat := &schedulepb.Message{
 		Header: &schedulepb.Message_Header{
@@ -639,7 +639,7 @@ func TestAgentHandleLivenessUpdate(t *testing.T) {
 
 	// Test liveness via heartbeat.
 	mockTableExecutor := newMockTableExecutor()
-	tableM := newTableManager(mockTableExecutor)
+	tableM := newTableManager(model.ChangeFeedID{}, mockTableExecutor)
 	a = newAgent4Test()
 	a.tableM = tableM
 	require.Equal(t, model.LivenessCaptureAlive, a.liveness)
@@ -666,7 +666,7 @@ func TestAgentCommitAddTableDuringStopping(t *testing.T) {
 
 	a := newAgent4Test()
 	mockTableExecutor := newMockTableExecutor()
-	a.tableM = newTableManager(mockTableExecutor)
+	a.tableM = newTableManager(model.ChangeFeedID{}, mockTableExecutor)
 	trans := newMockTrans()
 	a.trans = trans
 
