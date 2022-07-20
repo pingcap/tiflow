@@ -108,6 +108,10 @@ func (m *mockPuller) appendResolvedTs(ts model.Ts) {
 	})
 }
 
+func newMockDDLJobPuller(puller Puller) DDLJobPuller {
+	return &ddlJobPullerImpl{puller: puller, outputCh: make(chan *model.DDLJobEntry, defaultPullerOutputChanSize)}
+}
+
 func TestPuller(t *testing.T) {
 	startTs := uint64(10)
 	mockPuller := newMockPuller(t, startTs)
@@ -116,7 +120,7 @@ func TestPuller(t *testing.T) {
 	p, err := NewDDLPuller(
 		ctx, ctx.ChangefeedVars().Info.Config, up, startTs, ctx.ChangefeedVars().ID)
 	require.Nil(t, err)
-	p.(*ddlPullerImpl).puller = mockPuller
+	p.(*ddlPullerImpl).puller = newMockDDLJobPuller(mockPuller)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -248,7 +252,7 @@ func TestResolvedTsStuck(t *testing.T) {
 	mockClock := clock.NewMock()
 	p.(*ddlPullerImpl).clock = mockClock
 
-	p.(*ddlPullerImpl).puller = mockPuller
+	p.(*ddlPullerImpl).puller = newMockDDLJobPuller(mockPuller)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
