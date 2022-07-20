@@ -139,8 +139,11 @@ func shouldDiscardByBuiltInDDLAllowlist(ddlType timodel.ActionType) bool {
 		timodel.ActionModifySchemaCharsetAndCollate,
 		timodel.ActionAddPrimaryKey,
 		timodel.ActionDropPrimaryKey,
-		timodel.ActionAddColumns,
-		timodel.ActionDropColumns:
+		timodel.ActionAddColumns,  // Removed in TiDB v6.2.0, see https://github.com/pingcap/tidb/pull/35862.
+		timodel.ActionDropColumns, // Removed in TiDB v6.2.0
+		timodel.ActionRebaseAutoID,
+		timodel.ActionAlterIndexVisibility,
+		timodel.ActionMultiSchemaChange:
 		return false
 	}
 	return true
