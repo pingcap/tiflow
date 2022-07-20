@@ -35,7 +35,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/cdc/sink"
 	sinkmetric "github.com/pingcap/tiflow/cdc/sink/metrics"
-	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -767,25 +766,21 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		defer p.wg.Done()
 		p.sendError(ddlPuller.Run(stdCtx))
 	}()
-	ddlRawKVCh := memory.SortOutput(ctx, ddlPuller.Output())
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
-		var ddlRawKV *model.RawKVEntry
+		var jobEntry *model.DDLJobEntry
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case ddlRawKV = <-ddlRawKVCh:
-			}
-			if ddlRawKV == nil {
-				continue
+			case jobEntry = <-ddlPuller.Output():
 			}
 			failpoint.Inject("processorDDLResolved", nil)
-			if ddlRawKV.OpType == model.OpTypeResolved {
-				schemaStorage.AdvanceResolvedTs(ddlRawKV.CRTs)
+			if jobEntry.OpType == model.OpTypeResolved {
+				schemaStorage.AdvanceResolvedTs(jobEntry.CRTs)
 			}
-			job, err := ddlPuller.UnmarshalDDL(ddlRawKV)
+			job, err := jobEntry.Job, jobEntry.Err
 			if err != nil {
 				p.sendError(errors.Trace(err))
 				return
