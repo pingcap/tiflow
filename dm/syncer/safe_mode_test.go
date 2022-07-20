@@ -63,6 +63,7 @@ func TestEnableSafeModeInitializationPhase(t *testing.T) {
 			SyncerConfig: config.SyncerConfig{
 				CheckpointFlushInterval: 1,
 			},
+			Flavor: mysql.MySQLFlavor,
 		},
 	}
 
