@@ -38,125 +38,107 @@ func TestMysqlSinkWorker(t *testing.T) {
 		IsPartition: false,
 	}
 	testCases := []struct {
-		txns                     []*model.SingleTableTxn
-		expectedOutputRows       [][]*model.RowChangedEvent
-		exportedOutputReplicaIDs []uint64
-		maxTxnRow                int
+		txns               []*model.SingleTableTxn
+		expectedOutputRows [][]*model.RowChangedEvent
+		maxTxnRow          int
 	}{
 		{
 			txns:      []*model.SingleTableTxn{},
-			maxTxnRow: 4,
+			maxTxnRow: 1,
 		},
 		{
 			txns: []*model.SingleTableTxn{
 				{
-					Table:     tbl,
-					CommitTs:  1,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
-					ReplicaID: 1,
+					Table:    tbl,
+					CommitTs: 1,
+					Rows:     []*model.RowChangedEvent{{CommitTs: 1}},
 				},
 			},
-			expectedOutputRows:       [][]*model.RowChangedEvent{{{CommitTs: 1}}},
-			exportedOutputReplicaIDs: []uint64{1},
-			maxTxnRow:                2,
+			expectedOutputRows: [][]*model.RowChangedEvent{{{CommitTs: 1}}},
+			maxTxnRow:          1,
 		},
 		{
 			txns: []*model.SingleTableTxn{
 				{
-					Table:     tbl,
-					CommitTs:  1,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 1}, {CommitTs: 1}},
-					ReplicaID: 1,
+					Table:    tbl,
+					CommitTs: 1,
+					Rows:     []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 1}, {CommitTs: 1}},
 				},
 			},
 			expectedOutputRows: [][]*model.RowChangedEvent{
 				{{CommitTs: 1}, {CommitTs: 1}, {CommitTs: 1}},
 			},
-			exportedOutputReplicaIDs: []uint64{1},
-			maxTxnRow:                2,
+			maxTxnRow: 2,
 		},
 		{
 			txns: []*model.SingleTableTxn{
 				{
-					Table:     tbl,
-					CommitTs:  1,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 1}},
-					ReplicaID: 1,
+					Table:    tbl,
+					CommitTs: 1,
+					Rows:     []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 1}},
 				},
 				{
-					Table:     tbl,
-					CommitTs:  2,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 2}},
-					ReplicaID: 1,
+					Table:    tbl,
+					CommitTs: 2,
+					Rows:     []*model.RowChangedEvent{{CommitTs: 2}},
 				},
 				{
-					Table:     tbl,
-					CommitTs:  3,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 3}, {CommitTs: 3}},
-					ReplicaID: 1,
+					Table:    tbl,
+					CommitTs: 3,
+					Rows:     []*model.RowChangedEvent{{CommitTs: 3}, {CommitTs: 3}},
 				},
 			},
 			expectedOutputRows: [][]*model.RowChangedEvent{
 				{{CommitTs: 1}, {CommitTs: 1}, {CommitTs: 2}},
 				{{CommitTs: 3}, {CommitTs: 3}},
 			},
-			exportedOutputReplicaIDs: []uint64{1, 1},
-			maxTxnRow:                4,
+			maxTxnRow: 4,
 		},
 		{
 			txns: []*model.SingleTableTxn{
 				{
-					Table:     tbl,
-					CommitTs:  1,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
-					ReplicaID: 1,
+					Table:    tbl,
+					CommitTs: 1,
+					Rows:     []*model.RowChangedEvent{{CommitTs: 1}},
 				},
 				{
-					Table:     tbl,
-					CommitTs:  2,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 2}},
-					ReplicaID: 2,
+					Table:    tbl,
+					CommitTs: 2,
+					Rows:     []*model.RowChangedEvent{{CommitTs: 2}},
 				},
 				{
-					Table:     tbl,
-					CommitTs:  3,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 3}},
-					ReplicaID: 3,
+					Table:    tbl,
+					CommitTs: 3,
+					Rows:     []*model.RowChangedEvent{{CommitTs: 3}},
 				},
 			},
 			expectedOutputRows: [][]*model.RowChangedEvent{
-				{{CommitTs: 1}},
-				{{CommitTs: 2}},
+				{{CommitTs: 1}, {CommitTs: 2}},
 				{{CommitTs: 3}},
 			},
-			exportedOutputReplicaIDs: []uint64{1, 2, 3},
-			maxTxnRow:                4,
+			maxTxnRow: 2,
 		},
 		{
 			txns: []*model.SingleTableTxn{
 				{
-					Table:     tbl,
-					CommitTs:  1,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
-					ReplicaID: 1,
+					Table:    tbl,
+					CommitTs: 1,
+					Rows:     []*model.RowChangedEvent{{CommitTs: 1}},
 				},
 				{
-					Table:     tbl,
-					CommitTs:  2,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 2}, {CommitTs: 2}, {CommitTs: 2}},
-					ReplicaID: 1,
+					Table:    tbl,
+					CommitTs: 2,
+					Rows:     []*model.RowChangedEvent{{CommitTs: 2}, {CommitTs: 2}, {CommitTs: 2}},
 				},
 				{
-					Table:     tbl,
-					CommitTs:  3,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 3}},
-					ReplicaID: 1,
+					Table:    tbl,
+					CommitTs: 3,
+					Rows:     []*model.RowChangedEvent{{CommitTs: 3}},
 				},
 				{
-					Table:     tbl,
-					CommitTs:  4,
-					Rows:      []*model.RowChangedEvent{{CommitTs: 4}},
-					ReplicaID: 1,
+					Table:    tbl,
+					CommitTs: 4,
+					Rows:     []*model.RowChangedEvent{{CommitTs: 4}},
 				},
 			},
 			expectedOutputRows: [][]*model.RowChangedEvent{
@@ -164,8 +146,7 @@ func TestMysqlSinkWorker(t *testing.T) {
 				{{CommitTs: 2}, {CommitTs: 2}, {CommitTs: 2}},
 				{{CommitTs: 3}, {CommitTs: 4}},
 			},
-			exportedOutputReplicaIDs: []uint64{1, 1, 1},
-			maxTxnRow:                2,
+			maxTxnRow: 3,
 		},
 	}
 	ctx := context.Background()
@@ -174,18 +155,16 @@ func TestMysqlSinkWorker(t *testing.T) {
 	for i, tc := range testCases {
 		cctx, cancel := context.WithCancel(ctx)
 		var outputRows [][]*model.RowChangedEvent
-		var outputReplicaIDs []uint64
 		receiver, err := notifier.NewReceiver(-1)
 		require.Nil(t, err)
 		w := newMySQLSinkWorker(tc.maxTxnRow, 1,
 			metrics.BucketSizeCounter.
 				WithLabelValues("default", "changefeed", "1"),
 			receiver,
-			func(ctx context.Context, events []*model.RowChangedEvent, replicaID uint64, bucket int) error {
+			func(ctx context.Context, events []*model.RowChangedEvent, bucket int) error {
 				rows := make([]*model.RowChangedEvent, len(events))
 				copy(rows, events)
 				outputRows = append(outputRows, rows)
-				outputReplicaIDs = append(outputReplicaIDs, replicaID)
 				return nil
 			})
 		errg, cctx := errgroup.WithContext(cctx)
@@ -205,8 +184,6 @@ func TestMysqlSinkWorker(t *testing.T) {
 		require.Equal(t, context.Canceled, errors.Cause(errg.Wait()))
 		require.Equal(t, tc.expectedOutputRows, outputRows,
 			fmt.Sprintf("case %v, %s, %s", i, spew.Sdump(outputRows), spew.Sdump(tc.expectedOutputRows)))
-		require.Equal(t, tc.exportedOutputReplicaIDs, outputReplicaIDs, tc.exportedOutputReplicaIDs,
-			fmt.Sprintf("case %v, %s, %s", i, spew.Sdump(outputReplicaIDs), spew.Sdump(tc.exportedOutputReplicaIDs)))
 	}
 }
 
@@ -264,7 +241,7 @@ func TestMySQLSinkWorkerExitWithError(t *testing.T) {
 		metrics.
 			BucketSizeCounter.WithLabelValues("default", "changefeed", "1"),
 		receiver,
-		func(ctx context.Context, events []*model.RowChangedEvent, replicaID uint64, bucket int) error {
+		func(ctx context.Context, events []*model.RowChangedEvent, bucket int) error {
 			return errExecFailed
 		})
 	errg, cctx := errgroup.WithContext(cctx)
@@ -341,7 +318,7 @@ func TestMySQLSinkWorkerExitCleanup(t *testing.T) {
 		metrics.
 			BucketSizeCounter.WithLabelValues("default", "changefeed", "1"),
 		receiver,
-		func(ctx context.Context, events []*model.RowChangedEvent, replicaID uint64, bucket int) error {
+		func(ctx context.Context, events []*model.RowChangedEvent, bucket int) error {
 			return errExecFailed
 		})
 	errg, cctx := errgroup.WithContext(cctx)
