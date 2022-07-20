@@ -14,6 +14,8 @@
 package cli
 
 import (
+	"bytes"
+	"io/ioutil"
 	"os"
 	"testing"
 
@@ -30,18 +32,43 @@ func TestChangefeedListCli(t *testing.T) {
 	cf := mock.NewMockChangefeedInterface(ctrl)
 	f := &mockFactory{changefeeds: cf}
 	cmd := newCmdListChangefeed(f)
-	cf.EXPECT().List(gomock.Any(), "all").Return(&[]model.ChangefeedCommonInfo{
+	b := bytes.NewBufferString("")
+	cmd.SetOut(b)
+	cf.EXPECT().List(gomock.Any(), gomock.Any()).Return(&[]model.ChangefeedCommonInfo{
 		{
 			UpstreamID:     1,
 			Namespace:      "default",
-			ID:             "abc",
+			ID:             "c1",
 			CheckpointTime: model.JSONTime{},
 			RunningError:   nil,
+			FeedState:      model.StateError,
+		},
+		{
+			UpstreamID:     1,
+			Namespace:      "default",
+			ID:             "c2",
+			CheckpointTime: model.JSONTime{},
+			RunningError:   nil,
+			FeedState:      model.StateNormal,
+		},
+		{
+			UpstreamID:     1,
+			Namespace:      "default",
+			ID:             "c3",
+			CheckpointTime: model.JSONTime{},
+			RunningError:   nil,
+			FeedState:      model.StateFailed,
 		},
 	}, nil)
 	os.Args = []string{"list", "--all=true"}
 	require.Nil(t, cmd.Execute())
+	out, err := ioutil.ReadAll(b)
+	require.Nil(t, err)
+	// make sure the output contains error state changefeed.
+	require.Contains(t, string(out), "c1")
+	require.Contains(t, string(out), "c2")
+
 	os.Args = []string{"list", "--all=false"}
-	cf.EXPECT().List(gomock.Any(), "").Return(nil, errors.New("test"))
+	cf.EXPECT().List(gomock.Any(), gomock.Any()).Return(nil, errors.New("test"))
 	require.NotNil(t, cmd.Execute())
 }

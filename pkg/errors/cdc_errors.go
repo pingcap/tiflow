@@ -180,7 +180,7 @@ var (
 		errors.RFCCodeText("CDC:ErrDecodeFailed"),
 	)
 	ErrFilterRuleInvalid = errors.Normalize(
-		"filter rule is invalid %s",
+		"filter rule is invalid %v",
 		errors.RFCCodeText("CDC:ErrFilterRuleInvalid"),
 	)
 
@@ -453,6 +453,9 @@ var (
 		"operate on a closed notifier",
 		errors.RFCCodeText("CDC:ErrOperateOnClosedNotifier"),
 	)
+	ErrDiskFull = errors.Normalize(
+		"failed to preallocate file because disk is full",
+		errors.RFCCodeText("CDC:ErrDiskFull"))
 
 	// encode/decode, data format and data integrity errors
 	ErrInvalidRecordKey = errors.Normalize(
@@ -1074,11 +1077,19 @@ var (
 		errors.RFCCodeText("CDC:ErrFailedToFilterDDL"),
 	)
 	ErrExpressionParseFailed = errors.Normalize(
-		"invalid filter expressions. There is a syntax error in: %s",
+		"invalid filter expressions. There is a syntax error in: '%s'",
 		errors.RFCCodeText("CDC:ErrInvalidFilterExpression"),
 	)
 	ErrExpressionColumnNotFound = errors.Normalize(
 		"invalid filter expressions. Can not found column '%s' from table '%s' in: %s",
 		errors.RFCCodeText("CDC:ErrExpressionColumnNotFound"),
+	)
+	ErrInvalidIgnoreEventType = errors.Normalize(
+		"invalid ignore event type: '%s'",
+		errors.RFCCodeText("CDC:ErrInvalidIgnoreEventType"),
+	)
+	ErrConvertDDLToEventTypeFailed = errors.Normalize(
+		"failed to convert ddl '%s' to filter event type",
+		errors.RFCCodeText("CDC:ErrConvertDDLToEventTypeFailed"),
 	)
 )
