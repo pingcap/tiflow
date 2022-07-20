@@ -171,18 +171,28 @@ func (n *sorterNode) start(
 			}
 		}
 
+		select {
+		case <-stdCtx.Done():
+			return nil
+		case <-n.preparedCh:
+			log.Info("table is prepared",
+				zap.Int64("tableID", n.tableID),
+				zap.String("tableName", n.tableName),
+				zap.String("namespace", n.changefeed.Namespace),
+				zap.String("changefeed", n.changefeed.ID))
+		}
+
 		// once receive startTs, which means sink should start replicating data to downstream.
 		var startTs model.Ts
 		select {
 		case <-stdCtx.Done():
 			return nil
 		case startTs = <-n.startTsCh:
-		}
-
-		select {
-		case <-stdCtx.Done():
-			return nil
-		case <-n.preparedCh:
+			log.Info("table is replicating",
+				zap.Int64("tableID", n.tableID),
+				zap.String("tableName", n.tableName),
+				zap.String("namespace", n.changefeed.Namespace),
+				zap.String("changefeed", n.changefeed.ID))
 		}
 
 		n.state.Store(TableStateReplicating)

@@ -41,6 +41,8 @@ var (
 
 	defaultCapability            int64 = 100 // TODO: make this configurable
 	defaultLocalStorageDirPrefix       = "/tmp/dfe-storage/"
+
+	defaultExecutorAddr = "127.0.0.1:10340"
 )
 
 // Config is the configuration.
@@ -58,7 +60,7 @@ type Config struct {
 
 	ConfigFile string `toml:"config-file" json:"config-file"`
 
-	// TODO: in the future dm-workers should share a same ttl from dm-master
+	// TODO: in the future executors should share a same ttl from server-master
 	KeepAliveTTLStr      string `toml:"keepalive-ttl" json:"keepalive-ttl"`
 	KeepAliveIntervalStr string `toml:"keepalive-interval" json:"keepalive-interval"`
 	RPCTimeoutStr        string `toml:"rpc-timeout" json:"rpc-timeout"`
@@ -119,6 +121,10 @@ func getDefaultLocalStorageDir(executorName string) string {
 
 // Adjust adjusts the executor configuration
 func (c *Config) Adjust() (err error) {
+	if c.Join == "" {
+		return errors.ErrInvalidCliParameter.GenWithStack("join must be provided")
+	}
+
 	if c.AdvertiseAddr == "" {
 		c.AdvertiseAddr = c.WorkerAddr
 	}
@@ -158,7 +164,7 @@ func GetDefaultExecutorConfig() *Config {
 		},
 		Name:                 "",
 		Join:                 "",
-		WorkerAddr:           "",
+		WorkerAddr:           defaultExecutorAddr,
 		AdvertiseAddr:        "",
 		SessionTTL:           defaultSessionTTL,
 		KeepAliveTTLStr:      defaultKeepAliveTTL,
