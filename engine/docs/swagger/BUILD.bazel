@@ -5,5 +5,5 @@ go_library(
     srcs = ["docs.go"],
     importpath = "github.com/pingcap/tidb/engine/docs/swagger",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_swaggo_swag//:go_default_library"],
+    deps = ["@com_github_swaggo_swag//:swag"],
 )

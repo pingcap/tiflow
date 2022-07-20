@@ -16,6 +16,7 @@ go_library(
         "@com_github_pingcap_tiflow//cdc/model:go_default_library",
         "@com_github_pingcap_tiflow//pkg/config:go_default_library",
         "@com_github_pingcap_tiflow//pkg/etcd:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/migrate:go_default_library",
         "@com_github_pingcap_tiflow//pkg/orchestrator:go_default_library",
         "@com_github_pingcap_tiflow//pkg/orchestrator/util:go_default_library",
         "@com_github_pingcap_tiflow//pkg/security:go_default_library",

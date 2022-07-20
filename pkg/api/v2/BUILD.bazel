@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "api",
+    srcs = [
+        "api_client.go",
+        "changefeed.go",
+        "tso.go",
+        "unsafe.go",
+    ],
+    importpath = "github.com/pingcap/tidb/pkg/api/v2",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tiflow//cdc/api/v2:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/api/internal/rest:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/security:go_default_library",
+    ],
+)

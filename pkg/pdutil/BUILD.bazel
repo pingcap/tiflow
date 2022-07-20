@@ -4,7 +4,7 @@ go_library(
     name = "pdutil",
     srcs = [
         "clock.go",
-        "region_label.go",
+        "pd_api_client.go",
     ],
     importpath = "github.com/pingcap/tidb/pkg/pdutil",
     visibility = ["//visibility:public"],
@@ -25,7 +25,7 @@ go_test(
     srcs = [
         "clock_test.go",
         "main_test.go",
-        "region_label_test.go",
+        "pd_api_client_test.go",
     ],
     embed = [":pdutil"],
     deps = [

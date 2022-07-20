@@ -13,9 +13,9 @@ go_library(
         "@com_github_google_btree//:btree",
         "@com_github_pingcap_kvproto//pkg/metapb",
         "@com_github_pingcap_log//:log",
-        "@com_github_pingcap_tidb//kv:go_default_library",
-        "@com_github_pingcap_tidb//tablecodec:go_default_library",
-        "@com_github_pingcap_tidb//util/codec:go_default_library",
+        "@com_github_pingcap_tidb//kv",
+        "@com_github_pingcap_tidb//tablecodec",
+        "@com_github_pingcap_tidb//util/codec",
         "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
         "@org_uber_go_zap//:zap",
     ],
@@ -31,7 +31,7 @@ go_test(
     embed = [":regionspan"],
     deps = [
         "@com_github_pingcap_kvproto//pkg/metapb",
-        "@com_github_pingcap_tidb//tablecodec:go_default_library",
+        "@com_github_pingcap_tidb//tablecodec",
         "@com_github_stretchr_testify//require",
     ],
 )

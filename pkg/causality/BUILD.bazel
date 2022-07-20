@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "causality",
+    srcs = [
+        "conflict_detector.go",
+        "worker.go",
+    ],
+    importpath = "github.com/pingcap/tidb/pkg/causality",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_tiflow//engine/pkg/containers:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/causality/internal:go_default_library",
+        "@org_uber_go_atomic//:atomic",
+    ],
+)

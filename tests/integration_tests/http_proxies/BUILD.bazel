@@ -6,7 +6,7 @@ go_library(
     importpath = "github.com/pingcap/tidb/tests/integration_tests/http_proxies",
     visibility = ["//visibility:private"],
     deps = [
-        "@com_github_bradleyjkemp_grpc_tools//grpc-proxy:go_default_library",
+        "@com_github_bradleyjkemp_grpc_tools//grpc-proxy",
         "@com_github_pingcap_log//:log",
         "@org_golang_google_grpc//:grpc",
         "@org_uber_go_zap//:zap",

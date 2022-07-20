@@ -6,7 +6,7 @@ go_library(
     importpath = "github.com/pingcap/tidb/cmd/cdc",
     visibility = ["//visibility:private"],
     deps = [
-        "@com_github_pingcap_tidb//types/parser_driver:go_default_library",
+        "@com_github_pingcap_tidb//types/parser_driver",
         "@com_github_pingcap_tiflow//cmd/cdc/hack:go_default_library",
         "@com_github_pingcap_tiflow//pkg/cmd:go_default_library",
     ],

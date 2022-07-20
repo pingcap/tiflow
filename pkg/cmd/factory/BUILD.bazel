@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "factory",
@@ -10,10 +10,12 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "@com_github_pingcap_errors//:errors",
-        "@com_github_pingcap_tidb//kv:go_default_library",
-        "@com_github_pingcap_tiflow//cdc/kv:go_default_library",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//pkg/api/v1:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/api/v2:go_default_library",
         "@com_github_pingcap_tiflow//pkg/cmd/context:go_default_library",
         "@com_github_pingcap_tiflow//pkg/cmd/util:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
         "@com_github_pingcap_tiflow//pkg/etcd:go_default_library",
         "@com_github_pingcap_tiflow//pkg/security:go_default_library",
         "@com_github_pingcap_tiflow//pkg/version:go_default_library",
@@ -24,5 +26,23 @@ go_library(
         "@org_golang_google_grpc//:grpc",
         "@org_golang_google_grpc//backoff",
         "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "factory_test",
+    srcs = ["factory_impl_test.go"],
+    embed = [":factory"],
+    deps = [
+        "@com_github_golang_mock//gomock",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/api/v1:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/api/v1/mock:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/cmd/context:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/cmd/factory/mock:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/security:go_default_library",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_google_grpc//:grpc",
     ],
 )

@@ -6,7 +6,7 @@ go_library(
     importpath = "github.com/pingcap/tidb/dm/dm/master/metrics",
     visibility = ["//visibility:public"],
     deps = [
-        "@com_github_pingcap_tidb_tools//pkg/utils:go_default_library",
+        "@com_github_pingcap_tidb_tools//pkg/utils",
         "@com_github_pingcap_tiflow//dm/pkg/metricsproxy:go_default_library",
         "@com_github_pingcap_tiflow//engine/pkg/promutil:go_default_library",
         "@com_github_prometheus_client_golang//prometheus",

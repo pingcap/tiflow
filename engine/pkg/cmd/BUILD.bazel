@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "cmd",
+    srcs = ["cmd.go"],
+    importpath = "github.com/pingcap/tidb/engine/pkg/cmd",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_tiflow//engine/pkg/cmd/cli:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/cmd/executor:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/cmd/master:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/cmd/version:go_default_library",
+        "@com_github_spf13_cobra//:cobra",
+    ],
+)

@@ -7,7 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "@com_github_pingcap_log//:log",
-        "@com_github_pingcap_tidb//util/table-filter:go_default_library",
+        "@com_github_pingcap_tidb//util/table-filter",
         "@com_github_pingcap_tiflow//cdc/model:go_default_library",
         "@com_github_pingcap_tiflow//cdc/sink/mq/dispatcher/partition:go_default_library",
         "@com_github_pingcap_tiflow//cdc/sink/mq/dispatcher/topic:go_default_library",
@@ -25,7 +25,7 @@ go_test(
     ],
     embed = [":dispatcher"],
     deps = [
-        "@com_github_pingcap_tidb_parser//model:go_default_library",
+        "@com_github_pingcap_tidb_parser//model",
         "@com_github_pingcap_tiflow//cdc/model:go_default_library",
         "@com_github_pingcap_tiflow//cdc/sink/mq/dispatcher/partition:go_default_library",
         "@com_github_pingcap_tiflow//cdc/sink/mq/dispatcher/topic:go_default_library",

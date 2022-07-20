@@ -9,7 +9,7 @@ go_library(
     importpath = "github.com/pingcap/tidb/dm/pkg/upgrade",
     visibility = ["//visibility:public"],
     deps = [
-        "@com_github_pingcap_tidb//util/dbutil:go_default_library",
+        "@com_github_pingcap_tidb//util/dbutil",
         "@com_github_pingcap_tiflow//dm/dm/common:go_default_library",
         "@com_github_pingcap_tiflow//dm/dm/config:go_default_library",
         "@com_github_pingcap_tiflow//dm/pkg/conn:go_default_library",

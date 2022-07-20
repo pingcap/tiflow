@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "datarw.pb.go",
         "error.pb.go",
+        "errorv2.pb.go",
         "executor.pb.go",
         "master.pb.go",
         "metastore.pb.go",

@@ -19,7 +19,7 @@ go_library(
         "@com_github_pingcap_errors//:errors",
         "@com_github_pingcap_failpoint//:failpoint",
         "@com_github_pingcap_log//:log",
-        "@com_github_pingcap_tidb//util/memory:go_default_library",
+        "@com_github_pingcap_tidb//util/memory",
         "@com_github_pingcap_tiflow//cdc/contextutil:go_default_library",
         "@com_github_pingcap_tiflow//cdc/model:go_default_library",
         "@com_github_pingcap_tiflow//cdc/sorter:go_default_library",
@@ -51,7 +51,7 @@ go_test(
     deps = [
         "@com_github_pingcap_failpoint//:failpoint",
         "@com_github_pingcap_log//:log",
-        "@com_github_pingcap_tidb//util/memory:go_default_library",
+        "@com_github_pingcap_tidb//util/memory",
         "@com_github_pingcap_tiflow//cdc/model:go_default_library",
         "@com_github_pingcap_tiflow//cdc/sorter:go_default_library",
         "@com_github_pingcap_tiflow//cdc/sorter/encoding:go_default_library",

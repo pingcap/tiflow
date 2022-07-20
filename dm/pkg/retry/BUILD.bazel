@@ -9,9 +9,9 @@ go_library(
     importpath = "github.com/pingcap/tidb/dm/pkg/retry",
     visibility = ["//visibility:public"],
     deps = [
-        "@com_github_go_mysql_org_go_mysql//mysql:go_default_library",
+        "@com_github_go_mysql_org_go_mysql//mysql",
         "@com_github_pingcap_errors//:errors",
-        "@com_github_pingcap_tidb_parser//mysql:go_default_library",
+        "@com_github_pingcap_tidb_parser//mysql",
         "@com_github_pingcap_tiflow//dm/pkg/context:go_default_library",
         "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
         "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
@@ -25,7 +25,7 @@ go_test(
     embed = [":retry"],
     deps = [
         "@com_github_pingcap_check//:check",
-        "@com_github_pingcap_tidb//util/dbutil:go_default_library",
+        "@com_github_pingcap_tidb//util/dbutil",
         "@com_github_pingcap_tiflow//dm/pkg/context:go_default_library",
         "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
     ],

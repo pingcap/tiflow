@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "model",
+    srcs = [
+        "common.go",
+        "config.go",
+        "interfaces.go",
+        "op.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/pkg/meta/model",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_go_sql_driver_mysql//:mysql",
+        "@com_github_pingcap_tiflow//engine/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/dbutil:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/tenant:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+    ],
+)
+
+go_test(
+    name = "model_test",
+    srcs = [
+        "common_test.go",
+        "op_test.go",
+    ],
+    embed = [":model"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

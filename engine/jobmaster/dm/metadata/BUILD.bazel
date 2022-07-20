@@ -16,7 +16,7 @@ go_library(
         "@com_github_pingcap_tiflow//engine/framework/model:go_default_library",
         "@com_github_pingcap_tiflow//engine/jobmaster/dm/config:go_default_library",
         "@com_github_pingcap_tiflow//engine/pkg/adapter:go_default_library",
-        "@com_github_pingcap_tiflow//engine/pkg/meta/metaclient:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/meta/model:go_default_library",
     ],
 )
 
@@ -33,7 +33,7 @@ go_test(
         "@com_github_pingcap_tiflow//dm/dm/master:go_default_library",
         "@com_github_pingcap_tiflow//engine/jobmaster/dm/config:go_default_library",
         "@com_github_pingcap_tiflow//engine/pkg/adapter:go_default_library",
-        "@com_github_pingcap_tiflow//engine/pkg/meta/kvclient/mock:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/meta/mock:go_default_library",
         "@com_github_stretchr_testify//require",
     ],
 )

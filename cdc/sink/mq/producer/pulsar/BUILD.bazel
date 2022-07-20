@@ -10,7 +10,7 @@ go_library(
     importpath = "github.com/pingcap/tidb/cdc/sink/mq/producer/pulsar",
     visibility = ["//visibility:public"],
     deps = [
-        "@com_github_apache_pulsar_client_go//pulsar:go_default_library",
+        "@com_github_apache_pulsar_client_go//pulsar",
         "@com_github_pingcap_failpoint//:failpoint",
         "@com_github_pingcap_log//:log",
         "@com_github_pingcap_tiflow//cdc/sink/mq/codec:go_default_library",

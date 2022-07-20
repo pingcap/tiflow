@@ -13,8 +13,8 @@ go_library(
     importpath = "github.com/pingcap/tidb/dm/openapi",
     visibility = ["//visibility:public"],
     deps = [
-        "@com_github_deepmap_oapi_codegen//pkg/runtime:go_default_library",
-        "@com_github_getkin_kin_openapi//openapi3:go_default_library",
+        "@com_github_deepmap_oapi_codegen//pkg/runtime",
+        "@com_github_getkin_kin_openapi//openapi3",
         "@com_github_gin_gonic_gin//:gin",
         "@org_uber_go_zap//:zap",
         "@org_uber_go_zap//zapcore",

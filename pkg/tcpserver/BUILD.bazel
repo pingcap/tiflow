@@ -27,7 +27,7 @@ go_test(
     deps = [
         "@com_github_grpc_ecosystem_go_grpc_middleware//testing",
         "@com_github_grpc_ecosystem_go_grpc_middleware//testing/testproto",
-        "@com_github_integralist_go_findroot//find:go_default_library",
+        "@com_github_integralist_go_findroot//find",
         "@com_github_phayes_freeport//:freeport",
         "@com_github_pingcap_tiflow//pkg/httputil:go_default_library",
         "@com_github_pingcap_tiflow//pkg/leakutil:go_default_library",

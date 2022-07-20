@@ -9,7 +9,7 @@ go_library(
         "@com_github_aws_aws_sdk_go//aws/awserr",
         "@com_github_aws_aws_sdk_go//service/s3",
         "@com_github_pingcap_errors//:errors",
-        "@com_github_pingcap_tidb//br/pkg/storage:go_default_library",
+        "@com_github_pingcap_tidb//br/pkg/storage",
     ],
 )
 
@@ -24,8 +24,8 @@ go_test(
         "@com_github_aws_aws_sdk_go//service/s3",
         "@com_github_golang_mock//gomock",
         "@com_github_pingcap_kvproto//pkg/brpb",
-        "@com_github_pingcap_tidb//br/pkg/mock:go_default_library",
-        "@com_github_pingcap_tidb//br/pkg/storage:go_default_library",
+        "@com_github_pingcap_tidb//br/pkg/mock",
+        "@com_github_pingcap_tidb//br/pkg/storage",
         "@com_github_stretchr_testify//require",
     ],
 )

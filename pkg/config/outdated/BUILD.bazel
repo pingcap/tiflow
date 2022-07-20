@@ -5,5 +5,5 @@ go_library(
     srcs = ["v1.go"],
     importpath = "github.com/pingcap/tidb/pkg/config/outdated",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_pingcap_tidb//util/filter:go_default_library"],
+    deps = ["@com_github_pingcap_tidb//util/filter"],
 )

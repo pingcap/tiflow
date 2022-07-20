@@ -9,7 +9,7 @@ go_library(
     importpath = "github.com/pingcap/tidb/cdc/sink/flowcontrol",
     visibility = ["//visibility:public"],
     deps = [
-        "@com_github_edwingeng_deque//:go_default_library",
+        "@com_github_edwingeng_deque//:deque",
         "@com_github_pingcap_errors//:errors",
         "@com_github_pingcap_log//:log",
         "@com_github_pingcap_tiflow//cdc/model:go_default_library",

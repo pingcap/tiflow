@@ -10,8 +10,8 @@ go_library(
     importpath = "github.com/pingcap/tidb/engine/pkg/orm/model",
     visibility = ["//visibility:public"],
     deps = [
-        "@io_gorm_gorm//:go_default_library",
-        "@io_gorm_gorm//clause:go_default_library",
+        "@io_gorm_gorm//:gorm",
+        "@io_gorm_gorm//clause",
     ],
 )
 
@@ -23,7 +23,7 @@ go_test(
         "@com_github_data_dog_go_sqlmock//:go-sqlmock",
         "@com_github_go_sql_driver_mysql//:mysql",
         "@com_github_stretchr_testify//require",
-        "@io_gorm_driver_mysql//:go_default_library",
-        "@io_gorm_gorm//:go_default_library",
+        "@io_gorm_driver_mysql//:mysql",
+        "@io_gorm_gorm//:gorm",
     ],
 )

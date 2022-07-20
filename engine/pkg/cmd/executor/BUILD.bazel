@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "executor",
+    srcs = ["executor.go"],
+    importpath = "github.com/pingcap/tidb/engine/pkg/cmd/executor",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_gin_gonic_gin//:gin",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//engine/executor:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/cmd/util:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/version:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/cmd/context:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/cmd/util:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/logutil:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/security:go_default_library",
+        "@com_github_spf13_cobra//:cobra",
+        "@com_github_spf13_pflag//:pflag",
+        "@org_uber_go_zap//:zap",
+    ],
+)

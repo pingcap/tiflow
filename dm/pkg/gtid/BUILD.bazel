@@ -6,7 +6,7 @@ go_library(
     importpath = "github.com/pingcap/tidb/dm/pkg/gtid",
     visibility = ["//visibility:public"],
     deps = [
-        "@com_github_go_mysql_org_go_mysql//mysql:go_default_library",
+        "@com_github_go_mysql_org_go_mysql//mysql",
         "@com_github_pingcap_errors//:errors",
         "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
     ],
@@ -17,7 +17,7 @@ go_test(
     srcs = ["gtid_test.go"],
     embed = [":gtid"],
     deps = [
-        "@com_github_go_mysql_org_go_mysql//mysql:go_default_library",
+        "@com_github_go_mysql_org_go_mysql//mysql",
         "@com_github_stretchr_testify//require",
     ],
 )

@@ -11,6 +11,5 @@ go_library(
         "@com_github_pingcap_tiflow//cdc/capture:go_default_library",
         "@com_github_pingcap_tiflow//pkg/etcd:go_default_library",
         "@com_github_pingcap_tiflow//pkg/version:go_default_library",
-        "@io_etcd_go_etcd_client_v3//:client",
     ],
 )

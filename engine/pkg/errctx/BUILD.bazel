@@ -9,7 +9,7 @@ go_library(
     importpath = "github.com/pingcap/tidb/engine/pkg/errctx",
     visibility = ["//visibility:public"],
     deps = [
-        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@com_github_pingcap_log//:log",
         "@org_uber_go_zap//:zap",
     ],
 )

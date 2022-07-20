@@ -11,7 +11,7 @@ go_library(
     importpath = "github.com/pingcap/tidb/dm/debug-tools/binlog-event-blackhole",
     visibility = ["//visibility:private"],
     deps = [
-        "@com_github_go_mysql_org_go_mysql//client:go_default_library",
+        "@com_github_go_mysql_org_go_mysql//client",
         "@com_github_pingcap_errors//:errors",
         "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
         "@org_uber_go_atomic//:atomic",

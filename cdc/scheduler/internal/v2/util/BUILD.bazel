@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "util",
+    srcs = [
+        "sort_table_ids.go",
+        "table_set.go",
+    ],
+    importpath = "github.com/pingcap/tidb/cdc/scheduler/internal/v2/util",
+    visibility = ["//cdc/scheduler:__subpackages__"],
+    deps = [
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "util_test",
+    srcs = ["table_set_test.go"],
+    embed = [":util"],
+    deps = [
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

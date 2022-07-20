@@ -16,7 +16,6 @@ go_library(
         "@com_github_pingcap_tiflow//cdc/sink/mysql:go_default_library",
         "@com_github_pingcap_tiflow//pkg/config:go_default_library",
         "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
-        "@com_github_pingcap_tiflow//pkg/filter:go_default_library",
         "@com_github_pingcap_tiflow//pkg/util:go_default_library",
         "@org_golang_x_sync//errgroup",
         "@org_uber_go_zap//:zap",

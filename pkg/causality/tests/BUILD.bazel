@@ -1,0 +1,32 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "tests",
+    srcs = [
+        "driver.go",
+        "worker.go",
+        "workload.go",
+    ],
+    importpath = "github.com/pingcap/tidb/pkg/causality/tests",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//engine/pkg/containers:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/causality:go_default_library",
+        "@org_golang_x_exp//rand",
+        "@org_uber_go_atomic//:atomic",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "tests_test",
+    srcs = ["integration_test.go"],
+    embed = [":tests"],
+    deps = [
+        "@com_github_pingcap_log//:log",
+        "@com_github_stretchr_testify//require",
+        "@org_uber_go_zap//zapcore",
+    ],
+)

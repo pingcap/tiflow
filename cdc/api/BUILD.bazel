@@ -2,10 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "api",
-    srcs = [
-        "interfaces.go",
-        "util.go",
-    ],
+    srcs = ["util.go"],
     importpath = "github.com/pingcap/tidb/cdc/api",
     visibility = ["//visibility:public"],
     deps = [
@@ -14,6 +11,7 @@ go_library(
         "@com_github_pingcap_log//:log",
         "@com_github_pingcap_tiflow//cdc/capture:go_default_library",
         "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/scheduler:go_default_library",
         "@com_github_pingcap_tiflow//pkg/config:go_default_library",
         "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
         "@com_github_pingcap_tiflow//pkg/httputil:go_default_library",

@@ -12,10 +12,10 @@ go_library(
     importpath = "github.com/pingcap/tidb/dm/tests/_dmctl_tools",
     visibility = ["//visibility:private"],
     deps = [
-        "@com_github_go_mysql_org_go_mysql//mysql:go_default_library",
+        "@com_github_go_mysql_org_go_mysql//mysql",
         "@com_github_go_sql_driver_mysql//:mysql",
         "@com_github_pingcap_errors//:errors",
-        "@com_github_pingcap_tidb_tools//pkg/utils:go_default_library",
+        "@com_github_pingcap_tidb_tools//pkg/utils",
         "@com_github_pingcap_tiflow//dm/dm/pb:go_default_library",
         "@com_github_pingcap_tiflow//dm/pkg/binlog:go_default_library",
         "@com_github_pingcap_tiflow//dm/pkg/gtid:go_default_library",

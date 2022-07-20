@@ -8,7 +8,7 @@ go_library(
     deps = [
         "@com_github_pingcap_errors//:errors",
         "@com_github_pingcap_log//:log",
-        "@com_github_pingcap_tidb//br/pkg/lightning/log:go_default_library",
+        "@com_github_pingcap_tidb//br/pkg/lightning/log",
         "@com_github_pingcap_tiflow//dm/dm/ctl/common:go_default_library",
         "@com_github_pingcap_tiflow//dm/dm/worker:go_default_library",
         "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",

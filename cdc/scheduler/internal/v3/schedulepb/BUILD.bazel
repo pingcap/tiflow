@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "schedulepb",
+    srcs = ["table_schedule.pb.go"],
+    importpath = "github.com/pingcap/tidb/cdc/scheduler/internal/v3/schedulepb",
+    visibility = ["//cdc/scheduler:__subpackages__"],
+    deps = [
+        "@com_github_gogo_protobuf//gogoproto",
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+    ],
+)
+
+go_test(
+    name = "schedulepb_test",
+    srcs = ["table_schedule_manual_test.go"],
+    embed = [":schedulepb"],
+    deps = [
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+    ],
+)

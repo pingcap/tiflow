@@ -6,6 +6,7 @@ go_library(
         "black_hole.go",
         "sink.go",
         "table_sink.go",
+        "validator.go",
     ],
     importpath = "github.com/pingcap/tidb/cdc/sink",
     visibility = ["//visibility:public"],
@@ -20,7 +21,6 @@ go_library(
         "@com_github_pingcap_tiflow//cdc/sink/mysql:go_default_library",
         "@com_github_pingcap_tiflow//pkg/config:go_default_library",
         "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
-        "@com_github_pingcap_tiflow//pkg/filter:go_default_library",
         "@com_github_pingcap_tiflow//pkg/util:go_default_library",
         "@com_github_prometheus_client_golang//prometheus",
         "@org_uber_go_zap//:zap",
@@ -30,11 +30,14 @@ go_library(
 go_test(
     name = "sink_test",
     srcs = [
+        "black_hole_test.go",
         "main_test.go",
         "sink_test.go",
+        "validator_test.go",
     ],
     embed = [":sink"],
     deps = [
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
         "@com_github_pingcap_tiflow//pkg/config:go_default_library",
         "@com_github_pingcap_tiflow//pkg/leakutil:go_default_library",
         "@com_github_stretchr_testify//require",

@@ -12,11 +12,13 @@ go_library(
     deps = [
         "@com_github_pingcap_errors//:errors",
         "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//cdc/api/middleware:go_default_library",
         "@com_github_pingcap_tiflow//cdc/model:go_default_library",
         "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
         "@com_github_pingcap_tiflow//pkg/httputil:go_default_library",
         "@com_github_pingcap_tiflow//pkg/retry:go_default_library",
         "@com_github_pingcap_tiflow//pkg/security:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/version:go_default_library",
         "@org_uber_go_zap//:zap",
     ],
 )

@@ -9,7 +9,7 @@ go_library(
     importpath = "github.com/pingcap/tidb/tests/mq_protocol_tests/framework/avro",
     visibility = ["//visibility:public"],
     deps = [
-        "@com_github_integralist_go_findroot//find:go_default_library",
+        "@com_github_integralist_go_findroot//find",
         "@com_github_pingcap_errors//:errors",
         "@com_github_pingcap_log//:log",
         "@com_github_pingcap_tiflow//tests/mq_protocol_tests/framework:go_default_library",

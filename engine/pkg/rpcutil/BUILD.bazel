@@ -9,9 +9,10 @@ go_library(
     importpath = "github.com/pingcap/tidb/engine/pkg/rpcutil",
     visibility = ["//visibility:public"],
     deps = [
-        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@com_github_pingcap_log//:log",
         "@com_github_pingcap_tiflow//engine/enginepb:go_default_library",
-        "@com_github_pingcap_tiflow//engine/pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/retry:go_default_library",
         "@org_golang_google_grpc//:grpc",
         "@org_golang_x_time//rate",
         "@org_uber_go_atomic//:atomic",
@@ -29,7 +30,7 @@ go_test(
     deps = [
         "@com_github_pingcap_errors//:errors",
         "@com_github_pingcap_tiflow//engine/enginepb:go_default_library",
-        "@com_github_pingcap_tiflow//engine/pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
         "@com_github_stretchr_testify//require",
         "@org_golang_google_grpc//:grpc",
         "@org_golang_x_time//rate",

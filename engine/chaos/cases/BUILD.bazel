@@ -12,11 +12,12 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "@com_github_pingcap_errors//:errors",
-        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@com_github_pingcap_log//:log",
         "@com_github_pingcap_tiflow//engine/framework/fake:go_default_library",
         "@com_github_pingcap_tiflow//engine/model:go_default_library",
         "@com_github_pingcap_tiflow//engine/pkg/tenant:go_default_library",
         "@com_github_pingcap_tiflow//engine/test/e2e:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/logutil:go_default_library",
         "@com_github_pingcap_tiflow//pkg/retry:go_default_library",
         "@com_github_pingcap_tiflow//pkg/util:go_default_library",
         "@org_golang_x_sync//errgroup",

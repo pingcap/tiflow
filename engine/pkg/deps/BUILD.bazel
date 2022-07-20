@@ -7,8 +7,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "@com_github_pingcap_errors//:errors",
-        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
-        "@org_uber_go_dig//:go_default_library",
+        "@com_github_pingcap_log//:log",
+        "@org_uber_go_dig//:dig",
         "@org_uber_go_zap//:zap",
     ],
 )
@@ -19,6 +19,6 @@ go_test(
     embed = [":deps"],
     deps = [
         "@com_github_stretchr_testify//require",
-        "@org_uber_go_dig//:go_default_library",
+        "@org_uber_go_dig//:dig",
     ],
 )

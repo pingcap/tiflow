@@ -8,7 +8,7 @@ go_library(
     deps = [
         "@com_github_pingcap_errors//:errors",
         "@com_github_pingcap_log//:log",
-        "@com_github_pingcap_tidb//util/memory:go_default_library",
+        "@com_github_pingcap_tidb//util/memory",
         "@com_github_pingcap_tiflow//cdc/sorter/leveldb:go_default_library",
         "@com_github_pingcap_tiflow//cdc/sorter/leveldb/message:go_default_library",
         "@com_github_pingcap_tiflow//pkg/actor:go_default_library",

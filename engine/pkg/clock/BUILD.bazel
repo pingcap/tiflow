@@ -7,6 +7,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "@com_github_benbjohnson_clock//:clock",
-        "@com_github_gavv_monotime//:go_default_library",
+        "@com_github_gavv_monotime//:monotime",
     ],
 )

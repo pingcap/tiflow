@@ -1,0 +1,32 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "eventsink",
+    srcs = [
+        "event.go",
+        "event_appender.go",
+        "event_sink.go",
+    ],
+    importpath = "github.com/pingcap/tidb/cdc/sinkv2/eventsink",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/processor/pipeline:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "eventsink_test",
+    srcs = [
+        "event_appender_test.go",
+        "main_test.go",
+    ],
+    embed = [":eventsink"],
+    deps = [
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/leakutil:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

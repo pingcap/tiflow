@@ -5,5 +5,5 @@ go_library(
     srcs = ["keyadapter.go"],
     importpath = "github.com/pingcap/tidb/engine/pkg/adapter",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_pingcap_tiflow//engine/pkg/errors:go_default_library"],
+    deps = ["@com_github_pingcap_tiflow//pkg/errors:go_default_library"],
 )

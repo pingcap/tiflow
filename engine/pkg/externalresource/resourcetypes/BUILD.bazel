@@ -11,8 +11,8 @@ go_library(
     deps = [
         "@com_github_pingcap_tiflow//engine/client:go_default_library",
         "@com_github_pingcap_tiflow//engine/enginepb:go_default_library",
-        "@com_github_pingcap_tiflow//engine/pkg/errors:go_default_library",
         "@com_github_pingcap_tiflow//engine/pkg/externalresource/resourcemeta/model:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
     ],
 )
 

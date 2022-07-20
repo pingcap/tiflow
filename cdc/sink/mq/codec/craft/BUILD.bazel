@@ -12,8 +12,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "@com_github_pingcap_errors//:errors",
-        "@com_github_pingcap_tidb_parser//model:go_default_library",
-        "@com_github_pingcap_tidb_parser//mysql:go_default_library",
+        "@com_github_pingcap_tidb_parser//model",
+        "@com_github_pingcap_tidb_parser//mysql",
         "@com_github_pingcap_tiflow//cdc/model:go_default_library",
         "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
     ],

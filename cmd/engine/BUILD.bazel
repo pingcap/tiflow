@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "engine_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/pingcap/tidb/cmd/engine",
+    visibility = ["//visibility:private"],
+    deps = ["@com_github_pingcap_tiflow//engine/pkg/cmd:go_default_library"],
+)
+
+go_binary(
+    name = "engine",
+    embed = [":engine_lib"],
+    visibility = ["//visibility:public"],
+)

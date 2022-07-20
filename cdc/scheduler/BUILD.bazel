@@ -8,8 +8,11 @@ go_library(
     deps = [
         "@com_github_pingcap_tiflow//cdc/model:go_default_library",
         "@com_github_pingcap_tiflow//cdc/scheduler/internal:go_default_library",
-        "@com_github_pingcap_tiflow//cdc/scheduler/internal/base:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/scheduler/internal/v2:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/scheduler/internal/v3:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/config:go_default_library",
         "@com_github_pingcap_tiflow//pkg/etcd:go_default_library",
         "@com_github_pingcap_tiflow//pkg/p2p:go_default_library",
+        "@com_github_prometheus_client_golang//prometheus",
     ],
 )
