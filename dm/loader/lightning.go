@@ -174,6 +174,44 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 	return err
 }
 
+func (l *LightningLoader) getLightningConfig() (*lcfg.Config, error) {
+	cfg := lcfg.NewConfig()
+	if err := cfg.LoadFromGlobal(l.lightningGlobalConfig); err != nil {
+		return nil, err
+	}
+	// TableConcurrency is adjusted to the value of RegionConcurrency
+	// when using TiDB backend.
+	// TODO: should we set the TableConcurrency separately.
+	cfg.App.RegionConcurrency = l.cfg.LoaderConfig.PoolSize
+	cfg.Routes = l.cfg.RouteRules
+
+	cfg.Checkpoint.Driver = lcfg.CheckpointDriverFile
+	var cpPath string
+	// l.cfg.LoaderConfig.Dir may be a s3 path, and Lightning supports checkpoint in s3, we can use storage.AdjustPath to adjust path both local and s3.
+	cpPath, err := storage.AdjustPath(l.cfg.LoaderConfig.Dir, string(filepath.Separator)+lightningCheckpointFileName)
+	if err != nil {
+		return nil, err
+	}
+	cfg.Checkpoint.DSN = cpPath
+	cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
+
+	cfg.TikvImporter.OnDuplicate = string(l.cfg.OnDuplicate)
+	cfg.TiDB.Vars = make(map[string]string)
+	cfg.Routes = l.cfg.RouteRules
+	if l.cfg.To.Session != nil {
+		for k, v := range l.cfg.To.Session {
+			cfg.TiDB.Vars[k] = v
+		}
+	}
+	cfg.TiDB.StrSQLMode = l.sqlMode
+	cfg.TiDB.Vars = map[string]string{
+		"time_zone": l.timeZone,
+		// always set transaction mode to optimistic
+		"tidb_txn_mode": "optimistic",
+	}
+	return cfg, nil
+}
+
 func (l *LightningLoader) restore(ctx context.Context) error {
 	if err := putLoadTask(l.cli, l.cfg, l.workerName); err != nil {
 		return err
@@ -188,6 +226,7 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		if err = l.checkPointList.RegisterCheckPoint(ctx); err != nil {
 			return err
 		}
+<<<<<<< HEAD
 		cfg := lcfg.NewConfig()
 		if err = cfg.LoadFromGlobal(l.lightningGlobalConfig); err != nil {
 			return err
@@ -205,10 +244,21 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		}
 		cfg.TiDB.StrSQLMode = l.cfg.LoaderConfig.SQLMode
 		cfg.TiDB.Vars = map[string]string{"time_zone": l.timeZone}
+=======
+		var cfg *lcfg.Config
+		cfg, err = l.getLightningConfig()
+		if err != nil {
+			return err
+		}
+>>>>>>> ac2d0906f (lightning(dm): enable to config concurrency when using lightning (#6328))
 		err = l.runLightning(ctx, cfg)
 		if err == nil {
 			l.finish.Store(true)
 			err = l.checkPointList.UpdateStatus(ctx, lightningStatusFinished)
+			if err != nil {
+				l.logger.Error("failed to update checkpoint status", zap.Error(err))
+				return err
+			}
 		} else {
 			l.logger.Error("failed to runlightning", zap.Error(err))
 		}
