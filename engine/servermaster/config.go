@@ -41,6 +41,7 @@ const (
 	defaultDiscoverTicker     = 3 * time.Second
 	defaultMetricInterval     = 15 * time.Second
 
+	defaultMasterAddr          = "127.0.0.1:10240"
 	defaultPeerUrls            = "http://127.0.0.1:8291"
 	defaultInitialClusterState = embed.ClusterStateFlagNew
 
@@ -59,7 +60,7 @@ const (
 	defaultbusinessStoreType = metaModel.StoreTypeEtcd
 )
 
-// Config is the configuration for dm-master.
+// Config is the configuration for server-master.
 type Config struct {
 	LogConf logutil.Config `toml:"log" json:"log"`
 
@@ -165,7 +166,7 @@ func GetDefaultMasterConfig() *Config {
 			Level: "info",
 			File:  "",
 		},
-		MasterAddr:    "",
+		MasterAddr:    defaultMasterAddr,
 		AdvertiseAddr: "",
 		Etcd: &etcdutil.ConfigParams{
 			PeerUrls:            defaultPeerUrls,
