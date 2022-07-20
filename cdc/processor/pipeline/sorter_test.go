@@ -134,11 +134,12 @@ func (s *mockSorter) EmitStartTs(ctx context.Context, ts model.Ts) {
 		panic(ts)
 	}
 }
+
 func (s *mockSorter) Output() <-chan *model.PolymorphicEvent {
 	return s.outCh
 }
-func (s *mockSorter) Run(ctx context.Context) error {
 
+func (s *mockSorter) Run(ctx context.Context) error {
 	return nil
 }
 

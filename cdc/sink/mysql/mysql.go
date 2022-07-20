@@ -30,13 +30,14 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
+	dmretry "github.com/pingcap/tiflow/dm/pkg/retry"
 	dmutils "github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -599,6 +600,8 @@ func (s *mysqlSink) getTableResolvedTs(tableID model.TableID) (model.ResolvedTs,
 func logDMLTxnErr(err error) error {
 	if isRetryableDMLError(err) {
 		log.Warn("execute DMLs with error, retry later", zap.Error(err))
+	} else {
+		log.Error("execute DMLs with error, can not retry", zap.Error(err))
 	}
 	return err
 }
@@ -607,17 +610,12 @@ func isRetryableDMLError(err error) bool {
 	if !cerror.IsRetryableError(err) {
 		return false
 	}
-
-	errCode, ok := getSQLErrCode(err)
-	if !ok {
+	// Check if the error is connection errors that can retry safely.
+	if dmretry.IsConnectionError(err) {
 		return true
 	}
-
-	switch errCode {
-	case mysql.ErrNoSuchTable, mysql.ErrBadDB:
-		return false
-	}
-	return true
+	// Check if the error is an retriable TiDB error or MySQL error.
+	return dbutil.IsRetryableError(err)
 }
 
 func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDMLs, bucket int) error {
@@ -696,7 +694,6 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, bucket int) *prep
 	replaces := make(map[string][][]interface{})
 	rowCount := 0
 	// translateToInsert control the update and insert behavior
-	// FIXME: turn on safe-mode when mysql sink meets error.
 	translateToInsert := s.params.enableOldValue && !s.params.safeMode
 	for _, row := range rows {
 		if !translateToInsert {
@@ -989,15 +986,6 @@ func whereSlice(cols []*model.Column, forceReplicate bool) (colNames []string, a
 		}
 	}
 	return
-}
-
-func getSQLErrCode(err error) (errors.ErrCode, bool) {
-	mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError)
-	if !ok {
-		return -1, false
-	}
-
-	return errors.ErrCode(mysqlErr.Number), true
 }
 
 func buildColumnList(names []string) string {

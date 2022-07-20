@@ -1064,7 +1064,6 @@ func (s *mockUnavailableMySQL) Stop() {
 }
 
 func TestNewMySQLTimeout(t *testing.T) {
-	t.Parallel()
 	addr := "127.0.0.1:33333"
 	mockMySQL := newMockUnavailableMySQL(addr, t)
 	defer mockMySQL.Stop()
@@ -1072,7 +1071,7 @@ func TestNewMySQLTimeout(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	changefeed := "test-changefeed"
-	sinkURI, err := url.Parse(fmt.Sprintf("mysql://%s/?read-timeout=2s&timeout=2s", addr))
+	sinkURI, err := url.Parse(fmt.Sprintf("mysql://%s/?read-timeout=1s&timeout=1s", addr))
 	require.Nil(t, err)
 	rc := config.GetDefaultReplicaConfig()
 	require.Nil(t, err)
@@ -1494,6 +1493,74 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 
 	err = sink.execDMLs(ctx, rows, 1 /* bucket */)
 	require.Equal(t, errLockDeadlock, errors.Cause(err))
+
+	err = sink.Close(ctx)
+	require.Nil(t, err)
+}
+
+func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
+	errDup := mysql.NewErr(mysql.ErrDupEntry)
+	rows := []*model.RowChangedEvent{
+		{
+			StartTs:       2,
+			CommitTs:      3,
+			ReplicatingTs: 1,
+			Table:         &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 1,
+				},
+			},
+		},
+	}
+
+	dbIndex := 0
+	mockDBInsertDupEntry := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		defer func() {
+			dbIndex++
+		}()
+		if dbIndex == 0 {
+			// test db
+			db, err := mockTestDB(true)
+			require.Nil(t, err)
+			return db, nil
+		}
+		// normal db
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		require.Nil(t, err)
+		mock.ExpectBegin()
+		mock.ExpectExec("INSERT INTO `s1`.`t1`(`a`) VALUES (?)").
+			WithArgs(1).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectCommit().
+			WillReturnError(errDup)
+		mock.ExpectClose()
+		return db, nil
+	}
+	backupGetDBConn := GetDBConnImpl
+	GetDBConnImpl = mockDBInsertDupEntry
+	backupMaxRetry := defaultDMLMaxRetry
+	defaultDMLMaxRetry = 2
+	defer func() {
+		GetDBConnImpl = backupGetDBConn
+		defaultDMLMaxRetry = backupMaxRetry
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	changefeed := "test-changefeed"
+	sinkURI, err := url.Parse(
+		"mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&safe-mode=false")
+	require.Nil(t, err)
+	rc := config.GetDefaultReplicaConfig()
+	sink, err := NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, rc)
+	require.Nil(t, err)
+
+	err = sink.execDMLs(ctx, rows, 1 /* bucket */)
+	require.Equal(t, errDup, errors.Cause(err))
 
 	err = sink.Close(ctx)
 	require.Nil(t, err)
@@ -2121,7 +2188,9 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 				},
 			},
 			expected: &preparedDMLs{
-				sqls:     []string{"INSERT INTO `common_1`.`uk_without_pk`(`a1`,`a3`) VALUES (?,?);"},
+				sqls: []string{
+					"INSERT INTO `common_1`.`uk_without_pk`(`a1`,`a3`) VALUES (?,?);",
+				},
 				values:   [][]interface{}{{1, 1}},
 				rowCount: 1,
 			},
@@ -2184,7 +2253,10 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 				},
 			},
 			expected: &preparedDMLs{
-				sqls:     []string{"UPDATE `common_1`.`uk_without_pk` SET `a1`=?,`a3`=? WHERE `a1`=? AND `a3`=? LIMIT 1;"},
+				sqls: []string{
+					"UPDATE `common_1`.`uk_without_pk` SET `a1`=?,`a3`=? " +
+						"WHERE `a1`=? AND `a3`=? LIMIT 1;",
+				},
 				values:   [][]interface{}{{3, 3, 2, 2}},
 				rowCount: 1,
 			},
@@ -2221,7 +2293,8 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 				},
 			},
 			expected: &preparedDMLs{
-				sqls:     []string{"UPDATE `common_1`.`pk` SET `a1`=?,`a3`=? WHERE `a1`=? AND `a3`=? LIMIT 1;"},
+				sqls: []string{"UPDATE `common_1`.`pk` SET `a1`=?,`a3`=? " +
+					"WHERE `a1`=? AND `a3`=? LIMIT 1;"},
 				values:   [][]interface{}{{3, 3, 2, 2}},
 				rowCount: 1,
 			},
