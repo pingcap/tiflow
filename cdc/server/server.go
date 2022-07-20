@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package server
 
 import (
 	"context"
@@ -26,6 +26,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
@@ -60,10 +61,21 @@ const (
 	httpConnectionTimeout = 10 * time.Minute
 )
 
-// Server is the capture server
-// TODO: we need to make Server more unit testable and add more test cases.
-// Especially we need to decouple the HTTPServer out of Server.
-type Server struct {
+// Server is the interface for the TiCDC server
+type Server interface {
+	// Run runs the server.
+	Run(ctx context.Context) error
+	// Close closes the server.
+	Close()
+	// Drain removes tables in the current TiCDC instance.
+	// It's part of graceful shutdown, should be called before Close.
+	Drain(ctx context.Context) <-chan struct{}
+}
+
+// server implement the TiCDC Server interface
+// TODO: we need to make server more unit testable and add more test cases.
+// Especially we need to decouple the HTTPServer out of server.
+type server struct {
 	capture      capture.Capture
 	tcpServer    tcpserver.TCPServer
 	grpcService  *p2p.ServerWrapper
@@ -72,8 +84,8 @@ type Server struct {
 	pdEndpoints  []string
 }
 
-// NewServer creates a Server instance.
-func NewServer(pdEndpoints []string) (*Server, error) {
+// New creates a server instance.
+func New(pdEndpoints []string) (*server, error) {
 	conf := config.GetGlobalServerConfig()
 	log.Info("creating CDC server",
 		zap.Strings("pd", pdEndpoints),
@@ -99,7 +111,7 @@ func NewServer(pdEndpoints []string) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
-	s := &Server{
+	s := &server{
 		pdEndpoints: pdEndpoints,
 		grpcService: p2p.NewServerWrapper(),
 		tcpServer:   tcpServer,
@@ -109,7 +121,7 @@ func NewServer(pdEndpoints []string) (*Server, error) {
 }
 
 // Run runs the server.
-func (s *Server) Run(ctx context.Context) error {
+func (s *server) Run(ctx context.Context) error {
 	conf := config.GetGlobalServerConfig()
 
 	grpcTLSOption, err := conf.Security.ToGRPCDialOption()
@@ -125,10 +137,17 @@ func (s *Server) Run(ctx context.Context) error {
 	logConfig := logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 
+	// we does not pass a `context` to the etcd client,
+	// to prevent it's cancelled when the server is closing.
+	// For example, when the non-owner node goes offline,
+	// it would resign the campaign key which was put by call `campaign`,
+	// if this is not done due to the passed context cancelled,
+	// the key will be kept for the lease TTL, which is 10 seconds,
+	// then cause the new owner cannot be elected immediately after the old owner offline.
+	// see https://github.com/etcd-io/etcd/blob/525d53bd41/client/v3/concurrency/election.go#L98
 	etcdCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   s.pdEndpoints,
 		TLS:         tlsConfig,
-		Context:     ctx,
 		LogConfig:   &logConfig,
 		DialTimeout: 5 * time.Second,
 		DialOptions: []grpc.DialOption{
@@ -174,7 +193,7 @@ func (s *Server) Run(ctx context.Context) error {
 // startStatusHTTP starts the HTTP server.
 // `lis` is a listener that gives us plain-text HTTP requests.
 // TODO: can we decouple the HTTP server from the capture server?
-func (s *Server) startStatusHTTP(lis net.Listener) error {
+func (s *server) startStatusHTTP(lis net.Listener) error {
 	// LimitListener returns a Listener that accepts at most n simultaneous
 	// connections from the provided Listener. Connections that exceed the
 	// limit will wait in a queue and no new goroutines will be created until
@@ -190,7 +209,7 @@ func (s *Server) startStatusHTTP(lis net.Listener) error {
 	router.Use(gin.Recovery())
 	// router.
 	// Register APIs.
-	RegisterRoutes(router, s.capture, registry)
+	cdc.RegisterRoutes(router, s.capture, registry)
 
 	// No need to configure TLS because it is already handled by `s.tcpServer`.
 	// Add ReadTimeout and WriteTimeout to avoid some abnormal connections never close.
@@ -210,7 +229,7 @@ func (s *Server) startStatusHTTP(lis net.Listener) error {
 	return nil
 }
 
-func (s *Server) etcdHealthChecker(ctx context.Context) error {
+func (s *server) etcdHealthChecker(ctx context.Context) error {
 	ticker := time.NewTicker(time.Second * 3)
 	defer ticker.Stop()
 	conf := config.GetGlobalServerConfig()
@@ -247,7 +266,7 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 	}
 }
 
-func (s *Server) run(ctx context.Context) (err error) {
+func (s *server) run(ctx context.Context) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -293,12 +312,12 @@ func (s *Server) run(ctx context.Context) (err error) {
 
 // Drain removes tables in the current TiCDC instance.
 // It's part of graceful shutdown, should be called before Close.
-func (s *Server) Drain(ctx context.Context) <-chan struct{} {
+func (s *server) Drain(ctx context.Context) <-chan struct{} {
 	return s.capture.Drain(ctx)
 }
 
 // Close closes the server.
-func (s *Server) Close() {
+func (s *server) Close() {
 	if s.capture != nil {
 		s.capture.AsyncClose()
 	}
@@ -318,7 +337,7 @@ func (s *Server) Close() {
 	}
 }
 
-func (s *Server) initDir(ctx context.Context) error {
+func (s *server) initDir(ctx context.Context) error {
 	if err := s.setUpDir(ctx); err != nil {
 		return errors.Trace(err)
 	}
@@ -340,7 +359,7 @@ func (s *Server) initDir(ctx context.Context) error {
 	return nil
 }
 
-func (s *Server) setUpDir(ctx context.Context) error {
+func (s *server) setUpDir(ctx context.Context) error {
 	conf := config.GetGlobalServerConfig()
 	if conf.DataDir != "" {
 		conf.Sorter.SortDir = filepath.Join(conf.DataDir, config.DefaultSortDir)
