@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -127,7 +128,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	log.Info("Create changefeed successfully!",
 		zap.String("id", info.ID),
 		zap.String("changefeed", infoStr))
-	c.JSON(http.StatusCreated, toAPIModel(info))
+	c.JSON(http.StatusCreated, toAPIModel(info, true))
 }
 
 // verifyTable verify table, return ineligibleTables and EligibleTables.
@@ -270,7 +271,7 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		_ = c.Error(errors.Trace(err))
 		return
 	}
-	c.JSON(http.StatusOK, toAPIModel(newCfInfo))
+	c.JSON(http.StatusOK, toAPIModel(newCfInfo, true))
 }
 
 // getChangeFeedMetaInfo returns the metaInfo of a changefeed
@@ -288,7 +289,7 @@ func (h *OpenAPIV2) getChangeFeedMetaInfo(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	c.JSON(http.StatusOK, toAPIModel(info))
+	c.JSON(http.StatusOK, toAPIModel(info, false))
 }
 
 // resumeChangefeed handles update changefeed request.
@@ -375,7 +376,7 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
-func toAPIModel(info *model.ChangeFeedInfo) *ChangeFeedInfo {
+func toAPIModel(info *model.ChangeFeedInfo, maskSinkURI bool) *ChangeFeedInfo {
 	var runningError *RunningError
 	if info.Error != nil {
 		runningError = &RunningError{
@@ -384,11 +385,21 @@ func toAPIModel(info *model.ChangeFeedInfo) *ChangeFeedInfo {
 			Message: info.Error.Message,
 		}
 	}
+
+	sinkURI := info.SinkURI
+	var err error
+	if maskSinkURI {
+		sinkURI, err = util.MaskSinkURI(sinkURI)
+		if err != nil {
+			log.Error("failed to mask sink URI", zap.Error(err))
+		}
+	}
+
 	apiInfoModel := &ChangeFeedInfo{
 		UpstreamID:        info.UpstreamID,
 		Namespace:         info.Namespace,
 		ID:                info.ID,
-		SinkURI:           info.SinkURI,
+		SinkURI:           sinkURI,
 		CreateTime:        info.CreateTime,
 		StartTs:           info.StartTs,
 		TargetTs:          info.TargetTs,
