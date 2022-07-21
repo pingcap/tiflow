@@ -104,6 +104,14 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 		if binlog.CompareLocation(*exitPoint, beginLocation, s.cfg.EnableGTID) == 0 {
 			s.tctx.L().Info("exitPoint equal to beginLocation, so disable the safe mode")
 			s.checkpoint.SaveSafeModeExitPoint(nil)
+			// must flush here to avoid the following situation:
+			// 1. quit safe mode
+			// 2. push forward and replicate some sqls after safeModeExitPoint to downstream
+			// 3. quit because of network error, fail to flush global checkpoint and new safeModeExitPoint to downstream
+			// 4. restart again, quit safe mode at safeModeExitPoint, but some sqls after this location have already been replicated to the downstream
+			if err = s.checkpoint.FlushSafeModeExitPoint(s.runCtx); err != nil {
+				return
+			}
 			return
 		}
 
