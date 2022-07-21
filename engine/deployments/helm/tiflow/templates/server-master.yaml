@@ -1,0 +1,96 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "tiflow.name" . }}-server-master
+  labels:
+    app: {{ include "tiflow.name" . }}-server-master
+spec:
+  ports:
+    - name: port-master
+      port: 10240
+      targetPort: 10240
+    - name: port-mpeer
+      port: 10239
+      targetPort: 10239
+  selector:
+    app: {{ include "tiflow.name" . }}-server-master
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "tiflow.name" . }}-server-master
+  labels:
+    app: {{ include "tiflow.name" . }}-server-master
+spec:
+  selector:
+    matchLabels:
+      app: {{ include "tiflow.name" . }}-server-master
+  serviceName: {{ include "tiflow.name" . }}-server-master
+  replicas: {{ .Values.master.replicas }}
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      labels:
+        app: {{ include "tiflow.name" . }}-server-master
+    spec:
+      initContainers:
+        - name: init-mysql
+          image: busybox
+          command: ['sh', '-c', 'until nslookup {{ include "tiflow.name" . }}-metastore-mysql; do echo waiting for mysql; sleep 2; done;']
+      containers:
+        - name: {{ include "tiflow.name" . }}-server-master
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy }}
+          volumeMounts:
+            - mountPath: /data
+              name: {{ include "tiflow.name" . }}-server-master-data
+            - mountPath: /log
+              name: {{ include "tiflow.name" . }}-server-master-log
+          env:
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MY_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: MY_SERVICE_NAME
+              value: {{ include "tiflow.name" . }}-server-master
+          ports:
+            - containerPort: 10240
+              name: port-master
+            - containerPort: 10239
+              name: port-mpeer
+          command:
+            - "/tiflow"
+            - "master"
+            - "--name=$(MY_POD_NAME)"
+            - "--master-addr=0.0.0.0:10240"
+            - "--advertise-addr=$(MY_POD_NAME).$(MY_SERVICE_NAME).$(MY_POD_NAMESPACE):10240"
+            - "--peer-urls=0.0.0.0:10239"
+            - "--advertise-peer-urls=http://$(MY_POD_NAME).$(MY_SERVICE_NAME).$(MY_POD_NAMESPACE):10239"
+            - "--initial-cluster={{ include "tiflow.initialCluster" . }}"
+            - "--frame-meta-endpoints"
+            - "{{ include "tiflow.name" . }}-metastore-mysql:3306"
+            - "--business-meta-endpoints"
+            - "{{ include "tiflow.name" . }}-metastore-etcd:12479"
+            - "--config=/conf/server-master.toml"
+            - "--log-file=/log/$(MY_POD_NAME).log"
+  volumeClaimTemplates:
+    - metadata:
+        name: {{ include "tiflow.name" . }}-server-master-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 2Gi
+    - metadata:
+        name: {{ include "tiflow.name" . }}-server-master-log
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
