@@ -2,7 +2,7 @@
 
 ## Background
 
-TiDB already has [`sync-diff-inspector`](https://docs.pingcap.com/tidb/stable/sync-diff-inspector-overview) to do data validation for full data migration, but for incremental data migration there's no such option. We can do full data validation using `sync-diff-inspector` during database downtime for maintance to validate all incremental data migrated since last full data validation, but its time window is too short for `sync-diff-inspector` to completed and it might be too late to find any incorrect-migrated rows. We need an option to do incremental data validation which can validate incremental data in a more real-time way so we can find incorrect-migrated rows eailer and has less pressure on upstream and downstream database so business queries can run normally.
+TiDB already has [`sync-diff-inspector`](https://docs.pingcap.com/tidb/stable/sync-diff-inspector-overview) to do data validation for full data migration, but for incremental data migration there's no such option. We can do full data validation using `sync-diff-inspector` during database downtime for maintenance to validate all incremental data migrated since last full data validation, but its time window is too short for `sync-diff-inspector` to completed and it might be too late to find any incorrect-migrated rows. We need an alternative to do incremental data validation which can validate incremental data in a more real-time way so that we can find incorrect-migrated rows earlier and has less pressure on upstream and downstream database where during validation business queries can run normally.
 
 ## Limition
 
