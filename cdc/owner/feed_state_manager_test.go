@@ -29,7 +29,7 @@ import (
 
 func TestHandleJob(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	manager := newFeedStateManager4Test(2.0)
+	manager := newFeedStateManager4Test(200, 1600, 2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
@@ -106,7 +106,7 @@ func TestHandleJob(t *testing.T) {
 
 func TestResumeChangefeedWithCheckpointTs(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	manager := newFeedStateManager4Test(2.0)
+	manager := newFeedStateManager4Test(200, 1600, 2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
@@ -184,7 +184,7 @@ func TestResumeChangefeedWithCheckpointTs(t *testing.T) {
 
 func TestMarkFinished(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	manager := newFeedStateManager4Test(2.0)
+	manager := newFeedStateManager4Test(200, 1600, 2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
@@ -213,7 +213,7 @@ func TestMarkFinished(t *testing.T) {
 
 func TestCleanUpInfos(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	manager := newFeedStateManager4Test(2.0)
+	manager := newFeedStateManager4Test(200, 1600, 2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
@@ -247,7 +247,7 @@ func TestCleanUpInfos(t *testing.T) {
 
 func TestHandleError(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	manager := newFeedStateManager4Test(2.0)
+	manager := newFeedStateManager4Test(200, 1600, 2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
@@ -368,7 +368,7 @@ func TestChangefeedStatusNotExist(t *testing.T) {
 }
 `
 	ctx := cdcContext.NewBackendContext4Test(true)
-	manager := newFeedStateManager4Test(2.0)
+	manager := newFeedStateManager4Test(200, 1600, 2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, map[string]string{
@@ -402,7 +402,7 @@ func TestChangefeedStatusNotExist(t *testing.T) {
 
 func TestChangefeedNotRetry(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	manager := newFeedStateManager4Test(2.0)
+	manager := newFeedStateManager4Test(200, 1600, 2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
@@ -488,7 +488,7 @@ func TestChangefeedNotRetry(t *testing.T) {
 
 func TestContinuousBackoff(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	manager := newFeedStateManager4Test(1.0)
+	manager := newFeedStateManager4Test(50, 50, 1.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
@@ -505,7 +505,7 @@ func TestContinuousBackoff(t *testing.T) {
 	manager.Tick(state)
 	tester.MustApplyPatches()
 
-	for i := 0; i < 30; i++ {
+	for i := 0; i < 100; i++ {
 		require.True(t, manager.ShouldRunning())
 		state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID,
 			func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
@@ -522,7 +522,7 @@ func TestContinuousBackoff(t *testing.T) {
 		require.Equal(t, state.Info.State, model.StateError)
 		require.Equal(t, state.Info.AdminJobType, model.AdminStop)
 		require.Equal(t, state.Status.AdminJobType, model.AdminStop)
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 		manager.Tick(state)
 		tester.MustApplyPatches()
 	}
