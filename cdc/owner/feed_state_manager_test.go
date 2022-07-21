@@ -506,6 +506,7 @@ func TestContinuousBackoff(t *testing.T) {
 	tester.MustApplyPatches()
 
 	for i := 0; i < 100; i++ {
+		require.Equal(t, state.Info.State, model.StateNormal)
 		require.True(t, manager.ShouldRunning())
 		state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID,
 			func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
@@ -522,6 +523,8 @@ func TestContinuousBackoff(t *testing.T) {
 		require.Equal(t, state.Info.State, model.StateError)
 		require.Equal(t, state.Info.AdminJobType, model.AdminStop)
 		require.Equal(t, state.Status.AdminJobType, model.AdminStop)
+		// 50ms is the backoff interval, so sleep 50ms and after a manager tick,
+		// the changefeed will turn in to normal state
 		time.Sleep(50 * time.Millisecond)
 		manager.Tick(state)
 		tester.MustApplyPatches()
