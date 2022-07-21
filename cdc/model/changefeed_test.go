@@ -634,28 +634,28 @@ func TestChangefeedInfoStringer(t *testing.T) {
 				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2",
 				StartTs: 418881574869139457,
 			},
-			`.*kafka://\*\*\*/ticdc-test2.*`,
+			`.*kafka://.*ticdc-test2.*`,
 		},
 		{
 			&ChangeFeedInfo{
 				SinkURI: "mysql://root:124567@127.0.0.1:3306/",
 				StartTs: 418881574869139457,
 			},
-			`.*mysql://username:password@\*\*\*/.*`,
+			`.*mysql://root:xxxx@127.0.0.1:3306.*`,
 		},
 		{
 			&ChangeFeedInfo{
 				SinkURI: "mysql://root@127.0.0.1:3306/",
 				StartTs: 418881574869139457,
 			},
-			`.*mysql://username:password@\*\*\*/.*`,
+			`.*mysql://root:xxxx@127.0.0.1:3306.*`,
 		},
 		{
 			&ChangeFeedInfo{
 				SinkURI: "mysql://root:test%21%23%24%25%5E%26%2A@127.0.0.1:3306/",
 				StartTs: 418881574869139457,
 			},
-			`.*mysql://username:password@\*\*\*/.*`,
+			`.*mysql://root:xxxx@127.0.0.1:3306/.*`,
 		},
 	}
 

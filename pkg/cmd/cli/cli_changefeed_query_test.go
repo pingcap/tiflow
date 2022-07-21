@@ -75,7 +75,7 @@ func TestChangefeedQueryCli(t *testing.T) {
 	require.Nil(t, cmd.Execute())
 	out, err := ioutil.ReadAll(b)
 	require.Nil(t, err)
-	// make suer config is printed
+	// make sure config is printed
 	require.Contains(t, string(out), "config")
 
 	// query failed

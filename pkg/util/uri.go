@@ -18,7 +18,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/ngaut/log"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 )
 
