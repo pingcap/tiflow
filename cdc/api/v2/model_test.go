@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	parserModel "github.com/pingcap/tidb/parser/model"
 	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -73,6 +74,15 @@ func TestToAPIReplicaConfig(t *testing.T) {
 		DDLAllowlist: []parserModel.ActionType{
 			parserModel.ActionType(2),
 		},
+		EventFilters: []*config.EventFilterRule{{
+			Matcher:                  []string{"test.t1", "test.t2"},
+			IgnoreEvent:              []bf.EventType{bf.AllDML, bf.AllDDL, bf.AlterTable},
+			IgnoreSQL:                []string{"^DROP TABLE", "ADD COLUMN"},
+			IgnoreInsertValueExpr:    "c >= 0",
+			IgnoreUpdateNewValueExpr: "age <= 55",
+			IgnoreUpdateOldValueExpr: "age >= 84",
+			IgnoreDeleteValueExpr:    "age > 20",
+		}},
 	}
 	cfg2 := ToAPIReplicaConfig(cfg).ToInternalReplicaConfig()
 	require.Equal(t, "", cfg2.Sink.DispatchRules[0].DispatcherRule)
@@ -119,4 +129,36 @@ func TestToCredential(t *testing.T) {
 	require.Equal(t, pdCfg.KeyPath, credential.KeyPath)
 	require.Equal(t, len(credential.CertAllowedCN), 1)
 	require.Equal(t, credential.CertAllowedCN[0], pdCfg.CertAllowedCN[0])
+}
+
+func TestEventFilterRuleConvert(t *testing.T) {
+	cases := []struct {
+		inRule  *config.EventFilterRule
+		apiRule EventFilterRule
+	}{
+		{
+			inRule: &config.EventFilterRule{
+				Matcher:                  []string{"test.t1", "test.t2"},
+				IgnoreEvent:              []bf.EventType{bf.AllDML, bf.AllDDL, bf.AlterTable},
+				IgnoreSQL:                []string{"^DROP TABLE", "ADD COLUMN"},
+				IgnoreInsertValueExpr:    "c >= 0",
+				IgnoreUpdateNewValueExpr: "age <= 55",
+				IgnoreUpdateOldValueExpr: "age >= 84",
+				IgnoreDeleteValueExpr:    "age > 20",
+			},
+			apiRule: EventFilterRule{
+				Matcher:                  []string{"test.t1", "test.t2"},
+				IgnoreEvent:              []string{"all dml", "all ddl", "alter table"},
+				IgnoreSQL:                []string{"^DROP TABLE", "ADD COLUMN"},
+				IgnoreInsertValueExpr:    "c >= 0",
+				IgnoreUpdateNewValueExpr: "age <= 55",
+				IgnoreUpdateOldValueExpr: "age >= 84",
+				IgnoreDeleteValueExpr:    "age > 20",
+			},
+		},
+	}
+	for _, c := range cases {
+		require.Equal(t, c.apiRule, ToAPIEventFilterRule(c.inRule))
+		require.Equal(t, c.inRule, c.apiRule.ToInternalEventFilterRule())
+	}
 }

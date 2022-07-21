@@ -94,7 +94,7 @@ func (e *eventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) {
 	}
 	// Do not forget to add the resolvedTs to progressTracker.
 	e.progressTracker.addResolvedTs(e.genEventID(), resolvedTs)
-	e.backendSink.WriteEvents(resolvedCallbackableEvents...)
+	_ = e.backendSink.WriteEvents(resolvedCallbackableEvents...)
 }
 
 func (e *eventTableSink[E]) GetCheckpointTs() model.ResolvedTs {
