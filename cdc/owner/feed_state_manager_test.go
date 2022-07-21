@@ -526,12 +526,12 @@ func TestBackoffStopsUnexpectedly(t *testing.T) {
 		if i >= 20 {
 			require.True(t, manager.ShouldRunning())
 			require.Equal(t, state.Info.State, model.StateNormal)
-			continue
+		} else {
+			require.False(t, manager.ShouldRunning())
+			require.Equal(t, state.Info.State, model.StateError)
+			require.Equal(t, state.Info.AdminJobType, model.AdminStop)
+			require.Equal(t, state.Status.AdminJobType, model.AdminStop)
 		}
-		require.False(t, manager.ShouldRunning())
-		require.Equal(t, state.Info.State, model.StateError)
-		require.Equal(t, state.Info.AdminJobType, model.AdminStop)
-		require.Equal(t, state.Status.AdminJobType, model.AdminStop)
 		// 100ms is the backoff interval, so sleep 100ms and after a manager tick,
 		// the changefeed will turn into normal state
 		time.Sleep(100 * time.Millisecond)
