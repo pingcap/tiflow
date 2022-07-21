@@ -825,7 +825,7 @@ func (t *testMaster) TestCheckTask(c *check.C) {
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
 	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "", t.workerClients)
-	mock := conn.InitVersionDB(c)
+	mock := conn.InitVersionDB()
 	defer func() {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()
@@ -848,7 +848,7 @@ func (t *testMaster) TestCheckTask(c *check.C) {
 	// simulate invalid password returned from scheduler, but config was supported plaintext mysql password, so cfg.SubTaskConfigs will success
 	ctx, cancel = context.WithCancel(context.Background())
 	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "invalid-encrypt-password", t.workerClients)
-	mock = conn.InitVersionDB(c)
+	mock = conn.InitVersionDB()
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("version", "5.7.25-TiDB-v4.0.2"))
 	resp, err = server.CheckTask(context.Background(), &pb.CheckTaskRequest{
@@ -885,7 +885,7 @@ func (t *testMaster) TestStartTask(c *check.C) {
 	}
 	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "",
 		makeWorkerClientsForHandle(ctrl, taskName, sources, workers, req))
-	mock := conn.InitVersionDB(c)
+	mock := conn.InitVersionDB()
 	defer func() {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()
@@ -905,7 +905,7 @@ func (t *testMaster) TestStartTask(c *check.C) {
 
 	// check start-task with an invalid source
 	invalidSource := "invalid-source"
-	mock = conn.InitVersionDB(c)
+	mock = conn.InitVersionDB()
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("version", "5.7.25-TiDB-v4.0.2"))
 	resp, err = server.StartTask(context.Background(), &pb.StartTaskRequest{
@@ -926,7 +926,7 @@ func (t *testMaster) TestStartTask(c *check.C) {
 	defer func() {
 		checker.CheckSyncConfigFunc = bakCheckSyncConfigFunc
 	}()
-	mock = conn.InitVersionDB(c)
+	mock = conn.InitVersionDB()
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("version", "5.7.25-TiDB-v4.0.2"))
 	resp, err = server.StartTask(context.Background(), &pb.StartTaskRequest{
@@ -985,7 +985,7 @@ func (t *testMaster) TestStartTaskWithRemoveMeta(c *check.C) {
 	c.Assert(server.pessimist.Start(ctx, t.etcdTestCli), check.IsNil)
 	c.Assert(server.optimist.Start(ctx, t.etcdTestCli), check.IsNil)
 
-	verMock := conn.InitVersionDB(c)
+	verMock := conn.InitVersionDB()
 	defer func() {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()
@@ -1011,7 +1011,7 @@ func (t *testMaster) TestStartTaskWithRemoveMeta(c *check.C) {
 		defer wg.Done()
 		time.Sleep(10 * time.Microsecond)
 		// start another same task at the same time, should get err
-		verMock2 := conn.InitVersionDB(c)
+		verMock2 := conn.InitVersionDB()
 		verMock2.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 			AddRow("version", "5.7.25-TiDB-v4.0.2"))
 		resp1, err1 := server.StartTask(context.Background(), req)
@@ -1085,7 +1085,7 @@ func (t *testMaster) TestStartTaskWithRemoveMeta(c *check.C) {
 	err = server.optimist.Start(ctx, t.etcdTestCli)
 	c.Assert(err, check.IsNil)
 
-	verMock = conn.InitVersionDB(c)
+	verMock = conn.InitVersionDB()
 	verMock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("version", "5.7.25-TiDB-v4.0.2"))
 	mock = conn.InitMockDB(c)
@@ -1108,7 +1108,7 @@ func (t *testMaster) TestStartTaskWithRemoveMeta(c *check.C) {
 		defer wg.Done()
 		time.Sleep(10 * time.Microsecond)
 		// start another same task at the same time, should get err
-		vermock2 := conn.InitVersionDB(c)
+		vermock2 := conn.InitVersionDB()
 		vermock2.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 			AddRow("version", "5.7.25-TiDB-v4.0.2"))
 		resp1, err1 := server.StartTask(context.Background(), req)
@@ -1194,7 +1194,7 @@ func (t *testMaster) TestOperateTask(c *check.C) {
 	sourceResps := []*pb.CommonWorkerResponse{{Result: true, Source: sources[0]}, {Result: true, Source: sources[1]}}
 	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "",
 		makeWorkerClientsForHandle(ctrl, taskName, sources, workers, startReq, pauseReq, resumeReq, stopReq1, stopReq2))
-	mock := conn.InitVersionDB(c)
+	mock := conn.InitVersionDB()
 	defer func() {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()
@@ -2084,7 +2084,7 @@ func (t *testMaster) TestGetCfg(c *check.C) {
 	server.etcdClient = t.etcdTestCli
 
 	// start task
-	mock := conn.InitVersionDB(c)
+	mock := conn.InitVersionDB()
 	defer func() {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()
@@ -2261,7 +2261,7 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 	sourceResps := []*pb.CommonWorkerResponse{{Result: true, Source: sources[0]}, {Result: true, Source: sources[1]}}
 	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "",
 		makeWorkerClientsForHandle(ctrl, taskName, sources, workers, startReq))
-	mock := conn.InitVersionDB(c)
+	mock := conn.InitVersionDB()
 	defer func() {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()
@@ -2590,7 +2590,7 @@ func (t *testMaster) TestGetValidatorStatus(c *check.C) {
 	// start task without validation
 	sourceResps := []*pb.CommonWorkerResponse{{Result: true, Source: sources[0]}, {Result: true, Source: sources[1]}}
 	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "", t.workerClients)
-	mock := conn.InitVersionDB(c)
+	mock := conn.InitVersionDB()
 	defer func() {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()
@@ -2687,7 +2687,7 @@ func (t *testMaster) TestGetValidationError(c *check.C) {
 	// start task without validation
 	sourceResps := []*pb.CommonWorkerResponse{{Result: true, Source: sources[0]}, {Result: true, Source: sources[1]}}
 	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "", t.workerClients)
-	mock := conn.InitVersionDB(c)
+	mock := conn.InitVersionDB()
 	defer func() {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()
@@ -2780,7 +2780,7 @@ func (t *testMaster) TestOperateValidationError(c *check.C) {
 	// start task without validation
 	sourceResps := []*pb.CommonWorkerResponse{{Result: true, Source: sources[0]}, {Result: true, Source: sources[1]}}
 	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "", t.workerClients)
-	mock := conn.InitVersionDB(c)
+	mock := conn.InitVersionDB()
 	defer func() {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	}()

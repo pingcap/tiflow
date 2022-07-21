@@ -1376,7 +1376,7 @@ func parseSourceConfig(contents []string) ([]*config.SourceConfig, error) {
 	return cfgs, nil
 }
 
-func adjustTargetDB(ctx context.Context, dbConfig *config.DBConfig) error {
+func AdjustTargetDB(ctx context.Context, dbConfig *config.DBConfig) error {
 	cfg := *dbConfig
 	if len(cfg.Password) > 0 {
 		cfg.Password = utils.DecryptOrPlaintext(cfg.Password)
@@ -1615,7 +1615,7 @@ func (s *Server) generateSubTask(
 		}
 	}
 
-	err = adjustTargetDB(ctx, cfg.TargetDB)
+	err = AdjustTargetDB(ctx, cfg.TargetDB)
 	if err != nil {
 		return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
 	}
@@ -2355,7 +2355,7 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 			return resp2, nil
 		}
 		toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
-		if adjustDBErr := adjustTargetDB(ctx, toDBCfg); adjustDBErr != nil {
+		if adjustDBErr := AdjustTargetDB(ctx, toDBCfg); adjustDBErr != nil {
 			if adjustDBErr != nil {
 				resp2.Msg = adjustDBErr.Error()
 				// nolint:nilerr

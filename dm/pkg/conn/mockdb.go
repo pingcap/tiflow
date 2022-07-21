@@ -77,9 +77,9 @@ func MockDefaultDBProvider() (sqlmock.Sqlmock, error) {
 }
 
 // InitVersionDB return a mocked db for unit test's show version.
-func InitVersionDB(c *check.C) sqlmock.Sqlmock {
-	db, mock, err := sqlmock.New()
-	c.Assert(err, check.IsNil)
+func InitVersionDB() sqlmock.Sqlmock {
+	// nolint:errcheck
+	db, mock, _ := sqlmock.New()
 	if mdbp, ok := DefaultDBProvider.(*mockDBProvider); ok {
 		mdbp.verDB = db
 	} else {
