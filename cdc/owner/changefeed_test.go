@@ -99,7 +99,15 @@ func (m *mockAsyncSink) Close(ctx context.Context) error {
 	return nil
 }
 
+<<<<<<< HEAD
 func (m *mockAsyncSink) Barrier(ctx context.Context) error {
+=======
+func (m *mockDDLSink) isInitialized() bool {
+	return true
+}
+
+func (m *mockDDLSink) Barrier(ctx context.Context) error {
+>>>>>>> 3695071af (ddl_sink (ticdc): fix ddl sink nil point panic (#6390))
 	return nil
 }
 
