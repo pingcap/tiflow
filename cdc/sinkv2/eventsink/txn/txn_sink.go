@@ -25,7 +25,7 @@ var _ eventsink.EventSink[*model.SingleTableTxn] = (*Sink)(nil)
 type Sink struct{}
 
 // WriteEvents writes events to the sink.
-func (s *Sink) WriteEvents(rows ...*eventsink.TxnCallbackableEvent) {
+func (s *Sink) WriteEvents(rows ...*eventsink.TxnCallbackableEvent) error {
 	// TODO implement me
 	panic("implement me")
 }

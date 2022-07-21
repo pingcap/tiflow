@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package server
 
 import (
 	"github.com/pingcap/tiflow/cdc/entry"
@@ -44,6 +44,7 @@ func init() {
 	registry.MustRegister(prometheus.NewGoCollector(
 		collectors.WithGoCollections(collectors.GoRuntimeMemStatsCollection | collectors.GoRuntimeMetricsCollection)))
 
+	initServerMetrics(registry)
 	kv.InitMetrics(registry)
 	puller.InitMetrics(registry)
 	sink.InitMetrics(registry)
@@ -51,7 +52,6 @@ func init() {
 	processor.InitMetrics(registry)
 	owner.InitMetrics(registry)
 	etcd.InitMetrics(registry)
-	initServerMetrics(registry)
 	actor.InitMetrics(registry)
 	orchestrator.InitMetrics(registry)
 	p2p.InitMetrics(registry)
