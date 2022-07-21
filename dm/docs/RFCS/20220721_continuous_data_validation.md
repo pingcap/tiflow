@@ -55,7 +55,7 @@ Validator `worker` will cache `pending row changes` in memory, to avoid potentia
 
 ## Concepts
 
-- `row change`: validator decode upstream binlog into `row change` which contains:
+- `row change`: validator decodes upstream binlog into `row change` which contains:
     - change type(`insert`/`update`/`delete`)
     - table name
     - data before change(missing for `insert` change)
