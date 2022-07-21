@@ -168,6 +168,8 @@ func genServerMasterUUID(etcdName string) string {
 
 // NewServer creates a new master-server.
 func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
+	log.Info("creating server master", zap.Stringer("config", cfg))
+
 	executorManager := NewExecutorManagerImpl(cfg.KeepAliveTTL, cfg.KeepAliveInterval, ctx)
 
 	urls, err := parseURLs(cfg.MasterAddr)

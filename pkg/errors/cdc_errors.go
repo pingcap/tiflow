@@ -1081,7 +1081,7 @@ var (
 		errors.RFCCodeText("CDC:ErrInvalidFilterExpression"),
 	)
 	ErrExpressionColumnNotFound = errors.Normalize(
-		"invalid filter expressions. Can not found column '%s' from table '%s' in: %s",
+		"invalid filter expression(s). Cannot find column '%s' from table '%s' in: %s",
 		errors.RFCCodeText("CDC:ErrExpressionColumnNotFound"),
 	)
 	ErrInvalidIgnoreEventType = errors.Normalize(
