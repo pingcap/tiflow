@@ -29,7 +29,7 @@ Validator can be enabled together with the task or enabled on the fly, the task 
 1. Validator in `running` state will pull binlog from upstream and get `row change`s.
     - validator will only validate `row change` which has already been migrated by syncer.
 2. After routing and filtering using the same rule as in syncer, `row change` is dispatched to validator `worker`. `row change` of same table and primary key will be dispatched to the same `worker`.
-3. `worker` merges `row change` by table and primary key, we will use the last `row change` meet since last change override previous one. Then put it into `pending row changes`.
+3. `worker` merges `row change` by table and primary key, we will use the last `row change` since last change overrides previous one. Then put it into `pending row changes`.
 4. After accumulates enough `row change`s or after some interval, `worker` queries downstream for data using table and primary key info in those `row change`s, then compare with data in `row change`s
     - for `insert`/`update` type of row change, we validate them differently by validation mode
       - in `full` validation mode, we compare them column by column
