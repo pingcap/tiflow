@@ -493,6 +493,11 @@ func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 	// Update to the handle key column.
 	columns = []*model.Column{
 		{
+			Name:  "col0",
+			Flag:  model.BinaryFlag,
+			Value: "col1-value-updated",
+		},
+		{
 			Name:  "col1",
 			Flag:  model.BinaryFlag,
 			Value: "col1-value-updated",
@@ -504,6 +509,8 @@ func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 		},
 	}
 	preColumns = []*model.Column{
+		// It is possible that the pre columns are nil. For example, when you do `add column` DDL.
+		nil,
 		{
 			Name:  "col1",
 			Flag:  model.BinaryFlag,
@@ -527,18 +534,32 @@ func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 	require.Equal(t, 2, len(node.rowBuffer))
 
 	deleteEventIndex := 0
+<<<<<<< HEAD
 	require.Equal(t, 0, len(node.rowBuffer[deleteEventIndex].Columns))
 	require.Equal(t, 2, len(node.rowBuffer[deleteEventIndex].PreColumns))
 	nonHandleKeyColIndex := 0
 	handleKeyColIndex := 1
+=======
+	require.Len(t, sink.received[deleteEventIndex].row.Columns, 0)
+	require.Len(t, sink.received[deleteEventIndex].row.PreColumns, 3)
+	nilColIndex := 0
+	require.Nil(t, sink.received[deleteEventIndex].row.PreColumns[nilColIndex])
+	nonHandleKeyColIndex := 1
+	handleKeyColIndex := 2
+>>>>>>> 5d3e4a2ca (sink(ticdc): precheck before split the update event (#6403))
 	// NOTICE: When old value disabled, we only keep the handle key pre cols.
 	require.Nil(t, node.rowBuffer[deleteEventIndex].PreColumns[nonHandleKeyColIndex])
 	require.Equal(t, "col2", node.rowBuffer[deleteEventIndex].PreColumns[handleKeyColIndex].Name)
 	require.True(t, node.rowBuffer[deleteEventIndex].PreColumns[handleKeyColIndex].Flag.IsHandleKey())
 
 	insertEventIndex := 1
+<<<<<<< HEAD
 	require.Equal(t, 2, len(node.rowBuffer[insertEventIndex].Columns))
 	require.Equal(t, 0, len(node.rowBuffer[insertEventIndex].PreColumns))
+=======
+	require.Len(t, sink.received[insertEventIndex].row.Columns, 3)
+	require.Len(t, sink.received[insertEventIndex].row.PreColumns, 0)
+>>>>>>> 5d3e4a2ca (sink(ticdc): precheck before split the update event (#6403))
 }
 
 type flushFlowController struct {
