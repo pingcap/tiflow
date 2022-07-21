@@ -140,7 +140,6 @@ type ChangefeedDetail struct {
 	CheckpointTime JSONTime            `json:"checkpoint_time"`
 	Engine         SortEngine          `json:"sort_engine,omitempty"`
 	FeedState      FeedState           `json:"state"`
-	Config         interface{}         `json:"config,omitempty"`
 	RunningError   *RunningError       `json:"error"`
 	ErrorHis       []int64             `json:"error_history"`
 	CreatorVersion string              `json:"creator_version"`

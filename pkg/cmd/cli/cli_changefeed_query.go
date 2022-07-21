@@ -17,6 +17,7 @@ import (
 	"context"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/cdc/model"
 	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
 	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 
@@ -25,6 +26,12 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/spf13/cobra"
 )
+
+// cfMeta holds changefeed info and changefeed status.
+type cfMeta struct {
+	Info   *model.ChangeFeedInfo   `json:"info"`
+	Status *model.ChangeFeedStatus `json:"status"`
+}
 
 // queryChangefeedOptions defines flags for the `cli changefeed query` command.
 type queryChangefeedOptions struct {
@@ -86,9 +93,39 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return err
 	}
-	detail.Config = info.Config
-
-	return util.JSONPrint(cmd, detail)
+	var runningError *model.RunningError
+	if info.Error != nil {
+		runningError = &model.RunningError{
+			Addr:    info.Error.Addr,
+			Code:    info.Error.Code,
+			Message: info.Error.Message,
+		}
+	}
+	meta := &cfMeta{
+		Info: &model.ChangeFeedInfo{
+			UpstreamID:        info.UpstreamID,
+			Namespace:         info.Namespace,
+			ID:                info.ID,
+			SinkURI:           info.SinkURI,
+			CreateTime:        info.CreateTime,
+			StartTs:           info.StartTs,
+			TargetTs:          info.TargetTs,
+			AdminJobType:      info.AdminJobType,
+			Engine:            info.Engine,
+			Config:            info.Config.ToInternalReplicaConfig(),
+			State:             info.State,
+			Error:             runningError,
+			SyncPointEnabled:  info.SyncPointEnabled,
+			SyncPointInterval: info.SyncPointInterval,
+			CreatorVersion:    info.CreatorVersion,
+		},
+		Status: &model.ChangeFeedStatus{
+			ResolvedTs:   detail.ResolvedTs,
+			CheckpointTs: detail.CheckpointTSO,
+			AdminJobType: info.AdminJobType,
+		},
+	}
+	return util.JSONPrint(cmd, meta)
 }
 
 // newCmdQueryChangefeed creates the `cli changefeed query` command.
