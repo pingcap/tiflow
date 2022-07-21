@@ -510,6 +510,11 @@ func (s *outputSuite) TestSplitUpdateEventWhenDisableOldValue(c *check.C) {
 	// Update to the handle key column.
 	columns = []*model.Column{
 		{
+			Name:  "col0",
+			Flag:  model.BinaryFlag,
+			Value: "col1-value-updated",
+		},
+		{
 			Name:  "col1",
 			Flag:  model.BinaryFlag,
 			Value: "col1-value-updated",
@@ -521,6 +526,8 @@ func (s *outputSuite) TestSplitUpdateEventWhenDisableOldValue(c *check.C) {
 		},
 	}
 	preColumns = []*model.Column{
+		// It is possible that the pre columns are nil. For example, when you do `add column` DDL.
+		nil,
 		{
 			Name:  "col1",
 			Flag:  model.BinaryFlag,
@@ -546,18 +553,32 @@ func (s *outputSuite) TestSplitUpdateEventWhenDisableOldValue(c *check.C) {
 	c.Assert(node.eventBuffer, check.HasLen, 2)
 
 	deleteEventIndex := 0
+<<<<<<< HEAD
 	c.Assert(node.eventBuffer[deleteEventIndex].Row.Columns, check.HasLen, 0)
 	c.Assert(node.eventBuffer[deleteEventIndex].Row.PreColumns, check.HasLen, 2)
 	nonHandleKeyColIndex := 0
 	handleKeyColIndex := 1
+=======
+	require.Len(t, sink.received[deleteEventIndex].row.Columns, 0)
+	require.Len(t, sink.received[deleteEventIndex].row.PreColumns, 3)
+	nilColIndex := 0
+	require.Nil(t, sink.received[deleteEventIndex].row.PreColumns[nilColIndex])
+	nonHandleKeyColIndex := 1
+	handleKeyColIndex := 2
+>>>>>>> 5d3e4a2ca (sink(ticdc): precheck before split the update event (#6403))
 	// NOTICE: When old value disabled, we only keep the handle key pre cols.
 	c.Assert(node.eventBuffer[deleteEventIndex].Row.PreColumns[nonHandleKeyColIndex], check.IsNil)
 	c.Assert(node.eventBuffer[deleteEventIndex].Row.PreColumns[handleKeyColIndex].Name, check.Equals, "col2")
 	c.Assert(node.eventBuffer[deleteEventIndex].Row.PreColumns[handleKeyColIndex].Flag.IsHandleKey(), check.IsTrue)
 
 	insertEventIndex := 1
+<<<<<<< HEAD
 	c.Assert(node.eventBuffer[insertEventIndex].Row.Columns, check.HasLen, 2)
 	c.Assert(node.eventBuffer[insertEventIndex].Row.PreColumns, check.HasLen, 0)
+=======
+	require.Len(t, sink.received[insertEventIndex].row.Columns, 3)
+	require.Len(t, sink.received[insertEventIndex].row.PreColumns, 0)
+>>>>>>> 5d3e4a2ca (sink(ticdc): precheck before split the update event (#6403))
 }
 
 type flushFlowController struct {
