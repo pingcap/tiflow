@@ -1100,6 +1100,7 @@ type SyncerConfigForDowngrade struct {
 	EnableGTID              bool   `yaml:"enable-gtid"`
 	DisableCausality        bool   `yaml:"disable-detect"`
 	SafeMode                bool   `yaml:"safe-mode"`
+	SafeModeDuration        string `yaml:safe-mode-duration`
 	EnableANSIQuotes        bool   `yaml:"enable-ansi-quotes"`
 
 	Compact      bool `yaml:"compact,omitempty"`
@@ -1120,6 +1121,7 @@ func NewSyncerConfigsForDowngrade(syncerConfigs map[string]*SyncerConfig) map[st
 			EnableGTID:              syncerConfig.EnableGTID,
 			DisableCausality:        syncerConfig.DisableCausality,
 			SafeMode:                syncerConfig.SafeMode,
+			SafeModeDuration:        syncerConfig.SafeModeDuration,
 			EnableANSIQuotes:        syncerConfig.EnableANSIQuotes,
 			Compact:                 syncerConfig.Compact,
 			MultipleRows:            syncerConfig.MultipleRows,
@@ -1209,6 +1211,9 @@ func (c *TaskConfigForDowngrade) omitDefaultVals() {
 	}
 	if len(c.TrashTableRules) == 1 && c.TrashTableRules[0] == DefaultTrashTableRules {
 		c.TrashTableRules = nil
+	}
+	for _, s := range c.Syncers {
+		s.SafeModeDuration = ""
 	}
 	c.OnlineDDL = false
 }
