@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/expression"
+	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/planner/core"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/types"
@@ -77,6 +78,32 @@ func newExprFilterRule(
 // verifyAndInitRule will verify and init the rule.
 // It should only be called in dmlExprFilter's verify method.
 func (r *dmlExprFilterRule) verify(tableInfos []*model.TableInfo) error {
+	// verify expression filter rule syntax.
+	p := parser.New()
+	_, _, err := p.ParseSQL(completeExpression(r.config.IgnoreInsertValueExpr))
+	if err != nil {
+		log.Error("failed to parse expression", zap.Error(err))
+		return cerror.ErrExpressionParseFailed.
+			FastGenByArgs(r.config.IgnoreInsertValueExpr)
+	}
+	_, _, err = p.ParseSQL(completeExpression(r.config.IgnoreUpdateNewValueExpr))
+	if err != nil {
+		log.Error("failed to parse expression", zap.Error(err))
+		return cerror.ErrExpressionParseFailed.
+			FastGenByArgs(r.config.IgnoreUpdateNewValueExpr)
+	}
+	_, _, err = p.ParseSQL(completeExpression(r.config.IgnoreUpdateOldValueExpr))
+	if err != nil {
+		log.Error("failed to parse expression", zap.Error(err))
+		return cerror.ErrExpressionParseFailed.
+			FastGenByArgs(r.config.IgnoreUpdateOldValueExpr)
+	}
+	_, _, err = p.ParseSQL(completeExpression(r.config.IgnoreDeleteValueExpr))
+	if err != nil {
+		log.Error("failed to parse expression", zap.Error(err))
+		return cerror.ErrExpressionParseFailed.
+			FastGenByArgs(r.config.IgnoreDeleteValueExpr)
+	}
 	// verify expression filter rule.
 	for _, ti := range tableInfos {
 		tableName := ti.TableName.String()
@@ -209,7 +236,7 @@ func (r *dmlExprFilterRule) getSimpleExprOfTable(
 				zap.String("expression", expr),
 				zap.Error(err))
 			return nil, cerror.ErrExpressionColumnNotFound.
-				FastGenByArgs(getColumnFromError(err), ti.TableName.Table, expr)
+				FastGenByArgs(getColumnFromError(err), ti.TableName.String(), expr)
 		}
 		log.Error("failed to parse expression", zap.Error(err))
 		return nil, cerror.ErrExpressionParseFailed.FastGenByArgs(err, expr)
@@ -388,6 +415,9 @@ func (f *dmlExprFilter) shouldSkipDML(
 	for _, rule := range rules {
 		ignore, err := rule.shouldSkipDML(row, rawRow, ti)
 		if err != nil {
+			if cerror.IsChangefeedUnRetryableError(err) {
+				return false, err
+			}
 			return false, cerror.WrapError(cerror.ErrFailedToFilterDML, err, row)
 		}
 		if ignore {

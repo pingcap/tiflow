@@ -11,13 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package eventsink
+package mq
 
-// EventSink is the interface for event sink.
-type EventSink[E TableEvent] interface {
-	// WriteEvents writes events to the sink.
-	// This is an asynchronously and thread-safe method.
-	WriteEvents(rows ...*CallbackableEvent[E]) error
-	// Close closes the sink.
-	Close() error
+import (
+	"testing"
+
+	"github.com/pingcap/tiflow/pkg/leakutil"
+)
+
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(m)
 }
