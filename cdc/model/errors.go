@@ -26,7 +26,7 @@ type RunningError struct {
 	Message string `json:"message"`
 }
 
-// IsChangefeedNotRetryError return true if a running error contains a changefeed not retry error.
-func (r RunningError) IsChangefeedNotRetryError() bool {
-	return cerror.IsChangefeedNotRetryError(errors.New(r.Message + r.Code))
+// IsChangefeedUnRetryableError return true if a running error contains a changefeed not retry error.
+func (r RunningError) IsChangefeedUnRetryableError() bool {
+	return cerror.IsChangefeedUnRetryableError(errors.New(r.Message + r.Code))
 }

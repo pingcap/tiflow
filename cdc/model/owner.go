@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/pingcap/errors"
+	timodel "github.com/pingcap/tidb/parser/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -65,6 +66,14 @@ func (t AdminJobType) IsStopState() bool {
 		return true
 	}
 	return false
+}
+
+// DDLJobEntry is the DDL job entry.
+type DDLJobEntry struct {
+	Job    *timodel.Job
+	OpType OpType
+	CRTs   uint64
+	Err    error
 }
 
 // TaskPosition records the process information of a capture

@@ -535,7 +535,7 @@ func TestMultiVersionStorage(t *testing.T) {
 		SchemaID:   1,
 		TableID:    3,
 		Type:       timodel.ActionCreateTable,
-		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 2, TableInfo: tblInfo, FinishedTS: 120},
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 3, TableInfo: tblInfo, FinishedTS: 120},
 		Query:      "create table " + tbName.O,
 	}
 
@@ -554,7 +554,7 @@ func TestMultiVersionStorage(t *testing.T) {
 		SchemaID:   1,
 		TableID:    2,
 		Type:       timodel.ActionDropTable,
-		BinlogInfo: &timodel.HistoryInfo{FinishedTS: 130},
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 4, FinishedTS: 130},
 	}
 
 	err = storage.HandleDDLJob(job)
@@ -566,7 +566,7 @@ func TestMultiVersionStorage(t *testing.T) {
 		State:      timodel.JobStateSynced,
 		SchemaID:   1,
 		Type:       timodel.ActionDropSchema,
-		BinlogInfo: &timodel.HistoryInfo{FinishedTS: 140, DBInfo: dbInfo},
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 5, FinishedTS: 140, DBInfo: dbInfo},
 	}
 
 	err = storage.HandleDDLJob(job)

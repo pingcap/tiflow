@@ -32,8 +32,9 @@ type mockEventSink struct {
 	events []*eventsink.TxnCallbackableEvent
 }
 
-func (m *mockEventSink) WriteEvents(rows ...*eventsink.TxnCallbackableEvent) {
+func (m *mockEventSink) WriteEvents(rows ...*eventsink.TxnCallbackableEvent) error {
 	m.events = append(m.events, rows...)
+	return nil
 }
 
 func (m *mockEventSink) Close() error {
