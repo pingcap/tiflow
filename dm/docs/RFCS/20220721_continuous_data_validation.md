@@ -42,7 +42,7 @@ Validator can be enabled together with the task or enabled on the fly, the task 
 
 `error row change` produced in validation process might not be data which is incorrectly migrated, there are cases where `row change` is marked as falsely. Suppose some row which keeps changing on upstream for a time period > `delay time`. If it's marked as `failed row change` since the first time it changes, validator may mark it as `error row change` falsely. In real world scenarios, it's not common.
 
-To reduce the chance of false positive, validator only starts marking `failed row change` when validator has reached the progress of syncer or after some `initial delay time`
+To reduce the chance of false positive, validator will not start marking `failed row change` until validator has reached the progress of syncer or after some `initial delay time`
 
 
 ### Validation checkpoint
