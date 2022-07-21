@@ -182,6 +182,10 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 		w.uuidGenerator = uuid.NewGenerator()
 	}
 
+	if len(cfg.Dir) == 0 {
+		return nil, cerror.WrapError(cerror.ErrRedoFileOp, errors.New("invalid redo dir path"))
+	}
+
 	err := os.MkdirAll(cfg.Dir, common.DefaultDirMode)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrRedoFileOp,
