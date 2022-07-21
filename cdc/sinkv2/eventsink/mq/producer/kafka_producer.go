@@ -173,7 +173,7 @@ func NewKafkaProducer(
 	ctx context.Context,
 	client sarama.Client,
 	errCh chan error,
-) (*kafkaProducer, error) {
+) (Producer, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	role := contextutil.RoleFromCtx(ctx)
 

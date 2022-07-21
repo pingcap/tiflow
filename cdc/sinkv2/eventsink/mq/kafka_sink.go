@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/producer"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pkafka "github.com/pingcap/tiflow/pkg/kafka"
@@ -35,6 +36,8 @@ func NewKafkaSink(
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
 	errCh chan error,
+	adminClientCreator pkafka.ClusterAdminClientCreator,
+	producerCreator producer.NewProducerFunc,
 ) (*sink, error) {
 	topic, err := getTopic(sinkURI)
 	if err != nil {
@@ -50,7 +53,7 @@ func NewKafkaSink(
 		return nil, errors.Trace(err)
 	}
 
-	adminClient, err := kafka.NewAdminClientImpl(baseConfig.BrokerEndpoints, saramaConfig)
+	adminClient, err := adminClientCreator(baseConfig.BrokerEndpoints, saramaConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
@@ -70,7 +73,15 @@ func NewKafkaSink(
 		return nil, errors.Trace(err)
 	}
 
-	producer := newProducerImpl()
+	client, err := sarama.NewClient(baseConfig.BrokerEndpoints, saramaConfig)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	p, err := producerCreator(ctx, client, errCh)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
 
 	topicManager, err := getTopicManagerAndTryCreateTopic(
 		baseConfig.BrokerEndpoints, topic,
@@ -93,7 +104,7 @@ func NewKafkaSink(
 		return nil, errors.Trace(err)
 	}
 
-	s, err := newSink(ctx, producer, topicManager, eventRouter, encoderConfig, errCh)
+	s, err := newSink(ctx, p, topicManager, eventRouter, encoderConfig, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

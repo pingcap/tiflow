@@ -16,6 +16,7 @@ package producer
 import (
 	"context"
 
+	"github.com/Shopify/sarama"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 )
 
@@ -31,4 +32,5 @@ type Producer interface {
 }
 
 // NewProducerFunc is a function to create a producer.
-type NewProducerFunc func() Producer
+type NewProducerFunc func(ctx context.Context, client sarama.Client,
+	errCh chan error) (Producer, error)

@@ -17,6 +17,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/Shopify/sarama"
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 )
@@ -30,10 +31,10 @@ type MockProducer struct {
 }
 
 // NewMockProducer creates a mock producer.
-func NewMockProducer() Producer {
+func NewMockProducer(_ context.Context, _ sarama.Client, _ chan error) (Producer, error) {
 	return &MockProducer{
 		events: make(map[mqv1.TopicPartitionKey][]*codec.MQMessage),
-	}
+	}, nil
 }
 
 // AsyncSendMessage appends a message to the mock producer.
