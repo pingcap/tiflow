@@ -1,5 +1,4 @@
 import sys
-import os
 import requests as rq
 import time
 import json
@@ -10,11 +9,7 @@ RETRY_TIME = 10
 BASE_URL0 = "http://127.0.0.1:8300/api/v1"
 BASE_URL1 = "http://127.0.0.1:8301/api/v1"
 
-<<<<<<< HEAD
-=======
-V2_BASE_URL0 = "http://127.0.0.1:8300/api/v2"
 
->>>>>>> 511355020 (api (ticdc): fix get changefeeds api does not well after cdc server restart. (#5838))
 # we should write some SQLs in the run.sh after call create_changefeed
 def create_changefeed(sink_uri):
     url = BASE_URL1+"/changefeeds"
@@ -307,17 +302,6 @@ def set_log_level():
 
     print("pass test: set log level")
 
-<<<<<<< HEAD
-=======
-def get_tso():
-    # test state: all
-    url = V2_BASE_URL0+"/tso"
-    resp = rq.get(url)
-    assert resp.status_code == rq.codes.ok
-
-    print("pass test: get tso")
-
->>>>>>> 511355020 (api (ticdc): fix get changefeeds api does not well after cdc server restart. (#5838))
 # arg1: test case name
 # arg2: cetificates dir
 # arg3: sink uri
