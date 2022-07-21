@@ -237,6 +237,7 @@ func testSimpleAllModeTask(
 	require.NoError(t, err)
 	require.Nil(t, resp2.Err)
 	require.Contains(t, resp2.JsonRet, `"flavor":"mysql"`)
+	require.Contains(t, resp2.JsonRet, `"tidb_txn_mode":"optimistic"`)
 
 	noError(mysql.Exec("alter table " + db + ".t1 add column new_col int unique"))
 	noError(mysql.Exec("insert into " + db + ".t1 values(4,4)"))
