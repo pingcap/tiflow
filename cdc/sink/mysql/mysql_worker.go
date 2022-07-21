@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/container/queue"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -83,8 +84,9 @@ func (w *mysqlSinkWorker) isNormal() bool {
 
 func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 	var (
-		toExecRows []*model.RowChangedEvent
-		txnNum     int
+		//toExecRows queue.ChunkQueue[*model.RowChangedEvent]//[]*model.RowChangedEvent
+		txnNum      int
+		rowEvtQueue = queue.NewChunkQueue[*model.RowChangedEvent]()
 	)
 
 	// mark FinishWg before worker exits, all data txns can be omitted.
@@ -112,9 +114,15 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 	}()
 
 	flushRows := func() error {
-		if len(toExecRows) == 0 {
+		if rowEvtQueue.Empty() {
 			return nil
 		}
+
+		toExecRows, ok := rowEvtQueue.DequeueAll()
+		if !ok {
+			return nil
+		}
+
 		err := w.execDMLs(ctx, toExecRows, w.bucket)
 		if err != nil {
 			txnNum = 0
@@ -143,14 +151,14 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 				txn.FinishWg.Done()
 				continue
 			}
-			if len(toExecRows)+len(txn.Rows) > w.maxTxnRow {
+			if rowEvtQueue.Size()+len(txn.Rows) > w.maxTxnRow {
 				if err := flushRows(); err != nil {
 					txnNum++
 					w.hasError.Store(true)
 					return errors.Trace(err)
 				}
 			}
-			toExecRows = append(toExecRows, txn.Rows...)
+			rowEvtQueue.EnqueueMany(txn.Rows...)
 			txnNum++
 		case <-w.receiver.C:
 			if err := flushRows(); err != nil {
