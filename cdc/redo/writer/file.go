@@ -182,6 +182,16 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 		w.uuidGenerator = uuid.NewGenerator()
 	}
 
+	if len(cfg.Dir) == 0 {
+		return nil, cerror.WrapError(cerror.ErrRedoFileOp, errors.New("invalid redo dir path"))
+	}
+
+	err := os.MkdirAll(cfg.Dir, common.DefaultDirMode)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrRedoFileOp,
+			errors.Annotatef(err, "can't make dir: %s for redo writing", cfg.Dir))
+	}
+
 	// if we use S3 as the remote storage, a file allocator can be leveraged to
 	// pre-allocate files for us.
 	// TODO: test whether this improvement can also be applied to NFS.
@@ -329,6 +339,17 @@ func (w *Writer) close() error {
 	// after rename, the file name could be used for search, since the ts is the max ts for all events in the file.
 	w.commitTS.Store(w.maxCommitTS.Load())
 	err := os.Rename(w.file.Name(), w.filePath())
+	if err != nil {
+		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+	}
+
+	dirFile, err := os.Open(w.cfg.Dir)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+	}
+	defer dirFile.Close()
+	// sync the dir so as to guarantee the renamed file is persisted to disk.
+	err = dirFile.Sync()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
