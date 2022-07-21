@@ -74,10 +74,8 @@ func MaskSinkURI(uri string) (string, error) {
 		return "", err
 	}
 	if uriParsed.User != nil && uriParsed.User.String() != "" {
-		uriParsed.User = url.UserPassword("username", "password")
+		uriParsed.User = url.UserPassword(uriParsed.User.Username(), "xxxx")
 	}
-	if uriParsed.Host != "" {
-		uriParsed.Host = "***"
-	}
+
 	return uriParsed.String(), nil
 }

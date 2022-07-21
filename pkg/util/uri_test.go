@@ -71,5 +71,5 @@ func TestMaskSinkURI(t *testing.T) {
 	uri := "mysql://root:123456@127.0.0.1:3306/?time-zone=Asia/Shanghai"
 	maskedURI, err := MaskSinkURI(uri)
 	require.NoError(t, err)
-	require.Equal(t, "mysql://username:password@***/?time-zone=Asia/Shanghai", maskedURI)
+	require.Equal(t, "mysql://root:xxxx@127.0.0.1:3306/?time-zone=Asia/Shanghai", maskedURI)
 }
