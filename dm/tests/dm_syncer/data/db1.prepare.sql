@@ -23,3 +23,7 @@ create table dm_syncer_ignore_db_1(id int, name varchar(20), primary key(`id`));
 insert into dm_syncer_ignore_db_1(id, name) values (1, 'Howie'), (2, 'howie');
 create table dm_syncer_ignore_db_2(id int, name varchar(20), primary key(`id`));
 insert into dm_syncer_ignore_db_2(id, name) values (1, 'Howie'), (2, 'howie');
+
+use `dm_syncer_do_db`;
+create table dm_syncer_do_db_4(id int, foreign_id int, primary key (id), foreign key (foreign_id) references dm_syncer_ignore_db.dm_syncer_ignore_db_1(id));
+create table dm_syncer_do_db_5 like dm_syncer_do_db_4;
