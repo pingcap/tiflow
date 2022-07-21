@@ -192,7 +192,11 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		return errors.Trace(err)
 	default:
 	}
-
+	// we need to wait sink to be ready before we do the other things
+	// otherwise, we may cause a nil pointer panic
+	if !c.sink.isInitialized() {
+		return nil
+	}
 	// This means that the cached DDL has been executed,
 	// and we need to use the latest table names.
 	if c.currentTableNames == nil {
