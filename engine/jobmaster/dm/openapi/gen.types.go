@@ -21,8 +21,12 @@ const (
 
 // operation error
 type ErrorWithMessage struct {
+	// error code
+	Code    int       `json:"code"`
+	Details *[]string `json:"details,omitempty"`
+
 	// error message
-	ErrorMsg string `json:"error_msg"`
+	Message string `json:"message"`
 }
 
 // OperateJobRequest defines model for OperateJobRequest.

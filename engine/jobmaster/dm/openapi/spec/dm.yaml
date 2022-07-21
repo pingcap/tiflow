@@ -258,11 +258,19 @@ components:
       description: "operation error"
       type: object
       properties:
-        error_msg:
+        code:
+          type: integer
+          description: "error code"
+        message:
           type: string
           description: "error message"
+        details:
+          type: array
+          items:
+            type: string
       required:
-        - "error_msg"
+        - "code"
+        - "message"
     UpdateJobConfigRequest:
       type: object
       properties:

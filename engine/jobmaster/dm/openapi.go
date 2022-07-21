@@ -19,11 +19,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/openapi"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 )
 
 func (jm *JobMaster) initOpenAPI(router *gin.RouterGroup) {
+	router.Use(terrorHTTPErrorHandler())
+
 	wrapper := openapi.ServerInterfaceWrapper{
 		Handler: jm,
 	}
@@ -55,21 +58,46 @@ func (jm *JobMaster) DMAPIGetJobStatus(c *gin.Context, params openapi.DMAPIGetJo
 	}
 	resp, err := jm.QueryJobStatus(c.Request.Context(), tasks)
 	if err != nil {
+		// nolint:errcheck
 		_ = c.Error(err)
 		return
 	}
 	c.IndentedJSON(http.StatusOK, resp)
 }
 
+// TODO: extract terror from worker response
+func terrorHTTPErrorHandler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Next()
+		gErr := c.Errors.Last()
+		if gErr == nil {
+			return
+		}
+		var (
+			code int
+			msg  string
+		)
+		if tErr, ok := gErr.Err.(*terror.Error); ok {
+			code = int(tErr.Code())
+			msg = tErr.Error()
+		} else {
+			msg = gErr.Error()
+		}
+		c.IndentedJSON(http.StatusInternalServerError, openapi.ErrorWithMessage{Code: code, Message: msg})
+	}
+}
+
 // DMAPIGetJobConfig implements the api of get job config.
 func (jm *JobMaster) DMAPIGetJobConfig(c *gin.Context) {
 	cfg, err := jm.GetJobCfg(c.Request.Context())
 	if err != nil {
+		// nolint:errcheck
 		_ = c.Error(err)
 		return
 	}
 	bs, err := cfg.Yaml()
 	if err != nil {
+		// nolint:errcheck
 		_ = c.Error(err)
 		return
 	}
@@ -85,6 +113,7 @@ func (jm *JobMaster) DMAPIUpdateJobConfig(c *gin.Context) {
 func (jm *JobMaster) DMAPIOperateJob(c *gin.Context) {
 	var req openapi.OperateJobRequest
 	if err := c.Bind(&req); err != nil {
+		// nolint:errcheck
 		_ = c.Error(err)
 		return
 	}
@@ -96,6 +125,7 @@ func (jm *JobMaster) DMAPIOperateJob(c *gin.Context) {
 	case openapi.OperateJobRequestOpResume:
 		op = dmpkg.Resume
 	default:
+		// nolint:errcheck
 		_ = c.Error(errors.Errorf("unsupport op type '%s' for operate task", req.Op))
 		return
 	}
@@ -106,6 +136,7 @@ func (jm *JobMaster) DMAPIOperateJob(c *gin.Context) {
 	}
 	err := jm.OperateTask(c.Request.Context(), op, nil, tasks)
 	if err != nil {
+		// nolint:errcheck
 		_ = c.Error(err)
 		return
 	}
@@ -113,6 +144,7 @@ func (jm *JobMaster) DMAPIOperateJob(c *gin.Context) {
 }
 
 // DMAPIGetBinlogOperator implements the api of get binlog operator.
+// TODO: pagination support if needed
 func (jm *JobMaster) DMAPIGetBinlogOperator(c *gin.Context, taskName string, params openapi.DMAPIGetBinlogOperatorParams) {
 	req := &dmpkg.BinlogRequest{
 		Op:      pb.ErrorOp_List,
@@ -123,6 +155,7 @@ func (jm *JobMaster) DMAPIGetBinlogOperator(c *gin.Context, taskName string, par
 	}
 	resp, err := jm.Binlog(c.Request.Context(), req)
 	if err != nil {
+		// nolint:errcheck
 		_ = c.Error(err)
 		return
 	}
@@ -133,6 +166,7 @@ func (jm *JobMaster) DMAPIGetBinlogOperator(c *gin.Context, taskName string, par
 func (jm *JobMaster) DMAPISetBinlogOperator(c *gin.Context, taskName string) {
 	var req openapi.SetBinlogOperatorRequest
 	if err := c.Bind(&req); err != nil {
+		// nolint:errcheck
 		_ = c.Error(err)
 		return
 	}
@@ -154,15 +188,17 @@ func (jm *JobMaster) DMAPISetBinlogOperator(c *gin.Context, taskName string) {
 	case openapi.SetBinlogOperatorRequestOpReplace:
 		r.Op = pb.ErrorOp_Replace
 	default:
+		// nolint:errcheck
 		_ = c.Error(errors.New("unsupported op type '' for set binlog operator"))
 		return
 	}
 	resp, err := jm.Binlog(c.Request.Context(), r)
 	if err != nil {
+		// nolint:errcheck
 		_ = c.Error(err)
 		return
 	}
-	c.IndentedJSON(http.StatusOK, resp)
+	c.IndentedJSON(http.StatusCreated, resp)
 }
 
 // DMAPIDeleteBinlogOperator implements the api of delete binlog operator.
@@ -176,11 +212,22 @@ func (jm *JobMaster) DMAPIDeleteBinlogOperator(c *gin.Context, taskName string, 
 	}
 	resp, err := jm.Binlog(c.Request.Context(), req)
 	if err != nil {
+		// nolint:errcheck
 		_ = c.Error(err)
 		return
 	}
-	// TODO: use no content response, now return content because delete may failed.
-	c.IndentedJSON(http.StatusOK, resp)
+
+	if resp.ErrorMsg != "" {
+		c.IndentedJSON(http.StatusOK, resp)
+		return
+	}
+	for _, r := range resp.Results {
+		if r.ErrorMsg != "" {
+			c.IndentedJSON(http.StatusOK, resp)
+			return
+		}
+	}
+	c.Status(http.StatusNoContent)
 }
 
 // DMAPIGetSchema implements the api of get schema.
@@ -206,6 +253,7 @@ func (jm *JobMaster) DMAPIGetSchema(c *gin.Context, taskname string, params open
 	case database == "" && table == "":
 		op = pb.SchemaOp_ListSchema
 	default:
+		// nolint:errcheck
 		_ = c.Error(errors.New("invalid query params for get schema"))
 		return
 	}
@@ -228,6 +276,7 @@ func (jm *JobMaster) DMAPISetSchema(c *gin.Context, taskName string) {
 		fromTarget bool
 	)
 	if err := c.Bind(&req); err != nil {
+		// nolint:errcheck
 		_ = c.Error(err)
 		return
 	}

@@ -65,7 +65,6 @@ func (t *testDMOpenAPISuite) SetupSuite() {
 	jm.workerManager = NewWorkerManager(nil, jm.metadata.JobStore(), nil, jm.messageAgent, nil)
 
 	engine := gin.New()
-	engine.Use(terrorHTTPErrorHandler)
 	apiGroup := engine.Group(baseURL)
 	jm.initOpenAPI(apiGroup)
 
@@ -89,7 +88,7 @@ func (t *testDMOpenAPISuite) TestDMAPIGetJobConfig() {
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("GET", baseURL+"config", nil)
 	t.engine.ServeHTTP(w, r)
-	require.Equal(t.T(), http.StatusBadRequest, w.Code)
+	require.Equal(t.T(), http.StatusInternalServerError, w.Code)
 	equalError(t.T(), "state not found", w.Body)
 
 	jobCfg := &config.JobCfg{}
@@ -118,13 +117,13 @@ func (t *testDMOpenAPISuite) TestDMAPIGetJobStatus() {
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("GET", baseURL+"status", nil)
 	t.engine.ServeHTTP(w, r)
-	require.Equal(t.T(), http.StatusBadRequest, w.Code)
+	require.Equal(t.T(), http.StatusInternalServerError, w.Code)
 	equalError(t.T(), "state not found", w.Body)
 
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("GET", baseURL+"status"+"?tasks=task", nil)
 	t.engine.ServeHTTP(w, r)
-	require.Equal(t.T(), http.StatusBadRequest, w.Code)
+	require.Equal(t.T(), http.StatusInternalServerError, w.Code)
 	equalError(t.T(), "state not found", w.Body)
 
 	require.NoError(t.T(), t.jm.taskManager.OperateTask(context.Background(), dmpkg.Create, &config.JobCfg{}, nil))
@@ -162,7 +161,7 @@ func (t *testDMOpenAPISuite) TestDMAPIOperateJob() {
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("PUT", baseURL+"status", nil)
 	t.engine.ServeHTTP(w, r)
-	require.Equal(t.T(), http.StatusBadRequest, w.Code)
+	require.Equal(t.T(), http.StatusInternalServerError, w.Code)
 	equalError(t.T(), "unsupport op type '' for operate task", w.Body)
 
 	tasks := []string{"task"}
@@ -176,7 +175,7 @@ func (t *testDMOpenAPISuite) TestDMAPIOperateJob() {
 	r = httptest.NewRequest("PUT", baseURL+"status", bytes.NewReader(bs))
 	r.Header.Set("Content-Type", "application/json")
 	t.engine.ServeHTTP(w, r)
-	require.Equal(t.T(), http.StatusBadRequest, w.Code)
+	require.Equal(t.T(), http.StatusInternalServerError, w.Code)
 	equalError(t.T(), "state not found", w.Body)
 
 	jobCfg := &config.JobCfg{}
@@ -227,8 +226,8 @@ func (t *testDMOpenAPISuite) TestDMAPISetBinlogOperator() {
 	r = httptest.NewRequest("POST", baseURL+"binlog/tasks/"+"task1", bytes.NewReader(bs))
 	r.Header.Set("Content-Type", "application/json")
 	t.engine.ServeHTTP(w, r)
-	require.Equal(t.T(), http.StatusBadRequest, w.Code)
-	equalError(t.T(), "unsupport op type '' for set binlog operator", w.Body)
+	require.Equal(t.T(), http.StatusInternalServerError, w.Code)
+	equalError(t.T(), "unsupported op type '' for set binlog operator", w.Body)
 
 	pos := "mysql-bin.000001,4"
 	sqls := []string{"ALTER TABLE tb ADD COLUMN c int(11) UNIQUE;"}
@@ -246,7 +245,7 @@ func (t *testDMOpenAPISuite) TestDMAPISetBinlogOperator() {
 	r = httptest.NewRequest("POST", baseURL+"binlog/tasks/"+"task1", bytes.NewReader(bs))
 	r.Header.Set("Content-Type", "application/json")
 	t.engine.ServeHTTP(w, r)
-	require.Equal(t.T(), http.StatusOK, w.Code)
+	require.Equal(t.T(), http.StatusCreated, w.Code)
 	var binlogResp dmpkg.BinlogResponse
 	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &binlogResp))
 	require.Equal(t.T(), "", binlogResp.ErrorMsg)
@@ -264,7 +263,7 @@ func (t *testDMOpenAPISuite) TestDMAPISetBinlogOperator() {
 	r = httptest.NewRequest("POST", baseURL+"binlog/tasks/"+"task1", bytes.NewReader(bs))
 	r.Header.Set("Content-Type", "application/json")
 	t.engine.ServeHTTP(w, r)
-	require.Equal(t.T(), http.StatusOK, w.Code)
+	require.Equal(t.T(), http.StatusCreated, w.Code)
 	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &binlogResp))
 	require.Equal(t.T(), "", binlogResp.ErrorMsg)
 	require.Equal(t.T(), "no binlog error", binlogResp.Results["task1"].ErrorMsg)
@@ -281,7 +280,7 @@ func (t *testDMOpenAPISuite) TestDMAPISetBinlogOperator() {
 	r = httptest.NewRequest("POST", baseURL+"binlog/tasks/"+"task1", bytes.NewReader(bs))
 	r.Header.Set("Content-Type", "application/json")
 	t.engine.ServeHTTP(w, r)
-	require.Equal(t.T(), http.StatusOK, w.Code)
+	require.Equal(t.T(), http.StatusCreated, w.Code)
 	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &binlogResp))
 	require.Equal(t.T(), "", binlogResp.ErrorMsg)
 	require.Equal(t.T(), "no binlog error", binlogResp.Results["task1"].ErrorMsg)
@@ -302,6 +301,12 @@ func (t *testDMOpenAPISuite) TestDMAPIDeleteBinlogOperator() {
 	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &binlogResp))
 	require.Equal(t.T(), "", binlogResp.ErrorMsg)
 	require.Equal(t.T(), "binlog operator not found", binlogResp.Results["task1"].ErrorMsg)
+
+	t.messageAgent.On("SendRequest").Return(&dmpkg.CommonTaskResponse{}, nil).Once()
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest("DELETE", baseURL+"binlog/tasks/"+"task1"+"?binlog_pos='mysql-bin.000001,4'", nil)
+	t.engine.ServeHTTP(w, r)
+	require.Equal(t.T(), http.StatusNoContent, w.Code)
 }
 
 func (t *testDMOpenAPISuite) TestDMAPIGetSchema() {
@@ -358,7 +363,7 @@ func (t *testDMOpenAPISuite) TestDMAPIGetSchema() {
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("GET", baseURL+"schema/tasks/"+"task1"+"?table='tb'", nil)
 	t.engine.ServeHTTP(w, r)
-	require.Equal(t.T(), http.StatusBadRequest, w.Code)
+	require.Equal(t.T(), http.StatusInternalServerError, w.Code)
 	equalError(t.T(), "invalid query params for get schema", w.Body)
 }
 
@@ -400,17 +405,9 @@ func (t *testDMOpenAPISuite) TestDMAPISetSchema() {
 	require.Equal(t.T(), "success", binlogSchemaResp.Results["task1"].Msg)
 }
 
-func terrorHTTPErrorHandler(c *gin.Context) {
-	c.Next()
-	gErr := c.Errors.Last()
-	if gErr == nil {
-		return
-	}
-	c.IndentedJSON(http.StatusBadRequest, openapi.ErrorWithMessage{ErrorMsg: gErr.Error()})
-}
-
 func equalError(t *testing.T, expected string, body *bytes.Buffer) {
 	var e openapi.ErrorWithMessage
 	json.Unmarshal(body.Bytes(), &e)
-	require.Equal(t, expected, e.ErrorMsg)
+	require.Equal(t, expected, e.Message)
+	require.Equal(t, 0, e.Code)
 }
