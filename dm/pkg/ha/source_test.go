@@ -21,6 +21,7 @@ import (
 	"path"
 	"testing"
 
+	. "github.com/pingcap/check"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/tests/v3/integration"
 
