@@ -51,7 +51,7 @@ Validator will start validation from previous location after failover or resumin
 
 ### Self-protection
 
-Validator `worker` will cache `pending row changes` in memory, to avoid potential OOM, we add an self-protect mechaniam. If there's too much `pending row changes` or the overall size of `pending row changes` is too large, validator will be stopped automatically.
+Validator `worker` will cache `pending row changes` in memory, to avoid potential OOM, we add a self-protect mechanism. If there are too many `pending row changes` or the overall size of `pending row changes` is too large, validator will be stopped automatically.
 
 ## Concepts
 
