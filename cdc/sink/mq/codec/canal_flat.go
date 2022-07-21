@@ -79,7 +79,7 @@ type canalFlatMessageInterface interface {
 	getData() map[string]interface{}
 	getMySQLType() map[string]string
 	getJavaSQLType() map[string]int32
-	mqMessageType() model.MqMessageType
+	mqMessageType() model.MessageType
 	eventType() canal.EventType
 	pkNameSet() map[string]struct{}
 }
@@ -153,16 +153,16 @@ func (c *canalFlatMessage) getJavaSQLType() map[string]int32 {
 	return c.SQLType
 }
 
-func (c *canalFlatMessage) mqMessageType() model.MqMessageType {
+func (c *canalFlatMessage) mqMessageType() model.MessageType {
 	if c.IsDDL {
-		return model.MqMessageTypeDDL
+		return model.MessageTypeDDL
 	}
 
 	if c.EventType == tidbWaterMarkType {
-		return model.MqMessageTypeResolved
+		return model.MessageTypeResolved
 	}
 
-	return model.MqMessageTypeRow
+	return model.MessageTypeRow
 }
 
 func (c *canalFlatMessage) eventType() canal.EventType {
@@ -375,7 +375,7 @@ func (c *CanalFlatEventBatchEncoder) Build() []*MQMessage {
 			log.Panic("CanalFlatEventBatchEncoder", zap.Error(err))
 			return nil
 		}
-		m := NewMQMessage(config.ProtocolCanalJSON, nil, value, msg.getTikvTs(), model.MqMessageTypeRow, msg.getSchema(), msg.getTable())
+		m := NewMQMessage(config.ProtocolCanalJSON, nil, value, msg.getTikvTs(), model.MessageTypeRow, msg.getSchema(), msg.getTable())
 		m.IncRowsCount()
 		ret[i] = m
 	}
@@ -400,9 +400,9 @@ func NewCanalFlatEventBatchDecoder(data []byte, enableTiDBExtension bool) EventB
 }
 
 // HasNext implements the EventBatchDecoder interface
-func (b *CanalFlatEventBatchDecoder) HasNext() (model.MqMessageType, bool, error) {
+func (b *CanalFlatEventBatchDecoder) HasNext() (model.MessageType, bool, error) {
 	if len(b.data) == 0 {
-		return model.MqMessageTypeUnknown, false, nil
+		return model.MessageTypeUnknown, false, nil
 	}
 	var msg canalFlatMessageInterface = &canalFlatMessage{}
 	if b.enableTiDBExtension {
@@ -414,7 +414,7 @@ func (b *CanalFlatEventBatchDecoder) HasNext() (model.MqMessageType, bool, error
 	if err := json.Unmarshal(b.data, msg); err != nil {
 		log.Error("canal-json decoder unmarshal data failed",
 			zap.Error(err), zap.ByteString("data", b.data))
-		return model.MqMessageTypeUnknown, false, err
+		return model.MessageTypeUnknown, false, err
 	}
 	b.msg = msg
 	b.data = nil
@@ -425,7 +425,7 @@ func (b *CanalFlatEventBatchDecoder) HasNext() (model.MqMessageType, bool, error
 // NextRowChangedEvent implements the EventBatchDecoder interface
 // `HasNext` should be called before this.
 func (b *CanalFlatEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
-	if b.msg == nil || b.msg.mqMessageType() != model.MqMessageTypeRow {
+	if b.msg == nil || b.msg.mqMessageType() != model.MessageTypeRow {
 		return nil, cerrors.ErrCanalDecodeFailed.
 			GenWithStack("not found row changed event message")
 	}
@@ -440,7 +440,7 @@ func (b *CanalFlatEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEve
 // NextDDLEvent implements the EventBatchDecoder interface
 // `HasNext` should be called before this.
 func (b *CanalFlatEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
-	if b.msg == nil || b.msg.mqMessageType() != model.MqMessageTypeDDL {
+	if b.msg == nil || b.msg.mqMessageType() != model.MessageTypeDDL {
 		return nil, cerrors.ErrCanalDecodeFailed.
 			GenWithStack("not found ddl event message")
 	}
@@ -453,7 +453,7 @@ func (b *CanalFlatEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 // NextResolvedEvent implements the EventBatchDecoder interface
 // `HasNext` should be called before this.
 func (b *CanalFlatEventBatchDecoder) NextResolvedEvent() (uint64, error) {
-	if b.msg == nil || b.msg.mqMessageType() != model.MqMessageTypeResolved {
+	if b.msg == nil || b.msg.mqMessageType() != model.MessageTypeResolved {
 		return 0, cerrors.ErrCanalDecodeFailed.
 			GenWithStack("not found resolved event message")
 	}

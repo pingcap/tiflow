@@ -69,11 +69,10 @@ type processor struct {
 	schemaStorage entry.SchemaStorage
 	lastSchemaTs  model.Ts
 
-	filter        *filter.Filter
-	mounter       entry.Mounter
-	sink          sink.Sink
-	redoManager   redo.LogManager
-	lastRedoFlush time.Time
+	filter      *filter.Filter
+	mounter     entry.Mounter
+	sink        sink.Sink
+	redoManager redo.LogManager
 
 	initialized bool
 	errCh       chan error
@@ -245,13 +244,12 @@ func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 func newProcessor(ctx cdcContext.Context, upStream *upstream.Upstream) *processor {
 	changefeedID := ctx.ChangefeedVars().ID
 	p := &processor{
-		upStream:      upStream,
-		tables:        make(map[model.TableID]tablepipeline.TablePipeline),
-		errCh:         make(chan error, 1),
-		changefeedID:  changefeedID,
-		captureInfo:   ctx.GlobalVars().CaptureInfo,
-		cancel:        func() {},
-		lastRedoFlush: time.Now(),
+		upStream:     upStream,
+		tables:       make(map[model.TableID]tablepipeline.TablePipeline),
+		errCh:        make(chan error, 1),
+		changefeedID: changefeedID,
+		captureInfo:  ctx.GlobalVars().CaptureInfo,
+		cancel:       func() {},
 
 		metricResolvedTsGauge: resolvedTsGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
@@ -375,9 +373,6 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	}
 	if err := p.lazyInit(ctx); err != nil {
 		return errors.Trace(err)
-	}
-	if err := p.flushRedoLogMeta(ctx); err != nil {
-		return err
 	}
 	// it is no need to check the error here, because we will use
 	// local time when an error return, which is acceptable
@@ -793,12 +788,16 @@ func (p *processor) createTablePipelineImpl(
 		return nil
 	})
 
+	if p.redoManager.Enabled() {
+		p.redoManager.AddTable(tableID, replicaInfo.StartTs)
+	}
+
 	tableName, err := p.getTableName(ctx, tableID, replicaInfo)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	s, err := sink.NewTableSink(p.sink, tableID, p.metricsTableSinkTotalRows, p.redoManager)
+	s, err := sink.NewTableSink(p.sink, tableID, p.metricsTableSinkTotalRows)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -813,6 +812,7 @@ func (p *processor) createTablePipelineImpl(
 			tableName,
 			replicaInfo,
 			s,
+			p.redoManager,
 			p.changefeed.Info.GetTargetTs())
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -827,11 +827,8 @@ func (p *processor) createTablePipelineImpl(
 			s,
 			p.changefeed.Info.GetTargetTs(),
 			p.upStream,
+			p.redoManager,
 		)
-	}
-
-	if p.redoManager.Enabled() {
-		p.redoManager.AddTable(tableID, replicaInfo.StartTs)
 	}
 
 	log.Info("Add table pipeline", zap.Int64("tableID", tableID),
@@ -877,20 +874,6 @@ func (p *processor) doGCSchemaStorage(ctx cdcContext.Context) {
 		cdcContext.ZapFieldChangefeed(ctx))
 	lastSchemaPhysicalTs := oracle.ExtractPhysical(lastSchemaTs)
 	p.metricSchemaStorageGcTsGauge.Set(float64(lastSchemaPhysicalTs))
-}
-
-// flushRedoLogMeta flushes redo log meta, including resolved-ts and checkpoint-ts
-func (p *processor) flushRedoLogMeta(ctx context.Context) error {
-	if p.redoManager.Enabled() &&
-		time.Since(p.lastRedoFlush).Milliseconds() > p.changefeed.Info.Config.Consistent.FlushIntervalInMs {
-		st := p.changefeed.Status
-		err := p.redoManager.FlushResolvedAndCheckpointTs(ctx, st.ResolvedTs, st.CheckpointTs)
-		if err != nil {
-			return err
-		}
-		p.lastRedoFlush = time.Now()
-	}
-	return nil
 }
 
 func (p *processor) Close() error {
