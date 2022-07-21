@@ -327,7 +327,6 @@ if __name__ == "__main__":
         "set_log_level": set_log_level,
         "remove_changefeed": remove_changefeed,
         "resign_owner": resign_owner,
-        "get_tso": get_tso
     }
 
     func = FUNC_MAP[sys.argv[1]]
