@@ -15,6 +15,7 @@ package writer
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	"github.com/pingcap/log"
@@ -68,4 +69,27 @@ func (bs *blackHoleWriter) SendDDL(_ context.Context, ddl *model.RedoDDLEvent) e
 
 func (bs *blackHoleWriter) Close() error {
 	return nil
+}
+
+type invalidBlackHoleWriter struct {
+	*blackHoleWriter
+}
+
+// NewInvalidBlackHoleWriter creates a invalid blackHole writer
+func NewInvalidBlackHoleWriter(rl RedoLogWriter) *invalidBlackHoleWriter {
+	return &invalidBlackHoleWriter{
+		blackHoleWriter: rl.(*blackHoleWriter),
+	}
+}
+
+func (ibs *invalidBlackHoleWriter) WriteLog(
+	_ context.Context, _ model.TableID, _ []*model.RedoRowChangedEvent,
+) (err error) {
+	return errors.New("[WriteLog] invalid black hole writer")
+}
+
+func (ibs *invalidBlackHoleWriter) FlushLog(
+	_ context.Context, _, _ model.Ts,
+) error {
+	return errors.New("[FlushLog] invalid black hole writer")
 }
