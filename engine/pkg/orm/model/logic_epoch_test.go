@@ -46,9 +46,16 @@ func mockGetDBConn(t *testing.T, dsnStr string) (*gorm.DB, sqlmock.Sqlmock, erro
 	return gdb, mock, nil
 }
 
+func closeGormDB(t *testing.T, gdb *gorm.DB) {
+	db, err := gdb.DB()
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
+}
+
 func TestInitializeEpoch(t *testing.T) {
 	gdb, mock, err := mockGetDBConn(t, "test")
 	require.NoError(t, err)
+	defer closeGormDB(t, gdb)
 	ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
 	defer cancel()
 
@@ -61,6 +68,8 @@ func TestInitializeEpoch(t *testing.T) {
 		"`seq_id`[)]").WillReturnError(&gsql.MySQLError{Number: 1062, Message: "test error"})
 	err = InitializeEpoch(ctx, gdb)
 	require.Error(t, err)
+
+	mock.ExpectClose()
 }
 
 // UPDATE `logic_epoches` SET `epoch`=epoch + ?,`updated_at`=? WHERE `seq_id` = ?
@@ -68,6 +77,7 @@ func TestInitializeEpoch(t *testing.T) {
 func TestGenEpoch(t *testing.T) {
 	gdb, mock, err := mockGetDBConn(t, "test")
 	require.NoError(t, err)
+	defer closeGormDB(t, gdb)
 	ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
 	defer cancel()
 
@@ -89,4 +99,6 @@ func TestGenEpoch(t *testing.T) {
 	mock.ExpectRollback()
 	_, err = GenEpoch(ctx, gdb)
 	require.Error(t, err)
+
+	mock.ExpectClose()
 }
