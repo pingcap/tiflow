@@ -126,7 +126,7 @@ func (jm *JobMaster) DMAPIOperateJob(c *gin.Context) {
 		op = dmpkg.Resume
 	default:
 		// nolint:errcheck
-		_ = c.Error(errors.Errorf("unsupport op type '%s' for operate task", req.Op))
+		_ = c.Error(errors.Errorf("unsupported op type '%s' for operate task", req.Op))
 		return
 	}
 
@@ -189,7 +189,7 @@ func (jm *JobMaster) DMAPISetBinlogOperator(c *gin.Context, taskName string) {
 		r.Op = pb.ErrorOp_Replace
 	default:
 		// nolint:errcheck
-		_ = c.Error(errors.New("unsupported op type '' for set binlog operator"))
+		_ = c.Error(errors.Errorf("unsupported op type '%s' for set binlog operator", req.Op))
 		return
 	}
 	resp, err := jm.Binlog(c.Request.Context(), r)

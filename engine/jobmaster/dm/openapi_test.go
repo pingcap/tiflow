@@ -162,7 +162,7 @@ func (t *testDMOpenAPISuite) TestDMAPIOperateJob() {
 	r = httptest.NewRequest("PUT", baseURL+"status", nil)
 	t.engine.ServeHTTP(w, r)
 	require.Equal(t.T(), http.StatusInternalServerError, w.Code)
-	equalError(t.T(), "unsupport op type '' for operate task", w.Body)
+	equalError(t.T(), "unsupported op type '' for operate task", w.Body)
 
 	tasks := []string{"task"}
 	req := openapi.OperateJobRequest{
