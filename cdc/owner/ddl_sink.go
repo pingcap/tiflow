@@ -52,6 +52,7 @@ type DDLSink interface {
 	emitSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error
 	// close the sink, cancel running goroutine.
 	close(ctx context.Context) error
+	isInitialized() bool
 }
 
 type ddlSinkImpl struct {
@@ -72,15 +73,26 @@ type ddlSinkImpl struct {
 	// cancel would be used to cancel the goroutine start by `run`
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+	// we use `initialized` to indicate whether the sink has been initialized.
+	// the caller before calling any method of ddl sink
+	// should check `initialized` first
+	initialized atomic.Value
 }
 
 func newDDLSink() DDLSink {
+<<<<<<< HEAD
 	return &ddlSinkImpl{
+=======
+	res := &ddlSinkImpl{
+		ddlSentTsMap:    make(map[*model.DDLEvent]uint64),
+>>>>>>> 3695071af (ddl_sink (ticdc): fix ddl sink nil point panic (#6390))
 		ddlCh:           make(chan *model.DDLEvent, 1),
 		errCh:           make(chan error, defaultErrChSize),
 		sinkInitHandler: ddlSinkInitializer,
 		cancel:          func() {},
 	}
+	res.initialized.Store(false)
+	return res
 }
 
 type ddlSinkInitHandler func(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeFeedID, info *model.ChangeFeedInfo) error
@@ -106,6 +118,9 @@ func ddlSinkInitializer(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeF
 	if err != nil {
 		return errors.Trace(err)
 	}
+	failpoint.Inject("DDLSinkInitializeSlowly", func() {
+		time.Sleep(time.Second * 5)
+	})
 	a.syncPointStore = syncPointStore
 
 	if err := a.syncPointStore.CreateSynctable(stdCtx); err != nil {
@@ -129,6 +144,7 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 			ctx.Throw(err)
 			return
 		}
+		s.initialized.Store(true)
 		log.Info("ddl sink initialized, start processing...",
 			zap.Duration("duration", time.Since(start)))
 
@@ -239,4 +255,8 @@ func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 		return err
 	}
 	return nil
+}
+
+func (s *ddlSinkImpl) isInitialized() bool {
+	return s.initialized.Load().(bool)
 }
