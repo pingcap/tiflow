@@ -1002,6 +1002,10 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		updateJobMetricsFn: func(bool, string, *job) {},
 	}
 
+	// When crossing safeModeExitPoint, will generate a flush sql
+	checkPointMock.ExpectBegin()
+	checkPointMock.ExpectExec(".*INSERT INTO .* VALUES.* ON DUPLICATE KEY UPDATE.*").WillReturnResult(sqlmock.NewResult(0, 1))
+	checkPointMock.ExpectCommit()
 	// Simulate resume from syncer, last time we exit successfully, so we shouldn't open safe mode here
 	go syncer.Process(ctx, resultCh)
 

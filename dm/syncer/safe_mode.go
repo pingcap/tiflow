@@ -118,9 +118,9 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 			s.safeMode.Add(tctx, 1) // enable and will revert after 2 * CheckpointFlushInterval
 			go func() {
 				defer func() {
-					err := s.safeMode.Add(tctx, -1)
-					if err != nil {
-						s.runFatalChan <- unit.NewProcessError(err)
+					err2 := s.safeMode.Add(tctx, -1)
+					if err2 != nil {
+						s.runFatalChan <- unit.NewProcessError(err2)
 					}
 					if !s.safeMode.Enable() {
 						s.tctx.L().Info("disable safe-mode after task initialization finished")

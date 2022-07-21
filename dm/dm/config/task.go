@@ -1100,7 +1100,7 @@ type SyncerConfigForDowngrade struct {
 	EnableGTID              bool   `yaml:"enable-gtid"`
 	DisableCausality        bool   `yaml:"disable-detect"`
 	SafeMode                bool   `yaml:"safe-mode"`
-	SafeModeDuration        string `yaml:safe-mode-duration`
+	SafeModeDuration        string `yaml:"safe-mode-duration"`
 	EnableANSIQuotes        bool   `yaml:"enable-ansi-quotes"`
 
 	Compact      bool `yaml:"compact,omitempty"`

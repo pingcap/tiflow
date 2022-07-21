@@ -2240,7 +2240,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 		// check pass SafeModeExitLoc and try disable safe mode, but not in sharding or replacing error
 		safeModeExitLoc := s.checkpoint.SafeModeExitPoint()
-		if s.safeMode.Enable() && safeModeExitLoc != nil && shardingReSync == nil {
+		if safeModeExitLoc != nil && shardingReSync == nil {
 			// TODO: for RowsEvent (in fact other than QueryEvent), `currentLocation` is updated in `handleRowsEvent`
 			// so here the meaning of `currentLocation` is the location of last event
 			if binlog.CompareLocation(currentLocation, *safeModeExitLoc, s.cfg.EnableGTID) > 0 {
