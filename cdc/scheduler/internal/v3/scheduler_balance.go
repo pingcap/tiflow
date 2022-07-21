@@ -68,8 +68,7 @@ func (b *balanceScheduler) Schedule(
 
 	for _, capture := range captures {
 		if capture.State == CaptureStateStopping {
-			log.Debug("tpscheduler: capture is stopping, " +
-				"premature to balance table automatically")
+			log.Debug("schedulerv3: capture is stopping, premature to balance table")
 			return nil
 		}
 	}
@@ -101,7 +100,8 @@ func buildBalanceMoveTables(
 		}
 	}
 
-	moves := newBalanceMoveTables(random, captures, replications, maxTaskConcurrency)
+	moves := newBalanceMoveTables(
+		random, captures, replications, maxTaskConcurrency, model.ChangeFeedID{})
 	tasks := make([]*scheduleTask, 0, len(moves))
 	for i := 0; i < len(moves); i++ {
 		// No need for accept callback here.

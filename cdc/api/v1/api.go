@@ -17,17 +17,19 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sort"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/api/middleware"
-	"github.com/pingcap/tiflow/cdc/api/validator"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -70,6 +72,7 @@ func (h *OpenAPI) statusProvider() owner.StatusProvider {
 func RegisterOpenAPIRoutes(router *gin.Engine, api OpenAPI) {
 	v1 := router.Group("/api/v1")
 
+	v1.Use(middleware.CheckServerReadyMiddleware(api.capture))
 	v1.Use(middleware.LogMiddleware())
 	v1.Use(middleware.ErrorHandleMiddleware())
 
@@ -138,20 +141,35 @@ func (h *OpenAPI) ListChangefeed(c *gin.Context) {
 	}
 
 	resps := make([]*model.ChangefeedCommonInfo, 0)
-	for cfID, cfStatus := range statuses {
+	changefeeds := make([]model.ChangeFeedID, 0)
+
+	for cfID := range statuses {
+		changefeeds = append(changefeeds, cfID)
+	}
+	sort.Slice(changefeeds, func(i, j int) bool {
+		if changefeeds[i].Namespace == changefeeds[j].Namespace {
+			return changefeeds[i].ID < changefeeds[j].ID
+		}
+
+		return changefeeds[i].Namespace < changefeeds[j].Namespace
+	})
+
+	for _, cfID := range changefeeds {
 		cfInfo, exist := infos[cfID]
 		if !exist {
 			// If a changefeed info does not exists, skip it
 			continue
 		}
+		cfStatus := statuses[cfID]
 
 		if !cfInfo.State.IsNeeded(state) {
 			continue
 		}
 
 		resp := &model.ChangefeedCommonInfo{
-			Namespace: cfID.Namespace,
-			ID:        cfID.ID,
+			UpstreamID: cfInfo.UpstreamID,
+			Namespace:  cfID.Namespace,
+			ID:         cfID.ID,
 		}
 
 		if cfInfo != nil {
@@ -213,11 +231,16 @@ func (h *OpenAPI) GetChangefeed(c *gin.Context) {
 			for tableID := range status.Tables {
 				tables = append(tables, tableID)
 			}
-			taskStatus = append(taskStatus, model.CaptureTaskStatus{CaptureID: captureID, Tables: tables, Operation: status.Operation})
+			taskStatus = append(taskStatus,
+				model.CaptureTaskStatus{
+					CaptureID: captureID, Tables: tables,
+					Operation: status.Operation,
+				})
 		}
 	}
 
 	changefeedDetail := &model.ChangefeedDetail{
+		UpstreamID:     info.UpstreamID,
 		Namespace:      changefeedID.Namespace,
 		ID:             changefeedID.ID,
 		SinkURI:        info.SinkURI,
@@ -256,7 +279,18 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
-	info, err := validator.VerifyCreateChangefeedConfig(ctx, changefeedConfig, h.capture)
+	upManager, err := h.capture.GetUpstreamManager()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	up, err := upManager.GetDefaultUpstream()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	info, err := verifyCreateChangefeedConfig(ctx, changefeedConfig, h.capture)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -267,9 +301,17 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-
+	upstreamInfo := &model.UpstreamInfo{
+		ID:            up.ID,
+		PDEndpoints:   strings.Join(up.PdEndpoints, ","),
+		KeyPath:       up.SecurityConfig.KeyPath,
+		CertPath:      up.SecurityConfig.CertPath,
+		CAPath:        up.SecurityConfig.CAPath,
+		CertAllowedCN: up.SecurityConfig.CertAllowedCN,
+	}
 	err = h.capture.GetEtcdClient().CreateChangefeedInfo(
-		ctx, info, model.DefaultChangeFeedID(changefeedConfig.ID))
+		ctx, upstreamInfo,
+		info, model.DefaultChangeFeedID(changefeedConfig.ID))
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -397,7 +439,7 @@ func (h *OpenAPI) UpdateChangefeed(c *gin.Context) {
 		return
 	}
 
-	newInfo, err := validator.VerifyUpdateChangefeedConfig(ctx, changefeedConfig, info)
+	newInfo, err := VerifyUpdateChangefeedConfig(ctx, changefeedConfig, info)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -446,6 +488,28 @@ func (h *OpenAPI) RemoveChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
+
+	// Owner needs at least tow ticks to remove a changefeed,
+	// we need to wait for it.
+	err = retry.Do(ctx, func() error {
+		_, err := h.statusProvider().GetChangeFeedStatus(ctx, changefeedID)
+		if err != nil {
+			if strings.Contains(err.Error(), "ErrChangeFeedNotExists") {
+				return nil
+			}
+			return err
+		}
+		return cerror.ErrChangeFeedDeletionUnfinished.GenWithStackByArgs(changefeedID)
+	},
+		retry.WithMaxTries(100),         // max retry duration is 1 minute
+		retry.WithBackoffBaseDelay(600), // default owner tick interval is 200ms
+		retry.WithIsRetryableErr(cerror.IsRetryableError))
+
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
 	c.Status(http.StatusAccepted)
 }
 
@@ -583,7 +647,8 @@ func (h *OpenAPI) GetProcessor(c *gin.Context) {
 	}
 	if info.State != model.StateNormal {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam,
-			fmt.Errorf("changefeed in abnormal state: %s, can't get processors of an abnormal changefeed",
+			fmt.Errorf("changefeed in abnormal state: %s, "+
+				"can't get processors of an abnormal changefeed",
 				string(info.State))))
 	}
 	// check if this captureID exist
@@ -703,7 +768,7 @@ func (h *OpenAPI) ListCapture(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Success 200,202
-// @Failure 500,400 {object} model.HTTPError
+// @Failure 503,500,400 {object} model.HTTPError
 // @Router	/api/v1/captures/drain [put]
 func (h *OpenAPI) DrainCapture(c *gin.Context) {
 	var req model.DrainCaptureRequest
@@ -758,7 +823,7 @@ func (h *OpenAPI) DrainCapture(c *gin.Context) {
 
 	resp, err := api.HandleOwnerDrainCapture(ctx, h.capture, target)
 	if err != nil {
-		_ = c.Error(err)
+		_ = c.AbortWithError(http.StatusServiceUnavailable, err)
 		return
 	}
 

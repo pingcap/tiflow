@@ -33,10 +33,18 @@ var (
 			Name:      "total_rows_count",
 			Help:      "The total count of rows that are processed by mounter",
 		}, []string{"namespace", "changefeed"})
+	ignoredDMLEventCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "mounter",
+			Name:      "ignored_dml_event_count",
+			Help:      "The total count of dml events that are ignored in mounter.",
+		}, []string{"namespace", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(mountDuration)
 	registry.MustRegister(totalRowsCountGauge)
+	registry.MustRegister(ignoredDMLEventCounter)
 }

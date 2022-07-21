@@ -90,6 +90,8 @@ type Server struct {
 
 // NewServer creates a new executor server instance
 func NewServer(cfg *Config, ctx *test.Context) *Server {
+	log.Info("creating executor", zap.Stringer("config", cfg))
+
 	registerWorkerOnce.Do(registerWorkers)
 	s := Server{
 		cfg:         cfg,
@@ -124,8 +126,8 @@ func (s *Server) buildDeps() (*deps.Deps, error) {
 		return nil, err
 	}
 
-	err = deps.Provide(func() metaModel.KVClientEx {
-		return s.metastores.BusinessStore()
+	err = deps.Provide(func() metaModel.ClientConn {
+		return s.metastores.BusinessClientConn()
 	})
 	if err != nil {
 		return nil, err

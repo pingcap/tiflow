@@ -137,7 +137,7 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 		// 2. tableActor resolvedTs >= processor resolvedTs >= global resolvedTs >= barrierTs
 		redoTs := n.redoManager.GetMinResolvedTs()
 		if redoTs < currentBarrierTs {
-			log.Debug("redoTs should not less than current barrierTs",
+			log.Warn("redoTs should not less than current barrierTs",
 				zap.Int64("tableID", n.tableID),
 				zap.Uint64("redoTs", redoTs),
 				zap.Uint64("barrierTs", currentBarrierTs))
@@ -316,9 +316,6 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 		}
 
 		if event.IsResolved() {
-			if n.state.Load() == TableStatePrepared {
-				n.state.Store(TableStateReplicating)
-			}
 			failpoint.Inject("ProcessorSyncResolvedError", func() {
 				failpoint.Return(false, errors.New("processor sync resolved injected error"))
 			})

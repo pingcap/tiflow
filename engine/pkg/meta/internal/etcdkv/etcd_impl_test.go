@@ -200,7 +200,9 @@ func (suite *SuiteTestEtcd) TestBasicKV() {
 		Endpoints: []string{suite.endpoints},
 	}
 	t := suite.T()
-	cli, err := NewEtcdImpl(conf)
+	cc, err := NewEtcdClient(conf)
+	require.Nil(t, err)
+	cli, err := NewEtcdImpl(cc)
 	require.Nil(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -265,7 +267,9 @@ func (suite *SuiteTestEtcd) TestKeyRangeOption() {
 		Endpoints: []string{suite.endpoints},
 	}
 	t := suite.T()
-	cli, err := NewEtcdImpl(conf)
+	cc, err := NewEtcdClient(conf)
+	require.Nil(t, err)
+	cli, err := NewEtcdImpl(cc)
 	require.Nil(t, err)
 	defer cli.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -377,9 +381,12 @@ func (suite *SuiteTestEtcd) TestKeyRangeOption() {
 func (suite *SuiteTestEtcd) TestTxn() {
 	conf := &metaModel.StoreConfig{
 		Endpoints: []string{suite.endpoints},
+		StoreType: metaModel.StoreTypeEtcd,
 	}
 	t := suite.T()
-	cli, err := NewEtcdImpl(conf)
+	cc, err := NewEtcdClient(conf)
+	require.Nil(t, err)
+	cli, err := NewEtcdImpl(cc)
 	require.Nil(t, err)
 	defer cli.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -509,7 +516,9 @@ func (suite *SuiteTestEtcd) TestGenEpoch() {
 		Endpoints: []string{suite.endpoints},
 	}
 	t := suite.T()
-	cli, err := NewEtcdImpl(conf)
+	cc, err := NewEtcdClient(conf)
+	require.Nil(t, err)
+	cli, err := NewEtcdImpl(cc)
 	require.Nil(t, err)
 	defer cli.Close()
 	testGenerator(t, cli)

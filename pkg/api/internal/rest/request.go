@@ -19,17 +19,18 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path"
 	"time"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/api/middleware"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/version"
 	"go.uber.org/zap"
 )
 
@@ -85,6 +86,7 @@ func NewRequest(c *CDCRESTClient) *Request {
 		maxRetries: 1,
 	}
 	r.WithHeader("Accept", "application/json")
+	r.WithHeader(middleware.ClientVersionHeader, version.ReleaseVersion)
 	return r
 }
 
@@ -310,7 +312,7 @@ func (r *Request) Do(ctx context.Context) (res *Result) {
 			}
 			// close the body to let the TCP connection be reused after reconnecting
 			// see https://github.com/golang/go/blob/go1.18.1/src/net/http/response.go#L62-L64
-			_, _ = io.Copy(ioutil.Discard, resp.Body)
+			_, _ = io.Copy(io.Discard, resp.Body)
 			resp.Body.Close()
 		}()
 
@@ -344,7 +346,7 @@ func (r *Request) Do(ctx context.Context) (res *Result) {
 func (r *Request) checkResponse(resp *http.Response) *Result {
 	var body []byte
 	if resp.Body != nil {
-		data, err := ioutil.ReadAll(resp.Body)
+		data, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return &Result{err: err}
 		}

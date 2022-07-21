@@ -103,6 +103,7 @@ type ServerStatus struct {
 
 // ChangefeedCommonInfo holds some common usage information of a changefeed
 type ChangefeedCommonInfo struct {
+	UpstreamID     uint64        `json:"upstream_id"`
 	Namespace      string        `json:"namespace"`
 	ID             string        `json:"id"`
 	FeedState      FeedState     `json:"state"`
@@ -127,6 +128,7 @@ func (c ChangefeedCommonInfo) MarshalJSON() ([]byte, error) {
 
 // ChangefeedDetail holds detail info of a changefeed
 type ChangefeedDetail struct {
+	UpstreamID     uint64              `json:"upstream_id"`
 	Namespace      string              `json:"namespace"`
 	ID             string              `json:"id"`
 	SinkURI        string              `json:"sink_uri"`
@@ -136,12 +138,12 @@ type ChangefeedDetail struct {
 	TargetTs       uint64              `json:"target_ts"`
 	CheckpointTSO  uint64              `json:"checkpoint_tso"`
 	CheckpointTime JSONTime            `json:"checkpoint_time"`
-	Engine         SortEngine          `json:"sort_engine"`
+	Engine         SortEngine          `json:"sort_engine,omitempty"`
 	FeedState      FeedState           `json:"state"`
 	RunningError   *RunningError       `json:"error"`
 	ErrorHis       []int64             `json:"error_history"`
 	CreatorVersion string              `json:"creator_version"`
-	TaskStatus     []CaptureTaskStatus `json:"task_status"`
+	TaskStatus     []CaptureTaskStatus `json:"task_status,omitempty"`
 }
 
 // MarshalJSON use to marshal ChangefeedDetail

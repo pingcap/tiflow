@@ -16,7 +16,7 @@ package servermaster
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -57,7 +57,7 @@ store-id = "root"
 endpoints = ["127.0.0.1:%d"]
 [frame-metastore-conf.auth]
 user = "root"
-[user-metastore-conf]
+[business-metastore-conf]
 store-id = "default"
 endpoints = ["127.0.0.1:%d"]
 [etcd]
@@ -108,7 +108,7 @@ store-id = "root"
 endpoints = ["127.0.0.1:%d"]
 [frame-metastore-conf.auth]
 user = "root"
-[user-metastore-conf]
+[business-metastore-conf]
 store-id = "default"
 endpoints = ["127.0.0.1:%d"]
 [etcd]
@@ -157,7 +157,7 @@ func testPprof(t *testing.T, addr string) {
 		require.Nil(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
-		_, err = ioutil.ReadAll(resp.Body)
+		_, err = io.ReadAll(resp.Body)
 		require.Nil(t, err)
 	}
 }
@@ -167,7 +167,7 @@ func testPrometheusMetrics(t *testing.T, addr string) {
 	require.Nil(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	_, err = ioutil.ReadAll(resp.Body)
+	_, err = io.ReadAll(resp.Body)
 	require.Nil(t, err)
 }
 
@@ -359,7 +359,7 @@ func testCustomedPrometheusMetrics(t *testing.T, addr string) {
 		require.Nil(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		require.Nil(t, err)
 		metric := string(body)
 		return strings.Contains(metric, "dataflow_server_master_job_num") &&

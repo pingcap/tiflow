@@ -20,13 +20,8 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/stretchr/testify/require"
 )
-
-func TestMain(m *testing.M) {
-	leakutil.SetUpLeakTest(m)
-}
 
 func TestIsDirWritable(t *testing.T) {
 	t.Parallel()
