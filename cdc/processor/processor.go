@@ -67,7 +67,7 @@ type processor struct {
 	schemaStorage entry.SchemaStorage
 	lastSchemaTs  model.Ts
 
-	filter      *filter.Filter
+	filter      filter.Filter
 	mounter     entry.Mounter
 	sink        sink.Sink
 	redoManager redo.LogManager
@@ -639,7 +639,8 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	}()
 
 	var err error
-	p.filter, err = filter.NewFilter(p.changefeed.Info.Config)
+	p.filter, err = filter.NewFilter(p.changefeed.Info.Config,
+		util.GetTimeZoneName(contextutil.TimezoneFromCtx(ctx)))
 	if err != nil {
 		return errors.Trace(err)
 	}
