@@ -11,7 +11,7 @@ function run() {
 	# need to return error three times, first for switch to remote binlog, second for auto retry
 	inject_points=(
 		"github.com/pingcap/tiflow/dm/syncer/binlogstream/SyncerGetEventError=return"
-		"github.com/pingcap/tiflow/dm/syncer/binlogstream/GetEventError=3*return"
+		"github.com/pingcap/tiflow/dm/syncer/binlogstream/GetEventError=return"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 
