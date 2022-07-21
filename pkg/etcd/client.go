@@ -241,24 +241,23 @@ func (c *Client) WatchWithChan(
 	ctx context.Context, outCh chan<- clientV3.WatchResponse,
 	key string, role string, opts ...clientV3.OpOption,
 ) {
-	defer func() {
-		close(outCh)
-		log.Info("WatchWithChan exited", zap.String("role", role))
-	}()
 
 	// get initial revision from opts to avoid revision fall back
 	lastRevision := getRevisionFromWatchOpts(opts...)
-
 	watchCtx, cancel := context.WithCancel(ctx)
-	defer func() {
-		// Using closures to handle changes to the cancel function
-		cancel()
-	}()
 	watchCh := c.cli.Watch(watchCtx, key, opts...)
 
 	ticker := c.clock.Ticker(etcdRequestProgressDuration)
-	defer ticker.Stop()
 	lastReceivedResponseTime := c.clock.Now()
+
+	defer func() {
+		// Using closures to handle changes to the cancel function
+		ticker.Stop()
+		cancel()
+		close(outCh)
+
+		log.Info("WatchWithChan exited", zap.String("role", role))
+	}()
 
 	for {
 		select {
