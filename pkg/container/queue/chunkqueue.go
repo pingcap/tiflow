@@ -320,3 +320,21 @@ func (q *ChunkQueue[T]) Clear() {
 		q.popChunk()
 	}
 }
+
+// BinarySearch returns the smallest
+func (q *ChunkQueue[T]) BinarySearch(f func(val T) bool) int {
+	l, r := 0, q.Size()-1
+	for l < r {
+		m := (l + r) >> 1
+		v, _ := q.At(m)
+		if !f(v) {
+			l = m + 1
+		} else {
+			r = m
+		}
+	}
+	if v, ok := q.Head(); l == r && ok && !f(v) {
+		l++
+	}
+	return l
+}

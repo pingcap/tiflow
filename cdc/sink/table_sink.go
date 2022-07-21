@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/container/queue"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -27,7 +28,8 @@ import (
 type tableSink struct {
 	tableID     model.TableID
 	backendSink Sink
-	buffer      []*model.RowChangedEvent
+	//buffer      []*model.RowChangedEvent
+	buffer queue.ChunkQueue[*model.RowChangedEvent]
 
 	metricsTableSinkTotalRows prometheus.Counter
 }
@@ -52,7 +54,8 @@ func NewTableSink(
 }
 
 func (t *tableSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
-	t.buffer = append(t.buffer, rows...)
+	//t.buffer = append(t.buffer, rows...)
+	t.buffer.EnqueueMany(rows...)
 	t.metricsTableSinkTotalRows.Add(float64(len(rows)))
 	return nil
 }
@@ -73,15 +76,16 @@ func (t *tableSink) FlushRowChangedEvents(
 		log.Panic("inconsistent table sink",
 			zap.Int64("tableID", tableID), zap.Int64("sinkTableID", t.tableID))
 	}
-	i := sort.Search(len(t.buffer), func(i int) bool {
-		return t.buffer[i].CommitTs > resolvedTs
+	i := sort.Search(t.buffer.Size(), func(i int) bool {
+		event, _ := t.buffer.At(i)
+		return event.CommitTs > resolvedTs
 	})
 	if i == 0 {
 		return t.backendSink.FlushRowChangedEvents(ctx, t.tableID, resolved)
 	}
-	resolvedRows := t.buffer[:i]
-	t.buffer = append(make([]*model.RowChangedEvent, 0, len(t.buffer[i:])), t.buffer[i:]...)
-
+	//resolvedRows := t.buffer[:i]
+	//t.buffer = append(make([]*model.RowChangedEvent, 0, len(t.buffer[i:])), t.buffer[i:]...)
+	resolvedRows, _ := t.buffer.DequeueMany(i)
 	err := t.backendSink.EmitRowChangedEvents(ctx, resolvedRows...)
 	if err != nil {
 		return model.NewResolvedTs(0), errors.Trace(err)
