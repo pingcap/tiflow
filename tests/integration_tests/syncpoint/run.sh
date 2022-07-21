@@ -127,6 +127,8 @@ function run() {
 	run_sql "CREATE DATABASE testSync;"
 	run_sql "CREATE DATABASE testSync;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
+	# make suer no panic happen when the syncpoint enable and the ddl sink initializing slowly
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/owner/DDLSinkInitializeSlowly=return(true)'
 	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
