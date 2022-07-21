@@ -533,7 +533,7 @@ func TestBackoffStopsUnexpectedly(t *testing.T) {
 		require.Equal(t, state.Info.AdminJobType, model.AdminStop)
 		require.Equal(t, state.Status.AdminJobType, model.AdminStop)
 		// 100ms is the backoff interval, so sleep 100ms and after a manager tick,
-		// the changefeed will turn in to normal state
+		// the changefeed will turn into normal state
 		time.Sleep(100 * time.Millisecond)
 		manager.Tick(state)
 		tester.MustApplyPatches()
@@ -579,7 +579,7 @@ func TestBackoffNeverStops(t *testing.T) {
 		require.Equal(t, state.Info.AdminJobType, model.AdminStop)
 		require.Equal(t, state.Status.AdminJobType, model.AdminStop)
 		// 100ms is the backoff interval, so sleep 100ms and after a manager tick,
-		// the changefeed will turn in to normal state
+		// the changefeed will turn into normal state
 		time.Sleep(100 * time.Millisecond)
 		manager.Tick(state)
 		tester.MustApplyPatches()
