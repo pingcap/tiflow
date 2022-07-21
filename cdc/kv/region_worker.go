@@ -169,18 +169,19 @@ type regionWorker struct {
 func newRegionWorker(s *eventFeedSession, addr string) *regionWorker {
 	cfg := config.GetGlobalServerConfig().KVClient
 	return &regionWorker{
-		session:       s,
-		inputCh:       make(chan []*regionStatefulEvent, regionWorkerInputChanSize),
-		outputCh:      s.eventCh,
-		errorCh:       make(chan error, 1),
-		statesManager: newRegionStateManager(-1),
-		rtsManager:    newRegionTsManager(),
-		rtsUpdateCh:   make(chan *regionTsInfo, 1024),
-		storeAddr:     addr,
-		concurrent:    cfg.WorkerConcurrent,
-		inputPending:  0,
-		inputCalcSlot: func(regionID uint64) int { return int(regionID) % cfg.WorkerConcurrent },
-		inputSlots:    cfg.WorkerConcurrent,
+		session:        s,
+		inputCh:        make(chan []*regionStatefulEvent, regionWorkerInputChanSize),
+		outputCh:       s.eventCh,
+		errorCh:        make(chan error, 1),
+		statesManager:  newRegionStateManager(-1),
+		rtsManager:     newRegionTsManager(),
+		rtsUpdateCh:    make(chan *regionTsInfo, 1024),
+		enableOldValue: s.enableOldValue,
+		storeAddr:      addr,
+		concurrent:     cfg.WorkerConcurrent,
+		inputPending:   0,
+		inputCalcSlot:  func(regionID uint64) int { return int(regionID) % cfg.WorkerConcurrent },
+		inputSlots:     cfg.WorkerConcurrent,
 	}
 }
 
