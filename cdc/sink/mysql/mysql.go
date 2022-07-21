@@ -661,7 +661,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 					if rbErr := tx.Rollback(); rbErr != nil {
 						log.Warn("failed to rollback txn", zap.Error(err))
-						logDMLTxnErr(
+						_ = logDMLTxnErr(
 							cerror.WrapError(cerror.ErrMySQLTxnError, err),
 							start, s.params.changefeedID, query, dmls.rowCount)
 					}
