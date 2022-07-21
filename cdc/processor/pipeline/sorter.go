@@ -235,6 +235,8 @@ func (n *sorterNode) start(
 				if msg.RawKV.OpType != model.OpTypeResolved {
 					ignored, err := n.mounter.DecodeEvent(ctx, msg)
 					if err != nil {
+						log.Error("Got an error from mounter, sorter will stop.", zap.Error(err))
+						ctx.Throw(err)
 						return errors.Trace(err)
 					}
 					if ignored {

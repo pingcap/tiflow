@@ -68,13 +68,13 @@ func IsChangefeedFastFailErrorCode(errCode errors.RFCErrorCode) bool {
 	return false
 }
 
-var changefeedNotRetryErrors = []*errors.Error{
+var changefeedUnRetryableErrors = []*errors.Error{
 	ErrExpressionColumnNotFound, ErrExpressionParseFailed,
 }
 
-// IsChangefeedNotRetryError returns true if a error is a changefeed not retry error.
-func IsChangefeedNotRetryError(err error) bool {
-	for _, e := range changefeedNotRetryErrors {
+// IsChangefeedUnRetryableError returns true if a error is a changefeed not retry error.
+func IsChangefeedUnRetryableError(err error) bool {
+	for _, e := range changefeedUnRetryableErrors {
 		if e.Equal(err) {
 			return true
 		}

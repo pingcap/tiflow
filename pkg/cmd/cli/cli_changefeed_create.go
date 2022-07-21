@@ -15,6 +15,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"strings"
 	"time"
@@ -97,7 +98,7 @@ func (o *changefeedCommonOptions) strictDecodeConfig(component string, cfg *conf
 		return err
 	}
 
-	_, err = filter.VerifyRules(cfg.Filter)
+	_, err = filter.VerifyTableRules(cfg.Filter)
 
 	return err
 }
@@ -291,7 +292,7 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 	}
 
 	if !o.commonChangefeedOptions.noConfirm {
-		if err := confirmLargeDataGap(cmd, tso.Timestamp, o.startTs); err != nil {
+		if err = confirmLargeDataGap(cmd, tso.Timestamp, o.startTs); err != nil {
 			return err
 		}
 	}
@@ -312,6 +313,15 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 
 	tables, err := o.apiClient.Changefeeds().VerifyTable(ctx, verifyTableConfig)
 	if err != nil {
+		if strings.Contains(err.Error(), "ErrInvalidIgnoreEventType") {
+			supportedEventTypes := filter.SupportedEventTypes()
+			eventTypesStr := make([]string, 0, len(supportedEventTypes))
+			for _, eventType := range supportedEventTypes {
+				eventTypesStr = append(eventTypesStr, string(eventType))
+			}
+			cmd.Println(fmt.Sprintf("Invalid input, 'ignore-event' parameters can only accept [%s]",
+				strings.Join(eventTypesStr, ", ")))
+		}
 		return err
 	}
 
@@ -340,6 +350,15 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 
 	info, err := o.apiClient.Changefeeds().Create(ctx, createChangefeedCfg)
 	if err != nil {
+		if strings.Contains(err.Error(), "ErrInvalidIgnoreEventType") {
+			supportedEventTypes := filter.SupportedEventTypes()
+			eventTypesStr := make([]string, 0, len(supportedEventTypes))
+			for _, eventType := range supportedEventTypes {
+				eventTypesStr = append(eventTypesStr, string(eventType))
+			}
+			cmd.Println(fmt.Sprintf("Invalid input, 'ignore-event' parameters can only accept [%s]",
+				strings.Join(eventTypesStr, ", ")))
+		}
 		return err
 	}
 	infoStr, err := info.Marshal()
