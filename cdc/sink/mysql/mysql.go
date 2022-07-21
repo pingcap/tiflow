@@ -700,7 +700,8 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, bucket int) *prep
 			break
 		}
 		// It can be translated in to INSERT, if the row is committed after
-		// we start replicating the table.
+		// we starting replicating the table, which means it must not be
+		// replicated before, and there is no such row in downstream MySQL.
 		translateToInsert = row.CommitTs > row.ReplicatingTs
 	}
 
