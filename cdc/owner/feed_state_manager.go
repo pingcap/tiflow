@@ -31,7 +31,7 @@ const (
 	//	 640s, 1280s, 2560s, 3600s, ...).
 	// To avoid thunderherd, a random factor is also added.
 	defaultBackoffInitInterval        = 10 * time.Second
-	defaultBackoffMaxInterval         = 30 * time.Minute
+	defaultBackoffMaxInterval         = 60 * time.Minute
 	defaultBackoffRandomizationFactor = 0.1
 	defaultBackoffMultiplier          = 2.0
 
