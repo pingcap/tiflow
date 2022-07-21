@@ -36,6 +36,7 @@ type KV interface {
 	// an immutable representation of that bytes array.
 	// To get a string of bytes, do string([]byte{0x10, 0x20}).
 	// or do nothing on vice verse.
+	// Length of key is restricted to 2KB
 	Put(ctx context.Context, key, val string) (*PutResponse, Error)
 
 	// Get retrieves keys with newest revision.
