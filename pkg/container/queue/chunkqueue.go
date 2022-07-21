@@ -252,6 +252,11 @@ func (q *ChunkQueue[T]) EnqueueMany(vals ...T) {
 	}
 }
 
+// DequeueAll dequeues n elements from the head.
+func (q *ChunkQueue[T]) DequeueAll() ([]T, bool) {
+	return q.DequeueMany(q.Size())
+}
+
 // PopFrontMany dequeues n elements from the head.
 func (q *ChunkQueue[T]) PopFrontMany(n int) ([]T, bool) {
 	return q.DequeueMany(n)
