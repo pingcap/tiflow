@@ -110,30 +110,30 @@ func (q *ChunkQueue[T]) Empty() bool {
 // Getters
 
 // At returns the pointer to an element
-func (q *ChunkQueue[T]) At(idx int) (*T, bool) {
+func (q *ChunkQueue[T]) At(idx int) (T, bool) {
 	if idx < 0 || idx >= q.size {
-		return new(T), false
+		return q.defaultValue, false
 	}
 	i := q.chunks[q.head].l + idx
-	return &q.chunks[q.head+i/q.chunkLength].data[i%q.chunkLength], true
+	return q.chunks[q.head+i/q.chunkLength].data[i%q.chunkLength], true
 }
 
 // Head returns the pointer to the first element in queue and nil if empty
-func (q *ChunkQueue[T]) Head() (*T, bool) {
+func (q *ChunkQueue[T]) Head() (T, bool) {
 	if q.Empty() {
-		return nil, false
+		return q.defaultValue, false
 	}
 	c := q.firstChunk()
-	return &c.data[c.l], true
+	return c.data[c.l], true
 }
 
 // Tail() returns the pointer to the last element in queue and nil if empty
-func (q *ChunkQueue[T]) Tail() (*T, bool) {
+func (q *ChunkQueue[T]) Tail() (T, bool) {
 	if q.Empty() {
-		return nil, false
+		return q.defaultValue, false
 	}
 	c := q.lastChunk()
-	return &c.data[c.r-1], true
+	return c.data[c.r-1], true
 }
 
 // expandSpace extends the space by adding chunk(s) to the queue

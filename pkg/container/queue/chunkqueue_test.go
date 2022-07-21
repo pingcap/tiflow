@@ -66,8 +66,11 @@ func BenchmarkDequeueMany(b *testing.B) {
 		b.ResetTimer()
 		for _, l := range ls {
 			vals, ok := q.DequeueMany(l)
-			require.True(b, ok)
-			require.Equal(b, len(vals), l)
+			if !ok || len(vals) != l {
+				panic("error")
+			}
+			//require.True(b, ok)
+			//require.Equal(b, len(vals), l)
 		}
 	})
 
@@ -94,10 +97,10 @@ func TestChunkQueueSimpleWorkflow(t *testing.T) {
 
 	q.PushBack(10)
 	require.Equal(t, q.Size(), 1)
-	ptr, ok := q.At(0)
-	require.Equal(t, *ptr, 10)
+	v, ok := q.At(0)
+	require.Equal(t, v, 10)
 	require.True(t, ok)
-	v, ok := q.PopFront()
+	v, ok = q.PopFront()
 	require.Equal(t, v, 10)
 	require.True(t, ok)
 
@@ -127,8 +130,8 @@ func TestChunkQueueSimpleWorkflow(t *testing.T) {
 	require.False(t, q.Empty())
 	for i := 0; i < 1000; i++ {
 		x := rand.Intn(testCaseSize)
-		ptr, ok = q.At(x)
-		require.Equal(t, x, *ptr)
+		v, ok = q.At(x)
+		require.Equal(t, x, v)
 		require.True(t, ok)
 	}
 
