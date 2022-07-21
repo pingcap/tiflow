@@ -32,6 +32,7 @@ type (
 type ServerMasterClient interface {
 	TaskSchedulerClient
 	DiscoveryClient
+	ResourceManagerClient
 
 	// Close closes the gRPC connection used to create the client.
 	Close()
@@ -42,6 +43,7 @@ type ServerMasterClient interface {
 type ServerMasterClientWithFailOver struct {
 	TaskSchedulerClient
 	DiscoveryClient
+	ResourceManagerClient
 
 	conn     *grpc.ClientConn
 	resolver *internal.LeaderResolver
@@ -62,10 +64,11 @@ func NewServerMasterClientWithFailOver(
 	}
 
 	return &ServerMasterClientWithFailOver{
-		TaskSchedulerClient: NewTaskSchedulerClient(enginepb.NewTaskSchedulerClient(conn)),
-		DiscoveryClient:     NewDiscoveryClient(enginepb.NewDiscoveryClient(conn)),
-		conn:                conn,
-		resolver:            leaderResolver,
+		TaskSchedulerClient:   NewTaskSchedulerClient(enginepb.NewTaskSchedulerClient(conn)),
+		DiscoveryClient:       NewDiscoveryClient(enginepb.NewDiscoveryClient(conn)),
+		ResourceManagerClient: NewResourceManagerClient(enginepb.NewResourceManagerClient(conn)),
+		conn:                  conn,
+		resolver:              leaderResolver,
 	}, nil
 }
 

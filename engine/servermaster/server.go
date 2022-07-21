@@ -25,6 +25,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
+	pkgClient "github.com/pingcap/tiflow/engine/pkg/client"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/prometheus/client_golang/prometheus"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
@@ -38,7 +40,6 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
-	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
@@ -65,6 +66,13 @@ import (
 	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
 )
 
+type masterServiceGroup interface {
+	pb.DiscoveryServer
+	pb.ResourceManagerServer
+	pb.TaskSchedulerServer
+	pb.JobManagerServer
+}
+
 // Server handles PRC requests for df master.
 type Server struct {
 	etcd *embed.Etcd
@@ -76,11 +84,10 @@ type Server struct {
 		sync.RWMutex
 		m []*Member
 	}
-	masterCli       *rpcutil.LeaderClientWithLock[pb.MasterClient]
-	resourceCli     *rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]
+	masterCli       *rpcutil.LeaderClientWithLock[multiClient]
 	membership      Membership
 	leaderServiceFn func(context.Context) error
-	masterRPCHook   *rpcutil.PreRPCHook[pb.MasterClient]
+	masterRPCHook   rpcutil.PreRPCHook
 
 	// sched scheduler
 	executorManager        ExecutorManager
@@ -182,15 +189,14 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		leaderInitialized: *atomic.NewBool(false),
 		testCtx:           ctx,
 		leader:            atomic.Value{},
-		masterCli:         &rpcutil.LeaderClientWithLock[pb.MasterClient]{},
-		resourceCli:       &rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]{},
+		masterCli:         &rpcutil.LeaderClientWithLock[multiClient]{},
 		p2pMsgRouter:      p2pMsgRouter,
 		rpcLogRL:          rate.NewLimiter(rate.Every(time.Second*5), 3 /*burst*/),
 		metrics:           newServerMasterMetric(),
 		metaStoreManager:  NewMetaStoreManager(),
 	}
 	server.leaderServiceFn = server.runLeaderService
-	masterRPCHook := rpcutil.NewPreRPCHook[pb.MasterClient](
+	masterRPCHook := rpcutil.NewPreRPCHook[multiClient](
 		id,
 		&server.leader,
 		server.masterCli,
@@ -433,9 +439,6 @@ func (s *Server) Stop() {
 	if s.masterCli != nil {
 		s.masterCli.Close()
 	}
-	if s.resourceCli != nil {
-		s.resourceCli.Close()
-	}
 	if s.etcd != nil {
 		s.etcd.Close()
 	}
@@ -526,17 +529,10 @@ func (s *Server) registerMetaStore() error {
 }
 
 func (s *Server) startResourceManager() error {
-	resourceRPCHook := rpcutil.NewPreRPCHook[pb.ResourceManagerClient](
-		s.id,
-		&s.leader,
-		s.resourceCli,
-		&s.leaderInitialized,
-		s.rpcLogRL,
-	)
 	s.resourceManagerService = externRescManager.NewService(
 		s.frameMetaClient,
 		s.executorManager,
-		resourceRPCHook,
+		s.masterRPCHook,
 	)
 	s.scheduler = makeScheduler(s.executorManager, s.resourceManagerService)
 	return nil
@@ -565,7 +561,9 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 
 	registerDone := make(chan struct{})
 	gRPCSvr := func(gs *grpc.Server) {
-		pb.RegisterMasterServer(gs, s)
+		pb.RegisterDiscoveryServer(gs, s)
+		pb.RegisterTaskSchedulerServer(gs, s)
+		pb.RegisterJobManagerServer(gs, s)
 		pb.RegisterResourceManagerServer(gs, s.resourceManagerService)
 		s.msgService = p2p.NewMessageRPCServiceWithRPCServer(s.name(), nil, gs)
 		p2pProtocol.RegisterCDCPeerToPeerServer(gs, s.msgService.GetMessageServer())
@@ -657,11 +655,17 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		log.Info("resource manager exited")
 	}()
 
-	clients := client.NewClientManager()
-	err = clients.AddMasterClient(ctx, []string{s.cfg.MasterAddr})
+	// TODO support TLS.
+	executorClients := pkgClient.NewExecutorGroup(&security.Credential{}, log.L())
+	masterClient, err := pkgClient.NewServerMasterClientWithFailOver(
+		pkgClient.MasterServerList{
+			s.cfg.MasterAddr: true,
+		},
+	)
 	if err != nil {
 		return
 	}
+
 	dctx := dcontext.NewContext(ctx)
 	dctx.Environ.Addr = s.cfg.AdvertiseAddr
 	dctx.Environ.NodeID = s.name()
@@ -692,14 +696,14 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		return err
 	}
 
-	if err := dp.Provide(func() client.ClientsManager {
-		return clients
+	if err := dp.Provide(func() pkgClient.ExecutorGroup {
+		return executorClients
 	}); err != nil {
 		return err
 	}
 
-	if err := dp.Provide(func() client.MasterClient {
-		return clients.MasterClient()
+	if err := dp.Provide(func() pkgClient.ServerMasterClient {
+		return masterClient
 	}); err != nil {
 		return err
 	}
@@ -741,7 +745,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	}()
 
 	s.gcRunner = externRescManager.NewGCRunner(s.frameMetaClient, map[resModel.ResourceType]externRescManager.GCHandlerFunc{
-		"local": resourcetypes.NewLocalFileResourceType(clients).GCHandler(),
+		"local": resourcetypes.NewLocalFileResourceType(executorClients).GCHandler(),
 	})
 	s.gcCoordinator = externRescManager.NewGCCoordinator(s.executorManager, s.jobManager, s.frameMetaClient, s.gcRunner)
 

@@ -42,9 +42,15 @@ type GrpcServer interface {
 	Stop()
 }
 
+type masterServices interface {
+	pb.DiscoveryServer
+	pb.TaskSchedulerServer
+	pb.JobManagerServer
+}
+
 type masterServer struct {
 	*baseServer
-	pb.MasterServer
+	masterServices
 }
 
 func (s *masterServer) dial() (Conn, error) {
@@ -166,10 +172,12 @@ func (c *masterServerClient) ReportExecutorWorkload(
 	return resp.(*pb.ExecWorkloadResponse), nil
 }
 
+/*
 // NewMasterClient creates a new master client based on Conn
 func NewMasterClient(conn Conn) pb.MasterClient {
 	return &masterServerClient{conn}
 }
+*/
 
 type executorServer struct {
 	*baseServer
@@ -244,7 +252,7 @@ func Dial(addr string) (Conn, error) {
 
 // NewMasterServer creates a master grpc server and listened the address.
 // We try to make things simple, so we design the "NewMasterServer" to register only one type of pb server.
-func NewMasterServer(addr string, server pb.MasterServer) (GrpcServer, error) {
+func NewMasterServer(addr string, server masterServices) (GrpcServer, error) {
 	container.mu.Lock()
 	defer container.mu.Unlock()
 	_, ok := container.servers[addr]

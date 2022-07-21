@@ -93,7 +93,18 @@ func (l *LeaderClientWithLock[T]) Close() {
 // into an RPC server struct and call PreRPCHook.PreRPC() for every RPC method.
 //
 // The type parameter T is the type of RPC client that implements "forward to leader".
-type PreRPCHook[T RPCClientType] struct {
+type PreRPCHook interface {
+	PreRPC(
+		ctx context.Context,
+		req interface{},
+		respPointer interface{},
+	) (shouldRet bool, err error)
+
+	CheckLeader() (leader *Member, exist bool)
+}
+
+// preRPCHookImpl implements PreRPCHook.
+type preRPCHookImpl[T RPCClientType] struct {
 	// forward to leader
 	id        string        // used to compare with leader.Name, to know if this is the leader
 	leader    *atomic.Value // should be a Member
@@ -106,15 +117,15 @@ type PreRPCHook[T RPCClientType] struct {
 	limiter *rate.Limiter
 }
 
-// NewPreRPCHook creates a new PreRPCHook
+// NewPreRPCHook creates a new preRPCHookImpl
 func NewPreRPCHook[T RPCClientType](
 	id string,
 	leader *atomic.Value,
 	leaderCli *LeaderClientWithLock[T],
 	initialized *atomic.Bool,
 	limiter *rate.Limiter,
-) *PreRPCHook[T] {
-	return &PreRPCHook[T]{
+) *preRPCHookImpl[T] {
+	return &preRPCHookImpl[T]{
 		id:          id,
 		leader:      leader,
 		leaderCli:   leaderCli,
@@ -132,7 +143,7 @@ func NewPreRPCHook[T RPCClientType](
 // - rate limit
 // TODO: we can build a (req type -> resp type) map at compile time, to avoid passing
 // in respPointer.
-func (h PreRPCHook[T]) PreRPC(
+func (h preRPCHookImpl[T]) PreRPC(
 	ctx context.Context,
 	req interface{},
 	respPointer interface{},
@@ -152,14 +163,14 @@ func (h PreRPCHook[T]) PreRPC(
 	return
 }
 
-func (h PreRPCHook[T]) logRateLimit(methodName string, req interface{}) {
+func (h preRPCHookImpl[T]) logRateLimit(methodName string, req interface{}) {
 	// TODO: rate limiter based on different sender
 	if h.limiter.Allow() {
 		log.Info("", zap.Any("payload", req), zap.String("request", methodName))
 	}
 }
 
-func (h PreRPCHook[T]) checkInitialized(respPointer interface{}) (shouldRet bool, err error) {
+func (h preRPCHookImpl[T]) checkInitialized(respPointer interface{}) (shouldRet bool, err error) {
 	if h.initialized.Load() {
 		return false, nil
 	}
@@ -176,7 +187,7 @@ func (h PreRPCHook[T]) checkInitialized(respPointer interface{}) (shouldRet bool
 	return true, nil
 }
 
-func (h PreRPCHook[T]) forwardToLeader(
+func (h preRPCHookImpl[T]) forwardToLeader(
 	ctx context.Context,
 	methodName string,
 	req interface{},
@@ -210,7 +221,7 @@ func (h PreRPCHook[T]) forwardToLeader(
 	return true, errors.ErrMasterRPCNotForward.GenWithStackByArgs()
 }
 
-func (h PreRPCHook[T]) isLeaderAndNeedForward(ctx context.Context) (isLeader, needForward bool) {
+func (h preRPCHookImpl[T]) isLeaderAndNeedForward(ctx context.Context) (isLeader, needForward bool) {
 	leader, exist := h.CheckLeader()
 	// leader is nil, retry for 3 seconds
 	if !exist {
@@ -242,7 +253,7 @@ func (h PreRPCHook[T]) isLeaderAndNeedForward(ctx context.Context) (isLeader, ne
 	return
 }
 
-func (h PreRPCHook[T]) CheckLeader() (leader *Member, exist bool) {
+func (h preRPCHookImpl[T]) CheckLeader() (leader *Member, exist bool) {
 	lp := h.leader.Load()
 	if lp == nil {
 		return

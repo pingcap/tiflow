@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/gogo/status"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 
@@ -26,14 +27,13 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
-	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	derrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // ResourceManagerClient is a type alias for a client connecting to
 // the resource manager (which is part of the Servermaster).
-type ResourceManagerClient = *rpcutil.FailoverRPCClients[pb.ResourceManagerClient]
+type ResourceManagerClient = client.ResourceManagerClient
 
 // DefaultBroker implements the Broker interface
 type DefaultBroker struct {
@@ -182,12 +182,13 @@ func (b *DefaultBroker) checkForExistingResource(
 	ctx context.Context,
 	resourceKey resModel.ResourceKey,
 ) (*resModel.ResourceMeta, bool, error) {
-	resp, err := rpcutil.DoFailoverRPC(
-		ctx,
-		b.client,
-		&pb.QueryResourceRequest{ResourceKey: &pb.ResourceKey{JobId: resourceKey.JobID, ResourceId: resourceKey.ID}},
-		pb.ResourceManagerClient.QueryResource,
-	)
+	request := &pb.QueryResourceRequest{
+		ResourceKey: &pb.ResourceKey{
+			JobId:      resourceKey.JobID,
+			ResourceId: resourceKey.ID,
+		},
+	}
+	resp, err := b.client.QueryResource(ctx, request)
 	if err == nil {
 		return &resModel.ResourceMeta{
 			ID:       resourceKey.ID,

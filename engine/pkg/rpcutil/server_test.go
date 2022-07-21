@@ -33,7 +33,7 @@ func TestCheckLeaderAndNeedForward(t *testing.T) {
 
 	serverID := "server1"
 	ctx := context.Background()
-	h := &PreRPCHook[int]{
+	h := &preRPCHookImpl[int]{
 		id:        serverID,
 		leader:    &atomic.Value{},
 		leaderCli: &LeaderClientWithLock[int]{},
@@ -106,10 +106,10 @@ func (m *mockRPCClientImpl) MockRPCWithErrField(ctx context.Context, req *mockRP
 }
 
 type mockRPCServer struct {
-	hook *PreRPCHook[mockRPCClientIface]
+	hook *preRPCHookImpl[mockRPCClientIface]
 }
 
-// MockRPC is an example usage for PreRPCHook.PreRPC.
+// MockRPC is an example usage for preRPCHookImpl.PreRPC.
 func (s *mockRPCServer) MockRPC(ctx context.Context, req *mockRPCReq, opts ...grpc.CallOption) (*mockRPCResp, error) {
 	resp2 := &mockRPCResp{}
 	shouldRet, err := s.hook.PreRPC(ctx, req, &resp2)
@@ -131,7 +131,7 @@ func (s *mockRPCServer) MockRPCWithErrField(ctx context.Context, req *mockRPCReq
 // newMockRPCServer returns a mockRPCServer that is ready to use.
 func newMockRPCServer() *mockRPCServer {
 	serverID := "server1"
-	h := &PreRPCHook[mockRPCClientIface]{
+	h := &preRPCHookImpl[mockRPCClientIface]{
 		id:          serverID,
 		leader:      &atomic.Value{},
 		leaderCli:   &LeaderClientWithLock[mockRPCClientIface]{},

@@ -16,11 +16,14 @@ package internal
 import (
 	"fmt"
 	"math/rand"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 	"google.golang.org/grpc/resolver"
 	"google.golang.org/grpc/resolver/manual"
 	"google.golang.org/grpc/serviceconfig"
@@ -168,12 +171,23 @@ func (b *LeaderResolver) Build(
 // UpdateServerList should be called by engine's service discovery mechanism
 // to update the serverList in a timely manner.
 func (b *LeaderResolver) UpdateServerList(serverList MasterServerList) {
+	updated := false
+
 	b.serverListMu.Lock()
-	b.serverList = serverList
+	if !reflect.DeepEqual(b.serverList, serverList) {
+		b.serverList = serverList
+		updated = true
+	}
 	b.serverListMu.Unlock()
+
+	if !updated {
+		return
+	}
 
 	select {
 	case b.updateNotifyCh <- struct{}{}:
+		log.L().Info("leader resolver state updated",
+			zap.Any("server-list", b.serverList))
 	default:
 	}
 }
