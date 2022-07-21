@@ -163,8 +163,28 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *model.ChangefeedReactor
 		return errors.Trace(err)
 	default:
 	}
+<<<<<<< HEAD
 
 	c.sink.emitCheckpointTs(ctx, checkpointTs)
+=======
+	// we need to wait sink to be ready before we do the other things
+	// otherwise, we may cause a nil pointer panic
+	if !c.sink.isInitialized() {
+		return nil
+	}
+	// This means that the cached DDL has been executed,
+	// and we need to use the latest table names.
+	if c.currentTableNames == nil {
+		c.currentTableNames = c.schema.AllTableNames()
+		log.Debug("changefeed current table names updated",
+			zap.String("namespace", c.id.Namespace),
+			zap.String("changefeed", c.id.ID),
+			zap.Any("tables", c.currentTableNames),
+		)
+	}
+	c.sink.emitCheckpointTs(checkpointTs, c.currentTableNames)
+
+>>>>>>> 3695071af (ddl_sink (ticdc): fix ddl sink nil point panic (#6390))
 	barrierTs, err := c.handleBarrier(ctx)
 	if err != nil {
 		return errors.Trace(err)
