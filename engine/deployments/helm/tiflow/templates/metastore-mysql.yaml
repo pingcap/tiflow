@@ -1,16 +1,16 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "tiflow.name" . }}-metastore-mysql
+  name: {{ include "tiflow.name" . }}-metastore-framework
   labels:
-    app: {{ include "tiflow.name" . }}-metastore-mysql
+    app: {{ include "tiflow.name" . }}-metastore-framework
 spec:
   ports:
     - name: port-mysql # note the name is no more than 15 characters
       port: 3306
       targetPort: 3306
   selector:
-    app: {{ include "tiflow.name" . }}-metastore-mysql
+    app: {{ include "tiflow.name" . }}-metastore-framework
 
 ---
 apiVersion: apps/v1
@@ -18,26 +18,26 @@ kind: StatefulSet
 metadata:
   name: {{ include "tiflow.name" . }}-metastore-framework-mysql
   labels:
-    app: {{ include "tiflow.name" . }}-metastore-mysql
+    app: {{ include "tiflow.name" . }}-metastore-framework
 spec:
   selector:
     matchLabels:
-      app: {{ include "tiflow.name" . }}-metastore-mysql
-  serviceName: {{ include "tiflow.name" . }}-metastore-mysql
+      app: {{ include "tiflow.name" . }}-metastore-framework
+  serviceName: {{ include "tiflow.name" . }}-metastore-framework
   replicas: 1
   podManagementPolicy: Parallel
   template:
     metadata:
       labels:
-        app: {{ include "tiflow.name" . }}-metastore-mysql
+        app: {{ include "tiflow.name" . }}-metastore-framework
     spec:
       containers:
         - name: {{ include "tiflow.name" . }}-metastore-framework-mysql
           image: mysql:5.7
-          imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
           volumeMounts:
             - mountPath: "/var/lib/mysql"
-              name: {{ include "tiflow.name" . }}-metastore-framework-mysql-data
+              name: data
           env:
             - name: MYSQL_ALLOW_EMPTY_PASSWORD
               value: "true"
@@ -68,7 +68,7 @@ spec:
                 - "SELECT 1"
   volumeClaimTemplates:
     - metadata:
-        name: {{ include "tiflow.name" . }}-metastore-framework-mysql-data
+        name: data
       spec:
         accessModes:
           - ReadWriteOnce

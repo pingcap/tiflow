@@ -22,7 +22,7 @@ spec:
           command:
             - "/tiflow-chaos-case"
             - "--duration=20m"
-            - "--etcd-addr={{ include "tiflow.name" . }}-metastore-etcd:12479"
+            - "--etcd-addr={{ include "tiflow.name" . }}-metastore-business:12479"
             - "--master-addr={{ include "tiflow.name" . }}-server-master:10240"
             - "--master-count={{ .Values.master.replicas }}"
             - "--worker-count={{ .Values.executor.replicas }}"

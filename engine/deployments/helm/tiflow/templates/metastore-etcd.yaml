@@ -1,16 +1,16 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "tiflow.name" . }}-metastore-etcd
+  name: {{ include "tiflow.name" . }}-metastore-business
   labels:
-    app: {{ include "tiflow.name" . }}-metastore-etcd
+    app: {{ include "tiflow.name" . }}-metastore-business
 spec:
   ports:
     - name: port-etcd # note the name is no more than 15 characters
       port: 12479
       targetPort: 2479
   selector:
-    app: {{ include "tiflow.name" . }}-metastore-etcd
+    app: {{ include "tiflow.name" . }}-metastore-business
 
 ---
 apiVersion: apps/v1
@@ -18,23 +18,26 @@ kind: StatefulSet
 metadata:
   name: {{ include "tiflow.name" . }}-metastore-business-etcd
   labels:
-    app: {{ include "tiflow.name" . }}-metastore-etcd
+    app: {{ include "tiflow.name" . }}-metastore-business
 spec:
   selector:
     matchLabels:
-      app: {{ include "tiflow.name" . }}-metastore-etcd
-  serviceName: {{ include "tiflow.name" . }}-metastore-etcd
+      app: {{ include "tiflow.name" . }}-metastore-business
+  serviceName: {{ include "tiflow.name" . }}-metastore-business
   replicas: 1
   podManagementPolicy: Parallel
   template:
     metadata:
       labels:
-        app: {{ include "tiflow.name" . }}-metastore-etcd
+        app: {{ include "tiflow.name" . }}-metastore-business
     spec:
       containers:
         - name: {{ include "tiflow.name" . }}-metastore-business-etcd
           image: quay.io/coreos/etcd:v3.5.4
-          imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          volumeMounts:
+            - mountPath: "/data/etcd"
+              name: data
           env:
             - name: MY_POD_NAME
               valueFrom:
@@ -55,7 +58,7 @@ spec:
             - "--initial-cluster-state=new"
   volumeClaimTemplates:
     - metadata:
-        name: {{ include "tiflow.name" . }}-metastore-business-etcd-data
+        name: data
       spec:
         accessModes:
           - ReadWriteOnce

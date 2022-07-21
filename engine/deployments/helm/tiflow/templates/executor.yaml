@@ -37,10 +37,10 @@ spec:
       containers:
         - name: {{ include "tiflow.name" . }}-executor
           image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
-          imagePullPolicy: {{ default "IfNotPresent" .Values.image.pullPolicy }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
           volumeMounts:
             - mountPath: /log
-              name: {{ include "tiflow.name" . }}-executor-log
+              name: log
           env:
             - name: MY_POD_NAME
               valueFrom:
@@ -50,6 +50,8 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            - name: MY_SERVICE_NAME
+              value: {{ include "tiflow.name" . }}-executor
           ports:
             - containerPort: 10241
               name: executor
@@ -58,13 +60,13 @@ spec:
             - "executor"
             - "--name=$(MY_POD_NAME)"
             - "--worker-addr=0.0.0.0:10241"
-            - "--advertise-addr=$(MY_POD_NAME).-{{ include "tiflow.name" . }}-executor.$(MY_POD_NAMESPACE):10241"
+            - "--advertise-addr=$(MY_POD_NAME).$(MY_SERVICE_NAME).$(MY_POD_NAMESPACE):10241"
             - "--join={{ include "tiflow.masterAddr" . }}"
             - "--config=/conf/executor.toml"
             - "--log-file=/log/$(MY_POD_NAME).log"
   volumeClaimTemplates:
     - metadata:
-        name: {{ include "tiflow.name" . }}-executor-log
+        name: log
       spec:
         accessModes:
           - ReadWriteOnce
