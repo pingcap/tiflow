@@ -57,7 +57,7 @@ type schemaStorageImpl struct {
 	gcTs       uint64
 	resolvedTs uint64
 
-	filter         *filter.Filter
+	filter         filter.Filter
 	forceReplicate bool
 
 	id model.ChangeFeedID
@@ -65,7 +65,7 @@ type schemaStorageImpl struct {
 
 // NewSchemaStorage creates a new schema storage
 func NewSchemaStorage(
-	meta *timeta.Meta, startTs uint64, filter *filter.Filter,
+	meta *timeta.Meta, startTs uint64, filter filter.Filter,
 	forceReplicate bool, id model.ChangeFeedID,
 ) (SchemaStorage, error) {
 	var snap *schema.Snapshot

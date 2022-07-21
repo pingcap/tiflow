@@ -30,7 +30,7 @@ import (
 )
 
 type mockProducer struct {
-	mqEvent      map[topicPartitionKey][]*codec.MQMessage
+	mqEvent      map[TopicPartitionKey][]*codec.MQMessage
 	flushedTimes int
 
 	mockErr chan error
@@ -45,9 +45,9 @@ func (m *mockProducer) AsyncSendMessage(
 	default:
 	}
 
-	key := topicPartitionKey{
-		topic:     topic,
-		partition: partition,
+	key := TopicPartitionKey{
+		Topic:     topic,
+		Partition: partition,
 	}
 	if _, ok := m.mqEvent[key]; !ok {
 		m.mqEvent[key] = make([]*codec.MQMessage, 0)
@@ -77,7 +77,7 @@ func (m *mockProducer) InjectError(err error) {
 
 func NewMockProducer() *mockProducer {
 	return &mockProducer{
-		mqEvent: make(map[topicPartitionKey][]*codec.MQMessage),
+		mqEvent: make(map[TopicPartitionKey][]*codec.MQMessage),
 		mockErr: make(chan error, 1),
 	}
 }
@@ -106,9 +106,9 @@ func TestBatch(t *testing.T) {
 	defer cancel()
 	worker, _ := newTestWorker(ctx)
 	defer worker.close()
-	key := topicPartitionKey{
-		topic:     "test",
-		partition: 1,
+	key := TopicPartitionKey{
+		Topic:     "test",
+		Partition: 1,
 	}
 
 	tests := []struct {
@@ -220,17 +220,17 @@ func TestBatch(t *testing.T) {
 func TestGroup(t *testing.T) {
 	t.Parallel()
 
-	key1 := topicPartitionKey{
-		topic:     "test",
-		partition: 1,
+	key1 := TopicPartitionKey{
+		Topic:     "test",
+		Partition: 1,
 	}
-	key2 := topicPartitionKey{
-		topic:     "test",
-		partition: 2,
+	key2 := TopicPartitionKey{
+		Topic:     "test",
+		Partition: 2,
 	}
-	key3 := topicPartitionKey{
-		topic:     "test1",
-		partition: 2,
+	key3 := TopicPartitionKey{
+		Topic:     "test1",
+		Partition: 2,
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -299,19 +299,19 @@ func TestGroup(t *testing.T) {
 func TestAsyncSend(t *testing.T) {
 	t.Parallel()
 
-	key1 := topicPartitionKey{
-		topic:     "test",
-		partition: 1,
+	key1 := TopicPartitionKey{
+		Topic:     "test",
+		Partition: 1,
 	}
 
-	key2 := topicPartitionKey{
-		topic:     "test",
-		partition: 2,
+	key2 := TopicPartitionKey{
+		Topic:     "test",
+		Partition: 2,
 	}
 
-	key3 := topicPartitionKey{
-		topic:     "test",
-		partition: 3,
+	key3 := TopicPartitionKey{
+		Topic:     "test",
+		Partition: 3,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -393,9 +393,9 @@ func TestAsyncSend(t *testing.T) {
 func TestFlush(t *testing.T) {
 	t.Parallel()
 
-	key1 := topicPartitionKey{
-		topic:     "test",
-		partition: 1,
+	key1 := TopicPartitionKey{
+		Topic:     "test",
+		Partition: 1,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -524,9 +524,9 @@ func TestProducerError(t *testing.T) {
 				Value: []byte("aa"),
 			}},
 		},
-		key: topicPartitionKey{
-			topic:     "test",
-			partition: 1,
+		key: TopicPartitionKey{
+			Topic:     "test",
+			Partition: 1,
 		},
 	})
 	require.NoError(t, err)
@@ -560,9 +560,9 @@ func TestWorker(t *testing.T) {
 				Value: []byte("aa"),
 			}},
 		},
-		key: topicPartitionKey{
-			topic:     "test",
-			partition: 1,
+		key: TopicPartitionKey{
+			Topic:     "test",
+			Partition: 1,
 		},
 	})
 	require.NoError(t, err)
@@ -576,9 +576,9 @@ func TestWorker(t *testing.T) {
 				Value: []byte("aa"),
 			}},
 		},
-		key: topicPartitionKey{
-			topic:     "test",
-			partition: 1,
+		key: TopicPartitionKey{
+			Topic:     "test",
+			Partition: 1,
 		},
 	})
 	require.NoError(t, err)
