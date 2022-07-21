@@ -35,7 +35,7 @@ Validator can be enabled together with the task or enabled on the fly, the task 
       - in `full` validation mode, we compare them column by column
       - in `fast` validation mode, we only check its existence
     - for `delete` type of `row change`, downstream should not contains that data.
-5. For `row change`s which are validated successfully, worker will remove it from `pending row changes`, others which fail to validate will be marked as `failed row change` and be validated again after some interval.
+5. For `row change`s which are validated successfully, worker will remove them from `pending row changes`, while others failing the validation will be marked as `failed row change` and be validated again after a set interval.
 6. If a `failed row change` keeps failing to validate for enough time(`delay time`), we mark it as `error row change` and save it into meta database.
 
 ### False positive
