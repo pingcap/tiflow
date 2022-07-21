@@ -26,4 +26,6 @@ insert into dm_syncer_ignore_db_2(id, name) values (1, 'Howie'), (2, 'howie');
 
 use `dm_syncer_do_db`;
 create table dm_syncer_do_db_4(id int, foreign_id int, primary key (id), foreign key (foreign_id) references dm_syncer_ignore_db.dm_syncer_ignore_db_1(id));
+insert into dm_syncer_do_db_4(id, foreign_id) values (1, 1), (2, 2);
 create table dm_syncer_do_db_5 like dm_syncer_do_db_4;
+insert into dm_syncer_do_db_5(id, foreign_id) values (1, 1), (2, 2);
