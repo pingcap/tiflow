@@ -1100,11 +1100,11 @@ type SyncerConfigForDowngrade struct {
 	EnableGTID              bool   `yaml:"enable-gtid"`
 	DisableCausality        bool   `yaml:"disable-detect"`
 	SafeMode                bool   `yaml:"safe-mode"`
-	SafeModeDuration        string `yaml:"safe-mode-duration"`
 	EnableANSIQuotes        bool   `yaml:"enable-ansi-quotes"`
 
-	Compact      bool `yaml:"compact,omitempty"`
-	MultipleRows bool `yaml:"multipleRows,omitempty"`
+	SafeModeDuration string `yaml:"safe-mode-duration,omitempty"`
+	Compact          bool   `yaml:"compact,omitempty"`
+	MultipleRows     bool   `yaml:"multipleRows,omitempty"`
 }
 
 // NewSyncerConfigsForDowngrade converts SyncerConfig to SyncerConfigForDowngrade.
@@ -1164,16 +1164,16 @@ type TaskConfigForDowngrade struct {
 	BAList                  map[string]*filter.Rules             `yaml:"block-allow-list"`
 	Mydumpers               map[string]*MydumperConfig           `yaml:"mydumpers"`
 	Loaders                 map[string]*LoaderConfigForDowngrade `yaml:"loaders"`
-	Syncers                 map[string]*SyncerConfigForDowngrade `yaml:"syncers"`
 	CleanDumpFile           bool                                 `yaml:"clean-dump-file"`
 	EnableANSIQuotes        bool                                 `yaml:"ansi-quotes"`
 	RemoveMeta              bool                                 `yaml:"remove-meta"`
 	// new config item
-	MySQLInstances   []*MySQLInstanceForDowngrade `yaml:"mysql-instances"`
-	ExprFilter       map[string]*ExpressionFilter `yaml:"expression-filter,omitempty"`
-	OnlineDDL        bool                         `yaml:"online-ddl,omitempty"`
-	ShadowTableRules []string                     `yaml:"shadow-table-rules,omitempty"`
-	TrashTableRules  []string                     `yaml:"trash-table-rules,omitempty"`
+	Syncers          map[string]*SyncerConfigForDowngrade `yaml:"syncers,omitempty"`
+	MySQLInstances   []*MySQLInstanceForDowngrade         `yaml:"mysql-instances"`
+	ExprFilter       map[string]*ExpressionFilter         `yaml:"expression-filter,omitempty"`
+	OnlineDDL        bool                                 `yaml:"online-ddl,omitempty"`
+	ShadowTableRules []string                             `yaml:"shadow-table-rules,omitempty"`
+	TrashTableRules  []string                             `yaml:"trash-table-rules,omitempty"`
 }
 
 // NewTaskConfigForDowngrade create new TaskConfigForDowngrade.
