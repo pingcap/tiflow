@@ -22,7 +22,7 @@ Some known limitions to this design:
 
 ### Life cycle of validator
 
-Validator can be enabled together with the task or enabled on the fly, the task which enables validator should has a incremental migration unit, i.e. syncer. Validator will be deleted when the task is deleted. Enabled validator will be in `running` state, it can be stopped manually or stopped when met error that cannot be recovered automatically, then it's in `stopped` state. Validator in `stopped` state can be started again to return to `running` state.
+Validator can be enabled together with the task or enabled on the fly, the task which enables validator should has an incremental migration unit, i.e. syncer. Validator will be deleted when the task is deleted. Enabled validator will be in `running` state, it can be stopped manually or stopped when meeting error that cannot be recovered automatically, subsequently turning to `stopped` state. Validator in `stopped` state can be started again and return to `running` state.
 
 ### Validation process
 
