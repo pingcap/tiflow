@@ -120,7 +120,7 @@ func TestPuller(t *testing.T) {
 	p, err := NewDDLPuller(
 		ctx, ctx.ChangefeedVars().Info.Config, up, startTs, ctx.ChangefeedVars().ID)
 	require.Nil(t, err)
-	p.(*ddlPullerImpl).puller = newMockDDLJobPuller(mockPuller)
+	p.(*ddlPullerImpl).ddlJobPuller = newMockDDLJobPuller(mockPuller)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -252,7 +252,7 @@ func TestResolvedTsStuck(t *testing.T) {
 	mockClock := clock.NewMock()
 	p.(*ddlPullerImpl).clock = mockClock
 
-	p.(*ddlPullerImpl).puller = newMockDDLJobPuller(mockPuller)
+	p.(*ddlPullerImpl).ddlJobPuller = newMockDDLJobPuller(mockPuller)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {

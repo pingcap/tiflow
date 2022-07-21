@@ -31,13 +31,13 @@ import (
 )
 
 type schemaWrap4Owner struct {
-	schemaSnapshot         *schema.Snapshot
-	filter                 filter.Filter
-	config                 *config.ReplicaConfig
-	allPhysicalTablesCache []model.TableID
-	ddlHandledTs           model.Ts
-	schemaVersion          int64
-	id                     model.ChangeFeedID
+	schemaSnapshot              *schema.Snapshot
+	filter                      filter.Filter
+	config                      *config.ReplicaConfig
+	allPhysicalTablesCache      []model.TableID
+	ddlHandledTs                model.Ts
+	schemaVersion               int64
+	id                          model.ChangeFeedID
 	metricIgnoreDDLEventCounter prometheus.Counter
 }
 

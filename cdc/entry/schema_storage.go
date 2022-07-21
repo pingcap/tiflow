@@ -69,9 +69,11 @@ func NewSchemaStorage(
 	meta *timeta.Meta, startTs uint64, filter filter.Filter,
 	forceReplicate bool, id model.ChangeFeedID,
 ) (SchemaStorage, error) {
-	var snap *schema.Snapshot
-	var err error
-	var version int64
+	var (
+		snap    *schema.Snapshot
+		err     error
+		version int64
+	)
 	if meta == nil {
 		snap = schema.NewEmptySnapshot(forceReplicate)
 	} else {

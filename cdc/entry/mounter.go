@@ -236,7 +236,7 @@ func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawKey []b
 	}, nil
 }
 
-// IsLegacyFormatJob return true if the job is from queue.
+// IsLegacyFormatJob returns true if the job is from the legacy DDL list key.
 func IsLegacyFormatJob(rawKV *model.RawKVEntry) bool {
 	return bytes.HasPrefix(rawKV.Key, metaPrefix)
 }
@@ -264,7 +264,7 @@ func ParseDDLJob(tblInfo *model.TableInfo, rawKV *model.RawKVEntry, id int64) (*
 	return parseJob(v, rawKV.StartTs, rawKV.CRTs)
 }
 
-// parseJob unmarshal the job from the v.
+// parseJob unmarshal the job from "v".
 func parseJob(v []byte, startTs, CRTs uint64) (*timodel.Job, error) {
 	job := &timodel.Job{}
 	err := json.Unmarshal(v, job)

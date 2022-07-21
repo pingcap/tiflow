@@ -52,28 +52,32 @@ const (
 
 // DDLJobPuller is used to pull ddl job from TiKV.
 type DDLJobPuller interface {
+	// Run starts the DDLJobPuller.
 	Run(ctx context.Context) error
+	// Output the DDL job entry, it contains the DDL job and the error.
 	Output() <-chan *model.DDLJobEntry
 }
 
 type ddlJobPullerImpl struct {
 	puller    Puller
 	kvStorage tidbkv.Storage
+	// tableInfo is initialized when receive the first concurrent DDL job.
 	tableInfo *model.TableInfo
 	columnID  int64
 	outputCh  chan *model.DDLJobEntry
 }
 
+// Run starts the DDLJobPuller.
 func (p *ddlJobPullerImpl) Run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		return p.puller.Run(ctx)
+		return errors.Trace(p.puller.Run(ctx))
 	})
 
 	rawDDLCh := memory.SortOutput(ctx, p.puller.Output())
-	var ddlRawKV *model.RawKVEntry
 	for {
+		var ddlRawKV *model.RawKVEntry
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -82,16 +86,24 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context) error {
 		if ddlRawKV == nil {
 			continue
 		}
+
 		job, err := p.unmarshalDDL(ddlRawKV)
-		p.outputCh <- &model.DDLJobEntry{
+		jobEntry := &model.DDLJobEntry{
 			Job:    job,
 			OpType: ddlRawKV.OpType,
 			CRTs:   ddlRawKV.CRTs,
 			Err:    err,
 		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case p.outputCh <- jobEntry:
+		}
 	}
 }
 
+// Output the DDL job entry, it contains the DDL job and the error.
 func (p *ddlJobPullerImpl) Output() <-chan *model.DDLJobEntry {
 	return p.outputCh
 }
@@ -178,8 +190,7 @@ func findColumnByName(cols []*timodel.ColumnInfo, name string) (*timodel.ColumnI
 	return nil, cerror.WrapError(cerror.ErrDDLSchemaNotFound, errors.Errorf("can't find column %s", name))
 }
 
-// NewDDLJobPuller create a new NewDDLJobPuller fetch event start from checkpointTs
-// and put into buf.
+// NewDDLJobPuller creates a new NewDDLJobPuller, which fetches events starting event start from checkpointTs.
 func NewDDLJobPuller(
 	ctx context.Context,
 	pdCli pd.Client,
@@ -211,8 +222,8 @@ type DDLPuller interface {
 }
 
 type ddlPullerImpl struct {
-	puller DDLJobPuller
-	filter filter.Filter
+	ddlJobPuller DDLJobPuller
+	filter       filter.Filter
 
 	mu             sync.Mutex
 	resolvedTS     uint64
@@ -264,18 +275,18 @@ func NewDDLPuller(ctx context.Context,
 	}
 
 	return &ddlPullerImpl{
-		puller:        puller,
-		resolvedTS:    startTs,
-		filter:        f,
-		cancel:        func() {},
-		clock:         clock.New(),
-		changefeedID:  changefeed,
+		ddlJobPuller: puller,
+		resolvedTS:   startTs,
+		filter:       f,
+		cancel:       func() {},
+		clock:        clock.New(),
+		changefeedID: changefeed,
 		metricDiscardedDDLCounter: discardedDDLCounter.
 			WithLabelValues(changefeed.Namespace, changefeed.ID),
 	}, nil
 }
 
-func (h *ddlPullerImpl) handleRawDDL(jobEntry *model.DDLJobEntry) error {
+func (h *ddlPullerImpl) handleDDLJobEntry(jobEntry *model.DDLJobEntry) error {
 	if jobEntry.OpType == model.OpTypeResolved {
 		if jobEntry.CRTs > atomic.LoadUint64(&h.resolvedTS) {
 			h.lastResolvedTsAdvancedTime = h.clock.Now()
@@ -329,7 +340,7 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		return h.puller.Run(ctx)
+		return h.ddlJobPuller.Run(ctx)
 	})
 
 	ticker := h.clock.Ticker(ddlPullerStuckWarnDuration)
@@ -349,8 +360,8 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 						zap.Duration("duration", duration),
 						zap.Uint64("resolvedTs", atomic.LoadUint64(&h.resolvedTS)))
 				}
-			case e := <-h.puller.Output():
-				if err := h.handleRawDDL(e); err != nil {
+			case e := <-h.ddlJobPuller.Output():
+				if err := h.handleDDLJobEntry(e); err != nil {
 					return errors.Trace(err)
 				}
 			}
