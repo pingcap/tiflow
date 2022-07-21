@@ -1,3 +1,4 @@
+{{- if .Values.cases.enabled -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -28,3 +29,4 @@ spec:
             - "--worker-count={{ .Values.executor.replicas }}"
       restartPolicy: Never
   backoffLimit: 0 # fail immediately
+{{- end -}}

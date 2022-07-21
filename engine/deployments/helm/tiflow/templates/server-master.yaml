@@ -85,7 +85,7 @@ spec:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 2Gi
+            storage: {{ .Values.master.dataStorage }}
     - metadata:
         name: log
       spec:
@@ -93,4 +93,4 @@ spec:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 1Gi
+            storage: {{ .Values.master.logStorage }}
