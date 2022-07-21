@@ -21,20 +21,21 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
 )
 
 type connAmountChecker struct {
-	targetDB *conn.BaseDB
-	stCfgs   []*config.SubTaskConfig
+	toCheckDB *conn.BaseDB
+	stCfgs    []*config.SubTaskConfig
 
 	getConfigConn func(stCfgs []*config.SubTaskConfig) int
 	workerName    string
 	unlimitedConn bool
 }
 
-func newConnAmountChecker(targetDB *conn.BaseDB, stCfgs []*config.SubTaskConfig, fn func(stCfgs []*config.SubTaskConfig) int, workerName string) connAmountChecker {
+func newConnAmountChecker(toCheckDB *conn.BaseDB, stCfgs []*config.SubTaskConfig, fn func(stCfgs []*config.SubTaskConfig) int, workerName string) connAmountChecker {
 	return connAmountChecker{
-		targetDB:      targetDB,
+		toCheckDB:     toCheckDB,
 		stCfgs:        stCfgs,
 		getConfigConn: fn,
 		workerName:    workerName,
@@ -44,15 +45,17 @@ func newConnAmountChecker(targetDB *conn.BaseDB, stCfgs []*config.SubTaskConfig,
 func (c *connAmountChecker) check(ctx context.Context, checkerName string) *Result {
 	result := &Result{
 		Name:  checkerName,
-		Desc:  "check if user-specified amount of connection exceeds database's maximum",
+		Desc:  "check if user-specified number of connection exceeds database's maximum",
 		State: StateFailure,
 	}
-	baseConn, err := c.targetDB.GetBaseConn(ctx)
+	baseConn, err := c.toCheckDB.GetBaseConn(ctx)
+	//nolint:errcheck
+	defer c.toCheckDB.CloseBaseConn(baseConn)
 	if err != nil {
 		markCheckError(result, err)
 		return result
 	}
-	var rows *sql.Rows
+	var rows, processRows *sql.Rows
 	rows, err = baseConn.QuerySQL(tcontext.NewContext(ctx, log.L()), "SHOW GLOBAL VARIABLES LIKE 'max_connections'")
 	if err != nil {
 		markCheckError(result, err)
@@ -70,27 +73,61 @@ func (c *connAmountChecker) check(ctx context.Context, checkerName string) *Resu
 			return result
 		}
 	}
+	if maxConn == 0 {
+		c.unlimitedConn = true
+	}
+	processRows, err = baseConn.QuerySQL(tcontext.NewContext(ctx, log.L()), "SHOW PROCESSLIST")
+	if err != nil {
+		markCheckError(result, err)
+		return result
+	}
+	defer processRows.Close()
+	usedConn := 0
+	for processRows.Next() {
+		usedConn++
+	}
+	usedConn -= 1 // exclude the connection used for show processlist
+	log.L().Debug("connection checker", zap.Int("max_connections", maxConn), zap.Int("used_connections", usedConn))
 	neededConn := c.getConfigConn(c.stCfgs)
 	switch {
-	case maxConn != 0 && neededConn > maxConn:
+	case c.unlimitedConn:
+		// zero max_connections means unlimited connections
+		// we shouldn't report a warning.
+		c.unlimitedConn = true
+		result.State = StateSuccess
+	case neededConn > maxConn:
 		// nonzero max_connections and needed connections exceed max_connections
 		// FYI: https://github.com/pingcap/tidb/pull/35453
 		// currently, TiDB's max_connections is set to 0 representing unlimited connections,
 		// while for MySQL, 0 is not a legal value (never retrieve from it).
 		result.Errors = append(
 			result.Errors,
-			NewError("database's max_connections: %d is less than the amount %s needs: %d", maxConn, c.workerName, neededConn),
+			NewError(
+				"database's max_connections: %d is less than the number %s needs: %d",
+				maxConn,
+				c.workerName,
+				neededConn,
+			),
 		)
 		result.Instruction = "set larger max_connections or reduce the pool size of dm"
 		result.State = StateFailure
-	case maxConn == 0:
-		// zero max_connections means unlimited connections
-		// we shouldn't report a warning.
-		c.unlimitedConn = true
-		result.State = StateSuccess
 	default:
 		// nonzero max_connections and needed connections are less than or equal to max_connections
 		result.State = StateSuccess
+		if maxConn-usedConn < neededConn {
+			result.State = StateWarning
+			result.Errors = append(
+				result.Errors,
+				NewError(
+					"database's max_connections: %d, used_connections: %d, available_connections: %d is less than %s needs: %d",
+					maxConn,
+					usedConn,
+					maxConn-usedConn,
+					c.workerName,
+					neededConn,
+				),
+			)
+		}
 	}
 	return result
 }
@@ -118,12 +155,16 @@ func (l *LoaderConnAmountChecker) Name() string {
 
 func (l *LoaderConnAmountChecker) Check(ctx context.Context) *Result {
 	result := l.check(ctx, l.Name())
-	if !l.unlimitedConn && result.State == StateSuccess {
+	if !l.unlimitedConn && result.State == StateFailure {
+		// if the max_connections is set as a specific number
+		// and we failed because of the number connecions needed is smaller than max_connections
 		for _, stCfg := range l.stCfgs {
 			if stCfg.NeedUseLightning() {
+				// if we're using lightning, this error should be omitted
+				// because lightning doesn't need to keep connections while restoring.
 				result.Errors = append(
 					result.Errors,
-					NewWarn("task precheck cannot accurately check the amount of connection needed for Lightning, please set a sufficiently large connections for TiDB"),
+					NewWarn("task precheck cannot accurately check the number of connection needed for Lightning, please set a sufficiently large connections for TiDB"),
 				)
 				result.State = StateWarning
 				break

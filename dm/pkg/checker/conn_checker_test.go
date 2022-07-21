@@ -38,16 +38,30 @@ func TestConnAmountChecker(t *testing.T) {
 		},
 	}
 	baseDB := conn.NewBaseDB(db, func() {})
-	// test loader
+	// test loader: fail
 	dbMock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("max_connections", 16))
+	dbMock.ExpectQuery("SHOW PROCESSLIST").WillReturnRows(sqlmock.NewRows(
+		[]string{"Id", "User", "Host", "db", "Command", "Time", "State", "Info"}).
+		AddRow(1, "root", "localhost", "test", "Query", 0, "init", ""),
+	)
 	loaderChecker := NewLoaderConnAmountChecker(baseDB, stCfgs)
 	result := loaderChecker.Check(context.Background())
 	require.Equal(t, 1, len(result.Errors))
 	require.Equal(t, StateFailure, result.State)
-	require.Regexp(t, "(.|\n)*is less than the amount loader(.|\n)*", result.Errors[0].ShortErr)
+	require.Regexp(t, "(.|\n)*is less than the number loader(.|\n)*", result.Errors[0].ShortErr)
+
+	// test loader: success
+	db, dbMock, err = sqlmock.New()
+	require.NoError(t, err)
+	baseDB = conn.NewBaseDB(db, func() {})
 	dbMock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'max_connections'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("max_connections", 17))
+	dbMock.ExpectQuery("SHOW PROCESSLIST").WillReturnRows(sqlmock.NewRows(
+		[]string{"Id", "User", "Host", "db", "Command", "Time", "State", "Info"}).
+		AddRow(1, "root", "localhost", "test", "Query", 0, "init", ""),
+	)
+	loaderChecker = NewLoaderConnAmountChecker(baseDB, stCfgs)
 	result = loaderChecker.Check(context.Background())
 	require.Equal(t, 0, len(result.Errors))
 	require.Equal(t, StateSuccess, result.State)

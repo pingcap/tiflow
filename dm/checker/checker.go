@@ -149,9 +149,11 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	}
 	// check connections
 	if _, ok := c.checkingItems[config.ConnAmountChecking]; ok {
-		if len(c.stCfgs) > 0 && len(c.instances) > 0 {
+		if len(c.stCfgs) > 0 {
 			switch c.stCfgs[0].Mode {
 			case config.ModeAll:
+				// TODO: check the connections for syncer
+				// TODO: check for incremental mode
 				c.checkList = append(c.checkList, checker.NewLoaderConnAmountChecker(c.instances[0].targetDB, c.stCfgs))
 				for i, inst := range c.instances {
 					c.checkList = append(c.checkList, checker.NewDumperConnAmountChecker(inst.sourceDB, c.stCfgs[i].MydumperConfig.Threads))

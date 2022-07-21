@@ -158,17 +158,15 @@ function run() {
 function checktask_full_mode_conn() {
 	# full mode
 	# dumpers: (2 + 2) for each
-	# loaders: (5 + 1) * 2 = 12
+	# loaders: 5 + 1 = 6
 	run_sql_source1 "set @@GLOBAL.max_connections=3;"
-	run_sql_source2 "set @@GLOBAL.max_connections=3;"
 	check_task_not_pass $cur/conf/dm-task3.yaml # dumper threads too few
 	run_sql_source1 "set @@GLOBAL.max_connections=4;"
-	run_sql_source2 "set @@GLOBAL.max_connections=4;"
 	check_task_pass $cur/conf/dm-task3.yaml
 
-	run_sql "set @@GLOBAL.max_connections=11;" $TIDB_PORT $TIDB_PASSWORD # loader threads too few
+	run_sql_tidb "set @@GLOBAL.max_connections=5;" # loader threads too few
 	check_task_not_pass $cur/conf/dm-task3.yaml
-	run_sql "set @@GLOBAL.max_connections=12;" $TIDB_PORT $TIDB_PASSWORD
+	run_sql_tidb "set @@GLOBAL.max_connections=6;"
 	check_task_pass $cur/conf/dm-task3.yaml
 
 	run_sql_source1 "set @@GLOBAL.max_connections=151;"
@@ -182,11 +180,12 @@ function check_task_lightning() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"check-task $cur/conf/dm-task2.yaml" \
 		"\"passed\": true" 1 \
-		"task precheck cannot accurately check the amount of connection needed for Lightning, please set a sufficiently large connections for TiDB" 0
-	run_sql_tidb "set @@GLOBAL.max_connections=151;"
+		"task precheck cannot accurately check the number of connection needed for Lightning, please set a sufficiently large connections for TiDB" 0
+	run_sql_tidb "set @@GLOBAL.max_connections=5;"
+	# fail but give warning, because it's using Lightining
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"check-task $cur/conf/dm-task2.yaml" \
-		"task precheck cannot accurately check the amount of connection needed for Lightning, please set a sufficiently large connections for TiDB" 1
+		"task precheck cannot accurately check the number of connection needed for Lightning, please set a sufficiently large connections for TiDB" 1
 }
 
 function check_full_mode_conn() {
@@ -204,7 +203,7 @@ function check_full_mode_conn() {
 		run_sql_source1 "create table dmctl_conn.test_$i(id int primary key)"
 		run_sql_source1 "insert into dmctl_conn.test_$i values (1),(2),(3),(4),(5)"
 	done
-	dmctl_start_task "$cur/conf/dm-task3.yaml" --remove-meta
+	dmctl_start_task_standalone "$cur/conf/dm-task3.yaml" --remove-meta
 	run_sql_source1 'SHOW PROCESSLIST;'
 	check_rows_equal 5 # 4 + 1 for SHOWPROCESSLIST
 
@@ -212,9 +211,11 @@ function check_full_mode_conn() {
 		"query-status test" \
 		"Load" 1
 	run_sql_tidb 'SHOW PROCESSLIST;'
-	check_rows_equal 13 # (5 + 1) * 2 + 1 for SHOW PROCESSLIST= 13
+	check_rows_equal 7 # (5 + 1) + 1 for SHOW PROCESSLIST= 7
 
-	dmctl_stop_task "test"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task test" \
+		"\"result\": true" 2
 	run_sql_tidb "drop database if exists dm_meta" # cleanup checkpoint
 	run_sql_tidb "drop database if exists dmctl_conn"
 }
@@ -734,7 +735,7 @@ function run_check_task() {
 	source $cur/../dmctl_basic/check_list/check_task.sh
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
-	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/loader/longLoadProcess=return(20);github.com/pingcap/tiflow/dm/dumpling/longDumpProcess=return(true)'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/loader/longLoadProcess=return(20)'
 
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
@@ -748,10 +749,13 @@ function run_check_task() {
 	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
-
+	run_sql_source1 "set @@GLOBAL.max_connections=151;"
+	run_sql_source2 "set @@GLOBAL.max_connections=151;"
+	checktask_full_mode_conn
 	check_task_lightning
 	check_full_mode_conn
-	checktask_full_mode_conn
+	run_sql_source1 "set @@GLOBAL.max_connections=151;"
+	run_sql_source2 "set @@GLOBAL.max_connections=151;"
 	run_sql_tidb "set @@GLOBAL.max_connections=0;" # set default (unlimited), or other tests will fail
 }
 
@@ -844,17 +848,17 @@ function run_validator_cmd_error() {
 cleanup_data dmctl_command
 # also cleanup dm processes in case of last run failed
 cleanup_process $*
-run $*
-cleanup_process $*
+# run $*
+# cleanup_process $*
 
-# run validator commands
-cleanup_data dmctl_command
-run_validator_cmd $*
-run_validation_start_stop_cmd
-cleanup_process $*
+# # run validator commands
+# cleanup_data dmctl_command
+# run_validator_cmd $*
+# run_validation_start_stop_cmd
+# cleanup_process $*
 
-# run check task
-cleanup_data dmctl_command
+# # run check task
+# cleanup_data dmctl_command
 run_check_task
 cleanup_process $*
 
