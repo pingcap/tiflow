@@ -488,8 +488,8 @@ func TestChangefeedNotRetry(t *testing.T) {
 
 func TestBackoffStopsUnexpectedly(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	// after 2000ms, the backoff will stop
-	manager := newFeedStateManager4Test(100, 100, 2000, 1.0)
+	// after 4000ms, the backoff will stop
+	manager := newFeedStateManager4Test(500, 500, 4000, 1.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
@@ -506,7 +506,7 @@ func TestBackoffStopsUnexpectedly(t *testing.T) {
 	manager.Tick(state)
 	tester.MustApplyPatches()
 
-	for i := 1; i <= 30; i++ {
+	for i := 1; i <= 10; i++ {
 		require.Equal(t, state.Info.State, model.StateNormal)
 		require.True(t, manager.ShouldRunning())
 		state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID,
@@ -520,10 +520,10 @@ func TestBackoffStopsUnexpectedly(t *testing.T) {
 		tester.MustApplyPatches()
 		manager.Tick(state)
 		tester.MustApplyPatches()
-		// after round 20, the maxElapsedTime of backoff will exceed 2000ms,
+		// after round 8, the maxElapsedTime of backoff will exceed 4000ms,
 		// and NextBackOff() will return -1, so the changefeed state will
 		// never turn into error state.
-		if i >= 20 {
+		if i >= 8 {
 			require.True(t, manager.ShouldRunning())
 			require.Equal(t, state.Info.State, model.StateNormal)
 		} else {
@@ -532,9 +532,9 @@ func TestBackoffStopsUnexpectedly(t *testing.T) {
 			require.Equal(t, state.Info.AdminJobType, model.AdminStop)
 			require.Equal(t, state.Status.AdminJobType, model.AdminStop)
 		}
-		// 100ms is the backoff interval, so sleep 100ms and after a manager tick,
+		// 500ms is the backoff interval, so sleep 500ms and after a manager tick,
 		// the changefeed will turn into normal state
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		manager.Tick(state)
 		tester.MustApplyPatches()
 	}
