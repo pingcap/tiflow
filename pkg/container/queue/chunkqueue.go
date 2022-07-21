@@ -107,9 +107,7 @@ func (q *ChunkQueue[T]) Empty() bool {
 	return q.size == 0
 }
 
-// Getters
-
-// At returns the pointer to an element
+// At returns the value of a given index. At() does NOT support changing the value
 func (q *ChunkQueue[T]) At(idx int) (T, bool) {
 	if idx < 0 || idx >= q.size {
 		return q.defaultValue, false
@@ -118,7 +116,17 @@ func (q *ChunkQueue[T]) At(idx int) (T, bool) {
 	return q.chunks[q.head+i/q.chunkLength].data[i%q.chunkLength], true
 }
 
-// Head returns the pointer to the first element in queue and nil if empty
+// Replace assignes a new value to a given index
+func (q *ChunkQueue[T]) Replace(idx int, val T) bool {
+	if idx < 0 || idx >= q.size {
+		return false
+	}
+	i := q.chunks[q.head].l + idx
+	q.chunks[q.head+i/q.chunkLength].data[i%q.chunkLength] = val
+	return true
+}
+
+// Head returns the value of the first element in queue
 func (q *ChunkQueue[T]) Head() (T, bool) {
 	if q.Empty() {
 		return q.defaultValue, false
@@ -127,7 +135,7 @@ func (q *ChunkQueue[T]) Head() (T, bool) {
 	return c.data[c.l], true
 }
 
-// Tail() returns the pointer to the last element in queue and nil if empty
+// Tail() returns the value of the last element in queue
 func (q *ChunkQueue[T]) Tail() (T, bool) {
 	if q.Empty() {
 		return q.defaultValue, false
@@ -136,7 +144,7 @@ func (q *ChunkQueue[T]) Tail() (T, bool) {
 	return c.data[c.r-1], true
 }
 
-// expandSpace extends the space by adding chunk(s) to the queue
+// extend extends the space by adding chunk(s) to the queue
 func (q *ChunkQueue[T]) extend(n int) {
 	if n <= 0 {
 		n = 1

@@ -84,7 +84,7 @@ func (w *mysqlSinkWorker) isNormal() bool {
 
 func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 	var (
-		//toExecRows queue.ChunkQueue[*model.RowChangedEvent]//[]*model.RowChangedEvent
+		// toExecRows queue.ChunkQueue[*model.RowChangedEvent]//[]*model.RowChangedEvent
 		txnNum      int
 		rowEvtQueue = queue.NewChunkQueue[*model.RowChangedEvent]()
 	)

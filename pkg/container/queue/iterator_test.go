@@ -21,10 +21,11 @@ import (
 )
 
 const (
-	iterTestSize = 10<<17 + 10007
+	iterTestSize = 10007
 )
 
 func TestChunkQueueIteratorPrevNext(t *testing.T) {
+	t.Parallel()
 	q := NewChunkQueue[int]()
 	for i := 0; i < iterTestSize; i++ {
 		q.PushBack(i)
@@ -49,7 +50,7 @@ func TestChunkQueueIteratorPrevNext(t *testing.T) {
 	}
 }
 
-func BenchmarkChunkQueueIterator_Next(b *testing.B) {
+func BenchmarkChunkQueueIteratorNext(b *testing.B) {
 	b.Run("BenchMark-Iterate-ChunkQueue", func(b *testing.B) {
 		q := NewChunkQueue[int]()
 		n := b.N
@@ -85,6 +86,8 @@ func BenchmarkChunkQueueIterator_Next(b *testing.B) {
 }
 
 func TestChunkQueueGetIterator(t *testing.T) {
+	t.Parallel()
+
 	q := NewChunkQueue[int]()
 
 	for i := 0; i < iterTestSize; i++ {

@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	testCaseSize = 10 << 20
+	testCaseSize = 10007
 )
 
 func BenchmarkEnqueue(b *testing.B) {
@@ -35,7 +35,7 @@ func BenchmarkEnqueue(b *testing.B) {
 	})
 
 	b.Run("Benchmark-Enqueue-Slice", func(b *testing.B) {
-		q := make([]int, 1024, 1024)
+		q := make([]int, 0, 1024)
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			q = append(q, i)
@@ -69,8 +69,8 @@ func BenchmarkDequeueMany(b *testing.B) {
 			if !ok || len(vals) != l {
 				panic("error")
 			}
-			//require.True(b, ok)
-			//require.Equal(b, len(vals), l)
+			// require.True(b, ok)
+			// require.Equal(b, len(vals), l)
 		}
 	})
 
@@ -148,6 +148,8 @@ func TestChunkQueueSimpleWorkflow(t *testing.T) {
 }
 
 func TestChunkQueueExpand(t *testing.T) {
+	t.Parallel()
+
 	type Person struct {
 		no   int
 		name string
@@ -179,6 +181,8 @@ func TestChunkQueueExpand(t *testing.T) {
 }
 
 func TestChunkQueueDequeueMany(t *testing.T) {
+	t.Parallel()
+
 	q := NewChunkQueue[int]()
 	x := testCaseSize
 	for v := 0; v < x; v++ {
