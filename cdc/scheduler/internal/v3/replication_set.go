@@ -91,8 +91,9 @@ func (r ReplicationSetState) MarshalJSON() ([]byte, error) {
 
 // ReplicationSet is a state machine that manages replication states.
 type ReplicationSet struct {
-	TableID model.TableID
-	State   ReplicationSetState
+	Changefeed model.ChangeFeedID
+	TableID    model.TableID
+	State      ReplicationSetState
 	// Primary set indicate that the table is replicating on this capture
 	Primary model.CaptureID
 	// Secondary set indicate that the table is preparing on this capture
@@ -105,10 +106,12 @@ func newReplicationSet(
 	tableID model.TableID,
 	checkpoint model.Ts,
 	tableStatus map[model.CaptureID]*schedulepb.TableStatus,
+	changefeed model.ChangeFeedID,
 ) (*ReplicationSet, error) {
 	r := &ReplicationSet{
-		TableID:  tableID,
-		Captures: make(map[string]struct{}),
+		Changefeed: changefeed,
+		TableID:    tableID,
+		Captures:   make(map[string]struct{}),
 		Checkpoint: schedulepb.Checkpoint{
 			CheckpointTs: checkpoint,
 			ResolvedTs:   checkpoint,

@@ -21,12 +21,12 @@ import (
 
 // backend indicates a transaction backend like MySQL, TiDB, ...
 type backend interface {
-	// onTxnEvent handles one TxnCallbackableEvent.
-	onTxnEvent(*eventsink.TxnCallbackableEvent) (needFlush bool)
+	// OnTxnEvent handles one TxnCallbackableEvent.
+	OnTxnEvent(*eventsink.TxnCallbackableEvent) (needFlush bool)
 
 	// Flush pending events in the backend.
-	flush() error
+	Flush() error
 
 	// To reduce latency for low throughput cases.
-	maxFlushInterval() time.Duration
+	MaxFlushInterval() time.Duration
 }

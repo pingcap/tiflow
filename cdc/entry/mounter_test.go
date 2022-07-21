@@ -292,7 +292,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	require.Nil(t, err)
 	scheamStorage.AdvanceResolvedTs(ver.Ver)
 	config := config.GetDefaultReplicaConfig()
-	filter, err := pfilter.NewFilter(config)
+	filter, err := pfilter.NewFilter(config, "")
 	require.Nil(t, err)
 	mounter := NewMounter(scheamStorage,
 		model.DefaultChangeFeedID("c1"),
@@ -959,7 +959,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		val, _, _, _ := getDefaultOrZeroValue(&tc.ColInfo)
+		_, val, _, _, _ := getDefaultOrZeroValue(&tc.ColInfo)
 		require.Equal(t, tc.Res, val, tc.Name)
 		val = getDDLDefaultDefinition(&tc.ColInfo)
 		require.Equal(t, tc.Default, val, tc.Name)
@@ -983,14 +983,13 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.Filter.Rules = []string{"test.student", "test.computer"}
-	filter, err := pfilter.NewFilter(cfg)
+	filter, err := pfilter.NewFilter(cfg, "")
 	require.Nil(t, err)
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
 		ver.Ver, filter, false, cfID)
 	require.Nil(t, err)
-
 	// apply ddl to schemaStorage
 	for _, ddl := range ddls {
 		job := helper.DDL2Job(ddl)

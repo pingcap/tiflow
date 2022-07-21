@@ -32,7 +32,7 @@ type blackhole struct {
 	n     notify.Notifier
 }
 
-func (b *blackhole) onTxnEvent(e *eventsink.TxnCallbackableEvent) bool {
+func (b *blackhole) OnTxnEvent(e *eventsink.TxnCallbackableEvent) bool {
 	for {
 		if atomic.LoadInt32(&b.block) > 0 {
 			time.Sleep(time.Millisecond * time.Duration(100))
@@ -44,11 +44,11 @@ func (b *blackhole) onTxnEvent(e *eventsink.TxnCallbackableEvent) bool {
 	return true
 }
 
-func (b *blackhole) flush() error {
+func (b *blackhole) Flush() error {
 	return nil
 }
 
-func (b *blackhole) maxFlushInterval() time.Duration {
+func (b *blackhole) MaxFlushInterval() time.Duration {
 	return time.Second * time.Duration(1000000)
 }
 

@@ -44,10 +44,14 @@ func newSink(backends []backend, conflictDetectorSlots int64) sink {
 }
 
 // WriteEvents writes events to the sink.
-func (s *sink) WriteEvents(rows ...*eventsink.TxnCallbackableEvent) {
+func (s *sink) WriteEvents(rows ...*eventsink.TxnCallbackableEvent) (err error) {
 	for _, row := range rows {
-		_ = s.conflictDetector.Add(&txnEvent{row, nil})
+		err = s.conflictDetector.Add(&txnEvent{row, nil})
+		if err != nil {
+			return
+		}
 	}
+	return
 }
 
 // Close closes the sink. It won't wait for all pending items backend handled.

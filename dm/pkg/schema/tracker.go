@@ -244,7 +244,7 @@ func (tr *Tracker) Init(
 	// TiDB will unconditionally create an empty "test" schema.
 	// This interferes with MySQL/MariaDB upstream which such schema does not
 	// exist by default. So we need to drop it first.
-	err = dom.DDL().DropSchema(se, model.NewCIStr("test"))
+	err = dropDatabase(dom, se, "test")
 	if err != nil {
 		return err
 	}
@@ -398,17 +398,24 @@ func IsTableNotExists(err error) bool {
 func (tr *Tracker) Reset() error {
 	tr.se.SetValue(sessionctx.QueryString, "skip")
 	allDBs := tr.dom.InfoSchema().AllSchemaNames()
-	ddl := tr.dom.DDL()
 	for _, db := range allDBs {
 		dbName := model.NewCIStr(db)
 		if filter.IsSystemSchema(dbName.L) {
 			continue
 		}
-		if err := ddl.DropSchema(tr.se, dbName); err != nil {
+		if err := dropDatabase(tr.dom, tr.se, dbName.L); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func dropDatabase(dom *domain.Domain, se session.Session, db string) error {
+	stmt := &ast.DropDatabaseStmt{
+		Name:     model.NewCIStr(db),
+		IfExists: true,
+	}
+	return dom.DDL().DropSchema(se, stmt)
 }
 
 // Close close a tracker.
@@ -442,21 +449,30 @@ func (tr *Tracker) Close() error {
 // DropTable drops a table from this tracker.
 func (tr *Tracker) DropTable(table *filter.Table) error {
 	tr.se.SetValue(sessionctx.QueryString, "skip")
-	tableIdent := ast.Ident{
-		Schema: model.NewCIStr(table.Schema),
-		Name:   model.NewCIStr(table.Name),
+	stmt := &ast.DropTableStmt{
+		Tables: []*ast.TableName{
+			{
+				Schema: model.NewCIStr(table.Schema),
+				Name:   model.NewCIStr(table.Name),
+			},
+		},
+		IfExists: true,
 	}
-	return tr.dom.DDL().DropTable(tr.se, tableIdent)
+	return tr.dom.DDL().DropTable(tr.se, stmt)
 }
 
 // DropIndex drops an index from this tracker.
 func (tr *Tracker) DropIndex(table *filter.Table, index string) error {
 	tr.se.SetValue(sessionctx.QueryString, "skip")
-	tableIdent := ast.Ident{
-		Schema: model.NewCIStr(table.Schema),
-		Name:   model.NewCIStr(table.Name),
+	stmt := &ast.DropIndexStmt{
+		Table: &ast.TableName{
+			Schema: model.NewCIStr(table.Schema),
+			Name:   model.NewCIStr(table.Name),
+		},
+		IndexName: index,
+		IfExists:  true,
 	}
-	return tr.dom.DDL().DropIndex(tr.se, tableIdent, model.NewCIStr(index), true)
+	return tr.dom.DDL().DropIndex(tr.se, stmt)
 }
 
 // CreateSchemaIfNotExists creates a SCHEMA of the given name if it did not exist.
@@ -466,7 +482,11 @@ func (tr *Tracker) CreateSchemaIfNotExists(db string) error {
 	if tr.dom.InfoSchema().SchemaExists(dbName) {
 		return nil
 	}
-	return tr.dom.DDL().CreateSchema(tr.se, dbName, nil, nil)
+	stmt := &ast.CreateDatabaseStmt{
+		Name:        dbName,
+		IfNotExists: true,
+	}
+	return tr.dom.DDL().CreateSchema(tr.se, stmt)
 }
 
 // cloneTableInfo creates a clone of the TableInfo.

@@ -17,7 +17,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/chann"
+	"go.uber.org/zap"
 )
 
 type txnWithNotifier struct {
@@ -60,22 +62,23 @@ func (w *worker) Run() {
 	w.wg.Add(1)
 	go func() {
 		defer w.wg.Done()
-		w.timer = time.NewTimer(w.backend.maxFlushInterval())
+		w.timer = time.NewTimer(w.backend.MaxFlushInterval())
 		for {
 			select {
 			case <-w.stopped:
+				log.Info("transaction sink backend worker exits as expected",
+					zap.Int("workerID", w.ID))
 				return
-			case txn, ok := <-w.txnCh.Out():
-				if !ok {
-					break
-				}
+			case txn := <-w.txnCh.Out():
 				txn.wantMore()
-				if w.backend.onTxnEvent(txn.txnEvent.TxnCallbackableEvent) && w.doFlush() {
-					break
+				if w.backend.OnTxnEvent(txn.txnEvent.TxnCallbackableEvent) && w.doFlush() {
+					log.Warn("transaction sink backend exits unexcepted")
+					return
 				}
 			case <-w.timer.C:
 				if w.doFlush() {
-					break
+					log.Warn("transaction sink backend exits unexcepted")
+					return
 				}
 			}
 		}
@@ -83,13 +86,13 @@ func (w *worker) Run() {
 }
 
 func (w *worker) doFlush() bool {
-	if err := w.backend.flush(); err != nil {
+	if err := w.backend.Flush(); err != nil {
 		// TODO: handle err.
 		return true
 	}
 	if !w.timer.Stop() {
 		<-w.timer.C
 	}
-	w.timer.Reset(w.backend.maxFlushInterval())
+	w.timer.Reset(w.backend.MaxFlushInterval())
 	return false
 }
