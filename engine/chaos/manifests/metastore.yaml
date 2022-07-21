@@ -1,19 +1,16 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: metastore
+  name: metastore-framework
   labels:
-    app: metastore
+    app: metastore-framework
 spec:
   ports:
     - name: port-mysql # note the name is no more than 15 characters
-      port: 3306
+      port: 13306
       targetPort: 3306
-    - name: port-etcd # note the name is no more than 15 characters
-      port: 12479
-      targetPort: 2479
   selector:
-    app: metastore
+    app: metastore-framework
 
 ---
 apiVersion: apps/v1
@@ -21,18 +18,18 @@ kind: StatefulSet
 metadata:
   name: metastore-framework-mysql
   labels:
-    app: metastore
+    app: metastore-framework
 spec:
   selector:
     matchLabels:
-      app: metastore
-  serviceName: metastore
+      app: metastore-framework
+  serviceName: metastore-framework
   replicas: 1
   podManagementPolicy: Parallel
   template:
     metadata:
       labels:
-        app: metastore
+        app: metastore-framework
     spec:
       containers:
         - name: metastore-framework-mysql
@@ -59,24 +56,41 @@ spec:
           requests:
             storage: 5Gi
 
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: metastore-business
+  labels:
+    app: metastore-business
+spec:
+  ports:
+    - name: port-etcd # note the name is no more than 15 characters
+      port: 12479
+      targetPort: 2479
+  selector:
+    app: metastore-business
+
+
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: metastore-business-etcd
   labels:
-    app: metastore
+    app: metastore-business
 spec:
   selector:
     matchLabels:
-      app: metastore
-  serviceName: metastore
+      app: metastore-business
+  serviceName: metastore-business
   replicas: 1
   podManagementPolicy: Parallel
   template:
     metadata:
       labels:
-        app: metastore
+        app: metastore-business
     spec:
       containers:
         - name: metastore-business-etcd
