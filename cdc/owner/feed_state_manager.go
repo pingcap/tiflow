@@ -27,11 +27,11 @@ import (
 
 const (
 	// When errors occurred, and we need to do backoff, we start an exponential backoff
-	// with an interval from 10s to 60min (10s, 20s, 40s, 80s, 160s, 320s,
-	//	 640s, 1280s, 2560s, 3600s, ...).
+	// with an interval from 10s to 30min (10s, 20s, 40s, 80s, 160s, 320s,
+	//	 640s, 1280s, 1800s, ...).
 	// To avoid thunderherd, a random factor is also added.
 	defaultBackoffInitInterval        = 10 * time.Second
-	defaultBackoffMaxInterval         = 60 * time.Minute
+	defaultBackoffMaxInterval         = 30 * time.Minute
 	defaultBackoffRandomizationFactor = 0.1
 	defaultBackoffMultiplier          = 2.0
 
