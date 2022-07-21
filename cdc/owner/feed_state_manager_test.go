@@ -29,7 +29,7 @@ import (
 
 func TestHandleJob(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	manager := newFeedStateManager4Test()
+	manager := newFeedStateManager4Test(2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
@@ -106,7 +106,7 @@ func TestHandleJob(t *testing.T) {
 
 func TestResumeChangefeedWithCheckpointTs(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	manager := newFeedStateManager4Test()
+	manager := newFeedStateManager4Test(2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
@@ -184,7 +184,7 @@ func TestResumeChangefeedWithCheckpointTs(t *testing.T) {
 
 func TestMarkFinished(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	manager := newFeedStateManager4Test()
+	manager := newFeedStateManager4Test(2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
@@ -213,7 +213,7 @@ func TestMarkFinished(t *testing.T) {
 
 func TestCleanUpInfos(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	manager := newFeedStateManager4Test()
+	manager := newFeedStateManager4Test(2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
@@ -247,7 +247,7 @@ func TestCleanUpInfos(t *testing.T) {
 
 func TestHandleError(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	manager := newFeedStateManager4Test()
+	manager := newFeedStateManager4Test(2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
@@ -368,7 +368,7 @@ func TestChangefeedStatusNotExist(t *testing.T) {
 }
 `
 	ctx := cdcContext.NewBackendContext4Test(true)
-	manager := newFeedStateManager4Test()
+	manager := newFeedStateManager4Test(2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, map[string]string{
@@ -402,7 +402,7 @@ func TestChangefeedStatusNotExist(t *testing.T) {
 
 func TestChangefeedNotRetry(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	manager := newFeedStateManager4Test()
+	manager := newFeedStateManager4Test(2.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
@@ -484,4 +484,46 @@ func TestChangefeedNotRetry(t *testing.T) {
 	manager.Tick(state)
 	// should be false
 	require.False(t, manager.ShouldRunning())
+}
+
+func TestContinuousBackoff(t *testing.T) {
+	ctx := cdcContext.NewBackendContext4Test(true)
+	manager := newFeedStateManager4Test(1.0)
+	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		ctx.ChangefeedVars().ID)
+	tester := orchestrator.NewReactorStateTester(t, state, nil)
+	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		require.Nil(t, info)
+		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
+	})
+	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+		require.Nil(t, status)
+		return &model.ChangeFeedStatus{}, true, nil
+	})
+
+	tester.MustApplyPatches()
+	manager.Tick(state)
+	tester.MustApplyPatches()
+
+	for i := 0; i < 30; i++ {
+		require.True(t, manager.ShouldRunning())
+		state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID,
+			func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+				return &model.TaskPosition{Error: &model.RunningError{
+					Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
+					Code:    "[CDC:ErrEtcdSessionDone]",
+					Message: "fake error for test",
+				}}, true, nil
+			})
+		tester.MustApplyPatches()
+		manager.Tick(state)
+		tester.MustApplyPatches()
+		require.False(t, manager.ShouldRunning())
+		require.Equal(t, state.Info.State, model.StateError)
+		require.Equal(t, state.Info.AdminJobType, model.AdminStop)
+		require.Equal(t, state.Status.AdminJobType, model.AdminStop)
+		time.Sleep(200 * time.Millisecond)
+		manager.Tick(state)
+		tester.MustApplyPatches()
+	}
 }

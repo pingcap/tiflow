@@ -77,13 +77,13 @@ func newFeedStateManager() *feedStateManager {
 }
 
 // newFeedStateManager4Test creates feedStateManager for test
-func newFeedStateManager4Test() *feedStateManager {
+func newFeedStateManager4Test(multiplier float64) *feedStateManager {
 	f := new(feedStateManager)
 
 	f.errBackoff = backoff.NewExponentialBackOff()
 	f.errBackoff.InitialInterval = 200 * time.Millisecond
 	f.errBackoff.MaxInterval = 1600 * time.Millisecond
-	f.errBackoff.Multiplier = 2.0
+	f.errBackoff.Multiplier = multiplier
 	f.errBackoff.RandomizationFactor = 0
 
 	f.resetErrBackoff()
