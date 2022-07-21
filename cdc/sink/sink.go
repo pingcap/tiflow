@@ -62,7 +62,7 @@ type Sink interface {
 	// FlushRowChangedEvents is thread-safe.
 	FlushRowChangedEvents(
 		ctx context.Context, tableID model.TableID, resolved model.ResolvedTs,
-	) (uint64, error)
+	) (model.ResolvedTs, error)
 
 	// EmitCheckpointTs sends CheckpointTs to Sink.
 	// TiCDC guarantees that all Events **in the cluster** which of commitTs
@@ -157,6 +157,9 @@ func New(
 	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+	}
+	if err := config.ValidateAndAdjust(sinkURI); err != nil {
+		return nil, err
 	}
 	if newSink, ok := sinkIniterMap[strings.ToLower(sinkURI.Scheme)]; ok {
 		return newSink(ctx, changefeedID, sinkURI, filter, config, opts, errCh)

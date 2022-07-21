@@ -208,7 +208,10 @@ func TestLogReaderResetReader(t *testing.T) {
 			cfg:       &LogReaderConfig{Dir: dir},
 			rowReader: []fileReader{mockReader},
 			ddlReader: []fileReader{mockReader},
-			meta:      &common.LogMeta{CheckPointTs: tt.args.checkPointTs, ResolvedTs: tt.args.resolvedTs},
+			meta: &common.LogMeta{
+				CheckpointTs: tt.args.checkPointTs,
+				ResolvedTs:   tt.args.resolvedTs,
+			},
 		}
 
 		if tt.name == "context cancel" {
@@ -248,7 +251,7 @@ func TestLogReaderReadMeta(t *testing.T) {
 	f, err := os.Create(path)
 	require.Nil(t, err)
 	meta := &common.LogMeta{
-		CheckPointTs: 11,
+		CheckpointTs: 11,
 		ResolvedTs:   22,
 	}
 	data, err := meta.MarshalMsg(nil)
@@ -263,7 +266,7 @@ func TestLogReaderReadMeta(t *testing.T) {
 	f, err = os.Create(path)
 	require.Nil(t, err)
 	meta = &common.LogMeta{
-		CheckPointTs: 111,
+		CheckpointTs: 12,
 		ResolvedTs:   21,
 	}
 	data, err = meta.MarshalMsg(nil)
@@ -278,14 +281,14 @@ func TestLogReaderReadMeta(t *testing.T) {
 	tests := []struct {
 		name                             string
 		dir                              string
-		wantCheckPointTs, wantResolvedTs uint64
+		wantCheckpointTs, wantResolvedTs uint64
 		wantErr                          string
 	}{
 		{
 			name:             "happy",
 			dir:              dir,
-			wantCheckPointTs: meta.CheckPointTs,
-			wantResolvedTs:   meta.ResolvedTs,
+			wantCheckpointTs: 12,
+			wantResolvedTs:   22,
 		},
 		{
 			name:    "no meta file",
@@ -300,8 +303,8 @@ func TestLogReaderReadMeta(t *testing.T) {
 		{
 			name:             "context cancel",
 			dir:              dir,
-			wantCheckPointTs: meta.CheckPointTs,
-			wantResolvedTs:   meta.ResolvedTs,
+			wantCheckpointTs: 12,
+			wantResolvedTs:   22,
 			wantErr:          context.Canceled.Error(),
 		},
 	}
@@ -322,7 +325,7 @@ func TestLogReaderReadMeta(t *testing.T) {
 			require.Regexp(t, tt.wantErr, err, tt.name)
 		} else {
 			require.Nil(t, err, tt.name)
-			require.Equal(t, tt.wantCheckPointTs, cts, tt.name)
+			require.Equal(t, tt.wantCheckpointTs, cts, tt.name)
 			require.Equal(t, tt.wantResolvedTs, rts, tt.name)
 		}
 	}

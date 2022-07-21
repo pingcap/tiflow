@@ -633,7 +633,7 @@ func (z *DDLEvent) Msgsize() (s int) {
 }
 
 // DecodeMsg implements msgp.Decodable
-func (z *MqMessageType) DecodeMsg(dc *msgp.Reader) (err error) {
+func (z *MessageType) DecodeMsg(dc *msgp.Reader) (err error) {
 	{
 		var zb0001 int
 		zb0001, err = dc.ReadInt()
@@ -641,13 +641,13 @@ func (z *MqMessageType) DecodeMsg(dc *msgp.Reader) (err error) {
 			err = msgp.WrapError(err)
 			return
 		}
-		(*z) = MqMessageType(zb0001)
+		(*z) = MessageType(zb0001)
 	}
 	return
 }
 
 // EncodeMsg implements msgp.Encodable
-func (z MqMessageType) EncodeMsg(en *msgp.Writer) (err error) {
+func (z MessageType) EncodeMsg(en *msgp.Writer) (err error) {
 	err = en.WriteInt(int(z))
 	if err != nil {
 		err = msgp.WrapError(err)
@@ -657,14 +657,14 @@ func (z MqMessageType) EncodeMsg(en *msgp.Writer) (err error) {
 }
 
 // MarshalMsg implements msgp.Marshaler
-func (z MqMessageType) MarshalMsg(b []byte) (o []byte, err error) {
+func (z MessageType) MarshalMsg(b []byte) (o []byte, err error) {
 	o = msgp.Require(b, z.Msgsize())
 	o = msgp.AppendInt(o, int(z))
 	return
 }
 
 // UnmarshalMsg implements msgp.Unmarshaler
-func (z *MqMessageType) UnmarshalMsg(bts []byte) (o []byte, err error) {
+func (z *MessageType) UnmarshalMsg(bts []byte) (o []byte, err error) {
 	{
 		var zb0001 int
 		zb0001, bts, err = msgp.ReadIntBytes(bts)
@@ -672,14 +672,14 @@ func (z *MqMessageType) UnmarshalMsg(bts []byte) (o []byte, err error) {
 			err = msgp.WrapError(err)
 			return
 		}
-		(*z) = MqMessageType(zb0001)
+		(*z) = MessageType(zb0001)
 	}
 	o = bts
 	return
 }
 
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
-func (z MqMessageType) Msgsize() (s int) {
+func (z MessageType) Msgsize() (s int) {
 	s = msgp.IntSize
 	return
 }

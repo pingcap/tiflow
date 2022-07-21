@@ -20,7 +20,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor"
 	tablepipeline "github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/puller"
-	redowriter "github.com/pingcap/tiflow/cdc/redo/writer"
+	redo "github.com/pingcap/tiflow/cdc/redo/common"
 	sink "github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sorter"
@@ -59,7 +59,7 @@ func init() {
 	memory.InitMetrics(registry)
 	unified.InitMetrics(registry)
 	leveldb.InitMetrics(registry)
-	redowriter.InitMetrics(registry)
+	redo.InitMetrics(registry)
 	db.InitMetrics(registry)
 	kafka.InitMetrics(registry)
 	// TiKV client metrics, including metrics about resolved and region cache.

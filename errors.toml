@@ -216,6 +216,11 @@ error = '''
 decode row data to datum failed
 '''
 
+["CDC:ErrDiskFull"]
+error = '''
+failed to preallocate file because disk is full
+'''
+
 ["CDC:ErrEncodeFailed"]
 error = '''
 encode failed: %s
@@ -469,6 +474,11 @@ kafka send message failed
 ["CDC:ErrKafkaTopicExprInvalid"]
 error = '''
 invalid topic expression
+'''
+
+["CDC:ErrKafkaTopicNotExists"]
+error = '''
+kafka topic not exists after creation
 '''
 
 ["CDC:ErrLeaseExpired"]

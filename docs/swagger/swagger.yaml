@@ -41,6 +41,8 @@ definitions:
         type: string
       schema-registry:
         type: string
+      transaction-atomicity:
+        type: string
     type: object
   model.Capture:
     properties:
