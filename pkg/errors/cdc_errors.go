@@ -68,6 +68,10 @@ var (
 		"meta store list databases",
 		errors.RFCCodeText("CDC:ErrMetaListDatabases"),
 	)
+	ErrDDLSchemaNotFound = errors.Normalize(
+		"cannot find mysql.tidb_ddl_job schema",
+		errors.RFCCodeText("CDC:ErrDDLSchemaNotFound"),
+	)
 	ErrGRPCDialFailed = errors.Normalize(
 		"grpc dial failed",
 		errors.RFCCodeText("CDC:ErrGRPCDialFailed"),

@@ -36,6 +36,7 @@ type schemaWrap4Owner struct {
 	config                      *config.ReplicaConfig
 	allPhysicalTablesCache      []model.TableID
 	ddlHandledTs                model.Ts
+	schemaVersion               int64
 	id                          model.ChangeFeedID
 	metricIgnoreDDLEventCounter prometheus.Counter
 }
@@ -44,10 +45,17 @@ func newSchemaWrap4Owner(
 	kvStorage tidbkv.Storage, startTs model.Ts,
 	config *config.ReplicaConfig, id model.ChangeFeedID,
 ) (*schemaWrap4Owner, error) {
-	var meta *timeta.Meta
+	var (
+		meta    *timeta.Meta
+		version int64
+	)
 	if kvStorage != nil {
 		var err error
 		meta, err = kv.GetSnapshotMeta(kvStorage, startTs)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		version, err = schema.GetSchemaVersion(meta)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -67,6 +75,7 @@ func newSchemaWrap4Owner(
 		filter:         f,
 		config:         config,
 		ddlHandledTs:   startTs,
+		schemaVersion:  version,
 		id:             id,
 		metricIgnoreDDLEventCounter: changefeedIgnoredDDLEventCounter.
 			WithLabelValues(id.Namespace, id.ID),
@@ -108,12 +117,17 @@ func (s *schemaWrap4Owner) AllTableNames() []model.TableName {
 }
 
 func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
-	if job.BinlogInfo.FinishedTS <= s.ddlHandledTs {
+	// We use schemaVersion to check if an already-executed DDL job is processed for a second time.
+	// Unexecuted DDL jobs should have largest schemaVersions
+	if job.BinlogInfo.FinishedTS <= s.ddlHandledTs || job.BinlogInfo.SchemaVersion <= s.schemaVersion {
 		log.Warn("job finishTs is less than schema handleTs, discard invalid job",
 			zap.String("namespace", s.id.Namespace),
 			zap.String("changefeed", s.id.ID),
 			zap.Stringer("job", job),
-			zap.Any("ddlHandledTs", s.ddlHandledTs))
+			zap.Any("ddlHandledTs", s.ddlHandledTs),
+			zap.Int64("schemaVersion", s.schemaVersion),
+			zap.Int64("jobSchemaVersion", job.BinlogInfo.SchemaVersion),
+		)
 		return nil
 	}
 	s.allPhysicalTablesCache = nil
@@ -134,6 +148,7 @@ func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
 		zap.Any("role", util.RoleOwner))
 
 	s.ddlHandledTs = job.BinlogInfo.FinishedTS
+	s.schemaVersion = job.BinlogInfo.SchemaVersion
 	return nil
 }
 
