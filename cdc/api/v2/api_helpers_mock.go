@@ -116,9 +116,9 @@ func (mr *MockAPIV2HelpersMockRecorder) verifyResumeChangefeedConfig(ctx, pdClie
 }
 
 // verifyUpdateChangefeedConfig mocks base method.
-func (m *MockAPIV2Helpers) verifyUpdateChangefeedConfig(ctx context.Context, cfg *ChangefeedConfig, oldInfo *model.ChangeFeedInfo, oldUpInfo *model.UpstreamInfo) (*model.ChangeFeedInfo, *model.UpstreamInfo, error) {
+func (m *MockAPIV2Helpers) verifyUpdateChangefeedConfig(ctx context.Context, cfg *ChangefeedConfig, oldInfo *model.ChangeFeedInfo, oldUpInfo *model.UpstreamInfo, kvStorage kv.Storage, checkpointTs uint64) (*model.ChangeFeedInfo, *model.UpstreamInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "verifyUpdateChangefeedConfig", ctx, cfg, oldInfo, oldUpInfo)
+	ret := m.ctrl.Call(m, "verifyUpdateChangefeedConfig", ctx, cfg, oldInfo, oldUpInfo, kvStorage, checkpointTs)
 	ret0, _ := ret[0].(*model.ChangeFeedInfo)
 	ret1, _ := ret[1].(*model.UpstreamInfo)
 	ret2, _ := ret[2].(error)
@@ -126,9 +126,9 @@ func (m *MockAPIV2Helpers) verifyUpdateChangefeedConfig(ctx context.Context, cfg
 }
 
 // verifyUpdateChangefeedConfig indicates an expected call of verifyUpdateChangefeedConfig.
-func (mr *MockAPIV2HelpersMockRecorder) verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo interface{}) *gomock.Call {
+func (mr *MockAPIV2HelpersMockRecorder) verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, kvStorage, checkpointTs interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "verifyUpdateChangefeedConfig", reflect.TypeOf((*MockAPIV2Helpers)(nil).verifyUpdateChangefeedConfig), ctx, cfg, oldInfo, oldUpInfo)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "verifyUpdateChangefeedConfig", reflect.TypeOf((*MockAPIV2Helpers)(nil).verifyUpdateChangefeedConfig), ctx, cfg, oldInfo, oldUpInfo, kvStorage, checkpointTs)
 }
 
 // verifyUpstream mocks base method.

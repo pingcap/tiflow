@@ -26,16 +26,18 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
 type schemaWrap4Owner struct {
-	schemaSnapshot         *schema.Snapshot
-	filter                 *filter.Filter
-	config                 *config.ReplicaConfig
-	allPhysicalTablesCache []model.TableID
-	ddlHandledTs           model.Ts
-	id                     model.ChangeFeedID
+	schemaSnapshot              *schema.Snapshot
+	filter                      filter.Filter
+	config                      *config.ReplicaConfig
+	allPhysicalTablesCache      []model.TableID
+	ddlHandledTs                model.Ts
+	id                          model.ChangeFeedID
+	metricIgnoreDDLEventCounter prometheus.Counter
 }
 
 func newSchemaWrap4Owner(
@@ -54,7 +56,9 @@ func newSchemaWrap4Owner(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	f, err := filter.NewFilter(config)
+	// It is no matter to use a empty as timezone here because schemaWrap4Owner
+	// doesn't use expression filter's method.
+	f, err := filter.NewFilter(config, "")
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -64,6 +68,8 @@ func newSchemaWrap4Owner(
 		config:         config,
 		ddlHandledTs:   startTs,
 		id:             id,
+		metricIgnoreDDLEventCounter: changefeedIgnoredDDLEventCounter.
+			WithLabelValues(id.Namespace, id.ID),
 	}, nil
 }
 
@@ -189,8 +195,8 @@ func (s *schemaWrap4Owner) parseRenameTables(
 func (s *schemaWrap4Owner) BuildDDLEvents(
 	job *timodel.Job,
 ) ([]*model.DDLEvent, error) {
-	var preTableInfo *model.TableInfo
 	var err error
+	var preTableInfo *model.TableInfo
 	ddlEvents := make([]*model.DDLEvent, 0)
 	switch job.Type {
 	case timodel.ActionRenameTables:
@@ -216,7 +222,12 @@ func (s *schemaWrap4Owner) BuildDDLEvents(
 	// filter out ddl here
 	res := make([]*model.DDLEvent, 0, len(ddlEvents))
 	for _, event := range ddlEvents {
-		if s.filter.ShouldIgnoreDDLEvent(event) {
+		ignored, err := s.filter.ShouldIgnoreDDLEvent(event)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if ignored {
+			s.metricIgnoreDDLEventCounter.Inc()
 			log.Info(
 				"DDL event ignored",
 				zap.String("query", event.Query),

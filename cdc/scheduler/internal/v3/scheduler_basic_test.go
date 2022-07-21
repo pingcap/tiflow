@@ -30,7 +30,7 @@ func TestSchedulerBasic(t *testing.T) {
 	// Initial table dispatch.
 	// AddTable only
 	replications := map[model.TableID]*ReplicationSet{}
-	b := newBasicScheduler()
+	b := newBasicScheduler(model.ChangeFeedID{})
 
 	// one capture stopping, another one is initialized
 	captures["a"].State = CaptureStateStopping
@@ -156,7 +156,7 @@ func BenchmarkSchedulerBasicAddTables(b *testing.B) {
 		}
 		replications = map[model.TableID]*ReplicationSet{}
 		name = fmt.Sprintf("AddTable %d", total)
-		sched = newBasicScheduler()
+		sched = newBasicScheduler(model.ChangeFeedID{})
 		return name, currentTables, captures, replications, sched
 	})
 }
@@ -182,7 +182,7 @@ func BenchmarkSchedulerBasicRemoveTables(b *testing.B) {
 			}
 		}
 		name = fmt.Sprintf("RemoveTable %d", total)
-		sched = newBasicScheduler()
+		sched = newBasicScheduler(model.ChangeFeedID{})
 		return name, currentTables, captures, replications, sched
 	})
 }
@@ -211,7 +211,7 @@ func BenchmarkSchedulerBasicAddRemoveTables(b *testing.B) {
 			}
 		}
 		name = fmt.Sprintf("AddRemoveTable %d", total)
-		sched = newBasicScheduler()
+		sched = newBasicScheduler(model.ChangeFeedID{})
 		return name, currentTables, captures, replications, sched
 	})
 }

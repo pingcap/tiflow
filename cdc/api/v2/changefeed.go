@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"go.uber.org/zap"
@@ -202,6 +203,12 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 			GenWithStackByArgs("can only update changefeed config when it is stopped"))
 		return
 	}
+	cfStatus, err := h.capture.StatusProvider().GetChangeFeedStatus(ctx, changefeedID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
 	upInfo, err := h.capture.GetEtcdClient().
 		GetUpstreamInfo(ctx, cfInfo.UpstreamID, cfInfo.Namespace)
 	if err != nil {
@@ -226,8 +233,28 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		zap.String("changefeedInfo", cfInfo.String()),
 		zap.Any("upstreamInfo", upInfo))
 
+	var pdAddrs []string
+	var credentials *security.Credential
+	if upInfo != nil {
+		pdAddrs = strings.Split(upInfo.PDEndpoints, ",")
+		credentials = &security.Credential{
+			CAPath:        upInfo.CAPath,
+			CertPath:      upInfo.CertPath,
+			KeyPath:       upInfo.KeyPath,
+			CertAllowedCN: upInfo.CertAllowedCN,
+		}
+	}
+	if len(updateCfConfig.PDAddrs) != 0 {
+		pdAddrs = updateCfConfig.PDAddrs
+		credentials = updateCfConfig.PDConfig.toCredential()
+	}
+
+	storage, err := h.helpers.createTiStore(pdAddrs, credentials)
+	if err != nil {
+		_ = c.Error(errors.Trace(err))
+	}
 	newCfInfo, newUpInfo, err := h.helpers.
-		verifyUpdateChangefeedConfig(ctx, updateCfConfig, cfInfo, upInfo)
+		verifyUpdateChangefeedConfig(ctx, updateCfConfig, cfInfo, upInfo, storage, cfStatus.CheckpointTs)
 	if err != nil {
 		_ = c.Error(errors.Trace(err))
 		return

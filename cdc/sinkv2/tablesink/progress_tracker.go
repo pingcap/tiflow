@@ -15,10 +15,16 @@ package tablesink
 
 import (
 	"sync"
+	"time"
 
 	"github.com/emirpasic/gods/maps/linkedhashmap"
 	"github.com/pingcap/tiflow/cdc/model"
+	"go.uber.org/atomic"
 )
+
+// waitingInterval is the interval to wait for the all callbacks be called.
+// It used for close the table sink.
+const waitingInterval = 100 * time.Millisecond
 
 // progressTracker is used to track the progress of the table sink.
 // For example,
@@ -39,6 +45,8 @@ type progressTracker struct {
 	// lastMinResolvedTs is used to store the last min resolved ts.
 	// It is used to indicate the progress of the table sink.
 	lastMinResolvedTs model.ResolvedTs
+	// closed is used to indicate the progress tracker is closed.
+	closed atomic.Bool
 }
 
 // newProgressTracker is used to create a new progress tracker.
@@ -93,7 +101,10 @@ func (r *progressTracker) remove(key uint64) {
 		// If the element is resolved ts,
 		// it means we can advance the progress.
 		if iterator.Value() != nil {
-			r.lastMinResolvedTs = iterator.Value().(model.ResolvedTs)
+			// If the tracker is closed, we no longer need to track the progress.
+			if !r.closed.Load() {
+				r.lastMinResolvedTs = iterator.Value().(model.ResolvedTs)
+			}
 			deleteKeys = append(deleteKeys, iterator.Key())
 		} else {
 			// When we met the first event,
@@ -117,4 +128,23 @@ func (r *progressTracker) minTs() model.ResolvedTs {
 	defer r.lock.Unlock()
 
 	return r.lastMinResolvedTs
+}
+
+// trackingCount returns the number of pending events and resolved tss.
+// Notice: must hold the lock.
+func (r *progressTracker) trackingCount() int {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	return r.pendingEventAndResolvedTs.Size()
+}
+
+// close is used to close the progress tracker.
+func (r *progressTracker) close() {
+	r.closed.Store(true)
+
+	// TODO: add logs to measure the time of waiting for the all callbacks be called.
+	for r.trackingCount() != 0 {
+		// Sleep for a while to prevent CPU spin.
+		time.Sleep(waitingInterval)
+	}
 }
