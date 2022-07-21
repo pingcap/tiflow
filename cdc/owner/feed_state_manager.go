@@ -27,8 +27,8 @@ import (
 
 const (
 	// When errors occurred, and we need to do backoff, we start an exponential backoff
-	// with an interval from 10s to 60min (10s, 20s, 40s, 80s, 160s, 320s,
-	//	 640s, 1280s, 2560s, 3600s, ...).
+	// with an interval from 10s to 30min (10s, 20s, 40s, 80s, 160s, 320s,
+	//	 640s, 1280s, 1800s, ...).
 	// To avoid thunderherd, a random factor is also added.
 	defaultBackoffInitInterval        = 10 * time.Second
 	defaultBackoffMaxInterval         = 30 * time.Minute
@@ -67,6 +67,8 @@ func newFeedStateManager() *feedStateManager {
 	f.errBackoff.MaxInterval = defaultBackoffMaxInterval
 	f.errBackoff.Multiplier = defaultBackoffMultiplier
 	f.errBackoff.RandomizationFactor = defaultBackoffRandomizationFactor
+	// MaxElapsedTime=0 means the backoff never stops
+	f.errBackoff.MaxElapsedTime = 0
 
 	f.resetErrBackoff()
 	f.lastErrorTime = time.Unix(0, 0)
@@ -75,13 +77,19 @@ func newFeedStateManager() *feedStateManager {
 }
 
 // newFeedStateManager4Test creates feedStateManager for test
-func newFeedStateManager4Test() *feedStateManager {
+func newFeedStateManager4Test(
+	initialIntervalInMs time.Duration,
+	maxIntervalInMs time.Duration,
+	maxElapsedTimeInMs time.Duration,
+	multiplier float64,
+) *feedStateManager {
 	f := new(feedStateManager)
 
 	f.errBackoff = backoff.NewExponentialBackOff()
-	f.errBackoff.InitialInterval = 200 * time.Millisecond
-	f.errBackoff.MaxInterval = 1600 * time.Millisecond
-	f.errBackoff.Multiplier = 2.0
+	f.errBackoff.InitialInterval = initialIntervalInMs * time.Millisecond
+	f.errBackoff.MaxInterval = maxIntervalInMs * time.Millisecond
+	f.errBackoff.MaxElapsedTime = maxElapsedTimeInMs * time.Millisecond
+	f.errBackoff.Multiplier = multiplier
 	f.errBackoff.RandomizationFactor = 0
 
 	f.resetErrBackoff()
@@ -477,6 +485,9 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 		m.patchState(model.StateError)
 	} else {
 		oldBackoffInterval := m.backoffInterval
+		// NextBackOff will never return -1 because the backoff never stops
+		// with `MaxElapsedTime=0`
+		// ref: https://github.com/cenkalti/backoff/blob/v4/exponential.go#L121-L123
 		m.backoffInterval = m.errBackoff.NextBackOff()
 		m.lastErrorTime = time.Unix(0, 0)
 
