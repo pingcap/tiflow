@@ -96,6 +96,9 @@ spec:
         - name: metastore-business-etcd
           image: quay.io/coreos/etcd:v3.5.4
           imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - mountPath: "/data/etcd"
+              name: metastore-business-etcd
           ports:
             - containerPort: 2479
               name: port-etcd
@@ -103,6 +106,7 @@ spec:
             - "etcd"
           args:
             - "--name=metastore-business-etcd"
+            - "--data-dir=/data/etcd"
             - "--advertise-client-urls=http://0.0.0.0:2479"
             - "--listen-client-urls=http://0.0.0.0:2479"
             - "--listen-peer-urls=http://127.0.0.1:2480"
