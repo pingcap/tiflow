@@ -1131,6 +1131,15 @@ func NewSyncerConfigsForDowngrade(syncerConfigs map[string]*SyncerConfig) map[st
 	return syncerConfigsForDowngrade
 }
 
+// omitDefaultVals change default value to empty value for new config item.
+// If any default value for new config item is not empty(0 or false or nil),
+// we should change it to empty.
+func (c *SyncerConfigForDowngrade) omitDefaultVals() {
+	if c.SafeModeDuration == DefaultSyncerConfig().SafeModeDuration {
+		c.SafeModeDuration = ""
+	}
+}
+
 // TaskConfigForDowngrade is the base configuration for task in v2.0.
 // This config is used for downgrade(config export) from a higher dmctl version.
 // When we add any new config item into SourceConfig, we should update it also.
@@ -1213,7 +1222,7 @@ func (c *TaskConfigForDowngrade) omitDefaultVals() {
 		c.TrashTableRules = nil
 	}
 	for _, s := range c.Syncers {
-		s.SafeModeDuration = ""
+		s.omitDefaultVals()
 	}
 	c.OnlineDDL = false
 }
