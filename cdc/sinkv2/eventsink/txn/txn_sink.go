@@ -36,7 +36,7 @@ func newSink(backends []backend, conflictDetectorSlots int64) sink {
 	workers := make([]*worker, 0, len(backends))
 	for i, backend := range backends {
 		w := newWorker(i, backend)
-		w.Run()
+		w.runBackgroundLoop()
 		workers = append(workers, w)
 	}
 	detector := causality.NewConflictDetector[*worker, *txnEvent](workers, conflictDetectorSlots)

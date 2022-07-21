@@ -58,7 +58,7 @@ func (w *worker) Close() {
 }
 
 // Run a background loop.
-func (w *worker) Run() {
+func (w *worker) runBackgroundLoop() {
 	w.wg.Add(1)
 	go func() {
 		defer w.wg.Done()
@@ -66,18 +66,18 @@ func (w *worker) Run() {
 		for {
 			select {
 			case <-w.stopped:
-				log.Info("transaction sink backend worker exits as expected",
+				log.Info("transaction sink backend worker exits expectedly",
 					zap.Int("workerID", w.ID))
 				return
 			case txn := <-w.txnCh.Out():
 				txn.wantMore()
 				if w.backend.OnTxnEvent(txn.txnEvent.TxnCallbackableEvent) && w.doFlush() {
-					log.Warn("transaction sink backend exits unexcepted")
+					log.Warn("transaction sink backend exits unexceptedly")
 					return
 				}
 			case <-w.timer.C:
 				if w.doFlush() {
-					log.Warn("transaction sink backend exits unexcepted")
+					log.Warn("transaction sink backend exits unexceptedly")
 					return
 				}
 			}
