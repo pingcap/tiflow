@@ -334,7 +334,7 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 
 	g.Go(func() error {
 		err := c.campaignOwner(ctx)
-		log.Info("owner routine exited with error",
+		log.Info("owner routine exited",
 			zap.String("captureID", c.info.ID), zap.Error(err))
 		return err
 	})
@@ -356,9 +356,8 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		// (recoverable errors are intercepted in the processor tick)
 		// so we should also stop the processor and let capture restart or exit
 		err := c.runEtcdWorker(ctx, c.processorManager, globalState, processorFlushInterval, util.RoleProcessor.String())
-		log.Info("the processor routine has exited",
-			zap.String("captureID", c.info.ID),
-			zap.Error(err))
+		log.Info("processor routine exited",
+			zap.String("captureID", c.info.ID), zap.Error(err))
 		return err
 	})
 
