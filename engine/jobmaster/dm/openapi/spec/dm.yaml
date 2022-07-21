@@ -213,7 +213,7 @@ paths:
             schema:
               $ref: "#/components/schemas/SetBinlogOperatorRequest"
       responses:
-        "200":
+        "201":
           description: "success"
           content:
             "application/json":

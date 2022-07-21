@@ -74,6 +74,7 @@ func terrorHTTPErrorHandler() gin.HandlerFunc {
 			return
 		}
 		var (
+			// TODO: implement error code for engine.
 			code int
 			msg  string
 		)
