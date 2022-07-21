@@ -66,3 +66,10 @@ func TestIsIPv6Address(t *testing.T) {
 		})
 	}
 }
+
+func TestMaskSinkURI(t *testing.T) {
+	uri := "mysql://root:123456@127.0.0.1:3306/?time-zone=Asia/Shanghai"
+	maskedURI, err := MaskSinkURI(uri)
+	require.NoError(t, err)
+	require.Equal(t, "mysql://username:password@***/?time-zone=Asia/Shanghai", maskedURI)
+}

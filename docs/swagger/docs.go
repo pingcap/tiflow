@@ -931,7 +931,6 @@ var doc = `{
                 "checkpoint_tso": {
                     "type": "integer"
                 },
-                "config": {},
                 "create_time": {
                     "type": "string"
                 },

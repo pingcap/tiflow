@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	cutil "github.com/pingcap/tiflow/pkg/util"
 	"github.com/spf13/cobra"
 )
 
@@ -101,12 +102,18 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 			Message: info.Error.Message,
 		}
 	}
+
+	sinkURI, err := cutil.MaskSinkURI(info.SinkURI)
+	if err != nil {
+		return err
+	}
+
 	meta := &cfMeta{
 		Info: &model.ChangeFeedInfo{
 			UpstreamID:        info.UpstreamID,
 			Namespace:         info.Namespace,
 			ID:                info.ID,
-			SinkURI:           info.SinkURI,
+			SinkURI:           sinkURI,
 			CreateTime:        info.CreateTime,
 			StartTs:           info.StartTs,
 			TargetTs:          info.TargetTs,
