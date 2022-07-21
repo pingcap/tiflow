@@ -35,7 +35,7 @@ paths:
       responses:
         "200":
           description: "success"
-        "400":
+        "500":
           description: "failed"
           content:
             "application/json":
@@ -63,7 +63,7 @@ paths:
             "application/json":
               schema:
                 type: json
-        "400":
+        "500":
           description: "failed"
           content:
             "application/json":
@@ -83,7 +83,7 @@ paths:
       responses:
         "200":
           description: "success"
-        "400":
+        "500":
           description: "failed"
           content:
             "application/json":
@@ -127,7 +127,7 @@ paths:
             "application/json":
               schema:
                 type: json
-        "400":
+        "500":
           description: "failed"
           content:
             "application/json":
@@ -158,7 +158,7 @@ paths:
             "application/json":
               schema:
                 type: json
-        "400":
+        "500":
           description: "failed"
           content:
             "application/json":
@@ -188,7 +188,7 @@ paths:
             "application/json":
               schema:
                 type: json
-        "400":
+        "500":
           description: "failed"
           content:
             "application/json":
@@ -219,7 +219,7 @@ paths:
             "application/json":
               schema:
                 type: json
-        "400":
+        "500":
           description: "failed"
           content:
             "application/json":
@@ -245,7 +245,7 @@ paths:
       responses:
         "204":
           description: "success"
-        "400":
+        "500":
           description: "failed"
           content:
             "application/json":
