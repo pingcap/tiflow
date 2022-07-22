@@ -486,6 +486,7 @@ LOOP:
 func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	if !c.initialized {
 		c.cleanupRedoManager(ctx)
+		c.cleanupServiceGCSafePoints(ctx)
 		return
 	}
 	log.Info("close changefeed",
