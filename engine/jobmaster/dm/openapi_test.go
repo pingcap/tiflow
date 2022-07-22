@@ -227,7 +227,7 @@ func (t *testDMOpenAPISuite) TestDMAPISetBinlogOperator() {
 	r.Header.Set("Content-Type", "application/json")
 	t.engine.ServeHTTP(w, r)
 	require.Equal(t.T(), http.StatusInternalServerError, w.Code)
-	equalError(t.T(), "unsupported op type '' for set binlog operator", w.Body)
+	equalError(t.T(), "unsupported op type 'wrong-op' for set binlog operator", w.Body)
 
 	pos := "mysql-bin.000001,4"
 	sqls := []string{"ALTER TABLE tb ADD COLUMN c int(11) UNIQUE;"}
