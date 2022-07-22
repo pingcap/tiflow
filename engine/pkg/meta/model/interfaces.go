@@ -84,8 +84,9 @@ type ClientConn interface {
 	ClientType() ClientType
 
 	// GetConn gets the underlying connection object
-	// For storeTypeEtcd, it returns *clientv3.Client for the first return param
-	// For storeTypeSQL, it returns *sql.DB
+	// For StoreTypeEtcd, it returns *clientv3.Client for the first return param
+	// For StoreTypeSQL, it returns *sql.DB
+	// For StoreTypeSQLite, it return *gorm.DB
 	GetConn() (interface{}, error)
 
 	// Close closes the underlying connection and releases some resources

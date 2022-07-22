@@ -47,11 +47,11 @@ type EpochClient interface {
 }
 
 // NewEpochClient news a EpochClient
-// Make Sure to call 'InitializeEpochModel' to create backend table before
+// Make Sure to call 'InitEpochModel' to create backend table before
 // calling 'NewEpochClient'
 func NewEpochClient(jobID string, db *gorm.DB) (*epochClient, error) {
 	if db == nil {
-		return nil, errors.ErrMetaParamsInvalid.GenWithStackByArgs("inner db is nil")
+		return nil, errors.ErrMetaParamsInvalid.GenWithStackByArgs("input db is nil")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -117,8 +117,8 @@ func (e *epochClient) Close() error {
 	return nil
 }
 
-// InitializeEpochModel creates the backend logic epoch table if not exists
-func InitializeEpochModel(ctx context.Context, db *gorm.DB) error {
+// InitEpochModel creates the backend logic epoch table if not exists
+func InitEpochModel(ctx context.Context, db *gorm.DB) error {
 	if db == nil {
 		return errors.ErrMetaParamsInvalid.GenWithStackByArgs("inner db is nil")
 	}

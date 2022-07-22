@@ -85,7 +85,7 @@ func NewSQLKVClientImpl(sqlDB *sql.DB, table string, jobID metaModel.JobID) (*sq
 }
 
 // Initialize initializes metakv table
-// NOTE: Make Sure to call InitializeEpochModel before Initialize any KVClient
+// NOTE: Make Sure to call InitEpochModel before Initialize any KVClient
 func (c *sqlKVClientImpl) Initialize(ctx context.Context) error {
 	if err := c.tableScopeDB.
 		WithContext(ctx).

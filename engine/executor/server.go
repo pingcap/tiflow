@@ -119,8 +119,12 @@ func (s *Server) buildDeps() (*deps.Deps, error) {
 		return nil, err
 	}
 
+	cli, err := pkgOrm.NewClient(s.metastores.FrameworkClientConn())
+	if err != nil {
+		return nil, err
+	}
 	err = deps.Provide(func() pkgOrm.Client {
-		return s.metastores.FrameworkStore()
+		return cli
 	})
 	if err != nil {
 		return nil, err

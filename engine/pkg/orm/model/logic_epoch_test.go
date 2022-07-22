@@ -125,7 +125,7 @@ func TestGenEpoch(t *testing.T) {
 	mock.ExpectClose()
 }
 
-func TestInitializeEpochModel(t *testing.T) {
+func TestInitEpochModel(t *testing.T) {
 	t.Parallel()
 
 	gdb, mock, err := mockGetDBConn(t, "test")
@@ -134,7 +134,7 @@ func TestInitializeEpochModel(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
 	defer cancel()
 
-	err = InitializeEpochModel(ctx, nil)
+	err = InitEpochModel(ctx, nil)
 	require.Regexp(t, regexp.QuoteMeta("inner db is nil"), err.Error())
 
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA " +
@@ -145,7 +145,7 @@ func TestInitializeEpochModel(t *testing.T) {
 		"PRIMARY KEY (`seq_id`),UNIQUE INDEX uidx_jk (`job_id`))")).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
-	err = InitializeEpochModel(ctx, gdb)
+	err = InitEpochModel(ctx, gdb)
 	require.NoError(t, err)
 
 	mock.ExpectClose()

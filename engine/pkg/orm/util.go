@@ -14,14 +14,19 @@
 package orm
 
 import (
+	"context"
 	"database/sql"
 	"strings"
 	"time"
 
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
 )
 
 var defaultSlowLogThreshold = 200 * time.Millisecond
@@ -33,6 +38,48 @@ func IsNotFoundError(err error) bool {
 		return false
 	}
 	return strings.Contains(err.Error(), "ErrMetaEntryNotFound")
+}
+
+// InitAllFrameworkModels will create all related tables in SQL backend
+// TODO: What happen if we upgrade the definition of model when rolling update?
+// TODO: need test: change column definition/add column/drop column?
+func InitAllFrameworkModels(ctx context.Context, cc metaModel.ClientConn) error {
+	if cc == nil {
+		return errors.ErrMetaParamsInvalid.GenWithStackByArgs("input client conn is nil")
+	}
+
+	var err error
+	conn, err := cc.GetConn()
+	if err != nil {
+		return err
+	}
+
+	var gormDB *gorm.DB
+	// check if a sql.DB
+	db, ok := conn.(*sql.DB)
+	if ok {
+		gormDB, err = NewGormDB(db)
+		if err != nil {
+			return err
+		}
+	}
+
+	// check if a gorm.DB
+	if gormDB == nil {
+		gormDB, ok = conn.(*gorm.DB)
+		if !ok {
+			return errors.ErrMetaParamsInvalid.GenWithStackByArgs("client conn is not sql DB")
+		}
+	}
+
+	failpoint.InjectContext(ctx, "initializedDelay", nil)
+
+	if err := gormDB.WithContext(ctx).
+		AutoMigrate(globalModels...); err != nil {
+		return errors.ErrMetaOpFail.Wrap(err)
+	}
+
+	return ormModel.InitEpochModel(ctx, gormDB)
 }
 
 // NewGormDB news a gorm.DB

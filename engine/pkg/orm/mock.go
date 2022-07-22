@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	"github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/uuid"
@@ -32,6 +33,24 @@ func randomDBFile() string {
 	return uuid.NewGenerator().NewString() + ".db"
 }
 
+type sqliteClient struct {
+	Client
+	gormDB *gorm.DB
+}
+
+func (c *sqliteClient) Close() error {
+	if c.gormDB != nil {
+		db, err := c.gormDB.DB()
+		if err != nil {
+			return err
+		}
+
+		return db.Close()
+	}
+
+	return nil
+}
+
 // NewMockClient creates a mock orm client
 func NewMockClient() (Client, error) {
 	// ref:https://www.sqlite.org/inmemorydb.html
@@ -41,26 +60,25 @@ func NewMockClient() (Client, error) {
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", randomDBFile())
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		SkipDefaultTransaction: true,
-		// TODO: logger
 	})
 	if err != nil {
 		log.Error("create gorm client fail", zap.Error(err))
 		return nil, errors.ErrMetaNewClientFail.Wrap(err)
 	}
 
-	cli := &metaOpsClient{
-		db:          db,
-		epochClient: NewMockEpochClient(),
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	if err := cli.Initialize(ctx); err != nil {
-		cli.Close()
+	if err := InitAllFrameworkModels(ctx, mock.NewGormClientConn(db)); err != nil {
 		return nil, err
 	}
 
-	return cli, nil
+	return &sqliteClient{
+		Client: &metaOpsClient{
+			db:          db,
+			epochClient: NewMockEpochClient(),
+		},
+		gormDB: db,
+	}, nil
 }
 
 // NewMockEpochClient is the mock for EpochClient
@@ -73,10 +91,6 @@ func NewMockEpochClient() model.EpochClient {
 type mockEpochClient struct {
 	sync.Mutex
 	epoch int64
-}
-
-func (m *mockEpochClient) Initialize(ctx context.Context) error {
-	return nil
 }
 
 func (m *mockEpochClient) Close() error {

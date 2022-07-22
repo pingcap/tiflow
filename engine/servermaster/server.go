@@ -120,8 +120,9 @@ type Server struct {
 	testCtx *test.Context
 
 	// framework metastore client
-	frameMetaClient    pkgOrm.Client
-	businessClientConn metaModel.ClientConn
+	frameMetaClient     pkgOrm.Client
+	frameworkClientConn metaModel.ClientConn
+	businessClientConn  metaModel.ClientConn
 }
 
 // PersistResource implements pb.MasterServer.PersistResource
@@ -453,6 +454,9 @@ func (s *Server) Stop() {
 	if s.frameMetaClient != nil {
 		s.frameMetaClient.Close()
 	}
+	if s.frameworkClientConn != nil {
+		s.frameworkClientConn.Close()
+	}
 	if s.businessClientConn != nil {
 		s.businessClientConn.Close()
 	}
@@ -505,12 +509,15 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 		return err
 	}
 	var err error
-	// TODO: replace default db config
-	if s.frameMetaClient, err = pkgOrm.NewClient(*cfg.FrameMetaConf, *(cfg.FrameMetaConf.DBConf)); err != nil {
+	s.frameworkClientConn, err = meta.NewClientConn(cfg.FrameMetaConf)
+	if err != nil {
 		log.Error("connect to framework metastore fail", zap.Any("config", cfg.FrameMetaConf), zap.Error(err))
+		return nil
+	}
+	if s.frameMetaClient, err = pkgOrm.NewClient(s.frameworkClientConn); err != nil {
+		log.Error("create meta client fail", zap.Error(err))
 		return err
 	}
-
 	log.Info("register framework metastore successfully", zap.Any("metastore", cfg.FrameMetaConf))
 
 	// register metastore for business
@@ -627,8 +634,7 @@ func (s *Server) name() string {
 func (s *Server) initializedBackendMeta(ctx context.Context) error {
 	bctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-
-	if err := s.frameMetaClient.Initialize(bctx); err != nil {
+	if err := pkgOrm.InitAllFrameworkModels(bctx, s.frameworkClientConn); err != nil {
 		log.Error("framework metastore initialized all backend tables fail", zap.Error(err))
 		return err
 	}

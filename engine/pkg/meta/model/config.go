@@ -31,6 +31,9 @@ const (
 	StoreTypeEtcd = "etcd"
 	// StoreTypeSQL is the store type string for SQL
 	StoreTypeSQL = "sql"
+	// StoreTypeSQLite is the store type string for SQLite
+	// NOTE: ONLY for test
+	StoreTypeSQLite = "sqlite"
 )
 
 // AuthConfParams is basic authentication configurations

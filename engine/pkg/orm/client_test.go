@@ -31,12 +31,17 @@ import (
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	engineModel "github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pkg/dbutil"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	metaMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/orm/model"
 	derror "github.com/pingcap/tiflow/pkg/errors"
 )
+
+func init() {
+	// default log level is info, enable debug here for easy debug
+	// log.SetLevel(zapcore.DebugLevel)
+}
 
 type tCase struct {
 	fn     string        // function name
@@ -48,17 +53,12 @@ type tCase struct {
 	mockExpectResFn func(mock sqlmock.Sqlmock) // sqlmock expectation
 }
 
-func mockGetDBConn(t *testing.T, dsnStr string) (*sql.DB, sqlmock.Sqlmock, error) {
+func mockGetDBConn(t *testing.T) (*sql.DB, sqlmock.Sqlmock, error) {
 	db, mock, err := sqlmock.New()
 	require.Nil(t, err)
 	// common execution for orm
 	mock.ExpectQuery("SELECT VERSION()").
 		WillReturnRows(sqlmock.NewRows([]string{"VERSION()"}).AddRow("5.7.35-log"))
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).
-		WillReturnRows(sqlmock.NewRows([]string{"SCHEMA_NAME"}))
-	mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `logic_epoches` (`seq_id` bigint unsigned AUTO_INCREMENT,`created_at` datetime(3) NULL," +
-		"`updated_at` datetime(3) NULL,`job_id` varchar(128) not null,`epoch` bigint not null default 1,PRIMARY KEY (`seq_id`),UNIQUE INDEX uidx_jk (`job_id`))")).
-		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO `logic_epoches` (`created_at`,`updated_at`,`job_id`,`epoch`) VALUES (?,?,?,?) "+
 		"ON DUPLICATE KEY UPDATE `seq_id`=`seq_id`")).WithArgs(anyTime{}, anyTime{}, "", 1).
 		WillReturnResult(sqlmock.NewResult(1, 1))
@@ -77,85 +77,21 @@ func TestNewMetaOpsClient(t *testing.T) {
 
 	var store metaModel.StoreConfig
 	store.SetEndpoints("127.0.0.1:3306")
-	cli, err := NewClient(store, *dbutil.DefaultDBConfig())
-	require.Nil(t, cli)
+	_, err := NewClient(nil)
 	require.Error(t, err)
 
-	sqlDB, mock, err := mockGetDBConn(t, "test")
+	sqlDB, mock, err := mockGetDBConn(t)
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
 	require.Nil(t, err)
-	cli, err = newClient(sqlDB)
+	_, err = newClient(sqlDB)
 	require.Nil(t, err)
-	require.NotNil(t, cli)
-}
-
-// nolint: deadcode
-func testInitialize(t *testing.T) {
-	sqlDB, mock, err := mockGetDBConn(t, "test")
-	defer sqlDB.Close()
-	defer mock.ExpectClose()
-	require.Nil(t, err)
-	cli, err := newClient(sqlDB)
-	require.Nil(t, err)
-	require.NotNil(t, cli)
-
-	testCases := []tCase{
-		{
-			fn:     "Initialize",
-			inputs: []interface{}{},
-			// TODO: Why index sequence is not stable ??
-			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).WillReturnRows(
-					sqlmock.NewRows([]string{"SCHEMA_NAME"}))
-				mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `project_infos` (`seq_id` bigint unsigned AUTO_INCREMENT," +
-					"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL," +
-					"`id` varchar(128) not null,`name` varchar(128) not null,PRIMARY KEY (`seq_id`)," +
-					"UNIQUE INDEX uidx_id (`id`))")).WillReturnResult(sqlmock.NewResult(1, 1))
-
-				mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).WillReturnRows(
-					sqlmock.NewRows([]string{"SCHEMA_NAME"}))
-				mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `project_operations` (`seq_id` bigint unsigned AUTO_INCREMENT," +
-					"`project_id` varchar(128) not null,`operation` varchar(16) not null,`job_id` varchar(128) not null," +
-					"`created_at` datetime(3) NULL,PRIMARY KEY (`seq_id`),INDEX idx_op (`project_id`,`created_at`))")).WillReturnResult(sqlmock.NewResult(1, 1))
-
-				mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).WillReturnRows(
-					sqlmock.NewRows([]string{"SCHEMA_NAME"}))
-				mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `master_meta_kv_data` (`seq_id` bigint unsigned AUTO_INCREMENT,`created_at` datetime(3) NULL," +
-					"`updated_at` datetime(3) NULL,`project_id` varchar(128) not null,`id` varchar(128) not null,`type` smallint not null COMMENT 'JobManager(1),CvsJobMaster(2),FakeJobMaster(3),DMJobMaster(4),CDCJobMaster(5)'," +
-					"`status` tinyint not null COMMENT 'Uninit(1),Init(2),Finished(3),Stopped(4)',`node_id` varchar(128) not null,`address` varchar(256) not null,`epoch` bigint not null," +
-					"`config` blob,`deleted` datetime(3) NULL,PRIMARY KEY (`seq_id`),INDEX idx_mst (`project_id`,`status`),UNIQUE INDEX uidx_mid (`id`))")).WillReturnResult(sqlmock.NewResult(1, 1))
-
-				mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).WillReturnRows(
-					sqlmock.NewRows([]string{"SCHEMA_NAME"}))
-				mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `worker_statuses` (`seq_id` bigint unsigned AUTO_INCREMENT," +
-					"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL," +
-					"`project_id` varchar(128) not null,`job_id` varchar(128) not null,`id` varchar(128) not null," +
-					"`type` smallint not null COMMENT 'JobManager(1),CvsJobMaster(2),FakeJobMaster(3),DMJobMaster(4),CDCJobMaster(5),CvsTask(6),FakeTask(7),DMTask(8),CDCTask(9),WorkerDMDump(10),WorkerDMLoad(11),WorkerDMSync(12)'," +
-					"`status` tinyint not null COMMENT 'Normal(1),Created(2),Init(3),Error(4),Finished(5),Stopped(6)',`errmsg` text," +
-					"`ext_bytes` blob,PRIMARY KEY (`seq_id`),UNIQUE INDEX uidx_wid (`job_id`,`id`)," +
-					"INDEX idx_wst (`job_id`,`status`))")).WillReturnResult(sqlmock.NewResult(1, 1))
-
-				mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).WillReturnRows(
-					sqlmock.NewRows([]string{"SCHEMA_NAME"}))
-				mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `resource_meta` (`seq_id` bigint unsigned AUTO_INCREMENT,`created_at` datetime(3) NULL," +
-					"`updated_at` datetime(3) NULL,`project_id` varchar(128) not null," +
-					"`id` varchar(128) not null,`job_id` varchar(128) not null,`worker_id` varchar(128) not null," +
-					"`executor_id` varchar(128) not null,`gc_pending` BOOLEAN,`deleted` BOOLEAN,PRIMARY KEY (`seq_id`)," +
-					"UNIQUE INDEX uidx_rid (`job_id`,`id`), INDEX idx_rei (`executor_id`,`id`))")).WillReturnResult(sqlmock.NewResult(1, 1))
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		testInner(t, mock, cli, tc)
-	}
 }
 
 func TestProject(t *testing.T) {
 	t.Parallel()
 
-	sqlDB, mock, err := mockGetDBConn(t, "test")
+	sqlDB, mock, err := mockGetDBConn(t)
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
 	require.Nil(t, err)
@@ -305,7 +241,7 @@ func TestProject(t *testing.T) {
 func TestProjectOperation(t *testing.T) {
 	t.Parallel()
 
-	sqlDB, mock, err := mockGetDBConn(t, "test")
+	sqlDB, mock, err := mockGetDBConn(t)
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
 	require.Nil(t, err)
@@ -414,7 +350,7 @@ func TestProjectOperation(t *testing.T) {
 func TestJob(t *testing.T) {
 	t.Parallel()
 
-	sqlDB, mock, err := mockGetDBConn(t, "test")
+	sqlDB, mock, err := mockGetDBConn(t)
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
 	require.Nil(t, err)
@@ -633,7 +569,7 @@ func TestJob(t *testing.T) {
 func TestWorker(t *testing.T) {
 	t.Parallel()
 
-	sqlDB, mock, err := mockGetDBConn(t, "test")
+	sqlDB, mock, err := mockGetDBConn(t)
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
 	require.Nil(t, err)
@@ -879,7 +815,7 @@ func TestWorker(t *testing.T) {
 func TestResource(t *testing.T) {
 	t.Parallel()
 
-	sqlDB, mock, err := mockGetDBConn(t, "test")
+	sqlDB, mock, err := mockGetDBConn(t)
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
 	require.Nil(t, err)
@@ -1232,7 +1168,7 @@ func TestResource(t *testing.T) {
 func TestError(t *testing.T) {
 	t.Parallel()
 
-	sqlDB, mock, err := mockGetDBConn(t, "test")
+	sqlDB, mock, err := mockGetDBConn(t)
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
 	require.Nil(t, err)
@@ -1267,9 +1203,16 @@ func TestContext(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
 	defer cancel()
 
-	cli, err := NewMockClient()
-	require.NoError(t, err)
-	defer cli.Close()
+	db, mock, err := mockGetDBConn(t)
+	require.Nil(t, err)
+	defer db.Close()
+	defer mock.ExpectClose()
+	gormDB, err := NewGormDB(db)
+	require.Nil(t, err)
+
+	conn := metaMock.NewGormClientConn(gormDB)
+	require.NotNil(t, conn)
+	defer conn.Close()
 
 	// test normal function
 	err = failpoint.Enable("github.com/pingcap/tiflow/engine/pkg/orm/initializedDelay", "sleep(2000)")
@@ -1279,7 +1222,8 @@ func TestContext(t *testing.T) {
 	})
 	ctx2 := context.WithValue(ctx, "github.com/pingcap/tiflow/engine/pkg/orm/initializedDelay", struct{}{})
 
-	err = cli.Initialize(ctx2)
+	// NEED enable failpoint here, or you will meet sql mock NOT MATCH error
+	err = InitAllFrameworkModels(ctx2, conn)
 	require.Error(t, err)
 	require.Regexp(t, "context deadline exceed", err.Error())
 	failpoint.Disable("github.com/pingcap/tiflow/engine/pkg/orm/initializedDelay")
