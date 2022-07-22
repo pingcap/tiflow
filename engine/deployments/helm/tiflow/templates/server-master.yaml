@@ -4,6 +4,12 @@ metadata:
   name: {{ include "tiflow.name" . }}-server-master
   labels:
     app: {{ include "tiflow.name" . }}-server-master
+    app.kubernetes.io/name: {{ include "tiflow.name" . }}-server-master
+    app.kubernetes.io/instance: {{ include "tiflow.name" . }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/component: server-master
+    app.kubernetes.io/part-of: tiflow
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+"  "_" }}
 spec:
   ports:
     - name: port-master
@@ -21,6 +27,12 @@ metadata:
   name: {{ include "tiflow.name" . }}-server-master
   labels:
     app: {{ include "tiflow.name" . }}-server-master
+    app.kubernetes.io/name: {{ include "tiflow.name" . }}-server-master
+    app.kubernetes.io/instance: {{ include "tiflow.name" . }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/component: server-master
+    app.kubernetes.io/part-of: tiflow
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+"  "_" }}
 spec:
   selector:
     matchLabels:

@@ -4,6 +4,12 @@ metadata:
   name: {{ include "tiflow.name" . }}-metastore-framework
   labels:
     app: {{ include "tiflow.name" . }}-metastore-framework
+    app.kubernetes.io/name: {{ include "tiflow.name" . }}-metastore-framework
+    app.kubernetes.io/instance: {{ include "tiflow.name" . }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/component: metastore-framework
+    app.kubernetes.io/part-of: tiflow
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+"  "_" }}
 spec:
   ports:
     - name: port-mysql # note the name is no more than 15 characters
@@ -19,6 +25,12 @@ metadata:
   name: {{ include "tiflow.name" . }}-metastore-framework-mysql
   labels:
     app: {{ include "tiflow.name" . }}-metastore-framework
+    app.kubernetes.io/name: {{ include "tiflow.name" . }}-metastore-framework
+    app.kubernetes.io/instance: {{ include "tiflow.name" . }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/component: metastore-framework
+    app.kubernetes.io/part-of: tiflow
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+"  "_" }}
 spec:
   selector:
     matchLabels:
