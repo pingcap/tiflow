@@ -25,7 +25,7 @@ const (
 	defaultSizePerChunk = 1024
 	// the minimum length of each chunk is 16
 	minimumChunkLen      = 16
-	defaultPitchArrayLen = 32
+	defaultPitchArrayLen = 16
 )
 
 // ChunkQueue is a generic, efficient, iterable and GC-friendly queue.
@@ -327,20 +327,23 @@ func (q *ChunkQueue[T]) Clear() {
 	q.reallocateChunksArray(-1)
 }
 
-//// BinarySearch returns the smallest
-//func (q *ChunkQueue[T]) BinarySearch(f func(val T) bool) int {
-//	l, r := 0, q.Size()-1
-//	for l < r {
-//		m := (l + r) >> 1
-//		v, _ := q.At(m)
-//		if !f(v) {
-//			l = m + 1
-//		} else {
-//			r = m
-//		}
-//	}
-//	if v, ok := q.Head(); l == r && ok && !f(v) {
-//		l++
-//	}
-//	return l
-//}
+func (q *ChunkQueue[T]) Shrink() {
+	// Shink the chunks array
+	q.reallocateChunksArray(-1)
+}
+
+func (q *ChunkQueue[T]) Range(f func(val T) bool) {
+	if q.Empty() {
+		return
+	}
+
+	var c *chunk[T]
+	for i := q.head; i < q.tail; i++ {
+		c = q.chunks[i]
+		for j := c.l; j < c.r; j++ {
+			if !f(c.data[j]) {
+				return
+			}
+		}
+	}
+}

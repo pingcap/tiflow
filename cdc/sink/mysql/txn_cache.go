@@ -14,7 +14,6 @@
 package mysql
 
 import (
-	"sort"
 	"sync"
 
 	"github.com/pingcap/log"
@@ -127,13 +126,6 @@ func splitResolvedTxn(
 ) (checkpointTsMap map[model.TableID]model.ResolvedTs,
 	resolvedRowsMap map[model.TableID][]*model.SingleTableTxn,
 ) {
-	var (
-		ok                              bool
-		txnsLength                      int
-		txns                            *queue.ChunkQueue[*txnsWithTheSameCommitTs]
-		resolvedTxnsWithTheSameCommitTs []*txnsWithTheSameCommitTs
-	)
-
 	checkpointTsMap = make(map[model.TableID]model.ResolvedTs, len(unresolvedTxns))
 	resolvedTsMap.Range(func(k, v any) bool {
 		tableID := k.(model.TableID)
@@ -144,31 +136,34 @@ func splitResolvedTxn(
 
 	resolvedRowsMap = make(map[model.TableID][]*model.SingleTableTxn, len(unresolvedTxns))
 	for tableID, resolved := range checkpointTsMap {
-		if txns, ok = unresolvedTxns[tableID]; !ok || txns.Empty() {
+		txnQueue, ok := unresolvedTxns[tableID]
+		if !ok || txnQueue.Empty() {
 			continue
 		}
-		i := sort.Search(txns.Size(), func(i int) bool {
-			txn, _ := txns.At(i)
-			return txn.commitTs > resolved.Ts
-		})
-		if i != 0 {
-			if i == txns.Size() {
-				resolvedTxnsWithTheSameCommitTs, _ = txns.DequeueAll()
-				txns.Clear()
-			} else {
-				resolvedTxnsWithTheSameCommitTs, _ = txns.DequeueMany(i)
-			}
-			for _, txns := range resolvedTxnsWithTheSameCommitTs {
-				// why added up?
-				txnsLength += len(txns.txns)
-			}
-			resolvedTxns := make([]*model.SingleTableTxn, 0, txnsLength)
-			for _, txns := range resolvedTxnsWithTheSameCommitTs {
-				resolvedTxns = append(resolvedTxns, txns.txns...)
-			}
-			resolvedRowsMap[tableID] = resolvedTxns
-		}
-	}
 
-	return
+		txnsLength := 0
+		n := 0
+		txnQueue.Range(func(t *txnsWithTheSameCommitTs) bool {
+			if t.commitTs > resolved.Ts {
+				return false
+			}
+			txnsLength += len(t.txns)
+			n++
+			return true
+		})
+		if n == 0 {
+			continue
+		}
+
+		resolvedTxns := make([]*model.SingleTableTxn, 0, txnsLength)
+		for i := 0; i < n; i++ {
+			txns, _ := txnQueue.Dequeue()
+			resolvedTxns = append(resolvedTxns, txns.txns...)
+		}
+		if txnQueue.Empty() {
+			txnQueue.Shrink()
+		}
+		resolvedRowsMap[tableID] = resolvedTxns
+	}
+	return checkpointTsMap, resolvedRowsMap
 }

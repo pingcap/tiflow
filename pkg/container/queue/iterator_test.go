@@ -34,16 +34,14 @@ func TestChunkQueueIteratorPrevNext(t *testing.T) {
 	var it *ChunkQueueIterator[int]
 	i := 0
 	for it = q.Begin(); it.Valid(); it.Next() {
-		v, ok := it.Value()
-		require.True(t, ok)
+		v := it.Value()
 		require.Equal(t, i, it.Index())
 		require.Equal(t, i, v)
 		i++
 	}
 	i--
 	for it = q.End().Prev(); it.Valid(); it.Prev() {
-		v, ok := it.Value()
-		require.True(t, ok)
+		v := it.Value()
 		require.Equal(t, i, it.Index())
 		require.Equal(t, i, v)
 		i--
@@ -61,7 +59,7 @@ func BenchmarkChunkQueueIteratorNext(b *testing.B) {
 
 		i := 0
 		for it := q.Begin(); it.Valid(); it.Next() {
-			v, _ := it.Value()
+			v := it.Value()
 			if v != i {
 				panic("not equal")
 			}
@@ -104,8 +102,7 @@ func TestChunkQueueGetIterator(t *testing.T) {
 
 	for i := 0; i < iterTestSize; i++ {
 		it = q.GetIterator(i)
-		p1, ok := it.Value()
-		require.True(t, ok)
+		p1 := it.Value()
 		require.Equal(t, i, it.Index())
 		require.Equal(t, i, p1)
 
@@ -130,12 +127,11 @@ func TestChunkQueueGetIterator(t *testing.T) {
 
 		require.Nil(t, q.Begin().chunk.prevCk)
 		cnt += n
-		v, ok := q.Begin().Value()
+		v := q.Begin().Value()
 		if cnt >= iterTestSize {
-			require.False(t, ok)
+			require.True(t, !it.Valid())
 		} else {
 			require.Equal(t, cnt, v)
-			require.True(t, ok)
 		}
 	}
 }

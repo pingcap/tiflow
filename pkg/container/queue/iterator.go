@@ -63,12 +63,12 @@ func (it *ChunkQueueIterator[T]) Valid() bool {
 }
 
 // Value returns the element value of the iterator
-func (it *ChunkQueueIterator[T]) Value() (T, bool) {
+func (it *ChunkQueueIterator[T]) Value() T {
 	if !it.Valid() {
 		var defaultValue T
-		return defaultValue, false
+		return defaultValue
 	}
-	return it.chunk.data[it.idxInChunk], true
+	return it.chunk.data[it.idxInChunk]
 }
 
 // Index() returns the index of a given iterator, -1 for end or expired iterator
