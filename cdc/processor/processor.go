@@ -517,7 +517,10 @@ func (p *processor) handleErr(ctx cdcContext.Context,
 	err error,
 ) (orchestrator.ReactorState, error) {
 	if isProcessorIgnorableError(err) {
-		log.Info("processor exited", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
+		log.Info("processor exited",
+			zap.String("capture", p.captureInfo.ID),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID))
 		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 	}
 	p.metricProcessorErrorCounter.Inc()
@@ -540,8 +543,9 @@ func (p *processor) handleErr(ctx cdcContext.Context,
 		return position, true, nil
 	})
 	log.Error("run processor failed",
-		cdcContext.ZapFieldChangefeed(ctx),
-		cdcContext.ZapFieldCapture(ctx),
+		zap.String("capture", p.captureInfo.ID),
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeedID.ID),
 		zap.Error(err))
 	return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 }
@@ -568,7 +572,7 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	p.handlePosition(oracle.GetPhysical(pdTime))
 	p.pushResolvedTs2Table()
 
-	p.doGCSchemaStorage(ctx)
+	p.doGCSchemaStorage()
 
 	if err := p.agent.Tick(ctx, p.liveness.Load()); err != nil {
 		return errors.Trace(err)
@@ -692,7 +696,10 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	}
 
 	p.initialized = true
-	log.Info("run processor", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
+	log.Info("run processor",
+		zap.String("capture", p.captureInfo.ID),
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeedID.ID))
 	return nil
 }
 
@@ -722,12 +729,16 @@ func (p *processor) handleErrorCh(ctx cdcContext.Context) error {
 	}
 	if !isProcessorIgnorableError(err) {
 		log.Error("error on running processor",
-			cdcContext.ZapFieldCapture(ctx),
-			cdcContext.ZapFieldChangefeed(ctx),
+			zap.String("capture", p.captureInfo.ID),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
 			zap.Error(err))
 		return err
 	}
-	log.Info("processor exited", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
+	log.Info("processor exited",
+		zap.String("capture", p.captureInfo.ID),
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeedID.ID))
 	return cerror.ErrReactorFinished
 }
 
@@ -865,7 +876,7 @@ func (p *processor) pushResolvedTs2Table() {
 	}
 }
 
-func (p *processor) getTableName(ctx cdcContext.Context, tableID model.TableID) string {
+func (p *processor) getTableName(ctx context.Context, tableID model.TableID) string {
 	// FIXME: using GetLastSnapshot here would be confused and get the wrong table name
 	// after `rename table` DDL, since `rename table` keeps the tableID unchanged
 	var tableName *model.TableName
@@ -927,7 +938,8 @@ func (p *processor) createTablePipelineImpl(
 	}
 
 	log.Info("Add table pipeline", zap.Int64("tableID", tableID),
-		cdcContext.ZapFieldChangefeed(ctx),
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeedID.ID),
 		zap.String("name", table.Name()),
 		zap.Any("replicaInfo", replicaInfo),
 		zap.Uint64("globalResolvedTs", p.changefeed.Status.ResolvedTs))
@@ -945,7 +957,7 @@ func (p *processor) removeTable(table pipeline.TablePipeline, tableID model.Tabl
 }
 
 // doGCSchemaStorage trigger the schema storage GC
-func (p *processor) doGCSchemaStorage(ctx cdcContext.Context) {
+func (p *processor) doGCSchemaStorage() {
 	if p.schemaStorage == nil {
 		// schemaStorage is nil only in test
 		return
@@ -966,7 +978,8 @@ func (p *processor) doGCSchemaStorage(ctx cdcContext.Context) {
 
 	log.Debug("finished gc in schema storage",
 		zap.Uint64("gcTs", lastSchemaTs),
-		cdcContext.ZapFieldChangefeed(ctx))
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeedID.ID))
 	lastSchemaPhysicalTs := oracle.ExtractPhysical(lastSchemaTs)
 	p.metricSchemaStorageGcTsGauge.Set(float64(lastSchemaPhysicalTs))
 }

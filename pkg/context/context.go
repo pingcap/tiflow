@@ -212,13 +212,3 @@ func NewContext4Test(baseCtx context.Context, withChangefeedVars bool) Context {
 func NewBackendContext4Test(withChangefeedVars bool) Context {
 	return NewContext4Test(context.Background(), withChangefeedVars)
 }
-
-// ZapFieldCapture returns a zap field containing capture address
-func ZapFieldCapture(ctx Context) zap.Field {
-	return zap.String("capture", ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
-}
-
-// ZapFieldChangefeed returns a zap field containing changefeed id
-func ZapFieldChangefeed(ctx Context) zap.Field {
-	return zap.String("changefeed", ctx.ChangefeedVars().ID.ID)
-}
