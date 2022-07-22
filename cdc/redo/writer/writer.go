@@ -551,20 +551,35 @@ func (l *LogWriter) flushLogMeta(checkpointTs, resolvedTs uint64) error {
 		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't make dir for new redo logfile"))
 	}
 
-	metaFile, err := openTruncFile(l.filePath())
+	// we will create a temp metadata file and then atomically rename it.
+	tmpFileName := l.filePath() + common.MetaTmpEXT
+	tmpFile, err := openTruncFile(tmpFileName)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+	}
+	defer tmpFile.Close()
+
+	_, err = tmpFile.Write(data)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+	}
+	err = tmpFile.Sync()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 
-	_, err = metaFile.Write(data)
+	err = os.Rename(tmpFileName, l.filePath())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
-	err = metaFile.Sync()
+
+	dirFile, err := os.Open(l.cfg.Dir)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
-	err = metaFile.Close()
+	defer dirFile.Close()
+	// sync the dir so as to guarantee the renamed file is persisted to disk.
+	err = dirFile.Sync()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}

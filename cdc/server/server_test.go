@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package server
 
 import (
 	"context"
@@ -46,7 +46,7 @@ import (
 )
 
 type testServer struct {
-	server    *Server
+	server    *server
 	e         *embed.Etcd
 	clientURL *url.URL
 	ctx       context.Context
@@ -65,7 +65,7 @@ func newServer(t *testing.T) *testServer {
 		"http://" + s.clientURL.Host,
 		"http://invalid-pd-host:2379",
 	}
-	server, err := NewServer(pdEndpoints)
+	server, err := New(pdEndpoints)
 	require.Nil(t, err)
 	require.NotNil(t, server)
 	s.server = server
@@ -192,7 +192,7 @@ func TestServerTLSWithoutCommonName(t *testing.T) {
 	conf.Security = &security
 	config.StoreGlobalServerConfig(conf)
 
-	server, err := NewServer([]string{"https://127.0.0.1:2379"})
+	server, err := New([]string{"https://127.0.0.1:2379"})
 	server.capture = capture.NewCapture4Test(nil)
 	require.Nil(t, err)
 	err = server.startStatusHTTP(server.tcpServer.HTTP1Listener())
@@ -270,7 +270,7 @@ func TestServerTLSWithCommonName(t *testing.T) {
 	conf.Security = &security
 	config.StoreGlobalServerConfig(conf)
 
-	server, err := NewServer([]string{"https://127.0.0.1:2379"})
+	server, err := New([]string{"https://127.0.0.1:2379"})
 	server.capture = capture.NewCapture4Test(nil)
 	require.Nil(t, err)
 	err = server.startStatusHTTP(server.tcpServer.HTTP1Listener())
