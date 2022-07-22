@@ -29,7 +29,7 @@ import (
 type tableSink struct {
 	tableID     model.TableID
 	backendSink Sink
-	buffer      queue.ChunkQueue[*model.RowChangedEvent]
+	buffer      *queue.ChunkQueue[*model.RowChangedEvent]
 	bufferMu    sync.Mutex
 
 	metricsTableSinkTotalRows prometheus.Counter
@@ -47,6 +47,7 @@ func NewTableSink(
 		backendSink:               s,
 		metricsTableSinkTotalRows: totalRowsCounter,
 	}
+	sink.buffer = queue.NewChunkQueue[*model.RowChangedEvent]()
 
 	if err := sink.AddTable(tableID); err != nil {
 		return nil, errors.Trace(err)
