@@ -57,7 +57,7 @@ To reduce the chance of false positive, validator will not start marking `failed
 
 ### Validation checkpoint
 
-Validator will start validation from previous location after failover or resuming. Validator will save current location and current `pending row changes` into meta-db after some interval.
+Validator will start validation from previous location after failover or resuming. Validator will save current location, current `pending row changes` and `error row change`s into meta-db after some interval.
 
 ### Self-protection
 
