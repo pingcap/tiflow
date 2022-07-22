@@ -124,8 +124,10 @@ func (k *kafkaProducer) Close() error {
 			zap.Any("role", k.role))
 		return nil
 	}
+	close(k.failpointCh)
 	// Notify the run loop to exit.
 	close(k.closedChan)
+	k.closed = true
 	// `client` is mainly used by `asyncProducer` to fetch metadata and other related
 	// operations. When we close the `kafkaSaramaProducer`, TiCDC no need to make sure
 	// that buffered messages flushed.
@@ -158,7 +160,6 @@ func (k *kafkaProducer) Close() error {
 		zap.String("namespace", k.id.Namespace),
 		zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
 
-	k.closed = true
 	return nil
 }
 
