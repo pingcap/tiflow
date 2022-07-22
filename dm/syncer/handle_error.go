@@ -53,18 +53,21 @@ func (s *Syncer) HandleError(ctx context.Context, req *pb.HandleWorkerErrorReque
 
 	var err error
 	// remove outdated operators when add operator
-	err = s.errOperatorHolder.RemoveOutdated(s.checkpoint.FlushedGlobalPoint())
+	s.streamerController.RemoveOutdated(s.checkpoint.FlushedGlobalPoint().Position)
 	if err != nil {
 		return "", err
 	}
 
 	if req.Op == pb.ErrorOp_List {
-		commands := s.errOperatorHolder.GetBehindCommands(pos)
+		commands := s.streamerController.ListEqualAndAfter(pos)
 		commandsJSON, err1 := json.Marshal(commands)
 		if err1 != nil {
 			return "", err1
 		}
 		return string(commandsJSON), err1
+	}
+	if req.Op == pb.ErrorOp_Revert {
+		return "", s.streamerController.Delete(pos)
 	}
 
 	events := make([]*replication.BinlogEvent, 0)
@@ -77,7 +80,8 @@ func (s *Syncer) HandleError(ctx context.Context, req *pb.HandleWorkerErrorReque
 	}
 
 	req.BinlogPos = pos
-	return "", s.errOperatorHolder.Set(req, events)
+
+	return "", s.streamerController.Set(req, events)
 }
 
 func (s *Syncer) genEvents(ctx context.Context, sqls []string) ([]*replication.BinlogEvent, error) {

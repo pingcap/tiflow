@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/etcd"
 	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
 )
@@ -211,6 +212,8 @@ func TestCreateChangefeed(t *testing.T) {
 	err = json.NewDecoder(w.Body).Decode(&resp)
 	require.Nil(t, err)
 	require.Equal(t, cfConfig.ID, resp.ID)
+	mysqlSink, err = util.MaskSinkURI(mysqlSink)
+	require.Nil(t, err)
 	require.Equal(t, mysqlSink, resp.SinkURI)
 	require.Equal(t, http.StatusCreated, w.Code)
 }
@@ -331,10 +334,17 @@ func TestUpdateChangefeed(t *testing.T) {
 		verifyUpstream(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).AnyTimes()
 	helpers.EXPECT().
-		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		createTiStore(gomock.Any(), gomock.Any()).
+		Return(nil, nil).
+		AnyTimes()
+	helpers.EXPECT().
+		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&model.ChangeFeedInfo{}, &model.UpstreamInfo{}, cerrors.ErrChangefeedUpdateRefused).
 		Times(1)
 
+	statusProvider.changefeedStatus = &model.ChangeFeedStatus{
+		CheckpointTs: 1,
+	}
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), update.method,
 		fmt.Sprintf(update.url, validID), bytes.NewReader(body))
@@ -347,7 +357,7 @@ func TestUpdateChangefeed(t *testing.T) {
 
 	// case 7: update transaction failed
 	helpers.EXPECT().
-		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&model.ChangeFeedInfo{}, &model.UpstreamInfo{}, nil).
 		Times(1)
 	etcdClient.EXPECT().
@@ -366,7 +376,7 @@ func TestUpdateChangefeed(t *testing.T) {
 
 	// case 8: success
 	helpers.EXPECT().
-		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(oldCfInfo, &model.UpstreamInfo{}, nil).
 		Times(1)
 	etcdClient.EXPECT().

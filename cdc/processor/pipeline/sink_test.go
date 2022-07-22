@@ -161,6 +161,9 @@ func TestState(t *testing.T) {
 		CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved},
 		Row: &model.RowChangedEvent{},
 	})
+	// resolve event handled by the sink, which means also handled by the sorter
+	// it's time to make the sorter node become replicating.
+	state = TableStateReplicating
 	ok, err = node.HandleMessage(ctx, msg)
 	require.Nil(t, err)
 	require.True(t, ok)
@@ -210,6 +213,7 @@ func TestState(t *testing.T) {
 		CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved},
 		Row: &model.RowChangedEvent{},
 	})
+	state = TableStateReplicating
 	ok, err = node.HandleMessage(ctx, msg)
 	require.Nil(t, err)
 	require.True(t, ok)
@@ -247,6 +251,7 @@ func TestState(t *testing.T) {
 		CRTs: 7, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved},
 		Row: &model.RowChangedEvent{},
 	})
+	state = TableStateReplicating
 	ok, err = node.HandleMessage(ctx, msg)
 	require.Nil(t, err)
 	require.True(t, ok)
@@ -286,6 +291,7 @@ func TestStopStatus(t *testing.T) {
 		CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved},
 		Row: &model.RowChangedEvent{},
 	})
+	state = TableStateReplicating
 	ok, err := node.HandleMessage(ctx, msg)
 	require.Nil(t, err)
 	require.True(t, ok)
@@ -366,6 +372,7 @@ func TestManyTs(t *testing.T) {
 		CRTs: 2, RawKV: &model.RawKVEntry{OpType: model.OpTypeResolved},
 		Row: &model.RowChangedEvent{},
 	})
+	state = TableStateReplicating
 	ok, err = node.HandleMessage(ctx, msg)
 	require.Nil(t, err)
 	require.True(t, ok)
@@ -610,6 +617,11 @@ func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 	// Update to the handle key column.
 	columns = []*model.Column{
 		{
+			Name:  "col0",
+			Flag:  model.BinaryFlag,
+			Value: "col1-value-updated",
+		},
+		{
 			Name:  "col1",
 			Flag:  model.BinaryFlag,
 			Value: "col1-value-updated",
@@ -621,6 +633,8 @@ func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 		},
 	}
 	preColumns = []*model.Column{
+		// It is possible that the pre columns are nil. For example, when you do `add column` DDL.
+		nil,
 		{
 			Name:  "col1",
 			Flag:  model.BinaryFlag,
@@ -646,9 +660,11 @@ func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 
 	deleteEventIndex := 0
 	require.Len(t, sink.received[deleteEventIndex].row.Columns, 0)
-	require.Len(t, sink.received[deleteEventIndex].row.PreColumns, 2)
-	nonHandleKeyColIndex := 0
-	handleKeyColIndex := 1
+	require.Len(t, sink.received[deleteEventIndex].row.PreColumns, 3)
+	nilColIndex := 0
+	require.Nil(t, sink.received[deleteEventIndex].row.PreColumns[nilColIndex])
+	nonHandleKeyColIndex := 1
+	handleKeyColIndex := 2
 	// NOTICE: When old value disabled, we only keep the handle key pre cols.
 	require.Nil(t, sink.received[deleteEventIndex].row.PreColumns[nonHandleKeyColIndex])
 	require.Equal(t, "col2", sink.received[deleteEventIndex].row.PreColumns[handleKeyColIndex].Name)
@@ -657,7 +673,7 @@ func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 	)
 
 	insertEventIndex := 1
-	require.Len(t, sink.received[insertEventIndex].row.Columns, 2)
+	require.Len(t, sink.received[insertEventIndex].row.Columns, 3)
 	require.Len(t, sink.received[insertEventIndex].row.PreColumns, 0)
 }
 

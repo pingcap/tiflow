@@ -216,6 +216,11 @@ error = '''
 consistent storage (%s) not support
 '''
 
+["CDC:ErrConvertDDLToEventTypeFailed"]
+error = '''
+failed to convert ddl '%s' to filter event type
+'''
+
 ["CDC:ErrCraftCodecInvalidData"]
 error = '''
 craft codec invalid data
@@ -231,6 +236,11 @@ error = '''
 ddl event is ignored
 '''
 
+["CDC:ErrDDLSchemaNotFound"]
+error = '''
+cannot find mysql.tidb_ddl_job schema
+'''
+
 ["CDC:ErrDatumUnflatten"]
 error = '''
 unflatten datume data
@@ -244,6 +254,11 @@ decode failed: %s
 ["CDC:ErrDecodeRowToDatum"]
 error = '''
 decode row data to datum failed
+'''
+
+["CDC:ErrDiskFull"]
+error = '''
+failed to preallocate file because disk is full
 '''
 
 ["CDC:ErrEncodeFailed"]
@@ -298,7 +313,7 @@ exec DDL failed
 
 ["CDC:ErrExpressionColumnNotFound"]
 error = '''
-invalid filter expressions. Can not found column '%s' from table '%s' in: %s
+invalid filter expression(s). Cannot find column '%s' from table '%s' in: %s
 '''
 
 ["CDC:ErrFailedToFilterDDL"]
@@ -323,7 +338,7 @@ rawData size %d exceeds maximum file size %d
 
 ["CDC:ErrFilterRuleInvalid"]
 error = '''
-filter rule is invalid %s
+filter rule is invalid %v
 '''
 
 ["CDC:ErrFlowControllerAborted"]
@@ -413,12 +428,17 @@ invalid key: %s
 
 ["CDC:ErrInvalidFilterExpression"]
 error = '''
-invalid filter expressions. There is a syntax error in: %s
+invalid filter expressions. There is a syntax error in: '%s'
 '''
 
 ["CDC:ErrInvalidHost"]
 error = '''
 host must be a URL or a host:port pair: %q
+'''
+
+["CDC:ErrInvalidIgnoreEventType"]
+error = '''
+invalid ignore event type: '%s'
 '''
 
 ["CDC:ErrInvalidNamespace"]

@@ -89,7 +89,7 @@ func newServiceTestSuite(t *testing.T) *serviceTestSuite {
 		leaderVal,
 		&rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]{},
 		atomic.NewBool(true),
-		&rate.Limiter{}))
+		&rate.Limiter{}, nil))
 	return &serviceTestSuite{
 		service:              srvc,
 		executorInfoProvider: execPro,

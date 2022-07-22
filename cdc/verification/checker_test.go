@@ -72,8 +72,9 @@ func TestCompareCheckSum(t *testing.T) {
 		mockUpChecker.On("getCheckSum", mock.Anything, mock.Anything, mock.Anything).Return(tt.wantSource, tt.wantSourceErr)
 		mockDownChecker := &mockCheckSumChecker{}
 		mockDownChecker.On("getCheckSum", mock.Anything, mock.Anything, mock.Anything).Return(tt.wantSink, tt.wantSinkErr)
-
-		ret, err := compareCheckSum(context.Background(), mockUpChecker, mockDownChecker, &filter.Filter{})
+		f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+		require.Nil(t, err)
+		ret, err := compareCheckSum(context.Background(), mockUpChecker, mockDownChecker, f)
 		require.Equal(t, tt.wantRet, ret, tt.name)
 		if tt.wantDBErr != nil {
 			require.True(t, errors.ErrorEqual(err, tt.wantDBErr), tt.name)
@@ -234,7 +235,7 @@ func TestGetAllTables(t *testing.T) {
 		c := &checker{
 			db: db,
 		}
-		f, err := filter.NewFilter(tt.args.filterConfig)
+		f, err := filter.NewFilter(tt.args.filterConfig, "")
 		require.Nil(t, err, tt.name)
 		ret, err := c.getAllTables(context.Background(), "d", f)
 		require.Equal(t, tt.wanRet, ret, tt.name)
@@ -306,7 +307,7 @@ func TestGetCheckSum(t *testing.T) {
 		c := &checker{
 			db: db,
 		}
-		f, err := filter.NewFilter(config.GetDefaultReplicaConfig())
+		f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 		require.Nil(t, err)
 		ret, err := c.getCheckSum(context.Background(), "db", f)
 		require.Equal(t, tt.wantRet, ret, tt.name)

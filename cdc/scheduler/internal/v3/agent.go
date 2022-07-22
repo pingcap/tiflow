@@ -90,7 +90,7 @@ func NewAgent(ctx context.Context,
 
 	result := &agent{
 		agentInfo: newAgentInfo(changeFeedID, captureID),
-		tableM:    newTableManager(tableExecutor),
+		tableM:    newTableManager(changeFeedID, tableExecutor),
 		trans:     trans,
 	}
 
