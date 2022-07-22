@@ -20,6 +20,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -56,6 +57,9 @@ type kafkaProducer struct {
 	closed bool
 	// closedChan is used to notify the run loop to exit.
 	closedChan chan struct{}
+	// failpointCh is used to notify the run loop to failpoint.
+	// Only used in test.
+	failpointCh chan error
 }
 
 func (k *kafkaProducer) AsyncSendMessage(
@@ -74,6 +78,22 @@ func (k *kafkaProducer) AsyncSendMessage(
 		// So we shouldn't return other errors to the caller to mess up the shutdown process.
 		return ctx.Err()
 	}
+	failpoint.Inject("KafkaSinkAsyncSendError", func() {
+		// simulate sending message to input channel successfully but flushing
+		// message to Kafka meets error
+		log.Info("failpoint error injected", zap.String("namespace", k.id.Namespace),
+			zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
+		k.failpointCh <- errors.New("kafka sink injected error")
+		failpoint.Return(nil)
+	})
+
+	failpoint.Inject("SinkFlushDMLPanic", func() {
+		time.Sleep(time.Second)
+		log.Panic("SinkFlushDMLPanic",
+			zap.String("namespace", k.id.Namespace),
+			zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
+	})
+
 	msg := &sarama.ProducerMessage{
 		Topic:     topic,
 		Partition: partition,
@@ -149,6 +169,11 @@ func (k *kafkaProducer) run(ctx context.Context) error {
 			return ctx.Err()
 		case <-k.closedChan:
 			return nil
+		case err := <-k.failpointCh:
+			log.Warn("receive from failpoint chan", zap.Error(err),
+				zap.String("namespace", k.id.Namespace),
+				zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
+			return err
 		case ack := <-k.asyncProducer.Successes():
 			if ack != nil {
 				callback := ack.Metadata.(messageMetaData).callback
@@ -193,6 +218,7 @@ func NewKafkaProducer(
 		role:          role,
 		closed:        false,
 		closedChan:    make(chan struct{}),
+		failpointCh:   make(chan error, 1),
 	}
 
 	go func() {

@@ -18,11 +18,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
@@ -31,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pkafka "github.com/pingcap/tiflow/pkg/kafka"
+	"go.uber.org/zap"
 )
 
 // NewKafkaSink will verify the config and create a KafkaSink.
