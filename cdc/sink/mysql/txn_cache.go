@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/container/queue"
 	"go.uber.org/zap"
 )
 
@@ -55,13 +56,13 @@ func (t *txnsWithTheSameCommitTs) Append(row *model.RowChangedEvent) {
 // unresolvedTxnCache caches unresolved txns
 type unresolvedTxnCache struct {
 	unresolvedTxnsMu sync.Mutex
-	unresolvedTxns   map[model.TableID][]*txnsWithTheSameCommitTs
+	unresolvedTxns   map[model.TableID]*queue.ChunkQueue[*txnsWithTheSameCommitTs]
 }
 
 // newUnresolvedTxnCache returns a new unresolvedTxnCache
 func newUnresolvedTxnCache() *unresolvedTxnCache {
 	return &unresolvedTxnCache{
-		unresolvedTxns: make(map[model.TableID][]*txnsWithTheSameCommitTs),
+		unresolvedTxns: make(map[model.TableID]*queue.ChunkQueue[*txnsWithTheSameCommitTs]),
 	}
 }
 
@@ -83,20 +84,27 @@ func (c *unresolvedTxnCache) Append(rows ...*model.RowChangedEvent) int {
 	defer c.unresolvedTxnsMu.Unlock()
 	appendRows := 0
 	for _, row := range rows {
-		txns := c.unresolvedTxns[row.Table.TableID]
-		if len(txns) == 0 || txns[len(txns)-1].commitTs != row.CommitTs {
-			// fail-fast check
-			if len(txns) != 0 && txns[len(txns)-1].commitTs > row.CommitTs {
-				log.Panic("the commitTs of the emit row is less than the received row",
-					zap.Uint64("lastReceivedCommitTs", txns[len(txns)-1].commitTs),
-					zap.Any("row", row))
-			}
-			txns = append(txns, &txnsWithTheSameCommitTs{
-				commitTs: row.CommitTs,
-			})
+		txns, ok := c.unresolvedTxns[row.Table.TableID]
+		if !ok {
+			txns = queue.NewChunkQueue[*txnsWithTheSameCommitTs]()
 			c.unresolvedTxns[row.Table.TableID] = txns
 		}
-		txns[len(txns)-1].Append(row)
+
+		lastTxn, ok := txns.Tail()
+		if txns.Empty() || ok && lastTxn.commitTs != row.CommitTs {
+			// fail-fast check
+			if ok && lastTxn.commitTs > row.CommitTs {
+				log.Panic("the commitTs of the emit row is less than the received row",
+					zap.Uint64("lastReceivedCommitTs", lastTxn.commitTs),
+					zap.Any("row", row))
+			}
+			txns.Enqueue(&txnsWithTheSameCommitTs{
+				commitTs: row.CommitTs,
+			})
+		}
+
+		lastTxn, _ = txns.Tail()
+		lastTxn.Append(row)
 		appendRows++
 	}
 	return appendRows
@@ -114,14 +122,15 @@ func (c *unresolvedTxnCache) Resolved(
 }
 
 func splitResolvedTxn(
-	resolvedTsMap *sync.Map, unresolvedTxns map[model.TableID][]*txnsWithTheSameCommitTs,
+	resolvedTsMap *sync.Map,
+	unresolvedTxns map[model.TableID]*queue.ChunkQueue[*txnsWithTheSameCommitTs],
 ) (checkpointTsMap map[model.TableID]model.ResolvedTs,
 	resolvedRowsMap map[model.TableID][]*model.SingleTableTxn,
 ) {
 	var (
 		ok                              bool
 		txnsLength                      int
-		txns                            []*txnsWithTheSameCommitTs
+		txns                            *queue.ChunkQueue[*txnsWithTheSameCommitTs]
 		resolvedTxnsWithTheSameCommitTs []*txnsWithTheSameCommitTs
 	)
 
@@ -135,21 +144,22 @@ func splitResolvedTxn(
 
 	resolvedRowsMap = make(map[model.TableID][]*model.SingleTableTxn, len(unresolvedTxns))
 	for tableID, resolved := range checkpointTsMap {
-		if txns, ok = unresolvedTxns[tableID]; !ok {
+		if txns, ok = unresolvedTxns[tableID]; !ok || txns.Empty() {
 			continue
 		}
-		i := sort.Search(len(txns), func(i int) bool {
-			return txns[i].commitTs > resolved.Ts
+		i := sort.Search(txns.Size(), func(i int) bool {
+			txn, _ := txns.At(i)
+			return txn.commitTs > resolved.Ts
 		})
 		if i != 0 {
-			if i == len(txns) {
-				resolvedTxnsWithTheSameCommitTs = txns
-				delete(unresolvedTxns, tableID)
+			if i == txns.Size() {
+				resolvedTxnsWithTheSameCommitTs, _ = txns.DequeueAll()
+				txns.Clear()
 			} else {
-				resolvedTxnsWithTheSameCommitTs = txns[:i]
-				unresolvedTxns[tableID] = txns[i:]
+				resolvedTxnsWithTheSameCommitTs, _ = txns.DequeueMany(i)
 			}
 			for _, txns := range resolvedTxnsWithTheSameCommitTs {
+				// why added up?
 				txnsLength += len(txns.txns)
 			}
 			resolvedTxns := make([]*model.SingleTableTxn, 0, txnsLength)

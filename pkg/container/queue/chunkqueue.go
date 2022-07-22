@@ -25,7 +25,7 @@ const (
 	defaultSizePerChunk = 1024
 	// the minimum length of each chunk is 16
 	minimumChunkLen      = 16
-	initialPitchArrayLen = 32
+	defaultPitchArrayLen = 32
 )
 
 // ChunkQueue is a generic, efficient, iterable and GC-friendly queue.
@@ -86,7 +86,7 @@ func NewChunkQueueLeastCapacity[T any](minCapacity int) *ChunkQueue[T] {
 		},
 	}
 
-	q.chunks = make([]*chunk[T], initialPitchArrayLen, initialPitchArrayLen)
+	q.chunks = make([]*chunk[T], defaultPitchArrayLen, defaultPitchArrayLen)
 	q.extend(minCapacity)
 	return q
 }
@@ -168,15 +168,21 @@ func (q *ChunkQueue[T]) extend(n int) {
 	}
 }
 
-// reallocateChunksArray extends the []chunks array in which there are pointers to chunks
-func (q *ChunkQueue[T]) reallocateChunksArray(x int) {
-	n := len(q.chunks)
+// reallocateChunksArray extends/shrinks the []chunks array,
+// and move the pointers to head
+func (q *ChunkQueue[T]) reallocateChunksArray(need int) {
+	var n int
+	if need < 0 {
+		n = defaultPitchArrayLen
+	} else {
+		n = len(q.chunks)
+	}
 	used := q.tail - q.head
 	// Twice the array if more than a half will be in use
-	for used+x >= n/2 {
+	for used+need >= n/2 {
 		n *= 2
 	}
-	if n > len(q.chunks) {
+	if n != len(q.chunks) {
 		newChunks := make([]*chunk[T], n, n)
 		copy(newChunks[:used], q.chunks[q.head:q.tail])
 		q.chunks = newChunks
@@ -307,34 +313,34 @@ func (q *ChunkQueue[T]) DequeueMany(n int) ([]T, bool) {
 	return res, ok
 }
 
-// Clear clears the queue to empty
+// Clear clears the queue to empty and shrinks the chunks array
 func (q *ChunkQueue[T]) Clear() {
-	if q.Empty() {
-		return
-	}
-
-	emptyChunk := make([]T, q.chunkLength, q.chunkLength)
-	for i := q.head; i < q.tail; i++ {
-		q.size -= q.chunks[i].len()
-		copy(q.chunks[i].data[:], emptyChunk[:])
-		q.popChunk()
-	}
-}
-
-// BinarySearch returns the smallest
-func (q *ChunkQueue[T]) BinarySearch(f func(val T) bool) int {
-	l, r := 0, q.Size()-1
-	for l < r {
-		m := (l + r) >> 1
-		v, _ := q.At(m)
-		if !f(v) {
-			l = m + 1
-		} else {
-			r = m
+	if !q.Empty() {
+		emptyChunk := make([]T, q.chunkLength, q.chunkLength)
+		for i := q.head; i < q.tail; i++ {
+			q.size -= q.chunks[i].len()
+			copy(q.chunks[i].data[:], emptyChunk[:])
+			q.popChunk()
 		}
 	}
-	if v, ok := q.Head(); l == r && ok && !f(v) {
-		l++
-	}
-	return l
+	// Shink the chunks array
+	q.reallocateChunksArray(-1)
 }
+
+//// BinarySearch returns the smallest
+//func (q *ChunkQueue[T]) BinarySearch(f func(val T) bool) int {
+//	l, r := 0, q.Size()-1
+//	for l < r {
+//		m := (l + r) >> 1
+//		v, _ := q.At(m)
+//		if !f(v) {
+//			l = m + 1
+//		} else {
+//			r = m
+//		}
+//	}
+//	if v, ok := q.Head(); l == r && ok && !f(v) {
+//		l++
+//	}
+//	return l
+//}

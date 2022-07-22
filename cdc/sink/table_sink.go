@@ -28,8 +28,7 @@ import (
 type tableSink struct {
 	tableID     model.TableID
 	backendSink Sink
-	//buffer      []*model.RowChangedEvent
-	buffer queue.ChunkQueue[*model.RowChangedEvent]
+	buffer      queue.ChunkQueue[*model.RowChangedEvent]
 
 	metricsTableSinkTotalRows prometheus.Counter
 }
@@ -54,7 +53,6 @@ func NewTableSink(
 }
 
 func (t *tableSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
-	//t.buffer = append(t.buffer, rows...)
 	t.buffer.EnqueueMany(rows...)
 	t.metricsTableSinkTotalRows.Add(float64(len(rows)))
 	return nil
@@ -83,8 +81,6 @@ func (t *tableSink) FlushRowChangedEvents(
 	if i == 0 {
 		return t.backendSink.FlushRowChangedEvents(ctx, t.tableID, resolved)
 	}
-	//resolvedRows := t.buffer[:i]
-	//t.buffer = append(make([]*model.RowChangedEvent, 0, len(t.buffer[i:])), t.buffer[i:]...)
 	resolvedRows, _ := t.buffer.DequeueMany(i)
 	err := t.backendSink.EmitRowChangedEvents(ctx, resolvedRows...)
 	if err != nil {
