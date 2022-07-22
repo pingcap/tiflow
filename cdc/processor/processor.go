@@ -473,7 +473,7 @@ func isProcessorIgnorableError(err error) bool {
 func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) (orchestrator.ReactorState, error) {
 	// check upstream error first
 	if err := p.upstream.Error(); err != nil {
-		return p.handleErr(ctx, state, err)
+		return p.handleErr(state, err)
 	}
 	if p.upstream.IsClosed() {
 		log.Panic("upstream is closed",
@@ -509,10 +509,10 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	if err == nil {
 		return state, nil
 	}
-	return p.handleErr(ctx, state, err)
+	return p.handleErr(state, err)
 }
 
-func (p *processor) handleErr(ctx cdcContext.Context,
+func (p *processor) handleErr(
 	state *orchestrator.ChangefeedReactorState,
 	err error,
 ) (orchestrator.ReactorState, error) {
@@ -536,7 +536,7 @@ func (p *processor) handleErr(ctx cdcContext.Context,
 			position = &model.TaskPosition{}
 		}
 		position.Error = &model.RunningError{
-			Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
+			Addr:    p.captureInfo.AdvertiseAddr,
 			Code:    code,
 			Message: err.Error(),
 		}
@@ -559,7 +559,7 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	if p.createTaskPosition() {
 		return nil
 	}
-	if err := p.handleErrorCh(ctx); err != nil {
+	if err := p.handleErrorCh(); err != nil {
 		return errors.Trace(err)
 	}
 	if err := p.lazyInit(ctx); err != nil {
@@ -720,7 +720,7 @@ func (p *processor) newAgentImpl(ctx cdcContext.Context) (ret scheduler.Agent, e
 }
 
 // handleErrorCh listen the error channel and throw the error if it is not expected.
-func (p *processor) handleErrorCh(ctx cdcContext.Context) error {
+func (p *processor) handleErrorCh() error {
 	var err error
 	select {
 	case err = <-p.errCh:
