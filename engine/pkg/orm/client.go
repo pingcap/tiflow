@@ -282,7 +282,6 @@ func (c *metaOpsClient) Initialize(ctx context.Context) error {
 
 /////////////////////////////// Logic Epoch
 func (c *metaOpsClient) GenEpoch(ctx context.Context) (frameModel.Epoch, error) {
-	failpoint.InjectContext(ctx, "genEpochDelay", nil)
 	return c.epochClient.GenEpoch(ctx)
 }
 

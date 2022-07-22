@@ -17,6 +17,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -33,6 +34,8 @@ type LogicEpoch struct {
 	JobID string `gorm:"type:varchar(64) not null;uniqueIndex:uidx_jk"`
 	Epoch int64  `gorm:"type:bigint not null default 1"`
 }
+
+// TODO: after we split the orm model, move this client out of the file
 
 // EpochClient defines the client to generate epoch
 type EpochClient interface {
@@ -75,6 +78,7 @@ type epochClient struct {
 
 // GenEpoch implements GenEpoch of EpochClient
 func (e *epochClient) GenEpoch(ctx context.Context) (int64, error) {
+	failpoint.InjectContext(ctx, "genEpochDelay", nil)
 	if e.db == nil {
 		return int64(0), errors.ErrMetaParamsInvalid.GenWithStackByArgs("inner db is nil")
 	}

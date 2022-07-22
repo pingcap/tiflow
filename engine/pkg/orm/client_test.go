@@ -1283,22 +1283,6 @@ func TestContext(t *testing.T) {
 	require.Error(t, err)
 	require.Regexp(t, "context deadline exceed", err.Error())
 	failpoint.Disable("github.com/pingcap/tiflow/engine/pkg/orm/initializedDelay")
-
-	// test transaction
-	ctx, cancel = context.WithTimeout(context.TODO(), 1*time.Second)
-	defer cancel()
-
-	err = failpoint.Enable("github.com/pingcap/tiflow/engine/pkg/orm/genEpochDelay", "sleep(2000)")
-	require.NoError(t, err)
-	ctx = failpoint.WithHook(ctx, func(ctx context.Context, fpname string) bool {
-		return ctx.Value(fpname) != nil
-	})
-	ctx2 = context.WithValue(ctx, "github.com/pingcap/tiflow/engine/pkg/orm/genEpochDelay", struct{}{})
-
-	_, err = cli.GenEpoch(ctx2)
-	require.Error(t, err)
-	require.Regexp(t, "context deadline exceed", err.Error())
-	failpoint.Disable("github.com/pingcap/tiflow/engine/pkg/orm/model/genEpochDelay")
 }
 
 func testInner(t *testing.T, m sqlmock.Sqlmock, cli Client, c tCase) {

@@ -22,6 +22,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	gsql "github.com/go-sql-driver/mysql"
+	"github.com/pingcap/failpoint"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -94,6 +95,22 @@ func TestGenEpoch(t *testing.T) {
 	mock.ExpectRollback()
 	_, err = epochClient.GenEpoch(ctx)
 	require.Error(t, err)
+
+	// context cancel
+	ctx, cancel = context.WithTimeout(context.TODO(), 1*time.Second)
+	defer cancel()
+
+	err = failpoint.Enable("github.com/pingcap/tiflow/engine/pkg/orm/model/genEpochDelay", "sleep(2000)")
+	require.NoError(t, err)
+	ctx = failpoint.WithHook(ctx, func(ctx context.Context, fpname string) bool {
+		return ctx.Value(fpname) != nil
+	})
+	ctx2 := context.WithValue(ctx, "github.com/pingcap/tiflow/engine/pkg/orm/model/genEpochDelay", struct{}{})
+
+	_, err = epochClient.GenEpoch(ctx2)
+	require.Error(t, err)
+	require.Regexp(t, "context deadline exceed", err.Error())
+	failpoint.Disable("github.com/pingcap/tiflow/engine/pkg/orm/model/genEpochDelay")
 }
 
 func TestInitializeEpochModel(t *testing.T) {
