@@ -1,0 +1,29 @@
+// Copyright 2022 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package master
+
+import (
+	"github.com/spf13/cobra"
+)
+
+// NewTaskResumeCmd creates a Task Resume command.
+func NewTaskResumeCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "resume [task-name | config-file] [-s source ...]",
+		Short: "Resumes a specified paused task or all (sub)tasks bound to a source",
+		RunE:  resumeTaskFunc,
+	}
+	addOperateSourceTaskFlags(cmd)
+	return cmd
+}

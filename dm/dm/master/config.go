@@ -60,7 +60,7 @@ func NewConfig() *Config {
 
 	fs.BoolVar(&cfg.printVersion, "V", false, "prints version and exit")
 	fs.BoolVar(&cfg.printSampleConfig, "print-sample-config", false, "print sample config file of dm-worker")
-	fs.BoolVar(&cfg.OpenAPI, "openapi", false, "enable openapi")
+	fs.BoolVar(&cfg.OpenAPI, "openapi", true, "enable openapi")
 	fs.StringVar(&cfg.ConfigFile, "config", "", "path to config file")
 	fs.StringVar(&cfg.MasterAddr, "master-addr", "", "master API server and status addr")
 	fs.StringVar(&cfg.AdvertiseAddr, "advertise-addr", "", `advertise address for client traffic (default "${master-addr}")`)

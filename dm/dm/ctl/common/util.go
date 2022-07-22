@@ -14,9 +14,12 @@
 package common
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"os"
 	"reflect"
 	"regexp"
@@ -24,6 +27,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/pingcap/tiflow/dm/openapi"
 
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/golang/protobuf/proto"
@@ -56,11 +61,12 @@ var (
 
 // CtlClient used to get master client for dmctl.
 type CtlClient struct {
-	mu           sync.RWMutex
-	tls          *toolutils.TLS
-	conn         *grpc.ClientConn
-	MasterClient pb.MasterClient  // exposed to be used in test
-	EtcdClient   *clientv3.Client // exposed to be used in export config
+	mu                  sync.RWMutex
+	tls                 *toolutils.TLS
+	conn                *grpc.ClientConn
+	MasterGRPCClient    pb.MasterClient  // exposed to be used in test
+	EtcdClient          *clientv3.Client // exposed to be used in export config
+	MasterOpenapiClient *openapi.Client
 }
 
 func (c *CtlClient) updateMasterClient() error {
@@ -80,13 +86,29 @@ func (c *CtlClient) updateMasterClient() error {
 	for _, endpoint := range endpoints {
 		//nolint:staticcheck
 		conn, err = grpc.Dial(utils.UnwrapScheme(endpoint), c.tls.ToGRPCDialOption(), grpc.WithBackoffMaxDelay(3*time.Second), grpc.WithBlock(), grpc.WithTimeout(3*time.Second))
-		if err == nil {
-			c.conn = conn
-			c.MasterClient = pb.NewMasterClient(conn)
-			return nil
+		if err != nil {
+			continue
 		}
+		c.conn = conn
+		c.MasterGRPCClient = pb.NewMasterClient(conn)
+
+		if c.tls.TLSConfig() == nil {
+			c.MasterOpenapiClient, err = openapi.NewClient("http://" + utils.UnwrapScheme(endpoint))
+			if err != nil {
+				continue
+			}
+		} else {
+			transport := http.DefaultTransport.(*http.Transport).Clone()
+			transport.TLSClientConfig = c.tls.TLSConfig()
+			httpCli := &http.Client{Transport: transport}
+			c.MasterOpenapiClient, err = openapi.NewClient("https://"+utils.UnwrapScheme(endpoint), openapi.WithHTTPClient(httpCli))
+			if err != nil {
+				continue
+			}
+		}
+		return nil
 	}
-	return terror.ErrCtlGRPCCreateConn.AnnotateDelegate(err, "can't connect to %s", strings.Join(endpoints, ","))
+	return terror.ErrCtlCreateMasterConn.AnnotateDelegate(err, "can't connect to %s", strings.Join(endpoints, ","))
 }
 
 func (c *CtlClient) sendRequest(
@@ -103,7 +125,7 @@ func (c *CtlClient) sendRequest(
 	for _, o := range opts {
 		params = append(params, reflect.ValueOf(o))
 	}
-	results := reflect.ValueOf(c.MasterClient).MethodByName(reqName).Call(params)
+	results := reflect.ValueOf(c.MasterGRPCClient).MethodByName(reqName).Call(params)
 
 	reflect.ValueOf(respPointer).Elem().Set(results[0])
 	errInterface := results[1].Interface()
@@ -348,4 +370,113 @@ func PrintCmdUsage(cmd *cobra.Command) {
 	if err := cmd.Usage(); err != nil {
 		fmt.Println("can't output command's usage:", err)
 	}
+}
+
+// SendOpenapiRequest send openapi request to master.
+func (c *CtlClient) sendOpenapiRequest(
+	ctx context.Context,
+	reqName string,
+	params []interface{},
+	reqEditors ...openapi.RequestEditorFn,
+) (*http.Response, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	methodType, hasMethod := reflect.TypeOf(c.MasterOpenapiClient).MethodByName(reqName)
+	if !hasMethod {
+		return nil, errors.New("not found Openapi Client method " + reqName)
+	}
+	reflectParams := []reflect.Value{reflect.ValueOf(ctx)}
+	for i, p := range params {
+		// convert type
+		pType := methodType.Type.In(i + 2)
+		reflectParams = append(reflectParams, reflect.ValueOf(p).Convert(pType))
+	}
+	for _, e := range reqEditors {
+		reflectParams = append(reflectParams, reflect.ValueOf(e))
+	}
+
+	results := reflect.ValueOf(c.MasterOpenapiClient).MethodByName(reqName).Call(reflectParams)
+	errInterface := results[1].Interface()
+	// nil can't pass type conversion, so we handle it separately
+	if errInterface == nil {
+		res := &http.Response{}
+		reflect.ValueOf(&res).Elem().Set(results[0])
+		return res, nil
+	}
+	return nil, errInterface.(error)
+}
+
+type SendToOpenapiError struct {
+	error
+	StructMsg *openapi.ErrorWithMessage
+	StringMsg string
+}
+
+func (e SendToOpenapiError) Error() string {
+	ptRes := prettyOpenapiRes{Result: false}
+	if e.StructMsg != nil {
+		ptRes.Message = e.StructMsg
+	} else {
+		ptRes.Message = e.StringMsg
+	}
+	s, err := json.MarshalIndent(ptRes, "", "    ")
+	if err != nil {
+		return err.Error()
+	}
+	return string(s)
+}
+
+// GetOriginMsg returns origin error msg to make print exception simple.
+func (e SendToOpenapiError) GetOriginMsg() interface{} {
+	if e.StructMsg != nil {
+		return e.StructMsg
+	}
+	return e.StringMsg
+}
+
+func SendOpenapiRequest(ctx context.Context, reqName string, params []interface{}, successCode int, respPointer interface{}) *SendToOpenapiError {
+	httpRes, err := GlobalCtlClient.sendOpenapiRequest(ctx, reqName, params)
+	if err != nil {
+		return &SendToOpenapiError{StringMsg: err.Error()}
+	}
+	// handle httpRes
+	switch httpRes.StatusCode {
+	case successCode:
+		if respPointer == nil {
+			return nil
+		}
+		err = json.NewDecoder(httpRes.Body).Decode(&respPointer)
+		if err != nil {
+			return &SendToOpenapiError{StringMsg: err.Error()}
+		}
+	case http.StatusBadRequest:
+		errResp := &openapi.ErrorWithMessage{}
+		body, err := ioutil.ReadAll(httpRes.Body)
+		if err != nil {
+			return &SendToOpenapiError{StringMsg: err.Error()}
+		}
+		// try to make ErrorWithMessage
+		err = json.Unmarshal(body, &errResp)
+		if err != nil || errResp.ErrorMsg == "" {
+			return &SendToOpenapiError{StringMsg: string(body)}
+		}
+		return &SendToOpenapiError{StructMsg: errResp}
+	default:
+		buffer := new(bytes.Buffer)
+		err := httpRes.Write(buffer)
+		if err != nil {
+			return &SendToOpenapiError{StringMsg: err.Error()}
+		}
+		return &SendToOpenapiError{StringMsg: buffer.String()}
+	}
+	return nil
+}
+
+type prettyOpenapiRes struct {
+	Result  bool
+	Message interface{}
+}
+
+func PrettyPrintOpenapiResp(isSuccess bool, resp interface{}) {
+	PrettyPrintInterface(prettyOpenapiRes{Result: isSuccess, Message: resp})
 }
