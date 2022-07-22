@@ -64,7 +64,7 @@ type managerImpl struct {
 	commandQueue    chan *command
 	upstreamManager *upstream.Manager
 
-	newProcessor func(cdcContext.Context, *upstream.Upstream, *model.Liveness) *processor
+	newProcessor func(cdcContext.Context, model.ChangeFeedID, *upstream.Upstream, *model.Liveness) *processor
 
 	metricProcessorCloseDuration prometheus.Observer
 }
@@ -111,7 +111,7 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 				up = m.upstreamManager.AddUpstream(upstreamInfo.ID, upstreamInfo)
 			}
 			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
-			processor = m.newProcessor(ctx, up, m.liveness)
+			processor = m.newProcessor(ctx, changefeedID, up, m.liveness)
 			m.processors[changefeedID] = processor
 		}
 		if _, err := processor.Tick(ctx, changefeedState); err != nil {

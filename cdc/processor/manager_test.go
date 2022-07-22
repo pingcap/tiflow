@@ -48,7 +48,10 @@ func NewManager4Test(
 ) *managerImpl {
 	m := NewManager(upstream.NewManager4Test(nil), liveness).(*managerImpl)
 	m.newProcessor = func(
-		ctx cdcContext.Context, up *upstream.Upstream, liveness *model.Liveness,
+		ctx cdcContext.Context,
+		changefeedID model.ChangeFeedID,
+		up *upstream.Upstream,
+		liveness *model.Liveness,
 	) *processor {
 		return newProcessor4Test(ctx, t, createTablePipeline, m.liveness)
 	}
