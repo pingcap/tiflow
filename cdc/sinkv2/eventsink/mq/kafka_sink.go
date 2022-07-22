@@ -18,6 +18,9 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
@@ -78,6 +81,8 @@ func NewKafkaSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
+	log.Info("Try to create a producer",
+		zap.Any("baseConfig", baseConfig), zap.Any("saramaConfig", saramaConfig))
 	p, err := producerCreator(ctx, client, errCh)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)

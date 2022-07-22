@@ -75,6 +75,8 @@ func (w *worker) run(ctx context.Context) (retErr error) {
 			zap.String("namespace", w.changeFeedID.Namespace),
 			zap.String("changefeed", w.changeFeedID.ID))
 	}()
+	log.Info("MQ sink worker started", zap.String("namespace", w.changeFeedID.Namespace),
+		zap.String("changefeed", w.changeFeedID.ID))
 	// Fixed size of the batch.
 	eventsBuf := make([]mqEvent, mqv1.FlushBatchSize)
 	for {

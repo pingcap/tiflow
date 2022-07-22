@@ -154,6 +154,10 @@ func TestProducerSendMsgFailed(t *testing.T) {
 		err := producer.Close()
 		// Because the broker is no response, so we got this error.
 		require.Regexp(t, ".*Failed to deliver.*", err)
+
+		// Close reentry.
+		err = producer.Close()
+		require.Nil(t, err)
 	}()
 	require.Nil(t, err)
 	require.NotNil(t, producer)

@@ -48,12 +48,12 @@ type kafkaProducer struct {
 	client sarama.Client
 	// asyncProducer is used to send messages to kafka asynchronously.
 	asyncProducer sarama.AsyncProducer
-	// closingMu is used to protect `closing`.
+	// closedMu is used to protect `closed`.
 	// We need to ensure that never write to closed producers.
-	closingMu sync.RWMutex
-	// closing is used to indicate whether the producer is closing.
-	// We also use it to guard against double closing.
-	closing bool
+	closedMu sync.RWMutex
+	// closed is used to indicate whether the producer is closed.
+	// We also use it to guard against double closed.
+	closed bool
 	// closedChan is used to notify the run loop to exit.
 	closedChan chan struct{}
 }
@@ -64,12 +64,14 @@ func (k *kafkaProducer) AsyncSendMessage(
 ) error {
 	// We have to hold the lock to prevent write to closed producer.
 	// Close may be blocked for a long time.
-	k.closingMu.RLock()
-	defer k.closingMu.RUnlock()
+	k.closedMu.RLock()
+	defer k.closedMu.RUnlock()
 
 	// If the producer is closed, we should skip the message.
-	if k.closing {
-		// TODO: refine this error.
+	if k.closed {
+		// We return the context error directly rather than other error.
+		// Because if producer already closed, it means the context maybe is canceling or canceled.
+		// So we shouldn't return other errors to the caller to mess up the shutdown process.
 		return ctx.Err()
 	}
 	msg := &sarama.ProducerMessage{
@@ -90,11 +92,11 @@ func (k *kafkaProducer) AsyncSendMessage(
 
 func (k *kafkaProducer) Close() error {
 	// We have to hold the lock to prevent write to closed producer.
-	k.closingMu.Lock()
-	defer k.closingMu.Unlock()
+	k.closedMu.Lock()
+	defer k.closedMu.Unlock()
 	// If the producer was already closed, we should skip the close operation.
-	if k.closing {
-		// We need to guard against double closing the clients,
+	if k.closed {
+		// We need to guard against double closed the clients,
 		// which could lead to panic.
 		log.Warn("kafka producer already closed",
 			zap.String("namespace", k.id.Namespace),
@@ -102,7 +104,6 @@ func (k *kafkaProducer) Close() error {
 			zap.Any("role", k.role))
 		return nil
 	}
-	k.closing = true
 	// Notify the run loop to exit.
 	close(k.closedChan)
 	// `client` is mainly used by `asyncProducer` to fetch metadata and other related
@@ -137,6 +138,7 @@ func (k *kafkaProducer) Close() error {
 		zap.String("namespace", k.id.Namespace),
 		zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
 
+	k.closed = true
 	return nil
 }
 
@@ -168,7 +170,6 @@ func (k *kafkaProducer) run(ctx context.Context) error {
 }
 
 // NewKafkaProducer creates a new kafka producer.
-// TODO: add logs
 func NewKafkaProducer(
 	ctx context.Context,
 	client sarama.Client,
@@ -176,6 +177,9 @@ func NewKafkaProducer(
 ) (Producer, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	role := contextutil.RoleFromCtx(ctx)
+	log.Info("Starting kafka sarama producer ...",
+		zap.String("namespace", changefeedID.Namespace),
+		zap.String("changefeed", changefeedID.ID), zap.Any("role", role))
 
 	asyncProducer, err := sarama.NewAsyncProducerFromClient(client)
 	if err != nil {
@@ -187,7 +191,7 @@ func NewKafkaProducer(
 		asyncProducer: asyncProducer,
 		id:            changefeedID,
 		role:          role,
-		closing:       false,
+		closed:        false,
 		closedChan:    make(chan struct{}),
 	}
 
