@@ -18,6 +18,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/leakutil"
 )
 
-func TestMain(m *testing.M) {
+// TODO: enable leak test in this package
+// nolint:deadcode
+func testMain(m *testing.M) {
 	leakutil.SetUpLeakTest(m)
 }
