@@ -49,5 +49,5 @@ func TestClientConnImplError(t *testing.T) {
 		StoreType: metaModel.StoreTypeSQL,
 	})
 	require.Regexp(t, regexp.QuoteMeta("[DFLOW:ErrMetaParamsInvalid]"+
-		"meta params invalid:etcd conn but get unmatch type"), err.Error())
+		"etcd conn but get unmatch type"), err.Error())
 }

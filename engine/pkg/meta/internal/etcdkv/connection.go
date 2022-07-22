@@ -14,7 +14,6 @@
 package etcdkv
 
 import (
-	"fmt"
 	"sync"
 
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
@@ -30,8 +29,8 @@ func NewClientConnImpl(storeConf *metaModel.StoreConfig) (*clientConnImpl, error
 	}
 
 	if storeConf.StoreType != metaModel.StoreTypeEtcd {
-		return nil, cerrors.ErrMetaParamsInvalid.GenWithStackByArgs(fmt.Sprintf(
-			"etcd conn but get unmatch type:%s", storeConf.StoreType))
+		return nil, cerrors.ErrMetaParamsInvalid.GenWithStack(
+			"etcd conn but get unmatch type:%s", storeConf.StoreType)
 	}
 
 	etcdCli, err := NewEtcdClient(storeConf)
