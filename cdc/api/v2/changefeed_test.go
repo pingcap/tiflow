@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/etcd"
 	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
 )
@@ -211,6 +212,8 @@ func TestCreateChangefeed(t *testing.T) {
 	err = json.NewDecoder(w.Body).Decode(&resp)
 	require.Nil(t, err)
 	require.Equal(t, cfConfig.ID, resp.ID)
+	mysqlSink, err = util.MaskSinkURI(mysqlSink)
+	require.Nil(t, err)
 	require.Equal(t, mysqlSink, resp.SinkURI)
 	require.Equal(t, http.StatusCreated, w.Code)
 }

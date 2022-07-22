@@ -65,6 +65,19 @@ import (
 	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
 )
 
+// use a slice instead of map because in small data size, slice search is faster
+// than map search.
+var masterRPCLimiterAllowList = []string{
+	"SubmitJob",
+	"CancelJob",
+	"ScheduleTask",
+}
+
+var resourceRPCLimiterAllowList = []string{
+	"CreateResource",
+	"RemoveResource",
+}
+
 // Server handles PRC requests for df master.
 type Server struct {
 	etcd *embed.Etcd
@@ -198,6 +211,7 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		server.masterCli,
 		&server.leaderInitialized,
 		server.rpcLogRL,
+		masterRPCLimiterAllowList,
 	)
 	server.masterRPCHook = masterRPCHook
 	return server, nil
@@ -266,16 +280,6 @@ func (s *Server) PauseJob(ctx context.Context, req *pb.PauseJobRequest) (*pb.Pau
 		return resp2, err
 	}
 	return s.jobManager.PauseJob(ctx, req), nil
-}
-
-// DebugJob implements pb.MasterServer.DebugJob
-func (s *Server) DebugJob(ctx context.Context, req *pb.DebugJobRequest) (*pb.DebugJobResponse, error) {
-	resp2 := &pb.DebugJobResponse{}
-	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
-	if shouldRet {
-		return resp2, err
-	}
-	return s.jobManager.DebugJob(ctx, req), nil
 }
 
 // RegisterExecutor implements grpc interface, and passes request onto executor manager.
@@ -534,6 +538,7 @@ func (s *Server) startResourceManager() error {
 		s.resourceCli,
 		&s.leaderInitialized,
 		s.rpcLogRL,
+		resourceRPCLimiterAllowList,
 	)
 	s.resourceManagerService = externRescManager.NewService(
 		s.frameMetaClient,
