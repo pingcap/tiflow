@@ -15,6 +15,7 @@ package model
 
 import (
 	"context"
+	"time"
 
 	"github.com/pingcap/tiflow/pkg/errors"
 	"gorm.io/gorm"
@@ -50,8 +51,10 @@ func NewEpochClient(jobID string, db *gorm.DB) (*epochClient, error) {
 		return nil, errors.ErrMetaParamsInvalid.GenWithStackByArgs("inner db is nil")
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
 	// Do nothing on conflict
-	if err := db.Clauses(clause.OnConflict{DoNothing: true}).
+	if err := db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).
 		Create(&LogicEpoch{
 			JobID: jobID,
 			Epoch: defaultMinEpoch,
@@ -78,8 +81,8 @@ func (e *epochClient) GenEpoch(ctx context.Context) (int64, error) {
 
 	var epoch int64
 	// every job owns its logic epoch
-	err := e.db.Where("job_id = ?", e.jobID).
-		WithContext(ctx).
+	err := e.db.WithContext(ctx).
+		Where("job_id = ?", e.jobID).
 		Transaction(func(tx *gorm.DB) error {
 			//(1)update epoch = epoch + 1
 			if err := tx.Model(&LogicEpoch{}).
@@ -99,7 +102,7 @@ func (e *epochClient) GenEpoch(ctx context.Context) (int64, error) {
 			return nil
 		})
 	if err != nil {
-		return 0, err
+		return int64(0), err
 	}
 
 	return epoch, nil

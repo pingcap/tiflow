@@ -230,8 +230,19 @@ func newClient(sqlDB *sql.DB) (*metaOpsClient, error) {
 		return nil, errors.ErrMetaNewClientFail.Wrap(err)
 	}
 
+	// TODO: decouple the model creation and client creation in other pr
+	if err := model.InitializeEpochModel(context.TODO(), db); err != nil {
+		return nil, errors.ErrMetaOpFail.Wrap(err)
+	}
+
+	epCli, err := model.NewEpochClient("" /*jobID*/, db)
+	if err != nil {
+		return nil, err
+	}
+
 	return &metaOpsClient{
-		db: db,
+		db:          db,
+		epochClient: epCli,
 	}, nil
 }
 
@@ -266,17 +277,6 @@ func (c *metaOpsClient) Initialize(ctx context.Context) error {
 		AutoMigrate(globalModels...); err != nil {
 		return errors.ErrMetaOpFail.Wrap(err)
 	}
-
-	if err := model.InitializeEpochModel(ctx, c.db); err != nil {
-		return errors.ErrMetaOpFail.Wrap(err)
-	}
-
-	epCli, err := model.NewEpochClient("" /*jobID*/, c.db)
-	if err != nil {
-		return err
-	}
-	c.epochClient = epCli
-
 	return nil
 }
 
