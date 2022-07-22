@@ -62,6 +62,8 @@ spec:
               name: data
             - mountPath: /log
               name: log
+            - mountPath: /config
+              name: config
           env:
             - name: MY_POD_NAME
               valueFrom:
@@ -91,8 +93,15 @@ spec:
             - "{{ include "tiflow.name" . }}-metastore-framework:3306"
             - "--business-meta-endpoints"
             - "{{ include "tiflow.name" . }}-metastore-business:12479"
-            - "--config=/conf/server-master.toml"
+            - "--config=/config/server-master.toml"
             - "--log-file=/log/$(MY_POD_NAME).log"
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "tiflow.name" . }}-configmap
+            items:
+            - key: server-master
+              path: server-master.toml 
   volumeClaimTemplates:
     - metadata:
         name: data

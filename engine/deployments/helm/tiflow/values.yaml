@@ -14,10 +14,21 @@ master:
   replicas: 3
   dataStorage: 2Gi
   logStorage: 1Gi
+  config: |
+    [etcd]
+    data-dir = "/data/etcd"
+
+    [frame-metastore-conf]
+    auth.user = "root"
+    auth.passwd = ""
 
 executor:
   replicas: 4
   logStorage: 1Gi
+  config: |
+    keepalive-ttl = "20s"
+    keepalive-interval = "500ms"
+    session-ttl = 20
 
 metastore:
   frameworkStorage: 5Gi

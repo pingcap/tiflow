@@ -28,4 +28,13 @@
 {{- end -}}
 {{- end -}}
 
-
+{{- define "tiflow.configmap.data1" -}}
+server-master: |-
+    {{- if .Values.master.config }}
+{{ .Values.master.config | indent 2 }}
+    {{- end }}
+executor: |-
+    {{- if .Values.executor.config }}
+{{ .Values.executor.config | indent 2 }}
+    {{- end }}
+{{- end -}}

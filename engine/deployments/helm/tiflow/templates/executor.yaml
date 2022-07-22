@@ -57,6 +57,8 @@ spec:
           volumeMounts:
             - mountPath: /log
               name: log
+            - mountPath: /config
+              name: config
           env:
             - name: MY_POD_NAME
               valueFrom:
@@ -78,8 +80,15 @@ spec:
             - "--worker-addr=0.0.0.0:10241"
             - "--advertise-addr=$(MY_POD_NAME).$(MY_SERVICE_NAME).$(MY_POD_NAMESPACE):10241"
             - "--join={{ include "tiflow.masterAddr" . }}"
-            - "--config=/conf/executor.toml"
+            - "--config=/config/executor.toml"
             - "--log-file=/log/$(MY_POD_NAME).log"
+      volumes:
+          - name: config
+            configMap:
+              name: {{ include "tiflow.name" . }}-configmap
+              items:
+              - key: executor
+                path: executor.toml
   volumeClaimTemplates:
     - metadata:
         name: log
