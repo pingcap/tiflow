@@ -15,19 +15,25 @@ package pipeline
 
 import (
 	"context"
+	"math"
 	"strings"
 	"testing"
 
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
+	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
 	"github.com/stretchr/testify/require"
+	"github.com/tikv/client-go/v2/oracle"
+	pd "github.com/tikv/pd/client"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestUnifiedSorterFileLockConflict(t *testing.T) {
@@ -59,7 +65,7 @@ func TestSorterResolvedTs(t *testing.T) {
 	t.Parallel()
 	sn := newSorterNode("tableName", 1, 1, nil, nil, &config.ReplicaConfig{
 		Consistent: &config.ConsistentConfig{},
-	})
+	}, model.DefaultChangeFeedID("changefeed-id-test"), &mockPD{})
 	sn.sorter = memory.NewEntrySorter()
 	require.EqualValues(t, 1, sn.ResolvedTs())
 	nctx := pipeline.NewNodeContext(
@@ -101,13 +107,100 @@ func (c *checkSorter) Output() <-chan *model.PolymorphicEvent {
 	return c.ch
 }
 
+type mockPD struct {
+	pd.Client
+	ts int64
+}
+
+func (p *mockPD) GetTS(ctx context.Context) (int64, int64, error) {
+	if p.ts != 0 {
+		return p.ts, p.ts, nil
+	}
+	return math.MaxInt64, math.MaxInt64, nil
+}
+
+type mockSorter struct {
+	sorter.EventSorter
+
+	outCh         chan *model.PolymorphicEvent
+	expectStartTs model.Ts
+}
+
+func (s *mockSorter) EmitStartTs(ctx context.Context, ts model.Ts) {
+	if ts != s.expectStartTs {
+		panic(ts)
+	}
+}
+
+func (s *mockSorter) Output() <-chan *model.PolymorphicEvent {
+	return s.outCh
+}
+
+func (s *mockSorter) Run(ctx context.Context) error {
+	return nil
+}
+
+type mockMounter struct {
+	entry.Mounter
+}
+
+func (mockMounter) DecodeEvent(ctx context.Context, event *model.PolymorphicEvent) error {
+	return nil
+}
+
+func TestSorterReplicateTs(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	p := &mockPD{ts: 1}
+	ts := oracle.ComposeTS(1, 1)
+	sn := newSorterNode("tableName", 1, 1, &mockFlowController{}, mockMounter{},
+		&config.ReplicaConfig{
+			Consistent: &config.ConsistentConfig{},
+		}, model.DefaultChangeFeedID("changefeed-id-test"), p)
+	sn.sorter = memory.NewEntrySorter()
+
+	require.Equal(t, model.Ts(1), sn.ResolvedTs())
+
+	eg := &errgroup.Group{}
+	router := actor.NewRouter[pmessage.Message](t.Name())
+	ctx1 := newContext(
+		ctx, t.Name(), router, 1, &cdcContext.ChangefeedVars{},
+		&cdcContext.GlobalVars{}, func(err error) {})
+	s := &mockSorter{
+		outCh:         make(chan *model.PolymorphicEvent, 1),
+		expectStartTs: 1,
+	}
+	sn.start(ctx1, true, eg, 1, router, s)
+
+	s.outCh <- &model.PolymorphicEvent{
+		CRTs: 1, RawKV: &model.RawKVEntry{OpType: model.OpTypePut}, Row: &model.RowChangedEvent{
+			Table:    &model.TableName{},
+			CommitTs: 1,
+			Columns: []*model.Column{
+				{
+					Name:  "col1",
+					Flag:  model.BinaryFlag,
+					Value: "col1-value-updated",
+				},
+			},
+		},
+	}
+
+	outM := <-ctx1.outputCh
+	require.EqualValues(t, ts, outM.PolymorphicEvent.Row.ReplicatingTs)
+
+	cancel()
+	eg.Wait()
+}
+
 func TestSorterResolvedTsLessEqualBarrierTs(t *testing.T) {
 	t.Parallel()
 	sch := make(chan *model.PolymorphicEvent, 1)
 	s := &checkSorter{ch: sch}
 	sn := newSorterNode("tableName", 1, 1, nil, nil, &config.ReplicaConfig{
 		Consistent: &config.ConsistentConfig{},
-	})
+	}, model.DefaultChangeFeedID("changefeed-id-test"), &mockPD{})
 	sn.sorter = s
 
 	ch := make(chan pmessage.Message, 1)

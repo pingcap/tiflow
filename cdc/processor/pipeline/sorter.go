@@ -34,6 +34,8 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
+	"github.com/tikv/client-go/v2/oracle"
+	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -43,10 +45,12 @@ const (
 )
 
 type sorterNode struct {
-	sorter sorter.EventSorter
+	changefeed model.ChangeFeedID
+	pdClient   pd.Client
+	sorter     sorter.EventSorter
 
 	tableID   model.TableID
-	tableName string // quoted schema and table, used in metircs only
+	tableName string // quoted schema and table, used in metrics only
 
 	// for per-table flow control
 	flowController tableFlowController
@@ -72,6 +76,8 @@ func newSorterNode(
 	tableName string, tableID model.TableID, startTs model.Ts,
 	flowController tableFlowController, mounter entry.Mounter,
 	replConfig *config.ReplicaConfig,
+	changefeed model.ChangeFeedID,
+	pdClient pd.Client,
 ) *sorterNode {
 	return &sorterNode{
 		tableName:      tableName,
@@ -81,12 +87,18 @@ func newSorterNode(
 		resolvedTs:     startTs,
 		barrierTs:      startTs,
 		replConfig:     replConfig,
+		pdClient:       pdClient,
+		changefeed:     changefeed,
 	}
 }
 
 func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 	wg := errgroup.Group{}
-	return n.start(ctx, false, &wg, 0, nil)
+	sorter, err := createSorter(ctx, n.tableName, n.tableID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return n.start(ctx, false, &wg, 0, nil, sorter)
 }
 
 func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.TableID) (sorter.EventSorter, error) {
@@ -133,16 +145,12 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 func (n *sorterNode) start(
 	ctx pipeline.NodeContext, isTableActorMode bool, eg *errgroup.Group,
 	tableActorID actor.ID, tableActorRouter *actor.Router[pmessage.Message],
+	eventSorter sorter.EventSorter,
 ) error {
 	n.isTableActorMode = isTableActorMode
 	n.eg = eg
 	stdCtx, cancel := context.WithCancel(ctx)
 	n.cancel = cancel
-
-	eventSorter, err := createSorter(ctx, n.tableName, n.tableID)
-	if err != nil {
-		return errors.Trace(err)
-	}
 
 	failpoint.Inject("ProcessorAddTableError", func() {
 		failpoint.Return(errors.New("processor add table injected error"))
@@ -175,6 +183,18 @@ func (n *sorterNode) start(
 			}
 		}
 
+		phy, logic, err := n.pdClient.GetTS(ctx)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		replicateTs := oracle.ComposeTS(phy, logic)
+		log.Info("table is replicating",
+			zap.Int64("tableID", n.tableID),
+			zap.String("tableName", n.tableName),
+			zap.Uint64("replicateTs", replicateTs),
+			zap.String("namespace", n.changefeed.Namespace),
+			zap.String("changefeed", n.changefeed.ID))
+
 		for {
 			// We must call `sorter.Output` before receiving resolved events.
 			// Skip calling `sorter.Output` and caching output channel may fail
@@ -205,6 +225,9 @@ func (n *sorterNode) start(
 						resolvedTsInterpolateFunc(commitTs)
 					}
 
+					// For all rows, we add table replicate ts, so mysql sink can
+					// determine when to turn off safe-mode.
+					msg.Row.ReplicatingTs = replicateTs
 					// We calculate memory consumption by RowChangedEvent size.
 					// It's much larger than RawKVEntry.
 					size := uint64(msg.Row.ApproximateBytes())

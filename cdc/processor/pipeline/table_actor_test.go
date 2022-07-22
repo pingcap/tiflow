@@ -29,6 +29,7 @@ import (
 	serverConfig "github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -50,6 +51,7 @@ func TestAsyncStopFailed(t *testing.T) {
 		cancel:      func() {},
 		reportErr:   func(err error) {},
 		redoManager: redo.NewDisabledManager(),
+		upStream:    upstream.NewUpstream4Test(&mockPD{}),
 	}
 	tbl.sinkNode = newSinkNode(1, &mockSink{}, 0, 0, &mockFlowController{}, false, tbl.redoManager)
 	require.True(t, tbl.AsyncStop(1))
@@ -77,6 +79,7 @@ func TestTableActorInterface(t *testing.T) {
 				Level: "node",
 			},
 		},
+		upStream: upstream.NewUpstream4Test(&mockPD{}),
 	}
 	tableID, markID := tbl.ID()
 	require.Equal(t, int64(1), tableID)
@@ -119,6 +122,7 @@ func TestTableActorCancel(t *testing.T) {
 		router:      tableActorRouter,
 		cancel:      func() {},
 		reportErr:   func(err error) {},
+		upStream:    upstream.NewUpstream4Test(&mockPD{}),
 	}
 	mb := actor.NewMailbox[pmessage.Message](actor.ID(1), 0)
 	tbl.actorID = actor.ID(1)
@@ -364,7 +368,7 @@ func TestNewTableActor(t *testing.T) {
 	startSorter = func(t *tableActor, ctx *actorNodeContext) error {
 		return nil
 	}
-	tbl, err := NewTableActor(cctx, nil, nil, 1, "t1",
+	tbl, err := NewTableActor(cctx, upstream.NewUpstream4Test(&mockPD{}), nil, 1, "t1",
 		&model.TableReplicaInfo{
 			StartTs:     0,
 			MarkTableID: 1,
@@ -380,7 +384,7 @@ func TestNewTableActor(t *testing.T) {
 		return errors.New("failed to start puller")
 	}
 
-	tbl, err = NewTableActor(cctx, nil, nil, 1, "t1",
+	tbl, err = NewTableActor(cctx, upstream.NewUpstream4Test(&mockPD{}), nil, 1, "t1",
 		&model.TableReplicaInfo{
 			StartTs:     0,
 			MarkTableID: 1,
@@ -426,6 +430,7 @@ func TestTableActorStart(t *testing.T) {
 			MarkTableID: 1,
 		},
 		replicaConfig: config.GetDefaultReplicaConfig(),
+		upStream:      upstream.NewUpstream4Test(&mockPD{}),
 	}
 	require.Nil(t, tbl.start(ctx))
 	require.Equal(t, 1, len(tbl.nodes))
