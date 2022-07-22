@@ -18,8 +18,11 @@ import (
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
-var _ = fmt.Errorf
-var _ = math.Inf
+
+var (
+	_ = fmt.Errorf
+	_ = math.Inf
+)
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
@@ -78,9 +81,11 @@ func (*HeartbeatRequest) ProtoMessage()    {}
 func (*HeartbeatRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_f9c348dec43a6705, []int{0}
 }
+
 func (m *HeartbeatRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *HeartbeatRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_HeartbeatRequest.Marshal(b, m, deterministic)
@@ -93,12 +98,15 @@ func (m *HeartbeatRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, er
 		return b[:n], nil
 	}
 }
+
 func (m *HeartbeatRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_HeartbeatRequest.Merge(m, src)
 }
+
 func (m *HeartbeatRequest) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *HeartbeatRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_HeartbeatRequest.DiscardUnknown(m)
 }
@@ -152,9 +160,11 @@ func (*HeartbeatResponse) ProtoMessage()    {}
 func (*HeartbeatResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_f9c348dec43a6705, []int{1}
 }
+
 func (m *HeartbeatResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *HeartbeatResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_HeartbeatResponse.Marshal(b, m, deterministic)
@@ -167,12 +177,15 @@ func (m *HeartbeatResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, e
 		return b[:n], nil
 	}
 }
+
 func (m *HeartbeatResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_HeartbeatResponse.Merge(m, src)
 }
+
 func (m *HeartbeatResponse) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *HeartbeatResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_HeartbeatResponse.DiscardUnknown(m)
 }
@@ -212,9 +225,11 @@ func (*SubmitJobRequest) ProtoMessage()    {}
 func (*SubmitJobRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_f9c348dec43a6705, []int{2}
 }
+
 func (m *SubmitJobRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *SubmitJobRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_SubmitJobRequest.Marshal(b, m, deterministic)
@@ -227,12 +242,15 @@ func (m *SubmitJobRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, er
 		return b[:n], nil
 	}
 }
+
 func (m *SubmitJobRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_SubmitJobRequest.Merge(m, src)
 }
+
 func (m *SubmitJobRequest) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *SubmitJobRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_SubmitJobRequest.DiscardUnknown(m)
 }
@@ -271,9 +289,11 @@ func (*QueryJobRequest) ProtoMessage()    {}
 func (*QueryJobRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_f9c348dec43a6705, []int{3}
 }
+
 func (m *QueryJobRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *QueryJobRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_QueryJobRequest.Marshal(b, m, deterministic)
@@ -286,12 +306,15 @@ func (m *QueryJobRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, err
 		return b[:n], nil
 	}
 }
+
 func (m *QueryJobRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_QueryJobRequest.Merge(m, src)
 }
+
 func (m *QueryJobRequest) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *QueryJobRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_QueryJobRequest.DiscardUnknown(m)
 }
@@ -328,9 +351,11 @@ func (*WorkerInfo) ProtoMessage()    {}
 func (*WorkerInfo) Descriptor() ([]byte, []int) {
 	return fileDescriptor_f9c348dec43a6705, []int{4}
 }
+
 func (m *WorkerInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *WorkerInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_WorkerInfo.Marshal(b, m, deterministic)
@@ -343,12 +368,15 @@ func (m *WorkerInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
+
 func (m *WorkerInfo) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_WorkerInfo.Merge(m, src)
 }
+
 func (m *WorkerInfo) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *WorkerInfo) XXX_DiscardUnknown() {
 	xxx_messageInfo_WorkerInfo.DiscardUnknown(m)
 }
@@ -418,9 +446,11 @@ func (*QueryJobResponse) ProtoMessage()    {}
 func (*QueryJobResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_f9c348dec43a6705, []int{5}
 }
+
 func (m *QueryJobResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *QueryJobResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_QueryJobResponse.Marshal(b, m, deterministic)
@@ -433,12 +463,15 @@ func (m *QueryJobResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, er
 		return b[:n], nil
 	}
 }
+
 func (m *QueryJobResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_QueryJobResponse.Merge(m, src)
 }
+
 func (m *QueryJobResponse) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *QueryJobResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_QueryJobResponse.DiscardUnknown(m)
 }
@@ -491,9 +524,11 @@ func (*CancelJobRequest) ProtoMessage()    {}
 func (*CancelJobRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_f9c348dec43a6705, []int{6}
 }
+
 func (m *CancelJobRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *CancelJobRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_CancelJobRequest.Marshal(b, m, deterministic)
@@ -506,12 +541,15 @@ func (m *CancelJobRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, er
 		return b[:n], nil
 	}
 }
+
 func (m *CancelJobRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_CancelJobRequest.Merge(m, src)
 }
+
 func (m *CancelJobRequest) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *CancelJobRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_CancelJobRequest.DiscardUnknown(m)
 }
@@ -543,9 +581,11 @@ func (*PauseJobRequest) ProtoMessage()    {}
 func (*PauseJobRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_f9c348dec43a6705, []int{7}
 }
+
 func (m *PauseJobRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *PauseJobRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_PauseJobRequest.Marshal(b, m, deterministic)
@@ -558,12 +598,15 @@ func (m *PauseJobRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, err
 		return b[:n], nil
 	}
 }
+
 func (m *PauseJobRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_PauseJobRequest.Merge(m, src)
 }
+
 func (m *PauseJobRequest) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *PauseJobRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_PauseJobRequest.DiscardUnknown(m)
 }
@@ -595,9 +638,11 @@ func (*SubmitJobResponse) ProtoMessage()    {}
 func (*SubmitJobResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_f9c348dec43a6705, []int{8}
 }
+
 func (m *SubmitJobResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *SubmitJobResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_SubmitJobResponse.Marshal(b, m, deterministic)
@@ -610,12 +655,15 @@ func (m *SubmitJobResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, e
 		return b[:n], nil
 	}
 }
+
 func (m *SubmitJobResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_SubmitJobResponse.Merge(m, src)
 }
+
 func (m *SubmitJobResponse) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *SubmitJobResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_SubmitJobResponse.DiscardUnknown(m)
 }
@@ -646,9 +694,11 @@ func (*PauseJobResponse) ProtoMessage()    {}
 func (*PauseJobResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_f9c348dec43a6705, []int{9}
 }
+
 func (m *PauseJobResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *PauseJobResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_PauseJobResponse.Marshal(b, m, deterministic)
@@ -661,12 +711,15 @@ func (m *PauseJobResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, er
 		return b[:n], nil
 	}
 }
+
 func (m *PauseJobResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_PauseJobResponse.Merge(m, src)
 }
+
 func (m *PauseJobResponse) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *PauseJobResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_PauseJobResponse.DiscardUnknown(m)
 }
@@ -690,9 +743,11 @@ func (*CancelJobResponse) ProtoMessage()    {}
 func (*CancelJobResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_f9c348dec43a6705, []int{10}
 }
+
 func (m *CancelJobResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *CancelJobResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_CancelJobResponse.Marshal(b, m, deterministic)
@@ -705,12 +760,15 @@ func (m *CancelJobResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, e
 		return b[:n], nil
 	}
 }
+
 func (m *CancelJobResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_CancelJobResponse.Merge(m, src)
 }
+
 func (m *CancelJobResponse) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *CancelJobResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_CancelJobResponse.DiscardUnknown(m)
 }
@@ -738,9 +796,11 @@ func (*RegisterExecutorRequest) ProtoMessage()    {}
 func (*RegisterExecutorRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_f9c348dec43a6705, []int{11}
 }
+
 func (m *RegisterExecutorRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *RegisterExecutorRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_RegisterExecutorRequest.Marshal(b, m, deterministic)
@@ -753,12 +813,15 @@ func (m *RegisterExecutorRequest) XXX_Marshal(b []byte, deterministic bool) ([]b
 		return b[:n], nil
 	}
 }
+
 func (m *RegisterExecutorRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_RegisterExecutorRequest.Merge(m, src)
 }
+
 func (m *RegisterExecutorRequest) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *RegisterExecutorRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_RegisterExecutorRequest.DiscardUnknown(m)
 }
@@ -797,9 +860,11 @@ func (*RegisterExecutorResponse) ProtoMessage()    {}
 func (*RegisterExecutorResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_f9c348dec43a6705, []int{12}
 }
+
 func (m *RegisterExecutorResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *RegisterExecutorResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_RegisterExecutorResponse.Marshal(b, m, deterministic)
@@ -812,12 +877,15 @@ func (m *RegisterExecutorResponse) XXX_Marshal(b []byte, deterministic bool) ([]
 		return b[:n], nil
 	}
 }
+
 func (m *RegisterExecutorResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_RegisterExecutorResponse.Merge(m, src)
 }
+
 func (m *RegisterExecutorResponse) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *RegisterExecutorResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_RegisterExecutorResponse.DiscardUnknown(m)
 }
@@ -850,9 +918,11 @@ func (*ScheduleTaskRequest) ProtoMessage()    {}
 func (*ScheduleTaskRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_f9c348dec43a6705, []int{13}
 }
+
 func (m *ScheduleTaskRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *ScheduleTaskRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_ScheduleTaskRequest.Marshal(b, m, deterministic)
@@ -865,12 +935,15 @@ func (m *ScheduleTaskRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte,
 		return b[:n], nil
 	}
 }
+
 func (m *ScheduleTaskRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ScheduleTaskRequest.Merge(m, src)
 }
+
 func (m *ScheduleTaskRequest) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *ScheduleTaskRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_ScheduleTaskRequest.DiscardUnknown(m)
 }
@@ -909,9 +982,11 @@ func (*ScheduleTaskResponse) ProtoMessage()    {}
 func (*ScheduleTaskResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_f9c348dec43a6705, []int{14}
 }
+
 func (m *ScheduleTaskResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *ScheduleTaskResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_ScheduleTaskResponse.Marshal(b, m, deterministic)
@@ -924,12 +999,15 @@ func (m *ScheduleTaskResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte
 		return b[:n], nil
 	}
 }
+
 func (m *ScheduleTaskResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ScheduleTaskResponse.Merge(m, src)
 }
+
 func (m *ScheduleTaskResponse) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *ScheduleTaskResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_ScheduleTaskResponse.DiscardUnknown(m)
 }
@@ -961,9 +1039,11 @@ func (*ExecWorkload) ProtoMessage()    {}
 func (*ExecWorkload) Descriptor() ([]byte, []int) {
 	return fileDescriptor_f9c348dec43a6705, []int{15}
 }
+
 func (m *ExecWorkload) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *ExecWorkload) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_ExecWorkload.Marshal(b, m, deterministic)
@@ -976,12 +1056,15 @@ func (m *ExecWorkload) XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
 		return b[:n], nil
 	}
 }
+
 func (m *ExecWorkload) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ExecWorkload.Merge(m, src)
 }
+
 func (m *ExecWorkload) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *ExecWorkload) XXX_DiscardUnknown() {
 	xxx_messageInfo_ExecWorkload.DiscardUnknown(m)
 }
@@ -1014,9 +1097,11 @@ func (*ExecWorkloadRequest) ProtoMessage()    {}
 func (*ExecWorkloadRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_f9c348dec43a6705, []int{16}
 }
+
 func (m *ExecWorkloadRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *ExecWorkloadRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_ExecWorkloadRequest.Marshal(b, m, deterministic)
@@ -1029,12 +1114,15 @@ func (m *ExecWorkloadRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte,
 		return b[:n], nil
 	}
 }
+
 func (m *ExecWorkloadRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ExecWorkloadRequest.Merge(m, src)
 }
+
 func (m *ExecWorkloadRequest) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *ExecWorkloadRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_ExecWorkloadRequest.DiscardUnknown(m)
 }
@@ -1072,9 +1160,11 @@ func (*ExecWorkloadResponse) ProtoMessage()    {}
 func (*ExecWorkloadResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_f9c348dec43a6705, []int{17}
 }
+
 func (m *ExecWorkloadResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *ExecWorkloadResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_ExecWorkloadResponse.Marshal(b, m, deterministic)
@@ -1087,12 +1177,15 @@ func (m *ExecWorkloadResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte
 		return b[:n], nil
 	}
 }
+
 func (m *ExecWorkloadResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ExecWorkloadResponse.Merge(m, src)
 }
+
 func (m *ExecWorkloadResponse) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *ExecWorkloadResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_ExecWorkloadResponse.DiscardUnknown(m)
 }
@@ -1117,9 +1210,11 @@ func (*PersistResourceRequest) ProtoMessage()    {}
 func (*PersistResourceRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_f9c348dec43a6705, []int{18}
 }
+
 func (m *PersistResourceRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *PersistResourceRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_PersistResourceRequest.Marshal(b, m, deterministic)
@@ -1132,12 +1227,15 @@ func (m *PersistResourceRequest) XXX_Marshal(b []byte, deterministic bool) ([]by
 		return b[:n], nil
 	}
 }
+
 func (m *PersistResourceRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_PersistResourceRequest.Merge(m, src)
 }
+
 func (m *PersistResourceRequest) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *PersistResourceRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_PersistResourceRequest.DiscardUnknown(m)
 }
@@ -1168,9 +1266,11 @@ func (*PersistResourceResponse) ProtoMessage()    {}
 func (*PersistResourceResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_f9c348dec43a6705, []int{19}
 }
+
 func (m *PersistResourceResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *PersistResourceResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_PersistResourceResponse.Marshal(b, m, deterministic)
@@ -1183,12 +1283,15 @@ func (m *PersistResourceResponse) XXX_Marshal(b []byte, deterministic bool) ([]b
 		return b[:n], nil
 	}
 }
+
 func (m *PersistResourceResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_PersistResourceResponse.Merge(m, src)
 }
+
 func (m *PersistResourceResponse) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *PersistResourceResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_PersistResourceResponse.DiscardUnknown(m)
 }
@@ -1200,118 +1303,6 @@ func (m *PersistResourceResponse) GetErr() *Error {
 		return m.Err
 	}
 	return nil
-}
-
-type DebugJobRequest struct {
-	JobId   string `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
-	Command string `protobuf:"bytes,2,opt,name=command,proto3" json:"command,omitempty"`
-	JsonArg string `protobuf:"bytes,3,opt,name=json_arg,json=jsonArg,proto3" json:"json_arg,omitempty"`
-}
-
-func (m *DebugJobRequest) Reset()         { *m = DebugJobRequest{} }
-func (m *DebugJobRequest) String() string { return proto.CompactTextString(m) }
-func (*DebugJobRequest) ProtoMessage()    {}
-func (*DebugJobRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_f9c348dec43a6705, []int{20}
-}
-func (m *DebugJobRequest) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *DebugJobRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_DebugJobRequest.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *DebugJobRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_DebugJobRequest.Merge(m, src)
-}
-func (m *DebugJobRequest) XXX_Size() int {
-	return m.Size()
-}
-func (m *DebugJobRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_DebugJobRequest.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_DebugJobRequest proto.InternalMessageInfo
-
-func (m *DebugJobRequest) GetJobId() string {
-	if m != nil {
-		return m.JobId
-	}
-	return ""
-}
-
-func (m *DebugJobRequest) GetCommand() string {
-	if m != nil {
-		return m.Command
-	}
-	return ""
-}
-
-func (m *DebugJobRequest) GetJsonArg() string {
-	if m != nil {
-		return m.JsonArg
-	}
-	return ""
-}
-
-type DebugJobResponse struct {
-	Err     *Error `protobuf:"bytes,1,opt,name=err,proto3" json:"err,omitempty"`
-	JsonRet string `protobuf:"bytes,2,opt,name=json_ret,json=jsonRet,proto3" json:"json_ret,omitempty"`
-}
-
-func (m *DebugJobResponse) Reset()         { *m = DebugJobResponse{} }
-func (m *DebugJobResponse) String() string { return proto.CompactTextString(m) }
-func (*DebugJobResponse) ProtoMessage()    {}
-func (*DebugJobResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_f9c348dec43a6705, []int{21}
-}
-func (m *DebugJobResponse) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *DebugJobResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_DebugJobResponse.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *DebugJobResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_DebugJobResponse.Merge(m, src)
-}
-func (m *DebugJobResponse) XXX_Size() int {
-	return m.Size()
-}
-func (m *DebugJobResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_DebugJobResponse.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_DebugJobResponse proto.InternalMessageInfo
-
-func (m *DebugJobResponse) GetErr() *Error {
-	if m != nil {
-		return m.Err
-	}
-	return nil
-}
-
-func (m *DebugJobResponse) GetJsonRet() string {
-	if m != nil {
-		return m.JsonRet
-	}
-	return ""
 }
 
 func init() {
@@ -1336,88 +1327,82 @@ func init() {
 	proto.RegisterType((*ExecWorkloadResponse)(nil), "enginepb.ExecWorkloadResponse")
 	proto.RegisterType((*PersistResourceRequest)(nil), "enginepb.PersistResourceRequest")
 	proto.RegisterType((*PersistResourceResponse)(nil), "enginepb.PersistResourceResponse")
-	proto.RegisterType((*DebugJobRequest)(nil), "enginepb.DebugJobRequest")
-	proto.RegisterType((*DebugJobResponse)(nil), "enginepb.DebugJobResponse")
 }
 
 func init() { proto.RegisterFile("master.proto", fileDescriptor_f9c348dec43a6705) }
 
 var fileDescriptor_f9c348dec43a6705 = []byte{
-	// 1178 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x57, 0xdd, 0x72, 0xdb, 0x44,
-	0x14, 0xb6, 0xfc, 0xef, 0x63, 0xd7, 0x56, 0xb6, 0x4e, 0xa2, 0x1a, 0xea, 0x3a, 0x2a, 0xcc, 0xe4,
-	0x2a, 0x17, 0xa1, 0x30, 0x30, 0x93, 0x9b, 0x52, 0xca, 0x34, 0x61, 0x32, 0x04, 0x25, 0x9d, 0x52,
-	0x7e, 0xea, 0x91, 0xac, 0x8d, 0xbb, 0x89, 0xad, 0x55, 0x77, 0xd7, 0x40, 0x1e, 0x02, 0x86, 0x67,
-	0xe0, 0x19, 0x78, 0x08, 0xb8, 0x61, 0x7a, 0xc9, 0x25, 0x93, 0xbc, 0x08, 0xb3, 0x92, 0x56, 0x5a,
-	0xcb, 0x4e, 0xe2, 0x9b, 0xde, 0xf9, 0x9c, 0xdd, 0xfd, 0xf6, 0x3b, 0x3f, 0xfb, 0x1d, 0x19, 0x5a,
-	0x53, 0x97, 0x0b, 0xcc, 0x76, 0x42, 0x46, 0x05, 0x45, 0x75, 0x1c, 0x8c, 0x49, 0x80, 0x43, 0xaf,
-	0xd7, 0xc4, 0x8c, 0xd1, 0xc4, 0xdd, 0xeb, 0x4c, 0xb1, 0x70, 0xb9, 0xa0, 0x0c, 0x27, 0x8e, 0x76,
-	0xc8, 0xe8, 0x19, 0x1e, 0x09, 0xae, 0x36, 0x30, 0xcc, 0xe9, 0x8c, 0x8d, 0x70, 0xe2, 0xb0, 0xff,
-	0x30, 0xc0, 0x7c, 0x86, 0x5d, 0x26, 0x3c, 0xec, 0x0a, 0x07, 0xbf, 0x99, 0x61, 0x2e, 0xd0, 0x03,
-	0x68, 0xe2, 0x5f, 0xf0, 0x68, 0x26, 0x28, 0x1b, 0x12, 0xdf, 0x32, 0x06, 0xc6, 0x76, 0xc3, 0x01,
-	0xe5, 0xda, 0xf7, 0xd1, 0x87, 0xd0, 0x56, 0x40, 0xc3, 0x19, 0x77, 0xc7, 0xd8, 0x2a, 0x0e, 0x8c,
-	0xed, 0x8a, 0x73, 0x47, 0x79, 0x9f, 0x4b, 0x27, 0xda, 0x80, 0x2a, 0x17, 0xae, 0x98, 0x71, 0xab,
-	0x14, 0x2d, 0x27, 0x16, 0x7a, 0x1f, 0x1a, 0x82, 0x4c, 0x31, 0x17, 0xee, 0x34, 0xb4, 0xca, 0x03,
-	0x63, 0xbb, 0xec, 0x64, 0x0e, 0x64, 0x42, 0x49, 0x88, 0x89, 0x55, 0x89, 0xfc, 0xf2, 0xa7, 0xed,
-	0xc3, 0x9a, 0xc6, 0x91, 0x87, 0x34, 0xe0, 0x18, 0x6d, 0x41, 0x09, 0x33, 0x16, 0x91, 0x6b, 0xee,
-	0x76, 0x76, 0x54, 0x42, 0x76, 0x9e, 0xca, 0x7c, 0x38, 0x72, 0x4d, 0xde, 0x3f, 0xc1, 0xae, 0x8f,
-	0x59, 0x44, 0xaf, 0xe1, 0x24, 0x16, 0xea, 0x42, 0xc5, 0xf5, 0x7d, 0x26, 0x69, 0x95, 0xb6, 0x1b,
-	0x4e, 0x6c, 0xd8, 0x02, 0xcc, 0xe3, 0x99, 0x37, 0x25, 0xe2, 0x80, 0x7a, 0x2a, 0x13, 0x6d, 0x28,
-	0x8a, 0x30, 0xba, 0xa3, 0xe2, 0x14, 0x45, 0x28, 0x11, 0x47, 0x34, 0x38, 0x25, 0xe3, 0x08, 0xb1,
-	0xe5, 0x24, 0x16, 0xfa, 0x14, 0x5a, 0x49, 0xa6, 0x87, 0x24, 0x38, 0xa5, 0x51, 0xbc, 0xcd, 0xdd,
-	0xf5, 0x8c, 0xd5, 0x51, 0xbc, 0xba, 0x1f, 0x9c, 0x52, 0xa7, 0x19, 0x66, 0x86, 0xed, 0x41, 0xe7,
-	0x9b, 0x19, 0x66, 0x17, 0xda, 0xa5, 0xeb, 0x50, 0x3d, 0xa3, 0x5e, 0x96, 0xf9, 0xca, 0x19, 0xf5,
-	0xf6, 0xfd, 0x85, 0x3b, 0x8a, 0x2b, 0xdf, 0xf1, 0x8f, 0x01, 0xf0, 0x82, 0xb2, 0x73, 0xcc, 0xa4,
-	0x29, 0x83, 0x4a, 0xb1, 0x8b, 0xc4, 0xcf, 0x97, 0xbb, 0xb8, 0x50, 0xee, 0xf9, 0x3a, 0xb6, 0xd2,
-	0x3a, 0x66, 0xd9, 0x28, 0xcf, 0x65, 0x63, 0x0b, 0x5a, 0x84, 0x0f, 0x05, 0x9d, 0x7a, 0x5c, 0xd0,
-	0x00, 0x47, 0xa5, 0xac, 0x3b, 0x4d, 0xc2, 0x4f, 0x94, 0x0b, 0x0d, 0xa0, 0x35, 0x71, 0xb9, 0x18,
-	0xbe, 0xf6, 0x86, 0xb2, 0xf2, 0x56, 0x75, 0x60, 0x6c, 0x97, 0x1c, 0x90, 0xbe, 0x67, 0xde, 0x09,
-	0x99, 0x62, 0xd4, 0x83, 0xfa, 0xcf, 0x94, 0x9d, 0x4f, 0xa8, 0xeb, 0x5b, 0xb5, 0x68, 0x35, 0xb5,
-	0xed, 0x3f, 0x8b, 0x60, 0x66, 0x59, 0x4b, 0x1a, 0x62, 0xd5, 0x5a, 0xed, 0xcd, 0x45, 0xd3, 0xde,
-	0xfd, 0x20, 0xcb, 0x60, 0x1e, 0x73, 0xe7, 0x80, 0x7a, 0xc7, 0xd1, 0xde, 0x34, 0xe6, 0x3d, 0xe8,
-	0xc8, 0xe2, 0xc4, 0xaf, 0x31, 0x2e, 0x44, 0x39, 0x2a, 0x44, 0x37, 0x83, 0xc9, 0x72, 0xed, 0xdc,
-	0x39, 0xa3, 0xde, 0x61, 0xb4, 0x37, 0x4a, 0x7d, 0xd2, 0xb4, 0x95, 0xeb, 0x9b, 0xd6, 0x7e, 0x09,
-	0x8d, 0xf4, 0x56, 0x54, 0x87, 0x32, 0x09, 0x88, 0x30, 0x0b, 0xa8, 0x09, 0xb5, 0x10, 0x07, 0x3e,
-	0x09, 0xc6, 0xa6, 0x81, 0x00, 0xaa, 0x34, 0x98, 0x90, 0x00, 0x9b, 0x45, 0xd4, 0x06, 0xf0, 0x09,
-	0x0f, 0x5d, 0x31, 0x7a, 0x8d, 0x7d, 0xb3, 0x84, 0x5a, 0x50, 0x3f, 0x25, 0x01, 0xe1, 0xd2, 0x2a,
-	0xcb, 0x63, 0x5c, 0xd0, 0x30, 0xc4, 0xbe, 0x59, 0xb1, 0x47, 0x60, 0x3e, 0x71, 0x83, 0x11, 0x9e,
-	0xbc, 0xcb, 0x66, 0xf3, 0xa0, 0x73, 0xe4, 0xce, 0x38, 0x7e, 0x97, 0x77, 0x1c, 0xc2, 0x9a, 0xf6,
-	0x54, 0x57, 0x17, 0x84, 0x8c, 0x48, 0x51, 0x23, 0x62, 0x7f, 0x0c, 0x66, 0x46, 0x79, 0x65, 0x34,
-	0xfb, 0x13, 0x58, 0xd3, 0xd2, 0xb9, 0xfa, 0xb9, 0x29, 0x6c, 0x3a, 0x78, 0x4c, 0x64, 0x53, 0x3c,
-	0x4d, 0x1e, 0x99, 0xca, 0x94, 0x05, 0x35, 0x29, 0x46, 0x98, 0xf3, 0x24, 0x55, 0xca, 0x94, 0x2b,
-	0x3f, 0x61, 0xc6, 0x09, 0x0d, 0x12, 0xee, 0xca, 0x44, 0x7d, 0x80, 0x91, 0x1b, 0xba, 0x1e, 0x99,
-	0x10, 0x71, 0x11, 0xf5, 0x74, 0xc9, 0xd1, 0x3c, 0xf6, 0x2b, 0xb0, 0x16, 0xaf, 0x5b, 0x3d, 0x67,
-	0xb7, 0xa9, 0x83, 0xfd, 0x9b, 0x01, 0x77, 0x8f, 0x65, 0xf3, 0xcd, 0x26, 0xf8, 0xc4, 0xe5, 0xe7,
-	0x2a, 0x96, 0x4d, 0xa8, 0x09, 0x97, 0x9f, 0x67, 0x65, 0xaf, 0x4a, 0x73, 0xdf, 0x47, 0x08, 0xca,
-	0x23, 0xca, 0x45, 0x04, 0x55, 0x72, 0xa2, 0xdf, 0xe8, 0x00, 0xd6, 0xd3, 0x89, 0xc2, 0xf0, 0x9b,
-	0x19, 0x61, 0x78, 0x8a, 0x03, 0x11, 0x4b, 0xf4, 0x5c, 0x53, 0x38, 0xc9, 0xb6, 0xaf, 0xf0, 0x85,
-	0xd3, 0x55, 0x67, 0x1c, 0xed, 0x88, 0xfd, 0x03, 0x74, 0xe7, 0xf9, 0x24, 0xc1, 0xde, 0x3a, 0xd6,
-	0x1e, 0xc2, 0x9d, 0x74, 0x83, 0xcc, 0x7b, 0x12, 0x6c, 0x4b, 0x39, 0x1f, 0xfb, 0x3e, 0xb3, 0x1f,
-	0x41, 0x4b, 0xa6, 0xf1, 0x45, 0xa2, 0x45, 0x0b, 0xb2, 0xd3, 0x85, 0x8a, 0x3e, 0x12, 0x63, 0xc3,
-	0xfe, 0xd5, 0x80, 0xbb, 0xfa, 0xb1, 0x95, 0x47, 0xed, 0x23, 0x68, 0x28, 0xd9, 0xe3, 0x56, 0x31,
-	0x4a, 0xc6, 0x86, 0x56, 0x27, 0x1d, 0x32, 0xdb, 0x28, 0x61, 0xd3, 0x74, 0x12, 0x3f, 0x99, 0x73,
-	0xa0, 0x5c, 0xfb, 0xbe, 0xfd, 0x19, 0x74, 0xe7, 0xe9, 0xac, 0xde, 0xbe, 0xdf, 0xc1, 0xc6, 0x91,
-	0x6c, 0x3d, 0x2e, 0x1c, 0x2d, 0xfb, 0x2b, 0x05, 0x93, 0xa3, 0x95, 0xf4, 0x92, 0x46, 0x6b, 0x0f,
-	0x36, 0x17, 0xb0, 0x57, 0x67, 0xf6, 0x23, 0x74, 0xbe, 0xc0, 0xde, 0x6c, 0x7c, 0xbb, 0xf4, 0x58,
-	0x50, 0x1b, 0xd1, 0xe9, 0xd4, 0x0d, 0x14, 0x09, 0x65, 0xa2, 0x7b, 0x50, 0x3f, 0xe3, 0x34, 0x18,
-	0xba, 0x6c, 0x1c, 0xbd, 0xa5, 0x86, 0x53, 0x93, 0xf6, 0x63, 0x36, 0xb6, 0x8f, 0xc0, 0xcc, 0xe0,
-	0x57, 0x7f, 0x40, 0x0a, 0x91, 0x61, 0xa1, 0x2e, 0x93, 0xb6, 0x83, 0xc5, 0xee, 0xdf, 0x35, 0xa8,
-	0xc6, 0xd3, 0x01, 0x7d, 0x0f, 0x66, 0xfe, 0x95, 0xa2, 0x2d, 0xbd, 0xeb, 0x97, 0x0a, 0x46, 0xcf,
-	0xbe, 0x69, 0x4b, 0xcc, 0xd1, 0x2e, 0xa0, 0x2f, 0xa1, 0x91, 0xea, 0x25, 0xea, 0x65, 0x47, 0xf2,
-	0xdf, 0x3b, 0xbd, 0xf7, 0x96, 0xae, 0xa5, 0x38, 0x4f, 0xa0, 0xae, 0x46, 0x24, 0xba, 0xb7, 0x6c,
-	0x6c, 0xc6, 0x28, 0xbd, 0xeb, 0x27, 0x6a, 0x0c, 0xa2, 0xd4, 0x56, 0x07, 0xc9, 0x0d, 0x0d, 0x1d,
-	0x24, 0x2f, 0xce, 0x71, 0x44, 0xa9, 0xf6, 0xea, 0x11, 0xe5, 0xe7, 0x9b, 0x1e, 0xd1, 0x82, 0x58,
-	0xc7, 0x64, 0x54, 0x4d, 0x75, 0x32, 0xb9, 0x36, 0xd2, 0xc9, 0xe4, 0x5b, 0x20, 0x26, 0x93, 0x7e,
-	0x9f, 0xea, 0x64, 0xf2, 0x1f, 0xd6, 0x3a, 0x99, 0x85, 0x0f, 0x5a, 0xbb, 0x80, 0xbe, 0x86, 0x96,
-	0x2e, 0x5c, 0xe8, 0xbe, 0x56, 0x8d, 0x45, 0x81, 0xed, 0xf5, 0xaf, 0x5b, 0x4e, 0x01, 0x5f, 0xc1,
-	0x9a, 0xea, 0x8a, 0x43, 0x2c, 0xdc, 0x63, 0xf9, 0xcf, 0x00, 0x2d, 0x69, 0x99, 0x74, 0x51, 0x41,
-	0x3f, 0xbc, 0x71, 0x4f, 0x8a, 0xff, 0x1c, 0xda, 0x51, 0x81, 0x33, 0xf0, 0x07, 0xb9, 0xd2, 0x2f,
-	0x20, 0x0f, 0xae, 0xdf, 0x90, 0xc2, 0xbe, 0x84, 0x0d, 0x07, 0x87, 0x94, 0x09, 0xd5, 0xca, 0xa9,
-	0xd8, 0xde, 0xbf, 0x46, 0xfa, 0x16, 0x33, 0xb2, 0x4c, 0xdd, 0xec, 0x02, 0xfa, 0x16, 0x3a, 0x39,
-	0x81, 0x41, 0x1a, 0xa3, 0xe5, 0xba, 0xd6, 0xdb, 0xba, 0x61, 0x87, 0x42, 0xfe, 0xdc, 0xfa, 0xeb,
-	0xb2, 0x6f, 0xbc, 0xbd, 0xec, 0x1b, 0xff, 0x5d, 0xf6, 0x8d, 0xdf, 0xaf, 0xfa, 0x85, 0xb7, 0x57,
-	0xfd, 0xc2, 0xbf, 0x57, 0xfd, 0x82, 0x57, 0x8d, 0xfe, 0x6a, 0x7d, 0xf4, 0x7f, 0x00, 0x00, 0x00,
-	0xff, 0xff, 0xd7, 0x41, 0xba, 0xcf, 0xc3, 0x0d, 0x00, 0x00,
+	// 1111 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x57, 0x4f, 0x73, 0xdb, 0x44,
+	0x14, 0xb7, 0xfc, 0x2f, 0xf6, 0xb3, 0x6b, 0x2b, 0x5b, 0x37, 0x11, 0x86, 0xba, 0x8e, 0x0a, 0x33,
+	0x39, 0xe5, 0x10, 0x0a, 0x03, 0x33, 0xb9, 0x40, 0xa7, 0x4c, 0x13, 0x26, 0x43, 0xd8, 0xa4, 0x53,
+	0x0a, 0x4c, 0x3d, 0x92, 0xb5, 0x49, 0x37, 0xb1, 0xb5, 0xea, 0xee, 0x1a, 0xc8, 0x9d, 0x2b, 0x0c,
+	0x9f, 0x81, 0xcf, 0xc0, 0x87, 0xe0, 0xc4, 0xf4, 0xc8, 0x91, 0x49, 0xbe, 0x08, 0xb3, 0x92, 0x56,
+	0x5a, 0xcb, 0x4e, 0xea, 0x4b, 0x6f, 0x7e, 0x6f, 0xdf, 0xfe, 0xf6, 0xbd, 0xdf, 0x7b, 0xfb, 0x5b,
+	0x19, 0xda, 0x53, 0x4f, 0x48, 0xc2, 0x77, 0x22, 0xce, 0x24, 0x43, 0x0d, 0x12, 0x9e, 0xd1, 0x90,
+	0x44, 0x7e, 0xbf, 0x45, 0x38, 0x67, 0xa9, 0xbb, 0xdf, 0x9d, 0x12, 0xe9, 0x09, 0xc9, 0x38, 0x49,
+	0x1d, 0x9d, 0x88, 0xb3, 0x73, 0x32, 0x96, 0x42, 0x07, 0x70, 0x22, 0xd8, 0x8c, 0x8f, 0x49, 0xea,
+	0x70, 0xff, 0xb4, 0xc0, 0x7e, 0x4a, 0x3c, 0x2e, 0x7d, 0xe2, 0x49, 0x4c, 0x5e, 0xcf, 0x88, 0x90,
+	0xe8, 0x01, 0xb4, 0xc8, 0x2f, 0x64, 0x3c, 0x93, 0x8c, 0x8f, 0x68, 0xe0, 0x58, 0x43, 0x6b, 0xbb,
+	0x89, 0x41, 0xbb, 0xf6, 0x03, 0xf4, 0x11, 0x74, 0x34, 0xd0, 0x68, 0x26, 0xbc, 0x33, 0xe2, 0x94,
+	0x87, 0xd6, 0x76, 0x0d, 0xdf, 0xd1, 0xde, 0x67, 0xca, 0x89, 0x36, 0xa0, 0x2e, 0xa4, 0x27, 0x67,
+	0xc2, 0xa9, 0xc4, 0xcb, 0xa9, 0x85, 0x3e, 0x80, 0xa6, 0xa4, 0x53, 0x22, 0xa4, 0x37, 0x8d, 0x9c,
+	0xea, 0xd0, 0xda, 0xae, 0xe2, 0xdc, 0x81, 0x6c, 0xa8, 0x48, 0x39, 0x71, 0x6a, 0xb1, 0x5f, 0xfd,
+	0x74, 0x03, 0x58, 0x37, 0x72, 0x14, 0x11, 0x0b, 0x05, 0x41, 0x5b, 0x50, 0x21, 0x9c, 0xc7, 0xc9,
+	0xb5, 0x76, 0xbb, 0x3b, 0x9a, 0x90, 0x9d, 0x27, 0x8a, 0x0f, 0xac, 0xd6, 0xd4, 0xf9, 0x13, 0xe2,
+	0x05, 0x84, 0xc7, 0xe9, 0x35, 0x71, 0x6a, 0xa1, 0x1e, 0xd4, 0xbc, 0x20, 0xe0, 0x2a, 0xad, 0xca,
+	0x76, 0x13, 0x27, 0x86, 0x2b, 0xc1, 0x3e, 0x9e, 0xf9, 0x53, 0x2a, 0x0f, 0x98, 0xaf, 0x99, 0xe8,
+	0x40, 0x59, 0x46, 0xf1, 0x19, 0x35, 0x5c, 0x96, 0x91, 0x42, 0x1c, 0xb3, 0xf0, 0x94, 0x9e, 0xc5,
+	0x88, 0x6d, 0x9c, 0x5a, 0xe8, 0x33, 0x68, 0xa7, 0x4c, 0x8f, 0x68, 0x78, 0xca, 0xe2, 0x7a, 0x5b,
+	0xbb, 0xf7, 0xf2, 0xac, 0x8e, 0x92, 0xd5, 0xfd, 0xf0, 0x94, 0xe1, 0x56, 0x94, 0x1b, 0xae, 0x0f,
+	0xdd, 0x6f, 0x67, 0x84, 0x5f, 0x1a, 0x87, 0xde, 0x83, 0xfa, 0x39, 0xf3, 0x73, 0xe6, 0x6b, 0xe7,
+	0xcc, 0xdf, 0x0f, 0x16, 0xce, 0x28, 0xaf, 0x7c, 0xc6, 0x3f, 0x16, 0xc0, 0x73, 0xc6, 0x2f, 0x08,
+	0x57, 0xa6, 0x2a, 0x2a, 0xc3, 0x2e, 0xd3, 0xa0, 0xd8, 0xee, 0xf2, 0x42, 0xbb, 0xe7, 0xfb, 0xd8,
+	0xce, 0xfa, 0x98, 0xb3, 0x51, 0x9d, 0x63, 0x63, 0x0b, 0xda, 0x54, 0x8c, 0x24, 0x9b, 0xfa, 0x42,
+	0xb2, 0x90, 0xc4, 0xad, 0x6c, 0xe0, 0x16, 0x15, 0x27, 0xda, 0x85, 0x86, 0xd0, 0x9e, 0x78, 0x42,
+	0x8e, 0x5e, 0xf9, 0x23, 0xd5, 0x79, 0xa7, 0x3e, 0xb4, 0xb6, 0x2b, 0x18, 0x94, 0xef, 0xa9, 0x7f,
+	0x42, 0xa7, 0x04, 0xf5, 0xa1, 0xf1, 0x33, 0xe3, 0x17, 0x13, 0xe6, 0x05, 0xce, 0x5a, 0xbc, 0x9a,
+	0xd9, 0xee, 0x5f, 0x65, 0xb0, 0x73, 0xd6, 0xd2, 0x81, 0x58, 0xb5, 0x57, 0x7b, 0x73, 0xd5, 0x74,
+	0x76, 0x3f, 0xcc, 0x19, 0x2c, 0x62, 0xee, 0x1c, 0x30, 0xff, 0x38, 0x8e, 0xcd, 0x6a, 0xde, 0x83,
+	0xae, 0x6a, 0x4e, 0x72, 0x1b, 0x93, 0x46, 0x54, 0xe3, 0x46, 0xf4, 0x72, 0x98, 0x9c, 0x6b, 0x7c,
+	0xe7, 0x9c, 0xf9, 0x87, 0x71, 0x6c, 0x4c, 0x7d, 0x3a, 0xb4, 0xb5, 0x9b, 0x87, 0xd6, 0x7d, 0x01,
+	0xcd, 0xec, 0x54, 0xd4, 0x80, 0x2a, 0x0d, 0xa9, 0xb4, 0x4b, 0xa8, 0x05, 0x6b, 0x11, 0x09, 0x03,
+	0x1a, 0x9e, 0xd9, 0x16, 0x02, 0xa8, 0xb3, 0x70, 0x42, 0x43, 0x62, 0x97, 0x51, 0x07, 0x20, 0xa0,
+	0x22, 0xf2, 0xe4, 0xf8, 0x15, 0x09, 0xec, 0x0a, 0x6a, 0x43, 0xe3, 0x94, 0x86, 0x54, 0x28, 0xab,
+	0xaa, 0xb6, 0x09, 0xc9, 0xa2, 0x88, 0x04, 0x76, 0xcd, 0x1d, 0x83, 0xfd, 0xd8, 0x0b, 0xc7, 0x64,
+	0xf2, 0x2e, 0x87, 0xcd, 0x87, 0xee, 0x91, 0x37, 0x13, 0xe4, 0x5d, 0x9e, 0x71, 0x08, 0xeb, 0xc6,
+	0x55, 0x5d, 0x5d, 0x10, 0xf2, 0x44, 0xca, 0x46, 0x22, 0xee, 0x27, 0x60, 0xe7, 0x29, 0xaf, 0x8c,
+	0xe6, 0x7e, 0x0a, 0xeb, 0x06, 0x9d, 0xab, 0xef, 0x9b, 0xc2, 0x26, 0x26, 0x67, 0x54, 0x0d, 0xc5,
+	0x93, 0xf4, 0x92, 0x69, 0xa6, 0x1c, 0x58, 0x53, 0x62, 0x44, 0x84, 0x48, 0xa9, 0xd2, 0xa6, 0x5a,
+	0xf9, 0x89, 0x70, 0x41, 0x59, 0x98, 0xe6, 0xae, 0x4d, 0x34, 0x00, 0x18, 0x7b, 0x91, 0xe7, 0xd3,
+	0x09, 0x95, 0x97, 0xf1, 0x4c, 0x57, 0xb0, 0xe1, 0x71, 0x5f, 0x82, 0xb3, 0x78, 0xdc, 0xea, 0x9c,
+	0xbd, 0x4d, 0x1d, 0xdc, 0xdf, 0x2d, 0xb8, 0x7b, 0xac, 0x86, 0x6f, 0x36, 0x21, 0x27, 0x9e, 0xb8,
+	0xd0, 0xb5, 0x6c, 0xc2, 0x9a, 0xf4, 0xc4, 0x45, 0xde, 0xf6, 0xba, 0x32, 0xf7, 0x03, 0x84, 0xa0,
+	0x3a, 0x66, 0x42, 0xc6, 0x50, 0x15, 0x1c, 0xff, 0x46, 0x07, 0x70, 0x2f, 0x7b, 0x51, 0x38, 0x79,
+	0x3d, 0xa3, 0x9c, 0x4c, 0x49, 0x28, 0x13, 0x89, 0x9e, 0x1b, 0x0a, 0x9c, 0x86, 0x7d, 0x4d, 0x2e,
+	0x71, 0x4f, 0xef, 0xc1, 0xc6, 0x16, 0xf7, 0x47, 0xe8, 0xcd, 0xe7, 0x93, 0x16, 0xfb, 0xd6, 0x67,
+	0xed, 0x21, 0xdc, 0xc9, 0x02, 0x14, 0xef, 0x69, 0xb1, 0x6d, 0xed, 0xfc, 0x22, 0x08, 0xb8, 0xfb,
+	0x08, 0xda, 0x8a, 0xc6, 0xe7, 0xa9, 0x16, 0x2d, 0xc8, 0x4e, 0x0f, 0x6a, 0xe6, 0x93, 0x98, 0x18,
+	0xee, 0x6f, 0x16, 0xdc, 0x35, 0xb7, 0xad, 0xfc, 0xd4, 0x3e, 0x82, 0xa6, 0x96, 0x3d, 0xe1, 0x94,
+	0x63, 0x32, 0x36, 0x8c, 0x3e, 0x99, 0x90, 0x79, 0xa0, 0x82, 0xcd, 0xe8, 0xa4, 0x41, 0xfa, 0xce,
+	0x81, 0x76, 0xed, 0x07, 0xee, 0xe7, 0xd0, 0x9b, 0x4f, 0x67, 0xf5, 0xf1, 0xfd, 0x1e, 0x36, 0x8e,
+	0xd4, 0xe8, 0x09, 0x89, 0x0d, 0xf6, 0x57, 0x2a, 0xa6, 0x90, 0x56, 0x3a, 0x4b, 0x46, 0x5a, 0x7b,
+	0xb0, 0xb9, 0x80, 0xbd, 0x72, 0x66, 0xbb, 0xbf, 0xae, 0x41, 0x3d, 0x11, 0x5b, 0xf4, 0x03, 0xd8,
+	0xc5, 0xa1, 0x47, 0x5b, 0xe6, 0x10, 0x2d, 0xbd, 0x7f, 0x7d, 0xf7, 0xb6, 0x90, 0x24, 0x11, 0xb7,
+	0x84, 0xbe, 0x82, 0x66, 0x26, 0x3f, 0xa8, 0x9f, 0x6f, 0x29, 0x7e, 0x3e, 0xf4, 0xdf, 0x5f, 0xba,
+	0x96, 0xe1, 0x3c, 0x86, 0x86, 0x7e, 0x71, 0xd0, 0x7b, 0xcb, 0x5e, 0xa1, 0x04, 0xa5, 0x7f, 0xf3,
+	0x03, 0x95, 0x80, 0x68, 0xf1, 0x32, 0x41, 0x0a, 0x1a, 0x6c, 0x82, 0x14, 0xb5, 0x2e, 0xa9, 0x28,
+	0x93, 0x32, 0xb3, 0xa2, 0xe2, 0x73, 0x61, 0x56, 0xb4, 0xa0, 0x7d, 0x09, 0x4e, 0xf6, 0xa5, 0x66,
+	0xe2, 0x14, 0x3f, 0x31, 0x4d, 0x9c, 0x85, 0x4f, 0x3b, 0xb7, 0x84, 0xbe, 0x81, 0xb6, 0x79, 0x85,
+	0xd1, 0x7d, 0x83, 0xc8, 0x45, 0xa9, 0xe9, 0x0f, 0x6e, 0x5a, 0xce, 0x00, 0x5f, 0xc2, 0xba, 0x6e,
+	0xe8, 0x21, 0x91, 0xde, 0xb1, 0xfa, 0x46, 0x46, 0x4b, 0xba, 0x9d, 0x2d, 0x6a, 0xe8, 0x87, 0xb7,
+	0xc6, 0x64, 0xf8, 0xcf, 0xa0, 0x13, 0xf7, 0x26, 0x07, 0x7f, 0x50, 0xe8, 0xda, 0x02, 0xf2, 0xf0,
+	0xe6, 0x80, 0x0c, 0xf6, 0x05, 0x6c, 0x60, 0x12, 0x31, 0x2e, 0xf5, 0x14, 0x66, 0xb2, 0x73, 0xff,
+	0x06, 0x11, 0x58, 0x64, 0x64, 0xd9, 0x3d, 0x77, 0x4b, 0xe8, 0x3b, 0xe8, 0x16, 0xae, 0x1a, 0x32,
+	0x32, 0x5a, 0x7e, 0xc3, 0xfb, 0x5b, 0xb7, 0x44, 0x68, 0xe4, 0x2f, 0x9d, 0xbf, 0xaf, 0x06, 0xd6,
+	0x9b, 0xab, 0x81, 0xf5, 0xdf, 0xd5, 0xc0, 0xfa, 0xe3, 0x7a, 0x50, 0x7a, 0x73, 0x3d, 0x28, 0xfd,
+	0x7b, 0x3d, 0x28, 0xf9, 0xf5, 0xf8, 0x4f, 0xc7, 0xc7, 0xff, 0x07, 0x00, 0x00, 0xff, 0xff, 0x4a,
+	0xdf, 0x82, 0x08, 0xcd, 0x0c, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -1437,7 +1422,6 @@ type MasterClient interface {
 	QueryJob(ctx context.Context, in *QueryJobRequest, opts ...grpc.CallOption) (*QueryJobResponse, error)
 	PauseJob(ctx context.Context, in *PauseJobRequest, opts ...grpc.CallOption) (*PauseJobResponse, error)
 	CancelJob(ctx context.Context, in *CancelJobRequest, opts ...grpc.CallOption) (*CancelJobResponse, error)
-	DebugJob(ctx context.Context, in *DebugJobRequest, opts ...grpc.CallOption) (*DebugJobResponse, error)
 	Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error)
 	ScheduleTask(ctx context.Context, in *ScheduleTaskRequest, opts ...grpc.CallOption) (*ScheduleTaskResponse, error)
 	// RegisterMetaStore is called from backend metastore and
@@ -1507,15 +1491,6 @@ func (c *masterClient) CancelJob(ctx context.Context, in *CancelJobRequest, opts
 	return out, nil
 }
 
-func (c *masterClient) DebugJob(ctx context.Context, in *DebugJobRequest, opts ...grpc.CallOption) (*DebugJobResponse, error) {
-	out := new(DebugJobResponse)
-	err := c.cc.Invoke(ctx, "/enginepb.Master/DebugJob", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *masterClient) Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error) {
 	out := new(HeartbeatResponse)
 	err := c.cc.Invoke(ctx, "/enginepb.Master/Heartbeat", in, out, opts...)
@@ -1577,7 +1552,6 @@ type MasterServer interface {
 	QueryJob(context.Context, *QueryJobRequest) (*QueryJobResponse, error)
 	PauseJob(context.Context, *PauseJobRequest) (*PauseJobResponse, error)
 	CancelJob(context.Context, *CancelJobRequest) (*CancelJobResponse, error)
-	DebugJob(context.Context, *DebugJobRequest) (*DebugJobResponse, error)
 	Heartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error)
 	ScheduleTask(context.Context, *ScheduleTaskRequest) (*ScheduleTaskResponse, error)
 	// RegisterMetaStore is called from backend metastore and
@@ -1595,42 +1569,48 @@ type MasterServer interface {
 }
 
 // UnimplementedMasterServer can be embedded to have forward compatible implementations.
-type UnimplementedMasterServer struct {
-}
+type UnimplementedMasterServer struct{}
 
 func (*UnimplementedMasterServer) RegisterExecutor(ctx context.Context, req *RegisterExecutorRequest) (*RegisterExecutorResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterExecutor not implemented")
 }
+
 func (*UnimplementedMasterServer) SubmitJob(ctx context.Context, req *SubmitJobRequest) (*SubmitJobResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SubmitJob not implemented")
 }
+
 func (*UnimplementedMasterServer) QueryJob(ctx context.Context, req *QueryJobRequest) (*QueryJobResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QueryJob not implemented")
 }
+
 func (*UnimplementedMasterServer) PauseJob(ctx context.Context, req *PauseJobRequest) (*PauseJobResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PauseJob not implemented")
 }
+
 func (*UnimplementedMasterServer) CancelJob(ctx context.Context, req *CancelJobRequest) (*CancelJobResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CancelJob not implemented")
 }
-func (*UnimplementedMasterServer) DebugJob(ctx context.Context, req *DebugJobRequest) (*DebugJobResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method DebugJob not implemented")
-}
+
 func (*UnimplementedMasterServer) Heartbeat(ctx context.Context, req *HeartbeatRequest) (*HeartbeatResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Heartbeat not implemented")
 }
+
 func (*UnimplementedMasterServer) ScheduleTask(ctx context.Context, req *ScheduleTaskRequest) (*ScheduleTaskResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ScheduleTask not implemented")
 }
+
 func (*UnimplementedMasterServer) RegisterMetaStore(ctx context.Context, req *RegisterMetaStoreRequest) (*RegisterMetaStoreResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterMetaStore not implemented")
 }
+
 func (*UnimplementedMasterServer) QueryMetaStore(ctx context.Context, req *QueryMetaStoreRequest) (*QueryMetaStoreResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QueryMetaStore not implemented")
 }
+
 func (*UnimplementedMasterServer) ReportExecutorWorkload(ctx context.Context, req *ExecWorkloadRequest) (*ExecWorkloadResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReportExecutorWorkload not implemented")
 }
+
 func (*UnimplementedMasterServer) PersistResource(ctx context.Context, req *PersistResourceRequest) (*PersistResourceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PersistResource not implemented")
 }
@@ -1725,24 +1705,6 @@ func _Master_CancelJob_Handler(srv interface{}, ctx context.Context, dec func(in
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MasterServer).CancelJob(ctx, req.(*CancelJobRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Master_DebugJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DebugJobRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(MasterServer).DebugJob(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/enginepb.Master/DebugJob",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MasterServer).DebugJob(ctx, req.(*DebugJobRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1878,10 +1840,6 @@ var _Master_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CancelJob",
 			Handler:    _Master_CancelJob_Handler,
-		},
-		{
-			MethodName: "DebugJob",
-			Handler:    _Master_DebugJob_Handler,
 		},
 		{
 			MethodName: "Heartbeat",
@@ -2796,92 +2754,6 @@ func (m *PersistResourceResponse) MarshalToSizedBuffer(dAtA []byte) (int, error)
 	return len(dAtA) - i, nil
 }
 
-func (m *DebugJobRequest) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *DebugJobRequest) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *DebugJobRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if len(m.JsonArg) > 0 {
-		i -= len(m.JsonArg)
-		copy(dAtA[i:], m.JsonArg)
-		i = encodeVarintMaster(dAtA, i, uint64(len(m.JsonArg)))
-		i--
-		dAtA[i] = 0x1a
-	}
-	if len(m.Command) > 0 {
-		i -= len(m.Command)
-		copy(dAtA[i:], m.Command)
-		i = encodeVarintMaster(dAtA, i, uint64(len(m.Command)))
-		i--
-		dAtA[i] = 0x12
-	}
-	if len(m.JobId) > 0 {
-		i -= len(m.JobId)
-		copy(dAtA[i:], m.JobId)
-		i = encodeVarintMaster(dAtA, i, uint64(len(m.JobId)))
-		i--
-		dAtA[i] = 0xa
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *DebugJobResponse) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *DebugJobResponse) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *DebugJobResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if len(m.JsonRet) > 0 {
-		i -= len(m.JsonRet)
-		copy(dAtA[i:], m.JsonRet)
-		i = encodeVarintMaster(dAtA, i, uint64(len(m.JsonRet)))
-		i--
-		dAtA[i] = 0x12
-	}
-	if m.Err != nil {
-		{
-			size, err := m.Err.MarshalToSizedBuffer(dAtA[:i])
-			if err != nil {
-				return 0, err
-			}
-			i -= size
-			i = encodeVarintMaster(dAtA, i, uint64(size))
-		}
-		i--
-		dAtA[i] = 0xa
-	}
-	return len(dAtA) - i, nil
-}
-
 func encodeVarintMaster(dAtA []byte, offset int, v uint64) int {
 	offset -= sovMaster(v)
 	base := offset
@@ -2893,6 +2765,7 @@ func encodeVarintMaster(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
+
 func (m *HeartbeatRequest) Size() (n int) {
 	if m == nil {
 		return 0
@@ -3275,50 +3148,14 @@ func (m *PersistResourceResponse) Size() (n int) {
 	return n
 }
 
-func (m *DebugJobRequest) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	l = len(m.JobId)
-	if l > 0 {
-		n += 1 + l + sovMaster(uint64(l))
-	}
-	l = len(m.Command)
-	if l > 0 {
-		n += 1 + l + sovMaster(uint64(l))
-	}
-	l = len(m.JsonArg)
-	if l > 0 {
-		n += 1 + l + sovMaster(uint64(l))
-	}
-	return n
-}
-
-func (m *DebugJobResponse) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.Err != nil {
-		l = m.Err.Size()
-		n += 1 + l + sovMaster(uint64(l))
-	}
-	l = len(m.JsonRet)
-	if l > 0 {
-		n += 1 + l + sovMaster(uint64(l))
-	}
-	return n
-}
-
 func sovMaster(x uint64) (n int) {
 	return (math_bits.Len64(x|1) + 6) / 7
 }
+
 func sozMaster(x uint64) (n int) {
 	return sovMaster(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
+
 func (m *HeartbeatRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3477,6 +3314,7 @@ func (m *HeartbeatRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *HeartbeatResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3627,6 +3465,7 @@ func (m *HeartbeatResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *SubmitJobRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3766,6 +3605,7 @@ func (m *SubmitJobRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *QueryJobRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3884,6 +3724,7 @@ func (m *QueryJobRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *WorkerInfo) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -4124,6 +3965,7 @@ func (m *WorkerInfo) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *QueryJobResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -4318,6 +4160,7 @@ func (m *QueryJobResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *CancelJobRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -4436,6 +4279,7 @@ func (m *CancelJobRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *PauseJobRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -4554,6 +4398,7 @@ func (m *PauseJobRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *SubmitJobResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -4672,6 +4517,7 @@ func (m *SubmitJobResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *PauseJobResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -4758,6 +4604,7 @@ func (m *PauseJobResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *CancelJobResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -4844,6 +4691,7 @@ func (m *CancelJobResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *RegisterExecutorRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -4977,6 +4825,7 @@ func (m *RegisterExecutorRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *RegisterExecutorResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -5095,6 +4944,7 @@ func (m *RegisterExecutorResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *ScheduleTaskRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -5230,6 +5080,7 @@ func (m *ScheduleTaskRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *ScheduleTaskResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -5344,6 +5195,7 @@ func (m *ScheduleTaskResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *ExecWorkload) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -5432,6 +5284,7 @@ func (m *ExecWorkload) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *ExecWorkloadRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -5580,6 +5433,7 @@ func (m *ExecWorkloadRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *ExecWorkloadResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -5666,6 +5520,7 @@ func (m *ExecWorkloadResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *PersistResourceRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -5780,6 +5635,7 @@ func (m *PersistResourceRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *PersistResourceResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -5866,270 +5722,7 @@ func (m *PersistResourceResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *DebugJobRequest) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowMaster
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: DebugJobRequest: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: DebugJobRequest: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field JobId", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMaster
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthMaster
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthMaster
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.JobId = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Command", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMaster
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthMaster
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthMaster
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Command = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field JsonArg", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMaster
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthMaster
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthMaster
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.JsonArg = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipMaster(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthMaster
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
 
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *DebugJobResponse) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowMaster
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: DebugJobResponse: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: DebugJobResponse: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Err", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMaster
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthMaster
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthMaster
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.Err == nil {
-				m.Err = &Error{}
-			}
-			if err := m.Err.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field JsonRet", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMaster
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthMaster
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthMaster
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.JsonRet = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipMaster(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthMaster
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
 func skipMaster(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
