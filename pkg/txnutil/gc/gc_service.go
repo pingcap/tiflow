@@ -50,7 +50,7 @@ func EnsureChangefeedStartTsSafety(
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if startTs < minServiceGCTs {
+	if startTs < minServiceGCTs+1 {
 		return cerrors.ErrStartTsBeforeGC.GenWithStackByArgs(startTs, minServiceGCTs)
 	}
 	return nil
