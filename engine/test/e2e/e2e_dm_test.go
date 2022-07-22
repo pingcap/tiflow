@@ -31,17 +31,16 @@ import (
 	"github.com/pingcap/tiflow/tests/integration_tests/util"
 	"github.com/stretchr/testify/require"
 
-	"github.com/pingcap/tiflow/engine/client"
 	"github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	engineModel "github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 )
 
 func TestDMJob(t *testing.T) {
-	ctx := context.Background()
-	masterClient, err := client.NewMasterClient(ctx, []string{"127.0.0.1:10245"})
+	masterClient, err := client.NewServerMasterClientWithEndpointList([]string{"127.0.0.1:10245"})
 	require.NoError(t, err)
 
 	mysqlCfg := util.DBConfig{
@@ -110,7 +109,7 @@ func TestDMJob(t *testing.T) {
 // `db` should not contain special character.
 func testSimpleAllModeTask(
 	t *testing.T,
-	client client.MasterClient,
+	client client.ServerMasterClient,
 	mysql, tidb *sql.DB,
 	db string,
 ) {

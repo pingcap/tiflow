@@ -49,6 +49,16 @@ type ServerMasterClientWithFailOver struct {
 	resolver *internal.LeaderResolver
 }
 
+// NewServerMasterClientWithEndpointList creates a new ServerMasterClientWithFailOver
+// with an endpoint list.
+func NewServerMasterClientWithEndpointList(endpoints []string) (*ServerMasterClientWithFailOver, error) {
+	serverList := make(MasterServerList, len(endpoints))
+	for _, addr := range endpoints {
+		serverList[addr] = false
+	}
+	return NewServerMasterClientWithFailOver(serverList)
+}
+
 // NewServerMasterClientWithFailOver creates a new ServerMasterClientWithFailOver.
 // It is recommended that we use a singleton pattern here: Create one ServerMasterClientWithFailOver
 // in each executor process.

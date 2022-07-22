@@ -28,8 +28,8 @@ import (
 	"google.golang.org/grpc/backoff"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/config"
 	"github.com/pingcap/tiflow/engine/pkg/dbutil"
 	"github.com/pingcap/tiflow/engine/pkg/meta"
@@ -54,7 +54,7 @@ type MetastoreManager interface {
 	// Init is made part of the interface because the interface is intended
 	// to reflect the dependency between the objects during server initialization.
 	// NOTE: Init must be called before other methods can be.
-	Init(ctx context.Context, servermasterClient client.MasterClient) error
+	Init(ctx context.Context, discoveryClient client.DiscoveryClient) error
 	IsInitialized() bool
 	Close()
 
@@ -153,7 +153,7 @@ func (c metastoreCreatorImpl) CreateDBClientForFramework(
 	return frameMetaClient, err
 }
 
-func (m *metastoreManagerImpl) Init(ctx context.Context, servermasterClient client.MasterClient) (retErr error) {
+func (m *metastoreManagerImpl) Init(ctx context.Context, discoveryClient client.DiscoveryClient) (retErr error) {
 	if m.initialized.Load() {
 		log.Panic("MetastoreManager: double Init")
 	}
@@ -167,15 +167,15 @@ func (m *metastoreManagerImpl) Init(ctx context.Context, servermasterClient clie
 	}()
 
 	// TODO We will refactor similar code segments together with servermaster.MetaStoreManager.
-	if err := m.initServerDiscoveryStore(ctx, servermasterClient); err != nil {
+	if err := m.initServerDiscoveryStore(ctx, discoveryClient); err != nil {
 		return err
 	}
 
-	if err := m.initFrameworkStore(ctx, servermasterClient); err != nil {
+	if err := m.initFrameworkStore(ctx, discoveryClient); err != nil {
 		return err
 	}
 
-	if err := m.initBusinessStore(ctx, servermasterClient); err != nil {
+	if err := m.initBusinessStore(ctx, discoveryClient); err != nil {
 		return err
 	}
 
@@ -187,13 +187,11 @@ func (m *metastoreManagerImpl) IsInitialized() bool {
 	return m.initialized.Load()
 }
 
-func (m *metastoreManagerImpl) initServerDiscoveryStore(ctx context.Context, servermasterClient client.MasterClient) error {
+func (m *metastoreManagerImpl) initServerDiscoveryStore(ctx context.Context, discoveryClient client.DiscoveryClient) error {
 	// Query service discovery metastore endpoints.
-	resp, err := servermasterClient.QueryMetaStore(
+	resp, err := discoveryClient.QueryMetaStore(
 		ctx,
-		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_ServiceDiscovery},
-		fetchMetastoreConfigTimeout,
-	)
+		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_ServiceDiscovery})
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -208,13 +206,11 @@ func (m *metastoreManagerImpl) initServerDiscoveryStore(ctx context.Context, ser
 	return nil
 }
 
-func (m *metastoreManagerImpl) initFrameworkStore(ctx context.Context, servermasterClient client.MasterClient) error {
+func (m *metastoreManagerImpl) initFrameworkStore(ctx context.Context, discoveryClient client.DiscoveryClient) error {
 	// Query framework metastore endpoints.
-	resp, err := servermasterClient.QueryMetaStore(
+	resp, err := discoveryClient.QueryMetaStore(
 		ctx,
-		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_SystemMetaStore},
-		fetchMetastoreConfigTimeout,
-	)
+		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_SystemMetaStore})
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -229,13 +225,11 @@ func (m *metastoreManagerImpl) initFrameworkStore(ctx context.Context, servermas
 	return nil
 }
 
-func (m *metastoreManagerImpl) initBusinessStore(ctx context.Context, servermasterClient client.MasterClient) error {
+func (m *metastoreManagerImpl) initBusinessStore(ctx context.Context, discoveryClient client.DiscoveryClient) error {
 	// fetch business metastore connection endpoint
-	resp, err := servermasterClient.QueryMetaStore(
+	resp, err := discoveryClient.QueryMetaStore(
 		ctx,
-		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_AppMetaStore},
-		fetchMetastoreConfigTimeout,
-	)
+		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_AppMetaStore})
 	if err != nil {
 		return err
 	}
