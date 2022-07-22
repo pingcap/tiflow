@@ -15,20 +15,84 @@ package client
 
 import (
 	"context"
+	"sync"
+	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/model"
 )
 
 // MockExecutorGroup is a stub implementation for ExecutorGroup.
 type MockExecutorGroup struct {
+	mu      sync.RWMutex
+	clients map[model.ExecutorID]ExecutorClient
+
+	updateNotifyCh chan struct{}
 }
 
+// NewMockExecutorGroup returns a new MockExecutorGroup.
+func NewMockExecutorGroup() *MockExecutorGroup {
+	return &MockExecutorGroup{
+		clients:        make(map[model.ExecutorID]ExecutorClient),
+		updateNotifyCh: make(chan struct{}, 1),
+	}
+}
+
+// GetExecutorClient returns the ExecutorClient associated with id.
 func (g *MockExecutorGroup) GetExecutorClient(id model.ExecutorID) (ExecutorClient, bool) {
-	//TODO implement me
-	panic("implement me")
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	if client, ok := g.clients[id]; ok {
+		return client, true
+	}
+	return nil, false
 }
 
+// GetExecutorClientB tries to get the ExecutorClient blockingly.
 func (g *MockExecutorGroup) GetExecutorClientB(ctx context.Context, id model.ExecutorID) (ExecutorClient, error) {
-	//TODO implement me
-	panic("implement me")
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, errors.Trace(ctx.Err())
+		case <-ticker.C:
+		case <-g.updateNotifyCh:
+		}
+
+		if client, ok := g.GetExecutorClient(id); ok {
+			return client, nil
+		}
+	}
+}
+
+// AddClient adds a client to the client map.
+func (g *MockExecutorGroup) AddClient(id model.ExecutorID, client ExecutorClient) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	g.clients[id] = client
+
+	select {
+	case g.updateNotifyCh <- struct{}{}:
+	default:
+	}
+}
+
+// RemoveClient removes a client from the client map.
+func (g *MockExecutorGroup) RemoveClient(id model.ExecutorID) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	client, exists := g.clients[id]
+	if !exists {
+		return false
+	}
+
+	client.Close()
+	delete(g.clients, id)
+
+	return true
 }
