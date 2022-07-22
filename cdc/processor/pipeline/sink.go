@@ -317,7 +317,6 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 		if err := n.verifySplitTxn(event); err != nil {
 			return false, errors.Trace(err)
 		}
-
 		if event.IsResolved() {
 			failpoint.Inject("ProcessorSyncResolvedError", func() {
 				failpoint.Return(false, errors.New("processor sync resolved injected error"))

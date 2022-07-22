@@ -81,6 +81,7 @@ var (
 )
 
 // IsConnectionError tells whether this error should reconnect to Database.
+// Return true also means caller can retry sql safely.
 func IsConnectionError(err error) bool {
 	err = errors.Cause(err)
 	switch err {
