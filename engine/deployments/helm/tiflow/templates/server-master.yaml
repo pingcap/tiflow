@@ -37,6 +37,10 @@ spec:
         - name: wait-mysql
           image: busybox
           command: ['sh', '-c', 'until nslookup {{ include "tiflow.name" . }}-metastore-framework; do echo waiting for mysql; sleep 2; done;']
+{{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.imagePullSecrets | indent 6 }}
+{{- end }}
       containers:
         - name: {{ include "tiflow.name" . }}-server-master
           image: {{ .Values.image.repository }}:{{ .Values.image.tag }}

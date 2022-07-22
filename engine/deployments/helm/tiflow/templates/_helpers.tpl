@@ -1,12 +1,8 @@
-{{- define "tiflow.clusterType" -}}
-{{ .Values.master.replicas }}m{{ .Values.executor.replicas }}e
-{{- end -}}
-
 {{- define "tiflow.name" -}}
 {{- if .Values.clusterName -}}
-{{ .Values.clusterName }}-{{ .Release.Name }}-{{ include "tiflow.clusterType" . }}
+{{ .Values.clusterName }}-{{ .Release.Name }}
 {{- else -}}
-{{ .Release.Name }}-{{ include "tiflow.clusterType" . }}
+{{ .Release.Name }}
 {{- end -}}
 {{- end -}}
 

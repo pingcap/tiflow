@@ -34,6 +34,10 @@ spec:
         - name: wait-server-master
           image: busybox
           command: ['sh', '-c', 'until nslookup {{ include "tiflow.name" . }}-server-master; do echo waiting for server master; sleep 2; done;']
+{{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.imagePullSecrets | indent 6 }}
+{{- end }}
       containers:
         - name: {{ include "tiflow.name" . }}-executor
           image: {{ .Values.image.repository }}:{{ .Values.image.tag }}

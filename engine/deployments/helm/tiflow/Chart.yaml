@@ -23,14 +23,3 @@ version: 0.1.0
 # It is recommended to use it with quotes.
 appVersion: "dev"
 
-# dependencies:
-#   - name: cases
-#     version: 1.1.0
-#     repository: "file://./charts/cases"
-#     condition: cases.enabled
-  # - name: mysql
-  #   version: 9.2.1
-  #   repository: https://charts.bitnami.com/bitnami
-#   - name: etcd
-#     version: 8.3.2
-#     repository: https://charts.bitnami.com/bitnami

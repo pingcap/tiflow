@@ -5,7 +5,7 @@
 # clusterName: demo
 
 image:
-  repository: dataflow
+  repository: hub.pingcap.net/dataflow/engine
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: test
@@ -25,6 +25,8 @@ metastore:
 
 cases:
   enabled: true
+  repository: hub.pingcap.net/dataflow/engine
+  tag: cases
 
 resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious

@@ -7,13 +7,17 @@ metadata:
 spec:
   template:
     spec:
+{{- if .Values.cases.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.cases.imagePullSecrets | indent 6 }}
+{{- end }}
       initContainers:
         - name: wait-tiflow-cluster
           image: busybox
           command: ['sh', '-c', 'sleep 60']
       containers:
         - name: chaos-test-case
-          image: dataflow:chaos
+          image: {{ .Values.cases.repository }}:{{ .Values.cases.tag }}
           imagePullPolicy: IfNotPresent
           env:
             - name: MY_POD_NAMESPACE
