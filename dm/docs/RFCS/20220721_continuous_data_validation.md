@@ -18,6 +18,16 @@ Some known limitions to this design:
 - TiDB implements floating point data types differently with MySQL, we take it as equal if its absolute difference < 10^-6
 - do not support validation for JSON and binary data types
 
+## Concepts
+
+- `row change`: validator decodes upstream binlog into `row change` which contains:
+    - change type(`insert`/`update`/`delete`)
+    - table name
+    - data before change(missing for `insert` change)
+    - data after change(missing for `delete` change).
+- `failed row change`: `row change` which has failed to validate but hasn't been marked as `error row change`
+- `error row change`: if some `failed row change` keeps failing to validator for enough time(`delay time`), it's marked as `error row change`
+
 ## Detailed Design
 
 ### Life cycle of validator
@@ -36,11 +46,11 @@ Validator can be enabled together with the task or enabled on the fly, the task 
       - in `fast` validation mode, we only check its existence
     - for `delete` type of `row change`, downstream should not contain that data.
 5. For `row change`s which are validated successfully, worker will remove them from `pending row changes`, while others failing the validation will be marked as `failed row change` and be validated again after a set interval.
-6. If a `failed row change` keeps failing to validate for enough time(`delay time`), we mark it as `error row change` and save it into meta database.
+6. If a `failed row change` doesn't pass the validation after a set time(`delay time`) since its first validation, we mark it as `error row change` and save it into the meta database.
 
 ### False positive
 
-`error row change` produced in validation process might not be data which is incorrectly migrated, there are cases where `row change` is marked as falsely. Suppose some row which keeps changing on upstream for a time period > `delay time`. If it's marked as `failed row change` since the first time it changes, validator may mark it as `error row change` falsely. In real world scenarios, it's not common.
+`error row change` produced in validation process might not be data which is incorrectly migrated, there are cases where `row change` is marked falsely. Suppose some rows keep changing on upstream for a time period > `delay time`. If it's marked as `failed row change` since the first time it changes, validator may mark it as `error row change` falsely. In real world scenarios, it's not common.
 
 To reduce the chance of false positive, validator will not start marking `failed row change` until validator has reached the progress of syncer or after some `initial delay time`
 
@@ -52,13 +62,3 @@ Validator will start validation from previous location after failover or resumin
 ### Self-protection
 
 Validator `worker` will cache `pending row changes` in memory, to avoid potential OOM, we add a self-protect mechanism. If there are too many `pending row changes` or the overall size of `pending row changes` is too large, validator will be stopped automatically.
-
-## Concepts
-
-- `row change`: validator decodes upstream binlog into `row change` which contains:
-    - change type(`insert`/`update`/`delete`)
-    - table name
-    - data before change(missing for `insert` change)
-    - data after change(missing for `delete` change).
-- `failed row change`: `row change` which has failed to validate but hasn't been marked as `error row change`
-- `error row change`: if some `failed row change` keeps failing to validator for enough time(`delay time`), it's marked as `error row change`
