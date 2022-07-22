@@ -18,10 +18,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
-	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
@@ -47,7 +45,6 @@ func NewGormDB(sqlDB *sql.DB) (*gorm.DB, error) {
 		Logger:                 NewOrmLogger(logutil.WithComponent("gorm"), WithSlowThreshold(defaultSlowLogThreshold)),
 	})
 	if err != nil {
-		log.Error("create gorm client fail", zap.Error(err))
 		return nil, errors.ErrMetaNewClientFail.Wrap(err)
 	}
 

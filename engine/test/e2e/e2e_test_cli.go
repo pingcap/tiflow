@@ -44,18 +44,18 @@ import (
 // to adding chaos in e2e test.
 type ChaosCli struct {
 	masterAddrs []string
-	// used to operate with server master, such as submit job
+	// masterCli is used to operate with server master, such as submit job
 	masterCli client.MasterClient
-	// cc is the client connection for business metastore
+	// clientConn is the client connection for business metastore
 	clientConn metaModel.ClientConn
-	// used to query metadata which is stored from business logic(job-level isolation)
+	// metaCli is used to query metadata which is stored from business logic(job-level isolation)
 	// NEED to reinitialize the metaCli if we access to a different job
 	metaCli metaModel.KVClient
-	// used to write to etcd to simulate the business of fake job, this etcd client
+	// fakeJobCli used to write to etcd to simulate the business of fake job, this etcd client
 	// reuses the endpoints of business meta KV.
 	fakeJobCli *clientv3.Client
 	fakeJobCfg *FakeJobConfig
-	// used to save project info
+	// project is used to save project info
 	project tenant.ProjectInfo
 }
 
@@ -70,6 +70,8 @@ type FakeJobConfig struct {
 func NewUTCli(ctx context.Context, masterAddrs, businessMetaAddrs []string, project tenant.ProjectInfo,
 	cfg *FakeJobConfig,
 ) (*ChaosCli, error) {
+	// TODO: NEED to move metastore config to a toml, and parse the toml
+	defaultSchema := "test"
 	masterCli, err := client.NewMasterClient(ctx, masterAddrs)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -77,6 +79,7 @@ func NewUTCli(ctx context.Context, masterAddrs, businessMetaAddrs []string, proj
 
 	conf := server.NewDefaultBusinessMetaConfig()
 	conf.Endpoints = businessMetaAddrs
+	conf.Schema = defaultSchema
 	cc, err := meta.NewClientConn(conf)
 	if err != nil {
 		return nil, errors.Trace(err)

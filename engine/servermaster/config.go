@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
@@ -41,7 +42,9 @@ const (
 
 	// DefaultBusinessMetaID is the ID for default business metastore
 	DefaultBusinessMetaID        = "_default"
-	defaultBusinessMetaEndpoints = "127.0.0.1:12479"
+	defaultBusinessMetaEndpoints = "127.0.0.1:3336"
+	defaultBusinessMetaUser      = "root"
+	defaultBusinessMetaPassword  = "123456"
 
 	// FrameMetaID is the ID for frame metastore
 	FrameMetaID               = "_root"
@@ -50,8 +53,7 @@ const (
 	defaultFrameMetaPassword  = "123456"
 
 	defaultFrameworkStoreType = metaModel.StoreTypeSQL
-	// TODO: we will switch to StoreTypeSQL after we support sql implement
-	defaultbusinessStoreType = metaModel.StoreTypeEtcd
+	defaultBusinessStoreType  = metaModel.StoreTypeSQL
 )
 
 // Config is the configuration for server-master.
@@ -63,7 +65,7 @@ type Config struct {
 
 	ETCDEndpoints []string `toml:"etcd-endpoints" json:"etcd-endpoints"`
 
-	FrameMetaConf    *metaModel.StoreConfig `toml:"frame-metastore-conf" json:"frame-metastore-conf"`
+	FrameMetaConf    *metaModel.StoreConfig `toml:"framework-metastore-conf" json:"framework-metastore-conf"`
 	BusinessMetaConf *metaModel.StoreConfig `toml:"business-metastore-conf" json:"business-metastore-conf"`
 
 	KeepAliveTTLStr string `toml:"keepalive-ttl" json:"keepalive-ttl"`
@@ -98,8 +100,12 @@ func (c *Config) Toml() (string, error) {
 	return b.String(), nil
 }
 
-// Adjust adjusts the master configuration
-func (c *Config) Adjust() (err error) {
+// AdjustAndValidate validates and adjusts the master configuration
+func (c *Config) AdjustAndValidate() (err error) {
+	// adjust the metastore type
+	strings.ToLower(strings.TrimSpace(c.FrameMetaConf.StoreType))
+	strings.ToLower(strings.TrimSpace(c.BusinessMetaConf.StoreType))
+
 	if c.AdvertiseAddr == "" {
 		c.AdvertiseAddr = c.Addr
 	}
@@ -119,14 +125,10 @@ func (c *Config) Adjust() (err error) {
 		return err
 	}
 
-	c.adjustStoreConfig()
-	return nil
-}
-
-// adjustStoreConfig adjusts store configuration
-func (c *Config) adjustStoreConfig() {
-	strings.ToLower(strings.TrimSpace(c.FrameMetaConf.StoreType))
-	strings.ToLower(strings.TrimSpace(c.BusinessMetaConf.StoreType))
+	return validation.ValidateStruct(c,
+		validation.Field(&c.FrameMetaConf),
+		validation.Field(&c.BusinessMetaConf),
+	)
 }
 
 // configFromFile loads config from file and merges items into Config.
@@ -191,8 +193,10 @@ func newFrameMetaConfig() *metaModel.StoreConfig {
 func NewDefaultBusinessMetaConfig() *metaModel.StoreConfig {
 	conf := metaModel.DefaultStoreConfig()
 	conf.StoreID = DefaultBusinessMetaID
-	conf.StoreType = defaultbusinessStoreType
+	conf.StoreType = defaultBusinessStoreType
 	conf.Endpoints = append(conf.Endpoints, defaultBusinessMetaEndpoints)
+	conf.Auth.User = defaultBusinessMetaUser
+	conf.Auth.Passwd = defaultBusinessMetaPassword
 
 	return conf
 }

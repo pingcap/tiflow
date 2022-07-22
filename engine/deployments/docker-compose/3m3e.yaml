@@ -14,9 +14,6 @@ services:
       - "--log-level=debug"
       - "--addr=0.0.0.0:10240"
       - "--advertise-addr=server-master-0:10240"
-      - "--etcd-endpoints=etcd-standalone:2379"
-      - "--frame-meta-endpoints=mysql-standalone:3306"
-      - "--business-meta-endpoints=etcd-standalone:2379"
     depends_on:
       "etcd-standalone":
         condition: service_started
@@ -36,9 +33,6 @@ services:
       - "--log-level=debug"
       - "--addr=0.0.0.0:10240"
       - "--advertise-addr=server-master-1:10240"
-      - "--etcd-endpoints=etcd-standalone:2379"
-      - "--frame-meta-endpoints=mysql-standalone:3306"
-      - "--business-meta-endpoints=etcd-standalone:2379"
     depends_on:
       "etcd-standalone":
         condition: service_started
@@ -58,9 +52,6 @@ services:
       - "--log-level=debug"
       - "--addr=0.0.0.0:10240"
       - "--advertise-addr=server-master-2:10240"
-      - "--etcd-endpoints=etcd-standalone:2379"
-      - "--frame-meta-endpoints=mysql-standalone:3306"
-      - "--business-meta-endpoints=etcd-standalone:2379"
     depends_on:
       "etcd-standalone":
         condition: service_started

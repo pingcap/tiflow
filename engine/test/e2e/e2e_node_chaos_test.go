@@ -60,8 +60,8 @@ func TestNodeFailure(t *testing.T) {
 	// same in sample/3m3e.yaml
 	var (
 		masterAddrs                  = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
-		businessMetaAddrs            = []string{"127.0.0.1:12479"}
-		businessMetaAddrsInContainer = []string{"etcd-standalone:2379"}
+		businessMetaAddrs            = []string{"127.0.0.1:3336"}
+		businessMetaAddrsInContainer = []string{"mysql-standalone:3306"}
 	)
 
 	seed := time.Now().Unix()

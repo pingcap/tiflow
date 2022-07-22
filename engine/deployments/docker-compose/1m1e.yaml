@@ -11,9 +11,6 @@ services:
       - "--log-level=debug"
       - "--addr=0.0.0.0:10240"
       - "--advertise-addr=server-master:10240"
-      - "--etcd-endpoints=etcd-standalone:2379"
-      - "--frame-meta-endpoints=mysql-standalone:3306"
-      - "--business-meta-endpoints=etcd-standalone:2379"
     ports:
       - "10240:10240"
     depends_on:
