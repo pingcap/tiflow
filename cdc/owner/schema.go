@@ -117,6 +117,9 @@ func (s *schemaWrap4Owner) AllTableNames() []model.TableName {
 }
 
 func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
+	if s.filter.ShouldIgnoreTable(job.SchemaName, job.TableName) {
+		return nil
+	}
 	// We use schemaVersion to check if an already-executed DDL job is processed for a second time.
 	// Unexecuted DDL jobs should have largest schemaVersions
 	if job.BinlogInfo.FinishedTS <= s.ddlHandledTs || job.BinlogInfo.SchemaVersion <= s.schemaVersion {

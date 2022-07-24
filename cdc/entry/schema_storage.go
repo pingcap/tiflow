@@ -267,7 +267,8 @@ func (s *schemaStorageImpl) skipJob(job *timodel.Job) bool {
 		zap.String("DDL", job.Query), zap.Stringer("job", job),
 		zap.String("namespace", s.id.Namespace),
 		zap.String("changefeed", s.id.ID))
-	if s.filter != nil && s.filter.ShouldDiscardDDL(job.Type) {
+	if s.filter != nil && (s.filter.ShouldDiscardDDL(job.Type) ||
+		s.filter.ShouldIgnoreTable(job.SchemaName, job.TableName)) {
 		log.Info("discard DDL",
 			zap.Int64("jobID", job.ID), zap.String("DDL", job.Query),
 			zap.String("namespace", s.id.Namespace),

@@ -897,7 +897,6 @@ func (s *snapshot) iterTables(includeIneligible bool, f func(i *model.TableInfo)
 		}
 		return true
 	})
-	return
 }
 
 func (s *snapshot) iterPartitions(includeIneligible bool, f func(id int64, i *model.TableInfo)) {
