@@ -1034,6 +1034,11 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 	tables := make([]string, 0)
 	for _, tc := range testCases {
 		tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName(tc.schema, tc.table)
+		// table poet is filter out by filter rule.
+		if tc.table == "poet" {
+			require.False(t, ok)
+			continue
+		}
 		require.True(t, ok)
 		// TODO: add other dml event type
 		insertSQL := prepareInsertSQL(t, tableInfo, len(tc.columns))
@@ -1078,6 +1083,10 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 
 	for _, tc := range testCases {
 		tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName(tc.schema, tc.table)
+		if tc.table == "poet" {
+			require.False(t, ok)
+			continue
+		}
 		require.True(t, ok)
 		decodeAndCheckRowInTable(tableInfo.ID, toRawKV)
 	}
