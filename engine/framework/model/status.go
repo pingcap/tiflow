@@ -62,9 +62,9 @@ var WorkerUpdateColumns = []string{
 // TODO: refine me, merge orm model to WorkerStatus will cause some confuse
 type WorkerStatus struct {
 	ormModel.Model
-	ProjectID    tenant.ProjectID `json:"project-id" gorm:"column:project_id;type:varchar(64) not null"`
-	JobID        MasterID         `json:"job-id" gorm:"column:job_id;type:varchar(64) not null;uniqueIndex:uidx_wid,priority:1;index:idx_wst,priority:1"`
-	ID           WorkerID         `json:"id" gorm:"column:id;type:varchar(64) not null;uniqueIndex:uidx_wid,priority:2"`
+	ProjectID    tenant.ProjectID `json:"project-id" gorm:"column:project_id;type:varchar(128) not null"`
+	JobID        MasterID         `json:"job-id" gorm:"column:job_id;type:varchar(128) not null;uniqueIndex:uidx_wid,priority:1;index:idx_wst,priority:1"`
+	ID           WorkerID         `json:"id" gorm:"column:id;type:varchar(128) not null;uniqueIndex:uidx_wid,priority:2"`
 	Type         WorkerType       `json:"type" gorm:"column:type;type:smallint not null;comment:JobManager(1),CvsJobMaster(2),FakeJobMaster(3),DMJobMaster(4),CDCJobMaster(5),CvsTask(6),FakeTask(7),DMTask(8),CDCTask(9),WorkerDMDump(10),WorkerDMLoad(11),WorkerDMSync(12)"`
 	Code         WorkerStatusCode `json:"code" gorm:"column:status;type:tinyint not null;index:idx_wst,priority:2;comment:Normal(1),Created(2),Init(3),Error(4),Finished(5),Stopped(6)"`
 	ErrorMessage string           `json:"error-message" gorm:"column:errmsg;type:text"`
