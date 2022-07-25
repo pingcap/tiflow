@@ -208,7 +208,7 @@ function DM_RemoveLock_CASE() {
 function DM_RemoveLock() {
 	kill_process dm-master
 	check_master_port_offline 1
-	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/dm/master/shardddl/SleepWhenRemoveLock=return(30)"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/master/shardddl/SleepWhenRemoveLock=return(30)"
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
