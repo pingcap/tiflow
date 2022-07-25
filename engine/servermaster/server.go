@@ -623,6 +623,8 @@ func (s *Server) initializedBackendMeta(ctx context.Context) error {
 }
 
 func (s *Server) runLeaderService(ctx context.Context) (err error) {
+	start := time.Now()
+
 	// leader master need Initialize all backend tables first
 	err = s.initializedBackendMeta(ctx)
 	if err != nil {
@@ -770,7 +772,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	})
 
 	s.leaderInitialized.Store(true)
-	log.Info("leader is initialized")
+	log.Info("leader is initialized", zap.Duration("took", time.Since(start)))
 
 	return errg.Wait()
 }
