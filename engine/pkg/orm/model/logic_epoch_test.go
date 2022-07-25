@@ -130,6 +130,7 @@ func TestInitializeEpochModel(t *testing.T) {
 
 	gdb, mock, err := mockGetDBConn(t, "test")
 	require.NoError(t, err)
+	defer closeGormDB(t, gdb)
 	ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
 	defer cancel()
 
@@ -146,4 +147,6 @@ func TestInitializeEpochModel(t *testing.T) {
 
 	err = InitializeEpochModel(ctx, gdb)
 	require.NoError(t, err)
+
+	mock.ExpectClose()
 }
