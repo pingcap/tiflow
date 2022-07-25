@@ -81,7 +81,7 @@ func NewKafkaSink(
 	}
 
 	log.Info("Try to create a producer",
-		zap.Any("baseConfig", baseConfig), zap.Any("saramaConfig", saramaConfig))
+		zap.Any("baseConfig", baseConfig))
 	p, err := producerCreator(ctx, client, errCh)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
