@@ -297,11 +297,11 @@ func (v *DataValidator) initialize() error {
 	failpoint.Inject("ValidatorMockUpstreamTZ", func() {
 		defaultUpstreamTZ = "UTC"
 	})
-	v.upstreamTZ, err = str2TimezoneOrFromDB(newCtx, defaultUpstreamTZ, &v.cfg.From)
+	v.upstreamTZ, _, err = str2TimezoneOrFromDB(newCtx, defaultUpstreamTZ, &v.cfg.From)
 	if err != nil {
 		return err
 	}
-	v.timezone, err = str2TimezoneOrFromDB(newCtx, v.cfg.Timezone, &v.cfg.To)
+	v.timezone, _, err = str2TimezoneOrFromDB(newCtx, v.cfg.Timezone, &v.cfg.To)
 	if err != nil {
 		return err
 	}
@@ -311,7 +311,15 @@ func (v *DataValidator) initialize() error {
 		return err
 	}
 
-	v.streamerController = binlogstream.NewStreamerController(v.syncCfg, v.cfg.EnableGTID, &dbconn.UpStreamConn{BaseDB: v.fromDB}, v.cfg.RelayDir, v.timezone, nil)
+	v.streamerController = binlogstream.NewStreamerController(
+		v.syncCfg,
+		v.cfg.EnableGTID,
+		&dbconn.UpStreamConn{BaseDB: v.fromDB},
+		v.cfg.RelayDir,
+		v.timezone,
+		nil,
+		v.L,
+	)
 	return nil
 }
 
@@ -632,7 +640,7 @@ func (v *DataValidator) doValidate() {
 	locationForFlush := currLoc.Clone()
 	v.lastFlushTime = time.Now()
 	for {
-		e, err := v.streamerController.GetEvent(v.tctx)
+		e, _, _, err := v.streamerController.GetEvent(v.tctx)
 		if err != nil {
 			switch {
 			case err == context.Canceled:

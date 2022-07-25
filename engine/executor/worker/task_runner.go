@@ -109,7 +109,7 @@ func (r *TaskRunner) Run(ctx context.Context) error {
 				return cerrors.ErrRuntimeIsClosed.GenWithStackByArgs()
 			}
 			if err := r.onNewTask(task); err != nil {
-				log.L().Warn("Failed to launch task",
+				log.Warn("Failed to launch task",
 					zap.String("id", task.ID()),
 					zap.Error(err))
 			}
@@ -152,7 +152,7 @@ func (r *TaskRunner) cancelAll() {
 		id := key.(RunnableID)
 		t := value.(*taskEntry)
 		t.cancel()
-		log.L().Info("Cancelling task", zap.String("id", id))
+		log.Info("Cancelling task", zap.String("id", id))
 		return true
 	})
 	r.cancelMu.Unlock()
@@ -185,7 +185,7 @@ func (r *TaskRunner) onNewTask(task *internal.RunnableContainer) (ret error) {
 
 	_, exists := r.tasks.LoadOrStore(task.ID(), t)
 	if exists {
-		log.L().Warn("Duplicate Task ID", zap.String("id", task.ID()))
+		log.Warn("Duplicate Task ID", zap.String("id", task.ID()))
 		return cerrors.ErrRuntimeDuplicateTaskID.GenWithStackByArgs(task.ID())
 	}
 
@@ -204,24 +204,24 @@ func (r *TaskRunner) launchTask(rctx *RuntimeContext, entry *taskEntry) {
 
 		var err error
 		defer func() {
-			log.L().Info("Task Closed",
+			log.Info("Task Closed",
 				zap.String("id", entry.ID()),
 				zap.Error(err),
 				zap.Int64("runtime-task-count", r.taskCount.Load()))
 			entry.OnStopped()
 			r.taskStopNotifier.Notify(entry.ID())
 			if _, ok := r.tasks.LoadAndDelete(entry.ID()); !ok {
-				log.L().Panic("Task does not exist", zap.String("id", entry.ID()))
+				log.Panic("Task does not exist", zap.String("id", entry.ID()))
 			}
 		}()
 
 		entry.OnLaunched()
-		log.L().Info("Launching task",
+		log.Info("Launching task",
 			zap.String("id", entry.ID()),
 			zap.Int64("runtime-task-count", r.taskCount.Load()))
 
 		err = entry.Run(rctx)
-		log.L().Info("Task stopped", zap.String("id", entry.ID()), zap.Error(err))
+		log.Info("Task stopped", zap.String("id", entry.ID()), zap.Error(err))
 	}()
 }
 

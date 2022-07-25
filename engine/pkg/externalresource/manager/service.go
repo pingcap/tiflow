@@ -144,7 +144,7 @@ func (s *Service) RemoveResource(
 		return nil, status.Error(codes.NotFound, "resource not found")
 	}
 	if res.RowsAffected() > 1 {
-		log.L().Panic("unexpected RowsAffected",
+		log.Panic("unexpected RowsAffected",
 			zap.String("job-id", jobID),
 			zap.String("resource-id", resourceID))
 	}
@@ -164,7 +164,7 @@ func (s *Service) GetPlacementConstraint(
 	ctx context.Context,
 	resourceKey resModel.ResourceKey,
 ) (resModel.ExecutorID, bool, error) {
-	logger := log.L().With(zap.String("job-id", resourceKey.JobID), zap.String("resource-id", resourceKey.ID))
+	logger := log.With(zap.String("job-id", resourceKey.JobID), zap.String("resource-id", resourceKey.ID))
 
 	rType, _, err := resModel.ParseResourcePath(resourceKey.ID)
 	if err != nil {
@@ -205,7 +205,7 @@ func (s *Service) onExecutorOffline(executorID resModel.ExecutorID) error {
 		return nil
 	default:
 	}
-	log.L().Warn("Too many offlined executors, dropping event",
+	log.Warn("Too many offlined executors, dropping event",
 		zap.String("executor-id", string(executorID)))
 	return nil
 }
@@ -224,7 +224,7 @@ func (s *Service) StartBackgroundWorker() {
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
-		defer log.L().Info("Resource manager's background task exited")
+		defer log.Info("Resource manager's background task exited")
 		s.runBackgroundWorker(ctx)
 	}()
 }

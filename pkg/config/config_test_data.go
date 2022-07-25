@@ -129,13 +129,14 @@ const (
       "server-ack-interval": 100000000,
       "server-worker-pool-size": 4
     },
-    "enable-2phase-scheduler": false,
+    "enable-scheduler-v3": true,
     "scheduler": {
       "heartbeat-tick": 2,
       "max-task-concurrency": 10,
       "check-balance-interval": 60000000000
     }
-  }
+  },
+  "cluster-id": "default"
 }`
 
 	testCfgTestReplicaConfigMarshal1 = `{
@@ -147,7 +148,8 @@ const (
     "rules": [
       "1.1"
     ],
-    "ignore-txn-start-ts": null
+    "ignore-txn-start-ts": null,
+    "event-filters": null
   },
   "mounter": {
     "worker-num": 3

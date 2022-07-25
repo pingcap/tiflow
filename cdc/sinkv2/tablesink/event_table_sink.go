@@ -94,14 +94,21 @@ func (e *eventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) {
 	}
 	// Do not forget to add the resolvedTs to progressTracker.
 	e.progressTracker.addResolvedTs(e.genEventID(), resolvedTs)
-	e.backendSink.WriteEvents(resolvedCallbackableEvents...)
+	_ = e.backendSink.WriteEvents(resolvedCallbackableEvents...)
 }
 
 func (e *eventTableSink[E]) GetCheckpointTs() model.ResolvedTs {
 	return e.progressTracker.minTs()
 }
 
+// Close the table sink and wait for all callbacks be called.
+// Notice: It will be blocked until all callbacks be called.
 func (e *eventTableSink[E]) Close() {
+	// TODO: Before we depends on this state,
+	// we should check the state working well with new scheduler.
+	// Maybe we only need a sink state(isClosing), not a table state.
+	e.state.Store(pipeline.TableStateStopping)
+	e.progressTracker.close()
 	e.state.Store(pipeline.TableStateStopped)
 }
 

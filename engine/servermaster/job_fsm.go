@@ -206,7 +206,7 @@ func (fsm *JobFsm) IterPendingJobs(dispatchJobFn func(job *frameModel.MasterMeta
 		fsm.waitAckJobs[id] = &jobHolder{
 			MasterMetaKVData: job,
 		}
-		log.L().Info("job master recovered", zap.Any("job", job))
+		log.Info("job master recovered", zap.Any("job", job))
 	}
 
 	return nil
@@ -226,7 +226,7 @@ func (fsm *JobFsm) IterWaitAckJobs(dispatchJobFn func(job *frameModel.MasterMeta
 			return err
 		}
 		fsm.waitAckJobs[id].addFromFailover = false
-		log.L().Info("tombstone job master doesn't receive heartbeat in time, recreate it", zap.Any("job", job))
+		log.Info("tombstone job master doesn't receive heartbeat in time, recreate it", zap.Any("job", job))
 	}
 
 	return nil
@@ -260,7 +260,7 @@ func (fsm *JobFsm) JobOffline(worker framework.WorkerHandle, needFailover bool) 
 	} else {
 		job, ok = fsm.waitAckJobs[worker.ID()]
 		if !ok {
-			log.L().Warn("unknown worker, ignore it", zap.String("id", worker.ID()))
+			log.Warn("unknown worker, ignore it", zap.String("id", worker.ID()))
 			return
 		}
 		delete(fsm.waitAckJobs, worker.ID())

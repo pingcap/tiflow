@@ -22,12 +22,12 @@ import (
 type innerTxnsHeap []innerHeapEntry
 
 type innerHeapEntry struct {
-	ts     uint64
-	bucket int
+	minCommitTs uint64
+	bucket      int
 }
 
 func (h innerTxnsHeap) Len() int           { return len(h) }
-func (h innerTxnsHeap) Less(i, j int) bool { return h[i].ts < h[j].ts }
+func (h innerTxnsHeap) Less(i, j int) bool { return h[i].minCommitTs < h[j].minCommitTs }
 func (h innerTxnsHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
 
 func (h *innerTxnsHeap) Push(x interface{}) {
@@ -60,7 +60,7 @@ func newTxnsHeap(txnsMap map[model.TableID][]*model.SingleTableTxn) *txnsHeap {
 		if len(txns) == 0 {
 			continue
 		}
-		entry := innerHeapEntry{ts: txns[0].CommitTs, bucket: bucket}
+		entry := innerHeapEntry{minCommitTs: txns[0].CommitTs, bucket: bucket}
 		heap.Push(&inner, entry)
 	}
 	return &txnsHeap{inner: &inner, txnsGroup: txnsGroup}
@@ -77,8 +77,8 @@ func (h *txnsHeap) iter(fn func(txn *model.SingleTableTxn)) {
 		h.txnsGroup[bucket] = h.txnsGroup[bucket][1:]
 		if len(h.txnsGroup[bucket]) > 0 {
 			heap.Push(h.inner, innerHeapEntry{
-				ts:     h.txnsGroup[bucket][0].CommitTs,
-				bucket: bucket,
+				minCommitTs: h.txnsGroup[bucket][0].CommitTs,
+				bucket:      bucket,
 			})
 		}
 	}

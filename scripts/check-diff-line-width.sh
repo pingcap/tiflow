@@ -26,8 +26,8 @@ ERROR_THRESHOLD=100
 git --no-pager diff $BASE_HASH -U0 -- cdc pkg cmd \
 	-- ':(exclude)*_gen.go' \
 	-- ':(exclude)*_gen_test.go' \
+	-- ':(exclude)*_mock.go' \
 	-- ':(exclude)*.pb.go' |
-	-- ':(exclude)*_mock.pb.go' |
 	grep -E '^\+' | grep -vE '^\+\+\+' |
 	sed 's/\t/    /g' |
 	awk "

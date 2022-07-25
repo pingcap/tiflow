@@ -22,6 +22,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	kafkap "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
@@ -92,9 +93,9 @@ func TestKafkaSink(t *testing.T) {
 
 	encoder := sink.encoderBuilder.Build()
 
-	require.IsType(t, &codec.JSONEventBatchEncoder{}, encoder)
-	require.Equal(t, 1, encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize())
-	require.Equal(t, 1048576, encoder.(*codec.JSONEventBatchEncoder).GetMaxMessageBytes())
+	require.IsType(t, &codec.OpenProtocolBatchEncoder{}, encoder)
+	require.Equal(t, 1, encoder.(*codec.OpenProtocolBatchEncoder).GetMaxBatchSize())
+	require.Equal(t, 1048576, encoder.(*codec.OpenProtocolBatchEncoder).GetMaxMessageBytes())
 
 	// mock kafka broker processes 1 row changed event
 	tableID := model.TableID(1)
@@ -106,7 +107,11 @@ func TestKafkaSink(t *testing.T) {
 		},
 		StartTs:  100,
 		CommitTs: 120,
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+		Columns: []*model.Column{{
+			Name:  "col1",
+			Type:  mysql.TypeVarchar,
+			Value: []byte("aa"),
+		}},
 	}
 	err = sink.EmitRowChangedEvents(ctx, row)
 	require.Nil(t, err)
@@ -179,9 +184,9 @@ func TestPulsarSinkEncoderConfig(t *testing.T) {
 	require.Nil(t, err)
 
 	encoder := sink.encoderBuilder.Build()
-	require.IsType(t, &codec.JSONEventBatchEncoder{}, encoder)
-	require.Equal(t, 1, encoder.(*codec.JSONEventBatchEncoder).GetMaxBatchSize())
-	require.Equal(t, 4194304, encoder.(*codec.JSONEventBatchEncoder).GetMaxMessageBytes())
+	require.IsType(t, &codec.OpenProtocolBatchEncoder{}, encoder)
+	require.Equal(t, 1, encoder.(*codec.OpenProtocolBatchEncoder).GetMaxBatchSize())
+	require.Equal(t, 4194304, encoder.(*codec.OpenProtocolBatchEncoder).GetMaxMessageBytes())
 
 	// FIXME: mock pulsar client doesn't support close,
 	// so we can't call sink.Close() to close it.
@@ -225,7 +230,11 @@ func TestFlushRowChangedEvents(t *testing.T) {
 		},
 		StartTs:  100,
 		CommitTs: 120,
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+		Columns: []*model.Column{{
+			Name:  "col1",
+			Type:  mysql.TypeVarchar,
+			Value: []byte("aa"),
+		}},
 	}
 	err = sink.EmitRowChangedEvents(ctx, row1)
 	require.Nil(t, err)
@@ -239,7 +248,11 @@ func TestFlushRowChangedEvents(t *testing.T) {
 		},
 		StartTs:  90,
 		CommitTs: 110,
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+		Columns: []*model.Column{{
+			Name:  "col1",
+			Type:  mysql.TypeVarchar,
+			Value: []byte("aa"),
+		}},
 	}
 	err = sink.EmitRowChangedEvents(ctx, row2)
 	require.Nil(t, err)
@@ -253,7 +266,11 @@ func TestFlushRowChangedEvents(t *testing.T) {
 		},
 		StartTs:  110,
 		CommitTs: 130,
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+		Columns: []*model.Column{{
+			Name:  "col1",
+			Type:  mysql.TypeVarchar,
+			Value: []byte("aa"),
+		}},
 	}
 
 	err = sink.EmitRowChangedEvents(ctx, row3)

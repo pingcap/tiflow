@@ -47,7 +47,7 @@ func (d *Deps) Provide(constructor interface{}) error {
 func (d *Deps) Construct(fn interface{}) (interface{}, error) {
 	fnTp := reflect.TypeOf(fn)
 	if fnTp.NumOut() != 2 {
-		log.L().Panic("Unexpected input type", zap.Any("type", reflect.TypeOf(fn)))
+		log.Panic("Unexpected input type", zap.Any("type", reflect.TypeOf(fn)))
 	}
 
 	var in, out []reflect.Type

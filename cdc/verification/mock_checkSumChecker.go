@@ -51,11 +51,11 @@ func (_m *mockCheckSumChecker) getAllDBs(ctx context.Context) ([]string, error) 
 }
 
 // getCheckSum provides a mock function with given fields: ctx, db, f
-func (_m *mockCheckSumChecker) getCheckSum(ctx context.Context, db string, f *filter.Filter) (map[string]string, error) {
+func (_m *mockCheckSumChecker) getCheckSum(ctx context.Context, db string, f filter.Filter) (map[string]string, error) {
 	ret := _m.Called(ctx, db, f)
 
 	var r0 map[string]string
-	if rf, ok := ret.Get(0).(func(context.Context, string, *filter.Filter) map[string]string); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, filter.Filter) map[string]string); ok {
 		r0 = rf(ctx, db, f)
 	} else {
 		if ret.Get(0) != nil {
@@ -64,7 +64,7 @@ func (_m *mockCheckSumChecker) getCheckSum(ctx context.Context, db string, f *fi
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, string, *filter.Filter) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, string, filter.Filter) error); ok {
 		r1 = rf(ctx, db, f)
 	} else {
 		r1 = ret.Error(1)

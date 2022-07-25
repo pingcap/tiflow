@@ -41,10 +41,13 @@ var (
 
 	defaultCapability            int64 = 100 // TODO: make this configurable
 	defaultLocalStorageDirPrefix       = "/tmp/dfe-storage/"
+
+	defaultExecutorAddr = "127.0.0.1:10340"
 )
 
 // Config is the configuration.
 type Config struct {
+	// TODO: is executor name necessary, executor.Info.ID has similar effect
 	Name string `toml:"name" json:"name"`
 
 	LogConf logutil.Config `toml:"log" json:"log"`
@@ -57,7 +60,7 @@ type Config struct {
 
 	ConfigFile string `toml:"config-file" json:"config-file"`
 
-	// TODO: in the future dm-workers should share a same ttl from dm-master
+	// TODO: in the future executors should share a same ttl from server-master
 	KeepAliveTTLStr      string `toml:"keepalive-ttl" json:"keepalive-ttl"`
 	KeepAliveIntervalStr string `toml:"keepalive-interval" json:"keepalive-interval"`
 	RPCTimeoutStr        string `toml:"rpc-timeout" json:"rpc-timeout"`
@@ -75,7 +78,7 @@ type Config struct {
 func (c *Config) String() string {
 	cfg, err := json.Marshal(c)
 	if err != nil {
-		log.L().Error("fail to marshal config to json", logutil.ShortError(err))
+		log.Error("fail to marshal config to json", logutil.ShortError(err))
 	}
 	return string(cfg)
 }
@@ -86,7 +89,7 @@ func (c *Config) Toml() (string, error) {
 
 	err := toml.NewEncoder(&b).Encode(c)
 	if err != nil {
-		log.L().Error("fail to marshal config to toml", logutil.ShortError(err))
+		log.Error("fail to marshal config to toml", logutil.ShortError(err))
 	}
 
 	return b.String(), nil
@@ -118,6 +121,10 @@ func getDefaultLocalStorageDir(executorName string) string {
 
 // Adjust adjusts the executor configuration
 func (c *Config) Adjust() (err error) {
+	if c.Join == "" {
+		return errors.ErrInvalidCliParameter.GenWithStack("join must be provided")
+	}
+
 	if c.AdvertiseAddr == "" {
 		c.AdvertiseAddr = c.WorkerAddr
 	}
@@ -157,7 +164,7 @@ func GetDefaultExecutorConfig() *Config {
 		},
 		Name:                 "",
 		Join:                 "",
-		WorkerAddr:           "",
+		WorkerAddr:           defaultExecutorAddr,
 		AdvertiseAddr:        "",
 		SessionTTL:           defaultSessionTTL,
 		KeepAliveTTLStr:      defaultKeepAliveTTL,

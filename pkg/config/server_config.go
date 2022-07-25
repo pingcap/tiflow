@@ -15,8 +15,10 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
 	"net"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -29,6 +31,8 @@ import (
 )
 
 const (
+	// clusterIDMaxLen is the max length of cdc server cluster id
+	clusterIDMaxLen = 128
 	// DefaultSortDir is the default value of sort-dir, it will be s sub directory of data-dir.
 	DefaultSortDir = "/tmp/sorter"
 
@@ -40,6 +44,18 @@ const (
 
 	// DefaultTableMemoryQuota is the default memory quota for each table.
 	DefaultTableMemoryQuota = 10 * 1024 * 1024 // 10 MB
+)
+
+var (
+	clusterIDRe = regexp.MustCompile(`^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*$`)
+
+	// ReservedClusterIDs contains a list of reserved cluster id,
+	// these words are the part of old cdc etcd key prefix
+	// like: /tidb/cdc/owner
+	ReservedClusterIDs = []string{
+		"owner", "capture", "task",
+		"changefeed", "job", "meta",
+	}
 )
 
 func init() {
@@ -131,9 +147,10 @@ var defaultServerConfig = &ServerConfig{
 		},
 		Messages: defaultMessageConfig.Clone(),
 
-		EnableTwoPhaseScheduler: false,
-		Scheduler:               NewDefaultSchedulerConfig(),
+		EnableSchedulerV3: true,
+		Scheduler:         NewDefaultSchedulerConfig(),
 	},
+	ClusterID: "default",
 }
 
 // ServerConfig represents a config for server
@@ -160,6 +177,7 @@ type ServerConfig struct {
 	PerTableMemoryQuota uint64          `toml:"per-table-memory-quota" json:"per-table-memory-quota"`
 	KVClient            *KVClientConfig `toml:"kv-client" json:"kv-client"`
 	Debug               *DebugConfig    `toml:"debug" json:"debug"`
+	ClusterID           string          `toml:"cluster-id" json:"cluster-id"`
 }
 
 // Marshal returns the json marshal format of a ServerConfig
@@ -204,6 +222,12 @@ func (c *ServerConfig) Clone() *ServerConfig {
 
 // ValidateAndAdjust validates and adjusts the server configuration
 func (c *ServerConfig) ValidateAndAdjust() error {
+	if !isValidClusterID(c.ClusterID) {
+		return cerror.ErrInvalidServerOption.GenWithStack(fmt.Sprintf("bad cluster-id"+
+			"please match the pattern \"^[a-zA-Z0-9]+(\\-[a-zA-Z0-9]+)*$\", and not the list of"+
+			" following reserved world: %s"+
+			"eg, \"simple-cluster-id\"", strings.Join(ReservedClusterIDs, ",")))
+	}
 	if c.Addr == "" {
 		return cerror.ErrInvalidServerOption.GenWithStack("empty address")
 	}
@@ -312,4 +336,21 @@ func (d *TomlDuration) UnmarshalJSON(b []byte) error {
 	}
 	*d = TomlDuration(stdDuration)
 	return nil
+}
+
+// isValidClusterID returns true if the cluster ID matches
+// the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", length no more than `clusterIDMaxLen`,
+// eg, "simple-cluster-id".
+func isValidClusterID(clusterID string) bool {
+	valid := clusterID != "" && len(clusterID) <= clusterIDMaxLen &&
+		clusterIDRe.MatchString(clusterID)
+	if !valid {
+		return false
+	}
+	for _, reserved := range ReservedClusterIDs {
+		if reserved == clusterID {
+			return false
+		}
+	}
+	return true
 }

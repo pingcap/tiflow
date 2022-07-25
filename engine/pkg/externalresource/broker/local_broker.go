@@ -15,7 +15,7 @@ package broker
 
 import (
 	"context"
-	"io/ioutil"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -47,9 +47,9 @@ type LocalBroker struct {
 
 // NewBrokerForTesting creates a LocalBroker instance for testing only
 func NewBrokerForTesting(executorID resourcemeta.ExecutorID) *LocalBroker {
-	dir, err := ioutil.TempDir("/tmp", "*-localfiles")
+	dir, err := os.MkdirTemp("/tmp", "*-localfiles")
 	if err != nil {
-		log.L().Panic("failed to make tempdir")
+		log.Panic("failed to make tempdir")
 	}
 	cfg := &storagecfg.Config{Local: storagecfg.LocalFileConfig{BaseDir: dir}}
 	client := manager.NewWrappedMockClient()

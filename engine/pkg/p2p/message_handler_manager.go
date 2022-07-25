@@ -128,7 +128,7 @@ func (m *messageHandlerManagerImpl) CheckError(ctx context.Context) error {
 			if err == nil {
 				continue
 			}
-			log.L().Warn("handler error received",
+			log.Warn("handler error received",
 				zap.String("topic", topic))
 			return errors.Trace(err)
 		default:

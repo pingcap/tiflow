@@ -34,23 +34,23 @@ const (
 
 func NewStartValidationCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "start [-s source ...] [--all-task] [task-name]",
+		Use:   "start [--all-task] [task-name]",
 		Short: "start to validate the completeness of the data",
 		RunE:  startValidation,
 	}
 	cmd.Flags().Bool("all-task", false, "whether applied to all tasks")
-	cmd.Flags().String("mode", "", "specify the mode of validation: full, fast")
+	cmd.Flags().String("mode", "full", "specify the mode of validation: full (default), fast; this flag will be ignored if the validation task has been ever enabled but currently paused")
 	cmd.Flags().String("start-time", "", "specify the start time of binlog for validation, e.g. '2021-10-21 00:01:00' or 2021-10-21T00:01:00")
 	return cmd
 }
 
 func NewStopValidationCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "stop [-s source ...] [--all-task] [task-name]",
+		Use:   "stop [--all-task] [task-name]",
 		Short: "stop validating the completeness of the data",
 		RunE:  stopValidation,
 	}
-	cmd.Flags().Bool("all-task", false, "whether to all tasks")
+	cmd.Flags().Bool("all-task", false, "whether applied to all tasks")
 	return cmd
 }
 

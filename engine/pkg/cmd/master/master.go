@@ -70,7 +70,10 @@ func (o *options) addFlags(cmd *cobra.Command) {
 	cmd.Flags().StringSliceVar(&o.masterConfig.FrameMetaConf.Endpoints, "frame-meta-endpoints", o.masterConfig.FrameMetaConf.Endpoints, "framework metastore endpoint")
 	cmd.Flags().StringVar(&o.masterConfig.FrameMetaConf.Auth.User, "frame-meta-user", o.masterConfig.FrameMetaConf.Auth.User, "framework metastore user")
 	cmd.Flags().StringVar(&o.masterConfig.FrameMetaConf.Auth.Passwd, "frame-meta-password", o.masterConfig.FrameMetaConf.Auth.Passwd, "framework metastore password")
-	cmd.Flags().StringSliceVar(&o.masterConfig.UserMetaConf.Endpoints, "user-meta-endpoints", o.masterConfig.UserMetaConf.Endpoints, "user metastore endpoint")
+	cmd.Flags().StringVar(&o.masterConfig.FrameMetaConf.Schema, "frame-meta-schema", o.masterConfig.FrameMetaConf.Schema, `schema name for framework meta`)
+
+	cmd.Flags().StringSliceVar(&o.masterConfig.BusinessMetaConf.Endpoints, "business-meta-endpoints", o.masterConfig.BusinessMetaConf.Endpoints, "business metastore endpoint")
+	cmd.Flags().StringVar(&o.masterConfig.BusinessMetaConf.StoreType, "business-meta-store-type", o.masterConfig.BusinessMetaConf.StoreType, "business metastore store type")
 
 	cmd.Flags().StringVar(&o.masterConfigFilePath, "config", "", "Path of the configuration file")
 
@@ -104,7 +107,7 @@ func (o *options) run(cmd *cobra.Command) error {
 
 	err = server.Run(cmdconetxt.GetDefaultContext())
 	if err != nil && errors.Cause(err) != context.Canceled {
-		log.L().Error("run dataflow server master with error", zap.Error(err))
+		log.Error("run dataflow server master with error", zap.Error(err))
 		return errors.Trace(err)
 	}
 	log.Info("dataflow server master exits successfully")
@@ -151,8 +154,8 @@ func (o *options) complete(cmd *cobra.Command) error {
 			cfg.FrameMetaConf.Auth.User = o.masterConfig.FrameMetaConf.Auth.User
 		case "frame-meta-password":
 			cfg.FrameMetaConf.Auth.Passwd = o.masterConfig.FrameMetaConf.Auth.Passwd
-		case "user-meta-endpoints":
-			cfg.UserMetaConf.Endpoints = o.masterConfig.UserMetaConf.Endpoints
+		case "business-meta-endpoints":
+			cfg.BusinessMetaConf.Endpoints = o.masterConfig.BusinessMetaConf.Endpoints
 		case "ca":
 			cfg.Security.CAPath = o.masterConfig.Security.CAPath
 		case "cert":

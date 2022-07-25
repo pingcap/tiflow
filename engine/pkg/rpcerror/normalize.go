@@ -24,7 +24,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 )
 
@@ -83,7 +83,7 @@ func Normalize[E errorInfo](ops ...NormalizeOpt) *Prototype[E] {
 
 	_, exists := prototypeRegistry.LoadOrStore(opts.name, ret)
 	if exists {
-		log.L().Warn("duplicate error type", zap.String("name", opts.name))
+		log.Warn("duplicate error type", zap.String("name", opts.name))
 	}
 
 	return ret

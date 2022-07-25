@@ -23,7 +23,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/pkg/etcdutil"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -41,11 +41,26 @@ const (
 	defaultDiscoverTicker     = 3 * time.Second
 	defaultMetricInterval     = 15 * time.Second
 
+	defaultMasterAddr          = "127.0.0.1:10240"
 	defaultPeerUrls            = "http://127.0.0.1:8291"
 	defaultInitialClusterState = embed.ClusterStateFlagNew
+
+	// DefaultBusinessMetaID is the ID for default business metastore
+	DefaultBusinessMetaID        = "_default"
+	defaultBusinessMetaEndpoints = "127.0.0.1:12479"
+
+	// FrameMetaID is the ID for frame metastore
+	FrameMetaID               = "_root"
+	defaultFrameMetaEndpoints = "127.0.0.1:3336"
+	defaultFrameMetaUser      = "root"
+	defaultFrameMetaPassword  = "123456"
+
+	defaultFrameworkStoreType = metaModel.StoreTypeSQL
+	// TODO: we will switch to StoreTypeSQL after we support sql implement
+	defaultbusinessStoreType = metaModel.StoreTypeEtcd
 )
 
-// Config is the configuration for dm-master.
+// Config is the configuration for server-master.
 type Config struct {
 	LogConf logutil.Config `toml:"log" json:"log"`
 
@@ -59,8 +74,8 @@ type Config struct {
 	// NOTE: more items will be add when adding leader election
 	Etcd *etcdutil.ConfigParams `toml:"etcd" json:"etcd"`
 
-	FrameMetaConf *metaclient.StoreConfigParams `toml:"frame-metastore-conf" json:"frame-metastore-conf"`
-	UserMetaConf  *metaclient.StoreConfigParams `toml:"user-metastore-conf" json:"user-metastore-conf"`
+	FrameMetaConf    *metaModel.StoreConfig `toml:"frame-metastore-conf" json:"frame-metastore-conf"`
+	BusinessMetaConf *metaModel.StoreConfig `toml:"business-metastore-conf" json:"business-metastore-conf"`
 
 	KeepAliveTTLStr string `toml:"keepalive-ttl" json:"keepalive-ttl"`
 	// time interval string to check executor aliveness
@@ -77,7 +92,7 @@ type Config struct {
 func (c *Config) String() string {
 	cfg, err := json.Marshal(c)
 	if err != nil {
-		log.L().Error("marshal to json", zap.Reflect("master config", c), logutil.ShortError(err))
+		log.Error("marshal to json", zap.Reflect("master config", c), logutil.ShortError(err))
 	}
 	return string(cfg)
 }
@@ -88,7 +103,7 @@ func (c *Config) Toml() (string, error) {
 
 	err := toml.NewEncoder(&b).Encode(c)
 	if err != nil {
-		log.L().Error("fail to marshal config to toml", logutil.ShortError(err))
+		log.Error("fail to marshal config to toml", logutil.ShortError(err))
 	}
 
 	return b.String(), nil
@@ -116,7 +131,15 @@ func (c *Config) Adjust() (err error) {
 	if err != nil {
 		return err
 	}
+
+	c.adjustStoreConfig()
 	return nil
+}
+
+// adjustStoreConfig adjusts store configuration
+func (c *Config) adjustStoreConfig() {
+	strings.ToLower(strings.TrimSpace(c.FrameMetaConf.StoreType))
+	strings.ToLower(strings.TrimSpace(c.BusinessMetaConf.StoreType))
 }
 
 // configFromFile loads config from file and merges items into Config.
@@ -143,14 +166,14 @@ func GetDefaultMasterConfig() *Config {
 			Level: "info",
 			File:  "",
 		},
-		MasterAddr:    "",
+		MasterAddr:    defaultMasterAddr,
 		AdvertiseAddr: "",
 		Etcd: &etcdutil.ConfigParams{
 			PeerUrls:            defaultPeerUrls,
 			InitialClusterState: defaultInitialClusterState,
 		},
-		FrameMetaConf:        NewFrameMetaConfig(),
-		UserMetaConf:         NewDefaultUserMetaConfig(),
+		FrameMetaConf:        newFrameMetaConfig(),
+		BusinessMetaConf:     NewDefaultBusinessMetaConfig(),
 		KeepAliveTTLStr:      defaultKeepAliveTTL,
 		KeepAliveIntervalStr: defaultKeepAliveInterval,
 		RPCTimeoutStr:        defaultRPCTimeout,
@@ -195,4 +218,26 @@ func parseURLs(s string) ([]url.URL, error) {
 		urls = append(urls, *u)
 	}
 	return urls, nil
+}
+
+// newFrameMetaConfig return the default framework metastore config
+func newFrameMetaConfig() *metaModel.StoreConfig {
+	conf := metaModel.DefaultStoreConfig()
+	conf.StoreID = FrameMetaID
+	conf.StoreType = defaultFrameworkStoreType
+	conf.Endpoints = append(conf.Endpoints, defaultFrameMetaEndpoints)
+	conf.Auth.User = defaultFrameMetaUser
+	conf.Auth.Passwd = defaultFrameMetaPassword
+
+	return conf
+}
+
+// NewDefaultBusinessMetaConfig return the default business metastore config
+func NewDefaultBusinessMetaConfig() *metaModel.StoreConfig {
+	conf := metaModel.DefaultStoreConfig()
+	conf.StoreID = DefaultBusinessMetaID
+	conf.StoreType = defaultbusinessStoreType
+	conf.Endpoints = append(conf.Endpoints, defaultBusinessMetaEndpoints)
+
+	return conf
 }

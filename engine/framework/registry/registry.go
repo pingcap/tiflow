@@ -59,9 +59,9 @@ func NewRegistry() Registry {
 // MustRegisterWorkerType implements Registry.MustRegisterWorkerType
 func (r *registryImpl) MustRegisterWorkerType(tp frameModel.WorkerType, factory WorkerFactory) {
 	if ok := r.RegisterWorkerType(tp, factory); !ok {
-		log.L().Panic("duplicate worker type", zap.Int64("worker-type", int64(tp)))
+		log.Panic("duplicate worker type", zap.Int64("worker-type", int64(tp)))
 	}
-	log.L().Info("register worker", zap.Int64("worker-type", int64(tp)))
+	log.Info("register worker", zap.Int64("worker-type", int64(tp)))
 }
 
 // RegisterWorkerType implements Registry.RegisterWorkerType
@@ -122,7 +122,7 @@ func (r *registryImpl) CreateWorker(
 		setImplMember(impl, nameOfBaseJobMaster, base)
 		return base, nil
 	}
-	log.L().Panic("wrong use of CreateWorker",
+	log.Panic("wrong use of CreateWorker",
 		zap.String("reason", "impl has no member BaseWorker or BaseJobMaster"),
 		zap.Any("workerType", tp))
 	return nil, nil
@@ -148,7 +148,7 @@ func getTypeNameOfVarPtr(v interface{}) string {
 func implHasMember(impl interface{}, memberName string) bool {
 	defer func() {
 		if v := recover(); v != nil {
-			log.L().Panic("wrong use of implHasMember",
+			log.Panic("wrong use of implHasMember",
 				zap.Any("reason", v))
 		}
 	}()
@@ -158,7 +158,7 @@ func implHasMember(impl interface{}, memberName string) bool {
 func setImplMember(impl interface{}, memberName string, value interface{}) {
 	defer func() {
 		if v := recover(); v != nil {
-			log.L().Panic("wrong use of setImplMember",
+			log.Panic("wrong use of setImplMember",
 				zap.Any("reason", v))
 		}
 	}()

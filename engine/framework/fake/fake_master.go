@@ -76,7 +76,7 @@ type Checkpoint struct {
 func (cp *Checkpoint) String() string {
 	data, err := json.Marshal(cp)
 	if err != nil {
-		log.L().Warn("checkpoint marshal failed", zap.Error(err))
+		log.Warn("checkpoint marshal failed", zap.Error(err))
 	}
 	return string(data)
 }
@@ -130,7 +130,7 @@ type businessStatus struct {
 
 // OnJobManagerMessage implements JobMasterImpl.OnJobManagerMessage
 func (m *Master) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageValue) error {
-	log.L().Info("FakeMaster: OnJobManagerMessage", zap.Any("message", message))
+	log.Info("FakeMaster: OnJobManagerMessage", zap.Any("message", message))
 	switch msg := message.(type) {
 	case *frameModel.StatusChangeRequest:
 		switch msg.ExpectState {
@@ -163,10 +163,10 @@ func (m *Master) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageValue) 
 			}
 			m.workerListMu.Unlock()
 		default:
-			log.L().Info("FakeMaster: ignore status change state", zap.Int32("state", int32(msg.ExpectState)))
+			log.Info("FakeMaster: ignore status change state", zap.Int32("state", int32(msg.ExpectState)))
 		}
 	default:
-		log.L().Info("unsupported message", zap.Any("message", message))
+		log.Info("unsupported message", zap.Any("message", message))
 	}
 	return nil
 }
@@ -195,7 +195,7 @@ func (m *Master) Workload() model.RescUnit {
 
 // InitImpl implements BaseJobMaster.InitImpl
 func (m *Master) InitImpl(ctx context.Context) error {
-	log.L().Info("FakeMaster: Init", zap.Any("config", m.config))
+	log.Info("FakeMaster: Init", zap.Any("config", m.config))
 	defer m.initialized.Store(true)
 	return m.initWorkers()
 }
@@ -206,7 +206,7 @@ func (m *Master) createWorker(wcfg *WorkerConfig) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.L().Info("CreateWorker called",
+	log.Info("CreateWorker called",
 		zap.Int("BusinessID", wcfg.ID),
 		zap.String("worker-id", workerID))
 	m.pendingWorkerSet[workerID] = wcfg.ID
@@ -245,7 +245,7 @@ func (m *Master) failoverOnMasterRecover(ctx context.Context) error {
 	if !m.initialized.Load() {
 		if !m.IsMasterReady() {
 			if m.statusRateLimiter.Allow() {
-				log.L().Info("master is not ready, wait")
+				log.Info("master is not ready, wait")
 			}
 			return nil
 		}
@@ -276,7 +276,7 @@ func (m *Master) failoverOnMasterRecover(ctx context.Context) error {
 			if m.workerList[businessID] == nil {
 				m.workerID2BusinessID[worker.ID()] = businessID
 				m.workerList[businessID] = worker
-				log.L().Info("found active worker during failover",
+				log.Info("found active worker during failover",
 					zap.String("worker-id", worker.ID()), zap.Int("business-id", businessID))
 			}
 		}
@@ -285,7 +285,7 @@ func (m *Master) failoverOnMasterRecover(ctx context.Context) error {
 		ckpt := &Checkpoint{}
 		resp, metaErr := m.MetaKVClient().Get(ctx, CheckpointKey(m.workerID))
 		if metaErr != nil {
-			log.L().Warn("failed to load checkpoint", zap.Error(metaErr))
+			log.Warn("failed to load checkpoint", zap.Error(metaErr))
 		} else {
 			if len(resp.Kvs) > 0 {
 				if err := json.Unmarshal(resp.Kvs[0].Value, ckpt); err != nil {
@@ -314,7 +314,7 @@ func (m *Master) failoverOnMasterRecover(ctx context.Context) error {
 				}
 			}
 		}
-		log.L().Info("fake master failover finished", zap.String("master-id", m.ID()))
+		log.Info("fake master failover finished", zap.String("master-id", m.ID()))
 	}
 
 	return nil
@@ -353,17 +353,17 @@ func (m *Master) tickedCheckWorkers(ctx context.Context) error {
 func (m *Master) tickedCheckStatus(ctx context.Context) error {
 	if m.statusRateLimiter.Allow() {
 		m.bStatus.RLock()
-		log.L().Info("FakeMaster: Tick", zap.Any("status", m.bStatus.status))
+		log.Info("FakeMaster: Tick", zap.Any("status", m.bStatus.status))
 		m.bStatus.RUnlock()
 		// save checkpoint, which is used in business only
 		_, metaErr := m.MetaKVClient().Put(ctx, CheckpointKey(m.workerID), m.genCheckpoint().String())
 		if metaErr != nil {
-			log.L().Warn("update checkpoint with error", zap.Error(metaErr))
+			log.Warn("update checkpoint with error", zap.Error(metaErr))
 		}
 		// update status via framework provided API
 		err := m.BaseJobMaster.UpdateJobStatus(ctx, m.Status())
 		if cerrors.ErrWorkerUpdateStatusTryAgain.Equal(err) {
-			log.L().Warn("update status try again later", zap.String("error", err.Error()))
+			log.Warn("update status try again later", zap.String("error", err.Error()))
 			return nil
 		}
 		return err
@@ -371,12 +371,12 @@ func (m *Master) tickedCheckStatus(ctx context.Context) error {
 
 	// check for special worker status
 	if m.getStatusCode() == frameModel.WorkerStatusStopped {
-		log.L().Info("FakeMaster: received pause command, stop now")
+		log.Info("FakeMaster: received pause command, stop now")
 		m.setStatusCode(frameModel.WorkerStatusStopped)
 		return m.Exit(ctx, m.Status(), nil)
 	}
 	if len(m.finishedSet) == m.config.WorkerCount {
-		log.L().Info("FakeMaster: all worker finished, job master exits now")
+		log.Info("FakeMaster: all worker finished, job master exits now")
 		m.setStatusCode(frameModel.WorkerStatusFinished)
 		return m.Exit(ctx, m.Status(), nil)
 	}
@@ -394,7 +394,7 @@ func (m *Master) Tick(ctx context.Context) error {
 
 // OnMasterRecovered implements MasterImpl.OnMasterRecovered
 func (m *Master) OnMasterRecovered(ctx context.Context) error {
-	log.L().Info("FakeMaster: OnMasterRecovered", zap.String("master-id", m.ID()))
+	log.Info("FakeMaster: OnMasterRecovered", zap.String("master-id", m.ID()))
 	// all failover tasks will be executed in failoverOnMasterRecover in Tick
 	return nil
 }
@@ -402,7 +402,7 @@ func (m *Master) OnMasterRecovered(ctx context.Context) error {
 // OnWorkerDispatched implements MasterImpl.OnWorkerDispatched
 func (m *Master) OnWorkerDispatched(worker framework.WorkerHandle, result error) error {
 	if result != nil {
-		log.L().Error("FakeMaster: OnWorkerDispatched", zap.Error(result))
+		log.Error("FakeMaster: OnWorkerDispatched", zap.Error(result))
 		return errors.Trace(result)
 	}
 
@@ -411,7 +411,7 @@ func (m *Master) OnWorkerDispatched(worker framework.WorkerHandle, result error)
 
 // OnWorkerOnline implements MasterImpl.OnWorkerOnline
 func (m *Master) OnWorkerOnline(worker framework.WorkerHandle) error {
-	log.L().Info("FakeMaster: OnWorkerOnline",
+	log.Info("FakeMaster: OnWorkerOnline",
 		zap.String("worker-id", worker.ID()))
 
 	m.workerListMu.Lock()
@@ -419,7 +419,7 @@ func (m *Master) OnWorkerOnline(worker framework.WorkerHandle) error {
 
 	idx, ok := m.pendingWorkerSet[worker.ID()]
 	if !ok {
-		log.L().Panic("OnWorkerOnline is called with an unknown workerID",
+		log.Panic("OnWorkerOnline is called with an unknown workerID",
 			zap.String("worker-id", worker.ID()))
 	}
 	delete(m.pendingWorkerSet, worker.ID())
@@ -430,7 +430,7 @@ func (m *Master) OnWorkerOnline(worker framework.WorkerHandle) error {
 
 // OnWorkerOffline implements MasterImpl.OnWorkerOffline
 func (m *Master) OnWorkerOffline(worker framework.WorkerHandle, reason error) error {
-	log.L().Info("FakeMaster: OnWorkerOffline",
+	log.Info("FakeMaster: OnWorkerOffline",
 		zap.String("worker-id", worker.ID()), zap.Error(reason))
 
 	m.workerListMu.Lock()
@@ -446,14 +446,14 @@ func (m *Master) OnWorkerOffline(worker framework.WorkerHandle, reason error) er
 	m.bStatus.Unlock()
 
 	if cerrors.ErrWorkerFinish.Equal(reason) {
-		log.L().Info("FakeMaster: OnWorkerOffline: worker finished", zap.String("worker-id", worker.ID()))
+		log.Info("FakeMaster: OnWorkerOffline: worker finished", zap.String("worker-id", worker.ID()))
 		m.finishedSet[worker.ID()] = businessID
 		return nil
 	}
 
 	workerCkpt := zeroWorkerCheckpoint()
 	if ws, err := parseExtBytes(worker.Status().ExtBytes); err != nil {
-		log.L().Warn("failed to parse worker ext bytes", zap.Error(err))
+		log.Warn("failed to parse worker ext bytes", zap.Error(err))
 		workerCkpt.Revision = m.config.EtcdStartRevision
 	} else {
 		workerCkpt.Tick = ws.Tick
@@ -471,7 +471,7 @@ func (m *Master) OnWorkerOffline(worker framework.WorkerHandle, reason error) er
 
 // OnWorkerMessage implements MasterImpl.OnWorkerMessage
 func (m *Master) OnWorkerMessage(worker framework.WorkerHandle, topic p2p.Topic, message interface{}) error {
-	log.L().Info("FakeMaster: OnWorkerMessage",
+	log.Info("FakeMaster: OnWorkerMessage",
 		zap.String("topic", topic),
 		zap.Any("message", message))
 	return nil
@@ -479,7 +479,7 @@ func (m *Master) OnWorkerMessage(worker framework.WorkerHandle, topic p2p.Topic,
 
 // OnWorkerStatusUpdated implements MasterImpl.OnWorkerStatusUpdated
 func (m *Master) OnWorkerStatusUpdated(worker framework.WorkerHandle, newStatus *frameModel.WorkerStatus) error {
-	log.L().Info("FakeMaster: worker status updated",
+	log.Info("FakeMaster: worker status updated",
 		zap.String("worker-id", worker.ID()),
 		zap.Any("worker-status", newStatus))
 	return nil
@@ -487,13 +487,13 @@ func (m *Master) OnWorkerStatusUpdated(worker framework.WorkerHandle, newStatus 
 
 // CloseImpl implements MasterImpl.CloseImpl
 func (m *Master) CloseImpl(ctx context.Context) error {
-	log.L().Info("FakeMaster: Close", zap.Stack("stack"))
+	log.Info("FakeMaster: Close", zap.Stack("stack"))
 	return nil
 }
 
 // OnMasterMessage implements MasterImpl.OnMasterMessage
 func (m *Master) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
-	log.L().Info("FakeMaster: OnMasterMessage", zap.Any("message", message))
+	log.Info("FakeMaster: OnMasterMessage", zap.Any("message", message))
 	return nil
 }
 
@@ -502,7 +502,7 @@ func (m *Master) marshalBusinessStatus() []byte {
 	defer m.bStatus.RUnlock()
 	bytes, err := json.Marshal(m.bStatus.status)
 	if err != nil {
-		log.L().Panic("unexpected marshal error", zap.Error(err))
+		log.Panic("unexpected marshal error", zap.Error(err))
 	}
 	return bytes
 }
@@ -579,7 +579,7 @@ func (m *Master) genWorkerConfig(index int, checkpoint workerCheckpoint) *Worker
 
 // NewFakeMaster creates a new fake master instance
 func NewFakeMaster(ctx *dcontext.Context, workerID frameModel.WorkerID, masterID frameModel.MasterID, masterConfig *Config) *Master {
-	log.L().Info("new fake master", zap.Any("config", masterConfig))
+	log.Info("new fake master", zap.Any("config", masterConfig))
 	ret := &Master{
 		workerID:            workerID,
 		pendingWorkerSet:    make(map[frameModel.WorkerID]int),

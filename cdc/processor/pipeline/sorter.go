@@ -33,15 +33,18 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
+	"github.com/tikv/client-go/v2/oracle"
+	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
 type sorterNode struct {
-	sorter sorter.EventSorter
+	pdClient pd.Client
+	sorter   sorter.EventSorter
 
 	tableID   model.TableID
-	tableName string // quoted schema and table, used in metircs only
+	tableName string // quoted schema and table, used in metrics only
 
 	// for per-table flow control
 	flowController tableFlowController
@@ -74,6 +77,7 @@ func newSorterNode(
 	tableName string, tableID model.TableID, startTs model.Ts,
 	flowController tableFlowController, mounter entry.Mounter,
 	state *TableState, changefeed model.ChangeFeedID, redoLogEnabled bool,
+	pdClient pd.Client,
 ) *sorterNode {
 	return &sorterNode{
 		tableName:      tableName,
@@ -86,6 +90,7 @@ func newSorterNode(
 		preparedCh:     make(chan struct{}, 1),
 		startTsCh:      make(chan model.Ts, 1),
 		redoLogEnabled: redoLogEnabled,
+		pdClient:       pdClient,
 
 		changefeed: changefeed,
 	}
@@ -135,15 +140,11 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 func (n *sorterNode) start(
 	ctx pipeline.NodeContext, eg *errgroup.Group,
 	tableActorID actor.ID, tableActorRouter *actor.Router[pmessage.Message],
+	eventSorter sorter.EventSorter,
 ) error {
 	n.eg = eg
 	stdCtx, cancel := context.WithCancel(ctx)
 	n.cancel = cancel
-
-	eventSorter, err := createSorter(ctx, n.tableName, n.tableID)
-	if err != nil {
-		return errors.Trace(err)
-	}
 
 	failpoint.Inject("ProcessorAddTableError", func() {
 		failpoint.Return(errors.New("processor add table injected error"))
@@ -171,18 +172,36 @@ func (n *sorterNode) start(
 			}
 		}
 
-		// once receive startTs, which means sink should start replicating data to downstream.
+		select {
+		case <-stdCtx.Done():
+			return nil
+		case <-n.preparedCh:
+			log.Info("table is prepared",
+				zap.Int64("tableID", n.tableID),
+				zap.String("tableName", n.tableName),
+				zap.String("namespace", n.changefeed.Namespace),
+				zap.String("changefeed", n.changefeed.ID))
+		}
+
+		// The latest ts from PD when the table becomes replicating.
+		var replicateTs model.Ts
+		// Sink should start replicating data to downstream from the start ts.
 		var startTs model.Ts
 		select {
 		case <-stdCtx.Done():
 			return nil
 		case startTs = <-n.startTsCh:
-		}
-
-		select {
-		case <-stdCtx.Done():
-			return nil
-		case <-n.preparedCh:
+			phy, logic, err := n.pdClient.GetTS(ctx)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			replicateTs = oracle.ComposeTS(phy, logic)
+			log.Info("table is replicating",
+				zap.Int64("tableID", n.tableID),
+				zap.String("tableName", n.tableName),
+				zap.Uint64("replicateTs", replicateTs),
+				zap.String("namespace", n.changefeed.Namespace),
+				zap.String("changefeed", n.changefeed.ID))
 		}
 
 		n.state.Store(TableStateReplicating)
@@ -216,6 +235,8 @@ func (n *sorterNode) start(
 				if msg.RawKV.OpType != model.OpTypeResolved {
 					ignored, err := n.mounter.DecodeEvent(ctx, msg)
 					if err != nil {
+						log.Error("Got an error from mounter, sorter will stop.", zap.Error(err))
+						ctx.Throw(err)
 						return errors.Trace(err)
 					}
 					if ignored {
@@ -227,6 +248,9 @@ func (n *sorterNode) start(
 						resolvedTsInterpolateFunc(commitTs)
 					}
 
+					// For all rows, we add table replicate ts, so mysql sink can
+					// determine when to turn off safe-mode.
+					msg.Row.ReplicatingTs = replicateTs
 					// We calculate memory consumption by RowChangedEvent size.
 					// It's much larger than RawKVEntry.
 					size := uint64(msg.Row.ApproximateBytes())

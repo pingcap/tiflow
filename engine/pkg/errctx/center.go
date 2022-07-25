@@ -55,7 +55,7 @@ func (c *ErrCenter) OnError(err error) {
 	if c.firstErr != nil {
 		// OnError is no-op after the first call with
 		// a non-nil error.
-		log.L().Warn("More than one error is received",
+		log.Warn("More than one error is received",
 			zap.Error(err))
 		return
 	}

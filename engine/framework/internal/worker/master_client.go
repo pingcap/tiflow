@@ -181,14 +181,14 @@ func (m *MasterClient) Epoch() frameModel.Epoch {
 // HandleHeartbeat handles heartbeat messages received from the master.
 func (m *MasterClient) HandleHeartbeat(sender p2p.NodeID, msg *frameModel.HeartbeatPongMessage) {
 	if msg.ToWorkerID != m.workerID {
-		log.L().Warn("Received heartbeat for wrong workerID",
+		log.Warn("Received heartbeat for wrong workerID",
 			zap.Any("msg", msg), zap.String("actual-worker-id", m.workerID))
 		return
 	}
 
 	_, epoch := m.getMasterInfo()
 	if msg.Epoch < epoch {
-		log.L().Info("epoch does not match, ignore stale heartbeat",
+		log.Info("epoch does not match, ignore stale heartbeat",
 			zap.Any("msg", msg),
 			zap.Int64("master-epoch", epoch))
 		return
@@ -204,7 +204,7 @@ func (m *MasterClient) HandleHeartbeat(sender p2p.NodeID, msg *frameModel.Heartb
 		oldSt := m.closeState.Swap(masterClientClosed)
 		if oldSt == masterClientNormal {
 			// Jumping from Normal to Closed in unexpected
-			log.L().Panic("unexpected master client close state",
+			log.Panic("unexpected master client close state",
 				zap.String("master-id", m.masterID),
 				zap.String("worker-id", m.workerID))
 		}
@@ -218,7 +218,7 @@ func (m *MasterClient) HandleHeartbeat(sender p2p.NodeID, msg *frameModel.Heartb
 	// leads to false positive.
 	lastAckTime := m.lastMasterAckedPingTime.Load()
 	if lastAckTime > time.Duration(msg.SendTime) {
-		log.L().Info("received stale pong heartbeat",
+		log.Info("received stale pong heartbeat",
 			zap.Any("msg", msg), zap.Int64("lastAckTime", int64(lastAckTime)))
 	} else {
 		m.lastMasterAckedPingTime.Store(time.Duration(msg.SendTime))
@@ -263,14 +263,14 @@ func (m *MasterClient) SendHeartBeat(ctx context.Context) error {
 		IsFinished:   isFinished,
 	}
 
-	log.L().Debug("sending heartbeat", zap.String("worker", m.workerID),
+	log.Debug("sending heartbeat", zap.String("worker", m.workerID),
 		zap.String("master-id", m.masterID),
 		zap.Int64("epoch", epoch), zap.Int64("sendTime", int64(sendTime)))
 	ok, err := m.messageSender.SendToNode(ctx, nodeID, frameModel.HeartbeatPingTopic(m.masterID), heartbeatMsg)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.L().Info("sending heartbeat success", zap.String("worker", m.workerID),
+	log.Info("sending heartbeat success", zap.String("worker", m.workerID),
 		zap.String("master-id", m.masterID),
 		zap.Int64("epoch", epoch), zap.Int64("sendTime", int64(sendTime)))
 	if !ok {
@@ -296,7 +296,7 @@ func (m *MasterClient) WaitClosed(ctx context.Context) error {
 	switch m.closeState.Load() {
 	case masterClientNormal:
 		if !m.closeState.CAS(masterClientNormal, masterClientClosing) {
-			log.L().Panic("Unexpected close state in master client, race?",
+			log.Panic("Unexpected close state in master client, race?",
 				zap.String("master-id", m.masterID),
 				zap.String("worker-id", m.workerID))
 		}
@@ -318,7 +318,7 @@ func (m *MasterClient) WaitClosed(ctx context.Context) error {
 	}
 
 	if m.closeState.Load() != masterClientClosed {
-		log.L().Panic("Unexpected close state in master client, bug?",
+		log.Panic("Unexpected close state in master client, bug?",
 			zap.String("master-id", m.masterID),
 			zap.String("worker-id", m.workerID))
 	}

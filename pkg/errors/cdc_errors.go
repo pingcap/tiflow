@@ -40,6 +40,10 @@ var (
 		"changefeed already exists, %s",
 		errors.RFCCodeText("CDC:ErrChangeFeedAlreadyExists"),
 	)
+	ErrChangeFeedDeletionUnfinished = errors.Normalize(
+		"changefeed exists after deletion, %s",
+		errors.RFCCodeText("CDC:ErrChangeFeedDeletionUnfinished"),
+	)
 	ErrTaskStatusNotExists = errors.Normalize(
 		"task status not exists, %s",
 		errors.RFCCodeText("CDC:ErrTaskStatusNotExists"),
@@ -63,6 +67,10 @@ var (
 	ErrMetaListDatabases = errors.Normalize(
 		"meta store list databases",
 		errors.RFCCodeText("CDC:ErrMetaListDatabases"),
+	)
+	ErrDDLSchemaNotFound = errors.Normalize(
+		"cannot find mysql.tidb_ddl_job schema",
+		errors.RFCCodeText("CDC:ErrDDLSchemaNotFound"),
 	)
 	ErrGRPCDialFailed = errors.Normalize(
 		"grpc dial failed",
@@ -176,7 +184,7 @@ var (
 		errors.RFCCodeText("CDC:ErrDecodeFailed"),
 	)
 	ErrFilterRuleInvalid = errors.Normalize(
-		"filter rule is invalid",
+		"filter rule is invalid %v",
 		errors.RFCCodeText("CDC:ErrFilterRuleInvalid"),
 	)
 
@@ -193,6 +201,10 @@ var (
 	ErrClusterIDMismatch = errors.Normalize(
 		"cluster ID mismatch, tikv cluster ID is %d and request cluster ID is %d",
 		errors.RFCCodeText("CDC:ErrClusterIDMismatch"),
+	)
+	ErrMultipleCDCClustersExist = errors.Normalize(
+		"multiple TiCDC clusters exist while using --pd",
+		errors.RFCCodeText("CDC:ErrMultipleCDCClustersExist"),
 	)
 	ErrCreateMarkTableFailed = errors.Normalize(
 		"create mark table failed",
@@ -371,13 +383,13 @@ var (
 		"maxwell invalid data",
 		errors.RFCCodeText("CDC:ErrMaxwellInvalidData"),
 	)
-	ErrJSONCodecInvalidData = errors.Normalize(
-		"json codec invalid data",
-		errors.RFCCodeText("CDC:ErrJSONCodecInvalidData"),
+	ErrOpenProtocolCodecInvalidData = errors.Normalize(
+		"open-protocol codec invalid data",
+		errors.RFCCodeText("CDC:ErrOpenProtocolCodecInvalidData"),
 	)
-	ErrJSONCodecRowTooLarge = errors.Normalize(
-		"json codec single row too large",
-		errors.RFCCodeText("CDC:ErrJSONCodecRowTooLarge"),
+	ErrOpenProtocolCodecRowTooLarge = errors.Normalize(
+		"open-protocol codec single row too large",
+		errors.RFCCodeText("CDC:ErrOpenProtocolCodecRowTooLarge"),
 	)
 	ErrCanalDecodeFailed = errors.Normalize(
 		"canal decode failed",
@@ -445,6 +457,9 @@ var (
 		"operate on a closed notifier",
 		errors.RFCCodeText("CDC:ErrOperateOnClosedNotifier"),
 	)
+	ErrDiskFull = errors.Normalize(
+		"failed to preallocate file because disk is full",
+		errors.RFCCodeText("CDC:ErrDiskFull"))
 
 	// encode/decode, data format and data integrity errors
 	ErrInvalidRecordKey = errors.Normalize(
@@ -494,6 +509,14 @@ var (
 			"the length should no more than %d",
 			`eg, "simple-changefeed-task"`),
 		errors.RFCCodeText("CDC:ErrInvalidChangefeedID"),
+	)
+	ErrInvalidNamespace = errors.Normalize(
+		fmt.Sprintf("%s, %s, %s, %s,",
+			"bad namespace",
+			`please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$"`,
+			"the length should no more than %d",
+			`eg, "simple-namespace-test"`),
+		errors.RFCCodeText("CDC:ErrInvalidNamespace"),
 	)
 	ErrInvalidEtcdKey = errors.Normalize(
 		"invalid key: %s",
@@ -629,6 +652,10 @@ var (
 		"invalid api parameter",
 		errors.RFCCodeText("CDC:ErrAPIInvalidParam"),
 	)
+	ErrAPIGetPDClientFailed = errors.Normalize(
+		"failed to get PDClient to connect PD, please recheck",
+		errors.RFCCodeText("CDC:ErrAPIGetPDClientFailed"),
+	)
 	ErrRequestForwardErr = errors.Normalize(
 		"request forward error, an request can only forward to owner one time",
 		errors.RFCCodeText("ErrRequestForwardErr"),
@@ -648,6 +675,10 @@ var (
 	ErrChangefeedUpdateRefused = errors.Normalize(
 		"changefeed update error: %s",
 		errors.RFCCodeText("CDC:ErrChangefeedUpdateRefused"),
+	)
+	ErrChangefeedUpdateFailedTransaction = errors.Normalize(
+		"changefeed update failed due to unexpected etcd transaction failure: %s",
+		errors.RFCCodeText("CDC:ErrChangefeedUpdateFailed"),
 	)
 	ErrChangefeedAbnormalState = errors.Normalize(
 		"changefeed in abnormal state: %s, replication status: %+v",
@@ -675,7 +706,8 @@ var (
 		errors.RFCCodeText("CDC:ErrUpdateServiceSafepointFailed"),
 	)
 	ErrStartTsBeforeGC = errors.Normalize(
-		"fail to create changefeed because start-ts %d is earlier than GC safepoint at %d",
+		"fail to create or maintain changefeed because start-ts %d "+
+			"is earlier than GC safepoint at %d",
 		errors.RFCCodeText("CDC:ErrStartTsBeforeGC"),
 	)
 	ErrTargetTsBeforeStartTs = errors.Normalize(
@@ -747,6 +779,10 @@ var (
 	ErrEtcdTxnOpsExceed = errors.Normalize(
 		"patch ops:%d of a single changefeed exceed etcd txn max ops:%d",
 		errors.RFCCodeText("CDC:ErrEtcdTxnOpsExceed"),
+	)
+	ErrEtcdMigrateFailed = errors.Normalize(
+		"etcd meta data migrate failed:%s",
+		errors.RFCCodeText("CDC:ErrEtcdMigrateFailed"),
 	)
 
 	// pipeline errors
@@ -999,6 +1035,11 @@ var (
 		errors.RFCCodeText("CDC:ErrUpstreamNotFound"),
 	)
 
+	ErrUpstreamManagerNotReady = errors.Normalize(
+		"upstream manager not ready",
+		errors.RFCCodeText("CDC:ErrUpstreamManagerNotReady"),
+	)
+
 	// ReplicationSet error
 	ErrReplicationSetInconsistent = errors.Normalize(
 		"replication set inconsistent: %s",
@@ -1007,5 +1048,52 @@ var (
 	ErrReplicationSetMultiplePrimaryError = errors.Normalize(
 		"replication set multiple primary: %s",
 		errors.RFCCodeText("CDC:ErrReplicationSetMultiplePrimaryError"),
+	)
+
+	ErrUpstreamMissMatch = errors.Normalize(
+		"upstream missmatch,old: %d, new %d",
+		errors.RFCCodeText("CDC:ErrUpstreamMissMatch"),
+	)
+
+	ErrServerIsNotReady = errors.Normalize(
+		"cdc server is not ready",
+		errors.RFCCodeText("CDC:ErrServerIsNotReady"),
+	)
+
+	// cli error
+	ErrCliInvalidCheckpointTs = errors.Normalize(
+		"invalid overwrite-checkpoint-ts %s, "+
+			"overwrite-checkpoint-ts only accept 'now' or number",
+		errors.RFCCodeText("CDC:ErrCliInvalidCheckpointTs"),
+	)
+	ErrCliCheckpointTsIsInFuture = errors.Normalize(
+		"the overwrite-checkpoint-ts %d must be smaller than current TSO",
+		errors.RFCCodeText("CDC:ErrCliCheckpointTsIsInFuture"),
+	)
+
+	// Filter error
+	ErrFailedToFilterDML = errors.Normalize(
+		"failed to filter dml event: %v, please report a bug",
+		errors.RFCCodeText("CDC:ErrFailedToFilterDML"),
+	)
+	ErrFailedToFilterDDL = errors.Normalize(
+		"failed to filter ddl event: %v, please report a bug",
+		errors.RFCCodeText("CDC:ErrFailedToFilterDDL"),
+	)
+	ErrExpressionParseFailed = errors.Normalize(
+		"invalid filter expressions. There is a syntax error in: '%s'",
+		errors.RFCCodeText("CDC:ErrInvalidFilterExpression"),
+	)
+	ErrExpressionColumnNotFound = errors.Normalize(
+		"invalid filter expression(s). Cannot find column '%s' from table '%s' in: %s",
+		errors.RFCCodeText("CDC:ErrExpressionColumnNotFound"),
+	)
+	ErrInvalidIgnoreEventType = errors.Normalize(
+		"invalid ignore event type: '%s'",
+		errors.RFCCodeText("CDC:ErrInvalidIgnoreEventType"),
+	)
+	ErrConvertDDLToEventTypeFailed = errors.Normalize(
+		"failed to convert ddl '%s' to filter event type",
+		errors.RFCCodeText("CDC:ErrConvertDDLToEventTypeFailed"),
 	)
 )

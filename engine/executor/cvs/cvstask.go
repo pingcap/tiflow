@@ -129,14 +129,14 @@ func newCvsTask(ctx *dcontext.Context, _workerID frameModel.WorkerID, masterID f
 
 // InitImpl implements WorkerImpl.InitImpl
 func (task *cvsTask) InitImpl(ctx context.Context) error {
-	log.L().Info("init the task  ", zap.Any("task id :", task.ID()))
+	log.Info("init the task  ", zap.Any("task id :", task.ID()))
 	task.setStatusCode(frameModel.WorkerStatusNormal)
 	// Don't use the ctx from the caller. Caller may cancel the ctx after InitImpl returns.
 	ctx, task.cancelFn = context.WithCancel(context.Background())
 	go func() {
 		err := task.Receive(ctx)
 		if err != nil {
-			log.L().Error("error happened when reading data from the upstream ", zap.String("id", task.ID()), zap.Any("message", err.Error()))
+			log.Error("error happened when reading data from the upstream ", zap.String("id", task.ID()), zap.Any("message", err.Error()))
 			task.setRunError(err)
 			task.setStatusCode(frameModel.WorkerStatusError)
 		}
@@ -144,7 +144,7 @@ func (task *cvsTask) InitImpl(ctx context.Context) error {
 	go func() {
 		err := task.send(ctx)
 		if err != nil {
-			log.L().Error("error happened when writing data to the downstream ", zap.String("id", task.ID()), zap.Any("message", err.Error()))
+			log.Error("error happened when writing data to the downstream ", zap.String("id", task.ID()), zap.Any("message", err.Error()))
 			task.setRunError(err)
 			task.setStatusCode(frameModel.WorkerStatusError)
 		} else {
@@ -157,11 +157,11 @@ func (task *cvsTask) InitImpl(ctx context.Context) error {
 
 // Tick is called on a fixed interval.
 func (task *cvsTask) Tick(ctx context.Context) error {
-	// log.L().Info("cvs task tick", zap.Any(" task id ", string(task.ID())+" -- "+strconv.FormatInt(task.counter, 10)))
+	// log.Info("cvs task tick", zap.Any(" task id ", string(task.ID())+" -- "+strconv.FormatInt(task.counter, 10)))
 	if task.statusRateLimiter.Allow() {
 		err := task.BaseWorker.UpdateStatus(ctx, task.Status())
 		if errors.ErrWorkerUpdateStatusTryAgain.Equal(err) {
-			log.L().Warn("update status try again later", zap.String("id", task.ID()), zap.String("error", err.Error()))
+			log.Warn("update status try again later", zap.String("id", task.ID()), zap.String("error", err.Error()))
 			return nil
 		}
 		return err
@@ -183,7 +183,7 @@ func (task *cvsTask) Status() frameModel.WorkerStatus {
 	}
 	statsBytes, err := json.Marshal(stats)
 	if err != nil {
-		log.L().Panic("get stats error", zap.String("id", task.ID()), zap.Error(err))
+		log.Panic("get stats error", zap.String("id", task.ID()), zap.Error(err))
 	}
 	return frameModel.WorkerStatus{
 		Code: task.getStatusCode(), ErrorMessage: "",
@@ -203,10 +203,10 @@ func (task *cvsTask) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) 
 		case frameModel.WorkerStatusStopped:
 			task.setStatusCode(frameModel.WorkerStatusStopped)
 		default:
-			log.L().Info("FakeWorker: ignore status change state", zap.Int32("state", int32(msg.ExpectState)))
+			log.Info("FakeWorker: ignore status change state", zap.Int32("state", int32(msg.ExpectState)))
 		}
 	default:
-		log.L().Info("unsupported message", zap.Any("message", message))
+		log.Info("unsupported message", zap.Any("message", message))
 	}
 
 	return nil
@@ -223,26 +223,26 @@ func (task *cvsTask) CloseImpl(ctx context.Context) error {
 func (task *cvsTask) Receive(ctx context.Context) error {
 	conn, err := pool.getConn(task.SrcHost)
 	if err != nil {
-		log.L().Error("cann't connect with the source address ", zap.String("id", task.ID()), zap.Any("message", task.SrcHost))
+		log.Error("cann't connect with the source address ", zap.String("id", task.ID()), zap.Any("message", task.SrcHost))
 		return err
 	}
 	client := pb.NewDataRWServiceClient(conn)
 	reader, err := client.ReadLines(ctx, &pb.ReadLinesRequest{FileIdx: int32(task.Idx), LineNo: []byte(task.StartLoc)})
 	if err != nil {
-		log.L().Error("read data from file failed ", zap.String("id", task.ID()), zap.Error(err))
+		log.Error("read data from file failed ", zap.String("id", task.ID()), zap.Error(err))
 		return err
 	}
 	for {
 		reply, err := reader.Recv()
 		if err != nil {
-			log.L().Error("read data failed", zap.String("id", task.ID()), zap.Error(err))
+			log.Error("read data failed", zap.String("id", task.ID()), zap.Error(err))
 			if !task.isEOF {
 				task.cancelFn()
 			}
 			return err
 		}
 		if reply.IsEof {
-			log.L().Info("Reach the end of the file ", zap.String("id", task.ID()), zap.Any("fileID", task.Idx))
+			log.Info("Reach the end of the file ", zap.String("id", task.ID()), zap.Any("fileID", task.Idx))
 			close(task.buffer)
 			break
 		}
@@ -259,13 +259,13 @@ func (task *cvsTask) Receive(ctx context.Context) error {
 func (task *cvsTask) send(ctx context.Context) error {
 	conn, err := pool.getConn(task.DstHost)
 	if err != nil {
-		log.L().Error("can't connect with the destination address ", zap.Any("id", task.ID()), zap.Error(err))
+		log.Error("can't connect with the destination address ", zap.Any("id", task.ID()), zap.Error(err))
 		return err
 	}
 	client := pb.NewDataRWServiceClient(conn)
 	writer, err := client.WriteLines(ctx)
 	if err != nil {
-		log.L().Error("call write data rpc failed", zap.String("id", task.ID()), zap.Error(err))
+		log.Error("call write data rpc failed", zap.String("id", task.ID()), zap.Error(err))
 		task.cancelFn()
 		return err
 	}
@@ -273,19 +273,19 @@ func (task *cvsTask) send(ctx context.Context) error {
 		select {
 		case kv, more := <-task.buffer:
 			if !more {
-				log.L().Info("Reach the end of the file ", zap.String("id", task.ID()), zap.Any("cnt", task.counter.Load()), zap.String("last write", task.curLoc))
+				log.Info("Reach the end of the file ", zap.String("id", task.ID()), zap.Any("cnt", task.counter.Load()), zap.String("last write", task.curLoc))
 				resp, err := writer.CloseAndRecv()
 				if err != nil {
 					return err
 				}
 				if len(resp.ErrMsg) > 0 {
-					log.L().Warn("close writing meet error", zap.String("id", task.ID()))
+					log.Warn("close writing meet error", zap.String("id", task.ID()))
 				}
 				return nil
 			}
 			err := writer.Send(&pb.WriteLinesRequest{FileIdx: int32(task.Idx), Key: []byte(kv.firstStr), Value: []byte(kv.secondStr), Dir: task.DstDir})
 			if err != nil {
-				log.L().Error("call write data rpc failed ", zap.String("id", task.ID()), zap.Error(err))
+				log.Error("call write data rpc failed ", zap.String("id", task.ID()), zap.Error(err))
 				task.cancelFn()
 				return err
 			}

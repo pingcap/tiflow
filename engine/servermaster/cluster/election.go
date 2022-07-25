@@ -116,7 +116,7 @@ func (e *EtcdElection) Campaign(ctx context.Context, selfID NodeID, timeout time
 			if errors.Cause(err) != mvcc.ErrCompacted {
 				return nil, nil, err
 			}
-			log.L().Warn("campaign for leader failed", zap.Error(err))
+			log.Warn("campaign for leader failed", zap.Error(err))
 			continue
 		}
 		return retCtx, resign, nil
@@ -137,7 +137,7 @@ func (e *EtcdElection) doCampaign(ctx context.Context, selfID NodeID, timeout ti
 		defer retCtx.OnResigned()
 		err := e.election.Resign(resignCtx)
 		if err != nil {
-			log.L().Warn("resign leader failed", zap.Error(err))
+			log.Warn("resign leader failed", zap.Error(err))
 		}
 	}
 	return retCtx, resignFn, nil

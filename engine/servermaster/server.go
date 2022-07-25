@@ -50,9 +50,8 @@ import (
 	externRescManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcetypes"
-	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
-	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	"github.com/pingcap/tiflow/engine/pkg/meta"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
@@ -65,6 +64,19 @@ import (
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
 )
+
+// use a slice instead of map because in small data size, slice search is faster
+// than map search.
+var masterRPCLimiterAllowList = []string{
+	"SubmitJob",
+	"CancelJob",
+	"ScheduleTask",
+}
+
+var resourceRPCLimiterAllowList = []string{
+	"CreateResource",
+	"RemoveResource",
+}
 
 // Server handles PRC requests for df master.
 type Server struct {
@@ -115,9 +127,8 @@ type Server struct {
 	testCtx *test.Context
 
 	// framework metastore client
-	frameMetaClient pkgOrm.Client
-	// user metastore kvclient
-	userMetaKVClient extkv.KVClientEx
+	frameMetaClient    pkgOrm.Client
+	businessClientConn metaModel.ClientConn
 }
 
 // PersistResource implements pb.MasterServer.PersistResource
@@ -157,6 +168,8 @@ func genServerMasterUUID(etcdName string) string {
 
 // NewServer creates a new master-server.
 func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
+	log.Info("creating server master", zap.Stringer("config", cfg))
+
 	executorManager := NewExecutorManagerImpl(cfg.KeepAliveTTL, cfg.KeepAliveInterval, ctx)
 
 	urls, err := parseURLs(cfg.MasterAddr)
@@ -198,6 +211,7 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		server.masterCli,
 		&server.leaderInitialized,
 		server.rpcLogRL,
+		masterRPCLimiterAllowList,
 	)
 	server.masterRPCHook = masterRPCHook
 	return server, nil
@@ -268,16 +282,6 @@ func (s *Server) PauseJob(ctx context.Context, req *pb.PauseJobRequest) (*pb.Pau
 	return s.jobManager.PauseJob(ctx, req), nil
 }
 
-// DebugJob implements pb.MasterServer.DebugJob
-func (s *Server) DebugJob(ctx context.Context, req *pb.DebugJobRequest) (*pb.DebugJobResponse, error) {
-	resp2 := &pb.DebugJobResponse{}
-	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
-	if shouldRet {
-		return resp2, err
-	}
-	return s.jobManager.DebugJob(ctx, req), nil
-}
-
 // RegisterExecutor implements grpc interface, and passes request onto executor manager.
 func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest) (*pb.RegisterExecutorResponse, error) {
 	resp2 := &pb.RegisterExecutorResponse{}
@@ -289,7 +293,7 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 	// TODO: check leader, if not leader, return notLeader error.
 	execInfo, err := s.executorManager.AllocateNewExec(req)
 	if err != nil {
-		log.L().Error("add executor failed", zap.Error(err))
+		log.Error("add executor failed", zap.Error(err))
 		return &pb.RegisterExecutorResponse{
 			Err: cerrors.ToPBError(err),
 		}, nil
@@ -321,7 +325,7 @@ func (s *Server) ScheduleTask(ctx context.Context, req *pb.ScheduleTaskRequest) 
 
 	addr, ok := s.executorManager.GetAddr(schedulerResp.ExecutorID)
 	if !ok {
-		log.L().Warn("Executor is gone, RPC call needs retry",
+		log.Warn("Executor is gone, RPC call needs retry",
 			zap.Any("request", req),
 			zap.String("executor-id", string(schedulerResp.ExecutorID)))
 		errOut := cerrors.ErrUnknownExecutorID.GenWithStackByArgs(string(schedulerResp.ExecutorID))
@@ -382,11 +386,9 @@ func (s *Server) QueryMetaStore(
 			Address: s.cfg.AdvertiseAddr,
 		}, nil
 	case pb.StoreType_SystemMetaStore:
-		return getStore(metaclient.FrameMetaID), nil
+		return getStore(FrameMetaID), nil
 	case pb.StoreType_AppMetaStore:
-		return &pb.QueryMetaStoreResponse{
-			Address: s.cfg.UserMetaConf.Endpoints[0],
-		}, nil
+		return getStore(DefaultBusinessMetaID), nil
 	default:
 		return &pb.QueryMetaStoreResponse{
 			Err: &pb.Error{
@@ -402,9 +404,9 @@ func (s *Server) ReportExecutorWorkload(
 	ctx context.Context, req *pb.ExecWorkloadRequest,
 ) (*pb.ExecWorkloadResponse, error) {
 	// TODO: pass executor workload to capacity manager
-	log.L().Debug("receive workload report", zap.String("executor", req.ExecutorId))
+	log.Debug("receive workload report", zap.String("executor", req.ExecutorId))
 	for _, res := range req.GetWorkloads() {
-		log.L().Debug("workload", zap.Int32("type", res.GetTp()), zap.Int32("usage", res.GetUsage()))
+		log.Debug("workload", zap.Int32("type", res.GetTp()), zap.Int32("usage", res.GetUsage()))
 	}
 	return &pb.ExecWorkloadResponse{}, nil
 }
@@ -446,8 +448,8 @@ func (s *Server) Stop() {
 	if s.frameMetaClient != nil {
 		s.frameMetaClient.Close()
 	}
-	if s.userMetaKVClient != nil {
-		s.userMetaKVClient.Close()
+	if s.businessClientConn != nil {
+		s.businessClientConn.Close()
 	}
 }
 
@@ -507,23 +509,24 @@ func (s *Server) registerMetaStore() error {
 	}
 	var err error
 	// TODO: replace default db config
-	if s.frameMetaClient, err = pkgOrm.NewClient(*cfg.FrameMetaConf, pkgOrm.NewDefaultDBConfig()); err != nil {
-		log.L().Error("connect to framework metastore fail", zap.Any("config", cfg.FrameMetaConf), zap.Error(err))
+	if s.frameMetaClient, err = pkgOrm.NewClient(*cfg.FrameMetaConf, *(cfg.FrameMetaConf.DBConf)); err != nil {
+		log.Error("connect to framework metastore fail", zap.Any("config", cfg.FrameMetaConf), zap.Error(err))
 		return err
 	}
 
-	log.L().Info("register framework metastore successfully", zap.Any("metastore", cfg.FrameMetaConf))
+	log.Info("register framework metastore successfully", zap.Any("metastore", cfg.FrameMetaConf))
 
-	// register metastore for user
-	err = s.metaStoreManager.Register(cfg.UserMetaConf.StoreID, cfg.UserMetaConf)
+	// register metastore for business
+	err = s.metaStoreManager.Register(cfg.BusinessMetaConf.StoreID, cfg.BusinessMetaConf)
 	if err != nil {
 		return err
 	}
-	if s.userMetaKVClient, err = kvclient.NewKVClient(cfg.UserMetaConf); err != nil {
-		log.L().Error("connect to user metastore fail", zap.Any("config", cfg.UserMetaConf), zap.Error(err))
+	s.businessClientConn, err = meta.NewClientConn(cfg.BusinessMetaConf)
+	if err != nil {
+		log.Error("connect to business metastore fail", zap.Any("config", cfg.BusinessMetaConf), zap.Error(err))
 		return err
 	}
-	log.L().Info("register user metastore successfully", zap.Any("metastore", cfg.UserMetaConf))
+	log.Info("register business metastore successfully", zap.Any("metastore", cfg.BusinessMetaConf))
 
 	return nil
 }
@@ -535,6 +538,7 @@ func (s *Server) startResourceManager() error {
 		s.resourceCli,
 		&s.leaderInitialized,
 		s.rpcLogRL,
+		resourceRPCLimiterAllowList,
 	)
 	s.resourceManagerService = externRescManager.NewService(
 		s.frameMetaClient,
@@ -552,7 +556,7 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
-	log.L().Info("config after join prepared", zap.Stringer("config", s.cfg))
+	log.Info("config after join prepared", zap.Stringer("config", s.cfg))
 
 	// generates embed etcd config before any concurrent gRPC calls.
 	// potential concurrent gRPC calls:
@@ -589,7 +593,7 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
-	log.L().Info("start etcd successfully")
+	log.Info("start etcd successfully")
 
 	// start grpc server
 	s.etcdClient, err = etcdutil.CreateClient([]string{withHost(s.cfg.MasterAddr)}, nil)
@@ -633,7 +637,7 @@ func (s *Server) initializedBackendMeta(ctx context.Context) error {
 	bctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	if err := s.frameMetaClient.Initialize(bctx); err != nil {
-		log.L().Error("framework metastore initialized all backend tables fail", zap.Error(err))
+		log.Error("framework metastore initialized all backend tables fail", zap.Error(err))
 		return err
 	}
 
@@ -657,7 +661,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	s.resourceManagerService.StartBackgroundWorker()
 	defer func() {
 		s.resourceManagerService.Stop()
-		log.L().Info("resource manager exited")
+		log.Info("resource manager exited")
 	}()
 
 	clients := client.NewClientManager()
@@ -689,8 +693,8 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		return err
 	}
 
-	if err := dp.Provide(func() extkv.KVClientEx {
-		return s.userMetaKVClient
+	if err := dp.Provide(func() metaModel.ClientConn {
+		return s.businessClientConn
 	}); err != nil {
 		return err
 	}
@@ -738,9 +742,9 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	defer func() {
 		err := s.jobManager.Close(ctx)
 		if err != nil {
-			log.L().Warn("job manager close with error", zap.Error(err))
+			log.Warn("job manager close with error", zap.Error(err))
 		}
-		log.L().Info("job manager exited")
+		log.Info("job manager exited")
 	}()
 
 	s.gcRunner = externRescManager.NewGCRunner(s.frameMetaClient, map[resModel.ResourceType]externRescManager.GCHandlerFunc{
@@ -761,7 +765,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	errg.Go(func() error {
 		defer func() {
 			s.executorManager.Stop()
-			log.L().Info("executor manager exited")
+			log.Info("executor manager exited")
 		}()
 		s.executorManager.Start(errgCtx)
 		return nil
@@ -779,7 +783,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 				return errors.Trace(errgCtx.Err())
 			case <-leaderTicker.C:
 				if err := s.jobManager.Poll(errgCtx); err != nil {
-					log.L().Warn("Polling JobManager failed", zap.Error(err))
+					log.Warn("Polling JobManager failed", zap.Error(err))
 					return err
 				}
 			case <-leaderTicker.C:
@@ -815,7 +819,7 @@ func (s *Server) memberLoop(ctx context.Context) error {
 			return nil
 		case <-ticker.C:
 			if err := s.updateServerMasterMembers(ctx); err != nil {
-				log.L().Warn("update server master members failed", zap.Error(err))
+				log.Warn("update server master members failed", zap.Error(err))
 			}
 		}
 	}

@@ -76,12 +76,11 @@ func (b *DefaultBroker) OpenStorage(
 	case resModel.ResourceTypeLocalFile:
 		return b.newHandleForLocalFile(ctx, projectInfo, jobID, workerID, resourcePath)
 	case resModel.ResourceTypeS3:
-		log.L().Panic("resource type s3 is not supported for now")
+		log.Panic("resource type s3 is not supported for now")
 	default:
+		log.Panic("unsupported resource type", zap.String("resource-path", resourcePath))
 	}
-
-	log.L().Panic("unsupported resource type", zap.String("resource-path", resourcePath))
-	panic("unreachable")
+	return nil, errors.New("unreachable")
 }
 
 // OnWorkerClosed implements Broker.OnWorkerClosed
@@ -92,7 +91,7 @@ func (b *DefaultBroker) OnWorkerClosed(ctx context.Context, workerID resModel.Wo
 		// to report this.
 		// However, since an error here is unlikely to indicate a correctness
 		// problem, we do not take further actions.
-		log.L().Warn("Failed to remove temporary files for worker",
+		log.Warn("Failed to remove temporary files for worker",
 			zap.String("worker-id", workerID),
 			zap.String("job-id", jobID),
 			zap.Error(err))
@@ -145,7 +144,7 @@ func (b *DefaultBroker) newHandleForLocalFile(
 		return nil, err
 	}
 	if tp != resModel.ResourceTypeLocalFile {
-		log.L().Panic("unexpected resource type", zap.String("type", string(tp)))
+		log.Panic("unexpected resource type", zap.String("type", string(tp)))
 	}
 
 	record, exists, err := b.checkForExistingResource(ctx, resModel.ResourceKey{JobID: jobID, ID: resourceID})
@@ -174,7 +173,7 @@ func (b *DefaultBroker) newHandleForLocalFile(
 	}
 
 	filePath := desc.AbsolutePath()
-	log.L().Info("Using local storage with path", zap.String("path", filePath))
+	log.Info("Using local storage with path", zap.String("path", filePath))
 
 	return newLocalResourceHandle(projectInfo, resourceID, jobID, b.executorID, b.fileManager, desc, b.client)
 }

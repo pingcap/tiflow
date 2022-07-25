@@ -93,7 +93,7 @@ func (o *options) run(cmd *cobra.Command) error {
 
 	err = server.Run(cmdconetxt.GetDefaultContext())
 	if err != nil && errors.Cause(err) != context.Canceled {
-		log.L().Error("run dataflow executor with error", zap.Error(err))
+		log.Error("run dataflow executor with error", zap.Error(err))
 		return errors.Trace(err)
 	}
 	log.Info("dataflow executor exits successfully")
@@ -116,6 +116,8 @@ func (o *options) complete(cmd *cobra.Command) error {
 
 	cmd.Flags().Visit(func(flag *pflag.Flag) {
 		switch flag.Name {
+		case "name":
+			cfg.Name = o.executorConfig.Name
 		case "worker-addr":
 			cfg.WorkerAddr = o.executorConfig.WorkerAddr
 		case "advertise-addr":

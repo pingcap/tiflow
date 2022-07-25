@@ -64,7 +64,7 @@ func NewGCCoordinator(
 // Run runs the DefaultGCCoordinator.
 func (c *DefaultGCCoordinator) Run(ctx context.Context) error {
 	defer func() {
-		log.L().Info("default gc coordinator exited")
+		log.Info("default gc coordinator exited")
 	}()
 	// We run a retry loop at the max frequency of once per second.
 	rl := ratelimit.New(1 /* once per second */)
@@ -77,7 +77,7 @@ func (c *DefaultGCCoordinator) Run(ctx context.Context) error {
 
 		jobReceiver, executorReceiver, err := c.initializeGC(ctx)
 		if err != nil {
-			log.L().Warn("GC error", zap.Error(err))
+			log.Warn("GC error", zap.Error(err))
 			rl.Take()
 			continue
 		}
@@ -91,7 +91,7 @@ func (c *DefaultGCCoordinator) Run(ctx context.Context) error {
 		}
 
 		// TODO collect the error for observability.
-		log.L().Warn("Error running GC coordinator. Retrying...", zap.Error(err))
+		log.Warn("Error running GC coordinator. Retrying...", zap.Error(err))
 
 		rl.Take()
 	}
@@ -160,7 +160,7 @@ func (c *DefaultGCCoordinator) gcByStatusSnapshots(
 	startTime := time.Now()
 	defer func() {
 		duration := time.Since(startTime)
-		log.L().Info("gcByStatusSnapshots finished",
+		log.Info("gcByStatusSnapshots finished",
 			zap.Duration("duration", duration))
 	}()
 
@@ -197,7 +197,7 @@ func (c *DefaultGCCoordinator) gcByStatusSnapshots(
 	}
 
 	if len(toGC) > 0 {
-		log.L().Info("Adding resources to GC queue",
+		log.Info("Adding resources to GC queue",
 			zap.Any("resource-ids", toGC))
 		if err := c.metaClient.SetGCPendingByJobs(ctx, toGC); err != nil {
 			return err
@@ -206,7 +206,7 @@ func (c *DefaultGCCoordinator) gcByStatusSnapshots(
 	}
 
 	if len(toRemove) > 0 {
-		log.L().Info("Removing stale resources for offlined executors",
+		log.Info("Removing stale resources for offlined executors",
 			zap.Any("resource-ids", toRemove))
 		// Note: soft delete has not been implemented for resources yet.
 		if _, err := c.metaClient.DeleteResourcesByExecutorIDs(ctx, toRemove); err != nil {
@@ -218,7 +218,7 @@ func (c *DefaultGCCoordinator) gcByStatusSnapshots(
 }
 
 func (c *DefaultGCCoordinator) gcByOfflineJobID(ctx context.Context, jobID string) error {
-	log.L().Info("Added resources to GC queue of jobID", zap.String("job_id", jobID))
+	log.Info("Added resources to GC queue of jobID", zap.String("job_id", jobID))
 
 	if err := c.metaClient.SetGCPendingByJobs(ctx, []engineModel.JobID{jobID}); err != nil {
 		return err
@@ -229,7 +229,7 @@ func (c *DefaultGCCoordinator) gcByOfflineJobID(ctx context.Context, jobID strin
 }
 
 func (c *DefaultGCCoordinator) gcByOfflineExecutorID(ctx context.Context, executorID model.ExecutorID) error {
-	log.L().Info("Cleaning up resources meta for offlined executor",
+	log.Info("Cleaning up resources meta for offlined executor",
 		zap.String("executor-id", string(executorID)))
 
 	// Currently, we only support local files, so the resources are bound to

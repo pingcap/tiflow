@@ -29,11 +29,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	// CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
-	CDCServiceSafePointID = "ticdc"
-)
-
 // gcSafepointUpdateInterval is the minimum interval that CDC can update gc safepoint
 var gcSafepointUpdateInterval = 1 * time.Minute
 
@@ -47,9 +42,10 @@ type Manager interface {
 }
 
 type gcManager struct {
-	pdClient pd.Client
-	pdClock  pdutil.Clock
-	gcTTL    int64
+	gcServiceID string
+	pdClient    pd.Client
+	pdClock     pdutil.Clock
+	gcTTL       int64
 
 	lastUpdatedTime   time.Time
 	lastSucceededTime time.Time
@@ -58,12 +54,13 @@ type gcManager struct {
 }
 
 // NewManager creates a new Manager.
-func NewManager(pdClient pd.Client, pdClock pdutil.Clock) Manager {
+func NewManager(gcServiceID string, pdClient pd.Client, pdClock pdutil.Clock) Manager {
 	serverConfig := config.GetGlobalServerConfig()
 	failpoint.Inject("InjectGcSafepointUpdateInterval", func(val failpoint.Value) {
 		gcSafepointUpdateInterval = time.Duration(val.(int) * int(time.Millisecond))
 	})
 	return &gcManager{
+		gcServiceID:       gcServiceID,
 		pdClient:          pdClient,
 		pdClock:           pdClock,
 		lastSucceededTime: time.Now(),
@@ -79,8 +76,8 @@ func (m *gcManager) TryUpdateGCSafePoint(
 	}
 	m.lastUpdatedTime = time.Now()
 
-	actual, err := setServiceGCSafepoint(
-		ctx, m.pdClient, CDCServiceSafePointID, m.gcTTL, checkpointTs)
+	actual, err := SetServiceGCSafepoint(
+		ctx, m.pdClient, m.gcServiceID, m.gcTTL, checkpointTs)
 	if err != nil {
 		log.Warn("updateGCSafePoint failed",
 			zap.Uint64("safePointTs", checkpointTs),

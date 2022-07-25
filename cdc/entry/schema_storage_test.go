@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/errors"
 	ticonfig "github.com/pingcap/tidb/config"
+	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/domain"
 	tidbkv "github.com/pingcap/tidb/kv"
 	timeta "github.com/pingcap/tidb/meta"
@@ -31,11 +32,12 @@ import (
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/testkit"
 	"github.com/pingcap/tidb/types"
+	"github.com/stretchr/testify/require"
+	"github.com/tikv/client-go/v2/oracle"
+
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/stretchr/testify/require"
-	"github.com/tikv/client-go/v2/oracle"
 )
 
 func TestSchema(t *testing.T) {
@@ -533,7 +535,7 @@ func TestMultiVersionStorage(t *testing.T) {
 		SchemaID:   1,
 		TableID:    3,
 		Type:       timodel.ActionCreateTable,
-		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 2, TableInfo: tblInfo, FinishedTS: 120},
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 3, TableInfo: tblInfo, FinishedTS: 120},
 		Query:      "create table " + tbName.O,
 	}
 
@@ -552,7 +554,7 @@ func TestMultiVersionStorage(t *testing.T) {
 		SchemaID:   1,
 		TableID:    2,
 		Type:       timodel.ActionDropTable,
-		BinlogInfo: &timodel.HistoryInfo{FinishedTS: 130},
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 4, FinishedTS: 130},
 	}
 
 	err = storage.HandleDDLJob(job)
@@ -564,7 +566,7 @@ func TestMultiVersionStorage(t *testing.T) {
 		State:      timodel.JobStateSynced,
 		SchemaID:   1,
 		Type:       timodel.ActionDropSchema,
-		BinlogInfo: &timodel.HistoryInfo{FinishedTS: 140, DBInfo: dbInfo},
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 5, FinishedTS: 140, DBInfo: dbInfo},
 	}
 
 	err = storage.HandleDDLJob(job)
@@ -898,7 +900,7 @@ func getAllHistoryDDLJob(storage tidbkv.Storage) ([]*timodel.Job, error) {
 	defer txn.Rollback() //nolint:errcheck
 	txnMeta := timeta.NewMeta(txn)
 
-	jobs, err := txnMeta.GetAllHistoryDDLJobs()
+	jobs, err := ddl.GetAllHistoryDDLJobs(txnMeta)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

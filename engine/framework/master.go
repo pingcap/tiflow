@@ -41,9 +41,8 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	extkv "github.com/pingcap/tiflow/engine/pkg/meta/extension"
-	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	"github.com/pingcap/tiflow/engine/pkg/meta"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
@@ -106,8 +105,8 @@ const (
 type BaseMaster interface {
 	Master
 
-	// MetaKVClient return user metastore kv client
-	MetaKVClient() metaclient.KVClient
+	// MetaKVClient return business metastore kv client
+	MetaKVClient() metaModel.KVClient
 	MetricFactory() promutil.Factory
 	Logger() *zap.Logger
 	MasterMeta() *frameModel.MasterMetaKVData
@@ -134,9 +133,7 @@ type DefaultBaseMaster struct {
 	messageHandlerManager p2p.MessageHandlerManager
 	messageSender         p2p.MessageSender
 	// framework metastore client
-	frameMetaClient pkgOrm.Client
-	// user metastore raw kvclient
-	userRawKVClient       extkv.KVClientEx
+	frameMetaClient       pkgOrm.Client
 	executorClientManager client.ClientsManager
 	serverMasterClient    client.MasterClient
 
@@ -167,9 +164,8 @@ type DefaultBaseMaster struct {
 	// masterProjectInfo is the projectInfo of itself
 	masterProjectInfo tenant.ProjectInfo
 
-	// user metastore prefix kvclient
-	// Don't close it. It's just a prefix wrapper for underlying userRawKVClient
-	userMetaKVClient metaclient.KVClient
+	// business kvclient with namespace
+	businessMetaKVClient metaModel.KVClient
 
 	// metricFactory can produce metric with underlying project info and job info
 	metricFactory promutil.Factory
@@ -199,9 +195,8 @@ type masterParams struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
 	// framework metastore client
-	FrameMetaClient pkgOrm.Client
-	// user metastore raw kvclient
-	UserRawKVClient       extkv.KVClientEx
+	FrameMetaClient       pkgOrm.Client
+	BusinessClientConn    metaModel.ClientConn
 	ExecutorClientManager client.ClientsManager
 	ServerMasterClient    client.MasterClient
 }
@@ -225,23 +220,28 @@ func NewBaseMaster(
 		metaBytes := ctx.Environ.MasterMetaBytes
 		err := errors.Trace(masterMeta.Unmarshal(metaBytes))
 		if err != nil {
-			log.L().Warn("invalid master meta", zap.ByteString("data", metaBytes), zap.Error(err))
+			log.Warn("invalid master meta", zap.ByteString("data", metaBytes), zap.Error(err))
 		}
 	}
 
 	if err := ctx.Deps().Fill(&params); err != nil {
 		// TODO more elegant error handling
-		log.L().Panic("failed to provide dependencies", zap.Error(err))
+		log.Panic("failed to provide dependencies", zap.Error(err))
 	}
 
 	logger := logutil.FromContext(*ctx)
+
+	cli, err := meta.NewKVClientWithNamespace(params.BusinessClientConn, ctx.ProjectInfo.UniqueID(), id)
+	if err != nil {
+		// TODO more elegant error handling
+		log.Panic("failed to create business kvclient", zap.Error(err))
+	}
 
 	return &DefaultBaseMaster{
 		Impl:                  impl,
 		messageHandlerManager: params.MessageHandlerManager,
 		messageSender:         params.MessageSender,
 		frameMetaClient:       params.FrameMetaClient,
-		userRawKVClient:       params.UserRawKVClient,
 		executorClientManager: params.ExecutorClientManager,
 		serverMasterClient:    params.ServerMasterClient,
 		id:                    id,
@@ -260,18 +260,18 @@ func NewBaseMaster(
 		advertiseAddr:     advertiseAddr,
 		masterProjectInfo: ctx.ProjectInfo,
 
-		createWorkerQuota: quota.NewConcurrencyQuota(maxCreateWorkerConcurrency),
-		userMetaKVClient:  kvclient.NewPrefixKVClient(params.UserRawKVClient, ctx.ProjectInfo.UniqueID()),
-		metricFactory:     promutil.NewFactory4Master(ctx.ProjectInfo, MustConvertWorkerType2JobType(tp), id),
-		logger:            frameLog.WithMasterID(logger, id),
+		createWorkerQuota:    quota.NewConcurrencyQuota(maxCreateWorkerConcurrency),
+		businessMetaKVClient: cli,
+		metricFactory:        promutil.NewFactory4Master(ctx.ProjectInfo, MustConvertWorkerType2JobType(tp), id),
+		logger:               frameLog.WithMasterID(logger, id),
 
 		deps: ctx.Deps(),
 	}
 }
 
-// MetaKVClient returns the user space metaclient
-func (m *DefaultBaseMaster) MetaKVClient() metaclient.KVClient {
-	return m.userMetaKVClient
+// MetaKVClient returns the business space metaclient
+func (m *DefaultBaseMaster) MetaKVClient() metaModel.KVClient {
+	return m.businessMetaKVClient
 }
 
 // MetricFactory implements BaseMaster.MetricFactory
@@ -374,7 +374,7 @@ func (m *DefaultBaseMaster) registerMessageHandlers(ctx context.Context) error {
 				return err
 			}
 			if !ok {
-				log.L().Warn("Sending Heartbeat Pong failed",
+				log.Warn("Sending Heartbeat Pong failed",
 					zap.Any("reply", replyMsg))
 				return nil
 			}
@@ -466,6 +466,7 @@ func (m *DefaultBaseMaster) doClose() {
 			zap.String("master-id", m.id))
 	}
 	promutil.UnregisterWorkerMetrics(m.id)
+	m.businessMetaKVClient.Close()
 }
 
 // Close implements BaseMaster.Close
