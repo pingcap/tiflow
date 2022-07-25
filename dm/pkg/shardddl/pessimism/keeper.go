@@ -16,7 +16,7 @@ package pessimism
 import (
 	"sync"
 
-	"github.com/pingcap/tiflow/dm/dm/master/metrics"
+	"github.com/pingcap/tiflow/dm/master/metrics"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 

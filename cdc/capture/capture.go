@@ -29,6 +29,7 @@ import (
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.etcd.io/etcd/server/v3/mvcc"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -316,6 +317,12 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		cancel()
 	}()
 
+	defer func() {
+		c.AsyncClose()
+		c.grpcService.Reset(nil)
+	}()
+
+	g, stdCtx := errgroup.WithContext(stdCtx)
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
 		CaptureInfo:      c.info,
 		EtcdClient:       c.EtcdClient,
@@ -324,23 +331,18 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		MessageServer:    c.MessageServer,
 		MessageRouter:    c.MessageRouter,
 	})
-	wg := new(sync.WaitGroup)
-	var ownerErr, processorErr, messageServerErr error
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		defer c.AsyncClose()
-		// when the campaignOwner returns an error, it means that the owner throws an unrecoverable serious errors
-		// (recoverable errors are intercepted in the owner tick)
+
+	g.Go(func() error {
+		// when the campaignOwner returns an error, it means that the owner throws
+		// an unrecoverable serious errors (recoverable errors are intercepted in the owner tick)
 		// so we should also stop the owner and let capture restart or exit
-		ownerErr = c.campaignOwner(ctx)
-		log.Info("the owner routine exited",
+		err := c.campaignOwner(ctx)
+		log.Info("owner routine exited",
 			zap.String("captureID", c.info.ID), zap.Error(err))
-	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		defer c.AsyncClose()
+		return err
+	})
+
+	g.Go(func() error {
 		conf := config.GetGlobalServerConfig()
 		processorFlushInterval := time.Duration(conf.ProcessorFlushInterval)
 
@@ -356,28 +358,21 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		// when the etcd worker of processor returns an error, it means that the processor throws an unrecoverable serious errors
 		// (recoverable errors are intercepted in the processor tick)
 		// so we should also stop the processor and let capture restart or exit
-		processorErr = c.runEtcdWorker(ctx, c.processorManager, globalState, processorFlushInterval, util.RoleProcessor.String())
-		log.Info("the processor routine has exited",
-			zap.String("captureID", c.info.ID),
-			zap.Error(processorErr))
-	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		defer c.AsyncClose()
-		defer c.grpcService.Reset(nil)
-		messageServerErr = c.MessageServer.Run(ctx)
-	}()
-	wg.Wait()
-	if ownerErr != nil {
-		return errors.Annotate(ownerErr, "owner exited with error")
+		err := c.runEtcdWorker(ctx, c.processorManager, globalState, processorFlushInterval, util.RoleProcessor.String())
+		log.Info("processor routine exited",
+			zap.String("captureID", c.info.ID), zap.Error(err))
+		return err
+	})
+
+	g.Go(func() error {
+		return c.MessageServer.Run(ctx)
+	})
+
+	err = g.Wait()
+	if err != nil {
+		return errors.Annotate(err, "capture exited")
 	}
-	if processorErr != nil {
-		return errors.Annotate(processorErr, "processor exited with error")
-	}
-	if messageServerErr != nil {
-		return errors.Annotate(messageServerErr, "message server exited with error")
-	}
+
 	return nil
 }
 
