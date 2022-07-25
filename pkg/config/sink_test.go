@@ -108,8 +108,9 @@ func TestValidateApplyParameter(t *testing.T) {
 			expectedErr: "global level atomicity is not supported by.*",
 		},
 		{
-			sinkURI:     "tidb://normal:123456@127.0.0.1:3306?protocol=canal",
-			expectedErr: ".*protocol cannot be configured when using tidb scheme.*",
+			sinkURI:       "tidb://normal:123456@127.0.0.1:3306?protocol=canal",
+			expectedErr:   "",
+			expectedLevel: tableTxnAtomicity,
 		},
 		{
 			sinkURI:       "blackhole://normal:123456@127.0.0.1:3306?transaction-atomicity=none",
