@@ -35,6 +35,7 @@ func TestMasterMetadata(t *testing.T) {
 	ctx := context.Background()
 	metaClient, err := pkgOrm.NewMockClient()
 	require.Nil(t, err)
+	defer metaClient.Close()
 	meta := []*frameModel.MasterMetaKVData{
 		{
 			ID: JobManagerUUID,
@@ -99,6 +100,7 @@ func TestOperateMasterMetadata(t *testing.T) {
 	)
 	metaClient, err := pkgOrm.NewMockClient()
 	require.Nil(t, err)
+	defer metaClient.Close()
 
 	loadMeta := func() *frameModel.MasterMetaKVData {
 		cli := NewMasterMetadataClient(meta.ID, metaClient)
@@ -130,6 +132,7 @@ func TestLoadAllWorkers(t *testing.T) {
 
 	metaClient, err := pkgOrm.NewMockClient()
 	require.Nil(t, err)
+	defer metaClient.Close()
 	workerMetaClient := NewWorkerMetadataClient("master-1", metaClient)
 
 	// Using context.Background() since there is no risk that

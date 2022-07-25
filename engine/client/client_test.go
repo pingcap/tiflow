@@ -54,6 +54,7 @@ func TestClientManager(t *testing.T) {
 
 	masterServer, err := servermaster.NewServer(masterCfg, test.NewContext())
 	require.Nil(t, err)
+	masterServer.Stop()
 
 	masterCtx, masterCancel := context.WithCancel(ctx)
 	defer masterCancel()
