@@ -14,17 +14,25 @@
 package tablesink
 
 import (
+	"context"
 	"sync"
 	"time"
 
 	"github.com/emirpasic/gods/maps/linkedhashmap"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
-// waitingInterval is the interval to wait for the all callbacks be called.
-// It used for close the table sink.
-const waitingInterval = 100 * time.Millisecond
+const (
+	// waitingInterval is the interval to wait for the all callbacks be called.
+	// It used for close the table sink.
+	waitingInterval = 100 * time.Millisecond
+	// warnDuration is the duration to warn the progress tracker is not closed.
+	warnDuration = 3 * time.Minute
+)
 
 // progressTracker is used to track the progress of the table sink.
 // For example,
@@ -139,12 +147,24 @@ func (r *progressTracker) trackingCount() int {
 }
 
 // close is used to close the progress tracker.
-func (r *progressTracker) close() {
+func (r *progressTracker) close(ctx context.Context) error {
 	r.closed.Store(true)
 
-	// TODO: add logs to measure the time of waiting for the all callbacks be called.
-	for r.trackingCount() != 0 {
-		// Sleep for a while to prevent CPU spin.
-		time.Sleep(waitingInterval)
+	ticker := time.NewTicker(warnDuration)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case <-ticker.C:
+			log.Warn("close processor doesn't return in time, may be stuck",
+				zap.Int("trackingCount", r.trackingCount()))
+		default:
+			if r.trackingCount() == 0 {
+				return nil
+			}
+			// Sleep for a while to prevent CPU spin.
+			time.Sleep(waitingInterval)
+		}
 	}
 }

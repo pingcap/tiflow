@@ -14,6 +14,7 @@
 package tablesink
 
 import (
+	"context"
 	"sort"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -103,13 +104,18 @@ func (e *eventTableSink[E]) GetCheckpointTs() model.ResolvedTs {
 
 // Close the table sink and wait for all callbacks be called.
 // Notice: It will be blocked until all callbacks be called.
-func (e *eventTableSink[E]) Close() {
+func (e *eventTableSink[E]) Close(ctx context.Context) error {
 	// TODO: Before we depends on this state,
 	// we should check the state working well with new scheduler.
 	// Maybe we only need a sink state(isClosing), not a table state.
 	e.state.Store(pipeline.TableStateStopping)
-	e.progressTracker.close()
+	err := e.progressTracker.close(ctx)
+	if err != nil {
+		return err
+	}
 	e.state.Store(pipeline.TableStateStopped)
+
+	return nil
 }
 
 // genEventID generates an unique ID for event.
