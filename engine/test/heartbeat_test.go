@@ -58,7 +58,7 @@ func (t *testHeartbeatSuite) TestHeartbeatExecutorCrush(c *C) {
 			Name:    "master1",
 			DataDir: "/tmp/df",
 		},
-		MasterAddr:        "127.0.0.1:1991",
+		Addr:              "127.0.0.1:1991",
 		KeepAliveTTL:      t.keepAliveTTL,
 		KeepAliveInterval: t.keepAliveInterval,
 		RPCTimeout:        t.rpcTimeout,
@@ -66,7 +66,7 @@ func (t *testHeartbeatSuite) TestHeartbeatExecutorCrush(c *C) {
 	// one master + one executor
 	executorCfg := &executor.Config{
 		Join:              "127.0.0.1:1991",
-		WorkerAddr:        "127.0.0.1:1992",
+		Addr:              "127.0.0.1:1992",
 		KeepAliveTTL:      t.keepAliveTTL,
 		KeepAliveInterval: t.keepAliveInterval,
 		RPCTimeout:        t.rpcTimeout,

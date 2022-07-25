@@ -172,7 +172,7 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 
 	executorManager := NewExecutorManagerImpl(cfg.KeepAliveTTL, cfg.KeepAliveInterval, ctx)
 
-	urls, err := parseURLs(cfg.MasterAddr)
+	urls, err := parseURLs(cfg.Addr)
 	if err != nil {
 		return nil, err
 	}
@@ -414,7 +414,7 @@ func (s *Server) ReportExecutorWorkload(
 func (s *Server) startForTest(ctx context.Context) (err error) {
 	// TODO: implement mock-etcd and leader election
 
-	s.mockGrpcServer, err = mock.NewMasterServer(s.cfg.MasterAddr, s)
+	s.mockGrpcServer, err = mock.NewMasterServer(s.cfg.Addr, s)
 	if err != nil {
 		return err
 	}
@@ -555,7 +555,7 @@ func (s *Server) startResourceManager() error {
 func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 	etcdCfg := engineEtcdutil.GenEmbedEtcdConfigWithLogger(s.cfg.LogConf.Level)
 	// prepare to join an existing etcd cluster.
-	err = engineEtcdutil.PrepareJoinEtcd(s.cfg.Etcd, s.cfg.MasterAddr)
+	err = engineEtcdutil.PrepareJoinEtcd(s.cfg.Etcd, s.cfg.Addr)
 	if err != nil {
 		return
 	}
@@ -568,7 +568,7 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 	// no `String` method exists for embed.Config, and can not marshal it to join too.
 	// but when starting embed etcd server, the etcd pkg will log the config.
 	// https://github.com/etcd-io/etcd/blob/3cf2f69b5738fb702ba1a935590f36b52b18979b/embed/etcd.go#L299
-	etcdCfg, err = engineEtcdutil.GenEmbedEtcdConfig(etcdCfg, s.cfg.MasterAddr, s.cfg.AdvertiseAddr, s.cfg.Etcd)
+	etcdCfg, err = engineEtcdutil.GenEmbedEtcdConfig(etcdCfg, s.cfg.Addr, s.cfg.AdvertiseAddr, s.cfg.Etcd)
 	if err != nil {
 		return
 	}
@@ -599,7 +599,7 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 	log.Info("start etcd successfully")
 
 	// start grpc server
-	s.etcdClient, err = etcdutil.CreateClient([]string{withHost(s.cfg.MasterAddr)}, nil)
+	s.etcdClient, err = etcdutil.CreateClient([]string{withHost(s.cfg.Addr)}, nil)
 	if err != nil {
 		return
 	}
@@ -668,7 +668,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	}()
 
 	clients := client.NewClientManager()
-	err = clients.AddMasterClient(ctx, []string{s.cfg.MasterAddr})
+	err = clients.AddMasterClient(ctx, []string{s.cfg.Addr})
 	if err != nil {
 		return
 	}

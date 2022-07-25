@@ -50,7 +50,7 @@ func prepareServerEnv(t *testing.T, name string) (string, *Config) {
 	ports, err := freeport.GetFreePorts(2)
 	require.Nil(t, err)
 	cfgTpl := `
-master-addr = "127.0.0.1:%d"
+addr = "127.0.0.1:%d"
 advertise-addr = "127.0.0.1:%d"
 [frame-metastore-conf]
 store-id = "root"
@@ -101,7 +101,7 @@ func TestStartGrpcSrvCancelable(t *testing.T) {
 	ports, err := freeport.GetFreePorts(3)
 	require.Nil(t, err)
 	cfgTpl := `
-master-addr = "127.0.0.1:%d"
+addr = "127.0.0.1:%d"
 advertise-addr = "127.0.0.1:%d"
 [frame-metastore-conf]
 store-id = "root"
