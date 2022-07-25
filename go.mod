@@ -104,6 +104,8 @@ require (
 	upper.io/db.v3 v3.7.1+incompatible
 )
 
+require golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4
+
 require (
 	cloud.google.com/go v0.100.2 // indirect
 	cloud.google.com/go/compute v1.2.0 // indirect
