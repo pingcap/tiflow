@@ -142,7 +142,11 @@ func NewOwner4Test(
 	// Most tests do not need to test bootstrap.
 	o.bootstrapped = true
 	o.newChangefeed = func(id model.ChangeFeedID, up *upstream.Upstream) *changefeed {
-		return newChangefeed4Test(id, up, newDDLPuller, newSink)
+		c := newChangefeed4Test(id, up, newDDLPuller, newSink)
+		c.newScheduler = func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error) {
+			return &mockScheduler{}, nil
+		}
+		return c
 	}
 	return o
 }

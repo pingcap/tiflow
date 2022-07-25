@@ -467,9 +467,9 @@ func TestHandleJobsDontBlock(t *testing.T) {
 
 	// add an non-consistent version capture
 	captureInfo := &model.CaptureInfo{
-		ID:            "capture-id-owner-test",
+		ID:            "capture-higher-version",
 		AdvertiseAddr: "127.0.0.1:0000",
-		Version:       " v0.0.1-test-only",
+		Version:       "v6.3.0",
 	}
 	cdcKey = etcd.CDCKey{
 		ClusterID: state.ClusterID,
