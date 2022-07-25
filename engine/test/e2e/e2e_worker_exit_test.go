@@ -34,7 +34,7 @@ func TestWorkerExit(t *testing.T) {
 	var (
 		masterAddrs                  = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
 		businessMetaAddrs            = []string{"127.0.0.1:12479"}
-		businessMetaAddrsInContainer = []string{"business-etcd-standalone:2379"}
+		businessMetaAddrsInContainer = []string{"etcd-standalone:2379"}
 	)
 
 	ctx := context.Background()

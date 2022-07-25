@@ -68,7 +68,7 @@ func TestLeaderLoopSuccess(t *testing.T) {
 		leaderServiceFn: mockLeaderService,
 		info:            &model.NodeInfo{ID: model.DeployNodeID(id)},
 	}
-	preRPCHook := rpcutil.NewPreRPCHook[pb.MasterClient](
+	preRPCHook := rpcutil.NewPreRPCHook(
 		s.id,
 		&s.leader,
 		s.masterCli,
@@ -124,7 +124,7 @@ func TestLeaderLoopMeetStaleData(t *testing.T) {
 		leaderServiceFn: mockLeaderService,
 		info:            &model.NodeInfo{ID: model.DeployNodeID(id)},
 	}
-	preRPCHook := rpcutil.NewPreRPCHook[pb.MasterClient](
+	preRPCHook := rpcutil.NewPreRPCHook(
 		s.id,
 		&s.leader,
 		s.masterCli,
@@ -193,7 +193,7 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 			masterCli:   &rpcutil.LeaderClientWithLock[pb.MasterClient]{},
 			resourceCli: &rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]{},
 		}
-		preRPCHook := rpcutil.NewPreRPCHook[pb.MasterClient](
+		preRPCHook := rpcutil.NewPreRPCHook(
 			s.id,
 			&s.leader,
 			s.masterCli,

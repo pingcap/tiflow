@@ -52,7 +52,7 @@ func updateKeyAndCheckOnce(
 			}
 		}
 		return true
-	}, time.Second*60, time.Second*2)
+	}, time.Second*180, time.Second*2)
 }
 
 func TestNodeFailure(t *testing.T) {
@@ -61,7 +61,7 @@ func TestNodeFailure(t *testing.T) {
 	var (
 		masterAddrs                  = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
 		businessMetaAddrs            = []string{"127.0.0.1:12479"}
-		businessMetaAddrsInContainer = []string{"business-etcd-standalone:2379"}
+		businessMetaAddrsInContainer = []string{"etcd-standalone:2379"}
 	)
 
 	seed := time.Now().Unix()
@@ -108,7 +108,7 @@ func TestNodeFailure(t *testing.T) {
 			}
 		}
 		return true
-	}, time.Second*60, time.Second*2)
+	}, time.Second*180, time.Second*2)
 
 	mvccCount := 1
 	updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, "random-value-1", mvccCount)

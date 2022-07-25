@@ -204,7 +204,7 @@ func NewServer(cfg *Config, ctx *test.Context) (_ *Server, finalErr error) {
 		etcdClient:        etcdClient,
 	}
 	server.leaderServiceFn = server.runLeaderService
-	masterRPCHook := rpcutil.NewPreRPCHook[pb.MasterClient](
+	masterRPCHook := rpcutil.NewPreRPCHook(
 		id,
 		&server.leader,
 		server.masterCli,
@@ -529,7 +529,7 @@ func (s *Server) registerMetaStore() error {
 }
 
 func (s *Server) initResourceManagerService() {
-	resourceRPCHook := rpcutil.NewPreRPCHook[pb.ResourceManagerClient](
+	resourceRPCHook := rpcutil.NewPreRPCHook(
 		s.id,
 		&s.leader,
 		s.resourceCli,
@@ -770,6 +770,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	})
 
 	s.leaderInitialized.Store(true)
+	log.Info("leader is initialized")
 
 	return errg.Wait()
 }
