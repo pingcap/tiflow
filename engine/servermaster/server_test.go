@@ -16,7 +16,7 @@ package servermaster
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -50,7 +50,7 @@ func prepareServerEnv(t *testing.T, name string) (string, *Config) {
 	ports, err := freeport.GetFreePorts(2)
 	require.Nil(t, err)
 	cfgTpl := `
-master-addr = "127.0.0.1:%d"
+addr = "127.0.0.1:%d"
 advertise-addr = "127.0.0.1:%d"
 [frame-metastore-conf]
 store-id = "root"
@@ -101,7 +101,7 @@ func TestStartGrpcSrvCancelable(t *testing.T) {
 	ports, err := freeport.GetFreePorts(3)
 	require.Nil(t, err)
 	cfgTpl := `
-master-addr = "127.0.0.1:%d"
+addr = "127.0.0.1:%d"
 advertise-addr = "127.0.0.1:%d"
 [frame-metastore-conf]
 store-id = "root"
@@ -157,7 +157,7 @@ func testPprof(t *testing.T, addr string) {
 		require.Nil(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
-		_, err = ioutil.ReadAll(resp.Body)
+		_, err = io.ReadAll(resp.Body)
 		require.Nil(t, err)
 	}
 }
@@ -167,7 +167,7 @@ func testPrometheusMetrics(t *testing.T, addr string) {
 	require.Nil(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	_, err = ioutil.ReadAll(resp.Body)
+	_, err = io.ReadAll(resp.Body)
 	require.Nil(t, err)
 }
 
@@ -257,10 +257,6 @@ func (m *mockJobManager) PauseJob(ctx context.Context, req *pb.PauseJobRequest) 
 	panic("not implemented")
 }
 
-func (m *mockJobManager) DebugJob(ctx context.Context, req *pb.DebugJobRequest) *pb.DebugJobResponse {
-	panic("not implemented")
-}
-
 func (m *mockJobManager) GetJobStatuses(ctx context.Context) (map[frameModel.MasterID]frameModel.MasterStatusCode, error) {
 	panic("not implemented")
 }
@@ -308,7 +304,6 @@ func (m *mockExecutorManager) Start(ctx context.Context) {
 }
 
 func (m *mockExecutorManager) Stop() {
-	panic("not implemented")
 }
 
 func (m *mockExecutorManager) HasExecutor(executorID string) bool {
@@ -363,7 +358,7 @@ func testCustomedPrometheusMetrics(t *testing.T, addr string) {
 		require.Nil(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		require.Nil(t, err)
 		metric := string(body)
 		return strings.Contains(metric, "dataflow_server_master_job_num") &&

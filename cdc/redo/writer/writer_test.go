@@ -15,7 +15,6 @@ package writer
 
 import (
 	"context"
-	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -346,6 +345,23 @@ func TestLogWriterFlushLog(t *testing.T) {
 	}
 }
 
+// checkpoint or meta regress should be ignored correctly.
+func TestLogWriterRegress(t *testing.T) {
+	dir := t.TempDir()
+	writer, err := NewLogWriter(context.Background(), &LogWriterConfig{
+		Dir:          dir,
+		ChangeFeedID: model.DefaultChangeFeedID("test-log-writer-regress"),
+		CaptureID:    "cp",
+		S3Storage:    false,
+	})
+	require.Nil(t, err)
+	require.Nil(t, writer.FlushLog(context.Background(), 2, 4))
+	require.Nil(t, writer.FlushLog(context.Background(), 1, 3))
+	require.Equal(t, uint64(2), writer.meta.CheckpointTs)
+	require.Equal(t, uint64(4), writer.meta.ResolvedTs)
+	_ = writer.Close()
+}
+
 func TestNewLogWriter(t *testing.T) {
 	_, err := NewLogWriter(context.Background(), nil)
 	require.NotNil(t, err)
@@ -421,7 +437,7 @@ func TestNewLogWriter(t *testing.T) {
 	require.Equal(t, cfg.Dir, l.cfg.Dir)
 	require.Equal(t, meta.CheckpointTs, l.meta.CheckpointTs)
 	require.Equal(t, meta.ResolvedTs, l.meta.ResolvedTs)
-	time.Sleep(time.Millisecond * time.Duration(math.Max(float64(defaultFlushIntervalInMs), float64(defaultGCIntervalInMs))+1))
+	time.Sleep(time.Millisecond * time.Duration(float64(defaultGCIntervalInMs)))
 
 	origin := common.InitS3storage
 	defer func() {

@@ -68,6 +68,10 @@ var (
 		"meta store list databases",
 		errors.RFCCodeText("CDC:ErrMetaListDatabases"),
 	)
+	ErrDDLSchemaNotFound = errors.Normalize(
+		"cannot find mysql.tidb_ddl_job schema",
+		errors.RFCCodeText("CDC:ErrDDLSchemaNotFound"),
+	)
 	ErrGRPCDialFailed = errors.Normalize(
 		"grpc dial failed",
 		errors.RFCCodeText("CDC:ErrGRPCDialFailed"),
@@ -453,6 +457,9 @@ var (
 		"operate on a closed notifier",
 		errors.RFCCodeText("CDC:ErrOperateOnClosedNotifier"),
 	)
+	ErrDiskFull = errors.Normalize(
+		"failed to preallocate file because disk is full",
+		errors.RFCCodeText("CDC:ErrDiskFull"))
 
 	// encode/decode, data format and data integrity errors
 	ErrInvalidRecordKey = errors.Normalize(
@@ -1078,7 +1085,7 @@ var (
 		errors.RFCCodeText("CDC:ErrInvalidFilterExpression"),
 	)
 	ErrExpressionColumnNotFound = errors.Normalize(
-		"invalid filter expressions. Can not found column '%s' from table '%s' in: %s",
+		"invalid filter expression(s). Cannot find column '%s' from table '%s' in: %s",
 		errors.RFCCodeText("CDC:ErrExpressionColumnNotFound"),
 	)
 	ErrInvalidIgnoreEventType = errors.Normalize(

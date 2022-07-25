@@ -68,20 +68,21 @@ type Mounter interface {
 }
 
 type mounterImpl struct {
-	schemaStorage       SchemaStorage
-	tz                  *time.Location
-	enableOldValue      bool
-	changefeedID        model.ChangeFeedID
-	filter              *pfilter.Filter
-	metricMountDuration prometheus.Observer
-	metricTotalRows     prometheus.Gauge
+	schemaStorage                SchemaStorage
+	tz                           *time.Location
+	enableOldValue               bool
+	changefeedID                 model.ChangeFeedID
+	filter                       pfilter.Filter
+	metricMountDuration          prometheus.Observer
+	metricTotalRows              prometheus.Gauge
+	metricIgnoredDMLEventCounter prometheus.Counter
 }
 
 // NewMounter creates a mounter
 func NewMounter(schemaStorage SchemaStorage,
 	changefeedID model.ChangeFeedID,
 	tz *time.Location,
-	filter *pfilter.Filter,
+	filter pfilter.Filter,
 	enableOldValue bool,
 ) Mounter {
 	return &mounterImpl{
@@ -92,6 +93,8 @@ func NewMounter(schemaStorage SchemaStorage,
 		metricMountDuration: mountDuration.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricTotalRows: totalRowsCountGauge.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricIgnoredDMLEventCounter: ignoredDMLEventCounter.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		tz: tz,
 	}
@@ -110,6 +113,10 @@ func (m *mounterImpl) DecodeEvent(ctx context.Context, pEvent *model.Polymorphic
 	if err != nil {
 		return false, errors.Trace(err)
 	}
+	if row == nil {
+		log.Debug("message's row changed event is nil, it should be ignored", zap.Uint64("startTs", pEvent.StartTs))
+		return true, nil
+	}
 
 	pEvent.Row = row
 	pEvent.RawKV.Value = nil
@@ -118,12 +125,7 @@ func (m *mounterImpl) DecodeEvent(ctx context.Context, pEvent *model.Polymorphic
 	if duration > time.Second {
 		m.metricMountDuration.Observe(duration.Seconds())
 	}
-
-	ignored := m.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table)
-	if ignored {
-		log.Debug("message's row changed event is nil, it should be ignored", zap.Uint64("startTs", row.StartTs))
-	}
-	return ignored, nil
+	return false, nil
 }
 
 func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *model.RawKVEntry) (*model.RowChangedEvent, error) {
@@ -173,11 +175,26 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 			if rowKV == nil {
 				return nil, nil
 			}
-			return m.mountRowKVEntry(tableInfo, rowKV, raw.ApproximateDataSize())
+			row, rawRow, err := m.mountRowKVEntry(tableInfo, rowKV, raw.ApproximateDataSize())
+			if err != nil {
+				return nil, err
+			}
+			// We need to filter a row here because we need its tableInfo.
+			ignore, err := m.filter.ShouldIgnoreDMLEvent(row, rawRow, tableInfo)
+			if err != nil {
+				return nil, err
+			}
+			// TODO(dongmen): try to find better way to indicate this row has been filtered.
+			// Return a nil RowChangedEvent if this row should be ignored.
+			if ignore {
+				m.metricIgnoredDMLEventCounter.Inc()
+				return nil, nil
+			}
+			return row, nil
 		}
 		return nil, nil
 	}()
-	if err != nil {
+	if err != nil && !cerror.IsChangefeedUnRetryableError(err) {
 		log.Error("failed to mount and unmarshals entry, start to print debug info", zap.Error(err))
 		snap.PrintStatus(log.Error)
 	}
@@ -219,29 +236,38 @@ func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawKey []b
 	}, nil
 }
 
-const (
-	ddlJobListKey         = "DDLJobList"
-	ddlAddIndexJobListKey = "DDLJobAddIdxList"
-)
+// IsLegacyFormatJob returns true if the job is from the legacy DDL list key.
+func IsLegacyFormatJob(rawKV *model.RawKVEntry) bool {
+	return bytes.HasPrefix(rawKV.Key, metaPrefix)
+}
 
-// UnmarshalDDL unmarshals the ddl job from RawKVEntry
-func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
-	if raw.OpType != model.OpTypePut || !bytes.HasPrefix(raw.Key, metaPrefix) {
-		return nil, nil
+// ParseDDLJob parses the job from the raw KV entry. id is the column id of `job_meta`.
+func ParseDDLJob(tblInfo *model.TableInfo, rawKV *model.RawKVEntry, id int64) (*timodel.Job, error) {
+	var v []byte
+	if bytes.HasPrefix(rawKV.Key, metaPrefix) {
+		// old queue base job.
+		v = rawKV.Value
+	} else {
+		// DDL job comes from `tidb_ddl_job` table after we support concurrent DDL. We should decode the job from the column.
+		recordID, err := tablecodec.DecodeRowKey(rawKV.Key)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		row, err := decodeRow(rawKV.Value, recordID, tblInfo, time.UTC)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		datum := row[id]
+		v = datum.GetBytes()
 	}
-	meta, err := decodeMetaKey(raw.Key)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	if meta.getType() != ListData {
-		return nil, nil
-	}
-	k := meta.(metaListData)
-	if k.key != ddlJobListKey && k.key != ddlAddIndexJobListKey {
-		return nil, nil
-	}
+
+	return parseJob(v, rawKV.StartTs, rawKV.CRTs)
+}
+
+// parseJob unmarshal the job from "v".
+func parseJob(v []byte, startTs, CRTs uint64) (*timodel.Job, error) {
 	job := &timodel.Job{}
-	err = json.Unmarshal(raw.Value, job)
+	err := json.Unmarshal(v, job)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -251,22 +277,27 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	}
 	// FinishedTS is only set when the job is synced,
 	// but we can use the entry's ts here
-	job.StartTS = raw.StartTs
-	job.BinlogInfo.FinishedTS = raw.CRTs
+	job.StartTS = startTs
+	job.BinlogInfo.FinishedTS = CRTs
 	return job, nil
 }
 
-func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool) ([]*model.Column, error) {
+func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool) ([]*model.Column, []types.Datum, error) {
 	cols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
+	rawCols := make([]types.Datum, len(tableInfo.RowColumnsOffset))
 	for _, colInfo := range tableInfo.Columns {
 		colSize := 0
 		if !model.IsColCDCVisible(colInfo) {
+			log.Info("skip the column which is not visible",
+				zap.String("table", tableInfo.Name.O), zap.String("column", colInfo.Name.O))
 			continue
 		}
 		colName := colInfo.Name.O
 		colDatums, exist := datums[colInfo.ID]
 		var colValue interface{}
 		if !exist && !fillWithDefaultValue {
+			log.Info("column value is not found",
+				zap.String("table", tableInfo.Name.O), zap.String("column", colName))
 			continue
 		}
 		var err error
@@ -275,16 +306,17 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		if exist {
 			colValue, size, warn, err = formatColVal(colDatums, colInfo)
 		} else if fillWithDefaultValue {
-			colValue, size, warn, err = getDefaultOrZeroValue(colInfo)
+			colDatums, colValue, size, warn, err = getDefaultOrZeroValue(colInfo)
 		}
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, nil, errors.Trace(err)
 		}
 		if warn != "" {
 			log.Warn(warn, zap.String("table", tableInfo.TableName.String()), zap.String("column", colInfo.Name.String()))
 		}
 		defaultValue := getDDLDefaultDefinition(colInfo)
 		colSize += size
+		rawCols[tableInfo.RowColumnsOffset[colInfo.ID]] = colDatums
 		cols[tableInfo.RowColumnsOffset[colInfo.ID]] = &model.Column{
 			Name:    colName,
 			Type:    colInfo.GetType(),
@@ -296,13 +328,15 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 			ApproximateBytes: colSize + sizeOfEmptyColumn,
 		}
 	}
-	return cols, nil
+	return cols, rawCols, nil
 }
 
-func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, error) {
+func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, model.RowChangedDatums, error) {
 	var err error
 	// Decode previous columns.
 	var preCols []*model.Column
+	var preRawCols []types.Datum
+	var rawRow model.RowChangedDatums
 	// Since we now always use old value internally,
 	// we need to control the output(sink will use the PreColumns field to determine whether to output old value).
 	// Normally old value is output when only enableOldValue is on,
@@ -311,9 +345,9 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 	if row.PreRowExist {
 		// FIXME(leoppro): using pre table info to mounter pre column datum
 		// the pre column and current column in one event may using different table info
-		preCols, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
+		preCols, preRawCols, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, rawRow, errors.Trace(err)
 		}
 
 		// NOTICE: When the old Value feature is off,
@@ -329,10 +363,11 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 	}
 
 	var cols []*model.Column
+	var rawCols []types.Datum
 	if row.RowExist {
-		cols, err = datum2Column(tableInfo, row.Row, true)
+		cols, rawCols, err = datum2Column(tableInfo, row.Row, true)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, rawRow, errors.Trace(err)
 		}
 	}
 
@@ -353,6 +388,8 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 
 	_, _, colInfos := tableInfo.GetRowColInfos()
 
+	rawRow.PreRowDatums = preRawCols
+	rawRow.RowDatums = rawCols
 	return &model.RowChangedEvent{
 		StartTs:          row.StartTs,
 		CommitTs:         row.CRTs,
@@ -369,7 +406,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 		PreColumns:          preCols,
 		IndexColumns:        tableInfo.IndexColumnsOffset,
 		ApproximateDataSize: dataSize,
-	}, nil
+	}, rawRow, nil
 }
 
 var emptyBytes = make([]byte, 0)
@@ -466,7 +503,7 @@ func formatColVal(datum types.Datum, col *timodel.ColumnInfo) (
 // https://github.com/golang/go/blob/go1.17.4/src/database/sql/driver/types.go#L236
 // Supported type is: nil, basic type(Int, Int8,..., Float32, Float64, String), Slice(uint8), other types not support
 // TODO: Check default expr support
-func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, error) {
+func getDefaultOrZeroValue(col *timodel.ColumnInfo) (types.Datum, any, int, string, error) {
 	var d types.Datum
 	// NOTICE: SHOULD use OriginDefaultValue here, more info pls ref to
 	// https://github.com/pingcap/tiflow/issues/4048
@@ -476,7 +513,7 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, e
 	// Ref: https://github.com/pingcap/tidb/blob/d2c352980a43bb593db81fd1db996f47af596d91/table/column.go#L489
 	if col.GetOriginDefaultValue() != nil {
 		d = types.NewDatum(col.GetOriginDefaultValue())
-		return d.GetValue(), sizeOfDatum(d), "", nil
+		return d, d.GetValue(), sizeOfDatum(d), "", nil
 	}
 
 	if !mysql.HasNotNullFlag(col.GetFlag()) {
@@ -492,7 +529,7 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, e
 			// the default value is the first element of the enum list
 			d = types.NewDatum(col.FieldType.GetElem(0))
 		case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
-			return emptyBytes, sizeOfEmptyBytes, "", nil
+			return d, emptyBytes, sizeOfEmptyBytes, "", nil
 		default:
 			d = table.GetZeroValue(col)
 			if d.IsNull() {
@@ -500,8 +537,8 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, e
 			}
 		}
 	}
-
-	return formatColVal(d, col)
+	v, size, warn, err := formatColVal(d, col)
+	return d, v, size, warn, err
 }
 
 func getDDLDefaultDefinition(col *timodel.ColumnInfo) interface{} {

@@ -19,7 +19,6 @@ import (
 
 // Model defines basic fileds used in gorm
 // CreatedAt/UpdatedAt will autoupdate in the gorm lib, not in sql backend
-// TODO: refine the updatedAt to autoupdate backend, make `upsert` interface more elegant
 type Model struct {
 	SeqID     uint      `json:"seq-id" gorm:"primaryKey;autoIncrement"`
 	CreatedAt time.Time `json:"created-at"`

@@ -160,7 +160,7 @@ function cleanup() {
 function isolate_master() {
 	port=${master_ports[$(($1 - 1))]}
 	if [ $2 = "isolate" ]; then
-		export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/dm/master/FailToElect=return(\"master$1\")"
+		export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/master/FailToElect=return(\"master$1\")"
 	fi
 	echo "kill dm-master$1"
 	kill_process dm-master$1
@@ -172,7 +172,7 @@ function isolate_master() {
 function isolate_worker() {
 	port=${worker_ports[$(($1 - 1))]}
 	if [ $2 = "isolate" ]; then
-		export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/dm/worker/FailToKeepAlive=return(\"worker$1\")"
+		export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/worker/FailToKeepAlive=return(\"worker$1\")"
 	fi
 	echo "kill dm-worker$1"
 	kill_process dm-worker$1

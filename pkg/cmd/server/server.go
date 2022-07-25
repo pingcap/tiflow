@@ -23,8 +23,8 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	ticonfig "github.com/pingcap/tidb/config"
-	"github.com/pingcap/tiflow/cdc"
 	"github.com/pingcap/tiflow/cdc/contextutil"
+	"github.com/pingcap/tiflow/cdc/server"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
@@ -143,8 +143,8 @@ func (o *options) run(cmd *cobra.Command) error {
 	}
 
 	util.LogHTTPProxies()
-	cdc.RecordGoRuntimeSettings()
-	server, err := cdc.NewServer(strings.Split(o.serverPdAddr, ","))
+	server.RecordGoRuntimeSettings()
+	server, err := server.New(strings.Split(o.serverPdAddr, ","))
 	if err != nil {
 		return errors.Annotate(err, "new server")
 	}

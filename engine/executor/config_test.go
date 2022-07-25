@@ -15,7 +15,7 @@ package executor
 
 import (
 	"encoding/hex"
-	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -26,7 +26,8 @@ func TestConfigDefaultLocalStoragePath(t *testing.T) {
 
 	testToml := `
 name = "executor-1"
-worker-addr = "0.0.0.0:10241"
+addr = "0.0.0.0:10241"
+join = "127.0.0.1:10240"
 `
 	fileName := mustWriteToTempFile(t, testToml)
 	cfg := GetDefaultExecutorConfig()
@@ -45,7 +46,8 @@ func TestConfigDefaultLocalStoragePathNoName(t *testing.T) {
 	t.Parallel()
 
 	testToml := `
-worker-addr = "0.0.0.0:10241"
+addr = "0.0.0.0:10241"
+join = "127.0.0.1:10240"
 `
 	fileName := mustWriteToTempFile(t, testToml)
 	cfg := GetDefaultExecutorConfig()
@@ -64,7 +66,8 @@ func TestConfigStorage(t *testing.T) {
 
 	testToml := `
 name = "executor-1"
-worker-addr = "0.0.0.0:10241"
+addr = "0.0.0.0:10241"
+join = "127.0.0.1:10240"
 
 [storage]
 local.base-dir = "/tmp/my-base-dir"
@@ -81,7 +84,7 @@ local.base-dir = "/tmp/my-base-dir"
 
 func mustWriteToTempFile(t *testing.T, content string) (filePath string) {
 	dir := t.TempDir()
-	fd, err := ioutil.TempFile(dir, "*")
+	fd, err := os.CreateTemp(dir, "*")
 	require.NoError(t, err)
 	_, err = fd.WriteString(content)
 	require.NoError(t, err)

@@ -16,7 +16,6 @@ package servermaster
 import (
 	"context"
 	"encoding/json"
-	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -33,14 +32,12 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/ctxmu"
-	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	resManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	derrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
@@ -53,7 +50,6 @@ type JobManager interface {
 	QueryJob(ctx context.Context, req *pb.QueryJobRequest) *pb.QueryJobResponse
 	CancelJob(ctx context.Context, req *pb.CancelJobRequest) *pb.CancelJobResponse
 	PauseJob(ctx context.Context, req *pb.PauseJobRequest) *pb.PauseJobResponse
-	DebugJob(ctx context.Context, req *pb.DebugJobRequest) *pb.DebugJobResponse
 
 	GetJobStatuses(ctx context.Context) (map[frameModel.MasterID]frameModel.MasterStatusCode, error)
 	WatchJobStatuses(
@@ -86,9 +82,6 @@ type JobManagerImplV2 struct {
 	// TODO We might add a pending operation queue in the future.
 	jobStatusChangeMu *ctxmu.CtxMutex
 	notifier          *notifier.Notifier[resManager.JobStatusChangeEvent]
-
-	// only use for DebugJob
-	messageHandlerManager p2p.MessageHandlerManager
 }
 
 // PauseJob implements proto/Master.PauseJob
@@ -114,83 +107,6 @@ func (jm *JobManagerImplV2) PauseJob(ctx context.Context, req *pb.PauseJobReques
 	return &pb.PauseJobResponse{Err: &pb.Error{
 		Code: pb.ErrorCode_UnKnownJob,
 	}}
-}
-
-// DebugJob implements proto/Master.DebugJob
-// Used for request/response with jobmaster
-func (jm *JobManagerImplV2) DebugJob(ctx context.Context, req *pb.DebugJobRequest) (resp *pb.DebugJobResponse) {
-	job := jm.JobFsm.QueryOnlineJob(req.JobId)
-	if job == nil {
-		return &pb.DebugJobResponse{Err: &pb.Error{
-			Code: pb.ErrorCode_UnKnownJob,
-		}}
-	}
-	handle := job.WorkerHandle.Unwrap()
-	if handle == nil {
-		return &pb.DebugJobResponse{Err: &pb.Error{
-			Code: pb.ErrorCode_UnKnownJob,
-		}}
-	}
-
-	messageAgent := dmpkg.NewMessageAgentImpl(jm.MasterID(), jm, jm.messageHandlerManager)
-	if err := messageAgent.Init(ctx); err != nil {
-		return &pb.DebugJobResponse{Err: &pb.Error{
-			Code:    pb.ErrorCode_UnknownError,
-			Message: err.Error(),
-		}}
-	}
-	defer func() {
-		if err := messageAgent.Close(ctx); err != nil {
-			resp = &pb.DebugJobResponse{Err: &pb.Error{
-				Code:    pb.ErrorCode_UnknownError,
-				Message: err.Error(),
-			}}
-		}
-	}()
-	if err := messageAgent.UpdateClient(req.JobId, handle); err != nil {
-		return &pb.DebugJobResponse{Err: &pb.Error{
-			Code:    pb.ErrorCode_UnknownError,
-			Message: err.Error(),
-		}}
-	}
-	defer func() {
-		if err := messageAgent.UpdateClient(req.JobId, nil); err != nil {
-			resp = &pb.DebugJobResponse{Err: &pb.Error{
-				Code:    pb.ErrorCode_UnknownError,
-				Message: err.Error(),
-			}}
-		}
-	}()
-
-	runCtx, runCancel := context.WithCancel(ctx)
-	defer runCancel()
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for {
-			select {
-			case <-runCtx.Done():
-				return
-			case <-time.After(100 * time.Millisecond):
-			}
-			if err := messageAgent.Tick(runCtx); err != nil {
-				log.Error("failed to run message agent tick", logutil.ShortError(err))
-				return
-			}
-		}
-	}()
-
-	resp2, err := messageAgent.SendRequest(ctx, req.JobId, "DebugJob", req)
-	if err != nil {
-		return &pb.DebugJobResponse{Err: &pb.Error{
-			Code:    pb.ErrorCode_UnknownError,
-			Message: err.Error(),
-		}}
-	}
-	runCancel()
-	wg.Wait()
-	return resp2.(*pb.DebugJobResponse)
 }
 
 // CancelJob implements proto/Master.CancelJob
@@ -444,11 +360,6 @@ func NewJobManagerImplV2(
 		return nil, err
 	}
 
-	// nolint:errcheck
-	_, err = dctx.Deps().Construct(func(m p2p.MessageHandlerManager) (p2p.MessageHandlerManager, error) {
-		impl.messageHandlerManager = m
-		return m, nil
-	})
 	return impl, err
 }
 

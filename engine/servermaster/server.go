@@ -65,6 +65,19 @@ import (
 	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
 )
 
+// use a slice instead of map because in small data size, slice search is faster
+// than map search.
+var masterRPCLimiterAllowList = []string{
+	"SubmitJob",
+	"CancelJob",
+	"ScheduleTask",
+}
+
+var resourceRPCLimiterAllowList = []string{
+	"CreateResource",
+	"RemoveResource",
+}
+
 // Server handles PRC requests for df master.
 type Server struct {
 	etcd *embed.Etcd
@@ -155,9 +168,11 @@ func genServerMasterUUID(etcdName string) string {
 
 // NewServer creates a new master-server.
 func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
+	log.Info("creating server master", zap.Stringer("config", cfg))
+
 	executorManager := NewExecutorManagerImpl(cfg.KeepAliveTTL, cfg.KeepAliveInterval, ctx)
 
-	urls, err := parseURLs(cfg.MasterAddr)
+	urls, err := parseURLs(cfg.Addr)
 	if err != nil {
 		return nil, err
 	}
@@ -196,6 +211,7 @@ func NewServer(cfg *Config, ctx *test.Context) (*Server, error) {
 		server.masterCli,
 		&server.leaderInitialized,
 		server.rpcLogRL,
+		masterRPCLimiterAllowList,
 	)
 	server.masterRPCHook = masterRPCHook
 	return server, nil
@@ -264,16 +280,6 @@ func (s *Server) PauseJob(ctx context.Context, req *pb.PauseJobRequest) (*pb.Pau
 		return resp2, err
 	}
 	return s.jobManager.PauseJob(ctx, req), nil
-}
-
-// DebugJob implements pb.MasterServer.DebugJob
-func (s *Server) DebugJob(ctx context.Context, req *pb.DebugJobRequest) (*pb.DebugJobResponse, error) {
-	resp2 := &pb.DebugJobResponse{}
-	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
-	if shouldRet {
-		return resp2, err
-	}
-	return s.jobManager.DebugJob(ctx, req), nil
 }
 
 // RegisterExecutor implements grpc interface, and passes request onto executor manager.
@@ -408,7 +414,7 @@ func (s *Server) ReportExecutorWorkload(
 func (s *Server) startForTest(ctx context.Context) (err error) {
 	// TODO: implement mock-etcd and leader election
 
-	s.mockGrpcServer, err = mock.NewMasterServer(s.cfg.MasterAddr, s)
+	s.mockGrpcServer, err = mock.NewMasterServer(s.cfg.Addr, s)
 	if err != nil {
 		return err
 	}
@@ -444,6 +450,9 @@ func (s *Server) Stop() {
 	}
 	if s.businessClientConn != nil {
 		s.businessClientConn.Close()
+	}
+	if s.executorManager != nil {
+		s.executorManager.Stop()
 	}
 }
 
@@ -532,6 +541,7 @@ func (s *Server) startResourceManager() error {
 		s.resourceCli,
 		&s.leaderInitialized,
 		s.rpcLogRL,
+		resourceRPCLimiterAllowList,
 	)
 	s.resourceManagerService = externRescManager.NewService(
 		s.frameMetaClient,
@@ -545,7 +555,7 @@ func (s *Server) startResourceManager() error {
 func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 	etcdCfg := engineEtcdutil.GenEmbedEtcdConfigWithLogger(s.cfg.LogConf.Level)
 	// prepare to join an existing etcd cluster.
-	err = engineEtcdutil.PrepareJoinEtcd(s.cfg.Etcd, s.cfg.MasterAddr)
+	err = engineEtcdutil.PrepareJoinEtcd(s.cfg.Etcd, s.cfg.Addr)
 	if err != nil {
 		return
 	}
@@ -558,7 +568,7 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 	// no `String` method exists for embed.Config, and can not marshal it to join too.
 	// but when starting embed etcd server, the etcd pkg will log the config.
 	// https://github.com/etcd-io/etcd/blob/3cf2f69b5738fb702ba1a935590f36b52b18979b/embed/etcd.go#L299
-	etcdCfg, err = engineEtcdutil.GenEmbedEtcdConfig(etcdCfg, s.cfg.MasterAddr, s.cfg.AdvertiseAddr, s.cfg.Etcd)
+	etcdCfg, err = engineEtcdutil.GenEmbedEtcdConfig(etcdCfg, s.cfg.Addr, s.cfg.AdvertiseAddr, s.cfg.Etcd)
 	if err != nil {
 		return
 	}
@@ -589,7 +599,7 @@ func (s *Server) startGrpcSrv(ctx context.Context) (err error) {
 	log.Info("start etcd successfully")
 
 	// start grpc server
-	s.etcdClient, err = etcdutil.CreateClient([]string{withHost(s.cfg.MasterAddr)}, nil)
+	s.etcdClient, err = etcdutil.CreateClient([]string{withHost(s.cfg.Addr)}, nil)
 	if err != nil {
 		return
 	}
@@ -658,7 +668,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	}()
 
 	clients := client.NewClientManager()
-	err = clients.AddMasterClient(ctx, []string{s.cfg.MasterAddr})
+	err = clients.AddMasterClient(ctx, []string{s.cfg.Addr})
 	if err != nil {
 		return
 	}
