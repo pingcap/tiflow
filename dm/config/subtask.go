@@ -22,7 +22,6 @@ import (
 	"flag"
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -453,7 +452,7 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		c.SyncerConfig.CheckpointFlushInterval = defaultCheckpointFlushInterval
 	}
 	if c.SyncerConfig.SafeModeDuration == "" {
-		c.SyncerConfig.SafeModeDuration = strconv.Itoa(2*c.SyncerConfig.CheckpointFlushInterval) + "s"
+		c.SyncerConfig.SafeModeDuration = defaultSafeModeDuration
 	}
 	if duration, err := time.ParseDuration(c.SyncerConfig.SafeModeDuration); err != nil {
 		return terror.ErrConfigInvalidSafeModeDuration.Generate(c.SyncerConfig.SafeModeDuration, err)

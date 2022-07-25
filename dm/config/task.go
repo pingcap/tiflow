@@ -101,6 +101,7 @@ var (
 	defaultBatch                   = 100
 	defaultQueueSize               = 1024 // do not give too large default value to avoid OOM
 	defaultCheckpointFlushInterval = 30   // in seconds
+	defaultSafeModeDuration        = strconv.Itoa(2*defaultCheckpointFlushInterval) + "s"
 
 	// TargetDBConfig.
 	defaultSessionCfg = []struct {
@@ -339,7 +340,7 @@ func DefaultSyncerConfig() SyncerConfig {
 		Batch:                   defaultBatch,
 		QueueSize:               defaultQueueSize,
 		CheckpointFlushInterval: defaultCheckpointFlushInterval,
-		SafeModeDuration:        strconv.Itoa(2*defaultCheckpointFlushInterval) + "s",
+		SafeModeDuration:        defaultSafeModeDuration,
 	}
 }
 
@@ -798,7 +799,7 @@ func (c *TaskConfig) adjust() error {
 			inst.Syncer.CheckpointFlushInterval = defaultCheckpointFlushInterval
 		}
 		if inst.Syncer.SafeModeDuration == "" {
-			inst.Syncer.SafeModeDuration = strconv.Itoa(2*inst.Syncer.CheckpointFlushInterval) + "s"
+			inst.Syncer.SafeModeDuration = defaultSafeModeDuration
 		}
 		if duration, err := time.ParseDuration(inst.Syncer.SafeModeDuration); err != nil {
 			return terror.ErrConfigInvalidSafeModeDuration.Generate(inst.Syncer.SafeModeDuration, err)
