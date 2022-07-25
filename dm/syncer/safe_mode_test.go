@@ -128,9 +128,6 @@ func TestEnableSafeModeInitializationPhase(t *testing.T) {
 				CheckpointFlushInterval: 1,
 				SafeModeDuration:        "3s",
 			},
-			MydumperConfig: config.MydumperConfig{
-				ExtraArgs: "--consistency lock",
-			},
 			Flavor: mysql.MySQLFlavor,
 		},
 		checkpoint: &mockCheckpointForSafeMode{},
@@ -139,13 +136,5 @@ func TestEnableSafeModeInitializationPhase(t *testing.T) {
 	time.Sleep(time.Second * 2) // wait for enableSafeModeInitializationPhase running
 	require.True(t, s.safeMode.Enable())
 	time.Sleep(time.Second * 4) // wait for enableSafeModeInitializationPhase exit
-	require.False(t, s.safeMode.Enable())
-
-	// test enable by initPhaseSeconds, SafeModeDuration dosen't work with consistency = none
-	s.cfg.MydumperConfig.ExtraArgs = "--consistency none"
-	s.enableSafeModeInitializationPhase(s.tctx)
-	time.Sleep(time.Second) // wait for enableSafeModeInitializationPhase running
-	require.True(t, s.safeMode.Enable())
-	time.Sleep(time.Second * 2) // wait for enableSafeModeInitializationPhase exit
 	require.False(t, s.safeMode.Enable())
 }
