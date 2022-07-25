@@ -19,8 +19,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/pingcap/tiflow/dm/dm/ctl"
-	"github.com/pingcap/tiflow/dm/dm/ctl/common"
+	"github.com/pingcap/tiflow/dm/ctl"
+	"github.com/pingcap/tiflow/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
