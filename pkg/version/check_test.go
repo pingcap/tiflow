@@ -170,6 +170,18 @@ func TestCheckClusterVersion(t *testing.T) {
 		require.Regexp(t, ".*TiKV .* is not supported.*", err)
 	}
 
+	// check pd / tikv with higher version, suppose current cdc version is `6.3.0`
+	{
+		mock.getVersion = func() string {
+			return "6.4.0-alpha"
+		}
+		mock.getAllStores = func() []*metapb.Store {
+			return []*metapb.Store{{Version: "6.4.0-alpha"}}
+		}
+		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, true)
+		require.Nil(t, err)
+	}
+
 	{
 		mock.getStatusCode = func() int {
 			return http.StatusBadRequest
