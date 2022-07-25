@@ -305,15 +305,7 @@ func (ddl *ShardDDL) HandleQueryEvent(ev *replication.QueryEvent, ec eventContex
 		return err
 	}
 
-	switch ddl.s.cfg.ShardMode {
-	case "":
-		return ddl.strategy.handleDDL(qec)
-	case config.ShardOptimistic:
-		return ddl.strategy.handleDDL(qec)
-	case config.ShardPessimistic:
-		return ddl.strategy.handleDDL(qec)
-	}
-	return errors.Errorf("unsupported shard-mode %s, should not happened", ddl.s.cfg.ShardMode)
+	return ddl.strategy.handleDDL(qec)
 }
 
 func (ddl *Normal) preFilter(*ddlInfo, *queryEventContext, *filter.Table, *filter.Table) (bool, error) {
