@@ -59,7 +59,8 @@ func TestTxnSink(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		bes = append(bes, &blackhole{block: int32(1), n: notify.Notifier{}})
 	}
-	sink := newSink(bes, defaultConflictDetectorSlots)
+	errCh := make(chan error, 1)
+	sink := newSink(bes, errCh, defaultConflictDetectorSlots)
 
 	// Test `WriteEvents` shouldn't be blocked by slow workers.
 	var handled uint32 = 0

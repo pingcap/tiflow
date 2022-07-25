@@ -16,6 +16,7 @@ package txn
 import (
 	"encoding/binary"
 	"hash/crc64"
+	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -27,7 +28,12 @@ var crcTable *crc64.Table = crc64.MakeTable(crc64.ISO)
 
 type txnEvent struct {
 	*eventsink.TxnCallbackableEvent
+	start        time.Time
 	conflictKeys []int64
+}
+
+func newTxnEvent(event *eventsink.TxnCallbackableEvent) *txnEvent {
+	return &txnEvent{TxnCallbackableEvent: event, start: time.Now()}
 }
 
 // ConflictKeys implements causality.txnEvent interface.

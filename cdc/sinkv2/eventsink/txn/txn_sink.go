@@ -32,10 +32,10 @@ type sink struct {
 	workers          []*worker
 }
 
-func newSink(backends []backend, conflictDetectorSlots int64) sink {
+func newSink(backends []backend, errCh chan<- error, conflictDetectorSlots int64) sink {
 	workers := make([]*worker, 0, len(backends))
 	for i, backend := range backends {
-		w := newWorker(i, backend)
+		w := newWorker(i, backend, errCh)
 		w.runBackgroundLoop()
 		workers = append(workers, w)
 	}
@@ -46,7 +46,7 @@ func newSink(backends []backend, conflictDetectorSlots int64) sink {
 // WriteEvents writes events to the sink.
 func (s *sink) WriteEvents(rows ...*eventsink.TxnCallbackableEvent) (err error) {
 	for _, row := range rows {
-		err = s.conflictDetector.Add(&txnEvent{row, nil})
+		err = s.conflictDetector.Add(newTxnEvent(row))
 		if err != nil {
 			return
 		}

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"go.uber.org/zap"
 )
@@ -33,12 +34,13 @@ type worker struct {
 	stopped chan struct{}
 	wg      sync.WaitGroup
 	backend backend
+	errCh   chan<- error
 
 	// Fields only used in the background loop.
 	timer *time.Timer
 }
 
-func newWorker(ID int, backend backend) *worker {
+func newWorker(ID int, backend backend, errCh chan<- error) *worker {
 	return &worker{
 		ID:      ID,
 		txnCh:   chann.New[txnWithNotifier](chann.Cap(-1 /*unbounded*/)),
@@ -70,6 +72,7 @@ func (w *worker) runBackgroundLoop() {
 					zap.Int("workerID", w.ID))
 				return
 			case txn := <-w.txnCh.Out():
+				metrics.ConflictDetectDuration.Observe(time.Since(txn.start).Seconds())
 				txn.wantMore()
 				if w.backend.OnTxnEvent(txn.txnEvent.TxnCallbackableEvent) && w.doFlush() {
 					log.Warn("transaction sink backend exits unexceptedly")
@@ -87,7 +90,8 @@ func (w *worker) runBackgroundLoop() {
 
 func (w *worker) doFlush() bool {
 	if err := w.backend.Flush(); err != nil {
-		// TODO: handle err.
+		log.Warn("txn sink worker flush fail", zap.Error(err))
+		w.errCh <- err
 		return true
 	}
 	if !w.timer.Stop() {

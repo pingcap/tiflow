@@ -14,6 +14,7 @@
 package txn
 
 import (
+	"context"
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
@@ -25,7 +26,7 @@ type backend interface {
 	OnTxnEvent(*eventsink.TxnCallbackableEvent) (needFlush bool)
 
 	// Flush pending events in the backend.
-	Flush() error
+	Flush(ctx context.Context) error
 
 	// To reduce latency for low throughput cases.
 	MaxFlushInterval() time.Duration
