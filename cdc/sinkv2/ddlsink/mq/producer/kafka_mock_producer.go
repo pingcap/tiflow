@@ -15,7 +15,6 @@ package producer
 
 import (
 	"context"
-	"sync"
 
 	"github.com/Shopify/sarama"
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
@@ -26,26 +25,49 @@ var _ Producer = (*MockProducer)(nil)
 
 // MockProducer is a mock producer for test.
 type MockProducer struct {
-	mu     sync.Mutex
-	events map[mqv1.TopicPartitionKey][]*codec.MQMessage
+	injectError error
+	events      map[mqv1.TopicPartitionKey][]*codec.MQMessage
 }
 
 // NewMockProducer creates a mock producer.
-func NewMockProducer(_ context.Context, _ sarama.Client, _ chan error) (Producer, error) {
+func NewMockProducer(_ context.Context, _ sarama.Client) (Producer, error) {
 	return &MockProducer{
 		events: make(map[mqv1.TopicPartitionKey][]*codec.MQMessage),
 	}, nil
 }
 
-// AsyncSendMessage appends a message to the mock producer.
-func (m *MockProducer) AsyncSendMessage(ctx context.Context, topic string,
-	partition int32, message *codec.MQMessage,
+// SyncBroadcastMessage stores a message to all partitions of the topic.
+func (m *MockProducer) SyncBroadcastMessage(ctx context.Context, topic string,
+	totalPartitionsNum int32, message *codec.MQMessage,
 ) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	if m.injectError != nil {
+		return m.injectError
+	}
+	for i := 0; i < int(totalPartitionsNum); i++ {
+		key := mqv1.TopicPartitionKey{
+			Topic:     topic,
+			Partition: int32(i),
+		}
+		if _, ok := m.events[key]; !ok {
+			m.events[key] = make([]*codec.MQMessage, 0)
+		}
+		m.events[key] = append(m.events[key], message)
+	}
+
+	return nil
+}
+
+// SyncSendMessage stores a message to a partition of the topic.
+func (m *MockProducer) SyncSendMessage(ctx context.Context, topic string,
+	partitionNum int32, message *codec.MQMessage,
+) error {
+	if m.injectError != nil {
+		return m.injectError
+	}
+
 	key := mqv1.TopicPartitionKey{
 		Topic:     topic,
-		Partition: partition,
+		Partition: partitionNum,
 	}
 	if _, ok := m.events[key]; !ok {
 		m.events[key] = make([]*codec.MQMessage, 0)
@@ -58,20 +80,12 @@ func (m *MockProducer) AsyncSendMessage(ctx context.Context, topic string,
 // Close do nothing.
 func (m *MockProducer) Close() {}
 
-// GetAllEvents returns the events received by the mock producer.
-func (m *MockProducer) GetAllEvents() []*codec.MQMessage {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	var events []*codec.MQMessage
-	for _, v := range m.events {
-		events = append(events, v...)
-	}
-	return events
-}
-
 // GetEvents returns the event filtered by the key.
 func (m *MockProducer) GetEvents(key mqv1.TopicPartitionKey) []*codec.MQMessage {
-	m.mu.Lock()
-	defer m.mu.Unlock()
 	return m.events[key]
+}
+
+// InjectError injects an error to the mock producer.
+func (m *MockProducer) InjectError(err error) {
+	m.injectError = err
 }

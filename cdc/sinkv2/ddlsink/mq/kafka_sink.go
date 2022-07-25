@@ -23,22 +23,21 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	mqconfig "github.com/pingcap/tiflow/cdc/sinkv2/config/mq"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/producer"
+	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq/producer"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pkafka "github.com/pingcap/tiflow/pkg/kafka"
 	"go.uber.org/zap"
 )
 
-// NewKafkaSink will verify the config and create a KafkaSink.
-func NewKafkaSink(
+// NewKafkaDDLSink will verify the config and create a Kafka DDL Sink.
+func NewKafkaDDLSink(
 	ctx context.Context,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
-	errCh chan error,
 	adminClientCreator pkafka.ClusterAdminClientCreator,
 	producerCreator producer.Factory,
-) (*sink, error) {
+) (*ddlSink, error) {
 	topic, err := mqconfig.GetTopic(sinkURI)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -77,9 +76,9 @@ func NewKafkaSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	log.Info("Try to create a DML sink producer",
+	log.Info("Try to create a DDL sink producer",
 		zap.Any("baseConfig", baseConfig))
-	p, err := producerCreator(ctx, client, errCh)
+	p, err := producerCreator(ctx, client)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
@@ -112,7 +111,7 @@ func NewKafkaSink(
 		return nil, errors.Trace(err)
 	}
 
-	s, err := newSink(ctx, p, topicManager, eventRouter, encoderConfig, errCh)
+	s, err := newDDLSink(ctx, p, topicManager, eventRouter, encoderConfig)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
