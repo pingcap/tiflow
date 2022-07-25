@@ -110,7 +110,7 @@ func (k *kafkaProducer) AsyncSendMessage(
 	return nil
 }
 
-func (k *kafkaProducer) Close() error {
+func (k *kafkaProducer) Close() {
 	// We have to hold the lock to prevent write to closed producer.
 	k.closedMu.Lock()
 	defer k.closedMu.Unlock()
@@ -122,45 +122,47 @@ func (k *kafkaProducer) Close() error {
 			zap.String("namespace", k.id.Namespace),
 			zap.String("changefeed", k.id.ID),
 			zap.Any("role", k.role))
-		return nil
+		return
 	}
 	close(k.failpointCh)
 	// Notify the run loop to exit.
 	close(k.closedChan)
 	k.closed = true
-	// `client` is mainly used by `asyncProducer` to fetch metadata and other related
-	// operations. When we close the `kafkaSaramaProducer`, TiCDC no need to make sure
-	// that buffered messages flushed.
-	// Consider the situation that the broker does not respond, If the client is not
-	// closed, `asyncProducer.Close()` would waste a mount of time to try flush all messages.
-	// To prevent the scenario mentioned above, close client first.
-	start := time.Now()
-	if err := k.client.Close(); err != nil {
-		log.Error("close sarama client with error", zap.Error(err),
-			zap.Duration("duration", time.Since(start)),
-			zap.String("namespace", k.id.Namespace),
-			zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
-		return err
-	}
-	log.Info("sarama client closed", zap.Duration("duration", time.Since(start)),
-		zap.String("namespace", k.id.Namespace),
-		zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
+	// We need to close it asynchronously.
+	// Otherwise, we might get stuck with it in an unhealthy state of kafka.
+	go func() {
+		// `client` is mainly used by `asyncProducer` to fetch metadata and other related
+		// operations. When we close the `kafkaSaramaProducer`, TiCDC no need to make sure
+		// that buffered messages flushed.
+		// Consider the situation that the broker does not respond, If the client is not
+		// closed, `asyncProducer.Close()` would waste a mount of time to try flush all messages.
+		// To prevent the scenario mentioned above, close client first.
+		start := time.Now()
+		if err := k.client.Close(); err != nil {
+			log.Error("close sarama client with error", zap.Error(err),
+				zap.Duration("duration", time.Since(start)),
+				zap.String("namespace", k.id.Namespace),
+				zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
+		} else {
+			log.Info("sarama client closed", zap.Duration("duration", time.Since(start)),
+				zap.String("namespace", k.id.Namespace),
+				zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
+		}
 
-	start = time.Now()
-	err := k.asyncProducer.Close()
-	if err != nil {
-		log.Error("close async client with error", zap.Error(err),
-			zap.Duration("duration", time.Since(start)),
-			zap.String("namespace", k.id.Namespace),
-			zap.String("changefeed", k.id.ID),
-			zap.Any("role", k.role))
-		return err
-	}
-	log.Info("async client closed", zap.Duration("duration", time.Since(start)),
-		zap.String("namespace", k.id.Namespace),
-		zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
-
-	return nil
+		start = time.Now()
+		err := k.asyncProducer.Close()
+		if err != nil {
+			log.Error("close async client with error", zap.Error(err),
+				zap.Duration("duration", time.Since(start)),
+				zap.String("namespace", k.id.Namespace),
+				zap.String("changefeed", k.id.ID),
+				zap.Any("role", k.role))
+		} else {
+			log.Info("async client closed", zap.Duration("duration", time.Since(start)),
+				zap.String("namespace", k.id.Namespace),
+				zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
+		}
+	}()
 }
 
 func (k *kafkaProducer) run(ctx context.Context) error {

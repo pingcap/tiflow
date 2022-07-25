@@ -118,8 +118,7 @@ func TestKafkaProducerAck(t *testing.T) {
 	default:
 	}
 
-	err = producer.Close()
-	require.Nil(t, err)
+	producer.Close()
 	cancel()
 	// check send messages when context is canceled or producer closed
 	err = producer.AsyncSendMessage(ctx, topic, int32(0), &codec.MQMessage{
@@ -151,13 +150,10 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	require.Nil(t, err)
 	producer, err := NewKafkaProducer(ctx, client, errCh)
 	defer func() {
-		err := producer.Close()
-		// Because the broker is no response, so we got this error.
-		require.Regexp(t, ".*Failed to deliver.*", err)
+		producer.Close()
 
 		// Close reentry.
-		err = producer.Close()
-		require.Nil(t, err)
+		producer.Close()
 	}()
 	require.Nil(t, err)
 	require.NotNil(t, producer)
@@ -213,9 +209,6 @@ func TestProducerDoubleClose(t *testing.T) {
 	require.Nil(t, err)
 	require.NotNil(t, producer)
 
-	err = producer.Close()
-	require.Nil(t, err)
-
-	err = producer.Close()
-	require.Nil(t, err)
+	producer.Close()
+	producer.Close()
 }

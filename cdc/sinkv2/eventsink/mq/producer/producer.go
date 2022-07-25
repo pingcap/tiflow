@@ -28,7 +28,7 @@ type Producer interface {
 	) error
 
 	// Close closes the producer and client(s).
-	Close() error
+	Close()
 }
 
 // Creator is a function to create a producer.

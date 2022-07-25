@@ -56,9 +56,7 @@ func (m *MockProducer) AsyncSendMessage(ctx context.Context, topic string,
 }
 
 // Close do nothing.
-func (m *MockProducer) Close() error {
-	return nil
-}
+func (m *MockProducer) Close() {}
 
 // GetEvents returns the events received by the mock producer.
 func (m *MockProducer) GetEvents() []*codec.MQMessage {
