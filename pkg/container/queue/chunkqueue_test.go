@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	testCaseSize = 10007
+	testCaseSize = 2007
 )
 
 func TestChunkQueueSimpleWorkflow(t *testing.T) {
@@ -30,12 +30,12 @@ func TestChunkQueueSimpleWorkflow(t *testing.T) {
 
 	q := NewChunkQueue[int]()
 
-	q.PushBack(10)
+	q.Enqueue(10)
 	require.Equal(t, q.Size(), 1)
 	v, ok := q.At(0)
 	require.Equal(t, v, 10)
 	require.True(t, ok)
-	v, ok = q.PopFront()
+	v, ok = q.Dequeue()
 	require.Equal(t, v, 10)
 	require.True(t, ok)
 
@@ -57,7 +57,7 @@ func TestChunkQueueSimpleWorkflow(t *testing.T) {
 	require.True(t, q.Empty())
 
 	for i := 0; i < testCaseSize; i++ {
-		q.PushBack(i)
+		q.Enqueue(i)
 		require.Equal(t, i+1, q.Size())
 	}
 
@@ -71,14 +71,14 @@ func TestChunkQueueSimpleWorkflow(t *testing.T) {
 	}
 
 	for i := 0; i < testCaseSize; i++ {
-		v, ok = q.PopFront()
+		v, ok = q.Dequeue()
 		require.True(t, ok)
 		require.Equal(t, v, i)
 	}
 
 	require.True(t, q.Empty())
 	require.Equal(t, 0, q.Size())
-	_, ok = q.PopFront()
+	_, ok = q.Dequeue()
 	require.False(t, ok)
 }
 
@@ -107,7 +107,7 @@ func TestChunkQueueExpand(t *testing.T) {
 			require.True(t, freeSpace >= 0 && freeSpace < q.chunkLength)
 		}
 
-		p, ok := q.PopFront()
+		p, ok := q.Dequeue()
 		require.True(t, ok)
 		require.Equal(t, p.no, i)
 		require.Equal(t, p.name, fmt.Sprintf("test-name-%d", i))
@@ -121,7 +121,7 @@ func TestChunkQueueDequeueMany(t *testing.T) {
 	q := NewChunkQueue[int]()
 	x := testCaseSize
 	for v := 0; v < x; v++ {
-		q.PushBack(v)
+		q.Enqueue(v)
 	}
 	f := 0
 	for !q.Empty() {
@@ -129,7 +129,7 @@ func TestChunkQueueDequeueMany(t *testing.T) {
 		if l == 0 {
 			l = 1
 		}
-		vals, ok := q.PopFrontMany(l)
+		vals, ok := q.DequeueMany(l)
 		require.True(t, ok)
 		for i := 0; i < l; i++ {
 			require.Equal(t, f+i, vals[i])

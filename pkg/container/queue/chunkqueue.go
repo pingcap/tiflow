@@ -107,7 +107,7 @@ func (q *ChunkQueue[T]) Empty() bool {
 	return q.size == 0
 }
 
-// At returns the value of a given index. At() does NOT support changing the value
+// At returns the value of a given index. At() does NOT support modifying the value
 func (q *ChunkQueue[T]) At(idx int) (T, bool) {
 	if idx < 0 || idx >= q.size {
 		return q.defaultValue, false
@@ -116,7 +116,7 @@ func (q *ChunkQueue[T]) At(idx int) (T, bool) {
 	return q.chunks[q.head+i/q.chunkLength].data[i%q.chunkLength], true
 }
 
-// Replace assignes a new value to a given index
+// Replace assigns a new value to a given index
 func (q *ChunkQueue[T]) Replace(idx int, val T) bool {
 	if idx < 0 || idx >= q.size {
 		return false
@@ -135,7 +135,7 @@ func (q *ChunkQueue[T]) Head() (T, bool) {
 	return c.data[c.l], true
 }
 
-// Tail() returns the value of the last element in queue
+// Tail returns the value of the last element in queue
 func (q *ChunkQueue[T]) Tail() (T, bool) {
 	if q.Empty() {
 		return q.defaultValue, false
@@ -152,7 +152,7 @@ func (q *ChunkQueue[T]) extend(n int) {
 	chunksNum := (n + q.chunkLength - 1) / q.chunkLength
 
 	// should reallocate the chunks pointers array if the tail cannot hold
-	if len(q.chunks)-q.tail-chunksNum <= 1 {
+	if q.tail+chunksNum+1 >= len(q.chunks) {
 		q.reallocateChunksArray(chunksNum)
 	}
 
@@ -179,7 +179,7 @@ func (q *ChunkQueue[T]) reallocateChunksArray(need int) {
 	}
 	used := q.tail - q.head
 	// Twice the array if more than a half will be in use
-	for used+need >= n/2 {
+	for used+need > n/2 {
 		n *= 2
 	}
 	if n != len(q.chunks) {
@@ -196,7 +196,7 @@ func (q *ChunkQueue[T]) reallocateChunksArray(need int) {
 	q.head = 0
 }
 
-// PushBack pushes an element to tail
+// Enqueue enqueues an element to tail
 func (q *ChunkQueue[T]) Enqueue(v T) {
 	c := q.lastChunk()
 	if c.r == q.chunkLength {
@@ -209,7 +209,7 @@ func (q *ChunkQueue[T]) Enqueue(v T) {
 	q.size++
 }
 
-// PopFront pops an element from head
+// Dequeue dequeues an element from head
 func (q *ChunkQueue[T]) Dequeue() (T, bool) {
 	if q.Empty() {
 		return q.defaultValue, false
@@ -240,25 +240,12 @@ func (q *ChunkQueue[T]) popChunk() {
 	q.chunkPool.Put(c)
 }
 
-// PushBack enqueues a single element to the tail
-func (q *ChunkQueue[T]) PushBack(v T) {
-	q.Enqueue(v)
-}
-
-// PopFront dequeue a single element from the head
-func (q *ChunkQueue[T]) PopFront() (T, bool) {
-	return q.Dequeue()
-}
-
-// PushBackMany pushes multiple elements to the tail at a time
-func (q *ChunkQueue[T]) PushBackMany(vals ...T) {
-	q.EnqueueMany(vals...)
-}
-
 // EnqueueMany enqueues multiple elements at a time
 func (q *ChunkQueue[T]) EnqueueMany(vals ...T) {
-	if q.Cap()-q.Size() < len(vals) {
-		q.extend(len(vals))
+	n := len(vals)
+	c := q.lastChunk()
+	if q.Cap()-q.Size() < n {
+		q.extend(n - (q.chunkLength - c.r))
 	}
 
 	for _, val := range vals {
@@ -266,17 +253,12 @@ func (q *ChunkQueue[T]) EnqueueMany(vals ...T) {
 	}
 }
 
-// DequeueAll dequeues n elements from the head.
+// DequeueAll dequeues all elements in the queue
 func (q *ChunkQueue[T]) DequeueAll() ([]T, bool) {
 	return q.DequeueMany(q.Size())
 }
 
-// PopFrontMany dequeues n elements from the head.
-func (q *ChunkQueue[T]) PopFrontMany(n int) ([]T, bool) {
-	return q.DequeueMany(n)
-}
-
-// DequeueMany dequeues n elements from the head.
+// DequeueMany dequeues n elements at a time
 func (q *ChunkQueue[T]) DequeueMany(n int) ([]T, bool) {
 	if n < 0 {
 		return nil, false
@@ -289,15 +271,12 @@ func (q *ChunkQueue[T]) DequeueMany(n int) ([]T, bool) {
 
 	res := make([]T, n, n)
 	cnt := 0
-	// emptyChunk := make([]T, q.chunkLength, q.chunkLength)
 	for i := q.head; i < q.tail && cnt < n; i++ {
 		c := q.chunks[i]
 		popLen := c.len()
 		if n-cnt < popLen {
 			popLen = n - cnt
 		}
-		// copy(res[cnt:cnt+popLen], c.data[c.l:c.l+popLen])
-		// copy(c.data[c.l:c.l+popLen], emptyChunk[:popLen])
 		for j := 0; j < popLen; j++ {
 			res[cnt+j] = c.data[c.l+j]
 			c.data[c.l+j] = q.defaultValue
@@ -332,8 +311,7 @@ func (q *ChunkQueue[T]) Shrink() {
 	q.reallocateChunksArray(-1)
 }
 
-// Range will iterates the queue from head to the first element that does NOT
-// satisfy f()
+// Range iterates the queue from head to the first element that does NOT satisfy f()
 func (q *ChunkQueue[T]) Range(f func(e T) bool) {
 	if q.Empty() {
 		return

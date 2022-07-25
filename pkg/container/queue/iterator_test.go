@@ -28,7 +28,7 @@ func TestChunkQueueIteratorPrevNext(t *testing.T) {
 	t.Parallel()
 	q := NewChunkQueue[int]()
 	for i := 0; i < iterTestSize; i++ {
-		q.PushBack(i)
+		q.Enqueue(i)
 	}
 
 	var it *ChunkQueueIterator[int]
@@ -105,7 +105,7 @@ func TestChunkQueueGetIterator(t *testing.T) {
 	q := NewChunkQueue[int]()
 
 	for i := 0; i < iterTestSize; i++ {
-		q.PushBack(i)
+		q.Enqueue(i)
 	}
 	var it *ChunkQueueIterator[int]
 	it = q.GetIterator(-1)
