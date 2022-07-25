@@ -20,7 +20,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -831,27 +830,6 @@ func (m *MessageServer) verifyStreamMeta(streamMeta *p2p.StreamMeta) error {
 			streamMeta.ReceiverId, // actual
 		)
 	}
-
-	if m.config.ServerVersion == "" || streamMeta.ClientVersion == "" {
-		// skip checking versions
-		return nil
-	}
-
-	clientVer, err := semver.NewVersion(streamMeta.ClientVersion)
-	if err != nil {
-		log.Error("MessageServer: semver failed to parse",
-			zap.String("ver", streamMeta.ClientVersion),
-			zap.Error(err))
-		return cerror.ErrPeerMessageIllegalClientVersion.GenWithStackByArgs(streamMeta.ClientVersion)
-	}
-
-	serverVer := semver.New(m.config.ServerVersion)
-
-	// Only allow clients with the same Major and Minor.
-	if serverVer.Major != clientVer.Major || serverVer.Minor != clientVer.Minor {
-		return cerror.ErrVersionIncompatible.GenWithStackByArgs(m.config.ServerVersion)
-	}
-
 	return nil
 }
 
