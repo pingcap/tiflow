@@ -2163,9 +2163,13 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 		expected *preparedDMLs
 	}{
 		{
-			name:     "empty",
-			input:    []*model.RowChangedEvent{},
-			expected: &preparedDMLs{sqls: []string{}, values: [][]interface{}{}},
+			name:  "empty",
+			input: []*model.RowChangedEvent{},
+			expected: &preparedDMLs{
+				startTs: []model.Ts{},
+				sqls:    []string{},
+				values:  [][]interface{}{},
+			},
 		}, {
 			name: "insert without PK",
 			input: []*model.RowChangedEvent{
@@ -2188,6 +2192,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 				},
 			},
 			expected: &preparedDMLs{
+				startTs: []model.Ts{418658114257813514},
 				sqls: []string{
 					"INSERT INTO `common_1`.`uk_without_pk`(`a1`,`a3`) VALUES (?,?);",
 				},
@@ -2216,6 +2221,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 				},
 			},
 			expected: &preparedDMLs{
+				startTs:  []model.Ts{418658114257813514},
 				sqls:     []string{"INSERT INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);"},
 				values:   [][]interface{}{{1, 1}},
 				rowCount: 1,
@@ -2253,6 +2259,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 				},
 			},
 			expected: &preparedDMLs{
+				startTs: []model.Ts{418658114257813516},
 				sqls: []string{
 					"UPDATE `common_1`.`uk_without_pk` SET `a1`=?,`a3`=? " +
 						"WHERE `a1`=? AND `a3`=? LIMIT 1;",
@@ -2293,6 +2300,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 				},
 			},
 			expected: &preparedDMLs{
+				startTs: []model.Ts{418658114257813516},
 				sqls: []string{"UPDATE `common_1`.`pk` SET `a1`=?,`a3`=? " +
 					"WHERE `a1`=? AND `a3`=? LIMIT 1;"},
 				values:   [][]interface{}{{3, 3, 2, 2}},
@@ -2337,6 +2345,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 				},
 			},
 			expected: &preparedDMLs{
+				startTs: []model.Ts{418658114257813516},
 				sqls: []string{
 					"INSERT INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",
 					"INSERT INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",
@@ -2366,6 +2375,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 				},
 			},
 			expected: &preparedDMLs{
+				startTs: []model.Ts{418658114257813516},
 				sqls: []string{
 					"REPLACE INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",
 				},
@@ -2393,9 +2403,9 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 					}},
 				},
 				{
-					StartTs:       418658114257813516,
-					CommitTs:      418658114257813517,
-					ReplicatingTs: 418658114257813515,
+					StartTs:       418658114257813506,
+					CommitTs:      418658114257813507,
+					ReplicatingTs: 418658114257813505,
 					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
 					Columns: []*model.Column{nil, {
 						Name:  "a1",
@@ -2411,6 +2421,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 				},
 			},
 			expected: &preparedDMLs{
+				startTs: []model.Ts{418658114257813516, 418658114257813506},
 				sqls: []string{
 					"REPLACE INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",
 					"REPLACE INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",

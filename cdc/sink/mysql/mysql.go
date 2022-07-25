@@ -708,7 +708,7 @@ type preparedDMLs struct {
 
 // prepareDMLs converts model.RowChangedEvent list to query string list and args list
 func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, bucket int) *preparedDMLs {
-	startTs := make([]model.Ts, 0, len(rows))
+	startTs := make([]model.Ts, 0, 1)
 	sqls := make([]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
 	replaces := make(map[string][][]interface{})
@@ -723,7 +723,6 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, bucket int) *prep
 		// we starting replicating the table, which means it must not be
 		// replicated before, and there is no such row in downstream MySQL.
 		translateToInsert = row.CommitTs > row.ReplicatingTs
-		startTs = append(startTs, row.StartTs)
 	}
 
 	// flush cached batch replace or insert, to keep the sequence of DMLs
@@ -740,6 +739,10 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, bucket int) *prep
 		var query string
 		var args []interface{}
 		quoteTable := quotes.QuoteSchema(row.Table.Schema, row.Table.Table)
+		if len(startTs) == 0 || // Always add the first row's start ts.
+			startTs[len(startTs)-1] != row.StartTs { // Try to deduplicate starts ts.
+			startTs = append(startTs, row.StartTs)
+		}
 
 		// If the old value is enabled, is not in safe mode and is an update event, then translate to UPDATE.
 		// NOTICE: Only update events with the old value feature enabled will have both columns and preColumns.
