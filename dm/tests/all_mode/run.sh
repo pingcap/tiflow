@@ -235,7 +235,7 @@ function test_fail_job_between_event() {
 
 	# worker1 will be bound to source1 and fail when see the second row change in an event
 	inject_points=(
-		"github.com/pingcap/tiflow/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
+		"github.com/pingcap/tiflow/dm/worker/TaskCheckInterval=return(\"500ms\")"
 		"github.com/pingcap/tiflow/dm/syncer/countJobFromOneEvent=return()"
 		"github.com/pingcap/tiflow/dm/syncer/flushFirstJob=return()"
 		"github.com/pingcap/tiflow/dm/syncer/failSecondJob=return()"
@@ -247,7 +247,7 @@ function test_fail_job_between_event() {
 
 	# worker2 will be bound to source2 and fail when see the second event in a GTID
 	inject_points=(
-		"github.com/pingcap/tiflow/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
+		"github.com/pingcap/tiflow/dm/worker/TaskCheckInterval=return(\"500ms\")"
 		"github.com/pingcap/tiflow/dm/syncer/countJobFromOneGTID=return()"
 		"github.com/pingcap/tiflow/dm/syncer/flushFirstJob=return()"
 		"github.com/pingcap/tiflow/dm/syncer/failSecondJob=return()"
@@ -388,7 +388,7 @@ function run() {
 	test_regexpr_router regexpr-task-lightning.yaml
 
 	inject_points=(
-		"github.com/pingcap/tiflow/dm/dm/worker/TaskCheckInterval=return(\"500ms\")"
+		"github.com/pingcap/tiflow/dm/worker/TaskCheckInterval=return(\"500ms\")"
 		"github.com/pingcap/tiflow/dm/relay/NewUpstreamServer=return(true)"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"

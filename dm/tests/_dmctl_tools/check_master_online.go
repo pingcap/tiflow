@@ -22,7 +22,7 @@ import (
 
 	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
 
-	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/tests/utils"
 )
 
