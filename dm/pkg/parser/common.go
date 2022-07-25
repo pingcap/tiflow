@@ -72,6 +72,9 @@ type tableNameExtractor struct {
 }
 
 func (tne *tableNameExtractor) Enter(in ast.Node) (ast.Node, bool) {
+	if _, ok := in.(*ast.ReferenceDef); ok {
+		return in, true
+	}
 	if t, ok := in.(*ast.TableName); ok {
 		var tb *filter.Table
 		if tne.flavor == utils.LCTableNamesSensitive {
@@ -134,6 +137,9 @@ type tableRenameVisitor struct {
 
 func (v *tableRenameVisitor) Enter(in ast.Node) (ast.Node, bool) {
 	if v.hasErr {
+		return in, true
+	}
+	if _, ok := in.(*ast.ReferenceDef); ok {
 		return in, true
 	}
 	if t, ok := in.(*ast.TableName); ok {

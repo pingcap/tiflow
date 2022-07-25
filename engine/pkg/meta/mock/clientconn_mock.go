@@ -11,10 +11,6 @@ func NewMockClientConn() metaModel.ClientConn {
 
 type mockClientConn struct{}
 
-func (c *mockClientConn) Initialize(conf *metaModel.StoreConfig) error {
-	return nil
-}
-
 func (c *mockClientConn) ClientType() metaModel.ClientType {
 	return metaModel.MockKVClientType
 }
