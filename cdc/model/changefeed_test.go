@@ -589,8 +589,13 @@ func TestFixSinkProtocol(t *testing.T) {
 		tc.info.fixSinkProtocol()
 		var protocol config.Protocol
 		err := protocol.FromString(tc.info.Config.Sink.Protocol)
-		require.Nil(t, err)
-		require.Equal(t, tc.expectedProtocol, protocol)
+		if strings.Contains(tc.info.SinkURI, "kafka") {
+			require.Nil(t, err)
+			require.Equal(t, tc.expectedProtocol, protocol)
+		} else {
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "ErrMQSinkUnknownProtocol")
+		}
 	}
 
 	// Test fixing the protocol in SinkURI.
