@@ -45,9 +45,8 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/pb"
-	"github.com/pingcap/tiflow/dm/dm/unit"
+	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/reader"
@@ -72,6 +71,7 @@ import (
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 	sm "github.com/pingcap/tiflow/dm/syncer/safe-mode"
 	"github.com/pingcap/tiflow/dm/syncer/shardddl"
+	"github.com/pingcap/tiflow/dm/unit"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
@@ -3539,7 +3539,7 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 			setFirstErr(err2)
 			continue
 		}
-		stmts := bytes.Split(content, []byte(";"))
+		stmts := bytes.Split(content, []byte(";\n"))
 		for _, stmt := range stmts {
 			stmt = bytes.TrimSpace(stmt)
 			if len(stmt) == 0 || bytes.HasPrefix(stmt, []byte("/*")) {

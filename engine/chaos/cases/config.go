@@ -38,7 +38,7 @@ func newConfig() *config {
 	fs := cfg.FlagSet
 
 	fs.StringVar(&cfg.MasterAddr, "master-addr", "server-master:10240", "address of server-master")
-	fs.StringVar(&cfg.EtcdAddr, "etcd-addr", "metastore:12479", "address of etcd server(used by fake job)")
+	fs.StringVar(&cfg.EtcdAddr, "etcd-addr", "metastore-business:12479", "address of etcd server(used by fake job)")
 	fs.DurationVar(&cfg.Duration, "duration", 20*time.Minute, "duration of cases running")
 
 	fs.IntVar(&cfg.MasterCount, "master-count", 3, "expect count of server-master")

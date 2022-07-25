@@ -269,6 +269,8 @@ type RowChangedEvent struct {
 
 	// SplitTxn marks this RowChangedEvent as the first line of a new txn.
 	SplitTxn bool `json:"-" msg:"-"`
+	// ReplicatingTs is ts when a table starts replicating events to downstream.
+	ReplicatingTs Ts `json:"-" msg:"-"`
 }
 
 // GetCommitTs returns the commit timestamp of this event.
@@ -603,11 +605,10 @@ func (d *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
 //msgp:ignore SingleTableTxn
 type SingleTableTxn struct {
 	// data fields of SingleTableTxn
-	Table     *TableName
-	StartTs   uint64
-	CommitTs  uint64
-	Rows      []*RowChangedEvent
-	ReplicaID uint64
+	Table    *TableName
+	StartTs  uint64
+	CommitTs uint64
+	Rows     []*RowChangedEvent
 
 	// control fields of SingleTableTxn
 	// FinishWg is a barrier txn, after this txn is received, the worker must

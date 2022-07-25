@@ -35,7 +35,7 @@ func TestSchedulerRebalance(t *testing.T) {
 		4: {State: ReplicationSetStateAbsent},
 	}
 
-	scheduler := newRebalanceScheduler()
+	scheduler := newRebalanceScheduler(model.ChangeFeedID{})
 	require.Equal(t, "rebalance-scheduler", scheduler.Name())
 	// rebalance is not triggered
 	tasks := scheduler.Schedule(checkpointTs, currentTables, captures, replications)
