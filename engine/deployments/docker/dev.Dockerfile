@@ -1,4 +1,4 @@
-FROM golang:1.18-alpine as builder
+FROM alpine:3.16 as builder
 
 RUN apk add --no-cache gcompat
 

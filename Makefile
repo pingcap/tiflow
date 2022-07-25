@@ -500,6 +500,15 @@ engine_image:
 	@which docker || (echo "docker not found in ${PATH}"; exit 1)
 	./engine/test/utils/run_engine.sh build
 
+engine_image_linux: 
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	GOOS=linux GOARCH=amd64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
+	docker build --platform linux/amd64 -f ./engine/deployments/docker/dev.Dockerfile -t dataflow:test ./ 
+
+engine_image_infra: engine_image_linux
+	docker tag dataflow:test hub.pingcap.net/dataflow/engine:test
+	docker image push hub.pingcap.net/dataflow/engine:test
+
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))
 
