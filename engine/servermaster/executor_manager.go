@@ -276,6 +276,7 @@ func (e *ExecutorManagerImpl) Start(ctx context.Context) {
 // Stop implements ExecutorManager.Stop
 func (e *ExecutorManagerImpl) Stop() {
 	e.wg.Wait()
+	e.notifier.Close()
 }
 
 func (e *ExecutorManagerImpl) checkAliveImpl() error {

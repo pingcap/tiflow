@@ -52,8 +52,16 @@ func mockGetDBConn(t *testing.T, dsnStr string) (*sql.DB, sqlmock.Sqlmock, error
 	db, mock, err := sqlmock.New()
 	require.Nil(t, err)
 	// common execution for orm
-	mock.ExpectQuery("SELECT VERSION()").WillReturnRows(sqlmock.NewRows(
-		[]string{"VERSION()"}).AddRow("5.7.35-log"))
+	mock.ExpectQuery("SELECT VERSION()").
+		WillReturnRows(sqlmock.NewRows([]string{"VERSION()"}).AddRow("5.7.35-log"))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).
+		WillReturnRows(sqlmock.NewRows([]string{"SCHEMA_NAME"}))
+	mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `logic_epoches` (`seq_id` bigint unsigned AUTO_INCREMENT,`created_at` datetime(3) NULL," +
+		"`updated_at` datetime(3) NULL,`job_id` varchar(128) not null,`epoch` bigint not null default 1,PRIMARY KEY (`seq_id`),UNIQUE INDEX uidx_jk (`job_id`))")).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO `logic_epoches` (`created_at`,`updated_at`,`job_id`,`epoch`) VALUES (?,?,?,?) "+
+		"ON DUPLICATE KEY UPDATE `seq_id`=`seq_id`")).WithArgs(anyTime{}, anyTime{}, "", 1).
+		WillReturnResult(sqlmock.NewResult(1, 1))
 	return db, mock, nil
 }
 
@@ -135,13 +143,6 @@ func testInitialize(t *testing.T) {
 					"`id` varchar(128) not null,`job_id` varchar(128) not null,`worker_id` varchar(128) not null," +
 					"`executor_id` varchar(128) not null,`gc_pending` BOOLEAN,`deleted` BOOLEAN,PRIMARY KEY (`seq_id`)," +
 					"UNIQUE INDEX uidx_rid (`job_id`,`id`), INDEX idx_rei (`executor_id`,`id`))")).WillReturnResult(sqlmock.NewResult(1, 1))
-
-				mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).WillReturnRows(
-					sqlmock.NewRows([]string{"SCHEMA_NAME"}))
-				mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `logic_epoches` (`seq_id` bigint unsigned AUTO_INCREMENT,`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL,`epoch` bigint not null default 1,PRIMARY KEY (`seq_id`))")).WillReturnResult(
-					sqlmock.NewResult(1, 1))
-				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO `logic_epoches` (`created_at`,`updated_at`,`epoch`,`seq_id`) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE `seq_id`=`seq_id`")).WithArgs(
-					anyTime{}, anyTime{}, 1, 1).WillReturnResult(sqlmock.NewResult(1, 1))
 			},
 		},
 	}
@@ -1260,34 +1261,6 @@ func TestError(t *testing.T) {
 	require.True(t, e.Is(derror.ErrMetaEntryNotFound))
 }
 
-func TestLogicEpoch(t *testing.T) {
-	t.Parallel()
-
-	sqlDB, mock, err := mockGetDBConn(t, "test")
-	defer sqlDB.Close()
-	defer mock.ExpectClose()
-	require.Nil(t, err)
-	cli, err := newClient(sqlDB)
-	require.Nil(t, err)
-	require.NotNil(t, cli)
-
-	testCases := []tCase{
-		{
-			fn:     "GenEpoch",
-			inputs: []interface{}{},
-			err:    derror.ErrMetaOpFail.GenWithStackByArgs(),
-			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery("SELECT [*] FROM `logic_epoches`").WillReturnError(
-					errors.New("InitializeEpoch error"))
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		testInner(t, mock, cli, tc)
-	}
-}
-
 func TestContext(t *testing.T) {
 	t.Parallel()
 
@@ -1310,22 +1283,6 @@ func TestContext(t *testing.T) {
 	require.Error(t, err)
 	require.Regexp(t, "context deadline exceed", err.Error())
 	failpoint.Disable("github.com/pingcap/tiflow/engine/pkg/orm/initializedDelay")
-
-	// test transaction
-	ctx, cancel = context.WithTimeout(context.TODO(), 1*time.Second)
-	defer cancel()
-
-	err = failpoint.Enable("github.com/pingcap/tiflow/engine/pkg/orm/genEpochDelay", "sleep(2000)")
-	require.NoError(t, err)
-	ctx = failpoint.WithHook(ctx, func(ctx context.Context, fpname string) bool {
-		return ctx.Value(fpname) != nil
-	})
-	ctx2 = context.WithValue(ctx, "github.com/pingcap/tiflow/engine/pkg/orm/genEpochDelay", struct{}{})
-
-	_, err = cli.GenEpoch(ctx2)
-	require.Error(t, err)
-	require.Regexp(t, "context deadline exceed", err.Error())
-	failpoint.Disable("github.com/pingcap/tiflow/engine/pkg/orm/model/genEpochDelay")
 }
 
 func testInner(t *testing.T, m sqlmock.Sqlmock, cli Client, c tCase) {
