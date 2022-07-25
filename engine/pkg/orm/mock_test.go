@@ -42,29 +42,6 @@ func TestGenEpochMock(t *testing.T) {
 		require.NoError(t, err)
 	}
 	require.Equal(t, int64(11), epoch)
-
-	// Being a lightweight database, SQLite can’t handle a high level of concurrency
-	// NOTICE: Not Recommend to do high concurrenct test in unit test
-	// TODO: we can add retry for sqlite error 'database table is lock' later
-	/*
-		var wg sync.WaitGroup
-		for i := 0; i < 10; i++ {
-			wg.Add(1)
-			go func(idx int) {
-				t.Logf("goroutine:%d", idx)
-				defer wg.Done()
-				for j := 0; j < 10; j++ {
-					_, err := mock.GenEpoch(ctx)
-					require.NoError(t, err)
-				}
-			}(i)
-		}
-		wg.Wait()
-		t.Logf("end the concurrency")
-		epoch, err = mock.GenEpoch(ctx)
-		require.NoError(t, err)
-		require.Equal(t, 112, int(epoch))
-	*/
 }
 
 type mCase struct {
