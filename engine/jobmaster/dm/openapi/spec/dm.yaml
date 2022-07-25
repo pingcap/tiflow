@@ -1,0 +1,330 @@
+openapi: "3.0.0"
+tags:
+  - name: job
+    description: job
+  - name: task
+    description: task
+
+paths:
+  /config:
+    get:
+      tags:
+        - job
+      summary: "get job config"
+      operationId: "DMAPIGetJobConfig"
+      responses:
+        "200":
+          description: "job"
+          content:
+            "application/json":
+              schema:
+                type: json
+        "404":
+          description: "config not found"
+    put:
+      tags:
+        - job
+      summary: "update job config"
+      operationId: "DMAPIUpdateJobConfig"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/UpdateJobConfigRequest"
+      responses:
+        "200":
+          description: "success"
+        "500":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+  /status:
+    get:
+      tags:
+        - job
+      summary: "get the current status of the job"
+      operationId: "DMAPIGetJobStatus"
+      parameters:
+        - name: "tasks"
+          in: query
+          description: "globally unique data source name"
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+      responses:
+        "200":
+          description: "success"
+          content:
+            "application/json":
+              schema:
+                type: json
+        "500":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+    put:
+      tags:
+        - job
+      summary: "operate the stage of the job"
+      operationId: "DMAPIOperateJob"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/OperateJobRequest"
+      responses:
+        "200":
+          description: "success"
+        "500":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+  /schema/tasks/{task-name}:
+    get:
+      tags:
+        - task
+      summary: "get schema"
+      operationId: "DMAPIGetSchema"
+      parameters:
+        - name: "task-name"
+          in: path
+          description: "task name"
+          required: true
+          schema:
+            type: string
+        - name: "database"
+          in: query
+          description: "database name"
+          required: false
+          schema:
+            type: string
+        - name: "table"
+          in: query
+          description: "table name"
+          required: false
+          schema:
+            type: string
+        - name: "target"
+          in: query
+          description: "target table"
+          required: false
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: "success"
+          content:
+            "application/json":
+              schema:
+                type: json
+        "500":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+    put:
+      tags:
+        - tasks
+      summary: "set schema"
+      operationId: "DMAPISetSchema"
+      parameters:
+        - name: "task-name"
+          in: path
+          description: "task name"
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/SetBinlogSchemaRequest"
+      responses:
+        "200":
+          description: "success"
+          content:
+            "application/json":
+              schema:
+                type: json
+        "500":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+  /binlog/tasks/{task-name}:
+    get:
+      tags:
+        - task
+      summary: "get binlog operator"
+      operationId: "DMAPIGetBinlogOperator"
+      parameters:
+        - name: "task-name"
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: "binlog_pos"
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: "success"
+          content:
+            "application/json":
+              schema:
+                type: json
+        "500":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+    post:
+      tags:
+        - task
+      summary: "set binlog operator"
+      operationId: "DMAPISetBinlogOperator"
+      parameters:
+        - name: "task-name"
+          in: path
+          description: "task name"
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: "request body"
+        content:
+          "application/json":
+            schema:
+              $ref: "#/components/schemas/SetBinlogOperatorRequest"
+      responses:
+        "201":
+          description: "success"
+          content:
+            "application/json":
+              schema:
+                type: json
+        "500":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+    delete:
+      tags:
+        - task
+      summary: "delete binlog operator"
+      operationId: "DMAPIDeleteBinlogOperator"
+      parameters:
+        - name: "task-name"
+          in: path
+          description: "task name"
+          required: true
+          schema:
+            type: string
+        - name: "binlog_pos"
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "204":
+          description: "success"
+        "500":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
+
+components:
+  schemas:
+    ErrorWithMessage:
+      description: "operation error"
+      type: object
+      properties:
+        code:
+          type: integer
+          description: "error code"
+        message:
+          type: string
+          description: "error message"
+        details:
+          type: array
+          items:
+            type: string
+      required:
+        - "code"
+        - "message"
+    UpdateJobConfigRequest:
+      type: object
+      properties:
+        config:
+          type: string
+      required:
+        - "config"
+    OperateJobRequest:
+      type: object
+      properties:
+        tasks:
+          type: array
+          items:
+            type: string
+        op:
+          type: string
+          enum:
+            - "resume"
+            - "pause"
+      required:
+        - "op"
+    SetBinlogOperatorRequest:
+      type: object
+      properties:
+        op:
+          type: string
+          enum:
+            - "skip"
+            - "replace"
+            - "inject"
+        binlog_pos:
+          type: string
+        sqls:
+          type: array
+          items:
+            type: string
+      required:
+        - "op"
+    SetBinlogSchemaRequest:
+      type: object
+      properties:
+        sql:
+          type: string
+        database:
+          type: string
+        table:
+          type: string
+        from_source:
+          type: boolean
+          default: false
+        from_target:
+          type: boolean
+          default: false
+      required:
+        - "database"
+        - "table"
+        - "sql"

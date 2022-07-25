@@ -19,7 +19,7 @@ import (
 	. "github.com/pingcap/check"
 	"go.uber.org/atomic"
 
-	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 

@@ -236,6 +236,11 @@ error = '''
 ddl event is ignored
 '''
 
+["CDC:ErrDDLSchemaNotFound"]
+error = '''
+cannot find mysql.tidb_ddl_job schema
+'''
+
 ["CDC:ErrDatumUnflatten"]
 error = '''
 unflatten datume data
@@ -308,7 +313,7 @@ exec DDL failed
 
 ["CDC:ErrExpressionColumnNotFound"]
 error = '''
-invalid filter expressions. Can not found column '%s' from table '%s' in: %s
+invalid filter expression(s). Cannot find column '%s' from table '%s' in: %s
 '''
 
 ["CDC:ErrFailedToFilterDDL"]

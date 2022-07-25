@@ -26,6 +26,9 @@ var defaultOpts = []goleak.Option{
 	goleak.IgnoreTopFunction("github.com/golang/glog.(*loggingT).flushDaemon"),
 	// library used by sarama, ref: https://github.com/rcrowley/go-metrics/pull/266
 	goleak.IgnoreTopFunction("github.com/rcrowley/go-metrics.(*meterArbiter).tick"),
+	// Because we close the sarama producer asynchronously, so we have to ignore these funcs.
+	goleak.IgnoreTopFunction("github.com/Shopify/sarama.(*client).backgroundMetadataUpdater"),
+	goleak.IgnoreTopFunction("github.com/Shopify/sarama.(*Broker).responseReceiver"),
 }
 
 // VerifyNone verifies that no unexpected leaks occur

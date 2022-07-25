@@ -171,6 +171,6 @@ func TestChangefeedNotRetryError(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		require.Equal(t, c.expected, IsChangefeedNotRetryError(c.err))
+		require.Equal(t, c.expected, IsChangefeedUnRetryableError(c.err))
 	}
 }

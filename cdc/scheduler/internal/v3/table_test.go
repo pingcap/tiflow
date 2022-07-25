@@ -27,7 +27,7 @@ func TestTableManager(t *testing.T) {
 	// pretend there are 4 tables
 	mockTableExecutor := newMockTableExecutor()
 
-	tableM := newTableManager(mockTableExecutor)
+	tableM := newTableManager(model.ChangeFeedID{}, mockTableExecutor)
 
 	tableM.addTable(model.TableID(1))
 	require.Equal(t, schedulepb.TableStateAbsent, tableM.tables[model.TableID(1)].state)

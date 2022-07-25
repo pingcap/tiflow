@@ -29,7 +29,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/pingcap/tiflow/dm/dm/common"
+	"github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/server"
@@ -90,6 +90,8 @@ type Server struct {
 
 // NewServer creates a new executor server instance
 func NewServer(cfg *Config, ctx *test.Context) *Server {
+	log.Info("creating executor", zap.Stringer("config", cfg))
+
 	registerWorkerOnce.Do(registerWorkers)
 	s := Server{
 		cfg:         cfg,
