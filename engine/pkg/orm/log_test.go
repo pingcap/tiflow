@@ -15,6 +15,7 @@ package orm
 
 import (
 	"context"
+	"errors"
 	"regexp"
 	"testing"
 	"time"
@@ -50,6 +51,6 @@ func TestNewOrmLogger(t *testing.T) {
 	fc := func() (sql string, rowsAffected int64) { return "sql test", 10 }
 	logger.Trace(context.TODO(), time.Now(), fc, nil)
 	// expect no log here
-	logger.Trace(context.TODO(), time.Now().Add(-10*time.Second), fc, nil)
-	require.Regexp(t, regexp.QuoteMeta("[sql=\"sql test\"] [affected-rows=10]"), buffer.Stripped())
+	logger.Trace(context.TODO(), time.Now().Add(-10*time.Second), fc, errors.New("error test"))
+	require.Regexp(t, regexp.QuoteMeta("[sql=\"sql test\"] [affected-rows=10] [error=\"error test\"]"), buffer.Stripped())
 }
