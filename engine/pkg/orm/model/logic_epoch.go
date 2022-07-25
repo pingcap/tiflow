@@ -31,7 +31,7 @@ const (
 // We use union columns <JobID, Epoch> as uk to achieve job-level isolation
 type LogicEpoch struct {
 	Model
-	JobID string `gorm:"type:varchar(64) not null;uniqueIndex:uidx_jk"`
+	JobID string `gorm:"type:varchar(128) not null;uniqueIndex:uidx_jk"`
 	Epoch int64  `gorm:"type:bigint not null default 1"`
 }
 
