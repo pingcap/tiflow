@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
+	"github.com/rogpeppe/go-internal/semver"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
@@ -401,7 +402,18 @@ func (o *ownerImpl) updateMetrics(state *orchestrator.GlobalReactorState) {
 	return
 }
 
+// allowVersionInconsistent return true if the current owner version
+// allow other captures' version higher than it, since `v6.2.0`.
+// This is to support graceful rolling upgrade.
+func allowVersionInconsistent() bool {
+	return semver.Compare(version.ReleaseVersion, "v6.2.0") >= 0
+}
+
 func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model.CaptureInfo) bool {
+	if allowVersionInconsistent() {
+		return true
+	}
+
 	myVersion := version.ReleaseVersion
 	for _, capture := range captures {
 		if myVersion != capture.Version {
