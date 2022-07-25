@@ -21,19 +21,11 @@ import (
 
 // NewClientConn new a client connection
 func NewClientConn(storeConf *metaModel.StoreConfig) (metaModel.ClientConn, error) {
-	var cc metaModel.ClientConn
-
 	switch storeConf.StoreType {
 	case metaModel.StoreTypeEtcd:
-		cc = etcdkv.NewClientConnImpl()
-	default:
-		return nil, cerrors.ErrMetaClientTypeNotSupport.
-			GenWithStackByArgs(metaModel.ToClientType(storeConf.StoreType))
+		return etcdkv.NewClientConnImpl(storeConf)
 	}
 
-	if err := cc.Initialize(storeConf); err != nil {
-		return nil, err
-	}
-
-	return cc, nil
+	return nil, cerrors.ErrMetaClientTypeNotSupport.
+		GenWithStackByArgs(metaModel.ToClientType(storeConf.StoreType))
 }

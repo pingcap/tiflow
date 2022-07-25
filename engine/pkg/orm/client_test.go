@@ -52,8 +52,16 @@ func mockGetDBConn(t *testing.T, dsnStr string) (*sql.DB, sqlmock.Sqlmock, error
 	db, mock, err := sqlmock.New()
 	require.Nil(t, err)
 	// common execution for orm
-	mock.ExpectQuery("SELECT VERSION()").WillReturnRows(sqlmock.NewRows(
-		[]string{"VERSION()"}).AddRow("5.7.35-log"))
+	mock.ExpectQuery("SELECT VERSION()").
+		WillReturnRows(sqlmock.NewRows([]string{"VERSION()"}).AddRow("5.7.35-log"))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).
+		WillReturnRows(sqlmock.NewRows([]string{"SCHEMA_NAME"}))
+	mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `logic_epoches` (`seq_id` bigint unsigned AUTO_INCREMENT,`created_at` datetime(3) NULL," +
+		"`updated_at` datetime(3) NULL,`job_id` varchar(128) not null,`epoch` bigint not null default 1,PRIMARY KEY (`seq_id`),UNIQUE INDEX uidx_jk (`job_id`))")).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO `logic_epoches` (`created_at`,`updated_at`,`job_id`,`epoch`) VALUES (?,?,?,?) "+
+		"ON DUPLICATE KEY UPDATE `seq_id`=`seq_id`")).WithArgs(anyTime{}, anyTime{}, "", 1).
+		WillReturnResult(sqlmock.NewResult(1, 1))
 	return db, mock, nil
 }
 
@@ -102,27 +110,27 @@ func testInitialize(t *testing.T) {
 					sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 				mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `project_infos` (`seq_id` bigint unsigned AUTO_INCREMENT," +
 					"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL," +
-					"`id` varchar(64) not null,`name` varchar(64) not null,PRIMARY KEY (`seq_id`)," +
+					"`id` varchar(128) not null,`name` varchar(128) not null,PRIMARY KEY (`seq_id`)," +
 					"UNIQUE INDEX uidx_id (`id`))")).WillReturnResult(sqlmock.NewResult(1, 1))
 
 				mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).WillReturnRows(
 					sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 				mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `project_operations` (`seq_id` bigint unsigned AUTO_INCREMENT," +
-					"`project_id` varchar(64) not null,`operation` varchar(16) not null,`job_id` varchar(64) not null," +
+					"`project_id` varchar(128) not null,`operation` varchar(16) not null,`job_id` varchar(128) not null," +
 					"`created_at` datetime(3) NULL,PRIMARY KEY (`seq_id`),INDEX idx_op (`project_id`,`created_at`))")).WillReturnResult(sqlmock.NewResult(1, 1))
 
 				mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).WillReturnRows(
 					sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 				mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `master_meta_kv_data` (`seq_id` bigint unsigned AUTO_INCREMENT,`created_at` datetime(3) NULL," +
-					"`updated_at` datetime(3) NULL,`project_id` varchar(64) not null,`id` varchar(64) not null,`type` smallint not null COMMENT 'JobManager(1),CvsJobMaster(2),FakeJobMaster(3),DMJobMaster(4),CDCJobMaster(5)'," +
-					"`status` tinyint not null COMMENT 'Uninit(1),Init(2),Finished(3),Stopped(4)',`node_id` varchar(64) not null,`address` varchar(64) not null,`epoch` bigint not null," +
+					"`updated_at` datetime(3) NULL,`project_id` varchar(128) not null,`id` varchar(128) not null,`type` smallint not null COMMENT 'JobManager(1),CvsJobMaster(2),FakeJobMaster(3),DMJobMaster(4),CDCJobMaster(5)'," +
+					"`status` tinyint not null COMMENT 'Uninit(1),Init(2),Finished(3),Stopped(4)',`node_id` varchar(128) not null,`address` varchar(256) not null,`epoch` bigint not null," +
 					"`config` blob,`deleted` datetime(3) NULL,PRIMARY KEY (`seq_id`),INDEX idx_mst (`project_id`,`status`),UNIQUE INDEX uidx_mid (`id`))")).WillReturnResult(sqlmock.NewResult(1, 1))
 
 				mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).WillReturnRows(
 					sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 				mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `worker_statuses` (`seq_id` bigint unsigned AUTO_INCREMENT," +
 					"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL," +
-					"`project_id` varchar(64) not null,`job_id` varchar(64) not null,`id` varchar(64) not null," +
+					"`project_id` varchar(128) not null,`job_id` varchar(128) not null,`id` varchar(128) not null," +
 					"`type` smallint not null COMMENT 'JobManager(1),CvsJobMaster(2),FakeJobMaster(3),DMJobMaster(4),CDCJobMaster(5),CvsTask(6),FakeTask(7),DMTask(8),CDCTask(9),WorkerDMDump(10),WorkerDMLoad(11),WorkerDMSync(12)'," +
 					"`status` tinyint not null COMMENT 'Normal(1),Created(2),Init(3),Error(4),Finished(5),Stopped(6)',`errmsg` text," +
 					"`ext_bytes` blob,PRIMARY KEY (`seq_id`),UNIQUE INDEX uidx_wid (`job_id`,`id`)," +
@@ -131,17 +139,10 @@ func testInitialize(t *testing.T) {
 				mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).WillReturnRows(
 					sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 				mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `resource_meta` (`seq_id` bigint unsigned AUTO_INCREMENT,`created_at` datetime(3) NULL," +
-					"`updated_at` datetime(3) NULL,`project_id` varchar(64) not null," +
-					"`id` varchar(64) not null,`job_id` varchar(64) not null,`worker_id` varchar(64) not null," +
-					"`executor_id` varchar(64) not null,`gc_pending` BOOLEAN,`deleted` BOOLEAN,PRIMARY KEY (`seq_id`)," +
+					"`updated_at` datetime(3) NULL,`project_id` varchar(128) not null," +
+					"`id` varchar(128) not null,`job_id` varchar(128) not null,`worker_id` varchar(128) not null," +
+					"`executor_id` varchar(128) not null,`gc_pending` BOOLEAN,`deleted` BOOLEAN,PRIMARY KEY (`seq_id`)," +
 					"UNIQUE INDEX uidx_rid (`job_id`,`id`), INDEX idx_rei (`executor_id`,`id`))")).WillReturnResult(sqlmock.NewResult(1, 1))
-
-				mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).WillReturnRows(
-					sqlmock.NewRows([]string{"SCHEMA_NAME"}))
-				mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `logic_epoches` (`seq_id` bigint unsigned AUTO_INCREMENT,`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL,`epoch` bigint not null default 1,PRIMARY KEY (`seq_id`))")).WillReturnResult(
-					sqlmock.NewResult(1, 1))
-				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO `logic_epoches` (`created_at`,`updated_at`,`epoch`,`seq_id`) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE `seq_id`=`seq_id`")).WithArgs(
-					anyTime{}, anyTime{}, 1, 1).WillReturnResult(sqlmock.NewResult(1, 1))
 			},
 		},
 	}
@@ -1260,34 +1261,6 @@ func TestError(t *testing.T) {
 	require.True(t, e.Is(derror.ErrMetaEntryNotFound))
 }
 
-func TestLogicEpoch(t *testing.T) {
-	t.Parallel()
-
-	sqlDB, mock, err := mockGetDBConn(t, "test")
-	defer sqlDB.Close()
-	defer mock.ExpectClose()
-	require.Nil(t, err)
-	cli, err := newClient(sqlDB)
-	require.Nil(t, err)
-	require.NotNil(t, cli)
-
-	testCases := []tCase{
-		{
-			fn:     "GenEpoch",
-			inputs: []interface{}{},
-			err:    derror.ErrMetaOpFail.GenWithStackByArgs(),
-			mockExpectResFn: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery("SELECT [*] FROM `logic_epoches`").WillReturnError(
-					errors.New("InitializeEpoch error"))
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		testInner(t, mock, cli, tc)
-	}
-}
-
 func TestContext(t *testing.T) {
 	t.Parallel()
 
@@ -1310,22 +1283,6 @@ func TestContext(t *testing.T) {
 	require.Error(t, err)
 	require.Regexp(t, "context deadline exceed", err.Error())
 	failpoint.Disable("github.com/pingcap/tiflow/engine/pkg/orm/initializedDelay")
-
-	// test transaction
-	ctx, cancel = context.WithTimeout(context.TODO(), 1*time.Second)
-	defer cancel()
-
-	err = failpoint.Enable("github.com/pingcap/tiflow/engine/pkg/orm/genEpochDelay", "sleep(2000)")
-	require.NoError(t, err)
-	ctx = failpoint.WithHook(ctx, func(ctx context.Context, fpname string) bool {
-		return ctx.Value(fpname) != nil
-	})
-	ctx2 = context.WithValue(ctx, "github.com/pingcap/tiflow/engine/pkg/orm/genEpochDelay", struct{}{})
-
-	_, err = cli.GenEpoch(ctx2)
-	require.Error(t, err)
-	require.Regexp(t, "context deadline exceed", err.Error())
-	failpoint.Disable("github.com/pingcap/tiflow/engine/pkg/orm/model/genEpochDelay")
 }
 
 func testInner(t *testing.T, m sqlmock.Sqlmock, cli Client, c tCase) {
