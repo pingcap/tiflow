@@ -28,7 +28,7 @@
 {{- end -}}
 {{- end -}}
 
-{{- define "tiflow.configmap.data1" -}}
+{{- define "tiflow.configmap.data" -}}
 server-master: |-
     {{- if .Values.master.config }}
 {{ .Values.master.config | indent 2 }}

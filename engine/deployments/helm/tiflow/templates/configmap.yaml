@@ -11,4 +11,4 @@ metadata:
     app.kubernetes.io/part-of: tiflow
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+"  "_" }}
 data:
-{{ include "tiflow.configmap.data1" . | indent 2}}
+{{ include "tiflow.configmap.data" . | indent 2}}
