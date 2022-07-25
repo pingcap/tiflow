@@ -16,7 +16,6 @@ package sqlkv
 import (
 	"github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/errorutil"
 )
 
 // sqlError wraps IsRetryable to etcd error.
@@ -26,9 +25,6 @@ type sqlError struct {
 }
 
 func (e *sqlError) IsRetryable() bool {
-	if e.cause != nil {
-		return errorutil.IsRetryableEtcdError(e.cause)
-	}
 	// TODO define retryable error
 	return false
 }
