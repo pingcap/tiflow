@@ -130,11 +130,6 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 				failpoint.Return()
 			}
 		})
-		fresh, err2 := s.IsFreshTask(tctx.Ctx)
-		if err2 != nil {
-			err = err2
-		} else if !fresh {
-			err = terror.ErrSyncerReprocessWithSafeModeFail.Generate()
-		}
+		err = terror.ErrSyncerReprocessWithSafeModeFail.Generate()
 	}
 }
