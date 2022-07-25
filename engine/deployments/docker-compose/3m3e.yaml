@@ -73,7 +73,6 @@ services:
                         - "11241:10241"
                 volumes:
                         - ./config/executor.toml:/config.toml
-                        - /tmp/dataflow:/tmp/dataflow
                 command:
                         - "/tiflow"
                         - "executor"
@@ -95,7 +94,6 @@ services:
                         - "11242:10241"
                 volumes:
                         - ./config/executor.toml:/config.toml
-                        - /tmp/dataflow:/tmp/dataflow
                 command:
                         - "/tiflow"
                         - "executor"
@@ -149,7 +147,6 @@ services:
                 environment:
                         MYSQL_ROOT_PASSWORD: 123456
                 volumes:
-                        - '/tmp/dataflow/mysql:/var/lib/mysql'
                         - './config/mysql_meta.cnf:/etc/my.cnf'
                 ports:
                         - "3336:3306"
