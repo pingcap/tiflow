@@ -89,7 +89,6 @@ func TestChangefeedListCli(t *testing.T) {
 	require.Nil(t, cmd.Execute())
 	out, err := ioutil.ReadAll(b)
 	require.Nil(t, err)
-	// make sure the output contains error state changefeed.
 	require.Contains(t, string(out), "error-1")
 	require.Contains(t, string(out), "normal-2")
 	require.Contains(t, string(out), "stopped-6")
@@ -100,7 +99,6 @@ func TestChangefeedListCli(t *testing.T) {
 	require.Nil(t, cmd.Execute())
 	out, err = ioutil.ReadAll(b)
 	require.Nil(t, err)
-	// make sure the output contains error state changefeed.
 	require.Contains(t, string(out), "error-1")
 	require.Contains(t, string(out), "normal-2")
 	require.Contains(t, string(out), "failed-3")
