@@ -27,7 +27,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 
-	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/config"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 )
 

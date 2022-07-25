@@ -16,7 +16,7 @@ package relay
 import (
 	"encoding/json"
 
-	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
