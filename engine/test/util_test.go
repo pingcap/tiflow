@@ -96,7 +96,7 @@ func (c *MiniCluster) Start1M1E(cc *C) (
 			Name:    "master1",
 			DataDir: "/tmp/df",
 		},
-		MasterAddr:        masterAddr,
+		Addr:              masterAddr,
 		AdvertiseAddr:     masterAddr,
 		KeepAliveTTL:      20000000 * time.Second,
 		KeepAliveInterval: 200 * time.Millisecond,
@@ -105,7 +105,7 @@ func (c *MiniCluster) Start1M1E(cc *C) (
 	// one master + one executor
 	executorCfg := &executor.Config{
 		Join:              masterAddr,
-		WorkerAddr:        workerAddr,
+		Addr:              workerAddr,
 		AdvertiseAddr:     workerAddr,
 		KeepAliveTTL:      20000000 * time.Second,
 		KeepAliveInterval: 200 * time.Millisecond,

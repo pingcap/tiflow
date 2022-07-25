@@ -53,8 +53,13 @@ func newWriterTestSuite(
 	}
 }
 
+func (s *writerTestSuite) Close() {
+	_ = s.cli.Close()
+}
+
 func TestWriterUpdate(t *testing.T) {
 	suite := newWriterTestSuite(t, "master-1", "executor-1", 1, "worker-1")
+	defer suite.Close()
 	ctx := context.Background()
 
 	st := &frameModel.WorkerStatus{
@@ -109,6 +114,7 @@ func TestWriterUpdate(t *testing.T) {
 
 func TestWriterSendRetry(t *testing.T) {
 	suite := newWriterTestSuite(t, "master-1", "executor-1", 1, "worker-1")
+	defer suite.Close()
 	ctx := context.Background()
 
 	st := &frameModel.WorkerStatus{

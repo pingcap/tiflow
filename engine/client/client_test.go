@@ -46,7 +46,7 @@ func TestClientManager(t *testing.T) {
 			Name:    "master1",
 			DataDir: "/tmp/df",
 		},
-		MasterAddr:        "127.0.0.1:1992",
+		Addr:              "127.0.0.1:1992",
 		KeepAliveTTL:      20000000 * time.Second,
 		KeepAliveInterval: 200 * time.Millisecond,
 		RPCTimeout:        time.Second,
@@ -54,6 +54,7 @@ func TestClientManager(t *testing.T) {
 
 	masterServer, err := servermaster.NewServer(masterCfg, test.NewContext())
 	require.Nil(t, err)
+	masterServer.Stop()
 
 	masterCtx, masterCancel := context.WithCancel(ctx)
 	defer masterCancel()
@@ -66,7 +67,7 @@ func TestClientManager(t *testing.T) {
 
 	executorCfg := &executor.Config{
 		Join:              "127.0.0.1:1992",
-		WorkerAddr:        "127.0.0.1:1993",
+		Addr:              "127.0.0.1:1993",
 		KeepAliveTTL:      20000000 * time.Second,
 		KeepAliveInterval: 200 * time.Millisecond,
 		RPCTimeout:        time.Second,

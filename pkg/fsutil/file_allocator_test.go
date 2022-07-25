@@ -31,13 +31,21 @@ func TestFileAllocateSuccess(t *testing.T) {
 }
 
 func TestFileAllocateFailed(t *testing.T) {
+	// 1. the requested allocation space will cause disk full
 	fl := NewFileAllocator(t.TempDir(), "test", math.MaxInt64)
-	defer fl.Close()
 
 	f, err := fl.Open()
 	require.Nil(t, f)
 	require.NotNil(t, err)
 	f.Close()
+	fl.Close()
+
+	// 2. the directory does not exist
+	fl = NewFileAllocator("not-exist-dir", "test", 1024)
+	f, err = fl.Open()
+	require.NotNil(t, err)
+	require.Nil(t, f)
+	fl.Close()
 }
 
 func benchmarkWriteData(b *testing.B, size int, useFileAlloctor bool) {

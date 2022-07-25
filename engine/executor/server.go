@@ -29,7 +29,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/pingcap/tiflow/dm/dm/common"
+	"github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/server"
@@ -286,7 +286,7 @@ func (s *Server) Stop() {
 }
 
 func (s *Server) startForTest(ctx context.Context) (err error) {
-	s.mockSrv, err = mock.NewExecutorServer(s.cfg.WorkerAddr, s)
+	s.mockSrv, err = mock.NewExecutorServer(s.cfg.Addr, s)
 	if err != nil {
 		return err
 	}
@@ -422,14 +422,14 @@ func (s *Server) Run(ctx context.Context) error {
 
 // startTCPService starts grpc server and http server
 func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error {
-	tcpServer, err := tcpserver.NewTCPServer(s.cfg.WorkerAddr, &security.Credential{})
+	tcpServer, err := tcpserver.NewTCPServer(s.cfg.Addr, &security.Credential{})
 	if err != nil {
 		return err
 	}
 	s.tcpServer = tcpServer
 	pb.RegisterExecutorServer(s.grpcSrv, s)
 	pb.RegisterBrokerServiceServer(s.grpcSrv, s.resourceBroker)
-	log.Info("listen address", zap.String("addr", s.cfg.WorkerAddr))
+	log.Info("listen address", zap.String("addr", s.cfg.Addr))
 
 	wg.Go(func() error {
 		return s.tcpServer.Run(ctx)
