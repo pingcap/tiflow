@@ -31,10 +31,8 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
-	"github.com/pingcap/tiflow/pkg/version"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
-	"golang.org/x/mod/semver"
 	"golang.org/x/time/rate"
 )
 
@@ -173,9 +171,6 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 	// admin job, which will cause all http api unavailable.
 	o.handleJobs()
 
-	if !o.clusterVersionConsistent(state.Captures) {
-		return state, nil
-	}
 	// Owner should update GC safepoint before initializing changefeed, so
 	// changefeed can remove its "ticdc-creating" service GC safepoint during
 	// initializing.
@@ -400,24 +395,6 @@ func (o *ownerImpl) updateMetrics(state *orchestrator.GlobalReactorState) {
 		}
 	}
 	return
-}
-
-// clusterVersionConsistent return true
-// if the owner allow other captures with different version among the cluster.
-// before v6.2.0, the owner only allow captures at the same version among the cluster.
-// after v6.2.0, only allow captures at version higher than v6.2.0 in the cluster.
-func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model.CaptureInfo) bool {
-	for _, capture := range captures {
-		if semver.Compare(capture.Version, "v6.2.0") < 0 {
-			if o.logLimiter.Allow() {
-				log.Warn("the capture version is not compatible with the owner version",
-					zap.String("ownerVer", version.ReleaseVersion),
-					zap.Any("capture", capture))
-			}
-			return false
-		}
-	}
-	return true
 }
 
 func (o *ownerImpl) handleDrainCaptures(query *scheduler.Query, done chan<- error) {

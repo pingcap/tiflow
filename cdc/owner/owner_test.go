@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
-	"golang.org/x/time/rate"
 )
 
 type mockManager struct {
@@ -644,32 +643,4 @@ func TestAsyncStop(t *testing.T) {
 	default:
 		require.Fail(t, "unexpected")
 	}
-}
-
-func TestClusterVersionConsistent(t *testing.T) {
-	t.Parallel()
-
-	owner := ownerImpl{
-		logLimiter: rate.NewLimiter(versionInconsistentLogRate, versionInconsistentLogRate),
-	}
-	captures := map[model.CaptureID]*model.CaptureInfo{
-		"owner-capture": {ID: "owner-capture", Version: "v6.2.0"},
-		"capture-1":     {ID: "capture-1", Version: "v6.1.0"},
-	}
-	// upgrade from `v6.1.0` to `v6.2.0` is not allowed
-	// since etcd meta change due to support multiple cluster
-	allowed := owner.clusterVersionConsistent(captures)
-	require.False(t, allowed)
-
-	captures["capture-1"].Version = "v6.2.0"
-	allowed = owner.clusterVersionConsistent(captures)
-	require.True(t, allowed)
-
-	captures["owner-capture"].Version = "v6.3.0"
-	allowed = owner.clusterVersionConsistent(captures)
-	require.True(t, allowed)
-
-	captures["owner-capture"].Version = "v7.5.0"
-	allowed = owner.clusterVersionConsistent(captures)
-	require.True(t, allowed)
 }
