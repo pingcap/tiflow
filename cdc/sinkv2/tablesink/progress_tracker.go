@@ -42,6 +42,8 @@ const (
 // Then txn3-1 and txn3-2 are written, then the progress can be updated to resolvedTs3.
 // Next, since no data is being written, we can update to resolvedTs5 in order.
 type progressTracker struct {
+	// tableID is the table ID of the table sink.
+	tableID model.TableID
 	// This lock for both pendingEventAndResolvedTs and lastMinResolvedTs.
 	lock sync.Mutex
 	// pendingEventAndResolvedTs is used to store the pending event keys and resolved tss.
@@ -60,8 +62,9 @@ type progressTracker struct {
 // newProgressTracker is used to create a new progress tracker.
 // The last min resolved ts is set to 0.
 // It means that the table sink has not started yet.
-func newProgressTracker() *progressTracker {
+func newProgressTracker(tableID model.TableID) *progressTracker {
 	return &progressTracker{
+		tableID:                   tableID,
 		pendingEventAndResolvedTs: linkedhashmap.New(),
 		// It means the start of the table.
 		// It's Ok to use 0 here.
@@ -158,7 +161,10 @@ func (r *progressTracker) close(ctx context.Context) error {
 			return errors.Trace(ctx.Err())
 		case <-ticker.C:
 			log.Warn("close processor doesn't return in time, may be stuck",
-				zap.Int("trackingCount", r.trackingCount()))
+				zap.Int64("tableID", r.tableID),
+				zap.Int("trackingCount", r.trackingCount()),
+				zap.Any("lastMinResolvedTs", r.minTs()),
+			)
 		default:
 			if r.trackingCount() == 0 {
 				return nil

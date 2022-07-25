@@ -27,6 +27,7 @@ var _ TableSink = (*eventTableSink[*model.RowChangedEvent])(nil)
 var _ TableSink = (*eventTableSink[*model.SingleTableTxn])(nil)
 
 type eventTableSink[E eventsink.TableEvent] struct {
+	tableID         model.TableID
 	eventID         uint64
 	maxResolvedTs   model.ResolvedTs
 	backendSink     eventsink.EventSink[E]
@@ -39,14 +40,16 @@ type eventTableSink[E eventsink.TableEvent] struct {
 
 // New an eventTableSink with given backendSink and event appender.
 func New[E eventsink.TableEvent](
+	tableID model.TableID,
 	backendSink eventsink.EventSink[E],
 	appender eventsink.Appender[E],
 ) *eventTableSink[E] {
 	return &eventTableSink[E]{
+		tableID:         tableID,
 		eventID:         0,
 		maxResolvedTs:   model.NewResolvedTs(0),
 		backendSink:     backendSink,
-		progressTracker: newProgressTracker(),
+		progressTracker: newProgressTracker(tableID),
 		eventAppender:   appender,
 		eventBuffer:     make([]E, 0, 1024),
 		state:           pipeline.TableStatePreparing,

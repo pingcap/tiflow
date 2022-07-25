@@ -26,7 +26,7 @@ import (
 func TestNewProgressTracker(t *testing.T) {
 	t.Parallel()
 
-	tracker := newProgressTracker()
+	tracker := newProgressTracker(1)
 	require.NotNil(
 		t,
 		tracker.pendingEventAndResolvedTs,
@@ -43,7 +43,7 @@ func TestNewProgressTracker(t *testing.T) {
 func TestAddEvent(t *testing.T) {
 	t.Parallel()
 
-	tracker := newProgressTracker()
+	tracker := newProgressTracker(1)
 	tracker.addEvent(1)
 	tracker.addEvent(2)
 	tracker.addEvent(3)
@@ -54,7 +54,7 @@ func TestAddResolvedTs(t *testing.T) {
 	t.Parallel()
 
 	// There is no event in the tracker.
-	tracker := newProgressTracker()
+	tracker := newProgressTracker(1)
 	tracker.addResolvedTs(1, model.NewResolvedTs(1))
 	tracker.addResolvedTs(2, model.NewResolvedTs(2))
 	tracker.addResolvedTs(3, model.NewResolvedTs(3))
@@ -62,7 +62,7 @@ func TestAddResolvedTs(t *testing.T) {
 	require.Equal(t, uint64(3), tracker.minTs().Ts, "lastMinResolvedTs should be 3")
 
 	// There is an event in the tracker.
-	tracker = newProgressTracker()
+	tracker = newProgressTracker(1)
 	tracker.addEvent(1)
 	tracker.addResolvedTs(2, model.NewResolvedTs(2))
 	tracker.addResolvedTs(3, model.NewResolvedTs(3))
@@ -74,14 +74,14 @@ func TestRemove(t *testing.T) {
 	t.Parallel()
 
 	// Only event.
-	tracker := newProgressTracker()
+	tracker := newProgressTracker(1)
 	tracker.addEvent(1)
 	tracker.addEvent(2)
 	tracker.addEvent(3)
 	tracker.remove(2)
 	require.Equal(t, 2, tracker.pendingEventAndResolvedTs.Size(), "event2 should be removed")
 	// Only resolved ts.
-	tracker = newProgressTracker()
+	tracker = newProgressTracker(1)
 	tracker.addResolvedTs(1, model.NewResolvedTs(1))
 	tracker.addResolvedTs(2, model.NewResolvedTs(2))
 	tracker.addResolvedTs(3, model.NewResolvedTs(3))
@@ -95,7 +95,7 @@ func TestRemove(t *testing.T) {
 	)
 	require.Equal(t, uint64(3), tracker.minTs().Ts, "lastMinResolvedTs should be 3")
 	// Both event and resolved ts.
-	tracker = newProgressTracker()
+	tracker = newProgressTracker(1)
 	tracker.addEvent(1)
 	tracker.addEvent(2)
 	tracker.addResolvedTs(3, model.NewResolvedTs(3))
@@ -130,7 +130,7 @@ func TestRemove(t *testing.T) {
 func TestCloseTracker(t *testing.T) {
 	t.Parallel()
 
-	tracker := newProgressTracker()
+	tracker := newProgressTracker(1)
 	tracker.addEvent(1)
 	tracker.addResolvedTs(2, model.NewResolvedTs(1))
 	tracker.addEvent(3)
@@ -158,7 +158,7 @@ func TestCloseTracker(t *testing.T) {
 func TestCloseTrackerCancellable(t *testing.T) {
 	t.Parallel()
 
-	tracker := newProgressTracker()
+	tracker := newProgressTracker(1)
 	tracker.addEvent(1)
 	tracker.addResolvedTs(2, model.NewResolvedTs(1))
 	tracker.addEvent(3)
