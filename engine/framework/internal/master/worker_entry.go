@@ -174,6 +174,10 @@ func (e *workerEntry) SetExpireTime(expireAt time.Time) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
+	log.Info("set worker expire time",
+		zap.String("worker-id", e.id), zap.String("executor-id", string(e.executorID)),
+		zap.Any("expire-before", e.expireAt), zap.Any("expire-after", expireAt),
+	)
 	e.expireAt = expireAt
 }
 
