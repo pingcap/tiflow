@@ -357,14 +357,12 @@ func (info *ChangeFeedInfo) fixSinkProtocol() {
 		} else {
 			rawQuery.Set(config.ProtocolKey, newProtocolStr)
 		}
-		oldRawQuery := sinkURIParsed.RawQuery
-		newRawQuery := rawQuery.Encode()
-		sinkURIParsed.RawQuery = newRawQuery
-		fixedSinkURI := sinkURIParsed.String()
+		oldSinkURI := sinkURIParsed.String()
+		sinkURIParsed.RawQuery = rawQuery.Encode()
+		info.SinkURI = sinkURIParsed.String()
 		log.Info("handle incompatible protocol from sink URI",
-			zap.String("oldUriQuery", oldRawQuery),
-			zap.String("fixedUriQuery", newRawQuery))
-		info.SinkURI = fixedSinkURI
+			zap.String("oldSinkURI", oldSinkURI),
+			zap.String("fixedSinkURI", info.SinkURI))
 		info.Config.Sink.Protocol = newProtocolStr
 	}
 

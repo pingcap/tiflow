@@ -16,6 +16,7 @@ package model
 import (
 	"fmt"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -228,7 +229,7 @@ func TestFixSinkProtocolIncompatible(t *testing.T) {
 	configTestCases := []struct {
 		info                *ChangeFeedInfo
 		expectedProtocol    config.Protocol
-		expectedProtocolStr *string
+		expectedProtocolStr string
 	}{
 		{
 			info: &ChangeFeedInfo{
@@ -306,7 +307,7 @@ func TestFixSinkProtocolIncompatible(t *testing.T) {
 					Sink: &config.SinkConfig{Protocol: "default"},
 				},
 			},
-			expectedProtocolStr: &emptyProtocolStr,
+			expectedProtocolStr: emptyProtocolStr,
 		},
 		{
 			info: &ChangeFeedInfo{
@@ -319,19 +320,23 @@ func TestFixSinkProtocolIncompatible(t *testing.T) {
 					Sink: &config.SinkConfig{Protocol: "random"},
 				},
 			},
-			expectedProtocolStr: &emptyProtocolStr,
+			expectedProtocolStr: emptyProtocolStr,
 		},
 	}
 
 	for _, tc := range configTestCases {
 		tc.info.FixIncompatible()
-		if tc.expectedProtocolStr != nil {
-			require.Equal(t, *tc.expectedProtocolStr, tc.info.Config.Sink.Protocol)
+		if tc.expectedProtocolStr != "" {
+			require.Equal(t, tc.expectedProtocolStr, tc.info.Config.Sink.Protocol)
 		} else {
 			var protocol config.Protocol
 			err := protocol.FromString(tc.info.Config.Sink.Protocol)
-			require.Nil(t, err)
-			require.Equal(t, tc.expectedProtocol, protocol)
+			if strings.Contains(tc.info.SinkURI, "kafka") {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "ErrMQSinkUnknownProtocol")
+			}
 		}
 	}
 
