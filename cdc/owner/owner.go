@@ -422,6 +422,13 @@ func (o *ownerImpl) handleDrainCaptures(query *scheduler.Query, done chan<- erro
 		err                      error
 	)
 	for _, changefeed := range o.changefeeds {
+		if changefeed.scheduler == nil {
+			// scheduler is created lazily, it is possible to be nil.
+			// To prevent a changefeed being considered drained,
+			// we increase totalTableCount.
+			totalTableCount++
+			continue
+		}
 		count, e := changefeed.scheduler.DrainCapture(query.CaptureID)
 		if e != nil {
 			err = e
@@ -467,12 +474,18 @@ func (o *ownerImpl) handleJobs() {
 		case ownerJobTypeAdminJob:
 			cfReactor.feedStateManager.PushAdminJob(job.AdminJob)
 		case ownerJobTypeScheduleTable:
-			cfReactor.scheduler.MoveTable(job.TableID, job.TargetCaptureID)
+			// scheduler is created lazily, it is possible to be nil.
+			if cfReactor.scheduler != nil {
+				cfReactor.scheduler.MoveTable(job.TableID, job.TargetCaptureID)
+			}
 		case ownerJobTypeDrainCapture:
 			o.handleDrainCaptures(job.scheduleQuery, job.done)
 			continue // continue here to prevent close the done channel twice
 		case ownerJobTypeRebalance:
-			cfReactor.scheduler.Rebalance()
+			// scheduler is created lazily, it is possible to be nil.
+			if cfReactor.scheduler != nil {
+				cfReactor.scheduler.Rebalance()
+			}
 		case ownerJobTypeQuery:
 			job.done <- o.handleQueries(job.query)
 		case ownerJobTypeDebugInfo:

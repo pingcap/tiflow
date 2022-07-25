@@ -23,6 +23,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
+	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -643,4 +644,19 @@ func TestAsyncStop(t *testing.T) {
 	default:
 		require.Fail(t, "unexpected")
 	}
+}
+
+func TestHandleDrainCapturesSchedulerNotReady(t *testing.T) {
+	t.Parallel()
+
+	o := &ownerImpl{changefeeds: make(map[model.ChangeFeedID]*changefeed)}
+	o.changefeeds[model.ChangeFeedID{}] = &changefeed{
+		scheduler: nil, // scheduler is not set.
+	}
+
+	query := &scheduler.Query{CaptureID: "test"}
+	done := make(chan error, 1)
+	o.handleDrainCaptures(query, done)
+	require.NotEqualValues(t, 0, query.Resp.(*model.DrainCaptureResp).CurrentTableCount)
+	require.Nil(t, <-done)
 }
