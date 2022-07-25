@@ -91,9 +91,7 @@ func (s *Syncer) enableSafeModeInitializationPhase(tctx *tcontext.Context) {
 			// 2. push forward and replicate some sqls after safeModeExitPoint to downstream
 			// 3. quit because of network error, fail to flush global checkpoint and new safeModeExitPoint to downstream
 			// 4. restart again, quit safe mode at safeModeExitPoint, but some sqls after this location have already been replicated to the downstream
-			if err = s.checkpoint.FlushSafeModeExitPoint(s.runCtx); err != nil {
-				return
-			}
+			err = s.checkpoint.FlushSafeModeExitPoint(s.runCtx)
 			return
 		}
 
