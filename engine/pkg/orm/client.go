@@ -223,7 +223,7 @@ func newClient(sqlDB *sql.DB) (*metaOpsClient, error) {
 		SkipInitializeWithVersion: false,
 	}), &gorm.Config{
 		SkipDefaultTransaction: true,
-		// TODO: logger
+		Logger:                 NewOrmLogger(log.L(), WithSlowThreshold(200*time.Millisecond)),
 	})
 	if err != nil {
 		log.Error("create gorm client fail", zap.Error(err))
