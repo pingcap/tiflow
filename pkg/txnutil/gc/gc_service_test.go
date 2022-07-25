@@ -39,7 +39,7 @@ func TestCheckSafetyOfStartTs(t *testing.T) {
 		model.DefaultChangeFeedID("changefeed1"), TTL, 50)
 	require.Equal(t,
 		"[CDC:ErrStartTsBeforeGC]fail to create or maintain changefeed "+
-			"because start-ts 50 is earlier than GC safepoint at 60", err.Error())
+			"because start-ts 50 is earlier than or equal to GC safepoint at 60", err.Error())
 	pdCli.UpdateServiceGCSafePoint(ctx, "service2", 10, 80) //nolint:errcheck
 	pdCli.UpdateServiceGCSafePoint(ctx, "service3", 10, 70) //nolint:errcheck
 	err = EnsureChangefeedStartTsSafety(ctx, pdCli,
@@ -88,7 +88,7 @@ func TestCheckSafetyOfStartTs(t *testing.T) {
 		model.DefaultChangeFeedID("changefeed1"), TTL, 50)
 	require.Equal(t, err.Error(),
 		"[CDC:ErrStartTsBeforeGC]fail to create or maintain changefeed "+
-			"because start-ts 50 is earlier than GC safepoint at 60")
+			"because start-ts 50 is earlier than or equal to GC safepoint at 60")
 }
 
 type mockPdClientForServiceGCSafePoint struct {
