@@ -141,7 +141,7 @@ func TestReplicationManagerRemoveTable(t *testing.T) {
 	// Add the table.
 	tbl, err := newReplicationSet(1, 0, map[string]*schedulepb.TableStatus{
 		"1": {TableID: 1, State: schedulepb.TableStateReplicating},
-	})
+	}, model.ChangeFeedID{})
 	require.Nil(t, err)
 	require.Equal(t, ReplicationSetStateReplicating, tbl.State)
 	r.tables[1] = tbl
@@ -236,7 +236,7 @@ func TestReplicationManagerMoveTable(t *testing.T) {
 	// Add the table.
 	tbl, err := newReplicationSet(1, 0, map[string]*schedulepb.TableStatus{
 		source: {TableID: 1, State: schedulepb.TableStateReplicating},
-	})
+	}, model.ChangeFeedID{})
 	require.Nil(t, err)
 	require.Equal(t, ReplicationSetStateReplicating, tbl.State)
 	r.tables[1] = tbl
@@ -410,7 +410,7 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 	// Add a new table.
 	r.tables[5], err = newReplicationSet(5, 0, map[string]*schedulepb.TableStatus{
 		"5": {TableID: 5, State: schedulepb.TableStateReplicating},
-	})
+	}, model.ChangeFeedID{})
 	require.Nil(t, err)
 
 	// More burst balance is still allowed.
@@ -473,14 +473,14 @@ func TestReplicationManagerBurstBalanceMoveTables(t *testing.T) {
 	// Two tables in "1".
 	r.tables[1], err = newReplicationSet(1, 0, map[string]*schedulepb.TableStatus{
 		"1": {TableID: 1, State: schedulepb.TableStateReplicating},
-	})
+	}, model.ChangeFeedID{})
 	require.Nil(t, err)
 	r.tables[2], err = newReplicationSet(2, 0, map[string]*schedulepb.TableStatus{
 		"1": {
 			TableID: 2, State: schedulepb.TableStateReplicating,
 			Checkpoint: schedulepb.Checkpoint{CheckpointTs: 1},
 		},
-	})
+	}, model.ChangeFeedID{})
 	require.Nil(t, err)
 
 	msgs, err := r.HandleTasks([]*scheduleTask{{
@@ -568,7 +568,7 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 					ResolvedTs:   model.Ts(20),
 				},
 			},
-		})
+		}, model.ChangeFeedID{})
 	require.NoError(t, err)
 	r.tables[model.TableID(1)] = rs
 
@@ -582,7 +582,7 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 					ResolvedTs:   model.Ts(30),
 				},
 			},
-		})
+		}, model.ChangeFeedID{})
 	require.NoError(t, err)
 	r.tables[model.TableID(2)] = rs
 
@@ -616,7 +616,7 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 					ResolvedTs:   model.Ts(40),
 				},
 			},
-		})
+		}, model.ChangeFeedID{})
 	require.NoError(t, err)
 	r.tables[model.TableID(3)] = rs
 	checkpoint, resolved = r.AdvanceCheckpoint(currentTables)
@@ -634,7 +634,7 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 					ResolvedTs:   model.Ts(10),
 				},
 			},
-		})
+		}, model.ChangeFeedID{})
 	require.NoError(t, err)
 	r.tables[model.TableID(4)] = rs
 	checkpoint, resolved = r.AdvanceCheckpoint(currentTables)

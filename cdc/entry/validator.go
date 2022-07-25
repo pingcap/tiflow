@@ -19,31 +19,31 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
 )
 
 // VerifyTables catalog tables specified by ReplicaConfig into
 // eligible (has an unique index or primary key) and ineligible tables.
-func VerifyTables(replicaConfig *config.ReplicaConfig,
-	storage tidbkv.Storage, startTs uint64) (ineligibleTables,
-	eligibleTables []model.TableName, err error,
+func VerifyTables(
+	f filter.Filter,
+	storage tidbkv.Storage,
+	startTs uint64) (
+	tableInfos []*model.TableInfo,
+	ineligibleTables,
+	eligibleTables []model.TableName,
+	err error,
 ) {
-	filter, err := filter.NewFilter(replicaConfig)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
-	}
 	meta, err := kv.GetSnapshotMeta(storage, startTs)
 	if err != nil {
-		return nil, nil, errors.Trace(err)
+		return nil, nil, nil, errors.Trace(err)
 	}
 	snap, err := schema.NewSingleSnapshotFromMeta(meta, startTs, false /* explicitTables */)
 	if err != nil {
-		return nil, nil, errors.Trace(err)
+		return nil, nil, nil, errors.Trace(err)
 	}
 
 	snap.IterTables(true, func(tableInfo *model.TableInfo) {
-		if filter.ShouldIgnoreTable(tableInfo.TableName.Schema, tableInfo.TableName.Table) {
+		if f.ShouldIgnoreTable(tableInfo.TableName.Schema, tableInfo.TableName.Table) {
 			return
 		}
 		// Sequence is not supported yet, TiCDC needs to filter all sequence tables.
@@ -51,6 +51,7 @@ func VerifyTables(replicaConfig *config.ReplicaConfig,
 		if tableInfo.IsSequence() {
 			return
 		}
+		tableInfos = append(tableInfos, tableInfo)
 		if !tableInfo.IsEligible(false /* forceReplicate */) {
 			ineligibleTables = append(ineligibleTables, tableInfo.TableName)
 		} else {

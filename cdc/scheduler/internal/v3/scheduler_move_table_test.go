@@ -35,7 +35,7 @@ func TestSchedulerMoveTable(t *testing.T) {
 		1: {State: ReplicationSetStateReplicating, Primary: "a"},
 	}
 
-	scheduler := newMoveTableScheduler()
+	scheduler := newMoveTableScheduler(model.ChangeFeedID{})
 	require.Equal(t, "move-table-scheduler", scheduler.Name())
 
 	tasks := scheduler.Schedule(

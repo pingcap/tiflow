@@ -1,4 +1,4 @@
-// Copyright 2021 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,19 +11,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cli
+package producer
 
 import (
-	"os"
-	"testing"
+	"context"
 
-	"github.com/stretchr/testify/require"
+	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 )
 
-func TestCaptureCli(t *testing.T) {
-	cmd := newCmdCapture(nil)
-	os.Args = []string{"capture", "--disable-version-check=true"}
-	require.Nil(t, cmd.Execute())
-	os.Args = []string{"capture", "--disable-version-check=false"}
-	require.Nil(t, cmd.Execute())
+// Producer is the interface for message producer.
+type Producer interface {
+	// AsyncSendMessage sends a message asynchronously.
+	AsyncSendMessage(
+		ctx context.Context, topic string, partition int32, message *codec.MQMessage,
+	) error
+
+	// Close closes the producer and client(s).
+	Close() error
 }
+
+// NewProducerFunc is a function to create a producer.
+type NewProducerFunc func() Producer

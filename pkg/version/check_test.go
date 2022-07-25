@@ -329,44 +329,6 @@ func TestTiCDCClusterVersionFeaturesCompatible(t *testing.T) {
 	require.Equal(t, TiCDCClusterVersionUnknown.ShouldEnableOldValueByDefault(), true)
 }
 
-func TestCheckTiCDCClusterVersion(t *testing.T) {
-	t.Parallel()
-	testCases := []struct {
-		cdcClusterVersion TiCDCClusterVersion
-		expectedErr       string
-		expectedUnknown   bool
-	}{
-		{
-			cdcClusterVersion: TiCDCClusterVersionUnknown,
-			expectedErr:       "",
-			expectedUnknown:   true,
-		},
-		{
-			cdcClusterVersion: TiCDCClusterVersion{Version: MinTiCDCVersion},
-			expectedErr:       "",
-			expectedUnknown:   false,
-		},
-		{
-			cdcClusterVersion: TiCDCClusterVersion{Version: semver.New("1.0.0")},
-			expectedErr:       ".*minimal compatible version.*",
-			expectedUnknown:   false,
-		},
-		{
-			cdcClusterVersion: TiCDCClusterVersion{Version: semver.New("10000.0.0")},
-			expectedErr:       ".*maximum compatible version.*",
-			expectedUnknown:   false,
-		},
-	}
-
-	for _, tc := range testCases {
-		isUnknown, err := CheckTiCDCClusterVersion(tc.cdcClusterVersion)
-		require.Equal(t, isUnknown, tc.expectedUnknown)
-		if len(tc.expectedErr) != 0 {
-			require.Regexp(t, tc.expectedErr, err)
-		}
-	}
-}
-
 func TestCheckPDVersionError(t *testing.T) {
 	t.Parallel()
 

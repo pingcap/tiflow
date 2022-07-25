@@ -89,7 +89,15 @@ func TestDrainImmediately(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	mm := mock_processor.NewMockManager(ctrl)
-	cp := &captureImpl{processorManager: mm, config: config.GetDefaultServerConfig()}
+	cp := &captureImpl{
+		info: &model.CaptureInfo{
+			ID:            "capture-for-test",
+			AdvertiseAddr: "127.0.0.1", Version: "test",
+		},
+		processorManager: mm,
+		config:           config.GetDefaultServerConfig(),
+	}
+
 	cp.config.Debug.EnableSchedulerV3 = true
 	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
 
@@ -115,7 +123,14 @@ func TestDrainWaitsTables(t *testing.T) {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	mm := mock_processor.NewMockManager(ctrl)
-	cp := &captureImpl{processorManager: mm, config: config.GetDefaultServerConfig()}
+	cp := &captureImpl{
+		info: &model.CaptureInfo{
+			ID:            "capture-for-test",
+			AdvertiseAddr: "127.0.0.1", Version: "test",
+		},
+		processorManager: mm,
+		config:           config.GetDefaultServerConfig(),
+	}
 	cp.config.Debug.EnableSchedulerV3 = true
 	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
 
@@ -159,7 +174,15 @@ func TestDrainWaitsOwnerResign(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mo := mock_owner.NewMockOwner(ctrl)
 	mm := mock_processor.NewMockManager(ctrl)
-	cp := &captureImpl{processorManager: mm, owner: mo, config: config.GetDefaultServerConfig()}
+	cp := &captureImpl{
+		info: &model.CaptureInfo{
+			ID:            "capture-for-test",
+			AdvertiseAddr: "127.0.0.1", Version: "test",
+		},
+		processorManager: mm,
+		owner:            mo,
+		config:           config.GetDefaultServerConfig(),
+	}
 	cp.config.Debug.EnableSchedulerV3 = true
 	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
 
@@ -213,7 +236,16 @@ func TestDrainOneCapture(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mo := mock_owner.NewMockOwner(ctrl)
 	mm := mock_processor.NewMockManager(ctrl)
-	cp := &captureImpl{processorManager: mm, owner: mo, config: config.GetDefaultServerConfig()}
+	cp := &captureImpl{
+		info: &model.CaptureInfo{
+			ID:            "capture-for-test",
+			AdvertiseAddr: "127.0.0.1", Version: "test",
+		},
+		processorManager: mm,
+		owner:            mo,
+		config:           config.GetDefaultServerConfig(),
+	}
+
 	cp.config.Debug.EnableSchedulerV3 = true
 	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
 
@@ -241,7 +273,16 @@ func TestDrainErrors(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mo := mock_owner.NewMockOwner(ctrl)
 	mm := mock_processor.NewMockManager(ctrl)
-	cp := &captureImpl{processorManager: mm, owner: mo, config: config.GetDefaultServerConfig()}
+	cp := &captureImpl{
+		info: &model.CaptureInfo{
+			ID:            "capture-for-test",
+			AdvertiseAddr: "127.0.0.1", Version: "test",
+		},
+		processorManager: mm,
+		owner:            mo,
+		config:           config.GetDefaultServerConfig(),
+	}
+
 	cp.config.Debug.EnableSchedulerV3 = true
 	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
 
