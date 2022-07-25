@@ -16,6 +16,7 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"net"
 	"net/url"
@@ -30,13 +31,14 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
+	dmretry "github.com/pingcap/tiflow/dm/pkg/retry"
 	dmutils "github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -596,9 +598,21 @@ func (s *mysqlSink) getTableResolvedTs(tableID model.TableID) (model.ResolvedTs,
 	return resolved, ok
 }
 
-func logDMLTxnErr(err error) error {
+func logDMLTxnErr(
+	err error, start time.Time, changefeed model.ChangeFeedID, query string, count int,
+) error {
 	if isRetryableDMLError(err) {
-		log.Warn("execute DMLs with error, retry later", zap.Error(err))
+		log.Warn("execute DMLs with error, retry later",
+			zap.Error(err), zap.Duration("duration", time.Since(start)),
+			zap.String("query", query), zap.Int("count", count),
+			zap.String("namespace", changefeed.Namespace),
+			zap.String("changefeed", changefeed.ID))
+	} else {
+		log.Error("execute DMLs with error, can not retry",
+			zap.Error(err), zap.Duration("duration", time.Since(start)),
+			zap.String("query", query), zap.Int("count", count),
+			zap.String("namespace", changefeed.Namespace),
+			zap.String("changefeed", changefeed.ID))
 	}
 	return err
 }
@@ -607,17 +621,12 @@ func isRetryableDMLError(err error) bool {
 	if !cerror.IsRetryableError(err) {
 		return false
 	}
-
-	errCode, ok := getSQLErrCode(err)
-	if !ok {
+	// Check if the error is connection errors that can retry safely.
+	if dmretry.IsConnectionError(err) {
 		return true
 	}
-
-	switch errCode {
-	case mysql.ErrNoSuchTable, mysql.ErrBadDB:
-		return false
-	}
-	return true
+	// Check if the error is an retriable TiDB error or MySQL error.
+	return dbutil.IsRetryableError(err)
 }
 
 func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDMLs, bucket int) error {
@@ -627,18 +636,23 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 			zap.Any("values", dmls.values))
 	}
 
+	start := time.Now()
 	return retry.Do(ctx, func() error {
 		failpoint.Inject("MySQLSinkTxnRandomError", func() {
-			failpoint.Return(logDMLTxnErr(errors.Trace(dmysql.ErrInvalidConn)))
+			failpoint.Return(
+				logDMLTxnErr(
+					errors.Trace(driver.ErrBadConn),
+					start, s.params.changefeedID, "failpoint", 0))
 		})
 		failpoint.Inject("MySQLSinkHangLongTime", func() {
 			time.Sleep(time.Hour)
 		})
-
 		err := s.statistics.RecordBatchExecution(func() (int, error) {
 			tx, err := s.db.BeginTx(ctx, nil)
 			if err != nil {
-				return 0, logDMLTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
+				return 0, logDMLTxnErr(
+					cerror.WrapError(cerror.ErrMySQLTxnError, err),
+					start, s.params.changefeedID, "BEGIN", dmls.rowCount)
 			}
 
 			for i, query := range dmls.sqls {
@@ -647,8 +661,13 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 					if rbErr := tx.Rollback(); rbErr != nil {
 						log.Warn("failed to rollback txn", zap.Error(err))
+						_ = logDMLTxnErr(
+							cerror.WrapError(cerror.ErrMySQLTxnError, err),
+							start, s.params.changefeedID, query, dmls.rowCount)
 					}
-					return 0, logDMLTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
+					return 0, logDMLTxnErr(
+						cerror.WrapError(cerror.ErrMySQLTxnError, err),
+						start, s.params.changefeedID, query, dmls.rowCount)
 				}
 			}
 
@@ -658,12 +677,16 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 					if rbErr := tx.Rollback(); rbErr != nil {
 						log.Warn("failed to rollback txn", zap.Error(err))
 					}
-					return 0, logDMLTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
+					return 0, logDMLTxnErr(
+						cerror.WrapError(cerror.ErrMySQLTxnError, err),
+						start, s.params.changefeedID, dmls.markSQL, dmls.rowCount)
 				}
 			}
 
 			if err = tx.Commit(); err != nil {
-				return 0, logDMLTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
+				return 0, logDMLTxnErr(
+					cerror.WrapError(cerror.ErrMySQLTxnError, err),
+					start, s.params.changefeedID, "COMMIT", dmls.rowCount)
 			}
 			return dmls.rowCount, nil
 		})
@@ -697,6 +720,15 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, bucket int) *prep
 	rowCount := 0
 	// translateToInsert control the update and insert behavior
 	translateToInsert := s.params.enableOldValue && !s.params.safeMode
+	for _, row := range rows {
+		if !translateToInsert {
+			break
+		}
+		// It can be translated in to INSERT, if the row is committed after
+		// we starting replicating the table, which means it must not be
+		// replicated before, and there is no such row in downstream MySQL.
+		translateToInsert = row.CommitTs > row.ReplicatingTs
+	}
 
 	// flush cached batch replace or insert, to keep the sequence of DMLs
 	flushCacheDMLs := func() {
@@ -980,15 +1012,6 @@ func whereSlice(cols []*model.Column, forceReplicate bool) (colNames []string, a
 		}
 	}
 	return
-}
-
-func getSQLErrCode(err error) (errors.ErrCode, bool) {
-	mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError)
-	if !ok {
-		return -1, false
-	}
-
-	return errors.ErrCode(mysqlErr.Number), true
 }
 
 func buildColumnList(names []string) string {
