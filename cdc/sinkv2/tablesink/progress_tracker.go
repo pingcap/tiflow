@@ -153,24 +153,25 @@ func (r *progressTracker) trackingCount() int {
 func (r *progressTracker) close(ctx context.Context) error {
 	r.closed.Store(true)
 
-	ticker := time.NewTicker(warnDuration)
-	defer ticker.Stop()
+	blockTicker := time.NewTicker(warnDuration)
+	defer blockTicker.Stop()
+	// Used to block for loop for a while to prevent CPU spin.
+	waitingTicker := time.NewTicker(waitingInterval)
+	defer waitingTicker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case <-ticker.C:
+		case <-blockTicker.C:
 			log.Warn("close processor doesn't return in time, may be stuck",
 				zap.Int64("tableID", r.tableID),
 				zap.Int("trackingCount", r.trackingCount()),
 				zap.Any("lastMinResolvedTs", r.minTs()),
 			)
-		default:
+		case <-waitingTicker.C:
 			if r.trackingCount() == 0 {
 				return nil
 			}
-			// Sleep for a while to prevent CPU spin.
-			time.Sleep(waitingInterval)
 		}
 	}
 }
