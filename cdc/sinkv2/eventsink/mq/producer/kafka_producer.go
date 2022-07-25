@@ -187,6 +187,7 @@ func (k *kafkaProducer) run(ctx context.Context) error {
 			// is of a subtype of `error` because Go would store the type info
 			// and the resulted `error` variable would not be nil,
 			// which will cause the pkg/error library to malfunction.
+			// See: https://go.dev/doc/faq#nil_error
 			if err == nil {
 				return nil
 			}
