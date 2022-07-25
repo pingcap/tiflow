@@ -31,7 +31,7 @@ Use `make engine_unit_test` to run unit test and integrated test.
 #### Start Master on Single Node
 
 ```[shell]
-./bin/tiflow master --config=./engine/deployments/docker-compose/config/master.toml --master-addr 0.0.0.0:10240 --advertise-addr ${ip0}:10240 
+./bin/tiflow master --config=./engine/deployments/docker-compose/config/master.toml --addr 0.0.0.0:10240 --advertise-addr ${ip0}:10240 
 ```
 
 Replace **ip0** with your advertising ip.
@@ -39,7 +39,7 @@ Replace **ip0** with your advertising ip.
 #### Start Executor
 
 ```[shell]
-./bin/tiflow executor --config=./engine/deployments/docker-compose/config/executor.toml --join ${ip0}:10240 --worker-addr 0.0.0.0:10241 --advertise-addr ${ip1}:10241
+./bin/tiflow executor --config=./engine/deployments/docker-compose/config/executor.toml --join ${ip0}:10240 --addr 0.0.0.0:10241 --advertise-addr ${ip1}:10241
 ```
 
 Replace **ip1** with your advertising executor ip.
@@ -53,7 +53,7 @@ In this case, we assume three node ips are ip0, ip1 and ip2. Replace them with r
 #### Start Master on Node (ip0)
 
 ```[shell]
-./bin/tiflow master --name=ip0 --config=./engine/deployments/docker-compose/config/master.toml --master-addr 0.0.0.0:10240 --advertise-addr http://${ip0}:10240 --peer-urls 0.0.0.0:8291 --advertise-peer-urls http://${ip0}:8291 --initial-cluster ip0=http://${ip0}:8291,ip1=http://${ip1}:8291,ip2=http://${ip2}:8291
+./bin/tiflow master --name=ip0 --config=./engine/deployments/docker-compose/config/master.toml --addr 0.0.0.0:10240 --advertise-addr http://${ip0}:10240 --peer-urls 0.0.0.0:8291 --advertise-peer-urls http://${ip0}:8291 --initial-cluster ip0=http://${ip0}:8291,ip1=http://${ip1}:8291,ip2=http://${ip2}:8291
 ```
 
 Note that --name can be any names, but has to be different from other two masters.
@@ -63,7 +63,7 @@ Deploying masters for ip1 and ip2 are similar.
 #### Start Executor on Node (ip0)
 
 ```[shell]
-./bin/tiflow executor --config=./engine/deployments/docker-compose/config/executor.toml --join ${ip0}:10240 --worker-addr 0.0.0.0:10241 --advertise-addr ${ip1}:10241
+./bin/tiflow executor --config=./engine/deployments/docker-compose/config/executor.toml --join ${ip0}:10240 --addr 0.0.0.0:10241 --advertise-addr ${ip1}:10241
 ```
 
 ## Run engine in docker
