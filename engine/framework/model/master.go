@@ -47,7 +47,7 @@ type MasterMetaKVData struct {
 	Tp         WorkerType       `json:"type" gorm:"column:type;type:smallint not null;comment:JobManager(1),CvsJobMaster(2),FakeJobMaster(3),DMJobMaster(4),CDCJobMaster(5)"`
 	StatusCode MasterStatusCode `json:"status" gorm:"column:status;type:tinyint not null;index:idx_mst,priority:2;comment:Uninit(1),Init(2),Finished(3),Stopped(4)"`
 	NodeID     p2p.NodeID       `json:"node-id" gorm:"column:node_id;type:varchar(128) not null"`
-	Addr       string           `json:"addr" gorm:"column:address;type:varchar(128) not null"`
+	Addr       string           `json:"addr" gorm:"column:address;type:varchar(256) not null"`
 	Epoch      Epoch            `json:"epoch" gorm:"column:epoch;type:bigint not null"`
 
 	// Config holds business-specific data
