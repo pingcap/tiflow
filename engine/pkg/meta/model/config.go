@@ -77,7 +77,7 @@ func DefaultStoreConfig() *StoreConfig {
 
 // GenerateDSNByParams generates a dsn string.
 // dsn format: [username[:password]@][protocol[(address)]]/
-func GenerateDSNByParams(storeConf *StoreConfig) string {
+func GenerateDSNByParams(storeConf *StoreConfig, pairs map[string]string) string {
 	if storeConf == nil {
 		return "invalid dsn"
 	}
@@ -100,6 +100,10 @@ func GenerateDSNByParams(storeConf *StoreConfig) string {
 	dsnCfg.Params["readTimeout"] = storeConf.ReadTimeout
 	dsnCfg.Params["writeTimeout"] = storeConf.WriteTimeout
 	dsnCfg.Params["timeout"] = storeConf.DialTimeout
+
+	for k, v := range pairs {
+		dsnCfg.Params[k] = v
+	}
 
 	return dsnCfg.FormatDSN()
 }
