@@ -11,21 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package meta
+package namespace
 
 import (
-	"github.com/pingcap/tiflow/engine/pkg/meta/internal/etcdkv"
+	sqlkvModel "github.com/pingcap/tiflow/engine/pkg/meta/internal/sqlkv/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
-// NewClientConn new a client connection
-func NewClientConn(storeConf *metaModel.StoreConfig) (metaModel.ClientConn, error) {
-	switch storeConf.StoreType {
-	case metaModel.StoreTypeEtcd:
-		return etcdkv.NewClientConnImpl(storeConf)
-	}
-
-	return nil, cerrors.ErrMetaClientTypeNotSupport.
-		GenWithStackByArgs(metaModel.ToClientType(storeConf.StoreType))
+// TableNameWithNamespace constructs the table name with projectID
+func TableNameWithNamespace(projectID metaModel.ProjectID) string {
+	return projectID + "_" + sqlkvModel.MetaKVTableName
 }
