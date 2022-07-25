@@ -14,6 +14,7 @@
 package tablesink
 
 import (
+	"context"
 	"sort"
 	"sync"
 	"testing"
@@ -152,7 +153,7 @@ func TestNewEventTableSink(t *testing.T) {
 	t.Parallel()
 
 	sink := &mockEventSink{}
-	tb := New[*model.SingleTableTxn](sink, &eventsink.TxnEventAppender{})
+	tb := New[*model.SingleTableTxn](1, sink, &eventsink.TxnEventAppender{})
 
 	require.Equal(t, uint64(0), tb.eventID, "eventID should start from 0")
 	require.Equal(t, model.NewResolvedTs(0), tb.maxResolvedTs, "maxResolvedTs should start from 0")
@@ -167,7 +168,7 @@ func TestAppendRowChangedEvents(t *testing.T) {
 	t.Parallel()
 
 	sink := &mockEventSink{}
-	tb := New[*model.SingleTableTxn](sink, &eventsink.TxnEventAppender{})
+	tb := New[*model.SingleTableTxn](1, sink, &eventsink.TxnEventAppender{})
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	require.Len(t, tb.eventBuffer, 7, "txn event buffer should have 7 txns")
@@ -177,7 +178,7 @@ func TestUpdateResolvedTs(t *testing.T) {
 	t.Parallel()
 
 	sink := &mockEventSink{}
-	tb := New[*model.SingleTableTxn](sink, &eventsink.TxnEventAppender{})
+	tb := New[*model.SingleTableTxn](1, sink, &eventsink.TxnEventAppender{})
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	// No event will be flushed.
@@ -220,7 +221,7 @@ func TestGetCheckpointTs(t *testing.T) {
 	t.Parallel()
 
 	sink := &mockEventSink{}
-	tb := New[*model.SingleTableTxn](sink, &eventsink.TxnEventAppender{})
+	tb := New[*model.SingleTableTxn](1, sink, &eventsink.TxnEventAppender{})
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	require.Equal(t, model.NewResolvedTs(0), tb.GetCheckpointTs(), "checkpointTs should be 0")
@@ -253,7 +254,7 @@ func TestClose(t *testing.T) {
 	t.Parallel()
 
 	sink := &mockEventSink{}
-	tb := New[*model.SingleTableTxn](sink, &eventsink.TxnEventAppender{})
+	tb := New[*model.SingleTableTxn](1, sink, &eventsink.TxnEventAppender{})
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	tb.UpdateResolvedTs(model.NewResolvedTs(105))
@@ -261,7 +262,8 @@ func TestClose(t *testing.T) {
 	var wg sync.WaitGroup
 	go func() {
 		wg.Add(1)
-		tb.Close()
+		err := tb.Close(context.Background())
+		require.NoError(t, err, "close should not return error")
 		wg.Done()
 	}()
 	require.Eventually(t, func() bool {
@@ -273,4 +275,28 @@ func TestClose(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return pipeline.TableStateStopped == tb.state.Load()
 	}, time.Second, time.Millisecond*10, "table should be closed")
+}
+
+func TestCloseCancellable(t *testing.T) {
+	t.Parallel()
+
+	sink := &mockEventSink{}
+	tb := New[*model.SingleTableTxn](1, sink, &eventsink.TxnEventAppender{})
+
+	tb.AppendRowChangedEvents(getTestRows()...)
+	tb.UpdateResolvedTs(model.NewResolvedTs(105))
+	require.Len(t, sink.events, 7, "all events should be flushed")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
+	defer cancel()
+	var wg sync.WaitGroup
+	go func() {
+		wg.Add(1)
+		err := tb.Close(ctx)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		wg.Done()
+	}()
+	require.Eventually(t, func() bool {
+		return pipeline.TableStateStopping == tb.state.Load()
+	}, time.Second, time.Millisecond*10, "table should be stopping")
+	wg.Wait()
 }
