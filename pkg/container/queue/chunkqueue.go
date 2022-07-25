@@ -161,8 +161,8 @@ func (q *ChunkQueue[T]) extend(n int) {
 		c.queue = q
 		q.chunks[q.tail] = c
 		if q.tail > q.head {
-			c.prevCk = q.chunks[q.tail-1]
-			q.chunks[q.tail-1].nextCk = c
+			c.prev = q.chunks[q.tail-1]
+			q.chunks[q.tail-1].next = c
 		}
 		q.tail++
 	}
@@ -229,12 +229,12 @@ func (q *ChunkQueue[T]) Dequeue() (T, bool) {
 
 func (q *ChunkQueue[T]) popChunk() {
 	c := q.firstChunk()
-	if c.nextCk == nil {
+	if c.next == nil {
 		q.extend(1)
 	}
 	q.chunks[q.head] = nil
 	q.head++
-	q.chunks[q.head].prevCk = nil
+	q.chunks[q.head].prev = nil
 
 	c.reset()
 	q.chunkPool.Put(c)
@@ -327,12 +327,14 @@ func (q *ChunkQueue[T]) Clear() {
 	q.reallocateChunksArray(-1)
 }
 
+// Shrink shrinks the space of the chunks array
 func (q *ChunkQueue[T]) Shrink() {
-	// Shink the chunks array
 	q.reallocateChunksArray(-1)
 }
 
-func (q *ChunkQueue[T]) Range(f func(val T) bool) {
+// Range will iterates the queue from head to the first element that does NOT
+// satisfy f()
+func (q *ChunkQueue[T]) Range(f func(e T) bool) {
 	if q.Empty() {
 		return
 	}
@@ -344,6 +346,26 @@ func (q *ChunkQueue[T]) Range(f func(val T) bool) {
 			if !f(c.data[j]) {
 				return
 			}
+		}
+	}
+}
+
+// RangeWithIndex iterates the queue with index from head to the first element
+// that does NOT satisfy f
+func (q *ChunkQueue[T]) RangeWithIndex(f func(idx int, e T) bool) {
+	if q.Empty() {
+		return
+	}
+
+	var c *chunk[T]
+	idx := 0
+	for i := q.head; i < q.tail; i++ {
+		c = q.chunks[i]
+		for j := c.l; j < c.r; j++ {
+			if !f(idx, c.data[j]) {
+				return
+			}
+			idx++
 		}
 	}
 }

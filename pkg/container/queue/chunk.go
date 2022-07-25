@@ -20,8 +20,8 @@ type chunk[T any] struct {
 	r    int
 	data []T
 
-	prevCk *chunk[T]
-	nextCk *chunk[T]
+	prev *chunk[T]
+	next *chunk[T]
 
 	// a pointer points to the queue
 	queue *ChunkQueue[T]
@@ -50,11 +50,8 @@ func (c *chunk[T]) back() (T, bool) {
 }
 
 func (c *chunk[T]) reset() {
-	c.l = 0
-	c.r = 0
-	c.prevCk = nil
-	c.nextCk = nil
-	c.queue = nil
+	c.l, c.r = 0, 0
+	c.prev, c.next, c.queue = nil, nil, nil
 }
 
 func newChunk[T any](sz int, q *ChunkQueue[T]) *chunk[T] {

@@ -13,24 +13,21 @@
 
 package queue
 
-// ChunkQueueIterator is the iterator of ChunkQueue
+// ChunkQueueIterator is the iterator type of ChunkQueue
 type ChunkQueueIterator[T any] struct {
 	idxInChunk int
 	chunk      *chunk[T]
 }
 
-// Begin() gives the first iterator of the queue
+// Begin returns the first iterator of the queue
 func (q *ChunkQueue[T]) Begin() *ChunkQueueIterator[T] {
-	if q.Empty() {
-		return q.End()
-	}
 	return &ChunkQueueIterator[T]{
 		chunk:      q.firstChunk(),
 		idxInChunk: q.firstChunk().l,
 	}
 }
 
-// End() creates an special iterator of the queue representing the end
+// End creates a special iterator of the queue representing the end
 func (q *ChunkQueue[T]) End() *ChunkQueueIterator[T] {
 	return &ChunkQueueIterator[T]{
 		chunk:      q.lastChunk(),
@@ -38,9 +35,9 @@ func (q *ChunkQueue[T]) End() *ChunkQueueIterator[T] {
 	}
 }
 
-// GetIterator() returns a iterator given the index, and nil if out of range
+// GetIterator returns the iterator of a given index, and nil if out of range
 func (q *ChunkQueue[T]) GetIterator(idx int) *ChunkQueueIterator[T] {
-	if q.Empty() || idx < 0 || idx >= q.size {
+	if idx < 0 || idx >= q.size {
 		return nil
 	}
 	idx += q.chunks[q.head].l
@@ -50,28 +47,18 @@ func (q *ChunkQueue[T]) GetIterator(idx int) *ChunkQueueIterator[T] {
 	}
 }
 
-//// isEnd() checks if the iterator is an end iterator.
-//// Iterators of element that has been dequeued are end iterators.
-//func (it *ChunkQueueIterator[T]) isEnd() bool {
-//	return it.chunk != nil && it.idxInChunk == len(it.chunk.data)
-//}
-
-// Valid() indicates if iterator points to a valid element
+// Valid indicates if the element of the iterator is in queue or not
 func (it *ChunkQueueIterator[T]) Valid() bool {
-	return it.chunk != nil && it.chunk.queue != nil &&
-		it.idxInChunk >= it.chunk.l && it.idxInChunk < it.chunk.r
+	return it.chunk != nil && it.idxInChunk >= it.chunk.l && it.idxInChunk < it.chunk.r
 }
 
-// Value returns the element value of the iterator
+// Value returns the element value of a valid iterator which is in queue.
+// It's meaningless and may panic otherwise
 func (it *ChunkQueueIterator[T]) Value() T {
-	if !it.Valid() {
-		var defaultValue T
-		return defaultValue
-	}
 	return it.chunk.data[it.idxInChunk]
 }
 
-// Index() returns the index of a given iterator, -1 for end or expired iterator
+// Index returns the index of a valid iterator, and -1 otherwise
 func (it *ChunkQueueIterator[T]) Index() int {
 	if !it.Valid() {
 		return -1
@@ -89,39 +76,35 @@ func (it *ChunkQueueIterator[T]) Index() int {
 	return idx
 }
 
-// Next() updates the current iterator to its next iterator and returns it
+// Next updates the current iterator to its next iterator and returns it
 func (it *ChunkQueueIterator[T]) Next() *ChunkQueueIterator[T] {
-	if !it.Valid() {
-		return it
-	}
-
 	it.idxInChunk++
 	if it.idxInChunk < it.chunk.r {
 		return it
 	}
 
-	nextCk := it.chunk.nextCk
-	if chunkLength := len(it.chunk.data); it.chunk.r < chunkLength ||
-		nextCk == nil || nextCk.empty() {
-		it.idxInChunk = len(it.chunk.data)
+	c, q := it.chunk, it.chunk.queue
+	if it.idxInChunk == q.chunkLength && c.next != nil && !c.empty() {
+		it.idxInChunk, it.chunk = 0, c.next
 	} else {
-		it.chunk, it.idxInChunk = nextCk, nextCk.l
+		it.idxInChunk = q.chunkLength
 	}
 	return it
 }
 
 // Prev updates the current to its previous one and returns it
 func (it *ChunkQueueIterator[T]) Prev() *ChunkQueueIterator[T] {
-	if !it.Valid() {
+	if it.chunk == nil {
+		return it
+	}
+
+	c := it.chunk
+	if it.idxInChunk < c.l || it.idxInChunk >= c.r {
 		// if the iterator is an end iterator and the queue is not empty,
 		// then the iterator shall point to the last element.
-		if c := it.chunk; c != nil && c.queue != nil &&
-			it.idxInChunk == len(c.data) {
-			if !c.queue.Empty() {
-				lastChunk := c.queue.lastChunk()
-				it.chunk, it.idxInChunk = lastChunk, lastChunk.r-1
-				return it
-			}
+		if it.idxInChunk == len(c.data) && !c.queue.Empty() {
+			lastChunk := c.queue.lastChunk()
+			it.chunk, it.idxInChunk = lastChunk, lastChunk.r-1
 		}
 		return it
 	}
@@ -131,7 +114,7 @@ func (it *ChunkQueueIterator[T]) Prev() *ChunkQueueIterator[T] {
 		return it
 	}
 
-	it.chunk = it.chunk.prevCk
+	it.chunk = c.prev
 	if it.chunk == nil {
 		it.idxInChunk = -1
 	} else {

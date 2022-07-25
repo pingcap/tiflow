@@ -49,7 +49,7 @@ func TestChunkQueueIteratorPrevNext(t *testing.T) {
 }
 
 func BenchmarkChunkQueueIteratorNext(b *testing.B) {
-	b.Run("BenchMark-Iterate-ChunkQueue", func(b *testing.B) {
+	b.Run("BenchMark-Iterate-ChunkQueue-by-iterator", func(b *testing.B) {
 		q := NewChunkQueue[int]()
 		n := b.N
 		for i := 0; i < n; i++ {
@@ -65,6 +65,22 @@ func BenchmarkChunkQueueIteratorNext(b *testing.B) {
 			}
 			i++
 		}
+	})
+
+	b.Run("BenchMark-Iterate-ChunkQueue-by-Range", func(b *testing.B) {
+		q := NewChunkQueue[int]()
+		n := b.N
+		for i := 0; i < n; i++ {
+			q.Enqueue(i)
+		}
+		b.ResetTimer()
+
+		q.RangeWithIndex(func(idx int, val int) bool {
+			if val != idx {
+				panic("not equal")
+			}
+			return true
+		})
 	})
 
 	b.Run("BenchMark-Iterate-Slice", func(b *testing.B) {
@@ -125,7 +141,7 @@ func TestChunkQueueGetIterator(t *testing.T) {
 		require.Equal(t, -1, it.Index())
 		require.False(t, it.Valid())
 
-		require.Nil(t, q.Begin().chunk.prevCk)
+		require.Nil(t, q.Begin().chunk.prev)
 		cnt += n
 		v := q.Begin().Value()
 		if cnt >= iterTestSize {
@@ -135,5 +151,3 @@ func TestChunkQueueGetIterator(t *testing.T) {
 		}
 	}
 }
-
-// todo: add more random tests
