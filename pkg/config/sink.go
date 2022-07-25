@@ -188,6 +188,7 @@ func (s *SinkConfig) applyParameter(sinkURI *url.URL) error {
 	return nil
 }
 
+// IsMqScheme returns true if the scheme belong to mq schema.
 func IsMqScheme(scheme string) bool {
 	return scheme == "kafka" || scheme == "kafka+ssl" ||
 		scheme == "pulsar" || scheme == "pulsar+ssl"
