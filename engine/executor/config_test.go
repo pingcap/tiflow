@@ -26,7 +26,7 @@ func TestConfigDefaultLocalStoragePath(t *testing.T) {
 
 	testToml := `
 name = "executor-1"
-worker-addr = "0.0.0.0:10241"
+addr = "0.0.0.0:10241"
 join = "127.0.0.1:10240"
 `
 	fileName := mustWriteToTempFile(t, testToml)
@@ -46,7 +46,7 @@ func TestConfigDefaultLocalStoragePathNoName(t *testing.T) {
 	t.Parallel()
 
 	testToml := `
-worker-addr = "0.0.0.0:10241"
+addr = "0.0.0.0:10241"
 join = "127.0.0.1:10240"
 `
 	fileName := mustWriteToTempFile(t, testToml)
@@ -66,7 +66,7 @@ func TestConfigStorage(t *testing.T) {
 
 	testToml := `
 name = "executor-1"
-worker-addr = "0.0.0.0:10241"
+addr = "0.0.0.0:10241"
 join = "127.0.0.1:10240"
 
 [storage]
