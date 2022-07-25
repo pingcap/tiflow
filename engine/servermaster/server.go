@@ -451,6 +451,9 @@ func (s *Server) Stop() {
 	if s.businessClientConn != nil {
 		s.businessClientConn.Close()
 	}
+	if s.executorManager != nil {
+		s.executorManager.Stop()
+	}
 }
 
 // Run the server master.

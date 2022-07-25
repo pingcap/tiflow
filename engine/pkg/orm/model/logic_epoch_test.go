@@ -47,9 +47,16 @@ func mockGetDBConn(t *testing.T, dsnStr string) (*gorm.DB, sqlmock.Sqlmock, erro
 	return gdb, mock, nil
 }
 
+func closeGormDB(t *testing.T, gdb *gorm.DB) {
+	db, err := gdb.DB()
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
+}
+
 func TestNewEpochClient(t *testing.T) {
 	gdb, mock, err := mockGetDBConn(t, "test")
 	require.NoError(t, err)
+	defer closeGormDB(t, gdb)
 
 	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO `logic_epoches` (`created_at`,`updated_at`,`job_id`,`epoch`)" +
 		" VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE `seq_id`=`seq_id`")).
@@ -61,11 +68,14 @@ func TestNewEpochClient(t *testing.T) {
 		WillReturnError(&gsql.MySQLError{Number: 1062, Message: "test error"})
 	_, err = NewEpochClient("fakeJob", gdb)
 	require.Error(t, err)
+
+	mock.ExpectClose()
 }
 
 func TestGenEpoch(t *testing.T) {
 	gdb, mock, err := mockGetDBConn(t, "test")
 	require.NoError(t, err)
+	defer closeGormDB(t, gdb)
 	ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
 	defer cancel()
 
@@ -111,6 +121,8 @@ func TestGenEpoch(t *testing.T) {
 	require.Error(t, err)
 	require.Regexp(t, "context deadline exceed", err.Error())
 	failpoint.Disable("github.com/pingcap/tiflow/engine/pkg/orm/model/genEpochDelay")
+
+	mock.ExpectClose()
 }
 
 func TestInitializeEpochModel(t *testing.T) {
@@ -118,6 +130,7 @@ func TestInitializeEpochModel(t *testing.T) {
 
 	gdb, mock, err := mockGetDBConn(t, "test")
 	require.NoError(t, err)
+	defer closeGormDB(t, gdb)
 	ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
 	defer cancel()
 
@@ -134,4 +147,6 @@ func TestInitializeEpochModel(t *testing.T) {
 
 	err = InitializeEpochModel(ctx, gdb)
 	require.NoError(t, err)
+
+	mock.ExpectClose()
 }
