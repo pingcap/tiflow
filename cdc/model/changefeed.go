@@ -352,37 +352,29 @@ func (info *ChangeFeedInfo) fixSinkProtocol() {
 	protocolStr := rawQuery.Get(config.ProtocolKey)
 
 	fixSinkURI := func(newProtocolStr string) {
-		if newProtocolStr == "" {
-			rawQuery.Del(config.ProtocolKey)
-		} else {
-			rawQuery.Set(config.ProtocolKey, newProtocolStr)
-		}
-		oldSinkURI := sinkURIParsed.String()
-		sinkURIParsed.RawQuery = rawQuery.Encode()
-		info.SinkURI = sinkURIParsed.String()
-		if oldSinkURI != info.SinkURI {
-			log.Info("handle incompatible protocol from sink URI",
-				zap.String("oldSinkURI", oldSinkURI),
-				zap.String("fixedSinkURI", info.SinkURI))
-		}
-		oldProtocol := info.Config.Sink.Protocol
+		oldRawQuery := sinkURIParsed.RawQuery
+		newRawQuery := rawQuery.Encode()
+		log.Info("handle incompatible protocol from sink URI",
+			zap.String("oldUriQuery", oldRawQuery),
+			zap.String("fixedUriQuery", newRawQuery))
+
+		sinkURIParsed.RawQuery = newRawQuery
+		fixedSinkURI := sinkURIParsed.String()
+		info.SinkURI = fixedSinkURI
 		info.Config.Sink.Protocol = newProtocolStr
-		if oldProtocol != info.Config.Sink.Protocol {
-			log.Info("handle incompatible protocol from sink config",
-				zap.String("oldProtocol", oldProtocol),
-				zap.String("fixedProtocol", info.Config.Sink.Protocol))
-		}
 	}
 
 	// fix mysql sink
 	scheme := sinkURIParsed.Scheme
 	if !config.IsMqScheme(scheme) {
 		if protocolStr != "" || info.Config.Sink.Protocol != "" {
+			maskedSinkURI, _ := util.MaskSinkURI(info.SinkURI)
 			log.Warn("sink URI or sink config contains protocol, but scheme is not mq",
-				zap.String("sinkURI", info.SinkURI),
+				zap.String("sinkURI", maskedSinkURI),
 				zap.String("protocol", protocolStr),
 				zap.Any("sinkConfig", info.Config.Sink))
 			// always set protocol of mysql sink to ""
+			rawQuery.Del(config.ProtocolKey)
 			fixSinkURI("")
 		}
 		return
@@ -403,6 +395,7 @@ func (info *ChangeFeedInfo) fixSinkProtocol() {
 	// The sinkURI always has a higher priority.
 	if protocolStr != "" {
 		if needsFix(protocolStr) {
+			rawQuery.Set(config.ProtocolKey, openProtocolStr)
 			fixSinkURI(openProtocolStr)
 		}
 	} else {
