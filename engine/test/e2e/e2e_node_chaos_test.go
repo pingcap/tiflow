@@ -52,7 +52,7 @@ func updateKeyAndCheckOnce(
 			}
 		}
 		return true
-	}, time.Second*180, time.Second*2)
+	}, time.Second*60, time.Second*2)
 }
 
 func TestNodeFailure(t *testing.T) {
@@ -108,7 +108,7 @@ func TestNodeFailure(t *testing.T) {
 			}
 		}
 		return true
-	}, time.Second*180, time.Second*2)
+	}, time.Second*60, time.Second*2)
 
 	mvccCount := 1
 	updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, "random-value-1", mvccCount)
