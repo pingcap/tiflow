@@ -59,24 +59,24 @@ func (l *ormLogger) LogMode(logger.LogLevel) logger.Interface {
 }
 
 func (l *ormLogger) Info(ctx context.Context, format string, args ...interface{}) {
-	l.logger.Info("gorm info log", zap.String("detail", fmt.Sprintf(format, args...)))
+	l.logger.Info(fmt.Sprintf(format, args...))
 }
 
 func (l *ormLogger) Warn(ctx context.Context, format string, args ...interface{}) {
-	l.logger.Warn("gorm warn log", zap.String("detail", fmt.Sprintf(format, args...)))
+	l.logger.Warn(fmt.Sprintf(format, args...))
 }
 
 func (l *ormLogger) Error(ctx context.Context, format string, args ...interface{}) {
-	l.logger.Error("gorm error log", zap.String("detail", fmt.Sprintf(format, args...)))
+	l.logger.Error(fmt.Sprintf(format, args...))
 }
 
 func (l *ormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
 	elapsed := time.Since(begin)
 	sql, rows := fc()
-	l.logger.Debug("grom trace log", zap.Duration("elapsed", elapsed), zap.String("sql", sql),
+	l.logger.Debug("trace log", zap.Duration("elapsed", elapsed), zap.String("sql", sql),
 		zap.Int64("affected-rows", rows), zap.Error(err))
 	if elapsed > l.op.slowThreshold && l.op.slowThreshold != 0 {
-		l.logger.Warn("grom slow log", zap.Duration("elapsed", elapsed), zap.String("sql", sql),
+		l.logger.Warn("slow log", zap.Duration("elapsed", elapsed), zap.String("sql", sql),
 			zap.Int64("affected-rows", rows), zap.Error(err))
 	}
 }

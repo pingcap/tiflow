@@ -44,13 +44,17 @@ func TestNewOrmLogger(t *testing.T) {
 	logger.Info(context.TODO(), "%s test", "info")
 	// expect no log here
 	logger.Warn(context.TODO(), "%s test", "warn")
-	require.Regexp(t, regexp.QuoteMeta("[\"gorm warn log\"] [detail=\"warn test\"]"), buffer.Stripped())
+	require.Regexp(t, regexp.QuoteMeta("warn test"), buffer.Stripped())
+	buffer.Reset()
+
 	logger.Error(context.TODO(), "%s test", "error")
-	require.Regexp(t, regexp.QuoteMeta("[\"gorm error log\"] [detail=\"error test\"]"), buffer.Stripped())
+	require.Regexp(t, regexp.QuoteMeta("error test"), buffer.Stripped())
+	buffer.Reset()
 
 	fc := func() (sql string, rowsAffected int64) { return "sql test", 10 }
 	logger.Trace(context.TODO(), time.Now(), fc, nil)
 	// expect no log here
 	logger.Trace(context.TODO(), time.Now().Add(-10*time.Second), fc, errors.New("error test"))
 	require.Regexp(t, regexp.QuoteMeta("[sql=\"sql test\"] [affected-rows=10] [error=\"error test\"]"), buffer.Stripped())
+	buffer.Reset()
 }

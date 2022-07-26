@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -41,7 +42,7 @@ func NewGormDB(sqlDB *sql.DB) (*gorm.DB, error) {
 		SkipInitializeWithVersion: false,
 	}), &gorm.Config{
 		SkipDefaultTransaction: true,
-		Logger:                 NewOrmLogger(log.L(), WithSlowThreshold(200*time.Millisecond)),
+		Logger:                 NewOrmLogger(logutil.WithComponent("gorm"), WithSlowThreshold(200*time.Millisecond)),
 	})
 	if err != nil {
 		log.Error("create gorm client fail", zap.Error(err))
