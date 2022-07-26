@@ -22,7 +22,6 @@ import (
 
 	"github.com/pingcap/errors"
 	ticonfig "github.com/pingcap/tidb/config"
-	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/domain"
 	tidbkv "github.com/pingcap/tidb/kv"
 	timeta "github.com/pingcap/tidb/meta"
@@ -33,15 +32,10 @@ import (
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/testkit"
 	"github.com/pingcap/tidb/types"
-<<<<<<< HEAD
-=======
-	"github.com/stretchr/testify/require"
-	"github.com/tikv/client-go/v2/oracle"
-
-	"github.com/pingcap/tiflow/cdc/entry/schema"
->>>>>>> b4bbb8623 (db(dm): use `net.JoinHostPort` to generate host-port part of URI (#6248))
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/stretchr/testify/require"
+	"github.com/tikv/client-go/v2/oracle"
 )
 
 func TestSchema(t *testing.T) {
@@ -1039,7 +1033,7 @@ func getAllHistoryDDLJob(storage tidbkv.Storage) ([]*timodel.Job, error) {
 	defer txn.Rollback() //nolint:errcheck
 	txnMeta := timeta.NewMeta(txn)
 
-	jobs, err := ddl.GetAllHistoryDDLJobs(txnMeta)
+	jobs, err := txnMeta.GetAllHistoryDDLJobs()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

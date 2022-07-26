@@ -106,14 +106,13 @@ func FetchDDLTables(schema string, stmt ast.StmtNode, flavor utils.LowerCaseTabl
 	}
 
 	// special cases: schema related SQLs doesn't have tableName
-	// todo: pass .O or .L of table name depends on flavor
 	switch v := stmt.(type) {
 	case *ast.AlterDatabaseStmt:
-		return []*filter.Table{genTableName(v.Name.O, "")}, nil
+		return []*filter.Table{genTableName(v.Name, "")}, nil
 	case *ast.CreateDatabaseStmt:
-		return []*filter.Table{genTableName(v.Name.O, "")}, nil
+		return []*filter.Table{genTableName(v.Name, "")}, nil
 	case *ast.DropDatabaseStmt:
-		return []*filter.Table{genTableName(v.Name.O, "")}, nil
+		return []*filter.Table{genTableName(v.Name, "")}, nil
 	}
 
 	e := &tableNameExtractor{
@@ -168,11 +167,11 @@ func RenameDDLTable(stmt ast.StmtNode, targetTables []*filter.Table) (string, er
 
 	switch v := stmt.(type) {
 	case *ast.AlterDatabaseStmt:
-		v.Name = model.NewCIStr(targetTables[0].Schema)
+		v.Name = targetTables[0].Schema
 	case *ast.CreateDatabaseStmt:
-		v.Name = model.NewCIStr(targetTables[0].Schema)
+		v.Name = targetTables[0].Schema
 	case *ast.DropDatabaseStmt:
-		v.Name = model.NewCIStr(targetTables[0].Schema)
+		v.Name = targetTables[0].Schema
 	default:
 		visitor := &tableRenameVisitor{
 			targetNames: targetTables,

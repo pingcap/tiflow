@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	ticonfig "github.com/pingcap/tidb/config"
-	tiddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/kv"
 	timeta "github.com/pingcap/tidb/meta"
@@ -61,29 +60,13 @@ func NewSchemaTestHelper(t *testing.T) *SchemaTestHelper {
 // DDL2Job executes the DDL stmt and returns the DDL job
 func (s *SchemaTestHelper) DDL2Job(ddl string) *timodel.Job {
 	s.tk.MustExec(ddl)
-	jobs, err := tiddl.GetLastNHistoryDDLJobs(s.GetCurrentMeta(), 1)
+	jobs, err := s.GetCurrentMeta().GetLastNHistoryDDLJobs(1)
 	require.Nil(s.t, err)
 	require.Len(s.t, jobs, 1)
 	return jobs[0]
 }
 
-<<<<<<< HEAD
 // Storage return the tikv storage
-=======
-// DDL2Jobs executes the DDL statement and return the corresponding DDL jobs.
-// It is mainly used for "DROP TABLE" and "DROP VIEW" statement because
-// multiple jobs will be generated after executing these two types of
-// DDL statements.
-func (s *SchemaTestHelper) DDL2Jobs(ddl string, jobCnt int) []*timodel.Job {
-	s.tk.MustExec(ddl)
-	jobs, err := tiddl.GetLastNHistoryDDLJobs(s.GetCurrentMeta(), jobCnt)
-	require.Nil(s.t, err)
-	require.Len(s.t, jobs, jobCnt)
-	return jobs
-}
-
-// Storage returns the tikv storage
->>>>>>> b4bbb8623 (db(dm): use `net.JoinHostPort` to generate host-port part of URI (#6248))
 func (s *SchemaTestHelper) Storage() kv.Storage {
 	return s.storage
 }

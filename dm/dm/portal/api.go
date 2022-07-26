@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path"
@@ -32,13 +33,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/filter"
-	"github.com/unrolled/render"
-	"go.uber.org/zap"
-	"gopkg.in/yaml.v2"
-
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/unrolled/render"
+	"go.uber.org/zap"
 )
 
 const (
@@ -589,7 +588,8 @@ func generateTaskFileName(taskName string) string {
 
 // openDB opens a mysql connection FD.
 func openDB(cfg DBConfig, timeout int) (*sql.DB, error) {
-	dbDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4&timeout=%ds", cfg.User, cfg.Password, cfg.Host, cfg.Port, timeout)
+	hostPort := net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port))
+	dbDSN := fmt.Sprintf("%s:%s@tcp(%s)/?charset=utf8mb4&timeout=%ds", cfg.User, cfg.Password, hostPort, timeout)
 
 	dbConn, err := sql.Open("mysql", dbDSN)
 	if err != nil {
