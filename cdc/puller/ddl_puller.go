@@ -67,6 +67,7 @@ type ddlJobPullerImpl struct {
 	kvStorage      tidbkv.Storage
 	schemaSnapshot *schema.Snapshot
 	resolvedTs     uint64
+	schemaVersion  int64
 	filter         filter.Filter
 	// tableInfo is initialized when receive the first concurrent DDL job.
 	// It holds the info of table `tidb_ddl_jobs` of upstream TiDB.
@@ -344,6 +345,22 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		}
 	}()
 
+	if job.BinlogInfo.FinishedTS <= p.resolvedTs ||
+		job.BinlogInfo.SchemaVersion <= p.schemaVersion {
+		log.Info("ddl job finishedTs less than puller resolvedTs,"+
+			"discard the ddl job",
+			zap.Uint64("pullerResolvedTs", p.resolvedTs),
+			zap.Uint64("jobFinishedTS", job.BinlogInfo.FinishedTS),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.String("schema", job.SchemaName),
+			zap.String("table", job.TableName),
+			zap.String("query", job.Query),
+			zap.String("job", job.String()))
+		p.metricDiscardedDDLCounter.Inc()
+		return true, nil
+	}
+
 	var isRenameTables bool
 	switch job.Type {
 	case timodel.ActionRenameTables:
@@ -376,17 +393,16 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 	}
 
 	if !isRenameTables {
-		if job.BinlogInfo.FinishedTS < p.resolvedTs ||
-			p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.TableName) {
-			log.Info("discard the ddl job",
+		if p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.TableName) {
+			log.Info("ddl job schema or table is not match, discard it",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
-				zap.String("job", job.String()),
 				zap.String("schema", job.SchemaName),
 				zap.String("table", job.TableName),
 				zap.String("query", job.Query),
-				zap.Any("pullerResolvedTs", p.resolvedTs),
-				zap.Any("jobFinishedTS", job.BinlogInfo.FinishedTS))
+				zap.String("job", job.String()),
+				zap.Uint64("pullerResolvedTs", p.resolvedTs),
+				zap.Uint64("jobFinishedTS", job.BinlogInfo.FinishedTS))
 			p.metricDiscardedDDLCounter.Inc()
 			return true, nil
 		}
@@ -397,6 +413,10 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		log.Error("handle ddl job failed", zap.String("job", job.String()), zap.Error(err))
 		return true, errors.Trace(err)
 	}
+
+	p.resolvedTs = job.BinlogInfo.FinishedTS
+	p.schemaVersion = job.BinlogInfo.SchemaVersion
+
 	return false, nil
 }
 
