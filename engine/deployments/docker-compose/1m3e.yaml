@@ -79,8 +79,7 @@ services:
                         - ./config/etcd.yml:/etcd.yml
                 command:
                         - "etcd"
-                        - "--config-file"
-                        - "/etcd.yml"
+                        - "--advertise-client-urls=http://etcd-standalone:2379"
                 ports:
                         - "12479:2379"
                         - "12480:2380"
