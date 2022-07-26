@@ -129,7 +129,7 @@ func (k *kafkaProducer) Close() {
 	close(k.closedChan)
 	k.closed = true
 	// We need to close it asynchronously.
-	// Otherwise, we might get stuck with it in an unhealthy state of kafka.
+	// Otherwise, we might get stuck with an unhealthy state of kafka.
 	go func() {
 		// `client` is mainly used by `asyncProducer` to fetch metadata and other related
 		// operations. When we close the `kafkaSaramaProducer`, TiCDC no need to make sure
