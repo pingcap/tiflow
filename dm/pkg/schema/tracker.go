@@ -377,47 +377,20 @@ func (tr *Tracker) Close() error {
 
 // DropTable drops a table from this tracker.
 func (tr *Tracker) DropTable(table *filter.Table) error {
-<<<<<<< HEAD
 	tableIdent := ast.Ident{
 		Schema: model.NewCIStr(table.Schema),
 		Name:   model.NewCIStr(table.Name),
 	}
 	return tr.dom.DDL().DropTable(tr.se, tableIdent)
-=======
-	tr.se.SetValue(sessionctx.QueryString, "skip")
-	stmt := &ast.DropTableStmt{
-		Tables: []*ast.TableName{
-			{
-				Schema: model.NewCIStr(table.Schema),
-				Name:   model.NewCIStr(table.Name),
-			},
-		},
-		IfExists: true,
-	}
-	return tr.dom.DDL().DropTable(tr.se, stmt)
->>>>>>> b4bbb8623 (db(dm): use `net.JoinHostPort` to generate host-port part of URI (#6248))
 }
 
 // DropIndex drops an index from this tracker.
 func (tr *Tracker) DropIndex(table *filter.Table, index string) error {
-<<<<<<< HEAD
 	tableIdent := ast.Ident{
 		Schema: model.NewCIStr(table.Schema),
 		Name:   model.NewCIStr(table.Name),
 	}
 	return tr.dom.DDL().DropIndex(tr.se, tableIdent, model.NewCIStr(index), true)
-=======
-	tr.se.SetValue(sessionctx.QueryString, "skip")
-	stmt := &ast.DropIndexStmt{
-		Table: &ast.TableName{
-			Schema: model.NewCIStr(table.Schema),
-			Name:   model.NewCIStr(table.Name),
-		},
-		IndexName: index,
-		IfExists:  true,
-	}
-	return tr.dom.DDL().DropIndex(tr.se, stmt)
->>>>>>> b4bbb8623 (db(dm): use `net.JoinHostPort` to generate host-port part of URI (#6248))
 }
 
 // CreateSchemaIfNotExists creates a SCHEMA of the given name if it did not exist.
@@ -426,15 +399,7 @@ func (tr *Tracker) CreateSchemaIfNotExists(db string) error {
 	if tr.dom.InfoSchema().SchemaExists(dbName) {
 		return nil
 	}
-<<<<<<< HEAD
 	return tr.dom.DDL().CreateSchema(tr.se, dbName, nil, nil, nil)
-=======
-	stmt := &ast.CreateDatabaseStmt{
-		Name:        dbName,
-		IfNotExists: true,
-	}
-	return tr.dom.DDL().CreateSchema(tr.se, stmt)
->>>>>>> b4bbb8623 (db(dm): use `net.JoinHostPort` to generate host-port part of URI (#6248))
 }
 
 // cloneTableInfo creates a clone of the TableInfo.
