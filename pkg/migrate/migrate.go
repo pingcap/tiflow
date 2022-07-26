@@ -234,6 +234,7 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 				}
 				info.UpstreamID = upstreamID
 				info.Namespace = model.DefaultNamespace
+				info.ID = strings.TrimPrefix(string(v.Key), oldChangefeedPrefix+"/")
 				var str string
 				str, err = info.Marshal()
 				if err != nil {
