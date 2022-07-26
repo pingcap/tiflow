@@ -180,7 +180,7 @@ func (s *Server) checkLeaderExists(ctx context.Context) (retry bool, err error) 
 		leader.IsLeader = true
 		log.Info("start to watch server master leader",
 			zap.String("leader-name", leader.Name), zap.String("addr", leader.AdvertiseAddr))
-		s.watchLeader(ctx, leader, rev)
+		s.watchLeader(ctx, leader, key, rev)
 		log.Info("server master leader changed")
 	}
 
@@ -215,7 +215,7 @@ func (s *Server) closeLeaderClient() {
 	s.resourceCli.Close()
 }
 
-func (s *Server) watchLeader(ctx context.Context, m *rpcutil.Member, rev int64) {
+func (s *Server) watchLeader(ctx context.Context, m *rpcutil.Member, key []byte, rev int64) {
 	m.IsLeader = true
 	s.leader.Store(m)
 	s.createLeaderClient(ctx, []string{m.AdvertiseAddr})
@@ -229,8 +229,7 @@ func (s *Server) watchLeader(ctx context.Context, m *rpcutil.Member, rev int64) 
 			return
 		default:
 		}
-		leaderPath := adapter.MasterCampaignKey.Path()
-		rch := watcher.Watch(ctx, leaderPath, clientv3.WithPrefix(), clientv3.WithRev(rev))
+		rch := watcher.Watch(ctx, string(key), clientv3.WithRev(rev))
 		for wresp := range rch {
 			if wresp.CompactRevision != 0 {
 				log.Warn("watch leader met compacted error",
