@@ -170,17 +170,20 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	mockBaseJobmaster := &MockBaseJobmaster{}
 	mockCheckpointAgent := &MockCheckpointAgent{}
 	checkpoint.NewCheckpointAgent = func(*config.JobCfg, *zap.Logger) checkpoint.Agent { return mockCheckpointAgent }
+	mockMessageAgent := &dmpkg.MockMessageAgent{}
+	dmpkg.NewMessageAgent = func(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) dmpkg.MessageAgent {
+		return mockMessageAgent
+	}
 	defer func() {
 		checkpoint.NewCheckpointAgent = checkpoint.NewAgentImpl
+		dmpkg.NewMessageAgent = dmpkg.NewMessageAgentImpl
 	}()
-	mockMessageAgent := &dmpkg.MockMessageAgent{}
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	jm := &JobMaster{
 		workerID:      "jobmaster-id",
 		jobCfg:        jobCfg,
 		BaseJobMaster: mockBaseJobmaster,
-		messageAgent:  mockMessageAgent,
 	}
 
 	// init

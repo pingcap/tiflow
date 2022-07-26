@@ -49,11 +49,12 @@ type JobMaster struct {
 	workerID frameModel.WorkerID
 	jobCfg   *config.JobCfg
 
-	metadata        *metadata.MetaData
-	workerManager   *WorkerManager
-	taskManager     *TaskManager
-	messageAgent    dmpkg.MessageAgent
-	checkpointAgent checkpoint.Agent
+	metadata              *metadata.MetaData
+	workerManager         *WorkerManager
+	taskManager           *TaskManager
+	messageAgent          dmpkg.MessageAgent
+	checkpointAgent       checkpoint.Agent
+	messageHandlerManager p2p.MessageHandlerManager
 }
 
 var _ framework.JobMasterImpl = (*JobMaster)(nil)
@@ -81,7 +82,7 @@ func (j dmJobMasterFactory) NewWorkerImpl(dCtx *dcontext.Context, workerID frame
 	}
 	// nolint:errcheck
 	dCtx.Deps().Construct(func(m p2p.MessageHandlerManager) (p2p.MessageHandlerManager, error) {
-		jm.messageAgent = dmpkg.NewMessageAgentImpl(workerID, jm, m)
+		jm.messageHandlerManager = m
 		return m, nil
 	})
 	return jm, nil
@@ -89,6 +90,7 @@ func (j dmJobMasterFactory) NewWorkerImpl(dCtx *dcontext.Context, workerID frame
 
 func (jm *JobMaster) initComponents(ctx context.Context) error {
 	jm.Logger().Info("initializing the dm jobmaster components")
+	jm.messageAgent = dmpkg.NewMessageAgent(jm.workerID, jm, jm.messageHandlerManager, jm.Logger())
 	if err := jm.messageAgent.Init(ctx); err != nil {
 		return err
 	}
