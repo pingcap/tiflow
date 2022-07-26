@@ -53,7 +53,7 @@ type Config struct {
 	LogConf logutil.Config `toml:"log" json:"log"`
 
 	Join          string `toml:"join" json:"join" `
-	WorkerAddr    string `toml:"worker-addr" json:"worker-addr"`
+	Addr          string `toml:"addr" json:"addr"`
 	AdvertiseAddr string `toml:"advertise-addr" json:"advertise-addr"`
 
 	SessionTTL int `toml:"session-ttl" json:"session-ttl"`
@@ -126,7 +126,7 @@ func (c *Config) Adjust() (err error) {
 	}
 
 	if c.AdvertiseAddr == "" {
-		c.AdvertiseAddr = c.WorkerAddr
+		c.AdvertiseAddr = c.Addr
 	}
 
 	if c.Name == "" {
@@ -164,7 +164,7 @@ func GetDefaultExecutorConfig() *Config {
 		},
 		Name:                 "",
 		Join:                 "",
-		WorkerAddr:           defaultExecutorAddr,
+		Addr:                 defaultExecutorAddr,
 		AdvertiseAddr:        "",
 		SessionTTL:           defaultSessionTTL,
 		KeepAliveTTLStr:      defaultKeepAliveTTL,

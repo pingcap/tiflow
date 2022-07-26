@@ -110,6 +110,7 @@ func (h *masterClientTestHelper) WaitWorkerClosed(t *testing.T) error {
 
 func TestMasterClientRefreshInfo(t *testing.T) {
 	helper := newMasterClientTestHelper("master-1", "worker-1")
+	defer helper.Meta.Close()
 	err := helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMetaKVData{
 		ID:         "master-1",
 		StatusCode: frameModel.MasterStatusInit,
@@ -144,6 +145,7 @@ func TestMasterClientRefreshInfo(t *testing.T) {
 
 func TestMasterClientHeartbeat(t *testing.T) {
 	helper := newMasterClientTestHelper("master-1", "worker-1")
+	defer helper.Meta.Close()
 	err := helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMetaKVData{
 		ID:         "master-1",
 		StatusCode: frameModel.MasterStatusInit,
@@ -220,6 +222,7 @@ func TestMasterClientHeartbeat(t *testing.T) {
 
 func TestMasterClientHeartbeatMismatch(t *testing.T) {
 	helper := newMasterClientTestHelper("master-1", "worker-1")
+	defer helper.Meta.Close()
 	err := helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMetaKVData{
 		ID:         "master-1",
 		StatusCode: frameModel.MasterStatusInit,
@@ -273,6 +276,7 @@ func TestMasterClientHeartbeatLargerEpoch(t *testing.T) {
 	// with a larger Epoch.
 
 	helper := newMasterClientTestHelper("master-1", "worker-1")
+	defer helper.Meta.Close()
 	err := helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMetaKVData{
 		ID:         "master-1",
 		StatusCode: frameModel.MasterStatusInit,
@@ -307,6 +311,7 @@ func TestMasterClientHeartbeatLargerEpoch(t *testing.T) {
 
 func TestMasterClientTimeoutFromInit(t *testing.T) {
 	helper := newMasterClientTestHelper("master-1", "worker-1")
+	defer helper.Meta.Close()
 	err := helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMetaKVData{
 		ID:         "master-1",
 		StatusCode: frameModel.MasterStatusInit,
@@ -335,6 +340,7 @@ func TestMasterClientCheckTimeoutRefreshMaster(t *testing.T) {
 	// master info automatically.
 
 	helper := newMasterClientTestHelper("master-1", "worker-1")
+	defer helper.Meta.Close()
 	err := helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMetaKVData{
 		ID:         "master-1",
 		StatusCode: frameModel.MasterStatusInit,
@@ -383,6 +389,7 @@ func TestMasterClientSendHeartbeatRefreshMaster(t *testing.T) {
 	// a heartbeat, a master info refresh is triggered.
 
 	helper := newMasterClientTestHelper("master-1", "worker-1")
+	defer helper.Meta.Close()
 	err := helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMetaKVData{
 		ID:         "master-1",
 		StatusCode: frameModel.MasterStatusInit,
@@ -422,6 +429,7 @@ func TestMasterClientSendHeartbeatRefreshMaster(t *testing.T) {
 
 func TestMasterClientHeartbeatStalePong(t *testing.T) {
 	helper := newMasterClientTestHelper("master-1", "worker-1")
+	defer helper.Meta.Close()
 	err := helper.Meta.UpsertJob(context.Background(), &frameModel.MasterMetaKVData{
 		ID:         "master-1",
 		StatusCode: frameModel.MasterStatusInit,
