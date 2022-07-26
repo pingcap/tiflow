@@ -174,9 +174,6 @@ func (s *SinkConfig) applyParameter(sinkURI *url.URL) error {
 		if err != nil {
 			return err
 		}
-	} else if s.Protocol == "default" {
-		s.Protocol = ""
-		log.Warn(fmt.Sprintf("protocol cannot be configured when using %s scheme", sinkURI.Scheme))
 	} else if s.Protocol != "" {
 		return cerror.ErrSinkURIInvalid.GenWithStackByArgs(fmt.Sprintf("protocol %s "+
 			"is incompatible with %s scheme", s.Protocol, sinkURI.Scheme))

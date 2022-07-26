@@ -112,9 +112,12 @@ func TestValidateApplyParameter(t *testing.T) {
 			expectedErr: ".*protocol canal is incompatible with tidb scheme.*",
 		},
 		{
-			sinkURI:       "tidb://normal:123456@127.0.0.1:3306?protocol=default",
-			expectedErr:   "",
-			expectedLevel: tableTxnAtomicity,
+			sinkURI:     "tidb://normal:123456@127.0.0.1:3306?protocol=default",
+			expectedErr: ".*protocol default is incompatible with tidb scheme.*",
+		},
+		{
+			sinkURI:     "tidb://normal:123456@127.0.0.1:3306?protocol=random",
+			expectedErr: ".*protocol .* is incompatible with tidb scheme.*",
 		},
 		{
 			sinkURI:       "blackhole://normal:123456@127.0.0.1:3306?transaction-atomicity=none",
