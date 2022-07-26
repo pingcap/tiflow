@@ -25,9 +25,8 @@ import (
 	"time"
 
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
-	"github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/pb"
-	"github.com/pingcap/tiflow/dm/dm/unit"
+	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/checker"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -39,6 +38,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
+	"github.com/pingcap/tiflow/dm/unit"
 	"golang.org/x/sync/errgroup"
 
 	_ "github.com/go-sql-driver/mysql" // for mysql

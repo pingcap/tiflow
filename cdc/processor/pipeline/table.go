@@ -42,7 +42,6 @@ const (
 	// and replicating it to downstream
 	TableStateReplicating
 	// TableStateStopping means the table is stopping, but not guaranteed yet.
-	// at the moment, this state is not used, only keep aligned with `schedulepb.TableStateStopping`
 	TableStateStopping
 	// TableStateStopped means sink stop all works, but the table resource not released yet.
 	TableStateStopped

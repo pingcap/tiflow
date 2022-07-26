@@ -35,11 +35,13 @@ type basicScheduler struct {
 	random               *rand.Rand
 	lastRebalanceTime    time.Time
 	checkBalanceInterval time.Duration
+	changefeedID         model.ChangeFeedID
 }
 
-func newBasicScheduler() *basicScheduler {
+func newBasicScheduler(changefeed model.ChangeFeedID) *basicScheduler {
 	return &basicScheduler{
-		random: rand.New(rand.NewSource(time.Now().UnixNano())),
+		random:       rand.New(rand.NewSource(time.Now().UnixNano())),
+		changefeedID: changefeed,
 	}
 }
 
@@ -78,6 +80,8 @@ func (b *basicScheduler) Schedule(
 			if status.State == CaptureStateStopping {
 				log.Warn("schedulerv3: capture is stopping, "+
 					"skip the capture when add new table",
+					zap.String("namespace", b.changefeedID.Namespace),
+					zap.String("changefeed", b.changefeedID.ID),
 					zap.Any("captureStatus", status))
 				continue
 			}
@@ -90,6 +94,8 @@ func (b *basicScheduler) Schedule(
 			// for a cluster with n captures, n should be at least 2
 			// only n - 1 captures can be in the `stopping` at the same time.
 			log.Warn("schedulerv3: cannot found capture when add new table",
+				zap.String("namespace", b.changefeedID.Namespace),
+				zap.String("changefeed", b.changefeedID.ID),
 				zap.Any("allCaptureStatus", captures))
 			return tasks
 		}
@@ -100,7 +106,10 @@ func (b *basicScheduler) Schedule(
 			tableField = zap.Int64s("tableIDs", newTables)
 		}
 		log.Info("schedulerv3: burst add table",
-			tableField, zap.Strings("captureIDs", captureIDs))
+			tableField,
+			zap.String("namespace", b.changefeedID.Namespace),
+			zap.String("changefeed", b.changefeedID.ID),
+			zap.Strings("captureIDs", captureIDs))
 		tasks = append(
 			tasks, newBurstBalanceAddTables(checkpointTs, newTables, captureIDs))
 		if len(newTables) == len(currentTables) {
@@ -133,7 +142,8 @@ func (b *basicScheduler) Schedule(
 			}
 		}
 		if len(rmTables) > 0 {
-			tasks = append(tasks, newBurstBalanceRemoveTables(rmTables, replications))
+			tasks = append(tasks,
+				newBurstBalanceRemoveTables(rmTables, replications, b.changefeedID))
 		}
 	}
 	return tasks
@@ -163,6 +173,7 @@ func newBurstBalanceAddTables(
 
 func newBurstBalanceRemoveTables(
 	rmTables []model.TableID, replications map[model.TableID]*ReplicationSet,
+	changefeedID model.ChangeFeedID,
 ) *scheduleTask {
 	tables := make([]removeTable, 0, len(rmTables))
 	for _, tableID := range rmTables {
@@ -174,6 +185,8 @@ func newBurstBalanceRemoveTables(
 			captureID = rep.Secondary
 		} else {
 			log.Warn("schedulerv3: primary or secondary not found for removed table",
+				zap.String("namespace", changefeedID.Namespace),
+				zap.String("changefeed", changefeedID.ID),
 				zap.Any("table", rep))
 			continue
 		}

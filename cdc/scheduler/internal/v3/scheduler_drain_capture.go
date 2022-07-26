@@ -31,13 +31,17 @@ type drainCaptureScheduler struct {
 	mu     sync.Mutex
 	target model.CaptureID
 
+	changefeedID       model.ChangeFeedID
 	maxTaskConcurrency int
 }
 
-func newDrainCaptureScheduler(concurrency int) *drainCaptureScheduler {
+func newDrainCaptureScheduler(
+	concurrency int, changefeed model.ChangeFeedID,
+) *drainCaptureScheduler {
 	return &drainCaptureScheduler{
 		target:             captureIDNotDraining,
 		maxTaskConcurrency: concurrency,
+		changefeedID:       changefeed,
 	}
 }
 
@@ -95,6 +99,8 @@ func (d *drainCaptureScheduler) Schedule(
 		// Find a stopping capture, drain it.
 		d.target = stopping
 		log.Info("schedulerv3: drain a stopping capture",
+			zap.String("namespace", d.changefeedID.Namespace),
+			zap.String("changefeed", d.changefeedID.ID),
 			zap.String("captureID", stopping))
 	}
 
@@ -111,6 +117,8 @@ func (d *drainCaptureScheduler) Schedule(
 	if len(captureWorkload) == 0 {
 		log.Warn("schedulerv3: drain capture scheduler ignore drain target capture, "+
 			"since cannot found destination captures",
+			zap.String("namespace", d.changefeedID.Namespace),
+			zap.String("changefeed", d.changefeedID.ID),
 			zap.String("target", d.target), zap.Any("captures", captures))
 		d.target = captureIDNotDraining
 		return nil
@@ -124,6 +132,8 @@ func (d *drainCaptureScheduler) Schedule(
 			// only drain the target capture if all tables is replicating,
 			log.Debug("schedulerv3: drain capture scheduler skip this tick,"+
 				"not all table is replicating",
+				zap.String("namespace", d.changefeedID.Namespace),
+				zap.String("changefeed", d.changefeedID.ID),
 				zap.String("target", d.target),
 				zap.Any("replication", rep))
 			return nil
@@ -147,6 +157,8 @@ func (d *drainCaptureScheduler) Schedule(
 	// 3. the target capture cannot be found in the latest captures
 	if len(victimTables) == 0 {
 		log.Info("schedulerv3: drain capture scheduler finished, since no table",
+			zap.String("namespace", d.changefeedID.Namespace),
+			zap.String("changefeed", d.changefeedID.ID),
 			zap.String("target", d.target))
 		d.target = captureIDNotDraining
 		return nil
@@ -166,6 +178,8 @@ func (d *drainCaptureScheduler) Schedule(
 
 		if minWorkload == math.MaxInt64 {
 			log.Panic("schedulerv3: drain capture meet unexpected min workload",
+				zap.String("namespace", d.changefeedID.Namespace),
+				zap.String("changefeed", d.changefeedID.ID),
 				zap.Any("workload", captureWorkload))
 		}
 

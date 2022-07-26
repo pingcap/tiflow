@@ -403,7 +403,7 @@ func TestShouldSkipDMLError(t *testing.T) {
 					row:    []interface{}{999, "Will", 39, "male"},
 					ignore: false,
 					err:    cerror.ErrExpressionColumnNotFound,
-					errMsg: "Can not found column 'mather' from table 'student' in",
+					errMsg: "Cannot find column 'mather' from table 'test.student' in",
 				},
 				{ // update
 					schema: "test",
@@ -521,7 +521,7 @@ func TestShouldSkipDMLTableUpdated(t *testing.T) {
 					row:    []interface{}{999, "Will", 39, "male"},
 					ignore: false,
 					err:    cerror.ErrExpressionColumnNotFound,
-					errMsg: "Can not found column 'mather' from table 'student' in",
+					errMsg: "Cannot find column 'mather' from table 'test.student' in",
 				},
 				{ // insert
 					schema: "test",
@@ -622,7 +622,7 @@ func TestShouldSkipDMLTableUpdated(t *testing.T) {
 					row:    []interface{}{999, "Will", 39, "male"},
 					ignore: false,
 					err:    cerror.ErrExpressionColumnNotFound,
-					errMsg: "Can not found column 'company' from table 'worker' in",
+					errMsg: "Cannot find column 'company' from table 'test.worker' in",
 				},
 			},
 		},
@@ -729,7 +729,7 @@ func TestVerify(t *testing.T) {
 				},
 			},
 			err:    cerror.ErrExpressionColumnNotFound,
-			errMsg: "Can not found column 'company' from table 'child' in",
+			errMsg: "Cannot find column 'company' from table 'test.child' in",
 		},
 		{
 			ddls: []string{

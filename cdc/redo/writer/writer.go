@@ -119,26 +119,24 @@ func NewLogWriter(
 	var err error
 	var logWriter *LogWriter
 	rowCfg := &FileWriterConfig{
-		Dir:               cfg.Dir,
-		ChangeFeedID:      cfg.ChangeFeedID,
-		CaptureID:         cfg.CaptureID,
-		FileType:          common.DefaultRowLogFileType,
-		CreateTime:        cfg.CreateTime,
-		MaxLogSize:        cfg.MaxLogSize,
-		FlushIntervalInMs: cfg.FlushIntervalInMs,
-		S3Storage:         cfg.S3Storage,
-		S3URI:             cfg.S3URI,
+		Dir:          cfg.Dir,
+		ChangeFeedID: cfg.ChangeFeedID,
+		CaptureID:    cfg.CaptureID,
+		FileType:     common.DefaultRowLogFileType,
+		CreateTime:   cfg.CreateTime,
+		MaxLogSize:   cfg.MaxLogSize,
+		S3Storage:    cfg.S3Storage,
+		S3URI:        cfg.S3URI,
 	}
 	ddlCfg := &FileWriterConfig{
-		Dir:               cfg.Dir,
-		ChangeFeedID:      cfg.ChangeFeedID,
-		CaptureID:         cfg.CaptureID,
-		FileType:          common.DefaultDDLLogFileType,
-		CreateTime:        cfg.CreateTime,
-		MaxLogSize:        cfg.MaxLogSize,
-		FlushIntervalInMs: cfg.FlushIntervalInMs,
-		S3Storage:         cfg.S3Storage,
-		S3URI:             cfg.S3URI,
+		Dir:          cfg.Dir,
+		ChangeFeedID: cfg.ChangeFeedID,
+		CaptureID:    cfg.CaptureID,
+		FileType:     common.DefaultDDLLogFileType,
+		CreateTime:   cfg.CreateTime,
+		MaxLogSize:   cfg.MaxLogSize,
+		S3Storage:    cfg.S3Storage,
+		S3URI:        cfg.S3URI,
 	}
 	logWriter = &LogWriter{
 		cfg: cfg,
@@ -381,11 +379,12 @@ func (l *LogWriter) DeleteAllLogs(ctx context.Context) error {
 		return err
 	}
 
+	err = os.RemoveAll(l.cfg.Dir)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+	}
+
 	if !l.cfg.S3Storage {
-		err = os.RemoveAll(l.cfg.Dir)
-		if err != nil {
-			return cerror.WrapError(cerror.ErrRedoFileOp, err)
-		}
 		// after delete logs, rm the LogWriter since it is already closed
 		l.cleanUpLogWriter()
 		return nil
@@ -552,11 +551,13 @@ func (l *LogWriter) flushLogMeta(checkpointTs, resolvedTs uint64) error {
 		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't make dir for new redo logfile"))
 	}
 
+	// we will create a temp metadata file and then atomically rename it.
 	tmpFileName := l.filePath() + common.MetaTmpEXT
 	tmpFile, err := openTruncFile(tmpFileName)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
+	defer tmpFile.Close()
 
 	_, err = tmpFile.Write(data)
 	if err != nil {
@@ -566,12 +567,19 @@ func (l *LogWriter) flushLogMeta(checkpointTs, resolvedTs uint64) error {
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
-	err = tmpFile.Close()
+
+	err = os.Rename(tmpFileName, l.filePath())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 
-	err = os.Rename(tmpFileName, l.filePath())
+	dirFile, err := os.Open(l.cfg.Dir)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+	}
+	defer dirFile.Close()
+	// sync the dir so as to guarantee the renamed file is persisted to disk.
+	err = dirFile.Sync()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
