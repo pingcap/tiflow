@@ -359,6 +359,11 @@ func (r *Request) checkResponse(resp *http.Response) *Result {
 		err := json.Unmarshal(body, &jsonErr)
 		if err == nil {
 			err = errors.New(jsonErr.Error)
+		} else {
+			log.Warn("call cdc api failed",
+				zap.Int("code", resp.StatusCode),
+				zap.String("content-type", contentType),
+				zap.String("body", string(body)))
 		}
 
 		return &Result{
