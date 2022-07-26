@@ -18,11 +18,12 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/edwingeng/deque"
 	"github.com/stretchr/testify/require"
 )
 
 const (
-	testCaseSize = 2007
+	testCaseSize = 10007
 )
 
 func TestChunkQueueSimpleWorkflow(t *testing.T) {
@@ -40,13 +41,13 @@ func TestChunkQueueSimpleWorkflow(t *testing.T) {
 	require.True(t, ok)
 
 	adds := make([]int, 0, testCaseSize)
-	q.EnqueueMany(adds...)
+	// q.EnqueueMany(adds...)
 	require.True(t, q.Empty())
 	for i := 0; i < testCaseSize; i++ {
 		adds = append(adds, i)
 	}
 	q.EnqueueMany(adds...)
-	require.Equal(t, testCaseSize, q.Size())
+	require.Equal(t, testCaseSize, q.Size(), q.Len())
 	vals, ok := q.DequeueMany(testCaseSize * 3 / 4)
 	require.True(t, ok)
 	for i, v := range vals {
@@ -63,14 +64,28 @@ func TestChunkQueueSimpleWorkflow(t *testing.T) {
 
 	require.Equal(t, testCaseSize, q.Size())
 	require.False(t, q.Empty())
-	for i := 0; i < 1000; i++ {
-		x := rand.Intn(testCaseSize)
-		v, ok = q.At(x)
-		require.Equal(t, x, v)
+	for x := 0; x < 1000; x++ {
+		i := rand.Intn(testCaseSize)
+		v, ok = q.At(i)
 		require.True(t, ok)
+		it := q.GetIterator(i)
+		itv := it.Value()
+		require.Equal(t, it.Index(), itv, v)
+
+		require.True(t, it.Replace(i+1))
+		require.Equal(t, it.Value(), v+1)
+		q.Replace(i, i)
+		require.Equal(t, it.Value(), v)
 	}
 
+	tail, ok := q.Tail()
+	require.Equal(t, tail, testCaseSize-1)
+	require.True(t, ok)
+
 	for i := 0; i < testCaseSize; i++ {
+		h, ok := q.Head()
+		require.Equal(t, i, h)
+
 		v, ok = q.Dequeue()
 		require.True(t, ok)
 		require.Equal(t, v, i)
@@ -79,6 +94,10 @@ func TestChunkQueueSimpleWorkflow(t *testing.T) {
 	require.True(t, q.Empty())
 	require.Equal(t, 0, q.Size())
 	_, ok = q.Dequeue()
+	require.False(t, ok)
+	_, ok = q.Head()
+	require.False(t, ok)
+	_, ok = q.Tail()
 	require.False(t, ok)
 }
 
@@ -170,6 +189,53 @@ func TestChunkQueueRange(t *testing.T) {
 		require.Equal(t, i, v)
 		return true
 	})
+
+	q.RangeAndPop(func(v int) bool {
+		return v < 1000
+	})
+
+	require.Equal(t, testCaseSize-1000, q.Size())
+
+	process := 0
+	q.RangeAndPop(func(v int) bool {
+		process = v
+		return true
+	})
+	require.Equal(t, testCaseSize-1, process)
+	require.True(t, q.Empty())
+
+	require.NotPanics(t, func() {
+		q.RangeAndPop(func(v int) bool {
+			return true
+		})
+	})
+
+}
+
+func TestChunkQueueRangeAndPop(t *testing.T) {
+	t.Parallel()
+
+	q := NewChunkQueue[int]()
+	for i := 0; i < testCaseSize; i++ {
+		q.Enqueue(i)
+	}
+
+	var target int
+	q.Range(func(v int) bool {
+		if v >= 1000 {
+			target = v
+			return false
+		}
+		return true
+	})
+	require.Equal(t, 1000, target)
+
+	q.RangeWithIndex(func(i int, v int) bool {
+		require.Equal(t, i, v)
+		q.Dequeue()
+		return true
+	})
+	require.True(t, q.Empty())
 }
 
 func BenchmarkEnqueue(b *testing.B) {
@@ -186,6 +252,73 @@ func BenchmarkEnqueue(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			q = append(q, i)
+		}
+	})
+
+	b.Run("Benchmark-Enqueue-EdwingDeque", func(b *testing.B) {
+		q := deque.NewDeque()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			q.PushBack(i)
+		}
+	})
+
+}
+
+func TestChunkQueueEnqueueMany(t *testing.T) {
+	q := NewChunkQueueLeastCapacity[int](16)
+	n := testCaseSize
+	data := make([]int, 0, n)
+	cnt := 0
+	for i := 1; i < 10; i++ {
+		q.EnqueueMany(data[:n]...)
+		cnt += n
+		freeSpace := q.Cap() - q.Size()
+		fmt.Println(n, freeSpace)
+		require.Equal(t, cnt, q.Size())
+		require.True(t, freeSpace >= 0 && freeSpace <= q.chunkLength)
+	}
+}
+
+func BenchmarkEnqueueMany(b *testing.B) {
+	prepareSlice := func(n int) []int {
+		data := make([]int, 0, n)
+		for i := 0; i < n; i++ {
+			data = append(data, i)
+		}
+		return data
+	}
+
+	b.Run("Benchmark-EnqueueMany-ChunkDeque", func(b *testing.B) {
+		q := NewChunkQueueLeastCapacity[int](16)
+		n := b.N
+		data := prepareSlice(n)
+
+		b.ResetTimer()
+		for i := 1; i < 10; i++ {
+			q.EnqueueMany(data[:n]...)
+		}
+	})
+
+	b.Run("Benchmark-EnqueueMany-ChunkDeque-OneByOne", func(b *testing.B) {
+		q := NewChunkQueueLeastCapacity[int](16)
+		n := b.N
+		data := prepareSlice(n)
+
+		b.ResetTimer()
+		for i := 1; i < 10; i++ {
+			q.EnqueueManyOneByOne(data[:n]...)
+		}
+	})
+
+	b.Run("BenchMark-EnqueueMany-Slice", func(b *testing.B) {
+		q := make([]int, 0, 16)
+		n := b.N
+		data := prepareSlice(n)
+
+		b.ResetTimer()
+		for i := 1; i < 10; i++ {
+			q = append(q, data[:n]...)
 		}
 	})
 }
@@ -205,8 +338,6 @@ func BenchmarkDequeueMany(b *testing.B) {
 			if !ok || len(vals) != l {
 				panic("error")
 			}
-			// require.True(b, ok)
-			// require.Equal(b, len(vals), l)
 		}
 	})
 
@@ -222,6 +353,27 @@ func BenchmarkDequeueMany(b *testing.B) {
 		for _, l := range ls {
 			_ = q[:l]
 			q = append(make([]int, 0, len(q[l:])), q[l:]...)
+		}
+	})
+
+	b.Run("Benchmark-DequeueMany-EdwingDeque", func(b *testing.B) {
+		q := deque.NewDeque()
+
+		x := b.N
+		for i := 0; i < x; i++ {
+			q.Enqueue(i)
+		}
+		ls := []int{x / 5, x / 5, x / 5, x / 5, x - x/5*4}
+		b.ResetTimer()
+		for _, l := range ls {
+			if l > 0 {
+				vals := q.PopManyFront(l)
+				if len(vals) != l {
+					fmt.Println(l, len(vals), vals[0])
+					panic("error")
+				}
+			}
+
 		}
 	})
 }

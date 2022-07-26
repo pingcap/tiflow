@@ -35,20 +35,6 @@ func (c *chunk[T]) len() int {
 	return c.r - c.l
 }
 
-func (c *chunk[T]) front() (T, bool) {
-	if !c.empty() {
-		return c.data[c.l], true
-	}
-	return *new(T), false
-}
-
-func (c *chunk[T]) back() (T, bool) {
-	if !c.empty() {
-		return c.data[c.r-1], true
-	}
-	return *new(T), false
-}
-
 func (c *chunk[T]) reset() {
 	c.l, c.r = 0, 0
 	c.prev, c.next, c.queue = nil, nil, nil

@@ -96,6 +96,11 @@ func (q *ChunkQueue[T]) Size() int {
 	return q.size
 }
 
+// Len returns the number of elements in queue
+func (q *ChunkQueue[T]) Len() int {
+	return q.size
+}
+
 // Cap returns the capacity of the queue. The queue can hold more elements
 // than that number by automatic expansion
 func (q *ChunkQueue[T]) Cap() int {
@@ -126,7 +131,8 @@ func (q *ChunkQueue[T]) Replace(idx int, val T) bool {
 	return true
 }
 
-// Head returns the value of the first element in queue
+// Head returns the value of the first element. This method is only for reading
+// the first element, not for modification
 func (q *ChunkQueue[T]) Head() (T, bool) {
 	if q.Empty() {
 		return q.defaultValue, false
@@ -135,7 +141,8 @@ func (q *ChunkQueue[T]) Head() (T, bool) {
 	return c.data[c.l], true
 }
 
-// Tail returns the value of the last element in queue
+// Tail returns the value of the last element. This method is only for reading
+// the last element, not for modification
 func (q *ChunkQueue[T]) Tail() (T, bool) {
 	if q.Empty() {
 		return q.defaultValue, false
@@ -151,7 +158,7 @@ func (q *ChunkQueue[T]) extend(n int) {
 	}
 	chunksNum := (n + q.chunkLength - 1) / q.chunkLength
 
-	// should reallocate the chunks pointers array if the tail cannot hold
+	// reallocate the chunks array if no enough space in the tail
 	if q.tail+chunksNum+1 >= len(q.chunks) {
 		q.reallocateChunksArray(chunksNum)
 	}
@@ -169,21 +176,23 @@ func (q *ChunkQueue[T]) extend(n int) {
 }
 
 // reallocateChunksArray extends/shrinks the []chunks array,
-// and move the pointers to head
+// and then moves the pointers to head
 func (q *ChunkQueue[T]) reallocateChunksArray(need int) {
-	var n int
-	if need < 0 {
-		n = defaultPitchArrayLen
-	} else {
-		n = len(q.chunks)
-	}
 	used := q.tail - q.head
-	// Twice the array if more than a half will be in use
-	for used+need > n/2 {
-		n *= 2
+	newLen := len(q.chunks)
+	switch {
+	case need < 0:
+		if newLen <= defaultPitchArrayLen {
+			newLen = defaultPitchArrayLen
+		}
+	case need >= 0:
+		// Twice the array if more than a half will be in use
+		for used+need+1 >= newLen {
+			newLen *= 2
+		}
 	}
-	if n != len(q.chunks) {
-		newChunks := make([]*chunk[T], n, n)
+	if newLen != len(q.chunks) {
+		newChunks := make([]*chunk[T], newLen, newLen)
 		copy(newChunks[:used], q.chunks[q.head:q.tail])
 		q.chunks = newChunks
 	} else if q.head > 0 {
@@ -207,6 +216,51 @@ func (q *ChunkQueue[T]) Enqueue(v T) {
 	c.data[c.r] = v
 	c.r++
 	q.size++
+}
+
+// EnqueueMany enqueues multiple elements at a time
+func (q *ChunkQueue[T]) EnqueueMany(vals ...T) {
+	cnt, n := 0, len(vals)
+	c := q.lastChunk()
+	if q.Cap()-q.Size() < n {
+		q.extend(n - (q.chunkLength - c.r))
+	}
+
+	if c.r == q.chunkLength {
+		c = c.next
+	}
+
+	var addLen int
+	for n > 0 {
+		addLen = q.chunkLength - c.r
+		if addLen > n {
+			addLen = n
+		}
+		copy(c.data[c.r:c.r+addLen], vals[cnt:cnt+addLen])
+		c.r += addLen
+		q.size += addLen
+		cnt += addLen
+		c = c.next
+		n -= addLen
+	}
+}
+
+// EnqueueManyOneByOne enqueues multiple elements at a time
+func (q *ChunkQueue[T]) EnqueueManyOneByOne(vals ...T) {
+	n := len(vals)
+	c := q.lastChunk()
+	if q.Cap()-q.Size() < n {
+		q.extend(n - (q.chunkLength - c.r))
+	}
+
+	for _, val := range vals {
+		if c.r == q.chunkLength {
+			c = c.next
+		}
+		c.data[c.r] = val
+		c.r++
+		q.size++
+	}
 }
 
 // Dequeue dequeues an element from head
@@ -238,19 +292,6 @@ func (q *ChunkQueue[T]) popChunk() {
 
 	c.reset()
 	q.chunkPool.Put(c)
-}
-
-// EnqueueMany enqueues multiple elements at a time
-func (q *ChunkQueue[T]) EnqueueMany(vals ...T) {
-	n := len(vals)
-	c := q.lastChunk()
-	if q.Cap()-q.Size() < n {
-		q.extend(n - (q.chunkLength - c.r))
-	}
-
-	for _, val := range vals {
-		q.Enqueue(val)
-	}
 }
 
 // DequeueAll dequeues all elements in the queue
@@ -306,17 +347,13 @@ func (q *ChunkQueue[T]) Clear() {
 	q.reallocateChunksArray(-1)
 }
 
-// Shrink shrinks the space of the chunks array
+// Shrink shrinks the space of the chunks array.
 func (q *ChunkQueue[T]) Shrink() {
 	q.reallocateChunksArray(-1)
 }
 
 // Range iterates the queue from head to the first element that does NOT satisfy f()
 func (q *ChunkQueue[T]) Range(f func(e T) bool) {
-	if q.Empty() {
-		return
-	}
-
 	var c *chunk[T]
 	for i := q.head; i < q.tail; i++ {
 		c = q.chunks[i]
@@ -328,13 +365,9 @@ func (q *ChunkQueue[T]) Range(f func(e T) bool) {
 	}
 }
 
-// RangeWithIndex iterates the queue with index from head to the first element
-// that does NOT satisfy f
+// RangeWithIndex iterates the queue with index from head. It stops at the first
+// element e that function f(idx, e) returns false, or iterates all.
 func (q *ChunkQueue[T]) RangeWithIndex(f func(idx int, e T) bool) {
-	if q.Empty() {
-		return
-	}
-
 	var c *chunk[T]
 	idx := 0
 	for i := q.head; i < q.tail; i++ {
@@ -344,6 +377,30 @@ func (q *ChunkQueue[T]) RangeWithIndex(f func(idx int, e T) bool) {
 				return
 			}
 			idx++
+		}
+	}
+}
+
+// RangeAndPop iterate the queue from head, and pop the element if applying
+// func f() on it returns true. It stops the iteration at the first element
+// that f() returns false, or the queue is empty.
+// This method is convenient
+func (q *ChunkQueue[T]) RangeAndPop(f func(e T) bool) {
+	var c *chunk[T]
+
+	for i := q.head; !q.Empty() && i < q.tail; i++ {
+		c = q.chunks[i]
+		for j := c.l; j < c.r; j++ {
+			if f(c.data[j]) {
+				c.data[c.l] = q.defaultValue
+				c.l++
+				q.size--
+			} else {
+				return
+			}
+		}
+		if c.l == q.chunkLength {
+			q.popChunk()
 		}
 	}
 }

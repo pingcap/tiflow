@@ -135,35 +135,27 @@ func splitResolvedTxn(
 	})
 
 	resolvedRowsMap = make(map[model.TableID][]*model.SingleTableTxn, len(unresolvedTxns))
+	resolvedTxnsBuf := queue.NewChunkQueue[*model.SingleTableTxn]()
 	for tableID, resolved := range checkpointTsMap {
 		txnQueue, ok := unresolvedTxns[tableID]
 		if !ok || txnQueue.Empty() {
 			continue
 		}
 
-		txnsLength := 0
-		n := 0
-		txnQueue.Range(func(t *txnsWithTheSameCommitTs) bool {
-			if t.commitTs > resolved.Ts {
-				return false
+		txnQueue.RangeAndPop(func(txns *txnsWithTheSameCommitTs) bool {
+			if txns.commitTs <= resolved.Ts {
+				resolvedTxnsBuf.EnqueueMany(txns.txns...)
+				return true
 			}
-			txnsLength += len(t.txns)
-			n++
-			return true
+			return false
 		})
-		if n == 0 {
+		if resolvedTxnsBuf.Empty() {
 			continue
 		}
-
-		resolvedTxns := make([]*model.SingleTableTxn, 0, txnsLength)
-		for i := 0; i < n; i++ {
-			txns, _ := txnQueue.Dequeue()
-			resolvedTxns = append(resolvedTxns, txns.txns...)
-		}
+		resolvedRowsMap[tableID], _ = resolvedTxnsBuf.DequeueAll()
 		if txnQueue.Empty() {
 			txnQueue.Shrink()
 		}
-		resolvedRowsMap[tableID] = resolvedTxns
 	}
 	return checkpointTsMap, resolvedRowsMap
 }

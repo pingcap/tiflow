@@ -13,7 +13,12 @@
 
 package queue
 
-// ChunkQueueIterator is the iterator type of ChunkQueue
+// ChunkQueueIterator is the iterator type of ChunkQueue. Iterating ChunkQueue
+// by iterators is not thread-safe. Manipulating invalid iterators may incur
+// panics. Don't use an iterator of an element that has already been dequeued.
+// Instead, use with checks and in loop. E.g.
+// `for it := someQueue.Begin(); it.Valid(); it.Next() {...} ` // forwards
+// `for it := someQueue.End(); it.Prev(); {...} `			   // backwards
 type ChunkQueueIterator[T any] struct {
 	idxInChunk int
 	chunk      *chunk[T]
@@ -47,18 +52,28 @@ func (q *ChunkQueue[T]) GetIterator(idx int) *ChunkQueueIterator[T] {
 	}
 }
 
-// Valid indicates if the element of the iterator is in queue or not
+// Valid indicates if the element of the iterator is in queue
 func (it *ChunkQueueIterator[T]) Valid() bool {
 	return it.chunk != nil && it.idxInChunk >= it.chunk.l && it.idxInChunk < it.chunk.r
 }
 
 // Value returns the element value of a valid iterator which is in queue.
-// It's meaningless and may panic otherwise
+// It's meaningless and may panic otherwise.
 func (it *ChunkQueueIterator[T]) Value() T {
 	return it.chunk.data[it.idxInChunk]
 }
 
-// Index returns the index of a valid iterator, and -1 otherwise
+// Replace replaces the element of the valid iterator. It returns true on success
+func (it *ChunkQueueIterator[T]) Replace(v T) bool {
+	if it.Valid() {
+		it.chunk.data[it.idxInChunk] = v
+		return true
+	}
+	return false
+}
+
+// Index returns the index of a valid iterator, and -1 otherwise.
+// Attention: The time complexity is O(N). Please avoid using this method
 func (it *ChunkQueueIterator[T]) Index() int {
 	if !it.Valid() {
 		return -1
@@ -69,33 +84,41 @@ func (it *ChunkQueueIterator[T]) Index() int {
 		if q.chunks[i] != it.chunk {
 			idx += q.chunks[i].len()
 		} else {
-			idx += it.idxInChunk
+			idx += it.idxInChunk - it.chunk.l
 			break
 		}
 	}
 	return idx
 }
 
-// Next updates the current iterator to its next iterator and returns it
-func (it *ChunkQueueIterator[T]) Next() *ChunkQueueIterator[T] {
+// Next updates the current iterator to its next iterator. It returns true if
+// the next iterator is still in queue, and false otherwise. Calling Next for
+// an invalid iterator is meaningless, and using invalid iterators may panic.
+// Using Next
+func (it *ChunkQueueIterator[T]) Next() bool {
 	it.idxInChunk++
 	if it.idxInChunk < it.chunk.r {
-		return it
+		return true
 	}
 
 	c, q := it.chunk, it.chunk.queue
 	if it.idxInChunk == q.chunkLength && c.next != nil && !c.empty() {
 		it.idxInChunk, it.chunk = 0, c.next
-	} else {
-		it.idxInChunk = q.chunkLength
+		return true
 	}
-	return it
+
+	it.idxInChunk = q.chunkLength
+	return false
 }
 
-// Prev updates the current to its previous one and returns it
-func (it *ChunkQueueIterator[T]) Prev() *ChunkQueueIterator[T] {
+// Prev updates the current to its previous iterator. It returns true if the
+// next iterator is in queue, and false otherwise. The Prev of an end iterator
+// points to the last element of the queue if the queue is not empty.
+// The return boolean value is useful for backwards iteration. E.g.
+// `for it := someQueue.End(); it.Prev; {...} `
+func (it *ChunkQueueIterator[T]) Prev() bool {
 	if it.chunk == nil {
-		return it
+		return false
 	}
 
 	c := it.chunk
@@ -105,20 +128,22 @@ func (it *ChunkQueueIterator[T]) Prev() *ChunkQueueIterator[T] {
 		if it.idxInChunk == len(c.data) && !c.queue.Empty() {
 			lastChunk := c.queue.lastChunk()
 			it.chunk, it.idxInChunk = lastChunk, lastChunk.r-1
+			return true
 		}
-		return it
+		return false
 	}
 
 	it.idxInChunk--
 	if it.idxInChunk >= it.chunk.l {
-		return it
+		return true
 	}
 
 	it.chunk = c.prev
-	if it.chunk == nil {
-		it.idxInChunk = -1
-	} else {
+	if it.chunk != nil {
 		it.idxInChunk = it.chunk.r - 1
+		return true
 	}
-	return it
+
+	it.idxInChunk = -1
+	return false
 }

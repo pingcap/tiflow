@@ -18,7 +18,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/edwingeng/deque"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -26,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v2/protocol"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v2/util"
+	"github.com/pingcap/tiflow/pkg/container/queue"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
@@ -82,7 +82,7 @@ type Agent struct {
 	pendingOpsMu sync.Mutex
 	// pendingOps is a queue of operations yet to be processed.
 	// the Deque stores *agentOperation.
-	pendingOps deque.Deque
+	pendingOps *queue.ChunkQueue[*agentOperation]
 
 	// tableOperations is a map from tableID to the operation
 	// that is currently being processed.
@@ -118,7 +118,7 @@ func NewBaseAgent(
 		zap.String("namespace", changeFeedID.Namespace),
 		zap.String("changefeed", changeFeedID.ID))
 	ret := &Agent{
-		pendingOps:       deque.NewDeque(),
+		pendingOps:       queue.NewChunkQueue[*agentOperation](),
 		tableOperations:  map[model.TableID]*agentOperation{},
 		logger:           logger,
 		executor:         executor,
@@ -224,10 +224,7 @@ func (a *Agent) popPendingOps() (opsToApply []*agentOperation) {
 	defer a.pendingOpsMu.Unlock()
 
 	for !a.pendingOps.Empty() {
-		opsBatch := a.pendingOps.PopManyFront(128 /* batch size */)
-		for _, op := range opsBatch {
-			opsToApply = append(opsToApply, op.(*agentOperation))
-		}
+		opsToApply, _ = a.pendingOps.DequeueAll()
 	}
 	return
 }
@@ -359,7 +356,7 @@ func (a *Agent) OnOwnerDispatchedTask(
 		FromOwnerID: ownerCaptureID,
 		status:      operationReceived,
 	}
-	a.pendingOps.PushBack(op)
+	a.pendingOps.Enqueue(op)
 
 	a.logger.Info("OnOwnerDispatchedTask",
 		zap.String("ownerCaptureID", ownerCaptureID),
@@ -422,7 +419,7 @@ func (a *Agent) updateOwnerInfo(ownerCaptureID model.CaptureID, ownerRev int64) 
 		// Note: these pending operations have not yet been processed by the agent,
 		// so it is okay to lose them.
 		a.pendingOpsMu.Lock()
-		a.pendingOps = deque.NewDeque()
+		a.pendingOps.Clear()
 		a.pendingOpsMu.Unlock()
 		return true
 	}

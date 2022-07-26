@@ -17,6 +17,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/edwingeng/deque"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,7 +41,7 @@ func TestChunkQueueIteratorPrevNext(t *testing.T) {
 		i++
 	}
 	i--
-	for it = q.End().Prev(); it.Valid(); it.Prev() {
+	for it = q.End(); it.Prev(); {
 		v := it.Value()
 		require.Equal(t, i, it.Index())
 		require.Equal(t, i, v)
@@ -48,7 +49,7 @@ func TestChunkQueueIteratorPrevNext(t *testing.T) {
 	}
 }
 
-func BenchmarkChunkQueueIteratorNext(b *testing.B) {
+func BenchmarkChunkQueueIterate(b *testing.B) {
 	b.Run("BenchMark-Iterate-ChunkQueue-by-iterator", func(b *testing.B) {
 		q := NewChunkQueue[int]()
 		n := b.N
@@ -64,6 +65,23 @@ func BenchmarkChunkQueueIteratorNext(b *testing.B) {
 				panic("not equal")
 			}
 			i++
+		}
+	})
+
+	b.Run("BenchMark-Iterate-ChunkQueue-by-At", func(b *testing.B) {
+		q := NewChunkQueue[int]()
+		n := b.N
+		for i := 0; i < n; i++ {
+			q.Enqueue(i)
+		}
+		b.ResetTimer()
+
+		i := 0
+		for i = 0; i < q.Size(); i++ {
+			v, _ := q.At(i)
+			if v != i {
+				panic("not equal")
+			}
 		}
 	})
 
@@ -91,9 +109,43 @@ func BenchmarkChunkQueueIteratorNext(b *testing.B) {
 		}
 		b.ResetTimer()
 
-		for i := 0; i < n; i++ {
+		for i := 0; i < len(q); i++ {
 			if q[i] != i {
 				panic("error")
+			}
+		}
+	})
+
+	b.Run("BenchMark-Iterate-EdwingengDeque-Range", func(b *testing.B) {
+		q := deque.NewDeque()
+		n := b.N
+
+		for i := 0; i < n; i++ {
+			q.Enqueue(i)
+		}
+		b.ResetTimer()
+
+		q.Range(func(idx int, val deque.Elem) bool {
+			if val.(int) != idx {
+				panic("not equal")
+			}
+			return true
+		})
+	})
+
+	b.Run("BenchMark-Iterate-EdwingengDeque-Peek", func(b *testing.B) {
+		q := deque.NewDeque()
+		n := b.N
+
+		for i := 0; i < n; i++ {
+			q.Enqueue(i)
+		}
+		b.ResetTimer()
+
+		for i := 0; i < n; i++ {
+			val := q.Peek(i)
+			if val != i {
+				panic("not equal")
 			}
 		}
 	})
@@ -103,18 +155,23 @@ func TestChunkQueueGetIterator(t *testing.T) {
 	t.Parallel()
 
 	q := NewChunkQueue[int]()
+	q.EnqueueMany(0, 1)
+	var it *ChunkQueueIterator[int]
+	it = q.GetIterator(-1)
+	require.Nil(t, it)
+	it = q.GetIterator(2)
+	require.Nil(t, it)
+	oldIt := q.GetIterator(1)
+	q.DequeueMany(2)
+	require.False(t, oldIt.Valid(), oldIt.Prev())
+	require.True(t, q.Empty())
 
 	for i := 0; i < iterTestSize; i++ {
 		q.Enqueue(i)
 	}
-	var it *ChunkQueueIterator[int]
-	it = q.GetIterator(-1)
-	require.Nil(t, it)
-	it = q.GetIterator(iterTestSize)
-	require.Nil(t, it)
-
 	require.True(t, q.End().Index() < 0)
-	require.True(t, q.Begin().Prev().Index() < 0)
+	require.False(t, q.Begin().Prev())
+	require.False(t, q.End().Replace(1))
 
 	for i := 0; i < iterTestSize; i++ {
 		it = q.GetIterator(i)

@@ -17,10 +17,10 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/edwingeng/deque"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/container/queue"
 	"go.uber.org/zap"
 )
 
@@ -35,10 +35,8 @@ type TableFlowController struct {
 	memoryQuota  *tableMemoryQuota
 	lastCommitTs uint64
 
-	queueMu struct {
-		sync.Mutex
-		queue deque.Deque
-	}
+	queueMu sync.Mutex
+	queue   queue.ChunkQueue[*txnSizeEntry]
 
 	redoLogEnabled bool
 	splitTxn       bool
@@ -76,13 +74,8 @@ func NewTableFlowController(quota uint64, redoLogEnabled bool, splitTxn bool) *T
 	}
 
 	return &TableFlowController{
-		memoryQuota: newTableMemoryQuota(quota),
-		queueMu: struct {
-			sync.Mutex
-			queue deque.Deque
-		}{
-			queue: deque.NewDeque(),
-		},
+		memoryQuota:    newTableMemoryQuota(quota),
+		queue:          *queue.NewChunkQueue[*txnSizeEntry](),
 		redoLogEnabled: redoLogEnabled,
 		splitTxn:       splitTxn,
 		batchSize:      defaultBatchSize,
@@ -144,16 +137,14 @@ func (c *TableFlowController) Release(resolved model.ResolvedTs) {
 	var nBytesToRelease uint64
 
 	c.queueMu.Lock()
-	for c.queueMu.queue.Len() > 0 {
-		peeked := c.queueMu.queue.Front().(*txnSizeEntry)
-		if peeked.commitTs < resolved.Ts ||
-			(peeked.commitTs == resolved.Ts && peeked.batchID <= resolved.BatchID) {
-			nBytesToRelease += peeked.size
-			c.queueMu.queue.PopFront()
-		} else {
-			break
+	c.queue.RangeAndPop(func(e *txnSizeEntry) bool {
+		if e.commitTs < resolved.Ts ||
+			(e.commitTs == resolved.Ts && e.batchID <= resolved.BatchID) {
+			nBytesToRelease += e.size
+			return true
 		}
-	}
+		return false
+	})
 	c.queueMu.Unlock()
 
 	c.memoryQuota.release(nBytesToRelease)
@@ -169,9 +160,8 @@ func (c *TableFlowController) enqueueSingleMsg(
 	c.queueMu.Lock()
 	defer c.queueMu.Unlock()
 
-	e := c.queueMu.queue.Back()
 	// 1. Processing a new txn with different commitTs.
-	if e == nil || lastCommitTs < commitTs {
+	if c.queue.Empty() || lastCommitTs < commitTs {
 		atomic.StoreUint64(&c.lastCommitTs, commitTs)
 		c.resetBatch(lastCommitTs, commitTs)
 		c.addEntry(msg, size)
@@ -179,7 +169,7 @@ func (c *TableFlowController) enqueueSingleMsg(
 	}
 
 	// Processing txns with the same commitTs.
-	txnEntry := e.(*txnSizeEntry)
+	txnEntry, _ := c.queue.Tail()
 	if txnEntry.commitTs != lastCommitTs {
 		log.Panic("got wrong commitTs from deque in flow control, report a bug",
 			zap.Uint64("lastCommitTs", c.lastCommitTs),
@@ -204,7 +194,7 @@ func (c *TableFlowController) enqueueSingleMsg(
 // addEntry should be called only if c.queueMu is locked.
 func (c *TableFlowController) addEntry(msg *model.PolymorphicEvent, size uint64) {
 	c.batchGroupCount++
-	c.queueMu.queue.PushBack(&txnSizeEntry{
+	c.queue.Enqueue(&txnSizeEntry{
 		startTs:  msg.StartTs,
 		commitTs: msg.CRTs,
 		size:     size,
