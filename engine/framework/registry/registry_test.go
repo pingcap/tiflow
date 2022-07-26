@@ -22,6 +22,7 @@ import (
 	frame "github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/fake"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
+	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 )
 
 var fakeWorkerFactory WorkerFactory = NewSimpleWorkerFactory(fake.NewDummyWorker)
@@ -33,8 +34,16 @@ const (
 func TestGlobalRegistry(t *testing.T) {
 	GlobalWorkerRegistry().MustRegisterWorkerType(fakeWorkerType, fakeWorkerFactory)
 
+	ctx := makeCtxWithMockDeps(t)
+	metaCli, err := ctx.Deps().Construct(
+		func(cli pkgOrm.Client) (pkgOrm.Client, error) {
+			return cli, nil
+		},
+	)
+	require.NoError(t, err)
+	defer metaCli.(pkgOrm.Client).Close()
 	worker, err := GlobalWorkerRegistry().CreateWorker(
-		makeCtxWithMockDeps(t),
+		ctx,
 		fakeWorkerType,
 		"worker-1",
 		"master-1",

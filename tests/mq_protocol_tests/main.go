@@ -113,7 +113,7 @@ func testMySQL() {
 
 func testMySQLWithCheckingOldValue() {
 	env := mysql.NewDockerEnv(*dockerComposeFile)
-	env.DockerComposeOperator.ExecEnv = []string{"GO_FAILPOINTS=github.com/pingcap/tiflow/cdc/sink/SimpleMySQLSinkTester=return(ture)"}
+	env.DockerComposeOperator.ExecEnv = []string{"GO_FAILPOINTS=github.com/pingcap/tiflow/cdc/sink/SimpleMySQLSinkTester=return(true)"}
 	task := &mysql.SingleTableTask{TableName: "test", CheckOleValue: true}
 	testCases := []framework.Task{
 		cases.NewSimpleCase(task),
