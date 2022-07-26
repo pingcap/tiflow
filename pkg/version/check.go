@@ -35,17 +35,9 @@ import (
 var (
 	// minPDVersion is the version of the minimal compatible PD.
 	minPDVersion = semver.New("5.1.0-alpha")
-	// maxPDVersion is the version of the maximum compatible PD.
-	// Compatible versions are in [minPDVersion, maxPDVersion)
-	// 9999.0.0 disables the check effectively in the master branch.
-	maxPDVersion = semver.New("9999.0.0")
 
 	// MinTiKVVersion is the version of the minimal compatible TiKV.
 	MinTiKVVersion = semver.New("5.1.0-alpha")
-	// maxTiKVVersion is the version of the maximum compatible TiKV.
-	// Compatible versions are in [MinTiKVVersion, maxTiKVVersion)
-	// 9999.0.0 disables the check effectively in the master branch.
-	maxTiKVVersion = semver.New("9999.0.0")
 
 	// CaptureInfo.Version is added since v4.0.11,
 	// we use the minimal release version as default.
@@ -133,12 +125,6 @@ func CheckPDVersion(ctx context.Context, pdAddr string, credential *security.Cre
 			removeVAndHash(pdVer.Version), minPDVersion)
 		return cerror.ErrVersionIncompatible.GenWithStackByArgs(arg)
 	}
-	maxOrd := ver.Compare(*maxPDVersion)
-	if maxOrd >= 0 {
-		arg := fmt.Sprintf("PD %s is not supported, the maximum compatible version is %s",
-			removeVAndHash(pdVer.Version), maxPDVersion)
-		return cerror.ErrVersionIncompatible.GenWithStackByArgs(arg)
-	}
 	return nil
 }
 
@@ -167,12 +153,6 @@ func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) er
 		if minOrd < 0 {
 			arg := fmt.Sprintf("TiKV %s is not supported, the minimal compatible version is %s",
 				removeVAndHash(s.Version), MinTiKVVersion)
-			return cerror.ErrVersionIncompatible.GenWithStackByArgs(arg)
-		}
-		maxOrd := ver.Compare(*maxTiKVVersion)
-		if maxOrd >= 0 {
-			arg := fmt.Sprintf("TiKV %s is not supported, the maximum compatible version is %s",
-				removeVAndHash(s.Version), maxTiKVVersion)
 			return cerror.ErrVersionIncompatible.GenWithStackByArgs(arg)
 		}
 	}
