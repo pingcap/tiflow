@@ -53,7 +53,7 @@ type kafkaProducer struct {
 	// We need to ensure that closed producers are never written to.
 	closedMu sync.RWMutex
 	// closed is used to indicate whether the producer is closed.
-	// We also use it to guard against double closed.
+	// We also use it to guard against double closes.
 	closed bool
 	// closedChan is used to notify the run loop to exit.
 	closedChan chan struct{}
