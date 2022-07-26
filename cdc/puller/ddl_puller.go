@@ -114,13 +114,17 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context) error {
 			log.Info("fizz: get ddl job", zap.String("job", job.String()), zap.String("query", job.Query))
 		}
 
-		skip, err := p.handleJob(job)
-		if err != nil {
-			log.Error("fizz: ddl job handler error", zap.Error(err))
-			return errors.Trace(err)
-		}
-		if skip {
-			continue
+		// Only nil in test.
+		// TODO(dongmen-fizz): remove this after rewrite test.
+		if p.schemaSnapshot != nil {
+			skip, err := p.handleJob(job)
+			if err != nil {
+				log.Error("fizz: ddl job handler error", zap.Error(err))
+				return errors.Trace(err)
+			}
+			if skip {
+				continue
+			}
 		}
 
 		jobEntry := &model.DDLJobEntry{
