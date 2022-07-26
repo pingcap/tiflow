@@ -42,6 +42,10 @@ func (t *testBaseDBSuite) TestGetBaseConn(c *C) {
 	mock.ExpectQuery("select 1").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("1"))
 	// nolint:sqlclosecheck
 	rows, err := dbConn.QuerySQL(tctx, "select 1")
+	defer func() {
+		c.Assert(rows.Close(), IsNil)
+		c.Assert(rows.Err(), IsNil)
+	}()
 	c.Assert(err, IsNil)
 	ids := make([]int, 0, 1)
 	for rows.Next() {
