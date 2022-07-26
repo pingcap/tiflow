@@ -233,10 +233,7 @@ func (w *DefaultBaseWorker) Init(ctx context.Context) error {
 
 // NotifyExit implements BaseWorker.NotifyExit
 func (w *DefaultBaseWorker) NotifyExit(ctx context.Context, errIn error) (retErr error) {
-	w.closeImplOnce.Do(func() {
-		w.callCloseImpl()
-	})
-	w.doClose()
+	w.partialClose()
 
 	startTime := time.Now()
 	defer func() {
@@ -394,13 +391,19 @@ func (w *DefaultBaseWorker) doClose() {
 // Close implements BaseWorker.Close
 // TODO remove the return value from the signature.
 func (w *DefaultBaseWorker) Close(ctx context.Context) error {
+	w.partialClose()
+	w.cleanMessageHandler()
+	return nil
+}
+
+// partialClose calls CloseImpl to close impl, and calls doClose to release
+// resource. But it doesn't cleanup the message handler of worker.
+func (w *DefaultBaseWorker) partialClose() {
 	w.closeImplOnce.Do(func() {
 		w.callCloseImpl()
 	})
 
 	w.doClose()
-	w.cleanMessageHandler()
-	return nil
 }
 
 func (w *DefaultBaseWorker) callCloseImpl() {

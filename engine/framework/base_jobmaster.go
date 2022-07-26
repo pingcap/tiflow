@@ -215,8 +215,9 @@ func (d *DefaultBaseJobMaster) GetWorkers() map[frameModel.WorkerID]WorkerHandle
 	return d.master.GetWorkers()
 }
 
-// Close implements BaseJobMaster.Close
-func (d *DefaultBaseJobMaster) Close(ctx context.Context) error {
+// partialClose calls jobMasterImpl.CloseImpl and also closes underlying master
+// and worker. But it doesn't cleanup the message handler of worker.
+func (d *DefaultBaseJobMaster) partialClose(ctx context.Context) {
 	d.closeOnce.Do(func() {
 		err := d.impl.CloseImpl(ctx)
 		if err != nil {
@@ -226,14 +227,18 @@ func (d *DefaultBaseJobMaster) Close(ctx context.Context) error {
 
 	d.master.doClose()
 	d.worker.doClose()
+}
+
+// Close implements BaseJobMaster.Close
+func (d *DefaultBaseJobMaster) Close(ctx context.Context) error {
+	d.partialClose(ctx)
+	d.worker.cleanMessageHandler()
 	return nil
 }
 
 // NotifyExit implements BaseJobMaster interface
 func (d *DefaultBaseJobMaster) NotifyExit(ctx context.Context, errIn error) (retErr error) {
-	if err := d.Close(ctx); err != nil {
-		d.Logger().Warn("base job master close error", zap.Error(err))
-	}
+	d.partialClose(ctx)
 
 	startTime := time.Now()
 	defer func() {
