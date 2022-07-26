@@ -60,8 +60,12 @@ func TestPrepareDML(t *testing.T) {
 		expected *preparedDMLs
 	}{
 		{
-			input:    []*model.RowChangedEvent{},
-			expected: &preparedDMLs{sqls: []string{}, values: [][]interface{}{}},
+			input: []*model.RowChangedEvent{},
+			expected: &preparedDMLs{
+				startTs: []model.Ts{},
+				sqls:    []string{},
+				values:  [][]interface{}{},
+			},
 		}, {
 			input: []*model.RowChangedEvent{
 				{
@@ -83,6 +87,7 @@ func TestPrepareDML(t *testing.T) {
 				},
 			},
 			expected: &preparedDMLs{
+				startTs:  []model.Ts{418658114257813514},
 				sqls:     []string{"DELETE FROM `common_1`.`uk_without_pk` WHERE `a1` = ? AND `a3` = ? LIMIT 1;"},
 				values:   [][]interface{}{{1, 1}},
 				rowCount: 1,
@@ -108,6 +113,7 @@ func TestPrepareDML(t *testing.T) {
 				},
 			},
 			expected: &preparedDMLs{
+				startTs:  []model.Ts{418658114257813516},
 				sqls:     []string{"REPLACE INTO `common_1`.`uk_without_pk`(`a1`,`a3`) VALUES (?,?);"},
 				values:   [][]interface{}{{2, 2}},
 				rowCount: 1,
