@@ -17,11 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-<<<<<<< HEAD
-=======
 	"fmt"
-	"regexp"
->>>>>>> 1ba147108 (syncer(dm): fix different output format for operate-schema get (#5824))
 	"strings"
 
 	"github.com/pingcap/tidb-tools/pkg/filter"
@@ -77,13 +73,9 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 			s.tctx.L().Info("table schema is not in checkpoint, fetch from downstream",
 				zap.String("table", sourceTable.String()))
 			targetTable := s.route(sourceTable)
-<<<<<<< HEAD
-			return utils.GetTableCreateSQL(ctx, s.downstreamTrackConn.BaseConn.DBConn, targetTable.String())
-=======
-			result, err2 := dbconn.GetTableCreateSQL(s.tctx.WithContext(ctx), s.downstreamTrackConn, targetTable.String())
+			result, err2 := utils.GetTableCreateSQL(ctx, s.downstreamTrackConn.BaseConn.DBConn, targetTable.String())
 			result = strings.Replace(result, fmt.Sprintf("CREATE TABLE %s", quotes.QuoteName(targetTable.Name)), fmt.Sprintf("CREATE TABLE %s", quotes.QuoteName(sourceTable.Name)), 1)
 			return utils.CreateTableSQLToOneRow(result), err2
->>>>>>> 1ba147108 (syncer(dm): fix different output format for operate-schema get (#5824))
 		}
 
 		result := bytes.NewBuffer(make([]byte, 0, 512))
