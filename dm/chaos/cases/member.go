@@ -18,8 +18,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/dm/master/scheduler"
-	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/master/scheduler"
+	"github.com/pingcap/tiflow/dm/pb"
 )
 
 const (

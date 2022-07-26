@@ -50,7 +50,7 @@ func prepareServerEnv(t *testing.T) *Config {
 	ports, err := freeport.GetFreePorts(1)
 	require.NoError(t, err)
 	cfgTpl := `
-master-addr = "127.0.0.1:%d"
+addr = "127.0.0.1:%d"
 advertise-addr = "127.0.0.1:%d"
 [frame-metastore-conf]
 store-id = "root"
@@ -68,7 +68,7 @@ endpoints = ["127.0.0.1:%d"]
 	err = cfg.Adjust()
 	require.NoError(t, err)
 
-	cfg.MasterAddr = fmt.Sprintf("127.0.0.1:%d", ports[0])
+	cfg.Addr = fmt.Sprintf("127.0.0.1:%d", ports[0])
 
 	return cfg
 }
@@ -92,7 +92,7 @@ func TestServe(t *testing.T) {
 	}()
 
 	require.Eventually(t, func() bool {
-		conn, err := net.Dial("tcp", cfg.MasterAddr)
+		conn, err := net.Dial("tcp", cfg.Addr)
 		if err != nil {
 			return false
 		}
@@ -100,7 +100,7 @@ func TestServe(t *testing.T) {
 		return true
 	}, time.Second*5, time.Millisecond*100, "wait for server to start")
 
-	apiURL := "http://" + cfg.MasterAddr
+	apiURL := "http://" + cfg.Addr
 	testPprof(t, apiURL)
 	testPrometheusMetrics(t, apiURL)
 
@@ -230,10 +230,6 @@ func (m *mockJobManager) PauseJob(ctx context.Context, req *pb.PauseJobRequest) 
 	panic("not implemented")
 }
 
-func (m *mockJobManager) DebugJob(ctx context.Context, req *pb.DebugJobRequest) *pb.DebugJobResponse {
-	panic("not implemented")
-}
-
 func (m *mockJobManager) GetJobStatuses(ctx context.Context) (map[frameModel.MasterID]frameModel.MasterStatusCode, error) {
 	panic("not implemented")
 }
@@ -281,7 +277,6 @@ func (m *mockExecutorManager) Start(ctx context.Context) {
 }
 
 func (m *mockExecutorManager) Stop() {
-	panic("not implemented")
 }
 
 func (m *mockExecutorManager) HasExecutor(executorID string) bool {
@@ -330,7 +325,7 @@ func TestCollectMetric(t *testing.T) {
 	s.executorManager = executorManager
 
 	s.collectLeaderMetric()
-	apiURL := fmt.Sprintf("http://%s", cfg.MasterAddr)
+	apiURL := fmt.Sprintf("http://%s", cfg.Addr)
 	testCustomedPrometheusMetrics(t, apiURL)
 
 	cancel()

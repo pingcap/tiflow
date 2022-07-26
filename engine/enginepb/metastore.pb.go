@@ -14,8 +14,11 @@ import (
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
-var _ = fmt.Errorf
-var _ = math.Inf
+
+var (
+	_ = fmt.Errorf
+	_ = math.Inf
+)
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
@@ -62,9 +65,11 @@ func (*RegisterMetaStoreRequest) ProtoMessage()    {}
 func (*RegisterMetaStoreRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_f7f6a0570779d42a, []int{0}
 }
+
 func (m *RegisterMetaStoreRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *RegisterMetaStoreRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_RegisterMetaStoreRequest.Marshal(b, m, deterministic)
@@ -77,12 +82,15 @@ func (m *RegisterMetaStoreRequest) XXX_Marshal(b []byte, deterministic bool) ([]
 		return b[:n], nil
 	}
 }
+
 func (m *RegisterMetaStoreRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_RegisterMetaStoreRequest.Merge(m, src)
 }
+
 func (m *RegisterMetaStoreRequest) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *RegisterMetaStoreRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_RegisterMetaStoreRequest.DiscardUnknown(m)
 }
@@ -113,9 +121,11 @@ func (*RegisterMetaStoreResponse) ProtoMessage()    {}
 func (*RegisterMetaStoreResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_f7f6a0570779d42a, []int{1}
 }
+
 func (m *RegisterMetaStoreResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *RegisterMetaStoreResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_RegisterMetaStoreResponse.Marshal(b, m, deterministic)
@@ -128,12 +138,15 @@ func (m *RegisterMetaStoreResponse) XXX_Marshal(b []byte, deterministic bool) ([
 		return b[:n], nil
 	}
 }
+
 func (m *RegisterMetaStoreResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_RegisterMetaStoreResponse.Merge(m, src)
 }
+
 func (m *RegisterMetaStoreResponse) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *RegisterMetaStoreResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_RegisterMetaStoreResponse.DiscardUnknown(m)
 }
@@ -157,9 +170,11 @@ func (*QueryMetaStoreRequest) ProtoMessage()    {}
 func (*QueryMetaStoreRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_f7f6a0570779d42a, []int{2}
 }
+
 func (m *QueryMetaStoreRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *QueryMetaStoreRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_QueryMetaStoreRequest.Marshal(b, m, deterministic)
@@ -172,12 +187,15 @@ func (m *QueryMetaStoreRequest) XXX_Marshal(b []byte, deterministic bool) ([]byt
 		return b[:n], nil
 	}
 }
+
 func (m *QueryMetaStoreRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_QueryMetaStoreRequest.Merge(m, src)
 }
+
 func (m *QueryMetaStoreRequest) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *QueryMetaStoreRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_QueryMetaStoreRequest.DiscardUnknown(m)
 }
@@ -202,9 +220,11 @@ func (*QueryMetaStoreResponse) ProtoMessage()    {}
 func (*QueryMetaStoreResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_f7f6a0570779d42a, []int{3}
 }
+
 func (m *QueryMetaStoreResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
+
 func (m *QueryMetaStoreResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_QueryMetaStoreResponse.Marshal(b, m, deterministic)
@@ -217,12 +237,15 @@ func (m *QueryMetaStoreResponse) XXX_Marshal(b []byte, deterministic bool) ([]by
 		return b[:n], nil
 	}
 }
+
 func (m *QueryMetaStoreResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_QueryMetaStoreResponse.Merge(m, src)
 }
+
 func (m *QueryMetaStoreResponse) XXX_Size() int {
 	return m.Size()
 }
+
 func (m *QueryMetaStoreResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_QueryMetaStoreResponse.DiscardUnknown(m)
 }
@@ -426,6 +449,7 @@ func encodeVarintMetastore(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
+
 func (m *RegisterMetaStoreRequest) Size() (n int) {
 	if m == nil {
 		return 0
@@ -487,9 +511,11 @@ func (m *QueryMetaStoreResponse) Size() (n int) {
 func sovMetastore(x uint64) (n int) {
 	return (math_bits.Len64(x|1) + 6) / 7
 }
+
 func sozMetastore(x uint64) (n int) {
 	return sovMetastore(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
+
 func (m *RegisterMetaStoreRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -591,6 +617,7 @@ func (m *RegisterMetaStoreRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *RegisterMetaStoreResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -677,6 +704,7 @@ func (m *RegisterMetaStoreResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *QueryMetaStoreRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -746,6 +774,7 @@ func (m *QueryMetaStoreRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func (m *QueryMetaStoreResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -864,6 +893,7 @@ func (m *QueryMetaStoreResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+
 func skipMetastore(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0

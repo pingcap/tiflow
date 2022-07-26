@@ -58,7 +58,7 @@ const (
 type Config struct {
 	LogConf logutil.Config `toml:"log" json:"log"`
 
-	MasterAddr    string `toml:"master-addr" json:"master-addr"`
+	Addr          string `toml:"addr" json:"addr"`
 	AdvertiseAddr string `toml:"advertise-addr" json:"advertise-addr"`
 
 	ETCDEndpoints []string `toml:"etcd-endpoints" json:"etcd-endpoints"`
@@ -101,7 +101,7 @@ func (c *Config) Toml() (string, error) {
 // Adjust adjusts the master configuration
 func (c *Config) Adjust() (err error) {
 	if c.AdvertiseAddr == "" {
-		c.AdvertiseAddr = c.MasterAddr
+		c.AdvertiseAddr = c.Addr
 	}
 
 	c.KeepAliveInterval, err = time.ParseDuration(c.KeepAliveIntervalStr)
@@ -153,7 +153,7 @@ func GetDefaultMasterConfig() *Config {
 			Level: "info",
 			File:  "",
 		},
-		MasterAddr:           defaultMasterAddr,
+		Addr:                 defaultMasterAddr,
 		AdvertiseAddr:        "",
 		FrameMetaConf:        newFrameMetaConfig(),
 		BusinessMetaConf:     NewDefaultBusinessMetaConfig(),

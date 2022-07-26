@@ -279,16 +279,6 @@ func (s *Server) PauseJob(ctx context.Context, req *pb.PauseJobRequest) (*pb.Pau
 	return s.jobManager.PauseJob(ctx, req), nil
 }
 
-// DebugJob implements pb.MasterServer.DebugJob
-func (s *Server) DebugJob(ctx context.Context, req *pb.DebugJobRequest) (*pb.DebugJobResponse, error) {
-	resp2 := &pb.DebugJobResponse{}
-	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
-	if shouldRet {
-		return resp2, err
-	}
-	return s.jobManager.DebugJob(ctx, req), nil
-}
-
 // RegisterExecutor implements grpc interface, and passes request onto executor manager.
 func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest) (*pb.RegisterExecutorResponse, error) {
 	resp2 := &pb.RegisterExecutorResponse{}
@@ -424,7 +414,7 @@ func (s *Server) ReportExecutorWorkload(
 func (s *Server) startForTest(ctx context.Context) (err error) {
 	// TODO: implement mock-etcd and leader election
 
-	s.mockGrpcServer, err = mock.NewMasterServer(s.cfg.MasterAddr, s)
+	s.mockGrpcServer, err = mock.NewMasterServer(s.cfg.Addr, s)
 	if err != nil {
 		return err
 	}
@@ -457,6 +447,9 @@ func (s *Server) Stop() {
 	}
 	if s.businessClientConn != nil {
 		s.businessClientConn.Close()
+	}
+	if s.executorManager != nil {
+		s.executorManager.Stop()
 	}
 }
 
@@ -548,7 +541,7 @@ func (s *Server) serve(ctx context.Context) error {
 	errGroup, ctx := errgroup.WithContext(ctx)
 
 	// TODO: Support TLS.
-	tcpServer, err := tcpserver.NewTCPServer(s.cfg.MasterAddr, &security.Credential{})
+	tcpServer, err := tcpserver.NewTCPServer(s.cfg.Addr, &security.Credential{})
 	if err != nil {
 		return err
 	}
@@ -645,7 +638,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	}()
 
 	clients := client.NewClientManager()
-	err = clients.AddMasterClient(ctx, []string{s.cfg.MasterAddr})
+	err = clients.AddMasterClient(ctx, []string{s.cfg.Addr})
 	if err != nil {
 		return
 	}

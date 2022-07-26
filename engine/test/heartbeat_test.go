@@ -38,7 +38,7 @@ func TestHeartbeatExecutorCrush(t *testing.T) {
 	)
 
 	masterCfg := &servermaster.Config{
-		MasterAddr:        "127.0.0.1:1991",
+		Addr:              "127.0.0.1:1991",
 		ETCDEndpoints:     []string{addr},
 		KeepAliveTTL:      keepAliveTTL,
 		KeepAliveInterval: keepAliveInterval,
@@ -47,7 +47,7 @@ func TestHeartbeatExecutorCrush(t *testing.T) {
 	// one master + one executor
 	executorCfg := &executor.Config{
 		Join:              "127.0.0.1:1991",
-		WorkerAddr:        "127.0.0.1:1992",
+		Addr:              "127.0.0.1:1992",
 		KeepAliveTTL:      keepAliveTTL,
 		KeepAliveInterval: keepAliveInterval,
 		RPCTimeout:        rpcTimeout,

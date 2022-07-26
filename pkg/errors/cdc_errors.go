@@ -68,6 +68,10 @@ var (
 		"meta store list databases",
 		errors.RFCCodeText("CDC:ErrMetaListDatabases"),
 	)
+	ErrDDLSchemaNotFound = errors.Normalize(
+		"cannot find mysql.tidb_ddl_job schema",
+		errors.RFCCodeText("CDC:ErrDDLSchemaNotFound"),
+	)
 	ErrGRPCDialFailed = errors.Normalize(
 		"grpc dial failed",
 		errors.RFCCodeText("CDC:ErrGRPCDialFailed"),
@@ -219,6 +223,10 @@ var (
 	ErrKafkaSendMessage = errors.Normalize(
 		"kafka send message failed",
 		errors.RFCCodeText("CDC:ErrKafkaSendMessage"),
+	)
+	ErrKafkaProducerClosed = errors.Normalize(
+		"kafka producer closed",
+		errors.RFCCodeText("CDC:ErrKafkaProducerClosed"),
 	)
 	ErrKafkaAsyncSendMessage = errors.Normalize(
 		"kafka async send message failed",

@@ -9,7 +9,7 @@ services:
       - "master"
       - "--config=/config.toml"
       - "--log-level=debug"
-      - "--master-addr=0.0.0.0:10240"
+      - "--addr=0.0.0.0:10240"
       - "--advertise-addr=server-master:10240"
       - "--etcd-endpoints=etcd-standalone:2379"
       - "--frame-meta-endpoints=mysql-standalone:3306"
@@ -31,7 +31,7 @@ services:
       - "--config=/config.toml"
       - "--log-level=debug"
       - "--join=server-master:10240"
-      - "--worker-addr=0.0.0.0:10241"
+      - "--addr=0.0.0.0:10241"
       - "--advertise-addr=server-executor:10241"
     ports:
       - "10241:10241"

@@ -32,7 +32,7 @@ import (
 )
 
 func runFakeJobCase(ctx context.Context, cfg *config) error {
-	serverMasterEndpoints := []string{cfg.MasterAddr}
+	serverMasterEndpoints := []string{cfg.Addr}
 	etcdEndpoints := []string{cfg.EtcdAddr}
 
 	jobCfg := &fake.Config{

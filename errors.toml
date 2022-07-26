@@ -236,6 +236,11 @@ error = '''
 ddl event is ignored
 '''
 
+["CDC:ErrDDLSchemaNotFound"]
+error = '''
+cannot find mysql.tidb_ddl_job schema
+'''
+
 ["CDC:ErrDatumUnflatten"]
 error = '''
 unflatten datume data
@@ -524,6 +529,11 @@ invalid kafka version
 ["CDC:ErrKafkaNewSaramaProducer"]
 error = '''
 new sarama producer
+'''
+
+["CDC:ErrKafkaProducerClosed"]
+error = '''
+kafka producer closed
 '''
 
 ["CDC:ErrKafkaSendMessage"]

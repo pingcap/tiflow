@@ -59,7 +59,7 @@ spec:
           command:
             - "/tiflow"
             - "master"
-            - "--master-addr=0.0.0.0:10240"
+            - "--addr=0.0.0.0:10240"
             - "--advertise-addr=$(MY_POD_NAME).server-master.$(MY_POD_NAMESPACE):10240"
             - "--config=/conf/server-master.toml"
             - "--log-file=/log/$(MY_POD_NAME).log"

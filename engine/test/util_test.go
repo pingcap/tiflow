@@ -86,7 +86,7 @@ func (c *MiniCluster) Start1M1E(cc *C) (
 	masterAddr = fmt.Sprintf("127.0.0.1:%d", ports[0])
 	workerAddr = fmt.Sprintf("127.0.0.1:%d", ports[1])
 	masterCfg := &servermaster.Config{
-		MasterAddr:        masterAddr,
+		Addr:              masterAddr,
 		AdvertiseAddr:     masterAddr,
 		KeepAliveTTL:      20000000 * time.Second,
 		KeepAliveInterval: 200 * time.Millisecond,
@@ -95,7 +95,7 @@ func (c *MiniCluster) Start1M1E(cc *C) (
 	// one master + one executor
 	executorCfg := &executor.Config{
 		Join:              masterAddr,
-		WorkerAddr:        workerAddr,
+		Addr:              workerAddr,
 		AdvertiseAddr:     workerAddr,
 		KeepAliveTTL:      20000000 * time.Second,
 		KeepAliveInterval: 200 * time.Millisecond,
