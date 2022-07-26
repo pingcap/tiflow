@@ -17,8 +17,8 @@ import (
 	"context"
 	"testing"
 
-	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
-	dmmaster "github.com/pingcap/tiflow/dm/dm/master"
+	dmconfig "github.com/pingcap/tiflow/dm/config"
+	dmmaster "github.com/pingcap/tiflow/dm/master"
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"

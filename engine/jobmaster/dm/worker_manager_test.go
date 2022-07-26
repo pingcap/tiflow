@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
+	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/engine/model"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/stretchr/testify/require"
