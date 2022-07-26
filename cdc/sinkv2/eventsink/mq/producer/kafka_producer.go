@@ -50,7 +50,7 @@ type kafkaProducer struct {
 	// asyncProducer is used to send messages to kafka asynchronously.
 	asyncProducer sarama.AsyncProducer
 	// closedMu is used to protect `closed`.
-	// We need to ensure that never write to closed producers.
+	// We need to ensure that closed producers are never written to.
 	closedMu sync.RWMutex
 	// closed is used to indicate whether the producer is closed.
 	// We also use it to guard against double closed.
