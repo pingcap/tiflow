@@ -131,9 +131,9 @@ func (k *kafkaProducer) Close() {
 	// We need to close it asynchronously.
 	// Otherwise, we might get stuck with an unhealthy state of kafka.
 	go func() {
-		// `client` is mainly used by `asyncProducer` to fetch metadata and other related
-		// operations. When we close the `kafkaSaramaProducer`, TiCDC no need to make sure
-		// that buffered messages flushed.
+		// `client` is mainly used by `asyncProducer` to fetch metadata and perform other related
+		// operations. When we close the `kafkaSaramaProducer`, there is no need for TiCDC to make sure
+		// that all buffered messages are flushed.
 		// Consider the situation that the broker does not respond, If the client is not
 		// closed, `asyncProducer.Close()` would waste a mount of time to try flush all messages.
 		// To prevent the scenario mentioned above, close client first.
