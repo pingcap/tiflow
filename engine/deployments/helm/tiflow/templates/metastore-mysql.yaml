@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "tiflow.name" . }}-metastore-framework
+  name: {{ include "tiflow.name" . }}-metastore-mysql
   labels:
-    app: {{ include "tiflow.name" . }}-metastore-framework
-    app.kubernetes.io/name: {{ include "tiflow.name" . }}-metastore-framework
+    app: {{ include "tiflow.name" . }}-metastore-mysql
+    app.kubernetes.io/name: {{ include "tiflow.name" . }}-metastore-mysql
     app.kubernetes.io/instance: {{ include "tiflow.name" . }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
-    app.kubernetes.io/component: metastore-framework
+    app.kubernetes.io/component: metastore-mysql
     app.kubernetes.io/part-of: tiflow
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+"  "_" }}
 spec:
@@ -16,35 +16,35 @@ spec:
       port: 3306
       targetPort: 3306
   selector:
-    app: {{ include "tiflow.name" . }}-metastore-framework
+    app: {{ include "tiflow.name" . }}-metastore-mysql
 
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "tiflow.name" . }}-metastore-framework-mysql
+  name: {{ include "tiflow.name" . }}-metastore-mysql
   labels:
-    app: {{ include "tiflow.name" . }}-metastore-framework
-    app.kubernetes.io/name: {{ include "tiflow.name" . }}-metastore-framework
+    app: {{ include "tiflow.name" . }}-metastore-mysql
+    app.kubernetes.io/name: {{ include "tiflow.name" . }}-metastore-mysql
     app.kubernetes.io/instance: {{ include "tiflow.name" . }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
-    app.kubernetes.io/component: metastore-framework
+    app.kubernetes.io/component: metastore-mysql
     app.kubernetes.io/part-of: tiflow
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+"  "_" }}
 spec:
   selector:
     matchLabels:
-      app: {{ include "tiflow.name" . }}-metastore-framework
-  serviceName: {{ include "tiflow.name" . }}-metastore-framework
+      app: {{ include "tiflow.name" . }}-metastore-mysql
+  serviceName: {{ include "tiflow.name" . }}-metastore-mysql
   replicas: 1
   podManagementPolicy: Parallel
   template:
     metadata:
       labels:
-        app: {{ include "tiflow.name" . }}-metastore-framework
+        app: {{ include "tiflow.name" . }}-metastore-mysql
     spec:
       containers:
-        - name: metastore-framework
+        - name: metastore-mysql
           image: mysql:5.7
           imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
           volumeMounts:
@@ -66,7 +66,7 @@ spec:
                 - "-h127.0.0.1"
                 - "-P3306"
                 - "-uroot"
-            initialDelaySeconds: 30
+            initialDelaySeconds: 3
             periodSeconds: 10
             timeoutSeconds: 60
           readinessProbe:
