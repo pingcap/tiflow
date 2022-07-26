@@ -97,7 +97,7 @@ func (jm *JobMaster) initComponents(ctx context.Context) error {
 		return err
 	}
 
-	jm.checkpointAgent = checkpoint.NewCheckpointAgent(jm.jobCfg)
+	jm.checkpointAgent = checkpoint.NewCheckpointAgent(jm.jobCfg, jm.Logger())
 	jm.metadata = metadata.NewMetaData(jm.ID(), jm.MetaKVClient())
 	jm.taskManager = NewTaskManager(taskStatus, jm.metadata.JobStore(), jm.messageAgent, jm.Logger())
 	jm.workerManager = NewWorkerManager(workerStatus, jm.metadata.JobStore(), jm, jm.messageAgent, jm.checkpointAgent, jm.Logger())

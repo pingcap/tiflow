@@ -169,7 +169,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	metaKVClient := kvmock.NewMetaMock()
 	mockBaseJobmaster := &MockBaseJobmaster{}
 	mockCheckpointAgent := &MockCheckpointAgent{}
-	checkpoint.NewCheckpointAgent = func(jobCfg *config.JobCfg) checkpoint.Agent { return mockCheckpointAgent }
+	checkpoint.NewCheckpointAgent = func(*config.JobCfg, *zap.Logger) checkpoint.Agent { return mockCheckpointAgent }
 	defer func() {
 		checkpoint.NewCheckpointAgent = checkpoint.NewAgentImpl
 	}()
