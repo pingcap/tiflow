@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -360,10 +361,11 @@ func (r *Request) checkResponse(resp *http.Response) *Result {
 		if err == nil {
 			err = errors.New(jsonErr.Error)
 		} else {
-			log.Warn("call cdc api failed",
-				zap.Int("code", resp.StatusCode),
-				zap.String("content-type", contentType),
-				zap.String("body", string(body)))
+			err = fmt.Errorf(
+				"call cdc api failed, url=%s, "+
+					"code=%d, contentType=%s, response=%s",
+				r.URL().String(),
+				resp.StatusCode, contentType, string(body))
 		}
 
 		return &Result{
