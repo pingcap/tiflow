@@ -85,7 +85,8 @@ func TestCheckpoint(t *testing.T) {
 
 func TestCheckpointLifeCycle(t *testing.T) {
 	jobCfg := &config.JobCfg{Name: "test", MetaSchema: "meta", TaskMode: dmconfig.ModeAll}
-	checkpointAgent := NewAgentImpl(jobCfg)
+	agent := NewAgentImpl(jobCfg)
+	checkpointAgent := agent.(*AgentImpl)
 	require.Equal(t, checkpointAgent.getConfig(), jobCfg)
 	jobCfg2 := &config.JobCfg{Name: "test2", MetaSchema: "meta", TaskMode: dmconfig.ModeAll}
 	checkpointAgent.updateConfig(jobCfg2)

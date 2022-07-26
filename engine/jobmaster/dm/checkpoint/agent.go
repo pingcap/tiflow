@@ -55,6 +55,11 @@ const (
 	)`
 )
 
+var (
+	// NewCheckpointAgent is a method to create a new checkpoint agent
+	NewCheckpointAgent = NewAgentImpl
+)
+
 // Agent defeins a checkpoint agent interface
 type Agent interface {
 	Init(ctx context.Context) error
@@ -69,7 +74,7 @@ type AgentImpl struct {
 }
 
 // NewAgentImpl creates a new AgentImpl instance
-func NewAgentImpl(jobCfg *config.JobCfg) *AgentImpl {
+func NewAgentImpl(jobCfg *config.JobCfg) Agent {
 	c := &AgentImpl{}
 	c.updateConfig(jobCfg)
 	return c
