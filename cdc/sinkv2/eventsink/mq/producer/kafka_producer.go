@@ -57,7 +57,7 @@ type kafkaProducer struct {
 	closed bool
 	// closedChan is used to notify the run loop to exit.
 	closedChan chan struct{}
-	// failpointCh is used to notify the run loop to failpoint.
+	// failpointCh is used to inject failpoints to the run loop.
 	// Only used in test.
 	failpointCh chan error
 }
