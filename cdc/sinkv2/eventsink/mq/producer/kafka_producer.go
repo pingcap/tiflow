@@ -128,8 +128,17 @@ func (k *kafkaProducer) Close() {
 	// Notify the run loop to exit.
 	close(k.closedChan)
 	k.closed = true
-	// We need to close it asynchronously.
-	// Otherwise, we might get stuck with an unhealthy state of kafka.
+	// We need to close it asynchronously. Otherwise, we might get stuck
+	// with an unhealthy(i.e. Network jitter, isolation) state of Kafka.
+	// Safety:
+	// * If the kafka cluster is running well, it will be closed as soon as possible.
+	//   Also, we cancel all table pipelines before closed, so it's safe.
+	// * If there is a problem with the kafka cluster, it will shut down the client first,
+	//   which means no more data will be sent because the connection to the broker is dropped.
+	//   Also, we cancel all table pipelines before closed, so it's safe.
+	// * For Kafka Sink, duplicate data is acceptable.
+	// * There is a risk of goroutine leakage, but it is acceptable and our main
+	//   goal is not to get stuck with the processor tick.
 	go func() {
 		// `client` is mainly used by `asyncProducer` to fetch metadata and perform other related
 		// operations. When we close the `kafkaSaramaProducer`,
