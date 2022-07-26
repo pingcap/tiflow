@@ -121,12 +121,12 @@ func TestKafkaProducerAck(t *testing.T) {
 
 	producer.Close()
 	cancel()
-	// check send messages when context is canceled or producer closed
+	// check send messages when context is producer closed
 	err = producer.AsyncSendMessage(ctx, topic, int32(0), &codec.MQMessage{
 		Key:   []byte("cancel"),
 		Value: nil,
 	})
-	require.Equal(t, context.Canceled, err)
+	require.Equal(t, cerror.ErrKafkaProducerClosed, err)
 }
 
 func TestProducerSendMsgFailed(t *testing.T) {
