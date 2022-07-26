@@ -213,7 +213,7 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 	// TiDB will unconditionally create an empty "test" schema.
 	// This interferes with MySQL/MariaDB upstream which such schema does not
 	// exist by default. So we need to drop it first.
-	err = dropDatabase(dom, se, "test")
+	err = dom.DDL().DropSchema(se, model.NewCIStr("test"))
 	if err != nil {
 		return nil, err
 	}
@@ -339,24 +339,17 @@ func IsTableNotExists(err error) bool {
 // Reset drops all tables inserted into this tracker.
 func (tr *Tracker) Reset() error {
 	allDBs := tr.dom.InfoSchema().AllSchemaNames()
+	ddl := tr.dom.DDL()
 	for _, db := range allDBs {
 		dbName := model.NewCIStr(db)
 		if filter.IsSystemSchema(dbName.L) {
 			continue
 		}
-		if err := dropDatabase(tr.dom, tr.se, dbName.L); err != nil {
+		if err := ddl.DropSchema(tr.se, dbName); err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-func dropDatabase(dom *domain.Domain, se session.Session, db string) error {
-	stmt := &ast.DropDatabaseStmt{
-		Name:     model.NewCIStr(db),
-		IfExists: true,
-	}
-	return dom.DDL().DropSchema(se, stmt)
 }
 
 // Close close a tracker.

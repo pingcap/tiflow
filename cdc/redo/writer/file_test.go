@@ -26,12 +26,11 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
 	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/atomic"
-
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/pingcap/tiflow/pkg/uuid"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
 )
 
 func TestMain(m *testing.M) {
