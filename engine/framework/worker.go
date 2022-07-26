@@ -252,6 +252,7 @@ func (w *DefaultBaseWorker) NotifyExit(ctx context.Context, errIn error) (retErr
 	w.logger.Info("worker start exiting", zap.NamedError("cause", errIn))
 	return w.masterClient.WaitClosed(ctx)
 }
+
 func (w *DefaultBaseWorker) doPreInit(ctx context.Context) (retErr error) {
 	defer func() {
 		if retErr != nil {
