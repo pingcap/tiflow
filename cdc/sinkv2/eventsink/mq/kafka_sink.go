@@ -86,6 +86,13 @@ func NewKafkaSink(
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
+	// Preventing leaks when error occurs.
+	// This also closes the client in p.Close().
+	defer func() {
+		if err != nil {
+			p.Close()
+		}
+	}()
 
 	topicManager, err := getTopicManagerAndTryCreateTopic(
 		baseConfig.BrokerEndpoints, topic,
