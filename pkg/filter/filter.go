@@ -32,7 +32,7 @@ type Filter interface {
 	// ShouldDiscardDDL returns true if this DDL should be discarded.
 	// If a ddl is discarded, it will neither be applied to cdc's schema storage
 	// nor sent to downstream.
-	ShouldDiscardDDL(ddlType timodel.ActionType) bool
+	ShouldDiscardDDL(ddlType timodel.ActionType, schema, table string) bool
 	// ShouldIgnoreTable returns true if the table should be ignored.
 	ShouldIgnoreTable(schema, table string) bool
 	// Verify should only be called by create changefeed OpenAPI.
@@ -125,6 +125,9 @@ func (f *filter) ShouldIgnoreDDLEvent(ddl *model.DDLEvent) (bool, error) {
 	case timodel.ActionCreateSchema, timodel.ActionDropSchema,
 		timodel.ActionModifySchemaCharsetAndCollate:
 		shouldIgnoreTableOrSchema = !f.tableFilter.MatchSchema(ddl.TableInfo.Schema)
+	case timodel.ActionRenameTable:
+		// we should use old schema name and table name to match.
+		shouldIgnoreTableOrSchema = f.ShouldIgnoreTable(ddl.PreTableInfo.Schema, ddl.PreTableInfo.Table)
 	default:
 		shouldIgnoreTableOrSchema = f.ShouldIgnoreTable(ddl.TableInfo.Schema, ddl.TableInfo.Table)
 	}
@@ -137,7 +140,20 @@ func (f *filter) ShouldIgnoreDDLEvent(ddl *model.DDLEvent) (bool, error) {
 // ShouldDiscardDDL returns true if this DDL should be discarded.
 // If a ddl is discarded, it will not be applied to cdc's schema storage
 // and sent to downstream.
-func (f *filter) ShouldDiscardDDL(ddlType timodel.ActionType) bool {
+func (f *filter) ShouldDiscardDDL(ddlType timodel.ActionType, schema, table string) bool {
+	var shouldIgnoreTableOrSchema bool
+	switch ddlType {
+	case timodel.ActionCreateSchema, timodel.ActionDropSchema,
+		timodel.ActionModifySchemaCharsetAndCollate:
+		shouldIgnoreTableOrSchema = !f.tableFilter.MatchSchema(schema)
+	default:
+		shouldIgnoreTableOrSchema = f.ShouldIgnoreTable(schema, table)
+	}
+
+	if shouldIgnoreTableOrSchema {
+		return true
+	}
+
 	if !shouldDiscardByBuiltInDDLAllowlist(ddlType) {
 		return false
 	}

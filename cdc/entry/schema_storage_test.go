@@ -540,7 +540,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	}
 
 	jobs = append(jobs, job)
-	storage, err := NewSchemaStorage(nil, 0, nil, false, dummyChangeFeedID)
+	storage, err := NewSchemaStorage(nil, 0, false, dummyChangeFeedID)
 	require.Nil(t, err)
 	for _, job := range jobs {
 		err := storage.HandleDDLJob(job)
@@ -855,7 +855,7 @@ func TestSchemaStorage(t *testing.T) {
 
 		jobs, err := getAllHistoryDDLJob(store)
 		require.Nil(t, err)
-		schemaStorage, err := NewSchemaStorage(nil, 0, nil, false, dummyChangeFeedID)
+		schemaStorage, err := NewSchemaStorage(nil, 0, false, dummyChangeFeedID)
 		require.Nil(t, err)
 		for _, job := range jobs {
 			err := schemaStorage.HandleDDLJob(job)

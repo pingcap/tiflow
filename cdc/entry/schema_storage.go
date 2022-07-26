@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -58,7 +57,6 @@ type schemaStorageImpl struct {
 	resolvedTs    uint64
 	schemaVersion int64
 
-	filter         filter.Filter
 	forceReplicate bool
 
 	id model.ChangeFeedID
@@ -66,7 +64,7 @@ type schemaStorageImpl struct {
 
 // NewSchemaStorage creates a new schema storage
 func NewSchemaStorage(
-	meta *timeta.Meta, startTs uint64, filter filter.Filter,
+	meta *timeta.Meta, startTs uint64,
 	forceReplicate bool, id model.ChangeFeedID,
 ) (SchemaStorage, error) {
 	var (
@@ -92,7 +90,6 @@ func NewSchemaStorage(
 	schema := &schemaStorageImpl{
 		snaps:          []*schema.Snapshot{snap},
 		resolvedTs:     startTs,
-		filter:         filter,
 		forceReplicate: forceReplicate,
 		id:             id,
 		schemaVersion:  version,
@@ -267,13 +264,5 @@ func (s *schemaStorageImpl) skipJob(job *timodel.Job) bool {
 		zap.String("DDL", job.Query), zap.Stringer("job", job),
 		zap.String("namespace", s.id.Namespace),
 		zap.String("changefeed", s.id.ID))
-	if s.filter != nil && (s.filter.ShouldDiscardDDL(job.Type) ||
-		s.filter.ShouldIgnoreTable(job.SchemaName, job.TableName)) {
-		log.Info("discard DDL",
-			zap.Int64("jobID", job.ID), zap.String("DDL", job.Query),
-			zap.String("namespace", s.id.Namespace),
-			zap.String("changefeed", s.id.ID))
-		return true
-	}
 	return !job.IsSynced() && !job.IsDone()
 }

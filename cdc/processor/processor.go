@@ -747,6 +747,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		p.upstream.PDClock,
 		checkpointTs,
 		kvCfg,
+		p.changefeed.Info.Config,
 		ctx.ChangefeedVars().ID,
 	)
 	if err != nil {
@@ -756,7 +757,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	schemaStorage, err := entry.NewSchemaStorage(meta, checkpointTs, p.filter,
+	schemaStorage, err := entry.NewSchemaStorage(meta, checkpointTs,
 		p.changefeed.Info.Config.ForceReplicate, ctx.ChangefeedVars().ID)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -775,6 +776,9 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 			case <-ctx.Done():
 				return
 			case jobEntry = <-ddlPuller.Output():
+				if jobEntry.Job != nil {
+					log.Info("fizz:processor get ddl job", zap.Any("job", jobEntry.Job.Query))
+				}
 			}
 			failpoint.Inject("processorDDLResolved", nil)
 			if jobEntry.OpType == model.OpTypeResolved {
