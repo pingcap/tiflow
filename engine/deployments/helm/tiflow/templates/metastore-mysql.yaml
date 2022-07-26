@@ -44,7 +44,7 @@ spec:
         app: {{ include "tiflow.name" . }}-metastore-framework
     spec:
       containers:
-        - name: {{ include "tiflow.name" . }}-metastore-framework-mysql
+        - name: metastore-framework
           image: mysql:5.7
           imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
           volumeMounts:
