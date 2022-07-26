@@ -306,6 +306,12 @@ func (m *MasterClient) WaitClosed(ctx context.Context) error {
 		return nil
 	}
 
+	// Sends a heartbeat with is-finished=true mark to master, because background
+	// heartbeat goroutine has exited before calling `WaitClosed`
+	if err := m.SendHeartBeat(ctx); err != nil {
+		return err
+	}
+
 	timer := m.clk.Timer(workerExitWaitForMasterTimeout)
 	defer timer.Stop()
 

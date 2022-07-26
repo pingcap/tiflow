@@ -234,13 +234,14 @@ func (w *DefaultBaseWorker) Init(ctx context.Context) error {
 // NotifyExit implements BaseWorker.NotifyExit
 func (w *DefaultBaseWorker) NotifyExit(ctx context.Context, errIn error) (retErr error) {
 	w.closeImplOnce.Do(func() {
-		// Must ensure that the business logic is
-		// notified before closing.
 		w.callCloseImpl()
 	})
+	w.doClose()
 
 	startTime := time.Now()
 	defer func() {
+		w.cleanMessageHandler()
+
 		duration := time.Since(startTime)
 		w.logger.Info("worker finished exiting",
 			zap.NamedError("caused", errIn),
@@ -251,7 +252,6 @@ func (w *DefaultBaseWorker) NotifyExit(ctx context.Context, errIn error) (retErr
 	w.logger.Info("worker start exiting", zap.NamedError("cause", errIn))
 	return w.masterClient.WaitClosed(ctx)
 }
-
 func (w *DefaultBaseWorker) doPreInit(ctx context.Context) (retErr error) {
 	defer func() {
 		if retErr != nil {
@@ -357,6 +357,16 @@ func (w *DefaultBaseWorker) Poll(ctx context.Context) error {
 	return nil
 }
 
+func (w *DefaultBaseWorker) cleanMessageHandler() {
+	closeCtx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
+
+	if err := w.messageHandlerManager.Clean(closeCtx); err != nil {
+		w.Logger().Warn("cleaning message handlers failed",
+			zap.Error(err))
+	}
+}
+
 func (w *DefaultBaseWorker) doClose() {
 	if w.resourceBroker != nil {
 		// Closing the resource broker here will
@@ -375,14 +385,6 @@ func (w *DefaultBaseWorker) doClose() {
 	}
 	w.cancelMu.Unlock()
 
-	closeCtx, cancel := context.WithTimeout(context.Background(), time.Second*3)
-	defer cancel()
-
-	if err := w.messageHandlerManager.Clean(closeCtx); err != nil {
-		w.Logger().Warn("cleaning message handlers failed",
-			zap.Error(err))
-	}
-
 	w.wg.Wait()
 	promutil.UnregisterWorkerMetrics(w.id)
 	w.businessMetaKVClient.Close()
@@ -396,6 +398,7 @@ func (w *DefaultBaseWorker) Close(ctx context.Context) error {
 	})
 
 	w.doClose()
+	w.cleanMessageHandler()
 	return nil
 }
 

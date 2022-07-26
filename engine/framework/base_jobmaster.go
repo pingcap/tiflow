@@ -231,15 +231,13 @@ func (d *DefaultBaseJobMaster) Close(ctx context.Context) error {
 
 // NotifyExit implements BaseJobMaster interface
 func (d *DefaultBaseJobMaster) NotifyExit(ctx context.Context, errIn error) (retErr error) {
-	d.closeOnce.Do(func() {
-		err := d.impl.CloseImpl(ctx)
-		if err != nil {
-			log.Error("Failed to close JobMasterImpl", zap.Error(err))
-		}
-	})
+	if err := d.Close(ctx); err != nil {
+		d.Logger().Warn("base job master close error", zap.Error(err))
+	}
 
 	startTime := time.Now()
 	defer func() {
+		d.worker.cleanMessageHandler()
 		duration := time.Since(startTime)
 		d.Logger().Info("job master finished exiting",
 			zap.NamedError("caused", errIn),

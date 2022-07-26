@@ -65,6 +65,7 @@ func (r *Runner[R]) Run(ctx context.Context) error {
 	if !isForcefulExitError(err) {
 		// Exit gracefully.
 		r.doGracefulExit(ctx, err)
+		return err
 	}
 
 	if closeErr := r.task.Close(context.Background()); closeErr != nil {

@@ -29,7 +29,16 @@ type Task interface {
 
 	// NotifyExit does necessary bookkeeping job for exiting,
 	// such as notifying a master.
+	// Note before notifying master, master or worker resource must be cleaned
+	// up, except for heartbeat message handler.
 	// errIn describes the reason for exiting.
+	// TODO: find a better way for the exiting logic. The implement of NotifyExit
+	// is a little tricky but we can ensure that after step-2 master can recreate
+	// worker without any concern.
+	// 1. Close worker impl
+	// 2. Cleanup other resources, including base master and base worker
+	// 3. Send finished heartbeat to master, and waits for pong message or timeout
+	// 4. Cleanup heartbeat message handler
 	NotifyExit(ctx context.Context, errIn error) error
 
 	// Close does necessary clean up.

@@ -78,6 +78,7 @@ func (t *toyTask) Poll(ctx context.Context) error {
 
 func (t *toyTask) NotifyExit(ctx context.Context, errIn error) error {
 	require.True(t.t, t.status.CAS(toyTaskRunning, toyTaskClosing))
+	require.NoError(t.t, t.Close(ctx))
 
 	args := t.Called(ctx, errIn)
 	return args.Error(0)
