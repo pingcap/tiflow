@@ -40,7 +40,7 @@ type messageMetaData struct {
 
 // kafkaProducer is used to send messages to kafka.
 type kafkaProducer struct {
-	// id indicates this sink belongs to which processor(changefeed).
+	// id indicates which processor (changefeed) this sink belongs to.
 	id model.ChangeFeedID
 	// role indicates what this sink is used for.
 	role util.Role
