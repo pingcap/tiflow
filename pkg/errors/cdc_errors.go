@@ -224,6 +224,10 @@ var (
 		"kafka send message failed",
 		errors.RFCCodeText("CDC:ErrKafkaSendMessage"),
 	)
+	ErrKafkaProducerClosed = errors.Normalize(
+		"kafka producer closed",
+		errors.RFCCodeText("CDC:ErrKafkaProducerClosed"),
+	)
 	ErrKafkaAsyncSendMessage = errors.Normalize(
 		"kafka async send message failed",
 		errors.RFCCodeText("CDC:ErrKafkaAsyncSendMessage"),
