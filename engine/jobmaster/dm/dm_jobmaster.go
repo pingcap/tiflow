@@ -99,8 +99,8 @@ func (jm *JobMaster) initComponents(ctx context.Context) error {
 
 	jm.checkpointAgent = checkpoint.NewCheckpointAgent(jm.jobCfg)
 	jm.metadata = metadata.NewMetaData(jm.ID(), jm.MetaKVClient())
-	jm.taskManager = NewTaskManager(taskStatus, jm.metadata.JobStore(), jm.messageAgent)
-	jm.workerManager = NewWorkerManager(workerStatus, jm.metadata.JobStore(), jm, jm.messageAgent, jm.checkpointAgent)
+	jm.taskManager = NewTaskManager(taskStatus, jm.metadata.JobStore(), jm.messageAgent, jm.Logger())
+	jm.workerManager = NewWorkerManager(workerStatus, jm.metadata.JobStore(), jm, jm.messageAgent, jm.checkpointAgent, jm.Logger())
 	// register jobmanager client
 	return jm.messageAgent.UpdateClient(libMetadata.JobManagerUUID, jm)
 }
