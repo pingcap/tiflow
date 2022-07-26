@@ -114,7 +114,7 @@ func (k *kafkaProducer) Close() {
 	// We have to hold the lock to synchronize closing with writing.
 	k.closedMu.Lock()
 	defer k.closedMu.Unlock()
-	// If the producer was already closed, we should skip the close operation.
+	// If the producer has already been closed, we should skip this close operation.
 	if k.closed {
 		// We need to guard against double closed the clients,
 		// which could lead to panic.
