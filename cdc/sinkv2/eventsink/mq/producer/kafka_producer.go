@@ -116,7 +116,7 @@ func (k *kafkaProducer) Close() {
 	defer k.closedMu.Unlock()
 	// If the producer has already been closed, we should skip this close operation.
 	if k.closed {
-		// We need to guard against double closed the clients,
+		// We need to guard against double closing the clients,
 		// which could lead to panic.
 		log.Warn("kafka producer already closed",
 			zap.String("namespace", k.id.Namespace),
