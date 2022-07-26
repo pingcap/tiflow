@@ -150,6 +150,9 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	// check connections
 	if _, ok := c.checkingItems[config.ConnAmountChecking]; ok {
 		if len(c.stCfgs) > 0 {
+			// only check the first subtask's config
+			// because the Mode is the same across all the subtasks
+			// as long as they are derived from the same task config.
 			switch c.stCfgs[0].Mode {
 			case config.ModeAll:
 				// TODO: check the connections for syncer
