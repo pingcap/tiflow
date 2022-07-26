@@ -42,7 +42,7 @@ type messageMetaData struct {
 type kafkaProducer struct {
 	// id indicates this sink belongs to which processor(changefeed).
 	id model.ChangeFeedID
-	// role indicates this sink used for what.
+	// role indicates what this sink is used for.
 	role util.Role
 	// We hold the client to make close operation faster.
 	// Please see the comment of Close().
