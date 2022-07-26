@@ -136,7 +136,7 @@ func (k *kafkaProducer) Close() {
 		// that all buffered messages are flushed.
 		// Consider the situation where the broker is irresponsive. If the client were not
 		// closed, `asyncProducer.Close()` would waste a mount of time to try flush all messages.
-		// To prevent the scenario mentioned above, close client first.
+		// To prevent the scenario mentioned above, close the client first.
 		start := time.Now()
 		if err := k.client.Close(); err != nil {
 			log.Error("close sarama client with error", zap.Error(err),
