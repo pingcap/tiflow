@@ -16,11 +16,8 @@ package writer
 import (
 	"context"
 	"fmt"
-<<<<<<< HEAD
 	"io/ioutil"
 	"net/url"
-=======
->>>>>>> b4bbb8623 (db(dm): use `net.JoinHostPort` to generate host-port part of URI (#6248))
 	"os"
 	"path/filepath"
 	"testing"
@@ -28,17 +25,14 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
-	backuppb "github.com/pingcap/kvproto/pkg/brpb"
 	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
-	"github.com/pingcap/tidb/br/pkg/storage"
-	"github.com/stretchr/testify/require"
-	"github.com/uber-go/atomic"
-
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/pkg/fsutil"
 	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/pingcap/tiflow/pkg/uuid"
+	"github.com/stretchr/testify/require"
+	"github.com/uber-go/atomic"
 )
 
 func TestMain(m *testing.M) {
@@ -307,34 +301,21 @@ func TestNewWriter(t *testing.T) {
 	_, err := NewWriter(context.Background(), nil)
 	require.NotNil(t, err)
 
-<<<<<<< HEAD
 	s3URI, err := url.Parse("s3://logbucket/test-changefeed?endpoint=http://111/")
 	require.Nil(t, err)
 
 	dir, err := ioutil.TempDir("", "redo-NewWriter")
 	require.Nil(t, err)
 	defer os.RemoveAll(dir)
-=======
-	storageDir := t.TempDir()
-	dir := t.TempDir()
->>>>>>> b4bbb8623 (db(dm): use `net.JoinHostPort` to generate host-port part of URI (#6248))
 
 	uuidGen := uuid.NewConstGenerator("const-uuid")
 	w, err := NewWriter(context.Background(), &FileWriterConfig{
 		Dir:       "sdfsf",
-		S3Storage: false,
+		S3Storage: true,
+		S3URI:     *s3URI,
 	},
 		WithUUIDGenerator(func() uuid.Generator { return uuidGen }),
 	)
-	require.Nil(t, err)
-	backend := &backuppb.StorageBackend{
-		Backend: &backuppb.StorageBackend_Local{Local: &backuppb.Local{Path: storageDir}},
-	}
-	localStorage, err := storage.New(context.Background(), backend, &storage.ExternalStorageOptions{
-		SendCredentials: false,
-		HTTPClient:      nil,
-	})
-	w.storage = localStorage
 	require.Nil(t, err)
 	err = w.Close()
 	require.Nil(t, err)

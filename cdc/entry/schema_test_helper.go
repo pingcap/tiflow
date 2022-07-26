@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	ticonfig "github.com/pingcap/tidb/config"
-	tiddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/kv"
 	timeta "github.com/pingcap/tidb/meta"
@@ -61,7 +60,7 @@ func NewSchemaTestHelper(t *testing.T) *SchemaTestHelper {
 // DDL2Job executes the DDL stmt and returns the DDL job
 func (s *SchemaTestHelper) DDL2Job(ddl string) *timodel.Job {
 	s.tk.MustExec(ddl)
-	jobs, err := tiddl.GetLastNHistoryDDLJobs(s.GetCurrentMeta(), 1)
+	jobs, err := s.GetCurrentMeta().GetLastNHistoryDDLJobs(1)
 	require.Nil(s.t, err)
 	require.Len(s.t, jobs, 1)
 	return jobs[0]
@@ -73,7 +72,7 @@ func (s *SchemaTestHelper) DDL2Job(ddl string) *timodel.Job {
 // DDL statements.
 func (s *SchemaTestHelper) DDL2Jobs(ddl string, jobCnt int) []*timodel.Job {
 	s.tk.MustExec(ddl)
-	jobs, err := tiddl.GetLastNHistoryDDLJobs(s.GetCurrentMeta(), jobCnt)
+	jobs, err := s.GetCurrentMeta().GetLastNHistoryDDLJobs(jobCnt)
 	require.Nil(s.t, err)
 	require.Len(s.t, jobs, jobCnt)
 	return jobs
