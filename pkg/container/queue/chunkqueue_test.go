@@ -85,6 +85,7 @@ func TestChunkQueueSimpleWorkflow(t *testing.T) {
 	for i := 0; i < testCaseSize; i++ {
 		h, ok := q.Head()
 		require.Equal(t, i, h)
+		require.True(t, ok)
 
 		v, ok = q.Dequeue()
 		require.True(t, ok)
@@ -209,7 +210,6 @@ func TestChunkQueueRange(t *testing.T) {
 			return true
 		})
 	})
-
 }
 
 func TestChunkQueueRangeAndPop(t *testing.T) {
@@ -262,7 +262,6 @@ func BenchmarkEnqueue(b *testing.B) {
 			q.PushBack(i)
 		}
 	})
-
 }
 
 func TestChunkQueueEnqueueMany(t *testing.T) {
@@ -373,7 +372,6 @@ func BenchmarkDequeueMany(b *testing.B) {
 					panic("error")
 				}
 			}
-
 		}
 	})
 }
