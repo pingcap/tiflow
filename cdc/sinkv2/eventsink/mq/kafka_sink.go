@@ -39,7 +39,7 @@ func NewKafkaSink(
 	replicaConfig *config.ReplicaConfig,
 	errCh chan error,
 	adminClientCreator pkafka.ClusterAdminClientCreator,
-	producerCreator producer.Creator,
+	producerCreator producer.Factory,
 ) (*sink, error) {
 	topic, err := getTopic(sinkURI)
 	if err != nil {

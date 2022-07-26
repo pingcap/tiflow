@@ -31,6 +31,6 @@ type Producer interface {
 	Close()
 }
 
-// Creator is a function to create a producer.
-type Creator func(ctx context.Context, client sarama.Client,
+// Factory is a function to create a producer.
+type Factory func(ctx context.Context, client sarama.Client,
 	errCh chan error) (Producer, error)
