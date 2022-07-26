@@ -84,7 +84,7 @@ spec:
             - "/tiflow"
             - "master"
             - "--name=$(MY_POD_NAME)"
-            - "--master-addr=0.0.0.0:10240"
+            - "--addr=0.0.0.0:10240"
             - "--advertise-addr=$(MY_POD_NAME).$(MY_SERVICE_NAME).$(MY_POD_NAMESPACE):10240"
             - "--peer-urls=0.0.0.0:10239"
             - "--advertise-peer-urls=http://$(MY_POD_NAME).$(MY_SERVICE_NAME).$(MY_POD_NAMESPACE):10239"

@@ -77,7 +77,7 @@ spec:
             - "/tiflow"
             - "executor"
             - "--name=$(MY_POD_NAME)"
-            - "--worker-addr=0.0.0.0:10241"
+            - "--addr=0.0.0.0:10241"
             - "--advertise-addr=$(MY_POD_NAME).$(MY_SERVICE_NAME).$(MY_POD_NAMESPACE):10241"
             - "--join={{ include "tiflow.masterAddr" . }}"
             - "--config=/config/executor.toml"
