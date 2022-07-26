@@ -4,14 +4,12 @@ services:
   etcd-standalone:
     image: quay.io/coreos/etcd
     container_name: etcd-standalone
-    volumes:
-      - ./config/etcd.yml:/etcd.yml
     command:
       - "etcd"
+      - "--listen-client-urls=http://0.0.0.0:2379"
       - "--advertise-client-urls=http://etcd-standalone:2379"
     ports:
       - "12479:2379"
-      - "12480:2380"
   mysql-standalone:
     image: mysql:5.7
     container_name: mysql_standalone
