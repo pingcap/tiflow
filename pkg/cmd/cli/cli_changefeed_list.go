@@ -74,8 +74,8 @@ func (o *listChangefeedOptions) run(cmd *cobra.Command) error {
 
 	for _, cf := range *raw {
 		if !o.listAll {
-			if cf.FeedState == model.StateFailed ||
-				cf.FeedState == model.StateFinished {
+			if cf.FeedState == model.StateFinished ||
+				cf.FeedState == model.StateRemoved {
 				continue
 			}
 		}
