@@ -73,7 +73,7 @@ func (k *kafkaProducer) AsyncSendMessage(
 
 	// If the producer is closed, we should skip the message.
 	if k.closed {
-		// We return the context error directly rather than other error.
+		// We return the context error directly rather than any other error.
 		// Because if producer already closed, it means the context maybe is canceling or canceled.
 		// So we shouldn't return other errors to the caller to mess up the shutdown process.
 		return ctx.Err()
