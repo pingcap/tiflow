@@ -236,29 +236,38 @@ func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawKey []b
 	}, nil
 }
 
-const (
-	ddlJobListKey         = "DDLJobList"
-	ddlAddIndexJobListKey = "DDLJobAddIdxList"
-)
+// IsLegacyFormatJob returns true if the job is from the legacy DDL list key.
+func IsLegacyFormatJob(rawKV *model.RawKVEntry) bool {
+	return bytes.HasPrefix(rawKV.Key, metaPrefix)
+}
 
-// UnmarshalDDL unmarshals the ddl job from RawKVEntry
-func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
-	if raw.OpType != model.OpTypePut || !bytes.HasPrefix(raw.Key, metaPrefix) {
-		return nil, nil
+// ParseDDLJob parses the job from the raw KV entry. id is the column id of `job_meta`.
+func ParseDDLJob(tblInfo *model.TableInfo, rawKV *model.RawKVEntry, id int64) (*timodel.Job, error) {
+	var v []byte
+	if bytes.HasPrefix(rawKV.Key, metaPrefix) {
+		// old queue base job.
+		v = rawKV.Value
+	} else {
+		// DDL job comes from `tidb_ddl_job` table after we support concurrent DDL. We should decode the job from the column.
+		recordID, err := tablecodec.DecodeRowKey(rawKV.Key)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		row, err := decodeRow(rawKV.Value, recordID, tblInfo, time.UTC)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		datum := row[id]
+		v = datum.GetBytes()
 	}
-	meta, err := decodeMetaKey(raw.Key)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	if meta.getType() != ListData {
-		return nil, nil
-	}
-	k := meta.(metaListData)
-	if k.key != ddlJobListKey && k.key != ddlAddIndexJobListKey {
-		return nil, nil
-	}
+
+	return parseJob(v, rawKV.StartTs, rawKV.CRTs)
+}
+
+// parseJob unmarshal the job from "v".
+func parseJob(v []byte, startTs, CRTs uint64) (*timodel.Job, error) {
 	job := &timodel.Job{}
-	err = json.Unmarshal(raw.Value, job)
+	err := json.Unmarshal(v, job)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -268,8 +277,8 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	}
 	// FinishedTS is only set when the job is synced,
 	// but we can use the entry's ts here
-	job.StartTS = raw.StartTs
-	job.BinlogInfo.FinishedTS = raw.CRTs
+	job.StartTS = startTs
+	job.BinlogInfo.FinishedTS = CRTs
 	return job, nil
 }
 
@@ -279,12 +288,16 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 	for _, colInfo := range tableInfo.Columns {
 		colSize := 0
 		if !model.IsColCDCVisible(colInfo) {
+			log.Info("skip the column which is not visible",
+				zap.String("table", tableInfo.Name.O), zap.String("column", colInfo.Name.O))
 			continue
 		}
 		colName := colInfo.Name.O
 		colDatums, exist := datums[colInfo.ID]
 		var colValue interface{}
 		if !exist && !fillWithDefaultValue {
+			log.Info("column value is not found",
+				zap.String("table", tableInfo.Name.O), zap.String("column", colName))
 			continue
 		}
 		var err error

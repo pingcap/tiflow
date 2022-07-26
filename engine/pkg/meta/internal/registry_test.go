@@ -14,7 +14,6 @@
 package internal
 
 import (
-	"regexp"
 	"testing"
 
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
@@ -37,7 +36,7 @@ func TestMustRegisterClientBuilder(t *testing.T) {
 	t.Parallel()
 
 	r := GlobalClientBuilderRegistra()
-	require.Len(t, r.reg, 2)
+	require.Len(t, r.reg, 3)
 
 	defer func() {
 		err := recover()
@@ -58,5 +57,5 @@ func TestGetClientBuilder(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = GetClientBuilder(metaModel.SQLKVClientType)
-	require.Regexp(t, regexp.QuoteMeta("[DFLOW:ErrMetaClientTypeNotSupport]meta client type not support:3"), err.Error())
+	require.NoError(t, err)
 }

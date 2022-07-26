@@ -14,7 +14,7 @@ function run() {
 	# TableMapEvent, QueryEvent, GTIDEvent, and a specific Event in each group.
 	# so we slow down 460 * 4 ms. Besides the log may be not flushed to disk asap,
 	# we need to add some retry mechanism
-	inject_points=("github.com/pingcap/tiflow/dm/dm/worker/PrintStatusCheckSeconds=return(1)"
+	inject_points=("github.com/pingcap/tiflow/dm/worker/PrintStatusCheckSeconds=return(1)"
 		"github.com/pingcap/tiflow/dm/loader/LoadDataSlowDown=sleep(100)"
 		"github.com/pingcap/tiflow/dm/syncer/ProcessBinlogSlowDown=sleep(4)")
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"

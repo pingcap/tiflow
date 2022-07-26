@@ -50,7 +50,7 @@ func prepareServerEnv(t *testing.T, name string) (string, *Config) {
 	ports, err := freeport.GetFreePorts(2)
 	require.Nil(t, err)
 	cfgTpl := `
-master-addr = "127.0.0.1:%d"
+addr = "127.0.0.1:%d"
 advertise-addr = "127.0.0.1:%d"
 [frame-metastore-conf]
 store-id = "root"
@@ -101,7 +101,7 @@ func TestStartGrpcSrvCancelable(t *testing.T) {
 	ports, err := freeport.GetFreePorts(3)
 	require.Nil(t, err)
 	cfgTpl := `
-master-addr = "127.0.0.1:%d"
+addr = "127.0.0.1:%d"
 advertise-addr = "127.0.0.1:%d"
 [frame-metastore-conf]
 store-id = "root"
@@ -257,10 +257,6 @@ func (m *mockJobManager) PauseJob(ctx context.Context, req *pb.PauseJobRequest) 
 	panic("not implemented")
 }
 
-func (m *mockJobManager) DebugJob(ctx context.Context, req *pb.DebugJobRequest) *pb.DebugJobResponse {
-	panic("not implemented")
-}
-
 func (m *mockJobManager) GetJobStatuses(ctx context.Context) (map[frameModel.MasterID]frameModel.MasterStatusCode, error) {
 	panic("not implemented")
 }
@@ -308,7 +304,6 @@ func (m *mockExecutorManager) Start(ctx context.Context) {
 }
 
 func (m *mockExecutorManager) Stop() {
-	panic("not implemented")
 }
 
 func (m *mockExecutorManager) HasExecutor(executorID string) bool {
