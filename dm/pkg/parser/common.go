@@ -87,7 +87,6 @@ func FetchDDLTables(schema string, stmt ast.StmtNode, flavor utils.LowerCaseTabl
 	}
 
 	// special cases: schema related SQLs doesn't have tableName
-	// todo: pass .O or .L of table name depends on flavor
 	switch v := stmt.(type) {
 	case *ast.AlterDatabaseStmt:
 		return []*filter.Table{genTableName(v.Name, "")}, nil
