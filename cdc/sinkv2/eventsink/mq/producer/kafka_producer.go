@@ -134,7 +134,7 @@ func (k *kafkaProducer) Close() {
 		// `client` is mainly used by `asyncProducer` to fetch metadata and perform other related
 		// operations. When we close the `kafkaSaramaProducer`, there is no need for TiCDC to make sure
 		// that all buffered messages are flushed.
-		// Consider the situation that the broker does not respond, If the client is not
+		// Consider the situation where the broker is irresponsive. If the client were not
 		// closed, `asyncProducer.Close()` would waste a mount of time to try flush all messages.
 		// To prevent the scenario mentioned above, close client first.
 		start := time.Now()
