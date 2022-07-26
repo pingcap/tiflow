@@ -111,7 +111,7 @@ func (k *kafkaProducer) AsyncSendMessage(
 }
 
 func (k *kafkaProducer) Close() {
-	// We have to hold the lock to prevent write to closed producer.
+	// We have to hold the lock to synchronize closing with writing.
 	k.closedMu.Lock()
 	defer k.closedMu.Unlock()
 	// If the producer was already closed, we should skip the close operation.
