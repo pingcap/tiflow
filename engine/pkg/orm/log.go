@@ -72,8 +72,10 @@ func (l *ormLogger) Error(ctx context.Context, format string, args ...interface{
 
 func (l *ormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
 	elapsed := time.Since(begin)
+	sql, rows := fc()
+	l.logger.Debug("grom trace log", zap.Duration("elapsed", elapsed), zap.String("sql", sql),
+		zap.Int64("affected-rows", rows), zap.Error(err))
 	if elapsed > l.op.slowThreshold && l.op.slowThreshold != 0 {
-		sql, rows := fc()
 		l.logger.Warn("grom slow log", zap.Duration("elapsed", elapsed), zap.String("sql", sql),
 			zap.Int64("affected-rows", rows), zap.Error(err))
 	}
