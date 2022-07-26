@@ -1017,13 +1017,13 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	sourceSchemaFromCheckPoint, err := syncer.OperateSchema(ctx, &pb.OperateWorkerSchemaRequest{Op: pb.SchemaOp_GetSchema, Database: "test_1", Table: "t_1"})
 	c.Assert(err, IsNil)
 
-	syncer.tableRouter = &router.Table{}
-	c.Assert(syncer.tableRouter.AddRule(&router.TableRule{
+	syncer.tableRouter, err = router.NewTableRouter(false, []*router.TableRule{{
 		SchemaPattern: "test_1",
 		TablePattern:  "t_1",
 		TargetSchema:  "test_1",
 		TargetTable:   "t_2",
-	}), IsNil)
+	}})
+	c.Assert(err, IsNil)
 
 	syncer.checkpoint.(*RemoteCheckPoint).points = make(map[string]map[string]*binlogPoint)
 
