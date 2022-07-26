@@ -30,7 +30,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/pingcap/tiflow/pkg/uuid"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/atomic"
+	"github.com/uber-go/atomic"
 )
 
 func TestMain(m *testing.M) {
