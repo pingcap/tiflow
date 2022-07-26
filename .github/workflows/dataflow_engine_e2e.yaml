@@ -4,7 +4,7 @@ name: Dataflow Engine e2e tests
 # events but only for the master branch
 on:
   push:
-    branches: [ master, remove-embedded-etcd ] # Enable on remove-embedded-etcd for testing temporarily.
+    branches: [ master ]
   pull_request:
     branches: [ master ]
     paths:

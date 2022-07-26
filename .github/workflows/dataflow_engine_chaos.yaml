@@ -1,8 +1,6 @@
 name: Dataflow Engine Chaos
 
 on:
-  push:
-    branches: [ remove-embedded-etcd ] # Enable on remove-embedded-etcd for testing temporarily.
   schedule:
     - cron: '0 17-23 * * *' # run at minute 0 every hour from 01:00 ~ 07:00 UTC+8
   workflow_dispatch:
