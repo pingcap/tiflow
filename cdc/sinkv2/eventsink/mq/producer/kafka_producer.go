@@ -66,7 +66,7 @@ func (k *kafkaProducer) AsyncSendMessage(
 	ctx context.Context, topic string,
 	partition int32, message *codec.MQMessage,
 ) error {
-	// We have to hold the lock to prevent write to closed producer.
+	// We have to hold the lock to avoid writing to a closed producer.
 	// Close may be blocked for a long time.
 	k.closedMu.RLock()
 	defer k.closedMu.RUnlock()
