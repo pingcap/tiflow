@@ -369,7 +369,10 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		if err := p.schemaSnapshot.FillSchemaName(job); err != nil {
 			return true, errors.Trace(err)
 		}
-		job.TableName = job.BinlogInfo.TableInfo.Name.O
+		// nil means it is a schema ddl job, we don't need to fill the table name.
+		if job.BinlogInfo.TableInfo != nil {
+			job.TableName = job.BinlogInfo.TableInfo.Name.O
+		}
 	}
 
 	if !isRenameTables {
