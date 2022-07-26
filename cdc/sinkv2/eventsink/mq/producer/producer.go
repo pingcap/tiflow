@@ -16,6 +16,7 @@ package producer
 import (
 	"context"
 
+	"github.com/Shopify/sarama"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 )
 
@@ -27,8 +28,14 @@ type Producer interface {
 	) error
 
 	// Close closes the producer and client(s).
-	Close() error
+	Close()
 }
 
-// NewProducerFunc is a function to create a producer.
-type NewProducerFunc func() Producer
+// Factory is a function to create a producer.
+// errCh is used to report error to the caller(i.e. processor,owner).
+// Because the caller passes errCh to many goroutines,
+// there is no way to safely close errCh by the sender.
+// So we let the GC close errCh.
+// It's usually a buffered channel.
+type Factory func(ctx context.Context, client sarama.Client,
+	errCh chan error) (Producer, error)
