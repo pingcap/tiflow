@@ -18,7 +18,7 @@ spec:
       containers:
         - name: chaos-test-case
           image: {{ .Values.cases.repository }}:{{ .Values.cases.tag }}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
           env:
             - name: MY_POD_NAMESPACE
               valueFrom:
