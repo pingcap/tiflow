@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	kafkav1 "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
@@ -169,7 +170,9 @@ func TestProducerSendMsgFailed(t *testing.T) {
 				Value: []byte("test-value"),
 			})
 			if err != nil {
-				require.Equal(t, context.DeadlineExceeded, err)
+				require.Condition(t, func() bool {
+					return err == context.DeadlineExceeded || err == cerror.ErrKafkaProducerClosed
+				}, "should return error")
 			}
 		}
 	}(t)

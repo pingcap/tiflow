@@ -71,12 +71,9 @@ func (k *kafkaProducer) AsyncSendMessage(
 	k.closedMu.RLock()
 	defer k.closedMu.RUnlock()
 
-	// If the producer is closed, we should skip the message.
+	// If the producer is closed, we should skip the message and return an error.
 	if k.closed {
-		// We return the context error directly rather than any other error.
-		// Because if producer already closed, it means the context maybe is canceling or canceled.
-		// So we shouldn't return other errors to the caller to mess up the shutdown process.
-		return ctx.Err()
+		return cerror.ErrKafkaProducerClosed
 	}
 	failpoint.Inject("KafkaSinkAsyncSendError", func() {
 		// simulate sending message to input channel successfully but flushing
