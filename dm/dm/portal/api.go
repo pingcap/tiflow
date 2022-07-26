@@ -38,6 +38,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/unrolled/render"
 	"go.uber.org/zap"
+	"gopkg.in/yaml.v2"
 )
 
 const (
