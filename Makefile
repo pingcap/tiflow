@@ -2,7 +2,7 @@
 .PHONY: build test check clean fmt cdc kafka_consumer coverage \
 	integration_test_build integration_test integration_test_mysql integration_test_kafka bank \
 	dm dm-master dm-worker dmctl dm-syncer dm_coverage \
-	engine tiflow tiflow-demo tiflow-chaos-case
+	engine tiflow tiflow-demo tiflow-chaos-case engine_image engine_image_linux engine_image_infra
 
 PROJECT=tiflow
 P=3
