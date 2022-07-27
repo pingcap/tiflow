@@ -19,14 +19,13 @@ import (
 	"sync"
 	"time"
 
-	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
 	sqlkvModel "github.com/pingcap/tiflow/engine/pkg/meta/internal/sqlkv/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	"github.com/pingcap/tiflow/engine/pkg/orm"
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
-	"github.com/pingcap/tiflow/pkg/errors"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -50,15 +49,9 @@ func NewSQLKVClientImpl(sqlDB *sql.DB, table string, jobID metaModel.JobID) (*sq
 		return nil, cerrors.ErrMetaParamsInvalid.GenWithStackByArgs("input db is nil")
 	}
 
-	db, err := gorm.Open(mysql.New(mysql.Config{
-		Conn:                      sqlDB,
-		SkipInitializeWithVersion: false,
-	}), &gorm.Config{
-		SkipDefaultTransaction: true,
-		// TODO: logger
-	})
+	db, err := orm.NewGormDB(sqlDB)
 	if err != nil {
-		return nil, errors.ErrMetaNewClientFail.Wrap(err)
+		return nil, err
 	}
 
 	tableScopeDB := db

@@ -25,6 +25,8 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	parserModel "github.com/pingcap/tidb/parser/model"
+	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -82,9 +84,59 @@ func TestMigration(t *testing.T) {
 		StartTs: 2, TargetTs: 200, State: model.StateError,
 	}
 	status2 := model.ChangeFeedStatus{ResolvedTs: 3, CheckpointTs: 2}
+	cfg := config.GetDefaultReplicaConfig()
+	cfg.EnableOldValue = false
+	cfg.CheckGCSafePoint = false
+	cfg.Sink = &config.SinkConfig{
+		DispatchRules: []*config.DispatchRule{
+			{
+				Matcher:        []string{"a", "b", "c"},
+				DispatcherRule: "",
+				PartitionRule:  "rule",
+				TopicRule:      "topic",
+			},
+		},
+		Protocol: "aaa",
+		ColumnSelectors: []*config.ColumnSelector{
+			{
+				Matcher: []string{"a", "b", "c"},
+				Columns: []string{"a", "b"},
+			},
+		},
+		SchemaRegistry: "bbb",
+		TxnAtomicity:   "aa",
+	}
+	cfg.Consistent = &config.ConsistentConfig{
+		Level:             "1",
+		MaxLogSize:        99,
+		FlushIntervalInMs: 10,
+		Storage:           "s3",
+	}
+	cfg.Filter = &config.FilterConfig{
+		Rules: []string{"a", "b", "c"},
+		MySQLReplicationRules: &filter.MySQLReplicationRules{
+			DoTables: []*filter.Table{{
+				Schema: "testdo",
+				Name:   "testgotable",
+			}},
+			DoDBs: []string{"ad", "bdo"},
+			IgnoreTables: []*filter.Table{
+				{
+					Schema: "testignore",
+					Name:   "testaaaingore",
+				},
+			},
+			IgnoreDBs: []string{"aa", "b2"},
+		},
+		IgnoreTxnStartTs: []uint64{1, 2, 3},
+		DDLAllowlist: []parserModel.ActionType{
+			parserModel.ActionType(2),
+		},
+	}
 	info3 := model.ChangeFeedInfo{
 		SinkURI: "test1",
 		StartTs: 3, TargetTs: 300, State: model.StateFailed,
+		Config: cfg,
 	}
 	status3 := model.ChangeFeedStatus{ResolvedTs: 4, CheckpointTs: 3}
 
@@ -200,7 +252,9 @@ func TestMigration(t *testing.T) {
 		require.Equal(t, uint64(1), info.UpstreamID)
 		tc.info.UpstreamID = info.UpstreamID
 		require.Equal(t, model.DefaultNamespace, info.Namespace)
+		require.Equal(t, tc.id, info.ID)
 		tc.info.Namespace = info.Namespace
+		tc.info.ID = info.ID
 		require.Equal(t, tc.info, info)
 		statusResp, err := cli.Get(context.Background(),
 			fmt.Sprintf("%s%s/%s", etcd.DefaultClusterAndNamespacePrefix,
