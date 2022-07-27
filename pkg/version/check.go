@@ -70,7 +70,7 @@ func CheckClusterVersion(
 	}
 
 	for _, pdAddr := range pdAddrs {
-		err = CheckPDVersion(ctx, pdAddr, credential)
+		err = checkPDVersion(ctx, pdAddr, credential)
 		if err == nil {
 			break
 		}
@@ -79,8 +79,8 @@ func CheckClusterVersion(
 	return err
 }
 
-// CheckPDVersion check PD version.
-func CheckPDVersion(ctx context.Context, pdAddr string, credential *security.Credential) error {
+// checkPDVersion check PD version.
+func checkPDVersion(ctx context.Context, pdAddr string, credential *security.Credential) error {
 	// See more: https://github.com/pingcap/pd/blob/v4.0.0-rc.1/server/api/version.go
 	pdVer := struct {
 		Version string `json:"version"`
@@ -164,11 +164,6 @@ type TiCDCClusterVersion struct {
 	*semver.Version
 }
 
-// IsUnknown returns whether this is an unknown version
-func (v *TiCDCClusterVersion) IsUnknown() bool {
-	return v.Version == nil
-}
-
 // ShouldEnableOldValueByDefault returns whether old value should be enabled by default
 func (v *TiCDCClusterVersion) ShouldEnableOldValueByDefault() bool {
 	// we assume the unknown version to be the latest version
@@ -198,13 +193,13 @@ func (v *TiCDCClusterVersion) ShouldRunCliWithOpenAPI() bool {
 	return !v.LessThan(*semver.New("6.2.0")) || (v.Major == 6 && v.Minor == 2 && v.Patch == 0)
 }
 
-// TiCDCClusterVersionUnknown is a read-only variable to represent the unknown cluster version
-var TiCDCClusterVersionUnknown = TiCDCClusterVersion{}
+// cdcClusterVersionUnknown is a read-only variable to represent the unknown cluster version
+var cdcClusterVersionUnknown = TiCDCClusterVersion{}
 
 // GetTiCDCClusterVersion returns the version of ticdc cluster
 func GetTiCDCClusterVersion(captureVersion []string) (TiCDCClusterVersion, error) {
 	if len(captureVersion) == 0 {
-		return TiCDCClusterVersionUnknown, nil
+		return cdcClusterVersionUnknown, nil
 	}
 	var minVer *semver.Version
 	for _, versionStr := range captureVersion {
@@ -217,7 +212,7 @@ func GetTiCDCClusterVersion(captureVersion []string) (TiCDCClusterVersion, error
 		}
 		if err != nil {
 			err = errors.Annotate(err, "invalid CDC cluster version")
-			return TiCDCClusterVersionUnknown, cerror.WrapError(cerror.ErrNewSemVersion, err)
+			return cdcClusterVersionUnknown, cerror.WrapError(cerror.ErrNewSemVersion, err)
 		}
 		if minVer == nil || ver.Compare(*minVer) < 0 {
 			minVer = ver
