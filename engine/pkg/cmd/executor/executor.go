@@ -55,7 +55,7 @@ func newOptions() *options {
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
 func (o *options) addFlags(cmd *cobra.Command) {
-	cmd.Flags().StringVar(&o.executorConfig.WorkerAddr, "worker-addr", o.executorConfig.WorkerAddr, "Set the listening address for executor")
+	cmd.Flags().StringVar(&o.executorConfig.Addr, "addr", o.executorConfig.Addr, "Set the listening address for executor")
 	cmd.Flags().StringVar(&o.executorConfig.AdvertiseAddr, "advertise-addr", o.executorConfig.AdvertiseAddr, "Set the advertise listening address for client communication")
 
 	cmd.Flags().StringVar(&o.executorConfig.LogConf.File, "log-file", o.executorConfig.LogConf.File, "log file path")
@@ -118,8 +118,8 @@ func (o *options) complete(cmd *cobra.Command) error {
 		switch flag.Name {
 		case "name":
 			cfg.Name = o.executorConfig.Name
-		case "worker-addr":
-			cfg.WorkerAddr = o.executorConfig.WorkerAddr
+		case "addr":
+			cfg.Addr = o.executorConfig.Addr
 		case "advertise-addr":
 			cfg.AdvertiseAddr = o.executorConfig.AdvertiseAddr
 		case "log-file":

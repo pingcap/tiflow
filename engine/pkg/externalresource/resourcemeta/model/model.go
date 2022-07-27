@@ -82,11 +82,11 @@ func ToResourceRequirement(jobID JobID, resourceIDs ...ResourceID) []*pb.Resourc
 // ResourceMeta is the records stored in the metastore.
 type ResourceMeta struct {
 	ormModel.Model
-	ProjectID tenant.ProjectID `json:"project-id" gorm:"column:project_id;type:varchar(64) not null;"`
-	ID        ResourceID       `json:"id" gorm:"column:id;type:varchar(64) not null;uniqueIndex:uidx_rid,priority:2;index:idx_rei,priority:2"`
-	Job       JobID            `json:"job" gorm:"column:job_id;type:varchar(64) not null;uniqueIndex:uidx_rid,priority:1"`
-	Worker    WorkerID         `json:"worker" gorm:"column:worker_id;type:varchar(64) not null"`
-	Executor  ExecutorID       `json:"executor" gorm:"column:executor_id;type:varchar(64) not null;index:idx_rei,priority:1"`
+	ProjectID tenant.ProjectID `json:"project-id" gorm:"column:project_id;type:varchar(128) not null;"`
+	ID        ResourceID       `json:"id" gorm:"column:id;type:varchar(128) not null;uniqueIndex:uidx_rid,priority:2;index:idx_rei,priority:2"`
+	Job       JobID            `json:"job" gorm:"column:job_id;type:varchar(128) not null;uniqueIndex:uidx_rid,priority:1"`
+	Worker    WorkerID         `json:"worker" gorm:"column:worker_id;type:varchar(128) not null"`
+	Executor  ExecutorID       `json:"executor" gorm:"column:executor_id;type:varchar(128) not null;index:idx_rei,priority:1"`
 	GCPending bool             `json:"gc-pending" gorm:"column:gc_pending;type:BOOLEAN"`
 
 	// TODO soft delete has not be implemented, because it requires modifying too many

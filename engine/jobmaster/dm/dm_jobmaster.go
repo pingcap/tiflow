@@ -24,9 +24,9 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/checker"
-	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
-	ctlcommon "github.com/pingcap/tiflow/dm/dm/ctl/common"
-	"github.com/pingcap/tiflow/dm/dm/master"
+	dmconfig "github.com/pingcap/tiflow/dm/config"
+	ctlcommon "github.com/pingcap/tiflow/dm/ctl/common"
+	"github.com/pingcap/tiflow/dm/master"
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework"
 	libMetadata "github.com/pingcap/tiflow/engine/framework/metadata"
