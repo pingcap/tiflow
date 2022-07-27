@@ -26,7 +26,7 @@ const (
 	constFieldProjectKey = "project_id"
 	// ConstFieldJobKey is used to recognize jobs of the same job type
 	ConstFieldJobKey = "job_id"
-	// FieldWorkerKey is used to recognize workers of the same job
+	// ConstFieldWorkerKey is used to recognize workers of the same job
 	ConstFieldWorkerKey = "worker_id"
 )
 
