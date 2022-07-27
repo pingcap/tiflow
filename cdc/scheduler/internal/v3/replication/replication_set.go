@@ -195,6 +195,56 @@ func NewReplicationSet(
 	return r, nil
 }
 
+func (r *ReplicationSet) setSecondary(captureID model.CaptureID) error {
+	if r.Secondary != "" && r.Secondary != captureID {
+		jsonR, _ := json.Marshal(r)
+		return cerror.ErrReplicationSetInconsistent.GenWithStackByArgs(
+			fmt.Sprintf("Secondary already set, %s, %v", captureID, string(jsonR)))
+	}
+	r.Secondary = captureID
+	r.Captures[captureID] = struct{}{}
+	return nil
+}
+
+func (r *ReplicationSet) clearSecondary(captureID model.CaptureID) error {
+	if r.Secondary != captureID {
+		jsonR, _ := json.Marshal(r)
+		return cerror.ErrReplicationSetInconsistent.GenWithStackByArgs(
+			fmt.Sprintf("Secondary mismatch, %s, %v", captureID, string(jsonR)))
+	}
+	delete(r.Captures, r.Secondary)
+	r.Secondary = ""
+	return nil
+}
+
+func (r *ReplicationSet) promoteSecondary(captureID model.CaptureID) error {
+	if r.Primary == captureID {
+		log.Warn("schedulerv3: capture is already promoted",
+			zap.Any("replicationSet", r))
+		return nil
+	}
+	if r.Secondary != captureID {
+		jsonR, _ := json.Marshal(r)
+		return cerror.ErrReplicationSetInconsistent.GenWithStackByArgs(
+			fmt.Sprintf("Secondary mismatch, %s, %v", captureID, string(jsonR)))
+	}
+	if r.Primary != "" {
+		delete(r.Captures, r.Primary)
+	}
+	r.Primary = r.Secondary
+	r.Secondary = ""
+	return nil
+}
+
+func (r *ReplicationSet) clearPrimary() {
+	delete(r.Captures, r.Primary)
+	r.Primary = ""
+}
+
+func (r *ReplicationSet) clearCapture(captureID model.CaptureID) {
+	delete(r.Captures, captureID)
+}
+
 func (r *ReplicationSet) inconsistentError(
 	input *schedulepb.TableStatus, captureID model.CaptureID, msg string, fields ...zap.Field,
 ) error {
@@ -311,8 +361,7 @@ func (r *ReplicationSet) pollOnAbsent(
 				input, captureID, "schedulerv3: there must be no primary or secondary")
 		}
 		r.State = ReplicationSetStatePrepare
-		r.Secondary = captureID
-		r.Captures[captureID] = struct{}{}
+		r.setSecondary(captureID)
 		return nil, true, nil
 
 	case schedulepb.TableStateStopped:
@@ -374,16 +423,17 @@ func (r *ReplicationSet) pollOnPrepare(
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID),
 				zap.Any("replicationSet", r))
-			r.Primary = ""
-			delete(r.Captures, captureID)
+			r.clearPrimary()
 			return nil, false, nil
 		} else if r.Secondary == captureID {
 			log.Info("schedulerv3: capture is stopped during Prepare",
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID),
 				zap.Any("replicationSet", r))
-			r.Secondary = ""
-			delete(r.Captures, captureID)
+			err := r.clearSecondary(captureID)
+			if err != nil {
+				return nil, false, errors.Trace(err)
+			}
 			if r.Primary != "" {
 				// Secondary is stopped, and we still has primary.
 				// Transit to Replicating.
@@ -434,8 +484,11 @@ func (r *ReplicationSet) pollOnCommit(
 				return nil, false, nil
 			}
 			// No primary, promote secondary to primary.
-			r.Primary = r.Secondary
-			r.Secondary = ""
+			err := r.promoteSecondary(captureID)
+			if err != nil {
+				return nil, false, errors.Trace(err)
+			}
+
 			log.Info("schedulerv3: promote secondary, no primary",
 				zap.Any("replicationSet", r),
 				zap.Stringer("tableState", input),
@@ -462,8 +515,7 @@ func (r *ReplicationSet) pollOnCommit(
 		if r.Primary == captureID {
 			r.updateCheckpoint(input.Checkpoint)
 			original := r.Primary
-			delete(r.Captures, r.Primary)
-			r.Primary = ""
+			r.clearPrimary()
 			if r.Secondary == "" {
 				// If there is no secondary, transit to Absent.
 				log.Info("schedulerv3: primary is stopped during Commit",
@@ -474,8 +526,10 @@ func (r *ReplicationSet) pollOnCommit(
 				return nil, true, nil
 			}
 			// Primary is stopped, promote secondary to primary.
-			r.Primary = r.Secondary
-			r.Secondary = ""
+			err := r.promoteSecondary(r.Secondary)
+			if err != nil {
+				return nil, false, errors.Trace(err)
+			}
 			log.Info("schedulerv3: replication state promote secondary",
 				zap.Any("replicationSet", r),
 				zap.Stringer("tableState", input),
@@ -502,8 +556,10 @@ func (r *ReplicationSet) pollOnCommit(
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID),
 				zap.Any("replicationSet", r))
-			delete(r.Captures, r.Secondary)
-			r.Secondary = ""
+			err := r.clearSecondary(captureID)
+			if err != nil {
+				return nil, false, errors.Trace(err)
+			}
 			if r.Primary == "" {
 				// If there is no primary, transit to Absent.
 				r.State = ReplicationSetStateAbsent
@@ -598,8 +654,7 @@ func (r *ReplicationSet) pollOnReplicating(
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID),
 				zap.Any("replicationSet", r))
-			r.Primary = ""
-			delete(r.Captures, captureID)
+			r.clearPrimary()
 			r.State = ReplicationSetStateAbsent
 			return nil, true, nil
 		}
@@ -629,11 +684,12 @@ func (r *ReplicationSet) pollOnRemoving(
 		}, false, nil
 	case schedulepb.TableStateAbsent, schedulepb.TableStateStopped:
 		if r.Primary == captureID {
-			r.Primary = ""
+			r.clearPrimary()
 		} else if r.Secondary == captureID {
-			r.Secondary = ""
+			r.clearSecondary(captureID)
+		} else {
+			r.clearCapture(captureID)
 		}
-		delete(r.Captures, captureID)
 		log.Info("schedulerv3: replication state remove capture",
 			zap.Any("replicationSet", r),
 			zap.Stringer("tableState", input),
@@ -697,8 +753,7 @@ func (r *ReplicationSet) handleMoveTable(
 	}
 	oldState := r.State
 	r.State = ReplicationSetStatePrepare
-	r.Secondary = dest
-	r.Captures[dest] = struct{}{}
+	r.setSecondary(dest)
 	log.Info("schedulerv3: replication state transition, move table",
 		zap.Any("replicationSet", r),
 		zap.Stringer("old", oldState), zap.Stringer("new", r.State))
