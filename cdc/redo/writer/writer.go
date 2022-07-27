@@ -51,10 +51,7 @@ type RedoLogWriter interface {
 	// FlushLog sends resolved-ts from table pipeline to log writer, it is
 	// essential to flush when a table doesn't have any row change event for
 	// some time, and the resolved ts of this table should be moved forward.
-	FlushLog(ctx context.Context, rtsMap map[model.TableID]model.Ts) error
-
-	// EmitCheckpointTs write CheckpointTs to meta file
-	EmitCheckpointTs(ctx context.Context, ts uint64) error
+	FlushLog(ctx context.Context, checkpointTs, resolvedTs model.Ts) error
 
 	// DeleteAllLogs delete all log files related to the changefeed, called from owner only when delete changefeed
 	DeleteAllLogs(ctx context.Context) error
@@ -122,26 +119,24 @@ func NewLogWriter(
 	var err error
 	var logWriter *LogWriter
 	rowCfg := &FileWriterConfig{
-		Dir:               cfg.Dir,
-		ChangeFeedID:      cfg.ChangeFeedID,
-		CaptureID:         cfg.CaptureID,
-		FileType:          common.DefaultRowLogFileType,
-		CreateTime:        cfg.CreateTime,
-		MaxLogSize:        cfg.MaxLogSize,
-		FlushIntervalInMs: cfg.FlushIntervalInMs,
-		S3Storage:         cfg.S3Storage,
-		S3URI:             cfg.S3URI,
+		Dir:          cfg.Dir,
+		ChangeFeedID: cfg.ChangeFeedID,
+		CaptureID:    cfg.CaptureID,
+		FileType:     common.DefaultRowLogFileType,
+		CreateTime:   cfg.CreateTime,
+		MaxLogSize:   cfg.MaxLogSize,
+		S3Storage:    cfg.S3Storage,
+		S3URI:        cfg.S3URI,
 	}
 	ddlCfg := &FileWriterConfig{
-		Dir:               cfg.Dir,
-		ChangeFeedID:      cfg.ChangeFeedID,
-		CaptureID:         cfg.CaptureID,
-		FileType:          common.DefaultDDLLogFileType,
-		CreateTime:        cfg.CreateTime,
-		MaxLogSize:        cfg.MaxLogSize,
-		FlushIntervalInMs: cfg.FlushIntervalInMs,
-		S3Storage:         cfg.S3Storage,
-		S3URI:             cfg.S3URI,
+		Dir:          cfg.Dir,
+		ChangeFeedID: cfg.ChangeFeedID,
+		CaptureID:    cfg.CaptureID,
+		FileType:     common.DefaultDDLLogFileType,
+		CreateTime:   cfg.CreateTime,
+		MaxLogSize:   cfg.MaxLogSize,
+		S3Storage:    cfg.S3Storage,
+		S3URI:        cfg.S3URI,
 	}
 	logWriter = &LogWriter{
 		cfg: cfg,
@@ -231,7 +226,7 @@ func (l *LogWriter) initMeta(ctx context.Context) error {
 	default:
 	}
 
-	l.meta = &common.LogMeta{ResolvedTsList: make(map[model.TableID]model.Ts)}
+	l.meta = &common.LogMeta{}
 
 	data, err := os.ReadFile(l.filePath())
 	if err != nil {
@@ -279,7 +274,7 @@ func (l *LogWriter) runGC(ctx context.Context) {
 
 func (l *LogWriter) gc() error {
 	l.metaLock.RLock()
-	ts := l.meta.CheckPointTs
+	ts := l.meta.CheckpointTs
 	l.metaLock.RUnlock()
 
 	var err error
@@ -363,7 +358,7 @@ func (l *LogWriter) SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error 
 }
 
 // FlushLog implement FlushLog api
-func (l *LogWriter) FlushLog(ctx context.Context, rtsMap map[model.TableID]model.Ts) error {
+func (l *LogWriter) FlushLog(ctx context.Context, checkpointTs, resolvedTs model.Ts) error {
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
@@ -374,21 +369,7 @@ func (l *LogWriter) FlushLog(ctx context.Context, rtsMap map[model.TableID]model
 		return cerror.ErrRedoWriterStopped.GenWithStackByArgs()
 	}
 
-	return l.flush(rtsMap)
-}
-
-// EmitCheckpointTs implement EmitCheckpointTs api
-func (l *LogWriter) EmitCheckpointTs(ctx context.Context, ts uint64) error {
-	select {
-	case <-ctx.Done():
-		return errors.Trace(ctx.Err())
-	default:
-	}
-
-	if l.isStopped() {
-		return cerror.ErrRedoWriterStopped.GenWithStackByArgs()
-	}
-	return l.flushLogMeta(ts, nil)
+	return l.flush(checkpointTs, resolvedTs)
 }
 
 // DeleteAllLogs implement DeleteAllLogs api
@@ -398,11 +379,12 @@ func (l *LogWriter) DeleteAllLogs(ctx context.Context) error {
 		return err
 	}
 
+	err = os.RemoveAll(l.cfg.Dir)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+	}
+
 	if !l.cfg.S3Storage {
-		err = os.RemoveAll(l.cfg.Dir)
-		if err != nil {
-			return cerror.WrapError(cerror.ErrRedoFileOp, err)
-		}
 		// after delete logs, rm the LogWriter since it is already closed
 		l.cleanUpLogWriter()
 		return nil
@@ -497,10 +479,10 @@ func (l *LogWriter) Close() error {
 }
 
 // flush flushes all the buffered data to the disk.
-func (l *LogWriter) flush(rtsMap map[model.TableID]model.Ts) error {
+func (l *LogWriter) flush(checkpointTs, resolvedTs model.Ts) error {
 	err1 := l.ddlWriter.Flush()
 	err2 := l.rowWriter.Flush()
-	err3 := l.flushLogMeta(0, rtsMap)
+	err3 := l.flushLogMeta(checkpointTs, resolvedTs)
 
 	err := multierr.Append(err1, err2)
 	err = multierr.Append(err, err3)
@@ -521,51 +503,27 @@ func (l *LogWriter) getMetafileName() string {
 		common.DefaultMetaFileType, common.MetaEXT)
 }
 
-func (l *LogWriter) mergeMeta(checkPointTs uint64, rtsMap map[model.TableID]model.Ts) ([]byte, error) {
+func (l *LogWriter) maybeUpdateMeta(checkpointTs, resolvedTs uint64) ([]byte, error) {
 	l.metaLock.Lock()
 	defer l.metaLock.Unlock()
 
+	// NOTE: both checkpoint and resolved can regress if a cdc instance restarts.
 	hasChange := false
-	if checkPointTs > l.meta.CheckPointTs {
-		l.meta.CheckPointTs = checkPointTs
+	if checkpointTs > l.meta.CheckpointTs {
+		l.meta.CheckpointTs = checkpointTs
 		hasChange = true
-	} else if checkPointTs > 0 && checkPointTs != l.meta.CheckPointTs {
-		log.Panic("flushLogMeta with a regressed checkpoint ts",
-			zap.Uint64("currCheckPointTs", l.meta.CheckPointTs),
-			zap.Uint64("recvCheckPointTs", checkPointTs))
+	} else if checkpointTs > 0 && checkpointTs != l.meta.CheckpointTs {
+		log.Warn("flushLogMeta with a regressed checkpoint ts, ignore",
+			zap.Uint64("currCheckpointTs", l.meta.CheckpointTs),
+			zap.Uint64("recvCheckpointTs", checkpointTs))
 	}
-
-	for tID, ts := range rtsMap {
-		if l.meta.ResolvedTsList[tID] == ts {
-			continue
-		}
+	if resolvedTs > l.meta.ResolvedTs {
+		l.meta.ResolvedTs = resolvedTs
 		hasChange = true
-		if l.meta.ResolvedTsList[tID] > ts {
-			// Table resolved timestamp can regress if the table
-			// is removed and then added back quickly.
-			log.Warn("flushLogMeta with a regressed resolved ts",
-				zap.Int64("tableID", tID),
-				zap.Uint64("currResolvedTs", ts),
-				zap.Uint64("recvResolvedTs", l.meta.ResolvedTsList[tID]))
-		}
-		l.meta.ResolvedTsList[tID] = ts
-	}
-
-	// If a table has been removed from the cdc instance, clear it from meta file
-	// only after checkpoint has been advanced to its resolved timestamp.
-	garbageTIDs := make([]model.TableID, 0)
-	for tID, ts := range l.meta.ResolvedTsList {
-		if _, ok := rtsMap[tID]; !ok {
-			// NOTE: ts < l.meta.CheckPointTs means the table must have been
-			// took over by other cdc instances.
-			if ts < l.meta.CheckPointTs {
-				garbageTIDs = append(garbageTIDs, tID)
-			}
-		}
-	}
-	for _, tID := range garbageTIDs {
-		delete(l.meta.ResolvedTsList, tID)
-		hasChange = true
+	} else if resolvedTs > 0 && resolvedTs != l.meta.ResolvedTs {
+		log.Warn("flushLogMeta with a regressed resolved ts, ignore",
+			zap.Uint64("currCheckpointTs", l.meta.ResolvedTs),
+			zap.Uint64("recvCheckpointTs", resolvedTs))
 	}
 
 	if !hasChange {
@@ -579,8 +537,8 @@ func (l *LogWriter) mergeMeta(checkPointTs uint64, rtsMap map[model.TableID]mode
 	return data, err
 }
 
-func (l *LogWriter) flushLogMeta(checkPointTs uint64, rtsMap map[model.TableID]model.Ts) error {
-	data, err := l.mergeMeta(checkPointTs, rtsMap)
+func (l *LogWriter) flushLogMeta(checkpointTs, resolvedTs uint64) error {
+	data, err := l.maybeUpdateMeta(checkpointTs, resolvedTs)
 	if err != nil {
 		return err
 	}
@@ -593,11 +551,13 @@ func (l *LogWriter) flushLogMeta(checkPointTs uint64, rtsMap map[model.TableID]m
 		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't make dir for new redo logfile"))
 	}
 
+	// we will create a temp metadata file and then atomically rename it.
 	tmpFileName := l.filePath() + common.MetaTmpEXT
 	tmpFile, err := openTruncFile(tmpFileName)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
+	defer tmpFile.Close()
 
 	_, err = tmpFile.Write(data)
 	if err != nil {
@@ -607,12 +567,19 @@ func (l *LogWriter) flushLogMeta(checkPointTs uint64, rtsMap map[model.TableID]m
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
-	err = tmpFile.Close()
+
+	err = os.Rename(tmpFileName, l.filePath())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 
-	err = os.Rename(tmpFileName, l.filePath())
+	dirFile, err := os.Open(l.cfg.Dir)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+	}
+	defer dirFile.Close()
+	// sync the dir so as to guarantee the renamed file is persisted to disk.
+	err = dirFile.Sync()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}

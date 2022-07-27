@@ -41,6 +41,8 @@ var (
 
 	defaultCapability            int64 = 100 // TODO: make this configurable
 	defaultLocalStorageDirPrefix       = "/tmp/dfe-storage/"
+
+	defaultExecutorAddr = "127.0.0.1:10340"
 )
 
 // Config is the configuration.
@@ -51,14 +53,14 @@ type Config struct {
 	LogConf logutil.Config `toml:"log" json:"log"`
 
 	Join          string `toml:"join" json:"join" `
-	WorkerAddr    string `toml:"worker-addr" json:"worker-addr"`
+	Addr          string `toml:"addr" json:"addr"`
 	AdvertiseAddr string `toml:"advertise-addr" json:"advertise-addr"`
 
 	SessionTTL int `toml:"session-ttl" json:"session-ttl"`
 
 	ConfigFile string `toml:"config-file" json:"config-file"`
 
-	// TODO: in the future dm-workers should share a same ttl from dm-master
+	// TODO: in the future executors should share a same ttl from server-master
 	KeepAliveTTLStr      string `toml:"keepalive-ttl" json:"keepalive-ttl"`
 	KeepAliveIntervalStr string `toml:"keepalive-interval" json:"keepalive-interval"`
 	RPCTimeoutStr        string `toml:"rpc-timeout" json:"rpc-timeout"`
@@ -119,8 +121,12 @@ func getDefaultLocalStorageDir(executorName string) string {
 
 // Adjust adjusts the executor configuration
 func (c *Config) Adjust() (err error) {
+	if c.Join == "" {
+		return errors.ErrInvalidCliParameter.GenWithStack("join must be provided")
+	}
+
 	if c.AdvertiseAddr == "" {
-		c.AdvertiseAddr = c.WorkerAddr
+		c.AdvertiseAddr = c.Addr
 	}
 
 	if c.Name == "" {
@@ -158,7 +164,7 @@ func GetDefaultExecutorConfig() *Config {
 		},
 		Name:                 "",
 		Join:                 "",
-		WorkerAddr:           "",
+		Addr:                 defaultExecutorAddr,
 		AdvertiseAddr:        "",
 		SessionTTL:           defaultSessionTTL,
 		KeepAliveTTLStr:      defaultKeepAliveTTL,

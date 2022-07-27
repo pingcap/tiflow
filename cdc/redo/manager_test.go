@@ -23,6 +23,8 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/redo/writer"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
@@ -163,9 +165,6 @@ func TestLogManagerInProcessor(t *testing.T) {
 		require.Nil(t, err)
 	}
 	checkResolvedTs(logMgr, flushResolvedTs)
-
-	err = logMgr.UpdateCheckpointTs(ctx, 120 /*CheckPointTs*/)
-	require.Nil(t, err)
 }
 
 // TestLogManagerInOwner tests how redo log manager is used in owner,
@@ -312,4 +311,62 @@ func TestManagerRtsMap(t *testing.T) {
 	tables, minTs = logMgr.prepareForFlush()
 	logMgr.postFlush(tables, minTs)
 	require.Equal(t, uint64(20), logMgr.GetMinResolvedTs())
+}
+
+// TestManagerError tests whether internal error in bgUpdateLog could be managed correctly.
+func TestManagerError(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
+
+	cfg := &config.ConsistentConfig{
+		Level:   string(ConsistentLevelEventual),
+		Storage: "blackhole://",
+	}
+	errCh := make(chan error, 1)
+	opts := &ManagerOptions{
+		EnableBgRunner: false,
+		ErrCh:          errCh,
+	}
+	logMgr, err := NewManager(ctx, cfg, opts)
+	require.Nil(t, err)
+	logMgr.writer = writer.NewInvalidBlackHoleWriter(logMgr.writer)
+	defer logMgr.Cleanup(ctx)
+
+	go logMgr.bgUpdateLog(ctx, errCh)
+
+	testCases := []struct {
+		tableID model.TableID
+		rows    []*model.RowChangedEvent
+	}{
+		{
+			tableID: 53,
+			rows: []*model.RowChangedEvent{
+				{CommitTs: 120, Table: &model.TableName{TableID: 53}},
+				{CommitTs: 125, Table: &model.TableName{TableID: 53}},
+				{CommitTs: 130, Table: &model.TableName{TableID: 53}},
+			},
+		},
+	}
+	for _, tc := range testCases {
+		err := logMgr.EmitRowChangedEvents(ctx, tc.tableID, tc.rows...)
+		require.Nil(t, err)
+	}
+
+	select {
+	case <-ctx.Done():
+		t.Fatal("bgUpdateLog should return error before context is done")
+	case err := <-errCh:
+		require.Regexp(t, ".*invalid black hole writer.*", err)
+		require.Regexp(t, ".*WriteLog.*", err)
+	}
+
+	go logMgr.bgUpdateLog(ctx, errCh)
+	select {
+	case <-ctx.Done():
+		t.Fatal("bgUpdateLog should return error before context is done")
+	case err := <-errCh:
+		require.Regexp(t, ".*invalid black hole writer.*", err)
+		require.Regexp(t, ".*FlushLog.*", err)
+	}
 }

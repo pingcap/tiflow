@@ -14,7 +14,10 @@
 package tablesink
 
 import (
+	"context"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
@@ -23,7 +26,7 @@ import (
 func TestNewProgressTracker(t *testing.T) {
 	t.Parallel()
 
-	tracker := newProgressTracker()
+	tracker := newProgressTracker(1)
 	require.NotNil(
 		t,
 		tracker.pendingEventAndResolvedTs,
@@ -40,18 +43,18 @@ func TestNewProgressTracker(t *testing.T) {
 func TestAddEvent(t *testing.T) {
 	t.Parallel()
 
-	tracker := newProgressTracker()
+	tracker := newProgressTracker(1)
 	tracker.addEvent(1)
 	tracker.addEvent(2)
 	tracker.addEvent(3)
-	require.Equal(t, 3, tracker.pendingEventAndResolvedTs.Size(), "event should be added")
+	require.Equal(t, 3, tracker.trackingCount(), "event should be added")
 }
 
 func TestAddResolvedTs(t *testing.T) {
 	t.Parallel()
 
 	// There is no event in the tracker.
-	tracker := newProgressTracker()
+	tracker := newProgressTracker(1)
 	tracker.addResolvedTs(1, model.NewResolvedTs(1))
 	tracker.addResolvedTs(2, model.NewResolvedTs(2))
 	tracker.addResolvedTs(3, model.NewResolvedTs(3))
@@ -59,7 +62,7 @@ func TestAddResolvedTs(t *testing.T) {
 	require.Equal(t, uint64(3), tracker.minTs().Ts, "lastMinResolvedTs should be 3")
 
 	// There is an event in the tracker.
-	tracker = newProgressTracker()
+	tracker = newProgressTracker(1)
 	tracker.addEvent(1)
 	tracker.addResolvedTs(2, model.NewResolvedTs(2))
 	tracker.addResolvedTs(3, model.NewResolvedTs(3))
@@ -71,14 +74,14 @@ func TestRemove(t *testing.T) {
 	t.Parallel()
 
 	// Only event.
-	tracker := newProgressTracker()
+	tracker := newProgressTracker(1)
 	tracker.addEvent(1)
 	tracker.addEvent(2)
 	tracker.addEvent(3)
 	tracker.remove(2)
 	require.Equal(t, 2, tracker.pendingEventAndResolvedTs.Size(), "event2 should be removed")
 	// Only resolved ts.
-	tracker = newProgressTracker()
+	tracker = newProgressTracker(1)
 	tracker.addResolvedTs(1, model.NewResolvedTs(1))
 	tracker.addResolvedTs(2, model.NewResolvedTs(2))
 	tracker.addResolvedTs(3, model.NewResolvedTs(3))
@@ -92,7 +95,7 @@ func TestRemove(t *testing.T) {
 	)
 	require.Equal(t, uint64(3), tracker.minTs().Ts, "lastMinResolvedTs should be 3")
 	// Both event and resolved ts.
-	tracker = newProgressTracker()
+	tracker = newProgressTracker(1)
 	tracker.addEvent(1)
 	tracker.addEvent(2)
 	tracker.addResolvedTs(3, model.NewResolvedTs(3))
@@ -122,4 +125,58 @@ func TestRemove(t *testing.T) {
 		"all events and resolved ts should be removed",
 	)
 	require.Equal(t, uint64(8), tracker.minTs().Ts, "lastMinResolvedTs should be 8")
+}
+
+func TestCloseTracker(t *testing.T) {
+	t.Parallel()
+
+	tracker := newProgressTracker(1)
+	tracker.addEvent(1)
+	tracker.addResolvedTs(2, model.NewResolvedTs(1))
+	tracker.addEvent(3)
+	tracker.addResolvedTs(4, model.NewResolvedTs(2))
+	tracker.addEvent(5)
+	tracker.addResolvedTs(6, model.NewResolvedTs(3))
+	require.Equal(t, 6, tracker.trackingCount(), "event should be added")
+	var wg sync.WaitGroup
+	go func() {
+		wg.Add(1)
+		err := tracker.close(context.Background())
+		require.Nil(t, err, "close should not return error")
+		wg.Done()
+	}()
+	require.Eventually(t, func() bool {
+		return tracker.closed.Load()
+	}, time.Second, time.Millisecond*10, "tracker should be closed")
+	tracker.remove(1)
+	tracker.remove(3)
+	tracker.remove(5)
+	wg.Wait()
+	require.Equal(t, 0, tracker.trackingCount(), "all events should be removed")
+}
+
+func TestCloseTrackerCancellable(t *testing.T) {
+	t.Parallel()
+
+	tracker := newProgressTracker(1)
+	tracker.addEvent(1)
+	tracker.addResolvedTs(2, model.NewResolvedTs(1))
+	tracker.addEvent(3)
+	tracker.addResolvedTs(4, model.NewResolvedTs(2))
+	tracker.addEvent(5)
+	tracker.addResolvedTs(6, model.NewResolvedTs(3))
+	require.Equal(t, 6, tracker.trackingCount(), "event should be added")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
+	defer cancel()
+	var wg sync.WaitGroup
+	go func() {
+		wg.Add(1)
+		err := tracker.close(ctx)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		wg.Done()
+	}()
+	require.Eventually(t, func() bool {
+		return tracker.closed.Load()
+	}, time.Second, time.Millisecond*10, "tracker should be closed")
+	wg.Wait()
 }

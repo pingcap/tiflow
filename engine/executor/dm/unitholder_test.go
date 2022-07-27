@@ -28,9 +28,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/dumpling"
+	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/syncer"
@@ -140,10 +140,6 @@ func TestUnitHolderBinlog(t *testing.T) {
 	unitHolder.runCtx = context.Background()
 	msg, err = unitHolder.Binlog(context.Background(), &dmpkg.BinlogTaskRequest{})
 	require.EqualError(t, err, "source '' has no error")
-	require.Equal(t, "", msg)
-	// binlog skip
-	msg, err = unitHolder.Binlog(context.Background(), &dmpkg.BinlogTaskRequest{Op: pb.ErrorOp_Skip, BinlogPos: "mysql-bin.000001:2345"})
-	require.Nil(t, err)
 	require.Equal(t, "", msg)
 }
 

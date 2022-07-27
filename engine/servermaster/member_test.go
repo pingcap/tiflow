@@ -118,6 +118,7 @@ func TestUpdateServerMembers(t *testing.T) {
 		s.masterCli,
 		&s.leaderInitialized,
 		s.rpcLogRL,
+		nil,
 	)
 	s.masterRPCHook = preRPCHook
 	leader, exists := s.masterRPCHook.CheckLeader()

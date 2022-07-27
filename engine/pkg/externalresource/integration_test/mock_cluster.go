@@ -69,7 +69,7 @@ func newMockGCCluster() *mockCluster {
 		leaderVal,
 		&rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]{},
 		atomic.NewBool(true),
-		&rate.Limiter{}))
+		&rate.Limiter{}, nil))
 
 	executorGroup := client.NewMockExecutorGroup()
 	resourceTp := resourcetypes.NewLocalFileResourceType(executorGroup)

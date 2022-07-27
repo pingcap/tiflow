@@ -94,6 +94,29 @@ func (l *LeaderClientWithLock[T]) Close() {
 	}
 }
 
+// rpcLimiter is a customized rate limiter, which delegates Allow of rate.Limiter,
+// and provides an allow list with a higher priority.
+type rpcLimiter struct {
+	limiter   *rate.Limiter
+	allowList []string
+}
+
+func newRPCLimiter(limiter *rate.Limiter, allowList []string) *rpcLimiter {
+	return &rpcLimiter{
+		limiter:   limiter,
+		allowList: allowList,
+	}
+}
+
+func (rl *rpcLimiter) Allow(methodName string) bool {
+	for _, name := range rl.allowList {
+		if name == methodName {
+			return true
+		}
+	}
+	return rl.limiter.Allow()
+}
+
 // PreRPCHook provides some common functionality that should be executed before
 // some RPC, like "forward to leader", "checking rate limit". It should be embedded
 // into an RPC server struct and call PreRPCHook.PreRPC() for every RPC method.
@@ -120,7 +143,7 @@ type preRPCHookImpl[T RPCClientType] struct {
 	initialized *atomic.Bool
 
 	// rate limiter
-	limiter *rate.Limiter
+	limiter *rpcLimiter
 }
 
 // NewPreRPCHook creates a new preRPCHookImpl
@@ -130,13 +153,15 @@ func NewPreRPCHook[T RPCClientType](
 	leaderCli *LeaderClientWithLock[T],
 	initialized *atomic.Bool,
 	limiter *rate.Limiter,
-) *preRPCHookImpl[T] {
+	rpcLimiterAllowList []string,
+) PreRPCHook {
+	rpcLim := newRPCLimiter(limiter, rpcLimiterAllowList)
 	return &preRPCHookImpl[T]{
 		id:          id,
 		leader:      leader,
 		leaderCli:   leaderCli,
 		initialized: initialized,
-		limiter:     limiter,
+		limiter:     rpcLim,
 	}
 }
 
@@ -171,7 +196,7 @@ func (h preRPCHookImpl[T]) PreRPC(
 
 func (h preRPCHookImpl[T]) logRateLimit(methodName string, req interface{}) {
 	// TODO: rate limiter based on different sender
-	if h.limiter.Allow() {
+	if h.limiter.Allow(methodName) {
 		log.Info("", zap.Any("payload", req), zap.String("request", methodName))
 	}
 }

@@ -74,6 +74,7 @@ func TestLeaderLoopSuccess(t *testing.T) {
 		s.masterCli,
 		&s.leaderInitialized,
 		s.rpcLogRL,
+		nil,
 	)
 	s.masterRPCHook = preRPCHook
 	sessionCfg, err := s.generateSessionConfig()
@@ -134,6 +135,7 @@ func TestLeaderLoopMeetStaleData(t *testing.T) {
 		s.masterCli,
 		&s.leaderInitialized,
 		s.rpcLogRL,
+		nil,
 	)
 	s.masterRPCHook = preRPCHook
 
@@ -209,6 +211,7 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 			s.masterCli,
 			&s.leaderInitialized,
 			s.rpcLogRL,
+			nil,
 		)
 		s.masterRPCHook = preRPCHook
 		s.leaderServiceFn = mockLeaderServiceFn

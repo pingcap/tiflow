@@ -16,7 +16,7 @@ package executor
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -53,7 +53,7 @@ func TestStartTCPSrv(t *testing.T) {
 	port, err := freeport.GetFreePort()
 	require.Nil(t, err)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	cfg.WorkerAddr = addr
+	cfg.Addr = addr
 	s := NewServer(cfg, nil)
 
 	s.grpcSrv = grpc.NewServer()
@@ -87,7 +87,7 @@ func testPprof(t *testing.T, addr string) {
 		require.Nil(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
-		_, err = ioutil.ReadAll(resp.Body)
+		_, err = io.ReadAll(resp.Body)
 		require.Nil(t, err)
 	}
 }
@@ -101,7 +101,7 @@ func testPrometheusMetrics(t *testing.T, addr string) {
 		require.Nil(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
-		_, err = ioutil.ReadAll(resp.Body)
+		_, err = io.ReadAll(resp.Body)
 		require.Nil(t, err)
 	}
 }
@@ -112,7 +112,7 @@ func TestCollectMetric(t *testing.T) {
 	port, err := freeport.GetFreePort()
 	require.Nil(t, err)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	cfg.WorkerAddr = addr
+	cfg.Addr = addr
 	s := NewServer(cfg, nil)
 	s.taskRunner = worker.NewTaskRunner(defaultRuntimeIncomingQueueLen, defaultRuntimeInitConcurrency)
 
@@ -135,7 +135,7 @@ func testCustomedPrometheusMetrics(t *testing.T, addr string) {
 		require.Nil(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		require.Nil(t, err)
 		metric := string(body)
 		return strings.Contains(metric, "dataflow_executor_task_num")

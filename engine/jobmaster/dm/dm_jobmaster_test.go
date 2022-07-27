@@ -17,7 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -32,8 +32,8 @@ import (
 	"go.uber.org/dig"
 
 	"github.com/pingcap/tiflow/dm/checker"
-	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/master"
+	dmconfig "github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/master"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/engine/framework"
 	libMetadata "github.com/pingcap/tiflow/engine/framework/metadata"
@@ -123,7 +123,7 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 	dctx = dctx.WithDeps(dp)
 
 	// submit-job
-	cfgBytes, err := ioutil.ReadFile(jobTemplatePath)
+	cfgBytes, err := os.ReadFile(jobTemplatePath)
 	require.NoError(t.T(), err)
 	jobmaster, err := registry.GlobalWorkerRegistry().CreateWorker(dctx, framework.DMJobMaster, "dm-jobmaster", libMetadata.JobManagerUUID, cfgBytes)
 	require.NoError(t.T(), err)

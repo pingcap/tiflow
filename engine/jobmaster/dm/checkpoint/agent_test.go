@@ -22,7 +22,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/errors"
-	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
+	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/stretchr/testify/require"
 
@@ -44,6 +44,7 @@ func TestCheckpoint(t *testing.T) {
 	jobCfg := &config.JobCfg{Name: "test", MetaSchema: "meta", TaskMode: dmconfig.ModeAll}
 	db, mock, err := conn.InitMockDBFull()
 	require.NoError(t, err)
+	defer db.Close()
 	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS %s`, "`meta`"))).WillReturnResult(sqlmock.NewResult(1, 1))
 	require.NoError(t, createMetaDatabase(context.Background(), jobCfg, conn.NewBaseDB(db)))
 

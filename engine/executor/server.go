@@ -22,16 +22,8 @@ import (
 	"time"
 
 	perrors "github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	pkgClient "github.com/pingcap/tiflow/engine/pkg/client"
-	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
-	"golang.org/x/time/rate"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
-	"github.com/pingcap/tiflow/dm/dm/common"
+	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/dm/common"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/server"
 	"github.com/pingcap/tiflow/engine/executor/worker"
@@ -41,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/engine/framework/registry"
 	"github.com/pingcap/tiflow/engine/framework/taskutil"
 	"github.com/pingcap/tiflow/engine/model"
+	pkgClient "github.com/pingcap/tiflow/engine/pkg/client"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
@@ -58,6 +51,12 @@ import (
 	p2pImpl "github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // Server is a executor server abstraction
@@ -88,6 +87,8 @@ type Server struct {
 
 // NewServer creates a new executor server instance
 func NewServer(cfg *Config, ctx *test.Context) *Server {
+	log.Info("creating executor", zap.Stringer("config", cfg))
+
 	registerWorkerOnce.Do(registerWorkers)
 	s := Server{
 		cfg:     cfg,
@@ -131,7 +132,7 @@ func (s *Server) buildDeps() (*deps.Deps, error) {
 	}
 
 	err = deps.Provide(func() pkgClient.ExecutorGroup {
-		return pkgClient.NewExecutorGroup(nil, log.L().Logger)
+		return pkgClient.NewExecutorGroup(nil, log.L())
 	})
 	if err != nil {
 		return nil, err
@@ -283,7 +284,7 @@ func (s *Server) Stop() {
 }
 
 func (s *Server) startForTest(ctx context.Context) (err error) {
-	s.mockSrv, err = mock.NewExecutorServer(s.cfg.WorkerAddr, s)
+	s.mockSrv, err = mock.NewExecutorServer(s.cfg.Addr, s)
 	if err != nil {
 		return err
 	}
@@ -419,14 +420,14 @@ func (s *Server) Run(ctx context.Context) error {
 
 // startTCPService starts grpc server and http server
 func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error {
-	tcpServer, err := tcpserver.NewTCPServer(s.cfg.WorkerAddr, &security.Credential{})
+	tcpServer, err := tcpserver.NewTCPServer(s.cfg.Addr, &security.Credential{})
 	if err != nil {
 		return err
 	}
 	s.tcpServer = tcpServer
 	pb.RegisterExecutorServer(s.grpcSrv, s)
 	pb.RegisterBrokerServiceServer(s.grpcSrv, s.resourceBroker)
-	log.L().Info("listen address", zap.String("addr", s.cfg.WorkerAddr))
+	log.Info("listen address", zap.String("addr", s.cfg.Addr))
 
 	wg.Go(func() error {
 		return s.tcpServer.Run(ctx)
@@ -467,7 +468,7 @@ func (s *Server) initClients(ctx context.Context) (err error) {
 	if err != nil {
 		log.L().Info("master client init Failed",
 			zap.String("server-addrs", s.cfg.Join),
-			log.ShortError(err))
+			logutil.ShortError(err))
 		return err
 	}
 	log.L().Info("master client init successful",

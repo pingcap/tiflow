@@ -9,6 +9,7 @@ import "resources.proto";
 
 service Discovery {
     rpc RegisterExecutor(RegisterExecutorRequest) returns(RegisterExecutorResponse) {}
+
     rpc Heartbeat(HeartbeatRequest) returns(HeartbeatResponse) {}
 
     /* Metastore manager API */
@@ -38,8 +39,6 @@ service JobManager {
     rpc PauseJob(PauseJobRequest) returns(PauseJobResponse) {}
 
     rpc CancelJob(CancelJobRequest) returns(CancelJobResponse) {}
-
-    rpc DebugJob(DebugJobRequest) returns(DebugJobResponse) {}
 }
 
 message HeartbeatRequest {
@@ -164,15 +163,4 @@ message PersistResourceRequest {
 
 message PersistResourceResponse {
     Error err = 1;
-}
-
-message DebugJobRequest {
-    string job_id = 1;
-    string command = 2;
-    string json_arg = 3;
-}
-
-message DebugJobResponse {
-    Error err = 1;
-    string json_ret = 2;
 }
