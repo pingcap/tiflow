@@ -79,7 +79,6 @@ func GetTopicManagerAndTryCreateTopic(
 	client sarama.Client,
 	adminClient pkafka.ClusterAdminClient,
 ) (manager.TopicManager, error) {
-
 	topicManager, err := manager.NewKafkaTopicManager(
 		client,
 		adminClient,
