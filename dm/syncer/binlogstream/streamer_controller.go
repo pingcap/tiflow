@@ -122,7 +122,7 @@ func (r *remoteBinlogReader) GenerateStreamer(location binlog.Location) (reader.
 
 // StreamerController controls the streamer for read binlog, include:
 // 1. reset streamer to a binlog position or GTID
-// 2. read next binlog event (TODO: and maintain the locations of the events)
+// 2. read next binlog event
 // 3. transfer from local streamer to remote streamer.
 type StreamerController struct {
 	sync.RWMutex
@@ -147,7 +147,6 @@ type StreamerController struct {
 	// lastEventFromUpstream is the last event from upstream, and not sent to caller
 	// yet. It should be set to nil after sent to caller.
 	lastEventFromUpstream *replication.BinlogEvent
-	currBinlogFile        string // TODO: should be replaced by location recorder
 
 	// meetError means meeting error when get binlog event
 	// if binlogType is local and meetError is true, then need to create remote binlog stream
@@ -345,14 +344,12 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (
 	defer func() {
 		if err == nil {
 			c.locations.update(event)
-			// TODO: data race?
 			c.locations.curEndLocation.Suffix = suffix
 		}
 	}()
 
 	appendRelaySubDir := func() (*replication.BinlogEvent, pb.ErrorOp, error) {
 		if ev, ok := event.Event.(*replication.RotateEvent); ok {
-			c.currBinlogFile = string(ev.NextLogName)
 			// if is local binlog but switch to remote on error, need to add uuid information in binlog's name
 			// nolint:dogsled
 			_, relaySubDirSuffix, _, _ := utils.SplitFilenameWithUUIDSuffix(string(ev.NextLogName))
@@ -412,7 +409,7 @@ LOOP:
 		}
 
 		startPos := mysql.Position{
-			Name: c.currBinlogFile,
+			Name: c.locations.curEndLocation.Position.Name,
 			Pos:  c.lastEventFromUpstream.Header.LogPos - c.lastEventFromUpstream.Header.EventSize,
 		}
 		cmp := binlog.ComparePosition(startPos, frontOp.pos)
@@ -640,7 +637,7 @@ func (c *StreamerController) GetCurStartLocation() binlog.Location {
 }
 
 func (c *StreamerController) GetCurEndLocation() binlog.Location {
-	return c.locations.getCurEndLocation()
+	return c.locations.curEndLocation
 }
 
 func (c *StreamerController) GetTxnEndLocation() binlog.Location {

@@ -137,7 +137,6 @@ func TestGetEventWithInject(t *testing.T) {
 	producer := &mockStreamProducer{upstream}
 
 	controller := NewStreamerController4Test(producer, upstream)
-	controller.currBinlogFile = "bin.000001"
 
 	injectReq := &pb.HandleWorkerErrorRequest{
 		Op:        pb.ErrorOp_Inject,
@@ -155,10 +154,12 @@ func TestGetEventWithInject(t *testing.T) {
 	}
 	err := controller.Set(injectReq, injectEvents)
 	require.NoError(t, err)
-	controller.streamModifier.reset(binlog.Location{Position: mysql.Position{
+	loc := binlog.Location{Position: mysql.Position{
 		Name: "bin.000001",
 		Pos:  1000,
-	}})
+	}}
+	controller.streamModifier.reset(loc)
+	controller.locations.reset(loc)
 
 	expecteds := []expectedInfo{
 		{1010, 0, nil, pb.ErrorOp_InvalidErrorOp},
@@ -185,7 +186,6 @@ func TestGetEventWithReplace(t *testing.T) {
 	producer := &mockStreamProducer{upstream}
 
 	controller := NewStreamerController4Test(producer, upstream)
-	controller.currBinlogFile = "bin.000001"
 
 	replaceReq := &pb.HandleWorkerErrorRequest{
 		Op:        pb.ErrorOp_Replace,
@@ -203,10 +203,12 @@ func TestGetEventWithReplace(t *testing.T) {
 	}
 	err := controller.Set(replaceReq, replaceEvents)
 	require.NoError(t, err)
-	controller.streamModifier.reset(binlog.Location{Position: mysql.Position{
+	loc := binlog.Location{Position: mysql.Position{
 		Name: "bin.000001",
 		Pos:  1000,
-	}})
+	}}
+	controller.streamModifier.reset(loc)
+	controller.locations.reset(loc)
 
 	expecteds := []expectedInfo{
 		{1010, 0, nil, pb.ErrorOp_InvalidErrorOp},
@@ -232,7 +234,6 @@ func TestGetEventWithSkip(t *testing.T) {
 	producer := &mockStreamProducer{upstream}
 
 	controller := NewStreamerController4Test(producer, upstream)
-	controller.currBinlogFile = "bin.000001"
 
 	replaceReq := &pb.HandleWorkerErrorRequest{
 		Op:        pb.ErrorOp_Skip,
@@ -240,10 +241,12 @@ func TestGetEventWithSkip(t *testing.T) {
 	}
 	err := controller.Set(replaceReq, nil)
 	require.NoError(t, err)
-	controller.streamModifier.reset(binlog.Location{Position: mysql.Position{
+	loc := binlog.Location{Position: mysql.Position{
 		Name: "bin.000001",
 		Pos:  1000,
-	}})
+	}}
+	controller.streamModifier.reset(loc)
+	controller.locations.reset(loc)
 
 	expecteds := []expectedInfo{
 		{1010, 0, nil, pb.ErrorOp_InvalidErrorOp},
@@ -284,3 +287,5 @@ func checkGetEvent(t *testing.T, controller *StreamerController, expecteds []exp
 	_, _, err := controller.GetEvent(ctx)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 }
+
+// TODO: check GTID set is correctly forwarded

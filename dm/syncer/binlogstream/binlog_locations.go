@@ -73,18 +73,6 @@ func (l *locationRecorder) reset(loc binlog.Location) {
 	l.txnEndLocation = clone
 }
 
-func (l *locationRecorder) getCurEndLocation() binlog.Location {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.curEndLocation
-}
-
-func (l *locationRecorder) setCurEndLocation(location binlog.Location) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.curEndLocation = location
-}
-
 func (l *locationRecorder) saveTxnEndLocation() {
 	l.txnEndLocation = l.curEndLocation.Clone()
 }
