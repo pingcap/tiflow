@@ -42,7 +42,8 @@ func TestNewOrmLogger(t *testing.T) {
 
 	logger := NewOrmLogger(lg, WithSlowThreshold(3*time.Second))
 	logger.Info(context.TODO(), "%s test", "info")
-	// expect no log here
+	require.Equal(t, 0, len(buffer.Lines()))
+
 	logger.Warn(context.TODO(), "%s test", "warn")
 	require.Regexp(t, regexp.QuoteMeta("warn test"), buffer.Stripped())
 	buffer.Reset()
@@ -53,7 +54,8 @@ func TestNewOrmLogger(t *testing.T) {
 
 	fc := func() (sql string, rowsAffected int64) { return "sql test", 10 }
 	logger.Trace(context.TODO(), time.Now(), fc, nil)
-	// expect no log here
+	require.Equal(t, 0, len(buffer.Lines()))
+
 	logger.Trace(context.TODO(), time.Now().Add(-10*time.Second), fc, errors.New("error test"))
 	require.Regexp(t, regexp.MustCompile(`\["slow log"\] \[elapsed=10.*s\] \[sql="sql test"\] \[affected-rows=10\] \[error="error test"\]`), buffer.Stripped())
 	buffer.Reset()
