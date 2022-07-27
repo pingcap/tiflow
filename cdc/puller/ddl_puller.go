@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
-	timeta "github.com/pingcap/tidb/meta"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/contextutil"
@@ -54,6 +53,7 @@ const (
 )
 
 // DDLJobPuller is used to pull ddl job from TiKV.
+// It's used by processor and ddlPullerImpl.
 type DDLJobPuller interface {
 	// Run starts the DDLJobPuller.
 	Run(ctx context.Context) error
@@ -61,6 +61,8 @@ type DDLJobPuller interface {
 	Output() <-chan *model.DDLJobEntry
 }
 
+// Note: All unexported methods of `ddlJobPullerImpl` should
+// be called in the same one goroutine.
 type ddlJobPullerImpl struct {
 	changefeedID   model.ChangeFeedID
 	puller         Puller
@@ -69,31 +71,32 @@ type ddlJobPullerImpl struct {
 	resolvedTs     uint64
 	schemaVersion  int64
 	filter         filter.Filter
-	// tableInfo is initialized when receive the first concurrent DDL job.
+	// ddlJobsTable is initialized when receive the first concurrent DDL job.
 	// It holds the info of table `tidb_ddl_jobs` of upstream TiDB.
-	tableInfo *model.TableInfo
+	ddlJobsTable *model.TableInfo
 	// It holds the column id of `job_meta` in table `tidb_ddl_jobs`.
-	columnID                  int64
+	jobMetaColumnID           int64
 	outputCh                  chan *model.DDLJobEntry
 	metricDiscardedDDLCounter prometheus.Counter
 }
 
 // Run starts the DDLJobPuller.
 func (p *ddlJobPullerImpl) Run(ctx context.Context) error {
-	g, ctx := errgroup.WithContext(ctx)
+	eg, ctx := errgroup.WithContext(ctx)
 
-	g.Go(func() error {
+	eg.Go(func() error {
 		return errors.Trace(p.puller.Run(ctx))
 	})
 
 	rawDDLCh := memory.SortOutput(ctx, p.puller.Output())
-
+	log.Info("fizz start!")
 	for {
 		var ddlRawKV *model.RawKVEntry
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case ddlRawKV = <-rawDDLCh:
+			log.Info("fizz got!", zap.Any("ddlRawKV", ddlRawKV))
 		}
 		if ddlRawKV == nil {
 			continue
@@ -107,17 +110,16 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context) error {
 
 		job, err := p.unmarshalDDL(ddlRawKV)
 		if err != nil {
-			log.Error("unmarshal ddl job failed", zap.Error(err))
 			return errors.Trace(err)
 		}
 
 		if job != nil {
-			log.Info("fizz: get ddl job", zap.String("job", job.String()), zap.String("query", job.Query))
+			log.Info("fizz: get ddl job",
+				zap.String("job", job.String()),
+				zap.String("query", job.Query))
 		}
 
-		// Only nil in test.
-		// TODO(dongmen-fizz): remove this after rewrite test.
-		if p.schemaSnapshot != nil {
+		if ddlRawKV.OpType == model.OpTypePut {
 			skip, err := p.handleJob(job)
 			if err != nil {
 				log.Error("fizz: ddl job handler error", zap.Error(err))
@@ -135,7 +137,9 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context) error {
 			Err:    err,
 		}
 		if job != nil {
-			log.Info("fizz: sent ddl job entry", zap.String("query", job.Query), zap.String("job", job.String()))
+			log.Info("fizz: sent ddl job entry",
+				zap.String("query", job.Query),
+				zap.String("job", job.String()))
 		}
 		select {
 		case <-ctx.Done():
@@ -184,8 +188,8 @@ func (p *ddlJobPullerImpl) initJobTableMeta() error {
 		return errors.Trace(err)
 	}
 
-	p.tableInfo = model.WrapTableInfo(db.ID, db.Name.L, 0, tableInfo)
-	p.columnID = col.ID
+	p.ddlJobsTable = model.WrapTableInfo(db.ID, db.Name.L, 0, tableInfo)
+	p.jobMetaColumnID = col.ID
 	return nil
 }
 
@@ -193,50 +197,20 @@ func (p *ddlJobPullerImpl) unmarshalDDL(rawKV *model.RawKVEntry) (*timodel.Job, 
 	if rawKV.OpType != model.OpTypePut {
 		return nil, nil
 	}
-	if p.tableInfo == nil && !entry.IsLegacyFormatJob(rawKV) {
+	if p.ddlJobsTable == nil && !entry.IsLegacyFormatJob(rawKV) {
 		err := p.initJobTableMeta()
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 	}
-	return entry.ParseDDLJob(p.tableInfo, rawKV, p.columnID)
+	return entry.ParseDDLJob(p.ddlJobsTable, rawKV, p.jobMetaColumnID)
 }
 
-func findDBByName(dbs []*timodel.DBInfo, name string) (*timodel.DBInfo, error) {
-	for _, db := range dbs {
-		if db.Name.L == name {
-			return db, nil
-		}
-	}
-
-	return nil, cerror.WrapError(cerror.ErrDDLSchemaNotFound, errors.Errorf("can't find schema %s", name))
-}
-
-func findTableByName(tbls []*timodel.TableInfo, name string) (*timodel.TableInfo, error) {
-	for _, t := range tbls {
-		if t.Name.L == name {
-			return t, nil
-		}
-	}
-
-	return nil, cerror.WrapError(cerror.ErrDDLSchemaNotFound, errors.Errorf("can't find table %s", name))
-}
-
-func findColumnByName(cols []*timodel.ColumnInfo, name string) (*timodel.ColumnInfo, error) {
-	for _, c := range cols {
-		if c.Name.L == name {
-			return c, nil
-		}
-	}
-
-	return nil, cerror.WrapError(cerror.ErrDDLSchemaNotFound, errors.Errorf("can't find column %s", name))
-}
-
-// handleRenameTables handles the rename tables DDL job.
-// Since TiDB treats rename multiple tables as a single DDL job,
-// we need to handle it separately.
+// handleRenameTables gets all the tables that are renamed
+// in the DDL job out and filter them one by one, if a table is
+// filtered, it will be remove from `job.BinlogInfo.MultipleTableInfos`.
+// If all the tables are filtered, skip will be true.
 func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err error) {
-	// parseRenameTables gets a list of DDLEvent from a rename tables DDL job.
 	var (
 		oldSchemaIDs, newSchemaIDs, oldTableIDs []int64
 		newTableNames, oldSchemaNames           []*timodel.CIStr
@@ -267,8 +241,7 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 		preTableInfo, ok := p.schemaSnapshot.PhysicalTableByID(tableInfo.ID)
 		if !ok {
 			// If we can not find a table by its id in schemaSnapshot,
-			// it means we didn't replicate the table before,
-			// so we can just ignore it here.
+			// it means we didn't replicate the table before, skip it.
 			log.Info("table not found", zap.Int64("tableID", tableInfo.ID),
 				zap.String("tableName", tableInfo.Name.O))
 			continue
@@ -277,8 +250,7 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 		oldSchemaName := oldSchemaNames[i].L // fizz: 因为 filter 可能是大小写敏感的，这里需要测一下
 		oldTableName := preTableInfo.Name.O
 
-		// We only filter out the rename tables subJob by its
-		// old schema name and old table name.
+		// We only filter out the rename tables by its old schema name and old table name.
 		if p.filter.ShouldDiscardDDL(job.Type, oldSchemaName, oldTableName) {
 			continue
 		}
@@ -297,37 +269,32 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 	}
 
 	newArgs := make([]json.RawMessage, 5)
-	v, err := json.Marshal(remainOldSchemaIDs)
+	newArgs[0], err = json.Marshal(remainOldSchemaIDs)
 	if err != nil {
 		return true, errors.Trace(err)
 	}
-	newArgs[0] = v
-	v, err = json.Marshal(remainNewSchemaIDs)
+	newArgs[1], err = json.Marshal(remainNewSchemaIDs)
 	if err != nil {
 		return true, errors.Trace(err)
 	}
-	newArgs[1] = v
-	v, err = json.Marshal(remainNewTableNames)
+	newArgs[2], err = json.Marshal(remainNewTableNames)
 	if err != nil {
 		return true, errors.Trace(err)
 	}
-	newArgs[2] = v
-	v, err = json.Marshal(remainOldTableIDs)
+	newArgs[3], err = json.Marshal(remainOldTableIDs)
 	if err != nil {
 		return true, errors.Trace(err)
 	}
-	newArgs[3] = v
-	v, err = json.Marshal(remainOldSchemaNames)
+	newArgs[4], err = json.Marshal(remainOldSchemaNames)
 	if err != nil {
 		return true, errors.Trace(err)
 	}
-	newArgs[4] = v
 
-	newRawArgs, err := json.Marshal(newArgs)
+	job.RawArgs, err = json.Marshal(newArgs)
 	if err != nil {
 		return true, errors.Trace(err)
 	}
-	job.RawArgs = newRawArgs
+
 	job.BinlogInfo.MultipleTableInfos = newMultiTableInfos
 	return false, nil
 }
@@ -335,22 +302,17 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 // handleJob handles the DDL job.
 // It split rename tables DDL job and fill the job table name.
 func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
-	if job == nil {
+	// Only nil in test.
+	if p.schemaSnapshot == nil {
 		return false, nil
 	}
-
-	defer func() {
-		if err != nil {
-			log.Error("handle job error", zap.Error(err))
-		}
-	}()
 
 	if job.BinlogInfo.FinishedTS <= p.resolvedTs ||
 		job.BinlogInfo.SchemaVersion <= p.schemaVersion {
 		log.Info("ddl job finishedTs less than puller resolvedTs,"+
 			"discard the ddl job",
-			zap.Uint64("pullerResolvedTs", p.resolvedTs),
 			zap.Uint64("jobFinishedTS", job.BinlogInfo.FinishedTS),
+			zap.Uint64("pullerResolvedTs", p.resolvedTs),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.String("schema", job.SchemaName),
@@ -374,8 +336,10 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		}
 	case timodel.ActionRenameTable:
 		table, ok := p.schemaSnapshot.PhysicalTableByID(job.TableID)
+		// If we can not find a table by its id in schemaSnapshot,
+		// it means we didn't replicate the table before, skip it.
 		if !ok {
-			log.Warn("ddl table not found in schema snapshot, ignore it",
+			log.Warn("ddl table not found in schema snapshot, skip it",
 				zap.Int64("tableID", job.TableID),
 				zap.String("job", job.String()),
 				zap.String("query", job.Query))
@@ -386,7 +350,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		if err := p.schemaSnapshot.FillSchemaName(job); err != nil {
 			return true, errors.Trace(err)
 		}
-		// nil means it is a schema ddl job, we don't need to fill the table name.
+		// nil means it is a schema ddl job, it's no need to fill the table name.
 		if job.BinlogInfo.TableInfo != nil {
 			job.TableName = job.BinlogInfo.TableInfo.Name.O
 		}
@@ -400,9 +364,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 				zap.String("schema", job.SchemaName),
 				zap.String("table", job.TableName),
 				zap.String("query", job.Query),
-				zap.String("job", job.String()),
-				zap.Uint64("pullerResolvedTs", p.resolvedTs),
-				zap.Uint64("jobFinishedTS", job.BinlogInfo.FinishedTS))
+				zap.String("job", job.String()))
 			p.metricDiscardedDDLCounter.Inc()
 			return true, nil
 		}
@@ -410,7 +372,10 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 
 	err = p.schemaSnapshot.HandleDDL(job)
 	if err != nil {
-		log.Error("handle ddl job failed", zap.String("job", job.String()), zap.Error(err))
+		log.Error("handle ddl job failed",
+			zap.String("query", job.Query),
+			zap.String("job", job.String()),
+			zap.Error(err))
 		return true, errors.Trace(err)
 	}
 
@@ -420,7 +385,41 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 	return false, nil
 }
 
-// NewDDLJobPuller creates a new NewDDLJobPuller, which fetches events starting event start from checkpointTs.
+func findDBByName(dbs []*timodel.DBInfo, name string) (*timodel.DBInfo, error) {
+	for _, db := range dbs {
+		if db.Name.L == name {
+			return db, nil
+		}
+	}
+	return nil, cerror.WrapError(
+		cerror.ErrDDLSchemaNotFound,
+		errors.Errorf("can't find schema %s", name))
+}
+
+func findTableByName(tbls []*timodel.TableInfo, name string) (*timodel.TableInfo, error) {
+	for _, t := range tbls {
+		if t.Name.L == name {
+			return t, nil
+		}
+	}
+	return nil, cerror.WrapError(
+		cerror.ErrDDLSchemaNotFound,
+		errors.Errorf("can't find table %s", name))
+}
+
+func findColumnByName(cols []*timodel.ColumnInfo, name string) (*timodel.ColumnInfo, error) {
+	for _, c := range cols {
+		if c.Name.L == name {
+			return c, nil
+		}
+	}
+	return nil, cerror.WrapError(
+		cerror.ErrDDLSchemaNotFound,
+		errors.Errorf("can't find column %s", name))
+}
+
+// NewDDLJobPuller creates a new NewDDLJobPuller,
+// which fetches ddl events start from checkpointTs.
 func NewDDLJobPuller(
 	ctx context.Context,
 	pdCli pd.Client,
@@ -433,13 +432,9 @@ func NewDDLJobPuller(
 	replicaConfig *config.ReplicaConfig,
 	changefeed model.ChangeFeedID,
 ) (DDLJobPuller, error) {
-	var meta *timeta.Meta
-	if kvStorage != nil {
-		var err error
-		meta, err = kv.GetSnapshotMeta(kvStorage, checkpointTs)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
+	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 	schemaSnap, err := schema.NewSingleSnapshotFromMeta(meta, checkpointTs, replicaConfig.ForceReplicate)
 	if err != nil {
@@ -454,9 +449,19 @@ func NewDDLJobPuller(
 		changefeedID:   changefeed,
 		filter:         f,
 		schemaSnapshot: schemaSnap,
-		puller:         New(ctx, pdCli, grpcPool, regionCache, kvStorage, pdClock, checkpointTs, regionspan.GetAllDDLSpan(), cfg, changefeed),
-		kvStorage:      kvStorage,
-		outputCh:       make(chan *model.DDLJobEntry, defaultPullerOutputChanSize),
+		puller: New(
+			ctx,
+			pdCli,
+			grpcPool,
+			regionCache,
+			kvStorage,
+			pdClock,
+			checkpointTs,
+			regionspan.GetAllDDLSpan(),
+			cfg,
+			changefeed),
+		kvStorage: kvStorage,
+		outputCh:  make(chan *model.DDLJobEntry, defaultPullerOutputChanSize),
 		metricDiscardedDDLCounter: discardedDDLCounter.
 			WithLabelValues(changefeed.Namespace, changefeed.ID),
 	}, nil
@@ -531,7 +536,7 @@ func NewDDLPuller(ctx context.Context,
 }
 
 func (h *ddlPullerImpl) handleDDLJobEntry(jobEntry *model.DDLJobEntry) error {
-	if jobEntry.OpType == model.OpTypeResolved { // fizz: Resolved event 是一个空的 ddl 只是用来推进 resolvedTS
+	if jobEntry.OpType == model.OpTypeResolved {
 		if jobEntry.CRTs > atomic.LoadUint64(&h.resolvedTS) {
 			h.lastResolvedTsAdvancedTime = h.clock.Now()
 			atomic.StoreUint64(&h.resolvedTS, jobEntry.CRTs)
@@ -545,6 +550,7 @@ func (h *ddlPullerImpl) handleDDLJobEntry(jobEntry *model.DDLJobEntry) error {
 	if job == nil {
 		return nil
 	}
+	log.Info("[ddl] handleDDLJobEntry", zap.String("job", job.String()))
 	if job.ID == h.lastDDLJobID {
 		log.Warn("ignore duplicated DDL job",
 			zap.String("namespace", h.changefeedID.Namespace),
@@ -621,7 +627,7 @@ func (h *ddlPullerImpl) FrontDDL() (uint64, *timodel.Job) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if len(h.pendingDDLJobs) == 0 {
-		return atomic.LoadUint64(&h.resolvedTS), nil // fizz: 没有 ddl job 就返回上次的 resolvedTs
+		return atomic.LoadUint64(&h.resolvedTS), nil
 	}
 	job := h.pendingDDLJobs[0]
 	return job.BinlogInfo.FinishedTS, job
