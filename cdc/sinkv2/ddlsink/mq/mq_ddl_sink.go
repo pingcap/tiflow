@@ -129,7 +129,7 @@ func (k *ddlSink) WriteCheckpointTs(ctx context.Context,
 	if msg == nil {
 		return nil
 	}
-	// NOTICE: When there is no table sync,
+	// NOTICE: When there are no tables to replicate,
 	// we need to send checkpoint ts to the default topic.
 	// This will be compatible with the old behavior.
 	if len(tables) == 0 {
