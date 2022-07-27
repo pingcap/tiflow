@@ -30,36 +30,23 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/openapi"
 	engineModel "github.com/pingcap/tiflow/engine/model"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"github.com/pingcap/tiflow/engine/test/e2e"
 	"github.com/pingcap/tiflow/tests/integration_tests/util"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 const (
 	baseURL = "http://127.0.0.1:10245/api/v1/jobs/%s"
 )
 
-func newJobManagerClient(endpoint string) (enginepb.JobManagerClient, error) {
-	conn, err := grpc.Dial(
-		endpoint,
-		grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	return enginepb.NewJobManagerClient(conn), nil
-}
-
 func TestDMJob(t *testing.T) {
-	client, err := newJobManagerClient("http://127.0.0.1:10245")
+	client, err := e2e.NewJobManagerClient("http://127.0.0.1:10245")
 	require.NoError(t, err)
 
 	mysqlCfg := util.DBConfig{

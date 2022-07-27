@@ -152,7 +152,7 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr stri
 		Tp:     int32(engineModel.JobTypeCVSDemo),
 		Config: configBytes,
 	})
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Nil(t, resp.Err)
 
 	fmt.Printf("job id %s\n", resp.JobId)

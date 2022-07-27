@@ -26,6 +26,7 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/fake"
@@ -62,6 +63,18 @@ type FakeJobConfig struct {
 	KeyPrefix     string
 }
 
+// NewJobManagerClient returns a pb.JobManagerClient that can be used for tests.
+func NewJobManagerClient(endpoint string) (pb.JobManagerClient, error) {
+	conn, err := grpc.Dial(
+		endpoint,
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return pb.NewJobManagerClient(conn), nil
+}
+
 // NewUTCli creates a new ChaosCli instance
 func NewUTCli(ctx context.Context, masterAddrs, businessMetaAddrs []string, project tenant.ProjectInfo,
 	cfg *FakeJobConfig,
@@ -70,13 +83,10 @@ func NewUTCli(ctx context.Context, masterAddrs, businessMetaAddrs []string, proj
 		panic("length of masterAddrs is 0")
 	}
 
-	// TODO support TLS.
-	grpcConn, err := grpc.Dial(masterAddrs[0])
+	jobManagerCli, err := NewJobManagerClient(masterAddrs[0])
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, err
 	}
-
-	jobManagerCli := pb.NewJobManagerClient(grpcConn)
 
 	conf := server.NewDefaultBusinessMetaConfig()
 	conf.Endpoints = businessMetaAddrs
