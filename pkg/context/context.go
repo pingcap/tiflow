@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
@@ -188,7 +189,7 @@ func NewContext4Test(baseCtx context.Context, withChangefeedVars bool) Context {
 		CaptureInfo: &model.CaptureInfo{
 			ID:            "capture-id-test",
 			AdvertiseAddr: "127.0.0.1:0000",
-			Version:       "v6.2.0",
+			Version:       version.ReleaseVersion,
 		},
 		EtcdClient: &etcd.CDCEtcdClient{
 			ClusterID: etcd.DefaultCDCClusterID,

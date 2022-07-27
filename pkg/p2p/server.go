@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -832,18 +831,6 @@ func (m *MessageServer) verifyStreamMeta(streamMeta *p2p.StreamMeta) error {
 		)
 	}
 
-	if m.config.ServerVersion == "" || streamMeta.ClientVersion == "" {
-		// skip checking versions
-		return nil
-	}
-
-	// server and client version should in the range [minTiCDCVersion, maxTiCDCVersion)
-	versions := make(map[string]struct{}, 2)
-	versions[m.config.ServerVersion] = struct{}{}
-	versions[streamMeta.ClientVersion] = struct{}{}
-	if version.CheckTiCDCVersion(versions) {
-		return cerror.ErrVersionIncompatible.GenWithStackByArgs(versions)
-	}
 	return nil
 }
 
