@@ -142,6 +142,7 @@ type StreamerController struct {
 	streamer         reader.Streamer
 	streamerProducer StreamerProducer
 	*streamModifier
+	locations *locationRecorder
 
 	// lastEventFromUpstream is the last event from upstream, and not sent to caller
 	// yet. It should be set to nil after sent to caller.
@@ -198,6 +199,7 @@ func NewStreamerController(
 		closed:            true,
 		relay:             relay,
 		streamModifier:    newStreamModifier(logger),
+		locations:         &locationRecorder{},
 	}
 
 	return streamerController
@@ -288,6 +290,7 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 	c.streamer, err = c.streamerProducer.GenerateStreamer(location)
 	if err == nil {
 		c.streamModifier.reset(location)
+		c.locations.reset(location)
 		c.lastEventFromUpstream = nil
 	}
 	return err

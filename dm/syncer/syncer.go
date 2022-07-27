@@ -233,7 +233,6 @@ type Syncer struct {
 	firstMeetBinlogTS *int64
 	exitSafeModeTS    *int64 // TS(in binlog header) need to exit safe mode.
 
-	locations *locationRecorder
 	// initial executed binlog location, set once for each instance of syncer.
 	initExecutedLoc *binlog.Location
 
@@ -292,7 +291,6 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	}
 	syncer.lastCheckpointFlushedTime = time.Time{}
 	syncer.relay = relay
-	syncer.locations = &locationRecorder{}
 
 	syncer.shardDDL = NewShardDDL(&logger, syncer)
 	return syncer
@@ -1782,7 +1780,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	s.tctx.L().Info("replicate binlog from checkpoint", zap.Stringer("checkpoint", lastLocation))
 
 	if s.streamerController.IsClosed() {
-		s.locations.reset(lastLocation)
 		err = s.streamerController.Start(s.runCtx, lastLocation)
 		if err != nil {
 			return terror.Annotate(err, "fail to restart streamer controller")
@@ -1887,7 +1884,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			lastLocation = savedGlobalLastLocation // restore global last pos
 		}
 
-		s.locations.reset(currentLocation)
 		err3 := s.streamerController.ResetReplicationSyncer(s.tctx, currentLocation)
 		if err3 != nil {
 			return err3
@@ -2012,7 +2008,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 
 			currentLocation = shardingReSync.currLocation
-			s.locations.reset(shardingReSync.currLocation)
 			err = s.streamerController.ResetReplicationSyncer(s.runCtx, shardingReSync.currLocation)
 			if err != nil {
 				return err
