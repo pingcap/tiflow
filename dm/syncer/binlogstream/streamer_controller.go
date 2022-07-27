@@ -323,14 +323,14 @@ var mockRestarted = false
 // - Skip
 //   the skipped event will still be sent to caller, with op = pb.ErrorOp_Skip,
 //   to let caller track schema and save checkpoints.
-// TODO: start position and suffix is maintained in caller, after location recorder
+// TODO: start position is maintained in caller, after location recorder
 // is enabled we can maintain it inside StreamerController.
 func (c *StreamerController) GetEvent(tctx *tcontext.Context) (
 	event *replication.BinlogEvent,
-	suffix int,
 	op pb.ErrorOp,
 	err error,
 ) {
+	// TODO: too long this function!!!
 	failpoint.Inject("SyncerGetEventError", func(_ failpoint.Value) {
 		if !mockRestarted {
 			mockRestarted = true
@@ -340,7 +340,17 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (
 		}
 	})
 
-	appendRelaySubDir := func() (*replication.BinlogEvent, int, pb.ErrorOp, error) {
+	var suffix int
+
+	defer func() {
+		if err == nil {
+			c.locations.update(event)
+			// TODO: data race?
+			c.locations.curEndLocation.Suffix = suffix
+		}
+	}()
+
+	appendRelaySubDir := func() (*replication.BinlogEvent, pb.ErrorOp, error) {
 		if ev, ok := event.Event.(*replication.RotateEvent); ok {
 			c.currBinlogFile = string(ev.NextLogName)
 			// if is local binlog but switch to remote on error, need to add uuid information in binlog's name
@@ -351,13 +361,13 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (
 			} else if c.relaySubDirSuffix != "" {
 				filename, err2 := utils.ParseFilename(string(ev.NextLogName))
 				if err2 != nil {
-					return nil, 0, pb.ErrorOp_InvalidErrorOp, terror.Annotate(err2, "fail to parse binlog file name from rotate event")
+					return nil, pb.ErrorOp_InvalidErrorOp, terror.Annotate(err2, "fail to parse binlog file name from rotate event")
 				}
 				ev.NextLogName = []byte(utils.ConstructFilenameWithUUIDSuffix(filename, c.relaySubDirSuffix))
 				event.Event = ev
 			}
 		}
-		return event, suffix, op, nil
+		return event, op, nil
 	}
 
 	checkErr := func(err error) (shouldRet bool) {
@@ -390,7 +400,7 @@ LOOP:
 				err = errors.New("go-mysql returned an error")
 			})
 			if checkErr(err) {
-				return nil, 0, pb.ErrorOp_InvalidErrorOp, err
+				return nil, pb.ErrorOp_InvalidErrorOp, err
 			}
 		}
 
@@ -448,8 +458,6 @@ LOOP:
 					suffix = c.streamModifier.nextEventInOp
 				}
 				op = pb.ErrorOp_Replace
-				// TODO: currently we let caller to modify Suffix, after location recorder
-				// binlog streamer itself can maintain it
 				break LOOP
 			case pb.ErrorOp_Inject:
 				event, status = c.streamModifier.getEventFromFrontOp()
@@ -511,7 +519,7 @@ LOOP:
 		err = errors.New("go-mysql returned an error")
 	})
 	if checkErr(err) {
-		return nil, 0, pb.ErrorOp_InvalidErrorOp, err
+		return nil, pb.ErrorOp_InvalidErrorOp, err
 	}
 
 	return appendRelaySubDir()
@@ -627,6 +635,18 @@ func (c *StreamerController) updateServerIDAndResetReplication(tctx *tcontext.Co
 	return nil
 }
 
+func (c *StreamerController) GetCurStartLocation() binlog.Location {
+	return c.locations.curStartLocation
+}
+
+func (c *StreamerController) GetCurEndLocation() binlog.Location {
+	return c.locations.getCurEndLocation()
+}
+
+func (c *StreamerController) GetTxnEndLocation() binlog.Location {
+	return c.locations.txnEndLocation
+}
+
 // NewStreamerController4Test is used in tests.
 func NewStreamerController4Test(
 	streamerProducer StreamerProducer,
@@ -637,6 +657,7 @@ func NewStreamerController4Test(
 		streamer:         streamer,
 		closed:           false,
 		streamModifier:   &streamModifier{logger: log.L()},
+		locations:        &locationRecorder{},
 	}
 }
 

@@ -256,18 +256,31 @@ func TestGetEventWithSkip(t *testing.T) {
 func checkGetEvent(t *testing.T, controller *StreamerController, expecteds []expectedInfo) {
 	t.Helper()
 
+	var lastLoc binlog.Location
+
 	ctx := tcontext.Background()
 	for i, expected := range expecteds {
 		t.Logf("#%d", i)
-		event, suffix, op, err := controller.GetEvent(ctx)
+		event, op, err := controller.GetEvent(ctx)
 		require.NoError(t, err)
 		require.Equal(t, expected.pos, event.Header.LogPos)
-		require.Equal(t, expected.suffix, suffix)
 		require.Equal(t, expected.op, op)
+
+		curEndLoc := controller.GetCurEndLocation()
+		require.Equal(t, expected.pos, curEndLoc.Position.Pos)
+		require.Equal(t, expected.suffix, curEndLoc.Suffix)
+
+		if i > 0 {
+			curStartLoc := controller.GetCurStartLocation()
+			require.Equal(t, lastLoc.Position.Pos, curStartLoc.Position.Pos)
+			require.Equal(t, lastLoc.Suffix, curStartLoc.Suffix)
+		}
+
+		lastLoc = curEndLoc
 	}
 	ctx, cancel := ctx.WithTimeout(10 * time.Millisecond)
 	defer cancel()
 	// nolint:dogsled
-	_, _, _, err := controller.GetEvent(ctx)
+	_, _, err := controller.GetEvent(ctx)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 }

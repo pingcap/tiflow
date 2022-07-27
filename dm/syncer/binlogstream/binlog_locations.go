@@ -73,14 +73,12 @@ func (l *locationRecorder) reset(loc binlog.Location) {
 	l.txnEndLocation = clone
 }
 
-//nolint:unused
 func (l *locationRecorder) getCurEndLocation() binlog.Location {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.curEndLocation
 }
 
-//nolint:unused
 func (l *locationRecorder) setCurEndLocation(location binlog.Location) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -166,6 +164,7 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 
 	// GTID part is maintained separately
 	l.curStartLocation.Position = l.curEndLocation.Position
+	l.curStartLocation.Suffix = l.curEndLocation.Suffix
 
 	if l.needUpdateStartGTID {
 		l.updateCurStartGTID()
