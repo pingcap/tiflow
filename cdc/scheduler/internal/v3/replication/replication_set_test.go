@@ -58,7 +58,7 @@ func TestNewReplicationSet(t *testing.T) {
 		{
 			set: &ReplicationSet{
 				State:    ReplicationSetStateAbsent,
-				Captures: map[string]struct{}{},
+				Captures: map[string]CaptureRole{},
 			},
 			tableStatus: map[model.CaptureID]*schedulepb.TableStatus{},
 		},
@@ -66,7 +66,7 @@ func TestNewReplicationSet(t *testing.T) {
 			set: &ReplicationSet{
 				Primary:  "1",
 				State:    ReplicationSetStateReplicating,
-				Captures: map[string]struct{}{"1": {}},
+				Captures: map[string]CaptureRole{"1": CaptureRolePrimary},
 				Checkpoint: schedulepb.Checkpoint{
 					CheckpointTs: 2, ResolvedTs: 2,
 				},
@@ -86,7 +86,7 @@ func TestNewReplicationSet(t *testing.T) {
 			set: &ReplicationSet{
 				State:     ReplicationSetStatePrepare,
 				Secondary: "1",
-				Captures:  map[string]struct{}{"1": {}},
+				Captures:  map[string]CaptureRole{"1": CaptureRoleSecondary},
 			},
 			tableStatus: map[model.CaptureID]*schedulepb.TableStatus{
 				"1": {
@@ -98,10 +98,12 @@ func TestNewReplicationSet(t *testing.T) {
 		{
 			// Rebuild move table state, Prepare.
 			set: &ReplicationSet{
-				State:      ReplicationSetStatePrepare,
-				Primary:    "2",
-				Secondary:  "1",
-				Captures:   map[string]struct{}{"1": {}, "2": {}},
+				State:     ReplicationSetStatePrepare,
+				Primary:   "2",
+				Secondary: "1",
+				Captures: map[string]CaptureRole{
+					"1": CaptureRoleSecondary, "2": CaptureRolePrimary,
+				},
 				Checkpoint: schedulepb.Checkpoint{CheckpointTs: 2},
 			},
 			tableStatus: map[model.CaptureID]*schedulepb.TableStatus{
@@ -121,7 +123,9 @@ func TestNewReplicationSet(t *testing.T) {
 				State:     ReplicationSetStateCommit,
 				Primary:   "2",
 				Secondary: "1",
-				Captures:  map[string]struct{}{"1": {}, "2": {}},
+				Captures: map[string]CaptureRole{
+					"1": CaptureRoleSecondary, "2": CaptureRolePrimary,
+				},
 			},
 			tableStatus: map[model.CaptureID]*schedulepb.TableStatus{
 				"1": {
@@ -139,7 +143,9 @@ func TestNewReplicationSet(t *testing.T) {
 			set: &ReplicationSet{
 				State:     ReplicationSetStateCommit,
 				Secondary: "1",
-				Captures:  map[string]struct{}{"1": {}, "2": {}},
+				Captures: map[string]CaptureRole{
+					"1": CaptureRoleSecondary, "2": CaptureRoleSecondary,
+				},
 			},
 			tableStatus: map[model.CaptureID]*schedulepb.TableStatus{
 				"1": {
@@ -157,7 +163,7 @@ func TestNewReplicationSet(t *testing.T) {
 			set: &ReplicationSet{
 				State:     ReplicationSetStateCommit,
 				Secondary: "1",
-				Captures:  map[string]struct{}{"1": {}},
+				Captures:  map[string]CaptureRole{"1": CaptureRoleSecondary},
 			},
 			tableStatus: map[model.CaptureID]*schedulepb.TableStatus{
 				"1": {
@@ -173,8 +179,10 @@ func TestNewReplicationSet(t *testing.T) {
 		{
 			// Rebuild remove table state, Removing.
 			set: &ReplicationSet{
-				State:    ReplicationSetStateRemoving,
-				Captures: map[string]struct{}{"1": {}, "2": {}},
+				State: ReplicationSetStateRemoving,
+				Captures: map[string]CaptureRole{
+					"1": CaptureRoleSecondary, "2": CaptureRoleSecondary,
+				},
 			},
 			tableStatus: map[model.CaptureID]*schedulepb.TableStatus{
 				"1": {
@@ -472,9 +480,9 @@ func TestReplicationSetRemoveTable(t *testing.T) {
 	require.False(t, r.hasRemoved())
 
 	// Replicating -> Removing
-	r.Captures[from] = struct{}{}
-	r.Primary = from
 	r.State = ReplicationSetStateReplicating
+	require.Nil(t, r.setSecondary(from))
+	require.Nil(t, r.promoteSecondary(from))
 	msgs, err = r.handleRemoveTable()
 	require.Nil(t, err)
 	require.Len(t, msgs, 1)
@@ -529,9 +537,9 @@ func TestReplicationSetRemoveTable(t *testing.T) {
 
 func clone(r *ReplicationSet) *ReplicationSet {
 	rClone := *r
-	rClone.Captures = make(map[string]struct{})
-	for captureID := range r.Captures {
-		rClone.Captures[captureID] = struct{}{}
+	rClone.Captures = make(map[string]CaptureRole)
+	for captureID, role := range r.Captures {
+		rClone.Captures[captureID] = role
 	}
 	return &rClone
 }
@@ -547,16 +555,14 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	dest := "2"
 	// Ignore removing table if it's not in replicating.
 	r.State = ReplicationSetStatePrepare
-	r.Secondary = source
-	r.Captures[source] = struct{}{}
+	require.Nil(t, r.setSecondary(source))
 	msgs, err := r.handleMoveTable(dest)
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
 	require.NotContains(t, r.Captures, dest)
 
 	r.State = ReplicationSetStateReplicating
-	r.Primary = source
-	r.Secondary = ""
+	require.Nil(t, r.promoteSecondary(source))
 
 	// Replicating -> Prepare
 	msgs, err = r.handleMoveTable(dest)
@@ -872,7 +878,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 		require.Nil(t, err)
 		require.True(t, affected)
 		require.Len(t, msgs, 0)
-		require.EqualValues(t, map[string]struct{}{dest: {}}, rClone.Captures)
+		require.EqualValues(t, map[string]CaptureRole{dest: CaptureRoleSecondary}, rClone.Captures)
 		require.Equal(t, "", rClone.Primary)
 		require.Equal(t, dest, rClone.Secondary)
 		require.Equal(t, ReplicationSetStatePrepare, rClone.State)
@@ -893,7 +899,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 		require.Nil(t, err)
 		require.True(t, affected)
 		require.Len(t, msgs, 0)
-		require.EqualValues(t, map[string]struct{}{from: {}}, rClone.Captures)
+		require.EqualValues(t, map[string]CaptureRole{from: CaptureRolePrimary}, rClone.Captures)
 		require.Equal(t, from, rClone.Primary)
 		require.Equal(t, "", rClone.Secondary)
 		require.Equal(t, ReplicationSetStateReplicating, rClone.State)
@@ -930,7 +936,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 				},
 			},
 		}, msgs[0])
-		require.EqualValues(t, map[string]struct{}{dest: {}}, rClone.Captures)
+		require.EqualValues(t, map[string]CaptureRole{dest: CaptureRolePrimary}, rClone.Captures)
 		require.Equal(t, dest, rClone.Primary)
 		require.Equal(t, "", rClone.Secondary)
 		require.Equal(t, ReplicationSetStateCommit, rClone.State)
@@ -952,7 +958,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 		require.Nil(t, err)
 		require.True(t, affected)
 		require.Len(t, msgs, 0)
-		require.EqualValues(t, map[string]struct{}{from: {}}, rClone.Captures)
+		require.EqualValues(t, map[string]CaptureRole{from: CaptureRolePrimary}, rClone.Captures)
 		require.Equal(t, from, rClone.Primary)
 		require.Equal(t, "", rClone.Secondary)
 		require.Equal(t, ReplicationSetStateCommit, rClone.State)
@@ -966,7 +972,8 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 			})
 			require.Nil(t, err)
 			require.Len(t, msgs, 0)
-			require.EqualValues(t, map[string]struct{}{from: {}}, rClone1.Captures)
+			require.EqualValues(
+				t, map[string]CaptureRole{from: CaptureRolePrimary}, rClone1.Captures)
 			require.Equal(t, from, rClone1.Primary)
 			require.Equal(t, "", rClone1.Secondary)
 			require.Equal(t, ReplicationSetStateReplicating, rClone1.State)
@@ -1095,10 +1102,9 @@ func TestReplicationSetMoveTableWithHeartbeatResponse(t *testing.T) {
 
 	source := "1"
 	dest := "2"
-	r.Captures[source] = struct{}{}
 	r.State = ReplicationSetStateReplicating
-	r.Primary = source
-	r.Secondary = ""
+	require.Nil(t, r.setSecondary(source))
+	require.Nil(t, r.promoteSecondary(source))
 
 	// Replicating -> Prepare
 	msgs, err := r.handleMoveTable(dest)
@@ -1183,10 +1189,9 @@ func TestReplicationSetMoveTableSameDestCapture(t *testing.T) {
 
 	source := "1"
 	dest := source
-	r.Captures[source] = struct{}{}
 	r.State = ReplicationSetStateReplicating
-	r.Primary = source
-	r.Secondary = ""
+	require.Nil(t, r.setSecondary(source))
+	require.Nil(t, r.promoteSecondary(source))
 
 	// Ignore move table.
 	msgs, err := r.handleMoveTable(dest)

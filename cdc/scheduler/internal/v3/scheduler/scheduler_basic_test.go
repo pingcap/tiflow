@@ -78,9 +78,12 @@ func TestSchedulerBasic(t *testing.T) {
 		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 		2: {State: replication.ReplicationSetStateCommit, Secondary: "b"},
 		3: {State: replication.ReplicationSetStatePrepare, Primary: "a", Secondary: "b"},
-		5: {State: replication.ReplicationSetStateCommit, Captures: map[model.CaptureID]struct{}{
-			"a": {}, "b": {},
-		}},
+		5: {
+			State: replication.ReplicationSetStateCommit,
+			Captures: map[model.CaptureID]replication.CaptureRole{
+				"a": replication.CaptureRolePrimary, "b": replication.CaptureRoleSecondary,
+			},
+		},
 	}
 	tasks = b.Schedule(2, currentTables, captures, replications)
 	require.Len(t, tasks, 2)
@@ -100,9 +103,12 @@ func TestSchedulerBasic(t *testing.T) {
 		2: {State: replication.ReplicationSetStateCommit, Secondary: "b"},
 		3: {State: replication.ReplicationSetStatePrepare, Primary: "a", Secondary: "b"},
 		4: {State: replication.ReplicationSetStatePrepare, Primary: "a", Secondary: "b"},
-		5: {State: replication.ReplicationSetStatePrepare, Captures: map[model.CaptureID]struct{}{
-			"b": {},
-		}},
+		5: {
+			State: replication.ReplicationSetStatePrepare,
+			Captures: map[model.CaptureID]replication.CaptureRole{
+				"b": replication.CaptureRoleSecondary,
+			},
+		},
 	}
 	tasks = b.Schedule(3, currentTables, captures, replications)
 	require.Len(t, tasks, 1)

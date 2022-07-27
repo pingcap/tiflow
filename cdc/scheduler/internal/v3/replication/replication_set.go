@@ -90,6 +90,33 @@ func (r ReplicationSetState) MarshalJSON() ([]byte, error) {
 	return json.Marshal(r.String())
 }
 
+// CaptureRole is the role of a capture.
+type CaptureRole int
+
+const (
+	// CaptureRolePrimary primary role.
+	CaptureRolePrimary = 1
+	// CaptureRoleSecondary secondary role.
+	CaptureRoleSecondary = 2
+)
+
+func (r CaptureRole) String() string {
+	switch r {
+	case CaptureRolePrimary:
+		return "Primary"
+	case CaptureRoleSecondary:
+		return "Secondary"
+	default:
+		return fmt.Sprintf("Unknown %d", r)
+	}
+}
+
+// MarshalJSON returns r as the JSON encoding of CaptureRole.
+// Only used for pretty print in zap log.
+func (r CaptureRole) MarshalJSON() ([]byte, error) {
+	return json.Marshal(r.String())
+}
+
 // ReplicationSet is a state machine that manages replication states.
 type ReplicationSet struct { //nolint:revive
 	Changefeed model.ChangeFeedID
@@ -99,7 +126,7 @@ type ReplicationSet struct { //nolint:revive
 	Primary model.CaptureID
 	// Secondary set indicate that the table is preparing on this capture
 	Secondary  model.CaptureID
-	Captures   map[model.CaptureID]struct{}
+	Captures   map[model.CaptureID]CaptureRole
 	Checkpoint schedulepb.Checkpoint
 }
 
@@ -113,7 +140,7 @@ func NewReplicationSet(
 	r := &ReplicationSet{
 		Changefeed: changefeed,
 		TableID:    tableID,
-		Captures:   make(map[string]struct{}),
+		Captures:   make(map[string]CaptureRole),
 		Checkpoint: schedulepb.Checkpoint{
 			CheckpointTs: checkpoint,
 			ResolvedTs:   checkpoint,
@@ -139,16 +166,16 @@ func NewReplicationSet(
 			}
 			// Recognize primary if it's table is in replicating state.
 			r.Primary = captureID
-			r.Captures[captureID] = struct{}{}
+			r.Captures[captureID] = CaptureRolePrimary
 		case schedulepb.TableStatePreparing:
 			// Recognize secondary if it's table is in preparing state.
 			r.Secondary = captureID
-			r.Captures[captureID] = struct{}{}
+			r.Captures[captureID] = CaptureRoleSecondary
 		case schedulepb.TableStatePrepared:
 			// Recognize secondary and Commit state if it's table is in prepared state.
 			committed = true
 			r.Secondary = captureID
-			r.Captures[captureID] = struct{}{}
+			r.Captures[captureID] = CaptureRoleSecondary
 		case schedulepb.TableStateStopping:
 			// The capture is stop the table. It is possible that the capture is
 			// primary, and is still replicating data to downstream. We need to
@@ -158,7 +185,7 @@ func NewReplicationSet(
 				zap.Any("replicationSet", r),
 				zap.Int64("tableID", table.TableID),
 				zap.Any("status", tableStatus))
-			r.Captures[captureID] = struct{}{}
+			r.Captures[captureID] = CaptureRoleSecondary
 			stoppingCount++
 		case schedulepb.TableStateAbsent,
 			schedulepb.TableStateStopped:
@@ -202,7 +229,7 @@ func (r *ReplicationSet) setSecondary(captureID model.CaptureID) error {
 			fmt.Sprintf("Secondary already set, %s, %v", captureID, string(jsonR)))
 	}
 	r.Secondary = captureID
-	r.Captures[captureID] = struct{}{}
+	r.Captures[captureID] = CaptureRoleSecondary
 	return nil
 }
 
@@ -232,6 +259,7 @@ func (r *ReplicationSet) promoteSecondary(captureID model.CaptureID) error {
 		delete(r.Captures, r.Primary)
 	}
 	r.Primary = r.Secondary
+	r.Captures[r.Primary] = CaptureRolePrimary
 	r.Secondary = ""
 	return nil
 }
@@ -292,9 +320,12 @@ func (r *ReplicationSet) checkInvariant(
 				"schedulerv3: empty primary/secondary in state prepare/commit/replicating")
 		}
 	}
-	_, okP := r.Captures[r.Primary]
-	_, okS := r.Captures[r.Secondary]
-	if (!okP && r.Primary != "") || (!okS && r.Secondary != "") {
+	roleP, okP := r.Captures[r.Primary]
+	roleS, okS := r.Captures[r.Secondary]
+	if (!okP && r.Primary != "") || // Primary is not in Captures.
+		(!okS && r.Secondary != "") || // Secondary is not in Captures.
+		(okP && roleP != CaptureRolePrimary) || // Primary is not in primary role.
+		(okS && roleS != CaptureRoleSecondary) { // Secondary is not in secondary role.
 		return r.inconsistentError(input, captureID,
 			"schedulerv3: capture inconsistent")
 	}
@@ -356,10 +387,6 @@ func (r *ReplicationSet) pollOnAbsent(
 ) (*schedulepb.Message, bool, error) {
 	switch input.State {
 	case schedulepb.TableStateAbsent:
-		if r.Primary != "" || r.Secondary != "" {
-			return nil, false, r.inconsistentError(
-				input, captureID, "schedulerv3: there must be no primary or secondary")
-		}
 		r.State = ReplicationSetStatePrepare
 		r.setSecondary(captureID)
 		return nil, true, nil
@@ -722,7 +749,7 @@ func (r *ReplicationSet) handleAddTable(
 	}
 	oldState := r.State
 	r.State = ReplicationSetStateAbsent
-	r.Captures[captureID] = struct{}{}
+	r.setSecondary(captureID)
 	log.Info("schedulerv3: replication state transition, add table",
 		zap.Any("replicationSet", r),
 		zap.Stringer("old", oldState), zap.Stringer("new", r.State))
