@@ -245,24 +245,6 @@ func (q *ChunkQueue[T]) EnqueueMany(vals ...T) {
 	}
 }
 
-// EnqueueManyOneByOne enqueues multiple elements at a time
-func (q *ChunkQueue[T]) EnqueueManyOneByOne(vals ...T) {
-	n := len(vals)
-	c := q.lastChunk()
-	if q.Cap()-q.Size() < n {
-		q.extend(n - (q.chunkLength - c.r))
-	}
-
-	for _, val := range vals {
-		if c.r == q.chunkLength {
-			c = c.next
-		}
-		c.data[c.r] = val
-		c.r++
-		q.size++
-	}
-}
-
 // Dequeue dequeues an element from head
 func (q *ChunkQueue[T]) Dequeue() (T, bool) {
 	if q.Empty() {
@@ -352,7 +334,8 @@ func (q *ChunkQueue[T]) Shrink() {
 	q.reallocateChunksArray(-1)
 }
 
-// Range iterates the queue from head to the first element that does NOT satisfy f()
+// Range iterates the queue from head to tail. It stops at the first element e
+// that function f(e) returns false
 func (q *ChunkQueue[T]) Range(f func(e T) bool) {
 	var c *chunk[T]
 	for i := q.head; i < q.tail; i++ {
@@ -365,8 +348,8 @@ func (q *ChunkQueue[T]) Range(f func(e T) bool) {
 	}
 }
 
-// RangeWithIndex iterates the queue with index from head. It stops at the first
-// element e that function f(idx, e) returns false, or iterates all.
+// RangeWithIndex iterates the queue with index from head to tail. It stops at
+// the first element e that function f(idx, e) returns false
 func (q *ChunkQueue[T]) RangeWithIndex(f func(idx int, e T) bool) {
 	var c *chunk[T]
 	idx := 0
@@ -384,7 +367,7 @@ func (q *ChunkQueue[T]) RangeWithIndex(f func(idx int, e T) bool) {
 // RangeAndPop iterate the queue from head, and pop the element if applying
 // func f() on it returns true. It stops the iteration at the first element
 // that f() returns false, or the queue is empty.
-// This method is convenient
+// This method is convenient than peek and dequeue
 func (q *ChunkQueue[T]) RangeAndPop(f func(e T) bool) {
 	var c *chunk[T]
 

@@ -191,7 +191,6 @@ func TestChunkQueueGetIterator(t *testing.T) {
 			n = testCaseSize/20 + 1
 		}
 		it := q.Begin()
-		require.NotNil(t, it)
 		require.True(t, it.Valid())
 
 		q.DequeueMany(n)

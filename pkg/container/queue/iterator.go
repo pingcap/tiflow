@@ -17,8 +17,15 @@ package queue
 // by iterators is not thread-safe. Manipulating invalid iterators may incur
 // panics. Don't use an iterator of an element that has already been dequeued.
 // Instead, use with checks and in loop. E.g.
-// `for it := someQueue.Begin(); it.Valid(); it.Next() {...} ` // forwards
-// `for it := someQueue.End(); it.Prev(); {...} `			   // backwards
+//
+// for it := someQueue.Begin(); it.Valid(); it.Next() { // forwards
+// 		... // operations cannot pop element
+// }
+// for it := someQueue.Begin(); it.Valid(); { 			// forwards
+// 		it.Next()
+// 		q.Dequeue() // can pop element
+// }
+// for it := someQueue.End(); it.Prev(); {...}		 	// backwards
 type ChunkQueueIterator[T any] struct {
 	idxInChunk int
 	chunk      *chunk[T]
@@ -32,7 +39,9 @@ func (q *ChunkQueue[T]) Begin() *ChunkQueueIterator[T] {
 	}
 }
 
-// End creates a special iterator of the queue representing the end
+// End creates a special iterator of the queue representing the end. End()
+// iterator is not valid iterator since it's not in the queue. Calling Valid()
+// always get false.
 func (q *ChunkQueue[T]) End() *ChunkQueueIterator[T] {
 	return &ChunkQueueIterator[T]{
 		chunk:      q.lastChunk(),
@@ -40,7 +49,7 @@ func (q *ChunkQueue[T]) End() *ChunkQueueIterator[T] {
 	}
 }
 
-// GetIterator returns the iterator of a given index, and nil if out of range
+// GetIterator returns a iterator of a given index, and nil for invalid indices
 func (q *ChunkQueue[T]) GetIterator(idx int) *ChunkQueueIterator[T] {
 	if idx < 0 || idx >= q.size {
 		return nil
@@ -96,6 +105,10 @@ func (it *ChunkQueueIterator[T]) Index() int {
 // an invalid iterator is meaningless, and using invalid iterators may panic.
 // Using Next
 func (it *ChunkQueueIterator[T]) Next() bool {
+	if it.chunk == nil {
+		return false
+	}
+
 	it.idxInChunk++
 	if it.idxInChunk < it.chunk.r {
 		return true
@@ -138,12 +151,10 @@ func (it *ChunkQueueIterator[T]) Prev() bool {
 		return true
 	}
 
-	it.chunk = c.prev
-	if it.chunk != nil {
-		it.idxInChunk = it.chunk.r - 1
+	if c.prev != nil {
+		it.chunk, it.idxInChunk = c.prev, c.prev.r-1
 		return true
 	}
-
 	it.idxInChunk = -1
 	return false
 }
