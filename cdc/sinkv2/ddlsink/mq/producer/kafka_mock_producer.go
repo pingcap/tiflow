@@ -25,8 +25,7 @@ var _ Producer = (*MockProducer)(nil)
 
 // MockProducer is a mock producer for test.
 type MockProducer struct {
-	injectError error
-	events      map[mqv1.TopicPartitionKey][]*codec.MQMessage
+	events map[mqv1.TopicPartitionKey][]*codec.MQMessage
 }
 
 // NewMockProducer creates a mock producer.
@@ -40,9 +39,6 @@ func NewMockProducer(_ context.Context, _ sarama.Client) (Producer, error) {
 func (m *MockProducer) SyncBroadcastMessage(ctx context.Context, topic string,
 	totalPartitionsNum int32, message *codec.MQMessage,
 ) error {
-	if m.injectError != nil {
-		return m.injectError
-	}
 	for i := 0; i < int(totalPartitionsNum); i++ {
 		key := mqv1.TopicPartitionKey{
 			Topic:     topic,
@@ -61,10 +57,6 @@ func (m *MockProducer) SyncBroadcastMessage(ctx context.Context, topic string,
 func (m *MockProducer) SyncSendMessage(ctx context.Context, topic string,
 	partitionNum int32, message *codec.MQMessage,
 ) error {
-	if m.injectError != nil {
-		return m.injectError
-	}
-
 	key := mqv1.TopicPartitionKey{
 		Topic:     topic,
 		Partition: partitionNum,
@@ -80,12 +72,16 @@ func (m *MockProducer) SyncSendMessage(ctx context.Context, topic string,
 // Close do nothing.
 func (m *MockProducer) Close() {}
 
+// GetAllEvents returns the events received by the mock producer.
+func (m *MockProducer) GetAllEvents() []*codec.MQMessage {
+	var events []*codec.MQMessage
+	for _, v := range m.events {
+		events = append(events, v...)
+	}
+	return events
+}
+
 // GetEvents returns the event filtered by the key.
 func (m *MockProducer) GetEvents(key mqv1.TopicPartitionKey) []*codec.MQMessage {
 	return m.events[key]
-}
-
-// InjectError injects an error to the mock producer.
-func (m *MockProducer) InjectError(err error) {
-	m.injectError = err
 }

@@ -27,6 +27,8 @@ import (
 	"go.uber.org/zap"
 )
 
+// TODO: add tests for producer and add a failpoint.
+
 // Assert DDLEventSink implementation
 var _ Producer = (*kafkaProducer)(nil)
 
