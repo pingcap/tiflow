@@ -127,10 +127,6 @@ func NewSingleSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplica
 // NewSnapshotFromMeta creates a schema snapshot from meta.
 func NewSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate bool) (*Snapshot, error) {
 	snap := NewEmptySnapshot(forceReplicate)
-
-	// after v6.2, `mysql` database is created by this function, it will not appear in history DDL job.
-	_, _ = meta.CreateMySQLDatabaseIfNotExists()
-
 	dbinfos, err := meta.ListDatabases()
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrMetaListDatabases, err)
@@ -200,6 +196,8 @@ func NewEmptySnapshot(forceReplicate bool) *Snapshot {
 		currentTs:        0,
 	}
 
+	// since v6.2.0, `mysql` database will be directly written to meta without
+	// written to history DDL jobs.
 	mysqlDBInfo := &timodel.DBInfo{
 		ID:      1,
 		Name:    timodel.NewCIStr(mysql.SystemDB),
