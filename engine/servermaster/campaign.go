@@ -117,10 +117,7 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 // 2. If leader node exists, decode the leader information
 //    a. If decode fails, return retry=true to retry the leader loop
 //    b. If leader information is stale, try to delete it and retry the leader loop
-//    c. Otherwise watch the leader until it is evicted.
-// 3. If the leader doesn't exist, check whether current node is etcd leader
-//    - If it is not, return retry=true to retry the leader loop
-//    - If it is, return retry=false and continue the leader campaign.
+//    c. Otherwise, watch the leader until it is evicted.
 func (s *Server) checkLeaderExists(ctx context.Context) (retry bool, err error) {
 	// step-1
 	key, data, rev, err := etcdutil.GetLeader(ctx, s.etcdClient, adapter.MasterCampaignKey.Path())
@@ -162,7 +159,7 @@ func (s *Server) checkLeaderExists(ctx context.Context) (retry bool, err error) 
 			return true, nil
 		}
 
-		// step-3, case-c
+		// step-2, case-c
 		leader.IsLeader = true
 		log.Info("start to watch server master leader",
 			zap.String("leader-name", leader.Name), zap.String("addr", leader.AdvertiseAddr))
