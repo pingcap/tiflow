@@ -619,7 +619,8 @@ func TestMultiVersionStorage(t *testing.T) {
 	require.False(t, exist)
 
 	lastSchemaTs := storage.DoGC(0)
-	require.Equal(t, uint64(0), lastSchemaTs)
+	// Snapshot.InitConcurrentDDLTables will create a schema with ts = 1
+	require.Equal(t, uint64(1), lastSchemaTs)
 
 	snap, err = storage.GetSnapshot(ctx, 100)
 	require.Nil(t, err)

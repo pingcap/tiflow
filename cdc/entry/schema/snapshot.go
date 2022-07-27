@@ -215,7 +215,7 @@ func (s *Snapshot) InitConcurrentDDLTables() {
 		Collate: mysql.UTF8MB4DefaultCollation,
 		State:   timodel.StatePublic,
 	}
-	mockTS := uint64(0)
+	mockTS := uint64(1)
 	_ = s.inner.createSchema(mysqlDBInfo, mockTS)
 
 	p := parser.New()
