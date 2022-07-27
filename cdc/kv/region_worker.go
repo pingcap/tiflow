@@ -19,6 +19,7 @@ import (
 	"reflect"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -138,7 +139,7 @@ type regionWorker struct {
 	parentCtx context.Context
 	session   *eventFeedSession
 
-	inputCh  chan *regionStatefulEvent
+	inputCh  chan []*regionStatefulEvent
 	outputCh chan<- model.RegionFeedEvent
 	errorCh  chan error
 
@@ -154,6 +155,13 @@ type regionWorker struct {
 	metrics *regionWorkerMetrics
 
 	storeAddr string
+
+	// how many pending input events
+	inputPending int32
+	// get a slot for the given region
+	inputCalcSlot func(regionID uint64) int
+	// total input slots
+	inputSlots int
 }
 
 func newRegionWorker(
@@ -181,7 +189,7 @@ func newRegionWorker(
 
 	return &regionWorker{
 		session:       s,
-		inputCh:       make(chan *regionStatefulEvent, regionWorkerInputChanSize),
+		inputCh:       make(chan []*regionStatefulEvent, regionWorkerInputChanSize),
 		outputCh:      s.eventCh,
 		errorCh:       make(chan error, 1),
 		statesManager: newRegionStateManager(-1),
@@ -190,6 +198,9 @@ func newRegionWorker(
 		storeAddr:     addr,
 		concurrent:    s.client.config.WorkerConcurrent,
 		metrics:       metrics,
+		inputPending:  0,
+		inputCalcSlot: func(regionID uint64) int { return int(regionID) % s.client.config.WorkerConcurrent },
+		inputSlots:    s.client.config.WorkerConcurrent,
 	}
 }
 
@@ -465,59 +476,45 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 		}
 		return
 	}
-	pollEvent := func() (event *regionStatefulEvent, ok bool, err error) {
+	pollEvents := func() (events []*regionStatefulEvent, ok bool, err error) {
 		select {
 		case <-ctx.Done():
 			err = errors.Trace(ctx.Err())
 		case err = <-w.errorCh:
-		case event, ok = <-w.inputCh:
+		case events, ok = <-w.inputCh:
+			if ok && len(events) == 0 {
+				log.Panic("regionWorker.inputCh doesn't accept empty slice")
+			}
 		}
 		return
 	}
+
+	highWatermarkMet := false
 	for {
-		event, ok, err := pollEvent()
+		events, ok, err := pollEvents()
 		if err != nil {
 			return err
 		}
-		exitEventHandler, skipEvent := preprocess(event, ok)
-		if exitEventHandler {
-			return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
-		}
-		if skipEvent {
-			continue
-		}
-		// We measure whether the current worker is busy based on the input
-		// channel size. If the buffered event count is larger than the high
-		// watermark, we send events to worker pool to increase processing
-		// throughput. Otherwise we process event in local region worker to
-		// ensure low processing latency.
-		if len(w.inputCh) < regionWorkerHighWatermark {
-			err = w.processEvent(ctx, event)
-			if err != nil {
-				return err
-			}
+		regionEventsBatchSize.Observe(float64(len(events)))
+
+		intputPending := atomic.LoadInt32(&w.inputPending)
+		if highWatermarkMet {
+			highWatermarkMet = int(intputPending) >= regionWorkerLowWatermark
 		} else {
-			err = w.handles[int(event.regionID)%w.concurrent].AddEvent(ctx, event)
+			highWatermarkMet = int(intputPending) >= regionWorkerHighWatermark
+		}
+		atomic.AddInt32(&w.inputPending, -int32(len(events)))
+
+		if highWatermarkMet {
+			// All events in one batch can be hashed into one handle slot.
+			slot := w.inputCalcSlot(events[0].regionID)
+			eventsX := make([]interface{}, 0, len(events))
+			for _, event := range events {
+				eventsX = append(eventsX, event)
+			}
+			err = w.handles[slot].AddEvents(ctx, eventsX)
 			if err != nil {
 				return err
-			}
-			// TODO: add events in batch
-			for len(w.inputCh) >= regionWorkerLowWatermark {
-				event, ok, err = pollEvent()
-				if err != nil {
-					return err
-				}
-				exitEventHandler, skipEvent := preprocess(event, ok)
-				if exitEventHandler {
-					return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
-				}
-				if skipEvent {
-					continue
-				}
-				err = w.handles[int(event.regionID)%w.concurrent].AddEvent(ctx, event)
-				if err != nil {
-					return err
-				}
 			}
 			// Principle: events from the same region must be processed linearly.
 			//
@@ -529,25 +526,33 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 			// Send a dummy event to each worker pool handler, after each of these
 			// events are processed, we can ensure all events sent to worker pool
 			// from this region worker are processed.
-			finishedCallbackCh := make(chan struct{}, len(w.handles))
-			for _, handle := range w.handles {
-				err = handle.AddEvent(ctx, &regionStatefulEvent{finishedCallbackCh: finishedCallbackCh})
-				if err != nil {
-					return err
-				}
+			finishedCallbackCh := make(chan struct{}, 1)
+			err = w.handles[slot].AddEvent(ctx, &regionStatefulEvent{finishedCallbackCh: finishedCallbackCh})
+			if err != nil {
+				return err
 			}
-			counter := len(w.handles)
-		checkEventsProcessed:
-			for {
-				select {
-				case <-ctx.Done():
-					return errors.Trace(ctx.Err())
-				case err = <-w.errorCh:
-					return err
-				case <-finishedCallbackCh:
-					counter--
-					if counter == 0 {
-						break checkEventsProcessed
+			select {
+			case <-ctx.Done():
+				return errors.Trace(ctx.Err())
+			case err = <-w.errorCh:
+				return err
+			case <-finishedCallbackCh:
+			}
+		} else {
+			// We measure whether the current worker is busy based on the input
+			// channel size. If the buffered event count is larger than the high
+			// watermark, we send events to worker pool to increase processing
+			// throughput. Otherwise we process event in local region worker to
+			// ensure low processing latency.
+			for _, event := range events {
+				exitEventHandler, skipEvent := preprocess(event, ok)
+				if exitEventHandler {
+					return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
+				}
+				if !skipEvent {
+					err = w.processEvent(ctx, event)
+					if err != nil {
+						return err
 					}
 				}
 			}
@@ -829,6 +834,19 @@ func (w *regionWorker) evictAllRegions() {
 			w.session.onRegionFail(w.parentCtx, errInfo, revokeToken)
 			return true
 		})
+	}
+}
+
+// sendEvents puts events into inputCh and updates some internal states.
+// Callers must ensure that all items in events can be hashed into one handle slot.
+func (w *regionWorker) sendEvents(ctx context.Context, events []*regionStatefulEvent) error {
+	atomic.AddInt32(&w.inputPending, int32(len(events)))
+	select {
+	case <-ctx.Done():
+		atomic.AddInt32(&w.inputPending, -int32(len(events)))
+		return ctx.Err()
+	case w.inputCh <- events:
+		return nil
 	}
 }
 
