@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
+	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -489,13 +490,14 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
 	stdCtx := util.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = util.PutChangefeedIDInCtx(stdCtx, ctx.ChangefeedVars().ID)
+	kvCfg := config.GetGlobalServerConfig().KVClient
 	ddlPuller := puller.NewPuller(
 		stdCtx,
 		ctx.GlobalVars().PDClient,
 		ctx.GlobalVars().GrpcPool,
 		ctx.GlobalVars().KVStorage,
 		ctx.ChangefeedVars().ID,
-		checkpointTs, ddlspans, false)
+		checkpointTs, ddlspans, false, kvCfg)
 	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)

@@ -18,12 +18,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/pkg/pdtime"
-
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -96,7 +95,8 @@ func (s *gcManagerSuite) TestCheckStaleCheckpointTs(c *check.C) {
 	gcManager.isTiCDCBlockGC = true
 	ctx := context.Background()
 
-	TimeAcquirer := pdtime.NewTimeAcquirer(mockPDClient)
+	TimeAcquirer := pdutil.NewTimeAcquirer(mockPDClient)
+
 	go TimeAcquirer.Run(ctx)
 	time.Sleep(1 * time.Second)
 	defer TimeAcquirer.Stop()

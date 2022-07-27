@@ -55,6 +55,8 @@ func TestRawKVEntry(t *testing.T) {
 		Value:   []byte("345"),
 	}
 
-	require.Equal(t, "OpType: 1, Key: 123, Value: 345, StartTs: 100, CRTs: 101, RegionID: 0", raw.String())
+	require.Equal(t,
+		"OpType: 1, Key: 123, Value: 345, OldValue: , StartTs: 100, CRTs: 101, RegionID: 0",
+		raw.String())
 	require.Equal(t, int64(6), raw.ApproximateSize())
 }

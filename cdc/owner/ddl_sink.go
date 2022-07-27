@@ -222,5 +222,8 @@ func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 		err = s.syncPointStore.Close()
 	}
 	s.wg.Wait()
-	return err
+	if err != nil && errors.Cause(err) != context.Canceled {
+		return err
+	}
+	return nil
 }

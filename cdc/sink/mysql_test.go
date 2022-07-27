@@ -882,7 +882,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 		// normal db
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
-		for i := 0; i < defaultDMLMaxRetryTime; i++ {
+		for i := 0; i < defaultDMLMaxRetry; i++ {
 			mock.ExpectBegin()
 			mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?),(?)").
 				WithArgs(1, 2).
@@ -1083,6 +1083,9 @@ func TestNewMySQLSink(t *testing.T) {
 	require.Nil(t, err)
 	err = sink.Close(ctx)
 	require.Nil(t, err)
+	// Test idempotency of `Close` interface
+	err = sink.Close(ctx)
+	require.Nil(t, err)
 }
 
 func TestMySQLSinkClose(t *testing.T) {
@@ -1232,7 +1235,7 @@ func TestCleanTableResource(t *testing.T) {
 	require.Nil(t, s.Init(tblID))
 	m := &sync.Map{}
 	m.Store(tblID, uint64(10))
-	ret, _ := s.txnCache.Resolved(m)
+	_, ret := s.txnCache.Resolved(m)
 	require.True(t, len(ret) == 0)
 	_, ok := s.tableCheckpointTs.Load(tblID)
 	require.False(t, ok)

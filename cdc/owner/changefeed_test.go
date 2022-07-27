@@ -29,7 +29,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
-	"github.com/pingcap/tiflow/pkg/pdtime"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 	"github.com/pingcap/tiflow/pkg/version"
@@ -227,7 +227,7 @@ func (s *changefeedSuite) TestExecDDL(c *check.C) {
 			AdvertiseAddr: "127.0.0.1:0000",
 			Version:       version.ReleaseVersion,
 		},
-		TimeAcquirer: pdtime.NewTimeAcquirer4Test(),
+		TimeAcquirer: pdutil.NewTimeAcquirer4Test(),
 	})
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID: "changefeed-id-test",

@@ -58,9 +58,6 @@ import (
 )
 
 const (
-	// the session's TTL in seconds for leader election.
-	// NOTE: select this value carefully when adding a mechanism relying on leader election.
-	electionTTL = 60
 	// the DM-master leader election key prefix
 	// DM-master cluster : etcd cluster = 1 : 1 now.
 	electionKey = "/dm-master/leader"
@@ -76,6 +73,10 @@ var (
 	retryInterval = time.Second
 
 	useTLS atomic.Bool
+
+	// the session's TTL in seconds for leader election.
+	// NOTE: select this value carefully when adding a mechanism relying on leader election.
+	electionTTL = 60
 
 	// typically there's only one server running in one process, but testMaster.TestOfflineMember starts 3 servers,
 	// so we need sync.Once to prevent data race.
