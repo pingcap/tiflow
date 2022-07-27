@@ -23,6 +23,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/engine/pkg/client/internal/endpoint"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/resolver"
 	"google.golang.org/grpc/resolver/manual"
@@ -113,14 +114,12 @@ func (b *LeaderResolver) getResolverState() resolver.State {
 			if leaderAddr != nil {
 				panic(fmt.Sprintf("Duplicate leaders: %s and %s", leaderAddr.Addr, addr))
 			}
-			leaderAddr = &resolver.Address{
-				Addr: addr,
-			}
+			leaderAddr = makeAddress(addr)
 			continue
 		}
 
 		// Not leader
-		addrList = append(addrList, resolver.Address{Addr: addr})
+		addrList = append(addrList, *makeAddress(addr))
 	}
 
 	// Sorts the list of the followers to provide a fail-over order.
@@ -212,4 +211,9 @@ func orderedFollowerSorter(address []resolver.Address) {
 		// Note: strings.Compare(x, y) returns -1 iff x is considered less than y.
 		return strings.Compare(address[i].Addr, address[j].Addr) < 0
 	})
+}
+
+func makeAddress(ep string) *resolver.Address {
+	addr, name := endpoint.Interpret(ep)
+	return &resolver.Address{Addr: addr, ServerName: name}
 }

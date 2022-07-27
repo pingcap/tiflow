@@ -56,9 +56,9 @@ func TestLeaderResolver(t *testing.T) {
 
 	mockConn.On("UpdateState", mock.MatchedBy(func(state resolver.State) bool {
 		return reflect.DeepEqual(state.Addresses, []resolver.Address{
-			{Addr: "leader"},
-			{Addr: "follower-1"},
-			{Addr: "follower-2"},
+			{Addr: "leader", ServerName: "leader"},
+			{Addr: "follower-1", ServerName: "leader"},
+			{Addr: "follower-2", ServerName: "leader"},
 		})
 	})).Return(nil).Once()
 	mockConn.On("ParseServiceConfig", `{"loadBalancingPolicy": "pick_first"}`).
@@ -71,9 +71,9 @@ func TestLeaderResolver(t *testing.T) {
 
 	mockConn.On("UpdateState", mock.MatchedBy(func(state resolver.State) bool {
 		return reflect.DeepEqual(state.Addresses, []resolver.Address{
-			{Addr: "leader"},
-			{Addr: "follower-2"},
-			{Addr: "follower-3"},
+			{Addr: "leader", ServerName: "leader"},
+			{Addr: "follower-2", ServerName: "leader"},
+			{Addr: "follower-3", ServerName: "leader"},
 		})
 	})).Return(nil).Once()
 	leaderResolver.UpdateServerList(map[string]bool{
@@ -99,9 +99,9 @@ func TestLeaderResolverFrequentUpdate(t *testing.T) {
 
 	mockConn.On("UpdateState", mock.MatchedBy(func(state resolver.State) bool {
 		return reflect.DeepEqual(state.Addresses, []resolver.Address{
-			{Addr: "leader"},
-			{Addr: "follower-1"},
-			{Addr: "follower-2"},
+			{Addr: "leader", ServerName: "leader"},
+			{Addr: "follower-1", ServerName: "leader"},
+			{Addr: "follower-2", ServerName: "leader"},
 		})
 	})).Return(nil)
 	mockConn.On("ParseServiceConfig", `{"loadBalancingPolicy": "pick_first"}`).
@@ -134,9 +134,9 @@ func TestLeaderResolverUpdateAfterClose(t *testing.T) {
 
 	mockConn.On("UpdateState", mock.MatchedBy(func(state resolver.State) bool {
 		return reflect.DeepEqual(state.Addresses, []resolver.Address{
-			{Addr: "leader"},
-			{Addr: "follower-1"},
-			{Addr: "follower-2"},
+			{Addr: "leader", ServerName: "leader"},
+			{Addr: "follower-1", ServerName: "follower-1"},
+			{Addr: "follower-2", ServerName: "follower-2"},
 		})
 	})).Return(nil)
 	mockConn.On("ParseServiceConfig", `{"loadBalancingPolicy": "pick_first"}`).

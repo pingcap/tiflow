@@ -25,6 +25,7 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	cvs "github.com/pingcap/tiflow/engine/jobmaster/cvsjob"
 	engineModel "github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/test/e2e"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
@@ -130,7 +131,7 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr stri
 
 	// TODO support https.
 	dialURL := fmt.Sprintf("http://%s", config.MasterAddrs[0])
-	jobManagerCli, err := newJobManagerClient(dialURL)
+	jobManagerCli, err := e2e.NewJobManagerClient(dialURL)
 	require.NoError(t, err)
 
 	for {
