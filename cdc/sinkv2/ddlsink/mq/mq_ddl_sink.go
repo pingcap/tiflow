@@ -87,6 +87,12 @@ func (k *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 		return errors.Trace(err)
 	}
 	if msg == nil {
+		log.Info("skip ddl event", zap.Uint64("commitTs", ddl.CommitTs),
+			zap.String("query", ddl.Query),
+			zap.String("protocol", k.protocol.String()),
+			zap.String("namespace", k.id.Namespace),
+			zap.String("changefeed", k.id.ID),
+			zap.String("role", k.role.String()))
 		return nil
 	}
 
@@ -97,7 +103,7 @@ func (k *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 		zap.String("query", ddl.Query),
 		zap.String("namespace", k.id.Namespace),
 		zap.String("changefeed", k.id.ID),
-		zap.Any("role", k.role))
+		zap.String("role", k.role.String()))
 	if partitionRule == dispatcher.PartitionAll {
 		partitionNum, err := k.topicManager.GetPartitionNum(topic)
 		if err != nil {
