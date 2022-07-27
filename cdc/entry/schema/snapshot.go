@@ -22,6 +22,7 @@ import (
 	"github.com/google/btree"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"go.uber.org/zap"
 
@@ -126,6 +127,10 @@ func NewSingleSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplica
 // NewSnapshotFromMeta creates a schema snapshot from meta.
 func NewSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate bool) (*Snapshot, error) {
 	snap := NewEmptySnapshot(forceReplicate)
+
+	// after v6.2, `mysql` database is created by this function, it will not appear in history DDL job.
+	_, _ = meta.CreateMySQLDatabaseIfNotExists()
+
 	dbinfos, err := meta.ListDatabases()
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrMetaListDatabases, err)
@@ -194,6 +199,16 @@ func NewEmptySnapshot(forceReplicate bool) *Snapshot {
 		forceReplicate:   forceReplicate,
 		currentTs:        0,
 	}
+
+	mysqlDBInfo := &timodel.DBInfo{
+		ID:      1,
+		Name:    timodel.NewCIStr(mysql.SystemDB),
+		Charset: mysql.UTF8MB4Charset,
+		Collate: mysql.UTF8MB4DefaultCollation,
+		State:   timodel.StatePublic,
+	}
+
+	_ = inner.createSchema(mysqlDBInfo, 1)
 	return &Snapshot{inner: inner, rwlock: new(sync.RWMutex)}
 }
 
