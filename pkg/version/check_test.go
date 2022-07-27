@@ -133,6 +133,17 @@ func TestCheckClusterVersion(t *testing.T) {
 		require.Regexp(t, ".*PD .* is not supported.*", err)
 	}
 
+	{
+		mock.getPDVersion = func() string {
+			return maxPDVersion.String()
+		}
+		mock.getAllStores = func() []*metapb.Store {
+			return []*metapb.Store{{Version: MinTiKVVersion.String()}}
+		}
+		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, true)
+		require.Regexp(t, ".*PD .* is not supported.*", err)
+	}
+
 	// tikv version lower than the min supported
 	{
 		mock.getPDVersion = func() string {
@@ -148,13 +159,13 @@ func TestCheckClusterVersion(t *testing.T) {
 		require.Nil(t, err)
 	}
 
-	// check pd / tikv with higher version, suppose current cdc version is `6.3.0`
+	// check pd / tikv with the maximum allowed version
 	{
 		mock.getPDVersion = func() string {
-			return "7.0.0"
+			return "7.9.9"
 		}
 		mock.getAllStores = func() []*metapb.Store {
-			return []*metapb.Store{{Version: "7.0.0"}}
+			return []*metapb.Store{{Version: "v7.9.9"}}
 		}
 		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, true)
 		require.Nil(t, err)
@@ -334,4 +345,32 @@ func TestCheckPDVersionError(t *testing.T) {
 	require.Contains(t, checkPDVersion(context.TODO(), ts.URL, nil).Error(),
 		"[CDC:ErrCheckClusterVersionFromPD]failed to request PD 500 Internal Server Error , please try again later",
 	)
+}
+
+func TestCheckTiCDCVersion(t *testing.T) {
+	t.Parallel()
+
+	versions := make(map[string]struct{})
+
+	versions["v6.3.0"] = struct{}{}
+	require.True(t, CheckTiCDCVersion(versions))
+
+	versions["v6.4.0"] = struct{}{}
+	require.True(t, CheckTiCDCVersion(versions))
+
+	versions["v6.5.0"] = struct{}{}
+	require.False(t, CheckTiCDCVersion(versions))
+
+	delete(versions, "v6.5.0")
+	delete(versions, "v6.4.0")
+	versions["v5.0.0"] = struct{}{}
+	require.False(t, CheckTiCDCVersion(versions))
+
+	delete(versions, "v5.0.0")
+	versions["v8.0.0"] = struct{}{}
+	require.False(t, CheckTiCDCVersion(versions))
+
+	delete(versions, "v8.0.0")
+	versions["invalid-version"] = struct{}{}
+	require.False(t, CheckTiCDCVersion(versions))
 }
