@@ -74,16 +74,11 @@ func GetEncoderConfig(
 
 // GetTopicManagerAndTryCreateTopic returns the topic manager and try to create the topic.
 func GetTopicManagerAndTryCreateTopic(
-	endpoints []string,
 	topic string,
 	topicCfg *kafka.AutoCreateTopicConfig,
+	client sarama.Client,
 	adminClient pkafka.ClusterAdminClient,
-	saramaConfig *sarama.Config,
 ) (manager.TopicManager, error) {
-	client, err := sarama.NewClient(endpoints, saramaConfig)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
 
 	topicManager, err := manager.NewKafkaTopicManager(
 		client,

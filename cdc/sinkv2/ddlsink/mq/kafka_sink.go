@@ -91,10 +91,10 @@ func NewKafkaDDLSink(
 	}()
 
 	topicManager, err := mqutil.GetTopicManagerAndTryCreateTopic(
-		baseConfig.BrokerEndpoints, topic,
+		topic,
 		baseConfig.DeriveTopicConfig(),
+		client,
 		adminClient,
-		saramaConfig,
 	)
 	if err != nil {
 		return nil, errors.Trace(err)
