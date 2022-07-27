@@ -19,11 +19,10 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/Shopify/sarama"
 	mm "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
-
-	"github.com/Shopify/sarama"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq/producer"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/kafka"
