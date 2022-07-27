@@ -100,7 +100,6 @@ type ownerImpl struct {
 		sync.Mutex
 		queue []*ownerJob
 	}
-
 	// logLimiter controls cluster version check log output rate
 	logLimiter   *rate.Limiter
 	lastTickTime time.Time
@@ -152,7 +151,6 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 	if !o.clusterVersionConsistent(state.Captures) {
 		return state, nil
 	}
-
 	// Owner should update GC safepoint before initializing changefeed, so
 	// changefeed can remove its "ticdc-creating" service GC safepoint during
 	// initializing.
@@ -380,17 +378,19 @@ func (o *ownerImpl) updateMetrics(state *orchestrator.GlobalReactorState) {
 }
 
 func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model.CaptureInfo) bool {
-	myVersion := version.ReleaseVersion
+	versions := make(map[string]struct{}, len(captures))
 	for _, capture := range captures {
-		if myVersion != capture.Version {
-			if o.logLimiter.Allow() {
-				log.Warn("the capture version is different with the owner",
-					zap.Reflect("capture", capture), zap.String("ownerVer", myVersion))
-			}
-			return false
+		versions[capture.Version] = struct{}{}
+	}
+
+	ok := version.CheckTiCDCVersion(versions)
+	if !ok {
+		if o.logLimiter.Allow() {
+			log.Warn("capture version is not allowed",
+				zap.Any("captures", captures), zap.String("ownerVer", version.ReleaseVersion))
 		}
 	}
-	return true
+	return ok
 }
 
 func (o *ownerImpl) handleDrainCaptures(query *scheduler.Query, done chan<- error) {

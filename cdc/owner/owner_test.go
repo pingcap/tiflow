@@ -309,6 +309,49 @@ func TestFixChangefeedSinkProtocol(t *testing.T) {
 		"kafka://127.0.0.1:9092/ticdc-test2?protocol=open-protocol")
 }
 
+func TestCheckClusterVersion(t *testing.T) {
+	ctx := cdcContext.NewBackendContext4Test(false)
+	owner, state, tester := createOwner4Test(ctx, t)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
+
+	tester.MustUpdate(fmt.Sprintf("%s/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
+		etcd.DefaultClusterAndMetaPrefix),
+		[]byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225",
+"address":"127.0.0.1:8300","version":"v6.0.0"}`))
+
+	changefeedID := model.DefaultChangeFeedID("test-changefeed")
+	changefeedInfo := &model.ChangeFeedInfo{
+		StartTs: oracle.GoTimeToTS(time.Now()),
+		Config:  config.GetDefaultReplicaConfig(),
+	}
+	changefeedStr, err := changefeedInfo.Marshal()
+	require.Nil(t, err)
+	cdcKey := etcd.CDCKey{
+		ClusterID:    state.ClusterID,
+		Tp:           etcd.CDCKeyTypeChangefeedInfo,
+		ChangefeedID: changefeedID,
+	}
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
+
+	// check the tick is skipped and the changefeed will not be handled
+	_, err = owner.Tick(ctx, state)
+	tester.MustApplyPatches()
+	require.Nil(t, err)
+	require.NotContains(t, owner.changefeeds, changefeedID)
+
+	tester.MustUpdate(fmt.Sprintf("%s/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
+		etcd.DefaultClusterAndMetaPrefix,
+	),
+		[]byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300","version":"`+ctx.GlobalVars().CaptureInfo.Version+`"}`))
+
+	// check the tick is not skipped and the changefeed will be handled normally
+	_, err = owner.Tick(ctx, state)
+	tester.MustApplyPatches()
+	require.Nil(t, err)
+	require.Contains(t, owner.changefeeds, changefeedID)
+}
+
 func TestAdminJob(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(false)
 	ctx, cancel := cdcContext.WithCancel(ctx)

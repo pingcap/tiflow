@@ -37,19 +37,21 @@ var (
 	minPDVersion = semver.New("5.1.0-alpha")
 	// maxPDVersion is the version of the maximum compatible PD.
 	// Compatible versions are in [minPDVersion, maxPDVersion)
-	// 9999.0.0 disables the check effectively in the master branch.
 	maxPDVersion = semver.New("8.0.0")
 
 	// MinTiKVVersion is the version of the minimal compatible TiKV.
 	MinTiKVVersion = semver.New("5.1.0-alpha")
 	// maxTiKVVersion is the version of the maximum compatible TiKV.
 	// Compatible versions are in [MinTiKVVersion, maxTiKVVersion)
-	// 9999.0.0 disables the check effectively in the master branch.
 	maxTiKVVersion = semver.New("8.0.0")
 
 	// CaptureInfo.Version is added since v4.0.11,
 	// we use the minimal release version as default.
 	defaultTiCDCVersion = semver.New("4.0.1")
+
+	minTiCDCVersion = semver.New("6.3.0")
+
+	maxTiCDCVersion = semver.New("8.0.0")
 )
 
 var versionHash = regexp.MustCompile("-[0-9]+-g[0-9a-f]{7,}(-dev)?")
@@ -85,6 +87,31 @@ func CheckClusterVersion(
 	}
 
 	return err
+}
+
+// CheckTiCDCVersion return true if all cdc instance have valid semantic version
+// the whole cluster only allow at most 2 different version instances
+// and should in the range [minTiCDCVersion, maxTiCDCVersion)
+func CheckTiCDCVersion(versions map[string]struct{}) bool {
+	if len(versions) >= 3 {
+		return false
+	}
+	if len(versions) <= 1 {
+		return true
+	}
+	ver := &semver.Version{}
+	for v := range versions {
+		if err := ver.Set(removeVAndHash(v)); err != nil {
+			return false
+		}
+		if ver.Compare(*minTiCDCVersion) < 0 {
+			return false
+		}
+		if ver.Compare(*maxTiCDCVersion) >= 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // checkPDVersion check PD version.
