@@ -129,10 +129,9 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr stri
 	fmt.Printf("connect clients\n")
 
 	// TODO support https.
-	dialUrl := fmt.Sprintf("http://%s", config.MasterAddrs[0])
-	grpcConn, err := grpc.Dial(dialUrl)
+	dialURL := fmt.Sprintf("http://%s", config.MasterAddrs[0])
+	jobManagerCli, err := newJobManagerClient(dialURL)
 	require.NoError(t, err)
-	jobManagerCli := pb.NewJobManagerClient(grpcConn)
 
 	for {
 		resp, err := democlient.client.IsReady(ctx, &pb.IsReadyRequest{})
