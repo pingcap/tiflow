@@ -54,10 +54,8 @@ const (
 	)`
 )
 
-var (
-	// NewCheckpointAgent is a method to create a new checkpoint agent
-	NewCheckpointAgent = NewAgentImpl
-)
+// NewCheckpointAgent is a method to create a new checkpoint agent
+var NewCheckpointAgent = NewAgentImpl
 
 // Agent defeins a checkpoint agent interface
 type Agent interface {
