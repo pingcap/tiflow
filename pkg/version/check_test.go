@@ -98,6 +98,18 @@ func TestCheckClusterVersion(t *testing.T) {
 		require.Nil(t, err)
 	}
 
+	// check pd / tikv with the maximum allowed version
+	{
+		mock.getPDVersion = func() string {
+			return "7.9.9"
+		}
+		mock.getAllStores = func() []*metapb.Store {
+			return []*metapb.Store{{Version: "v7.9.9"}}
+		}
+		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, true)
+		require.Nil(t, err)
+	}
+
 	// Check invalid PD/TiKV version.
 	{
 		mock.getPDVersion = func() string {
@@ -159,16 +171,17 @@ func TestCheckClusterVersion(t *testing.T) {
 		require.Nil(t, err)
 	}
 
-	// check pd / tikv with the maximum allowed version
+	// Check maximum supported TiKV version
 	{
 		mock.getPDVersion = func() string {
-			return "7.9.9"
+			return minPDVersion.String()
 		}
+
 		mock.getAllStores = func() []*metapb.Store {
-			return []*metapb.Store{{Version: "v7.9.9"}}
+			return []*metapb.Store{{Version: maxTiKVVersion.String()}}
 		}
 		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, true)
-		require.Nil(t, err)
+		require.Regexp(t, ".*TiKV .* is not supported.*", err)
 	}
 
 	{
