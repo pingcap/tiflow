@@ -1023,7 +1023,7 @@ sink config invalid
 
 ["CDC:ErrSinkURIInvalid"]
 error = '''
-sink uri invalid
+sink uri invalid '%s'
 '''
 
 ["CDC:ErrSnapshotLostByGC"]

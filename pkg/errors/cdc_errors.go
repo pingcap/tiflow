@@ -320,7 +320,7 @@ var (
 		errors.RFCCodeText("CDC:ErrAsyncBroadcastNotSupport"),
 	)
 	ErrSinkURIInvalid = errors.Normalize(
-		"sink uri invalid",
+		"sink uri invalid '%s'",
 		errors.RFCCodeText("CDC:ErrSinkURIInvalid"),
 	)
 	ErrMQSinkUnknownProtocol = errors.Normalize(
