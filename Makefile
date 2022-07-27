@@ -302,9 +302,6 @@ dm-chaos-case:
 dm_debug-tools:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/binlog-event-blackhole ./dm/debug-tools/binlog-event-blackhole
 
-dm_generate_proto:
-	@echo "dm_generate_proto is merged into generate-protobuf, please run 'make generate-protobuf' instead"
-
 dm_generate_mock: tools/bin/mockgen
 	./dm/tests/generate-mock.sh
 
@@ -489,9 +486,6 @@ engine: tiflow tiflow-demo
 
 tiflow:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
-
-tiflow-proto:
-	@echo "tiflow-proto is merged into generate-protobuf, please run 'make generate-protobuf' instead."
 
 tiflow-demo:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./cmd/tiflow-demoserver
