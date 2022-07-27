@@ -57,22 +57,28 @@ type RPCClientType any
 
 // LeaderClientWithLock encapsulates a thread-safe rpc client
 type LeaderClientWithLock[T RPCClientType] struct {
-	mu    sync.RWMutex
-	inner *FailoverRPCClients[T]
+	mu      sync.RWMutex
+	inner   *T
+	closeFn func()
 }
 
 // Get returns internal FailoverRPCClients
-func (l *LeaderClientWithLock[T]) Get() *FailoverRPCClients[T] {
+func (l *LeaderClientWithLock[T]) Get() (ret T, ok bool) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
-	return l.inner
+	if l.inner == nil {
+		ok = false
+		return
+	}
+	return *l.inner, true
 }
 
 // Set sets internal FailoverRPCClients to given value
-func (l *LeaderClientWithLock[T]) Set(c *FailoverRPCClients[T]) {
+func (l *LeaderClientWithLock[T]) Set(c T, closeFn func()) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.inner = c
+	l.inner = &c
+	l.closeFn = closeFn
 }
 
 // Close closes internal FailoverRPCClients
@@ -80,9 +86,9 @@ func (l *LeaderClientWithLock[T]) Close() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.inner != nil {
-		err := l.inner.Close()
-		if err != nil {
-			log.Warn("close leader client failed", zap.Error(err))
+		if l.closeFn != nil {
+			l.closeFn()
+			l.closeFn = nil
 		}
 		l.inner = nil
 	}
@@ -198,13 +204,13 @@ func (h preRPCHookImpl[T]) forwardToLeader(
 		return false, nil
 	}
 	if needForward {
-		inner := h.leaderCli.Get()
-		if inner == nil {
+		inner, ok := h.leaderCli.Get()
+		if !ok {
 			return true, errors.ErrMasterRPCNotForward.GenWithStackByArgs()
 		}
 
 		params := []reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(req)}
-		results := reflect.ValueOf(inner.GetLeaderClient()).
+		results := reflect.ValueOf(inner).
 			MethodByName(methodName).
 			Call(params)
 		// result's inner types should be (*pb.XXResponse, error), which is same as s.leaderClient.XXRPCMethod
@@ -245,7 +251,7 @@ func (h preRPCHookImpl[T]) isLeaderAndNeedForward(ctx context.Context) (isLeader
 	}
 
 	isLeader = false
-	needForward = h.leaderCli.Get() != nil
+	_, needForward = h.leaderCli.Get()
 	if leader == nil {
 		return
 	}

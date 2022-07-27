@@ -32,7 +32,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/pingcap/tiflow/dm/dm/common"
-	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/server"
 	"github.com/pingcap/tiflow/engine/executor/worker"
@@ -68,7 +67,7 @@ type Server struct {
 
 	tcpServer     tcpserver.TCPServer
 	grpcSrv       *grpc.Server
-	masterClient  *pkgClient.ServerMasterClientWithFailOver
+	masterClient  pkgClient.ServerMasterClient
 	cliUpdateCh   chan cliUpdateInfo
 	taskRunner    *worker.TaskRunner
 	taskCommitter *worker.TaskCommitter
@@ -131,8 +130,8 @@ func (s *Server) buildDeps() (*deps.Deps, error) {
 		return nil, err
 	}
 
-	err = deps.Provide(func() client.ClientsManager {
-		return client.NewClientManager()
+	err = deps.Provide(func() pkgClient.ExecutorGroup {
+		return pkgClient.NewExecutorGroup(nil, log.L().Logger)
 	})
 	if err != nil {
 		return nil, err
@@ -463,7 +462,8 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 func (s *Server) initClients(ctx context.Context) (err error) {
 	// initServerMasterList is a MasterServerList with all servers marked as followers.
 	initServerMasterList := getInitServerMasterList(s.cfg.Join)
-	s.masterClient, err = pkgClient.NewServerMasterClientWithFailOver(initServerMasterList)
+	// TODO support TLS
+	s.masterClient, err = pkgClient.NewServerMasterClientWithFailOver(initServerMasterList, nil)
 	if err != nil {
 		log.L().Info("master client init Failed",
 			zap.String("server-addrs", s.cfg.Join),
@@ -666,7 +666,9 @@ func (s *Server) bgUpdateServerMasterClients(ctx context.Context) error {
 				// s.cliUpdateCh is closed.
 				return nil
 			}
-			s.masterClient.UpdateServerList(info.toServerMasterList())
+			if failoverCli, ok := s.masterClient.(*pkgClient.ServerMasterClientWithFailOver); ok {
+				failoverCli.UpdateServerList(info.toServerMasterList())
+			}
 		}
 	}
 }

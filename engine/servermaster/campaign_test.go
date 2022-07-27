@@ -20,7 +20,6 @@ import (
 	"testing"
 	"time"
 
-	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
@@ -69,7 +68,7 @@ func TestLeaderLoopSuccess(t *testing.T) {
 		info:            &model.NodeInfo{ID: model.DeployNodeID(name)},
 		membership:      &EtcdMembership{etcdCli: client},
 	}
-	preRPCHook := rpcutil.NewPreRPCHook[pb.MasterClient](
+	preRPCHook := rpcutil.NewPreRPCHook[multiClient](
 		s.id,
 		&s.leader,
 		s.masterCli,
@@ -129,7 +128,7 @@ func TestLeaderLoopMeetStaleData(t *testing.T) {
 		info:            &model.NodeInfo{ID: model.DeployNodeID(name)},
 		membership:      &EtcdMembership{etcdCli: client},
 	}
-	preRPCHook := rpcutil.NewPreRPCHook[pb.MasterClient](
+	preRPCHook := rpcutil.NewPreRPCHook[multiClient](
 		s.id,
 		&s.leader,
 		s.masterCli,
@@ -196,16 +195,15 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 		cfg.Etcd.Name = names[i]
 		cfg.AdvertiseAddr = addrs[i]
 		s := &Server{
-			id:          genServerMasterUUID(names[i]),
-			cfg:         cfg,
-			etcd:        etcds[i],
-			etcdClient:  client,
-			info:        &model.NodeInfo{ID: model.DeployNodeID(names[i])},
-			masterCli:   &rpcutil.LeaderClientWithLock[pb.MasterClient]{},
-			resourceCli: &rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]{},
-			membership:  &EtcdMembership{etcdCli: client},
+			id:         genServerMasterUUID(names[i]),
+			cfg:        cfg,
+			etcd:       etcds[i],
+			etcdClient: client,
+			info:       &model.NodeInfo{ID: model.DeployNodeID(names[i])},
+			masterCli:  &rpcutil.LeaderClientWithLock[multiClient]{},
+			membership: &EtcdMembership{etcdCli: client},
 		}
-		preRPCHook := rpcutil.NewPreRPCHook[pb.MasterClient](
+		preRPCHook := rpcutil.NewPreRPCHook[multiClient](
 			s.id,
 			&s.leader,
 			s.masterCli,
@@ -256,8 +254,8 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 			require.Nil(t, err)
 
 			// check masterCli is not set
-			leaderCli := s.masterCli.Get()
-			require.Nil(t, leaderCli)
+			_, ok := s.masterCli.Get()
+			require.False(t, ok)
 
 			err = s.leaderLoop(ctx)
 			require.EqualError(t, err, context.Canceled.Error())
@@ -278,7 +276,8 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 			if member.Name != servers[leaderIndex].name() {
 				return false
 			}
-			return s.masterCli.Get() != nil
+			_, ok := s.masterCli.Get()
+			return ok
 		}, time.Second*2, time.Millisecond*20)
 
 	}

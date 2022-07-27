@@ -23,6 +23,9 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/golang/mock/gomock"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -32,8 +35,6 @@ import (
 	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/dm/master"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
-	"github.com/pingcap/tiflow/engine/client"
-	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
 	libMetadata "github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -92,8 +93,8 @@ type masterParamListForTest struct {
 	MessageSender         p2p.MessageSender
 	FrameMetaClient       pkgOrm.Client
 	BusinessClientConn    metaModel.ClientConn
-	ExecutorClientManager client.ClientsManager
-	ServerMasterClient    client.MasterClient
+	ExecutorGroup         client.ExecutorGroup
+	ServerMasterClient    client.ServerMasterClient
 	ResourceBroker        broker.Broker
 }
 
@@ -101,14 +102,14 @@ type masterParamListForTest struct {
 func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 	cli, err := pkgOrm.NewMockClient()
 	require.NoError(t.T(), err)
-	mockServerMasterClient := &client.MockServerMasterClient{}
-	mockExecutorClient := client.NewClientManager()
+	mockServerMasterClient := client.NewMockServerMasterClient(gomock.NewController(t.T()))
+	mockExecutorGroup := client.NewMockExecutorGroup()
 	depsForTest := masterParamListForTest{
 		MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 		MessageSender:         p2p.NewMockMessageSender(),
 		FrameMetaClient:       cli,
 		BusinessClientConn:    kvmock.NewMockClientConn(),
-		ExecutorClientManager: mockExecutorClient,
+		ExecutorGroup:         mockExecutorGroup,
 		ServerMasterClient:    mockServerMasterClient,
 		ResourceBroker:        nil,
 	}
@@ -150,10 +151,15 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 	require.NoError(t.T(), jobmaster.Init(context.Background()))
 
 	// Poll
-	mockServerMasterClient.On("ScheduleTask", mock.Anything, mock.Anything, mock.Anything).
-		Return(&pb.ScheduleTaskResponse{}, nil).Once()
-	mockServerMasterClient.On("ScheduleTask", mock.Anything, mock.Anything, mock.Anything).
-		Return(&pb.ScheduleTaskResponse{}, nil).Once()
+	mockServerMasterClient.EXPECT().
+		ScheduleTask(gomock.Any(), gomock.Any()).
+		Return(&pb.ScheduleTaskResponse{}, nil).
+		MinTimes(0)
+	mockServerMasterClient.EXPECT().
+		ScheduleTask(gomock.Any(), gomock.Any()).
+		Return(&pb.ScheduleTaskResponse{}, nil).
+		MinTimes(0)
+
 	require.NoError(t.T(), jobmaster.Poll(context.Background()))
 	require.NoError(t.T(), jobmaster.Poll(context.Background()))
 	require.NoError(t.T(), jobmaster.Poll(context.Background()))

@@ -18,6 +18,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/client/internal"
+	"github.com/pingcap/tiflow/pkg/security"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
@@ -51,12 +52,15 @@ type ServerMasterClientWithFailOver struct {
 
 // NewServerMasterClientWithEndpointList creates a new ServerMasterClientWithFailOver
 // with an endpoint list.
-func NewServerMasterClientWithEndpointList(endpoints []string) (*ServerMasterClientWithFailOver, error) {
+func NewServerMasterClientWithEndpointList(
+	endpoints []string,
+	credentials *security.Credential,
+) (*ServerMasterClientWithFailOver, error) {
 	serverList := make(MasterServerList, len(endpoints))
 	for _, addr := range endpoints {
 		serverList[addr] = false
 	}
-	return NewServerMasterClientWithFailOver(serverList)
+	return NewServerMasterClientWithFailOver(serverList, credentials)
 }
 
 // NewServerMasterClientWithFailOver creates a new ServerMasterClientWithFailOver.
@@ -64,11 +68,22 @@ func NewServerMasterClientWithEndpointList(endpoints []string) (*ServerMasterCli
 // in each executor process.
 func NewServerMasterClientWithFailOver(
 	serverList MasterServerList,
+	credentials *security.Credential,
 ) (*ServerMasterClientWithFailOver, error) {
+	if credentials == nil {
+		credentials = &security.Credential{}
+	}
+
+	dialOpt, err := credentials.ToGRPCDialOption()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	leaderResolver := internal.NewLeaderResolver(serverList)
 	conn, err := grpc.Dial(
-		"tiflow_masters:///", // Dummy
-		grpc.WithResolvers(leaderResolver))
+		"tiflow://dummy", // Dummy
+		grpc.WithResolvers(leaderResolver),
+		dialOpt)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

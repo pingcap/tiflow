@@ -27,7 +27,6 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
-	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/fake"
 	engineModel "github.com/pingcap/tiflow/engine/model"
@@ -40,8 +39,7 @@ import (
 // ChaosCli is used to interact with server master, fake job and provides ways
 // to adding chaos in e2e test.
 type ChaosCli struct {
-	// used to operate with server master, such as submit job
-	masterCli client.MasterClient
+	jobManagerCli pb.JobManagerClient
 	// cc is the client connection for business metastore
 	clientConn metaModel.ClientConn
 	// used to query metadata which is stored from business logic(job-level isolation)
@@ -68,10 +66,17 @@ type FakeJobConfig struct {
 func NewUTCli(ctx context.Context, masterAddrs, businessMetaAddrs []string, project tenant.ProjectInfo,
 	cfg *FakeJobConfig,
 ) (*ChaosCli, error) {
-	masterCli, err := client.NewMasterClient(ctx, masterAddrs)
+	if len(masterAddrs) == 0 {
+		panic("length of masterAddrs is 0")
+	}
+
+	// TODO support TLS.
+	grpcConn, err := grpc.Dial(masterAddrs[0])
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
+	jobManagerCli := pb.NewJobManagerClient(grpcConn)
 
 	conf := server.NewDefaultBusinessMetaConfig()
 	conf.Endpoints = businessMetaAddrs
@@ -101,7 +106,7 @@ func NewUTCli(ctx context.Context, masterAddrs, businessMetaAddrs []string, proj
 	}
 
 	return &ChaosCli{
-		masterCli:     masterCli,
+		jobManagerCli: jobManagerCli,
 		clientConn:    cc,
 		masterEtcdCli: masterEtcdCli,
 		fakeJobCli:    fakeJobCli,
@@ -120,7 +125,7 @@ func (cli *ChaosCli) CreateJob(ctx context.Context, tp engineModel.JobType, conf
 			ProjectId: cli.project.ProjectID(),
 		},
 	}
-	resp, err := cli.masterCli.SubmitJob(ctx, req)
+	resp, err := cli.jobManagerCli.SubmitJob(ctx, req)
 	if err != nil {
 		return "", err
 	}
@@ -139,7 +144,7 @@ func (cli *ChaosCli) PauseJob(ctx context.Context, jobID string) error {
 			ProjectId: cli.project.ProjectID(),
 		},
 	}
-	resp, err := cli.masterCli.PauseJob(ctx, req)
+	resp, err := cli.jobManagerCli.PauseJob(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -160,7 +165,7 @@ func (cli *ChaosCli) CheckJobStatus(
 			ProjectId: cli.project.ProjectID(),
 		},
 	}
-	resp, err := cli.masterCli.QueryJob(ctx, req)
+	resp, err := cli.jobManagerCli.QueryJob(ctx, req)
 	if err != nil {
 		return false, err
 	}

@@ -72,7 +72,8 @@ func (c *discoveryClient) RegisterExecutor(
 		request,
 		// RegisterExecutor is not idempotent in general
 		// TODO review idempotency
-		internal.WithForceNoRetry())
+		// internal.WithForceNoRetry()
+	)
 	resp, err := call.Do(ctx)
 	if err != nil {
 		return "", err
@@ -108,7 +109,7 @@ func (c *discoveryClient) RegisterMetaStore(
 		return err
 	}
 	if resp.Err != nil && resp.Err.Code != enginepb.ErrorCode_None {
-		return errors.Errorf("RegisterMetaStore: %s", resp.Err.Size())
+		return errors.Errorf("RegisterMetaStore: %d", resp.Err.Size())
 	}
 	return nil
 }

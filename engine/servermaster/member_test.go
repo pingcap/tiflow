@@ -17,7 +17,6 @@ import (
 	"context"
 	"testing"
 
-	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
@@ -113,7 +112,7 @@ func TestUpdateServerMembers(t *testing.T) {
 		etcd:       etcd,
 		membership: &EtcdMembership{etcdCli: etcdCli},
 	}
-	preRPCHook := rpcutil.NewPreRPCHook[pb.MasterClient](
+	preRPCHook := rpcutil.NewPreRPCHook[multiClient](
 		id,
 		&s.leader,
 		s.masterCli,

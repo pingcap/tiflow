@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	schemaName = "tiflow_masters"
+	schemaName = "tiflow"
 )
 
 // MasterServerList stores a map from server addresses to whether they are the leader.
@@ -126,10 +126,12 @@ func (b *LeaderResolver) getResolverState() resolver.State {
 	// Sorts the list of the followers to provide a fail-over order.
 	b.FollowerSorter(addrList)
 
-	addrListWithLeader := append([]resolver.Address{*leaderAddr}, addrList...)
+	if leaderAddr != nil {
+		addrList = append([]resolver.Address{*leaderAddr}, addrList...)
+	}
 
 	return resolver.State{
-		Addresses:     addrListWithLeader,
+		Addresses:     addrList,
 		ServiceConfig: b.serviceConfig,
 	}
 }

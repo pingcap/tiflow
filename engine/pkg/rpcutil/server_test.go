@@ -33,10 +33,10 @@ func TestCheckLeaderAndNeedForward(t *testing.T) {
 
 	serverID := "server1"
 	ctx := context.Background()
-	h := &preRPCHookImpl[int]{
+	h := &preRPCHookImpl[*FailoverRPCClients[int]]{
 		id:        serverID,
 		leader:    &atomic.Value{},
-		leaderCli: &LeaderClientWithLock[int]{},
+		leaderCli: &LeaderClientWithLock[*FailoverRPCClients[int]]{},
 	}
 
 	isLeader, needForward := h.isLeaderAndNeedForward(ctx)
@@ -66,7 +66,10 @@ func TestCheckLeaderAndNeedForward(t *testing.T) {
 		require.True(t, needForward)
 	}()
 	time.Sleep(time.Second)
-	h.leaderCli.Set(&FailoverRPCClients[int]{})
+	cli := &FailoverRPCClients[int]{}
+	h.leaderCli.Set(cli, func() {
+		_ = cli.Close()
+	})
 	h.leader.Store(&Member{Name: serverID})
 	wg.Wait()
 }
@@ -155,9 +158,8 @@ func TestForwardToLeader(t *testing.T) {
 	// the server is not leader, and cluster has another leader
 
 	s.hook.leader.Store(&Member{Name: "another"})
-	s.hook.leaderCli.Set(NewFailoverRPCClientsForTest[mockRPCClientIface](
-		&mockRPCClientImpl{},
-	))
+	cli := &mockRPCClientImpl{}
+	s.hook.leaderCli.Set(cli, func() {})
 	resp, err = s.MockRPC(ctx, req)
 	require.NoError(t, err)
 	require.Equal(t, 2, resp.id)
@@ -182,10 +184,8 @@ func TestForwardToLeader(t *testing.T) {
 	require.True(t, errors.ErrMasterRPCNotForward.Equal(err))
 
 	// forwarding returns error
-
-	s.hook.leaderCli.Set(NewFailoverRPCClientsForTest[mockRPCClientIface](
-		&mockRPCClientImpl{fail: true},
-	))
+	cli = &mockRPCClientImpl{fail: true}
+	s.hook.leaderCli.Set(cli, func() {})
 	resp, err = s.MockRPC(ctx, req)
 	require.ErrorContains(t, err, "mock failed")
 }

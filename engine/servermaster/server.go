@@ -661,6 +661,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		pkgClient.MasterServerList{
 			s.cfg.MasterAddr: true,
 		},
+		nil, // TODO support TLS
 	)
 	if err != nil {
 		return

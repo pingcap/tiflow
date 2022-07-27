@@ -78,8 +78,8 @@ func NewMockMasterImpl(t *testing.T, masterID, id frameModel.MasterID) *MockMast
 	ret.messageSender = ret.DefaultBaseMaster.messageSender
 	ret.frameMetaClient = ret.DefaultBaseMaster.frameMetaClient
 	ret.businessMetaKVClient = ret.DefaultBaseMaster.businessMetaKVClient.(*metaMock.MetaMock)
-	// ret.executorGroup = ret.DefaultBaseMaster.executorGroup.(*client.Manager)
-	// ret.serverMasterClient = ret.DefaultBaseMaster.serverMasterClient.(*client.MockServerMasterClient)
+	ret.executorGroup = ret.DefaultBaseMaster.executorGroup.(*client.MockExecutorGroup)
+	ret.serverMasterClient = ret.DefaultBaseMaster.serverMasterClient.(*client.MockServerMasterClient)
 
 	return ret
 }

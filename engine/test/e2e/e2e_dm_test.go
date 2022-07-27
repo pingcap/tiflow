@@ -28,20 +28,22 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/dm/dm/pb"
-	"github.com/pingcap/tiflow/tests/integration_tests/util"
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	engineModel "github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pkg/client"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"github.com/pingcap/tiflow/tests/integration_tests/util"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 )
 
 func TestDMJob(t *testing.T) {
-	masterClient, err := client.NewServerMasterClientWithEndpointList([]string{"127.0.0.1:10245"})
+	// TODO support https.
+	dialUrl := "http://127.0.0.1:10245"
+	grpcConn, err := grpc.Dial(dialUrl)
 	require.NoError(t, err)
+	jobManagerCli := enginepb.NewJobManagerClient(grpcConn)
 
 	mysqlCfg := util.DBConfig{
 		Host:     "127.0.0.1",
@@ -75,11 +77,11 @@ func TestDMJob(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		testSimpleAllModeTask(t, masterClient, mysql, tidb, "test1")
+		testSimpleAllModeTask(t, jobManagerCli, mysql, tidb, "test1")
 	}()
 	go func() {
 		defer wg.Done()
-		testSimpleAllModeTask(t, masterClient, mysql, tidb, "test2")
+		testSimpleAllModeTask(t, jobManagerCli, mysql, tidb, "test2")
 	}()
 	wg.Wait()
 
@@ -109,7 +111,7 @@ func TestDMJob(t *testing.T) {
 // `db` should not contain special character.
 func testSimpleAllModeTask(
 	t *testing.T,
-	client client.ServerMasterClient,
+	client enginepb.JobManagerClient,
 	mysql, tidb *sql.DB,
 	db string,
 ) {
@@ -280,7 +282,7 @@ func testSimpleAllModeTask(
 	require.Equal(t, fmt.Sprintf("source '%s' has no error", source1), binlogResp.Results[source1].ErrorMsg)
 }
 
-func queryStatus(ctx context.Context, client client.MasterClient, jobID string, tasks []string, t *testing.T) (*enginepb.DebugJobResponse, error) {
+func queryStatus(ctx context.Context, client enginepb.JobManagerClient, jobID string, tasks []string, t *testing.T) (*enginepb.DebugJobResponse, error) {
 	var args struct {
 		Tasks []string
 	}
@@ -292,7 +294,7 @@ func queryStatus(ctx context.Context, client client.MasterClient, jobID string, 
 	return client.DebugJob(ctx2, &enginepb.DebugJobRequest{JobId: jobID, Command: dmpkg.QueryStatus, JsonArg: string(jsonArg)})
 }
 
-func operateTask(ctx context.Context, client client.MasterClient, jobID string, tasks []string, op dmpkg.OperateType, t *testing.T) (*enginepb.DebugJobResponse, error) {
+func operateTask(ctx context.Context, client enginepb.JobManagerClient, jobID string, tasks []string, op dmpkg.OperateType, t *testing.T) (*enginepb.DebugJobResponse, error) {
 	var args struct {
 		Tasks []string
 		Op    dmpkg.OperateType
@@ -306,13 +308,13 @@ func operateTask(ctx context.Context, client client.MasterClient, jobID string, 
 	return client.DebugJob(ctx2, &enginepb.DebugJobRequest{JobId: jobID, Command: dmpkg.OperateTask, JsonArg: string(jsonArg)})
 }
 
-func getJobCfg(ctx context.Context, client client.MasterClient, jobID string, t *testing.T) (*enginepb.DebugJobResponse, error) {
+func getJobCfg(ctx context.Context, client enginepb.JobManagerClient, jobID string, t *testing.T) (*enginepb.DebugJobResponse, error) {
 	ctx2, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	return client.DebugJob(ctx2, &enginepb.DebugJobRequest{JobId: jobID, Command: dmpkg.GetJobCfg})
 }
 
-func binlog(ctx context.Context, client client.MasterClient, jobID string, req *dmpkg.BinlogRequest, t *testing.T) (*enginepb.DebugJobResponse, error) {
+func binlog(ctx context.Context, client enginepb.JobManagerClient, jobID string, req *dmpkg.BinlogRequest, t *testing.T) (*enginepb.DebugJobResponse, error) {
 	ctx2, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	jsonArg, err := json.Marshal(req)
@@ -320,7 +322,7 @@ func binlog(ctx context.Context, client client.MasterClient, jobID string, req *
 	return client.DebugJob(ctx2, &enginepb.DebugJobRequest{JobId: jobID, Command: dmpkg.Binlog, JsonArg: string(jsonArg)})
 }
 
-func binlogSchema(ctx context.Context, client client.MasterClient, jobID string, req *dmpkg.BinlogSchemaRequest, t *testing.T) (*enginepb.DebugJobResponse, error) {
+func binlogSchema(ctx context.Context, client enginepb.JobManagerClient, jobID string, req *dmpkg.BinlogSchemaRequest, t *testing.T) (*enginepb.DebugJobResponse, error) {
 	ctx2, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	jsonArg, err := json.Marshal(req)

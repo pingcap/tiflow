@@ -23,13 +23,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-
-	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	cvs "github.com/pingcap/tiflow/engine/jobmaster/cvsjob"
 	engineModel "github.com/pingcap/tiflow/engine/model"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 )
 
 type Config struct {
@@ -130,8 +128,12 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr stri
 	democlient, err := NewDemoClient(ctx, demoAddr)
 	require.Nil(t, err)
 	fmt.Printf("connect clients\n")
-	masterclient, err := client.NewMasterClient(ctx, config.MasterAddrs)
-	require.Nil(t, err)
+
+	// TODO support https.
+	dialUrl := fmt.Sprintf("http://%s", config.MasterAddrs[0])
+	grpcConn, err := grpc.Dial(dialUrl)
+	require.NoError(t, err)
+	jobManagerCli := pb.NewJobManagerClient(grpcConn)
 
 	for {
 		resp, err := democlient.client.IsReady(ctx, &pb.IsReadyRequest{})
@@ -148,7 +150,7 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr stri
 	<-flowControl
 	fmt.Printf("test is ready\n")
 
-	resp, err := masterclient.SubmitJob(ctx, &pb.SubmitJobRequest{
+	resp, err := jobManagerCli.SubmitJob(ctx, &pb.SubmitJobRequest{
 		Tp:     int32(engineModel.JobTypeCVSDemo),
 		Config: configBytes,
 	})
@@ -163,7 +165,7 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr stri
 	// continue to query
 	for {
 		ctx1, cancel := context.WithTimeout(ctx, 3*time.Second)
-		queryResp, err := masterclient.QueryJob(ctx1, queryReq)
+		queryResp, err := jobManagerCli.QueryJob(ctx1, queryReq)
 		require.NoError(t, err)
 		require.Nil(t, queryResp.Err)
 		require.Equal(t, queryResp.Tp, int32(engineModel.JobTypeCVSDemo))
