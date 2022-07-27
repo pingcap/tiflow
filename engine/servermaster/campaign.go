@@ -23,7 +23,6 @@ import (
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/pingcap/tiflow/engine/client"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
@@ -99,20 +98,7 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 		}
 		leaderResignFn = newResignFn
 
-		errg, leaderCtx := errgroup.WithContext(newCtx)
-		errg.Go(func() error {
-			for {
-				select {
-				case <-leaderCtx.Done():
-					return errors.Trace(ctx.Err())
-				}
-			}
-		})
-		errg.Go(func() error {
-			return s.leaderServiceFn(leaderCtx)
-		})
-		err = errg.Wait()
-		if err != nil {
+		if err := s.leaderServiceFn(newCtx); err != nil {
 			if errors.Cause(err) == context.Canceled ||
 				derrors.ErrEtcdLeaderChanged.Equal(err) {
 				log.Info("leader service exits", zap.Error(err))
