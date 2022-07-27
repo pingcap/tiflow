@@ -44,7 +44,7 @@ func TestGetBaseConn(t *testing.T) {
 	require.NotNil(t, dbConn)
 
 	mock.ExpectQuery("select 1").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("1"))
-	// nolint:sqlclosecheck
+	// nolint:sqlclosecheck,rowserrcheck
 	rows, err := dbConn.QuerySQL(tctx, "select 1")
 	require.NoError(t, err)
 	ids := make([]int, 0, 1)
