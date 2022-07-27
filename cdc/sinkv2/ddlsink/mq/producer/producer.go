@@ -17,7 +17,6 @@ import (
 	"context"
 
 	"github.com/Shopify/sarama"
-
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 )
 
