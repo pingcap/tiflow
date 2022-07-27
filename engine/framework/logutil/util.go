@@ -24,10 +24,10 @@ const (
 	// constFieldTenantKey and constFieldProjectKey is used to recognize metric for tenant/project
 	constFieldTenantKey  = "tenant"
 	constFieldProjectKey = "project_id"
-	// constFieldJobKey is used to recognize jobs of the same job type
-	constFieldJobKey = "job_id"
-	// FieldWorkerKey is used to recognize workers of the same job
-	constFieldWorkerKey = "worker_id"
+	// ConstFieldJobKey is used to recognize jobs of the same job type
+	ConstFieldJobKey = "job_id"
+	// ConstFieldWorkerKey is used to recognize workers of the same job
+	ConstFieldWorkerKey = "worker_id"
 )
 
 // WithProjectInfo attaches project info to logger
@@ -41,13 +41,13 @@ func WithProjectInfo(logger *zap.Logger, project tenant.ProjectInfo) *zap.Logger
 // WithMasterID attaches master id to logger
 func WithMasterID(logger *zap.Logger, masterID frameModel.MasterID) *zap.Logger {
 	return logger.With(
-		zap.String(constFieldJobKey, masterID),
+		zap.String(ConstFieldJobKey, masterID),
 	)
 }
 
 // WithWorkerID attaches worker id to logger
 func WithWorkerID(logger *zap.Logger, workerID frameModel.WorkerID) *zap.Logger {
 	return logger.With(
-		zap.String(constFieldWorkerKey, workerID),
+		zap.String(ConstFieldWorkerKey, workerID),
 	)
 }
