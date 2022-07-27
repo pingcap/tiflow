@@ -231,6 +231,12 @@ func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.H
 				resp.Addrs = append(resp.Addrs, nodeInfo.Addr)
 			}
 		}
+		// `discoveryKeeper.Keepalive` starts at early stage, so it's unlikely that
+		// GetSnapshot() returns nil. For safety, we check it here. If it returns nil,
+		// we will add own node address to the response.
+		if len(resp.Addrs) == 0 {
+			resp.Addrs = append(resp.Addrs, s.cfg.AdvertiseAddr)
+		}
 		leader, exists := s.masterRPCHook.CheckLeader()
 		if exists {
 			resp.Leader = leader.AdvertiseAddr
