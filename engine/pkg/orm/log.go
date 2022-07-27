@@ -70,9 +70,9 @@ func (l *ormLogger) Error(ctx context.Context, format string, args ...interface{
 	l.logger.Error(fmt.Sprintf(format, args...))
 }
 
-func (l *ormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
+func (l *ormLogger) Trace(ctx context.Context, begin time.Time, resFunc func() (sql string, rowsAffected int64), err error) {
 	elapsed := time.Since(begin)
-	sql, rows := fc()
+	sql, rows := resFunc()
 	l.logger.Debug("trace log", zap.Duration("elapsed", elapsed), zap.String("sql", sql),
 		zap.Int64("affected-rows", rows), zap.Error(err))
 	if elapsed > l.op.slowThreshold && l.op.slowThreshold != 0 {

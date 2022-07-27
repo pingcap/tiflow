@@ -26,6 +26,8 @@ import (
 	"gorm.io/gorm"
 )
 
+var defaultSlowLogThreshold = 200 * time.Millisecond
+
 // IsNotFoundError checks whether the error is ErrMetaEntryNotFound
 // TODO: refine me, need wrap error for api
 func IsNotFoundError(err error) bool {
@@ -42,7 +44,7 @@ func NewGormDB(sqlDB *sql.DB) (*gorm.DB, error) {
 		SkipInitializeWithVersion: false,
 	}), &gorm.Config{
 		SkipDefaultTransaction: true,
-		Logger:                 NewOrmLogger(logutil.WithComponent("gorm"), WithSlowThreshold(200*time.Millisecond)),
+		Logger:                 NewOrmLogger(logutil.WithComponent("gorm"), WithSlowThreshold(defaultSlowLogThreshold)),
 	})
 	if err != nil {
 		log.Error("create gorm client fail", zap.Error(err))
