@@ -43,11 +43,20 @@ echo "download gogo.proto..."
 	curl -sL https://raw.githubusercontent.com/gogo/protobuf/v$GOGO_VERSION/gogoproto/gogo.proto \
 		-o $TOOLS_INCLUDE_DIR/gogoproto/gogo.proto
 
+echo "download necessary google apis for grpc gateway..."
+mkdir -p $TOOLS_INCLUDE_DIR/google/api/
+[ ! -f $TOOLS_INCLUDE_DIR/google/api/annotations.proto ] &&
+	curl -sL https://raw.githubusercontent.com/googleapis/googleapis/master/google/api/annotations.proto \
+		-o $TOOLS_INCLUDE_DIR/google/api/annotations.proto
+[ ! -f $TOOLS_INCLUDE_DIR/google/api/http.proto ] &&
+	curl -sL https://raw.githubusercontent.com/googleapis/googleapis/master/google/api/http.proto \
+		-o $TOOLS_INCLUDE_DIR/google/api/http.proto
+
 echo "download protoc..."
 [ ! -d $TOOLS_BIN_DIR ] && mkdir -p $TOOLS_BIN_DIR
 [ ! -f $TOOLS_BIN_DIR/protoc ] &&
 	mkdir -p /tmp/cdc/protoc &&
 	curl -sL $PROTOC_URL -o /tmp/cdc/protoc/protoc-$PROTOC_VERSION-linux-x86_64.zip &&
 	unzip -q -o -d /tmp/cdc/protoc /tmp/cdc/protoc/protoc-$PROTOC_VERSION-linux-x86_64.zip &&
-	mv /tmp/cdc/protoc/include/google $TOOLS_INCLUDE_DIR &&
+	mv /tmp/cdc/protoc/include/google/protobuf $TOOLS_INCLUDE_DIR/google/ &&
 	mv /tmp/cdc/protoc/bin/protoc $TOOLS_BIN_DIR/protoc

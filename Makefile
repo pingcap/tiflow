@@ -220,7 +220,7 @@ generate-msgp-code: tools/bin/msgp
 	@echo "generate-msgp-code"
 	./scripts/generate-msgp-code.sh
 
-generate-protobuf: tools/bin/protoc tools/bin/protoc-gen-gogofaster
+generate-protobuf: tools/bin/protoc tools/bin/protoc-gen-gogofaster tools/bin/protoc-gen-grpc-gateway
 	@echo "generate-protobuf"
 	./scripts/generate-protobuf.sh
 
@@ -275,6 +275,7 @@ clean:
 	rm -rf *.out
 	rm -rf bin
 	rm -rf tools/bin
+	rm -rf tools/include
 
 dm: dm-master dm-worker dmctl dm-syncer
 
@@ -301,8 +302,8 @@ dm-chaos-case:
 dm_debug-tools:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/binlog-event-blackhole ./dm/debug-tools/binlog-event-blackhole
 
-dm_generate_proto: tools/bin/protoc-gen-gogofaster tools/bin/protoc-gen-grpc-gateway
-	./dm/generate-dm.sh
+dm_generate_proto:
+	@echo "dm_generate_proto is merged into generate-protobuf, please run 'make generate-protobuf' instead"
 
 dm_generate_mock: tools/bin/mockgen
 	./dm/tests/generate-mock.sh
@@ -489,8 +490,8 @@ engine: tiflow tiflow-demo
 tiflow:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
 
-tiflow-proto: tools/bin/protoc tools/bin/protoc-gen-gogofaster tools/bin/goimports
-	scripts/generate-engine-proto.sh
+tiflow-proto:
+	@echo "tiflow-proto is merged into generate-protobuf, please run 'make generate-protobuf' instead."
 
 tiflow-demo:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./cmd/tiflow-demoserver
