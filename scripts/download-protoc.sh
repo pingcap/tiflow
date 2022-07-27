@@ -18,6 +18,8 @@ TOOLS_BIN_DIR=tools/bin
 TOOLS_INCLUDE_DIR=tools/include
 GOGO_VERSION=1.3.2
 PROTOC_VERSION=3.20.1
+# Google APIs doesn't have a semantic version, so we use the commit SHA.
+GOOGLE_API_VERSION=643311525df18aff3090d13449db4e9c2e9df419
 OS="$(uname)"
 
 case $OS in
@@ -46,10 +48,10 @@ echo "download gogo.proto..."
 echo "download necessary google apis for grpc gateway..."
 mkdir -p $TOOLS_INCLUDE_DIR/google/api/
 [ ! -f $TOOLS_INCLUDE_DIR/google/api/annotations.proto ] &&
-	curl -sL https://raw.githubusercontent.com/googleapis/googleapis/master/google/api/annotations.proto \
+	curl -sL https://raw.githubusercontent.com/googleapis/googleapis/$GOOGLE_API_VERSION/google/api/annotations.proto \
 		-o $TOOLS_INCLUDE_DIR/google/api/annotations.proto
 [ ! -f $TOOLS_INCLUDE_DIR/google/api/http.proto ] &&
-	curl -sL https://raw.githubusercontent.com/googleapis/googleapis/master/google/api/http.proto \
+	curl -sL https://raw.githubusercontent.com/googleapis/googleapis/$GOOGLE_API_VERSION/google/api/http.proto \
 		-o $TOOLS_INCLUDE_DIR/google/api/http.proto
 
 echo "download protoc..."
