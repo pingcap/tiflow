@@ -1010,7 +1010,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 					},
 				},
 			}, msgs[0])
-			require.Empty(t, rClone1.Captures)
+			require.Contains(t, rClone1.Captures, from)
 			require.Equal(t, "", rClone1.Primary)
 			require.Equal(t, from, rClone1.Secondary)
 			require.Equal(t, ReplicationSetStatePrepare, rClone1.State)
@@ -1059,6 +1059,31 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 		require.Len(t, msgs, 0)
 		require.EqualValues(t, r, rClone)
 	})
+}
+
+func TestReplicationSetCaptureShutdownAfterReconstructCommitState(t *testing.T) {
+	t.Parallel()
+
+	// Reconstruct commit state
+	from := "1"
+	tableID := model.TableID(1)
+	tableStatus := map[model.CaptureID]*schedulepb.TableStatus{
+		from: {TableID: tableID, State: schedulepb.TableStatePrepared},
+	}
+	r, err := newReplicationSet(tableID, 0, tableStatus, model.ChangeFeedID{})
+	require.Nil(t, err)
+	require.Equal(t, ReplicationSetStateCommit, r.State)
+	require.Equal(t, "", r.Primary)
+	require.Equal(t, from, r.Secondary)
+
+	// Commit -> Absent as there is no primary nor secondary.
+	msg, affected, err := r.handleCaptureShutdown(from)
+	require.Nil(t, err)
+	require.True(t, affected)
+	require.Empty(t, msg)
+	require.Equal(t, ReplicationSetStateAbsent, r.State)
+	require.Equal(t, "", r.Primary)
+	require.Equal(t, "", r.Secondary)
 }
 
 func TestReplicationSetMoveTableWithHeartbeatResponse(t *testing.T) {

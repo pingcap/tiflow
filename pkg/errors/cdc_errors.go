@@ -224,6 +224,10 @@ var (
 		"kafka send message failed",
 		errors.RFCCodeText("CDC:ErrKafkaSendMessage"),
 	)
+	ErrKafkaProducerClosed = errors.Normalize(
+		"kafka producer closed",
+		errors.RFCCodeText("CDC:ErrKafkaProducerClosed"),
+	)
 	ErrKafkaAsyncSendMessage = errors.Normalize(
 		"kafka async send message failed",
 		errors.RFCCodeText("CDC:ErrKafkaAsyncSendMessage"),
@@ -320,7 +324,7 @@ var (
 		errors.RFCCodeText("CDC:ErrAsyncBroadcastNotSupport"),
 	)
 	ErrSinkURIInvalid = errors.Normalize(
-		"sink uri invalid",
+		"sink uri invalid '%s'",
 		errors.RFCCodeText("CDC:ErrSinkURIInvalid"),
 	)
 	ErrMQSinkUnknownProtocol = errors.Normalize(

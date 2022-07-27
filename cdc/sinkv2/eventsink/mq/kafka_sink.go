@@ -20,13 +20,16 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/producer"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pkafka "github.com/pingcap/tiflow/pkg/kafka"
+	"go.uber.org/zap"
 )
 
 // NewKafkaSink will verify the config and create a KafkaSink.
@@ -35,6 +38,8 @@ func NewKafkaSink(
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
 	errCh chan error,
+	adminClientCreator pkafka.ClusterAdminClientCreator,
+	producerCreator producer.Factory,
 ) (*sink, error) {
 	topic, err := getTopic(sinkURI)
 	if err != nil {
@@ -50,7 +55,7 @@ func NewKafkaSink(
 		return nil, errors.Trace(err)
 	}
 
-	adminClient, err := kafka.NewAdminClientImpl(baseConfig.BrokerEndpoints, saramaConfig)
+	adminClient, err := adminClientCreator(baseConfig.BrokerEndpoints, saramaConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
@@ -70,7 +75,24 @@ func NewKafkaSink(
 		return nil, errors.Trace(err)
 	}
 
-	producer := newProducerImpl()
+	client, err := sarama.NewClient(baseConfig.BrokerEndpoints, saramaConfig)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	log.Info("Try to create a producer",
+		zap.Any("baseConfig", baseConfig))
+	p, err := producerCreator(ctx, client, errCh)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+	// Preventing leaks when error occurs.
+	// This also closes the client in p.Close().
+	defer func() {
+		if err != nil {
+			p.Close()
+		}
+	}()
 
 	topicManager, err := getTopicManagerAndTryCreateTopic(
 		baseConfig.BrokerEndpoints, topic,
@@ -93,7 +115,7 @@ func NewKafkaSink(
 		return nil, errors.Trace(err)
 	}
 
-	s, err := newSink(ctx, producer, topicManager, eventRouter, encoderConfig, errCh)
+	s, err := newSink(ctx, p, topicManager, eventRouter, encoderConfig, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
