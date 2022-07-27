@@ -68,7 +68,7 @@ func (f workerFactory) DeserializeConfig(configBytes []byte) (registry.WorkerCon
 
 // NewWorkerImpl implements WorkerFactory.NewWorkerImpl
 func (f workerFactory) NewWorkerImpl(ctx *dcontext.Context, workerID frameModel.WorkerID, masterID frameModel.MasterID, conf framework.WorkerConfig) (framework.WorkerImpl, error) {
-	log.Info("new dm worker", zap.String(logutil.ConstFieldJobKey, workerID), zap.String(logutil.ConstFieldJobKey, masterID))
+	log.Info("new dm worker", zap.String(logutil.ConstFieldJobKey, masterID), zap.String(logutil.ConstFieldWorkerKey, workerID))
 	return newDMWorker(ctx, masterID, f.workerType, conf.(*dmconfig.SubTaskConfig)), nil
 }
 
