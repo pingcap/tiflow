@@ -75,6 +75,8 @@ func (w *worker) run(ctx context.Context) (retErr error) {
 			zap.String("namespace", w.changeFeedID.Namespace),
 			zap.String("changefeed", w.changeFeedID.ID))
 	}()
+	log.Info("MQ sink worker started", zap.String("namespace", w.changeFeedID.Namespace),
+		zap.String("changefeed", w.changeFeedID.ID))
 	// Fixed size of the batch.
 	eventsBuf := make([]mqEvent, mqv1.FlushBatchSize)
 	for {
@@ -199,12 +201,5 @@ func (w *worker) close() {
 	for range w.msgChan.Out() {
 		// Do nothing. We do not care about the data.
 	}
-	// We need to close it asynchronously.
-	// Otherwise, we might get stuck with it in an unhealthy state of kafka.
-	go func() {
-		err := w.producer.Close()
-		if err != nil {
-			log.Error("failed to close Kafka producer", zap.Error(err))
-		}
-	}()
+	w.producer.Close()
 }

@@ -35,7 +35,8 @@ func newTestWorker(t *testing.T) (*worker, producer.Producer) {
 	require.Nil(t, err)
 	encoder := builder.Build()
 	require.Nil(t, err)
-	p := producer.NewMockProducer()
+	p, err := producer.NewMockProducer(context.Background(), nil, nil)
+	require.Nil(t, err)
 	id := model.DefaultChangeFeedID("test")
 	return newWorker(id, encoder, p), p
 }

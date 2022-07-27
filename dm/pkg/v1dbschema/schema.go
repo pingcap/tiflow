@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/tidb/util/dbutil"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/reader"
 	"github.com/pingcap/tiflow/dm/pkg/conn"

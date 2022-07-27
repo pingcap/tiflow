@@ -17,7 +17,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/config"
 
 	. "github.com/pingcap/check"
 )

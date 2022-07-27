@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/tiflow/engine/pkg/meta/internal/etcdkv"
 	"github.com/pingcap/tiflow/engine/pkg/meta/internal/mockkv"
+	"github.com/pingcap/tiflow/engine/pkg/meta/internal/sqlkv"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
@@ -27,6 +28,7 @@ import (
 func init() {
 	MustRegisterClientBuilder(&mockkv.ClientBuilderImpl{})
 	MustRegisterClientBuilder(&etcdkv.ClientBuilderImpl{})
+	MustRegisterClientBuilder(&sqlkv.ClientBuilderImpl{})
 }
 
 // clientBuilderRegistra is the registra for client builder

@@ -632,3 +632,30 @@ func TestAsyncStop(t *testing.T) {
 		require.Fail(t, "unexpected")
 	}
 }
+
+func TestHandleDrainCapturesSchedulerNotReady(t *testing.T) {
+	t.Parallel()
+
+	cf := &changefeed{
+		scheduler: nil, // scheduler is not set.
+		state: &orchestrator.ChangefeedReactorState{
+			Info: &model.ChangeFeedInfo{State: model.StateNormal},
+		},
+	}
+	o := &ownerImpl{changefeeds: make(map[model.ChangeFeedID]*changefeed)}
+	o.changefeeds[model.ChangeFeedID{}] = cf
+
+	query := &scheduler.Query{CaptureID: "test"}
+	done := make(chan error, 1)
+	o.handleDrainCaptures(query, done)
+	require.NotEqualValues(t, 0, query.Resp.(*model.DrainCaptureResp).CurrentTableCount)
+	require.Nil(t, <-done)
+
+	// Only count changefeed that is normal.
+	cf.state.Info.State = model.StateStopped
+	query = &scheduler.Query{CaptureID: "test"}
+	done = make(chan error, 1)
+	o.handleDrainCaptures(query, done)
+	require.EqualValues(t, 0, query.Resp.(*model.DrainCaptureResp).CurrentTableCount)
+	require.Nil(t, <-done)
+}

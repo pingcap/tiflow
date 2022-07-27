@@ -34,6 +34,13 @@ type testCase struct {
 
 var testCases = []testCase{
 	{
+		"create table `t1` (`id` int, `student_id` int, primary key (`id`), foreign key (`student_id`) references `t2`(`id`))",
+		[]string{"CREATE TABLE IF NOT EXISTS `test`.`t1` (`id` INT,`student_id` INT,PRIMARY KEY(`id`),CONSTRAINT FOREIGN KEY (`student_id`) REFERENCES `t2`(`id`))"},
+		[][]*filter.Table{{genTableName("test", "t1")}},
+		[][]*filter.Table{{genTableName("xtest", "t1")}},
+		[]string{"CREATE TABLE IF NOT EXISTS `xtest`.`t1` (`id` INT,`student_id` INT,PRIMARY KEY(`id`),CONSTRAINT FOREIGN KEY (`student_id`) REFERENCES `t2`(`id`))"},
+	},
+	{
 		"create schema `s1`",
 		[]string{"CREATE DATABASE IF NOT EXISTS `s1`"},
 		[][]*filter.Table{{genTableName("s1", "")}},
@@ -218,9 +225,9 @@ var testCases = []testCase{
 	{
 		"alter table `t1` add constraint fk_t2_id foreign key if not exists (t2_id) references t2(id)",
 		[]string{"ALTER TABLE `test`.`t1` ADD CONSTRAINT `fk_t2_id` FOREIGN KEY IF NOT EXISTS (`t2_id`) REFERENCES `t2`(`id`)"},
-		[][]*filter.Table{{genTableName("test", "t1"), genTableName("test", "t2")}},
-		[][]*filter.Table{{genTableName("xtest", "xt1"), genTableName("xtest", "xt2")}},
-		[]string{"ALTER TABLE `xtest`.`xt1` ADD CONSTRAINT `fk_t2_id` FOREIGN KEY IF NOT EXISTS (`t2_id`) REFERENCES `xtest`.`xt2`(`id`)"},
+		[][]*filter.Table{{genTableName("test", "t1")}},
+		[][]*filter.Table{{genTableName("xtest", "xt1")}},
+		[]string{"ALTER TABLE `xtest`.`xt1` ADD CONSTRAINT `fk_t2_id` FOREIGN KEY IF NOT EXISTS (`t2_id`) REFERENCES `t2`(`id`)"},
 	},
 	{
 		"create index if not exists i1 on `t1`(`c1`)",

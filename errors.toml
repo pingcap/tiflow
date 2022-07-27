@@ -531,6 +531,11 @@ error = '''
 new sarama producer
 '''
 
+["CDC:ErrKafkaProducerClosed"]
+error = '''
+kafka producer closed
+'''
+
 ["CDC:ErrKafkaSendMessage"]
 error = '''
 kafka send message failed
@@ -1023,7 +1028,7 @@ sink config invalid
 
 ["CDC:ErrSinkURIInvalid"]
 error = '''
-sink uri invalid
+sink uri invalid '%s'
 '''
 
 ["CDC:ErrSnapshotLostByGC"]

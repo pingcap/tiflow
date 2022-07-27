@@ -64,7 +64,7 @@ const (
 type Config struct {
 	LogConf logutil.Config `toml:"log" json:"log"`
 
-	MasterAddr    string `toml:"master-addr" json:"master-addr"`
+	Addr          string `toml:"addr" json:"addr"`
 	AdvertiseAddr string `toml:"advertise-addr" json:"advertise-addr"`
 
 	ConfigFile string `toml:"config-file" json:"config-file"`
@@ -114,7 +114,7 @@ func (c *Config) Adjust() (err error) {
 	c.Etcd.Adjust(defaultPeerUrls, defaultInitialClusterState)
 
 	if c.AdvertiseAddr == "" {
-		c.AdvertiseAddr = c.MasterAddr
+		c.AdvertiseAddr = c.Addr
 	}
 
 	c.KeepAliveInterval, err = time.ParseDuration(c.KeepAliveIntervalStr)
@@ -166,7 +166,7 @@ func GetDefaultMasterConfig() *Config {
 			Level: "info",
 			File:  "",
 		},
-		MasterAddr:    defaultMasterAddr,
+		Addr:          defaultMasterAddr,
 		AdvertiseAddr: "",
 		Etcd: &etcdutil.ConfigParams{
 			PeerUrls:            defaultPeerUrls,

@@ -52,7 +52,7 @@ func TestStartTCPSrv(t *testing.T) {
 	port, err := freeport.GetFreePort()
 	require.Nil(t, err)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	cfg.WorkerAddr = addr
+	cfg.Addr = addr
 	s := NewServer(cfg, nil)
 
 	s.grpcSrv = grpc.NewServer()
@@ -111,7 +111,7 @@ func TestCollectMetric(t *testing.T) {
 	port, err := freeport.GetFreePort()
 	require.Nil(t, err)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	cfg.WorkerAddr = addr
+	cfg.Addr = addr
 	s := NewServer(cfg, nil)
 	s.taskRunner = worker.NewTaskRunner(defaultRuntimeIncomingQueueLen, defaultRuntimeInitConcurrency)
 
