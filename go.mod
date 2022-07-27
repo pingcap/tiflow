@@ -53,9 +53,9 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20220423142525-ae43b7f4e5c3
 	github.com/pingcap/kvproto v0.0.0-20220711062932-08b02befd813
 	github.com/pingcap/log v1.1.0
-	github.com/pingcap/tidb v1.1.0-beta.0.20220727054110-43e39e5c0f85
+	github.com/pingcap/tidb v1.1.0-beta.0.20220727070511-8da8863459e7
 	github.com/pingcap/tidb-tools v6.1.1-0.20220715000306-1d2f00da8c3e+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20220727054110-43e39e5c0f85
+	github.com/pingcap/tidb/parser v0.0.0-20220727070511-8da8863459e7
 	github.com/prometheus/client_golang v1.12.2
 	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0
@@ -289,5 +289,3 @@ replace github.com/dgrijalva/jwt-go v3.2.0+incompatible => github.com/golang-jwt
 
 // Fix https://github.com/pingcap/tiflow/issues/4961
 replace github.com/benbjohnson/clock v1.3.0 => github.com/benbjohnson/clock v1.1.0
-
-replace github.com/pingcap/tidb => /home/lance/Projects/tidb
