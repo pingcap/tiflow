@@ -1,4 +1,4 @@
-// Copyright 2021 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,19 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package util
+package producer
 
 import (
-	"github.com/pingcap/failpoint"
+	"testing"
+
+	"github.com/pingcap/tiflow/pkg/leakutil"
 )
 
-// FailpointBuild is true if this is a failpoint build
-var FailpointBuild = isFailpointBuild()
-
-// using failpoint package when the failpoint is enabled to avoid imported and not used error
-var _failpointValue = failpoint.Value(0) //nolint
-
-func isFailpointBuild() bool {
-	failpoint.Return(true)
-	return false
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(m)
 }

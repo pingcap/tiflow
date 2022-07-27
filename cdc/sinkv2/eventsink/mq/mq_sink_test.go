@@ -23,7 +23,6 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline"
-	kafkav1 "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/producer"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -53,11 +52,6 @@ func initBroker(t *testing.T, partitionNum int) (*sarama.MockBroker, string) {
 func TestWriteEvents(t *testing.T) {
 	t.Parallel()
 
-	kafkav1.NewAdminClientImpl = kafka.NewMockAdminClient
-	defer func() {
-		kafkav1.NewAdminClientImpl = kafka.NewSaramaAdminClient
-	}()
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -74,7 +68,8 @@ func TestWriteEvents(t *testing.T) {
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 	errCh := make(chan error, 1)
 
-	s, err := NewKafkaSink(ctx, sinkURI, replicaConfig, errCh)
+	s, err := NewKafkaSink(ctx, sinkURI, replicaConfig, errCh,
+		kafka.NewMockAdminClient, producer.NewMockProducer)
 	require.Nil(t, err)
 	require.NotNil(t, s)
 
