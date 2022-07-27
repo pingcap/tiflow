@@ -22,7 +22,11 @@ import (
 	"github.com/google/btree"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/ddl"
+	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tiflow/cdc/model"
 	"go.uber.org/zap"
 
@@ -118,6 +122,7 @@ func NewSingleSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplica
 	// meta is nil only in unit tests
 	if meta == nil {
 		snap := NewEmptySnapshot(forceReplicate)
+		snap.InitConcurrentDDLTables()
 		snap.inner.currentTs = currentTs
 		return snap, nil
 	}
@@ -196,8 +201,13 @@ func NewEmptySnapshot(forceReplicate bool) *Snapshot {
 		currentTs:        0,
 	}
 
-	// since v6.2.0, `mysql` database will be directly written to meta without
-	// written to history DDL jobs.
+	return &Snapshot{inner: inner, rwlock: new(sync.RWMutex)}
+}
+
+// InitConcurrentDDLTables imitate the creating table logic for concurrent DDL.
+// since v6.2.0, tables of concurrent DDL will be directly written to meta
+// without written to history DDL jobs.
+func (s *Snapshot) InitConcurrentDDLTables() {
 	mysqlDBInfo := &timodel.DBInfo{
 		ID:      1,
 		Name:    timodel.NewCIStr(mysql.SystemDB),
@@ -205,9 +215,19 @@ func NewEmptySnapshot(forceReplicate bool) *Snapshot {
 		Collate: mysql.UTF8MB4DefaultCollation,
 		State:   timodel.StatePublic,
 	}
+	mockTS := uint64(1)
+	_ = s.inner.createSchema(mysqlDBInfo, mockTS)
 
-	_ = inner.createSchema(mysqlDBInfo, 1)
-	return &Snapshot{inner: inner, rwlock: new(sync.RWMutex)}
+	p := parser.New()
+	tableIDs := []int64{ddl.JobTableID, ddl.ReorgTableID, ddl.HistoryTableID}
+	for i, table := range session.DDLJobTables {
+		stmt, _ := p.ParseOneStmt(table.SQL, "", "")
+		tblInfo, _ := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
+		tblInfo.State = timodel.StatePublic
+		tblInfo.ID = tableIDs[i]
+		wrapped := model.WrapTableInfo(1, "mysql", mockTS, tblInfo)
+		_ = s.inner.createTable(wrapped, mockTS)
+	}
 }
 
 // Copy creates a new schema snapshot based on the given one. The copied one shares same internal
