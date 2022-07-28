@@ -53,6 +53,7 @@ func (c *connNumberChecker) check(ctx context.Context, checkerName string) *Resu
 		markCheckError(result, err)
 		return result
 	}
+	//nolint:errcheck
 	defer c.toCheckDB.CloseBaseConn(baseConn)
 	if err != nil {
 		markCheckError(result, err)
