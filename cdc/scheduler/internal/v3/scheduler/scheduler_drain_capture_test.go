@@ -56,13 +56,48 @@ func TestDrainCapture(t *testing.T) {
 	captures["b"] = &member.CaptureStatus{}
 	currentTables = []model.TableID{1, 2, 3, 4, 5, 6, 7}
 	replications = map[model.TableID]*replication.ReplicationSet{
-		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
-		2: {State: replication.ReplicationSetStateCommit, Secondary: "a"},
-		3: {State: replication.ReplicationSetStatePrepare, Secondary: "a"},
-		4: {State: replication.ReplicationSetStatePrepare, Primary: "a", Secondary: "b"},
-		5: {State: replication.ReplicationSetStateRemoving, Primary: "a"},
-		6: {State: replication.ReplicationSetStateReplicating, Primary: "b"},
-		7: {State: replication.ReplicationSetStateCommit, Secondary: "b"},
+		1: {
+			State: replication.ReplicationSetStateReplicating, Primary: "a",
+			Captures: map[string]replication.CaptureRole{
+				"a": replication.CaptureRolePrimary,
+			},
+		},
+		2: {
+			State: replication.ReplicationSetStateCommit,
+			Captures: map[string]replication.CaptureRole{
+				"a": replication.CaptureRoleSecondary,
+			},
+		},
+		3: {
+			State: replication.ReplicationSetStatePrepare,
+			Captures: map[string]replication.CaptureRole{
+				"a": replication.CaptureRoleSecondary,
+			},
+		},
+		4: {
+			State: replication.ReplicationSetStatePrepare, Primary: "a",
+			Captures: map[string]replication.CaptureRole{
+				"a": replication.CaptureRolePrimary, "b": replication.CaptureRoleSecondary,
+			},
+		},
+		5: {
+			State: replication.ReplicationSetStateRemoving, Primary: "a",
+			Captures: map[string]replication.CaptureRole{
+				"a": replication.CaptureRolePrimary,
+			},
+		},
+		6: {
+			State: replication.ReplicationSetStateReplicating, Primary: "b",
+			Captures: map[string]replication.CaptureRole{
+				"b": replication.CaptureRolePrimary,
+			},
+		},
+		7: {
+			State: replication.ReplicationSetStateCommit,
+			Captures: map[string]replication.CaptureRole{
+				"b": replication.CaptureRoleSecondary,
+			},
+		},
 	}
 
 	ok = scheduler.setTarget("a")
