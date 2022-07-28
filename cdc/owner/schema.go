@@ -117,19 +117,6 @@ func (s *schemaWrap4Owner) AllTableNames() []model.TableName {
 }
 
 func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
-	// We use schemaVersion to check if an already-executed DDL job is processed for a second time.
-	// Unexecuted DDL jobs should have largest schemaVersions
-	// if job.BinlogInfo.FinishedTS <= s.ddlHandledTs || job.BinlogInfo.SchemaVersion <= s.schemaVersion {
-	// 	log.Warn("job finishTs is less than schema handleTs, discard invalid job",
-	// 		zap.String("namespace", s.id.Namespace),
-	// 		zap.String("changefeed", s.id.ID),
-	// 		zap.Stringer("job", job),
-	// 		zap.Any("ddlHandledTs", s.ddlHandledTs),
-	// 		zap.Int64("schemaVersion", s.schemaVersion),
-	// 		zap.Int64("jobSchemaVersion", job.BinlogInfo.SchemaVersion),
-	// 	)
-	// 	return nil
-	// }
 	s.allPhysicalTablesCache = nil
 	err := s.schemaSnapshot.HandleDDL(job)
 	if err != nil {

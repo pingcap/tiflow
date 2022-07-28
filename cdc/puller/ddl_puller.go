@@ -103,8 +103,8 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context) error {
 		}
 
 		if ddlRawKV.OpType == model.OpTypeResolved {
-			if ddlRawKV.CRTs > p.resolvedTs {
-				p.resolvedTs = ddlRawKV.CRTs
+			if ddlRawKV.CRTs > p.getResolvedTs() {
+				p.setResolvedTs(ddlRawKV.CRTs)
 			}
 		}
 
@@ -119,7 +119,7 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context) error {
 				zap.String("query", job.Query))
 		}
 
-		if ddlRawKV.OpType == model.OpTypePut {
+		if ddlRawKV.OpType == model.OpTypePut && job != nil {
 			skip, err := p.handleJob(job)
 			if err != nil {
 				log.Error("fizz: ddl job handler error", zap.Error(err))
@@ -152,6 +152,14 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context) error {
 // Output the DDL job entry, it contains the DDL job and the error.
 func (p *ddlJobPullerImpl) Output() <-chan *model.DDLJobEntry {
 	return p.outputCh
+}
+
+func (p *ddlJobPullerImpl) getResolvedTs() uint64 {
+	return atomic.LoadUint64(&p.resolvedTs)
+}
+
+func (p *ddlJobPullerImpl) setResolvedTs(ts uint64) {
+	atomic.StoreUint64(&p.resolvedTs, ts)
 }
 
 func (p *ddlJobPullerImpl) initJobTableMeta() error {
@@ -307,12 +315,12 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		return false, nil
 	}
 
-	if job.BinlogInfo.FinishedTS <= p.resolvedTs ||
+	if job.BinlogInfo.FinishedTS <= p.getResolvedTs() ||
 		job.BinlogInfo.SchemaVersion <= p.schemaVersion {
 		log.Info("ddl job finishedTs less than puller resolvedTs,"+
 			"discard the ddl job",
 			zap.Uint64("jobFinishedTS", job.BinlogInfo.FinishedTS),
-			zap.Uint64("pullerResolvedTs", p.resolvedTs),
+			zap.Uint64("pullerResolvedTs", p.getResolvedTs()),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.String("schema", job.SchemaName),
@@ -379,7 +387,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		return true, errors.Trace(err)
 	}
 
-	p.resolvedTs = job.BinlogInfo.FinishedTS
+	p.setResolvedTs(job.BinlogInfo.FinishedTS)
 	p.schemaVersion = job.BinlogInfo.SchemaVersion
 
 	return false, nil

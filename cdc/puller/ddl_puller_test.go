@@ -228,9 +228,8 @@ func TestHandleJob(t *testing.T) {
 
 func waitResolvedTs(t *testing.T, p DDLJobPuller, targetTs model.Ts) {
 	err := retry.Do(context.Background(), func() error {
-		resolvedTs := p.(*ddlJobPullerImpl).resolvedTs
-		if resolvedTs < targetTs {
-			return fmt.Errorf("resolvedTs %d < targetTs %d", resolvedTs, targetTs)
+		if p.(*ddlJobPullerImpl).getResolvedTs() < targetTs {
+			return fmt.Errorf("resolvedTs %d < targetTs %d", p.(*ddlJobPullerImpl).getResolvedTs(), targetTs)
 		}
 		return nil
 	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(200))
