@@ -16,6 +16,7 @@ package mq
 import (
 	"context"
 	"net/url"
+	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
@@ -76,9 +77,12 @@ func NewKafkaDDLSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
+	start := time.Now()
 	log.Info("Try to create a DDL sink producer",
 		zap.Any("baseConfig", baseConfig))
 	p, err := producerCreator(ctx, client)
+	log.Info("DDL sink producer client created", zap.Duration("duration", time.Since(start)))
+
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}

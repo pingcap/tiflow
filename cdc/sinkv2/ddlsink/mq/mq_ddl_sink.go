@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq/producer"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -37,8 +36,6 @@ var _ ddlsink.DDLEventSink = (*ddlSink)(nil)
 type ddlSink struct {
 	// id indicates which processor (changefeed) this sink belongs to.
 	id model.ChangeFeedID
-	// role indicates what this sink is used for.
-	role util.Role
 	// protocol indicates the protocol used by this sink.
 	protocol config.Protocol
 	// eventRouter used to route events to the right topic and partition.
@@ -60,7 +57,6 @@ func newDDLSink(ctx context.Context,
 	encoderConfig *codec.Config,
 ) (*ddlSink, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-	role := contextutil.RoleFromCtx(ctx)
 
 	encoderBuilder, err := codec.NewEventBatchEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
@@ -69,7 +65,6 @@ func newDDLSink(ctx context.Context,
 
 	s := &ddlSink{
 		id:             changefeedID,
-		role:           role,
 		protocol:       encoderConfig.Protocol(),
 		eventRouter:    eventRouter,
 		topicManager:   topicManager,
@@ -91,8 +86,7 @@ func (k *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 			zap.String("query", ddl.Query),
 			zap.String("protocol", k.protocol.String()),
 			zap.String("namespace", k.id.Namespace),
-			zap.String("changefeed", k.id.ID),
-			zap.String("role", k.role.String()))
+			zap.String("changefeed", k.id.ID))
 		return nil
 	}
 
@@ -102,8 +96,7 @@ func (k *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 		zap.Uint64("commitTs", ddl.CommitTs),
 		zap.String("query", ddl.Query),
 		zap.String("namespace", k.id.Namespace),
-		zap.String("changefeed", k.id.ID),
-		zap.String("role", k.role.String()))
+		zap.String("changefeed", k.id.ID))
 	if partitionRule == dispatcher.PartitionAll {
 		partitionNum, err := k.topicManager.GetPartitionNum(topic)
 		if err != nil {
