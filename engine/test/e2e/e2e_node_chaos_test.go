@@ -61,7 +61,7 @@ func TestNodeFailure(t *testing.T) {
 	var (
 		masterAddrs                  = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
 		businessMetaAddrs            = []string{"127.0.0.1:12479"}
-		businessMetaAddrsInContainer = []string{"business-etcd-standalone:2379"}
+		businessMetaAddrsInContainer = []string{"etcd-standalone:2379"}
 	)
 
 	seed := time.Now().Unix()
@@ -119,15 +119,6 @@ func TestNodeFailure(t *testing.T) {
 		cli.ContainerRestart(masterContainerName(i))
 		mvccCount++
 		value := fmt.Sprintf("restart-server-master-value-%d", i)
-		updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, value, mvccCount)
-	}
-
-	// transfer etcd leader to a random node for several times
-	for i := 0; i < nodeCount; i++ {
-		err := cli.TransferEtcdLeader(ctx)
-		require.NoError(t, err)
-		mvccCount++
-		value := fmt.Sprintf("transfer-etcd-leader-value-%d", i)
 		updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, value, mvccCount)
 	}
 
