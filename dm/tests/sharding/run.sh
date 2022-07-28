@@ -96,8 +96,7 @@ function run() {
 
 	# resume-task to next stage
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"resume-task test" \
-		"\"result\": true" 3
+		"resume-task test"
 
 	# TODO: check sharding partition id
 	# use sync_diff_inspector to check data now!

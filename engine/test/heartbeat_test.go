@@ -17,77 +17,58 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
+
 	"github.com/pingcap/tiflow/engine/executor"
-	"github.com/pingcap/tiflow/engine/pkg/etcdutil"
 	"github.com/pingcap/tiflow/engine/servermaster"
 	"github.com/pingcap/tiflow/engine/test"
-	"github.com/pingcap/tiflow/pkg/logutil"
 )
 
-func TestT(t *testing.T) {
-	err := logutil.InitLogger(&logutil.Config{
-		Level: "debug",
-	})
-	if err != nil {
-		panic(err)
-	}
-
+func TestHeartbeatExecutorCrush(t *testing.T) {
 	test.SetGlobalTestFlag(true)
 	defer test.SetGlobalTestFlag(false)
-	TestingT(t)
-}
 
-var _ = SerialSuites(&testHeartbeatSuite{})
+	addr, _, _, cleanFn := test.PrepareEtcd(t, "etcd0")
+	defer cleanFn()
 
-type testHeartbeatSuite struct {
-	keepAliveTTL      time.Duration
-	keepAliveInterval time.Duration
-	rpcTimeout        time.Duration
-}
+	const (
+		keepAliveTTL      = 3 * time.Second
+		keepAliveInterval = 500 * time.Millisecond
+		rpcTimeout        = 6 * time.Second
+	)
 
-func (t *testHeartbeatSuite) SetUpSuite(c *C) {
-	t.keepAliveTTL = 3 * time.Second
-	t.keepAliveInterval = 500 * time.Millisecond
-	t.rpcTimeout = 6 * time.Second
-}
-
-func (t *testHeartbeatSuite) TestHeartbeatExecutorCrush(c *C) {
 	masterCfg := &servermaster.Config{
-		Etcd: &etcdutil.ConfigParams{
-			Name:    "master1",
-			DataDir: "/tmp/df",
-		},
 		Addr:              "127.0.0.1:1991",
-		KeepAliveTTL:      t.keepAliveTTL,
-		KeepAliveInterval: t.keepAliveInterval,
-		RPCTimeout:        t.rpcTimeout,
+		ETCDEndpoints:     []string{addr},
+		KeepAliveTTL:      keepAliveTTL,
+		KeepAliveInterval: keepAliveInterval,
+		RPCTimeout:        rpcTimeout,
 	}
 	// one master + one executor
 	executorCfg := &executor.Config{
 		Join:              "127.0.0.1:1991",
 		Addr:              "127.0.0.1:1992",
-		KeepAliveTTL:      t.keepAliveTTL,
-		KeepAliveInterval: t.keepAliveInterval,
-		RPCTimeout:        t.rpcTimeout,
+		KeepAliveTTL:      keepAliveTTL,
+		KeepAliveInterval: keepAliveInterval,
+		RPCTimeout:        rpcTimeout,
 	}
 
 	cluster := new(MiniCluster)
 	masterCtx, err := cluster.CreateMaster(masterCfg)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	executorCtx := cluster.CreateExecutor(executorCfg)
 	// Start cluster
 	err = cluster.AsyncStartMaster()
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 
 	err = cluster.AsyncStartExector()
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 
 	time.Sleep(2 * time.Second)
 	cluster.StopExec()
 
 	executorEvent := <-executorCtx.ExecutorChange()
 	masterEvent := <-masterCtx.ExecutorChange()
-	c.Assert(executorEvent.Time.Add(t.keepAliveTTL), Less, masterEvent.Time)
+	require.Less(t, executorEvent.Time.Add(keepAliveTTL), masterEvent.Time)
 	cluster.StopMaster()
 }
