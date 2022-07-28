@@ -65,8 +65,7 @@ func TestWorkerExit(t *testing.T) {
 		fakeJobCfg)
 	require.NoError(t, err)
 
-	jobID, err := e2e.CreateJobViaOpenAPI(ctx, masterAddrs[0], tenantID, projectID,
-		engineModel.JobTypeFakeJob, string(cfgBytes))
+	jobID, err := cli.CreateJob(ctx, engineModel.JobTypeFakeJob, cfgBytes)
 	require.NoError(t, err)
 
 	err = cli.InitializeMetaClient(jobID)
