@@ -233,10 +233,10 @@ func NewKafkaProducer(
 	}
 
 	k := &kafkaProducer{
-		client:        client,
-		asyncProducer: asyncProducer,
 		id:            changefeedID,
 		role:          role,
+		client:        client,
+		asyncProducer: asyncProducer,
 		closed:        false,
 		closedChan:    make(chan struct{}),
 		failpointCh:   make(chan error, 1),
