@@ -148,7 +148,7 @@ jobs:
           go-version: 1.18
 
       - name: Build images
-        run:  make engine_image
+        run: make engine_image
 
 
       - name: Run containers

@@ -17,9 +17,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/concurrency"
+
+	"github.com/pingcap/tiflow/engine/pkg/adapter"
 )
 
 // DiscoveryRunner defines an interface to run Discovery service
@@ -30,7 +31,7 @@ type DiscoveryRunner interface {
 	// and returned.
 	ResetDiscovery(ctx context.Context, resetSession bool) (Session, error)
 	GetWatcher() <-chan WatchResp
-	// returns current snapshot, DiscoveryRunner maintains this as snapshot plus
+	// GetSnapshot returns current snapshot, DiscoveryRunner maintains this as snapshot plus
 	// revision, which can be used in any failover scenarios. The drawback is to
 	// consume more memory, but since it contains node address information only,
 	// the memory consumption is acceptable.
