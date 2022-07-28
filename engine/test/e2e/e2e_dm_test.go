@@ -40,15 +40,17 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/openapi"
 	engineModel "github.com/pingcap/tiflow/engine/model"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"github.com/pingcap/tiflow/engine/test/e2e"
 )
 
 const (
-	baseURL = "http://127.0.0.1:10245/api/v1/jobs/%s"
+	masterAddr = "127.0.0.1:10245"
+	baseURL    = "http://" + masterAddr + "/api/v1/jobs/%s"
 )
 
 func TestDMJob(t *testing.T) {
 	ctx := context.Background()
-	masterClient, err := client.NewMasterClient(ctx, []string{"127.0.0.1:10245"})
+	masterClient, err := client.NewMasterClient(ctx, []string{masterAddr})
 	require.NoError(t, err)
 
 	mysqlCfg := util.DBConfig{
@@ -143,11 +145,8 @@ func testSimpleAllModeTask(
 	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("<placeholder>"), []byte(db))
 	var resp *enginepb.SubmitJobResponse
 	require.Eventually(t, func() bool {
-		resp, err = client.SubmitJob(ctx, &enginepb.SubmitJobRequest{
-			Tp:     int32(engineModel.JobTypeDM),
-			Config: dmJobCfg,
-		})
-		return err == nil && resp.Err == nil
+		_, err := e2e.CreateJobViaOpenAPI(ctx, masterAddr, engineModel.JobTypeDM, string(dmJobCfg))
+		return err == nil
 	}, time.Second*5, time.Millisecond*100)
 
 	// check full phase

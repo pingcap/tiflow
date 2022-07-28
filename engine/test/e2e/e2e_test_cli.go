@@ -17,7 +17,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/url"
 	"os/exec"
+	"strconv"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -34,6 +37,7 @@ import (
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	server "github.com/pingcap/tiflow/engine/servermaster"
+	"github.com/pingcap/tiflow/pkg/httputil"
 )
 
 // ChaosCli is used to interact with server master, fake job and provides ways
@@ -94,26 +98,6 @@ func NewUTCli(ctx context.Context, masterAddrs, businessMetaAddrs []string, proj
 		fakeJobCfg: cfg,
 		project:    project,
 	}, nil
-}
-
-// CreateJob sends SubmitJob command to servermaster
-func (cli *ChaosCli) CreateJob(ctx context.Context, tp engineModel.JobType, config []byte) (string, error) {
-	req := &pb.SubmitJobRequest{
-		Tp:     int32(tp),
-		Config: config,
-		ProjectInfo: &pb.ProjectInfo{
-			TenantId:  cli.project.TenantID(),
-			ProjectId: cli.project.ProjectID(),
-		},
-	}
-	resp, err := cli.masterCli.SubmitJob(ctx, req)
-	if err != nil {
-		return "", err
-	}
-	if resp.Err != nil {
-		return "", errors.New(resp.Err.String())
-	}
-	return resp.JobId, nil
 }
 
 // PauseJob sends PauseJob command to servermaster
@@ -288,4 +272,30 @@ func (cli *ChaosCli) InitializeMetaClient(jobID string) error {
 
 	cli.metaCli = metaCli
 	return nil
+}
+
+// CreateJobViaOpenAPI wraps OpenAPI to create a job
+func CreateJobViaOpenAPI(
+	ctx context.Context, apiEndpoint string, tp engineModel.JobType, cfg string,
+) (string, error) {
+	cli, err := httputil.NewClient(nil)
+	if err != nil {
+		return "", err
+	}
+	data := url.Values{
+		"job_type":   {strconv.Itoa(int(tp))},
+		"job_config": {cfg},
+		"tenant_id":  {"tenant-1"},
+		"project_id": {"project-1"},
+	}
+	apiURL := "http://" + apiEndpoint + "/api/v1/jobs"
+	resp, err := cli.PostForm(ctx, apiURL, data)
+	if err != nil {
+		return "", err
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	return string(body), nil
 }
