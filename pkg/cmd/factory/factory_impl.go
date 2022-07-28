@@ -90,6 +90,12 @@ func (f *factoryImpl) GetCredential() *security.Credential {
 
 // EtcdClient creates new cdc etcd client.
 func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClient, error) {
+	// check pd-address is an actual pd cluster
+	_, err := f.PdClient()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	ctx := cmdconetxt.GetDefaultContext()
 	tlsConfig, err := f.ToTLSConfig()
 	if err != nil {
