@@ -178,8 +178,8 @@ func NewMySQLSink(
 		metricBucketSizeCounters[i] = metrics.BucketSizeCounter.
 			WithLabelValues(params.changefeedID.Namespace, params.changefeedID.ID, strconv.Itoa(i))
 	}
-	ctx, cancel := context.WithCancel(ctx)
 
+	ctx, cancel := context.WithCancel(ctx)
 	sink := &mysqlSink{
 		db:                              db,
 		params:                          params,
