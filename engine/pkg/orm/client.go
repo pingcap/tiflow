@@ -18,8 +18,6 @@ import (
 	"database/sql"
 	gerrors "errors"
 	"fmt"
-	stdlog "log"
-	"os"
 	"strconv"
 	"time"
 
@@ -27,10 +25,8 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
-	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"gorm.io/gorm/logger"
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	engineModel "github.com/pingcap/tiflow/engine/model"
@@ -221,21 +217,9 @@ func generateDSNByParams(mc metaModel.StoreConfig, projectID tenant.ProjectID,
 }
 
 func newClient(sqlDB *sql.DB) (*metaOpsClient, error) {
-	db, err := gorm.Open(mysql.New(mysql.Config{
-		Conn:                      sqlDB,
-		SkipInitializeWithVersion: false,
-	}), &gorm.Config{
-		SkipDefaultTransaction: true,
-		Logger: logger.New(stdlog.New(os.Stdout, "\r\n", stdlog.LstdFlags), logger.Config{
-			SlowThreshold:             200 * time.Millisecond,
-			LogLevel:                  logger.Warn,
-			IgnoreRecordNotFoundError: true,
-			Colorful:                  true,
-		}),
-	})
+	db, err := NewGormDB(sqlDB)
 	if err != nil {
-		log.Error("create gorm client fail", zap.Error(err))
-		return nil, errors.ErrMetaNewClientFail.Wrap(err)
+		return nil, err
 	}
 
 	// TODO: decouple the model creation and client creation in other pr
