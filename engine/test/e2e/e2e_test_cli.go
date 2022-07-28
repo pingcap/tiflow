@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -61,7 +62,9 @@ type FakeJobConfig struct {
 }
 
 // NewJobManagerClient returns a pb.JobManagerClient that can be used for tests.
+// TODO remove this function. It is only for temporary use before an OpenAPI client is ready.
 func NewJobManagerClient(endpoint string) (pb.JobManagerClient, error) {
+	endpoint = strings.TrimLeft(endpoint, "http://")
 	conn, err := grpc.Dial(
 		endpoint,
 		grpc.WithTransportCredentials(insecure.NewCredentials()))
