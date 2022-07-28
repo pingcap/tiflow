@@ -363,53 +363,38 @@ func TestCheckPDVersionError(t *testing.T) {
 func TestCheckTiCDCVersion(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		versions map[string]struct{}
-		result   bool
-	}{
-		// only one capture in the cluster, it's ok
-		{
-			versions: map[string]struct{}{
-				"v6.3.0": {},
-			},
-			result: true,
-		},
-		// 2 different version running instances in the cluster, it's ok
-		{
-			versions: map[string]struct{}{
-				"v6.3.0": {},
-				"v6.4.0": {},
-			},
-			result: true,
-		},
-		// at the most only 2 different versions running instances allowed, so not ok.
-		{
-			versions: map[string]struct{}{
-				"v6.3.0": {},
-				"v6.4.0": {},
-				"v6.5.0": {},
-			},
-			result: false,
-		},
-		// `5.0.0` is lower the min supported version
-		{
-			versions: map[string]struct{}{
-				"v6.3.0": {},
-				"v5.0.0": {},
-			},
-			result: false,
-		},
-		// `v8.0.0` is not supported
-		{
-			versions: map[string]struct{}{
-				"v6.3.0": {},
-				"v8.0.0": {},
-			},
-			result: false,
-		},
+	// only one capture in the cluster, it's ok
+	versions := map[string]struct{}{
+		"v6.3.0": {},
 	}
+	require.NoError(t, CheckTiCDCVersion(versions))
 
-	for _, c := range cases {
-		require.Equal(t, c.result, CheckTiCDCVersion(c.versions))
+	// 2 running instances in different versions both within the range, it's ok
+	versions = map[string]struct{}{
+		"v6.3.0": {},
+		"v6.4.0": {},
 	}
+	require.NoError(t, CheckTiCDCVersion(versions))
+
+	versions = map[string]struct{}{
+		"v6.3.0": {},
+		"v6.4.0": {},
+		"v6.5.0": {},
+	}
+	err := CheckTiCDCVersion(versions)
+	require.Regexp(t, ".*all running cdc instance belong to 3 different versions.*", err)
+
+	versions = map[string]struct{}{
+		"v6.3.0": {},
+		"v5.0.0": {},
+	}
+	err = CheckTiCDCVersion(versions)
+	require.Regexp(t, "TiCDC .* not supported, the minimal compatible version.*", err)
+
+	versions = map[string]struct{}{
+		"v6.3.0": {},
+		"v8.0.0": {},
+	}
+	err = CheckTiCDCVersion(versions)
+	require.Regexp(t, "TiCDC .* not supported, only support version less than.*", err)
 }
