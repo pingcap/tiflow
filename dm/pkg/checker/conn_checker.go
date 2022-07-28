@@ -45,7 +45,7 @@ func newConnAmountChecker(toCheckDB *conn.BaseDB, stCfgs []*config.SubTaskConfig
 func (c *connAmountChecker) check(ctx context.Context, checkerName string) *Result {
 	result := &Result{
 		Name:  checkerName,
-		Desc:  "check if user-specified number of connection exceeds database's maximum",
+		Desc:  "check if connetion concurrency exceeds database's maximum connection limit",
 		State: StateFailure,
 	}
 	baseConn, err := c.toCheckDB.GetBaseConn(ctx)
