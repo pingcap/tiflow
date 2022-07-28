@@ -63,6 +63,8 @@ type mysqlSink struct {
 
 	events []*eventsink.TxnCallbackableEvent
 	rows   int
+
+	cancel func()
 }
 
 // NewMySQLSink creates a new MySQL sink using schema storage
@@ -150,6 +152,7 @@ func NewMySQLSink(
 	db.SetMaxIdleConns(params.workerCount)
 	db.SetMaxOpenConns(params.workerCount)
 
+	ctx, cancel := context.WithCancel(ctx)
 	sink := &mysqlSink{
 		changefeedID:   changefeedID,
 		db:             db,
@@ -157,6 +160,7 @@ func NewMySQLSink(
 		forceReplicate: replicaConfig.ForceReplicate,
 		enableOldValue: replicaConfig.EnableOldValue,
 		statistics:     metrics.NewStatistics(ctx, metrics.SinkTypeDB),
+		cancel:         cancel,
 	}
 
 	log.Info("mysql backend is created",
@@ -209,6 +213,10 @@ func (s *mysqlSink) Close() (err error) {
 	if s.db != nil {
 		err = s.db.Close()
 		s.db = nil
+	}
+	if s.cancel != nil {
+		s.cancel()
+		s.cancel = nil
 	}
 	return
 }

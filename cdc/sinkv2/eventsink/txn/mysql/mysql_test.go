@@ -1077,8 +1077,7 @@ func TestNewMySQLTimeout(t *testing.T) {
 	require.Nil(t, err)
 	rc := config.GetDefaultReplicaConfig()
 	require.Nil(t, err)
-	_, err = NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed),
-		sinkURI, rc)
+	_, err = NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, rc)
 	require.Equal(t, driver.ErrBadConn, errors.Cause(err))
 }
 
