@@ -135,13 +135,13 @@ func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClient, error) {
 	})
 	if err != nil {
 		return nil, errors.Annotatef(err,
-			"fail to open PD client, please check pd address \"%s\"", pdAddr)
+			"Fail to open PD client. Please check the pd address(es) \"%s\"", pdAddr)
 	}
 
 	client, err := etcd.NewCDCEtcdClient(ctx, etcdClient, etcd.DefaultCDCClusterID)
 	if err != nil {
 		return nil, cerror.ErrEtcdAPIError.GenWithStack(
-			"etcd operation error, please the cluster status and the address is correct: \"%s\"")
+			"Etcd operation error. Please check the cluster's status and the pd address(es)  \"%s\"")
 	}
 
 	return &client, err
@@ -160,7 +160,7 @@ func (f factoryImpl) PdClient() (pd.Client, error) {
 	pdAddr := f.GetPdAddr()
 	if len(pdAddr) == 0 {
 		return nil, cerror.ErrInvalidServerOption.
-			GenWithStack("empty PD address, please use --pd to specify PD cluster addresses")
+			GenWithStack("empty PD address. Please use --pd to specify PD cluster addresses")
 	}
 	pdEndpoints := strings.Split(pdAddr, ",")
 	for _, ep := range pdEndpoints {
@@ -189,7 +189,7 @@ func (f factoryImpl) PdClient() (pd.Client, error) {
 		))
 	if err != nil {
 		return nil, errors.Annotatef(err,
-			"fail to open PD client, please check pd address \"%s\"", pdAddr)
+			"Fail to open PD client. Please check the pd address(es)  \"%s\"", pdAddr)
 	}
 
 	err = version.CheckClusterVersion(ctx, pdClient, pdEndpoints, credential, true)
