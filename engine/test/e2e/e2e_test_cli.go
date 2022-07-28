@@ -304,5 +304,7 @@ func CreateJobViaOpenAPI(
 	if err != nil {
 		return "", err
 	}
-	return string(body), nil
+	var jobID string
+	err = json.Unmarshal(body, &jobID)
+	return jobID, err
 }
