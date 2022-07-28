@@ -62,8 +62,6 @@ func TestNodeFailure(t *testing.T) {
 		masterAddrs                  = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
 		businessMetaAddrs            = []string{"127.0.0.1:12479"}
 		businessMetaAddrsInContainer = []string{"etcd-standalone:2379"}
-		tenantID                     = "e2e-test"
-		projectID                    = "project-node-failure"
 	)
 
 	seed := time.Now().Unix()
@@ -89,8 +87,7 @@ func TestNodeFailure(t *testing.T) {
 		KeyPrefix:     cfg.EtcdWatchPrefix,
 	}
 
-	tenantInfo := tenant.NewProjectInfo(tenantID, projectID)
-	cli, err := e2e.NewUTCli(ctx, masterAddrs, businessMetaAddrs, tenantInfo,
+	cli, err := e2e.NewUTCli(ctx, masterAddrs, businessMetaAddrs, tenant.DefaultUserProjectInfo,
 		fakeJobCfg)
 	require.NoError(t, err)
 
