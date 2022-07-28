@@ -161,7 +161,7 @@ func (f factoryImpl) PdClient() (pd.Client, error) {
 	pdAddr := f.GetPdAddr()
 	if len(pdAddr) == 0 {
 		return nil, cerror.ErrInvalidServerOption.
-			GenWithStack("empty PD address. Please use --pd to specify PD cluster addresses")
+			GenWithStack("Empty PD address. Please use --pd to specify PD cluster addresses")
 	}
 	pdEndpoints := strings.Split(pdAddr, ",")
 	for _, ep := range pdEndpoints {
