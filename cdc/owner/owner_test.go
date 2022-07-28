@@ -544,7 +544,8 @@ func TestHandleJobsDontBlock(t *testing.T) {
 	captureInfo := &model.CaptureInfo{
 		ID:            "capture-higher-version",
 		AdvertiseAddr: "127.0.0.1:0000",
-		Version:       "v6.3.0",
+		// owner version is `v6.3.0`, use `v6.4.0` to make version inconsistent
+		Version: "v6.4.0",
 	}
 	cdcKey = etcd.CDCKey{
 		ClusterID: state.ClusterID,
@@ -576,6 +577,43 @@ func TestHandleJobsDontBlock(t *testing.T) {
 	// add changefeed success when the cluster have mixed version.
 	require.NotNil(t, owner.changefeeds[cf2])
 
+	// add third non-consistent version capture
+	captureInfo = &model.CaptureInfo{
+		ID:            "capture-higher-version-2",
+		AdvertiseAddr: "127.0.0.1:8302",
+		// only allow at most 2 different version instances in the cdc cluster.
+		Version: "v6.5.0",
+	}
+	cdcKey = etcd.CDCKey{
+		ClusterID: state.ClusterID,
+		Tp:        etcd.CDCKeyTypeCapture,
+		CaptureID: captureInfo.ID,
+	}
+	v, err = captureInfo.Marshal()
+	require.NoError(t, err)
+	tester.MustUpdate(cdcKey.String(), v)
+
+	// try to add another changefeed, this should not be handled
+	cf3 := model.DefaultChangeFeedID("test-changefeed2")
+	cfInfo3 := &model.ChangeFeedInfo{
+		StartTs: oracle.GoTimeToTS(time.Now()),
+		Config:  config.GetDefaultReplicaConfig(),
+		State:   model.StateNormal,
+	}
+	changefeedStr2, err := cfInfo3.Marshal()
+	require.NoError(t, err)
+	cdcKey = etcd.CDCKey{
+		ClusterID:    state.ClusterID,
+		Tp:           etcd.CDCKeyTypeChangefeedInfo,
+		ChangefeedID: cf3,
+	}
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr2))
+	_, err = owner.Tick(ctx, state)
+	tester.MustApplyPatches()
+	require.NoError(t, err)
+	// add changefeed failed, since 3 different version instances in the cluster.
+	require.Nil(t, owner.changefeeds[cf3])
+
 	// make sure statusProvider works well
 	ctx1, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
@@ -605,6 +643,7 @@ WorkLoop:
 	require.Nil(t, errIn)
 	require.NotNil(t, infos[cf1])
 	require.NotNil(t, infos[cf2])
+	require.Nil(t, infos[cf3])
 }
 
 func TestCalculateGCSafepointTs(t *testing.T) {

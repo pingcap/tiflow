@@ -387,7 +387,8 @@ func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model
 	if !ok {
 		if o.logLimiter.Allow() {
 			log.Warn("capture version is not allowed",
-				zap.Any("captures", captures), zap.String("ownerVer", version.ReleaseVersion))
+				zap.Any("captures", captures),
+				zap.String("ownerVer", version.ReleaseVersion))
 		}
 	}
 	return ok
