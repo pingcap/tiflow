@@ -386,7 +386,7 @@ func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model
 	ok := version.CheckTiCDCVersion(versions)
 	if !ok {
 		if o.logLimiter.Allow() {
-			log.Warn("more than three versions instance in the cdc cluster, it's not allowed",
+			log.Warn("more than two versions instance in the cdc cluster, it's not allowed",
 				zap.Any("captures", captures),
 				zap.String("ownerVer", version.ReleaseVersion))
 		}
