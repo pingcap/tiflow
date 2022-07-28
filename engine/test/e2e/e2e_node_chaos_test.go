@@ -89,7 +89,8 @@ func TestNodeFailure(t *testing.T) {
 		KeyPrefix:     cfg.EtcdWatchPrefix,
 	}
 
-	cli, err := e2e.NewUTCli(ctx, masterAddrs, businessMetaAddrs, tenant.DefaultUserProjectInfo,
+	tenantInfo := tenant.NewProjectInfo(tenantID, projectID)
+	cli, err := e2e.NewUTCli(ctx, masterAddrs, businessMetaAddrs, tenantInfo,
 		fakeJobCfg)
 	require.NoError(t, err)
 
