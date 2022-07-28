@@ -138,7 +138,6 @@ services:
       - "--advertise-client-urls=http://etcd-standalone:2379"
     ports:
       - "12479:2379"
-      - "12480:2380"
   mysql-standalone:
     image: mysql:5.7
     container_name: 3m3e-mysql_standalone
