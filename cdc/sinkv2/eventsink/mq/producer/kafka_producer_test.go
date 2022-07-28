@@ -15,6 +15,7 @@ package producer
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -126,7 +127,7 @@ func TestKafkaProducerAck(t *testing.T) {
 		Key:   []byte("cancel"),
 		Value: nil,
 	})
-	require.Equal(t, cerror.ErrKafkaProducerClosed, err)
+	require.ErrorIs(t, err, cerror.ErrKafkaProducerClosed)
 }
 
 func TestProducerSendMsgFailed(t *testing.T) {
@@ -171,7 +172,8 @@ func TestProducerSendMsgFailed(t *testing.T) {
 			})
 			if err != nil {
 				require.Condition(t, func() bool {
-					return err == context.DeadlineExceeded || err == cerror.ErrKafkaProducerClosed
+					return errors.Is(err, cerror.ErrKafkaProducerClosed) ||
+						errors.Is(err, context.DeadlineExceeded)
 				}, "should return error")
 			}
 		}
