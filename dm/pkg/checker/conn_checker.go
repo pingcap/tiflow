@@ -87,7 +87,7 @@ func (c *connAmountChecker) check(ctx context.Context, checkerName string) *Resu
 		usedConn++
 	}
 	usedConn -= 1 // exclude the connection used for show processlist
-	log.L().Debug("connection checker", zap.Int("max_connections", maxConn), zap.Int("used_connections", usedConn))
+	log.L().Debug("connection checker", zap.Int("maxConnections", maxConn), zap.Int("usedConnections", usedConn))
 	neededConn := c.getConfigConn(c.stCfgs)
 	switch {
 	case c.unlimitedConn:
