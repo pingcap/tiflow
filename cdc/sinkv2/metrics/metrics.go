@@ -20,9 +20,8 @@ import (
 // rowSizeLowBound is set to 128K, only track data event with size not smaller than it.
 const rowSizeLowBound = 128 * 1024
 
+// ---------- Metrics for txn sink and backends. ---------- //
 var (
-	// ---------- Metrics for txn sink and backends. ---------- //
-
 	// ConflictDetectDuration records the duration of detecting conflict.
 	ConflictDetectDuration = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
@@ -61,7 +60,9 @@ var (
 			Help:      "Bucketed histogram of processing time (s) of a txn.",
 			Buckets:   prometheus.ExponentialBuckets(0.002 /* 2 ms */, 2, 18),
 		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
+)
 
+var (
 	// LargeRowSizeHistogram records the row size of events.
 	LargeRowSizeHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -123,9 +124,9 @@ var (
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(ConflictDetectDuration)
 	registry.MustRegister(TxnBatchSize)
-
 	registry.MustRegister(ExecBatchHistogram)
 	registry.MustRegister(ExecTxnHistogram)
+
 	registry.MustRegister(ExecDDLHistogram)
 	registry.MustRegister(LargeRowSizeHistogram)
 	registry.MustRegister(ExecutionErrorCounter)
