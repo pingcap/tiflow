@@ -769,6 +769,82 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		}
 	})
 
+	errg.Go(func() error {
+		log.Debug("WatchExecutors")
+		watchStart := time.Now()
+		snap, updates, err := s.executorManager.WatchExecutors(errgCtx)
+		if err != nil {
+			return err
+		}
+		if duration := time.Since(watchStart); duration <= 100*time.Millisecond {
+			log.Debug("WatchExecutors returned")
+		} else {
+			log.Warn("WatchExecutors took too long",
+				zap.Duration("duration", duration),
+				zap.Any("snap", snap))
+		}
+
+		initList := make(map[model.ExecutorID]string, len(snap))
+		for _, executorID := range snap {
+			addr, ok := s.executorManager.GetAddr(executorID)
+			if !ok {
+				log.Info("executorID not found", zap.String("id", string(executorID)))
+				continue
+			}
+			initList[executorID] = addr
+		}
+
+		log.Info("update executor list", zap.Any("list", initList))
+		if err := executorClients.UpdateExecutorList(initList); err != nil {
+			return err
+		}
+
+		for {
+			var change model.ExecutorStatusChange
+			select {
+			case <-errgCtx.Done():
+				return errors.Trace(errgCtx.Err())
+			case change = <-updates.C:
+			}
+
+			if change.Tp == model.EventExecutorOnline {
+				addr, ok := s.executorManager.GetAddr(change.ID)
+				if !ok {
+					log.Info("executorID not found", zap.String("id", string(change.ID)))
+					continue
+				}
+
+				err := executorClients.AddExecutor(change.ID, addr)
+				if err != nil {
+					if pkgClient.ErrExecutorAlreadyExists.Is(err) {
+						log.Warn("unexpected EventExecutorOnline",
+							zap.Error(err))
+						continue
+					}
+					return err
+				}
+				log.Info("add executor",
+					zap.String("id", string(change.ID)),
+					zap.String("addr", addr))
+			} else if change.Tp == model.EventExecutorOffline {
+				err := executorClients.RemoveExecutor(change.ID)
+				if err != nil {
+					if pkgClient.ErrExecutorNotFound.Is(err) {
+						log.Warn("unexpected EventExecutorOffline",
+							zap.Error(err))
+						continue
+					}
+					return err
+				}
+				log.Info("remove executor",
+					zap.String("id", string(change.ID)))
+			} else {
+				log.Panic("unknown ExecutorStatusChange type",
+					zap.Any("change", change))
+			}
+		}
+	})
+
 	s.leaderInitialized.Store(true)
 	log.Info("leader is initialized", zap.Duration("took", time.Since(start)))
 
