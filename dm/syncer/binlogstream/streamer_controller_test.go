@@ -159,7 +159,7 @@ func TestGetEventWithInject(t *testing.T) {
 		Pos:  1000,
 	}}
 	controller.streamModifier.reset(loc)
-	controller.upstreamLocations.reset(loc)
+	controller.upstream.locationRecorder.reset(loc)
 
 	expecteds := []expectedInfo{
 		{1010, 0, nil, pb.ErrorOp_InvalidErrorOp},
@@ -208,7 +208,7 @@ func TestGetEventWithReplace(t *testing.T) {
 		Pos:  1000,
 	}}
 	controller.streamModifier.reset(loc)
-	controller.upstreamLocations.reset(loc)
+	controller.upstream.locationRecorder.reset(loc)
 
 	expecteds := []expectedInfo{
 		{1010, 0, nil, pb.ErrorOp_InvalidErrorOp},
@@ -246,7 +246,7 @@ func TestGetEventWithSkip(t *testing.T) {
 		Pos:  1000,
 	}}
 	controller.streamModifier.reset(loc)
-	controller.upstreamLocations.reset(loc)
+	controller.upstream.locationRecorder.reset(loc)
 
 	expecteds := []expectedInfo{
 		{1010, 0, nil, pb.ErrorOp_InvalidErrorOp},
@@ -263,10 +263,10 @@ func checkGetEvent(t *testing.T, controller *StreamerController, expecteds []exp
 
 	ctx := tcontext.Background()
 	for i, expected := range expecteds {
-		t.Logf("#%d", i)
-		event, op, err := controller.GetEvent(ctx)
+		event, suffix, op, err := controller.GetEvent(ctx)
 		require.NoError(t, err)
 		require.Equal(t, expected.pos, event.Header.LogPos)
+		require.Equal(t, expected.suffix, suffix)
 		require.Equal(t, expected.op, op)
 
 		curEndLoc := controller.GetCurEndLocation()
@@ -284,7 +284,7 @@ func checkGetEvent(t *testing.T, controller *StreamerController, expecteds []exp
 	ctx, cancel := ctx.WithTimeout(10 * time.Millisecond)
 	defer cancel()
 	// nolint:dogsled
-	_, _, err := controller.GetEvent(ctx)
+	_, _, _, err := controller.GetEvent(ctx)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 }
 

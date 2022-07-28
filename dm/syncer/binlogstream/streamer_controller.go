@@ -39,10 +39,10 @@ import (
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 )
 
-// StreamGenerator provides the ability to generate reader.Streamer from
+// streamGenerator provides the ability to generate reader.Streamer from
 // specified location. Current implementation of reader.Streamer are MySQL binlog
 // streamer, relay log streamer and mock streamer.
-type StreamGenerator interface {
+type streamGenerator interface {
 	GenerateStreamFrom(location binlog.Location) (reader.Streamer, error)
 }
 
@@ -87,6 +87,20 @@ type locationedStream struct {
 	locationRecorder *locationRecorder
 }
 
+func newLocationedStream(generator streamGenerator, location binlog.Location) (locationedStream, error) {
+	var ret locationedStream
+	s, err := generator.GenerateStreamFrom(location)
+	if err != nil {
+		return ret, err
+	}
+	ret.stream = s
+
+	recorder := &locationRecorder{}
+	recorder.reset(location)
+	ret.locationRecorder = recorder
+	return ret, nil
+}
+
 func (l locationedStream) GetEvent(ctx context.Context) (*replication.BinlogEvent, error) {
 	e, err := l.stream.GetEvent(ctx)
 	if err != nil {
@@ -115,7 +129,7 @@ type StreamerController struct {
 	localBinlogDir string
 	timezone       *time.Location
 
-	streamProducer StreamGenerator
+	streamProducer streamGenerator
 	upstream       locationedStream
 
 	*streamModifier
@@ -240,8 +254,7 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 			t.reader.Close()
 		default:
 			// some other producers such as mockStreamerProducer, should not re-create
-			c.streamer, err = c.streamProducer.GenerateStreamFrom(location)
-
+			c.upstream, err = newLocationedStream(c.streamProducer, location)
 			return err
 		}
 	}
@@ -264,10 +277,9 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 		c.streamProducer = &localBinlogReader{c.relay.NewReader(tctx.L(), &relay.BinlogReaderConfig{RelayDir: c.localBinlogDir, Timezone: c.timezone, Flavor: c.syncCfg.Flavor}), c.enableGTID}
 	}
 
-	c.streamer, err = c.streamProducer.GenerateStreamFrom(location)
+	c.upstream, err = newLocationedStream(c.streamProducer, location)
 	if err == nil {
 		c.streamModifier.reset(location)
-		c.upstreamLocations.reset(location)
 		c.lastEventFromUpstream = nil
 	}
 	return err
@@ -329,17 +341,21 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (*replication.Binl
 		return nil, 0, pb.ErrorOp_InvalidErrorOp, err
 	}
 
-	c.upstreamLocations.update(event)
-
-	if suffix == 0 {
-		c.locations = c.upstreamLocations.locations
-	} else {
-		c.locations.curStartLocation = c.upstreamLocations.curStartLocation
+	if suffix != 0 {
+		c.locations.curStartLocation = c.upstream.locationRecorder.curStartLocation
 		c.locations.curStartLocation.Suffix = suffix - 1
-		c.locations.curEndLocation = c.upstreamLocations.curStartLocation
+		c.locations.curEndLocation = c.upstream.locationRecorder.curStartLocation
 		c.locations.curEndLocation.Suffix = suffix
-		c.locations.txnEndLocation = c.upstreamLocations.txnEndLocation
-		// TODO: need update suffix for txnEndLocation?
+		c.locations.txnEndLocation = c.locations.curEndLocation
+	} else {
+		if c.locations.curEndLocation.Suffix != 0 {
+			// this is the first upstream event after injection, keep suffix for start location
+			c.locations.curStartLocation = c.locations.curEndLocation
+			c.locations.curEndLocation = c.upstream.locationRecorder.curEndLocation
+			c.locations.txnEndLocation = c.upstream.locationRecorder.txnEndLocation
+		} else {
+			c.locations = c.upstream.locationRecorder.locations
+		}
 	}
 
 	return event, suffix, op, nil
@@ -357,8 +373,9 @@ func (c *StreamerController) getEvent(tctx *tcontext.Context) (
 		failpoint.Return(nil, 0, pb.ErrorOp_InvalidErrorOp, terror.ErrDBBadConn.Generate())
 	})
 
+	// TODO: why this lock?
 	c.RLock()
-	streamer := c.streamer
+	upstream := c.upstream
 	c.RUnlock()
 
 LOOP:
@@ -368,7 +385,7 @@ LOOP:
 		var status getEventFromFrontOpStatus
 
 		if c.lastEventFromUpstream == nil {
-			c.lastEventFromUpstream, err = streamer.GetEvent(tctx.Context())
+			c.lastEventFromUpstream, err = upstream.GetEvent(tctx.Context())
 			failpoint.Inject("GetEventError", func() {
 				err = errors.New("go-mysql returned an error")
 			})
@@ -385,7 +402,7 @@ LOOP:
 		}
 
 		startPos := mysql.Position{
-			Name: c.upstreamLocations.curEndLocation.Position.Name,
+			Name: c.upstream.locationRecorder.curEndLocation.Position.Name,
 			Pos:  c.lastEventFromUpstream.Header.LogPos - c.lastEventFromUpstream.Header.EventSize,
 		}
 		cmp := binlog.ComparePosition(startPos, frontOp.pos)
@@ -487,7 +504,7 @@ LOOP:
 		return
 	}
 
-	event, err = streamer.GetEvent(tctx.Context())
+	event, err = upstream.GetEvent(tctx.Context())
 	failpoint.Inject("GetEventError", func() {
 		err = errors.New("go-mysql returned an error")
 	})
@@ -618,14 +635,16 @@ func (c *StreamerController) GetTxnEndLocation() binlog.Location {
 
 // NewStreamerController4Test is used in tests.
 func NewStreamerController4Test(
-	streamerProducer StreamGenerator,
+	streamerProducer streamGenerator,
 	streamer reader.Streamer,
 ) *StreamerController {
 	return &StreamerController{
-		streamProducer:    streamerProducer,
-		streamer:          streamer,
-		closed:            false,
-		streamModifier:    &streamModifier{logger: log.L()},
-		upstreamLocations: &locationRecorder{},
+		streamProducer: streamerProducer,
+		upstream: locationedStream{
+			stream:           streamer,
+			locationRecorder: &locationRecorder{},
+		},
+		closed:         false,
+		streamModifier: &streamModifier{logger: log.L()},
 	}
 }
