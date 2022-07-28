@@ -50,10 +50,8 @@ const (
 	maxFlushInterval = time.Millisecond * time.Duration(100)
 )
 
-var (
-	defaultDMLMaxRetry uint64 = 8
-	defaultDDLMaxRetry uint64 = 20
-)
+var defaultDMLMaxRetry uint64 = 8 // TODO: use it later.
+// defaultDDLMaxRetry uint64 = 20
 
 type mysqlSink struct {
 	changefeedID   model.ChangeFeedID

@@ -43,7 +43,6 @@ const (
 	maxMaxTxnRow = 2048
 
 	defaultTiDBTxnMode         = "optimistic"
-	defaultFlushInterval       = time.Millisecond * 50
 	defaultBatchReplaceEnabled = true
 	defaultBatchReplaceSize    = 20
 	defaultReadTimeout         = "2m"
