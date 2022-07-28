@@ -150,14 +150,11 @@ func (k *ddlSink) WriteCheckpointTs(ctx context.Context,
 		return errors.Trace(err)
 	}
 	topics := k.eventRouter.GetActiveTopics(tables)
-	log.Debug("MQ sink current active topics", zap.Any("topics", topics))
 	for _, topic := range topics {
 		partitionNum, err := k.topicManager.GetPartitionNum(topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		log.Debug("emit checkpointTs to active topic",
-			zap.String("topic", topic), zap.Uint64("checkpointTs", ts))
 		err = k.producer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
 		if err != nil {
 			return errors.Trace(err)
