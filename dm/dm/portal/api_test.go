@@ -15,7 +15,6 @@ package portal
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"io"
 	"mime/multipart"
@@ -26,15 +25,12 @@ import (
 	"strings"
 	"testing"
 
-	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
 	. "github.com/pingcap/check"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pingcap/tidb/br/pkg/mock"
-
-	"github.com/pingcap/tiflow/dm/dm/config"
 )
 
 var _ = Suite(&testPortalSuite{})
@@ -246,16 +242,6 @@ func (t *testPortalSuite) TestAnalyzeRuleName(c *C) {
 	}
 }
 
-func (t *testPortalSuite) getMockDB(req *http.Request, timeout int) (*sql.DB, string, error) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		return nil, "", err
-	}
-	t.mockSchemaInfo(mock)
-
-	return db, "mock", nil
-}
-
 func (t *testPortalSuite) TestAdjustConfig(c *C) {
 	c.Assert(adjustConfig(t.taskConfig), IsNil)
 
@@ -309,30 +295,8 @@ func (t *testPortalSuite) TestGenerateMydumperCfgName(c *C) {
 	c.Assert(dumpCfgName, Equals, "source-1.dump")
 }
 
-func (t *testPortalSuite) mockSchemaInfo(mock sqlmock.Sqlmock) {
-	schemas := sqlmock.NewRows([]string{"Database"})
-	for _, tables := range t.allTables {
-		schemas.AddRow(tables.Schema)
-	}
-	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(schemas)
-
-	for _, tables := range t.allTables {
-		tablesResult := sqlmock.NewRows([]string{"Tables_in_" + tables.Schema, "Table_type"})
-		for _, table := range tables.Tables {
-			tablesResult.AddRow(table, "BASE TABLE")
-		}
-		mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(tablesResult)
-	}
-}
-
 func (t *testPortalSuite) TestGenerateTaskFileName(c *C) {
 	taskName := "test"
 	fileName := generateTaskFileName(taskName)
 	c.Assert(fileName, Equals, "test-task.yaml")
-}
-
-func getTestDBCfgBytes(c *C, dbCfg *config.DBConfig) []byte {
-	dbCfgBytes, err := json.Marshal(dbCfg)
-	c.Assert(err, IsNil)
-	return dbCfgBytes
 }

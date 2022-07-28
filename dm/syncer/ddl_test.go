@@ -17,17 +17,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
+	"reflect"
 	"strings"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/go-sql-driver/mysql"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pingcap/tidb/br/pkg/mock"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
+	"github.com/pingcap/tidb/server"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/dm/config"
@@ -406,6 +406,18 @@ func (s *testDDLSuite) TestResolveGeneratedColumnSQL(c *C) {
 	}
 }
 
+// in TiDB 5.3 mock cluster has bug, it doesn't set DSN correctly
+// but in newer version of DM, we rewrite the test and using our own mock cluster,
+// see https://github.com/pingcap/tiflow/blob/45bee3c178920e81d95086e89dc0b896345d8512/dm/syncer/ddl_test.go#L452
+// so in here, we'll not try to fix bug in TiDB 5.3 and just extract the port
+// using reflection.
+func extractClusterPort(s *server.Server) int {
+	v := reflect.ValueOf(s)
+	field := v.Elem().FieldByName("cfg")
+	portVal := field.Elem().FieldByName("Port")
+	return int(portVal.Uint())
+}
+
 func (s *testDDLSuite) TestResolveOnlineDDL(c *C) {
 	cases := []struct {
 		sql       string
@@ -447,12 +459,8 @@ func (s *testDDLSuite) TestResolveOnlineDDL(c *C) {
 	cluster, err := mock.NewCluster()
 	c.Assert(err, IsNil)
 	c.Assert(cluster.Start(), IsNil)
-	mysqlConfig, err := mysql.ParseDSN(cluster.DSN)
-	c.Assert(err, IsNil)
-	mockClusterPort, err := strconv.Atoi(strings.Split(mysqlConfig.Addr, ":")[1])
-	c.Assert(err, IsNil)
 	dbCfg := config.GetDBConfigForTest()
-	dbCfg.Port = mockClusterPort
+	dbCfg.Port = extractClusterPort(cluster.Server)
 	dbCfg.Password = ""
 	cfg := s.newSubTaskCfg(dbCfg)
 
@@ -530,12 +538,8 @@ func (s *testDDLSuite) TestMistakeOnlineDDLRegex(c *C) {
 	cluster, err := mock.NewCluster()
 	c.Assert(err, IsNil)
 	c.Assert(cluster.Start(), IsNil)
-	mysqlConfig, err := mysql.ParseDSN(cluster.DSN)
-	c.Assert(err, IsNil)
-	mockClusterPort, err := strconv.Atoi(strings.Split(mysqlConfig.Addr, ":")[1])
-	c.Assert(err, IsNil)
 	dbCfg := config.GetDBConfigForTest()
-	dbCfg.Port = mockClusterPort
+	dbCfg.Port = extractClusterPort(cluster.Server)
 	dbCfg.Password = ""
 	cfg := s.newSubTaskCfg(dbCfg)
 	for _, ca := range cases {
