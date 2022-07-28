@@ -43,6 +43,7 @@ import (
 // ChaosCli is used to interact with server master, fake job and provides ways
 // to adding chaos in e2e test.
 type ChaosCli struct {
+	masterAddrs []string
 	// used to operate with server master, such as submit job
 	masterCli client.MasterClient
 	// cc is the client connection for business metastore
@@ -92,12 +93,18 @@ func NewUTCli(ctx context.Context, masterAddrs, businessMetaAddrs []string, proj
 	}
 
 	return &ChaosCli{
-		masterCli:  masterCli,
-		clientConn: cc,
-		fakeJobCli: fakeJobCli,
-		fakeJobCfg: cfg,
-		project:    project,
+		masterAddrs: masterAddrs,
+		masterCli:   masterCli,
+		clientConn:  cc,
+		fakeJobCli:  fakeJobCli,
+		fakeJobCfg:  cfg,
+		project:     project,
 	}, nil
+}
+
+// CreateJob sends SubmitJob command to servermaster
+func (cli *ChaosCli) CreateJob(ctx context.Context, tp engineModel.JobType, config []byte) (string, error) {
+	return CreateJobViaOpenAPI(ctx, cli.masterAddrs[0], tp, string(config))
 }
 
 // PauseJob sends PauseJob command to servermaster
