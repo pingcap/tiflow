@@ -23,7 +23,7 @@ import (
 	mm "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
-	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq/producer"
+	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq/ddlproducer"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/stretchr/testify/require"
@@ -67,7 +67,7 @@ func TestWriteDDLEventToAllPartitions(t *testing.T) {
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
 	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
-		kafka.NewMockAdminClient, producer.NewMockProducer)
+		kafka.NewMockAdminClient, ddlproducer.NewMockDDLProducer)
 	require.Nil(t, err)
 	require.NotNil(t, s)
 
@@ -81,17 +81,17 @@ func TestWriteDDLEventToAllPartitions(t *testing.T) {
 	}
 	err = s.WriteDDLEvent(ctx, ddl)
 	require.Nil(t, err)
-	require.Len(t, s.producer.(*producer.MockProducer).GetAllEvents(),
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetAllEvents(),
 		3, "All partitions should be broadcast")
-	require.Len(t, s.producer.(*producer.MockProducer).GetEvents(mqv1.TopicPartitionKey{
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
 		Topic:     "mock_topic",
 		Partition: 0,
 	}), 1)
-	require.Len(t, s.producer.(*producer.MockProducer).GetEvents(mqv1.TopicPartitionKey{
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
 		Topic:     "mock_topic",
 		Partition: 1,
 	}), 1)
-	require.Len(t, s.producer.(*producer.MockProducer).GetEvents(mqv1.TopicPartitionKey{
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
 		Topic:     "mock_topic",
 		Partition: 2,
 	}), 1)
@@ -116,7 +116,7 @@ func TestWriteDDLEventToZeroPartition(t *testing.T) {
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
 	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
-		kafka.NewMockAdminClient, producer.NewMockProducer)
+		kafka.NewMockAdminClient, ddlproducer.NewMockDDLProducer)
 	require.Nil(t, err)
 	require.NotNil(t, s)
 
@@ -130,16 +130,17 @@ func TestWriteDDLEventToZeroPartition(t *testing.T) {
 	}
 	err = s.WriteDDLEvent(ctx, ddl)
 	require.Nil(t, err)
-	require.Len(t, s.producer.(*producer.MockProducer).GetAllEvents(), 1, "Only zero partition")
-	require.Len(t, s.producer.(*producer.MockProducer).GetEvents(mqv1.TopicPartitionKey{
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetAllEvents(),
+		1, "Only zero partition")
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
 		Topic:     "mock_topic",
 		Partition: 0,
 	}), 1)
-	require.Len(t, s.producer.(*producer.MockProducer).GetEvents(mqv1.TopicPartitionKey{
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
 		Topic:     "mock_topic",
 		Partition: 1,
 	}), 0)
-	require.Len(t, s.producer.(*producer.MockProducer).GetEvents(mqv1.TopicPartitionKey{
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
 		Topic:     "mock_topic",
 		Partition: 2,
 	}), 0)
@@ -165,7 +166,7 @@ func TestWriteCheckpointTsToDefaultTopic(t *testing.T) {
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
 	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
-		kafka.NewMockAdminClient, producer.NewMockProducer)
+		kafka.NewMockAdminClient, ddlproducer.NewMockDDLProducer)
 	require.Nil(t, err)
 	require.NotNil(t, s)
 
@@ -174,17 +175,17 @@ func TestWriteCheckpointTsToDefaultTopic(t *testing.T) {
 	err = s.WriteCheckpointTs(ctx, checkpointTs, tables)
 	require.Nil(t, err)
 
-	require.Len(t, s.producer.(*producer.MockProducer).GetAllEvents(),
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetAllEvents(),
 		3, "All partitions should be broadcast")
-	require.Len(t, s.producer.(*producer.MockProducer).GetEvents(mqv1.TopicPartitionKey{
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
 		Topic:     "mock_topic",
 		Partition: 0,
 	}), 1)
-	require.Len(t, s.producer.(*producer.MockProducer).GetEvents(mqv1.TopicPartitionKey{
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
 		Topic:     "mock_topic",
 		Partition: 1,
 	}), 1)
-	require.Len(t, s.producer.(*producer.MockProducer).GetEvents(mqv1.TopicPartitionKey{
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
 		Topic:     "mock_topic",
 		Partition: 2,
 	}), 1)
@@ -217,7 +218,7 @@ func TestWriteCheckpointTsToTableTopics(t *testing.T) {
 	}
 
 	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
-		kafka.NewMockAdminClient, producer.NewMockProducer)
+		kafka.NewMockAdminClient, ddlproducer.NewMockDDLProducer)
 	require.Nil(t, err)
 	require.NotNil(t, s)
 
@@ -239,29 +240,29 @@ func TestWriteCheckpointTsToTableTopics(t *testing.T) {
 	err = s.WriteCheckpointTs(ctx, checkpointTs, tables)
 	require.Nil(t, err)
 
-	require.Len(t, s.producer.(*producer.MockProducer).GetAllEvents(),
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetAllEvents(),
 		6, "All topics and partitions should be broadcast")
-	require.Len(t, s.producer.(*producer.MockProducer).GetEvents(mqv1.TopicPartitionKey{
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
 		Topic:     "mock_topic",
 		Partition: 0,
 	}), 1)
-	require.Len(t, s.producer.(*producer.MockProducer).GetEvents(mqv1.TopicPartitionKey{
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
 		Topic:     "mock_topic",
 		Partition: 1,
 	}), 1)
-	require.Len(t, s.producer.(*producer.MockProducer).GetEvents(mqv1.TopicPartitionKey{
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
 		Topic:     "mock_topic",
 		Partition: 2,
 	}), 1)
-	require.Len(t, s.producer.(*producer.MockProducer).GetEvents(mqv1.TopicPartitionKey{
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
 		Topic:     "cdc_person",
 		Partition: 0,
 	}), 1)
-	require.Len(t, s.producer.(*producer.MockProducer).GetEvents(mqv1.TopicPartitionKey{
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
 		Topic:     "cdc_person1",
 		Partition: 0,
 	}), 1)
-	require.Len(t, s.producer.(*producer.MockProducer).GetEvents(mqv1.TopicPartitionKey{
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
 		Topic:     "cdc_person2",
 		Partition: 0,
 	}), 1)
@@ -288,7 +289,7 @@ func TestWriteCheckpointTsWhenCanalJsonTiDBExtensionIsDisable(t *testing.T) {
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
 	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
-		kafka.NewMockAdminClient, producer.NewMockProducer)
+		kafka.NewMockAdminClient, ddlproducer.NewMockDDLProducer)
 	require.Nil(t, err)
 	require.NotNil(t, s)
 
@@ -297,6 +298,6 @@ func TestWriteCheckpointTsWhenCanalJsonTiDBExtensionIsDisable(t *testing.T) {
 	err = s.WriteCheckpointTs(ctx, checkpointTs, tables)
 	require.Nil(t, err)
 
-	require.Len(t, s.producer.(*producer.MockProducer).GetAllEvents(),
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetAllEvents(),
 		0, "No topic and partition should be broadcast")
 }

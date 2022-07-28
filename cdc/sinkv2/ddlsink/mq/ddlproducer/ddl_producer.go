@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package producer
+package ddlproducer
 
 import (
 	"context"
@@ -20,8 +20,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 )
 
-// Producer is the interface for DDL message producer.
-type Producer interface {
+// DDLProducer is the interface for DDL message producer.
+type DDLProducer interface {
 	// SyncBroadcastMessage broadcasts a message synchronously.
 	SyncBroadcastMessage(
 		ctx context.Context, topic string, totalPartitionsNum int32, message *codec.MQMessage,
@@ -35,4 +35,4 @@ type Producer interface {
 }
 
 // Factory is a function to create a producer.
-type Factory func(ctx context.Context, client sarama.Client) (Producer, error)
+type Factory func(ctx context.Context, client sarama.Client) (DDLProducer, error)

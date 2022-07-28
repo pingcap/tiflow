@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
-	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq/producer"
+	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq/ddlproducer"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
@@ -47,11 +47,11 @@ type ddlSink struct {
 	encoderBuilder codec.EncoderBuilder
 	// producer used to send events to the MQ system.
 	// Usually it is a sync producer.
-	producer producer.Producer
+	producer ddlproducer.DDLProducer
 }
 
 func newDDLSink(ctx context.Context,
-	producer producer.Producer,
+	producer ddlproducer.DDLProducer,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
 	encoderConfig *codec.Config,

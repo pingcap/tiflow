@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package producer
+package ddlproducer
 
 import (
 	"context"
@@ -29,7 +29,7 @@ import (
 )
 
 // Assert DDLEventSink implementation
-// var _ Producer = (*kafkaDDLProducer)(nil)
+// var _ DDLProducer = (*kafkaDDLProducer)(nil)
 
 // kafkaDDLProducer is used to send messages to kafka synchronously.
 type kafkaDDLProducer struct {
