@@ -95,11 +95,11 @@ func CheckClusterVersion(
 // the whole cluster only allow at most 2 different version instances
 // and should in the range [minTiCDCVersion, maxTiCDCVersion)
 func CheckTiCDCVersion(versions map[string]struct{}) bool {
-	if len(versions) >= 3 {
-		return false
-	}
 	if len(versions) <= 1 {
 		return true
+	}
+	if len(versions) >= 3 {
+		return false
 	}
 	ver := &semver.Version{}
 	for v := range versions {
