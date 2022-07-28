@@ -15,6 +15,7 @@ package txn
 
 import (
 	"bytes"
+	"context"
 	"sort"
 	"sync/atomic"
 	"testing"
@@ -44,12 +45,16 @@ func (b *blackhole) OnTxnEvent(e *eventsink.TxnCallbackableEvent) bool {
 	return true
 }
 
-func (b *blackhole) Flush() error {
+func (b *blackhole) Flush(ctx context.Context) error {
 	return nil
 }
 
 func (b *blackhole) MaxFlushInterval() time.Duration {
 	return time.Second * time.Duration(1000000)
+}
+
+func (b *blackhole) Close() error {
+	return nil
 }
 
 func TestTxnSink(t *testing.T) {

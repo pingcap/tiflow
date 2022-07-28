@@ -14,6 +14,7 @@
 package txn
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -63,7 +64,13 @@ func (w *worker) Close() {
 func (w *worker) runBackgroundLoop() {
 	w.wg.Add(1)
 	go func() {
-		defer w.wg.Done()
+		defer func() {
+			if err := w.backend.Close(); err != nil {
+				log.Info("transaction sink backend close fail",
+					zap.Error(err))
+			}
+			w.wg.Done()
+		}()
 		w.timer = time.NewTimer(w.backend.MaxFlushInterval())
 		for {
 			select {
@@ -89,7 +96,9 @@ func (w *worker) runBackgroundLoop() {
 }
 
 func (w *worker) doFlush() bool {
-	if err := w.backend.Flush(); err != nil {
+	// TODO: support to cnacel the worker in flushing.
+	ctx := context.Background()
+	if err := w.backend.Flush(ctx); err != nil {
 		log.Warn("txn sink worker flush fail", zap.Error(err))
 		w.errCh <- err
 		return true

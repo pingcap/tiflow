@@ -16,6 +16,7 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"net"
 	"net/url"
@@ -45,11 +46,13 @@ const (
 	backoffBaseDelayInMs = 500       // 500ms
 	backoffMaxDelayInMs  = 60 * 1000 // 60s
 
-	defaultDMLMaxRetry uint64 = 8
-	defaultDDLMaxRetry uint64 = 20
-
 	// Max interval for flushing transactions to the downstream.
 	maxFlushInterval = time.Millisecond * time.Duration(100)
+)
+
+var (
+	defaultDMLMaxRetry uint64 = 8
+	defaultDDLMaxRetry uint64 = 20
 )
 
 type mysqlSink struct {
@@ -204,6 +207,14 @@ func (s *mysqlSink) Flush(ctx context.Context) (err error) {
 	return
 }
 
+func (s *mysqlSink) Close() (err error) {
+	if s.db != nil {
+		err = s.db.Close()
+		s.db = nil
+	}
+	return
+}
+
 func (s *mysqlSink) MaxFlushInterval() time.Duration {
 	return maxFlushInterval
 }
@@ -241,12 +252,11 @@ func checkCharsetSupport(ctx context.Context, db *sql.DB, charsetName string) (b
 
 // prepareDMLs converts model.RowChangedEvent list to query string list and args list
 func (s *mysqlSink) prepareDMLs() *preparedDMLs {
+	startTsSet := make(map[uint64]struct{}, s.rows)
 	sqls := make([]string, 0, s.rows)
 	values := make([][]interface{}, 0, s.rows)
+	callbacks := make([]eventsink.CallbackFunc, 0, len(s.events))
 	replaces := make(map[string][][]interface{})
-
-	// translateToInsert control the update and insert behavior
-	translateToInsert := s.enableOldValue && !s.params.safeMode
 
 	// flush cached batch replace or insert, to keep the sequence of DMLs
 	flushCacheDMLs := func() {
@@ -258,12 +268,32 @@ func (s *mysqlSink) prepareDMLs() *preparedDMLs {
 		}
 	}
 
+	// translateToInsert control the update and insert behavior
+	translateToInsert := s.enableOldValue && !s.params.safeMode
+	for _, event := range s.events {
+		for _, row := range event.Event.Rows {
+			if !translateToInsert {
+				break
+			}
+			// It can be translated in to INSERT, if the row is committed after
+			// we starting replicating the table, which means it must not be
+			// replicated before, and there is no such row in downstream MySQL.
+			translateToInsert = row.CommitTs > row.ReplicatingTs
+		}
+	}
+
 	rowCount := 0
 	for _, event := range s.events {
+		if event.Callback != nil {
+			callbacks = append(callbacks, event.Callback)
+		}
+
 		for _, row := range event.Event.Rows {
 			var query string
 			var args []interface{}
 			quoteTable := quotes.QuoteSchema(row.Table.Schema, row.Table.Table)
+
+			startTsSet[row.StartTs] = struct{}{}
 
 			// If the old value is enabled, is not in safe mode and is an update event, then translate to UPDATE.
 			// NOTICE: Only update events with the old value feature enabled will have both columns and preColumns.
@@ -325,7 +355,22 @@ func (s *mysqlSink) prepareDMLs() *preparedDMLs {
 	}
 	flushCacheDMLs()
 
-	return &preparedDMLs{sqls, values, rowCount}
+	startTs := make([]uint64, 0, len(startTsSet))
+	for k := range startTsSet {
+		startTs = append(startTs, k)
+	}
+
+	if len(callbacks) == 0 {
+		callbacks = nil
+	}
+
+	return &preparedDMLs{
+		startTs:   startTs,
+		sqls:      sqls,
+		values:    values,
+		callbacks: callbacks,
+		rowCount:  rowCount,
+	}
 }
 
 func prepareUpdate(quoteTable string, preCols, cols []*model.Column, forceReplicate bool) (string, []interface{}) {
@@ -406,9 +451,23 @@ func prepareReplace(
 	return builder.String(), args
 }
 
-func logDMLTxnErr(err error) error {
+func logDMLTxnErr(
+	err error, start time.Time, changefeed model.ChangeFeedID,
+	query string, count int, startTs []model.Ts,
+) error {
 	if isRetryableDMLError(err) {
-		log.Warn("execute DMLs with error, retry later", zap.Error(err))
+		log.Warn("execute DMLs with error, retry later",
+			zap.Error(err), zap.Duration("duration", time.Since(start)),
+			zap.String("query", query), zap.Int("count", count),
+			zap.Uint64s("startTs", startTs),
+			zap.String("namespace", changefeed.Namespace),
+			zap.String("changefeed", changefeed.ID))
+	} else {
+		log.Error("execute DMLs with error, can not retry",
+			zap.Error(err), zap.Duration("duration", time.Since(start)),
+			zap.String("query", query), zap.Int("count", count),
+			zap.String("namespace", changefeed.Namespace),
+			zap.String("changefeed", changefeed.ID))
 	}
 	return err
 }
@@ -437,9 +496,13 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 			zap.Any("values", dmls.values))
 	}
 
+	start := time.Now()
 	return retry.Do(ctx, func() error {
 		failpoint.Inject("MySQLSinkTxnRandomError", func() {
-			failpoint.Return(logDMLTxnErr(errors.Trace(dmysql.ErrInvalidConn)))
+			failpoint.Return(
+				logDMLTxnErr(
+					errors.Trace(driver.ErrBadConn),
+					start, s.changefeedID, "failpoint", 0, nil))
 		})
 		failpoint.Inject("MySQLSinkHangLongTime", func() {
 			time.Sleep(time.Hour)
@@ -448,22 +511,33 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 		err := s.statistics.RecordBatchExecution(func() (int, error) {
 			tx, err := s.db.BeginTx(ctx, nil)
 			if err != nil {
-				return 0, logDMLTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
+				return 0, logDMLTxnErr(
+					cerror.WrapError(cerror.ErrMySQLTxnError, err),
+					start, s.changefeedID, "BEGIN", dmls.rowCount, dmls.startTs)
 			}
 
 			for i, query := range dmls.sqls {
 				args := dmls.values[i]
 				log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
 				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+					err := logDMLTxnErr(
+						cerror.WrapError(cerror.ErrMySQLTxnError, err),
+						start, s.changefeedID, query, dmls.rowCount, dmls.startTs)
 					if rbErr := tx.Rollback(); rbErr != nil {
-						log.Warn("failed to rollback txn", zap.Error(err))
+						log.Warn("failed to rollback txn", zap.Error(rbErr))
 					}
-					return 0, logDMLTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
+					return 0, err
 				}
 			}
 
 			if err = tx.Commit(); err != nil {
-				return 0, logDMLTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
+				return 0, logDMLTxnErr(
+					cerror.WrapError(cerror.ErrMySQLTxnError, err),
+					start, s.changefeedID, "COMMIT", dmls.rowCount, dmls.startTs)
+			}
+
+			for _, callback := range dmls.callbacks {
+				callback()
 			}
 			return dmls.rowCount, nil
 		})
@@ -482,9 +556,11 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 }
 
 type preparedDMLs struct {
-	sqls     []string
-	values   [][]interface{}
-	rowCount int
+	startTs   []model.Ts
+	sqls      []string
+	values    [][]interface{}
+	callbacks []eventsink.CallbackFunc
+	rowCount  int
 }
 
 // if the column value type is []byte and charset is not binary, we get its string
