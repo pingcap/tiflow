@@ -286,10 +286,10 @@ func TestAsyncSend(t *testing.T) {
 	err := worker.asyncSend(context.Background(), paritionedRows)
 	require.NoError(t, err)
 	mp := p.(*producer.MockProducer)
-	require.Len(t, mp.GetEvents(), 6)
-	require.Len(t, mp.GetEvent(key1), 3)
-	require.Len(t, mp.GetEvent(key2), 1)
-	require.Len(t, mp.GetEvent(key3), 2)
+	require.Len(t, mp.GetAllEvents(), 6)
+	require.Len(t, mp.GetEvents(key1), 3)
+	require.Len(t, mp.GetEvents(key2), 1)
+	require.Len(t, mp.GetEvents(key3), 2)
 }
 
 func TestAsyncSendWhenTableStopping(t *testing.T) {
@@ -346,7 +346,7 @@ func TestAsyncSendWhenTableStopping(t *testing.T) {
 	err := worker.asyncSend(context.Background(), paritionedRows)
 	require.NoError(t, err)
 	mp := p.(*producer.MockProducer)
-	require.Len(t, mp.GetEvents(), 2)
+	require.Len(t, mp.GetAllEvents(), 2)
 }
 
 func TestAbort(t *testing.T) {
