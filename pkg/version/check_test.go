@@ -234,7 +234,7 @@ func TestGetTiCDCClusterVersion(t *testing.T) {
 	}{
 		{
 			captureVersions: []string{},
-			expected:        cdcClusterVersionUnknown,
+			expected:        ticdcClusterVersionUnknown,
 		},
 		{
 			captureVersions: []string{
@@ -291,7 +291,7 @@ func TestGetTiCDCClusterVersion(t *testing.T) {
 			"",
 			"testCDC",
 		},
-		expected: cdcClusterVersionUnknown,
+		expected: ticdcClusterVersionUnknown,
 	}
 	_, err := GetTiCDCClusterVersion(invalidTestCase.captureVersions)
 	require.Regexp(t, ".*invalid CDC cluster version.*", err)
@@ -339,8 +339,8 @@ func TestTiCDCClusterVersionFeaturesCompatible(t *testing.T) {
 	require.Equal(t, ver.ShouldEnableUnifiedSorterByDefault(), true)
 	require.Equal(t, ver.ShouldEnableOldValueByDefault(), true)
 
-	require.Equal(t, cdcClusterVersionUnknown.ShouldEnableUnifiedSorterByDefault(), true)
-	require.Equal(t, cdcClusterVersionUnknown.ShouldEnableOldValueByDefault(), true)
+	require.Equal(t, ticdcClusterVersionUnknown.ShouldEnableUnifiedSorterByDefault(), true)
+	require.Equal(t, ticdcClusterVersionUnknown.ShouldEnableOldValueByDefault(), true)
 }
 
 func TestCheckPDVersionError(t *testing.T) {
@@ -363,27 +363,53 @@ func TestCheckPDVersionError(t *testing.T) {
 func TestCheckTiCDCVersion(t *testing.T) {
 	t.Parallel()
 
-	versions := make(map[string]struct{})
+	cases := []struct {
+		versions map[string]struct{}
+		result   bool
+	}{
+		// only one capture in the cluster, it's ok
+		{
+			versions: map[string]struct{}{
+				"v6.3.0": {},
+			},
+			result: true,
+		},
+		// 2 different version running instances in the cluster, it's ok
+		{
+			versions: map[string]struct{}{
+				"v6.3.0": {},
+				"v6.4.0": {},
+			},
+			result: true,
+		},
+		// at the most only 2 different versions running instances allowed, so not ok.
+		{
+			versions: map[string]struct{}{
+				"v6.3.0": {},
+				"v6.4.0": {},
+				"v6.5.0": {},
+			},
+			result: false,
+		},
+		// `5.0.0` is lower the min supported version
+		{
+			versions: map[string]struct{}{
+				"v6.3.0": {},
+				"v5.0.0": {},
+			},
+			result: false,
+		},
+		// `v8.0.0` is not supported
+		{
+			versions: map[string]struct{}{
+				"v6.3.0": {},
+				"v8.0.0": {},
+			},
+			result: false,
+		},
+	}
 
-	versions["v6.3.0"] = struct{}{}
-	require.True(t, CheckTiCDCVersion(versions))
-
-	versions["v6.4.0"] = struct{}{}
-	require.True(t, CheckTiCDCVersion(versions))
-
-	versions["v6.5.0"] = struct{}{}
-	require.False(t, CheckTiCDCVersion(versions))
-
-	delete(versions, "v6.5.0")
-	delete(versions, "v6.4.0")
-	versions["v5.0.0"] = struct{}{}
-	require.False(t, CheckTiCDCVersion(versions))
-
-	delete(versions, "v5.0.0")
-	versions["v8.0.0"] = struct{}{}
-	require.False(t, CheckTiCDCVersion(versions))
-
-	delete(versions, "v8.0.0")
-	versions["invalid-version"] = struct{}{}
-	require.False(t, CheckTiCDCVersion(versions))
+	for _, c := range cases {
+		require.Equal(t, c.result, CheckTiCDCVersion(c.versions))
+	}
 }

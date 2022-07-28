@@ -383,15 +383,15 @@ func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model
 		versions[capture.Version] = struct{}{}
 	}
 
-	ok := version.CheckTiCDCVersion(versions)
-	if !ok {
+	if err := version.CheckTiCDCVersion(versions); err != nil {
 		if o.logLimiter.Allow() {
-			log.Warn("more than two versions instance in the cdc cluster, it's not allowed",
-				zap.Any("captures", captures),
-				zap.String("ownerVer", version.ReleaseVersion))
+			log.Warn("TiCDC cluster versions not allowed",
+				zap.String("ownerVer", version.ReleaseVersion),
+				zap.Any("captures", captures), zap.Error(err))
 		}
+		return false
 	}
-	return ok
+	return true
 }
 
 func (o *ownerImpl) handleDrainCaptures(query *scheduler.Query, done chan<- error) {
