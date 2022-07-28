@@ -80,9 +80,11 @@ func mockTestDB(adjustSQLMode bool) (*sql.DB, error) {
 func newMySQLSink4Test(ctx context.Context, t *testing.T) *mysqlSink {
 	params := defaultParams.Clone()
 	params.batchReplaceEnabled = false
+	ctx, cancel := context.WithCancel(ctx)
 	return &mysqlSink{
 		statistics: metrics.NewStatistics(ctx, metrics.SinkTypeDB),
 		params:     params,
+		cancel:     cancel,
 	}
 }
 
@@ -988,15 +990,15 @@ func TestAdjustSQLMode(t *testing.T) {
 
 	dbIndex := 0
 	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
-		defer func() {
-			dbIndex++
-		}()
+		defer func() { dbIndex++ }()
+
 		if dbIndex == 0 {
 			// test db
 			db, err := mockTestDB(true)
 			require.Nil(t, err)
 			return db, nil
 		}
+
 		// normal db
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
@@ -1005,17 +1007,16 @@ func TestAdjustSQLMode(t *testing.T) {
 	}
 	backupGetDBConn := GetDBConnImpl
 	GetDBConnImpl = mockGetDBConn
-	defer func() {
-		GetDBConnImpl = backupGetDBConn
-	}()
+	defer func() { GetDBConnImpl = backupGetDBConn }()
 
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
 	require.Nil(t, err)
 	rc := config.GetDefaultReplicaConfig()
 	require.Nil(t, err)
-	_, err = NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, rc)
+	sink, err := NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, rc)
 	require.Nil(t, err)
+	require.Nil(t, sink.Close())
 }
 
 type mockUnavailableMySQL struct {
@@ -1077,8 +1078,7 @@ func TestNewMySQLTimeout(t *testing.T) {
 	require.Nil(t, err)
 	rc := config.GetDefaultReplicaConfig()
 	require.Nil(t, err)
-	_, err = NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed),
-		sinkURI, rc)
+	_, err = NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, rc)
 	require.Equal(t, driver.ErrBadConn, errors.Cause(err))
 }
 
@@ -1682,6 +1682,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 		mock.ExpectBegin()
 		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`,`b`) VALUES (?,?)").WillDelayFor(1 * time.Second).
 			WillReturnError(&dmysql.MySQLError{Number: mysql.ErrNoSuchTable})
+		mock.ExpectClose()
 		return db, nil
 	}
 	backupGetDBConn := GetDBConnImpl
@@ -1800,7 +1801,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 	})
 	err = sink.Flush(context.Background())
 	require.Regexp(t, ".*ErrMySQLTxnError.*", err)
-	_ = sink.Close()
+	require.Nil(t, sink.Close())
 }
 
 func TestMysqlSinkSafeModeOff(t *testing.T) {
