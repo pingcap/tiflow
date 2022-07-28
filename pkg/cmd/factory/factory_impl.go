@@ -141,7 +141,8 @@ func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClient, error) {
 	client, err := etcd.NewCDCEtcdClient(ctx, etcdClient, etcd.DefaultCDCClusterID)
 	if err != nil {
 		return nil, cerror.ErrEtcdAPIError.GenWithStack(
-			"Etcd operation error. Please check the cluster's status and the pd address(es)  \"%s\"")
+			"Etcd operation error. Please check the cluster's status " +
+				" and the pd address(es) \"%s\"")
 	}
 
 	return &client, err

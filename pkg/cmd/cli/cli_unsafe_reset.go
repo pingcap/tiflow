@@ -48,9 +48,9 @@ func (o *unsafeResetOptions) complete(f factory.Factory) (retErr error) {
 	}()
 
 	o.pdClient = pdClient
+
 	etcdClient, err := f.EtcdClient()
 	if err != nil {
-		pdClient.Close()
 		return err
 	}
 	etcdClient.ClusterID = o.clusterID
