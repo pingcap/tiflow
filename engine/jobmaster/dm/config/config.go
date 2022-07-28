@@ -116,6 +116,8 @@ type JobCfg struct {
 	// BWList map[string]*filter.Rules `yaml:"black-white-list" toml:"black-white-list" json:"black-white-list"`
 	// EnableANSIQuotes bool `yaml:"ansi-quotes" toml:"ansi-quotes" json:"ansi-quotes"`
 	// RemoveMeta bool `yaml:"remove-meta"`
+
+	ModRevision uint64 `yaml:"mod_revision" toml:"mod_revision" json:"mod_revision"`
 }
 
 // DecodeFile reads file content from a given path and decodes it.

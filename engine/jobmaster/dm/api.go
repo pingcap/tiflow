@@ -30,13 +30,15 @@ import (
 type TaskStatus struct {
 	ExpectedStage metadata.TaskStage
 	WorkerID      frameModel.WorkerID
+	CfgModRevison uint64
 	Status        *dmpkg.QueryStatusResponse
 }
 
 // JobStatus represents status of a job
 type JobStatus struct {
-	JobMasterID frameModel.MasterID
-	WorkerID    frameModel.WorkerID
+	JobMasterID           frameModel.MasterID
+	WorkerID              frameModel.WorkerID
+	ExpectedCfgModRevison uint64
 	// taskID -> Status
 	TaskStatus map[string]TaskStatus
 }
@@ -55,14 +57,21 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 		}
 	}
 
+	var cfgModeRevsion uint64
+	for _, task := range job.Tasks {
+		cfgModeRevsion = task.Cfg.ModRevision
+		break
+	}
+
 	var (
 		workerStatusMap = jm.workerManager.WorkerStatus()
 		wg              sync.WaitGroup
 		mu              sync.Mutex
 		jobStatus       = &JobStatus{
-			JobMasterID: jm.JobMasterID(),
-			WorkerID:    jm.ID(),
-			TaskStatus:  make(map[string]TaskStatus),
+			JobMasterID:           jm.JobMasterID(),
+			WorkerID:              jm.ID(),
+			ExpectedCfgModRevison: cfgModeRevsion,
+			TaskStatus:            make(map[string]TaskStatus),
 		}
 	)
 
@@ -75,6 +84,7 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 			var (
 				queryStatusResp *dmpkg.QueryStatusResponse
 				workerID        string
+				cfgModRevision  uint64
 				expectedStage   metadata.TaskStage
 			)
 
@@ -90,9 +100,11 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 				} else if workerStatus.Stage == runtime.WorkerFinished {
 					// task finished
 					workerID = workerStatus.ID
+					cfgModRevision = workerStatus.CfgModRevision
 					queryStatusResp = &dmpkg.QueryStatusResponse{Unit: workerStatus.Unit, Stage: metadata.StageFinished}
 				} else {
 					workerID = workerStatus.ID
+					cfgModRevision = workerStatus.CfgModRevision
 					queryStatusResp = jm.QueryStatus(ctx, taskID)
 				}
 			}
@@ -102,6 +114,7 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 				ExpectedStage: expectedStage,
 				WorkerID:      workerID,
 				Status:        queryStatusResp,
+				CfgModRevison: cfgModRevision,
 			}
 			mu.Unlock()
 		}()
@@ -125,7 +138,7 @@ func (jm *JobMaster) QueryStatus(ctx context.Context, taskID string) *dmpkg.Quer
 // OperateTask operate task.
 func (jm *JobMaster) OperateTask(ctx context.Context, op dmpkg.OperateType, cfg *config.JobCfg, tasks []string) error {
 	switch op {
-	case dmpkg.Resume, dmpkg.Pause:
+	case dmpkg.Resume, dmpkg.Pause, dmpkg.Update:
 		return jm.taskManager.OperateTask(ctx, op, cfg, tasks)
 	default:
 		return errors.Errorf("unsupport op type %d for operate task", op)
@@ -145,6 +158,17 @@ func (jm *JobMaster) GetJobCfg(ctx context.Context) (*config.JobCfg, error) {
 		taskCfgs = append(taskCfgs, task.Cfg)
 	}
 	return config.FromTaskCfgs(taskCfgs), nil
+}
+
+// UpdateJobCfg updates job config.
+func (jm *JobMaster) UpdateJobCfg(ctx context.Context, cfg *config.JobCfg) error {
+	if err := jm.preCheck(ctx, cfg); err != nil {
+		return err
+	}
+	if err := jm.OperateTask(ctx, dmpkg.Update, cfg, nil); err != nil {
+		return err
+	}
+	return jm.checkpointAgent.Update(ctx, cfg)
 }
 
 // Binlog implements the api of binlog request.

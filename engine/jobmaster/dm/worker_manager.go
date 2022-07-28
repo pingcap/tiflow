@@ -126,6 +126,9 @@ func (wm *WorkerManager) TickImpl(ctx context.Context) error {
 	if err := wm.stopUnneededWorkers(ctx, job); err != nil {
 		recordError = err
 	}
+	if err := wm.stopOutdatedWorkers(ctx, job); err != nil {
+		recordError = err
+	}
 	if err := wm.checkAndScheduleWorkers(ctx, job); err != nil {
 		recordError = err
 	}
@@ -151,8 +154,12 @@ func (wm *WorkerManager) removeOfflineWorkers() {
 func (wm *WorkerManager) onJobNotExist(ctx context.Context) error {
 	var recordError error
 	wm.workerStatusMap.Range(func(key, value interface{}) bool {
+		workerStatus := value.(runtime.WorkerStatus)
+		if workerStatus.IsTombStone() {
+			return true
+		}
 		wm.logger.Info("stop worker", zap.String("task_id", key.(string)), zap.String(logutil.ConstFieldWorkerKey, value.(runtime.WorkerStatus).ID))
-		if err := wm.stopWorker(ctx, key.(string), value.(runtime.WorkerStatus).ID); err != nil {
+		if err := wm.stopWorker(ctx, key.(string), workerStatus.ID); err != nil {
 			recordError = err
 		}
 		return true
@@ -166,6 +173,10 @@ func (wm *WorkerManager) stopUnneededWorkers(ctx context.Context, job *metadata.
 	wm.workerStatusMap.Range(func(key, value interface{}) bool {
 		taskID := key.(string)
 		if _, ok := job.Tasks[taskID]; !ok {
+			workerStatus := value.(runtime.WorkerStatus)
+			if workerStatus.IsTombStone() {
+				return true
+			}
 			wm.logger.Info("stop unneeded worker", zap.String("task_id", taskID), zap.String(logutil.ConstFieldWorkerKey, value.(runtime.WorkerStatus).ID))
 			if err := wm.stopWorker(ctx, taskID, value.(runtime.WorkerStatus).ID); err != nil {
 				recordError = err
@@ -176,11 +187,32 @@ func (wm *WorkerManager) stopUnneededWorkers(ctx context.Context, job *metadata.
 	return recordError
 }
 
+// stop outdated workers, usually happened when update job cfgs.
+func (wm *WorkerManager) stopOutdatedWorkers(ctx context.Context, job *metadata.Job) error {
+	var recordError error
+	wm.workerStatusMap.Range(func(key, value interface{}) bool {
+		taskID := key.(string)
+		workerStatus := value.(runtime.WorkerStatus)
+		task, ok := job.Tasks[taskID]
+		if !ok || task.Cfg.ModRevision == workerStatus.CfgModRevision {
+			return true
+		}
+		if workerStatus.IsTombStone() {
+			return true
+		}
+		wm.logger.Info("stop outdated worker", zap.String("task_id", taskID), zap.String(logutil.ConstFieldWorkerKey, value.(runtime.WorkerStatus).ID),
+			zap.Uint64("config_modify_revision", workerStatus.CfgModRevision), zap.Uint64("expected_config_modify_revision", task.Cfg.ModRevision))
+		if err := wm.stopWorker(ctx, taskID, value.(runtime.WorkerStatus).ID); err != nil {
+			recordError = err
+		}
+		return true
+	})
+	return recordError
+}
+
 // checkAndScheduleWorkers check whether a task need a new worker.
 // If there is no related worker, create a new worker.
 // If task is finished, check whether need a new worker.
-// This function does not handle taskCfg updated(update-job).
-// TODO: support update taskCfg, or we may need to send update request manually.
 func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metadata.Job) error {
 	var (
 		runningWorker runtime.WorkerStatus
@@ -296,7 +328,7 @@ func (wm *WorkerManager) createWorker(
 	resources ...resourcemeta.ResourceID,
 ) error {
 	wm.logger.Info("start to create worker", zap.String("task_id", taskID), zap.Int64("unit", int64(unit)))
-	workerID, err := wm.workerAgent.CreateWorker(unit, taskCfg.ToDMSubTaskCfg(), 1, resources...)
+	workerID, err := wm.workerAgent.CreateWorker(unit, taskCfg, 1, resources...)
 	if err != nil {
 		wm.logger.Error("failed to create workers", zap.String("task_id", taskID), zap.Int64("unit", int64(unit)), zap.Error(err))
 	}
@@ -324,13 +356,7 @@ func (wm *WorkerManager) stopWorker(ctx context.Context, taskID string, workerID
 		wm.logger.Error("failed to stop worker", zap.String("task_id", taskID), zap.String("worker_id", workerID), zap.Error(err))
 		return err
 	}
-	//	There are two mechanisms for removing worker status.
-	//	1.	remove worker status when no error.
-	//		It is possible that the worker will be stopped twice, so the stop needs to be idempotent.
-	//	2.	remove worker status even if there is error.
-	//		When stop fails, we stop it again until the next time we receive worker online status, so the stop interval will be longer.
-	//	We choose the first mechanism now.
-	wm.workerStatusMap.Delete(taskID)
+	// workerStatus will be removed when the worker is offline.
 	return nil
 }
 
