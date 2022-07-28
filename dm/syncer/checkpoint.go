@@ -422,7 +422,16 @@ func (cp *RemoteCheckPoint) Snapshot(isSyncFlush bool) *SnapshotInfo {
 		}
 	}
 
-	flushGlobalPoint := cp.globalPoint.outOfDate() || cp.globalPointSaveTime.IsZero() || (isSyncFlush && cp.needFlushSafeModeExitPoint.Load())
+	// flush when
+	// - global checkpoint is forwarded
+	// - global checkpoint is not forwarded but binlog filename updated. This may happen when upstream switched or relay
+	//   enable/disable in GTID replication
+	// - the first time to flush checkpoint
+	// - need update safe mode exit point
+	flushGlobalPoint := cp.globalPoint.outOfDate() ||
+		cp.globalPoint.savedPoint.location.Position.Name != cp.globalPoint.flushedPoint.location.Position.Name ||
+		cp.globalPointSaveTime.IsZero() ||
+		(isSyncFlush && cp.needFlushSafeModeExitPoint.Load())
 
 	// if there is no change on both table points and global point, just return an empty snapshot
 	if len(tableCheckPoints) == 0 && !flushGlobalPoint {
