@@ -23,7 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestConnAmountChecker(t *testing.T) {
+func TestConnNumberChecker(t *testing.T) {
 	var err error
 	db, dbMock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -45,7 +45,7 @@ func TestConnAmountChecker(t *testing.T) {
 		[]string{"Id", "User", "Host", "db", "Command", "Time", "State", "Info"}).
 		AddRow(1, "root", "localhost", "test", "Query", 0, "init", ""),
 	)
-	loaderChecker := NewLoaderConnAmountChecker(baseDB, stCfgs)
+	loaderChecker := NewLoaderConnNumberChecker(baseDB, stCfgs)
 	result := loaderChecker.Check(context.Background())
 	require.Equal(t, 1, len(result.Errors))
 	require.Equal(t, StateFailure, result.State)
@@ -61,7 +61,7 @@ func TestConnAmountChecker(t *testing.T) {
 		[]string{"Id", "User", "Host", "db", "Command", "Time", "State", "Info"}).
 		AddRow(1, "root", "localhost", "test", "Query", 0, "init", ""),
 	)
-	loaderChecker = NewLoaderConnAmountChecker(baseDB, stCfgs)
+	loaderChecker = NewLoaderConnNumberChecker(baseDB, stCfgs)
 	result = loaderChecker.Check(context.Background())
 	require.Equal(t, 0, len(result.Errors))
 	require.Equal(t, StateSuccess, result.State)

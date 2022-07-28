@@ -35,7 +35,7 @@ const (
 	ShardAutoIncrementIDChecking = "auto_increment_ID"
 	OnlineDDLChecking            = "online_ddl"
 	BinlogDBChecking             = "binlog_db"
-	ConnAmountChecking           = "conn_amount"
+	ConnNumberChecking           = "conn_number"
 )
 
 // AllCheckingItems contains all checking items.
@@ -53,7 +53,7 @@ var AllCheckingItems = map[string]string{
 	ShardAutoIncrementIDChecking: "conflict auto increment ID of shard tables checking item",
 	OnlineDDLChecking:            "online ddl checking item",
 	BinlogDBChecking:             "binlog db checking item",
-	ConnAmountChecking:           "connection number checking item",
+	ConnNumberChecking:           "connection number checking item",
 }
 
 // MaxSourceIDLength is the max length for dm-worker source id.

@@ -148,7 +148,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		return egErr
 	}
 	// check connections
-	if _, ok := c.checkingItems[config.ConnAmountChecking]; ok {
+	if _, ok := c.checkingItems[config.ConnNumberChecking]; ok {
 		if len(c.stCfgs) > 0 {
 			// only check the first subtask's config
 			// because the Mode is the same across all the subtasks
@@ -157,14 +157,14 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			case config.ModeAll:
 				// TODO: check the connections for syncer
 				// TODO: check for incremental mode
-				c.checkList = append(c.checkList, checker.NewLoaderConnAmountChecker(c.instances[0].targetDB, c.stCfgs))
+				c.checkList = append(c.checkList, checker.NewLoaderConnNumberChecker(c.instances[0].targetDB, c.stCfgs))
 				for i, inst := range c.instances {
-					c.checkList = append(c.checkList, checker.NewDumperConnAmountChecker(inst.sourceDB, c.stCfgs[i].MydumperConfig.Threads))
+					c.checkList = append(c.checkList, checker.NewDumperConnNumberChecker(inst.sourceDB, c.stCfgs[i].MydumperConfig.Threads))
 				}
 			case config.ModeFull:
-				c.checkList = append(c.checkList, checker.NewLoaderConnAmountChecker(c.instances[0].targetDB, c.stCfgs))
+				c.checkList = append(c.checkList, checker.NewLoaderConnNumberChecker(c.instances[0].targetDB, c.stCfgs))
 				for i, inst := range c.instances {
-					c.checkList = append(c.checkList, checker.NewDumperConnAmountChecker(inst.sourceDB, c.stCfgs[i].MydumperConfig.Threads))
+					c.checkList = append(c.checkList, checker.NewDumperConnNumberChecker(inst.sourceDB, c.stCfgs[i].MydumperConfig.Threads))
 				}
 			}
 		}

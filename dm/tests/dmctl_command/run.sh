@@ -848,17 +848,17 @@ function run_validator_cmd_error() {
 cleanup_data dmctl_command
 # also cleanup dm processes in case of last run failed
 cleanup_process $*
-# run $*
-# cleanup_process $*
+run $*
+cleanup_process $*
 
-# # run validator commands
-# cleanup_data dmctl_command
-# run_validator_cmd $*
-# run_validation_start_stop_cmd
-# cleanup_process $*
+# run validator commands
+cleanup_data dmctl_command
+run_validator_cmd $*
+run_validation_start_stop_cmd
+cleanup_process $*
 
-# # run check task
-# cleanup_data dmctl_command
+# run check task
+cleanup_data dmctl_command
 run_check_task
 cleanup_process $*
 

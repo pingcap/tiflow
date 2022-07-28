@@ -24,7 +24,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type connAmountChecker struct {
+type connNumberChecker struct {
 	toCheckDB *conn.BaseDB
 	stCfgs    []*config.SubTaskConfig
 
@@ -33,8 +33,8 @@ type connAmountChecker struct {
 	unlimitedConn bool
 }
 
-func newConnAmountChecker(toCheckDB *conn.BaseDB, stCfgs []*config.SubTaskConfig, fn func(stCfgs []*config.SubTaskConfig) int, workerName string) connAmountChecker {
-	return connAmountChecker{
+func newConnNumberChecker(toCheckDB *conn.BaseDB, stCfgs []*config.SubTaskConfig, fn func(stCfgs []*config.SubTaskConfig) int, workerName string) connNumberChecker {
+	return connNumberChecker{
 		toCheckDB:     toCheckDB,
 		stCfgs:        stCfgs,
 		getConfigConn: fn,
@@ -42,14 +42,17 @@ func newConnAmountChecker(toCheckDB *conn.BaseDB, stCfgs []*config.SubTaskConfig
 	}
 }
 
-func (c *connAmountChecker) check(ctx context.Context, checkerName string) *Result {
+func (c *connNumberChecker) check(ctx context.Context, checkerName string) *Result {
 	result := &Result{
 		Name:  checkerName,
 		Desc:  "check if connetion concurrency exceeds database's maximum connection limit",
 		State: StateFailure,
 	}
 	baseConn, err := c.toCheckDB.GetBaseConn(ctx)
-	//nolint:errcheck
+	if err != nil {
+		markCheckError(result, err)
+		return result
+	}
 	defer c.toCheckDB.CloseBaseConn(baseConn)
 	if err != nil {
 		markCheckError(result, err)
@@ -61,7 +64,6 @@ func (c *connAmountChecker) check(ctx context.Context, checkerName string) *Resu
 		markCheckError(result, err)
 		return result
 	}
-	defer rows.Close()
 	var (
 		maxConn  int
 		variable string
@@ -73,8 +75,11 @@ func (c *connAmountChecker) check(ctx context.Context, checkerName string) *Resu
 			return result
 		}
 	}
+	rows.Close()
 	if maxConn == 0 {
 		c.unlimitedConn = true
+		result.State = StateSuccess
+		return result
 	}
 	processRows, err = baseConn.QuerySQL(tcontext.NewContext(ctx, log.L()), "SHOW PROCESSLIST")
 	if err != nil {
@@ -89,13 +94,7 @@ func (c *connAmountChecker) check(ctx context.Context, checkerName string) *Resu
 	usedConn -= 1 // exclude the connection used for show processlist
 	log.L().Debug("connection checker", zap.Int("maxConnections", maxConn), zap.Int("usedConnections", usedConn))
 	neededConn := c.getConfigConn(c.stCfgs)
-	switch {
-	case c.unlimitedConn:
-		// zero max_connections means unlimited connections
-		// we shouldn't report a warning.
-		c.unlimitedConn = true
-		result.State = StateSuccess
-	case neededConn > maxConn:
+	if neededConn > maxConn {
 		// nonzero max_connections and needed connections exceed max_connections
 		// FYI: https://github.com/pingcap/tidb/pull/35453
 		// currently, TiDB's max_connections is set to 0 representing unlimited connections,
@@ -103,19 +102,20 @@ func (c *connAmountChecker) check(ctx context.Context, checkerName string) *Resu
 		result.Errors = append(
 			result.Errors,
 			NewError(
-				"database's max_connections: %d is less than the number %s needs: %d",
+				"checked database's max_connections: %d is less than the number %s needs: %d",
 				maxConn,
 				c.workerName,
 				neededConn,
 			),
 		)
-		result.Instruction = "set larger max_connections or reduce the pool size of dm"
+		result.Instruction = "set larger max_connections or adjust the configuration of dm"
 		result.State = StateFailure
-	default:
+	} else {
 		// nonzero max_connections and needed connections are less than or equal to max_connections
 		result.State = StateSuccess
 		if maxConn-usedConn < neededConn {
 			result.State = StateWarning
+			result.Instruction = "set larger max_connections or adjust the configuration of dm"
 			result.Errors = append(
 				result.Errors,
 				NewError(
@@ -132,13 +132,13 @@ func (c *connAmountChecker) check(ctx context.Context, checkerName string) *Resu
 	return result
 }
 
-type LoaderConnAmountChecker struct {
-	connAmountChecker
+type LoaderConnNumberChecker struct {
+	connNumberChecker
 }
 
-func NewLoaderConnAmountChecker(targetDB *conn.BaseDB, stCfgs []*config.SubTaskConfig) RealChecker {
-	return &LoaderConnAmountChecker{
-		connAmountChecker: newConnAmountChecker(targetDB, stCfgs, func(stCfgs []*config.SubTaskConfig) int {
+func NewLoaderConnNumberChecker(targetDB *conn.BaseDB, stCfgs []*config.SubTaskConfig) RealChecker {
+	return &LoaderConnNumberChecker{
+		connNumberChecker: newConnNumberChecker(targetDB, stCfgs, func(stCfgs []*config.SubTaskConfig) int {
 			loaderConn := 0
 			for _, stCfg := range stCfgs {
 				// loader's worker and checkpoint (always keeps one db connection)
@@ -149,11 +149,11 @@ func NewLoaderConnAmountChecker(targetDB *conn.BaseDB, stCfgs []*config.SubTaskC
 	}
 }
 
-func (l *LoaderConnAmountChecker) Name() string {
-	return "loader_conn_amount_checker"
+func (l *LoaderConnNumberChecker) Name() string {
+	return "loader_conn_number_checker"
 }
 
-func (l *LoaderConnAmountChecker) Check(ctx context.Context) *Result {
+func (l *LoaderConnNumberChecker) Check(ctx context.Context) *Result {
 	result := l.check(ctx, l.Name())
 	if !l.unlimitedConn && result.State == StateFailure {
 		// if the max_connections is set as a specific number
@@ -174,23 +174,23 @@ func (l *LoaderConnAmountChecker) Check(ctx context.Context) *Result {
 	return result
 }
 
-func NewDumperConnAmountChecker(sourceDB *conn.BaseDB, dumperThreads int) RealChecker {
-	return &DumperConnAmountChecker{
-		connAmountChecker: newConnAmountChecker(sourceDB, nil, func(_ []*config.SubTaskConfig) int {
+func NewDumperConnNumberChecker(sourceDB *conn.BaseDB, dumperThreads int) RealChecker {
+	return &DumperConnNumberChecker{
+		connNumberChecker: newConnNumberChecker(sourceDB, nil, func(_ []*config.SubTaskConfig) int {
 			// one for generating SQL, another for consistency control
 			return dumperThreads + 2
 		}, "dumper"),
 	}
 }
 
-type DumperConnAmountChecker struct {
-	connAmountChecker
+type DumperConnNumberChecker struct {
+	connNumberChecker
 }
 
-func (d *DumperConnAmountChecker) Check(ctx context.Context) *Result {
+func (d *DumperConnNumberChecker) Check(ctx context.Context) *Result {
 	return d.check(ctx, d.Name())
 }
 
-func (d *DumperConnAmountChecker) Name() string {
-	return "dumper_conn_amount_checker"
+func (d *DumperConnNumberChecker) Name() string {
+	return "dumper_conn_number_checker"
 }
