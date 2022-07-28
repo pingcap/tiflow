@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package producer
+package dmlproducer
 
 import (
 	"context"
@@ -68,7 +68,7 @@ func getConfig(addr string) *kafkav1.Config {
 	return config
 }
 
-func TestKafkaProducerAck(t *testing.T) {
+func TestProducerAck(t *testing.T) {
 	t.Parallel()
 
 	leader, topic := initBroker(t, true)
@@ -85,7 +85,7 @@ func TestKafkaProducerAck(t *testing.T) {
 
 	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
-	producer, err := NewKafkaProducer(ctx, client, errCh)
+	producer, err := NewKafkaDMLProducer(ctx, client, errCh)
 	require.Nil(t, err)
 	require.NotNil(t, producer)
 
@@ -150,7 +150,7 @@ func TestProducerSendMsgFailed(t *testing.T) {
 
 	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
-	producer, err := NewKafkaProducer(ctx, client, errCh)
+	producer, err := NewKafkaDMLProducer(ctx, client, errCh)
 	defer func() {
 		producer.Close()
 
@@ -210,7 +210,7 @@ func TestProducerDoubleClose(t *testing.T) {
 	saramaConfig.Producer.Flush.MaxMessages = 1
 	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
-	producer, err := NewKafkaProducer(ctx, client, errCh)
+	producer, err := NewKafkaDMLProducer(ctx, client, errCh)
 	require.Nil(t, err)
 	require.NotNil(t, producer)
 

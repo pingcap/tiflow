@@ -24,7 +24,7 @@ import (
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/producer"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"go.uber.org/zap"
 )
@@ -48,12 +48,12 @@ type worker struct {
 	// encoder is used to encode the messages.
 	encoder codec.EventBatchEncoder
 	// producer is used to send the messages to the Kafka/Pulsar broker.
-	producer producer.Producer
+	producer dmlproducer.DMLProducer
 }
 
 // newWorker creates a new flush worker.
 func newWorker(id model.ChangeFeedID, encoder codec.EventBatchEncoder,
-	producer producer.Producer,
+	producer dmlproducer.DMLProducer,
 ) *worker {
 	w := &worker{
 		changeFeedID: id,
