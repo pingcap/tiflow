@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/dm/checker"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	ctlcommon "github.com/pingcap/tiflow/dm/ctl/common"
+	"github.com/pingcap/tiflow/dm/master"
 	"github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/logutil"
@@ -299,6 +300,10 @@ func (jm *JobMaster) getInitStatus() ([]runtime.TaskStatus, []runtime.WorkerStat
 
 func (jm *JobMaster) preCheck(ctx context.Context) error {
 	jm.Logger().Info("start pre-checking job config")
+
+	if err := master.AdjustTargetDB(ctx, jm.jobCfg.TargetDB); err != nil {
+		return err
+	}
 
 	taskCfgs := jm.jobCfg.ToTaskCfgs()
 	dmSubtaskCfgs := make([]*dmconfig.SubTaskConfig, 0, len(taskCfgs))

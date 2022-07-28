@@ -30,6 +30,13 @@ if [ ! -f "$GOGO_FASTER" ]; then
 	exit 1
 fi
 
+echo "check grpcgateway..."
+GRPC_GATEWAY=$TOOLS_BIN_DIR/protoc-gen-grpc-gateway
+if [ ! -f "$GRPC_GATEWAY" ]; then
+	echo "${GRPC_GATEWAY} does not exist, please run 'make tools/bin/protoc-gen-grpc-gateway' first"
+	exit 1
+fi
+
 echo "generate canal..."
 mkdir -p ./proto/canal
 $TOOLS_BIN_DIR/protoc -I"./proto" -I"$TOOLS_INCLUDE_DIR" \
@@ -56,3 +63,18 @@ mkdir -p ./cdc/scheduler/internal/v3/schedulepb
 $TOOLS_BIN_DIR/protoc -I"./proto" -I"$TOOLS_INCLUDE_DIR" \
 	--plugin=protoc-gen-gogofaster="$GOGO_FASTER" \
 	--gogofaster_out=plugins=grpc:./cdc/scheduler/internal/v3/schedulepb ./proto/table_schedule.proto
+
+echo "generate dmpb..."
+mkdir -p ./dm/pb
+"${TOOLS_BIN_DIR}/protoc" -I"./dm/proto" -I"$TOOLS_INCLUDE_DIR" \
+	--plugin=protoc-gen-gogofaster="$GOGO_FASTER" \
+	--gogofaster_out=plugins=grpc:./dm/pb ./dm/proto/*.proto
+"${TOOLS_BIN_DIR}/protoc" -I"./dm/proto" -I"$TOOLS_INCLUDE_DIR" \
+	--plugin=protoc-gen-grpc-gateway="$GRPC_GATEWAY" \
+	--grpc-gateway_out=./dm/pb ./dm/proto/dmmaster.proto
+
+echo "generate enginepb..."
+mkdir -p ./engine/enginepb
+"${TOOLS_BIN_DIR}/protoc" -I"./engine/proto" -I"$TOOLS_INCLUDE_DIR" \
+	--plugin=protoc-gen-gogofaster="$GOGO_FASTER" \
+	--gogofaster_out=plugins=grpc:engine/enginepb engine/proto/*.proto
