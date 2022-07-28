@@ -71,7 +71,10 @@ func runFakeJobCase(ctx context.Context, cfg *config) error {
 	var jobID string
 	err = retry.Do(ctx, func() error {
 		var inErr error
-		jobID, err = cli.CreateJob(ctx, engineModel.JobTypeFakeJob, cfgBytes)
+		jobID, inErr = cli.CreateJob(ctx, engineModel.JobTypeFakeJob, cfgBytes)
+		if inErr != nil {
+			log.Error("create fake job failed", zap.Error(inErr))
+		}
 		return inErr
 	},
 		retry.WithBackoffBaseDelay(1000 /* 1 second */),

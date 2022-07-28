@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/retry"
 )
 
-const defaultDialRetry = 3
+const defaultDialRetry = 6
 
 // CloseableConnIface defines an interface that supports Close(release resource)
 type CloseableConnIface interface {
