@@ -20,12 +20,10 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	kafkav1 "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/kafka"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -75,7 +73,6 @@ func TestSyncBroadcastMessage(t *testing.T) {
 	defer leader.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	ctx = contextutil.PutRoleInCtx(ctx, util.RoleTester)
 	config := getConfig(leader.Addr())
 	saramaConfig, err := kafkav1.NewSaramaConfig(context.Background(), config)
 	require.Nil(t, err)
@@ -83,7 +80,7 @@ func TestSyncBroadcastMessage(t *testing.T) {
 
 	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
-	p, err := newKafkaProducer(ctx, client)
+	p, err := NewKafkaDDLProducer(ctx, client)
 	require.Nil(t, err)
 
 	err = p.SyncBroadcastMessage(ctx, topic,
@@ -93,7 +90,7 @@ func TestSyncBroadcastMessage(t *testing.T) {
 	p.Close()
 	err = p.SyncBroadcastMessage(ctx, topic,
 		kafka.DefaultMockPartitionNum, &codec.MQMessage{Ts: 417318403368288260})
-	require.Equal(t, cerror.ErrKafkaProducerClosed, err)
+	require.ErrorIs(t, err, cerror.ErrKafkaProducerClosed)
 	cancel()
 }
 
@@ -104,7 +101,6 @@ func TestSyncSendMessage(t *testing.T) {
 	defer leader.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	ctx = contextutil.PutRoleInCtx(ctx, util.RoleTester)
 	config := getConfig(leader.Addr())
 	saramaConfig, err := kafkav1.NewSaramaConfig(context.Background(), config)
 	require.Nil(t, err)
@@ -112,7 +108,7 @@ func TestSyncSendMessage(t *testing.T) {
 
 	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
-	p, err := newKafkaProducer(ctx, client)
+	p, err := NewKafkaDDLProducer(ctx, client)
 	require.Nil(t, err)
 
 	err = p.SyncSendMessage(ctx, topic, 0, &codec.MQMessage{Ts: 417318403368288260})
@@ -120,7 +116,7 @@ func TestSyncSendMessage(t *testing.T) {
 
 	p.Close()
 	err = p.SyncSendMessage(ctx, topic, 0, &codec.MQMessage{Ts: 417318403368288260})
-	require.Equal(t, cerror.ErrKafkaProducerClosed, err)
+	require.ErrorIs(t, err, cerror.ErrKafkaProducerClosed)
 	cancel()
 }
 
@@ -132,7 +128,6 @@ func TestProducerSendMsgFailed(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	ctx = contextutil.PutRoleInCtx(ctx, util.RoleTester)
 	config := getConfig(leader.Addr())
 	saramaConfig, err := kafkav1.NewSaramaConfig(context.Background(), config)
 	require.Nil(t, err)
@@ -143,7 +138,7 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
 
-	p, err := newKafkaProducer(ctx, client)
+	p, err := NewKafkaDDLProducer(ctx, client)
 	require.Nil(t, err)
 	defer p.Close()
 
@@ -159,7 +154,6 @@ func TestProducerDoubleClose(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ctx = contextutil.PutRoleInCtx(ctx, util.RoleTester)
 	config := getConfig(leader.Addr())
 	saramaConfig, err := kafkav1.NewSaramaConfig(context.Background(), config)
 	require.Nil(t, err)
@@ -167,7 +161,7 @@ func TestProducerDoubleClose(t *testing.T) {
 
 	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
-	p, err := newKafkaProducer(ctx, client)
+	p, err := NewKafkaDDLProducer(ctx, client)
 	require.Nil(t, err)
 
 	p.Close()
