@@ -218,6 +218,17 @@ func NewKafkaProducer(
 
 	asyncProducer, err := sarama.NewAsyncProducerFromClient(client)
 	if err != nil {
+		// Close the client to prevent the goroutine leak.
+		// Because it may be a long time to close the client,
+		// so close it asynchronously.
+		go func() {
+			err := client.Close()
+			if err != nil {
+				log.Error("Close sarama client with error", zap.Error(err),
+					zap.String("namespace", changefeedID.Namespace),
+					zap.String("changefeed", changefeedID.ID), zap.String("role", role.String()))
+			}
+		}()
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
