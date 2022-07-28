@@ -535,7 +535,6 @@ func TestBuildIgnoredDDLJob(t *testing.T) {
 	// test case 5: Will filter out drop test.tb3 ddl.
 	job = helper.DDL2Job("alter table test.tb3 add location char(100)")
 	events, err = schema.BuildDDLEvents(job)
-	require.NotNil(t, err)
-	require.Contains(t, err.Error(), "ErrSchemaStorageTableMiss")
+	require.Nil(t, err)
 	require.Len(t, events, 0)
 }

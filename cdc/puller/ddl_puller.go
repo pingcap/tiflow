@@ -117,9 +117,6 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context) error {
 			log.Info("fizz: get ddl job",
 				zap.String("job", job.String()),
 				zap.String("query", job.Query))
-		}
-
-		if ddlRawKV.OpType == model.OpTypePut && job != nil {
 			skip, err := p.handleJob(job)
 			if err != nil {
 				log.Error("fizz: ddl job handler error", zap.Error(err))
