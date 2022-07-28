@@ -83,7 +83,6 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: 123456
     volumes:
-      - '/tmp/dataflow/mysql:/var/lib/mysql'
       - './config/mysql_meta.cnf:/etc/my.cnf'
     ports:
       - "3336:3306"
