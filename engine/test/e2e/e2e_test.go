@@ -125,6 +125,11 @@ func TestSubmitTest(t *testing.T) {
 
 // run this test after docker-compose has been up
 func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr string, flowControl chan struct{}) {
+	var (
+		tenantID  = "e2e-test"
+		projectID = "project-basic-test"
+	)
+
 	ctx := context.Background()
 	fmt.Printf("connect demo\n")
 	democlient, err := NewDemoClient(ctx, demoAddr)
@@ -149,7 +154,7 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr stri
 	fmt.Printf("test is ready\n")
 
 	jobID, err := e2e.CreateJobViaOpenAPI(ctx, config.MasterAddrs[0],
-		engineModel.JobTypeCVSDemo, string(configBytes))
+		tenantID, projectID, engineModel.JobTypeCVSDemo, string(configBytes))
 	require.NoError(t, err)
 
 	fmt.Printf("job id %s\n", jobID)

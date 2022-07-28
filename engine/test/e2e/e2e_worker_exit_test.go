@@ -35,6 +35,8 @@ func TestWorkerExit(t *testing.T) {
 		masterAddrs                  = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
 		businessMetaAddrs            = []string{"127.0.0.1:12479"}
 		businessMetaAddrsInContainer = []string{"etcd-standalone:2379"}
+		tenantID                     = "e2e-test"
+		projectID                    = "project-basic-test"
 	)
 
 	ctx := context.Background()
@@ -62,7 +64,7 @@ func TestWorkerExit(t *testing.T) {
 		fakeJobCfg)
 	require.NoError(t, err)
 
-	jobID, err := e2e.CreateJobViaOpenAPI(ctx, masterAddrs[0],
+	jobID, err := e2e.CreateJobViaOpenAPI(ctx, masterAddrs[0], tenantID, projectID,
 		engineModel.JobTypeFakeJob, string(cfgBytes))
 	require.NoError(t, err)
 

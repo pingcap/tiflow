@@ -104,7 +104,8 @@ func NewUTCli(ctx context.Context, masterAddrs, businessMetaAddrs []string, proj
 
 // CreateJob sends SubmitJob command to servermaster
 func (cli *ChaosCli) CreateJob(ctx context.Context, tp engineModel.JobType, config []byte) (string, error) {
-	return CreateJobViaOpenAPI(ctx, cli.masterAddrs[0], tp, string(config))
+	return CreateJobViaOpenAPI(ctx, cli.masterAddrs[0], cli.project.TenantID(),
+		cli.project.ProjectID(), tp, string(config))
 }
 
 // PauseJob sends PauseJob command to servermaster
@@ -283,7 +284,8 @@ func (cli *ChaosCli) InitializeMetaClient(jobID string) error {
 
 // CreateJobViaOpenAPI wraps OpenAPI to create a job
 func CreateJobViaOpenAPI(
-	ctx context.Context, apiEndpoint string, tp engineModel.JobType, cfg string,
+	ctx context.Context, apiEndpoint string, tenantID string, projectID string,
+	tp engineModel.JobType, cfg string,
 ) (string, error) {
 	cli, err := httputil.NewClient(nil)
 	if err != nil {
@@ -292,8 +294,8 @@ func CreateJobViaOpenAPI(
 	data := url.Values{
 		"job_type":   {strconv.Itoa(int(tp))},
 		"job_config": {cfg},
-		"tenant_id":  {"tenant-1"},
-		"project_id": {"project-1"},
+		"tenant_id":  {tenantID},
+		"project_id": {projectID},
 	}
 	apiURL := "http://" + apiEndpoint + "/api/v1/jobs"
 	resp, err := cli.PostForm(ctx, apiURL, data)

@@ -45,6 +45,8 @@ import (
 const (
 	masterAddr = "127.0.0.1:10245"
 	baseURL    = "http://" + masterAddr + "/api/v1/jobs/%s"
+	tenantID   = "e2e-test"
+	projectID  = "project-dm"
 )
 
 func TestDMJob(t *testing.T) {
@@ -145,7 +147,8 @@ func testSimpleAllModeTask(
 	var jobID string
 	require.Eventually(t, func() bool {
 		var err error
-		jobID, err = e2e.CreateJobViaOpenAPI(ctx, masterAddr, engineModel.JobTypeDM, string(dmJobCfg))
+		jobID, err = e2e.CreateJobViaOpenAPI(ctx, masterAddr, tenantID, projectID,
+			engineModel.JobTypeDM, string(dmJobCfg))
 		return err == nil
 	}, time.Second*5, time.Millisecond*100)
 
