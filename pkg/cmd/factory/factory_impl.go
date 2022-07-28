@@ -254,12 +254,13 @@ func (f *factoryImpl) findServerAddr() (string, error) {
 	if err != nil {
 		return "", errors.Trace(err)
 	}
-	pdClient.Close()
+	defer pdClient.Close()
 	// use pd to get server addr from etcd
 	etcdClient, err := f.EtcdClient()
 	if err != nil {
 		return "", errors.Trace(err)
 	}
+	defer etcdClient.Close()
 
 	ctx := cmdconetxt.GetDefaultContext()
 	err = etcdClient.CheckMultipleCDCClusterExist(ctx)

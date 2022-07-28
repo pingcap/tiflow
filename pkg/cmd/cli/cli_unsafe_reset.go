@@ -45,6 +45,7 @@ func (o *unsafeResetOptions) complete(f factory.Factory) error {
 
 	etcdClient, err := f.EtcdClient()
 	if err != nil {
+		pdClient.Close()
 		return err
 	}
 	etcdClient.ClusterID = o.clusterID
@@ -60,6 +61,8 @@ func (o *unsafeResetOptions) addFlags(cmd *cobra.Command) {
 // run runs the `cli unsafe reset` command.
 func (o *unsafeResetOptions) run(cmd *cobra.Command) error {
 	ctx := context.GetDefaultContext()
+	defer o.pdClient.Close()
+	defer o.etcdClient.Close()
 
 	leases, err := o.etcdClient.GetCaptureLeases(ctx)
 	if err != nil {
