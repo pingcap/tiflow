@@ -55,6 +55,7 @@ func TestGetBaseConn(t *testing.T) {
 		ids = append(ids, id)
 	}
 	require.Equal(t, []int{1}, ids)
+	require.NoError(t, rows.Err())
 
 	mock.ExpectBegin()
 	mock.ExpectExec("create database test").WillReturnResult(sqlmock.NewResult(1, 1))

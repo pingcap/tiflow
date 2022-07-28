@@ -15,7 +15,6 @@ package portal
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"io"
 	"mime/multipart"
@@ -26,15 +25,12 @@ import (
 	"strings"
 	"testing"
 
-	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
 	. "github.com/pingcap/check"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 	router "github.com/pingcap/tidb-tools/pkg/table-router"
 	"github.com/pingcap/tidb/br/pkg/mock"
-
-	"github.com/pingcap/tiflow/dm/dm/config"
 )
 
 var _ = Suite(&testPortalSuite{})
@@ -155,82 +151,6 @@ func (t *testPortalSuite) initTaskCfg() {
 	}
 }
 
-func (t *testPortalSuite) TestCheck(c *C) {
-	wrongDBCfg := config.GetDBConfigForTest()
-	wrongDBCfg.User = "wrong"
-	wrongDBCfg.Port = t.mockClusterPort
-	dbCfgBytes := getTestDBCfgBytes(c, &wrongDBCfg)
-	req := httptest.NewRequest("POST", "/check", bytes.NewReader(dbCfgBytes))
-	resp := httptest.NewRecorder()
-
-	// will connection to database failed
-	t.portalHandler.Check(resp, req)
-	c.Log("resp", resp)
-	c.Assert(resp.Code, Equals, http.StatusBadRequest)
-
-	checkResult := &CheckResult{}
-	err := readJSON(resp.Body, checkResult)
-	c.Assert(err, IsNil)
-	c.Assert(checkResult.Result, Equals, failed)
-	c.Assert(checkResult.Error, Matches, "Error 1045: Access denied for user 'wrong'.*")
-
-	// don't need connection to database, and will return StatusOK
-	getDBConnFunc = t.getMockDB
-	defer func() {
-		getDBConnFunc = getDBConnFromReq
-	}()
-
-	resp = httptest.NewRecorder()
-	t.portalHandler.Check(resp, req)
-	c.Assert(resp.Code, Equals, http.StatusOK)
-
-	err = readJSON(resp.Body, checkResult)
-	c.Assert(err, IsNil)
-	c.Assert(checkResult.Result, Equals, success)
-	c.Assert(checkResult.Error, Equals, "")
-}
-
-func (t *testPortalSuite) TestGetSchemaInfo(c *C) {
-	dbCfg := config.GetDBConfigForTest()
-	dbCfg.User = "wrong"
-	dbCfg.Port = t.mockClusterPort
-	dbCfgBytes := getTestDBCfgBytes(c, &dbCfg)
-	req := httptest.NewRequest("POST", "/schema", bytes.NewReader(dbCfgBytes))
-	resp := httptest.NewRecorder()
-
-	t.portalHandler.GetSchemaInfo(resp, req)
-	c.Log("resp", resp)
-	c.Assert(resp.Code, Equals, http.StatusBadRequest)
-
-	schemaInfoResult := new(SchemaInfoResult)
-	err := readJSON(resp.Body, schemaInfoResult)
-	c.Assert(err, IsNil)
-	c.Assert(schemaInfoResult.Result, Equals, failed)
-	c.Assert(schemaInfoResult.Error, Matches, "Error 1045: Access denied for user 'wrong'.*")
-	c.Assert(schemaInfoResult.Tables, IsNil)
-
-	getDBConnFunc = t.getMockDB
-	defer func() {
-		getDBConnFunc = getDBConnFromReq
-	}()
-
-	resp = httptest.NewRecorder()
-	t.portalHandler.GetSchemaInfo(resp, req)
-	c.Assert(resp.Code, Equals, http.StatusOK)
-
-	err = readJSON(resp.Body, schemaInfoResult)
-	c.Assert(err, IsNil)
-	c.Assert(schemaInfoResult.Result, Equals, success)
-	c.Assert(schemaInfoResult.Error, Equals, "")
-	c.Assert(schemaInfoResult.Tables, HasLen, len(t.allTables)-1)
-	for i, schemaTables := range schemaInfoResult.Tables {
-		c.Assert(schemaTables.Schema, Equals, t.allTables[i].Schema)
-		for j, table := range schemaTables.Tables {
-			c.Assert(table, Equals, t.allTables[i].Tables[j])
-		}
-	}
-}
-
 func (t *testPortalSuite) TestGenerateAndDownloadAndAnalyzeConfig(c *C) {
 	t.initTaskCfg()
 
@@ -322,16 +242,6 @@ func (t *testPortalSuite) TestAnalyzeRuleName(c *C) {
 	}
 }
 
-func (t *testPortalSuite) getMockDB(req *http.Request, timeout int) (*sql.DB, string, error) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		return nil, "", err
-	}
-	t.mockSchemaInfo(mock)
-
-	return db, "mock", nil
-}
-
 func (t *testPortalSuite) TestAdjustConfig(c *C) {
 	c.Assert(adjustConfig(t.taskConfig), IsNil)
 
@@ -385,30 +295,8 @@ func (t *testPortalSuite) TestGenerateMydumperCfgName(c *C) {
 	c.Assert(dumpCfgName, Equals, "source-1.dump")
 }
 
-func (t *testPortalSuite) mockSchemaInfo(mock sqlmock.Sqlmock) {
-	schemas := sqlmock.NewRows([]string{"Database"})
-	for _, tables := range t.allTables {
-		schemas.AddRow(tables.Schema)
-	}
-	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(schemas)
-
-	for _, tables := range t.allTables {
-		tablesResult := sqlmock.NewRows([]string{"Tables_in_" + tables.Schema, "Table_type"})
-		for _, table := range tables.Tables {
-			tablesResult.AddRow(table, "BASE TABLE")
-		}
-		mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(tablesResult)
-	}
-}
-
 func (t *testPortalSuite) TestGenerateTaskFileName(c *C) {
 	taskName := "test"
 	fileName := generateTaskFileName(taskName)
 	c.Assert(fileName, Equals, "test-task.yaml")
-}
-
-func getTestDBCfgBytes(c *C, dbCfg *config.DBConfig) []byte {
-	dbCfgBytes, err := json.Marshal(dbCfg)
-	c.Assert(err, IsNil)
-	return dbCfgBytes
 }

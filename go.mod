@@ -25,7 +25,7 @@ require (
 	github.com/frankban/quicktest v1.11.1 // indirect
 	github.com/getkin/kin-openapi v0.79.0
 	github.com/gin-gonic/gin v1.7.0
-	github.com/go-mysql-org/go-mysql v1.4.1-0.20211217061939-06f932768788
+	github.com/go-mysql-org/go-mysql v1.6.1-0.20220718092400-c855c26b37bd
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/gogo/gateway v1.1.0
 	github.com/gogo/protobuf v1.3.2
@@ -33,7 +33,7 @@ require (
 	github.com/golang/protobuf v1.5.2
 	github.com/google/btree v1.0.0
 	github.com/google/go-cmp v0.5.6
-	github.com/google/uuid v1.1.2
+	github.com/google/uuid v1.3.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
@@ -52,11 +52,11 @@ require (
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20210513014640-40f9a1999b3b
 	github.com/pingcap/failpoint v0.0.0-20210316064728-7acb0f0a3dfd
-	github.com/pingcap/kvproto v0.0.0-20211011060348-d957056f1551
+	github.com/pingcap/kvproto v0.0.0-20220614124712-cd832493ec73
 	github.com/pingcap/log v0.0.0-20210906054005-afc726e70354
-	github.com/pingcap/tidb v1.1.0-beta.0.20211111080905-76b00f3ec11e
+	github.com/pingcap/tidb v1.1.0-beta.0.20220727103312-d674b6486c83
 	github.com/pingcap/tidb-tools v5.2.2-0.20211019062242-37a8bef2fa17+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20211111080905-76b00f3ec11e
+	github.com/pingcap/tidb/parser v0.0.0-20220727103312-d674b6486c83
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/client_model v0.2.0
@@ -74,8 +74,8 @@ require (
 	github.com/syndtr/goleveldb v1.0.1-0.20190318030020-c3a204f8e965
 	github.com/tidwall/gjson v1.9.1
 	github.com/tidwall/sjson v1.2.2
-	github.com/tikv/client-go/v2 v2.0.0-alpha.0.20211029104011-2fd3841894de
-	github.com/tikv/pd v1.1.0-beta.0.20211029083450-e65f0c55b6ae
+	github.com/tikv/client-go/v2 v2.0.0-alpha.0.20220614073506-266c33cb2c82
+	github.com/tikv/pd v1.1.0-beta.0.20211104095303-69c86d05d379
 	github.com/tinylib/msgp v1.1.0
 	github.com/uber-go/atomic v1.4.0
 	github.com/unrolled/render v1.0.1
