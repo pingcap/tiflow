@@ -33,9 +33,7 @@ type Reader interface {
 	// Close will be blocked if `GetEvent` has not returned.
 	Close() error
 
-	// GetEvent gets the binlog event one by one, it will block if no event can be read.
-	// You can pass a context (like Cancel or Timeout) to break the block.
-	GetEvent(ctx context.Context) (*replication.BinlogEvent, error)
+	Streamer
 
 	// Status returns the status of the reader.
 	Status() interface{}

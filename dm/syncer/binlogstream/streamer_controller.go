@@ -39,63 +39,25 @@ import (
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 )
 
-// the minimal interval to retry reset binlog streamer.
-var minErrorRetryInterval = 1 * time.Minute
-
-// BinlogType represents binlog type from syncer's view.
-type BinlogType uint8
-
-const (
-	// RemoteBinlog means syncer is connected to MySQL and reading binlog.
-	RemoteBinlog BinlogType = iota + 1
-	// LocalBinlog means syncer is reading binlog from relay log.
-	LocalBinlog
-)
-
-// RelayToBinlogType converts relay.Process to BinlogType.
-func RelayToBinlogType(relay relay.Process) BinlogType {
-	if relay != nil {
-		return LocalBinlog
-	}
-
-	return RemoteBinlog
+// StreamGenerator provides the ability to generate reader.Streamer from
+// specified location. Current implementation of reader.Streamer are MySQL binlog
+// streamer, relay log streamer and mock streamer.
+type StreamGenerator interface {
+	GenerateStreamFrom(location binlog.Location) (reader.Streamer, error)
 }
 
-func (t BinlogType) String() string {
-	switch t {
-	case RemoteBinlog:
-		return "remote"
-	case LocalBinlog:
-		return "local"
-	default:
-		return "unknown"
-	}
-}
-
-// StreamerProducer provides the ability to generate binlog streamer by StartSync()
-// but go-mysql StartSync() returns (struct, err) rather than (interface, err)
-// And we can't simply use StartSync() method in SteamerProducer
-// so use GenerateStreamer to wrap StartSync() method to make *BinlogSyncer and *BinlogReader in same interface
-// For other implementations who implement StreamerProducer and Streamer can easily take place of Syncer.streamProducer
-// For test is easy to mock.
-type StreamerProducer interface {
-	GenerateStreamer(location binlog.Location) (reader.Streamer, error)
-}
-
-// Read local relay log.
 type localBinlogReader struct {
 	reader     *relay.BinlogReader
 	EnableGTID bool
 }
 
-func (l *localBinlogReader) GenerateStreamer(location binlog.Location) (reader.Streamer, error) {
+func (l *localBinlogReader) GenerateStreamFrom(location binlog.Location) (reader.Streamer, error) {
 	if l.EnableGTID {
 		return l.reader.StartSyncByGTID(location.GetGTID().Clone())
 	}
 	return l.reader.StartSyncByPos(location.Position)
 }
 
-// Read remote binlog.
 type remoteBinlogReader struct {
 	reader     *replication.BinlogSyncer
 	tctx       *tcontext.Context
@@ -103,7 +65,7 @@ type remoteBinlogReader struct {
 	EnableGTID bool
 }
 
-func (r *remoteBinlogReader) GenerateStreamer(location binlog.Location) (reader.Streamer, error) {
+func (r *remoteBinlogReader) GenerateStreamFrom(location binlog.Location) (reader.Streamer, error) {
 	defer func() {
 		lastSlaveConnectionID := r.reader.LastConnectionID()
 		r.tctx.L().Info("last slave connection", zap.Uint32("connection ID", lastSlaveConnectionID))
@@ -115,9 +77,23 @@ func (r *remoteBinlogReader) GenerateStreamer(location binlog.Location) (reader.
 	}
 
 	// position's name may contain uuid, so need remove it
-	adjustedPos := binlog.AdjustPosition(location.Position)
+	adjustedPos := binlog.RemoveRelaySubDirSuffix(location.Position)
 	streamer, err := r.reader.StartSync(adjustedPos)
 	return streamer, terror.ErrSyncerUnitRemoteSteamerStartSync.Delegate(err)
+}
+
+type locationedStream struct {
+	stream           reader.Streamer
+	locationRecorder *locationRecorder
+}
+
+func (l locationedStream) GetEvent(ctx context.Context) (*replication.BinlogEvent, error) {
+	e, err := l.stream.GetEvent(ctx)
+	if err != nil {
+		return nil, err
+	}
+	l.locationRecorder.update(e)
+	return e, nil
 }
 
 // StreamerController controls the streamer for read binlog, include:
@@ -139,10 +115,12 @@ type StreamerController struct {
 	localBinlogDir string
 	timezone       *time.Location
 
-	streamer         reader.Streamer
-	streamerProducer StreamerProducer
+	streamProducer StreamGenerator
+	upstream       locationedStream
+
 	*streamModifier
-	locations *locationRecorder
+	// streamModifier will also modify locations so they'll be different from upstreamLocations.
+	locations locations
 
 	// lastEventFromUpstream is the last event from upstream, and not sent to caller
 	// yet. It should be set to nil after sent to caller.
@@ -198,7 +176,6 @@ func NewStreamerController(
 		closed:            true,
 		relay:             relay,
 		streamModifier:    newStreamModifier(logger),
-		locations:         &locationRecorder{},
 	}
 
 	return streamerController
@@ -240,15 +217,15 @@ func (c *StreamerController) GetStreamer() reader.Streamer {
 	c.Lock()
 	defer c.Unlock()
 
-	return c.streamer
+	return c.upstream
 }
 
 func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, location binlog.Location) (err error) {
 	uuidSameWithUpstream := true
 
-	// close old streamerProducer
-	if c.streamerProducer != nil {
-		switch t := c.streamerProducer.(type) {
+	// close old streamProducer
+	if c.streamProducer != nil {
+		switch t := c.streamProducer.(type) {
 		case *remoteBinlogReader:
 			// unclosed conn bug already fixed in go-mysql, https://github.com/go-mysql-org/go-mysql/pull/411
 			t.reader.Close()
@@ -263,7 +240,8 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 			t.reader.Close()
 		default:
 			// some other producers such as mockStreamerProducer, should not re-create
-			c.streamer, err = c.streamerProducer.GenerateStreamer(location)
+			c.streamer, err = c.streamProducer.GenerateStreamFrom(location)
+
 			return err
 		}
 	}
@@ -281,21 +259,19 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 	}
 
 	if c.currentBinlogType == RemoteBinlog {
-		c.streamerProducer = &remoteBinlogReader{replication.NewBinlogSyncer(c.syncCfg), tctx, c.syncCfg.Flavor, c.enableGTID}
+		c.streamProducer = &remoteBinlogReader{replication.NewBinlogSyncer(c.syncCfg), tctx, c.syncCfg.Flavor, c.enableGTID}
 	} else {
-		c.streamerProducer = &localBinlogReader{c.relay.NewReader(tctx.L(), &relay.BinlogReaderConfig{RelayDir: c.localBinlogDir, Timezone: c.timezone, Flavor: c.syncCfg.Flavor}), c.enableGTID}
+		c.streamProducer = &localBinlogReader{c.relay.NewReader(tctx.L(), &relay.BinlogReaderConfig{RelayDir: c.localBinlogDir, Timezone: c.timezone, Flavor: c.syncCfg.Flavor}), c.enableGTID}
 	}
 
-	c.streamer, err = c.streamerProducer.GenerateStreamer(location)
+	c.streamer, err = c.streamProducer.GenerateStreamFrom(location)
 	if err == nil {
 		c.streamModifier.reset(location)
-		c.locations.reset(location)
+		c.upstreamLocations.reset(location)
 		c.lastEventFromUpstream = nil
 	}
 	return err
 }
-
-var mockRestarted = false
 
 // GetEvent returns binlog event from upstream binlog or streamModifier.
 // When return events from streamModifier, we should maintain these properties:
@@ -322,35 +298,12 @@ var mockRestarted = false
 // - Skip
 //   the skipped event will still be sent to caller, with op = pb.ErrorOp_Skip,
 //   to let caller track schema and save checkpoints.
-// TODO: start position is maintained in caller, after location recorder
-// is enabled we can maintain it inside StreamerController.
-func (c *StreamerController) GetEvent(tctx *tcontext.Context) (
-	event *replication.BinlogEvent,
-	op pb.ErrorOp,
-	err error,
-) {
-	// TODO: too long this function!!!
-	failpoint.Inject("SyncerGetEventError", func(_ failpoint.Value) {
-		if !mockRestarted {
-			mockRestarted = true
-			c.meetError = true
-			tctx.L().Info("mock upstream instance restart", zap.String("failpoint", "SyncerGetEventError"))
-			failpoint.Return(nil, 0, pb.ErrorOp_InvalidErrorOp, terror.ErrDBBadConn.Generate())
-		}
-	})
+func (c *StreamerController) GetEvent(tctx *tcontext.Context) (*replication.BinlogEvent, int, pb.ErrorOp, error) {
+	event, suffix, op, err := c.getEvent(tctx)
 
-	var suffix int
-
-	defer func() {
-		if err == nil {
-			c.locations.update(event)
-			c.locations.curEndLocation.Suffix = suffix
-		}
-	}()
-
-	appendRelaySubDir := func() (*replication.BinlogEvent, pb.ErrorOp, error) {
+	// if is local binlog but switch to remote on error, need to add uuid information in binlog's filename
+	if event != nil {
 		if ev, ok := event.Event.(*replication.RotateEvent); ok {
-			// if is local binlog but switch to remote on error, need to add uuid information in binlog's name
 			// nolint:dogsled
 			_, relaySubDirSuffix, _, _ := utils.SplitFilenameWithUUIDSuffix(string(ev.NextLogName))
 			if relaySubDirSuffix != "" {
@@ -358,28 +311,51 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (
 			} else if c.relaySubDirSuffix != "" {
 				filename, err2 := utils.ParseFilename(string(ev.NextLogName))
 				if err2 != nil {
-					return nil, pb.ErrorOp_InvalidErrorOp, terror.Annotate(err2, "fail to parse binlog file name from rotate event")
+					return nil, 0, pb.ErrorOp_InvalidErrorOp, terror.Annotate(err2, "fail to parse binlog file name from rotate event")
 				}
 				ev.NextLogName = []byte(utils.ConstructFilenameWithUUIDSuffix(filename, c.relaySubDirSuffix))
-				event.Event = ev
 			}
 		}
-		return event, op, nil
 	}
 
-	checkErr := func(err error) (shouldRet bool) {
-		if err == nil {
-			return false
+	if err != nil {
+		if err == context.Canceled || err == context.DeadlineExceeded {
+			return nil, 0, pb.ErrorOp_InvalidErrorOp, err
 		}
-
-		if err != context.Canceled && err != context.DeadlineExceeded {
-			c.Lock()
-			tctx.L().Error("meet error when get binlog event", zap.Error(err))
-			c.meetError = true
-			c.Unlock()
-		}
-		return true
+		c.Lock()
+		tctx.L().Error("meet error when get binlog event", zap.Error(err))
+		c.meetError = true
+		c.Unlock()
+		return nil, 0, pb.ErrorOp_InvalidErrorOp, err
 	}
+
+	c.upstreamLocations.update(event)
+
+	if suffix == 0 {
+		c.locations = c.upstreamLocations.locations
+	} else {
+		c.locations.curStartLocation = c.upstreamLocations.curStartLocation
+		c.locations.curStartLocation.Suffix = suffix - 1
+		c.locations.curEndLocation = c.upstreamLocations.curStartLocation
+		c.locations.curEndLocation.Suffix = suffix
+		c.locations.txnEndLocation = c.upstreamLocations.txnEndLocation
+		// TODO: need update suffix for txnEndLocation?
+	}
+
+	return event, suffix, op, nil
+}
+
+func (c *StreamerController) getEvent(tctx *tcontext.Context) (
+	event *replication.BinlogEvent,
+	suffix int,
+	op pb.ErrorOp,
+	err error,
+) {
+	failpoint.Inject("SyncerGetEventError", func(_ failpoint.Value) {
+		c.meetError = true
+		tctx.L().Info("mock upstream instance restart", zap.String("failpoint", "SyncerGetEventError"))
+		failpoint.Return(nil, 0, pb.ErrorOp_InvalidErrorOp, terror.ErrDBBadConn.Generate())
+	})
 
 	c.RLock()
 	streamer := c.streamer
@@ -396,8 +372,8 @@ LOOP:
 			failpoint.Inject("GetEventError", func() {
 				err = errors.New("go-mysql returned an error")
 			})
-			if checkErr(err) {
-				return nil, pb.ErrorOp_InvalidErrorOp, err
+			if err != nil {
+				return
 			}
 		}
 
@@ -409,7 +385,7 @@ LOOP:
 		}
 
 		startPos := mysql.Position{
-			Name: c.locations.curEndLocation.Position.Name,
+			Name: c.upstreamLocations.curEndLocation.Position.Name,
 			Pos:  c.lastEventFromUpstream.Header.LogPos - c.lastEventFromUpstream.Header.EventSize,
 		}
 		cmp := binlog.ComparePosition(startPos, frontOp.pos)
@@ -499,7 +475,7 @@ LOOP:
 	}
 
 	if event != nil {
-		return appendRelaySubDir()
+		return
 	}
 
 	// above loop will be terminated when streamModifier is empty. We still need
@@ -508,18 +484,14 @@ LOOP:
 	if c.lastEventFromUpstream != nil {
 		event = c.lastEventFromUpstream
 		c.lastEventFromUpstream = nil
-		return appendRelaySubDir()
+		return
 	}
 
 	event, err = streamer.GetEvent(tctx.Context())
 	failpoint.Inject("GetEventError", func() {
 		err = errors.New("go-mysql returned an error")
 	})
-	if checkErr(err) {
-		return nil, pb.ErrorOp_InvalidErrorOp, err
-	}
-
-	return appendRelaySubDir()
+	return
 }
 
 // Close closes streamer.
@@ -534,8 +506,8 @@ func (c *StreamerController) close() {
 		return
 	}
 
-	if c.streamerProducer != nil {
-		switch r := c.streamerProducer.(type) {
+	if c.streamProducer != nil {
+		switch r := c.streamProducer.(type) {
 		case *remoteBinlogReader:
 			// process remote binlog reader
 			r.reader.Close()
@@ -543,7 +515,7 @@ func (c *StreamerController) close() {
 			// process local binlog reader
 			r.reader.Close()
 		}
-		c.streamerProducer = nil
+		c.streamProducer = nil
 	}
 
 	c.closed = true
@@ -646,44 +618,14 @@ func (c *StreamerController) GetTxnEndLocation() binlog.Location {
 
 // NewStreamerController4Test is used in tests.
 func NewStreamerController4Test(
-	streamerProducer StreamerProducer,
+	streamerProducer StreamGenerator,
 	streamer reader.Streamer,
 ) *StreamerController {
 	return &StreamerController{
-		streamerProducer: streamerProducer,
-		streamer:         streamer,
-		closed:           false,
-		streamModifier:   &streamModifier{logger: log.L()},
-		locations:        &locationRecorder{},
+		streamProducer:    streamerProducer,
+		streamer:          streamer,
+		closed:            false,
+		streamModifier:    &streamModifier{logger: log.L()},
+		upstreamLocations: &locationRecorder{},
 	}
-}
-
-// retryStrategy.
-type retryStrategy interface {
-	CanRetry(error) bool
-}
-
-type alwaysRetryStrategy struct{}
-
-func (s alwaysRetryStrategy) CanRetry(error) bool {
-	return true
-}
-
-// maxIntervalRetryStrategy allows retry when the retry interval is greater than the set interval.
-type maxIntervalRetryStrategy struct {
-	interval    time.Duration
-	lastErr     error
-	lastErrTime time.Time
-}
-
-func (s *maxIntervalRetryStrategy) CanRetry(err error) bool {
-	if err == nil {
-		return true
-	}
-
-	now := time.Now()
-	lastErrTime := s.lastErrTime
-	s.lastErrTime = now
-	s.lastErr = err
-	return lastErrTime.Add(s.interval).Before(now)
 }

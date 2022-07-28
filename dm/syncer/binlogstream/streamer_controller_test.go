@@ -111,7 +111,7 @@ type mockStreamProducer struct {
 	stream *mockStream
 }
 
-func (m *mockStreamProducer) GenerateStreamer(location binlog.Location) (reader.Streamer, error) {
+func (m *mockStreamProducer) GenerateStreamFrom(location binlog.Location) (reader.Streamer, error) {
 	return m.stream, nil
 }
 
@@ -159,7 +159,7 @@ func TestGetEventWithInject(t *testing.T) {
 		Pos:  1000,
 	}}
 	controller.streamModifier.reset(loc)
-	controller.locations.reset(loc)
+	controller.upstreamLocations.reset(loc)
 
 	expecteds := []expectedInfo{
 		{1010, 0, nil, pb.ErrorOp_InvalidErrorOp},
@@ -208,7 +208,7 @@ func TestGetEventWithReplace(t *testing.T) {
 		Pos:  1000,
 	}}
 	controller.streamModifier.reset(loc)
-	controller.locations.reset(loc)
+	controller.upstreamLocations.reset(loc)
 
 	expecteds := []expectedInfo{
 		{1010, 0, nil, pb.ErrorOp_InvalidErrorOp},
@@ -246,7 +246,7 @@ func TestGetEventWithSkip(t *testing.T) {
 		Pos:  1000,
 	}}
 	controller.streamModifier.reset(loc)
-	controller.locations.reset(loc)
+	controller.upstreamLocations.reset(loc)
 
 	expecteds := []expectedInfo{
 		{1010, 0, nil, pb.ErrorOp_InvalidErrorOp},

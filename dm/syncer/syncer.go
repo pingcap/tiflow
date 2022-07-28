@@ -1764,15 +1764,27 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		utils.OsExit(1)
 	})
 
-	loc := s.checkpoint.GlobalPoint()
-	s.tctx.L().Info("replicate binlog from checkpoint", zap.Stringer("checkpoint", loc))
+	// startLocation is the start location for current received event
+	// currentLocation is the end location for current received event (End_log_pos in `show binlog events` for mysql)
+	// lastLocation is the end location for last received and fully executed (ROTATE / QUERY / XID) event
+	// we use startLocation to replace and skip binlog event of specified position
+	// we use currentLocation and update table checkpoint in sharding ddl
+	// we use lastLocation to update global checkpoint and table checkpoint
+	var (
+		currentLocation = s.checkpoint.GlobalPoint() // also init to global checkpoint
+		startLocation   = s.checkpoint.GlobalPoint()
+		lastLocation    = s.checkpoint.GlobalPoint()
+
+		currentGTID string
+	)
+	s.tctx.L().Info("replicate binlog from checkpoint", zap.Stringer("checkpoint", lastLocation))
+
 	if s.streamerController.IsClosed() {
-		err = s.streamerController.Start(s.runCtx, loc)
+		err = s.streamerController.Start(s.runCtx, lastLocation)
 		if err != nil {
 			return terror.Annotate(err, "fail to restart streamer controller")
 		}
 	}
-
 	// syncing progress with sharding DDL group
 	// 1. use the global streamer to sync regular binlog events
 	// 2. sharding DDL synced for some sharding groups
@@ -2053,7 +2065,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 
 		startTime := time.Now()
-		e, op, err := s.streamerController.GetEvent(s.runCtx)
+		e, suffix, op, err := s.streamerController.GetEvent(s.runCtx)
 
 		failpoint.Inject("SafeModeExit", func(val failpoint.Value) {
 			if intVal, ok := val.(int); ok && intVal == 1 {
@@ -3468,7 +3480,7 @@ func (s *Syncer) adjustGlobalPointGTID(tctx *tcontext.Context) (bool, error) {
 		s.tctx.L(),
 	)
 
-	endPos := binlog.AdjustPosition(location.Position)
+	endPos := binlog.RemoveRelaySubDirSuffix(location.Position)
 	startPos := mysql.Position{
 		Name: endPos.Name,
 		Pos:  0,

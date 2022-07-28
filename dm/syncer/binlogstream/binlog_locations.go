@@ -27,7 +27,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
-type locationRecorder struct {
+type locations struct {
 	//            +-------------+
 	//        ... |current event| ...
 	//       ^    +-------------+    ^
@@ -52,10 +52,14 @@ type locationRecorder struct {
 	// - reset binlog replication for a finer granularity
 	// - save global checkpoint
 	txnEndLocation binlog.Location
+}
+
+type locationRecorder struct {
+	locations
 
 	// DML will also generate a query event if user set session binlog_format='statement', we use this field to
 	// distinguish DML query event.
-	inDML bool
+	inDMLQuery bool
 
 	// we assign startGTID := endGTID after COMMIT, so at COMMIT we turn on the flag.
 	needUpdateStartGTID bool
@@ -181,12 +185,12 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 	case *replication.MariadbGTIDEvent:
 		l.setCurEndGTID(e)
 		if !ev.IsDDL() {
-			l.inDML = true
+			l.inDMLQuery = true
 		}
 	case *replication.XIDEvent:
 		// for transactional engines like InnoDB, COMMIT is xid event
 		l.saveTxnEndLocation()
-		l.inDML = false
+		l.inDMLQuery = false
 		l.needUpdateStartGTID = true
 	case *replication.QueryEvent:
 		query := strings.TrimSpace(string(ev.Query))
@@ -195,13 +199,13 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 			// MySQL will write a "BEGIN" query event when it starts a DML transaction, we use this event to distinguish
 			// DML query event which comes from a session binlog_format = STATEMENT.
 			// But MariaDB will not write "BEGIN" query event, we simply hope user should not do that.
-			l.inDML = true
+			l.inDMLQuery = true
 		case "COMMIT":
 			// for non-transactional engines like MyISAM, COMMIT is query event
-			l.inDML = false
+			l.inDMLQuery = false
 		}
 
-		if l.inDML {
+		if l.inDMLQuery {
 			return
 		}
 		l.needUpdateStartGTID = true
