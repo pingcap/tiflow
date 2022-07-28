@@ -36,13 +36,18 @@ func newUnsafeResetOptions() *unsafeResetOptions {
 }
 
 // complete adapts from the command line args to the data and client required.
-func (o *unsafeResetOptions) complete(f factory.Factory) error {
+func (o *unsafeResetOptions) complete(f factory.Factory) (retErr error) {
 	pdClient, err := f.PdClient()
 	if err != nil {
 		return err
 	}
-	o.pdClient = pdClient
+	defer func() {
+		if retErr != nil {
+			pdClient.Close()
+		}
+	}()
 
+	o.pdClient = pdClient
 	etcdClient, err := f.EtcdClient()
 	if err != nil {
 		pdClient.Close()
