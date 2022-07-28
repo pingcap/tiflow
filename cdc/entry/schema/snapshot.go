@@ -204,29 +204,36 @@ func NewEmptySnapshot(forceReplicate bool) *Snapshot {
 	return &Snapshot{inner: inner, rwlock: new(sync.RWMutex)}
 }
 
-// InitConcurrentDDLTables imitate the creating table logic for concurrent DDL.
-// since v6.2.0, tables of concurrent DDL will be directly written to meta
-// without written to history DDL jobs.
+// these constants imitate TiDB's session.InitDDLJobTables in an empty Snapshot.
+const (
+	mysqlDBID = int64(1)
+	dummyTS   = uint64(1)
+)
+
+// InitConcurrentDDLTables imitates the creating table logic for concurrent DDL.
+// Since v6.2.0, tables of concurrent DDL will be directly written as meta KV in
+// TiKV, without being written to history DDL jobs. So the Snapshot which is not
+// build from meta needs this method to handle history DDL.
 func (s *Snapshot) InitConcurrentDDLTables() {
+	tableIDs := [...]int64{ddl.JobTableID, ddl.ReorgTableID, ddl.HistoryTableID}
+
 	mysqlDBInfo := &timodel.DBInfo{
-		ID:      1,
+		ID:      mysqlDBID,
 		Name:    timodel.NewCIStr(mysql.SystemDB),
 		Charset: mysql.UTF8MB4Charset,
 		Collate: mysql.UTF8MB4DefaultCollation,
 		State:   timodel.StatePublic,
 	}
-	mockTS := uint64(1)
-	_ = s.inner.createSchema(mysqlDBInfo, mockTS)
+	_ = s.inner.createSchema(mysqlDBInfo, dummyTS)
 
 	p := parser.New()
-	tableIDs := []int64{ddl.JobTableID, ddl.ReorgTableID, ddl.HistoryTableID}
 	for i, table := range session.DDLJobTables {
 		stmt, _ := p.ParseOneStmt(table.SQL, "", "")
 		tblInfo, _ := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
 		tblInfo.State = timodel.StatePublic
 		tblInfo.ID = tableIDs[i]
-		wrapped := model.WrapTableInfo(1, "mysql", mockTS, tblInfo)
-		_ = s.inner.createTable(wrapped, mockTS)
+		wrapped := model.WrapTableInfo(mysqlDBID, mysql.SystemDB, dummyTS, tblInfo)
+		_ = s.inner.createTable(wrapped, dummyTS)
 	}
 }
 
