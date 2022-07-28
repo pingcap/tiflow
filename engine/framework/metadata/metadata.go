@@ -166,7 +166,7 @@ func StoreMasterMeta(
 	if err != nil {
 		return err
 	}
-	log.Warn("master meta exits, will be overwritten", zap.Any("old-meta", masterMeta), zap.Any("meta", meta))
+	log.Warn("master meta exists, will be overwritten", zap.Any("old-meta", masterMeta), zap.Any("meta", meta))
 
 	return metaCli.Store(ctx, meta)
 }
