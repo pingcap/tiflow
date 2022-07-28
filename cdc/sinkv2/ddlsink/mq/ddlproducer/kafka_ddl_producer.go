@@ -29,7 +29,7 @@ import (
 )
 
 // Assert DDLEventSink implementation
-// var _ DDLProducer = (*kafkaDDLProducer)(nil)
+var _ DDLProducer = (*kafkaDDLProducer)(nil)
 
 // kafkaDDLProducer is used to send messages to kafka synchronously.
 type kafkaDDLProducer struct {
