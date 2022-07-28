@@ -73,7 +73,7 @@ func (k *kafkaProducer) AsyncSendMessage(
 
 	// If the producer is closed, we should skip the message and return an error.
 	if k.closed {
-		return cerror.ErrKafkaProducerClosed
+		return cerror.ErrKafkaProducerClosed.GenWithStackByArgs()
 	}
 	failpoint.Inject("KafkaSinkAsyncSendError", func() {
 		// simulate sending message to input channel successfully but flushing
@@ -101,7 +101,7 @@ func (k *kafkaProducer) AsyncSendMessage(
 
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return errors.Trace(ctx.Err())
 	case k.asyncProducer.Input() <- msg:
 	}
 	return nil
@@ -175,14 +175,14 @@ func (k *kafkaProducer) run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return errors.Trace(ctx.Err())
 		case <-k.closedChan:
 			return nil
 		case err := <-k.failpointCh:
 			log.Warn("receive from failpoint chan", zap.Error(err),
 				zap.String("namespace", k.id.Namespace),
 				zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
-			return err
+			return errors.Trace(err)
 		case ack := <-k.asyncProducer.Successes():
 			if ack != nil {
 				callback := ack.Metadata.(messageMetaData).callback
