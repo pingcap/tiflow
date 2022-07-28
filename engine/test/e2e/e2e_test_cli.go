@@ -17,7 +17,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"os/exec"
 	"time"
 
@@ -47,8 +46,6 @@ type ChaosCli struct {
 	// used to query metadata which is stored from business logic(job-level isolation)
 	// NEED to reinitialize the metaCli if we access to a different job
 	metaCli metaModel.KVClient
-	// masterEtcdCli is used to interact with embedded etcd in server master
-	masterEtcdCli *clientv3.Client
 	// used to write to etcd to simulate the business of fake job, this etcd client
 	// reuses the endpoints of business meta KV.
 	fakeJobCli *clientv3.Client
@@ -90,23 +87,12 @@ func NewUTCli(ctx context.Context, masterAddrs, businessMetaAddrs []string, proj
 		return nil, errors.Trace(err)
 	}
 
-	masterEtcdCli, err := clientv3.New(clientv3.Config{
-		Endpoints:   masterAddrs,
-		Context:     ctx,
-		DialTimeout: 3 * time.Second,
-		DialOptions: []grpc.DialOption{},
-	})
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
 	return &ChaosCli{
-		masterCli:     masterCli,
-		clientConn:    cc,
-		masterEtcdCli: masterEtcdCli,
-		fakeJobCli:    fakeJobCli,
-		fakeJobCfg:    cfg,
-		project:       project,
+		masterCli:  masterCli,
+		clientConn: cc,
+		fakeJobCli: fakeJobCli,
+		fakeJobCfg: cfg,
+		project:    project,
 	}, nil
 }
 
@@ -170,7 +156,7 @@ func (cli *ChaosCli) CheckJobStatus(
 	return resp.Status == expectedStatus, nil
 }
 
-// UpdateFakeJobKey updates the etcd value of a worker beloinging to a fake job
+// UpdateFakeJobKey updates the etcd value of a worker belonging to a fake job
 func (cli *ChaosCli) UpdateFakeJobKey(ctx context.Context, id int, value string) error {
 	key := fmt.Sprintf("%s%d", cli.fakeJobCfg.KeyPrefix, id)
 	_, err := cli.fakeJobCli.Put(ctx, key, value)
@@ -178,7 +164,7 @@ func (cli *ChaosCli) UpdateFakeJobKey(ctx context.Context, id int, value string)
 }
 
 func (cli *ChaosCli) getFakeJobCheckpoint(
-	ctx context.Context, masterID string, jobIndex int,
+	ctx context.Context, masterID string,
 ) (*fake.Checkpoint, error) {
 	ckptKey := fake.CheckpointKey(masterID)
 	resp, metaErr := cli.metaCli.Get(ctx, ckptKey)
@@ -201,7 +187,7 @@ func (cli *ChaosCli) getFakeJobCheckpoint(
 func (cli *ChaosCli) CheckFakeJobTick(
 	ctx context.Context, masterID string, jobIndex int, target int64,
 ) error {
-	ckpt, err := cli.getFakeJobCheckpoint(ctx, masterID, jobIndex)
+	ckpt, err := cli.getFakeJobCheckpoint(ctx, masterID)
 	if err != nil {
 		return err
 	}
@@ -220,7 +206,7 @@ func (cli *ChaosCli) CheckFakeJobTick(
 func (cli *ChaosCli) CheckFakeJobKey(
 	ctx context.Context, masterID string, jobIndex int, expectedMvcc int, expectedValue string,
 ) error {
-	checkpoint, err := cli.getFakeJobCheckpoint(ctx, masterID, jobIndex)
+	checkpoint, err := cli.getFakeJobCheckpoint(ctx, masterID)
 	if err != nil {
 		return err
 	}
@@ -267,57 +253,6 @@ func runCmdHandleError(cmd *exec.Cmd) []byte {
 
 	log.Info("Finished executing command", zap.String("cmd", cmd.String()), zap.ByteString("output", bytes))
 	return bytes
-}
-
-// TransferEtcdLeader moves etcd leader to a random node
-func (cli *ChaosCli) TransferEtcdLeader(ctx context.Context) error {
-	if len(cli.masterEtcdCli.Endpoints()) == 0 {
-		return errors.Errorf("master etcd endpoints is empty")
-	}
-	var (
-		leaderID  uint64
-		leaderCli *clientv3.Client
-	)
-	for _, endpoint := range cli.masterEtcdCli.Endpoints() {
-		etcdCli, err := clientv3.New(clientv3.Config{
-			Endpoints:   []string{endpoint},
-			Context:     ctx,
-			DialTimeout: 3 * time.Second,
-			DialOptions: []grpc.DialOption{},
-		})
-		if err != nil {
-			return err
-		}
-		status, err := etcdCli.Status(ctx, endpoint)
-		if err != nil {
-			return err
-		}
-		leaderID = status.Leader
-		if status.Header.MemberId == leaderID {
-			leaderCli = etcdCli
-			break
-		}
-		_ = etcdCli.Close()
-	}
-
-	defer func() {
-		_ = leaderCli.Close()
-	}()
-
-	members, err := cli.masterEtcdCli.MemberList(ctx)
-	if err != nil {
-		return err
-	}
-	followerIDs := make([]uint64, 0, members.Header.Size()-1)
-	for _, m := range members.Members {
-		if m.GetID() != leaderID {
-			followerIDs = append(followerIDs, m.GetID())
-		}
-	}
-
-	// MoveLeader must request the etcd leader
-	_, err = leaderCli.MoveLeader(ctx, followerIDs[rand.Intn(len(followerIDs))])
-	return err
 }
 
 // ContainerRestart restarts a docker container
