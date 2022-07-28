@@ -37,19 +37,18 @@ func newUnsafeResetOptions() *unsafeResetOptions {
 
 // complete adapts from the command line args to the data and client required.
 func (o *unsafeResetOptions) complete(f factory.Factory) error {
+	pdClient, err := f.PdClient()
+	if err != nil {
+		return err
+	}
+	o.pdClient = pdClient
+
 	etcdClient, err := f.EtcdClient()
 	if err != nil {
 		return err
 	}
 	etcdClient.ClusterID = o.clusterID
 	o.etcdClient = etcdClient
-
-	pdClient, err := f.PdClient()
-	if err != nil {
-		return err
-	}
-
-	o.pdClient = pdClient
 
 	return nil
 }

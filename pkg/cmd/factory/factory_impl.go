@@ -90,12 +90,6 @@ func (f *factoryImpl) GetCredential() *security.Credential {
 
 // EtcdClient creates new cdc etcd client.
 func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClient, error) {
-	// check pd-address is an actual pd cluster
-	_, err := f.PdClient()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
 	ctx := cmdconetxt.GetDefaultContext()
 	tlsConfig, err := f.ToTLSConfig()
 	if err != nil {
@@ -145,6 +139,11 @@ func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClient, error) {
 	}
 
 	client, err := etcd.NewCDCEtcdClient(ctx, etcdClient, etcd.DefaultCDCClusterID)
+	if err != nil {
+		return nil, cerror.ErrEtcdAPIError.GenWithStack(
+			"etcd operation error, please the cluster status and the address is correct: \"%s\"")
+	}
+
 	return &client, err
 }
 
@@ -250,6 +249,12 @@ func (f *factoryImpl) findServerAddr() (string, error) {
 	if f.clientGetter.GetServerAddr() != "" {
 		return f.clientGetter.GetServerAddr(), nil
 	}
+	// check pd-address represents a real pd cluster
+	pdClient, err := f.PdClient()
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	pdClient.Close()
 	// use pd to get server addr from etcd
 	etcdClient, err := f.EtcdClient()
 	if err != nil {
