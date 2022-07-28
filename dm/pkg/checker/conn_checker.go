@@ -64,6 +64,7 @@ func (c *connNumberChecker) check(ctx context.Context, checkerName string) *Resu
 		markCheckError(result, err)
 		return result
 	}
+	defer rows.Close()
 	var (
 		maxConn  int
 		variable string

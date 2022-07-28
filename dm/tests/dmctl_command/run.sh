@@ -101,7 +101,6 @@ function run() {
 		"not free" 1
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
-	source $cur/../dmctl_basic/check_list/check_task.sh
 	# check wrong do-tables
 	cp $cur/conf/dm-task.yaml $WORK_DIR/wrong-dm-task.yaml
 	sed -i "/do-dbs:/a\    do-tables:\n    - db-name: \"dmctl_command\"" $WORK_DIR/wrong-dm-task.yaml
