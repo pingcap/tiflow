@@ -15,7 +15,7 @@ package servermaster
 
 import (
 	"context"
-	"fmt"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/servermaster/cluster"
 	"github.com/pingcap/tiflow/engine/test"
+	"github.com/pingcap/tiflow/engine/test/mock"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/client/v3/concurrency"
@@ -45,8 +46,7 @@ func TestLeaderLoopSuccess(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	name := "server-master-leader-loop-test1"
-	addr, etcd, client, cleanFn := test.PrepareEtcd(t, name)
+	_, _, client, cleanFn := test.PrepareEtcd(t, "etcd0")
 	defer cleanFn()
 
 	runLeaderCounter := atomic.NewInt32(0)
@@ -56,17 +56,15 @@ func TestLeaderLoopSuccess(t *testing.T) {
 		return ctx.Err()
 	}
 
+	id := "servermaster0"
 	// prepare server master
 	cfg := GetDefaultMasterConfig()
-	cfg.Etcd.Name = name
-	cfg.AdvertiseAddr = addr
 	s := &Server{
+		id:              id,
 		cfg:             cfg,
-		etcd:            etcd,
 		etcdClient:      client,
 		leaderServiceFn: mockLeaderService,
-		info:            &model.NodeInfo{ID: model.DeployNodeID(name)},
-		membership:      &EtcdMembership{etcdCli: client},
+		info:            &model.NodeInfo{ID: model.DeployNodeID(id)},
 	}
 	preRPCHook := rpcutil.NewPreRPCHook[multiClient](
 		s.id,
@@ -105,8 +103,7 @@ func TestLeaderLoopMeetStaleData(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	name := "server-master-leader-loop-stale-data-test1"
-	addr, etcd, client, cleanFn := test.PrepareEtcd(t, name)
+	_, _, client, cleanFn := test.PrepareEtcd(t, "etcd0")
 	defer cleanFn()
 
 	runLeaderCounter := atomic.NewInt32(0)
@@ -117,17 +114,13 @@ func TestLeaderLoopMeetStaleData(t *testing.T) {
 	}
 
 	cfg := GetDefaultMasterConfig()
-	cfg.Etcd.Name = name
-	cfg.AdvertiseAddr = addr
-	id := genServerMasterUUID(name)
+	id := "servermaster0"
 	s := &Server{
 		id:              id,
 		cfg:             cfg,
-		etcd:            etcd,
 		etcdClient:      client,
 		leaderServiceFn: mockLeaderService,
-		info:            &model.NodeInfo{ID: model.DeployNodeID(name)},
-		membership:      &EtcdMembership{etcdCli: client},
+		info:            &model.NodeInfo{ID: model.DeployNodeID(id)},
 	}
 	preRPCHook := rpcutil.NewPreRPCHook[multiClient](
 		s.id,
@@ -174,38 +167,30 @@ func TestLeaderLoopMeetStaleData(t *testing.T) {
 // TestLeaderLoopWatchLeader tests a non-leader node enters LeaderLoop, finds an
 // existing leader can start to watch leader.
 func TestLeaderLoopWatchLeader(t *testing.T) {
-	t.Parallel()
+	test.SetGlobalTestFlag(true)
+	defer test.SetGlobalTestFlag(false)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	serverCount := 3
-	names := make([]string, 0, serverCount)
-	for i := 0; i < serverCount; i++ {
-		names = append(names, fmt.Sprintf("server-master-leader-loop-watch-leader-test-%d", i))
-	}
-	addrs, etcds, client, cleanFn := test.PrepareEtcdCluster(t, names)
+
+	_, _, client, cleanFn := test.PrepareEtcd(t, "etcd0")
 	defer cleanFn()
 
-	mockLeaderServiceFn := func(ctx context.Context) error {
-		<-ctx.Done()
-		return nil
-	}
-
+	const serverCount = 3
 	servers := make([]*Server, 0, serverCount)
 	sessions := make([]cluster.Session, 0, serverCount)
-	for i := range names {
+	for i := 0; i < serverCount; i++ {
+		id := "servermaster" + strconv.Itoa(i)
 		cfg := GetDefaultMasterConfig()
-		cfg.Etcd.Name = names[i]
-		cfg.AdvertiseAddr = addrs[i]
+		cfg.AdvertiseAddr = "servermaster" + strconv.Itoa(i)
+
 		s := &Server{
-			id:         genServerMasterUUID(names[i]),
+			id:         id,
 			cfg:        cfg,
-			etcd:       etcds[i],
 			etcdClient: client,
-			info:       &model.NodeInfo{ID: model.DeployNodeID(names[i])},
+			info:       &model.NodeInfo{ID: model.DeployNodeID(id)},
 			masterCli:  &rpcutil.LeaderClientWithLock[multiClient]{},
-			membership: &EtcdMembership{etcdCli: client},
 		}
-		preRPCHook := rpcutil.NewPreRPCHook[multiClient](
+		preRPCHook := rpcutil.NewPreRPCHook(
 			s.id,
 			&s.leader,
 			s.masterCli,
@@ -214,7 +199,19 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 			nil,
 		)
 		s.masterRPCHook = preRPCHook
-		s.leaderServiceFn = mockLeaderServiceFn
+		s.leaderServiceFn = func(ctx context.Context) error {
+			s.leader.Store(&rpcutil.Member{
+				Name:          s.name(),
+				AdvertiseAddr: s.cfg.AdvertiseAddr,
+				IsLeader:      true,
+			})
+			<-ctx.Done()
+			return nil
+		}
+
+		_, err := mock.NewMasterServer(cfg.AdvertiseAddr, s)
+		require.NoError(t, err)
+
 		servers = append(servers, s)
 
 		sessionCfg, err := s.generateSessionConfig()
@@ -224,31 +221,9 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 		sessions = append(sessions, session)
 	}
 
-	leaderIndex := -1
-	for i, server := range servers {
-		if server.etcd.Server.Lead() == uint64(server.etcd.Server.ID()) {
-			leaderIndex = i
-			break
-		}
-	}
-	require.LessOrEqual(t, 0, leaderIndex)
-	require.LessOrEqual(t, leaderIndex, serverCount)
-
 	var wg sync.WaitGroup
 	wg.Add(serverCount)
-	go func() {
-		defer wg.Done()
-		session := sessions[leaderIndex]
-		err := session.Reset(ctx)
-		require.Nil(t, err)
-		leaderServer := servers[leaderIndex]
-		err = leaderServer.leaderLoop(ctx)
-		require.EqualError(t, err, context.Canceled.Error())
-	}()
 	for i := 0; i < serverCount; i++ {
-		if i == leaderIndex {
-			continue
-		}
 		s := servers[i]
 		session := sessions[i]
 		go func() {
@@ -264,6 +239,19 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 			require.EqualError(t, err, context.Canceled.Error())
 		}()
 	}
+
+	leaderIndex := -1
+
+	require.Eventually(t, func() bool {
+		leaderIndex = -1
+		for i, server := range servers {
+			if server.IsLeader() {
+				leaderIndex = i
+				return true
+			}
+		}
+		return false
+	}, time.Second*10, time.Millisecond*100, "failed to elect a leader")
 
 	// check s.watchLeader is called in non-leader node
 	for i := 0; i < serverCount; i++ {
@@ -281,8 +269,7 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 			}
 			_, ok := s.masterCli.Get()
 			return ok
-		}, time.Second*2, time.Millisecond*20)
-
+		}, defaultCampaignTimeout*2, time.Millisecond*100)
 	}
 
 	cancel()

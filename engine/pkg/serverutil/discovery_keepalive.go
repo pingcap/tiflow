@@ -18,11 +18,13 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/srvdiscovery"
 	"github.com/pingcap/tiflow/pkg/p2p"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.uber.org/zap"
 )
 
 // DiscoveryKeepaliver wraps wraps DiscoveryRunner and MessageRouter
@@ -34,6 +36,7 @@ type DiscoveryKeepaliver struct {
 
 	discoveryRunner     srvdiscovery.DiscoveryRunner
 	initDiscoveryRunner func() error
+	runnerInitialized   atomic.Bool
 	p2pMsgRouter        p2p.MessageRouter
 }
 
@@ -52,12 +55,12 @@ func NewDiscoveryKeepaliver(
 		watchDur:     watchDur,
 		p2pMsgRouter: msgRouter,
 	}
-	k.initDiscoveryRunner = k.InitRunnerImpl
+	k.initDiscoveryRunner = k.initRunnerImpl
 	return k
 }
 
 // InitRunnerImpl inits the discovery runner
-func (k *DiscoveryKeepaliver) InitRunnerImpl() error {
+func (k *DiscoveryKeepaliver) initRunnerImpl() error {
 	value, err := k.info.ToJSON()
 	if err != nil {
 		return err
@@ -65,6 +68,7 @@ func (k *DiscoveryKeepaliver) InitRunnerImpl() error {
 
 	k.discoveryRunner = srvdiscovery.NewDiscoveryRunnerImpl(
 		k.etcdCli, k.sessionTTL, k.watchDur, k.info.EtcdKey(), value)
+	k.runnerInitialized.Store(true)
 	return nil
 }
 
@@ -130,4 +134,12 @@ func (k *DiscoveryKeepaliver) Keepalive(ctx context.Context) error {
 			k.discoveryRunner.ApplyWatchResult(resp)
 		}
 	}
+}
+
+// Snapshot returns the current snapshot of service resources.
+func (k *DiscoveryKeepaliver) Snapshot() srvdiscovery.Snapshot {
+	if k.runnerInitialized.Load() {
+		return k.discoveryRunner.GetSnapshot()
+	}
+	return nil
 }

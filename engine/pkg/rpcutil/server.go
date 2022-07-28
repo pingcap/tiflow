@@ -34,10 +34,9 @@ import (
 // Member stores server member information
 // TODO: make it a protobuf field and can be shared by gRPC API
 type Member struct {
-	IsServLeader  bool   `json:"is-serv-leader"`
-	IsEtcdLeader  bool   `json:"is-etcd-leader"`
 	Name          string `json:"name"`
 	AdvertiseAddr string `json:"advertise-addr"`
+	IsLeader      bool   `json:"is-leader"`
 }
 
 // String implements json marshal

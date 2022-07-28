@@ -57,8 +57,8 @@ func TestLeaderResolver(t *testing.T) {
 	mockConn.On("UpdateState", mock.MatchedBy(func(state resolver.State) bool {
 		return reflect.DeepEqual(state.Addresses, []resolver.Address{
 			{Addr: "leader", ServerName: "leader"},
-			{Addr: "follower-1", ServerName: "leader"},
-			{Addr: "follower-2", ServerName: "leader"},
+			{Addr: "follower-1", ServerName: "follower-1"},
+			{Addr: "follower-2", ServerName: "follower-2"},
 		})
 	})).Return(nil).Once()
 	mockConn.On("ParseServiceConfig", `{"loadBalancingPolicy": "pick_first"}`).
@@ -72,8 +72,8 @@ func TestLeaderResolver(t *testing.T) {
 	mockConn.On("UpdateState", mock.MatchedBy(func(state resolver.State) bool {
 		return reflect.DeepEqual(state.Addresses, []resolver.Address{
 			{Addr: "leader", ServerName: "leader"},
-			{Addr: "follower-2", ServerName: "leader"},
-			{Addr: "follower-3", ServerName: "leader"},
+			{Addr: "follower-2", ServerName: "follower-2"},
+			{Addr: "follower-3", ServerName: "follower-3"},
 		})
 	})).Return(nil).Once()
 	leaderResolver.UpdateServerList(map[string]bool{
@@ -100,8 +100,8 @@ func TestLeaderResolverFrequentUpdate(t *testing.T) {
 	mockConn.On("UpdateState", mock.MatchedBy(func(state resolver.State) bool {
 		return reflect.DeepEqual(state.Addresses, []resolver.Address{
 			{Addr: "leader", ServerName: "leader"},
-			{Addr: "follower-1", ServerName: "leader"},
-			{Addr: "follower-2", ServerName: "leader"},
+			{Addr: "follower-1", ServerName: "follower-1"},
+			{Addr: "follower-2", ServerName: "follower-2"},
 		})
 	})).Return(nil)
 	mockConn.On("ParseServiceConfig", `{"loadBalancingPolicy": "pick_first"}`).

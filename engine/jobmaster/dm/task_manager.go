@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"go.uber.org/zap"
 
@@ -40,16 +39,18 @@ type TaskManager struct {
 
 	jobStore     *metadata.JobStore
 	messageAgent dmpkg.MessageAgent
+	logger       *zap.Logger
 	// tasks record the runtime task status
 	// taskID -> TaskStatus
 	tasks sync.Map
 }
 
 // NewTaskManager creates a new TaskManager instance
-func NewTaskManager(initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobStore, messageAgent dmpkg.MessageAgent) *TaskManager {
+func NewTaskManager(initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobStore, messageAgent dmpkg.MessageAgent, pLogger *zap.Logger) *TaskManager {
 	taskManager := &TaskManager{
 		DefaultTicker: ticker.NewDefaultTicker(taskNormalInterval, taskErrorInterval),
 		jobStore:      jobStore,
+		logger:        pLogger.With(zap.String("component", "task_manager")),
 		messageAgent:  messageAgent,
 	}
 	taskManager.DefaultTicker.Ticker = taskManager
@@ -63,7 +64,7 @@ func NewTaskManager(initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobS
 // OperateTask updates the task status in metadata and triggers the task manager to check and operate task.
 // called by user request.
 func (tm *TaskManager) OperateTask(ctx context.Context, op dmpkg.OperateType, jobCfg *config.JobCfg, tasks []string) (err error) {
-	log.L().Info("operate task", zap.Int("op", int(op)), zap.Strings("tasks", tasks))
+	tm.logger.Info("operate task", zap.Int("op", int(op)), zap.Strings("tasks", tasks))
 	defer func() {
 		if err == nil {
 			tm.SetNextCheckTime(time.Now())
@@ -89,7 +90,7 @@ func (tm *TaskManager) OperateTask(ctx context.Context, op dmpkg.OperateType, jo
 
 // UpdateTaskStatus is called when receive task status from worker.
 func (tm *TaskManager) UpdateTaskStatus(taskStatus runtime.TaskStatus) {
-	log.L().Debug("update task status", zap.String("task_id", taskStatus.Task), zap.Int("stage", int(taskStatus.Stage)), zap.Int("unit", int(taskStatus.Unit)))
+	tm.logger.Debug("update task status", zap.String("task_id", taskStatus.Task), zap.Int("stage", int(taskStatus.Stage)), zap.Int("unit", int(taskStatus.Unit)))
 	tm.tasks.Store(taskStatus.Task, taskStatus)
 }
 
@@ -106,10 +107,10 @@ func (tm *TaskManager) TaskStatus() map[string]runtime.TaskStatus {
 // TickImpl removes tasks that are not in the job config.
 // TickImpl checks and operates task if needed.
 func (tm *TaskManager) TickImpl(ctx context.Context) error {
-	log.L().Info("start to check and operate tasks")
+	tm.logger.Info("start to check and operate tasks")
 	state, err := tm.jobStore.Get(ctx)
 	if err != nil {
-		log.L().Error("get job state failed", zap.Error(err))
+		tm.logger.Error("get job state failed", zap.Error(err))
 		tm.onJobNotExist(ctx)
 		return err
 	}
@@ -135,22 +136,22 @@ func (tm *TaskManager) checkAndOperateTasks(ctx context.Context, job *metadata.J
 		// task unbounded or worker offline
 		if !ok || runningTask.Stage == metadata.StageUnscheduled {
 			recordError = errors.New("get task running status failed")
-			log.L().Error("failed to schedule task", zap.String("task_id", taskID), zap.Error(recordError))
+			tm.logger.Error("failed to schedule task", zap.String("task_id", taskID), zap.Error(recordError))
 			continue
 		}
 
 		op := genOp(runningTask.Stage, persistentTask.Stage)
 		if op == dmpkg.None {
-			log.L().Debug("task status will not be changed", zap.String("task_id", taskID), zap.Int("stage", int(runningTask.Stage)))
+			tm.logger.Debug("task status will not be changed", zap.String("task_id", taskID), zap.Int("stage", int(runningTask.Stage)))
 			continue
 		}
 
-		log.L().Info("unexpected task status", zap.String("task_id", taskID), zap.Int("op", int(op)),
+		tm.logger.Info("unexpected task status", zap.String("task_id", taskID), zap.Int("op", int(op)),
 			zap.Int("expected_stage", int(persistentTask.Stage)), zap.Int("stage", int(runningTask.Stage)))
 		// operateTaskMessage should be a asynchronous request
 		if err := tm.operateTaskMessage(ctx, taskID, op); err != nil {
 			recordError = err
-			log.L().Error("operate task failed", zap.Error(recordError))
+			tm.logger.Error("operate task failed", zap.Error(recordError))
 			continue
 		}
 	}
@@ -159,7 +160,7 @@ func (tm *TaskManager) checkAndOperateTasks(ctx context.Context, job *metadata.J
 
 // remove all tasks, usually happened when delete jobs.
 func (tm *TaskManager) onJobNotExist(ctx context.Context) {
-	log.L().Info("clear all task status")
+	tm.logger.Info("clear all task status")
 	tm.tasks.Range(func(key, value interface{}) bool {
 		tm.tasks.Delete(key)
 		return true
@@ -171,7 +172,7 @@ func (tm *TaskManager) removeTaskStatus(job *metadata.Job) {
 	tm.tasks.Range(func(key, value interface{}) bool {
 		taskID := key.(string)
 		if _, ok := job.Tasks[taskID]; !ok {
-			log.L().Info("remove task status", zap.String("task_id", taskID))
+			tm.logger.Info("remove task status", zap.String("task_id", taskID))
 			tm.tasks.Delete(taskID)
 		}
 		return true
