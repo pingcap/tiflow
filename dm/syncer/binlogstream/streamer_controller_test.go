@@ -15,11 +15,13 @@ package binlogstream
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
+	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -288,4 +290,84 @@ func checkGetEvent(t *testing.T, controller *StreamerController, expecteds []exp
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 }
 
-// TODO: check GTID set is correctly forwarded
+func (s *testLocationSuite) TestLocationsWithGTID() {
+	events := s.generateDDLEvents()
+
+	// we have 5 events, only last 2 of them
+	s.Require().Len(events, 5)
+	startLoc := binlog.Location{
+		Position: mysql.Position{
+			Name: s.binlogFile,
+			Pos:  events[2].Header.LogPos,
+		},
+	}
+	err := startLoc.SetGTID(s.prevGSet)
+	s.Require().NoError(err)
+
+	events = events[3:5]
+	{
+		s.Require().Equal(replication.GTID_EVENT, events[0].Header.EventType)
+		s.Require().Equal(uint32(259), events[0].Header.LogPos)
+		e := events[0].Event.(*replication.GTIDEvent)
+		gtid := fmt.Sprintf("%s:%d", uuid.Must(uuid.FromBytes(e.SID)), e.GNO)
+		s.Require().Equal("3ccc475b-2343-11e7-be21-6c0b84d59f30:15", gtid)
+	}
+	{
+		s.Require().Equal(replication.QUERY_EVENT, events[1].Header.EventType)
+		s.Require().Equal(uint32(322), events[1].Header.LogPos)
+	}
+
+	replaceReq := &pb.HandleWorkerErrorRequest{
+		Op:        pb.ErrorOp_Replace,
+		BinlogPos: "(mysql-bin.000001, 259)",
+	}
+	replaceEvents := []*replication.BinlogEvent{
+		{
+			RawData: []byte("first replace event"),
+		},
+		{
+			RawData: []byte("seconds replace event"),
+		},
+	}
+
+	// expected 3 events, check their start/end locations
+	expectedLocations := make([]binlog.Location, 4)
+	expectedLocations[0] = startLoc
+	expectedLocations[1] = startLoc
+	expectedLocations[1].Position.Pos = events[0].Header.LogPos
+	expectedLocations[2] = expectedLocations[1]
+	expectedLocations[2].Suffix = 1
+	expectedLocations[3] = startLoc
+	expectedLocations[3].Position.Pos = events[1].Header.LogPos
+	err = expectedLocations[3].SetGTID(s.currGSet)
+	s.Require().NoError(err)
+
+	upstream := &mockStream{
+		events: events,
+	}
+	producer := &mockStreamProducer{upstream}
+
+	controller := NewStreamerController4Test(producer, upstream)
+
+	err = controller.Set(replaceReq, replaceEvents)
+	s.Require().NoError(err)
+
+	controller.streamModifier.reset(startLoc)
+	controller.upstream.locationRecorder.reset(startLoc)
+	ctx := tcontext.Background()
+
+	for i := 1; i < len(expectedLocations); i++ {
+		s.T().Logf("#%d", i)
+		// nolint:dogsled
+		_, _, _, err = controller.GetEvent(ctx)
+		s.Require().NoError(err)
+		s.Require().Equal(expectedLocations[i-1].String(), controller.GetCurStartLocation().String())
+		s.Require().Equal(expectedLocations[i].String(), controller.GetCurEndLocation().String())
+	}
+
+	ctx, cancel := ctx.WithTimeout(10 * time.Millisecond)
+	defer cancel()
+	// nolint:dogsled
+	_, _, _, err = controller.GetEvent(ctx)
+	s.Require().ErrorIs(err, context.DeadlineExceeded)
+}
