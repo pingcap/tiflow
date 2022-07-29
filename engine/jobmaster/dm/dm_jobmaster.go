@@ -204,7 +204,11 @@ func (jm *JobMaster) OnWorkerStatusUpdated(worker framework.WorkerHandle, newSta
 		return nil
 	}
 	jm.Logger().Info("on worker status updated", zap.String(logutil.ConstFieldWorkerKey, worker.ID()), zap.String("extra bytes", string(newStatus.ExtBytes)))
-	return jm.handleOnlineStatus(worker)
+	if err := jm.handleOnlineStatus(worker); err != nil {
+		return err
+	}
+	jm.taskManager.SetNextCheckTime(time.Now())
+	return nil
 }
 
 // OnJobManagerMessage implements JobMasterImpl.OnJobManagerMessage

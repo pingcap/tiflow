@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/pingcap/errors"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -168,7 +169,11 @@ func (jm *JobMaster) UpdateJobCfg(ctx context.Context, cfg *config.JobCfg) error
 	if err := jm.OperateTask(ctx, dmpkg.Update, cfg, nil); err != nil {
 		return err
 	}
-	return jm.checkpointAgent.Update(ctx, cfg)
+	if err := jm.checkpointAgent.Update(ctx, cfg); err != nil {
+		return err
+	}
+	jm.workerManager.SetNextCheckTime(time.Now())
+	return nil
 }
 
 // Binlog implements the api of binlog request.

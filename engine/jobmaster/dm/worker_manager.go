@@ -213,6 +213,7 @@ func (wm *WorkerManager) stopOutdatedWorkers(ctx context.Context, job *metadata.
 // checkAndScheduleWorkers check whether a task need a new worker.
 // If there is no related worker, create a new worker.
 // If task is finished, check whether need a new worker.
+// TODO: support incremental -> all mode switch.
 func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metadata.Job) error {
 	var (
 		runningWorker runtime.WorkerStatus
