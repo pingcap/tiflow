@@ -71,7 +71,7 @@ func TestFactoryImplPdClient(t *testing.T) {
 	c.EXPECT().GetPdAddr().Return(pdAddr).Times(1)
 	pdClient, err = f.PdClient()
 	require.Nil(t, pdClient)
-	require.Contains(t, err.Error(), "fail to open PD client")
+	require.Contains(t, err.Error(), "Fail to open PD client")
 }
 
 type mockAPIClient struct {
