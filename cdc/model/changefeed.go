@@ -366,7 +366,7 @@ func (info *ChangeFeedInfo) fixSinkProtocol() {
 
 	// fix mysql sink
 	scheme := sinkURIParsed.Scheme
-	if !config.IsMqScheme(scheme) {
+	if !config.IsMQScheme(scheme) {
 		if protocolStr != "" || info.Config.Sink.Protocol != "" {
 			maskedSinkURI, _ := util.MaskSinkURI(info.SinkURI)
 			log.Warn("sink URI or sink config contains protocol, but scheme is not mq",
