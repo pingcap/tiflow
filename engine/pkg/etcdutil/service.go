@@ -18,10 +18,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/pingcap/tiflow/pkg/errors"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/grpc"
+
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // StartEtcd starts an embedded etcd server.
@@ -76,6 +77,6 @@ func GetLeader(ctx context.Context, cli *clientv3.Client, campKey string) (
 	}
 	key = resp.Kvs[0].Key
 	val = resp.Kvs[0].Value
-	rev = resp.Header.Revision
+	rev = resp.Kvs[0].ModRevision
 	return
 }

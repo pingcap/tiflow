@@ -227,6 +227,7 @@ func testSimpleAllModeTask(
 	jobCfg, err := getJobCfg(ctx, httpClient, resp.JobId, t)
 	require.NoError(t, err)
 	require.Contains(t, jobCfg, `flavor: mysql`)
+	require.Contains(t, jobCfg, `tidb_txn_mode: optimistic`)
 
 	noError(mysql.Exec("alter table " + db + ".t1 add column new_col int unique"))
 	noError(mysql.Exec("insert into " + db + ".t1 values(4,4)"))

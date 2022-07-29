@@ -11,4 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package etcdclient
+package dmlproducer
+
+import (
+	"testing"
+
+	"github.com/pingcap/tiflow/pkg/leakutil"
+)
+
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(m)
+}

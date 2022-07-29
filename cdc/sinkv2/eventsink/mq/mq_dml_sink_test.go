@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/producer"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/stretchr/testify/require"
@@ -68,8 +68,8 @@ func TestWriteEvents(t *testing.T) {
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 	errCh := make(chan error, 1)
 
-	s, err := NewKafkaSink(ctx, sinkURI, replicaConfig, errCh,
-		kafka.NewMockAdminClient, producer.NewMockProducer)
+	s, err := NewKafkaDMLSink(ctx, sinkURI, replicaConfig, errCh,
+		kafka.NewMockAdminClient, dmlproducer.NewDMLMockProducer)
 	require.Nil(t, err)
 	require.NotNil(t, s)
 
@@ -94,7 +94,7 @@ func TestWriteEvents(t *testing.T) {
 	time.Sleep(time.Second)
 	require.Nil(t, err)
 	require.Len(t, errCh, 0)
-	require.Len(t, s.worker.producer.(*producer.MockProducer).GetEvents(), 3000)
+	require.Len(t, s.worker.producer.(*dmlproducer.MockDMLProducer).GetAllEvents(), 3000)
 	err = s.Close()
 	require.Nil(t, err)
 }
