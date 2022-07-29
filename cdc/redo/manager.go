@@ -99,6 +99,7 @@ type LogManager interface {
 	AddTable(tableID model.TableID, startTs uint64)
 	RemoveTable(tableID model.TableID)
 	GetResolvedTs(tableID model.TableID) model.Ts
+	// Min resolvedTs for all tables. If there is no tables, return math.MaxInt64.
 	GetMinResolvedTs() uint64
 	EmitRowChangedEvents(ctx context.Context, tableID model.TableID,
 		rows ...*model.RowChangedEvent) error
@@ -393,6 +394,16 @@ func (m *ManagerImpl) RemoveTable(tableID model.TableID) {
 	if _, ok := m.rtsMap.LoadAndDelete(tableID); !ok {
 		log.Warn("remove a table not maintained in redo log manager", zap.Int64("tableID", tableID))
 	}
+	newMin := uint64(math.MaxInt64)
+	m.rtsMap.Range(func(key interface{}, value interface{}) bool {
+		rts := value.(*statefulRts)
+		flushed := rts.getFlushed()
+		if flushed < newMin {
+			newMin = flushed
+		}
+		return true
+	})
+	atomic.StoreUint64(&m.minResolvedTs, newMin)
 }
 
 // Cleanup removes all redo logs of this manager, it is called when changefeed is removed

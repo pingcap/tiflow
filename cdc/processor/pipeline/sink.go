@@ -125,32 +125,27 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 		resolved = model.NewResolvedTs(n.targetTs)
 	}
 
-	currentBarrierTs := atomic.LoadUint64(&n.barrierTs)
 	if n.redoManager != nil && n.redoManager.Enabled() {
 		// redo log do not support batch resolve mode, hence we
 		// use `ResolvedMark` to restore a normal resolved ts
 		resolved = model.NewResolvedTs(resolved.ResolvedMark())
 		err = n.redoManager.UpdateResolvedTs(ctx, n.tableID, resolved.Ts)
-
-		// fail fast check, the happens before relationship is:
-		// 1. sorter resolvedTs >= sink resolvedTs >= table redoTs == tableActor resolvedTs
-		// 2. tableActor resolvedTs >= processor resolvedTs >= global resolvedTs >= barrierTs
-		redoTs := n.redoManager.GetMinResolvedTs()
-		if redoTs < currentBarrierTs {
-			log.Warn("redoTs should not less than current barrierTs",
-				zap.Int64("tableID", n.tableID),
-				zap.Uint64("redoTs", redoTs),
-				zap.Uint64("barrierTs", currentBarrierTs))
-		}
-
-		// TODO: remove this check after SchedulerV3 become the first choice.
-		if resolved.Ts > redoTs {
-			resolved = model.NewResolvedTs(redoTs)
-		}
 	}
 
+	// Flush sink with barrierTs, which is broadcasted by owner.
+	currentBarrierTs := atomic.LoadUint64(&n.barrierTs)
 	if resolved.Ts > currentBarrierTs {
 		resolved = model.NewResolvedTs(currentBarrierTs)
+	}
+	if n.redoManager != nil && n.redoManager.Enabled() {
+		redoTs := n.redoManager.GetMinResolvedTs()
+		if resolved.Ts > redoTs {
+			log.Fatal("redoTs should not less than current barrierTs",
+				zap.Int64("tableID", n.tableID),
+				zap.Uint64("redoTs", redoTs),
+				zap.Uint64("resolvedTs", resolved.Ts),
+				zap.Uint64("barrierTs", currentBarrierTs))
+		}
 	}
 
 	currentCheckpointTs := n.getCheckpointTs()
