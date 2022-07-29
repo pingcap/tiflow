@@ -36,20 +36,25 @@ func newUnsafeResetOptions() *unsafeResetOptions {
 }
 
 // complete adapts from the command line args to the data and client required.
-func (o *unsafeResetOptions) complete(f factory.Factory) error {
+func (o *unsafeResetOptions) complete(f factory.Factory) (err error) {
+	pdClient, err := f.PdClient()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			pdClient.Close()
+		}
+	}()
+
+	o.pdClient = pdClient
+
 	etcdClient, err := f.EtcdClient()
 	if err != nil {
 		return err
 	}
 	etcdClient.ClusterID = o.clusterID
 	o.etcdClient = etcdClient
-
-	pdClient, err := f.PdClient()
-	if err != nil {
-		return err
-	}
-
-	o.pdClient = pdClient
 
 	return nil
 }
@@ -61,6 +66,8 @@ func (o *unsafeResetOptions) addFlags(cmd *cobra.Command) {
 // run runs the `cli unsafe reset` command.
 func (o *unsafeResetOptions) run(cmd *cobra.Command) error {
 	ctx := context.GetDefaultContext()
+	defer o.pdClient.Close()
+	defer o.etcdClient.Close()
 
 	leases, err := o.etcdClient.GetCaptureLeases(ctx)
 	if err != nil {

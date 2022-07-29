@@ -1,4 +1,4 @@
-etcd-endpoints = ["metastore:12479"] # Reuse the same endpoints as the metastore.
+etcd-endpoints = ["metastore-business:12479"] # Reuse the same endpoints as the business-metastore.
 
 [frame-metastore-conf]
 endpoints = ["metastore-framework:13306"]

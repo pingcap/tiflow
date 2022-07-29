@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package producer
+package dmlproducer
 
 import (
 	"context"
@@ -20,8 +20,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 )
 
-// Producer is the interface for message producer.
-type Producer interface {
+// DMLProducer is the interface for message producer.
+type DMLProducer interface {
 	// AsyncSendMessage sends a message asynchronously.
 	AsyncSendMessage(
 		ctx context.Context, topic string, partition int32, message *codec.MQMessage,
@@ -38,4 +38,4 @@ type Producer interface {
 // So we let the GC close errCh.
 // It's usually a buffered channel.
 type Factory func(ctx context.Context, client sarama.Client,
-	errCh chan error) (Producer, error)
+	errCh chan error) (DMLProducer, error)
