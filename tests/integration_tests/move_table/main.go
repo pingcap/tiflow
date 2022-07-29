@@ -122,7 +122,7 @@ type tableInfo struct {
 type cluster struct {
 	ownerAddr  string
 	captures   map[string][]*tableInfo
-	cdcEtcdCli etcd.CDCEtcdClient
+	cdcEtcdCli etcd.CDCEtcdClientImpl
 }
 
 func newCluster(ctx context.Context, pd string) (*cluster, error) {
