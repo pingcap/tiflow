@@ -23,19 +23,20 @@ import (
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/producer"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
 
-func newTestWorker(t *testing.T) (*worker, producer.Producer) {
+func newTestWorker(t *testing.T) (*worker, dmlproducer.DMLProducer) {
 	// 200 is about the size of a rowEvent change.
 	encoderConfig := codec.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(200)
 	builder, err := codec.NewEventBatchEncoderBuilder(context.Background(), encoderConfig)
 	require.Nil(t, err)
 	encoder := builder.Build()
 	require.Nil(t, err)
-	p := producer.NewMockProducer()
+	p, err := dmlproducer.NewDMLMockProducer(context.Background(), nil, nil)
+	require.Nil(t, err)
 	id := model.DefaultChangeFeedID("test")
 	return newWorker(id, encoder, p), p
 }
@@ -284,11 +285,11 @@ func TestAsyncSend(t *testing.T) {
 	paritionedRows := worker.group(events)
 	err := worker.asyncSend(context.Background(), paritionedRows)
 	require.NoError(t, err)
-	mp := p.(*producer.MockProducer)
-	require.Len(t, mp.GetEvents(), 6)
-	require.Len(t, mp.GetEvent(key1), 3)
-	require.Len(t, mp.GetEvent(key2), 1)
-	require.Len(t, mp.GetEvent(key3), 2)
+	mp := p.(*dmlproducer.MockDMLProducer)
+	require.Len(t, mp.GetAllEvents(), 6)
+	require.Len(t, mp.GetEvents(key1), 3)
+	require.Len(t, mp.GetEvents(key2), 1)
+	require.Len(t, mp.GetEvents(key3), 2)
 }
 
 func TestAsyncSendWhenTableStopping(t *testing.T) {
@@ -344,8 +345,8 @@ func TestAsyncSendWhenTableStopping(t *testing.T) {
 	paritionedRows := worker.group(events)
 	err := worker.asyncSend(context.Background(), paritionedRows)
 	require.NoError(t, err)
-	mp := p.(*producer.MockProducer)
-	require.Len(t, mp.GetEvents(), 2)
+	mp := p.(*dmlproducer.MockDMLProducer)
+	require.Len(t, mp.GetAllEvents(), 2)
 }
 
 func TestAbort(t *testing.T) {

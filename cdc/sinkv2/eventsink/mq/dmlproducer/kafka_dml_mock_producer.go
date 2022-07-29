@@ -11,33 +11,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package producer
+package dmlproducer
 
 import (
 	"context"
 	"sync"
 
+	"github.com/Shopify/sarama"
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 )
 
-var _ Producer = (*MockProducer)(nil)
+var _ DMLProducer = (*MockDMLProducer)(nil)
 
-// MockProducer is a mock producer for test.
-type MockProducer struct {
+// MockDMLProducer is a mock producer for test.
+type MockDMLProducer struct {
 	mu     sync.Mutex
 	events map[mqv1.TopicPartitionKey][]*codec.MQMessage
 }
 
-// NewMockProducer creates a mock producer.
-func NewMockProducer() Producer {
-	return &MockProducer{
+// NewDMLMockProducer creates a mock producer.
+func NewDMLMockProducer(_ context.Context, _ sarama.Client, _ chan error) (DMLProducer, error) {
+	return &MockDMLProducer{
 		events: make(map[mqv1.TopicPartitionKey][]*codec.MQMessage),
-	}
+	}, nil
 }
 
 // AsyncSendMessage appends a message to the mock producer.
-func (m *MockProducer) AsyncSendMessage(ctx context.Context, topic string,
+func (m *MockDMLProducer) AsyncSendMessage(ctx context.Context, topic string,
 	partition int32, message *codec.MQMessage,
 ) error {
 	m.mu.Lock()
@@ -55,12 +56,10 @@ func (m *MockProducer) AsyncSendMessage(ctx context.Context, topic string,
 }
 
 // Close do nothing.
-func (m *MockProducer) Close() error {
-	return nil
-}
+func (m *MockDMLProducer) Close() {}
 
-// GetEvents returns the events received by the mock producer.
-func (m *MockProducer) GetEvents() []*codec.MQMessage {
+// GetAllEvents returns the events received by the mock producer.
+func (m *MockDMLProducer) GetAllEvents() []*codec.MQMessage {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var events []*codec.MQMessage
@@ -70,8 +69,8 @@ func (m *MockProducer) GetEvents() []*codec.MQMessage {
 	return events
 }
 
-// GetEvent returns the event filtered by the key.
-func (m *MockProducer) GetEvent(key mqv1.TopicPartitionKey) []*codec.MQMessage {
+// GetEvents returns the event filtered by the key.
+func (m *MockDMLProducer) GetEvents(key mqv1.TopicPartitionKey) []*codec.MQMessage {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.events[key]

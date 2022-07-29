@@ -22,7 +22,7 @@ package tools
 import (
 	// make go module happy
 	_ "github.com/AlekSi/gocov-xml"
-	_ "github.com/axw/gocov"
+	_ "github.com/axw/gocov/gocov"
 	_ "github.com/deepmap/oapi-codegen/cmd/oapi-codegen"
 	_ "github.com/gogo/protobuf/protoc-gen-gogofaster"
 	_ "github.com/golang/mock/mockgen"
@@ -31,10 +31,11 @@ import (
 	_ "github.com/mattn/goveralls"
 	_ "github.com/pingcap/errors/errdoc-gen"
 	_ "github.com/pingcap/failpoint/failpoint-ctl"
-	_ "github.com/swaggo/swag"
+	_ "github.com/swaggo/swag/cmd/swag"
 	_ "github.com/tinylib/msgp"
 	_ "github.com/zhouqiang-cl/gocovmerge"
 	_ "golang.org/x/tools/cmd/goimports"
+	_ "gotest.tools/gotestsum"
 	_ "mvdan.cc/gofumpt"
 	_ "mvdan.cc/sh/v3/cmd/shfmt"
 )

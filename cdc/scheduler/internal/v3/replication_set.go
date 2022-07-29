@@ -212,9 +212,18 @@ func (r *ReplicationSet) checkInvariant(
 		return r.inconsistentError(input, captureID,
 			"schedulerv3: tableID must be the same")
 	}
-	if r.Primary == r.Secondary && r.Primary != "" {
-		return r.inconsistentError(input, captureID,
-			"schedulerv3: primary and secondary can not be the same")
+	if r.Primary == r.Secondary {
+		if r.Primary != "" {
+			return r.inconsistentError(input, captureID,
+				"schedulerv3: primary and secondary can not be the same")
+		} else if r.State == ReplicationSetStatePrepare ||
+			r.State == ReplicationSetStateCommit ||
+			r.State == ReplicationSetStateReplicating {
+			// When the state is in prepare, commit or replicating, there must
+			// be at least one of primary and secondary.
+			return r.inconsistentError(input, captureID,
+				"schedulerv3: empty primary/secondary in state prepare/commit/replicating")
+		}
 	}
 	_, okP := r.Captures[r.Primary]
 	_, okS := r.Captures[r.Secondary]
@@ -230,10 +239,6 @@ func (r *ReplicationSet) checkInvariant(
 func (r *ReplicationSet) poll(
 	input *schedulepb.TableStatus, captureID model.CaptureID,
 ) ([]*schedulepb.Message, error) {
-	err := r.checkInvariant(input, captureID)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 	if _, ok := r.Captures[captureID]; !ok {
 		return nil, nil
 	}
@@ -241,6 +246,10 @@ func (r *ReplicationSet) poll(
 	msgBuf := make([]*schedulepb.Message, 0)
 	stateChanged := true
 	for stateChanged {
+		err := r.checkInvariant(input, captureID)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 		oldState := r.State
 		var msg *schedulepb.Message
 		switch r.State {
@@ -286,6 +295,7 @@ func (r *ReplicationSet) pollOnAbsent(
 		}
 		r.State = ReplicationSetStatePrepare
 		r.Secondary = captureID
+		r.Captures[captureID] = struct{}{}
 		return nil, true, nil
 
 	case schedulepb.TableStateStopped:
@@ -466,6 +476,10 @@ func (r *ReplicationSet) pollOnCommit(
 				zap.Any("replicationSet", r))
 			delete(r.Captures, r.Secondary)
 			r.Secondary = ""
+			if r.Primary == "" {
+				// If there is no primary, transit to Absent.
+				r.State = ReplicationSetStateAbsent
+			}
 			return nil, true, nil
 		}
 

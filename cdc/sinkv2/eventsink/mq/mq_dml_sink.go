@@ -25,15 +25,12 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/producer"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
-
-// newProducerImpl specifies the build method for the producer.
-var newProducerImpl producer.NewProducerFunc = producer.NewMockProducer
 
 // Assert EventSink[E event.TableEvent] implementation
 var _ eventsink.EventSink[*model.RowChangedEvent] = (*sink)(nil)
@@ -60,7 +57,7 @@ type sink struct {
 }
 
 func newSink(ctx context.Context,
-	producer producer.Producer,
+	producer dmlproducer.DMLProducer,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
 	encoderConfig *codec.Config,
