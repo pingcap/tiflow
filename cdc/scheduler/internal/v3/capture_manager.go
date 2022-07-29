@@ -57,14 +57,18 @@ type CaptureStatus struct {
 	Epoch    schedulepb.ProcessorEpoch
 	State    CaptureState
 	Tables   []schedulepb.TableStatus
+	ID       model.CaptureID
 	Addr     string
 	IsOwner  bool
 }
 
-func newCaptureStatus(rev schedulepb.OwnerRevision, addr string, isOwner bool) *CaptureStatus {
+func newCaptureStatus(
+	rev schedulepb.OwnerRevision, id model.CaptureID, addr string, isOwner bool,
+) *CaptureStatus {
 	return &CaptureStatus{
 		OwnerRev: rev,
 		State:    CaptureStateUninitialized,
+		ID:       id,
 		Addr:     addr,
 		IsOwner:  isOwner,
 	}
@@ -75,7 +79,7 @@ func (c *CaptureStatus) handleHeartbeatResponse(
 ) {
 	// Check epoch for initialized captures.
 	if c.State != CaptureStateUninitialized && c.Epoch.Epoch != epoch.Epoch {
-		log.Warn("tpscheduler: ignore heartbeat response",
+		log.Warn("schedulerv3: ignore heartbeat response",
 			zap.String("epoch", c.Epoch.Epoch),
 			zap.String("respEpoch", epoch.Epoch),
 			zap.Int64("ownerRev", c.OwnerRev.Revision))
@@ -85,9 +89,11 @@ func (c *CaptureStatus) handleHeartbeatResponse(
 	if c.State == CaptureStateUninitialized {
 		c.Epoch = epoch
 		c.State = CaptureStateInitialized
+		log.Info("schedulerv3: capture initialized", zap.String("capture", c.ID))
 	}
 	if resp.Liveness == model.LivenessCaptureStopping {
 		c.State = CaptureStateStopping
+		log.Info("schedulerv3: capture stopping", zap.String("capture", c.ID))
 	}
 	c.Tables = resp.Tables
 }
@@ -185,7 +191,7 @@ func (c *captureManager) HandleMessage(
 		if msg.MsgType == schedulepb.MsgHeartbeatResponse {
 			captureStatus, ok := c.Captures[msg.From]
 			if !ok {
-				log.Warn("tpscheduler: heartbeat response from unknown capture",
+				log.Warn("schedulerv3: heartbeat response from unknown capture",
 					zap.String("capture", msg.From))
 				continue
 			}
@@ -203,8 +209,8 @@ func (c *captureManager) HandleAliveCaptureUpdate(
 		if _, ok := c.Captures[id]; !ok {
 			// A new capture.
 			c.Captures[id] = newCaptureStatus(
-				c.OwnerRev, info.AdvertiseAddr, c.ownerID == id)
-			log.Info("tpscheduler: find a new capture", zap.String("capture", id))
+				c.OwnerRev, id, info.AdvertiseAddr, c.ownerID == id)
+			log.Info("schedulerv3: find a new capture", zap.String("capture", id))
 			msgs = append(msgs, &schedulepb.Message{
 				To:        id,
 				MsgType:   schedulepb.MsgHeartbeat,
@@ -216,7 +222,7 @@ func (c *captureManager) HandleAliveCaptureUpdate(
 	// Find removed captures.
 	for id, capture := range c.Captures {
 		if _, ok := aliveCaptures[id]; !ok {
-			log.Info("tpscheduler: removed a capture", zap.String("capture", id))
+			log.Info("schedulerv3: removed a capture", zap.String("capture", id))
 			delete(c.Captures, id)
 
 			// Only update changes after initialization.
@@ -242,7 +248,7 @@ func (c *captureManager) HandleAliveCaptureUpdate(
 		for id, capture := range c.Captures {
 			c.changes.Init[id] = capture.Tables
 		}
-		log.Info("tpscheduler: all capture initialized",
+		log.Info("schedulerv3: all capture initialized",
 			zap.Int("captureCount", len(c.Captures)))
 		c.initialized = true
 	}

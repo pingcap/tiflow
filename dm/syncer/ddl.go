@@ -22,7 +22,7 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
@@ -63,7 +63,7 @@ func (s *Syncer) processOneDDL(qec *queryEventContext, sql string) ([]string, er
 		}
 	}
 
-	qec.tctx.L().Debug("will skip query event", zap.String("event", "query"), zap.String("statement", sql), zap.Stringer("ddlInfo", ddlInfo))
+	qec.tctx.L().Debug("will check skip query event", zap.String("event", "query"), zap.String("statement", sql), zap.Stringer("ddlInfo", ddlInfo))
 	shouldSkip, err := s.skipQueryEvent(qec, ddlInfo)
 	if err != nil {
 		return nil, err

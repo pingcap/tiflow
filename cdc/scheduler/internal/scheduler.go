@@ -54,7 +54,7 @@ type Scheduler interface {
 
 	// DrainCapture is used to drop all tables situated at the target capture
 	// It is thread-safe.
-	DrainCapture(target model.CaptureID) int
+	DrainCapture(target model.CaptureID) (int, error)
 
 	// Close scheduler and release resource.
 	// It is not thread-safe.

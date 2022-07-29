@@ -97,14 +97,26 @@ func GetTableSpan(tableID int64) Span {
 	}
 }
 
-// GetDDLSpan returns the span to watch for DDL related events
-func GetDDLSpan() Span {
+// getDDLSpan returns the span to watch for DDL related events
+func getDDLSpan() Span {
 	return getMetaListKey("DDLJobList")
 }
 
-// GetAddIndexDDLSpan returns the span to watch for Add Index DDL related events
-func GetAddIndexDDLSpan() Span {
+// getAddIndexDDLSpan returns the span to watch for Add Index DDL related events
+func getAddIndexDDLSpan() Span {
 	return getMetaListKey("DDLJobAddIdxList")
+}
+
+const (
+	// MaxInt48 is the max value of int48.
+	MaxInt48 = 0x0000FFFFFFFFFFFF
+	// JobTableID is the id of `tidb_ddl_job`.
+	JobTableID = MaxInt48 - 1
+)
+
+// GetAllDDLSpan return all cdc interested spans for DDL.
+func GetAllDDLSpan() []Span {
+	return []Span{getDDLSpan(), getAddIndexDDLSpan(), GetTableSpan(JobTableID)}
 }
 
 func getMetaListKey(key string) Span {
@@ -131,7 +143,6 @@ func KeyInSpans(k []byte, spans []ComparableSpan) bool {
 			return true
 		}
 	}
-
 	return false
 }
 

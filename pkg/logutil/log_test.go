@@ -16,7 +16,6 @@ package logutil
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -32,7 +31,7 @@ import (
 )
 
 func TestInitLoggerAndSetLogLevel(t *testing.T) {
-	f, err := ioutil.TempFile("", "init-logger-test")
+	f, err := os.CreateTemp("", "init-logger-test")
 	require.Nil(t, err)
 	defer os.Remove(f.Name())
 
@@ -166,4 +165,15 @@ func TestLoggerOption(t *testing.T) {
 	var buffer zaptest.Buffer
 	op.applyOpts([]LoggerOpt{WithOutputWriteSyncer(&buffer)})
 	require.Equal(t, &buffer, op.output)
+}
+
+func TestWithComponent(t *testing.T) {
+	var buffer zaptest.Buffer
+	err := InitLogger(&Config{Level: "info"}, WithOutputWriteSyncer(&buffer))
+	require.NoError(t, err)
+
+	lg := WithComponent("grpc")
+	lg.Warn("component test", zap.String("other", "other"))
+	require.Regexp(t, regexp.QuoteMeta("[\"component test\"] [component=grpc] [other=other]"), buffer.Stripped())
+	buffer.Reset()
 }

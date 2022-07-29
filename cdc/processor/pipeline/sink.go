@@ -137,7 +137,7 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 		// 2. tableActor resolvedTs >= processor resolvedTs >= global resolvedTs >= barrierTs
 		redoTs := n.redoManager.GetMinResolvedTs()
 		if redoTs < currentBarrierTs {
-			log.Debug("redoTs should not less than current barrierTs",
+			log.Warn("redoTs should not less than current barrierTs",
 				zap.Int64("tableID", n.tableID),
 				zap.Uint64("redoTs", redoTs),
 				zap.Uint64("barrierTs", currentBarrierTs))
@@ -253,10 +253,12 @@ func shouldSplitUpdateEvent(updateEvent *model.PolymorphicEvent) bool {
 	handleKeyCount := 0
 	equivalentHandleKeyCount := 0
 	for i := range updateEvent.Row.Columns {
-		if updateEvent.Row.Columns[i].Flag.IsHandleKey() && updateEvent.Row.PreColumns[i].Flag.IsHandleKey() {
+		col := updateEvent.Row.Columns[i]
+		preCol := updateEvent.Row.PreColumns[i]
+		if col != nil && col.Flag.IsHandleKey() && preCol != nil && preCol.Flag.IsHandleKey() {
 			handleKeyCount++
-			colValueString := model.ColumnValueString(updateEvent.Row.Columns[i].Value)
-			preColValueString := model.ColumnValueString(updateEvent.Row.PreColumns[i].Value)
+			colValueString := model.ColumnValueString(col.Value)
+			preColValueString := model.ColumnValueString(preCol.Value)
 			if colValueString == preColValueString {
 				equivalentHandleKeyCount++
 			}
@@ -286,7 +288,8 @@ func splitUpdateEvent(updateEvent *model.PolymorphicEvent) (*model.PolymorphicEv
 	deleteEvent.Row.Columns = nil
 	for i := range deleteEvent.Row.PreColumns {
 		// NOTICE: Only the handle key pre column is retained in the delete event.
-		if !deleteEvent.Row.PreColumns[i].Flag.IsHandleKey() {
+		if deleteEvent.Row.PreColumns[i] != nil &&
+			!deleteEvent.Row.PreColumns[i].Flag.IsHandleKey() {
 			deleteEvent.Row.PreColumns[i] = nil
 		}
 	}
@@ -314,11 +317,7 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 		if err := n.verifySplitTxn(event); err != nil {
 			return false, errors.Trace(err)
 		}
-
 		if event.IsResolved() {
-			if n.state.Load() == TableStatePrepared {
-				n.state.Store(TableStateReplicating)
-			}
 			failpoint.Inject("ProcessorSyncResolvedError", func() {
 				failpoint.Return(false, errors.New("processor sync resolved injected error"))
 			})

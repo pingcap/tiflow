@@ -21,7 +21,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"strings"
 	"time"
@@ -154,10 +153,14 @@ func newCluster(ctx context.Context, pd string) (*cluster, error) {
 		return nil, errors.Trace(err)
 	}
 
+	cdcEtcdCli, err := etcd.NewCDCEtcdClient(ctx, etcdCli, etcd.DefaultCDCClusterID)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	ret := &cluster{
 		ownerAddr:  "",
 		captures:   nil,
-		cdcEtcdCli: etcd.NewCDCEtcdClient(ctx, etcdCli),
+		cdcEtcdCli: cdcEtcdCli,
 	}
 
 	log.Info("new cluster initialized")
@@ -265,7 +268,7 @@ func queryProcessor(
 			errors.Errorf("HTTP API returned error status: %d, url: %s", resp.StatusCode, requestURL))
 	}
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

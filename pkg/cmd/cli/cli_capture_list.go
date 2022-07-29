@@ -14,17 +14,11 @@
 package cli
 
 import (
-	"context"
-
-	"github.com/spf13/cobra"
-	"go.etcd.io/etcd/client/v3/concurrency"
-
-	"github.com/pingcap/errors"
+	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/spf13/cobra"
 )
 
 // capture holds capture information.
@@ -36,7 +30,7 @@ type capture struct {
 
 // listCaptureOptions defines flags for the `cli capture list` command.
 type listCaptureOptions struct {
-	etcdClient *etcd.CDCEtcdClient
+	apiv1Client apiv1client.APIV1Interface
 }
 
 // newListCaptureOptions creates new listCaptureOptions for the `cli capture list` command.
@@ -46,13 +40,11 @@ func newListCaptureOptions() *listCaptureOptions {
 
 // complete adapts from the command line args to the data and client required.
 func (o *listCaptureOptions) complete(f factory.Factory) error {
-	etcdClient, err := f.EtcdClient()
+	apiv1Client, err := f.APIV1Client()
 	if err != nil {
 		return err
 	}
-
-	o.etcdClient = etcdClient
-
+	o.apiv1Client = apiv1Client
 	return nil
 }
 
@@ -60,9 +52,14 @@ func (o *listCaptureOptions) complete(f factory.Factory) error {
 func (o *listCaptureOptions) run(cmd *cobra.Command) error {
 	ctx := cmdcontext.GetDefaultContext()
 
-	captures, err := listCaptures(ctx, o.etcdClient)
+	raw, err := o.apiv1Client.Captures().List(ctx)
 	if err != nil {
 		return err
+	}
+	captures := make([]*capture, 0, len(*raw))
+	for _, c := range *raw {
+		captures = append(captures,
+			&capture{ID: c.ID, IsOwner: c.IsOwner, AdvertiseAddr: c.AdvertiseAddr})
 	}
 
 	return util.JSONPrint(cmd, captures)
@@ -87,42 +84,4 @@ func newCmdListCapture(f factory.Factory) *cobra.Command {
 	}
 
 	return command
-}
-
-// listCaptures list all the captures from the etcd.
-func listCaptures(ctx context.Context, etcdClient *etcd.CDCEtcdClient) ([]*capture, error) {
-	_, raw, err := etcdClient.GetCaptures(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	ownerID, err := etcdClient.GetOwnerID(ctx)
-	if err != nil && errors.Cause(err) != concurrency.ErrElectionNoLeader {
-		return nil, err
-	}
-
-	captures := make([]*capture, 0, len(raw))
-	for _, c := range raw {
-		isOwner := c.ID == ownerID
-		captures = append(captures,
-			&capture{ID: c.ID, IsOwner: isOwner, AdvertiseAddr: c.AdvertiseAddr})
-	}
-
-	return captures, nil
-}
-
-// getOwnerCapture returns the owner capture.
-func getOwnerCapture(ctx context.Context, etcdClient *etcd.CDCEtcdClient) (*capture, error) {
-	captures, err := listCaptures(ctx, etcdClient)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, c := range captures {
-		if c.IsOwner {
-			return c, nil
-		}
-	}
-
-	return nil, errors.Trace(cerror.ErrOwnerNotFound)
 }

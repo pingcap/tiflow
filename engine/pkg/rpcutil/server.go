@@ -34,10 +34,9 @@ import (
 // Member stores server member information
 // TODO: make it a protobuf field and can be shared by gRPC API
 type Member struct {
-	IsServLeader  bool   `json:"is-serv-leader"`
-	IsEtcdLeader  bool   `json:"is-etcd-leader"`
 	Name          string `json:"name"`
 	AdvertiseAddr string `json:"advertise-addr"`
+	IsLeader      bool   `json:"is-leader"`
 }
 
 // String implements json marshal
@@ -88,6 +87,29 @@ func (l *LeaderClientWithLock[T]) Close() {
 	}
 }
 
+// rpcLimiter is a customized rate limiter, which delegates Allow of rate.Limiter,
+// and provides an allow list with a higher priority.
+type rpcLimiter struct {
+	limiter   *rate.Limiter
+	allowList []string
+}
+
+func newRPCLimiter(limiter *rate.Limiter, allowList []string) *rpcLimiter {
+	return &rpcLimiter{
+		limiter:   limiter,
+		allowList: allowList,
+	}
+}
+
+func (rl *rpcLimiter) Allow(methodName string) bool {
+	for _, name := range rl.allowList {
+		if name == methodName {
+			return true
+		}
+	}
+	return rl.limiter.Allow()
+}
+
 // PreRPCHook provides some common functionality that should be executed before
 // some RPC, like "forward to leader", "checking rate limit". It should be embedded
 // into an RPC server struct and call PreRPCHook.PreRPC() for every RPC method.
@@ -103,7 +125,7 @@ type PreRPCHook[T RPCClientType] struct {
 	initialized *atomic.Bool
 
 	// rate limiter
-	limiter *rate.Limiter
+	limiter *rpcLimiter
 }
 
 // NewPreRPCHook creates a new PreRPCHook
@@ -113,13 +135,15 @@ func NewPreRPCHook[T RPCClientType](
 	leaderCli *LeaderClientWithLock[T],
 	initialized *atomic.Bool,
 	limiter *rate.Limiter,
+	rpcLimiterAllowList []string,
 ) *PreRPCHook[T] {
+	rpcLim := newRPCLimiter(limiter, rpcLimiterAllowList)
 	return &PreRPCHook[T]{
 		id:          id,
 		leader:      leader,
 		leaderCli:   leaderCli,
 		initialized: initialized,
-		limiter:     limiter,
+		limiter:     rpcLim,
 	}
 }
 
@@ -153,9 +177,8 @@ func (h PreRPCHook[T]) PreRPC(
 }
 
 func (h PreRPCHook[T]) logRateLimit(methodName string, req interface{}) {
-	// TODO: rate limiter based on different sender
-	if h.limiter.Allow() {
-		log.Info("", zap.Any("payload", req), zap.String("request", methodName))
+	if h.limiter.Allow(methodName) {
+		log.Info("Executing rpc", zap.String("request", methodName), zap.Any("payload", req))
 	}
 }
 

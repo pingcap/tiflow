@@ -208,13 +208,14 @@ func TestParseCfg(t *testing.T) {
 				ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
 				ServerWorkerPoolSize:         4,
 			},
-			EnableTwoPhaseScheduler: false,
+			EnableSchedulerV3: true,
 			Scheduler: &config.SchedulerConfig{
 				HeartbeatTick:        2,
 				MaxTaskConcurrency:   10,
 				CheckBalanceInterval: 60000000000,
 			},
 		},
+		ClusterID: "default",
 	}, o.serverConfig)
 }
 
@@ -255,7 +256,7 @@ region-retry-duration = "3s"
 
 [debug]
 enable-db-sorter = false
-enable-2phase-scheduler = true
+enable-scheduler-v3 = true
 [debug.db]
 count = 5
 concurrency = 6
@@ -364,13 +365,14 @@ check-balance-interval = "10s"
 				ServerAckInterval:            config.TomlDuration(1 * time.Second),
 				ServerWorkerPoolSize:         16,
 			},
-			EnableTwoPhaseScheduler: true,
+			EnableSchedulerV3: true,
 			Scheduler: &config.SchedulerConfig{
 				HeartbeatTick:        3,
 				MaxTaskConcurrency:   11,
 				CheckBalanceInterval: config.TomlDuration(10 * time.Second),
 			},
 		},
+		ClusterID: "default",
 	}, o.serverConfig)
 }
 
@@ -512,13 +514,14 @@ cert-allowed-cn = ["dd","ee"]
 				ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
 				ServerWorkerPoolSize:         4,
 			},
-			EnableTwoPhaseScheduler: false,
+			EnableSchedulerV3: true,
 			Scheduler: &config.SchedulerConfig{
 				HeartbeatTick:        2,
 				MaxTaskConcurrency:   10,
 				CheckBalanceInterval: 60000000000,
 			},
 		},
+		ClusterID: "default",
 	}, o.serverConfig)
 }
 
@@ -577,7 +580,7 @@ unknown3 = 3
 			ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
 			ServerWorkerPoolSize:         4,
 		},
-		EnableTwoPhaseScheduler: false,
+		EnableSchedulerV3: true,
 		Scheduler: &config.SchedulerConfig{
 			HeartbeatTick:        2,
 			MaxTaskConcurrency:   10,

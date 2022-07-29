@@ -36,7 +36,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	dlog "github.com/pingcap/tiflow/dm/pkg/log"
@@ -554,16 +554,19 @@ func (s *trackerSuite) TestBatchCreateTableIfNotExist(c *C) {
 		_, err = tracker.GetTableInfo(tables[i])
 		c.Assert(err, ErrorMatches, `.*Table 'testdb.*\.foo.*' doesn't exist`) // drop table success
 	}
-	// 2. recover
+	// 2. test empty load
 	tablesToCreate := map[string]map[string]*model.TableInfo{}
 	tablesToCreate["testdb"] = map[string]*model.TableInfo{}
 	tablesToCreate["testdb2"] = map[string]*model.TableInfo{}
+	err = tracker.BatchCreateTableIfNotExist(tablesToCreate)
+	c.Assert(err, IsNil)
+	// 3. recover
 	for i := range tables {
 		tablesToCreate[tables[i].Schema][tables[i].Name] = tiInfos[i]
 	}
 	err = tracker.BatchCreateTableIfNotExist(tablesToCreate)
 	c.Assert(err, IsNil)
-	// 3. check all create success
+	// 4. check all create success
 	for i := range tables {
 		var ti *model.TableInfo
 		ti, err = tracker.GetTableInfo(tables[i])

@@ -55,23 +55,20 @@ func newOptions() *options {
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
 func (o *options) addFlags(cmd *cobra.Command) {
-	cmd.Flags().StringVar(&o.masterConfig.MasterAddr, "master-addr", o.masterConfig.MasterAddr, "Set the listening address for server master")
+	cmd.Flags().StringVar(&o.masterConfig.Addr, "addr", o.masterConfig.Addr, "Set the listening address for server master")
 	cmd.Flags().StringVar(&o.masterConfig.AdvertiseAddr, "advertise-addr", o.masterConfig.AdvertiseAddr, "Set the advertise listening address for client communication")
+	cmd.Flags().StringSliceVar(&o.masterConfig.ETCDEndpoints, "etcd-endpoints", o.masterConfig.ETCDEndpoints, "etcd endpoints")
 
 	cmd.Flags().StringVar(&o.masterConfig.LogConf.File, "log-file", o.masterConfig.LogConf.File, "log file path")
 	cmd.Flags().StringVar(&o.masterConfig.LogConf.Level, "log-level", o.masterConfig.LogConf.Level, "log level (etc: debug|info|warn|error)")
-
-	cmd.Flags().StringVar(&o.masterConfig.Etcd.Name, "name", o.masterConfig.Etcd.Name, "human readable name for server master")
-	cmd.Flags().StringVar(&o.masterConfig.Etcd.DataDir, "data-dir", o.masterConfig.Etcd.DataDir, "data directory used for embed etcd")
-	cmd.Flags().StringVar(&o.masterConfig.Etcd.InitialCluster, "initial-cluster", o.masterConfig.Etcd.InitialCluster, "initial cluster configuration for etcd bootstrapping")
-	cmd.Flags().StringVar(&o.masterConfig.Etcd.PeerUrls, "peer-urls", o.masterConfig.Etcd.PeerUrls, "URLs for etcd peer traffic")
-	cmd.Flags().StringVar(&o.masterConfig.Etcd.AdvertisePeerUrls, "advertise-peer-urls", o.masterConfig.Etcd.AdvertisePeerUrls, "advertise URLs for etcd peer traffic")
 
 	cmd.Flags().StringSliceVar(&o.masterConfig.FrameMetaConf.Endpoints, "frame-meta-endpoints", o.masterConfig.FrameMetaConf.Endpoints, "framework metastore endpoint")
 	cmd.Flags().StringVar(&o.masterConfig.FrameMetaConf.Auth.User, "frame-meta-user", o.masterConfig.FrameMetaConf.Auth.User, "framework metastore user")
 	cmd.Flags().StringVar(&o.masterConfig.FrameMetaConf.Auth.Passwd, "frame-meta-password", o.masterConfig.FrameMetaConf.Auth.Passwd, "framework metastore password")
 	cmd.Flags().StringVar(&o.masterConfig.FrameMetaConf.Schema, "frame-meta-schema", o.masterConfig.FrameMetaConf.Schema, `schema name for framework meta`)
-	cmd.Flags().StringSliceVar(&o.masterConfig.UserMetaConf.Endpoints, "user-meta-endpoints", o.masterConfig.UserMetaConf.Endpoints, "user metastore endpoint")
+
+	cmd.Flags().StringSliceVar(&o.masterConfig.BusinessMetaConf.Endpoints, "business-meta-endpoints", o.masterConfig.BusinessMetaConf.Endpoints, "business metastore endpoint")
+	cmd.Flags().StringVar(&o.masterConfig.BusinessMetaConf.StoreType, "business-meta-store-type", o.masterConfig.BusinessMetaConf.StoreType, "business metastore store type")
 
 	cmd.Flags().StringVar(&o.masterConfigFilePath, "config", "", "Path of the configuration file")
 
@@ -128,32 +125,24 @@ func (o *options) complete(cmd *cobra.Command) error {
 
 	cmd.Flags().Visit(func(flag *pflag.Flag) {
 		switch flag.Name {
-		case "master-addr":
-			cfg.MasterAddr = o.masterConfig.MasterAddr
+		case "addr":
+			cfg.Addr = o.masterConfig.Addr
 		case "advertise-addr":
 			cfg.AdvertiseAddr = o.masterConfig.AdvertiseAddr
+		case "etcd-endpoints":
+			cfg.ETCDEndpoints = o.masterConfig.ETCDEndpoints
 		case "log-file":
 			cfg.LogConf.File = o.masterConfig.LogConf.File
 		case "log-level":
 			cfg.LogConf.Level = o.masterConfig.LogConf.Level
-		case "name":
-			cfg.Etcd.Name = o.masterConfig.Etcd.Name
-		case "data-dir":
-			cfg.Etcd.DataDir = o.masterConfig.Etcd.DataDir
-		case "initial-cluster":
-			cfg.Etcd.InitialCluster = o.masterConfig.Etcd.InitialCluster
-		case "peer-urls":
-			cfg.Etcd.PeerUrls = o.masterConfig.Etcd.PeerUrls
-		case "advertise-peer-urls":
-			cfg.Etcd.AdvertisePeerUrls = o.masterConfig.Etcd.AdvertisePeerUrls
 		case "frame-meta-endpoints":
 			cfg.FrameMetaConf.Endpoints = o.masterConfig.FrameMetaConf.Endpoints
 		case "frame-meta-user":
 			cfg.FrameMetaConf.Auth.User = o.masterConfig.FrameMetaConf.Auth.User
 		case "frame-meta-password":
 			cfg.FrameMetaConf.Auth.Passwd = o.masterConfig.FrameMetaConf.Auth.Passwd
-		case "user-meta-endpoints":
-			cfg.UserMetaConf.Endpoints = o.masterConfig.UserMetaConf.Endpoints
+		case "business-meta-endpoints":
+			cfg.BusinessMetaConf.Endpoints = o.masterConfig.BusinessMetaConf.Endpoints
 		case "ca":
 			cfg.Security.CAPath = o.masterConfig.Security.CAPath
 		case "cert":

@@ -20,9 +20,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/framework/fake"
 	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
@@ -32,7 +32,7 @@ import (
 )
 
 func runFakeJobCase(ctx context.Context, cfg *config) error {
-	serverMasterEndpoints := []string{cfg.MasterAddr}
+	serverMasterEndpoints := []string{cfg.Addr}
 	etcdEndpoints := []string{cfg.EtcdAddr}
 
 	jobCfg := &fake.Config{
@@ -45,14 +45,17 @@ func runFakeJobCase(ctx context.Context, cfg *config) error {
 		EtcdWatchPrefix: "/fake-job/test/",
 	}
 	e2eCfg := &e2e.FakeJobConfig{
-		EtcdEndpoints: etcdEndpoints, // reuse user meta KV endpoints
+		EtcdEndpoints: etcdEndpoints, // reuse business meta KV endpoints
 		WorkerCount:   jobCfg.WorkerCount,
 		KeyPrefix:     jobCfg.EtcdWatchPrefix,
 	}
-	cli, err := e2e.NewUTCli(ctx, serverMasterEndpoints, etcdEndpoints, tenant.DefaultUserProjectInfo, e2eCfg)
+
+	cli, err := e2e.NewUTCli(ctx, serverMasterEndpoints, etcdEndpoints,
+		tenant.DefaultUserProjectInfo, e2eCfg)
 	if err != nil {
 		return err
 	}
+
 	revision, err := cli.GetRevision(ctx)
 	if err != nil {
 		return err
@@ -75,6 +78,11 @@ func runFakeJobCase(ctx context.Context, cfg *config) error {
 		retry.WithBackoffMaxDelay(8000 /* 8 seconds */),
 		retry.WithMaxTries(15 /* fail after 103 seconds */),
 	)
+	if err != nil {
+		return err
+	}
+
+	err = cli.InitializeMetaClient(jobID)
 	if err != nil {
 		return err
 	}

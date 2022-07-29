@@ -23,8 +23,8 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	ticonfig "github.com/pingcap/tidb/config"
-	"github.com/pingcap/tiflow/cdc"
 	"github.com/pingcap/tiflow/cdc/contextutil"
+	"github.com/pingcap/tiflow/cdc/server"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
@@ -62,6 +62,7 @@ func newOptions() *options {
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
 func (o *options) addFlags(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&o.serverConfig.ClusterID, "cluster-id", "default", "Set cdc cluster id")
 	cmd.Flags().StringVar(&o.serverConfig.Addr, "addr", o.serverConfig.Addr, "Set the listening address")
 	cmd.Flags().StringVar(&o.serverConfig.AdvertiseAddr, "advertise-addr", o.serverConfig.AdvertiseAddr, "Set the advertise listening address for client communication")
 
@@ -142,8 +143,8 @@ func (o *options) run(cmd *cobra.Command) error {
 	}
 
 	util.LogHTTPProxies()
-	cdc.RecordGoRuntimeSettings()
-	server, err := cdc.NewServer(strings.Split(o.serverPdAddr, ","))
+	server.RecordGoRuntimeSettings()
+	server, err := server.New(strings.Split(o.serverPdAddr, ","))
 	if err != nil {
 		return errors.Annotate(err, "new server")
 	}
@@ -232,6 +233,8 @@ func (o *options) complete(cmd *cobra.Command) error {
 					"sort-dir will be set to `{data-dir}/tmp/sorter`. The sort-dir here will be no-op\n"))
 			}
 			cfg.Sorter.SortDir = config.DefaultSortDir
+		case "cluster-id":
+			cfg.ClusterID = o.serverConfig.ClusterID
 		case "pd", "config":
 			// do nothing
 		default:

@@ -98,18 +98,20 @@ func initProcessor4Test(
 }
 `
 	p := newProcessor4Test(ctx, t, newMockTablePipeline, liveness)
-	p.changefeed = orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+	p.changefeed = orchestrator.NewChangefeedReactorState(
+		etcd.DefaultCDCClusterID, ctx.ChangefeedVars().ID)
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	changefeedID := ctx.ChangefeedVars().ID
 	return p, orchestrator.NewReactorStateTester(t, p.changefeed, map[string]string{
-		"/tidb/cdc/capture/" +
-			captureID: `{"id":"` + captureID + `","address":"127.0.0.1:8300"}`,
-		"/tidb/cdc/changefeed/info/" +
-			changefeedID.ID: changefeedInfo,
-		"/tidb/cdc/job/" +
-			ctx.ChangefeedVars().ID.ID: `{"resolved-ts":0,"checkpoint-ts":0,"admin-job-type":0}`,
-		"/tidb/cdc/task/status/" +
-			captureID + "/" + changefeedID.ID: `{"tables":{},"operation":null,"admin-job-type":0}`,
+		fmt.Sprintf("%s/capture/%s",
+			etcd.DefaultClusterAndMetaPrefix,
+			captureID): `{"id":"` + captureID + `","address":"127.0.0.1:8300"}`,
+		fmt.Sprintf("%s/changefeed/info/%s",
+			etcd.DefaultClusterAndNamespacePrefix,
+			changefeedID.ID): changefeedInfo,
+		fmt.Sprintf("%s/changefeed/status/%s",
+			etcd.DefaultClusterAndNamespacePrefix,
+			ctx.ChangefeedVars().ID.ID): `{"resolved-ts":0,"checkpoint-ts":0,"admin-job-type":0}`,
 	})
 }
 
@@ -262,7 +264,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 
 	// since add table indirectly, `preparing` -> `prepared` -> `replicating`
 	// is only support by `SchedulerV3`, enable it.
-	config.GetGlobalServerConfig().Debug.EnableTwoPhaseScheduler = true
+	config.GetGlobalServerConfig().Debug.EnableSchedulerV3 = true
 
 	var err error
 	// init tick
@@ -542,7 +544,7 @@ func TestProcessorError(t *testing.T) {
 		Error: &model.RunningError{
 			Addr:    "127.0.0.1:0000",
 			Code:    "CDC:ErrSinkURIInvalid",
-			Message: "[CDC:ErrSinkURIInvalid]sink uri invalid",
+			Message: "[CDC:ErrSinkURIInvalid]sink uri invalid '%s'",
 		},
 	})
 
@@ -658,7 +660,7 @@ func TestProcessorClose(t *testing.T) {
 	require.Equal(t, p.changefeed.TaskPositions[p.captureInfo.ID].Error, &model.RunningError{
 		Addr:    "127.0.0.1:0000",
 		Code:    "CDC:ErrSinkURIInvalid",
-		Message: "[CDC:ErrSinkURIInvalid]sink uri invalid",
+		Message: "[CDC:ErrSinkURIInvalid]sink uri invalid '%s'",
 	})
 	require.True(t, p.tables[1].(*mockTablePipeline).canceled)
 	require.True(t, p.tables[2].(*mockTablePipeline).canceled)
@@ -744,6 +746,7 @@ func TestSchemaGC(t *testing.T) {
 
 func updateChangeFeedPosition(t *testing.T, tester *orchestrator.ReactorStateTester, cfID model.ChangeFeedID, resolvedTs, checkpointTs model.Ts) {
 	key := etcd.CDCKey{
+		ClusterID:    etcd.DefaultCDCClusterID,
 		Tp:           etcd.CDCKeyTypeChangeFeedStatus,
 		ChangefeedID: cfID,
 	}

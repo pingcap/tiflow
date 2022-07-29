@@ -1,0 +1,112 @@
+// Copyright 2021 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package cli
+
+import (
+	"bytes"
+	"io/ioutil"
+	"os"
+	"testing"
+
+	"github.com/golang/mock/gomock"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/api/v1/mock"
+	"github.com/stretchr/testify/require"
+)
+
+func TestChangefeedListCli(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	cf := mock.NewMockChangefeedInterface(ctrl)
+	f := &mockFactory{changefeeds: cf}
+	cmd := newCmdListChangefeed(f)
+	b := bytes.NewBufferString("")
+	cmd.SetOut(b)
+	cf.EXPECT().List(gomock.Any(), gomock.Any()).Return(&[]model.ChangefeedCommonInfo{
+		{
+			UpstreamID:     1,
+			Namespace:      "default",
+			ID:             "error-1",
+			CheckpointTime: model.JSONTime{},
+			RunningError:   nil,
+			FeedState:      model.StateError,
+		},
+		{
+			UpstreamID:     1,
+			Namespace:      "default",
+			ID:             "normal-2",
+			CheckpointTime: model.JSONTime{},
+			RunningError:   nil,
+			FeedState:      model.StateNormal,
+		},
+		{
+			UpstreamID:     1,
+			Namespace:      "default",
+			ID:             "failed-3",
+			CheckpointTime: model.JSONTime{},
+			RunningError:   nil,
+			FeedState:      model.StateFailed,
+		},
+		{
+			UpstreamID:     1,
+			Namespace:      "default",
+			ID:             "removed-4",
+			CheckpointTime: model.JSONTime{},
+			RunningError:   nil,
+			FeedState:      model.StateRemoved,
+		},
+		{
+			UpstreamID:     1,
+			Namespace:      "default",
+			ID:             "finished-5",
+			CheckpointTime: model.JSONTime{},
+			RunningError:   nil,
+			FeedState:      model.StateFinished,
+		},
+		{
+			UpstreamID:     1,
+			Namespace:      "default",
+			ID:             "stopped-6",
+			CheckpointTime: model.JSONTime{},
+			RunningError:   nil,
+			FeedState:      model.StateStopped,
+		},
+	}, nil).Times(2)
+	// when --all=false, should contains StateNormal, StateError, StateFailed, StateStopped changefeed
+	os.Args = []string{"list", "--all=false"}
+	require.Nil(t, cmd.Execute())
+	out, err := ioutil.ReadAll(b)
+	require.Nil(t, err)
+	require.Contains(t, string(out), "error-1")
+	require.Contains(t, string(out), "normal-2")
+	require.Contains(t, string(out), "stopped-6")
+	require.Contains(t, string(out), "failed-3")
+
+	// when --all=true, should contains all changefeed
+	os.Args = []string{"list", "--all=true"}
+	require.Nil(t, cmd.Execute())
+	out, err = ioutil.ReadAll(b)
+	require.Nil(t, err)
+	require.Contains(t, string(out), "error-1")
+	require.Contains(t, string(out), "normal-2")
+	require.Contains(t, string(out), "failed-3")
+	require.Contains(t, string(out), "removed-4")
+	require.Contains(t, string(out), "finished-5")
+	require.Contains(t, string(out), "stopped-6")
+
+	os.Args = []string{"list", "--all=false"}
+	cf.EXPECT().List(gomock.Any(), gomock.Any()).Return(nil, errors.New("test"))
+	require.NotNil(t, cmd.Execute())
+}

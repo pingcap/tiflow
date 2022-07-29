@@ -109,7 +109,15 @@ func TestValidateApplyParameter(t *testing.T) {
 		},
 		{
 			sinkURI:     "tidb://normal:123456@127.0.0.1:3306?protocol=canal",
-			expectedErr: ".*protocol cannot be configured when using tidb scheme.*",
+			expectedErr: ".*protocol canal is incompatible with tidb scheme.*",
+		},
+		{
+			sinkURI:     "tidb://normal:123456@127.0.0.1:3306?protocol=default",
+			expectedErr: ".*protocol default is incompatible with tidb scheme.*",
+		},
+		{
+			sinkURI:     "tidb://normal:123456@127.0.0.1:3306?protocol=random",
+			expectedErr: ".*protocol .* is incompatible with tidb scheme.*",
 		},
 		{
 			sinkURI:       "blackhole://normal:123456@127.0.0.1:3306?transaction-atomicity=none",
@@ -149,5 +157,40 @@ func TestValidateApplyParameter(t *testing.T) {
 		} else {
 			require.Regexp(t, tc.expectedErr, cfg.validateAndAdjust(parsedSinkURI, true))
 		}
+	}
+}
+
+func TestApplyParameter(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		sinkConfig *SinkConfig
+		sinkURI    string
+		result     string
+	}{
+		{
+			sinkConfig: &SinkConfig{
+				Protocol: "default",
+			},
+			sinkURI: "kafka://127.0.0.1:9092?protocol=whatever",
+			result:  "whatever",
+		},
+		{
+			sinkConfig: &SinkConfig{},
+			sinkURI:    "kafka://127.0.0.1:9092?protocol=default",
+			result:     "default",
+		},
+		{
+			sinkConfig: &SinkConfig{
+				Protocol: "default",
+			},
+			sinkURI: "kafka://127.0.0.1:9092",
+			result:  "default",
+		},
+	}
+	for _, c := range testCases {
+		parsedSinkURI, err := url.Parse(c.sinkURI)
+		require.Nil(t, err)
+		c.sinkConfig.applyParameter(parsedSinkURI)
+		require.Equal(t, c.result, c.sinkConfig.Protocol)
 	}
 }

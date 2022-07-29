@@ -23,15 +23,18 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
-// DefaultNamespace is the default namespace value,
-// all the old changefeed will be put into default namespace
-const DefaultNamespace = "default"
+const (
+	// DefaultNamespace is the default namespace value,
+	// all the old changefeed will be put into default namespace
+	DefaultNamespace = "default"
+)
 
 // ChangeFeedID is the type for change feed ID
 type ChangeFeedID struct {
@@ -45,6 +48,14 @@ type ChangeFeedID struct {
 func DefaultChangeFeedID(id string) ChangeFeedID {
 	return ChangeFeedID{
 		Namespace: DefaultNamespace,
+		ID:        id,
+	}
+}
+
+// ChangeFeedID4Test returns `ChangefeedID` with given namespace and id
+func ChangeFeedID4Test(namespace, id string) ChangeFeedID {
+	return ChangeFeedID{
+		Namespace: namespace,
 		ID:        id,
 	}
 }
@@ -113,6 +124,8 @@ func (s FeedState) IsNeeded(need string) bool {
 // ChangeFeedInfo describes the detail of a ChangeFeed
 type ChangeFeedInfo struct {
 	UpstreamID uint64    `json:"upstream-id"`
+	Namespace  string    `json:"namespace"`
+	ID         string    `json:"changefeed-id"`
 	SinkURI    string    `json:"sink-uri"`
 	CreateTime time.Time `json:"create-time"`
 	// Start sync at this commit ts if `StartTs` is specify or using the CreateTime of changefeed.
@@ -144,7 +157,21 @@ var changeFeedIDRe = regexp.MustCompile(`^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*$`)
 // the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", length no more than "changeFeedIDMaxLen", eg, "simple-changefeed-task".
 func ValidateChangefeedID(changefeedID string) error {
 	if !changeFeedIDRe.MatchString(changefeedID) || len(changefeedID) > changeFeedIDMaxLen {
-		return cerrors.ErrInvalidChangefeedID.GenWithStackByArgs(changeFeedIDMaxLen)
+		return cerror.ErrInvalidChangefeedID.GenWithStackByArgs(changeFeedIDMaxLen)
+	}
+	return nil
+}
+
+const namespaceMaxLen = 128
+
+var namespaceRe = regexp.MustCompile(`^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*$`)
+
+// ValidateNamespace returns true if the namespace matches
+// the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$",
+// length no more than "changeFeedIDMaxLen", eg, "simple-changefeed-task".
+func ValidateNamespace(namespace string) error {
+	if !namespaceRe.MatchString(namespace) || len(namespace) > namespaceMaxLen {
+		return cerror.ErrInvalidNamespace.GenWithStackByArgs(namespaceRe)
 	}
 	return nil
 }
@@ -163,18 +190,12 @@ func (info *ChangeFeedInfo) String() (str string) {
 		log.Error("failed to unmarshal changefeed info", zap.Error(err))
 		return
 	}
-	sinkURIParsed, err := url.Parse(clone.SinkURI)
+
+	clone.SinkURI, err = util.MaskSinkURI(clone.SinkURI)
 	if err != nil {
-		log.Error("failed to parse sink URI", zap.Error(err))
-		return
+		log.Error("failed to marshal changefeed info", zap.Error(err))
 	}
-	if sinkURIParsed.User != nil && sinkURIParsed.User.String() != "" {
-		sinkURIParsed.User = url.UserPassword("username", "password")
-	}
-	if sinkURIParsed.Host != "" {
-		sinkURIParsed.Host = "***"
-	}
-	clone.SinkURI = sinkURIParsed.String()
+
 	str, err = clone.Marshal()
 	if err != nil {
 		log.Error("failed to marshal changefeed info", zap.Error(err))
@@ -211,7 +232,7 @@ func (info *ChangeFeedInfo) GetTargetTs() uint64 {
 // Marshal returns the json marshal format of a ChangeFeedInfo
 func (info *ChangeFeedInfo) Marshal() (string, error) {
 	data, err := json.Marshal(info)
-	return string(data), cerrors.WrapError(cerrors.ErrMarshalFailed, err)
+	return string(data), cerror.WrapError(cerror.ErrMarshalFailed, err)
 }
 
 // Unmarshal unmarshals into *ChangeFeedInfo from json marshal byte slice
@@ -219,7 +240,7 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, &info)
 	if err != nil {
 		return errors.Annotatef(
-			cerrors.WrapError(cerrors.ErrUnmarshalFailed, err), "Unmarshal data: %v", data)
+			cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: %v", data)
 	}
 	return nil
 }
@@ -289,7 +310,7 @@ func (info *ChangeFeedInfo) fixState() {
 		// This corresponds to the case of failure or error.
 		case AdminNone, AdminResume:
 			if info.Error != nil {
-				if cerrors.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code)) {
+				if cerror.IsChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code)) {
 					state = StateFailed
 				} else {
 					state = StateError
@@ -330,6 +351,36 @@ func (info *ChangeFeedInfo) fixSinkProtocol() {
 	rawQuery := sinkURIParsed.Query()
 	protocolStr := rawQuery.Get(config.ProtocolKey)
 
+	fixSinkURI := func(newProtocolStr string) {
+		oldRawQuery := sinkURIParsed.RawQuery
+		newRawQuery := rawQuery.Encode()
+		log.Info("handle incompatible protocol from sink URI",
+			zap.String("oldUriQuery", oldRawQuery),
+			zap.String("fixedUriQuery", newRawQuery))
+
+		sinkURIParsed.RawQuery = newRawQuery
+		fixedSinkURI := sinkURIParsed.String()
+		info.SinkURI = fixedSinkURI
+		info.Config.Sink.Protocol = newProtocolStr
+	}
+
+	// fix mysql sink
+	scheme := sinkURIParsed.Scheme
+	if !config.IsMqScheme(scheme) {
+		if protocolStr != "" || info.Config.Sink.Protocol != "" {
+			maskedSinkURI, _ := util.MaskSinkURI(info.SinkURI)
+			log.Warn("sink URI or sink config contains protocol, but scheme is not mq",
+				zap.String("sinkURI", maskedSinkURI),
+				zap.String("protocol", protocolStr),
+				zap.Any("sinkConfig", info.Config.Sink))
+			// always set protocol of mysql sink to ""
+			rawQuery.Del(config.ProtocolKey)
+			fixSinkURI("")
+		}
+		return
+	}
+
+	// fix MQ sink
 	needsFix := func(protocolStr string) bool {
 		var protocol config.Protocol
 		err = protocol.FromString(protocolStr)
@@ -345,14 +396,7 @@ func (info *ChangeFeedInfo) fixSinkProtocol() {
 	if protocolStr != "" {
 		if needsFix(protocolStr) {
 			rawQuery.Set(config.ProtocolKey, openProtocolStr)
-			oldRawQuery := sinkURIParsed.RawQuery
-			newRawQuery := rawQuery.Encode()
-			sinkURIParsed.RawQuery = newRawQuery
-			fixedSinkURI := sinkURIParsed.String()
-			log.Info("handle incompatible protocol from sink URI",
-				zap.String("oldUriQuery", oldRawQuery),
-				zap.String("fixedUriQuery", newRawQuery))
-			info.SinkURI = fixedSinkURI
+			fixSinkURI(openProtocolStr)
 		}
 	} else {
 		if needsFix(info.Config.Sink.Protocol) {
@@ -369,5 +413,5 @@ func (info *ChangeFeedInfo) HasFastFailError() bool {
 	if info.Error == nil {
 		return false
 	}
-	return cerrors.ChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
+	return cerror.IsChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
 }

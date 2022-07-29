@@ -21,11 +21,12 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/pb"
-	"github.com/pingcap/tiflow/dm/dm/worker"
+	dmconfig "github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/backoff"
+	"github.com/pingcap/tiflow/dm/worker"
 	"github.com/pingcap/tiflow/engine/framework"
+	"github.com/pingcap/tiflow/engine/framework/logutil"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/registry"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm"
@@ -36,7 +37,6 @@ import (
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -68,7 +68,7 @@ func (f workerFactory) DeserializeConfig(configBytes []byte) (registry.WorkerCon
 
 // NewWorkerImpl implements WorkerFactory.NewWorkerImpl
 func (f workerFactory) NewWorkerImpl(ctx *dcontext.Context, workerID frameModel.WorkerID, masterID frameModel.MasterID, conf framework.WorkerConfig) (framework.WorkerImpl, error) {
-	log.L().Info("new dm worker", zap.String("id", workerID), zap.String("master-id", masterID))
+	log.Info("new dm worker", zap.String(logutil.ConstFieldJobKey, masterID), zap.String(logutil.ConstFieldWorkerKey, workerID))
 	return newDMWorker(ctx, masterID, f.workerType, conf.(*dmconfig.SubTaskConfig)), nil
 }
 
@@ -80,13 +80,14 @@ type dmWorker struct {
 	messageAgent dmpkg.MessageAgent
 	autoResume   *worker.AutoResumeInfo
 
-	mu                 sync.RWMutex
-	cfg                *dmconfig.SubTaskConfig
-	storageWriteHandle broker.Handle
-	stage              metadata.TaskStage
-	workerType         frameModel.WorkerType
-	taskID             string
-	masterID           frameModel.MasterID
+	mu                    sync.RWMutex
+	cfg                   *dmconfig.SubTaskConfig
+	storageWriteHandle    broker.Handle
+	stage                 metadata.TaskStage
+	workerType            frameModel.WorkerType
+	taskID                string
+	masterID              frameModel.MasterID
+	messageHandlerManager p2p.MessageHandlerManager
 }
 
 func newDMWorker(ctx *dcontext.Context, masterID frameModel.MasterID, workerType framework.WorkerType, cfg *dmconfig.SubTaskConfig) *dmWorker {
@@ -106,7 +107,7 @@ func newDMWorker(ctx *dcontext.Context, masterID frameModel.MasterID, workerType
 
 	// nolint:errcheck
 	ctx.Deps().Construct(func(m p2p.MessageHandlerManager) (p2p.MessageHandlerManager, error) {
-		w.messageAgent = dmpkg.NewMessageAgentImpl(w.taskID, w, m)
+		w.messageHandlerManager = m
 		return m, nil
 	})
 	return w
@@ -114,7 +115,8 @@ func newDMWorker(ctx *dcontext.Context, masterID frameModel.MasterID, workerType
 
 // InitImpl implements lib.WorkerImpl.InitImpl
 func (w *dmWorker) InitImpl(ctx context.Context) error {
-	log.L().Info("initializing the dm worker", zap.String("task-id", w.taskID))
+	w.Logger().Info("initializing the dm worker", zap.String("task-id", w.taskID))
+	w.messageAgent = dmpkg.NewMessageAgentImpl(w.taskID, w, w.messageHandlerManager, w.Logger())
 	if err := w.messageAgent.Init(ctx); err != nil {
 		return err
 	}
@@ -140,39 +142,41 @@ func (w *dmWorker) Tick(ctx context.Context) error {
 	if err := w.tryUpdateStatus(ctx); err != nil {
 		return err
 	}
+	// update unit status periodically to update metrics
+	w.unitHolder.CheckAndUpdateStatus(ctx)
 	return w.messageAgent.Tick(ctx)
 }
 
 // Workload implements lib.WorkerImpl.Worload
 func (w *dmWorker) Workload() model.RescUnit {
-	log.L().Info("dmworker.Workload")
+	w.Logger().Info("dmworker.Workload")
 	return 0
 }
 
 // OnMasterFailover implements lib.WorkerImpl.OnMasterFailover
 func (w *dmWorker) OnMasterFailover(reason framework.MasterFailoverReason) error {
-	log.L().Info("dmworker.OnMasterFailover")
+	w.Logger().Info("dmworker.OnMasterFailover")
 	return nil
 }
 
 // OnMasterMessage implements lib.WorkerImpl.OnMasterMessage
 func (w *dmWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
-	log.L().Info("dmworker.OnMasterMessage", zap.String("topic", topic), zap.Any("message", message))
+	w.Logger().Info("dmworker.OnMasterMessage", zap.String("topic", topic), zap.Any("message", message))
 	return nil
 }
 
 // CloseImpl implements lib.WorkerImpl.CloseImpl
 func (w *dmWorker) CloseImpl(ctx context.Context) error {
-	log.L().Info("close the dm worker", zap.String("task-id", w.taskID))
+	w.Logger().Info("close the dm worker", zap.String("task-id", w.taskID))
 	var recordErr error
 	// unregister jobmaster client
 	if err := w.messageAgent.UpdateClient(w.masterID, nil); err != nil {
-		log.L().Error("failed to update message client", logutil.ShortError(err))
+		w.Logger().Error("failed to update message client", zap.Error(err))
 		recordErr = err
 	}
 	w.unitHolder.Close(ctx)
 	if err := w.messageAgent.Close(ctx); err != nil {
-		log.L().Error("failed to close message client", logutil.ShortError(err))
+		w.Logger().Error("failed to close message client", zap.Error(err))
 		recordErr = err
 	}
 	return recordErr
@@ -183,7 +187,7 @@ func (w *dmWorker) setupStorage(ctx context.Context) error {
 	rid := dm.NewDMResourceID(w.cfg.Name, w.cfg.SourceID)
 	h, err := w.OpenStorage(ctx, rid)
 	for status.Code(err) == codes.Unavailable {
-		log.L().Info("simple retry", zap.Error(err))
+		w.Logger().Info("simple retry", zap.Error(err))
 		time.Sleep(time.Second)
 		h, err = w.OpenStorage(ctx, rid)
 	}
@@ -207,18 +211,18 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 	if currentStage == previousStage {
 		return nil
 	}
-	log.L().Info("task stage changed", zap.String("task-id", w.taskID), zap.Int("from", int(previousStage)), zap.Int("to", int(currentStage)))
+	w.Logger().Info("task stage changed", zap.String("task-id", w.taskID), zap.Int("from", int(previousStage)), zap.Int("to", int(currentStage)))
 	w.setStage(currentStage)
 
 	status := w.workerStatus()
 	if currentStage != metadata.StageFinished {
-		log.L().Info("update status", zap.String("task-id", w.taskID), zap.String("status", string(status.ExtBytes)))
+		w.Logger().Info("update status", zap.String("task-id", w.taskID), zap.String("status", string(status.ExtBytes)))
 		return w.UpdateStatus(ctx, status)
 	}
 
 	if w.workerType == framework.WorkerDMDump {
 		if err := w.persistStorage(ctx); err != nil {
-			log.L().Error("failed to persist storage", zap.Error(err))
+			w.Logger().Error("failed to persist storage", zap.Error(err))
 			// persist in next tick
 			return nil
 		}
@@ -261,16 +265,16 @@ func (w *dmWorker) checkAndAutoResume(ctx context.Context) error {
 		return nil
 	}
 
-	log.L().Error("task runs with error", zap.String("task-id", w.taskID), zap.Any("error msg", result.Errors))
+	w.Logger().Error("task runs with error", zap.String("task-id", w.taskID), zap.Any("error msg", result.Errors))
 	subtaskStage := &pb.SubTaskStatus{
 		Stage:  pb.Stage_Paused,
 		Result: result,
 	}
 	strategy := w.autoResume.CheckResumeSubtask(subtaskStage, dmconfig.DefaultBackoffRollback)
-	log.L().Info("got auto resume strategy", zap.String("task-id", w.taskID), zap.Stringer("strategy", strategy))
+	w.Logger().Info("got auto resume strategy", zap.String("task-id", w.taskID), zap.Stringer("strategy", strategy))
 
 	if strategy == worker.ResumeDispatch {
-		log.L().Info("dispatch auto resume task", zap.String("task-id", w.taskID))
+		w.Logger().Info("dispatch auto resume task", zap.String("task-id", w.taskID))
 		return w.unitHolder.Resume(ctx)
 	}
 	return nil

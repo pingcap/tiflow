@@ -191,6 +191,9 @@ func NewContext4Test(baseCtx context.Context, withChangefeedVars bool) Context {
 			AdvertiseAddr: "127.0.0.1:0000",
 			Version:       version.ReleaseVersion,
 		},
+		EtcdClient: &etcd.CDCEtcdClient{
+			ClusterID: etcd.DefaultCDCClusterID,
+		},
 	})
 	if withChangefeedVars {
 		ctx = WithChangefeedVars(ctx, &ChangefeedVars{

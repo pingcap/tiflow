@@ -1,19 +1,16 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: metastore
+  name: metastore-framework
   labels:
-    app: metastore
+    app: metastore-framework
 spec:
   ports:
     - name: port-mysql # note the name is no more than 15 characters
-      port: 3306
+      port: 13306
       targetPort: 3306
-    - name: port-etcd # note the name is no more than 15 characters
-      port: 12479
-      targetPort: 2479
   selector:
-    app: metastore
+    app: metastore-framework
 
 ---
 apiVersion: apps/v1
@@ -21,18 +18,18 @@ kind: StatefulSet
 metadata:
   name: metastore-framework-mysql
   labels:
-    app: metastore
+    app: metastore-framework
 spec:
   selector:
     matchLabels:
-      app: metastore
-  serviceName: metastore
+      app: metastore-framework
+  serviceName: metastore-framework
   replicas: 1
   podManagementPolicy: Parallel
   template:
     metadata:
       labels:
-        app: metastore
+        app: metastore-framework
     spec:
       containers:
         - name: metastore-framework-mysql
@@ -59,45 +56,66 @@ spec:
           requests:
             storage: 5Gi
 
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: metastore-business
+  labels:
+    app: metastore-business
+spec:
+  ports:
+    - name: port-etcd # note the name is no more than 15 characters
+      port: 12479
+      targetPort: 2479
+  selector:
+    app: metastore-business
+
+
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: metastore-user-etcd
+  name: metastore-business-etcd
   labels:
-    app: metastore
+    app: metastore-business
 spec:
   selector:
     matchLabels:
-      app: metastore
-  serviceName: metastore
+      app: metastore-business
+  serviceName: metastore-business
   replicas: 1
   podManagementPolicy: Parallel
   template:
     metadata:
       labels:
-        app: metastore
+        app: metastore-business
     spec:
       containers:
-        - name: metastore-user-etcd
+        - name: metastore-business-etcd
           image: quay.io/coreos/etcd:v3.5.4
           imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - mountPath: "/data/etcd"
+              name: metastore-business-etcd
           ports:
             - containerPort: 2479
               name: port-etcd
           command:
             - "etcd"
           args:
-            - "--name=metastore-user-etcd"
-            - "--advertise-client-urls=http://0.0.0.0:2479"
+            - "--name=metastore-business-etcd"
+            - "--data-dir=/data/etcd"
+            - "--advertise-client-urls=http://metastore-business:12479"
             - "--listen-client-urls=http://0.0.0.0:2479"
             - "--listen-peer-urls=http://127.0.0.1:2480"
             - "--initial-advertise-peer-urls=http://127.0.0.1:2480"
-            - "--initial-cluster=metastore-user-etcd=http://127.0.0.1:2480"
+            - "--initial-cluster=metastore-business-etcd=http://127.0.0.1:2480"
             - "--initial-cluster-state=new"
   volumeClaimTemplates:
     - metadata:
-        name: metastore-user-etcd
+        name: metastore-business-etcd
       spec:
         accessModes:
           - ReadWriteOnce

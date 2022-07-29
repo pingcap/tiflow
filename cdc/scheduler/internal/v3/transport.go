@@ -113,7 +113,7 @@ func (t *p2pTransport) Send(
 		to := value.To
 		client := t.messageRouter.GetClient(to)
 		if client == nil {
-			log.Warn("tpscheduler: no message client found, retry later",
+			log.Warn("schedulerv3: no message client found, retry later",
 				zap.String("namespace", t.changefeed.Namespace),
 				zap.String("changefeed", t.changefeed.ID),
 				zap.String("to", to))
@@ -126,7 +126,7 @@ func (t *p2pTransport) Send(
 				return nil
 			}
 			if cerror.ErrPeerMessageClientClosed.Equal(err) {
-				log.Warn("tpscheduler: peer messaging client is closed"+
+				log.Warn("schedulerv3: peer messaging client is closed"+
 					"while trying to send a message through it. "+
 					"Report a bug if this warning repeats",
 					zap.String("namespace", t.changefeed.Namespace),
@@ -139,7 +139,7 @@ func (t *p2pTransport) Send(
 	}
 
 	if len(msgs) != 0 {
-		log.Debug("tpscheduler: all messages sent",
+		log.Debug("schedulerv3: all messages sent",
 			zap.String("namespace", t.changefeed.Namespace),
 			zap.String("changefeed", t.changefeed.ID),
 			zap.Int("len", len(msgs)))

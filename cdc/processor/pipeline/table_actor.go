@@ -288,7 +288,9 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		t.redoManager.Enabled(), splitTxn)
 	sorterNode := newSorterNode(t.tableName, t.tableID,
 		t.replicaInfo.StartTs, flowController,
-		t.mounter, &t.state, t.changefeedID, t.redoManager.Enabled())
+		t.mounter, &t.state, t.changefeedID, t.redoManager.Enabled(),
+		t.upstream.PDClient,
+	)
 	t.sortNode = sorterNode
 	sortActorNodeContext := newContext(sdtTableContext, t.tableName,
 		t.globalVars.TableActorSystem.Router(),
@@ -498,5 +500,9 @@ var startPuller = func(t *tableActor, ctx *actorNodeContext) error {
 }
 
 var startSorter = func(t *tableActor, ctx *actorNodeContext) error {
-	return t.sortNode.start(ctx, t.wg, t.actorID, t.router)
+	eventSorter, err := createSorter(ctx, t.tableName, t.tableID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return t.sortNode.start(ctx, t.wg, t.actorID, t.router, eventSorter)
 }

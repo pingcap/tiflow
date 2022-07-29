@@ -39,35 +39,24 @@ const (
 //					\			/
 //					   etcdIml(KVClient)
 
-// etcdImpl is the etcd implement of KVClient interface
+// etcdKVClientImpl is the etcd implement of KVClient interface
 // Since we always get the latest data, we will set etcd-server with autocompact parameters
 // -auto-compaction-mode: revision
 // -auto-compaction-retention: 100
-type etcdImpl struct {
+type etcdKVClientImpl struct {
 	cli     *clientv3.Client
 	closeMu sync.Mutex
 }
 
-// NewEtcdImpl creates a new etcdImpl instance
-func NewEtcdImpl(config *metaModel.StoreConfig) (*etcdImpl, error) {
-	cli, err := clientv3.New(clientv3.Config{
-		Endpoints: config.Endpoints,
-		// [TODO] TLS
-		// Username: conf.Auth.Username,
-		// Password: conf.Auth.Password,
-		// [TODO] LOG
-	})
-	if err != nil {
-		return nil, errors.ErrMetaNewClientFail.Wrap(err)
-	}
-
-	c := &etcdImpl{
+// NewEtcdKVClientImpl creates a new etcdKVClientImpl instance
+func NewEtcdKVClientImpl(cli *clientv3.Client) (*etcdKVClientImpl, error) {
+	c := &etcdKVClientImpl{
 		cli: cli,
 	}
 	return c, nil
 }
 
-func (c *etcdImpl) getEtcdOptions(op metaModel.Op) []clientv3.OpOption {
+func (c *etcdKVClientImpl) getEtcdOptions(op metaModel.Op) []clientv3.OpOption {
 	etcdOps := make([]clientv3.OpOption, 0, 1)
 	switch {
 	case op.IsOptsWithPrefix():
@@ -81,7 +70,7 @@ func (c *etcdImpl) getEtcdOptions(op metaModel.Op) []clientv3.OpOption {
 	return etcdOps
 }
 
-func (c *etcdImpl) getEtcdOp(op metaModel.Op) clientv3.Op {
+func (c *etcdKVClientImpl) getEtcdOp(op metaModel.Op) clientv3.Op {
 	opts := c.getEtcdOptions(op)
 	switch {
 	case op.IsGet():
@@ -102,7 +91,7 @@ func (c *etcdImpl) getEtcdOp(op metaModel.Op) clientv3.Op {
 	panic("unknown op type")
 }
 
-func (c *etcdImpl) Put(ctx context.Context, key, val string) (*metaModel.PutResponse, metaModel.Error) {
+func (c *etcdKVClientImpl) Put(ctx context.Context, key, val string) (*metaModel.PutResponse, metaModel.Error) {
 	op := metaModel.OpPut(key, val)
 	etcdResp, err := c.cli.Do(ctx, c.getEtcdOp(op))
 	if err != nil {
@@ -113,7 +102,7 @@ func (c *etcdImpl) Put(ctx context.Context, key, val string) (*metaModel.PutResp
 	return makePutResp(putRsp), nil
 }
 
-func (c *etcdImpl) Get(ctx context.Context, key string, opts ...metaModel.OpOption) (*metaModel.GetResponse, metaModel.Error) {
+func (c *etcdKVClientImpl) Get(ctx context.Context, key string, opts ...metaModel.OpOption) (*metaModel.GetResponse, metaModel.Error) {
 	op := metaModel.OpGet(key, opts...)
 	if err := op.CheckValidOp(); err != nil {
 		return nil, &etcdError{
@@ -130,7 +119,7 @@ func (c *etcdImpl) Get(ctx context.Context, key string, opts ...metaModel.OpOpti
 	return makeGetResp(getRsp), nil
 }
 
-func (c *etcdImpl) Delete(ctx context.Context, key string, opts ...metaModel.OpOption) (*metaModel.DeleteResponse, metaModel.Error) {
+func (c *etcdKVClientImpl) Delete(ctx context.Context, key string, opts ...metaModel.OpOption) (*metaModel.DeleteResponse, metaModel.Error) {
 	op := metaModel.OpDelete(key, opts...)
 	if err := op.CheckValidOp(); err != nil {
 		return nil, &etcdError{
@@ -147,7 +136,7 @@ func (c *etcdImpl) Delete(ctx context.Context, key string, opts ...metaModel.OpO
 	return makeDeleteResp(delRsp), nil
 }
 
-func (c *etcdImpl) Do(ctx context.Context, op metaModel.Op) (metaModel.OpResponse, metaModel.Error) {
+func (c *etcdKVClientImpl) Do(ctx context.Context, op metaModel.Op) (metaModel.OpResponse, metaModel.Error) {
 	if err := op.CheckValidOp(); err != nil {
 		return metaModel.OpResponse{}, &etcdError{
 			displayed: errors.ErrMetaOptionInvalid.Wrap(err),
@@ -188,14 +177,14 @@ type etcdTxn struct {
 	clientv3.Txn
 
 	mu  sync.Mutex
-	kv  *etcdImpl
+	kv  *etcdKVClientImpl
 	ops []clientv3.Op
 	// cache error to make chain operation work
 	Err       *etcdError
 	committed bool
 }
 
-func (c *etcdImpl) Txn(ctx context.Context) metaModel.Txn {
+func (c *etcdKVClientImpl) Txn(ctx context.Context) metaModel.Txn {
 	return &etcdTxn{
 		Txn: c.cli.Txn(ctx),
 		kv:  c,
@@ -203,19 +192,11 @@ func (c *etcdImpl) Txn(ctx context.Context) metaModel.Txn {
 	}
 }
 
-func (c *etcdImpl) Close() error {
-	c.closeMu.Lock()
-	defer c.closeMu.Unlock()
-	if c.cli != nil {
-		err := c.cli.Close()
-		c.cli = nil
-		return err
-	}
-
+func (c *etcdKVClientImpl) Close() error {
 	return nil
 }
 
-func (c *etcdImpl) GenEpoch(ctx context.Context) (int64, error) {
+func (c *etcdKVClientImpl) GenEpoch(ctx context.Context) (int64, error) {
 	resp, err := c.cli.Put(ctx, FakeKey, FakeValue)
 	if err != nil {
 		return 0, etcdErrorFromOpFail(errors.WrapError(errors.ErrMasterEtcdEpochFail, err))

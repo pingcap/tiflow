@@ -23,8 +23,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/dig"
 
-	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/pb"
+	dmconfig "github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/registry"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
@@ -45,7 +45,7 @@ type workerParamListForTest struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
 	FrameMetaClient       pkgOrm.Client
-	UserRawKVClient       metaModel.KVClientEx
+	BusinessClientConn    metaModel.ClientConn
 	ResourceBroker        broker.Broker
 }
 
@@ -61,7 +61,7 @@ func TestFactory(t *testing.T) {
 		MessageHandlerManager: messageHandlerManager,
 		MessageSender:         p2p.NewMockMessageSender(),
 		FrameMetaClient:       cli,
-		UserRawKVClient:       kvmock.NewMetaMock(),
+		BusinessClientConn:    kvmock.NewMockClientConn(),
 		ResourceBroker:        broker.NewBrokerForTesting("exector-id"),
 	}
 	require.NoError(t, dp.Provide(func() workerParamListForTest {
@@ -89,13 +89,13 @@ func TestWorker(t *testing.T) {
 		return p2p.NewMockMessageHandlerManager()
 	}))
 	dmWorker := newDMWorker(dctx, "master-id", framework.WorkerDMDump, &dmconfig.SubTaskConfig{})
-	require.NotNil(t, dmWorker.messageAgent)
 	unitHolder := &mockUnitHolder{}
 	dmWorker.unitHolder = unitHolder
 	dmWorker.BaseWorker = framework.MockBaseWorker("worker-id", "master-id", dmWorker)
 	require.NoError(t, dmWorker.Init(context.Background()))
 	// tick
 	unitHolder.On("Stage").Return(metadata.StageRunning, nil).Twice()
+	unitHolder.On("CheckAndUpdateStatus")
 	require.NoError(t, dmWorker.Tick(context.Background()))
 	unitHolder.On("Stage").Return(metadata.StageRunning, nil).Twice()
 	require.NoError(t, dmWorker.Tick(context.Background()))

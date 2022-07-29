@@ -17,7 +17,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -79,7 +79,7 @@ func TestRequestHeader(t *testing.T) {
 
 		return &http.Response{
 			StatusCode: http.StatusOK,
-			Body:       ioutil.NopCloser(bytes.NewReader([]byte{})),
+			Body:       io.NopCloser(bytes.NewReader([]byte{})),
 		}, nil
 	}))
 	req := NewRequestWithClient(&url.URL{Path: "/test"}, "", nil).WithMethod(HTTPMethodGet)

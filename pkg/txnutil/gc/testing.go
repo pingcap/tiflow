@@ -25,6 +25,7 @@ import (
 type MockPDClient struct {
 	pd.Client
 	UpdateServiceGCSafePointFunc func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error)
+	ClusterID                    uint64
 }
 
 // UpdateServiceGCSafePoint implements pd.Client.UpdateServiceGCSafePoint.
@@ -40,3 +41,8 @@ func (m *MockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
 // Close implements pd.Client.Close()
 // This method is used in some unit test cases.
 func (m *MockPDClient) Close() {}
+
+// GetClusterID gets the cluster ID from PD.
+func (m *MockPDClient) GetClusterID(ctx context.Context) uint64 {
+	return m.ClusterID
+}

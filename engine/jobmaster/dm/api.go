@@ -15,12 +15,10 @@ package dm
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sync"
 
 	"github.com/pingcap/errors"
-	pb "github.com/pingcap/tiflow/engine/enginepb"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
@@ -246,73 +244,4 @@ func (jm *JobMaster) BinlogSchemaTask(ctx context.Context, taskID string, req *d
 		return &dmpkg.CommonTaskResponse{ErrorMsg: err.Error()}
 	}
 	return resp.(*dmpkg.CommonTaskResponse)
-}
-
-// DebugJob debugs job.
-func (jm *JobMaster) DebugJob(ctx context.Context, req *pb.DebugJobRequest) *pb.DebugJobResponse {
-	var (
-		resp interface{}
-		err  error
-	)
-	switch req.Command {
-	case dmpkg.QueryStatus:
-		var jsonArg struct {
-			Tasks []string
-		}
-		if err := json.Unmarshal([]byte(req.JsonArg), &jsonArg); err != nil {
-			return &pb.DebugJobResponse{Err: &pb.Error{
-				Code:    pb.ErrorCode_UnknownError,
-				Message: err.Error(),
-			}}
-		}
-		resp, err = jm.QueryJobStatus(ctx, jsonArg.Tasks)
-	case dmpkg.OperateTask:
-		var jsonArg struct {
-			Tasks []string
-			Op    dmpkg.OperateType
-		}
-		if err := json.Unmarshal([]byte(req.JsonArg), &jsonArg); err != nil {
-			return &pb.DebugJobResponse{Err: &pb.Error{
-				Code:    pb.ErrorCode_UnknownError,
-				Message: err.Error(),
-			}}
-		}
-		err = jm.OperateTask(ctx, jsonArg.Op, nil, jsonArg.Tasks)
-	case dmpkg.GetJobCfg:
-		resp, err = jm.GetJobCfg(ctx)
-	case dmpkg.Binlog:
-		var binlogReq dmpkg.BinlogRequest
-		if err := json.Unmarshal([]byte(req.JsonArg), &binlogReq); err != nil {
-			return &pb.DebugJobResponse{Err: &pb.Error{
-				Code:    pb.ErrorCode_UnknownError,
-				Message: err.Error(),
-			}}
-		}
-		resp, err = jm.Binlog(ctx, &binlogReq)
-	case dmpkg.BinlogSchema:
-		var binlogSchemaReq dmpkg.BinlogSchemaRequest
-		if err := json.Unmarshal([]byte(req.JsonArg), &binlogSchemaReq); err != nil {
-			return &pb.DebugJobResponse{Err: &pb.Error{
-				Code:    pb.ErrorCode_UnknownError,
-				Message: err.Error(),
-			}}
-		}
-		resp = jm.BinlogSchema(ctx, &binlogSchemaReq)
-	default:
-	}
-
-	if err != nil {
-		return &pb.DebugJobResponse{Err: &pb.Error{
-			Code:    pb.ErrorCode_UnknownError,
-			Message: err.Error(),
-		}}
-	}
-	jsonRet, err := json.Marshal(resp)
-	if err != nil {
-		return &pb.DebugJobResponse{Err: &pb.Error{
-			Code:    pb.ErrorCode_UnknownError,
-			Message: err.Error(),
-		}}
-	}
-	return &pb.DebugJobResponse{JsonRet: string(jsonRet)}
 }
