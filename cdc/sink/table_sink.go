@@ -81,7 +81,7 @@ func (t *tableSink) FlushRowChangedEvents(
 	}
 	t.bufferMu.Lock()
 	defer t.bufferMu.Unlock()
-	i := sort.Search(t.buffer.Size(), func(i int) bool {
+	i := sort.Search(t.buffer.Len(), func(i int) bool {
 		event, _ := t.buffer.At(i)
 		return event.CommitTs > resolvedTs
 	})

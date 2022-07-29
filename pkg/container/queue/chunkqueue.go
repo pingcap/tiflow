@@ -21,10 +21,11 @@ import (
 )
 
 const (
-	// the size of each chunk is 1024 bytes (1kB) by default
+	// defaultSizePerChunk set the default size of each chunk be 1024 bytes (1kB)
 	defaultSizePerChunk = 1024
-	// the minimum length of each chunk is 16
-	minimumChunkLen      = 16
+	// minimumChunkLen is the minimum length of each chunk
+	minimumChunkLen = 16
+	// defaultPitchArrayLen is the default length of the chunk pointers array
 	defaultPitchArrayLen = 16
 )
 
@@ -38,9 +39,9 @@ type ChunkQueue[T any] struct {
 	// size is number of elements in queue
 	size int
 
-	// chunks is an array storing ptr
+	// chunks is an array to store chunk pointers
 	chunks []*chunk[T]
-	// chunkLength is the max number of elements stored in every chunk
+	// chunkLength is the max number of elements stored in every chunk.
 	chunkLength  int
 	chunkPool    sync.Pool
 	defaultValue T
@@ -91,11 +92,6 @@ func NewChunkQueueLeastCapacity[T any](minCapacity int) *ChunkQueue[T] {
 	return q
 }
 
-// Size returns the number of elements in queue
-func (q *ChunkQueue[T]) Size() int {
-	return q.size
-}
-
 // Len returns the number of elements in queue
 func (q *ChunkQueue[T]) Len() int {
 	return q.size
@@ -117,7 +113,9 @@ func (q *ChunkQueue[T]) At(idx int) (T, bool) {
 	if idx < 0 || idx >= q.size {
 		return q.defaultValue, false
 	}
-	i := q.chunks[q.head].l + idx
+	// There may some space in the former part of the chunk. Added the bias and
+	// index, we can get locate the element by division
+	i := q.firstChunk().l + idx
 	return q.chunks[q.head+i/q.chunkLength].data[i%q.chunkLength], true
 }
 
@@ -126,7 +124,8 @@ func (q *ChunkQueue[T]) Replace(idx int, val T) bool {
 	if idx < 0 || idx >= q.size {
 		return false
 	}
-	i := q.chunks[q.head].l + idx
+	// same with At()
+	i := q.firstChunk().l + idx
 	q.chunks[q.head+i/q.chunkLength].data[i%q.chunkLength] = val
 	return true
 }
@@ -154,7 +153,7 @@ func (q *ChunkQueue[T]) Tail() (T, bool) {
 // extend extends the space by adding chunk(s) to the queue
 func (q *ChunkQueue[T]) extend(n int) {
 	if n <= 0 {
-		n = 1
+		return
 	}
 	chunksNum := (n + q.chunkLength - 1) / q.chunkLength
 
@@ -175,27 +174,31 @@ func (q *ChunkQueue[T]) extend(n int) {
 	}
 }
 
-// reallocateChunksArray extends/shrinks the []chunks array,
-// and then moves the pointers to head
+// reallocateChunksArray extends (for need > 0) or shrinks (need < 0) the chunk
+// pointers array []*chunks, and then eliminates the former spaces
 func (q *ChunkQueue[T]) reallocateChunksArray(need int) {
 	used := q.tail - q.head
 	newLen := len(q.chunks)
+	// adjust the array length
 	switch {
 	case need < 0:
 		if newLen <= defaultPitchArrayLen {
 			newLen = defaultPitchArrayLen
 		}
-	case need >= 0:
-		// Twice the array if more than a half will be in use
+	case need > 0:
+		// Expand the array if no enough space
 		for used+need+1 >= newLen {
 			newLen *= 2
 		}
 	}
 	if newLen != len(q.chunks) {
+		// If the length changed, allocate a new array and do copy
 		newChunks := make([]*chunk[T], newLen, newLen)
 		copy(newChunks[:used], q.chunks[q.head:q.tail])
 		q.chunks = newChunks
 	} else if q.head > 0 {
+		// If the allocation doesn't change array length, then no need to
+		// create a new array, and only move the elements to head
 		copy(q.chunks[:used], q.chunks[q.head:q.tail])
 		for i := used; i < q.tail; i++ {
 			q.chunks[i] = nil
@@ -222,7 +225,7 @@ func (q *ChunkQueue[T]) Enqueue(v T) {
 func (q *ChunkQueue[T]) EnqueueMany(vals ...T) {
 	cnt, n := 0, len(vals)
 	c := q.lastChunk()
-	if q.Cap()-q.Size() < n {
+	if q.Cap()-q.Len() < n {
 		q.extend(n - (q.chunkLength - c.r))
 	}
 
@@ -245,7 +248,8 @@ func (q *ChunkQueue[T]) EnqueueMany(vals ...T) {
 	}
 }
 
-// Dequeue dequeues an element from head
+// Dequeue dequeues an element from head. The second return value is true on
+// success, and false if the queue is empty and no element can be popped
 func (q *ChunkQueue[T]) Dequeue() (T, bool) {
 	if q.Empty() {
 		return q.defaultValue, false
@@ -278,10 +282,11 @@ func (q *ChunkQueue[T]) popChunk() {
 
 // DequeueAll dequeues all elements in the queue
 func (q *ChunkQueue[T]) DequeueAll() ([]T, bool) {
-	return q.DequeueMany(q.Size())
+	return q.DequeueMany(q.Len())
 }
 
-// DequeueMany dequeues n elements at a time
+// DequeueMany dequeues n elements at a time. The second return value is true
+// if n elements were popped out, and false otherwise.
 func (q *ChunkQueue[T]) DequeueMany(n int) ([]T, bool) {
 	if n < 0 {
 		return nil, false
@@ -325,8 +330,8 @@ func (q *ChunkQueue[T]) Clear() {
 			q.popChunk()
 		}
 	}
-	// Shink the chunks array
-	q.reallocateChunksArray(-1)
+	// Shrink the chunks array
+	q.Shrink()
 }
 
 // Shrink shrinks the space of the chunks array.

@@ -40,9 +40,9 @@ func (c *chunk[T]) reset() {
 	c.prev, c.next, c.queue = nil, nil, nil
 }
 
-func newChunk[T any](sz int, q *ChunkQueue[T]) *chunk[T] {
+func newChunk[T any](size int, q *ChunkQueue[T]) *chunk[T] {
 	return &chunk[T]{
-		data:  make([]T, sz, sz),
+		data:  make([]T, size, size),
 		queue: q,
 	}
 }

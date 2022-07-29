@@ -223,7 +223,7 @@ func (a *Agent) popPendingOps() (opsToApply []*agentOperation) {
 	a.pendingOpsMu.Lock()
 	defer a.pendingOpsMu.Unlock()
 
-	for !a.pendingOps.Empty() {
+	if !a.pendingOps.Empty() {
 		opsToApply, _ = a.pendingOps.DequeueAll()
 	}
 	return

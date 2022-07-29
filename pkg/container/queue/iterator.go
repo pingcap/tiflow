@@ -49,7 +49,7 @@ func (q *ChunkQueue[T]) End() *ChunkQueueIterator[T] {
 	}
 }
 
-// GetIterator returns a iterator of a given index, and nil for invalid indices
+// GetIterator returns an iterator of a given index and nil for invalid indices
 func (q *ChunkQueue[T]) GetIterator(idx int) *ChunkQueueIterator[T] {
 	if idx < 0 || idx >= q.size {
 		return nil

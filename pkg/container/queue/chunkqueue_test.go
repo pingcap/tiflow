@@ -32,7 +32,7 @@ func TestChunkQueueCommon(t *testing.T) {
 	q := NewChunkQueue[int]()
 
 	q.Enqueue(10)
-	require.Equal(t, q.Size(), 1)
+	require.Equal(t, q.Len(), 1)
 	v, ok := q.At(0)
 	require.Equal(t, v, 10)
 	require.True(t, ok)
@@ -47,22 +47,22 @@ func TestChunkQueueCommon(t *testing.T) {
 		adds = append(adds, i)
 	}
 	q.EnqueueMany(adds...)
-	require.Equal(t, testCaseSize, q.Size(), q.Len())
+	require.Equal(t, testCaseSize, q.Len(), q.Len())
 	vals, ok := q.DequeueMany(testCaseSize * 3 / 4)
 	require.True(t, ok)
 	for i, v := range vals {
 		require.Equal(t, adds[i], v)
 	}
-	require.Equal(t, testCaseSize-testCaseSize*3/4, q.Size())
+	require.Equal(t, testCaseSize-testCaseSize*3/4, q.Len())
 	q.Clear()
 	require.True(t, q.Empty())
 
 	for i := 0; i < testCaseSize; i++ {
 		q.Enqueue(i)
-		require.Equal(t, i+1, q.Size())
+		require.Equal(t, i+1, q.Len())
 	}
 
-	require.Equal(t, testCaseSize, q.Size())
+	require.Equal(t, testCaseSize, q.Len())
 	require.False(t, q.Empty())
 	for x := 0; x < 1000; x++ {
 		i := rand.Intn(testCaseSize)
@@ -93,7 +93,7 @@ func TestChunkQueueCommon(t *testing.T) {
 	}
 
 	require.True(t, q.Empty())
-	require.Equal(t, 0, q.Size())
+	require.Equal(t, 0, q.Len())
 	_, ok = q.Dequeue()
 	require.False(t, ok)
 	_, ok = q.Head()
@@ -118,9 +118,9 @@ func TestExpand(t *testing.T) {
 			no:   i,
 			name: str,
 		})
-		require.Equal(t, 1, q.Size())
+		require.Equal(t, 1, q.Len())
 
-		freeSpace := q.Cap() - q.Size()
+		freeSpace := q.Cap() - q.Len()
 		if q.Empty() {
 			require.True(t, freeSpace > 0 && freeSpace <= q.chunkLength)
 		} else {
@@ -145,7 +145,7 @@ func TestDequeueMany(t *testing.T) {
 	}
 	f := 0
 	for !q.Empty() {
-		l := rand.Intn(q.Size()/5 + 1)
+		l := rand.Intn(q.Len()/5 + 1)
 		if l == 0 {
 			l = 1
 		}
@@ -157,7 +157,7 @@ func TestDequeueMany(t *testing.T) {
 		f += len(vals)
 		require.True(t, len(vals) > 0 && len(vals) <= l)
 
-		freeSpace := q.Cap() - q.Size()
+		freeSpace := q.Cap() - q.Len()
 		if q.Empty() {
 			require.True(t, freeSpace > 0 && freeSpace <= q.chunkLength)
 		} else {
@@ -195,7 +195,7 @@ func TestRange(t *testing.T) {
 		return v < 1000
 	})
 
-	require.Equal(t, testCaseSize-1000, q.Size())
+	require.Equal(t, testCaseSize-1000, q.Len())
 
 	process := 0
 	q.RangeAndPop(func(v int) bool {
@@ -272,8 +272,8 @@ func TestChunkQueueEnqueueMany(t *testing.T) {
 	for i := 1; i < 10; i++ {
 		q.EnqueueMany(data[:n]...)
 		cnt += n
-		freeSpace := q.Cap() - q.Size()
-		require.Equal(t, cnt, q.Size())
+		freeSpace := q.Cap() - q.Len()
+		require.Equal(t, cnt, q.Len())
 		require.True(t, freeSpace >= 0 && freeSpace <= q.chunkLength)
 	}
 }

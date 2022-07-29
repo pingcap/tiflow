@@ -77,7 +77,7 @@ func BenchmarkChunkQueueIterate(b *testing.B) {
 		b.ResetTimer()
 
 		i := 0
-		for i = 0; i < q.Size(); i++ {
+		for i = 0; i < q.Len(); i++ {
 			v, _ := q.At(i)
 			if v != i {
 				panic("not equal")
@@ -186,7 +186,7 @@ func TestChunkQueueGetIterator(t *testing.T) {
 
 	cnt := 0
 	for !q.Empty() {
-		n := rand.Intn(q.Size())
+		n := rand.Intn(q.Len())
 		if n == 0 {
 			n = testCaseSize/20 + 1
 		}
