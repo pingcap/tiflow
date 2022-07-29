@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
+	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/stretchr/testify/require"
 )
 
@@ -54,7 +55,7 @@ func (m *mockEventSink) acknowledge(commitTs uint64) []*eventsink.TxnCallbackabl
 	}
 	ackedEvents := m.events[:i]
 	for _, event := range ackedEvents {
-		if event.TableStatus.Load() != pipeline.TableStateStopping {
+		if event.SinkState.Load() != state.TableSinkStopping {
 			event.Callback()
 		} else {
 			event.Callback()
@@ -267,13 +268,13 @@ func TestClose(t *testing.T) {
 		wg.Done()
 	}()
 	require.Eventually(t, func() bool {
-		return pipeline.TableStateStopping == tb.state.Load()
+		return state.TableSinkStopping == tb.state.Load()
 	}, time.Second, time.Millisecond*10, "table should be stopping")
 	droppedEvents := sink.acknowledge(105)
 	require.Len(t, droppedEvents, 7, "all events should be dropped")
 	wg.Wait()
 	require.Eventually(t, func() bool {
-		return pipeline.TableStateStopped == tb.state.Load()
+		return state.TableSinkStopped == tb.state.Load()
 	}, time.Second, time.Millisecond*10, "table should be closed")
 }
 
@@ -296,7 +297,7 @@ func TestCloseCancellable(t *testing.T) {
 		wg.Done()
 	}()
 	require.Eventually(t, func() bool {
-		return pipeline.TableStateStopping == tb.state.Load()
+		return state.TableSinkStopping == tb.state.Load()
 	}, time.Second, time.Millisecond*10, "table should be stopping")
 	wg.Wait()
 }

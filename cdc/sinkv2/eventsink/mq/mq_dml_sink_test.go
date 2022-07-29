@@ -22,9 +22,9 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
+	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/stretchr/testify/require"
@@ -73,7 +73,7 @@ func TestWriteEvents(t *testing.T) {
 	require.Nil(t, err)
 	require.NotNil(t, s)
 
-	tableStatus := pipeline.TableStateReplicating
+	tableStatus := state.TableSinkStopping
 	row := &model.RowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
@@ -83,9 +83,9 @@ func TestWriteEvents(t *testing.T) {
 	events := make([]*eventsink.RowChangeCallbackableEvent, 0, 3000)
 	for i := 0; i < 3000; i++ {
 		events = append(events, &eventsink.RowChangeCallbackableEvent{
-			Event:       row,
-			Callback:    func() {},
-			TableStatus: &tableStatus,
+			Event:     row,
+			Callback:  func() {},
+			SinkState: &tableStatus,
 		})
 	}
 
