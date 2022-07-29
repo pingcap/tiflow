@@ -208,15 +208,18 @@ func (s *testLocationSuite) initAndCheckOneTxnEvents(events []*replication.Binlo
 }
 
 func (s *testLocationSuite) checkOneTxnEvents(r *locationRecorder, events []*replication.BinlogEvent, expected []binlog.Location) {
-	seenGTID := false
+	afterGTID := -1
 	for i, e := range events {
 		r.update(e)
 		s.Require().Equal(expected[i], r.curStartLocation)
 
-		if e.Header.EventType == replication.GTID_EVENT || e.Header.EventType == replication.MARIADB_GTID_EVENT {
-			seenGTID = true
+		if afterGTID >= 0 {
+			afterGTID++
 		}
-		if seenGTID {
+		if e.Header.EventType == replication.GTID_EVENT || e.Header.EventType == replication.MARIADB_GTID_EVENT {
+			afterGTID = 0
+		}
+		if afterGTID > 0 {
 			s.Require().Equal(expected[i+1].Position, r.curEndLocation.Position)
 			s.Require().Equal(expected[len(expected)-1].GetGTID(), r.curEndLocation.GetGTID())
 		} else {

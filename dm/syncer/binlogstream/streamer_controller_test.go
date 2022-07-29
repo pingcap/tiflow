@@ -323,9 +323,11 @@ func (s *testLocationSuite) TestLocationsWithGTID() {
 	}
 	replaceEvents := []*replication.BinlogEvent{
 		{
+			Header:  &replication.EventHeader{},
 			RawData: []byte("first replace event"),
 		},
 		{
+			Header:  &replication.EventHeader{},
 			RawData: []byte("seconds replace event"),
 		},
 	}
