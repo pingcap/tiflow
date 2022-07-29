@@ -53,6 +53,9 @@ type RedoLogWriter interface {
 	// some time, and the resolved ts of this table should be moved forward.
 	FlushLog(ctx context.Context, checkpointTs, resolvedTs model.Ts) error
 
+	// Get the current meta.
+	GetMeta() (checkpointTs, resolvedTs model.Ts)
+
 	// DeleteAllLogs delete all log files related to the changefeed, called from owner only when delete changefeed
 	DeleteAllLogs(ctx context.Context) error
 }
@@ -370,6 +373,10 @@ func (l *LogWriter) FlushLog(ctx context.Context, checkpointTs, resolvedTs model
 	}
 
 	return l.flush(checkpointTs, resolvedTs)
+}
+
+func (l *LogWriter) GetMeta() (checkpointTs, resolvedTs model.Ts) {
+	return l.meta.CheckpointTs, l.meta.ResolvedTs
 }
 
 // DeleteAllLogs implement DeleteAllLogs api

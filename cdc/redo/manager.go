@@ -148,7 +148,7 @@ func (s *statefulRts) checkAndSetUnflushed(unflushed model.Ts) {
 	for {
 		old := atomic.LoadUint64(&s.unflushed)
 		if old > unflushed {
-			panic("statefulRts.unflushed should never regress")
+			return
 		}
 		if atomic.CompareAndSwapUint64(&s.unflushed, old, unflushed) {
 			break
@@ -250,6 +250,11 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 			return nil, err
 		}
 		m.writer = writer
+		checkpointTs, resolvedTs := m.writer.GetMeta()
+		m.metaCheckpointTs.flushed = checkpointTs
+		m.metaCheckpointTs.unflushed = checkpointTs
+		m.metaResolvedTs.flushed = resolvedTs
+		m.metaResolvedTs.unflushed = resolvedTs
 	default:
 		return nil, cerror.ErrConsistentStorage.GenWithStackByArgs(m.storageType)
 	}
