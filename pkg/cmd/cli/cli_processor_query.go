@@ -37,7 +37,7 @@ type processorMeta struct {
 
 // queryProcessorOptions defines flags for the `cli processor query` command.
 type queryProcessorOptions struct {
-	etcdClient *etcd.CDCEtcdClient
+	etcdClient *etcd.CDCEtcdClientImpl
 	apiClient  apiv1client.APIV1Interface
 
 	changefeedID     string

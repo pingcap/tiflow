@@ -47,8 +47,13 @@ func RegisterStatusAPIRoutes(router *gin.Engine, capture *capture.Capture) {
 	router.GET("/debug/info", gin.WrapF(statusAPI.handleDebugInfo))
 }
 
+<<<<<<< HEAD:cdc/api/status.go
 func (h *statusAPI) writeEtcdInfo(ctx context.Context, cli *etcd.CDCEtcdClient, w io.Writer) {
 	resp, err := cli.Client.Get(ctx, etcd.EtcdKeyBase, clientv3.WithPrefix())
+=======
+func (h *statusAPI) writeEtcdInfo(ctx context.Context, cli etcd.CDCEtcdClient, w io.Writer) {
+	kvs, err := cli.GetAllCDCInfo(ctx)
+>>>>>>> bb5ba3c95 (owner(ticdc): do not campaign owner when liveness is stopping (#6210)):cdc/api/status/status.go
 	if err != nil {
 		fmt.Fprintf(w, "failed to get info: %s\n\n", err.Error())
 		return

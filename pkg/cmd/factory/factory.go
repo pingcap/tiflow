@@ -29,7 +29,7 @@ import (
 // Factory defines the client-side construction factory.
 type Factory interface {
 	ClientGetter
-	EtcdClient() (*etcd.CDCEtcdClient, error)
+	EtcdClient() (*etcd.CDCEtcdClientImpl, error)
 	PdClient() (pd.Client, error)
 	KvStorage() (kv.Storage, error)
 }

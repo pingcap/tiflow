@@ -76,7 +76,7 @@ func (f *factoryImpl) GetCredential() *security.Credential {
 }
 
 // EtcdClient creates new cdc etcd client.
-func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClient, error) {
+func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClientImpl, error) {
 	ctx := cmdconetxt.GetDefaultContext()
 
 	tlsConfig, err := f.ToTLSConfig()

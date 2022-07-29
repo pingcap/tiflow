@@ -57,7 +57,7 @@ func NewAgent(
 	ctx context.Context,
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
-	etcdClient *etcd.CDCEtcdClient,
+	etcdClient etcd.CDCEtcdClient,
 	executor TableExecutor,
 	changefeedID model.ChangeFeedID,
 ) (Agent, error) {
@@ -77,3 +77,41 @@ func NewScheduler(
 	return base.NewSchedulerV2(
 		ctx, changeFeedID, checkpointTs, messageServer, messageRouter, ownerRevision)
 }
+<<<<<<< HEAD
+=======
+
+// NewAgentV3 returns two-phase agent.
+func NewAgentV3(
+	ctx context.Context,
+	captureID model.CaptureID,
+	messageServer *p2p.MessageServer,
+	messageRouter p2p.MessageRouter,
+	etcdClient etcd.CDCEtcdClient,
+	executor TableExecutor,
+	changefeedID model.ChangeFeedID,
+) (Agent, error) {
+	return v3.NewAgent(
+		ctx, captureID, changefeedID, messageServer, messageRouter, etcdClient, executor)
+}
+
+// NewSchedulerV3 returns two-phase scheduler.
+func NewSchedulerV3(
+	ctx context.Context,
+	captureID model.CaptureID,
+	changeFeedID model.ChangeFeedID,
+	checkpointTs model.Ts,
+	messageServer *p2p.MessageServer,
+	messageRouter p2p.MessageRouter,
+	ownerRevision int64,
+	cfg *config.SchedulerConfig,
+) (Scheduler, error) {
+	return v3.NewCoordinator(
+		ctx, captureID, changeFeedID, checkpointTs,
+		messageServer, messageRouter, ownerRevision, cfg)
+}
+
+// InitMetrics registers all metrics used in scheduler
+func InitMetrics(registry *prometheus.Registry) {
+	v3.InitMetrics(registry)
+}
+>>>>>>> bb5ba3c95 (owner(ticdc): do not campaign owner when liveness is stopping (#6210))

@@ -236,6 +236,10 @@ func TestInitialize(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// initialize
+<<<<<<< HEAD
+=======
+	ctx.GlobalVars().EtcdClient = &etcd.CDCEtcdClientImpl{}
+>>>>>>> bb5ba3c95 (owner(ticdc): do not campaign owner when liveness is stopping (#6210))
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
 	require.Equal(t, state.Status.CheckpointTs, ctx.ChangefeedVars().Info.StartTs)

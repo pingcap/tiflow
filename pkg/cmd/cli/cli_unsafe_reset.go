@@ -25,7 +25,12 @@ import (
 
 // unsafeResetOptions defines flags for the `cli unsafe reset` command.
 type unsafeResetOptions struct {
+<<<<<<< HEAD
 	etcdClient *etcd.CDCEtcdClient
+=======
+	clusterID  string
+	etcdClient *etcd.CDCEtcdClientImpl
+>>>>>>> bb5ba3c95 (owner(ticdc): do not campaign owner when liveness is stopping (#6210))
 	pdClient   pd.Client
 }
 

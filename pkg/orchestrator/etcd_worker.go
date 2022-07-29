@@ -96,9 +96,22 @@ type rawStateEntry struct {
 }
 
 // NewEtcdWorker returns a new EtcdWorker
+<<<<<<< HEAD
 func NewEtcdWorker(client *etcd.Client, prefix string, reactor Reactor, initState ReactorState) (*EtcdWorker, error) {
 	return &EtcdWorker{
 		client:     client,
+=======
+func NewEtcdWorker(
+	client etcd.CDCEtcdClient,
+	prefix string,
+	reactor Reactor,
+	initState ReactorState,
+	migrator migrate.Migrator,
+) (*EtcdWorker, error) {
+	return &EtcdWorker{
+		clusterID:  client.GetClusterID(),
+		client:     client.GetEtcdClient(),
+>>>>>>> bb5ba3c95 (owner(ticdc): do not campaign owner when liveness is stopping (#6210))
 		reactor:    reactor,
 		state:      initState,
 		rawState:   make(map[util.EtcdKey]rawStateEntry),

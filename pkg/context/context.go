@@ -34,7 +34,7 @@ import (
 // All field in Vars should be READ-ONLY and THREAD-SAFE
 type GlobalVars struct {
 	CaptureInfo      *model.CaptureInfo
-	EtcdClient       *etcd.CDCEtcdClient
+	EtcdClient       etcd.CDCEtcdClient
 	TableActorSystem *system.System
 	SorterSystem     *ssystem.System
 
@@ -191,6 +191,12 @@ func NewContext4Test(baseCtx context.Context, withChangefeedVars bool) Context {
 			AdvertiseAddr: "127.0.0.1:0000",
 			Version:       version.ReleaseVersion,
 		},
+<<<<<<< HEAD
+=======
+		EtcdClient: &etcd.CDCEtcdClientImpl{
+			ClusterID: etcd.DefaultCDCClusterID,
+		},
+>>>>>>> bb5ba3c95 (owner(ticdc): do not campaign owner when liveness is stopping (#6210))
 	})
 	if withChangefeedVars {
 		ctx = WithChangefeedVars(ctx, &ChangefeedVars{

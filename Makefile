@@ -255,6 +255,14 @@ swagger-spec: tools/bin/swag
 
 generate_mock: tools/bin/mockgen
 	tools/bin/mockgen -source cdc/owner/owner.go -destination cdc/owner/mock/owner_mock.go
+<<<<<<< HEAD
+=======
+	tools/bin/mockgen -source cdc/api/v2/api_helpers.go -destination cdc/api/v2/api_helpers_mock.go -package v2
+	tools/bin/mockgen -source pkg/etcd/etcd.go -destination pkg/etcd/mock/etcd_client_mock.go
+	tools/bin/mockgen -source cdc/processor/manager.go -destination cdc/processor/mock/manager_mock.go
+	tools/bin/mockgen -source cdc/capture/capture.go -destination cdc/capture/mock/capture_mock.go
+	tools/bin/mockgen -source pkg/cmd/factory/factory.go -destination pkg/cmd/factory/mock/factory_mock.go -package mock_factory
+>>>>>>> bb5ba3c95 (owner(ticdc): do not campaign owner when liveness is stopping (#6210))
 
 clean:
 	go clean -i ./...
@@ -466,3 +474,55 @@ failpoint-enable: check_failpoint_ctl
 
 failpoint-disable: check_failpoint_ctl
 	$(FAILPOINT_DISABLE)
+<<<<<<< HEAD
+=======
+
+engine: tiflow tiflow-demo
+
+tiflow:
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
+
+tiflow-demo:
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./cmd/tiflow-demoserver
+
+tiflow-chaos-case:
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-chaos-case ./engine/chaos/cases
+
+tiflow-generate-mock: tools/bin/mockgen
+	scripts/generate-engine-mock.sh
+
+engine_image:
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	./engine/test/utils/run_engine.sh build
+
+engine_unit_test: check_failpoint_ctl
+	$(call run_engine_unit_test,$(ENGINE_PACKAGES))
+
+engine_integration_test:
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	./engine/test/integration_tests/run.sh "$(CASE)" "$(START_AT)"
+
+tiflow-swagger-spec: tools/bin/swag
+	tools/bin/swag init --exclude cdc,dm  --parseVendor -generalInfo engine/servermaster/openapi.go --output engine/docs/swagger
+
+define run_engine_unit_test
+	@echo "running unit test for packages:" $(1)
+	mkdir -p $(ENGINE_TEST_DIR)
+	$(FAILPOINT_ENABLE)
+	@export log_level=error; \
+	$(GOTEST) -timeout 5m -covermode=atomic -coverprofile="$(ENGINE_TEST_DIR)/cov.unit_test.out" $(1) \
+	|| { $(FAILPOINT_DISABLE); exit 1; }
+	$(FAILPOINT_DISABLE)
+endef
+
+engine_unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin/gocov tools/bin/gocov-xml
+	mkdir -p $(ENGINE_TEST_DIR)
+	$(FAILPOINT_ENABLE)
+	@export log_level=error; \
+	CGO_ENABLED=1 tools/bin/gotestsum --junitfile engine-junit-report.xml -- -v -timeout 5m -p $(P) --race \
+	-covermode=atomic -coverprofile="$(ENGINE_TEST_DIR)/cov.unit_test.out" $(ENGINE_PACKAGES) \
+	|| { $(FAILPOINT_DISABLE); exit 1; }
+	tools/bin/gocov convert "$(ENGINE_TEST_DIR)/cov.unit_test.out" | tools/bin/gocov-xml > engine-coverage.xml
+	$(FAILPOINT_DISABLE)
+	@bash <(curl -s https://codecov.io/bash) -F engine -f $(ENGINE_TEST_DIR)/cov.unit_test.out -t $(TICDC_CODECOV_TOKEN)
+>>>>>>> bb5ba3c95 (owner(ticdc): do not campaign owner when liveness is stopping (#6210))
