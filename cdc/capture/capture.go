@@ -481,7 +481,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		// use a new context to prevent the context from being cancelled.
 		resignCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		if resignErr := c.resign(resignCtx); resignErr != nil {
-			if errors.Cause(err) != context.DeadlineExceeded {
+			if errors.Cause(resignErr) != context.DeadlineExceeded {
 				log.Info("owner resign failed", zap.String("captureID", c.info.ID),
 					zap.Error(err), zap.Int64("ownerRev", ownerRev))
 				cancel()
