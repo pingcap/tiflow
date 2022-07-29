@@ -85,6 +85,8 @@ type Checker struct {
 	warnCnt int64
 
 	onlineDDL onlineddl.OnlinePlugin
+
+	stCfgs []*config.SubTaskConfig
 }
 
 // NewChecker returns a checker.
@@ -94,6 +96,7 @@ func NewChecker(cfgs []*config.SubTaskConfig, checkingItems map[string]string, e
 		checkingItems: checkingItems,
 		errCnt:        errCnt,
 		warnCnt:       warnCnt,
+		stCfgs:        cfgs,
 	}
 
 	for _, cfg := range cfgs {
@@ -119,6 +122,53 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	rollbackHolder.Add(fr.FuncRollback{Name: "close-DBs", Fn: c.closeDBs})
 
 	c.tctx = tcontext.NewContext(ctx, log.With(zap.String("unit", "task check")))
+<<<<<<< HEAD
+=======
+
+	// prepare source target do dbs concurrently
+	eg, ctx2 := errgroup.WithContext(ctx)
+	// sourceID => source targetDB mapping, only writing need used mu to avoid concurrent write map
+	var mu sync.Mutex
+	sourceTargetM := make(map[string]map[string][]*filter.Table)
+	for idx := range c.instances {
+		i := idx
+		eg.Go(func() error {
+			mapping, fetchErr := c.fetchSourceTargetDB(ctx2, c.instances[i])
+			if fetchErr != nil {
+				return fetchErr
+			}
+			mu.Lock()
+			sourceTargetM[c.instances[i].cfg.SourceID] = mapping
+			mu.Unlock()
+			return nil
+		})
+	}
+	if egErr := eg.Wait(); egErr != nil {
+		return egErr
+	}
+	// check connections
+	if _, ok := c.checkingItems[config.ConnNumberChecking]; ok {
+		if len(c.stCfgs) > 0 {
+			// only check the first subtask's config
+			// because the Mode is the same across all the subtasks
+			// as long as they are derived from the same task config.
+			switch c.stCfgs[0].Mode {
+			case config.ModeAll:
+				// TODO: check the connections for syncer
+				// TODO: check for incremental mode
+				c.checkList = append(c.checkList, checker.NewLoaderConnNumberChecker(c.instances[0].targetDB, c.stCfgs))
+				for i, inst := range c.instances {
+					c.checkList = append(c.checkList, checker.NewDumperConnNumberChecker(inst.sourceDB, c.stCfgs[i].MydumperConfig.Threads))
+				}
+			case config.ModeFull:
+				c.checkList = append(c.checkList, checker.NewLoaderConnNumberChecker(c.instances[0].targetDB, c.stCfgs))
+				for i, inst := range c.instances {
+					c.checkList = append(c.checkList, checker.NewDumperConnNumberChecker(inst.sourceDB, c.stCfgs[i].MydumperConfig.Threads))
+				}
+			}
+		}
+	}
+>>>>>>> 566357e7a (checker(dm): check the number of connections before starting (#5185))
 	// targetTableID => source => [tables]
 	sharding := make(map[string]map[string][]*filter.Table)
 	shardingCounter := make(map[string]int)
