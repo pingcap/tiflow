@@ -445,7 +445,8 @@ func (m *migrator) Migrate(ctx context.Context) error {
 					zap.Error(err))
 				return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
 			}
-			_, err := m.cli.GetEtcdClient().Put(ctx, m.metaVersionKey, fmt.Sprintf("%d", newVersion))
+			_, err := m.cli.GetEtcdClient().
+				Put(ctx, m.metaVersionKey, fmt.Sprintf("%d", newVersion))
 			if err != nil {
 				log.Error("put meta version failed", zap.Error(err))
 			}

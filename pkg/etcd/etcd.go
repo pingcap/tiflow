@@ -386,7 +386,9 @@ func (c *CDCEtcdClientImpl) GetCaptures(ctx context.Context) (int64, []*model.Ca
 
 // GetCaptureInfo get capture info from etcd.
 // return ErrCaptureNotExist if the capture not exists.
-func (c *CDCEtcdClientImpl) GetCaptureInfo(ctx context.Context, id string) (info *model.CaptureInfo, err error) {
+func (c *CDCEtcdClientImpl) GetCaptureInfo(
+	ctx context.Context, id string,
+) (info *model.CaptureInfo, err error) {
 	key := GetEtcdKeyCaptureInfo(c.ClusterID, id)
 
 	resp, err := c.Client.Get(ctx, key)
@@ -642,7 +644,9 @@ func (c *CDCEtcdClientImpl) GetTaskPosition(
 
 // PutCaptureInfo put capture info into etcd,
 // this happens when the capture starts.
-func (c *CDCEtcdClientImpl) PutCaptureInfo(ctx context.Context, info *model.CaptureInfo, leaseID clientv3.LeaseID) error {
+func (c *CDCEtcdClientImpl) PutCaptureInfo(
+	ctx context.Context, info *model.CaptureInfo, leaseID clientv3.LeaseID,
+) error {
 	data, err := info.Marshal()
 	if err != nil {
 		return errors.Trace(err)
@@ -674,7 +678,9 @@ func (c *CDCEtcdClientImpl) GetOwnerID(ctx context.Context) (string, error) {
 }
 
 // GetOwnerRevision gets the Etcd revision for the elected owner.
-func (c *CDCEtcdClientImpl) GetOwnerRevision(ctx context.Context, captureID string) (rev int64, err error) {
+func (c *CDCEtcdClientImpl) GetOwnerRevision(
+	ctx context.Context, captureID string,
+) (rev int64, err error) {
 	resp, err := c.Client.Get(ctx, CaptureOwnerKey(c.ClusterID), clientv3.WithFirstCreate()...)
 	if err != nil {
 		return 0, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
