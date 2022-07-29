@@ -315,6 +315,8 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	// CheckpointCannotProceed implies that not all tables are being replicated normally,
 	// so in that case there is no need to advance the global watermarks.
 	if newCheckpointTs != scheduler.CheckpointCannotProceed {
+		// If the owner is just initialized, barrierTs can be `checkpoint-1`. To avoid
+		// global resolvedTs and checkpointTs regression, we need to handle the case.
 		if newResolvedTs > barrierTs {
 			newResolvedTs = barrierTs
 		}
@@ -322,10 +324,12 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 			newCheckpointTs = barrierTs
 		}
 		prevResolvedTs := c.state.Status.ResolvedTs
-		var flushedCheckpointTs, flushedResolvedTs model.Ts
+		prevCheckpointTs := c.state.Status.CheckpointTs
 		if c.redoManager.Enabled() {
+			var flushedCheckpointTs, flushedResolvedTs model.Ts
 			// newResolvedTs can never exceed the barrier timestamp boundary. If redo is enabled,
 			// we can only upload it to etcd after it has been flushed into redo meta.
+			// NOTE: `UpdateMeta` handles regressed checkpointTs and resolvedTs internally.
 			c.redoManager.UpdateMeta(newCheckpointTs, newResolvedTs)
 			c.redoManager.GetFlushedMeta(&flushedCheckpointTs, &flushedResolvedTs)
 			log.Debug("owner gets flushed meta",
@@ -340,6 +344,13 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 			} else {
 				newResolvedTs = prevResolvedTs
 			}
+		}
+		// checkpointTs and resolvedTs should never regress.
+		if newResolvedTs < prevResolvedTs {
+			newResolvedTs = prevResolvedTs
+		}
+		if newCheckpointTs < prevCheckpointTs {
+			newCheckpointTs = prevCheckpointTs
 		}
 		c.updateStatus(newCheckpointTs, newResolvedTs)
 		c.updateMetrics(currentTs, newCheckpointTs, newResolvedTs)
