@@ -64,7 +64,7 @@ type Capture interface {
 	WriteDebugInfo(ctx context.Context, w io.Writer)
 
 	GetUpstreamManager() (*upstream.Manager, error)
-	GetEtcdClient() etcd.CDCEtcdClientForAPI
+	GetEtcdClient() etcd.CDCEtcdClient
 	// IsReady returns if the cdc server is ready
 	// currently only check if ettcd data migration is done
 	IsReady() bool
@@ -87,7 +87,7 @@ type captureImpl struct {
 	session  *concurrency.Session
 	election election
 
-	EtcdClient       *etcd.CDCEtcdClient
+	EtcdClient       etcd.CDCEtcdClient
 	sorterSystem     *ssystem.System
 	tableActorSystem *system.System
 
@@ -117,7 +117,7 @@ type captureImpl struct {
 
 // NewCapture returns a new Capture instance
 func NewCapture(pdEndpoints []string,
-	etcdClient *etcd.CDCEtcdClient,
+	etcdClient etcd.CDCEtcdClient,
 	grpcService *p2p.ServerWrapper,
 ) Capture {
 	conf := config.GetGlobalServerConfig()
@@ -164,12 +164,13 @@ func (c *captureImpl) GetUpstreamManager() (*upstream.Manager, error) {
 	return c.upstreamManager, nil
 }
 
-func (c *captureImpl) GetEtcdClient() etcd.CDCEtcdClientForAPI {
+func (c *captureImpl) GetEtcdClient() etcd.CDCEtcdClient {
 	return c.EtcdClient
 }
 
 func (c *captureImpl) reset(ctx context.Context) error {
-	sess, err := concurrency.NewSession(c.EtcdClient.Client.Unwrap(),
+	sess, err := concurrency.NewSession(
+		c.EtcdClient.GetEtcdClient().Unwrap(),
 		concurrency.WithTTL(c.config.CaptureSessionTTL))
 	if err != nil {
 		return errors.Annotate(
@@ -202,7 +203,7 @@ func (c *captureImpl) reset(ctx context.Context) error {
 		_ = c.session.Close()
 	}
 	c.session = sess
-	c.election = newElection(sess, etcd.CaptureOwnerKey(c.EtcdClient.ClusterID))
+	c.election = newElection(sess, etcd.CaptureOwnerKey(c.EtcdClient.GetClusterID()))
 
 	if c.tableActorSystem != nil {
 		c.tableActorSystem.Stop()
@@ -342,7 +343,7 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 	g.Go(func() error {
 		processorFlushInterval := time.Duration(c.config.ProcessorFlushInterval)
 
-		globalState := orchestrator.NewGlobalState(c.EtcdClient.ClusterID)
+		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID())
 
 		globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
 			c.MessageRouter.AddPeer(captureID, addr)
@@ -458,7 +459,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		owner := c.newOwner(c.upstreamManager)
 		c.setOwner(owner)
 
-		globalState := orchestrator.NewGlobalState(c.EtcdClient.ClusterID)
+		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID())
 
 		globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
 			c.MessageRouter.AddPeer(captureID, addr)
@@ -468,7 +469,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		})
 
 		err = c.runEtcdWorker(ownerCtx, owner,
-			orchestrator.NewGlobalState(c.EtcdClient.ClusterID),
+			orchestrator.NewGlobalState(c.EtcdClient.GetClusterID()),
 			ownerFlushInterval, util.RoleOwner.String())
 		c.setOwner(nil)
 
@@ -511,7 +512,7 @@ func (c *captureImpl) runEtcdWorker(
 	role string,
 ) error {
 	etcdWorker, err := orchestrator.NewEtcdWorker(c.EtcdClient,
-		etcd.BaseKey(c.EtcdClient.ClusterID), reactor, reactorState, c.migrator)
+		etcd.BaseKey(c.EtcdClient.GetClusterID()), reactor, reactorState, c.migrator)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -527,7 +528,7 @@ func (c *captureImpl) runEtcdWorker(
 			log.Warn("session is disconnected", zap.Error(err))
 			return cerror.ErrCaptureSuicide.GenWithStackByArgs()
 		}
-		lease, inErr := c.EtcdClient.Client.TimeToLive(ctx, c.session.Lease())
+		lease, inErr := c.EtcdClient.GetEtcdClient().TimeToLive(ctx, c.session.Lease())
 		if inErr != nil {
 			return cerror.WrapError(cerror.ErrPDEtcdAPIError, inErr)
 		}
@@ -686,8 +687,20 @@ func (c *captureImpl) drainImpl(ctx context.Context) bool {
 		return false
 	}
 	// Step 2, wait for moving out all tables.
-	// Set liveness stopping, owners will move out all tables in the capture.
+	// Set liveness stopping, owners will move all tables out in the capture.
 	c.liveness.Store(model.LivenessCaptureStopping)
+	// Check if there is an owner.
+	_, err := c.GetEtcdClient().GetOwnerID(ctx)
+	if err != nil {
+		if errors.Cause(err) != concurrency.ErrElectionNoLeader {
+			log.Error("fail to get owner ID, retry")
+			return false
+		}
+		// There is no owner. It's impossible to move tables out, give up drain.
+		log.Warn("there is no owner, skip drain")
+		return true
+	}
+
 	queryDone := make(chan error, 1)
 	tableCh := make(chan int, 1)
 	c.processorManager.QueryTableCount(ctx, tableCh, queryDone)
