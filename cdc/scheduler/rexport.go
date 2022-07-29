@@ -64,7 +64,7 @@ func NewAgent(
 	captureID model.CaptureID,
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
-	etcdClient *etcd.CDCEtcdClient,
+	etcdClient etcd.CDCEtcdClient,
 	executor TableExecutor,
 	changefeedID model.ChangeFeedID,
 ) (Agent, error) {
@@ -93,7 +93,7 @@ func NewAgentV3(
 	captureID model.CaptureID,
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
-	etcdClient *etcd.CDCEtcdClient,
+	etcdClient etcd.CDCEtcdClient,
 	executor TableExecutor,
 	changefeedID model.ChangeFeedID,
 ) (Agent, error) {
