@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package producer
+package ddlproducer
 
 import (
 	"context"
@@ -20,22 +20,19 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 )
 
-// Producer is the interface for message producer.
-type Producer interface {
-	// AsyncSendMessage sends a message asynchronously.
-	AsyncSendMessage(
-		ctx context.Context, topic string, partition int32, message *codec.MQMessage,
+// DDLProducer is the interface for DDL message producer.
+type DDLProducer interface {
+	// SyncBroadcastMessage broadcasts a message synchronously.
+	SyncBroadcastMessage(
+		ctx context.Context, topic string, totalPartitionsNum int32, message *codec.MQMessage,
 	) error
-
-	// Close closes the producer and client(s).
+	// SyncSendMessage sends a message for a partition synchronously.
+	SyncSendMessage(
+		ctx context.Context, topic string, partitionNum int32, message *codec.MQMessage,
+	) error
+	// Close closes the producer.
 	Close()
 }
 
 // Factory is a function to create a producer.
-// errCh is used to report error to the caller(i.e. processor,owner).
-// Because the caller passes errCh to many goroutines,
-// there is no way to safely close errCh by the sender.
-// So we let the GC close errCh.
-// It's usually a buffered channel.
-type Factory func(ctx context.Context, client sarama.Client,
-	errCh chan error) (Producer, error)
+type Factory func(ctx context.Context, client sarama.Client) (DDLProducer, error)

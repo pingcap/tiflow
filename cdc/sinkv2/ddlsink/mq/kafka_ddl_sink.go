@@ -23,7 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
-	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq/producer"
+	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq/ddlproducer"
 	mqutil "github.com/pingcap/tiflow/cdc/sinkv2/util/mq"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -37,7 +37,7 @@ func NewKafkaDDLSink(
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
 	adminClientCreator pkafka.ClusterAdminClientCreator,
-	producerCreator producer.Factory,
+	producerCreator ddlproducer.Factory,
 ) (*ddlSink, error) {
 	topic, err := mqutil.GetTopic(sinkURI)
 	if err != nil {

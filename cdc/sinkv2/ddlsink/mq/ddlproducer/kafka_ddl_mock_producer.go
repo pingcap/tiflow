@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package producer
+package ddlproducer
 
 import (
 	"context"
@@ -21,22 +21,22 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 )
 
-var _ Producer = (*MockProducer)(nil)
+var _ DDLProducer = (*MockDDLProducer)(nil)
 
-// MockProducer is a mock producer for test.
-type MockProducer struct {
+// MockDDLProducer is a mock producer for test.
+type MockDDLProducer struct {
 	events map[mqv1.TopicPartitionKey][]*codec.MQMessage
 }
 
-// NewMockProducer creates a mock producer.
-func NewMockProducer(_ context.Context, _ sarama.Client) (Producer, error) {
-	return &MockProducer{
+// NewMockDDLProducer creates a mock producer.
+func NewMockDDLProducer(_ context.Context, _ sarama.Client) (DDLProducer, error) {
+	return &MockDDLProducer{
 		events: make(map[mqv1.TopicPartitionKey][]*codec.MQMessage),
 	}, nil
 }
 
 // SyncBroadcastMessage stores a message to all partitions of the topic.
-func (m *MockProducer) SyncBroadcastMessage(ctx context.Context, topic string,
+func (m *MockDDLProducer) SyncBroadcastMessage(ctx context.Context, topic string,
 	totalPartitionsNum int32, message *codec.MQMessage,
 ) error {
 	for i := 0; i < int(totalPartitionsNum); i++ {
@@ -54,7 +54,7 @@ func (m *MockProducer) SyncBroadcastMessage(ctx context.Context, topic string,
 }
 
 // SyncSendMessage stores a message to a partition of the topic.
-func (m *MockProducer) SyncSendMessage(ctx context.Context, topic string,
+func (m *MockDDLProducer) SyncSendMessage(ctx context.Context, topic string,
 	partitionNum int32, message *codec.MQMessage,
 ) error {
 	key := mqv1.TopicPartitionKey{
@@ -70,10 +70,10 @@ func (m *MockProducer) SyncSendMessage(ctx context.Context, topic string,
 }
 
 // Close do nothing.
-func (m *MockProducer) Close() {}
+func (m *MockDDLProducer) Close() {}
 
 // GetAllEvents returns the events received by the mock producer.
-func (m *MockProducer) GetAllEvents() []*codec.MQMessage {
+func (m *MockDDLProducer) GetAllEvents() []*codec.MQMessage {
 	var events []*codec.MQMessage
 	for _, v := range m.events {
 		events = append(events, v...)
@@ -82,6 +82,6 @@ func (m *MockProducer) GetAllEvents() []*codec.MQMessage {
 }
 
 // GetEvents returns the event filtered by the key.
-func (m *MockProducer) GetEvents(key mqv1.TopicPartitionKey) []*codec.MQMessage {
+func (m *MockDDLProducer) GetEvents(key mqv1.TopicPartitionKey) []*codec.MQMessage {
 	return m.events[key]
 }
