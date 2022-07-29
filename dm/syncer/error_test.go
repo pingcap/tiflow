@@ -15,7 +15,10 @@ package syncer
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
@@ -207,4 +210,20 @@ func TestIsConnectionRefusedError(t *testing.T) {
 
 	isConnRefusedErr = isConnectionRefusedError(errors.New("connect: connection refused"))
 	require.True(t, isConnRefusedErr)
+}
+
+func TestGetDDLStatusFromTiDB(t *testing.T) {
+	db, err := sql.Open("mysql", "root:@tcp(127.0.0.1:4000)/many_tables_test")
+	if err != nil {
+		//panic(err.Error())
+	}
+	defer db.Close()
+
+	err = db.Ping()
+	if err != nil {
+		fmt.Printf("DB connection failed")
+	}
+
+	createTime := time.Now().Unix() - 86400 //within 24 hours
+	_, _ = GetDDLStatusFromTiDB(db, "t1", "ALTER TABLE many_tables_test.t1 ADD x timestamp DEFAULT current_timestamp", createTime)
 }

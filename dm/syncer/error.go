@@ -14,9 +14,12 @@
 package syncer
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
@@ -59,6 +62,97 @@ func isDropColumnWithIndexError(err error) bool {
 		(strings.Contains(mysqlErr.Message, "with index") ||
 			strings.Contains(mysqlErr.Message, "with composite index") ||
 			strings.Contains(mysqlErr.Message, "with tidb_enable_change_multi_schema is disable"))
+}
+
+// here db should be TiDB database
+func GetDDLStatusFromTiDB(db *sql.DB, table string, DDL string, createTime int64) (string, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	rowNum := 10
+	//var err error
+	for {
+		showJobs := fmt.Sprintf("ADMIN SHOW DDL JOBS %d;", rowNum) //every attempt try 10 history jobs
+		rows, err := db.QueryContext(ctx, showJobs)
+		if err != nil {
+			fmt.Printf("Error: %v \n", err)
+		}
+		defer rows.Close()
+
+		columns, err := rows.Columns()
+		if err != nil {
+			fmt.Printf("Error: %v \n", err)
+		}
+
+		values := make([]sql.RawBytes, len(columns))
+		scanArgs := make([]interface{}, len(values))
+		for i := range values {
+			scanArgs[i] = &values[i]
+		}
+
+		valuesForLimit := make([]sql.RawBytes, len(columns))
+		scanArgsForLimit := make([]interface{}, len(values))
+		for i := range values {
+			scanArgsForLimit[i] = &valuesForLimit[i]
+		}
+
+		count := 0
+		for rows.Next() {
+			err = rows.Scan(scanArgs...)
+			if err != nil {
+				fmt.Printf("Error: %v \n", err)
+			}
+
+			//var value string
+			createTimeStr := string(values[8])
+			timeLayout := "2006-01-02 15:04:05"
+			loc, _ := time.LoadLocation("Local")
+			theTime, _ := time.ParseInLocation(timeLayout, createTimeStr, loc)
+			DDLCreateTime := theTime.Unix()
+			if DDLCreateTime >= createTime {
+				fmt.Println("jobiD atoi ")
+				jobID, err := strconv.Atoi(string(values[0]))
+				if err != nil {
+					fmt.Printf("Error: %v \n", err)
+				}
+
+				offset := rowNum + count - 10
+				for {
+					//var DDLJob string
+					showJob := fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d;", offset)
+					err = db.QueryRowContext(ctx, showJob).Scan(scanArgsForLimit...)
+					//rowsForLimit, err := db.QueryContext(ctx, showJob)
+					if err != nil {
+						fmt.Printf("Error: %v \n", err)
+					}
+
+					fmt.Println("jobIDForLimit atoi")
+					jobIDForLimit, err := strconv.Atoi(string(valuesForLimit[0]))
+					if err != nil {
+						fmt.Printf("Error: %v \n", err)
+					}
+					if table == string(values[2]) && jobID == jobIDForLimit && DDL == string(valuesForLimit[1]) {
+						fmt.Printf("DDL: %v \n", string(valuesForLimit[1]))
+						fmt.Printf("state: %v \n", string(values[11]))
+						return string(values[11]), err
+					}
+					// jobID in 'ADMIN SHOW DDL JOBS' are not strictly but overall in ascending order
+					if jobIDForLimit < (jobID - 10) {
+						break
+					}
+					offset++
+				}
+				count++
+
+			} else {
+				return "", err //return what state, which error?
+			}
+		}
+		if err = rows.Err(); err != nil {
+			fmt.Printf("Error: %v \n", err)
+		}
+		rowNum += 10
+	}
 }
 
 // handleSpecialDDLError handles special errors for DDL execution.
