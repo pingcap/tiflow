@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/stretchr/testify/require"
@@ -162,7 +161,7 @@ func TestNewEventTableSink(t *testing.T) {
 	require.NotNil(t, tb.progressTracker, "progressTracker should be set")
 	require.NotNil(t, tb.eventAppender, "eventAppender should be set")
 	require.Equal(t, 0, len(tb.eventBuffer), "eventBuffer should be empty")
-	require.Equal(t, pipeline.TableStatePreparing, tb.state, "tableState should be unknown")
+	require.Equal(t, state.TableSinkSinking, tb.state, "table sink should be sinking")
 }
 
 func TestAppendRowChangedEvents(t *testing.T) {
