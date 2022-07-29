@@ -285,7 +285,8 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 	return err
 }
 
-// GetEvent returns binlog event from upstream binlog or streamModifier.
+// GetEvent returns binlog event from upstream binlog or streamModifier. It's not
+// concurrent safe.
 // When return events from streamModifier, we should maintain these properties:
 // - Inject
 //   if we inject events [DDL1, DDL2] at (start) position 900, where start position
@@ -373,7 +374,6 @@ func (c *StreamerController) getEvent(tctx *tcontext.Context) (
 		failpoint.Return(nil, 0, pb.ErrorOp_InvalidErrorOp, terror.ErrDBBadConn.Generate())
 	})
 
-	// TODO: why this lock?
 	c.RLock()
 	upstream := c.upstream
 	c.RUnlock()
@@ -440,8 +440,6 @@ LOOP:
 				if status == lastEvent {
 					event.Header.LogPos = c.lastEventFromUpstream.Header.LogPos
 					event.Header.EventSize = c.lastEventFromUpstream.Header.EventSize
-					// TODO: for last event we should forward GTID set? let caller
-					// do it unless we merge location recorder
 					suffix = 0
 				} else {
 					event.Header.LogPos = startPos.Pos
@@ -508,6 +506,7 @@ LOOP:
 	failpoint.Inject("GetEventError", func() {
 		err = errors.New("go-mysql returned an error")
 	})
+	// nolint:nakedret
 	return
 }
 
