@@ -73,7 +73,7 @@ func TestWriteEvents(t *testing.T) {
 	require.Nil(t, err)
 	require.NotNil(t, s)
 
-	tableStatus := state.TableSinkStopping
+	tableStatus := state.TableSinkSinking
 	row := &model.RowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
