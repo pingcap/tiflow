@@ -216,15 +216,25 @@ func (o *createChangefeedOptions) completeReplicaCfg(
 
 // validate checks that the provided attach options are specified.
 func (o *createChangefeedOptions) validate(cmd *cobra.Command) error {
+	sinkURI, err := url.Parse(o.commonChangefeedOptions.sinkURI)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+	}
+	if config.IsPulsarScheme(sinkURI.Scheme) {
+		cmd.Printf(color.HiYellowString("[WARN] Pulsar Sink is " +
+			"not recommended for production use.\n"))
+	}
+
 	if o.timezone != "SYSTEM" {
 		cmd.Printf(color.HiYellowString("[WARN] --tz is deprecated in changefeed settings.\n"))
 	}
+
 	// user is not allowed to set sort-dir at changefeed level
 	if o.commonChangefeedOptions.sortDir != "" {
 		cmd.Printf(color.HiYellowString("[WARN] --sort-dir is deprecated in changefeed settings. " +
 			"Please use `cdc server --data-dir` to start the cdc server if possible, sort-dir will be set automatically. " +
 			"The --sort-dir here will be no-op\n"))
-		return errors.New("Creating changefeed with `--sort-dir`, it's invalid")
+		return errors.New("creating changefeed with `--sort-dir`, it's invalid")
 	}
 
 	switch o.commonChangefeedOptions.sortEngine {
@@ -240,7 +250,7 @@ func (o *createChangefeedOptions) validate(cmd *cobra.Command) error {
 	return nil
 }
 
-func (o *createChangefeedOptions) getChangefeedConfig(cmd *cobra.Command) *v2.ChangefeedConfig {
+func (o *createChangefeedOptions) getChangefeedConfig() *v2.ChangefeedConfig {
 	replicaConfig := v2.ToAPIReplicaConfig(o.cfg)
 	upstreamConfig := o.getUpstreamConfig()
 	return &v2.ChangefeedConfig{
@@ -297,7 +307,7 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 		}
 	}
 
-	createChangefeedCfg := o.getChangefeedConfig(cmd)
+	createChangefeedCfg := o.getChangefeedConfig()
 
 	verifyTableConfig := &v2.VerifyTableConfig{
 		PDConfig: v2.PDConfig{
