@@ -122,6 +122,8 @@ func (m *MasterClient) asyncReloadMasterInfo(ctx context.Context) <-chan error {
 	go func() {
 		defer close(errCh)
 
+		log.Info("try to reload master info asynchronously")
+
 		timeoutCtx, cancel := context.WithTimeout(ctx, reloadMasterInfoTimeout)
 		defer cancel()
 
@@ -132,6 +134,7 @@ func (m *MasterClient) asyncReloadMasterInfo(ctx context.Context) <-chan error {
 		}
 
 		m.putMasterInfo(masterMeta.NodeID, masterMeta.Epoch)
+		log.Info("master info reloaded", zap.Any("meta", masterMeta))
 	}()
 	return errCh
 }

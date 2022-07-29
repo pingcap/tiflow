@@ -61,6 +61,7 @@ func (c *MasterMetadataClient) Load(ctx context.Context) (*frameModel.MasterMeta
 
 		return nil, errors.Trace(err)
 	}
+	log.Info("master meta loaded", zap.Any("meta", masterMeta), zap.Stack("stack"))
 	return masterMeta, nil
 }
 

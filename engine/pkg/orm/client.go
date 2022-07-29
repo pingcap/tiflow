@@ -392,13 +392,18 @@ func (c *metaOpsClient) UpdateJob(ctx context.Context, job *frameModel.MasterMet
 	if job == nil {
 		return errors.ErrMetaParamsInvalid.GenWithStackByArgs("input master meta is nil")
 	}
+	log.Info("UpdateJob", zap.Any("job", job))
 	// we don't use `Save` here to avoid user dealing with the basic model
 	// expected SQL: UPDATE xxx SET xxx='xxx', updated_at='2013-11-17 21:34:10' WHERE id=xxx;
-	if err := c.db.WithContext(ctx).
+	update := c.db.WithContext(ctx).
 		Model(&frameModel.MasterMetaKVData{}).
 		Where("id = ?", job.ID).
-		Updates(job.Map()).Error; err != nil {
+		Updates(job.Map())
+	if err := update.Error; err != nil {
 		return errors.ErrMetaOpFail.Wrap(err)
+	}
+	if update.RowsAffected != 1 {
+		log.Warn("update job result", zap.Int("affected", int(update.RowsAffected)))
 	}
 
 	return nil
