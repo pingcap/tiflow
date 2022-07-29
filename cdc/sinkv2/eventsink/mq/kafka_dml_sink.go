@@ -16,32 +16,30 @@ package mq
 import (
 	"context"
 	"net/url"
-	"strings"
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
-	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/producer"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
+	mqutil "github.com/pingcap/tiflow/cdc/sinkv2/util/mq"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pkafka "github.com/pingcap/tiflow/pkg/kafka"
 	"go.uber.org/zap"
 )
 
-// NewKafkaSink will verify the config and create a KafkaSink.
-func NewKafkaSink(
+// NewKafkaDMLSink will verify the config and create a KafkaSink.
+func NewKafkaDMLSink(
 	ctx context.Context,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
 	errCh chan error,
 	adminClientCreator pkafka.ClusterAdminClientCreator,
-	producerCreator producer.Factory,
+	producerCreator dmlproducer.Factory,
 ) (*sink, error) {
-	topic, err := getTopic(sinkURI)
+	topic, err := mqutil.GetTopic(sinkURI)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -61,16 +59,15 @@ func NewKafkaSink(
 	}
 	// we must close adminClient when this func return cause by an error
 	// otherwise the adminClient will never be closed and lead to a goroutine leak
+	// TODO: we should pass this adminClient to the producer to get the metrics.
 	defer func() {
-		if err != nil {
-			_ = adminClient.Close()
-		}
+		_ = adminClient.Close()
 	}()
 	if err := kafka.AdjustConfig(adminClient, baseConfig, saramaConfig, topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	protocol, err := getProtocol(replicaConfig.Sink.Protocol)
+	protocol, err := mqutil.GetProtocol(replicaConfig.Sink.Protocol)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -80,7 +77,7 @@ func NewKafkaSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	log.Info("Try to create a producer",
+	log.Info("Try to create a DML sink producer",
 		zap.Any("baseConfig", baseConfig))
 	p, err := producerCreator(ctx, client, errCh)
 	if err != nil {
@@ -94,11 +91,11 @@ func NewKafkaSink(
 		}
 	}()
 
-	topicManager, err := getTopicManagerAndTryCreateTopic(
-		baseConfig.BrokerEndpoints, topic,
+	topicManager, err := mqutil.GetTopicManagerAndTryCreateTopic(
+		topic,
 		baseConfig.DeriveTopicConfig(),
+		client,
 		adminClient,
-		saramaConfig,
 	)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -109,7 +106,7 @@ func NewKafkaSink(
 		return nil, errors.Trace(err)
 	}
 
-	encoderConfig, err := getEncoderConfig(sinkURI, protocol, replicaConfig,
+	encoderConfig, err := mqutil.GetEncoderConfig(sinkURI, protocol, replicaConfig,
 		saramaConfig.Producer.MaxMessageBytes)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -121,73 +118,4 @@ func NewKafkaSink(
 	}
 
 	return s, nil
-}
-
-func getTopic(sinkURI *url.URL) (string, error) {
-	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
-		return r == '/'
-	})
-	if topic == "" {
-		return "", cerror.ErrKafkaInvalidConfig.GenWithStack("no topic is specified in sink-uri")
-	}
-	return topic, nil
-}
-
-func getProtocol(protocolStr string) (config.Protocol, error) {
-	var protocol config.Protocol
-	if err := protocol.FromString(protocolStr); err != nil {
-		return protocol, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-
-	return protocol, nil
-}
-
-func getEncoderConfig(
-	sinkURI *url.URL,
-	protocol config.Protocol,
-	replicaConfig *config.ReplicaConfig,
-	maxMsgBytes int,
-) (*codec.Config, error) {
-	encoderConfig := codec.NewConfig(protocol)
-	if err := encoderConfig.Apply(sinkURI, replicaConfig); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-	// Always set encoder's `MaxMessageBytes` equal to producer's `MaxMessageBytes`
-	// to prevent that the encoder generate batched message too large
-	// then cause producer meet `message too large`.
-	encoderConfig = encoderConfig.WithMaxMessageBytes(maxMsgBytes)
-
-	if err := encoderConfig.Validate(); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-
-	return encoderConfig, nil
-}
-
-func getTopicManagerAndTryCreateTopic(
-	endpoints []string,
-	topic string,
-	topicCfg *kafka.AutoCreateTopicConfig,
-	adminClient pkafka.ClusterAdminClient,
-	saramaConfig *sarama.Config,
-) (manager.TopicManager, error) {
-	client, err := sarama.NewClient(endpoints, saramaConfig)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
-
-	topicManager, err := manager.NewKafkaTopicManager(
-		client,
-		adminClient,
-		topicCfg,
-	)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
-
-	if _, err := topicManager.CreateTopicAndWaitUntilVisible(topic); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
-	}
-
-	return topicManager, nil
 }

@@ -1,5 +1,5 @@
 ARG version
-From mysql:$version
+FROM mysql:${version}-debian
 
 RUN apt-get update && apt-get -y install keepalived net-tools
 
