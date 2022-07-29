@@ -375,6 +375,7 @@ func (l *LogWriter) FlushLog(ctx context.Context, checkpointTs, resolvedTs model
 	return l.flush(checkpointTs, resolvedTs)
 }
 
+// GetMeta implement GetMeta api
 func (l *LogWriter) GetMeta() (checkpointTs, resolvedTs model.Ts) {
 	return l.meta.CheckpointTs, l.meta.ResolvedTs
 }
