@@ -474,6 +474,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 func NewPulsarSink(ctx context.Context, sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig, errCh chan error,
 ) (*mqSink, error) {
+	log.Warn("Pulsar Sink is not recommended for production use.")
 	s := sinkURI.Query().Get(config.ProtocolKey)
 	if s != "" {
 		replicaConfig.Sink.Protocol = s
