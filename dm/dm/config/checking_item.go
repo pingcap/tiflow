@@ -34,6 +34,12 @@ const (
 	TableSchemaChecking          = "table_schema"
 	ShardTableSchemaChecking     = "schema_of_shard_tables"
 	ShardAutoIncrementIDChecking = "auto_increment_ID"
+<<<<<<< HEAD:dm/dm/config/checking_item.go
+=======
+	OnlineDDLChecking            = "online_ddl"
+	BinlogDBChecking             = "binlog_db"
+	ConnNumberChecking           = "conn_number"
+>>>>>>> 566357e7a (checker(dm): check the number of connections before starting (#5185)):dm/config/checking_item.go
 )
 
 // AllCheckingItems contains all checking items.
@@ -49,6 +55,12 @@ var AllCheckingItems = map[string]string{
 	TableSchemaChecking:          "table schema compatibility checking item",
 	ShardTableSchemaChecking:     "consistent schema of shard tables checking item",
 	ShardAutoIncrementIDChecking: "conflict auto increment ID of shard tables checking item",
+<<<<<<< HEAD:dm/dm/config/checking_item.go
+=======
+	OnlineDDLChecking:            "online ddl checking item",
+	BinlogDBChecking:             "binlog db checking item",
+	ConnNumberChecking:           "connection number checking item",
+>>>>>>> 566357e7a (checker(dm): check the number of connections before starting (#5185)):dm/config/checking_item.go
 }
 
 // MaxSourceIDLength is the max length for dm-worker source id.
