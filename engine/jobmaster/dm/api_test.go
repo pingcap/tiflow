@@ -300,12 +300,14 @@ func TestUpdateJobCfg(t *testing.T) {
 		mockCheckpointAgent = &MockCheckpointAgent{}
 		messageAgent        = &dmpkg.MockMessageAgent{}
 		jobCfg              = &config.JobCfg{}
+		jobStore            = metadata.NewJobStore(mockBaseJobmaster.JobMasterID(), metaKVClient)
 		jm                  = &JobMaster{
 			BaseJobMaster:   mockBaseJobmaster,
-			taskManager:     NewTaskManager(nil, metadata.NewJobStore(mockBaseJobmaster.JobMasterID(), metaKVClient), messageAgent, mockBaseJobmaster.Logger()),
 			checkpointAgent: mockCheckpointAgent,
 		}
 	)
+	jm.taskManager = NewTaskManager(nil, jobStore, messageAgent, jm.Logger())
+	jm.workerManager = NewWorkerManager(nil, jobStore, jm, messageAgent, mockCheckpointAgent, jm.Logger())
 	funcBackup := master.CheckAndAdjustSourceConfigFunc
 	master.CheckAndAdjustSourceConfigFunc = func(ctx context.Context, cfg *dmconfig.SourceConfig) error { return nil }
 	defer func() {
