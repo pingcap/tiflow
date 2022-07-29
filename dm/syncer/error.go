@@ -65,23 +65,22 @@ func isDropColumnWithIndexError(err error) bool {
 }
 
 // here db should be TiDB database
-func GetDDLStatusFromTiDB(db *sql.DB, table string, DDL string, createTime int64) (string, error) {
+func GetDDLStatusFromTiDB(db *sql.DB, DDL string, createTime int64) (string, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	rowNum := 10
-	//var err error
 	for {
 		showJobs := fmt.Sprintf("ADMIN SHOW DDL JOBS %d;", rowNum) //every attempt try 10 history jobs
 		rows, err := db.QueryContext(ctx, showJobs)
 		if err != nil {
-			fmt.Printf("Error: %v \n", err)
+			return "", err
 		}
 		defer rows.Close()
 
 		columns, err := rows.Columns()
 		if err != nil {
-			fmt.Printf("Error: %v \n", err)
+			return "", err
 		}
 
 		values := make([]sql.RawBytes, len(columns))
@@ -90,9 +89,9 @@ func GetDDLStatusFromTiDB(db *sql.DB, table string, DDL string, createTime int64
 			scanArgs[i] = &values[i]
 		}
 
-		valuesForLimit := make([]sql.RawBytes, len(columns))
-		scanArgsForLimit := make([]interface{}, len(values))
-		for i := range values {
+		valuesForLimit := make([]sql.RawBytes, 2)
+		scanArgsForLimit := make([]interface{}, 2)
+		for i := range valuesForLimit {
 			scanArgsForLimit[i] = &valuesForLimit[i]
 		}
 
@@ -100,20 +99,18 @@ func GetDDLStatusFromTiDB(db *sql.DB, table string, DDL string, createTime int64
 		for rows.Next() {
 			err = rows.Scan(scanArgs...)
 			if err != nil {
-				fmt.Printf("Error: %v \n", err)
+				return "", err
 			}
 
-			//var value string
 			createTimeStr := string(values[8])
 			timeLayout := "2006-01-02 15:04:05"
 			loc, _ := time.LoadLocation("Local")
 			theTime, _ := time.ParseInLocation(timeLayout, createTimeStr, loc)
 			DDLCreateTime := theTime.Unix()
 			if DDLCreateTime >= createTime {
-				fmt.Println("jobiD atoi ")
 				jobID, err := strconv.Atoi(string(values[0]))
 				if err != nil {
-					fmt.Printf("Error: %v \n", err)
+					return "", err
 				}
 
 				offset := rowNum + count - 10
@@ -123,15 +120,14 @@ func GetDDLStatusFromTiDB(db *sql.DB, table string, DDL string, createTime int64
 					err = db.QueryRowContext(ctx, showJob).Scan(scanArgsForLimit...)
 					//rowsForLimit, err := db.QueryContext(ctx, showJob)
 					if err != nil {
-						fmt.Printf("Error: %v \n", err)
+						return "", err
 					}
 
-					fmt.Println("jobIDForLimit atoi")
 					jobIDForLimit, err := strconv.Atoi(string(valuesForLimit[0]))
 					if err != nil {
-						fmt.Printf("Error: %v \n", err)
+						return "", err
 					}
-					if table == string(values[2]) && jobID == jobIDForLimit && DDL == string(valuesForLimit[1]) {
+					if jobID == jobIDForLimit && DDL == string(valuesForLimit[1]) {
 						fmt.Printf("DDL: %v \n", string(valuesForLimit[1]))
 						fmt.Printf("state: %v \n", string(values[11]))
 						return string(values[11]), err
@@ -145,11 +141,12 @@ func GetDDLStatusFromTiDB(db *sql.DB, table string, DDL string, createTime int64
 				count++
 
 			} else {
-				return "", err //return what state, which error?
+				// requested DDL cannot be found
+				return "", err
 			}
 		}
 		if err = rows.Err(); err != nil {
-			fmt.Printf("Error: %v \n", err)
+			return "", err
 		}
 		rowNum += 10
 	}

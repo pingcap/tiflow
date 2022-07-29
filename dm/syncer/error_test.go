@@ -215,7 +215,7 @@ func TestIsConnectionRefusedError(t *testing.T) {
 func TestGetDDLStatusFromTiDB(t *testing.T) {
 	db, err := sql.Open("mysql", "root:@tcp(127.0.0.1:4000)/many_tables_test")
 	if err != nil {
-		//panic(err.Error())
+		fmt.Printf("Error: %v \n", err)
 	}
 	defer db.Close()
 
@@ -225,5 +225,5 @@ func TestGetDDLStatusFromTiDB(t *testing.T) {
 	}
 
 	createTime := time.Now().Unix() - 86400 //within 24 hours
-	_, _ = GetDDLStatusFromTiDB(db, "t1", "ALTER TABLE many_tables_test.t1 ADD x timestamp DEFAULT current_timestamp", createTime)
+	_, _ = GetDDLStatusFromTiDB(db, "ALTER TABLE many_tables_test.t1 ADD x timestamp DEFAULT current_timestamp", createTime)
 }
