@@ -284,15 +284,16 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 	if err != nil {
 		return errors.Trace(err)
 	}
+	log.Debug("owner handles barrier",
+		zap.String("namespace", c.id.Namespace),
+		zap.String("changefeed", c.id.ID),
+		zap.Uint64("barrierTs", barrierTs),
+		zap.Uint64("checkpointTs", checkpointTs))
 
 	if barrierTs < checkpointTs {
 		// This condition implies that the DDL resolved-ts has not yet reached checkpointTs,
 		// which implies that it would be premature to schedule tables or to update status.
 		// So we return here.
-		log.Debug("barrierTs < checkpointTs, premature to schedule tables or update status",
-			zap.String("namespace", c.id.Namespace),
-			zap.String("changefeed", c.id.ID),
-			zap.Uint64("barrierTs", barrierTs), zap.Uint64("checkpointTs", checkpointTs))
 		return nil
 	}
 
@@ -344,6 +345,10 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 				newResolvedTs = prevResolvedTs
 			}
 		}
+		log.Debug("owner prepares to update status",
+			zap.Uint64("prevResolvedTs", prevResolvedTs),
+			zap.Uint64("newResolvedTs", newResolvedTs),
+			zap.Uint64("newCheckpointTs", newCheckpointTs))
 		// resolvedTs should never regress but checkpointTs can, as checkpointTs has already
 		// been decreased when the owner is initialized.
 		if newResolvedTs < prevResolvedTs {
@@ -374,18 +379,26 @@ LOOP:
 			break LOOP
 		}
 	}
+
 	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
+	resolvedTs := checkpointTs
+	if c.state.Status != nil {
+		resolvedTs = c.state.Status.ResolvedTs
+	}
 	log.Info("initialize changefeed",
 		zap.String("namespace", c.state.ID.Namespace),
 		zap.String("changefeed", c.state.ID.ID),
 		zap.Stringer("info", c.state.Info),
-		zap.Uint64("checkpointTs", checkpointTs))
+		zap.Uint64("checkpointTs", checkpointTs),
+		zap.Uint64("resolvedTs", resolvedTs))
+
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
 		failpoint.Return(cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs-300, checkpointTs))
 	})
 	failpoint.Inject("NewChangefeedRetryError", func() {
 		failpoint.Return(errors.New("failpoint injected retriable error"))
 	})
+
 	if c.state.Info.Config.CheckGCSafePoint {
 		// Check TiDB GC safepoint does not exceed the checkpoint.
 		//
@@ -635,7 +648,7 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 	barrierTp, barrierTs := c.barriers.Min()
 	phyBarrierTs := oracle.ExtractPhysical(barrierTs)
 	c.metricsChangefeedBarrierTsGauge.Set(float64(phyBarrierTs))
-	blocked := (barrierTs == c.state.Status.CheckpointTs) && (barrierTs == c.state.Status.ResolvedTs)
+	blocked := barrierTs == c.state.Status.CheckpointTs
 	switch barrierTp {
 	case ddlJobBarrier:
 		ddlResolvedTs, ddlJob := c.ddlPuller.FrontDDL()
@@ -671,10 +684,10 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		c.barriers.Update(syncPointBarrier, nextSyncPointTs)
 
 	case finishBarrier:
-		if !blocked {
-			return barrierTs, nil
+		if blocked && barrierTs == c.state.Status.ResolvedTs {
+			c.feedStateManager.MarkFinished()
 		}
-		c.feedStateManager.MarkFinished()
+		return barrierTs, nil
 	default:
 		log.Panic("Unknown barrier type", zap.Int("barrierType", int(barrierTp)))
 	}
