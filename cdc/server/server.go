@@ -80,7 +80,7 @@ type server struct {
 	tcpServer    tcpserver.TCPServer
 	grpcService  *p2p.ServerWrapper
 	statusServer *http.Server
-	etcdClient   *etcd.CDCEtcdClient
+	etcdClient   *etcd.CDCEtcdClientImpl
 	pdEndpoints  []string
 }
 
