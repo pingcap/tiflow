@@ -91,7 +91,7 @@ func BenchmarkCoordinatorHeartbeat(b *testing.B) {
 		// Always heartbeat.
 		captureM := member.NewCaptureManager(
 			"", model.ChangeFeedID{}, schedulepb.OwnerRevision{}, 0)
-		captureM.SetInitialized(true)
+		captureM.SetInitializedForTests(true)
 		for i := 0; i < captureCount; i++ {
 			captures[fmt.Sprint(i)] = &model.CaptureInfo{}
 			captureM.Captures[fmt.Sprint(i)] = &member.CaptureStatus{State: member.CaptureStateInitialized}
@@ -122,7 +122,7 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 		// Disable heartbeat.
 		captureM := member.NewCaptureManager(
 			"", model.ChangeFeedID{}, schedulepb.OwnerRevision{}, math.MaxInt)
-		captureM.SetInitialized(true)
+		captureM.SetInitializedForTests(true)
 		for i := 0; i < captureCount; i++ {
 			captures[fmt.Sprint(i)] = &model.CaptureInfo{}
 			captureM.Captures[fmt.Sprint(i)] = &member.CaptureStatus{State: member.CaptureStateInitialized}
@@ -143,7 +143,7 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			replicationM.SetReplicationSet(rep)
+			replicationM.SetReplicationSetForTests(rep)
 			_, ok := heartbeatResp[captureID]
 			if !ok {
 				heartbeatResp[captureID] = &schedulepb.Message{

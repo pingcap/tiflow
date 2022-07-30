@@ -19,9 +19,14 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
+)
+
+const (
+	checkpointCannotProceed = internal.CheckpointCannotProceed
 )
 
 type Callback func()
@@ -576,12 +581,12 @@ func (r *ReplicationManager) CleanMetrics() {
 	}
 }
 
-// SetReplicationSet is only used in tests.
-func (r *ReplicationManager) SetReplicationSet(rs *ReplicationSet) {
+// SetReplicationSetForTests is only used in tests.
+func (r *ReplicationManager) SetReplicationSetForTests(rs *ReplicationSet) {
 	r.tables[rs.TableID] = rs
 }
 
-// GetReplicationSet is only used in tests.
-func (r *ReplicationManager) GetReplicationSet() map[model.TableID]*ReplicationSet {
+// GetReplicationSetForTests is only used in tests.
+func (r *ReplicationManager) GetReplicationSetForTests() map[model.TableID]*ReplicationSet {
 	return r.tables
 }

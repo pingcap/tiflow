@@ -280,7 +280,7 @@ func (c *CaptureManager) CleanMetrics() {
 	}
 }
 
-// SetInitialized is only used in tests.
-func (c *CaptureManager) SetInitialized(init bool) {
+// SetInitializedForTests is only used in tests.
+func (c *CaptureManager) SetInitializedForTests(init bool) {
 	c.initialized = init
 }

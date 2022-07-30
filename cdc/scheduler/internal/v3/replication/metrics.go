@@ -14,12 +14,7 @@
 package replication
 
 import (
-	"github.com/pingcap/tiflow/cdc/scheduler/internal"
 	"github.com/prometheus/client_golang/prometheus"
-)
-
-const (
-	checkpointCannotProceed = internal.CheckpointCannotProceed
 )
 
 var (
@@ -30,13 +25,6 @@ var (
 			Name:      "table",
 			Help:      "The total number of tables",
 		}, []string{"namespace", "changefeed"})
-	captureTableGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "scheduler",
-			Name:      "capture_table",
-			Help:      "The total number of tables",
-		}, []string{"namespace", "changefeed", "addr"})
 	tableStateGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -44,13 +32,6 @@ var (
 			Name:      "table_replication_state",
 			Help:      "The total number of tables in different replication states",
 		}, []string{"namespace", "changefeed", "state"})
-	scheduleTaskCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "ticdc",
-			Subsystem: "scheduler",
-			Name:      "task",
-			Help:      "The total number of scheduler tasks",
-		}, []string{"namespace", "changefeed", "scheduler", "task"})
 	acceptScheduleTaskCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
@@ -97,9 +78,7 @@ var (
 
 // InitMetrics registers all metrics used in scheduler
 func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(scheduleTaskCounter)
 	registry.MustRegister(tableGauge)
-	registry.MustRegister(captureTableGauge)
 	registry.MustRegister(tableStateGauge)
 	registry.MustRegister(acceptScheduleTaskCounter)
 	registry.MustRegister(runningScheduleTaskGauge)

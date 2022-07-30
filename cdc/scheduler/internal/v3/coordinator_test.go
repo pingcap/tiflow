@@ -198,7 +198,7 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 	require.Len(t, msgs, 1)
 	// Basic scheduler, make sure all tables get replicated.
 	require.EqualValues(t, 3, msgs[0].DispatchTableRequest.GetAddTable().TableID)
-	require.Len(t, coord.replicationM.GetReplicationSet(), 3)
+	require.Len(t, coord.replicationM.GetReplicationSetForTests(), 3)
 }
 
 func TestCoordinatorAddCapture(t *testing.T) {
@@ -214,7 +214,7 @@ func TestCoordinatorAddCapture(t *testing.T) {
 	// Two captures "a".
 	// Three tables 1 2 3.
 	coord.captureM.Captures["a"] = &member.CaptureStatus{State: member.CaptureStateInitialized}
-	coord.captureM.SetInitialized(true)
+	coord.captureM.SetInitializedForTests(true)
 	require.True(t, coord.captureM.CheckAllCaptureInitialized())
 	init := map[string][]schedulepb.TableStatus{
 		"a": {
@@ -226,7 +226,7 @@ func TestCoordinatorAddCapture(t *testing.T) {
 	msgs, err := coord.replicationM.HandleCaptureChanges(init, nil, 0)
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
-	require.Len(t, coord.replicationM.GetReplicationSet(), 3)
+	require.Len(t, coord.replicationM.GetReplicationSetForTests(), 3)
 
 	// Capture "b" is online, heartbeat, and then move one table to capture "b".
 	ctx := context.Background()
@@ -272,7 +272,7 @@ func TestCoordinatorRemoveCapture(t *testing.T) {
 	coord.captureM.Captures["a"] = &member.CaptureStatus{State: member.CaptureStateInitialized}
 	coord.captureM.Captures["b"] = &member.CaptureStatus{State: member.CaptureStateInitialized}
 	coord.captureM.Captures["c"] = &member.CaptureStatus{State: member.CaptureStateInitialized}
-	coord.captureM.SetInitialized(true)
+	coord.captureM.SetInitializedForTests(true)
 	require.True(t, coord.captureM.CheckAllCaptureInitialized())
 	init := map[string][]schedulepb.TableStatus{
 		"a": {{TableID: 1, State: schedulepb.TableStateReplicating}},
@@ -282,7 +282,7 @@ func TestCoordinatorRemoveCapture(t *testing.T) {
 	msgs, err := coord.replicationM.HandleCaptureChanges(init, nil, 0)
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
-	require.Len(t, coord.replicationM.GetReplicationSet(), 3)
+	require.Len(t, coord.replicationM.GetReplicationSetForTests(), 3)
 
 	// Capture "c" is removed, add table 3 to another capture.
 	ctx := context.Background()
@@ -306,7 +306,7 @@ func TestCoordinatorDrainCapture(t *testing.T) {
 	}
 	coord.captureM = member.NewCaptureManager("", model.ChangeFeedID{}, coord.revision, 0)
 
-	coord.captureM.SetInitialized(true)
+	coord.captureM.SetInitializedForTests(true)
 	coord.captureM.Captures["a"] = &member.CaptureStatus{State: member.CaptureStateUninitialized}
 	count, err := coord.DrainCapture("a")
 	require.ErrorIs(t, err, cerror.ErrSchedulerRequestFailed)
@@ -318,7 +318,7 @@ func TestCoordinatorDrainCapture(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 0, count)
 
-	coord.replicationM.SetReplicationSet(&replication.ReplicationSet{
+	coord.replicationM.SetReplicationSetForTests(&replication.ReplicationSet{
 		TableID: 1,
 		State:   replication.ReplicationSetStateReplicating,
 		Primary: "a",
@@ -329,7 +329,7 @@ func TestCoordinatorDrainCapture(t *testing.T) {
 	require.Equal(t, 1, count)
 
 	coord.captureM.Captures["b"] = &member.CaptureStatus{State: member.CaptureStateInitialized}
-	coord.replicationM.SetReplicationSet(&replication.ReplicationSet{
+	coord.replicationM.SetReplicationSetForTests(&replication.ReplicationSet{
 		TableID: 2,
 		State:   replication.ReplicationSetStateReplicating,
 		Primary: "b",

@@ -22,6 +22,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	captureIDNotDraining = ""
+)
+
 func TestCaptureStatusHandleHeartbeatResponse(t *testing.T) {
 	t.Parallel()
 
