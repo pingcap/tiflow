@@ -33,7 +33,7 @@ import (
 // All field in Vars should be READ-ONLY and THREAD-SAFE
 type GlobalVars struct {
 	CaptureInfo      *model.CaptureInfo
-	EtcdClient       *etcd.CDCEtcdClient
+	EtcdClient       etcd.CDCEtcdClient
 	TableActorSystem *system.System
 	SorterSystem     *ssystem.System
 
@@ -191,7 +191,7 @@ func NewContext4Test(baseCtx context.Context, withChangefeedVars bool) Context {
 			// suppose the current version is `v6.3.0`
 			Version: "v6.3.0",
 		},
-		EtcdClient: &etcd.CDCEtcdClient{
+		EtcdClient: &etcd.CDCEtcdClientImpl{
 			ClusterID: etcd.DefaultCDCClusterID,
 		},
 	})

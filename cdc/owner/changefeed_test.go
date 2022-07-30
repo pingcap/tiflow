@@ -255,7 +255,7 @@ func TestInitialize(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// initialize
-	ctx.GlobalVars().EtcdClient = &etcd.CDCEtcdClient{}
+	ctx.GlobalVars().EtcdClient = &etcd.CDCEtcdClientImpl{}
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
 	require.Equal(t, state.Status.CheckpointTs, ctx.ChangefeedVars().Info.StartTs)
