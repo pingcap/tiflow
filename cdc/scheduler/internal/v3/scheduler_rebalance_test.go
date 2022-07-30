@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,11 +29,11 @@ func TestSchedulerRebalance(t *testing.T) {
 	captures := map[model.CaptureID]*CaptureStatus{"a": {}, "b": {}}
 	currentTables := []model.TableID{1, 2, 3, 4}
 
-	replications := map[model.TableID]*ReplicationSet{
-		1: {State: ReplicationSetStateReplicating, Primary: "a"},
-		2: {State: ReplicationSetStateCommit, Secondary: "b"},
-		3: {State: ReplicationSetStatePrepare, Primary: "a", Secondary: "b"},
-		4: {State: ReplicationSetStateAbsent},
+	replications := map[model.TableID]*replication.ReplicationSet{
+		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
+		2: {State: replication.ReplicationSetStateCommit, Secondary: "b"},
+		3: {State: replication.ReplicationSetStatePrepare, Primary: "a", Secondary: "b"},
+		4: {State: replication.ReplicationSetStateAbsent},
 	}
 
 	scheduler := newRebalanceScheduler(model.ChangeFeedID{})
@@ -56,22 +57,22 @@ func TestSchedulerRebalance(t *testing.T) {
 	require.Len(t, tasks, 0)
 
 	// table distribution is balanced, should have no task.
-	replications = map[model.TableID]*ReplicationSet{
-		1: {State: ReplicationSetStateReplicating, Primary: "a"},
-		2: {State: ReplicationSetStateReplicating, Primary: "a"},
-		3: {State: ReplicationSetStateReplicating, Primary: "b"},
-		4: {State: ReplicationSetStateReplicating, Primary: "b"},
+	replications = map[model.TableID]*replication.ReplicationSet{
+		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
+		2: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
+		3: {State: replication.ReplicationSetStateReplicating, Primary: "b"},
+		4: {State: replication.ReplicationSetStateReplicating, Primary: "b"},
 	}
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 
 	// Imbalance.
-	replications[5] = &ReplicationSet{
-		State:   ReplicationSetStateReplicating,
+	replications[5] = &replication.ReplicationSet{
+		State:   replication.ReplicationSetStateReplicating,
 		Primary: "a",
 	}
-	replications[6] = &ReplicationSet{
-		State:   ReplicationSetStateReplicating,
+	replications[6] = &replication.ReplicationSet{
+		State:   replication.ReplicationSetStateReplicating,
 		Primary: "a",
 	}
 
@@ -86,12 +87,12 @@ func TestSchedulerRebalance(t *testing.T) {
 	scheduler.random = nil // disable random to make test easier.
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
-	require.Contains(t, tasks[0].burstBalance.MoveTables, moveTable{
+	require.Contains(t, tasks[0].BurstBalance.MoveTables, replication.MoveTable{
 		TableID: 1, DestCapture: "b",
 	})
 	require.EqualValues(t, 1, atomic.LoadInt32(&scheduler.rebalance))
 
-	tasks[0].accept()
+	tasks[0].Accept()
 	require.EqualValues(t, 0, atomic.LoadInt32(&scheduler.rebalance))
 
 	// pending task is not consumed yet, this turn should have no tasks.

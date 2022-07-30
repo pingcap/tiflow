@@ -22,6 +22,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"go.uber.org/zap"
 )
 
@@ -50,8 +51,8 @@ func (r *rebalanceScheduler) Schedule(
 	_ model.Ts,
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*CaptureStatus,
-	replications map[model.TableID]*ReplicationSet,
-) []*scheduleTask {
+	replications map[model.TableID]*replication.ReplicationSet,
+) []*replication.ScheduleTask {
 	// rebalance is not triggered, or there is still some pending task,
 	// do not generate new tasks.
 	if atomic.LoadInt32(&r.rebalance) == 0 {
@@ -78,7 +79,7 @@ func (r *rebalanceScheduler) Schedule(
 		if !ok {
 			return nil
 		}
-		if rep.State != ReplicationSetStateReplicating {
+		if rep.State != replication.ReplicationSetStateReplicating {
 			log.Debug("schedulerv3: not all table replicating, premature to rebalance tables",
 				zap.String("namespace", r.changefeedID.Namespace),
 				zap.String("changefeed", r.changefeedID.ID))
@@ -97,26 +98,26 @@ func (r *rebalanceScheduler) Schedule(
 			zap.String("namespace", r.changefeedID.Namespace),
 			zap.String("changefeed", r.changefeedID.ID))
 	}
-	return []*scheduleTask{{
-		burstBalance: &burstBalance{MoveTables: tasks},
-		accept:       accept,
+	return []*replication.ScheduleTask{{
+		BurstBalance: &replication.BurstBalance{MoveTables: tasks},
+		Accept:       accept,
 	}}
 }
 
 func newBalanceMoveTables(
 	random *rand.Rand,
 	captures map[model.CaptureID]*CaptureStatus,
-	replications map[model.TableID]*ReplicationSet,
+	replications map[model.TableID]*replication.ReplicationSet,
 	maxTaskLimit int,
 	changefeedID model.ChangeFeedID,
-) []moveTable {
+) []replication.MoveTable {
 	tablesPerCapture := make(map[model.CaptureID]*tableSet)
 	for captureID := range captures {
 		tablesPerCapture[captureID] = newTableSet()
 	}
 
 	for tableID, rep := range replications {
-		if rep.State != ReplicationSetStateReplicating {
+		if rep.State != replication.ReplicationSetStateReplicating {
 			continue
 		}
 		tablesPerCapture[rep.Primary].add(tableID)
@@ -169,7 +170,7 @@ func newBalanceMoveTables(
 		captureWorkload[captureID] = randomizeWorkload(random, ts.size())
 	}
 	// for each victim table, find the target for it
-	moveTables := make([]moveTable, 0, len(victims))
+	moveTables := make([]replication.MoveTable, 0, len(victims))
 	for idx, tableID := range victims {
 		target := ""
 		minWorkload := math.MaxInt64
@@ -192,7 +193,7 @@ func newBalanceMoveTables(
 			break
 		}
 
-		moveTables = append(moveTables, moveTable{
+		moveTables = append(moveTables, replication.MoveTable{
 			TableID:     tableID,
 			DestCapture: target,
 		})

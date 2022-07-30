@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -46,7 +47,7 @@ type coordinator struct {
 	revision     schedulepb.OwnerRevision
 	captureID    model.CaptureID
 	trans        transport
-	replicationM *replicationManager
+	replicationM *replication.ReplicationManager
 	captureM     *captureManager
 	schedulerM   *schedulerManager
 
@@ -86,7 +87,7 @@ func newCoordinator(
 		version:      version.ReleaseSemver(),
 		revision:     revision,
 		captureID:    captureID,
-		replicationM: newReplicationManager(cfg.MaxTaskConcurrency, changefeedID),
+		replicationM: replication.NewReplicationManager(cfg.MaxTaskConcurrency, changefeedID),
 		captureM:     newCaptureManager(captureID, changefeedID, revision, cfg.HeartbeatTick),
 		schedulerM:   newSchedulerManager(changefeedID, cfg),
 		changefeedID: changefeedID,
@@ -251,7 +252,8 @@ func (c *coordinator) poll(
 
 	// Handle capture membership changes.
 	if changes := c.captureM.TakeChanges(); changes != nil {
-		msgs, err = c.replicationM.HandleCaptureChanges(changes, checkpointTs)
+		msgs, err = c.replicationM.HandleCaptureChanges(
+			changes.Init, changes.Removed, checkpointTs)
 		if err != nil {
 			return checkpointCannotProceed, checkpointCannotProceed, errors.Trace(err)
 		}

@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
 	"github.com/stretchr/testify/require"
 )
@@ -211,7 +212,7 @@ func TestCaptureManagerTick(t *testing.T) {
 	// TableID in heartbeat.
 	msgs = cm.Tick(nil, captureIDNotDraining)
 	require.Empty(t, msgs)
-	tables := map[model.TableID]*ReplicationSet{
+	tables := map[model.TableID]*replication.ReplicationSet{
 		1: {Captures: map[model.CaptureID]struct{}{"1": {}}},
 		2: {Captures: map[model.CaptureID]struct{}{"1": {}, "2": {}}},
 		3: {Captures: map[model.CaptureID]struct{}{"2": {}}},

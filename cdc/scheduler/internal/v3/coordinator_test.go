@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -195,7 +196,7 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 	require.Len(t, msgs, 1)
 	// Basic scheduler, make sure all tables get replicated.
 	require.EqualValues(t, 3, msgs[0].DispatchTableRequest.GetAddTable().TableID)
-	require.Len(t, coord.replicationM.tables, 3)
+	require.Len(t, coord.replicationM.GetReplicationSet(), 3)
 }
 
 func TestCoordinatorAddCapture(t *testing.T) {
@@ -213,18 +214,17 @@ func TestCoordinatorAddCapture(t *testing.T) {
 	coord.captureM.Captures["a"] = &CaptureStatus{State: CaptureStateInitialized}
 	coord.captureM.initialized = true
 	require.True(t, coord.captureM.CheckAllCaptureInitialized())
-	msgs, err := coord.replicationM.HandleCaptureChanges(&captureChanges{
-		Init: map[string][]schedulepb.TableStatus{
-			"a": {
-				{TableID: 1, State: schedulepb.TableStateReplicating},
-				{TableID: 2, State: schedulepb.TableStateReplicating},
-				{TableID: 3, State: schedulepb.TableStateReplicating},
-			},
+	init := map[string][]schedulepb.TableStatus{
+		"a": {
+			{TableID: 1, State: schedulepb.TableStateReplicating},
+			{TableID: 2, State: schedulepb.TableStateReplicating},
+			{TableID: 3, State: schedulepb.TableStateReplicating},
 		},
-	}, 0)
+	}
+	msgs, err := coord.replicationM.HandleCaptureChanges(init, nil, 0)
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
-	require.Len(t, coord.replicationM.tables, 3)
+	require.Len(t, coord.replicationM.GetReplicationSet(), 3)
 
 	// Capture "b" is online, heartbeat, and then move one table to capture "b".
 	ctx := context.Background()
@@ -272,16 +272,15 @@ func TestCoordinatorRemoveCapture(t *testing.T) {
 	coord.captureM.Captures["c"] = &CaptureStatus{State: CaptureStateInitialized}
 	coord.captureM.initialized = true
 	require.True(t, coord.captureM.CheckAllCaptureInitialized())
-	msgs, err := coord.replicationM.HandleCaptureChanges(&captureChanges{
-		Init: map[string][]schedulepb.TableStatus{
-			"a": {{TableID: 1, State: schedulepb.TableStateReplicating}},
-			"b": {{TableID: 2, State: schedulepb.TableStateReplicating}},
-			"c": {{TableID: 3, State: schedulepb.TableStateReplicating}},
-		},
-	}, 0)
+	init := map[string][]schedulepb.TableStatus{
+		"a": {{TableID: 1, State: schedulepb.TableStateReplicating}},
+		"b": {{TableID: 2, State: schedulepb.TableStateReplicating}},
+		"c": {{TableID: 3, State: schedulepb.TableStateReplicating}},
+	}
+	msgs, err := coord.replicationM.HandleCaptureChanges(init, nil, 0)
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
-	require.Len(t, coord.replicationM.tables, 3)
+	require.Len(t, coord.replicationM.GetReplicationSet(), 3)
 
 	// Capture "c" is removed, add table 3 to another capture.
 	ctx := context.Background()
@@ -312,27 +311,27 @@ func TestCoordinatorDrainCapture(t *testing.T) {
 	require.Equal(t, 0, count)
 
 	coord.captureM.Captures["a"] = &CaptureStatus{State: CaptureStateInitialized}
-	coord.replicationM = newReplicationManager(10, model.ChangeFeedID{})
+	coord.replicationM = replication.NewReplicationManager(10, model.ChangeFeedID{})
 	count, err = coord.DrainCapture("a")
 	require.NoError(t, err)
 	require.Equal(t, 0, count)
 
-	coord.replicationM.tables[1] = &ReplicationSet{
+	coord.replicationM.SetReplicationSet(&replication.ReplicationSet{
 		TableID: 1,
-		State:   ReplicationSetStateReplicating,
+		State:   replication.ReplicationSetStateReplicating,
 		Primary: "a",
-	}
+	})
 
 	count, err = coord.DrainCapture("a")
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
 
 	coord.captureM.Captures["b"] = &CaptureStatus{State: CaptureStateInitialized}
-	coord.replicationM.tables[2] = &ReplicationSet{
+	coord.replicationM.SetReplicationSet(&replication.ReplicationSet{
 		TableID: 2,
-		State:   ReplicationSetStateReplicating,
+		State:   replication.ReplicationSetStateReplicating,
 		Primary: "b",
-	}
+	})
 
 	count, err = coord.DrainCapture("a")
 	require.NoError(t, err)

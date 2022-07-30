@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"go.uber.org/zap"
 )
 
@@ -83,8 +84,8 @@ func (d *drainCaptureScheduler) Schedule(
 	_ model.Ts,
 	_ []model.TableID,
 	captures map[model.CaptureID]*CaptureStatus,
-	replications map[model.TableID]*ReplicationSet,
-) []*scheduleTask {
+	replications map[model.TableID]*replication.ReplicationSet,
+) []*replication.ScheduleTask {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -128,7 +129,7 @@ func (d *drainCaptureScheduler) Schedule(
 	// victimTables record tables should be moved out from the target capture
 	victimTables := make([]model.TableID, 0, maxTaskConcurrency)
 	for tableID, rep := range replications {
-		if rep.State != ReplicationSetStateReplicating {
+		if rep.State != replication.ReplicationSetStateReplicating {
 			// only drain the target capture if all tables is replicating,
 			log.Debug("schedulerv3: drain capture scheduler skip this tick,"+
 				"not all table is replicating",
@@ -165,7 +166,7 @@ func (d *drainCaptureScheduler) Schedule(
 	}
 
 	// For each victim table, find the target for it
-	result := make([]*scheduleTask, 0, maxTaskConcurrency)
+	result := make([]*replication.ScheduleTask, 0, maxTaskConcurrency)
 	for _, tableID := range victimTables {
 		target := ""
 		minWorkload := math.MaxInt64
@@ -183,12 +184,12 @@ func (d *drainCaptureScheduler) Schedule(
 				zap.Any("workload", captureWorkload))
 		}
 
-		result = append(result, &scheduleTask{
-			moveTable: &moveTable{
+		result = append(result, &replication.ScheduleTask{
+			MoveTable: &replication.MoveTable{
 				TableID:     tableID,
 				DestCapture: target,
 			},
-			accept: (callback)(nil), // No need for accept callback here.
+			Accept: (replication.Callback)(nil), // No need for accept callback here.
 		})
 
 		// Increase target workload to make sure tables are evenly distributed.

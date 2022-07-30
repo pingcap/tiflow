@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,18 +30,18 @@ func TestSchedulerBasic(t *testing.T) {
 
 	// Initial table dispatch.
 	// AddTable only
-	replications := map[model.TableID]*ReplicationSet{}
+	replications := map[model.TableID]*replication.ReplicationSet{}
 	b := newBasicScheduler(model.ChangeFeedID{})
 
 	// one capture stopping, another one is initialized
 	captures["a"].State = CaptureStateStopping
 	tasks := b.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
-	require.Len(t, tasks[0].burstBalance.AddTables, 4)
-	require.Equal(t, tasks[0].burstBalance.AddTables[0].CaptureID, "b")
-	require.Equal(t, tasks[0].burstBalance.AddTables[1].CaptureID, "b")
-	require.Equal(t, tasks[0].burstBalance.AddTables[2].CaptureID, "b")
-	require.Equal(t, tasks[0].burstBalance.AddTables[3].CaptureID, "b")
+	require.Len(t, tasks[0].BurstBalance.AddTables, 4)
+	require.Equal(t, tasks[0].BurstBalance.AddTables[0].CaptureID, "b")
+	require.Equal(t, tasks[0].BurstBalance.AddTables[1].CaptureID, "b")
+	require.Equal(t, tasks[0].BurstBalance.AddTables[2].CaptureID, "b")
+	require.Equal(t, tasks[0].BurstBalance.AddTables[3].CaptureID, "b")
 
 	// all capture's stopping, cannot add table
 	captures["b"].State = CaptureStateStopping
@@ -51,60 +52,60 @@ func TestSchedulerBasic(t *testing.T) {
 	captures["b"].State = CaptureStateInitialized
 	tasks = b.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
-	require.Len(t, tasks[0].burstBalance.AddTables, 4)
-	require.Equal(t, tasks[0].burstBalance.AddTables[0].TableID, model.TableID(1))
-	require.Equal(t, tasks[0].burstBalance.AddTables[1].TableID, model.TableID(2))
-	require.Equal(t, tasks[0].burstBalance.AddTables[2].TableID, model.TableID(3))
-	require.Equal(t, tasks[0].burstBalance.AddTables[3].TableID, model.TableID(4))
+	require.Len(t, tasks[0].BurstBalance.AddTables, 4)
+	require.Equal(t, tasks[0].BurstBalance.AddTables[0].TableID, model.TableID(1))
+	require.Equal(t, tasks[0].BurstBalance.AddTables[1].TableID, model.TableID(2))
+	require.Equal(t, tasks[0].BurstBalance.AddTables[2].TableID, model.TableID(3))
+	require.Equal(t, tasks[0].BurstBalance.AddTables[3].TableID, model.TableID(4))
 
-	// Capture offline, causes ReplicationSetStateAbsent.
+	// Capture offline, causes replication.ReplicationSetStateAbsent.
 	// AddTable only.
-	replications = map[model.TableID]*ReplicationSet{
-		1: {State: ReplicationSetStateReplicating, Primary: "a"},
-		2: {State: ReplicationSetStateCommit, Secondary: "b"},
-		3: {State: ReplicationSetStatePrepare, Primary: "a", Secondary: "b"},
-		4: {State: ReplicationSetStateAbsent},
+	replications = map[model.TableID]*replication.ReplicationSet{
+		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
+		2: {State: replication.ReplicationSetStateCommit, Secondary: "b"},
+		3: {State: replication.ReplicationSetStatePrepare, Primary: "a", Secondary: "b"},
+		4: {State: replication.ReplicationSetStateAbsent},
 	}
 	tasks = b.Schedule(1, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
-	require.Equal(t, tasks[0].burstBalance.AddTables[0].TableID, model.TableID(4))
-	require.Equal(t, tasks[0].burstBalance.AddTables[0].CheckpointTs, model.Ts(1))
+	require.Equal(t, tasks[0].BurstBalance.AddTables[0].TableID, model.TableID(4))
+	require.Equal(t, tasks[0].BurstBalance.AddTables[0].CheckpointTs, model.Ts(1))
 
 	// DDL CREATE/DROP/TRUNCATE TABLE.
 	// AddTable 4, and RemoveTable 5.
-	replications = map[model.TableID]*ReplicationSet{
-		1: {State: ReplicationSetStateReplicating, Primary: "a"},
-		2: {State: ReplicationSetStateCommit, Secondary: "b"},
-		3: {State: ReplicationSetStatePrepare, Primary: "a", Secondary: "b"},
-		5: {State: ReplicationSetStateCommit, Captures: map[model.CaptureID]struct{}{
+	replications = map[model.TableID]*replication.ReplicationSet{
+		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
+		2: {State: replication.ReplicationSetStateCommit, Secondary: "b"},
+		3: {State: replication.ReplicationSetStatePrepare, Primary: "a", Secondary: "b"},
+		5: {State: replication.ReplicationSetStateCommit, Captures: map[model.CaptureID]struct{}{
 			"a": {}, "b": {},
 		}},
 	}
 	tasks = b.Schedule(2, currentTables, captures, replications)
 	require.Len(t, tasks, 2)
-	if tasks[0].burstBalance.AddTables != nil {
-		require.Equal(t, tasks[0].burstBalance.AddTables[0].TableID, model.TableID(4))
-		require.Equal(t, tasks[0].burstBalance.AddTables[0].CheckpointTs, model.Ts(2))
-		require.Equal(t, tasks[1].burstBalance.RemoveTables[0].TableID, model.TableID(5))
+	if tasks[0].BurstBalance.AddTables != nil {
+		require.Equal(t, tasks[0].BurstBalance.AddTables[0].TableID, model.TableID(4))
+		require.Equal(t, tasks[0].BurstBalance.AddTables[0].CheckpointTs, model.Ts(2))
+		require.Equal(t, tasks[1].BurstBalance.RemoveTables[0].TableID, model.TableID(5))
 	} else {
-		require.Equal(t, tasks[1].burstBalance.AddTables[0].TableID, model.TableID(4))
-		require.Equal(t, tasks[0].burstBalance.AddTables[0].CheckpointTs, model.Ts(2))
-		require.Equal(t, tasks[0].burstBalance.RemoveTables[0].TableID, model.TableID(5))
+		require.Equal(t, tasks[1].BurstBalance.AddTables[0].TableID, model.TableID(4))
+		require.Equal(t, tasks[0].BurstBalance.AddTables[0].CheckpointTs, model.Ts(2))
+		require.Equal(t, tasks[0].BurstBalance.RemoveTables[0].TableID, model.TableID(5))
 	}
 
 	// RemoveTable only.
-	replications = map[model.TableID]*ReplicationSet{
-		1: {State: ReplicationSetStateReplicating, Primary: "a"},
-		2: {State: ReplicationSetStateCommit, Secondary: "b"},
-		3: {State: ReplicationSetStatePrepare, Primary: "a", Secondary: "b"},
-		4: {State: ReplicationSetStatePrepare, Primary: "a", Secondary: "b"},
-		5: {State: ReplicationSetStateCommit, Captures: map[model.CaptureID]struct{}{
+	replications = map[model.TableID]*replication.ReplicationSet{
+		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
+		2: {State: replication.ReplicationSetStateCommit, Secondary: "b"},
+		3: {State: replication.ReplicationSetStatePrepare, Primary: "a", Secondary: "b"},
+		4: {State: replication.ReplicationSetStatePrepare, Primary: "a", Secondary: "b"},
+		5: {State: replication.ReplicationSetStatePrepare, Captures: map[model.CaptureID]struct{}{
 			"b": {},
 		}},
 	}
 	tasks = b.Schedule(3, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
-	require.Equal(t, tasks[0].burstBalance.RemoveTables[0].TableID, model.TableID(5))
+	require.Equal(t, tasks[0].BurstBalance.RemoveTables[0].TableID, model.TableID(5))
 }
 
 func TestSchedulerPriority(t *testing.T) {
@@ -124,7 +125,7 @@ func benchmarkSchedulerBalance(
 		name string,
 		currentTables []model.TableID,
 		captures map[model.CaptureID]*CaptureStatus,
-		replications map[model.TableID]*ReplicationSet,
+		replications map[model.TableID]*replication.ReplicationSet,
 		sched scheduler,
 	),
 ) {
@@ -146,7 +147,7 @@ func BenchmarkSchedulerBasicAddTables(b *testing.B) {
 		name string,
 		currentTables []model.TableID,
 		captures map[model.CaptureID]*CaptureStatus,
-		replications map[model.TableID]*ReplicationSet,
+		replications map[model.TableID]*replication.ReplicationSet,
 		sched scheduler,
 	) {
 		const captureCount = 8
@@ -158,7 +159,7 @@ func BenchmarkSchedulerBasicAddTables(b *testing.B) {
 		for i := 0; i < total; i++ {
 			currentTables = append(currentTables, int64(10000+i))
 		}
-		replications = map[model.TableID]*ReplicationSet{}
+		replications = map[model.TableID]*replication.ReplicationSet{}
 		name = fmt.Sprintf("AddTable %d", total)
 		sched = newBasicScheduler(model.ChangeFeedID{})
 		return name, currentTables, captures, replications, sched
@@ -170,7 +171,7 @@ func BenchmarkSchedulerBasicRemoveTables(b *testing.B) {
 		name string,
 		currentTables []model.TableID,
 		captures map[model.CaptureID]*CaptureStatus,
-		replications map[model.TableID]*ReplicationSet,
+		replications map[model.TableID]*replication.ReplicationSet,
 		sched scheduler,
 	) {
 		const captureCount = 8
@@ -179,9 +180,9 @@ func BenchmarkSchedulerBasicRemoveTables(b *testing.B) {
 			captures[fmt.Sprint(i)] = &CaptureStatus{}
 		}
 		currentTables = make([]model.TableID, 0, total)
-		replications = map[model.TableID]*ReplicationSet{}
+		replications = map[model.TableID]*replication.ReplicationSet{}
 		for i := 0; i < total; i++ {
-			replications[int64(10000+i)] = &ReplicationSet{
+			replications[int64(10000+i)] = &replication.ReplicationSet{
 				Primary: fmt.Sprint(i % captureCount),
 			}
 		}
@@ -196,7 +197,7 @@ func BenchmarkSchedulerBasicAddRemoveTables(b *testing.B) {
 		name string,
 		currentTables []model.TableID,
 		captures map[model.CaptureID]*CaptureStatus,
-		replications map[model.TableID]*ReplicationSet,
+		replications map[model.TableID]*replication.ReplicationSet,
 		sched scheduler,
 	) {
 		const captureCount = 8
@@ -208,9 +209,9 @@ func BenchmarkSchedulerBasicAddRemoveTables(b *testing.B) {
 		for i := 0; i < total/2; i++ {
 			currentTables = append(currentTables, int64(100000+i))
 		}
-		replications = map[model.TableID]*ReplicationSet{}
+		replications = map[model.TableID]*replication.ReplicationSet{}
 		for i := 0; i < total/2; i++ {
-			replications[int64(200000+i)] = &ReplicationSet{
+			replications[int64(200000+i)] = &replication.ReplicationSet{
 				Primary: fmt.Sprint(i % captureCount),
 			}
 		}

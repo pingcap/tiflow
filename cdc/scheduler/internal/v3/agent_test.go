@@ -27,6 +27,31 @@ import (
 	"go.uber.org/zap"
 )
 
+// See https://stackoverflow.com/a/30230552/3920448 for details.
+func nextPerm(p []int) {
+	for i := len(p) - 1; i >= 0; i-- {
+		if i == 0 || p[i] < len(p)-i-1 {
+			p[i]++
+			return
+		}
+		p[i] = 0
+	}
+}
+
+func getPerm(orig, p []int) []int {
+	result := append([]int{}, orig...)
+	for i, v := range p {
+		result[i], result[i+v] = result[i+v], result[i]
+	}
+	return result
+}
+
+func iterPermutation(sequence []int, fn func(sequence []int)) {
+	for p := make([]int, len(sequence)); p[0] < len(p); nextPerm(p) {
+		fn(getPerm(sequence, p))
+	}
+}
+
 func newAgent4Test() *agent {
 	a := &agent{
 		ownerInfo: ownerInfo{

@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 )
 
 var _ scheduler = &balanceScheduler{}
@@ -55,8 +56,8 @@ func (b *balanceScheduler) Schedule(
 	_ model.Ts,
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*CaptureStatus,
-	replications map[model.TableID]*ReplicationSet,
-) []*scheduleTask {
+	replications map[model.TableID]*replication.ReplicationSet,
+) []*replication.ScheduleTask {
 	if !b.forceBalance {
 		now := time.Now()
 		if now.Sub(b.lastRebalanceTime) < b.checkBalanceInterval {
@@ -83,9 +84,9 @@ func buildBalanceMoveTables(
 	random *rand.Rand,
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*CaptureStatus,
-	replications map[model.TableID]*ReplicationSet,
+	replications map[model.TableID]*replication.ReplicationSet,
 	maxTaskConcurrency int,
-) []*scheduleTask {
+) []*replication.ScheduleTask {
 	captureTables := make(map[model.CaptureID][]model.TableID)
 	for _, tableID := range currentTables {
 		rep, ok := replications[tableID]
@@ -99,10 +100,10 @@ func buildBalanceMoveTables(
 
 	moves := newBalanceMoveTables(
 		random, captures, replications, maxTaskConcurrency, model.ChangeFeedID{})
-	tasks := make([]*scheduleTask, 0, len(moves))
+	tasks := make([]*replication.ScheduleTask, 0, len(moves))
 	for i := 0; i < len(moves); i++ {
 		// No need for accept callback here.
-		tasks = append(tasks, &scheduleTask{moveTable: &moves[i]})
+		tasks = append(tasks, &replication.ScheduleTask{MoveTable: &moves[i]})
 	}
 	return tasks
 }

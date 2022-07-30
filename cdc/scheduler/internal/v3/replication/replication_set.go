@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v3
+package replication
 
 import (
 	"encoding/json"
@@ -102,7 +102,7 @@ type ReplicationSet struct {
 	Checkpoint schedulepb.Checkpoint
 }
 
-func newReplicationSet(
+func NewReplicationSet(
 	tableID model.TableID,
 	checkpoint model.Ts,
 	tableStatus map[model.CaptureID]*schedulepb.TableStatus,

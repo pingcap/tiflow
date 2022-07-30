@@ -16,6 +16,7 @@ package v3
 import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
 	"go.uber.org/zap"
 )
@@ -152,7 +153,7 @@ func (c *captureManager) checkAllCaptureInitialized() bool {
 }
 
 func (c *captureManager) Tick(
-	reps map[model.TableID]*ReplicationSet, drainingCapture model.CaptureID,
+	reps map[model.TableID]*replication.ReplicationSet, drainingCapture model.CaptureID,
 ) []*schedulepb.Message {
 	c.tickCounter++
 	if c.tickCounter < c.heartbeatTick {

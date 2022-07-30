@@ -15,6 +15,7 @@ package v3
 
 import (
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 )
 
 type scheduler interface {
@@ -23,7 +24,7 @@ type scheduler interface {
 		checkpointTs model.Ts,
 		currentTables []model.TableID,
 		aliveCaptures map[model.CaptureID]*CaptureStatus,
-		replications map[model.TableID]*ReplicationSet) []*scheduleTask
+		replications map[model.TableID]*replication.ReplicationSet) []*replication.ScheduleTask
 }
 
 // schedulerPriority is the priority of each scheduler.

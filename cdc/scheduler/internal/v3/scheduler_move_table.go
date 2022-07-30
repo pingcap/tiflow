@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"go.uber.org/zap"
 )
 
@@ -25,14 +26,14 @@ var _ scheduler = &moveTableScheduler{}
 
 type moveTableScheduler struct {
 	mu    sync.Mutex
-	tasks map[model.TableID]*scheduleTask
+	tasks map[model.TableID]*replication.ScheduleTask
 
 	changefeedID model.ChangeFeedID
 }
 
 func newMoveTableScheduler(changefeed model.ChangeFeedID) *moveTableScheduler {
 	return &moveTableScheduler{
-		tasks:        make(map[model.TableID]*scheduleTask),
+		tasks:        make(map[model.TableID]*replication.ScheduleTask),
 		changefeedID: changefeed,
 	}
 }
@@ -48,12 +49,12 @@ func (m *moveTableScheduler) addTask(tableID model.TableID, target model.Capture
 	if _, ok := m.tasks[tableID]; ok {
 		return false
 	}
-	m.tasks[tableID] = &scheduleTask{
-		moveTable: &moveTable{
+	m.tasks[tableID] = &replication.ScheduleTask{
+		MoveTable: &replication.MoveTable{
 			TableID:     tableID,
 			DestCapture: target,
 		},
-		accept: func() {
+		Accept: func() {
 			m.mu.Lock()
 			defer m.mu.Unlock()
 			delete(m.tasks, tableID)
@@ -66,12 +67,12 @@ func (m *moveTableScheduler) Schedule(
 	_ model.Ts,
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*CaptureStatus,
-	replications map[model.TableID]*ReplicationSet,
-) []*scheduleTask {
+	replications map[model.TableID]*replication.ReplicationSet,
+) []*replication.ScheduleTask {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	result := make([]*scheduleTask, 0)
+	result := make([]*replication.ScheduleTask, 0)
 
 	if len(m.tasks) == 0 {
 		return result
@@ -94,19 +95,19 @@ func (m *moveTableScheduler) Schedule(
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Int64("tableID", tableID),
-				zap.String("captureID", task.moveTable.DestCapture))
+				zap.String("captureID", task.MoveTable.DestCapture))
 			delete(m.tasks, tableID)
 			continue
 		}
 
 		// the target capture may offline after manual move table triggered.
-		status, ok := captures[task.moveTable.DestCapture]
+		status, ok := captures[task.MoveTable.DestCapture]
 		if !ok {
 			log.Info("schedulerv3: move table ignored, since the target capture cannot found",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Int64("tableID", tableID),
-				zap.String("captureID", task.moveTable.DestCapture))
+				zap.String("captureID", task.MoveTable.DestCapture))
 			delete(m.tasks, tableID)
 			continue
 		}
@@ -115,7 +116,7 @@ func (m *moveTableScheduler) Schedule(
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Int64("tableID", tableID),
-				zap.String("captureID", task.moveTable.DestCapture),
+				zap.String("captureID", task.MoveTable.DestCapture),
 				zap.Any("state", status.State))
 			delete(m.tasks, tableID)
 			continue
@@ -127,17 +128,17 @@ func (m *moveTableScheduler) Schedule(
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Int64("tableID", tableID),
-				zap.String("captureID", task.moveTable.DestCapture))
+				zap.String("captureID", task.MoveTable.DestCapture))
 			delete(m.tasks, tableID)
 			continue
 		}
 		// only move replicating table.
-		if rep.State != ReplicationSetStateReplicating {
+		if rep.State != replication.ReplicationSetStateReplicating {
 			log.Info("schedulerv3: move table ignored, since the table is not replicating now",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Int64("tableID", tableID),
-				zap.String("captureID", task.moveTable.DestCapture),
+				zap.String("captureID", task.MoveTable.DestCapture),
 				zap.Any("replicationState", rep.State))
 			delete(m.tasks, tableID)
 		}

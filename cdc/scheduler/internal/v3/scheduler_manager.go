@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/pkg/config"
 	"go.uber.org/zap"
 )
@@ -59,9 +60,9 @@ func (sm *schedulerManager) Schedule(
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
 	aliveCaptures map[model.CaptureID]*CaptureStatus,
-	replications map[model.TableID]*ReplicationSet,
-	runTasking map[model.TableID]*scheduleTask,
-) []*scheduleTask {
+	replications map[model.TableID]*replication.ReplicationSet,
+	runTasking map[model.TableID]*replication.ScheduleTask,
+) []*replication.ScheduleTask {
 	for sid, scheduler := range sm.schedulers {
 		// Basic scheduler bypasses max task check, because it handles the most
 		// critical scheduling, eg. add table via CREATE TABLE DDL.

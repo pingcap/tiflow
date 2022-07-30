@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
 	"go.uber.org/zap/zapcore"
 )
@@ -67,7 +68,7 @@ func BenchmarkCoordinatorInit(b *testing.B) {
 		}
 		coord = &coordinator{
 			trans:        &mockTrans{},
-			replicationM: newReplicationManager(10, model.ChangeFeedID{}),
+			replicationM: replication.NewReplicationManager(10, model.ChangeFeedID{}),
 			// Disable heartbeat.
 			captureM: newCaptureManager(
 				"", model.ChangeFeedID{}, schedulepb.OwnerRevision{}, math.MaxInt),
@@ -100,7 +101,7 @@ func BenchmarkCoordinatorHeartbeat(b *testing.B) {
 		}
 		coord = &coordinator{
 			trans:        &mockTrans{},
-			replicationM: newReplicationManager(10, model.ChangeFeedID{}),
+			replicationM: replication.NewReplicationManager(10, model.ChangeFeedID{}),
 			captureM:     captureM,
 		}
 		name = fmt.Sprintf("Heartbeat %d", total)
@@ -125,14 +126,14 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 			captures[fmt.Sprint(i)] = &model.CaptureInfo{}
 			captureM.Captures[fmt.Sprint(i)] = &CaptureStatus{State: CaptureStateInitialized}
 		}
-		replicationM := newReplicationManager(10, model.ChangeFeedID{})
+		replicationM := replication.NewReplicationManager(10, model.ChangeFeedID{})
 		currentTables = make([]model.TableID, 0, total)
 		heartbeatResp := make(map[model.CaptureID]*schedulepb.Message)
 		for i := 0; i < total; i++ {
 			tableID := int64(10000 + i)
 			currentTables = append(currentTables, tableID)
 			captureID := fmt.Sprint(i % captureCount)
-			rep, err := newReplicationSet(tableID, 0, map[string]*schedulepb.TableStatus{
+			rep, err := replication.NewReplicationSet(tableID, 0, map[string]*schedulepb.TableStatus{
 				captureID: {
 					TableID: tableID,
 					State:   schedulepb.TableStateReplicating,
@@ -141,7 +142,7 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			replicationM.tables[tableID] = rep
+			replicationM.SetReplicationSet(rep)
 			_, ok := heartbeatResp[captureID]
 			if !ok {
 				heartbeatResp[captureID] = &schedulepb.Message{
