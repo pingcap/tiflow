@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/scheduler"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/transport"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/p2p"
@@ -48,7 +49,7 @@ type coordinator struct {
 	version      string
 	revision     schedulepb.OwnerRevision
 	captureID    model.CaptureID
-	trans        transport
+	trans        transport.Transport
 	replicationM *replication.ReplicationManager
 	captureM     *member.CaptureManager
 	schedulerM   *scheduler.SchedulerManager
@@ -68,7 +69,7 @@ func NewCoordinator(
 	ownerRevision int64,
 	cfg *config.SchedulerConfig,
 ) (internal.Scheduler, error) {
-	trans, err := newTransport(ctx, changefeedID, schedulerRole, messageServer, messageRouter)
+	trans, err := transport.NewTransport(ctx, changefeedID, transport.SchedulerRole, messageServer, messageRouter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v3
+package transport
 
 import (
 	"context"
@@ -28,28 +28,28 @@ import (
 	"go.uber.org/zap"
 )
 
-type transport interface {
+type Transport interface {
 	Send(ctx context.Context, msgs []*schedulepb.Message) error
 	Recv(ctx context.Context) ([]*schedulepb.Message, error)
 	Close() error
 }
 
 func p2pTopic(changefeed model.ChangeFeedID, role Role) (selfTopic, peerTopic p2p.Topic) {
-	if role == agentRole {
+	if role == AgentRole {
 		selfTopic = fmt.Sprintf(
-			"changefeed/%s/%s/%s", changefeed.Namespace, changefeed.ID, agentRole)
+			"changefeed/%s/%s/%s", changefeed.Namespace, changefeed.ID, AgentRole)
 		peerTopic = fmt.Sprintf(
-			"changefeed/%s/%s/%s", changefeed.Namespace, changefeed.ID, schedulerRole)
+			"changefeed/%s/%s/%s", changefeed.Namespace, changefeed.ID, SchedulerRole)
 	} else {
 		selfTopic = fmt.Sprintf(
-			"changefeed/%s/%s/%s", changefeed.Namespace, changefeed.ID, schedulerRole)
+			"changefeed/%s/%s/%s", changefeed.Namespace, changefeed.ID, SchedulerRole)
 		peerTopic = fmt.Sprintf(
-			"changefeed/%s/%s/%s", changefeed.Namespace, changefeed.ID, agentRole)
+			"changefeed/%s/%s/%s", changefeed.Namespace, changefeed.ID, AgentRole)
 	}
 	return
 }
 
-var _ transport = (*p2pTransport)(nil)
+var _ Transport = (*p2pTransport)(nil)
 
 type p2pTransport struct {
 	changefeed    model.ChangeFeedID
@@ -70,11 +70,11 @@ type p2pTransport struct {
 type Role string
 
 const (
-	agentRole     Role = "agent"
-	schedulerRole Role = "scheduler"
+	AgentRole     Role = "agent"
+	SchedulerRole Role = "scheduler"
 )
 
-func newTransport(
+func NewTransport(
 	ctx context.Context, changefeed model.ChangeFeedID, role Role,
 	server *p2p.MessageServer, router p2p.MessageRouter,
 ) (*p2pTransport, error) {

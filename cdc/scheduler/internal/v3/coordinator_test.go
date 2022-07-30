@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/scheduler"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/transport"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/leakutil"
@@ -33,42 +34,10 @@ func TestMain(m *testing.M) {
 	leakutil.SetUpLeakTest(m)
 }
 
-type mockTrans struct {
-	sendBuffer []*schedulepb.Message
-	recvBuffer []*schedulepb.Message
-
-	keepRecvBuffer bool
-}
-
-func newMockTrans() *mockTrans {
-	return &mockTrans{
-		sendBuffer: make([]*schedulepb.Message, 0),
-		recvBuffer: make([]*schedulepb.Message, 0),
-	}
-}
-
-func (m *mockTrans) Close() error {
-	return nil
-}
-
-func (m *mockTrans) Send(ctx context.Context, msgs []*schedulepb.Message) error {
-	m.sendBuffer = append(m.sendBuffer, msgs...)
-	return nil
-}
-
-func (m *mockTrans) Recv(ctx context.Context) ([]*schedulepb.Message, error) {
-	if m.keepRecvBuffer {
-		return m.recvBuffer, nil
-	}
-	messages := m.recvBuffer[:len(m.recvBuffer)]
-	m.recvBuffer = make([]*schedulepb.Message, 0)
-	return messages, nil
-}
-
 func TestCoordinatorSendMsgs(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	trans := newMockTrans()
+	trans := transport.NewMockTrans()
 	coord := coordinator{
 		version:   "6.2.0",
 		revision:  schedulepb.OwnerRevision{Revision: 3},
@@ -96,14 +65,14 @@ func TestCoordinatorSendMsgs(t *testing.T) {
 			ProcessorEpoch: schedulepb.ProcessorEpoch{Epoch: "epoch"},
 		},
 		From: "0", To: "1", MsgType: schedulepb.MsgDispatchTableRequest,
-	}}, trans.sendBuffer)
+	}}, trans.SendBuffer)
 }
 
 func TestCoordinatorRecvMsgs(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	trans := &mockTrans{}
+	trans := transport.NewMockTrans()
 	coord := coordinator{
 		version:   "6.2.0",
 		revision:  schedulepb.OwnerRevision{Revision: 3},
@@ -111,21 +80,21 @@ func TestCoordinatorRecvMsgs(t *testing.T) {
 		trans:     trans,
 	}
 
-	trans.recvBuffer = append(trans.recvBuffer,
+	trans.RecvBuffer = append(trans.RecvBuffer,
 		&schedulepb.Message{
 			Header: &schedulepb.Message_Header{
 				OwnerRevision: coord.revision,
 			},
 			From: "1", To: coord.captureID, MsgType: schedulepb.MsgDispatchTableResponse,
 		})
-	trans.recvBuffer = append(trans.recvBuffer,
+	trans.RecvBuffer = append(trans.RecvBuffer,
 		&schedulepb.Message{
 			Header: &schedulepb.Message_Header{
 				OwnerRevision: schedulepb.OwnerRevision{Revision: 4},
 			},
 			From: "2", To: coord.captureID, MsgType: schedulepb.MsgDispatchTableResponse,
 		})
-	trans.recvBuffer = append(trans.recvBuffer,
+	trans.RecvBuffer = append(trans.RecvBuffer,
 		&schedulepb.Message{
 			Header: &schedulepb.Message_Header{
 				OwnerRevision: coord.revision,
@@ -150,7 +119,7 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 		HeartbeatTick:      math.MaxInt,
 		MaxTaskConcurrency: 1,
 	})
-	trans := &mockTrans{}
+	trans := transport.NewMockTrans()
 	coord.trans = trans
 
 	// Prepare captureM and replicationM.
@@ -161,13 +130,13 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 	aliveCaptures := map[model.CaptureID]*model.CaptureInfo{"a": {}, "b": {}}
 	_, _, err := coord.poll(ctx, 0, currentTables, aliveCaptures)
 	require.Nil(t, err)
-	msgs := trans.sendBuffer
+	msgs := trans.SendBuffer
 	require.Len(t, msgs, 2)
 	require.NotNil(t, msgs[0].Heartbeat, msgs[0])
 	require.NotNil(t, msgs[1].Heartbeat, msgs[1])
 	require.False(t, coord.captureM.CheckAllCaptureInitialized())
 
-	trans.recvBuffer = append(trans.recvBuffer, &schedulepb.Message{
+	trans.RecvBuffer = append(trans.RecvBuffer, &schedulepb.Message{
 		Header: &schedulepb.Message_Header{
 			OwnerRevision: schedulepb.OwnerRevision{Revision: 1},
 		},
@@ -176,7 +145,7 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 		MsgType:           schedulepb.MsgHeartbeatResponse,
 		HeartbeatResponse: &schedulepb.HeartbeatResponse{},
 	})
-	trans.recvBuffer = append(trans.recvBuffer, &schedulepb.Message{
+	trans.RecvBuffer = append(trans.RecvBuffer, &schedulepb.Message{
 		Header: &schedulepb.Message_Header{
 			OwnerRevision: schedulepb.OwnerRevision{Revision: 1},
 		},
@@ -190,11 +159,11 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 			},
 		},
 	})
-	trans.sendBuffer = []*schedulepb.Message{}
+	trans.SendBuffer = []*schedulepb.Message{}
 	_, _, err = coord.poll(ctx, 0, currentTables, aliveCaptures)
 	require.Nil(t, err)
 	require.True(t, coord.captureM.CheckAllCaptureInitialized())
-	msgs = trans.sendBuffer
+	msgs = trans.SendBuffer
 	require.Len(t, msgs, 1)
 	// Basic scheduler, make sure all tables get replicated.
 	require.EqualValues(t, 3, msgs[0].DispatchTableRequest.GetAddTable().TableID)
@@ -207,7 +176,7 @@ func TestCoordinatorAddCapture(t *testing.T) {
 		HeartbeatTick:      math.MaxInt,
 		MaxTaskConcurrency: 1,
 	})
-	trans := &mockTrans{}
+	trans := transport.NewMockTrans()
 	coord.trans = trans
 
 	// Prepare captureM and replicationM.
@@ -234,11 +203,11 @@ func TestCoordinatorAddCapture(t *testing.T) {
 	aliveCaptures := map[model.CaptureID]*model.CaptureInfo{"a": {}, "b": {}}
 	_, _, err = coord.poll(ctx, 0, currentTables, aliveCaptures)
 	require.Nil(t, err)
-	msgs = trans.sendBuffer
+	msgs = trans.SendBuffer
 	require.Len(t, msgs, 1)
 	require.NotNil(t, msgs[0].Heartbeat, msgs[0])
 
-	trans.recvBuffer = append(trans.recvBuffer, &schedulepb.Message{
+	trans.RecvBuffer = append(trans.RecvBuffer, &schedulepb.Message{
 		Header: &schedulepb.Message_Header{
 			OwnerRevision: schedulepb.OwnerRevision{Revision: 1},
 		},
@@ -247,10 +216,10 @@ func TestCoordinatorAddCapture(t *testing.T) {
 		MsgType:           schedulepb.MsgHeartbeatResponse,
 		HeartbeatResponse: &schedulepb.HeartbeatResponse{},
 	})
-	trans.sendBuffer = []*schedulepb.Message{}
+	trans.SendBuffer = []*schedulepb.Message{}
 	_, _, err = coord.poll(ctx, 0, currentTables, aliveCaptures)
 	require.Nil(t, err)
-	msgs = trans.sendBuffer
+	msgs = trans.SendBuffer
 	require.Len(t, msgs, 1)
 	require.NotNil(t, msgs[0].DispatchTableRequest.GetAddTable(), msgs[0])
 	require.True(t, msgs[0].DispatchTableRequest.GetAddTable().IsSecondary)
@@ -263,7 +232,7 @@ func TestCoordinatorRemoveCapture(t *testing.T) {
 		HeartbeatTick:      math.MaxInt,
 		MaxTaskConcurrency: 1,
 	})
-	trans := &mockTrans{}
+	trans := transport.NewMockTrans()
 	coord.trans = trans
 
 	// Prepare captureM and replicationM.
@@ -290,7 +259,7 @@ func TestCoordinatorRemoveCapture(t *testing.T) {
 	aliveCaptures := map[model.CaptureID]*model.CaptureInfo{"a": {}, "b": {}}
 	_, _, err = coord.poll(ctx, 0, currentTables, aliveCaptures)
 	require.Nil(t, err)
-	msgs = trans.sendBuffer
+	msgs = trans.SendBuffer
 	require.Len(t, msgs, 1)
 	require.NotNil(t, msgs[0].DispatchTableRequest.GetAddTable(), msgs[0])
 	require.EqualValues(t, 3, msgs[0].DispatchTableRequest.GetAddTable().TableID)

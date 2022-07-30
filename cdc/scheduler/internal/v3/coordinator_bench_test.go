@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/transport"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -68,7 +69,7 @@ func BenchmarkCoordinatorInit(b *testing.B) {
 			currentTables = append(currentTables, int64(10000+i))
 		}
 		coord = &coordinator{
-			trans:        &mockTrans{},
+			trans:        transport.NewMockTrans(),
 			replicationM: replication.NewReplicationManager(10, model.ChangeFeedID{}),
 			// Disable heartbeat.
 			captureM: member.NewCaptureManager(
@@ -101,7 +102,7 @@ func BenchmarkCoordinatorHeartbeat(b *testing.B) {
 			currentTables = append(currentTables, int64(10000+i))
 		}
 		coord = &coordinator{
-			trans:        &mockTrans{},
+			trans:        transport.NewMockTrans(),
 			replicationM: replication.NewReplicationManager(10, model.ChangeFeedID{}),
 			captureM:     captureM,
 		}
@@ -164,9 +165,9 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 		for _, resp := range heartbeatResp {
 			recvMsgs = append(recvMsgs, resp)
 		}
-		trans := &mockTrans{
-			recvBuffer:     recvMsgs,
-			keepRecvBuffer: true,
+		trans := &transport.MockTrans{
+			RecvBuffer:     recvMsgs,
+			KeepRecvBuffer: true,
 		}
 		coord = &coordinator{
 			trans:        trans,
