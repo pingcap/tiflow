@@ -324,7 +324,6 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 			newCheckpointTs = barrierTs
 		}
 		prevResolvedTs := c.state.Status.ResolvedTs
-		prevCheckpointTs := c.state.Status.CheckpointTs
 		if c.redoManager.Enabled() {
 			var flushedCheckpointTs, flushedResolvedTs model.Ts
 			// newResolvedTs can never exceed the barrier timestamp boundary. If redo is enabled,
@@ -345,12 +344,10 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 				newResolvedTs = prevResolvedTs
 			}
 		}
-		// checkpointTs and resolvedTs should never regress.
+		// resolvedTs should never regress but checkpointTs can, as checkpointTs has already
+		// been decreased when the owner is initialized.
 		if newResolvedTs < prevResolvedTs {
 			newResolvedTs = prevResolvedTs
-		}
-		if newCheckpointTs < prevCheckpointTs {
-			newCheckpointTs = prevCheckpointTs
 		}
 		c.updateStatus(newCheckpointTs, newResolvedTs)
 		c.updateMetrics(currentTs, newCheckpointTs, newResolvedTs)
