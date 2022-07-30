@@ -109,7 +109,7 @@ func (k *DiscoveryKeepaliver) Keepalive(ctx context.Context) error {
 			}
 		case resp := <-k.discoveryRunner.GetWatcher():
 			if resp.Err != nil {
-				log.Warn("discovery watch met error", zap.Error(resp.Err))
+				log.Warn("discovery watch met error", zap.Error(resp.Err), zap.Strings("endpoints", k.etcdCli.Endpoints()))
 				_, err = k.discoveryRunner.ResetDiscovery(ctx, false /* resetSession*/)
 				if err != nil {
 					return err

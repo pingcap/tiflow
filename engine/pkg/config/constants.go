@@ -19,6 +19,7 @@ import (
 
 // Define some constants
 const (
-	ServerMasterEtcdDialTimeout  = 5 * time.Second
-	ServerMasterEtcdSyncInterval = time.Duration(0) // disable auto sync since we use service endpoint
+	ServerMasterEtcdDialTimeout = 5 * time.Second
+	// ServerMasterEtcdSyncInterval = time.Duration(0) // disable auto sync since we use service endpoint
+	ServerMasterEtcdSyncInterval = 3 * time.Second
 )

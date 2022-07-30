@@ -106,7 +106,7 @@ func (c metastoreCreatorImpl) CreateEtcdCliForServiceDiscovery(
 	ctx context.Context, params metaModel.StoreConfig,
 ) (*clientv3.Client, error) {
 	logConfig := logutil.DefaultZapLoggerConfig
-	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
+	logConfig.Level = zap.NewAtomicLevelAt(zapcore.InfoLevel)
 	etcdCli, err := clientv3.New(clientv3.Config{
 		Endpoints:        params.Endpoints,
 		Context:          ctx,
