@@ -140,7 +140,8 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 	if n.redoManager != nil && n.redoManager.Enabled() {
 		redoTs := n.redoManager.GetMinResolvedTs()
 		if currentBarrierTs > redoTs {
-			log.Fatal("redoTs should not less than current barrierTs",
+			// FIXME: How can barrierTs be greater than todoTs?
+			log.Warn("redoTs should not less than current barrierTs",
 				zap.Int64("tableID", n.tableID),
 				zap.Uint64("redoTs", redoTs),
 				zap.Uint64("barrierTs", currentBarrierTs))
