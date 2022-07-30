@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
@@ -42,9 +43,9 @@ func TestSchedulerManagerScheduler(t *testing.T) {
 	cfg.MaxTaskConcurrency = 1
 	m := newSchedulerManager(model.DefaultChangeFeedID("test-changefeed"), cfg)
 
-	captures := map[model.CaptureID]*CaptureStatus{
-		"a": {State: CaptureStateInitialized},
-		"b": {State: CaptureStateInitialized},
+	captures := map[model.CaptureID]*member.CaptureStatus{
+		"a": {State: member.CaptureStateInitialized},
+		"b": {State: member.CaptureStateInitialized},
 	}
 	currentTables := []model.TableID{1}
 

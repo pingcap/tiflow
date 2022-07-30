@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v3
+package member
 
 import (
 	"testing"
@@ -53,7 +53,7 @@ func TestCaptureManagerHandleAliveCaptureUpdate(t *testing.T) {
 	t.Parallel()
 
 	rev := schedulepb.OwnerRevision{}
-	cm := newCaptureManager("1", model.ChangeFeedID{}, rev, 2)
+	cm := NewCaptureManager("1", model.ChangeFeedID{}, rev, 2)
 	ms := map[model.CaptureID]*model.CaptureInfo{
 		"1": {}, "2": {}, "3": {},
 	}
@@ -125,7 +125,7 @@ func TestCaptureManagerHandleMessages(t *testing.T) {
 		"1": {},
 		"2": {},
 	}
-	cm := newCaptureManager("", model.ChangeFeedID{}, rev, 2)
+	cm := NewCaptureManager("", model.ChangeFeedID{}, rev, 2)
 	require.False(t, cm.CheckAllCaptureInitialized())
 
 	// Initial handle alive captures.
@@ -173,7 +173,7 @@ func TestCaptureManagerTick(t *testing.T) {
 	t.Parallel()
 
 	rev := schedulepb.OwnerRevision{}
-	cm := newCaptureManager("", model.ChangeFeedID{}, rev, 2)
+	cm := NewCaptureManager("", model.ChangeFeedID{}, rev, 2)
 
 	// No heartbeat if there is no capture.
 	msgs := cm.Tick(nil, captureIDNotDraining)

@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/stretchr/testify/require"
 )
@@ -25,7 +26,7 @@ import (
 func TestSchedulerBasic(t *testing.T) {
 	t.Parallel()
 
-	captures := map[model.CaptureID]*CaptureStatus{"a": {}, "b": {}}
+	captures := map[model.CaptureID]*member.CaptureStatus{"a": {}, "b": {}}
 	currentTables := []model.TableID{1, 2, 3, 4}
 
 	// Initial table dispatch.
@@ -34,7 +35,7 @@ func TestSchedulerBasic(t *testing.T) {
 	b := newBasicScheduler(model.ChangeFeedID{})
 
 	// one capture stopping, another one is initialized
-	captures["a"].State = CaptureStateStopping
+	captures["a"].State = member.CaptureStateStopping
 	tasks := b.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
 	require.Len(t, tasks[0].BurstBalance.AddTables, 4)
@@ -44,12 +45,12 @@ func TestSchedulerBasic(t *testing.T) {
 	require.Equal(t, tasks[0].BurstBalance.AddTables[3].CaptureID, "b")
 
 	// all capture's stopping, cannot add table
-	captures["b"].State = CaptureStateStopping
+	captures["b"].State = member.CaptureStateStopping
 	tasks = b.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 
-	captures["a"].State = CaptureStateInitialized
-	captures["b"].State = CaptureStateInitialized
+	captures["a"].State = member.CaptureStateInitialized
+	captures["b"].State = member.CaptureStateInitialized
 	tasks = b.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
 	require.Len(t, tasks[0].BurstBalance.AddTables, 4)
@@ -124,7 +125,7 @@ func benchmarkSchedulerBalance(
 	factory func(total int) (
 		name string,
 		currentTables []model.TableID,
-		captures map[model.CaptureID]*CaptureStatus,
+		captures map[model.CaptureID]*member.CaptureStatus,
 		replications map[model.TableID]*replication.ReplicationSet,
 		sched scheduler,
 	),
@@ -146,14 +147,14 @@ func BenchmarkSchedulerBasicAddTables(b *testing.B) {
 	benchmarkSchedulerBalance(b, func(total int) (
 		name string,
 		currentTables []model.TableID,
-		captures map[model.CaptureID]*CaptureStatus,
+		captures map[model.CaptureID]*member.CaptureStatus,
 		replications map[model.TableID]*replication.ReplicationSet,
 		sched scheduler,
 	) {
 		const captureCount = 8
-		captures = map[model.CaptureID]*CaptureStatus{}
+		captures = map[model.CaptureID]*member.CaptureStatus{}
 		for i := 0; i < captureCount; i++ {
-			captures[fmt.Sprint(i)] = &CaptureStatus{}
+			captures[fmt.Sprint(i)] = &member.CaptureStatus{}
 		}
 		currentTables = make([]model.TableID, 0, total)
 		for i := 0; i < total; i++ {
@@ -170,14 +171,14 @@ func BenchmarkSchedulerBasicRemoveTables(b *testing.B) {
 	benchmarkSchedulerBalance(b, func(total int) (
 		name string,
 		currentTables []model.TableID,
-		captures map[model.CaptureID]*CaptureStatus,
+		captures map[model.CaptureID]*member.CaptureStatus,
 		replications map[model.TableID]*replication.ReplicationSet,
 		sched scheduler,
 	) {
 		const captureCount = 8
-		captures = map[model.CaptureID]*CaptureStatus{}
+		captures = map[model.CaptureID]*member.CaptureStatus{}
 		for i := 0; i < captureCount; i++ {
-			captures[fmt.Sprint(i)] = &CaptureStatus{}
+			captures[fmt.Sprint(i)] = &member.CaptureStatus{}
 		}
 		currentTables = make([]model.TableID, 0, total)
 		replications = map[model.TableID]*replication.ReplicationSet{}
@@ -196,14 +197,14 @@ func BenchmarkSchedulerBasicAddRemoveTables(b *testing.B) {
 	benchmarkSchedulerBalance(b, func(total int) (
 		name string,
 		currentTables []model.TableID,
-		captures map[model.CaptureID]*CaptureStatus,
+		captures map[model.CaptureID]*member.CaptureStatus,
 		replications map[model.TableID]*replication.ReplicationSet,
 		sched scheduler,
 	) {
 		const captureCount = 8
-		captures = map[model.CaptureID]*CaptureStatus{}
+		captures = map[model.CaptureID]*member.CaptureStatus{}
 		for i := 0; i < captureCount; i++ {
-			captures[fmt.Sprint(i)] = &CaptureStatus{}
+			captures[fmt.Sprint(i)] = &member.CaptureStatus{}
 		}
 		currentTables = make([]model.TableID, 0, total)
 		for i := 0; i < total/2; i++ {

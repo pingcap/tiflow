@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"go.uber.org/zap"
 )
@@ -67,13 +68,13 @@ func (d *drainCaptureScheduler) setTarget(target model.CaptureID) bool {
 	return true
 }
 
-func checkStoppingCapture(captures map[model.CaptureID]*CaptureStatus) model.CaptureID {
+func checkStoppingCapture(captures map[model.CaptureID]*member.CaptureStatus) model.CaptureID {
 	for id, cs := range captures {
 		if cs.IsOwner {
 			// Skip draining owner.
 			continue
 		}
-		if cs.State == CaptureStateStopping {
+		if cs.State == member.CaptureStateStopping {
 			return id
 		}
 	}
@@ -83,7 +84,7 @@ func checkStoppingCapture(captures map[model.CaptureID]*CaptureStatus) model.Cap
 func (d *drainCaptureScheduler) Schedule(
 	_ model.Ts,
 	_ []model.TableID,
-	captures map[model.CaptureID]*CaptureStatus,
+	captures map[model.CaptureID]*member.CaptureStatus,
 	replications map[model.TableID]*replication.ReplicationSet,
 ) []*replication.ScheduleTask {
 	d.mu.Lock()

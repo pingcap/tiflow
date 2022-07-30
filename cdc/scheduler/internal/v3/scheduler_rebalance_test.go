@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/stretchr/testify/require"
 )
@@ -26,7 +27,7 @@ func TestSchedulerRebalance(t *testing.T) {
 	t.Parallel()
 
 	var checkpointTs model.Ts
-	captures := map[model.CaptureID]*CaptureStatus{"a": {}, "b": {}}
+	captures := map[model.CaptureID]*member.CaptureStatus{"a": {}, "b": {}}
 	currentTables := []model.TableID{1, 2, 3, 4}
 
 	replications := map[model.TableID]*replication.ReplicationSet{
@@ -45,7 +46,7 @@ func TestSchedulerRebalance(t *testing.T) {
 	atomic.StoreInt32(&scheduler.rebalance, 1)
 	// no captures
 	tasks = scheduler.Schedule(
-		checkpointTs, currentTables, map[model.CaptureID]*CaptureStatus{}, replications)
+		checkpointTs, currentTables, map[model.CaptureID]*member.CaptureStatus{}, replications)
 	require.Len(t, tasks, 0)
 
 	// table not in the replication set,
@@ -77,12 +78,12 @@ func TestSchedulerRebalance(t *testing.T) {
 	}
 
 	// capture is stopping, ignore the request
-	captures["a"].State = CaptureStateStopping
+	captures["a"].State = member.CaptureStateStopping
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 	require.Equal(t, atomic.LoadInt32(&scheduler.rebalance), int32(0))
 
-	captures["a"].State = CaptureStateInitialized
+	captures["a"].State = member.CaptureStateInitialized
 	atomic.StoreInt32(&scheduler.rebalance, 1)
 	scheduler.random = nil // disable random to make test easier.
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)

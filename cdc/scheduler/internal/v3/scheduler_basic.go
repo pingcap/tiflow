@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"go.uber.org/zap"
 )
@@ -53,7 +54,7 @@ func (b *basicScheduler) Name() string {
 func (b *basicScheduler) Schedule(
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
-	captures map[model.CaptureID]*CaptureStatus,
+	captures map[model.CaptureID]*member.CaptureStatus,
 	replications map[model.TableID]*replication.ReplicationSet,
 ) []*replication.ScheduleTask {
 	tasks := make([]*replication.ScheduleTask, 0)
@@ -78,7 +79,7 @@ func (b *basicScheduler) Schedule(
 	if len(newTables) > 0 {
 		captureIDs := make([]model.CaptureID, 0, len(captures))
 		for captureID, status := range captures {
-			if status.State == CaptureStateStopping {
+			if status.State == member.CaptureStateStopping {
 				log.Warn("schedulerv3: capture is stopping, "+
 					"skip the capture when add new table",
 					zap.String("namespace", b.changefeedID.Namespace),

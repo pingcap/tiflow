@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -73,11 +74,11 @@ func TestCoordinatorSendMsgs(t *testing.T) {
 		captureID: "0",
 		trans:     trans,
 	}
-	coord.captureM = newCaptureManager("", model.ChangeFeedID{}, coord.revision, 0)
+	coord.captureM = member.NewCaptureManager("", model.ChangeFeedID{}, coord.revision, 0)
 	coord.sendMsgs(
 		ctx, []*schedulepb.Message{{To: "1", MsgType: schedulepb.MsgDispatchTableRequest}})
 
-	coord.captureM.Captures["1"] = &CaptureStatus{Epoch: schedulepb.ProcessorEpoch{Epoch: "epoch"}}
+	coord.captureM.Captures["1"] = &member.CaptureStatus{Epoch: schedulepb.ProcessorEpoch{Epoch: "epoch"}}
 	coord.sendMsgs(
 		ctx, []*schedulepb.Message{{To: "1", MsgType: schedulepb.MsgDispatchTableRequest}})
 
@@ -211,8 +212,8 @@ func TestCoordinatorAddCapture(t *testing.T) {
 	// Prepare captureM and replicationM.
 	// Two captures "a".
 	// Three tables 1 2 3.
-	coord.captureM.Captures["a"] = &CaptureStatus{State: CaptureStateInitialized}
-	coord.captureM.initialized = true
+	coord.captureM.Captures["a"] = &member.CaptureStatus{State: member.CaptureStateInitialized}
+	coord.captureM.SetInitialized(true)
 	require.True(t, coord.captureM.CheckAllCaptureInitialized())
 	init := map[string][]schedulepb.TableStatus{
 		"a": {
@@ -267,10 +268,10 @@ func TestCoordinatorRemoveCapture(t *testing.T) {
 	// Prepare captureM and replicationM.
 	// Three captures "a" "b" "c".
 	// Three tables 1 2 3.
-	coord.captureM.Captures["a"] = &CaptureStatus{State: CaptureStateInitialized}
-	coord.captureM.Captures["b"] = &CaptureStatus{State: CaptureStateInitialized}
-	coord.captureM.Captures["c"] = &CaptureStatus{State: CaptureStateInitialized}
-	coord.captureM.initialized = true
+	coord.captureM.Captures["a"] = &member.CaptureStatus{State: member.CaptureStateInitialized}
+	coord.captureM.Captures["b"] = &member.CaptureStatus{State: member.CaptureStateInitialized}
+	coord.captureM.Captures["c"] = &member.CaptureStatus{State: member.CaptureStateInitialized}
+	coord.captureM.SetInitialized(true)
 	require.True(t, coord.captureM.CheckAllCaptureInitialized())
 	init := map[string][]schedulepb.TableStatus{
 		"a": {{TableID: 1, State: schedulepb.TableStateReplicating}},
@@ -302,15 +303,15 @@ func TestCoordinatorDrainCapture(t *testing.T) {
 		revision:  schedulepb.OwnerRevision{Revision: 3},
 		captureID: "a",
 	}
-	coord.captureM = newCaptureManager("", model.ChangeFeedID{}, coord.revision, 0)
+	coord.captureM = member.NewCaptureManager("", model.ChangeFeedID{}, coord.revision, 0)
 
-	coord.captureM.initialized = true
-	coord.captureM.Captures["a"] = &CaptureStatus{State: CaptureStateUninitialized}
+	coord.captureM.SetInitialized(true)
+	coord.captureM.Captures["a"] = &member.CaptureStatus{State: member.CaptureStateUninitialized}
 	count, err := coord.DrainCapture("a")
 	require.ErrorIs(t, err, cerror.ErrSchedulerRequestFailed)
 	require.Equal(t, 0, count)
 
-	coord.captureM.Captures["a"] = &CaptureStatus{State: CaptureStateInitialized}
+	coord.captureM.Captures["a"] = &member.CaptureStatus{State: member.CaptureStateInitialized}
 	coord.replicationM = replication.NewReplicationManager(10, model.ChangeFeedID{})
 	count, err = coord.DrainCapture("a")
 	require.NoError(t, err)
@@ -326,7 +327,7 @@ func TestCoordinatorDrainCapture(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
 
-	coord.captureM.Captures["b"] = &CaptureStatus{State: CaptureStateInitialized}
+	coord.captureM.Captures["b"] = &member.CaptureStatus{State: member.CaptureStateInitialized}
 	coord.replicationM.SetReplicationSet(&replication.ReplicationSet{
 		TableID: 2,
 		State:   replication.ReplicationSetStateReplicating,

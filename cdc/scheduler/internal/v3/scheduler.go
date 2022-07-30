@@ -15,6 +15,7 @@ package v3
 
 import (
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 )
 
@@ -23,7 +24,7 @@ type scheduler interface {
 	Schedule(
 		checkpointTs model.Ts,
 		currentTables []model.TableID,
-		aliveCaptures map[model.CaptureID]*CaptureStatus,
+		aliveCaptures map[model.CaptureID]*member.CaptureStatus,
 		replications map[model.TableID]*replication.ReplicationSet) []*replication.ScheduleTask
 }
 

@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
 	"go.uber.org/zap/zapcore"
@@ -70,7 +71,7 @@ func BenchmarkCoordinatorInit(b *testing.B) {
 			trans:        &mockTrans{},
 			replicationM: replication.NewReplicationManager(10, model.ChangeFeedID{}),
 			// Disable heartbeat.
-			captureM: newCaptureManager(
+			captureM: member.NewCaptureManager(
 				"", model.ChangeFeedID{}, schedulepb.OwnerRevision{}, math.MaxInt),
 		}
 		name = fmt.Sprintf("InitTable %d", total)
@@ -88,12 +89,12 @@ func BenchmarkCoordinatorHeartbeat(b *testing.B) {
 		const captureCount = 8
 		captures = map[model.CaptureID]*model.CaptureInfo{}
 		// Always heartbeat.
-		captureM := newCaptureManager(
+		captureM := member.NewCaptureManager(
 			"", model.ChangeFeedID{}, schedulepb.OwnerRevision{}, 0)
-		captureM.initialized = true
+		captureM.SetInitialized(true)
 		for i := 0; i < captureCount; i++ {
 			captures[fmt.Sprint(i)] = &model.CaptureInfo{}
-			captureM.Captures[fmt.Sprint(i)] = &CaptureStatus{State: CaptureStateInitialized}
+			captureM.Captures[fmt.Sprint(i)] = &member.CaptureStatus{State: member.CaptureStateInitialized}
 		}
 		currentTables = make([]model.TableID, 0, total)
 		for i := 0; i < total; i++ {
@@ -119,12 +120,12 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 		const captureCount = 8
 		captures = map[model.CaptureID]*model.CaptureInfo{}
 		// Disable heartbeat.
-		captureM := newCaptureManager(
+		captureM := member.NewCaptureManager(
 			"", model.ChangeFeedID{}, schedulepb.OwnerRevision{}, math.MaxInt)
-		captureM.initialized = true
+		captureM.SetInitialized(true)
 		for i := 0; i < captureCount; i++ {
 			captures[fmt.Sprint(i)] = &model.CaptureInfo{}
-			captureM.Captures[fmt.Sprint(i)] = &CaptureStatus{State: CaptureStateInitialized}
+			captureM.Captures[fmt.Sprint(i)] = &member.CaptureStatus{State: member.CaptureStateInitialized}
 		}
 		replicationM := replication.NewReplicationManager(10, model.ChangeFeedID{})
 		currentTables = make([]model.TableID, 0, total)

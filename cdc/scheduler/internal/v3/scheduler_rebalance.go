@@ -22,6 +22,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"go.uber.org/zap"
 )
@@ -50,7 +51,7 @@ func (r *rebalanceScheduler) Name() string {
 func (r *rebalanceScheduler) Schedule(
 	_ model.Ts,
 	currentTables []model.TableID,
-	captures map[model.CaptureID]*CaptureStatus,
+	captures map[model.CaptureID]*member.CaptureStatus,
 	replications map[model.TableID]*replication.ReplicationSet,
 ) []*replication.ScheduleTask {
 	// rebalance is not triggered, or there is still some pending task,
@@ -64,7 +65,7 @@ func (r *rebalanceScheduler) Schedule(
 	}
 
 	for _, capture := range captures {
-		if capture.State == CaptureStateStopping {
+		if capture.State == member.CaptureStateStopping {
 			log.Warn("schedulerv3: capture is stopping, ignore manual rebalance request",
 				zap.String("namespace", r.changefeedID.Namespace),
 				zap.String("changefeed", r.changefeedID.ID))
@@ -106,7 +107,7 @@ func (r *rebalanceScheduler) Schedule(
 
 func newBalanceMoveTables(
 	random *rand.Rand,
-	captures map[model.CaptureID]*CaptureStatus,
+	captures map[model.CaptureID]*member.CaptureStatus,
 	replications map[model.TableID]*replication.ReplicationSet,
 	maxTaskLimit int,
 	changefeedID model.ChangeFeedID,

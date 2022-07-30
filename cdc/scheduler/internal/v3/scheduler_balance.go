@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 )
 
@@ -55,7 +56,7 @@ func (b *balanceScheduler) Name() string {
 func (b *balanceScheduler) Schedule(
 	_ model.Ts,
 	currentTables []model.TableID,
-	captures map[model.CaptureID]*CaptureStatus,
+	captures map[model.CaptureID]*member.CaptureStatus,
 	replications map[model.TableID]*replication.ReplicationSet,
 ) []*replication.ScheduleTask {
 	if !b.forceBalance {
@@ -68,7 +69,7 @@ func (b *balanceScheduler) Schedule(
 	}
 
 	for _, capture := range captures {
-		if capture.State == CaptureStateStopping {
+		if capture.State == member.CaptureStateStopping {
 			log.Debug("schedulerv3: capture is stopping, premature to balance table")
 			return nil
 		}
@@ -83,7 +84,7 @@ func (b *balanceScheduler) Schedule(
 func buildBalanceMoveTables(
 	random *rand.Rand,
 	currentTables []model.TableID,
-	captures map[model.CaptureID]*CaptureStatus,
+	captures map[model.CaptureID]*member.CaptureStatus,
 	replications map[model.TableID]*replication.ReplicationSet,
 	maxTaskConcurrency int,
 ) []*replication.ScheduleTask {

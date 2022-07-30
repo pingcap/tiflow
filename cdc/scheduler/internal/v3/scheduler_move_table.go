@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"go.uber.org/zap"
 )
@@ -66,7 +67,7 @@ func (m *moveTableScheduler) addTask(tableID model.TableID, target model.Capture
 func (m *moveTableScheduler) Schedule(
 	_ model.Ts,
 	currentTables []model.TableID,
-	captures map[model.CaptureID]*CaptureStatus,
+	captures map[model.CaptureID]*member.CaptureStatus,
 	replications map[model.TableID]*replication.ReplicationSet,
 ) []*replication.ScheduleTask {
 	m.mu.Lock()
@@ -111,7 +112,7 @@ func (m *moveTableScheduler) Schedule(
 			delete(m.tasks, tableID)
 			continue
 		}
-		if status.State != CaptureStateInitialized {
+		if status.State != member.CaptureStateInitialized {
 			log.Warn("schedulerv3: move table ignored, target capture is not initialized",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
