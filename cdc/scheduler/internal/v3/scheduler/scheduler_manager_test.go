@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v3
+package scheduler
 
 import (
 	"testing"
@@ -26,7 +26,7 @@ import (
 func TestNewSchedulerManager(t *testing.T) {
 	t.Parallel()
 
-	m := newSchedulerManager(model.DefaultChangeFeedID("test-changefeed"),
+	m := NewSchedulerManager(model.DefaultChangeFeedID("test-changefeed"),
 		config.NewDefaultSchedulerConfig())
 	require.NotNil(t, m)
 	require.NotNil(t, m.schedulers[schedulerPriorityBasic])
@@ -41,7 +41,7 @@ func TestSchedulerManagerScheduler(t *testing.T) {
 
 	cfg := config.NewDefaultSchedulerConfig()
 	cfg.MaxTaskConcurrency = 1
-	m := newSchedulerManager(model.DefaultChangeFeedID("test-changefeed"), cfg)
+	m := NewSchedulerManager(model.DefaultChangeFeedID("test-changefeed"), cfg)
 
 	captures := map[model.CaptureID]*member.CaptureStatus{
 		"a": {State: member.CaptureStateInitialized},

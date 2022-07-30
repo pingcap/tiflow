@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v3
+package scheduler
 
 import (
 	"sync/atomic"
@@ -25,7 +25,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type schedulerManager struct {
+type SchedulerManager struct {
 	changefeedID model.ChangeFeedID
 
 	schedulers         []scheduler
@@ -33,10 +33,10 @@ type schedulerManager struct {
 	maxTaskConcurrency int
 }
 
-func newSchedulerManager(
+func NewSchedulerManager(
 	changefeedID model.ChangeFeedID, cfg *config.SchedulerConfig,
-) *schedulerManager {
-	sm := &schedulerManager{
+) *SchedulerManager {
+	sm := &SchedulerManager{
 		maxTaskConcurrency: cfg.MaxTaskConcurrency,
 		changefeedID:       changefeedID,
 		schedulers:         make([]scheduler, schedulerPriorityMax),
@@ -57,7 +57,7 @@ func newSchedulerManager(
 	return sm
 }
 
-func (sm *schedulerManager) Schedule(
+func (sm *SchedulerManager) Schedule(
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
 	aliveCaptures map[model.CaptureID]*member.CaptureStatus,
@@ -94,7 +94,7 @@ func (sm *schedulerManager) Schedule(
 	return nil
 }
 
-func (sm *schedulerManager) MoveTable(tableID model.TableID, target model.CaptureID) {
+func (sm *SchedulerManager) MoveTable(tableID model.TableID, target model.CaptureID) {
 	scheduler := sm.schedulers[schedulerPriorityMoveTable]
 	moveTableScheduler, ok := scheduler.(*moveTableScheduler)
 	if !ok {
@@ -112,7 +112,7 @@ func (sm *schedulerManager) MoveTable(tableID model.TableID, target model.Captur
 	}
 }
 
-func (sm *schedulerManager) Rebalance() {
+func (sm *SchedulerManager) Rebalance() {
 	scheduler := sm.schedulers[schedulerPriorityRebalance]
 	rebalanceScheduler, ok := scheduler.(*rebalanceScheduler)
 	if !ok {
@@ -124,7 +124,7 @@ func (sm *schedulerManager) Rebalance() {
 	atomic.StoreInt32(&rebalanceScheduler.rebalance, 1)
 }
 
-func (sm *schedulerManager) DrainCapture(target model.CaptureID) bool {
+func (sm *SchedulerManager) DrainCapture(target model.CaptureID) bool {
 	scheduler := sm.schedulers[schedulerPriorityDrainCapture]
 	drainCaptureScheduler, ok := scheduler.(*drainCaptureScheduler)
 	if !ok {
@@ -136,11 +136,11 @@ func (sm *schedulerManager) DrainCapture(target model.CaptureID) bool {
 	return drainCaptureScheduler.setTarget(target)
 }
 
-func (sm *schedulerManager) DrainingTarget() model.CaptureID {
+func (sm *SchedulerManager) DrainingTarget() model.CaptureID {
 	return sm.schedulers[schedulerPriorityDrainCapture].(*drainCaptureScheduler).getTarget()
 }
 
-func (sm *schedulerManager) CollectMetrics() {
+func (sm *SchedulerManager) CollectMetrics() {
 	cf := sm.changefeedID
 	for name, counter := range sm.tasksCounter {
 		scheduleTaskCounter.
@@ -150,7 +150,7 @@ func (sm *schedulerManager) CollectMetrics() {
 	}
 }
 
-func (sm *schedulerManager) CleanMetrics() {
+func (sm *SchedulerManager) CleanMetrics() {
 	cf := sm.changefeedID
 	for name := range sm.tasksCounter {
 		scheduleTaskCounter.DeleteLabelValues(cf.Namespace, cf.ID, name.scheduler, name.task)

@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/scheduler"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/leakutil"
@@ -338,7 +339,7 @@ func TestCoordinatorDrainCapture(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
 
-	coord.schedulerM = newSchedulerManager(model.ChangeFeedID{}, config.NewDefaultSchedulerConfig())
+	coord.schedulerM = scheduler.NewSchedulerManager(model.ChangeFeedID{}, config.NewDefaultSchedulerConfig())
 	count, err = coord.DrainCapture("b")
 	require.NoError(t, err)
 	require.Equal(t, 1, count)

@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/scheduler"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/p2p"
@@ -50,7 +51,7 @@ type coordinator struct {
 	trans        transport
 	replicationM *replication.ReplicationManager
 	captureM     *member.CaptureManager
-	schedulerM   *schedulerManager
+	schedulerM   *scheduler.SchedulerManager
 
 	lastCollectTime time.Time
 	changefeedID    model.ChangeFeedID
@@ -90,7 +91,7 @@ func newCoordinator(
 		captureID:    captureID,
 		replicationM: replication.NewReplicationManager(cfg.MaxTaskConcurrency, changefeedID),
 		captureM:     member.NewCaptureManager(captureID, changefeedID, revision, cfg.HeartbeatTick),
-		schedulerM:   newSchedulerManager(changefeedID, cfg),
+		schedulerM:   scheduler.NewSchedulerManager(changefeedID, cfg),
 		changefeedID: changefeedID,
 	}
 }
