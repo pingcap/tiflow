@@ -54,7 +54,7 @@ func (m *mockEventSink) acknowledge(commitTs uint64) []*eventsink.TxnCallbackabl
 	}
 	ackedEvents := m.events[:i]
 	for _, event := range ackedEvents {
-		if event.SinkState.Load() != state.TableSinkStopping {
+		if event.GetTableSinkState() != state.TableSinkStopping {
 			event.Callback()
 		} else {
 			event.Callback()

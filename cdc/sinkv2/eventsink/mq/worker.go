@@ -169,7 +169,7 @@ func (w *worker) asyncSend(
 	for key, events := range partitionedRows {
 		for _, event := range events {
 			// Skip this event when the table is stopping.
-			if event.SinkState.Load() == state.TableSinkStopping {
+			if event.GetTableSinkState() == state.TableSinkStopping {
 				event.Callback()
 				log.Debug("skip event of stopped table", zap.Any("event", event))
 				continue

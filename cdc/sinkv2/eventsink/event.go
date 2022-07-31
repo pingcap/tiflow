@@ -35,6 +35,11 @@ type CallbackableEvent[E TableEvent] struct {
 	SinkState *state.TableSinkState
 }
 
+// GetTableSinkState returns the table sink state.
+func (ce *CallbackableEvent[E]) GetTableSinkState() state.TableSinkState {
+	return ce.SinkState.Load()
+}
+
 // RowChangeCallbackableEvent is the row change event which can be callbacked.
 type RowChangeCallbackableEvent = CallbackableEvent[*model.RowChangedEvent]
 
