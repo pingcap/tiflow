@@ -25,7 +25,8 @@ import (
 	"go.uber.org/zap"
 )
 
-type SchedulerManager struct {
+// SchedulerManager manages schedulers and generates schedule tasks.
+type SchedulerManager struct { //nolint:revive
 	changefeedID model.ChangeFeedID
 
 	schedulers         []scheduler
@@ -33,6 +34,7 @@ type SchedulerManager struct {
 	maxTaskConcurrency int
 }
 
+// NewSchedulerManager returns a new scheduler manager.
 func NewSchedulerManager(
 	changefeedID model.ChangeFeedID, cfg *config.SchedulerConfig,
 ) *SchedulerManager {
@@ -57,6 +59,7 @@ func NewSchedulerManager(
 	return sm
 }
 
+// Schedule generates schedule tasks based on the inputs.
 func (sm *SchedulerManager) Schedule(
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
@@ -94,6 +97,7 @@ func (sm *SchedulerManager) Schedule(
 	return nil
 }
 
+// MoveTable moves a table to the target capture.
 func (sm *SchedulerManager) MoveTable(tableID model.TableID, target model.CaptureID) {
 	scheduler := sm.schedulers[schedulerPriorityMoveTable]
 	moveTableScheduler, ok := scheduler.(*moveTableScheduler)
@@ -112,6 +116,7 @@ func (sm *SchedulerManager) MoveTable(tableID model.TableID, target model.Captur
 	}
 }
 
+// Rebalance rebalance tables.
 func (sm *SchedulerManager) Rebalance() {
 	scheduler := sm.schedulers[schedulerPriorityRebalance]
 	rebalanceScheduler, ok := scheduler.(*rebalanceScheduler)
@@ -124,6 +129,7 @@ func (sm *SchedulerManager) Rebalance() {
 	atomic.StoreInt32(&rebalanceScheduler.rebalance, 1)
 }
 
+// DrainCapture drains all tables in the target capture.
 func (sm *SchedulerManager) DrainCapture(target model.CaptureID) bool {
 	scheduler := sm.schedulers[schedulerPriorityDrainCapture]
 	drainCaptureScheduler, ok := scheduler.(*drainCaptureScheduler)
@@ -136,10 +142,12 @@ func (sm *SchedulerManager) DrainCapture(target model.CaptureID) bool {
 	return drainCaptureScheduler.setTarget(target)
 }
 
+// DrainingTarget returns a capture id that is currently been draining.
 func (sm *SchedulerManager) DrainingTarget() model.CaptureID {
 	return sm.schedulers[schedulerPriorityDrainCapture].(*drainCaptureScheduler).getTarget()
 }
 
+// CollectMetrics collects metrics.
 func (sm *SchedulerManager) CollectMetrics() {
 	cf := sm.changefeedID
 	for name, counter := range sm.tasksCounter {
@@ -150,6 +158,7 @@ func (sm *SchedulerManager) CollectMetrics() {
 	}
 }
 
+// CleanMetrics cleans metrics.
 func (sm *SchedulerManager) CleanMetrics() {
 	cf := sm.changefeedID
 	for name := range sm.tasksCounter {

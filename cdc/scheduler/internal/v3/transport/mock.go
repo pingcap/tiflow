@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
 )
 
+// MockTrans mocks transport, used in tests.
 type MockTrans struct {
 	SendBuffer []*schedulepb.Message
 	RecvBuffer []*schedulepb.Message
@@ -26,6 +27,7 @@ type MockTrans struct {
 	KeepRecvBuffer bool
 }
 
+// NewMockTrans returns a new mock transport.
 func NewMockTrans() *MockTrans {
 	return &MockTrans{
 		SendBuffer: make([]*schedulepb.Message, 0),
@@ -33,15 +35,18 @@ func NewMockTrans() *MockTrans {
 	}
 }
 
+// Close mock transport.
 func (m *MockTrans) Close() error {
 	return nil
 }
 
+// Send sends messages.
 func (m *MockTrans) Send(ctx context.Context, msgs []*schedulepb.Message) error {
 	m.SendBuffer = append(m.SendBuffer, msgs...)
 	return nil
 }
 
+// Recv receives messages.
 func (m *MockTrans) Recv(ctx context.Context) ([]*schedulepb.Message, error) {
 	if m.KeepRecvBuffer {
 		return m.RecvBuffer, nil

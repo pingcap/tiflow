@@ -104,7 +104,7 @@ func TestCaptureManagerHandleAliveCaptureUpdate(t *testing.T) {
 	msgs = cm.HandleAliveCaptureUpdate(ms)
 	require.Len(t, msgs, 0)
 	require.True(t, cm.CheckAllCaptureInitialized())
-	require.EqualValues(t, &captureChanges{
+	require.EqualValues(t, &CaptureChanges{
 		Init: map[string][]schedulepb.TableStatus{"2": {{TableID: 1}}, "3": {{TableID: 2}}},
 	}, cm.TakeChanges())
 
@@ -115,7 +115,7 @@ func TestCaptureManagerHandleAliveCaptureUpdate(t *testing.T) {
 	require.ElementsMatch(t, []*schedulepb.Message{
 		{To: "4", MsgType: schedulepb.MsgHeartbeat, Heartbeat: &schedulepb.Heartbeat{}},
 	}, msgs)
-	require.Equal(t, &captureChanges{
+	require.Equal(t, &CaptureChanges{
 		Removed: map[string][]schedulepb.TableStatus{"2": {{TableID: 1}}},
 	}, cm.TakeChanges())
 	require.False(t, cm.CheckAllCaptureInitialized())

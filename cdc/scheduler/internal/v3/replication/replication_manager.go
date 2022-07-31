@@ -29,6 +29,7 @@ const (
 	checkpointCannotProceed = internal.CheckpointCannotProceed
 )
 
+// Callback is invoked when something is done.
 type Callback func()
 
 // BurstBalance for changefeed set up or unplanned TiCDC node failure.
@@ -39,23 +40,27 @@ type BurstBalance struct {
 	MoveTables   []MoveTable
 }
 
+// MoveTable is a schedule task for moving a table.
 type MoveTable struct {
 	TableID     model.TableID
 	DestCapture model.CaptureID
 }
 
+// AddTable is a schedule task for adding a table.
 type AddTable struct {
 	TableID      model.TableID
 	CaptureID    model.CaptureID
 	CheckpointTs model.Ts
 }
 
+// RemoveTable is a schedule task for removing a table.
 type RemoveTable struct {
 	TableID   model.TableID
 	CaptureID model.CaptureID
 }
 
-type ScheduleTask struct {
+// ScheduleTask is a schedule task that wraps add/move/remove table tasks.
+type ScheduleTask struct { //nolint:revive
 	MoveTable    *MoveTable
 	AddTable     *AddTable
 	RemoveTable  *RemoveTable
@@ -64,6 +69,7 @@ type ScheduleTask struct {
 	Accept Callback
 }
 
+// Name returns the name of a schedule task.
 func (s *ScheduleTask) Name() string {
 	if s.MoveTable != nil {
 		return "moveTable"
@@ -77,7 +83,8 @@ func (s *ScheduleTask) Name() string {
 	return "unknown"
 }
 
-type ReplicationManager struct {
+// ReplicationManager manages replications and running scheduling tasks.
+type ReplicationManager struct { //nolint:revive
 	tables map[model.TableID]*ReplicationSet
 
 	runningTasks       map[model.TableID]*ScheduleTask
@@ -92,6 +99,7 @@ type ReplicationManager struct {
 	acceptBurstBalanceTask int
 }
 
+// NewReplicationManager returns a new replication manager.
 func NewReplicationManager(
 	maxTaskConcurrency int, changefeedID model.ChangeFeedID,
 ) *ReplicationManager {
@@ -103,6 +111,7 @@ func NewReplicationManager(
 	}
 }
 
+// HandleCaptureChanges handles capture changes.
 func (r *ReplicationManager) HandleCaptureChanges(
 	init map[model.CaptureID][]schedulepb.TableStatus,
 	removed map[model.CaptureID][]schedulepb.TableStatus,
@@ -153,6 +162,7 @@ func (r *ReplicationManager) HandleCaptureChanges(
 	return sentMsgs, nil
 }
 
+// HandleMessage handles messages sent by other captures.
 func (r *ReplicationManager) HandleMessage(
 	msgs []*schedulepb.Message,
 ) ([]*schedulepb.Message, error) {
@@ -250,6 +260,7 @@ func (r *ReplicationManager) handleMessageDispatchTableResponse(
 	return msgs, nil
 }
 
+// HandleTasks handles schedule tasks.
 func (r *ReplicationManager) HandleTasks(
 	tasks []*ScheduleTask,
 ) ([]*schedulepb.Message, error) {
@@ -460,6 +471,7 @@ func (r *ReplicationManager) RunningTasks() map[model.TableID]*ScheduleTask {
 	return r.runningTasks
 }
 
+// AdvanceCheckpoint tries to advance checkpoint and returns current checkpoint.
 func (r *ReplicationManager) AdvanceCheckpoint(
 	currentTables []model.TableID,
 ) (newCheckpointTs, newResolvedTs model.Ts) {
@@ -490,6 +502,7 @@ func (r *ReplicationManager) AdvanceCheckpoint(
 	return newCheckpointTs, newResolvedTs
 }
 
+// CollectMetrics collects metrics.
 func (r *ReplicationManager) CollectMetrics() {
 	cf := r.changefeedID
 	tableGauge.
@@ -543,6 +556,7 @@ func (r *ReplicationManager) CollectMetrics() {
 	}
 }
 
+// CleanMetrics cleans metrics.
 func (r *ReplicationManager) CleanMetrics() {
 	cf := r.changefeedID
 	tableGauge.DeleteLabelValues(cf.Namespace, cf.ID)

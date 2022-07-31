@@ -28,6 +28,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// Transport is an interface of message channel between scheduler and agent.
 type Transport interface {
 	Send(ctx context.Context, msgs []*schedulepb.Message) error
 	Recv(ctx context.Context) ([]*schedulepb.Message, error)
@@ -70,10 +71,13 @@ type p2pTransport struct {
 type Role string
 
 const (
-	AgentRole     Role = "agent"
+	// AgentRole is the role of agent.
+	AgentRole Role = "agent"
+	// SchedulerRole is the role of scheduler.
 	SchedulerRole Role = "scheduler"
 )
 
+// NewTransport returns a new transport.
 func NewTransport(
 	ctx context.Context, changefeed model.ChangeFeedID, role Role,
 	server *p2p.MessageServer, router p2p.MessageRouter,

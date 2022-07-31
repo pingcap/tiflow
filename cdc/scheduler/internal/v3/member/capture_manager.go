@@ -99,17 +99,19 @@ func (c *CaptureStatus) handleHeartbeatResponse(
 	c.Tables = resp.Tables
 }
 
-type captureChanges struct {
+// CaptureChanges wraps changes of captures.
+type CaptureChanges struct {
 	Init    map[model.CaptureID][]schedulepb.TableStatus
 	Removed map[model.CaptureID][]schedulepb.TableStatus
 }
 
+// CaptureManager manages capture status.
 type CaptureManager struct {
 	OwnerRev schedulepb.OwnerRevision
 	Captures map[model.CaptureID]*CaptureStatus
 
 	initialized bool
-	changes     *captureChanges
+	changes     *CaptureChanges
 
 	// A logical clock counter, for heartbeat.
 	tickCounter   int
@@ -119,6 +121,7 @@ type CaptureManager struct {
 	ownerID      model.CaptureID
 }
 
+// NewCaptureManager returns a new capture manager.
 func NewCaptureManager(
 	ownerID model.CaptureID, changefeedID model.ChangeFeedID,
 	rev schedulepb.OwnerRevision, heartbeatTick int,
@@ -133,6 +136,7 @@ func NewCaptureManager(
 	}
 }
 
+// CheckAllCaptureInitialized check if all capture is initialized.
 func (c *CaptureManager) CheckAllCaptureInitialized() bool {
 	return c.initialized && c.checkAllCaptureInitialized()
 }
@@ -152,6 +156,8 @@ func (c *CaptureManager) checkAllCaptureInitialized() bool {
 	return true
 }
 
+// Tick advances the logical lock of capture manager and produce heartbeat when
+// necessary.
 func (c *CaptureManager) Tick(
 	reps map[model.TableID]*replication.ReplicationSet, drainingCapture model.CaptureID,
 ) []*schedulepb.Message {
@@ -182,6 +188,7 @@ func (c *CaptureManager) Tick(
 	return msgs
 }
 
+// HandleMessage handles messages sent from other captures.
 func (c *CaptureManager) HandleMessage(
 	msgs []*schedulepb.Message,
 ) {
@@ -199,6 +206,7 @@ func (c *CaptureManager) HandleMessage(
 	}
 }
 
+// HandleAliveCaptureUpdate update captures liveness.
 func (c *CaptureManager) HandleAliveCaptureUpdate(
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 ) []*schedulepb.Message {
@@ -228,7 +236,7 @@ func (c *CaptureManager) HandleAliveCaptureUpdate(
 				continue
 			}
 			if c.changes == nil {
-				c.changes = &captureChanges{}
+				c.changes = &CaptureChanges{}
 			}
 			if c.changes.Removed == nil {
 				c.changes.Removed = make(map[string][]schedulepb.TableStatus)
@@ -242,7 +250,7 @@ func (c *CaptureManager) HandleAliveCaptureUpdate(
 
 	// Check if this is the first time all captures are initialized.
 	if !c.initialized && c.checkAllCaptureInitialized() {
-		c.changes = &captureChanges{Init: make(map[string][]schedulepb.TableStatus)}
+		c.changes = &CaptureChanges{Init: make(map[string][]schedulepb.TableStatus)}
 		for id, capture := range c.Captures {
 			c.changes.Init[id] = capture.Tables
 		}
@@ -254,7 +262,8 @@ func (c *CaptureManager) HandleAliveCaptureUpdate(
 	return msgs
 }
 
-func (c *CaptureManager) TakeChanges() *captureChanges {
+// TakeChanges takes the changes of captures that it sees so far.
+func (c *CaptureManager) TakeChanges() *CaptureChanges {
 	// Only return changes when it's initialized.
 	if !c.initialized {
 		return nil
@@ -264,6 +273,7 @@ func (c *CaptureManager) TakeChanges() *captureChanges {
 	return changes
 }
 
+// CollectMetrics collects metrics.
 func (c *CaptureManager) CollectMetrics() {
 	cf := c.changefeedID
 	for _, capture := range c.Captures {
@@ -273,6 +283,7 @@ func (c *CaptureManager) CollectMetrics() {
 	}
 }
 
+// CleanMetrics cleans metrics.
 func (c *CaptureManager) CleanMetrics() {
 	cf := c.changefeedID
 	for _, capture := range c.Captures {
