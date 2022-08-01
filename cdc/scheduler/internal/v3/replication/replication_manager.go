@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v3
+package replication
 
 import (
 	"math"
@@ -19,63 +19,75 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
-type callback func()
+const (
+	checkpointCannotProceed = internal.CheckpointCannotProceed
+)
 
-// burstBalance for changefeed set up or unplanned TiCDC node failure.
+// Callback is invoked when something is done.
+type Callback func()
+
+// BurstBalance for changefeed set up or unplanned TiCDC node failure.
 // TiCDC needs to balance interrupted tables as soon as possible.
-type burstBalance struct {
-	AddTables    []addTable
-	RemoveTables []removeTable
-	MoveTables   []moveTable
+type BurstBalance struct {
+	AddTables    []AddTable
+	RemoveTables []RemoveTable
+	MoveTables   []MoveTable
 }
 
-type moveTable struct {
+// MoveTable is a schedule task for moving a table.
+type MoveTable struct {
 	TableID     model.TableID
 	DestCapture model.CaptureID
 }
 
-type addTable struct {
+// AddTable is a schedule task for adding a table.
+type AddTable struct {
 	TableID      model.TableID
 	CaptureID    model.CaptureID
 	CheckpointTs model.Ts
 }
 
-type removeTable struct {
+// RemoveTable is a schedule task for removing a table.
+type RemoveTable struct {
 	TableID   model.TableID
 	CaptureID model.CaptureID
 }
 
-type scheduleTask struct {
-	moveTable    *moveTable
-	addTable     *addTable
-	removeTable  *removeTable
-	burstBalance *burstBalance
+// ScheduleTask is a schedule task that wraps add/move/remove table tasks.
+type ScheduleTask struct { //nolint:revive
+	MoveTable    *MoveTable
+	AddTable     *AddTable
+	RemoveTable  *RemoveTable
+	BurstBalance *BurstBalance
 
-	accept callback
+	Accept Callback
 }
 
-func (s *scheduleTask) Name() string {
-	if s.moveTable != nil {
+// Name returns the name of a schedule task.
+func (s *ScheduleTask) Name() string {
+	if s.MoveTable != nil {
 		return "moveTable"
-	} else if s.addTable != nil {
+	} else if s.AddTable != nil {
 		return "addTable"
-	} else if s.removeTable != nil {
+	} else if s.RemoveTable != nil {
 		return "removeTable"
-	} else if s.burstBalance != nil {
+	} else if s.BurstBalance != nil {
 		return "burstBalance"
 	}
 	return "unknown"
 }
 
-type replicationManager struct {
+// ReplicationManager manages replications and running scheduling tasks.
+type ReplicationManager struct { //nolint:revive
 	tables map[model.TableID]*ReplicationSet
 
-	runningTasks       map[model.TableID]*scheduleTask
+	runningTasks       map[model.TableID]*ScheduleTask
 	maxTaskConcurrency int
 
 	changefeedID           model.ChangeFeedID
@@ -87,29 +99,33 @@ type replicationManager struct {
 	acceptBurstBalanceTask int
 }
 
-func newReplicationManager(
+// NewReplicationManager returns a new replication manager.
+func NewReplicationManager(
 	maxTaskConcurrency int, changefeedID model.ChangeFeedID,
-) *replicationManager {
-	return &replicationManager{
+) *ReplicationManager {
+	return &ReplicationManager{
 		tables:             make(map[int64]*ReplicationSet),
-		runningTasks:       make(map[int64]*scheduleTask),
+		runningTasks:       make(map[int64]*ScheduleTask),
 		maxTaskConcurrency: maxTaskConcurrency,
 		changefeedID:       changefeedID,
 	}
 }
 
-func (r *replicationManager) HandleCaptureChanges(
-	changes *captureChanges, checkpointTs model.Ts,
+// HandleCaptureChanges handles capture changes.
+func (r *ReplicationManager) HandleCaptureChanges(
+	init map[model.CaptureID][]schedulepb.TableStatus,
+	removed map[model.CaptureID][]schedulepb.TableStatus,
+	checkpointTs model.Ts,
 ) ([]*schedulepb.Message, error) {
-	if changes.Init != nil {
+	if init != nil {
 		if len(r.tables) != 0 {
 			log.Panic("schedulerv3: init again",
 				zap.String("namespace", r.changefeedID.Namespace),
 				zap.String("changefeed", r.changefeedID.ID),
-				zap.Any("init", changes.Init), zap.Any("tables", r.tables))
+				zap.Any("init", init), zap.Any("tables", r.tables))
 		}
 		tableStatus := map[model.TableID]map[model.CaptureID]*schedulepb.TableStatus{}
-		for captureID, tables := range changes.Init {
+		for captureID, tables := range init {
 			for i := range tables {
 				table := tables[i]
 				if _, ok := tableStatus[table.TableID]; !ok {
@@ -119,7 +135,7 @@ func (r *replicationManager) HandleCaptureChanges(
 			}
 		}
 		for tableID, status := range tableStatus {
-			table, err := newReplicationSet(
+			table, err := NewReplicationSet(
 				tableID, checkpointTs, status, r.changefeedID)
 			if err != nil {
 				return nil, errors.Trace(err)
@@ -128,9 +144,9 @@ func (r *replicationManager) HandleCaptureChanges(
 		}
 	}
 	sentMsgs := make([]*schedulepb.Message, 0)
-	if changes.Removed != nil {
+	if removed != nil {
 		for _, table := range r.tables {
-			for captureID := range changes.Removed {
+			for captureID := range removed {
 				msgs, affected, err := table.handleCaptureShutdown(captureID)
 				if err != nil {
 					return nil, errors.Trace(err)
@@ -146,7 +162,8 @@ func (r *replicationManager) HandleCaptureChanges(
 	return sentMsgs, nil
 }
 
-func (r *replicationManager) HandleMessage(
+// HandleMessage handles messages sent by other captures.
+func (r *ReplicationManager) HandleMessage(
 	msgs []*schedulepb.Message,
 ) ([]*schedulepb.Message, error) {
 	sentMsgs := make([]*schedulepb.Message, 0, len(msgs))
@@ -175,7 +192,7 @@ func (r *replicationManager) HandleMessage(
 	return sentMsgs, nil
 }
 
-func (r *replicationManager) handleMessageHeartbeatResponse(
+func (r *ReplicationManager) handleMessageHeartbeatResponse(
 	from model.CaptureID, msg *schedulepb.HeartbeatResponse,
 ) ([]*schedulepb.Message, error) {
 	sentMsgs := make([]*schedulepb.Message, 0)
@@ -204,7 +221,7 @@ func (r *replicationManager) handleMessageHeartbeatResponse(
 	return sentMsgs, nil
 }
 
-func (r *replicationManager) handleMessageDispatchTableResponse(
+func (r *ReplicationManager) handleMessageDispatchTableResponse(
 	from model.CaptureID, msg *schedulepb.DispatchTableResponse,
 ) ([]*schedulepb.Message, error) {
 	var status *schedulepb.TableStatus
@@ -243,8 +260,9 @@ func (r *replicationManager) handleMessageDispatchTableResponse(
 	return msgs, nil
 }
 
-func (r *replicationManager) HandleTasks(
-	tasks []*scheduleTask,
+// HandleTasks handles schedule tasks.
+func (r *ReplicationManager) HandleTasks(
+	tasks []*ScheduleTask,
 ) ([]*schedulepb.Message, error) {
 	// Check if a running task is finished.
 	for tableID := range r.runningTasks {
@@ -263,14 +281,14 @@ func (r *replicationManager) HandleTasks(
 	sentMsgs := make([]*schedulepb.Message, 0)
 	for _, task := range tasks {
 		// Burst balance does not affect by maxTaskConcurrency.
-		if task.burstBalance != nil {
-			msgs, err := r.handleBurstBalanceTasks(task.burstBalance)
+		if task.BurstBalance != nil {
+			msgs, err := r.handleBurstBalanceTasks(task.BurstBalance)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
 			sentMsgs = append(sentMsgs, msgs...)
-			if task.accept != nil {
-				task.accept()
+			if task.Accept != nil {
+				task.Accept()
 			}
 			continue
 		}
@@ -286,12 +304,12 @@ func (r *replicationManager) HandleTasks(
 		}
 
 		var tableID model.TableID
-		if task.addTable != nil {
-			tableID = task.addTable.TableID
-		} else if task.removeTable != nil {
-			tableID = task.removeTable.TableID
-		} else if task.moveTable != nil {
-			tableID = task.moveTable.TableID
+		if task.AddTable != nil {
+			tableID = task.AddTable.TableID
+		} else if task.RemoveTable != nil {
+			tableID = task.RemoveTable.TableID
+		} else if task.MoveTable != nil {
+			tableID = task.MoveTable.TableID
 		}
 
 		// Skip task if the table is already running a task,
@@ -303,7 +321,7 @@ func (r *replicationManager) HandleTasks(
 				zap.Any("task", task))
 			continue
 		}
-		if _, ok := r.tables[tableID]; !ok && task.addTable == nil {
+		if _, ok := r.tables[tableID]; !ok && task.AddTable == nil {
 			log.Info("schedulerv3: ignore task, table not found",
 				zap.String("namespace", r.changefeedID.Namespace),
 				zap.String("changefeed", r.changefeedID.ID),
@@ -313,33 +331,33 @@ func (r *replicationManager) HandleTasks(
 
 		var msgs []*schedulepb.Message
 		var err error
-		if task.addTable != nil {
-			msgs, err = r.handleAddTableTask(task.addTable)
-		} else if task.removeTable != nil {
-			msgs, err = r.handleRemoveTableTask(task.removeTable)
-		} else if task.moveTable != nil {
-			msgs, err = r.handleMoveTableTask(task.moveTable)
+		if task.AddTable != nil {
+			msgs, err = r.handleAddTableTask(task.AddTable)
+		} else if task.RemoveTable != nil {
+			msgs, err = r.handleRemoveTableTask(task.RemoveTable)
+		} else if task.MoveTable != nil {
+			msgs, err = r.handleMoveTableTask(task.MoveTable)
 		}
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 		sentMsgs = append(sentMsgs, msgs...)
 		r.runningTasks[tableID] = task
-		if task.accept != nil {
-			task.accept()
+		if task.Accept != nil {
+			task.Accept()
 		}
 	}
 	return sentMsgs, nil
 }
 
-func (r *replicationManager) handleAddTableTask(
-	task *addTable,
+func (r *ReplicationManager) handleAddTableTask(
+	task *AddTable,
 ) ([]*schedulepb.Message, error) {
 	r.acceptAddTableTask++
 	var err error
 	table := r.tables[task.TableID]
 	if table == nil {
-		table, err = newReplicationSet(
+		table, err = NewReplicationSet(
 			task.TableID, task.CheckpointTs, nil, r.changefeedID)
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -349,8 +367,8 @@ func (r *replicationManager) handleAddTableTask(
 	return table.handleAddTable(task.CaptureID)
 }
 
-func (r *replicationManager) handleRemoveTableTask(
-	task *removeTable,
+func (r *ReplicationManager) handleRemoveTableTask(
+	task *RemoveTable,
 ) ([]*schedulepb.Message, error) {
 	r.acceptRemoveTableTask++
 	table := r.tables[task.TableID]
@@ -365,16 +383,16 @@ func (r *replicationManager) handleRemoveTableTask(
 	return table.handleRemoveTable()
 }
 
-func (r *replicationManager) handleMoveTableTask(
-	task *moveTable,
+func (r *ReplicationManager) handleMoveTableTask(
+	task *MoveTable,
 ) ([]*schedulepb.Message, error) {
 	r.acceptMoveTableTask++
 	table := r.tables[task.TableID]
 	return table.handleMoveTable(task.DestCapture)
 }
 
-func (r *replicationManager) handleBurstBalanceTasks(
-	task *burstBalance,
+func (r *ReplicationManager) handleBurstBalanceTasks(
+	task *BurstBalance,
 ) ([]*schedulepb.Message, error) {
 	r.acceptBurstBalanceTask++
 	perCapture := make(map[model.CaptureID]int)
@@ -408,7 +426,7 @@ func (r *replicationManager) handleBurstBalanceTasks(
 		}
 		sentMsgs = append(sentMsgs, msgs...)
 		// Just for place holding.
-		r.runningTasks[addTable.TableID] = &scheduleTask{}
+		r.runningTasks[addTable.TableID] = &ScheduleTask{}
 	}
 	for i := range task.RemoveTables {
 		removeTable := task.RemoveTables[i]
@@ -422,7 +440,7 @@ func (r *replicationManager) handleBurstBalanceTasks(
 		}
 		sentMsgs = append(sentMsgs, msgs...)
 		// Just for place holding.
-		r.runningTasks[removeTable.TableID] = &scheduleTask{}
+		r.runningTasks[removeTable.TableID] = &ScheduleTask{}
 	}
 	for i := range task.MoveTables {
 		moveTable := task.MoveTables[i]
@@ -436,24 +454,25 @@ func (r *replicationManager) handleBurstBalanceTasks(
 		}
 		sentMsgs = append(sentMsgs, msgs...)
 		// Just for place holding.
-		r.runningTasks[moveTable.TableID] = &scheduleTask{}
+		r.runningTasks[moveTable.TableID] = &ScheduleTask{}
 	}
 	return sentMsgs, nil
 }
 
 // ReplicationSets return all tracking replication set
 // Caller must not modify the returned map.
-func (r *replicationManager) ReplicationSets() map[model.TableID]*ReplicationSet {
+func (r *ReplicationManager) ReplicationSets() map[model.TableID]*ReplicationSet {
 	return r.tables
 }
 
 // RunningTasks return running tasks.
 // Caller must not modify the returned map.
-func (r *replicationManager) RunningTasks() map[model.TableID]*scheduleTask {
+func (r *ReplicationManager) RunningTasks() map[model.TableID]*ScheduleTask {
 	return r.runningTasks
 }
 
-func (r *replicationManager) AdvanceCheckpoint(
+// AdvanceCheckpoint tries to advance checkpoint and returns current checkpoint.
+func (r *ReplicationManager) AdvanceCheckpoint(
 	currentTables []model.TableID,
 ) (newCheckpointTs, newResolvedTs model.Ts) {
 	newCheckpointTs, newResolvedTs = math.MaxUint64, math.MaxUint64
@@ -483,7 +502,8 @@ func (r *replicationManager) AdvanceCheckpoint(
 	return newCheckpointTs, newResolvedTs
 }
 
-func (r *replicationManager) CollectMetrics() {
+// CollectMetrics collects metrics.
+func (r *ReplicationManager) CollectMetrics() {
 	cf := r.changefeedID
 	tableGauge.
 		WithLabelValues(cf.Namespace, cf.ID).Set(float64(len(r.tables)))
@@ -536,7 +556,8 @@ func (r *replicationManager) CollectMetrics() {
 	}
 }
 
-func (r *replicationManager) CleanMetrics() {
+// CleanMetrics cleans metrics.
+func (r *ReplicationManager) CleanMetrics() {
 	cf := r.changefeedID
 	tableGauge.DeleteLabelValues(cf.Namespace, cf.ID)
 	slowestTableIDGauge.DeleteLabelValues(cf.Namespace, cf.ID)
@@ -572,4 +593,14 @@ func (r *replicationManager) CleanMetrics() {
 		tableStateGauge.
 			DeleteLabelValues(cf.Namespace, cf.ID, ReplicationSetState(s).String())
 	}
+}
+
+// SetReplicationSetForTests is only used in tests.
+func (r *ReplicationManager) SetReplicationSetForTests(rs *ReplicationSet) {
+	r.tables[rs.TableID] = rs
+}
+
+// GetReplicationSetForTests is only used in tests.
+func (r *ReplicationManager) GetReplicationSetForTests() map[model.TableID]*ReplicationSet {
+	return r.tables
 }

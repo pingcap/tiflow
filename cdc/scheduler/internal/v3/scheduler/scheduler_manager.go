@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v3
+package scheduler
 
 import (
 	"sync/atomic"
@@ -19,11 +19,14 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/pkg/config"
 	"go.uber.org/zap"
 )
 
-type schedulerManager struct {
+// SchedulerManager manages schedulers and generates schedule tasks.
+type SchedulerManager struct { //nolint:revive
 	changefeedID model.ChangeFeedID
 
 	schedulers         []scheduler
@@ -31,10 +34,11 @@ type schedulerManager struct {
 	maxTaskConcurrency int
 }
 
-func newSchedulerManager(
+// NewSchedulerManager returns a new scheduler manager.
+func NewSchedulerManager(
 	changefeedID model.ChangeFeedID, cfg *config.SchedulerConfig,
-) *schedulerManager {
-	sm := &schedulerManager{
+) *SchedulerManager {
+	sm := &SchedulerManager{
 		maxTaskConcurrency: cfg.MaxTaskConcurrency,
 		changefeedID:       changefeedID,
 		schedulers:         make([]scheduler, schedulerPriorityMax),
@@ -55,13 +59,14 @@ func newSchedulerManager(
 	return sm
 }
 
-func (sm *schedulerManager) Schedule(
+// Schedule generates schedule tasks based on the inputs.
+func (sm *SchedulerManager) Schedule(
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
-	aliveCaptures map[model.CaptureID]*CaptureStatus,
-	replications map[model.TableID]*ReplicationSet,
-	runTasking map[model.TableID]*scheduleTask,
-) []*scheduleTask {
+	aliveCaptures map[model.CaptureID]*member.CaptureStatus,
+	replications map[model.TableID]*replication.ReplicationSet,
+	runTasking map[model.TableID]*replication.ScheduleTask,
+) []*replication.ScheduleTask {
 	for sid, scheduler := range sm.schedulers {
 		// Basic scheduler bypasses max task check, because it handles the most
 		// critical scheduling, eg. add table via CREATE TABLE DDL.
@@ -92,7 +97,8 @@ func (sm *schedulerManager) Schedule(
 	return nil
 }
 
-func (sm *schedulerManager) MoveTable(tableID model.TableID, target model.CaptureID) {
+// MoveTable moves a table to the target capture.
+func (sm *SchedulerManager) MoveTable(tableID model.TableID, target model.CaptureID) {
 	scheduler := sm.schedulers[schedulerPriorityMoveTable]
 	moveTableScheduler, ok := scheduler.(*moveTableScheduler)
 	if !ok {
@@ -110,7 +116,8 @@ func (sm *schedulerManager) MoveTable(tableID model.TableID, target model.Captur
 	}
 }
 
-func (sm *schedulerManager) Rebalance() {
+// Rebalance rebalance tables.
+func (sm *SchedulerManager) Rebalance() {
 	scheduler := sm.schedulers[schedulerPriorityRebalance]
 	rebalanceScheduler, ok := scheduler.(*rebalanceScheduler)
 	if !ok {
@@ -122,7 +129,8 @@ func (sm *schedulerManager) Rebalance() {
 	atomic.StoreInt32(&rebalanceScheduler.rebalance, 1)
 }
 
-func (sm *schedulerManager) DrainCapture(target model.CaptureID) bool {
+// DrainCapture drains all tables in the target capture.
+func (sm *SchedulerManager) DrainCapture(target model.CaptureID) bool {
 	scheduler := sm.schedulers[schedulerPriorityDrainCapture]
 	drainCaptureScheduler, ok := scheduler.(*drainCaptureScheduler)
 	if !ok {
@@ -134,11 +142,13 @@ func (sm *schedulerManager) DrainCapture(target model.CaptureID) bool {
 	return drainCaptureScheduler.setTarget(target)
 }
 
-func (sm *schedulerManager) DrainingTarget() model.CaptureID {
+// DrainingTarget returns a capture id that is currently been draining.
+func (sm *SchedulerManager) DrainingTarget() model.CaptureID {
 	return sm.schedulers[schedulerPriorityDrainCapture].(*drainCaptureScheduler).getTarget()
 }
 
-func (sm *schedulerManager) CollectMetrics() {
+// CollectMetrics collects metrics.
+func (sm *SchedulerManager) CollectMetrics() {
 	cf := sm.changefeedID
 	for name, counter := range sm.tasksCounter {
 		scheduleTaskCounter.
@@ -148,7 +158,8 @@ func (sm *schedulerManager) CollectMetrics() {
 	}
 }
 
-func (sm *schedulerManager) CleanMetrics() {
+// CleanMetrics cleans metrics.
+func (sm *SchedulerManager) CleanMetrics() {
 	cf := sm.changefeedID
 	for name := range sm.tasksCounter {
 		scheduleTaskCounter.DeleteLabelValues(cf.Namespace, cf.ID, name.scheduler, name.task)

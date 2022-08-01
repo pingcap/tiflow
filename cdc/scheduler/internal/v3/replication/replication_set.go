@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v3
+package replication
 
 import (
 	"encoding/json"
@@ -39,6 +39,7 @@ import (
 //
 // When a capture shutdown unexpectedly, we may need to transit the state to
 // Absent or Replicating immediately.
+//nolint:revive
 type ReplicationSetState int
 
 const (
@@ -90,7 +91,7 @@ func (r ReplicationSetState) MarshalJSON() ([]byte, error) {
 }
 
 // ReplicationSet is a state machine that manages replication states.
-type ReplicationSet struct {
+type ReplicationSet struct { //nolint:revive
 	Changefeed model.ChangeFeedID
 	TableID    model.TableID
 	State      ReplicationSetState
@@ -102,7 +103,8 @@ type ReplicationSet struct {
 	Checkpoint schedulepb.Checkpoint
 }
 
-func newReplicationSet(
+// NewReplicationSet returns a new replication set.
+func NewReplicationSet(
 	tableID model.TableID,
 	checkpoint model.Ts,
 	tableStatus map[model.CaptureID]*schedulepb.TableStatus,

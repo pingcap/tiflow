@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v3
+package agent
 
 import (
 	"context"
@@ -22,10 +22,36 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/transport"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
+
+// See https://stackoverflow.com/a/30230552/3920448 for details.
+func nextPerm(p []int) {
+	for i := len(p) - 1; i >= 0; i-- {
+		if i == 0 || p[i] < len(p)-i-1 {
+			p[i]++
+			return
+		}
+		p[i] = 0
+	}
+}
+
+func getPerm(orig, p []int) []int {
+	result := append([]int{}, orig...)
+	for i, v := range p {
+		result[i], result[i+v] = result[i+v], result[i]
+	}
+	return result
+}
+
+func iterPermutation(sequence []int, fn func(sequence []int)) {
+	for p := make([]int, len(sequence)); p[0] < len(p); nextPerm(p) {
+		fn(getPerm(sequence, p))
+	}
+}
 
 func newAgent4Test() *agent {
 	a := &agent{
@@ -282,7 +308,7 @@ func TestAgentPermuteMessages(t *testing.T) {
 	mockTableExecutor := newMockTableExecutor()
 	a.tableM = newTableManager(model.ChangeFeedID{}, mockTableExecutor)
 
-	trans := newMockTrans()
+	trans := transport.NewMockTrans()
 	a.trans = trans
 
 	// all possible inbound Messages can be received
@@ -369,12 +395,12 @@ func TestAgentPermuteMessages(t *testing.T) {
 			for _, idx := range sequence {
 				message := inboundMessages[idx]
 				if message.MsgType == schedulepb.MsgHeartbeat {
-					trans.recvBuffer = append(trans.recvBuffer, message)
+					trans.RecvBuffer = append(trans.RecvBuffer, message)
 					err := a.Tick(ctx, model.LivenessCaptureAlive)
 					require.NoError(t, err)
-					require.Len(t, trans.sendBuffer, 1)
-					heartbeatResponse := trans.sendBuffer[0].HeartbeatResponse
-					trans.sendBuffer = trans.sendBuffer[:0]
+					require.Len(t, trans.SendBuffer, 1)
+					heartbeatResponse := trans.SendBuffer[0].HeartbeatResponse
+					trans.SendBuffer = trans.SendBuffer[:0]
 					require.Equal(t, model.LivenessCaptureAlive, heartbeatResponse.Liveness)
 
 					continue
@@ -389,10 +415,10 @@ func TestAgentPermuteMessages(t *testing.T) {
 							mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 								mock.Anything, mock.Anything).Return(ok1, nil)
 
-							trans.recvBuffer = append(trans.recvBuffer, message)
+							trans.RecvBuffer = append(trans.RecvBuffer, message)
 							err := a.Tick(ctx, model.LivenessCaptureAlive)
 							require.NoError(t, err)
-							trans.sendBuffer = trans.sendBuffer[:0]
+							trans.SendBuffer = trans.SendBuffer[:0]
 
 							mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
 						}
@@ -403,16 +429,16 @@ func TestAgentPermuteMessages(t *testing.T) {
 						mockTableExecutor.On("RemoveTable", mock.Anything,
 							mock.Anything).Return(ok)
 						for _, ok1 := range []bool{false, true} {
-							trans.recvBuffer = append(trans.recvBuffer, message)
+							trans.RecvBuffer = append(trans.RecvBuffer, message)
 							mockTableExecutor.On("IsRemoveTableFinished",
 								mock.Anything, mock.Anything).Return(0, ok1)
 							err := a.Tick(ctx, model.LivenessCaptureAlive)
 							require.NoError(t, err)
-							if len(trans.sendBuffer) != 0 {
-								require.Len(t, trans.sendBuffer, 1)
-								response, yes := trans.sendBuffer[0].DispatchTableResponse.
+							if len(trans.SendBuffer) != 0 {
+								require.Len(t, trans.SendBuffer, 1)
+								response, yes := trans.SendBuffer[0].DispatchTableResponse.
 									Response.(*schedulepb.DispatchTableResponse_RemoveTable)
-								trans.sendBuffer = trans.sendBuffer[:0]
+								trans.SendBuffer = trans.SendBuffer[:0]
 								require.True(t, yes)
 								expected := schedulepb.TableStateStopping
 								if ok && ok1 {
@@ -528,7 +554,7 @@ func TestAgentTick(t *testing.T) {
 	t.Parallel()
 
 	a := newAgent4Test()
-	trans := newMockTrans()
+	trans := transport.NewMockTrans()
 	mockTableExecutor := newMockTableExecutor()
 	a.trans = trans
 	a.tableM = newTableManager(model.ChangeFeedID{}, mockTableExecutor)
@@ -546,13 +572,13 @@ func TestAgentTick(t *testing.T) {
 	}
 
 	// receive first heartbeat from the owner
-	trans.recvBuffer = append(trans.recvBuffer, heartbeat)
+	trans.RecvBuffer = append(trans.RecvBuffer, heartbeat)
 
 	ctx := context.Background()
 	require.NoError(t, a.Tick(ctx, model.LivenessCaptureAlive))
-	require.Len(t, trans.sendBuffer, 1)
-	heartbeatResponse := trans.sendBuffer[0]
-	trans.sendBuffer = trans.sendBuffer[:0]
+	require.Len(t, trans.SendBuffer, 1)
+	heartbeatResponse := trans.SendBuffer[0]
+	trans.SendBuffer = trans.SendBuffer[:0]
 
 	require.Equal(t, schedulepb.MsgHeartbeatResponse, heartbeatResponse.MsgType)
 	require.Equal(t, a.ownerInfo.CaptureID, heartbeatResponse.To)
@@ -596,23 +622,23 @@ func TestAgentTick(t *testing.T) {
 	var messages []*schedulepb.Message
 	messages = append(messages, addTableRequest)
 	messages = append(messages, removeTableRequest)
-	trans.recvBuffer = append(trans.recvBuffer, messages...)
+	trans.RecvBuffer = append(trans.RecvBuffer, messages...)
 
 	mockTableExecutor.On("AddTable", mock.Anything,
 		mock.Anything, mock.Anything, mock.Anything).Return(true, nil)
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(false, nil)
 	require.NoError(t, a.Tick(ctx, model.LivenessCaptureAlive))
-	trans.sendBuffer = trans.sendBuffer[:0]
+	trans.SendBuffer = trans.SendBuffer[:0]
 
-	trans.recvBuffer = append(trans.recvBuffer, addTableRequest)
+	trans.RecvBuffer = append(trans.RecvBuffer, addTableRequest)
 
 	mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(true, nil)
 	require.NoError(t, a.Tick(ctx, model.LivenessCaptureAlive))
-	responses := trans.sendBuffer[:len(trans.sendBuffer)]
-	trans.sendBuffer = trans.sendBuffer[:0]
+	responses := trans.SendBuffer[:len(trans.SendBuffer)]
+	trans.SendBuffer = trans.SendBuffer[:0]
 	require.Len(t, responses, 1)
 	require.Equal(t, schedulepb.MsgDispatchTableResponse, responses[0].MsgType)
 	resp, ok := responses[0].DispatchTableResponse.
@@ -667,7 +693,7 @@ func TestAgentCommitAddTableDuringStopping(t *testing.T) {
 	a := newAgent4Test()
 	mockTableExecutor := newMockTableExecutor()
 	a.tableM = newTableManager(model.ChangeFeedID{}, mockTableExecutor)
-	trans := newMockTrans()
+	trans := transport.NewMockTrans()
 	a.trans = trans
 
 	prepareTableMsg := &schedulepb.Message{
@@ -688,7 +714,7 @@ func TestAgentCommitAddTableDuringStopping(t *testing.T) {
 			},
 		},
 	}
-	trans.recvBuffer = []*schedulepb.Message{prepareTableMsg}
+	trans.RecvBuffer = []*schedulepb.Message{prepareTableMsg}
 
 	// Prepare add table is still in-progress.
 	mockTableExecutor.
@@ -699,7 +725,7 @@ func TestAgentCommitAddTableDuringStopping(t *testing.T) {
 		Return(false, nil).Once()
 	err := a.Tick(context.Background(), model.LivenessCaptureAlive)
 	require.Nil(t, err)
-	require.Len(t, trans.sendBuffer, 0)
+	require.Len(t, trans.SendBuffer, 0)
 
 	mockTableExecutor.
 		On("AddTable", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -709,8 +735,8 @@ func TestAgentCommitAddTableDuringStopping(t *testing.T) {
 		Return(true, nil).Once()
 	err = a.Tick(context.Background(), model.LivenessCaptureAlive)
 	require.Nil(t, err)
-	require.Len(t, trans.sendBuffer, 1)
-	require.Equal(t, trans.sendBuffer[0].MsgType, schedulepb.MsgDispatchTableResponse)
+	require.Len(t, trans.SendBuffer, 1)
+	require.Equal(t, trans.SendBuffer[0].MsgType, schedulepb.MsgDispatchTableResponse)
 
 	// Commit add table request should not be rejected.
 	commitTableMsg := &schedulepb.Message{
@@ -731,8 +757,8 @@ func TestAgentCommitAddTableDuringStopping(t *testing.T) {
 			},
 		},
 	}
-	trans.recvBuffer = []*schedulepb.Message{commitTableMsg}
-	trans.sendBuffer = []*schedulepb.Message{}
+	trans.RecvBuffer = []*schedulepb.Message{commitTableMsg}
+	trans.SendBuffer = []*schedulepb.Message{}
 	mockTableExecutor.
 		On("AddTable", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(true, nil).Once()
@@ -741,18 +767,18 @@ func TestAgentCommitAddTableDuringStopping(t *testing.T) {
 		Return(false, nil).Once()
 	err = a.Tick(context.Background(), model.LivenessCaptureStopping)
 	require.Nil(t, err)
-	require.Len(t, trans.sendBuffer, 1)
+	require.Len(t, trans.SendBuffer, 1)
 
-	trans.recvBuffer = []*schedulepb.Message{}
-	trans.sendBuffer = []*schedulepb.Message{}
+	trans.RecvBuffer = []*schedulepb.Message{}
+	trans.SendBuffer = []*schedulepb.Message{}
 	mockTableExecutor.
 		On("IsAddTableFinished", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(true, nil).Once()
 	err = a.Tick(context.Background(), model.LivenessCaptureStopping)
 	require.Nil(t, err)
-	require.Len(t, trans.sendBuffer, 1)
-	require.Equal(t, schedulepb.MsgDispatchTableResponse, trans.sendBuffer[0].MsgType)
-	addTableResp := trans.sendBuffer[0].DispatchTableResponse.GetAddTable()
+	require.Len(t, trans.SendBuffer, 1)
+	require.Equal(t, schedulepb.MsgDispatchTableResponse, trans.SendBuffer[0].MsgType)
+	addTableResp := trans.SendBuffer[0].DispatchTableResponse.GetAddTable()
 	require.Equal(t, schedulepb.TableStateReplicating, addTableResp.Status.State)
 }
 
