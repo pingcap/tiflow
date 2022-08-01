@@ -87,6 +87,13 @@ func newMySQLSink4Test(ctx context.Context, t *testing.T) *mysqlSink {
 	}
 }
 
+func TestMustFlushOnNilEvent(t *testing.T) {
+	mc := newMySQLSink4Test(context.Background(), t)
+	needFlush := mc.OnTxnEvent(&eventsink.TxnCallbackableEvent{Event: nil})
+	require.True(t, needFlush)
+	require.Nil(t, mc.Close())
+}
+
 func TestPrepareDML(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {

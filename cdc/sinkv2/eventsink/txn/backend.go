@@ -23,7 +23,8 @@ import (
 // backend indicates a transaction backend like MySQL, TiDB, ...
 type backend interface {
 	// OnTxnEvent handles one TxnCallbackableEvent.
-	OnTxnEvent(*eventsink.TxnCallbackableEvent) (needFlush bool)
+	// NOTE: It must return true if e.Event is nil.
+	OnTxnEvent(e *eventsink.TxnCallbackableEvent) (needFlush bool)
 
 	// Flush pending events in the backend.
 	Flush(ctx context.Context) error

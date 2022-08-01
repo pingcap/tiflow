@@ -184,6 +184,7 @@ func adjustDSN(ctx context.Context, sinkURI *url.URL, params *sinkParams) (dsnSt
 	return
 }
 
+// OnTxnEvent implements interface backend.
 func (s *mysqlSink) OnTxnEvent(event *eventsink.TxnCallbackableEvent) (needFlush bool) {
 	if event.Event == nil {
 		return true
@@ -193,6 +194,7 @@ func (s *mysqlSink) OnTxnEvent(event *eventsink.TxnCallbackableEvent) (needFlush
 	return event.Event.FinishWg != nil || s.rows >= s.params.maxTxnRow
 }
 
+// Flush implements interface backend.
 func (s *mysqlSink) Flush(ctx context.Context) (err error) {
 	failpoint.Inject("SinkFlushDMLPanic", func() {
 		time.Sleep(time.Second)
@@ -230,6 +232,7 @@ func (s *mysqlSink) Flush(ctx context.Context) (err error) {
 	return
 }
 
+// Close implements interface backend.
 func (s *mysqlSink) Close() (err error) {
 	if s.db != nil {
 		err = s.db.Close()
@@ -242,6 +245,7 @@ func (s *mysqlSink) Close() (err error) {
 	return
 }
 
+// MaxFlushInterval implements interface backend.
 func (s *mysqlSink) MaxFlushInterval() time.Duration {
 	return maxFlushInterval
 }
