@@ -47,7 +47,7 @@ func newProcessor4Test(
 ) *processor {
 	up := upstream.NewUpstream4Test(nil)
 	p := newProcessor(
-		&model.CaptureInfo{},
+		&model.CaptureInfo{AdvertiseAddr: "127.0.0.1:0000"},
 		model.ChangeFeedID4Test("processor-test", "processor-test"), up, liveness)
 	p.lazyInit = func(ctx cdcContext.Context) error {
 		p.agent = &mockAgent{executor: p}
