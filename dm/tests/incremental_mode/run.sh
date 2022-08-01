@@ -172,7 +172,7 @@ function run() {
 	grep -Fq "reset replication binlog puller" $WORK_DIR/worker1/log/dm-worker.log
 	grep -Fq "reset replication binlog puller" $WORK_DIR/worker2/log/dm-worker.log
 
-	check_log_contain_with_retry 'finish to handle ddls in normal mode.*create table t2' $WORK_DIR/worker2/log/dm-worker.log
+	check_log_contain_with_retry 'finish to handle ddls in normal mode.*create table t2' $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log
 
 	# we use failpoint to let worker sleep 8 second when executeSQLs, to increase possibility of
 	# meeting an error of context cancel.
