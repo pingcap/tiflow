@@ -26,7 +26,7 @@ import (
 // unsafeResetOptions defines flags for the `cli unsafe reset` command.
 type unsafeResetOptions struct {
 	clusterID  string
-	etcdClient *etcd.CDCEtcdClient
+	etcdClient *etcd.CDCEtcdClientImpl
 	pdClient   pd.Client
 }
 

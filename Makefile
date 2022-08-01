@@ -265,7 +265,7 @@ swagger-spec: tools/bin/swag
 generate_mock: tools/bin/mockgen
 	tools/bin/mockgen -source cdc/owner/owner.go -destination cdc/owner/mock/owner_mock.go
 	tools/bin/mockgen -source cdc/api/v2/api_helpers.go -destination cdc/api/v2/api_helpers_mock.go -package v2
-	tools/bin/mockgen -source pkg/etcd/client_for_api.go -destination pkg/etcd/mock/etcd_client_mock.go
+	tools/bin/mockgen -source pkg/etcd/etcd.go -destination pkg/etcd/mock/etcd_client_mock.go
 	tools/bin/mockgen -source cdc/processor/manager.go -destination cdc/processor/mock/manager_mock.go
 	tools/bin/mockgen -source cdc/capture/capture.go -destination cdc/capture/mock/capture_mock.go
 	tools/bin/mockgen -source pkg/cmd/factory/factory.go -destination pkg/cmd/factory/mock/factory_mock.go -package mock_factory
@@ -496,14 +496,14 @@ tiflow-chaos-case:
 tiflow-generate-mock: tools/bin/mockgen
 	scripts/generate-engine-mock.sh
 
-engine_image: 
+engine_image:
 	@which docker || (echo "docker not found in ${PATH}"; exit 1)
 	./engine/test/utils/run_engine.sh build
 
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))
 
-engine_integration_test: 
+engine_integration_test:
 	@which docker || (echo "docker not found in ${PATH}"; exit 1)
 	./engine/test/integration_tests/run.sh "$(CASE)" "$(START_AT)"
 

@@ -80,7 +80,7 @@ func NewAgent(ctx context.Context,
 	changeFeedID model.ChangeFeedID,
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
-	etcdClient *etcd.CDCEtcdClient,
+	etcdClient etcd.CDCEtcdClient,
 	tableExecutor internal.TableExecutor,
 ) (internal.Agent, error) {
 	trans, err := newTransport(ctx, changeFeedID, agentRole, messageServer, messageRouter)

@@ -47,7 +47,7 @@ func RegisterStatusAPIRoutes(router *gin.Engine, capture capture.Capture) {
 	router.GET("/debug/info", gin.WrapF(statusAPI.handleDebugInfo))
 }
 
-func (h *statusAPI) writeEtcdInfo(ctx context.Context, cli etcd.CDCEtcdClientForAPI, w io.Writer) {
+func (h *statusAPI) writeEtcdInfo(ctx context.Context, cli etcd.CDCEtcdClient, w io.Writer) {
 	kvs, err := cli.GetAllCDCInfo(ctx)
 	if err != nil {
 		fmt.Fprintf(w, "failed to get info: %s\n\n", err.Error())

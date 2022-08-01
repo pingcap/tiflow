@@ -37,21 +37,24 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/engine/client"
-	"github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/openapi"
 	engineModel "github.com/pingcap/tiflow/engine/model"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"github.com/pingcap/tiflow/engine/test/e2e"
 )
 
 const (
-	baseURL = "http://127.0.0.1:10245/api/v1/jobs/%s"
+	masterAddr = "127.0.0.1:10245"
+	baseURL    = "http://" + masterAddr + "/api/v1/jobs/%s"
+	tenantID   = "e2e-test"
+	projectID  = "project-dm"
 )
 
 func TestDMJob(t *testing.T) {
 	ctx := context.Background()
-	masterClient, err := client.NewMasterClient(ctx, []string{"127.0.0.1:10245"})
+	masterClient, err := client.NewMasterClient(ctx, []string{masterAddr})
 	require.NoError(t, err)
 
 	mysqlCfg := util.DBConfig{
@@ -146,13 +149,12 @@ func testSimpleAllModeTask(
 	// start full job
 	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("<placeholder>"), []byte(db))
 	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("task-mode: all"), []byte("task-mode: full"))
-	var resp *enginepb.SubmitJobResponse
+	var jobID string
 	require.Eventually(t, func() bool {
-		resp, err = client.SubmitJob(ctx, &enginepb.SubmitJobRequest{
-			Tp:     int32(engineModel.JobTypeDM),
-			Config: dmJobCfg,
-		})
-		return err == nil && resp.Err == nil
+		var err error
+		jobID, err = e2e.CreateJobViaOpenAPI(ctx, masterAddr, tenantID, projectID,
+			engineModel.JobTypeDM, string(dmJobCfg))
+		return err == nil
 	}, time.Second*5, time.Millisecond*100)
 
 	// check full phase
@@ -180,7 +182,7 @@ func testSimpleAllModeTask(
 	source1 := "mysql-replica-01"
 	source2 := "mysql-replica-02"
 	require.Eventually(t, func() bool {
-		jobStatus, err := queryStatus(httpClient, resp.JobId, []string{source1})
+		jobStatus, err := queryStatus(httpClient, jobID, []string{source1})
 		return err == nil && jobStatus.TaskStatus[source1].Status.Stage == metadata.StageFinished
 	}, time.Second*30, time.Millisecond*100)
 
@@ -190,7 +192,7 @@ func testSimpleAllModeTask(
 	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("task-mode: full"), []byte("task-mode: incremental"))
 	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("binlog-name: ON.000001"), []byte(fmt.Sprintf("binlog-name: %s", binlogName)))
 	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("binlog-pos: 4"), []byte(fmt.Sprintf("binlog-pos: %d", binlogPos)))
-	err = updateJobCfg(httpClient, resp.JobId, string(dmJobCfg))
+	err = updateJobCfg(httpClient, jobID, string(dmJobCfg))
 	require.NoError(t, err)
 
 	// incremental phase
@@ -207,43 +209,43 @@ func testSimpleAllModeTask(
 	// check auto resume
 	waitRow("c = 3", db)
 
-	jobStatus, err := queryStatus(httpClient, resp.JobId, []string{source1, source2})
+	jobStatus, err := queryStatus(httpClient, jobID, []string{source1, source2})
 	require.NoError(t, err)
-	require.Equal(t, resp.JobId, jobStatus.JobMasterID)
+	require.Equal(t, jobID, jobStatus.JobMasterID)
 	require.Contains(t, string(jobStatus.TaskStatus[source1].Status.Status), "totalEvents")
 	require.Contains(t, jobStatus.TaskStatus[source2].Status.ErrorMsg, fmt.Sprintf("task %s for job not found", source2))
 
 	// pause task
-	err = operateJob(httpClient, resp.JobId, []string{source1}, dmpkg.Pause)
+	err = operateJob(httpClient, jobID, []string{source1}, dmpkg.Pause)
 	require.NoError(t, err)
 
 	// eventually paused
 	require.Eventually(t, func() bool {
-		jobStatus, err = queryStatus(httpClient, resp.JobId, nil)
+		jobStatus, err = queryStatus(httpClient, jobID, nil)
 		require.NoError(t, err)
 		return jobStatus.TaskStatus[source1].Status.Stage == metadata.StagePaused
 	}, time.Second*10, time.Second)
 
 	// binlog schema list
-	binlogSchemaResp, err := getBinlogSchema(httpClient, resp.JobId, source1, "", "")
+	binlogSchemaResp, err := getBinlogSchema(httpClient, jobID, source1, "", "")
 	require.NoError(t, err)
 	require.Len(t, binlogSchemaResp.Results, 1)
 	require.Equal(t, fmt.Sprintf(`["%s"]`, db), binlogSchemaResp.Results[source1].Msg)
 	require.Equal(t, "", binlogSchemaResp.Results[source1].ErrorMsg)
 
 	// resume task
-	err = operateJob(httpClient, resp.JobId, nil, dmpkg.Resume)
+	err = operateJob(httpClient, jobID, nil, dmpkg.Resume)
 	require.NoError(t, err)
 
 	// eventually resumed
 	require.Eventually(t, func() bool {
-		jobStatus, err = queryStatus(httpClient, resp.JobId, []string{source1})
+		jobStatus, err = queryStatus(httpClient, jobID, []string{source1})
 		require.NoError(t, err)
 		return jobStatus.TaskStatus[source1].Status.Stage == metadata.StageRunning
 	}, time.Second*10, time.Second)
 
 	// get job cfg
-	jobCfg, err := getJobCfg(httpClient, resp.JobId)
+	jobCfg, err := getJobCfg(httpClient, jobID)
 	require.NoError(t, err)
 	require.Contains(t, jobCfg, `flavor: mysql`)
 	require.Contains(t, jobCfg, `tidb_txn_mode: optimistic`)
@@ -253,7 +255,7 @@ func testSimpleAllModeTask(
 
 	// eventually error
 	require.Eventually(t, func() bool {
-		jobStatus, err = queryStatus(httpClient, resp.JobId, nil)
+		jobStatus, err = queryStatus(httpClient, jobID, nil)
 		require.NoError(t, err)
 		return jobStatus.TaskStatus[source1].Status.Stage == metadata.StageError &&
 			strings.Contains(jobStatus.TaskStatus[source1].Status.Result.Errors[0].RawCause,
@@ -268,7 +270,7 @@ func testSimpleAllModeTask(
 			"alter table " + db + ".t1 add unique(new_col);",
 		},
 	}
-	binlogResp, err := setBinlogOperator(httpClient, resp.JobId, source1, binlogReq)
+	binlogResp, err := setBinlogOperator(httpClient, jobID, source1, binlogReq)
 	require.NoError(t, err)
 	require.Equal(t, "", binlogResp.ErrorMsg)
 	require.Len(t, binlogResp.Results, 1)
@@ -277,7 +279,7 @@ func testSimpleAllModeTask(
 	waitRow("new_col = 4", db)
 
 	// binlog replace again
-	binlogResp, err = setBinlogOperator(httpClient, resp.JobId, source1, binlogReq)
+	binlogResp, err = setBinlogOperator(httpClient, jobID, source1, binlogReq)
 	require.NoError(t, err)
 	require.Equal(t, "", binlogResp.ErrorMsg)
 	require.Len(t, binlogResp.Results, 1)
@@ -285,7 +287,7 @@ func testSimpleAllModeTask(
 	require.Equal(t, fmt.Sprintf("source '%s' has no error", source1), binlogResp.Results[source1].ErrorMsg)
 
 	// binlog get
-	binlogResp, err = getBinlogOperator(httpClient, resp.JobId, source1, "")
+	binlogResp, err = getBinlogOperator(httpClient, jobID, source1, "")
 	require.NoError(t, err)
 	require.Equal(t, "", binlogResp.ErrorMsg)
 	require.Len(t, binlogResp.Results, 1)
@@ -293,7 +295,7 @@ func testSimpleAllModeTask(
 	require.Equal(t, fmt.Sprintf("source '%s' has no error", source1), binlogResp.Results[source1].ErrorMsg)
 
 	// binlog delete
-	binlogResp, err = deleteBinlogOperator(httpClient, resp.JobId, source1)
+	binlogResp, err = deleteBinlogOperator(httpClient, jobID, source1)
 	require.NoError(t, err)
 	require.Equal(t, "", binlogResp.ErrorMsg)
 	require.Len(t, binlogResp.Results, 1)
@@ -301,11 +303,11 @@ func testSimpleAllModeTask(
 	require.Equal(t, fmt.Sprintf("source '%s' has no error", source1), binlogResp.Results[source1].ErrorMsg)
 
 	// pause task
-	err = operateJob(httpClient, resp.JobId, []string{source1}, dmpkg.Pause)
+	err = operateJob(httpClient, jobID, []string{source1}, dmpkg.Pause)
 	require.NoError(t, err)
 	// eventually paused
 	require.Eventually(t, func() bool {
-		jobStatus, err = queryStatus(httpClient, resp.JobId, nil)
+		jobStatus, err = queryStatus(httpClient, jobID, nil)
 		require.NoError(t, err)
 		return jobStatus.TaskStatus[source1].Status.Stage == metadata.StagePaused
 	}, time.Second*10, time.Second)
@@ -316,13 +318,13 @@ func testSimpleAllModeTask(
 		Table:      "t1",
 		FromSource: &fromSource,
 	}
-	binlogSchemaResp, err = setBinlogSchema(httpClient, resp.JobId, source1, binlogSchemaReq)
+	binlogSchemaResp, err = setBinlogSchema(httpClient, jobID, source1, binlogSchemaReq)
 	require.NoError(t, err)
 	require.Equal(t, "", binlogSchemaResp.ErrorMsg)
 	require.Equal(t, "", binlogSchemaResp.Results[source1].ErrorMsg)
 	require.Equal(t, "", binlogSchemaResp.Results[source1].Msg)
 	// get new binlog schema
-	binlogSchemaResp, err = getBinlogSchema(httpClient, resp.JobId, source1, db, "t1")
+	binlogSchemaResp, err = getBinlogSchema(httpClient, jobID, source1, db, "t1")
 	require.NoError(t, err)
 	require.Len(t, binlogSchemaResp.Results, 1)
 	require.Equal(t, "CREATE TABLE `t1` ( `c` int(11) NOT NULL, `new_col` int(11) DEFAULT NULL, PRIMARY KEY (`c`) /*T![clustered_index] CLUSTERED */, UNIQUE KEY `new_col` (`new_col`)) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin", binlogSchemaResp.Results[source1].Msg)
@@ -331,25 +333,25 @@ func testSimpleAllModeTask(
 	// update with new balist
 	newDB := "new_" + db
 	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte(fmt.Sprintf(`["%s"]`, db)), []byte(fmt.Sprintf(`["%s", "%s"]`, db, newDB)))
-	err = updateJobCfg(httpClient, resp.JobId, string(dmJobCfg))
+	err = updateJobCfg(httpClient, jobID, string(dmJobCfg))
 	require.NoError(t, err)
 	// get new config
-	jobCfg, err = getJobCfg(httpClient, resp.JobId)
+	jobCfg, err = getJobCfg(httpClient, jobID)
 	require.NoError(t, err)
 	require.Contains(t, jobCfg, newDB)
 	require.Contains(t, jobCfg, `mod_revision: 2`)
 	// eventually apply new config, task still paused
 	require.Eventually(t, func() bool {
-		jobStatus, err = queryStatus(httpClient, resp.JobId, nil)
+		jobStatus, err = queryStatus(httpClient, jobID, nil)
 		return err == nil && jobStatus.TaskStatus[source1].CfgModRevison == 2 && jobStatus.TaskStatus[source1].Status.Stage == metadata.StagePaused
 	}, time.Second*30, time.Second)
 
 	// resume task
-	err = operateJob(httpClient, resp.JobId, nil, dmpkg.Resume)
+	err = operateJob(httpClient, jobID, nil, dmpkg.Resume)
 	require.NoError(t, err)
 	// eventually resumed
 	require.Eventually(t, func() bool {
-		jobStatus, err = queryStatus(httpClient, resp.JobId, []string{source1})
+		jobStatus, err = queryStatus(httpClient, jobID, []string{source1})
 		require.NoError(t, err)
 		return jobStatus.TaskStatus[source1].Status.Stage == metadata.StageRunning
 	}, time.Second*10, time.Second)
