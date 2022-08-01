@@ -67,7 +67,7 @@ func (o *options) addFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.masterConfig.FrameMetaConf.Auth.Passwd, "framework-meta-password", o.masterConfig.FrameMetaConf.Auth.Passwd, "framework metastore password")
 	// NOTE: Schema Convention:
 	// 1.It need to stay UNCHANGED for one dataflow engine cluster
-	// 2.It need be different between any two dataflow engine clusters
+	// 2.It needs be different between any two dataflow engine clusters
 	// 3.Naming rule: https://dev.mysql.com/doc/refman/5.7/en/identifiers.html
 	cmd.Flags().StringVar(&o.masterConfig.FrameMetaConf.Schema, "framework-meta-schema", o.masterConfig.FrameMetaConf.Schema, `schema name for framework meta`)
 
