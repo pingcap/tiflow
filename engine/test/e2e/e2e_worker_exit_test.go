@@ -32,10 +32,11 @@ import (
 func TestWorkerExit(t *testing.T) {
 	// TODO: make the following variables configurable
 	var (
-		masterAddrs          = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
-		businessMetaAddrs    = []string{"127.0.0.1:3336"}
-		etcdAddrs            = []string{"127.0.0.1:12379"}
-		etcdAddrsInContainer = []string{"etcd-standalone:2379"}
+		masterAddrs           = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
+		businessMetaAddrs     = []string{"127.0.0.1:3336"}
+		etcdAddrs             = []string{"127.0.0.1:12379"}
+		etcdAddrsInContainer  = []string{"etcd-standalone:2379"}
+		defaultTimeoutForTest = 3 * time.Second
 	)
 
 	ctx := context.Background()
@@ -63,7 +64,7 @@ func TestWorkerExit(t *testing.T) {
 		fakeJobCfg)
 	require.NoError(t, err)
 
-	ctx1, cancel := context.WithTimeout(ctx, defaultTimeout)
+	ctx1, cancel := context.WithTimeout(ctx, defaultTimeoutForTest)
 	defer cancel()
 	jobID, err := cli.CreateJob(ctx1, engineModel.JobTypeFakeJob, cfgBytes)
 	require.NoError(t, err)
@@ -72,7 +73,7 @@ func TestWorkerExit(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
-		ctx1, cancel := context.WithTimeout(ctx, defaultTimeout)
+		ctx1, cancel := context.WithTimeout(ctx, defaultTimeoutForTest)
 		defer cancel()
 		// check tick increases to ensure all workers are online
 		// TODO modify the test case to use a "restart-count" as a terminating condition.
@@ -87,7 +88,8 @@ func TestWorkerExit(t *testing.T) {
 		return true
 	}, time.Second*300, time.Second*2)
 
-	ctx1, cancel := context.WithTimeout(ctx, defaultTimeout)
+	ctx1, cancel = context.WithTimeout(ctx, defaultTimeoutForTest)
+	defer cancel()
 	err = cli.PauseJob(ctx1, jobID)
 	require.NoError(t, err)
 }

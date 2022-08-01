@@ -32,6 +32,8 @@ import (
 	"github.com/pingcap/tiflow/engine/test/e2e"
 )
 
+var DefaultTimeoutForTest = 3 * time.Second
+
 // update the watched key of workers belonging to a given job, and then
 // check the mvcc count and value of the key are updated as expected.
 func updateKeyAndCheckOnce(
@@ -40,7 +42,7 @@ func updateKeyAndCheckOnce(
 ) {
 	log.Debug("update fake job key", zap.String("job-id", jobID), zap.String("update-value", updateValue),
 		zap.Int("expect-mvcc", expectedMvcc))
-	ctx1, cancel := context.WithTimeout(ctx, defaultTimeout)
+	ctx1, cancel := context.WithTimeout(ctx, DefaultTimeoutForTest)
 	defer cancel()
 	for j := 0; j < workerCount; j++ {
 		err := cli.UpdateFakeJobKey(ctx1, j, updateValue)
@@ -48,7 +50,7 @@ func updateKeyAndCheckOnce(
 	}
 
 	require.Eventually(t, func() bool {
-		ctx1, cancel := context.WithTimeout(ctx, defaultTimeout)
+		ctx1, cancel := context.WithTimeout(ctx, DefaultTimeoutForTest)
 		defer cancel()
 		log.Debug("wait and check fake job value and mvcc. tick.")
 		for jobIdx := 0; jobIdx < workerCount; jobIdx++ {
@@ -99,7 +101,7 @@ func TestNodeFailure(t *testing.T) {
 		fakeJobCfg)
 	require.NoError(t, err)
 
-	ctx1, cancel := context.WithTimeout(ctx, defaultTimeout)
+	ctx1, cancel := context.WithTimeout(ctx, DefaultTimeoutForTest)
 	defer cancel()
 	jobID, err := cli.CreateJob(ctx1, engineModel.JobTypeFakeJob, cfgBytes)
 	require.NoError(t, err)
@@ -109,7 +111,7 @@ func TestNodeFailure(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
-		ctx1, cancel := context.WithTimeout(ctx, defaultTimeout)
+		ctx1, cancel := context.WithTimeout(ctx, DefaultTimeoutForTest)
 		defer cancel()
 		log.Info("wait and check if all workers are online. tick.")
 		// check tick increases to ensure all workers are online
