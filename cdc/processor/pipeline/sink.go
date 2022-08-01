@@ -125,32 +125,37 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 		resolved = model.NewResolvedTs(n.targetTs)
 	}
 
-	currentBarrierTs := atomic.LoadUint64(&n.barrierTs)
 	if n.redoManager != nil && n.redoManager.Enabled() {
 		// redo log do not support batch resolve mode, hence we
 		// use `ResolvedMark` to restore a normal resolved ts
 		resolved = model.NewResolvedTs(resolved.ResolvedMark())
 		err = n.redoManager.UpdateResolvedTs(ctx, n.tableID, resolved.Ts)
-
-		// fail fast check, the happens before relationship is:
-		// 1. sorter resolvedTs >= sink resolvedTs >= table redoTs == tableActor resolvedTs
-		// 2. tableActor resolvedTs >= processor resolvedTs >= global resolvedTs >= barrierTs
-		redoTs := n.redoManager.GetMinResolvedTs()
-		if redoTs < currentBarrierTs {
-			log.Warn("redoTs should not less than current barrierTs",
-				zap.Int64("tableID", n.tableID),
-				zap.Uint64("redoTs", redoTs),
-				zap.Uint64("barrierTs", currentBarrierTs))
-		}
-
-		// TODO: remove this check after SchedulerV3 become the first choice.
-		if resolved.Ts > redoTs {
-			resolved = model.NewResolvedTs(redoTs)
-		}
 	}
 
+	// Flush sink with barrierTs, which is broadcasted by owner.
+	currentBarrierTs := atomic.LoadUint64(&n.barrierTs)
 	if resolved.Ts > currentBarrierTs {
 		resolved = model.NewResolvedTs(currentBarrierTs)
+	}
+	if n.redoManager != nil && n.redoManager.Enabled() {
+		redoTs := n.redoManager.GetMinResolvedTs()
+		redoFlushed := n.redoManager.GetResolvedTs(n.tableID)
+		if currentBarrierTs > redoTs {
+			// NOTE: How can barrierTs be greater than rodoTs?
+			// When scheduler moves a table from one place to another place, the table
+			// start position will be checkpointTs instead of resolvedTs, which means
+			// redoTs can be less than barrierTs.
+			log.Info("redoTs is less than current barrierTs",
+				zap.Int64("tableID", n.tableID),
+				zap.Uint64("redoTs", redoTs),
+				zap.Uint64("barrierTs", currentBarrierTs),
+				zap.Uint64("tableRedoFlushed", redoFlushed))
+		}
+		if currentBarrierTs > redoFlushed {
+			// The latest above comment shows why barrierTs can be greater than redoTs.
+			// So here the aim is to avoid slow tables holding back the whole processor.
+			resolved = model.NewResolvedTs(redoFlushed)
+		}
 	}
 
 	currentCheckpointTs := n.getCheckpointTs()
