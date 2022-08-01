@@ -11,18 +11,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v3
+package member
 
 import (
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/scheduler"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+var captureTableGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Namespace: "ticdc",
+		Subsystem: "scheduler",
+		Name:      "capture_table",
+		Help:      "The total number of tables",
+	}, []string{"namespace", "changefeed", "addr"})
+
 // InitMetrics registers all metrics used in scheduler
 func InitMetrics(registry *prometheus.Registry) {
-	member.InitMetrics(registry)
-	replication.InitMetrics(registry)
-	scheduler.InitMetrics(registry)
+	registry.MustRegister(captureTableGauge)
 }

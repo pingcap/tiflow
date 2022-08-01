@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
@@ -31,7 +32,7 @@ func TestInfoProvider(t *testing.T) {
 		HeartbeatTick:      math.MaxInt,
 		MaxTaskConcurrency: 1,
 	})
-	coord.captureM.Captures = map[model.CaptureID]*CaptureStatus{
+	coord.captureM.Captures = map[model.CaptureID]*member.CaptureStatus{
 		"a": {Tables: []schedulepb.TableStatus{{
 			TableID:    1,
 			Checkpoint: schedulepb.Checkpoint{CheckpointTs: 1},

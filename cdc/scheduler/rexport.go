@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
 	v2 "github.com/pingcap/tiflow/cdc/scheduler/internal/v2"
 	v3 "github.com/pingcap/tiflow/cdc/scheduler/internal/v3"
+	v3agent "github.com/pingcap/tiflow/cdc/scheduler/internal/v3/agent"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
@@ -97,7 +98,7 @@ func NewAgentV3(
 	executor TableExecutor,
 	changefeedID model.ChangeFeedID,
 ) (Agent, error) {
-	return v3.NewAgent(
+	return v3agent.NewAgent(
 		ctx, captureID, changefeedID, messageServer, messageRouter, etcdClient, executor)
 }
 
