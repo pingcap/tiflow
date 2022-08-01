@@ -43,6 +43,7 @@ type HeartbeatPingMessage struct {
 	FromWorkerID WorkerID            `json:"from-worker-id"`
 	Epoch        Epoch               `json:"epoch"`
 	IsFinished   bool                `json:"is-finished"`
+	WorkerEpoch  Epoch               `json:"worker-epoch"`
 }
 
 // HeartbeatPongMessage ships information in heartbeat pong

@@ -51,6 +51,7 @@ type MasterClient struct {
 	infoLock    sync.RWMutex
 	masterNode  p2p.NodeID
 	masterEpoch frameModel.Epoch
+	workerEpoch frameModel.Epoch
 
 	lastMasterAckedPingTime atomic.Duration
 
@@ -75,6 +76,7 @@ func NewMasterClient(
 	metaCli pkgOrm.Client,
 	initTime clock.MonotonicTime,
 	clk clock.Clock,
+	workerEpoch frameModel.Epoch,
 ) *MasterClient {
 	return &MasterClient{
 		masterID:                masterID,

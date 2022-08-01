@@ -121,6 +121,7 @@ func NewBaseJobMaster(
 	masterID frameModel.MasterID,
 	workerID frameModel.WorkerID,
 	tp frameModel.WorkerType,
+	epoch frameModel.Epoch,
 ) BaseJobMaster {
 	// master-worker pair: job manager <-> job master(`baseWorker` following)
 	// master-worker pair: job master(`baseMaster` following) <-> real workers
@@ -129,7 +130,7 @@ func NewBaseJobMaster(
 	baseMaster := NewBaseMaster(
 		ctx, &jobMasterImplAsMasterImpl{jobMasterImpl}, workerID, tp)
 	baseWorker := NewBaseWorker(
-		ctx, &jobMasterImplAsWorkerImpl{jobMasterImpl}, workerID, masterID, tp)
+		ctx, &jobMasterImplAsWorkerImpl{jobMasterImpl}, workerID, masterID, tp, epoch)
 	errCenter := errctx.NewErrCenter()
 	baseMaster.(*DefaultBaseMaster).errCenter = errCenter
 	baseWorker.(*DefaultBaseWorker).errCenter = errCenter

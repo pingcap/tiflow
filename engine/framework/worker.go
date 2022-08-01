@@ -119,6 +119,7 @@ type DefaultBaseWorker struct {
 
 	id            frameModel.WorkerID
 	timeoutConfig config.TimeoutConfig
+	epoch         frameModel.Epoch
 
 	pool workerpool.AsyncPool
 
@@ -163,6 +164,7 @@ func NewBaseWorker(
 	workerID frameModel.WorkerID,
 	masterID frameModel.MasterID,
 	tp frameModel.WorkerType,
+	epoch frameModel.Epoch,
 ) BaseWorker {
 	var params workerParams
 	if err := ctx.Deps().Fill(&params); err != nil {
@@ -195,6 +197,7 @@ func NewBaseWorker(
 			Type:      tp,
 		},
 		timeoutConfig: config.DefaultTimeoutConfig(),
+		epoch:         epoch,
 
 		pool: workerpool.NewDefaultAsyncPool(1),
 
@@ -290,7 +293,9 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) (retErr error) {
 		w.messageSender,
 		w.frameMetaClient,
 		initTime,
-		w.clock)
+		w.clock,
+		w.workerStatus.Epoch,
+	)
 
 	w.workerMetaClient = metadata.NewWorkerMetadataClient(w.masterID, w.frameMetaClient)
 

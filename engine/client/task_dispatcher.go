@@ -57,6 +57,7 @@ type DispatchTaskArgs struct {
 	MasterID     string
 	WorkerType   int64
 	WorkerConfig []byte
+	Epoch        int64
 }
 
 type (
@@ -175,6 +176,7 @@ func (d *TaskDispatcher) preDispatchTaskOnce(
 			MasterId:   args.MasterID,
 			WorkerId:   args.WorkerID,
 			RequestId:  requestID,
+			Epoch:      args.Epoch,
 		},
 	})
 	if err != nil {

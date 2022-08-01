@@ -97,6 +97,7 @@ type MasterImpl interface {
 const (
 	createWorkerWaitQuotaTimeout = 5 * time.Second
 	createWorkerTimeout          = 10 * time.Second
+	genEpochTimeout              = 5 * time.Second
 	maxCreateWorkerConcurrency   = 100
 )
 
@@ -627,6 +628,14 @@ func (m *DefaultBaseMaster) CreateWorker(
 			return
 		}
 
+		genEpochCtx, cancel := context.WithTimeout(errCtx, genEpochTimeout)
+		defer cancel()
+		epoch, err := m.frameMetaClient.GenEpoch(genEpochCtx)
+		if err != nil {
+			m.workerManager.AbortCreatingWorker(workerID, err)
+			return
+		}
+
 		executorClient := m.executorClientManager.ExecutorClient(executorID)
 		dispatchArgs := &client.DispatchTaskArgs{
 			// [NOTICE]:
@@ -637,10 +646,11 @@ func (m *DefaultBaseMaster) CreateWorker(
 			MasterID:     m.id,
 			WorkerType:   int64(workerType),
 			WorkerConfig: configBytes,
+			Epoch:        epoch,
 		}
 
 		err = executorClient.DispatchTask(requestCtx, dispatchArgs, func() {
-			m.workerManager.BeforeStartingWorker(workerID, executorID)
+			m.workerManager.BeforeStartingWorker(workerID, executorID, epoch)
 		}, func(err error) {
 			m.workerManager.AbortCreatingWorker(workerID, err)
 		})

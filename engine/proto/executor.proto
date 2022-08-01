@@ -18,6 +18,7 @@ message PreDispatchTaskRequest {
     
     // request_id should be a UUID unique for each RPC call.
     string request_id = 6;
+    int64 epoch = 7;
 }
 
 message PreDispatchTaskResponse {
