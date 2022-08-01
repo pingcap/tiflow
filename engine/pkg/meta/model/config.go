@@ -48,8 +48,8 @@ type StoreConfig struct {
 	Endpoints []string        `toml:"endpoints" json:"endpoints"`
 	Auth      *AuthConfParams `toml:"auth" json:"auth"`
 	// Schema is the predefine schema name for mysql-compatible metastore
-	// 1.It need to stay UNCHANGED for one dataflow engine cluster
-	// 2.It need be different between any two dataflow engine clusters
+	// 1.It needs to stay UNCHANGED for one dataflow engine cluster
+	// 2.It needs be different between any two dataflow engine clusters
 	// 3.Naming rule: https://dev.mysql.com/doc/refman/5.7/en/identifiers.html
 	Schema       string `toml:"schema" json:"schema"`
 	ReadTimeout  string `toml:"read-timeout" json:"read-timeout"`
