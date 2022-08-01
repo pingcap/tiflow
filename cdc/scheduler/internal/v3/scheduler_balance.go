@@ -92,11 +92,8 @@ func buildBalanceMoveTables(
 		if !ok {
 			continue
 		}
-		if rep.Primary != "" {
-			captureTables[rep.Primary] = append(captureTables[rep.Primary], tableID)
-		}
-		if rep.Secondary != "" {
-			captureTables[rep.Secondary] = append(captureTables[rep.Secondary], tableID)
+		for captureID := range rep.Captures {
+			captureTables[captureID] = append(captureTables[captureID], tableID)
 		}
 	}
 

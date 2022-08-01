@@ -20,11 +20,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
+	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"go.uber.org/zap"
 )
@@ -169,7 +169,7 @@ func (w *worker) asyncSend(
 	for key, events := range partitionedRows {
 		for _, event := range events {
 			// Skip this event when the table is stopping.
-			if event.TableStatus.Load() == pipeline.TableStateStopping {
+			if event.GetTableSinkState() == state.TableSinkStopping {
 				event.Callback()
 				log.Debug("skip event of stopped table", zap.Any("event", event))
 				continue
