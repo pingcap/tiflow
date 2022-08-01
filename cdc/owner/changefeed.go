@@ -648,7 +648,8 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 	barrierTp, barrierTs := c.barriers.Min()
 	phyBarrierTs := oracle.ExtractPhysical(barrierTs)
 	c.metricsChangefeedBarrierTsGauge.Set(float64(phyBarrierTs))
-	blocked := barrierTs == c.state.Status.CheckpointTs
+	ddlBlocked := barrierTs == c.state.Status.CheckpointTs
+	blocked := ddlBlocked && barrierTs == c.state.Status.ResolvedTs
 	switch barrierTp {
 	case ddlJobBarrier:
 		ddlResolvedTs, ddlJob := c.ddlPuller.FrontDDL()
@@ -659,7 +660,9 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 			c.barriers.Update(ddlJobBarrier, ddlResolvedTs)
 			return barrierTs, nil
 		}
-		if !blocked {
+		if !ddlBlocked {
+			// DDL shouldn't be blocked by resolvedTs because DDL puller is created
+			// with checkpointTs instead of resolvedTs.
 			return barrierTs, nil
 		}
 		done, err := c.asyncExecDDLJob(ctx, ddlJob)
@@ -684,7 +687,7 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		c.barriers.Update(syncPointBarrier, nextSyncPointTs)
 
 	case finishBarrier:
-		if blocked && barrierTs == c.state.Status.ResolvedTs {
+		if blocked {
 			c.feedStateManager.MarkFinished()
 		}
 		return barrierTs, nil
