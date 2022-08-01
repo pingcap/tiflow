@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/edwingeng/deque"
+	"github.com/labstack/gommon/random"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,42 +30,45 @@ const (
 func TestChunkQueueCommon(t *testing.T) {
 	t.Parallel()
 
+	type ZeroSizeType struct{}
+	require.Nil(t, NewChunkQueue[ZeroSizeType]())
+
 	q := NewChunkQueue[int]()
 
-	q.Enqueue(10)
+	// simple enqueue dequeue
+	x := rand.Int()
+	q.Enqueue(x)
 	require.Equal(t, q.Len(), 1)
 	v, ok := q.At(0)
-	require.Equal(t, v, 10)
+	require.Equal(t, v, x)
 	require.True(t, ok)
 	v, ok = q.Dequeue()
-	require.Equal(t, v, 10)
+	require.Equal(t, v, x)
 	require.True(t, ok)
 
-	adds := make([]int, 0, testCaseSize)
-	// q.EnqueueMany(adds...)
+	// EnqueueMany & DequeueMany
+	elements := make([]int, 0, testCaseSize)
 	require.True(t, q.Empty())
 	for i := 0; i < testCaseSize; i++ {
-		adds = append(adds, i)
+		elements = append(elements, i)
 	}
-	q.EnqueueMany(adds...)
+	q.EnqueueMany(elements...)
 	require.Equal(t, testCaseSize, q.Len(), q.Len())
 	vals, ok := q.DequeueMany(testCaseSize * 3 / 4)
 	require.True(t, ok)
 	for i, v := range vals {
-		require.Equal(t, adds[i], v)
+		require.Equal(t, elements[i], v)
 	}
 	require.Equal(t, testCaseSize-testCaseSize*3/4, q.Len())
+	// Clear
 	q.Clear()
 	require.True(t, q.Empty())
 
-	for i := 0; i < testCaseSize; i++ {
-		q.Enqueue(i)
-		require.Equal(t, i+1, q.Len())
-	}
-
+	// Element Access
+	q.EnqueueMany(elements...)
 	require.Equal(t, testCaseSize, q.Len())
 	require.False(t, q.Empty())
-	for x := 0; x < 1000; x++ {
+	for j := 0; j < testCaseSize; j++ {
 		i := rand.Intn(testCaseSize)
 		v, ok = q.At(i)
 		require.True(t, ok)
@@ -77,21 +81,26 @@ func TestChunkQueueCommon(t *testing.T) {
 		q.Replace(i, i)
 		require.Equal(t, it.Value(), v)
 	}
+	_, ok = q.At(-1)
+	require.False(t, ok)
+	ok = q.Replace(testCaseSize, 0)
+	require.False(t, ok)
 
 	tail, ok := q.Tail()
 	require.Equal(t, tail, testCaseSize-1)
 	require.True(t, ok)
 
+	// Dequeue one by one
 	for i := 0; i < testCaseSize; i++ {
 		h, ok := q.Head()
 		require.Equal(t, i, h)
 		require.True(t, ok)
-
 		v, ok = q.Dequeue()
 		require.True(t, ok)
 		require.Equal(t, v, i)
 	}
 
+	// EmptyOperation
 	require.True(t, q.Empty())
 	require.Equal(t, 0, q.Len())
 	_, ok = q.Dequeue()
@@ -102,35 +111,137 @@ func TestChunkQueueCommon(t *testing.T) {
 	require.False(t, ok)
 }
 
-func TestExpand(t *testing.T) {
+func TestChunkQueueRandom(t *testing.T) {
 	t.Parallel()
 
-	type Person struct {
-		no   int
-		name string
+	getInt := func() int {
+		return rand.Int()
+	}
+	doRandomTest[int](t, getInt)
+	getFloat := func() float64 {
+		return rand.Float64() + rand.Float64()
 	}
 
-	q := NewChunkQueue[*Person]()
+	doRandomTest[float64](t, getFloat)
 
-	for i := 0; i < testCaseSize; i++ {
-		str := fmt.Sprintf("test-name-%d", i)
-		q.Enqueue(&Person{
-			no:   i,
-			name: str,
-		})
-		require.Equal(t, 1, q.Len())
+	getBool := func() bool {
+		return rand.Int()%2 == 1
+	}
+	doRandomTest[bool](t, getBool)
 
+	getString := func() string {
+		return random.String(16)
+	}
+	doRandomTest[string](t, getString)
+
+	type MyType struct {
+		x int
+		y string
+	}
+	getMyType := func() MyType {
+		return MyType{1, random.String(64)}
+	}
+
+	doRandomTest[MyType](t, getMyType)
+
+	getMyTypePtr := func() *MyType {
+		return &MyType{1, random.String(64)}
+	}
+
+	doRandomTest[*MyType](t, getMyTypePtr)
+}
+
+func doRandomTest[T comparable](t *testing.T, getVal func() T) {
+	const (
+		opEnqueueOne = iota
+		opEnqueueMany
+		opDequeueOne
+		opDequeueMany
+		opDequeueAll
+	)
+
+	q := NewChunkQueue[T]()
+	slice := make([]T, 0, 100)
+	var val T
+	for i := 0; i < 100; i++ {
+		op := rand.Intn(4)
+		if i == 99 {
+			op = opDequeueAll
+		}
+		switch op {
+		case opEnqueueOne:
+			val = getVal()
+			q.Enqueue(val)
+			slice = append(slice, val)
+		case opEnqueueMany:
+			n := rand.Intn(1024) + 1
+			vals := make([]T, n, n)
+			for j := 0; j < n; j++ {
+				vals = append(vals, getVal())
+			}
+			q.EnqueueMany(vals...)
+			slice = append(slice, vals...)
+		case opDequeueOne:
+			if q.Empty() {
+				require.Equal(t, 0, q.Len(), len(slice))
+				_, ok := q.Dequeue()
+				require.False(t, ok)
+			} else {
+				v, ok := q.Dequeue()
+				require.True(t, ok)
+				require.Equal(t, slice[0], v)
+				slice = slice[1:]
+			}
+		case opDequeueMany:
+			if q.Empty() {
+				require.True(t, len(slice) == 0)
+			} else {
+				n := rand.Intn(q.Len()) + 1
+				pops, ok := q.DequeueMany(n)
+				require.True(t, ok)
+				require.Equal(t, n, len(pops))
+				popSlice := slice[0:n]
+				slice = append(make([]T, 0, len(slice[n:])), slice[n:]...)
+
+				for i := 0; i < len(pops); i++ {
+					require.Equal(t, popSlice[i], pops[i])
+				}
+			}
+		case opDequeueAll:
+			pops, ok := q.DequeueAll()
+			require.True(t, ok)
+			require.Equal(t, len(pops), len(slice))
+			for i := 0; i < len(pops); i++ {
+				require.Equal(t, slice[i], pops[i])
+			}
+			slice = slice[:0]
+			q.Clear()
+		}
+
+		require.Equal(t, q.Len(), len(slice))
+		require.Nil(t, q.firstChunk().prev)
+		require.Nil(t, q.lastChunk().next)
 		freeSpace := q.Cap() - q.Len()
 		if q.Empty() {
 			require.True(t, freeSpace > 0 && freeSpace <= q.chunkLength)
 		} else {
 			require.True(t, freeSpace >= 0 && freeSpace < q.chunkLength)
 		}
+	}
+}
 
+func TestExpand(t *testing.T) {
+	t.Parallel()
+	q := NewChunkQueue[int]()
+
+	for i := 0; i < testCaseSize; i++ {
+		q.Enqueue(1)
+		require.Equal(t, 1, q.Len())
+		freeSpace := q.Cap() - q.Len()
+		require.True(t, freeSpace >= 0 && freeSpace < q.chunkLength)
 		p, ok := q.Dequeue()
 		require.True(t, ok)
-		require.Equal(t, p.no, i)
-		require.Equal(t, p.name, fmt.Sprintf("test-name-%d", i))
+		require.Equal(t, 1, p)
 		require.True(t, q.Empty())
 	}
 }
@@ -176,20 +287,25 @@ func TestRange(t *testing.T) {
 		q.Enqueue(i)
 	}
 
-	var target int
+	var x int
 	q.Range(func(v int) bool {
 		if v >= 1000 {
-			target = v
 			return false
 		}
+		x++
 		return true
 	})
-	require.Equal(t, 1000, target)
+	require.Equal(t, 1000, x)
 
 	q.RangeWithIndex(func(i int, v int) bool {
 		require.Equal(t, i, v)
+		if i >= 1000 {
+			return false
+		}
+		x++
 		return true
 	})
+	require.Equal(t, 2000, x)
 
 	q.RangeAndPop(func(v int) bool {
 		return v < 1000
