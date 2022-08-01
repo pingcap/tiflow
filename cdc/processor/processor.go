@@ -399,7 +399,7 @@ func (p *processor) GetTableMeta(tableID model.TableID) pipeline.TableMeta {
 
 // newProcessor creates a new processor
 func newProcessor(
-	ctx cdcContext.Context,
+	captureInfo *model.CaptureInfo,
 	changefeedID model.ChangeFeedID,
 	up *upstream.Upstream,
 	liveness *model.Liveness,
@@ -409,7 +409,7 @@ func newProcessor(
 		tables:       make(map[model.TableID]pipeline.TablePipeline),
 		errCh:        make(chan error, 1),
 		changefeedID: changefeedID,
-		captureInfo:  ctx.GlobalVars().CaptureInfo,
+		captureInfo:  captureInfo,
 		cancel:       func() {},
 		liveness:     liveness,
 
