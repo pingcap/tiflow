@@ -180,9 +180,9 @@ func NewMySQLSink(
 			WithLabelValues(params.changefeedID.Namespace, params.changefeedID.ID, strconv.Itoa(i))
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
 	captureAddr := contextutil.CaptureAddrFromCtx(ctx)
 	statistics := metrics.NewStatistics(ctx, captureAddr, metrics.SinkTypeDB)
-	ctx, cancel := context.WithCancel(ctx)
 	sink := &mysqlSink{
 		db:                              db,
 		params:                          params,
