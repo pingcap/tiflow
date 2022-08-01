@@ -133,7 +133,7 @@ func (s *Server) buildDeps() (*deps.Deps, error) {
 	}
 
 	err = deps.Provide(func() pkgClient.ExecutorGroup {
-		return pkgClient.NewExecutorGroup(nil, log.L())
+		return s.executorGroup
 	})
 	if err != nil {
 		return nil, err
