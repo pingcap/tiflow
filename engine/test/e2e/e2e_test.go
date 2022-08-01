@@ -22,12 +22,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	cvs "github.com/pingcap/tiflow/engine/jobmaster/cvsjob"
 	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/test/e2e"
-	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 )
 
 type Config struct {
@@ -123,6 +124,11 @@ func TestSubmitTest(t *testing.T) {
 
 // run this test after docker-compose has been up
 func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr string, flowControl chan struct{}) {
+	var (
+		tenantID  = "e2e-test"
+		projectID = "project-basic-test"
+	)
+
 	ctx := context.Background()
 	fmt.Printf("connect demo\n")
 	democlient, err := NewDemoClient(ctx, demoAddr)
@@ -149,17 +155,14 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr stri
 	<-flowControl
 	fmt.Printf("test is ready\n")
 
-	resp, err := jobManagerCli.SubmitJob(ctx, &pb.SubmitJobRequest{
-		Tp:     int32(engineModel.JobTypeCVSDemo),
-		Config: configBytes,
-	})
+	jobID, err := e2e.CreateJobViaOpenAPI(ctx, config.MasterAddrs[0],
+		tenantID, projectID, engineModel.JobTypeCVSDemo, string(configBytes))
 	require.NoError(t, err)
-	require.Nil(t, resp.Err)
 
-	fmt.Printf("job id %s\n", resp.JobId)
+	fmt.Printf("job id %s\n", jobID)
 
 	queryReq := &pb.QueryJobRequest{
-		JobId: resp.JobId,
+		JobId: jobID,
 	}
 	// continue to query
 	for {
@@ -169,17 +172,17 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr stri
 		require.Nil(t, queryResp.Err)
 		require.Equal(t, queryResp.Tp, int32(engineModel.JobTypeCVSDemo))
 		cancel()
-		fmt.Printf("query id %s, status %d, time %s\n", resp.JobId, int(queryResp.Status), time.Now().Format("2006-01-02 15:04:05"))
+		fmt.Printf("query id %s, status %d, time %s\n", jobID, int(queryResp.Status), time.Now().Format("2006-01-02 15:04:05"))
 		if queryResp.Status == pb.QueryJobResponse_finished {
 			break
 		}
 		time.Sleep(time.Second)
 	}
-	fmt.Printf("job id %s checking\n", resp.JobId)
+	fmt.Printf("job id %s checking\n", jobID)
 	// check files
 	demoResp, err := democlient.client.CheckDir(ctx, &pb.CheckDirRequest{
 		Dir: cfg.DstDir,
 	})
-	require.Nil(t, err, resp.JobId)
+	require.Nil(t, err, jobID)
 	require.Empty(t, demoResp.ErrMsg, demoResp.ErrFileIdx)
 }

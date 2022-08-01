@@ -89,7 +89,7 @@ func (f *factoryImpl) GetCredential() *security.Credential {
 }
 
 // EtcdClient creates new cdc etcd client.
-func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClient, error) {
+func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClientImpl, error) {
 	ctx := cmdconetxt.GetDefaultContext()
 	tlsConfig, err := f.ToTLSConfig()
 	if err != nil {
@@ -135,10 +135,16 @@ func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClient, error) {
 	})
 	if err != nil {
 		return nil, errors.Annotatef(err,
-			"fail to open PD client, please check pd address \"%s\"", pdAddr)
+			"Fail to open PD client. Please check the pd address(es) \"%s\"", pdAddr)
 	}
 
 	client, err := etcd.NewCDCEtcdClient(ctx, etcdClient, etcd.DefaultCDCClusterID)
+	if err != nil {
+		return nil, cerror.ErrEtcdAPIError.GenWithStack(
+			"Etcd operation error. Please check the cluster's status " +
+				" and the pd address(es) \"%s\"")
+	}
+
 	return &client, err
 }
 
@@ -155,7 +161,7 @@ func (f factoryImpl) PdClient() (pd.Client, error) {
 	pdAddr := f.GetPdAddr()
 	if len(pdAddr) == 0 {
 		return nil, cerror.ErrInvalidServerOption.
-			GenWithStack("empty PD address, please use --pd to specify PD cluster addresses")
+			GenWithStack("Empty PD address. Please use --pd to specify PD cluster addresses")
 	}
 	pdEndpoints := strings.Split(pdAddr, ",")
 	for _, ep := range pdEndpoints {
@@ -184,7 +190,7 @@ func (f factoryImpl) PdClient() (pd.Client, error) {
 		))
 	if err != nil {
 		return nil, errors.Annotatef(err,
-			"fail to open PD client, please check pd address \"%s\"", pdAddr)
+			"Fail to open PD client. Please check the pd address(es)  \"%s\"", pdAddr)
 	}
 
 	err = version.CheckClusterVersion(ctx, pdClient, pdEndpoints, credential, true)
@@ -226,6 +232,15 @@ func (f *factoryImpl) APIV2Client() (apiv2client.APIV2Interface, error) {
 	return apiv2client.NewAPIClient(serverAddr, f.clientGetter.GetCredential())
 }
 
+// findServerAddr find the cdc server address by the following logic
+// a) Only the cdc server address is specified: use it;
+// b) Only the PD address is specified:
+//   1) check the address and create a etcdClient
+// 	 2) check the etcd keys and find cdc cluster addresses:
+//	 	If there are multiple CDC clusters exist, report an error; otherwise,
+//	 	cache the server address in f.fetchedServerAddr and return it (since
+//	 	some cli cmds use both apiV1 and apiV2)
+// c) Both PD and cdc server addresses are specified: report an error
 func (f *factoryImpl) findServerAddr() (string, error) {
 	if f.fetchedServerAddr != "" {
 		return f.fetchedServerAddr, nil
@@ -244,11 +259,18 @@ func (f *factoryImpl) findServerAddr() (string, error) {
 	if f.clientGetter.GetServerAddr() != "" {
 		return f.clientGetter.GetServerAddr(), nil
 	}
+	// check pd-address represents a real pd cluster
+	pdClient, err := f.PdClient()
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	defer pdClient.Close()
 	// use pd to get server addr from etcd
 	etcdClient, err := f.EtcdClient()
 	if err != nil {
 		return "", errors.Trace(err)
 	}
+	defer etcdClient.Close()
 
 	ctx := cmdconetxt.GetDefaultContext()
 	err = etcdClient.CheckMultipleCDCClusterExist(ctx)
