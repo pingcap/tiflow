@@ -64,12 +64,12 @@ func (w *worker) Close() {
 func (w *worker) runBackgroundLoop() {
 	w.wg.Add(1)
 	go func() {
+		defer w.wg.Done()
 		defer func() {
 			if err := w.backend.Close(); err != nil {
 				log.Info("transaction sink backend close fail",
 					zap.Error(err))
 			}
-			w.wg.Done()
 		}()
 		w.timer = time.NewTimer(w.backend.MaxFlushInterval())
 		for {
@@ -96,11 +96,14 @@ func (w *worker) runBackgroundLoop() {
 }
 
 func (w *worker) doFlush() bool {
-	// TODO: support to cnacel the worker in flushing.
+	// TODO: support to cancel the worker when performing some blocking operations.
 	ctx := context.Background()
 	if err := w.backend.Flush(ctx); err != nil {
 		log.Warn("txn sink worker flush fail", zap.Error(err))
-		w.errCh <- err
+		select {
+		case w.errCh <- err:
+		case <-ctx.Done():
+		}
 		return true
 	}
 	if !w.timer.Stop() {

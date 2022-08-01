@@ -35,7 +35,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
-	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -1012,9 +1011,7 @@ func TestAdjustSQLMode(t *testing.T) {
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
 	require.Nil(t, err)
-	rc := config.GetDefaultReplicaConfig()
-	require.Nil(t, err)
-	sink, err := NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, rc)
+	sink, err := NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI)
 	require.Nil(t, err)
 	require.Nil(t, sink.Close())
 }
@@ -1076,9 +1073,8 @@ func TestNewMySQLTimeout(t *testing.T) {
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse(fmt.Sprintf("mysql://%s/?read-timeout=1s&timeout=1s", addr))
 	require.Nil(t, err)
-	rc := config.GetDefaultReplicaConfig()
 	require.Nil(t, err)
-	_, err = NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, rc)
+	_, err = NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI)
 	require.Equal(t, driver.ErrBadConn, errors.Cause(err))
 }
 
@@ -1119,8 +1115,7 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
 	require.Nil(t, err)
-	rc := config.GetDefaultReplicaConfig()
-	sink, err := NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, rc)
+	sink, err := NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI)
 	require.Nil(t, err)
 
 	rows := []*model.RowChangedEvent{
@@ -1283,8 +1278,7 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1")
 	require.Nil(t, err)
-	rc := config.GetDefaultReplicaConfig()
-	sink, err := NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, rc)
+	sink, err := NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI)
 	require.Nil(t, err)
 
 	_ = sink.OnTxnEvent(&eventsink.TxnCallbackableEvent{
@@ -1358,8 +1352,7 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1")
 	require.Nil(t, err)
-	rc := config.GetDefaultReplicaConfig()
-	sink, err := NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, rc)
+	sink, err := NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI)
 	require.Nil(t, err)
 
 	_ = sink.OnTxnEvent(&eventsink.TxnCallbackableEvent{
@@ -1439,8 +1432,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1")
 	require.Nil(t, err)
-	rc := config.GetDefaultReplicaConfig()
-	sink, err := NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, rc)
+	sink, err := NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI)
 	require.Nil(t, err)
 
 	_ = sink.OnTxnEvent(&eventsink.TxnCallbackableEvent{
@@ -1508,8 +1500,7 @@ func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&safe-mode=false")
 	require.Nil(t, err)
-	rc := config.GetDefaultReplicaConfig()
-	sink, err := NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, rc)
+	sink, err := NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI)
 	require.Nil(t, err)
 
 	_ = sink.OnTxnEvent(&eventsink.TxnCallbackableEvent{
@@ -1557,8 +1548,7 @@ func TestNewMySQLSink(t *testing.T) {
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
 	require.Nil(t, err)
-	rc := config.GetDefaultReplicaConfig()
-	sink, err := NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, rc)
+	sink, err := NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI)
 
 	require.Nil(t, err)
 	require.Nil(t, sink.Close())
@@ -1595,8 +1585,7 @@ func TestNewMySQLSinkWithIPv6Address(t *testing.T) {
 	// See https://www.ietf.org/rfc/rfc2732.txt, we have to use brackets to wrap IPv6 address.
 	sinkURI, err := url.Parse("mysql://[::1]:3306/?time-zone=UTC&worker-count=4")
 	require.Nil(t, err)
-	rc := config.GetDefaultReplicaConfig()
-	sink, err := NewMySQLSink(ctx, changefeed, sinkURI, rc)
+	sink, err := NewMySQLSink(ctx, changefeed, sinkURI)
 	require.Nil(t, err)
 	require.Nil(t, sink.Close())
 }
@@ -1634,8 +1623,7 @@ func TestGBKSupported(t *testing.T) {
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
 	require.Nil(t, err)
-	rc := config.GetDefaultReplicaConfig()
-	sink, err := NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, rc)
+	sink, err := NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI)
 	require.Nil(t, err)
 
 	// no gbk-related warning log will be output because GBK charset is supported
@@ -1694,8 +1682,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&batch-replace-size=1")
 	require.Nil(t, err)
-	rc := config.GetDefaultReplicaConfig()
-	sink, err := NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, rc)
+	sink, err := NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI)
 	require.Nil(t, err)
 
 	rows := []*model.RowChangedEvent{
@@ -2085,7 +2072,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 	defer cancel()
 	ms := newMySQLSink4Test(ctx, t)
 	ms.params.safeMode = false
-	ms.enableOldValue = true
+	ms.options.enableOldValue = true
 	for _, tc := range testCases {
 		ms.events = make([]*eventsink.TxnCallbackableEvent, 1)
 		ms.events[0] = &eventsink.TxnCallbackableEvent{

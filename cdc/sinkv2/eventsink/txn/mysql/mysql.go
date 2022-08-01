@@ -36,7 +36,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	dmutils "github.com/pingcap/tiflow/dm/pkg/utils"
-	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/retry"
@@ -54,12 +53,11 @@ var defaultDMLMaxRetry uint64 = 8 // TODO: use it later.
 // defaultDDLMaxRetry uint64 = 20
 
 type mysqlSink struct {
-	changefeedID   model.ChangeFeedID
-	db             *sql.DB
-	params         *sinkParams
-	forceReplicate bool
-	enableOldValue bool
-	statistics     *metrics.Statistics
+	changefeedID model.ChangeFeedID
+	db           *sql.DB
+	params       *sinkParams
+	options      SinkOptions
+	statistics   *metrics.Statistics
 
 	events []*eventsink.TxnCallbackableEvent
 	rows   int
@@ -72,13 +70,48 @@ func NewMySQLSink(
 	ctx context.Context,
 	changefeedID model.ChangeFeedID,
 	sinkURI *url.URL,
-	replicaConfig *config.ReplicaConfig,
+	opts ...SinkOptions,
 ) (*mysqlSink, error) {
 	params, err := parseSinkURIToParams(ctx, changefeedID, sinkURI)
 	if err != nil {
 		return nil, err
 	}
 
+	dsnStr, err := adjustDSN(ctx, sinkURI, params)
+	if err != nil {
+		return nil, err
+	}
+
+	db, err := GetDBConnImpl(ctx, dsnStr)
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxIdleConns(params.workerCount)
+	db.SetMaxOpenConns(params.workerCount)
+
+	if len(opts) == 0 {
+		opts = make([]SinkOptions, 1)
+		opts[0] = SinkOptionsDefault()
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	sink := &mysqlSink{
+		changefeedID: changefeedID,
+		db:           db,
+		params:       params,
+		options:      opts[0],
+		statistics:   metrics.NewStatistics(ctx, metrics.SinkTypeDB),
+		cancel:       cancel,
+	}
+
+	log.Info("mysql backend is created",
+		zap.String("changefeedID", fmt.Sprintf("%s.%s", changefeedID.Namespace, changefeedID.ID)),
+		zap.Bool("forceReplicate", sink.options.forceReplicate),
+		zap.Bool("enableOldValue", sink.options.enableOldValue))
+	return sink, nil
+}
+
+func adjustDSN(ctx context.Context, sinkURI *url.URL, params *sinkParams) (dsnStr string, err error) {
 	// dsn format of the driver:
 	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
 	username := sinkURI.User.Username()
@@ -93,11 +126,11 @@ func NewMySQLSink(
 	}
 
 	// This will handle the IPv6 address format.
+	var dsn *dmysql.Config
 	host := net.JoinHostPort(hostName, port)
-	dsnStr := fmt.Sprintf("%s:%s@tcp(%s)/%s", username, password, host, params.tls)
-	dsn, err := dmysql.ParseDSN(dsnStr)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+	dsnStr = fmt.Sprintf("%s:%s@tcp(%s)/%s", username, password, host, params.tls)
+	if dsn, err = dmysql.ParseDSN(dsnStr); err != nil {
+		return
 	}
 
 	// create test db used for parameter detection
@@ -111,63 +144,44 @@ func NewMySQLSink(
 	dsn.Params["readTimeout"] = params.readTimeout
 	dsn.Params["writeTimeout"] = params.writeTimeout
 	dsn.Params["timeout"] = params.dialTimeout
-	testDB, err := GetDBConnImpl(ctx, dsn.FormatDSN())
+
+	var testDB *sql.DB
+	testDB, err = GetDBConnImpl(ctx, dsn.FormatDSN())
 	if err != nil {
-		return nil, err
+		return
 	}
 	defer testDB.Close()
 
 	// Adjust sql_mode for compatibility.
 	dsn.Params["sql_mode"], err = querySQLMode(ctx, testDB)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return
 	}
 	dsn.Params["sql_mode"], err = dmutils.AdjustSQLModeCompatible(dsn.Params["sql_mode"])
 	if err != nil {
-		return nil, errors.Trace(err)
+		return
 	}
-
 	// NOTE: quote the string is necessary to avoid ambiguities.
 	dsn.Params["sql_mode"] = strconv.Quote(dsn.Params["sql_mode"])
 
 	dsnStr, err = generateDSNByParams(ctx, dsn, params, testDB)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return
 	}
+
 	// check if GBK charset is supported by downstream
-	gbkSupported, err := checkCharsetSupport(ctx, testDB, charset.CharsetGBK)
+	var gbkSupported bool
+	gbkSupported, err = checkCharsetSupport(ctx, testDB, charset.CharsetGBK)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return
 	}
 	if !gbkSupported {
-		log.Warn("gbk charset is not supported by downstream, "+
-			"some types of DDL may fail to be executed",
+		log.Warn("GBK charset is not supported by the downstream. "+
+			"Some types of DDLs may fail to execute",
 			zap.String("hostname", hostName), zap.String("port", port))
 	}
 
-	db, err := GetDBConnImpl(ctx, dsnStr)
-	if err != nil {
-		return nil, err
-	}
-	db.SetMaxIdleConns(params.workerCount)
-	db.SetMaxOpenConns(params.workerCount)
-
-	ctx, cancel := context.WithCancel(ctx)
-	sink := &mysqlSink{
-		changefeedID:   changefeedID,
-		db:             db,
-		params:         params,
-		forceReplicate: replicaConfig.ForceReplicate,
-		enableOldValue: replicaConfig.EnableOldValue,
-		statistics:     metrics.NewStatistics(ctx, metrics.SinkTypeDB),
-		cancel:         cancel,
-	}
-
-	log.Info("mysql backend is created",
-		zap.String("changefeedID", fmt.Sprintf("%s.%s", changefeedID.Namespace, changefeedID.ID)),
-		zap.Bool("forceReplicate", sink.forceReplicate),
-		zap.Bool("enableOldValue", sink.enableOldValue))
-	return sink, nil
+	return
 }
 
 func (s *mysqlSink) OnTxnEvent(event *eventsink.TxnCallbackableEvent) (needFlush bool) {
@@ -204,6 +218,13 @@ func (s *mysqlSink) Flush(ctx context.Context) (err error) {
 		return errors.Trace(err)
 	}
 
+	// Be friently to GC.
+	for i := 0; i < len(s.events); i++ {
+		s.events[i] = nil
+	}
+	if cap(s.events) > 1024 {
+		s.events = make([]*eventsink.TxnCallbackableEvent, 0)
+	}
 	s.events = s.events[:0]
 	s.rows = 0
 	return
@@ -258,6 +279,7 @@ func checkCharsetSupport(ctx context.Context, db *sql.DB, charsetName string) (b
 
 // prepareDMLs converts model.RowChangedEvent list to query string list and args list
 func (s *mysqlSink) prepareDMLs() *preparedDMLs {
+	// TODO: use a sync.Pool to reduce allocations.
 	startTsSet := make(map[uint64]struct{}, s.rows)
 	sqls := make([]string, 0, s.rows)
 	values := make([][]interface{}, 0, s.rows)
@@ -275,7 +297,7 @@ func (s *mysqlSink) prepareDMLs() *preparedDMLs {
 	}
 
 	// translateToInsert control the update and insert behavior
-	translateToInsert := s.enableOldValue && !s.params.safeMode
+	translateToInsert := s.options.enableOldValue && !s.params.safeMode
 	for _, event := range s.events {
 		for _, row := range event.Event.Rows {
 			if !translateToInsert {
@@ -305,7 +327,7 @@ func (s *mysqlSink) prepareDMLs() *preparedDMLs {
 			// NOTICE: Only update events with the old value feature enabled will have both columns and preColumns.
 			if translateToInsert && len(row.PreColumns) != 0 && len(row.Columns) != 0 {
 				flushCacheDMLs()
-				query, args = prepareUpdate(quoteTable, row.PreColumns, row.Columns, s.forceReplicate)
+				query, args = prepareUpdate(quoteTable, row.PreColumns, row.Columns, s.options.forceReplicate)
 				if query != "" {
 					sqls = append(sqls, query)
 					values = append(values, args)
@@ -322,7 +344,7 @@ func (s *mysqlSink) prepareDMLs() *preparedDMLs {
 			// It will be translated directly into a DELETE SQL.
 			if len(row.PreColumns) != 0 {
 				flushCacheDMLs()
-				query, args = prepareDelete(quoteTable, row.PreColumns, s.forceReplicate)
+				query, args = prepareDelete(quoteTable, row.PreColumns, s.options.forceReplicate)
 				if query != "" {
 					sqls = append(sqls, query)
 					values = append(values, args)

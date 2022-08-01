@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
 	"go.uber.org/zap"
@@ -326,4 +327,20 @@ func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultVal
 	}
 	// session variable not exists, return "" to ignore it
 	return "", nil
+}
+
+type SinkOptions struct {
+	forceReplicate bool
+	enableOldValue bool
+}
+
+func SinkOptionsFromReplicaConfig(config *config.ReplicaConfig) SinkOptions {
+	return SinkOptions{
+		forceReplicate: config.ForceReplicate,
+		enableOldValue: config.EnableOldValue,
+	}
+}
+
+func SinkOptionsDefault() SinkOptions {
+	return SinkOptionsFromReplicaConfig(config.GetDefaultReplicaConfig())
 }
