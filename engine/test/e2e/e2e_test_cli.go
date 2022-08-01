@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/log"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 
 	"github.com/pingcap/tiflow/engine/client"
@@ -39,6 +40,11 @@ import (
 	server "github.com/pingcap/tiflow/engine/servermaster"
 	"github.com/pingcap/tiflow/pkg/httputil"
 )
+
+func init() {
+	// set the debug level log for easy test
+	log.SetLevel(zapcore.DebugLevel)
+}
 
 // ChaosCli is used to interact with server master, fake job and provides ways
 // to adding chaos in e2e test.
@@ -173,6 +179,8 @@ func (cli *ChaosCli) getFakeJobCheckpoint(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	log.Debug("get fake job checkpoint", zap.String("ckptKey", ckptKey),
+		zap.Any("checkpoint", checkpoint))
 	return checkpoint, nil
 }
 

@@ -38,12 +38,15 @@ func updateKeyAndCheckOnce(
 	ctx context.Context, t *testing.T, cli *e2e.ChaosCli,
 	jobID string, workerCount int, updateValue string, expectedMvcc int,
 ) {
+	log.Debug("update fake job key", zap.String("job-id", jobID), zap.String("update-value", updateValue),
+		zap.Int("expect-mvcc", expectedMvcc))
 	for j := 0; j < workerCount; j++ {
 		err := cli.UpdateFakeJobKey(ctx, j, updateValue)
 		require.NoError(t, err)
 	}
 
 	require.Eventually(t, func() bool {
+		log.Debug("wait and check fake job value and mvcc. tick.")
 		for jobIdx := 0; jobIdx < workerCount; jobIdx++ {
 			err := cli.CheckFakeJobKey(ctx, jobID, jobIdx, expectedMvcc, updateValue)
 			if err != nil {
@@ -61,6 +64,7 @@ func TestNodeFailure(t *testing.T) {
 	var (
 		masterAddrs          = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
 		businessMetaAddrs    = []string{"127.0.0.1:3336"}
+		etcdAddrs            = []string{"127.0.0.1:12379"}
 		etcdAddrsInContainer = []string{"etcd-standalone:2379"}
 	)
 
@@ -82,7 +86,7 @@ func TestNodeFailure(t *testing.T) {
 	require.NoError(t, err)
 
 	fakeJobCfg := &e2e.FakeJobConfig{
-		EtcdEndpoints: etcdAddrsInContainer,
+		EtcdEndpoints: etcdAddrs,
 		WorkerCount:   cfg.WorkerCount,
 		KeyPrefix:     cfg.EtcdWatchPrefix,
 	}
@@ -93,11 +97,13 @@ func TestNodeFailure(t *testing.T) {
 
 	jobID, err := cli.CreateJob(ctx, engineModel.JobTypeFakeJob, cfgBytes)
 	require.NoError(t, err)
+	log.Info("create fake job successful", zap.String("job-id", jobID))
 
 	err = cli.InitializeMetaClient(jobID)
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
+		log.Info("wait and check if all workers are online. tick.")
 		// check tick increases to ensure all workers are online
 		targetTick := int64(20)
 		for jobIdx := 0; jobIdx < cfg.WorkerCount; jobIdx++ {
@@ -110,10 +116,11 @@ func TestNodeFailure(t *testing.T) {
 		return true
 	}, time.Second*60, time.Second*2)
 
+	log.Info("wait and check if worker is normal")
 	mvccCount := 1
 	updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, "random-value-1", mvccCount)
 
-	// restart all server masters and check fake job is running normally
+	log.Info("restart all server masters and check fake job is running normally")
 	nodeCount := 3
 	for i := 0; i < nodeCount; i++ {
 		cli.ContainerRestart(masterContainerName(i))
@@ -122,7 +129,7 @@ func TestNodeFailure(t *testing.T) {
 		updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, value, mvccCount)
 	}
 
-	// restart all executors and check fake job is running normally
+	log.Info("restart all executors and check fake job is running normally")
 	for i := 0; i < nodeCount; i++ {
 		cli.ContainerRestart(executorContainerName(i))
 		mvccCount++
@@ -142,6 +149,7 @@ func TestNodeFailure(t *testing.T) {
 	mvccCount++
 	updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, value, mvccCount)
 
+	log.Info("pause job and check if the job status is stopped")
 	err = cli.PauseJob(ctx, jobID)
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
