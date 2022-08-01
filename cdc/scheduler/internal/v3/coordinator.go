@@ -69,7 +69,8 @@ func NewCoordinator(
 	ownerRevision int64,
 	cfg *config.SchedulerConfig,
 ) (internal.Scheduler, error) {
-	trans, err := transport.NewTransport(ctx, changefeedID, transport.SchedulerRole, messageServer, messageRouter)
+	trans, err := transport.NewTransport(
+		ctx, changefeedID, transport.SchedulerRole, messageServer, messageRouter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -87,11 +88,13 @@ func newCoordinator(
 	revision := schedulepb.OwnerRevision{Revision: ownerRevision}
 
 	return &coordinator{
-		version:      version.ReleaseSemver(),
-		revision:     revision,
-		captureID:    captureID,
-		replicationM: replication.NewReplicationManager(cfg.MaxTaskConcurrency, changefeedID),
-		captureM:     member.NewCaptureManager(captureID, changefeedID, revision, cfg.HeartbeatTick),
+		version:   version.ReleaseSemver(),
+		revision:  revision,
+		captureID: captureID,
+		replicationM: replication.NewReplicationManager(
+			cfg.MaxTaskConcurrency, changefeedID),
+		captureM: member.NewCaptureManager(
+			captureID, changefeedID, revision, cfg.HeartbeatTick),
 		schedulerM:   scheduler.NewSchedulerManager(changefeedID, cfg),
 		changefeedID: changefeedID,
 	}

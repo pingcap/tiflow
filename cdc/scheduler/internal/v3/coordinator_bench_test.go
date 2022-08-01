@@ -95,7 +95,9 @@ func BenchmarkCoordinatorHeartbeat(b *testing.B) {
 		captureM.SetInitializedForTests(true)
 		for i := 0; i < captureCount; i++ {
 			captures[fmt.Sprint(i)] = &model.CaptureInfo{}
-			captureM.Captures[fmt.Sprint(i)] = &member.CaptureStatus{State: member.CaptureStateInitialized}
+			captureM.Captures[fmt.Sprint(i)] = &member.CaptureStatus{
+				State: member.CaptureStateInitialized,
+			}
 		}
 		currentTables = make([]model.TableID, 0, total)
 		for i := 0; i < total; i++ {
@@ -126,7 +128,9 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 		captureM.SetInitializedForTests(true)
 		for i := 0; i < captureCount; i++ {
 			captures[fmt.Sprint(i)] = &model.CaptureInfo{}
-			captureM.Captures[fmt.Sprint(i)] = &member.CaptureStatus{State: member.CaptureStateInitialized}
+			captureM.Captures[fmt.Sprint(i)] = &member.CaptureStatus{
+				State: member.CaptureStateInitialized,
+			}
 		}
 		replicationM := replication.NewReplicationManager(10, model.ChangeFeedID{})
 		currentTables = make([]model.TableID, 0, total)
@@ -135,12 +139,13 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 			tableID := int64(10000 + i)
 			currentTables = append(currentTables, tableID)
 			captureID := fmt.Sprint(i % captureCount)
-			rep, err := replication.NewReplicationSet(tableID, 0, map[string]*schedulepb.TableStatus{
-				captureID: {
-					TableID: tableID,
-					State:   schedulepb.TableStateReplicating,
-				},
-			}, model.ChangeFeedID{})
+			rep, err := replication.NewReplicationSet(
+				tableID, 0, map[string]*schedulepb.TableStatus{
+					captureID: {
+						TableID: tableID,
+						State:   schedulepb.TableStateReplicating,
+					},
+				}, model.ChangeFeedID{})
 			if err != nil {
 				b.Fatal(err)
 			}

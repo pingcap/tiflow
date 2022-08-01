@@ -84,7 +84,8 @@ func NewAgent(ctx context.Context,
 	etcdClient etcd.CDCEtcdClient,
 	tableExecutor internal.TableExecutor,
 ) (internal.Agent, error) {
-	trans, err := transport.NewTransport(ctx, changeFeedID, transport.AgentRole, messageServer, messageRouter)
+	trans, err := transport.NewTransport(
+		ctx, changeFeedID, transport.AgentRole, messageServer, messageRouter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

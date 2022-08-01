@@ -48,7 +48,9 @@ func TestCoordinatorSendMsgs(t *testing.T) {
 	coord.sendMsgs(
 		ctx, []*schedulepb.Message{{To: "1", MsgType: schedulepb.MsgDispatchTableRequest}})
 
-	coord.captureM.Captures["1"] = &member.CaptureStatus{Epoch: schedulepb.ProcessorEpoch{Epoch: "epoch"}}
+	coord.captureM.Captures["1"] = &member.CaptureStatus{
+		Epoch: schedulepb.ProcessorEpoch{Epoch: "epoch"},
+	}
 	coord.sendMsgs(
 		ctx, []*schedulepb.Message{{To: "1", MsgType: schedulepb.MsgDispatchTableRequest}})
 
@@ -308,7 +310,8 @@ func TestCoordinatorDrainCapture(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
 
-	coord.schedulerM = scheduler.NewSchedulerManager(model.ChangeFeedID{}, config.NewDefaultSchedulerConfig())
+	coord.schedulerM = scheduler.NewSchedulerManager(
+		model.ChangeFeedID{}, config.NewDefaultSchedulerConfig())
 	count, err = coord.DrainCapture("b")
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
