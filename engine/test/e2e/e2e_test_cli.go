@@ -112,6 +112,7 @@ func NewUTCli(ctx context.Context, masterAddrs, businessMetaAddrs []string, proj
 
 	return &ChaosCli{
 		jobManagerCli: jobManagerCli,
+		masterAddrs:   masterAddrs,
 		clientConn:    cc,
 		fakeJobCli:    fakeJobCli,
 		fakeJobCfg:    cfg,

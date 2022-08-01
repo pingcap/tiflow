@@ -113,7 +113,11 @@ func GRPCStatusCode(errIn error) (codes.Code, bool) {
 	if err, ok := tryUnwrapNormalizedError(errIn); ok {
 		return err.statusCode(), true
 	}
-	if st, ok := status.FromError(errors.Unwrap(errIn)); ok {
+
+	if errors.HasStack(errIn) {
+		errIn = errors.Unwrap(errIn)
+	}
+	if st, ok := status.FromError(errIn); ok {
 		// errIn is a raw gRPC error
 		return st.Code(), true
 	}

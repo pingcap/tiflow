@@ -17,6 +17,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
+
 	"github.com/gogo/status"
 	"github.com/pingcap/tiflow/engine/pkg/client"
 	"go.uber.org/zap"
@@ -199,14 +201,13 @@ func (b *DefaultBroker) checkForExistingResource(
 		}, true, nil
 	}
 
-	// TODO perhaps we need a grpcutil package to put all this stuff?
-	st, ok := status.FromError(err)
+	code, ok := rpcerror.GRPCStatusCode(err)
 	if !ok {
 		// If the error is not derived from a grpc status, we should throw it.
 		return nil, false, errors.Trace(err)
 	}
 
-	switch st.Code() {
+	switch code {
 	case codes.NotFound:
 		// Indicates that there is no existing resource with the same name.
 		return nil, false, nil
