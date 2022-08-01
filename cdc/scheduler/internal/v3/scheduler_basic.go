@@ -179,11 +179,11 @@ func newBurstBalanceRemoveTables(
 	for _, tableID := range rmTables {
 		rep := replications[tableID]
 		var captureID model.CaptureID
-		if rep.Primary != "" {
-			captureID = rep.Primary
-		} else if rep.Secondary != "" {
-			captureID = rep.Secondary
-		} else {
+		for id := range rep.Captures {
+			captureID = id
+			break
+		}
+		if captureID == "" {
 			log.Warn("schedulerv3: primary or secondary not found for removed table",
 				zap.String("namespace", changefeedID.Namespace),
 				zap.String("changefeed", changefeedID.ID),
