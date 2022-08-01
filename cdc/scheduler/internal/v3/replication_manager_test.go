@@ -654,15 +654,17 @@ func TestReplicationManagerHandleCaptureChanges(t *testing.T) {
 			{TableID: 2, State: schedulepb.TableStatePreparing},
 		},
 		"4": {{TableID: 4, State: schedulepb.TableStateStopping}},
+		"5": {{TableID: 5, State: schedulepb.TableStateStopped}},
 	}}
 	msgs, err := r.HandleCaptureChanges(&changes, 0)
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
-	require.Len(t, r.tables, 4)
+	require.Len(t, r.tables, 5)
 	require.Equal(t, ReplicationSetStateReplicating, r.tables[1].State)
 	require.Equal(t, ReplicationSetStatePrepare, r.tables[2].State)
 	require.Equal(t, ReplicationSetStateReplicating, r.tables[3].State)
-	require.Equal(t, ReplicationSetStateAbsent, r.tables[4].State)
+	require.Equal(t, ReplicationSetStateRemoving, r.tables[4].State)
+	require.Equal(t, ReplicationSetStateAbsent, r.tables[5].State)
 
 	changes = captureChanges{Removed: map[string][]schedulepb.TableStatus{
 		"1": {{TableID: 1, State: schedulepb.TableStateReplicating}},
@@ -670,11 +672,12 @@ func TestReplicationManagerHandleCaptureChanges(t *testing.T) {
 	msgs, err = r.HandleCaptureChanges(&changes, 0)
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
-	require.Len(t, r.tables, 4)
+	require.Len(t, r.tables, 5)
 	require.Equal(t, ReplicationSetStateAbsent, r.tables[1].State)
 	require.Equal(t, ReplicationSetStatePrepare, r.tables[2].State)
 	require.Equal(t, ReplicationSetStateReplicating, r.tables[3].State)
-	require.Equal(t, ReplicationSetStateAbsent, r.tables[4].State)
+	require.Equal(t, ReplicationSetStateRemoving, r.tables[4].State)
+	require.Equal(t, ReplicationSetStateAbsent, r.tables[5].State)
 }
 
 func TestReplicationManagerHandleCaptureChangesDuringAddTable(t *testing.T) {

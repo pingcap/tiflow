@@ -384,7 +384,7 @@ func (r *replicationManager) handleBurstBalanceTasks(
 	for _, task := range task.RemoveTables {
 		perCapture[task.CaptureID]++
 	}
-	fields := make([]zap.Field, 0, len(perCapture)+3)
+	fields := make([]zap.Field, 0)
 	for captureID, count := range perCapture {
 		fields = append(fields, zap.Int(captureID, count))
 	}
