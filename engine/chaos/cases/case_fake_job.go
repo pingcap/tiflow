@@ -20,9 +20,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/framework/fake"
 	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
@@ -32,7 +32,7 @@ import (
 )
 
 func runFakeJobCase(ctx context.Context, cfg *config) error {
-	serverMasterEndpoints := []string{cfg.MasterAddr}
+	serverMasterEndpoints := []string{cfg.Addr}
 	etcdEndpoints := []string{cfg.EtcdAddr}
 
 	jobCfg := &fake.Config{

@@ -23,6 +23,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
+	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -32,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
+	pd "github.com/tikv/pd/client"
 )
 
 type mockManager struct {
@@ -46,6 +48,28 @@ func (m *mockManager) CheckStaleCheckpointTs(
 
 var _ gc.Manager = (*mockManager)(nil)
 
+// newOwner4Test creates a new Owner for test
+func newOwner4Test(
+	newDDLPuller func(ctx context.Context,
+		replicaConfig *config.ReplicaConfig,
+		up *upstream.Upstream,
+		startTs uint64,
+		changefeed model.ChangeFeedID,
+	) (puller.DDLPuller, error),
+	newSink func() DDLSink,
+	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error),
+	pdClient pd.Client,
+) Owner {
+	m := upstream.NewManager4Test(pdClient)
+	o := NewOwner(m).(*ownerImpl)
+	// Most tests do not need to test bootstrap.
+	o.bootstrapped = true
+	o.newChangefeed = func(id model.ChangeFeedID, up *upstream.Upstream) *changefeed {
+		return newChangefeed4Test(id, up, newDDLPuller, newSink, newScheduler)
+	}
+	return o
+}
+
 func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*ownerImpl, *orchestrator.GlobalReactorState, *orchestrator.ReactorStateTester) {
 	pdClient := &gc.MockPDClient{
 		UpdateServiceGCSafePointFunc: func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
@@ -53,16 +77,24 @@ func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*ownerImpl, *orches
 		},
 	}
 
-	owner := NewOwner4Test(func(ctx context.Context,
-		replicaConfig *config.ReplicaConfig,
-		up *upstream.Upstream,
-		startTs uint64,
-		changefeed model.ChangeFeedID,
-	) (puller.DDLPuller, error) {
-		return &mockDDLPuller{resolvedTs: startTs - 1}, nil
-	}, func() DDLSink {
-		return &mockDDLSink{}
-	},
+	owner := newOwner4Test(
+		// new ddl puller
+		func(ctx context.Context,
+			replicaConfig *config.ReplicaConfig,
+			up *upstream.Upstream,
+			startTs uint64,
+			changefeed model.ChangeFeedID,
+		) (puller.DDLPuller, error) {
+			return &mockDDLPuller{resolvedTs: startTs - 1}, nil
+		},
+		// new ddl sink
+		func() DDLSink {
+			return &mockDDLSink{}
+		},
+		// new scheduler
+		func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error) {
+			return &mockScheduler{}, nil
+		},
 		pdClient,
 	)
 	o := owner.(*ownerImpl)
@@ -510,9 +542,10 @@ func TestHandleJobsDontBlock(t *testing.T) {
 
 	// add an non-consistent version capture
 	captureInfo := &model.CaptureInfo{
-		ID:            "capture-id-owner-test",
+		ID:            "capture-higher-version",
 		AdvertiseAddr: "127.0.0.1:0000",
-		Version:       " v0.0.1-test-only",
+		// owner version is `v6.3.0`, use `v6.4.0` to make version inconsistent
+		Version: "v6.4.0",
 	}
 	cdcKey = etcd.CDCKey{
 		ClusterID: state.ClusterID,
@@ -541,9 +574,45 @@ func TestHandleJobsDontBlock(t *testing.T) {
 	_, err = owner.Tick(ctx, state)
 	tester.MustApplyPatches()
 	require.Nil(t, err)
-	// make sure this changefeed add failed, which means that owner are return
-	// in clusterVersionConsistent check
-	require.Nil(t, owner.changefeeds[cf2])
+	// add changefeed success when the cluster have mixed version.
+	require.NotNil(t, owner.changefeeds[cf2])
+
+	// add third non-consistent version capture
+	captureInfo = &model.CaptureInfo{
+		ID:            "capture-higher-version-2",
+		AdvertiseAddr: "127.0.0.1:8302",
+		// only allow at most 2 different version instances in the cdc cluster.
+		Version: "v6.5.0",
+	}
+	cdcKey = etcd.CDCKey{
+		ClusterID: state.ClusterID,
+		Tp:        etcd.CDCKeyTypeCapture,
+		CaptureID: captureInfo.ID,
+	}
+	v, err = captureInfo.Marshal()
+	require.NoError(t, err)
+	tester.MustUpdate(cdcKey.String(), v)
+
+	// try to add another changefeed, this should not be handled
+	cf3 := model.DefaultChangeFeedID("test-changefeed2")
+	cfInfo3 := &model.ChangeFeedInfo{
+		StartTs: oracle.GoTimeToTS(time.Now()),
+		Config:  config.GetDefaultReplicaConfig(),
+		State:   model.StateNormal,
+	}
+	changefeedStr2, err := cfInfo3.Marshal()
+	require.NoError(t, err)
+	cdcKey = etcd.CDCKey{
+		ClusterID:    state.ClusterID,
+		Tp:           etcd.CDCKeyTypeChangefeedInfo,
+		ChangefeedID: cf3,
+	}
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr2))
+	_, err = owner.Tick(ctx, state)
+	tester.MustApplyPatches()
+	require.NoError(t, err)
+	// add changefeed failed, since 3 different version instances in the cluster.
+	require.Nil(t, owner.changefeeds[cf3])
 
 	// make sure statusProvider works well
 	ctx1, cancel := context.WithTimeout(context.Background(), time.Second*5)
@@ -573,7 +642,8 @@ WorkLoop:
 	}
 	require.Nil(t, errIn)
 	require.NotNil(t, infos[cf1])
-	require.Nil(t, infos[cf2])
+	require.NotNil(t, infos[cf2])
+	require.Nil(t, infos[cf3])
 }
 
 func TestCalculateGCSafepointTs(t *testing.T) {
@@ -643,4 +713,31 @@ func TestAsyncStop(t *testing.T) {
 	default:
 		require.Fail(t, "unexpected")
 	}
+}
+
+func TestHandleDrainCapturesSchedulerNotReady(t *testing.T) {
+	t.Parallel()
+
+	cf := &changefeed{
+		scheduler: nil, // scheduler is not set.
+		state: &orchestrator.ChangefeedReactorState{
+			Info: &model.ChangeFeedInfo{State: model.StateNormal},
+		},
+	}
+	o := &ownerImpl{changefeeds: make(map[model.ChangeFeedID]*changefeed)}
+	o.changefeeds[model.ChangeFeedID{}] = cf
+
+	query := &scheduler.Query{CaptureID: "test"}
+	done := make(chan error, 1)
+	o.handleDrainCaptures(query, done)
+	require.NotEqualValues(t, 0, query.Resp.(*model.DrainCaptureResp).CurrentTableCount)
+	require.Nil(t, <-done)
+
+	// Only count changefeed that is normal.
+	cf.state.Info.State = model.StateStopped
+	query = &scheduler.Query{CaptureID: "test"}
+	done = make(chan error, 1)
+	o.handleDrainCaptures(query, done)
+	require.EqualValues(t, 0, query.Resp.(*model.DrainCaptureResp).CurrentTableCount)
+	require.Nil(t, <-done)
 }

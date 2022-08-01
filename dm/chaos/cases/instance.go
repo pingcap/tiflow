@@ -16,7 +16,7 @@ package main
 import (
 	"context"
 
-	config2 "github.com/pingcap/tiflow/dm/dm/config"
+	config2 "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 )
 

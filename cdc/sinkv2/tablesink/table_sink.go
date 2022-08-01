@@ -13,7 +13,11 @@
 
 package tablesink
 
-import "github.com/pingcap/tiflow/cdc/model"
+import (
+	"context"
+
+	"github.com/pingcap/tiflow/cdc/model"
+)
 
 // TableSink is the interface for table sink.
 // It is used to sink data in table units.
@@ -31,5 +35,6 @@ type TableSink interface {
 	// This is a thread-safe method.
 	GetCheckpointTs() model.ResolvedTs
 	// Close closes the table sink.
-	Close()
+	// We should make sure this method is cancellable.
+	Close(ctx context.Context) error
 }

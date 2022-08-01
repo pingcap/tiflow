@@ -23,8 +23,9 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/log"
+	dmconfig "github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
@@ -105,8 +106,8 @@ func TestQueryStatusAPI(t *testing.T) {
 	)
 	messageAgent := &dmpkg.MockMessageAgent{}
 	jm.messageAgent = messageAgent
-	jm.workerManager = NewWorkerManager(nil, jm.metadata.JobStore(), nil, nil, nil)
-	jm.taskManager = NewTaskManager(nil, nil, nil)
+	jm.workerManager = NewWorkerManager(nil, jm.metadata.JobStore(), nil, nil, nil, jm.Logger())
+	jm.taskManager = NewTaskManager(nil, nil, nil, jm.Logger())
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task2", framework.WorkerDMLoad, "worker2", runtime.WorkerFinished))
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task3", framework.WorkerDMDump, "worker3", runtime.WorkerOnline))
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task4", framework.WorkerDMDump, "worker4", runtime.WorkerOnline))
@@ -256,7 +257,7 @@ func TestQueryStatusAPI(t *testing.T) {
 
 func TestOperateTask(t *testing.T) {
 	jm := &JobMaster{
-		taskManager: NewTaskManager(nil, metadata.NewJobStore("master-id", kvmock.NewMetaMock()), nil),
+		taskManager: NewTaskManager(nil, metadata.NewJobStore("master-id", kvmock.NewMetaMock()), nil, log.L()),
 	}
 	require.EqualError(t, jm.OperateTask(context.Background(), dmpkg.Delete, nil, nil), fmt.Sprintf("unsupport op type %d for operate task", dmpkg.Delete))
 	require.EqualError(t, jm.OperateTask(context.Background(), dmpkg.Pause, nil, nil), "state not found")

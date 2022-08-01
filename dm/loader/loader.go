@@ -30,15 +30,15 @@ import (
 
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
-	"github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/pb"
-	"github.com/pingcap/tiflow/dm/dm/unit"
+	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/unit"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -614,7 +614,12 @@ func (l *Loader) Process(ctx context.Context, pr chan pb.ProcessResult) {
 			errs = append(errs, err)
 		}
 	}()
-
+	failpoint.Inject("longLoadProcess", func(val failpoint.Value) {
+		if sec, ok := val.(int); ok {
+			l.logger.Info("long loader unit", zap.Int("second", sec))
+			time.Sleep(time.Duration(sec) * time.Second)
+		}
+	})
 	err = l.Restore(newCtx)
 	close(l.runFatalChan) // Restore returned, all potential fatal sent to l.runFatalChan
 	cancel()              // cancel the goroutines created in `Restore`.

@@ -545,7 +545,7 @@ func TestProcessorError(t *testing.T) {
 		Error: &model.RunningError{
 			Addr:    "127.0.0.1:0000",
 			Code:    "CDC:ErrSinkURIInvalid",
-			Message: "[CDC:ErrSinkURIInvalid]sink uri invalid",
+			Message: "[CDC:ErrSinkURIInvalid]sink uri invalid '%s'",
 		},
 	})
 
@@ -661,7 +661,7 @@ func TestProcessorClose(t *testing.T) {
 	require.Equal(t, p.changefeed.TaskPositions[p.captureInfo.ID].Error, &model.RunningError{
 		Addr:    "127.0.0.1:0000",
 		Code:    "CDC:ErrSinkURIInvalid",
-		Message: "[CDC:ErrSinkURIInvalid]sink uri invalid",
+		Message: "[CDC:ErrSinkURIInvalid]sink uri invalid '%s'",
 	})
 	require.True(t, p.tables[1].(*mockTablePipeline).canceled)
 	require.True(t, p.tables[2].(*mockTablePipeline).canceled)

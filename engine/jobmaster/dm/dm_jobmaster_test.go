@@ -27,10 +27,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/dig"
+	"go.uber.org/zap"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/checker"
-	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/master"
+	dmconfig "github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/master"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
@@ -38,6 +40,7 @@ import (
 	libMetadata "github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/registry"
+	"github.com/pingcap/tiflow/engine/jobmaster/dm/checkpoint"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
@@ -126,7 +129,11 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 	require.NoError(t.T(), err)
 	jobmaster, err := registry.GlobalWorkerRegistry().CreateWorker(dctx, framework.DMJobMaster, "dm-jobmaster", libMetadata.JobManagerUUID, cfgBytes)
 	require.NoError(t.T(), err)
+
 	// Init
+	verDB := conn.InitVersionDB()
+	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("version", "5.7.25-TiDB-v6.1.0"))
 	_, mockDB, err := conn.InitMockDBFull()
 	require.NoError(t.T(), err)
 	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
@@ -142,6 +149,9 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 
 	jobmaster, err = registry.GlobalWorkerRegistry().CreateWorker(dctx, framework.DMJobMaster, "dm-jobmaster", libMetadata.JobManagerUUID, cfgBytes)
 	require.NoError(t.T(), err)
+	verDB = conn.InitVersionDB()
+	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("version", "5.7.26-log"))
 	_, mockDB, err = conn.InitMockDBFull()
 	require.NoError(t.T(), err)
 	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
@@ -166,18 +176,27 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	metaKVClient := kvmock.NewMetaMock()
 	mockBaseJobmaster := &MockBaseJobmaster{}
 	mockCheckpointAgent := &MockCheckpointAgent{}
+	checkpoint.NewCheckpointAgent = func(*config.JobCfg, *zap.Logger) checkpoint.Agent { return mockCheckpointAgent }
 	mockMessageAgent := &dmpkg.MockMessageAgent{}
+	dmpkg.NewMessageAgent = func(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) dmpkg.MessageAgent {
+		return mockMessageAgent
+	}
+	defer func() {
+		checkpoint.NewCheckpointAgent = checkpoint.NewAgentImpl
+		dmpkg.NewMessageAgent = dmpkg.NewMessageAgentImpl
+	}()
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	jm := &JobMaster{
-		workerID:        "jobmaster-id",
-		jobCfg:          jobCfg,
-		BaseJobMaster:   mockBaseJobmaster,
-		checkpointAgent: mockCheckpointAgent,
-		messageAgent:    mockMessageAgent,
+		workerID:      "jobmaster-id",
+		jobCfg:        jobCfg,
+		BaseJobMaster: mockBaseJobmaster,
 	}
 
 	// init
+	verDB := conn.InitVersionDB()
+	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("version", "5.7.25-TiDB-v6.1.0"))
 	precheckError := errors.New("precheck error")
 	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
 		return "", precheckError
@@ -189,17 +208,19 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
 		return "check pass", nil
 	}
+	verDB = conn.InitVersionDB()
+	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("version", "5.7.26-log"))
 	mockBaseJobmaster.On("MetaKVClient").Return(metaKVClient)
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]framework.WorkerHandle{}).Once()
 	require.NoError(t.T(), jm.InitImpl(context.Background()))
 
 	// recover
 	jm = &JobMaster{
-		workerID:        "jobmaster-id",
-		jobCfg:          jobCfg,
-		BaseJobMaster:   mockBaseJobmaster,
-		checkpointAgent: mockCheckpointAgent,
-		messageAgent:    mockMessageAgent,
+		workerID:      "jobmaster-id",
+		jobCfg:        jobCfg,
+		BaseJobMaster: mockBaseJobmaster,
+		messageAgent:  mockMessageAgent,
 	}
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]framework.WorkerHandle{}).Once()
 	jm.OnMasterRecovered(context.Background())
@@ -370,6 +391,10 @@ func (m *MockBaseJobmaster) CreateWorker(workerType framework.WorkerType, config
 
 func (m *MockBaseJobmaster) CurrentEpoch() int64 {
 	return 0
+}
+
+func (m *MockBaseJobmaster) Logger() *zap.Logger {
+	return log.L()
 }
 
 type MockCheckpointAgent struct {

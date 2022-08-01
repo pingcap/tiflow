@@ -22,7 +22,6 @@ import (
 	. "github.com/pingcap/check"
 
 	"github.com/pingcap/tiflow/engine/executor"
-	"github.com/pingcap/tiflow/engine/pkg/etcdutil"
 	"github.com/pingcap/tiflow/engine/servermaster"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
@@ -35,11 +34,6 @@ type MiniCluster struct {
 
 	exec       *executor.Server
 	execCancel func()
-}
-
-func NewEmptyMiniCluster() *MiniCluster {
-	c := new(MiniCluster)
-	return c
 }
 
 func (c *MiniCluster) CreateMaster(cfg *servermaster.Config) (*test.Context, error) {
@@ -92,11 +86,7 @@ func (c *MiniCluster) Start1M1E(cc *C) (
 	masterAddr = fmt.Sprintf("127.0.0.1:%d", ports[0])
 	workerAddr = fmt.Sprintf("127.0.0.1:%d", ports[1])
 	masterCfg := &servermaster.Config{
-		Etcd: &etcdutil.ConfigParams{
-			Name:    "master1",
-			DataDir: "/tmp/df",
-		},
-		MasterAddr:        masterAddr,
+		Addr:              masterAddr,
 		AdvertiseAddr:     masterAddr,
 		KeepAliveTTL:      20000000 * time.Second,
 		KeepAliveInterval: 200 * time.Millisecond,
@@ -105,7 +95,7 @@ func (c *MiniCluster) Start1M1E(cc *C) (
 	// one master + one executor
 	executorCfg := &executor.Config{
 		Join:              masterAddr,
-		WorkerAddr:        workerAddr,
+		Addr:              workerAddr,
 		AdvertiseAddr:     workerAddr,
 		KeepAliveTTL:      20000000 * time.Second,
 		KeepAliveInterval: 200 * time.Millisecond,

@@ -351,6 +351,36 @@ func (info *ChangeFeedInfo) fixSinkProtocol() {
 	rawQuery := sinkURIParsed.Query()
 	protocolStr := rawQuery.Get(config.ProtocolKey)
 
+	fixSinkURI := func(newProtocolStr string) {
+		oldRawQuery := sinkURIParsed.RawQuery
+		newRawQuery := rawQuery.Encode()
+		log.Info("handle incompatible protocol from sink URI",
+			zap.String("oldUriQuery", oldRawQuery),
+			zap.String("fixedUriQuery", newRawQuery))
+
+		sinkURIParsed.RawQuery = newRawQuery
+		fixedSinkURI := sinkURIParsed.String()
+		info.SinkURI = fixedSinkURI
+		info.Config.Sink.Protocol = newProtocolStr
+	}
+
+	// fix mysql sink
+	scheme := sinkURIParsed.Scheme
+	if !config.IsMQScheme(scheme) {
+		if protocolStr != "" || info.Config.Sink.Protocol != "" {
+			maskedSinkURI, _ := util.MaskSinkURI(info.SinkURI)
+			log.Warn("sink URI or sink config contains protocol, but scheme is not mq",
+				zap.String("sinkURI", maskedSinkURI),
+				zap.String("protocol", protocolStr),
+				zap.Any("sinkConfig", info.Config.Sink))
+			// always set protocol of mysql sink to ""
+			rawQuery.Del(config.ProtocolKey)
+			fixSinkURI("")
+		}
+		return
+	}
+
+	// fix MQ sink
 	needsFix := func(protocolStr string) bool {
 		var protocol config.Protocol
 		err = protocol.FromString(protocolStr)
@@ -366,14 +396,7 @@ func (info *ChangeFeedInfo) fixSinkProtocol() {
 	if protocolStr != "" {
 		if needsFix(protocolStr) {
 			rawQuery.Set(config.ProtocolKey, openProtocolStr)
-			oldRawQuery := sinkURIParsed.RawQuery
-			newRawQuery := rawQuery.Encode()
-			sinkURIParsed.RawQuery = newRawQuery
-			fixedSinkURI := sinkURIParsed.String()
-			log.Info("handle incompatible protocol from sink URI",
-				zap.String("oldUriQuery", oldRawQuery),
-				zap.String("fixedUriQuery", newRawQuery))
-			info.SinkURI = fixedSinkURI
+			fixSinkURI(openProtocolStr)
 		}
 	} else {
 		if needsFix(info.Config.Sink.Protocol) {

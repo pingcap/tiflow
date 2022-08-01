@@ -139,7 +139,7 @@ func TestNewReplicationSet(t *testing.T) {
 			set: &ReplicationSet{
 				State:     ReplicationSetStateCommit,
 				Secondary: "1",
-				Captures:  map[string]struct{}{"1": {}},
+				Captures:  map[string]struct{}{"1": {}, "2": {}},
 			},
 			tableStatus: map[model.CaptureID]*schedulepb.TableStatus{
 				"1": {
@@ -173,8 +173,8 @@ func TestNewReplicationSet(t *testing.T) {
 		{
 			// Rebuild remove table state, Removing.
 			set: &ReplicationSet{
-				State:    ReplicationSetStateAbsent,
-				Captures: map[string]struct{}{},
+				State:    ReplicationSetStateRemoving,
+				Captures: map[string]struct{}{"1": {}, "2": {}},
 			},
 			tableStatus: map[model.CaptureID]*schedulepb.TableStatus{
 				"1": {
@@ -1010,7 +1010,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 					},
 				},
 			}, msgs[0])
-			require.Empty(t, rClone1.Captures)
+			require.Contains(t, rClone1.Captures, from)
 			require.Equal(t, "", rClone1.Primary)
 			require.Equal(t, from, rClone1.Secondary)
 			require.Equal(t, ReplicationSetStatePrepare, rClone1.State)
@@ -1059,6 +1059,31 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 		require.Len(t, msgs, 0)
 		require.EqualValues(t, r, rClone)
 	})
+}
+
+func TestReplicationSetCaptureShutdownAfterReconstructCommitState(t *testing.T) {
+	t.Parallel()
+
+	// Reconstruct commit state
+	from := "1"
+	tableID := model.TableID(1)
+	tableStatus := map[model.CaptureID]*schedulepb.TableStatus{
+		from: {TableID: tableID, State: schedulepb.TableStatePrepared},
+	}
+	r, err := newReplicationSet(tableID, 0, tableStatus, model.ChangeFeedID{})
+	require.Nil(t, err)
+	require.Equal(t, ReplicationSetStateCommit, r.State)
+	require.Equal(t, "", r.Primary)
+	require.Equal(t, from, r.Secondary)
+
+	// Commit -> Absent as there is no primary nor secondary.
+	msg, affected, err := r.handleCaptureShutdown(from)
+	require.Nil(t, err)
+	require.True(t, affected)
+	require.Empty(t, msg)
+	require.Equal(t, ReplicationSetStateAbsent, r.State)
+	require.Equal(t, "", r.Primary)
+	require.Equal(t, "", r.Secondary)
 }
 
 func TestReplicationSetMoveTableWithHeartbeatResponse(t *testing.T) {
@@ -1170,4 +1195,137 @@ func TestReplicationSetMoveTableSameDestCapture(t *testing.T) {
 	require.Equal(t, ReplicationSetStateReplicating, r.State)
 	require.Equal(t, "", r.Secondary)
 	require.Equal(t, source, r.Primary)
+}
+
+func TestReplicationSetCommitRestart(t *testing.T) {
+	t.Parallel()
+
+	// Primary has received remove table message and is currently stopping.
+	tableStatus := map[model.CaptureID]*schedulepb.TableStatus{
+		"1": {
+			State:      schedulepb.TableStatePrepared,
+			Checkpoint: schedulepb.Checkpoint{},
+		},
+		"2": {
+			State:      schedulepb.TableStateStopping,
+			Checkpoint: schedulepb.Checkpoint{},
+		},
+	}
+	r, err := newReplicationSet(0, 0, tableStatus, model.ChangeFeedID{})
+	require.Nil(t, err)
+	require.Equal(t, ReplicationSetStateCommit, r.State)
+	require.Equal(t, "1", r.Secondary)
+	require.Equal(t, "", r.Primary)
+	require.Contains(t, r.Captures, "2")
+
+	// Can not promote to primary as there are other captures.
+	msgs, err := r.handleTableStatus("1", &schedulepb.TableStatus{
+		TableID: 0,
+		State:   schedulepb.TableStatePrepared,
+	})
+	require.Nil(t, err)
+	require.Len(t, msgs, 0)
+	require.Equal(t, ReplicationSetStateCommit, r.State)
+	require.Equal(t, "1", r.Secondary)
+	require.Equal(t, "", r.Primary)
+	require.Contains(t, r.Captures, "2")
+
+	// Table status reported by other captures does not change replication set.
+	msgs, err = r.handleTableStatus("2", &schedulepb.TableStatus{
+		TableID: 0,
+		State:   schedulepb.TableStateStopping,
+	})
+	require.Nil(t, err)
+	require.Len(t, msgs, 0)
+	require.Equal(t, ReplicationSetStateCommit, r.State)
+	require.Equal(t, "1", r.Secondary)
+	require.Equal(t, "", r.Primary)
+	require.Contains(t, r.Captures, "2")
+
+	// Only Stopped or Absent allows secondary to be promoted.
+	rClone := clone(r)
+	msgs, err = rClone.handleTableStatus("2", &schedulepb.TableStatus{
+		TableID: 0,
+		State:   schedulepb.TableStateAbsent,
+	})
+	require.Nil(t, err)
+	require.Len(t, msgs, 0)
+	require.Equal(t, ReplicationSetStateCommit, rClone.State)
+	require.Equal(t, "1", rClone.Secondary)
+	require.Equal(t, "", rClone.Primary)
+	require.NotContains(t, rClone.Captures, "2")
+	msgs, err = r.handleTableStatus("2", &schedulepb.TableStatus{
+		TableID: 0,
+		State:   schedulepb.TableStateStopped,
+	})
+	require.Nil(t, err)
+	require.Len(t, msgs, 0)
+	require.Equal(t, ReplicationSetStateCommit, r.State)
+	require.Equal(t, "1", r.Secondary)
+	require.Equal(t, "", r.Primary)
+	require.NotContains(t, r.Captures, "2")
+
+	// No other captures, promote secondary.
+	msgs, err = r.handleTableStatus("1", &schedulepb.TableStatus{
+		TableID: 0,
+		State:   schedulepb.TableStatePrepared,
+	})
+	require.Nil(t, err)
+	require.Len(t, msgs, 1)
+	require.Equal(t, "1", msgs[0].To)
+	require.False(t, msgs[0].DispatchTableRequest.GetAddTable().IsSecondary)
+	require.Equal(t, ReplicationSetStateCommit, r.State)
+	require.Equal(t, "1", r.Primary)
+	require.Equal(t, "", r.Secondary)
+}
+
+func TestReplicationSetRemoveRestart(t *testing.T) {
+	t.Parallel()
+
+	// Primary has received remove table message and is currently stopping.
+	tableStatus := map[model.CaptureID]*schedulepb.TableStatus{
+		"1": {
+			State:      schedulepb.TableStateStopping,
+			Checkpoint: schedulepb.Checkpoint{},
+		},
+		"2": {
+			State:      schedulepb.TableStateStopping,
+			Checkpoint: schedulepb.Checkpoint{},
+		},
+	}
+	r, err := newReplicationSet(0, 0, tableStatus, model.ChangeFeedID{})
+	require.Nil(t, err)
+	require.Equal(t, ReplicationSetStateRemoving, r.State)
+	require.Equal(t, "", r.Secondary)
+	require.Equal(t, "", r.Primary)
+	require.Contains(t, r.Captures, "1")
+	require.Contains(t, r.Captures, "2")
+	require.False(t, r.hasRemoved())
+
+	// A capture reports its status.
+	msgs, err := r.handleTableStatus("2", &schedulepb.TableStatus{
+		TableID: 0,
+		State:   schedulepb.TableStateStopping,
+	})
+	require.Nil(t, err)
+	require.Len(t, msgs, 0)
+	require.False(t, r.hasRemoved())
+
+	// A capture stopped.
+	msgs, err = r.handleTableStatus("2", &schedulepb.TableStatus{
+		TableID: 0,
+		State:   schedulepb.TableStateStopped,
+	})
+	require.Nil(t, err)
+	require.Len(t, msgs, 0)
+	require.False(t, r.hasRemoved())
+
+	// Another capture stopped too.
+	msgs, err = r.handleTableStatus("1", &schedulepb.TableStatus{
+		TableID: 0,
+		State:   schedulepb.TableStateAbsent,
+	})
+	require.Nil(t, err)
+	require.Len(t, msgs, 0)
+	require.True(t, r.hasRemoved())
 }

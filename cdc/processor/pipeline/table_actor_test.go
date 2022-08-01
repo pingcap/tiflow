@@ -29,6 +29,7 @@ import (
 	serverConfig "github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -51,6 +52,7 @@ func TestAsyncStopFailed(t *testing.T) {
 		cancel:      func() {},
 		reportErr:   func(err error) {},
 		state:       TableStatePreparing,
+		upstream:    upstream.NewUpstream4Test(&mockPD{}),
 	}
 	tbl.sinkNode = newSinkNode(1, &mockSink{}, 0, 0, &mockFlowController{}, tbl.redoManager,
 		&tbl.state, model.DefaultChangeFeedID("changefeed-test"), true, false)
@@ -76,6 +78,7 @@ func TestTableActorInterface(t *testing.T) {
 				Level: "node",
 			},
 		},
+		upstream: upstream.NewUpstream4Test(&mockPD{}),
 	}
 	table.sinkNode = &sinkNode{state: &table.state}
 	table.sortNode = &sorterNode{state: &table.state, resolvedTs: 5}
@@ -127,6 +130,7 @@ func TestTableActorCancel(t *testing.T) {
 		router:      tableActorRouter,
 		cancel:      func() {},
 		reportErr:   func(err error) {},
+		upstream:    upstream.NewUpstream4Test(&mockPD{}),
 	}
 	tbl.sinkNode = &sinkNode{
 		state:          &tbl.state,
@@ -388,7 +392,7 @@ func TestNewTableActor(t *testing.T) {
 	startSorter = func(t *tableActor, ctx *actorNodeContext) error {
 		return nil
 	}
-	tbl, err := NewTableActor(cctx, nil, nil, 1, "t1",
+	tbl, err := NewTableActor(cctx, upstream.NewUpstream4Test(&mockPD{}), nil, 1, "t1",
 		&model.TableReplicaInfo{
 			StartTs:     0,
 			MarkTableID: 1,
@@ -405,7 +409,7 @@ func TestNewTableActor(t *testing.T) {
 		return errors.New("failed to start puller")
 	}
 
-	tbl, err = NewTableActor(cctx, nil, nil, 1, "t1",
+	tbl, err = NewTableActor(cctx, upstream.NewUpstream4Test(&mockPD{}), nil, 1, "t1",
 		&model.TableReplicaInfo{
 			StartTs:     0,
 			MarkTableID: 1,
@@ -451,6 +455,7 @@ func TestTableActorStart(t *testing.T) {
 			MarkTableID: 1,
 		},
 		replicaConfig: config.GetDefaultReplicaConfig(),
+		upstream:      upstream.NewUpstream4Test(&mockPD{}),
 	}
 	require.Nil(t, tbl.start(ctx))
 	require.Equal(t, 1, len(tbl.nodes))

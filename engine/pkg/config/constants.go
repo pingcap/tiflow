@@ -19,6 +19,9 @@ import (
 
 // Define some constants
 const (
-	ServerMasterEtcdDialTimeout  = 5 * time.Second
-	ServerMasterEtcdSyncInterval = 3 * time.Second
+	ServerMasterEtcdDialTimeout = 5 * time.Second
+	// Disable endpoints auto sync in etcd client. Make sure to pass a load
+	// balancer address(such as service endpoint in K8s), or all advertise-addrs
+	// of the etcd cluster.
+	ServerMasterEtcdSyncInterval = time.Duration(0)
 )
