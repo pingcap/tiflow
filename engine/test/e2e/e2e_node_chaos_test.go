@@ -40,15 +40,19 @@ func updateKeyAndCheckOnce(
 ) {
 	log.Debug("update fake job key", zap.String("job-id", jobID), zap.String("update-value", updateValue),
 		zap.Int("expect-mvcc", expectedMvcc))
+	ctx1, cancel := context.WithTimeout(ctx, defaultTimeout)
+	defer cancel()
 	for j := 0; j < workerCount; j++ {
-		err := cli.UpdateFakeJobKey(ctx, j, updateValue)
+		err := cli.UpdateFakeJobKey(ctx1, j, updateValue)
 		require.NoError(t, err)
 	}
 
 	require.Eventually(t, func() bool {
+		ctx1, cancel := context.WithTimeout(ctx, defaultTimeout)
+		defer cancel()
 		log.Debug("wait and check fake job value and mvcc. tick.")
 		for jobIdx := 0; jobIdx < workerCount; jobIdx++ {
-			err := cli.CheckFakeJobKey(ctx, jobID, jobIdx, expectedMvcc, updateValue)
+			err := cli.CheckFakeJobKey(ctx1, jobID, jobIdx, expectedMvcc, updateValue)
 			if err != nil {
 				log.Warn("check fake job failed", zap.Error(err))
 				return false
@@ -95,7 +99,9 @@ func TestNodeFailure(t *testing.T) {
 		fakeJobCfg)
 	require.NoError(t, err)
 
-	jobID, err := cli.CreateJob(ctx, engineModel.JobTypeFakeJob, cfgBytes)
+	ctx1, cancel := context.WithTimeout(ctx, defaultTimeout)
+	defer cancel()
+	jobID, err := cli.CreateJob(ctx1, engineModel.JobTypeFakeJob, cfgBytes)
 	require.NoError(t, err)
 	log.Info("create fake job successful", zap.String("job-id", jobID))
 
@@ -103,11 +109,13 @@ func TestNodeFailure(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
+		ctx1, cancel := context.WithTimeout(ctx, defaultTimeout)
+		defer cancel()
 		log.Info("wait and check if all workers are online. tick.")
 		// check tick increases to ensure all workers are online
 		targetTick := int64(20)
 		for jobIdx := 0; jobIdx < cfg.WorkerCount; jobIdx++ {
-			err := cli.CheckFakeJobTick(ctx, jobID, jobIdx, targetTick)
+			err := cli.CheckFakeJobTick(ctx1, jobID, jobIdx, targetTick)
 			if err != nil {
 				log.Warn("check fake job tick failed", zap.Error(err))
 				return false

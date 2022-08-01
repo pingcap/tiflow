@@ -63,18 +63,22 @@ func TestWorkerExit(t *testing.T) {
 		fakeJobCfg)
 	require.NoError(t, err)
 
-	jobID, err := cli.CreateJob(ctx, engineModel.JobTypeFakeJob, cfgBytes)
+	ctx1, cancel := context.WithTimeout(ctx, defaultTimeout)
+	defer cancel()
+	jobID, err := cli.CreateJob(ctx1, engineModel.JobTypeFakeJob, cfgBytes)
 	require.NoError(t, err)
 
 	err = cli.InitializeMetaClient(jobID)
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
+		ctx1, cancel := context.WithTimeout(ctx, defaultTimeout)
+		defer cancel()
 		// check tick increases to ensure all workers are online
 		// TODO modify the test case to use a "restart-count" as a terminating condition.
 		targetTick := int64(1000)
 		for jobIdx := 0; jobIdx < cfg.WorkerCount; jobIdx++ {
-			err := cli.CheckFakeJobTick(ctx, jobID, jobIdx, targetTick)
+			err := cli.CheckFakeJobTick(ctx1, jobID, jobIdx, targetTick)
 			if err != nil {
 				log.Warn("check fake job tick failed", zap.Error(err))
 				return false
@@ -83,6 +87,7 @@ func TestWorkerExit(t *testing.T) {
 		return true
 	}, time.Second*300, time.Second*2)
 
-	err = cli.PauseJob(ctx, jobID)
+	ctx1, cancel := context.WithTimeout(ctx, defaultTimeout)
+	err = cli.PauseJob(ctx1, jobID)
 	require.NoError(t, err)
 }

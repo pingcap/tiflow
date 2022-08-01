@@ -41,6 +41,10 @@ import (
 	"github.com/pingcap/tiflow/pkg/httputil"
 )
 
+var (
+	defaultTimeout = 3 * time.Second
+)
+
 func init() {
 	// set the debug level log for easy test
 	log.SetLevel(zapcore.DebugLevel)
