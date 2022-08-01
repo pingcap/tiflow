@@ -95,7 +95,7 @@ func (w *worker) runBackgroundLoop() {
 	}()
 }
 
-func (w *worker) doFlush() bool {
+func (w *worker) doFlush() (shouldExit bool) {
 	// TODO: support to cancel the worker when performing some blocking operations.
 	ctx := context.Background()
 	if err := w.backend.Flush(ctx); err != nil {
@@ -104,11 +104,12 @@ func (w *worker) doFlush() bool {
 		case w.errCh <- err:
 		case <-ctx.Done():
 		}
-		return true
+        shouldExit = true
+        return
 	}
 	if !w.timer.Stop() {
 		<-w.timer.C
 	}
 	w.timer.Reset(w.backend.MaxFlushInterval())
-	return false
+	return
 }
