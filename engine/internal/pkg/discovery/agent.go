@@ -192,6 +192,11 @@ func (a *agentImpl) Subscribe() (srvdiscovery.Snapshot, *notifier.Receiver[Event
 	req := &subscribeReq{
 		doneCh: make(chan struct{}),
 	}
+	select {
+	case <-ctx.Done():
+		return nil, nil, errors.Trace(ctx.Err())
+	case a.subscribeCh <- req:
+	}
 
 	select {
 	case <-ctx.Done():
