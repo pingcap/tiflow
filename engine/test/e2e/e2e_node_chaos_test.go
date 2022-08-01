@@ -59,9 +59,9 @@ func TestNodeFailure(t *testing.T) {
 	// TODO: make the following variables configurable, these variables keep the
 	// same in sample/3m3e.yaml
 	var (
-		masterAddrs                  = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
-		businessMetaAddrs            = []string{"127.0.0.1:3336"}
-		businessMetaAddrsInContainer = []string{"mysql-standalone:3306"}
+		masterAddrs          = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
+		businessMetaAddrs    = []string{"127.0.0.1:3336"}
+		etcdAddrsInContainer = []string{"etcd-standalone:2379"}
 	)
 
 	seed := time.Now().Unix()
@@ -75,14 +75,14 @@ func TestNodeFailure(t *testing.T) {
 		// use a large enough target tick to ensure the fake job long running
 		TargetTick:      10000000,
 		EtcdWatchEnable: true,
-		EtcdEndpoints:   businessMetaAddrsInContainer,
+		EtcdEndpoints:   etcdAddrsInContainer,
 		EtcdWatchPrefix: "/fake-job/test/",
 	}
 	cfgBytes, err := json.Marshal(cfg)
 	require.NoError(t, err)
 
 	fakeJobCfg := &e2e.FakeJobConfig{
-		EtcdEndpoints: businessMetaAddrs, // reuse business meta KV endpoints
+		EtcdEndpoints: etcdAddrsInContainer,
 		WorkerCount:   cfg.WorkerCount,
 		KeyPrefix:     cfg.EtcdWatchPrefix,
 	}

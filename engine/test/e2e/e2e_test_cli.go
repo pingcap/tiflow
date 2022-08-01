@@ -51,8 +51,7 @@ type ChaosCli struct {
 	// metaCli is used to query metadata which is stored from business logic(job-level isolation)
 	// NEED to reinitialize the metaCli if we access to a different job
 	metaCli metaModel.KVClient
-	// fakeJobCli used to write to etcd to simulate the business of fake job, this etcd client
-	// reuses the endpoints of business meta KV.
+	// fakeJobCli is used to write to etcd to simulate the business of fake job
 	fakeJobCli *clientv3.Client
 	fakeJobCfg *FakeJobConfig
 	// project is used to save project info

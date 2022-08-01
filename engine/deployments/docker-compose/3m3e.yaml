@@ -131,7 +131,7 @@ services:
       - "12479:2379"
   mysql-standalone:
     image: mysql:5.7
-    container_name: 3m3e-mysql_standalone
+    container_name: 3m3e-mysql-standalone
     environment:
       MYSQL_ROOT_PASSWORD: 123456
     volumes:
