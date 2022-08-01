@@ -161,11 +161,8 @@ func (c *captureManager) Tick(
 	c.tickCounter = 0
 	tables := make(map[model.CaptureID][]model.TableID)
 	for tableID, rep := range reps {
-		if rep.Primary != "" {
-			tables[rep.Primary] = append(tables[rep.Primary], tableID)
-		}
-		if rep.Secondary != "" {
-			tables[rep.Secondary] = append(tables[rep.Secondary], tableID)
+		for captureID := range rep.Captures {
+			tables[captureID] = append(tables[captureID], tableID)
 		}
 	}
 	msgs := make([]*schedulepb.Message, 0, len(c.Captures))
