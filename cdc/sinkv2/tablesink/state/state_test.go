@@ -11,17 +11,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package config
+package state
 
 import (
-	"time"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-// Define some constants
-const (
-	ServerMasterEtcdDialTimeout = 5 * time.Second
-	// Disable endpoints auto sync in etcd client. Make sure to pass a load
-	// balancer address(such as service endpoint in K8s), or all advertise-addrs
-	// of the etcd cluster.
-	ServerMasterEtcdSyncInterval = time.Duration(0)
-)
+func TestStateString(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		state TableSinkState
+		want  string
+	}{
+		{TableSinkStateUnknown, "Unknown"},
+		{TableSinkSinking, "Sinking"},
+		{TableSinkStopping, "Stopping"},
+		{TableSinkStopped, "Stopped"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.want, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, tc.state.String())
+		})
+	}
+}

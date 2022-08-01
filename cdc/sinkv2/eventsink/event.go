@@ -15,7 +15,7 @@ package eventsink
 
 import (
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/pipeline"
+	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 )
 
 // TableEvent is the interface for events which can be written to sink by TableSink.
@@ -30,9 +30,14 @@ type CallbackFunc func()
 // CallbackableEvent means the event can be callbacked.
 // It also contains the table status.
 type CallbackableEvent[E TableEvent] struct {
-	Event       E
-	Callback    CallbackFunc
-	TableStatus *pipeline.TableState
+	Event     E
+	Callback  CallbackFunc
+	SinkState *state.TableSinkState
+}
+
+// GetTableSinkState returns the table sink state.
+func (ce *CallbackableEvent[E]) GetTableSinkState() state.TableSinkState {
+	return ce.SinkState.Load()
 }
 
 // RowChangeCallbackableEvent is the row change event which can be callbacked.

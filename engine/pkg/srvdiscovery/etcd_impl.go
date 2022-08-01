@@ -26,6 +26,8 @@ import (
 
 const defaultWatchChanSize = 8
 
+const defaultGetSnapshotTimeout = 5 * time.Second
+
 // EtcdSrvDiscovery implements Discovery interface based on etcd as backend storage
 // Note this struct is not thread-safe, and can be watched only once.
 type EtcdSrvDiscovery struct {
@@ -139,6 +141,8 @@ func (d *EtcdSrvDiscovery) delta(ctx context.Context) (
 func (d *EtcdSrvDiscovery) getSnapshot(ctx context.Context) (
 	map[UUID]ServiceResource, error,
 ) {
+	ctx, cancel := context.WithTimeout(ctx, defaultGetSnapshotTimeout)
+	defer cancel()
 	resp, err := d.etcdCli.Get(ctx, d.keyAdapter.Path(), clientv3.WithPrefix())
 	if err != nil {
 		return nil, errors.WrapError(errors.ErrEtcdAPIError, err)

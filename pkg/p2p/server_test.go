@@ -775,49 +775,6 @@ func TestServerExitWhileRemovingHandler(t *testing.T) {
 	wg.Wait()
 }
 
-func TestServerVersionsIncompatible(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
-	defer cancel()
-
-	server, newClient, closer := newServerForTesting(t, "test-server-1")
-	defer closer()
-
-	// enables version check
-	server.config.ServerVersion = "5.2.0"
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err := server.Run(ctx)
-		require.Regexp(t, ".*context canceled.*", err.Error())
-	}()
-
-	client, closeClient := newClient()
-	defer closeClient()
-
-	stream, err := client.SendMessage(ctx)
-	require.NoError(t, err)
-
-	err = stream.Send(&p2p.MessagePacket{
-		Meta: &p2p.StreamMeta{
-			SenderId:      "test-client-1",
-			ReceiverId:    "test-server-1",
-			Epoch:         0,
-			ClientVersion: "5.1.0",
-		},
-	})
-	require.NoError(t, err)
-
-	resp, err := stream.Recv()
-	require.NoError(t, err)
-	require.Equal(t, p2p.ExitReason_UNKNOWN, resp.ExitReason)
-	require.Regexp(t, ".*incompatible.*", resp.String())
-
-	cancel()
-	wg.Wait()
-}
-
 func TestReceiverIDMismatch(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
 	defer cancel()
