@@ -17,10 +17,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/concurrency"
-
-	"github.com/pingcap/tiflow/engine/pkg/adapter"
 )
 
 // DiscoveryRunner defines an interface to run Discovery service

@@ -16,6 +16,8 @@ package model
 import (
 	"encoding/json"
 
+	"github.com/pingcap/errors"
+
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 )
 
@@ -89,7 +91,7 @@ func (s ExecutorStatus) String() string {
 func (e *NodeInfo) ToJSON() (string, error) {
 	data, err := json.Marshal(e)
 	if err != nil {
-		return "", err
+		return "", errors.Trace(err)
 	}
 	return string(data), nil
 }

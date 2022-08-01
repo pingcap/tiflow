@@ -21,6 +21,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/tiflow/engine/internal/pkg/discovery"
+
 	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/common"
@@ -42,7 +44,6 @@ import (
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
-	"github.com/pingcap/tiflow/engine/pkg/serverutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
@@ -67,6 +68,7 @@ type Server struct {
 	tcpServer     tcpserver.TCPServer
 	grpcSrv       *grpc.Server
 	masterClient  pkgClient.ServerMasterClient
+	executorGroup *pkgClient.DefaultExecutorGroup
 	cliUpdateCh   chan cliUpdateInfo
 	taskRunner    *worker.TaskRunner
 	taskCommitter *worker.TaskCommitter
@@ -79,10 +81,9 @@ type Server struct {
 
 	metastores server.MetastoreManager
 
-	p2pMsgRouter    p2pImpl.MessageRouter
-	discoveryKeeper *serverutil.DiscoveryKeepaliver
-	resourceBroker  broker.Broker
-	jobAPISrv       *jobAPIServer
+	p2pMsgRouter   p2pImpl.MessageRouter
+	resourceBroker broker.Broker
+	jobAPISrv      *jobAPIServer
 }
 
 // NewServer creates a new executor server instance
@@ -390,13 +391,87 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
-	s.discoveryKeeper = serverutil.NewDiscoveryKeepaliver(
-		s.info, s.metastores.ServiceDiscoveryStore(), s.cfg.SessionTTL, defaultDiscoverTicker,
-		s.p2pMsgRouter,
-	)
-	// connects to metastore and maintains a etcd session
+	discoveryAgent := discovery.NewAgent(
+		s.info,
+		s.metastores.ServiceDiscoveryStore(),
+		s.cfg.SessionTTL,
+		defaultDiscoverTicker)
 	wg.Go(func() error {
-		return s.discoveryKeeper.Keepalive(ctx)
+		return discoveryAgent.Run(ctx)
+	})
+
+	wg.Go(func() error {
+		snap, receiver, err := discoveryAgent.Subscribe()
+		if err != nil {
+			return err
+		}
+
+		for uuid, info := range snap {
+			log.Debug("update p2p msg router by snapshot", zap.Any("info", info))
+			s.p2pMsgRouter.AddPeer(uuid, info.Addr)
+		}
+
+		for {
+			var event discovery.Event
+			select {
+			case <-ctx.Done():
+				return perrors.Trace(err)
+			case event = <-receiver.C:
+			}
+
+			log.Debug("update p2p msg router", zap.Any("event", event))
+			if event.Tp == discovery.EventTypeDel {
+				s.p2pMsgRouter.RemovePeer(p2pImpl.NodeID(event.Info.ID))
+			} else if event.Tp == discovery.EventTypeAdd {
+				s.p2pMsgRouter.AddPeer(p2pImpl.NodeID(event.Info.ID), event.Info.Addr)
+			}
+		}
+	})
+
+	wg.Go(func() error {
+		snap, receiver, err := discoveryAgent.Subscribe()
+		if err != nil {
+			return err
+		}
+		defer receiver.Close()
+
+		for uuid, info := range snap {
+			if info.Type != model.NodeTypeExecutor {
+				continue
+			}
+
+			log.Debug("update executor client group by snapshot", zap.Any("info", info))
+			err := s.executorGroup.AddExecutor(model.ExecutorID(uuid), info.Addr)
+			if err != nil {
+				return err
+			}
+		}
+
+		for {
+			var event discovery.Event
+			select {
+			case <-ctx.Done():
+				return perrors.Trace(err)
+			case event = <-receiver.C:
+			}
+
+			if event.Info.Type != model.NodeTypeExecutor {
+				continue
+			}
+
+			log.Debug("update executor client group", zap.Any("event", event))
+			if event.Tp == discovery.EventTypeDel {
+				err := s.executorGroup.RemoveExecutor(event.Info.ID)
+				if err != nil {
+					return err
+				}
+			} else if event.Tp == discovery.EventTypeAdd {
+				err := s.executorGroup.AddExecutor(event.Info.ID, event.Info.Addr)
+				if err != nil {
+					return err
+				}
+			}
+		}
 	})
 
 	wg.Go(func() error {
@@ -473,6 +548,8 @@ func (s *Server) initClients(ctx context.Context) (err error) {
 	}
 	log.L().Info("master client init successful",
 		zap.String("server-addrs", s.cfg.Join))
+
+	s.executorGroup = pkgClient.NewExecutorGroup(nil, log.L())
 	return nil
 }
 
