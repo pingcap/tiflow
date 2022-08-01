@@ -24,15 +24,12 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/scheduler"
-	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
-	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
@@ -125,27 +122,6 @@ func NewOwner(upstreamManager *upstream.Manager) Owner {
 		newChangefeed:   newChangefeed,
 		logLimiter:      rate.NewLimiter(versionInconsistentLogRate, versionInconsistentLogRate),
 	}
-}
-
-// NewOwner4Test creates a new Owner for test
-func NewOwner4Test(
-	newDDLPuller func(ctx context.Context,
-		replicaConfig *config.ReplicaConfig,
-		up *upstream.Upstream,
-		startTs uint64,
-		changefeed model.ChangeFeedID,
-	) (puller.DDLPuller, error),
-	newSink func() DDLSink,
-	pdClient pd.Client,
-) Owner {
-	m := upstream.NewManager4Test(pdClient)
-	o := NewOwner(m).(*ownerImpl)
-	// Most tests do not need to test bootstrap.
-	o.bootstrapped = true
-	o.newChangefeed = func(id model.ChangeFeedID, up *upstream.Upstream) *changefeed {
-		return newChangefeed4Test(id, up, newDDLPuller, newSink)
-	}
-	return o
 }
 
 // Tick implements the Reactor interface
@@ -402,15 +378,18 @@ func (o *ownerImpl) updateMetrics(state *orchestrator.GlobalReactorState) {
 }
 
 func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model.CaptureInfo) bool {
-	myVersion := version.ReleaseVersion
+	versions := make(map[string]struct{}, len(captures))
 	for _, capture := range captures {
-		if myVersion != capture.Version {
-			if o.logLimiter.Allow() {
-				log.Warn("the capture version is different with the owner",
-					zap.Reflect("capture", capture), zap.String("ownerVer", myVersion))
-			}
-			return false
+		versions[capture.Version] = struct{}{}
+	}
+
+	if err := version.CheckTiCDCVersion(versions); err != nil {
+		if o.logLimiter.Allow() {
+			log.Warn("TiCDC cluster versions not allowed",
+				zap.String("ownerVer", version.ReleaseVersion),
+				zap.Any("captures", captures), zap.Error(err))
 		}
+		return false
 	}
 	return true
 }

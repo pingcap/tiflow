@@ -117,6 +117,8 @@ func newReplicationSet(
 			ResolvedTs:   checkpoint,
 		},
 	}
+	// Count of captures that is in Stopping states.
+	stoppingCount := 0
 	committed := false
 	for captureID, table := range tableStatus {
 		if r.TableID != table.TableID {
@@ -145,8 +147,18 @@ func newReplicationSet(
 			committed = true
 			r.Secondary = captureID
 			r.Captures[captureID] = struct{}{}
+		case schedulepb.TableStateStopping:
+			// The capture is stop the table. It is possible that the capture is
+			// primary, and is still replicating data to downstream. We need to
+			// wait its state becomes Stopped or Absent before proceeding
+			// further scheduling.
+			log.Warn("schedulerv3: found a stopping capture during initializing",
+				zap.Any("replicationSet", r),
+				zap.Int64("tableID", table.TableID),
+				zap.Any("status", tableStatus))
+			r.Captures[captureID] = struct{}{}
+			stoppingCount++
 		case schedulepb.TableStateAbsent,
-			schedulepb.TableStateStopping,
 			schedulepb.TableStateStopped:
 			// Ignore stop state.
 		default:
@@ -171,6 +183,9 @@ func newReplicationSet(
 	}
 	if len(r.Captures) == 0 {
 		r.State = ReplicationSetStateAbsent
+	}
+	if r.State == ReplicationSetStateUnknown && len(r.Captures) == stoppingCount {
+		r.State = ReplicationSetStateRemoving
 	}
 	log.Info("schedulerv3: initialize replication set",
 		zap.Any("replicationSet", r))
@@ -405,10 +420,21 @@ func (r *ReplicationSet) pollOnCommit(
 					},
 				}, false, nil
 			}
+			if len(r.Captures) > 1 {
+				// There are other captures that have the table.
+				// Must waiting for other captures become stopped or absent
+				// before promoting the secondary, otherwise there may be two
+				// primary that write data and lead to data inconsistency.
+				log.Info("schedulerv3: there are unknown captures during commit",
+					zap.Any("replicationSet", r),
+					zap.Stringer("tableState", input),
+					zap.String("captureID", captureID))
+				return nil, false, nil
+			}
 			// No primary, promote secondary to primary.
 			r.Primary = r.Secondary
 			r.Secondary = ""
-			log.Info("schedulerv3: replication state promote secondary, no primary",
+			log.Info("schedulerv3: promote secondary, no primary",
 				zap.Any("replicationSet", r),
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID))
@@ -481,6 +507,13 @@ func (r *ReplicationSet) pollOnCommit(
 				r.State = ReplicationSetStateAbsent
 			}
 			return nil, true, nil
+		} else if _, ok := r.Captures[captureID]; ok {
+			log.Info("schedulerv3: capture is stopped during Commit",
+				zap.Stringer("tableState", input),
+				zap.String("captureID", captureID),
+				zap.Any("replicationSet", r))
+			delete(r.Captures, captureID)
+			return nil, false, nil
 		}
 
 	case schedulepb.TableStateReplicating:
@@ -520,7 +553,14 @@ func (r *ReplicationSet) pollOnCommit(
 		if r.Primary == captureID && r.Secondary != "" {
 			r.updateCheckpoint(input.Checkpoint)
 			return nil, false, nil
+		} else if _, ok := r.Captures[captureID]; ok {
+			log.Info("schedulerv3: capture is stopping during Commit",
+				zap.Stringer("tableState", input),
+				zap.String("captureID", captureID),
+				zap.Any("replicationSet", r))
+			return nil, false, nil
 		}
+
 	case schedulepb.TableStatePreparing:
 	}
 	log.Warn("schedulerv3: ignore input, unexpected replication set state",

@@ -153,10 +153,12 @@ func newChangefeed4Test(
 		changefeed model.ChangeFeedID,
 	) (puller.DDLPuller, error),
 	newSink func() DDLSink,
+	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error),
 ) *changefeed {
 	c := newChangefeed(id, up)
 	c.newDDLPuller = newDDLPuller
 	c.newSink = newSink
+	c.newScheduler = newScheduler
 	return c
 }
 
