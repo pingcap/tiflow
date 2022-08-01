@@ -65,7 +65,7 @@ func isDropColumnWithIndexError(err error) bool {
 }
 
 // here db should be TiDB database
-func GetDDLStatusFromTiDB(db *sql.DB, DDL string, createTime int64) (string, error) {
+func GetDDLStatusFromTiDB(db *sql.DB, DDL string) (string, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -89,14 +89,9 @@ func GetDDLStatusFromTiDB(db *sql.DB, DDL string, createTime int64) (string, err
 			scanArgs[i] = &values[i]
 		}
 
-		valuesForLimit := make([]sql.RawBytes, 2)
-		scanArgsForLimit := make([]interface{}, 2)
-		for i := range valuesForLimit {
-			scanArgsForLimit[i] = &valuesForLimit[i]
-		}
-
-		count := 0
 		for rows.Next() {
+			count := 0
+			//fmt.Println("check1")
 			err = rows.Scan(scanArgs...)
 			if err != nil {
 				return "", err
@@ -107,29 +102,40 @@ func GetDDLStatusFromTiDB(db *sql.DB, DDL string, createTime int64) (string, err
 			loc, _ := time.LoadLocation("Local")
 			theTime, _ := time.ParseInLocation(timeLayout, createTimeStr, loc)
 			DDLCreateTime := theTime.Unix()
-			if DDLCreateTime >= createTime {
+			fmt.Printf("DDLCreateTime: %d \n", DDLCreateTime)
+			var createTime uint8
+
+			if DDLCreateTime >= int64(createTime) {
 				jobID, err := strconv.Atoi(string(values[0]))
 				if err != nil {
 					return "", err
 				}
 
 				offset := rowNum + count - 10
+				//fmt.Printf("count: %d \n", count)
 				for {
-					//var DDLJob string
-					showJob := fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d;", offset)
-					err = db.QueryRowContext(ctx, showJob).Scan(scanArgsForLimit...)
+					//fmt.Println("check2")
+					//fmt.Printf("offset: %d \n", offset)
+					var DDLJob string
+					var jobIDForLimit int
+					showJob := fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d \n;", offset)
+					err = db.QueryRowContext(ctx, showJob).Scan(&jobIDForLimit, &DDLJob)
 					//rowsForLimit, err := db.QueryContext(ctx, showJob)
 					if err != nil {
 						return "", err
 					}
 
-					jobIDForLimit, err := strconv.Atoi(string(valuesForLimit[0]))
-					if err != nil {
-						return "", err
-					}
-					if jobID == jobIDForLimit && DDL == string(valuesForLimit[1]) {
-						fmt.Printf("DDL: %v \n", string(valuesForLimit[1]))
-						fmt.Printf("state: %v \n", string(values[11]))
+					//jobIDForLimit, err := strconv.Atoi(string(valuesForLimit[0]))
+					//if err != nil {
+					//	return "", err
+					//}
+					//fmt.Printf("jobID: %d", jobID)
+					//fmt.Printf("jobIDForLimit: %d", jobIDForLimit)
+					//fmt.Printf("DDL: %v", DDL)
+					//fmt.Printf("string(valuesForLimit[1]): %v", DDLJob)
+					if jobID == jobIDForLimit && DDL == DDLJob {
+						fmt.Printf("DDLJob: %v \n", DDLJob)
+						fmt.Printf("status: %v \n", string(values[11]))
 						return string(values[11]), err
 					}
 					// jobID in 'ADMIN SHOW DDL JOBS' are not strictly but overall in ascending order
@@ -139,7 +145,6 @@ func GetDDLStatusFromTiDB(db *sql.DB, DDL string, createTime int64) (string, err
 					offset++
 				}
 				count++
-
 			} else {
 				// requested DDL cannot be found
 				return "", err
@@ -153,7 +158,7 @@ func GetDDLStatusFromTiDB(db *sql.DB, DDL string, createTime int64) (string, err
 }
 
 // handleSpecialDDLError handles special errors for DDL execution.
-func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls []string, index int, conn *dbconn.DBConn) error {
+func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls []string, index int, conn *dbconn.DBConn, createTime uint8) error {
 	// We use default parser because ddls are came from *Syncer.genDDLInfo, which is StringSingleQuotes, KeyWordUppercase and NameBackQuotes
 	parser2 := parser.New()
 

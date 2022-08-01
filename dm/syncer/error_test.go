@@ -18,7 +18,6 @@ import (
 	"database/sql"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
@@ -224,6 +223,10 @@ func TestGetDDLStatusFromTiDB(t *testing.T) {
 		fmt.Printf("DB connection failed")
 	}
 
-	createTime := time.Now().Unix() - 86400 //within 24 hours
-	_, _ = GetDDLStatusFromTiDB(db, "ALTER TABLE many_tables_test.t1 ADD x timestamp DEFAULT current_timestamp", createTime)
+	//createTime := time.Now().Unix() - 86400 //within 24 hours
+	status, err := GetDDLStatusFromTiDB(db, "CREATE TABLE many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)")
+	fmt.Printf("status: %v", status)
+	if err != nil {
+		fmt.Printf("err: %v", err)
+	}
 }
