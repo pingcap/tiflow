@@ -63,7 +63,6 @@ func TestNewOrmLogger(t *testing.T) {
 
 	lg.Trace(context.TODO(), time.Now().Add(-10*time.Second), fc, errors.New("error test"))
 	require.Regexp(t, regexp.QuoteMeta("[ERROR]"), buffer.Stripped())
-	buffer.Reset()
 	require.Regexp(t, regexp.MustCompile(`\["slow log"\] \[elapsed=10.*s\] \[sql="sql test"\] \[affected-rows=10\] \[error="error test"\]`), buffer.Stripped())
 	buffer.Reset()
 
