@@ -637,7 +637,10 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 			if resp.Err != nil {
 				log.L().Warn("heartbeat response meet error", zap.Stringer("code", resp.Err.GetCode()))
 				switch resp.Err.Code {
-				case pb.ErrorCode_UnknownExecutor, pb.ErrorCode_TombstoneExecutor:
+				case pb.ErrorCode_UnknownExecutor:
+					log.L().Info("heartbeat failed, will retry", zap.Error(err))
+					continue
+				case pb.ErrorCode_TombstoneExecutor:
 					return errors.ErrHeartbeat.GenWithStack("logic error: %s", resp.Err.GetMessage())
 				case pb.ErrorCode_MasterNotReady:
 					s.lastHearbeatTime = t
