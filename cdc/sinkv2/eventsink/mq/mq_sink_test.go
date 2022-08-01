@@ -22,10 +22,16 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/tiflow/cdc/model"
+<<<<<<< HEAD:cdc/sinkv2/eventsink/mq/mq_sink_test.go
 	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	kafkav1 "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/producer"
+=======
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
+	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
+>>>>>>> 29d1882b6 (sinkv2(ticdc): use table sink state instead of table state (#6527)):cdc/sinkv2/eventsink/mq/mq_dml_sink_test.go
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/stretchr/testify/require"
@@ -78,7 +84,7 @@ func TestWriteEvents(t *testing.T) {
 	require.Nil(t, err)
 	require.NotNil(t, s)
 
-	tableStatus := pipeline.TableStateReplicating
+	tableStatus := state.TableSinkSinking
 	row := &model.RowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
@@ -88,9 +94,9 @@ func TestWriteEvents(t *testing.T) {
 	events := make([]*eventsink.RowChangeCallbackableEvent, 0, 3000)
 	for i := 0; i < 3000; i++ {
 		events = append(events, &eventsink.RowChangeCallbackableEvent{
-			Event:       row,
-			Callback:    func() {},
-			TableStatus: &tableStatus,
+			Event:     row,
+			Callback:  func() {},
+			SinkState: &tableStatus,
 		})
 	}
 

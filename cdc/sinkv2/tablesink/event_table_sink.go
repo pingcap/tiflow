@@ -17,8 +17,8 @@ import (
 	"sort"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
+	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 )
 
 // Assert TableSink implementation
@@ -33,7 +33,7 @@ type eventTableSink[E eventsink.TableEvent] struct {
 	eventAppender   eventsink.Appender[E]
 	// NOTICE: It is ordered by commitTs.
 	eventBuffer []E
-	state       pipeline.TableState
+	state       state.TableSinkState
 }
 
 // New an eventTableSink with given backendSink and event appender.
@@ -48,7 +48,7 @@ func New[E eventsink.TableEvent](
 		progressTracker: newProgressTracker(),
 		eventAppender:   appender,
 		eventBuffer:     make([]E, 0, 1024),
-		state:           pipeline.TableStatePreparing,
+		state:           state.TableSinkSinking,
 	}
 }
 
@@ -87,7 +87,7 @@ func (e *eventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) {
 			Callback: func() {
 				e.progressTracker.remove(eventID)
 			},
-			TableStatus: &e.state,
+			SinkState: &e.state,
 		}
 		resolvedCallbackableEvents = append(resolvedCallbackableEvents, ce)
 		e.progressTracker.addEvent(eventID)
@@ -103,6 +103,7 @@ func (e *eventTableSink[E]) GetCheckpointTs() model.ResolvedTs {
 
 // Close the table sink and wait for all callbacks be called.
 // Notice: It will be blocked until all callbacks be called.
+<<<<<<< HEAD:cdc/sinkv2/tablesink/event_table_sink.go
 func (e *eventTableSink[E]) Close() {
 	// TODO: Before we depends on this state,
 	// we should check the state working well with new scheduler.
@@ -110,6 +111,17 @@ func (e *eventTableSink[E]) Close() {
 	e.state.Store(pipeline.TableStateStopping)
 	e.progressTracker.close()
 	e.state.Store(pipeline.TableStateStopped)
+=======
+func (e *eventTableSink[E]) Close(ctx context.Context) error {
+	e.state.Store(state.TableSinkStopping)
+	err := e.progressTracker.close(ctx)
+	if err != nil {
+		return err
+	}
+	e.state.Store(state.TableSinkStopped)
+
+	return nil
+>>>>>>> 29d1882b6 (sinkv2(ticdc): use table sink state instead of table state (#6527)):cdc/sinkv2/tablesink/table_sink_impl.go
 }
 
 // genEventID generates an unique ID for event.
