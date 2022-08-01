@@ -171,12 +171,15 @@ type ManagerImpl struct {
 	// and flushed is updated in flushLog.
 	rtsMap sync.Map
 
+	// A fast way to get min flushed timestamp in rtsMap. It can be updated
+	// in redo-flush goroutine and AddTable/RemoveTable.
+	minResolvedTs uint64
+
 	metaCheckpointTs statefulRts
 	metaResolvedTs   statefulRts
 
 	writer        writer.RedoLogWriter
 	logBuffer     *chann.Chann[cacheEvents]
-	minResolvedTs uint64
 	flushing      int64
 	lastFlushTime time.Time
 
@@ -384,26 +387,42 @@ func (m *ManagerImpl) AddTable(tableID model.TableID, startTs uint64) {
 		return
 	}
 
-	if startTs < m.GetMinResolvedTs() {
-		atomic.StoreUint64(&m.minResolvedTs, startTs)
+	for {
+		currMin := m.GetMinResolvedTs()
+		if currMin < startTs || atomic.CompareAndSwapUint64(&m.minResolvedTs, currMin, startTs) {
+			break
+		}
 	}
 }
 
 // RemoveTable removes a table from redo log manager
 func (m *ManagerImpl) RemoveTable(tableID model.TableID) {
-	if _, ok := m.rtsMap.LoadAndDelete(tableID); !ok {
+	var v interface{}
+	var ok bool
+	if v, ok = m.rtsMap.LoadAndDelete(tableID); !ok {
 		log.Warn("remove a table not maintained in redo log manager", zap.Int64("tableID", tableID))
+		return
 	}
-	newMin := uint64(math.MaxInt64)
-	m.rtsMap.Range(func(key interface{}, value interface{}) bool {
-		rts := value.(*statefulRts)
-		flushed := rts.getFlushed()
-		if flushed < newMin {
-			newMin = flushed
+
+	removedTs := v.(*statefulRts).getFlushed()
+	for {
+		currMin := m.GetMinResolvedTs()
+		if currMin > removedTs {
+			break
 		}
-		return true
-	})
-	atomic.StoreUint64(&m.minResolvedTs, newMin)
+		newMin := uint64(math.MaxInt64)
+		m.rtsMap.Range(func(key interface{}, value interface{}) bool {
+			rts := value.(*statefulRts)
+			flushed := rts.getFlushed()
+			if flushed < newMin {
+				newMin = flushed
+			}
+			return true
+		})
+		if atomic.CompareAndSwapUint64(&m.minResolvedTs, currMin, newMin) {
+			break
+		}
+	}
 }
 
 // Cleanup removes all redo logs of this manager, it is called when changefeed is removed
