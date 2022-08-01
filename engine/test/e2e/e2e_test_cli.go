@@ -85,7 +85,7 @@ func NewUTCli(ctx context.Context, masterAddrs, businessMetaAddrs []string, proj
 	}
 
 	fakeJobCli, err := clientv3.New(clientv3.Config{
-		Endpoints:   businessMetaAddrs,
+		Endpoints:   cfg.EtcdEndpoints,
 		Context:     ctx,
 		DialTimeout: 3 * time.Second,
 		DialOptions: []grpc.DialOption{},

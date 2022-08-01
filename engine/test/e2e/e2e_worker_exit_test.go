@@ -32,9 +32,9 @@ import (
 func TestWorkerExit(t *testing.T) {
 	// TODO: make the following variables configurable
 	var (
-		masterAddrs                  = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
-		businessMetaAddrs            = []string{"127.0.0.1:3336"}
-		businessMetaAddrsInContainer = []string{"mysql-standalone:3306"}
+		masterAddrs          = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
+		businessMetaAddrs    = []string{"127.0.0.1:3336"}
+		etcdAddrsInContainer = []string{"etcd-standalone:2379"}
 	)
 
 	ctx := context.Background()
@@ -44,7 +44,7 @@ func TestWorkerExit(t *testing.T) {
 		// use a large enough target tick to ensure the fake job long running
 		TargetTick:      10000000,
 		EtcdWatchEnable: true,
-		EtcdEndpoints:   businessMetaAddrsInContainer,
+		EtcdEndpoints:   etcdAddrsInContainer,
 		EtcdWatchPrefix: "/fake-job/test/",
 
 		InjectErrorInterval: time.Second * 3,
@@ -53,7 +53,7 @@ func TestWorkerExit(t *testing.T) {
 	require.NoError(t, err)
 
 	fakeJobCfg := &e2e.FakeJobConfig{
-		EtcdEndpoints: businessMetaAddrs, // reuse business meta KV endpoints
+		EtcdEndpoints: etcdAddrsInContainer,
 		WorkerCount:   cfg.WorkerCount,
 		KeyPrefix:     cfg.EtcdWatchPrefix,
 	}
