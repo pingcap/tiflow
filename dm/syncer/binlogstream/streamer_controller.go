@@ -374,10 +374,6 @@ func (c *StreamerController) getEvent(tctx *tcontext.Context) (
 		failpoint.Return(nil, 0, pb.ErrorOp_InvalidErrorOp, terror.ErrDBBadConn.Generate())
 	})
 
-	c.RLock()
-	upstream := c.upstream
-	c.RUnlock()
-
 LOOP:
 	for frontOp := c.streamModifier.front(); frontOp != nil; frontOp = c.streamModifier.front() {
 		op = pb.ErrorOp_InvalidErrorOp
@@ -385,7 +381,7 @@ LOOP:
 		var status getEventFromFrontOpStatus
 
 		if c.lastEventFromUpstream == nil {
-			c.lastEventFromUpstream, err = upstream.GetEvent(tctx.Context())
+			c.lastEventFromUpstream, err = c.upstream.GetEvent(tctx.Context())
 			failpoint.Inject("GetEventError", func() {
 				err = errors.New("go-mysql returned an error")
 			})
@@ -502,7 +498,7 @@ LOOP:
 		return
 	}
 
-	event, err = upstream.GetEvent(tctx.Context())
+	event, err = c.upstream.GetEvent(tctx.Context())
 	failpoint.Inject("GetEventError", func() {
 		err = errors.New("go-mysql returned an error")
 	})

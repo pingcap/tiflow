@@ -149,6 +149,7 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 	for _, f := range l.preUpdate {
 		f()
 	}
+	// reset to zero value of slice after executed
 	l.preUpdate = nil
 
 	// GTID part is maintained separately
