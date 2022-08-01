@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v3
+package scheduler
 
 import (
 	"math/rand"
@@ -19,6 +19,8 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 )
 
 var _ scheduler = &balanceScheduler{}
@@ -54,9 +56,9 @@ func (b *balanceScheduler) Name() string {
 func (b *balanceScheduler) Schedule(
 	_ model.Ts,
 	currentTables []model.TableID,
-	captures map[model.CaptureID]*CaptureStatus,
-	replications map[model.TableID]*ReplicationSet,
-) []*scheduleTask {
+	captures map[model.CaptureID]*member.CaptureStatus,
+	replications map[model.TableID]*replication.ReplicationSet,
+) []*replication.ScheduleTask {
 	if !b.forceBalance {
 		now := time.Now()
 		if now.Sub(b.lastRebalanceTime) < b.checkBalanceInterval {
@@ -67,7 +69,7 @@ func (b *balanceScheduler) Schedule(
 	}
 
 	for _, capture := range captures {
-		if capture.State == CaptureStateStopping {
+		if capture.State == member.CaptureStateStopping {
 			log.Debug("schedulerv3: capture is stopping, premature to balance table")
 			return nil
 		}
@@ -82,10 +84,10 @@ func (b *balanceScheduler) Schedule(
 func buildBalanceMoveTables(
 	random *rand.Rand,
 	currentTables []model.TableID,
-	captures map[model.CaptureID]*CaptureStatus,
-	replications map[model.TableID]*ReplicationSet,
+	captures map[model.CaptureID]*member.CaptureStatus,
+	replications map[model.TableID]*replication.ReplicationSet,
 	maxTaskConcurrency int,
-) []*scheduleTask {
+) []*replication.ScheduleTask {
 	captureTables := make(map[model.CaptureID][]model.TableID)
 	for _, tableID := range currentTables {
 		rep, ok := replications[tableID]
@@ -99,10 +101,10 @@ func buildBalanceMoveTables(
 
 	moves := newBalanceMoveTables(
 		random, captures, replications, maxTaskConcurrency, model.ChangeFeedID{})
-	tasks := make([]*scheduleTask, 0, len(moves))
+	tasks := make([]*replication.ScheduleTask, 0, len(moves))
 	for i := 0; i < len(moves); i++ {
 		// No need for accept callback here.
-		tasks = append(tasks, &scheduleTask{moveTable: &moves[i]})
+		tasks = append(tasks, &replication.ScheduleTask{MoveTable: &moves[i]})
 	}
 	return tasks
 }

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v3
+package agent
 
 import (
 	"context"
@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/transport"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
@@ -35,7 +36,7 @@ var _ internal.Agent = (*agent)(nil)
 
 type agent struct {
 	agentInfo
-	trans transport
+	trans transport.Transport
 
 	tableM *tableManager
 
@@ -83,7 +84,8 @@ func NewAgent(ctx context.Context,
 	etcdClient etcd.CDCEtcdClient,
 	tableExecutor internal.TableExecutor,
 ) (internal.Agent, error) {
-	trans, err := newTransport(ctx, changeFeedID, agentRole, messageServer, messageRouter)
+	trans, err := transport.NewTransport(
+		ctx, changeFeedID, transport.AgentRole, messageServer, messageRouter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

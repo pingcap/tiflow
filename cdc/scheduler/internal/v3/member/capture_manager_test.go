@@ -11,14 +11,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v3
+package member
 
 import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
 	"github.com/stretchr/testify/require"
+)
+
+const (
+	captureIDNotDraining = ""
 )
 
 func TestCaptureStatusHandleHeartbeatResponse(t *testing.T) {
@@ -52,7 +57,7 @@ func TestCaptureManagerHandleAliveCaptureUpdate(t *testing.T) {
 	t.Parallel()
 
 	rev := schedulepb.OwnerRevision{}
-	cm := newCaptureManager("1", model.ChangeFeedID{}, rev, 2)
+	cm := NewCaptureManager("1", model.ChangeFeedID{}, rev, 2)
 	ms := map[model.CaptureID]*model.CaptureInfo{
 		"1": {}, "2": {}, "3": {},
 	}
@@ -99,7 +104,7 @@ func TestCaptureManagerHandleAliveCaptureUpdate(t *testing.T) {
 	msgs = cm.HandleAliveCaptureUpdate(ms)
 	require.Len(t, msgs, 0)
 	require.True(t, cm.CheckAllCaptureInitialized())
-	require.EqualValues(t, &captureChanges{
+	require.EqualValues(t, &CaptureChanges{
 		Init: map[string][]schedulepb.TableStatus{"2": {{TableID: 1}}, "3": {{TableID: 2}}},
 	}, cm.TakeChanges())
 
@@ -110,7 +115,7 @@ func TestCaptureManagerHandleAliveCaptureUpdate(t *testing.T) {
 	require.ElementsMatch(t, []*schedulepb.Message{
 		{To: "4", MsgType: schedulepb.MsgHeartbeat, Heartbeat: &schedulepb.Heartbeat{}},
 	}, msgs)
-	require.Equal(t, &captureChanges{
+	require.Equal(t, &CaptureChanges{
 		Removed: map[string][]schedulepb.TableStatus{"2": {{TableID: 1}}},
 	}, cm.TakeChanges())
 	require.False(t, cm.CheckAllCaptureInitialized())
@@ -124,7 +129,7 @@ func TestCaptureManagerHandleMessages(t *testing.T) {
 		"1": {},
 		"2": {},
 	}
-	cm := newCaptureManager("", model.ChangeFeedID{}, rev, 2)
+	cm := NewCaptureManager("", model.ChangeFeedID{}, rev, 2)
 	require.False(t, cm.CheckAllCaptureInitialized())
 
 	// Initial handle alive captures.
@@ -172,7 +177,7 @@ func TestCaptureManagerTick(t *testing.T) {
 	t.Parallel()
 
 	rev := schedulepb.OwnerRevision{}
-	cm := newCaptureManager("", model.ChangeFeedID{}, rev, 2)
+	cm := NewCaptureManager("", model.ChangeFeedID{}, rev, 2)
 
 	// No heartbeat if there is no capture.
 	msgs := cm.Tick(nil, captureIDNotDraining)
@@ -211,7 +216,7 @@ func TestCaptureManagerTick(t *testing.T) {
 	// TableID in heartbeat.
 	msgs = cm.Tick(nil, captureIDNotDraining)
 	require.Empty(t, msgs)
-	tables := map[model.TableID]*ReplicationSet{
+	tables := map[model.TableID]*replication.ReplicationSet{
 		1: {Captures: map[model.CaptureID]struct{}{"1": {}}},
 		2: {Captures: map[model.CaptureID]struct{}{"1": {}, "2": {}}},
 		3: {Captures: map[model.CaptureID]struct{}{"2": {}}},

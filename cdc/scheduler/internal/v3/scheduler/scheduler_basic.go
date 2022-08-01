@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v3
+package scheduler
 
 import (
 	"math/rand"
@@ -19,6 +19,8 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"go.uber.org/zap"
 )
 
@@ -52,10 +54,10 @@ func (b *basicScheduler) Name() string {
 func (b *basicScheduler) Schedule(
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
-	captures map[model.CaptureID]*CaptureStatus,
-	replications map[model.TableID]*ReplicationSet,
-) []*scheduleTask {
-	tasks := make([]*scheduleTask, 0)
+	captures map[model.CaptureID]*member.CaptureStatus,
+	replications map[model.TableID]*replication.ReplicationSet,
+) []*replication.ScheduleTask {
+	tasks := make([]*replication.ScheduleTask, 0)
 	tablesLenEqual := len(currentTables) == len(replications)
 	tablesAllFind := true
 	newTables := make([]model.TableID, 0)
@@ -68,7 +70,7 @@ func (b *basicScheduler) Schedule(
 			tablesAllFind = false
 			continue
 		}
-		if rep.State == ReplicationSetStateAbsent {
+		if rep.State == replication.ReplicationSetStateAbsent {
 			newTables = append(newTables, tableID)
 		}
 	}
@@ -77,7 +79,7 @@ func (b *basicScheduler) Schedule(
 	if len(newTables) > 0 {
 		captureIDs := make([]model.CaptureID, 0, len(captures))
 		for captureID, status := range captures {
-			if status.State == CaptureStateStopping {
+			if status.State == member.CaptureStateStopping {
 				log.Warn("schedulerv3: capture is stopping, "+
 					"skip the capture when add new table",
 					zap.String("namespace", b.changefeedID.Namespace),
@@ -152,11 +154,11 @@ func (b *basicScheduler) Schedule(
 // newBurstBalanceAddTables add each new table to captures in a round-robin way.
 func newBurstBalanceAddTables(
 	checkpointTs model.Ts, newTables []model.TableID, captureIDs []model.CaptureID,
-) *scheduleTask {
+) *replication.ScheduleTask {
 	idx := 0
-	tables := make([]addTable, 0, len(newTables))
+	tables := make([]replication.AddTable, 0, len(newTables))
 	for _, tableID := range newTables {
-		tables = append(tables, addTable{
+		tables = append(tables, replication.AddTable{
 			TableID:      tableID,
 			CaptureID:    captureIDs[idx],
 			CheckpointTs: checkpointTs,
@@ -166,16 +168,16 @@ func newBurstBalanceAddTables(
 			idx = 0
 		}
 	}
-	return &scheduleTask{burstBalance: &burstBalance{
+	return &replication.ScheduleTask{BurstBalance: &replication.BurstBalance{
 		AddTables: tables,
 	}}
 }
 
 func newBurstBalanceRemoveTables(
-	rmTables []model.TableID, replications map[model.TableID]*ReplicationSet,
+	rmTables []model.TableID, replications map[model.TableID]*replication.ReplicationSet,
 	changefeedID model.ChangeFeedID,
-) *scheduleTask {
-	tables := make([]removeTable, 0, len(rmTables))
+) *replication.ScheduleTask {
+	tables := make([]replication.RemoveTable, 0, len(rmTables))
 	for _, tableID := range rmTables {
 		rep := replications[tableID]
 		var captureID model.CaptureID
@@ -190,12 +192,12 @@ func newBurstBalanceRemoveTables(
 				zap.Any("table", rep))
 			continue
 		}
-		tables = append(tables, removeTable{
+		tables = append(tables, replication.RemoveTable{
 			TableID:   tableID,
 			CaptureID: captureID,
 		})
 	}
-	return &scheduleTask{burstBalance: &burstBalance{
+	return &replication.ScheduleTask{BurstBalance: &replication.BurstBalance{
 		RemoveTables: tables,
 	}}
 }

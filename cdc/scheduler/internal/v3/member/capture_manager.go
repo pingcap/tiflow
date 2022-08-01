@@ -11,11 +11,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v3
+package member
 
 import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
 	"go.uber.org/zap"
 )
@@ -98,17 +99,19 @@ func (c *CaptureStatus) handleHeartbeatResponse(
 	c.Tables = resp.Tables
 }
 
-type captureChanges struct {
+// CaptureChanges wraps changes of captures.
+type CaptureChanges struct {
 	Init    map[model.CaptureID][]schedulepb.TableStatus
 	Removed map[model.CaptureID][]schedulepb.TableStatus
 }
 
-type captureManager struct {
+// CaptureManager manages capture status.
+type CaptureManager struct {
 	OwnerRev schedulepb.OwnerRevision
 	Captures map[model.CaptureID]*CaptureStatus
 
 	initialized bool
-	changes     *captureChanges
+	changes     *CaptureChanges
 
 	// A logical clock counter, for heartbeat.
 	tickCounter   int
@@ -118,11 +121,12 @@ type captureManager struct {
 	ownerID      model.CaptureID
 }
 
-func newCaptureManager(
+// NewCaptureManager returns a new capture manager.
+func NewCaptureManager(
 	ownerID model.CaptureID, changefeedID model.ChangeFeedID,
 	rev schedulepb.OwnerRevision, heartbeatTick int,
-) *captureManager {
-	return &captureManager{
+) *CaptureManager {
+	return &CaptureManager{
 		OwnerRev:      rev,
 		Captures:      make(map[model.CaptureID]*CaptureStatus),
 		heartbeatTick: heartbeatTick,
@@ -132,11 +136,12 @@ func newCaptureManager(
 	}
 }
 
-func (c *captureManager) CheckAllCaptureInitialized() bool {
+// CheckAllCaptureInitialized check if all capture is initialized.
+func (c *CaptureManager) CheckAllCaptureInitialized() bool {
 	return c.initialized && c.checkAllCaptureInitialized()
 }
 
-func (c *captureManager) checkAllCaptureInitialized() bool {
+func (c *CaptureManager) checkAllCaptureInitialized() bool {
 	for _, captureStatus := range c.Captures {
 		// CaptureStateStopping is also considered initialized, because when
 		// a capture shutdown, it becomes stopping, we need to move its tables
@@ -151,8 +156,10 @@ func (c *captureManager) checkAllCaptureInitialized() bool {
 	return true
 }
 
-func (c *captureManager) Tick(
-	reps map[model.TableID]*ReplicationSet, drainingCapture model.CaptureID,
+// Tick advances the logical lock of capture manager and produce heartbeat when
+// necessary.
+func (c *CaptureManager) Tick(
+	reps map[model.TableID]*replication.ReplicationSet, drainingCapture model.CaptureID,
 ) []*schedulepb.Message {
 	c.tickCounter++
 	if c.tickCounter < c.heartbeatTick {
@@ -181,7 +188,8 @@ func (c *captureManager) Tick(
 	return msgs
 }
 
-func (c *captureManager) HandleMessage(
+// HandleMessage handles messages sent from other captures.
+func (c *CaptureManager) HandleMessage(
 	msgs []*schedulepb.Message,
 ) {
 	for _, msg := range msgs {
@@ -198,7 +206,8 @@ func (c *captureManager) HandleMessage(
 	}
 }
 
-func (c *captureManager) HandleAliveCaptureUpdate(
+// HandleAliveCaptureUpdate update captures liveness.
+func (c *CaptureManager) HandleAliveCaptureUpdate(
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 ) []*schedulepb.Message {
 	msgs := make([]*schedulepb.Message, 0)
@@ -227,7 +236,7 @@ func (c *captureManager) HandleAliveCaptureUpdate(
 				continue
 			}
 			if c.changes == nil {
-				c.changes = &captureChanges{}
+				c.changes = &CaptureChanges{}
 			}
 			if c.changes.Removed == nil {
 				c.changes.Removed = make(map[string][]schedulepb.TableStatus)
@@ -241,7 +250,7 @@ func (c *captureManager) HandleAliveCaptureUpdate(
 
 	// Check if this is the first time all captures are initialized.
 	if !c.initialized && c.checkAllCaptureInitialized() {
-		c.changes = &captureChanges{Init: make(map[string][]schedulepb.TableStatus)}
+		c.changes = &CaptureChanges{Init: make(map[string][]schedulepb.TableStatus)}
 		for id, capture := range c.Captures {
 			c.changes.Init[id] = capture.Tables
 		}
@@ -253,7 +262,8 @@ func (c *captureManager) HandleAliveCaptureUpdate(
 	return msgs
 }
 
-func (c *captureManager) TakeChanges() *captureChanges {
+// TakeChanges takes the changes of captures that it sees so far.
+func (c *CaptureManager) TakeChanges() *CaptureChanges {
 	// Only return changes when it's initialized.
 	if !c.initialized {
 		return nil
@@ -263,7 +273,8 @@ func (c *captureManager) TakeChanges() *captureChanges {
 	return changes
 }
 
-func (c *captureManager) CollectMetrics() {
+// CollectMetrics collects metrics.
+func (c *CaptureManager) CollectMetrics() {
 	cf := c.changefeedID
 	for _, capture := range c.Captures {
 		captureTableGauge.
@@ -272,9 +283,15 @@ func (c *captureManager) CollectMetrics() {
 	}
 }
 
-func (c *captureManager) CleanMetrics() {
+// CleanMetrics cleans metrics.
+func (c *CaptureManager) CleanMetrics() {
 	cf := c.changefeedID
 	for _, capture := range c.Captures {
 		captureTableGauge.DeleteLabelValues(cf.Namespace, cf.ID, capture.Addr)
 	}
+}
+
+// SetInitializedForTests is only used in tests.
+func (c *CaptureManager) SetInitializedForTests(init bool) {
+	c.initialized = init
 }

@@ -11,12 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v3
+package scheduler
 
 import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
@@ -24,7 +26,7 @@ import (
 func TestNewSchedulerManager(t *testing.T) {
 	t.Parallel()
 
-	m := newSchedulerManager(model.DefaultChangeFeedID("test-changefeed"),
+	m := NewSchedulerManager(model.DefaultChangeFeedID("test-changefeed"),
 		config.NewDefaultSchedulerConfig())
 	require.NotNil(t, m)
 	require.NotNil(t, m.schedulers[schedulerPriorityBasic])
@@ -39,41 +41,41 @@ func TestSchedulerManagerScheduler(t *testing.T) {
 
 	cfg := config.NewDefaultSchedulerConfig()
 	cfg.MaxTaskConcurrency = 1
-	m := newSchedulerManager(model.DefaultChangeFeedID("test-changefeed"), cfg)
+	m := NewSchedulerManager(model.DefaultChangeFeedID("test-changefeed"), cfg)
 
-	captures := map[model.CaptureID]*CaptureStatus{
-		"a": {State: CaptureStateInitialized},
-		"b": {State: CaptureStateInitialized},
+	captures := map[model.CaptureID]*member.CaptureStatus{
+		"a": {State: member.CaptureStateInitialized},
+		"b": {State: member.CaptureStateInitialized},
 	}
 	currentTables := []model.TableID{1}
 
 	// schedulerPriorityBasic bypasses task check.
-	replications := map[model.TableID]*ReplicationSet{}
-	runningTasks := map[model.TableID]*scheduleTask{1: {}}
+	replications := map[model.TableID]*replication.ReplicationSet{}
+	runningTasks := map[model.TableID]*replication.ScheduleTask{1: {}}
 	tasks := m.Schedule(0, currentTables, captures, replications, runningTasks)
 	require.Len(t, tasks, 1)
 
 	// No more task.
-	replications = map[model.TableID]*ReplicationSet{
-		1: {State: ReplicationSetStateReplicating, Primary: "a"},
+	replications = map[model.TableID]*replication.ReplicationSet{
+		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 	}
 	tasks = m.Schedule(0, currentTables, captures, replications, runningTasks)
 	require.Len(t, tasks, 0)
 
 	// Move table is drop because of running tasks.
 	m.MoveTable(1, "b")
-	replications = map[model.TableID]*ReplicationSet{
-		1: {State: ReplicationSetStateReplicating, Primary: "a"},
+	replications = map[model.TableID]*replication.ReplicationSet{
+		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 	}
 	tasks = m.Schedule(0, currentTables, captures, replications, runningTasks)
 	require.Len(t, tasks, 0)
 
 	// Move table can proceed after clean up tasks.
 	m.MoveTable(1, "b")
-	replications = map[model.TableID]*ReplicationSet{
-		1: {State: ReplicationSetStateReplicating, Primary: "a"},
+	replications = map[model.TableID]*replication.ReplicationSet{
+		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 	}
-	runningTasks = map[model.TableID]*scheduleTask{}
+	runningTasks = map[model.TableID]*replication.ScheduleTask{}
 	tasks = m.Schedule(0, currentTables, captures, replications, runningTasks)
 	require.Len(t, tasks, 1)
 }
