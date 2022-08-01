@@ -70,7 +70,7 @@ func TestNodeFailure(t *testing.T) {
 	var (
 		masterAddrs          = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
 		businessMetaAddrs    = []string{"127.0.0.1:3336"}
-		etcdAddrs            = []string{"127.0.0.1:12379"}
+		etcdAddrs            = []string{"127.0.0.1:12479"}
 		etcdAddrsInContainer = []string{"etcd-standalone:2379"}
 	)
 
