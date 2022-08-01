@@ -75,20 +75,6 @@ type ownerInfo struct {
 	CaptureID string
 }
 
-func newTransport(
-	ctx context.Context,
-	changeFeedID model.ChangeFeedID,
-	messageServer *p2p.MessageServer,
-	messageRouter p2p.MessageRouter,
-) (transport.Transport, error) {
-	trans, err := transport.NewTransport(
-		ctx, changeFeedID, transport.AgentRole, messageServer, messageRouter)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return trans, nil
-}
-
 func newAgent(
 	ctx context.Context,
 	captureID model.CaptureID,
@@ -163,10 +149,13 @@ func NewAgent(ctx context.Context,
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	trans, err := newTransport(ctx, changeFeedID, messageServer, messageRouter)
+
+	trans, err := transport.NewTransport(
+		ctx, changeFeedID, transport.AgentRole, messageServer, messageRouter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
 	result.(*agent).trans = trans
 	return result, nil
 }
