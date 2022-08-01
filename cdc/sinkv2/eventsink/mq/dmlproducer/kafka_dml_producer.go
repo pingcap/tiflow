@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package producer
+package dmlproducer
 
 import (
 	"context"
@@ -31,15 +31,15 @@ import (
 	"go.uber.org/zap"
 )
 
-var _ Producer = (*kafkaProducer)(nil)
+var _ DMLProducer = (*kafkaDMLProducer)(nil)
 
 // messageMetaData is used to store the callback function for the message.
 type messageMetaData struct {
 	callback eventsink.CallbackFunc
 }
 
-// kafkaProducer is used to send messages to kafka.
-type kafkaProducer struct {
+// kafkaDMLProducer is used to send messages to kafka.
+type kafkaDMLProducer struct {
 	// id indicates which processor (changefeed) this sink belongs to.
 	id model.ChangeFeedID
 	// role indicates what this sink is used for.
@@ -62,7 +62,7 @@ type kafkaProducer struct {
 	failpointCh chan error
 }
 
-func (k *kafkaProducer) AsyncSendMessage(
+func (k *kafkaDMLProducer) AsyncSendMessage(
 	ctx context.Context, topic string,
 	partition int32, message *codec.MQMessage,
 ) error {
@@ -73,7 +73,7 @@ func (k *kafkaProducer) AsyncSendMessage(
 
 	// If the producer is closed, we should skip the message and return an error.
 	if k.closed {
-		return cerror.ErrKafkaProducerClosed
+		return cerror.ErrKafkaProducerClosed.GenWithStackByArgs()
 	}
 	failpoint.Inject("KafkaSinkAsyncSendError", func() {
 		// simulate sending message to input channel successfully but flushing
@@ -101,13 +101,13 @@ func (k *kafkaProducer) AsyncSendMessage(
 
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return errors.Trace(ctx.Err())
 	case k.asyncProducer.Input() <- msg:
 	}
 	return nil
 }
 
-func (k *kafkaProducer) Close() {
+func (k *kafkaDMLProducer) Close() {
 	// We have to hold the lock to synchronize closing with writing.
 	k.closedMu.Lock()
 	defer k.closedMu.Unlock()
@@ -171,18 +171,18 @@ func (k *kafkaProducer) Close() {
 	}()
 }
 
-func (k *kafkaProducer) run(ctx context.Context) error {
+func (k *kafkaDMLProducer) run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return errors.Trace(ctx.Err())
 		case <-k.closedChan:
 			return nil
 		case err := <-k.failpointCh:
 			log.Warn("receive from failpoint chan", zap.Error(err),
 				zap.String("namespace", k.id.Namespace),
 				zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
-			return err
+			return errors.Trace(err)
 		case ack := <-k.asyncProducer.Successes():
 			if ack != nil {
 				callback := ack.Metadata.(messageMetaData).callback
@@ -204,12 +204,12 @@ func (k *kafkaProducer) run(ctx context.Context) error {
 	}
 }
 
-// NewKafkaProducer creates a new kafka producer.
-func NewKafkaProducer(
+// NewKafkaDMLProducer creates a new kafka producer.
+func NewKafkaDMLProducer(
 	ctx context.Context,
 	client sarama.Client,
 	errCh chan error,
-) (Producer, error) {
+) (DMLProducer, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	role := contextutil.RoleFromCtx(ctx)
 	log.Info("Starting kafka sarama producer ...",
@@ -218,14 +218,25 @@ func NewKafkaProducer(
 
 	asyncProducer, err := sarama.NewAsyncProducerFromClient(client)
 	if err != nil {
+		// Close the client to prevent the goroutine leak.
+		// Because it may be a long time to close the client,
+		// so close it asynchronously.
+		go func() {
+			err := client.Close()
+			if err != nil {
+				log.Error("Close sarama client with error", zap.Error(err),
+					zap.String("namespace", changefeedID.Namespace),
+					zap.String("changefeed", changefeedID.ID), zap.String("role", role.String()))
+			}
+		}()
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	k := &kafkaProducer{
-		client:        client,
-		asyncProducer: asyncProducer,
+	k := &kafkaDMLProducer{
 		id:            changefeedID,
 		role:          role,
+		client:        client,
+		asyncProducer: asyncProducer,
 		closed:        false,
 		closedChan:    make(chan struct{}),
 		failpointCh:   make(chan error, 1),

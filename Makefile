@@ -220,7 +220,7 @@ generate-msgp-code: tools/bin/msgp
 	@echo "generate-msgp-code"
 	./scripts/generate-msgp-code.sh
 
-generate-protobuf: tools/bin/protoc tools/bin/protoc-gen-gogofaster
+generate-protobuf: tools/bin/protoc tools/bin/protoc-gen-gogofaster tools/bin/protoc-gen-grpc-gateway
 	@echo "generate-protobuf"
 	./scripts/generate-protobuf.sh
 
@@ -265,7 +265,7 @@ swagger-spec: tools/bin/swag
 generate_mock: tools/bin/mockgen
 	tools/bin/mockgen -source cdc/owner/owner.go -destination cdc/owner/mock/owner_mock.go
 	tools/bin/mockgen -source cdc/api/v2/api_helpers.go -destination cdc/api/v2/api_helpers_mock.go -package v2
-	tools/bin/mockgen -source pkg/etcd/client_for_api.go -destination pkg/etcd/mock/etcd_client_mock.go
+	tools/bin/mockgen -source pkg/etcd/etcd.go -destination pkg/etcd/mock/etcd_client_mock.go
 	tools/bin/mockgen -source cdc/processor/manager.go -destination cdc/processor/mock/manager_mock.go
 	tools/bin/mockgen -source cdc/capture/capture.go -destination cdc/capture/mock/capture_mock.go
 	tools/bin/mockgen -source pkg/cmd/factory/factory.go -destination pkg/cmd/factory/mock/factory_mock.go -package mock_factory
@@ -275,6 +275,7 @@ clean:
 	rm -rf *.out
 	rm -rf bin
 	rm -rf tools/bin
+	rm -rf tools/include
 
 dm: dm-master dm-worker dmctl dm-syncer
 
@@ -300,9 +301,6 @@ dm-chaos-case:
 
 dm_debug-tools:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/binlog-event-blackhole ./dm/debug-tools/binlog-event-blackhole
-
-dm_generate_proto: tools/bin/protoc-gen-gogofaster tools/bin/protoc-gen-grpc-gateway
-	./dm/generate-dm.sh
 
 dm_generate_mock: tools/bin/mockgen
 	./dm/tests/generate-mock.sh
@@ -489,9 +487,6 @@ engine: tiflow tiflow-demo
 tiflow:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
 
-tiflow-proto: tools/bin/protoc tools/bin/protoc-gen-gogofaster tools/bin/goimports
-	scripts/generate-engine-proto.sh
-
 tiflow-demo:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./cmd/tiflow-demoserver
 
@@ -501,14 +496,14 @@ tiflow-chaos-case:
 tiflow-generate-mock: tools/bin/mockgen
 	scripts/generate-engine-mock.sh
 
-engine_image: 
+engine_image:
 	@which docker || (echo "docker not found in ${PATH}"; exit 1)
 	./engine/test/utils/run_engine.sh build
 
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))
 
-engine_integration_test: 
+engine_integration_test:
 	@which docker || (echo "docker not found in ${PATH}"; exit 1)
 	./engine/test/integration_tests/run.sh "$(CASE)" "$(START_AT)"
 

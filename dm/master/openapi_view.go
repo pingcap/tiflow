@@ -839,7 +839,7 @@ func (s *Server) DMAPICreateTaskTemplate(c *gin.Context) {
 	// prepare target db config
 	newCtx := c.Request.Context()
 	toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
-	if adjustDBErr := adjustTargetDB(newCtx, toDBCfg); adjustDBErr != nil {
+	if adjustDBErr := AdjustTargetDB(newCtx, toDBCfg); adjustDBErr != nil {
 		_ = c.Error(terror.WithClass(adjustDBErr, terror.ClassDMMaster))
 		return
 	}
@@ -901,7 +901,7 @@ func (s *Server) DMAPUpdateTaskTemplate(c *gin.Context, taskName string) {
 	}
 	newCtx := c.Request.Context()
 	toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
-	if adjustDBErr := adjustTargetDB(newCtx, toDBCfg); adjustDBErr != nil {
+	if adjustDBErr := AdjustTargetDB(newCtx, toDBCfg); adjustDBErr != nil {
 		_ = c.Error(terror.WithClass(adjustDBErr, terror.ClassDMMaster))
 		return
 	}

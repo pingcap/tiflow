@@ -44,7 +44,7 @@ func TestCDCMetaData(t *testing.T) {
 	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
 	router := newRouter(apiV2)
 
-	etcdClient := mock_etcd.NewMockCDCEtcdClientForAPI(gomock.NewController(t))
+	etcdClient := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
 	cp.EXPECT().IsOwner().Return(true).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
 	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()

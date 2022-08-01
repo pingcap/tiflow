@@ -98,15 +98,16 @@ type rawStateEntry struct {
 }
 
 // NewEtcdWorker returns a new EtcdWorker
-func NewEtcdWorker(client *etcd.CDCEtcdClient,
+func NewEtcdWorker(
+	client etcd.CDCEtcdClient,
 	prefix string,
 	reactor Reactor,
 	initState ReactorState,
 	migrator migrate.Migrator,
 ) (*EtcdWorker, error) {
 	return &EtcdWorker{
-		clusterID:  client.ClusterID,
-		client:     client.Client,
+		clusterID:  client.GetClusterID(),
+		client:     client.GetEtcdClient(),
 		reactor:    reactor,
 		state:      initState,
 		rawState:   make(map[util.EtcdKey]rawStateEntry),
