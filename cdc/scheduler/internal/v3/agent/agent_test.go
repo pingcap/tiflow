@@ -18,13 +18,17 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/schedulepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/transport"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.uber.org/zap"
 )
 
@@ -67,6 +71,50 @@ func newAgent4Test() *agent {
 	a.CaptureID = "agent-1"
 
 	return a
+}
+
+func TestNewAgent(t *testing.T) {
+	t.Parallel()
+
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	me := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
+
+	tableExector := newMockTableExecutor()
+
+	// owner and revision found successfully
+	me.EXPECT().GetOwnerID(gomock.Any()).Return("owneID", nil).Times(1)
+	me.EXPECT().GetOwnerRevision(gomock.Any(), gomock.Any()).Return(int64(2333), nil).Times(1)
+	a, err := newAgent(context.Background(), "capture-test", changefeed, me, tableExector)
+	require.NoError(t, err)
+	require.NotNil(t, a)
+
+	// owner not found temporarily, it's ok.
+	me.EXPECT().GetOwnerID(gomock.Any()).
+		Return("", concurrency.ErrElectionNoLeader).Times(1)
+	a, err = newAgent(context.Background(), "capture-test", changefeed, me, tableExector)
+	require.NoError(t, err)
+	require.NotNil(t, a)
+
+	// owner not found since pd is unstable
+	me.EXPECT().GetOwnerID(gomock.Any()).Return("", cerror.ErrPDEtcdAPIError).Times(1)
+	a, err = newAgent(context.Background(), "capture-test", changefeed, me, tableExector)
+	require.Error(t, err)
+	require.Nil(t, a)
+
+	// owner found, get revision failed.
+	me.EXPECT().GetOwnerID(gomock.Any()).Return("ownerID", nil).Times(1)
+	me.EXPECT().GetOwnerRevision(gomock.Any(), gomock.Any()).
+		Return(int64(0), cerror.ErrPDEtcdAPIError).Times(1)
+	a, err = newAgent(context.Background(), "capture-test", changefeed, me, tableExector)
+	require.Error(t, err)
+	require.Nil(t, a)
+
+	me.EXPECT().GetOwnerID(gomock.Any()).Return("ownerID", nil).Times(1)
+	me.EXPECT().GetOwnerRevision(gomock.Any(), gomock.Any()).
+		Return(int64(0), cerror.ErrOwnerNotFound).Times(1)
+	a, err = newAgent(context.Background(), "capture-test", changefeed, me, tableExector)
+	require.NoError(t, err)
+	require.NotNil(t, a)
 }
 
 func TestAgentHandleMessageDispatchTable(t *testing.T) {

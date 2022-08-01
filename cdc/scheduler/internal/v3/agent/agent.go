@@ -75,25 +75,30 @@ type ownerInfo struct {
 	CaptureID string
 }
 
-// NewAgent returns a new agent.
-func NewAgent(ctx context.Context,
-	captureID model.CaptureID,
+func newTransport(
+	ctx context.Context,
 	changeFeedID model.ChangeFeedID,
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
-	etcdClient etcd.CDCEtcdClient,
-	tableExecutor internal.TableExecutor,
-) (internal.Agent, error) {
+) (transport.Transport, error) {
 	trans, err := transport.NewTransport(
 		ctx, changeFeedID, transport.AgentRole, messageServer, messageRouter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	return trans, nil
+}
 
+func newAgent(
+	ctx context.Context,
+	captureID model.CaptureID,
+	changeFeedID model.ChangeFeedID,
+	etcdClient etcd.CDCEtcdClient,
+	tableExecutor internal.TableExecutor,
+) (internal.Agent, error) {
 	result := &agent{
 		agentInfo: newAgentInfo(changeFeedID, captureID),
 		tableM:    newTableManager(changeFeedID, tableExecutor),
-		trans:     trans,
 	}
 
 	etcdCliCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -142,6 +147,27 @@ func NewAgent(ctx context.Context,
 		CaptureID: ownerCaptureID,
 		Revision:  schedulepb.OwnerRevision{Revision: revision},
 	}
+	return result, nil
+}
+
+// NewAgent returns a new agent.
+func NewAgent(ctx context.Context,
+	captureID model.CaptureID,
+	changeFeedID model.ChangeFeedID,
+	messageServer *p2p.MessageServer,
+	messageRouter p2p.MessageRouter,
+	etcdClient etcd.CDCEtcdClient,
+	tableExecutor internal.TableExecutor,
+) (internal.Agent, error) {
+	result, err := newAgent(ctx, captureID, changeFeedID, etcdClient, tableExecutor)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	trans, err := newTransport(ctx, changeFeedID, messageServer, messageRouter)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	result.(*agent).trans = trans
 	return result, nil
 }
 
