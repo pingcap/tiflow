@@ -42,7 +42,9 @@ func NewGormDB(sqlDB *sql.DB) (*gorm.DB, error) {
 		SkipInitializeWithVersion: false,
 	}), &gorm.Config{
 		SkipDefaultTransaction: true,
-		Logger:                 NewOrmLogger(logutil.WithComponent("gorm"), WithSlowThreshold(defaultSlowLogThreshold)),
+		Logger: NewOrmLogger(logutil.WithComponent("gorm"),
+			WithSlowThreshold(defaultSlowLogThreshold),
+			WithIgnoreTraceRecordNotFoundErr()),
 	})
 	if err != nil {
 		return nil, errors.ErrMetaNewClientFail.Wrap(err)
