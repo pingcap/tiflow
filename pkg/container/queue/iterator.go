@@ -18,25 +18,46 @@ package queue
 // panics. Don't use an iterator of an element that has already been dequeued.
 // Instead, use with checks and in loop. E.g.
 //
-// for it := someQueue.Begin(); it.Valid(); it.Next() { // forwards
+// for it := someQueue.First(); it.Valid(); it.Next() {
 // 		... // operations cannot pop element
 // }
+// Note: Begin() and First() are interchangeable
 // for it := someQueue.Begin(); it.Valid(); { 			// forwards
 // 		it.Next()
 // 		q.Dequeue() // can pop element
 // }
-// for it := someQueue.End(); it.Prev(); {...}		 	// backwards
+// for it := someQueue.Last(); it.Valid(); it.Next() {	// backwards
+// 		...
+// }
+// for it := someQueue.End(); it.Prev(); {				// backwards
+//		...
+// }
 type ChunkQueueIterator[T any] struct {
 	idxInChunk int
 	chunk      *chunk[T]
 }
 
-// Begin returns the first iterator of the queue
-func (q *ChunkQueue[T]) Begin() *ChunkQueueIterator[T] {
+// First returns the first valid iterator of the queue, which represents the
+// first element (if exists)
+func (q *ChunkQueue[T]) First() *ChunkQueueIterator[T] {
 	return &ChunkQueueIterator[T]{
 		chunk:      q.firstChunk(),
 		idxInChunk: q.firstChunk().l,
 	}
+}
+
+// Last returns the last valid iterator of the queue, which represents the
+// last element (if exists)
+func (q *ChunkQueue[T]) Last() *ChunkQueueIterator[T] {
+	return &ChunkQueueIterator[T]{
+		chunk:      q.lastChunk(),
+		idxInChunk: q.lastChunk().r - 1,
+	}
+}
+
+// Begin is an alias of First(), for convenient
+func (q *ChunkQueue[T]) Begin() *ChunkQueueIterator[T] {
+	return q.First()
 }
 
 // End creates a special iterator of the queue representing the end. End()
@@ -128,6 +149,7 @@ func (it *ChunkQueueIterator[T]) Next() bool {
 // next iterator is in queue, and false otherwise. The Prev of an end iterator
 // points to the last element of the queue if the queue is not empty.
 // The return boolean value is useful for backwards iteration. E.g.
+// `for it := someQueue.Last(); it.Valid(); it.Next() {...}`
 // `for it := someQueue.End(); it.Prev; {...} `
 func (it *ChunkQueueIterator[T]) Prev() bool {
 	if it.chunk == nil {

@@ -14,6 +14,7 @@
 package queue
 
 import (
+	"fmt"
 	"sync"
 	"unsafe"
 
@@ -88,7 +89,7 @@ func NewChunkQueueLeastCapacity[T any](minCapacity int) *ChunkQueue[T] {
 	}
 
 	q.chunks = make([]*chunk[T], defaultPitchArrayLen, defaultPitchArrayLen)
-	q.extend(minCapacity)
+	q.addSpace(minCapacity)
 	return q
 }
 
@@ -108,10 +109,10 @@ func (q *ChunkQueue[T]) Empty() bool {
 	return q.size == 0
 }
 
-// At returns the value of a given index. At() does NOT support modifying the value
+// At returns the value of a given index. It does NOT support modifying the value
 func (q *ChunkQueue[T]) At(idx int) (T, bool) {
 	if idx < 0 || idx >= q.size {
-		return q.defaultValue, false
+		panic(fmt.Sprintf("[ChunkQueue]: index %d os out of index [0, %d)", idx, q.size))
 	}
 	// There may some space in the former part of the chunk. Added the bias and
 	// index, we can get locate the element by division
@@ -122,7 +123,7 @@ func (q *ChunkQueue[T]) At(idx int) (T, bool) {
 // Replace assigns a new value to a given index
 func (q *ChunkQueue[T]) Replace(idx int, val T) bool {
 	if idx < 0 || idx >= q.size {
-		return false
+		panic(fmt.Sprintf("[ChunkQueue]: index %d os out of index [0, %d)", idx, q.size))
 	}
 	// same with At()
 	i := q.firstChunk().l + idx
@@ -151,15 +152,15 @@ func (q *ChunkQueue[T]) Tail() (T, bool) {
 }
 
 // extend extends the space by adding chunk(s) to the queue
-func (q *ChunkQueue[T]) extend(n int) {
+func (q *ChunkQueue[T]) addSpace(n int) {
 	if n <= 0 {
-		return
+		panic("[ChunkQueue]: n should be greater than 0")
 	}
 	chunksNum := (n + q.chunkLength - 1) / q.chunkLength
 
 	// reallocate the chunks array if no enough space in the tail
 	if q.tail+chunksNum+1 >= len(q.chunks) {
-		q.reallocateChunksArray(chunksNum)
+		q.adjustChunksArray(chunksNum)
 	}
 
 	for i := 0; i < chunksNum; i++ {
@@ -174,21 +175,30 @@ func (q *ChunkQueue[T]) extend(n int) {
 	}
 }
 
-// reallocateChunksArray extends (for need > 0) or shrinks (need < 0) the chunk
-// pointers array []*chunks, and then eliminates the former spaces
-func (q *ChunkQueue[T]) reallocateChunksArray(need int) {
+// adjustChunksArray extends/shrinks the chunk pointers array []*chunks, and
+// eliminates the former spaces caused by popped chunks:
+// 1) extend > 0: A positive expand represents an "extend" operation:
+//	The value is the amount of space the array should have in tail. Expand the
+//	chunks array until there is enough space.
+// 2) extend < 0: A negative expand represents a "shrink" operation:
+// 	The value of a negative extend is oblivious. The new length of the array
+//	[]*chunks is max(defaultLength, tail - head + 1), which makes sure
+func (q *ChunkQueue[T]) adjustChunksArray(extend int) {
 	used := q.tail - q.head
-	newLen := len(q.chunks)
-	// adjust the array length
+	// adjust the array length. The new length should
+	var newLen int
 	switch {
-	case need < 0:
-		if newLen <= defaultPitchArrayLen {
-			newLen = defaultPitchArrayLen
-		}
-	case need > 0:
-		// Expand the array if no enough space
-		for used+need+1 >= newLen {
+	case extend > 0:
+		newLen = len(q.chunks)
+		// Expand the array if no enough space.
+		for used+extend+1 >= newLen {
 			newLen *= 2
+		}
+	case extend < 0:
+		// for shrink, the new length is max(defaultLength, tail - head + 1)
+		newLen = used + 1
+		if newLen < defaultPitchArrayLen {
+			newLen = defaultPitchArrayLen
 		}
 	}
 	if newLen != len(q.chunks) {
@@ -197,8 +207,8 @@ func (q *ChunkQueue[T]) reallocateChunksArray(need int) {
 		copy(newChunks[:used], q.chunks[q.head:q.tail])
 		q.chunks = newChunks
 	} else if q.head > 0 {
-		// If the allocation doesn't change array length, then no need to
-		// create a new array, and only move the elements to head
+		// If the new array length remains the same, then there is no need to
+		// create a new array, and only move the elements to front slots
 		copy(q.chunks[:used], q.chunks[q.head:q.tail])
 		for i := used; i < q.tail; i++ {
 			q.chunks[i] = nil
@@ -212,7 +222,7 @@ func (q *ChunkQueue[T]) reallocateChunksArray(need int) {
 func (q *ChunkQueue[T]) Enqueue(v T) {
 	c := q.lastChunk()
 	if c.r == q.chunkLength {
-		q.extend(1)
+		q.addSpace(1)
 		c = q.lastChunk()
 	}
 
@@ -226,7 +236,7 @@ func (q *ChunkQueue[T]) EnqueueMany(vals ...T) {
 	cnt, n := 0, len(vals)
 	c := q.lastChunk()
 	if q.Cap()-q.Len() < n {
-		q.extend(n - (q.chunkLength - c.r))
+		q.addSpace(n - (q.chunkLength - c.r))
 	}
 
 	if c.r == q.chunkLength {
@@ -270,7 +280,7 @@ func (q *ChunkQueue[T]) Dequeue() (T, bool) {
 func (q *ChunkQueue[T]) popChunk() {
 	c := q.firstChunk()
 	if c.next == nil {
-		q.extend(1)
+		q.addSpace(1)
 	}
 	q.chunks[q.head] = nil
 	q.head++
@@ -336,7 +346,7 @@ func (q *ChunkQueue[T]) Clear() {
 
 // Shrink shrinks the space of the chunks array.
 func (q *ChunkQueue[T]) Shrink() {
-	q.reallocateChunksArray(-1)
+	q.adjustChunksArray(-1)
 }
 
 // Range iterates the queue from head to tail. It stops at the first element e

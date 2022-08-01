@@ -34,7 +34,7 @@ func TestChunkQueueIteratorPrevNext(t *testing.T) {
 
 	var it *ChunkQueueIterator[int]
 	i := 0
-	for it = q.Begin(); it.Valid(); it.Next() {
+	for it = q.First(); it.Valid(); it.Next() {
 		v := it.Value()
 		require.Equal(t, i, it.Index())
 		require.Equal(t, i, v)
@@ -48,8 +48,7 @@ func TestChunkQueueIteratorPrevNext(t *testing.T) {
 		i--
 	}
 
-	it = q.Begin()
-	it.chunk = nil
+	it = &ChunkQueueIterator[int]{0, nil}
 	require.False(t, it.Prev())
 	require.False(t, it.Next())
 }
@@ -64,7 +63,7 @@ func BenchmarkChunkQueueIterate(b *testing.B) {
 		b.ResetTimer()
 
 		i := 0
-		for it := q.Begin(); it.Valid(); it.Next() {
+		for it := q.First(); it.Valid(); it.Next() {
 			v := it.Value()
 			if v != i {
 				panic("not equal")

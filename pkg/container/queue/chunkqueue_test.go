@@ -81,11 +81,12 @@ func TestChunkQueueCommon(t *testing.T) {
 		q.Replace(i, i)
 		require.Equal(t, it.Value(), v)
 	}
-	_, ok = q.At(-1)
-	require.False(t, ok)
-	ok = q.Replace(testCaseSize, 0)
-	require.False(t, ok)
-
+	require.Panics(t, func() {
+		_, _ = q.At(-1)
+	})
+	require.Panics(t, func() {
+		_ = q.Replace(testCaseSize, 0)
+	})
 	tail, ok := q.Tail()
 	require.Equal(t, tail, testCaseSize-1)
 	require.True(t, ok)
