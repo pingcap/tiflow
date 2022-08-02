@@ -15,6 +15,7 @@ package master
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -287,7 +288,7 @@ func TestCreateWorkerAndWorkerStatusUpdatedAndTimesOut(t *testing.T) {
 	t.Parallel()
 
 	suite := NewWorkerManageTestSuite(true)
-	wEpoch := int64(101)
+	wEpoch := int64(2)
 	suite.manager.BeforeStartingWorker("worker-1", "executor-1", wEpoch)
 
 	suite.SimulateHeartbeat("worker-1", 1, wEpoch, "executor-1", false)
@@ -540,4 +541,40 @@ func TestWorkerGracefulExitAfterFailover(t *testing.T) {
 	require.Contains(t, suite.manager.GetWorkers(), "worker-1")
 	require.NotNil(t, suite.manager.GetWorkers()["worker-1"].GetTombstone())
 	suite.Close()
+}
+
+func TestWorkerSendsStaleHeartbeat(t *testing.T) {
+	t.Parallel()
+
+	suite := NewWorkerManageTestSuite(true)
+	wEpoch := int64(2)
+	suite.manager.BeforeStartingWorker("worker-1", "executor-1", wEpoch)
+
+	suite.SimulateHeartbeat("worker-1", 1, wEpoch, "executor-1", false)
+	suite.SimulateHeartbeat("worker-1", 1, wEpoch, "executor-1", false)
+
+	event := suite.WaitForEvent(t, "worker-1")
+	require.Equal(t, workerOnlineEvent, event.Tp)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Millisecond * 20):
+				suite.SimulateHeartbeat("worker-1", 1, wEpoch-1, "executor-1", false)
+			}
+		}
+	}()
+
+	event = suite.WaitForEvent(t, "worker-1")
+	require.Equal(t, workerOfflineEvent, event.Tp)
+
+	suite.Close()
+	cancel()
+	wg.Wait()
 }
