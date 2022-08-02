@@ -95,7 +95,7 @@ func newTestWorker(ctx context.Context) (*flushWorker, *mockProducer) {
 	}
 	producer := NewMockProducer()
 	return newFlushWorker(encoder, producer,
-		metrics.NewStatistics(ctx, metrics.SinkTypeMQ)), producer
+		metrics.NewStatistics(ctx, "", metrics.SinkTypeMQ)), producer
 }
 
 //nolint:tparallel

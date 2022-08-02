@@ -41,13 +41,14 @@ import (
 var _ scheduler.TableExecutor = (*processor)(nil)
 
 func newProcessor4Test(
-	ctx cdcContext.Context,
 	t *testing.T,
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (pipeline.TablePipeline, error),
 	liveness *model.Liveness,
 ) *processor {
 	up := upstream.NewUpstream4Test(nil)
-	p := newProcessor(ctx, up, liveness)
+	p := newProcessor(
+		&model.CaptureInfo{AdvertiseAddr: "127.0.0.1:0000"},
+		model.ChangeFeedID4Test("processor-test", "processor-test"), up, liveness)
 	p.lazyInit = func(ctx cdcContext.Context) error {
 		p.agent = &mockAgent{executor: p}
 		return nil
@@ -97,7 +98,7 @@ func initProcessor4Test(
     "sync-point-interval": 600000000000
 }
 `
-	p := newProcessor4Test(ctx, t, newMockTablePipeline, liveness)
+	p := newProcessor4Test(t, newMockTablePipeline, liveness)
 	p.changefeed = orchestrator.NewChangefeedReactorState(
 		etcd.DefaultCDCClusterID, ctx.ChangefeedVars().ID)
 	captureID := ctx.GlobalVars().CaptureInfo.ID
