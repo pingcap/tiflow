@@ -17,13 +17,9 @@ import (
 	"context"
 	"database/sql"
 	"strings"
-	"time"
 
-	dmysql "github.com/go-sql-driver/mysql"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/charset"
-	"github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -107,44 +103,6 @@ func prepareReplace(
 	}
 
 	return builder.String(), args
-}
-
-func logDMLTxnErr(
-	err error, start time.Time, changefeed model.ChangeFeedID,
-	query string, count int, startTs []model.Ts,
-) error {
-	if isRetryableDMLError(err) {
-		log.Warn("execute DMLs with error, retry later",
-			zap.Error(err), zap.Duration("duration", time.Since(start)),
-			zap.String("query", query), zap.Int("count", count),
-			zap.Uint64s("startTs", startTs),
-			zap.String("namespace", changefeed.Namespace),
-			zap.String("changefeed", changefeed.ID))
-	} else {
-		log.Error("execute DMLs with error, can not retry",
-			zap.Error(err), zap.Duration("duration", time.Since(start)),
-			zap.String("query", query), zap.Int("count", count),
-			zap.String("namespace", changefeed.Namespace),
-			zap.String("changefeed", changefeed.ID))
-	}
-	return err
-}
-
-func isRetryableDMLError(err error) bool {
-	if !cerror.IsRetryableError(err) {
-		return false
-	}
-
-	errCode, ok := getSQLErrCode(err)
-	if !ok {
-		return true
-	}
-
-	switch errCode {
-	case mysql.ErrNoSuchTable, mysql.ErrBadDB:
-		return false
-	}
-	return true
 }
 
 // if the column value type is []byte and charset is not binary, we get its string
@@ -248,15 +206,6 @@ func whereSlice(cols []*model.Column, forceReplicate bool) (colNames []string, a
 		}
 	}
 	return
-}
-
-func getSQLErrCode(err error) (errors.ErrCode, bool) {
-	mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError)
-	if !ok {
-		return -1, false
-	}
-
-	return errors.ErrCode(mysqlErr.Number), true
 }
 
 func buildColumnList(names []string) string {
