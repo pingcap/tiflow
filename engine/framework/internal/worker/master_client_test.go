@@ -178,6 +178,7 @@ func TestMasterClientHeartbeat(t *testing.T) {
 		SendTime:     clock.ToMono(sendTime1),
 		FromWorkerID: "worker-1",
 		Epoch:        1,
+		WorkerEpoch:  helper.Client.WorkerEpoch(),
 		IsFinished:   false,
 	}, ping)
 	helper.Client.HandleHeartbeat("executor-1", &frameModel.HeartbeatPongMessage{
@@ -205,6 +206,7 @@ func TestMasterClientHeartbeat(t *testing.T) {
 		SendTime:     clock.ToMono(sendTime2),
 		FromWorkerID: "worker-1",
 		Epoch:        1,
+		WorkerEpoch:  helper.Client.WorkerEpoch(),
 		IsFinished:   true,
 	}, ping)
 	// The pong has IsFinished == false.
