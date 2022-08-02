@@ -308,7 +308,7 @@ generate_mock: tools/bin/mockgen
 	tools/bin/mockgen -source pkg/cmd/factory/factory.go -destination pkg/cmd/factory/mock/factory_mock.go -package mock_factory
 
 clean:
-	#go clean -i ./...
+	go clean -i ./...
 	rm -rf *.out
 	rm -rf bin
 	rm -rf tools/bin
