@@ -39,8 +39,8 @@ spec:
             - mountPath: "/var/lib/mysql"
               name: metastore-mysql
           env:
-            - name: MYSQL_ALLOW_EMPTY_PASSWORD
-              value: "true"
+            - name: MYSQL_ROOT_PASSWORD
+              value: 123456
           ports:
             - containerPort: 3306
               name: port-mysql
