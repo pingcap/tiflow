@@ -127,7 +127,9 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 	// submit-job
 	cfgBytes, err := os.ReadFile(jobTemplatePath)
 	require.NoError(t.T(), err)
-	jobmaster, err := registry.GlobalWorkerRegistry().CreateWorker(dctx, framework.DMJobMaster, "dm-jobmaster", libMetadata.JobManagerUUID, cfgBytes)
+	jobmaster, err := registry.GlobalWorkerRegistry().CreateWorker(
+		dctx, framework.DMJobMaster, "dm-jobmaster", libMetadata.JobManagerUUID,
+		cfgBytes, int64(1))
 	require.NoError(t.T(), err)
 
 	// Init
@@ -147,7 +149,9 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 	// mock master failed and recoverd after init
 	require.NoError(t.T(), jobmaster.Close(context.Background()))
 
-	jobmaster, err = registry.GlobalWorkerRegistry().CreateWorker(dctx, framework.DMJobMaster, "dm-jobmaster", libMetadata.JobManagerUUID, cfgBytes)
+	jobmaster, err = registry.GlobalWorkerRegistry().CreateWorker(
+		dctx, framework.DMJobMaster, "dm-jobmaster", libMetadata.JobManagerUUID,
+		cfgBytes, int64(2))
 	require.NoError(t.T(), err)
 	verDB = conn.InitVersionDB()
 	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).

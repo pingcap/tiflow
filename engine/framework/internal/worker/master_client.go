@@ -180,6 +180,12 @@ func (m *MasterClient) Epoch() frameModel.Epoch {
 	return epoch
 }
 
+// WorkerEpoch returns the worker epoch.
+// This value is a constant value for the master client of every single worker
+func (m *MasterClient) WorkerEpoch() frameModel.Epoch {
+	return m.workerEpoch
+}
+
 // HandleHeartbeat handles heartbeat messages received from the master.
 func (m *MasterClient) HandleHeartbeat(sender p2p.NodeID, msg *frameModel.HeartbeatPongMessage) {
 	if msg.ToWorkerID != m.workerID {
@@ -262,6 +268,7 @@ func (m *MasterClient) SendHeartBeat(ctx context.Context) error {
 		SendTime:     sendTime,
 		FromWorkerID: m.workerID,
 		Epoch:        epoch,
+		WorkerEpoch:  m.WorkerEpoch(),
 		IsFinished:   isFinished,
 	}
 

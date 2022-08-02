@@ -175,12 +175,18 @@ func newBaseJobMasterForTests(impl JobMasterImpl) *DefaultBaseJobMaster {
 	ctx := dcontext.Background()
 	ctx = ctx.WithDeps(dp)
 
+	epoch, err := params.FrameMetaClient.GenEpoch(ctx)
+	if err != nil {
+		panic(err)
+	}
+
 	return NewBaseJobMaster(
 		ctx,
 		impl,
 		masterName,
 		workerID1,
 		FakeTask,
+		epoch,
 	).(*DefaultBaseJobMaster)
 }
 

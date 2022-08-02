@@ -86,6 +86,7 @@ func MockBaseMasterCreateWorker(
 	workerID frameModel.WorkerID,
 	executorID model.ExecutorID,
 	resources []resourcemeta.ResourceID,
+	workerEpoch frameModel.Epoch,
 ) {
 	master.uuidGen = uuid.NewMock()
 	expectedSchedulerReq := &pb.ScheduleTaskRequest{
@@ -115,6 +116,7 @@ func MockBaseMasterCreateWorker(
 			MasterID:     masterID,
 			WorkerType:   int64(workerType),
 			WorkerConfig: configBytes,
+			Epoch:        workerEpoch,
 		}, mock.Anything, mock.Anything).
 		Return(nil).
 		Run(func(args mock.Arguments) {
@@ -158,6 +160,9 @@ func MockBaseMasterWorkerHeartbeat(
 	workerID frameModel.WorkerID,
 	executorID p2p.NodeID,
 ) {
+	worker, ok := master.workerManager.GetWorkers()[workerID]
+	require.True(t, ok)
+	workerEpoch := worker.Status().Epoch
 	err := master.messageHandlerManager.(*p2p.MockMessageHandlerManager).InvokeHandler(
 		t,
 		frameModel.HeartbeatPingTopic(masterID),
@@ -166,6 +171,7 @@ func MockBaseMasterWorkerHeartbeat(
 			SendTime:     clock.MonoNow(),
 			FromWorkerID: workerID,
 			Epoch:        master.currentEpoch.Load(),
+			WorkerEpoch:  workerEpoch,
 		})
 
 	require.NoError(t, err)

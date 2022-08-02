@@ -73,11 +73,17 @@ func TestFactory(t *testing.T) {
 	content, err := subtaskCfg.Toml()
 	require.NoError(t, err)
 	RegisterWorker()
-	_, err = registry.GlobalWorkerRegistry().CreateWorker(dctx, framework.WorkerDMDump, "worker-id", "dm-jobmaster-id", []byte(content))
+	_, err = registry.GlobalWorkerRegistry().CreateWorker(
+		dctx, framework.WorkerDMDump, "worker-id", "dm-jobmaster-id",
+		[]byte(content), int64(2))
 	require.NoError(t, err)
-	_, err = registry.GlobalWorkerRegistry().CreateWorker(dctx, framework.WorkerDMLoad, "worker-id", "dm-jobmaster-id", []byte(content))
+	_, err = registry.GlobalWorkerRegistry().CreateWorker(
+		dctx, framework.WorkerDMLoad, "worker-id", "dm-jobmaster-id",
+		[]byte(content), int64(3))
 	require.NoError(t, err)
-	_, err = registry.GlobalWorkerRegistry().CreateWorker(dctx, framework.WorkerDMSync, "worker-id", "dm-jobmaster-id", []byte(content))
+	_, err = registry.GlobalWorkerRegistry().CreateWorker(
+		dctx, framework.WorkerDMSync, "worker-id", "dm-jobmaster-id",
+		[]byte(content), int64(4))
 	require.NoError(t, err)
 }
 

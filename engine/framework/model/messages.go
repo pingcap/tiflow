@@ -42,8 +42,8 @@ type HeartbeatPingMessage struct {
 	SendTime     clock.MonotonicTime `json:"send-time"`
 	FromWorkerID WorkerID            `json:"from-worker-id"`
 	Epoch        Epoch               `json:"epoch"`
-	IsFinished   bool                `json:"is-finished"`
 	WorkerEpoch  Epoch               `json:"worker-epoch"`
+	IsFinished   bool                `json:"is-finished"`
 }
 
 // HeartbeatPongMessage ships information in heartbeat pong
