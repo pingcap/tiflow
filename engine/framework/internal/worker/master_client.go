@@ -88,6 +88,7 @@ func NewMasterClient(
 		closeCh:                 make(chan struct{}),
 		timeoutConfig:           config.DefaultTimeoutConfig(),
 		clk:                     clk,
+		workerEpoch:             workerEpoch,
 	}
 }
 
