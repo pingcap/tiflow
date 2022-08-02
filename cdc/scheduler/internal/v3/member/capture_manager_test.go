@@ -217,9 +217,15 @@ func TestCaptureManagerTick(t *testing.T) {
 	msgs = cm.Tick(nil, captureIDNotDraining)
 	require.Empty(t, msgs)
 	tables := map[model.TableID]*replication.ReplicationSet{
-		1: {Captures: map[model.CaptureID]struct{}{"1": {}}},
-		2: {Captures: map[model.CaptureID]struct{}{"1": {}, "2": {}}},
-		3: {Captures: map[model.CaptureID]struct{}{"2": {}}},
+		1: {Captures: map[model.CaptureID]replication.Role{
+			"1": replication.RolePrimary,
+		}},
+		2: {Captures: map[model.CaptureID]replication.Role{
+			"1": replication.RolePrimary, "2": replication.RoleSecondary,
+		}},
+		3: {Captures: map[model.CaptureID]replication.Role{
+			"2": replication.RoleSecondary,
+		}},
 		4: {},
 	}
 	msgs = cm.Tick(tables, captureIDNotDraining)
