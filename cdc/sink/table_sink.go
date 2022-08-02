@@ -80,15 +80,16 @@ func (t *tableSink) FlushRowChangedEvents(
 			zap.Int64("tableID", tableID), zap.Int64("sinkTableID", t.tableID))
 	}
 	t.bufferMu.Lock()
-	defer t.bufferMu.Unlock()
 	i := sort.Search(t.buffer.Len(), func(i int) bool {
 		event, _ := t.buffer.At(i)
 		return event.CommitTs > resolvedTs
 	})
 	if i == 0 {
+		t.bufferMu.Unlock()
 		return t.backendSink.FlushRowChangedEvents(ctx, t.tableID, resolved)
 	}
 	resolvedRows, _ := t.buffer.DequeueMany(i)
+	t.bufferMu.Unlock()
 	err := t.backendSink.EmitRowChangedEvents(ctx, resolvedRows...)
 	if err != nil {
 		return model.NewResolvedTs(0), errors.Trace(err)
