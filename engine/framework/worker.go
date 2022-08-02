@@ -195,6 +195,7 @@ func NewBaseWorker(
 			JobID:     masterID,
 			ID:        workerID,
 			Type:      tp,
+			Epoch:     epoch,
 		},
 		timeoutConfig: config.DefaultTimeoutConfig(),
 		epoch:         epoch,
