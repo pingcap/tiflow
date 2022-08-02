@@ -107,7 +107,7 @@ spec:
           args:
             - "--name=metastore-etcd"
             - "--data-dir=/data/etcd"
-            - "--advertise-client-urls=http://metastore-business:12479"
+            - "--advertise-client-urls=http://metastore-etcd:12479"
             - "--listen-client-urls=http://0.0.0.0:2479"
             - "--listen-peer-urls=http://127.0.0.1:2480"
             - "--initial-advertise-peer-urls=http://127.0.0.1:2480"
