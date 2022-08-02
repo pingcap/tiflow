@@ -40,7 +40,7 @@ spec:
               name: metastore-mysql
           env:
             - name: MYSQL_ROOT_PASSWORD
-              value: 123456
+              value: "123456"
           ports:
             - containerPort: 3306
               name: port-mysql
