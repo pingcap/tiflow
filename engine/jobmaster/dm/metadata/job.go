@@ -136,7 +136,8 @@ func (jobStore *JobStore) UpdateConfig(ctx context.Context, jobCfg *config.JobCf
 	}
 	oldJob := state.(*Job)
 
-	// TODO: each task can have different version.
+	// TODO: we may diff the config at task level in the future, that way different tasks will have different modify revisions.
+	// so that changing the configuration of one task will not affect other tasks.
 	var oldVersion uint64
 	for _, task := range oldJob.Tasks {
 		oldVersion = task.Cfg.ModRevision
