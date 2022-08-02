@@ -506,15 +506,22 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 	if err := s.metaStoreManager.Register(cfg.FrameMetaConf.StoreID, cfg.FrameMetaConf); err != nil {
 		return err
 	}
+	if cfg.FrameMetaConf.StoreType == metaModel.StoreTypeSQL {
+		// Normally, a schema will be created in advance and we may have no privilege
+		// to create schema for framework meta. Just for easy test here. Ignore any error.
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+		if err := meta.CreateSchemaIfNotExists(ctx, *(s.cfg.FrameMetaConf)); err != nil {
+			log.Warn("create schema for framework metastore fail, but it can be ignored.",
+				zap.String("schema", s.cfg.FrameMetaConf.Schema),
+				zap.Error(err))
+		}
+	}
 	var err error
 	s.frameworkClientConn, err = meta.NewClientConn(cfg.FrameMetaConf)
 	if err != nil {
 		log.Error("connect to framework metastore fail", zap.Any("config", cfg.FrameMetaConf), zap.Error(err))
 		return nil
-	}
-	if s.frameMetaClient, err = pkgOrm.NewClient(s.frameworkClientConn); err != nil {
-		log.Error("create meta client fail", zap.Error(err))
-		return err
 	}
 	log.Info("register framework metastore successfully", zap.Any("metastore", cfg.FrameMetaConf))
 
@@ -525,9 +532,8 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 	}
 	if cfg.BusinessMetaConf.StoreType == metaModel.StoreTypeSQL {
 		// Normally, a schema will be created in advance and we may have no privilege
-		// to create schema for business meta.
-		// Just for easy test here. Ignore any error.
-		ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
+		// to create schema for business meta. Just for easy test here. Ignore any error.
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 		if err := meta.CreateSchemaIfNotExists(ctx, *(s.cfg.BusinessMetaConf)); err != nil {
 			log.Warn("create schema for business metastore fail, but it can be ignored.",
@@ -535,7 +541,6 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 				zap.Error(err))
 		}
 	}
-
 	s.businessClientConn, err = meta.NewClientConn(cfg.BusinessMetaConf)
 	if err != nil {
 		log.Error("connect to business metastore fail", zap.Any("config", cfg.BusinessMetaConf), zap.Error(err))
@@ -656,6 +661,12 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	err = s.initializedBackendMeta(ctx)
 	if err != nil {
 		return
+	}
+
+	// create the framework meta client after we have try create the schema
+	if s.frameMetaClient, err = pkgOrm.NewClient(s.frameworkClientConn); err != nil {
+		log.Error("create meta client fail", zap.Error(err))
+		return err
 	}
 
 	// rebuild states from existing meta if needed
