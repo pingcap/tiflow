@@ -82,6 +82,7 @@ dbMapping:
   database: ${DB_NAME}
 EOF
 
+bash ./bin/stop.sh
 bash ./bin/startup.sh
 
 while true; do
