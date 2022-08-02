@@ -2,7 +2,7 @@
 .PHONY: build test check clean fmt cdc kafka_consumer coverage \
 	integration_test_build integration_test integration_test_mysql integration_test_kafka bank \
 	kafka_docker_integration_test kafka_docker_integration_test_with_build \
-	build_kafka_integration_test_images \
+	clean_integration_test_containers \
 	mysql_docker_integration_test mysql_docker_integration_test_with_build \
     build_mysql_integration_test_images clean_integration_test_images \
 	dm dm-master dm-worker dmctl dm-syncer dm_coverage \
@@ -60,6 +60,8 @@ FAILPOINT := tools/bin/failpoint-ctl
 
 FAILPOINT_ENABLE  := $$(echo $(FAILPOINT_DIR) | xargs $(FAILPOINT) enable >/dev/null)
 FAILPOINT_DISABLE := $$(echo $(FAILPOINT_DIR) | xargs $(FAILPOINT) disable >/dev/null)
+
+DEPLOYMENTS_DIR := deployments/ticdc/docker-compose/
 
 RELEASE_VERSION =
 ifeq ($(RELEASE_VERSION),)
@@ -186,35 +188,34 @@ integration_test_mysql:
 	tests/integration_tests/run.sh mysql "$(CASE)" "$(START_AT)"
 
 mysql_docker_integration_test: ## Run TiCDC MySQL all integration tests in Docker.
-	docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-mysql-integration.yml down -v
-	docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-mysql-integration.yml up
+mysql_docker_integration_test: clean_integration_test_containers
+	docker-compose -f $(DEPLOYMENTS_DIR)/docker-compose-mysql-integration.yml up
 
 mysql_docker_integration_test_with_build: ## Build images and run TiCDC MySQL all integration tests in Docker. Please use only after modifying the TiCDC non-test code.
-	docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-mysql-integration.yml down -v
-	docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-mysql-integration.yml up --build
+mysql_docker_integration_test_with_build: clean_integration_test_containers
+	docker-compose -f $(DEPLOYMENTS_DIR)/docker-compose-mysql-integration.yml up --build
 
 build_mysql_integration_test_images: ## Build MySQL integration test images without cache.
-	docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-mysql-integration.yml down -v
-	docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-mysql-integration.yml build --no-cache
+build_mysql_integration_test_images: clean_integration_test_containers
+	docker-compose -f $(DEPLOYMENTS_DIR)/docker-compose-mysql-integration.yml build --no-cache
 
 integration_test_kafka: check_third_party_binary
 	tests/integration_tests/run.sh kafka "$(CASE)" "$(START_AT)"
 
 kafka_docker_integration_test: ## Run TiCDC Kafka all integration tests in Docker.
-	docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-kafka-integration.yml down -v
-	docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-kafka-integration.yml up
+kafka_docker_integration_test: clean_integration_test_containers
+	docker-compose -f $(DEPLOYMENTS_DIR)/docker-compose-kafka-integration.yml up
 
 kafka_docker_integration_test_with_build: ## Build images and run TiCDC Kafka all integration tests in Docker. Please use only after modifying the TiCDC non-test code.
-	docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-kafka-integration.yml down -v
-	docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-kafka-integration.yml up --build
+kafka_docker_integration_test_with_build: clean_integration_test_containers
+	docker-compose -f $(DEPLOYMENTS_DIR)/docker-compose-kafka-integration.yml up --build
 
 build_kafka_integration_test_images: ## Build Kafka integration test images without cache.
-	docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-kafka-integration.yml down -v
-	docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-kafka-integration.yml build --no-cache
+build_kafka_integration_test_images: clean_integration_test_containers
+	docker-compose -f $(DEPLOYMENTS_DIR)/docker-compose-kafka-integration.yml build --no-cache
 
-clean_integration_test_images: ## Clean MySQL and Kafka integration test images.
-	docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-kafka-integration.yml down -v
-	docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-mysql-integration.yml down -v
+clean_integration_test_containers: ## Clean MySQL and Kafka integration test containers.
+	docker-compose -f $(DEPLOYMENTS_DIR)/docker-compose-mysql-integration.yml down -v
 
 fmt: tools/bin/gofumports tools/bin/shfmt generate_mock generate-msgp-code tiflow-generate-mock
 	@echo "gofmt (simplify)"
