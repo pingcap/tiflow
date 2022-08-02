@@ -21,6 +21,8 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/client/internal"
 )
 
+// TaskSchedulerClient is an interface for a client to the task scheduler
+// in the server master.
 type TaskSchedulerClient interface {
 	ScheduleTask(
 		ctx context.Context,
@@ -52,7 +54,7 @@ func (c *taskSchedulerClient) ScheduleTask(
 	return call.Do(ctx)
 }
 
-func (c taskSchedulerClient) ReportExecutorWorkload(
+func (c *taskSchedulerClient) ReportExecutorWorkload(
 	ctx context.Context,
 	request *enginepb.ExecWorkloadRequest,
 ) error {

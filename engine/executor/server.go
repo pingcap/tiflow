@@ -401,7 +401,7 @@ func (s *Server) Run(ctx context.Context) error {
 	})
 
 	wg.Go(func() error {
-		snap, receiver, err := discoveryAgent.Subscribe()
+		snap, receiver, err := discoveryAgent.Subscribe(ctx)
 		if err != nil {
 			return err
 		}
@@ -429,7 +429,7 @@ func (s *Server) Run(ctx context.Context) error {
 	})
 
 	wg.Go(func() error {
-		snap, receiver, err := discoveryAgent.Subscribe()
+		snap, receiver, err := discoveryAgent.Subscribe(ctx)
 		if err != nil {
 			return err
 		}

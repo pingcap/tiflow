@@ -23,6 +23,7 @@ import (
 	"strings"
 )
 
+// CredsRequirement indicates whether a certificate is needed.
 type CredsRequirement int
 
 const (

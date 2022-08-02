@@ -64,12 +64,9 @@ func (o *jobGeneralOptions) validate(ctx context.Context, cmd *cobra.Command) er
 		return errors.ErrInvalidCliParameter.GenWithStack("master-addrs can't be nil")
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, o.rpcTimeout)
-	defer cancel()
-
 	// TODO support https.
-	dialUrl := o.masterAddrs[0]
-	grpcConn, err := grpc.Dial(dialUrl)
+	dialURL := o.masterAddrs[0]
+	grpcConn, err := grpc.Dial(dialURL)
 	if err != nil {
 		return perrors.Trace(err)
 	}

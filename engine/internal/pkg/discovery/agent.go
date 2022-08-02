@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	"github.com/pingcap/tiflow/engine/pkg/srvdiscovery"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 )
@@ -46,7 +47,7 @@ type Event struct {
 // Agent registers the current node and receives membership changes of all nodes.
 type Agent interface {
 	Run(ctx context.Context) error
-	Subscribe() (srvdiscovery.Snapshot, *notifier.Receiver[Event], error)
+	Subscribe(ctx context.Context) (srvdiscovery.Snapshot, *notifier.Receiver[Event], error)
 }
 
 type runnerFactory interface {
@@ -88,6 +89,8 @@ type subscribeReq struct {
 	doneCh   chan struct{}
 }
 
+// NewAgent creates a new Agent that registers the current node to the
+// discovery service and receives membership changes from the discovery service.
 func NewAgent(
 	selfInfo *model.NodeInfo,
 	etcdCli *clientv3.Client,
@@ -105,6 +108,8 @@ func NewAgent(
 	}
 }
 
+// Run runs the internal logic of an Agent. It blocks
+// until an error has occurred, or it has been canceled.
 func (a *agentImpl) Run(ctx context.Context) error {
 	selfInfoStr, err := a.selfInfo.ToJSON()
 	if err != nil {
@@ -119,38 +124,48 @@ func (a *agentImpl) Run(ctx context.Context) error {
 	defer cancel()
 
 	// FIXME The semantics of ResetDiscovery is confusing. We will deal with this later.
+	startTime := time.Now()
 	session, err := runner.ResetDiscovery(discoveryCtx, true)
+	duration := time.Since(startTime)
 	if err != nil {
+		log.Warn("establish discovery session failed",
+			zap.Duration("duration", duration), logutil.ShortError(err))
 		return errors.Trace(err)
 	}
+	log.Info("discovery session established", zap.Duration("duration", duration))
 	defer func() {
 		_ = session.Close()
 	}()
 
-	watcher := runner.GetWatcher()
 	eventNotifier := notifier.NewNotifier[Event]()
 	defer eventNotifier.Close()
 
 	for {
-		var resp srvdiscovery.WatchResp
 		select {
 		case <-discoveryCtx.Done():
 			return errors.Trace(discoveryCtx.Err())
 		case <-session.Done():
 			log.Warn("metastore session is done", zap.String("executor-id", string(a.selfInfo.ID)))
+
+			startTime := time.Now()
 			session, err = runner.ResetDiscovery(ctx, true /* resetSession*/)
+			duration := time.Since(startTime)
+
 			if err != nil {
+				log.Warn("reset discovery session failed",
+					zap.Duration("duration", duration),
+					logutil.ShortError(err))
 				return errors.Annotate(err, "discovery agent session done")
 			}
+			log.Info("reset discovery session", zap.Duration("duration", duration))
 		case req := <-a.subscribeCh:
 			req.snap = runner.GetSnapshot()
 			req.receiver = eventNotifier.NewReceiver()
 			close(req.doneCh)
-		case resp = <-watcher:
-		}
-
-		if err := a.handleWatchResp(resp, runner, eventNotifier); err != nil {
-			return err
+		case resp := <-runner.GetWatcher():
+			if err := a.handleWatchResp(resp, runner, eventNotifier); err != nil {
+				return err
+			}
 		}
 	}
 }
@@ -160,6 +175,17 @@ func (a *agentImpl) handleWatchResp(
 	runner srvdiscovery.DiscoveryRunner,
 	eventNotifier *notifier.Notifier[Event],
 ) error {
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime)
+		if duration > 1*time.Second {
+			// Print a warning to indicate that there might be a
+			// congestion problem.
+			log.Warn("discovery agent broadcast took too long",
+				zap.Duration("duration", duration))
+		}
+	}()
+
 	if resp.Err != nil {
 		return errors.Annotate(resp.Err, "discovery agent handleWatchResp")
 	}
@@ -185,8 +211,13 @@ func (a *agentImpl) handleWatchResp(
 	return nil
 }
 
-func (a *agentImpl) Subscribe() (srvdiscovery.Snapshot, *notifier.Receiver[Event], error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+const (
+	subscribeTimeout = 10 * time.Second
+)
+
+// Subscribe subscribes to the service membership changes.
+func (a *agentImpl) Subscribe(ctx context.Context) (srvdiscovery.Snapshot, *notifier.Receiver[Event], error) {
+	ctx, cancel := context.WithTimeout(ctx, subscribeTimeout)
 	defer cancel()
 
 	req := &subscribeReq{

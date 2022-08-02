@@ -18,15 +18,6 @@ import (
 	"google.golang.org/grpc"
 )
 
-// multiService is an interface that implements all the Server interfaces
-// for the individual services running on the server masters.
-type multiService interface {
-	enginepb.DiscoveryServer
-	enginepb.ResourceManagerServer
-	enginepb.TaskSchedulerServer
-	enginepb.JobManagerServer
-}
-
 // multiClient is an interface that implements all the Client interfaces
 // for the individual services running on the server masters.
 type multiClient interface {

@@ -38,10 +38,6 @@ import (
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
-const (
-	fetchMetastoreConfigTimeout = 5 * time.Second
-)
-
 // MetastoreManager maintains all metastore clients we need.
 // Except for ServiceDiscoveryStore, FrameworkStore and BusinessClientConn,
 // a MetastoreManager is not thread-safe.

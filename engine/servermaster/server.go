@@ -65,13 +65,6 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type masterServiceGroup interface {
-	pb.DiscoveryServer
-	pb.ResourceManagerServer
-	pb.TaskSchedulerServer
-	pb.JobManagerServer
-}
-
 // use a slice instead of map because in small data size, slice search is faster
 // than map search.
 var masterRPCLimiterAllowList = []string{
