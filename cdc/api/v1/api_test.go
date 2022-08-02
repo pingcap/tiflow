@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/capture"
 	mock_capture "github.com/pingcap/tiflow/cdc/capture/mock"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/owner"
 	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -92,7 +93,12 @@ func (p *mockStatusProvider) GetCaptures(ctx context.Context) ([]*model.CaptureI
 	return args.Get(0).([]*model.CaptureInfo), args.Error(1)
 }
 
-func newRouter(c capture.Capture, p *mockStatusProvider) *gin.Engine {
+func (p *mockStatusProvider) IsHealthy(ctx context.Context) (bool, error) {
+	args := p.Called(ctx)
+	return args.Get(0).(bool), args.Error(1)
+}
+
+func newRouter(c capture.Capture, p owner.StatusProvider) *gin.Engine {
 	router := gin.New()
 	RegisterOpenAPIRoutes(router, NewOpenAPI4Test(c, p))
 	return router
@@ -875,7 +881,48 @@ func TestSetLogLevel(t *testing.T) {
 	require.Contains(t, httpError.Error, "fail to change log level: foo")
 }
 
+func TestHealth(t *testing.T) {
+	t.Parallel()
+	// capture is owner
+	ctrl := gomock.NewController(t)
+	cp := mock_capture.NewMockCapture(ctrl)
+	sp := mock_owner.NewMockStatusProvider(ctrl)
+	ownerRouter := newRouter(cp, sp)
+	api := testCase{url: "/api/v1/health", method: "GET"}
+
+	cp.EXPECT().IsReady().Return(true).AnyTimes()
+	cp.EXPECT().Info().DoAndReturn(func() (model.CaptureInfo, error) {
+		return model.CaptureInfo{}, nil
+	}).AnyTimes()
+	cp.EXPECT().IsOwner().DoAndReturn(func() bool {
+		return true
+	}).AnyTimes()
+
+	// IsHealth returns error.
+	isHealthError := sp.EXPECT().IsHealth(gomock.Any()).
+		Return(false, cerror.ErrOwnerNotFound)
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
+	ownerRouter.ServeHTTP(w, req)
+	require.Equal(t, 500, w.Code)
+
+	// IsHealth returns false.
+	isHealthFalse := sp.EXPECT().IsHealth(gomock.Any()).
+		Return(false, cerror.ErrOwnerNotFound).After(isHealthError)
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
+	ownerRouter.ServeHTTP(w, req)
+	require.Equal(t, 500, w.Code)
+
+	// IsHealth returns true.
+	sp.EXPECT().IsHealth(gomock.Any()).
+		Return(true, nil).After(isHealthFalse)
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
+	ownerRouter.ServeHTTP(w, req)
+	require.Equal(t, 200, w.Code)
+}
+
 // TODO: finished these test cases after we decouple those APIs from etcdClient.
 func TestCreateChangefeed(t *testing.T) {}
 func TestUpdateChangefeed(t *testing.T) {}
-func TestHealth(t *testing.T)           {}
