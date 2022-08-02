@@ -325,7 +325,7 @@ func QueryJobViaOpenAPI(
 		"http://%s/api/v1/jobs/%s?tenant_id=%s&project_id=%s",
 		apiEndpoint, jobID, tenantID, projectID,
 	)
-	resp, err := http.Get(url)
+	resp, err := http.Get(url) // #nosec G107
 	if err != nil {
 		return
 	}

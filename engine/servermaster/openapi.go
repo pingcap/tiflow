@@ -44,7 +44,7 @@ type APICreateJobRequest struct {
 	JobConfig string `json:"job_config"`
 }
 
-// APICreateJobRequest defines the json fields of query job response
+// APICreateJobResponse defines the json fields of query job response
 type APIQueryJobResponse struct {
 	JobType   int32  `json:"job_type"`
 	JobConfig string `json:"job_config"`
