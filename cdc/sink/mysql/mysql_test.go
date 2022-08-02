@@ -48,7 +48,7 @@ func newMySQLSink4Test(ctx context.Context, t *testing.T) *mysqlSink {
 	params.batchReplaceEnabled = false
 	return &mysqlSink{
 		txnCache:   newUnresolvedTxnCache(),
-		statistics: metrics.NewStatistics(ctx, metrics.SinkTypeDB),
+		statistics: metrics.NewStatistics(ctx, "", metrics.SinkTypeDB),
 		params:     params,
 	}
 }
@@ -1964,7 +1964,7 @@ func TestCleanTableResource(t *testing.T) {
 	tblID := model.TableID(1)
 	s := &mysqlSink{
 		txnCache:   newUnresolvedTxnCache(),
-		statistics: metrics.NewStatistics(ctx, metrics.SinkTypeDB),
+		statistics: metrics.NewStatistics(ctx, "", metrics.SinkTypeDB),
 	}
 	require.Nil(t, s.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
 		Table: &model.TableName{TableID: tblID, Schema: "test", Table: "t1"},

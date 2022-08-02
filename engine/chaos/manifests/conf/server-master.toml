@@ -1,9 +1,12 @@
-etcd-endpoints = ["metastore-business:12479"] # Reuse the same endpoints as the business-metastore.
+# Reuse the same endpoints as the metastore.
+etcd-endpoints = ["metastore-etcd:12479"] 
 
-[frame-metastore-conf]
-endpoints = ["metastore-framework:13306"]
+[framework-metastore-conf]
+endpoints = ["metastore-mysql:13306"]
 auth.user = "root"
-auth.passwd = ""
+schema = "test"
 
 [business-metastore-conf]
-endpoints = ["metastore-business:12479"]
+endpoints = ["metastore-mysql:13306"]
+auth.user = "root"
+schema = "test"

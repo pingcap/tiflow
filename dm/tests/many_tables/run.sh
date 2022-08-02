@@ -91,7 +91,7 @@ function run() {
 	check_metric $WORKER1_PORT 'lightning_tables{result="success",source_id="mysql-replica-01",state="completed",task="test"}' 1 499 501
 
 	# check https://github.com/pingcap/tiflow/issues/5063
-	check_time=20
+	check_time=100
 	sleep 5
 	while [ $check_time -gt 0 ]; do
 		syncer_recv_event_num=$(grep '"receive binlog event"' $WORK_DIR/worker1/log/dm-worker.log | wc -l)
