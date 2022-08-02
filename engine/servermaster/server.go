@@ -523,6 +523,11 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 		log.Error("connect to framework metastore fail", zap.Any("config", cfg.FrameMetaConf), zap.Error(err))
 		return nil
 	}
+	// create the framework meta client after we have try create the schema
+	if s.frameMetaClient, err = pkgOrm.NewClient(s.frameworkClientConn); err != nil {
+		log.Error("create meta client fail", zap.Error(err))
+		return err
+	}
 	log.Info("register framework metastore successfully", zap.Any("metastore", cfg.FrameMetaConf))
 
 	// register metastore for business
@@ -661,12 +666,6 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	err = s.initializedBackendMeta(ctx)
 	if err != nil {
 		return
-	}
-
-	// create the framework meta client after we have try create the schema
-	if s.frameMetaClient, err = pkgOrm.NewClient(s.frameworkClientConn); err != nil {
-		log.Error("create meta client fail", zap.Error(err))
-		return err
 	}
 
 	// rebuild states from existing meta if needed
