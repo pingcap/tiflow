@@ -489,7 +489,8 @@ func (r *ReplicationSet) pollOnPrepare(
 				zap.Any("replicationSet", r))
 			r.clearPrimary()
 			return nil, false, nil
-		} else if r.isInRole(captureID, CaptureRoleSecondary) {
+		}
+		if r.isInRole(captureID, CaptureRoleSecondary) {
 			log.Info("schedulerv3: capture is stopped during Prepare",
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID),
@@ -536,7 +537,7 @@ func (r *ReplicationSet) pollOnCommit(
 					},
 				}, false, nil
 			}
-			if len(r.Captures) > 1 {
+			if r.hasRole(CaptureRoleUndetermined) {
 				// There are other captures that have the table.
 				// Must waiting for other captures become stopped or absent
 				// before promoting the secondary, otherwise there may be two
@@ -630,13 +631,13 @@ func (r *ReplicationSet) pollOnCommit(
 				r.State = ReplicationSetStateAbsent
 			}
 			return nil, true, nil
-		} else if _, ok := r.Captures[captureID]; ok {
+		} else if r.isInRole(captureID, CaptureRoleUndetermined) {
 			log.Info("schedulerv3: capture is stopped during Commit",
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID),
 				zap.Any("replicationSet", r))
-			delete(r.Captures, captureID)
-			return nil, false, nil
+			err := r.clearCapture(captureID, CaptureRoleUndetermined)
+			return nil, false, errors.Trace(err)
 		}
 
 	case schedulepb.TableStateReplicating:
@@ -676,7 +677,7 @@ func (r *ReplicationSet) pollOnCommit(
 		if r.Primary == captureID && r.hasRole(CaptureRoleSecondary) {
 			r.updateCheckpoint(input.Checkpoint)
 			return nil, false, nil
-		} else if _, ok := r.Captures[captureID]; ok {
+		} else if r.isInRole(captureID, CaptureRoleUndetermined) {
 			log.Info("schedulerv3: capture is stopping during Commit",
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID),
