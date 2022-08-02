@@ -128,6 +128,8 @@ func TestInitEpochModel(t *testing.T) {
 	err = InitEpochModel(ctx, nil)
 	require.Regexp(t, regexp.QuoteMeta("input client conn is nil"), err.Error())
 
+	mock.ExpectQuery("SELECT VERSION()").
+		WillReturnRows(sqlmock.NewRows([]string{"VERSION()"}).AddRow("5.7.35-log"))
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA " +
 		"where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).WillReturnRows(
 		sqlmock.NewRows([]string{"SCHEMA_NAME"}))
