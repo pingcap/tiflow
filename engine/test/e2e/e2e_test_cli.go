@@ -17,13 +17,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/url"
 	"os/exec"
+	"strconv"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 
 	"github.com/pingcap/tiflow/engine/client"
@@ -34,23 +38,29 @@ import (
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	server "github.com/pingcap/tiflow/engine/servermaster"
+	"github.com/pingcap/tiflow/pkg/httputil"
 )
+
+func init() {
+	// set the debug level log for easy test
+	log.SetLevel(zapcore.DebugLevel)
+}
 
 // ChaosCli is used to interact with server master, fake job and provides ways
 // to adding chaos in e2e test.
 type ChaosCli struct {
-	// used to operate with server master, such as submit job
+	masterAddrs []string
+	// masterCli is used to operate with server master, such as submit job
 	masterCli client.MasterClient
-	// cc is the client connection for business metastore
+	// clientConn is the client connection for business metastore
 	clientConn metaModel.ClientConn
-	// used to query metadata which is stored from business logic(job-level isolation)
+	// metaCli is used to query metadata which is stored from business logic(job-level isolation)
 	// NEED to reinitialize the metaCli if we access to a different job
 	metaCli metaModel.KVClient
-	// used to write to etcd to simulate the business of fake job, this etcd client
-	// reuses the endpoints of business meta KV.
+	// fakeJobCli is used to write to etcd to simulate the business of fake job
 	fakeJobCli *clientv3.Client
 	fakeJobCfg *FakeJobConfig
-	// used to save project info
+	// project is used to save project info
 	project tenant.ProjectInfo
 }
 
@@ -65,6 +75,8 @@ type FakeJobConfig struct {
 func NewUTCli(ctx context.Context, masterAddrs, businessMetaAddrs []string, project tenant.ProjectInfo,
 	cfg *FakeJobConfig,
 ) (*ChaosCli, error) {
+	// TODO: NEED to move metastore config to a toml, and parse the toml
+	defaultSchema := "test"
 	masterCli, err := client.NewMasterClient(ctx, masterAddrs)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -72,13 +84,14 @@ func NewUTCli(ctx context.Context, masterAddrs, businessMetaAddrs []string, proj
 
 	conf := server.NewDefaultBusinessMetaConfig()
 	conf.Endpoints = businessMetaAddrs
+	conf.Schema = defaultSchema
 	cc, err := meta.NewClientConn(conf)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	fakeJobCli, err := clientv3.New(clientv3.Config{
-		Endpoints:   businessMetaAddrs,
+		Endpoints:   cfg.EtcdEndpoints,
 		Context:     ctx,
 		DialTimeout: 3 * time.Second,
 		DialOptions: []grpc.DialOption{},
@@ -88,32 +101,19 @@ func NewUTCli(ctx context.Context, masterAddrs, businessMetaAddrs []string, proj
 	}
 
 	return &ChaosCli{
-		masterCli:  masterCli,
-		clientConn: cc,
-		fakeJobCli: fakeJobCli,
-		fakeJobCfg: cfg,
-		project:    project,
+		masterAddrs: masterAddrs,
+		masterCli:   masterCli,
+		clientConn:  cc,
+		fakeJobCli:  fakeJobCli,
+		fakeJobCfg:  cfg,
+		project:     project,
 	}, nil
 }
 
 // CreateJob sends SubmitJob command to servermaster
 func (cli *ChaosCli) CreateJob(ctx context.Context, tp engineModel.JobType, config []byte) (string, error) {
-	req := &pb.SubmitJobRequest{
-		Tp:     int32(tp),
-		Config: config,
-		ProjectInfo: &pb.ProjectInfo{
-			TenantId:  cli.project.TenantID(),
-			ProjectId: cli.project.ProjectID(),
-		},
-	}
-	resp, err := cli.masterCli.SubmitJob(ctx, req)
-	if err != nil {
-		return "", err
-	}
-	if resp.Err != nil {
-		return "", errors.New(resp.Err.String())
-	}
-	return resp.JobId, nil
+	return CreateJobViaOpenAPI(ctx, cli.masterAddrs[0], cli.project.TenantID(),
+		cli.project.ProjectID(), tp, string(config))
 }
 
 // PauseJob sends PauseJob command to servermaster
@@ -179,6 +179,8 @@ func (cli *ChaosCli) getFakeJobCheckpoint(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	log.Debug("get fake job checkpoint", zap.String("ckptKey", ckptKey),
+		zap.Any("checkpoint", checkpoint))
 	return checkpoint, nil
 }
 
@@ -288,4 +290,33 @@ func (cli *ChaosCli) InitializeMetaClient(jobID string) error {
 
 	cli.metaCli = metaCli
 	return nil
+}
+
+// CreateJobViaOpenAPI wraps OpenAPI to create a job
+func CreateJobViaOpenAPI(
+	ctx context.Context, apiEndpoint string, tenantID string, projectID string,
+	tp engineModel.JobType, cfg string,
+) (string, error) {
+	cli, err := httputil.NewClient(nil)
+	if err != nil {
+		return "", err
+	}
+	data := url.Values{
+		"job_type":   {strconv.Itoa(int(tp))},
+		"job_config": {cfg},
+		"tenant_id":  {tenantID},
+		"project_id": {projectID},
+	}
+	apiURL := "http://" + apiEndpoint + "/api/v1/jobs"
+	resp, err := cli.PostForm(ctx, apiURL, data)
+	if err != nil {
+		return "", err
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	var jobID string
+	err = json.Unmarshal(body, &jobID)
+	return jobID, err
 }

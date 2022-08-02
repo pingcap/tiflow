@@ -79,11 +79,12 @@ func newMqSink(
 		return nil, errors.Trace(err)
 	}
 
+	captureAddr := contextutil.CaptureAddrFromCtx(ctx)
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	role := contextutil.RoleFromCtx(ctx)
 
 	encoder := encoderBuilder.Build()
-	statistics := metrics.NewStatistics(ctx, metrics.SinkTypeMQ)
+	statistics := metrics.NewStatistics(ctx, captureAddr, metrics.SinkTypeMQ)
 	flushWorker := newFlushWorker(encoder, mqProducer, statistics)
 
 	s := &mqSink{
@@ -474,6 +475,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 func NewPulsarSink(ctx context.Context, sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig, errCh chan error,
 ) (*mqSink, error) {
+	log.Warn("Pulsar Sink is not recommended for production use.")
 	s := sinkURI.Query().Get(config.ProtocolKey)
 	if s != "" {
 		replicaConfig.Sink.Protocol = s

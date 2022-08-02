@@ -18,8 +18,8 @@ import (
 	"sort"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
+	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 )
 
 // Assert TableSink implementation
@@ -35,7 +35,7 @@ type eventTableSink[E eventsink.TableEvent] struct {
 	eventAppender   eventsink.Appender[E]
 	// NOTICE: It is ordered by commitTs.
 	eventBuffer []E
-	state       pipeline.TableState
+	state       state.TableSinkState
 }
 
 // New an eventTableSink with given backendSink and event appender.
@@ -52,7 +52,7 @@ func New[E eventsink.TableEvent](
 		progressTracker: newProgressTracker(tableID),
 		eventAppender:   appender,
 		eventBuffer:     make([]E, 0, 1024),
-		state:           pipeline.TableStatePreparing,
+		state:           state.TableSinkSinking,
 	}
 }
 
@@ -91,7 +91,7 @@ func (e *eventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) {
 			Callback: func() {
 				e.progressTracker.remove(eventID)
 			},
-			TableStatus: &e.state,
+			SinkState: &e.state,
 		}
 		resolvedCallbackableEvents = append(resolvedCallbackableEvents, ce)
 		e.progressTracker.addEvent(eventID)
@@ -108,15 +108,12 @@ func (e *eventTableSink[E]) GetCheckpointTs() model.ResolvedTs {
 // Close the table sink and wait for all callbacks be called.
 // Notice: It will be blocked until all callbacks be called.
 func (e *eventTableSink[E]) Close(ctx context.Context) error {
-	// TODO: Before we depends on this state,
-	// we should check the state working well with new scheduler.
-	// Maybe we only need a sink state(isClosing), not a table state.
-	e.state.Store(pipeline.TableStateStopping)
+	e.state.Store(state.TableSinkStopping)
 	err := e.progressTracker.close(ctx)
 	if err != nil {
 		return err
 	}
-	e.state.Store(pipeline.TableStateStopped)
+	e.state.Store(state.TableSinkStopped)
 
 	return nil
 }

@@ -164,7 +164,6 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 
 	newCtx, cancel := context.WithCancel(ctx)
 	var dumpling *export.Dumper
-
 	if dumpling, err = export.NewDumper(newCtx, m.dumpConfig); err == nil {
 		m.mu.Lock()
 		m.core = dumpling
@@ -269,13 +268,13 @@ func (m *Dumpling) Status(_ *binlog.SourceStatus) interface{} {
 }
 
 func (m *Dumpling) status() *pb.DumpStatus {
-	mid := m.core.GetParameters()
+	dumpStatus := m.core.GetStatus()
 	s := &pb.DumpStatus{
-		TotalTables:       mid.TotalTables,
-		CompletedTables:   mid.CompletedTables,
-		FinishedBytes:     mid.FinishedBytes,
-		FinishedRows:      mid.FinishedRows,
-		EstimateTotalRows: mid.EstimateTotalRows,
+		TotalTables:       dumpStatus.TotalTables,
+		CompletedTables:   dumpStatus.CompletedTables,
+		FinishedBytes:     dumpStatus.FinishedBytes,
+		FinishedRows:      dumpStatus.FinishedRows,
+		EstimateTotalRows: dumpStatus.EstimateTotalRows,
 	}
 	var estimateProgress string
 	if s.FinishedRows >= s.EstimateTotalRows {
