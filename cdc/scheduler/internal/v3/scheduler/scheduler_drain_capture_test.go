@@ -58,44 +58,44 @@ func TestDrainCapture(t *testing.T) {
 	replications = map[model.TableID]*replication.ReplicationSet{
 		1: {
 			State: replication.ReplicationSetStateReplicating, Primary: "a",
-			Captures: map[string]replication.CaptureRole{
-				"a": replication.CaptureRolePrimary,
+			Captures: map[string]replication.Role{
+				"a": replication.RolePrimary,
 			},
 		},
 		2: {
 			State: replication.ReplicationSetStateCommit,
-			Captures: map[string]replication.CaptureRole{
-				"a": replication.CaptureRoleSecondary,
+			Captures: map[string]replication.Role{
+				"a": replication.RoleSecondary,
 			},
 		},
 		3: {
 			State: replication.ReplicationSetStatePrepare,
-			Captures: map[string]replication.CaptureRole{
-				"a": replication.CaptureRoleSecondary,
+			Captures: map[string]replication.Role{
+				"a": replication.RoleSecondary,
 			},
 		},
 		4: {
 			State: replication.ReplicationSetStatePrepare, Primary: "a",
-			Captures: map[string]replication.CaptureRole{
-				"a": replication.CaptureRolePrimary, "b": replication.CaptureRoleSecondary,
+			Captures: map[string]replication.Role{
+				"a": replication.RolePrimary, "b": replication.RoleSecondary,
 			},
 		},
 		5: {
 			State: replication.ReplicationSetStateRemoving, Primary: "a",
-			Captures: map[string]replication.CaptureRole{
-				"a": replication.CaptureRolePrimary,
+			Captures: map[string]replication.Role{
+				"a": replication.RolePrimary,
 			},
 		},
 		6: {
 			State: replication.ReplicationSetStateReplicating, Primary: "b",
-			Captures: map[string]replication.CaptureRole{
-				"b": replication.CaptureRolePrimary,
+			Captures: map[string]replication.Role{
+				"b": replication.RolePrimary,
 			},
 		},
 		7: {
 			State: replication.ReplicationSetStateCommit,
-			Captures: map[string]replication.CaptureRole{
-				"b": replication.CaptureRoleSecondary,
+			Captures: map[string]replication.Role{
+				"b": replication.RoleSecondary,
 			},
 		},
 	}

@@ -33,20 +33,20 @@ func TestSchedulerRebalance(t *testing.T) {
 	replications := map[model.TableID]*replication.ReplicationSet{
 		1: {
 			State: replication.ReplicationSetStateReplicating, Primary: "a",
-			Captures: map[string]replication.CaptureRole{
-				"a": replication.CaptureRolePrimary,
+			Captures: map[string]replication.Role{
+				"a": replication.RolePrimary,
 			},
 		},
 		2: {
 			State: replication.ReplicationSetStateCommit,
-			Captures: map[string]replication.CaptureRole{
-				"b": replication.CaptureRoleSecondary,
+			Captures: map[string]replication.Role{
+				"b": replication.RoleSecondary,
 			},
 		},
 		3: {
 			State: replication.ReplicationSetStatePrepare, Primary: "a",
-			Captures: map[string]replication.CaptureRole{
-				"a": replication.CaptureRolePrimary, "b": replication.CaptureRoleSecondary,
+			Captures: map[string]replication.Role{
+				"a": replication.RolePrimary, "b": replication.RoleSecondary,
 			},
 		},
 		4: {State: replication.ReplicationSetStateAbsent},

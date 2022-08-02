@@ -90,26 +90,26 @@ func (r ReplicationSetState) MarshalJSON() ([]byte, error) {
 	return json.Marshal(r.String())
 }
 
-// CaptureRole is the role of a capture.
-type CaptureRole int
+// Role is the role of a capture.
+type Role int
 
 const (
-	// CaptureRolePrimary primary role.
-	CaptureRolePrimary = 1
-	// CaptureRoleSecondary secondary role.
-	CaptureRoleSecondary = 2
-	// CaptureRoleUndetermined means that we don't known its state, it may be
+	// RolePrimary primary role.
+	RolePrimary = 1
+	// RoleSecondary secondary role.
+	RoleSecondary = 2
+	// RoleUndetermined means that we don't known its state, it may be
 	// replicating, stopping or stopped.
-	CaptureRoleUndetermined = 3
+	RoleUndetermined = 3
 )
 
-func (r CaptureRole) String() string {
+func (r Role) String() string {
 	switch r {
-	case CaptureRolePrimary:
+	case RolePrimary:
 		return "Primary"
-	case CaptureRoleSecondary:
+	case RoleSecondary:
 		return "Secondary"
-	case CaptureRoleUndetermined:
+	case RoleUndetermined:
 		return "Undetermined"
 	default:
 		return fmt.Sprintf("Unknown %d", r)
@@ -118,7 +118,7 @@ func (r CaptureRole) String() string {
 
 // MarshalJSON returns r as the JSON encoding of CaptureRole.
 // Only used for pretty print in zap log.
-func (r CaptureRole) MarshalJSON() ([]byte, error) {
+func (r Role) MarshalJSON() ([]byte, error) {
 	return json.Marshal(r.String())
 }
 
@@ -132,7 +132,7 @@ type ReplicationSet struct { //nolint:revive
 	// Captures is a map of captures that has the table replica.
 	// NB: Invariant, 1) at most one primary, 2) primary capture must be in
 	//     CaptureRolePrimary.
-	Captures   map[model.CaptureID]CaptureRole
+	Captures   map[model.CaptureID]Role
 	Checkpoint schedulepb.Checkpoint
 }
 
@@ -146,7 +146,7 @@ func NewReplicationSet(
 	r := &ReplicationSet{
 		Changefeed: changefeed,
 		TableID:    tableID,
-		Captures:   make(map[string]CaptureRole),
+		Captures:   make(map[string]Role),
 		Checkpoint: schedulepb.Checkpoint{
 			CheckpointTs: checkpoint,
 			ResolvedTs:   checkpoint,
@@ -171,7 +171,7 @@ func NewReplicationSet(
 					zap.Any("status", tableStatus))
 			}
 			// Recognize primary if it's table is in replicating state.
-			err := r.setCapture(captureID, CaptureRoleSecondary)
+			err := r.setCapture(captureID, RoleSecondary)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
@@ -181,14 +181,14 @@ func NewReplicationSet(
 			}
 		case schedulepb.TableStatePreparing:
 			// Recognize secondary if it's table is in preparing state.
-			err := r.setCapture(captureID, CaptureRoleSecondary)
+			err := r.setCapture(captureID, RoleSecondary)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
 		case schedulepb.TableStatePrepared:
 			// Recognize secondary and Commit state if it's table is in prepared state.
 			committed = true
-			err := r.setCapture(captureID, CaptureRoleSecondary)
+			err := r.setCapture(captureID, RoleSecondary)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
@@ -201,7 +201,7 @@ func NewReplicationSet(
 				zap.Any("replicationSet", r),
 				zap.Int64("tableID", table.TableID),
 				zap.Any("status", tableStatus))
-			err := r.setCapture(captureID, CaptureRoleUndetermined)
+			err := r.setCapture(captureID, RoleUndetermined)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
@@ -222,7 +222,7 @@ func NewReplicationSet(
 		r.State = ReplicationSetStateReplicating
 	}
 	// Move table or add table is in-progress.
-	if r.hasRole(CaptureRoleSecondary) {
+	if r.hasRole(RoleSecondary) {
 		r.State = ReplicationSetStatePrepare
 	}
 	// Move table or add table is committed.
@@ -241,12 +241,12 @@ func NewReplicationSet(
 	return r, nil
 }
 
-func (r *ReplicationSet) hasRole(role CaptureRole) bool {
+func (r *ReplicationSet) hasRole(role Role) bool {
 	_, has := r.getRole(role)
 	return has
 }
 
-func (r *ReplicationSet) isInRole(captureID model.CaptureID, role CaptureRole) bool {
+func (r *ReplicationSet) isInRole(captureID model.CaptureID, role Role) bool {
 	rc, ok := r.Captures[captureID]
 	if !ok {
 		return false
@@ -254,7 +254,7 @@ func (r *ReplicationSet) isInRole(captureID model.CaptureID, role CaptureRole) b
 	return rc == role
 }
 
-func (r *ReplicationSet) getRole(role CaptureRole) (model.CaptureID, bool) {
+func (r *ReplicationSet) getRole(role Role) (model.CaptureID, bool) {
 	for captureID, cr := range r.Captures {
 		if cr == role {
 			return captureID, true
@@ -263,7 +263,7 @@ func (r *ReplicationSet) getRole(role CaptureRole) (model.CaptureID, bool) {
 	return "", false
 }
 
-func (r *ReplicationSet) setCapture(captureID model.CaptureID, role CaptureRole) error {
+func (r *ReplicationSet) setCapture(captureID model.CaptureID, role Role) error {
 	cr, ok := r.Captures[captureID]
 	if ok && cr != role {
 		jsonR, _ := json.Marshal(r)
@@ -274,7 +274,7 @@ func (r *ReplicationSet) setCapture(captureID model.CaptureID, role CaptureRole)
 	return nil
 }
 
-func (r *ReplicationSet) clearCapture(captureID model.CaptureID, role CaptureRole) error {
+func (r *ReplicationSet) clearCapture(captureID model.CaptureID, role Role) error {
 	cr, ok := r.Captures[captureID]
 	if ok && cr != role {
 		jsonR, _ := json.Marshal(r)
@@ -292,7 +292,7 @@ func (r *ReplicationSet) promoteSecondary(captureID model.CaptureID) error {
 		return nil
 	}
 	role, ok := r.Captures[captureID]
-	if ok && role != CaptureRoleSecondary {
+	if ok && role != RoleSecondary {
 		jsonR, _ := json.Marshal(r)
 		return cerror.ErrReplicationSetInconsistent.GenWithStackByArgs(fmt.Sprintf(
 			"can not promote %s to primary, it's %s, %v", captureID, role, string(jsonR)))
@@ -301,7 +301,7 @@ func (r *ReplicationSet) promoteSecondary(captureID model.CaptureID) error {
 		delete(r.Captures, r.Primary)
 	}
 	r.Primary = captureID
-	r.Captures[r.Primary] = CaptureRolePrimary
+	r.Captures[r.Primary] = RolePrimary
 	return nil
 }
 
@@ -356,12 +356,12 @@ func (r *ReplicationSet) checkInvariant(
 	}
 	roleP, okP := r.Captures[r.Primary]
 	if (!okP && r.Primary != "") || // Primary is not in Captures.
-		(okP && roleP != CaptureRolePrimary) { // Primary is not in primary role.
+		(okP && roleP != RolePrimary) { // Primary is not in primary role.
 		return r.inconsistentError(input, captureID,
 			"schedulerv3: capture inconsistent")
 	}
 	for captureID, role := range r.Captures {
-		if role == CaptureRolePrimary && captureID != r.Primary {
+		if role == RolePrimary && captureID != r.Primary {
 			return r.multiplePrimaryError(input, captureID,
 				"schedulerv3: capture inconsistent")
 		}
@@ -425,7 +425,7 @@ func (r *ReplicationSet) pollOnAbsent(
 	switch input.State {
 	case schedulepb.TableStateAbsent:
 		r.State = ReplicationSetStatePrepare
-		err := r.setCapture(captureID, CaptureRoleSecondary)
+		err := r.setCapture(captureID, RoleSecondary)
 		return nil, true, errors.Trace(err)
 
 	case schedulepb.TableStateStopped:
@@ -448,7 +448,7 @@ func (r *ReplicationSet) pollOnPrepare(
 ) (*schedulepb.Message, bool, error) {
 	switch input.State {
 	case schedulepb.TableStateAbsent:
-		if r.isInRole(captureID, CaptureRoleSecondary) {
+		if r.isInRole(captureID, RoleSecondary) {
 			return &schedulepb.Message{
 				To:      captureID,
 				MsgType: schedulepb.MsgDispatchTableRequest,
@@ -464,12 +464,12 @@ func (r *ReplicationSet) pollOnPrepare(
 			}, false, nil
 		}
 	case schedulepb.TableStatePreparing:
-		if r.isInRole(captureID, CaptureRoleSecondary) {
+		if r.isInRole(captureID, RoleSecondary) {
 			// Ignore secondary Preparing, it may take a long time.
 			return nil, false, nil
 		}
 	case schedulepb.TableStatePrepared:
-		if r.isInRole(captureID, CaptureRoleSecondary) {
+		if r.isInRole(captureID, RoleSecondary) {
 			// Secondary is prepared, transit to Commit state.
 			r.State = ReplicationSetStateCommit
 			return nil, true, nil
@@ -490,12 +490,12 @@ func (r *ReplicationSet) pollOnPrepare(
 			r.clearPrimary()
 			return nil, false, nil
 		}
-		if r.isInRole(captureID, CaptureRoleSecondary) {
+		if r.isInRole(captureID, RoleSecondary) {
 			log.Info("schedulerv3: capture is stopped during Prepare",
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID),
 				zap.Any("replicationSet", r))
-			err := r.clearCapture(captureID, CaptureRoleSecondary)
+			err := r.clearCapture(captureID, RoleSecondary)
 			if err != nil {
 				return nil, false, errors.Trace(err)
 			}
@@ -523,7 +523,7 @@ func (r *ReplicationSet) pollOnCommit(
 ) (*schedulepb.Message, bool, error) {
 	switch input.State {
 	case schedulepb.TableStatePrepared:
-		if r.isInRole(captureID, CaptureRoleSecondary) {
+		if r.isInRole(captureID, RoleSecondary) {
 			if r.Primary != "" {
 				// Secondary capture is prepared and waiting for stopping primary.
 				// Send message to primary, ask for stopping.
@@ -537,7 +537,7 @@ func (r *ReplicationSet) pollOnCommit(
 					},
 				}, false, nil
 			}
-			if r.hasRole(CaptureRoleUndetermined) {
+			if r.hasRole(RoleUndetermined) {
 				// There are other captures that have the table.
 				// Must waiting for other captures become stopped or absent
 				// before promoting the secondary, otherwise there may be two
@@ -560,7 +560,7 @@ func (r *ReplicationSet) pollOnCommit(
 				zap.String("captureID", captureID))
 		}
 		// Secondary has been promoted, retry AddTableRequest.
-		if r.Primary == captureID && !r.hasRole(CaptureRoleSecondary) {
+		if r.Primary == captureID && !r.hasRole(RoleSecondary) {
 			return &schedulepb.Message{
 				To:      captureID,
 				MsgType: schedulepb.MsgDispatchTableRequest,
@@ -581,7 +581,7 @@ func (r *ReplicationSet) pollOnCommit(
 			r.updateCheckpoint(input.Checkpoint)
 			original := r.Primary
 			r.clearPrimary()
-			if !r.hasRole(CaptureRoleSecondary) {
+			if !r.hasRole(RoleSecondary) {
 				// If there is no secondary, transit to Absent.
 				log.Info("schedulerv3: primary is stopped during Commit",
 					zap.Stringer("tableState", input),
@@ -591,7 +591,7 @@ func (r *ReplicationSet) pollOnCommit(
 				return nil, true, nil
 			}
 			// Primary is stopped, promote secondary to primary.
-			secondary, _ := r.getRole(CaptureRoleSecondary)
+			secondary, _ := r.getRole(RoleSecondary)
 			err := r.promoteSecondary(secondary)
 			if err != nil {
 				return nil, false, errors.Trace(err)
@@ -614,7 +614,7 @@ func (r *ReplicationSet) pollOnCommit(
 					},
 				},
 			}, false, nil
-		} else if r.isInRole(captureID, CaptureRoleSecondary) {
+		} else if r.isInRole(captureID, RoleSecondary) {
 			// As it sends RemoveTableRequest to the original primary
 			// upon entering Commit state. Do not change state and wait
 			// the original primary reports its table.
@@ -622,7 +622,7 @@ func (r *ReplicationSet) pollOnCommit(
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID),
 				zap.Any("replicationSet", r))
-			err := r.clearCapture(captureID, CaptureRoleSecondary)
+			err := r.clearCapture(captureID, RoleSecondary)
 			if err != nil {
 				return nil, false, errors.Trace(err)
 			}
@@ -631,19 +631,19 @@ func (r *ReplicationSet) pollOnCommit(
 				r.State = ReplicationSetStateAbsent
 			}
 			return nil, true, nil
-		} else if r.isInRole(captureID, CaptureRoleUndetermined) {
+		} else if r.isInRole(captureID, RoleUndetermined) {
 			log.Info("schedulerv3: capture is stopped during Commit",
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID),
 				zap.Any("replicationSet", r))
-			err := r.clearCapture(captureID, CaptureRoleUndetermined)
+			err := r.clearCapture(captureID, RoleUndetermined)
 			return nil, false, errors.Trace(err)
 		}
 
 	case schedulepb.TableStateReplicating:
 		if r.Primary == captureID {
 			r.updateCheckpoint(input.Checkpoint)
-			if r.hasRole(CaptureRoleSecondary) {
+			if r.hasRole(RoleSecondary) {
 				// Original primary is not stopped, ask for stopping.
 				return &schedulepb.Message{
 					To:      captureID,
@@ -674,10 +674,10 @@ func (r *ReplicationSet) pollOnCommit(
 			input, captureID, "schedulerv3: multiple primary")
 
 	case schedulepb.TableStateStopping:
-		if r.Primary == captureID && r.hasRole(CaptureRoleSecondary) {
+		if r.Primary == captureID && r.hasRole(RoleSecondary) {
 			r.updateCheckpoint(input.Checkpoint)
 			return nil, false, nil
-		} else if r.isInRole(captureID, CaptureRoleUndetermined) {
+		} else if r.isInRole(captureID, RoleUndetermined) {
 			log.Info("schedulerv3: capture is stopping during Commit",
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID),
@@ -752,11 +752,11 @@ func (r *ReplicationSet) pollOnRemoving(
 		errField := zap.Skip()
 		if r.Primary == captureID {
 			r.clearPrimary()
-		} else if r.isInRole(captureID, CaptureRoleSecondary) {
-			err := r.clearCapture(captureID, CaptureRoleSecondary)
+		} else if r.isInRole(captureID, RoleSecondary) {
+			err := r.clearCapture(captureID, RoleSecondary)
 			errField = zap.Error(err)
 		} else {
-			err := r.clearCapture(captureID, CaptureRoleUndetermined)
+			err := r.clearCapture(captureID, RoleUndetermined)
 			errField = zap.Error(err)
 		}
 		log.Info("schedulerv3: replication state remove capture",
@@ -792,7 +792,7 @@ func (r *ReplicationSet) handleAddTable(
 	}
 	oldState := r.State
 	r.State = ReplicationSetStateAbsent
-	err := r.setCapture(captureID, CaptureRoleSecondary)
+	err := r.setCapture(captureID, RoleSecondary)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -826,7 +826,7 @@ func (r *ReplicationSet) handleMoveTable(
 	}
 	oldState := r.State
 	r.State = ReplicationSetStatePrepare
-	err := r.setCapture(dest, CaptureRoleSecondary)
+	err := r.setCapture(dest, RoleSecondary)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

@@ -98,7 +98,7 @@ func TestReplicationManagerHandleAddTableTask(t *testing.T) {
 	}, msgs[0])
 	require.Equal(t, ReplicationSetStateCommit, r.tables[1].State)
 	require.Equal(t, "1", r.tables[1].Primary)
-	require.False(t, r.tables[1].hasRole(CaptureRoleSecondary))
+	require.False(t, r.tables[1].hasRole(RoleSecondary))
 
 	// Commit -> Replicating through heartbeat response.
 	msgs, err = r.HandleMessage([]*schedulepb.Message{{
@@ -115,7 +115,7 @@ func TestReplicationManagerHandleAddTableTask(t *testing.T) {
 	require.Len(t, msgs, 0)
 	require.Equal(t, ReplicationSetStateReplicating, r.tables[1].State)
 	require.Equal(t, "1", r.tables[1].Primary)
-	require.False(t, r.tables[1].hasRole(CaptureRoleSecondary))
+	require.False(t, r.tables[1].hasRole(RoleSecondary))
 
 	// Handle task again to clear runningTasks
 	msgs, err = r.HandleTasks(nil)
