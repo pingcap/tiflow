@@ -136,8 +136,8 @@ func (jm *JobMaster) QueryStatus(ctx context.Context, taskID string) *dmpkg.Quer
 	return resp.(*dmpkg.QueryStatusResponse)
 }
 
-// OperateTask operate task.
-func (jm *JobMaster) OperateTask(ctx context.Context, op dmpkg.OperateType, cfg *config.JobCfg, tasks []string) error {
+// operateTask operate task.
+func (jm *JobMaster) operateTask(ctx context.Context, op dmpkg.OperateType, cfg *config.JobCfg, tasks []string) error {
 	switch op {
 	case dmpkg.Resume, dmpkg.Pause, dmpkg.Update:
 		return jm.taskManager.OperateTask(ctx, op, cfg, tasks)
@@ -166,7 +166,7 @@ func (jm *JobMaster) UpdateJobCfg(ctx context.Context, cfg *config.JobCfg) error
 	if err := jm.preCheck(ctx, cfg); err != nil {
 		return err
 	}
-	if err := jm.OperateTask(ctx, dmpkg.Update, cfg, nil); err != nil {
+	if err := jm.operateTask(ctx, dmpkg.Update, cfg, nil); err != nil {
 		return err
 	}
 	if err := jm.checkpointAgent.Update(ctx, cfg); err != nil {

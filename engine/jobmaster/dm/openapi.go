@@ -155,7 +155,7 @@ func (jm *JobMaster) DMAPIOperateJob(c *gin.Context) {
 	if req.Tasks != nil {
 		tasks = *req.Tasks
 	}
-	err := jm.OperateTask(c.Request.Context(), op, nil, tasks)
+	err := jm.operateTask(c.Request.Context(), op, nil, tasks)
 	if err != nil {
 		// nolint:errcheck
 		_ = c.Error(err)

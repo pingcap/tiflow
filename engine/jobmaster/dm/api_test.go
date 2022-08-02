@@ -271,8 +271,8 @@ func TestOperateTask(t *testing.T) {
 	jm := &JobMaster{
 		taskManager: NewTaskManager(nil, metadata.NewJobStore("master-id", kvmock.NewMetaMock()), nil, log.L()),
 	}
-	require.EqualError(t, jm.OperateTask(context.Background(), dmpkg.Delete, nil, nil), fmt.Sprintf("unsupport op type %d for operate task", dmpkg.Delete))
-	require.EqualError(t, jm.OperateTask(context.Background(), dmpkg.Pause, nil, nil), "state not found")
+	require.EqualError(t, jm.operateTask(context.Background(), dmpkg.Delete, nil, nil), fmt.Sprintf("unsupport op type %d for operate task", dmpkg.Delete))
+	require.EqualError(t, jm.operateTask(context.Background(), dmpkg.Pause, nil, nil), "state not found")
 }
 
 func TestGetJobCfg(t *testing.T) {
