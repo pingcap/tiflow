@@ -15,7 +15,6 @@ package servermaster
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -51,7 +50,6 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/meta"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
-	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/serverutil"
@@ -635,25 +633,15 @@ func (s *Server) initializedBackendMeta(ctx context.Context) error {
 	bctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	if err := pkgOrm.InitAllFrameworkModels(bctx, s.frameworkClientConn); err != nil {
-		log.Error("framework metastore initialized all backend tables fail", zap.Error(err))
+		log.Error("framework metastore initializes all backend tables fail", zap.Error(err))
 		return err
 	}
 
 	// Since we have the sql-type business metastore,
 	// we need to initialize the logic_epoches table for all jobs
 	if s.cfg.BusinessMetaConf.StoreType == metaModel.StoreTypeSQL {
-		conn, err := s.businessClientConn.GetConn()
-		if err != nil {
-			return err
-		}
-		gormDB, err := pkgOrm.NewGormDB(conn.(*sql.DB))
-		if err != nil {
-			return err
-		}
-		// TODO: we will replace the gormDB with ClientConn here after we unify the usage of
-		// framework client
-		err = ormModel.InitializeEpochModel(ctx, gormDB)
-		if err != nil {
+		if err := pkgOrm.InitEpochModel(ctx, s.businessClientConn); err != nil {
+			log.Error("business metastore initializes the logic epoch table fail", zap.Error(err))
 			return err
 		}
 	}

@@ -124,29 +124,3 @@ func TestGenEpoch(t *testing.T) {
 
 	mock.ExpectClose()
 }
-
-func TestInitEpochModel(t *testing.T) {
-	t.Parallel()
-
-	gdb, mock, err := mockGetDBConn(t, "test")
-	require.NoError(t, err)
-	defer closeGormDB(t, gdb)
-	ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
-	defer cancel()
-
-	err = InitEpochModel(ctx, nil)
-	require.Regexp(t, regexp.QuoteMeta("inner db is nil"), err.Error())
-
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA " +
-		"where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).WillReturnRows(
-		sqlmock.NewRows([]string{"SCHEMA_NAME"}))
-	mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `logic_epoches` (`seq_id` bigint unsigned AUTO_INCREMENT," +
-		"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL,`job_id` varchar(128) not null,`epoch` bigint not null default 1," +
-		"PRIMARY KEY (`seq_id`),UNIQUE INDEX uidx_jk (`job_id`))")).
-		WillReturnResult(sqlmock.NewResult(1, 1))
-
-	err = InitEpochModel(ctx, gdb)
-	require.NoError(t, err)
-
-	mock.ExpectClose()
-}

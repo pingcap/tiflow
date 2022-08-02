@@ -116,17 +116,3 @@ func (e *epochClient) GenEpoch(ctx context.Context) (int64, error) {
 func (e *epochClient) Close() error {
 	return nil
 }
-
-// InitEpochModel creates the backend logic epoch table if not exists
-func InitEpochModel(ctx context.Context, db *gorm.DB) error {
-	if db == nil {
-		return errors.ErrMetaParamsInvalid.GenWithStackByArgs("inner db is nil")
-	}
-
-	if err := db.WithContext(ctx).
-		AutoMigrate(&LogicEpoch{}); err != nil {
-		return errors.ErrMetaOpFail.Wrap(err)
-	}
-
-	return nil
-}

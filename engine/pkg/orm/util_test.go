@@ -18,6 +18,7 @@ import (
 	"errors"
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/require"
@@ -111,4 +112,36 @@ func testInitialize(t *testing.T) {
 
 	err = InitAllFrameworkModels(context.TODO(), conn)
 	require.Nil(t, err)
+}
+
+func TestInitEpochModel(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.Nil(t, err)
+	defer db.Close()
+	defer mock.ExpectClose()
+
+	ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
+	defer cancel()
+
+	err = InitEpochModel(ctx, nil)
+	require.Regexp(t, regexp.QuoteMeta("input client conn is nil"), err.Error())
+
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA " +
+		"where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).WillReturnRows(
+		sqlmock.NewRows([]string{"SCHEMA_NAME"}))
+	mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `logic_epoches` (`seq_id` bigint unsigned AUTO_INCREMENT," +
+		"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL,`job_id` varchar(128) not null,`epoch` bigint not null default 1," +
+		"PRIMARY KEY (`seq_id`),UNIQUE INDEX uidx_jk (`job_id`))")).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	gormDB, err := NewGormDB(db)
+	require.Nil(t, err)
+	conn := metaMock.NewGormClientConn(gormDB)
+	require.NotNil(t, conn)
+	defer conn.Close()
+
+	err = InitEpochModel(ctx, conn)
+	require.NoError(t, err)
 }

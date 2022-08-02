@@ -25,6 +25,7 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 
+	"github.com/pingcap/tiflow/engine/pkg/meta/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
 )
@@ -48,7 +49,6 @@ func InitAllFrameworkModels(ctx context.Context, cc metaModel.ClientConn) error 
 		return errors.ErrMetaParamsInvalid.GenWithStackByArgs("input client conn is nil")
 	}
 
-	var err error
 	conn, err := cc.GetConn()
 	if err != nil {
 		return err
@@ -79,7 +79,43 @@ func InitAllFrameworkModels(ctx context.Context, cc metaModel.ClientConn) error 
 		return errors.ErrMetaOpFail.Wrap(err)
 	}
 
-	return ormModel.InitEpochModel(ctx, gormDB)
+	return nil
+}
+
+// InitEpochModel creates the backend logic epoch table if not exists
+func InitEpochModel(ctx context.Context, cc model.ClientConn) error {
+	if cc == nil {
+		return errors.ErrMetaParamsInvalid.GenWithStackByArgs("input client conn is nil")
+	}
+
+	conn, err := cc.GetConn()
+	if err != nil {
+		return err
+	}
+
+	var gormDB *gorm.DB
+	// check if a sql.DB
+	db, ok := conn.(*sql.DB)
+	if ok {
+		gormDB, err = NewGormDB(db)
+		if err != nil {
+			return err
+		}
+	}
+
+	// check if a gorm.DB
+	if gormDB == nil {
+		gormDB, ok = conn.(*gorm.DB)
+		if !ok {
+			return errors.ErrMetaParamsInvalid.GenWithStackByArgs("client conn is not sql DB")
+		}
+	}
+	if err := gormDB.WithContext(ctx).
+		AutoMigrate(&ormModel.LogicEpoch{}); err != nil {
+		return errors.ErrMetaOpFail.Wrap(err)
+	}
+
+	return nil
 }
 
 // NewGormDB news a gorm.DB
