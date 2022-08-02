@@ -25,26 +25,34 @@ func TestMetaStoreConfig(t *testing.T) {
 	t.Parallel()
 
 	testToml := `
-[frame-metastore-conf]
+[framework-metastore-conf]
 endpoints = ["mysql-0:3306"]
 auth.user = "root"
 auth.passwd = "passwd"
+schema = "test0"
 
 [business-metastore-conf]
 endpoints = ["metastore:12479"]
+store-type = "etcd"
 `
 	fileName := mustWriteToTempFile(t, testToml)
 
 	config := GetDefaultMasterConfig()
 	err := config.configFromFile(fileName)
 	require.Nil(t, err)
-	err = config.Adjust()
+	err = config.AdjustAndValidate()
 	require.Nil(t, err)
 
 	require.Equal(t, "mysql-0:3306", config.FrameMetaConf.Endpoints[0])
 	require.Equal(t, "root", config.FrameMetaConf.Auth.User)
 	require.Equal(t, "passwd", config.FrameMetaConf.Auth.Passwd)
+	require.Equal(t, "test0", config.FrameMetaConf.Schema)
+	require.Equal(t, "sql", config.FrameMetaConf.StoreType)
+
+	require.Equal(t, "etcd", config.BusinessMetaConf.StoreType)
 	require.Equal(t, "metastore:12479", config.BusinessMetaConf.Endpoints[0])
+	require.Empty(t, config.BusinessMetaConf.Schema)
+
 	fmt.Printf("config: %+v\n", config)
 }
 

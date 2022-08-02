@@ -11,18 +11,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v3
+package scheduler
 
 import (
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
-	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/scheduler"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+var scheduleTaskCounter = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Namespace: "ticdc",
+		Subsystem: "scheduler",
+		Name:      "task",
+		Help:      "The total number of scheduler tasks",
+	}, []string{"namespace", "changefeed", "scheduler", "task"})
+
 // InitMetrics registers all metrics used in scheduler
 func InitMetrics(registry *prometheus.Registry) {
-	member.InitMetrics(registry)
-	replication.InitMetrics(registry)
-	scheduler.InitMetrics(registry)
+	registry.MustRegister(scheduleTaskCounter)
 }

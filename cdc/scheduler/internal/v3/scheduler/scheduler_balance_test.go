@@ -11,13 +11,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v3
+package scheduler
 
 import (
 	"testing"
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,30 +30,30 @@ func TestSchedulerBalanceCaptureOnline(t *testing.T) {
 	sched.random = nil
 
 	// New capture "b" online
-	captures := map[model.CaptureID]*CaptureStatus{"a": {}, "b": {}}
+	captures := map[model.CaptureID]*member.CaptureStatus{"a": {}, "b": {}}
 	currentTables := []model.TableID{1, 2}
-	replications := map[model.TableID]*ReplicationSet{
-		1: {State: ReplicationSetStateReplicating, Primary: "a"},
-		2: {State: ReplicationSetStateReplicating, Primary: "a"},
+	replications := map[model.TableID]*replication.ReplicationSet{
+		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
+		2: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 	}
 	tasks := sched.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
-	require.NotNil(t, tasks[0].moveTable)
-	require.Equal(t, tasks[0].moveTable.TableID, model.TableID(1))
+	require.NotNil(t, tasks[0].MoveTable)
+	require.Equal(t, tasks[0].MoveTable.TableID, model.TableID(1))
 
 	// New capture "b" online, but this time has capture is stopping
-	captures["a"].State = CaptureStateStopping
+	captures["a"].State = member.CaptureStateStopping
 	tasks = sched.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 
 	// New capture "b" online, it keeps balancing, even though it has not pass
 	// balance interval yet.
 	sched.checkBalanceInterval = time.Hour
-	captures = map[model.CaptureID]*CaptureStatus{"a": {}, "b": {}}
+	captures = map[model.CaptureID]*member.CaptureStatus{"a": {}, "b": {}}
 	currentTables = []model.TableID{1, 2}
-	replications = map[model.TableID]*ReplicationSet{
-		1: {State: ReplicationSetStateReplicating, Primary: "a"},
-		2: {State: ReplicationSetStateReplicating, Primary: "a"},
+	replications = map[model.TableID]*replication.ReplicationSet{
+		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
+		2: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 	}
 	tasks = sched.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
@@ -59,11 +61,11 @@ func TestSchedulerBalanceCaptureOnline(t *testing.T) {
 	// New capture "b" online, but this time it not pass check balance interval.
 	sched.checkBalanceInterval = time.Hour
 	sched.forceBalance = false
-	captures = map[model.CaptureID]*CaptureStatus{"a": {}, "b": {}}
+	captures = map[model.CaptureID]*member.CaptureStatus{"a": {}, "b": {}}
 	currentTables = []model.TableID{1, 2}
-	replications = map[model.TableID]*ReplicationSet{
-		1: {State: ReplicationSetStateReplicating, Primary: "a"},
-		2: {State: ReplicationSetStateReplicating, Primary: "a"},
+	replications = map[model.TableID]*replication.ReplicationSet{
+		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
+		2: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 	}
 	tasks = sched.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
@@ -76,13 +78,13 @@ func TestSchedulerBalanceTaskLimit(t *testing.T) {
 	sched.random = nil
 
 	// New capture "b" online
-	captures := map[model.CaptureID]*CaptureStatus{"a": {}, "b": {}}
+	captures := map[model.CaptureID]*member.CaptureStatus{"a": {}, "b": {}}
 	currentTables := []model.TableID{1, 2, 3, 4}
-	replications := map[model.TableID]*ReplicationSet{
-		1: {State: ReplicationSetStateReplicating, Primary: "a"},
-		2: {State: ReplicationSetStateReplicating, Primary: "a"},
-		3: {State: ReplicationSetStateReplicating, Primary: "a"},
-		4: {State: ReplicationSetStateReplicating, Primary: "a"},
+	replications := map[model.TableID]*replication.ReplicationSet{
+		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
+		2: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
+		3: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
+		4: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 	}
 	tasks := sched.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 2)

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v3
+package replication
 
 import (
 	"testing"
@@ -24,12 +24,12 @@ import (
 func TestReplicationManagerHandleAddTableTask(t *testing.T) {
 	t.Parallel()
 
-	r := newReplicationManager(10, model.ChangeFeedID{})
+	r := NewReplicationManager(10, model.ChangeFeedID{})
 	addTableCh := make(chan int, 1)
 	// Absent -> Prepare
-	msgs, err := r.HandleTasks([]*scheduleTask{{
-		addTable: &addTable{TableID: 1, CaptureID: "1", CheckpointTs: 1},
-		accept: func() {
+	msgs, err := r.HandleTasks([]*ScheduleTask{{
+		AddTable: &AddTable{TableID: 1, CaptureID: "1", CheckpointTs: 1},
+		Accept: func() {
 			addTableCh <- 1
 			close(addTableCh)
 		},
@@ -56,9 +56,9 @@ func TestReplicationManagerHandleAddTableTask(t *testing.T) {
 	require.Equal(t, 1, <-addTableCh)
 
 	// Ignore if add the table again.
-	msgs, err = r.HandleTasks([]*scheduleTask{{
-		addTable: &addTable{TableID: 1, CaptureID: "1"},
-		accept:   func() { t.Fatalf("must not accept") },
+	msgs, err = r.HandleTasks([]*ScheduleTask{{
+		AddTable: &AddTable{TableID: 1, CaptureID: "1"},
+		Accept:   func() { t.Fatalf("must not accept") },
 	}})
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
@@ -127,19 +127,19 @@ func TestReplicationManagerHandleAddTableTask(t *testing.T) {
 func TestReplicationManagerRemoveTable(t *testing.T) {
 	t.Parallel()
 
-	r := newReplicationManager(10, model.ChangeFeedID{})
+	r := NewReplicationManager(10, model.ChangeFeedID{})
 	removeTableCh := make(chan int, 1)
 
 	// Ignore remove table if there is no such table.
-	msgs, err := r.HandleTasks([]*scheduleTask{{
-		removeTable: &removeTable{TableID: 1, CaptureID: "1"},
-		accept:      func() { t.Fatal("must not accept") },
+	msgs, err := r.HandleTasks([]*ScheduleTask{{
+		RemoveTable: &RemoveTable{TableID: 1, CaptureID: "1"},
+		Accept:      func() { t.Fatal("must not accept") },
 	}})
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
 
 	// Add the table.
-	tbl, err := newReplicationSet(1, 0, map[string]*schedulepb.TableStatus{
+	tbl, err := NewReplicationSet(1, 0, map[string]*schedulepb.TableStatus{
 		"1": {TableID: 1, State: schedulepb.TableStateReplicating},
 	}, model.ChangeFeedID{})
 	require.Nil(t, err)
@@ -147,9 +147,9 @@ func TestReplicationManagerRemoveTable(t *testing.T) {
 	r.tables[1] = tbl
 
 	// Remove the table.
-	msgs, err = r.HandleTasks([]*scheduleTask{{
-		removeTable: &removeTable{TableID: 1, CaptureID: "1"},
-		accept: func() {
+	msgs, err = r.HandleTasks([]*ScheduleTask{{
+		RemoveTable: &RemoveTable{TableID: 1, CaptureID: "1"},
+		Accept: func() {
 			removeTableCh <- 1
 			close(removeTableCh)
 		},
@@ -169,9 +169,9 @@ func TestReplicationManagerRemoveTable(t *testing.T) {
 	require.Equal(t, 1, <-removeTableCh)
 
 	// Ignore if remove table again.
-	msgs, err = r.HandleTasks([]*scheduleTask{{
-		removeTable: &removeTable{TableID: 1, CaptureID: "1"},
-		accept:      func() { t.Fatalf("must not accept") },
+	msgs, err = r.HandleTasks([]*ScheduleTask{{
+		RemoveTable: &RemoveTable{TableID: 1, CaptureID: "1"},
+		Accept:      func() { t.Fatalf("must not accept") },
 	}})
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
@@ -219,22 +219,22 @@ func TestReplicationManagerRemoveTable(t *testing.T) {
 func TestReplicationManagerMoveTable(t *testing.T) {
 	t.Parallel()
 
-	r := newReplicationManager(10, model.ChangeFeedID{})
+	r := NewReplicationManager(10, model.ChangeFeedID{})
 	moveTableCh := make(chan int, 1)
 
 	source := "1"
 	dest := "2"
 
 	// Ignore move table if it's not exist.
-	msgs, err := r.HandleTasks([]*scheduleTask{{
-		moveTable: &moveTable{TableID: 1, DestCapture: dest},
-		accept:    func() { t.Fatal("must not accept") },
+	msgs, err := r.HandleTasks([]*ScheduleTask{{
+		MoveTable: &MoveTable{TableID: 1, DestCapture: dest},
+		Accept:    func() { t.Fatal("must not accept") },
 	}})
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
 
 	// Add the table.
-	tbl, err := newReplicationSet(1, 0, map[string]*schedulepb.TableStatus{
+	tbl, err := NewReplicationSet(1, 0, map[string]*schedulepb.TableStatus{
 		source: {TableID: 1, State: schedulepb.TableStateReplicating},
 	}, model.ChangeFeedID{})
 	require.Nil(t, err)
@@ -242,9 +242,9 @@ func TestReplicationManagerMoveTable(t *testing.T) {
 	r.tables[1] = tbl
 
 	// Replicating -> Prepare
-	msgs, err = r.HandleTasks([]*scheduleTask{{
-		moveTable: &moveTable{TableID: 1, DestCapture: dest},
-		accept: func() {
+	msgs, err = r.HandleTasks([]*ScheduleTask{{
+		MoveTable: &MoveTable{TableID: 1, DestCapture: dest},
+		Accept: func() {
 			moveTableCh <- 1
 			close(moveTableCh)
 		},
@@ -267,9 +267,9 @@ func TestReplicationManagerMoveTable(t *testing.T) {
 	require.Equal(t, 1, <-moveTableCh)
 
 	// Ignore if move table again.
-	msgs, err = r.HandleTasks([]*scheduleTask{{
-		moveTable: &moveTable{TableID: 1, DestCapture: dest},
-		accept: func() {
+	msgs, err = r.HandleTasks([]*ScheduleTask{{
+		MoveTable: &MoveTable{TableID: 1, DestCapture: dest},
+		Accept: func() {
 			moveTableCh <- 1
 			close(moveTableCh)
 		},
@@ -361,15 +361,15 @@ func TestReplicationManagerMoveTable(t *testing.T) {
 func TestReplicationManagerBurstBalance(t *testing.T) {
 	t.Parallel()
 
-	r := newReplicationManager(1, model.ChangeFeedID{})
+	r := NewReplicationManager(1, model.ChangeFeedID{})
 	balanceTableCh := make(chan int, 1)
 
 	// Burst balance is not limited by maxTaskConcurrency.
-	msgs, err := r.HandleTasks([]*scheduleTask{{
-		addTable: &addTable{TableID: 1, CaptureID: "0", CheckpointTs: 1},
+	msgs, err := r.HandleTasks([]*ScheduleTask{{
+		AddTable: &AddTable{TableID: 1, CaptureID: "0", CheckpointTs: 1},
 	}, {
-		burstBalance: &burstBalance{
-			AddTables: []addTable{{
+		BurstBalance: &BurstBalance{
+			AddTables: []AddTable{{
 				TableID: 1, CaptureID: "1", CheckpointTs: 1,
 			}, {
 				TableID: 2, CaptureID: "2", CheckpointTs: 1,
@@ -377,7 +377,7 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 				TableID: 3, CaptureID: "3", CheckpointTs: 1,
 			}},
 		},
-		accept: func() {
+		Accept: func() {
 			balanceTableCh <- 1
 		},
 	}})
@@ -408,26 +408,26 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 	}
 
 	// Add a new table.
-	r.tables[5], err = newReplicationSet(5, 0, map[string]*schedulepb.TableStatus{
+	r.tables[5], err = NewReplicationSet(5, 0, map[string]*schedulepb.TableStatus{
 		"5": {TableID: 5, State: schedulepb.TableStateReplicating},
 	}, model.ChangeFeedID{})
 	require.Nil(t, err)
 
 	// More burst balance is still allowed.
-	msgs, err = r.HandleTasks([]*scheduleTask{{
-		burstBalance: &burstBalance{
-			AddTables: []addTable{{
+	msgs, err = r.HandleTasks([]*ScheduleTask{{
+		BurstBalance: &BurstBalance{
+			AddTables: []AddTable{{
 				TableID: 4, CaptureID: "4", CheckpointTs: 2,
 			}, {
 				TableID: 1, CaptureID: "0", CheckpointTs: 2,
 			}},
-			RemoveTables: []removeTable{{
+			RemoveTables: []RemoveTable{{
 				TableID: 5, CaptureID: "5",
 			}, {
 				TableID: 1, CaptureID: "0",
 			}},
 		},
-		accept: func() {
+		Accept: func() {
 			balanceTableCh <- 1
 		},
 	}})
@@ -466,16 +466,16 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 func TestReplicationManagerBurstBalanceMoveTables(t *testing.T) {
 	t.Parallel()
 
-	r := newReplicationManager(1, model.ChangeFeedID{})
+	r := NewReplicationManager(1, model.ChangeFeedID{})
 	balanceTableCh := make(chan int, 1)
 
 	var err error
 	// Two tables in "1".
-	r.tables[1], err = newReplicationSet(1, 0, map[string]*schedulepb.TableStatus{
+	r.tables[1], err = NewReplicationSet(1, 0, map[string]*schedulepb.TableStatus{
 		"1": {TableID: 1, State: schedulepb.TableStateReplicating},
 	}, model.ChangeFeedID{})
 	require.Nil(t, err)
-	r.tables[2], err = newReplicationSet(2, 0, map[string]*schedulepb.TableStatus{
+	r.tables[2], err = NewReplicationSet(2, 0, map[string]*schedulepb.TableStatus{
 		"1": {
 			TableID: 2, State: schedulepb.TableStateReplicating,
 			Checkpoint: schedulepb.Checkpoint{CheckpointTs: 1},
@@ -483,13 +483,13 @@ func TestReplicationManagerBurstBalanceMoveTables(t *testing.T) {
 	}, model.ChangeFeedID{})
 	require.Nil(t, err)
 
-	msgs, err := r.HandleTasks([]*scheduleTask{{
-		burstBalance: &burstBalance{
-			MoveTables: []moveTable{{
+	msgs, err := r.HandleTasks([]*ScheduleTask{{
+		BurstBalance: &BurstBalance{
+			MoveTables: []MoveTable{{
 				TableID: 2, DestCapture: "2",
 			}},
 		},
-		accept: func() {
+		Accept: func() {
 			balanceTableCh <- 1
 		},
 	}})
@@ -516,12 +516,12 @@ func TestReplicationManagerBurstBalanceMoveTables(t *testing.T) {
 func TestReplicationManagerMaxTaskConcurrency(t *testing.T) {
 	t.Parallel()
 
-	r := newReplicationManager(1, model.ChangeFeedID{})
+	r := NewReplicationManager(1, model.ChangeFeedID{})
 	addTableCh := make(chan int, 1)
 
-	msgs, err := r.HandleTasks([]*scheduleTask{{
-		addTable: &addTable{TableID: 1, CaptureID: "1"},
-		accept: func() {
+	msgs, err := r.HandleTasks([]*ScheduleTask{{
+		AddTable: &AddTable{TableID: 1, CaptureID: "1"},
+		Accept: func() {
 			addTableCh <- 1
 			close(addTableCh)
 		},
@@ -544,9 +544,9 @@ func TestReplicationManagerMaxTaskConcurrency(t *testing.T) {
 	require.Equal(t, 1, <-addTableCh)
 
 	// No more tasks allowed.
-	msgs, err = r.HandleTasks([]*scheduleTask{{
-		addTable: &addTable{TableID: 2, CaptureID: "1"},
-		accept: func() {
+	msgs, err = r.HandleTasks([]*ScheduleTask{{
+		AddTable: &AddTable{TableID: 2, CaptureID: "1"},
+		Accept: func() {
 			t.Fatal("must not accept")
 		},
 	}})
@@ -557,8 +557,8 @@ func TestReplicationManagerMaxTaskConcurrency(t *testing.T) {
 func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	t.Parallel()
 
-	r := newReplicationManager(1, model.ChangeFeedID{})
-	rs, err := newReplicationSet(model.TableID(1), model.Ts(10),
+	r := NewReplicationManager(1, model.ChangeFeedID{})
+	rs, err := NewReplicationSet(model.TableID(1), model.Ts(10),
 		map[model.CaptureID]*schedulepb.TableStatus{
 			"1": {
 				TableID: model.TableID(1),
@@ -572,7 +572,7 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	require.NoError(t, err)
 	r.tables[model.TableID(1)] = rs
 
-	rs, err = newReplicationSet(model.TableID(2), model.Ts(15),
+	rs, err = NewReplicationSet(model.TableID(2), model.Ts(15),
 		map[model.CaptureID]*schedulepb.TableStatus{
 			"2": {
 				TableID: model.TableID(2),
@@ -598,7 +598,7 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	require.Equal(t, checkpointCannotProceed, checkpoint)
 	require.Equal(t, checkpointCannotProceed, resolved)
 
-	rs, err = newReplicationSet(model.TableID(3), model.Ts(5),
+	rs, err = NewReplicationSet(model.TableID(3), model.Ts(5),
 		map[model.CaptureID]*schedulepb.TableStatus{
 			"1": {
 				TableID: model.TableID(3),
@@ -624,7 +624,7 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	require.Equal(t, model.Ts(20), resolved)
 
 	currentTables = append(currentTables, 4)
-	rs, err = newReplicationSet(model.TableID(4), model.Ts(3),
+	rs, err = NewReplicationSet(model.TableID(4), model.Ts(3),
 		map[model.CaptureID]*schedulepb.TableStatus{
 			"1": {
 				TableID: model.TableID(4),
@@ -645,8 +645,8 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 func TestReplicationManagerHandleCaptureChanges(t *testing.T) {
 	t.Parallel()
 
-	r := newReplicationManager(1, model.ChangeFeedID{})
-	changes := captureChanges{Init: map[model.CaptureID][]schedulepb.TableStatus{
+	r := NewReplicationManager(1, model.ChangeFeedID{})
+	init := map[model.CaptureID][]schedulepb.TableStatus{
 		"1": {{TableID: 1, State: schedulepb.TableStateReplicating}},
 		"2": {{TableID: 2, State: schedulepb.TableStateReplicating}},
 		"3": {
@@ -655,8 +655,8 @@ func TestReplicationManagerHandleCaptureChanges(t *testing.T) {
 		},
 		"4": {{TableID: 4, State: schedulepb.TableStateStopping}},
 		"5": {{TableID: 5, State: schedulepb.TableStateStopped}},
-	}}
-	msgs, err := r.HandleCaptureChanges(&changes, 0)
+	}
+	msgs, err := r.HandleCaptureChanges(init, nil, 0)
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
 	require.Len(t, r.tables, 5)
@@ -666,10 +666,10 @@ func TestReplicationManagerHandleCaptureChanges(t *testing.T) {
 	require.Equal(t, ReplicationSetStateRemoving, r.tables[4].State)
 	require.Equal(t, ReplicationSetStateAbsent, r.tables[5].State)
 
-	changes = captureChanges{Removed: map[string][]schedulepb.TableStatus{
+	removed := map[string][]schedulepb.TableStatus{
 		"1": {{TableID: 1, State: schedulepb.TableStateReplicating}},
-	}}
-	msgs, err = r.HandleCaptureChanges(&changes, 0)
+	}
+	msgs, err = r.HandleCaptureChanges(nil, removed, 0)
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
 	require.Len(t, r.tables, 5)
@@ -683,12 +683,12 @@ func TestReplicationManagerHandleCaptureChanges(t *testing.T) {
 func TestReplicationManagerHandleCaptureChangesDuringAddTable(t *testing.T) {
 	t.Parallel()
 
-	r := newReplicationManager(1, model.ChangeFeedID{})
+	r := NewReplicationManager(1, model.ChangeFeedID{})
 	addTableCh := make(chan int, 1)
 
-	msgs, err := r.HandleTasks([]*scheduleTask{{
-		addTable: &addTable{TableID: 1, CaptureID: "1"},
-		accept: func() {
+	msgs, err := r.HandleTasks([]*ScheduleTask{{
+		AddTable: &AddTable{TableID: 1, CaptureID: "1"},
+		Accept: func() {
 			addTableCh <- 1
 		},
 	}})
@@ -697,10 +697,10 @@ func TestReplicationManagerHandleCaptureChangesDuringAddTable(t *testing.T) {
 	require.NotNil(t, r.runningTasks[1])
 	require.Equal(t, 1, <-addTableCh)
 
-	changes := captureChanges{Removed: map[string][]schedulepb.TableStatus{
+	removed := map[string][]schedulepb.TableStatus{
 		"1": {{TableID: 1, State: schedulepb.TableStatePreparing}},
-	}}
-	msgs, err = r.HandleCaptureChanges(&changes, 0)
+	}
+	msgs, err = r.HandleCaptureChanges(nil, removed, 0)
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
 	require.Len(t, r.tables, 1)
@@ -708,9 +708,9 @@ func TestReplicationManagerHandleCaptureChangesDuringAddTable(t *testing.T) {
 	require.Nil(t, r.runningTasks[1])
 
 	// New task must be accepted.
-	msgs, err = r.HandleTasks([]*scheduleTask{{
-		addTable: &addTable{TableID: 1, CaptureID: "1"},
-		accept: func() {
+	msgs, err = r.HandleTasks([]*ScheduleTask{{
+		AddTable: &AddTable{TableID: 1, CaptureID: "1"},
+		Accept: func() {
 			addTableCh <- 1
 		},
 	}})

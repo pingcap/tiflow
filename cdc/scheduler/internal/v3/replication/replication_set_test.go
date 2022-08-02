@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v3
+package replication
 
 import (
 	"encoding/json"
@@ -207,7 +207,7 @@ func TestNewReplicationSet(t *testing.T) {
 		status := tc.tableStatus
 		checkpoint := tc.checkpoint
 
-		output, err := newReplicationSet(0, checkpoint, status, model.ChangeFeedID{})
+		output, err := NewReplicationSet(0, checkpoint, status, model.ChangeFeedID{})
 		if set == nil {
 			require.Error(t, err)
 		} else {
@@ -251,7 +251,7 @@ func TestReplicationSetPoll(t *testing.T) {
 				Checkpoint: schedulepb.Checkpoint{},
 			}
 		}
-		r, _ := newReplicationSet(1, 0, status, model.ChangeFeedID{})
+		r, _ := NewReplicationSet(1, 0, status, model.ChangeFeedID{})
 		var tableStates []int
 		for state := range schedulepb.TableState_name {
 			tableStates = append(tableStates, int(state))
@@ -282,7 +282,7 @@ func TestReplicationSetPollUnknownCapture(t *testing.T) {
 	t.Parallel()
 
 	tableID := model.TableID(1)
-	r, err := newReplicationSet(tableID, 0, map[model.CaptureID]*schedulepb.TableStatus{
+	r, err := NewReplicationSet(tableID, 0, map[model.CaptureID]*schedulepb.TableStatus{
 		"1": {
 			TableID:    tableID,
 			State:      schedulepb.TableStateReplicating,
@@ -318,7 +318,7 @@ func TestReplicationSetAddTable(t *testing.T) {
 
 	from := "1"
 	tableID := model.TableID(1)
-	r, err := newReplicationSet(tableID, 0, nil, model.ChangeFeedID{})
+	r, err := NewReplicationSet(tableID, 0, nil, model.ChangeFeedID{})
 	require.Nil(t, err)
 
 	// Absent -> Prepare
@@ -462,7 +462,7 @@ func TestReplicationSetRemoveTable(t *testing.T) {
 
 	from := "1"
 	tableID := model.TableID(1)
-	r, err := newReplicationSet(tableID, 0, nil, model.ChangeFeedID{})
+	r, err := NewReplicationSet(tableID, 0, nil, model.ChangeFeedID{})
 	require.Nil(t, err)
 
 	// Ignore removing table if it's not in replicating.
@@ -540,7 +540,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	t.Parallel()
 
 	tableID := model.TableID(1)
-	r, err := newReplicationSet(tableID, 0, nil, model.ChangeFeedID{})
+	r, err := NewReplicationSet(tableID, 0, nil, model.ChangeFeedID{})
 	require.Nil(t, err)
 
 	source := "1"
@@ -772,7 +772,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 
 	from := "1"
 	tableID := model.TableID(1)
-	r, err := newReplicationSet(tableID, 0, nil, model.ChangeFeedID{})
+	r, err := NewReplicationSet(tableID, 0, nil, model.ChangeFeedID{})
 	require.Nil(t, err)
 
 	// Add table, Absent -> Prepare
@@ -1070,7 +1070,7 @@ func TestReplicationSetCaptureShutdownAfterReconstructCommitState(t *testing.T) 
 	tableStatus := map[model.CaptureID]*schedulepb.TableStatus{
 		from: {TableID: tableID, State: schedulepb.TableStatePrepared},
 	}
-	r, err := newReplicationSet(tableID, 0, tableStatus, model.ChangeFeedID{})
+	r, err := NewReplicationSet(tableID, 0, tableStatus, model.ChangeFeedID{})
 	require.Nil(t, err)
 	require.Equal(t, ReplicationSetStateCommit, r.State)
 	require.Equal(t, "", r.Primary)
@@ -1090,7 +1090,7 @@ func TestReplicationSetMoveTableWithHeartbeatResponse(t *testing.T) {
 	t.Parallel()
 
 	tableID := model.TableID(1)
-	r, err := newReplicationSet(tableID, 0, nil, model.ChangeFeedID{})
+	r, err := NewReplicationSet(tableID, 0, nil, model.ChangeFeedID{})
 	require.Nil(t, err)
 
 	source := "1"
@@ -1178,7 +1178,7 @@ func TestReplicationSetMoveTableSameDestCapture(t *testing.T) {
 	t.Parallel()
 
 	tableID := model.TableID(1)
-	r, err := newReplicationSet(tableID, 0, nil, model.ChangeFeedID{})
+	r, err := NewReplicationSet(tableID, 0, nil, model.ChangeFeedID{})
 	require.Nil(t, err)
 
 	source := "1"
@@ -1211,7 +1211,7 @@ func TestReplicationSetCommitRestart(t *testing.T) {
 			Checkpoint: schedulepb.Checkpoint{},
 		},
 	}
-	r, err := newReplicationSet(0, 0, tableStatus, model.ChangeFeedID{})
+	r, err := NewReplicationSet(0, 0, tableStatus, model.ChangeFeedID{})
 	require.Nil(t, err)
 	require.Equal(t, ReplicationSetStateCommit, r.State)
 	require.Equal(t, "1", r.Secondary)
@@ -1293,7 +1293,7 @@ func TestReplicationSetRemoveRestart(t *testing.T) {
 			Checkpoint: schedulepb.Checkpoint{},
 		},
 	}
-	r, err := newReplicationSet(0, 0, tableStatus, model.ChangeFeedID{})
+	r, err := NewReplicationSet(0, 0, tableStatus, model.ChangeFeedID{})
 	require.Nil(t, err)
 	require.Equal(t, ReplicationSetStateRemoving, r.State)
 	require.Equal(t, "", r.Secondary)

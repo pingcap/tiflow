@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v3
+package transport
 
 import (
 	"context"
@@ -36,15 +36,15 @@ func TestTransSendRecv(t *testing.T) {
 
 	var err error
 	var schedulerAddr string
-	var schedulerTrans transport
-	agentTransMap := make(map[string]transport)
+	var schedulerTrans Transport
+	agentTransMap := make(map[string]Transport)
 	for addr, node := range cluster.Nodes {
 		if schedulerAddr == "" {
-			schedulerTrans, err = newTransport(
-				ctx, changefeedID, schedulerRole, node.Server, node.Router)
+			schedulerTrans, err = NewTransport(
+				ctx, changefeedID, SchedulerRole, node.Server, node.Router)
 		} else {
-			agentTransMap[addr], err = newTransport(
-				ctx, changefeedID, agentRole, node.Server, node.Router)
+			agentTransMap[addr], err = NewTransport(
+				ctx, changefeedID, AgentRole, node.Server, node.Router)
 		}
 		require.Nil(t, err)
 	}
@@ -98,9 +98,9 @@ func TestTransUnknownAddr(t *testing.T) {
 	changefeedID := model.ChangeFeedID{Namespace: "test", ID: "test"}
 
 	var err error
-	transMap := make(map[string]transport)
+	transMap := make(map[string]Transport)
 	for addr, node := range cluster.Nodes {
-		transMap[addr], err = newTransport(ctx, changefeedID, agentRole, node.Server, node.Router)
+		transMap[addr], err = NewTransport(ctx, changefeedID, AgentRole, node.Server, node.Router)
 		require.Nil(t, err)
 	}
 
@@ -123,9 +123,9 @@ func TestTransEmptyRecv(t *testing.T) {
 	changefeedID := model.ChangeFeedID{Namespace: "test", ID: "test"}
 
 	var err error
-	transMap := make(map[string]transport)
+	transMap := make(map[string]Transport)
 	for addr, node := range cluster.Nodes {
-		transMap[addr], err = newTransport(ctx, changefeedID, agentRole, node.Server, node.Router)
+		transMap[addr], err = NewTransport(ctx, changefeedID, AgentRole, node.Server, node.Router)
 		require.Nil(t, err)
 	}
 
@@ -148,9 +148,9 @@ func TestTransTwoRolesInOneNode(t *testing.T) {
 	changefeedID := model.ChangeFeedID{Namespace: "test", ID: "test"}
 
 	for _, node := range cluster.Nodes {
-		_, err := newTransport(ctx, changefeedID, agentRole, node.Server, node.Router)
+		_, err := NewTransport(ctx, changefeedID, AgentRole, node.Server, node.Router)
 		require.Nil(t, err)
-		_, err = newTransport(ctx, changefeedID, schedulerRole, node.Server, node.Router)
+		_, err = NewTransport(ctx, changefeedID, SchedulerRole, node.Server, node.Router)
 		require.Nil(t, err)
 	}
 }
