@@ -58,5 +58,4 @@ func TestGetTopic(t *testing.T) {
 			}
 		})
 	}
-
 }
