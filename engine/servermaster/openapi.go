@@ -44,7 +44,7 @@ type APICreateJobRequest struct {
 	JobConfig string `json:"job_config"`
 }
 
-// APICreateJobResponse defines the json fields of query job response
+// APIQueryJobResponse defines the json fields of query job response
 type APIQueryJobResponse struct {
 	JobType   int32  `json:"job_type"`
 	JobConfig string `json:"job_config"`
@@ -208,7 +208,7 @@ func (o *OpenAPI) QueryJob(c *gin.Context) {
 		JobConfig: string(resp.GetConfig()),
 		Status:    int32(resp.GetStatus()),
 	}
-	c.IndentedJSON(http.StatusCreated, queryResp)
+	c.IndentedJSON(http.StatusOK, queryResp)
 }
 
 // PauseJob pauses a job.
