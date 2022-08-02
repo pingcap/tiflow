@@ -1,7 +1,7 @@
 # Reuse the same endpoints as the metastore.
 etcd-endpoints = ["metastore-etcd:12479"] 
 
-[frame-metastore-conf]
+[framework-metastore-conf]
 endpoints = ["metastore-mysql:13306"]
 auth.user = "root"
 auth.passwd = ""
