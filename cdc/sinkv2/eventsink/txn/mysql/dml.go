@@ -16,29 +16,19 @@ package mysql
 import (
 	"context"
 	"database/sql"
-	"database/sql/driver"
-	"fmt"
-	"net"
-	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/mysql"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
-	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
-	dmutils "github.com/pingcap/tiflow/dm/pkg/utils"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/quotes"
-	"github.com/pingcap/tiflow/pkg/retry"
 )
 
 func prepareUpdate(quoteTable string, preCols, cols []*model.Column, forceReplicate bool) (string, []interface{}) {
@@ -155,80 +145,6 @@ func isRetryableDMLError(err error) bool {
 		return false
 	}
 	return true
-}
-
-func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDMLs) error {
-	if len(dmls.sqls) != len(dmls.values) {
-		log.Panic("unexpected number of sqls and values",
-			zap.Strings("sqls", dmls.sqls),
-			zap.Any("values", dmls.values))
-	}
-
-	start := time.Now()
-	return retry.Do(ctx, func() error {
-		failpoint.Inject("MySQLSinkTxnRandomError", func() {
-			failpoint.Return(
-				logDMLTxnErr(
-					errors.Trace(driver.ErrBadConn),
-					start, s.changefeedID, "failpoint", 0, nil))
-		})
-		failpoint.Inject("MySQLSinkHangLongTime", func() {
-			time.Sleep(time.Hour)
-		})
-
-		err := s.statistics.RecordBatchExecution(func() (int, error) {
-			tx, err := s.db.BeginTx(ctx, nil)
-			if err != nil {
-				return 0, logDMLTxnErr(
-					cerror.WrapError(cerror.ErrMySQLTxnError, err),
-					start, s.changefeedID, "BEGIN", dmls.rowCount, dmls.startTs)
-			}
-
-			for i, query := range dmls.sqls {
-				args := dmls.values[i]
-				log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
-				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
-					err := logDMLTxnErr(
-						cerror.WrapError(cerror.ErrMySQLTxnError, err),
-						start, s.changefeedID, query, dmls.rowCount, dmls.startTs)
-					if rbErr := tx.Rollback(); rbErr != nil {
-						log.Warn("failed to rollback txn", zap.Error(rbErr))
-					}
-					return 0, err
-				}
-			}
-
-			if err = tx.Commit(); err != nil {
-				return 0, logDMLTxnErr(
-					cerror.WrapError(cerror.ErrMySQLTxnError, err),
-					start, s.changefeedID, "COMMIT", dmls.rowCount, dmls.startTs)
-			}
-
-			for _, callback := range dmls.callbacks {
-				callback()
-			}
-			return dmls.rowCount, nil
-		})
-		if err != nil {
-			return errors.Trace(err)
-		}
-		log.Debug("Exec Rows succeeded",
-			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID),
-			zap.Int("numOfRows", dmls.rowCount))
-		return nil
-	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
-		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
-		retry.WithMaxTries(defaultDMLMaxRetry),
-		retry.WithIsRetryableErr(isRetryableDMLError))
-}
-
-type preparedDMLs struct {
-	startTs   []model.Ts
-	sqls      []string
-	values    [][]interface{}
-	callbacks []eventsink.CallbackFunc
-	rowCount  int
 }
 
 // if the column value type is []byte and charset is not binary, we get its string

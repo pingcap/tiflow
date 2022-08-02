@@ -14,30 +14,14 @@
 package mysql
 
 import (
-	"context"
-	"database/sql"
-	"database/sql/driver"
 	"fmt"
-	"net"
-	"net/url"
 	"sort"
-	"sync"
 	"testing"
-	"time"
 
-	"github.com/DATA-DOG/go-sqlmock"
-	dmysql "github.com/go-sql-driver/mysql"
-	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
-	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestPrepareUpdate(t *testing.T) {
