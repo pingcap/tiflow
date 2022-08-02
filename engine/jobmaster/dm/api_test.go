@@ -147,12 +147,11 @@ func TestQueryStatusAPI(t *testing.T) {
 	expectedStatus := `{
 	"JobMasterID": "dm-jobmaster-id",
 	"WorkerID": "jobmaster-worker-id",
-	"ExpectedCfgModRevison": 4,
 	"TaskStatus": {
 		"task1": {
 			"ExpectedStage": 3,
 			"WorkerID": "",
-			"CfgModRevison": 0,
+			"ConfigOutdated": true,
 			"Status": {
 				"ErrorMsg": "worker for task task1 not found",
 				"Unit": 0,
@@ -164,7 +163,7 @@ func TestQueryStatusAPI(t *testing.T) {
 		"task2": {
 			"ExpectedStage": 4,
 			"WorkerID": "worker2",
-			"CfgModRevison": 3,
+			"ConfigOutdated": true,
 			"Status": {
 				"ErrorMsg": "",
 				"Unit": 11,
@@ -176,7 +175,7 @@ func TestQueryStatusAPI(t *testing.T) {
 		"task3": {
 			"ExpectedStage": 4,
 			"WorkerID": "worker3",
-			"CfgModRevison": 4,
+			"ConfigOutdated": false,
 			"Status": {
 				"ErrorMsg": "context deadline exceeded",
 				"Unit": 0,
@@ -188,7 +187,7 @@ func TestQueryStatusAPI(t *testing.T) {
 		"task4": {
 			"ExpectedStage": 2,
 			"WorkerID": "worker4",
-			"CfgModRevison": 3,
+			"ConfigOutdated": true,
 			"Status": {
 				"ErrorMsg": "",
 				"Unit": 10,
@@ -206,7 +205,7 @@ func TestQueryStatusAPI(t *testing.T) {
 		"task5": {
 			"ExpectedStage": 2,
 			"WorkerID": "worker5",
-			"CfgModRevison": 4,
+			"ConfigOutdated": false,
 			"Status": {
 				"ErrorMsg": "",
 				"Unit": 11,
@@ -226,7 +225,7 @@ func TestQueryStatusAPI(t *testing.T) {
 		"task6": {
 			"ExpectedStage": 2,
 			"WorkerID": "worker6",
-			"CfgModRevison": 3,
+			"ConfigOutdated": true,
 			"Status": {
 				"ErrorMsg": "",
 				"Unit": 12,

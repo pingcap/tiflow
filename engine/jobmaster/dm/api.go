@@ -29,17 +29,16 @@ import (
 
 // TaskStatus represents status of a task
 type TaskStatus struct {
-	ExpectedStage metadata.TaskStage
-	WorkerID      frameModel.WorkerID
-	CfgModRevison uint64
-	Status        *dmpkg.QueryStatusResponse
+	ExpectedStage  metadata.TaskStage
+	WorkerID       frameModel.WorkerID
+	ConfigOutdated bool
+	Status         *dmpkg.QueryStatusResponse
 }
 
 // JobStatus represents status of a job
 type JobStatus struct {
-	JobMasterID           frameModel.MasterID
-	WorkerID              frameModel.WorkerID
-	ExpectedCfgModRevison uint64
+	JobMasterID frameModel.MasterID
+	WorkerID    frameModel.WorkerID
 	// taskID -> Status
 	TaskStatus map[string]TaskStatus
 }
@@ -58,9 +57,9 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 		}
 	}
 
-	var cfgModeRevsion uint64
+	var expectedCfgModRevsion uint64
 	for _, task := range job.Tasks {
-		cfgModeRevsion = task.Cfg.ModRevision
+		expectedCfgModRevsion = task.Cfg.ModRevision
 		break
 	}
 
@@ -69,10 +68,9 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 		wg              sync.WaitGroup
 		mu              sync.Mutex
 		jobStatus       = &JobStatus{
-			JobMasterID:           jm.JobMasterID(),
-			WorkerID:              jm.ID(),
-			ExpectedCfgModRevison: cfgModeRevsion,
-			TaskStatus:            make(map[string]TaskStatus),
+			JobMasterID: jm.JobMasterID(),
+			WorkerID:    jm.ID(),
+			TaskStatus:  make(map[string]TaskStatus),
 		}
 	)
 
@@ -112,10 +110,10 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 
 			mu.Lock()
 			jobStatus.TaskStatus[taskID] = TaskStatus{
-				ExpectedStage: expectedStage,
-				WorkerID:      workerID,
-				Status:        queryStatusResp,
-				CfgModRevison: cfgModRevision,
+				ExpectedStage:  expectedStage,
+				WorkerID:       workerID,
+				Status:         queryStatusResp,
+				ConfigOutdated: cfgModRevision != expectedCfgModRevsion,
 			}
 			mu.Unlock()
 		}()
