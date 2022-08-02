@@ -1,4 +1,4 @@
-FROM golang:1.18-alpine as builder
+FROM alpine:3.16 as builder
 
 RUN apk add --no-cache gcompat
 
@@ -6,5 +6,7 @@ RUN wget -O /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/
     chmod +x /usr/local/bin/dumb-init
 
 COPY ./bin/tiflow /
+COPY ./bin/tiflow-demoserver /tiflow-demoserver
+COPY ./bin/tiflow-chaos-case /tiflow-chaos-case
 
 ENTRYPOINT ["/usr/local/bin/dumb-init"]

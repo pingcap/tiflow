@@ -113,4 +113,64 @@ cd ../../../ # root dir of tiflow
 ./bin/tiflow cli job create --master-addrs ${$server-master-ip0}:${port0} --job-type CVSDemo --job-config ./engine/deployments/docker-compose/config/demo.json
 ```
 
+## Manager engine cluster by [helm](https://github.com/helm/helm)
+### Install tools
+* [helm](https://helm.sh/docs/intro/install/)
+* [kind](https://kind.sigs.k8s.io/)
+* [kubectl](https://kubernetes.io/docs/tasks/tools/)
+
+### Create a k8s cluster
+```
+$ kind create cluster
+Creating cluster "kind" ...
+ ✓ Ensuring node image (kindest/node:v1.24.0) 🖼 
+ ✓ Preparing nodes 📦  
+ ✓ Writing configuration 📜 
+ ✓ Starting control-plane 🕹️ 
+ ✓ Installing CNI 🔌 
+ ✓ Installing StorageClass 💾 
+Set kubectl context to "kind-kind"
+You can now use your cluster with:
+
+kubectl cluster-info --context kind-kind
+Have a question, bug, or feature request? Let us know! https://kind.sigs.k8s.io/#community 🙂
+
+$ kubectl cluster-info --context kind-kind
+```
+
+### Load engine image to k8s cluster
+```
+$ make engine_image
+$ kind load docker-image dataflow:test
+```
+
+### Deploy engine cluster via helm
+```
+$ cd engine/deployments/helm
+$ helm install test ./tiflow
+NAME: test
+LAST DEPLOYED: Fri Jul 22 18:52:02 2022
+NAMESPACE: default
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+$ helm list
+NAME    NAMESPACE       REVISION        UPDATED                                 STATUS          CHART           APP VERSION
+t1      default         1               2022-07-22 18:51:49.82093217 +0800 CST  deployed        tiflow-0.1.0    dev        
+test    default         1               2022-07-22 18:52:02.96320918 +0800 CST  deployed        tiflow-0.1.0    dev   
+
+$ kubectl get pods 
+NAME                               READY   STATUS    RESTARTS        AGE
+test-chaos-test-case-rvhx2         1/1     Running   0               6m58s
+test-executor-0                    1/1     Running   0               6m58s
+test-executor-1                    1/1     Running   0               6m58s
+test-executor-2                    1/1     Running   0               6m58s
+test-executor-3                    1/1     Running   0               6m58s
+test-metastore-business-etcd-0     1/1     Running   0               6m58s
+test-metastore-framework-mysql-0   1/1     Running   0               6m58s
+test-server-master-0               1/1     Running   1 (4m49s ago)   6m58s
+test-server-master-1               1/1     Running   1 (4m49s ago)   6m58s
+test-server-master-2               1/1     Running   0               6m58s
+```
+
 ## Contribute
