@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 func TestShouldReturnCaptureID(t *testing.T) {
@@ -110,16 +109,4 @@ func TestKVStorageNotSet(t *testing.T) {
 	kvStorage, err = KVStorageFromCtx(ctx)
 	require.Nil(t, kvStorage)
 	require.NotNil(t, err)
-}
-
-func TestZapFieldWithContext(t *testing.T) {
-	var (
-		capture    string = "127.0.0.1:8200"
-		changefeed        = model.DefaultChangeFeedID("test-cf")
-	)
-	ctx := context.Background()
-	ctx = PutCaptureAddrInCtx(ctx, capture)
-	ctx = PutChangefeedIDInCtx(ctx, changefeed)
-	require.Equal(t, zap.String("capture", capture), ZapFieldCapture(ctx))
-	require.Equal(t, zap.String("changefeed", changefeed.ID), ZapFieldChangefeed(ctx))
 }

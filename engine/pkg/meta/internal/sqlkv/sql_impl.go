@@ -29,6 +29,16 @@ import (
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
+// Where clause for meta kv option
+// NOTE: 'job_id' and 'meta_key' MUST be same as backend table
+const (
+	WhereClauseWithJobID     = "job_id = ?"
+	WhereClauseWithKeyRange  = "meta_key >= ? AND meta_key < ?"
+	WhereClauseWithKeyPrefix = "meta_key like ?%"
+	WhereClauseWithFromKey   = "meta_key >= ?"
+	WhereClauseWithKey       = "meta_key = ?"
+)
+
 // sqlKVClientImpl is the mysql-compatible implement for KVClient
 type sqlKVClientImpl struct {
 	// db is the original gorm.DB without table scope
@@ -36,7 +46,7 @@ type sqlKVClientImpl struct {
 	jobID metaModel.JobID
 	// tableScopeDB is with project-specific metakv table scope
 	// we use it in all methods except GenEpoch
-	// since GenEpoch use a different backend table
+	// since GenEpoch uses a different backend table
 	tableScopeDB *gorm.DB
 
 	// for GenEpoch
@@ -148,16 +158,16 @@ func (c *sqlKVClientImpl) doGet(ctx context.Context, db *gorm.DB, op *metaModel.
 		key        = op.KeyBytes()
 	)
 
-	db = db.WithContext(ctx).Where("job_id = ?", c.jobID)
+	db = db.WithContext(ctx).Where(WhereClauseWithJobID, c.jobID)
 	switch {
 	case op.IsOptsWithRange():
-		err = db.Where("key >= ? AND key < ?", key, op.RangeBytes()).Find(&metaKvs).Error
+		err = db.Where(WhereClauseWithKeyRange, key, op.RangeBytes()).Find(&metaKvs).Error
 	case op.IsOptsWithPrefix():
-		err = db.Where("key like ?%", key).Find(&metaKvs).Error
+		err = db.Where(WhereClauseWithKeyPrefix, key).Find(&metaKvs).Error
 	case op.IsOptsWithFromKey():
-		err = db.Where("key >= ?", key).Find(&metaKvs).Error
+		err = db.Where(WhereClauseWithFromKey, key).Find(&metaKvs).Error
 	default:
-		err = db.Where("key = ?", key).First(&metaKv).Error
+		err = db.Where(WhereClauseWithKey, key).First(&metaKv).Error
 		isPointGet = true
 	}
 	if err != nil {
@@ -199,17 +209,17 @@ func (c *sqlKVClientImpl) doDelete(ctx context.Context, db *gorm.DB, op *metaMod
 		key = op.KeyBytes()
 	)
 
-	db = db.WithContext(ctx).Where("job_id = ?", c.jobID)
+	db = db.WithContext(ctx).Where(WhereClauseWithJobID, c.jobID)
 	switch {
 	case op.IsOptsWithRange():
-		err = db.Where("key >= ? AND key < ?", key,
+		err = db.Where(WhereClauseWithKeyRange, key,
 			op.RangeBytes()).Delete(&sqlkvModel.MetaKV{}).Error
 	case op.IsOptsWithPrefix():
-		err = db.Where("key like ?%", key).Delete(&sqlkvModel.MetaKV{}).Error
+		err = db.Where(WhereClauseWithKeyPrefix, key).Delete(&sqlkvModel.MetaKV{}).Error
 	case op.IsOptsWithFromKey():
-		err = db.Where("key >= ?", key).Delete(&sqlkvModel.MetaKV{}).Error
+		err = db.Where(WhereClauseWithFromKey, key).Delete(&sqlkvModel.MetaKV{}).Error
 	default:
-		err = db.Where("key = ?", key).Delete(&sqlkvModel.MetaKV{}).Error
+		err = db.Where(WhereClauseWithKey, key).Delete(&sqlkvModel.MetaKV{}).Error
 	}
 	if err != nil {
 		return nil, sqlErrorFromOpFail(err)

@@ -290,27 +290,24 @@ func TestManagerRtsMap(t *testing.T) {
 
 	// Remove a table.
 	logMgr.RemoveTable(model.TableID(1))
-	tables, minTs = logMgr.prepareForFlush()
-	require.Equal(t, 1, len(tables))
-	require.Equal(t, uint64(20), minTs)
-	logMgr.postFlush(tables, minTs)
 	require.Equal(t, uint64(20), logMgr.GetMinResolvedTs())
 
+	// Add the table back, GetMinResolvedTs can regress.
+	logMgr.AddTable(model.TableID(1), model.Ts(10))
+	require.Equal(t, uint64(10), logMgr.GetMinResolvedTs())
+
 	// Received some timestamps, some tables may not be updated.
-	logMgr.AddTable(model.TableID(3), model.Ts(20))
-	logMgr.onResolvedTsMsg(model.TableID(2), model.Ts(30))
+	logMgr.onResolvedTsMsg(model.TableID(1), model.Ts(30))
 	tables, minTs = logMgr.prepareForFlush()
 	require.Equal(t, 2, len(tables))
 	require.Equal(t, uint64(20), minTs)
 	logMgr.postFlush(tables, minTs)
 	require.Equal(t, uint64(20), logMgr.GetMinResolvedTs())
 
-	// GetMinResolvedTs can never regress.
+	// Remove all tables.
+	logMgr.RemoveTable(model.TableID(1))
 	logMgr.RemoveTable(model.TableID(2))
-	logMgr.RemoveTable(model.TableID(3))
-	tables, minTs = logMgr.prepareForFlush()
-	logMgr.postFlush(tables, minTs)
-	require.Equal(t, uint64(20), logMgr.GetMinResolvedTs())
+	require.Equal(t, uint64(math.MaxInt64), logMgr.GetMinResolvedTs())
 }
 
 // TestManagerError tests whether internal error in bgUpdateLog could be managed correctly.
