@@ -30,10 +30,12 @@ func NewSQLDB(driver string, dsn string, dbConf *DBConfig) (*sql.DB, error) {
 		return nil, cerrors.ErrMetaOpFail.Wrap(err)
 	}
 
-	db.SetConnMaxIdleTime(dbConf.ConnMaxIdleTime)
-	db.SetConnMaxLifetime(dbConf.ConnMaxLifeTime)
-	db.SetMaxIdleConns(dbConf.MaxIdleConns)
-	db.SetMaxOpenConns(dbConf.MaxOpenConns)
+	if dbConf != nil {
+		db.SetConnMaxIdleTime(dbConf.ConnMaxIdleTime)
+		db.SetConnMaxLifetime(dbConf.ConnMaxLifeTime)
+		db.SetMaxIdleConns(dbConf.MaxIdleConns)
+		db.SetMaxOpenConns(dbConf.MaxOpenConns)
+	}
 	return db, nil
 }
 

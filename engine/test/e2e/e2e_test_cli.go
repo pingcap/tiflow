@@ -26,11 +26,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.uber.org/zap"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/fake"
 	engineModel "github.com/pingcap/tiflow/engine/model"
@@ -39,23 +34,32 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	server "github.com/pingcap/tiflow/engine/servermaster"
 	"github.com/pingcap/tiflow/pkg/httputil"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
+
+func init() {
+	// set the debug level log for easy test
+	log.SetLevel(zapcore.DebugLevel)
+}
 
 // ChaosCli is used to interact with server master, fake job and provides ways
 // to adding chaos in e2e test.
 type ChaosCli struct {
 	jobManagerCli pb.JobManagerClient
 	masterAddrs   []string
-	// cc is the client connection for business metastore
+	// masterCli is used to operate with server master, such as submit job
 	clientConn metaModel.ClientConn
-	// used to query metadata which is stored from business logic(job-level isolation)
+	// metaCli is used to query metadata which is stored from business logic(job-level isolation)
 	// NEED to reinitialize the metaCli if we access to a different job
 	metaCli metaModel.KVClient
-	// used to write to etcd to simulate the business of fake job, this etcd client
-	// reuses the endpoints of business meta KV.
+	// fakeJobCli is used to write to etcd to simulate the business of fake job
 	fakeJobCli *clientv3.Client
 	fakeJobCfg *FakeJobConfig
-	// used to save project info
+	// project is used to save project info
 	project tenant.ProjectInfo
 }
 
@@ -93,15 +97,19 @@ func NewUTCli(ctx context.Context, masterAddrs, businessMetaAddrs []string, proj
 		return nil, err
 	}
 
+	// TODO: NEED to move metastore config to a toml, and parse the toml
+	defaultSchema := "test"
+
 	conf := server.NewDefaultBusinessMetaConfig()
 	conf.Endpoints = businessMetaAddrs
+	conf.Schema = defaultSchema
 	cc, err := meta.NewClientConn(conf)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	fakeJobCli, err := clientv3.New(clientv3.Config{
-		Endpoints:   businessMetaAddrs,
+		Endpoints:   cfg.EtcdEndpoints,
 		Context:     ctx,
 		DialTimeout: 3 * time.Second,
 		DialOptions: []grpc.DialOption{},
@@ -189,6 +197,8 @@ func (cli *ChaosCli) getFakeJobCheckpoint(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	log.Debug("get fake job checkpoint", zap.String("ckptKey", ckptKey),
+		zap.Any("checkpoint", checkpoint))
 	return checkpoint, nil
 }
 
