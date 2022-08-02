@@ -15,7 +15,6 @@ package syncer
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"testing"
 
@@ -212,21 +211,250 @@ func TestIsConnectionRefusedError(t *testing.T) {
 }
 
 func TestGetDDLStatusFromTiDB(t *testing.T) {
-	db, err := sql.Open("mysql", "root:@tcp(127.0.0.1:4000)/many_tables_test")
-	if err != nil {
-		fmt.Printf("Error: %v \n", err)
-	}
-	defer db.Close()
+	var (
+		createDatabaseSQL          = ""
+		selectTimeSQL              = ""
+		createTableSQL1            = ""
+		createTableSQL2            = ""
+		createTableSQL3            = ""
+		createTableSQL4            = ""
+		createTableSQL5            = ""
+		createTableSQL6            = ""
+		alterTableSQL1             = ""
+		alterTableSQL2             = ""
+		alterTableSQL3             = ""
+		alterTableSQL4             = ""
+		alterTableSQL5             = ""
+		alterTableSQL6             = ""
+		adminShowDDLJobsSQL1       = ""
+		adminShowDDLJobsSQL2       = ""
+		adminShowDDLJobsLimitSQL1  = ""
+		adminShowDDLJobsLimitSQL2  = ""
+		adminShowDDLJobsLimitSQL3  = ""
+		adminShowDDLJobsLimitSQL4  = ""
+		adminShowDDLJobsLimitSQL5  = ""
+		adminShowDDLJobsLimitSQL6  = ""
+		adminShowDDLJobsLimitSQL7  = ""
+		adminShowDDLJobsLimitSQL8  = ""
+		adminShowDDLJobsLimitSQL9  = ""
+		adminShowDDLJobsLimitSQL10 = ""
+		adminShowDDLJobsLimitSQL11 = ""
+		adminShowDDLJobsLimitSQL12 = ""
+		adminShowDDLJobsLimitSQL13 = ""
+		adminShowDDLJobsLimitSQL14 = ""
+		adminShowDDLJobsLimitSQL15 = ""
+		adminShowDDLJobsLimitSQL16 = ""
+		adminShowDDLJobsLimitSQL17 = ""
+		adminShowDDLJobsLimitSQL18 = ""
+		adminShowDDLJobsLimitSQL19 = ""
+		adminShowDDLJobsLimitSQL20 = ""
+	)
 
-	err = db.Ping()
-	if err != nil {
-		fmt.Printf("DB connection failed")
-	}
+	var err error
+	db, mock, err := sqlmock.New()
+	require.Nil(t, err)
 
-	//createTime := time.Now().Unix() - 86400 //within 24 hours
-	status, err := GetDDLStatusFromTiDB(db, "CREATE TABLE many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)")
-	fmt.Printf("status: %v", status)
-	if err != nil {
-		fmt.Printf("err: %v", err)
-	}
+	createDatabaseSQL = fmt.Sprintf("CREATE DATABASE IF NOT EXISTS many_tables_test")
+	selectTimeSQL = fmt.Sprintf("SELECT @@TIMESTAMP")
+	createTableSQL1 = fmt.Sprintf("CREATE TABLE IF NOT EXISTS many_tables_test.t%d(i TINYINT, j INT UNIQUE KEY)", 1)
+	createTableSQL2 = fmt.Sprintf("CREATE TABLE IF NOT EXISTS many_tables_test.t%d(i TINYINT, j INT UNIQUE KEY)", 2)
+	createTableSQL3 = fmt.Sprintf("CREATE TABLE IF NOT EXISTS many_tables_test.t%d(i TINYINT, j INT UNIQUE KEY)", 3)
+	createTableSQL4 = fmt.Sprintf("CREATE TABLE IF NOT EXISTS many_tables_test.t%d(i TINYINT, j INT UNIQUE KEY)", 4)
+	createTableSQL5 = fmt.Sprintf("CREATE TABLE IF NOT EXISTS many_tables_test.t%d(i TINYINT, j INT UNIQUE KEY)", 5)
+	createTableSQL6 = fmt.Sprintf("CREATE TABLE IF NOT EXISTS many_tables_test.t%d(i TINYINT, j INT UNIQUE KEY)", 6)
+	alterTableSQL1 = fmt.Sprintf("ALTER TABLE many_tables_test.t%d ADD x timestamp DEFAULT current_timestamp;", 1)
+	alterTableSQL2 = fmt.Sprintf("ALTER TABLE many_tables_test.t%d ADD x timestamp DEFAULT current_timestamp;", 2)
+	alterTableSQL3 = fmt.Sprintf("ALTER TABLE many_tables_test.t%d ADD x timestamp DEFAULT current_timestamp;", 3)
+	alterTableSQL4 = fmt.Sprintf("ALTER TABLE many_tables_test.t%d ADD x timestamp DEFAULT current_timestamp;", 4)
+	alterTableSQL5 = fmt.Sprintf("ALTER TABLE many_tables_test.t%d ADD x timestamp DEFAULT current_timestamp;", 5)
+	alterTableSQL6 = fmt.Sprintf("ALTER TABLE many_tables_test.t%d ADD x timestamp DEFAULT current_timestamp;", 6)
+	adminShowDDLJobsSQL1 = fmt.Sprintf("ADMIN SHOW DDL JOBS 10")
+	adminShowDDLJobsSQL2 = fmt.Sprintf("ADMIN SHOW DDL JOBS 20")
+	adminShowDDLJobsLimitSQL1 = fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d", 0)
+	adminShowDDLJobsLimitSQL2 = fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d", 1)
+	adminShowDDLJobsLimitSQL3 = fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d", 2)
+	adminShowDDLJobsLimitSQL4 = fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d", 3)
+	adminShowDDLJobsLimitSQL5 = fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d", 4)
+	adminShowDDLJobsLimitSQL6 = fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d", 5)
+	adminShowDDLJobsLimitSQL7 = fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d", 6)
+	adminShowDDLJobsLimitSQL8 = fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d", 7)
+	adminShowDDLJobsLimitSQL9 = fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d", 8)
+	adminShowDDLJobsLimitSQL10 = fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d", 9)
+	adminShowDDLJobsLimitSQL11 = fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d", 10)
+	adminShowDDLJobsLimitSQL12 = fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d", 11)
+	adminShowDDLJobsLimitSQL13 = fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d", 12)
+	adminShowDDLJobsLimitSQL14 = fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d", 13)
+	adminShowDDLJobsLimitSQL15 = fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d", 14)
+	adminShowDDLJobsLimitSQL16 = fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d", 15)
+	adminShowDDLJobsLimitSQL17 = fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d", 16)
+	adminShowDDLJobsLimitSQL18 = fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d", 17)
+	adminShowDDLJobsLimitSQL19 = fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d", 18)
+	adminShowDDLJobsLimitSQL20 = fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d", 19)
+
+	mock.ExpectBegin()
+	mock.ExpectExec(createDatabaseSQL).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectQuery(selectTimeSQL).WillReturnRows(sqlmock.NewRows([]string{"@@TIMESTAMP"}).AddRow(1659416697.8055072))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectExec(createTableSQL1).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectExec(createTableSQL2).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectExec(createTableSQL3).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectExec(createTableSQL4).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectExec(createTableSQL5).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectExec(createTableSQL6).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectExec(alterTableSQL1).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectExec(alterTableSQL2).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectExec(alterTableSQL3).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectExec(alterTableSQL4).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectExec(alterTableSQL5).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectExec(alterTableSQL6).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	// ADMIN SHOW DDL JOBS QUERIES
+	mock.ExpectBegin()
+	mock.ExpectQuery(adminShowDDLJobsSQL1).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "DB_NAME", "TABLE_NAME", "JOB_TYPE", "SCHEMA_STATE", "SCHEMA_ID", "TABLE_ID", "ROW_COUNT", "CREATE_TIME", "START_TIME", "END_TIME", "STATE"}).
+		AddRow(61, "many_tables_test", "t6", "alter table", "public", 1, 61, 0, "2022-08-02 2:51:39", "2022-08-02 2:51:39", "NULL", "running").
+		AddRow(60, "many_tables_test", "t5", "alter table", "public", 1, 60, 0, "2022-08-02 2:51:28", "2022-08-02 2:51:28", "2022-08-02 2:51:28", "synced").
+		AddRow(59, "many_tables_test", "t4", "alter table", "public", 1, 59, 0, "2022-08-02 2:50:37", "2022-08-02 2:50:37", "NULL", "none").
+		AddRow(58, "many_tables_test", "t3", "alter table", "public", 1, 58, 0, "2022-08-02 2:50:12", "2022-08-02 2:50:12", "2022-08-02 2:50:12", "synced").
+		AddRow(57, "many_tables_test", "t2", "alter table", "public", 1, 57, 0, "2022-08-02 2:49:39", "2022-08-02 2:49:39", "2022-08-02 2:49:39", "synced").
+		AddRow(56, "many_tables_test", "t1", "alter table", "public", 1, 56, 0, "2022-08-02 2:49:09", "2022-08-02 2:49:09", "2022-08-02 2:49:09", "synced").
+		AddRow(55, "many_tables_test", "t6", "create table", "public", 1, 55, 0, "2022-08-02 2:48:38", "2022-08-02 2:48:38", "2022-08-02 2:48:38", "synced").
+		AddRow(54, "many_tables_test", "t5", "create table", "public", 1, 54, 0, "2022-08-02 2:48:19", "2022-08-02 2:48:19", "2022-08-02 2:48:19", "synced").
+		AddRow(53, "many_tables_test", "t4", "create table", "public", 1, 53, 0, "2022-08-02 2:47:55", "2022-08-02 2:47:55", "2022-08-02 2:47:55", "synced").
+		AddRow(52, "many_tables_test", "t3", "create table", "public", 1, 52, 0, "2022-08-02 2:47:24", "2022-08-02 2:47:24", "2022-08-02 2:47:24", "synced"))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectQuery(adminShowDDLJobsSQL2).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "DB_NAME", "TABLE_NAME", "JOB_TYPE", "SCHEMA_STATE", "SCHEMA_ID", "TABLE_ID", "ROW_COUNT", "CREATE_TIME", "START_TIME", "END_TIME", "STATE"}).
+		AddRow(61, "many_tables_test", "t6", "alter table", "public", 1, 61, 0, "2022-08-02 2:51:39", "2022-08-02 2:51:39", "NULL", "running").
+		AddRow(60, "many_tables_test", "t5", "alter table", "public", 1, 60, 0, "2022-08-02 2:51:28", "2022-08-02 2:51:28", "2022-08-02 2:51:28", "synced").
+		AddRow(59, "many_tables_test", "t4", "alter table", "public", 1, 59, 0, "2022-08-02 2:50:37", "2022-08-02 2:50:37", "NULL", "none").
+		AddRow(58, "many_tables_test", "t3", "alter table", "public", 1, 58, 0, "2022-08-02 2:50:12", "2022-08-02 2:50:12", "2022-08-02 2:50:12", "synced").
+		AddRow(57, "many_tables_test", "t2", "alter table", "public", 1, 57, 0, "2022-08-02 2:49:39", "2022-08-02 2:49:39", "2022-08-02 2:49:39", "synced").
+		AddRow(56, "many_tables_test", "t1", "alter table", "public", 1, 56, 0, "2022-08-02 2:49:09", "2022-08-02 2:49:09", "2022-08-02 2:49:09", "synced").
+		AddRow(55, "many_tables_test", "t6", "create table", "public", 1, 55, 0, "2022-08-02 2:48:38", "2022-08-02 2:48:38", "2022-08-02 2:48:38", "synced").
+		AddRow(54, "many_tables_test", "t5", "create table", "public", 1, 54, 0, "2022-08-02 2:48:19", "2022-08-02 2:48:19", "2022-08-02 2:48:19", "synced").
+		AddRow(53, "many_tables_test", "t4", "create table", "public", 1, 53, 0, "2022-08-02 2:47:55", "2022-08-02 2:47:55", "2022-08-02 2:47:55", "synced").
+		AddRow(52, "many_tables_test", "t3", "create table", "public", 1, 52, 0, "2022-08-02 2:47:24", "2022-08-02 2:47:24", "2022-08-02 2:47:24", "synced").
+		AddRow(51, "many_tables_test", "t2", "create table", "public", 1, 51, 0, "2022-08-02 2:46:43", "2022-08-02 2:46:43", "2022-08-02 2:46:43", "synced").
+		AddRow(50, "many_tables_test", "t1", "create table", "public", 1, 50, 0, "2022-08-02 2:46:14", "2022-08-02 2:46:14", "2022-08-02 2:46:14", "synced").
+		AddRow(49, "other_test", "t7", "create table", "public", 2, 49, 0, "2022-08-02 2:45:52", "2022-08-02 2:45:52", "2022-08-02 2:45:52", "synced").
+		AddRow(48, "other_test", "t6", "create table", "public", 2, 48, 0, "2022-08-02 2:45:38", "2022-08-02 2:45:38", "2022-08-02 2:45:38", "synced").
+		AddRow(47, "other_test", "t5", "create table", "public", 2, 47, 0, "2022-08-02 2:44:47", "2022-08-02 2:44:47", "2022-08-02 2:44:47", "synced").
+		AddRow(46, "other_test", "t4", "create table", "public", 2, 46, 0, "2022-08-02 2:44:22", "2022-08-02 2:44:22", "2022-08-02 2:44:22", "synced").
+		AddRow(45, "other_test", "t3", "create table", "public", 2, 45, 0, "2022-08-02 2:43:35", "2022-08-02 2:43:35", "2022-08-02 2:43:35", "synced").
+		AddRow(44, "other_test", "t2", "create table", "public", 2, 44, 0, "2022-08-02 2:43:08", "2022-08-02 2:43:08", "2022-08-02 2:43:08", "synced").
+		AddRow(43, "other_test", "t1", "create table", "public", 2, 43, 0, "2022-08-02 2:42:41", "2022-08-02 2:42:41", "2022-08-02 2:42:41", "synced").
+		AddRow(42, "other_test", "t0", "create table", "public", 2, 42, 0, "2022-08-02 2:42:16", "2022-08-02 2:42:16", "2022-08-02 2:42:16", "synced"))
+	mock.ExpectCommit()
+
+	// ADMIN SHOW DDL JOBS QUERIES LIMIT 1 OFFSET n
+	mock.ExpectBegin()
+	mock.ExpectQuery(adminShowDDLJobsLimitSQL1).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
+		61, "ALTER TABLE many_tables_test.t6 ADD x timestamp DEFAULT current_timestamp"))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectQuery(adminShowDDLJobsLimitSQL2).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
+		60, "ALTER TABLE many_tables_test.t5 ADD x timestamp DEFAULT current_timestamp"))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectQuery(adminShowDDLJobsLimitSQL3).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
+		59, "ALTER TABLE many_tables_test.t4 ADD x timestamp DEFAULT current_timestamp"))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectQuery(adminShowDDLJobsLimitSQL4).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
+		58, "ALTER TABLE many_tables_test.t3 ADD x timestamp DEFAULT current_timestamp"))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectQuery(adminShowDDLJobsLimitSQL5).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
+		57, "ALTER TABLE many_tables_test.t2 ADD x timestamp DEFAULT current_timestamp"))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectQuery(adminShowDDLJobsLimitSQL6).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
+		56, "ALTER TABLE many_tables_test.t1 ADD x timestamp DEFAULT current_timestamp"))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectQuery(adminShowDDLJobsLimitSQL7).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
+		55, "CREATE TABLE IF NOT EXISTS many_tables_test.t6(i TINYINT, j INT UNIQUE KEY)"))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectQuery(adminShowDDLJobsLimitSQL8).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
+		54, "CREATE TABLE IF NOT EXISTS many_tables_test.t5(i TINYINT, j INT UNIQUE KEY)"))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectQuery(adminShowDDLJobsLimitSQL9).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
+		53, "CREATE TABLE IF NOT EXISTS many_tables_test.t4(i TINYINT, j INT UNIQUE KEY)"))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectQuery(adminShowDDLJobsLimitSQL10).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
+		52, "CREATE TABLE IF NOT EXISTS many_tables_test.t3(i TINYINT, j INT UNIQUE KEY)"))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectQuery(adminShowDDLJobsLimitSQL11).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
+		51, "CREATE TABLE IF NOT EXISTS many_tables_test.t2(i TINYINT, j INT UNIQUE KEY)"))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectQuery(adminShowDDLJobsLimitSQL12).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
+		50, "CREATE TABLE IF NOT EXISTS many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)"))
+	mock.ExpectCommit()
+	mock.ExpectQuery(adminShowDDLJobsLimitSQL13).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
+		49, "CREATE TABLE IF NOT EXISTS other_test.t7(i TINYINT, j INT UNIQUE KEY)"))
+	mock.ExpectCommit()
+	mock.ExpectQuery(adminShowDDLJobsLimitSQL14).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
+		48, "CREATE TABLE IF NOT EXISTS other_test.t6(i TINYINT, j INT UNIQUE KEY)"))
+	mock.ExpectCommit()
+	mock.ExpectQuery(adminShowDDLJobsLimitSQL15).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
+		47, "CREATE TABLE IF NOT EXISTS other_test.t5(i TINYINT, j INT UNIQUE KEY)"))
+	mock.ExpectCommit()
+	mock.ExpectQuery(adminShowDDLJobsLimitSQL16).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
+		46, "CREATE TABLE IF NOT EXISTS other_test.t4(i TINYINT, j INT UNIQUE KEY)"))
+	mock.ExpectCommit()
+	mock.ExpectQuery(adminShowDDLJobsLimitSQL17).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
+		45, "CREATE TABLE IF NOT EXISTS other_test.t3(i TINYINT, j INT UNIQUE KEY)"))
+	mock.ExpectCommit()
+	mock.ExpectQuery(adminShowDDLJobsLimitSQL18).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
+		44, "CREATE TABLE IF NOT EXISTS other_test.t2(i TINYINT, j INT UNIQUE KEY)"))
+	mock.ExpectCommit()
+	mock.ExpectQuery(adminShowDDLJobsLimitSQL19).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
+		43, "CREATE TABLE IF NOT EXISTS other_test.t1(i TINYINT, j INT UNIQUE KEY)"))
+	mock.ExpectCommit()
+	mock.ExpectQuery(adminShowDDLJobsLimitSQL20).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
+		42, "CREATE TABLE IF NOT EXISTS other_test.t0(i TINYINT, j INT UNIQUE KEY)"))
+	mock.ExpectCommit()
+
+	status, err := GetDDLStatusFromTiDB(db, "ALTER TABLE many_tables_test.t6 ADD x timestamp DEFAULT current_timestamp")
+	require.Equal(t, "running", status)
+	require.Nil(t, err)
+
+	status, err = GetDDLStatusFromTiDB(db, "ALTER TABLE many_tables_test.t4 ADD x timestamp DEFAULT current_timestamp")
+	require.Equal(t, "none", status)
+	require.Nil(t, err)
+
+	status, err = GetDDLStatusFromTiDB(db, "CREATE TABLE IF NOT EXISTS many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)")
+	require.Equal(t, "synced", status)
+	require.Nil(t, err)
 }

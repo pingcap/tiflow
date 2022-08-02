@@ -38,6 +38,10 @@ import (
 	"github.com/pingcap/tiflow/pkg/errorutil"
 )
 
+var (
+	createTime uint8
+)
+
 // ignoreTrackerDDLError is also same with ignoreDDLError, but in order to keep tracker's table structure same as
 // upstream's, we can't ignore "already exists" errors because already exists doesn't mean same.
 func ignoreTrackerDDLError(err error) bool {
@@ -62,6 +66,10 @@ func isDropColumnWithIndexError(err error) bool {
 		(strings.Contains(mysqlErr.Message, "with index") ||
 			strings.Contains(mysqlErr.Message, "with composite index") ||
 			strings.Contains(mysqlErr.Message, "with tidb_enable_change_multi_schema is disable"))
+}
+
+func passDDLCreateTime(ddlCreateTime uint8) {
+	createTime = ddlCreateTime
 }
 
 // here db should be TiDB database
@@ -91,7 +99,6 @@ func GetDDLStatusFromTiDB(db *sql.DB, DDL string) (string, error) {
 
 		for rows.Next() {
 			count := 0
-			//fmt.Println("check1")
 			err = rows.Scan(scanArgs...)
 			if err != nil {
 				return "", err
@@ -103,7 +110,6 @@ func GetDDLStatusFromTiDB(db *sql.DB, DDL string) (string, error) {
 			theTime, _ := time.ParseInLocation(timeLayout, createTimeStr, loc)
 			DDLCreateTime := theTime.Unix()
 			fmt.Printf("DDLCreateTime: %d \n", DDLCreateTime)
-			var createTime uint8
 
 			if DDLCreateTime >= int64(createTime) {
 				jobID, err := strconv.Atoi(string(values[0]))
@@ -112,27 +118,14 @@ func GetDDLStatusFromTiDB(db *sql.DB, DDL string) (string, error) {
 				}
 
 				offset := rowNum + count - 10
-				//fmt.Printf("count: %d \n", count)
 				for {
-					//fmt.Println("check2")
-					//fmt.Printf("offset: %d \n", offset)
 					var DDLJob string
 					var jobIDForLimit int
 					showJob := fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d \n;", offset)
 					err = db.QueryRowContext(ctx, showJob).Scan(&jobIDForLimit, &DDLJob)
-					//rowsForLimit, err := db.QueryContext(ctx, showJob)
 					if err != nil {
 						return "", err
 					}
-
-					//jobIDForLimit, err := strconv.Atoi(string(valuesForLimit[0]))
-					//if err != nil {
-					//	return "", err
-					//}
-					//fmt.Printf("jobID: %d", jobID)
-					//fmt.Printf("jobIDForLimit: %d", jobIDForLimit)
-					//fmt.Printf("DDL: %v", DDL)
-					//fmt.Printf("string(valuesForLimit[1]): %v", DDLJob)
 					if jobID == jobIDForLimit && DDL == DDLJob {
 						fmt.Printf("DDLJob: %v \n", DDLJob)
 						fmt.Printf("status: %v \n", string(values[11]))
@@ -158,7 +151,7 @@ func GetDDLStatusFromTiDB(db *sql.DB, DDL string) (string, error) {
 }
 
 // handleSpecialDDLError handles special errors for DDL execution.
-func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls []string, index int, conn *dbconn.DBConn, createTime uint8) error {
+func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls []string, index int, conn *dbconn.DBConn) error {
 	// We use default parser because ddls are came from *Syncer.genDDLInfo, which is StringSingleQuotes, KeyWordUppercase and NameBackQuotes
 	parser2 := parser.New()
 
