@@ -59,9 +59,6 @@ func mockGetDBConn(t *testing.T) (*sql.DB, sqlmock.Sqlmock, error) {
 	// common execution for orm
 	mock.ExpectQuery("SELECT VERSION()").
 		WillReturnRows(sqlmock.NewRows([]string{"VERSION()"}).AddRow("5.7.35-log"))
-	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO `logic_epoches` (`created_at`,`updated_at`,`job_id`,`epoch`) VALUES (?,?,?,?) "+
-		"ON DUPLICATE KEY UPDATE `seq_id`=`seq_id`")).WithArgs(anyTime{}, anyTime{}, "", 1).
-		WillReturnResult(sqlmock.NewResult(1, 1))
 	return db, mock, nil
 }
 

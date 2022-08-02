@@ -57,19 +57,11 @@ func TestNewEpochClient(t *testing.T) {
 	gdb, mock, err := mockGetDBConn(t, "test")
 	require.NoError(t, err)
 	defer closeGormDB(t, gdb)
+	defer mock.ExpectClose()
 
-	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO `logic_epoches` (`created_at`,`updated_at`,`job_id`,`epoch`)" +
-		" VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE `seq_id`=`seq_id`")).
-		WillReturnResult(sqlmock.NewResult(1, 1))
-	_, err = NewEpochClient("fakeJob", gdb)
+	cli, err := NewEpochClient("fakeJob", gdb)
 	require.NoError(t, err)
-
-	mock.ExpectExec(".*").
-		WillReturnError(&gsql.MySQLError{Number: 1062, Message: "test error"})
-	_, err = NewEpochClient("fakeJob", gdb)
-	require.Error(t, err)
-
-	mock.ExpectClose()
+	defer cli.Close()
 }
 
 func TestGenEpoch(t *testing.T) {
@@ -83,10 +75,20 @@ func TestGenEpoch(t *testing.T) {
 	createdAt := tm.Add(time.Duration(1))
 	updatedAt := tm.Add(time.Duration(1))
 
-	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	epochClient, err := NewEpochClient("fakeJob", gdb)
 	require.NoError(t, err)
 
+	// insert first record fail
+	mock.ExpectExec(".*").
+		WillReturnError(&gsql.MySQLError{Number: 1062, Message: "test error"})
+	epoch, err := epochClient.GenEpoch(ctx)
+	require.Error(t, err)
+	require.False(t, epochClient.isInitialized.Load())
+
+	// insert first record successful
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO `logic_epoches` (`created_at`,`updated_at`,`job_id`,`epoch`)" +
+		" VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE `seq_id`=`seq_id`")).
+		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta("UPDATE `logic_epoches` SET `epoch`=epoch + ?,`updated_at`=? WHERE job_id = ?")).
 		WillReturnResult(sqlmock.NewResult(1, 1))
@@ -96,10 +98,12 @@ func TestGenEpoch(t *testing.T) {
 			AddRow(1, createdAt, updatedAt, "fakeJob", 11))
 	mock.ExpectCommit()
 
-	epoch, err := epochClient.GenEpoch(ctx)
+	epoch, err = epochClient.GenEpoch(ctx)
 	require.NoError(t, err)
 	require.Equal(t, int64(11), epoch)
+	require.True(t, epochClient.isInitialized.Load())
 
+	// update fail
 	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE `logic_epoches` SET").WillReturnError(errors.New("gen epoch error"))
 	mock.ExpectRollback()

@@ -15,10 +15,10 @@ package model
 
 import (
 	"context"
-	"time"
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/atomic"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -54,17 +54,6 @@ func NewEpochClient(jobID string, db *gorm.DB) (*epochClient, error) {
 		return nil, errors.ErrMetaParamsInvalid.GenWithStackByArgs("input db is nil")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	// Do nothing on conflict
-	if err := db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).
-		Create(&LogicEpoch{
-			JobID: jobID,
-			Epoch: defaultMinEpoch,
-		}).Error; err != nil {
-		return nil, errors.ErrMetaOpFail.Wrap(err)
-	}
-
 	return &epochClient{
 		jobID: jobID,
 		db:    db,
@@ -72,12 +61,37 @@ func NewEpochClient(jobID string, db *gorm.DB) (*epochClient, error) {
 }
 
 type epochClient struct {
-	jobID string
-	db    *gorm.DB
+	// isInitialized is for lazy initializatiom
+	isInitialized atomic.Bool
+	jobID         string
+	db            *gorm.DB
+}
+
+func (e *epochClient) initialize(ctx context.Context) error {
+	// Do nothing on conflict
+	if err := e.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).
+		Create(&LogicEpoch{
+			JobID: e.jobID,
+			Epoch: defaultMinEpoch,
+		}).Error; err != nil {
+		return errors.ErrMetaOpFail.Wrap(err)
+	}
+
+	return nil
 }
 
 // GenEpoch implements GenEpoch of EpochClient
 func (e *epochClient) GenEpoch(ctx context.Context) (int64, error) {
+	// we make lazy initialization for two reasons:
+	// 1. Not all kinds of client need calling GenEpoch
+	// 2. some components depend on framework meta client before initializing the backend meta table
+	if !e.isInitialized.Load() {
+		if err := e.initialize(ctx); err != nil {
+			return int64(0), err
+		}
+		e.isInitialized.Store(true)
+	}
+
 	failpoint.InjectContext(ctx, "genEpochDelay", nil)
 	if e.db == nil {
 		return int64(0), errors.ErrMetaParamsInvalid.GenWithStackByArgs("inner db is nil")

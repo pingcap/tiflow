@@ -58,10 +58,6 @@ func mockGetDBConn(t *testing.T, dsnStr string, table string, jobID string) (*sq
 		"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL,`meta_key` varbinary(2048) not null,`meta_value` blob,"+
 		"`job_id` varchar(64) not null,PRIMARY KEY (`seq_id`),UNIQUE INDEX uidx_jk (`job_id`,`meta_key`))", table))).
 		WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO `logic_epoches` (`created_at`,`updated_at`,"+
-		"`job_id`,`epoch`) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE `seq_id`=`seq_id`")).
-		WithArgs(anyTime{}, anyTime{}, jobID, 1).
-		WillReturnResult(sqlmock.NewResult(1, 1))
 	return db, mock, nil
 }
 
