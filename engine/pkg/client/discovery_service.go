@@ -16,6 +16,10 @@ package client
 import (
 	"context"
 
+	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/retry"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
@@ -67,18 +71,30 @@ func (c *discoveryClient) RegisterExecutor(
 	ctx context.Context,
 	request *enginepb.RegisterExecutorRequest,
 ) (model.ExecutorID, error) {
-	call := internal.NewCall(
-		c.cli.RegisterExecutor,
-		request,
-		// RegisterExecutor is not idempotent in general
-		// TODO review idempotency
-		// internal.WithForceNoRetry()
-	)
-	resp, err := call.Do(ctx)
+	var ret model.ExecutorID
+	err := retry.Do(ctx, func() error {
+		call := internal.NewCall(
+			c.cli.RegisterExecutor,
+			request,
+			// RegisterExecutor is not idempotent in general
+			// TODO review idempotency
+			// internal.WithForceNoRetry()
+		)
+		resp, err := call.Do(ctx)
+		if err != nil {
+			return err
+		}
+		if resp.Err != nil && resp.Err.Code != enginepb.ErrorCode_None {
+			log.Info("RegisterExecutor", zap.Any("error", resp.Err))
+			return errors.New(resp.Err.String())
+		}
+		ret = model.ExecutorID(resp.ExecutorId)
+		return nil
+	})
 	if err != nil {
-		return "", err
+		return "", errors.Trace(err)
 	}
-	return model.ExecutorID(resp.ExecutorId), nil
+	return ret, nil
 }
 
 // Heartbeat sends a heartbeat to the DiscoveryService.
