@@ -34,18 +34,21 @@ const (
 	apiOpVarProjectID = "project_id"
 	// apiOpVarJobID is the key of job id in HTTP API.
 	apiOpVarJobID = "job_id"
-	// apiOpVarJobID is the key of job type in HTTP API.
-	apiOpJobType = "job_type"
-	// apiOpVarJobID is the key of job config in HTTP API.
-	apiOpJobConfig = "job_config"
 )
 
-// APICreateJobJSON defines the json fields when creating a job with OpenAPI
-type APICreateJobJSON struct {
+// APICreateJobRequest defines the json fields when creating a job with OpenAPI
+type APICreateJobRequest struct {
 	JobType   int32  `json:"job_type"`
 	TenantID  string `json:"tenant_id"`
 	ProjectID string `json:"project_id"`
 	JobConfig string `json:"job_config"`
+}
+
+// APICreateJobRequest defines the json fields of query job response
+type APIQueryJobResponse struct {
+	JobType   int32  `json:"job_type"`
+	JobConfig string `json:"job_config"`
+	Status    int32  `json:"status"`
 }
 
 // ServerInfoProvider provides server info.
@@ -136,8 +139,8 @@ func (o *OpenAPI) ListJobs(c *gin.Context) {
 // @Router	/api/v1/jobs [post]
 // TODO: use gRPC gateway to serve OpenAPI in the future
 func (o *OpenAPI) SubmitJob(c *gin.Context) {
-	data := &APICreateJobJSON{}
-	err := c.BindJSON(data)
+	data := &APICreateJobRequest{}
+	err := c.ShouldBindJSON(data)
 	if err != nil {
 		_ = c.AbortWithError(http.StatusBadRequest, err)
 		return
@@ -181,9 +184,31 @@ func (o *OpenAPI) QueryJob(c *gin.Context) {
 	tenantID := c.Query(apiOpVarTenantID)
 	projectID := c.Query(apiOpVarProjectID)
 	jobID := c.Param(apiOpVarJobID)
-	_, _, _ = tenantID, projectID, jobID
-	// TODO: Implement it.
-	c.AbortWithStatus(http.StatusNotImplemented)
+
+	jobMgr, ok := o.infoProvider.JobManager()
+	if !ok {
+		_ = c.AbortWithError(http.StatusServiceUnavailable, errors.New("job manager is not initialized"))
+		return
+	}
+	req := &pb.QueryJobRequest{
+		JobId: jobID,
+		ProjectInfo: &pb.ProjectInfo{
+			TenantId:  tenantID,
+			ProjectId: projectID,
+		},
+	}
+	ctx := c.Request.Context()
+	resp := jobMgr.QueryJob(ctx, req)
+	if resp.Err != nil {
+		_ = c.AbortWithError(http.StatusBadRequest, errors.New(resp.Err.String()))
+		return
+	}
+	queryResp := &APIQueryJobResponse{
+		JobType:   resp.GetTp(),
+		JobConfig: string(resp.GetConfig()),
+		Status:    int32(resp.GetStatus()),
+	}
+	c.IndentedJSON(http.StatusCreated, queryResp)
 }
 
 // PauseJob pauses a job.

@@ -139,21 +139,12 @@ func (cli *ChaosCli) PauseJob(ctx context.Context, jobID string) error {
 func (cli *ChaosCli) CheckJobStatus(
 	ctx context.Context, jobID string, expectedStatus pb.QueryJobResponse_JobStatus,
 ) (bool, error) {
-	req := &pb.QueryJobRequest{
-		JobId: jobID,
-		ProjectInfo: &pb.ProjectInfo{
-			TenantId:  cli.project.TenantID(),
-			ProjectId: cli.project.ProjectID(),
-		},
-	}
-	resp, err := cli.masterCli.QueryJob(ctx, req)
+	resp, err := QueryJobViaOpenAPI(ctx, cli.masterAddrs[0],
+		cli.project.TenantID(), cli.project.ProjectID(), jobID)
 	if err != nil {
 		return false, err
 	}
-	if resp.Err != nil {
-		return false, errors.New(resp.Err.String())
-	}
-	return resp.Status == expectedStatus, nil
+	return resp.Status == int32(expectedStatus), nil
 }
 
 // UpdateFakeJobKey updates the etcd value of a worker belonging to a fake job
@@ -297,7 +288,7 @@ func CreateJobViaOpenAPI(
 	ctx context.Context, apiEndpoint string, tenantID string, projectID string,
 	tp engineModel.JobType, cfg string,
 ) (string, error) {
-	data := &servermaster.APICreateJobJSON{
+	data := &servermaster.APICreateJobRequest{
 		JobType:   int32(tp),
 		JobConfig: cfg,
 		TenantID:  tenantID,
@@ -324,4 +315,25 @@ func CreateJobViaOpenAPI(
 	var jobID string
 	err = json.Unmarshal(body, &jobID)
 	return jobID, err
+}
+
+// QueryJobViaOpenAPI wraps OpenAPI to query a job
+func QueryJobViaOpenAPI(
+	ctx context.Context, apiEndpoint string, tenantID, projectID, jobID string,
+) (result *servermaster.APIQueryJobResponse, err error) {
+	url := fmt.Sprintf(
+		"http://%s/api/v1/jobs/%s?tenant_id=%s&project_id=%s",
+		apiEndpoint, jobID, tenantID, projectID,
+	)
+	resp, err := http.Get(url)
+	if err != nil {
+		return
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
+	result = &servermaster.APIQueryJobResponse{}
+	err = json.Unmarshal(body, result)
+	return
 }
