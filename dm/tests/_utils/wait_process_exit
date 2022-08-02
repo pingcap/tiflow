@@ -5,7 +5,7 @@ process=$1
 
 WAIT_COUNT=0
 while [ $WAIT_COUNT -lt 120 ]; do
-	pgrep -f $process >/dev/null 2>&1
+	ps aux | grep $process | grep -v 'wait_process_exit' >/dev/null 2>&1
 	ret=$?
 	if [ "$ret" != "0" ]; then
 		echo "process $process already exit"
