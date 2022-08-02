@@ -22,9 +22,10 @@ import (
 type config struct {
 	*flag.FlagSet `toml:"-" yaml:"-" json:"-"`
 
-	Addr string `toml:"addr" yaml:"addr" json:"addr"`
-	// reuse business metastore currently
-	EtcdAddr string        `toml:"etcd-addr" yaml:"etcd-addr" json:"etcd-addr"`
+	Addr             string `toml:"addr" yaml:"addr" json:"addr"`
+	BusinessMetaAddr string `toml:"business-meta-addr" yaml:"business-meta-addr" json:"business-meta-addr"`
+	EtcdAddr         string `toml:"etcd-addr" yaml:"etcd-addr" json:"etcd-addr"`
+
 	Duration time.Duration `toml:"duration" yaml:"duration" json:"duration"`
 
 	MasterCount int `toml:"master-count" yaml:"master-count" json:"master-count"`
@@ -38,7 +39,9 @@ func newConfig() *config {
 	fs := cfg.FlagSet
 
 	fs.StringVar(&cfg.Addr, "addr", "server-master:10240", "address of server-master")
-	fs.StringVar(&cfg.EtcdAddr, "etcd-addr", "metastore-business:12479", "address of etcd server(used by fake job)")
+	fs.StringVar(&cfg.EtcdAddr, "etcd-addr", "metastore-etcd:12479", "address of etcd server(used by fake job)")
+	// business metastore also uses mysql now
+	fs.StringVar(&cfg.BusinessMetaAddr, "business-meta-addr", "metastore-mysql:13306", "address of business metastore")
 	fs.DurationVar(&cfg.Duration, "duration", 20*time.Minute, "duration of cases running")
 
 	fs.IntVar(&cfg.MasterCount, "master-count", 3, "expect count of server-master")
