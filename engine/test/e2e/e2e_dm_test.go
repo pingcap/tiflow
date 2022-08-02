@@ -458,3 +458,14 @@ func setBinlogSchema(ctx context.Context, client *http.Client, jobID string, tas
 	err = json.Unmarshal(respBody, &binlogSchemaResp)
 	return &binlogSchemaResp, err
 }
+
+func TestA(t *testing.T) {
+	resp, err := e2e.CreateJobViaOpenAPI(context.Background(),
+		"127.0.0.1:9000",
+		"tenant",
+		"project",
+		3,
+		"config")
+	println(string(resp))
+	println(err.Error())
+}

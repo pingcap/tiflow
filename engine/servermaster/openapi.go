@@ -129,6 +129,7 @@ func (o *OpenAPI) ListJobs(c *gin.Context) {
 // @Router	/api/v1/jobs [post]
 // TODO: use gRPC gateway to serve OpenAPI in the future
 func (o *OpenAPI) SubmitJob(c *gin.Context) {
+	c.Bind()
 	tpStr := c.PostForm(apiOpJobType)
 	tp, err := strconv.ParseInt(tpStr, 10, 64)
 	if err != nil {
