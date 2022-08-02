@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -178,13 +179,15 @@ func NewMySQLSink(
 		metricBucketSizeCounters[i] = metrics.BucketSizeCounter.
 			WithLabelValues(params.changefeedID.Namespace, params.changefeedID.ID, strconv.Itoa(i))
 	}
-	ctx, cancel := context.WithCancel(ctx)
 
+	ctx, cancel := context.WithCancel(ctx)
+	captureAddr := contextutil.CaptureAddrFromCtx(ctx)
+	statistics := metrics.NewStatistics(ctx, captureAddr, metrics.SinkTypeDB)
 	sink := &mysqlSink{
 		db:                              db,
 		params:                          params,
 		txnCache:                        newUnresolvedTxnCache(),
-		statistics:                      metrics.NewStatistics(ctx, metrics.SinkTypeDB),
+		statistics:                      statistics,
 		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
 		metricBucketSizeCounters:        metricBucketSizeCounters,
 		execWaitNotifier:                new(notify.Notifier),
