@@ -10,6 +10,8 @@ function run() {
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
 	start_engine_cluster $CONFIG
+	# add a delay in case that the cluster is not ready
+	sleep 3s
 	go test -count=1 -v -run ^TestWorkerExit$ github.com/pingcap/tiflow/engine/test/e2e
 }
 

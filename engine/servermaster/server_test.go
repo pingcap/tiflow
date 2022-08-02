@@ -52,21 +52,22 @@ func prepareServerEnv(t *testing.T) *Config {
 	cfgTpl := `
 addr = "127.0.0.1:%d"
 advertise-addr = "127.0.0.1:%d"
-[frame-metastore-conf]
+[framework-metastore-conf]
 store-id = "root"
 endpoints = ["127.0.0.1:%d"]
-[frame-metastore-conf.auth]
-user = "root"
+schema = "test0"
+auth.user = "root"
 [business-metastore-conf]
 store-id = "default"
 endpoints = ["127.0.0.1:%d"]
+schema = "test1"
 `
 	cfgStr := fmt.Sprintf(cfgTpl, ports[0], ports[0], ports[0], ports[0])
 	cfg := GetDefaultMasterConfig()
 	err = cfg.configFromString(cfgStr)
-	require.NoError(t, err)
-	err = cfg.Adjust()
-	require.NoError(t, err)
+	require.Nil(t, err)
+	err = cfg.AdjustAndValidate()
+	require.Nil(t, err)
 
 	cfg.Addr = fmt.Sprintf("127.0.0.1:%d", ports[0])
 
@@ -158,8 +159,7 @@ func testRunLeaderService(t *testing.T) {
 	s, err := NewServer(cfg, nil)
 	require.NoError(t, err)
 
-	// meta operation fail:context deadline exceeded
-	_ = s.registerMetaStore()
+	_ = s.registerMetaStore(ctx)
 
 	s.initResourceManagerService()
 	s.scheduler = makeScheduler(s.executorManager, s.resourceManagerService)
