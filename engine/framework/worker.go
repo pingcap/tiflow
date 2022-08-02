@@ -119,7 +119,6 @@ type DefaultBaseWorker struct {
 
 	id            frameModel.WorkerID
 	timeoutConfig config.TimeoutConfig
-	epoch         frameModel.Epoch
 
 	pool workerpool.AsyncPool
 
@@ -198,7 +197,6 @@ func NewBaseWorker(
 			Epoch:     epoch,
 		},
 		timeoutConfig: config.DefaultTimeoutConfig(),
-		epoch:         epoch,
 
 		pool: workerpool.NewDefaultAsyncPool(1),
 

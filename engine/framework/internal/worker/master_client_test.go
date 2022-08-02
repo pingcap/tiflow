@@ -255,6 +255,7 @@ func TestMasterClientHeartbeatMismatch(t *testing.T) {
 		SendTime:     clock.ToMono(sendTime1),
 		FromWorkerID: "worker-1",
 		Epoch:        2,
+		WorkerEpoch:  helper.Client.WorkerEpoch(),
 		IsFinished:   false,
 	}, ping)
 
@@ -463,6 +464,7 @@ func TestMasterClientHeartbeatStalePong(t *testing.T) {
 		SendTime:     clock.ToMono(sendTime1),
 		FromWorkerID: "worker-1",
 		Epoch:        1,
+		WorkerEpoch:  helper.Client.WorkerEpoch(),
 		IsFinished:   false,
 	}, ping)
 
