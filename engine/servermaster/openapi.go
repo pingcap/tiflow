@@ -19,7 +19,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -40,6 +39,14 @@ const (
 	// apiOpVarJobID is the key of job config in HTTP API.
 	apiOpJobConfig = "job_config"
 )
+
+// APICreateJobJSON defines the json fields when creating a job with OpenAPI
+type APICreateJobJSON struct {
+	JobType   int32  `json:"job_type"`
+	TenantID  string `json:"tenant_id"`
+	ProjectID string `json:"project_id"`
+	JobConfig string `json:"job_config"`
+}
 
 // ServerInfoProvider provides server info.
 type ServerInfoProvider interface {
@@ -129,28 +136,17 @@ func (o *OpenAPI) ListJobs(c *gin.Context) {
 // @Router	/api/v1/jobs [post]
 // TODO: use gRPC gateway to serve OpenAPI in the future
 func (o *OpenAPI) SubmitJob(c *gin.Context) {
-	tpStr := c.PostForm(apiOpJobType)
-	tp, err := strconv.ParseInt(tpStr, 10, 64)
+	data := &APICreateJobJSON{}
+	err := c.BindJSON(data)
 	if err != nil {
-		_ = c.AbortWithError(http.StatusBadRequest, errors.New("job-type is not valid"))
-		return
-	}
-	tenantID := c.PostForm(apiOpVarTenantID)
-	projectID := c.PostForm(apiOpVarProjectID)
-	if tenantID == "" {
-		_ = c.AbortWithError(http.StatusBadRequest, errors.New("tenant_id must be provided"))
-		return
-	}
-	if projectID == "" {
-		_ = c.AbortWithError(http.StatusBadRequest, errors.New("project_id must be provided"))
+		_ = c.AbortWithError(http.StatusBadRequest, err)
 		return
 	}
 
 	projInfo := &pb.ProjectInfo{
-		TenantId:  tenantID,
-		ProjectId: projectID,
+		TenantId:  data.TenantID,
+		ProjectId: data.ProjectID,
 	}
-	cfg := c.PostForm(apiOpJobConfig)
 
 	jobMgr, ok := o.infoProvider.JobManager()
 	if !ok {
@@ -159,8 +155,8 @@ func (o *OpenAPI) SubmitJob(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	req := &pb.SubmitJobRequest{
-		Tp:          int32(tp),
-		Config:      []byte(cfg),
+		Tp:          data.JobType,
+		Config:      []byte(data.JobConfig),
 		ProjectInfo: projInfo,
 	}
 	resp := jobMgr.SubmitJob(ctx, req)

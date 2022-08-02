@@ -14,13 +14,13 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/url"
+	"net/http"
 	"os/exec"
-	"strconv"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -37,8 +37,8 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/meta"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/engine/servermaster"
 	server "github.com/pingcap/tiflow/engine/servermaster"
-	"github.com/pingcap/tiflow/pkg/httputil"
 )
 
 func init() {
@@ -297,18 +297,22 @@ func CreateJobViaOpenAPI(
 	ctx context.Context, apiEndpoint string, tenantID string, projectID string,
 	tp engineModel.JobType, cfg string,
 ) (string, error) {
-	cli, err := httputil.NewClient(nil)
+	data := &servermaster.APICreateJobJSON{
+		JobType:   int32(tp),
+		JobConfig: cfg,
+		TenantID:  tenantID,
+		ProjectID: projectID,
+	}
+	postData, err := json.Marshal(data)
 	if err != nil {
 		return "", err
 	}
-	data := url.Values{
-		"job_type":   {strconv.Itoa(int(tp))},
-		"job_config": {cfg},
-		"tenant_id":  {tenantID},
-		"project_id": {projectID},
-	}
-	apiURL := "http://" + apiEndpoint + "/api/v1/jobs"
-	resp, err := cli.PostForm(ctx, apiURL, data)
+
+	resp, err := http.Post(
+		"http://"+apiEndpoint+"/api/v1/jobs",
+		"application/json",
+		bytes.NewReader(postData),
+	)
 	if err != nil {
 		return "", err
 	}
@@ -316,6 +320,7 @@ func CreateJobViaOpenAPI(
 	if err != nil {
 		return "", err
 	}
+
 	var jobID string
 	err = json.Unmarshal(body, &jobID)
 	return jobID, err
