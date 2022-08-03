@@ -60,3 +60,30 @@ func TestInfoProvider(t *testing.T) {
 	require.Len(t, ip.GetTotalTableCounts(), 2)
 	require.Empty(t, ip.GetPendingTableCounts())
 }
+
+func TestInfoProviderIsInitialized(t *testing.T) {
+	t.Parallel()
+
+	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
+		HeartbeatTick:      math.MaxInt,
+		MaxTaskConcurrency: 1,
+	})
+	var ip internal.InfoProvider = coord
+
+	// Has not initialized yet.
+	coord.captureM.Captures = map[model.CaptureID]*member.CaptureStatus{
+		"a": {State: member.CaptureStateUninitialized},
+		"b": {State: member.CaptureStateInitialized},
+	}
+	require.False(t, ip.IsInitialized())
+	// Has not initialized yet.
+	coord.captureM.Captures = map[model.CaptureID]*member.CaptureStatus{
+		"a": {State: member.CaptureStateInitialized},
+		"b": {State: member.CaptureStateInitialized},
+	}
+	require.False(t, ip.IsInitialized())
+
+	// SetInitializedForTests
+	coord.captureM.SetInitializedForTests(true)
+	require.True(t, ip.IsInitialized())
+}
