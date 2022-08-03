@@ -57,7 +57,7 @@ type DispatchTaskArgs struct {
 	MasterID     string
 	WorkerType   int64
 	WorkerConfig []byte
-	Epoch        int64
+	WorkerEpoch  int64
 }
 
 type (
@@ -171,12 +171,12 @@ func (d *TaskDispatcher) preDispatchTaskOnce(
 				TenantId:  args.ProjectInfo.TenantID(),
 				ProjectId: args.ProjectInfo.ProjectID(),
 			},
-			TaskTypeId: args.WorkerType,
-			TaskConfig: args.WorkerConfig,
-			MasterId:   args.MasterID,
-			WorkerId:   args.WorkerID,
-			RequestId:  requestID,
-			Epoch:      args.Epoch,
+			TaskTypeId:  args.WorkerType,
+			TaskConfig:  args.WorkerConfig,
+			MasterId:    args.MasterID,
+			WorkerId:    args.WorkerID,
+			RequestId:   requestID,
+			WorkerEpoch: args.WorkerEpoch,
 		},
 	})
 	if err != nil {

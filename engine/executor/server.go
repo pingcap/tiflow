@@ -225,7 +225,7 @@ func (s *Server) PreDispatchTask(ctx context.Context, req *pb.PreDispatchTaskReq
 		req.GetMasterId(),
 		frameModel.WorkerType(req.GetTaskTypeId()),
 		req.GetTaskConfig(),
-		req.Epoch,
+		req.GetWorkerEpoch(),
 	)
 	if err != nil {
 		// We use the code Aborted here per the suggestion in gRPC's documentation

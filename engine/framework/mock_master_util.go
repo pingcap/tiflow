@@ -116,7 +116,7 @@ func MockBaseMasterCreateWorker(
 			MasterID:     masterID,
 			WorkerType:   int64(workerType),
 			WorkerConfig: configBytes,
-			Epoch:        workerEpoch,
+			WorkerEpoch:  workerEpoch,
 		}, mock.Anything, mock.Anything).
 		Return(nil).
 		Run(func(args mock.Arguments) {

@@ -646,7 +646,7 @@ func (m *DefaultBaseMaster) CreateWorker(
 			MasterID:     m.id,
 			WorkerType:   int64(workerType),
 			WorkerConfig: configBytes,
-			Epoch:        epoch,
+			WorkerEpoch:  epoch,
 		}
 
 		err = executorClient.DispatchTask(requestCtx, dispatchArgs, func() {
