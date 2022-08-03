@@ -53,6 +53,9 @@ type sqlKVClientImpl struct {
 	// since GenEpoch uses a different backend table
 	tableScopeDB *gorm.DB
 
+	// meta kv table name
+	table string
+
 	// for GenEpoch
 	epochClient ormModel.EpochClient
 }
@@ -79,6 +82,7 @@ func NewSQLKVClientImpl(sqlDB *sql.DB, table string, jobID metaModel.JobID) (*sq
 		db:           db,
 		jobID:        jobID,
 		tableScopeDB: tableScopeDB,
+		table:        table,
 	}
 	if err := impl.initialize(ctx); err != nil {
 		return nil, err
@@ -99,7 +103,8 @@ func (c *sqlKVClientImpl) initialize(ctx context.Context) error {
 		if errMySQL, ok := err.(*mysql.MySQLError); !ok || errMySQL.Number != mysqlerr.ER_TABLE_EXISTS_ERROR {
 			return err
 		}
-		log.Info("meet 'table exists' error when creating meta kv table, but can be ignored", zap.Error(err))
+		log.Info("meet 'table exists' error when creating meta kv table, but can be ignored",
+			zap.String("table", c.table))
 	}
 
 	epCli, err := ormModel.NewEpochClient(c.jobID, c.db)
