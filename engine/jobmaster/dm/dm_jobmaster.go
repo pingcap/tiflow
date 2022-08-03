@@ -207,6 +207,7 @@ func (jm *JobMaster) OnWorkerStatusUpdated(worker framework.WorkerHandle, newSta
 	if err := jm.handleOnlineStatus(worker); err != nil {
 		return err
 	}
+	// run task manager tick when worker status changed to operate task.
 	jm.taskManager.SetNextCheckTime(time.Now())
 	return nil
 }
