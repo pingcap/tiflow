@@ -7,6 +7,7 @@
     build_mysql_integration_test_images clean_integration_test_images \
 	dm dm-master dm-worker dmctl dm-syncer dm_coverage \
 	engine tiflow tiflow-demo tiflow-chaos-case help
+
 .DEFAULT_GOAL := default
 
 # Adapted from https://www.thapaliya.com/en/writings/well-documented-makefiles/
