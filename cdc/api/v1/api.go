@@ -873,7 +873,13 @@ func (h *OpenAPI) ServerStatus(c *gin.Context) {
 func (h *OpenAPI) Health(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	if _, err := h.capture.GetOwnerCaptureInfo(ctx); err != nil {
+	health, err := h.statusProvider().IsHealthy(ctx)
+	if err != nil {
+		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		return
+	}
+	if !health {
+		err = cerror.ErrClusterIsUnhealthy.FastGenByArgs()
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 		return
 	}
