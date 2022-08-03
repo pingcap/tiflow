@@ -239,6 +239,8 @@ func (c *coordinator) poll(
 	ctx context.Context, checkpointTs model.Ts, currentTables []model.TableID,
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
+	c.maybeCollectMetrics()
+
 	recvMsgs, err := c.recvMsgs(ctx)
 	if err != nil {
 		return checkpointCannotProceed, checkpointCannotProceed, errors.Trace(err)
@@ -250,10 +252,19 @@ func (c *coordinator) poll(
 	msgBuf = append(msgBuf, msgs...)
 	msgs = c.captureM.HandleAliveCaptureUpdate(aliveCaptures)
 	msgBuf = append(msgBuf, msgs...)
+
+	// Handle received messages to advance replication set.
+	msgs, err = c.replicationM.HandleMessage(recvMsgs)
+	if err != nil {
+		return checkpointCannotProceed, checkpointCannotProceed, errors.Trace(err)
+	}
+	msgBuf = append(msgBuf, msgs...)
+
 	if !c.captureM.CheckAllCaptureInitialized() {
-		// Skip handling messages and tasks for replication manager,
+		// Skip generating schedule tasks for replication manager,
 		// as not all capture are initialized.
-		return checkpointCannotProceed, checkpointCannotProceed, c.sendMsgs(ctx, msgBuf)
+		newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(currentTables)
+		return newCheckpointTs, newResolvedTs, c.sendMsgs(ctx, msgBuf)
 	}
 
 	// Handle capture membership changes.
@@ -265,13 +276,6 @@ func (c *coordinator) poll(
 		}
 		msgBuf = append(msgBuf, msgs...)
 	}
-
-	// Handle received messages to advance replication set.
-	msgs, err = c.replicationM.HandleMessage(recvMsgs)
-	if err != nil {
-		return checkpointCannotProceed, checkpointCannotProceed, errors.Trace(err)
-	}
-	msgBuf = append(msgBuf, msgs...)
 
 	// Generate schedule tasks based on the current status.
 	replications := c.replicationM.ReplicationSets()
@@ -291,8 +295,6 @@ func (c *coordinator) poll(
 	if err != nil {
 		return checkpointCannotProceed, checkpointCannotProceed, errors.Trace(err)
 	}
-
-	c.maybeCollectMetrics()
 
 	// Checkpoint calculation
 	newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(currentTables)
