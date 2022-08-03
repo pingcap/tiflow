@@ -521,7 +521,13 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 	s.frameworkClientConn, err = meta.NewClientConn(cfg.FrameMetaConf)
 	if err != nil {
 		log.Error("connect to framework metastore fail", zap.Any("config", cfg.FrameMetaConf), zap.Error(err))
-		return nil
+		return err
+	}
+	// some components depend on this framework meta client
+	s.frameMetaClient, err = pkgOrm.NewClient(s.frameworkClientConn)
+	if err != nil {
+		log.Error("create framework meta client fail", zap.Error(err))
+		return err
 	}
 	log.Info("register framework metastore successfully", zap.Any("metastore", cfg.FrameMetaConf))
 

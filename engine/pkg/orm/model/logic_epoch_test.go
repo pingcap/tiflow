@@ -83,6 +83,7 @@ func TestGenEpoch(t *testing.T) {
 		WillReturnError(&gsql.MySQLError{Number: 1062, Message: "test error"})
 	epoch, err := epochClient.GenEpoch(ctx)
 	require.Error(t, err)
+	require.Equal(t, int64(0), epoch)
 	require.False(t, epochClient.isInitialized.Load())
 
 	// insert first record successful

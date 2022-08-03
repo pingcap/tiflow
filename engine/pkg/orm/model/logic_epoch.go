@@ -84,7 +84,7 @@ func (e *epochClient) initialize(ctx context.Context) error {
 func (e *epochClient) GenEpoch(ctx context.Context) (int64, error) {
 	// we make lazy initialization for two reasons:
 	// 1. Not all kinds of client need calling GenEpoch
-	// 2. some components depend on framework meta client before initializing the backend meta table
+	// 2. Some components depend on framework meta client before initializing the backend meta table
 	if !e.isInitialized.Load() {
 		if err := e.initialize(ctx); err != nil {
 			return int64(0), err
