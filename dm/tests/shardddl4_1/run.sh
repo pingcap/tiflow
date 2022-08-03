@@ -1174,6 +1174,19 @@ function DM_RESYNC_NOT_FLUSHED_CASE() {
 		sleep 1
 	done
 
+	check_log_contain_with_retry "receive redirection operation from master" $WORK_DIR/worker1/log/dm-worker.log
+	check_log_contain_with_retry "receive redirection operation from master" $WORK_DIR/worker2/log/dm-worker.log
+	for ((k = 140; k < 160; k++)); do
+		run_sql_source1 "insert into ${shardddl1}.${tb1} values(${k},${k},${k});"
+		k=$((k + 1))
+		run_sql_source1 "insert into ${shardddl1}.${tb2} values(${k},${k},${k});"
+		k=$((k + 1))
+		run_sql_source2 "insert into ${shardddl1}.${tb1} values(${k},${k},${k});"
+		k=$((k + 1))
+		run_sql_source2 "insert into ${shardddl1}.${tb2} values(${k},${k});"
+		sleep 1
+	done
+
 	# lock finished at first time, both workers should exit
 	check_process_exit worker1 20
 	check_process_exit worker2 20
