@@ -127,7 +127,7 @@ function DM_040_CASE() {
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
 			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `col1` VARCHAR(10) CHARACTER SET UTF8' 1 \
-			"-\`${shardddl1}\`.\`${tb1}\`\"" 1
+			"\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
 
