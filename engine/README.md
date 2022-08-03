@@ -113,7 +113,7 @@ cd ../../../ # root dir of tiflow
 ./bin/tiflow cli job create --master-addrs ${$server-master-ip0}:${port0} --job-type CVSDemo --job-config ./engine/deployments/docker-compose/config/demo.json
 ```
 
-## Manager engine cluster by [helm](https://github.com/helm/helm)
+## Manager engine cluster by [helm](https://github.com/helm/helm) in local K8s
 ### Install tools
 * [helm](https://helm.sh/docs/intro/install/)
 * [kind](https://kind.sigs.k8s.io/)
