@@ -339,7 +339,7 @@ func testSimpleAllModeTask(
 	jobCfg, err = getJobCfg(httpClient, jobID)
 	require.NoError(t, err)
 	require.Contains(t, jobCfg, newDB)
-	require.Contains(t, jobCfg, `mod_revision: 2`)
+	require.Contains(t, jobCfg, `mod-revision: 2`)
 	// eventually apply new config, task still paused
 	require.Eventually(t, func() bool {
 		jobStatus, err = queryStatus(httpClient, jobID, nil)
