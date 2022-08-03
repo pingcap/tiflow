@@ -117,7 +117,7 @@ type JobCfg struct {
 	// EnableANSIQuotes bool `yaml:"ansi-quotes" toml:"ansi-quotes" json:"ansi-quotes"`
 	// RemoveMeta bool `yaml:"remove-meta"`
 
-	ModRevision uint64 `yaml:"mod_revision" toml:"mod_revision" json:"mod_revision"`
+	ModRevision uint64 `yaml:"mod-revision" toml:"mod-revision" json:"mod-revision"`
 }
 
 // DecodeFile reads file content from a given path and decodes it.
