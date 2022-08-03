@@ -21,7 +21,7 @@ import (
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/prometheus/client_golang/prometheus"
 	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
@@ -294,7 +294,7 @@ func (c *Client) RequestProgress(ctx context.Context) error {
 
 func isRetryableError(rpcName string) retry.IsRetryable {
 	return func(err error) bool {
-		if !cerrors.IsRetryableError(err) {
+		if !cerror.IsRetryableError(err) {
 			return false
 		}
 
@@ -334,6 +334,7 @@ func isRetryableTxnError(err error) bool {
 	default:
 	}
 	// when the PD instance was deleted from the PD cluster, it may meet error with `raft:stopped`,
+	// retry on such error make cdc robust to PD / ETCD cluster member removal.
 	// we should tolerant such case to make cdc robust to PD / ETCD cluster member change.
 	// see: https://github.com/etcd-io/etcd/blob/ae36a577d7be/raft/node.go#L35
 	if strings.Contains(etcdErr.Error(), "raft: stopped") {
