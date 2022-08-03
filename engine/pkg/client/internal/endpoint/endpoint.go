@@ -13,6 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// This file is copied from Etcd's source code. The original's link:
+// https://github.com/etcd-io/etcd/blob/ae36a577d7becbdeebf1f0fb665573b721e435f8/client/v3/internal/endpoint/endpoint.go
+
 package endpoint
 
 import (
@@ -48,7 +51,7 @@ func extractHostFromPath(pathStr string) string {
 }
 
 // mustSplit2 returns the values from strings.SplitN(s, sep, 2).
-// If sep is not found, it returns ("", "", false) instead.
+// If sep is not found, it returns ("", "") instead.
 func mustSplit2(s, sep string) (string, string) {
 	spl := strings.SplitN(s, sep, 2)
 	if len(spl) < 2 {

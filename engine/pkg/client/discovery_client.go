@@ -42,14 +42,13 @@ type DiscoveryClient interface {
 	) (*enginepb.HeartbeatResponse, error)
 
 	// RegisterMetaStore registers a new metastore.
-	// TODO discuss whether this method can be moved to another service.
+	// Deprecated
 	RegisterMetaStore(
 		ctx context.Context,
 		request *enginepb.RegisterMetaStoreRequest,
 	) error
 
 	// QueryMetaStore queries the details of a metastore.
-	// TODO discuss whether this method can be moved to another service.
 	QueryMetaStore(
 		ctx context.Context,
 		request *enginepb.QueryMetaStoreRequest,
