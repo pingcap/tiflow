@@ -1,4 +1,4 @@
-### Makefile for ticdc
+### Makefile for tiflow
 .PHONY: build test check clean fmt cdc kafka_consumer coverage \
 	integration_test_build integration_test integration_test_mysql integration_test_kafka bank \
 	kafka_docker_integration_test kafka_docker_integration_test_with_build \
@@ -6,7 +6,7 @@
 	mysql_docker_integration_test mysql_docker_integration_test_with_build \
     build_mysql_integration_test_images clean_integration_test_images \
 	dm dm-master dm-worker dmctl dm-syncer dm_coverage \
-	engine tiflow tiflow-demo tiflow-chaos-case help
+	engine tiflow tiflow-demo tiflow-chaos-case engine_image help
 
 # Adapted from https://www.thapaliya.com/en/writings/well-documented-makefiles/
 help: ## Display this help and any documented user-facing targets. Other undocumented targets may be present in the Makefile.
@@ -538,6 +538,20 @@ tiflow-generate-mock: tools/bin/mockgen
 engine_image:
 	@which docker || (echo "docker not found in ${PATH}"; exit 1)
 	./engine/test/utils/run_engine.sh build
+
+engine_image_amd64: 
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	GOOS=linux GOARCH=amd64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
+	GOOS=linux GOARCH=amd64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./cmd/tiflow-demoserver
+	GOOS=linux GOARCH=amd64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-chaos-case ./engine/chaos/cases
+	docker build --platform linux/amd64 -f ./engine/deployments/docker/dev.Dockerfile -t dataflow:test ./ 
+
+engine_image_arm64: 
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
+	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./cmd/tiflow-demoserver
+	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-chaos-case ./engine/chaos/cases
+	docker build --platform linux/amd64 -f ./engine/deployments/docker/dev.Dockerfile -t dataflow:test ./ 
 
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))

@@ -25,7 +25,7 @@ upstreams:
     host: host.docker.internal
     port: 3306
     user: root
-    password: '123456'
+    password: ''
     session: {}
   source-id: mysql-replica-01
   meta: null
