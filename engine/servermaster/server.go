@@ -290,6 +290,10 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 	resp2 := &pb.RegisterExecutorResponse{}
 	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
 	if shouldRet {
+		if err != nil {
+			log.Warn("RegisterExecutor failed", zap.Error(err))
+			return nil, err
+		}
 		return resp2, err
 	}
 	// register executor to scheduler
