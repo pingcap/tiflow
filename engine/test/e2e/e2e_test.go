@@ -25,7 +25,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
-	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	cvs "github.com/pingcap/tiflow/engine/jobmaster/cvsjob"
 	engineModel "github.com/pingcap/tiflow/engine/model"
@@ -135,8 +134,6 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr stri
 	democlient, err := NewDemoClient(ctx, demoAddr)
 	require.Nil(t, err)
 	fmt.Printf("connect clients\n")
-	masterclient, err := client.NewMasterClient(ctx, config.MasterAddrs)
-	require.Nil(t, err)
 
 	for {
 		resp, err := democlient.client.IsReady(ctx, &pb.IsReadyRequest{})
@@ -159,19 +156,18 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr stri
 
 	fmt.Printf("job id %s\n", jobID)
 
-	queryReq := &pb.QueryJobRequest{
-		JobId: jobID,
-	}
 	// continue to query
 	for {
 		ctx1, cancel := context.WithTimeout(ctx, 3*time.Second)
-		queryResp, err := masterclient.QueryJob(ctx1, queryReq)
+		queryResp, err := e2e.QueryJobViaOpenAPI(ctx1, config.MasterAddrs[0],
+			tenantID, projectID, jobID,
+		)
 		require.NoError(t, err)
-		require.Nil(t, queryResp.Err)
-		require.Equal(t, queryResp.Tp, int32(engineModel.JobTypeCVSDemo))
 		cancel()
-		fmt.Printf("query id %s, status %d, time %s\n", jobID, int(queryResp.Status), time.Now().Format("2006-01-02 15:04:05"))
-		if queryResp.Status == pb.QueryJobResponse_finished {
+		require.Equal(t, int32(engineModel.JobTypeCVSDemo), queryResp.JobType)
+		fmt.Printf("query id %s, status %d, time %s\n",
+			jobID, int(queryResp.Status), time.Now().Format("2006-01-02 15:04:05"))
+		if queryResp.Status == int32(pb.QueryJobResponse_finished) {
 			break
 		}
 		time.Sleep(time.Second)
