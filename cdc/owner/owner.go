@@ -109,6 +109,10 @@ type ownerImpl struct {
 	// NOTICE: Do not use it in a method other than tick unexpectedly,
 	//         as it is not a thread-safe value.
 	bootstrapped bool
+	// changefeedTicked specifies whether changefeeds have been ticked.
+	// NOTICE: Do not use it in a method other than tick unexpectedly,
+	//         as it is not a thread-safe value.
+	changefeedTicked bool
 
 	newChangefeed func(id model.ChangeFeedID, up *upstream.Upstream) *changefeed
 }
@@ -186,6 +190,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 		}
 		cfReactor.Tick(ctx, changefeedState, state.Captures)
 	}
+	o.changefeedTicked = true
 
 	// Cleanup changefeeds that are not in the state.
 	if len(o.changefeeds) != len(state.Changefeeds) {
@@ -603,6 +608,11 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 				isHealthy = false
 				break
 			}
+		}
+		if !o.changefeedTicked {
+			// Owner has not yet tick changefeeds, some changefeeds may be not
+			// initialized.
+			isHealthy = false
 		}
 		query.Data = isHealthy
 	}
