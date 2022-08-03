@@ -14,13 +14,13 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/url"
+	"net/http"
 	"os/exec"
-	"strconv"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -37,8 +37,8 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/meta"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/engine/servermaster"
 	server "github.com/pingcap/tiflow/engine/servermaster"
-	"github.com/pingcap/tiflow/pkg/httputil"
 )
 
 func init() {
@@ -139,21 +139,12 @@ func (cli *ChaosCli) PauseJob(ctx context.Context, jobID string) error {
 func (cli *ChaosCli) CheckJobStatus(
 	ctx context.Context, jobID string, expectedStatus pb.QueryJobResponse_JobStatus,
 ) (bool, error) {
-	req := &pb.QueryJobRequest{
-		JobId: jobID,
-		ProjectInfo: &pb.ProjectInfo{
-			TenantId:  cli.project.TenantID(),
-			ProjectId: cli.project.ProjectID(),
-		},
-	}
-	resp, err := cli.masterCli.QueryJob(ctx, req)
+	resp, err := QueryJobViaOpenAPI(ctx, cli.masterAddrs[0],
+		cli.project.TenantID(), cli.project.ProjectID(), jobID)
 	if err != nil {
 		return false, err
 	}
-	if resp.Err != nil {
-		return false, errors.New(resp.Err.String())
-	}
-	return resp.Status == expectedStatus, nil
+	return resp.Status == int32(expectedStatus), nil
 }
 
 // UpdateFakeJobKey updates the etcd value of a worker belonging to a fake job
@@ -297,18 +288,22 @@ func CreateJobViaOpenAPI(
 	ctx context.Context, apiEndpoint string, tenantID string, projectID string,
 	tp engineModel.JobType, cfg string,
 ) (string, error) {
-	cli, err := httputil.NewClient(nil)
+	data := &servermaster.APICreateJobRequest{
+		JobType:   int32(tp),
+		JobConfig: cfg,
+	}
+	postData, err := json.Marshal(data)
 	if err != nil {
 		return "", err
 	}
-	data := url.Values{
-		"job_type":   {strconv.Itoa(int(tp))},
-		"job_config": {cfg},
-		"tenant_id":  {tenantID},
-		"project_id": {projectID},
-	}
-	apiURL := "http://" + apiEndpoint + "/api/v1/jobs"
-	resp, err := cli.PostForm(ctx, apiURL, data)
+
+	resp, err := http.Post(
+		fmt.Sprintf("http://%s/api/v1/jobs?tenant_id=%s&project_id=%s",
+			apiEndpoint, tenantID, projectID,
+		),
+		"application/json",
+		bytes.NewReader(postData),
+	)
 	if err != nil {
 		return "", err
 	}
@@ -316,7 +311,29 @@ func CreateJobViaOpenAPI(
 	if err != nil {
 		return "", err
 	}
+
 	var jobID string
 	err = json.Unmarshal(body, &jobID)
 	return jobID, err
+}
+
+// QueryJobViaOpenAPI wraps OpenAPI to query a job
+func QueryJobViaOpenAPI(
+	ctx context.Context, apiEndpoint string, tenantID, projectID, jobID string,
+) (result *servermaster.APIQueryJobResponse, err error) {
+	url := fmt.Sprintf(
+		"http://%s/api/v1/jobs/%s?tenant_id=%s&project_id=%s",
+		apiEndpoint, jobID, tenantID, projectID,
+	)
+	resp, err := http.Get(url) // #nosec G107
+	if err != nil {
+		return
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
+	result = &servermaster.APIQueryJobResponse{}
+	err = json.Unmarshal(body, result)
+	return
 }
