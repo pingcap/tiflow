@@ -4,7 +4,7 @@
 	kafka_docker_integration_test kafka_docker_integration_test_with_build \
 	clean_integration_test_containers \
 	mysql_docker_integration_test mysql_docker_integration_test_with_build \
-    build_mysql_integration_test_images clean_integration_test_images \
+	build_mysql_integration_test_images clean_integration_test_images \
 	dm dm-master dm-worker dmctl dm-syncer dm_coverage \
 	engine tiflow tiflow-demo tiflow-chaos-case help
 
