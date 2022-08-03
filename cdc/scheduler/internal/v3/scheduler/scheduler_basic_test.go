@@ -62,9 +62,24 @@ func TestSchedulerBasic(t *testing.T) {
 	// Capture offline, causes replication.ReplicationSetStateAbsent.
 	// AddTable only.
 	replications = map[model.TableID]*replication.ReplicationSet{
-		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
-		2: {State: replication.ReplicationSetStateCommit, Secondary: "b"},
-		3: {State: replication.ReplicationSetStatePrepare, Primary: "a", Secondary: "b"},
+		1: {
+			State: replication.ReplicationSetStateReplicating, Primary: "a",
+			Captures: map[string]replication.Role{
+				"a": replication.RolePrimary,
+			},
+		},
+		2: {
+			State: replication.ReplicationSetStateCommit,
+			Captures: map[string]replication.Role{
+				"b": replication.RoleSecondary,
+			},
+		},
+		3: {
+			State: replication.ReplicationSetStatePrepare, Primary: "a",
+			Captures: map[string]replication.Role{
+				"a": replication.RolePrimary, "b": replication.RoleSecondary,
+			},
+		},
 		4: {State: replication.ReplicationSetStateAbsent},
 	}
 	tasks = b.Schedule(1, currentTables, captures, replications)
@@ -75,12 +90,30 @@ func TestSchedulerBasic(t *testing.T) {
 	// DDL CREATE/DROP/TRUNCATE TABLE.
 	// AddTable 4, and RemoveTable 5.
 	replications = map[model.TableID]*replication.ReplicationSet{
-		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
-		2: {State: replication.ReplicationSetStateCommit, Secondary: "b"},
-		3: {State: replication.ReplicationSetStatePrepare, Primary: "a", Secondary: "b"},
-		5: {State: replication.ReplicationSetStateCommit, Captures: map[model.CaptureID]struct{}{
-			"a": {}, "b": {},
-		}},
+		1: {
+			State: replication.ReplicationSetStateReplicating, Primary: "a",
+			Captures: map[string]replication.Role{
+				"a": replication.RolePrimary,
+			},
+		},
+		2: {
+			State: replication.ReplicationSetStateCommit,
+			Captures: map[string]replication.Role{
+				"b": replication.RoleSecondary,
+			},
+		},
+		3: {
+			State: replication.ReplicationSetStatePrepare, Primary: "a",
+			Captures: map[string]replication.Role{
+				"a": replication.RolePrimary, "b": replication.RoleSecondary,
+			},
+		},
+		5: {
+			State: replication.ReplicationSetStateCommit, Primary: "a",
+			Captures: map[string]replication.Role{
+				"a": replication.RoleUndetermined, "b": replication.RoleSecondary,
+			},
+		},
 	}
 	tasks = b.Schedule(2, currentTables, captures, replications)
 	require.Len(t, tasks, 2)
@@ -96,13 +129,36 @@ func TestSchedulerBasic(t *testing.T) {
 
 	// RemoveTable only.
 	replications = map[model.TableID]*replication.ReplicationSet{
-		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
-		2: {State: replication.ReplicationSetStateCommit, Secondary: "b"},
-		3: {State: replication.ReplicationSetStatePrepare, Primary: "a", Secondary: "b"},
-		4: {State: replication.ReplicationSetStatePrepare, Primary: "a", Secondary: "b"},
-		5: {State: replication.ReplicationSetStatePrepare, Captures: map[model.CaptureID]struct{}{
-			"b": {},
-		}},
+		1: {
+			State: replication.ReplicationSetStateReplicating, Primary: "a",
+			Captures: map[string]replication.Role{
+				"a": replication.RolePrimary,
+			},
+		},
+		2: {
+			State: replication.ReplicationSetStateCommit,
+			Captures: map[string]replication.Role{
+				"b": replication.RoleSecondary,
+			},
+		},
+		3: {
+			State: replication.ReplicationSetStatePrepare, Primary: "a",
+			Captures: map[string]replication.Role{
+				"a": replication.RolePrimary, "b": replication.RoleSecondary,
+			},
+		},
+		4: {
+			State: replication.ReplicationSetStatePrepare, Primary: "a",
+			Captures: map[string]replication.Role{
+				"a": replication.RolePrimary, "b": replication.RoleSecondary,
+			},
+		},
+		5: {
+			State: replication.ReplicationSetStatePrepare,
+			Captures: map[string]replication.Role{
+				"b": replication.RoleUndetermined,
+			},
+		},
 	}
 	tasks = b.Schedule(3, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
