@@ -1,0 +1,89 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "tiflow.name" . }}-metastore-mysql
+  labels:
+    app: {{ include "tiflow.name" . }}-metastore-mysql
+    app.kubernetes.io/name: {{ include "tiflow.name" . }}-metastore-mysql
+    app.kubernetes.io/instance: {{ include "tiflow.name" . }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/component: metastore-mysql
+    app.kubernetes.io/part-of: tiflow
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+"  "_" }}
+spec:
+  ports:
+    - name: port-mysql # note the name is no more than 15 characters
+      port: 3306
+      targetPort: 3306
+  selector:
+    app: {{ include "tiflow.name" . }}-metastore-mysql
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "tiflow.name" . }}-metastore-mysql
+  labels:
+    app: {{ include "tiflow.name" . }}-metastore-mysql
+    app.kubernetes.io/name: {{ include "tiflow.name" . }}-metastore-mysql
+    app.kubernetes.io/instance: {{ include "tiflow.name" . }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/component: metastore-mysql
+    app.kubernetes.io/part-of: tiflow
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+"  "_" }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ include "tiflow.name" . }}-metastore-mysql
+  serviceName: {{ include "tiflow.name" . }}-metastore-mysql
+  replicas: 1
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      labels:
+        app: {{ include "tiflow.name" . }}-metastore-mysql
+    spec:
+      containers:
+        - name: metastore-mysql
+          image: mysql:5.7
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          volumeMounts:
+            - mountPath: "/var/lib/mysql"
+              name: data
+          env:
+            - name: MYSQL_ALLOW_EMPTY_PASSWORD
+              value: "true"
+          ports:
+            - containerPort: 3306
+              name: port-mysql
+          args:
+            - "--server-id=1"
+          livenessProbe:
+            exec:
+              command:
+                - "mysqladmin"
+                - "ping"
+                - "-h127.0.0.1"
+                - "-P3306"
+                - "-uroot"
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 60
+          readinessProbe:
+            exec:
+              command:
+                - "mysql"
+                - "-h127.0.0.1"
+                - "-P3306"
+                - "-uroot"
+                - "-e"
+                - "SELECT 1"
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: {{ .Values.metastore.frameworkStorage }}

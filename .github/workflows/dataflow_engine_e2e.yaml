@@ -31,7 +31,7 @@ jobs:
         run: make engine_image
 
       - name: Run containers
-        run: docker-compose -f $GITHUB_WORKSPACE/engine/deployments/docker-compose/3m3e.yaml -f $GITHUB_WORKSPACE/engine/deployments/docker-compose/demo.yaml up -d
+        run: docker compose -f $GITHUB_WORKSPACE/engine/deployments/docker-compose/3m3e.yaml -f $GITHUB_WORKSPACE/engine/deployments/docker-compose/demo.yaml up -d
 
       - name: Run tests
         run: |
@@ -71,7 +71,7 @@ jobs:
         run: make engine_image
 
       - name: Run containers
-        run: docker-compose -f $GITHUB_WORKSPACE/engine/deployments/docker-compose/3m3e.yaml up -d
+        run: docker compose -f $GITHUB_WORKSPACE/engine/deployments/docker-compose/3m3e.yaml up -d
 
       - name: Run tests
         run: |
@@ -111,7 +111,7 @@ jobs:
         run: make engine_image
 
       - name: Run containers
-        run: docker-compose -f $GITHUB_WORKSPACE/engine/deployments/docker-compose/3m3e.yaml up -d
+        run: docker compose -f $GITHUB_WORKSPACE/engine/deployments/docker-compose/3m3e.yaml up -d
 
       - name: Run tests
         run: |
@@ -152,11 +152,11 @@ jobs:
 
 
       - name: Run containers
-        run: docker-compose -f $GITHUB_WORKSPACE/engine/deployments/docker-compose/3m3e.yaml -f $GITHUB_WORKSPACE/engine/deployments/docker-compose/dm_databases.yaml up -d
+        run: docker compose -f $GITHUB_WORKSPACE/engine/deployments/docker-compose/3m3e.yaml -f $GITHUB_WORKSPACE/engine/deployments/docker-compose/dm_databases.yaml up -d
 
       - name: Run tests
         run: |
-          $GITHUB_WORKSPACE/engine/test/utils/wait_mysql_online.sh --host 127.0.0.1 --port 3306 --password 123456
+          $GITHUB_WORKSPACE/engine/test/utils/wait_mysql_online.sh --host 127.0.0.1 --port 3306
           $GITHUB_WORKSPACE/engine/test/utils/wait_mysql_online.sh --host 127.0.0.1 --port 4000
           cd $GITHUB_WORKSPACE/engine/test/e2e
           go test -count=1 -v -run=TestDMJob
