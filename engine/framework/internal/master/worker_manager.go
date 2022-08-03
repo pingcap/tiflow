@@ -589,8 +589,9 @@ func (m *WorkerManager) checkWorkerEpochMatch(curEpoch, msgEpoch frameModel.Epoc
 	if msgEpoch < curEpoch {
 		log.Info("Message from small worker epoch dropped",
 			zap.String("master-id", m.masterID),
+			zap.Int64("own-worker-epoch", curEpoch),
 			zap.Int64("msg-worker-epoch", msgEpoch),
-			zap.Int64("own-worker-epoch", curEpoch))
+		)
 		return false
 	}
 	return true
