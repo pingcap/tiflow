@@ -1386,11 +1386,11 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 			var ddlCreateTime uint8
 			row, err := db.QuerySQL(s.syncCtx, s.metricsProxies, "SELECT @@TIMESTAMP")
 			err = row.Scan(&ddlCreateTime)
-			passDDLCreateTime(ddlCreateTime)
+			//passDDLCreateTime(ddlCreateTime)
 			var affected int
 			affected, err = db.ExecuteSQLWithIgnore(s.syncCtx, s.metricsProxies, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)
 			if err != nil {
-				err = s.handleSpecialDDLError(s.syncCtx, err, ddlJob.ddls, affected, db)
+				err = s.handleSpecialDDLError(s.syncCtx, err, ddlJob.ddls, affected, db, ddlCreateTime)
 				err = terror.WithScope(err, terror.ScopeDownstream)
 			}
 		}
