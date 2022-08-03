@@ -4,8 +4,13 @@
 process=$1
 
 WAIT_COUNT=0
+<<<<<<< HEAD
 while [ $WAIT_COUNT -lt 30 ]; do
 	pgrep $process >/dev/null 2>&1
+=======
+while [ $WAIT_COUNT -lt 120 ]; do
+	ps aux | grep $process | grep -v 'grep' | grep -v 'wait_process_exit' >/dev/null 2>&1
+>>>>>>> b2da15fff (test(dm): fix using pgrep to check argument pattern (#6572))
 	ret=$?
 	if [ "$ret" != "0" ]; then
 		echo "process $process already exit"
@@ -16,5 +21,5 @@ while [ $WAIT_COUNT -lt 30 ]; do
 	((WAIT_COUNT++))
 done
 
-echo "process $process didn't exit after 120 seconds, current processlist: $(ps aux | grep $process | grep -v 'grep')"
+echo "process $process didn't exit after 120 seconds, current processlist: $(ps aux | grep $process | grep -v 'grep' | grep -v 'wait_process_exit')"
 exit 1
