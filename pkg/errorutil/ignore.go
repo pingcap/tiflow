@@ -14,11 +14,14 @@
 package errorutil
 
 import (
+	"strings"
+
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/dbterror"
+	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 )
 
 // IsIgnorableMySQLDDLError is used to check what error can be ignored
@@ -46,4 +49,33 @@ func IsIgnorableMySQLDDLError(err error) bool {
 	default:
 		return false
 	}
+}
+
+// IsRetryableEtcdError is used to check what error can be retried.
+func IsRetryableEtcdError(err error) bool {
+	etcdErr := errors.Cause(err)
+
+	switch etcdErr {
+	// Etcd ResourceExhausted errors, may recover after some time
+	case v3rpc.ErrNoSpace, v3rpc.ErrTooManyRequests:
+		return true
+	// Etcd Unavailable errors, may be available after some time
+	// https://github.com/etcd-io/etcd/pull/9934/files#diff-6d8785d0c9eaf96bc3e2b29c36493c04R162-R167
+	// ErrStopped:
+	// one of the etcd nodes stopped from failure injection
+	// ErrNotCapable:
+	// capability check has not been done (in the beginning)
+	case v3rpc.ErrNoLeader, v3rpc.ErrLeaderChanged, v3rpc.ErrNotCapable, v3rpc.ErrStopped, v3rpc.ErrTimeout,
+		v3rpc.ErrTimeoutDueToLeaderFail, v3rpc.ErrGRPCTimeoutDueToConnectionLost, v3rpc.ErrUnhealthy:
+		return true
+	default:
+	}
+	// when the PD instance was deleted from the PD cluster, it may meet error with `raft:stopped`,
+	// retry on such error make cdc robust to PD / ETCD cluster member removal.
+	// we should tolerant such case to make cdc robust to PD / ETCD cluster member change.
+	// see: https://github.com/etcd-io/etcd/blob/ae36a577d7be/raft/node.go#L35
+	if strings.Contains(etcdErr.Error(), "raft: stopped") {
+		return true
+	}
+	return false
 }
