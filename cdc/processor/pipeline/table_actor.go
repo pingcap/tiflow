@@ -24,8 +24,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
-	"github.com/pingcap/tiflow/cdc/sink"
+	sinkv1 "github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/cdc/sink/flowcontrol"
+	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/actor/message"
 	serverConfig "github.com/pingcap/tiflow/pkg/config"
@@ -57,7 +58,8 @@ type tableActor struct {
 	// backend mounter
 	mounter entry.Mounter
 	// backend tableSink
-	tableSink   sink.Sink
+	tableSinkV1 sinkv1.Sink
+	tableSinkV2 sinkv2.TableSink
 	redoManager redo.LogManager
 
 	state TableState
@@ -104,7 +106,8 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	tableID model.TableID,
 	tableName string,
 	replicaInfo *model.TableReplicaInfo,
-	sink sink.Sink,
+	sinkV1 sinkv1.Sink,
+	sinkV2 sinkv2.TableSink,
 	redoManager redo.LogManager,
 	targetTs model.Ts,
 ) (TablePipeline, error) {
@@ -135,7 +138,8 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		mounter:       mounter,
 		replicaInfo:   replicaInfo,
 		replicaConfig: config,
-		tableSink:     sink,
+		tableSinkV1:   sinkV1,
+		tableSinkV2:   sinkV2,
 		redoManager:   redoManager,
 		targetTs:      targetTs,
 		started:       false,
@@ -320,9 +324,13 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		return sortActorNodeContext.tryGetProcessedMessage()
 	}
 
-	actorSinkNode := newSinkNode(t.tableID, t.tableSink,
+	actorSinkNode := newSinkNode(
+		t.tableID,
+		t.tableSinkV1,
+		t.tableSinkV2,
 		t.replicaInfo.StartTs, t.targetTs, flowController, t.redoManager,
-		&t.state, t.changefeedID, t.replicaConfig.EnableOldValue, splitTxn)
+		&t.state, t.changefeedID, t.replicaConfig.EnableOldValue, splitTxn,
+	)
 	t.sinkNode = actorSinkNode
 
 	// construct sink actor node, it gets message from sortNode
