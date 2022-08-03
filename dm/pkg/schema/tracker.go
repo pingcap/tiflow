@@ -66,7 +66,7 @@ var (
 	}
 )
 
-// TODO: use it
+// TODO: use it in next PR.
 var _ = schematracker.NewSchemaTracker(0)
 
 func init() {
