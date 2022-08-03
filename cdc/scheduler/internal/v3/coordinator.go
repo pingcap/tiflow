@@ -239,6 +239,8 @@ func (c *coordinator) poll(
 	ctx context.Context, checkpointTs model.Ts, currentTables []model.TableID,
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
+	c.maybeCollectMetrics()
+
 	recvMsgs, err := c.recvMsgs(ctx)
 	if err != nil {
 		return checkpointCannotProceed, checkpointCannotProceed, errors.Trace(err)
@@ -293,8 +295,6 @@ func (c *coordinator) poll(
 	if err != nil {
 		return checkpointCannotProceed, checkpointCannotProceed, errors.Trace(err)
 	}
-
-	c.maybeCollectMetrics()
 
 	// Checkpoint calculation
 	newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(currentTables)
