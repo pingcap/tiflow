@@ -355,14 +355,18 @@ func TestCoordinatorAdvanceCheckpoint(t *testing.T) {
 		MsgType: schedulepb.MsgHeartbeatResponse,
 		HeartbeatResponse: &schedulepb.HeartbeatResponse{
 			Tables: []schedulepb.TableStatus{
-				{TableID: 1, State: schedulepb.TableStateReplicating,
+				{
+					TableID: 1, State: schedulepb.TableStateReplicating,
 					Checkpoint: schedulepb.Checkpoint{
 						CheckpointTs: 2, ResolvedTs: 4,
-					}},
-				{TableID: 2, State: schedulepb.TableStateReplicating,
+					},
+				},
+				{
+					TableID: 2, State: schedulepb.TableStateReplicating,
 					Checkpoint: schedulepb.Checkpoint{
 						CheckpointTs: 2, ResolvedTs: 4,
-					}},
+					},
+				},
 			},
 		},
 	})
@@ -384,14 +388,18 @@ func TestCoordinatorAdvanceCheckpoint(t *testing.T) {
 		MsgType: schedulepb.MsgHeartbeatResponse,
 		HeartbeatResponse: &schedulepb.HeartbeatResponse{
 			Tables: []schedulepb.TableStatus{
-				{TableID: 1, State: schedulepb.TableStateReplicating,
+				{
+					TableID: 1, State: schedulepb.TableStateReplicating,
 					Checkpoint: schedulepb.Checkpoint{
 						CheckpointTs: 3, ResolvedTs: 5,
-					}},
-				{TableID: 2, State: schedulepb.TableStateReplicating,
+					},
+				},
+				{
+					TableID: 2, State: schedulepb.TableStateReplicating,
 					Checkpoint: schedulepb.Checkpoint{
 						CheckpointTs: 4, ResolvedTs: 5,
-					}},
+					},
+				},
 			},
 		},
 	})
