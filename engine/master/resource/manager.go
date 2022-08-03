@@ -14,8 +14,8 @@
 package resource
 
 import (
+	"github.com/pingcap/tiflow/engine/master/scheduler"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 )
 
 // RescMgr manages the resources of the clusters.

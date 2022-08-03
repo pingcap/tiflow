@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package servermaster
+package master
 
 import (
 	"context"
@@ -25,11 +25,11 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/engine/client"
+	"github.com/pingcap/tiflow/engine/master/cluster"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	"github.com/pingcap/tiflow/engine/pkg/etcdutil"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
-	"github.com/pingcap/tiflow/engine/servermaster/cluster"
 	derrors "github.com/pingcap/tiflow/pkg/errors"
 )
 

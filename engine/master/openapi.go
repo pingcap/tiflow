@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package servermaster
+package master
 
 import (
 	"errors"
@@ -63,7 +63,7 @@ type ServerInfoProvider interface {
 	ExecutorManager() (ExecutorManager, bool)
 }
 
-// OpenAPI provides API for servermaster.
+// OpenAPI provides API for master server.
 type OpenAPI struct {
 	infoProvider ServerInfoProvider
 }
@@ -107,9 +107,9 @@ func RegisterOpenAPIRoutes(router *gin.Engine, openapi *OpenAPI) {
 	})
 }
 
-// ListJobs lists all jobs in servermaster.
+// ListJobs lists all jobs in master server.
 // @Summary List jobs
-// @Description lists all jobs in servermaster
+// @Description lists all jobs in master server
 // @Tags jobs
 // @Accept json
 // @Produce json

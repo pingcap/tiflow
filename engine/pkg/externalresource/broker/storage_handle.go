@@ -51,7 +51,7 @@ type LocalResourceHandle struct {
 	fileManager FileManager
 
 	// isPersisted should be set to true if the
-	// resource has been registered with the servermaster.
+	// resource has been registered with the master server.
 	isPersisted atomic.Bool
 	isInvalid   atomic.Bool
 }

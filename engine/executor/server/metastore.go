@@ -46,15 +46,15 @@ const (
 // Except for ServiceDiscoveryStore, FrameworkStore and BusinessClientConn,
 // a MetastoreManager is not thread-safe.
 //
-// TODO refactor some code repetition together with servermaster.MetaStoreManager,
-// and add integration tests between MetastoreManager in this file and servermaster.MetaStoreManager.
+// TODO refactor some code repetition together with master.MetaStoreManager,
+// and add integration tests between MetastoreManager in this file and master.MetaStoreManager.
 type MetastoreManager interface {
 	// Init fetches metastore configurations from Servermaster and
 	// creates the necessary client.
 	// Init is made part of the interface because the interface is intended
 	// to reflect the dependency between the objects during server initialization.
 	// NOTE: Init must be called before other methods can be.
-	Init(ctx context.Context, servermasterClient client.MasterClient) error
+	Init(ctx context.Context, client client.MasterClient) error
 	IsInitialized() bool
 	Close()
 
@@ -153,7 +153,7 @@ func (c metastoreCreatorImpl) CreateDBClientForFramework(
 	return frameMetaClient, err
 }
 
-func (m *metastoreManagerImpl) Init(ctx context.Context, servermasterClient client.MasterClient) (retErr error) {
+func (m *metastoreManagerImpl) Init(ctx context.Context, client client.MasterClient) (retErr error) {
 	if m.initialized.Load() {
 		log.Panic("MetastoreManager: double Init")
 	}
@@ -167,15 +167,15 @@ func (m *metastoreManagerImpl) Init(ctx context.Context, servermasterClient clie
 	}()
 
 	// TODO We will refactor similar code segments together with servermaster.MetaStoreManager.
-	if err := m.initServerDiscoveryStore(ctx, servermasterClient); err != nil {
+	if err := m.initServerDiscoveryStore(ctx, client); err != nil {
 		return err
 	}
 
-	if err := m.initFrameworkStore(ctx, servermasterClient); err != nil {
+	if err := m.initFrameworkStore(ctx, client); err != nil {
 		return err
 	}
 
-	if err := m.initBusinessStore(ctx, servermasterClient); err != nil {
+	if err := m.initBusinessStore(ctx, client); err != nil {
 		return err
 	}
 
@@ -187,9 +187,9 @@ func (m *metastoreManagerImpl) IsInitialized() bool {
 	return m.initialized.Load()
 }
 
-func (m *metastoreManagerImpl) initServerDiscoveryStore(ctx context.Context, servermasterClient client.MasterClient) error {
+func (m *metastoreManagerImpl) initServerDiscoveryStore(ctx context.Context, client client.MasterClient) error {
 	// Query service discovery metastore endpoints.
-	resp, err := servermasterClient.QueryMetaStore(
+	resp, err := client.QueryMetaStore(
 		ctx,
 		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_ServiceDiscovery},
 		fetchMetastoreConfigTimeout,
@@ -208,9 +208,9 @@ func (m *metastoreManagerImpl) initServerDiscoveryStore(ctx context.Context, ser
 	return nil
 }
 
-func (m *metastoreManagerImpl) initFrameworkStore(ctx context.Context, servermasterClient client.MasterClient) error {
+func (m *metastoreManagerImpl) initFrameworkStore(ctx context.Context, client client.MasterClient) error {
 	// Query framework metastore endpoints.
-	resp, err := servermasterClient.QueryMetaStore(
+	resp, err := client.QueryMetaStore(
 		ctx,
 		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_SystemMetaStore},
 		fetchMetastoreConfigTimeout,
@@ -229,9 +229,9 @@ func (m *metastoreManagerImpl) initFrameworkStore(ctx context.Context, servermas
 	return nil
 }
 
-func (m *metastoreManagerImpl) initBusinessStore(ctx context.Context, servermasterClient client.MasterClient) error {
+func (m *metastoreManagerImpl) initBusinessStore(ctx context.Context, client client.MasterClient) error {
 	// fetch business metastore connection endpoint
-	resp, err := servermasterClient.QueryMetaStore(
+	resp, err := client.QueryMetaStore(
 		ctx,
 		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_AppMetaStore},
 		fetchMetastoreConfigTimeout,

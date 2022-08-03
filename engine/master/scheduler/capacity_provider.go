@@ -14,8 +14,8 @@
 package scheduler
 
 import (
+	schedModel "github.com/pingcap/tiflow/engine/master/scheduler/model"
 	"github.com/pingcap/tiflow/engine/model"
-	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 )
 
 // CapacityProvider describes an object providing capacity info for

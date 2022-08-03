@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package servermaster
+package master
 
 import (
 	"context"
@@ -42,6 +42,8 @@ import (
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	"github.com/pingcap/tiflow/engine/master/scheduler"
+	schedModel "github.com/pingcap/tiflow/engine/master/scheduler/model"
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
@@ -56,8 +58,6 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/serverutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
-	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"

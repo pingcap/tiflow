@@ -20,7 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/engine/executor"
-	"github.com/pingcap/tiflow/engine/servermaster"
+	"github.com/pingcap/tiflow/engine/master"
 	"github.com/pingcap/tiflow/engine/test"
 )
 
@@ -37,7 +37,7 @@ func TestHeartbeatExecutorCrush(t *testing.T) {
 		rpcTimeout        = 6 * time.Second
 	)
 
-	masterCfg := &servermaster.Config{
+	masterCfg := &master.Config{
 		Addr:              "127.0.0.1:1991",
 		ETCDEndpoints:     []string{addr},
 		KeepAliveTTL:      keepAliveTTL,

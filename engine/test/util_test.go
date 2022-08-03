@@ -22,23 +22,23 @@ import (
 	. "github.com/pingcap/check"
 
 	"github.com/pingcap/tiflow/engine/executor"
-	"github.com/pingcap/tiflow/engine/servermaster"
+	"github.com/pingcap/tiflow/engine/master"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
 )
 
 // TODO: support multi master / executor
 type MiniCluster struct {
-	master       *servermaster.Server
+	master       *master.Server
 	masterCancel func()
 
 	exec       *executor.Server
 	execCancel func()
 }
 
-func (c *MiniCluster) CreateMaster(cfg *servermaster.Config) (*test.Context, error) {
+func (c *MiniCluster) CreateMaster(cfg *master.Config) (*test.Context, error) {
 	masterCtx := test.NewContext()
-	master, err := servermaster.NewServer(cfg, masterCtx)
+	master, err := master.NewServer(cfg, masterCtx)
 	c.master = master
 	return masterCtx, err
 }
@@ -85,7 +85,7 @@ func (c *MiniCluster) Start1M1E(cc *C) (
 	cc.Assert(err, IsNil)
 	masterAddr = fmt.Sprintf("127.0.0.1:%d", ports[0])
 	workerAddr = fmt.Sprintf("127.0.0.1:%d", ports[1])
-	masterCfg := &servermaster.Config{
+	masterCfg := &master.Config{
 		Addr:              masterAddr,
 		AdvertiseAddr:     masterAddr,
 		KeepAliveTTL:      20000000 * time.Second,

@@ -17,8 +17,8 @@ import (
 	"math/rand"
 	"time"
 
+	schedModel "github.com/pingcap/tiflow/engine/master/scheduler/model"
 	"github.com/pingcap/tiflow/engine/model"
-	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 )
 
 // CostScheduler is a random scheduler

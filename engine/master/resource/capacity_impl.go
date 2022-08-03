@@ -21,8 +21,8 @@ import (
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
+	schedModel "github.com/pingcap/tiflow/engine/master/scheduler/model"
 	"github.com/pingcap/tiflow/engine/model"
-	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 )
 

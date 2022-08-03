@@ -19,9 +19,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	schedModel "github.com/pingcap/tiflow/engine/master/scheduler/model"
 	"github.com/pingcap/tiflow/engine/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 )
 
 func getMockCapacityDataForScheduler() CapacityProvider {

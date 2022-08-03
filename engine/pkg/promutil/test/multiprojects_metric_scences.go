@@ -97,8 +97,8 @@ func scenarios1OneServerOneExecutor(wg *sync.WaitGroup) {
 		// one server
 		factory := promutil.NewFactory4FrameworkImpl(reg)
 		counter := factory.NewCounter(prometheus.CounterOpts{
-			Namespace: "dfe",
-			Subsystem: "servermaster",
+			Namespace: "tiflow",
+			Subsystem: "master",
 			Name:      "counter",
 
 			ConstLabels: prometheus.Labels{
@@ -123,7 +123,7 @@ func scenarios1OneServerOneExecutor(wg *sync.WaitGroup) {
 		// one server
 		factory := promutil.NewFactory4FrameworkImpl(reg)
 		counter := factory.NewCounter(prometheus.CounterOpts{
-			Namespace: "dfe",
+			Namespace: "tiflow",
 			Subsystem: "executor",
 			Name:      "counter",
 
@@ -154,7 +154,7 @@ func scenarios2OneServerMultiExecutor(wg *sync.WaitGroup) {
 		// one server
 		factory := promutil.NewFactory4FrameworkImpl(reg)
 		counter := factory.NewCounter(prometheus.CounterOpts{
-			Namespace: "dfe",
+			Namespace: "tiflow",
 			Subsystem: "executor",
 			Name:      "counter",
 
@@ -180,7 +180,7 @@ func scenarios2OneServerMultiExecutor(wg *sync.WaitGroup) {
 		// one server
 		factory := promutil.NewFactory4FrameworkImpl(reg)
 		counter := factory.NewCounter(prometheus.CounterOpts{
-			Namespace: "dfe",
+			Namespace: "tiflow",
 			Subsystem: "executor",
 			Name:      "counter",
 

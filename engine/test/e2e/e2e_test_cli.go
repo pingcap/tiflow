@@ -33,12 +33,12 @@ import (
 	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/fake"
+	"github.com/pingcap/tiflow/engine/master"
+	server "github.com/pingcap/tiflow/engine/master"
 	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/meta"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	"github.com/pingcap/tiflow/engine/servermaster"
-	server "github.com/pingcap/tiflow/engine/servermaster"
 )
 
 func init() {
@@ -110,13 +110,13 @@ func NewUTCli(ctx context.Context, masterAddrs, businessMetaAddrs []string, proj
 	}, nil
 }
 
-// CreateJob sends SubmitJob command to servermaster
+// CreateJob sends SubmitJob command to master server
 func (cli *ChaosCli) CreateJob(ctx context.Context, tp engineModel.JobType, config []byte) (string, error) {
 	return CreateJobViaOpenAPI(ctx, cli.masterAddrs[0], cli.project.TenantID(),
 		cli.project.ProjectID(), tp, string(config))
 }
 
-// PauseJob sends PauseJob command to servermaster
+// PauseJob sends PauseJob command to master server
 func (cli *ChaosCli) PauseJob(ctx context.Context, jobID string) error {
 	req := &pb.PauseJobRequest{
 		JobId: jobID,
@@ -288,7 +288,7 @@ func CreateJobViaOpenAPI(
 	ctx context.Context, apiEndpoint string, tenantID string, projectID string,
 	tp engineModel.JobType, cfg string,
 ) (string, error) {
-	data := &servermaster.APICreateJobRequest{
+	data := &master.APICreateJobRequest{
 		JobType:   int32(tp),
 		JobConfig: cfg,
 	}
@@ -320,7 +320,7 @@ func CreateJobViaOpenAPI(
 // QueryJobViaOpenAPI wraps OpenAPI to query a job
 func QueryJobViaOpenAPI(
 	ctx context.Context, apiEndpoint string, tenantID, projectID, jobID string,
-) (result *servermaster.APIQueryJobResponse, err error) {
+) (result *master.APIQueryJobResponse, err error) {
 	url := fmt.Sprintf(
 		"http://%s/api/v1/jobs/%s?tenant_id=%s&project_id=%s",
 		apiEndpoint, jobID, tenantID, projectID,
@@ -333,7 +333,7 @@ func QueryJobViaOpenAPI(
 	if err != nil {
 		return
 	}
-	result = &servermaster.APIQueryJobResponse{}
+	result = &master.APIQueryJobResponse{}
 	err = json.Unmarshal(body, result)
 	return
 }

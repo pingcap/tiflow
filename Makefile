@@ -560,7 +560,7 @@ engine_integration_test:
 	./engine/test/integration_tests/run.sh "$(CASE)" "$(START_AT)"
 
 tiflow-swagger-spec: tools/bin/swag
-	tools/bin/swag init --exclude cdc,dm  --parseVendor -generalInfo engine/servermaster/openapi.go --output engine/docs/swagger
+	tools/bin/swag init --exclude cdc,dm  --parseVendor -generalInfo engine/master/openapi.go --output engine/docs/swagger
 
 define run_engine_unit_test
 	@echo "running unit test for packages:" $(1)

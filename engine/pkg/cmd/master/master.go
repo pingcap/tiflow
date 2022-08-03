@@ -25,9 +25,9 @@ import (
 	"github.com/spf13/pflag"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/tiflow/engine/master"
 	"github.com/pingcap/tiflow/engine/pkg/cmd/util"
 	"github.com/pingcap/tiflow/engine/pkg/version"
-	"github.com/pingcap/tiflow/engine/servermaster"
 	cmdconetxt "github.com/pingcap/tiflow/pkg/cmd/context"
 	ticdcutil "github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/logutil"
@@ -36,7 +36,7 @@ import (
 
 // options defines flags for the `server` command.
 type options struct {
-	masterConfig         *servermaster.Config
+	masterConfig         *master.Config
 	masterConfigFilePath string
 
 	caPath        string
@@ -48,7 +48,7 @@ type options struct {
 // newOptions creates new options for the `server` command.
 func newOptions() *options {
 	return &options{
-		masterConfig: servermaster.GetDefaultMasterConfig(),
+		masterConfig: master.GetDefaultMasterConfig(),
 	}
 }
 
@@ -103,7 +103,7 @@ func (o *options) run(cmd *cobra.Command) error {
 
 	ticdcutil.LogHTTPProxies()
 
-	server, err := servermaster.NewServer(o.masterConfig, nil)
+	server, err := master.NewServer(o.masterConfig, nil)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -122,7 +122,7 @@ func (o *options) run(cmd *cobra.Command) error {
 func (o *options) complete(cmd *cobra.Command) error {
 	o.masterConfig.Security = o.getCredential()
 
-	cfg := servermaster.GetDefaultMasterConfig()
+	cfg := master.GetDefaultMasterConfig()
 
 	if len(o.masterConfigFilePath) > 0 {
 		if err := ticdcutil.StrictDecodeFile(

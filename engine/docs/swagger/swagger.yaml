@@ -5,7 +5,7 @@ paths:
     get:
       consumes:
       - application/json
-      description: lists all jobs in servermaster
+      description: lists all jobs in master server
       parameters:
       - description: tenant id
         in: query

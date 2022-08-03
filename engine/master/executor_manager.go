@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package servermaster
+package master
 
 import (
 	"context"
@@ -23,10 +23,10 @@ import (
 
 	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/master/resource"
+	"github.com/pingcap/tiflow/engine/master/scheduler"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
-	"github.com/pingcap/tiflow/engine/servermaster/resource"
-	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/uuid"

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package servermaster
+package master
 
 import (
 	"context"
@@ -25,10 +25,10 @@ import (
 	"go.uber.org/atomic"
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/master/cluster"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
-	"github.com/pingcap/tiflow/engine/servermaster/cluster"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
 	"github.com/pingcap/tiflow/pkg/logutil"

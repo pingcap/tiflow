@@ -20,7 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/pingcap/tiflow/engine/client"
-	"github.com/pingcap/tiflow/engine/servermaster"
+	"github.com/pingcap/tiflow/engine/master"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
 )
@@ -37,7 +37,7 @@ func TestMasterClient(t *testing.T) {
 		if addr == abnormalHost {
 			continue
 		}
-		srv := &servermaster.Server{}
+		srv := &master.Server{}
 		_, err := mock.NewMasterServer(addr, srv)
 		require.Nil(t, err)
 	}
@@ -51,7 +51,7 @@ func TestMasterClient(t *testing.T) {
 	require.Len(t, mcli.Endpoints(), 2)
 
 	// abnormal server master comes back
-	srv := &servermaster.Server{}
+	srv := &master.Server{}
 	_, err = mock.NewMasterServer(abnormalHost, srv)
 	require.Nil(t, err)
 	mcli.UpdateClients(ctx, join, "")

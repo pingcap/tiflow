@@ -22,7 +22,7 @@ import (
 
 	"github.com/pingcap/tiflow/engine/client"
 	"github.com/pingcap/tiflow/engine/executor"
-	"github.com/pingcap/tiflow/engine/servermaster"
+	"github.com/pingcap/tiflow/engine/master"
 	"github.com/pingcap/tiflow/engine/test"
 )
 
@@ -40,7 +40,7 @@ func TestClientManager(t *testing.T) {
 	require.NotNil(t, err)
 	require.Nil(t, manager.MasterClient())
 
-	masterCfg := &servermaster.Config{
+	masterCfg := &master.Config{
 		Addr:              "127.0.0.1:1992",
 		ETCDEndpoints:     []string{"127.0.0.1:2379"},
 		KeepAliveTTL:      20000000 * time.Second,
@@ -48,7 +48,7 @@ func TestClientManager(t *testing.T) {
 		RPCTimeout:        time.Second,
 	}
 
-	masterServer, err := servermaster.NewServer(masterCfg, test.NewContext())
+	masterServer, err := master.NewServer(masterCfg, test.NewContext())
 	require.Nil(t, err)
 	masterServer.Stop()
 

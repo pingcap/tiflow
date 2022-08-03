@@ -25,7 +25,7 @@ var doc = `{
     "paths": {
         "/api/v1/jobs": {
             "get": {
-                "description": "lists all jobs in servermaster",
+                "description": "lists all jobs in master server",
                 "consumes": [
                     "application/json"
                 ],

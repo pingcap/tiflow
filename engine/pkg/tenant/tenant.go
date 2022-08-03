@@ -23,16 +23,16 @@ type (
 // tenant const variables
 var (
 	FrameProjectInfo = ProjectInfo{
-		tenantID:  "dfe_tenant_root",
-		projectID: "dfe_proj_root",
+		tenantID:  "tiflow_tenant_root",
+		projectID: "tiflow_proj_root",
 	}
 	TestProjectInfo = ProjectInfo{
-		tenantID:  "dfe_tenant_test",
-		projectID: "dfe_proj_test",
+		tenantID:  "tiflow_tenant_test",
+		projectID: "tiflow_proj_test",
 	}
 	DefaultUserProjectInfo = ProjectInfo{
-		tenantID:  "dfe_tenant_default",
-		projectID: "dfe_proj_default",
+		tenantID:  "tiflow_tenant_default",
+		projectID: "tiflow_proj_default",
 	}
 )
 
