@@ -135,11 +135,6 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr stri
 	require.Nil(t, err)
 	fmt.Printf("connect clients\n")
 
-	// TODO support https.
-	dialURL := fmt.Sprintf("http://%s", config.MasterAddrs[0])
-	jobManagerCli, err := e2e.NewJobManagerClient(dialURL)
-	require.NoError(t, err)
-
 	for {
 		resp, err := democlient.client.IsReady(ctx, &pb.IsReadyRequest{})
 		require.Nil(t, err)
@@ -161,19 +156,18 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr stri
 
 	fmt.Printf("job id %s\n", jobID)
 
-	queryReq := &pb.QueryJobRequest{
-		JobId: jobID,
-	}
 	// continue to query
 	for {
 		ctx1, cancel := context.WithTimeout(ctx, 3*time.Second)
-		queryResp, err := jobManagerCli.QueryJob(ctx1, queryReq)
+		queryResp, err := e2e.QueryJobViaOpenAPI(ctx1, config.MasterAddrs[0],
+			tenantID, projectID, jobID,
+		)
 		require.NoError(t, err)
-		require.Nil(t, queryResp.Err)
-		require.Equal(t, queryResp.Tp, int32(engineModel.JobTypeCVSDemo))
 		cancel()
-		fmt.Printf("query id %s, status %d, time %s\n", jobID, int(queryResp.Status), time.Now().Format("2006-01-02 15:04:05"))
-		if queryResp.Status == pb.QueryJobResponse_finished {
+		require.Equal(t, int32(engineModel.JobTypeCVSDemo), queryResp.JobType)
+		fmt.Printf("query id %s, status %d, time %s\n",
+			jobID, int(queryResp.Status), time.Now().Format("2006-01-02 15:04:05"))
+		if queryResp.Status == int32(pb.QueryJobResponse_finished) {
 			break
 		}
 		time.Sleep(time.Second)
