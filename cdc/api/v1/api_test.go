@@ -898,24 +898,24 @@ func TestHealth(t *testing.T) {
 		return true
 	}).AnyTimes()
 
-	// IsHealth returns error.
-	isHealthError := sp.EXPECT().IsHealth(gomock.Any()).
+	// IsHealthy returns error.
+	isHealthError := sp.EXPECT().IsHealthy(gomock.Any()).
 		Return(false, cerror.ErrOwnerNotFound)
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	ownerRouter.ServeHTTP(w, req)
 	require.Equal(t, 500, w.Code)
 
-	// IsHealth returns false.
-	isHealthFalse := sp.EXPECT().IsHealth(gomock.Any()).
+	// IsHealthy returns false.
+	isHealthFalse := sp.EXPECT().IsHealthy(gomock.Any()).
 		Return(false, cerror.ErrOwnerNotFound).After(isHealthError)
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	ownerRouter.ServeHTTP(w, req)
 	require.Equal(t, 500, w.Code)
 
-	// IsHealth returns true.
-	sp.EXPECT().IsHealth(gomock.Any()).
+	// IsHealthy returns true.
+	sp.EXPECT().IsHealthy(gomock.Any()).
 		Return(true, nil).After(isHealthFalse)
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
