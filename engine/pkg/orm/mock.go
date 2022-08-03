@@ -19,12 +19,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/glebarez/sqlite"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/uuid"
 	"go.uber.org/zap"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
