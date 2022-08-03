@@ -72,7 +72,7 @@ func TestMetaLabelFail(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	mockClient := newMockPDClient(ctx, false)
-	pc, err := newPDApiClient(mockClient, nil)
+	pc, err := NewPDAPIClient(mockClient, nil)
 	require.Nil(t, err)
 	mockClient.url = "http://127.0.1.1:2345"
 

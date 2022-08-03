@@ -185,12 +185,19 @@ func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
 	log.Info("upstream's GCManager created", zap.Uint64("upstreamID", up.ID))
 
 	// Update meta-region label to ensure that meta region isolated from data regions.
-	err = pdutil.UpdateMetaLabel(ctx, up.PDClient, up.SecurityConfig)
+	pdApiClient, err := pdutil.NewPDAPIClient(up.PDClient, up.SecurityConfig)
+	if err != nil {
+		log.Error("create pd api client failed", zap.Error(err))
+		return errors.Trace(err)
+	}
+	defer pdApiClient.Close()
+
+	err = pdApiClient.UpdateMetaLabel(ctx, up.PDClient, up.SecurityConfig)
 	if err != nil {
 		log.Warn("Fail to verify region label rule",
 			zap.Error(err),
 			zap.Uint64("upstreamID", up.ID),
-			zap.Strings("upstramEndpoints", up.PdEndpoints))
+			zap.Strings("upstreamEndpoints", up.PdEndpoints))
 	}
 
 	up.wg.Add(1)

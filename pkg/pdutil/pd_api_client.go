@@ -32,6 +32,7 @@ import (
 const (
 	regionLabelPrefix     = "/pd/api/v1/config/region-label/rules"
 	gcServiceSafePointURL = "/pd/api/v1/gc/safepoint"
+	healthyAPI            = "/pd/api/v1/health"
 
 	// Split the default rule by following keys to keep metadata region isolated
 	// from the normal data area.
@@ -80,37 +81,36 @@ const (
 
 var defaultMaxRetry uint64 = 3
 
-// pdAPIClient is api client of Placement Driver.
+// pdAPIClient is the api client of Placement Driver, include both grpc client, also http client.
 type pdAPIClient struct {
-	pdClient   pd.Client
-	dialClient *httputil.Client
+	grpcClient pd.Client
+	httpClient *httputil.Client
 }
 
-// newPDApiClient create a new pdAPIClient.
-func newPDApiClient(pdClient pd.Client, conf *config.SecurityConfig) (*pdAPIClient, error) {
+// NewPDAPIClient create a new pdAPIClient.
+func NewPDAPIClient(pdClient pd.Client, conf *config.SecurityConfig) (*pdAPIClient, error) {
 	dialClient, err := httputil.NewClient(conf)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	return &pdAPIClient{
-		pdClient:   pdClient,
-		dialClient: dialClient,
+		grpcClient: pdClient,
+		httpClient: dialClient,
 	}, nil
 }
 
+// Close the pd api client, at the moment only close idle http connections if there is any.
+func (pc *pdAPIClient) Close() {
+	pc.httpClient.CloseIdleConnections()
+}
+
 // UpdateMetaLabel is a reentrant function that updates the meta-region label of upstream cluster.
-func UpdateMetaLabel(ctx context.Context,
+func (pc *pdAPIClient) UpdateMetaLabel(ctx context.Context,
 	pdClient pd.Client,
 	conf *config.SecurityConfig,
 ) error {
-	pc, err := newPDApiClient(pdClient, conf)
-	if err != nil {
-		return err
-	}
-	defer pc.dialClient.CloseIdleConnections()
-
-	err = retry.Do(ctx, func() error {
-		err = pc.patchMetaLabel(ctx)
+	err := retry.Do(ctx, func() error {
+		err := pc.patchMetaLabel(ctx)
 		if err != nil {
 			log.Error("Fail to add meta region label to PD", zap.Error(err))
 			return err
@@ -142,16 +142,13 @@ type ListServiceGCSafepoint struct {
 }
 
 // ListGcServiceSafePoint list gc service safepoint from PD
-func ListGcServiceSafePoint(ctx context.Context,
-	pdClient pd.Client,
-	conf *config.SecurityConfig,
+func (pc *pdAPIClient) ListGcServiceSafePoint(
+	ctx context.Context,
 ) (*ListServiceGCSafepoint, error) {
-	pc, err := newPDApiClient(pdClient, conf)
-	if err != nil {
-		return nil, err
-	}
-	defer pc.dialClient.CloseIdleConnections()
-	var resp *ListServiceGCSafepoint
+	var (
+		resp *ListServiceGCSafepoint
+		err  error
+	)
 	err = retry.Do(ctx, func() error {
 		resp, err = pc.listGcServiceSafePoint(ctx)
 		if err != nil {
@@ -169,13 +166,13 @@ func ListGcServiceSafePoint(ctx context.Context,
 }
 
 func (pc *pdAPIClient) patchMetaLabel(ctx context.Context) error {
-	url := pc.pdClient.GetLeaderAddr() + regionLabelPrefix
+	url := pc.grpcClient.GetLeaderAddr() + regionLabelPrefix
 	header := http.Header{"Content-Type": {"application/json"}}
 	content := []byte(addMetaJSON)
 
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	_, err := pc.dialClient.DoRequest(ctx, url, http.MethodPatch,
+	_, err := pc.httpClient.DoRequest(ctx, url, http.MethodPatch,
 		header, bytes.NewReader(content))
 	return errors.Trace(err)
 }
@@ -183,11 +180,11 @@ func (pc *pdAPIClient) patchMetaLabel(ctx context.Context) error {
 func (pc *pdAPIClient) listGcServiceSafePoint(
 	ctx context.Context,
 ) (*ListServiceGCSafepoint, error) {
-	url := pc.pdClient.GetLeaderAddr() + gcServiceSafePointURL
+	url := pc.grpcClient.GetLeaderAddr() + gcServiceSafePointURL
 
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	respData, err := pc.dialClient.DoRequest(ctx, url, http.MethodGet,
+	respData, err := pc.httpClient.DoRequest(ctx, url, http.MethodGet,
 		nil, nil)
 	if err != nil {
 		return nil, errors.Trace(err)
