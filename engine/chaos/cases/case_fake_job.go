@@ -33,6 +33,7 @@ import (
 
 func runFakeJobCase(ctx context.Context, cfg *config) error {
 	serverMasterEndpoints := []string{cfg.Addr}
+	businessMetaEndpoints := []string{cfg.BusinessMetaAddr}
 	etcdEndpoints := []string{cfg.EtcdAddr}
 
 	jobCfg := &fake.Config{
@@ -45,12 +46,12 @@ func runFakeJobCase(ctx context.Context, cfg *config) error {
 		EtcdWatchPrefix: "/fake-job/test/",
 	}
 	e2eCfg := &e2e.FakeJobConfig{
-		EtcdEndpoints: etcdEndpoints, // reuse business meta KV endpoints
+		EtcdEndpoints: etcdEndpoints,
 		WorkerCount:   jobCfg.WorkerCount,
 		KeyPrefix:     jobCfg.EtcdWatchPrefix,
 	}
 
-	cli, err := e2e.NewUTCli(ctx, serverMasterEndpoints, etcdEndpoints,
+	cli, err := e2e.NewUTCli(ctx, serverMasterEndpoints, businessMetaEndpoints,
 		tenant.DefaultUserProjectInfo, e2eCfg)
 	if err != nil {
 		return err
