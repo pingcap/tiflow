@@ -41,7 +41,7 @@ func IsNotFoundError(err error) bool {
 	return strings.Contains(err.Error(), "ErrMetaEntryNotFound")
 }
 
-// InitAllFrameworkModels will create all related tables in SQL backend
+// InitAllFrameworkModels will create all framework-related tables in SQL backend
 // NOT thread-safe.
 // TODO: What happen if we upgrade the definition of model when rolling update?
 // TODO: need test: change column definition/add column/drop column?
@@ -84,7 +84,8 @@ func InitAllFrameworkModels(ctx context.Context, cc metaModel.ClientConn) error 
 }
 
 // InitEpochModel creates the backend logic epoch table if not exists
-// NOT thread-safe.
+// Only use for business meta currently
+// NOT thread-safe
 func InitEpochModel(ctx context.Context, cc model.ClientConn) error {
 	if cc == nil {
 		return errors.ErrMetaParamsInvalid.GenWithStackByArgs("input client conn is nil")

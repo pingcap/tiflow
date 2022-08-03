@@ -28,7 +28,8 @@ func (c *mockClientConn) Close() error {
 	return nil
 }
 
-// NewGormClientConn new a sqlite client connection
+// NewGormClientConn new a client connection with an gorm.DB inside
+// Currently, we only use this connection for sqlite backend
 func NewGormClientConn(db *gorm.DB) metaModel.ClientConn {
 	return &gormClientConn{
 		db: db,
