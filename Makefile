@@ -4,9 +4,11 @@
 	kafka_docker_integration_test kafka_docker_integration_test_with_build \
 	clean_integration_test_containers \
 	mysql_docker_integration_test mysql_docker_integration_test_with_build \
-    build_mysql_integration_test_images clean_integration_test_images \
+	build_mysql_integration_test_images clean_integration_test_images \
 	dm dm-master dm-worker dmctl dm-syncer dm_coverage \
 	engine tiflow tiflow-demo tiflow-chaos-case engine_image help
+
+.DEFAULT_GOAL := default
 
 # Adapted from https://www.thapaliya.com/en/writings/well-documented-makefiles/
 help: ## Display this help and any documented user-facing targets. Other undocumented targets may be present in the Makefile.
@@ -302,6 +304,7 @@ swagger-spec: tools/bin/swag
 
 generate_mock: tools/bin/mockgen
 	tools/bin/mockgen -source cdc/owner/owner.go -destination cdc/owner/mock/owner_mock.go
+	tools/bin/mockgen -source cdc/owner/status_provider.go -destination cdc/owner/mock/status_provider_mock.go
 	tools/bin/mockgen -source cdc/api/v2/api_helpers.go -destination cdc/api/v2/api_helpers_mock.go -package v2
 	tools/bin/mockgen -source pkg/etcd/etcd.go -destination pkg/etcd/mock/etcd_client_mock.go
 	tools/bin/mockgen -source cdc/processor/manager.go -destination cdc/processor/mock/manager_mock.go
