@@ -20,15 +20,14 @@ import (
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/prometheus/client_golang/prometheus"
 	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	clientV3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/raft/v3"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
-
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/errorutil"
-	"github.com/pingcap/tiflow/pkg/retry"
 )
 
 // etcd operation names
@@ -177,28 +176,6 @@ func (c *Client) Grant(
 	return
 }
 
-func isRetryableError(rpcName string) retry.IsRetryable {
-	return func(err error) bool {
-		if !cerrors.IsRetryableError(err) {
-			return false
-		}
-
-		switch rpcName {
-		case EtcdRevoke:
-			if etcdErr, ok := err.(v3rpc.EtcdError); ok && etcdErr.Code() == codes.NotFound {
-				// It means the etcd lease is already expired or revoked
-				return false
-			}
-		case EtcdTxn:
-			return errorutil.IsRetryableEtcdError(err)
-		default:
-			// For other types of operation, we retry directly without handling errors
-		}
-
-		return true
-	}
-}
-
 // Revoke delegates request to clientV3.Lease.Revoke
 func (c *Client) Revoke(
 	ctx context.Context, id clientV3.LeaseID,
@@ -313,4 +290,52 @@ func (c *Client) WatchWithChan(
 // RequestProgress requests a progress notify response be sent in all watch channels.
 func (c *Client) RequestProgress(ctx context.Context) error {
 	return c.cli.RequestProgress(ctx)
+}
+
+func isRetryableError(rpcName string) retry.IsRetryable {
+	return func(err error) bool {
+		if !cerrors.IsRetryableError(err) {
+			return false
+		}
+
+		switch rpcName {
+		case EtcdRevoke:
+			if etcdErr, ok := err.(v3rpc.EtcdError); ok && etcdErr.Code() == codes.NotFound {
+				// It means the etcd lease is already expired or revoked
+				return false
+			}
+		case EtcdTxn:
+			return isRetryableTxnError(err)
+		default:
+			// For other types of operation, we retry directly without handling errors
+		}
+
+		return true
+	}
+}
+
+// isRetryableTxnError is used to check whether the error can be retried for etcd transaction.
+func isRetryableTxnError(err error) bool {
+	etcdErr := errors.Cause(err)
+
+	switch etcdErr {
+	// Etcd ResourceExhausted errors, may recover after some time
+	case v3rpc.ErrNoSpace, v3rpc.ErrTooManyRequests:
+		return true
+	// Etcd Unavailable errors, may be available after some time
+	// https://github.com/etcd-io/etcd/pull/9934/files#diff-6d8785d0c9eaf96bc3e2b29c36493c04R162-R167
+	// ErrStopped:
+	// one of the etcd nodes stopped from failure injection
+	// ErrNotCapable:
+	// capability check has not been done (in the beginning)
+	case v3rpc.ErrNoLeader, v3rpc.ErrLeaderChanged, v3rpc.ErrNotCapable, v3rpc.ErrStopped, v3rpc.ErrTimeout,
+		v3rpc.ErrTimeoutDueToLeaderFail, v3rpc.ErrGRPCTimeoutDueToConnectionLost, v3rpc.ErrUnhealthy:
+		return true
+	// when the PD instance goes offline, it may meet error with `raft:stopped`,
+	// we should tolerant such case to make cdc robust to PD cluster member change.
+	case raft.ErrStopped:
+		return true
+	default:
+	}
+	return false
 }
