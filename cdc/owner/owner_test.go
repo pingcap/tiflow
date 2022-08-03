@@ -741,3 +741,63 @@ func TestHandleDrainCapturesSchedulerNotReady(t *testing.T) {
 	require.EqualValues(t, 0, query.Resp.(*model.DrainCaptureResp).CurrentTableCount)
 	require.Nil(t, <-done)
 }
+
+type heathScheduler struct {
+	scheduler.Scheduler
+	scheduler.InfoProvider
+	init bool
+}
+
+func (h *heathScheduler) IsInitialized() bool {
+	return h.init
+}
+
+func TestIsHealthy(t *testing.T) {
+	t.Parallel()
+
+	o := &ownerImpl{changefeeds: make(map[model.ChangeFeedID]*changefeed)}
+	query := &Query{Tp: QueryHealth}
+
+	// Unhealthy, changefeeds are not ticked.
+	o.changefeedTicked = false
+	err := o.handleQueries(query)
+	require.Nil(t, err)
+	require.False(t, query.Data.(bool))
+	// Healthy, no changefeed.
+	o.changefeedTicked = true
+	err = o.handleQueries(query)
+	require.Nil(t, err)
+	require.True(t, query.Data.(bool))
+
+	// Unhealthy, scheduler is not set.
+	cf := &changefeed{
+		scheduler: nil, // scheduler is not set.
+	}
+	o.changefeeds[model.ChangeFeedID{ID: "1"}] = cf
+	o.changefeedTicked = true
+	err = o.handleQueries(query)
+	require.Nil(t, err)
+	require.False(t, query.Data.(bool))
+
+	// Healthy, scheduler is set and return true.
+	cf.scheduler = &heathScheduler{init: true}
+	o.changefeedTicked = true
+	err = o.handleQueries(query)
+	require.Nil(t, err)
+	require.True(t, query.Data.(bool))
+
+	// Unhealthy, changefeeds are not ticked.
+	o.changefeedTicked = false
+	err = o.handleQueries(query)
+	require.Nil(t, err)
+	require.False(t, query.Data.(bool))
+
+	// Unhealthy, there is another changefeed is not initialized.
+	o.changefeeds[model.ChangeFeedID{ID: "1"}] = &changefeed{
+		scheduler: &heathScheduler{init: false},
+	}
+	o.changefeedTicked = true
+	err = o.handleQueries(query)
+	require.Nil(t, err)
+	require.False(t, query.Data.(bool))
+}

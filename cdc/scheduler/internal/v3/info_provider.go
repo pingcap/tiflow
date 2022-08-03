@@ -20,6 +20,15 @@ import (
 
 var _ internal.InfoProvider = (*coordinator)(nil)
 
+// IsInitialized returns a boolean indicates whether all captures have
+// initialized.
+func (c *coordinator) IsInitialized() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.captureM.CheckAllCaptureInitialized()
+}
+
 // GetTaskStatuses returns the task statuses.
 func (c *coordinator) GetTaskStatuses() (map[model.CaptureID]*model.TaskStatus, error) {
 	c.mu.Lock()
