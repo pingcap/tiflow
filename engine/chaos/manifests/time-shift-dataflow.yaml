@@ -11,13 +11,13 @@ spec:
   selector:
     pods:
       default: # default namespace
-        - server-master-0
-        - server-master-1
-        - server-master-2
-        - executor-0
-        - executor-1
-        - executor-2
-        - executor-3
+        - chaos-server-master-0
+        - chaos-server-master-1
+        - chaos-server-master-2
+        - chaos-executor-0
+        - chaos-executor-1
+        - chaos-executor-2
+        - chaos-executor-3
   timeOffset: '-10m'
   clockIds:
     - CLOCK_REALTIME

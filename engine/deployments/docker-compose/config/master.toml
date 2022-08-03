@@ -6,10 +6,10 @@ etcd-endpoints = ["etcd-standalone:2379"]
 endpoints = ["mysql-standalone:3306"]
 schema = "test"
 auth.user = "root"
-auth.passwd = "123456"
+auth.passwd = ""
 
 [business-metastore-conf]
 endpoints = ["mysql-standalone:3306"]
 schema = "test"
 auth.user = "root"
-auth.passwd = "123456"
+auth.passwd = ""
