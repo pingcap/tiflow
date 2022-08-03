@@ -26,7 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Assert TableSink implementation
+// Assert EventSink implementation
 var _ eventsink.EventSink[*model.SingleTableTxn] = (*mockEventSink)(nil)
 
 type mockEventSink struct {
