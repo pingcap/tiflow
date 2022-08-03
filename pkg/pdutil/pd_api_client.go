@@ -105,10 +105,7 @@ func (pc *pdAPIClient) Close() {
 }
 
 // UpdateMetaLabel is a reentrant function that updates the meta-region label of upstream cluster.
-func (pc *pdAPIClient) UpdateMetaLabel(ctx context.Context,
-	pdClient pd.Client,
-	conf *config.SecurityConfig,
-) error {
+func (pc *pdAPIClient) UpdateMetaLabel(ctx context.Context) error {
 	err := retry.Do(ctx, func() error {
 		err := pc.patchMetaLabel(ctx)
 		if err != nil {

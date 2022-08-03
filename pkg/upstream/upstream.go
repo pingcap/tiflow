@@ -192,7 +192,7 @@ func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
 	}
 	defer pdApiClient.Close()
 
-	err = pdApiClient.UpdateMetaLabel(ctx, up.PDClient, up.SecurityConfig)
+	err = pdApiClient.UpdateMetaLabel(ctx)
 	if err != nil {
 		log.Warn("Fail to verify region label rule",
 			zap.Error(err),
