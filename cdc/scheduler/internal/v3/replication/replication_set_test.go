@@ -58,7 +58,7 @@ func TestNewReplicationSet(t *testing.T) {
 		{
 			set: &ReplicationSet{
 				State:    ReplicationSetStateAbsent,
-				Captures: map[string]struct{}{},
+				Captures: map[string]Role{},
 			},
 			tableStatus: map[model.CaptureID]*schedulepb.TableStatus{},
 		},
@@ -66,7 +66,7 @@ func TestNewReplicationSet(t *testing.T) {
 			set: &ReplicationSet{
 				Primary:  "1",
 				State:    ReplicationSetStateReplicating,
-				Captures: map[string]struct{}{"1": {}},
+				Captures: map[string]Role{"1": RolePrimary},
 				Checkpoint: schedulepb.Checkpoint{
 					CheckpointTs: 2, ResolvedTs: 2,
 				},
@@ -84,9 +84,8 @@ func TestNewReplicationSet(t *testing.T) {
 		{
 			// Rebuild add table state.
 			set: &ReplicationSet{
-				State:     ReplicationSetStatePrepare,
-				Secondary: "1",
-				Captures:  map[string]struct{}{"1": {}},
+				State:    ReplicationSetStatePrepare,
+				Captures: map[string]Role{"1": RoleSecondary},
 			},
 			tableStatus: map[model.CaptureID]*schedulepb.TableStatus{
 				"1": {
@@ -98,10 +97,11 @@ func TestNewReplicationSet(t *testing.T) {
 		{
 			// Rebuild move table state, Prepare.
 			set: &ReplicationSet{
-				State:      ReplicationSetStatePrepare,
-				Primary:    "2",
-				Secondary:  "1",
-				Captures:   map[string]struct{}{"1": {}, "2": {}},
+				State:   ReplicationSetStatePrepare,
+				Primary: "2",
+				Captures: map[string]Role{
+					"1": RoleSecondary, "2": RolePrimary,
+				},
 				Checkpoint: schedulepb.Checkpoint{CheckpointTs: 2},
 			},
 			tableStatus: map[model.CaptureID]*schedulepb.TableStatus{
@@ -118,10 +118,11 @@ func TestNewReplicationSet(t *testing.T) {
 		{
 			// Rebuild move table state, Commit.
 			set: &ReplicationSet{
-				State:     ReplicationSetStateCommit,
-				Primary:   "2",
-				Secondary: "1",
-				Captures:  map[string]struct{}{"1": {}, "2": {}},
+				State:   ReplicationSetStateCommit,
+				Primary: "2",
+				Captures: map[string]Role{
+					"1": RoleSecondary, "2": RolePrimary,
+				},
 			},
 			tableStatus: map[model.CaptureID]*schedulepb.TableStatus{
 				"1": {
@@ -137,9 +138,10 @@ func TestNewReplicationSet(t *testing.T) {
 		{
 			// Rebuild move table state, Commit, original primary stopping.
 			set: &ReplicationSet{
-				State:     ReplicationSetStateCommit,
-				Secondary: "1",
-				Captures:  map[string]struct{}{"1": {}, "2": {}},
+				State: ReplicationSetStateCommit,
+				Captures: map[string]Role{
+					"1": RoleSecondary, "2": RoleUndetermined,
+				},
 			},
 			tableStatus: map[model.CaptureID]*schedulepb.TableStatus{
 				"1": {
@@ -155,9 +157,8 @@ func TestNewReplicationSet(t *testing.T) {
 		{
 			// Rebuild move table state, Commit, original primary stopped.
 			set: &ReplicationSet{
-				State:     ReplicationSetStateCommit,
-				Secondary: "1",
-				Captures:  map[string]struct{}{"1": {}},
+				State:    ReplicationSetStateCommit,
+				Captures: map[string]Role{"1": RoleSecondary},
 			},
 			tableStatus: map[model.CaptureID]*schedulepb.TableStatus{
 				"1": {
@@ -173,8 +174,10 @@ func TestNewReplicationSet(t *testing.T) {
 		{
 			// Rebuild remove table state, Removing.
 			set: &ReplicationSet{
-				State:    ReplicationSetStateRemoving,
-				Captures: map[string]struct{}{"1": {}, "2": {}},
+				State: ReplicationSetStateRemoving,
+				Captures: map[string]Role{
+					"1": RoleUndetermined, "2": RoleUndetermined,
+				},
 			},
 			tableStatus: map[model.CaptureID]*schedulepb.TableStatus{
 				"1": {
@@ -209,9 +212,9 @@ func TestNewReplicationSet(t *testing.T) {
 
 		output, err := NewReplicationSet(0, checkpoint, status, model.ChangeFeedID{})
 		if set == nil {
-			require.Error(t, err)
+			require.Errorf(t, err, "%d", id)
 		} else {
-			require.Nil(t, err)
+			require.Nilf(t, err, "%+v, %d", err, id)
 			require.EqualValuesf(t, set, output, "%d", id)
 		}
 	}
@@ -339,7 +342,7 @@ func TestReplicationSetAddTable(t *testing.T) {
 		},
 	}, msgs[0])
 	require.Equal(t, ReplicationSetStatePrepare, r.State)
-	require.Equal(t, from, r.Secondary)
+	require.True(t, r.isInRole(from, RoleSecondary))
 
 	// No-op if add table again.
 	msgs, err = r.handleAddTable(from)
@@ -367,7 +370,7 @@ func TestReplicationSetAddTable(t *testing.T) {
 		},
 	}, msgs[0])
 	require.Equal(t, ReplicationSetStatePrepare, r.State)
-	require.Equal(t, from, r.Secondary)
+	require.True(t, r.isInRole(from, RoleSecondary))
 
 	// Prepare is in-progress.
 	msgs, err = r.handleTableStatus(from, &schedulepb.TableStatus{
@@ -377,7 +380,7 @@ func TestReplicationSetAddTable(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
 	require.Equal(t, ReplicationSetStatePrepare, r.State)
-	require.Equal(t, from, r.Secondary)
+	require.True(t, r.isInRole(from, RoleSecondary))
 
 	// Prepare -> Commit.
 	msgs, err = r.handleTableStatus(from, &schedulepb.TableStatus{
@@ -401,7 +404,7 @@ func TestReplicationSetAddTable(t *testing.T) {
 	}, msgs[0])
 	require.Equal(t, ReplicationSetStateCommit, r.State)
 	require.Equal(t, from, r.Primary)
-	require.Equal(t, "", r.Secondary)
+	require.False(t, r.hasRole(RoleSecondary))
 	// The secondary AddTable request may be lost.
 	msgs, err = r.handleTableStatus(from, &schedulepb.TableStatus{
 		TableID: tableID,
@@ -424,7 +427,7 @@ func TestReplicationSetAddTable(t *testing.T) {
 	}, msgs[0])
 	require.Equal(t, ReplicationSetStateCommit, r.State)
 	require.Equal(t, from, r.Primary)
-	require.Equal(t, "", r.Secondary)
+	require.False(t, r.hasRole(RoleSecondary))
 
 	// Commit -> Replicating
 	msgs, err = r.handleTableStatus(from, &schedulepb.TableStatus{
@@ -435,7 +438,7 @@ func TestReplicationSetAddTable(t *testing.T) {
 	require.Len(t, msgs, 0)
 	require.Equal(t, ReplicationSetStateReplicating, r.State)
 	require.Equal(t, from, r.Primary)
-	require.Equal(t, "", r.Secondary)
+	require.False(t, r.hasRole(RoleSecondary))
 
 	// Replicating -> Replicating
 	msgs, err = r.handleTableStatus(from, &schedulepb.TableStatus{
@@ -450,7 +453,7 @@ func TestReplicationSetAddTable(t *testing.T) {
 	require.Len(t, msgs, 0)
 	require.Equal(t, ReplicationSetStateReplicating, r.State)
 	require.Equal(t, from, r.Primary)
-	require.Equal(t, "", r.Secondary)
+	require.False(t, r.hasRole(RoleSecondary))
 	require.Equal(t, schedulepb.Checkpoint{
 		CheckpointTs: 3,
 		ResolvedTs:   4,
@@ -472,9 +475,9 @@ func TestReplicationSetRemoveTable(t *testing.T) {
 	require.False(t, r.hasRemoved())
 
 	// Replicating -> Removing
-	r.Captures[from] = struct{}{}
-	r.Primary = from
 	r.State = ReplicationSetStateReplicating
+	require.Nil(t, r.setCapture(from, RoleSecondary))
+	require.Nil(t, r.promoteSecondary(from))
 	msgs, err = r.handleRemoveTable()
 	require.Nil(t, err)
 	require.Len(t, msgs, 1)
@@ -529,9 +532,9 @@ func TestReplicationSetRemoveTable(t *testing.T) {
 
 func clone(r *ReplicationSet) *ReplicationSet {
 	rClone := *r
-	rClone.Captures = make(map[string]struct{})
-	for captureID := range r.Captures {
-		rClone.Captures[captureID] = struct{}{}
+	rClone.Captures = make(map[string]Role)
+	for captureID, role := range r.Captures {
+		rClone.Captures[captureID] = role
 	}
 	return &rClone
 }
@@ -547,16 +550,14 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	dest := "2"
 	// Ignore removing table if it's not in replicating.
 	r.State = ReplicationSetStatePrepare
-	r.Secondary = source
-	r.Captures[source] = struct{}{}
+	require.Nil(t, r.setCapture(source, RoleSecondary))
 	msgs, err := r.handleMoveTable(dest)
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
 	require.NotContains(t, r.Captures, dest)
 
 	r.State = ReplicationSetStateReplicating
-	r.Primary = source
-	r.Secondary = ""
+	require.Nil(t, r.promoteSecondary(source))
 
 	// Replicating -> Prepare
 	msgs, err = r.handleMoveTable(dest)
@@ -576,7 +577,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 		},
 	}, msgs[0])
 	require.Equal(t, ReplicationSetStatePrepare, r.State)
-	require.Equal(t, dest, r.Secondary)
+	require.True(t, r.isInRole(dest, RoleSecondary))
 	require.Equal(t, source, r.Primary)
 
 	// No-op if add table again.
@@ -621,7 +622,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 		},
 	}, msgs[0])
 	require.Equal(t, ReplicationSetStatePrepare, r.State)
-	require.Equal(t, dest, r.Secondary)
+	require.True(t, r.isInRole(dest, RoleSecondary))
 
 	// Prepare -> Commit.
 	msgs, err = r.handleTableStatus(dest, &schedulepb.TableStatus{
@@ -641,7 +642,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	}, msgs[0])
 	require.Equal(t, ReplicationSetStateCommit, r.State)
 	require.Equal(t, source, r.Primary)
-	require.Equal(t, dest, r.Secondary)
+	require.True(t, r.isInRole(dest, RoleSecondary))
 
 	// Source updates it's table status
 	msgs, err = r.handleTableStatus(source, &schedulepb.TableStatus{
@@ -665,7 +666,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	}, msgs[0])
 	require.Equal(t, ReplicationSetStateCommit, r.State)
 	require.Equal(t, source, r.Primary)
-	require.Equal(t, dest, r.Secondary)
+	require.True(t, r.isInRole(dest, RoleSecondary))
 	require.Equal(t, schedulepb.Checkpoint{
 		CheckpointTs: 2,
 		ResolvedTs:   3,
@@ -684,7 +685,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	require.Len(t, msgs, 0)
 	require.Equal(t, ReplicationSetStateCommit, r.State)
 	require.Equal(t, source, r.Primary)
-	require.Equal(t, dest, r.Secondary)
+	require.True(t, r.isInRole(dest, RoleSecondary))
 	require.Equal(t, schedulepb.Checkpoint{
 		CheckpointTs: 3,
 		ResolvedTs:   3,
@@ -717,7 +718,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	}, msgs[0])
 	require.Equal(t, ReplicationSetStateCommit, r.State)
 	require.Equal(t, dest, r.Primary)
-	require.Equal(t, "", r.Secondary)
+	require.False(t, r.hasRole(RoleSecondary))
 	require.Equal(t, schedulepb.Checkpoint{
 		CheckpointTs: 3,
 		ResolvedTs:   4,
@@ -749,7 +750,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	}, msgs[0])
 	require.Equal(t, ReplicationSetStateCommit, rClone.State)
 	require.Equal(t, dest, rClone.Primary)
-	require.Equal(t, "", rClone.Secondary)
+	require.False(t, rClone.hasRole(RoleSecondary))
 	require.Equal(t, schedulepb.Checkpoint{
 		CheckpointTs: 3,
 		ResolvedTs:   3,
@@ -764,7 +765,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	require.Len(t, msgs, 0)
 	require.Equal(t, ReplicationSetStateReplicating, r.State)
 	require.Equal(t, dest, r.Primary)
-	require.Equal(t, "", r.Secondary)
+	require.False(t, r.hasRole(RoleSecondary))
 }
 
 func TestReplicationSetCaptureShutdown(t *testing.T) {
@@ -793,7 +794,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 		},
 	}, msgs[0])
 	require.Equal(t, ReplicationSetStatePrepare, r.State)
-	require.Equal(t, from, r.Secondary)
+	require.True(t, r.isInRole(from, RoleSecondary))
 
 	affected := false
 	// Secondary shutdown during Prepare, Prepare -> Absent
@@ -805,7 +806,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 		require.Len(t, msgs, 0)
 		require.Empty(t, rClone.Captures)
 		require.Equal(t, "", rClone.Primary)
-		require.Equal(t, "", rClone.Secondary)
+		require.False(t, rClone.hasRole(RoleSecondary))
 		require.Equal(t, ReplicationSetStateAbsent, rClone.State)
 	})
 
@@ -818,7 +819,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 	require.Len(t, msgs, 1)
 	require.Equal(t, ReplicationSetStateCommit, r.State)
 	require.Equal(t, from, r.Primary)
-	require.Equal(t, "", r.Secondary)
+	require.False(t, r.hasRole(RoleSecondary))
 
 	// Secondary shutdown during Commit, Commit -> Absent
 	t.Run("AddTableSecondaryShutdownDuringCommit", func(t *testing.T) {
@@ -829,7 +830,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 		require.Len(t, msgs, 0)
 		require.Empty(t, rClone.Captures)
 		require.Equal(t, "", rClone.Primary)
-		require.Equal(t, "", rClone.Secondary)
+		require.False(t, rClone.hasRole(RoleSecondary))
 		require.Equal(t, ReplicationSetStateAbsent, rClone.State)
 	})
 
@@ -842,7 +843,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 	require.Len(t, msgs, 0)
 	require.Equal(t, ReplicationSetStateReplicating, r.State)
 	require.Equal(t, from, r.Primary)
-	require.Equal(t, "", r.Secondary)
+	require.False(t, r.hasRole(RoleSecondary))
 
 	// Primary shutdown during Replicating, Replicating -> Absent
 	t.Run("AddTablePrimaryShutdownDuringReplicating", func(t *testing.T) {
@@ -853,7 +854,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 		require.Len(t, msgs, 0)
 		require.Empty(t, rClone.Captures)
 		require.Equal(t, "", rClone.Primary)
-		require.Equal(t, "", rClone.Secondary)
+		require.False(t, rClone.hasRole(RoleSecondary))
 		require.Equal(t, ReplicationSetStateAbsent, rClone.State)
 	})
 
@@ -863,7 +864,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, msgs, 1)
 	require.Equal(t, ReplicationSetStatePrepare, r.State)
-	require.Equal(t, dest, r.Secondary)
+	require.True(t, r.isInRole(dest, RoleSecondary))
 
 	// Primary shutdown during Prepare, Prepare -> Prepare
 	t.Run("MoveTablePrimaryShutdownDuringPrepare", func(t *testing.T) {
@@ -872,30 +873,34 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 		require.Nil(t, err)
 		require.True(t, affected)
 		require.Len(t, msgs, 0)
-		require.EqualValues(t, map[string]struct{}{dest: {}}, rClone.Captures)
+		require.EqualValues(t, map[string]Role{dest: RoleSecondary}, rClone.Captures)
 		require.Equal(t, "", rClone.Primary)
-		require.Equal(t, dest, rClone.Secondary)
+		require.True(t, rClone.isInRole(dest, RoleSecondary))
 		require.Equal(t, ReplicationSetStatePrepare, rClone.State)
 		// Secondary shutdown after primary shutdown, Prepare -> Absent
-		msgs, affected, err = rClone.handleCaptureShutdown(rClone.Secondary)
+		secondary, ok := rClone.getRole(RoleSecondary)
+		require.True(t, ok)
+		msgs, affected, err = rClone.handleCaptureShutdown(secondary)
 		require.Nil(t, err)
 		require.True(t, affected)
 		require.Len(t, msgs, 0)
 		require.Empty(t, rClone.Captures)
 		require.Equal(t, "", rClone.Primary)
-		require.Equal(t, "", rClone.Secondary)
+		require.False(t, rClone.hasRole(RoleSecondary))
 		require.Equal(t, ReplicationSetStateAbsent, rClone.State)
 	})
 	// Primary shutdown during Prepare, Prepare -> Prepare
 	t.Run("MoveTableSecondaryShutdownDuringPrepare", func(t *testing.T) {
 		rClone := clone(r)
-		msgs, affected, err = rClone.handleCaptureShutdown(rClone.Secondary)
+		secondary, ok := rClone.getRole(RoleSecondary)
+		require.True(t, ok)
+		msgs, affected, err = rClone.handleCaptureShutdown(secondary)
 		require.Nil(t, err)
 		require.True(t, affected)
 		require.Len(t, msgs, 0)
-		require.EqualValues(t, map[string]struct{}{from: {}}, rClone.Captures)
+		require.EqualValues(t, map[string]Role{from: RolePrimary}, rClone.Captures)
 		require.Equal(t, from, rClone.Primary)
-		require.Equal(t, "", rClone.Secondary)
+		require.False(t, rClone.hasRole(RoleSecondary))
 		require.Equal(t, ReplicationSetStateReplicating, rClone.State)
 	})
 
@@ -908,7 +913,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 	require.Len(t, msgs, 1)
 	require.Equal(t, ReplicationSetStateCommit, r.State)
 	require.Equal(t, from, r.Primary)
-	require.Equal(t, dest, r.Secondary)
+	require.True(t, r.isInRole(dest, RoleSecondary))
 
 	// Original primary shutdown during Commit, Commit -> Commit
 	t.Run("MoveTableOriginalPrimaryShutdownDuringCommit", func(t *testing.T) {
@@ -930,9 +935,9 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 				},
 			},
 		}, msgs[0])
-		require.EqualValues(t, map[string]struct{}{dest: {}}, rClone.Captures)
+		require.EqualValues(t, map[string]Role{dest: RolePrimary}, rClone.Captures)
 		require.Equal(t, dest, rClone.Primary)
-		require.Equal(t, "", rClone.Secondary)
+		require.False(t, rClone.hasRole(RoleSecondary))
 		require.Equal(t, ReplicationSetStateCommit, rClone.State)
 		// New primary shutdown after original primary shutdown, Commit -> Absent
 		msgs, affected, err = rClone.handleCaptureShutdown(dest)
@@ -941,20 +946,22 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 		require.Len(t, msgs, 0)
 		require.Empty(t, rClone.Captures)
 		require.Equal(t, "", rClone.Primary)
-		require.Equal(t, "", rClone.Secondary)
+		require.False(t, rClone.hasRole(RoleSecondary))
 		require.Equal(t, ReplicationSetStateAbsent, rClone.State)
 	})
 
 	// Secondary shutdown during Commit, Commit -> Commit
 	t.Run("MoveTableSecondaryShutdownDuringCommit", func(t *testing.T) {
 		rClone := clone(r)
-		msgs, affected, err = rClone.handleCaptureShutdown(rClone.Secondary)
+		secondary, ok := rClone.getRole(RoleSecondary)
+		require.True(t, ok)
+		msgs, affected, err = rClone.handleCaptureShutdown(secondary)
 		require.Nil(t, err)
 		require.True(t, affected)
 		require.Len(t, msgs, 0)
-		require.EqualValues(t, map[string]struct{}{from: {}}, rClone.Captures)
+		require.EqualValues(t, map[string]Role{from: RolePrimary}, rClone.Captures)
 		require.Equal(t, from, rClone.Primary)
-		require.Equal(t, "", rClone.Secondary)
+		require.False(t, rClone.hasRole(RoleSecondary))
 		require.Equal(t, ReplicationSetStateCommit, rClone.State)
 
 		// Original primary is still replicating, Commit -> Replicating
@@ -966,9 +973,10 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 			})
 			require.Nil(t, err)
 			require.Len(t, msgs, 0)
-			require.EqualValues(t, map[string]struct{}{from: {}}, rClone1.Captures)
+			require.EqualValues(
+				t, map[string]Role{from: RolePrimary}, rClone1.Captures)
 			require.Equal(t, from, rClone1.Primary)
-			require.Equal(t, "", rClone1.Secondary)
+			require.False(t, rClone1.hasRole(RoleSecondary))
 			require.Equal(t, ReplicationSetStateReplicating, rClone1.State)
 		})
 
@@ -983,7 +991,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 			require.Len(t, msgs, 0)
 			require.Empty(t, rClone1.Captures)
 			require.Equal(t, "", rClone1.Primary)
-			require.Equal(t, "", rClone1.Secondary)
+			require.False(t, rClone1.hasRole(RoleSecondary))
 			require.Equal(t, ReplicationSetStateAbsent, rClone1.State)
 		})
 
@@ -1012,7 +1020,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 			}, msgs[0])
 			require.Contains(t, rClone1.Captures, from)
 			require.Equal(t, "", rClone1.Primary)
-			require.Equal(t, from, rClone1.Secondary)
+			require.True(t, rClone1.isInRole(from, RoleSecondary))
 			require.Equal(t, ReplicationSetStatePrepare, rClone1.State)
 		})
 	})
@@ -1026,7 +1034,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 	require.Len(t, msgs, 1)
 	require.Equal(t, ReplicationSetStateCommit, r.State)
 	require.Equal(t, dest, r.Primary)
-	require.Equal(t, "", r.Secondary)
+	require.False(t, r.hasRole(RoleSecondary))
 	t.Run("MoveTableNewPrimaryShutdownDuringCommit", func(t *testing.T) {
 		rClone := clone(r)
 		msgs, affected, err = rClone.handleCaptureShutdown(rClone.Primary)
@@ -1035,7 +1043,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 		require.Len(t, msgs, 0)
 		require.Empty(t, rClone.Captures)
 		require.Equal(t, "", rClone.Primary)
-		require.Equal(t, "", rClone.Secondary)
+		require.False(t, rClone.hasRole(RoleSecondary))
 		require.Equal(t, ReplicationSetStateAbsent, rClone.State)
 	})
 
@@ -1048,7 +1056,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 	require.Len(t, msgs, 0)
 	require.Equal(t, ReplicationSetStateReplicating, r.State)
 	require.Equal(t, dest, r.Primary)
-	require.Equal(t, "", r.Secondary)
+	require.False(t, r.hasRole(RoleSecondary))
 
 	// Unknown capture shutdown has no effect.
 	t.Run("UnknownCaptureShutdown", func(t *testing.T) {
@@ -1074,7 +1082,7 @@ func TestReplicationSetCaptureShutdownAfterReconstructCommitState(t *testing.T) 
 	require.Nil(t, err)
 	require.Equal(t, ReplicationSetStateCommit, r.State)
 	require.Equal(t, "", r.Primary)
-	require.Equal(t, from, r.Secondary)
+	require.True(t, r.isInRole(from, RoleSecondary))
 
 	// Commit -> Absent as there is no primary nor secondary.
 	msg, affected, err := r.handleCaptureShutdown(from)
@@ -1083,7 +1091,7 @@ func TestReplicationSetCaptureShutdownAfterReconstructCommitState(t *testing.T) 
 	require.Empty(t, msg)
 	require.Equal(t, ReplicationSetStateAbsent, r.State)
 	require.Equal(t, "", r.Primary)
-	require.Equal(t, "", r.Secondary)
+	require.False(t, r.hasRole(RoleSecondary))
 }
 
 func TestReplicationSetMoveTableWithHeartbeatResponse(t *testing.T) {
@@ -1095,17 +1103,16 @@ func TestReplicationSetMoveTableWithHeartbeatResponse(t *testing.T) {
 
 	source := "1"
 	dest := "2"
-	r.Captures[source] = struct{}{}
 	r.State = ReplicationSetStateReplicating
-	r.Primary = source
-	r.Secondary = ""
+	require.Nil(t, r.setCapture(source, RoleSecondary))
+	require.Nil(t, r.promoteSecondary(source))
 
 	// Replicating -> Prepare
 	msgs, err := r.handleMoveTable(dest)
 	require.Nil(t, err)
 	require.Len(t, msgs, 1)
 	require.Equal(t, ReplicationSetStatePrepare, r.State)
-	require.Equal(t, dest, r.Secondary)
+	require.True(t, r.isInRole(dest, RoleSecondary))
 	require.Equal(t, source, r.Primary)
 
 	// Prepare -> Commit.
@@ -1117,7 +1124,7 @@ func TestReplicationSetMoveTableWithHeartbeatResponse(t *testing.T) {
 	require.Len(t, msgs, 1)
 	require.Equal(t, ReplicationSetStateCommit, r.State)
 	require.Equal(t, source, r.Primary)
-	require.Equal(t, dest, r.Secondary)
+	require.True(t, r.isInRole(dest, RoleSecondary))
 
 	// Source updates it's table status
 	// Source is removed.
@@ -1133,7 +1140,7 @@ func TestReplicationSetMoveTableWithHeartbeatResponse(t *testing.T) {
 	require.Len(t, msgs, 1)
 	require.Equal(t, ReplicationSetStateCommit, r.State)
 	require.Equal(t, dest, r.Primary)
-	require.Equal(t, "", r.Secondary)
+	require.False(t, r.hasRole(RoleSecondary))
 	require.Equal(t, schedulepb.Checkpoint{
 		CheckpointTs: 3,
 		ResolvedTs:   4,
@@ -1148,7 +1155,7 @@ func TestReplicationSetMoveTableWithHeartbeatResponse(t *testing.T) {
 	require.Len(t, msgs, 0)
 	require.Equal(t, ReplicationSetStateCommit, r.State)
 	require.Equal(t, dest, r.Primary)
-	require.Equal(t, "", r.Secondary)
+	require.False(t, r.hasRole(RoleSecondary))
 	require.Equal(t, schedulepb.Checkpoint{
 		CheckpointTs: 3,
 		ResolvedTs:   4,
@@ -1163,7 +1170,7 @@ func TestReplicationSetMoveTableWithHeartbeatResponse(t *testing.T) {
 	require.Len(t, msgs, 0)
 	require.Equal(t, ReplicationSetStateReplicating, r.State)
 	require.Equal(t, dest, r.Primary)
-	require.Equal(t, "", r.Secondary)
+	require.False(t, r.hasRole(RoleSecondary))
 }
 
 func TestReplicationSetMarshalJSON(t *testing.T) {
@@ -1183,17 +1190,16 @@ func TestReplicationSetMoveTableSameDestCapture(t *testing.T) {
 
 	source := "1"
 	dest := source
-	r.Captures[source] = struct{}{}
 	r.State = ReplicationSetStateReplicating
-	r.Primary = source
-	r.Secondary = ""
+	require.Nil(t, r.setCapture(source, RoleSecondary))
+	require.Nil(t, r.promoteSecondary(source))
 
 	// Ignore move table.
 	msgs, err := r.handleMoveTable(dest)
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
 	require.Equal(t, ReplicationSetStateReplicating, r.State)
-	require.Equal(t, "", r.Secondary)
+	require.False(t, r.hasRole(RoleSecondary))
 	require.Equal(t, source, r.Primary)
 }
 
@@ -1214,7 +1220,7 @@ func TestReplicationSetCommitRestart(t *testing.T) {
 	r, err := NewReplicationSet(0, 0, tableStatus, model.ChangeFeedID{})
 	require.Nil(t, err)
 	require.Equal(t, ReplicationSetStateCommit, r.State)
-	require.Equal(t, "1", r.Secondary)
+	require.EqualValues(t, RoleSecondary, r.Captures["1"])
 	require.Equal(t, "", r.Primary)
 	require.Contains(t, r.Captures, "2")
 
@@ -1226,7 +1232,7 @@ func TestReplicationSetCommitRestart(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
 	require.Equal(t, ReplicationSetStateCommit, r.State)
-	require.Equal(t, "1", r.Secondary)
+	require.EqualValues(t, RoleSecondary, r.Captures["1"])
 	require.Equal(t, "", r.Primary)
 	require.Contains(t, r.Captures, "2")
 
@@ -1238,7 +1244,7 @@ func TestReplicationSetCommitRestart(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
 	require.Equal(t, ReplicationSetStateCommit, r.State)
-	require.Equal(t, "1", r.Secondary)
+	require.EqualValues(t, RoleSecondary, r.Captures["1"])
 	require.Equal(t, "", r.Primary)
 	require.Contains(t, r.Captures, "2")
 
@@ -1251,7 +1257,7 @@ func TestReplicationSetCommitRestart(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
 	require.Equal(t, ReplicationSetStateCommit, rClone.State)
-	require.Equal(t, "1", rClone.Secondary)
+	require.EqualValues(t, RoleSecondary, rClone.Captures["1"])
 	require.Equal(t, "", rClone.Primary)
 	require.NotContains(t, rClone.Captures, "2")
 	msgs, err = r.handleTableStatus("2", &schedulepb.TableStatus{
@@ -1261,7 +1267,7 @@ func TestReplicationSetCommitRestart(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
 	require.Equal(t, ReplicationSetStateCommit, r.State)
-	require.Equal(t, "1", r.Secondary)
+	require.EqualValues(t, RoleSecondary, r.Captures["1"])
 	require.Equal(t, "", r.Primary)
 	require.NotContains(t, r.Captures, "2")
 
@@ -1276,7 +1282,7 @@ func TestReplicationSetCommitRestart(t *testing.T) {
 	require.False(t, msgs[0].DispatchTableRequest.GetAddTable().IsSecondary)
 	require.Equal(t, ReplicationSetStateCommit, r.State)
 	require.Equal(t, "1", r.Primary)
-	require.Equal(t, "", r.Secondary)
+	require.False(t, r.hasRole(RoleSecondary))
 }
 
 func TestReplicationSetRemoveRestart(t *testing.T) {
@@ -1296,7 +1302,7 @@ func TestReplicationSetRemoveRestart(t *testing.T) {
 	r, err := NewReplicationSet(0, 0, tableStatus, model.ChangeFeedID{})
 	require.Nil(t, err)
 	require.Equal(t, ReplicationSetStateRemoving, r.State)
-	require.Equal(t, "", r.Secondary)
+	require.False(t, r.hasRole(RoleSecondary))
 	require.Equal(t, "", r.Primary)
 	require.Contains(t, r.Captures, "1")
 	require.Contains(t, r.Captures, "2")
