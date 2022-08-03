@@ -291,8 +291,6 @@ func CreateJobViaOpenAPI(
 	data := &servermaster.APICreateJobRequest{
 		JobType:   int32(tp),
 		JobConfig: cfg,
-		TenantID:  tenantID,
-		ProjectID: projectID,
 	}
 	postData, err := json.Marshal(data)
 	if err != nil {
@@ -300,7 +298,9 @@ func CreateJobViaOpenAPI(
 	}
 
 	resp, err := http.Post(
-		"http://"+apiEndpoint+"/api/v1/jobs",
+		fmt.Sprintf("http://%s/api/v1/jobs?tenant_id=%s&project_id=%s",
+			apiEndpoint, tenantID, projectID,
+		),
 		"application/json",
 		bytes.NewReader(postData),
 	)

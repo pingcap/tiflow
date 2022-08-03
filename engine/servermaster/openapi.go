@@ -39,8 +39,6 @@ const (
 // APICreateJobRequest defines the json fields when creating a job with OpenAPI
 type APICreateJobRequest struct {
 	JobType   int32  `json:"job_type"`
-	TenantID  string `json:"tenant_id"`
-	ProjectID string `json:"project_id"`
 	JobConfig string `json:"job_config"`
 }
 
@@ -145,10 +143,9 @@ func (o *OpenAPI) SubmitJob(c *gin.Context) {
 		_ = c.AbortWithError(http.StatusBadRequest, err)
 		return
 	}
-
 	projInfo := &pb.ProjectInfo{
-		TenantId:  data.TenantID,
-		ProjectId: data.ProjectID,
+		TenantId:  c.Query(apiOpVarTenantID),
+		ProjectId: c.Query(apiOpVarProjectID),
 	}
 
 	jobMgr, ok := o.infoProvider.JobManager()
