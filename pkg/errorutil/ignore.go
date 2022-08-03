@@ -53,6 +53,9 @@ func IsIgnorableMySQLDDLError(err error) bool {
 
 // IsRetryableEtcdError is used to check what error can be retried.
 func IsRetryableEtcdError(err error) bool {
+	if err == nil {
+		return false
+	}
 	etcdErr := errors.Cause(err)
 
 	switch etcdErr {
