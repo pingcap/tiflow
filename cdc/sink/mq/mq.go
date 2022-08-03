@@ -79,11 +79,12 @@ func newMqSink(
 		return nil, errors.Trace(err)
 	}
 
+	captureAddr := contextutil.CaptureAddrFromCtx(ctx)
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	role := contextutil.RoleFromCtx(ctx)
 
 	encoder := encoderBuilder.Build()
-	statistics := metrics.NewStatistics(ctx, metrics.SinkTypeMQ)
+	statistics := metrics.NewStatistics(ctx, captureAddr, metrics.SinkTypeMQ)
 	flushWorker := newFlushWorker(encoder, mqProducer, statistics)
 
 	s := &mqSink{

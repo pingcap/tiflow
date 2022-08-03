@@ -21,12 +21,12 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
+	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/stretchr/testify/require"
 )
 
-// Assert TableSink implementation
+// Assert EventSink implementation
 var _ eventsink.EventSink[*model.SingleTableTxn] = (*mockEventSink)(nil)
 
 type mockEventSink struct {
@@ -54,7 +54,7 @@ func (m *mockEventSink) acknowledge(commitTs uint64) []*eventsink.TxnCallbackabl
 	}
 	ackedEvents := m.events[:i]
 	for _, event := range ackedEvents {
-		if event.TableStatus.Load() != pipeline.TableStateStopping {
+		if event.GetTableSinkState() != state.TableSinkStopping {
 			event.Callback()
 		} else {
 			event.Callback()
@@ -161,7 +161,7 @@ func TestNewEventTableSink(t *testing.T) {
 	require.NotNil(t, tb.progressTracker, "progressTracker should be set")
 	require.NotNil(t, tb.eventAppender, "eventAppender should be set")
 	require.Equal(t, 0, len(tb.eventBuffer), "eventBuffer should be empty")
-	require.Equal(t, pipeline.TableStatePreparing, tb.state, "tableState should be unknown")
+	require.Equal(t, state.TableSinkSinking, tb.state, "table sink should be sinking")
 }
 
 func TestAppendRowChangedEvents(t *testing.T) {
@@ -267,13 +267,13 @@ func TestClose(t *testing.T) {
 		wg.Done()
 	}()
 	require.Eventually(t, func() bool {
-		return pipeline.TableStateStopping == tb.state.Load()
+		return state.TableSinkStopping == tb.state.Load()
 	}, time.Second, time.Millisecond*10, "table should be stopping")
 	droppedEvents := sink.acknowledge(105)
 	require.Len(t, droppedEvents, 7, "all events should be dropped")
 	wg.Wait()
 	require.Eventually(t, func() bool {
-		return pipeline.TableStateStopped == tb.state.Load()
+		return state.TableSinkStopped == tb.state.Load()
 	}, time.Second, time.Millisecond*10, "table should be closed")
 }
 
@@ -296,7 +296,7 @@ func TestCloseCancellable(t *testing.T) {
 		wg.Done()
 	}()
 	require.Eventually(t, func() bool {
-		return pipeline.TableStateStopping == tb.state.Load()
+		return state.TableSinkStopping == tb.state.Load()
 	}, time.Second, time.Millisecond*10, "table should be stopping")
 	wg.Wait()
 }
