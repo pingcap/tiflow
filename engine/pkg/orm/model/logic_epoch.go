@@ -40,6 +40,7 @@ type LogicEpoch struct {
 // EpochClient defines the client to generate epoch
 type EpochClient interface {
 	// GenEpoch increases the backend epoch by 1 and return the new epoch
+	// Guarantee to be thread-safe
 	GenEpoch(ctx context.Context) (int64, error)
 
 	// Close releases some inner resources
@@ -61,7 +62,7 @@ func NewEpochClient(jobID string, db *gorm.DB) (*epochClient, error) {
 }
 
 type epochClient struct {
-	// isInitialized is for lazy initializatiom
+	// isInitialized is for lazy initialization
 	isInitialized atomic.Bool
 	jobID         string
 	db            *gorm.DB
@@ -81,6 +82,7 @@ func (e *epochClient) initialize(ctx context.Context) error {
 }
 
 // GenEpoch implements GenEpoch of EpochClient
+// Guarantee to be thread-safe
 func (e *epochClient) GenEpoch(ctx context.Context) (int64, error) {
 	// we make lazy initialization for two reasons:
 	// 1. Not all kinds of client need calling GenEpoch
