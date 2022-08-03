@@ -600,19 +600,20 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 		query.Data = ret
 	case QueryHealth:
 		isHealthy := true
-		for _, cfReactor := range o.changefeeds {
-			provider := cfReactor.GetInfoProvider()
-			if provider == nil || !provider.IsInitialized() {
-				// The scheduler has not been initialized yet, it is considered
-				// unhealthy, because owner can not schedule tables for now.
-				isHealthy = false
-				break
-			}
-		}
 		if !o.changefeedTicked {
 			// Owner has not yet tick changefeeds, some changefeeds may be not
 			// initialized.
 			isHealthy = false
+		} else {
+			for _, cfReactor := range o.changefeeds {
+				provider := cfReactor.GetInfoProvider()
+				if provider == nil || !provider.IsInitialized() {
+					// The scheduler has not been initialized yet, it is considered
+					// unhealthy, because owner can not schedule tables for now.
+					isHealthy = false
+					break
+				}
+			}
 		}
 		query.Data = isHealthy
 	}
