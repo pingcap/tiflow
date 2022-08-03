@@ -33,12 +33,12 @@ function run() {
 	run_sql_file $CUR/data/data.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	# sync_diff can't check non-exist table, so we check expected tables are created in downstream first
-	check_table_exists test.binary_columns ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 200
-	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
+	check_table_exists test.binary_columns ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 600
+	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 600
 
 	run_sql_file $CUR/data/data_gbk.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	check_table_exists test.binary_columns ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 200
-	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
+	check_table_exists test.binary_columns ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 600
+	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 600
 
 	cleanup_process $CDC_BINARY
 }
