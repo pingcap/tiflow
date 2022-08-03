@@ -314,9 +314,9 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 		case <-advanceCheckTicker.C:
 			currentTimeFromPD, err := w.session.client.pdClock.CurrentTime()
 			if err != nil {
-				log.Warn("failed to get current version from PD",
+				log.Warn("failed to get current time from PD",
 					zap.Error(err),
-					zap.String("namesapce", w.session.client.changefeed.Namespace),
+					zap.String("namespace", w.session.client.changefeed.Namespace),
 					zap.String("changefeed", w.session.client.changefeed.ID))
 				continue
 			}
@@ -352,7 +352,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 					sinceLastEvent := time.Since(rts.ts.eventTime)
 					if sinceLastResolvedTs > reconnectInterval && sinceLastEvent > reconnectInterval {
 						log.Warn("kv client reconnect triggered",
-							zap.String("namesapce", w.session.client.changefeed.Namespace),
+							zap.String("namespace", w.session.client.changefeed.Namespace),
 							zap.String("changefeed", w.session.client.changefeed.ID),
 							zap.Duration("duration", sinceLastResolvedTs), zap.Duration("sinceLastEvent", sinceLastResolvedTs))
 						return errReconnect
@@ -369,7 +369,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 						continue
 					}
 					log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
-						zap.String("namesapce", w.session.client.changefeed.Namespace),
+						zap.String("namespace", w.session.client.changefeed.Namespace),
 						zap.String("changefeed", w.session.client.changefeed.ID),
 						zap.String("addr", w.storeAddr),
 						zap.Uint64("regionID", rts.regionID),
@@ -382,7 +382,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 					if err != nil {
 						log.Warn("failed to resolve lock",
 							zap.Uint64("regionID", rts.regionID), zap.Error(err),
-							zap.String("namesapce", w.session.client.changefeed.Namespace),
+							zap.String("namespace", w.session.client.changefeed.Namespace),
 							zap.String("changefeed", w.session.client.changefeed.ID))
 						continue
 					}
