@@ -17,10 +17,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/kvproto/pkg/pdpb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/httputil"
@@ -32,6 +35,7 @@ import (
 const (
 	regionLabelPrefix     = "/pd/api/v1/config/region-label/rules"
 	gcServiceSafePointURL = "/pd/api/v1/gc/safepoint"
+	healthyAPI            = "/pd/api/v1/health"
 
 	// Split the default rule by `6e000000000000000000f8` to keep metadata region
 	// isolated from the normal data area.
@@ -65,8 +69,8 @@ type pdAPIClient struct {
 	dialClient *httputil.Client
 }
 
-// newPDApiClient create a new pdAPIClient.
-func newPDApiClient(pdClient pd.Client, conf *config.SecurityConfig) (*pdAPIClient, error) {
+// NewPDApiClient create a new pdAPIClient.
+func NewPDApiClient(pdClient pd.Client, conf *config.SecurityConfig) (*pdAPIClient, error) {
 	dialClient, err := httputil.NewClient(conf)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -77,19 +81,15 @@ func newPDApiClient(pdClient pd.Client, conf *config.SecurityConfig) (*pdAPIClie
 	}, nil
 }
 
-// UpdateMetaLabel is a reentrant function that updates the meta-region label of upstream cluster.
-func UpdateMetaLabel(ctx context.Context,
-	pdClient pd.Client,
-	conf *config.SecurityConfig,
-) error {
-	pc, err := newPDApiClient(pdClient, conf)
-	if err != nil {
-		return err
-	}
-	defer pc.dialClient.CloseIdleConnections()
+// Close close idle http connections
+func (pc *pdAPIClient) Close() {
+	pc.dialClient.CloseIdleConnections()
+}
 
-	err = retry.Do(ctx, func() error {
-		err = pc.patchMetaLabel(ctx)
+// UpdateMetaLabel is a reentrant function that updates the meta-region label of upstream cluster.
+func (pc *pdAPIClient) UpdateMetaLabel(ctx context.Context) error {
+	err := retry.Do(ctx, func() error {
+		err := pc.patchMetaLabel(ctx)
 		if err != nil {
 			log.Error("Fail to add meta region label to PD", zap.Error(err))
 			return err
@@ -121,16 +121,11 @@ type ListServiceGCSafepoint struct {
 }
 
 // ListGcServiceSafePoint list gc service safepoint from PD
-func ListGcServiceSafePoint(ctx context.Context,
-	pdClient pd.Client,
-	conf *config.SecurityConfig,
-) (*ListServiceGCSafepoint, error) {
-	pc, err := newPDApiClient(pdClient, conf)
-	if err != nil {
-		return nil, err
-	}
-	defer pc.dialClient.CloseIdleConnections()
-	var resp *ListServiceGCSafepoint
+func (pc *pdAPIClient) ListGcServiceSafePoint(ctx context.Context) (*ListServiceGCSafepoint, error) {
+	var (
+		resp *ListServiceGCSafepoint
+		err  error
+	)
 	err = retry.Do(ctx, func() error {
 		resp, err = pc.listGcServiceSafePoint(ctx)
 		if err != nil {
@@ -177,4 +172,50 @@ func (pc *pdAPIClient) listGcServiceSafePoint(
 		return nil, errors.Trace(err)
 	}
 	return &resp, nil
+}
+
+// getAllMemberEndpoints return all pd members
+func (pc *pdAPIClient) getAllMemberEndpoints(
+	ctx context.Context,
+) ([]*pdpb.Member, error) {
+	members, err := pc.pdClient.GetAllMembers(ctx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return members, nil
+	//
+	//result := make([]string, 0, len(members))
+	//for _, m := range members {
+	//	result = append(result, m.GetPeerUrls()[0])
+	//}
+	//return result, nil
+}
+
+func (pc *pdAPIClient) IsMemberHealthy(ctx context.Context) error {
+	members, err := pc.getAllMemberEndpoints(ctx)
+	if err != nil {
+		return err
+	}
+	for _, m := range members {
+		if err := pc.isMemberHealthy(ctx, m.GetPeerUrls()[0]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (pc *pdAPIClient) isMemberHealthy(ctx context.Context, endpoint string) error {
+	url := endpoint + healthyAPI
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	resp, err := pc.dialClient.Get(ctx, fmt.Sprintf("%s/", url))
+	if err != nil {
+		return err
+	}
+
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
+	return nil
 }

@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -251,16 +250,10 @@ func (s *server) etcdHealthChecker(ctx context.Context) error {
 		case <-ticker.C:
 			for _, pdEndpoint := range s.pdEndpoints {
 				start := time.Now()
-				ctx, cancel := context.WithTimeout(ctx, time.Second*10)
-				resp, err := httpCli.Get(ctx, fmt.Sprintf("%s/pd/api/v1/health", pdEndpoint))
-				if err != nil {
+				if err := isPDHealthy(ctx, httpCli, pdEndpoint); err != nil {
 					log.Warn("etcd health check error", zap.Error(err))
-				} else {
-					_, _ = io.Copy(io.Discard, resp.Body)
-					_ = resp.Body.Close()
-					metrics[pdEndpoint].Observe(float64(time.Since(start)) / float64(time.Second))
 				}
-				cancel()
+				metrics[pdEndpoint].Observe(float64(time.Since(start)) / float64(time.Second))
 			}
 		}
 	}

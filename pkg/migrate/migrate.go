@@ -374,7 +374,7 @@ func (m *migrator) migrateGcServiceSafePoint(ctx context.Context,
 	newGcServiceID string,
 	ttl int64,
 ) error {
-	gcServiceSafePoins, err := pdutil.ListGcServiceSafePoint(ctx, pdClient,
+	gcServiceSafePoints, err := pdutil.ListGcServiceSafePoint(ctx, pdClient,
 		config)
 	if err != nil {
 		log.Error("list gc service safepoint failed",
@@ -382,7 +382,7 @@ func (m *migrator) migrateGcServiceSafePoint(ctx context.Context,
 		return errors.Trace(err)
 	}
 	var cdcGcSafePoint *pdutil.ServiceSafePoint
-	for _, item := range gcServiceSafePoins.ServiceGCSafepoints {
+	for _, item := range gcServiceSafePoints.ServiceGCSafepoints {
 		if item.ServiceID == oldGcServiceID {
 			cdcGcSafePoint = item
 			break
