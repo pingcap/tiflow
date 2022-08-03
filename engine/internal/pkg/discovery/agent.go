@@ -190,21 +190,18 @@ func (a *agentImpl) handleWatchResp(
 		return errors.Annotate(resp.Err, "discovery agent handleWatchResp")
 	}
 
-	if resp.DelSet != nil {
-		for _, res := range resp.DelSet {
-			eventNotifier.Notify(Event{
-				Tp:   EventTypeDel,
-				Info: res,
-			})
-		}
+	for _, res := range resp.DelSet {
+		eventNotifier.Notify(Event{
+			Tp:   EventTypeDel,
+			Info: res,
+		})
 	}
-	if resp.AddSet != nil {
-		for _, res := range resp.AddSet {
-			eventNotifier.Notify(Event{
-				Tp:   EventTypeAdd,
-				Info: res,
-			})
-		}
+
+	for _, res := range resp.AddSet {
+		eventNotifier.Notify(Event{
+			Tp:   EventTypeAdd,
+			Info: res,
+		})
 	}
 
 	runner.ApplyWatchResult(resp)

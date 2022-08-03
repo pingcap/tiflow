@@ -129,7 +129,7 @@ func (c *mockCluster) AddBroker(id model.ExecutorID, baseDir string) {
 	c.brokers[id] = brk
 	c.brokerLock.Unlock()
 
-	c.executorInfo.AddExecutor(string(id))
+	c.executorInfo.AddExecutor(string(id), "")
 	c.executorGroup.AddClient(id, &executorClientStub{
 		brk: brk,
 	})

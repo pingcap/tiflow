@@ -21,8 +21,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/tiflow/engine/internal/pkg/discovery"
-
 	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/common"
@@ -34,6 +32,7 @@ import (
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/registry"
 	"github.com/pingcap/tiflow/engine/framework/taskutil"
+	"github.com/pingcap/tiflow/engine/internal/pkg/discovery"
 	"github.com/pingcap/tiflow/engine/model"
 	pkgClient "github.com/pingcap/tiflow/engine/pkg/client"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
@@ -60,7 +59,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// Server is a executor server abstraction
+// Server is an executor server.
 type Server struct {
 	cfg     *Config
 	testCtx *test.Context
@@ -197,7 +196,7 @@ func (s *Server) makeTask(
 		masterID,
 		workerConfig)
 	if err != nil {
-		log.L().Error("Failed to create worker", zap.Error(err))
+		log.Error("Failed to create worker", zap.Error(err))
 		return nil, err
 	}
 	if jm, ok := newWorker.(framework.BaseJobMasterExt); ok {

@@ -109,6 +109,7 @@ const (
 // ExecutorStatusChange describes an event where an
 // executor's status has changed.
 type ExecutorStatusChange struct {
-	ID ExecutorID
-	Tp ExecutorStatusChangeType
+	ID   ExecutorID
+	Tp   ExecutorStatusChangeType
+	Addr string
 }
