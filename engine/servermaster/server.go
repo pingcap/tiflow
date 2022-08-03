@@ -21,8 +21,6 @@ import (
 	"net/http"
 	"time"
 
-	serverutil2 "github.com/pingcap/tiflow/engine/servermaster/serverutil"
-
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
@@ -50,6 +48,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
+	serverutil2 "github.com/pingcap/tiflow/engine/servermaster/serverutil"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
@@ -103,9 +102,11 @@ type Server struct {
 	gcRunner      externRescManager.GCRunner
 	gcCoordinator externRescManager.GCCoordinator
 
-	msgService      *p2p.MessageRPCService
-	p2pMsgRouter    p2p.MessageRouter
-	rpcLogRL        *rate.Limiter
+	msgService   *p2p.MessageRPCService
+	p2pMsgRouter p2p.MessageRouter
+	rpcLogRL     *rate.Limiter
+
+	// Deprecated. Will be replaced with `discovery.Agent`.
 	discoveryKeeper *serverutil.DiscoveryKeepaliver
 
 	metaStoreManager MetaStoreManager
