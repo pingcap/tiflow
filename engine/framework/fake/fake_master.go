@@ -458,13 +458,28 @@ func (m *Master) OnWorkerOffline(worker framework.WorkerHandle, reason error) er
 	}
 
 	workerCkpt := zeroWorkerCheckpoint()
-	if ckpt, ok := m.cachedCheckpoint.Checkpoints[businessID]; ok {
-		workerCkpt = ckpt
+	checkpointLoaded := false
+	if ws, err := parseExtBytes(worker.Status().ExtBytes); err != nil {
+		log.Warn("failed to parse worker ext bytes", zap.Error(err))
 	} else {
-		workerCkpt.Revision = m.config.EtcdStartRevision
+		workerCkpt.Tick = ws.Tick
+		if ws.Checkpoint != nil {
+			workerCkpt.Revision = ws.Checkpoint.Revision
+			workerCkpt.MvccCount = ws.Checkpoint.MvccCount
+			workerCkpt.Value = ws.Checkpoint.Value
+			checkpointLoaded = true
+		}
 	}
-	if tick, ok := m.cachedCheckpoint.Ticks[businessID]; ok {
-		workerCkpt.Tick = tick
+	// can't load worker status from worker manager, try to load checkpoint from
+	// cached value.
+	if !checkpointLoaded {
+		log.Warn("try to load checkpoint from cached value",
+			zap.Any("checkpoint", m.cachedCheckpoint.Checkpoints[businessID]))
+		if ckpt, ok := m.cachedCheckpoint.Checkpoints[businessID]; ok {
+			workerCkpt = ckpt
+		} else {
+			workerCkpt.Revision = m.config.EtcdStartRevision
+		}
 	}
 
 	wcfg := m.genWorkerConfig(businessID, workerCkpt)
