@@ -38,10 +38,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/errorutil"
 )
 
-//var (
-//	createTime uint8
-//)
-
 // ignoreTrackerDDLError is also same with ignoreDDLError, but in order to keep tracker's table structure same as
 // upstream's, we can't ignore "already exists" errors because already exists doesn't mean same.
 func ignoreTrackerDDLError(err error) bool {
