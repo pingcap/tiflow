@@ -212,7 +212,6 @@ func TestIsConnectionRefusedError(t *testing.T) {
 
 func TestGetDDLStatusFromTiDB(t *testing.T) {
 	var (
-		//selectTimeSQL              = ""
 		adminShowDDLJobsSQL1       = ""
 		adminShowDDLJobsSQL2       = ""
 		adminShowDDLJobsLimitSQL1  = ""
@@ -343,7 +342,7 @@ func TestGetDDLStatusFromTiDB(t *testing.T) {
 	mock.ExpectQuery(adminShowDDLJobsLimitSQL12).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
 		50, "CREATE TABLE IF NOT EXISTS many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)"))
 
-	//test 4
+	// test 4
 	mock.ExpectQuery(adminShowDDLJobsSQL1).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "DB_NAME", "TABLE_NAME", "JOB_TYPE", "SCHEMA_STATE", "SCHEMA_ID", "TABLE_ID", "ROW_COUNT", "CREATE_TIME", "START_TIME", "END_TIME", "STATE"}).
 		AddRow(61, "many_tables_test", "t6", "alter table", "public", 1, 61, 0, "2022-08-02 2:51:39", "2022-08-02 2:51:39", "NULL", "running").
 		AddRow(60, "many_tables_test", "t5", "alter table", "public", 1, 60, 0, "2022-08-02 2:51:28", "2022-08-02 2:51:28", "2022-08-02 2:51:28", "synced").
@@ -356,7 +355,7 @@ func TestGetDDLStatusFromTiDB(t *testing.T) {
 		AddRow(53, "many_tables_test", "t4", "create table", "public", 1, 53, 0, "2022-08-02 2:47:55", "2022-08-02 2:47:55", "2022-08-02 2:47:55", "synced").
 		AddRow(52, "many_tables_test", "t3", "create table", "public", 1, 52, 0, "2022-08-02 2:47:24", "2022-08-02 2:47:24", "2022-08-02 2:47:24", "synced"))
 
-	//test 1
+	// test 1
 	status, err := GetDDLStatusFromTiDB(db, "ALTER TABLE many_tables_test.t6 ADD x timestamp DEFAULT current_timestamp", 1659379898)
 	require.Nil(t, err)
 	require.Equal(t, "running", status)
