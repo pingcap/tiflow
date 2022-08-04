@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pdutil
+package clock
 
 import (
 	"context"
@@ -36,8 +36,8 @@ type Clock interface {
 	Stop()
 }
 
-// PDClock cache time get from PD periodically and cache it
-type PDClock struct {
+// clock cache time get from PD periodically and cache it
+type clock struct {
 	pdClient pd.Client
 	mu       struct {
 		sync.RWMutex
@@ -48,9 +48,9 @@ type PDClock struct {
 	stopCh chan struct{}
 }
 
-// NewClock return a new PDClock
-func NewClock(ctx context.Context, pdClient pd.Client) (*PDClock, error) {
-	ret := &PDClock{
+// New return a new clock
+func New(ctx context.Context, pdClient pd.Client) (*clock, error) {
+	ret := &clock{
 		pdClient: pdClient,
 		stopCh:   make(chan struct{}, 1),
 	}
@@ -63,7 +63,7 @@ func NewClock(ctx context.Context, pdClient pd.Client) (*PDClock, error) {
 }
 
 // Run will get time from pd periodically to cache in timeCache
-func (c *PDClock) Run(ctx context.Context) {
+func (c *clock) Run(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
 	ticker := time.NewTicker(pdTimeUpdateInterval)
@@ -98,7 +98,7 @@ func (c *PDClock) Run(ctx context.Context) {
 }
 
 // CurrentTime returns current time from timeCache
-func (c *PDClock) CurrentTime() (time.Time, error) {
+func (c *clock) CurrentTime() (time.Time, error) {
 	c.mu.RLock()
 	err := c.mu.err
 	cacheTime := c.mu.timeCache
@@ -106,25 +106,8 @@ func (c *PDClock) CurrentTime() (time.Time, error) {
 	return cacheTime, errors.Trace(err)
 }
 
-// Stop PDClock.
-func (c *PDClock) Stop() {
+// Stop clock.
+func (c *clock) Stop() {
 	c.cancel()
 	<-c.stopCh
-}
-
-type clock4Test struct{}
-
-// NewClock4Test return a new clock for test.
-func NewClock4Test() Clock {
-	return &clock4Test{}
-}
-
-func (c *clock4Test) CurrentTime() (time.Time, error) {
-	return time.Now(), nil
-}
-
-func (c *clock4Test) Run(ctx context.Context) {
-}
-
-func (c *clock4Test) Stop() {
 }
