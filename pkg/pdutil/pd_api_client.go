@@ -81,7 +81,7 @@ const (
 
 var defaultMaxRetry uint64 = 3
 
-// pdAPIClient is the api client of Placement Driver, include both grpc client, also http client.
+// pdAPIClient is the api client of Placement Driver, include grpc client and http client.
 type pdAPIClient struct {
 	grpcClient pd.Client
 	httpClient *httputil.Client
@@ -193,3 +193,60 @@ func (pc *pdAPIClient) listGcServiceSafePoint(
 	}
 	return &resp, nil
 }
+
+// collectMemberEndpoints return all members' endpoint
+func (pc *pdAPIClient) collectMemberEndpoints(ctx context.Context) ([]string, error) {
+
+	return nil, nil
+}
+
+// Healthy return error if the member corresponding to the endpoint is unhealthy
+func (pc *pdAPIClient) Healthy(ctx context.Context, endpoint string) error {
+	return nil
+}
+
+// getAllMemberEndpoints return all pd members
+//func (pc *pdAPIClient) getAllMemberEndpoints(
+//	ctx context.Context,
+//) ([]*pdpb.Member, error) {
+//	members, err := pc.pdClient.GetAllMembers(ctx)
+//	if err != nil {
+//		return nil, errors.Trace(err)
+//	}
+//
+//	return members, nil
+//	//
+//	//result := make([]string, 0, len(members))
+//	//for _, m := range members {
+//	//	result = append(result, m.GetPeerUrls()[0])
+//	//}
+//	//return result, nil
+//}
+//
+//func (pc *pdAPIClient) IsMemberHealthy(ctx context.Context) error {
+//	members, err := pc.getAllMemberEndpoints(ctx)
+//	if err != nil {
+//		return err
+//	}
+//	for _, m := range members {
+//		if err := pc.isMemberHealthy(ctx, m.GetPeerUrls()[0]); err != nil {
+//			return err
+//		}
+//	}
+//	return nil
+//}
+//
+//func (pc *pdAPIClient) isMemberHealthy(ctx context.Context, endpoint string) error {
+//	url := endpoint + healthyAPI
+//	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+//	defer cancel()
+//
+//	resp, err := pc.dialClient.Get(ctx, fmt.Sprintf("%s/", url))
+//	if err != nil {
+//		return err
+//	}
+//
+//	_, _ = io.Copy(io.Discard, resp.Body)
+//	_ = resp.Body.Close()
+//	return nil
+//}
