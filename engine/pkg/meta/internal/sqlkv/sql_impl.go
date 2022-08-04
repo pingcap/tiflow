@@ -19,6 +19,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/VividCortex/mysqlerr"
+	"github.com/go-sql-driver/mysql"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
@@ -29,6 +33,16 @@ import (
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
+// Where clause for meta kv option
+// NOTE: 'job_id' and 'meta_key' MUST be same as backend table
+const (
+	WhereClauseWithJobID     = "job_id = ?"
+	WhereClauseWithKeyRange  = "meta_key >= ? AND meta_key < ?"
+	WhereClauseWithKeyPrefix = "meta_key like ?%"
+	WhereClauseWithFromKey   = "meta_key >= ?"
+	WhereClauseWithKey       = "meta_key = ?"
+)
+
 // sqlKVClientImpl is the mysql-compatible implement for KVClient
 type sqlKVClientImpl struct {
 	// db is the original gorm.DB without table scope
@@ -36,8 +50,11 @@ type sqlKVClientImpl struct {
 	jobID metaModel.JobID
 	// tableScopeDB is with project-specific metakv table scope
 	// we use it in all methods except GenEpoch
-	// since GenEpoch use a different backend table
+	// since GenEpoch uses a different backend table
 	tableScopeDB *gorm.DB
+
+	// meta kv table name
+	table string
 
 	// for GenEpoch
 	epochClient ormModel.EpochClient
@@ -61,26 +78,33 @@ func NewSQLKVClientImpl(sqlDB *sql.DB, table string, jobID metaModel.JobID) (*sq
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-
 	impl := &sqlKVClientImpl{
 		db:           db,
 		jobID:        jobID,
 		tableScopeDB: tableScopeDB,
+		table:        table,
 	}
-	if err := impl.Initialize(ctx); err != nil {
+	if err := impl.initialize(ctx); err != nil {
 		return nil, err
 	}
 
 	return impl, nil
 }
 
-// Initialize initializes metakv table
-// NOTE: Make Sure to call InitializeEpochModel before Initialize any KVClient
-func (c *sqlKVClientImpl) Initialize(ctx context.Context) error {
+// initialize initializes metakv table
+// NOTE: Make Sure to call InitializeEpochModel before initializing any KVClient
+func (c *sqlKVClientImpl) initialize(ctx context.Context) error {
 	if err := c.tableScopeDB.
 		WithContext(ctx).
 		AutoMigrate(&sqlkvModel.MetaKV{}); err != nil {
-		return cerrors.ErrMetaOpFail.Wrap(err)
+		// since meta kv table is project-isolated and needs to be created dynamically,
+		// 'table exists' error will be raised if multi-jobs create meta kv table concurrently.
+		// Ignore the specific mysql error code: 1050
+		if errMySQL, ok := err.(*mysql.MySQLError); !ok || errMySQL.Number != mysqlerr.ER_TABLE_EXISTS_ERROR {
+			return err
+		}
+		log.Info("meet 'table exists' error when creating meta kv table, but can be ignored",
+			zap.String("table", c.table))
 	}
 
 	epCli, err := ormModel.NewEpochClient(c.jobID, c.db)
@@ -88,7 +112,6 @@ func (c *sqlKVClientImpl) Initialize(ctx context.Context) error {
 		return err
 	}
 	c.epochClient = epCli
-
 	return nil
 }
 
@@ -98,11 +121,13 @@ func (c *sqlKVClientImpl) Close() error {
 }
 
 // GetEpoch implements GenEpoch interface of Client
+// Guarantee to be thread-safe
 func (c *sqlKVClientImpl) GenEpoch(ctx context.Context) (int64, error) {
 	return c.epochClient.GenEpoch(ctx)
 }
 
 // Put implements Put interface of KV
+// Guarantee to be thread-safe
 func (c *sqlKVClientImpl) Put(ctx context.Context, key, val string) (*metaModel.PutResponse, metaModel.Error) {
 	op := metaModel.OpPut(key, val)
 	return c.doPut(ctx, c.tableScopeDB, &op)
@@ -128,6 +153,7 @@ func (c *sqlKVClientImpl) doPut(ctx context.Context, db *gorm.DB, op *metaModel.
 }
 
 // Get implements Get interface of KV
+// Guarantee to be thread-safe
 func (c *sqlKVClientImpl) Get(ctx context.Context, key string, opts ...metaModel.OpOption) (*metaModel.GetResponse, metaModel.Error) {
 	op := metaModel.OpGet(key, opts...)
 	return c.doGet(ctx, c.tableScopeDB, &op)
@@ -148,16 +174,16 @@ func (c *sqlKVClientImpl) doGet(ctx context.Context, db *gorm.DB, op *metaModel.
 		key        = op.KeyBytes()
 	)
 
-	db = db.WithContext(ctx).Where("job_id = ?", c.jobID)
+	db = db.WithContext(ctx).Where(WhereClauseWithJobID, c.jobID)
 	switch {
 	case op.IsOptsWithRange():
-		err = db.Where("key >= ? AND key < ?", key, op.RangeBytes()).Find(&metaKvs).Error
+		err = db.Where(WhereClauseWithKeyRange, key, op.RangeBytes()).Find(&metaKvs).Error
 	case op.IsOptsWithPrefix():
-		err = db.Where("key like ?%", key).Find(&metaKvs).Error
+		err = db.Where(WhereClauseWithKeyPrefix, key).Find(&metaKvs).Error
 	case op.IsOptsWithFromKey():
-		err = db.Where("key >= ?", key).Find(&metaKvs).Error
+		err = db.Where(WhereClauseWithFromKey, key).Find(&metaKvs).Error
 	default:
-		err = db.Where("key = ?", key).First(&metaKv).Error
+		err = db.Where(WhereClauseWithKey, key).First(&metaKv).Error
 		isPointGet = true
 	}
 	if err != nil {
@@ -182,6 +208,7 @@ func (c *sqlKVClientImpl) doGet(ctx context.Context, db *gorm.DB, op *metaModel.
 }
 
 // Delete implements Delete interface of KV
+// Guarantee to be thread-safe
 func (c *sqlKVClientImpl) Delete(ctx context.Context, key string, opts ...metaModel.OpOption) (*metaModel.DeleteResponse, metaModel.Error) {
 	op := metaModel.OpDelete(key, opts...)
 	return c.doDelete(ctx, c.tableScopeDB, &op)
@@ -199,17 +226,17 @@ func (c *sqlKVClientImpl) doDelete(ctx context.Context, db *gorm.DB, op *metaMod
 		key = op.KeyBytes()
 	)
 
-	db = db.WithContext(ctx).Where("job_id = ?", c.jobID)
+	db = db.WithContext(ctx).Where(WhereClauseWithJobID, c.jobID)
 	switch {
 	case op.IsOptsWithRange():
-		err = db.Where("key >= ? AND key < ?", key,
+		err = db.Where(WhereClauseWithKeyRange, key,
 			op.RangeBytes()).Delete(&sqlkvModel.MetaKV{}).Error
 	case op.IsOptsWithPrefix():
-		err = db.Where("key like ?%", key).Delete(&sqlkvModel.MetaKV{}).Error
+		err = db.Where(WhereClauseWithKeyPrefix, key).Delete(&sqlkvModel.MetaKV{}).Error
 	case op.IsOptsWithFromKey():
-		err = db.Where("key >= ?", key).Delete(&sqlkvModel.MetaKV{}).Error
+		err = db.Where(WhereClauseWithFromKey, key).Delete(&sqlkvModel.MetaKV{}).Error
 	default:
-		err = db.Where("key = ?", key).Delete(&sqlkvModel.MetaKV{}).Error
+		err = db.Where(WhereClauseWithKey, key).Delete(&sqlkvModel.MetaKV{}).Error
 	}
 	if err != nil {
 		return nil, sqlErrorFromOpFail(err)
@@ -241,6 +268,7 @@ func (c *sqlKVClientImpl) Txn(ctx context.Context) metaModel.Txn {
 }
 
 // Do implements Do interface of Txn
+// Guarantee to be thread-safe
 func (t *sqlTxn) Do(ops ...metaModel.Op) metaModel.Txn {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -261,6 +289,7 @@ func (t *sqlTxn) Do(ops ...metaModel.Op) metaModel.Txn {
 }
 
 // Commit implements Commit interface of Txn
+// Guarantee to be thread-safe
 func (t *sqlTxn) Commit() (*metaModel.TxnResponse, metaModel.Error) {
 	t.mu.Lock()
 	if t.Err != nil {

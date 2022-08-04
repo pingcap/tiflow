@@ -22,10 +22,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/dm/checker"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/master"
 	"github.com/pingcap/tiflow/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
@@ -46,18 +50,19 @@ func TestQueryStatusAPI(t *testing.T) {
 		}
 		job = &metadata.Job{
 			Tasks: map[string]*metadata.Task{
-				"task1": {Stage: metadata.StagePaused},
-				"task2": {Stage: metadata.StageFinished},
-				"task3": {Stage: metadata.StageFinished},
-				"task4": {Stage: metadata.StageRunning},
-				"task5": {Stage: metadata.StageRunning},
-				"task6": {Stage: metadata.StageRunning},
+				"task1": {Stage: metadata.StagePaused, Cfg: &config.TaskCfg{ModRevision: 4}},
+				"task2": {Stage: metadata.StageFinished, Cfg: &config.TaskCfg{ModRevision: 4}},
+				"task3": {Stage: metadata.StageFinished, Cfg: &config.TaskCfg{ModRevision: 4}},
+				"task4": {Stage: metadata.StageRunning, Cfg: &config.TaskCfg{ModRevision: 4}},
+				"task5": {Stage: metadata.StageRunning, Cfg: &config.TaskCfg{ModRevision: 4}},
+				"task6": {Stage: metadata.StageRunning, Cfg: &config.TaskCfg{ModRevision: 4}},
 			},
 		}
 		finishedTaskStatus = runtime.TaskStatus{
-			Unit:  framework.WorkerDMLoad,
-			Task:  "task2",
-			Stage: metadata.StageFinished,
+			Unit:           framework.WorkerDMLoad,
+			Task:           "task2",
+			Stage:          metadata.StageFinished,
+			CfgModRevision: 3,
 		}
 		dumpStatus = &pb.DumpStatus{
 			TotalTables:       10,
@@ -108,11 +113,11 @@ func TestQueryStatusAPI(t *testing.T) {
 	jm.messageAgent = messageAgent
 	jm.workerManager = NewWorkerManager(nil, jm.metadata.JobStore(), nil, nil, nil, jm.Logger())
 	jm.taskManager = NewTaskManager(nil, nil, nil, jm.Logger())
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task2", framework.WorkerDMLoad, "worker2", runtime.WorkerFinished))
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task3", framework.WorkerDMDump, "worker3", runtime.WorkerOnline))
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task4", framework.WorkerDMDump, "worker4", runtime.WorkerOnline))
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task5", framework.WorkerDMLoad, "worker5", runtime.WorkerOnline))
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task6", framework.WorkerDMSync, "worker6", runtime.WorkerOnline))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task2", framework.WorkerDMLoad, "worker2", runtime.WorkerFinished, 3))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task3", framework.WorkerDMDump, "worker3", runtime.WorkerOnline, 4))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task4", framework.WorkerDMDump, "worker4", runtime.WorkerOnline, 3))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task5", framework.WorkerDMLoad, "worker5", runtime.WorkerOnline, 4))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task6", framework.WorkerDMSync, "worker6", runtime.WorkerOnline, 3))
 	jm.taskManager.UpdateTaskStatus(finishedTaskStatus)
 
 	// no job
@@ -146,6 +151,7 @@ func TestQueryStatusAPI(t *testing.T) {
 		"task1": {
 			"ExpectedStage": 3,
 			"WorkerID": "",
+			"ConfigOutdated": true,
 			"Status": {
 				"ErrorMsg": "worker for task task1 not found",
 				"Unit": 0,
@@ -157,6 +163,7 @@ func TestQueryStatusAPI(t *testing.T) {
 		"task2": {
 			"ExpectedStage": 4,
 			"WorkerID": "worker2",
+			"ConfigOutdated": true,
 			"Status": {
 				"ErrorMsg": "",
 				"Unit": 11,
@@ -168,6 +175,7 @@ func TestQueryStatusAPI(t *testing.T) {
 		"task3": {
 			"ExpectedStage": 4,
 			"WorkerID": "worker3",
+			"ConfigOutdated": false,
 			"Status": {
 				"ErrorMsg": "context deadline exceeded",
 				"Unit": 0,
@@ -179,6 +187,7 @@ func TestQueryStatusAPI(t *testing.T) {
 		"task4": {
 			"ExpectedStage": 2,
 			"WorkerID": "worker4",
+			"ConfigOutdated": true,
 			"Status": {
 				"ErrorMsg": "",
 				"Unit": 10,
@@ -196,6 +205,7 @@ func TestQueryStatusAPI(t *testing.T) {
 		"task5": {
 			"ExpectedStage": 2,
 			"WorkerID": "worker5",
+			"ConfigOutdated": false,
 			"Status": {
 				"ErrorMsg": "",
 				"Unit": 11,
@@ -215,6 +225,7 @@ func TestQueryStatusAPI(t *testing.T) {
 		"task6": {
 			"ExpectedStage": 2,
 			"WorkerID": "worker6",
+			"ConfigOutdated": true,
 			"Status": {
 				"ErrorMsg": "",
 				"Unit": 12,
@@ -259,8 +270,8 @@ func TestOperateTask(t *testing.T) {
 	jm := &JobMaster{
 		taskManager: NewTaskManager(nil, metadata.NewJobStore("master-id", kvmock.NewMetaMock()), nil, log.L()),
 	}
-	require.EqualError(t, jm.OperateTask(context.Background(), dmpkg.Delete, nil, nil), fmt.Sprintf("unsupport op type %d for operate task", dmpkg.Delete))
-	require.EqualError(t, jm.OperateTask(context.Background(), dmpkg.Pause, nil, nil), "state not found")
+	require.EqualError(t, jm.operateTask(context.Background(), dmpkg.Delete, nil, nil), fmt.Sprintf("unsupport op type %d for operate task", dmpkg.Delete))
+	require.EqualError(t, jm.operateTask(context.Background(), dmpkg.Pause, nil, nil), "state not found")
 }
 
 func TestGetJobCfg(t *testing.T) {
@@ -279,6 +290,55 @@ func TestGetJobCfg(t *testing.T) {
 	jobCfg, err = jm.GetJobCfg(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, "job-id", jobCfg.Name)
+}
+
+func TestUpdateJobCfg(t *testing.T) {
+	var (
+		mockBaseJobmaster   = &MockBaseJobmaster{}
+		metaKVClient        = kvmock.NewMetaMock()
+		mockCheckpointAgent = &MockCheckpointAgent{}
+		messageAgent        = &dmpkg.MockMessageAgent{}
+		jobCfg              = &config.JobCfg{}
+		jobStore            = metadata.NewJobStore(mockBaseJobmaster.JobMasterID(), metaKVClient)
+		jm                  = &JobMaster{
+			BaseJobMaster:   mockBaseJobmaster,
+			checkpointAgent: mockCheckpointAgent,
+		}
+	)
+	jm.taskManager = NewTaskManager(nil, jobStore, messageAgent, jm.Logger())
+	jm.workerManager = NewWorkerManager(nil, jobStore, jm, messageAgent, mockCheckpointAgent, jm.Logger())
+	funcBackup := master.CheckAndAdjustSourceConfigFunc
+	master.CheckAndAdjustSourceConfigFunc = func(ctx context.Context, cfg *dmconfig.SourceConfig) error { return nil }
+	defer func() {
+		master.CheckAndAdjustSourceConfigFunc = funcBackup
+	}()
+
+	precheckError := errors.New("precheck error")
+	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
+		return "", precheckError
+	}
+	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
+	verDB := conn.InitVersionDB()
+	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnError(errors.New("database error"))
+	require.EqualError(t, jm.UpdateJobCfg(context.Background(), jobCfg), "database error")
+
+	verDB = conn.InitVersionDB()
+	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("version", "5.7.25-TiDB-v6.1.0"))
+	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
+		return "check pass", nil
+	}
+	require.EqualError(t, jm.UpdateJobCfg(context.Background(), jobCfg), "state not found")
+
+	jm.taskManager.OperateTask(context.Background(), dmpkg.Create, jobCfg, nil)
+	verDB = conn.InitVersionDB()
+	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("version", "5.7.25-TiDB-v6.1.0"))
+	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
+		return "check pass", nil
+	}
+	mockCheckpointAgent.On("Update").Return(nil)
+	require.NoError(t, jm.UpdateJobCfg(context.Background(), jobCfg))
 }
 
 func TestBinlog(t *testing.T) {
