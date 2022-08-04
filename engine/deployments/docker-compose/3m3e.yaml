@@ -133,7 +133,7 @@ services:
     image: mysql:5.7
     container_name: 3m3e-mysql-standalone
     environment:
-      MYSQL_ALLOW_EMPTY_PASSWORD: true
+      MYSQL_ALLOW_EMPTY_PASSWORD: 1
     volumes:
       - './config/mysql_meta.cnf:/etc/my.cnf'
     ports:
