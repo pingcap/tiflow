@@ -68,21 +68,17 @@ func isDropColumnWithIndexError(err error) bool {
 			strings.Contains(mysqlErr.Message, "with tidb_enable_change_multi_schema is disable"))
 }
 
-//func passDDLCreateTime(ddlCreateTime uint8) {
-//	createTime = ddlCreateTime
-//}
-
 // here db should be TiDB database
-func GetDDLStatusFromTiDB(db *sql.DB, DDL string, createTime uint8) (string, error) {
+func GetDDLStatusFromTiDB(db *sql.DB, DDL string, createTime int64) (string, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	rowNum := 10
+	count := 0
 	for {
-		showJobs := fmt.Sprintf("ADMIN SHOW DDL JOBS %d;", rowNum)
-		fmt.Println(showJobs)
+		showJobs := fmt.Sprintf("ADMIN SHOW DDL JOBS %d", rowNum)
 		// every attempt try 10 history jobs
-		rows, err := db.QueryContext(ctx, "ADMIN SHOW DDL JOBS ?", rowNum)
+		rows, err := db.QueryContext(ctx, showJobs)
 		if err != nil {
 			return "", err
 		}
@@ -99,8 +95,17 @@ func GetDDLStatusFromTiDB(db *sql.DB, DDL string, createTime uint8) (string, err
 			scanArgs[i] = &values[i]
 		}
 
+		// skip the lines that have been checked
+		skipNum := 0
+		if rowNum > 10 {
+			for rows.Next() {
+				skipNum++
+				if skipNum >= rowNum-10 {
+					break
+				}
+			}
+		}
 		for rows.Next() {
-			count := 0
 			err = rows.Scan(scanArgs...)
 			if err != nil {
 				return "", err
@@ -111,9 +116,8 @@ func GetDDLStatusFromTiDB(db *sql.DB, DDL string, createTime uint8) (string, err
 			loc, _ := time.LoadLocation("Local")
 			theTime, _ := time.ParseInLocation(timeLayout, createTimeStr, loc)
 			DDLCreateTime := theTime.Unix()
-			fmt.Printf("DDLCreateTime: %d \n", DDLCreateTime)
 
-			if DDLCreateTime >= int64(createTime) {
+			if DDLCreateTime >= createTime {
 				jobID, err := strconv.Atoi(string(values[0]))
 				if err != nil {
 					return "", err
@@ -123,19 +127,15 @@ func GetDDLStatusFromTiDB(db *sql.DB, DDL string, createTime uint8) (string, err
 				for {
 					var DDLJob string
 					var jobIDForLimit int
-					showJob := fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d \n;", offset)
-					fmt.Println(showJob)
-					err = db.QueryRowContext(ctx, "ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET ?", offset).Scan(&jobIDForLimit, &DDLJob)
+					showJob := fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d", offset)
+					err = db.QueryRowContext(ctx, showJob).Scan(&jobIDForLimit, &DDLJob)
 					if err != nil {
 						return "", err
 					}
 					if jobID == jobIDForLimit && DDL == DDLJob {
-						fmt.Printf("DDLJob: %v \n", DDLJob)
-						fmt.Printf("status: %v \n", string(values[11]))
 						return string(values[11]), err
 					}
-					// jobID in 'ADMIN SHOW DDL JOBS' are not strictly but overall in ascending order
-					if jobIDForLimit < (jobID - 10) {
+					if jobIDForLimit <= jobID {
 						break
 					}
 					offset++
@@ -150,11 +150,12 @@ func GetDDLStatusFromTiDB(db *sql.DB, DDL string, createTime uint8) (string, err
 			return "", err
 		}
 		rowNum += 10
+		count = 0
 	}
 }
 
 // handleSpecialDDLError handles special errors for DDL execution.
-func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls []string, index int, conn *dbconn.DBConn, ddlCreateTime uint8) error {
+func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls []string, index int, conn *dbconn.DBConn) error {
 	// We use default parser because ddls are came from *Syncer.genDDLInfo, which is StringSingleQuotes, KeyWordUppercase and NameBackQuotes
 	parser2 := parser.New()
 
@@ -170,7 +171,6 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 			return err // return the original error
 		}
 
-		//GetDDLStatusFromTiDB(conn, ddls[index], ddlCreateTime)
 		ddl2 := ddls[index]
 		stmt, err2 := parser2.ParseOneStmt(ddl2, "", "")
 		if err2 != nil {

@@ -210,28 +210,9 @@ func TestIsConnectionRefusedError(t *testing.T) {
 	require.True(t, isConnRefusedErr)
 }
 
-//func TestGetDDLStatusFromTiDB1(t *testing.T) {
-//	db, err := sql.Open("mysql", "root:@tcp(127.0.0.1:4000)/many_tables_test")
-//	if err != nil {
-//		fmt.Printf("Error: %v \n", err)
-//	}
-//	defer db.Close()
-//	err = db.Ping()
-//	if err != nil {
-//		fmt.Printf("DB connection failed")
-//	}
-//
-//	//createTime := time.Now().Unix() - 86400 //within 24 hours
-//	status, err := GetDDLStatusFromTiDB(db, "CREATE TABLE many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)", 1659379573)
-//	fmt.Printf("status: %v", status)
-//	if err != nil {
-//		fmt.Printf("err: %v", err)
-//	}
-//}
-
 func TestGetDDLStatusFromTiDB(t *testing.T) {
 	var (
-		selectTimeSQL              = ""
+		//selectTimeSQL              = ""
 		adminShowDDLJobsSQL1       = ""
 		adminShowDDLJobsSQL2       = ""
 		adminShowDDLJobsLimitSQL1  = ""
@@ -252,7 +233,6 @@ func TestGetDDLStatusFromTiDB(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.Nil(t, err)
 
-	selectTimeSQL = fmt.Sprintf("SELECT @@TIMESTAMP")
 	adminShowDDLJobsSQL1 = fmt.Sprintf("ADMIN SHOW DDL JOBS 10")
 	adminShowDDLJobsSQL2 = fmt.Sprintf("ADMIN SHOW DDL JOBS 20")
 	adminShowDDLJobsLimitSQL1 = fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d", 0)
@@ -269,7 +249,6 @@ func TestGetDDLStatusFromTiDB(t *testing.T) {
 	adminShowDDLJobsLimitSQL12 = fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d", 11)
 
 	// test 1
-	mock.ExpectQuery(selectTimeSQL).WillReturnRows(sqlmock.NewRows([]string{"@@TIMESTAMP"}).AddRow(1659379898))
 	mock.ExpectQuery(adminShowDDLJobsSQL1).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "DB_NAME", "TABLE_NAME", "JOB_TYPE", "SCHEMA_STATE", "SCHEMA_ID", "TABLE_ID", "ROW_COUNT", "CREATE_TIME", "START_TIME", "END_TIME", "STATE"}).
 		AddRow(61, "many_tables_test", "t6", "alter table", "public", 1, 61, 0, "2022-08-02 2:51:39", "2022-08-02 2:51:39", "NULL", "running").
 		AddRow(60, "many_tables_test", "t5", "alter table", "public", 1, 60, 0, "2022-08-02 2:51:28", "2022-08-02 2:51:28", "2022-08-02 2:51:28", "synced").
@@ -285,7 +264,6 @@ func TestGetDDLStatusFromTiDB(t *testing.T) {
 		61, "ALTER TABLE many_tables_test.t6 ADD x timestamp DEFAULT current_timestamp"))
 
 	// test 2
-	mock.ExpectQuery(selectTimeSQL).WillReturnRows(sqlmock.NewRows([]string{"@@TIMESTAMP"}).AddRow(1659379836))
 	mock.ExpectQuery(adminShowDDLJobsSQL1).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "DB_NAME", "TABLE_NAME", "JOB_TYPE", "SCHEMA_STATE", "SCHEMA_ID", "TABLE_ID", "ROW_COUNT", "CREATE_TIME", "START_TIME", "END_TIME", "STATE"}).
 		AddRow(61, "many_tables_test", "t6", "alter table", "public", 1, 61, 0, "2022-08-02 2:51:39", "2022-08-02 2:51:39", "NULL", "running").
 		AddRow(60, "many_tables_test", "t5", "alter table", "public", 1, 60, 0, "2022-08-02 2:51:28", "2022-08-02 2:51:28", "2022-08-02 2:51:28", "synced").
@@ -305,7 +283,6 @@ func TestGetDDLStatusFromTiDB(t *testing.T) {
 		59, "ALTER TABLE many_tables_test.t4 ADD x timestamp DEFAULT current_timestamp"))
 
 	// test 3
-	mock.ExpectQuery(selectTimeSQL).WillReturnRows(sqlmock.NewRows([]string{"@@TIMESTAMP"}).AddRow(1659379573))
 	mock.ExpectQuery(adminShowDDLJobsSQL1).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "DB_NAME", "TABLE_NAME", "JOB_TYPE", "SCHEMA_STATE", "SCHEMA_ID", "TABLE_ID", "ROW_COUNT", "CREATE_TIME", "START_TIME", "END_TIME", "STATE"}).
 		AddRow(61, "many_tables_test", "t6", "alter table", "public", 1, 61, 0, "2022-08-02 2:51:39", "2022-08-02 2:51:39", "NULL", "running").
 		AddRow(60, "many_tables_test", "t5", "alter table", "public", 1, 60, 0, "2022-08-02 2:51:28", "2022-08-02 2:51:28", "2022-08-02 2:51:28", "synced").
@@ -338,145 +315,6 @@ func TestGetDDLStatusFromTiDB(t *testing.T) {
 		53, "CREATE TABLE IF NOT EXISTS many_tables_test.t4(i TINYINT, j INT UNIQUE KEY)"))
 	mock.ExpectQuery(adminShowDDLJobsLimitSQL10).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
 		52, "CREATE TABLE IF NOT EXISTS many_tables_test.t3(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL11).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		51, "CREATE TABLE IF NOT EXISTS many_tables_test.t2(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL12).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		50, "CREATE TABLE IF NOT EXISTS many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)"))
-
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL2).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		60, "ALTER TABLE many_tables_test.t5 ADD x timestamp DEFAULT current_timestamp"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL3).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		59, "ALTER TABLE many_tables_test.t4 ADD x timestamp DEFAULT current_timestamp"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL4).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		58, "ALTER TABLE many_tables_test.t3 ADD x timestamp DEFAULT current_timestamp"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL5).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		57, "ALTER TABLE many_tables_test.t2 ADD x timestamp DEFAULT current_timestamp"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL6).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		56, "ALTER TABLE many_tables_test.t1 ADD x timestamp DEFAULT current_timestamp"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL7).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		55, "CREATE TABLE IF NOT EXISTS many_tables_test.t6(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL8).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		54, "CREATE TABLE IF NOT EXISTS many_tables_test.t5(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL9).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		53, "CREATE TABLE IF NOT EXISTS many_tables_test.t4(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL10).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		52, "CREATE TABLE IF NOT EXISTS many_tables_test.t3(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL11).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		51, "CREATE TABLE IF NOT EXISTS many_tables_test.t2(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL12).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		50, "CREATE TABLE IF NOT EXISTS many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)"))
-
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL3).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		59, "ALTER TABLE many_tables_test.t4 ADD x timestamp DEFAULT current_timestamp"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL4).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		58, "ALTER TABLE many_tables_test.t3 ADD x timestamp DEFAULT current_timestamp"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL5).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		57, "ALTER TABLE many_tables_test.t2 ADD x timestamp DEFAULT current_timestamp"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL6).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		56, "ALTER TABLE many_tables_test.t1 ADD x timestamp DEFAULT current_timestamp"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL7).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		55, "CREATE TABLE IF NOT EXISTS many_tables_test.t6(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL8).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		54, "CREATE TABLE IF NOT EXISTS many_tables_test.t5(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL9).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		53, "CREATE TABLE IF NOT EXISTS many_tables_test.t4(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL10).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		52, "CREATE TABLE IF NOT EXISTS many_tables_test.t3(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL11).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		51, "CREATE TABLE IF NOT EXISTS many_tables_test.t2(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL12).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		50, "CREATE TABLE IF NOT EXISTS many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)"))
-
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL4).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		58, "ALTER TABLE many_tables_test.t3 ADD x timestamp DEFAULT current_timestamp"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL5).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		57, "ALTER TABLE many_tables_test.t2 ADD x timestamp DEFAULT current_timestamp"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL6).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		56, "ALTER TABLE many_tables_test.t1 ADD x timestamp DEFAULT current_timestamp"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL7).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		55, "CREATE TABLE IF NOT EXISTS many_tables_test.t6(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL8).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		54, "CREATE TABLE IF NOT EXISTS many_tables_test.t5(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL9).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		53, "CREATE TABLE IF NOT EXISTS many_tables_test.t4(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL10).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		52, "CREATE TABLE IF NOT EXISTS many_tables_test.t3(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL11).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		51, "CREATE TABLE IF NOT EXISTS many_tables_test.t2(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL12).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		50, "CREATE TABLE IF NOT EXISTS many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)"))
-
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL5).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		57, "ALTER TABLE many_tables_test.t2 ADD x timestamp DEFAULT current_timestamp"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL6).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		56, "ALTER TABLE many_tables_test.t1 ADD x timestamp DEFAULT current_timestamp"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL7).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		55, "CREATE TABLE IF NOT EXISTS many_tables_test.t6(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL8).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		54, "CREATE TABLE IF NOT EXISTS many_tables_test.t5(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL9).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		53, "CREATE TABLE IF NOT EXISTS many_tables_test.t4(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL10).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		52, "CREATE TABLE IF NOT EXISTS many_tables_test.t3(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL11).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		51, "CREATE TABLE IF NOT EXISTS many_tables_test.t2(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL12).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		50, "CREATE TABLE IF NOT EXISTS many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)"))
-
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL6).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		56, "ALTER TABLE many_tables_test.t1 ADD x timestamp DEFAULT current_timestamp"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL7).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		55, "CREATE TABLE IF NOT EXISTS many_tables_test.t6(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL8).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		54, "CREATE TABLE IF NOT EXISTS many_tables_test.t5(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL9).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		53, "CREATE TABLE IF NOT EXISTS many_tables_test.t4(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL10).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		52, "CREATE TABLE IF NOT EXISTS many_tables_test.t3(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL11).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		51, "CREATE TABLE IF NOT EXISTS many_tables_test.t2(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL12).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		50, "CREATE TABLE IF NOT EXISTS many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)"))
-
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL7).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		55, "CREATE TABLE IF NOT EXISTS many_tables_test.t6(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL8).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		54, "CREATE TABLE IF NOT EXISTS many_tables_test.t5(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL9).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		53, "CREATE TABLE IF NOT EXISTS many_tables_test.t4(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL10).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		52, "CREATE TABLE IF NOT EXISTS many_tables_test.t3(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL11).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		51, "CREATE TABLE IF NOT EXISTS many_tables_test.t2(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL12).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		50, "CREATE TABLE IF NOT EXISTS many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)"))
-
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL8).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		54, "CREATE TABLE IF NOT EXISTS many_tables_test.t5(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL9).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		53, "CREATE TABLE IF NOT EXISTS many_tables_test.t4(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL10).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		52, "CREATE TABLE IF NOT EXISTS many_tables_test.t3(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL11).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		51, "CREATE TABLE IF NOT EXISTS many_tables_test.t2(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL12).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		50, "CREATE TABLE IF NOT EXISTS many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)"))
-
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL9).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		53, "CREATE TABLE IF NOT EXISTS many_tables_test.t4(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL10).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		52, "CREATE TABLE IF NOT EXISTS many_tables_test.t3(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL11).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		51, "CREATE TABLE IF NOT EXISTS many_tables_test.t2(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL12).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		50, "CREATE TABLE IF NOT EXISTS many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)"))
-
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL10).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		52, "CREATE TABLE IF NOT EXISTS many_tables_test.t3(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL11).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		51, "CREATE TABLE IF NOT EXISTS many_tables_test.t2(i TINYINT, j INT UNIQUE KEY)"))
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL12).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		50, "CREATE TABLE IF NOT EXISTS many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)"))
 
 	mock.ExpectQuery(adminShowDDLJobsSQL2).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "DB_NAME", "TABLE_NAME", "JOB_TYPE", "SCHEMA_STATE", "SCHEMA_ID", "TABLE_ID", "ROW_COUNT", "CREATE_TIME", "START_TIME", "END_TIME", "STATE"}).
 		AddRow(61, "many_tables_test", "t6", "alter table", "public", 1, 61, 0, "2022-08-02 2:51:39", "2022-08-02 2:51:39", "NULL", "running").
@@ -505,11 +343,7 @@ func TestGetDDLStatusFromTiDB(t *testing.T) {
 	mock.ExpectQuery(adminShowDDLJobsLimitSQL12).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
 		50, "CREATE TABLE IF NOT EXISTS many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)"))
 
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL12).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(
-		50, "CREATE TABLE IF NOT EXISTS many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)"))
-
 	//test 4
-	mock.ExpectQuery(selectTimeSQL).WillReturnRows(sqlmock.NewRows([]string{"@@TIMESTAMP"}).AddRow(1659501300))
 	mock.ExpectQuery(adminShowDDLJobsSQL1).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "DB_NAME", "TABLE_NAME", "JOB_TYPE", "SCHEMA_STATE", "SCHEMA_ID", "TABLE_ID", "ROW_COUNT", "CREATE_TIME", "START_TIME", "END_TIME", "STATE"}).
 		AddRow(61, "many_tables_test", "t6", "alter table", "public", 1, 61, 0, "2022-08-02 2:51:39", "2022-08-02 2:51:39", "NULL", "running").
 		AddRow(60, "many_tables_test", "t5", "alter table", "public", 1, 60, 0, "2022-08-02 2:51:28", "2022-08-02 2:51:28", "2022-08-02 2:51:28", "synced").
@@ -522,38 +356,23 @@ func TestGetDDLStatusFromTiDB(t *testing.T) {
 		AddRow(53, "many_tables_test", "t4", "create table", "public", 1, 53, 0, "2022-08-02 2:47:55", "2022-08-02 2:47:55", "2022-08-02 2:47:55", "synced").
 		AddRow(52, "many_tables_test", "t3", "create table", "public", 1, 52, 0, "2022-08-02 2:47:24", "2022-08-02 2:47:24", "2022-08-02 2:47:24", "synced"))
 
-	var syncer *Syncer
-	//var job *job
-	job := &job{}
-
 	//test 1
-	fmt.Println("check1")
-	job.ddls = []string{"ALTER TABLE many_tables_test.t6 ADD x timestamp DEFAULT current_timestamp"}
-	syncer.ddlJobCh <- job
-	syncer.syncDDL(adminQueueName, syncer.ddlDBConn, syncer.ddlJobCh)
-	fmt.Println("check12")
-	status, err := GetDDLStatusFromTiDB(db, "ALTER TABLE many_tables_test.t6 ADD x timestamp DEFAULT current_timestamp")
+	status, err := GetDDLStatusFromTiDB(db, "ALTER TABLE many_tables_test.t6 ADD x timestamp DEFAULT current_timestamp", 1659379898)
 	require.Nil(t, err)
 	require.Equal(t, "running", status)
 
 	// test 2
-	fmt.Println("check2")
-	syncer.syncDDL(adminQueueName, syncer.ddlDBConn, syncer.ddlJobCh)
-	status, err = GetDDLStatusFromTiDB(db, "ALTER TABLE many_tables_test.t4 ADD x timestamp DEFAULT current_timestamp")
+	status, err = GetDDLStatusFromTiDB(db, "ALTER TABLE many_tables_test.t4 ADD x timestamp DEFAULT current_timestamp", 1659379836)
 	require.Nil(t, err)
 	require.Equal(t, "none", status)
 
 	// test 3
-	fmt.Println("check3")
-	syncer.syncDDL(adminQueueName, syncer.ddlDBConn, syncer.ddlJobCh)
-	status, err = GetDDLStatusFromTiDB(db, "CREATE TABLE IF NOT EXISTS many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)")
+	status, err = GetDDLStatusFromTiDB(db, "CREATE TABLE IF NOT EXISTS many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)", 1659379573)
 	require.Nil(t, err)
 	require.Equal(t, "synced", status)
 
 	// test 4
-	fmt.Println("check4")
-	syncer.syncDDL(adminQueueName, syncer.ddlDBConn, syncer.ddlJobCh)
-	status, err = GetDDLStatusFromTiDB(db, "CREATE TABLE IF NOT EXISTS many_tables_test.t7(i TINYINT, j INT UNIQUE KEY)")
+	status, err = GetDDLStatusFromTiDB(db, "CREATE TABLE IF NOT EXISTS many_tables_test.t7(i TINYINT, j INT UNIQUE KEY)", 1659501300)
 	require.Nil(t, err)
 	require.Equal(t, "", status) // DDL does not exist
 }
