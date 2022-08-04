@@ -89,7 +89,7 @@ func newUpstream(pdEndpoints []string,
 	}
 }
 
-// NewUpstream4Test new a upstream for unit test.
+// NewUpstream4Test new an upstream for unit test.
 func NewUpstream4Test(pdClient pd.Client) *Upstream {
 	pdClock := pdutil.NewClock4Test()
 	gcManager := gc.NewManager(

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package clock
+package pdutil
 
 import (
 	"context"
@@ -36,7 +36,7 @@ func (m *MockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
 func TestTimeFromPD(t *testing.T) {
 	t.Parallel()
 	mockPDClient := &MockPDClient{}
-	clock, err := New(context.Background(), mockPDClient)
+	clock, err := NewClock(context.Background(), mockPDClient)
 	require.NoError(t, err)
 
 	go clock.Run(context.Background())

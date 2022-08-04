@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package clock
+package pdutil
 
 import (
 	"context"
@@ -48,8 +48,8 @@ type clock struct {
 	stopCh chan struct{}
 }
 
-// New return a new clock
-func New(ctx context.Context, pdClient pd.Client) (*clock, error) {
+// NewClock return a new clock
+func NewClock(ctx context.Context, pdClient pd.Client) (*clock, error) {
 	ret := &clock{
 		pdClient: pdClient,
 		stopCh:   make(chan struct{}, 1),
@@ -110,4 +110,21 @@ func (c *clock) CurrentTime() (time.Time, error) {
 func (c *clock) Stop() {
 	c.cancel()
 	<-c.stopCh
+}
+
+type clock4Test struct{}
+
+// NewClock4Test return a new clock for test.
+func NewClock4Test() Clock {
+	return &clock4Test{}
+}
+
+func (c *clock4Test) CurrentTime() (time.Time, error) {
+	return time.Now(), nil
+}
+
+func (c *clock4Test) Run(ctx context.Context) {
+}
+
+func (c *clock4Test) Stop() {
 }
