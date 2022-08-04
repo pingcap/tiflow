@@ -23,7 +23,6 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
-	confighelper "github.com/pingcap/tiflow/cdc/sinkv2/util/config"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/kafka"
@@ -51,10 +50,10 @@ func initBroker(t *testing.T, partitionNum int) (*sarama.MockBroker, string) {
 
 func newForTest(ctx context.Context,
 	sinkURIStr string,
-	config *config.ReplicaConfig,
+	cfg *config.ReplicaConfig,
 	errCh chan error,
 ) (*SinkFactory, error) {
-	sinkURI, err := confighelper.GetSinkURIAndAdjustConfigWithSinkURI(sinkURIStr, config)
+	sinkURI, err := config.GetSinkURIAndAdjustConfigWithSinkURI(sinkURIStr, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +62,7 @@ func newForTest(ctx context.Context,
 	schema := strings.ToLower(sinkURI.Scheme)
 	switch schema {
 	case "kafka", "kafka+ssl":
-		mqs, err := mq.NewKafkaDMLSink(ctx, sinkURI, config, errCh,
+		mqs, err := mq.NewKafkaDMLSink(ctx, sinkURI, cfg, errCh,
 			// Use mock kafka clients for test.
 			kafka.NewMockAdminClient, dmlproducer.NewDMLMockProducer)
 		if err != nil {

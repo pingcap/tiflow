@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
-	confighelper "github.com/pingcap/tiflow/cdc/sinkv2/util/config"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/kafka"
@@ -50,10 +49,10 @@ type SinkFactory struct {
 // New creates a new SinkFactory by schema.
 func New(ctx context.Context,
 	sinkURIStr string,
-	config *config.ReplicaConfig,
+	cfg *config.ReplicaConfig,
 	errCh chan error,
 ) (*SinkFactory, error) {
-	sinkURI, err := confighelper.GetSinkURIAndAdjustConfigWithSinkURI(sinkURIStr, config)
+	sinkURI, err := config.GetSinkURIAndAdjustConfigWithSinkURI(sinkURIStr, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +62,7 @@ func New(ctx context.Context,
 	// TODO: add more sink factory here.
 	switch schema {
 	case "kafka", "kafka+ssl":
-		mqs, err := mq.NewKafkaDMLSink(ctx, sinkURI, config, errCh,
+		mqs, err := mq.NewKafkaDMLSink(ctx, sinkURI, cfg, errCh,
 			kafka.NewSaramaAdminClient, dmlproducer.NewKafkaDMLProducer)
 		if err != nil {
 			return nil, err

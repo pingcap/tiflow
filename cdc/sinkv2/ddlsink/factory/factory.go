@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq/ddlproducer"
-	confighelper "github.com/pingcap/tiflow/cdc/sinkv2/util/config"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
@@ -30,9 +29,9 @@ import (
 func New(
 	ctx context.Context,
 	sinkURIStr string,
-	config *config.ReplicaConfig,
+	cfg *config.ReplicaConfig,
 ) (ddlsink.DDLEventSink, error) {
-	sinkURI, err := confighelper.GetSinkURIAndAdjustConfigWithSinkURI(sinkURIStr, config)
+	sinkURI, err := config.GetSinkURIAndAdjustConfigWithSinkURI(sinkURIStr, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +39,7 @@ func New(
 	// TODO: add more sink factory here.
 	switch schema {
 	case "kafka", "kafka+ssl":
-		return mq.NewKafkaDDLSink(ctx, sinkURI, config,
+		return mq.NewKafkaDDLSink(ctx, sinkURI, cfg,
 			kafka.NewAdminClientImpl, ddlproducer.NewKafkaDDLProducer)
 	default:
 		return nil,
