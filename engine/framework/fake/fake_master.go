@@ -476,7 +476,9 @@ func (m *Master) OnWorkerOffline(worker framework.WorkerHandle, reason error) er
 		log.Warn("try to load checkpoint from cached value",
 			zap.Any("checkpoint", m.cachedCheckpoint.Checkpoints[businessID]))
 		if ckpt, ok := m.cachedCheckpoint.Checkpoints[businessID]; ok {
-			workerCkpt = ckpt
+			workerCkpt.Revision = ckpt.Revision
+			workerCkpt.MvccCount = ckpt.MvccCount
+			workerCkpt.Value = ckpt.Value
 		} else {
 			workerCkpt.Revision = m.config.EtcdStartRevision
 		}
