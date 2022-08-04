@@ -82,13 +82,13 @@ func (r *remoteBinlogReader) GenerateStreamFrom(location binlog.Location) (reade
 	return streamer, terror.ErrSyncerUnitRemoteSteamerStartSync.Delegate(err)
 }
 
-type locationedStream struct {
+type locationStream struct {
 	stream           reader.Streamer
 	locationRecorder *locationRecorder
 }
 
-func newLocationedStream(generator streamGenerator, location binlog.Location) (locationedStream, error) {
-	var ret locationedStream
+func newLocationedStream(generator streamGenerator, location binlog.Location) (locationStream, error) {
+	var ret locationStream
 	s, err := generator.GenerateStreamFrom(location)
 	if err != nil {
 		return ret, err
@@ -101,7 +101,7 @@ func newLocationedStream(generator streamGenerator, location binlog.Location) (l
 	return ret, nil
 }
 
-func (l locationedStream) GetEvent(ctx context.Context) (*replication.BinlogEvent, error) {
+func (l locationStream) GetEvent(ctx context.Context) (*replication.BinlogEvent, error) {
 	e, err := l.stream.GetEvent(ctx)
 	if err != nil {
 		return nil, err
@@ -130,7 +130,7 @@ type StreamerController struct {
 	timezone       *time.Location
 
 	streamProducer streamGenerator
-	upstream       locationedStream
+	upstream       locationStream
 
 	*streamModifier
 	// streamModifier will also modify locations so they'll be different from upstreamLocations.
@@ -635,7 +635,7 @@ func NewStreamerController4Test(
 ) *StreamerController {
 	return &StreamerController{
 		streamProducer: streamerProducer,
-		upstream: locationedStream{
+		upstream: locationStream{
 			stream:           streamer,
 			locationRecorder: &locationRecorder{},
 		},
