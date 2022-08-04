@@ -63,7 +63,7 @@ func (t *testDMOpenAPISuite) SetupSuite() {
 		jm                  = &JobMaster{
 			workerID:        "jobmaster-worker-id",
 			BaseJobMaster:   mockBaseJobmaster,
-			metadata:        metadata.NewMetaData(mockBaseJobmaster.JobMasterID(), mock.NewMetaMock()),
+			metadata:        metadata.NewMetaData(mockBaseJobmaster.ID(), mock.NewMetaMock()),
 			messageAgent:    mockMessageAgent,
 			checkpointAgent: mockCheckpointAgent,
 		}
@@ -182,9 +182,8 @@ func (t *testDMOpenAPISuite) TestDMAPIGetJobStatus() {
 	require.Equal(t.T(), http.StatusOK, w.Code)
 
 	jobStatus := JobStatus{
-		JobMasterID: "dm-jobmaster-id",
-		WorkerID:    "jobmaster-worker-id",
-		TaskStatus:  map[string]TaskStatus{},
+		JobID:      "dm-jobmaster-id",
+		TaskStatus: map[string]TaskStatus{},
 	}
 	var jobStatus2 JobStatus
 	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &jobStatus2))
