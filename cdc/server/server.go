@@ -55,9 +55,9 @@ const (
 	defaultDataDir = "/tmp/cdc_data"
 	// dataDirThreshold is used to warn if the free space of the specified data-dir is lower than it, unit is GB
 	dataDirThreshold = 500
-	// maxHTTPConnection is used to limits the max concurrent connections of http server.
+	// maxHTTPConnection is used to limit the max concurrent connections of http server.
 	maxHTTPConnection = 1000
-	// httpConnectionTimeout is used to limits a connection max alive time of http server.
+	// httpConnectionTimeout is used to limit a connection max alive time of http server.
 	httpConnectionTimeout = 10 * time.Minute
 )
 
@@ -80,7 +80,7 @@ type server struct {
 	tcpServer    tcpserver.TCPServer
 	grpcService  *p2p.ServerWrapper
 	statusServer *http.Server
-	etcdClient   *etcd.CDCEtcdClientImpl
+	etcdClient   etcd.CDCEtcdClient
 	pdEndpoints  []string
 }
 
@@ -137,7 +137,7 @@ func (s *server) Run(ctx context.Context) error {
 	logConfig := logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 
-	// we does not pass a `context` to the etcd client,
+	// we do not pass a `context` to the etcd client,
 	// to prevent it's cancelled when the server is closing.
 	// For example, when the non-owner node goes offline,
 	// it would resign the campaign key which was put by call `campaign`,
@@ -165,14 +165,15 @@ func (s *server) Run(ctx context.Context) error {
 		},
 	})
 	if err != nil {
-		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "new etcd client")
+		cerror.WrapError(cerror.ErrNewCaptureFailed, err)
 	}
+
 	cdcEtcdClient, err := etcd.NewCDCEtcdClient(ctx, etcdCli, conf.ClusterID)
 	if err != nil {
-		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err),
-			"wrapper etcd client")
+		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
 	}
-	s.etcdClient = &cdcEtcdClient
+	s.etcdClient = cdcEtcdClient
+
 	err = s.initDir(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -180,7 +181,7 @@ func (s *server) Run(ctx context.Context) error {
 
 	kv.InitWorkerPool()
 
-	s.capture = capture.NewCapture(s.pdEndpoints, s.etcdClient, s.grpcService)
+	s.capture = capture.NewCapture(s.pdEndpoints, cdcEtcdClient, s.grpcService)
 
 	err = s.startStatusHTTP(s.tcpServer.HTTP1Listener())
 	if err != nil {
@@ -198,7 +199,7 @@ func (s *server) startStatusHTTP(lis net.Listener) error {
 	// connections from the provided Listener. Connections that exceed the
 	// limit will wait in a queue and no new goroutines will be created until
 	// a connection is processed.
-	// We use it here to limit the max concurrent conections of statusServer.
+	// We use it here to limit the max concurrent connections of statusServer.
 	lis = netutil.LimitListener(lis, maxHTTPConnection)
 	conf := config.GetGlobalServerConfig()
 

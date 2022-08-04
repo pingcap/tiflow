@@ -28,7 +28,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
-	"github.com/pingcap/tiflow/pkg/pdutil"
+	"github.com/pingcap/tiflow/pkg/pd"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	pd "github.com/tikv/pd/client"
@@ -374,7 +374,7 @@ func (m *migrator) migrateGcServiceSafePoint(ctx context.Context,
 	newGcServiceID string,
 	ttl int64,
 ) error {
-	pdApiClient, err := pdutil.NewPDAPIClient(pdClient, config)
+	pdApiClient, err := pd.NewPDAPIClient(pdClient, config)
 	if err != nil {
 		log.Error("create pd api client failed", zap.Error(err))
 		return errors.Trace(err)
@@ -387,7 +387,7 @@ func (m *migrator) migrateGcServiceSafePoint(ctx context.Context,
 			zap.Error(err))
 		return errors.Trace(err)
 	}
-	var cdcGcSafePoint *pdutil.ServiceSafePoint
+	var cdcGcSafePoint *pd.ServiceSafePoint
 	for _, item := range gcServiceSafePoints.ServiceGCSafepoints {
 		if item.ServiceID == oldGcServiceID {
 			cdcGcSafePoint = item
