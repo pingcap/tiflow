@@ -14,19 +14,22 @@
 package dm
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"testing"
 	"time"
 
-	"github.com/go-mysql-org/go-mysql/mysql"
+	"github.com/BurntSushi/toml"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/dig"
 
 	dmconfig "github.com/pingcap/tiflow/dm/config"
+	dmmaster "github.com/pingcap/tiflow/dm/master"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/registry"
+	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
@@ -38,6 +41,8 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
+
+var jobTemplatePath = "../../jobmaster/dm/config/job_template.yaml"
 
 type workerParamListForTest struct {
 	dig.Out
@@ -68,16 +73,24 @@ func TestFactory(t *testing.T) {
 		return depsForTest
 	}))
 
+	funcBackup := dmmaster.CheckAndAdjustSourceConfigFunc
+	dmmaster.CheckAndAdjustSourceConfigFunc = func(ctx context.Context, cfg *dmconfig.SourceConfig) error { return nil }
+	defer func() {
+		dmmaster.CheckAndAdjustSourceConfigFunc = funcBackup
+	}()
 	// test factory
-	subtaskCfg := &dmconfig.SubTaskConfig{Name: "job-id", SourceID: "task-id", Flavor: mysql.MySQLFlavor}
-	content, err := subtaskCfg.Toml()
-	require.NoError(t, err)
+	var jobCfg config.JobCfg
+	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
+	taskCfg := jobCfg.ToTaskCfgs()["mysql-replica-01"]
+	var b bytes.Buffer
+	require.NoError(t, toml.NewEncoder(&b).Encode(taskCfg))
+	content := b.Bytes()
 	RegisterWorker()
-	_, err = registry.GlobalWorkerRegistry().CreateWorker(dctx, framework.WorkerDMDump, "worker-id", "dm-jobmaster-id", []byte(content))
+	_, err = registry.GlobalWorkerRegistry().CreateWorker(dctx, framework.WorkerDMDump, "worker-id", "dm-jobmaster-id", content)
 	require.NoError(t, err)
-	_, err = registry.GlobalWorkerRegistry().CreateWorker(dctx, framework.WorkerDMLoad, "worker-id", "dm-jobmaster-id", []byte(content))
+	_, err = registry.GlobalWorkerRegistry().CreateWorker(dctx, framework.WorkerDMLoad, "worker-id", "dm-jobmaster-id", content)
 	require.NoError(t, err)
-	_, err = registry.GlobalWorkerRegistry().CreateWorker(dctx, framework.WorkerDMSync, "worker-id", "dm-jobmaster-id", []byte(content))
+	_, err = registry.GlobalWorkerRegistry().CreateWorker(dctx, framework.WorkerDMSync, "worker-id", "dm-jobmaster-id", content)
 	require.NoError(t, err)
 }
 
@@ -88,7 +101,7 @@ func TestWorker(t *testing.T) {
 	require.NoError(t, dp.Provide(func() p2p.MessageHandlerManager {
 		return p2p.NewMockMessageHandlerManager()
 	}))
-	dmWorker := newDMWorker(dctx, "master-id", framework.WorkerDMDump, &dmconfig.SubTaskConfig{})
+	dmWorker := newDMWorker(dctx, "master-id", framework.WorkerDMDump, &dmconfig.SubTaskConfig{}, 0)
 	unitHolder := &mockUnitHolder{}
 	dmWorker.unitHolder = unitHolder
 	dmWorker.BaseWorker = framework.MockBaseWorker("worker-id", "master-id", dmWorker)
