@@ -224,6 +224,10 @@ var (
 		"kafka send message failed",
 		errors.RFCCodeText("CDC:ErrKafkaSendMessage"),
 	)
+	ErrKafkaProducerClosed = errors.Normalize(
+		"kafka producer closed",
+		errors.RFCCodeText("CDC:ErrKafkaProducerClosed"),
+	)
 	ErrKafkaAsyncSendMessage = errors.Normalize(
 		"kafka async send message failed",
 		errors.RFCCodeText("CDC:ErrKafkaAsyncSendMessage"),
@@ -320,7 +324,7 @@ var (
 		errors.RFCCodeText("CDC:ErrAsyncBroadcastNotSupport"),
 	)
 	ErrSinkURIInvalid = errors.Normalize(
-		"sink uri invalid",
+		"sink uri invalid '%s'",
 		errors.RFCCodeText("CDC:ErrSinkURIInvalid"),
 	)
 	ErrMQSinkUnknownProtocol = errors.Normalize(
@@ -639,6 +643,10 @@ var (
 	ErrWaitHandleOperationTimeout = errors.Normalize(
 		"waiting processor to handle the operation finished timeout",
 		errors.RFCCodeText("CDC:ErrWaitHandleOperationTimeout"),
+	)
+	ErrClusterIsUnhealthy = errors.Normalize(
+		"TiCDC cluster is unhealthy",
+		errors.RFCCodeText("CDC:ErrClusterIsUnhealthy"),
 	)
 	ErrSupportPostOnly = errors.Normalize(
 		"this api supports POST method only",

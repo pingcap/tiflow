@@ -51,7 +51,7 @@ func TestCreateChangefeed(t *testing.T) {
 	pdClient := &mockPDClient{}
 	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
 	cp := mock_capture.NewMockCapture(gomock.NewController(t))
-	etcdClient := mock_etcd.NewMockCDCEtcdClientForAPI(gomock.NewController(t))
+	etcdClient := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
 	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
 	router := newRouter(apiV2)
 
@@ -279,7 +279,7 @@ func TestUpdateChangefeed(t *testing.T) {
 	// case 4: changefeed stopped, but get upstream failed: not found
 	oldCfInfo.UpstreamID = 100
 	oldCfInfo.State = "stopped"
-	etcdClient := mock_etcd.NewMockCDCEtcdClientForAPI(gomock.NewController(t))
+	etcdClient := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
 	etcdClient.EXPECT().
 		GetUpstreamInfo(gomock.Any(), gomock.Eq(uint64(100)), gomock.Any()).
 		Return(nil, cerrors.ErrUpstreamNotFound).Times(1)
@@ -556,7 +556,7 @@ func TestResumeChangefeed(t *testing.T) {
 	router := newRouter(apiV2)
 
 	pdClient := &mockPDClient{}
-	etcdClient := mock_etcd.NewMockCDCEtcdClientForAPI(gomock.NewController(t))
+	etcdClient := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
 	mockUpManager := upstream.NewManager4Test(pdClient)
 	statusProvider := &mockStatusProvider{}
 

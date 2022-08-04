@@ -201,6 +201,11 @@ error = '''
 cluster ID mismatch, tikv cluster ID is %d and request cluster ID is %d
 '''
 
+["CDC:ErrClusterIsUnhealthy"]
+error = '''
+TiCDC cluster is unhealthy
+'''
+
 ["CDC:ErrCodecDecode"]
 error = '''
 codec decode error
@@ -529,6 +534,11 @@ invalid kafka version
 ["CDC:ErrKafkaNewSaramaProducer"]
 error = '''
 new sarama producer
+'''
+
+["CDC:ErrKafkaProducerClosed"]
+error = '''
+kafka producer closed
 '''
 
 ["CDC:ErrKafkaSendMessage"]
@@ -1023,7 +1033,7 @@ sink config invalid
 
 ["CDC:ErrSinkURIInvalid"]
 error = '''
-sink uri invalid
+sink uri invalid '%s'
 '''
 
 ["CDC:ErrSnapshotLostByGC"]

@@ -1,8 +1,19 @@
-### Makefile for ticdc
+### Makefile for tiflow
 .PHONY: build test check clean fmt cdc kafka_consumer coverage \
 	integration_test_build integration_test integration_test_mysql integration_test_kafka bank \
+	kafka_docker_integration_test kafka_docker_integration_test_with_build \
+	clean_integration_test_containers \
+	mysql_docker_integration_test mysql_docker_integration_test_with_build \
+	build_mysql_integration_test_images clean_integration_test_images \
 	dm dm-master dm-worker dmctl dm-syncer dm_coverage \
-	engine tiflow tiflow-demo tiflow-chaos-case
+	engine tiflow tiflow-demo tiflow-chaos-case engine_image help
+
+.DEFAULT_GOAL := default
+
+# Adapted from https://www.thapaliya.com/en/writings/well-documented-makefiles/
+help: ## Display this help and any documented user-facing targets. Other undocumented targets may be present in the Makefile.
+help:
+	@awk 'BEGIN {FS = ": ##"; printf "Usage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_\.\-\/%]+: ##/ { printf "  %-45s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
 PROJECT=tiflow
 P=3
@@ -52,9 +63,11 @@ FAILPOINT := tools/bin/failpoint-ctl
 FAILPOINT_ENABLE  := $$(echo $(FAILPOINT_DIR) | xargs $(FAILPOINT) enable >/dev/null)
 FAILPOINT_DISABLE := $$(echo $(FAILPOINT_DIR) | xargs $(FAILPOINT) disable >/dev/null)
 
+TICDC_DOCKER_DEPLOYMENTS_DIR := deployments/ticdc/docker-compose/
+
 RELEASE_VERSION =
 ifeq ($(RELEASE_VERSION),)
-	RELEASE_VERSION := v6.2.0-master
+	RELEASE_VERSION := v6.3.0-master
 	release_version_regex := ^v[0-9]\..*$$
 	release_branch_regex := "^release-[0-9]\.[0-9].*$$|^HEAD$$|^.*/*tags/v[0-9]\.[0-9]\..*$$"
 	ifneq ($(shell git rev-parse --abbrev-ref HEAD | egrep $(release_branch_regex)),)
@@ -176,8 +189,35 @@ integration_test: integration_test_mysql
 integration_test_mysql:
 	tests/integration_tests/run.sh mysql "$(CASE)" "$(START_AT)"
 
+mysql_docker_integration_test: ## Run TiCDC MySQL all integration tests in Docker.
+mysql_docker_integration_test: clean_integration_test_containers
+	docker-compose -f $(TICDC_DOCKER_DEPLOYMENTS_DIR)/docker-compose-mysql-integration.yml up
+
+mysql_docker_integration_test_with_build: ## Build images and run TiCDC MySQL all integration tests in Docker. Please use only after modifying the TiCDC non-test code.
+mysql_docker_integration_test_with_build: clean_integration_test_containers
+	docker-compose -f $(TICDC_DOCKER_DEPLOYMENTS_DIR)/docker-compose-mysql-integration.yml up --build
+
+build_mysql_integration_test_images: ## Build MySQL integration test images without cache.
+build_mysql_integration_test_images: clean_integration_test_containers
+	docker-compose -f $(TICDC_DOCKER_DEPLOYMENTS_DIR)/docker-compose-mysql-integration.yml build --no-cache
+
 integration_test_kafka: check_third_party_binary
 	tests/integration_tests/run.sh kafka "$(CASE)" "$(START_AT)"
+
+kafka_docker_integration_test: ## Run TiCDC Kafka all integration tests in Docker.
+kafka_docker_integration_test: clean_integration_test_containers
+	docker-compose -f $(TICDC_DOCKER_DEPLOYMENTS_DIR)/docker-compose-kafka-integration.yml up
+
+kafka_docker_integration_test_with_build: ## Build images and run TiCDC Kafka all integration tests in Docker. Please use only after modifying the TiCDC non-test code.
+kafka_docker_integration_test_with_build: clean_integration_test_containers
+	docker-compose -f $(TICDC_DOCKER_DEPLOYMENTS_DIR)/docker-compose-kafka-integration.yml up --build
+
+build_kafka_integration_test_images: ## Build Kafka integration test images without cache.
+build_kafka_integration_test_images: clean_integration_test_containers
+	docker-compose -f $(TICDC_DOCKER_DEPLOYMENTS_DIR)/docker-compose-kafka-integration.yml build --no-cache
+
+clean_integration_test_containers: ## Clean MySQL and Kafka integration test containers.
+	docker-compose -f $(TICDC_DOCKER_DEPLOYMENTS_DIR)/docker-compose-mysql-integration.yml down -v
 
 fmt: tools/bin/gofumports tools/bin/shfmt generate_mock generate-msgp-code tiflow-generate-mock
 	@echo "gofmt (simplify)"
@@ -220,7 +260,7 @@ generate-msgp-code: tools/bin/msgp
 	@echo "generate-msgp-code"
 	./scripts/generate-msgp-code.sh
 
-generate-protobuf: tools/bin/protoc tools/bin/protoc-gen-gogofaster
+generate-protobuf: tools/bin/protoc tools/bin/protoc-gen-gogofaster tools/bin/protoc-gen-grpc-gateway
 	@echo "generate-protobuf"
 	./scripts/generate-protobuf.sh
 
@@ -264,8 +304,9 @@ swagger-spec: tools/bin/swag
 
 generate_mock: tools/bin/mockgen
 	tools/bin/mockgen -source cdc/owner/owner.go -destination cdc/owner/mock/owner_mock.go
+	tools/bin/mockgen -source cdc/owner/status_provider.go -destination cdc/owner/mock/status_provider_mock.go
 	tools/bin/mockgen -source cdc/api/v2/api_helpers.go -destination cdc/api/v2/api_helpers_mock.go -package v2
-	tools/bin/mockgen -source pkg/etcd/client_for_api.go -destination pkg/etcd/mock/etcd_client_mock.go
+	tools/bin/mockgen -source pkg/etcd/etcd.go -destination pkg/etcd/mock/etcd_client_mock.go
 	tools/bin/mockgen -source cdc/processor/manager.go -destination cdc/processor/mock/manager_mock.go
 	tools/bin/mockgen -source cdc/capture/capture.go -destination cdc/capture/mock/capture_mock.go
 	tools/bin/mockgen -source pkg/cmd/factory/factory.go -destination pkg/cmd/factory/mock/factory_mock.go -package mock_factory
@@ -275,6 +316,7 @@ clean:
 	rm -rf *.out
 	rm -rf bin
 	rm -rf tools/bin
+	rm -rf tools/include
 
 dm: dm-master dm-worker dmctl dm-syncer
 
@@ -300,9 +342,6 @@ dm-chaos-case:
 
 dm_debug-tools:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/binlog-event-blackhole ./dm/debug-tools/binlog-event-blackhole
-
-dm_generate_proto: tools/bin/protoc-gen-gogofaster tools/bin/protoc-gen-grpc-gateway
-	./dm/generate-dm.sh
 
 dm_generate_mock: tools/bin/mockgen
 	./dm/tests/generate-mock.sh
@@ -489,9 +528,6 @@ engine: tiflow tiflow-demo
 tiflow:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
 
-tiflow-proto: tools/bin/protoc tools/bin/protoc-gen-gogofaster tools/bin/goimports
-	scripts/generate-engine-proto.sh
-
 tiflow-demo:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./cmd/tiflow-demoserver
 
@@ -501,14 +537,28 @@ tiflow-chaos-case:
 tiflow-generate-mock: tools/bin/mockgen
 	scripts/generate-engine-mock.sh
 
-engine_image: 
+engine_image:
 	@which docker || (echo "docker not found in ${PATH}"; exit 1)
 	./engine/test/utils/run_engine.sh build
+
+engine_image_amd64: 
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	GOOS=linux GOARCH=amd64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
+	GOOS=linux GOARCH=amd64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./cmd/tiflow-demoserver
+	GOOS=linux GOARCH=amd64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-chaos-case ./engine/chaos/cases
+	docker build --platform linux/amd64 -f ./engine/deployments/docker/dev.Dockerfile -t dataflow:test ./ 
+
+engine_image_arm64: 
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
+	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./cmd/tiflow-demoserver
+	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-chaos-case ./engine/chaos/cases
+	docker build --platform linux/amd64 -f ./engine/deployments/docker/dev.Dockerfile -t dataflow:test ./ 
 
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))
 
-engine_integration_test: 
+engine_integration_test:
 	@which docker || (echo "docker not found in ${PATH}"; exit 1)
 	./engine/test/integration_tests/run.sh "$(CASE)" "$(START_AT)"
 

@@ -41,13 +41,14 @@ import (
 var _ scheduler.TableExecutor = (*processor)(nil)
 
 func newProcessor4Test(
-	ctx cdcContext.Context,
 	t *testing.T,
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (pipeline.TablePipeline, error),
 	liveness *model.Liveness,
 ) *processor {
 	up := upstream.NewUpstream4Test(nil)
-	p := newProcessor(ctx, up, liveness)
+	p := newProcessor(
+		&model.CaptureInfo{AdvertiseAddr: "127.0.0.1:0000"},
+		model.ChangeFeedID4Test("processor-test", "processor-test"), up, liveness)
 	p.lazyInit = func(ctx cdcContext.Context) error {
 		p.agent = &mockAgent{executor: p}
 		return nil
@@ -97,7 +98,7 @@ func initProcessor4Test(
     "sync-point-interval": 600000000000
 }
 `
-	p := newProcessor4Test(ctx, t, newMockTablePipeline, liveness)
+	p := newProcessor4Test(t, newMockTablePipeline, liveness)
 	p.changefeed = orchestrator.NewChangefeedReactorState(
 		etcd.DefaultCDCClusterID, ctx.ChangefeedVars().ID)
 	captureID := ctx.GlobalVars().CaptureInfo.ID
@@ -544,7 +545,7 @@ func TestProcessorError(t *testing.T) {
 		Error: &model.RunningError{
 			Addr:    "127.0.0.1:0000",
 			Code:    "CDC:ErrSinkURIInvalid",
-			Message: "[CDC:ErrSinkURIInvalid]sink uri invalid",
+			Message: "[CDC:ErrSinkURIInvalid]sink uri invalid '%s'",
 		},
 	})
 
@@ -660,7 +661,7 @@ func TestProcessorClose(t *testing.T) {
 	require.Equal(t, p.changefeed.TaskPositions[p.captureInfo.ID].Error, &model.RunningError{
 		Addr:    "127.0.0.1:0000",
 		Code:    "CDC:ErrSinkURIInvalid",
-		Message: "[CDC:ErrSinkURIInvalid]sink uri invalid",
+		Message: "[CDC:ErrSinkURIInvalid]sink uri invalid '%s'",
 	})
 	require.True(t, p.tables[1].(*mockTablePipeline).canceled)
 	require.True(t, p.tables[2].(*mockTablePipeline).canceled)

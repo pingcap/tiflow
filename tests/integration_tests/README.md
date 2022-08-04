@@ -77,12 +77,12 @@ We recommend that you provide docker with at least 6+ cores and 8G+ memory. Of c
 > We will try to resolve these issues as soon as possible.
 
 1. If you want to run kafka tests,
-   run `START_AT="clustered_index" docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-kafka-integration.yml up --build`
+   run `START_AT="clustered_index" make kafka_docker_integration_test_with_build`
 
 2. If you want to run MySQL tests,
-   run `CASE="clustered_index" docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-mysql-integration.yml up --build`
+   run `CASE="clustered_index" make mysql_docker_integration_test_with_build`
 
-3. Use the command `docker-compose -f ./deployments/ticdc/docker-compose/docker-compose-kafka-integration.yml down -v`
+3. Use the command `make clean_integration_test_images`
    to clean up the corresponding environment.
 
 Some useful tips:
@@ -97,7 +97,7 @@ Some useful tips:
    > For example, you can change `RUN ./download-integration-test-binaries.sh master`
    to `RUN ./download-integration-test-binaries.sh release-5.2`
    > to use the release-5.2 dependency.
-   > Then rebuild the image with the [--no-cache](https://docs.docker.com/compose/reference/build/) flag.
+   > Then rebuild the image with `make build_mysql_integration_test_images`.
 
 #### Run integration tests locally
 

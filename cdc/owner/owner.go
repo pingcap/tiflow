@@ -24,15 +24,12 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/scheduler"
-	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
-	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
@@ -112,6 +109,10 @@ type ownerImpl struct {
 	// NOTICE: Do not use it in a method other than tick unexpectedly,
 	//         as it is not a thread-safe value.
 	bootstrapped bool
+	// changefeedTicked specifies whether changefeeds have been ticked.
+	// NOTICE: Do not use it in a method other than tick unexpectedly,
+	//         as it is not a thread-safe value.
+	changefeedTicked bool
 
 	newChangefeed func(id model.ChangeFeedID, up *upstream.Upstream) *changefeed
 }
@@ -125,27 +126,6 @@ func NewOwner(upstreamManager *upstream.Manager) Owner {
 		newChangefeed:   newChangefeed,
 		logLimiter:      rate.NewLimiter(versionInconsistentLogRate, versionInconsistentLogRate),
 	}
-}
-
-// NewOwner4Test creates a new Owner for test
-func NewOwner4Test(
-	newDDLPuller func(ctx context.Context,
-		replicaConfig *config.ReplicaConfig,
-		up *upstream.Upstream,
-		startTs uint64,
-		changefeed model.ChangeFeedID,
-	) (puller.DDLPuller, error),
-	newSink func() DDLSink,
-	pdClient pd.Client,
-) Owner {
-	m := upstream.NewManager4Test(pdClient)
-	o := NewOwner(m).(*ownerImpl)
-	// Most tests do not need to test bootstrap.
-	o.bootstrapped = true
-	o.newChangefeed = func(id model.ChangeFeedID, up *upstream.Upstream) *changefeed {
-		return newChangefeed4Test(id, up, newDDLPuller, newSink)
-	}
-	return o
 }
 
 // Tick implements the Reactor interface
@@ -210,6 +190,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 		}
 		cfReactor.Tick(ctx, changefeedState, state.Captures)
 	}
+	o.changefeedTicked = true
 
 	// Cleanup changefeeds that are not in the state.
 	if len(o.changefeeds) != len(state.Changefeeds) {
@@ -402,15 +383,18 @@ func (o *ownerImpl) updateMetrics(state *orchestrator.GlobalReactorState) {
 }
 
 func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model.CaptureInfo) bool {
-	myVersion := version.ReleaseVersion
+	versions := make(map[string]struct{}, len(captures))
 	for _, capture := range captures {
-		if myVersion != capture.Version {
-			if o.logLimiter.Allow() {
-				log.Warn("the capture version is different with the owner",
-					zap.Reflect("capture", capture), zap.String("ownerVer", myVersion))
-			}
-			return false
+		versions[capture.Version] = struct{}{}
+	}
+
+	if err := version.CheckTiCDCVersion(versions); err != nil {
+		if o.logLimiter.Allow() {
+			log.Warn("TiCDC cluster versions not allowed",
+				zap.String("ownerVer", version.ReleaseVersion),
+				zap.Any("captures", captures), zap.Error(err))
 		}
+		return false
 	}
 	return true
 }
@@ -422,6 +406,28 @@ func (o *ownerImpl) handleDrainCaptures(query *scheduler.Query, done chan<- erro
 		err                      error
 	)
 	for _, changefeed := range o.changefeeds {
+		// Only count normal changefeed.
+		state := changefeed.state.Info.State
+		if state != model.StateNormal {
+			log.Info("skip drain changefeed",
+				zap.String("state", string(state)),
+				zap.String("target", query.CaptureID),
+				zap.String("namespace", changefeed.id.Namespace),
+				zap.String("changefeed", changefeed.id.ID))
+			continue
+		}
+		if changefeed.scheduler == nil {
+			// Scheduler is created lazily, it is nil before initialization.
+			log.Info("drain a changefeed without scheduler",
+				zap.String("state", string(state)),
+				zap.String("target", query.CaptureID),
+				zap.String("namespace", changefeed.id.Namespace),
+				zap.String("changefeed", changefeed.id.ID))
+			// To prevent a changefeed being considered drained,
+			// we increase totalTableCount.
+			totalTableCount++
+			continue
+		}
 		count, e := changefeed.scheduler.DrainCapture(query.CaptureID)
 		if e != nil {
 			err = e
@@ -467,12 +473,18 @@ func (o *ownerImpl) handleJobs() {
 		case ownerJobTypeAdminJob:
 			cfReactor.feedStateManager.PushAdminJob(job.AdminJob)
 		case ownerJobTypeScheduleTable:
-			cfReactor.scheduler.MoveTable(job.TableID, job.TargetCaptureID)
+			// Scheduler is created lazily, it is nil before initialization.
+			if cfReactor.scheduler != nil {
+				cfReactor.scheduler.MoveTable(job.TableID, job.TargetCaptureID)
+			}
 		case ownerJobTypeDrainCapture:
 			o.handleDrainCaptures(job.scheduleQuery, job.done)
 			continue // continue here to prevent close the done channel twice
 		case ownerJobTypeRebalance:
-			cfReactor.scheduler.Rebalance()
+			// Scheduler is created lazily, it is nil before initialization.
+			if cfReactor.scheduler != nil {
+				cfReactor.scheduler.Rebalance()
+			}
 		case ownerJobTypeQuery:
 			job.done <- o.handleQueries(job.query)
 		case ownerJobTypeDebugInfo:
@@ -586,6 +598,24 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 			})
 		}
 		query.Data = ret
+	case QueryHealth:
+		isHealthy := true
+		if !o.changefeedTicked {
+			// Owner has not yet tick changefeeds, some changefeeds may be not
+			// initialized.
+			isHealthy = false
+		} else {
+			for _, cfReactor := range o.changefeeds {
+				provider := cfReactor.GetInfoProvider()
+				if provider == nil || !provider.IsInitialized() {
+					// The scheduler has not been initialized yet, it is considered
+					// unhealthy, because owner can not schedule tables for now.
+					isHealthy = false
+					break
+				}
+			}
+		}
+		query.Data = isHealthy
 	}
 	return nil
 }

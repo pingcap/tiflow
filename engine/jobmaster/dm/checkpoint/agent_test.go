@@ -22,6 +22,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/stretchr/testify/require"
@@ -44,6 +45,7 @@ func TestCheckpoint(t *testing.T) {
 	jobCfg := &config.JobCfg{Name: "test", MetaSchema: "meta", TaskMode: dmconfig.ModeAll}
 	db, mock, err := conn.InitMockDBFull()
 	require.NoError(t, err)
+	defer db.Close()
 	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS %s`, "`meta`"))).WillReturnResult(sqlmock.NewResult(1, 1))
 	require.NoError(t, createMetaDatabase(context.Background(), jobCfg, conn.NewBaseDB(db)))
 
@@ -84,7 +86,8 @@ func TestCheckpoint(t *testing.T) {
 
 func TestCheckpointLifeCycle(t *testing.T) {
 	jobCfg := &config.JobCfg{Name: "test", MetaSchema: "meta", TaskMode: dmconfig.ModeAll}
-	checkpointAgent := NewAgentImpl(jobCfg)
+	agent := NewAgentImpl(jobCfg, log.L())
+	checkpointAgent := agent.(*AgentImpl)
 	require.Equal(t, checkpointAgent.getConfig(), jobCfg)
 	jobCfg2 := &config.JobCfg{Name: "test2", MetaSchema: "meta", TaskMode: dmconfig.ModeAll}
 	checkpointAgent.updateConfig(jobCfg2)
@@ -195,7 +198,7 @@ func TestIsFresh(t *testing.T) {
 		},
 	}
 	taskCfg := jobCfg.ToTaskCfgs()[source1]
-	checkpointAgent := NewAgentImpl(jobCfg)
+	checkpointAgent := NewAgentImpl(jobCfg, log.L())
 
 	isFresh, err := checkpointAgent.IsFresh(context.Background(), framework.WorkerDMDump, &metadata.Task{Cfg: taskCfg})
 	require.NoError(t, err)

@@ -1,5 +1,15 @@
 addr = "0.0.0.0:10240"
-[etcd]
-name = "server-master-1"
-data-dir = "/tmp/df/master"
 
+etcd-endpoints = ["etcd-standalone:2379"]
+
+[framework-metastore-conf]
+endpoints = ["mysql-standalone:3306"]
+schema = "test"
+auth.user = "root"
+auth.passwd = ""
+
+[business-metastore-conf]
+endpoints = ["mysql-standalone:3306"]
+schema = "test"
+auth.user = "root"
+auth.passwd = ""

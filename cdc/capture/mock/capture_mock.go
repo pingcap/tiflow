@@ -66,10 +66,10 @@ func (mr *MockCaptureMockRecorder) Drain(ctx interface{}) *gomock.Call {
 }
 
 // GetEtcdClient mocks base method.
-func (m *MockCapture) GetEtcdClient() etcd.CDCEtcdClientForAPI {
+func (m *MockCapture) GetEtcdClient() etcd.CDCEtcdClient {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetEtcdClient")
-	ret0, _ := ret[0].(etcd.CDCEtcdClientForAPI)
+	ret0, _ := ret[0].(etcd.CDCEtcdClient)
 	return ret0
 }
 

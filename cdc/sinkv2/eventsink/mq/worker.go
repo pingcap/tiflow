@@ -20,11 +20,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/producer"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
+	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"go.uber.org/zap"
 )
@@ -48,12 +48,12 @@ type worker struct {
 	// encoder is used to encode the messages.
 	encoder codec.EventBatchEncoder
 	// producer is used to send the messages to the Kafka/Pulsar broker.
-	producer producer.Producer
+	producer dmlproducer.DMLProducer
 }
 
 // newWorker creates a new flush worker.
 func newWorker(id model.ChangeFeedID, encoder codec.EventBatchEncoder,
-	producer producer.Producer,
+	producer dmlproducer.DMLProducer,
 ) *worker {
 	w := &worker{
 		changeFeedID: id,
@@ -75,6 +75,8 @@ func (w *worker) run(ctx context.Context) (retErr error) {
 			zap.String("namespace", w.changeFeedID.Namespace),
 			zap.String("changefeed", w.changeFeedID.ID))
 	}()
+	log.Info("MQ sink worker started", zap.String("namespace", w.changeFeedID.Namespace),
+		zap.String("changefeed", w.changeFeedID.ID))
 	// Fixed size of the batch.
 	eventsBuf := make([]mqEvent, mqv1.FlushBatchSize)
 	for {
@@ -167,7 +169,7 @@ func (w *worker) asyncSend(
 	for key, events := range partitionedRows {
 		for _, event := range events {
 			// Skip this event when the table is stopping.
-			if event.TableStatus.Load() == pipeline.TableStateStopping {
+			if event.GetTableSinkState() == state.TableSinkStopping {
 				event.Callback()
 				log.Debug("skip event of stopped table", zap.Any("event", event))
 				continue
@@ -199,12 +201,5 @@ func (w *worker) close() {
 	for range w.msgChan.Out() {
 		// Do nothing. We do not care about the data.
 	}
-	// We need to close it asynchronously.
-	// Otherwise, we might get stuck with it in an unhealthy state of kafka.
-	go func() {
-		err := w.producer.Close()
-		if err != nil {
-			log.Error("failed to close Kafka producer", zap.Error(err))
-		}
-	}()
+	w.producer.Close()
 }

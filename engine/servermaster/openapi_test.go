@@ -117,7 +117,7 @@ func TestOpenAPIBasic(t *testing.T) {
 		{
 			method:        http.MethodGet,
 			path:          "/api/v1/jobs/job1",
-			statusCode:    http.StatusNotImplemented,
+			statusCode:    http.StatusOK,
 			shouldForward: false,
 		},
 		{
