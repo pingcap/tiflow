@@ -212,20 +212,20 @@ func TestIsConnectionRefusedError(t *testing.T) {
 
 func TestGetDDLStatusFromTiDB(t *testing.T) {
 	var (
-		adminShowDDLJobsSQL1       = ""
-		adminShowDDLJobsSQL2       = ""
-		adminShowDDLJobsLimitSQL1  = ""
-		adminShowDDLJobsLimitSQL2  = ""
-		adminShowDDLJobsLimitSQL3  = ""
-		adminShowDDLJobsLimitSQL4  = ""
-		adminShowDDLJobsLimitSQL5  = ""
-		adminShowDDLJobsLimitSQL6  = ""
-		adminShowDDLJobsLimitSQL7  = ""
-		adminShowDDLJobsLimitSQL8  = ""
-		adminShowDDLJobsLimitSQL9  = ""
-		adminShowDDLJobsLimitSQL10 = ""
-		adminShowDDLJobsLimitSQL11 = ""
-		adminShowDDLJobsLimitSQL12 = ""
+		adminShowDDLJobsSQL1       string
+		adminShowDDLJobsSQL2       string
+		adminShowDDLJobsLimitSQL1  string
+		adminShowDDLJobsLimitSQL2  string
+		adminShowDDLJobsLimitSQL3  string
+		adminShowDDLJobsLimitSQL4  string
+		adminShowDDLJobsLimitSQL5  string
+		adminShowDDLJobsLimitSQL6  string
+		adminShowDDLJobsLimitSQL7  string
+		adminShowDDLJobsLimitSQL8  string
+		adminShowDDLJobsLimitSQL9  string
+		adminShowDDLJobsLimitSQL10 string
+		adminShowDDLJobsLimitSQL11 string
+		adminShowDDLJobsLimitSQL12 string
 	)
 
 	var err error

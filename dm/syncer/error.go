@@ -64,8 +64,8 @@ func isDropColumnWithIndexError(err error) bool {
 			strings.Contains(mysqlErr.Message, "with tidb_enable_change_multi_schema is disable"))
 }
 
-// here db should be TiDB database
-func GetDDLStatusFromTiDB(db *sql.DB, DDL string, createTime int64) (string, error) {
+// here db should be TiDB database.
+func GetDDLStatusFromTiDB(db *sql.DB, ddl string, createTime int64) (string, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -114,7 +114,8 @@ func GetDDLStatusFromTiDB(db *sql.DB, DDL string, createTime int64) (string, err
 			DDLCreateTime := theTime.Unix()
 
 			if DDLCreateTime >= createTime {
-				jobID, err := strconv.Atoi(string(values[0]))
+				var jobID int
+				jobID, err = strconv.Atoi(string(values[0]))
 				if err != nil {
 					return "", err
 				}
@@ -128,7 +129,7 @@ func GetDDLStatusFromTiDB(db *sql.DB, DDL string, createTime int64) (string, err
 					if err != nil {
 						return "", err
 					}
-					if jobID == jobIDForLimit && DDL == DDLJob {
+					if jobID == jobIDForLimit && ddl == DDLJob {
 						return string(values[11]), err
 					}
 					if jobIDForLimit <= jobID {
