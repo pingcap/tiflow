@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/pingcap/errors"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -28,9 +29,10 @@ import (
 
 // TaskStatus represents status of a task
 type TaskStatus struct {
-	ExpectedStage metadata.TaskStage
-	WorkerID      frameModel.WorkerID
-	Status        *dmpkg.QueryStatusResponse
+	ExpectedStage  metadata.TaskStage
+	WorkerID       frameModel.WorkerID
+	ConfigOutdated bool
+	Status         *dmpkg.QueryStatusResponse
 }
 
 // JobStatus represents status of a job
@@ -55,6 +57,12 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 		}
 	}
 
+	var expectedCfgModRevsion uint64
+	for _, task := range job.Tasks {
+		expectedCfgModRevsion = task.Cfg.ModRevision
+		break
+	}
+
 	var (
 		workerStatusMap = jm.workerManager.WorkerStatus()
 		wg              sync.WaitGroup
@@ -75,6 +83,7 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 			var (
 				queryStatusResp *dmpkg.QueryStatusResponse
 				workerID        string
+				cfgModRevision  uint64
 				expectedStage   metadata.TaskStage
 			)
 
@@ -90,18 +99,21 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 				} else if workerStatus.Stage == runtime.WorkerFinished {
 					// task finished
 					workerID = workerStatus.ID
+					cfgModRevision = workerStatus.CfgModRevision
 					queryStatusResp = &dmpkg.QueryStatusResponse{Unit: workerStatus.Unit, Stage: metadata.StageFinished}
 				} else {
 					workerID = workerStatus.ID
+					cfgModRevision = workerStatus.CfgModRevision
 					queryStatusResp = jm.QueryStatus(ctx, taskID)
 				}
 			}
 
 			mu.Lock()
 			jobStatus.TaskStatus[taskID] = TaskStatus{
-				ExpectedStage: expectedStage,
-				WorkerID:      workerID,
-				Status:        queryStatusResp,
+				ExpectedStage:  expectedStage,
+				WorkerID:       workerID,
+				Status:         queryStatusResp,
+				ConfigOutdated: cfgModRevision != expectedCfgModRevsion,
 			}
 			mu.Unlock()
 		}()
@@ -122,10 +134,10 @@ func (jm *JobMaster) QueryStatus(ctx context.Context, taskID string) *dmpkg.Quer
 	return resp.(*dmpkg.QueryStatusResponse)
 }
 
-// OperateTask operate task.
-func (jm *JobMaster) OperateTask(ctx context.Context, op dmpkg.OperateType, cfg *config.JobCfg, tasks []string) error {
+// operateTask operate task.
+func (jm *JobMaster) operateTask(ctx context.Context, op dmpkg.OperateType, cfg *config.JobCfg, tasks []string) error {
 	switch op {
-	case dmpkg.Resume, dmpkg.Pause:
+	case dmpkg.Resume, dmpkg.Pause, dmpkg.Update:
 		return jm.taskManager.OperateTask(ctx, op, cfg, tasks)
 	default:
 		return errors.Errorf("unsupport op type %d for operate task", op)
@@ -145,6 +157,21 @@ func (jm *JobMaster) GetJobCfg(ctx context.Context) (*config.JobCfg, error) {
 		taskCfgs = append(taskCfgs, task.Cfg)
 	}
 	return config.FromTaskCfgs(taskCfgs), nil
+}
+
+// UpdateJobCfg updates job config.
+func (jm *JobMaster) UpdateJobCfg(ctx context.Context, cfg *config.JobCfg) error {
+	if err := jm.preCheck(ctx, cfg); err != nil {
+		return err
+	}
+	if err := jm.operateTask(ctx, dmpkg.Update, cfg, nil); err != nil {
+		return err
+	}
+	if err := jm.checkpointAgent.Update(ctx, cfg); err != nil {
+		return err
+	}
+	jm.workerManager.SetNextCheckTime(time.Now())
+	return nil
 }
 
 // Binlog implements the api of binlog request.

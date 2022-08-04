@@ -195,7 +195,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	jm := &JobMaster{
 		workerID:      "jobmaster-id",
-		jobCfg:        jobCfg,
+		initJobCfg:    jobCfg,
 		BaseJobMaster: mockBaseJobmaster,
 	}
 
@@ -224,7 +224,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	// recover
 	jm = &JobMaster{
 		workerID:      "jobmaster-id",
-		jobCfg:        jobCfg,
+		initJobCfg:    jobCfg,
 		BaseJobMaster: mockBaseJobmaster,
 		messageAgent:  mockMessageAgent,
 	}
@@ -316,7 +316,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	// master failover
 	jm = &JobMaster{
 		workerID:        "jobmaster-id",
-		jobCfg:          jobCfg,
+		initJobCfg:      jobCfg,
 		BaseJobMaster:   mockBaseJobmaster,
 		checkpointAgent: mockCheckpointAgent,
 		messageAgent:    mockMessageAgent,
@@ -349,7 +349,11 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 		defer wg.Done()
 		require.NoError(t.T(), jm.CloseImpl(context.Background()))
 	}()
-	time.Sleep(time.Second * 2)
+	require.Eventually(t.T(), func() bool {
+		mockMessageAgent.Lock()
+		defer mockMessageAgent.Unlock()
+		return len(mockMessageAgent.Calls) == 2
+	}, 5*time.Second, 10*time.Millisecond)
 	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
 	workerHandle2.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes2}).Once()
 	jm.OnWorkerOffline(workerHandle1, errors.New("offline error"))
@@ -408,7 +412,7 @@ type MockCheckpointAgent struct {
 	mock.Mock
 }
 
-func (m *MockCheckpointAgent) Init(ctx context.Context) error {
+func (m *MockCheckpointAgent) Create(ctx context.Context) error {
 	return nil
 }
 
@@ -421,4 +425,11 @@ func (m *MockCheckpointAgent) IsFresh(ctx context.Context, workerType framework.
 	defer m.mu.Unlock()
 	args := m.Called()
 	return args.Get(0).(bool), args.Error(1)
+}
+
+func (m *MockCheckpointAgent) Update(ctx context.Context, jobCfg *config.JobCfg) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	args := m.Called()
+	return args.Error(0)
 }
