@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -234,6 +233,8 @@ func (s *server) etcdHealthChecker(ctx context.Context) error {
 	ticker := time.NewTicker(time.Second * 3)
 	defer ticker.Stop()
 	conf := config.GetGlobalServerConfig()
+	//
+	//pdApiClient, err := pd.NewPDAPIClient(conf.PdAddr, conf.Security)
 
 	httpCli, err := httputil.NewClient(conf.Security)
 	if err != nil {
