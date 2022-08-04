@@ -16,9 +16,5 @@ while [ $WAIT_COUNT -lt 120 ]; do
 	((WAIT_COUNT++))
 done
 
-<<<<<<< HEAD
-echo "process $process didn't exit after 120 seconds, current processlist: $(pgrep $process)"
-=======
 echo "process $process didn't exit after 120 seconds, current processlist: $(ps aux | grep $process | grep -v 'grep' | grep -v 'wait_process_exit')"
->>>>>>> b2da15fff (test(dm): fix using pgrep to check argument pattern (#6572))
 exit 1
