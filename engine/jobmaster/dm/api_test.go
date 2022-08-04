@@ -299,7 +299,7 @@ func TestUpdateJobCfg(t *testing.T) {
 		mockCheckpointAgent = &MockCheckpointAgent{}
 		messageAgent        = &dmpkg.MockMessageAgent{}
 		jobCfg              = &config.JobCfg{}
-		jobStore            = metadata.NewJobStore(mockBaseJobmaster.JobMasterID(), metaKVClient)
+		jobStore            = metadata.NewJobStore(mockBaseJobmaster.ID(), metaKVClient)
 		jm                  = &JobMaster{
 			BaseJobMaster:   mockBaseJobmaster,
 			checkpointAgent: mockCheckpointAgent,

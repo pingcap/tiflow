@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
+	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
@@ -273,11 +274,11 @@ func (d *DefaultBaseJobMaster) Workload() model.RescUnit {
 	return d.worker.Workload()
 }
 
-// ID returns the id of the job master itself
-func (d *DefaultBaseJobMaster) ID() frameModel.MasterID {
+// ID delegates the ID of inner worker
+func (d *DefaultBaseJobMaster) ID() runtime.RunnableID {
 	// JobMaster is a combination of 'master' and 'worker'
 	// d.master.MasterID() == d.worker.ID() == JobID
-	return d.master.MasterID()
+	return d.worker.ID()
 }
 
 // UpdateJobStatus implements BaseJobMaster.UpdateJobStatus

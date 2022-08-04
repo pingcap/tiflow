@@ -37,6 +37,7 @@ import (
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/master"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	engineRuntime "github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework"
 	libMetadata "github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -372,6 +373,10 @@ type MockBaseJobmaster struct {
 	mock.Mock
 
 	framework.BaseJobMaster
+}
+
+func (m *MockBaseJobmaster) ID() engineRuntime.RunnableID {
+	return "dm-jobmaster-id"
 }
 
 func (m *MockBaseJobmaster) GetWorkers() map[string]framework.WorkerHandle {
