@@ -353,6 +353,7 @@ func (m *Master) tickedCheckWorkers(ctx context.Context) error {
 }
 
 func (m *Master) tickedCheckStatus(ctx context.Context) error {
+	// if job master is not initialized, does nothing here
 	if !m.initialized.Load() {
 		return nil
 	}
