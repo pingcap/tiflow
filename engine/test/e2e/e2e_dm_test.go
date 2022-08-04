@@ -31,18 +31,18 @@ import (
 	"time"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
-	"github.com/pingcap/tiflow/dm/pkg/conn"
-	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
-	"github.com/pingcap/tiflow/tests/integration_tests/util"
 	"github.com/stretchr/testify/require"
 
-	"github.com/pingcap/tiflow/engine/client"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/openapi"
 	engineModel "github.com/pingcap/tiflow/engine/model"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/test/e2e"
+	"github.com/pingcap/tiflow/tests/integration_tests/util"
 )
 
 const (
@@ -53,15 +53,14 @@ const (
 )
 
 func TestDMJob(t *testing.T) {
-	ctx := context.Background()
-	masterClient, err := client.NewMasterClient(ctx, []string{masterAddr})
+	client, err := e2e.NewJobManagerClient("http://127.0.0.1:10245")
 	require.NoError(t, err)
 
 	mysqlCfg := util.DBConfig{
 		Host:     "127.0.0.1",
 		Port:     3306,
 		User:     "root",
-		Password: "123456",
+		Password: "",
 	}
 	tidbCfg := util.DBConfig{
 		Host:     "127.0.0.1",
@@ -89,11 +88,11 @@ func TestDMJob(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		testSimpleAllModeTask(t, masterClient, mysql, tidb, "test1")
+		testSimpleAllModeTask(t, client, mysql, tidb, "test1")
 	}()
 	go func() {
 		defer wg.Done()
-		testSimpleAllModeTask(t, masterClient, mysql, tidb, "test2")
+		testSimpleAllModeTask(t, client, mysql, tidb, "test2")
 	}()
 	wg.Wait()
 
@@ -123,7 +122,7 @@ func TestDMJob(t *testing.T) {
 // `db` should not contain special character.
 func testSimpleAllModeTask(
 	t *testing.T,
-	client client.MasterClient,
+	client enginepb.JobManagerClient,
 	mysql, tidb *sql.DB,
 	db string,
 ) {

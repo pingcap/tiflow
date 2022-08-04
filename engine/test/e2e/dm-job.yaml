@@ -14,7 +14,7 @@ target-database:
   host: host.docker.internal
   port: 4000
   user: root
-  password: ''
+  password: ""
   max-allowed-packet: null
   session:
     tidb_txn_mode: optimistic
@@ -25,7 +25,7 @@ upstreams:
       host: host.docker.internal
       port: 3306
       user: root
-      password: '123456'
+      password: ""
       session: {}
     source-id: mysql-replica-01
     meta:

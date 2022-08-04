@@ -51,7 +51,7 @@ func (o *jobPauseOptions) validate(ctx context.Context, cmd *cobra.Command) erro
 
 // run the `cli job create` command.
 func (o *jobPauseOptions) run(ctx context.Context, cmd *cobra.Command) error {
-	resp, err := o.generalOpts.masterClient.PauseJob(ctx, &enginepb.PauseJobRequest{
+	resp, err := o.generalOpts.jobManagerCli.PauseJob(ctx, &enginepb.PauseJobRequest{
 		JobId: o.jobID,
 		ProjectInfo: &enginepb.ProjectInfo{
 			TenantId:  o.generalOpts.tenant.TenantID(),

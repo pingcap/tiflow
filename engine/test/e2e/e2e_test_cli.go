@@ -14,31 +14,31 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/url"
+	"net/http"
 	"os/exec"
-	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"google.golang.org/grpc"
-
-	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/fake"
 	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/meta"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/engine/servermaster"
 	server "github.com/pingcap/tiflow/engine/servermaster"
-	"github.com/pingcap/tiflow/pkg/httputil"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func init() {
@@ -49,10 +49,9 @@ func init() {
 // ChaosCli is used to interact with server master, fake job and provides ways
 // to adding chaos in e2e test.
 type ChaosCli struct {
-	masterAddrs []string
+	jobManagerCli pb.JobManagerClient
+	masterAddrs   []string
 	// masterCli is used to operate with server master, such as submit job
-	masterCli client.MasterClient
-	// clientConn is the client connection for business metastore
 	clientConn metaModel.ClientConn
 	// metaCli is used to query metadata which is stored from business logic(job-level isolation)
 	// NEED to reinitialize the metaCli if we access to a different job
@@ -71,16 +70,35 @@ type FakeJobConfig struct {
 	KeyPrefix     string
 }
 
+// NewJobManagerClient returns a pb.JobManagerClient that can be used for tests.
+// TODO remove this function. It is only for temporary use before an OpenAPI client is ready.
+func NewJobManagerClient(endpoint string) (pb.JobManagerClient, error) {
+	endpoint = strings.TrimLeft(endpoint, "http://")
+	conn, err := grpc.Dial(
+		endpoint,
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return pb.NewJobManagerClient(conn), nil
+}
+
 // NewUTCli creates a new ChaosCli instance
 func NewUTCli(ctx context.Context, masterAddrs, businessMetaAddrs []string, project tenant.ProjectInfo,
 	cfg *FakeJobConfig,
 ) (*ChaosCli, error) {
+	if len(masterAddrs) == 0 {
+		panic("length of masterAddrs is 0")
+	}
+
+	jobManagerCli, err := NewJobManagerClient(masterAddrs[0])
+	if err != nil {
+		return nil, err
+	}
+
 	// TODO: NEED to move metastore config to a toml, and parse the toml
 	defaultSchema := "test"
-	masterCli, err := client.NewMasterClient(ctx, masterAddrs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 
 	conf := server.NewDefaultBusinessMetaConfig()
 	conf.Endpoints = businessMetaAddrs
@@ -101,12 +119,12 @@ func NewUTCli(ctx context.Context, masterAddrs, businessMetaAddrs []string, proj
 	}
 
 	return &ChaosCli{
-		masterAddrs: masterAddrs,
-		masterCli:   masterCli,
-		clientConn:  cc,
-		fakeJobCli:  fakeJobCli,
-		fakeJobCfg:  cfg,
-		project:     project,
+		jobManagerCli: jobManagerCli,
+		masterAddrs:   masterAddrs,
+		clientConn:    cc,
+		fakeJobCli:    fakeJobCli,
+		fakeJobCfg:    cfg,
+		project:       project,
 	}, nil
 }
 
@@ -125,7 +143,7 @@ func (cli *ChaosCli) PauseJob(ctx context.Context, jobID string) error {
 			ProjectId: cli.project.ProjectID(),
 		},
 	}
-	resp, err := cli.masterCli.PauseJob(ctx, req)
+	resp, err := cli.jobManagerCli.PauseJob(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -139,21 +157,12 @@ func (cli *ChaosCli) PauseJob(ctx context.Context, jobID string) error {
 func (cli *ChaosCli) CheckJobStatus(
 	ctx context.Context, jobID string, expectedStatus pb.QueryJobResponse_JobStatus,
 ) (bool, error) {
-	req := &pb.QueryJobRequest{
-		JobId: jobID,
-		ProjectInfo: &pb.ProjectInfo{
-			TenantId:  cli.project.TenantID(),
-			ProjectId: cli.project.ProjectID(),
-		},
-	}
-	resp, err := cli.masterCli.QueryJob(ctx, req)
+	resp, err := QueryJobViaOpenAPI(ctx, cli.masterAddrs[0],
+		cli.project.TenantID(), cli.project.ProjectID(), jobID)
 	if err != nil {
 		return false, err
 	}
-	if resp.Err != nil {
-		return false, errors.New(resp.Err.String())
-	}
-	return resp.Status == expectedStatus, nil
+	return resp.Status == int32(expectedStatus), nil
 }
 
 // UpdateFakeJobKey updates the etcd value of a worker belonging to a fake job
@@ -297,18 +306,22 @@ func CreateJobViaOpenAPI(
 	ctx context.Context, apiEndpoint string, tenantID string, projectID string,
 	tp engineModel.JobType, cfg string,
 ) (string, error) {
-	cli, err := httputil.NewClient(nil)
+	data := &servermaster.APICreateJobRequest{
+		JobType:   int32(tp),
+		JobConfig: cfg,
+	}
+	postData, err := json.Marshal(data)
 	if err != nil {
 		return "", err
 	}
-	data := url.Values{
-		"job_type":   {strconv.Itoa(int(tp))},
-		"job_config": {cfg},
-		"tenant_id":  {tenantID},
-		"project_id": {projectID},
-	}
-	apiURL := "http://" + apiEndpoint + "/api/v1/jobs"
-	resp, err := cli.PostForm(ctx, apiURL, data)
+
+	resp, err := http.Post(
+		fmt.Sprintf("http://%s/api/v1/jobs?tenant_id=%s&project_id=%s",
+			apiEndpoint, tenantID, projectID,
+		),
+		"application/json",
+		bytes.NewReader(postData),
+	)
 	if err != nil {
 		return "", err
 	}
@@ -316,7 +329,29 @@ func CreateJobViaOpenAPI(
 	if err != nil {
 		return "", err
 	}
+
 	var jobID string
 	err = json.Unmarshal(body, &jobID)
 	return jobID, err
+}
+
+// QueryJobViaOpenAPI wraps OpenAPI to query a job
+func QueryJobViaOpenAPI(
+	ctx context.Context, apiEndpoint string, tenantID, projectID, jobID string,
+) (result *servermaster.APIQueryJobResponse, err error) {
+	url := fmt.Sprintf(
+		"http://%s/api/v1/jobs/%s?tenant_id=%s&project_id=%s",
+		apiEndpoint, jobID, tenantID, projectID,
+	)
+	resp, err := http.Get(url) // #nosec G107
+	if err != nil {
+		return
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
+	result = &servermaster.APIQueryJobResponse{}
+	err = json.Unmarshal(body, result)
+	return
 }
