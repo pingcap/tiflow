@@ -87,7 +87,7 @@ func openFileAndReadString(path string) (content []byte, err error) {
 
 // run the `cli job create` command.
 func (o *jobCreateOptions) run(ctx context.Context, cmd *cobra.Command) error {
-	resp, err := o.generalOpts.masterClient.SubmitJob(ctx, &enginepb.SubmitJobRequest{
+	resp, err := o.generalOpts.jobManagerCli.SubmitJob(ctx, &enginepb.SubmitJobRequest{
 		Tp:     int32(o.jobType),
 		Config: o.jobConfig,
 		ProjectInfo: &enginepb.ProjectInfo{

@@ -155,7 +155,7 @@ func (c *DefaultGCCoordinator) initializeGC(
 func (c *DefaultGCCoordinator) gcByStatusSnapshots(
 	ctx context.Context,
 	jobSnapshot JobStatusesSnapshot,
-	executorSnapshot []model.ExecutorID,
+	executorSnapshot map[model.ExecutorID]string,
 ) error {
 	startTime := time.Now()
 	defer func() {
@@ -170,7 +170,7 @@ func (c *DefaultGCCoordinator) gcByStatusSnapshots(
 	}
 
 	executorSet := make(map[model.ExecutorID]struct{}, len(executorSnapshot))
-	for _, id := range executorSnapshot {
+	for id := range executorSnapshot {
 		executorSet[id] = struct{}{}
 	}
 

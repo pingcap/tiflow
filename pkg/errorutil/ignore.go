@@ -14,6 +14,8 @@
 package errorutil
 
 import (
+	"strings"
+
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/infoschema"
@@ -51,6 +53,9 @@ func IsIgnorableMySQLDDLError(err error) bool {
 
 // IsRetryableEtcdError is used to check what error can be retried.
 func IsRetryableEtcdError(err error) bool {
+	if err == nil {
+		return false
+	}
 	etcdErr := errors.Cause(err)
 
 	switch etcdErr {
@@ -67,6 +72,13 @@ func IsRetryableEtcdError(err error) bool {
 		v3rpc.ErrTimeoutDueToLeaderFail, v3rpc.ErrGRPCTimeoutDueToConnectionLost, v3rpc.ErrUnhealthy:
 		return true
 	default:
-		return false
 	}
+	// when the PD instance was deleted from the PD cluster, it may meet error with `raft:stopped`,
+	// retry on such error make cdc robust to PD / ETCD cluster member removal.
+	// we should tolerant such case to make cdc robust to PD / ETCD cluster member change.
+	// see: https://github.com/etcd-io/etcd/blob/ae36a577d7be/raft/node.go#L35
+	if strings.Contains(etcdErr.Error(), "raft: stopped") {
+		return true
+	}
+	return false
 }
