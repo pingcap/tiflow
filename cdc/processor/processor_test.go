@@ -843,6 +843,7 @@ func TestProcessorLiveness(t *testing.T) {
 	require.Equal(t, model.LivenessCaptureStopping, p.agent.(*mockAgent).liveness.Load())
 
 	// Changing p.agent liveness affects p.liveness.
-	p.agent.(*mockAgent).liveness.Store(model.LivenessCaptureAlive)
+	// Force set liveness to alive.
+	*p.agent.(*mockAgent).liveness = model.LivenessCaptureAlive
 	require.Equal(t, model.LivenessCaptureAlive, p.liveness.Load())
 }

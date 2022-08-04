@@ -157,8 +157,8 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	}
 
 	// addTableRequest should be not ignored even if it's stopping.
-	a.liveness.Store(model.LivenessCaptureAlive)
 	a.handleLivenessUpdate(model.LivenessCaptureStopping)
+	require.Equal(t, model.LivenessCaptureStopping, a.liveness.Load())
 	mockTableExecutor.On("AddTable", mock.Anything, mock.Anything,
 		mock.Anything, mock.Anything).Return(false, nil)
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
@@ -174,7 +174,8 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	require.NotContains(t, a.tableM.tables, model.TableID(1))
 
 	// Force set liveness to alive.
-	a.liveness.Store(model.LivenessCaptureAlive)
+	*a.liveness = model.LivenessCaptureAlive
+	require.Equal(t, model.LivenessCaptureAlive, a.liveness.Load())
 	mockTableExecutor.ExpectedCalls = nil
 	mockTableExecutor.On("AddTable", mock.Anything, mock.Anything,
 		mock.Anything, mock.Anything).Return(true, nil)

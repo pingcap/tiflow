@@ -193,14 +193,12 @@ func (a *agent) Tick(ctx context.Context) error {
 func (a *agent) handleLivenessUpdate(liveness model.Liveness) {
 	currentLiveness := a.liveness.Load()
 	if currentLiveness != liveness {
-		if currentLiveness == model.LivenessCaptureStopping {
-			// No way to go back, once it becomes shutting down,
-			return
+		ok := a.liveness.Store(liveness)
+		if ok {
+			log.Info("schedulerv3: agent updates liveness",
+				zap.String("old", currentLiveness.String()),
+				zap.String("new", liveness.String()))
 		}
-		log.Info("schedulerv3: agent updates liveness",
-			zap.String("old", currentLiveness.String()),
-			zap.String("new", liveness.String()))
-		a.liveness.Store(liveness)
 	}
 }
 
