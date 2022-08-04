@@ -62,7 +62,7 @@ func NewClock(ctx context.Context, pdClient pd.Client) (*clock, error) {
 	return ret, nil
 }
 
-// Run will get time from pdutil periodically to cache in timeCache
+// Run will get time from pd periodically to cache in timeCache
 func (c *clock) Run(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
@@ -77,7 +77,7 @@ func (c *clock) Run(ctx context.Context) {
 			err := retry.Do(ctx, func() error {
 				physical, _, err := c.pdClient.GetTS(ctx)
 				if err != nil {
-					log.Info("get time from pdutil failed, retry later", zap.Error(err))
+					log.Info("get time from pd failed, retry later", zap.Error(err))
 					return err
 				}
 				c.mu.Lock()
@@ -87,7 +87,7 @@ func (c *clock) Run(ctx context.Context) {
 				return nil
 			}, retry.WithBackoffBaseDelay(200), retry.WithMaxTries(10))
 			if err != nil {
-				log.Warn("get time from pdutil failed, will use local time as pdutil time")
+				log.Warn("get time from pd failed, will use local time as pd time")
 				c.mu.Lock()
 				c.mu.timeCache = time.Now()
 				c.mu.err = err

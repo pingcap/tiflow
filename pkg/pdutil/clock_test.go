@@ -23,12 +23,12 @@ import (
 	pd "github.com/tikv/pd/client"
 )
 
-// MockPDClient mocks pdutil.Client to facilitate unit testing.
+// MockPDClient mocks pd.Client to facilitate unit testing.
 type MockPDClient struct {
 	pd.Client
 }
 
-// GetTS implements pdutil.Client.GetTS.
+// GetTS implements pd.Client.GetTS.
 func (m *MockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
 	return oracle.GetPhysical(time.Now()), 0, nil
 }

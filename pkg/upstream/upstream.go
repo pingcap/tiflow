@@ -179,7 +179,7 @@ func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
 		up.err.Store(err)
 		return errors.Trace(err)
 	}
-	log.Info("upstream's clock created", zap.Uint64("upstreamID", up.ID))
+	log.Info("upstream's PDClock created", zap.Uint64("upstreamID", up.ID))
 
 	up.GCManager = gc.NewManager(gcServiceID, up.PDClient, up.PDClock)
 	log.Info("upstream's GCManager created", zap.Uint64("upstreamID", up.ID))

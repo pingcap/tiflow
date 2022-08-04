@@ -58,10 +58,10 @@ const (
 )
 
 var (
-	txnEmptyCmps    []clientV3.Cmp
-	txnEmptyOpsThen []clientV3.Op
+	txnEmptyCmps    = []clientV3.Cmp{}
+	txnEmptyOpsThen = []clientV3.Op{}
 	// TxnEmptyOpsElse is a no-op operation.
-	TxnEmptyOpsElse []clientV3.Op
+	TxnEmptyOpsElse = []clientV3.Op{}
 )
 
 // set to var instead of const for mocking the value to speedup test
