@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
@@ -42,12 +43,11 @@ func TestJobManagerSubmitJob(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	mockMaster := framework.NewMockMasterImpl("", "submit-job-test")
+	mockMaster := framework.NewMockMasterImpl(t, "", "submit-job-test")
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
-	mockMaster.MasterClient().On(
-		"ScheduleTask", mock.Anything, mock.Anything, mock.Anything).Return(
-		&pb.ScheduleTaskResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs(),
-	)
+	mockMaster.MasterClient().EXPECT().ScheduleTask(
+		gomock.Any(),
+		gomock.Any()).Return(&pb.ScheduleTaskResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs()).Times(1)
 	mgr := &JobManagerImplV2{
 		BaseMaster:        mockMaster.DefaultBaseMaster,
 		JobFsm:            NewJobFsm(),
@@ -100,7 +100,7 @@ func TestCreateWorkerReturnError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	masterImpl := framework.NewMockMasterImpl("", "create-worker-with-error")
+	masterImpl := framework.NewMockMasterImpl(t, "", "create-worker-with-error")
 	mockMaster := &mockBaseMasterCreateWorkerFailed{
 		MockMasterImpl: masterImpl,
 	}
@@ -128,7 +128,7 @@ func TestJobManagerPauseJob(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	mockMaster := framework.NewMockMasterImpl("", "pause-job-test")
+	mockMaster := framework.NewMockMasterImpl(t, "", "pause-job-test")
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
 	mgr := &JobManagerImplV2{
 		BaseMaster:        mockMaster.DefaultBaseMaster,
@@ -166,7 +166,7 @@ func TestJobManagerCancelJob(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	mockMaster := framework.NewMockMasterImpl("", "cancel-job-test")
+	mockMaster := framework.NewMockMasterImpl(t, "", "cancel-job-test")
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
 	mgr := &JobManagerImplV2{
 		BaseMaster:        mockMaster.DefaultBaseMaster,
@@ -222,7 +222,7 @@ func TestJobManagerQueryJob(t *testing.T) {
 		},
 	}
 
-	mockMaster := framework.NewMockMasterImpl("", "job-manager-query-job-test")
+	mockMaster := framework.NewMockMasterImpl(t, "", "job-manager-query-job-test")
 	for _, tc := range testCases {
 		cli := metadata.NewMasterMetadataClient(tc.meta.ID, mockMaster.GetFrameMetaClient())
 		err := cli.Store(ctx, tc.meta)
@@ -260,12 +260,10 @@ func TestJobManagerOnlineJob(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	mockMaster := framework.NewMockMasterImpl("", "submit-job-test")
+	mockMaster := framework.NewMockMasterImpl(t, "", "submit-job-test")
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
-	mockMaster.MasterClient().On(
-		"ScheduleTask", mock.Anything, mock.Anything, mock.Anything).Return(
-		&pb.ScheduleTaskResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs(),
-	)
+	mockMaster.MasterClient().EXPECT().ScheduleTask(gomock.Any(), gomock.Any()).
+		Return(&pb.ScheduleTaskResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs()).MinTimes(0)
 	mgr := &JobManagerImplV2{
 		BaseMaster:        mockMaster.DefaultBaseMaster,
 		JobFsm:            NewJobFsm(),
@@ -301,7 +299,7 @@ func TestJobManagerRecover(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	mockMaster := framework.NewMockMasterImpl("", "job-manager-recover-test")
+	mockMaster := framework.NewMockMasterImpl(t, "", "job-manager-recover-test")
 	// prepare mockvk with two job masters
 	meta := []*frameModel.MasterMetaKVData{
 		{
@@ -340,7 +338,7 @@ func TestJobManagerTickExceedQuota(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	masterImpl := framework.NewMockMasterImpl("", "create-worker-with-error")
+	masterImpl := framework.NewMockMasterImpl(t, "", "create-worker-with-error")
 	mockMaster := &mockBaseMasterCreateWorkerFailed{
 		MockMasterImpl: masterImpl,
 	}
@@ -372,7 +370,7 @@ func TestJobManagerWatchJobStatuses(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	mockMaster := framework.NewMockMasterImpl("", "cancel-job-test")
+	mockMaster := framework.NewMockMasterImpl(t, "", "cancel-job-test")
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
 	mgr := &JobManagerImplV2{
 		BaseMaster:        mockMaster.DefaultBaseMaster,

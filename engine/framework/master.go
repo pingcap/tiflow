@@ -23,11 +23,11 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	"go.uber.org/atomic"
 	"go.uber.org/dig"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/config"
 	"github.com/pingcap/tiflow/engine/framework/internal/master"
@@ -134,9 +134,9 @@ type DefaultBaseMaster struct {
 	messageHandlerManager p2p.MessageHandlerManager
 	messageSender         p2p.MessageSender
 	// framework metastore client
-	frameMetaClient       pkgOrm.Client
-	executorClientManager client.ClientsManager
-	serverMasterClient    client.MasterClient
+	frameMetaClient    pkgOrm.Client
+	executorGroup      client.ExecutorGroup
+	serverMasterClient client.ServerMasterClient
 
 	clock clock.Clock
 
@@ -196,10 +196,10 @@ type masterParams struct {
 	MessageHandlerManager p2p.MessageHandlerManager
 	MessageSender         p2p.MessageSender
 	// framework metastore client
-	FrameMetaClient       pkgOrm.Client
-	BusinessClientConn    metaModel.ClientConn
-	ExecutorClientManager client.ClientsManager
-	ServerMasterClient    client.MasterClient
+	FrameMetaClient    pkgOrm.Client
+	BusinessClientConn metaModel.ClientConn
+	ExecutorGroup      client.ExecutorGroup
+	ServerMasterClient client.ServerMasterClient
 }
 
 // NewBaseMaster creates a new DefaultBaseMaster instance
@@ -243,7 +243,7 @@ func NewBaseMaster(
 		messageHandlerManager: params.MessageHandlerManager,
 		messageSender:         params.MessageSender,
 		frameMetaClient:       params.FrameMetaClient,
-		executorClientManager: params.ExecutorClientManager,
+		executorGroup:         params.ExecutorGroup,
 		serverMasterClient:    params.ServerMasterClient,
 		id:                    id,
 		clock:                 clock.New(),
@@ -609,9 +609,7 @@ func (m *DefaultBaseMaster) CreateWorker(
 			TaskId:               workerID,
 			Cost:                 int64(cost),
 			ResourceRequirements: resModel.ToResourceRequirement(m.id, resources...),
-		},
-			// TODO (zixiong) remove this timeout.
-			time.Second*10)
+		})
 		if err != nil {
 			// TODO log the gRPC errors from a lower level such as by an interceptor.
 			m.Logger().Warn("ScheduleTask returned error", zap.Error(err))
@@ -621,10 +619,9 @@ func (m *DefaultBaseMaster) CreateWorker(
 		m.Logger().Debug("ScheduleTask succeeded", zap.Any("response", resp))
 
 		executorID := model.ExecutorID(resp.ExecutorId)
-
-		err = m.executorClientManager.AddExecutor(executorID, resp.ExecutorAddr)
+		executorClient, err := m.executorGroup.GetExecutorClientB(requestCtx, executorID)
 		if err != nil {
-			m.workerManager.AbortCreatingWorker(workerID, err)
+			m.workerManager.AbortCreatingWorker(workerID, errors.Annotate(err, "CreateWorker"))
 			return
 		}
 
@@ -636,7 +633,6 @@ func (m *DefaultBaseMaster) CreateWorker(
 			return
 		}
 
-		executorClient := m.executorClientManager.ExecutorClient(executorID)
 		dispatchArgs := &client.DispatchTaskArgs{
 			// [NOTICE]:
 			// For JobManager, <JobID, ProjectInfo> pair is set in advance

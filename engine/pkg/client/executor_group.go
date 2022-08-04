@@ -97,7 +97,7 @@ func (g *DefaultExecutorGroup) GetExecutorClientB(ctx context.Context, id model.
 		}
 		return ErrExecutorNotFound.GenWithStack(&ExecutorNotFoundErrInfo{ExecutorID: id})
 	},
-		retry.WithBackoffMaxDelay(10*time.Second.Milliseconds()),
+		retry.WithBackoffMaxDelay(10),
 		retry.WithIsRetryableErr(func(err error) bool {
 			return ErrExecutorNotFound.Is(err)
 		}))

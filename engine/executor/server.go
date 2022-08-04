@@ -15,22 +15,15 @@ package executor
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/pprof"
 	"strings"
 	"time"
 
-	pcErrors "github.com/pingcap/errors"
+	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
-	"golang.org/x/time/rate"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	"github.com/pingcap/tiflow/dm/common"
-	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/server"
 	"github.com/pingcap/tiflow/engine/executor/worker"
@@ -39,7 +32,9 @@ import (
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/registry"
 	"github.com/pingcap/tiflow/engine/framework/taskutil"
+	"github.com/pingcap/tiflow/engine/internal/pkg/discovery"
 	"github.com/pingcap/tiflow/engine/model"
+	pkgClient "github.com/pingcap/tiflow/engine/pkg/client"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
@@ -48,33 +43,36 @@ import (
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
-	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
-	"github.com/pingcap/tiflow/engine/pkg/serverutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	p2pImpl "github.com/pingcap/tiflow/pkg/p2p"
-	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
-// Server is a executor server abstraction
+// Server is an executor server.
 type Server struct {
 	cfg     *Config
 	testCtx *test.Context
 
-	tcpServer      tcpserver.TCPServer
-	grpcSrv        *grpc.Server
-	masterClient   client.MasterClient
-	resourceClient *rpcutil.FailoverRPCClients[pb.ResourceManagerClient]
-	cliUpdateCh    chan cliUpdateInfo
-	taskRunner     *worker.TaskRunner
-	taskCommitter  *worker.TaskCommitter
-	msgServer      *p2p.MessageRPCService
-	info           *model.NodeInfo
+	tcpServer     tcpserver.TCPServer
+	grpcSrv       *grpc.Server
+	masterClient  pkgClient.ServerMasterClient
+	executorGroup *pkgClient.DefaultExecutorGroup
+	cliUpdateCh   chan cliUpdateInfo
+	taskRunner    *worker.TaskRunner
+	taskCommitter *worker.TaskCommitter
+	msgServer     *p2p.MessageRPCService
+	info          *model.NodeInfo
 
 	lastHearbeatTime time.Time
 
@@ -82,10 +80,9 @@ type Server struct {
 
 	metastores server.MetastoreManager
 
-	p2pMsgRouter    p2pImpl.MessageRouter
-	discoveryKeeper *serverutil.DiscoveryKeepaliver
-	resourceBroker  broker.Broker
-	jobAPISrv       *jobAPIServer
+	p2pMsgRouter   p2pImpl.MessageRouter
+	resourceBroker broker.Broker
+	jobAPISrv      *jobAPIServer
 }
 
 // NewServer creates a new executor server instance
@@ -94,9 +91,10 @@ func NewServer(cfg *Config, ctx *test.Context) *Server {
 
 	registerWorkerOnce.Do(registerWorkers)
 	s := Server{
-		cfg:         cfg,
-		testCtx:     ctx,
-		cliUpdateCh: make(chan cliUpdateInfo),
+		cfg:     cfg,
+		testCtx: ctx,
+		// cliUpdateCh should be buffered to avoid unnecessary blocking
+		cliUpdateCh: make(chan cliUpdateInfo, 1),
 		jobAPISrv:   newJobAPIServer(),
 		metastores:  server.NewMetastoreManager(),
 	}
@@ -133,14 +131,14 @@ func (s *Server) buildDeps() (*deps.Deps, error) {
 		return nil, err
 	}
 
-	err = deps.Provide(func() client.ClientsManager {
-		return client.NewClientManager()
+	err = deps.Provide(func() pkgClient.ExecutorGroup {
+		return s.executorGroup
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	err = deps.Provide(func() client.MasterClient {
+	err = deps.Provide(func() pkgClient.ServerMasterClient {
 		return s.masterClient
 	})
 	if err != nil {
@@ -269,7 +267,7 @@ func (s *Server) Stop() {
 	if s.tcpServer != nil {
 		err := s.tcpServer.Close()
 		if err != nil {
-			log.Error("close tcp server", zap.Error(err))
+			log.L().Error("close tcp server", zap.Error(err))
 		}
 	}
 
@@ -279,7 +277,7 @@ func (s *Server) Stop() {
 		defer cancel()
 		_, err := etcdCli.Delete(ctx, s.info.EtcdKey())
 		if err != nil {
-			log.Warn("failed to delete executor info", zap.Error(err))
+			log.L().Warn("failed to delete executor info", zap.Error(err))
 		}
 
 		s.metastores.Close()
@@ -306,7 +304,7 @@ func (s *Server) startForTest(ctx context.Context) (err error) {
 	}
 	go func() {
 		err := s.keepHeartbeat(ctx)
-		log.Info("heartbeat quits", zap.Error(err))
+		log.L().Info("heartbeat quits", zap.Error(err))
 	}()
 	return nil
 }
@@ -377,7 +375,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.resourceBroker = broker.NewBroker(
 		&storagecfg.Config{Local: storagecfg.LocalFileConfig{BaseDir: "./"}},
 		s.info.ID,
-		s.resourceClient)
+		s.masterClient)
 
 	s.p2pMsgRouter = p2p.NewMessageRouter(p2p.NodeID(s.info.ID), s.info.Addr)
 
@@ -393,17 +391,91 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 
 	if err := s.metastores.Init(ctx, s.masterClient); err != nil {
-		log.Error("Failed to init metastores", zap.Error(err))
+		log.L().Error("Failed to init metastores", zap.Error(err))
 		return err
 	}
 
-	s.discoveryKeeper = serverutil.NewDiscoveryKeepaliver(
-		s.info, s.metastores.ServiceDiscoveryStore(), s.cfg.SessionTTL, defaultDiscoverTicker,
-		s.p2pMsgRouter,
-	)
-	// connects to metastore and maintains a etcd session
+	discoveryAgent := discovery.NewAgent(
+		s.info,
+		s.metastores.ServiceDiscoveryStore(),
+		s.cfg.SessionTTL,
+		defaultDiscoverTicker)
 	wg.Go(func() error {
-		return s.discoveryKeeper.Keepalive(ctx)
+		return discoveryAgent.Run(ctx)
+	})
+
+	wg.Go(func() error {
+		snap, receiver, err := discoveryAgent.Subscribe(ctx)
+		if err != nil {
+			return err
+		}
+
+		for uuid, info := range snap {
+			log.Debug("update p2p msg router by snapshot", zap.Any("info", info))
+			s.p2pMsgRouter.AddPeer(uuid, info.Addr)
+		}
+
+		for {
+			var event discovery.Event
+			select {
+			case <-ctx.Done():
+				return perrors.Trace(err)
+			case event = <-receiver.C:
+			}
+
+			log.Debug("update p2p msg router", zap.Any("event", event))
+			if event.Tp == discovery.EventTypeDel {
+				s.p2pMsgRouter.RemovePeer(p2pImpl.NodeID(event.Info.ID))
+			} else if event.Tp == discovery.EventTypeAdd {
+				s.p2pMsgRouter.AddPeer(p2pImpl.NodeID(event.Info.ID), event.Info.Addr)
+			}
+		}
+	})
+
+	wg.Go(func() error {
+		snap, receiver, err := discoveryAgent.Subscribe(ctx)
+		if err != nil {
+			return err
+		}
+		defer receiver.Close()
+
+		for uuid, info := range snap {
+			if info.Type != model.NodeTypeExecutor {
+				continue
+			}
+
+			log.Debug("update executor client group by snapshot", zap.Any("info", info))
+			err := s.executorGroup.AddExecutor(model.ExecutorID(uuid), info.Addr)
+			if err != nil {
+				return err
+			}
+		}
+
+		for {
+			var event discovery.Event
+			select {
+			case <-ctx.Done():
+				return perrors.Trace(err)
+			case event = <-receiver.C:
+			}
+
+			if event.Info.Type != model.NodeTypeExecutor {
+				continue
+			}
+
+			log.Debug("update executor client group", zap.Any("event", event))
+			if event.Tp == discovery.EventTypeDel {
+				err := s.executorGroup.RemoveExecutor(event.Info.ID)
+				if err != nil {
+					return err
+				}
+			} else if event.Tp == discovery.EventTypeAdd {
+				err := s.executorGroup.AddExecutor(event.Info.ID, event.Info.Addr)
+				if err != nil {
+					return err
+				}
+			}
+		}
 	})
 
 	wg.Go(func() error {
@@ -460,7 +532,7 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 		}
 		err := httpSrv.Serve(s.tcpServer.HTTP1Listener())
 		if err != nil && !common.IsErrNetClosing(err) && err != http.ErrServerClosed {
-			log.Error("http server returned", logutil.ShortError(err))
+			log.L().Error("http server returned", logutil.ShortError(err))
 		}
 		return err
 	})
@@ -468,85 +540,64 @@ func (s *Server) startTCPService(ctx context.Context, wg *errgroup.Group) error 
 }
 
 func (s *Server) initClients(ctx context.Context) (err error) {
-	s.masterClient, err = client.NewMasterClient(ctx, getJoinURLs(s.cfg.Join))
+	// initServerMasterList is a MasterServerList with all servers marked as followers.
+	initServerMasterList := getInitServerMasterList(s.cfg.Join)
+	// TODO support TLS
+	s.masterClient, err = pkgClient.NewServerMasterClientWithFailOver(initServerMasterList, nil)
 	if err != nil {
+		log.L().Info("master client init Failed",
+			zap.String("server-addrs", s.cfg.Join),
+			logutil.ShortError(err))
 		return err
 	}
-	log.Info("master client init successful")
+	log.L().Info("master client init successful",
+		zap.String("server-addrs", s.cfg.Join))
 
-	resourceCliDialer := func(ctx context.Context, addr string) (pb.ResourceManagerClient, rpcutil.CloseableConnIface, error) {
-		ctx, cancel := context.WithTimeout(ctx, client.DialTimeout)
-		defer cancel()
-		// TODO: reuse connection with masterClient
-		conn, err := grpc.DialContext(ctx, addr, grpc.WithInsecure(), grpc.WithBlock())
-		if err != nil {
-			return nil, nil, errors.WrapError(errors.ErrGrpcBuildConn, err)
-		}
-		return pb.NewResourceManagerClient(conn), conn, nil
-	}
-	s.resourceClient, err = rpcutil.NewFailoverRPCClients[pb.ResourceManagerClient](
-		ctx,
-		getJoinURLs(s.cfg.Join),
-		resourceCliDialer,
-	)
-	if err != nil {
-		if test.GetGlobalTestFlag() {
-			log.Info("ignore error when in unit tests")
-			return nil
-		}
-		return err
-	}
-	log.Info("resource client init successful")
+	s.executorGroup = pkgClient.NewExecutorGroup(nil, log.L())
 	return nil
 }
 
-func (s *Server) selfRegister(ctx context.Context) (err error) {
+func (s *Server) selfRegister(ctx context.Context) error {
 	registerReq := &pb.RegisterExecutorRequest{
 		Address:    s.cfg.AdvertiseAddr,
 		Capability: defaultCapability,
 	}
-
-	var resp *pb.RegisterExecutorResponse
-	err = retry.Do(ctx, func() error {
-		var err2 error
-		resp, err2 = s.masterClient.RegisterExecutor(ctx, registerReq, s.cfg.RPCTimeout)
-		if err2 != nil {
-			return err2
-		}
-		if resp.Err != nil {
-			return pcErrors.New(resp.Err.Code.String())
-		}
-		return nil
-	},
-		retry.WithBackoffBaseDelay(200 /* 200 ms */),
-		retry.WithBackoffMaxDelay(3000 /* 3 seconds */),
-		retry.WithMaxTries(15 /* fail after 33 seconds, TODO: make it configurable */),
-		retry.WithIsRetryableErr(func(err error) bool {
-			if err.Error() == pb.ErrorCode_MasterNotReady.String() {
-				log.Info("server master leader is not ready, retry later")
-				return true
-			}
-			return false
-		}),
-	)
-
+	executorID, err := s.masterClient.RegisterExecutor(ctx, registerReq)
 	if err != nil {
-		return
+		return err
 	}
 
 	s.info = &model.NodeInfo{
 		Type:       model.NodeTypeExecutor,
-		ID:         model.ExecutorID(resp.ExecutorId),
+		ID:         executorID,
 		Addr:       s.cfg.AdvertiseAddr,
 		Capability: int(defaultCapability),
 	}
-	log.Info("register successful", zap.Any("info", s.info))
+	log.L().Info("register successful", zap.Any("info", s.info))
 	return nil
 }
 
 type cliUpdateInfo struct {
 	leaderURL string
 	urls      []string
+}
+
+func (info *cliUpdateInfo) toServerMasterList() pkgClient.MasterServerList {
+	ret := make(pkgClient.MasterServerList, len(info.urls))
+	// Mark all servers as followers at first.
+	for _, addr := range info.urls {
+		ret[addr] = false
+	}
+
+	if _, exists := ret[info.leaderURL]; !exists {
+		// The caller of the method should make sure the leaderURL is contained within
+		// urls.
+		panic(fmt.Sprintf("inconsistent cliUpdateInfo: unexpected leader %s", info.leaderURL))
+	}
+
+	// Mark the leader.
+	ret[info.leaderURL] = true
+	return ret
 }
 
 // TODO: Right now heartbeat maintainable is too simple. We should look into
@@ -579,23 +630,26 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 				// executor actually wait for a timeout when ttl is nearly up.
 				Ttl: uint64(s.cfg.KeepAliveTTL.Milliseconds() + s.cfg.RPCTimeout.Milliseconds()),
 			}
-			resp, err := s.masterClient.Heartbeat(ctx, req, s.cfg.RPCTimeout)
+			resp, err := s.masterClient.Heartbeat(ctx, req)
 			if err != nil {
-				log.Error("heartbeat rpc meet error", zap.Error(err))
+				log.L().Error("heartbeat rpc meet error", zap.Error(err))
 				if s.lastHearbeatTime.Add(s.cfg.KeepAliveTTL).Before(time.Now()) {
 					return errors.WrapError(errors.ErrHeartbeat, err, "rpc")
 				}
 				continue
 			}
 			if resp.Err != nil {
-				log.Warn("heartbeat response meet error", zap.Stringer("code", resp.Err.GetCode()))
+				log.L().Warn("heartbeat response meet error", zap.Stringer("code", resp.Err.GetCode()))
 				switch resp.Err.Code {
-				case pb.ErrorCode_UnknownExecutor, pb.ErrorCode_TombstoneExecutor:
+				case pb.ErrorCode_UnknownExecutor:
+					log.L().Info("heartbeat failed, will retry", zap.Error(err))
+					continue
+				case pb.ErrorCode_TombstoneExecutor:
 					return errors.ErrHeartbeat.GenWithStack("logic error: %s", resp.Err.GetMessage())
 				case pb.ErrorCode_MasterNotReady:
 					s.lastHearbeatTime = t
 					if rl.Allow() {
-						log.Info("heartbeat success with MasterNotReady")
+						log.L().Info("heartbeat success with MasterNotReady")
 					}
 					continue
 				default:
@@ -609,7 +663,9 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 			// This gap is unsafe.
 			s.lastHearbeatTime = t
 			if rl.Allow() {
-				log.Info("heartbeat success", zap.String("leader", resp.Leader), zap.Strings("members", resp.Addrs))
+				log.L().Info("heartbeat success",
+					zap.String("leader", resp.Leader),
+					zap.Strings("members", resp.Addrs))
 			}
 			// update master client could cost long time, we make it a background
 			// job and if there is running update task, we ignore once since more
@@ -629,6 +685,16 @@ func (s *Server) keepHeartbeat(ctx context.Context) error {
 
 func getJoinURLs(addrs string) []string {
 	return strings.Split(addrs, ",")
+}
+
+// getInitServerMasterList returns a MasterServerList with
+// all servers marked as the follower.
+func getInitServerMasterList(addrs string) pkgClient.MasterServerList {
+	ret := make(pkgClient.MasterServerList, len(addrs))
+	for _, addr := range getJoinURLs(addrs) {
+		ret[addr] = false // Mark no leader
+	}
+	return ret
 }
 
 func (s *Server) reportTaskRescOnce(ctx context.Context) error {
@@ -679,10 +745,15 @@ func (s *Server) bgUpdateServerMasterClients(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
-		case info := <-s.cliUpdateCh:
-			s.masterClient.UpdateClients(ctx, info.urls, info.leaderURL)
-			s.resourceClient.UpdateClients(ctx, info.urls, info.leaderURL)
+			return perrors.Trace(ctx.Err())
+		case info, ok := <-s.cliUpdateCh:
+			if !ok {
+				// s.cliUpdateCh is closed.
+				return nil
+			}
+			if failoverCli, ok := s.masterClient.(*pkgClient.ServerMasterClientWithFailOver); ok {
+				failoverCli.UpdateServerList(info.toServerMasterList())
+			}
 		}
 	}
 }

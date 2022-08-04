@@ -20,11 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/client/v3/concurrency"
-	"go.uber.org/atomic"
-
-	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
@@ -32,6 +27,9 @@ import (
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
 	"github.com/pingcap/tiflow/pkg/logutil"
+	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/client/v3/concurrency"
+	"go.uber.org/atomic"
 )
 
 func init() {
@@ -68,7 +66,7 @@ func TestLeaderLoopSuccess(t *testing.T) {
 		leaderServiceFn: mockLeaderService,
 		info:            &model.NodeInfo{ID: model.DeployNodeID(id)},
 	}
-	preRPCHook := rpcutil.NewPreRPCHook(
+	preRPCHook := rpcutil.NewPreRPCHook[multiClient](
 		s.id,
 		&s.leader,
 		s.masterCli,
@@ -124,7 +122,7 @@ func TestLeaderLoopMeetStaleData(t *testing.T) {
 		leaderServiceFn: mockLeaderService,
 		info:            &model.NodeInfo{ID: model.DeployNodeID(id)},
 	}
-	preRPCHook := rpcutil.NewPreRPCHook(
+	preRPCHook := rpcutil.NewPreRPCHook[multiClient](
 		s.id,
 		&s.leader,
 		s.masterCli,
@@ -186,12 +184,11 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 		cfg.AdvertiseAddr = "servermaster" + strconv.Itoa(i)
 
 		s := &Server{
-			id:          id,
-			cfg:         cfg,
-			etcdClient:  client,
-			info:        &model.NodeInfo{ID: model.DeployNodeID(id)},
-			masterCli:   &rpcutil.LeaderClientWithLock[pb.MasterClient]{},
-			resourceCli: &rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]{},
+			id:         id,
+			cfg:        cfg,
+			etcdClient: client,
+			info:       &model.NodeInfo{ID: model.DeployNodeID(id)},
+			masterCli:  &rpcutil.LeaderClientWithLock[multiClient]{},
 		}
 		preRPCHook := rpcutil.NewPreRPCHook(
 			s.id,
@@ -234,6 +231,10 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 			err := session.Reset(ctx)
 			require.Nil(t, err)
 
+			// check masterCli is not set
+			_, ok := s.masterCli.Get()
+			require.False(t, ok)
+
 			err = s.leaderLoop(ctx)
 			require.EqualError(t, err, context.Canceled.Error())
 		}()
@@ -266,9 +267,9 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 			if member.Name != servers[leaderIndex].name() {
 				return false
 			}
-			return s.masterCli.Get() != nil
+			_, ok := s.masterCli.Get()
+			return ok
 		}, defaultCampaignTimeout*2, time.Millisecond*100)
-
 	}
 
 	cancel()
