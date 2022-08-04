@@ -46,35 +46,12 @@ func IsNotFoundError(err error) bool {
 // TODO: What happen if we upgrade the definition of model when rolling update?
 // TODO: need test: change column definition/add column/drop column?
 func InitAllFrameworkModels(ctx context.Context, cc metaModel.ClientConn) error {
-	if cc == nil {
-		return errors.ErrMetaParamsInvalid.GenWithStackByArgs("input client conn is nil")
-	}
-
-	conn, err := cc.GetConn()
+	gormDB, err := genGormDBFromClientConn(cc)
 	if err != nil {
 		return err
 	}
 
-	var gormDB *gorm.DB
-	// check if a sql.DB
-	db, ok := conn.(*sql.DB)
-	if ok {
-		gormDB, err = NewGormDB(db)
-		if err != nil {
-			return err
-		}
-	}
-
-	// check if a gorm.DB
-	if gormDB == nil {
-		gormDB, ok = conn.(*gorm.DB)
-		if !ok {
-			return errors.ErrMetaParamsInvalid.GenWithStackByArgs("client conn is not sql DB")
-		}
-	}
-
 	failpoint.InjectContext(ctx, "initializedDelay", nil)
-
 	if err := gormDB.WithContext(ctx).
 		AutoMigrate(globalModels...); err != nil {
 		return errors.ErrMetaOpFail.Wrap(err)
@@ -87,13 +64,26 @@ func InitAllFrameworkModels(ctx context.Context, cc metaModel.ClientConn) error 
 // Only use for business meta currently
 // NOT thread-safe
 func InitEpochModel(ctx context.Context, cc model.ClientConn) error {
+	gormDB, err := genGormDBFromClientConn(cc)
+	if err != nil {
+		return err
+	}
+	if err := gormDB.WithContext(ctx).
+		AutoMigrate(&ormModel.LogicEpoch{}); err != nil {
+		return errors.ErrMetaOpFail.Wrap(err)
+	}
+
+	return nil
+}
+
+func genGormDBFromClientConn(cc model.ClientConn) (*gorm.DB, error) {
 	if cc == nil {
-		return errors.ErrMetaParamsInvalid.GenWithStackByArgs("input client conn is nil")
+		return nil, errors.ErrMetaParamsInvalid.GenWithStackByArgs("input client conn is nil")
 	}
 
 	conn, err := cc.GetConn()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	var gormDB *gorm.DB
@@ -102,7 +92,7 @@ func InitEpochModel(ctx context.Context, cc model.ClientConn) error {
 	if ok {
 		gormDB, err = NewGormDB(db)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -110,15 +100,11 @@ func InitEpochModel(ctx context.Context, cc model.ClientConn) error {
 	if gormDB == nil {
 		gormDB, ok = conn.(*gorm.DB)
 		if !ok {
-			return errors.ErrMetaParamsInvalid.GenWithStackByArgs("client conn is not sql DB")
+			return nil, errors.ErrMetaParamsInvalid.GenWithStackByArgs("client conn is not sql DB")
 		}
 	}
-	if err := gormDB.WithContext(ctx).
-		AutoMigrate(&ormModel.LogicEpoch{}); err != nil {
-		return errors.ErrMetaOpFail.Wrap(err)
-	}
 
-	return nil
+	return gormDB, nil
 }
 
 // NewGormDB news a gorm.DB
