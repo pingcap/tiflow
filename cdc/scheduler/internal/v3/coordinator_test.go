@@ -316,3 +316,96 @@ func TestCoordinatorDrainCapture(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
 }
+
+func TestCoordinatorAdvanceCheckpoint(t *testing.T) {
+	t.Parallel()
+
+	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
+		HeartbeatTick:      math.MaxInt,
+		MaxTaskConcurrency: 1,
+	})
+	trans := transport.NewMockTrans()
+	coord.trans = trans
+
+	// Prepare captureM and replicationM.
+	// Two captures "a", "b".
+	// Three tables 1 2.
+	ctx := context.Background()
+	currentTables := []model.TableID{1, 2}
+	aliveCaptures := map[model.CaptureID]*model.CaptureInfo{"a": {}, "b": {}}
+	_, _, err := coord.poll(ctx, 0, currentTables, aliveCaptures)
+	require.Nil(t, err)
+
+	// Initialize captures.
+	trans.RecvBuffer = append(trans.RecvBuffer, &schedulepb.Message{
+		Header: &schedulepb.Message_Header{
+			OwnerRevision: schedulepb.OwnerRevision{Revision: 1},
+		},
+		To:                "a",
+		From:              "b",
+		MsgType:           schedulepb.MsgHeartbeatResponse,
+		HeartbeatResponse: &schedulepb.HeartbeatResponse{},
+	})
+	trans.RecvBuffer = append(trans.RecvBuffer, &schedulepb.Message{
+		Header: &schedulepb.Message_Header{
+			OwnerRevision: schedulepb.OwnerRevision{Revision: 1},
+		},
+		To:      "a",
+		From:    "a",
+		MsgType: schedulepb.MsgHeartbeatResponse,
+		HeartbeatResponse: &schedulepb.HeartbeatResponse{
+			Tables: []schedulepb.TableStatus{
+				{
+					TableID: 1, State: schedulepb.TableStateReplicating,
+					Checkpoint: schedulepb.Checkpoint{
+						CheckpointTs: 2, ResolvedTs: 4,
+					},
+				},
+				{
+					TableID: 2, State: schedulepb.TableStateReplicating,
+					Checkpoint: schedulepb.Checkpoint{
+						CheckpointTs: 2, ResolvedTs: 4,
+					},
+				},
+			},
+		},
+	})
+	cts, rts, err := coord.poll(ctx, 0, currentTables, aliveCaptures)
+	require.Nil(t, err)
+	require.True(t, coord.captureM.CheckAllCaptureInitialized())
+	require.EqualValues(t, 2, cts)
+	require.EqualValues(t, 4, rts)
+
+	// Checkpoint should be advanced even if there is an uninitialized capture.
+	aliveCaptures["c"] = &model.CaptureInfo{}
+	trans.RecvBuffer = nil
+	trans.RecvBuffer = append(trans.RecvBuffer, &schedulepb.Message{
+		Header: &schedulepb.Message_Header{
+			OwnerRevision: schedulepb.OwnerRevision{Revision: 1},
+		},
+		To:      "a",
+		From:    "a",
+		MsgType: schedulepb.MsgHeartbeatResponse,
+		HeartbeatResponse: &schedulepb.HeartbeatResponse{
+			Tables: []schedulepb.TableStatus{
+				{
+					TableID: 1, State: schedulepb.TableStateReplicating,
+					Checkpoint: schedulepb.Checkpoint{
+						CheckpointTs: 3, ResolvedTs: 5,
+					},
+				},
+				{
+					TableID: 2, State: schedulepb.TableStateReplicating,
+					Checkpoint: schedulepb.Checkpoint{
+						CheckpointTs: 4, ResolvedTs: 5,
+					},
+				},
+			},
+		},
+	})
+	cts, rts, err = coord.poll(ctx, 0, currentTables, aliveCaptures)
+	require.Nil(t, err)
+	require.False(t, coord.captureM.CheckAllCaptureInitialized())
+	require.EqualValues(t, 3, cts)
+	require.EqualValues(t, 5, rts)
+}

@@ -644,6 +644,10 @@ var (
 		"waiting processor to handle the operation finished timeout",
 		errors.RFCCodeText("CDC:ErrWaitHandleOperationTimeout"),
 	)
+	ErrClusterIsUnhealthy = errors.Normalize(
+		"TiCDC cluster is unhealthy",
+		errors.RFCCodeText("CDC:ErrClusterIsUnhealthy"),
+	)
 	ErrSupportPostOnly = errors.Normalize(
 		"this api supports POST method only",
 		errors.RFCCodeText("CDC:ErrSupportPostOnly"),

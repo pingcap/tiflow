@@ -24,13 +24,14 @@ import (
 
 	"github.com/phayes/freeport"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/server"
 	"github.com/pingcap/tiflow/engine/executor/worker"
@@ -147,7 +148,7 @@ type registerExecutorReturnValue struct {
 }
 
 type mockRegisterMasterClient struct {
-	client.MasterClient
+	client.ServerMasterClient
 	respChan chan *registerExecutorReturnValue
 }
 
@@ -158,10 +159,13 @@ func newMockRegisterMasterClient(chanBufferSize int) *mockRegisterMasterClient {
 }
 
 func (c *mockRegisterMasterClient) RegisterExecutor(
-	ctx context.Context, req *pb.RegisterExecutorRequest, timeout time.Duration,
-) (resp *pb.RegisterExecutorResponse, err error) {
+	ctx context.Context, req *pb.RegisterExecutorRequest,
+) (nodeID model.ExecutorID, err error) {
 	value := <-c.respChan
-	return value.resp, value.err
+	if value.err != nil {
+		return "", value.err
+	}
+	return model.ExecutorID(value.resp.ExecutorId), nil
 }
 
 func TestSelfRegister(t *testing.T) {
@@ -185,11 +189,6 @@ func TestSelfRegister(t *testing.T) {
 
 	executorID := uuid.NewGenerator().NewString()
 	returnValues := []*registerExecutorReturnValue{
-		{
-			&pb.RegisterExecutorResponse{
-				Err: &pb.Error{Code: pb.ErrorCode_MasterNotReady},
-			}, nil,
-		},
 		{
 			&pb.RegisterExecutorResponse{
 				ExecutorId: executorID,

@@ -21,6 +21,8 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type mockRequest struct {
@@ -132,7 +134,7 @@ func TestCallForceNoRetry(t *testing.T) {
 		} else {
 			return &mockResponse{val: req.val}, nil
 		}
-		return nil, retryableErr.Gen(&retryableErrInfo{})
+		return nil, status.Error(codes.Unavailable, "should not retry")
 	}
 
 	call := NewCall(mockCallFn, &mockRequest{val: 1}, WithForceNoRetry())

@@ -19,38 +19,38 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
+	"github.com/stretchr/testify/require"
 )
 
 // MockExecutorInfoProvider implements ExecutorInfoProvider interface
 type MockExecutorInfoProvider struct {
 	mu          sync.RWMutex
-	executorSet map[resModel.ExecutorID]struct{}
+	executorSet map[resModel.ExecutorID]string
 	notifier    *notifier.Notifier[model.ExecutorStatusChange]
 }
 
 // NewMockExecutorInfoProvider creates a new MockExecutorInfoProvider instance
 func NewMockExecutorInfoProvider() *MockExecutorInfoProvider {
 	return &MockExecutorInfoProvider{
-		executorSet: make(map[resModel.ExecutorID]struct{}),
+		executorSet: make(map[resModel.ExecutorID]string),
 		notifier:    notifier.NewNotifier[model.ExecutorStatusChange](),
 	}
 }
 
 // AddExecutor adds an executor to the mock.
-func (p *MockExecutorInfoProvider) AddExecutor(executorID string) {
+func (p *MockExecutorInfoProvider) AddExecutor(executorID string, addr string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	p.executorSet[resModel.ExecutorID(executorID)] = struct{}{}
+	p.executorSet[resModel.ExecutorID(executorID)] = addr
 	p.notifier.Notify(model.ExecutorStatusChange{
-		ID: model.ExecutorID(executorID),
-		Tp: model.EventExecutorOnline,
+		ID:   model.ExecutorID(executorID),
+		Tp:   model.EventExecutorOnline,
+		Addr: addr,
 	})
 }
 
@@ -59,10 +59,12 @@ func (p *MockExecutorInfoProvider) RemoveExecutor(executorID string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	addr := p.executorSet[resModel.ExecutorID(executorID)]
 	delete(p.executorSet, resModel.ExecutorID(executorID))
 	p.notifier.Notify(model.ExecutorStatusChange{
-		ID: model.ExecutorID(executorID),
-		Tp: model.EventExecutorOffline,
+		ID:   model.ExecutorID(executorID),
+		Tp:   model.EventExecutorOffline,
+		Addr: addr,
 	})
 }
 
@@ -89,13 +91,13 @@ func (p *MockExecutorInfoProvider) ListExecutors() (ret []string) {
 // WatchExecutors implements ExecutorManager.WatchExecutors
 func (p *MockExecutorInfoProvider) WatchExecutors(
 	ctx context.Context,
-) ([]model.ExecutorID, *notifier.Receiver[model.ExecutorStatusChange], error) {
+) (map[model.ExecutorID]string, *notifier.Receiver[model.ExecutorStatusChange], error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	var executors []model.ExecutorID
-	for id := range p.executorSet {
-		executors = append(executors, id)
+	executors := make(map[model.ExecutorID]string, len(p.executorSet))
+	for id, addr := range p.executorSet {
+		executors[id] = addr
 	}
 
 	return executors, p.notifier.NewReceiver(), nil

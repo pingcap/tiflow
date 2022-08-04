@@ -17,14 +17,15 @@ import (
 	"context"
 	"encoding/json"
 	"sync"
+	"testing"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/atomic"
 	"go.uber.org/dig"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/internal/master"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -58,12 +59,12 @@ type MockMasterImpl struct {
 	messageSender         p2p.MessageSender
 	frameMetaClient       pkgOrm.Client
 	businessMetaKVClient  *metaMock.MetaMock
-	executorClientManager *client.Manager
+	executorGroup         *client.MockExecutorGroup
 	serverMasterClient    *client.MockServerMasterClient
 }
 
 // NewMockMasterImpl creates a new MockMasterImpl instance
-func NewMockMasterImpl(masterID, id frameModel.MasterID) *MockMasterImpl {
+func NewMockMasterImpl(t *testing.T, masterID, id frameModel.MasterID) *MockMasterImpl {
 	ret := &MockMasterImpl{
 		masterID:          masterID,
 		id:                id,
@@ -72,12 +73,12 @@ func NewMockMasterImpl(masterID, id frameModel.MasterID) *MockMasterImpl {
 		dispatchedResult:  make(chan error, 1),
 		updatedStatuses:   make(chan *frameModel.WorkerStatus, 1024),
 	}
-	ret.DefaultBaseMaster = MockBaseMaster(id, ret)
+	ret.DefaultBaseMaster = MockBaseMaster(t, id, ret)
 	ret.messageHandlerManager = ret.DefaultBaseMaster.messageHandlerManager.(*p2p.MockMessageHandlerManager)
 	ret.messageSender = ret.DefaultBaseMaster.messageSender
 	ret.frameMetaClient = ret.DefaultBaseMaster.frameMetaClient
 	ret.businessMetaKVClient = ret.DefaultBaseMaster.businessMetaKVClient.(*metaMock.MetaMock)
-	ret.executorClientManager = ret.DefaultBaseMaster.executorClientManager.(*client.Manager)
+	ret.executorGroup = ret.DefaultBaseMaster.executorGroup.(*client.MockExecutorGroup)
 	ret.serverMasterClient = ret.DefaultBaseMaster.serverMasterClient.(*client.MockServerMasterClient)
 
 	return ret
@@ -90,8 +91,8 @@ type masterParamListForTest struct {
 	MessageSender         p2p.MessageSender
 	FrameMetaClient       pkgOrm.Client
 	BusinessClientConn    metaModel.ClientConn
-	ExecutorClientManager client.ClientsManager
-	ServerMasterClient    client.MasterClient
+	ExecutorGroup         client.ExecutorGroup
+	ServerMasterClient    client.ServerMasterClient
 	ResourceBroker        broker.Broker
 }
 
@@ -116,7 +117,7 @@ func (m *MockMasterImpl) Reset() {
 			MessageSender:         m.messageSender,
 			FrameMetaClient:       m.frameMetaClient,
 			BusinessClientConn:    metaMock.NewMockClientConn(),
-			ExecutorClientManager: m.executorClientManager,
+			ExecutorGroup:         m.executorGroup,
 			ServerMasterClient:    m.serverMasterClient,
 			ResourceBroker:        broker.NewBrokerForTesting("executor-1"),
 		}

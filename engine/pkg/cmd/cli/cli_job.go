@@ -17,10 +17,12 @@ import (
 	"context"
 	"time"
 
+	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc"
 
-	"github.com/pingcap/tiflow/engine/client"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/pkg/errors"
 )
@@ -35,8 +37,8 @@ type jobGeneralOptions struct {
 	// TODO: add tls support
 
 	// Following fields are generated from options
-	masterClient client.MasterClient
-	tenant       tenant.ProjectInfo
+	jobManagerCli enginepb.JobManagerClient
+	tenant        tenant.ProjectInfo
 }
 
 func newJobGeneralOptions() *jobGeneralOptions {
@@ -62,14 +64,13 @@ func (o *jobGeneralOptions) validate(ctx context.Context, cmd *cobra.Command) er
 		return errors.ErrInvalidCliParameter.GenWithStack("master-addrs can't be nil")
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, o.rpcTimeout)
-	defer cancel()
-	cliManager := client.NewClientManager()
-	if err := cliManager.AddMasterClient(ctx, o.masterAddrs); err != nil {
-		return err
+	// TODO support https.
+	dialURL := o.masterAddrs[0]
+	grpcConn, err := grpc.Dial(dialURL)
+	if err != nil {
+		return perrors.Trace(err)
 	}
-	o.masterClient = cliManager.MasterClient()
-
+	o.jobManagerCli = enginepb.NewJobManagerClient(grpcConn)
 	o.tenant = o.getProjectInfo()
 
 	return nil
