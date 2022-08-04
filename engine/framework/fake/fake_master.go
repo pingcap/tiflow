@@ -353,6 +353,9 @@ func (m *Master) tickedCheckWorkers(ctx context.Context) error {
 }
 
 func (m *Master) tickedCheckStatus(ctx context.Context) error {
+	if !m.initialized.Load() {
+		return nil
+	}
 	if m.statusRateLimiter.Allow() {
 		m.bStatus.RLock()
 		log.Info("FakeMaster: Tick", zap.Any("status", m.bStatus.status))
