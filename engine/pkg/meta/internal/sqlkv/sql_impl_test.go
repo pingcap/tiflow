@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"errors"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -24,6 +25,8 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/VividCortex/mysqlerr"
+	"github.com/go-sql-driver/mysql"
 	sqlkvModel "github.com/pingcap/tiflow/engine/pkg/meta/internal/sqlkv/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/stretchr/testify/require"
@@ -438,4 +441,44 @@ func TestSQLImplWithoutNamespace(t *testing.T) {
 	txn.Do(metaModel.OpPut("key1", "value1"))
 	txn.Do(metaModel.OpDelete("key2", metaModel.WithPrefix()))
 	txn.Commit()
+}
+
+func TestInitializeError(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.Nil(t, err)
+	defer db.Close()
+	defer mock.ExpectClose()
+
+	// table exists error
+	mock.ExpectQuery("SELECT VERSION()").
+		WillReturnRows(sqlmock.NewRows([]string{"VERSION()"}).
+			AddRow("5.7.35-log"))
+	mock.ExpectQuery(".*").WillReturnRows(sqlmock.NewRows([]string{"SCHEMA_NAME"}))
+	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf("CREATE TABLE `%s`", "test"))).
+		WillReturnError(&mysql.MySQLError{Number: mysqlerr.ER_TABLE_EXISTS_ERROR, Message: "table already exists"})
+	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
+	cli, err := NewSQLKVClientImpl(db, "test", "")
+	require.Nil(t, err)
+	require.NotNil(t, cli)
+	defer cli.Close()
+
+	// other mysql error
+	mock.ExpectQuery("SELECT VERSION()").
+		WillReturnRows(sqlmock.NewRows([]string{"VERSION()"}).
+			AddRow("5.7.35-log"))
+	mock.ExpectQuery(".*").WillReturnRows(sqlmock.NewRows([]string{"SCHEMA_NAME"}))
+	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf("CREATE TABLE `%s`", "test"))).
+		WillReturnError(&mysql.MySQLError{Number: mysqlerr.ER_WRONG_OUTER_JOIN, Message: "other mysql error"})
+	_, err = NewSQLKVClientImpl(db, "test", "")
+	require.Regexp(t, "other mysql error", err.Error())
+
+	// other error
+	mock.ExpectQuery("SELECT VERSION()").
+		WillReturnRows(sqlmock.NewRows([]string{"VERSION()"}).
+			AddRow("5.7.35-log"))
+	mock.ExpectQuery(".*").WillReturnRows(sqlmock.NewRows([]string{"SCHEMA_NAME"}))
+	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf("CREATE TABLE `%s`", "test"))).
+		WillReturnError(errors.New("other error"))
+	_, err = NewSQLKVClientImpl(db, "test", "")
+	require.Regexp(t, "other error", err.Error())
 }
