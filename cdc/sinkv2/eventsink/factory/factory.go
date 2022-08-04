@@ -15,7 +15,6 @@ package factory
 
 import (
 	"context"
-	"net/url"
 	"strings"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -23,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
+	confighelper "github.com/pingcap/tiflow/cdc/sinkv2/util/config"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/kafka"
@@ -53,7 +53,7 @@ func New(ctx context.Context,
 	config *config.ReplicaConfig,
 	errCh chan error,
 ) (*SinkFactory, error) {
-	sinkURI, err := getSinkURIAndAdjustConfigWithSinkURI(sinkURIStr, config)
+	sinkURI, err := confighelper.GetSinkURIAndAdjustConfigWithSinkURI(sinkURIStr, config)
 	if err != nil {
 		return nil, err
 	}
@@ -102,19 +102,4 @@ func (s *SinkFactory) Close() error {
 	default:
 		panic("unknown sink type")
 	}
-}
-
-func getSinkURIAndAdjustConfigWithSinkURI(sinkURIStr string,
-	config *config.ReplicaConfig,
-) (*url.URL, error) {
-	// parse sinkURI as a URI
-	sinkURI, err := url.Parse(sinkURIStr)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
-	}
-	if err := config.ValidateAndAdjust(sinkURI); err != nil {
-		return nil, err
-	}
-
-	return sinkURI, nil
 }

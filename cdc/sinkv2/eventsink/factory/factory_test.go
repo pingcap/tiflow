@@ -23,6 +23,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
+	confighelper "github.com/pingcap/tiflow/cdc/sinkv2/util/config"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/kafka"
@@ -53,7 +54,7 @@ func newForTest(ctx context.Context,
 	config *config.ReplicaConfig,
 	errCh chan error,
 ) (*SinkFactory, error) {
-	sinkURI, err := getSinkURIAndAdjustConfigWithSinkURI(sinkURIStr, config)
+	sinkURI, err := confighelper.GetSinkURIAndAdjustConfigWithSinkURI(sinkURIStr, config)
 	if err != nil {
 		return nil, err
 	}
