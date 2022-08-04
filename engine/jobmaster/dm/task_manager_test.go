@@ -151,8 +151,7 @@ func (t *testDMJobmasterSuite) TestOperateTask() {
 	require.NoError(t.T(), err)
 	job = state.(*metadata.Job)
 	require.Equal(t.T(), job.Tasks[source1].Stage, metadata.StageRunning)
-	// TODO: should it be paused?
-	require.Equal(t.T(), job.Tasks[source2].Stage, metadata.StageRunning)
+	require.Equal(t.T(), job.Tasks[source2].Stage, metadata.StagePaused)
 
 	require.NoError(t.T(), taskManager.OperateTask(context.Background(), dmpkg.Delete, nil, []string{source1, source2}))
 	state, err = jobStore.Get(context.Background())
