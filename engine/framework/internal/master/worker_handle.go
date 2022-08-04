@@ -19,9 +19,9 @@ import (
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
-	pb "github.com/pingcap/tiflow/engine/enginepb"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 )
 

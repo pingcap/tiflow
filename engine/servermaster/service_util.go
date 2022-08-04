@@ -14,31 +14,31 @@
 package servermaster
 
 import (
-	"github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pb"
 	"google.golang.org/grpc"
 )
 
 // multiClient is an interface that implements all the Client interfaces
 // for the individual services running on the server masters.
 type multiClient interface {
-	enginepb.DiscoveryClient
-	enginepb.ResourceManagerClient
-	enginepb.TaskSchedulerClient
-	enginepb.JobManagerClient
+	pb.DiscoveryClient
+	pb.ResourceManagerClient
+	pb.TaskSchedulerClient
+	pb.JobManagerClient
 }
 
 type multiClientImpl struct {
-	enginepb.DiscoveryClient
-	enginepb.ResourceManagerClient
-	enginepb.TaskSchedulerClient
-	enginepb.JobManagerClient
+	pb.DiscoveryClient
+	pb.ResourceManagerClient
+	pb.TaskSchedulerClient
+	pb.JobManagerClient
 }
 
 func newMultiClient(conn *grpc.ClientConn) multiClient {
 	return &multiClientImpl{
-		DiscoveryClient:       enginepb.NewDiscoveryClient(conn),
-		ResourceManagerClient: enginepb.NewResourceManagerClient(conn),
-		TaskSchedulerClient:   enginepb.NewTaskSchedulerClient(conn),
-		JobManagerClient:      enginepb.NewJobManagerClient(conn),
+		DiscoveryClient:       pb.NewDiscoveryClient(conn),
+		ResourceManagerClient: pb.NewResourceManagerClient(conn),
+		TaskSchedulerClient:   pb.NewTaskSchedulerClient(conn),
+		JobManagerClient:      pb.NewJobManagerClient(conn),
 	}
 }

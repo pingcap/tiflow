@@ -16,7 +16,7 @@ package client
 import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/pkg/security"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -48,8 +48,8 @@ type executorClientImpl struct {
 // Note that conn will be closed if the returned client is closed.
 func NewExecutorClient(conn *grpc.ClientConn) ExecutorClient {
 	return &executorClientImpl{
-		ExecutorServiceClient: NewExecutorServiceClient(enginepb.NewExecutorClient(conn)),
-		BrokerServiceClient:   NewBrokerServiceClient(enginepb.NewBrokerServiceClient(conn)),
+		ExecutorServiceClient: NewExecutorServiceClient(pb.NewExecutorClient(conn)),
+		BrokerServiceClient:   NewBrokerServiceClient(pb.NewBrokerServiceClient(conn)),
 		conn:                  conn,
 	}
 }

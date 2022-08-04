@@ -18,8 +18,8 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	"github.com/pingcap/tiflow/engine/enginepb"
-	pbMock "github.com/pingcap/tiflow/engine/enginepb/mock"
+	"github.com/pingcap/tiflow/engine/pb"
+	pbMock "github.com/pingcap/tiflow/engine/pb/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,10 +30,10 @@ func TestBrokerServiceClientNormal(t *testing.T) {
 	client := pbMock.NewMockBrokerServiceClient(ctrl)
 	serviceCli := NewBrokerServiceClient(client)
 
-	client.EXPECT().RemoveResource(gomock.Any(), gomock.Eq(&enginepb.RemoveLocalResourceRequest{
+	client.EXPECT().RemoveResource(gomock.Any(), gomock.Eq(&pb.RemoveLocalResourceRequest{
 		ResourceId: "/local/resource-1",
 		CreatorId:  "worker-1",
-	})).Return(&enginepb.RemoveLocalResourceResponse{}, nil).Times(1)
+	})).Return(&pb.RemoveLocalResourceResponse{}, nil).Times(1)
 
 	err := serviceCli.RemoveResource(context.Background(), "worker-1", "/local/resource-1")
 	require.NoError(t, err)

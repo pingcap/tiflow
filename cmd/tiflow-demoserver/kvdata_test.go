@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )

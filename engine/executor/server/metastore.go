@@ -28,7 +28,7 @@ import (
 	"google.golang.org/grpc/backoff"
 
 	"github.com/pingcap/log"
-	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/config"
 	"github.com/pingcap/tiflow/engine/pkg/dbutil"

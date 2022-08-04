@@ -21,7 +21,7 @@ import (
 	"sync"
 
 	"github.com/pingcap/log"
-	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pb"
 	"go.uber.org/zap"
 )
 

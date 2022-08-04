@@ -20,7 +20,7 @@ import (
 
 	"github.com/gogo/status"
 	"github.com/pingcap/errors"
-	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pb"
 	"google.golang.org/grpc/codes"
 )
 

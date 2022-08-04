@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package enginepb;
+package pb;
 
 message ErrorV2 {
   string name = 1;

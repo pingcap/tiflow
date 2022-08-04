@@ -74,7 +74,7 @@ mkdir -p ./dm/pb
 	--grpc-gateway_out=./dm/pb ./dm/proto/dmmaster.proto
 
 echo "generate enginepb..."
-mkdir -p ./engine/enginepb
+mkdir -p ./engine/pb
 "${TOOLS_BIN_DIR}/protoc" -I"./engine/proto" -I"$TOOLS_INCLUDE_DIR" \
 	--plugin=protoc-gen-gogofaster="$GOGO_FASTER" \
-	--gogofaster_out=plugins=grpc:engine/enginepb engine/proto/*.proto
+	--gogofaster_out=plugins=grpc:engine/pb engine/proto/*.proto

@@ -18,9 +18,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	"github.com/pingcap/tiflow/engine/pb"
 )
 
 func TestJobFsmStateTrans(t *testing.T) {

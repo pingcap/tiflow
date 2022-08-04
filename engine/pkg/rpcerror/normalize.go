@@ -25,7 +25,7 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/pingcap/log"
-	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pb"
 )
 
 // normalizeOpts stores information used to generate a Prototype.

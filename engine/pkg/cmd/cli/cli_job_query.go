@@ -17,7 +17,7 @@ import (
 	"context"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pb"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -51,9 +51,9 @@ func (o *jobQueryOptions) validate(ctx context.Context, cmd *cobra.Command) erro
 
 // run the `cli job create` command.
 func (o *jobQueryOptions) run(ctx context.Context, cmd *cobra.Command) error {
-	resp, err := o.generalOpts.jobManagerCli.QueryJob(ctx, &enginepb.QueryJobRequest{
+	resp, err := o.generalOpts.jobManagerCli.QueryJob(ctx, &pb.QueryJobRequest{
 		JobId: o.jobID,
-		ProjectInfo: &enginepb.ProjectInfo{
+		ProjectInfo: &pb.ProjectInfo{
 			TenantId:  o.generalOpts.tenant.TenantID(),
 			ProjectId: o.generalOpts.tenant.ProjectID(),
 		},

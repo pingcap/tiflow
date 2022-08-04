@@ -23,8 +23,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pb"
 )
 
 const (

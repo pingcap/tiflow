@@ -21,8 +21,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/client/internal"
 )
 
@@ -32,43 +32,43 @@ type DiscoveryClient interface {
 	// will allocate and records a UUID.
 	RegisterExecutor(
 		ctx context.Context,
-		request *enginepb.RegisterExecutorRequest,
+		request *pb.RegisterExecutorRequest,
 	) (model.ExecutorID, error)
 
 	// Heartbeat sends a heartbeat message to the server.
 	Heartbeat(
 		ctx context.Context,
-		request *enginepb.HeartbeatRequest,
-	) (*enginepb.HeartbeatResponse, error)
+		request *pb.HeartbeatRequest,
+	) (*pb.HeartbeatResponse, error)
 
 	// RegisterMetaStore registers a new metastore.
 	// Deprecated
 	RegisterMetaStore(
 		ctx context.Context,
-		request *enginepb.RegisterMetaStoreRequest,
+		request *pb.RegisterMetaStoreRequest,
 	) error
 
 	// QueryMetaStore queries the details of a metastore.
 	QueryMetaStore(
 		ctx context.Context,
-		request *enginepb.QueryMetaStoreRequest,
-	) (*enginepb.QueryMetaStoreResponse, error)
+		request *pb.QueryMetaStoreRequest,
+	) (*pb.QueryMetaStoreResponse, error)
 }
 
 var _ DiscoveryClient = &discoveryClient{}
 
 type discoveryClient struct {
-	cli enginepb.DiscoveryClient
+	cli pb.DiscoveryClient
 }
 
 // NewDiscoveryClient returns a DiscoveryClient.
-func NewDiscoveryClient(cli enginepb.DiscoveryClient) DiscoveryClient {
+func NewDiscoveryClient(cli pb.DiscoveryClient) DiscoveryClient {
 	return &discoveryClient{cli: cli}
 }
 
 func (c *discoveryClient) RegisterExecutor(
 	ctx context.Context,
-	request *enginepb.RegisterExecutorRequest,
+	request *pb.RegisterExecutorRequest,
 ) (model.ExecutorID, error) {
 	var ret model.ExecutorID
 	err := retry.Do(ctx, func() error {
@@ -83,7 +83,7 @@ func (c *discoveryClient) RegisterExecutor(
 		if err != nil {
 			return err
 		}
-		if resp.Err != nil && resp.Err.Code != enginepb.ErrorCode_None {
+		if resp.Err != nil && resp.Err.Code != pb.ErrorCode_None {
 			log.Info("RegisterExecutor", zap.Any("error", resp.Err))
 			return errors.New(resp.Err.String())
 		}
@@ -102,8 +102,8 @@ func (c *discoveryClient) RegisterExecutor(
 // TODO refactor this.
 func (c *discoveryClient) Heartbeat(
 	ctx context.Context,
-	request *enginepb.HeartbeatRequest,
-) (*enginepb.HeartbeatResponse, error) {
+	request *pb.HeartbeatRequest,
+) (*pb.HeartbeatResponse, error) {
 	call := internal.NewCall(
 		c.cli.Heartbeat,
 		request,
@@ -114,7 +114,7 @@ func (c *discoveryClient) Heartbeat(
 
 func (c *discoveryClient) RegisterMetaStore(
 	ctx context.Context,
-	request *enginepb.RegisterMetaStoreRequest,
+	request *pb.RegisterMetaStoreRequest,
 ) error {
 	call := internal.NewCall(
 		c.cli.RegisterMetaStore,
@@ -123,7 +123,7 @@ func (c *discoveryClient) RegisterMetaStore(
 	if err != nil {
 		return err
 	}
-	if resp.Err != nil && resp.Err.Code != enginepb.ErrorCode_None {
+	if resp.Err != nil && resp.Err.Code != pb.ErrorCode_None {
 		return errors.Errorf("RegisterMetaStore: %d", resp.Err.Size())
 	}
 	return nil
@@ -131,8 +131,8 @@ func (c *discoveryClient) RegisterMetaStore(
 
 func (c *discoveryClient) QueryMetaStore(
 	ctx context.Context,
-	request *enginepb.QueryMetaStoreRequest,
-) (*enginepb.QueryMetaStoreResponse, error) {
+	request *pb.QueryMetaStoreRequest,
+) (*pb.QueryMetaStoreResponse, error) {
 	call := internal.NewCall(
 		c.cli.QueryMetaStore,
 		request)

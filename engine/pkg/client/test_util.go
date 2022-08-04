@@ -20,7 +20,7 @@ import (
 	"reflect"
 
 	"github.com/golang/mock/gomock"
-	"github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pb"
 )
 
 type preDispatchArgsMatcher struct {
@@ -33,7 +33,7 @@ func matchPreDispatchArgs(args *DispatchTaskArgs) gomock.Matcher {
 
 func (m *preDispatchArgsMatcher) Matches(x interface{}) bool {
 	// TODO match ProjectInfo
-	req, ok := x.(*enginepb.PreDispatchTaskRequest)
+	req, ok := x.(*pb.PreDispatchTaskRequest)
 	if !ok {
 		return false
 	}
@@ -78,19 +78,19 @@ func matchConfirmDispatch(requestID *string, workerID string) gomock.Matcher {
 }
 
 func (m *confirmDispatchMatcher) Matches(x interface{}) bool {
-	req, ok := x.(*enginepb.ConfirmDispatchTaskRequest)
+	req, ok := x.(*pb.ConfirmDispatchTaskRequest)
 	if !ok {
 		return false
 	}
 
-	return reflect.DeepEqual(req, &enginepb.ConfirmDispatchTaskRequest{
+	return reflect.DeepEqual(req, &pb.ConfirmDispatchTaskRequest{
 		WorkerId:  m.workerID,
 		RequestId: *m.requestID,
 	})
 }
 
 func (m *confirmDispatchMatcher) String() string {
-	expected := &enginepb.ConfirmDispatchTaskRequest{
+	expected := &pb.ConfirmDispatchTaskRequest{
 		WorkerId:  m.workerID,
 		RequestId: *m.requestID,
 	}

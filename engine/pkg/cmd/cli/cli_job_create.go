@@ -19,8 +19,8 @@ import (
 	"os"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/engine/enginepb"
 	engineModel "github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pb"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/spf13/cobra"
@@ -87,10 +87,10 @@ func openFileAndReadString(path string) (content []byte, err error) {
 
 // run the `cli job create` command.
 func (o *jobCreateOptions) run(ctx context.Context, cmd *cobra.Command) error {
-	resp, err := o.generalOpts.jobManagerCli.SubmitJob(ctx, &enginepb.SubmitJobRequest{
+	resp, err := o.generalOpts.jobManagerCli.SubmitJob(ctx, &pb.SubmitJobRequest{
 		Tp:     int32(o.jobType),
 		Config: o.jobConfig,
-		ProjectInfo: &enginepb.ProjectInfo{
+		ProjectInfo: &pb.ProjectInfo{
 			TenantId:  o.generalOpts.tenant.TenantID(),
 			ProjectId: o.generalOpts.tenant.ProjectID(),
 		},

@@ -30,7 +30,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pb"
 
 	"github.com/pingcap/tiflow/engine/jobmaster/dm"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
@@ -119,7 +119,7 @@ func TestDMJob(t *testing.T) {
 // `db` should not contain special character.
 func testSimpleAllModeTask(
 	t *testing.T,
-	client enginepb.JobManagerClient,
+	client pb.JobManagerClient,
 	mysql, tidb *sql.DB,
 	db string,
 ) {

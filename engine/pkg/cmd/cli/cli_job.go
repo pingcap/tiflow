@@ -19,7 +19,7 @@ import (
 
 	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 
@@ -37,7 +37,7 @@ type jobGeneralOptions struct {
 	// TODO: add tls support
 
 	// Following fields are generated from options
-	jobManagerCli enginepb.JobManagerClient
+	jobManagerCli pb.JobManagerClient
 	tenant        tenant.ProjectInfo
 }
 
@@ -70,7 +70,7 @@ func (o *jobGeneralOptions) validate(ctx context.Context, cmd *cobra.Command) er
 	if err != nil {
 		return perrors.Trace(err)
 	}
-	o.jobManagerCli = enginepb.NewJobManagerClient(grpcConn)
+	o.jobManagerCli = pb.NewJobManagerClient(grpcConn)
 	o.tenant = o.getProjectInfo()
 
 	return nil

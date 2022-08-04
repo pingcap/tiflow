@@ -18,7 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/client/internal"
 	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"

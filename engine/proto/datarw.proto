@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package enginepb;
+package pb;
 
 service DataRWService {
     rpc ReadLines(ReadLinesRequest ) returns (stream ReadLinesResponse) {}

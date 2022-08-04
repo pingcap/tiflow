@@ -27,7 +27,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 
-	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/pkg/errors"
 )
 

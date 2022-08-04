@@ -9,8 +9,8 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	enginepb "github.com/pingcap/tiflow/engine/enginepb"
 	model "github.com/pingcap/tiflow/engine/model"
+	pb "github.com/pingcap/tiflow/engine/pb"
 )
 
 // MockExecutorClient is a mock of ExecutorClient interface.
@@ -112,7 +112,7 @@ func (mr *MockServerMasterClientMockRecorder) Close() *gomock.Call {
 }
 
 // CreateResource mocks base method.
-func (m *MockServerMasterClient) CreateResource(arg0 context.Context, arg1 *enginepb.CreateResourceRequest) error {
+func (m *MockServerMasterClient) CreateResource(arg0 context.Context, arg1 *pb.CreateResourceRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateResource", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -126,10 +126,10 @@ func (mr *MockServerMasterClientMockRecorder) CreateResource(arg0, arg1 interfac
 }
 
 // Heartbeat mocks base method.
-func (m *MockServerMasterClient) Heartbeat(arg0 context.Context, arg1 *enginepb.HeartbeatRequest) (*enginepb.HeartbeatResponse, error) {
+func (m *MockServerMasterClient) Heartbeat(arg0 context.Context, arg1 *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Heartbeat", arg0, arg1)
-	ret0, _ := ret[0].(*enginepb.HeartbeatResponse)
+	ret0, _ := ret[0].(*pb.HeartbeatResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -141,10 +141,10 @@ func (mr *MockServerMasterClientMockRecorder) Heartbeat(arg0, arg1 interface{}) 
 }
 
 // QueryMetaStore mocks base method.
-func (m *MockServerMasterClient) QueryMetaStore(arg0 context.Context, arg1 *enginepb.QueryMetaStoreRequest) (*enginepb.QueryMetaStoreResponse, error) {
+func (m *MockServerMasterClient) QueryMetaStore(arg0 context.Context, arg1 *pb.QueryMetaStoreRequest) (*pb.QueryMetaStoreResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "QueryMetaStore", arg0, arg1)
-	ret0, _ := ret[0].(*enginepb.QueryMetaStoreResponse)
+	ret0, _ := ret[0].(*pb.QueryMetaStoreResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -156,10 +156,10 @@ func (mr *MockServerMasterClientMockRecorder) QueryMetaStore(arg0, arg1 interfac
 }
 
 // QueryResource mocks base method.
-func (m *MockServerMasterClient) QueryResource(arg0 context.Context, arg1 *enginepb.QueryResourceRequest) (*enginepb.QueryResourceResponse, error) {
+func (m *MockServerMasterClient) QueryResource(arg0 context.Context, arg1 *pb.QueryResourceRequest) (*pb.QueryResourceResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "QueryResource", arg0, arg1)
-	ret0, _ := ret[0].(*enginepb.QueryResourceResponse)
+	ret0, _ := ret[0].(*pb.QueryResourceResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -171,7 +171,7 @@ func (mr *MockServerMasterClientMockRecorder) QueryResource(arg0, arg1 interface
 }
 
 // RegisterExecutor mocks base method.
-func (m *MockServerMasterClient) RegisterExecutor(arg0 context.Context, arg1 *enginepb.RegisterExecutorRequest) (model.DeployNodeID, error) {
+func (m *MockServerMasterClient) RegisterExecutor(arg0 context.Context, arg1 *pb.RegisterExecutorRequest) (model.DeployNodeID, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RegisterExecutor", arg0, arg1)
 	ret0, _ := ret[0].(model.DeployNodeID)
@@ -186,7 +186,7 @@ func (mr *MockServerMasterClientMockRecorder) RegisterExecutor(arg0, arg1 interf
 }
 
 // RegisterMetaStore mocks base method.
-func (m *MockServerMasterClient) RegisterMetaStore(arg0 context.Context, arg1 *enginepb.RegisterMetaStoreRequest) error {
+func (m *MockServerMasterClient) RegisterMetaStore(arg0 context.Context, arg1 *pb.RegisterMetaStoreRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RegisterMetaStore", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -200,7 +200,7 @@ func (mr *MockServerMasterClientMockRecorder) RegisterMetaStore(arg0, arg1 inter
 }
 
 // RemoveResource mocks base method.
-func (m *MockServerMasterClient) RemoveResource(arg0 context.Context, arg1 *enginepb.RemoveResourceRequest) error {
+func (m *MockServerMasterClient) RemoveResource(arg0 context.Context, arg1 *pb.RemoveResourceRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemoveResource", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -214,7 +214,7 @@ func (mr *MockServerMasterClientMockRecorder) RemoveResource(arg0, arg1 interfac
 }
 
 // ReportExecutorWorkload mocks base method.
-func (m *MockServerMasterClient) ReportExecutorWorkload(arg0 context.Context, arg1 *enginepb.ExecWorkloadRequest) error {
+func (m *MockServerMasterClient) ReportExecutorWorkload(arg0 context.Context, arg1 *pb.ExecWorkloadRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReportExecutorWorkload", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -228,10 +228,10 @@ func (mr *MockServerMasterClientMockRecorder) ReportExecutorWorkload(arg0, arg1 
 }
 
 // ScheduleTask mocks base method.
-func (m *MockServerMasterClient) ScheduleTask(arg0 context.Context, arg1 *enginepb.ScheduleTaskRequest) (*enginepb.ScheduleTaskResponse, error) {
+func (m *MockServerMasterClient) ScheduleTask(arg0 context.Context, arg1 *pb.ScheduleTaskRequest) (*pb.ScheduleTaskResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ScheduleTask", arg0, arg1)
-	ret0, _ := ret[0].(*enginepb.ScheduleTaskResponse)
+	ret0, _ := ret[0].(*pb.ScheduleTaskResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

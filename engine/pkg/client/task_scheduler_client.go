@@ -17,7 +17,7 @@ import (
 	"context"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/client/internal"
 )
 
@@ -26,28 +26,28 @@ import (
 type TaskSchedulerClient interface {
 	ScheduleTask(
 		ctx context.Context,
-		request *enginepb.ScheduleTaskRequest,
-	) (*enginepb.ScheduleTaskResponse, error)
+		request *pb.ScheduleTaskRequest,
+	) (*pb.ScheduleTaskResponse, error)
 
 	ReportExecutorWorkload(
 		ctx context.Context,
-		request *enginepb.ExecWorkloadRequest,
+		request *pb.ExecWorkloadRequest,
 	) error
 }
 
 type taskSchedulerClient struct {
-	cli enginepb.TaskSchedulerClient
+	cli pb.TaskSchedulerClient
 }
 
 // NewTaskSchedulerClient returns a TaskSchedulerClient.
-func NewTaskSchedulerClient(cli enginepb.TaskSchedulerClient) TaskSchedulerClient {
+func NewTaskSchedulerClient(cli pb.TaskSchedulerClient) TaskSchedulerClient {
 	return &taskSchedulerClient{cli: cli}
 }
 
 func (c *taskSchedulerClient) ScheduleTask(
 	ctx context.Context,
-	request *enginepb.ScheduleTaskRequest,
-) (*enginepb.ScheduleTaskResponse, error) {
+	request *pb.ScheduleTaskRequest,
+) (*pb.ScheduleTaskResponse, error) {
 	call := internal.NewCall(
 		c.cli.ScheduleTask,
 		request)
@@ -56,7 +56,7 @@ func (c *taskSchedulerClient) ScheduleTask(
 
 func (c *taskSchedulerClient) ReportExecutorWorkload(
 	ctx context.Context,
-	request *enginepb.ExecWorkloadRequest,
+	request *pb.ExecWorkloadRequest,
 ) error {
 	call := internal.NewCall(
 		c.cli.ReportExecutorWorkload,
@@ -65,7 +65,7 @@ func (c *taskSchedulerClient) ReportExecutorWorkload(
 	if err != nil {
 		return err
 	}
-	if resp.Err != nil && resp.Err.Code != enginepb.ErrorCode_None {
+	if resp.Err != nil && resp.Err.Code != pb.ErrorCode_None {
 		return errors.Errorf("ReportExecutorWorkload: %s",
 			resp.String())
 	}

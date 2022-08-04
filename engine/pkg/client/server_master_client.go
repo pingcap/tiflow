@@ -16,7 +16,7 @@ package client
 import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/client/internal"
 	"github.com/pingcap/tiflow/pkg/security"
 	"go.uber.org/zap"
@@ -89,9 +89,9 @@ func NewServerMasterClientWithFailOver(
 	}
 
 	return &ServerMasterClientWithFailOver{
-		TaskSchedulerClient:   NewTaskSchedulerClient(enginepb.NewTaskSchedulerClient(conn)),
-		DiscoveryClient:       NewDiscoveryClient(enginepb.NewDiscoveryClient(conn)),
-		ResourceManagerClient: NewResourceManagerClient(enginepb.NewResourceManagerClient(conn)),
+		TaskSchedulerClient:   NewTaskSchedulerClient(pb.NewTaskSchedulerClient(conn)),
+		DiscoveryClient:       NewDiscoveryClient(pb.NewDiscoveryClient(conn)),
+		ResourceManagerClient: NewResourceManagerClient(pb.NewResourceManagerClient(conn)),
 		conn:                  conn,
 		resolver:              leaderResolver,
 	}, nil

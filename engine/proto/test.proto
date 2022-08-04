@@ -1,5 +1,5 @@
 syntax = "proto3";
-package enginepb;
+package pb;
 
 import "error.proto";
 

@@ -16,8 +16,8 @@ package client
 import (
 	"context"
 
-	"github.com/pingcap/tiflow/engine/enginepb"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/client/internal"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 )
@@ -32,11 +32,11 @@ type BrokerServiceClient interface {
 }
 
 type brokerServiceClient struct {
-	cli enginepb.BrokerServiceClient
+	cli pb.BrokerServiceClient
 }
 
 // NewBrokerServiceClient returns a new BrokerServiceClient.
-func NewBrokerServiceClient(cli enginepb.BrokerServiceClient) BrokerServiceClient {
+func NewBrokerServiceClient(cli pb.BrokerServiceClient) BrokerServiceClient {
 	return &brokerServiceClient{cli: cli}
 }
 
@@ -48,7 +48,7 @@ func (c *brokerServiceClient) RemoveResource(
 ) error {
 	call := internal.NewCall(
 		c.cli.RemoveResource,
-		&enginepb.RemoveLocalResourceRequest{
+		&pb.RemoveLocalResourceRequest{
 			ResourceId: resourceID,
 			CreatorId:  creatorID,
 		})

@@ -16,40 +16,40 @@ package client
 import (
 	"context"
 
-	"github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pb"
 	"github.com/pingcap/tiflow/engine/pkg/client/internal"
 )
 
 // ResourceManagerClient is a client to the service ResourceManager, which
 // currently is part of the server master.
 type ResourceManagerClient interface {
-	CreateResource(ctx context.Context, request *enginepb.CreateResourceRequest) error
-	QueryResource(ctx context.Context, request *enginepb.QueryResourceRequest) (*enginepb.QueryResourceResponse, error)
-	RemoveResource(ctx context.Context, request *enginepb.RemoveResourceRequest) error
+	CreateResource(ctx context.Context, request *pb.CreateResourceRequest) error
+	QueryResource(ctx context.Context, request *pb.QueryResourceRequest) (*pb.QueryResourceResponse, error)
+	RemoveResource(ctx context.Context, request *pb.RemoveResourceRequest) error
 }
 
 type resourceManagerClient struct {
-	cli enginepb.ResourceManagerClient
+	cli pb.ResourceManagerClient
 }
 
 // NewResourceManagerClient returns a ResourceManagerClient.
-func NewResourceManagerClient(cli enginepb.ResourceManagerClient) ResourceManagerClient {
+func NewResourceManagerClient(cli pb.ResourceManagerClient) ResourceManagerClient {
 	return &resourceManagerClient{cli: cli}
 }
 
-func (c *resourceManagerClient) CreateResource(ctx context.Context, request *enginepb.CreateResourceRequest) error {
+func (c *resourceManagerClient) CreateResource(ctx context.Context, request *pb.CreateResourceRequest) error {
 	call := internal.NewCall(c.cli.CreateResource, request)
 	_, err := call.Do(ctx)
 	// TODO specialized retry strategy.
 	return err
 }
 
-func (c *resourceManagerClient) QueryResource(ctx context.Context, request *enginepb.QueryResourceRequest) (*enginepb.QueryResourceResponse, error) {
+func (c *resourceManagerClient) QueryResource(ctx context.Context, request *pb.QueryResourceRequest) (*pb.QueryResourceResponse, error) {
 	call := internal.NewCall(c.cli.QueryResource, request)
 	return call.Do(ctx)
 }
 
-func (c *resourceManagerClient) RemoveResource(ctx context.Context, request *enginepb.RemoveResourceRequest) error {
+func (c *resourceManagerClient) RemoveResource(ctx context.Context, request *pb.RemoveResourceRequest) error {
 	call := internal.NewCall(c.cli.RemoveResource, request)
 	_, err := call.Do(ctx)
 	// TODO specialized retry strategy.

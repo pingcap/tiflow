@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package enginepb;
+package pb;
 
 enum ErrorCode {
     None = 0;

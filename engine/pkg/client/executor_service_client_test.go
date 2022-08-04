@@ -20,8 +20,8 @@ import (
 	"github.com/gogo/status"
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/engine/enginepb"
-	pbMock "github.com/pingcap/tiflow/engine/enginepb/mock"
+	"github.com/pingcap/tiflow/engine/pb"
+	pbMock "github.com/pingcap/tiflow/engine/pb/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 	"google.golang.org/grpc"
@@ -49,14 +49,14 @@ func TestDispatchTaskNormal(t *testing.T) {
 	}
 
 	client.EXPECT().PreDispatchTask(gomock.Any(), matchPreDispatchArgs(args)).
-		Do(func(_ context.Context, arg1 *enginepb.PreDispatchTaskRequest, _ ...grpc.CallOption) {
+		Do(func(_ context.Context, arg1 *pb.PreDispatchTaskRequest, _ ...grpc.CallOption) {
 			requestID = arg1.RequestId
 			preDispatchComplete.Store(true)
-		}).Return(&enginepb.PreDispatchTaskResponse{}, nil).Times(1)
+		}).Return(&pb.PreDispatchTaskResponse{}, nil).Times(1)
 
 	client.EXPECT().ConfirmDispatchTask(gomock.Any(), matchConfirmDispatch(&requestID, "worker-1")).
-		Return(&enginepb.ConfirmDispatchTaskResponse{}, nil).Do(
-		func(_ context.Context, _ *enginepb.ConfirmDispatchTaskRequest, _ ...grpc.CallOption) {
+		Return(&pb.ConfirmDispatchTaskResponse{}, nil).Do(
+		func(_ context.Context, _ *pb.ConfirmDispatchTaskRequest, _ ...grpc.CallOption) {
 			require.True(t, preDispatchComplete.Load())
 			require.True(t, cbCalled.Load())
 		}).Times(1)
@@ -88,7 +88,7 @@ func TestPreDispatchAborted(t *testing.T) {
 
 	unknownRPCError := status.Error(codes.Unknown, "fake error")
 	client.EXPECT().PreDispatchTask(gomock.Any(), matchPreDispatchArgs(args)).
-		Return((*enginepb.PreDispatchTaskResponse)(nil), unknownRPCError).Times(1)
+		Return((*pb.PreDispatchTaskResponse)(nil), unknownRPCError).Times(1)
 
 	err := serviceCli.DispatchTask(context.Background(), args, func() {
 		t.Fatalf("unexpected callback")
@@ -156,14 +156,14 @@ func TestConfirmDispatchErrorFailFast(t *testing.T) {
 		}
 
 		client.EXPECT().PreDispatchTask(gomock.Any(), matchPreDispatchArgs(args)).
-			Do(func(_ context.Context, arg1 *enginepb.PreDispatchTaskRequest, _ ...grpc.CallOption) {
+			Do(func(_ context.Context, arg1 *pb.PreDispatchTaskRequest, _ ...grpc.CallOption) {
 				requestID = arg1.RequestId
 				preDispatchComplete.Store(true)
-			}).Return(&enginepb.PreDispatchTaskResponse{}, nil).Times(1)
+			}).Return(&pb.PreDispatchTaskResponse{}, nil).Times(1)
 
 		client.EXPECT().ConfirmDispatchTask(gomock.Any(), matchConfirmDispatch(&requestID, "worker-1")).
-			Return((*enginepb.ConfirmDispatchTaskResponse)(nil), tc.err).Do(
-			func(_ context.Context, _ *enginepb.ConfirmDispatchTaskRequest, _ ...grpc.CallOption) {
+			Return((*pb.ConfirmDispatchTaskResponse)(nil), tc.err).Do(
+			func(_ context.Context, _ *pb.ConfirmDispatchTaskRequest, _ ...grpc.CallOption) {
 				require.True(t, preDispatchComplete.Load())
 				require.True(t, timerStarted.Load())
 			}).Times(1)
