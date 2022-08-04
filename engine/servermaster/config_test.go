@@ -25,6 +25,8 @@ func TestMetaStoreConfig(t *testing.T) {
 	t.Parallel()
 
 	testToml := `
+advertise-addr = "http://127.0.0.1:10241"
+
 [framework-metastore-conf]
 endpoints = ["mysql-0:3306"]
 auth.user = "root"
@@ -39,9 +41,10 @@ store-type = "etcd"
 
 	config := GetDefaultMasterConfig()
 	err := config.configFromFile(fileName)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	err = config.AdjustAndValidate()
-	require.Nil(t, err)
+	require.NoError(t, err)
+	require.Equal(t, "http://127.0.0.1:10241", config.AdvertiseLeaderAddr)
 
 	require.Equal(t, "mysql-0:3306", config.FrameMetaConf.Endpoints[0])
 	require.Equal(t, "root", config.FrameMetaConf.Auth.User)

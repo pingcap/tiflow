@@ -191,6 +191,23 @@ var doc = `{
                     }
                 }
             }
+        },
+        "/readyz": {
+            "get": {
+                "description": "check if the servermaster is ready to serve requests",
+                "tags": [
+                    "servermaster"
+                ],
+                "summary": "Check if the servermaster is ready to serve requests",
+                "responses": {
+                    "200": {
+                        "description": ""
+                    },
+                    "503": {
+                        "description": ""
+                    }
+                }
+            }
         }
     }
 }`

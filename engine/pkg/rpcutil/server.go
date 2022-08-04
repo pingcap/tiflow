@@ -33,10 +33,13 @@ import (
 
 // Member stores server member information
 // TODO: make it a protobuf field and can be shared by gRPC API
+// Note: member information is used for leader election and follower forwarding
+// only, do not use it for other purposes.
 type Member struct {
-	Name          string `json:"name"`
-	AdvertiseAddr string `json:"advertise-addr"`
-	IsLeader      bool   `json:"is-leader"`
+	Name                string `json:"name"`
+	AdvertiseAddr       string `json:"advertise-addr"`
+	AdvertiseLeaderAddr string `json:"advertise-leader-addr"`
+	IsLeader            bool   `json:"is-leader"`
 }
 
 // String implements json marshal

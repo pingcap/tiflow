@@ -182,6 +182,7 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 		id := "servermaster" + strconv.Itoa(i)
 		cfg := GetDefaultMasterConfig()
 		cfg.AdvertiseAddr = "servermaster" + strconv.Itoa(i)
+		cfg.AdvertiseLeaderAddr = cfg.AdvertiseAddr
 
 		s := &Server{
 			id:         id,
@@ -201,9 +202,10 @@ func TestLeaderLoopWatchLeader(t *testing.T) {
 		s.masterRPCHook = preRPCHook
 		s.leaderServiceFn = func(ctx context.Context) error {
 			s.leader.Store(&rpcutil.Member{
-				Name:          s.name(),
-				AdvertiseAddr: s.cfg.AdvertiseAddr,
-				IsLeader:      true,
+				Name:                s.name(),
+				AdvertiseAddr:       s.cfg.AdvertiseAddr,
+				AdvertiseLeaderAddr: s.cfg.AdvertiseLeaderAddr,
+				IsLeader:            true,
 			})
 			<-ctx.Done()
 			return nil

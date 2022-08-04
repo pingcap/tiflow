@@ -226,9 +226,15 @@ func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.H
 
 	resp, err := s.executorManager.HandleHeartbeat(req)
 	if err == nil && resp.Err == nil {
+		// Multiple nodes may share the AdvertiseAddr, so we need to remove the
+		// duplicated address from the address list.
+		addrSet := make(map[string]struct{})
 		for _, nodeInfo := range s.discoveryKeeper.Snapshot() {
 			if nodeInfo.Type == model.NodeTypeServerMaster {
-				resp.Addrs = append(resp.Addrs, nodeInfo.Addr)
+				if _, ok := addrSet[nodeInfo.Addr]; !ok {
+					resp.Addrs = append(resp.Addrs, nodeInfo.Addr)
+					addrSet[nodeInfo.Addr] = struct{}{}
+				}
 			}
 		}
 		// `discoveryKeeper.Keepalive` starts at early stage, so it's unlikely that
@@ -239,6 +245,8 @@ func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.H
 		}
 		leader, exists := s.masterRPCHook.CheckLeader()
 		if exists {
+			// Don't use AdvertiseLeaderAddr here, because it is used for master only.
+			// TODO: move these logic to the discovery service.
 			resp.Leader = leader.AdvertiseAddr
 		}
 	}
@@ -601,8 +609,9 @@ func (s *Server) createHTTPServer() *http.Server {
 // member returns member information of the server
 func (s *Server) member() string {
 	m := &rpcutil.Member{
-		Name:          s.name(),
-		AdvertiseAddr: s.cfg.AdvertiseAddr,
+		Name:                s.name(),
+		AdvertiseAddr:       s.cfg.AdvertiseAddr,
+		AdvertiseLeaderAddr: s.cfg.AdvertiseLeaderAddr,
 	}
 	val, err := m.String()
 	if err != nil {
@@ -736,9 +745,10 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	}
 
 	s.leader.Store(&rpcutil.Member{
-		Name:          s.name(),
-		AdvertiseAddr: s.cfg.AdvertiseAddr,
-		IsLeader:      true,
+		Name:                s.name(),
+		AdvertiseAddr:       s.cfg.AdvertiseAddr,
+		AdvertiseLeaderAddr: s.cfg.AdvertiseLeaderAddr,
+		IsLeader:            true,
 	})
 	defer func() {
 		s.leaderInitialized.Store(false)
@@ -851,7 +861,7 @@ func (s *Server) LeaderAddr() (string, bool) {
 	if !ok || leader == nil {
 		return "", false
 	}
-	return leader.AdvertiseAddr, true
+	return leader.AdvertiseLeaderAddr, true
 }
 
 // JobManager implements ServerInfoProvider.JobManager.

@@ -141,7 +141,7 @@ func (s *Server) checkLeaderExists(ctx context.Context) (retry bool, err error) 
 		}
 
 		// step-2, case-b
-		if leader.Name == s.name() || leader.AdvertiseAddr == s.cfg.AdvertiseAddr {
+		if leader.Name == s.name() || leader.AdvertiseLeaderAddr == s.cfg.AdvertiseLeaderAddr {
 			// - leader.Name == s.name() means this server should be leader
 			// - leader.AdvertiseAddr == s.cfg.AdvertiseAddr means the old leader
 			//   has the same advertise addr as current server
@@ -160,7 +160,7 @@ func (s *Server) checkLeaderExists(ctx context.Context) (retry bool, err error) 
 		// step-2, case-c
 		leader.IsLeader = true
 		log.Info("start to watch server master leader",
-			zap.String("leader-name", leader.Name), zap.String("addr", leader.AdvertiseAddr))
+			zap.String("leader-name", leader.Name), zap.String("addr", leader.AdvertiseLeaderAddr))
 		s.watchLeader(ctx, leader, key, rev)
 		log.Info("server master leader changed")
 	}
@@ -169,7 +169,7 @@ func (s *Server) checkLeaderExists(ctx context.Context) (retry bool, err error) 
 }
 
 // TODO: we can use UpdateClients, don't need to close and re-create it.
-func (s *Server) createLeaderClient(ctx context.Context, addr string) {
+func (s *Server) createLeaderClient(addr string) {
 	s.closeLeaderClient()
 
 	// TODO support TLS
@@ -198,7 +198,7 @@ func (s *Server) watchLeader(ctx context.Context, m *rpcutil.Member, key []byte,
 	m.IsLeader = true
 	s.leader.Store(m)
 
-	s.createLeaderClient(ctx, m.AdvertiseAddr)
+	s.createLeaderClient(m.AdvertiseLeaderAddr)
 	defer s.leader.Store(&rpcutil.Member{})
 
 	watcher := clientv3.NewWatcher(s.etcdClient)

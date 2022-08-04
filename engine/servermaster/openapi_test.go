@@ -208,3 +208,33 @@ func TestForwardToLeader(t *testing.T) {
 	forwardReq := <-reqs
 	require.Equal(t, "/api/v1/jobs", forwardReq.URL.Path)
 }
+
+func TestReadyzReady(t *testing.T) {
+	infoProvider := &mockServerInfoProvider{
+		serverAddr: "server-0",
+		leaderAddr: "server-0",
+	}
+	openapi := NewOpenAPI(infoProvider)
+	router := gin.New()
+	RegisterOpenAPIRoutes(router, openapi)
+
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	require.Equal(t, http.StatusOK, resp.Code)
+}
+
+func TestReadyzNotReady(t *testing.T) {
+	infoProvider := &mockServerInfoProvider{
+		serverAddr: "server-0",
+		leaderAddr: "server-1",
+	}
+	openapi := NewOpenAPI(infoProvider)
+	router := gin.New()
+	RegisterOpenAPIRoutes(router, openapi)
+
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	require.Equal(t, http.StatusServiceUnavailable, resp.Code)
+}

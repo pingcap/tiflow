@@ -75,6 +75,8 @@ func NewOpenAPI(infoProvider ServerInfoProvider) *OpenAPI {
 
 // RegisterOpenAPIRoutes registers routes for OpenAPI.
 func RegisterOpenAPIRoutes(router *gin.Engine, openapi *OpenAPI) {
+	router.GET("/readyz", openapi.Readyz)
+
 	v1 := router.Group("/api/v1")
 	v1.Use(openapi.ForwardToLeader)
 	v1.Use(openapi.httpErrorHandler)
@@ -244,6 +246,21 @@ func (o *OpenAPI) CancelJob(c *gin.Context) {
 	_, _, _ = tenantID, projectID, jobID
 	// TODO: Implement it.
 	c.AbortWithStatus(http.StatusNotImplemented)
+}
+
+// Readyz checks if the servermaster is ready to serve requests.
+// @Summary Check if the servermaster is ready to serve requests
+// @Description check if the servermaster is ready to serve requests
+// @Tags servermaster
+// @Success 200
+// @Failure 503
+// @Router /readyz [get]
+func (o *OpenAPI) Readyz(c *gin.Context) {
+	if o.infoProvider.IsLeader() {
+		c.String(http.StatusOK, "OK")
+	} else {
+		c.String(http.StatusServiceUnavailable, "Not ready")
+	}
 }
 
 // ForwardToJobMaster forwards the request to job master.

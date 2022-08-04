@@ -57,6 +57,8 @@ func newOptions() *options {
 func (o *options) addFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.masterConfig.Addr, "addr", o.masterConfig.Addr, "Set the listening address for server master")
 	cmd.Flags().StringVar(&o.masterConfig.AdvertiseAddr, "advertise-addr", o.masterConfig.AdvertiseAddr, "Set the advertise listening address for client communication")
+	cmd.Flags().StringVar(&o.masterConfig.AdvertiseLeaderAddr, "advertise-leader-addr", o.masterConfig.AdvertiseLeaderAddr,
+		"Set the advertise listening address for follower forwarding. If not set, use the value of `--advertise-addr` instead.")
 	cmd.Flags().StringSliceVar(&o.masterConfig.ETCDEndpoints, "etcd-endpoints", o.masterConfig.ETCDEndpoints, "etcd endpoints")
 
 	cmd.Flags().StringVar(&o.masterConfig.LogConf.File, "log-file", o.masterConfig.LogConf.File, "log file path")
@@ -137,6 +139,8 @@ func (o *options) complete(cmd *cobra.Command) error {
 			cfg.Addr = o.masterConfig.Addr
 		case "advertise-addr":
 			cfg.AdvertiseAddr = o.masterConfig.AdvertiseAddr
+		case "advertise-leader-addr":
+			cfg.AdvertiseLeaderAddr = o.masterConfig.AdvertiseLeaderAddr
 		case "etcd-endpoints":
 			cfg.ETCDEndpoints = o.masterConfig.ETCDEndpoints
 		case "log-file":
