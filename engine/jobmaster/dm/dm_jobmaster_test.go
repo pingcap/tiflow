@@ -374,10 +374,6 @@ type MockBaseJobmaster struct {
 	framework.BaseJobMaster
 }
 
-func (m *MockBaseJobmaster) JobMasterID() frameModel.MasterID {
-	return "dm-jobmaster-id"
-}
-
 func (m *MockBaseJobmaster) GetWorkers() map[string]framework.WorkerHandle {
 	m.mu.Lock()
 	defer m.mu.Unlock()

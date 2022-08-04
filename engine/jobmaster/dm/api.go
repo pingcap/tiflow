@@ -68,7 +68,7 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 		wg              sync.WaitGroup
 		mu              sync.Mutex
 		jobStatus       = &JobStatus{
-			JobMasterID: jm.JobMasterID(),
+			JobMasterID: jm.ID(),
 			WorkerID:    jm.ID(),
 			TaskStatus:  make(map[string]TaskStatus),
 		}

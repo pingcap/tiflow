@@ -46,7 +46,7 @@ func TestQueryStatusAPI(t *testing.T) {
 		jm                = &JobMaster{
 			workerID:      "jobmaster-worker-id",
 			BaseJobMaster: mockBaseJobmaster,
-			metadata:      metadata.NewMetaData(mockBaseJobmaster.JobMasterID(), metaKVClient),
+			metadata:      metadata.NewMetaData(mockBaseJobmaster.ID(), metaKVClient),
 		}
 		job = &metadata.Job{
 			Tasks: map[string]*metadata.Task{

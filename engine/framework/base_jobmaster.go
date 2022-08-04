@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
-	runtime "github.com/pingcap/tiflow/engine/executor/worker"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
@@ -48,7 +47,6 @@ type BaseJobMaster interface {
 	Logger() *zap.Logger
 	GetWorkers() map[frameModel.WorkerID]WorkerHandle
 	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit, resources ...resourcemeta.ResourceID) (frameModel.WorkerID, error)
-	JobMasterID() frameModel.MasterID
 	UpdateJobStatus(ctx context.Context, status frameModel.WorkerStatus) error
 	CurrentEpoch() frameModel.Epoch
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
@@ -124,8 +122,8 @@ func NewBaseJobMaster(
 ) BaseJobMaster {
 	// master-worker pair: job manager <-> job master(`baseWorker` following)
 	// master-worker pair: job master(`baseMaster` following) <-> real workers
-	// `masterID` is always the ID of master role, against current object
-	// `workerID` is the ID of current object
+	// `masterID` here is the ID of `JobManager`
+	// `workerID` here is the ID of Job. It remains unchanged in the job lifecycle.
 	baseMaster := NewBaseMaster(
 		ctx, &jobMasterImplAsMasterImpl{jobMasterImpl}, workerID, tp)
 	baseWorker := NewBaseWorker(
@@ -275,13 +273,10 @@ func (d *DefaultBaseJobMaster) Workload() model.RescUnit {
 	return d.worker.Workload()
 }
 
-// ID delegates the ID of inner worker
-func (d *DefaultBaseJobMaster) ID() runtime.RunnableID {
-	return d.worker.ID()
-}
-
-// JobMasterID delegates the JobMasterID of inner worker
-func (d *DefaultBaseJobMaster) JobMasterID() frameModel.MasterID {
+// ID returns the id of the job master itself
+func (d *DefaultBaseJobMaster) ID() frameModel.MasterID {
+	// JobMaster is a combination of 'master' and 'worker'
+	// d.master.MasterID() == d.worker.ID() == JobID
 	return d.master.MasterID()
 }
 
