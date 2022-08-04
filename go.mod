@@ -105,6 +105,8 @@ require (
 	upper.io/db.v3 v3.7.1+incompatible
 )
 
+require go.etcd.io/etcd/raft/v3 v3.5.2
+
 require (
 	cloud.google.com/go v0.100.2 // indirect
 	cloud.google.com/go/compute v1.5.0 // indirect
@@ -258,7 +260,6 @@ require (
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
 	go.etcd.io/bbolt v1.3.6 // indirect
 	go.etcd.io/etcd/client/v2 v2.305.2 // indirect
-	go.etcd.io/etcd/raft/v3 v3.5.2 // indirect
 	go.opencensus.io v0.23.0 // indirect
 	go.opentelemetry.io/contrib v0.20.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.20.0 // indirect
