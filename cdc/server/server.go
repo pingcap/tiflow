@@ -27,7 +27,9 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/prometheus/client_golang/prometheus"
+	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
@@ -44,7 +46,6 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/fsutil"
-	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
 	p2pProto "github.com/pingcap/tiflow/proto/p2p"
@@ -164,7 +165,7 @@ func (s *server) Run(ctx context.Context) error {
 		},
 	})
 	if err != nil {
-		cerror.WrapError(cerror.ErrNewCaptureFailed, err)
+		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
 	}
 
 	cdcEtcdClient, err := etcd.NewCDCEtcdClient(ctx, etcdCli, conf.ClusterID)
@@ -232,15 +233,18 @@ func (s *server) startStatusHTTP(lis net.Listener) error {
 func (s *server) etcdHealthChecker(ctx context.Context) error {
 	ticker := time.NewTicker(time.Second * 3)
 	defer ticker.Stop()
-	conf := config.GetGlobalServerConfig()
-	//
-	//pdApiClient, err := pd.NewPDAPIClient(conf.PdAddr, conf.Security)
 
-	httpCli, err := httputil.NewClient(conf.Security)
+	conf := config.GetGlobalServerConfig()
+	grpcClient, err := pd.NewClientWithContext(ctx, s.pdEndpoints, conf.Security.PDSecurityOption())
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
-	defer httpCli.CloseIdleConnections()
+	pc, err := pdutil.NewPDAPIClient(grpcClient, conf.Security)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer pc.Close()
+
 	metrics := make(map[string]prometheus.Observer)
 	for _, pdEndpoint := range s.pdEndpoints {
 		metrics[pdEndpoint] = etcdHealthCheckDuration.WithLabelValues(pdEndpoint)
@@ -251,17 +255,19 @@ func (s *server) etcdHealthChecker(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			for _, pdEndpoint := range s.pdEndpoints {
+			endpoints, err := pc.CollectMemberEndpoints(ctx)
+			if err != nil {
+				log.Warn("etcd health check: cannot collect all members", zap.Error(err))
+				continue
+			}
+			for _, endpoint := range endpoints {
 				start := time.Now()
-				ctx, cancel := context.WithTimeout(ctx, time.Second*10)
-				resp, err := httpCli.Get(ctx, fmt.Sprintf("%s/pd/api/v1/health", pdEndpoint))
-				if err != nil {
-					log.Warn("etcd health check error", zap.Error(err))
-				} else {
-					_, _ = io.Copy(io.Discard, resp.Body)
-					_ = resp.Body.Close()
-					metrics[pdEndpoint].Observe(float64(time.Since(start)) / float64(time.Second))
+				ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+				if err := pc.Healthy(ctx, endpoint); err != nil {
+					log.Warn("etcd health check error",
+						zap.String("endpoint", endpoint), zap.Error(err))
 				}
+				metrics[endpoint].Observe(time.Since(start).Seconds())
 				cancel()
 			}
 		}

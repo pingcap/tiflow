@@ -34,7 +34,7 @@ type Tester struct {
 	dir       string
 	etcd      *embed.Etcd
 	ClientURL *url.URL
-	client    CDCEtcdClientImpl
+	client    CDCEtcdClient
 	ctx       context.Context
 	cancel    context.CancelFunc
 	errg      *errgroup.Group

@@ -52,6 +52,34 @@ func (mr *MockCDCEtcdClientMockRecorder) CheckMultipleCDCClusterExist(ctx interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckMultipleCDCClusterExist", reflect.TypeOf((*MockCDCEtcdClient)(nil).CheckMultipleCDCClusterExist), ctx)
 }
 
+// ClearAllCDCInfo mocks base method.
+func (m *MockCDCEtcdClient) ClearAllCDCInfo(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClearAllCDCInfo", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ClearAllCDCInfo indicates an expected call of ClearAllCDCInfo.
+func (mr *MockCDCEtcdClientMockRecorder) ClearAllCDCInfo(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearAllCDCInfo", reflect.TypeOf((*MockCDCEtcdClient)(nil).ClearAllCDCInfo), ctx)
+}
+
+// Close mocks base method.
+func (m *MockCDCEtcdClient) Close() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Close")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockCDCEtcdClientMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockCDCEtcdClient)(nil).Close))
+}
+
 // CreateChangefeedInfo mocks base method.
 func (m *MockCDCEtcdClient) CreateChangefeedInfo(arg0 context.Context, arg1 *model.UpstreamInfo, arg2 *model.ChangeFeedInfo, arg3 model.ChangeFeedID) error {
 	m.ctrl.T.Helper()
@@ -80,6 +108,20 @@ func (mr *MockCDCEtcdClientMockRecorder) DeleteCaptureInfo(arg0, arg1 interface{
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCaptureInfo", reflect.TypeOf((*MockCDCEtcdClient)(nil).DeleteCaptureInfo), arg0, arg1)
 }
 
+// DeleteChangeFeedInfo mocks base method.
+func (m *MockCDCEtcdClient) DeleteChangeFeedInfo(ctx context.Context, id model.ChangeFeedID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteChangeFeedInfo", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteChangeFeedInfo indicates an expected call of DeleteChangeFeedInfo.
+func (mr *MockCDCEtcdClientMockRecorder) DeleteChangeFeedInfo(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteChangeFeedInfo", reflect.TypeOf((*MockCDCEtcdClient)(nil).DeleteChangeFeedInfo), ctx, id)
+}
+
 // GetAllCDCInfo mocks base method.
 func (m *MockCDCEtcdClient) GetAllCDCInfo(ctx context.Context) ([]*mvccpb.KeyValue, error) {
 	m.ctrl.T.Helper()
@@ -93,6 +135,51 @@ func (m *MockCDCEtcdClient) GetAllCDCInfo(ctx context.Context) ([]*mvccpb.KeyVal
 func (mr *MockCDCEtcdClientMockRecorder) GetAllCDCInfo(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllCDCInfo", reflect.TypeOf((*MockCDCEtcdClient)(nil).GetAllCDCInfo), ctx)
+}
+
+// GetAllChangeFeedInfo mocks base method.
+func (m *MockCDCEtcdClient) GetAllChangeFeedInfo(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAllChangeFeedInfo", ctx)
+	ret0, _ := ret[0].(map[model.ChangeFeedID]*model.ChangeFeedInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetAllChangeFeedInfo indicates an expected call of GetAllChangeFeedInfo.
+func (mr *MockCDCEtcdClientMockRecorder) GetAllChangeFeedInfo(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllChangeFeedInfo", reflect.TypeOf((*MockCDCEtcdClient)(nil).GetAllChangeFeedInfo), ctx)
+}
+
+// GetAllChangeFeedStatus mocks base method.
+func (m *MockCDCEtcdClient) GetAllChangeFeedStatus(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedStatus, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAllChangeFeedStatus", ctx)
+	ret0, _ := ret[0].(map[model.ChangeFeedID]*model.ChangeFeedStatus)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetAllChangeFeedStatus indicates an expected call of GetAllChangeFeedStatus.
+func (mr *MockCDCEtcdClientMockRecorder) GetAllChangeFeedStatus(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllChangeFeedStatus", reflect.TypeOf((*MockCDCEtcdClient)(nil).GetAllChangeFeedStatus), ctx)
+}
+
+// GetCaptureLeases mocks base method.
+func (m *MockCDCEtcdClient) GetCaptureLeases(ctx context.Context) (map[string]int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCaptureLeases", ctx)
+	ret0, _ := ret[0].(map[string]int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCaptureLeases indicates an expected call of GetCaptureLeases.
+func (mr *MockCDCEtcdClientMockRecorder) GetCaptureLeases(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCaptureLeases", reflect.TypeOf((*MockCDCEtcdClient)(nil).GetCaptureLeases), ctx)
 }
 
 // GetCaptures mocks base method.
@@ -140,6 +227,22 @@ func (m *MockCDCEtcdClient) GetChangeFeedStatus(ctx context.Context, id model.Ch
 func (mr *MockCDCEtcdClientMockRecorder) GetChangeFeedStatus(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChangeFeedStatus", reflect.TypeOf((*MockCDCEtcdClient)(nil).GetChangeFeedStatus), ctx, id)
+}
+
+// GetChangeFeeds mocks base method.
+func (m *MockCDCEtcdClient) GetChangeFeeds(ctx context.Context) (int64, map[model.ChangeFeedID]*mvccpb.KeyValue, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetChangeFeeds", ctx)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(map[model.ChangeFeedID]*mvccpb.KeyValue)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetChangeFeeds indicates an expected call of GetChangeFeeds.
+func (mr *MockCDCEtcdClientMockRecorder) GetChangeFeeds(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChangeFeeds", reflect.TypeOf((*MockCDCEtcdClient)(nil).GetChangeFeeds), ctx)
 }
 
 // GetClusterID mocks base method.
@@ -255,6 +358,20 @@ func (m *MockCDCEtcdClient) PutCaptureInfo(arg0 context.Context, arg1 *model.Cap
 func (mr *MockCDCEtcdClientMockRecorder) PutCaptureInfo(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutCaptureInfo", reflect.TypeOf((*MockCDCEtcdClient)(nil).PutCaptureInfo), arg0, arg1, arg2)
+}
+
+// RevokeAllLeases mocks base method.
+func (m *MockCDCEtcdClient) RevokeAllLeases(ctx context.Context, leases map[string]int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RevokeAllLeases", ctx, leases)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RevokeAllLeases indicates an expected call of RevokeAllLeases.
+func (mr *MockCDCEtcdClientMockRecorder) RevokeAllLeases(ctx, leases interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RevokeAllLeases", reflect.TypeOf((*MockCDCEtcdClient)(nil).RevokeAllLeases), ctx, leases)
 }
 
 // SaveChangeFeedInfo mocks base method.

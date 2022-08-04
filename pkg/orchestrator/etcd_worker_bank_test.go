@@ -156,7 +156,7 @@ func TestEtcdBank(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for {
-				worker, err := NewEtcdWorker(&cdcCli, bankTestPrefix, &bankReactor{
+				worker, err := NewEtcdWorker(cdcCli, bankTestPrefix, &bankReactor{
 					accountNumber: totalAccountNumber,
 				}, &bankReactorState{t: t, index: i, account: make([]int, totalAccountNumber)},
 					&migrate.NoOpMigrator{})

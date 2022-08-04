@@ -82,7 +82,7 @@ func newServer(t *testing.T) *testServer {
 
 	etcdClient, err := etcd.NewCDCEtcdClient(s.ctx, client, etcd.DefaultCDCClusterID)
 	require.Nil(t, err)
-	s.server.etcdClient = &etcdClient
+	s.server.etcdClient = etcdClient
 
 	s.errg = util.HandleErrWithErrGroup(s.ctx, s.e.Err(), func(e error) { t.Log(e) })
 	return s
