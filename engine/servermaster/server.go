@@ -26,23 +26,13 @@ import (
 	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/prometheus/client_golang/prometheus"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
-	"golang.org/x/time/rate"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
-	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
+	pkgClient "github.com/pingcap/tiflow/engine/pkg/client"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	externRescManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
@@ -58,12 +48,22 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
+	serverutil2 "github.com/pingcap/tiflow/engine/servermaster/serverutil"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
 	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
+	"github.com/prometheus/client_golang/prometheus"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // use a slice instead of map because in small data size, slice search is faster
@@ -72,9 +72,6 @@ var masterRPCLimiterAllowList = []string{
 	"SubmitJob",
 	"CancelJob",
 	"ScheduleTask",
-}
-
-var resourceRPCLimiterAllowList = []string{
 	"CreateResource",
 	"RemoveResource",
 }
@@ -89,11 +86,11 @@ type Server struct {
 
 	etcdClient *clientv3.Client
 
-	leader          atomic.Value
-	masterCli       *rpcutil.LeaderClientWithLock[pb.MasterClient]
-	resourceCli     *rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]
+	leader    atomic.Value
+	masterCli *rpcutil.LeaderClientWithLock[multiClient]
+
 	leaderServiceFn func(context.Context) error
-	masterRPCHook   *rpcutil.PreRPCHook[pb.MasterClient]
+	masterRPCHook   rpcutil.PreRPCHook
 
 	// sched scheduler
 	executorManager        ExecutorManager
@@ -105,9 +102,11 @@ type Server struct {
 	gcRunner      externRescManager.GCRunner
 	gcCoordinator externRescManager.GCCoordinator
 
-	msgService      *p2p.MessageRPCService
-	p2pMsgRouter    p2p.MessageRouter
-	rpcLogRL        *rate.Limiter
+	msgService   *p2p.MessageRPCService
+	p2pMsgRouter p2p.MessageRouter
+	rpcLogRL     *rate.Limiter
+
+	// Deprecated. Will be replaced with `discovery.Agent`.
 	discoveryKeeper *serverutil.DiscoveryKeepaliver
 
 	metaStoreManager MetaStoreManager
@@ -195,8 +194,7 @@ func NewServer(cfg *Config, ctx *test.Context) (_ *Server, finalErr error) {
 		leaderInitialized: *atomic.NewBool(false),
 		testCtx:           ctx,
 		leader:            atomic.Value{},
-		masterCli:         &rpcutil.LeaderClientWithLock[pb.MasterClient]{},
-		resourceCli:       &rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]{},
+		masterCli:         &rpcutil.LeaderClientWithLock[multiClient]{},
 		msgService:        msgService,
 		p2pMsgRouter:      p2pMsgRouter,
 		rpcLogRL:          rate.NewLimiter(rate.Every(time.Second*5), 3 /*burst*/),
@@ -206,7 +204,7 @@ func NewServer(cfg *Config, ctx *test.Context) (_ *Server, finalErr error) {
 		etcdClient:        etcdClient,
 	}
 	server.leaderServiceFn = server.runLeaderService
-	masterRPCHook := rpcutil.NewPreRPCHook(
+	masterRPCHook := rpcutil.NewPreRPCHook[multiClient](
 		id,
 		&server.leader,
 		server.masterCli,
@@ -292,6 +290,10 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 	resp2 := &pb.RegisterExecutorResponse{}
 	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
 	if shouldRet {
+		if err != nil {
+			log.Warn("RegisterExecutor failed", zap.Error(err))
+			return nil, err
+		}
 		return resp2, err
 	}
 	// register executor to scheduler
@@ -447,9 +449,6 @@ func (s *Server) Stop() {
 	if s.masterCli != nil {
 		s.masterCli.Close()
 	}
-	if s.resourceCli != nil {
-		s.resourceCli.Close()
-	}
 	if s.frameMetaClient != nil {
 		s.frameMetaClient.Close()
 	}
@@ -542,18 +541,10 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 }
 
 func (s *Server) initResourceManagerService() {
-	resourceRPCHook := rpcutil.NewPreRPCHook(
-		s.id,
-		&s.leader,
-		s.resourceCli,
-		&s.leaderInitialized,
-		s.rpcLogRL,
-		resourceRPCLimiterAllowList,
-	)
 	s.resourceManagerService = externRescManager.NewService(
 		s.frameMetaClient,
 		s.executorManager,
-		resourceRPCHook,
+		s.masterRPCHook,
 	)
 }
 
@@ -581,7 +572,6 @@ func (s *Server) serve(ctx context.Context) error {
 	errGroup.Go(func() error {
 		return grpcServer.Serve(tcpServer.GrpcListener())
 	})
-
 	return errGroup.Wait()
 }
 
@@ -590,7 +580,9 @@ func (s *Server) createGRPCServer() *grpc.Server {
 		grpc.StreamInterceptor(grpcprometheus.StreamServerInterceptor),
 		grpc.UnaryInterceptor(grpcprometheus.UnaryServerInterceptor),
 	)
-	pb.RegisterMasterServer(grpcServer, s)
+	pb.RegisterDiscoveryServer(grpcServer, s)
+	pb.RegisterTaskSchedulerServer(grpcServer, s)
+	pb.RegisterJobManagerServer(grpcServer, s)
 	pb.RegisterResourceManagerServer(grpcServer, s.resourceManagerService)
 	p2pProtocol.RegisterCDCPeerToPeerServer(grpcServer, s.msgService.GetMessageServer())
 	return grpcServer
@@ -677,11 +669,18 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		log.Info("resource manager exited")
 	}()
 
-	clients := client.NewClientManager()
-	err = clients.AddMasterClient(ctx, []string{s.cfg.Addr})
+	// TODO support TLS.
+	executorClients := pkgClient.NewExecutorGroup(&security.Credential{}, log.L())
+	masterClient, err := pkgClient.NewServerMasterClientWithFailOver(
+		pkgClient.MasterServerList{
+			s.cfg.Addr: true,
+		},
+		nil, // TODO support TLS
+	)
 	if err != nil {
 		return
 	}
+
 	dctx := dcontext.NewContext(ctx)
 	dctx.Environ.Addr = s.cfg.AdvertiseAddr
 	dctx.Environ.NodeID = s.name()
@@ -712,14 +711,14 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		return err
 	}
 
-	if err := dp.Provide(func() client.ClientsManager {
-		return clients
+	if err := dp.Provide(func() pkgClient.ExecutorGroup {
+		return executorClients
 	}); err != nil {
 		return err
 	}
 
-	if err := dp.Provide(func() client.MasterClient {
-		return clients.MasterClient()
+	if err := dp.Provide(func() pkgClient.ServerMasterClient {
+		return masterClient
 	}); err != nil {
 		return err
 	}
@@ -760,7 +759,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	}()
 
 	s.gcRunner = externRescManager.NewGCRunner(s.frameMetaClient, map[resModel.ResourceType]externRescManager.GCHandlerFunc{
-		"local": resourcetypes.NewLocalFileResourceType(clients).GCHandler(),
+		"local": resourcetypes.NewLocalFileResourceType(executorClients).GCHandler(),
 	})
 	s.gcCoordinator = externRescManager.NewGCCoordinator(s.executorManager, s.jobManager, s.frameMetaClient, s.gcRunner)
 
@@ -802,6 +801,10 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 				s.collectLeaderMetric()
 			}
 		}
+	})
+
+	errg.Go(func() error {
+		return serverutil2.WatchExecutors(ctx, s.executorManager, executorClients)
 	})
 
 	s.leaderInitialized.Store(true)
