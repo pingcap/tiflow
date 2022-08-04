@@ -458,17 +458,15 @@ func (m *Master) OnWorkerOffline(worker framework.WorkerHandle, reason error) er
 	}
 
 	workerCkpt := zeroWorkerCheckpoint()
-	if ws, err := parseExtBytes(worker.Status().ExtBytes); err != nil {
-		log.Warn("failed to parse worker ext bytes", zap.Error(err))
-		workerCkpt.Revision = m.config.EtcdStartRevision
+	if ckpt, ok := m.cachedCheckpoint.Checkpoints[businessID]; ok {
+		workerCkpt = ckpt
 	} else {
-		workerCkpt.Tick = ws.Tick
-		if ws.Checkpoint != nil {
-			workerCkpt.Revision = ws.Checkpoint.Revision
-			workerCkpt.MvccCount = ws.Checkpoint.MvccCount
-			workerCkpt.Value = ws.Checkpoint.Value
-		}
+		workerCkpt.Revision = m.config.EtcdStartRevision
 	}
+	if tick, ok := m.cachedCheckpoint.Ticks[businessID]; ok {
+		workerCkpt.Tick = tick
+	}
+
 	wcfg := m.genWorkerConfig(businessID, workerCkpt)
 	m.workerListMu.Lock()
 	defer m.workerListMu.Unlock()
