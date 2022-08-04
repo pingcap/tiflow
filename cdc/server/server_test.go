@@ -102,18 +102,7 @@ func TestServerBasic(t *testing.T) {
 	t.Parallel()
 	s := newServer(t)
 	defer s.close(t)
-	testEtcdHealthChecker(t, s)
 	testSetUpDataDir(t, s)
-}
-
-func testEtcdHealthChecker(t *testing.T, s *testServer) {
-	s.errg.Go(func() error {
-		err := s.server.etcdHealthChecker(s.ctx)
-		require.Equal(t, context.Canceled, err)
-		return nil
-	})
-	// longer than one check tick 3s
-	time.Sleep(time.Second * 4)
 }
 
 func testSetUpDataDir(t *testing.T, s *testServer) {
