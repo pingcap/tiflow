@@ -43,7 +43,10 @@ type agent struct {
 	ownerInfo ownerInfo
 
 	// Liveness of the capture.
-	liveness model.Liveness
+	// It changes to LivenessCaptureStopping in following cases:
+	// 1. The capture receives a SIGTERM signal.
+	// 2. The agent receives a stopping heartbeat.
+	liveness *model.Liveness
 }
 
 type agentInfo struct {
@@ -78,6 +81,7 @@ type ownerInfo struct {
 func newAgent(
 	ctx context.Context,
 	captureID model.CaptureID,
+	liveness *model.Liveness,
 	changeFeedID model.ChangeFeedID,
 	etcdClient etcd.CDCEtcdClient,
 	tableExecutor internal.TableExecutor,
@@ -85,6 +89,7 @@ func newAgent(
 	result := &agent{
 		agentInfo: newAgentInfo(changeFeedID, captureID),
 		tableM:    newTableManager(changeFeedID, tableExecutor),
+		liveness:  liveness,
 	}
 
 	etcdCliCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -139,13 +144,15 @@ func newAgent(
 // NewAgent returns a new agent.
 func NewAgent(ctx context.Context,
 	captureID model.CaptureID,
+	liveness *model.Liveness,
 	changeFeedID model.ChangeFeedID,
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
 	etcdClient etcd.CDCEtcdClient,
 	tableExecutor internal.TableExecutor,
 ) (internal.Agent, error) {
-	result, err := newAgent(ctx, captureID, changeFeedID, etcdClient, tableExecutor)
+	result, err := newAgent(
+		ctx, captureID, liveness, changeFeedID, etcdClient, tableExecutor)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -161,13 +168,11 @@ func NewAgent(ctx context.Context,
 }
 
 // Tick implement agent interface
-func (a *agent) Tick(ctx context.Context, liveness model.Liveness) error {
+func (a *agent) Tick(ctx context.Context) error {
 	inboundMessages, err := a.recvMsgs(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	a.handleLivenessUpdate(liveness, livenessSourceTick)
 
 	outboundMessages := a.handleMessage(inboundMessages)
 
@@ -185,22 +190,17 @@ func (a *agent) Tick(ctx context.Context, liveness model.Liveness) error {
 	return nil
 }
 
-const (
-	livenessSourceTick      = "tick"
-	livenessSourceHeartbeat = "heartbeat"
-)
-
-func (a *agent) handleLivenessUpdate(liveness model.Liveness, source string) {
-	if a.liveness != liveness {
-		if a.liveness == model.LivenessCaptureStopping {
+func (a *agent) handleLivenessUpdate(liveness model.Liveness) {
+	currentLiveness := a.liveness.Load()
+	if currentLiveness != liveness {
+		if currentLiveness == model.LivenessCaptureStopping {
 			// No way to go back, once it becomes shutting down,
 			return
 		}
-		log.Info("schedulerv3: agent liveness changed",
-			zap.String("old", a.liveness.String()),
-			zap.String("new", liveness.String()),
-			zap.String("source", source))
-		a.liveness = liveness
+		log.Info("schedulerv3: agent updates liveness",
+			zap.String("old", currentLiveness.String()),
+			zap.String("new", liveness.String()))
+		a.liveness.Store(liveness)
 	}
 }
 
@@ -252,11 +252,11 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) *schedulep
 	}
 
 	if request.IsStopping {
-		a.handleLivenessUpdate(model.LivenessCaptureStopping, livenessSourceHeartbeat)
+		a.handleLivenessUpdate(model.LivenessCaptureStopping)
 	}
 	response := &schedulepb.HeartbeatResponse{
 		Tables:   result,
-		Liveness: a.liveness,
+		Liveness: a.liveness.Load(),
 	}
 
 	message := &schedulepb.Message{
