@@ -81,6 +81,7 @@ require (
 	go.etcd.io/etcd/client/pkg/v3 v3.5.2
 	go.etcd.io/etcd/client/v3 v3.5.2
 	go.etcd.io/etcd/pkg/v3 v3.5.2
+	go.etcd.io/etcd/raft/v3 v3.5.2
 	go.etcd.io/etcd/server/v3 v3.5.2
 	go.etcd.io/etcd/tests/v3 v3.5.2
 	go.uber.org/atomic v1.9.0
@@ -104,8 +105,6 @@ require (
 	gorm.io/gorm v1.23.4
 	upper.io/db.v3 v3.7.1+incompatible
 )
-
-require go.etcd.io/etcd/raft/v3 v3.5.2
 
 require (
 	cloud.google.com/go v0.100.2 // indirect
