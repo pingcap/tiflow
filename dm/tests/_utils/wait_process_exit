@@ -5,7 +5,7 @@ process=$1
 
 WAIT_COUNT=0
 while [ $WAIT_COUNT -lt 120 ]; do
-	pgrep $process >/dev/null 2>&1
+	ps aux | grep $process | grep -v 'grep' | grep -v 'wait_process_exit' >/dev/null 2>&1
 	ret=$?
 	if [ "$ret" != "0" ]; then
 		echo "process $process already exit"
@@ -16,5 +16,5 @@ while [ $WAIT_COUNT -lt 120 ]; do
 	((WAIT_COUNT++))
 done
 
-echo "process $process didn't exit after 120 seconds, current processlist: $(ps aux | grep $process | grep -v 'grep')"
+echo "process $process didn't exit after 120 seconds, current processlist: $(ps aux | grep $process | grep -v 'grep' | grep -v 'wait_process_exit')"
 exit 1

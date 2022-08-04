@@ -18,16 +18,15 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/srvdiscovery"
 	"github.com/pingcap/tiflow/pkg/p2p"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
-// DiscoveryKeepaliver wraps wraps DiscoveryRunner and MessageRouter
+// DiscoveryKeepaliver wraps DiscoveryRunner and MessageRouter
 type DiscoveryKeepaliver struct {
 	info       *model.NodeInfo
 	etcdCli    *clientv3.Client

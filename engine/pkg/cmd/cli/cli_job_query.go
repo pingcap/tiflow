@@ -51,7 +51,7 @@ func (o *jobQueryOptions) validate(ctx context.Context, cmd *cobra.Command) erro
 
 // run the `cli job create` command.
 func (o *jobQueryOptions) run(ctx context.Context, cmd *cobra.Command) error {
-	resp, err := o.generalOpts.masterClient.QueryJob(ctx, &enginepb.QueryJobRequest{
+	resp, err := o.generalOpts.jobManagerCli.QueryJob(ctx, &enginepb.QueryJobRequest{
 		JobId: o.jobID,
 		ProjectInfo: &enginepb.ProjectInfo{
 			TenantId:  o.generalOpts.tenant.TenantID(),

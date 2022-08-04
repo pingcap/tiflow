@@ -10,22 +10,15 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package client
+
+package factory
 
 import (
 	"testing"
 
 	"github.com/pingcap/tiflow/pkg/leakutil"
-	"go.uber.org/goleak"
 )
 
 func TestMain(m *testing.M) {
-	opts := []goleak.Option{
-		// TODO: remove the following lines after executor manager supports to
-		// remove failed clients. Otherwise test case TestAddNonExistentExecutor
-		// will fail.
-		goleak.IgnoreTopFunction("google.golang.org/grpc.(*addrConn).resetTransport"),
-		goleak.IgnoreTopFunction("google.golang.org/grpc.(*ccBalancerWrapper).watcher"),
-	}
-	leakutil.SetUpLeakTest(m, opts...)
+	leakutil.SetUpLeakTest(m)
 }

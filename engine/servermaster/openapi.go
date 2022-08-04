@@ -19,7 +19,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -35,11 +34,20 @@ const (
 	apiOpVarProjectID = "project_id"
 	// apiOpVarJobID is the key of job id in HTTP API.
 	apiOpVarJobID = "job_id"
-	// apiOpVarJobID is the key of job type in HTTP API.
-	apiOpJobType = "job_type"
-	// apiOpVarJobID is the key of job config in HTTP API.
-	apiOpJobConfig = "job_config"
 )
+
+// APICreateJobRequest defines the json fields when creating a job with OpenAPI
+type APICreateJobRequest struct {
+	JobType   int32  `json:"job_type"`
+	JobConfig string `json:"job_config"`
+}
+
+// APIQueryJobResponse defines the json fields of query job response
+type APIQueryJobResponse struct {
+	JobType   int32  `json:"job_type"`
+	JobConfig string `json:"job_config"`
+	Status    int32  `json:"status"`
+}
 
 // ServerInfoProvider provides server info.
 type ServerInfoProvider interface {
@@ -129,29 +137,16 @@ func (o *OpenAPI) ListJobs(c *gin.Context) {
 // @Router	/api/v1/jobs [post]
 // TODO: use gRPC gateway to serve OpenAPI in the future
 func (o *OpenAPI) SubmitJob(c *gin.Context) {
-	c.Bind()
-	tpStr := c.PostForm(apiOpJobType)
-	tp, err := strconv.ParseInt(tpStr, 10, 64)
+	data := &APICreateJobRequest{}
+	err := c.ShouldBindJSON(data)
 	if err != nil {
-		_ = c.AbortWithError(http.StatusBadRequest, errors.New("job-type is not valid"))
+		_ = c.AbortWithError(http.StatusBadRequest, err)
 		return
 	}
-	tenantID := c.PostForm(apiOpVarTenantID)
-	projectID := c.PostForm(apiOpVarProjectID)
-	if tenantID == "" {
-		_ = c.AbortWithError(http.StatusBadRequest, errors.New("tenant_id must be provided"))
-		return
-	}
-	if projectID == "" {
-		_ = c.AbortWithError(http.StatusBadRequest, errors.New("project_id must be provided"))
-		return
-	}
-
 	projInfo := &pb.ProjectInfo{
-		TenantId:  tenantID,
-		ProjectId: projectID,
+		TenantId:  c.Query(apiOpVarTenantID),
+		ProjectId: c.Query(apiOpVarProjectID),
 	}
-	cfg := c.PostForm(apiOpJobConfig)
 
 	jobMgr, ok := o.infoProvider.JobManager()
 	if !ok {
@@ -160,8 +155,8 @@ func (o *OpenAPI) SubmitJob(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	req := &pb.SubmitJobRequest{
-		Tp:          int32(tp),
-		Config:      []byte(cfg),
+		Tp:          data.JobType,
+		Config:      []byte(data.JobConfig),
 		ProjectInfo: projInfo,
 	}
 	resp := jobMgr.SubmitJob(ctx, req)
@@ -186,9 +181,31 @@ func (o *OpenAPI) QueryJob(c *gin.Context) {
 	tenantID := c.Query(apiOpVarTenantID)
 	projectID := c.Query(apiOpVarProjectID)
 	jobID := c.Param(apiOpVarJobID)
-	_, _, _ = tenantID, projectID, jobID
-	// TODO: Implement it.
-	c.AbortWithStatus(http.StatusNotImplemented)
+
+	jobMgr, ok := o.infoProvider.JobManager()
+	if !ok {
+		_ = c.AbortWithError(http.StatusServiceUnavailable, errors.New("job manager is not initialized"))
+		return
+	}
+	req := &pb.QueryJobRequest{
+		JobId: jobID,
+		ProjectInfo: &pb.ProjectInfo{
+			TenantId:  tenantID,
+			ProjectId: projectID,
+		},
+	}
+	ctx := c.Request.Context()
+	resp := jobMgr.QueryJob(ctx, req)
+	if resp.Err != nil {
+		_ = c.AbortWithError(http.StatusBadRequest, errors.New(resp.Err.String()))
+		return
+	}
+	queryResp := &APIQueryJobResponse{
+		JobType:   resp.GetTp(),
+		JobConfig: string(resp.GetConfig()),
+		Status:    int32(resp.GetStatus()),
+	}
+	c.IndentedJSON(http.StatusOK, queryResp)
 }
 
 // PauseJob pauses a job.

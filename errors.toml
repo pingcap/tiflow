@@ -201,6 +201,11 @@ error = '''
 cluster ID mismatch, tikv cluster ID is %d and request cluster ID is %d
 '''
 
+["CDC:ErrClusterIsUnhealthy"]
+error = '''
+TiCDC cluster is unhealthy
+'''
+
 ["CDC:ErrCodecDecode"]
 error = '''
 codec decode error
