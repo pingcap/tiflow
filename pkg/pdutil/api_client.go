@@ -204,7 +204,7 @@ func (pc *pdAPIClient) CollectMemberEndpoints(ctx context.Context) ([]string, er
 	}
 	result := make([]string, 0, len(members))
 	for _, m := range members {
-		result = append(result, m.GetPeerUrls()[0])
+		result = append(result, m.GetClientUrls()[0])
 	}
 	return result, nil
 }

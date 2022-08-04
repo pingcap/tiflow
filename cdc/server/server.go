@@ -267,7 +267,12 @@ func (s *server) etcdHealthChecker(ctx context.Context) error {
 					log.Warn("etcd health check error",
 						zap.String("endpoint", endpoint), zap.Error(err))
 				}
-				metrics[endpoint].Observe(time.Since(start).Seconds())
+				metric, ok := metrics[endpoint]
+				if !ok {
+					metric = etcdHealthCheckDuration.WithLabelValues(endpoint)
+					metrics[endpoint] = metric
+				}
+				metric.Observe(time.Since(start).Seconds())
 				cancel()
 			}
 		}
