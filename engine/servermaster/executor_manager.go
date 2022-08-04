@@ -50,7 +50,7 @@ type ExecutorManager interface {
 	// a stream of events describing changes that happen to the executors
 	// after the snapshot is taken.
 	WatchExecutors(ctx context.Context) (
-		snap []model.ExecutorID, stream *notifier.Receiver[model.ExecutorStatusChange], err error,
+		snap map[model.ExecutorID]string, stream *notifier.Receiver[model.ExecutorStatusChange], err error,
 	)
 }
 
@@ -90,11 +90,12 @@ func (e *ExecutorManagerImpl) removeExecutorImpl(id model.ExecutorID) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	log.Info("begin to remove executor", zap.String("id", string(id)))
-	_, ok := e.executors[id]
+	exec, ok := e.executors[id]
 	if !ok {
 		// This executor has been removed
 		return errors.ErrUnknownExecutorID.GenWithStackByArgs(id)
 	}
+	addr := exec.Addr
 	delete(e.executors, id)
 	e.rescMgr.Unregister(id)
 	log.Info("notify to offline exec")
@@ -106,8 +107,9 @@ func (e *ExecutorManagerImpl) removeExecutorImpl(id model.ExecutorID) error {
 	}
 
 	e.notifier.Notify(model.ExecutorStatusChange{
-		ID: id,
-		Tp: model.EventExecutorOffline,
+		ID:   id,
+		Tp:   model.EventExecutorOffline,
+		Addr: addr,
 	})
 	return nil
 }
@@ -154,8 +156,9 @@ func (e *ExecutorManagerImpl) RegisterExec(info *model.NodeInfo) {
 	e.mu.Lock()
 	e.executors[info.ID] = exec
 	e.notifier.Notify(model.ExecutorStatusChange{
-		ID: info.ID,
-		Tp: model.EventExecutorOnline,
+		ID:   info.ID,
+		Tp:   model.EventExecutorOnline,
+		Addr: info.Addr,
 	})
 	e.mu.Unlock()
 	e.rescMgr.Register(exec.ID, exec.Addr, model.RescUnit(exec.Capability))
@@ -325,12 +328,13 @@ func (e *ExecutorManagerImpl) GetAddr(executorID model.ExecutorID) (string, bool
 // WatchExecutors implements the ExecutorManager interface.
 func (e *ExecutorManagerImpl) WatchExecutors(
 	ctx context.Context,
-) (snap []model.ExecutorID, receiver *notifier.Receiver[model.ExecutorStatusChange], err error) {
+) (snap map[model.ExecutorID]string, receiver *notifier.Receiver[model.ExecutorStatusChange], err error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	for executorID := range e.executors {
-		snap = append(snap, executorID)
+	snap = make(map[model.ExecutorID]string, len(e.executors))
+	for executorID, exec := range e.executors {
+		snap[executorID] = exec.Addr
 	}
 
 	if err := e.notifier.Flush(ctx); err != nil {
