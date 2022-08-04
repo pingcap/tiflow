@@ -44,13 +44,13 @@ const (
 	DefaultBusinessMetaID        = "_default"
 	defaultBusinessMetaEndpoints = "127.0.0.1:3336"
 	defaultBusinessMetaUser      = "root"
-	defaultBusinessMetaPassword  = "123456"
+	defaultBusinessMetaPassword  = ""
 
 	// FrameMetaID is the ID for frame metastore
 	FrameMetaID               = "_root"
 	defaultFrameMetaEndpoints = "127.0.0.1:3336"
 	defaultFrameMetaUser      = "root"
-	defaultFrameMetaPassword  = "123456"
+	defaultFrameMetaPassword  = ""
 
 	defaultFrameworkStoreType = metaModel.StoreTypeSQL
 	defaultBusinessStoreType  = metaModel.StoreTypeSQL

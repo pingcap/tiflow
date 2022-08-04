@@ -57,7 +57,7 @@ func TestDMJob(t *testing.T) {
 		Host:     "127.0.0.1",
 		Port:     3306,
 		User:     "root",
-		Password: "123456",
+		Password: "",
 	}
 	tidbCfg := util.DBConfig{
 		Host:     "127.0.0.1",

@@ -11,12 +11,12 @@ spec:
   mode: one
   selector:
     labelSelectors:
-      "app": "server-master"
+      "app": "chaos-server-master"
   direction: both
   target:
     selector:
       labelSelectors:
-        "app": "executor"
+        "app": "chaos-executor"
     mode: one
   duration: "20s"
   scheduler:
@@ -35,12 +35,12 @@ spec:
   mode: one
   selector:
     labelSelectors:
-      "app": "server-master"
+      "app": "chaos-server-master"
   direction: both
   target:
     selector:
       labelSelectors:
-        "app": "server-master"
+        "app": "chaos-server-master"
     mode: one
   duration: "20s"
   scheduler:
@@ -59,12 +59,12 @@ spec:
   mode: one
   selector:
     labelSelectors:
-      "app": "executor"
+      "app": "chaos-executor"
   direction: both
   target:
     selector:
       labelSelectors:
-        "app": "executor"
+        "app": "chaos-executor"
     mode: one
   duration: "20s"
   scheduler:

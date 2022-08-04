@@ -18,6 +18,11 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v2/util"
 )
 
+// IsInitialized implements internal.InfoProvider.
+func (s *ScheduleDispatcher) IsInitialized() bool {
+	return true
+}
+
 // GetTaskStatuses implements InfoProvider for BaseScheduleDispatcher.
 // Complexity Note: This function has O(#tables) cost. USE WITH CARE.
 // Functions with cost O(#tables) are NOT recommended for regular metrics

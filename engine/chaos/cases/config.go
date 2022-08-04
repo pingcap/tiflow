@@ -38,10 +38,10 @@ func newConfig() *config {
 	cfg.FlagSet = flag.NewFlagSet("chaos-case", flag.ContinueOnError)
 	fs := cfg.FlagSet
 
-	fs.StringVar(&cfg.Addr, "addr", "server-master:10240", "address of server-master")
-	fs.StringVar(&cfg.EtcdAddr, "etcd-addr", "metastore-etcd:12479", "address of etcd server(used by fake job)")
+	fs.StringVar(&cfg.Addr, "addr", "chaos-server-master:10240", "address of server-master")
+	fs.StringVar(&cfg.EtcdAddr, "etcd-addr", "chaos-metastore-etcd:12479", "address of etcd server(used by fake job)")
 	// business metastore also uses mysql now
-	fs.StringVar(&cfg.BusinessMetaAddr, "business-meta-addr", "metastore-mysql:13306", "address of business metastore")
+	fs.StringVar(&cfg.BusinessMetaAddr, "business-meta-addr", "chaos-metastore-mysql:3306", "address of business metastore")
 	fs.DurationVar(&cfg.Duration, "duration", 20*time.Minute, "duration of cases running")
 
 	fs.IntVar(&cfg.MasterCount, "master-count", 3, "expect count of server-master")
