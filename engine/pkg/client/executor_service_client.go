@@ -57,6 +57,7 @@ type DispatchTaskArgs struct {
 	MasterID     string
 	WorkerType   int64
 	WorkerConfig []byte
+	WorkerEpoch  int64
 }
 
 type executorServiceClient struct {
