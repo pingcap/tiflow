@@ -20,9 +20,10 @@ import (
 
 // TaskStatus defines the running task status.
 type TaskStatus struct {
-	Unit  frameModel.WorkerType
-	Task  string
-	Stage metadata.TaskStage
+	Unit           frameModel.WorkerType
+	Task           string
+	Stage          metadata.TaskStage
+	CfgModRevision uint64
 }
 
 // NewOfflineStatus is used when jobmaster receives a worker offline.
