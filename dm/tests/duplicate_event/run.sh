@@ -74,10 +74,6 @@ function run_with_prepared_source_config() {
 	binlog_file=$(grep "File" $TEST_DIR/sql_res.$TEST_NAME.txt | awk -F: '{print $2}' | xargs)
 	binlog_pos=$(grep "Position" $TEST_DIR/sql_res.$TEST_NAME.txt | awk -F: '{print $2}' | xargs)
 	server_uuid=$(tail -n 1 $WORK_DIR/worker2/relay-dir/server-uuid.index)
-<<<<<<< HEAD
-	relay_log_size=$(ls -al $WORK_DIR/worker2/relay-dir/$server_uuid/$binlog_file | awk '{print $5}')
-	[ "$binlog_pos" -eq "$relay_log_size" ]
-=======
 
 	succ=0
 	for ((k = 1; k < 6; k++)); do
@@ -93,7 +89,6 @@ function run_with_prepared_source_config() {
 		echo "binlog_pos is not equal to relay_log_size"
 		exit 1
 	fi
->>>>>>> b2da15fff (test(dm): fix using pgrep to check argument pattern (#6572))
 
 	echo "============== run_with_prepared_source_config success ==================="
 }
