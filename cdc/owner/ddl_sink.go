@@ -109,12 +109,14 @@ func ddlSinkInitializer(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeF
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleOwner)
 	conf := config.GetGlobalServerConfig()
 	if !conf.Debug.EnableNewSink {
+		log.Info("Try to create sinkV1")
 		s, err := sinkv1.New(stdCtx, id, info.SinkURI, info.Config, a.errCh)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		a.sinkV1 = s
 	} else {
+		log.Info("Try to create sinkV2")
 		s, err := factory.New(stdCtx, info.SinkURI, info.Config)
 		if err != nil {
 			return errors.Trace(err)

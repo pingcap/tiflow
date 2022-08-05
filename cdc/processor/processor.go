@@ -673,6 +673,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	start := time.Now()
 	conf := config.GetGlobalServerConfig()
 	if !conf.Debug.EnableNewSink {
+		log.Info("Try to create sinkV1")
 		p.sinkV1, err = sinkv1.New(
 			stdCtx,
 			p.changefeed.ID,
@@ -681,6 +682,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 			errCh,
 		)
 	} else {
+		log.Info("Try to create sinkV2")
 		p.sinkV2Factory, err = factory.New(ctx, p.changefeed.Info.SinkURI,
 			p.changefeed.Info.Config,
 			errCh)
@@ -1053,7 +1055,7 @@ func (p *processor) Close() error {
 		// pass a canceled context is ok here, since we don't need to wait Close
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		log.Info("processor try to close the sink",
+		log.Info("processor try to close the sinkV1",
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID))
 		start := time.Now()
@@ -1069,7 +1071,7 @@ func (p *processor) Close() error {
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Duration("duration", time.Since(start)))
 	} else {
-		log.Info("processor try to close the sink",
+		log.Info("processor try to close the sinkV2",
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID))
 		start := time.Now()
