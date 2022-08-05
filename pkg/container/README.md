@@ -32,7 +32,7 @@ of elements popped meets the input n.
 For a ChunkQueue, there is at most one non-full chunk at both ends.
 
 
-![ChunkQueue Design](./queue/ChunkQueue.jpg)
+![ChunkQueue Design](../../docs/media/chunkqueue_design.jpg)
 
 ### APIs
 #### ChunkQueue[T]

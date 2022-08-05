@@ -16,7 +16,6 @@ package sink
 import (
 	"context"
 	"sort"
-	"sync"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -30,7 +29,6 @@ type tableSink struct {
 	tableID     model.TableID
 	backendSink Sink
 	buffer      *queue.ChunkQueue[*model.RowChangedEvent]
-	bufferMu    sync.Mutex
 
 	metricsTableSinkTotalRows prometheus.Counter
 }
@@ -56,8 +54,6 @@ func NewTableSink(
 }
 
 func (t *tableSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
-	t.bufferMu.Lock()
-	defer t.bufferMu.Unlock()
 	t.buffer.PushMany(rows...)
 	t.metricsTableSinkTotalRows.Add(float64(len(rows)))
 	return nil
@@ -79,17 +75,14 @@ func (t *tableSink) FlushRowChangedEvents(
 		log.Panic("inconsistent table sink",
 			zap.Int64("tableID", tableID), zap.Int64("sinkTableID", t.tableID))
 	}
-	t.bufferMu.Lock()
 	i := sort.Search(t.buffer.Len(), func(i int) bool {
 		event := t.buffer.Peek(i)
 		return event.CommitTs > resolvedTs
 	})
 	if i == 0 {
-		t.bufferMu.Unlock()
 		return t.backendSink.FlushRowChangedEvents(ctx, t.tableID, resolved)
 	}
 	resolvedRows, _ := t.buffer.PopMany(i)
-	t.bufferMu.Unlock()
 	err := t.backendSink.EmitRowChangedEvents(ctx, resolvedRows...)
 	if err != nil {
 		return model.NewResolvedTs(0), errors.Trace(err)
