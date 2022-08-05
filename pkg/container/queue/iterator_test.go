@@ -29,7 +29,7 @@ func TestChunkQueueIteratorPrevNext(t *testing.T) {
 	t.Parallel()
 	q := NewChunkQueue[int]()
 	for i := 0; i < iterTestSize; i++ {
-		q.Enqueue(i)
+		q.Push(i)
 	}
 
 	var it *ChunkQueueIterator[int]
@@ -53,12 +53,12 @@ func TestChunkQueueIteratorPrevNext(t *testing.T) {
 	require.False(t, it.Next())
 }
 
-func BenchmarkChunkQueueIterate(b *testing.B) {
-	b.Run("BenchMark-Iterate-ChunkQueue-by-iterator", func(b *testing.B) {
+func BenchmarkIterate(b *testing.B) {
+	b.Run("Iterate-ChunkQueue-by-iterator", func(b *testing.B) {
 		q := NewChunkQueue[int]()
 		n := b.N
 		for i := 0; i < n; i++ {
-			q.Enqueue(i)
+			q.Push(i)
 		}
 		b.ResetTimer()
 
@@ -72,28 +72,27 @@ func BenchmarkChunkQueueIterate(b *testing.B) {
 		}
 	})
 
-	b.Run("BenchMark-Iterate-ChunkQueue-by-At", func(b *testing.B) {
+	b.Run("Iterate-ChunkQueue-by-Peek", func(b *testing.B) {
 		q := NewChunkQueue[int]()
 		n := b.N
 		for i := 0; i < n; i++ {
-			q.Enqueue(i)
+			q.Push(i)
 		}
 		b.ResetTimer()
 
 		i := 0
 		for i = 0; i < q.Len(); i++ {
-			v, _ := q.At(i)
-			if v != i {
-				panic("not equal")
+			if q.Peek(i) != i {
+				panic(q.Peek(i))
 			}
 		}
 	})
 
-	b.Run("BenchMark-Iterate-ChunkQueue-by-Range", func(b *testing.B) {
+	b.Run("Iterate-ChunkQueue-by-Range", func(b *testing.B) {
 		q := NewChunkQueue[int]()
 		n := b.N
 		for i := 0; i < n; i++ {
-			q.Enqueue(i)
+			q.Push(i)
 		}
 		b.ResetTimer()
 
@@ -105,7 +104,7 @@ func BenchmarkChunkQueueIterate(b *testing.B) {
 		})
 	})
 
-	b.Run("BenchMark-Iterate-Slice", func(b *testing.B) {
+	b.Run("Iterate-Slice-byLoop", func(b *testing.B) {
 		n := b.N
 		q := make([]int, n, n)
 		for i := 0; i < n; i++ {
@@ -120,7 +119,7 @@ func BenchmarkChunkQueueIterate(b *testing.B) {
 		}
 	})
 
-	b.Run("BenchMark-Iterate-EdwingengDeque-Range", func(b *testing.B) {
+	b.Run("Iterate-3rdPartyDeque-byRange", func(b *testing.B) {
 		q := deque.NewDeque()
 		n := b.N
 
@@ -137,7 +136,7 @@ func BenchmarkChunkQueueIterate(b *testing.B) {
 		})
 	})
 
-	b.Run("BenchMark-Iterate-EdwingengDeque-Peek", func(b *testing.B) {
+	b.Run("Iterate-3rdPartyDeque-byPeek", func(b *testing.B) {
 		q := deque.NewDeque()
 		n := b.N
 
@@ -159,34 +158,32 @@ func TestChunkQueueGetIterator(t *testing.T) {
 	t.Parallel()
 
 	q := NewChunkQueue[int]()
-	q.EnqueueMany(0, 1)
+	q.PushMany(0, 1)
 	var it *ChunkQueueIterator[int]
 	it = q.GetIterator(-1)
 	require.Nil(t, it)
 	it = q.GetIterator(2)
 	require.Nil(t, it)
 	oldIt := q.GetIterator(1)
-	q.DequeueMany(2)
+	q.PopMany(2)
 	require.False(t, oldIt.Valid(), oldIt.Prev())
 	require.True(t, q.Empty())
 
 	for i := 0; i < iterTestSize; i++ {
-		q.Enqueue(i)
+		q.Push(i)
 	}
 	require.True(t, q.End().Index() < 0)
 	require.False(t, q.Begin().Prev())
-	require.False(t, q.End().Replace(1))
+	require.Panics(t, func() {
+		q.End().Set(1)
+	})
 
-	for i := 0; i < iterTestSize; i++ {
-		it = q.GetIterator(i)
-		p1 := it.Value()
-		require.Equal(t, i, it.Index())
-		require.Equal(t, i, p1)
-
-		p2, ok := q.At(i)
-		require.True(t, ok)
-		require.Equal(t, p1, p2)
-	}
+	require.NotPanics(t, func() {
+		for i := 0; i < iterTestSize; i++ {
+			it = q.GetIterator(i)
+			require.Equal(t, i, it.Index(), it.Value(), q.Peek(i))
+		}
+	})
 
 	cnt := 0
 	for !q.Empty() {
@@ -197,7 +194,7 @@ func TestChunkQueueGetIterator(t *testing.T) {
 		it := q.Begin()
 		require.True(t, it.Valid())
 
-		q.DequeueMany(n)
+		q.PopMany(n)
 		require.Equal(t, -1, it.Index())
 		require.False(t, it.Valid())
 

@@ -17,8 +17,6 @@ import (
 	"fmt"
 	"sync"
 	"unsafe"
-
-	"github.com/pingcap/log"
 )
 
 const (
@@ -67,8 +65,8 @@ func NewChunkQueue[T any]() *ChunkQueue[T] {
 func NewChunkQueueLeastCapacity[T any](minCapacity int) *ChunkQueue[T] {
 	elementSize := unsafe.Sizeof(*new(T))
 	if elementSize == 0 {
-		log.Error("Cannot create a queue of type")
-		return nil
+		// To avoid divided by zero
+		elementSize = 1
 	}
 
 	chunkLength := int(defaultSizePerChunk / elementSize)
@@ -109,30 +107,28 @@ func (q *ChunkQueue[T]) Empty() bool {
 	return q.size == 0
 }
 
-// At returns the value of a given index. It does NOT support modifying the value
-func (q *ChunkQueue[T]) At(idx int) (T, bool) {
+// Peek returns the value of a given index. It does NOT support modifying the value
+func (q *ChunkQueue[T]) Peek(idx int) T {
 	if idx < 0 || idx >= q.size {
 		panic(fmt.Sprintf("[ChunkQueue]: index %d os out of index [0, %d)", idx, q.size))
 	}
 	// There may some space in the former part of the chunk. Added the bias and
 	// index, we can get locate the element by division
 	i := q.firstChunk().l + idx
-	return q.chunks[q.head+i/q.chunkLength].data[i%q.chunkLength], true
+	return q.chunks[q.head+i/q.chunkLength].data[i%q.chunkLength]
 }
 
 // Replace assigns a new value to a given index
-func (q *ChunkQueue[T]) Replace(idx int, val T) bool {
+func (q *ChunkQueue[T]) Replace(idx int, val T) {
 	if idx < 0 || idx >= q.size {
 		panic(fmt.Sprintf("[ChunkQueue]: index %d os out of index [0, %d)", idx, q.size))
 	}
-	// same with At()
+	// same with Peek()
 	i := q.firstChunk().l + idx
 	q.chunks[q.head+i/q.chunkLength].data[i%q.chunkLength] = val
-	return true
 }
 
-// Head returns the value of the first element. This method is only for reading
-// the first element, not for modification
+// Head returns the value of the first element. This method is read-only
 func (q *ChunkQueue[T]) Head() (T, bool) {
 	if q.Empty() {
 		return q.defaultValue, false
@@ -218,8 +214,8 @@ func (q *ChunkQueue[T]) adjustChunksArray(extend int) {
 	q.head = 0
 }
 
-// Enqueue enqueues an element to tail
-func (q *ChunkQueue[T]) Enqueue(v T) {
+// Push enqueues an element to tail
+func (q *ChunkQueue[T]) Push(v T) {
 	c := q.lastChunk()
 	if c.r == q.chunkLength {
 		q.addSpace(1)
@@ -231,8 +227,8 @@ func (q *ChunkQueue[T]) Enqueue(v T) {
 	q.size++
 }
 
-// EnqueueMany enqueues multiple elements at a time
-func (q *ChunkQueue[T]) EnqueueMany(vals ...T) {
+// PushMany enqueues multiple elements at a time
+func (q *ChunkQueue[T]) PushMany(vals ...T) {
 	cnt, n := 0, len(vals)
 	c := q.lastChunk()
 	if q.Cap()-q.Len() < n {
@@ -258,9 +254,9 @@ func (q *ChunkQueue[T]) EnqueueMany(vals ...T) {
 	}
 }
 
-// Dequeue dequeues an element from head. The second return value is true on
+// Pop dequeues an element from head. The second return value is true on
 // success, and false if the queue is empty and no element can be popped
-func (q *ChunkQueue[T]) Dequeue() (T, bool) {
+func (q *ChunkQueue[T]) Pop() (T, bool) {
 	if q.Empty() {
 		return q.defaultValue, false
 	}
@@ -290,14 +286,14 @@ func (q *ChunkQueue[T]) popChunk() {
 	q.chunkPool.Put(c)
 }
 
-// DequeueAll dequeues all elements in the queue
-func (q *ChunkQueue[T]) DequeueAll() ([]T, bool) {
-	return q.DequeueMany(q.Len())
+// PopAll dequeues all elements in the queue
+func (q *ChunkQueue[T]) PopAll() ([]T, bool) {
+	return q.PopMany(q.Len())
 }
 
-// DequeueMany dequeues n elements at a time. The second return value is true
+// PopMany dequeues n elements at a time. The second return value is true
 // if n elements were popped out, and false otherwise.
-func (q *ChunkQueue[T]) DequeueMany(n int) ([]T, bool) {
+func (q *ChunkQueue[T]) PopMany(n int) ([]T, bool) {
 	if n < 0 {
 		return nil, false
 	}
@@ -330,7 +326,7 @@ func (q *ChunkQueue[T]) DequeueMany(n int) ([]T, bool) {
 	return res, ok
 }
 
-// Clear clears the queue to empty and shrinks the chunks array
+// Clear clears the queue and shrinks the chunks array
 func (q *ChunkQueue[T]) Clear() {
 	if !q.Empty() {
 		emptyChunk := make([]T, q.chunkLength, q.chunkLength)
@@ -344,13 +340,13 @@ func (q *ChunkQueue[T]) Clear() {
 	q.Shrink()
 }
 
-// Shrink shrinks the space of the chunks array.
+// Shrink shrinks the space of the chunks array
 func (q *ChunkQueue[T]) Shrink() {
 	q.adjustChunksArray(-1)
 }
 
-// Range iterates the queue from head to tail. It stops at the first element e
-// that function f(e) returns false
+// Range iterates the queue from head to the first element e that f(e) returns
+// false, or to the end if f() is true for all elements.
 func (q *ChunkQueue[T]) Range(f func(e T) bool) {
 	var c *chunk[T]
 	for i := q.head; i < q.tail; i++ {
@@ -363,8 +359,8 @@ func (q *ChunkQueue[T]) Range(f func(e T) bool) {
 	}
 }
 
-// RangeWithIndex iterates the queue with index from head to tail. It stops at
-// the first element e that function f(idx, e) returns false
+// RangeWithIndex iterates the queue with index from head. the first element e
+// with index i that f(i, e) is false, or to tail if f() is true for all elements.
 func (q *ChunkQueue[T]) RangeWithIndex(f func(idx int, e T) bool) {
 	var c *chunk[T]
 	idx := 0
@@ -379,10 +375,9 @@ func (q *ChunkQueue[T]) RangeWithIndex(f func(idx int, e T) bool) {
 	}
 }
 
-// RangeAndPop iterate the queue from head, and pop the element if applying
-// func f() on it returns true. It stops the iteration at the first element
-// that f() returns false, or the queue is empty.
-// This method is convenient than peek and dequeue
+// RangeAndPop iterate the queue from head, and pop the element til the first
+// element e that f(e) is false, or all elements if f(e) is true for all elements.
+// This method is more convenient than Peek and Pop
 func (q *ChunkQueue[T]) RangeAndPop(f func(e T) bool) {
 	var c *chunk[T]
 

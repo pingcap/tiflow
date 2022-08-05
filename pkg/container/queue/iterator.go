@@ -24,7 +24,7 @@ package queue
 // Note: Begin() and First() are interchangeable
 // for it := someQueue.Begin(); it.Valid(); { 			// forwards
 // 		it.Next()
-// 		q.Dequeue() // can pop element
+// 		q.Pop() // can pop element
 // }
 // for it := someQueue.Last(); it.Valid(); it.Next() {	// backwards
 // 		...
@@ -37,8 +37,8 @@ type ChunkQueueIterator[T any] struct {
 	chunk      *chunk[T]
 }
 
-// First returns the first valid iterator of the queue, which represents the
-// first element (if exists)
+// First returns the iterator of the first element. The iterator is valid for a
+// non-empty queue, and invalid otherwise.
 func (q *ChunkQueue[T]) First() *ChunkQueueIterator[T] {
 	return &ChunkQueueIterator[T]{
 		chunk:      q.firstChunk(),
@@ -46,8 +46,8 @@ func (q *ChunkQueue[T]) First() *ChunkQueueIterator[T] {
 	}
 }
 
-// Last returns the last valid iterator of the queue, which represents the
-// last element (if exists)
+// Last returns the iterator of the last element. The iterator is valid for a
+// non-empty queue, and invalid otherwise.
 func (q *ChunkQueue[T]) Last() *ChunkQueueIterator[T] {
 	return &ChunkQueueIterator[T]{
 		chunk:      q.lastChunk(),
@@ -60,9 +60,8 @@ func (q *ChunkQueue[T]) Begin() *ChunkQueueIterator[T] {
 	return q.First()
 }
 
-// End creates a special iterator of the queue representing the end. End()
-// iterator is not valid iterator since it's not in the queue. Calling Valid()
-// always get false.
+// End returns a special iterator of the queue representing the end. The end
+// iterator is not valid since it's not in the queue. Its predecessor is Last()
 func (q *ChunkQueue[T]) End() *ChunkQueueIterator[T] {
 	return &ChunkQueueIterator[T]{
 		chunk:      q.lastChunk(),
@@ -70,7 +69,7 @@ func (q *ChunkQueue[T]) End() *ChunkQueueIterator[T] {
 	}
 }
 
-// GetIterator returns an iterator of a given index and nil for invalid indices
+// GetIterator returns an iterator of a given index. Nil for invalid indices
 func (q *ChunkQueue[T]) GetIterator(idx int) *ChunkQueueIterator[T] {
 	if idx < 0 || idx >= q.size {
 		return nil
@@ -93,13 +92,9 @@ func (it *ChunkQueueIterator[T]) Value() T {
 	return it.chunk.data[it.idxInChunk]
 }
 
-// Replace replaces the element of the valid iterator. It returns true on success
-func (it *ChunkQueueIterator[T]) Replace(v T) bool {
-	if it.Valid() {
-		it.chunk.data[it.idxInChunk] = v
-		return true
-	}
-	return false
+// Set replaces the element of the valid iterator. Panic for invalid iterators
+func (it *ChunkQueueIterator[T]) Set(v T) {
+	it.chunk.data[it.idxInChunk] = v
 }
 
 // Index returns the index of a valid iterator, and -1 otherwise.
@@ -124,7 +119,6 @@ func (it *ChunkQueueIterator[T]) Index() int {
 // Next updates the current iterator to its next iterator. It returns true if
 // the next iterator is still in queue, and false otherwise. Calling Next for
 // an invalid iterator is meaningless, and using invalid iterators may panic.
-// Using Next
 func (it *ChunkQueueIterator[T]) Next() bool {
 	if it.chunk == nil {
 		return false
@@ -152,18 +146,11 @@ func (it *ChunkQueueIterator[T]) Next() bool {
 // `for it := someQueue.Last(); it.Valid(); it.Next() {...}`
 // `for it := someQueue.End(); it.Prev; {...} `
 func (it *ChunkQueueIterator[T]) Prev() bool {
-	if it.chunk == nil {
-		return false
-	}
-
-	c := it.chunk
-	if it.idxInChunk < c.l || it.idxInChunk >= c.r {
-		// if the iterator is an end iterator and the queue is not empty,
-		// then the iterator shall point to the last element.
-		if it.idxInChunk == len(c.data) && !c.queue.Empty() {
-			lastChunk := c.queue.lastChunk()
-			it.chunk, it.idxInChunk = lastChunk, lastChunk.r-1
-			return true
+	if !it.Valid() {
+		if c := it.chunk; c != nil && c.queue != nil && it.idxInChunk == len(c.data) {
+			lc := c.queue.lastChunk()
+			it.chunk, it.idxInChunk = lc, lc.r-1
+			return it.Valid()
 		}
 		return false
 	}
@@ -173,6 +160,7 @@ func (it *ChunkQueueIterator[T]) Prev() bool {
 		return true
 	}
 
+	c := it.chunk
 	if c.prev != nil {
 		it.chunk, it.idxInChunk = c.prev, c.prev.r-1
 		return true
