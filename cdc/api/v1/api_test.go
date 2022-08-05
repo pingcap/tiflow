@@ -32,6 +32,7 @@ import (
 	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -774,7 +775,10 @@ func TestServerStatus(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mo := mock_owner.NewMockOwner(ctrl)
 	cp := capture.NewCapture4Test(mo)
+	etcdClient := mock_etcd.NewMockCDCEtcdClient(ctrl)
+	etcdClient.EXPECT().GetClusterID().Return("abcd").AnyTimes()
 	ownerRouter := newRouter(cp, newStatusProvider())
+	cp.EtcdClient = etcdClient
 	api := testCase{url: "/api/v1/status", method: "GET"}
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
@@ -785,9 +789,11 @@ func TestServerStatus(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, "capture-for-test", resp.ID)
 	require.True(t, resp.IsOwner)
+	require.Equal(t, "abcd", resp.ClusterID)
 
 	// capture is not owner
 	c := capture.NewCapture4Test(nil)
+	c.EtcdClient = etcdClient
 	r := gin.New()
 	RegisterOpenAPIRoutes(r, NewOpenAPI4Test(c, nil))
 	api = testCase{url: "/api/v1/status", method: "GET"}
@@ -799,6 +805,7 @@ func TestServerStatus(t *testing.T) {
 	err = json.NewDecoder(w.Body).Decode(&resp)
 	require.Nil(t, err)
 	require.False(t, resp.IsOwner)
+	require.Equal(t, "abcd", resp.ClusterID)
 }
 
 func TestServerStatusLiveness(t *testing.T) {
