@@ -1202,7 +1202,7 @@ function DM_RESYNC_NOT_FLUSHED_CASE() {
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(35,35,35);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(36,36,36);"
 
-	for ((k = 200; k < 240; k++)); do
+	for ((k = 200; k < 280; k++)); do
 		run_sql_source1 "insert into ${shardddl1}.${tb1} values(${k},${k},${k});"
 		k=$((k + 1))
 		run_sql_source1 "insert into ${shardddl1}.${tb2} values(${k},${k},${k});"
