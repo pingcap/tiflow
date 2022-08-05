@@ -102,9 +102,9 @@ func (h *gcTestHelper) IsRemoved(t *testing.T, resourceKey pkgOrm.ResourceKey) b
 }
 
 func (h *gcTestHelper) LoadDefaultMockData(t *testing.T) {
-	h.ExecInfo.AddExecutor("executor-1")
-	h.ExecInfo.AddExecutor("executor-2")
-	h.ExecInfo.AddExecutor("executor-3")
+	h.ExecInfo.AddExecutor("executor-1", "addr-1:8080")
+	h.ExecInfo.AddExecutor("executor-2", "addr-2:8080")
+	h.ExecInfo.AddExecutor("executor-3", "addr-3:8080")
 
 	h.JobInfo.SetJobStatus("job-1", frameModel.MasterStatusInit)
 	h.JobInfo.SetJobStatus("job-2", frameModel.MasterStatusInit)
