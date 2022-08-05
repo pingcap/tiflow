@@ -45,6 +45,8 @@ const (
 )
 
 // ExecutorGroup holds a group of ExecutorClients.
+// It is used by any component that would like to invoke RPC
+// methods on the executors.
 type ExecutorGroup interface {
 	// GetExecutorClient tries to get the ExecutorClient for the given executor.
 	// It will return (nil, false) immediately if no such executor is found.
@@ -115,6 +117,9 @@ func (g *DefaultExecutorGroup) GetExecutorClient(id model.ExecutorID) (ExecutorC
 
 // GetExecutorClientB tries to get the ExecutorClient for the given executor.
 // It blocks until either the context has been canceled or the executor ID becomes valid.
+//
+// When an Executor goes offline, the ID is added to a tombstone list so that
+// we can fail fast. The assumption here is that executor IDs will not be reused.
 func (g *DefaultExecutorGroup) GetExecutorClientB(ctx context.Context, id model.ExecutorID) (ExecutorClient, error) {
 	ctx, cancel := context.WithTimeout(ctx, getExecutorBlockTimeout)
 	defer cancel()
