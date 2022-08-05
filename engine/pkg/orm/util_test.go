@@ -27,11 +27,6 @@ import (
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
-func init() {
-	// default log level is info, enable debug here for easy debug
-	// log.SetLevel(zapcore.DebugLevel)
-}
-
 func TestIsNotFoundError(t *testing.T) {
 	b := IsNotFoundError(cerrors.ErrMetaEntryNotFound.GenWithStackByArgs("error"))
 	require.True(t, b)

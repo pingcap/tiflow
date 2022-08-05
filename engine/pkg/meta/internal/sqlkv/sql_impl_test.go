@@ -27,9 +27,11 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/VividCortex/mysqlerr"
 	"github.com/go-sql-driver/mysql"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	sqlkvModel "github.com/pingcap/tiflow/engine/pkg/meta/internal/sqlkv/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zapcore"
 )
 
 const (
@@ -444,6 +446,11 @@ func TestSQLImplWithoutNamespace(t *testing.T) {
 }
 
 func TestInitializeError(t *testing.T) {
+	t.Parallel()
+
+	log.SetLevel(zapcore.DebugLevel)
+	defer log.SetLevel(zapcore.InfoLevel)
+
 	db, mock, err := sqlmock.New()
 	require.Nil(t, err)
 	defer db.Close()

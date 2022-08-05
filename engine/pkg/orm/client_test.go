@@ -38,11 +38,6 @@ import (
 	derror "github.com/pingcap/tiflow/pkg/errors"
 )
 
-func init() {
-	// default log level is info, enable debug here for easy debug
-	// log.SetLevel(zapcore.DebugLevel)
-}
-
 type tCase struct {
 	fn     string        // function name
 	inputs []interface{} // function args
