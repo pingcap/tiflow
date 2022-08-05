@@ -18,10 +18,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/edwingeng/deque"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/container/queue"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/p2p/internal"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -81,7 +81,7 @@ type MessageClient struct {
 
 type topicEntry struct {
 	sentMessageMu sync.Mutex
-	sentMessages  deque.Deque
+	sentMessages  queue.ChunkQueue[*p2p.MessageEntry]
 
 	nextSeq  atomic.Int64
 	ack      atomic.Int64
@@ -259,7 +259,7 @@ func (c *MessageClient) runTx(ctx context.Context, stream clientStream) error {
 		}
 
 		tpk.sentMessageMu.Lock()
-		tpk.sentMessages.PushBack(msg)
+		tpk.sentMessages.Push(msg)
 		tpk.sentMessageMu.Unlock()
 
 		metricsClientMessageCount.Inc()
@@ -292,15 +292,15 @@ func (c *MessageClient) retrySending(ctx context.Context, stream clientStream) e
 
 		tpk.sentMessageMu.Lock()
 
-		if !tpk.sentMessages.Empty() {
-			retryFromSeq := tpk.sentMessages.Front().(*p2p.MessageEntry).Sequence
+		if queueHead, ok := tpk.sentMessages.Head(); ok {
+			retryFromSeq := queueHead.Sequence
 			log.Info("peer-to-peer client retrying",
 				zap.String("topic", topic),
 				zap.Int64("fromSeq", retryFromSeq))
 		}
 
-		for i := 0; i < tpk.sentMessages.Len(); i++ {
-			msg := tpk.sentMessages.Peek(i).(*p2p.MessageEntry)
+		for it := tpk.sentMessages.Begin(); it.Valid(); it.Next() {
+			msg := it.Value()
 			log.Debug("retry sending msg",
 				zap.String("topic", msg.Topic),
 				zap.Int64("seq", msg.Sequence))
@@ -370,9 +370,9 @@ func (c *MessageClient) runRx(ctx context.Context, stream clientStream) error {
 
 			tpk.ack.Store(ack.GetLastSeq())
 			tpk.sentMessageMu.Lock()
-			for !tpk.sentMessages.Empty() && tpk.sentMessages.Front().(*p2p.MessageEntry).Sequence <= ack.GetLastSeq() {
-				tpk.sentMessages.PopFront()
-			}
+			tpk.sentMessages.RangeAndPop(func(msg *p2p.MessageEntry) bool {
+				return msg.Sequence <= ack.GetLastSeq()
+			})
 			tpk.sentMessageMu.Unlock()
 		}
 	}
@@ -413,7 +413,7 @@ func (c *MessageClient) sendMessage(ctx context.Context, topic Topic, value inte
 
 	if !ok {
 		tpk = &topicEntry{
-			sentMessages: deque.NewDeque(),
+			sentMessages: *queue.NewChunkQueue[*p2p.MessageEntry](),
 		}
 		tpk.nextSeq.Store(0)
 		c.topicMu.Lock()
