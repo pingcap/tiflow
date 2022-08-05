@@ -51,11 +51,11 @@ var _ gc.Manager = (*mockManager)(nil)
 // newOwner4Test creates a new Owner for test
 func newOwner4Test(
 	newDDLPuller func(ctx context.Context,
-		replicaConfig *config.ReplicaConfig,
-		up *upstream.Upstream,
-		startTs uint64,
-		changefeed model.ChangeFeedID,
-	) (puller.DDLPuller, error),
+	replicaConfig *config.ReplicaConfig,
+	up *upstream.Upstream,
+	startTs uint64,
+	changefeed model.ChangeFeedID,
+) (puller.DDLPuller, error),
 	newSink func() DDLSink,
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error),
 	pdClient pd.Client,
@@ -758,14 +758,16 @@ func TestIsHealthy(t *testing.T) {
 	o := &ownerImpl{changefeeds: make(map[model.ChangeFeedID]*changefeed)}
 	query := &Query{Tp: QueryHealth}
 
+	ctx := context.Background()
+
 	// Unhealthy, changefeeds are not ticked.
 	o.changefeedTicked = false
-	err := o.handleQueries(query)
+	err := o.handleQueries(ctx, query)
 	require.Nil(t, err)
 	require.False(t, query.Data.(bool))
 	// Healthy, no changefeed.
 	o.changefeedTicked = true
-	err = o.handleQueries(query)
+	err = o.handleQueries(ctx, query)
 	require.Nil(t, err)
 	require.True(t, query.Data.(bool))
 
@@ -775,20 +777,20 @@ func TestIsHealthy(t *testing.T) {
 	}
 	o.changefeeds[model.ChangeFeedID{ID: "1"}] = cf
 	o.changefeedTicked = true
-	err = o.handleQueries(query)
+	err = o.handleQueries(ctx, query)
 	require.Nil(t, err)
 	require.False(t, query.Data.(bool))
 
 	// Healthy, scheduler is set and return true.
 	cf.scheduler = &heathScheduler{init: true}
 	o.changefeedTicked = true
-	err = o.handleQueries(query)
+	err = o.handleQueries(ctx, query)
 	require.Nil(t, err)
 	require.True(t, query.Data.(bool))
 
 	// Unhealthy, changefeeds are not ticked.
 	o.changefeedTicked = false
-	err = o.handleQueries(query)
+	err = o.handleQueries(ctx, query)
 	require.Nil(t, err)
 	require.False(t, query.Data.(bool))
 
@@ -797,7 +799,7 @@ func TestIsHealthy(t *testing.T) {
 		scheduler: &heathScheduler{init: false},
 	}
 	o.changefeedTicked = true
-	err = o.handleQueries(query)
+	err = o.handleQueries(ctx, query)
 	require.Nil(t, err)
 	require.False(t, query.Data.(bool))
 }

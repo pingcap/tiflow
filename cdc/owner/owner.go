@@ -150,7 +150,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 	// when there are different versions of cdc nodes in the cluster,
 	// the admin job may not be processed all the time. And http api relies on
 	// admin job, which will cause all http api unavailable.
-	o.handleJobs()
+	o.handleJobs(stdCtx)
 
 	if !o.clusterVersionConsistent(state.Captures) {
 		return state, nil
@@ -458,7 +458,7 @@ func (o *ownerImpl) handleDrainCaptures(query *scheduler.Query, done chan<- erro
 	close(done)
 }
 
-func (o *ownerImpl) handleJobs() {
+func (o *ownerImpl) handleJobs(ctx context.Context) {
 	jobs := o.takeOwnerJobs()
 	for _, job := range jobs {
 		changefeedID := job.ChangefeedID
@@ -486,7 +486,7 @@ func (o *ownerImpl) handleJobs() {
 				cfReactor.scheduler.Rebalance()
 			}
 		case ownerJobTypeQuery:
-			job.done <- o.handleQueries(job.query)
+			job.done <- o.handleQueries(ctx, job.query)
 		case ownerJobTypeDebugInfo:
 			// TODO: implement this function
 		}
@@ -494,7 +494,7 @@ func (o *ownerImpl) handleJobs() {
 	}
 }
 
-func (o *ownerImpl) handleQueries(query *Query) error {
+func (o *ownerImpl) handleQueries(ctx context.Context, query *Query) error {
 	switch query.Tp {
 	case QueryAllChangeFeedStatuses:
 		ret := map[model.ChangeFeedID]*model.ChangeFeedStatus{}
@@ -599,25 +599,43 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 		}
 		query.Data = ret
 	case QueryHealth:
-		isHealthy := true
-		if !o.changefeedTicked {
-			// Owner has not yet tick changefeeds, some changefeeds may be not
-			// initialized.
-			isHealthy = false
-		} else {
-			for _, cfReactor := range o.changefeeds {
-				provider := cfReactor.GetInfoProvider()
-				if provider == nil || !provider.IsInitialized() {
-					// The scheduler has not been initialized yet, it is considered
-					// unhealthy, because owner can not schedule tables for now.
-					isHealthy = false
-					break
-				}
-			}
+		isHealthy, err := o.isHealthy(ctx)
+		if err != nil {
+			return errors.Trace(err)
 		}
 		query.Data = isHealthy
 	}
 	return nil
+}
+
+func (o *ownerImpl) isHealthy(ctx context.Context) (bool, error) {
+	if !o.clusterVersionConsistent(o.captures) {
+		return false, nil
+	}
+
+	upstreamM, err := o.upstreamManager.GetDefaultUpstream()
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	if err := version.CheckStoreVersion(ctx, upstreamM.PDClient, 0); err != nil {
+		return false, errors.Trace(err)
+	}
+
+	if !o.changefeedTicked {
+		// Owner has not yet tick changefeeds, some changefeeds may be not
+		// initialized.
+		return false, nil
+	}
+
+	for _, cfReactor := range o.changefeeds {
+		provider := cfReactor.GetInfoProvider()
+		if provider == nil || !provider.IsInitialized() {
+			// The scheduler has not been initialized yet, it is considered
+			// unhealthy, because owner can not schedule tables for now.
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func (o *ownerImpl) takeOwnerJobs() []*ownerJob {
