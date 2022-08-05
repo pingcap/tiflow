@@ -44,7 +44,6 @@ func TestQueryStatusAPI(t *testing.T) {
 		metaKVClient      = kvmock.NewMetaMock()
 		mockBaseJobmaster = &MockBaseJobmaster{}
 		jm                = &JobMaster{
-			workerID:      "jobmaster-worker-id",
 			BaseJobMaster: mockBaseJobmaster,
 			metadata:      metadata.NewMetaData(mockBaseJobmaster.ID(), metaKVClient),
 		}
@@ -146,7 +145,6 @@ func TestQueryStatusAPI(t *testing.T) {
 
 	expectedStatus := `{
 	"JobMasterID": "dm-jobmaster-id",
-	"WorkerID": "jobmaster-worker-id",
 	"TaskStatus": {
 		"task1": {
 			"ExpectedStage": 3,

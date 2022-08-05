@@ -195,7 +195,6 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	jm := &JobMaster{
-		workerID:      "jobmaster-id",
 		initJobCfg:    jobCfg,
 		BaseJobMaster: mockBaseJobmaster,
 	}
@@ -224,7 +223,6 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 
 	// recover
 	jm = &JobMaster{
-		workerID:      "jobmaster-id",
 		initJobCfg:    jobCfg,
 		BaseJobMaster: mockBaseJobmaster,
 		messageAgent:  mockMessageAgent,
@@ -316,7 +314,6 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 
 	// master failover
 	jm = &JobMaster{
-		workerID:        "jobmaster-id",
 		initJobCfg:      jobCfg,
 		BaseJobMaster:   mockBaseJobmaster,
 		checkpointAgent: mockCheckpointAgent,

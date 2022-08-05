@@ -61,7 +61,6 @@ func (t *testDMOpenAPISuite) SetupSuite() {
 		mockMessageAgent    = &dmpkg.MockMessageAgent{}
 		mockCheckpointAgent = &MockCheckpointAgent{}
 		jm                  = &JobMaster{
-			workerID:        "jobmaster-worker-id",
 			BaseJobMaster:   mockBaseJobmaster,
 			metadata:        metadata.NewMetaData(mockBaseJobmaster.ID(), mock.NewMetaMock()),
 			messageAgent:    mockMessageAgent,
@@ -183,7 +182,6 @@ func (t *testDMOpenAPISuite) TestDMAPIGetJobStatus() {
 
 	jobStatus := JobStatus{
 		JobMasterID: "dm-jobmaster-id",
-		WorkerID:    "jobmaster-worker-id",
 		TaskStatus:  map[string]TaskStatus{},
 	}
 	var jobStatus2 JobStatus
