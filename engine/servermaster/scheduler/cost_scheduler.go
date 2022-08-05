@@ -21,42 +21,42 @@ import (
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 )
 
-// CostScheduler is a random scheduler
-type CostScheduler struct {
-	capacityProvider CapacityProvider
-	random           *rand.Rand
+// costScheduler is a random scheduler
+type costScheduler struct {
+	infoProvider executorInfoProvider
+	random       *rand.Rand
 }
 
-// NewRandomizedCostScheduler creates a CostScheduler instance
-func NewRandomizedCostScheduler(capacityProvider CapacityProvider) *CostScheduler {
-	return &CostScheduler{
-		capacityProvider: capacityProvider,
-		random:           rand.New(rand.NewSource(time.Now().UnixNano())),
+// NewRandomizedCostScheduler creates a costScheduler instance
+func NewRandomizedCostScheduler(infoProvider executorInfoProvider) *costScheduler {
+	return &costScheduler{
+		infoProvider: infoProvider,
+		random:       rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
 // NewDeterministicCostScheduler is used in unit-testing.
-func NewDeterministicCostScheduler(capacityProvider CapacityProvider, seed int64) *CostScheduler {
-	return &CostScheduler{
-		capacityProvider: capacityProvider,
-		random:           rand.New(rand.NewSource(seed)),
+func NewDeterministicCostScheduler(infoProvider executorInfoProvider, seed int64) *costScheduler {
+	return &costScheduler{
+		infoProvider: infoProvider,
+		random:       rand.New(rand.NewSource(seed)),
 	}
 }
 
 // ScheduleByCost is a native random based scheduling strategy
-func (s *CostScheduler) ScheduleByCost(cost schedModel.ResourceUnit) (model.ExecutorID, bool) {
-	executorCaps := s.capacityProvider.CapacitiesForAllExecutors()
-	executorList := make([]model.ExecutorID, 0, len(executorCaps))
-	for executorID := range executorCaps {
+func (s *costScheduler) ScheduleByCost(cost schedModel.ResourceUnit) (model.ExecutorID, bool) {
+	infos := s.infoProvider.GetExecutorInfo()
+	executorList := make([]model.ExecutorID, 0, len(infos))
+	for executorID := range infos {
 		executorList = append(executorList, executorID)
 	}
 	// TODO optimize for performance if the need arises.
-	s.random.Shuffle(len(executorCaps), func(i, j int) {
+	s.random.Shuffle(len(infos), func(i, j int) {
 		executorList[i], executorList[j] = executorList[j], executorList[i]
 	})
 
 	for _, executorID := range executorList {
-		if executorCaps[executorID].Remaining() > cost {
+		if infos[executorID].ResourceStatus.Remaining() > cost {
 			return executorID, true
 		}
 	}

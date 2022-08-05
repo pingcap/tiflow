@@ -327,7 +327,7 @@ func (s *Server) ScheduleTask(ctx context.Context, req *pb.ScheduleTaskRequest) 
 	}
 	schedulerResp, err := s.scheduler.ScheduleTask(ctx, schedulerReq)
 	if err != nil {
-		return nil, schedModel.SchedulerErrorToGRPCError(err)
+		return nil, scheduler.ErrorToGRPCError(err)
 	}
 
 	addr, ok := s.executorManager.GetAddr(schedulerResp.ExecutorID)
@@ -474,7 +474,9 @@ func (s *Server) Run(ctx context.Context) error {
 	// ResourceManagerService should be initialized after registerMetaStore.
 	// FIXME: We should do these work inside NewServer.
 	s.initResourceManagerService()
-	s.scheduler = makeScheduler(s.executorManager, s.resourceManagerService)
+	s.scheduler = scheduler.NewScheduler(
+		s.executorManager,
+		s.resourceManagerService)
 
 	wg, ctx := errgroup.WithContext(ctx)
 
@@ -821,19 +823,6 @@ func (s *Server) collectLeaderMetric() {
 	for status := range model.ExecutorStatusNameMapping {
 		s.metrics.metricExecutorNum[status].Set(float64(s.executorManager.ExecutorCount(status)))
 	}
-}
-
-// makeScheduler is a helper function for Server to create a scheduler.Scheduler.
-// This function makes it clear how a Scheduler is supposed to be constructed
-// using concrete type, from the perspective of Server.
-func makeScheduler(
-	executorManager ExecutorManager,
-	externalResourceManager *externRescManager.Service,
-) *scheduler.Scheduler {
-	return scheduler.NewScheduler(
-		executorManager.CapacityProvider(),
-		externalResourceManager,
-	)
 }
 
 // IsLeader implements ServerInfoProvider.IsLeader.

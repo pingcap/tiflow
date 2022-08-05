@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package model
+package scheduler
 
 import (
 	stdErrors "errors"
@@ -20,11 +20,10 @@ import (
 	"github.com/gogo/status"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"google.golang.org/grpc/codes"
-
 	"github.com/pingcap/tiflow/engine/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	derrors "github.com/pingcap/tiflow/pkg/errors"
+	"google.golang.org/grpc/codes"
 )
 
 // ResourceNotFoundError happens when the resource id doesn't equal to any record
@@ -77,10 +76,10 @@ func (e *ResourceConflictError) Error() string {
 		e.ConflictingResources[1], e.AssignedExecutors[1])
 }
 
-// SchedulerErrorToGRPCError converts resource error to corresponding gRPC error
-func SchedulerErrorToGRPCError(errIn error) error {
+// ErrorToGRPCError converts resource error to corresponding gRPC error
+func ErrorToGRPCError(errIn error) error {
 	if errIn == nil {
-		log.Panic("Invalid input to SchedulerErrorToGRPCError")
+		log.Panic("Invalid input to ErrorToGRPCError")
 	}
 
 	var (

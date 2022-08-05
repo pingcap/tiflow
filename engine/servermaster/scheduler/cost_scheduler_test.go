@@ -23,23 +23,32 @@ import (
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 )
 
-func getMockCapacityData() CapacityProvider {
-	return &MockCapacityProvider{
-		Capacities: map[model.ExecutorID]*schedModel.ExecutorResourceStatus{
+func getMockCapacityData() *mockExecutorInfoProvider {
+	return &mockExecutorInfoProvider{
+		infos: map[model.ExecutorID]schedModel.ExecutorInfo{
 			"executor-1": {
-				Capacity: 100,
-				Reserved: 50,
-				Used:     50,
+				ID: "executor-1",
+				ResourceStatus: schedModel.ExecutorResourceStatus{
+					Capacity: 100,
+					Reserved: 50,
+					Used:     50,
+				},
 			},
 			"executor-2": {
-				Capacity: 100,
-				Reserved: 30,
-				Used:     30,
+				ID: "executor-2",
+				ResourceStatus: schedModel.ExecutorResourceStatus{
+					Capacity: 100,
+					Reserved: 30,
+					Used:     30,
+				},
 			},
 			"executor-3": {
-				Capacity: 100,
-				Reserved: 10,
-				Used:     10,
+				ID: "executor-3",
+				ResourceStatus: schedModel.ExecutorResourceStatus{
+					Capacity: 100,
+					Reserved: 10,
+					Used:     10,
+				},
 			},
 		},
 	}

@@ -17,31 +17,30 @@ import (
 	"context"
 
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/engine/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // Scheduler is a full set of scheduling management, containing capacity provider,
 // real scheduler and resource placement manager.
 type Scheduler struct {
-	capacityProvider     CapacityProvider
-	costScheduler        *CostScheduler
+	infoProvider         executorInfoProvider
+	costScheduler        *costScheduler
 	placementConstrainer PlacementConstrainer
 }
 
 // NewScheduler creates a new Scheduler instance
 func NewScheduler(
-	capacityProvider CapacityProvider,
+	infoProvider executorInfoProvider,
 	placementConstrainer PlacementConstrainer,
 ) *Scheduler {
 	return &Scheduler{
-		capacityProvider:     capacityProvider,
-		costScheduler:        NewRandomizedCostScheduler(capacityProvider),
+		infoProvider:         infoProvider,
+		costScheduler:        NewRandomizedCostScheduler(infoProvider),
 		placementConstrainer: placementConstrainer,
 	}
 }
@@ -89,12 +88,13 @@ func (s *Scheduler) checkCostAllows(
 	request *schedModel.SchedulerRequest,
 	target model.ExecutorID,
 ) bool {
-	executorResc, ok := s.capacityProvider.CapacityForExecutor(target)
+	infos := s.infoProvider.GetExecutorInfo()
+	executorResc, ok := infos[target]
 	if !ok {
 		// Executor is gone.
 		return false
 	}
-	remaining := executorResc.Remaining()
+	remaining := executorResc.ResourceStatus.Remaining()
 	return remaining >= request.Cost
 }
 
@@ -111,7 +111,7 @@ func (s *Scheduler) getConstraint(
 		executorID, hasConstraint, err := s.placementConstrainer.GetPlacementConstraint(ctx, resource)
 		if err != nil {
 			if errors.ErrResourceDoesNotExist.Equal(err) {
-				return "", schedModel.NewResourceNotFoundError(resourceID, err)
+				return "", NewResourceNotFoundError(resourceID, err)
 			}
 			return "", err
 		}
@@ -132,7 +132,7 @@ func (s *Scheduler) getConstraint(
 			// two different executors, which is impossible.
 			log.Warn("Conflicting resource constraints",
 				zap.Any("resources", resources))
-			return "", schedModel.NewResourceConflictError(
+			return "", NewResourceConflictError(
 				resourceID, executorID,
 				lastResourceID, ret)
 		}

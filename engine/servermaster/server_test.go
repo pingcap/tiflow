@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
+
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/require"
 
@@ -162,7 +164,9 @@ func testRunLeaderService(t *testing.T) {
 	_ = s.registerMetaStore(ctx)
 
 	s.initResourceManagerService()
-	s.scheduler = makeScheduler(s.executorManager, s.resourceManagerService)
+	s.scheduler = scheduler.NewScheduler(
+		s.executorManager,
+		s.resourceManagerService)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -256,10 +260,6 @@ func (m *mockExecutorManager) GetAddr(executorID model.ExecutorID) (string, bool
 	panic("implement me")
 }
 
-func (m *mockExecutorManager) CapacityProvider() scheduler.CapacityProvider {
-	panic("implement me")
-}
-
 func (m *mockExecutorManager) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
 	panic("not implemented")
 }
@@ -291,6 +291,10 @@ func (m *mockExecutorManager) ExecutorCount(status model.ExecutorStatus) int {
 	m.executorMu.RLock()
 	defer m.executorMu.RUnlock()
 	return m.count[status]
+}
+
+func (m *mockExecutorManager) GetExecutorInfo() map[model.ExecutorID]schedModel.ExecutorInfo {
+	panic("not implemented")
 }
 
 func TestCollectMetric(t *testing.T) {

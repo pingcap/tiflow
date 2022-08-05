@@ -16,6 +16,8 @@ package model
 import (
 	"encoding/json"
 
+	"github.com/pingcap/tiflow/pkg/label"
+
 	"github.com/pingcap/errors"
 
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
@@ -52,6 +54,10 @@ type NodeInfo struct {
 	// 3. disk cap
 	// TODO: So we should enrich the cap dimensions in the future.
 	Capability int `json:"cap"`
+
+	// Labels store the label set for each executor.
+	// It is invalid if Type != NodeTypeExecutor.
+	Labels label.Set `json:"labels"`
 }
 
 // EtcdKey return encoded key for a node used in service discovery etcd

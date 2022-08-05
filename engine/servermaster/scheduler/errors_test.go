@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package model
+package scheduler
 
 import (
 	"testing"
@@ -28,7 +28,7 @@ func TestConflictErrorToGRPCError(t *testing.T) {
 	errIn := NewResourceConflictError(
 		"resource-1", "executor-1",
 		"resource-2", "executor-2")
-	errOut := SchedulerErrorToGRPCError(errors.Trace(errIn))
+	errOut := ErrorToGRPCError(errors.Trace(errIn))
 	st := status.Convert(errOut)
 	require.Equal(t, codes.FailedPrecondition, st.Code())
 	require.Equal(t, "Scheduler could not assign executor"+
@@ -40,7 +40,7 @@ func TestConflictErrorToGRPCError(t *testing.T) {
 func TestNotFoundErrorToGRPCError(t *testing.T) {
 	errIn := NewResourceNotFoundError("resource-1",
 		cerrors.ErrResourceDoesNotExist.GenWithStackByArgs("resource-1"))
-	errOut := SchedulerErrorToGRPCError(errors.Trace(errIn))
+	errOut := ErrorToGRPCError(errors.Trace(errIn))
 	st := status.Convert(errOut)
 	require.Equal(t, codes.NotFound, st.Code())
 	require.Equal(t, "Scheduler could not find resource resource-1,"+
