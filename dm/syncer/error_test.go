@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
@@ -355,23 +356,36 @@ func TestGetDDLStatusFromTiDB(t *testing.T) {
 		AddRow(53, "many_tables_test", "t4", "create table", "public", 1, 53, 0, "2022-08-02 2:47:55", "2022-08-02 2:47:55", "2022-08-02 2:47:55", "synced").
 		AddRow(52, "many_tables_test", "t3", "create table", "public", 1, 52, 0, "2022-08-02 2:47:24", "2022-08-02 2:47:24", "2022-08-02 2:47:24", "synced"))
 
+	var createTime time.Time
+	var status string
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// test 1
-	status, err := GetDDLStatusFromTiDB(db, "ALTER TABLE many_tables_test.t6 ADD x timestamp DEFAULT current_timestamp", 1659379898)
+	createTime, err = time.Parse("2006-01-02 15:04:05", "2022-08-02 2:51:38")
+	require.Nil(t, err)
+	status, err = GetDDLStatusFromTiDB(ctx, db, "ALTER TABLE many_tables_test.t6 ADD x timestamp DEFAULT current_timestamp", createTime.Unix())
 	require.Nil(t, err)
 	require.Equal(t, "running", status)
 
 	// test 2
-	status, err = GetDDLStatusFromTiDB(db, "ALTER TABLE many_tables_test.t4 ADD x timestamp DEFAULT current_timestamp", 1659379836)
+	createTime, err = time.Parse("2006-01-02 15:04:05", "2022-08-02 2:50:36")
+	require.Nil(t, err)
+	status, err = GetDDLStatusFromTiDB(ctx, db, "ALTER TABLE many_tables_test.t4 ADD x timestamp DEFAULT current_timestamp", createTime.Unix())
 	require.Nil(t, err)
 	require.Equal(t, "none", status)
 
 	// test 3
-	status, err = GetDDLStatusFromTiDB(db, "CREATE TABLE IF NOT EXISTS many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)", 1659379573)
+	createTime, err = time.Parse("2006-01-02 15:04:05", "2022-08-02 2:46:13")
+	require.Nil(t, err)
+	status, err = GetDDLStatusFromTiDB(ctx, db, "CREATE TABLE IF NOT EXISTS many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)", createTime.Unix())
 	require.Nil(t, err)
 	require.Equal(t, "synced", status)
 
 	// test 4
-	status, err = GetDDLStatusFromTiDB(db, "CREATE TABLE IF NOT EXISTS many_tables_test.t7(i TINYINT, j INT UNIQUE KEY)", 1659501300)
+	createTime, err = time.Parse("2006-01-02 15:04:05", "2022-08-03 12:35:00")
+	require.Nil(t, err)
+	status, err = GetDDLStatusFromTiDB(ctx, db, "CREATE TABLE IF NOT EXISTS many_tables_test.t7(i TINYINT, j INT UNIQUE KEY)", createTime.Unix())
 	require.Nil(t, err)
 	require.Equal(t, "", status) // DDL does not exist
 }
