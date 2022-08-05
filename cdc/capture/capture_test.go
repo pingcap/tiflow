@@ -443,7 +443,8 @@ func TestCampaignLiveness(t *testing.T) {
 	require.Nil(t, err)
 	require.False(t, me.campaignFlag)
 
-	cp.liveness.Store(model.LivenessCaptureAlive)
+	// Force set alive.
+	cp.liveness = model.LivenessCaptureAlive
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
