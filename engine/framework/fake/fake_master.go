@@ -283,27 +283,19 @@ func (m *Master) failoverOnMasterRecover(ctx context.Context) error {
 			}
 		}
 
-		// load checkpoint if it exists
-		ckpt := &Checkpoint{}
-		resp, metaErr := m.MetaKVClient().Get(ctx, CheckpointKey(m.workerID))
-		if metaErr != nil {
-			log.Warn("failed to load checkpoint", zap.Error(metaErr))
-		} else {
-			if len(resp.Kvs) > 0 {
-				if err := json.Unmarshal(resp.Kvs[0].Value, ckpt); err != nil {
-					return errors.Trace(err)
-				}
-			}
+		err := m.loadCheckpoint(ctx)
+		if err != nil {
+			return err
 		}
 
 		for i, worker := range m.workerList {
 			// create new worker for non-active worker
 			if worker == nil {
 				workerCkpt := zeroWorkerCheckpoint()
-				if tick, ok := ckpt.Ticks[i]; ok {
+				if tick, ok := m.cachedCheckpoint.Ticks[i]; ok {
 					workerCkpt.Tick = tick
 				}
-				if etcdCkpt, ok := ckpt.Checkpoints[i]; ok {
+				if etcdCkpt, ok := m.cachedCheckpoint.Checkpoints[i]; ok {
 					workerCkpt.Revision = etcdCkpt.Revision
 					workerCkpt.MvccCount = etcdCkpt.MvccCount
 					workerCkpt.Value = etcdCkpt.Value
@@ -558,6 +550,22 @@ func parseExtBytes(data []byte) (*dummyWorkerStatus, error) {
 // CheckpointKey returns key path used in etcd for checkpoint
 func CheckpointKey(id frameModel.MasterID) string {
 	return strings.Join([]string{"fake-master", "checkpoint", id}, "/")
+}
+
+// loadCheckpoint is not thread safe
+func (m *Master) loadCheckpoint(ctx context.Context) error {
+	ckpt := &Checkpoint{}
+	resp, metaErr := m.MetaKVClient().Get(ctx, CheckpointKey(m.workerID))
+	if metaErr != nil {
+		log.Warn("failed to load checkpoint", zap.Error(metaErr))
+	} else {
+		if len(resp.Kvs) > 0 {
+			if err := json.Unmarshal(resp.Kvs[0].Value, ckpt); err != nil {
+				return errors.Trace(err)
+			}
+		}
+	}
+	return nil
 }
 
 func (m *Master) genCheckpoint() string {
