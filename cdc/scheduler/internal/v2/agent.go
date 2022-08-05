@@ -223,10 +223,7 @@ func (a *Agent) popPendingOps() (opsToApply []*agentOperation) {
 	a.pendingOpsMu.Lock()
 	defer a.pendingOpsMu.Unlock()
 
-	if !a.pendingOps.Empty() {
-		opsToApply, _ = a.pendingOps.DequeueAll()
-	}
-	return
+	return a.pendingOps.PopAll()
 }
 
 // sendSync needs to be called with a.pendingOpsMu held.
@@ -356,7 +353,7 @@ func (a *Agent) OnOwnerDispatchedTask(
 		FromOwnerID: ownerCaptureID,
 		status:      operationReceived,
 	}
-	a.pendingOps.Enqueue(op)
+	a.pendingOps.Push(op)
 
 	a.logger.Info("OnOwnerDispatchedTask",
 		zap.String("ownerCaptureID", ownerCaptureID),

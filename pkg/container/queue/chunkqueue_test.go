@@ -206,8 +206,7 @@ func doRandomTest[T comparable](t *testing.T, getVal func() T) {
 				}
 			}
 		case opPopAll:
-			pops, ok := q.PopAll()
-			require.True(t, ok)
+			pops := q.PopAll()
 			require.Equal(t, len(pops), len(slice))
 			for i := 0; i < len(pops); i++ {
 				require.Equal(t, slice[i], pops[i])

@@ -259,7 +259,7 @@ func (c *MessageClient) runTx(ctx context.Context, stream clientStream) error {
 		}
 
 		tpk.sentMessageMu.Lock()
-		tpk.sentMessages.Enqueue(msg)
+		tpk.sentMessages.Push(msg)
 		tpk.sentMessageMu.Unlock()
 
 		metricsClientMessageCount.Inc()

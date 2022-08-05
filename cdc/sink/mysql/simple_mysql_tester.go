@@ -112,7 +112,7 @@ func (s *simpleMySQLSink) AddTable(tableID model.TableID) error {
 func (s *simpleMySQLSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	s.rowsBufferLock.Lock()
 	defer s.rowsBufferLock.Unlock()
-	s.rowsBuffer.EnqueueMany(rows...)
+	s.rowsBuffer.PushMany(rows...)
 	return nil
 }
 
@@ -191,14 +191,14 @@ func (s *simpleMySQLSink) FlushRowChangedEvents(
 
 	oldLen := s.rowsBuffer.Len()
 	for i := 0; i < oldLen; i++ {
-		row, _ := s.rowsBuffer.Dequeue()
+		row, _ := s.rowsBuffer.Pop()
 		if row.CommitTs <= resolved.Ts {
 			err := s.executeRowChangedEvents(ctx, row)
 			if err != nil {
 				return model.NewResolvedTs(0), err
 			}
 		} else {
-			s.rowsBuffer.Enqueue(row)
+			s.rowsBuffer.Push(row)
 		}
 	}
 	return resolved, nil

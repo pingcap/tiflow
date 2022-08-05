@@ -97,7 +97,7 @@ func (c *unresolvedTxnCache) Append(rows ...*model.RowChangedEvent) int {
 					zap.Uint64("lastReceivedCommitTs", lastTxn.commitTs),
 					zap.Any("row", row))
 			}
-			txns.Enqueue(&txnsWithTheSameCommitTs{
+			txns.Push(&txnsWithTheSameCommitTs{
 				commitTs: row.CommitTs,
 			})
 		}
@@ -144,7 +144,7 @@ func splitResolvedTxn(
 
 		txnQueue.RangeAndPop(func(txns *txnsWithTheSameCommitTs) bool {
 			if txns.commitTs <= resolved.Ts {
-				resolvedTxnsBuf.EnqueueMany(txns.txns...)
+				resolvedTxnsBuf.PushMany(txns.txns...)
 				return true
 			}
 			return false
@@ -152,7 +152,7 @@ func splitResolvedTxn(
 		if resolvedTxnsBuf.Empty() {
 			continue
 		}
-		resolvedRowsMap[tableID], _ = resolvedTxnsBuf.DequeueAll()
+		resolvedRowsMap[tableID] = resolvedTxnsBuf.PopAll()
 		if txnQueue.Empty() {
 			txnQueue.Shrink()
 		}

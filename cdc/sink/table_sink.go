@@ -58,7 +58,7 @@ func NewTableSink(
 func (t *tableSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	t.bufferMu.Lock()
 	defer t.bufferMu.Unlock()
-	t.buffer.EnqueueMany(rows...)
+	t.buffer.PushMany(rows...)
 	t.metricsTableSinkTotalRows.Add(float64(len(rows)))
 	return nil
 }
@@ -81,14 +81,14 @@ func (t *tableSink) FlushRowChangedEvents(
 	}
 	t.bufferMu.Lock()
 	i := sort.Search(t.buffer.Len(), func(i int) bool {
-		event, _ := t.buffer.At(i)
+		event := t.buffer.Peek(i)
 		return event.CommitTs > resolvedTs
 	})
 	if i == 0 {
 		t.bufferMu.Unlock()
 		return t.backendSink.FlushRowChangedEvents(ctx, t.tableID, resolved)
 	}
-	resolvedRows, _ := t.buffer.DequeueMany(i)
+	resolvedRows, _ := t.buffer.PopMany(i)
 	t.bufferMu.Unlock()
 	err := t.backendSink.EmitRowChangedEvents(ctx, resolvedRows...)
 	if err != nil {

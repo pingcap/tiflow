@@ -287,15 +287,16 @@ func (q *ChunkQueue[T]) popChunk() {
 }
 
 // PopAll dequeues all elements in the queue
-func (q *ChunkQueue[T]) PopAll() ([]T, bool) {
-	return q.PopMany(q.Len())
+func (q *ChunkQueue[T]) PopAll() []T {
+	v, _ := q.PopMany(q.Len())
+	return v
 }
 
 // PopMany dequeues n elements at a time. The second return value is true
 // if n elements were popped out, and false otherwise.
 func (q *ChunkQueue[T]) PopMany(n int) ([]T, bool) {
 	if n < 0 {
-		return nil, false
+		panic(fmt.Sprintf("negative pop number %v", n))
 	}
 
 	ok := n <= q.size

@@ -194,7 +194,7 @@ func (c *TableFlowController) enqueueSingleMsg(
 // addEntry should be called only if c.queueMu is locked.
 func (c *TableFlowController) addEntry(msg *model.PolymorphicEvent, size uint64) {
 	c.batchGroupCount++
-	c.queue.Enqueue(&txnSizeEntry{
+	c.queue.Push(&txnSizeEntry{
 		startTs:  msg.StartTs,
 		commitTs: msg.CRTs,
 		size:     size,
