@@ -116,7 +116,7 @@ func GetDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 			}
 			ddlCreateTime := ddlCreateTimeParse.Unix()
 
-			// ddlCreateTime and createTime are both based on timezone of downsream
+			// ddlCreateTime and createTime are both based on timezone of downstream
 			if ddlCreateTime >= createTime {
 				var jobID int
 				jobID, err = strconv.Atoi(string(values[0]))
