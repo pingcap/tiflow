@@ -22,7 +22,8 @@ import (
 type ExecutorNotFoundErrInfo struct {
 	rpcerror.Error[rpcerror.Retryable, rpcerror.NotFound]
 
-	ExecutorID model.ExecutorID
+	ExecutorID  model.ExecutorID
+	IsTombstone bool
 }
 
 // ErrExecutorNotFound is used when an executor ID is not found for
