@@ -79,7 +79,7 @@ type processor struct {
 
 	lazyInit            func(ctx cdcContext.Context) error
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (pipeline.TablePipeline, error)
-	newAgent            func(ctx cdcContext.Context) (scheduler.Agent, error)
+	newAgent            func(cdcContext.Context, *model.Liveness) (scheduler.Agent, error)
 
 	liveness     *model.Liveness
 	agent        scheduler.Agent
@@ -578,7 +578,7 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 
 	p.doGCSchemaStorage()
 
-	if err := p.agent.Tick(ctx, p.liveness.Load()); err != nil {
+	if err := p.agent.Tick(ctx); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
@@ -704,7 +704,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		return err
 	}
 
-	p.agent, err = p.newAgent(ctx)
+	p.agent, err = p.newAgent(ctx, p.liveness)
 	if err != nil {
 		return err
 	}
@@ -717,7 +717,9 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	return nil
 }
 
-func (p *processor) newAgentImpl(ctx cdcContext.Context) (ret scheduler.Agent, err error) {
+func (p *processor) newAgentImpl(
+	ctx cdcContext.Context, liveness *model.Liveness,
+) (ret scheduler.Agent, err error) {
 	messageServer := ctx.GlobalVars().MessageServer
 	messageRouter := ctx.GlobalVars().MessageRouter
 	etcdClient := ctx.GlobalVars().EtcdClient
@@ -725,10 +727,12 @@ func (p *processor) newAgentImpl(ctx cdcContext.Context) (ret scheduler.Agent, e
 	cfg := config.GetGlobalServerConfig().Debug
 	if cfg.EnableSchedulerV3 {
 		ret, err = scheduler.NewAgentV3(
-			ctx, captureID, messageServer, messageRouter, etcdClient, p, p.changefeedID)
+			ctx, captureID, liveness,
+			messageServer, messageRouter, etcdClient, p, p.changefeedID)
 	} else {
 		ret, err = scheduler.NewAgent(
-			ctx, captureID, messageServer, messageRouter, etcdClient, p, p.changefeedID)
+			ctx, captureID, liveness,
+			messageServer, messageRouter, etcdClient, p, p.changefeedID)
 	}
 	return ret, errors.Trace(err)
 }

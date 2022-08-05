@@ -29,4 +29,5 @@ func TestTaskStatus(t *testing.T) {
 	require.Equal(t, offlineStatus.Unit, frameModel.WorkerType(0))
 	require.Equal(t, offlineStatus.Task, "task_status_test")
 	require.Equal(t, offlineStatus.Stage, metadata.StageUnscheduled)
+	require.Equal(t, offlineStatus.CfgModRevision, uint64(0))
 }

@@ -32,7 +32,7 @@ type ExecutorInfoProvider interface {
 	// a stream of events describing changes that happen to the executors
 	// after the snapshot is taken.
 	WatchExecutors(ctx context.Context) (
-		snap []model.ExecutorID, stream *notifier.Receiver[model.ExecutorStatusChange], err error,
+		snap map[model.ExecutorID]string, stream *notifier.Receiver[model.ExecutorStatusChange], err error,
 	)
 }
 

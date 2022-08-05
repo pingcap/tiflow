@@ -10,7 +10,7 @@ function run() {
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
 	start_engine_cluster $CONFIG
-	wait_mysql_online.sh --host 127.0.0.1 --port 3306 --password 123456
+	wait_mysql_online.sh --host 127.0.0.1 --port 3306
 	wait_mysql_online.sh --host 127.0.0.1 --port 4000
 	go test -count=1 -v -run ^TestDMJob$ github.com/pingcap/tiflow/engine/test/e2e
 }
