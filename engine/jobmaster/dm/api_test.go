@@ -44,7 +44,6 @@ func TestQueryStatusAPI(t *testing.T) {
 		metaKVClient      = kvmock.NewMetaMock()
 		mockBaseJobmaster = &MockBaseJobmaster{}
 		jm                = &JobMaster{
-			workerID:      "jobmaster-worker-id",
 			BaseJobMaster: mockBaseJobmaster,
 			metadata:      metadata.NewMetaData(mockBaseJobmaster.ID(), metaKVClient),
 		}

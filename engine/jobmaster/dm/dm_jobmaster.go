@@ -47,7 +47,6 @@ import (
 type JobMaster struct {
 	framework.BaseJobMaster
 
-	workerID frameModel.WorkerID
 	// only use when init
 	// it will be outdated if user update job cfg.
 	initJobCfg *config.JobCfg
@@ -83,7 +82,6 @@ func (j dmJobMasterFactory) DeserializeConfig(configBytes []byte) (registry.Work
 func (j dmJobMasterFactory) NewWorkerImpl(dCtx *dcontext.Context, workerID frameModel.WorkerID, masterID frameModel.MasterID, conf framework.WorkerConfig) (framework.WorkerImpl, error) {
 	log.L().Info("new dm jobmaster", zap.String(logutil.ConstFieldJobKey, workerID))
 	jm := &JobMaster{
-		workerID:   workerID,
 		initJobCfg: conf.(*config.JobCfg),
 	}
 	// nolint:errcheck
@@ -96,7 +94,7 @@ func (j dmJobMasterFactory) NewWorkerImpl(dCtx *dcontext.Context, workerID frame
 
 func (jm *JobMaster) initComponents(ctx context.Context) error {
 	jm.Logger().Info("initializing the dm jobmaster components")
-	jm.messageAgent = dmpkg.NewMessageAgent(jm.workerID, jm, jm.messageHandlerManager, jm.Logger())
+	jm.messageAgent = dmpkg.NewMessageAgent(jm.ID(), jm, jm.messageHandlerManager, jm.Logger())
 	if err := jm.messageAgent.Init(ctx); err != nil {
 		return err
 	}
