@@ -27,34 +27,41 @@ func TestWorkerStatus(t *testing.T) {
 
 	task := "worker_status_test"
 	workerID := "worker-id"
-	workerStatus := NewWorkerStatus(task, framework.WorkerDMDump, workerID, WorkerOffline)
+	workerStatus := NewWorkerStatus(task, framework.WorkerDMDump, workerID, WorkerOffline, 1)
 	require.Equal(t, workerStatus.TaskID, task)
 	require.Equal(t, workerStatus.ID, workerID)
 	require.Equal(t, workerStatus.Unit, framework.WorkerDMDump)
 	require.Equal(t, workerStatus.Stage, WorkerOffline)
+	require.Equal(t, workerStatus.CfgModRevision, uint64(1))
 	require.True(t, workerStatus.IsOffline())
+	require.True(t, workerStatus.IsTombStone())
 	require.False(t, workerStatus.RunAsExpected())
 
 	workerStatus = InitWorkerStatus(task, framework.WorkerDMLoad, workerID)
 	require.Equal(t, workerStatus.Unit, framework.WorkerDMLoad)
 	require.Equal(t, workerStatus.Stage, WorkerCreating)
 	require.False(t, workerStatus.IsOffline())
+	require.False(t, workerStatus.IsTombStone())
 	require.True(t, workerStatus.RunAsExpected())
 
-	workerStatus = NewWorkerStatus(task, framework.WorkerDMSync, workerID, WorkerOnline)
+	workerStatus = NewWorkerStatus(task, framework.WorkerDMSync, workerID, WorkerOnline, 0)
 	require.Equal(t, workerStatus.Unit, framework.WorkerDMSync)
 	require.Equal(t, workerStatus.Stage, WorkerOnline)
 	require.False(t, workerStatus.IsOffline())
+	require.False(t, workerStatus.IsTombStone())
 	require.True(t, workerStatus.RunAsExpected())
 
-	workerStatus = NewWorkerStatus(task, framework.WorkerDMLoad, workerID, WorkerFinished)
+	workerStatus = NewWorkerStatus(task, framework.WorkerDMLoad, workerID, WorkerFinished, 0)
 	require.Equal(t, workerStatus.Unit, framework.WorkerDMLoad)
 	require.Equal(t, workerStatus.Stage, WorkerFinished)
 	require.False(t, workerStatus.IsOffline())
+	require.True(t, workerStatus.IsTombStone())
 	require.True(t, workerStatus.RunAsExpected())
 
 	workerStatus = InitWorkerStatus(task, framework.WorkerDMLoad, workerID)
 	require.False(t, workerStatus.CreateFailed())
+	require.False(t, workerStatus.IsTombStone())
 	workerStatus.createdTime = time.Now().Add(-2*HeartbeatInterval - 1)
 	require.True(t, workerStatus.CreateFailed())
+	require.True(t, workerStatus.IsTombStone())
 }
