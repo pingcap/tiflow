@@ -275,14 +275,16 @@ func (m *MasterClient) SendHeartBeat(ctx context.Context) error {
 
 	log.Debug("sending heartbeat", zap.String("worker", m.workerID),
 		zap.String("master-id", m.masterID),
-		zap.Int64("epoch", epoch), zap.Int64("sendTime", int64(sendTime)))
+		zap.Int64("epoch", epoch), zap.Int64("worker-epoch", heartbeatMsg.WorkerEpoch),
+		zap.Int64("sendTime", int64(sendTime)))
 	ok, err := m.messageSender.SendToNode(ctx, nodeID, frameModel.HeartbeatPingTopic(m.masterID), heartbeatMsg)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	log.Info("sending heartbeat success", zap.String("worker", m.workerID),
 		zap.String("master-id", m.masterID),
-		zap.Int64("epoch", epoch), zap.Int64("sendTime", int64(sendTime)))
+		zap.Int64("epoch", epoch), zap.Int64("worker-epoch", heartbeatMsg.WorkerEpoch),
+		zap.Int64("sendTime", int64(sendTime)))
 	if !ok {
 		// Reloads master info asynchronously.
 		// Not using `ctx` because the caller might cancel unexpectedly.
