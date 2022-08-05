@@ -633,7 +633,7 @@ func (c *captureImpl) AsyncClose() {
 // Drain removes tables in the current TiCDC instance.
 func (c *captureImpl) Drain(ctx context.Context) <-chan struct{} {
 	log.Info("draining capture, removing all tables on the capture",
-		zap.String("captureID", c.info.ID))
+		zap.Any("capture", c.info))
 
 	const drainInterval = 100 * time.Millisecond
 	done := make(chan struct{})
