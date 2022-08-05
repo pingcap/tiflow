@@ -48,7 +48,6 @@ type BaseJobMaster interface {
 	Logger() *zap.Logger
 	GetWorkers() map[frameModel.WorkerID]WorkerHandle
 	CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit, resources ...resourcemeta.ResourceID) (frameModel.WorkerID, error)
-	JobMasterID() frameModel.MasterID
 	UpdateJobStatus(ctx context.Context, status frameModel.WorkerStatus) error
 	CurrentEpoch() frameModel.Epoch
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
@@ -125,8 +124,8 @@ func NewBaseJobMaster(
 ) BaseJobMaster {
 	// master-worker pair: job manager <-> job master(`baseWorker` following)
 	// master-worker pair: job master(`baseMaster` following) <-> real workers
-	// `masterID` is always the ID of master role, against current object
-	// `workerID` is the ID of current object
+	// `masterID` here is the ID of `JobManager`
+	// `workerID` here is the ID of Job. It remains unchanged in the job lifecycle.
 	baseMaster := NewBaseMaster(
 		ctx, &jobMasterImplAsMasterImpl{jobMasterImpl}, workerID, tp)
 	baseWorker := NewBaseWorker(
@@ -278,12 +277,9 @@ func (d *DefaultBaseJobMaster) Workload() model.RescUnit {
 
 // ID delegates the ID of inner worker
 func (d *DefaultBaseJobMaster) ID() runtime.RunnableID {
+	// JobMaster is a combination of 'master' and 'worker'
+	// d.master.MasterID() == d.worker.ID() == JobID
 	return d.worker.ID()
-}
-
-// JobMasterID delegates the JobMasterID of inner worker
-func (d *DefaultBaseJobMaster) JobMasterID() frameModel.MasterID {
-	return d.master.MasterID()
 }
 
 // UpdateJobStatus implements BaseJobMaster.UpdateJobStatus
