@@ -175,10 +175,7 @@ func (jm *JobMaster) UpdateJobCfg(ctx context.Context, cfg *config.JobCfg) error
 		return err
 	}
 	// reset finished status, all tasks will be restarted now.
-	jm.finishedStatus.Range(func(key interface{}, value interface{}) bool {
-		jm.finishedStatus.Delete(key)
-		return true
-	})
+	jm.finishedStatus = sync.Map{}
 	jm.workerManager.SetNextCheckTime(time.Now())
 	return nil
 }

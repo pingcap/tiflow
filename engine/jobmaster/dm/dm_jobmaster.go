@@ -52,6 +52,7 @@ type JobMaster struct {
 	initJobCfg *config.JobCfg
 	// taskID -> FinishedTaskStatus
 	// worker exists after finished, so we need record the finished status for QueryJobStatus
+	// finishedStatus will be reset when jobmaster failover and update-job-cfg request comes.
 	finishedStatus sync.Map
 
 	metadata              *metadata.MetaData
