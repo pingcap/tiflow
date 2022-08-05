@@ -554,13 +554,12 @@ func CheckpointKey(id frameModel.MasterID) string {
 
 // loadCheckpoint is not thread safe
 func (m *Master) loadCheckpoint(ctx context.Context) error {
-	ckpt := &Checkpoint{}
 	resp, metaErr := m.MetaKVClient().Get(ctx, CheckpointKey(m.workerID))
 	if metaErr != nil {
 		log.Warn("failed to load checkpoint", zap.Error(metaErr))
 	} else {
 		if len(resp.Kvs) > 0 {
-			if err := json.Unmarshal(resp.Kvs[0].Value, ckpt); err != nil {
+			if err := json.Unmarshal(resp.Kvs[0].Value, m.cachedCheckpoint); err != nil {
 				return errors.Trace(err)
 			}
 		}
