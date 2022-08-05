@@ -152,7 +152,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 	// admin job, which will cause all http api unavailable.
 	o.handleJobs(stdCtx)
 
-	if !o.clusterVersionConsistent(state.Captures) {
+	if !o.clusterVersionConsistent(o.captures) {
 		return state, nil
 	}
 	// Owner should update GC safepoint before initializing changefeed, so
