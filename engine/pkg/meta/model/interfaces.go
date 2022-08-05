@@ -80,13 +80,12 @@ type KVClient interface {
 // ClientConn is the common method for different connection
 // HOPE to reuse the common underlying connection pool
 type ClientConn interface {
-	// ClientType returns the client type of connection
-	ClientType() ClientType
+	// ConnType returns the type of store
+	ConnType() StoreType
 
 	// GetConn gets the underlying connection object
 	// For StoreTypeEtcd, it returns *clientv3.Client for the first return param
 	// For StoreTypeSQL, it returns *sql.DB
-	// For StoreTypeSQLite, it return *gorm.DB
 	GetConn() (interface{}, error)
 
 	// Close closes the underlying connection and releases some resources

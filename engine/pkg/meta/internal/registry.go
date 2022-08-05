@@ -76,5 +76,5 @@ func GetClientBuilder(tp metaModel.ClientType) (clientBuilder, error) {
 		return builder, nil
 	}
 
-	return nil, errors.ErrMetaClientTypeNotSupport.GenWithStackByArgs(tp)
+	return nil, errors.ErrMetaClientTypeNotSupport.GenWithStackByArgs(tp.String())
 }

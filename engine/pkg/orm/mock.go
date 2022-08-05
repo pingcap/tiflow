@@ -15,7 +15,6 @@ package orm
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -53,11 +52,7 @@ func (c *sqliteClient) Close() error {
 
 // NewMockClient creates a mock orm client
 func NewMockClient() (Client, error) {
-	// ref:https://www.sqlite.org/inmemorydb.html
-	// using dsn(file:%s?mode=memory&cache=shared) format here to
-	// 1. Create different DB for different TestXXX()
-	// 2. Enable DB shared for different connection
-	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", randomDBFile())
+
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		SkipDefaultTransaction: true,
 	})

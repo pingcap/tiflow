@@ -27,13 +27,15 @@ const (
 	defaultDialTimeout  = "3s"
 
 	defaultStoreType = StoreTypeSQL
+)
+
+type StoreType = string
+
+const (
 	// StoreTypeEtcd is the store type string for etcd
 	StoreTypeEtcd = "etcd"
 	// StoreTypeSQL is the store type string for SQL
 	StoreTypeSQL = "sql"
-	// StoreTypeSQLite is the store type string for SQLite
-	// NOTE: ONLY for test
-	StoreTypeSQLite = "sqlite"
 )
 
 // AuthConfParams is basic authentication configurations
@@ -47,7 +49,7 @@ type StoreConfig struct {
 	// StoreID is the unique readable identifier for a store
 	StoreID string `toml:"store-id" json:"store-id"`
 	// StoreType supports 'etcd' or 'sql', default is 'sql'
-	StoreType string          `toml:"store-type" json:"store-type"`
+	StoreType StoreType       `toml:"store-type" json:"store-type"`
 	Endpoints []string        `toml:"endpoints" json:"endpoints"`
 	Auth      *AuthConfParams `toml:"auth" json:"auth"`
 	// Schema is the predefine schema name for mysql-compatible metastore

@@ -1,11 +1,12 @@
 package mock
 
 import (
+	"database/sql"
+	"fmt"
 	"log"
 
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
-	"gorm.io/gorm"
 )
 
 // NewMockClientConn new a mock client connection
@@ -30,14 +31,24 @@ func (c *mockClientConn) Close() error {
 
 // NewGormClientConn new a client connection with an gorm.DB inside
 // Currently, we only use this connection for sqlite backend
-func NewGormClientConn(db *gorm.DB) metaModel.ClientConn {
+func NewMockClientConnForSqlite(dbFile string) (metaModel.ClientConn, error) {
+	// ref:https://www.sqlite.org/inmemorydb.html
+	// using dsn(file:%s?mode=memory&cache=shared) format here to
+	// 1. Create different DB for different TestXXX()
+	// 2. Enable DB shared for different connection
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", dbFile)
+	db, err := sql.Open("sqlite3", dsn)
+	if err != nil {
+		return nil, errors.ErrMetaOpFail.wrap(err)
+	}
+
 	return &gormClientConn{
 		db: db,
 	}
 }
 
 type gormClientConn struct {
-	db *gorm.DB
+	db *sql.DB
 }
 
 func (c *gormClientConn) ClientType() metaModel.ClientType {

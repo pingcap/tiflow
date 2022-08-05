@@ -75,9 +75,9 @@ func (cc *clientConnImpl) Close() error {
 	return nil
 }
 
-// ClientType implements ClientType of ClientConn
-func (cc *clientConnImpl) ClientType() model.ClientType {
-	return model.SQLKVClientType
+// ConnType implements ConnType of ClientConn
+func (cc *clientConnImpl) ConnType() model.StoreType {
+	return model.StoreTypeSQL
 }
 
 // NewSQLDB news a sql.DB.

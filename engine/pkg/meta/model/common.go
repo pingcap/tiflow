@@ -21,7 +21,7 @@ import (
 )
 
 // ClientType indicates the kvclient type
-type ClientType = int
+type ClientType int
 
 type (
 	// ProjectID is the alia of tenant.ProjectID
@@ -37,6 +37,22 @@ const (
 	EtcdKVClientType
 	SQLKVClientType
 )
+
+// String implements the Stringer interface
+func (t ClientType) String() string {
+	switch t {
+	case UnknownKVClientType:
+		return "unknown-kvclient"
+	case MockKVClientType:
+		return "mock-kvclient"
+	case EtcdKVClientType:
+		return "etcd-kvclient"
+	case SQLKVClientType:
+		return "sql-kvclient"
+	}
+
+	return fmt.Sprintf("unexpect client type:%d", int(t))
+}
 
 // ResponseHeader is common response header
 type ResponseHeader struct {
