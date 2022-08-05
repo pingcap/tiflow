@@ -50,10 +50,10 @@ func initBroker(t *testing.T, partitionNum int) (*sarama.MockBroker, string) {
 
 func newForTest(ctx context.Context,
 	sinkURIStr string,
-	config *config.ReplicaConfig,
+	cfg *config.ReplicaConfig,
 	errCh chan error,
 ) (*SinkFactory, error) {
-	sinkURI, err := getSinkURIAndAdjustConfigWithSinkURI(sinkURIStr, config)
+	sinkURI, err := config.GetSinkURIAndAdjustConfigWithSinkURI(sinkURIStr, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +62,7 @@ func newForTest(ctx context.Context,
 	schema := strings.ToLower(sinkURI.Scheme)
 	switch schema {
 	case "kafka", "kafka+ssl":
-		mqs, err := mq.NewKafkaDMLSink(ctx, sinkURI, config, errCh,
+		mqs, err := mq.NewKafkaDMLSink(ctx, sinkURI, cfg, errCh,
 			// Use mock kafka clients for test.
 			kafka.NewMockAdminClient, dmlproducer.NewDMLMockProducer)
 		if err != nil {
