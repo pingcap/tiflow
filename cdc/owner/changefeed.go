@@ -147,11 +147,11 @@ func newChangefeed(id model.ChangeFeedID, up *upstream.Upstream) *changefeed {
 func newChangefeed4Test(
 	id model.ChangeFeedID, up *upstream.Upstream,
 	newDDLPuller func(ctx context.Context,
-		replicaConfig *config.ReplicaConfig,
-		up *upstream.Upstream,
-		startTs uint64,
-		changefeed model.ChangeFeedID,
-	) (puller.DDLPuller, error),
+	replicaConfig *config.ReplicaConfig,
+	up *upstream.Upstream,
+	startTs uint64,
+	changefeed model.ChangeFeedID,
+) (puller.DDLPuller, error),
 	newSink func() DDLSink,
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error),
 ) *changefeed {
@@ -424,7 +424,7 @@ LOOP:
 		err = gc.UndoEnsureChangefeedStartTsSafety(
 			ctx, c.upstream.PDClient,
 			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
-			ctx.ChangefeedVars().ID,
+			c.id,
 		)
 		if err != nil {
 			return errors.Trace(err)
@@ -432,7 +432,7 @@ LOOP:
 		err = gc.UndoEnsureChangefeedStartTsSafety(
 			ctx, c.upstream.PDClient,
 			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
-			ctx.ChangefeedVars().ID,
+			c.id,
 		)
 		if err != nil {
 			return errors.Trace(err)
@@ -454,7 +454,7 @@ LOOP:
 	// the lower bound of an open interval, i.e. (startTs, ...), we pass checkpointTs-1 as the start-ts to initialize
 	// the schema cache.
 	c.schema, err = newSchemaWrap4Owner(c.upstream.KVStorage,
-		checkpointTs-1, c.state.Info.Config, ctx.ChangefeedVars().ID)
+		checkpointTs-1, c.state.Info.Config, c.id)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -462,13 +462,12 @@ LOOP:
 	c.cancel = cancel
 
 	c.sink = c.newSink()
-	c.sink.run(cancelCtx, cancelCtx.ChangefeedVars().ID, cancelCtx.ChangefeedVars().Info)
+	c.sink.run(cancelCtx, c.id, cancelCtx.ChangefeedVars().Info)
 
 	// Refer to the previous comment on why we use (checkpointTs-1).
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx,
 		cancelCtx.ChangefeedVars().Info.Config,
-		c.upstream, checkpointTs-1,
-		ctx.ChangefeedVars().ID)
+		c.upstream, checkpointTs-1, c.id)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -601,10 +600,8 @@ func (c *changefeed) cleanupServiceGCSafePoints(ctx cdcContext.Context) {
 
 	for _, serviceID := range serviceIDs {
 		err := gc.UndoEnsureChangefeedStartTsSafety(
-			ctx,
-			c.upstream.PDClient,
-			serviceID,
-			ctx.ChangefeedVars().ID)
+			ctx, c.upstream.PDClient, serviceID, c.id,
+		)
 		if err != nil {
 			log.Error("failed to remove gc safepoint",
 				zap.String("namespace", c.state.ID.Namespace),

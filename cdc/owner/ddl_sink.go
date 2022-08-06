@@ -60,6 +60,8 @@ type DDLSink interface {
 }
 
 type ddlSinkImpl struct {
+	changefeed model.ChangeFeedID
+
 	lastSyncPoint  model.Ts
 	syncPointStore mysql.SyncpointStore
 
@@ -142,7 +144,7 @@ func ddlSinkInitializer(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeF
 	return nil
 }
 
-func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *model.ChangeFeedInfo) {
+func (s *ddlSinkImpl) run(ctx cdcContext.Context, changefeed model.ChangeFeedID, info *model.ChangeFeedInfo) {
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	s.cancel = cancel
 
@@ -151,18 +153,18 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 		defer s.wg.Done()
 
 		start := time.Now()
-		if err := s.sinkInitHandler(ctx, s, id, info); err != nil {
+		if err := s.sinkInitHandler(ctx, s, changefeed, info); err != nil {
 			log.Warn("ddl sink initialize failed",
-				zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
-				zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
+				zap.String("namespace", changefeed.Namespace),
+				zap.String("changefeed", changefeed.ID),
 				zap.Duration("duration", time.Since(start)))
 			ctx.Throw(err)
 			return
 		}
 		s.initialized.Store(true)
 		log.Info("ddl sink initialized, start processing...",
-			zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
-			zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
+			zap.String("namespace", changefeed.Namespace),
+			zap.String("changefeed", changefeed.ID),
 			zap.Duration("duration", time.Since(start)))
 
 		// TODO make the tick duration configurable
@@ -213,8 +215,8 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 
 			case ddl := <-s.ddlCh:
 				log.Info("begin emit ddl event",
-					zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
-					zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
+					zap.String("namespace", changefeed.Namespace),
+					zap.String("changefeed", changefeed.ID),
 					zap.Any("DDL", ddl))
 				var err error
 				if s.sinkV1 != nil {
@@ -227,8 +229,8 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 				})
 				if err == nil {
 					log.Info("Execute DDL succeeded",
-						zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
-						zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
+						zap.String("namespace", changefeed.Namespace),
+						zap.String("changefeed", changefeed.ID),
 						zap.Bool("ignored", err != nil),
 						zap.Any("ddl", ddl))
 					// Force emitting checkpoint ts when a ddl event is finished.
@@ -261,8 +263,8 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 				// If DDL executing failed, and the error can not be ignored,
 				// throw an error and pause the changefeed
 				log.Error("Execute DDL failed",
-					zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
-					zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
+					zap.String("namespace", changefeed.Namespace),
+					zap.String("changefeed", changefeed.ID),
 					zap.Error(err),
 					zap.Any("ddl", ddl))
 				ctx.Throw(errors.Trace(err))
@@ -288,8 +290,8 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 	if ddl.Done {
 		// the DDL event is executed successfully, and done is true
 		log.Info("ddl already executed",
-			zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
-			zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID),
 			zap.Any("DDL", ddl))
 		delete(s.ddlSentTsMap, ddl)
 		s.mu.Unlock()
@@ -300,8 +302,8 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 	ddlSentTs := s.ddlSentTsMap[ddl]
 	if ddl.CommitTs <= ddlSentTs {
 		log.Debug("ddl is not finished yet",
-			zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
-			zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID),
 			zap.Uint64("ddlSentTs", ddlSentTs), zap.Any("DDL", ddl))
 		// the DDL event is executing and not finished yet, return false
 		return false, nil
@@ -312,13 +314,13 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 	case s.ddlCh <- ddl:
 		s.ddlSentTsMap[ddl] = ddl.CommitTs
 		log.Info("ddl is sent",
-			zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
-			zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID),
 			zap.Uint64("ddlSentTs", ddl.CommitTs))
 	default:
 		log.Warn("ddl chan full, send it the next round",
-			zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
-			zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID),
 			zap.Uint64("ddlSentTs", ddlSentTs),
 			zap.Any("DDL", ddl))
 		// if this hit, we think that ddlCh is full,
@@ -333,7 +335,7 @@ func (s *ddlSinkImpl) emitSyncPoint(ctx cdcContext.Context, checkpointTs uint64)
 	}
 	s.lastSyncPoint = checkpointTs
 	// TODO implement async sink syncPoint
-	return s.syncPointStore.SinkSyncpoint(ctx, ctx.ChangefeedVars().ID, checkpointTs)
+	return s.syncPointStore.SinkSyncpoint(ctx, s.changefeed, checkpointTs)
 }
 
 func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
