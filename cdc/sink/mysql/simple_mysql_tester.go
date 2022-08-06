@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/container/queue"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/quotes"
@@ -37,7 +38,7 @@ type simpleMySQLSink struct {
 	enableOldValue      bool
 	enableCheckOldValue bool
 	db                  *sql.DB
-	rowsBuffer          []*model.RowChangedEvent
+	rowsBuffer          *queue.ChunkQueue[*model.RowChangedEvent]
 	rowsBufferLock      sync.Mutex
 }
 
@@ -93,6 +94,7 @@ func NewSimpleMySQLSink(
 	sink := &simpleMySQLSink{
 		db:             db,
 		enableOldValue: config.EnableOldValue,
+		rowsBuffer:     queue.NewChunkQueue[*model.RowChangedEvent](),
 	}
 	if strings.ToLower(sinkURI.Query().Get("check-old-value")) == "true" {
 		sink.enableCheckOldValue = true
@@ -110,7 +112,7 @@ func (s *simpleMySQLSink) AddTable(tableID model.TableID) error {
 func (s *simpleMySQLSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	s.rowsBufferLock.Lock()
 	defer s.rowsBufferLock.Unlock()
-	s.rowsBuffer = append(s.rowsBuffer, rows...)
+	s.rowsBuffer.PushMany(rows...)
 	return nil
 }
 
@@ -186,18 +188,19 @@ func (s *simpleMySQLSink) FlushRowChangedEvents(
 ) (model.ResolvedTs, error) {
 	s.rowsBufferLock.Lock()
 	defer s.rowsBufferLock.Unlock()
-	newBuffer := make([]*model.RowChangedEvent, 0, len(s.rowsBuffer))
-	for _, row := range s.rowsBuffer {
+
+	oldLen := s.rowsBuffer.Len()
+	for i := 0; i < oldLen; i++ {
+		row, _ := s.rowsBuffer.Pop()
 		if row.CommitTs <= resolved.Ts {
 			err := s.executeRowChangedEvents(ctx, row)
 			if err != nil {
 				return model.NewResolvedTs(0), err
 			}
 		} else {
-			newBuffer = append(newBuffer, row)
+			s.rowsBuffer.Push(row)
 		}
 	}
-	s.rowsBuffer = newBuffer
 	return resolved, nil
 }
 
