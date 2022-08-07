@@ -38,7 +38,6 @@ type TaskStatus struct {
 // JobStatus represents status of a job
 type JobStatus struct {
 	JobMasterID frameModel.MasterID
-	WorkerID    frameModel.WorkerID
 	// taskID -> Status
 	TaskStatus map[string]TaskStatus
 }
@@ -68,8 +67,7 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 		wg              sync.WaitGroup
 		mu              sync.Mutex
 		jobStatus       = &JobStatus{
-			JobMasterID: jm.JobMasterID(),
-			WorkerID:    jm.ID(),
+			JobMasterID: jm.ID(),
 			TaskStatus:  make(map[string]TaskStatus),
 		}
 	)

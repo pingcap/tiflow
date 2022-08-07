@@ -24,8 +24,11 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink"
+	sinkv1 "github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/cdc/sink/mysql"
+	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
+	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/factory"
+	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -73,7 +76,8 @@ type ddlSinkImpl struct {
 	ddlCh chan *model.DDLEvent
 	errCh chan error
 
-	sink sink.Sink
+	sinkV1 sinkv1.Sink
+	sinkV2 sinkv2.DDLEventSink
 	// `sinkInitHandler` can be helpful in unit testing.
 	sinkInitHandler ddlSinkInitHandler
 
@@ -103,11 +107,22 @@ type ddlSinkInitHandler func(ctx cdcContext.Context, a *ddlSinkImpl, id model.Ch
 func ddlSinkInitializer(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeFeedID, info *model.ChangeFeedInfo) error {
 	stdCtx := contextutil.PutChangefeedIDInCtx(ctx, id)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleOwner)
-	s, err := sink.New(stdCtx, id, info.SinkURI, info.Config, a.errCh)
-	if err != nil {
-		return errors.Trace(err)
+	conf := config.GetGlobalServerConfig()
+	if !conf.Debug.EnableNewSink {
+		log.Info("Try to create ddlSink based on sinkV1")
+		s, err := sinkv1.New(stdCtx, id, info.SinkURI, info.Config, a.errCh)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		a.sinkV1 = s
+	} else {
+		log.Info("Try to create ddlSink based on sinkV2")
+		s, err := factory.New(stdCtx, info.SinkURI, info.Config)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		a.sinkV2 = s
 	}
-	a.sink = s
 
 	if !info.SyncPointEnabled {
 		return nil
@@ -182,16 +197,31 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 				tables := s.mu.currentTableNames
 				s.mu.Unlock()
 				lastCheckpointTs = checkpointTs
-				if err := s.sink.EmitCheckpointTs(ctx, checkpointTs, tables); err != nil {
-					ctx.Throw(errors.Trace(err))
-					return
+				if s.sinkV1 != nil {
+					if err := s.sinkV1.EmitCheckpointTs(ctx,
+						checkpointTs, tables); err != nil {
+						ctx.Throw(errors.Trace(err))
+						return
+					}
+				} else {
+					if err := s.sinkV2.WriteCheckpointTs(ctx,
+						checkpointTs, tables); err != nil {
+						ctx.Throw(errors.Trace(err))
+						return
+					}
 				}
+
 			case ddl := <-s.ddlCh:
 				log.Info("begin emit ddl event",
 					zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
 					zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
 					zap.Any("DDL", ddl))
-				err := s.sink.EmitDDLEvent(ctx, ddl)
+				var err error
+				if s.sinkV1 != nil {
+					err = s.sinkV1.EmitDDLEvent(ctx, ddl)
+				} else {
+					err = s.sinkV2.WriteDDLEvent(ctx, ddl)
+				}
 				failpoint.Inject("InjectChangefeedDDLError", func() {
 					err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 				})
@@ -213,9 +243,18 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 					tables := s.mu.currentTableNames
 					s.mu.Unlock()
 					lastCheckpointTs = checkpointTs
-					if err := s.sink.EmitCheckpointTs(ctx, checkpointTs, tables); err != nil {
-						ctx.Throw(errors.Trace(err))
-						return
+					if s.sinkV1 != nil {
+						if err := s.sinkV1.EmitCheckpointTs(ctx,
+							checkpointTs, tables); err != nil {
+							ctx.Throw(errors.Trace(err))
+							return
+						}
+					} else {
+						if err := s.sinkV2.WriteCheckpointTs(ctx,
+							checkpointTs, tables); err != nil {
+							ctx.Throw(errors.Trace(err))
+							return
+						}
 					}
 					continue
 				}
@@ -299,8 +338,10 @@ func (s *ddlSinkImpl) emitSyncPoint(ctx cdcContext.Context, checkpointTs uint64)
 
 func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 	s.cancel()
-	if s.sink != nil {
-		err = s.sink.Close(ctx)
+	if s.sinkV1 != nil {
+		err = s.sinkV1.Close(ctx)
+	} else {
+		err = s.sinkV2.Close()
 	}
 	if s.syncPointStore != nil {
 		err = s.syncPointStore.Close()
