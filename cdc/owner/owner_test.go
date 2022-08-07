@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/scheduler"
@@ -34,6 +36,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
+	"golang.org/x/time/rate"
 )
 
 type mockManager struct {
@@ -51,11 +54,11 @@ var _ gc.Manager = (*mockManager)(nil)
 // newOwner4Test creates a new Owner for test
 func newOwner4Test(
 	newDDLPuller func(ctx context.Context,
-	replicaConfig *config.ReplicaConfig,
-	up *upstream.Upstream,
-	startTs uint64,
-	changefeed model.ChangeFeedID,
-) (puller.DDLPuller, error),
+		replicaConfig *config.ReplicaConfig,
+		up *upstream.Upstream,
+		startTs uint64,
+		changefeed model.ChangeFeedID,
+	) (puller.DDLPuller, error),
 	newSink func() DDLSink,
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error),
 	pdClient pd.Client,
@@ -755,20 +758,55 @@ func (h *heathScheduler) IsInitialized() bool {
 func TestIsHealthy(t *testing.T) {
 	t.Parallel()
 
-	o := &ownerImpl{changefeeds: make(map[model.ChangeFeedID]*changefeed)}
+	pdClient := &gc.MockPDClient{}
+	o := &ownerImpl{
+		changefeeds:     make(map[model.ChangeFeedID]*changefeed),
+		upstreamManager: upstream.NewManager4Test(pdClient),
+		logLimiter:      rate.NewLimiter(versionInconsistentLogRate, versionInconsistentLogRate),
+	}
 	query := &Query{Tp: QueryHealth}
 
 	ctx := context.Background()
 
+	// Unhealthy, cdc cluster version is inconsistent
+	o.captures = map[model.CaptureID]*model.CaptureInfo{
+		model.CaptureID("1"): {
+			Version: "v6.3.0",
+		},
+		model.CaptureID("2"): {
+			Version: "v8.0.0",
+		},
+	}
+	err := o.handleQueries(ctx, query)
+	require.NoError(t, err)
+	require.False(t, query.Data.(bool))
+
+	// Unhealthy, store version check failed
+	// set to nil to skip cdc cluster version check, pretend it's true
+	o.captures = nil
+	pdClient.GetAllStoresFunc = func(
+		ctx context.Context, opts ...pd.GetStoreOption,
+	) ([]*metapb.Store, error) {
+		return nil, errors.New("store version check failed")
+	}
+	err = o.handleQueries(ctx, query)
+	require.Error(t, err)
+	require.False(t, query.Data.(bool))
+
+	pdClient.GetAllStoresFunc = func(
+		ctx context.Context, opts ...pd.GetStoreOption,
+	) ([]*metapb.Store, error) {
+		return nil, nil
+	}
 	// Unhealthy, changefeeds are not ticked.
 	o.changefeedTicked = false
-	err := o.handleQueries(ctx, query)
-	require.Nil(t, err)
+	err = o.handleQueries(ctx, query)
+	require.NoError(t, err)
 	require.False(t, query.Data.(bool))
 	// Healthy, no changefeed.
 	o.changefeedTicked = true
 	err = o.handleQueries(ctx, query)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.True(t, query.Data.(bool))
 
 	// Unhealthy, scheduler is not set.
@@ -778,20 +816,20 @@ func TestIsHealthy(t *testing.T) {
 	o.changefeeds[model.ChangeFeedID{ID: "1"}] = cf
 	o.changefeedTicked = true
 	err = o.handleQueries(ctx, query)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.False(t, query.Data.(bool))
 
 	// Healthy, scheduler is set and return true.
 	cf.scheduler = &heathScheduler{init: true}
 	o.changefeedTicked = true
 	err = o.handleQueries(ctx, query)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.True(t, query.Data.(bool))
 
 	// Unhealthy, changefeeds are not ticked.
 	o.changefeedTicked = false
 	err = o.handleQueries(ctx, query)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.False(t, query.Data.(bool))
 
 	// Unhealthy, there is another changefeed is not initialized.
@@ -800,6 +838,6 @@ func TestIsHealthy(t *testing.T) {
 	}
 	o.changefeedTicked = true
 	err = o.handleQueries(ctx, query)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.False(t, query.Data.(bool))
 }
