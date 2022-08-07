@@ -7,7 +7,7 @@
 	build_mysql_integration_test_images clean_integration_test_images \
 	dm dm-master dm-worker dmctl dm-syncer dm_coverage \
 	engine tiflow tiflow-demo tiflow-chaos-case engine_image help \
-	format-makefiles
+	format-makefiles check-makefiles
 
 .DEFAULT_GOAL := default
 
@@ -130,7 +130,7 @@ test: unit_test dm_unit_test engine_unit_test
 
 build: cdc dm engine
 
-check-makefiles: ## Check the makefiles format.
+check-makefiles: ## Check the makefiles format. Please run this target after the changes are committed.
 check-makefiles: format-makefiles
 	@git diff --exit-code -- $(MAKE_FILES) || (echo "Please format Makefiles by running 'make format-makefiles'" && false)
 
@@ -474,7 +474,7 @@ dm_compatibility_test: check_third_party_binary_for_dm
 
 dm_coverage: tools/bin/gocovmerge tools/bin/goveralls
 	# unify cover mode in coverage files, more details refer to dm/tests/_utils/run_dm_ctl
-	find "$(DM_TEST_DIR)" -type f -name "cov.*.dmctl.*.out" -exec sed -i "s/mode: count/mode: atomic/g" {} \;
+	find "$(DM_TEST_DIR)" -type f -name "cov.*.dmctl.*.out" -exec $(SED) -i "s/mode: count/mode: atomic/g" {} \;
 	tools/bin/gocovmerge "$(DM_TEST_DIR)"/cov.* | grep -vE ".*.pb.go|.*.pb.gw.go|.*.__failpoint_binding__.go|.*debug-tools.*|.*chaos.*" > "$(DM_TEST_DIR)/all_cov.out"
 	tools/bin/gocovmerge "$(DM_TEST_DIR)"/cov.unit_test*.out | grep -vE ".*.pb.go|.*.pb.gw.go|.*.__failpoint_binding__.go|.*debug-tools.*|.*chaos.*" > $(DM_TEST_DIR)/unit_test.out
 	go tool cover -html "$(DM_TEST_DIR)/all_cov.out" -o "$(DM_TEST_DIR)/all_cov.html"
