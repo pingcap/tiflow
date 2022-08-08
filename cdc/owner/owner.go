@@ -609,8 +609,21 @@ func (o *ownerImpl) handleQueries(ctx context.Context, query *Query) error {
 }
 
 func (o *ownerImpl) isHealthy(ctx context.Context) (bool, error) {
+	if !o.changefeedTicked {
+		// Owner has not yet tick changefeeds, some changefeeds may be not
+		// initialized.
+		return false, nil
+	}
 	if !o.clusterVersionConsistent(o.captures) {
 		return false, nil
+	}
+	for _, cfReactor := range o.changefeeds {
+		provider := cfReactor.GetInfoProvider()
+		if provider == nil || !provider.IsInitialized() {
+			// The scheduler has not been initialized yet, it is considered
+			// unhealthy, because owner can not schedule tables for now.
+			return false, nil
+		}
 	}
 
 	err := o.upstreamManager.Visit(func(upstream *upstream.Upstream) error {
@@ -621,21 +634,6 @@ func (o *ownerImpl) isHealthy(ctx context.Context) (bool, error) {
 	})
 	if err != nil {
 		return false, errors.Trace(err)
-	}
-
-	if !o.changefeedTicked {
-		// Owner has not yet tick changefeeds, some changefeeds may be not
-		// initialized.
-		return false, nil
-	}
-
-	for _, cfReactor := range o.changefeeds {
-		provider := cfReactor.GetInfoProvider()
-		if provider == nil || !provider.IsInitialized() {
-			// The scheduler has not been initialized yet, it is considered
-			// unhealthy, because owner can not schedule tables for now.
-			return false, nil
-		}
 	}
 	return true, nil
 }
