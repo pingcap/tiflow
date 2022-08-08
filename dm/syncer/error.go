@@ -23,6 +23,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/pingcap/tidb/errno"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/parser"
@@ -64,9 +65,9 @@ func isDropColumnWithIndexError(err error) bool {
 			strings.Contains(mysqlErr.Message, "with tidb_enable_change_multi_schema is disable"))
 }
 
-// GetDDLStatusFromTiDB() retrieves the synchronizing status of DDL from TiDB
+// getDDLStatusFromTiDB retrieves the synchronizing status of DDL from TiDB
 // hence here db should be TiDB database.
-func GetDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTime int64) (string, error) {
+func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTime int64) (string, error) {
 	rowNum := 10
 	count := 0
 	for {
@@ -84,34 +85,43 @@ func GetDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 			return "", err
 		}
 
-		values := make([]sql.RawBytes, len(columns))
-		scanArgs := make([]interface{}, len(values))
-		for i := range values {
-			scanArgs[i] = &values[i]
+		//values := make([]sql.RawBytes, len(columns))
+		//scanArgs := make([]interface{}, len(values))
+		//for i := range values {
+		//	scanArgs[i] = &values[i]
+		//}
+
+		var results [][]string
+		results, err = export.GetSpecifiedColumnValuesAndClose(rows, columns...)
+		if err != nil {
+			rows.Close()
+			return "", err
 		}
 
 		// skip the lines that have been checked
-		skipNum := 0
-		if rowNum > 10 {
-			for rows.Next() {
-				skipNum++
-				if skipNum >= rowNum-10 {
-					break
-				}
-			}
-		}
-		for rows.Next() {
-			err = rows.Scan(scanArgs...)
-			if err != nil {
-				rows.Close()
-				return "", err
-			}
+		//skipNum := 0
+		//if rowNum > 10 {
+		//	for rows.Next() {
+		//		skipNum++
+		//		if skipNum >= rowNum-10 {
+		//			break
+		//		}
+		//	}
+		//}
+		//for rows.Next() {
+		for i := rowNum - 10; i < rowNum; i++ {
+			//err = rows.Scan(scanArgs...)
+			//if err != nil {
+			//	rows.Close()
+			//	return "", err
+			//}
 
-			ddlCreateTimeStr := string(values[8])
+			//ddlCreateTimeStr := string(values[8])
+			ddlCreateTimeStr := results[i][8]
 			var ddlCreateTimeParse time.Time
 			ddlCreateTimeParse, err = time.Parse("2006-01-02 15:04:05", ddlCreateTimeStr)
 			if err != nil {
-				rows.Close()
+				//rows.Close()
 				return "", err
 			}
 			ddlCreateTime := ddlCreateTimeParse.Unix()
@@ -119,9 +129,9 @@ func GetDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 			// ddlCreateTime and createTime are both based on timezone of downstream
 			if ddlCreateTime >= createTime {
 				var jobID int
-				jobID, err = strconv.Atoi(string(values[0]))
+				jobID, err = strconv.Atoi(results[i][0])
 				if err != nil {
-					rows.Close()
+					//rows.Close()
 					return "", err
 				}
 
@@ -132,12 +142,12 @@ func GetDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 					showJob := fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d", offset)
 					err = db.QueryRowContext(ctx, showJob).Scan(&jobIDForLimit, &DDLJob)
 					if err != nil {
-						rows.Close()
+						//rows.Close()
 						return "", err
 					}
 					if jobID == jobIDForLimit && ddl == DDLJob {
-						rows.Close()
-						return string(values[11]), err
+						//rows.Close()
+						return results[i][11], err
 					}
 					if jobIDForLimit <= jobID {
 						break
@@ -147,15 +157,15 @@ func GetDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 				count++
 			} else {
 				// requested DDL cannot be found
-				rows.Close()
+				//rows.Close()
 				return "", err
 			}
 		}
-		if err = rows.Err(); err != nil {
-			rows.Close()
-			return "", err
-		}
-		rows.Close()
+		//if err = rows.Err(); err != nil {
+		//	rows.Close()
+		//	return "", err
+		//}
+		//rows.Close()
 		rowNum += 10
 		count = 0
 	}
