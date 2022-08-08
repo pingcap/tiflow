@@ -57,8 +57,6 @@ type trackerSuite struct {
 
 func (s *trackerSuite) SetUpSuite(c *C) {
 	s.cfg = &config.SubTaskConfig{}
-	s.backupKeys = downstreamVars
-	downstreamVars = []string{"sql_mode"}
 	db, _, err := sqlmock.New()
 	s.db = db
 	c.Assert(err, IsNil)
@@ -69,7 +67,6 @@ func (s *trackerSuite) SetUpSuite(c *C) {
 
 func (s *trackerSuite) TearDownSuite(c *C) {
 	s.db.Close()
-	downstreamVars = s.backupKeys
 }
 
 func (s *trackerSuite) TestTiDBAndSessionCfg(c *C) {
@@ -750,7 +747,7 @@ func (s *trackerSuite) TestGetDownStreamIndexInfo(c *C) {
 
 	mock.ExpectQuery("SHOW CREATE TABLE " + tableID).WillReturnRows(
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow("test", "create table t(a int primary key, b int, c varchar(10))"))
+			AddRow("test", "create table t(a int primary key, b int, c varchar(10000), key(c))"))
 	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableID, oriTi)
 	c.Assert(err, IsNil)
 	c.Assert(dti, NotNil)

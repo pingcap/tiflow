@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tidb/util/mock"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -445,7 +446,9 @@ func (dt *downstreamTracker) getTableInfoByCreateStmt(tctx *tcontext.Context, ta
 		return nil, dmterror.ErrSchemaTrackerInvalidCreateTableStmt.Delegate(err, createStr)
 	}
 
-	ti, err := ddl.BuildTableInfoFromAST(stmtNode.(*ast.CreateTableStmt))
+	sctx := mock.NewContext()
+	sctx.GetSessionVars().StrictSQLMode = false
+	ti, err := ddl.BuildTableInfoWithStmt(sctx, stmtNode.(*ast.CreateTableStmt), mysql.DefaultCharset, "", nil)
 	if err != nil {
 		return nil, dmterror.ErrSchemaTrackerCannotMockDownstreamTable.Delegate(err, createStr)
 	}
