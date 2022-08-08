@@ -44,7 +44,7 @@ type Service struct {
 	cancelCh chan struct{}
 
 	offlinedExecutors chan resModel.ExecutorID
-	preRPCHook        *rpcutil.PreRPCHook[pb.ResourceManagerClient]
+	preRPCHook        rpcutil.PreRPCHook
 }
 
 const (
@@ -55,7 +55,7 @@ const (
 func NewService(
 	metaclient pkgOrm.Client,
 	executorInfoProvider ExecutorInfoProvider,
-	preRPCHook *rpcutil.PreRPCHook[pb.ResourceManagerClient],
+	preRPCHook rpcutil.PreRPCHook,
 ) *Service {
 	return &Service{
 		metaclient:        metaclient,

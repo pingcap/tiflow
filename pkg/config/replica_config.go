@@ -18,12 +18,11 @@ import (
 	"fmt"
 	"net/url"
 
-	"go.uber.org/zap"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config/outdated"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
 )
 
 var defaultReplicaConfig = &ReplicaConfig{
@@ -43,6 +42,11 @@ var defaultReplicaConfig = &ReplicaConfig{
 		FlushIntervalInMs: 2000,
 		Storage:           "",
 	},
+}
+
+// GetDefaultReplicaConfig returns the default replica config.
+func GetDefaultReplicaConfig() *ReplicaConfig {
+	return defaultReplicaConfig.Clone()
 }
 
 // ReplicaConfig represents some addition replication config for a changefeed
@@ -125,7 +129,19 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 	return nil
 }
 
-// GetDefaultReplicaConfig returns the default replica config.
-func GetDefaultReplicaConfig() *ReplicaConfig {
-	return defaultReplicaConfig.Clone()
+// GetSinkURIAndAdjustConfigWithSinkURI parses sinkURI as a URI and adjust config with sinkURI.
+func GetSinkURIAndAdjustConfigWithSinkURI(
+	sinkURIStr string,
+	config *ReplicaConfig,
+) (*url.URL, error) {
+	// parse sinkURI as a URI
+	sinkURI, err := url.Parse(sinkURIStr)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+	}
+	if err := config.ValidateAndAdjust(sinkURI); err != nil {
+		return nil, err
+	}
+
+	return sinkURI, nil
 }
