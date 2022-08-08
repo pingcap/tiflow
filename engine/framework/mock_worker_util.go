@@ -66,12 +66,18 @@ func MockBaseWorker(
 	}
 	ctx = ctx.WithDeps(dp)
 
+	epoch, err := params.FrameMetaClient.GenEpoch(ctx)
+	if err != nil {
+		panic(err)
+	}
 	ret := NewBaseWorker(
 		ctx,
 		workerImpl,
 		workerID,
 		masterID,
-		FakeTask)
+		FakeTask,
+		epoch,
+	)
 	return &BaseWorkerForTesting{
 		ret.(*DefaultBaseWorker),
 		resourceBroker,
