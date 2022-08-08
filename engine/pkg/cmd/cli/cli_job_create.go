@@ -34,6 +34,7 @@ type jobCreateOptions struct {
 	jobTypeStr   string
 	jobConfigStr string
 
+	jobID     string
 	jobType   engineModel.JobType
 	jobConfig []byte
 }
@@ -50,8 +51,9 @@ func (o *jobCreateOptions) addFlags(cmd *cobra.Command) {
 		return
 	}
 
-	cmd.Flags().StringVar(&o.jobTypeStr, "job-type", "", "job type")
+	cmd.Flags().StringVar(&o.jobTypeStr, "job-type", "", "job type, one of [FakeJob, CVSDemo, DM]")
 	cmd.Flags().StringVar(&o.jobConfigStr, "job-config", "", "path of config file for the job")
+	cmd.Flags().StringVar(&o.jobID, "job-id", "", "job id")
 }
 
 // validate checks that the provided job options are valid.
@@ -77,6 +79,10 @@ func (o *jobCreateOptions) validate(ctx context.Context, cmd *cobra.Command) err
 }
 
 func openFileAndReadString(path string) (content []byte, err error) {
+	if path == "" {
+		log.Warn("create job with empty config file")
+		return nil, nil
+	}
 	fp, err := os.Open(path)
 	if err != nil {
 		return nil, err
