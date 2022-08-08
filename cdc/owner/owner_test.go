@@ -762,7 +762,7 @@ func TestIsHealthy(t *testing.T) {
 	o := &ownerImpl{
 		changefeeds:     make(map[model.ChangeFeedID]*changefeed),
 		upstreamManager: upstream.NewManager4Test(pdClient),
-		logLimiter:      rate.NewLimiter(versionInconsistentLogRate, versionInconsistentLogRate),
+		logLimiter:      rate.NewLimiter(1, 1),
 	}
 	query := &Query{Tp: QueryHealth}
 
