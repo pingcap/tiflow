@@ -1538,7 +1538,7 @@ peer message client is not found for worker: worker ID %s
 
 ["DFLOW:ErrMetaClientTypeNotSupport"]
 error = '''
-meta client type not support:%d
+meta client type not support:%s
 '''
 
 ["DFLOW:ErrMetaCommittedTxn"]
