@@ -62,7 +62,7 @@ func (o *jobGeneralOptions) addFlags(cmd *cobra.Command) {
 func (o *jobGeneralOptions) validate(ctx context.Context, cmd *cobra.Command) error {
 	if len(o.masterAddrs) == 0 {
 		o.masterAddrs = []string{"127.0.0.1:10240"}
-		log.Warn("master-addrs is nil, use default addr: 127.0.0.1:10240")
+		log.Warn("the master-addrs are not assigned, use default addr: 127.0.0.1:10240")
 	}
 
 	// TODO support https.
