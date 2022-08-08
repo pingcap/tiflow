@@ -62,7 +62,7 @@ func (bs *blackHoleWriter) FlushLog(_ context.Context, checkpointTs, resolvedTs 
 	return nil
 }
 
-func (ibs *blackHoleWriter) GetMeta() (checkpointTs, resolvedTs model.Ts) {
+func (bs *blackHoleWriter) GetMeta() (checkpointTs, resolvedTs model.Ts) {
 	return 0, 0
 }
 
