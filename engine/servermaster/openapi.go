@@ -49,12 +49,19 @@ type APIQueryJobResponse struct {
 	Status    int32  `json:"status"`
 }
 
+// APIServerStatus defines the json fields of server status
+type APIServerStatus struct {
+	IsLeader bool `json:"is_leader"`
+}
+
 // ServerInfoProvider provides server info.
 type ServerInfoProvider interface {
 	// IsLeader returns whether the server is leader.
 	IsLeader() bool
 	// LeaderAddr returns the address of leader.
 	LeaderAddr() (string, bool)
+	// ResignLeader resigns the leader.
+	ResignLeader()
 	// JobManager returns the job manager instance.
 	// It returns nil if the server is not leader.
 	JobManager() (JobManager, bool)
@@ -76,10 +83,15 @@ func NewOpenAPI(infoProvider ServerInfoProvider) *OpenAPI {
 // RegisterOpenAPIRoutes registers routes for OpenAPI.
 func RegisterOpenAPIRoutes(router *gin.Engine, openapi *OpenAPI) {
 	v1 := router.Group("/api/v1")
-	v1.Use(openapi.ForwardToLeader)
 	v1.Use(openapi.httpErrorHandler)
 
+	v1.GET("/status", openapi.ServerStatus)
+
+	leaderGroup := v1.Group("/leader")
+	leaderGroup.POST("/resign", openapi.ResignLeader)
+
 	jobGroup := v1.Group("/jobs")
+	jobGroup.Use(openapi.ForwardToLeader)
 	jobGroup.GET("", openapi.ListJobs)
 	jobGroup.POST("", openapi.SubmitJob)
 	jobGroup.GET("/:job_id", openapi.QueryJob)
@@ -105,6 +117,31 @@ func RegisterOpenAPIRoutes(router *gin.Engine, openapi *OpenAPI) {
 			openapi.ForwardToJobMaster(c)
 		}
 	})
+}
+
+// ServerStatus gets the status of servermaster.
+// @Summary Get the status of servermaster.
+// @Description gets the status of servermaster.
+// @Produce json
+// @Success 200
+// @Failure 400,500
+// @Router	/api/v1/status [get]
+func (o *OpenAPI) ServerStatus(c *gin.Context) {
+	status := APIServerStatus{
+		IsLeader: o.infoProvider.IsLeader(),
+	}
+	c.IndentedJSON(http.StatusOK, status)
+}
+
+// ResignLeader resigns the leader.
+// @Summary Resign the leader
+// @Description resigns the leader
+// @Tags leader
+// @Success 202
+// @Failure 400,500
+// @Router	/api/v1/leader/resign [post]
+func (o *OpenAPI) ResignLeader(_ *gin.Context) {
+	o.infoProvider.ResignLeader()
 }
 
 // ListJobs lists all jobs in servermaster.

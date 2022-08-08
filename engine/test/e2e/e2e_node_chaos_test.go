@@ -67,6 +67,7 @@ func updateKeyAndCheckOnce(
 func TestNodeFailure(t *testing.T) {
 	// TODO: make the following variables configurable, these variables keep the
 	// same in sample/3m3e.yaml
+	const nodeCount = 3
 	var (
 		masterAddrs          = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
 		businessMetaAddrs    = []string{"127.0.0.1:3336"}
@@ -131,13 +132,40 @@ func TestNodeFailure(t *testing.T) {
 	updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, "random-value-1", mvccCount)
 
 	log.Info("restart all server masters and check fake job is running normally")
-	nodeCount := 3
 	for i := 0; i < nodeCount; i++ {
 		cli.ContainerRestart(masterContainerName(i))
 		mvccCount++
 		value := fmt.Sprintf("restart-server-master-value-%d", i)
 		updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, value, mvccCount)
 	}
+
+	log.Info("resign the leader and check if the leader is changed")
+	var leaderAddr string
+	for i := 0; i < nodeCount; i++ {
+		isLeader, err := cli.IsLeader(ctx, masterAddrs[i])
+		require.NoError(t, err)
+		if isLeader {
+			leaderAddr = masterAddrs[i]
+		}
+	}
+	require.NotEmpty(t, leaderAddr, "leader not found")
+	err = cli.ResignLeader(ctx, leaderAddr)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		var newLeaderAddr string
+		for i := 0; i < nodeCount; i++ {
+			isLeader, err := cli.IsLeader(ctx, masterAddrs[i])
+			require.NoError(t, err)
+			if isLeader {
+				newLeaderAddr = masterAddrs[i]
+			}
+		}
+		if newLeaderAddr == "" {
+			return false
+		}
+		require.NotEqual(t, leaderAddr, newLeaderAddr, "leader is not changed")
+		return true
+	}, time.Second*10, time.Second)
 
 	log.Info("restart all executors and check fake job is running normally")
 	for i := 0; i < nodeCount; i++ {

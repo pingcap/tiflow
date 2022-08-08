@@ -301,6 +301,46 @@ func (cli *ChaosCli) InitializeMetaClient(jobID string) error {
 	return nil
 }
 
+// IsLeader checks if the server at the given addr is a leader.
+func (cli *ChaosCli) IsLeader(ctx context.Context, addr string) (bool, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/api/v1/status", addr), nil)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return false, errors.Errorf("status code %d", resp.StatusCode)
+	}
+	var status struct {
+		IsLeader bool `json:"is_leader"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+		return false, errors.Trace(err)
+	}
+	return status.IsLeader, nil
+}
+
+// ResignLeader resigns the leader at the given addr.
+func (cli *ChaosCli) ResignLeader(ctx context.Context, addr string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("http://%s/api/v1/leader/resign", addr), nil)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return errors.Errorf("status code %d", resp.StatusCode)
+	}
+	return nil
+}
+
 // CreateJobViaOpenAPI wraps OpenAPI to create a job
 func CreateJobViaOpenAPI(
 	ctx context.Context, apiEndpoint string, tenantID string, projectID string,

@@ -1286,11 +1286,6 @@ error = '''
 etcd api returns error
 '''
 
-["DFLOW:ErrEtcdLeaderChanged"]
-error = '''
-etcd leader has changed
-'''
-
 ["DFLOW:ErrExecutorConfigInvalidFlag"]
 error = '''
 '%s' is an invalid flag
@@ -1404,6 +1399,11 @@ invalid worker type: %s
 ["DFLOW:ErrLeaderCtxCanceled"]
 error = '''
 leader context is canceled
+'''
+
+["DFLOW:ErrLeaderResigned"]
+error = '''
+leader has resigned
 '''
 
 ["DFLOW:ErrLocalFileDirNotWritable"]

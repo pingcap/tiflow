@@ -83,6 +83,8 @@ type Server struct {
 	cfg     *Config
 	info    *model.NodeInfo
 	metrics *serverMasterMetric
+	// Notify the server to resign leadership.
+	resignCh chan struct{}
 
 	etcdClient *clientv3.Client
 
@@ -190,6 +192,7 @@ func NewServer(cfg *Config, ctx *test.Context) (_ *Server, finalErr error) {
 		id:                id,
 		cfg:               cfg,
 		info:              info,
+		resignCh:          make(chan struct{}),
 		executorManager:   executorManager,
 		leaderInitialized: *atomic.NewBool(false),
 		testCtx:           ctx,
@@ -852,6 +855,14 @@ func (s *Server) LeaderAddr() (string, bool) {
 		return "", false
 	}
 	return leader.AdvertiseAddr, true
+}
+
+// ResignLeader implements ServerInfoProvider.ResignLeader.
+func (s *Server) ResignLeader() {
+	select {
+	case s.resignCh <- struct{}{}:
+	default:
+	}
 }
 
 // JobManager implements ServerInfoProvider.JobManager.

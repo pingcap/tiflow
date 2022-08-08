@@ -15,6 +15,7 @@ package servermaster
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -71,6 +72,9 @@ func (m *mockServerInfoProvider) IsLeader() bool {
 
 func (m *mockServerInfoProvider) LeaderAddr() (string, bool) {
 	return m.leaderAddr, true
+}
+
+func (m *mockServerInfoProvider) ResignLeader() {
 }
 
 func (m *mockServerInfoProvider) JobManager() (JobManager, bool) {
@@ -207,4 +211,31 @@ func TestForwardToLeader(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	forwardReq := <-reqs
 	require.Equal(t, "/api/v1/jobs", forwardReq.URL.Path)
+}
+
+func TestServerStatus(t *testing.T) {
+	infoProvider := &mockServerInfoProvider{
+		mockMgr:    &mockManager{},
+		serverAddr: "servermaster0",
+		leaderAddr: "servermaster0",
+	}
+	openapi := NewOpenAPI(infoProvider)
+	router := gin.New()
+	RegisterOpenAPIRoutes(router, openapi)
+
+	var status APIServerStatus
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/status", nil)
+
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	require.Equal(t, http.StatusOK, resp.Code)
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &status))
+	require.True(t, status.IsLeader)
+
+	infoProvider.leaderAddr = ""
+	resp = httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	require.Equal(t, http.StatusOK, resp.Code)
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &status))
+	require.False(t, status.IsLeader)
 }
