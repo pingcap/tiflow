@@ -59,7 +59,7 @@ func MustRegisterClientBuilder(builder clientBuilder) {
 	defer r.mu.Unlock()
 
 	if _, exists := r.reg[builder.ClientType()]; exists {
-		log.Panic("client type is already existed", zap.Int("client-type", builder.ClientType()))
+		log.Panic("client type is already existed", zap.Any("client-type", builder.ClientType()))
 	}
 
 	r.reg[builder.ClientType()] = builder

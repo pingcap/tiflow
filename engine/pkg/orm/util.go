@@ -20,14 +20,15 @@ import (
 	"time"
 
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/logutil"
 	"gorm.io/driver/mysql"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
 	"github.com/pingcap/tiflow/engine/pkg/meta/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
 )
 
 var defaultSlowLogThreshold = 200 * time.Millisecond
@@ -86,33 +87,36 @@ func genGormDBFromClientConn(cc model.ClientConn) (*gorm.DB, error) {
 		return nil, err
 	}
 
-	var gormDB *gorm.DB
 	// check if a sql.DB
 	db, ok := conn.(*sql.DB)
-	if ok {
-		gormDB, err = NewGormDB(db)
-		if err != nil {
-			return nil, err
-		}
+	if !ok {
+		return nil, errors.ErrMetaParamsInvalid.GenWithStackByArgs("client conn is not sql DB")
 	}
-
-	// check if a gorm.DB
-	if gormDB == nil {
-		gormDB, ok = conn.(*gorm.DB)
-		if !ok {
-			return nil, errors.ErrMetaParamsInvalid.GenWithStackByArgs("client conn is not sql DB")
-		}
+	gormDB, err := NewGormDB(db, cc.StoreType())
+	if err != nil {
+		return nil, err
 	}
 
 	return gormDB, nil
 }
 
 // NewGormDB news a gorm.DB
-func NewGormDB(sqlDB *sql.DB) (*gorm.DB, error) {
-	db, err := gorm.Open(mysql.New(mysql.Config{
-		Conn:                      sqlDB,
-		SkipInitializeWithVersion: false,
-	}), &gorm.Config{
+func NewGormDB(sqlDB *sql.DB, storeType metaModel.StoreType) (*gorm.DB, error) {
+	var dialector gorm.Dialector
+	if storeType == metaModel.StoreTypeMySQL {
+		dialector = mysql.New(mysql.Config{
+			Conn:                      sqlDB,
+			SkipInitializeWithVersion: false,
+		})
+	} else if storeType == metaModel.StoreTypeSQLite {
+		dialector = sqlite.Dialector{
+			Conn: sqlDB,
+		}
+	} else {
+		return nil, errors.ErrMetaParamsInvalid.GenWithStack("SQL subtype is not supported yet:%s", storeType)
+	}
+
+	db, err := gorm.Open(dialector, &gorm.Config{
 		SkipDefaultTransaction: true,
 		Logger: NewOrmLogger(logutil.WithComponent("gorm"),
 			WithSlowThreshold(defaultSlowLogThreshold),

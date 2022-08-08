@@ -38,6 +38,10 @@ import (
 	derror "github.com/pingcap/tiflow/pkg/errors"
 )
 
+const (
+	defaultTestStoreType = metaModel.StoreTypeMySQL
+)
+
 type tCase struct {
 	fn     string        // function name
 	inputs []interface{} // function args
@@ -76,7 +80,7 @@ func TestNewMetaOpsClient(t *testing.T) {
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
 	require.Nil(t, err)
-	_, err = newClient(sqlDB)
+	_, err = newClient(sqlDB, defaultTestStoreType)
 	require.Nil(t, err)
 }
 
@@ -87,7 +91,7 @@ func TestProject(t *testing.T) {
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
 	require.Nil(t, err)
-	cli, err := newClient(sqlDB)
+	cli, err := newClient(sqlDB, defaultTestStoreType)
 	require.Nil(t, err)
 	require.NotNil(t, cli)
 
@@ -237,7 +241,7 @@ func TestProjectOperation(t *testing.T) {
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
 	require.Nil(t, err)
-	cli, err := newClient(sqlDB)
+	cli, err := newClient(sqlDB, defaultTestStoreType)
 	require.Nil(t, err)
 	require.NotNil(t, cli)
 
@@ -346,7 +350,7 @@ func TestJob(t *testing.T) {
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
 	require.Nil(t, err)
-	cli, err := newClient(sqlDB)
+	cli, err := newClient(sqlDB, defaultTestStoreType)
 	require.Nil(t, err)
 	require.NotNil(t, cli)
 
@@ -565,7 +569,7 @@ func TestWorker(t *testing.T) {
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
 	require.Nil(t, err)
-	cli, err := newClient(sqlDB)
+	cli, err := newClient(sqlDB, defaultTestStoreType)
 	require.Nil(t, err)
 	require.NotNil(t, cli)
 
@@ -811,7 +815,7 @@ func TestResource(t *testing.T) {
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
 	require.Nil(t, err)
-	cli, err := newClient(sqlDB)
+	cli, err := newClient(sqlDB, defaultTestStoreType)
 	require.Nil(t, err)
 	require.NotNil(t, cli)
 
@@ -1164,7 +1168,7 @@ func TestError(t *testing.T) {
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
 	require.Nil(t, err)
-	cli, err := newClient(sqlDB)
+	cli, err := newClient(sqlDB, defaultTestStoreType)
 	require.Nil(t, err)
 	require.NotNil(t, cli)
 
@@ -1199,10 +1203,8 @@ func TestContext(t *testing.T) {
 	require.Nil(t, err)
 	defer db.Close()
 	defer mock.ExpectClose()
-	gormDB, err := NewGormDB(db)
-	require.Nil(t, err)
 
-	conn := metaMock.NewGormClientConn(gormDB)
+	conn := metaMock.NewClientConnWithDB(db)
 	require.NotNil(t, conn)
 	defer conn.Close()
 

@@ -143,15 +143,15 @@ func NewClient(cc metaModel.ClientConn) (Client, error) {
 
 	sqlDB, ok := conn.(*sql.DB)
 	if !ok {
-		return nil, errors.ErrMetaParamsInvalid.GenWithStack("input client conn is not a sql type:%d",
-			cc.ClientType())
+		return nil, errors.ErrMetaParamsInvalid.GenWithStack("input client conn is not a sql type:%s",
+			cc.StoreType())
 	}
 
-	return newClient(sqlDB)
+	return newClient(sqlDB, cc.StoreType())
 }
 
-func newClient(db *sql.DB) (Client, error) {
-	ormDB, err := NewGormDB(db)
+func newClient(db *sql.DB, storeType metaModel.StoreType) (Client, error) {
+	ormDB, err := NewGormDB(db, storeType)
 	if err != nil {
 		return nil, err
 	}

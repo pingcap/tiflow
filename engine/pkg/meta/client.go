@@ -18,22 +18,11 @@ import (
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 )
 
-func storeType2ClientType(st metaModel.StoreType) metaModel.ClientType {
-	switch st {
-	case metaModel.StoreTypeEtcd:
-		return metaModel.EtcdKVClientType
-	case metaModel.StoreTypeSQL:
-		return metaModel.SQLKVClientType
-	}
-
-	return metaModel.UnknownKVClientType
-}
-
 // NewKVClientWithNamespace return a KVClient with namspace isolation
 func NewKVClientWithNamespace(cc metaModel.ClientConn, projectID metaModel.ProjectID,
 	jobID metaModel.JobID,
 ) (metaModel.KVClient, error) {
-	builder, err := internal.GetClientBuilder(storeType2ClientType(cc.StoreType()))
+	builder, err := internal.GetClientBuilder(metaModel.ToClientType(cc.StoreType()))
 	if err != nil {
 		return nil, err
 	}

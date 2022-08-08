@@ -15,86 +15,67 @@ package orm
 
 import (
 	"context"
-	"sync"
+	"fmt"
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
-	"github.com/pingcap/tiflow/engine/pkg/orm/model"
-	"github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/uuid"
 	"go.uber.org/zap"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
+
+	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
 func randomDBFile() string {
 	return uuid.NewGenerator().NewString() + ".db"
 }
 
-type sqliteClient struct {
-	Client
-	gormDB *gorm.DB
-}
-
-func (c *sqliteClient) Close() error {
-	if c.gormDB != nil {
-		db, err := c.gormDB.DB()
-		if err != nil {
-			return err
-		}
-
-		return db.Close()
-	}
-
-	return nil
-}
-
 // NewMockClient creates a mock orm client
 func NewMockClient() (Client, error) {
-
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
-		SkipDefaultTransaction: true,
-	})
+	// ref:https://www.sqlite.org/inmemorydb.html
+	// using dsn(file:%s?mode=memory&cache=shared) format here to
+	// 1. Create different DB for different TestXXX() to enable concurrent execution
+	// 2. Enable DB shared for different connection
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", randomDBFile())
+	cc, err := mock.NewClientConnForSQLite(dsn)
 	if err != nil {
-		log.Error("create gorm client fail", zap.Error(err))
-		return nil, errors.ErrMetaNewClientFail.Wrap(err)
+		return nil, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	if err := InitAllFrameworkModels(ctx, mock.NewGormClientConn(db)); err != nil {
+	if err := InitAllFrameworkModels(ctx, cc); err != nil {
+		log.Error("initialize all framework models fail", zap.Error(err))
+		cc.Close()
+		return nil, err
+	}
+
+	cli, err := NewClient(cc)
+	if err != nil {
+		log.Error("new mock client fail", zap.Error(err))
+		cc.Close()
 		return nil, err
 	}
 
 	return &sqliteClient{
-		Client: &metaOpsClient{
-			db:          db,
-			epochClient: NewMockEpochClient(),
-		},
-		gormDB: db,
+		Client: cli,
+		conn:   cc,
 	}, nil
 }
 
-// NewMockEpochClient is the mock for EpochClient
-func NewMockEpochClient() model.EpochClient {
-	return &mockEpochClient{
-		epoch: 1,
+type sqliteClient struct {
+	Client
+	conn metaModel.ClientConn
+}
+
+func (c *sqliteClient) Close() error {
+	if c.Client != nil {
+		c.Client.Close()
 	}
-}
 
-type mockEpochClient struct {
-	sync.Mutex
-	epoch int64
-}
+	if c.conn != nil {
+		c.conn.Close()
+	}
 
-func (m *mockEpochClient) Close() error {
 	return nil
-}
-
-func (m *mockEpochClient) GenEpoch(ctx context.Context) (int64, error) {
-	m.Lock()
-	defer m.Unlock()
-	m.epoch = m.epoch + 1
-	return m.epoch, nil
 }

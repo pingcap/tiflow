@@ -73,8 +73,8 @@ func (cc *clientConnImpl) Close() error {
 	return nil
 }
 
-// ConnType implements ConnType of ClientConn
-func (cc *clientConnImpl) ConnType() metaModel.StoreType {
+// StoreType implements StoreType of ClientConn
+func (cc *clientConnImpl) StoreType() metaModel.StoreType {
 	return metaModel.StoreTypeEtcd
 }
 

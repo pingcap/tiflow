@@ -25,17 +25,25 @@ const (
 	defaultReadTimeout  = "3s"
 	defaultWriteTimeout = "3s"
 	defaultDialTimeout  = "3s"
-
-	defaultStoreType = StoreTypeSQL
 )
 
+// StoreType is the type of metastore
 type StoreType = string
 
 const (
+	defaultStoreType = StoreTypeMySQL
 	// StoreTypeEtcd is the store type string for etcd
 	StoreTypeEtcd = "etcd"
-	// StoreTypeSQL is the store type string for SQL
-	StoreTypeSQL = "sql"
+	// StoreTypeMySQL is the store type string for MySQL
+	StoreTypeMySQL = "mysql"
+
+	// StoreTypeSQLite is the store type string for SQLite
+	// Only for test now
+	StoreTypeSQLite = "sqlite"
+	// StoreTypeMockKV is a specific store type which can generate
+	// a mock kvclient (using map as backend)
+	// Only for test now
+	StoreTypeMockKV = "mock-kv"
 )
 
 // AuthConfParams is basic authentication configurations
@@ -48,7 +56,7 @@ type AuthConfParams struct {
 type StoreConfig struct {
 	// StoreID is the unique readable identifier for a store
 	StoreID string `toml:"store-id" json:"store-id"`
-	// StoreType supports 'etcd' or 'sql', default is 'sql'
+	// StoreType supports 'etcd' or 'mysql', default is 'mysql'
 	StoreType StoreType       `toml:"store-type" json:"store-type"`
 	Endpoints []string        `toml:"endpoints" json:"endpoints"`
 	Auth      *AuthConfParams `toml:"auth" json:"auth"`
@@ -74,8 +82,8 @@ func (s *StoreConfig) SetEndpoints(endpoints string) {
 // Validate implements the validation.Validatable interface
 func (s StoreConfig) Validate() error {
 	return validation.ValidateStruct(&s,
-		validation.Field(&s.StoreType, validation.In(StoreTypeEtcd, StoreTypeSQL)),
-		validation.Field(&s.Schema, validation.When(s.StoreType == StoreTypeSQL, validation.Required, validation.Length(1, 128))),
+		validation.Field(&s.StoreType, validation.In(StoreTypeEtcd, StoreTypeMySQL)),
+		validation.Field(&s.Schema, validation.When(s.StoreType == StoreTypeMySQL, validation.Required, validation.Length(1, 128))),
 	)
 }
 
@@ -126,12 +134,14 @@ func GenerateDSNByParams(storeConf *StoreConfig, pairs map[string]string) string
 }
 
 // ToClientType translates store type to client type
-func ToClientType(storeType string) ClientType {
+func ToClientType(storeType StoreType) ClientType {
 	switch storeType {
 	case StoreTypeEtcd:
 		return EtcdKVClientType
-	case StoreTypeSQL:
+	case StoreTypeMySQL:
 		return SQLKVClientType
+	case StoreTypeMockKV:
+		return MockKVClientType
 	}
 
 	return UnknownKVClientType

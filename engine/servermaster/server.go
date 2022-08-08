@@ -505,7 +505,7 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 	if err := s.metaStoreManager.Register(cfg.FrameMetaConf.StoreID, cfg.FrameMetaConf); err != nil {
 		return err
 	}
-	if cfg.FrameMetaConf.StoreType == metaModel.StoreTypeSQL {
+	if cfg.FrameMetaConf.StoreType == metaModel.StoreTypeMySQL {
 		// Normally, a schema will be created in advance and we may have no privilege
 		// to create schema for framework meta. Just for easy test here. Ignore any error.
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
@@ -535,7 +535,7 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if cfg.BusinessMetaConf.StoreType == metaModel.StoreTypeSQL {
+	if cfg.BusinessMetaConf.StoreType == metaModel.StoreTypeMySQL {
 		// Normally, a schema will be created in advance and we may have no privilege
 		// to create schema for business meta. Just for easy test here. Ignore any error.
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
@@ -642,7 +642,7 @@ func (s *Server) initializedBackendMeta(ctx context.Context) error {
 
 	// Since we have the sql-type business metastore,
 	// we need to initialize the logic_epoches table for all jobs
-	if s.cfg.BusinessMetaConf.StoreType == metaModel.StoreTypeSQL {
+	if s.cfg.BusinessMetaConf.StoreType == metaModel.StoreTypeMySQL {
 		if err := pkgOrm.InitEpochModel(ctx, s.businessClientConn); err != nil {
 			log.Error("business metastore initializes the logic epoch table fail", zap.Error(err))
 			return err

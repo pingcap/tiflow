@@ -99,9 +99,7 @@ func testInitialize(t *testing.T) {
 		"`updated_at` datetime(3) NULL,`job_id` varchar(128) not null,`epoch` bigint not null default 1,PRIMARY KEY (`seq_id`),UNIQUE INDEX uidx_jk (`job_id`))")).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
-	gormDB, err := NewGormDB(db)
-	require.Nil(t, err)
-	conn := metaMock.NewGormClientConn(gormDB)
+	conn := metaMock.NewClientConnWithDB(db)
 	require.NotNil(t, conn)
 	defer conn.Close()
 
@@ -133,9 +131,7 @@ func TestInitEpochModel(t *testing.T) {
 		"PRIMARY KEY (`seq_id`),UNIQUE INDEX uidx_jk (`job_id`))")).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
-	gormDB, err := NewGormDB(db)
-	require.Nil(t, err)
-	conn := metaMock.NewGormClientConn(gormDB)
+	conn := metaMock.NewClientConnWithDB(db)
 	require.NotNil(t, conn)
 	defer conn.Close()
 

@@ -27,7 +27,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/VividCortex/mysqlerr"
 	"github.com/go-sql-driver/mysql"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	sqlkvModel "github.com/pingcap/tiflow/engine/pkg/meta/internal/sqlkv/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/stretchr/testify/require"
@@ -35,8 +35,9 @@ import (
 )
 
 const (
-	fakeJob   = "fakeJob"
-	fakeTable = "fakeTable"
+	fakeJob              = "fakeJob"
+	fakeTable            = "fakeTable"
+	defaultTestStoreType = metaModel.StoreTypeMySQL
 )
 
 type tCase struct {
@@ -81,7 +82,7 @@ func TestNewSQLImpl(t *testing.T) {
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
 	require.Nil(t, err)
-	cli, err := NewSQLKVClientImpl(sqlDB, fakeTable, fakeJob)
+	cli, err := NewSQLKVClientImpl(sqlDB, defaultTestStoreType, fakeTable, fakeJob)
 	defer cli.Close()
 	require.Nil(t, err)
 	require.NotNil(t, cli)
@@ -94,7 +95,7 @@ func TestPut(t *testing.T) {
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
 	require.Nil(t, err)
-	cli, err := NewSQLKVClientImpl(sqlDB, fakeTable, fakeJob)
+	cli, err := NewSQLKVClientImpl(sqlDB, defaultTestStoreType, fakeTable, fakeJob)
 	defer cli.Close()
 	require.Nil(t, err)
 	require.NotNil(t, cli)
@@ -132,7 +133,7 @@ func TestGet(t *testing.T) {
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
 	require.Nil(t, err)
-	cli, err := NewSQLKVClientImpl(sqlDB, fakeTable, fakeJob)
+	cli, err := NewSQLKVClientImpl(sqlDB, defaultTestStoreType, fakeTable, fakeJob)
 	require.Nil(t, err)
 	require.NotNil(t, cli)
 
@@ -243,7 +244,7 @@ func TestDelete(t *testing.T) {
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
 	require.Nil(t, err)
-	cli, err := NewSQLKVClientImpl(sqlDB, fakeTable, fakeJob)
+	cli, err := NewSQLKVClientImpl(sqlDB, defaultTestStoreType, fakeTable, fakeJob)
 	require.Nil(t, err)
 	require.NotNil(t, cli)
 
@@ -322,7 +323,7 @@ func TestTxn(t *testing.T) {
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
 	require.Nil(t, err)
-	cli, err := NewSQLKVClientImpl(sqlDB, fakeTable, fakeJob)
+	cli, err := NewSQLKVClientImpl(sqlDB, defaultTestStoreType, fakeTable, fakeJob)
 	require.Nil(t, err)
 	require.NotNil(t, cli)
 	var anyT anyTime
@@ -401,7 +402,7 @@ func TestSQLImplWithoutNamespace(t *testing.T) {
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
 	require.Nil(t, err)
-	cli, err := NewSQLKVClientImpl(sqlDB, sqlkvModel.MetaKVTableName, "")
+	cli, err := NewSQLKVClientImpl(sqlDB, defaultTestStoreType, sqlkvModel.MetaKVTableName, "")
 	require.Nil(t, err)
 	require.NotNil(t, cli)
 	var anyT anyTime
@@ -463,8 +464,7 @@ func TestInitializeError(t *testing.T) {
 	mock.ExpectQuery(".*").WillReturnRows(sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf("CREATE TABLE `%s`", "test"))).
 		WillReturnError(&mysql.MySQLError{Number: mysqlerr.ER_TABLE_EXISTS_ERROR, Message: "table already exists"})
-	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
-	cli, err := NewSQLKVClientImpl(db, "test", "")
+	cli, err := NewSQLKVClientImpl(db, defaultTestStoreType, "test", "")
 	require.Nil(t, err)
 	require.NotNil(t, cli)
 	defer cli.Close()
@@ -476,9 +476,8 @@ func TestInitializeError(t *testing.T) {
 	mock.ExpectQuery(".*").WillReturnRows(sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf("CREATE TABLE `%s`", "test"))).
 		WillReturnError(&mysql.MySQLError{Number: mysqlerr.ER_WRONG_OUTER_JOIN, Message: "other mysql error"})
-	_, err = NewSQLKVClientImpl(db, "test", "")
+	_, err = NewSQLKVClientImpl(db, defaultTestStoreType, "test", "")
 	require.Regexp(t, "other mysql error", err.Error())
-
 	// other error
 	mock.ExpectQuery("SELECT VERSION()").
 		WillReturnRows(sqlmock.NewRows([]string{"VERSION()"}).
@@ -486,6 +485,6 @@ func TestInitializeError(t *testing.T) {
 	mock.ExpectQuery(".*").WillReturnRows(sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf("CREATE TABLE `%s`", "test"))).
 		WillReturnError(errors.New("other error"))
-	_, err = NewSQLKVClientImpl(db, "test", "")
+	_, err = NewSQLKVClientImpl(db, defaultTestStoreType, "test", "")
 	require.Regexp(t, "other error", err.Error())
 }
