@@ -42,12 +42,16 @@ func TestGlobalRegistry(t *testing.T) {
 	)
 	require.NoError(t, err)
 	defer metaCli.(pkgOrm.Client).Close()
+	epoch, err := metaCli.(pkgOrm.Client).GenEpoch(ctx)
+	require.NoError(t, err)
 	worker, err := GlobalWorkerRegistry().CreateWorker(
 		ctx,
 		fakeWorkerType,
 		"worker-1",
 		"master-1",
-		[]byte(`{"target-tick":10}`))
+		[]byte(`{"target-tick":10}`),
+		epoch,
+	)
 	require.NoError(t, err)
 	require.IsType(t, &framework.DefaultBaseWorker{}, worker)
 	impl := worker.(*framework.DefaultBaseWorker).Impl
@@ -72,7 +76,8 @@ func TestRegistryDuplicateType(t *testing.T) {
 func TestRegistryWorkerTypeNotFound(t *testing.T) {
 	registry := NewRegistry()
 	ctx := dcontext.Background()
-	_, err := registry.CreateWorker(ctx, fakeWorkerType, "worker-1", "master-1", []byte(`{"Val"":0}`))
+	_, err := registry.CreateWorker(ctx, fakeWorkerType, "worker-1", "master-1",
+		[]byte(`{"Val"":0}`), int64(2))
 	require.Error(t, err)
 }
 
