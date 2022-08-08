@@ -543,17 +543,21 @@ engine_image:
 
 engine_image_amd64: 
 	@which docker || (echo "docker not found in ${PATH}"; exit 1)
-	test -f ./bin/tiflow || (echo "./bin/tiflow not found, please run 'make tiflow' first"; exit 1)
-	test -f ./bin/tiflow-demoserver || (echo "./bin/tiflow-demoserver not found, please run 'make tiflow-demo' first"; exit 1)
-	test -f ./bin/tiflow-chaos-case || (echo "./bin/tiflow-chaos-case not found, please run 'make tiflow-chaos-case' first"; exit 1)
+	GOOS=linux GOARCH=amd64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
+	GOOS=linux GOARCH=amd64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./cmd/tiflow-demoserver
+	GOOS=linux GOARCH=amd64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-chaos-case ./engine/chaos/cases
 	docker build --platform linux/amd64 -f ./engine/deployments/docker/dev.Dockerfile -t dataflow:test ./ 
 
 engine_image_arm64: 
 	@which docker || (echo "docker not found in ${PATH}"; exit 1)
-	test -f ./bin/tiflow || (echo "./bin/tiflow not found, please run 'make tiflow' first"; exit 1)
-	test -f ./bin/tiflow-demoserver || (echo "./bin/tiflow-demoserver not found, please run 'make tiflow-demo' first"; exit 1)
-	test -f ./bin/tiflow-chaos-case || (echo "./bin/tiflow-chaos-case not found, please run 'make tiflow-chaos-case' first"; exit 1)
-	docker build --platform linux/arm64 -f ./engine/deployments/docker/dev.Dockerfile -t dataflow:test ./
+	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
+	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./cmd/tiflow-demoserver
+	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-chaos-case ./engine/chaos/cases
+	docker build --platform linux/amd64 -f ./engine/deployments/docker/dev.Dockerfile -t dataflow:test ./
+
+engine_image_from_local:
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	./engine/test/utils/run_engine.sh build-local
 
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))
