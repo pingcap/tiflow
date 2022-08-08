@@ -48,6 +48,7 @@ require (
 	github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d
 	github.com/linkedin/goavro/v2 v2.11.1
 	github.com/mattn/go-shellwords v1.0.12
+	github.com/mattn/go-sqlite3 v2.0.2+incompatible
 	github.com/modern-go/reflect2 v1.0.2
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
@@ -106,8 +107,6 @@ require (
 	gorm.io/gorm v1.23.4
 	upper.io/db.v3 v3.7.1+incompatible
 )
-
-require github.com/mattn/go-sqlite3 v2.0.2+incompatible
 
 require (
 	cloud.google.com/go v0.100.2 // indirect

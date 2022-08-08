@@ -4,12 +4,12 @@ etcd-endpoints = ["etcd-standalone:2379"]
 
 [framework-metastore-conf]
 endpoints = ["mysql-standalone:3306"]
-schema = "test-framework"
+schema = "test_framework"
 auth.user = "root"
 auth.passwd = ""
 
 [business-metastore-conf]
 endpoints = ["mysql-standalone:3306"]
-schema = "test-business"
+schema = "test_business"
 auth.user = "root"
 auth.passwd = ""
