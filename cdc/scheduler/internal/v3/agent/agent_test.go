@@ -69,13 +69,15 @@ func newAgent4Test() *agent {
 	a.Version = "agent-version-1"
 	a.Epoch = schedulepb.ProcessorEpoch{Epoch: "agent-epoch-1"}
 	a.CaptureID = "agent-1"
-
+	liveness := model.LivenessCaptureAlive
+	a.liveness = &liveness
 	return a
 }
 
 func TestNewAgent(t *testing.T) {
 	t.Parallel()
 
+	liveness := model.LivenessCaptureAlive
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
 	me := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
 
@@ -84,20 +86,23 @@ func TestNewAgent(t *testing.T) {
 	// owner and revision found successfully
 	me.EXPECT().GetOwnerID(gomock.Any()).Return("owneID", nil).Times(1)
 	me.EXPECT().GetOwnerRevision(gomock.Any(), gomock.Any()).Return(int64(2333), nil).Times(1)
-	a, err := newAgent(context.Background(), "capture-test", changefeed, me, tableExector)
+	a, err := newAgent(
+		context.Background(), "capture-test", &liveness, changefeed, me, tableExector)
 	require.NoError(t, err)
 	require.NotNil(t, a)
 
 	// owner not found temporarily, it's ok.
 	me.EXPECT().GetOwnerID(gomock.Any()).
 		Return("", concurrency.ErrElectionNoLeader).Times(1)
-	a, err = newAgent(context.Background(), "capture-test", changefeed, me, tableExector)
+	a, err = newAgent(
+		context.Background(), "capture-test", &liveness, changefeed, me, tableExector)
 	require.NoError(t, err)
 	require.NotNil(t, a)
 
 	// owner not found since pd is unstable
 	me.EXPECT().GetOwnerID(gomock.Any()).Return("", cerror.ErrPDEtcdAPIError).Times(1)
-	a, err = newAgent(context.Background(), "capture-test", changefeed, me, tableExector)
+	a, err = newAgent(
+		context.Background(), "capture-test", &liveness, changefeed, me, tableExector)
 	require.Error(t, err)
 	require.Nil(t, a)
 
@@ -105,14 +110,16 @@ func TestNewAgent(t *testing.T) {
 	me.EXPECT().GetOwnerID(gomock.Any()).Return("ownerID", nil).Times(1)
 	me.EXPECT().GetOwnerRevision(gomock.Any(), gomock.Any()).
 		Return(int64(0), cerror.ErrPDEtcdAPIError).Times(1)
-	a, err = newAgent(context.Background(), "capture-test", changefeed, me, tableExector)
+	a, err = newAgent(
+		context.Background(), "capture-test", &liveness, changefeed, me, tableExector)
 	require.Error(t, err)
 	require.Nil(t, a)
 
 	me.EXPECT().GetOwnerID(gomock.Any()).Return("ownerID", nil).Times(1)
 	me.EXPECT().GetOwnerRevision(gomock.Any(), gomock.Any()).
 		Return(int64(0), cerror.ErrOwnerNotFound).Times(1)
-	a, err = newAgent(context.Background(), "capture-test", changefeed, me, tableExector)
+	a, err = newAgent(
+		context.Background(), "capture-test", &liveness, changefeed, me, tableExector)
 	require.NoError(t, err)
 	require.NotNil(t, a)
 }
@@ -150,7 +157,8 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	}
 
 	// addTableRequest should be not ignored even if it's stopping.
-	a.handleLivenessUpdate(model.LivenessCaptureStopping, livenessSourceTick)
+	a.handleLivenessUpdate(model.LivenessCaptureStopping)
+	require.Equal(t, model.LivenessCaptureStopping, a.liveness.Load())
 	mockTableExecutor.On("AddTable", mock.Anything, mock.Anything,
 		mock.Anything, mock.Anything).Return(false, nil)
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
@@ -166,7 +174,8 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	require.NotContains(t, a.tableM.tables, model.TableID(1))
 
 	// Force set liveness to alive.
-	a.liveness = model.LivenessCaptureAlive
+	*a.liveness = model.LivenessCaptureAlive
+	require.Equal(t, model.LivenessCaptureAlive, a.liveness.Load())
 	mockTableExecutor.ExpectedCalls = nil
 	mockTableExecutor.On("AddTable", mock.Anything, mock.Anything,
 		mock.Anything, mock.Anything).Return(true, nil)
@@ -336,17 +345,16 @@ func TestAgentHandleMessageHeartbeat(t *testing.T) {
 	})
 	require.Equal(t, schedulepb.TableStateStopping, result[1].State)
 
-	a.handleLivenessUpdate(model.LivenessCaptureStopping, livenessSourceTick)
+	a.handleLivenessUpdate(model.LivenessCaptureStopping)
 	response = a.handleMessage([]*schedulepb.Message{heartbeat})
 	require.Len(t, response, 1)
 	require.Equal(t, model.LivenessCaptureStopping, response[0].GetHeartbeatResponse().Liveness)
 
-	a.handleLivenessUpdate(model.LivenessCaptureAlive, livenessSourceTick)
-
+	a.handleLivenessUpdate(model.LivenessCaptureAlive)
 	heartbeat.Heartbeat.IsStopping = true
 	response = a.handleMessage([]*schedulepb.Message{heartbeat})
 	require.Equal(t, model.LivenessCaptureStopping, response[0].GetHeartbeatResponse().Liveness)
-	require.Equal(t, model.LivenessCaptureStopping, a.liveness)
+	require.Equal(t, model.LivenessCaptureStopping, a.liveness.Load())
 }
 
 func TestAgentPermuteMessages(t *testing.T) {
@@ -444,7 +452,7 @@ func TestAgentPermuteMessages(t *testing.T) {
 				message := inboundMessages[idx]
 				if message.MsgType == schedulepb.MsgHeartbeat {
 					trans.RecvBuffer = append(trans.RecvBuffer, message)
-					err := a.Tick(ctx, model.LivenessCaptureAlive)
+					err := a.Tick(ctx)
 					require.NoError(t, err)
 					require.Len(t, trans.SendBuffer, 1)
 					heartbeatResponse := trans.SendBuffer[0].HeartbeatResponse
@@ -464,7 +472,7 @@ func TestAgentPermuteMessages(t *testing.T) {
 								mock.Anything, mock.Anything).Return(ok1, nil)
 
 							trans.RecvBuffer = append(trans.RecvBuffer, message)
-							err := a.Tick(ctx, model.LivenessCaptureAlive)
+							err := a.Tick(ctx)
 							require.NoError(t, err)
 							trans.SendBuffer = trans.SendBuffer[:0]
 
@@ -480,7 +488,7 @@ func TestAgentPermuteMessages(t *testing.T) {
 							trans.RecvBuffer = append(trans.RecvBuffer, message)
 							mockTableExecutor.On("IsRemoveTableFinished",
 								mock.Anything, mock.Anything).Return(0, ok1)
-							err := a.Tick(ctx, model.LivenessCaptureAlive)
+							err := a.Tick(ctx)
 							require.NoError(t, err)
 							if len(trans.SendBuffer) != 0 {
 								require.Len(t, trans.SendBuffer, 1)
@@ -623,7 +631,7 @@ func TestAgentTick(t *testing.T) {
 	trans.RecvBuffer = append(trans.RecvBuffer, heartbeat)
 
 	ctx := context.Background()
-	require.NoError(t, a.Tick(ctx, model.LivenessCaptureAlive))
+	require.NoError(t, a.Tick(ctx))
 	require.Len(t, trans.SendBuffer, 1)
 	heartbeatResponse := trans.SendBuffer[0]
 	trans.SendBuffer = trans.SendBuffer[:0]
@@ -676,7 +684,7 @@ func TestAgentTick(t *testing.T) {
 		mock.Anything, mock.Anything, mock.Anything).Return(true, nil)
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(false, nil)
-	require.NoError(t, a.Tick(ctx, model.LivenessCaptureAlive))
+	require.NoError(t, a.Tick(ctx))
 	trans.SendBuffer = trans.SendBuffer[:0]
 
 	trans.RecvBuffer = append(trans.RecvBuffer, addTableRequest)
@@ -684,7 +692,7 @@ func TestAgentTick(t *testing.T) {
 	mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
 	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(true, nil)
-	require.NoError(t, a.Tick(ctx, model.LivenessCaptureAlive))
+	require.NoError(t, a.Tick(ctx))
 	responses := trans.SendBuffer[:len(trans.SendBuffer)]
 	trans.SendBuffer = trans.SendBuffer[:0]
 	require.Len(t, responses, 1)
@@ -700,23 +708,12 @@ func TestAgentTick(t *testing.T) {
 func TestAgentHandleLivenessUpdate(t *testing.T) {
 	t.Parallel()
 
-	// Test liveness via tick.
-	a := newAgent4Test()
-	a.handleLivenessUpdate(model.LivenessCaptureAlive, livenessSourceTick)
-	require.Equal(t, model.LivenessCaptureAlive, a.liveness)
-
-	a.handleLivenessUpdate(model.LivenessCaptureStopping, livenessSourceTick)
-	require.Equal(t, model.LivenessCaptureStopping, a.liveness)
-
-	a.handleLivenessUpdate(model.LivenessCaptureAlive, livenessSourceTick)
-	require.Equal(t, model.LivenessCaptureStopping, a.liveness)
-
 	// Test liveness via heartbeat.
 	mockTableExecutor := newMockTableExecutor()
 	tableM := newTableManager(model.ChangeFeedID{}, mockTableExecutor)
-	a = newAgent4Test()
+	a := newAgent4Test()
 	a.tableM = tableM
-	require.Equal(t, model.LivenessCaptureAlive, a.liveness)
+	require.Equal(t, model.LivenessCaptureAlive, a.liveness.Load())
 	a.handleMessage([]*schedulepb.Message{{
 		Header: &schedulepb.Message_Header{
 			Version:        a.ownerInfo.Version,
@@ -729,10 +726,10 @@ func TestAgentHandleLivenessUpdate(t *testing.T) {
 			IsStopping: true,
 		},
 	}})
-	require.Equal(t, model.LivenessCaptureStopping, a.liveness)
+	require.Equal(t, model.LivenessCaptureStopping, a.liveness.Load())
 
-	a.handleLivenessUpdate(model.LivenessCaptureAlive, livenessSourceTick)
-	require.Equal(t, model.LivenessCaptureStopping, a.liveness)
+	a.handleLivenessUpdate(model.LivenessCaptureAlive)
+	require.Equal(t, model.LivenessCaptureStopping, a.liveness.Load())
 }
 
 func TestAgentCommitAddTableDuringStopping(t *testing.T) {
@@ -771,7 +768,7 @@ func TestAgentCommitAddTableDuringStopping(t *testing.T) {
 	mockTableExecutor.
 		On("IsAddTableFinished", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(false, nil).Once()
-	err := a.Tick(context.Background(), model.LivenessCaptureAlive)
+	err := a.Tick(context.Background())
 	require.Nil(t, err)
 	require.Len(t, trans.SendBuffer, 0)
 
@@ -781,7 +778,7 @@ func TestAgentCommitAddTableDuringStopping(t *testing.T) {
 	mockTableExecutor.
 		On("IsAddTableFinished", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(true, nil).Once()
-	err = a.Tick(context.Background(), model.LivenessCaptureAlive)
+	err = a.Tick(context.Background())
 	require.Nil(t, err)
 	require.Len(t, trans.SendBuffer, 1)
 	require.Equal(t, trans.SendBuffer[0].MsgType, schedulepb.MsgDispatchTableResponse)
@@ -813,7 +810,9 @@ func TestAgentCommitAddTableDuringStopping(t *testing.T) {
 	mockTableExecutor.
 		On("IsAddTableFinished", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(false, nil).Once()
-	err = a.Tick(context.Background(), model.LivenessCaptureStopping)
+	// Set liveness to stopping.
+	a.liveness.Store(model.LivenessCaptureStopping)
+	err = a.Tick(context.Background())
 	require.Nil(t, err)
 	require.Len(t, trans.SendBuffer, 1)
 
@@ -822,7 +821,7 @@ func TestAgentCommitAddTableDuringStopping(t *testing.T) {
 	mockTableExecutor.
 		On("IsAddTableFinished", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(true, nil).Once()
-	err = a.Tick(context.Background(), model.LivenessCaptureStopping)
+	err = a.Tick(context.Background())
 	require.Nil(t, err)
 	require.Len(t, trans.SendBuffer, 1)
 	require.Equal(t, schedulepb.MsgDispatchTableResponse, trans.SendBuffer[0].MsgType)

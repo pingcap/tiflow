@@ -63,10 +63,11 @@ const (
 
 // WorkerStatus manages worker state machine
 type WorkerStatus struct {
-	TaskID string
-	ID     frameModel.WorkerID
-	Unit   framework.WorkerType
-	Stage  WorkerStage
+	TaskID         string
+	ID             frameModel.WorkerID
+	Unit           framework.WorkerType
+	Stage          WorkerStage
+	CfgModRevision uint64
 	// only use when creating, change to updatedTime if needed.
 	createdTime time.Time
 }
@@ -74,6 +75,11 @@ type WorkerStatus struct {
 // IsOffline checks whether worker stage is offline
 func (w *WorkerStatus) IsOffline() bool {
 	return w.Stage == WorkerOffline
+}
+
+// IsTombStone returns whether the worker is tombstone, which means we don't need to stop it.
+func (w *WorkerStatus) IsTombStone() bool {
+	return w.Stage == WorkerOffline || w.Stage == WorkerFinished || w.CreateFailed()
 }
 
 // CreateFailed checks whether the worker creation is failed
@@ -89,17 +95,18 @@ func (w *WorkerStatus) RunAsExpected() bool {
 
 // InitWorkerStatus creates a new worker status and initializes it
 func InitWorkerStatus(taskID string, unit framework.WorkerType, id frameModel.WorkerID) WorkerStatus {
-	workerStatus := NewWorkerStatus(taskID, unit, id, WorkerCreating)
+	workerStatus := NewWorkerStatus(taskID, unit, id, WorkerCreating, 0)
 	workerStatus.createdTime = time.Now()
 	return workerStatus
 }
 
 // NewWorkerStatus creates a new WorkerStatus instance
-func NewWorkerStatus(taskID string, unit framework.WorkerType, id frameModel.WorkerID, stage WorkerStage) WorkerStatus {
+func NewWorkerStatus(taskID string, unit framework.WorkerType, id frameModel.WorkerID, stage WorkerStage, cfgModRevision uint64) WorkerStatus {
 	return WorkerStatus{
-		TaskID: taskID,
-		ID:     id,
-		Unit:   unit,
-		Stage:  stage,
+		TaskID:         taskID,
+		ID:             id,
+		Unit:           unit,
+		Stage:          stage,
+		CfgModRevision: cfgModRevision,
 	}
 }

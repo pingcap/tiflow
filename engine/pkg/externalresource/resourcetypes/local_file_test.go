@@ -17,21 +17,18 @@ import (
 	"context"
 	"testing"
 
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
-
-	"github.com/pingcap/tiflow/engine/client"
-	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/golang/mock/gomock"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRemoveFileOnExecutor(t *testing.T) {
-	clientManager := client.NewClientManager()
-	mockCli := &client.MockExecutorClient{}
-	err := clientManager.AddExecutorClient("executor-1", mockCli)
-	require.NoError(t, err)
+	clientGroup := client.NewMockExecutorGroup()
+	mockCli := client.NewMockExecutorClient(gomock.NewController(t))
+	clientGroup.AddClient("executor-1", mockCli)
 
-	resourceTp := NewLocalFileResourceType(clientManager)
+	resourceTp := NewLocalFileResourceType(clientGroup)
 	gcHandler := resourceTp.GCHandler()
 
 	resMeta := &resModel.ResourceMeta{
@@ -41,10 +38,10 @@ func TestRemoveFileOnExecutor(t *testing.T) {
 		Executor: "executor-1",
 	}
 
-	mockCli.On("RemoveLocalResource", mock.Anything, &pb.RemoveLocalResourceRequest{
-		ResourceId: "resource-1",
-		CreatorId:  "worker-1",
-	}).Return(nil)
-	err = gcHandler(context.Background(), resMeta)
+	mockCli.EXPECT().
+		RemoveResource(gomock.Any(), "worker-1", "resource-1").
+		Return(nil).Times(1)
+
+	err := gcHandler(context.Background(), resMeta)
 	require.NoError(t, err)
 }

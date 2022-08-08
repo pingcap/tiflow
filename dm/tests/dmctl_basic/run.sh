@@ -448,8 +448,9 @@ function run() {
 	run_sql_source1 "update dmctl.t_1 set d = '' where id = 13"
 	run_sql_source1 "update dmctl.t_2 set d = '' where id = 12"
 
-	# sleep to ensure syncer unit has resumed, read next binlog files and updated ActiveRelayLog
-	sleep 5
+	# ensure syncer unit has resumed, read latest binlog files and updated ActiveRelayLog
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+
 	server_uuid=$(tail -n 1 $WORK_DIR/worker1/relay_log/server-uuid.index)
 	run_sql_source1 "show binary logs\G"
 	max_binlog_name=$(grep Log_name "$SQL_RESULT_FILE" | tail -n 1 | awk -F":" '{print $NF}')
