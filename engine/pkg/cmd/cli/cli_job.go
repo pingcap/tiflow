@@ -27,8 +27,8 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
-// DefaultMasterAddr is the default master address.
-const DefaultMasterAddr = "127.0.0.1:10240"
+// defaultMasterAddr is the default master address.
+const defaultMasterAddr = "127.0.0.1:10240"
 
 // jobGeneralOptions defines some general options of job management
 type jobGeneralOptions struct {
@@ -64,8 +64,8 @@ func (o *jobGeneralOptions) addFlags(cmd *cobra.Command) {
 // validate checks that the provided job options are valid.
 func (o *jobGeneralOptions) validate(ctx context.Context, cmd *cobra.Command) error {
 	if len(o.masterAddrs) == 0 {
-		o.masterAddrs = []string{DefaultMasterAddr}
-		log.Warn("the master-addrs are not assigned, use default addr: " + DefaultMasterAddr)
+		o.masterAddrs = []string{defaultMasterAddr}
+		log.Warn("the master-addrs are not assigned, use default addr: " + defaultMasterAddr)
 	}
 
 	// TODO support https.
