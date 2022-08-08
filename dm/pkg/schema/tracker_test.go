@@ -775,7 +775,7 @@ func (s *trackerSuite) TestGetDownStreamIndexInfo(c *C) {
 
 	mock.ExpectQuery("SHOW CREATE TABLE " + tableID).WillReturnRows(
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow("test", "create table t(a int primary key, b int, c varchar(10))"))
+			AddRow("test", "create table t(a int primary key, b int, c varchar(10000), key(c))"))
 	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableID, oriTi)
 	c.Assert(err, IsNil)
 	c.Assert(dti, NotNil)
