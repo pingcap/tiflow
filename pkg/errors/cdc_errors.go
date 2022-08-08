@@ -1063,7 +1063,7 @@ var (
 	// cli error
 	ErrCliInvalidCheckpointTs = errors.Normalize(
 		"invalid overwrite-checkpoint-ts %s, "+
-			"overwrite-checkpoint-ts only accept 'now' or positive number",
+			"overwrite-checkpoint-ts only accept 'now' or a valid timestamp in integer",
 		errors.RFCCodeText("CDC:ErrCliInvalidCheckpointTs"),
 	)
 	ErrCliCheckpointTsIsInFuture = errors.Normalize(

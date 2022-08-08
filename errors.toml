@@ -193,7 +193,7 @@ the overwrite-checkpoint-ts %d must be smaller than current TSO
 
 ["CDC:ErrCliInvalidCheckpointTs"]
 error = '''
-invalid overwrite-checkpoint-ts %s, overwrite-checkpoint-ts only accept 'now' or positive number
+invalid overwrite-checkpoint-ts %s, overwrite-checkpoint-ts only accept 'now' or a valid timestamp in integer
 '''
 
 ["CDC:ErrClusterIDMismatch"]

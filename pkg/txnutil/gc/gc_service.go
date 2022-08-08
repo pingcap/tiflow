@@ -50,9 +50,9 @@ func EnsureChangefeedStartTsSafety(
 	if err != nil {
 		return errors.Trace(err)
 	}
-	// startTs should greater or equal than minServiceGCTs + 1, otherwise gcManager
-	// will return a ErrSnapshotLostByGC though the changefeed is successfully created/resumed.
-	// See issue #6350 for more detail.
+	// startTs should be greater than or equal to minServiceGCTs + 1, otherwise gcManager
+	// would return a ErrSnapshotLostByGC even though the changefeed would appear to be successfully
+	// created/resumed. See issue #6350 for more detail.
 	if startTs > 0 && startTs < minServiceGCTs+1 {
 		return cerrors.ErrStartTsBeforeGC.GenWithStackByArgs(startTs, minServiceGCTs)
 	}

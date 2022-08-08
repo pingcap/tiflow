@@ -511,7 +511,7 @@ LOOP:
 func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	if !c.initialized {
 		c.cleanupRedoManager(ctx)
-		c.cleanupServiceGCSafePoints(ctx)
+		c.cleanupChangefeedServiceGCSafePoints(ctx)
 		return
 	}
 	log.Info("close changefeed",
@@ -523,7 +523,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.ddlPuller.Close()
 	c.schema = nil
 	c.cleanupRedoManager(ctx)
-	c.cleanupServiceGCSafePoints(ctx)
+	c.cleanupChangefeedServiceGCSafePoints(ctx)
 	canceledCtx, cancel := context.WithCancel(context.Background())
 	cancel()
 	// We don't need to wait sink Close, pass a canceled context is ok
@@ -587,7 +587,7 @@ func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 	}
 }
 
-func (c *changefeed) cleanupServiceGCSafePoints(ctx cdcContext.Context) {
+func (c *changefeed) cleanupChangefeedServiceGCSafePoints(ctx cdcContext.Context) {
 	if !c.isRemoved {
 		return
 	}
