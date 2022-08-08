@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc"
 	"github.com/pingcap/tiflow/pkg/pdutil"
-	"github.com/prometheus/client_golang/prometheus"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -245,11 +244,6 @@ func (s *server) etcdHealthChecker(ctx context.Context) error {
 	}
 	defer pc.Close()
 
-	metrics := make(map[string]prometheus.Observer)
-	for _, pdEndpoint := range s.pdEndpoints {
-		metrics[pdEndpoint] = etcdHealthCheckDuration.WithLabelValues(pdEndpoint)
-	}
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -262,17 +256,13 @@ func (s *server) etcdHealthChecker(ctx context.Context) error {
 			}
 			for _, endpoint := range endpoints {
 				start := time.Now()
-				ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+				ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 				if err := pc.Healthy(ctx, endpoint); err != nil {
 					log.Warn("etcd health check error",
 						zap.String("endpoint", endpoint), zap.Error(err))
 				}
-				metric, ok := metrics[endpoint]
-				if !ok {
-					metric = etcdHealthCheckDuration.WithLabelValues(endpoint)
-					metrics[endpoint] = metric
-				}
-				metric.Observe(time.Since(start).Seconds())
+				etcdHealthCheckDuration.WithLabelValues(endpoint).
+					Observe(time.Since(start).Seconds())
 				cancel()
 			}
 		}

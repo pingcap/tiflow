@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"time"
 
@@ -109,6 +108,9 @@ func (pc *pdAPIClient) Close() {
 // UpdateMetaLabel is a reentrant function that updates the meta-region label of upstream cluster.
 func (pc *pdAPIClient) UpdateMetaLabel(ctx context.Context) error {
 	err := retry.Do(ctx, func() error {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
 		err := pc.patchMetaLabel(ctx)
 		if err != nil {
 			log.Error("Fail to add meta region label to PD", zap.Error(err))
@@ -149,6 +151,9 @@ func (pc *pdAPIClient) ListGcServiceSafePoint(
 		err  error
 	)
 	err = retry.Do(ctx, func() error {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
 		resp, err = pc.listGcServiceSafePoint(ctx)
 		if err != nil {
 			return err
@@ -169,8 +174,6 @@ func (pc *pdAPIClient) patchMetaLabel(ctx context.Context) error {
 	header := http.Header{"Content-Type": {"application/json"}}
 	content := []byte(addMetaJSON)
 
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
 	_, err := pc.httpClient.DoRequest(ctx, url, http.MethodPatch,
 		header, bytes.NewReader(content))
 	return errors.Trace(err)
@@ -181,8 +184,6 @@ func (pc *pdAPIClient) listGcServiceSafePoint(
 ) (*ListServiceGCSafepoint, error) {
 	url := pc.grpcClient.GetLeaderAddr() + gcServiceSafePointURL
 
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
 	respData, err := pc.httpClient.DoRequest(ctx, url, http.MethodGet,
 		nil, nil)
 	if err != nil {
@@ -212,16 +213,10 @@ func (pc *pdAPIClient) CollectMemberEndpoints(ctx context.Context) ([]string, er
 // Healthy return error if the member corresponding to the endpoint is unhealthy
 func (pc *pdAPIClient) Healthy(ctx context.Context, endpoint string) error {
 	url := endpoint + healthyAPI
-
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
 	resp, err := pc.httpClient.Get(ctx, fmt.Sprintf("%s/", url))
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	_, _ = io.Copy(io.Discard, resp.Body)
 	_ = resp.Body.Close()
 	return nil
 }
