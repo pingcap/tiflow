@@ -36,7 +36,7 @@ import (
 	"go.uber.org/zap"
 
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -525,7 +525,7 @@ func isRetryableDBError(err error) bool {
 		return true
 	}
 	switch err {
-	case driver.ErrBadConn, context.DeadlineExceeded, mysql.ErrInvalidConn:
+	case driver.ErrBadConn, mysql.ErrInvalidConn:
 		return true
 	}
 	return false

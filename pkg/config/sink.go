@@ -15,6 +15,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -22,8 +23,35 @@ import (
 	"go.uber.org/zap"
 )
 
-// DefaultMaxMessageBytes sets the default value for max-message-bytes
+// DefaultMaxMessageBytes sets the default value for max-message-bytes.
 const DefaultMaxMessageBytes = 10 * 1024 * 1024 // 10M
+
+// AtomicityLevel represents the atomicity level of a changefeed.
+type AtomicityLevel string
+
+const (
+	// unknowTxnAtomicity is the default atomicity level, which is invalid and will
+	// be set to a valid value when initializing sink in processor.
+	unknowTxnAtomicity AtomicityLevel = ""
+
+	// noneTxnAtomicity means atomicity of transactions is not guaranteed
+	noneTxnAtomicity AtomicityLevel = "none"
+
+	// tableTxnAtomicity means atomicity of single table transactions is guaranteed.
+	tableTxnAtomicity AtomicityLevel = "table"
+
+	// globalTxnAtomicity means atomicity of cross table transactions is guaranteed, which
+	// is currently not supported by TiCDC.
+	// globalTxnAtomicity AtomicityLevel = "global"
+
+	defaultMqTxnAtomicity    = noneTxnAtomicity
+	defaultMysqlTxnAtomicity = tableTxnAtomicity
+)
+
+// ShouldSplitTxn returns whether the sink should split txn.
+func (l AtomicityLevel) ShouldSplitTxn() bool {
+	return l == noneTxnAtomicity
+}
 
 // ForceEnableOldValueProtocols specifies which protocols need to be forced to enable old value.
 var ForceEnableOldValueProtocols = []string{
@@ -38,9 +66,10 @@ type SinkConfig struct {
 	Protocol        string            `toml:"protocol" json:"protocol"`
 	ColumnSelectors []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
 	SchemaRegistry  string            `toml:"schema-registry" json:"schema-registry"`
+	TxnAtomicity    AtomicityLevel    `toml:"transaction-atomicity" json:"transaction-atomicity"`
 }
 
-// DispatchRule represents partition rule for a table
+// DispatchRule represents partition rule for a table.
 type DispatchRule struct {
 	Matcher []string `toml:"matcher" json:"matcher"`
 	// Deprecated, please use PartitionRule.
@@ -57,7 +86,11 @@ type ColumnSelector struct {
 	Columns []string `toml:"columns" json:"columns"`
 }
 
-func (s *SinkConfig) validate(enableOldValue bool) error {
+func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) error {
+	if err := s.applyParameter(sinkURI); err != nil {
+		return err
+	}
+
 	if !enableOldValue {
 		for _, protocolStr := range ForceEnableOldValueProtocols {
 			if protocolStr == s.Protocol {
@@ -85,4 +118,80 @@ func (s *SinkConfig) validate(enableOldValue bool) error {
 	}
 
 	return nil
+}
+
+// applyParameter fill the `ReplicaConfig` and `TxnAtomicity` by sinkURI.
+func (s *SinkConfig) applyParameter(sinkURI *url.URL) error {
+	if sinkURI == nil {
+		return nil
+	}
+	params := sinkURI.Query()
+
+	txnAtomicity := params.Get("transaction-atomicity")
+	switch AtomicityLevel(txnAtomicity) {
+	case unknowTxnAtomicity:
+		// Set default value according to scheme.
+		if IsMQScheme(sinkURI.Scheme) {
+			s.TxnAtomicity = defaultMqTxnAtomicity
+		} else {
+			s.TxnAtomicity = defaultMysqlTxnAtomicity
+		}
+	case noneTxnAtomicity:
+		s.TxnAtomicity = noneTxnAtomicity
+	case tableTxnAtomicity:
+		// MqSink only support `noneTxnAtomicity`.
+		if IsMQScheme(sinkURI.Scheme) {
+			log.Warn("The configuration of transaction-atomicity is incompatible with scheme",
+				zap.Any("txnAtomicity", s.TxnAtomicity),
+				zap.String("scheme", sinkURI.Scheme),
+				zap.String("protocol", s.Protocol))
+			s.TxnAtomicity = defaultMqTxnAtomicity
+		} else {
+			s.TxnAtomicity = tableTxnAtomicity
+		}
+	default:
+		errMsg := fmt.Sprintf("%s level atomicity is not supported by %s scheme",
+			txnAtomicity, sinkURI.Scheme)
+		return cerror.ErrSinkURIInvalid.GenWithStackByArgs(errMsg)
+	}
+
+	protocolFromURI := params.Get(ProtocolKey)
+	if protocolFromURI != "" {
+		if s.Protocol != "" {
+			log.Warn(
+				fmt.Sprintf("protocol is specified in both sink URI and config file"+
+					"the value in sink URI will be used"+
+					"protocol in sink URI:%s, protocol in config file:%s",
+					protocolFromURI, s.Protocol))
+		}
+		s.Protocol = protocolFromURI
+	}
+
+	// validate that protocol is compatible with the scheme
+	if IsMQScheme(sinkURI.Scheme) {
+		var protocol Protocol
+		err := protocol.FromString(s.Protocol)
+		if err != nil {
+			return err
+		}
+	} else if s.Protocol != "" {
+		return cerror.ErrSinkURIInvalid.GenWithStackByArgs(fmt.Sprintf("protocol %s "+
+			"is incompatible with %s scheme", s.Protocol, sinkURI.Scheme))
+	}
+
+	log.Info("succeed to parse parameter from sink uri",
+		zap.String("protocol", s.Protocol),
+		zap.String("txnAtomicity", string(s.TxnAtomicity)))
+	return nil
+}
+
+// IsMQScheme returns true if the scheme belong to mq schema.
+func IsMQScheme(scheme string) bool {
+	return scheme == "kafka" || scheme == "kafka+ssl" ||
+		IsPulsarScheme(scheme)
+}
+
+// IsPulsarScheme returns true if the scheme belong to pulsar schema.
+func IsPulsarScheme(scheme string) bool {
+	return scheme == "pulsar" || scheme == "pulsar+ssl"
 }

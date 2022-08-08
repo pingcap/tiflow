@@ -26,26 +26,36 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
 type schemaWrap4Owner struct {
-	schemaSnapshot         *schema.Snapshot
-	filter                 *filter.Filter
-	config                 *config.ReplicaConfig
-	allPhysicalTablesCache []model.TableID
-	ddlHandledTs           model.Ts
-	id                     model.ChangeFeedID
+	schemaSnapshot              *schema.Snapshot
+	filter                      filter.Filter
+	config                      *config.ReplicaConfig
+	allPhysicalTablesCache      []model.TableID
+	ddlHandledTs                model.Ts
+	schemaVersion               int64
+	id                          model.ChangeFeedID
+	metricIgnoreDDLEventCounter prometheus.Counter
 }
 
 func newSchemaWrap4Owner(
 	kvStorage tidbkv.Storage, startTs model.Ts,
 	config *config.ReplicaConfig, id model.ChangeFeedID,
 ) (*schemaWrap4Owner, error) {
-	var meta *timeta.Meta
+	var (
+		meta    *timeta.Meta
+		version int64
+	)
 	if kvStorage != nil {
 		var err error
 		meta, err = kv.GetSnapshotMeta(kvStorage, startTs)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		version, err = schema.GetSchemaVersion(meta)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -54,7 +64,9 @@ func newSchemaWrap4Owner(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	f, err := filter.NewFilter(config)
+	// It is no matter to use a empty as timezone here because schemaWrap4Owner
+	// doesn't use expression filter's method.
+	f, err := filter.NewFilter(config, "")
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -63,7 +75,10 @@ func newSchemaWrap4Owner(
 		filter:         f,
 		config:         config,
 		ddlHandledTs:   startTs,
+		schemaVersion:  version,
 		id:             id,
+		metricIgnoreDDLEventCounter: changefeedIgnoredDDLEventCounter.
+			WithLabelValues(id.Namespace, id.ID),
 	}, nil
 }
 
@@ -102,12 +117,17 @@ func (s *schemaWrap4Owner) AllTableNames() []model.TableName {
 }
 
 func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
-	if job.BinlogInfo.FinishedTS <= s.ddlHandledTs {
+	// We use schemaVersion to check if an already-executed DDL job is processed for a second time.
+	// Unexecuted DDL jobs should have largest schemaVersions
+	if job.BinlogInfo.FinishedTS <= s.ddlHandledTs || job.BinlogInfo.SchemaVersion <= s.schemaVersion {
 		log.Warn("job finishTs is less than schema handleTs, discard invalid job",
 			zap.String("namespace", s.id.Namespace),
 			zap.String("changefeed", s.id.ID),
 			zap.Stringer("job", job),
-			zap.Any("ddlHandledTs", s.ddlHandledTs))
+			zap.Any("ddlHandledTs", s.ddlHandledTs),
+			zap.Int64("schemaVersion", s.schemaVersion),
+			zap.Int64("jobSchemaVersion", job.BinlogInfo.SchemaVersion),
+		)
 		return nil
 	}
 	s.allPhysicalTablesCache = nil
@@ -128,6 +148,7 @@ func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
 		zap.Any("role", util.RoleOwner))
 
 	s.ddlHandledTs = job.BinlogInfo.FinishedTS
+	s.schemaVersion = job.BinlogInfo.SchemaVersion
 	return nil
 }
 
@@ -185,12 +206,12 @@ func (s *schemaWrap4Owner) parseRenameTables(
 
 // BuildDDLEvents builds ddl events from a DDL job.
 // The result contains more than one DDLEvent for a rename tables job.
+// Note: If BuildDDLEvents return (nil, nil), it means the DDL Job should be ignored.
 func (s *schemaWrap4Owner) BuildDDLEvents(
 	job *timodel.Job,
 ) ([]*model.DDLEvent, error) {
-	var preTableInfo *model.TableInfo
 	var err error
-
+	var preTableInfo *model.TableInfo
 	ddlEvents := make([]*model.DDLEvent, 0)
 	switch job.Type {
 	case timodel.ActionRenameTables:
@@ -213,8 +234,28 @@ func (s *schemaWrap4Owner) BuildDDLEvents(
 		event.FromJob(job, preTableInfo)
 		ddlEvents = append(ddlEvents, event)
 	}
-
-	return ddlEvents, nil
+	// filter out ddl here
+	res := make([]*model.DDLEvent, 0, len(ddlEvents))
+	for _, event := range ddlEvents {
+		ignored, err := s.filter.ShouldIgnoreDDLEvent(event)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if ignored {
+			s.metricIgnoreDDLEventCounter.Inc()
+			log.Info(
+				"DDL event ignored",
+				zap.String("query", event.Query),
+				zap.Uint64("startTs", event.StartTs),
+				zap.Uint64("commitTs", event.CommitTs),
+				zap.String("namespace", s.id.Namespace),
+				zap.String("changefeed", s.id.ID),
+			)
+			continue
+		}
+		res = append(res, event)
+	}
+	return res, nil
 }
 
 func (s *schemaWrap4Owner) shouldIgnoreTable(t *model.TableInfo) bool {

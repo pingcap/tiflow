@@ -14,33 +14,37 @@
 package v2
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/upstream"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	pd "github.com/tikv/pd/client"
 )
 
-// GetTso request and returns a TSO from PD
-func (h *OpenAPIV2) GetTso(c *gin.Context) {
+// QueryTso request and returns a TSO from PD
+func (h *OpenAPIV2) QueryTso(c *gin.Context) {
 	ctx := c.Request.Context()
-	if h.capture.UpstreamManager == nil {
-		c.Status(http.StatusServiceUnavailable)
-		return
-	}
-	pdClient := h.capture.UpstreamManager.Get(upstream.DefaultUpstreamID).PDClient
-	if pdClient == nil {
-		c.Status(http.StatusServiceUnavailable)
-		return
-	}
 
-	timestamp, logicalTime, err := pdClient.GetTS(ctx)
+	upstreamConfig := &UpstreamConfig{}
+	if err := c.BindJSON(upstreamConfig); err != nil {
+		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
+		return
+	}
+	resp := &Tso{}
+	err := h.withUpstreamConfig(ctx, upstreamConfig,
+		func(ctx context.Context, client pd.Client) error {
+			timestamp, logicalTime, err := client.GetTS(ctx)
+			if err != nil {
+				return cerror.WrapError(cerror.ErrInternalServerError, err)
+			}
+			resp.LogicTime = logicalTime
+			resp.Timestamp = timestamp
+			return nil
+		})
 	if err != nil {
 		_ = c.Error(err)
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 		return
 	}
-
-	resp := Tso{timestamp, logicalTime}
 	c.IndentedJSON(http.StatusOK, resp)
 }

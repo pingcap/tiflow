@@ -46,4 +46,7 @@ type EventSorter interface {
 	//  	}
 	//  }
 	Output() <-chan *model.PolymorphicEvent
+
+	// EmitStartTs let sorter know the start timestamp for consuming data
+	EmitStartTs(ctx context.Context, ts uint64)
 }

@@ -14,38 +14,45 @@
 package cli
 
 import (
-	"github.com/pingcap/log"
+	"context"
+
+	"github.com/pingcap/errors"
+	v2 "github.com/pingcap/tiflow/cdc/api/v2"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/cmd/context"
+	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
+	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
+
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/etcd"
-	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/spf13/cobra"
-	"go.uber.org/zap"
 )
-
-// captureTaskStatus holds capture task status.
-type captureTaskStatus struct {
-	CaptureID  string            `json:"capture-id"`
-	TaskStatus *model.TaskStatus `json:"status"`
-}
 
 // cfMeta holds changefeed info and changefeed status.
 type cfMeta struct {
-	Info       *model.ChangeFeedInfo   `json:"info"`
-	Status     *model.ChangeFeedStatus `json:"status"`
-	Count      uint64                  `json:"count"`
-	TaskStatus []captureTaskStatus     `json:"task-status"`
+	UpstreamID     uint64                    `json:"upstream_id"`
+	Namespace      string                    `json:"namespace"`
+	ID             string                    `json:"id"`
+	SinkURI        string                    `json:"sink_uri"`
+	Config         *v2.ReplicaConfig         `json:"config"`
+	CreateTime     model.JSONTime            `json:"create_time"`
+	StartTs        uint64                    `json:"start_ts"`
+	ResolvedTs     uint64                    `json:"resolved_ts"`
+	TargetTs       uint64                    `json:"target_ts"`
+	CheckpointTSO  uint64                    `json:"checkpoint_tso"`
+	CheckpointTime model.JSONTime            `json:"checkpoint_time"`
+	Engine         model.SortEngine          `json:"sort_engine,omitempty"`
+	FeedState      model.FeedState           `json:"state"`
+	RunningError   *model.RunningError       `json:"error"`
+	ErrorHis       []int64                   `json:"error_history"`
+	CreatorVersion string                    `json:"creator_version"`
+	TaskStatus     []model.CaptureTaskStatus `json:"task_status,omitempty"`
 }
 
 // queryChangefeedOptions defines flags for the `cli changefeed query` command.
 type queryChangefeedOptions struct {
-	etcdClient *etcd.CDCEtcdClient
-
-	credential *security.Credential
-
+	apiClient    apiv1client.APIV1Interface
+	apiClientV2  apiv2client.APIV2Interface
 	changefeedID string
 	simplified   bool
 }
@@ -65,77 +72,63 @@ func (o *queryChangefeedOptions) addFlags(cmd *cobra.Command) {
 
 // complete adapts from the command line args to the data and client required.
 func (o *queryChangefeedOptions) complete(f factory.Factory) error {
-	etcdClient, err := f.EtcdClient()
+	clientV1, err := f.APIV1Client()
 	if err != nil {
 		return err
 	}
-
-	o.etcdClient = etcdClient
-
-	o.credential = f.GetCredential()
-
+	o.apiClient = clientV1
+	clientV2, err := f.APIV2Client()
+	if err != nil {
+		return err
+	}
+	o.apiClientV2 = clientV2
 	return nil
 }
 
 // run the `cli changefeed query` command.
 func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
-	ctx := context.GetDefaultContext()
-
+	ctx := context.Background()
 	if o.simplified {
-		resp, err := sendOwnerChangefeedQuery(ctx, o.etcdClient,
-			model.DefaultChangeFeedID(o.changefeedID),
-			o.credential)
+		infos, err := o.apiClient.Changefeeds().List(ctx, "all")
 		if err != nil {
-			return err
+			return errors.Trace(err)
 		}
-
-		cmd.Println(resp)
-
-		return nil
+		for _, info := range *infos {
+			if info.ID == o.changefeedID {
+				return util.JSONPrint(cmd, info)
+			}
+		}
+		return cerror.ErrChangeFeedNotExists.GenWithStackByArgs(o.changefeedID)
 	}
 
-	info, err := o.etcdClient.GetChangeFeedInfo(ctx,
-		model.DefaultChangeFeedID(o.changefeedID))
-	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
-		return err
-	}
-	if info == nil {
-		log.Warn("This changefeed has been deleted, the residual meta data will be completely deleted within 24 hours.", zap.String("changgefeed", o.changefeedID))
-	}
-
-	status, _, err := o.etcdClient.GetChangeFeedStatus(ctx,
-		model.DefaultChangeFeedID(o.changefeedID))
+	detail, err := o.apiClient.Changefeeds().Get(ctx, o.changefeedID)
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return err
 	}
 
-	if err != nil && cerror.ErrChangeFeedNotExists.Equal(err) {
-		log.Error("This changefeed does not exist", zap.String("changefeed", o.changefeedID))
-		return err
-	}
-
-	taskPositions, err := o.etcdClient.GetAllTaskPositions(ctx, o.changefeedID)
+	info, err := o.apiClientV2.Changefeeds().GetInfo(ctx, o.changefeedID)
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return err
 	}
-
-	var count uint64
-	for _, pinfo := range taskPositions {
-		count += pinfo.Count
+	meta := &cfMeta{
+		UpstreamID:     detail.UpstreamID,
+		Namespace:      detail.Namespace,
+		ID:             detail.ID,
+		SinkURI:        detail.SinkURI,
+		Config:         info.Config,
+		CreateTime:     detail.CreateTime,
+		StartTs:        detail.StartTs,
+		ResolvedTs:     detail.ResolvedTs,
+		TargetTs:       detail.TargetTs,
+		CheckpointTSO:  detail.CheckpointTSO,
+		CheckpointTime: detail.CheckpointTime,
+		Engine:         detail.Engine,
+		FeedState:      detail.FeedState,
+		RunningError:   detail.RunningError,
+		ErrorHis:       detail.ErrorHis,
+		CreatorVersion: detail.CreatorVersion,
+		TaskStatus:     detail.TaskStatus,
 	}
-
-	processorInfos, err := o.etcdClient.GetAllTaskStatus(ctx, o.changefeedID)
-	if err != nil {
-		return err
-	}
-
-	taskStatus := make([]captureTaskStatus, 0, len(processorInfos))
-	for captureID, status := range processorInfos {
-		taskStatus = append(taskStatus, captureTaskStatus{CaptureID: captureID, TaskStatus: status})
-	}
-
-	meta := &cfMeta{Info: info, Status: status, Count: count, TaskStatus: taskStatus}
-
 	return util.JSONPrint(cmd, meta)
 }
 

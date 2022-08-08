@@ -16,7 +16,7 @@ package executor
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -24,22 +24,23 @@ import (
 
 	"github.com/phayes/freeport"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/server"
 	"github.com/pingcap/tiflow/engine/executor/worker"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
 func init() {
-	err := log.InitLogger(&log.Config{Level: "warn"})
+	err := logutil.InitLogger(&logutil.Config{Level: "warn"})
 	if err != nil {
 		panic(err)
 	}
@@ -48,11 +49,11 @@ func init() {
 func TestStartTCPSrv(t *testing.T) {
 	t.Parallel()
 
-	cfg := NewConfig()
+	cfg := GetDefaultExecutorConfig()
 	port, err := freeport.GetFreePort()
 	require.Nil(t, err)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	cfg.WorkerAddr = addr
+	cfg.Addr = addr
 	s := NewServer(cfg, nil)
 
 	s.grpcSrv = grpc.NewServer()
@@ -86,7 +87,7 @@ func testPprof(t *testing.T, addr string) {
 		require.Nil(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
-		_, err = ioutil.ReadAll(resp.Body)
+		_, err = io.ReadAll(resp.Body)
 		require.Nil(t, err)
 	}
 }
@@ -100,18 +101,18 @@ func testPrometheusMetrics(t *testing.T, addr string) {
 		require.Nil(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
-		_, err = ioutil.ReadAll(resp.Body)
+		_, err = io.ReadAll(resp.Body)
 		require.Nil(t, err)
 	}
 }
 
 func TestCollectMetric(t *testing.T) {
 	wg, ctx := errgroup.WithContext(context.Background())
-	cfg := NewConfig()
+	cfg := GetDefaultExecutorConfig()
 	port, err := freeport.GetFreePort()
 	require.Nil(t, err)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	cfg.WorkerAddr = addr
+	cfg.Addr = addr
 	s := NewServer(cfg, nil)
 	s.taskRunner = worker.NewTaskRunner(defaultRuntimeIncomingQueueLen, defaultRuntimeInitConcurrency)
 
@@ -134,7 +135,7 @@ func testCustomedPrometheusMetrics(t *testing.T, addr string) {
 		require.Nil(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		require.Nil(t, err)
 		metric := string(body)
 		return strings.Contains(metric, "dataflow_executor_task_num")
@@ -147,7 +148,7 @@ type registerExecutorReturnValue struct {
 }
 
 type mockRegisterMasterClient struct {
-	client.MasterClient
+	client.ServerMasterClient
 	respChan chan *registerExecutorReturnValue
 }
 
@@ -158,17 +159,20 @@ func newMockRegisterMasterClient(chanBufferSize int) *mockRegisterMasterClient {
 }
 
 func (c *mockRegisterMasterClient) RegisterExecutor(
-	ctx context.Context, req *pb.RegisterExecutorRequest, timeout time.Duration,
-) (resp *pb.RegisterExecutorResponse, err error) {
+	ctx context.Context, req *pb.RegisterExecutorRequest,
+) (nodeID model.ExecutorID, err error) {
 	value := <-c.respChan
-	return value.resp, value.err
+	if value.err != nil {
+		return "", value.err
+	}
+	return model.ExecutorID(value.resp.ExecutorId), nil
 }
 
 func TestSelfRegister(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	cfg := NewConfig()
+	cfg := GetDefaultExecutorConfig()
 	port, err := freeport.GetFreePort()
 	require.Nil(t, err)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
@@ -185,11 +189,6 @@ func TestSelfRegister(t *testing.T) {
 
 	executorID := uuid.NewGenerator().NewString()
 	returnValues := []*registerExecutorReturnValue{
-		{
-			&pb.RegisterExecutorResponse{
-				Err: &pb.Error{Code: pb.ErrorCode_MasterNotReady},
-			}, nil,
-		},
 		{
 			&pb.RegisterExecutorResponse{
 				ExecutorId: executorID,

@@ -23,7 +23,6 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -126,7 +125,7 @@ func (w *FileWriter) handleFormatDescriptionEvent(ev *replication.BinlogEvent) (
 	}
 
 	// verify filename
-	if !binlog.VerifyFilename(w.filename.Load()) {
+	if !utils.VerifyFilename(w.filename.Load()) {
 		return WResult{}, terror.ErrRelayBinlogNameNotValid.Generatef("binlog filename %s not valid", w.filename.Load())
 	}
 

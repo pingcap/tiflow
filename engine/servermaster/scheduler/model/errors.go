@@ -19,24 +19,24 @@ import (
 
 	"github.com/gogo/status"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"google.golang.org/grpc/codes"
 
 	"github.com/pingcap/tiflow/engine/model"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	derrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // ResourceNotFoundError happens when the resource id doesn't equal to any record
 // in metastore, it also contains detail cause by Inner error field.
 type ResourceNotFoundError struct {
-	ProblemResource resourcemeta.ResourceID
+	ProblemResource resModel.ResourceID
 	Inner           error
 }
 
 // NewResourceNotFoundError creates a resource not found error
 func NewResourceNotFoundError(
-	resourceID resourcemeta.ResourceID, cause error,
+	resourceID resModel.ResourceID, cause error,
 ) error {
 	ret := &ResourceNotFoundError{
 		ProblemResource: resourceID,
@@ -52,19 +52,19 @@ func (e *ResourceNotFoundError) Error() string {
 
 // ResourceConflictError is raised when two resources are assigned to two executors.
 type ResourceConflictError struct {
-	ConflictingResources [2]resourcemeta.ResourceID
+	ConflictingResources [2]resModel.ResourceID
 	AssignedExecutors    [2]model.ExecutorID
 }
 
 // NewResourceConflictError creates a new resource conflict error
 func NewResourceConflictError(
-	resourceA resourcemeta.ResourceID,
+	resourceA resModel.ResourceID,
 	executorA model.ExecutorID,
-	resourceB resourcemeta.ResourceID,
+	resourceB resModel.ResourceID,
 	executorB model.ExecutorID,
 ) error {
 	ret := &ResourceConflictError{
-		ConflictingResources: [2]resourcemeta.ResourceID{resourceA, resourceB},
+		ConflictingResources: [2]resModel.ResourceID{resourceA, resourceB},
 		AssignedExecutors:    [2]model.ExecutorID{executorA, executorB},
 	}
 	return errors.Trace(ret)
@@ -80,7 +80,7 @@ func (e *ResourceConflictError) Error() string {
 // SchedulerErrorToGRPCError converts resource error to corresponding gRPC error
 func SchedulerErrorToGRPCError(errIn error) error {
 	if errIn == nil {
-		log.L().Panic("Invalid input to SchedulerErrorToGRPCError")
+		log.Panic("Invalid input to SchedulerErrorToGRPCError")
 	}
 
 	var (

@@ -32,15 +32,15 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/pb"
-	"github.com/pingcap/tiflow/dm/dm/unit"
+	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/unit"
 )
 
 const (
@@ -79,13 +79,17 @@ type LightningLoader struct {
 // NewLightning creates a new Loader importing data with lightning.
 func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName string) *LightningLoader {
 	lightningCfg := makeGlobalConfig(cfg)
+	logger := log.L()
+	if cfg.FrameworkLogger != nil {
+		logger = log.Logger{Logger: cfg.FrameworkLogger}
+	}
 	loader := &LightningLoader{
 		cfg:                   cfg,
 		cli:                   cli,
 		workerName:            workerName,
 		lightningGlobalConfig: lightningCfg,
 		core:                  lightning.New(lightningCfg),
-		logger:                log.With(zap.String("task", cfg.Name), zap.String("unit", "lightning-load")),
+		logger:                logger.WithFields(zap.String("task", cfg.Name), zap.String("unit", "lightning-load")),
 	}
 	return loader
 }
@@ -131,7 +135,7 @@ func (l *LightningLoader) Init(ctx context.Context) (err error) {
 		return err
 	}
 
-	checkpointList := NewLightningCheckpointList(l.toDB, l.cfg.Name, l.cfg.SourceID, l.cfg.MetaSchema)
+	checkpointList := NewLightningCheckpointList(l.toDB, l.cfg.Name, l.cfg.SourceID, l.cfg.MetaSchema, l.logger)
 	err = checkpointList.Prepare(ctx)
 	if err == nil {
 		l.checkPointList = checkpointList
@@ -146,8 +150,13 @@ func (l *LightningLoader) Init(ctx context.Context) (err error) {
 
 	timeZone := l.cfg.Timezone
 	if len(timeZone) == 0 {
+		baseDB, err2 := conn.DefaultDBProvider.Apply(&l.cfg.To)
+		if err2 != nil {
+			return err2
+		}
+		defer baseDB.Close()
 		var err1 error
-		timeZone, err1 = conn.FetchTimeZoneSetting(ctx, &l.cfg.To)
+		timeZone, err1 = config.FetchTimeZoneSetting(ctx, baseDB.DB)
 		if err1 != nil {
 			return err1
 		}
@@ -239,6 +248,9 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 			lightning.WithDumpFileStorage(l.cfg.ExtStorage),
 			lightning.WithCheckpointStorage(l.cfg.ExtStorage, lightningCheckpointFileName))
 	}
+	if l.cfg.FrameworkLogger != nil {
+		opts = append(opts, lightning.WithLogger(l.cfg.FrameworkLogger))
+	}
 
 	err = l.core.RunOnceWithOptions(taskCtx, cfg, opts...)
 	failpoint.Inject("LoadDataSlowDown", nil)
@@ -255,6 +267,55 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 	return err
 }
 
+func (l *LightningLoader) getLightningConfig() (*lcfg.Config, error) {
+	cfg := lcfg.NewConfig()
+	if err := cfg.LoadFromGlobal(l.lightningGlobalConfig); err != nil {
+		return nil, err
+	}
+	// TableConcurrency is adjusted to the value of RegionConcurrency
+	// when using TiDB backend.
+	// TODO: should we set the TableConcurrency separately.
+	cfg.App.RegionConcurrency = l.cfg.LoaderConfig.PoolSize
+	cfg.Routes = l.cfg.RouteRules
+
+	cfg.Checkpoint.Driver = lcfg.CheckpointDriverFile
+	loderPath, err := storage.VerifyLoaderPath(l.cfg.LoaderConfig.Dir, l.cfg.Name, l.cfg.SourceID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if loderPath.Moved != "" {
+		err = os.Rename(loderPath.Moved, loderPath.Actual)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	var cpPath string
+	// l.cfg.LoaderConfig.Dir may be a s3 path, and Lightning supports checkpoint in s3, we can use storage.AdjustPath to adjust path both local and s3.
+	cpPath, err = storage.AdjustPath(l.cfg.LoaderConfig.Dir, string(filepath.Separator)+lightningCheckpointFileName)
+	if err != nil {
+		return nil, err
+	}
+	cfg.Checkpoint.DSN = cpPath
+	cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
+
+	cfg.TikvImporter.OnDuplicate = string(l.cfg.OnDuplicate)
+	cfg.TiDB.Vars = make(map[string]string)
+	cfg.Routes = l.cfg.RouteRules
+	if l.cfg.To.Session != nil {
+		for k, v := range l.cfg.To.Session {
+			cfg.TiDB.Vars[k] = v
+		}
+	}
+	cfg.TiDB.StrSQLMode = l.sqlMode
+	cfg.TiDB.Vars = map[string]string{
+		"time_zone": l.timeZone,
+		// always set transaction mode to optimistic
+		"tidb_txn_mode": "optimistic",
+	}
+	return cfg, nil
+}
+
 func (l *LightningLoader) restore(ctx context.Context) error {
 	if err := putLoadTask(l.cli, l.cfg, l.workerName); err != nil {
 		return err
@@ -269,52 +330,19 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		if err = l.checkPointList.RegisterCheckPoint(ctx); err != nil {
 			return err
 		}
-		cfg := lcfg.NewConfig()
-		if err = cfg.LoadFromGlobal(l.lightningGlobalConfig); err != nil {
-			return err
-		}
-		cfg.Routes = l.cfg.RouteRules
-
-		cfg.Checkpoint.Driver = lcfg.CheckpointDriverFile
-
-		loderPath, err := storage.VerifyLoaderPath(l.cfg.LoaderConfig.Dir, l.cfg.Name, l.cfg.SourceID)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if loderPath.Moved != "" {
-			err = os.Rename(loderPath.Moved, loderPath.Actual)
-			if err != nil {
-				return errors.Trace(err)
-			}
-		}
-
-		var cpPath string
-		// l.cfg.LoaderConfig.Dir may be a s3 path, and Lightning supports checkpoint in s3, we can use storage.AdjustPath to adjust path both local and s3.
-		cpPath, err = storage.AdjustPath(l.cfg.LoaderConfig.Dir, string(filepath.Separator)+lightningCheckpointFileName)
+		var cfg *lcfg.Config
+		cfg, err = l.getLightningConfig()
 		if err != nil {
 			return err
-		}
-		cfg.Checkpoint.DSN = cpPath
-		cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
-
-		cfg.TikvImporter.OnDuplicate = string(l.cfg.OnDuplicate)
-		cfg.TiDB.Vars = make(map[string]string)
-		cfg.Routes = l.cfg.RouteRules
-		if l.cfg.To.Session != nil {
-			for k, v := range l.cfg.To.Session {
-				cfg.TiDB.Vars[k] = v
-			}
-		}
-		cfg.TiDB.StrSQLMode = l.sqlMode
-		cfg.TiDB.Vars = map[string]string{
-			"time_zone": l.timeZone,
-			// always set transaction mode to optimistic
-			"tidb_txn_mode": "optimistic",
 		}
 		err = l.runLightning(ctx, cfg)
 		if err == nil {
 			l.finish.Store(true)
 			err = l.checkPointList.UpdateStatus(ctx, lightningStatusFinished)
+			if err != nil {
+				l.logger.Error("failed to update checkpoint status", zap.Error(err))
+				return err
+			}
 		} else {
 			l.logger.Error("failed to runlightning", zap.Error(err))
 		}

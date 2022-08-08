@@ -15,7 +15,7 @@ package executor
 
 import (
 	"encoding/hex"
-	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -26,11 +26,14 @@ func TestConfigDefaultLocalStoragePath(t *testing.T) {
 
 	testToml := `
 name = "executor-1"
-worker-addr = "0.0.0.0:10241"
+addr = "0.0.0.0:10241"
+join = "127.0.0.1:10240"
 `
 	fileName := mustWriteToTempFile(t, testToml)
-	cfg := NewConfig()
-	err := cfg.Parse([]string{"-config", fileName})
+	cfg := GetDefaultExecutorConfig()
+	err := cfg.configFromFile(fileName)
+	require.NoError(t, err)
+	err = cfg.Adjust()
 	require.NoError(t, err)
 
 	expectedPath := "/tmp/dfe-storage/" + hex.EncodeToString([]byte("executor-1"))
@@ -43,11 +46,14 @@ func TestConfigDefaultLocalStoragePathNoName(t *testing.T) {
 	t.Parallel()
 
 	testToml := `
-worker-addr = "0.0.0.0:10241"
+addr = "0.0.0.0:10241"
+join = "127.0.0.1:10240"
 `
 	fileName := mustWriteToTempFile(t, testToml)
-	cfg := NewConfig()
-	err := cfg.Parse([]string{"-config", fileName})
+	cfg := GetDefaultExecutorConfig()
+	err := cfg.configFromFile(fileName)
+	require.NoError(t, err)
+	err = cfg.Adjust()
 	require.NoError(t, err)
 
 	expectedPath := "/tmp/dfe-storage/" + hex.EncodeToString([]byte("executor-0.0.0.0:10241"))
@@ -60,14 +66,17 @@ func TestConfigStorage(t *testing.T) {
 
 	testToml := `
 name = "executor-1"
-worker-addr = "0.0.0.0:10241"
+addr = "0.0.0.0:10241"
+join = "127.0.0.1:10240"
 
 [storage]
 local.base-dir = "/tmp/my-base-dir"
 `
 	fileName := mustWriteToTempFile(t, testToml)
-	cfg := NewConfig()
-	err := cfg.Parse([]string{"-config", fileName})
+	cfg := GetDefaultExecutorConfig()
+	err := cfg.configFromFile(fileName)
+	require.NoError(t, err)
+	err = cfg.Adjust()
 	require.NoError(t, err)
 
 	require.Equal(t, "/tmp/my-base-dir", cfg.Storage.Local.BaseDir)
@@ -75,7 +84,7 @@ local.base-dir = "/tmp/my-base-dir"
 
 func mustWriteToTempFile(t *testing.T, content string) (filePath string) {
 	dir := t.TempDir()
-	fd, err := ioutil.TempFile(dir, "*")
+	fd, err := os.CreateTemp(dir, "*")
 	require.NoError(t, err)
 	_, err = fd.WriteString(content)
 	require.NoError(t, err)

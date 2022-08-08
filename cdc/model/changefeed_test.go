@@ -16,14 +16,14 @@ package model
 import (
 	"fmt"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/pingcap/tidb/parser/model"
 	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -224,10 +224,12 @@ func TestFixStateIncompatible(t *testing.T) {
 func TestFixSinkProtocolIncompatible(t *testing.T) {
 	t.Parallel()
 
+	emptyProtocolStr := ""
 	// Test to fix incompatible protocols.
 	configTestCases := []struct {
-		info             *ChangeFeedInfo
-		expectedProtocol config.Protocol
+		info                *ChangeFeedInfo
+		expectedProtocol    config.Protocol
+		expectedProtocolStr string
 	}{
 		{
 			info: &ChangeFeedInfo{
@@ -294,19 +296,54 @@ func TestFixSinkProtocolIncompatible(t *testing.T) {
 			},
 			expectedProtocol: config.ProtocolOpen,
 		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType:   AdminStop,
+				State:          StateStopped,
+				Error:          nil,
+				CreatorVersion: "5.3.0",
+				SinkURI:        "mysql://127.0.0.1:9092/ticdc-test2",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: "default"},
+				},
+			},
+			expectedProtocolStr: emptyProtocolStr,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType:   AdminStop,
+				State:          StateStopped,
+				Error:          nil,
+				CreatorVersion: "5.3.0",
+				SinkURI:        "tidb://127.0.0.1:9092/ticdc-test2",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: "random"},
+				},
+			},
+			expectedProtocolStr: emptyProtocolStr,
+		},
 	}
 
 	for _, tc := range configTestCases {
 		tc.info.FixIncompatible()
-		var protocol config.Protocol
-		err := protocol.FromString(tc.info.Config.Sink.Protocol)
-		require.Nil(t, err)
-		require.Equal(t, tc.expectedProtocol, protocol)
+		if tc.expectedProtocolStr != "" {
+			require.Equal(t, tc.expectedProtocolStr, tc.info.Config.Sink.Protocol)
+		} else {
+			var protocol config.Protocol
+			err := protocol.FromString(tc.info.Config.Sink.Protocol)
+			if strings.Contains(tc.info.SinkURI, "kafka") {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "ErrMQSinkUnknownProtocol")
+			}
+		}
 	}
 
 	sinkURITestCases := []struct {
-		info            *ChangeFeedInfo
-		expectedSinkURI string
+		info                *ChangeFeedInfo
+		expectedSinkURI     string
+		expectedProtocolStr *string
 	}{
 		{
 			info: &ChangeFeedInfo{
@@ -360,11 +397,42 @@ func TestFixSinkProtocolIncompatible(t *testing.T) {
 			},
 			expectedSinkURI: "kafka://127.0.0.1:9092/ticdc-test2?protocol=open-protocol",
 		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType:   AdminStop,
+				State:          StateStopped,
+				Error:          nil,
+				CreatorVersion: "5.3.0",
+				SinkURI:        "mysql://127.0.0.1:9092/ticdc-test2?protocol=random",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedSinkURI:     "mysql://127.0.0.1:9092/ticdc-test2",
+			expectedProtocolStr: &emptyProtocolStr,
+		},
+		{
+			info: &ChangeFeedInfo{
+				AdminJobType:   AdminStop,
+				State:          StateStopped,
+				Error:          nil,
+				CreatorVersion: "5.3.0",
+				SinkURI:        "mysql://127.0.0.1:9092/ticdc-test2?protocol=default",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolAvro.String()},
+				},
+			},
+			expectedSinkURI:     "mysql://127.0.0.1:9092/ticdc-test2",
+			expectedProtocolStr: &emptyProtocolStr,
+		},
 	}
 
 	for _, tc := range sinkURITestCases {
 		tc.info.FixIncompatible()
 		require.Equal(t, tc.expectedSinkURI, tc.info.SinkURI)
+		if tc.expectedProtocolStr != nil {
+			require.Equal(t, *tc.expectedProtocolStr, tc.info.Config.Sink.Protocol)
+		}
 	}
 }
 
@@ -396,7 +464,7 @@ func TestFixState(t *testing.T) {
 				AdminJobType: AdminNone,
 				State:        StateNormal,
 				Error: &RunningError{
-					Code: string(cerrors.ErrGCTTLExceeded.RFCCode()),
+					Code: string(errors.ErrGCTTLExceeded.RFCCode()),
 				},
 			},
 			expectedState: StateFailed,
@@ -406,7 +474,7 @@ func TestFixState(t *testing.T) {
 				AdminJobType: AdminResume,
 				State:        StateNormal,
 				Error: &RunningError{
-					Code: string(cerrors.ErrGCTTLExceeded.RFCCode()),
+					Code: string(errors.ErrGCTTLExceeded.RFCCode()),
 				},
 			},
 			expectedState: StateFailed,
@@ -416,7 +484,7 @@ func TestFixState(t *testing.T) {
 				AdminJobType: AdminNone,
 				State:        StateNormal,
 				Error: &RunningError{
-					Code: string(cerrors.ErrClusterIDMismatch.RFCCode()),
+					Code: string(errors.ErrClusterIDMismatch.RFCCode()),
 				},
 			},
 			expectedState: StateError,
@@ -426,7 +494,7 @@ func TestFixState(t *testing.T) {
 				AdminJobType: AdminResume,
 				State:        StateNormal,
 				Error: &RunningError{
-					Code: string(cerrors.ErrClusterIDMismatch.RFCCode()),
+					Code: string(errors.ErrClusterIDMismatch.RFCCode()),
 				},
 			},
 			expectedState: StateError,
@@ -521,8 +589,13 @@ func TestFixSinkProtocol(t *testing.T) {
 		tc.info.fixSinkProtocol()
 		var protocol config.Protocol
 		err := protocol.FromString(tc.info.Config.Sink.Protocol)
-		require.Nil(t, err)
-		require.Equal(t, tc.expectedProtocol, protocol)
+		if strings.Contains(tc.info.SinkURI, "kafka") {
+			require.Nil(t, err)
+			require.Equal(t, tc.expectedProtocol, protocol)
+		} else {
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "ErrMQSinkUnknownProtocol")
+		}
 	}
 
 	// Test fixing the protocol in SinkURI.
@@ -635,28 +708,28 @@ func TestChangefeedInfoStringer(t *testing.T) {
 				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2",
 				StartTs: 418881574869139457,
 			},
-			`.*kafka://\*\*\*/ticdc-test2.*`,
+			`.*kafka://.*ticdc-test2.*`,
 		},
 		{
 			&ChangeFeedInfo{
 				SinkURI: "mysql://root:124567@127.0.0.1:3306/",
 				StartTs: 418881574869139457,
 			},
-			`.*mysql://username:password@\*\*\*/.*`,
+			`.*mysql://root:xxxx@127.0.0.1:3306.*`,
 		},
 		{
 			&ChangeFeedInfo{
 				SinkURI: "mysql://root@127.0.0.1:3306/",
 				StartTs: 418881574869139457,
 			},
-			`.*mysql://username:password@\*\*\*/.*`,
+			`.*mysql://root:xxxx@127.0.0.1:3306.*`,
 		},
 		{
 			&ChangeFeedInfo{
 				SinkURI: "mysql://root:test%21%23%24%25%5E%26%2A@127.0.0.1:3306/",
 				StartTs: 418881574869139457,
 			},
-			`.*mysql://username:password@\*\*\*/.*`,
+			`.*mysql://root:xxxx@127.0.0.1:3306/.*`,
 		},
 	}
 
@@ -739,7 +812,91 @@ func TestValidateChangefeedID(t *testing.T) {
 		if !tt.wantErr {
 			require.Nil(t, err, fmt.Sprintf("case:%s", tt.name))
 		} else {
-			require.True(t, cerror.ErrInvalidChangefeedID.Equal(err), fmt.Sprintf("case:%s", tt.name))
+			require.True(t, errors.ErrInvalidChangefeedID.Equal(err),
+				fmt.Sprintf("case:%s", tt.name))
+		}
+	}
+}
+
+func TestValidateNamespace(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		id      string
+		wantErr bool
+	}{
+		{
+			name:    "alphabet",
+			id:      "testTtTT",
+			wantErr: false,
+		},
+		{
+			name:    "number",
+			id:      "01131323",
+			wantErr: false,
+		},
+		{
+			name:    "mixed",
+			id:      "9ff52acaA-aea6-4022-8eVc4-fbee3fD2c7890",
+			wantErr: false,
+		},
+		{
+			name: "len==128",
+			id: "1234567890-1234567890-1234567890-1234567890-" +
+				"1234567890-1234567890-1234567890-1234567890-" +
+				"1234567890123456789012345678901234567890",
+			wantErr: false,
+		},
+		{
+			name:    "empty string 1",
+			id:      "",
+			wantErr: true,
+		},
+		{
+			name:    "empty string 2",
+			id:      "   ",
+			wantErr: true,
+		},
+		{
+			name:    "test_task",
+			id:      "test_task ",
+			wantErr: true,
+		},
+		{
+			name:    "job$",
+			id:      "job$ ",
+			wantErr: true,
+		},
+		{
+			name:    "test-",
+			id:      "test-",
+			wantErr: true,
+		},
+		{
+			name:    "-",
+			id:      "-",
+			wantErr: true,
+		},
+		{
+			name:    "-sfsdfdf1",
+			id:      "-sfsdfdf1",
+			wantErr: true,
+		},
+		{
+			name: "len==129",
+			id: "1234567890-1234567890-1234567890-1234567890-1234567890-1234567890-" +
+				"1234567890-1234567890-1234567890-123456789012345678901234567890",
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		err := ValidateNamespace(tt.id)
+		if !tt.wantErr {
+			require.Nil(t, err, fmt.Sprintf("case:%s", tt.name))
+		} else {
+			require.True(t, errors.ErrInvalidNamespace.Equal(err),
+				fmt.Sprintf("case:%s", tt.name))
 		}
 	}
 }

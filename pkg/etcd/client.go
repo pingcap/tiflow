@@ -20,15 +20,14 @@ import (
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errorutil"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/prometheus/client_golang/prometheus"
 	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	clientV3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
-
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/errorutil"
-	"github.com/pingcap/tiflow/pkg/retry"
 )
 
 // etcd operation names
@@ -177,28 +176,6 @@ func (c *Client) Grant(
 	return
 }
 
-func isRetryableError(rpcName string) retry.IsRetryable {
-	return func(err error) bool {
-		if !cerrors.IsRetryableError(err) {
-			return false
-		}
-
-		switch rpcName {
-		case EtcdRevoke:
-			if etcdErr, ok := err.(v3rpc.EtcdError); ok && etcdErr.Code() == codes.NotFound {
-				// It means the etcd lease is already expired or revoked
-				return false
-			}
-		case EtcdTxn:
-			return errorutil.IsRetryableEtcdError(err)
-		default:
-			// For other types of operation, we retry directly without handling errors
-		}
-
-		return true
-	}
-}
-
 // Revoke delegates request to clientV3.Lease.Revoke
 func (c *Client) Revoke(
 	ctx context.Context, id clientV3.LeaseID,
@@ -241,24 +218,22 @@ func (c *Client) WatchWithChan(
 	ctx context.Context, outCh chan<- clientV3.WatchResponse,
 	key string, role string, opts ...clientV3.OpOption,
 ) {
-	defer func() {
-		close(outCh)
-		log.Info("WatchWithChan exited", zap.String("role", role))
-	}()
-
 	// get initial revision from opts to avoid revision fall back
 	lastRevision := getRevisionFromWatchOpts(opts...)
-
 	watchCtx, cancel := context.WithCancel(ctx)
-	defer func() {
-		// Using closures to handle changes to the cancel function
-		cancel()
-	}()
 	watchCh := c.cli.Watch(watchCtx, key, opts...)
 
 	ticker := c.clock.Ticker(etcdRequestProgressDuration)
-	defer ticker.Stop()
 	lastReceivedResponseTime := c.clock.Now()
+
+	defer func() {
+		// Using closures to handle changes to the cancel function
+		ticker.Stop()
+		cancel()
+		close(outCh)
+
+		log.Info("WatchWithChan exited", zap.String("role", role))
+	}()
 
 	for {
 		select {
@@ -315,4 +290,26 @@ func (c *Client) WatchWithChan(
 // RequestProgress requests a progress notify response be sent in all watch channels.
 func (c *Client) RequestProgress(ctx context.Context) error {
 	return c.cli.RequestProgress(ctx)
+}
+
+func isRetryableError(rpcName string) retry.IsRetryable {
+	return func(err error) bool {
+		if !cerror.IsRetryableError(err) {
+			return false
+		}
+
+		switch rpcName {
+		case EtcdRevoke:
+			if etcdErr, ok := err.(v3rpc.EtcdError); ok && etcdErr.Code() == codes.NotFound {
+				// It means the etcd lease is already expired or revoked
+				return false
+			}
+		case EtcdTxn:
+			return errorutil.IsRetryableEtcdError(err)
+		default:
+			// For other types of operation, we retry directly without handling errors
+		}
+
+		return true
+	}
 }

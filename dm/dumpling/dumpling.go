@@ -25,15 +25,15 @@ import (
 	"github.com/pingcap/tidb/dumpling/export"
 	tidbpromutil "github.com/pingcap/tidb/util/promutil"
 	filter "github.com/pingcap/tidb/util/table-filter"
-	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
-	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/pb"
-	"github.com/pingcap/tiflow/dm/dm/unit"
+	"github.com/pingcap/tiflow/dm/pkg/metricsproxy"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
+
+	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	dutils "github.com/pingcap/tiflow/dm/pkg/dumpling"
@@ -41,6 +41,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/unit"
 )
 
 // Dumpling dumps full data from a MySQL-compatible database.
@@ -58,9 +59,13 @@ type Dumpling struct {
 
 // NewDumpling creates a new Dumpling.
 func NewDumpling(cfg *config.SubTaskConfig) *Dumpling {
+	logger := log.L()
+	if cfg.FrameworkLogger != nil {
+		logger = log.Logger{Logger: cfg.FrameworkLogger}
+	}
 	m := &Dumpling{
 		cfg:    cfg,
-		logger: log.With(zap.String("task", cfg.Name), zap.String("unit", "dump")),
+		logger: logger.WithFields(zap.String("task", cfg.Name), zap.String("unit", "dump")),
 	}
 	return m
 }
@@ -159,7 +164,6 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 
 	newCtx, cancel := context.WithCancel(ctx)
 	var dumpling *export.Dumper
-
 	if dumpling, err = export.NewDumper(newCtx, m.dumpConfig); err == nil {
 		m.mu.Lock()
 		m.core = dumpling
@@ -171,6 +175,8 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 			m.logger.Info("", zap.String("failpoint", "SleepBeforeDumplingClose"))
 		})
 		dumpling.Close()
+	} else {
+		m.logger.Warn("error occurred during NewDumper", zap.Error(err))
 	}
 	cancel()
 
@@ -262,13 +268,13 @@ func (m *Dumpling) Status(_ *binlog.SourceStatus) interface{} {
 }
 
 func (m *Dumpling) status() *pb.DumpStatus {
-	mid := m.core.GetParameters()
+	dumpStatus := m.core.GetStatus()
 	s := &pb.DumpStatus{
-		TotalTables:       mid.TotalTables,
-		CompletedTables:   mid.CompletedTables,
-		FinishedBytes:     mid.FinishedBytes,
-		FinishedRows:      mid.FinishedRows,
-		EstimateTotalRows: mid.EstimateTotalRows,
+		TotalTables:       dumpStatus.TotalTables,
+		CompletedTables:   dumpStatus.CompletedTables,
+		FinishedBytes:     dumpStatus.FinishedBytes,
+		FinishedRows:      dumpStatus.FinishedRows,
+		EstimateTotalRows: dumpStatus.EstimateTotalRows,
 	}
 	var estimateProgress string
 	if s.FinishedRows >= s.EstimateTotalRows {
@@ -323,8 +329,13 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 	tz := m.cfg.Timezone
 	if len(tz) == 0 {
 		// use target db time_zone as default
+		baseDB, err2 := conn.DefaultDBProvider.Apply(&m.cfg.To)
+		if err2 != nil {
+			return nil, err2
+		}
+		defer baseDB.Close()
 		var err1 error
-		tz, err1 = conn.FetchTimeZoneSetting(ctx, &m.cfg.To)
+		tz, err1 = config.FetchTimeZoneSetting(ctx, baseDB.DB)
 		if err1 != nil {
 			return nil, err1
 		}
@@ -337,7 +348,7 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 		dumpConfig.Threads = cfg.Threads
 	}
 	if cfg.ChunkFilesize != "" {
-		dumpConfig.FileSize, err = dutils.ParseFileSize(cfg.ChunkFilesize, export.UnspecifiedSize)
+		dumpConfig.FileSize, err = utils.ParseFileSize(cfg.ChunkFilesize, export.UnspecifiedSize)
 		if err != nil {
 			m.logger.Warn("parsed some unsupported arguments", zap.Error(err))
 			return nil, err

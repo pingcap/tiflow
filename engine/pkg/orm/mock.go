@@ -16,10 +16,12 @@ package orm
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/pingcap/log"
-	cerrors "github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/engine/pkg/orm/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/uuid"
 	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
@@ -42,12 +44,13 @@ func NewMockClient() (Client, error) {
 		// TODO: logger
 	})
 	if err != nil {
-		log.L().Error("create gorm client fail", zap.Error(err))
-		return nil, cerrors.ErrMetaNewClientFail.Wrap(err)
+		log.Error("create gorm client fail", zap.Error(err))
+		return nil, errors.ErrMetaNewClientFail.Wrap(err)
 	}
 
 	cli := &metaOpsClient{
-		db: db,
+		db:          db,
+		epochClient: NewMockEpochClient(),
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -58,4 +61,31 @@ func NewMockClient() (Client, error) {
 	}
 
 	return cli, nil
+}
+
+// NewMockEpochClient is the mock for EpochClient
+func NewMockEpochClient() model.EpochClient {
+	return &mockEpochClient{
+		epoch: 1,
+	}
+}
+
+type mockEpochClient struct {
+	sync.Mutex
+	epoch int64
+}
+
+func (m *mockEpochClient) Initialize(ctx context.Context) error {
+	return nil
+}
+
+func (m *mockEpochClient) Close() error {
+	return nil
+}
+
+func (m *mockEpochClient) GenEpoch(ctx context.Context) (int64, error) {
+	m.Lock()
+	defer m.Unlock()
+	m.epoch = m.epoch + 1
+	return m.epoch, nil
 }

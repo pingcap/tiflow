@@ -21,7 +21,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
@@ -523,14 +523,20 @@ type LightningCheckpointList struct {
 	logger     log.Logger
 }
 
-func NewLightningCheckpointList(db *conn.BaseDB, taskName, sourceName, metaSchema string) *LightningCheckpointList {
+func NewLightningCheckpointList(
+	db *conn.BaseDB,
+	taskName string,
+	sourceName string,
+	metaSchema string,
+	logger log.Logger,
+) *LightningCheckpointList {
 	return &LightningCheckpointList{
 		db:         db,
 		schema:     dbutil.ColumnName(metaSchema),
 		tableName:  dbutil.TableName(metaSchema, cputil.LightningCheckpoint(taskName)),
 		taskName:   taskName,
 		sourceName: sourceName,
-		logger:     log.L().WithFields(zap.String("component", "lightning checkpoint database list")),
+		logger:     logger.WithFields(zap.String("component", "lightning checkpoint database list")),
 	}
 }
 

@@ -25,7 +25,8 @@ import (
 
 // unsafeResetOptions defines flags for the `cli unsafe reset` command.
 type unsafeResetOptions struct {
-	etcdClient *etcd.CDCEtcdClient
+	clusterID  string
+	etcdClient *etcd.CDCEtcdClientImpl
 	pdClient   pd.Client
 }
 
@@ -35,27 +36,38 @@ func newUnsafeResetOptions() *unsafeResetOptions {
 }
 
 // complete adapts from the command line args to the data and client required.
-func (o *unsafeResetOptions) complete(f factory.Factory) error {
-	etcdClient, err := f.EtcdClient()
-	if err != nil {
-		return err
-	}
-
-	o.etcdClient = etcdClient
-
+func (o *unsafeResetOptions) complete(f factory.Factory) (err error) {
 	pdClient, err := f.PdClient()
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if err != nil {
+			pdClient.Close()
+		}
+	}()
 
 	o.pdClient = pdClient
 
+	etcdClient, err := f.EtcdClient()
+	if err != nil {
+		return err
+	}
+	etcdClient.ClusterID = o.clusterID
+	o.etcdClient = etcdClient
+
 	return nil
+}
+
+func (o *unsafeResetOptions) addFlags(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&o.clusterID, "cluster-id", "default", "cdc cluster id")
 }
 
 // run runs the `cli unsafe reset` command.
 func (o *unsafeResetOptions) run(cmd *cobra.Command) error {
 	ctx := context.GetDefaultContext()
+	defer o.pdClient.Close()
+	defer o.etcdClient.Close()
 
 	leases, err := o.etcdClient.GetCaptureLeases(ctx)
 	if err != nil {
@@ -72,7 +84,7 @@ func (o *unsafeResetOptions) run(cmd *cobra.Command) error {
 		return errors.Trace(err)
 	}
 
-	err = gc.RemoveServiceGCSafepoint(ctx, o.pdClient, gc.CDCServiceSafePointID)
+	err = gc.RemoveServiceGCSafepoint(ctx, o.pdClient, o.etcdClient.GetGCServiceID())
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -103,6 +115,7 @@ func newCmdReset(f factory.Factory, commonOptions *unsafeCommonOptions) *cobra.C
 			return o.run(cmd)
 		},
 	}
+	o.addFlags(command)
 
 	return command
 }

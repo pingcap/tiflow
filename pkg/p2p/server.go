@@ -20,10 +20,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -32,7 +32,6 @@ import (
 	gRPCPeer "google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/workerpool"
 	"github.com/pingcap/tiflow/proto/p2p"
 )
@@ -830,26 +829,6 @@ func (m *MessageServer) verifyStreamMeta(streamMeta *p2p.StreamMeta) error {
 			m.serverID,            // expected
 			streamMeta.ReceiverId, // actual
 		)
-	}
-
-	if m.config.ServerVersion == "" || streamMeta.ClientVersion == "" {
-		// skip checking versions
-		return nil
-	}
-
-	clientVer, err := semver.NewVersion(streamMeta.ClientVersion)
-	if err != nil {
-		log.Error("MessageServer: semver failed to parse",
-			zap.String("ver", streamMeta.ClientVersion),
-			zap.Error(err))
-		return cerror.ErrPeerMessageIllegalClientVersion.GenWithStackByArgs(streamMeta.ClientVersion)
-	}
-
-	serverVer := semver.New(m.config.ServerVersion)
-
-	// Only allow clients with the same Major and Minor.
-	if serverVer.Major != clientVer.Major || serverVer.Minor != clientVer.Minor {
-		return cerror.ErrVersionIncompatible.GenWithStackByArgs(m.config.ServerVersion)
 	}
 
 	return nil

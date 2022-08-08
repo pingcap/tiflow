@@ -19,7 +19,6 @@ import (
 	"fmt"
 
 	"github.com/pingcap/errors"
-
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 )
 

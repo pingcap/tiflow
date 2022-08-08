@@ -61,7 +61,7 @@ func CollectBinlogFilesCmp(dir, baseFile string, cmp FileCmp) ([]string, error) 
 		return nil, terror.ErrBaseFileNotFound.Generate(baseFile, dir)
 	}
 
-	bf, err := binlog.ParseFilename(baseFile)
+	bf, err := utils.ParseFilename(baseFile)
 	if err != nil {
 		return nil, terror.Annotatef(err, "filename %s", baseFile)
 	}
@@ -74,7 +74,7 @@ func CollectBinlogFilesCmp(dir, baseFile string, cmp FileCmp) ([]string, error) 
 	results := make([]string, 0, len(allFiles))
 	for _, f := range allFiles {
 		// we have parse f in `CollectAllBinlogFiles`, may be we can refine this
-		parsed, err := binlog.ParseFilename(f)
+		parsed, err := utils.ParseFilename(f)
 		if err != nil || parsed.BaseName != bf.BaseName {
 			log.L().Warn("collecting binlog file, ignore invalid file", zap.String("file", f), log.ShortError(err))
 			continue

@@ -6,14 +6,13 @@ package enginepb
 import (
 	context "context"
 	fmt "fmt"
-	io "io"
-	math "math"
-	math_bits "math/bits"
-
 	proto "github.com/gogo/protobuf/proto"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	io "io"
+	math "math"
+	math_bits "math/bits"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -839,9 +838,9 @@ func (m *RegisterExecutorResponse) GetExecutorId() string {
 }
 
 type ScheduleTaskRequest struct {
-	TaskId               string   `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	Cost                 int64    `protobuf:"varint,2,opt,name=cost,proto3" json:"cost,omitempty"`
-	ResourceRequirements []string `protobuf:"bytes,3,rep,name=resource_requirements,json=resourceRequirements,proto3" json:"resource_requirements,omitempty"`
+	TaskId               string         `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	Cost                 int64          `protobuf:"varint,2,opt,name=cost,proto3" json:"cost,omitempty"`
+	ResourceRequirements []*ResourceKey `protobuf:"bytes,3,rep,name=resource_requirements,json=resourceRequirements,proto3" json:"resource_requirements,omitempty"`
 }
 
 func (m *ScheduleTaskRequest) Reset()         { *m = ScheduleTaskRequest{} }
@@ -891,7 +890,7 @@ func (m *ScheduleTaskRequest) GetCost() int64 {
 	return 0
 }
 
-func (m *ScheduleTaskRequest) GetResourceRequirements() []string {
+func (m *ScheduleTaskRequest) GetResourceRequirements() []*ResourceKey {
 	if m != nil {
 		return m.ResourceRequirements
 	}
@@ -1202,118 +1201,6 @@ func (m *PersistResourceResponse) GetErr() *Error {
 	return nil
 }
 
-type DebugJobRequest struct {
-	JobId   string `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
-	Command string `protobuf:"bytes,2,opt,name=command,proto3" json:"command,omitempty"`
-	JsonArg string `protobuf:"bytes,3,opt,name=json_arg,json=jsonArg,proto3" json:"json_arg,omitempty"`
-}
-
-func (m *DebugJobRequest) Reset()         { *m = DebugJobRequest{} }
-func (m *DebugJobRequest) String() string { return proto.CompactTextString(m) }
-func (*DebugJobRequest) ProtoMessage()    {}
-func (*DebugJobRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_f9c348dec43a6705, []int{20}
-}
-func (m *DebugJobRequest) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *DebugJobRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_DebugJobRequest.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *DebugJobRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_DebugJobRequest.Merge(m, src)
-}
-func (m *DebugJobRequest) XXX_Size() int {
-	return m.Size()
-}
-func (m *DebugJobRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_DebugJobRequest.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_DebugJobRequest proto.InternalMessageInfo
-
-func (m *DebugJobRequest) GetJobId() string {
-	if m != nil {
-		return m.JobId
-	}
-	return ""
-}
-
-func (m *DebugJobRequest) GetCommand() string {
-	if m != nil {
-		return m.Command
-	}
-	return ""
-}
-
-func (m *DebugJobRequest) GetJsonArg() string {
-	if m != nil {
-		return m.JsonArg
-	}
-	return ""
-}
-
-type DebugJobResponse struct {
-	Err     *Error `protobuf:"bytes,1,opt,name=err,proto3" json:"err,omitempty"`
-	JsonRet string `protobuf:"bytes,2,opt,name=json_ret,json=jsonRet,proto3" json:"json_ret,omitempty"`
-}
-
-func (m *DebugJobResponse) Reset()         { *m = DebugJobResponse{} }
-func (m *DebugJobResponse) String() string { return proto.CompactTextString(m) }
-func (*DebugJobResponse) ProtoMessage()    {}
-func (*DebugJobResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_f9c348dec43a6705, []int{21}
-}
-func (m *DebugJobResponse) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *DebugJobResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_DebugJobResponse.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *DebugJobResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_DebugJobResponse.Merge(m, src)
-}
-func (m *DebugJobResponse) XXX_Size() int {
-	return m.Size()
-}
-func (m *DebugJobResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_DebugJobResponse.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_DebugJobResponse proto.InternalMessageInfo
-
-func (m *DebugJobResponse) GetErr() *Error {
-	if m != nil {
-		return m.Err
-	}
-	return nil
-}
-
-func (m *DebugJobResponse) GetJsonRet() string {
-	if m != nil {
-		return m.JsonRet
-	}
-	return ""
-}
-
 func init() {
 	proto.RegisterEnum("enginepb.QueryJobResponse_JobStatus", QueryJobResponse_JobStatus_name, QueryJobResponse_JobStatus_value)
 	proto.RegisterType((*HeartbeatRequest)(nil), "enginepb.HeartbeatRequest")
@@ -1336,87 +1223,83 @@ func init() {
 	proto.RegisterType((*ExecWorkloadResponse)(nil), "enginepb.ExecWorkloadResponse")
 	proto.RegisterType((*PersistResourceRequest)(nil), "enginepb.PersistResourceRequest")
 	proto.RegisterType((*PersistResourceResponse)(nil), "enginepb.PersistResourceResponse")
-	proto.RegisterType((*DebugJobRequest)(nil), "enginepb.DebugJobRequest")
-	proto.RegisterType((*DebugJobResponse)(nil), "enginepb.DebugJobResponse")
 }
 
 func init() { proto.RegisterFile("master.proto", fileDescriptor_f9c348dec43a6705) }
 
 var fileDescriptor_f9c348dec43a6705 = []byte{
-	// 1166 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x57, 0xdd, 0x6e, 0xdb, 0x36,
-	0x14, 0xb6, 0xfc, 0xef, 0x63, 0xd7, 0x56, 0x58, 0x37, 0x55, 0xbd, 0xd5, 0x75, 0xd4, 0x0d, 0xf0,
-	0x55, 0x2e, 0xd2, 0x6e, 0xd8, 0x80, 0xdc, 0x74, 0x5d, 0x87, 0xa6, 0x40, 0xb0, 0x4c, 0x49, 0xd1,
-	0x75, 0x3f, 0x35, 0x24, 0x8b, 0x71, 0x99, 0xd8, 0xa2, 0x4a, 0xd2, 0xeb, 0xfa, 0x10, 0x03, 0xf6,
-	0x0c, 0x7b, 0x86, 0x3d, 0xc4, 0x76, 0x33, 0xf4, 0x72, 0x97, 0x43, 0xf2, 0x22, 0x03, 0x25, 0x51,
-	0x62, 0xe4, 0x38, 0xd1, 0x4d, 0xef, 0x7c, 0x0e, 0xa9, 0x8f, 0xdf, 0xf9, 0xe1, 0x77, 0x68, 0xe8,
-	0x2c, 0x5c, 0x2e, 0x30, 0xdb, 0x0e, 0x19, 0x15, 0x14, 0x35, 0x71, 0x30, 0x23, 0x01, 0x0e, 0xbd,
-	0x41, 0x1b, 0x33, 0x46, 0x13, 0xf7, 0xa0, 0xb7, 0xc0, 0xc2, 0xe5, 0x82, 0x32, 0x9c, 0x38, 0xba,
-	0x21, 0xa3, 0x27, 0x78, 0x2a, 0x78, 0x6c, 0xdb, 0x7f, 0x18, 0x60, 0x3e, 0xc5, 0x2e, 0x13, 0x1e,
-	0x76, 0x85, 0x83, 0xdf, 0x2c, 0x31, 0x17, 0xe8, 0x1e, 0xb4, 0xf1, 0xaf, 0x78, 0xba, 0x14, 0x94,
-	0x4d, 0x88, 0x6f, 0x19, 0x23, 0x63, 0xdc, 0x72, 0x40, 0xb9, 0xf6, 0x7c, 0xf4, 0x29, 0x74, 0x19,
-	0xe6, 0x74, 0xc9, 0xa6, 0x78, 0xb2, 0xe4, 0xee, 0x0c, 0x5b, 0xe5, 0x91, 0x31, 0xae, 0x39, 0x37,
-	0x94, 0xf7, 0xb9, 0x74, 0xa2, 0x4d, 0xa8, 0x73, 0xe1, 0x8a, 0x25, 0xb7, 0x2a, 0xd1, 0x72, 0x62,
-	0xa1, 0x8f, 0xa1, 0x25, 0xc8, 0x02, 0x73, 0xe1, 0x2e, 0x42, 0xab, 0x3a, 0x32, 0xc6, 0x55, 0x27,
-	0x73, 0x20, 0x13, 0x2a, 0x42, 0xcc, 0xad, 0x5a, 0xe4, 0x97, 0x3f, 0x6d, 0x1f, 0x36, 0x34, 0x8e,
-	0x3c, 0xa4, 0x01, 0xc7, 0x68, 0x0b, 0x2a, 0x98, 0xb1, 0x88, 0x5c, 0x7b, 0xa7, 0xb7, 0xad, 0xe2,
-	0xdf, 0x7e, 0x22, 0xc3, 0x77, 0xe4, 0x9a, 0x3c, 0x7f, 0x8e, 0x5d, 0x1f, 0xb3, 0x88, 0x5e, 0xcb,
-	0x49, 0x2c, 0xd4, 0x87, 0x9a, 0xeb, 0xfb, 0x4c, 0xd2, 0xaa, 0x8c, 0x5b, 0x4e, 0x6c, 0xd8, 0x02,
-	0xcc, 0xc3, 0xa5, 0xb7, 0x20, 0xe2, 0x19, 0xf5, 0x54, 0x26, 0xba, 0x50, 0x16, 0x61, 0x74, 0x46,
-	0xcd, 0x29, 0x8b, 0x50, 0x22, 0x4e, 0x69, 0x70, 0x4c, 0x66, 0x11, 0x62, 0xc7, 0x49, 0x2c, 0xf4,
-	0x05, 0x74, 0x92, 0xc4, 0x4e, 0x48, 0x70, 0x4c, 0xa3, 0x78, 0xdb, 0x3b, 0xb7, 0x32, 0x56, 0x07,
-	0xf1, 0xea, 0x5e, 0x70, 0x4c, 0x9d, 0x76, 0x98, 0x19, 0xb6, 0x07, 0xbd, 0xef, 0x96, 0x98, 0xbd,
-	0xd3, 0x0e, 0xbd, 0x05, 0xf5, 0x13, 0xea, 0x65, 0x99, 0xaf, 0x9d, 0x50, 0x6f, 0xcf, 0x5f, 0x39,
-	0xa3, 0x5c, 0xf8, 0x8c, 0x7f, 0x0c, 0x80, 0x17, 0x94, 0x9d, 0x62, 0x26, 0x4d, 0x19, 0x54, 0x8a,
-	0x5d, 0x26, 0x7e, 0xbe, 0xdc, 0xe5, 0x95, 0x72, 0x5f, 0xac, 0x63, 0x27, 0xad, 0x63, 0x96, 0x8d,
-	0xea, 0x85, 0x6c, 0x6c, 0x41, 0x87, 0xf0, 0x89, 0xa0, 0x0b, 0x8f, 0x0b, 0x1a, 0xe0, 0xa8, 0x94,
-	0x4d, 0xa7, 0x4d, 0xf8, 0x91, 0x72, 0xa1, 0x11, 0x74, 0xe6, 0x2e, 0x17, 0x93, 0xd7, 0xde, 0x44,
-	0x56, 0xde, 0xaa, 0x8f, 0x8c, 0x71, 0xc5, 0x01, 0xe9, 0x7b, 0xea, 0x1d, 0x91, 0x05, 0x46, 0x03,
-	0x68, 0xbe, 0xa5, 0xec, 0x74, 0x4e, 0x5d, 0xdf, 0x6a, 0x44, 0xab, 0xa9, 0x6d, 0xff, 0x59, 0x06,
-	0x33, 0xcb, 0x5a, 0xd2, 0x10, 0x45, 0x6b, 0xb5, 0x7b, 0x21, 0x9a, 0xee, 0xce, 0x27, 0x59, 0x06,
-	0xf3, 0x98, 0xdb, 0xcf, 0xa8, 0x77, 0x18, 0xed, 0x4d, 0x63, 0xde, 0x85, 0x9e, 0x2c, 0x4e, 0x7c,
-	0xf9, 0xe2, 0x42, 0x54, 0xa3, 0x42, 0xf4, 0x33, 0x98, 0x2c, 0xd7, 0xce, 0x8d, 0x13, 0xea, 0xed,
-	0x47, 0x7b, 0xa3, 0xd4, 0x27, 0x4d, 0x5b, 0x5b, 0xdf, 0xb4, 0xf6, 0x4b, 0x68, 0xa5, 0xa7, 0xa2,
-	0x26, 0x54, 0x49, 0x40, 0x84, 0x59, 0x42, 0x6d, 0x68, 0x84, 0x38, 0xf0, 0x49, 0x30, 0x33, 0x0d,
-	0x04, 0x50, 0xa7, 0xc1, 0x9c, 0x04, 0xd8, 0x2c, 0xa3, 0x2e, 0x80, 0x4f, 0x78, 0xe8, 0x8a, 0xe9,
-	0x6b, 0xec, 0x9b, 0x15, 0xd4, 0x81, 0xe6, 0x31, 0x09, 0x08, 0x97, 0x56, 0x55, 0x7e, 0xc6, 0x05,
-	0x0d, 0x43, 0xec, 0x9b, 0x35, 0x7b, 0x0a, 0xe6, 0x63, 0x37, 0x98, 0xe2, 0xf9, 0x87, 0x6c, 0x36,
-	0x0f, 0x7a, 0x07, 0xee, 0x92, 0xe3, 0x0f, 0x79, 0xc6, 0x3e, 0x6c, 0x68, 0x57, 0xb5, 0xb8, 0x20,
-	0x64, 0x44, 0xca, 0x1a, 0x11, 0xfb, 0x33, 0x30, 0x33, 0xca, 0x85, 0xd1, 0xec, 0xcf, 0x61, 0x43,
-	0x4b, 0x67, 0xf1, 0xef, 0x16, 0x70, 0xdb, 0xc1, 0x33, 0x22, 0x9b, 0xe2, 0x49, 0x72, 0xc9, 0x54,
-	0xa6, 0x2c, 0x68, 0x48, 0x31, 0xc2, 0x9c, 0x27, 0xa9, 0x52, 0xa6, 0x5c, 0xf9, 0x05, 0x33, 0x4e,
-	0x68, 0x90, 0x70, 0x57, 0x26, 0x1a, 0x02, 0x4c, 0xdd, 0xd0, 0xf5, 0xc8, 0x9c, 0x88, 0x77, 0x51,
-	0x4f, 0x57, 0x1c, 0xcd, 0x63, 0xbf, 0x02, 0x6b, 0xf5, 0xb8, 0xe2, 0x39, 0xbb, 0x4e, 0x1d, 0xec,
-	0xb7, 0x70, 0xf3, 0x50, 0xf6, 0xde, 0x72, 0x8e, 0x8f, 0x5c, 0x7e, 0xaa, 0x42, 0xb9, 0x0d, 0x0d,
-	0xe1, 0xf2, 0xd3, 0xac, 0xea, 0x75, 0x69, 0xee, 0xf9, 0x08, 0x41, 0x75, 0x4a, 0xb9, 0x88, 0x90,
-	0x2a, 0x4e, 0xf4, 0x1b, 0x3d, 0x80, 0x5b, 0xe9, 0x40, 0x61, 0xf8, 0xcd, 0x92, 0x30, 0xbc, 0xc0,
-	0x81, 0x50, 0x0a, 0xdd, 0x57, 0x8b, 0x8e, 0xb6, 0x66, 0xff, 0x04, 0xfd, 0x8b, 0x07, 0x27, 0x41,
-	0x5d, 0x3b, 0xbe, 0xee, 0xc3, 0x8d, 0x74, 0x83, 0xcc, 0x6f, 0x12, 0x54, 0x47, 0x39, 0x1f, 0xf9,
-	0x3e, 0xb3, 0x1f, 0x42, 0x47, 0xa6, 0xeb, 0x45, 0xa2, 0x39, 0x2b, 0xf2, 0xd2, 0x87, 0x9a, 0x3e,
-	0xfa, 0x62, 0xc3, 0xfe, 0xcd, 0x80, 0x9b, 0xfa, 0x67, 0x85, 0x47, 0xea, 0x43, 0x68, 0x29, 0x79,
-	0xe3, 0x56, 0x79, 0x54, 0x19, 0xb7, 0x77, 0x36, 0xb5, 0x7a, 0xe8, 0x90, 0xd9, 0x46, 0x09, 0x9b,
-	0xe6, 0x8d, 0xf8, 0x49, 0xb6, 0x40, 0xb9, 0xf6, 0x7c, 0xfb, 0x4b, 0xe8, 0x5f, 0xa4, 0x53, 0xbc,
-	0x4d, 0x7f, 0x80, 0xcd, 0x03, 0xd9, 0x62, 0x5c, 0xce, 0xdc, 0x34, 0xfb, 0x85, 0x82, 0xc9, 0xd1,
-	0x4a, 0x7a, 0x46, 0xa3, 0xb5, 0x0b, 0xb7, 0x57, 0xb0, 0x8b, 0x33, 0xfb, 0x19, 0x7a, 0x5f, 0x63,
-	0x6f, 0x39, 0xbb, 0x5e, 0x62, 0x2c, 0x68, 0x4c, 0xe9, 0x62, 0xe1, 0x06, 0x8a, 0x84, 0x32, 0xd1,
-	0x1d, 0x68, 0x9e, 0x70, 0x1a, 0x4c, 0x5c, 0x36, 0x8b, 0xee, 0x4c, 0xcb, 0x69, 0x48, 0xfb, 0x11,
-	0x9b, 0xd9, 0x07, 0x60, 0x66, 0xf0, 0xc5, 0x2f, 0x8a, 0x42, 0x64, 0x58, 0xa8, 0xc3, 0xa4, 0xed,
-	0x60, 0xb1, 0xf3, 0x77, 0x03, 0xea, 0xf1, 0x14, 0x40, 0x3f, 0x82, 0x99, 0xbf, 0x8d, 0x68, 0x2b,
-	0xc3, 0x5b, 0x23, 0x0c, 0x03, 0xfb, 0xaa, 0x2d, 0x31, 0x47, 0xbb, 0x84, 0xbe, 0x81, 0x56, 0xaa,
-	0x8b, 0x68, 0x90, 0x7d, 0x92, 0x7f, 0xd7, 0x0c, 0x3e, 0xba, 0x74, 0x2d, 0xc5, 0x79, 0x0c, 0x4d,
-	0x35, 0x0a, 0xd1, 0x9d, 0xcb, 0xc6, 0x63, 0x8c, 0x32, 0x58, 0x3f, 0x39, 0x63, 0x10, 0xa5, 0xaa,
-	0x3a, 0x48, 0x6e, 0x38, 0xe8, 0x20, 0x79, 0x11, 0x8e, 0x23, 0x4a, 0x35, 0x56, 0x8f, 0x28, 0x3f,
-	0xc7, 0xf4, 0x88, 0x56, 0x44, 0x39, 0x26, 0xa3, 0x6a, 0xaa, 0x93, 0xc9, 0xb5, 0x91, 0x4e, 0x26,
-	0xdf, 0x02, 0x31, 0x99, 0xf4, 0x1d, 0xaa, 0x93, 0xc9, 0x3f, 0xa0, 0x75, 0x32, 0x2b, 0x0f, 0x57,
-	0xbb, 0x84, 0xbe, 0x85, 0x8e, 0x2e, 0x5c, 0xe8, 0xae, 0x56, 0x8d, 0x55, 0x25, 0x1d, 0x0c, 0xd7,
-	0x2d, 0xa7, 0x80, 0xaf, 0x60, 0x43, 0x75, 0xc5, 0x3e, 0x16, 0xee, 0xa1, 0x7c, 0xf0, 0xa3, 0x4b,
-	0x5a, 0x26, 0x5d, 0x54, 0xd0, 0xf7, 0xaf, 0xdc, 0x93, 0xe2, 0x3f, 0x87, 0x6e, 0x54, 0xe0, 0x0c,
-	0xfc, 0x5e, 0xae, 0xf4, 0x2b, 0xc8, 0xa3, 0xf5, 0x1b, 0x52, 0xd8, 0x97, 0xb0, 0xe9, 0xe0, 0x90,
-	0x32, 0xa1, 0x5a, 0x39, 0x15, 0xdb, 0xbb, 0x6b, 0xa4, 0x6f, 0x35, 0x23, 0x97, 0xa9, 0x9b, 0x5d,
-	0x42, 0xdf, 0x43, 0x2f, 0x27, 0x30, 0x48, 0x63, 0x74, 0xb9, 0xae, 0x0d, 0xb6, 0xae, 0xd8, 0xa1,
-	0x90, 0xbf, 0xb2, 0xfe, 0x3a, 0x1b, 0x1a, 0xef, 0xcf, 0x86, 0xc6, 0x7f, 0x67, 0x43, 0xe3, 0xf7,
-	0xf3, 0x61, 0xe9, 0xfd, 0xf9, 0xb0, 0xf4, 0xef, 0xf9, 0xb0, 0xe4, 0xd5, 0xa3, 0xbf, 0x54, 0x0f,
-	0xfe, 0x0f, 0x00, 0x00, 0xff, 0xff, 0x49, 0x42, 0x79, 0x2c, 0x9a, 0x0d, 0x00, 0x00,
+	// 1127 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x57, 0xcd, 0x6e, 0xdb, 0xc6,
+	0x13, 0x17, 0xa9, 0x0f, 0x4b, 0x23, 0x59, 0xa6, 0x37, 0xb2, 0xcd, 0xbf, 0xfe, 0x8d, 0x22, 0x33,
+	0x2d, 0xe0, 0x93, 0x0f, 0x6a, 0x5a, 0xb4, 0x80, 0x2f, 0x6d, 0x9a, 0x22, 0x76, 0x61, 0xd4, 0xa5,
+	0x1d, 0x04, 0x69, 0x8b, 0x08, 0xa4, 0x38, 0x56, 0xd6, 0x96, 0xb8, 0xcc, 0xee, 0x2a, 0xad, 0x1f,
+	0xa2, 0x45, 0x9f, 0xa1, 0x87, 0x3e, 0x41, 0x6f, 0x7d, 0x81, 0x9e, 0x8a, 0x1c, 0x7b, 0x2c, 0xec,
+	0x43, 0x5f, 0xa3, 0x58, 0x8a, 0x4b, 0x52, 0x1f, 0x4e, 0x74, 0xc9, 0x8d, 0x33, 0x3b, 0xfb, 0x9b,
+	0x99, 0xdf, 0xcc, 0xee, 0x2c, 0xa1, 0x31, 0xf6, 0x84, 0x44, 0xbe, 0x1f, 0x71, 0x26, 0x19, 0xa9,
+	0x62, 0x38, 0xa4, 0x21, 0x46, 0x7e, 0xbb, 0x8e, 0x9c, 0xb3, 0x44, 0xdd, 0xde, 0x18, 0xa3, 0xf4,
+	0x84, 0x64, 0x1c, 0x13, 0x45, 0x33, 0xe2, 0xec, 0x02, 0x07, 0x52, 0x68, 0x03, 0x8e, 0x82, 0x4d,
+	0xf8, 0x00, 0x13, 0x85, 0xf3, 0xab, 0x01, 0xd6, 0x63, 0xf4, 0xb8, 0xf4, 0xd1, 0x93, 0x2e, 0xbe,
+	0x9c, 0xa0, 0x90, 0xe4, 0x1e, 0xd4, 0xf1, 0x47, 0x1c, 0x4c, 0x24, 0xe3, 0x7d, 0x1a, 0xd8, 0x46,
+	0xd7, 0xd8, 0xab, 0xb9, 0xa0, 0x55, 0x87, 0x01, 0xf9, 0x00, 0x9a, 0x1a, 0xa8, 0x3f, 0x11, 0xde,
+	0x10, 0x6d, 0xb3, 0x6b, 0xec, 0x95, 0xdd, 0x75, 0xad, 0x7d, 0xa2, 0x94, 0x64, 0x1b, 0x2a, 0x42,
+	0x7a, 0x72, 0x22, 0xec, 0x62, 0xbc, 0x9c, 0x48, 0xe4, 0x3d, 0xa8, 0x49, 0x3a, 0x46, 0x21, 0xbd,
+	0x71, 0x64, 0x97, 0xba, 0xc6, 0x5e, 0xc9, 0xcd, 0x14, 0xc4, 0x82, 0xa2, 0x94, 0x23, 0xbb, 0x1c,
+	0xeb, 0xd5, 0xa7, 0x13, 0xc0, 0x66, 0x2e, 0x46, 0x11, 0xb1, 0x50, 0x20, 0xd9, 0x85, 0x22, 0x72,
+	0x1e, 0x07, 0x57, 0xef, 0x6d, 0xec, 0x6b, 0x42, 0xf6, 0x1f, 0x29, 0x3e, 0x5c, 0xb5, 0xa6, 0xfc,
+	0x8f, 0xd0, 0x0b, 0x90, 0xc7, 0xe1, 0xd5, 0xdc, 0x44, 0x22, 0x2d, 0x28, 0x7b, 0x41, 0xc0, 0x55,
+	0x58, 0xc5, 0xbd, 0x9a, 0x3b, 0x15, 0x1c, 0x09, 0xd6, 0xe9, 0xc4, 0x1f, 0x53, 0x79, 0xc4, 0x7c,
+	0xcd, 0x44, 0x13, 0x4c, 0x19, 0xc5, 0x3e, 0xca, 0xae, 0x29, 0x23, 0x85, 0x38, 0x60, 0xe1, 0x39,
+	0x1d, 0xc6, 0x88, 0x0d, 0x37, 0x91, 0xc8, 0x27, 0xd0, 0x48, 0x98, 0xee, 0xd3, 0xf0, 0x9c, 0xc5,
+	0xf9, 0xd6, 0x7b, 0x5b, 0x59, 0x54, 0x27, 0xd3, 0xd5, 0xc3, 0xf0, 0x9c, 0xb9, 0xf5, 0x28, 0x13,
+	0x1c, 0x1f, 0x36, 0xbe, 0x99, 0x20, 0xbf, 0xca, 0x39, 0xdd, 0x82, 0xca, 0x05, 0xf3, 0x33, 0xe6,
+	0xcb, 0x17, 0xcc, 0x3f, 0x0c, 0x16, 0x7c, 0x98, 0x2b, 0xfb, 0xf8, 0xcb, 0x00, 0x78, 0xca, 0xf8,
+	0x25, 0x72, 0x25, 0xaa, 0xa4, 0x52, 0x6c, 0x93, 0x06, 0xf3, 0xe5, 0x36, 0x17, 0xca, 0x3d, 0x5b,
+	0xc7, 0x46, 0x5a, 0xc7, 0x8c, 0x8d, 0xd2, 0x0c, 0x1b, 0xbb, 0xd0, 0xa0, 0xa2, 0x2f, 0xd9, 0xd8,
+	0x17, 0x92, 0x85, 0x18, 0x97, 0xb2, 0xea, 0xd6, 0xa9, 0x38, 0xd3, 0x2a, 0xd2, 0x85, 0xc6, 0xc8,
+	0x13, 0xb2, 0xff, 0xc2, 0xef, 0xab, 0xca, 0xdb, 0x95, 0xae, 0xb1, 0x57, 0x74, 0x41, 0xe9, 0x1e,
+	0xfb, 0x67, 0x74, 0x8c, 0xa4, 0x0d, 0xd5, 0x1f, 0x18, 0xbf, 0x1c, 0x31, 0x2f, 0xb0, 0xd7, 0xe2,
+	0xd5, 0x54, 0x76, 0x7e, 0x37, 0xc1, 0xca, 0x58, 0x4b, 0x1a, 0x62, 0xd5, 0x5a, 0x1d, 0xcc, 0x64,
+	0xd3, 0xec, 0xbd, 0x9f, 0x31, 0x38, 0x8f, 0xb9, 0x7f, 0xc4, 0xfc, 0xd3, 0xd8, 0x36, 0xcd, 0xf9,
+	0x00, 0x36, 0x54, 0x71, 0xa6, 0xa7, 0x71, 0x5a, 0x88, 0x52, 0x5c, 0x88, 0x56, 0x06, 0x93, 0x71,
+	0xed, 0xae, 0x5f, 0x30, 0xff, 0x38, 0xb6, 0x8d, 0xa9, 0x4f, 0x9a, 0xb6, 0x7c, 0x7b, 0xd3, 0x3a,
+	0xcf, 0xa0, 0x96, 0x7a, 0x25, 0x55, 0x28, 0xd1, 0x90, 0x4a, 0xab, 0x40, 0xea, 0xb0, 0x16, 0x61,
+	0x18, 0xd0, 0x70, 0x68, 0x19, 0x04, 0xa0, 0xc2, 0xc2, 0x11, 0x0d, 0xd1, 0x32, 0x49, 0x13, 0x20,
+	0xa0, 0x22, 0xf2, 0xe4, 0xe0, 0x05, 0x06, 0x56, 0x91, 0x34, 0xa0, 0x7a, 0x4e, 0x43, 0x2a, 0x94,
+	0x54, 0x52, 0xdb, 0x84, 0x64, 0x51, 0x84, 0x81, 0x55, 0x76, 0x06, 0x60, 0x3d, 0xf4, 0xc2, 0x01,
+	0x8e, 0xde, 0x65, 0xb3, 0xf9, 0xb0, 0x71, 0xe2, 0x4d, 0x04, 0xbe, 0x4b, 0x1f, 0xc7, 0xb0, 0x99,
+	0x3b, 0xaa, 0xab, 0x5f, 0x08, 0x59, 0x20, 0x66, 0x2e, 0x10, 0xe7, 0x23, 0xb0, 0xb2, 0x90, 0x57,
+	0x46, 0x73, 0x3e, 0x86, 0xcd, 0x1c, 0x9d, 0xab, 0xef, 0x1b, 0xc3, 0x8e, 0x8b, 0x43, 0xaa, 0x9a,
+	0xe2, 0x51, 0x72, 0xc8, 0x34, 0x53, 0x36, 0xac, 0xa9, 0xcb, 0x08, 0x85, 0x48, 0xa8, 0xd2, 0xa2,
+	0x5a, 0x79, 0x85, 0x5c, 0x50, 0x16, 0x26, 0xb1, 0x6b, 0x91, 0x74, 0x00, 0x06, 0x5e, 0xe4, 0xf9,
+	0x74, 0x44, 0xe5, 0x55, 0xdc, 0xd3, 0x45, 0x37, 0xa7, 0x71, 0x9e, 0x83, 0xbd, 0xe8, 0x6e, 0x75,
+	0xce, 0xde, 0x76, 0x3b, 0x38, 0x3f, 0x1b, 0x70, 0xe7, 0x54, 0x35, 0xdf, 0x64, 0x84, 0x67, 0x9e,
+	0xb8, 0xd4, 0xb9, 0xec, 0xc0, 0x9a, 0xf4, 0xc4, 0x65, 0x56, 0xf6, 0x8a, 0x12, 0x0f, 0x03, 0x42,
+	0xa0, 0x34, 0x60, 0x42, 0xc6, 0x50, 0x45, 0x37, 0xfe, 0x26, 0x47, 0xb0, 0x95, 0x4e, 0x14, 0x8e,
+	0x2f, 0x27, 0x94, 0xe3, 0x18, 0x43, 0x39, 0xbd, 0xa2, 0x67, 0x9a, 0xc2, 0x4d, 0xcc, 0xbe, 0xc2,
+	0x2b, 0xb7, 0xa5, 0xf7, 0xb8, 0xb9, 0x2d, 0xce, 0xf7, 0xd0, 0x9a, 0x8d, 0x27, 0x49, 0xf6, 0xad,
+	0x63, 0xed, 0x3e, 0xac, 0xa7, 0x06, 0x8a, 0xf7, 0x24, 0xd9, 0x86, 0x56, 0x7e, 0x16, 0x04, 0xdc,
+	0x79, 0x00, 0x0d, 0x45, 0xe3, 0xd3, 0xe4, 0x2e, 0x5a, 0xb8, 0x76, 0x5a, 0x50, 0xce, 0x8f, 0xc4,
+	0xa9, 0xe0, 0xfc, 0x64, 0xc0, 0x9d, 0xfc, 0xb6, 0x95, 0x47, 0xed, 0x03, 0xa8, 0xe9, 0x6b, 0x4f,
+	0xd8, 0x66, 0x4c, 0xc6, 0x76, 0xae, 0x4e, 0x79, 0xc8, 0xcc, 0x50, 0xc1, 0xa6, 0x74, 0xd2, 0x20,
+	0x99, 0x73, 0xa0, 0x55, 0x87, 0x81, 0xf3, 0x29, 0xb4, 0x66, 0xc3, 0x59, 0xbd, 0x7d, 0xbf, 0x85,
+	0xed, 0x13, 0xd5, 0x7a, 0x42, 0xba, 0x39, 0xf6, 0x57, 0x4a, 0x66, 0x2e, 0xac, 0xa4, 0x97, 0x72,
+	0x61, 0x1d, 0xc0, 0xce, 0x02, 0xf6, 0xca, 0x91, 0xf5, 0xfe, 0x35, 0xa1, 0xf6, 0x05, 0x15, 0x03,
+	0xf6, 0x0a, 0xf9, 0x15, 0xf9, 0x0e, 0xac, 0xf9, 0xbe, 0x27, 0xbb, 0xf9, 0x3e, 0x5a, 0x7a, 0x04,
+	0xdb, 0xce, 0x9b, 0x4c, 0xa6, 0xb1, 0x38, 0x05, 0xf2, 0x25, 0xd4, 0xd2, 0x27, 0x09, 0x69, 0x67,
+	0x5b, 0xe6, 0xdf, 0x52, 0xed, 0xff, 0x2f, 0x5d, 0x4b, 0x71, 0x9e, 0xc3, 0xa6, 0xf6, 0x72, 0x8c,
+	0xd2, 0x3b, 0x55, 0x6f, 0x37, 0xb2, 0x24, 0x84, 0x74, 0x51, 0xe3, 0xde, 0x7f, 0xa3, 0x4d, 0x8a,
+	0xff, 0x04, 0x9a, 0xf1, 0x50, 0xcb, 0xc0, 0xef, 0xcd, 0x8d, 0xbb, 0x05, 0xe4, 0xee, 0xed, 0x06,
+	0x1a, 0xb6, 0xf7, 0x87, 0x01, 0xeb, 0xea, 0x6c, 0xe9, 0x73, 0xc6, 0xc9, 0xd7, 0xd0, 0xc8, 0x1f,
+	0x3a, 0x72, 0x37, 0x43, 0x59, 0x72, 0x39, 0xb4, 0x3b, 0xb7, 0x2d, 0xa7, 0x91, 0x3f, 0x83, 0x6d,
+	0x17, 0x23, 0xc6, 0xa5, 0x66, 0x3f, 0x3d, 0x71, 0x77, 0x6f, 0xe9, 0xff, 0x45, 0xe8, 0x65, 0x2d,
+	0xee, 0x14, 0x7a, 0xbf, 0x99, 0x00, 0x47, 0x6a, 0x2e, 0x87, 0xde, 0x10, 0xb9, 0xaa, 0x65, 0x3a,
+	0x4d, 0xf2, 0xb5, 0x9c, 0x7f, 0x0d, 0xe6, 0x6b, 0xb9, 0x30, 0x7e, 0x9c, 0x02, 0x79, 0x08, 0x55,
+	0xfd, 0x80, 0x20, 0xff, 0x5b, 0xf6, 0xa8, 0x98, 0xa2, 0xb4, 0x6f, 0x7f, 0x6f, 0x4c, 0x41, 0xf4,
+	0x2c, 0xca, 0x83, 0xcc, 0x8d, 0xd4, 0x3c, 0xc8, 0xfc, 0xe8, 0x9a, 0x76, 0x67, 0x3a, 0x99, 0xf2,
+	0x19, 0xcd, 0x4f, 0xff, 0x7c, 0x46, 0x0b, 0xa3, 0xcc, 0x29, 0x7c, 0x6e, 0xff, 0x79, 0xdd, 0x31,
+	0x5e, 0x5f, 0x77, 0x8c, 0x7f, 0xae, 0x3b, 0xc6, 0x2f, 0x37, 0x9d, 0xc2, 0xeb, 0x9b, 0x4e, 0xe1,
+	0xef, 0x9b, 0x4e, 0xc1, 0xaf, 0xc4, 0xbf, 0x0f, 0x1f, 0xfe, 0x17, 0x00, 0x00, 0xff, 0xff, 0xaa,
+	0x57, 0xdb, 0x70, 0x97, 0x0c, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -1427,484 +1310,480 @@ var _ grpc.ClientConn
 // is compatible with the grpc package it is being compiled against.
 const _ = grpc.SupportPackageIsVersion4
 
-// MasterClient is the client API for Master service.
+// DiscoveryClient is the client API for Discovery service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
-type MasterClient interface {
+type DiscoveryClient interface {
 	RegisterExecutor(ctx context.Context, in *RegisterExecutorRequest, opts ...grpc.CallOption) (*RegisterExecutorResponse, error)
-	SubmitJob(ctx context.Context, in *SubmitJobRequest, opts ...grpc.CallOption) (*SubmitJobResponse, error)
-	QueryJob(ctx context.Context, in *QueryJobRequest, opts ...grpc.CallOption) (*QueryJobResponse, error)
-	PauseJob(ctx context.Context, in *PauseJobRequest, opts ...grpc.CallOption) (*PauseJobResponse, error)
-	CancelJob(ctx context.Context, in *CancelJobRequest, opts ...grpc.CallOption) (*CancelJobResponse, error)
-	DebugJob(ctx context.Context, in *DebugJobRequest, opts ...grpc.CallOption) (*DebugJobResponse, error)
 	Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error)
-	ScheduleTask(ctx context.Context, in *ScheduleTaskRequest, opts ...grpc.CallOption) (*ScheduleTaskResponse, error)
 	// RegisterMetaStore is called from backend metastore and
 	// registers to server master metastore manager
 	RegisterMetaStore(ctx context.Context, in *RegisterMetaStoreRequest, opts ...grpc.CallOption) (*RegisterMetaStoreResponse, error)
 	// QueryMetaStore queries metastore manager and returns
 	// the information of a matching metastore
 	QueryMetaStore(ctx context.Context, in *QueryMetaStoreRequest, opts ...grpc.CallOption) (*QueryMetaStoreResponse, error)
-	// ReportExecutorWorkload is called from executor to server master to report
-	// resource usage in executor.
-	ReportExecutorWorkload(ctx context.Context, in *ExecWorkloadRequest, opts ...grpc.CallOption) (*ExecWorkloadResponse, error)
-	// PersistResource is called from executor to indicate some workers on it wants
-	// to persist resource files.
-	PersistResource(ctx context.Context, in *PersistResourceRequest, opts ...grpc.CallOption) (*PersistResourceResponse, error)
 }
 
-type masterClient struct {
+type discoveryClient struct {
 	cc *grpc.ClientConn
 }
 
-func NewMasterClient(cc *grpc.ClientConn) MasterClient {
-	return &masterClient{cc}
+func NewDiscoveryClient(cc *grpc.ClientConn) DiscoveryClient {
+	return &discoveryClient{cc}
 }
 
-func (c *masterClient) RegisterExecutor(ctx context.Context, in *RegisterExecutorRequest, opts ...grpc.CallOption) (*RegisterExecutorResponse, error) {
+func (c *discoveryClient) RegisterExecutor(ctx context.Context, in *RegisterExecutorRequest, opts ...grpc.CallOption) (*RegisterExecutorResponse, error) {
 	out := new(RegisterExecutorResponse)
-	err := c.cc.Invoke(ctx, "/enginepb.Master/RegisterExecutor", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/enginepb.Discovery/RegisterExecutor", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *masterClient) SubmitJob(ctx context.Context, in *SubmitJobRequest, opts ...grpc.CallOption) (*SubmitJobResponse, error) {
-	out := new(SubmitJobResponse)
-	err := c.cc.Invoke(ctx, "/enginepb.Master/SubmitJob", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *masterClient) QueryJob(ctx context.Context, in *QueryJobRequest, opts ...grpc.CallOption) (*QueryJobResponse, error) {
-	out := new(QueryJobResponse)
-	err := c.cc.Invoke(ctx, "/enginepb.Master/QueryJob", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *masterClient) PauseJob(ctx context.Context, in *PauseJobRequest, opts ...grpc.CallOption) (*PauseJobResponse, error) {
-	out := new(PauseJobResponse)
-	err := c.cc.Invoke(ctx, "/enginepb.Master/PauseJob", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *masterClient) CancelJob(ctx context.Context, in *CancelJobRequest, opts ...grpc.CallOption) (*CancelJobResponse, error) {
-	out := new(CancelJobResponse)
-	err := c.cc.Invoke(ctx, "/enginepb.Master/CancelJob", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *masterClient) DebugJob(ctx context.Context, in *DebugJobRequest, opts ...grpc.CallOption) (*DebugJobResponse, error) {
-	out := new(DebugJobResponse)
-	err := c.cc.Invoke(ctx, "/enginepb.Master/DebugJob", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *masterClient) Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error) {
+func (c *discoveryClient) Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error) {
 	out := new(HeartbeatResponse)
-	err := c.cc.Invoke(ctx, "/enginepb.Master/Heartbeat", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/enginepb.Discovery/Heartbeat", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *masterClient) ScheduleTask(ctx context.Context, in *ScheduleTaskRequest, opts ...grpc.CallOption) (*ScheduleTaskResponse, error) {
-	out := new(ScheduleTaskResponse)
-	err := c.cc.Invoke(ctx, "/enginepb.Master/ScheduleTask", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *masterClient) RegisterMetaStore(ctx context.Context, in *RegisterMetaStoreRequest, opts ...grpc.CallOption) (*RegisterMetaStoreResponse, error) {
+func (c *discoveryClient) RegisterMetaStore(ctx context.Context, in *RegisterMetaStoreRequest, opts ...grpc.CallOption) (*RegisterMetaStoreResponse, error) {
 	out := new(RegisterMetaStoreResponse)
-	err := c.cc.Invoke(ctx, "/enginepb.Master/RegisterMetaStore", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/enginepb.Discovery/RegisterMetaStore", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *masterClient) QueryMetaStore(ctx context.Context, in *QueryMetaStoreRequest, opts ...grpc.CallOption) (*QueryMetaStoreResponse, error) {
+func (c *discoveryClient) QueryMetaStore(ctx context.Context, in *QueryMetaStoreRequest, opts ...grpc.CallOption) (*QueryMetaStoreResponse, error) {
 	out := new(QueryMetaStoreResponse)
-	err := c.cc.Invoke(ctx, "/enginepb.Master/QueryMetaStore", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/enginepb.Discovery/QueryMetaStore", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *masterClient) ReportExecutorWorkload(ctx context.Context, in *ExecWorkloadRequest, opts ...grpc.CallOption) (*ExecWorkloadResponse, error) {
-	out := new(ExecWorkloadResponse)
-	err := c.cc.Invoke(ctx, "/enginepb.Master/ReportExecutorWorkload", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *masterClient) PersistResource(ctx context.Context, in *PersistResourceRequest, opts ...grpc.CallOption) (*PersistResourceResponse, error) {
-	out := new(PersistResourceResponse)
-	err := c.cc.Invoke(ctx, "/enginepb.Master/PersistResource", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-// MasterServer is the server API for Master service.
-type MasterServer interface {
+// DiscoveryServer is the server API for Discovery service.
+type DiscoveryServer interface {
 	RegisterExecutor(context.Context, *RegisterExecutorRequest) (*RegisterExecutorResponse, error)
-	SubmitJob(context.Context, *SubmitJobRequest) (*SubmitJobResponse, error)
-	QueryJob(context.Context, *QueryJobRequest) (*QueryJobResponse, error)
-	PauseJob(context.Context, *PauseJobRequest) (*PauseJobResponse, error)
-	CancelJob(context.Context, *CancelJobRequest) (*CancelJobResponse, error)
-	DebugJob(context.Context, *DebugJobRequest) (*DebugJobResponse, error)
 	Heartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error)
-	ScheduleTask(context.Context, *ScheduleTaskRequest) (*ScheduleTaskResponse, error)
 	// RegisterMetaStore is called from backend metastore and
 	// registers to server master metastore manager
 	RegisterMetaStore(context.Context, *RegisterMetaStoreRequest) (*RegisterMetaStoreResponse, error)
 	// QueryMetaStore queries metastore manager and returns
 	// the information of a matching metastore
 	QueryMetaStore(context.Context, *QueryMetaStoreRequest) (*QueryMetaStoreResponse, error)
-	// ReportExecutorWorkload is called from executor to server master to report
-	// resource usage in executor.
-	ReportExecutorWorkload(context.Context, *ExecWorkloadRequest) (*ExecWorkloadResponse, error)
-	// PersistResource is called from executor to indicate some workers on it wants
-	// to persist resource files.
-	PersistResource(context.Context, *PersistResourceRequest) (*PersistResourceResponse, error)
 }
 
-// UnimplementedMasterServer can be embedded to have forward compatible implementations.
-type UnimplementedMasterServer struct {
+// UnimplementedDiscoveryServer can be embedded to have forward compatible implementations.
+type UnimplementedDiscoveryServer struct {
 }
 
-func (*UnimplementedMasterServer) RegisterExecutor(ctx context.Context, req *RegisterExecutorRequest) (*RegisterExecutorResponse, error) {
+func (*UnimplementedDiscoveryServer) RegisterExecutor(ctx context.Context, req *RegisterExecutorRequest) (*RegisterExecutorResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterExecutor not implemented")
 }
-func (*UnimplementedMasterServer) SubmitJob(ctx context.Context, req *SubmitJobRequest) (*SubmitJobResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SubmitJob not implemented")
-}
-func (*UnimplementedMasterServer) QueryJob(ctx context.Context, req *QueryJobRequest) (*QueryJobResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method QueryJob not implemented")
-}
-func (*UnimplementedMasterServer) PauseJob(ctx context.Context, req *PauseJobRequest) (*PauseJobResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method PauseJob not implemented")
-}
-func (*UnimplementedMasterServer) CancelJob(ctx context.Context, req *CancelJobRequest) (*CancelJobResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method CancelJob not implemented")
-}
-func (*UnimplementedMasterServer) DebugJob(ctx context.Context, req *DebugJobRequest) (*DebugJobResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method DebugJob not implemented")
-}
-func (*UnimplementedMasterServer) Heartbeat(ctx context.Context, req *HeartbeatRequest) (*HeartbeatResponse, error) {
+func (*UnimplementedDiscoveryServer) Heartbeat(ctx context.Context, req *HeartbeatRequest) (*HeartbeatResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Heartbeat not implemented")
 }
-func (*UnimplementedMasterServer) ScheduleTask(ctx context.Context, req *ScheduleTaskRequest) (*ScheduleTaskResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ScheduleTask not implemented")
-}
-func (*UnimplementedMasterServer) RegisterMetaStore(ctx context.Context, req *RegisterMetaStoreRequest) (*RegisterMetaStoreResponse, error) {
+func (*UnimplementedDiscoveryServer) RegisterMetaStore(ctx context.Context, req *RegisterMetaStoreRequest) (*RegisterMetaStoreResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterMetaStore not implemented")
 }
-func (*UnimplementedMasterServer) QueryMetaStore(ctx context.Context, req *QueryMetaStoreRequest) (*QueryMetaStoreResponse, error) {
+func (*UnimplementedDiscoveryServer) QueryMetaStore(ctx context.Context, req *QueryMetaStoreRequest) (*QueryMetaStoreResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QueryMetaStore not implemented")
 }
-func (*UnimplementedMasterServer) ReportExecutorWorkload(ctx context.Context, req *ExecWorkloadRequest) (*ExecWorkloadResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ReportExecutorWorkload not implemented")
-}
-func (*UnimplementedMasterServer) PersistResource(ctx context.Context, req *PersistResourceRequest) (*PersistResourceResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method PersistResource not implemented")
+
+func RegisterDiscoveryServer(s *grpc.Server, srv DiscoveryServer) {
+	s.RegisterService(&_Discovery_serviceDesc, srv)
 }
 
-func RegisterMasterServer(s *grpc.Server, srv MasterServer) {
-	s.RegisterService(&_Master_serviceDesc, srv)
-}
-
-func _Master_RegisterExecutor_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Discovery_RegisterExecutor_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RegisterExecutorRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MasterServer).RegisterExecutor(ctx, in)
+		return srv.(DiscoveryServer).RegisterExecutor(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/enginepb.Master/RegisterExecutor",
+		FullMethod: "/enginepb.Discovery/RegisterExecutor",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MasterServer).RegisterExecutor(ctx, req.(*RegisterExecutorRequest))
+		return srv.(DiscoveryServer).RegisterExecutor(ctx, req.(*RegisterExecutorRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Master_SubmitJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SubmitJobRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(MasterServer).SubmitJob(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/enginepb.Master/SubmitJob",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MasterServer).SubmitJob(ctx, req.(*SubmitJobRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Master_QueryJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(QueryJobRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(MasterServer).QueryJob(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/enginepb.Master/QueryJob",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MasterServer).QueryJob(ctx, req.(*QueryJobRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Master_PauseJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(PauseJobRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(MasterServer).PauseJob(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/enginepb.Master/PauseJob",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MasterServer).PauseJob(ctx, req.(*PauseJobRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Master_CancelJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CancelJobRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(MasterServer).CancelJob(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/enginepb.Master/CancelJob",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MasterServer).CancelJob(ctx, req.(*CancelJobRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Master_DebugJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DebugJobRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(MasterServer).DebugJob(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/enginepb.Master/DebugJob",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MasterServer).DebugJob(ctx, req.(*DebugJobRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Master_Heartbeat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Discovery_Heartbeat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(HeartbeatRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MasterServer).Heartbeat(ctx, in)
+		return srv.(DiscoveryServer).Heartbeat(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/enginepb.Master/Heartbeat",
+		FullMethod: "/enginepb.Discovery/Heartbeat",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MasterServer).Heartbeat(ctx, req.(*HeartbeatRequest))
+		return srv.(DiscoveryServer).Heartbeat(ctx, req.(*HeartbeatRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Master_ScheduleTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ScheduleTaskRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(MasterServer).ScheduleTask(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/enginepb.Master/ScheduleTask",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MasterServer).ScheduleTask(ctx, req.(*ScheduleTaskRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Master_RegisterMetaStore_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Discovery_RegisterMetaStore_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RegisterMetaStoreRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MasterServer).RegisterMetaStore(ctx, in)
+		return srv.(DiscoveryServer).RegisterMetaStore(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/enginepb.Master/RegisterMetaStore",
+		FullMethod: "/enginepb.Discovery/RegisterMetaStore",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MasterServer).RegisterMetaStore(ctx, req.(*RegisterMetaStoreRequest))
+		return srv.(DiscoveryServer).RegisterMetaStore(ctx, req.(*RegisterMetaStoreRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Master_QueryMetaStore_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Discovery_QueryMetaStore_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(QueryMetaStoreRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MasterServer).QueryMetaStore(ctx, in)
+		return srv.(DiscoveryServer).QueryMetaStore(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/enginepb.Master/QueryMetaStore",
+		FullMethod: "/enginepb.Discovery/QueryMetaStore",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MasterServer).QueryMetaStore(ctx, req.(*QueryMetaStoreRequest))
+		return srv.(DiscoveryServer).QueryMetaStore(ctx, req.(*QueryMetaStoreRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Master_ReportExecutorWorkload_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+var _Discovery_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "enginepb.Discovery",
+	HandlerType: (*DiscoveryServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "RegisterExecutor",
+			Handler:    _Discovery_RegisterExecutor_Handler,
+		},
+		{
+			MethodName: "Heartbeat",
+			Handler:    _Discovery_Heartbeat_Handler,
+		},
+		{
+			MethodName: "RegisterMetaStore",
+			Handler:    _Discovery_RegisterMetaStore_Handler,
+		},
+		{
+			MethodName: "QueryMetaStore",
+			Handler:    _Discovery_QueryMetaStore_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "master.proto",
+}
+
+// TaskSchedulerClient is the client API for TaskScheduler service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
+type TaskSchedulerClient interface {
+	ScheduleTask(ctx context.Context, in *ScheduleTaskRequest, opts ...grpc.CallOption) (*ScheduleTaskResponse, error)
+	// ReportExecutorWorkload is called from executor to server master to report
+	// resource usage in executor.
+	ReportExecutorWorkload(ctx context.Context, in *ExecWorkloadRequest, opts ...grpc.CallOption) (*ExecWorkloadResponse, error)
+}
+
+type taskSchedulerClient struct {
+	cc *grpc.ClientConn
+}
+
+func NewTaskSchedulerClient(cc *grpc.ClientConn) TaskSchedulerClient {
+	return &taskSchedulerClient{cc}
+}
+
+func (c *taskSchedulerClient) ScheduleTask(ctx context.Context, in *ScheduleTaskRequest, opts ...grpc.CallOption) (*ScheduleTaskResponse, error) {
+	out := new(ScheduleTaskResponse)
+	err := c.cc.Invoke(ctx, "/enginepb.TaskScheduler/ScheduleTask", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *taskSchedulerClient) ReportExecutorWorkload(ctx context.Context, in *ExecWorkloadRequest, opts ...grpc.CallOption) (*ExecWorkloadResponse, error) {
+	out := new(ExecWorkloadResponse)
+	err := c.cc.Invoke(ctx, "/enginepb.TaskScheduler/ReportExecutorWorkload", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// TaskSchedulerServer is the server API for TaskScheduler service.
+type TaskSchedulerServer interface {
+	ScheduleTask(context.Context, *ScheduleTaskRequest) (*ScheduleTaskResponse, error)
+	// ReportExecutorWorkload is called from executor to server master to report
+	// resource usage in executor.
+	ReportExecutorWorkload(context.Context, *ExecWorkloadRequest) (*ExecWorkloadResponse, error)
+}
+
+// UnimplementedTaskSchedulerServer can be embedded to have forward compatible implementations.
+type UnimplementedTaskSchedulerServer struct {
+}
+
+func (*UnimplementedTaskSchedulerServer) ScheduleTask(ctx context.Context, req *ScheduleTaskRequest) (*ScheduleTaskResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ScheduleTask not implemented")
+}
+func (*UnimplementedTaskSchedulerServer) ReportExecutorWorkload(ctx context.Context, req *ExecWorkloadRequest) (*ExecWorkloadResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReportExecutorWorkload not implemented")
+}
+
+func RegisterTaskSchedulerServer(s *grpc.Server, srv TaskSchedulerServer) {
+	s.RegisterService(&_TaskScheduler_serviceDesc, srv)
+}
+
+func _TaskScheduler_ScheduleTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ScheduleTaskRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TaskSchedulerServer).ScheduleTask(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/enginepb.TaskScheduler/ScheduleTask",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TaskSchedulerServer).ScheduleTask(ctx, req.(*ScheduleTaskRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TaskScheduler_ReportExecutorWorkload_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ExecWorkloadRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MasterServer).ReportExecutorWorkload(ctx, in)
+		return srv.(TaskSchedulerServer).ReportExecutorWorkload(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/enginepb.Master/ReportExecutorWorkload",
+		FullMethod: "/enginepb.TaskScheduler/ReportExecutorWorkload",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MasterServer).ReportExecutorWorkload(ctx, req.(*ExecWorkloadRequest))
+		return srv.(TaskSchedulerServer).ReportExecutorWorkload(ctx, req.(*ExecWorkloadRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Master_PersistResource_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(PersistResourceRequest)
+var _TaskScheduler_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "enginepb.TaskScheduler",
+	HandlerType: (*TaskSchedulerServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ScheduleTask",
+			Handler:    _TaskScheduler_ScheduleTask_Handler,
+		},
+		{
+			MethodName: "ReportExecutorWorkload",
+			Handler:    _TaskScheduler_ReportExecutorWorkload_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "master.proto",
+}
+
+// JobManagerClient is the client API for JobManager service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
+type JobManagerClient interface {
+	SubmitJob(ctx context.Context, in *SubmitJobRequest, opts ...grpc.CallOption) (*SubmitJobResponse, error)
+	QueryJob(ctx context.Context, in *QueryJobRequest, opts ...grpc.CallOption) (*QueryJobResponse, error)
+	PauseJob(ctx context.Context, in *PauseJobRequest, opts ...grpc.CallOption) (*PauseJobResponse, error)
+	CancelJob(ctx context.Context, in *CancelJobRequest, opts ...grpc.CallOption) (*CancelJobResponse, error)
+}
+
+type jobManagerClient struct {
+	cc *grpc.ClientConn
+}
+
+func NewJobManagerClient(cc *grpc.ClientConn) JobManagerClient {
+	return &jobManagerClient{cc}
+}
+
+func (c *jobManagerClient) SubmitJob(ctx context.Context, in *SubmitJobRequest, opts ...grpc.CallOption) (*SubmitJobResponse, error) {
+	out := new(SubmitJobResponse)
+	err := c.cc.Invoke(ctx, "/enginepb.JobManager/SubmitJob", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *jobManagerClient) QueryJob(ctx context.Context, in *QueryJobRequest, opts ...grpc.CallOption) (*QueryJobResponse, error) {
+	out := new(QueryJobResponse)
+	err := c.cc.Invoke(ctx, "/enginepb.JobManager/QueryJob", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *jobManagerClient) PauseJob(ctx context.Context, in *PauseJobRequest, opts ...grpc.CallOption) (*PauseJobResponse, error) {
+	out := new(PauseJobResponse)
+	err := c.cc.Invoke(ctx, "/enginepb.JobManager/PauseJob", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *jobManagerClient) CancelJob(ctx context.Context, in *CancelJobRequest, opts ...grpc.CallOption) (*CancelJobResponse, error) {
+	out := new(CancelJobResponse)
+	err := c.cc.Invoke(ctx, "/enginepb.JobManager/CancelJob", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// JobManagerServer is the server API for JobManager service.
+type JobManagerServer interface {
+	SubmitJob(context.Context, *SubmitJobRequest) (*SubmitJobResponse, error)
+	QueryJob(context.Context, *QueryJobRequest) (*QueryJobResponse, error)
+	PauseJob(context.Context, *PauseJobRequest) (*PauseJobResponse, error)
+	CancelJob(context.Context, *CancelJobRequest) (*CancelJobResponse, error)
+}
+
+// UnimplementedJobManagerServer can be embedded to have forward compatible implementations.
+type UnimplementedJobManagerServer struct {
+}
+
+func (*UnimplementedJobManagerServer) SubmitJob(ctx context.Context, req *SubmitJobRequest) (*SubmitJobResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SubmitJob not implemented")
+}
+func (*UnimplementedJobManagerServer) QueryJob(ctx context.Context, req *QueryJobRequest) (*QueryJobResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method QueryJob not implemented")
+}
+func (*UnimplementedJobManagerServer) PauseJob(ctx context.Context, req *PauseJobRequest) (*PauseJobResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PauseJob not implemented")
+}
+func (*UnimplementedJobManagerServer) CancelJob(ctx context.Context, req *CancelJobRequest) (*CancelJobResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CancelJob not implemented")
+}
+
+func RegisterJobManagerServer(s *grpc.Server, srv JobManagerServer) {
+	s.RegisterService(&_JobManager_serviceDesc, srv)
+}
+
+func _JobManager_SubmitJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SubmitJobRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MasterServer).PersistResource(ctx, in)
+		return srv.(JobManagerServer).SubmitJob(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/enginepb.Master/PersistResource",
+		FullMethod: "/enginepb.JobManager/SubmitJob",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MasterServer).PersistResource(ctx, req.(*PersistResourceRequest))
+		return srv.(JobManagerServer).SubmitJob(ctx, req.(*SubmitJobRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-var _Master_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "enginepb.Master",
-	HandlerType: (*MasterServer)(nil),
+func _JobManager_QueryJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryJobRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(JobManagerServer).QueryJob(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/enginepb.JobManager/QueryJob",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(JobManagerServer).QueryJob(ctx, req.(*QueryJobRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _JobManager_PauseJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PauseJobRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(JobManagerServer).PauseJob(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/enginepb.JobManager/PauseJob",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(JobManagerServer).PauseJob(ctx, req.(*PauseJobRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _JobManager_CancelJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelJobRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(JobManagerServer).CancelJob(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/enginepb.JobManager/CancelJob",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(JobManagerServer).CancelJob(ctx, req.(*CancelJobRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+var _JobManager_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "enginepb.JobManager",
+	HandlerType: (*JobManagerServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "RegisterExecutor",
-			Handler:    _Master_RegisterExecutor_Handler,
-		},
-		{
 			MethodName: "SubmitJob",
-			Handler:    _Master_SubmitJob_Handler,
+			Handler:    _JobManager_SubmitJob_Handler,
 		},
 		{
 			MethodName: "QueryJob",
-			Handler:    _Master_QueryJob_Handler,
+			Handler:    _JobManager_QueryJob_Handler,
 		},
 		{
 			MethodName: "PauseJob",
-			Handler:    _Master_PauseJob_Handler,
+			Handler:    _JobManager_PauseJob_Handler,
 		},
 		{
 			MethodName: "CancelJob",
-			Handler:    _Master_CancelJob_Handler,
-		},
-		{
-			MethodName: "DebugJob",
-			Handler:    _Master_DebugJob_Handler,
-		},
-		{
-			MethodName: "Heartbeat",
-			Handler:    _Master_Heartbeat_Handler,
-		},
-		{
-			MethodName: "ScheduleTask",
-			Handler:    _Master_ScheduleTask_Handler,
-		},
-		{
-			MethodName: "RegisterMetaStore",
-			Handler:    _Master_RegisterMetaStore_Handler,
-		},
-		{
-			MethodName: "QueryMetaStore",
-			Handler:    _Master_QueryMetaStore_Handler,
-		},
-		{
-			MethodName: "ReportExecutorWorkload",
-			Handler:    _Master_ReportExecutorWorkload_Handler,
-		},
-		{
-			MethodName: "PersistResource",
-			Handler:    _Master_PersistResource_Handler,
+			Handler:    _JobManager_CancelJob_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -2538,9 +2417,14 @@ func (m *ScheduleTaskRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = l
 	if len(m.ResourceRequirements) > 0 {
 		for iNdEx := len(m.ResourceRequirements) - 1; iNdEx >= 0; iNdEx-- {
-			i -= len(m.ResourceRequirements[iNdEx])
-			copy(dAtA[i:], m.ResourceRequirements[iNdEx])
-			i = encodeVarintMaster(dAtA, i, uint64(len(m.ResourceRequirements[iNdEx])))
+			{
+				size, err := m.ResourceRequirements[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintMaster(dAtA, i, uint64(size))
+			}
 			i--
 			dAtA[i] = 0x1a
 		}
@@ -2775,92 +2659,6 @@ func (m *PersistResourceResponse) MarshalToSizedBuffer(dAtA []byte) (int, error)
 	_ = i
 	var l int
 	_ = l
-	if m.Err != nil {
-		{
-			size, err := m.Err.MarshalToSizedBuffer(dAtA[:i])
-			if err != nil {
-				return 0, err
-			}
-			i -= size
-			i = encodeVarintMaster(dAtA, i, uint64(size))
-		}
-		i--
-		dAtA[i] = 0xa
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *DebugJobRequest) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *DebugJobRequest) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *DebugJobRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if len(m.JsonArg) > 0 {
-		i -= len(m.JsonArg)
-		copy(dAtA[i:], m.JsonArg)
-		i = encodeVarintMaster(dAtA, i, uint64(len(m.JsonArg)))
-		i--
-		dAtA[i] = 0x1a
-	}
-	if len(m.Command) > 0 {
-		i -= len(m.Command)
-		copy(dAtA[i:], m.Command)
-		i = encodeVarintMaster(dAtA, i, uint64(len(m.Command)))
-		i--
-		dAtA[i] = 0x12
-	}
-	if len(m.JobId) > 0 {
-		i -= len(m.JobId)
-		copy(dAtA[i:], m.JobId)
-		i = encodeVarintMaster(dAtA, i, uint64(len(m.JobId)))
-		i--
-		dAtA[i] = 0xa
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *DebugJobResponse) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *DebugJobResponse) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *DebugJobResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if len(m.JsonRet) > 0 {
-		i -= len(m.JsonRet)
-		copy(dAtA[i:], m.JsonRet)
-		i = encodeVarintMaster(dAtA, i, uint64(len(m.JsonRet)))
-		i--
-		dAtA[i] = 0x12
-	}
 	if m.Err != nil {
 		{
 			size, err := m.Err.MarshalToSizedBuffer(dAtA[:i])
@@ -3161,8 +2959,8 @@ func (m *ScheduleTaskRequest) Size() (n int) {
 		n += 1 + sovMaster(uint64(m.Cost))
 	}
 	if len(m.ResourceRequirements) > 0 {
-		for _, s := range m.ResourceRequirements {
-			l = len(s)
+		for _, e := range m.ResourceRequirements {
+			l = e.Size()
 			n += 1 + l + sovMaster(uint64(l))
 		}
 	}
@@ -3264,44 +3062,6 @@ func (m *PersistResourceResponse) Size() (n int) {
 	_ = l
 	if m.Err != nil {
 		l = m.Err.Size()
-		n += 1 + l + sovMaster(uint64(l))
-	}
-	return n
-}
-
-func (m *DebugJobRequest) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	l = len(m.JobId)
-	if l > 0 {
-		n += 1 + l + sovMaster(uint64(l))
-	}
-	l = len(m.Command)
-	if l > 0 {
-		n += 1 + l + sovMaster(uint64(l))
-	}
-	l = len(m.JsonArg)
-	if l > 0 {
-		n += 1 + l + sovMaster(uint64(l))
-	}
-	return n
-}
-
-func (m *DebugJobResponse) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.Err != nil {
-		l = m.Err.Size()
-		n += 1 + l + sovMaster(uint64(l))
-	}
-	l = len(m.JsonRet)
-	if l > 0 {
 		n += 1 + l + sovMaster(uint64(l))
 	}
 	return n
@@ -5173,7 +4933,7 @@ func (m *ScheduleTaskRequest) Unmarshal(dAtA []byte) error {
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ResourceRequirements", wireType)
 			}
-			var stringLen uint64
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowMaster
@@ -5183,23 +4943,25 @@ func (m *ScheduleTaskRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
+			if msglen < 0 {
 				return ErrInvalidLengthMaster
 			}
-			postIndex := iNdEx + intStringLen
+			postIndex := iNdEx + msglen
 			if postIndex < 0 {
 				return ErrInvalidLengthMaster
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.ResourceRequirements = append(m.ResourceRequirements, string(dAtA[iNdEx:postIndex]))
+			m.ResourceRequirements = append(m.ResourceRequirements, &ResourceKey{})
+			if err := m.ResourceRequirements[len(m.ResourceRequirements)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -5836,270 +5598,6 @@ func (m *PersistResourceResponse) Unmarshal(dAtA []byte) error {
 			if err := m.Err.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipMaster(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthMaster
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *DebugJobRequest) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowMaster
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: DebugJobRequest: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: DebugJobRequest: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field JobId", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMaster
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthMaster
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthMaster
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.JobId = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Command", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMaster
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthMaster
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthMaster
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Command = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field JsonArg", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMaster
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthMaster
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthMaster
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.JsonArg = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipMaster(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthMaster
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *DebugJobResponse) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowMaster
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: DebugJobResponse: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: DebugJobResponse: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Err", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMaster
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthMaster
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthMaster
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.Err == nil {
-				m.Err = &Error{}
-			}
-			if err := m.Err.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field JsonRet", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMaster
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthMaster
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthMaster
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.JsonRet = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

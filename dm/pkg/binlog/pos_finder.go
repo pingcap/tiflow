@@ -14,7 +14,6 @@
 package binlog
 
 import (
-	"database/sql"
 	"path"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
@@ -25,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/reader"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -41,7 +41,7 @@ type binlogPosFinder struct {
 	flavor     string
 
 	// fields used for remote mode
-	db      *sql.DB
+	db      *conn.BaseDB
 	syncCfg replication.BinlogSyncerConfig
 
 	// fields used for local relay
@@ -95,7 +95,7 @@ func NewLocalBinlogPosFinder(tctx *tcontext.Context, enableGTID bool, flavor str
 	}
 }
 
-func NewRemoteBinlogPosFinder(tctx *tcontext.Context, db *sql.DB, syncCfg replication.BinlogSyncerConfig, enableGTID bool) *binlogPosFinder {
+func NewRemoteBinlogPosFinder(tctx *tcontext.Context, db *conn.BaseDB, syncCfg replication.BinlogSyncerConfig, enableGTID bool) *binlogPosFinder {
 	// make sure raw mode enabled, and MaxReconnectAttempts set
 	syncCfg.RawModeEnabled = true
 	if syncCfg.MaxReconnectAttempts == 0 {
@@ -120,7 +120,7 @@ func NewRemoteBinlogPosFinder(tctx *tcontext.Context, db *sql.DB, syncCfg replic
 
 func (r *binlogPosFinder) getBinlogFiles() (FileSizes, error) {
 	if r.remote {
-		return GetBinaryLogs(r.tctx.Ctx, r.db)
+		return GetBinaryLogs(r.tctx, r.db)
 	}
 	return GetLocalBinaryLogs(r.relayDir)
 }

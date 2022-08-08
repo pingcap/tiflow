@@ -20,7 +20,7 @@ function run() {
 	inject_points=(
 		"github.com/pingcap/tiflow/dm/syncer/BlockDDLJob=return(1)"
 		"github.com/pingcap/tiflow/dm/syncer/ShowLagInLog=return(1)" # test lag metric >= 1 because we inject BlockDDLJob(ddl) to sleep(1)
-		"github.com/pingcap/tiflow/dm/dm/worker/PrintStatusCheckSeconds=return(1)"
+		"github.com/pingcap/tiflow/dm/worker/PrintStatusCheckSeconds=return(1)"
 	)
 	export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 
@@ -97,13 +97,13 @@ function run() {
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
-	run_sql_source1 "truncate table metrics.t1;"                                        # make skip job
+	run_sql_source1 "create view metrics.v1 as select * from metrics.t1;"               # make skip job
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1 # make dml job
 	run_sql_file $cur/data/db2.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2 # make dml job
 
 	# check two worker's lag >= 2
-	check_log_contain_with_retry "[ShowLagInLog]" $WORK_DIR/worker1/log/dm-worker.log
-	check_log_contain_with_retry "[ShowLagInLog]" $WORK_DIR/worker2/log/dm-worker.log
+	check_log_contain_with_retry "ShowLagInLog" $WORK_DIR/worker1/log/dm-worker.log
+	check_log_contain_with_retry "ShowLagInLog" $WORK_DIR/worker2/log/dm-worker.log
 	check_metric $WORKER1_PORT 'dm_syncer_replication_lag_sum{source_id="mysql-replica-01",task="test",worker="worker1"}' 5 1 999
 	check_metric $WORKER2_PORT 'dm_syncer_replication_lag_sum{source_id="mysql-replica-02",task="test",worker="worker2"}' 5 1 999
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml

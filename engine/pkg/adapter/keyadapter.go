@@ -18,12 +18,12 @@ import (
 	"path"
 	"strings"
 
-	"github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // Defines all key adapters
 var (
-	MasterCampaignKey KeyAdapter = keyHexEncoderDecoder("/data-flow/master/leader/")
+	MasterCampaignKey KeyAdapter = keyHexEncoderDecoder("/data-flow/master/leader")
 	// TODO: investigate whether we can merge MasterInfoKey and MasterMetaKey into one key
 	MasterInfoKey      KeyAdapter = keyHexEncoderDecoder("/data-flow/master/info/")
 	MasterMetaKey      KeyAdapter = keyHexEncoderDecoder("/data-flow/master/meta/")
@@ -72,7 +72,7 @@ func (s keyHexEncoderDecoder) Decode(key string) ([]string, error) {
 	for i, k := range v {
 		dec, err := hex.DecodeString(k)
 		if err != nil {
-			return nil, errors.Wrap(errors.ErrDecodeEtcdKeyFail, err, k)
+			return nil, errors.WrapError(errors.ErrDecodeEtcdKeyFail, err, k)
 		}
 		v[i] = string(dec)
 	}

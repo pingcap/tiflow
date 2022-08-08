@@ -19,7 +19,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -38,6 +37,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/fsutil"
 	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
@@ -45,12 +45,8 @@ const (
 	// pageBytes is the alignment for flushing records to the backing Writer.
 	// It should be a multiple of the minimum sector size so that log can safely
 	// distinguish between torn writes and ordinary data corruption.
-	pageBytes = 8 * common.MinSectorSize
-)
-
-const (
-	defaultFlushIntervalInMs = 1000
-	defaultS3Timeout         = 3 * time.Second
+	pageBytes        = 8 * common.MinSectorSize
+	defaultS3Timeout = 3 * time.Second
 )
 
 var (
@@ -84,10 +80,9 @@ type FileWriterConfig struct {
 	FileType     string
 	CreateTime   time.Time
 	// MaxLogSize is the maximum size of log in megabyte, defaults to defaultMaxLogSize.
-	MaxLogSize        int64
-	FlushIntervalInMs int64
-	S3Storage         bool
-	S3URI             url.URL
+	MaxLogSize int64
+	S3Storage  bool
+	S3URI      url.URL
 }
 
 // Option define the writerOptions
@@ -137,6 +132,7 @@ type Writer struct {
 	storage         storage.ExternalStorage
 	sync.RWMutex
 	uuidGenerator uuid.Generator
+	allocator     *fsutil.FileAllocator
 
 	metricFsyncDuration    prometheus.Observer
 	metricFlushAllDuration prometheus.Observer
@@ -149,9 +145,6 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 		return nil, cerror.WrapError(cerror.ErrRedoConfigInvalid, errors.New("FileWriterConfig can not be nil"))
 	}
 
-	if cfg.FlushIntervalInMs == 0 {
-		cfg.FlushIntervalInMs = defaultFlushIntervalInMs
-	}
 	cfg.MaxLogSize *= megabyte
 	if cfg.MaxLogSize == 0 {
 		cfg.MaxLogSize = defaultMaxLogSize
@@ -169,17 +162,18 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 	for _, opt := range opts {
 		opt(op)
 	}
+
 	w := &Writer{
 		cfg:       cfg,
 		op:        op,
 		uint64buf: make([]byte, 8),
 		storage:   s3storage,
 
-		metricFsyncDuration: redoFsyncDurationHistogram.
+		metricFsyncDuration: common.RedoFsyncDurationHistogram.
 			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
-		metricFlushAllDuration: redoFlushAllDurationHistogram.
+		metricFlushAllDuration: common.RedoFlushAllDurationHistogram.
 			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
-		metricWriteBytes: redoWriteBytesGauge.
+		metricWriteBytes: common.RedoWriteBytesGauge.
 			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
 	}
 	if w.op.getUUIDGenerator != nil {
@@ -188,39 +182,25 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 		w.uuidGenerator = uuid.NewGenerator()
 	}
 
-	w.running.Store(true)
-	go w.runFlushToDisk(ctx, cfg.FlushIntervalInMs)
-
-	return w, nil
-}
-
-func (w *Writer) runFlushToDisk(ctx context.Context, flushIntervalInMs int64) {
-	ticker := time.NewTicker(time.Duration(flushIntervalInMs) * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		if !w.IsRunning() {
-			return
-		}
-
-		select {
-		case <-ctx.Done():
-			err := w.Close()
-			if err != nil {
-				log.Error("runFlushToDisk close fail",
-					zap.String("namespace", w.cfg.ChangeFeedID.Namespace),
-					zap.String("changefeed", w.cfg.ChangeFeedID.ID),
-					zap.Error(err))
-			}
-		case <-ticker.C:
-			err := w.Flush()
-			if err != nil {
-				log.Error("redo log flush fail",
-					zap.String("namespace", w.cfg.ChangeFeedID.Namespace),
-					zap.String("changefeed", w.cfg.ChangeFeedID.ID), zap.Error(err))
-			}
-		}
+	if len(cfg.Dir) == 0 {
+		return nil, cerror.WrapError(cerror.ErrRedoFileOp, errors.New("invalid redo dir path"))
 	}
+
+	err := os.MkdirAll(cfg.Dir, common.DefaultDirMode)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrRedoFileOp,
+			errors.Annotatef(err, "can't make dir: %s for redo writing", cfg.Dir))
+	}
+
+	// if we use S3 as the remote storage, a file allocator can be leveraged to
+	// pre-allocate files for us.
+	// TODO: test whether this improvement can also be applied to NFS.
+	if cfg.S3Storage {
+		w.allocator = fsutil.NewFileAllocator(cfg.Dir, cfg.FileType, defaultMaxLogSize)
+	}
+
+	w.running.Store(true)
+	return w, nil
 }
 
 // Write implement write interface
@@ -235,7 +215,7 @@ func (w *Writer) Write(rawData []byte) (int, error) {
 	}
 
 	if w.file == nil {
-		if err := w.openOrNew(len(rawData)); err != nil {
+		if err := w.openNew(); err != nil {
 			return 0, err
 		}
 	}
@@ -245,6 +225,7 @@ func (w *Writer) Write(rawData []byte) (int, error) {
 			return 0, err
 		}
 	}
+
 	if w.maxCommitTS.Load() < w.eventCommitTS.Load() {
 		w.maxCommitTS.Store(w.eventCommitTS.Load())
 	}
@@ -259,8 +240,12 @@ func (w *Writer) Write(rawData []byte) (int, error) {
 	}
 
 	n, err := w.bw.Write(rawData)
+	if err != nil {
+		return 0, err
+	}
 	w.metricWriteBytes.Add(float64(n))
 	w.size += int64(n)
+
 	return n, err
 }
 
@@ -296,15 +281,20 @@ func (w *Writer) Close() error {
 	// always set to false when closed, since if having err may not get fixed just by retry
 	defer w.running.Store(false)
 
+	if w.allocator != nil {
+		w.allocator.Close()
+		w.allocator = nil
+	}
+
 	if !w.IsRunning() {
 		return nil
 	}
 
-	redoFlushAllDurationHistogram.
+	common.RedoFlushAllDurationHistogram.
 		DeleteLabelValues(w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID)
-	redoFsyncDurationHistogram.
+	common.RedoFsyncDurationHistogram.
 		DeleteLabelValues(w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID)
-	redoWriteBytesGauge.
+	common.RedoWriteBytesGauge.
 		DeleteLabelValues(w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID)
 
 	return w.close()
@@ -323,25 +313,57 @@ func (w *Writer) close() error {
 	if w.file == nil {
 		return nil
 	}
-	err := w.flushAll()
-	if err != nil {
+
+	if err := w.flush(); err != nil {
 		return err
+	}
+
+	if w.cfg.S3Storage {
+		off, err := w.file.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return err
+		}
+		// offset equals to 0 means that no written happened for current file,
+		// we can simply return
+		if off == 0 {
+			return nil
+		}
+		// a file created by a file allocator needs to be truncated
+		// to save disk space and network bandwidth.
+		if err := w.file.Truncate(off); err != nil {
+			return err
+		}
 	}
 
 	// rename the file name from commitTs.log.tmp to maxCommitTS.log if closed safely
 	// after rename, the file name could be used for search, since the ts is the max ts for all events in the file.
 	w.commitTS.Store(w.maxCommitTS.Load())
-	err = os.Rename(w.file.Name(), w.filePath())
+	err := os.Rename(w.file.Name(), w.filePath())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 
+	dirFile, err := os.Open(w.cfg.Dir)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+	}
+	defer dirFile.Close()
+	// sync the dir so as to guarantee the renamed file is persisted to disk.
+	err = dirFile.Sync()
+	if err != nil {
+		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+	}
+
+	// We only write content to S3 before closing the local file.
+	// By this way, we no longer need renaming object in S3.
 	if w.cfg.S3Storage {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultS3Timeout)
 		defer cancel()
 
-		err = w.renameInS3(ctx, w.file.Name(), w.ongoingFilePath)
+		err = w.writeToS3(ctx, w.ongoingFilePath)
 		if err != nil {
+			w.file.Close()
+			w.file = nil
 			return cerror.WrapError(cerror.ErrS3StorageAPI, err)
 		}
 	}
@@ -349,14 +371,6 @@ func (w *Writer) close() error {
 	err = w.file.Close()
 	w.file = nil
 	return cerror.WrapError(cerror.ErrRedoFileOp, err)
-}
-
-func (w *Writer) renameInS3(ctx context.Context, oldPath, newPath string) error {
-	err := w.writeToS3(ctx, newPath)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrS3StorageAPI, err)
-	}
-	return cerror.WrapError(cerror.ErrS3StorageAPI, w.storage.DeleteFile(ctx, filepath.Base(oldPath)))
 }
 
 func (w *Writer) getLogFileName() string {
@@ -389,51 +403,32 @@ func openTruncFile(name string) (*os.File, error) {
 func (w *Writer) openNew() error {
 	err := os.MkdirAll(w.cfg.Dir, common.DefaultDirMode)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotatef(err, "can't make dir: %s for new redo logfile", w.cfg.Dir))
+		return cerror.WrapError(cerror.ErrRedoFileOp,
+			errors.Annotatef(err, "can't make dir: %s for new redo logfile", w.cfg.Dir))
 	}
 
 	// reset ts used in file name when new file
-	w.commitTS.Store(w.eventCommitTS.Load())
-	w.maxCommitTS.Store(w.eventCommitTS.Load())
-	path := w.filePath() + common.TmpEXT
-	f, err := openTruncFile(path)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't open new redo logfile"))
+	var f *os.File
+	if w.allocator == nil {
+		w.commitTS.Store(w.eventCommitTS.Load())
+		w.maxCommitTS.Store(w.eventCommitTS.Load())
+		path := w.filePath() + common.TmpEXT
+		f, err = openTruncFile(path)
+		if err != nil {
+			return cerror.WrapError(cerror.ErrRedoFileOp,
+				errors.Annotate(err, "can't open new redolog file"))
+		}
+	} else {
+		// if there is a file allocator, we use the pre-created file
+		// supplied by the allocator to boost performance
+		f, err = w.allocator.Open()
+		if err != nil {
+			return cerror.WrapError(cerror.ErrRedoFileOp,
+				errors.Annotate(err, "can't open new redolog file with file allocator"))
+		}
 	}
 	w.file = f
 	w.size = 0
-	err = w.newPageWriter()
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (w *Writer) openOrNew(writeLen int) error {
-	path := w.ongoingFilePath
-	if path == "" {
-		return w.openNew()
-	}
-	info, err := os.Stat(path)
-	if os.IsNotExist(err) {
-		return w.openNew()
-	}
-	if err != nil {
-		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "error getting log file info"))
-	}
-
-	if info.Size()+int64(writeLen) >= w.cfg.MaxLogSize {
-		return w.rotate()
-	}
-
-	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, common.DefaultFileMode)
-	if err != nil {
-		// return err let the caller decide next move
-		return cerror.WrapError(cerror.ErrRedoFileOp, err)
-	}
-
-	w.file = file
-	w.size = info.Size()
 	err = w.newPageWriter()
 	if err != nil {
 		return err
@@ -516,7 +511,7 @@ func (w *Writer) shouldRemoved(checkPointTs uint64, f os.FileInfo) (bool, error)
 }
 
 func (w *Writer) getShouldRemovedFiles(checkPointTs uint64) ([]os.FileInfo, error) {
-	files, err := ioutil.ReadDir(w.cfg.Dir)
+	files, err := os.ReadDir(w.cfg.Dir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			log.Warn("check removed log dir fail", zap.Error(err))
@@ -527,23 +522,31 @@ func (w *Writer) getShouldRemovedFiles(checkPointTs uint64) ([]os.FileInfo, erro
 
 	logFiles := []os.FileInfo{}
 	for _, f := range files {
-		ret, err := w.shouldRemoved(checkPointTs, f)
+		fileInfo, err := f.Info()
+		if err != nil {
+			log.Warn("get file info failed",
+				zap.String("dirEntry", f.Name()),
+				zap.Error(err))
+			continue
+		}
+		ret, err := w.shouldRemoved(checkPointTs, fileInfo)
 		if err != nil {
 			log.Warn("check removed log file fail",
-				zap.String("logFile", f.Name()),
+				zap.String("logFile", fileInfo.Name()),
 				zap.Error(err))
 			continue
 		}
 
 		if ret {
-			logFiles = append(logFiles, f)
+			logFiles = append(logFiles, fileInfo)
 		}
 	}
 
 	return logFiles, nil
 }
 
-func (w *Writer) flushAll() error {
+// flushAndRotateFile flushes the file to disk and rotate it if S3 storage is used.
+func (w *Writer) flushAndRotateFile() error {
 	if w.file == nil {
 		return nil
 	}
@@ -553,14 +556,23 @@ func (w *Writer) flushAll() error {
 	if err != nil {
 		return err
 	}
+
 	if !w.cfg.S3Storage {
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), defaultS3Timeout)
-	defer cancel()
+	if w.size == 0 {
+		return nil
+	}
 
-	err = w.writeToS3(ctx, w.file.Name())
+	// for s3 storage, when the file is flushed to disk, we need an immediate
+	// file rotate. Otherwise, the existing file content would be repeatedly written to S3,
+	// which could cause considerable network bandwidth waste.
+	err = w.rotate()
+	if err != nil {
+		return nil
+	}
+
 	w.metricFlushAllDuration.Observe(time.Since(start).Seconds())
 
 	return err
@@ -571,7 +583,7 @@ func (w *Writer) Flush() error {
 	w.Lock()
 	defer w.Unlock()
 
-	return w.flushAll()
+	return w.flushAndRotateFile()
 }
 
 func (w *Writer) flush() error {
@@ -599,5 +611,18 @@ func (w *Writer) writeToS3(ctx context.Context, name string) error {
 	}
 
 	// Key in s3: aws.String(rs.options.Prefix + name), prefix should be changefeed name
-	return cerror.WrapError(cerror.ErrS3StorageAPI, w.storage.WriteFile(ctx, filepath.Base(name), fileData))
+	err = w.storage.WriteFile(ctx, filepath.Base(name), fileData)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrS3StorageAPI, err)
+	}
+
+	// in case the page cache piling up triggered the OS memory reclaming which may cause
+	// I/O latency spike, we mandatorily drop the page cache of the file when it is successfully
+	// written to S3.
+	err = fsutil.DropPageCache(name)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+	}
+
+	return nil
 }

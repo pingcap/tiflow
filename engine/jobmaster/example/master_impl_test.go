@@ -19,11 +19,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	"github.com/pingcap/tiflow/pkg/logutil"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -36,9 +35,9 @@ const (
 
 var initLogger sync.Once
 
-func newExampleMaster() *exampleMaster {
+func newExampleMaster(t *testing.T) *exampleMaster {
 	self := &exampleMaster{}
-	self.DefaultBaseMaster = framework.MockBaseMaster(masterID, self)
+	self.DefaultBaseMaster = framework.MockBaseMaster(t, masterID, self)
 	return self
 }
 
@@ -46,12 +45,12 @@ func TestExampleMaster(t *testing.T) {
 	t.Parallel()
 
 	initLogger.Do(func() {
-		_ = log.InitLogger(&log.Config{
+		_ = logutil.InitLogger(&logutil.Config{
 			Level: "debug",
 		})
 	})
 
-	master := newExampleMaster()
+	master := newExampleMaster(t)
 	// master.Init will call CreateWorker, so we mock it first
 	framework.MockBaseMasterCreateWorker(
 		t,

@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -49,7 +48,6 @@ type mqSink struct {
 	mqProducer     producer.Producer
 	eventRouter    *dispatcher.EventRouter
 	encoderBuilder codec.EncoderBuilder
-	filter         *filter.Filter
 	protocol       config.Protocol
 
 	topicManager         manager.TopicManager
@@ -67,7 +65,6 @@ func newMqSink(
 	ctx context.Context,
 	topicManager manager.TopicManager,
 	mqProducer producer.Producer,
-	filter *filter.Filter,
 	defaultTopic string,
 	replicaConfig *config.ReplicaConfig, encoderConfig *codec.Config,
 	errCh chan error,
@@ -82,18 +79,18 @@ func newMqSink(
 		return nil, errors.Trace(err)
 	}
 
+	captureAddr := contextutil.CaptureAddrFromCtx(ctx)
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	role := contextutil.RoleFromCtx(ctx)
 
 	encoder := encoderBuilder.Build()
-	statistics := metrics.NewStatistics(ctx, metrics.SinkTypeMQ)
+	statistics := metrics.NewStatistics(ctx, captureAddr, metrics.SinkTypeMQ)
 	flushWorker := newFlushWorker(encoder, mqProducer, statistics)
 
 	s := &mqSink{
 		mqProducer:     mqProducer,
 		eventRouter:    eventRouter,
 		encoderBuilder: encoderBuilder,
-		filter:         filter,
 		protocol:       encoderConfig.Protocol(),
 		topicManager:   topicManager,
 		flushWorker:    flushWorker,
@@ -134,19 +131,11 @@ func (k *mqSink) AddTable(tableID model.TableID) error {
 	return nil
 }
 
-// EmitRowChangedEvents emits row changed events to the flush worker by paritition.
+// EmitRowChangedEvents emits row changed events to the flush worker by partition.
 // Concurrency Note: This method is thread-safe.
 func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	rowsCount := 0
 	for _, row := range rows {
-		if k.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
-			log.Info("Row changed event ignored",
-				zap.Uint64("startTs", row.StartTs),
-				zap.String("namespace", k.id.Namespace),
-				zap.String("changefeed", k.id.ID),
-				zap.Any("role", k.role))
-			continue
-		}
 		topic := k.eventRouter.GetTopicForRowChange(row)
 		partitionNum, err := k.topicManager.GetPartitionNum(topic)
 		if err != nil {
@@ -155,8 +144,8 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 		partition := k.eventRouter.GetPartitionForRowChange(row, partitionNum)
 		err = k.flushWorker.addEvent(ctx, mqEvent{
 			row: row,
-			key: topicPartitionKey{
-				topic: topic, partition: partition,
+			key: TopicPartitionKey{
+				Topic: topic, Partition: partition,
 			},
 		})
 		if err != nil {
@@ -287,19 +276,6 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []model
 // EmitDDLEvent sends a DDL event to the default topic or the table's corresponding topic.
 // Concurrency Note: EmitDDLEvent is thread-safe.
 func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	if k.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.Type, ddl.TableInfo.Schema, ddl.TableInfo.Table) {
-		log.Info(
-			"DDL event ignored",
-			zap.String("query", ddl.Query),
-			zap.Uint64("startTs", ddl.StartTs),
-			zap.Uint64("commitTs", ddl.CommitTs),
-			zap.String("namespace", k.id.Namespace),
-			zap.String("changefeed", k.id.ID),
-			zap.Any("role", k.role),
-		)
-		return cerror.ErrDDLEventIgnored.GenWithStackByArgs()
-	}
-
 	encoder := k.encoderBuilder.Build()
 	msg, err := encoder.EncodeDDLEvent(ddl)
 	if err != nil {
@@ -396,7 +372,8 @@ func (k *mqSink) asyncFlushToPartitionZero(
 
 // NewKafkaSaramaSink creates a new Kafka mqSink.
 func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
-	filter *filter.Filter, replicaConfig *config.ReplicaConfig, errCh chan error,
+	replicaConfig *config.ReplicaConfig,
+	errCh chan error,
 ) (*mqSink, error) {
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
@@ -408,10 +385,6 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 	baseConfig := kafka.NewConfig()
 	if err := baseConfig.Apply(sinkURI); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-
-	if err := replicaConfig.ApplyProtocol(sinkURI).Validate(); err != nil {
-		return nil, errors.Trace(err)
 	}
 
 	saramaConfig, err := kafka.NewSaramaConfig(ctx, baseConfig)
@@ -487,7 +460,6 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		ctx,
 		topicManager,
 		sProducer,
-		filter,
 		topic,
 		replicaConfig,
 		encoderConfig,
@@ -500,16 +472,13 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 }
 
 // NewPulsarSink creates a new Pulsar mqSink.
-func NewPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
+func NewPulsarSink(ctx context.Context, sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig, errCh chan error,
 ) (*mqSink, error) {
+	log.Warn("Pulsar Sink is not recommended for production use.")
 	s := sinkURI.Query().Get(config.ProtocolKey)
 	if s != "" {
 		replicaConfig.Sink.Protocol = s
-	}
-	err := replicaConfig.Validate()
-	if err != nil {
-		return nil, err
 	}
 
 	var protocol config.Protocol
@@ -538,7 +507,6 @@ func NewPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 		ctx,
 		fakeTopicManager,
 		producer,
-		filter,
 		"",
 		replicaConfig,
 		encoderConfig,

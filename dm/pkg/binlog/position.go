@@ -35,7 +35,7 @@ const (
 	//   originalPos.BinlogBaseName + posRelaySubDirSuffixSeparator + RelaySubDirSuffix + binlogFilenameSep + originalPos.BinlogSeq
 	// eg. mysql-bin.000003 under folder c6ae5afe-c7a3-11e8-a19d-0242ac130006.000002 => mysql-bin|000002.000003
 	// when new relay log subdirectory is created, RelaySubDirSuffix should increase.
-	posRelaySubDirSuffixSeparator = "|"
+	posRelaySubDirSuffixSeparator = utils.PosRelaySubDirSuffixSeparator
 	// MinRelaySubDirSuffix is same as relay.MinRelaySubDirSuffix.
 	MinRelaySubDirSuffix = 1
 	// FileHeaderLen is the length of binlog file header.
@@ -74,7 +74,7 @@ func PositionFromPosStr(str string) (gmysql.Position, error) {
 	s := trimBrackets(str)
 	parsed := strings.Split(s, ", ")
 	if len(parsed) != 2 {
-		return gmysql.Position{}, terror.ErrBinlogParsePosFromStr.Generatef("invalid binlog pos, position string %s", str)
+		return gmysql.Position{}, terror.ErrBinlogParsePosFromStr.Generatef("invalid binlog pos, should be like (mysql-bin.000001, 2345), got %s", str)
 	}
 	pos, err := strconv.ParseUint(parsed[1], 10, 32)
 	if err != nil {
@@ -92,7 +92,7 @@ func PositionFromPosStr(str string) (gmysql.Position, error) {
 // `originalPos.BinlogBaseName + binlogFilenameSep + originalPos.BinlogSeq`.
 // if parsed failed returns the given position and the traced error.
 func RealMySQLPos(pos gmysql.Position) (gmysql.Position, error) {
-	parsed, err := ParseFilename(pos.Name)
+	parsed, err := utils.ParseFilename(pos.Name)
 	if err != nil {
 		return pos, err
 	}
@@ -104,7 +104,7 @@ func RealMySQLPos(pos gmysql.Position) (gmysql.Position, error) {
 			return pos, nil // pos is just the real pos
 		}
 		return gmysql.Position{
-			Name: ConstructFilename(parsed.BaseName[:sepIdx], parsed.Seq),
+			Name: utils.ConstructFilename(parsed.BaseName[:sepIdx], parsed.Seq),
 			Pos:  pos.Pos,
 		}, nil
 	}
@@ -117,7 +117,7 @@ func ExtractSuffix(name string) (int, error) {
 	if len(name) == 0 {
 		return MinRelaySubDirSuffix, nil
 	}
-	filename, err := ParseFilename(name)
+	filename, err := utils.ParseFilename(name)
 	if err != nil {
 		return 0, err
 	}
@@ -138,7 +138,7 @@ func ExtractPos(pos gmysql.Position, uuids []string) (uuidWithSuffix string, rel
 		return
 	}
 
-	parsed, err := ParseFilename(pos.Name)
+	parsed, err := utils.ParseFilename(pos.Name)
 	if err != nil {
 		return
 	}
@@ -158,7 +158,7 @@ func ExtractPos(pos gmysql.Position, uuids []string) (uuidWithSuffix string, rel
 			uuidWithSuffix = uuid
 			relaySubDirSuffix = masterRelaySubDirSuffix
 			realPos = gmysql.Position{
-				Name: ConstructFilename(realBaseName, parsed.Seq),
+				Name: utils.ConstructFilename(realBaseName, parsed.Seq),
 				Pos:  pos.Pos,
 			}
 		} else {
@@ -318,7 +318,7 @@ func CompareLocation(location1, location2 Location, cmpGTID bool) int {
 			if cmp != 0 {
 				return cmp
 			}
-			return compareIndex(location1.Suffix, location2.Suffix)
+			return compareInjectSuffix(location1.Suffix, location2.Suffix)
 		}
 
 		// if can't compare by GTIDSet, then compare by position
@@ -329,7 +329,7 @@ func CompareLocation(location1, location2 Location, cmpGTID bool) int {
 	if cmp != 0 {
 		return cmp
 	}
-	return compareIndex(location1.Suffix, location2.Suffix)
+	return compareInjectSuffix(location1.Suffix, location2.Suffix)
 }
 
 // IsFreshPosition returns true when location1 is a fresh location without any info.
@@ -357,7 +357,7 @@ func IsFreshPosition(location Location, flavor string, cmpGTID bool) bool {
 	if cmp != 0 {
 		return cmp <= 0
 	}
-	return compareIndex(location.Suffix, zeroLocation.Suffix) <= 0
+	return compareInjectSuffix(location.Suffix, zeroLocation.Suffix) <= 0
 }
 
 // CompareGTID returns:
@@ -396,7 +396,7 @@ func CompareGTID(gSet1, gSet2 gmysql.GTIDSet) (int, bool) {
 	return 0, false
 }
 
-func compareIndex(lhs, rhs int) int {
+func compareInjectSuffix(lhs, rhs int) int {
 	switch {
 	case lhs < rhs:
 		return -1

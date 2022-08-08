@@ -25,7 +25,8 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.uber.org/zap"
 )
 
@@ -49,7 +50,7 @@ func main() {
 		return
 	}
 
-	err = log.InitLogger(&log.Config{
+	err = logutil.InitLogger(&logutil.Config{
 		Level: "info",
 	})
 	if err != nil {
@@ -76,14 +77,14 @@ func main() {
 		syscall.SIGQUIT)
 	go func() {
 		sig := <-sc
-		log.L().Info("got signal to exit", zap.Stringer("signal", sig))
+		log.Info("got signal to exit", zap.Stringer("signal", sig))
 		cancel()
 	}()
 
 	// run tests cases
 	err = runCases(ctx, cfg)
 	if err != nil {
-		log.L().Error("run cases failed", zap.Error(err))
+		log.Error("run cases failed", zap.Error(err))
 		code = 2
 		return
 	}

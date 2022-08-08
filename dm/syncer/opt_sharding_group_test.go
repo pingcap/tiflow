@@ -20,7 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -102,7 +102,7 @@ func (s *optShardingGroupSuite) TestSync() {
 		optimist:   shardddl.NewOptimist(&logger, nil, "", ""),
 		checkpoint: &mockCheckpoint{},
 	}
-	syncer.schemaTracker, err = schema.NewTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.downstreamTrackConn)
+	syncer.schemaTracker, err = schema.NewTestTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.downstreamTrackConn, log.L())
 	require.NoError(s.T(), err)
 
 	// case 1: mock receive resolved stage from dm-master when syncing other tables

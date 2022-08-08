@@ -31,7 +31,7 @@ import (
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/tikv/client-go/v2/testutils"
 
-	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/config"
 )
 
 type mockDBProvider struct {
@@ -62,10 +62,24 @@ func InitMockDB(c *check.C) sqlmock.Sqlmock {
 	return mock
 }
 
-// InitVersionDB return a mocked db for unit test's show version.
-func InitVersionDB(c *check.C) sqlmock.Sqlmock {
+// MockDefaultDBProvider return a mocked db for unit test.
+func MockDefaultDBProvider() (sqlmock.Sqlmock, error) {
 	db, mock, err := sqlmock.New()
-	c.Assert(err, check.IsNil)
+	if err != nil {
+		return nil, err
+	}
+	if mdbp, ok := DefaultDBProvider.(*mockDBProvider); ok {
+		mdbp.db = db
+	} else {
+		DefaultDBProvider = &mockDBProvider{db: db}
+	}
+	return mock, nil
+}
+
+// InitVersionDB return a mocked db for unit test's show version.
+func InitVersionDB() sqlmock.Sqlmock {
+	// nolint:errcheck
+	db, mock, _ := sqlmock.New()
 	if mdbp, ok := DefaultDBProvider.(*mockDBProvider); ok {
 		mdbp.verDB = db
 	} else {

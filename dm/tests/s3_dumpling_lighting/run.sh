@@ -12,7 +12,7 @@ db="s3_dumpling_lightning"
 db1="s3_dumpling_lightning1"
 tb="t"
 tb1="t1"
-S3_DIR="s3://dmbucket/dump?region=us-west-2\&endpoint=http://127.0.0.1:8688\&access_key=s3accesskey\&secret_access_key=s3secretkey\&force_path_style=true"
+S3_DIR="s3://dmbucket/dump?region=us-east-1\&endpoint=http://127.0.0.1:8688\&access_key=s3accesskey\&secret_access_key=s3secretkey\&force_path_style=true"
 LOCAL_TEST_DIR="./dumpdata"
 
 # s3 config

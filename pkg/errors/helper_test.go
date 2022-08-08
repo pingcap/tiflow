@@ -15,6 +15,7 @@ package errors
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/pingcap/errors"
@@ -33,8 +34,26 @@ func TestWrapError(t *testing.T) {
 			args     []interface{}
 		}{
 			{ErrDecodeFailed, nil, true, "", nil},
-			{ErrDecodeFailed, err, false, "[CDC:ErrDecodeFailed]decode failed: args data: cause error", []interface{}{"args data"}},
-			{ErrWriteTsConflict, err, false, "[CDC:ErrWriteTsConflict]write ts conflict: cause error", nil},
+			{
+				ErrDecodeFailed, err, false,
+				"[CDC:ErrDecodeFailed]decode failed: args data: cause error",
+				[]interface{}{"args data"},
+			},
+			{
+				ErrWriteTsConflict, err, false,
+				"[CDC:ErrWriteTsConflict]write ts conflict: cause error", nil,
+			},
+			{ErrBuildJobFailed, nil, true, "", []interface{}{}},
+			{
+				ErrBuildJobFailed, err, false,
+				"[DFLOW:ErrBuildJobFailed]build job failed: cause error",
+				[]interface{}{},
+			},
+			{
+				ErrSubJobFailed, err, false,
+				"[DFLOW:ErrSubJobFailed]executor e-1 job 2: cause error",
+				[]interface{}{"e-1", 2},
+			},
 		}
 	)
 	for _, tc := range testCases {
@@ -46,6 +65,29 @@ func TestWrapError(t *testing.T) {
 			require.Equal(t, we.Error(), tc.expected)
 		}
 	}
+}
+
+func TestRFCCode(t *testing.T) {
+	t.Parallel()
+	rfc, ok := RFCCode(ErrAPIInvalidParam)
+	require.Equal(t, true, ok)
+	require.Contains(t, rfc, "ErrAPIInvalidParam")
+
+	err := fmt.Errorf("inner error: invalid request")
+	rfc, ok = RFCCode(err)
+	require.Equal(t, false, ok)
+	require.Equal(t, rfc, errors.RFCErrorCode(""))
+
+	rfcErr := ErrAPIInvalidParam
+	Err := WrapError(rfcErr, err)
+	rfc, ok = RFCCode(Err)
+	require.Equal(t, true, ok)
+	require.Contains(t, rfc, "ErrAPIInvalidParam")
+
+	anoErr := errors.Annotate(ErrEtcdTryAgain, "annotated Etcd Try again")
+	rfc, ok = RFCCode(anoErr)
+	require.Equal(t, true, ok)
+	require.Contains(t, rfc, "ErrEtcdTryAgain")
 }
 
 func TestIsRetryableError(t *testing.T) {
@@ -71,31 +113,64 @@ func TestChangefeedFastFailError(t *testing.T) {
 	t.Parallel()
 	err := ErrGCTTLExceeded.FastGenByArgs()
 	rfcCode, _ := RFCCode(err)
-	require.Equal(t, true, ChangefeedFastFailError(err))
-	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+	require.Equal(t, true, IsChangefeedFastFailError(err))
+	require.Equal(t, true, IsChangefeedFastFailErrorCode(rfcCode))
 
 	err = ErrGCTTLExceeded.GenWithStack("aa")
 	rfcCode, _ = RFCCode(err)
-	require.Equal(t, true, ChangefeedFastFailError(err))
-	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+	require.Equal(t, true, IsChangefeedFastFailError(err))
+	require.Equal(t, true, IsChangefeedFastFailErrorCode(rfcCode))
 
 	err = ErrGCTTLExceeded.Wrap(errors.New("aa"))
 	rfcCode, _ = RFCCode(err)
-	require.Equal(t, true, ChangefeedFastFailError(err))
-	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+	require.Equal(t, true, IsChangefeedFastFailError(err))
+	require.Equal(t, true, IsChangefeedFastFailErrorCode(rfcCode))
 
 	err = ErrSnapshotLostByGC.FastGenByArgs()
 	rfcCode, _ = RFCCode(err)
-	require.Equal(t, true, ChangefeedFastFailError(err))
-	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+	require.Equal(t, true, IsChangefeedFastFailError(err))
+	require.Equal(t, true, IsChangefeedFastFailErrorCode(rfcCode))
 
 	err = ErrStartTsBeforeGC.FastGenByArgs()
 	rfcCode, _ = RFCCode(err)
-	require.Equal(t, true, ChangefeedFastFailError(err))
-	require.Equal(t, true, ChangefeedFastFailErrorCode(rfcCode))
+	require.Equal(t, true, IsChangefeedFastFailError(err))
+	require.Equal(t, true, IsChangefeedFastFailErrorCode(rfcCode))
 
 	err = ErrToTLSConfigFailed.FastGenByArgs()
 	rfcCode, _ = RFCCode(err)
-	require.Equal(t, false, ChangefeedFastFailError(err))
-	require.Equal(t, false, ChangefeedFastFailErrorCode(rfcCode))
+	require.Equal(t, false, IsChangefeedFastFailError(err))
+	require.Equal(t, false, IsChangefeedFastFailErrorCode(rfcCode))
+}
+
+func TestChangefeedNotRetryError(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		err      error
+		expected bool
+	}{
+		{
+			err:      ErrInvalidIgnoreEventType.FastGenByArgs(),
+			expected: false,
+		},
+		{
+			err:      ErrExpressionColumnNotFound.FastGenByArgs(),
+			expected: true,
+		},
+		{
+			err:      ErrExpressionParseFailed.FastGenByArgs(),
+			expected: true,
+		},
+		{
+			err:      WrapError(ErrFilterRuleInvalid, ErrExpressionColumnNotFound.FastGenByArgs()),
+			expected: true,
+		},
+		{
+			err:      errors.New("CDC:ErrExpressionColumnNotFound"),
+			expected: true,
+		},
+	}
+
+	for _, c := range cases {
+		require.Equal(t, c.expected, IsChangefeedUnRetryableError(c.err))
+	}
 }

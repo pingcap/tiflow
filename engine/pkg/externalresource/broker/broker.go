@@ -17,22 +17,25 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
+
 	"github.com/gogo/status"
-	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	derrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
-	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	derrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // ResourceManagerClient is a type alias for a client connecting to
 // the resource manager (which is part of the Servermaster).
-type ResourceManagerClient = *rpcutil.FailoverRPCClients[pb.ResourceManagerClient]
+type ResourceManagerClient = client.ResourceManagerClient
 
 // DefaultBroker implements the Broker interface
 type DefaultBroker struct {
@@ -61,6 +64,7 @@ func NewBroker(
 // OpenStorage implements Broker.OpenStorage
 func (b *DefaultBroker) OpenStorage(
 	ctx context.Context,
+	projectInfo tenant.ProjectInfo,
 	workerID resModel.WorkerID,
 	jobID resModel.JobID,
 	resourcePath resModel.ResourceID,
@@ -72,14 +76,13 @@ func (b *DefaultBroker) OpenStorage(
 
 	switch tp {
 	case resModel.ResourceTypeLocalFile:
-		return b.newHandleForLocalFile(ctx, jobID, workerID, resourcePath)
+		return b.newHandleForLocalFile(ctx, projectInfo, jobID, workerID, resourcePath)
 	case resModel.ResourceTypeS3:
-		log.L().Panic("resource type s3 is not supported for now")
+		log.Panic("resource type s3 is not supported for now")
 	default:
+		log.Panic("unsupported resource type", zap.String("resource-path", resourcePath))
 	}
-
-	log.L().Panic("unsupported resource type", zap.String("resource-path", resourcePath))
-	panic("unreachable")
+	return nil, errors.New("unreachable")
 }
 
 // OnWorkerClosed implements Broker.OnWorkerClosed
@@ -90,7 +93,7 @@ func (b *DefaultBroker) OnWorkerClosed(ctx context.Context, workerID resModel.Wo
 		// to report this.
 		// However, since an error here is unlikely to indicate a correctness
 		// problem, we do not take further actions.
-		log.L().Warn("Failed to remove temporary files for worker",
+		log.Warn("Failed to remove temporary files for worker",
 			zap.String("worker-id", workerID),
 			zap.String("job-id", jobID),
 			zap.Error(err))
@@ -130,6 +133,7 @@ func (b *DefaultBroker) RemoveResource(
 
 func (b *DefaultBroker) newHandleForLocalFile(
 	ctx context.Context,
+	projectInfo tenant.ProjectInfo,
 	jobID resModel.JobID,
 	workerID resModel.WorkerID,
 	resourceID resModel.ResourceID,
@@ -142,10 +146,10 @@ func (b *DefaultBroker) newHandleForLocalFile(
 		return nil, err
 	}
 	if tp != resModel.ResourceTypeLocalFile {
-		log.L().Panic("unexpected resource type", zap.String("type", string(tp)))
+		log.Panic("unexpected resource type", zap.String("type", string(tp)))
 	}
 
-	record, exists, err := b.checkForExistingResource(ctx, resourceID)
+	record, exists, err := b.checkForExistingResource(ctx, resModel.ResourceKey{JobID: jobID, ID: resourceID})
 	if err != nil {
 		return nil, err
 	}
@@ -171,24 +175,25 @@ func (b *DefaultBroker) newHandleForLocalFile(
 	}
 
 	filePath := desc.AbsolutePath()
-	log.L().Info("Using local storage with path", zap.String("path", filePath))
+	log.Info("Using local storage with path", zap.String("path", filePath))
 
-	return newLocalResourceHandle(resourceID, jobID, b.executorID, b.fileManager, desc, b.client)
+	return newLocalResourceHandle(projectInfo, resourceID, jobID, b.executorID, b.fileManager, desc, b.client)
 }
 
 func (b *DefaultBroker) checkForExistingResource(
 	ctx context.Context,
-	resourceID resModel.ResourceID,
+	resourceKey resModel.ResourceKey,
 ) (*resModel.ResourceMeta, bool, error) {
-	resp, err := rpcutil.DoFailoverRPC(
-		ctx,
-		b.client,
-		&pb.QueryResourceRequest{ResourceId: resourceID},
-		pb.ResourceManagerClient.QueryResource,
-	)
+	request := &pb.QueryResourceRequest{
+		ResourceKey: &pb.ResourceKey{
+			JobId:      resourceKey.JobID,
+			ResourceId: resourceKey.ID,
+		},
+	}
+	resp, err := b.client.QueryResource(ctx, request)
 	if err == nil {
 		return &resModel.ResourceMeta{
-			ID:       resourceID,
+			ID:       resourceKey.ID,
 			Job:      resp.GetJobId(),
 			Worker:   resp.GetCreatorWorkerId(),
 			Executor: resModel.ExecutorID(resp.GetCreatorExecutor()),
@@ -196,14 +201,13 @@ func (b *DefaultBroker) checkForExistingResource(
 		}, true, nil
 	}
 
-	// TODO perhaps we need a grpcutil package to put all this stuff?
-	st, ok := status.FromError(err)
+	code, ok := rpcerror.GRPCStatusCode(err)
 	if !ok {
 		// If the error is not derived from a grpc status, we should throw it.
 		return nil, false, errors.Trace(err)
 	}
 
-	switch st.Code() {
+	switch code {
 	case codes.NotFound:
 		// Indicates that there is no existing resource with the same name.
 		return nil, false, nil

@@ -208,7 +208,7 @@ function DM_RemoveLock_CASE() {
 function DM_RemoveLock() {
 	kill_process dm-master
 	check_master_port_offline 1
-	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/dm/master/shardddl/SleepWhenRemoveLock=return(30)"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/master/shardddl/SleepWhenRemoveLock=return(30)"
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -243,6 +243,14 @@ function DM_RestartMaster_CASE() {
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	run_sql_source1 "alter table ${shardddl1}.${tb1} add column c double;"
+	if [[ "$1" = "pessimistic" ]]; then
+		check_log_contain_with_retry 'putted shard DDL info.*ADD COLUMN' \
+			$WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log
+	else
+		check_log_contain_with_retry 'finish to handle ddls in optimistic shard mode.*add column' \
+			$WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log
+	fi
+
 	run_sql_source2 "alter table ${shardddl1}.${tb1} add column c text;"
 
 	if [[ "$1" = "pessimistic" ]]; then

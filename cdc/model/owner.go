@@ -18,23 +18,19 @@ import (
 	"fmt"
 
 	"github.com/pingcap/errors"
+	timodel "github.com/pingcap/tidb/parser/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // AdminJobType represents for admin job type, both used in owner and processor
 type AdminJobType int
 
-// AdminJobOption records addition options of an admin job
-type AdminJobOption struct {
-	ForceRemove bool
-}
-
 // AdminJob holds an admin job
 type AdminJob struct {
-	CfID  ChangeFeedID
-	Type  AdminJobType
-	Opts  *AdminJobOption
-	Error *RunningError
+	CfID                  ChangeFeedID
+	Type                  AdminJobType
+	Error                 *RunningError
+	OverwriteCheckpointTs uint64
 }
 
 // All AdminJob types
@@ -70,6 +66,14 @@ func (t AdminJobType) IsStopState() bool {
 		return true
 	}
 	return false
+}
+
+// DDLJobEntry is the DDL job entry.
+type DDLJobEntry struct {
+	Job    *timodel.Job
+	OpType OpType
+	CRTs   uint64
+	Err    error
 }
 
 // TaskPosition records the process information of a capture

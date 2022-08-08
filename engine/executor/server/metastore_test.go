@@ -19,16 +19,14 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
-	clientv3 "go.etcd.io/etcd/client/v3"
-
-	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/server/mocks"
-	kvMock "github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
-	"github.com/pingcap/tiflow/engine/pkg/meta/metaclient"
+	"github.com/pingcap/tiflow/engine/pkg/client"
+	metaMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
+	"github.com/stretchr/testify/require"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 func newMetastoreManagerForTesting(ctrl *gomock.Controller) (*metastoreManagerImpl, *mocks.MockMetastoreCreator) {
@@ -43,57 +41,51 @@ func TestMetastoreManagerBasics(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 
-	mockServerMasterClient := &client.MockServerMasterClient{}
+	mockServerMasterClient := client.NewMockServerMasterClient(ctrl)
 	manager, mockCreator := newMetastoreManagerForTesting(ctrl)
 	ctx := context.Background()
 
-	var discoveryStoreParams metaclient.StoreConfigParams
+	var discoveryStoreParams metaModel.StoreConfig
 	discoveryStoreParams.SetEndpoints("embedded-etcd:1234")
 
-	mockServerMasterClient.On(
-		"QueryMetaStore",
-		mock.Anything,
-		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_ServiceDiscovery},
-		fetchMetastoreConfigTimeout,
-	).
+	mockServerMasterClient.EXPECT().
+		QueryMetaStore(
+			gomock.Any(),
+			gomock.Eq(&pb.QueryMetaStoreRequest{Tp: pb.StoreType_ServiceDiscovery})).
 		Return(&pb.QueryMetaStoreResponse{
 			Address: "embedded-etcd:1234", // fake address
-		}, nil).Once()
+		}, nil).Times(1)
 
-	var frameStoreParams metaclient.StoreConfigParams
+	var frameStoreParams metaModel.StoreConfig
 	frameStoreParams.SetEndpoints("127.0.0.1:3306")
 	frameParamBytes, err := json.Marshal(frameStoreParams)
 	require.NoError(t, err)
 
-	mockServerMasterClient.On(
-		"QueryMetaStore",
-		mock.Anything,
-		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_SystemMetaStore},
-		fetchMetastoreConfigTimeout,
-	).
+	mockServerMasterClient.EXPECT().
+		QueryMetaStore(
+			gomock.Any(),
+			gomock.Eq(&pb.QueryMetaStoreRequest{Tp: pb.StoreType_SystemMetaStore})).
 		Return(&pb.QueryMetaStoreResponse{
 			Address: string(frameParamBytes),
-		}, nil).Once()
+		}, nil).Times(1)
 
-	var businessStoreParams metaclient.StoreConfigParams
+	var businessStoreParams metaModel.StoreConfig
 	businessStoreParams.SetEndpoints("127.0.0.1:12345")
 	businessParamBytes, err := json.Marshal(businessStoreParams)
 	require.NoError(t, err)
 
-	mockServerMasterClient.On(
-		"QueryMetaStore",
-		mock.Anything,
-		&pb.QueryMetaStoreRequest{Tp: pb.StoreType_AppMetaStore},
-		fetchMetastoreConfigTimeout,
-	).
+	mockServerMasterClient.EXPECT().
+		QueryMetaStore(
+			gomock.Any(),
+			gomock.Eq(&pb.QueryMetaStoreRequest{Tp: pb.StoreType_AppMetaStore})).
 		Return(&pb.QueryMetaStoreResponse{
 			Address: string(businessParamBytes),
-		}, nil).Once()
+		}, nil).Times(1)
 
 	fakeEtcdCli := clientv3.NewCtxClient(ctx)
 	fakeFrameStore, err := pkgOrm.NewMockClient()
 	require.NoError(t, err)
-	fakeBusinessStore := kvMock.NewMetaMock()
+	fakeBusinessClientConn := metaMock.NewMockClientConn()
 
 	mockCreator.
 		EXPECT().
@@ -105,8 +97,8 @@ func TestMetastoreManagerBasics(t *testing.T) {
 		Return(fakeFrameStore, nil)
 	mockCreator.
 		EXPECT().
-		CreateMetaKVClientForBusiness(gomock.Any(), gomock.Eq(businessStoreParams)).
-		Return(fakeBusinessStore, nil)
+		CreateClientConnForBusiness(gomock.Any(), gomock.Eq(businessStoreParams)).
+		Return(fakeBusinessClientConn, nil)
 	err = manager.Init(ctx, mockServerMasterClient)
 	require.NoError(t, err)
 
@@ -114,13 +106,13 @@ func TestMetastoreManagerBasics(t *testing.T) {
 
 	require.Equal(t, fakeEtcdCli, manager.ServiceDiscoveryStore())
 	require.Equal(t, fakeFrameStore, manager.FrameworkStore())
-	require.Equal(t, fakeBusinessStore, manager.BusinessStore())
+	require.Equal(t, fakeBusinessClientConn, manager.BusinessClientConn())
 
 	manager.Close()
 
 	require.Nil(t, manager.ServiceDiscoveryStore())
 	require.Nil(t, manager.FrameworkStore())
-	require.Nil(t, manager.BusinessStore())
+	require.Nil(t, manager.BusinessClientConn())
 }
 
 func TestMetastoreManagerUseBeforeInit(t *testing.T) {
@@ -138,6 +130,6 @@ func TestMetastoreManagerUseBeforeInit(t *testing.T) {
 		manager.FrameworkStore()
 	})
 	require.Panics(t, func() {
-		manager.BusinessStore()
+		manager.BusinessClientConn()
 	})
 }

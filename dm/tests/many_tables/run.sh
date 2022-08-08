@@ -8,6 +8,11 @@ source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME
 TABLE_NUM=500
 
+function restore_timezone() {
+	run_sql_source1 "SET GLOBAL TIME_ZONE = SYSTEM"
+	run_sql_tidb "SET GLOBAL TIME_ZONE = SYSTEM"
+}
+
 function prepare_data() {
 	run_sql 'DROP DATABASE if exists many_tables_db;' $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql 'CREATE DATABASE many_tables_db;' $MYSQL_PORT1 $MYSQL_PASSWORD1
@@ -16,6 +21,8 @@ function prepare_data() {
 		for j in $(seq 2); do
 			run_sql "INSERT INTO many_tables_db.t$i VALUES ($j,${j}000$j),($j,${j}001$j);" $MYSQL_PORT1 $MYSQL_PASSWORD1
 		done
+		# to make the tables have odd number of lines before 'ALTER TABLE' command, for check_sync_diff to work correctly
+		run_sql "INSERT INTO many_tables_db.t$i VALUES (9, 90009);" $MYSQL_PORT1 $MYSQL_PASSWORD1
 	done
 }
 
@@ -25,16 +32,36 @@ function incremental_data() {
 			run_sql "INSERT INTO many_tables_db.t$i VALUES ($j,${j}000$j),($j,${j}001$j);" $MYSQL_PORT1 $MYSQL_PASSWORD1
 		done
 	done
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"pause-task test" \
+		"\"result\": true" 2
+
+	run_sql "ALTER TABLE many_tables_db.t1 ADD x datetime DEFAULT current_timestamp;" $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql "ALTER TABLE many_tables_db.t2 ADD x timestamp DEFAULT current_timestamp;" $MYSQL_PORT1 $MYSQL_PASSWORD1
+	sleep 1
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"resume-task test" \
+		"\"result\": true" 2
 }
 
 function incremental_data_2() {
 	j=6
 	for i in $(seq $TABLE_NUM); do
-		run_sql "INSERT INTO many_tables_db.t$i VALUES ($j,${j}000$j);" $MYSQL_PORT1 $MYSQL_PASSWORD1
+		run_sql "INSERT INTO many_tables_db.t$i (i, j) VALUES ($j,${j}000$j);" $MYSQL_PORT1 $MYSQL_PASSWORD1
 	done
 }
 
 function run() {
+	run_sql_source1 "SET GLOBAL TIME_ZONE = '+02:00'"
+	run_sql_source1 "SELECT cast(TIMEDIFF(NOW(6), UTC_TIMESTAMP(6)) as time) time"
+	check_contains "time: 02:00:00"
+	run_sql_tidb "SET GLOBAL TIME_ZONE = '+06:00'"
+	run_sql_tidb "SELECT cast(TIMEDIFF(NOW(6), UTC_TIMESTAMP(6)) as time) time"
+	check_contains "time: 06:00:00"
+	trap restore_timezone EXIT
+
 	echo "start prepare_data"
 	prepare_data
 	echo "finish prepare_data"
@@ -64,7 +91,7 @@ function run() {
 	check_metric $WORKER1_PORT 'lightning_tables{result="success",source_id="mysql-replica-01",state="completed",task="test"}' 1 499 501
 
 	# check https://github.com/pingcap/tiflow/issues/5063
-	check_time=20
+	check_time=100
 	sleep 5
 	while [ $check_time -gt 0 ]; do
 		syncer_recv_event_num=$(grep '"receive binlog event"' $WORK_DIR/worker1/log/dm-worker.log | wc -l)
@@ -83,7 +110,15 @@ function run() {
 	echo "start incremental_data"
 	incremental_data
 	echo "finish incremental_data"
+	echo "check diff 1" # to check data are synchronized after 'ALTER TABLE' command
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+
+	run_sql "INSERT INTO many_tables_db.t1 (i, j) VALUES (1, 1001);" $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql "INSERT INTO many_tables_db.t2 (i, j) VALUES (2, 2002);" $MYSQL_PORT1 $MYSQL_PASSWORD1
+	echo "check diff 2" # to check timezone and timestamp have been set back to default
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	restore_timezone
+	trap - EXIT
 
 	# test https://github.com/pingcap/tiflow/issues/5344
 	kill_dm_worker

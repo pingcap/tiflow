@@ -14,101 +14,135 @@
 package filter
 
 import (
-	"github.com/pingcap/tidb/parser/model"
-	filterV1 "github.com/pingcap/tidb/util/filter"
-	filterV2 "github.com/pingcap/tidb/util/table-filter"
+	timodel "github.com/pingcap/tidb/parser/model"
+	tfilter "github.com/pingcap/tidb/util/table-filter"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
-// Filter is an event filter implementation.
-type Filter struct {
-	filter           filterV2.Filter
-	ignoreTxnStartTs []uint64
-	ddlAllowlist     []model.ActionType
+// Filter are safe for concurrent use.
+// TODO: find a better way to abstract this interface.
+type Filter interface {
+	// ShouldIgnoreDMLEvent returns true and nil if the DML event should be ignored.
+	ShouldIgnoreDMLEvent(dml *model.RowChangedEvent, rawRow model.RowChangedDatums, tableInfo *model.TableInfo) (bool, error)
+	// ShouldIgnoreDDLEvent returns true and nil if the DDL event should be ignored.
+	// If a ddl is ignored, it will applied to cdc's schema storage,
+	// but not sent to downstream.
+	ShouldIgnoreDDLEvent(ddl *model.DDLEvent) (bool, error)
+	// ShouldDiscardDDL returns true if this DDL should be discarded.
+	// If a ddl is discarded, it will neither be applied to cdc's schema storage
+	// nor sent to downstream.
+	ShouldDiscardDDL(ddlType timodel.ActionType) bool
+	// ShouldIgnoreTable returns true if the table should be ignored.
+	ShouldIgnoreTable(schema, table string) bool
+	// Verify should only be called by create changefeed OpenAPI.
+	// Its purpose is to verify the expression filter config.
+	Verify(tableInfos []*model.TableInfo) error
 }
 
-// VerifyRules checks the filter rules in the configuration
-// and returns an invalid rule error if the verification fails, otherwise it will return the parsed filter.
-func VerifyRules(cfg *config.ReplicaConfig) (filterV2.Filter, error) {
-	var f filterV2.Filter
-	var err error
-	if len(cfg.Filter.Rules) == 0 && cfg.Filter.MySQLReplicationRules != nil {
-		f, err = filterV2.ParseMySQLReplicationRules(cfg.Filter.MySQLReplicationRules)
-	} else {
-		rules := cfg.Filter.Rules
-		if len(rules) == 0 {
-			rules = []string{"*.*"}
-		}
-		f, err = filterV2.Parse(rules)
-	}
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err)
-	}
-
-	return f, nil
+// filter implements Filter.
+type filter struct {
+	// tableFilter is used to filter in dml/ddl event by table name.
+	tableFilter tfilter.Filter
+	// dmlExprFilter is used to filter out dml event by its columns value.
+	dmlExprFilter *dmlExprFilter
+	// sqlEventFilter is used to filter out dml/ddl event by its type or query.
+	sqlEventFilter *sqlEventFilter
+	// ignoreTxnStartTs is used to filter out dml/ddl event by its starsTs.
+	ignoreTxnStartTs []uint64
+	ddlAllowlist     []timodel.ActionType
 }
 
 // NewFilter creates a filter.
-func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
-	f, err := VerifyRules(cfg)
+func NewFilter(cfg *config.ReplicaConfig, tz string) (Filter, error) {
+	f, err := VerifyTableRules(cfg.Filter)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err)
+		return nil, err
 	}
 
 	if !cfg.CaseSensitive {
-		f = filterV2.CaseInsensitive(f)
+		f = tfilter.CaseInsensitive(f)
 	}
-	return &Filter{
-		filter:           f,
+
+	dmlExprFilter, err := newExprFilter(tz, cfg.Filter)
+	if err != nil {
+		return nil, err
+	}
+	sqlEventFilter, err := newSQLEventFilter(cfg.Filter)
+	if err != nil {
+		return nil, err
+	}
+	return &filter{
+		tableFilter:      f,
+		dmlExprFilter:    dmlExprFilter,
+		sqlEventFilter:   sqlEventFilter,
 		ignoreTxnStartTs: cfg.Filter.IgnoreTxnStartTs,
 		ddlAllowlist:     cfg.Filter.DDLAllowlist,
 	}, nil
 }
 
-func (f *Filter) shouldIgnoreStartTs(ts uint64) bool {
-	for _, ignoreTs := range f.ignoreTxnStartTs {
-		if ignoreTs == ts {
-			return true
-		}
+// ShouldIgnoreDMLEvent checks if a DML event should be ignore by conditions below:
+// 0. By startTs.
+// 1. By table name.
+// 2. By type.
+// 3. By columns value.
+func (f *filter) ShouldIgnoreDMLEvent(
+	dml *model.RowChangedEvent,
+	rawRow model.RowChangedDatums,
+	ti *model.TableInfo,
+) (bool, error) {
+	if f.shouldIgnoreStartTs(dml.StartTs) {
+		return true, nil
 	}
-	return false
-}
 
-// ShouldIgnoreTable returns true if the specified table should be ignored by this change feed.
-// NOTICE: Set `tbl` to an empty string to test against the whole database.
-func (f *Filter) ShouldIgnoreTable(db, tbl string) bool {
-	if isSysSchema(db) {
-		return true
+	if f.ShouldIgnoreTable(dml.Table.Schema, dml.Table.Table) {
+		return true, nil
 	}
-	return !f.filter.MatchTable(db, tbl)
+
+	ignoreByEventType, err := f.sqlEventFilter.shouldSkipDML(dml)
+	if err != nil {
+		return false, err
+	}
+	if ignoreByEventType {
+		return true, nil
+	}
+	return f.dmlExprFilter.shouldSkipDML(dml, rawRow, ti)
 }
 
-// ShouldIgnoreDMLEvent removes DMLs that's not wanted by this change feed.
-// CDC only supports filtering by database/table now.
-func (f *Filter) ShouldIgnoreDMLEvent(ts uint64, schema, table string) bool {
-	return f.shouldIgnoreStartTs(ts) || f.ShouldIgnoreTable(schema, table)
-}
+// ShouldIgnoreDDLEvent checks if a DDL Event should be ignore by conditions below:
+// 0. By startTs.
+// 1. By schema name.
+// 2. By table name.
+// 3. By type.
+// 4. By query.
+func (f *filter) ShouldIgnoreDDLEvent(ddl *model.DDLEvent) (bool, error) {
+	if f.shouldIgnoreStartTs(ddl.StartTs) {
+		return true, nil
+	}
 
-// ShouldIgnoreDDLEvent removes DDLs that's not wanted by this change feed.
-// CDC only supports filtering by database/table now.
-func (f *Filter) ShouldIgnoreDDLEvent(ts uint64, ddlType model.ActionType, schema, table string) bool {
 	var shouldIgnoreTableOrSchema bool
-	switch ddlType {
-	case model.ActionCreateSchema, model.ActionDropSchema,
-		model.ActionModifySchemaCharsetAndCollate:
-		shouldIgnoreTableOrSchema = !f.filter.MatchSchema(schema)
+	switch ddl.Type {
+	case timodel.ActionCreateSchema, timodel.ActionDropSchema,
+		timodel.ActionModifySchemaCharsetAndCollate:
+		shouldIgnoreTableOrSchema = !f.tableFilter.MatchSchema(ddl.TableInfo.Schema)
 	default:
-		shouldIgnoreTableOrSchema = f.ShouldIgnoreTable(schema, table)
+		shouldIgnoreTableOrSchema = f.ShouldIgnoreTable(ddl.TableInfo.Schema, ddl.TableInfo.Table)
 	}
-	return f.shouldIgnoreStartTs(ts) || shouldIgnoreTableOrSchema
+	if shouldIgnoreTableOrSchema {
+		return true, nil
+	}
+	return f.sqlEventFilter.shouldSkipDDL(ddl)
 }
 
 // ShouldDiscardDDL returns true if this DDL should be discarded.
-func (f *Filter) ShouldDiscardDDL(ddlType model.ActionType) bool {
-	if !f.shouldDiscardByBuiltInDDLAllowlist(ddlType) {
+// If a ddl is discarded, it will not be applied to cdc's schema storage
+// and sent to downstream.
+func (f *filter) ShouldDiscardDDL(ddlType timodel.ActionType) bool {
+	if !shouldDiscardByBuiltInDDLAllowlist(ddlType) {
 		return false
 	}
+	// If a ddl is in BuildInDDLAllowList we should check if it was be
+	// added to filter's ddlAllowList by user.
 	for _, allowDDLType := range f.ddlAllowlist {
 		if allowDDLType == ddlType {
 			return false
@@ -117,65 +151,24 @@ func (f *Filter) ShouldDiscardDDL(ddlType model.ActionType) bool {
 	return true
 }
 
-func (f *Filter) shouldDiscardByBuiltInDDLAllowlist(ddlType model.ActionType) bool {
-	/* The following DDL will be filter:
-	ActionAddForeignKey                 ActionType = 9
-	ActionDropForeignKey                ActionType = 10
-	ActionRebaseAutoID                  ActionType = 13
-	ActionShardRowID                    ActionType = 16
-	ActionLockTable                     ActionType = 27
-	ActionUnlockTable                   ActionType = 28
-	ActionRepairTable                   ActionType = 29
-	ActionSetTiFlashReplica             ActionType = 30
-	ActionUpdateTiFlashReplicaStatus    ActionType = 31
-	ActionCreateSequence                ActionType = 34
-	ActionAlterSequence                 ActionType = 35
-	ActionDropSequence                  ActionType = 36
-	ActionModifyTableAutoIdCache        ActionType = 39
-	ActionRebaseAutoRandomBase          ActionType = 40
-	ActionAlterIndexVisibility          ActionType = 41
-	ActionExchangeTablePartition        ActionType = 42
-	ActionAddCheckConstraint            ActionType = 43
-	ActionDropCheckConstraint           ActionType = 44
-	ActionAlterCheckConstraint          ActionType = 45
-	ActionAlterTableAlterPartition      ActionType = 46
-
-	... Any Action which of value is greater than 46 ...
-	*/
-	switch ddlType {
-	case model.ActionCreateSchema,
-		model.ActionDropSchema,
-		model.ActionCreateTable,
-		model.ActionDropTable,
-		model.ActionAddColumn,
-		model.ActionDropColumn,
-		model.ActionAddIndex,
-		model.ActionDropIndex,
-		model.ActionTruncateTable,
-		model.ActionModifyColumn,
-		model.ActionRenameTable,
-		model.ActionRenameTables,
-		model.ActionSetDefaultValue,
-		model.ActionModifyTableComment,
-		model.ActionRenameIndex,
-		model.ActionAddTablePartition,
-		model.ActionDropTablePartition,
-		model.ActionCreateView,
-		model.ActionModifyTableCharsetAndCollate,
-		model.ActionTruncateTablePartition,
-		model.ActionDropView,
-		model.ActionRecoverTable,
-		model.ActionModifySchemaCharsetAndCollate,
-		model.ActionAddPrimaryKey,
-		model.ActionDropPrimaryKey,
-		model.ActionAddColumns,
-		model.ActionDropColumns:
-		return false
+// ShouldIgnoreTable returns true if the specified table should be ignored by this change feed.
+// NOTICE: Set `tbl` to an empty string to test against the whole database.
+func (f *filter) ShouldIgnoreTable(db, tbl string) bool {
+	if isSysSchema(db) {
+		return true
 	}
-	return true
+	return !f.tableFilter.MatchTable(db, tbl)
 }
 
-// isSysSchema returns true if the given schema is a system schema
-func isSysSchema(db string) bool {
-	return filterV1.IsSystemSchema(db)
+func (f *filter) Verify(tableInfos []*model.TableInfo) error {
+	return f.dmlExprFilter.verify(tableInfos)
+}
+
+func (f *filter) shouldIgnoreStartTs(ts uint64) bool {
+	for _, ignoreTs := range f.ignoreTxnStartTs {
+		if ignoreTs == ts {
+			return true
+		}
+	}
+	return false
 }

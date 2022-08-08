@@ -22,15 +22,16 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang/mock/gomock"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/pingcap/tiflow/engine/client"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
-	mockkv "github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
+	metaMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 )
@@ -151,7 +152,7 @@ func (m *testJobMasterImpl) Status() frameModel.WorkerStatus {
 	}
 }
 
-func newBaseJobMasterForTests(impl JobMasterImpl) *DefaultBaseJobMaster {
+func newBaseJobMasterForTests(t *testing.T, impl JobMasterImpl) *DefaultBaseJobMaster {
 	cli, err := pkgOrm.NewMockClient()
 	if err != nil {
 		panic(err)
@@ -160,9 +161,9 @@ func newBaseJobMasterForTests(impl JobMasterImpl) *DefaultBaseJobMaster {
 		MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 		MessageSender:         p2p.NewMockMessageSender(),
 		FrameMetaClient:       cli,
-		UserRawKVClient:       mockkv.NewMetaMock(),
-		ExecutorClientManager: client.NewClientManager(),
-		ServerMasterClient:    &client.MockServerMasterClient{},
+		BusinessClientConn:    metaMock.NewMockClientConn(),
+		ExecutorGroup:         client.NewMockExecutorGroup(),
+		ServerMasterClient:    client.NewMockServerMasterClient(gomock.NewController(t)),
 	}
 	dp := deps.NewDeps()
 	err = dp.Provide(func() masterParamListForTest {
@@ -186,7 +187,7 @@ func newBaseJobMasterForTests(impl JobMasterImpl) *DefaultBaseJobMaster {
 
 func TestBaseJobMasterBasics(t *testing.T) {
 	jobMaster := &testJobMasterImpl{}
-	base := newBaseJobMasterForTests(jobMaster)
+	base := newBaseJobMasterForTests(t, jobMaster)
 	jobMaster.base = base
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -235,7 +236,7 @@ func TestBaseJobMasterBasics(t *testing.T) {
 
 func TestOnOpenAPIInitialized(t *testing.T) {
 	jobMaster := &testJobMasterImpl{}
-	base := newBaseJobMasterForTests(jobMaster)
+	base := newBaseJobMasterForTests(t, jobMaster)
 	jobMaster.base = base
 
 	engine := gin.New()

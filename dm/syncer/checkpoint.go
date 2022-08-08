@@ -27,7 +27,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
 
-	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -422,7 +422,16 @@ func (cp *RemoteCheckPoint) Snapshot(isSyncFlush bool) *SnapshotInfo {
 		}
 	}
 
-	flushGlobalPoint := cp.globalPoint.outOfDate() || cp.globalPointSaveTime.IsZero() || (isSyncFlush && cp.needFlushSafeModeExitPoint.Load())
+	// flush when
+	// - global checkpoint is forwarded
+	// - global checkpoint is not forwarded but binlog filename updated. This may happen when upstream switched or relay
+	//   enable/disable in GTID replication
+	// - the first time to flush checkpoint
+	// - need update safe mode exit point
+	flushGlobalPoint := cp.globalPoint.outOfDate() ||
+		cp.globalPoint.savedPoint.location.Position.Name != cp.globalPoint.flushedPoint.location.Position.Name ||
+		cp.globalPointSaveTime.IsZero() ||
+		(isSyncFlush && cp.needFlushSafeModeExitPoint.Load())
 
 	// if there is no change on both table points and global point, just return an empty snapshot
 	if len(tableCheckPoints) == 0 && !flushGlobalPoint {
@@ -1168,7 +1177,7 @@ func (cp *RemoteCheckPoint) CheckAndUpdate(ctx context.Context, schemas map[stri
 	cp.Unlock()
 
 	if hasChange {
-		tctx := tcontext.NewContext(ctx, log.L())
+		tctx := cp.logCtx.WithContext(ctx)
 		cpID := cp.Snapshot(true)
 		if cpID != nil {
 			return cp.FlushPointsExcept(tctx, cpID.id, nil, nil, nil)

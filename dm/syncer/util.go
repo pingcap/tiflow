@@ -27,7 +27,7 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -106,21 +106,26 @@ func printServerVersion(tctx *tcontext.Context, db *conn.BaseDB, scope string) {
 	version.ParseServerInfo(versionInfo)
 }
 
-func str2TimezoneOrFromDB(tctx *tcontext.Context, tzStr string, dbCfg *config.DBConfig) (*time.Location, error) {
+func str2TimezoneOrFromDB(tctx *tcontext.Context, tzStr string, dbCfg *config.DBConfig) (*time.Location, string, error) {
 	var err error
 	if len(tzStr) == 0 {
-		tzStr, err = conn.FetchTimeZoneSetting(tctx.Ctx, dbCfg)
+		baseDB, err2 := conn.DefaultDBProvider.Apply(dbCfg)
+		if err2 != nil {
+			return nil, "", err2
+		}
+		defer baseDB.Close()
+		tzStr, err = config.FetchTimeZoneSetting(tctx.Ctx, baseDB.DB)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 	}
 	loc, err := utils.ParseTimeZone(tzStr)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	tctx.L().Info("use timezone", zap.String("location", loc.String()),
 		zap.String("host", dbCfg.Host), zap.Int("port", dbCfg.Port))
-	return loc, nil
+	return loc, tzStr, nil
 }
 
 func subtaskCfg2BinlogSyncerCfg(cfg *config.SubTaskConfig, timezone *time.Location) (replication.BinlogSyncerConfig, error) {

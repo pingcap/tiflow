@@ -29,8 +29,8 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -43,7 +43,7 @@ import (
 const (
 	maxRowKeyLength = 64
 
-	validationDBTimeout = queryTimeout
+	validationDBTimeout = queryTimeout * 5
 )
 
 var mapErrType2Str = map[validateFailedType]string{

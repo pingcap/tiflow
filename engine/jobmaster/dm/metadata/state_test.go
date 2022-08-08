@@ -21,7 +21,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/stretchr/testify/require"
 
-	"github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
+	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
 )
 
 type DummyState struct {

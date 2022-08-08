@@ -16,8 +16,6 @@ package writer
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -25,12 +23,16 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
+	backuppb "github.com/pingcap/kvproto/pkg/brpb"
 	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
-	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/redo/common"
-	"github.com/pingcap/tiflow/pkg/uuid"
+	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/atomic"
+
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/redo/common"
+	"github.com/pingcap/tiflow/pkg/fsutil"
+	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
 func TestWriterWrite(t *testing.T) {
@@ -65,11 +67,11 @@ func TestWriterWrite(t *testing.T) {
 			},
 			uint64buf: make([]byte, 8),
 			running:   *atomic.NewBool(true),
-			metricWriteBytes: redoWriteBytesGauge.
+			metricWriteBytes: common.RedoWriteBytesGauge.
 				WithLabelValues("default", "test-cf"),
-			metricFsyncDuration: redoFsyncDurationHistogram.
+			metricFsyncDuration: common.RedoFsyncDurationHistogram.
 				WithLabelValues("default", "test-cf"),
-			metricFlushAllDuration: redoFlushAllDurationHistogram.
+			metricFlushAllDuration: common.RedoFlushAllDurationHistogram.
 				WithLabelValues("default", "test-cf"),
 			uuidGenerator: uuidGen,
 		}
@@ -157,11 +159,11 @@ func TestWriterWrite(t *testing.T) {
 			},
 			uint64buf: make([]byte, 8),
 			running:   *atomic.NewBool(true),
-			metricWriteBytes: redoWriteBytesGauge.
+			metricWriteBytes: common.RedoWriteBytesGauge.
 				WithLabelValues("default", "test-cf11"),
-			metricFsyncDuration: redoFsyncDurationHistogram.
+			metricFsyncDuration: common.RedoFsyncDurationHistogram.
 				WithLabelValues("default", "test-cf11"),
-			metricFlushAllDuration: redoFlushAllDurationHistogram.
+			metricFlushAllDuration: common.RedoFlushAllDurationHistogram.
 				WithLabelValues("default", "test-cf11"),
 			uuidGenerator: uuidGen,
 		}
@@ -199,26 +201,12 @@ func TestWriterGC(t *testing.T) {
 	uuidGen := uuid.NewConstGenerator("const-uuid")
 	controller := gomock.NewController(t)
 	mockStorage := mockstorage.NewMockExternalStorage(controller)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_row_1_const-uuid.log.tmp",
-		gomock.Any()).Return(nil).Times(1)
 	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_row_1_const-uuid.log",
-		gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_row_1_const-uuid.log.tmp").
-		Return(nil).Times(1)
-
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_row_2_const-uuid.log.tmp",
 		gomock.Any()).Return(nil).Times(1)
 	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_row_2_const-uuid.log",
 		gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_row_2_const-uuid.log.tmp").
-		Return(nil).Times(1)
-
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_row_3_const-uuid.log.tmp",
-		gomock.Any()).Return(nil).Times(1)
 	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_test_row_3_const-uuid.log",
 		gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_row_3_const-uuid.log.tmp").
-		Return(nil).Times(1)
 
 	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_test_row_1_const-uuid.log").
 		Return(errors.New("ignore err")).Times(1)
@@ -227,24 +215,23 @@ func TestWriterGC(t *testing.T) {
 
 	megabyte = 1
 	cfg := &FileWriterConfig{
-		Dir:               dir,
-		ChangeFeedID:      model.DefaultChangeFeedID("test"),
-		CaptureID:         "cp",
-		MaxLogSize:        10,
-		FileType:          common.DefaultRowLogFileType,
-		CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
-		FlushIntervalInMs: 5,
-		S3Storage:         true,
+		Dir:          dir,
+		ChangeFeedID: model.DefaultChangeFeedID("test"),
+		CaptureID:    "cp",
+		MaxLogSize:   10,
+		FileType:     common.DefaultRowLogFileType,
+		CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
+		S3Storage:    true,
 	}
 	w := &Writer{
 		cfg:       cfg,
 		uint64buf: make([]byte, 8),
 		storage:   mockStorage,
-		metricWriteBytes: redoWriteBytesGauge.
+		metricWriteBytes: common.RedoWriteBytesGauge.
 			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
-		metricFsyncDuration: redoFsyncDurationHistogram.
+		metricFsyncDuration: common.RedoFsyncDurationHistogram.
 			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
-		metricFlushAllDuration: redoFlushAllDurationHistogram.
+		metricFlushAllDuration: common.RedoFlushAllDurationHistogram.
 			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
 		uuidGenerator: uuidGen,
 	}
@@ -259,7 +246,7 @@ func TestWriterGC(t *testing.T) {
 	_, err = w.Write([]byte("t3333"))
 	require.Nil(t, err)
 
-	files, err := ioutil.ReadDir(w.cfg.Dir)
+	files, err := os.ReadDir(w.cfg.Dir)
 	require.Nil(t, err)
 	require.Equal(t, 3, len(files), "should have 3 log file")
 
@@ -269,7 +256,7 @@ func TestWriterGC(t *testing.T) {
 	err = w.Close()
 	require.Nil(t, err)
 	require.False(t, w.IsRunning())
-	files, err = ioutil.ReadDir(w.cfg.Dir)
+	files, err = os.ReadDir(w.cfg.Dir)
 	require.Nil(t, err)
 	require.Equal(t, 1, len(files), "should have 1 log left after GC")
 
@@ -300,33 +287,34 @@ func TestNewWriter(t *testing.T) {
 	_, err := NewWriter(context.Background(), nil)
 	require.NotNil(t, err)
 
-	s3URI, err := url.Parse("s3://logbucket/test-changefeed?endpoint=http://111/")
-	require.Nil(t, err)
-
+	storageDir := t.TempDir()
 	dir := t.TempDir()
 
 	uuidGen := uuid.NewConstGenerator("const-uuid")
 	w, err := NewWriter(context.Background(), &FileWriterConfig{
 		Dir:       "sdfsf",
-		S3Storage: true,
-		S3URI:     *s3URI,
+		S3Storage: false,
 	},
 		WithUUIDGenerator(func() uuid.Generator { return uuidGen }),
 	)
 	require.Nil(t, err)
-	time.Sleep(time.Duration(defaultFlushIntervalInMs+1) * time.Millisecond)
+	backend := &backuppb.StorageBackend{
+		Backend: &backuppb.StorageBackend_Local{Local: &backuppb.Local{Path: storageDir}},
+	}
+	localStorage, err := storage.New(context.Background(), backend, &storage.ExternalStorageOptions{
+		SendCredentials: false,
+		HTTPClient:      nil,
+	})
+	w.storage = localStorage
+	require.Nil(t, err)
 	err = w.Close()
 	require.Nil(t, err)
 	require.False(t, w.IsRunning())
 
 	controller := gomock.NewController(t)
 	mockStorage := mockstorage.NewMockExternalStorage(controller)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_ddl_0_const-uuid.log.tmp",
-		gomock.Any()).Return(nil).Times(2)
 	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_ddl_0_const-uuid.log",
 		gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_abcd_test_ddl_0_const-uuid.log.tmp").
-		Return(nil).Times(1)
 
 	changefeed := model.ChangeFeedID{
 		Namespace: "abcd",
@@ -344,28 +332,26 @@ func TestNewWriter(t *testing.T) {
 		},
 		uint64buf: make([]byte, 8),
 		storage:   mockStorage,
-		metricWriteBytes: redoWriteBytesGauge.
+		metricWriteBytes: common.RedoWriteBytesGauge.
 			WithLabelValues("default", "test"),
-		metricFsyncDuration: redoFsyncDurationHistogram.
+		metricFsyncDuration: common.RedoFsyncDurationHistogram.
 			WithLabelValues("default", "test"),
-		metricFlushAllDuration: redoFlushAllDurationHistogram.
+		metricFlushAllDuration: common.RedoFlushAllDurationHistogram.
 			WithLabelValues("default", "test"),
 		uuidGenerator: uuidGen,
 	}
 	w.running.Store(true)
 	_, err = w.Write([]byte("test"))
 	require.Nil(t, err)
-	//
 	err = w.Flush()
 	require.Nil(t, err)
 
 	err = w.Close()
 	require.Nil(t, err)
 	require.Equal(t, w.running.Load(), false)
-	time.Sleep(time.Duration(defaultFlushIntervalInMs+1) * time.Millisecond)
 }
 
-func TestRotateFile(t *testing.T) {
+func TestRotateFileWithFileAllocator(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	_, err := NewWriter(ctx, nil)
@@ -374,19 +360,10 @@ func TestRotateFile(t *testing.T) {
 	controller := gomock.NewController(t)
 	mockStorage := mockstorage.NewMockExternalStorage(controller)
 
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_row_0_uuid-1.log.tmp",
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_row_0_uuid-1.log",
 		gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_row_0_uuid-2.log",
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_row_100_uuid-2.log",
 		gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_abcd_test_row_0_uuid-1.log.tmp").
-		Return(nil).Times(1)
-
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_row_0_uuid-3.log.tmp",
-		gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_row_100_uuid-4.log",
-		gomock.Any()).Return(nil).Times(1)
-	mockStorage.EXPECT().DeleteFile(gomock.Any(), "cp_abcd_test_row_0_uuid-3.log.tmp").
-		Return(nil).Times(1)
 
 	dir := t.TempDir()
 	uuidGen := uuid.NewMock()
@@ -410,15 +387,17 @@ func TestRotateFile(t *testing.T) {
 			MaxLogSize:   defaultMaxLogSize,
 		},
 		uint64buf: make([]byte, 8),
-		metricWriteBytes: redoWriteBytesGauge.
+		metricWriteBytes: common.RedoWriteBytesGauge.
 			WithLabelValues("default", "test"),
-		metricFsyncDuration: redoFsyncDurationHistogram.
+		metricFsyncDuration: common.RedoFsyncDurationHistogram.
 			WithLabelValues("default", "test"),
-		metricFlushAllDuration: redoFlushAllDurationHistogram.
+		metricFlushAllDuration: common.RedoFlushAllDurationHistogram.
 			WithLabelValues("default", "test"),
 		storage:       mockStorage,
 		uuidGenerator: uuidGen,
 	}
+	w.allocator = fsutil.NewFileAllocator(
+		w.cfg.Dir, common.DefaultRowLogFileType, defaultMaxLogSize)
 
 	w.running.Store(true)
 	_, err = w.Write([]byte("test"))
@@ -432,4 +411,68 @@ func TestRotateFile(t *testing.T) {
 	require.Nil(t, err)
 	err = w.rotate()
 	require.Nil(t, err)
+
+	w.Close()
+}
+
+func TestRotateFileWithoutFileAllocator(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	_, err := NewWriter(ctx, nil)
+	require.NotNil(t, err)
+
+	controller := gomock.NewController(t)
+	mockStorage := mockstorage.NewMockExternalStorage(controller)
+
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_ddl_0_uuid-2.log",
+		gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_ddl_100_uuid-4.log",
+		gomock.Any()).Return(nil).Times(1)
+
+	dir := t.TempDir()
+	uuidGen := uuid.NewMock()
+	uuidGen.Push("uuid-1")
+	uuidGen.Push("uuid-2")
+	uuidGen.Push("uuid-3")
+	uuidGen.Push("uuid-4")
+	uuidGen.Push("uuid-5")
+	uuidGen.Push("uuid-6")
+	changefeed := model.ChangeFeedID{
+		Namespace: "abcd",
+		ID:        "test",
+	}
+	w := &Writer{
+		cfg: &FileWriterConfig{
+			Dir:          dir,
+			CaptureID:    "cp",
+			ChangeFeedID: changefeed,
+			FileType:     common.DefaultDDLLogFileType,
+			CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
+			S3Storage:    true,
+			MaxLogSize:   defaultMaxLogSize,
+		},
+		uint64buf: make([]byte, 8),
+		metricWriteBytes: common.RedoWriteBytesGauge.
+			WithLabelValues("default", "test"),
+		metricFsyncDuration: common.RedoFsyncDurationHistogram.
+			WithLabelValues("default", "test"),
+		metricFlushAllDuration: common.RedoFlushAllDurationHistogram.
+			WithLabelValues("default", "test"),
+		storage:       mockStorage,
+		uuidGenerator: uuidGen,
+	}
+	w.running.Store(true)
+	_, err = w.Write([]byte("test"))
+	require.Nil(t, err)
+
+	err = w.rotate()
+	require.Nil(t, err)
+
+	w.AdvanceTs(100)
+	_, err = w.Write([]byte("test"))
+	require.Nil(t, err)
+	err = w.rotate()
+	require.Nil(t, err)
+
+	w.Close()
 }

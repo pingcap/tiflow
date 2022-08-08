@@ -15,7 +15,7 @@ mysql-instances:
     block-allow-list:  "instance"
     route-rules: ["global", "t1"]
     syncer-config-name: "global"
-    continuous-validator-config-name: global
+    validator-config-name: global
 
 block-allow-list:
   instance:

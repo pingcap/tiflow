@@ -14,12 +14,13 @@
 package config
 
 import (
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidate(t *testing.T) {
+func TestValidateOldValue(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
 		protocol       string
@@ -73,9 +74,123 @@ func TestValidate(t *testing.T) {
 			Protocol: tc.protocol,
 		}
 		if tc.expectedErr == "" {
-			require.Nil(t, cfg.validate(tc.enableOldValue))
+			require.Nil(t, cfg.validateAndAdjust(nil, tc.enableOldValue))
 		} else {
-			require.Regexp(t, tc.expectedErr, cfg.validate(tc.enableOldValue))
+			require.Regexp(t, tc.expectedErr, cfg.validateAndAdjust(nil, tc.enableOldValue))
 		}
+	}
+}
+
+func TestValidateApplyParameter(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		sinkURI       string
+		expectedErr   string
+		expectedLevel AtomicityLevel
+	}{
+		{
+			sinkURI:       "mysql://normal:123456@127.0.0.1:3306",
+			expectedErr:   "",
+			expectedLevel: tableTxnAtomicity,
+		},
+		{
+			sinkURI:       "mysql://normal:123456@127.0.0.1:3306?transaction-atomicity=table",
+			expectedErr:   "",
+			expectedLevel: tableTxnAtomicity,
+		},
+		{
+			sinkURI:       "mysql://normal:123456@127.0.0.1:3306?transaction-atomicity=none",
+			expectedErr:   "",
+			expectedLevel: noneTxnAtomicity,
+		},
+		{
+			sinkURI:     "mysql://normal:123456@127.0.0.1:3306?transaction-atomicity=global",
+			expectedErr: "global level atomicity is not supported by.*",
+		},
+		{
+			sinkURI:     "tidb://normal:123456@127.0.0.1:3306?protocol=canal",
+			expectedErr: ".*protocol canal is incompatible with tidb scheme.*",
+		},
+		{
+			sinkURI:     "tidb://normal:123456@127.0.0.1:3306?protocol=default",
+			expectedErr: ".*protocol default is incompatible with tidb scheme.*",
+		},
+		{
+			sinkURI:     "tidb://normal:123456@127.0.0.1:3306?protocol=random",
+			expectedErr: ".*protocol .* is incompatible with tidb scheme.*",
+		},
+		{
+			sinkURI:       "blackhole://normal:123456@127.0.0.1:3306?transaction-atomicity=none",
+			expectedErr:   "",
+			expectedLevel: noneTxnAtomicity,
+		},
+		{
+			sinkURI: "kafka://127.0.0.1:9092?transaction-atomicity=none" +
+				"&protocol=open-protocol",
+			expectedErr:   "",
+			expectedLevel: noneTxnAtomicity,
+		},
+		{
+			sinkURI: "pulsar://127.0.0.1:9092?transaction-atomicity=table" +
+				"&protocol=open-protocol",
+			expectedErr:   "",
+			expectedLevel: noneTxnAtomicity,
+		},
+		{
+			sinkURI:       "kafka://127.0.0.1:9092?protocol=default",
+			expectedErr:   "",
+			expectedLevel: noneTxnAtomicity,
+		},
+		{
+			sinkURI:     "kafka://127.0.0.1:9092?transaction-atomicity=table",
+			expectedErr: ".*unknown .* protocol for Message Queue sink.*",
+		},
+	}
+
+	for _, tc := range testCases {
+		cfg := SinkConfig{}
+		parsedSinkURI, err := url.Parse(tc.sinkURI)
+		require.Nil(t, err)
+		if tc.expectedErr == "" {
+			require.Nil(t, cfg.validateAndAdjust(parsedSinkURI, true))
+			require.Equal(t, tc.expectedLevel, cfg.TxnAtomicity)
+		} else {
+			require.Regexp(t, tc.expectedErr, cfg.validateAndAdjust(parsedSinkURI, true))
+		}
+	}
+}
+
+func TestApplyParameter(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		sinkConfig *SinkConfig
+		sinkURI    string
+		result     string
+	}{
+		{
+			sinkConfig: &SinkConfig{
+				Protocol: "default",
+			},
+			sinkURI: "kafka://127.0.0.1:9092?protocol=whatever",
+			result:  "whatever",
+		},
+		{
+			sinkConfig: &SinkConfig{},
+			sinkURI:    "kafka://127.0.0.1:9092?protocol=default",
+			result:     "default",
+		},
+		{
+			sinkConfig: &SinkConfig{
+				Protocol: "default",
+			},
+			sinkURI: "kafka://127.0.0.1:9092",
+			result:  "default",
+		},
+	}
+	for _, c := range testCases {
+		parsedSinkURI, err := url.Parse(c.sinkURI)
+		require.Nil(t, err)
+		c.sinkConfig.applyParameter(parsedSinkURI)
+		require.Equal(t, c.result, c.sinkConfig.Protocol)
 	}
 }

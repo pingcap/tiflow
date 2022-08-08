@@ -21,7 +21,7 @@ import (
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
 
-	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -63,7 +63,7 @@ func (s *Syncer) setInitActiveRelayLog(ctx context.Context) error {
 		}
 	default:
 		// start from dumper or loader, get current pos from master
-		pos, _, err = s.fromDB.GetMasterStatus(ctx, s.cfg.Flavor)
+		pos, _, err = s.fromDB.GetMasterStatus(s.tctx.WithContext(ctx), s.cfg.Flavor)
 		if err != nil {
 			return terror.Annotatef(err, "get master status")
 		}

@@ -23,8 +23,8 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb/util/filter"
 	router "github.com/pingcap/tidb/util/table-router"
-	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/master"
+	dmconfig "github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/master"
 	"gopkg.in/yaml.v2"
 )
 
@@ -116,6 +116,8 @@ type JobCfg struct {
 	// BWList map[string]*filter.Rules `yaml:"black-white-list" toml:"black-white-list" json:"black-white-list"`
 	// EnableANSIQuotes bool `yaml:"ansi-quotes" toml:"ansi-quotes" json:"ansi-quotes"`
 	// RemoveMeta bool `yaml:"remove-meta"`
+
+	ModRevision uint64 `yaml:"mod-revision" toml:"mod-revision" json:"mod-revision"`
 }
 
 // DecodeFile reads file content from a given path and decodes it.

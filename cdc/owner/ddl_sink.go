@@ -16,6 +16,7 @@ package owner
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -23,11 +24,13 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink"
+	sinkv1 "github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/cdc/sink/mysql"
+	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
+	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/factory"
+	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
@@ -53,6 +56,7 @@ type DDLSink interface {
 	emitSyncPoint(ctx cdcContext.Context, checkpointTs uint64) error
 	// close the sink, cancel running goroutine.
 	close(ctx context.Context) error
+	isInitialized() bool
 }
 
 type ddlSinkImpl struct {
@@ -72,40 +76,53 @@ type ddlSinkImpl struct {
 	ddlCh chan *model.DDLEvent
 	errCh chan error
 
-	sink sink.Sink
+	sinkV1 sinkv1.Sink
+	sinkV2 sinkv2.DDLEventSink
 	// `sinkInitHandler` can be helpful in unit testing.
 	sinkInitHandler ddlSinkInitHandler
 
 	// cancel would be used to cancel the goroutine start by `run`
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+	// we use `initialized` to indicate whether the sink has been initialized.
+	// the caller before calling any method of ddl sink
+	// should check `initialized` first
+	initialized atomic.Value
 }
 
 func newDDLSink() DDLSink {
-	return &ddlSinkImpl{
+	res := &ddlSinkImpl{
 		ddlSentTsMap:    make(map[*model.DDLEvent]uint64),
 		ddlCh:           make(chan *model.DDLEvent, 1),
 		errCh:           make(chan error, defaultErrChSize),
 		sinkInitHandler: ddlSinkInitializer,
 		cancel:          func() {},
 	}
+	res.initialized.Store(false)
+	return res
 }
 
 type ddlSinkInitHandler func(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeFeedID, info *model.ChangeFeedInfo) error
 
 func ddlSinkInitializer(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeFeedID, info *model.ChangeFeedInfo) error {
-	filter, err := filter.NewFilter(info.Config)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
 	stdCtx := contextutil.PutChangefeedIDInCtx(ctx, id)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleOwner)
-	s, err := sink.New(stdCtx, id, info.SinkURI, filter, info.Config, a.errCh)
-	if err != nil {
-		return errors.Trace(err)
+	conf := config.GetGlobalServerConfig()
+	if !conf.Debug.EnableNewSink {
+		log.Info("Try to create ddlSink based on sinkV1")
+		s, err := sinkv1.New(stdCtx, id, info.SinkURI, info.Config, a.errCh)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		a.sinkV1 = s
+	} else {
+		log.Info("Try to create ddlSink based on sinkV2")
+		s, err := factory.New(stdCtx, info.SinkURI, info.Config)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		a.sinkV2 = s
 	}
-	a.sink = s
 
 	if !info.SyncPointEnabled {
 		return nil
@@ -114,6 +131,9 @@ func ddlSinkInitializer(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeF
 	if err != nil {
 		return errors.Trace(err)
 	}
+	failpoint.Inject("DDLSinkInitializeSlowly", func() {
+		time.Sleep(time.Second * 5)
+	})
 	a.syncPointStore = syncPointStore
 
 	if err := a.syncPointStore.CreateSynctable(stdCtx); err != nil {
@@ -139,6 +159,7 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 			ctx.Throw(err)
 			return
 		}
+		s.initialized.Store(true)
 		log.Info("ddl sink initialized, start processing...",
 			zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
 			zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
@@ -176,20 +197,35 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 				tables := s.mu.currentTableNames
 				s.mu.Unlock()
 				lastCheckpointTs = checkpointTs
-				if err := s.sink.EmitCheckpointTs(ctx, checkpointTs, tables); err != nil {
-					ctx.Throw(errors.Trace(err))
-					return
+				if s.sinkV1 != nil {
+					if err := s.sinkV1.EmitCheckpointTs(ctx,
+						checkpointTs, tables); err != nil {
+						ctx.Throw(errors.Trace(err))
+						return
+					}
+				} else {
+					if err := s.sinkV2.WriteCheckpointTs(ctx,
+						checkpointTs, tables); err != nil {
+						ctx.Throw(errors.Trace(err))
+						return
+					}
 				}
+
 			case ddl := <-s.ddlCh:
 				log.Info("begin emit ddl event",
 					zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
 					zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
 					zap.Any("DDL", ddl))
-				err := s.sink.EmitDDLEvent(ctx, ddl)
+				var err error
+				if s.sinkV1 != nil {
+					err = s.sinkV1.EmitDDLEvent(ctx, ddl)
+				} else {
+					err = s.sinkV2.WriteDDLEvent(ctx, ddl)
+				}
 				failpoint.Inject("InjectChangefeedDDLError", func() {
 					err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 				})
-				if err == nil || cerror.ErrDDLEventIgnored.Equal(errors.Cause(err)) {
+				if err == nil {
 					log.Info("Execute DDL succeeded",
 						zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
 						zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
@@ -207,9 +243,18 @@ func (s *ddlSinkImpl) run(ctx cdcContext.Context, id model.ChangeFeedID, info *m
 					tables := s.mu.currentTableNames
 					s.mu.Unlock()
 					lastCheckpointTs = checkpointTs
-					if err := s.sink.EmitCheckpointTs(ctx, checkpointTs, tables); err != nil {
-						ctx.Throw(errors.Trace(err))
-						return
+					if s.sinkV1 != nil {
+						if err := s.sinkV1.EmitCheckpointTs(ctx,
+							checkpointTs, tables); err != nil {
+							ctx.Throw(errors.Trace(err))
+							return
+						}
+					} else {
+						if err := s.sinkV2.WriteCheckpointTs(ctx,
+							checkpointTs, tables); err != nil {
+							ctx.Throw(errors.Trace(err))
+							return
+						}
 					}
 					continue
 				}
@@ -269,7 +314,7 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 		log.Info("ddl is sent",
 			zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
 			zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
-			zap.Uint64("ddlSentTs", ddlSentTs))
+			zap.Uint64("ddlSentTs", ddl.CommitTs))
 	default:
 		log.Warn("ddl chan full, send it the next round",
 			zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
@@ -293,8 +338,10 @@ func (s *ddlSinkImpl) emitSyncPoint(ctx cdcContext.Context, checkpointTs uint64)
 
 func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 	s.cancel()
-	if s.sink != nil {
-		err = s.sink.Close(ctx)
+	if s.sinkV1 != nil {
+		err = s.sinkV1.Close(ctx)
+	} else {
+		err = s.sinkV2.Close()
 	}
 	if s.syncPointStore != nil {
 		err = s.syncPointStore.Close()
@@ -304,4 +351,8 @@ func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 		return err
 	}
 	return nil
+}
+
+func (s *ddlSinkImpl) isInitialized() bool {
+	return s.initialized.Load().(bool)
 }

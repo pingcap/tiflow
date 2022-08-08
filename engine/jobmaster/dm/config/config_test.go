@@ -19,8 +19,8 @@ import (
 	"testing"
 
 	"github.com/BurntSushi/toml"
-	dmconfig "github.com/pingcap/tiflow/dm/dm/config"
-	dmmaster "github.com/pingcap/tiflow/dm/dm/master"
+	dmconfig "github.com/pingcap/tiflow/dm/config"
+	dmmaster "github.com/pingcap/tiflow/dm/master"
 	"github.com/stretchr/testify/require"
 )
 
@@ -74,6 +74,8 @@ func TestTaskCfg(t *testing.T) {
 
 	jobCfg := &JobCfg{}
 	require.NoError(t, jobCfg.DecodeFile(jobTemplatePath))
+	// test update job
+	jobCfg.ModRevision = 1
 
 	taskCfgs := jobCfg.ToTaskCfgs()
 
@@ -83,6 +85,8 @@ func TestTaskCfg(t *testing.T) {
 	}
 	jobCfg2 := FromTaskCfgs(taskCfgList)
 	taskCfgs = jobCfg2.ToTaskCfgs()
+
+	require.Equal(t, jobCfg.ModRevision, jobCfg2.ModRevision)
 
 	for _, taskCfg := range taskCfgs {
 		subTaskCfg := taskCfg.ToDMSubTaskCfg()

@@ -68,7 +68,7 @@ func newDDLSink4Test() (DDLSink, *mockSink) {
 	mockSink := &mockSink{}
 	ddlSink := newDDLSink()
 	ddlSink.(*ddlSinkImpl).sinkInitHandler = func(ctx cdcContext.Context, a *ddlSinkImpl, _ model.ChangeFeedID, _ *model.ChangeFeedInfo) error {
-		a.sink = mockSink
+		a.sinkV1 = mockSink
 		return nil
 	}
 	return ddlSink, mockSink
@@ -153,18 +153,6 @@ func TestExecDDLError(t *testing.T) {
 	}()
 
 	ddlSink.run(ctx, ctx.ChangefeedVars().ID, ctx.ChangefeedVars().Info)
-
-	mSink.ddlError = cerror.ErrDDLEventIgnored.GenWithStackByArgs()
-	ddl1 := &model.DDLEvent{CommitTs: 1}
-	for {
-		done, err := ddlSink.emitDDLEvent(ctx, ddl1)
-		require.Nil(t, err)
-		if done {
-			require.Equal(t, mSink.GetDDL(), ddl1)
-			break
-		}
-	}
-	require.Nil(t, resultErr)
 
 	mSink.ddlError = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 	ddl2 := &model.DDLEvent{CommitTs: 2}

@@ -22,6 +22,11 @@ import (
 	"github.com/google/btree"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/ddl"
+	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/ast"
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tiflow/cdc/model"
 	"go.uber.org/zap"
 
@@ -94,11 +99,30 @@ func (s *Snapshot) FillSchemaName(job *timodel.Job) error {
 	return nil
 }
 
+// GetSchemaVersion returns the schema version of the meta.
+func GetSchemaVersion(meta *timeta.Meta) (int64, error) {
+	// After we get the schema version at startTs, if the diff corresponding to that version does not exist,
+	// it means that the job is not committed yet, so we should subtract one from the version, i.e., version--.
+	version, err := meta.GetSchemaVersion()
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	diff, err := meta.GetSchemaDiff(version)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	if diff == nil {
+		version--
+	}
+	return version, nil
+}
+
 // NewSingleSnapshotFromMeta creates a new single schema snapshot from a tidb meta
 func NewSingleSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate bool) (*Snapshot, error) {
 	// meta is nil only in unit tests
 	if meta == nil {
 		snap := NewEmptySnapshot(forceReplicate)
+		snap.InitConcurrentDDLTables()
 		snap.inner.currentTs = currentTs
 		return snap, nil
 	}
@@ -176,7 +200,41 @@ func NewEmptySnapshot(forceReplicate bool) *Snapshot {
 		forceReplicate:   forceReplicate,
 		currentTs:        0,
 	}
+
 	return &Snapshot{inner: inner, rwlock: new(sync.RWMutex)}
+}
+
+// these constants imitate TiDB's session.InitDDLJobTables in an empty Snapshot.
+const (
+	mysqlDBID = int64(1)
+	dummyTS   = uint64(1)
+)
+
+// InitConcurrentDDLTables imitates the creating table logic for concurrent DDL.
+// Since v6.2.0, tables of concurrent DDL will be directly written as meta KV in
+// TiKV, without being written to history DDL jobs. So the Snapshot which is not
+// build from meta needs this method to handle history DDL.
+func (s *Snapshot) InitConcurrentDDLTables() {
+	tableIDs := [...]int64{ddl.JobTableID, ddl.ReorgTableID, ddl.HistoryTableID}
+
+	mysqlDBInfo := &timodel.DBInfo{
+		ID:      mysqlDBID,
+		Name:    timodel.NewCIStr(mysql.SystemDB),
+		Charset: mysql.UTF8MB4Charset,
+		Collate: mysql.UTF8MB4DefaultCollation,
+		State:   timodel.StatePublic,
+	}
+	_ = s.inner.createSchema(mysqlDBInfo, dummyTS)
+
+	p := parser.New()
+	for i, table := range session.DDLJobTables {
+		stmt, _ := p.ParseOneStmt(table.SQL, "", "")
+		tblInfo, _ := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
+		tblInfo.State = timodel.StatePublic
+		tblInfo.ID = tableIDs[i]
+		wrapped := model.WrapTableInfo(mysqlDBID, mysql.SystemDB, dummyTS, tblInfo)
+		_ = s.inner.createTable(wrapped, dummyTS)
+	}
 }
 
 // Copy creates a new schema snapshot based on the given one. The copied one shares same internal

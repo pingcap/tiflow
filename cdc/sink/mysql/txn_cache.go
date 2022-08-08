@@ -14,12 +14,11 @@
 package mysql
 
 import (
-	"sort"
 	"sync"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/container/queue"
 	"go.uber.org/zap"
 )
 
@@ -38,10 +37,9 @@ func (t *txnsWithTheSameCommitTs) Append(row *model.RowChangedEvent) {
 	var txn *model.SingleTableTxn
 	if len(t.txns) == 0 || row.SplitTxn || t.txns[len(t.txns)-1].StartTs < row.StartTs {
 		txn = &model.SingleTableTxn{
-			StartTs:   row.StartTs,
-			CommitTs:  row.CommitTs,
-			Table:     row.Table,
-			ReplicaID: row.ReplicaID,
+			StartTs:  row.StartTs,
+			CommitTs: row.CommitTs,
+			Table:    row.Table,
 		}
 		t.txns = append(t.txns, txn)
 	} else if t.txns[len(t.txns)-1].StartTs == row.StartTs {
@@ -57,13 +55,13 @@ func (t *txnsWithTheSameCommitTs) Append(row *model.RowChangedEvent) {
 // unresolvedTxnCache caches unresolved txns
 type unresolvedTxnCache struct {
 	unresolvedTxnsMu sync.Mutex
-	unresolvedTxns   map[model.TableID][]*txnsWithTheSameCommitTs
+	unresolvedTxns   map[model.TableID]*queue.ChunkQueue[*txnsWithTheSameCommitTs]
 }
 
 // newUnresolvedTxnCache returns a new unresolvedTxnCache
 func newUnresolvedTxnCache() *unresolvedTxnCache {
 	return &unresolvedTxnCache{
-		unresolvedTxns: make(map[model.TableID][]*txnsWithTheSameCommitTs),
+		unresolvedTxns: make(map[model.TableID]*queue.ChunkQueue[*txnsWithTheSameCommitTs]),
 	}
 }
 
@@ -75,34 +73,37 @@ func (c *unresolvedTxnCache) RemoveTableTxn(tableID model.TableID) {
 }
 
 // Append adds unresolved rows to cache
-// the rows inputed into this function will go through the following handling logic
+// the rows inputted into this function will go through the following handling logic
 // 1. group by tableID from one input stream
 // 2. for each tableID stream, the callers of this function should **make sure** that the CommitTs of rows is **strictly increasing**
 // 3. group by CommitTs, according to CommitTs cut the rows into many group of rows in the same CommitTs
 // 4. group by StartTs, cause the StartTs is the unique identifier of the transaction, according to StartTs cut the rows into many txns
-func (c *unresolvedTxnCache) Append(filter *filter.Filter, rows ...*model.RowChangedEvent) int {
+func (c *unresolvedTxnCache) Append(rows ...*model.RowChangedEvent) int {
 	c.unresolvedTxnsMu.Lock()
 	defer c.unresolvedTxnsMu.Unlock()
 	appendRows := 0
 	for _, row := range rows {
-		if filter != nil && filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
-			log.Info("Row changed event ignored", zap.Uint64("startTs", row.StartTs))
-			continue
-		}
-		txns := c.unresolvedTxns[row.Table.TableID]
-		if len(txns) == 0 || txns[len(txns)-1].commitTs != row.CommitTs {
-			// fail-fast check
-			if len(txns) != 0 && txns[len(txns)-1].commitTs > row.CommitTs {
-				log.Panic("the commitTs of the emit row is less than the received row",
-					zap.Uint64("lastReceivedCommitTs", txns[len(txns)-1].commitTs),
-					zap.Any("row", row))
-			}
-			txns = append(txns, &txnsWithTheSameCommitTs{
-				commitTs: row.CommitTs,
-			})
+		txns, ok := c.unresolvedTxns[row.Table.TableID]
+		if !ok {
+			txns = queue.NewChunkQueue[*txnsWithTheSameCommitTs]()
 			c.unresolvedTxns[row.Table.TableID] = txns
 		}
-		txns[len(txns)-1].Append(row)
+
+		lastTxn, ok := txns.Tail()
+		if txns.Empty() || ok && lastTxn.commitTs != row.CommitTs {
+			// fail-fast check
+			if ok && lastTxn.commitTs > row.CommitTs {
+				log.Panic("the commitTs of the emit row is less than the received row",
+					zap.Uint64("lastReceivedCommitTs", lastTxn.commitTs),
+					zap.Any("row", row))
+			}
+			txns.Push(&txnsWithTheSameCommitTs{
+				commitTs: row.CommitTs,
+			})
+		}
+
+		lastTxn, _ = txns.Tail()
+		lastTxn.Append(row)
 		appendRows++
 	}
 	return appendRows
@@ -120,17 +121,11 @@ func (c *unresolvedTxnCache) Resolved(
 }
 
 func splitResolvedTxn(
-	resolvedTsMap *sync.Map, unresolvedTxns map[model.TableID][]*txnsWithTheSameCommitTs,
+	resolvedTsMap *sync.Map,
+	unresolvedTxns map[model.TableID]*queue.ChunkQueue[*txnsWithTheSameCommitTs],
 ) (checkpointTsMap map[model.TableID]model.ResolvedTs,
 	resolvedRowsMap map[model.TableID][]*model.SingleTableTxn,
 ) {
-	var (
-		ok                              bool
-		txnsLength                      int
-		txns                            []*txnsWithTheSameCommitTs
-		resolvedTxnsWithTheSameCommitTs []*txnsWithTheSameCommitTs
-	)
-
 	checkpointTsMap = make(map[model.TableID]model.ResolvedTs, len(unresolvedTxns))
 	resolvedTsMap.Range(func(k, v any) bool {
 		tableID := k.(model.TableID)
@@ -140,31 +135,27 @@ func splitResolvedTxn(
 	})
 
 	resolvedRowsMap = make(map[model.TableID][]*model.SingleTableTxn, len(unresolvedTxns))
+	resolvedTxnsBuf := queue.NewChunkQueue[*model.SingleTableTxn]()
 	for tableID, resolved := range checkpointTsMap {
-		if txns, ok = unresolvedTxns[tableID]; !ok {
+		txnQueue, ok := unresolvedTxns[tableID]
+		if !ok || txnQueue.Empty() {
 			continue
 		}
-		i := sort.Search(len(txns), func(i int) bool {
-			return txns[i].commitTs > resolved.Ts
+
+		txnQueue.RangeAndPop(func(txns *txnsWithTheSameCommitTs) bool {
+			if txns.commitTs <= resolved.Ts {
+				resolvedTxnsBuf.PushMany(txns.txns...)
+				return true
+			}
+			return false
 		})
-		if i != 0 {
-			if i == len(txns) {
-				resolvedTxnsWithTheSameCommitTs = txns
-				delete(unresolvedTxns, tableID)
-			} else {
-				resolvedTxnsWithTheSameCommitTs = txns[:i]
-				unresolvedTxns[tableID] = txns[i:]
-			}
-			for _, txns := range resolvedTxnsWithTheSameCommitTs {
-				txnsLength += len(txns.txns)
-			}
-			resolvedTxns := make([]*model.SingleTableTxn, 0, txnsLength)
-			for _, txns := range resolvedTxnsWithTheSameCommitTs {
-				resolvedTxns = append(resolvedTxns, txns.txns...)
-			}
-			resolvedRowsMap[tableID] = resolvedTxns
+		if resolvedTxnsBuf.Empty() {
+			continue
+		}
+		resolvedRowsMap[tableID] = resolvedTxnsBuf.PopAll()
+		if txnQueue.Empty() {
+			txnQueue.Shrink()
 		}
 	}
-
-	return
+	return checkpointTsMap, resolvedRowsMap
 }

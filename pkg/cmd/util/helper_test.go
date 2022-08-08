@@ -18,7 +18,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/spf13/cobra"
@@ -151,14 +153,14 @@ func TestStrictDecodeInvalidFile(t *testing.T) {
 
 	configPath := filepath.Join(tmpDir, "ticdc.toml")
 	configContent := fmt.Sprintf(`
-unknown = "128.0.0.1:1234"
-data-dir = "%+v"
+	unknown = "128.0.0.1:1234"
+	data-dir = "%+v"
 
-[log.unkown]
-max-size = 200
-max-days = 1
-max-backups = 1
-`, dataDir)
+	[log.unkown]
+	max-size = 200
+	max-days = 1
+	max-backups = 1
+	`, dataDir)
 	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.Nil(t, err)
 
@@ -180,7 +182,7 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 	require.Equal(t, &config.MounterConfig{
 		WorkerNum: 16,
 	}, cfg.Mounter)
-	err = cfg.Validate()
+	err = cfg.ValidateAndAdjust(nil)
 	require.Nil(t, err)
 	require.Equal(t, &config.SinkConfig{
 		DispatchRules: []*config.DispatchRule{
@@ -274,4 +276,55 @@ unknown = 1
 
 	err = StrictDecodeFile(configPath, "test", conf, "debug")
 	require.Nil(t, err)
+}
+
+func TestInitSignalHandlingGracefulShutdown(t *testing.T) {
+	shutdownCh := make(chan struct{}, 1)
+	shutdown := func() <-chan struct{} { return shutdownCh }
+	cancelCh := make(chan struct{}, 1)
+	cancel := func() { cancelCh <- struct{}{} }
+	InitSignalHandling(shutdown, cancel)
+	self, err := os.FindProcess(os.Getpid())
+	require.Nil(t, err)
+
+	// First signal for preparing shutdown.
+	err = self.Signal(syscall.SIGTERM)
+	require.Nil(t, err)
+	select {
+	case <-shutdownCh:
+		require.Fail(t, "unexpected")
+	case <-cancelCh:
+		require.Fail(t, "unexpected")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	// Graceful shutdown complete.
+	shutdownCh <- struct{}{}
+	select {
+	case <-cancelCh:
+	case <-time.After(100 * time.Millisecond):
+		require.Fail(t, "timeout")
+	}
+}
+
+func TestInitSignalHandlingForceShutdown(t *testing.T) {
+	shutdownCh := make(chan struct{}, 1)
+	shutdown := func() <-chan struct{} { return shutdownCh }
+	cancelCh := make(chan struct{}, 1)
+	cancel := func() { cancelCh <- struct{}{} }
+	InitSignalHandling(shutdown, cancel)
+	self, err := os.FindProcess(os.Getpid())
+	require.Nil(t, err)
+	err = self.Signal(syscall.SIGTERM)
+	require.Nil(t, err)
+	// Second signal for force shutdown.
+	// We use another signal, to avoid lost signal, because sending a signal
+	// is setting a bit in Unix.
+	err = self.Signal(syscall.SIGQUIT)
+	require.Nil(t, err)
+	select {
+	case <-cancelCh:
+	case <-time.After(1 * time.Second):
+		require.Fail(t, "timeout")
+	}
 }

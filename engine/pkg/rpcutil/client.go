@@ -18,11 +18,15 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/engine/pkg/errors"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+
+	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/retry"
 )
+
+const defaultDialRetry = 3
 
 // CloseableConnIface defines an interface that supports Close(release resource)
 type CloseableConnIface interface {
@@ -97,12 +101,21 @@ func (c *FailoverRPCClients[T]) UpdateClients(ctx context.Context, urls []string
 		delete(notFound, addr)
 
 		if _, ok := c.clients[addr]; !ok {
-			log.L().Info("add new server master client", zap.String("addr", addr))
-			cli, conn, err := c.dialer(ctx, addr)
+			log.Info("add new server master client", zap.String("addr", addr))
+
+			var (
+				cli  T
+				conn CloseableConnIface
+			)
+			err := retry.Do(ctx, func() (err error) {
+				cli, conn, err = c.dialer(ctx, addr)
+				return err
+			}, retry.WithMaxTries(defaultDialRetry))
 			if err != nil {
-				log.L().Warn("dial to server master failed", zap.String("addr", addr), zap.Error(err))
+				log.Warn("dial to server master failed", zap.String("addr", addr), zap.Error(err))
 				continue
 			}
+
 			c.clients[addr] = &clientHolder[T]{
 				conn:   conn,
 				client: cli,
@@ -112,7 +125,7 @@ func (c *FailoverRPCClients[T]) UpdateClients(ctx context.Context, urls []string
 
 	for k := range notFound {
 		if err := c.clients[k].conn.Close(); err != nil {
-			log.L().Warn("close server master client failed", zap.String("addr", k), zap.Error(err))
+			log.Warn("close server master client failed", zap.String("addr", k), zap.Error(err))
 		}
 		delete(c.clients, k)
 	}
@@ -165,7 +178,7 @@ func (c *FailoverRPCClients[T]) GetLeaderClient() T {
 
 	leader, ok := c.clients[c.leader]
 	if !ok {
-		log.L().Panic("leader client not found", zap.String("leader", c.leader))
+		log.Panic("leader client not found", zap.String("leader", c.leader))
 	}
 	return leader.client
 }
@@ -191,7 +204,18 @@ func DoFailoverRPC[
 		return resp, errors.ErrNoRPCClient.GenWithStack("rpc: %#v, request: %#v", rpc, req)
 	}
 
-	for _, cli := range clients.clients {
+	// As long as len(clients.clients) > 0, leaderCli is impossible to be nil.
+	leaderCli := clients.GetLeaderClient()
+	resp, err = rpc(leaderCli, ctx, req)
+	if err == nil {
+		return resp, nil
+	}
+
+	for k, cli := range clients.clients {
+		// Skip the leader since we've already tried it.
+		if k == clients.leader {
+			continue
+		}
 		resp, err = rpc(cli.client, ctx, req)
 		if err == nil {
 			return resp, nil

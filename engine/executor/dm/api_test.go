@@ -20,15 +20,15 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
-	engineErrors "github.com/pingcap/tiflow/engine/pkg/errors"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -101,7 +101,7 @@ func TestQueryStatusAPI(t *testing.T) {
 	}))
 	dctx = dctx.WithDeps(dp)
 
-	dmWorker := newDMWorker(dctx, "", framework.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"})
+	dmWorker := newDMWorker(dctx, "", framework.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"}, 0)
 	unitHolder := &mockUnitHolder{}
 	dmWorker.unitHolder = unitHolder
 
@@ -137,14 +137,14 @@ func TestStopWorker(t *testing.T) {
 	}))
 	dctx = dctx.WithDeps(dp)
 
-	dmWorker := newDMWorker(dctx, "master-id", framework.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"})
+	dmWorker := newDMWorker(dctx, "master-id", framework.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"}, 0)
 	dmWorker.BaseWorker = framework.MockBaseWorker("worker-id", "master-id", dmWorker)
 	dmWorker.BaseWorker.Init(context.Background())
 	dmWorker.unitHolder = &mockUnitHolder{}
 
 	require.EqualError(t, dmWorker.StopWorker(context.Background(), &dmpkg.StopWorkerMessage{Task: "wrong-task-id"}), "task id mismatch, get wrong-task-id, actually task-id")
 	err := dmWorker.StopWorker(context.Background(), &dmpkg.StopWorkerMessage{Task: "task-id"})
-	require.True(t, engineErrors.ErrWorkerFinish.Equal(err))
+	require.True(t, cerrors.ErrWorkerFinish.Equal(err))
 
 	// mock close by framework
 	require.NoError(t, dmWorker.CloseImpl(context.Background()))
@@ -158,7 +158,7 @@ func TestOperateTask(t *testing.T) {
 	}))
 	dctx = dctx.WithDeps(dp)
 
-	dmWorker := newDMWorker(dctx, "master-id", framework.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"})
+	dmWorker := newDMWorker(dctx, "master-id", framework.WorkerDMDump, &config.SubTaskConfig{SourceID: "task-id"}, 0)
 	dmWorker.BaseWorker = framework.MockBaseWorker("worker-id", "master-id", dmWorker)
 	dmWorker.BaseWorker.Init(context.Background())
 	mockUnitHolder := &mockUnitHolder{}

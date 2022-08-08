@@ -74,8 +74,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -758,7 +758,7 @@ func (k *ShardingGroupKeeper) CheckAndFix(metas map[string]*shardmeta.ShardingMe
 	k.Lock()
 	defer k.Unlock()
 	for targetID, meta := range metas {
-		sqls, args, err := meta.CheckAndUpdate(targetID, schemaMap, tablesMap)
+		sqls, args, err := meta.CheckAndUpdate(k.tctx.L(), targetID, schemaMap, tablesMap)
 		if err != nil {
 			return err
 		}

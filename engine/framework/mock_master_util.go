@@ -21,10 +21,11 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/stretchr/testify/mock"
+	"github.com/golang/mock/gomock"
+	"github.com/pingcap/tiflow/engine/pkg/client"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 
-	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -33,16 +34,15 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
-	"github.com/pingcap/tiflow/engine/pkg/errors"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	mockkv "github.com/pingcap/tiflow/engine/pkg/meta/kvclient/mock"
+	metaMock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
 // MockBaseMaster returns a mock DefaultBaseMaster
-func MockBaseMaster(id frameModel.MasterID, masterImpl MasterImpl) *DefaultBaseMaster {
+func MockBaseMaster(t *testing.T, id frameModel.MasterID, masterImpl MasterImpl) *DefaultBaseMaster {
 	ctx := dcontext.Background()
 	dp := deps.NewDeps()
 	cli, err := pkgOrm.NewMockClient()
@@ -54,9 +54,9 @@ func MockBaseMaster(id frameModel.MasterID, masterImpl MasterImpl) *DefaultBaseM
 			MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 			MessageSender:         p2p.NewMockMessageSender(),
 			FrameMetaClient:       cli,
-			UserRawKVClient:       mockkv.NewMetaMock(),
-			ExecutorClientManager: client.NewClientManager(),
-			ServerMasterClient:    &client.MockServerMasterClient{},
+			BusinessClientConn:    metaMock.NewMockClientConn(),
+			ExecutorGroup:         client.NewMockExecutorGroup(),
+			ServerMasterClient:    client.NewMockServerMasterClient(gomock.NewController(t)),
 		}
 	})
 	if err != nil {
@@ -91,36 +91,34 @@ func MockBaseMasterCreateWorker(
 	expectedSchedulerReq := &pb.ScheduleTaskRequest{
 		TaskId:               workerID,
 		Cost:                 int64(cost),
-		ResourceRequirements: resources,
+		ResourceRequirements: resourcemeta.ToResourceRequirement(masterID, resources...),
 	}
-	master.serverMasterClient.(*client.MockServerMasterClient).On(
-		"ScheduleTask",
-		mock.Anything,
-		expectedSchedulerReq,
-		mock.Anything).Return(
-		&pb.ScheduleTaskResponse{
+	master.serverMasterClient.(*client.MockServerMasterClient).EXPECT().
+		ScheduleTask(gomock.Any(), gomock.Eq(expectedSchedulerReq)).
+		Return(&pb.ScheduleTaskResponse{
 			ExecutorId: string(executorID),
-		}, nil)
+		}, nil).Times(1)
 
-	mockExecutorClient := &client.MockExecutorClient{}
-	err := master.executorClientManager.(*client.Manager).AddExecutorClient(executorID, mockExecutorClient)
-	require.NoError(t, err)
+	mockExecutorClient := client.NewMockExecutorClient(gomock.NewController(t))
+	master.executorGroup.(*client.MockExecutorGroup).AddClient(executorID, mockExecutorClient)
 	configBytes, err := json.Marshal(config)
 	require.NoError(t, err)
 
-	mockExecutorClient.On("DispatchTask",
-		mock.Anything,
-		&client.DispatchTaskArgs{
+	mockExecutorClient.EXPECT().DispatchTask(gomock.Any(),
+		gomock.Eq(&client.DispatchTaskArgs{
 			WorkerID:     workerID,
 			MasterID:     masterID,
 			WorkerType:   int64(workerType),
 			WorkerConfig: configBytes,
-		}, mock.Anything, mock.Anything).
-		Return(nil).
-		Run(func(args mock.Arguments) {
-			startWorker := args.Get(2).(client.StartWorkerCallback)
-			startWorker()
-		})
+		}), gomock.Any(), gomock.Any()).Do(
+		func(
+			ctx context.Context,
+			args *client.DispatchTaskArgs,
+			start client.StartWorkerCallback,
+			abort client.AbortWorkerCallback,
+		) {
+			start()
+		}).Times(1).Return(nil)
 
 	master.uuidGen.(*uuid.MockGenerator).Push(workerID)
 }
@@ -141,12 +139,11 @@ func MockBaseMasterCreateWorkerMetScheduleTaskError(
 		TaskId: workerID,
 		Cost:   int64(cost),
 	}
-	master.serverMasterClient.(*client.MockServerMasterClient).On(
-		"ScheduleTask",
-		mock.Anything,
-		expectedSchedulerReq,
-		mock.Anything).Return(
-		&pb.ScheduleTaskResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs())
+	master.serverMasterClient.(*client.MockServerMasterClient).EXPECT().
+		ScheduleTask(gomock.Any(), gomock.Eq(expectedSchedulerReq)).
+		Return(nil, errors.ErrClusterResourceNotEnough.FastGenByArgs()).
+		Times(1)
+
 	master.uuidGen.(*uuid.MockGenerator).Push(workerID)
 }
 

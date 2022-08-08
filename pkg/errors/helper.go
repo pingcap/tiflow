@@ -15,8 +15,10 @@ package errors
 
 import (
 	"context"
+	"strings"
 
 	"github.com/pingcap/errors"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 )
 
 // WrapError generates a new error based on given `*errors.Error`, wraps the err
@@ -30,20 +32,20 @@ func WrapError(rfcError *errors.Error, err error, args ...interface{}) error {
 	return rfcError.Wrap(err).GenWithStackByArgs(args...)
 }
 
-// ChangeFeedFastFailError is read only.
+// changeFeedFastFailError is read only.
 // If this type of error occurs in a changefeed, it means that the data it
 // wants to replicate has been or will be GC. So it makes no sense to try to
 // resume the changefeed, and the changefeed should immediately be failed.
-var ChangeFeedFastFailError = []*errors.Error{
+var changeFeedFastFailError = []*errors.Error{
 	ErrGCTTLExceeded, ErrSnapshotLostByGC, ErrStartTsBeforeGC,
 }
 
-// ChangefeedFastFailError checks if an error is a ChangefeedFastFailError
-func ChangefeedFastFailError(err error) bool {
+// IsChangefeedFastFailError checks if an error is a ChangefeedFastFailError
+func IsChangefeedFastFailError(err error) bool {
 	if err == nil {
 		return false
 	}
-	for _, e := range ChangeFeedFastFailError {
+	for _, e := range changeFeedFastFailError {
 		if e.Equal(err) {
 			return true
 		}
@@ -55,11 +57,33 @@ func ChangefeedFastFailError(err error) bool {
 	return false
 }
 
-// ChangefeedFastFailErrorCode checks the error code, returns true if it is a
+// IsChangefeedFastFailErrorCode checks the error code, returns true if it is a
 // ChangefeedFastFailError code
-func ChangefeedFastFailErrorCode(errCode errors.RFCErrorCode) bool {
-	for _, e := range ChangeFeedFastFailError {
+func IsChangefeedFastFailErrorCode(errCode errors.RFCErrorCode) bool {
+	for _, e := range changeFeedFastFailError {
 		if errCode == e.RFCCode() {
+			return true
+		}
+	}
+	return false
+}
+
+var changefeedUnRetryableErrors = []*errors.Error{
+	ErrExpressionColumnNotFound, ErrExpressionParseFailed,
+}
+
+// IsChangefeedUnRetryableError returns true if a error is a changefeed not retry error.
+func IsChangefeedUnRetryableError(err error) bool {
+	for _, e := range changefeedUnRetryableErrors {
+		if e.Equal(err) {
+			return true
+		}
+		if code, ok := RFCCode(err); ok {
+			if code == e.RFCCode() {
+				return true
+			}
+		}
+		if strings.Contains(err.Error(), string(e.RFCCode())) {
 			return true
 		}
 	}
@@ -74,11 +98,14 @@ func RFCCode(err error) (errors.RFCErrorCode, bool) {
 	if terr, ok := err.(rfcCoder); ok {
 		return terr.RFCCode(), true
 	}
-	err = errors.Cause(err)
-	if terr, ok := err.(rfcCoder); ok {
+	cause := errors.Unwrap(err)
+	if cause == nil {
+		return "", false
+	}
+	if terr, ok := cause.(rfcCoder); ok {
 		return terr.RFCCode(), true
 	}
-	return "", false
+	return RFCCode(cause)
 }
 
 // IsRetryableError check the error is safe or worth to retry
@@ -92,4 +119,37 @@ func IsRetryableError(err error) bool {
 		return false
 	}
 	return true
+}
+
+// ToPBError translates go error to pb error.
+func ToPBError(err error) *pb.Error {
+	if err == nil {
+		return nil
+	}
+	rfcCode, ok := RFCCode(err)
+	if !ok {
+		return &pb.Error{
+			Code:    pb.ErrorCode_UnknownError,
+			Message: err.Error(),
+		}
+	}
+	pbErr := &pb.Error{}
+	switch rfcCode {
+	case ErrUnknownExecutorID.RFCCode():
+		pbErr.Code = pb.ErrorCode_UnknownExecutor
+	case ErrTombstoneExecutor.RFCCode():
+		pbErr.Code = pb.ErrorCode_TombstoneExecutor
+	case ErrSubJobFailed.RFCCode():
+		pbErr.Code = pb.ErrorCode_SubJobSubmitFailed
+	case ErrClusterResourceNotEnough.RFCCode():
+		pbErr.Code = pb.ErrorCode_NotEnoughResource
+	case ErrBuildJobFailed.RFCCode():
+		pbErr.Code = pb.ErrorCode_SubJobBuildFailed
+	case ErrGrpcBuildConn.RFCCode():
+		pbErr.Code = pb.ErrorCode_BuildGrpcConnFailed
+	default:
+		pbErr.Code = pb.ErrorCode_UnknownError
+	}
+	pbErr.Message = err.Error()
+	return pbErr
 }

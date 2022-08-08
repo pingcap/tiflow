@@ -31,7 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/dm/dm/config"
+	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
@@ -529,7 +529,6 @@ func TestValidatorWorkerGetSourceRowsForCompare(t *testing.T) {
 func TestValidatorIsRetryableDBError(t *testing.T) {
 	require.True(t, isRetryableDBError(&gmysql.MySQLError{Number: errno.ErrPDServerTimeout}))
 	require.True(t, isRetryableDBError(gmysql.ErrInvalidConn))
-	require.True(t, isRetryableDBError(context.DeadlineExceeded))
 	require.True(t, isRetryableDBError(driver.ErrBadConn))
 	require.True(t, isRetryableDBError(errors.Annotate(driver.ErrBadConn, "test")))
 }

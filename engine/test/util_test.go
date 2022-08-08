@@ -20,9 +20,8 @@ import (
 
 	"github.com/phayes/freeport"
 	. "github.com/pingcap/check"
+
 	"github.com/pingcap/tiflow/engine/executor"
-	"github.com/pingcap/tiflow/engine/pkg/etcdutils"
-	"github.com/pingcap/tiflow/engine/pkg/metadata"
 	"github.com/pingcap/tiflow/engine/servermaster"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/engine/test/mock"
@@ -35,19 +34,10 @@ type MiniCluster struct {
 
 	exec       *executor.Server
 	execCancel func()
-
-	metastore metadata.MetaKV
-}
-
-func NewEmptyMiniCluster() *MiniCluster {
-	c := new(MiniCluster)
-	c.metastore = metadata.NewMetaMock()
-	return c
 }
 
 func (c *MiniCluster) CreateMaster(cfg *servermaster.Config) (*test.Context, error) {
 	masterCtx := test.NewContext()
-	masterCtx.SetMetaKV(c.metastore)
 	master, err := servermaster.NewServer(cfg, masterCtx)
 	c.master = master
 	return masterCtx, err
@@ -63,7 +53,6 @@ func (c *MiniCluster) AsyncStartMaster() error {
 
 func (c *MiniCluster) CreateExecutor(cfg *executor.Config) *test.Context {
 	execContext := test.NewContext()
-	execContext.SetMetaKV(c.metastore)
 	exec := executor.NewServer(cfg, execContext)
 	c.exec = exec
 	return execContext
@@ -97,11 +86,7 @@ func (c *MiniCluster) Start1M1E(cc *C) (
 	masterAddr = fmt.Sprintf("127.0.0.1:%d", ports[0])
 	workerAddr = fmt.Sprintf("127.0.0.1:%d", ports[1])
 	masterCfg := &servermaster.Config{
-		Etcd: &etcdutils.ConfigParams{
-			Name:    "master1",
-			DataDir: "/tmp/df",
-		},
-		MasterAddr:        masterAddr,
+		Addr:              masterAddr,
 		AdvertiseAddr:     masterAddr,
 		KeepAliveTTL:      20000000 * time.Second,
 		KeepAliveInterval: 200 * time.Millisecond,
@@ -110,7 +95,7 @@ func (c *MiniCluster) Start1M1E(cc *C) (
 	// one master + one executor
 	executorCfg := &executor.Config{
 		Join:              masterAddr,
-		WorkerAddr:        workerAddr,
+		Addr:              workerAddr,
 		AdvertiseAddr:     workerAddr,
 		KeepAliveTTL:      20000000 * time.Second,
 		KeepAliveInterval: 200 * time.Millisecond,

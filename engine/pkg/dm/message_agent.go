@@ -24,9 +24,9 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/workerpool"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -37,6 +37,9 @@ var (
 	defaultRequestTimeOut  = time.Second * 30
 	defaultResponseTimeOut = time.Second * 10
 	defaultHandlerTimeOut  = time.Second * 30
+
+	// NewMessageAgent creates a new MessageAgent instance.
+	NewMessageAgent = NewMessageAgentImpl
 )
 
 // generateTopic generate dm message topic with hex encoding.
@@ -155,6 +158,7 @@ type MessageAgent interface {
 type MessageAgentImpl struct {
 	ctx                   context.Context
 	cancel                context.CancelFunc
+	logger                *zap.Logger
 	messageMatcher        *messageMatcher
 	messageHandlerManager p2p.MessageHandlerManager
 	pool                  workerpool.AsyncPool
@@ -175,7 +179,7 @@ type MessageAgentImpl struct {
 // MessageFuncType: func(ctx context.Context, msg *interface{}) error {}
 // RequestFuncType(1): func(ctx context.Context, req *interface{}) (resp *interface{}, err error) {}
 // RequestFuncType(2): func(ctx context.Context, req *interface{}) (resp *interface{}) {}
-func NewMessageAgentImpl(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager) *MessageAgentImpl {
+func NewMessageAgentImpl(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) MessageAgent {
 	agent := &MessageAgentImpl{
 		messageMatcher:        newMessageMatcher(),
 		clients:               make(map[string]client),
@@ -183,13 +187,14 @@ func NewMessageAgentImpl(id string, commandHandler interface{}, messageHandlerMa
 		messageHandlerManager: messageHandlerManager,
 		pool:                  workerpool.NewDefaultAsyncPool(10),
 		id:                    id,
+		logger:                pLogger.With(zap.String("component", "message-agent")),
 	}
 	agent.messageRouter = framework.NewMessageRouter(agent.id, agent.pool, 100,
 		func(topic p2p.Topic, msg p2p.MessageValue) error {
 			err := agent.onMessage(topic, msg)
 			if err != nil {
 				// Todo: handle error
-				log.L().Error("failed to handle message", log.ShortError(err))
+				agent.logger.Error("failed to handle message", logutil.ShortError(err))
 			}
 			return err
 		},
@@ -204,7 +209,7 @@ func (agent *MessageAgentImpl) Init(ctx context.Context) error {
 	go func() {
 		defer agent.wg.Done()
 		err := agent.pool.Run(agent.ctx)
-		log.L().Info("workerpool exited", zap.Error(err))
+		agent.logger.Info("workerpool exited", zap.Error(err))
 	}()
 	return nil
 }
@@ -263,7 +268,7 @@ func (agent *MessageAgentImpl) SendMessage(ctx context.Context, clientID string,
 	}
 	ctx2, cancel := context.WithTimeout(ctx, defaultMessageTimeOut)
 	defer cancel()
-	log.L().Debug("send message", zap.String("client-id", clientID), zap.String("command", command), zap.Any("msg", msg))
+	agent.logger.Debug("send message", zap.String("client-id", clientID), zap.String("command", command), zap.Any("msg", msg))
 	return client.SendMessage(ctx2, generateTopic(agent.id, clientID), message{ID: 0, Type: messageTp, Command: command, Payload: msg}, false /* nonblock */)
 }
 
@@ -277,7 +282,7 @@ func (agent *MessageAgentImpl) SendRequest(ctx context.Context, clientID string,
 	}
 	ctx2, cancel := context.WithTimeout(ctx, defaultRequestTimeOut)
 	defer cancel()
-	log.L().Debug("send request", zap.String("client-id", clientID), zap.String("command", command), zap.Any("req", req))
+	agent.logger.Debug("send request", zap.String("client-id", clientID), zap.String("command", command), zap.Any("req", req))
 	return agent.messageMatcher.sendRequest(ctx2, generateTopic(agent.id, clientID), command, req, client)
 }
 
@@ -289,7 +294,7 @@ func (agent *MessageAgentImpl) sendResponse(ctx context.Context, clientID string
 	}
 	ctx2, cancel := context.WithTimeout(ctx, defaultResponseTimeOut)
 	defer cancel()
-	log.L().Debug("send response", zap.String("client-id", clientID), zap.String("command", command), zap.Any("resp", resp))
+	agent.logger.Debug("send response", zap.String("client-id", clientID), zap.String("command", command), zap.Any("resp", resp))
 	return agent.messageMatcher.sendResponse(ctx2, generateTopic(agent.id, clientID), msgID, command, resp, client)
 }
 
@@ -298,7 +303,7 @@ func (agent *MessageAgentImpl) sendResponse(ctx context.Context, clientID string
 // According to the command, the corresponding message processing function of commandHandler will be called.
 // According to the command, the corresponding request processing function of commandHandler will be called, and send the response to caller.
 func (agent *MessageAgentImpl) onMessage(topic string, msg interface{}) error {
-	log.L().Debug("on message", zap.String("topic", topic), zap.Any("msg", msg))
+	agent.logger.Debug("on message", zap.String("topic", topic), zap.Any("msg", msg))
 	m, ok := msg.(*message)
 	if !ok {
 		return errors.Errorf("unknown message type of topic %s", topic)
@@ -396,7 +401,7 @@ func (agent *MessageAgentImpl) handleMessage(command string, msg interface{}) er
 // registerTopic register p2p topic.
 func (agent *MessageAgentImpl) registerTopic(ctx context.Context, clientID string) error {
 	topic := generateTopic(clientID, agent.id)
-	log.L().Debug("register topic", zap.String("topic", topic))
+	agent.logger.Debug("register topic", zap.String("topic", topic))
 	_, err := agent.messageHandlerManager.RegisterHandler(
 		ctx,
 		topic,
@@ -411,7 +416,7 @@ func (agent *MessageAgentImpl) registerTopic(ctx context.Context, clientID strin
 
 // unregisterTopic unregister p2p topic.
 func (agent *MessageAgentImpl) unregisterTopic(ctx context.Context, clientID string) error {
-	log.L().Debug("unregister topic", zap.String("topic", generateTopic(clientID, agent.id)))
+	agent.logger.Debug("unregister topic", zap.String("topic", generateTopic(clientID, agent.id)))
 	_, err := agent.messageHandlerManager.UnregisterHandler(ctx, generateTopic(clientID, agent.id))
 	return err
 }

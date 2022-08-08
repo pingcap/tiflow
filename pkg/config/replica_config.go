@@ -18,10 +18,9 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/pingcap/tiflow/pkg/config/outdated"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/config/outdated"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -40,9 +39,14 @@ var defaultReplicaConfig = &ReplicaConfig{
 	Consistent: &ConsistentConfig{
 		Level:             "none",
 		MaxLogSize:        64,
-		FlushIntervalInMs: 1000,
+		FlushIntervalInMs: 2000,
 		Storage:           "",
 	},
+}
+
+// GetDefaultReplicaConfig returns the default replica config.
+func GetDefaultReplicaConfig() *ReplicaConfig {
+	return defaultReplicaConfig.Clone()
 }
 
 // ReplicaConfig represents some addition replication config for a changefeed
@@ -114,10 +118,10 @@ func (c *replicaConfig) fillFromV1(v1 *outdated.ReplicaConfigV1) {
 	}
 }
 
-// Validate verifies that each parameter is valid.
-func (c *ReplicaConfig) Validate() error {
+// ValidateAndAdjust verifies and adjusts the replica configuration.
+func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 	if c.Sink != nil {
-		err := c.Sink.validate(c.EnableOldValue)
+		err := c.Sink.validateAndAdjust(sinkURI, c.EnableOldValue)
 		if err != nil {
 			return err
 		}
@@ -125,16 +129,19 @@ func (c *ReplicaConfig) Validate() error {
 	return nil
 }
 
-// ApplyProtocol sinkURI to fill the `ReplicaConfig`
-func (c *ReplicaConfig) ApplyProtocol(sinkURI *url.URL) *ReplicaConfig {
-	params := sinkURI.Query()
-	if s := params.Get(ProtocolKey); s != "" {
-		c.Sink.Protocol = s
+// GetSinkURIAndAdjustConfigWithSinkURI parses sinkURI as a URI and adjust config with sinkURI.
+func GetSinkURIAndAdjustConfigWithSinkURI(
+	sinkURIStr string,
+	config *ReplicaConfig,
+) (*url.URL, error) {
+	// parse sinkURI as a URI
+	sinkURI, err := url.Parse(sinkURIStr)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 	}
-	return c
-}
+	if err := config.ValidateAndAdjust(sinkURI); err != nil {
+		return nil, err
+	}
 
-// GetDefaultReplicaConfig returns the default replica config.
-func GetDefaultReplicaConfig() *ReplicaConfig {
-	return defaultReplicaConfig.Clone()
+	return sinkURI, nil
 }

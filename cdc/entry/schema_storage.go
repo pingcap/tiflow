@@ -52,12 +52,13 @@ type SchemaStorage interface {
 }
 
 type schemaStorageImpl struct {
-	snaps      []*schema.Snapshot
-	snapsMu    sync.RWMutex
-	gcTs       uint64
-	resolvedTs uint64
+	snaps         []*schema.Snapshot
+	snapsMu       sync.RWMutex
+	gcTs          uint64
+	resolvedTs    uint64
+	schemaVersion int64
 
-	filter         *filter.Filter
+	filter         filter.Filter
 	forceReplicate bool
 
 	id model.ChangeFeedID
@@ -65,15 +66,26 @@ type schemaStorageImpl struct {
 
 // NewSchemaStorage creates a new schema storage
 func NewSchemaStorage(
-	meta *timeta.Meta, startTs uint64, filter *filter.Filter,
+	meta *timeta.Meta, startTs uint64, filter filter.Filter,
 	forceReplicate bool, id model.ChangeFeedID,
 ) (SchemaStorage, error) {
-	var snap *schema.Snapshot
-	var err error
+	var (
+		snap    *schema.Snapshot
+		err     error
+		version int64
+	)
 	if meta == nil {
 		snap = schema.NewEmptySnapshot(forceReplicate)
+		snap.InitConcurrentDDLTables()
 	} else {
 		snap, err = schema.NewSnapshotFromMeta(meta, startTs, forceReplicate)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		version, err = schema.GetSchemaVersion(meta)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -84,6 +96,7 @@ func NewSchemaStorage(
 		filter:         filter,
 		forceReplicate: forceReplicate,
 		id:             id,
+		schemaVersion:  version,
 	}
 	return schema, nil
 }
@@ -152,6 +165,7 @@ func (s *schemaStorageImpl) GetLastSnapshot() *schema.Snapshot {
 // HandleDDLJob creates a new snapshot in storage and handles the ddl job
 func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 	if s.skipJob(job) {
+		s.schemaVersion = job.BinlogInfo.SchemaVersion
 		s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
 		return nil
 	}
@@ -160,17 +174,23 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 	var snap *schema.Snapshot
 	if len(s.snaps) > 0 {
 		lastSnap := s.snaps[len(s.snaps)-1]
-		if job.BinlogInfo.FinishedTS <= lastSnap.CurrentTs() {
+		// We use schemaVersion to check if an already-executed DDL job is processed for a second time.
+		// Unexecuted DDL jobs should have largest schemaVersions.
+		if job.BinlogInfo.FinishedTS <= lastSnap.CurrentTs() || job.BinlogInfo.SchemaVersion <= s.schemaVersion {
 			log.Info("ignore foregone DDL", zap.Int64("jobID", job.ID),
 				zap.String("DDL", job.Query),
 				zap.String("namespace", s.id.Namespace),
 				zap.String("changefeed", s.id.ID),
-				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
+				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
+				zap.Int64("schemaVersion", s.schemaVersion),
+				zap.Int64("jobSchemaVersion", job.BinlogInfo.SchemaVersion),
+			)
 			return nil
 		}
 		snap = lastSnap.Copy()
 	} else {
 		snap = schema.NewEmptySnapshot(s.forceReplicate)
+		snap.InitConcurrentDDLTables()
 	}
 	if err := snap.HandleDDL(job); err != nil {
 		log.Error("handle DDL failed", zap.String("DDL", job.Query),
@@ -186,19 +206,16 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 		zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
 
 	s.snaps = append(s.snaps, snap)
+	s.schemaVersion = job.BinlogInfo.SchemaVersion
 	s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
 	return nil
 }
 
-// AdvanceResolvedTs advances the resolved
+// AdvanceResolvedTs advances the resolved. Not thread safe.
+// NOTE: SHOULD NOT call it concurrently
 func (s *schemaStorageImpl) AdvanceResolvedTs(ts uint64) {
-	var swapped bool
-	for !swapped {
-		oldResolvedTs := atomic.LoadUint64(&s.resolvedTs)
-		if ts < oldResolvedTs {
-			return
-		}
-		swapped = atomic.CompareAndSwapUint64(&s.resolvedTs, oldResolvedTs, ts)
+	if ts > s.ResolvedTs() {
+		atomic.StoreUint64(&s.resolvedTs, ts)
 	}
 }
 

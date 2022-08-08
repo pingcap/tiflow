@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net"
 	"net/url"
 	"strings"
 
@@ -94,16 +95,19 @@ func newMySQLSyncpointStore(ctx context.Context,
 	// dsn format of the driver:
 	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
 	username := sinkURI.User.Username()
-	password, _ := sinkURI.User.Password()
-	port := sinkURI.Port()
 	if username == "" {
 		username = "root"
 	}
+	password, _ := sinkURI.User.Password()
+	port := sinkURI.Port()
 	if port == "" {
 		port = "4000"
 	}
 
-	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, sinkURI.Hostname(), port, tlsParam)
+	// This will handle the IPv6 address format.
+	host := net.JoinHostPort(sinkURI.Hostname(), port)
+
+	dsnStr := fmt.Sprintf("%s:%s@tcp(%s)/%s", username, password, host, tlsParam)
 	dsn, err := dmysql.ParseDSN(dsnStr)
 	if err != nil {
 		return nil, errors.Trace(err)

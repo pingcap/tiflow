@@ -18,7 +18,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
@@ -42,9 +42,15 @@ type GrpcServer interface {
 	Stop()
 }
 
+type masterServices interface {
+	pb.DiscoveryServer
+	pb.TaskSchedulerServer
+	pb.JobManagerServer
+}
+
 type masterServer struct {
 	*baseServer
-	pb.MasterServer
+	masterServices
 }
 
 func (s *masterServer) dial() (Conn, error) {
@@ -71,8 +77,6 @@ func (s *masterServerConn) sendRequest(ctx context.Context, req interface{}) (in
 		return s.server.Heartbeat(ctx, x)
 	case *pb.CancelJobRequest:
 		return s.server.CancelJob(ctx, x)
-	case *pb.DebugJobRequest:
-		return s.server.DebugJob(ctx, x)
 	}
 	return nil, errors.New("unknown request")
 }
@@ -104,11 +108,6 @@ func (c *masterServerClient) SubmitJob(ctx context.Context, req *pb.SubmitJobReq
 func (c *masterServerClient) CancelJob(ctx context.Context, req *pb.CancelJobRequest, opts ...grpc.CallOption) (*pb.CancelJobResponse, error) {
 	resp, err := c.conn.sendRequest(ctx, req)
 	return resp.(*pb.CancelJobResponse), err
-}
-
-func (c *masterServerClient) DebugJob(ctx context.Context, req *pb.DebugJobRequest, opts ...grpc.CallOption) (*pb.DebugJobResponse, error) {
-	resp, err := c.conn.sendRequest(ctx, req)
-	return resp.(*pb.DebugJobResponse), err
 }
 
 func (c *masterServerClient) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest, opts ...grpc.CallOption) (*pb.HeartbeatResponse, error) {
@@ -166,10 +165,12 @@ func (c *masterServerClient) ReportExecutorWorkload(
 	return resp.(*pb.ExecWorkloadResponse), nil
 }
 
+/*
 // NewMasterClient creates a new master client based on Conn
 func NewMasterClient(conn Conn) pb.MasterClient {
 	return &masterServerClient{conn}
 }
+*/
 
 type executorServer struct {
 	*baseServer
@@ -192,7 +193,7 @@ func (s *baseServer) Stop() {
 	container.mu.Lock()
 	defer container.mu.Unlock()
 	_, ok := container.servers[s.addr]
-	log.L().Logger.Info("server is cancelled", zap.String("ip", s.addr))
+	log.Info("server is cancelled", zap.String("ip", s.addr))
 	if ok {
 		delete(container.servers, s.addr)
 	}
@@ -244,7 +245,7 @@ func Dial(addr string) (Conn, error) {
 
 // NewMasterServer creates a master grpc server and listened the address.
 // We try to make things simple, so we design the "NewMasterServer" to register only one type of pb server.
-func NewMasterServer(addr string, server pb.MasterServer) (GrpcServer, error) {
+func NewMasterServer(addr string, server masterServices) (GrpcServer, error) {
 	container.mu.Lock()
 	defer container.mu.Unlock()
 	_, ok := container.servers[addr]

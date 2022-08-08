@@ -31,8 +31,8 @@ import (
 	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
 	"github.com/stretchr/testify/require"
 
-	"github.com/pingcap/tiflow/dm/dm/config"
-	"github.com/pingcap/tiflow/dm/dm/pb"
+	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -357,7 +357,7 @@ func TestValidatorDoValidate(t *testing.T) {
 	dbConn, err := db.Conn(context.Background())
 	require.NoError(t, err)
 	syncerObj.downstreamTrackConn = dbconn.NewDBConn(cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
-	syncerObj.schemaTracker, err = schema.NewTracker(context.Background(), cfg.Name, defaultTestSessionCfg, syncerObj.downstreamTrackConn)
+	syncerObj.schemaTracker, err = schema.NewTestTracker(context.Background(), cfg.Name, defaultTestSessionCfg, syncerObj.downstreamTrackConn, log.L())
 	defer syncerObj.schemaTracker.Close()
 	require.NoError(t, err)
 	require.NoError(t, syncerObj.schemaTracker.CreateSchemaIfNotExists(schemaName))
