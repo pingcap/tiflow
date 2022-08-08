@@ -113,7 +113,7 @@ func TestSchedulerResourceOwnerNoCapacity(t *testing.T) {
 		ExternalResources: []resModel.ResourceKey{{JobID: "fakeJob", ID: "resource-3"}},
 	})
 	require.Error(t, err)
-	require.Regexp(t, ".*ErrClusterResourceNotEnough.*", err)
+	require.Regexp(t, "CapacityNotEnoughError", err)
 }
 
 func TestSchedulerResourceNotFound(t *testing.T) {
@@ -127,7 +127,9 @@ func TestSchedulerResourceNotFound(t *testing.T) {
 		ExternalResources: []resModel.ResourceKey{{JobID: "fakeJob", ID: "resource-blah"}},
 	})
 	require.Error(t, err)
-	require.Regexp(t, ".*Scheduler could not find resource resource-blah.*", err)
+	info, ok := ErrResourceNotFound.Convert(err)
+	require.True(t, ok)
+	require.Equal(t, "resource-blah", info.ResourceID)
 }
 
 func TestSchedulerByCostNoCapacity(t *testing.T) {
@@ -140,7 +142,7 @@ func TestSchedulerByCostNoCapacity(t *testing.T) {
 		Cost: 50,
 	})
 	require.Error(t, err)
-	require.Regexp(t, ".*ErrClusterResourceNotEnough.*", err)
+	require.Regexp(t, "CapacityNotEnoughError", err)
 }
 
 func TestSchedulerConstraintConflict(t *testing.T) {
@@ -162,5 +164,5 @@ func TestSchedulerConstraintConflict(t *testing.T) {
 		},
 	})
 	require.Error(t, err)
-	require.Regexp(t, ".*Scheduler could not assign executor due to conflicting.*", err)
+	require.Regexp(t, "ResourceConflictError", err)
 }

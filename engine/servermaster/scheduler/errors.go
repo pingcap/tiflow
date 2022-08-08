@@ -14,86 +14,68 @@
 package scheduler
 
 import (
-	stdErrors "errors"
-	"fmt"
-
-	"github.com/gogo/status"
-	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/engine/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	derrors "github.com/pingcap/tiflow/pkg/errors"
-	"google.golang.org/grpc/codes"
+	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
+	"github.com/pingcap/tiflow/pkg/label"
 )
 
-// ResourceNotFoundError happens when the resource id doesn't equal to any record
-// in metastore, it also contains detail cause by Inner error field.
+// ErrResourceNotFound indicates that a given resource requirement
+// (usually a local file requirement) cannot be satisfied because
+// the given resource could not be found.
+var ErrResourceNotFound = rpcerror.Normalize[ResourceNotFoundError]()
+
+// ResourceNotFoundError provides the details of an ErrResourceNotFound.
 type ResourceNotFoundError struct {
-	ProblemResource resModel.ResourceID
-	Inner           error
+	rpcerror.Error[rpcerror.NotRetryable, rpcerror.NotFound]
+
+	ResourceID resModel.ResourceID
+	Details    string
 }
 
-// NewResourceNotFoundError creates a resource not found error
-func NewResourceNotFoundError(
-	resourceID resModel.ResourceID, cause error,
-) error {
-	ret := &ResourceNotFoundError{
-		ProblemResource: resourceID,
-		Inner:           cause,
-	}
-	return errors.Trace(ret)
-}
+// ErrResourceConflict indicates that two resource requirements have
+// conflicting executors (usually caused by requiring two local files
+// on different executors).
+var ErrResourceConflict = rpcerror.Normalize[ResourceConflictError]()
 
-func (e *ResourceNotFoundError) Error() string {
-	return fmt.Sprintf("Scheduler could not find resource %s, caused by %s",
-		e.ProblemResource, e.Inner.Error())
-}
-
-// ResourceConflictError is raised when two resources are assigned to two executors.
+// ResourceConflictError provides details of ErrResourceConflict.
 type ResourceConflictError struct {
+	rpcerror.Error[rpcerror.NotRetryable, rpcerror.FailedPrecondition]
+
 	ConflictingResources [2]resModel.ResourceID
 	AssignedExecutors    [2]model.ExecutorID
 }
 
-// NewResourceConflictError creates a new resource conflict error
-func NewResourceConflictError(
-	resourceA resModel.ResourceID,
-	executorA model.ExecutorID,
-	resourceB resModel.ResourceID,
-	executorB model.ExecutorID,
-) error {
-	ret := &ResourceConflictError{
-		ConflictingResources: [2]resModel.ResourceID{resourceA, resourceB},
-		AssignedExecutors:    [2]model.ExecutorID{executorA, executorB},
-	}
-	return errors.Trace(ret)
+// ErrSelectorUnsatisfied indicates that a given selector could not
+// be satisfied by the currently available executors.
+var ErrSelectorUnsatisfied = rpcerror.Normalize[SelectorUnsatisfiedError]()
+
+// SelectorUnsatisfiedError provides details of an ErrSelectorUnsatisfied.
+type SelectorUnsatisfiedError struct {
+	rpcerror.Error[rpcerror.NotRetryable, rpcerror.ResourceExhausted]
+
+	Selector label.Selector
 }
 
-func (e *ResourceConflictError) Error() string {
-	return fmt.Sprintf("Scheduler could not assign executor due to conflicting "+
-		"requirements: resource %s needs executor %s, while resource %s needs executor %s",
-		e.ConflictingResources[0], e.AssignedExecutors[0],
-		e.ConflictingResources[1], e.AssignedExecutors[1])
+// ErrFilterNoResult indicates that a scheduler filter returns an
+// empty set for potential executors.
+var ErrFilterNoResult = rpcerror.Normalize[FilterNoResultError]()
+
+// FilterNoResultError provides details of ErrFilterNoResult.
+type FilterNoResultError struct {
+	rpcerror.Error[rpcerror.NotRetryable, rpcerror.ResourceExhausted]
+
+	FilterName      string
+	InputCandidates []model.ExecutorID
 }
 
-// ErrorToGRPCError converts resource error to corresponding gRPC error
-func ErrorToGRPCError(errIn error) error {
-	if errIn == nil {
-		log.Panic("Invalid input to ErrorToGRPCError")
-	}
+// ErrCapacityNotEnough indicates that no suitable executor with
+// enough capacity can be found.
+var ErrCapacityNotEnough = rpcerror.Normalize[CapacityNotEnoughError]()
 
-	var (
-		conflictErr *ResourceConflictError
-		notFoundErr *ResourceNotFoundError
-	)
-	switch {
-	case stdErrors.As(errIn, &conflictErr):
-		return status.Error(codes.FailedPrecondition, conflictErr.Error())
-	case stdErrors.As(errIn, &notFoundErr):
-		return status.Error(codes.NotFound, notFoundErr.Error())
-	case derrors.ErrClusterResourceNotEnough.Equal(errIn):
-		return status.Error(codes.ResourceExhausted, errIn.Error())
-	default:
-	}
-	return errIn
+// CapacityNotEnoughError provides details of an ErrCapacityNotEnough.
+type CapacityNotEnoughError struct {
+	rpcerror.Error[rpcerror.NotRetryable, rpcerror.ResourceExhausted]
+
+	FinalCandidates []model.ExecutorID
 }

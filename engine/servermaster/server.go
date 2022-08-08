@@ -21,6 +21,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
@@ -327,7 +329,7 @@ func (s *Server) ScheduleTask(ctx context.Context, req *pb.ScheduleTaskRequest) 
 	}
 	schedulerResp, err := s.scheduler.ScheduleTask(ctx, schedulerReq)
 	if err != nil {
-		return nil, scheduler.ErrorToGRPCError(err)
+		return nil, rpcerror.ToGRPCError(err)
 	}
 
 	addr, ok := s.executorManager.GetAddr(schedulerResp.ExecutorID)

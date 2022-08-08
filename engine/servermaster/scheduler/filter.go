@@ -11,24 +11,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package model
+package scheduler
 
 import (
+	"context"
+
 	"github.com/pingcap/tiflow/engine/model"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	"github.com/pingcap/tiflow/pkg/label"
+	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 )
 
-// SchedulerRequest represents a request for an executor to run a given task.
-type SchedulerRequest struct {
-	TenantID string // reserved for future use.
-
-	Cost              ResourceUnit
-	ExternalResources []resourcemeta.ResourceKey
-	Selectors         []label.Selector
-}
-
-// SchedulerResponse represents a response to a task scheduling request.
-type SchedulerResponse struct {
-	ExecutorID model.ExecutorID
+type filter interface {
+	GetEligibleExecutors(
+		ctx context.Context,
+		request *schedModel.SchedulerRequest,
+		// candidates is the range of executors to choose from,
+		// may be the output of another filter.
+		candidates []model.ExecutorID,
+	) ([]model.ExecutorID, error)
 }

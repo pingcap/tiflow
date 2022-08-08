@@ -17,10 +17,9 @@ import (
 	"math"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/pingcap/tiflow/engine/model"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
+	"github.com/stretchr/testify/require"
 )
 
 func getMockCapacityData() *mockExecutorInfoProvider {
@@ -59,11 +58,13 @@ const randomSeedForTest = 0x1234
 func TestScheduleByCostBasics(t *testing.T) {
 	costSched := NewDeterministicCostScheduler(getMockCapacityData(), randomSeedForTest)
 
-	target, ok := costSched.ScheduleByCost(85)
+	target, ok := costSched.ScheduleByCost(85,
+		[]model.ExecutorID{"executor-1", "executor-2", "executor-3"})
 	require.True(t, ok)
 	require.Equal(t, model.ExecutorID("executor-3"), target)
 
-	_, ok = costSched.ScheduleByCost(95)
+	_, ok = costSched.ScheduleByCost(95,
+		[]model.ExecutorID{"executor-1", "executor-2", "executor-3"})
 	require.False(t, ok)
 }
 
@@ -72,7 +73,8 @@ func TestScheduleByCostBalance(t *testing.T) {
 	counters := make(map[model.ExecutorID]int)
 
 	for i := 0; i < 999; i++ {
-		target, ok := costSched.ScheduleByCost(5)
+		target, ok := costSched.ScheduleByCost(5,
+			[]model.ExecutorID{"executor-1", "executor-2", "executor-3"})
 		require.True(t, ok)
 		counters[target]++
 	}
