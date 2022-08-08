@@ -155,8 +155,6 @@ type CDCEtcdClient interface {
 	DeleteCaptureInfo(context.Context, model.CaptureID) error
 
 	CheckMultipleCDCClusterExist(ctx context.Context) error
-
-	Close() error
 }
 
 // CDCEtcdClientImpl is a wrap of etcd client
