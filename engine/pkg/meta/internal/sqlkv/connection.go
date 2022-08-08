@@ -29,7 +29,7 @@ func NewClientConnImpl(storeConf *model.StoreConfig) (*clientConnImpl, error) {
 		return nil, errors.ErrMetaParamsInvalid.GenWithStackByArgs("store config is nil")
 	}
 
-	if storeConf.StoreType != model.StoreTypeSQL {
+	if storeConf.StoreType != model.StoreTypeMySQL {
 		return nil, errors.ErrMetaParamsInvalid.GenWithStack("sql conn but get type:%s",
 			storeConf.StoreType)
 	}
@@ -75,9 +75,9 @@ func (cc *clientConnImpl) Close() error {
 	return nil
 }
 
-// ClientType implements ClientType of ClientConn
-func (cc *clientConnImpl) ClientType() model.ClientType {
-	return model.SQLKVClientType
+// StoreType implements StoreType of ClientConn
+func (cc *clientConnImpl) StoreType() model.StoreType {
+	return model.StoreTypeMySQL
 }
 
 // NewSQLDB news a sql.DB.

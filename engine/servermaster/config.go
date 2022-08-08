@@ -52,8 +52,8 @@ const (
 	defaultFrameMetaUser      = "root"
 	defaultFrameMetaPassword  = ""
 
-	defaultFrameworkStoreType = metaModel.StoreTypeSQL
-	defaultBusinessStoreType  = metaModel.StoreTypeSQL
+	defaultFrameworkStoreType = metaModel.StoreTypeMySQL
+	defaultBusinessStoreType  = metaModel.StoreTypeMySQL
 )
 
 // Config is the configuration for server-master.

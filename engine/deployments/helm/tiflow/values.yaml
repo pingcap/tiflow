@@ -18,12 +18,12 @@ master:
     [framework-metastore-conf]
     auth.user = "root"
     auth.passwd = ""
-    schema = "test"
+    schema = "test_framework"
 
     [business-metastore-conf]
     auth.user = "root"
     auth.passwd = ""
-    schema = "test"
+    schema = "test_business"
 
 executor:
   replicas: 4
