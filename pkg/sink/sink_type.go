@@ -28,6 +28,21 @@ const (
 	KafkaSchema = "kafka"
 	// KafkaSSLSchema indicates the schema is kafka+ssl.
 	KafkaSSLSchema = "kafka+ssl"
+	// PulsarSchema indicates the schema is pulsar.
+	PulsarSchema = "pulsar"
+	// PulsarSSLSchema indicates the schema is pulsar+ssl.
+	PulsarSSLSchema = "pulsar+ssl"
 	// BlackHoleSchema indicates the schema is blackhole.
 	BlackHoleSchema = "blackhole"
 )
+
+// IsMQScheme returns true if the scheme belong to mq schema.
+func IsMQScheme(scheme string) bool {
+	return scheme == KafkaSchema || scheme == KafkaSSLSchema ||
+		IsPulsarScheme(scheme)
+}
+
+// IsPulsarScheme returns true if the scheme belong to pulsar schema.
+func IsPulsarScheme(scheme string) bool {
+	return scheme == PulsarSchema || scheme == PulsarSSLSchema
+}
