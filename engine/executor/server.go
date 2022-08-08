@@ -166,6 +166,7 @@ func (s *Server) makeTask(
 	masterID frameModel.MasterID,
 	workerType frameModel.WorkerType,
 	workerConfig []byte,
+	workerEpoch frameModel.Epoch,
 ) (worker.Runnable, error) {
 	dctx := dcontext.NewContext(ctx)
 	dp, err := s.buildDeps()
@@ -198,7 +199,9 @@ func (s *Server) makeTask(
 		workerType,
 		workerID,
 		masterID,
-		workerConfig)
+		workerConfig,
+		workerEpoch,
+	)
 	if err != nil {
 		log.Error("Failed to create worker", zap.Error(err))
 		return nil, err
@@ -223,7 +226,9 @@ func (s *Server) PreDispatchTask(ctx context.Context, req *pb.PreDispatchTaskReq
 		req.GetWorkerId(),
 		req.GetMasterId(),
 		frameModel.WorkerType(req.GetTaskTypeId()),
-		req.GetTaskConfig())
+		req.GetTaskConfig(),
+		req.GetWorkerEpoch(),
+	)
 	if err != nil {
 		// We use the code Aborted here per the suggestion in gRPC's documentation
 		// "Use Aborted if the client should retry at a higher-level".
