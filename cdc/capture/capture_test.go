@@ -461,3 +461,45 @@ func TestCampaignLiveness(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestDisableDrainByDefault(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	mo := mock_owner.NewMockOwner(ctrl)
+	mm := mock_processor.NewMockManager(ctrl)
+	me := mock_etcd.NewMockCDCEtcdClient(ctrl)
+	cp := &captureImpl{
+		EtcdClient: me,
+		info: &model.CaptureInfo{
+			ID:            "capture-for-test",
+			AdvertiseAddr: "127.0.0.1", Version: "test",
+		},
+		processorManager: mm,
+		owner:            mo,
+		config:           config.GetDefaultServerConfig(),
+		disableDrain:     disableDrain,
+	}
+	cp.config.Debug.EnableSchedulerV3 = true
+	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
+
+	// Owner can not be resigned.
+	mo.EXPECT().Query(gomock.Any(), gomock.Any()).Do(func(
+		query *owner.Query, done chan<- error,
+	) {
+		// Two captures to allow owner resign.
+		query.Data = []*model.CaptureInfo{{}, {}}
+		close(done)
+	}).AnyTimes()
+	mo.EXPECT().AsyncStop().AnyTimes()
+
+	done := cp.Drain(ctx)
+
+	// Must skipping drain by default.
+	select {
+	case <-time.After(3 * time.Second):
+		require.Fail(t, "timeout")
+	case <-done:
+	}
+}

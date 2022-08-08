@@ -76,6 +76,7 @@ type captureImpl struct {
 	processorManager processor.Manager
 	liveness         model.Liveness
 	config           *config.ServerConfig
+	disableDrain     bool
 
 	pdEndpoints     []string
 	ownerMu         sync.Mutex
@@ -114,6 +115,11 @@ type captureImpl struct {
 	newOwner func(upstreamManager *upstream.Manager) owner.Owner
 }
 
+// disableDrain is a boolean that disable capture drain feature.
+// Because TiCDC release-6.2 does not support cross version upgrade and stops
+// service during upgrade, it is impossible to perform graceful shutdown.
+const disableDrain = true
+
 // NewCapture returns a new Capture instance
 func NewCapture(pdEndpoints []string,
 	etcdClient etcd.CDCEtcdClient,
@@ -121,6 +127,7 @@ func NewCapture(pdEndpoints []string,
 ) Capture {
 	conf := config.GetGlobalServerConfig()
 	return &captureImpl{
+		disableDrain:        disableDrain,
 		config:              config.GetGlobalServerConfig(),
 		liveness:            model.LivenessCaptureAlive,
 		EtcdClient:          etcdClient,
@@ -666,7 +673,7 @@ func (c *captureImpl) Drain(ctx context.Context) <-chan struct{} {
 }
 
 func (c *captureImpl) drainImpl(ctx context.Context) bool {
-	if !c.config.Debug.EnableSchedulerV3 {
+	if !c.config.Debug.EnableSchedulerV3 || c.disableDrain {
 		// Skip drain as two phase scheduler is disabled.
 		return true
 	}
