@@ -15,7 +15,6 @@ package factory
 
 import (
 	"context"
-	"net/url"
 	"strings"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -50,10 +49,10 @@ type SinkFactory struct {
 // New creates a new SinkFactory by schema.
 func New(ctx context.Context,
 	sinkURIStr string,
-	config *config.ReplicaConfig,
+	cfg *config.ReplicaConfig,
 	errCh chan error,
 ) (*SinkFactory, error) {
-	sinkURI, err := getSinkURIAndAdjustConfigWithSinkURI(sinkURIStr, config)
+	sinkURI, err := config.GetSinkURIAndAdjustConfigWithSinkURI(sinkURIStr, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +62,7 @@ func New(ctx context.Context,
 	// TODO: add more sink factory here.
 	switch schema {
 	case "kafka", "kafka+ssl":
-		mqs, err := mq.NewKafkaDMLSink(ctx, sinkURI, config, errCh,
+		mqs, err := mq.NewKafkaDMLSink(ctx, sinkURI, cfg, errCh,
 			kafka.NewSaramaAdminClient, dmlproducer.NewKafkaDMLProducer)
 		if err != nil {
 			return nil, err
@@ -102,19 +101,4 @@ func (s *SinkFactory) Close() error {
 	default:
 		panic("unknown sink type")
 	}
-}
-
-func getSinkURIAndAdjustConfigWithSinkURI(sinkURIStr string,
-	config *config.ReplicaConfig,
-) (*url.URL, error) {
-	// parse sinkURI as a URI
-	sinkURI, err := url.Parse(sinkURIStr)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
-	}
-	if err := config.ValidateAndAdjust(sinkURI); err != nil {
-		return nil, err
-	}
-
-	return sinkURI, nil
 }

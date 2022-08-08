@@ -9,7 +9,7 @@ services:
         volumes:
             - ./config/mysql.cnf:/etc/mysql/conf.d/mysql.cnf
         environment:
-            MYSQL_ALLOW_EMPTY_PASSWORD: true
+            MYSQL_ALLOW_EMPTY_PASSWORD: 1
 
     dm_downstream_pd:
         image: pingcap/pd:v5.4.0

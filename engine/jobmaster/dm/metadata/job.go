@@ -127,3 +127,31 @@ func (jobStore *JobStore) UpdateStages(ctx context.Context, taskIDs []string, st
 
 	return jobStore.Put(ctx, job)
 }
+
+// UpdateConfig will be called if user update job config.
+func (jobStore *JobStore) UpdateConfig(ctx context.Context, jobCfg *config.JobCfg) error {
+	state, err := jobStore.Get(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	oldJob := state.(*Job)
+
+	// TODO: we may diff the config at task level in the future, that way different tasks will have different modify revisions.
+	// so that changing the configuration of one task will not affect other tasks.
+	var oldVersion uint64
+	for _, task := range oldJob.Tasks {
+		oldVersion = task.Cfg.ModRevision
+		break
+	}
+	jobCfg.ModRevision = oldVersion + 1
+	newJob := NewJob(jobCfg)
+
+	for taskID, newTask := range newJob.Tasks {
+		// task stage will not be updated.
+		if oldTask, ok := oldJob.Tasks[taskID]; ok {
+			newTask.Stage = oldTask.Stage
+		}
+	}
+
+	return jobStore.Put(ctx, newJob)
+}
