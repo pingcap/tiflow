@@ -11,10 +11,11 @@ mkdir -p $OUT_DIR || true
 
 if [ "${1-}" = 'debug' ]; then
 	shift
-	if [[ ${1} ]]; then
+	if [[ $# -lt 0 ]]; then
 		cnf=$*
 	else
 		cnf="$DOCKER_COMPOSE_DIR/1m1e.yaml"
+		echo "got empty file, use default config: ${cnf}"
 	fi
 
 	trap "stop_engine_cluster $cnf" EXIT
