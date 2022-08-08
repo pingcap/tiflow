@@ -41,6 +41,7 @@ type Registry interface {
 		workerID frameModel.WorkerID,
 		masterID frameModel.MasterID,
 		config []byte,
+		epoch frameModel.Epoch,
 	) (framework.Worker, error)
 }
 
@@ -83,6 +84,7 @@ func (r *registryImpl) CreateWorker(
 	workerID frameModel.WorkerID,
 	masterID frameModel.MasterID,
 	configBytes []byte,
+	epoch frameModel.Epoch,
 ) (framework.Worker, error) {
 	factory, ok := r.getWorkerFactory(tp)
 	if !ok {
@@ -106,6 +108,7 @@ func (r *registryImpl) CreateWorker(
 			workerID,
 			masterID,
 			tp,
+			epoch,
 		)
 		setImplMember(impl, nameOfBaseWorker, base)
 		return base, nil
@@ -118,6 +121,7 @@ func (r *registryImpl) CreateWorker(
 			masterID,
 			workerID,
 			tp,
+			epoch,
 		)
 		setImplMember(impl, nameOfBaseJobMaster, base)
 		return base, nil
