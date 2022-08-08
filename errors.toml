@@ -193,7 +193,7 @@ the overwrite-checkpoint-ts %d must be smaller than current TSO
 
 ["CDC:ErrCliInvalidCheckpointTs"]
 error = '''
-invalid overwrite-checkpoint-ts %s, overwrite-checkpoint-ts only accept 'now' or number
+invalid overwrite-checkpoint-ts %s, overwrite-checkpoint-ts only accept 'now' or a valid timestamp in integer
 '''
 
 ["CDC:ErrClusterIDMismatch"]
@@ -1073,7 +1073,7 @@ start a stopped leveldb system
 
 ["CDC:ErrStartTsBeforeGC"]
 error = '''
-fail to create or maintain changefeed because start-ts %d is earlier than GC safepoint at %d
+fail to create or maintain changefeed because start-ts %d is earlier than or equal to GC safepoint at %d
 '''
 
 ["CDC:ErrSupportGetOnly"]

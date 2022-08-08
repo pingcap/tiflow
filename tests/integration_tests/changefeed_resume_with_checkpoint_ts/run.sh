@@ -117,6 +117,15 @@ function resume_changefeed_in_failed_state() {
 			    but actually got $result"
 		exit 1
 	fi
+
+	gc_safepoint=$(pd-ctl -u=$pd_addr service-gc-safepoint | grep -oE "\"safe_point\": [0-9]+" | grep -oE "[0-9]+" | sort | head -n1)
+	result=$(cdc cli changefeed resume --changefeed-id=$changefeed_id --pd=$pd_addr --overwrite-checkpoint-ts=$gc_safepoint --no-confirm=true 2>&1 || true)
+	if [[ $result != *"ErrStartTsBeforeGC"* ]]; then
+		echo "changefeeed resume result is expected to contain 'ErrStartTsBeforeGC', \
+			    but actually got $result"
+		exit 1
+	fi
+
 	cleanup_process $CDC_BINARY
 }
 
