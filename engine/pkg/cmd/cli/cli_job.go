@@ -24,7 +24,6 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // jobGeneralOptions defines some general options of job management
@@ -61,12 +60,13 @@ func (o *jobGeneralOptions) addFlags(cmd *cobra.Command) {
 // validate checks that the provided job options are valid.
 func (o *jobGeneralOptions) validate(ctx context.Context, cmd *cobra.Command) error {
 	if len(o.masterAddrs) == 0 {
-		return errors.ErrInvalidCliParameter.GenWithStack("master-addrs can't be nil")
+		o.masterAddrs = []string{"127.0.0.1:10240"}
+		log.Warn("master-addrs is nil, use default addr: 127.0.0.1:10240")
 	}
 
 	// TODO support https.
 	dialURL := o.masterAddrs[0]
-	grpcConn, err := grpc.Dial(dialURL)
+	grpcConn, err := grpc.Dial(dialURL, grpc.WithInsecure())
 	if err != nil {
 		return perrors.Trace(err)
 	}
