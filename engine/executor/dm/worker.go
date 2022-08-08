@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
@@ -30,6 +31,7 @@ import (
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/registry"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm"
+	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	"github.com/pingcap/tiflow/engine/model"
@@ -61,15 +63,17 @@ func newWorkerFactory(workerType frameModel.WorkerType) *workerFactory {
 
 // DeserializeConfig implements WorkerFactory.DeserializeConfig
 func (f workerFactory) DeserializeConfig(configBytes []byte) (registry.WorkerConfig, error) {
-	cfg := &dmconfig.SubTaskConfig{}
-	err := cfg.Decode(string(configBytes), true)
+	cfg := &config.TaskCfg{}
+	_, err := toml.Decode(string(configBytes), cfg)
 	return cfg, err
 }
 
 // NewWorkerImpl implements WorkerFactory.NewWorkerImpl
 func (f workerFactory) NewWorkerImpl(ctx *dcontext.Context, workerID frameModel.WorkerID, masterID frameModel.MasterID, conf framework.WorkerConfig) (framework.WorkerImpl, error) {
-	log.Info("new dm worker", zap.String(logutil.ConstFieldJobKey, masterID), zap.String(logutil.ConstFieldWorkerKey, workerID))
-	return newDMWorker(ctx, masterID, f.workerType, conf.(*dmconfig.SubTaskConfig)), nil
+	cfg := conf.(*config.TaskCfg)
+	log.Info("new dm worker", zap.String(logutil.ConstFieldJobKey, masterID), zap.String(logutil.ConstFieldWorkerKey, workerID), zap.Uint64("config_modify_revision", cfg.ModRevision))
+	dmSubtaskCfg := cfg.ToDMSubTaskCfg()
+	return newDMWorker(ctx, masterID, f.workerType, dmSubtaskCfg, cfg.ModRevision), nil
 }
 
 // dmWorker implements methods for framework.WorkerImpl
@@ -88,21 +92,24 @@ type dmWorker struct {
 	taskID                string
 	masterID              frameModel.MasterID
 	messageHandlerManager p2p.MessageHandlerManager
+
+	cfgModRevision uint64
 }
 
-func newDMWorker(ctx *dcontext.Context, masterID frameModel.MasterID, workerType framework.WorkerType, cfg *dmconfig.SubTaskConfig) *dmWorker {
+func newDMWorker(ctx *dcontext.Context, masterID frameModel.MasterID, workerType framework.WorkerType, cfg *dmconfig.SubTaskConfig, cfgModRevision uint64) *dmWorker {
 	// TODO: support config later
 	// nolint:errcheck
 	bf, _ := backoff.NewBackoff(dmconfig.DefaultBackoffFactor, dmconfig.DefaultBackoffJitter, dmconfig.DefaultBackoffMin, dmconfig.DefaultBackoffMax)
 	autoResume := &worker.AutoResumeInfo{Backoff: bf, LatestPausedTime: time.Now(), LatestResumeTime: time.Now()}
 	w := &dmWorker{
-		cfg:        cfg,
-		stage:      metadata.StageInit,
-		workerType: workerType,
-		taskID:     cfg.SourceID,
-		masterID:   masterID,
-		unitHolder: newUnitHolderImpl(workerType, cfg),
-		autoResume: autoResume,
+		cfg:            cfg,
+		stage:          metadata.StageInit,
+		workerType:     workerType,
+		taskID:         cfg.SourceID,
+		masterID:       masterID,
+		unitHolder:     newUnitHolderImpl(workerType, cfg),
+		autoResume:     autoResume,
+		cfgModRevision: cfgModRevision,
 	}
 
 	// nolint:errcheck
@@ -237,7 +244,7 @@ func (w *dmWorker) workerStatus() frameModel.WorkerStatus {
 	if stage == metadata.StageFinished {
 		code = frameModel.WorkerStatusFinished
 	}
-	status := &runtime.TaskStatus{Unit: w.workerType, Task: w.taskID, Stage: stage}
+	status := &runtime.TaskStatus{Unit: w.workerType, Task: w.taskID, Stage: stage, CfgModRevision: w.cfgModRevision}
 	// nolint:errcheck
 	statusBytes, _ := json.Marshal(status)
 	return frameModel.WorkerStatus{
