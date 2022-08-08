@@ -306,7 +306,7 @@ function DM_DROP_COLUMN_EXEC_ERROR() {
 }
 
 function DM_DROP_COLUMN_ALL_DONE_CASE() {
-	# get worker of source1
+	# get worker of source2
 	w="1"
 	got=$(grep -a "mysql-replica-02" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
 	if [[ "$got" -eq 0 ]]; then
