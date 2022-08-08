@@ -79,6 +79,10 @@ func (o *jobCreateOptions) validate(ctx context.Context, cmd *cobra.Command) err
 }
 
 func openFileAndReadString(path string) (content []byte, err error) {
+	if path == "" {
+		log.Warn("create job with empty config file")
+		return nil, nil
+	}
 	fp, err := os.Open(path)
 	if err != nil {
 		return nil, err

@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
@@ -66,7 +67,7 @@ func (o *jobGeneralOptions) validate(ctx context.Context, cmd *cobra.Command) er
 
 	// TODO support https.
 	dialURL := o.masterAddrs[0]
-	grpcConn, err := grpc.Dial(dialURL, grpc.WithInsecure())
+	grpcConn, err := grpc.Dial(dialURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return perrors.Trace(err)
 	}
