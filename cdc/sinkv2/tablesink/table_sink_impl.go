@@ -60,11 +60,11 @@ func (e *eventTableSink[E]) AppendRowChangedEvents(rows ...*model.RowChangedEven
 	e.eventBuffer = e.eventAppender.Append(e.eventBuffer, rows...)
 }
 
-func (e *eventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) {
+func (e *eventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error {
 	// If resolvedTs is not greater than maxResolvedTs,
 	// the flush is unnecessary.
 	if !e.maxResolvedTs.Less(resolvedTs) {
-		return
+		return nil
 	}
 	e.maxResolvedTs = resolvedTs
 
@@ -74,7 +74,7 @@ func (e *eventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) {
 	// Despite the lack of data, we have to move forward with progress.
 	if i == 0 {
 		e.progressTracker.addResolvedTs(e.genEventID(), resolvedTs)
-		return
+		return nil
 	}
 	resolvedEvents := e.eventBuffer[:i]
 	e.eventBuffer = append(make([]E, 0, len(e.eventBuffer[i:])), e.eventBuffer[i:]...)
@@ -98,7 +98,7 @@ func (e *eventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) {
 	}
 	// Do not forget to add the resolvedTs to progressTracker.
 	e.progressTracker.addResolvedTs(e.genEventID(), resolvedTs)
-	_ = e.backendSink.WriteEvents(resolvedCallbackableEvents...)
+	return e.backendSink.WriteEvents(resolvedCallbackableEvents...)
 }
 
 func (e *eventTableSink[E]) GetCheckpointTs() model.ResolvedTs {

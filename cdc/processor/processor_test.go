@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
+	mocksink "github.com/pingcap/tiflow/cdc/sink/mock"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -51,6 +52,7 @@ func newProcessor4Test(
 		model.ChangeFeedID4Test("processor-test", "processor-test"), up, liveness)
 	p.lazyInit = func(ctx cdcContext.Context) error {
 		p.agent = &mockAgent{executor: p}
+		p.sinkV1 = mocksink.NewNormalMockSink()
 		return nil
 	}
 	p.redoManager = redo.NewDisabledManager()
