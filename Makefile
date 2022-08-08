@@ -553,7 +553,7 @@ engine_image_arm64:
 	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
 	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./cmd/tiflow-demoserver
 	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-chaos-case ./engine/chaos/cases
-	docker build --platform linux/amd64 -f ./engine/deployments/docker/dev.Dockerfile -t dataflow:test ./
+	docker build --platform linux/arm64 -f ./engine/deployments/docker/dev.Dockerfile -t dataflow:test ./
 
 engine_image_from_local:
 	@which docker || (echo "docker not found in ${PATH}"; exit 1)
