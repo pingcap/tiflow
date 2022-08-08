@@ -52,6 +52,7 @@ var WorkerUpdateColumns = []string{
 	"id",
 	"type",
 	"status",
+	"epoch",
 	"errmsg",
 	"ext_bytes",
 }
@@ -67,6 +68,7 @@ type WorkerStatus struct {
 	ID           WorkerID         `json:"id" gorm:"column:id;type:varchar(128) not null;uniqueIndex:uidx_wid,priority:2"`
 	Type         WorkerType       `json:"type" gorm:"column:type;type:smallint not null;comment:JobManager(1),CvsJobMaster(2),FakeJobMaster(3),DMJobMaster(4),CDCJobMaster(5),CvsTask(6),FakeTask(7),DMTask(8),CDCTask(9),WorkerDMDump(10),WorkerDMLoad(11),WorkerDMSync(12)"`
 	Code         WorkerStatusCode `json:"code" gorm:"column:status;type:tinyint not null;index:idx_wst,priority:2;comment:Normal(1),Created(2),Init(3),Error(4),Finished(5),Stopped(6)"`
+	Epoch        Epoch            `json:"epoch" gorm:"column:epoch;type:bigint not null"`
 	ErrorMessage string           `json:"error-message" gorm:"column:errmsg;type:text"`
 
 	// ExtBytes carries the serialized form of the Ext field, which is used in
@@ -112,6 +114,7 @@ func (s *WorkerStatus) Map() map[string]interface{} {
 		"id":         s.ID,
 		"type":       s.Type,
 		"status":     s.Code,
+		"epoch":      s.Epoch,
 		"errmsg":     s.ErrorMessage,
 		"ext_bytes":  s.ExtBytes,
 	}

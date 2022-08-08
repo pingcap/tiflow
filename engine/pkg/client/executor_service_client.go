@@ -57,6 +57,7 @@ type DispatchTaskArgs struct {
 	MasterID     string
 	WorkerType   int64
 	WorkerConfig []byte
+	WorkerEpoch  int64
 }
 
 type executorServiceClient struct {
@@ -84,11 +85,12 @@ func (c *executorServiceClient) DispatchTask(
 			TenantId:  args.ProjectInfo.TenantID(),
 			ProjectId: args.ProjectInfo.ProjectID(),
 		},
-		TaskTypeId: args.WorkerType,
-		TaskConfig: args.WorkerConfig,
-		MasterId:   args.MasterID,
-		WorkerId:   args.WorkerID,
-		RequestId:  requestID,
+		TaskTypeId:  args.WorkerType,
+		TaskConfig:  args.WorkerConfig,
+		MasterId:    args.MasterID,
+		WorkerId:    args.WorkerID,
+		WorkerEpoch: args.WorkerEpoch,
+		RequestId:   requestID,
 	}
 
 	_, err := internal.NewCall(c.cli.PreDispatchTask, predispatchReq).Do(ctx)
