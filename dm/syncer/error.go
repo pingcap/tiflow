@@ -71,20 +71,23 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 	rowNum := 10
 	count := 0
 	for {
-		showJobs := fmt.Sprintf("ADMIN SHOW DDL JOBS %d", rowNum)
 		// every attempt try 10 history jobs
+		showJobs := fmt.Sprintf("ADMIN SHOW DDL JOBS %d", rowNum)
+		fmt.Println(showJobs)
 		rows, err := db.QueryContext(ctx, showJobs)
 		if err != nil {
 			rows.Close()
 			return "", err
 		}
 
-		columns, err := rows.Columns()
+		//fmt.Println("check1")
+		var columns []string
+		columns, err = rows.Columns()
 		if err != nil {
 			rows.Close()
 			return "", err
 		}
-
+		//fmt.Println("check2")
 		//values := make([]sql.RawBytes, len(columns))
 		//scanArgs := make([]interface{}, len(values))
 		//for i := range values {
@@ -98,6 +101,7 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 			return "", err
 		}
 
+		//fmt.Println("check3")
 		// skip the lines that have been checked
 		//skipNum := 0
 		//if rowNum > 10 {
@@ -110,6 +114,7 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 		//}
 		//for rows.Next() {
 		for i := rowNum - 10; i < rowNum; i++ {
+			fmt.Printf("i: %d \n", i)
 			//err = rows.Scan(scanArgs...)
 			//if err != nil {
 			//	rows.Close()
@@ -126,6 +131,8 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 			}
 			ddlCreateTime := ddlCreateTimeParse.Unix()
 
+			//fmt.Printf("ddlCreateTime: %v", ddlCreateTime)
+			//fmt.Printf("createTime: %v", createTime)
 			// ddlCreateTime and createTime are both based on timezone of downstream
 			if ddlCreateTime >= createTime {
 				var jobID int
@@ -137,28 +144,61 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 
 				offset := rowNum + count - 10
 				for {
-					var DDLJob string
-					var jobIDForLimit int
-					showJob := fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 1 OFFSET %d", offset)
-					err = db.QueryRowContext(ctx, showJob).Scan(&jobIDForLimit, &DDLJob)
+					//var DDLJob string
+					//var jobIDForLimit int
+					showJob := fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET %d", offset)
+					fmt.Println(showJob)
+
+					rowsForLimit, err := db.QueryContext(ctx, showJob)
 					if err != nil {
-						//rows.Close()
+						rowsForLimit.Close()
 						return "", err
 					}
-					if jobID == jobIDForLimit && ddl == DDLJob {
-						//rows.Close()
-						return results[i][11], err
+
+					var columnsForLimit []string
+					columnsForLimit, err = rowsForLimit.Columns()
+					if err != nil {
+						rowsForLimit.Close()
+						return "", err
 					}
-					if jobIDForLimit <= jobID {
+
+					var resultsForLimit [][]string
+					resultsForLimit, err = export.GetSpecifiedColumnValuesAndClose(rowsForLimit, columnsForLimit...)
+					if err != nil {
+						rowsForLimit.Close()
+						return "", err
+					}
+
+					//err = db.QueryRowContext(ctx, showJob).Scan(&jobIDForLimit, &DDLJob)
+					//if err != nil {
+					//	//rows.Close()
+					//	return "", err
+					//}
+
+					flag := false
+					for j := 0; j < 10; j++ {
+						fmt.Printf("j: %d \n", j)
+						var jobIDForLimit int
+						jobIDForLimit, err = strconv.Atoi(resultsForLimit[j][0])
+						if jobID == jobIDForLimit && ddl == resultsForLimit[j][1] {
+							//rows.Close()
+							return results[i][11], nil
+						}
+						if jobIDForLimit <= jobID {
+							flag = true
+							break
+						}
+					}
+					offset += 10
+					if flag {
 						break
 					}
-					offset++
 				}
 				count++
 			} else {
 				// requested DDL cannot be found
 				//rows.Close()
-				return "", err
+				return "", nil
 			}
 		}
 		//if err = rows.Err(); err != nil {
