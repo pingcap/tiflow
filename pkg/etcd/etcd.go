@@ -112,8 +112,6 @@ type CDCEtcdClient interface {
 
 	GetAllCDCInfo(ctx context.Context) ([]*mvccpb.KeyValue, error)
 
-	ClearAllCDCInfo(ctx context.Context) error
-
 	GetChangeFeedInfo(ctx context.Context,
 		id model.ChangeFeedID,
 	) (*model.ChangeFeedInfo, error)
@@ -122,22 +120,9 @@ type CDCEtcdClient interface {
 		map[model.ChangeFeedID]*model.ChangeFeedInfo, error,
 	)
 
-	DeleteChangeFeedInfo(ctx context.Context,
-		id model.ChangeFeedID,
-	) error
-
-	GetChangeFeeds(ctx context.Context) (
-		int64,
-		map[model.ChangeFeedID]*mvccpb.KeyValue, error,
-	)
-
 	GetChangeFeedStatus(ctx context.Context,
 		id model.ChangeFeedID,
 	) (*model.ChangeFeedStatus, int64, error)
-
-	GetAllChangeFeedStatus(ctx context.Context) (
-		map[model.ChangeFeedID]*model.ChangeFeedStatus, error,
-	)
 
 	GetUpstreamInfo(ctx context.Context,
 		upstreamID model.UpstreamID,
@@ -170,10 +155,6 @@ type CDCEtcdClient interface {
 	DeleteCaptureInfo(context.Context, model.CaptureID) error
 
 	CheckMultipleCDCClusterExist(ctx context.Context) error
-
-	GetCaptureLeases(ctx context.Context) (map[string]int64, error)
-
-	RevokeAllLeases(ctx context.Context, leases map[string]int64) error
 
 	Close() error
 }
