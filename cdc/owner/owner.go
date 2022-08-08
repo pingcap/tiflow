@@ -613,11 +613,13 @@ func (o *ownerImpl) isHealthy(ctx context.Context) (bool, error) {
 		return false, nil
 	}
 
-	upstreamM, err := o.upstreamManager.GetDefaultUpstream()
+	err := o.upstreamManager.Visit(func(upstream *upstream.Upstream) error {
+		if err := version.CheckStoreVersion(ctx, upstream.PDClient, 0); err != nil {
+			return errors.Trace(err)
+		}
+		return nil
+	})
 	if err != nil {
-		return false, errors.Trace(err)
-	}
-	if err := version.CheckStoreVersion(ctx, upstreamM.PDClient, 0); err != nil {
 		return false, errors.Trace(err)
 	}
 
