@@ -27,11 +27,6 @@ import (
 	"go.uber.org/zap"
 )
 
-var (
-	rangeTsEntryFreeList   = btree.NewFreeListG[*rangeTsEntry](1024)
-	rangeLockEntryFreeList = btree.NewFreeListG[*rangeLockEntry](1024)
-)
-
 type rangeTsEntry struct {
 	// Only startKey is necessary. End key can be inferred by the next item since the map always keeps a continuous
 	// range.
@@ -58,7 +53,7 @@ type RangeTsMap struct {
 // NewRangeTsMap creates a RangeTsMap.
 func NewRangeTsMap(startKey, endKey []byte, startTs uint64) *RangeTsMap {
 	m := &RangeTsMap{
-		m: btree.NewWithFreeListG[*rangeTsEntry](32, rangeTsEntryLess, rangeTsEntryFreeList),
+		m: btree.NewG[*rangeTsEntry](16, rangeTsEntryLess),
 	}
 	m.Set(startKey, endKey, startTs)
 	return m
@@ -168,10 +163,9 @@ func NewRegionRangeLock(
 	return &RegionRangeLock{
 		changefeedLogInfo: changefeedLogInfo,
 		rangeCheckpointTs: NewRangeTsMap(startKey, endKey, startTs),
+		rangeLock:         btree.NewG[*rangeLockEntry](16, rangeLockEntryLess),
 		regionIDLock:      make(map[uint64]*rangeLockEntry),
 		id:                allocID(),
-		rangeLock: btree.NewWithFreeListG[*rangeLockEntry](16,
-			rangeLockEntryLess, rangeLockEntryFreeList),
 	}
 }
 
