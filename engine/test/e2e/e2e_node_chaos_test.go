@@ -74,6 +74,11 @@ func TestNodeFailure(t *testing.T) {
 		etcdAddrs            = []string{"127.0.0.1:12479"}
 		etcdAddrsInContainer = []string{"etcd-standalone:2379"}
 	)
+	masterContainerAddrsMapping := map[string]string{
+		"server-master-0:10240": masterAddrs[0],
+		"server-master-1:10240": masterAddrs[1],
+		"server-master-2:10240": masterAddrs[2],
+	}
 
 	seed := time.Now().Unix()
 	rand.Seed(seed)
@@ -142,7 +147,8 @@ func TestNodeFailure(t *testing.T) {
 	log.Info("resign the leader and check if the leader is changed")
 	leaderAddr, err := cli.GetLeaderAddr(ctx)
 	require.NoError(t, err)
-	err = cli.ResignLeader(ctx, leaderAddr)
+	require.Contains(t, masterContainerAddrsMapping, leaderAddr, "leader addr is invalid")
+	err = cli.ResignLeader(ctx, masterContainerAddrsMapping[leaderAddr])
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
 		newLeaderAddr, err := cli.GetLeaderAddr(ctx)

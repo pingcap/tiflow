@@ -46,6 +46,7 @@ func init() {
 	log.SetLevel(zapcore.DebugLevel)
 }
 
+// ErrLeaderNotFound is returned when the leader is not found.
 var ErrLeaderNotFound = errors.New("leader not found")
 
 // ChaosCli is used to interact with server master, fake job and provides ways

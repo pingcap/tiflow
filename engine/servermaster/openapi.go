@@ -358,10 +358,8 @@ func (o *OpenAPI) ForwardToLeader(c *gin.Context) {
 		}
 		u, err := o.parseURL(leaderAddr)
 		if err != nil {
-			if err != nil {
-				_ = c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("invalid executor address: %s", leaderAddr))
-				return
-			}
+			_ = c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("invalid executor address: %s", leaderAddr))
+			return
 		}
 		proxy := httputil.NewSingleHostReverseProxy(u)
 		proxy.ServeHTTP(c.Writer, c.Request)

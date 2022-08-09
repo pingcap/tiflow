@@ -851,7 +851,7 @@ func (s *Server) IsLeader() bool {
 // LeaderAddr implements ServerInfoProvider.LeaderAddr.
 func (s *Server) LeaderAddr() (string, bool) {
 	leader, ok := s.leader.Load().(*rpcutil.Member)
-	if !ok || leader == nil {
+	if !ok || leader == nil || leader.AdvertiseAddr == "" {
 		return "", false
 	}
 	return leader.AdvertiseAddr, true
