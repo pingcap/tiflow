@@ -73,7 +73,6 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 	rowOffset := 0
 
 	showJobsLimit := fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET %d", rowOffset)
-	fmt.Println(showJobsLimit)
 	rowsLimit, err := db.QueryContext(ctx, showJobsLimit)
 	if err != nil {
 		rowsLimit.Close()
@@ -97,7 +96,6 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 	for {
 		// every attempt try 10 history jobs
 		showJobs := fmt.Sprintf("ADMIN SHOW DDL JOBS %d", rowNum)
-		fmt.Println(showJobs)
 		rows, err := db.QueryContext(ctx, showJobs)
 		if err != nil {
 			rows.Close()
@@ -119,31 +117,19 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 		}
 
 		for i := rowNum - 10; i < rowNum; i++ {
-			fmt.Printf("i: %d \n", i)
-			//err = rows.Scan(scanArgs...)
-			//if err != nil {
-			//	rows.Close()
-			//	return "", err
-			//}
-
-			//ddlCreateTimeStr := string(values[8])
 			ddlCreateTimeStr := results[i][8]
 			var ddlCreateTimeParse time.Time
 			ddlCreateTimeParse, err = time.Parse("2006-01-02 15:04:05", ddlCreateTimeStr)
 			if err != nil {
-				//rows.Close()
 				return "", err
 			}
 			ddlCreateTime := ddlCreateTimeParse.Unix()
 
-			//fmt.Printf("ddlCreateTime: %v", ddlCreateTime)
-			//fmt.Printf("createTime: %v", createTime)
 			// ddlCreateTime and createTime are both based on timezone of downstream
 			if ddlCreateTime >= createTime {
 				var jobID int
 				jobID, err = strconv.Atoi(results[i][0])
 				if err != nil {
-					//rows.Close()
 					return "", err
 				}
 
@@ -152,12 +138,12 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 					flag := false
 					currentOffset := offset
 					for {
-						fmt.Printf("currentOffset: %d \n", currentOffset)
 						if currentOffset == len(resultsLimit)-1 {
+							// expand resultsLimit for deeper search
 							rowOffset += 10
 							showJobsLimitNext := fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET %d", rowOffset)
-							fmt.Println(showJobsLimitNext)
-							rowsLimitNext, err := db.QueryContext(ctx, showJobsLimitNext)
+							var rowsLimitNext *sql.Rows
+							rowsLimitNext, err = db.QueryContext(ctx, showJobsLimitNext)
 							if err != nil {
 								rowsLimitNext.Close()
 								return "", err
@@ -184,15 +170,16 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 
 						var jobIDForLimit int
 						jobIDForLimit, err = strconv.Atoi(resultsLimit[currentOffset][0])
+						if err != nil {
+							return "", err
+						}
 						if jobID == jobIDForLimit && ddl == resultsLimit[currentOffset][1] {
-							//rows.Close()
 							return results[i][11], nil
 						}
 						if jobIDForLimit <= jobID {
 							flag = true
 							break
 						}
-
 						currentOffset++
 					}
 					offset += 10
@@ -203,15 +190,9 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 				count++
 			} else {
 				// requested DDL cannot be found
-				//rows.Close()
 				return "", nil
 			}
 		}
-		//if err = rows.Err(); err != nil {
-		//	rows.Close()
-		//	return "", err
-		//}
-		//rows.Close()
 		rowNum += 10
 		count = 0
 	}

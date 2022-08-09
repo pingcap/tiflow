@@ -15,7 +15,6 @@ package syncer
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"testing"
 	"time"
@@ -210,24 +209,6 @@ func TestIsConnectionRefusedError(t *testing.T) {
 
 	isConnRefusedErr = isConnectionRefusedError(errors.New("connect: connection refused"))
 	require.True(t, isConnRefusedErr)
-}
-
-func TestGetDDLStatusFromTiDB2(t *testing.T) {
-	db, err := sql.Open("mysql", "root:@tcp(127.0.0.1:4000)/many_tables_test")
-	if err != nil {
-		//panic(err.Error())
-	}
-	defer db.Close()
-
-	err = db.Ping()
-	if err != nil {
-		fmt.Printf("DB connection failed")
-	}
-	createTime, err := time.Parse("2006-01-02 15:04:05", "2022-08-08 16:43:49")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	status, err := getDDLStatusFromTiDB(ctx, db, "CREATE TABLE many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)", createTime.Unix())
-	fmt.Printf("status: %v", status)
 }
 
 func TestGetDDLStatusFromTiDB(t *testing.T) {
