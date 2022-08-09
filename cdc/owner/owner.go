@@ -150,7 +150,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 	// when there are different versions of cdc nodes in the cluster,
 	// the admin job may not be processed all the time. And http api relies on
 	// admin job, which will cause all http api unavailable.
-	o.handleJobs()
+	o.handleJobs(stdCtx)
 
 	if !o.clusterVersionConsistent(o.captures) {
 		return state, nil
@@ -399,7 +399,20 @@ func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model
 	return true
 }
 
-func (o *ownerImpl) handleDrainCaptures(query *scheduler.Query, done chan<- error) {
+func (o *ownerImpl) handleDrainCaptures(ctx context.Context, query *scheduler.Query, done chan<- error) {
+	if err := o.upstreamManager.Visit(func(upstream *upstream.Upstream) error {
+		if err := version.CheckStoreVersion(ctx, upstream.PDClient, 0); err != nil {
+			return errors.Trace(err)
+		}
+		return nil
+	}); err != nil {
+		log.Info("owner handle drain capture failed, since check upstream store version failed",
+			zap.String("target", query.CaptureID), zap.Error(err))
+		done <- err
+		close(done)
+		return
+	}
+
 	var (
 		changefeedWithTableCount int
 		totalTableCount          int
@@ -458,7 +471,7 @@ func (o *ownerImpl) handleDrainCaptures(query *scheduler.Query, done chan<- erro
 	close(done)
 }
 
-func (o *ownerImpl) handleJobs() {
+func (o *ownerImpl) handleJobs(ctx context.Context) {
 	jobs := o.takeOwnerJobs()
 	for _, job := range jobs {
 		changefeedID := job.ChangefeedID
@@ -478,7 +491,7 @@ func (o *ownerImpl) handleJobs() {
 				cfReactor.scheduler.MoveTable(job.TableID, job.TargetCaptureID)
 			}
 		case ownerJobTypeDrainCapture:
-			o.handleDrainCaptures(job.scheduleQuery, job.done)
+			o.handleDrainCaptures(ctx, job.scheduleQuery, job.done)
 			continue // continue here to prevent close the done channel twice
 		case ownerJobTypeRebalance:
 			// Scheduler is created lazily, it is nil before initialization.
