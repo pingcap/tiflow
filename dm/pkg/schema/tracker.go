@@ -59,13 +59,11 @@ type Tracker struct {
 	// 3. Close: Being similar as above, the validator can read the Tracker while the syncer is closing the Tracker.
 	sync.RWMutex
 	lowerCaseTableNames int
-	// TODO: ansi quotes?
-	parser            *parser.Parser
-	se                sessionctx.Context
-	upstreamTracker   schematracker.SchemaTracker
-	downstreamTracker *downstreamTracker
-	logger            log.Logger
-	closed            atomic.Bool
+	se                  sessionctx.Context
+	upstreamTracker     schematracker.SchemaTracker
+	downstreamTracker   *downstreamTracker
+	logger              log.Logger
+	closed              atomic.Bool
 }
 
 // downstreamTracker tracks downstream schema.
@@ -120,7 +118,6 @@ func (tr *Tracker) Init(
 	se := utils.NewSessionCtx(nil)
 	tr.Lock()
 	defer tr.Unlock()
-	tr.parser = parser.New()
 	tr.lowerCaseTableNames = lowerCaseTableNames
 	tr.se = se
 	tr.upstreamTracker = upTracker

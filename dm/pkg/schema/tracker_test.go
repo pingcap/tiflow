@@ -39,6 +39,8 @@ import (
 )
 
 func parseSQL(t *testing.T, p *parser.Parser, sql string) ast.StmtNode {
+	t.Helper()
+	
 	ret, err := p.ParseOneStmt(sql, "", "")
 	require.NoError(t, err)
 	return ret
@@ -555,6 +557,8 @@ func TestAllSchemas(t *testing.T) {
 }
 
 func mockBaseConn(t *testing.T) (*dbconn.DBConn, sqlmock.Sqlmock) {
+	t.Helper()
+
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	t.Cleanup(func() {

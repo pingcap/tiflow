@@ -394,6 +394,7 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 	// test save with table info and rollback
 	c.Assert(s.tracker.CreateSchemaIfNotExists(schemaName), IsNil)
 	stmt, err := parseSQL("create table " + tableName + " (c int);")
+	c.Assert(err, IsNil)
 	err = s.tracker.Exec(ctx, schemaName, stmt)
 	c.Assert(err, IsNil)
 	ti, err := s.tracker.GetTableInfo(table)
@@ -420,6 +421,7 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 	c.Assert(cp.GlobalPoint(), Equals, lastGlobalPoint)
 	c.Assert(cp.GlobalPointSaveTime(), Equals, lastGlobalPointSavedTime)
 	stmt, err = parseSQL("alter table " + tableName + " add c2 int;")
+	c.Assert(err, IsNil)
 	err = s.tracker.Exec(ctx, schemaName, stmt)
 	c.Assert(err, IsNil)
 	ti2, err := s.tracker.GetTableInfo(table)
