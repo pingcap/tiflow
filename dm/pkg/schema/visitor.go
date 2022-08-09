@@ -49,6 +49,8 @@ func (c currentDBSetter) Leave(n ast.Node) (node ast.Node, ok bool) {
 	if !ok {
 		return n, true
 	}
-	v.Schema = model.NewCIStr(c.currentDB)
+	if v.Schema.O == "" {
+		v.Schema = model.NewCIStr(c.currentDB)
+	}
 	return n, true
 }
