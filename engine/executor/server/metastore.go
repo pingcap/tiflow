@@ -31,10 +31,8 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/config"
-	"github.com/pingcap/tiflow/engine/pkg/dbutil"
 	"github.com/pingcap/tiflow/engine/pkg/meta"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
-	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -55,7 +53,7 @@ type MetastoreManager interface {
 	Close()
 
 	ServiceDiscoveryStore() *clientv3.Client
-	FrameworkStore() pkgOrm.Client
+	FrameworkClientConn() metaModel.ClientConn
 	BusinessClientConn() metaModel.ClientConn
 }
 
@@ -74,7 +72,7 @@ type metastoreManagerImpl struct {
 	initialized atomic.Bool
 
 	serviceDiscoveryStore *clientv3.Client
-	frameworkStore        pkgOrm.Client
+	frameworkClientConn   metaModel.ClientConn
 	businessClientConn    metaModel.ClientConn
 
 	creator MetastoreCreator
@@ -91,9 +89,9 @@ type MetastoreCreator interface {
 		ctx context.Context, params metaModel.StoreConfig,
 	) (metaModel.ClientConn, error)
 
-	CreateDBClientForFramework(
+	CreateClientConnForFramework(
 		ctx context.Context, params metaModel.StoreConfig,
-	) (pkgOrm.Client, error)
+	) (metaModel.ClientConn, error)
 }
 
 type metastoreCreatorImpl struct{}
@@ -139,14 +137,14 @@ func (c metastoreCreatorImpl) CreateClientConnForBusiness(
 	return cc, nil
 }
 
-func (c metastoreCreatorImpl) CreateDBClientForFramework(
+func (c metastoreCreatorImpl) CreateClientConnForFramework(
 	_ context.Context, params metaModel.StoreConfig,
-) (pkgOrm.Client, error) {
-	frameMetaClient, err := pkgOrm.NewClient(params, *dbutil.DefaultDBConfig())
+) (metaModel.ClientConn, error) {
+	cc, err := meta.NewClientConn(&params)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return frameMetaClient, err
+	return cc, err
 }
 
 func (m *metastoreManagerImpl) Init(ctx context.Context, discoveryClient client.DiscoveryClient) (retErr error) {
@@ -213,11 +211,12 @@ func (m *metastoreManagerImpl) initFrameworkStore(ctx context.Context, discovery
 	log.Info("Obtained framework metastore endpoint", zap.String("addr", resp.Address))
 
 	conf := parseStoreConfig([]byte(resp.Address))
-	dbCli, err := m.creator.CreateDBClientForFramework(ctx, conf)
+	cc, err := m.creator.CreateClientConnForFramework(ctx, conf)
 	if err != nil {
 		return err
 	}
-	m.frameworkStore = dbCli
+
+	m.frameworkClientConn = cc
 	return nil
 }
 
@@ -248,11 +247,11 @@ func (m *metastoreManagerImpl) ServiceDiscoveryStore() *clientv3.Client {
 	return m.serviceDiscoveryStore
 }
 
-func (m *metastoreManagerImpl) FrameworkStore() pkgOrm.Client {
+func (m *metastoreManagerImpl) FrameworkClientConn() metaModel.ClientConn {
 	if !m.initialized.Load() {
 		log.Panic("FrameworkStore is called before Init is successful")
 	}
-	return m.frameworkStore
+	return m.frameworkClientConn
 }
 
 func (m *metastoreManagerImpl) BusinessClientConn() metaModel.ClientConn {
@@ -268,9 +267,9 @@ func (m *metastoreManagerImpl) Close() {
 		m.serviceDiscoveryStore = nil
 	}
 
-	if m.frameworkStore != nil {
-		_ = m.frameworkStore.Close()
-		m.frameworkStore = nil
+	if m.frameworkClientConn != nil {
+		_ = m.frameworkClientConn.Close()
+		m.frameworkClientConn = nil
 	}
 
 	if m.businessClientConn != nil {

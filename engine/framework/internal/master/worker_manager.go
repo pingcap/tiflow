@@ -237,6 +237,11 @@ func (m *WorkerManager) HandleHeartbeat(msg *frameModel.HeartbeatPingMessage, fr
 		return
 	}
 
+	epoch := entry.Status().Epoch
+	if !m.checkWorkerEpochMatch(epoch, msg.WorkerEpoch) {
+		return
+	}
+
 	if msg.IsFinished {
 		entry.SetFinished()
 	}
@@ -341,7 +346,9 @@ func (m *WorkerManager) Tick(ctx context.Context) error {
 
 // BeforeStartingWorker is called by the BaseMaster BEFORE the executor runs the worker,
 // but after the executor records the time at which the worker is submitted.
-func (m *WorkerManager) BeforeStartingWorker(workerID frameModel.WorkerID, executorID model.ExecutorID) {
+func (m *WorkerManager) BeforeStartingWorker(
+	workerID frameModel.WorkerID, executorID model.ExecutorID, epoch frameModel.Epoch,
+) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -355,8 +362,10 @@ func (m *WorkerManager) BeforeStartingWorker(workerID frameModel.WorkerID, execu
 		m.nextExpireTime(),
 		workerEntryCreated,
 		&frameModel.WorkerStatus{
-			Code: frameModel.WorkerStatusCreated,
-		})
+			Code:  frameModel.WorkerStatusCreated,
+			Epoch: epoch,
+		},
+	)
 }
 
 // AbortCreatingWorker is called by BaseMaster if starting the worker has failed for sure.
@@ -564,6 +573,25 @@ func (m *WorkerManager) checkMasterEpochMatch(msgEpoch frameModel.Epoch) (ok boo
 			zap.String("master-id", m.masterID),
 			zap.Int64("msg-epoch", msgEpoch),
 			zap.Int64("own-epoch", m.epoch))
+		return false
+	}
+	return true
+}
+
+func (m *WorkerManager) checkWorkerEpochMatch(curEpoch, msgEpoch frameModel.Epoch) bool {
+	if msgEpoch > curEpoch {
+		log.Panic("We are a stale master still running",
+			zap.String("master-id", m.masterID), zap.Int64("own-epoch", m.epoch),
+			zap.Int64("own-worker-epoch", curEpoch),
+			zap.Int64("msg-worker-epoch", msgEpoch),
+		)
+	}
+	if msgEpoch < curEpoch {
+		log.Info("Message from small worker epoch dropped",
+			zap.String("master-id", m.masterID),
+			zap.Int64("own-worker-epoch", curEpoch),
+			zap.Int64("msg-worker-epoch", msgEpoch),
+		)
 		return false
 	}
 	return true

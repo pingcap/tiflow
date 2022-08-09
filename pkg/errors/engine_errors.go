@@ -408,7 +408,7 @@ var (
 		errors.RFCCodeText("DFLOW:ErrMetaEntryAlreadyExists"),
 	)
 	ErrMetaClientTypeNotSupport = errors.Normalize(
-		"meta client type not support:%d",
+		"meta client type not support:%s",
 		errors.RFCCodeText("DFLOW:ErrMetaClientTypeNotSupport"),
 	)
 
