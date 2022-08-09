@@ -104,3 +104,61 @@ func TestSelectorFilter(t *testing.T) {
 	require.Error(t, err)
 	require.True(t, ErrSelectorUnsatisfied.Is(err))
 }
+
+func TestCandidateExecutorGone(t *testing.T) {
+	t.Parallel()
+
+	provider := &mockExecutorInfoProvider{
+		infos: map[model.ExecutorID]schedModel.ExecutorInfo{
+			"executor-1": {
+				ID: "executor-1",
+				ResourceStatus: schedModel.ExecutorResourceStatus{
+					Capacity: 100,
+					Reserved: 50,
+					Used:     50,
+				},
+				Labels: label.Set{
+					"type":     "1",
+					"function": "1",
+				},
+			},
+			"executor-2": {
+				ID: "executor-2",
+				ResourceStatus: schedModel.ExecutorResourceStatus{
+					Capacity: 100,
+					Reserved: 50,
+					Used:     50,
+				},
+				Labels: label.Set{
+					"type":     "2",
+					"function": "1",
+				},
+			},
+			"executor-3": {
+				ID: "executor-2",
+				ResourceStatus: schedModel.ExecutorResourceStatus{
+					Capacity: 100,
+					Reserved: 50,
+					Used:     50,
+				},
+				Labels: label.Set{
+					"type":     "2",
+					"function": "2",
+				},
+			},
+		},
+	}
+	sf := newSelectorFilter(provider)
+	ret, err := sf.GetEligibleExecutors(context.Background(), &schedModel.SchedulerRequest{
+		Cost: 10,
+		Selectors: []label.Selector{
+			{
+				Key:    "function",
+				Target: "1",
+				Op:     "eq",
+			},
+		},
+	}, []model.ExecutorID{"executor-1", "executor-2", "executor-3", "executor-4"})
+	require.NoError(t, err)
+	require.Equal(t, []model.ExecutorID{"executor-1", "executor-2"}, ret)
+}

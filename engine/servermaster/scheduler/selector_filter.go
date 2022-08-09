@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tiflow/engine/model"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"go.uber.org/zap"
+	"golang.org/x/exp/slices"
 )
 
 type selectorFilter struct {
@@ -70,5 +71,6 @@ func (f *selectorFilter) GetEligibleExecutors(
 	for id := range executors {
 		ret = append(ret, id)
 	}
+	slices.Sort(ret) // for determinism
 	return ret, nil
 }

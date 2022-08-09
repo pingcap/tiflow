@@ -68,6 +68,63 @@ const (
 	noExecutorConstraint = ""
 )
 
+// getExecutor locates one unique executor onto which the task should be scheduled.
+// If no placement requirement is found, noExecutorConstraint is returned.
+func (f *resourceFilter) getExecutor(
+	ctx context.Context,
+	request *schedModel.SchedulerRequest,
+) (model.ExecutorID, error) {
+	var (
+		lastResourceID resModel.ResourceID
+		ret            model.ExecutorID
+	)
+
+	ret = noExecutorConstraint
+	for _, resource := range request.ExternalResources {
+		resourceID := resource.ID
+		// GetPlacementConstraint() may incur database queries.
+		// Note the performance.
+		executorID, hasConstraint, err := f.constrainer.GetPlacementConstraint(ctx, resource)
+		if err != nil {
+			if errors.ErrResourceDoesNotExist.Equal(err) {
+				return noExecutorConstraint, ErrResourceNotFound.GenWithStack(&ResourceNotFoundError{
+					ResourceID: resourceID,
+					Details:    err.Error(),
+				})
+			}
+			return noExecutorConstraint, err
+		}
+		if !hasConstraint {
+			// The resource requires no special placement.
+			log.Debug("No constraint is found for resource",
+				zap.String("resource-id", resourceID))
+			continue
+		}
+		log.Info("Found resource constraint for resource",
+			zap.String("resource-id", resourceID),
+			zap.String("executor-id", string(executorID)))
+
+		if ret != noExecutorConstraint && ret != executorID {
+			// Conflicting constraints.
+			// We are forced to schedule the task to
+			// two different executors, which is impossible.
+			log.Warn("Conflicting resource constraints",
+				zap.Any("resources", request.ExternalResources))
+			return noExecutorConstraint, ErrResourceConflict.GenWithStack(&ResourceConflictError{
+				ConflictingResources: [2]resModel.ResourceID{
+					resourceID, lastResourceID,
+				},
+				AssignedExecutors: [2]model.ExecutorID{
+					executorID, ret,
+				},
+			})
+		}
+		ret = executorID
+		lastResourceID = resourceID
+	}
+	return ret, nil
+}
+
 func (f *resourceFilter) GetEligibleExecutors(
 	ctx context.Context,
 	request *schedModel.SchedulerRequest,
@@ -77,62 +134,22 @@ func (f *resourceFilter) GetEligibleExecutors(
 		return candidates, nil
 	}
 
-	var (
-		lastResourceID  resModel.ResourceID
-		finalExecutorID model.ExecutorID
-	)
-
-	finalExecutorID = noExecutorConstraint
-	for _, resource := range request.ExternalResources {
-		resourceID := resource.ID
-		executorID, hasConstraint, err := f.constrainer.GetPlacementConstraint(ctx, resource)
-		if err != nil {
-			if errors.ErrResourceDoesNotExist.Equal(err) {
-				return nil, ErrResourceNotFound.GenWithStack(&ResourceNotFoundError{
-					ResourceID: resourceID,
-					Details:    err.Error(),
-				})
-			}
-			return nil, err
-		}
-		if !hasConstraint {
-			log.Info("No constraint is found for resource",
-				zap.String("resource-id", resourceID))
-			continue
-		}
-		log.Info("Found resource constraint for resource",
-			zap.String("resource-id", resourceID),
-			zap.String("executor-id", string(executorID)))
-
-		if finalExecutorID != noExecutorConstraint && finalExecutorID != executorID {
-			// Conflicting constraints.
-			// We are forced to schedule the task to
-			// two different executors, which is impossible.
-			log.Warn("Conflicting resource constraints",
-				zap.Any("resources", request.ExternalResources))
-			return nil, ErrResourceConflict.GenWithStack(&ResourceConflictError{
-				ConflictingResources: [2]resModel.ResourceID{
-					resourceID, lastResourceID,
-				},
-				AssignedExecutors: [2]model.ExecutorID{
-					executorID, finalExecutorID,
-				},
-			})
-		}
-		finalExecutorID = executorID
-		lastResourceID = resourceID
+	finalCandidate, err := f.getExecutor(ctx, request)
+	if err != nil {
+		return nil, err
 	}
 
-	if finalExecutorID == noExecutorConstraint {
+	if finalCandidate == noExecutorConstraint {
+		// Any executor is good.
 		return candidates, nil
 	}
 
-	// Check that finalExecutorID should be found in the input candidates.
-	if slices.Index(candidates, finalExecutorID) == -1 {
+	// Check that finalCandidate is found in the input candidates.
+	if slices.Index(candidates, finalCandidate) == -1 {
 		return nil, ErrFilterNoResult.GenWithStack(&FilterNoResultError{
 			FilterName:      "resource",
 			InputCandidates: candidates,
 		})
 	}
-	return []model.ExecutorID{finalExecutorID}, nil
+	return []model.ExecutorID{finalCandidate}, nil
 }
