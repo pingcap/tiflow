@@ -2830,20 +2830,34 @@ func (t *testMaster) TestDashboardAddress(c *check.C) {
 	defer os.Remove(file.Name())
 
 	cfg := NewConfig()
+	err = cfg.FromContent(SampleConfig)
+	c.Assert(err, check.IsNil)
+
+	err = log.InitLogger(&log.Config{
+		File: file.Name(),
+	})
+	c.Assert(err, check.IsNil)
+	defer func() {
+		err = log.InitLogger(&log.Config{})
+		c.Assert(err, check.IsNil)
+	}()
+
 	cfg.OpenAPI = true
 	cfg.LogFile = file.Name()
 	cfg.DataDir = c.MkDir()
 
 	server := NewServer(cfg)
 	server.leader.Store(oneselfLeader)
-	go server.ap.Start(context.Background())
-	go server.Start(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
+	go server.ap.Start(ctx)
+	go server.Start(ctx)
 	defer server.Close()
+	defer cancel()
 
 	// Wait server bootstraped.
-	time.Sleep(time.Second * 5)
+	time.Sleep(time.Second * 3)
 
 	content, err := ioutil.ReadFile(file.Name())
 	c.Assert(err, check.IsNil)
-	c.Assert(string(content), check.Matches, "Web UI enabled")
+	c.Assert(string(content), check.Matches, "[\\s\\S]*Web UI enabled[\\s\\S]*")
 }
