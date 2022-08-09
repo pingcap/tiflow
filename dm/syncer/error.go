@@ -75,21 +75,12 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 	showJobsLimit := fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET %d", rowOffset)
 	rowsLimit, err := db.QueryContext(ctx, showJobsLimit)
 	if err != nil {
-		rowsLimit.Close()
-		return "", err
-	}
-
-	var columnsLimit []string
-	columnsLimit, err = rowsLimit.Columns()
-	if err != nil {
-		rowsLimit.Close()
 		return "", err
 	}
 
 	var resultsLimit [][]string
-	resultsLimit, err = export.GetSpecifiedColumnValuesAndClose(rowsLimit, columnsLimit...)
+	resultsLimit, err = export.GetSpecifiedColumnValuesAndClose(rowsLimit, []string{"JOB_ID", "QUERY"}...)
 	if err != nil {
-		rowsLimit.Close()
 		return "", err
 	}
 
@@ -98,26 +89,17 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 		showJobs := fmt.Sprintf("ADMIN SHOW DDL JOBS %d", rowNum)
 		rows, err := db.QueryContext(ctx, showJobs)
 		if err != nil {
-			rows.Close()
-			return "", err
-		}
-
-		var columns []string
-		columns, err = rows.Columns()
-		if err != nil {
-			rows.Close()
 			return "", err
 		}
 
 		var results [][]string
-		results, err = export.GetSpecifiedColumnValuesAndClose(rows, columns...)
+		results, err = export.GetSpecifiedColumnValuesAndClose(rows, []string{"JOB_ID", "CREATE_TIME", "STATE"}...)
 		if err != nil {
-			rows.Close()
 			return "", err
 		}
 
 		for i := rowNum - 10; i < rowNum; i++ {
-			ddlCreateTimeStr := results[i][8]
+			ddlCreateTimeStr := results[i][1]
 			var ddlCreateTimeParse time.Time
 			ddlCreateTimeParse, err = time.Parse("2006-01-02 15:04:05", ddlCreateTimeStr)
 			if err != nil {
@@ -145,24 +127,17 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 							var rowsLimitNext *sql.Rows
 							rowsLimitNext, err = db.QueryContext(ctx, showJobsLimitNext)
 							if err != nil {
-								rowsLimitNext.Close()
-								return "", err
-							}
-
-							var columnsLimitNext []string
-							columnsLimitNext, err = rowsLimitNext.Columns()
-							if err != nil {
-								rowsLimitNext.Close()
 								return "", err
 							}
 
 							var resultsLimitNext [][]string
-							resultsLimitNext, err = export.GetSpecifiedColumnValuesAndClose(rowsLimitNext, columnsLimitNext...)
+							resultsLimitNext, err = export.GetSpecifiedColumnValuesAndClose(rowsLimitNext, []string{"JOB_ID", "QUERY"}...)
 							if err != nil {
-								rowsLimitNext.Close()
 								return "", err
 							}
 
+							// if new DDLs are written to TiDB after the last query 'ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET'
+							// we may get duplicate rows here, but it does not affect the checking
 							for k := 0; k < 10; k++ {
 								resultsLimit = append(resultsLimit, resultsLimitNext[k])
 							}
@@ -174,7 +149,7 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 							return "", err
 						}
 						if jobID == jobIDForLimit && ddl == resultsLimit[currentOffset][1] {
-							return results[i][11], nil
+							return results[i][2], nil
 						}
 						if jobIDForLimit <= jobID {
 							flag = true
