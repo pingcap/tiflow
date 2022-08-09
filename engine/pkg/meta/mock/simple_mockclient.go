@@ -23,6 +23,9 @@ import (
 	"github.com/pingcap/tiflow/pkg/errors"
 )
 
+// simple_mockclient is a simple mock kvclient using map to simulate db backend
+// IT DOESN'T support options, like 'key-range'、'key-prefix'
+
 type mockTxn struct {
 	c   context.Context
 	m   *MetaMock
