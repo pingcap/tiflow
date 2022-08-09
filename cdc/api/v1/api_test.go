@@ -813,6 +813,8 @@ func TestServerStatusLiveness(t *testing.T) {
 	// capture is owner
 	ctrl := gomock.NewController(t)
 	cp := mock_capture.NewMockCapture(ctrl)
+	etcdClient := mock_etcd.NewMockCDCEtcdClient(ctrl)
+	etcdClient.EXPECT().GetClusterID().Return("abcd").AnyTimes()
 	ownerRouter := newRouter(cp, newStatusProvider())
 	api := testCase{url: "/api/v1/status", method: "GET"}
 
@@ -823,6 +825,7 @@ func TestServerStatusLiveness(t *testing.T) {
 	cp.EXPECT().IsOwner().DoAndReturn(func() bool {
 		return true
 	}).AnyTimes()
+	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
 
 	// Alive.
 	alive := cp.EXPECT().Liveness().DoAndReturn(func() model.Liveness {
