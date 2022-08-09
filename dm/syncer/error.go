@@ -70,6 +70,30 @@ func isDropColumnWithIndexError(err error) bool {
 func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTime int64) (string, error) {
 	rowNum := 10
 	count := 0
+	rowOffset := 0
+
+	showJobsLimit := fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET %d", rowOffset)
+	fmt.Println(showJobsLimit)
+	rowsLimit, err := db.QueryContext(ctx, showJobsLimit)
+	if err != nil {
+		rowsLimit.Close()
+		return "", err
+	}
+
+	var columnsLimit []string
+	columnsLimit, err = rowsLimit.Columns()
+	if err != nil {
+		rowsLimit.Close()
+		return "", err
+	}
+
+	var resultsLimit [][]string
+	resultsLimit, err = export.GetSpecifiedColumnValuesAndClose(rowsLimit, columnsLimit...)
+	if err != nil {
+		rowsLimit.Close()
+		return "", err
+	}
+
 	for {
 		// every attempt try 10 history jobs
 		showJobs := fmt.Sprintf("ADMIN SHOW DDL JOBS %d", rowNum)
@@ -125,43 +149,42 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 
 				offset := rowNum + count - 10
 				for {
-					//var DDLJob string
-					//var jobIDForLimit int
-					showJob := fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET %d", offset)
-					fmt.Println(showJob)
-
-					rowsForLimit, err := db.QueryContext(ctx, showJob)
-					if err != nil {
-						rowsForLimit.Close()
-						return "", err
-					}
-
-					var columnsForLimit []string
-					columnsForLimit, err = rowsForLimit.Columns()
-					if err != nil {
-						rowsForLimit.Close()
-						return "", err
-					}
-
-					var resultsForLimit [][]string
-					resultsForLimit, err = export.GetSpecifiedColumnValuesAndClose(rowsForLimit, columnsForLimit...)
-					if err != nil {
-						rowsForLimit.Close()
-						return "", err
-					}
-
-					//err = db.QueryRowContext(ctx, showJob).Scan(&jobIDForLimit, &DDLJob)
-					//if err != nil {
-					//	//rows.Close()
-					//	return "", err
-					//}
-
 					flag := false
-					for j := 0; j < 10; j++ {
-						fmt.Printf("j: %d \n", j)
+					currentOffset := offset
+					for {
+						fmt.Printf("currentOffset: %d \n", currentOffset)
+						if currentOffset == len(resultsLimit)-1 {
+							rowOffset += 10
+							showJobsLimitNext := fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET %d", rowOffset)
+							fmt.Println(showJobsLimitNext)
+							rowsLimitNext, err := db.QueryContext(ctx, showJobsLimitNext)
+							if err != nil {
+								rowsLimitNext.Close()
+								return "", err
+							}
+
+							var columnsLimitNext []string
+							columnsLimitNext, err = rowsLimitNext.Columns()
+							if err != nil {
+								rowsLimitNext.Close()
+								return "", err
+							}
+
+							var resultsLimitNext [][]string
+							resultsLimitNext, err = export.GetSpecifiedColumnValuesAndClose(rowsLimitNext, columnsLimitNext...)
+							if err != nil {
+								rowsLimitNext.Close()
+								return "", err
+							}
+
+							for k := 0; k < 10; k++ {
+								resultsLimit = append(resultsLimit, resultsLimitNext[k])
+							}
+						}
+
 						var jobIDForLimit int
-						jobIDForLimit, err = strconv.Atoi(resultsForLimit[j][0])
-						if jobID == jobIDForLimit && ddl == resultsForLimit[j][1] {
+						jobIDForLimit, err = strconv.Atoi(resultsLimit[currentOffset][0])
+						if jobID == jobIDForLimit && ddl == resultsLimit[currentOffset][1] {
 							//rows.Close()
 							return results[i][11], nil
 						}
@@ -169,6 +192,8 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 							flag = true
 							break
 						}
+
+						currentOffset++
 					}
 					offset += 10
 					if flag {
