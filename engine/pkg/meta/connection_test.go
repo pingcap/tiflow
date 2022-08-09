@@ -26,7 +26,7 @@ func TestNewClientConn(t *testing.T) {
 
 	_, err := NewClientConn(&metaModel.StoreConfig{StoreType: "unknown"})
 	require.Regexp(t, regexp.QuoteMeta("[DFLOW:ErrMetaClientTypeNotSupport]"+
-		"meta client type not support:0"), err.Error())
+		"meta client type not support:unknown-kvclient"), err.Error())
 
 	_, err = NewClientConn(&metaModel.StoreConfig{StoreType: metaModel.StoreTypeEtcd})
 	require.Regexp(t, regexp.QuoteMeta("[DFLOW:ErrMetaNewClientFail]create meta client fail: "+

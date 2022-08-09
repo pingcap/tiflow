@@ -62,6 +62,7 @@ const (
 type workerEntry struct {
 	id         frameModel.WorkerID
 	executorID model.ExecutorID
+	epoch      frameModel.Epoch
 
 	mu       sync.Mutex
 	expireAt time.Time
