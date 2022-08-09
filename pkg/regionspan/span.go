@@ -224,7 +224,8 @@ func IsSubSpan(sub ComparableSpan, parents ...ComparableSpan) bool {
 	return false
 }
 
-// ToComparableSpan returns a comparable span.
+// ToComparableSpan returns a memcomparable span.
+// See: https://github.com/facebook/mysql-5.6/wiki/MyRocks-record-format
 func ToComparableSpan(span Span) ComparableSpan {
 	return ComparableSpan{
 		Start: codec.EncodeBytes(nil, span.Start),
