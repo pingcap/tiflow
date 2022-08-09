@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/util/codec"
@@ -108,10 +109,8 @@ func getAddIndexDDLSpan() Span {
 }
 
 const (
-	// MaxInt48 is the max value of int48.
-	MaxInt48 = 0x0000FFFFFFFFFFFF
 	// JobTableID is the id of `tidb_ddl_job`.
-	JobTableID = MaxInt48 - 1
+	JobTableID = ddl.JobTableID
 )
 
 // GetAllDDLSpan return all cdc interested spans for DDL.
