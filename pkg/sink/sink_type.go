@@ -23,6 +23,17 @@ const (
 	TxnSink
 )
 
+// String returns the string representation of the type.
+func (t Type) String() string {
+	switch t {
+	case RowSink:
+		return "RowSink"
+	case TxnSink:
+		return "TxnSink"
+	}
+	panic("unknown sink type")
+}
+
 const (
 	// KafkaSchema indicates the schema is kafka.
 	KafkaSchema = "kafka"
