@@ -2756,7 +2756,7 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 		shouldReTrackDownstreamIndex bool // retrack downstreamIndex
 	)
 
-	switch node := trackInfo.originStmt.(type) {
+	switch node := trackInfo.stmtCache.(type) {
 	case *ast.CreateDatabaseStmt:
 		shouldExecDDLOnSchemaTracker = true
 	case *ast.AlterDatabaseStmt:
@@ -2807,7 +2807,7 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 	case *ast.LockTablesStmt, *ast.UnlockTablesStmt, *ast.CleanupTableLockStmt, *ast.TruncateTableStmt:
 		break
 	default:
-		ec.tctx.L().DPanic("unhandled DDL type cannot be tracked", zap.Stringer("type", reflect.TypeOf(trackInfo.originStmt)))
+		ec.tctx.L().DPanic("unhandled DDL type cannot be tracked", zap.Stringer("type", reflect.TypeOf(trackInfo.stmtCache)))
 	}
 
 	if shouldReTrackDownstreamIndex {
@@ -2905,7 +2905,7 @@ func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext) (ma
 			return nil, err
 		}
 		sourceTable := ddlInfo.sourceTables[0]
-		switch ddlInfo.originStmt.(type) {
+		switch ddlInfo.stmtCache.(type) {
 		case *ast.DropDatabaseStmt:
 			delete(affectedTbls, sourceTable.Schema)
 		case *ast.DropTableStmt:
