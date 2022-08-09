@@ -26,7 +26,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
+	collector "github.com/pingcap/tiflow/cdc/sinkv2/metrics/kafka"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	pkafka "github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
@@ -49,6 +51,8 @@ type kafkaDMLProducer struct {
 	client sarama.Client
 	// asyncProducer is used to send messages to kafka asynchronously.
 	asyncProducer sarama.AsyncProducer
+	// collector is used to report metrics.
+	collector *collector.Collector
 	// closedMu is used to protect `closed`.
 	// We need to ensure that closed producers are never written to.
 	closedMu sync.RWMutex
@@ -60,6 +64,73 @@ type kafkaDMLProducer struct {
 	// failpointCh is used to inject failpoints to the run loop.
 	// Only used in test.
 	failpointCh chan error
+}
+
+// NewKafkaDMLProducer creates a new kafka producer.
+func NewKafkaDMLProducer(
+	ctx context.Context,
+	client sarama.Client,
+	adminClient pkafka.ClusterAdminClient,
+	errCh chan error,
+) (DMLProducer, error) {
+	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
+	role := contextutil.RoleFromCtx(ctx)
+	log.Info("Starting kafka sarama producer ...",
+		zap.String("namespace", changefeedID.Namespace),
+		zap.String("changefeed", changefeedID.ID), zap.Any("role", role))
+
+	asyncProducer, err := sarama.NewAsyncProducerFromClient(client)
+	if err != nil {
+		// Close the client to prevent the goroutine leak.
+		// Because it may be a long time to close the client,
+		// so close it asynchronously.
+		go func() {
+			if err := client.Close(); err != nil {
+				log.Error("Close sarama client with error", zap.Error(err),
+					zap.String("namespace", changefeedID.Namespace),
+					zap.String("changefeed", changefeedID.ID), zap.String("role", role.String()))
+			}
+			if err := adminClient.Close(); err != nil {
+				log.Error("Close kafka admin client with error", zap.Error(err),
+					zap.String("namespace", changefeedID.Namespace),
+					zap.String("changefeed", changefeedID.ID), zap.String("role", role.String()))
+			}
+		}()
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
+	collector := collector.New(changefeedID, role,
+		adminClient, client.Config().MetricRegistry)
+
+	k := &kafkaDMLProducer{
+		id:            changefeedID,
+		role:          role,
+		client:        client,
+		asyncProducer: asyncProducer,
+		collector:     collector,
+		closed:        false,
+		closedChan:    make(chan struct{}),
+		failpointCh:   make(chan error, 1),
+	}
+
+	// Start collecting metrics.
+	go k.collector.Run(ctx)
+
+	go func() {
+		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
+			select {
+			case <-ctx.Done():
+				return
+			case errCh <- err:
+			default:
+				log.Error("error channel is full", zap.Error(err),
+					zap.String("namespace", k.id.Namespace),
+					zap.String("changefeed", k.id.ID), zap.Any("role", role))
+			}
+		}
+	}()
+
+	return k, nil
 }
 
 func (k *kafkaDMLProducer) AsyncSendMessage(
@@ -168,6 +239,8 @@ func (k *kafkaDMLProducer) Close() {
 				zap.String("namespace", k.id.Namespace),
 				zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
 		}
+		// Finally, close the metric collector.
+		k.collector.Close()
 	}()
 }
 
@@ -202,59 +275,4 @@ func (k *kafkaDMLProducer) run(ctx context.Context) error {
 			return cerror.WrapError(cerror.ErrKafkaAsyncSendMessage, err)
 		}
 	}
-}
-
-// NewKafkaDMLProducer creates a new kafka producer.
-func NewKafkaDMLProducer(
-	ctx context.Context,
-	client sarama.Client,
-	errCh chan error,
-) (DMLProducer, error) {
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-	role := contextutil.RoleFromCtx(ctx)
-	log.Info("Starting kafka sarama producer ...",
-		zap.String("namespace", changefeedID.Namespace),
-		zap.String("changefeed", changefeedID.ID), zap.Any("role", role))
-
-	asyncProducer, err := sarama.NewAsyncProducerFromClient(client)
-	if err != nil {
-		// Close the client to prevent the goroutine leak.
-		// Because it may be a long time to close the client,
-		// so close it asynchronously.
-		go func() {
-			err := client.Close()
-			if err != nil {
-				log.Error("Close sarama client with error", zap.Error(err),
-					zap.String("namespace", changefeedID.Namespace),
-					zap.String("changefeed", changefeedID.ID), zap.String("role", role.String()))
-			}
-		}()
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
-
-	k := &kafkaDMLProducer{
-		id:            changefeedID,
-		role:          role,
-		client:        client,
-		asyncProducer: asyncProducer,
-		closed:        false,
-		closedChan:    make(chan struct{}),
-		failpointCh:   make(chan error, 1),
-	}
-
-	go func() {
-		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
-			select {
-			case <-ctx.Done():
-				return
-			case errCh <- err:
-			default:
-				log.Error("error channel is full", zap.Error(err),
-					zap.String("namespace", k.id.Namespace),
-					zap.String("changefeed", k.id.ID), zap.Any("role", role))
-			}
-		}
-	}()
-
-	return k, nil
 }
