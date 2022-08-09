@@ -68,9 +68,9 @@ func TestValidate(t *testing.T) {
 			errMsg: "",
 		},
 		{
-			caseName: "StoreTypeSQLCheckSchema",
+			caseName: "StoreTypeMySQLCheckSchema",
 			conf: &StoreConfig{
-				StoreType: StoreTypeSQL,
+				StoreType: StoreTypeMySQL,
 				Schema:    "",
 			},
 			errMsg: "schema: cannot be blank",
