@@ -192,6 +192,26 @@ var doc = `{
                 }
             }
         },
+        "/api/v1/leader": {
+            "get": {
+                "description": "gets the leader info",
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Get the leader info",
+                "responses": {
+                    "200": {
+                        "description": ""
+                    },
+                    "404": {
+                        "description": ""
+                    },
+                    "500": {
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/v1/leader/resign": {
             "post": {
                 "description": "resigns the leader",
@@ -201,26 +221,6 @@ var doc = `{
                 "summary": "Resign the leader",
                 "responses": {
                     "202": {
-                        "description": ""
-                    },
-                    "400": {
-                        "description": ""
-                    },
-                    "500": {
-                        "description": ""
-                    }
-                }
-            }
-        },
-        "/api/v1/status": {
-            "get": {
-                "description": "gets the status of servermaster.",
-                "produces": [
-                    "application/json"
-                ],
-                "summary": "Get the status of servermaster.",
-                "responses": {
-                    "200": {
                         "description": ""
                     },
                     "400": {

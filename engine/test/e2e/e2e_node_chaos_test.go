@@ -140,27 +140,13 @@ func TestNodeFailure(t *testing.T) {
 	}
 
 	log.Info("resign the leader and check if the leader is changed")
-	var leaderAddr string
-	for i := 0; i < nodeCount; i++ {
-		isLeader, err := cli.IsLeader(ctx, masterAddrs[i])
-		require.NoError(t, err)
-		if isLeader {
-			leaderAddr = masterAddrs[i]
-		}
-	}
-	require.NotEmpty(t, leaderAddr, "leader not found")
+	leaderAddr, err := cli.GetLeaderAddr(ctx)
+	require.NoError(t, err)
 	err = cli.ResignLeader(ctx, leaderAddr)
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
-		var newLeaderAddr string
-		for i := 0; i < nodeCount; i++ {
-			isLeader, err := cli.IsLeader(ctx, masterAddrs[i])
-			require.NoError(t, err)
-			if isLeader {
-				newLeaderAddr = masterAddrs[i]
-			}
-		}
-		if newLeaderAddr == "" {
+		newLeaderAddr, err := cli.GetLeaderAddr(ctx)
+		if err == e2e.ErrLeaderNotFound {
 			return false
 		}
 		require.NotEqual(t, leaderAddr, newLeaderAddr, "leader is not changed")

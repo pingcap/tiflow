@@ -49,9 +49,9 @@ type APIQueryJobResponse struct {
 	Status    int32  `json:"status"`
 }
 
-// APIServerStatus defines the json fields of server status
-type APIServerStatus struct {
-	IsLeader bool `json:"is_leader"`
+// APILeaderInfo defines the json fields of leader info.
+type APILeaderInfo struct {
+	AdvertiseAddr string `json:"advertise_addr"`
 }
 
 // ServerInfoProvider provides server info.
@@ -85,9 +85,8 @@ func RegisterOpenAPIRoutes(router *gin.Engine, openapi *OpenAPI) {
 	v1 := router.Group("/api/v1")
 	v1.Use(openapi.httpErrorHandler)
 
-	v1.GET("/status", openapi.ServerStatus)
-
 	leaderGroup := v1.Group("/leader")
+	leaderGroup.GET("", openapi.GetLeader)
 	leaderGroup.POST("/resign", openapi.ResignLeader)
 
 	jobGroup := v1.Group("/jobs")
@@ -119,18 +118,23 @@ func RegisterOpenAPIRoutes(router *gin.Engine, openapi *OpenAPI) {
 	})
 }
 
-// ServerStatus gets the status of servermaster.
-// @Summary Get the status of servermaster.
-// @Description gets the status of servermaster.
+// GetLeader returns the leader info.
+// @Summary Get the leader info
+// @Description gets the leader info
 // @Produce json
 // @Success 200
-// @Failure 400,500
-// @Router	/api/v1/status [get]
-func (o *OpenAPI) ServerStatus(c *gin.Context) {
-	status := APIServerStatus{
-		IsLeader: o.infoProvider.IsLeader(),
+// @Failure 404,500
+// @Router	/api/v1/leader [get]
+func (o *OpenAPI) GetLeader(c *gin.Context) {
+	leaderAddr, ok := o.infoProvider.LeaderAddr()
+	if ok {
+		leaderInfo := &APILeaderInfo{
+			AdvertiseAddr: leaderAddr,
+		}
+		c.IndentedJSON(http.StatusOK, leaderInfo)
+	} else {
+		c.AbortWithStatus(http.StatusNotFound)
 	}
-	c.IndentedJSON(http.StatusOK, status)
 }
 
 // ResignLeader resigns the leader.
