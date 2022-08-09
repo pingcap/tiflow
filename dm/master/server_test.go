@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
@@ -2820,4 +2821,29 @@ func (t *testMaster) TestOperateValidationError(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(resp.Result, check.IsFalse)
 	c.Assert(resp.Msg, check.Matches, ".*grpc error.*")
+}
+
+func (t *testMaster) TestDashboardAddress(c *check.C) {
+	// Temp file for test log output
+	file, err := ioutil.TempFile(c.MkDir(), "*")
+	c.Assert(err, check.IsNil)
+	defer os.Remove(file.Name())
+
+	cfg := NewConfig()
+	cfg.OpenAPI = true
+	cfg.LogFile = file.Name()
+	cfg.DataDir = c.MkDir()
+
+	server := NewServer(cfg)
+	server.leader.Store(oneselfLeader)
+	go server.ap.Start(context.Background())
+	go server.Start(context.Background())
+	defer server.Close()
+
+	// Wait server bootstraped.
+	time.Sleep(time.Second * 5)
+
+	content, err := ioutil.ReadFile(file.Name())
+	c.Assert(err, check.IsNil)
+	c.Assert(string(content), check.Matches, "Web UI enabled")
 }
