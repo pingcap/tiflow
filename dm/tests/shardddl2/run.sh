@@ -304,11 +304,7 @@ function DM_DROP_COLUMN_EXEC_ERROR() {
 function DM_DROP_COLUMN_ALL_DONE_CASE() {
 	# get worker of source2
 	w="1"
-<<<<<<< HEAD
-	got=$(grep "mysql-replica-01" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
-=======
 	got=$(grep -a "mysql-replica-02" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
->>>>>>> 1e7b84040 (test(dm): inject error to a not-auto-resume source (#6624))
 	if [[ "$got" -eq 0 ]]; then
 		w="2"
 	fi
