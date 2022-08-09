@@ -83,8 +83,8 @@ func (r *remoteBinlogReader) GenerateStreamFrom(location binlog.Location) (reade
 }
 
 type locationStream struct {
-	stream           reader.Streamer
-	locationRecorder *locationRecorder
+	stream reader.Streamer
+	*locationRecorder
 }
 
 func newLocationedStream(generator streamGenerator, location binlog.Location) (locationStream, error) {
@@ -288,29 +288,29 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 // GetEvent returns binlog event from upstream binlog or streamModifier. It's not
 // concurrent safe.
 // When return events from streamModifier, we should maintain these properties:
-// - Inject
-//   if we inject events [DDL1, DDL2] at (start) position 900, where start position
-//   900 has Insert1 event whose LogPos (end position) is 1000, we should return
-//   to caller like
+//   - Inject
+//     if we inject events [DDL1, DDL2] at (start) position 900, where start position
+//     900 has Insert1 event whose LogPos (end position) is 1000, we should return
+//     to caller like
 //   - DDL1, start position 900 LogPos 900, suffix 1
 //   - DDL2, start position 900 LogPos 900, suffix 2
 //   - Insert1, start position 900 LogPos 1000, suffix 0
-//   The DDLs are placed before DML because user may want to use Inject to change
-//   table structure for DML.
-//   when DDL need shard resync, for example, after DDL2's shard group finished,
-//   caller should use (LogPos 900, suffix 2) to reset streamer, then the next
-//   event from upstream binlog is Insert1 since upstream will ignore the suffix,
-//   and next event from streamModifier is unknown in this context.
-// - Replace
-//   if we replace events [DDL1, DDL2] at (start) position 900, where start position
-//   900 has DDL0 event whose LogPos (end position) is 1000, we should return to
-//   caller like
+//     The DDLs are placed before DML because user may want to use Inject to change
+//     table structure for DML.
+//     when DDL need shard resync, for example, after DDL2's shard group finished,
+//     caller should use (LogPos 900, suffix 2) to reset streamer, then the next
+//     event from upstream binlog is Insert1 since upstream will ignore the suffix,
+//     and next event from streamModifier is unknown in this context.
+//   - Replace
+//     if we replace events [DDL1, DDL2] at (start) position 900, where start position
+//     900 has DDL0 event whose LogPos (end position) is 1000, we should return to
+//     caller like
 //   - DDL1, start position 900 LogPos 900, suffix 1
 //   - DDL2, start position 900 LogPos 1000, suffix 0
-//   for shard resync, caller should use end position to reset streamer as above
-// - Skip
-//   the skipped event will still be sent to caller, with op = pb.ErrorOp_Skip,
-//   to let caller track schema and save checkpoints.
+//     for shard resync, caller should use end position to reset streamer as above
+//   - Skip
+//     the skipped event will still be sent to caller, with op = pb.ErrorOp_Skip,
+//     to let caller track schema and save checkpoints.
 func (c *StreamerController) GetEvent(tctx *tcontext.Context) (*replication.BinlogEvent, int, pb.ErrorOp, error) {
 	event, suffix, op, err := c.getEvent(tctx)
 
@@ -343,19 +343,19 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (*replication.Binl
 	}
 
 	if suffix != 0 {
-		c.locations.curStartLocation = c.upstream.locationRecorder.curStartLocation
+		c.locations.curStartLocation = c.upstream.curStartLocation
 		c.locations.curStartLocation.Suffix = suffix - 1
-		c.locations.curEndLocation = c.upstream.locationRecorder.curStartLocation
+		c.locations.curEndLocation = c.upstream.curStartLocation
 		c.locations.curEndLocation.Suffix = suffix
 		c.locations.txnEndLocation = c.locations.curEndLocation
 	} else {
 		if c.locations.curEndLocation.Suffix != 0 {
 			// this is the first upstream event after injection, keep suffix for start location
 			c.locations.curStartLocation = c.locations.curEndLocation
-			c.locations.curEndLocation = c.upstream.locationRecorder.curEndLocation
-			c.locations.txnEndLocation = c.upstream.locationRecorder.txnEndLocation
+			c.locations.curEndLocation = c.upstream.curEndLocation
+			c.locations.txnEndLocation = c.upstream.txnEndLocation
 		} else {
-			c.locations = c.upstream.locationRecorder.locations
+			c.locations = c.upstream.locations
 		}
 	}
 
@@ -398,7 +398,7 @@ LOOP:
 		}
 
 		startPos := mysql.Position{
-			Name: c.upstream.locationRecorder.curEndLocation.Position.Name,
+			Name: c.upstream.curEndLocation.Position.Name,
 			Pos:  c.lastEventFromUpstream.Header.LogPos - c.lastEventFromUpstream.Header.EventSize,
 		}
 		cmp := binlog.ComparePosition(startPos, frontOp.pos)
