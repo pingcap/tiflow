@@ -187,7 +187,7 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 			// When scheduler moves a table from one place to another place, the table
 			// start position will be checkpointTs instead of resolvedTs, which means
 			// redoTs can be less than barrierTs.
-			log.Debug("redoTs is less than current barrierTs",
+			log.Info("redoTs is less than current barrierTs",
 				zap.Int64("tableID", n.tableID),
 				zap.Uint64("redoTs", redoTs),
 				zap.Uint64("barrierTs", currentBarrierTs),
