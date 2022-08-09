@@ -147,13 +147,7 @@ func NewTestTracker(
 }
 
 // Exec runs an SQL (DDL) statement.
-func (tr *Tracker) Exec(ctx context.Context, db string, sql string) error {
-	tr.se.GetSessionVars().CurrentDB = db
-	stmt, err := tr.parser.ParseOneStmt(sql, "", "")
-	if err != nil {
-		return err
-	}
-
+func (tr *Tracker) Exec(ctx context.Context, db string, stmt ast.StmtNode) error {
 	visitor := currentDBSetter{
 		currentDB: db,
 	}
@@ -207,28 +201,22 @@ func (tr *Tracker) GetCreateTable(ctx context.Context, table *filter.Table) (str
 }
 
 // AllSchemas returns all schemas visible to the tracker (excluding system tables).
-func (tr *Tracker) AllSchemas() []*model.DBInfo {
-	// TODO: do it in TiDB
-	panic("not implemented")
+func (tr *Tracker) AllSchemas() []string {
+	return tr.upstreamTracker.AllSchemaNames()
 }
 
 // ListSchemaTables lists all tables in the schema.
 func (tr *Tracker) ListSchemaTables(schema string) ([]string, error) {
-	allSchemas := tr.AllSchemas()
-	for _, db := range allSchemas {
-		if db.Name.String() == schema {
-			tables := make([]string, len(db.Tables))
-			for i, t := range db.Tables {
-				tables[i] = t.Name.String()
-			}
-			return tables, nil
-		}
+	ret, err := tr.upstreamTracker.AllTableNamesOfSchema(model.NewCIStr(schema))
+	if err != nil {
+		return nil, dmterror.ErrSchemaTrackerUnSchemaNotExist.Generate(schema)
 	}
-	return nil, dmterror.ErrSchemaTrackerUnSchemaNotExist.Generate(schema)
+	return ret, nil
 }
 
 // GetSingleColumnIndices returns indices of input column if input column only has single-column indices
 // returns nil if input column has no indices, or has multi-column indices.
+// TODO: move out of this package!
 func (tr *Tracker) GetSingleColumnIndices(db, tbl, col string) ([]*model.IndexInfo, error) {
 	col = strings.ToLower(col)
 	t, err := tr.upstreamTracker.TableByName(model.NewCIStr(db), model.NewCIStr(tbl))
@@ -265,16 +253,15 @@ func (tr *Tracker) Reset() {
 }
 
 // Close closes a tracker.
-func (tr *Tracker) Close() error {
+func (tr *Tracker) Close() {
 	if tr == nil {
-		return nil
+		return
 	}
 	// prevent SchemaTracker being closed when
 	// other components are getting/setting table info
 	tr.Lock()
 	defer tr.Unlock()
 	tr.closed.Store(true)
-	return nil
 }
 
 // DropTable drops a table from this tracker.
