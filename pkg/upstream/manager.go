@@ -172,19 +172,6 @@ func (m *Manager) Close() {
 	})
 }
 
-// Visit on each upstream, return error on the first
-func (m *Manager) Visit(visitor func(up *Upstream) error) error {
-	var err error
-	m.ups.Range(func(k, v interface{}) bool {
-		err = visitor(v.(*Upstream))
-		if err != nil {
-			return false
-		}
-		return true
-	})
-	return err
-}
-
 // Tick checks and frees upstream that have not been used
 // for a long time to save resources.
 func (m *Manager) Tick(ctx context.Context,

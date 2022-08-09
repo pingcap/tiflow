@@ -150,7 +150,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 	// when there are different versions of cdc nodes in the cluster,
 	// the admin job may not be processed all the time. And http api relies on
 	// admin job, which will cause all http api unavailable.
-	o.handleJobs(stdCtx)
+	o.handleJobs()
 
 	if !o.clusterVersionConsistent(o.captures) {
 		return state, nil
@@ -458,7 +458,7 @@ func (o *ownerImpl) handleDrainCaptures(query *scheduler.Query, done chan<- erro
 	close(done)
 }
 
-func (o *ownerImpl) handleJobs(ctx context.Context) {
+func (o *ownerImpl) handleJobs() {
 	jobs := o.takeOwnerJobs()
 	for _, job := range jobs {
 		changefeedID := job.ChangefeedID
@@ -486,7 +486,7 @@ func (o *ownerImpl) handleJobs(ctx context.Context) {
 				cfReactor.scheduler.Rebalance()
 			}
 		case ownerJobTypeQuery:
-			job.done <- o.handleQueries(ctx, job.query)
+			job.done <- o.handleQueries(job.query)
 		case ownerJobTypeDebugInfo:
 			// TODO: implement this function
 		}
@@ -494,7 +494,7 @@ func (o *ownerImpl) handleJobs(ctx context.Context) {
 	}
 }
 
-func (o *ownerImpl) handleQueries(ctx context.Context, query *Query) error {
+func (o *ownerImpl) handleQueries(query *Query) error {
 	switch query.Tp {
 	case QueryAllChangeFeedStatuses:
 		ret := map[model.ChangeFeedID]*model.ChangeFeedStatus{}
@@ -599,7 +599,7 @@ func (o *ownerImpl) handleQueries(ctx context.Context, query *Query) error {
 		}
 		query.Data = ret
 	case QueryHealth:
-		isHealthy, err := o.isHealthy(ctx)
+		isHealthy, err := o.isHealthy()
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -608,7 +608,7 @@ func (o *ownerImpl) handleQueries(ctx context.Context, query *Query) error {
 	return nil
 }
 
-func (o *ownerImpl) isHealthy(ctx context.Context) (bool, error) {
+func (o *ownerImpl) isHealthy() (bool, error) {
 	if !o.changefeedTicked {
 		// Owner has not yet tick changefeeds, some changefeeds may be not
 		// initialized.
@@ -624,16 +624,6 @@ func (o *ownerImpl) isHealthy(ctx context.Context) (bool, error) {
 			// unhealthy, because owner can not schedule tables for now.
 			return false, nil
 		}
-	}
-
-	err := o.upstreamManager.Visit(func(upstream *upstream.Upstream) error {
-		if err := version.CheckStoreVersion(ctx, upstream.PDClient, 0); err != nil {
-			return errors.Trace(err)
-		}
-		return nil
-	})
-	if err != nil {
-		return false, errors.Trace(err)
 	}
 	return true, nil
 }

@@ -21,8 +21,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/errors"
-	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/scheduler"
@@ -759,19 +757,15 @@ func (h *heathScheduler) IsInitialized() bool {
 func TestIsHealthy(t *testing.T) {
 	t.Parallel()
 
-	pdClient := &gc.MockPDClient{}
 	o := &ownerImpl{
-		changefeeds:     make(map[model.ChangeFeedID]*changefeed),
-		upstreamManager: upstream.NewManager4Test(pdClient),
-		logLimiter:      rate.NewLimiter(1, 1),
+		changefeeds: make(map[model.ChangeFeedID]*changefeed),
+		logLimiter:  rate.NewLimiter(1, 1),
 	}
 	query := &Query{Tp: QueryHealth}
 
-	ctx := context.Background()
-
 	// Unhealthy, changefeeds are not ticked.
 	o.changefeedTicked = false
-	err := o.handleQueries(ctx, query)
+	err := o.handleQueries(query)
 	require.NoError(t, err)
 	require.False(t, query.Data.(bool))
 
@@ -785,31 +779,14 @@ func TestIsHealthy(t *testing.T) {
 			Version: version.MaxTiCDCVersion.String(),
 		},
 	}
-	err = o.handleQueries(ctx, query)
+	err = o.handleQueries(query)
 	require.NoError(t, err)
 	require.False(t, query.Data.(bool))
 
 	// make all captures version consistent.
-	o.captures["1"].Version = version.MinTiCDCVersion.String()
-
-	// Unhealthy, store version check failed
-	pdClient.GetAllStoresFunc = func(
-		ctx context.Context, opts ...pd.GetStoreOption,
-	) ([]*metapb.Store, error) {
-		return nil, errors.New("store version check failed")
-	}
-	err = o.handleQueries(ctx, query)
-	require.Error(t, err)
-	require.False(t, query.Data.(bool))
-
-	pdClient.GetAllStoresFunc = func(
-		ctx context.Context, opts ...pd.GetStoreOption,
-	) ([]*metapb.Store, error) {
-		return nil, nil
-	}
-
+	o.captures["2"].Version = version.MinTiCDCVersion.String()
 	// Healthy, no changefeed.
-	err = o.handleQueries(ctx, query)
+	err = o.handleQueries(query)
 	require.NoError(t, err)
 	require.True(t, query.Data.(bool))
 
@@ -819,20 +796,20 @@ func TestIsHealthy(t *testing.T) {
 	}
 	o.changefeeds[model.ChangeFeedID{ID: "1"}] = cf
 	o.changefeedTicked = true
-	err = o.handleQueries(ctx, query)
+	err = o.handleQueries(query)
 	require.NoError(t, err)
 	require.False(t, query.Data.(bool))
 
 	// Healthy, scheduler is set and return true.
 	cf.scheduler = &heathScheduler{init: true}
 	o.changefeedTicked = true
-	err = o.handleQueries(ctx, query)
+	err = o.handleQueries(query)
 	require.NoError(t, err)
 	require.True(t, query.Data.(bool))
 
 	// Unhealthy, changefeeds are not ticked.
 	o.changefeedTicked = false
-	err = o.handleQueries(ctx, query)
+	err = o.handleQueries(query)
 	require.NoError(t, err)
 	require.False(t, query.Data.(bool))
 
@@ -841,7 +818,7 @@ func TestIsHealthy(t *testing.T) {
 		scheduler: &heathScheduler{init: false},
 	}
 	o.changefeedTicked = true
-	err = o.handleQueries(ctx, query)
+	err = o.handleQueries(query)
 	require.NoError(t, err)
 	require.False(t, query.Data.(bool))
 }
