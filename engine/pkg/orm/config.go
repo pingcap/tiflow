@@ -19,7 +19,7 @@ import "time"
 const (
 	DefaultFrameMetaEndpoints = "127.0.0.1:3336"
 	DefaultFrameMetaUser      = "root"
-	DefaultFrameMetaPassword  = "123456"
+	DefaultFrameMetaPassword  = ""
 )
 
 const (

@@ -16,22 +16,21 @@ package resourcetypes
 import (
 	"context"
 
-	"github.com/pingcap/tiflow/engine/client"
-	pb "github.com/pingcap/tiflow/engine/enginepb"
+	perrors "github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // LocalFileResourceController defines operations specific to
 // the local file type.
 type LocalFileResourceController struct {
 	// clientManager is used to communicate with executors.
-	clientManager client.ClientsManager
+	clientGroup client.ExecutorGroup
 }
 
 // NewLocalFileResourceType creates a new LocalFileResourceController.
-func NewLocalFileResourceType(clientManager client.ClientsManager) *LocalFileResourceController {
-	return &LocalFileResourceController{clientManager: clientManager}
+func NewLocalFileResourceType(clientGroup client.ExecutorGroup) *LocalFileResourceController {
+	return &LocalFileResourceController{clientGroup: clientGroup}
 }
 
 // GCHandler returns a closure to the invoker to perform GC.
@@ -40,16 +39,10 @@ func (r *LocalFileResourceController) GCHandler() func(context.Context, *resMode
 }
 
 func (r *LocalFileResourceController) removeFilesOnExecutor(ctx context.Context, resource *resModel.ResourceMeta) error {
-	cli := r.clientManager.ExecutorClient(resource.Executor)
-	if cli == nil {
-		// TODO we should retry here.
-		// Ideally the retrying for unknown executors should reside in clientManager.
-		// We will deal with that later.
-		return errors.ErrUnknownExecutorID.FastGenByArgs(resource.Executor)
+	cli, err := r.clientGroup.GetExecutorClientB(ctx, resource.Executor)
+	if err != nil {
+		return perrors.Annotate(err, "removeFilesOnExecutor")
 	}
 
-	return cli.RemoveLocalResource(ctx, &pb.RemoveLocalResourceRequest{
-		ResourceId: resource.ID,
-		CreatorId:  resource.Worker,
-	})
+	return cli.RemoveResource(ctx, resource.Worker, resource.ID)
 }

@@ -27,7 +27,6 @@ import (
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	ctlcommon "github.com/pingcap/tiflow/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/master"
-	"github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/logutil"
 	libMetadata "github.com/pingcap/tiflow/engine/framework/metadata"
@@ -47,8 +46,9 @@ import (
 type JobMaster struct {
 	framework.BaseJobMaster
 
-	workerID frameModel.WorkerID
-	jobCfg   *config.JobCfg
+	// only use when init
+	// it will be outdated if user update job cfg.
+	initJobCfg *config.JobCfg
 
 	metadata              *metadata.MetaData
 	workerManager         *WorkerManager
@@ -78,8 +78,7 @@ func (j dmJobMasterFactory) DeserializeConfig(configBytes []byte) (registry.Work
 func (j dmJobMasterFactory) NewWorkerImpl(dCtx *dcontext.Context, workerID frameModel.WorkerID, masterID frameModel.MasterID, conf framework.WorkerConfig) (framework.WorkerImpl, error) {
 	log.L().Info("new dm jobmaster", zap.String(logutil.ConstFieldJobKey, workerID))
 	jm := &JobMaster{
-		workerID: workerID,
-		jobCfg:   conf.(*config.JobCfg),
+		initJobCfg: conf.(*config.JobCfg),
 	}
 	// nolint:errcheck
 	dCtx.Deps().Construct(func(m p2p.MessageHandlerManager) (p2p.MessageHandlerManager, error) {
@@ -91,7 +90,7 @@ func (j dmJobMasterFactory) NewWorkerImpl(dCtx *dcontext.Context, workerID frame
 
 func (jm *JobMaster) initComponents(ctx context.Context) error {
 	jm.Logger().Info("initializing the dm jobmaster components")
-	jm.messageAgent = dmpkg.NewMessageAgent(jm.workerID, jm, jm.messageHandlerManager, jm.Logger())
+	jm.messageAgent = dmpkg.NewMessageAgent(jm.ID(), jm, jm.messageHandlerManager, jm.Logger())
 	if err := jm.messageAgent.Init(ctx); err != nil {
 		return err
 	}
@@ -100,7 +99,7 @@ func (jm *JobMaster) initComponents(ctx context.Context) error {
 		return err
 	}
 
-	jm.checkpointAgent = checkpoint.NewCheckpointAgent(jm.jobCfg, jm.Logger())
+	jm.checkpointAgent = checkpoint.NewCheckpointAgent(jm.initJobCfg, jm.Logger())
 	jm.metadata = metadata.NewMetaData(jm.ID(), jm.MetaKVClient())
 	jm.taskManager = NewTaskManager(taskStatus, jm.metadata.JobStore(), jm.messageAgent, jm.Logger())
 	jm.workerManager = NewWorkerManager(workerStatus, jm.metadata.JobStore(), jm, jm.messageAgent, jm.checkpointAgent, jm.Logger())
@@ -114,13 +113,13 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 	if err := jm.initComponents(ctx); err != nil {
 		return err
 	}
-	if err := jm.preCheck(ctx); err != nil {
+	if err := jm.preCheck(ctx, jm.initJobCfg); err != nil {
 		return err
 	}
-	if err := jm.checkpointAgent.Init(ctx); err != nil {
+	if err := jm.checkpointAgent.Create(ctx); err != nil {
 		return err
 	}
-	return jm.taskManager.OperateTask(ctx, dmpkg.Create, jm.jobCfg, nil)
+	return jm.taskManager.OperateTask(ctx, dmpkg.Create, jm.initJobCfg, nil)
 }
 
 // Tick implements JobMasterImpl.Tick
@@ -160,7 +159,7 @@ func (jm *JobMaster) handleOnlineStatus(worker framework.WorkerHandle) error {
 	}
 
 	jm.taskManager.UpdateTaskStatus(taskStatus)
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerOnline))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerOnline, taskStatus.CfgModRevision))
 	return jm.messageAgent.UpdateClient(taskStatus.Task, worker.Unwrap())
 }
 
@@ -176,7 +175,7 @@ func (jm *JobMaster) OnWorkerOffline(worker framework.WorkerHandle, reason error
 		return jm.onWorkerFinished(taskStatus, worker)
 	}
 	jm.taskManager.UpdateTaskStatus(runtime.NewOfflineStatus(taskStatus.Task))
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerOffline))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerOffline, taskStatus.CfgModRevision))
 	if err := jm.messageAgent.UpdateClient(taskStatus.Task, nil); err != nil {
 		return err
 	}
@@ -187,7 +186,7 @@ func (jm *JobMaster) OnWorkerOffline(worker framework.WorkerHandle, reason error
 func (jm *JobMaster) onWorkerFinished(taskStatus runtime.TaskStatus, worker framework.WorkerHandle) error {
 	jm.Logger().Info("on worker finished", zap.String(logutil.ConstFieldWorkerKey, worker.ID()))
 	jm.taskManager.UpdateTaskStatus(taskStatus)
-	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerFinished))
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerFinished, taskStatus.CfgModRevision))
 	if err := jm.messageAgent.UpdateClient(taskStatus.Task, nil); err != nil {
 		return err
 	}
@@ -202,7 +201,12 @@ func (jm *JobMaster) OnWorkerStatusUpdated(worker framework.WorkerHandle, newSta
 		return nil
 	}
 	jm.Logger().Info("on worker status updated", zap.String(logutil.ConstFieldWorkerKey, worker.ID()), zap.String("extra bytes", string(newStatus.ExtBytes)))
-	return jm.handleOnlineStatus(worker)
+	if err := jm.handleOnlineStatus(worker); err != nil {
+		return err
+	}
+	// run task manager tick when worker status changed to operate task.
+	jm.taskManager.SetNextCheckTime(time.Now())
+	return nil
 }
 
 // OnJobManagerMessage implements JobMasterImpl.OnJobManagerMessage
@@ -259,11 +263,6 @@ outer:
 	return jm.messageAgent.Close(ctx)
 }
 
-// ID implements JobMasterImpl.ID
-func (jm *JobMaster) ID() worker.RunnableID {
-	return jm.workerID
-}
-
 // Workload implements JobMasterImpl.Workload
 func (jm *JobMaster) Workload() model.RescUnit {
 	// TODO: implement workload
@@ -292,20 +291,20 @@ func (jm *JobMaster) getInitStatus() ([]runtime.TaskStatus, []runtime.WorkerStat
 			return nil, nil, errors.Trace(err)
 		}
 		taskStatusList = append(taskStatusList, taskStatus)
-		workerStatusList = append(workerStatusList, runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, workerHandle.ID(), runtime.WorkerOnline))
+		workerStatusList = append(workerStatusList, runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, workerHandle.ID(), runtime.WorkerOnline, taskStatus.CfgModRevision))
 	}
 
 	return taskStatusList, workerStatusList, nil
 }
 
-func (jm *JobMaster) preCheck(ctx context.Context) error {
+func (jm *JobMaster) preCheck(ctx context.Context, cfg *config.JobCfg) error {
 	jm.Logger().Info("start pre-checking job config")
 
-	if err := master.AdjustTargetDB(ctx, jm.jobCfg.TargetDB); err != nil {
+	if err := master.AdjustTargetDB(ctx, cfg.TargetDB); err != nil {
 		return err
 	}
 
-	taskCfgs := jm.jobCfg.ToTaskCfgs()
+	taskCfgs := cfg.ToTaskCfgs()
 	dmSubtaskCfgs := make([]*dmconfig.SubTaskConfig, 0, len(taskCfgs))
 	for _, taskCfg := range taskCfgs {
 		dmSubtaskCfgs = append(dmSubtaskCfgs, taskCfg.ToDMSubTaskCfg())

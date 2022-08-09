@@ -117,7 +117,9 @@ func (s *serviceTestSuite) LoadMockData() {
 	}
 
 	for i := 1; i <= 4; i++ {
-		s.executorInfoProvider.AddExecutor(fmt.Sprintf("executor-%d", i))
+		s.executorInfoProvider.AddExecutor(
+			fmt.Sprintf("executor-%d", i),
+			fmt.Sprintf("addr-%d", i))
 	}
 }
 

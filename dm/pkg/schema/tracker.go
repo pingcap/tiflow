@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/errors"
 	tidbConfig "github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/ddl"
+	"github.com/pingcap/tidb/ddl/schematracker"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
@@ -64,6 +65,9 @@ var (
 		TiDBClusteredIndex: "OFF",
 	}
 )
+
+// TODO: use it in next PR.
+var _ = schematracker.NewSchemaTracker(0)
 
 func init() {
 	unistoreConfig.DefaultConf.Engine.VlogFileSize = int64(kv.TxnEntrySizeLimit)

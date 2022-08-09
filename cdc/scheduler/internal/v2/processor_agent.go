@@ -159,7 +159,7 @@ func NewAgent(
 	return ret, nil
 }
 
-func (a *agentImpl) Tick(ctx context.Context, liveness model.Liveness) error {
+func (a *agentImpl) Tick(ctx context.Context) error {
 	for _, errCh := range a.handlerErrChs {
 		select {
 		case <-ctx.Done():

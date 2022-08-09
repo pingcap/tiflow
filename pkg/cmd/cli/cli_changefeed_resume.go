@@ -188,6 +188,10 @@ func (o *resumeChangefeedOptions) validateParams(ctx context.Context, cmd *cobra
 		return cerror.ErrCliInvalidCheckpointTs.GenWithStackByArgs(o.overwriteCheckpointTs)
 	}
 
+	if checkpointTs == 0 {
+		return cerror.ErrCliInvalidCheckpointTs.GenWithStackByArgs(o.overwriteCheckpointTs)
+	}
+
 	if checkpointTs > oracle.ComposeTS(tso.Timestamp, tso.LogicTime) {
 		return cerror.ErrCliCheckpointTsIsInFuture.GenWithStackByArgs(checkpointTs)
 	}

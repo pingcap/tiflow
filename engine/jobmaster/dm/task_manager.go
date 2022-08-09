@@ -73,8 +73,10 @@ func (tm *TaskManager) OperateTask(ctx context.Context, op dmpkg.OperateType, jo
 
 	var stage metadata.TaskStage
 	switch op {
-	case dmpkg.Create, dmpkg.Update:
+	case dmpkg.Create:
 		return tm.jobStore.Put(ctx, metadata.NewJob(jobCfg))
+	case dmpkg.Update:
+		return tm.jobStore.UpdateConfig(ctx, jobCfg)
 	case dmpkg.Delete:
 		return tm.jobStore.Delete(ctx)
 	case dmpkg.Resume:
@@ -90,7 +92,7 @@ func (tm *TaskManager) OperateTask(ctx context.Context, op dmpkg.OperateType, jo
 
 // UpdateTaskStatus is called when receive task status from worker.
 func (tm *TaskManager) UpdateTaskStatus(taskStatus runtime.TaskStatus) {
-	tm.logger.Debug("update task status", zap.String("task_id", taskStatus.Task), zap.Int("stage", int(taskStatus.Stage)), zap.Int("unit", int(taskStatus.Unit)))
+	tm.logger.Debug("update task status", zap.String("task_id", taskStatus.Task), zap.Int("stage", int(taskStatus.Stage)), zap.Int("unit", int(taskStatus.Unit)), zap.Uint64("config_modify_revison", taskStatus.CfgModRevision))
 	tm.tasks.Store(taskStatus.Task, taskStatus)
 }
 

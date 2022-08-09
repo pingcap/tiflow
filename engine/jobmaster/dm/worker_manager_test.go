@@ -142,13 +142,24 @@ func (t *testDMJobmasterSuite) TestClearWorkerStatus() {
 	require.Len(t.T(), workerManager.WorkerStatus(), 1)
 
 	job := metadata.NewJob(&config.JobCfg{})
+	destroyError := errors.New("destroy error")
+
+	job.Tasks[source2] = metadata.NewTask(&config.TaskCfg{})
+	require.NoError(t.T(), workerManager.stopOutdatedWorkers(context.Background(), job))
+	messageAgent.On("SendMessage").Return(destroyError).Once()
+	job.Tasks[source2] = metadata.NewTask(&config.TaskCfg{ModRevision: 1})
+	require.EqualError(t.T(), workerManager.stopOutdatedWorkers(context.Background(), job), destroyError.Error())
+	messageAgent.On("SendMessage").Return(nil).Once()
+	job.Tasks[source2] = metadata.NewTask(&config.TaskCfg{ModRevision: 1})
+	require.NoError(t.T(), workerManager.stopOutdatedWorkers(context.Background(), job))
+
+	job = metadata.NewJob(&config.JobCfg{})
 	job.Tasks[source2] = metadata.NewTask(&config.TaskCfg{})
 	err := workerManager.stopUnneededWorkers(ctx, job)
 	require.NoError(t.T(), err)
 	require.Len(t.T(), workerManager.WorkerStatus(), 1)
 
 	delete(job.Tasks, source2)
-	destroyError := errors.New("destroy error")
 	messageAgent.On("SendMessage").Return(destroyError).Once()
 	err = workerManager.stopUnneededWorkers(ctx, job)
 	require.EqualError(t.T(), err, destroyError.Error())
@@ -157,6 +168,12 @@ func (t *testDMJobmasterSuite) TestClearWorkerStatus() {
 	messageAgent.On("SendMessage").Return(nil).Once()
 	err = workerManager.stopUnneededWorkers(ctx, job)
 	require.NoError(t.T(), err)
+	require.Len(t.T(), workerManager.WorkerStatus(), 1)
+
+	workerStatus2.Stage = runtime.WorkerOffline
+	workerManager.UpdateWorkerStatus(workerStatus2)
+	require.NoError(t.T(), workerManager.stopUnneededWorkers(ctx, job))
+	workerManager.removeOfflineWorkers()
 	require.Len(t.T(), workerManager.WorkerStatus(), 0)
 
 	err = workerManager.onJobNotExist(context.Background())
@@ -165,6 +182,8 @@ func (t *testDMJobmasterSuite) TestClearWorkerStatus() {
 
 	workerStatus1.Stage = runtime.WorkerFinished
 	workerManager.UpdateWorkerStatus(workerStatus1)
+	workerStatus2.Stage = runtime.WorkerOnline
+	workerManager.UpdateWorkerStatus(workerStatus2)
 
 	messageAgent.On("SendMessage").Return(destroyError).Once()
 	messageAgent.On("SendMessage").Return(nil).Once()
@@ -173,6 +192,10 @@ func (t *testDMJobmasterSuite) TestClearWorkerStatus() {
 	require.Len(t.T(), workerManager.WorkerStatus(), 2)
 	err = workerManager.onJobNotExist(context.Background())
 	require.EqualError(t.T(), err, destroyError.Error())
+	require.Len(t.T(), workerManager.WorkerStatus(), 2)
+	workerStatus1.Stage = runtime.WorkerOffline
+	workerManager.UpdateWorkerStatus(workerStatus1)
+	workerManager.removeOfflineWorkers()
 	require.Len(t.T(), workerManager.WorkerStatus(), 1)
 
 	workerManager.UpdateWorkerStatus(runtime.InitWorkerStatus("task", framework.WorkerDMDump, "worker-id"))
@@ -230,7 +253,7 @@ func (t *testDMJobmasterSuite) TestGetUnit() {
 	task.Cfg.TaskMode = dmconfig.ModeFull
 	workerManager := NewWorkerManager(nil, nil, nil, nil, mockAgent, log.L())
 
-	workerStatus := runtime.NewWorkerStatus("source", framework.WorkerDMDump, "worker-id-1", runtime.WorkerOnline)
+	workerStatus := runtime.NewWorkerStatus("source", framework.WorkerDMDump, "worker-id-1", runtime.WorkerOnline, 0)
 	require.Equal(t.T(), getNextUnit(task, workerStatus), framework.WorkerDMDump)
 	workerStatus.Stage = runtime.WorkerFinished
 	require.Equal(t.T(), getNextUnit(task, workerStatus), framework.WorkerDMLoad)
@@ -466,13 +489,26 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 
 	// mock remove task2 by update-job
 	delete(job.Tasks, source2)
+	job.Tasks[source1].Cfg.ModRevision++
 	jobStore.Put(context.Background(), job)
-	destroyError := errors.New("destroy error")
-	messageAgent.On("SendMessage").Return(destroyError).Once()
-	messageAgent.On("SendMessage").Return(nil).Once()
-	// check by update-job
+	messageAgent.On("SendMessage").Return(nil).Twice()
+	// check by update-job, task2 stops, task1 restarts
 	workerManager.SetNextCheckTime(time.Now())
-	// removed eventually
+	// both task removed eventually
+	require.Eventually(t.T(), func() bool {
+		messageAgent.Lock()
+		defer messageAgent.Unlock()
+		return len(messageAgent.Calls) == 2
+	}, 5*time.Second, 100*time.Millisecond)
+	workerStatus1.Stage = runtime.WorkerOffline
+	workerStatus3.Stage = runtime.WorkerOffline
+	workerManager.UpdateWorkerStatus(workerStatus1)
+	workerManager.UpdateWorkerStatus(workerStatus3)
+
+	// task1 eventually restarts
+	checkpointAgent.On("IsFresh", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Times(3)
+	workerAgent.On("CreateWorker").Return(worker1, nil).Once()
+	workerManager.SetNextCheckTime(time.Now())
 	require.Eventually(t.T(), func() bool {
 		return len(workerManager.WorkerStatus()) == 1
 	}, 5*time.Second, 100*time.Millisecond)
@@ -492,10 +528,20 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 
 	// mock delete job
 	jobStore.Delete(ctx)
+	destroyError := errors.New("destroy error")
 	messageAgent.On("SendMessage").Return(destroyError).Once()
 	messageAgent.On("SendMessage").Return(nil).Once()
+
 	// check by delete
 	workerManager.SetNextCheckTime(time.Now())
+	require.Eventually(t.T(), func() bool {
+		messageAgent.Lock()
+		defer messageAgent.Unlock()
+		return len(messageAgent.Calls) == 4
+	}, 5*time.Second, 100*time.Millisecond)
+
+	workerStatus.Stage = runtime.WorkerOffline
+	workerManager.UpdateWorkerStatus(workerStatus)
 	// deleted eventually
 	require.Eventually(t.T(), func() bool {
 		return len(workerManager.WorkerStatus()) == 0

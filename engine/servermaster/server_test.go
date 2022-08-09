@@ -248,7 +248,7 @@ type mockExecutorManager struct {
 
 func (m *mockExecutorManager) WatchExecutors(
 	ctx context.Context,
-) ([]model.ExecutorID, *notifier.Receiver[model.ExecutorStatusChange], error) {
+) (map[model.ExecutorID]string, *notifier.Receiver[model.ExecutorStatusChange], error) {
 	panic("implement me")
 }
 
