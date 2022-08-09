@@ -163,6 +163,7 @@ func NewBaseWorker(
 	workerID frameModel.WorkerID,
 	masterID frameModel.MasterID,
 	tp frameModel.WorkerType,
+	epoch frameModel.Epoch,
 ) BaseWorker {
 	var params workerParams
 	if err := ctx.Deps().Fill(&params); err != nil {
@@ -193,6 +194,7 @@ func NewBaseWorker(
 			JobID:     masterID,
 			ID:        workerID,
 			Type:      tp,
+			Epoch:     epoch,
 		},
 		timeoutConfig: config.DefaultTimeoutConfig(),
 
@@ -290,7 +292,9 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) (retErr error) {
 		w.messageSender,
 		w.frameMetaClient,
 		initTime,
-		w.clock)
+		w.clock,
+		w.workerStatus.Epoch,
+	)
 
 	w.workerMetaClient = metadata.NewWorkerMetadataClient(w.masterID, w.frameMetaClient)
 

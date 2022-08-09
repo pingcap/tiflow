@@ -37,6 +37,7 @@ import (
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/master"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	engineRuntime "github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework"
 	libMetadata "github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -128,7 +129,9 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 	// submit-job
 	cfgBytes, err := os.ReadFile(jobTemplatePath)
 	require.NoError(t.T(), err)
-	jobmaster, err := registry.GlobalWorkerRegistry().CreateWorker(dctx, framework.DMJobMaster, "dm-jobmaster", libMetadata.JobManagerUUID, cfgBytes)
+	jobmaster, err := registry.GlobalWorkerRegistry().CreateWorker(
+		dctx, framework.DMJobMaster, "dm-jobmaster", libMetadata.JobManagerUUID,
+		cfgBytes, int64(1))
 	require.NoError(t.T(), err)
 
 	// Init
@@ -148,7 +151,9 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 	// mock master failed and recoverd after init
 	require.NoError(t.T(), jobmaster.Close(context.Background()))
 
-	jobmaster, err = registry.GlobalWorkerRegistry().CreateWorker(dctx, framework.DMJobMaster, "dm-jobmaster", libMetadata.JobManagerUUID, cfgBytes)
+	jobmaster, err = registry.GlobalWorkerRegistry().CreateWorker(
+		dctx, framework.DMJobMaster, "dm-jobmaster", libMetadata.JobManagerUUID,
+		cfgBytes, int64(2))
 	require.NoError(t.T(), err)
 	verDB = conn.InitVersionDB()
 	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
@@ -194,7 +199,6 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	jm := &JobMaster{
-		workerID:      "jobmaster-id",
 		initJobCfg:    jobCfg,
 		BaseJobMaster: mockBaseJobmaster,
 	}
@@ -223,7 +227,6 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 
 	// recover
 	jm = &JobMaster{
-		workerID:      "jobmaster-id",
 		initJobCfg:    jobCfg,
 		BaseJobMaster: mockBaseJobmaster,
 		messageAgent:  mockMessageAgent,
@@ -315,7 +318,6 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 
 	// master failover
 	jm = &JobMaster{
-		workerID:        "jobmaster-id",
 		initJobCfg:      jobCfg,
 		BaseJobMaster:   mockBaseJobmaster,
 		checkpointAgent: mockCheckpointAgent,
@@ -374,7 +376,7 @@ type MockBaseJobmaster struct {
 	framework.BaseJobMaster
 }
 
-func (m *MockBaseJobmaster) JobMasterID() frameModel.MasterID {
+func (m *MockBaseJobmaster) ID() engineRuntime.RunnableID {
 	return "dm-jobmaster-id"
 }
 

@@ -49,7 +49,7 @@ type kafkaDDLProducer struct {
 }
 
 // NewKafkaDDLProducer creates a new kafka producer for replicating DDL.
-func NewKafkaDDLProducer(ctx context.Context, client sarama.Client) (*kafkaDDLProducer, error) {
+func NewKafkaDDLProducer(ctx context.Context, client sarama.Client) (DDLProducer, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
 	syncProducer, err := sarama.NewSyncProducerFromClient(client)

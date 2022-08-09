@@ -73,9 +73,9 @@ func (cc *clientConnImpl) Close() error {
 	return nil
 }
 
-// ClientType implements ClientType of ClientConn
-func (cc *clientConnImpl) ClientType() metaModel.ClientType {
-	return metaModel.EtcdKVClientType
+// StoreType implements StoreType of ClientConn
+func (cc *clientConnImpl) StoreType() metaModel.StoreType {
+	return metaModel.StoreTypeEtcd
 }
 
 // NewEtcdClient new a clientv3.Client.For easy test usage
