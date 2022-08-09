@@ -14,16 +14,11 @@
 package mysql
 
 import (
-	"context"
-	"database/sql"
 	"strings"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tiflow/cdc/model"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/quotes"
-	"go.uber.org/zap"
 )
 
 // prepareUpdate builds a parametrics UPDATE statement as following
