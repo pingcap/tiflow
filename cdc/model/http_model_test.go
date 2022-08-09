@@ -22,6 +22,8 @@ import (
 )
 
 func TestChangefeedCommonInfoMarshalJSON(t *testing.T) {
+	t.Parallel()
+
 	runningErr := &RunningError{
 		"",
 		string(errors.ErrProcessorUnknown.RFCCode()),
@@ -45,6 +47,8 @@ func TestChangefeedCommonInfoMarshalJSON(t *testing.T) {
 }
 
 func TestChangefeedDetailMarshalJSON(t *testing.T) {
+	t.Parallel()
+
 	runningErr := &RunningError{
 		"",
 		string(errors.ErrProcessorUnknown.RFCCode()),
@@ -65,4 +69,19 @@ func TestChangefeedDetailMarshalJSON(t *testing.T) {
 	cfInfoJSON, err = json.Marshal(cfDetail)
 	require.Nil(t, err)
 	require.Contains(t, string(cfInfoJSON), string(errors.ErrProcessorUnknown.RFCCode()))
+}
+
+func TestLiveness(t *testing.T) {
+	t.Parallel()
+
+	liveness := LivenessCaptureAlive
+
+	require.True(t, liveness.Store(LivenessCaptureAlive))
+	require.Equal(t, LivenessCaptureAlive, liveness.Load())
+
+	require.True(t, liveness.Store(LivenessCaptureStopping))
+	require.Equal(t, LivenessCaptureStopping, liveness.Load())
+
+	require.False(t, liveness.Store(LivenessCaptureAlive))
+	require.Equal(t, LivenessCaptureStopping, liveness.Load())
 }

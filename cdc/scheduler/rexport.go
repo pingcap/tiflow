@@ -63,6 +63,7 @@ const CheckpointCannotProceed = internal.CheckpointCannotProceed
 func NewAgent(
 	ctx context.Context,
 	captureID model.CaptureID,
+	liveness *model.Liveness,
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
 	etcdClient etcd.CDCEtcdClient,
@@ -92,6 +93,7 @@ func NewScheduler(
 func NewAgentV3(
 	ctx context.Context,
 	captureID model.CaptureID,
+	liveness *model.Liveness,
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
 	etcdClient etcd.CDCEtcdClient,
@@ -99,7 +101,9 @@ func NewAgentV3(
 	changefeedID model.ChangeFeedID,
 ) (Agent, error) {
 	return v3agent.NewAgent(
-		ctx, captureID, changefeedID, messageServer, messageRouter, etcdClient, executor)
+		ctx, captureID, liveness, changefeedID,
+		messageServer, messageRouter, etcdClient, executor,
+	)
 }
 
 // NewSchedulerV3 returns two-phase scheduler.

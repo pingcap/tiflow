@@ -44,9 +44,8 @@ func TestQueryStatusAPI(t *testing.T) {
 		metaKVClient      = kvmock.NewMetaMock()
 		mockBaseJobmaster = &MockBaseJobmaster{}
 		jm                = &JobMaster{
-			workerID:      "jobmaster-worker-id",
 			BaseJobMaster: mockBaseJobmaster,
-			metadata:      metadata.NewMetaData(mockBaseJobmaster.JobMasterID(), metaKVClient),
+			metadata:      metadata.NewMetaData(mockBaseJobmaster.ID(), metaKVClient),
 		}
 		job = &metadata.Job{
 			Tasks: map[string]*metadata.Task{
@@ -146,7 +145,6 @@ func TestQueryStatusAPI(t *testing.T) {
 
 	expectedStatus := `{
 	"JobMasterID": "dm-jobmaster-id",
-	"WorkerID": "jobmaster-worker-id",
 	"TaskStatus": {
 		"task1": {
 			"ExpectedStage": 3,
@@ -299,7 +297,7 @@ func TestUpdateJobCfg(t *testing.T) {
 		mockCheckpointAgent = &MockCheckpointAgent{}
 		messageAgent        = &dmpkg.MockMessageAgent{}
 		jobCfg              = &config.JobCfg{}
-		jobStore            = metadata.NewJobStore(mockBaseJobmaster.JobMasterID(), metaKVClient)
+		jobStore            = metadata.NewJobStore(mockBaseJobmaster.ID(), metaKVClient)
 		jm                  = &JobMaster{
 			BaseJobMaster:   mockBaseJobmaster,
 			checkpointAgent: mockCheckpointAgent,
