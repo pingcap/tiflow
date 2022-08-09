@@ -52,6 +52,22 @@ const (
 						"end_key": "6e00000000000000f8"
 					}
 				]
+			},
+			{
+				"id": "ticdc/meta_tidb_ddl_job",
+				"labels": [
+					{
+						"key": "data-type",
+						"value": "meta"
+					}
+				],
+				"rule_type": "key-range",
+				"data": [
+					{
+						"start_key": "748000fffffffffffffe00000000000000f8",
+						"end_key":   "748000ffffffffffffff00000000000000f8"
+					}
+				]
 			}
 		]
 	}`
