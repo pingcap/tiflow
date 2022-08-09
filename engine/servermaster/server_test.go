@@ -24,11 +24,7 @@ import (
 	"testing"
 	"time"
 
-	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
-
 	"github.com/phayes/freeport"
-	"github.com/stretchr/testify/require"
-
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -38,7 +34,9 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/servermaster/cluster"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
+	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"github.com/pingcap/tiflow/pkg/logutil"
+	"github.com/stretchr/testify/require"
 )
 
 func init() {

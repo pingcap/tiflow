@@ -16,11 +16,9 @@ package model
 import (
 	"encoding/json"
 
-	"github.com/pingcap/tiflow/pkg/label"
-
 	"github.com/pingcap/errors"
-
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
+	"github.com/pingcap/tiflow/pkg/label"
 )
 
 // NodeType is the type of a server instance, could be either server master or executor
