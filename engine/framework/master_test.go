@@ -161,7 +161,7 @@ func TestMasterCreateWorker(t *testing.T) {
 		workerID1,
 		executorNodeID1,
 		[]resourcemeta.ResourceID{"resource-1", "resource-2"},
-		epoch+2,
+		epoch+3,
 	)
 
 	workerID, err := master.CreateWorker(

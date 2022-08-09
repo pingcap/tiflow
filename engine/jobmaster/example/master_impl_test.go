@@ -68,7 +68,7 @@ func TestExampleMaster(t *testing.T) {
 		workerID,
 		executorNodeID,
 		nil,
-		epoch+2,
+		epoch+3,
 	)
 
 	err = master.Init(ctx)

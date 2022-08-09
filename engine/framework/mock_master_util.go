@@ -23,6 +23,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/tiflow/engine/pkg/client"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 
@@ -46,9 +47,7 @@ func MockBaseMaster(t *testing.T, id frameModel.MasterID, masterImpl MasterImpl)
 	ctx := dcontext.Background()
 	dp := deps.NewDeps()
 	cli, err := pkgOrm.NewMockClient()
-	if err != nil {
-		panic(err)
-	}
+	require.NoError(t, err)
 	err = dp.Provide(func() masterParamListForTest {
 		return masterParamListForTest{
 			MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
@@ -59,11 +58,29 @@ func MockBaseMaster(t *testing.T, id frameModel.MasterID, masterImpl MasterImpl)
 			ServerMasterClient:    client.NewMockServerMasterClient(gomock.NewController(t)),
 		}
 	})
-	if err != nil {
-		panic(err)
-	}
+	require.NoError(t, err)
 
 	ctx = ctx.WithDeps(dp)
+	ctx.Environ.NodeID = "test-node-id"
+	ctx.Environ.Addr = "127.0.0.1:10000"
+	ctx.ProjectInfo = tenant.TestProjectInfo
+	epoch, err := cli.GenEpoch(ctx)
+	require.NoError(t, err)
+	masterMeta := &frameModel.MasterMetaKVData{
+		ProjectID:  tenant.TestProjectInfo.UniqueID(),
+		Addr:       ctx.Environ.Addr,
+		NodeID:     ctx.Environ.NodeID,
+		ID:         id,
+		Tp:         FakeJobMaster,
+		Epoch:      epoch,
+		StatusCode: frameModel.MasterStatusUninit,
+	}
+	masterMetaBytes, err := masterMeta.Marshal()
+	require.NoError(t, err)
+	ctx.Environ.MasterMetaBytes = masterMetaBytes
+
+	err = cli.UpsertJob(ctx, masterMeta)
+	require.NoError(t, err)
 
 	ret := NewBaseMaster(
 		ctx,
@@ -107,6 +124,7 @@ func MockBaseMasterCreateWorker(
 
 	mockExecutorClient.EXPECT().DispatchTask(gomock.Any(),
 		gomock.Eq(&client.DispatchTaskArgs{
+			ProjectInfo:  tenant.TestProjectInfo,
 			WorkerID:     workerID,
 			MasterID:     masterID,
 			WorkerType:   int64(workerType),

@@ -301,6 +301,7 @@ func TestJobManagerRecover(t *testing.T) {
 
 	mockMaster := framework.NewMockMasterImpl(t, "", "job-manager-recover-test")
 	// prepare mockvk with two job masters
+
 	meta := []*frameModel.MasterMetaKVData{
 		{
 			ID: "master-1",
@@ -326,7 +327,7 @@ func TestJobManagerRecover(t *testing.T) {
 	}
 	err := mgr.OnMasterRecovered(ctx)
 	require.Nil(t, err)
-	require.Equal(t, 2, mgr.JobFsm.JobCount(pb.QueryJobResponse_dispatched))
+	require.Equal(t, 3, mgr.JobFsm.JobCount(pb.QueryJobResponse_dispatched))
 	queryResp := mgr.QueryJob(ctx, &pb.QueryJobRequest{JobId: "master-1"})
 	require.Nil(t, queryResp.Err)
 	require.Equal(t, pb.QueryJobResponse_dispatched, queryResp.Status)
@@ -395,6 +396,7 @@ func TestJobManagerWatchJobStatuses(t *testing.T) {
 	snap, stream, err := mgr.WatchJobStatuses(ctx)
 	require.NoError(t, err)
 	require.Equal(t, map[frameModel.MasterID]frameModel.MasterStatusCode{
+		"cancel-job-test":    frameModel.MasterStatusUninit,
 		"job-to-be-canceled": frameModel.MasterStatusStopped,
 	}, snap)
 
