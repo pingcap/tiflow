@@ -171,7 +171,7 @@ func TestQueryStatusAPI(t *testing.T) {
 			"WorkerID": "worker2",
 			"ConfigOutdated": true,
 			"Status": {
-				"ErrorMsg": "task task2 finished but status not found",
+				"ErrorMsg": "task task2 is finished and status has been deleted",
 				"Unit": 11,
 				"Stage": 4,
 				"Result": null,

@@ -100,7 +100,7 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 					cfgModRevision = workerStatus.CfgModRevision
 					finishedStatus, ok := jm.finishedStatus.Load(taskID)
 					if !ok {
-						queryStatusResp = &dmpkg.QueryStatusResponse{Unit: workerStatus.Unit, Stage: metadata.StageFinished, ErrorMsg: fmt.Sprintf("task %s finished but status not found", taskID)}
+						queryStatusResp = &dmpkg.QueryStatusResponse{Unit: workerStatus.Unit, Stage: metadata.StageFinished, ErrorMsg: fmt.Sprintf("task %s is finished and status has been deleted", taskID)}
 					} else {
 						s := finishedStatus.(runtime.FinishedTaskStatus)
 						queryStatusResp = &dmpkg.QueryStatusResponse{Unit: workerStatus.Unit, Stage: metadata.StageFinished, Result: s.Result, Status: s.Status}
