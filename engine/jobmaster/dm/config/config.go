@@ -186,7 +186,7 @@ func FromTaskCfgs(taskCfgs []*TaskCfg) *JobCfg {
 
 // toDMTaskConfig transform a jobCfg to DM TaskCfg.
 func (c *JobCfg) toDMTaskConfig() (*dmconfig.TaskConfig, error) {
-	dmTaskCfg := &dmconfig.TaskConfig{}
+	dmTaskCfg := dmconfig.NewTaskConfig()
 
 	// Copy all the fields contained in dmTaskCfg.
 	content, err := c.Yaml()
