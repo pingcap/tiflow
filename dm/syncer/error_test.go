@@ -219,7 +219,6 @@ func TestGetDDLStatusFromTiDB(t *testing.T) {
 		adminShowDDLJobsLimitSQL2 string
 	)
 
-	var err error
 	db, mock, err := sqlmock.New()
 	require.Nil(t, err)
 
