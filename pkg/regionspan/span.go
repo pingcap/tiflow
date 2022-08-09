@@ -148,13 +148,14 @@ func KeyInSpan(k []byte, span ComparableSpan) bool {
 }
 
 // StartCompare compares two start keys.
-// Nil means Negative infinity
 // The result will be 0 if lhs==rhs, -1 if lhs < rhs, and +1 if lhs > rhs
 func StartCompare(lhs []byte, rhs []byte) int {
 	if lhs == nil && rhs == nil {
 		return 0
 	}
 
+	// Nil means Negative infinity.
+	// It's difference with EndCompare.
 	if lhs == nil {
 		return -1
 	}
@@ -167,13 +168,14 @@ func StartCompare(lhs []byte, rhs []byte) int {
 }
 
 // EndCompare compares two end keys.
-// Nil means Positive infinity
 // The result will be 0 if lhs==rhs, -1 if lhs < rhs, and +1 if lhs > rhs
 func EndCompare(lhs []byte, rhs []byte) int {
 	if lhs == nil && rhs == nil {
 		return 0
 	}
 
+	// Nil means Positive infinity.
+	// It's difference with StartCompare.
 	if lhs == nil {
 		return 1
 	}
