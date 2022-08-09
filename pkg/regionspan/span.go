@@ -26,6 +26,16 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	// MaxInt48 is the max value of int48.
+	MaxInt48 = 0x0000FFFFFFFFFFFF
+	// JobTableID is the id of `tidb_ddl_job`.
+	JobTableID = MaxInt48 - 1
+)
+
+// UpperBoundKey represents the maximum value.
+var UpperBoundKey = []byte{255, 255, 255, 255, 255}
+
 // Span represents an arbitrary kv range
 type Span struct {
 	Start []byte
@@ -37,8 +47,25 @@ func (s Span) String() string {
 	return fmt.Sprintf("[%s, %s)", hex.EncodeToString(s.Start), hex.EncodeToString(s.End))
 }
 
-// UpperBoundKey represents the maximum value.
-var UpperBoundKey = []byte{255, 255, 255, 255, 255}
+// Hack will set End as UpperBoundKey if End is Nil.
+func (s Span) Hack() Span {
+	s.Start, s.End = hackSpan(s.Start, s.End)
+	return s
+}
+
+func hackSpan(originStart []byte, originEnd []byte) (start []byte, end []byte) {
+	start = originStart
+	end = originEnd
+
+	if start == nil {
+		start = []byte{}
+	}
+
+	if end == nil {
+		end = UpperBoundKey
+	}
+	return
+}
 
 // ComparableSpan represents an arbitrary kv range which is comparable
 type ComparableSpan Span
@@ -62,31 +89,12 @@ func (s ComparableSpan) Clone() ComparableSpan {
 	}
 }
 
-// Hack will set End as UpperBoundKey if End is Nil.
-func (s Span) Hack() Span {
-	s.Start, s.End = hackSpan(s.Start, s.End)
-	return s
-}
-
-func hackSpan(originStart []byte, originEnd []byte) (start []byte, end []byte) {
-	start = originStart
-	end = originEnd
-
-	if originStart == nil {
-		start = []byte{}
-	}
-
-	if originEnd == nil {
-		end = UpperBoundKey
-	}
-	return
-}
-
 // GetTableSpan returns the span to watch for the specified table
 func GetTableSpan(tableID int64) Span {
+	tablePrefix := tablecodec.GenTablePrefix(tableID)
 	sep := byte('_')
 	recordMarker := byte('r')
-	tablePrefix := tablecodec.GenTablePrefix(tableID)
+
 	var start, end kv.Key
 	// ignore index keys.
 	start = append(tablePrefix, sep, recordMarker)
@@ -106,13 +114,6 @@ func getDDLSpan() Span {
 func getAddIndexDDLSpan() Span {
 	return getMetaListKey("DDLJobAddIdxList")
 }
-
-const (
-	// MaxInt48 is the max value of int48.
-	MaxInt48 = 0x0000FFFFFFFFFFFF
-	// JobTableID is the id of `tidb_ddl_job`.
-	JobTableID = MaxInt48 - 1
-)
 
 // GetAllDDLSpan return all cdc interested spans for DDL.
 func GetAllDDLSpan() []Span {
@@ -134,16 +135,6 @@ func getMetaListKey(key string) Span {
 		Start: start,
 		End:   end,
 	}
-}
-
-// KeyInSpans check if k in the range of spans.
-func KeyInSpans(k []byte, spans []ComparableSpan) bool {
-	for _, span := range spans {
-		if KeyInSpan(k, span) {
-			return true
-		}
-	}
-	return false
 }
 
 // KeyInSpan check if k in the span range.
@@ -194,7 +185,7 @@ func EndCompare(lhs []byte, rhs []byte) int {
 	return bytes.Compare(lhs, rhs)
 }
 
-// Intersect return the intersect part of lhs and rhs span.
+// Intersect return to intersect part of lhs and rhs span.
 // Return error if there's no intersect part
 func Intersect(lhs ComparableSpan, rhs ComparableSpan) (span ComparableSpan, err error) {
 	if lhs.Start != nil && EndCompare(lhs.Start, rhs.End) >= 0 ||
@@ -231,7 +222,7 @@ func IsSubSpan(sub ComparableSpan, parents ...ComparableSpan) bool {
 	return false
 }
 
-// ToComparableSpan returns a memcomparable span
+// ToComparableSpan returns a comparable span.
 func ToComparableSpan(span Span) ComparableSpan {
 	return ComparableSpan{
 		Start: codec.EncodeBytes(nil, span.Start),
@@ -239,7 +230,7 @@ func ToComparableSpan(span Span) ComparableSpan {
 	}
 }
 
-// ToComparableKey returns a memcomparable key.
+// ToComparableKey returns a comparable key.
 func ToComparableKey(key []byte) []byte {
 	return codec.EncodeBytes(nil, key)
 }
