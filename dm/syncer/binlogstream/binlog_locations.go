@@ -53,6 +53,9 @@ type locations struct {
 	txnEndLocation binlog.Location
 }
 
+// updateHookFunc is used to run some logic before locationRecorder.update.
+type updateHookFunc func()
+
 // locationRecorder is not concurrent-safe.
 type locationRecorder struct {
 	locations
@@ -61,7 +64,7 @@ type locationRecorder struct {
 	// distinguish DML query event.
 	inDMLQuery bool
 
-	preUpdate []func()
+	preUpdateHook []updateHookFunc
 }
 
 func (l *locationRecorder) reset(loc binlog.Location) {
@@ -107,15 +110,7 @@ func (l *locationRecorder) updateCurStartGTID() {
 	}
 }
 
-func (l *locationRecorder) setCurEndGTID(e *replication.BinlogEvent) {
-	gtidStr, err := event.GetGTIDStr(e)
-	if err != nil {
-		log.L().DPanic("failed to get GTID from event",
-			zap.Any("event", e),
-			zap.Error(err))
-		return
-	}
-
+func (l *locationRecorder) setCurEndGTID(gtidStr string) {
 	gset := l.curEndLocation.GetGTID()
 
 	if gset == nil {
@@ -125,7 +120,7 @@ func (l *locationRecorder) setCurEndGTID(e *replication.BinlogEvent) {
 	}
 
 	clone := gset.Clone()
-	err = clone.Update(gtidStr)
+	err := clone.Update(gtidStr)
 	if err != nil {
 		log.L().DPanic("failed to update GTID set",
 			zap.String("GTID", gtidStr),
@@ -146,11 +141,11 @@ func (l *locationRecorder) setCurEndGTID(e *replication.BinlogEvent) {
 // - curEndLocation is tried to be updated in-place
 // - txnEndLocation is assigned to curEndLocation when `e` is the last event of a transaction.
 func (l *locationRecorder) update(e *replication.BinlogEvent) {
-	for _, f := range l.preUpdate {
+	for _, f := range l.preUpdateHook {
 		f()
 	}
 	// reset to zero value of slice after executed
-	l.preUpdate = nil
+	l.preUpdateHook = nil
 
 	// GTID part is maintained separately
 	l.curStartLocation.Position = l.curEndLocation.Position
@@ -175,15 +170,27 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 	switch ev := e.Event.(type) {
 	case *replication.GTIDEvent:
 		// following event should have new GTID set as end location
-		e2 := e
-		l.preUpdate = append(l.preUpdate, func() {
-			l.setCurEndGTID(e2)
+		gtidStr, err := event.GetGTIDStr(e)
+		if err != nil {
+			log.L().DPanic("failed to get GTID from event",
+				zap.Any("event", e),
+				zap.Error(err))
+			break
+		}
+		l.preUpdateHook = append(l.preUpdateHook, func() {
+			l.setCurEndGTID(gtidStr)
 		})
 	case *replication.MariadbGTIDEvent:
 		// following event should have new GTID set as end location
-		e2 := e
-		l.preUpdate = append(l.preUpdate, func() {
-			l.setCurEndGTID(e2)
+		gtidStr, err := event.GetGTIDStr(e)
+		if err != nil {
+			log.L().DPanic("failed to get GTID from event",
+				zap.Any("event", e),
+				zap.Error(err))
+			break
+		}
+		l.preUpdateHook = append(l.preUpdateHook, func() {
+			l.setCurEndGTID(gtidStr)
 		})
 
 		if !ev.IsDDL() {
@@ -195,7 +202,7 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 		l.inDMLQuery = false
 
 		// next event can update its GTID set of start location
-		l.preUpdate = append(l.preUpdate, l.updateCurStartGTID)
+		l.preUpdateHook = append(l.preUpdateHook, l.updateCurStartGTID)
 	case *replication.QueryEvent:
 		query := strings.TrimSpace(string(ev.Query))
 		switch query {
@@ -214,7 +221,7 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 		}
 
 		// next event can update its GTID set of start location
-		l.preUpdate = append(l.preUpdate, l.updateCurStartGTID)
+		l.preUpdateHook = append(l.preUpdateHook, l.updateCurStartGTID)
 
 		l.saveTxnEndLocation()
 	}
