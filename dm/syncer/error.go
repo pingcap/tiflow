@@ -67,17 +67,15 @@ func isDropColumnWithIndexError(err error) bool {
 
 // getDDLStatusFromTiDB retrieves the synchronizing status of DDL from TiDB
 // hence here db should be TiDB database
-// createTime should be based on the timezone of downstream, and its unit is second
+// createTime should be based on the timezone of downstream, and its unit is second.
 func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTime int64) (string, error) {
 	rowNum := 10
-	count := 0
 	rowOffset := 0
-	var resultsLimit [][]string
+	queryMap := make(map[int]string)
 
 	for {
 		// every attempt try 10 history jobs
 		showJobs := fmt.Sprintf("ADMIN SHOW DDL JOBS %d", rowNum)
-		fmt.Println(showJobs)
 		jobsRows, err := db.QueryContext(ctx, showJobs)
 		if err != nil {
 			return "", err
@@ -106,62 +104,47 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 					return "", err
 				}
 
-				offset := rowNum + count - 10
 				for {
-					flag := false
-					currentOffset := offset
-					for {
-						if len(resultsLimit) == 0 || currentOffset == len(resultsLimit)-1 {
-							// expand resultsLimit for deeper search
-							showJobsLimitNext := fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET %d", rowOffset)
-							fmt.Println(showJobsLimitNext)
-							var rowsLimitNext *sql.Rows
-							rowsLimitNext, err = db.QueryContext(ctx, showJobsLimitNext)
-							if err != nil {
-								return "", err
-							}
-
-							var resultsLimitNext [][]string
-							resultsLimitNext, err = export.GetSpecifiedColumnValuesAndClose(rowsLimitNext, "JOB_ID", "QUERY")
-							if err != nil {
-								return "", err
-							}
-
-							// if new DDLs are written to TiDB after the last query 'ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET'
-							// we may get duplicate rows here, but it does not affect the checking
-							for k := 0; k < 10; k++ {
-								resultsLimit = append(resultsLimit, resultsLimitNext[k])
-							}
-							rowOffset += 10
-						}
-
-						var jobIDForLimit int
-						jobIDForLimit, err = strconv.Atoi(resultsLimit[currentOffset][0])
+					ddlQuery, ok := queryMap[jobID]
+					if !ok {
+						// jobID does not exist, expand queryMap for deeper search
+						showJobsLimitNext := fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET %d", rowOffset)
+						var rowsLimitNext *sql.Rows
+						rowsLimitNext, err = db.QueryContext(ctx, showJobsLimitNext)
 						if err != nil {
 							return "", err
 						}
-						if jobID == jobIDForLimit && ddl == resultsLimit[currentOffset][1] {
+
+						var resultsLimitNext [][]string
+						resultsLimitNext, err = export.GetSpecifiedColumnValuesAndClose(rowsLimitNext, "JOB_ID", "QUERY")
+						if err != nil {
+							return "", err
+						}
+
+						// if new DDLs are written to TiDB after the last query 'ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET'
+						// we may get duplicate rows here, but it does not affect the checking
+						for k := 0; k < 10; k++ {
+							var jobIDForLimit int
+							jobIDForLimit, err = strconv.Atoi(resultsLimitNext[k][0])
+							if err != nil {
+								return "", err
+							}
+							queryMap[jobIDForLimit] = resultsLimitNext[k][1]
+						}
+						rowOffset += 10
+					} else {
+						if ddl == ddlQuery {
 							return jobsResults[i][2], nil
 						}
-						if jobIDForLimit == jobID {
-							flag = true
-							break
-						}
-						currentOffset++
-					}
-					offset += 10
-					if flag {
 						break
 					}
 				}
-				count++
 			} else {
 				// requested DDL cannot be found
 				return "", nil
 			}
 		}
 		rowNum += 10
-		count = 0
 	}
 }
 
