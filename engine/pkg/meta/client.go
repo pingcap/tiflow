@@ -22,7 +22,7 @@ import (
 func NewKVClientWithNamespace(cc metaModel.ClientConn, projectID metaModel.ProjectID,
 	jobID metaModel.JobID,
 ) (metaModel.KVClient, error) {
-	builder, err := internal.GetClientBuilder(cc.ClientType())
+	builder, err := internal.GetClientBuilder(metaModel.ToClientType(cc.StoreType()))
 	if err != nil {
 		return nil, err
 	}

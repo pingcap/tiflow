@@ -51,6 +51,7 @@ type MasterClient struct {
 	infoLock    sync.RWMutex
 	masterNode  p2p.NodeID
 	masterEpoch frameModel.Epoch
+	workerEpoch frameModel.Epoch
 
 	lastMasterAckedPingTime atomic.Duration
 
@@ -75,6 +76,7 @@ func NewMasterClient(
 	metaCli pkgOrm.Client,
 	initTime clock.MonotonicTime,
 	clk clock.Clock,
+	workerEpoch frameModel.Epoch,
 ) *MasterClient {
 	return &MasterClient{
 		masterID:                masterID,
@@ -86,6 +88,7 @@ func NewMasterClient(
 		closeCh:                 make(chan struct{}),
 		timeoutConfig:           config.DefaultTimeoutConfig(),
 		clk:                     clk,
+		workerEpoch:             workerEpoch,
 	}
 }
 
@@ -178,6 +181,12 @@ func (m *MasterClient) Epoch() frameModel.Epoch {
 	return epoch
 }
 
+// WorkerEpoch returns the worker epoch.
+// This value is a constant value for the master client of every single worker
+func (m *MasterClient) WorkerEpoch() frameModel.Epoch {
+	return m.workerEpoch
+}
+
 // HandleHeartbeat handles heartbeat messages received from the master.
 func (m *MasterClient) HandleHeartbeat(sender p2p.NodeID, msg *frameModel.HeartbeatPongMessage) {
 	if msg.ToWorkerID != m.workerID {
@@ -260,19 +269,22 @@ func (m *MasterClient) SendHeartBeat(ctx context.Context) error {
 		SendTime:     sendTime,
 		FromWorkerID: m.workerID,
 		Epoch:        epoch,
+		WorkerEpoch:  m.WorkerEpoch(),
 		IsFinished:   isFinished,
 	}
 
 	log.Debug("sending heartbeat", zap.String("worker", m.workerID),
 		zap.String("master-id", m.masterID),
-		zap.Int64("epoch", epoch), zap.Int64("sendTime", int64(sendTime)))
+		zap.Int64("epoch", epoch), zap.Int64("worker-epoch", heartbeatMsg.WorkerEpoch),
+		zap.Int64("sendTime", int64(sendTime)))
 	ok, err := m.messageSender.SendToNode(ctx, nodeID, frameModel.HeartbeatPingTopic(m.masterID), heartbeatMsg)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	log.Info("sending heartbeat success", zap.String("worker", m.workerID),
 		zap.String("master-id", m.masterID),
-		zap.Int64("epoch", epoch), zap.Int64("sendTime", int64(sendTime)))
+		zap.Int64("epoch", epoch), zap.Int64("worker-epoch", heartbeatMsg.WorkerEpoch),
+		zap.Int64("sendTime", int64(sendTime)))
 	if !ok {
 		// Reloads master info asynchronously.
 		// Not using `ctx` because the caller might cancel unexpectedly.

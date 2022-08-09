@@ -48,6 +48,13 @@ func newMasterClientTestHelper(
 		panic(err)
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	epoch, err := meta.GenEpoch(ctx)
+	if err != nil {
+		panic(err)
+	}
+
 	initTime := time.Now()
 	msgSender := p2p.NewMockMessageSender()
 	clk := clock.NewMock()
@@ -57,7 +64,9 @@ func newMasterClientTestHelper(
 		msgSender,
 		meta,
 		clock.ToMono(initTime),
-		clk)
+		clk,
+		epoch,
+	)
 
 	return &masterClientTestHelper{
 		Client:        masterCli,
@@ -169,6 +178,7 @@ func TestMasterClientHeartbeat(t *testing.T) {
 		SendTime:     clock.ToMono(sendTime1),
 		FromWorkerID: "worker-1",
 		Epoch:        1,
+		WorkerEpoch:  helper.Client.WorkerEpoch(),
 		IsFinished:   false,
 	}, ping)
 	helper.Client.HandleHeartbeat("executor-1", &frameModel.HeartbeatPongMessage{
@@ -196,6 +206,7 @@ func TestMasterClientHeartbeat(t *testing.T) {
 		SendTime:     clock.ToMono(sendTime2),
 		FromWorkerID: "worker-1",
 		Epoch:        1,
+		WorkerEpoch:  helper.Client.WorkerEpoch(),
 		IsFinished:   true,
 	}, ping)
 	// The pong has IsFinished == false.
@@ -246,6 +257,7 @@ func TestMasterClientHeartbeatMismatch(t *testing.T) {
 		SendTime:     clock.ToMono(sendTime1),
 		FromWorkerID: "worker-1",
 		Epoch:        2,
+		WorkerEpoch:  helper.Client.WorkerEpoch(),
 		IsFinished:   false,
 	}, ping)
 
@@ -454,6 +466,7 @@ func TestMasterClientHeartbeatStalePong(t *testing.T) {
 		SendTime:     clock.ToMono(sendTime1),
 		FromWorkerID: "worker-1",
 		Epoch:        1,
+		WorkerEpoch:  helper.Client.WorkerEpoch(),
 		IsFinished:   false,
 	}, ping)
 
