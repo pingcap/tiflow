@@ -49,7 +49,7 @@ type StatusProvider interface {
 	// GetCaptures returns the information about all captures.
 	GetCaptures(ctx context.Context) ([]*model.CaptureInfo, error)
 
-	// GetHealth return
+	// IsHealthy return true if the cluster is healthy
 	IsHealthy(ctx context.Context) (bool, error)
 }
 
