@@ -75,21 +75,14 @@ func (s *testCheckpointSuite) SetUpSuite(c *C) {
 	}
 
 	log.SetLevel(zapcore.ErrorLevel)
-	var (
-		err                   error
-		defaultTestSessionCfg = map[string]string{
-			"sql_mode":             "ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION",
-			"tidb_skip_utf8_check": "0",
-		}
-	)
+	var err error
 
-	s.tracker, err = schema.NewTestTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, nil, dlog.L())
+	s.tracker, err = schema.NewTestTracker(context.Background(), s.cfg.Name, nil, dlog.L())
 	c.Assert(err, IsNil)
 }
 
 func (s *testCheckpointSuite) TestUpTest(c *C) {
-	err := s.tracker.Reset()
-	c.Assert(err, IsNil)
+	s.tracker.Reset()
 }
 
 func (s *testCheckpointSuite) prepareCheckPointSQL() {
@@ -400,7 +393,8 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 
 	// test save with table info and rollback
 	c.Assert(s.tracker.CreateSchemaIfNotExists(schemaName), IsNil)
-	err = s.tracker.Exec(ctx, schemaName, "create table "+tableName+" (c int);")
+	stmt, err := parseSQL("create table " + tableName + " (c int);")
+	err = s.tracker.Exec(ctx, schemaName, stmt)
 	c.Assert(err, IsNil)
 	ti, err := s.tracker.GetTableInfo(table)
 	c.Assert(err, IsNil)
@@ -425,7 +419,8 @@ func (s *testCheckpointSuite) testTableCheckPoint(c *C, cp CheckPoint) {
 	c.Assert(cp.FlushPointsExcept(tctx, cp.Snapshot(true).id, nil, nil, nil), IsNil)
 	c.Assert(cp.GlobalPoint(), Equals, lastGlobalPoint)
 	c.Assert(cp.GlobalPointSaveTime(), Equals, lastGlobalPointSavedTime)
-	err = s.tracker.Exec(ctx, schemaName, "alter table "+tableName+" add c2 int;")
+	stmt, err = parseSQL("alter table " + tableName + " add c2 int;")
+	err = s.tracker.Exec(ctx, schemaName, stmt)
 	c.Assert(err, IsNil)
 	ti2, err := s.tracker.GetTableInfo(table)
 	c.Assert(err, IsNil)
@@ -499,7 +494,7 @@ func TestRemoteCheckPointLoadIntoSchemaTracker(t *testing.T) {
 	dbConn, err := db.Conn(ctx)
 	require.NoError(t, err)
 	downstreamTrackConn := dbconn.NewDBConn(cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
-	schemaTracker, err := schema.NewTestTracker(ctx, cfg.Name, defaultTestSessionCfg, downstreamTrackConn, dlog.L())
+	schemaTracker, err := schema.NewTestTracker(ctx, cfg.Name, downstreamTrackConn, dlog.L())
 	require.NoError(t, err)
 	defer schemaTracker.Close() //nolint
 
