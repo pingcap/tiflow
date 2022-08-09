@@ -53,6 +53,7 @@ func (t sinkType) String() string {
 func NewStatistics(ctx context.Context, t sinkType) *Statistics {
 	statistics := &Statistics{
 		sinkType:     t,
+		captureAddr:  contextutil.CaptureAddrFromCtx(ctx),
 		changefeedID: contextutil.ChangefeedIDFromCtx(ctx),
 	}
 	statistics.lastPrintStatusTime.Store(time.Now())
@@ -102,6 +103,7 @@ func NewStatistics(ctx context.Context, t sinkType) *Statistics {
 // Note: All methods of Statistics should be thread-safe.
 type Statistics struct {
 	sinkType         sinkType
+	captureAddr      string
 	changefeedID     model.ChangeFeedID
 	totalRows        uint64
 	totalFlushedRows uint64
@@ -197,7 +199,7 @@ func (b *Statistics) PrintStatus(ctx context.Context) {
 		zap.Stringer("sinkType", b.sinkType),
 		zap.String("namespace", b.changefeedID.Namespace),
 		zap.String("changefeed", b.changefeedID.ID),
-		contextutil.ZapFieldCapture(ctx),
+		zap.String("capture", b.captureAddr),
 		zap.Uint64("count", count),
 		zap.Uint64("qps", qps),
 		zap.Uint64("ddl", totalDDLCount))

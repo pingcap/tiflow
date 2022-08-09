@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 )
 
 // Call represents a grpc call.
@@ -91,9 +92,18 @@ func (c *Call[ReqT, RespT, F]) callOnce(ctx context.Context) (RespT, error) {
 }
 
 func (c *Call[ReqT, RespT, F]) isRetryable(errIn error) bool {
+	if rpcerror.IsManagedError(errIn) {
+		return rpcerror.IsRetryable(errIn)
+	}
+
 	if c.opts.forceNoRetry {
 		return false
 	}
 
-	return rpcerror.IsRetryable(errIn)
+	stCode, ok := rpcerror.GRPCStatusCode(errIn)
+	if !ok {
+		return false
+	}
+
+	return stCode == codes.Unavailable || stCode == codes.DeadlineExceeded
 }

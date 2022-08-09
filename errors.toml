@@ -193,12 +193,17 @@ the overwrite-checkpoint-ts %d must be smaller than current TSO
 
 ["CDC:ErrCliInvalidCheckpointTs"]
 error = '''
-invalid overwrite-checkpoint-ts %s, overwrite-checkpoint-ts only accept 'now' or number
+invalid overwrite-checkpoint-ts %s, overwrite-checkpoint-ts only accept 'now' or a valid timestamp in integer
 '''
 
 ["CDC:ErrClusterIDMismatch"]
 error = '''
 cluster ID mismatch, tikv cluster ID is %d and request cluster ID is %d
+'''
+
+["CDC:ErrClusterIsUnhealthy"]
+error = '''
+TiCDC cluster is unhealthy
 '''
 
 ["CDC:ErrCodecDecode"]
@@ -1068,7 +1073,7 @@ start a stopped leveldb system
 
 ["CDC:ErrStartTsBeforeGC"]
 error = '''
-fail to create or maintain changefeed because start-ts %d is earlier than GC safepoint at %d
+fail to create or maintain changefeed because start-ts %d is earlier than or equal to GC safepoint at %d
 '''
 
 ["CDC:ErrSupportGetOnly"]
@@ -1533,7 +1538,7 @@ peer message client is not found for worker: worker ID %s
 
 ["DFLOW:ErrMetaClientTypeNotSupport"]
 error = '''
-meta client type not support:%d
+meta client type not support:%s
 '''
 
 ["DFLOW:ErrMetaCommittedTxn"]

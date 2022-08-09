@@ -10,9 +10,6 @@ services:
       - "--config=/config.toml"
       - "--addr=0.0.0.0:10240"
       - "--advertise-addr=server-master:10240"
-      - "--etcd-endpoints=etcd-standalone:2379"
-      - "--frame-meta-endpoints=mysql-standalone:3306"
-      - "--business-meta-endpoints=etcd-standalone:2379"
     ports:
       - "10240:10240"
     depends_on:
@@ -81,13 +78,13 @@ services:
     image: mysql:5.7
     container_name: mysql-standalone
     environment:
-      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_ALLOW_EMPTY_PASSWORD: true
     volumes:
       - './config/mysql_meta.cnf:/etc/my.cnf'
     ports:
       - "3336:3306"
     healthcheck:
-      test: "mysqladmin ping -h127.0.0.1 -P3306 -uroot -p123456"
+      test: "mysqladmin ping -h127.0.0.1 -P3306 -uroot"
       interval: 10s
       timeout: 600s
       retries: 60

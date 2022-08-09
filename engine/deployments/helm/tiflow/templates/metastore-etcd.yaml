@@ -1,0 +1,79 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "tiflow.name" . }}-metastore-etcd
+  labels:
+    app: {{ include "tiflow.name" . }}-metastore-etcd
+    app.kubernetes.io/name: {{ include "tiflow.name" . }}-metastore-etcd
+    app.kubernetes.io/instance: {{ include "tiflow.name" . }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/component: metastore-etcd
+    app.kubernetes.io/part-of: tiflow
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+"  "_" }}
+spec:
+  ports:
+    - name: port-etcd # note the name is no more than 15 characters
+      port: 12479
+      targetPort: 2479
+  selector:
+    app: {{ include "tiflow.name" . }}-metastore-etcd
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "tiflow.name" . }}-metastore-etcd
+  labels:
+    app: {{ include "tiflow.name" . }}-metastore-etcd
+    app.kubernetes.io/name: {{ include "tiflow.name" . }}-metastore-etcd
+    app.kubernetes.io/instance: {{ include "tiflow.name" . }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/component: metastore-etcd
+    app.kubernetes.io/part-of: tiflow
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+"  "_" }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ include "tiflow.name" . }}-metastore-etcd
+  serviceName: {{ include "tiflow.name" . }}-metastore-etcd
+  replicas: 1
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      labels:
+        app: {{ include "tiflow.name" . }}-metastore-etcd
+    spec:
+      containers:
+        - name: metastore-etcd
+          image: quay.io/coreos/etcd:v3.5.4
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          volumeMounts:
+            - mountPath: "/data/etcd"
+              name: data
+          env:
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          ports:
+            - containerPort: 2479
+              name: port-etcd
+          command:
+            - "etcd"
+          args:
+            - "--name=$(MY_POD_NAME)"
+            - "--advertise-client-urls=http://{{ include "tiflow.name" . }}-metastore-etcd:12479"
+            - "--listen-client-urls=http://0.0.0.0:2479"
+            - "--listen-peer-urls=http://127.0.0.1:2480"
+            - "--initial-advertise-peer-urls=http://127.0.0.1:2480"
+            - "--initial-cluster=$(MY_POD_NAME)=http://127.0.0.1:2480"
+            - "--initial-cluster-state=new"
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: {{ .Values.metastore.businessStorage }}

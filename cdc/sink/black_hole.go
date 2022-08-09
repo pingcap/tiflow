@@ -27,7 +27,7 @@ import (
 func newBlackHoleSink(ctx context.Context) *blackHoleSink {
 	return &blackHoleSink{
 		// use `SinkTypeDB` to record metrics
-		statistics: metrics.NewStatistics(ctx, metrics.SinkTypeDB),
+		statistics: metrics.NewStatistics(ctx, "", metrics.SinkTypeDB),
 	}
 }
 

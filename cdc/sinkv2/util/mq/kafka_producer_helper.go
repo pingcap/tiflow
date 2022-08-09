@@ -26,8 +26,6 @@ import (
 	pkafka "github.com/pingcap/tiflow/pkg/kafka"
 )
 
-// TODO: add tests for below funcs.
-
 // GetTopic returns the topic name from the sink URI.
 func GetTopic(sinkURI *url.URL) (string, error) {
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {

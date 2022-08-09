@@ -654,6 +654,7 @@ function test_validation_syncer_stopped() {
 	run_sql_source1 "insert into validator_basic.test values(0, 0)"
 	trigger_checkpoint_flush
 	# wait syncer to start so that validator can start
+	sleep 4
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"synced\": true" 1 \

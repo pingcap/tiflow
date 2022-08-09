@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/util"
-	"go.uber.org/zap"
 )
 
 type ctxKey string
@@ -137,15 +136,4 @@ func RoleFromCtx(ctx context.Context) util.Role {
 // PutRoleInCtx return a new child context with the specified role stored.
 func PutRoleInCtx(ctx context.Context, role util.Role) context.Context {
 	return context.WithValue(ctx, ctxKeyRole, role)
-}
-
-// ZapFieldCapture returns a zap field containing capture address
-// TODO: log redact for capture address
-func ZapFieldCapture(ctx context.Context) zap.Field {
-	return zap.String("capture", CaptureAddrFromCtx(ctx))
-}
-
-// ZapFieldChangefeed returns a zap field containing changefeed id
-func ZapFieldChangefeed(ctx context.Context) zap.Field {
-	return zap.String("changefeed", ChangefeedIDFromCtx(ctx).ID)
 }

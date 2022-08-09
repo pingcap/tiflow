@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
+	mocksink "github.com/pingcap/tiflow/cdc/sink/mock"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -41,15 +42,17 @@ import (
 var _ scheduler.TableExecutor = (*processor)(nil)
 
 func newProcessor4Test(
-	ctx cdcContext.Context,
 	t *testing.T,
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (pipeline.TablePipeline, error),
 	liveness *model.Liveness,
 ) *processor {
 	up := upstream.NewUpstream4Test(nil)
-	p := newProcessor(ctx, up, liveness)
+	p := newProcessor(
+		&model.CaptureInfo{AdvertiseAddr: "127.0.0.1:0000"},
+		model.ChangeFeedID4Test("processor-test", "processor-test"), up, liveness)
 	p.lazyInit = func(ctx cdcContext.Context) error {
 		p.agent = &mockAgent{executor: p}
+		p.sinkV1 = mocksink.NewNormalMockSink()
 		return nil
 	}
 	p.redoManager = redo.NewDisabledManager()
@@ -97,7 +100,7 @@ func initProcessor4Test(
     "sync-point-interval": 600000000000
 }
 `
-	p := newProcessor4Test(ctx, t, newMockTablePipeline, liveness)
+	p := newProcessor4Test(t, newMockTablePipeline, liveness)
 	p.changefeed = orchestrator.NewChangefeedReactorState(
 		etcd.DefaultCDCClusterID, ctx.ChangefeedVars().ID)
 	captureID := ctx.GlobalVars().CaptureInfo.ID
@@ -235,12 +238,11 @@ type mockAgent struct {
 
 	executor         scheduler.TableExecutor
 	lastCheckpointTs model.Ts
-	lastLiveness     model.Liveness
+	liveness         *model.Liveness
 	isClosed         bool
 }
 
-func (a *mockAgent) Tick(_ context.Context, liveness model.Liveness) error {
-	a.lastLiveness = liveness
+func (a *mockAgent) Tick(_ context.Context) error {
 	if len(a.executor.GetAllCurrentTables()) == 0 {
 		return nil
 	}
@@ -822,6 +824,12 @@ func TestProcessorLiveness(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	liveness := model.LivenessCaptureAlive
 	p, tester := initProcessor4Test(ctx, t, &liveness)
+	p.lazyInit = func(ctx cdcContext.Context) error {
+		// Mock the newAgent procedure in p.lazyInitImpl,
+		// by passing p.liveness to mockAgent.
+		p.agent = &mockAgent{executor: p, liveness: p.liveness}
+		return nil
+	}
 
 	// First tick for creating position.
 	_, err := p.Tick(ctx, p.changefeed)
@@ -831,10 +839,13 @@ func TestProcessorLiveness(t *testing.T) {
 	// Second tick for init.
 	_, err = p.Tick(ctx, p.changefeed)
 	require.Nil(t, err)
-	require.Equal(t, model.LivenessCaptureAlive, p.agent.(*mockAgent).lastLiveness)
 
-	liveness.Store(model.LivenessCaptureStopping)
-	_, err = p.Tick(ctx, p.changefeed)
-	require.Nil(t, err)
-	require.Equal(t, model.LivenessCaptureStopping, p.agent.(*mockAgent).lastLiveness)
+	// Changing p.liveness affects p.agent liveness.
+	p.liveness.Store(model.LivenessCaptureStopping)
+	require.Equal(t, model.LivenessCaptureStopping, p.agent.(*mockAgent).liveness.Load())
+
+	// Changing p.agent liveness affects p.liveness.
+	// Force set liveness to alive.
+	*p.agent.(*mockAgent).liveness = model.LivenessCaptureAlive
+	require.Equal(t, model.LivenessCaptureAlive, p.liveness.Load())
 }
