@@ -20,13 +20,15 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/charset"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/quotes"
+	"go.uber.org/zap"
 )
 
+// prepareUpdate builds a parametrics UPDATE statement as following
+// sql: `UPDATE `test`.`t` SET {} = ?, {} = ? WHERE {} = ?, {} = {}`
+// `WHERE` conditions come from `preCols` and SET clause targets come from `cols`.
 func prepareUpdate(quoteTable string, preCols, cols []*model.Column, forceReplicate bool) (string, []interface{}) {
 	var builder strings.Builder
 	builder.WriteString("UPDATE " + quoteTable + " SET ")
@@ -72,6 +74,8 @@ func prepareUpdate(quoteTable string, preCols, cols []*model.Column, forceReplic
 	return sql, args
 }
 
+// prepareReplace builds a parametrics REPLACE statement as following
+// sql: `REPLACE INTO `test`.`t` VALUES (?,?,?)`
 func prepareReplace(
 	quoteTable string,
 	cols []*model.Column,
@@ -162,6 +166,8 @@ func reduceReplace(replaces map[string][][]interface{}, batchSize int) ([]string
 	return sqls, args
 }
 
+// prepareDelete builds a parametric DELETE statement as following
+// sql: `DELETE FROM `test`.`t` WHERE x = ? AND y >= ?`
 func prepareDelete(quoteTable string, cols []*model.Column, forceReplicate bool) (string, []interface{}) {
 	var builder strings.Builder
 	builder.WriteString("DELETE FROM " + quoteTable + " WHERE ")
@@ -187,6 +193,8 @@ func prepareDelete(quoteTable string, cols []*model.Column, forceReplicate bool)
 	return sql, args
 }
 
+// whereSlice builds a parametric WHERE clause as following
+// sql: `WHERE {} = ? AND {} > ?`
 func whereSlice(cols []*model.Column, forceReplicate bool) (colNames []string, args []interface{}) {
 	// Try to use unique key values when available
 	for _, col := range cols {
@@ -233,23 +241,4 @@ func placeHolder(n int) string {
 		builder.WriteString("?")
 	}
 	return builder.String()
-}
-
-// GetDBConnImpl is the implement holder to get db connection. Export it for tests
-var GetDBConnImpl = getDBConn
-
-func getDBConn(ctx context.Context, dsnStr string) (*sql.DB, error) {
-	db, err := sql.Open("mysql", dsnStr)
-	if err != nil {
-		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
-	}
-	err = db.PingContext(ctx)
-	if err != nil {
-		// close db to recycle resources
-		if closeErr := db.Close(); closeErr != nil {
-			log.Warn("close db failed", zap.Error(err))
-		}
-		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
-	}
-	return db, nil
 }
