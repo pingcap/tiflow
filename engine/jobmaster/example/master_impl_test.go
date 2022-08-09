@@ -41,7 +41,7 @@ func newExampleMaster(t *testing.T) *exampleMaster {
 	return self
 }
 
-func TestExampleMaster(t *testing.T) {
+func testExampleMaster(t *testing.T) {
 	t.Parallel()
 
 	initLogger.Do(func() {
