@@ -239,7 +239,7 @@ func TestJobManagerQueryJob(t *testing.T) {
 
 	statuses, err := mgr.GetJobStatuses(ctx)
 	require.NoError(t, err)
-	require.Len(t, statuses, len(testCases))
+	require.Len(t, statuses, len(testCases)+1)
 
 	for _, tc := range testCases {
 		req := &pb.QueryJobRequest{
