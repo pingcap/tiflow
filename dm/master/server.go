@@ -213,8 +213,17 @@ func (s *Server) Start(ctx context.Context) (err error) {
 		if initOpenAPIErr := s.InitOpenAPIHandles(tls3.TLSConfig()); initOpenAPIErr != nil {
 			return terror.ErrOpenAPICommonError.Delegate(initOpenAPIErr)
 		}
+
+		const dashboardPrefix = "/dashboard/"
+		scheme := "http://"
+		if len(s.cfg.SSLCA) != 0 {
+			scheme = "https://"
+		}
+		log.L().Info("Web UI enabled", zap.String("dashboard", scheme+s.cfg.AdvertiseAddr+dashboardPrefix))
+
+		// Register handlers for OpenAPI and dashboard.
 		userHandles["/api/v1/"] = s.openapiHandles
-		userHandles["/dashboard/"] = ui.InitWebUIRouter()
+		userHandles[dashboardPrefix] = ui.InitWebUIRouter()
 	}
 
 	// gRPC API server
