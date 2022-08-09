@@ -233,7 +233,7 @@ func ToComparableSpan(span Span) ComparableSpan {
 	}
 }
 
-// ToComparableKey returns a comparable key.
+// ToComparableKey returns a memcomparable key.
 func ToComparableKey(key []byte) []byte {
 	return codec.EncodeBytes(nil, key)
 }
