@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
@@ -768,22 +769,30 @@ func TestIsHealthy(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Unhealthy, cdc cluster version is inconsistent
-	o.captures = map[model.CaptureID]*model.CaptureInfo{
-		model.CaptureID("1"): {
-			Version: "v6.3.0",
-		},
-		model.CaptureID("2"): {
-			Version: "v8.0.0",
-		},
-	}
+	// Unhealthy, changefeeds are not ticked.
+	o.changefeedTicked = false
 	err := o.handleQueries(ctx, query)
 	require.NoError(t, err)
 	require.False(t, query.Data.(bool))
 
+	o.changefeedTicked = true
+	// Unhealthy, cdc cluster version is inconsistent
+	o.captures = map[model.CaptureID]*model.CaptureInfo{
+		"1": {
+			Version: version.MinTiCDCVersion.String(),
+		},
+		"2": {
+			Version: version.MaxTiCDCVersion.String(),
+		},
+	}
+	err = o.handleQueries(ctx, query)
+	require.NoError(t, err)
+	require.False(t, query.Data.(bool))
+
+	// make all captures version consistent.
+	o.captures["1"].Version = version.MinTiCDCVersion.String()
+
 	// Unhealthy, store version check failed
-	// set to nil to skip cdc cluster version check, pretend it's true
-	o.captures = nil
 	pdClient.GetAllStoresFunc = func(
 		ctx context.Context, opts ...pd.GetStoreOption,
 	) ([]*metapb.Store, error) {
@@ -798,13 +807,8 @@ func TestIsHealthy(t *testing.T) {
 	) ([]*metapb.Store, error) {
 		return nil, nil
 	}
-	// Unhealthy, changefeeds are not ticked.
-	o.changefeedTicked = false
-	err = o.handleQueries(ctx, query)
-	require.NoError(t, err)
-	require.False(t, query.Data.(bool))
+
 	// Healthy, no changefeed.
-	o.changefeedTicked = true
 	err = o.handleQueries(ctx, query)
 	require.NoError(t, err)
 	require.True(t, query.Data.(bool))
