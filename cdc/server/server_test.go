@@ -28,6 +28,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
+	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/pd/pkg/tempurl"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -193,7 +195,12 @@ func TestServerTLSWithoutCommonName(t *testing.T) {
 	config.StoreGlobalServerConfig(conf)
 
 	server, err := New([]string{"https://127.0.0.1:2379"})
-	server.capture = capture.NewCapture4Test(nil)
+	cp := capture.NewCapture4Test(nil)
+	ctrl := gomock.NewController(t)
+	etcdClient := mock_etcd.NewMockCDCEtcdClient(ctrl)
+	etcdClient.EXPECT().GetClusterID().Return("abcd").AnyTimes()
+	cp.EtcdClient = etcdClient
+	server.capture = cp
 	require.Nil(t, err)
 	err = server.startStatusHTTP(server.tcpServer.HTTP1Listener())
 	require.Nil(t, err)
@@ -271,7 +278,12 @@ func TestServerTLSWithCommonName(t *testing.T) {
 	config.StoreGlobalServerConfig(conf)
 
 	server, err := New([]string{"https://127.0.0.1:2379"})
-	server.capture = capture.NewCapture4Test(nil)
+	cp := capture.NewCapture4Test(nil)
+	ctrl := gomock.NewController(t)
+	etcdClient := mock_etcd.NewMockCDCEtcdClient(ctrl)
+	etcdClient.EXPECT().GetClusterID().Return("abcd").AnyTimes()
+	cp.EtcdClient = etcdClient
+	server.capture = cp
 	require.Nil(t, err)
 	err = server.startStatusHTTP(server.tcpServer.HTTP1Listener())
 	require.Nil(t, err)
