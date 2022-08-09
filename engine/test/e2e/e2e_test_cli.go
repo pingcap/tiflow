@@ -98,7 +98,7 @@ func NewUTCli(ctx context.Context, masterAddrs, businessMetaAddrs []string, proj
 	}
 
 	// TODO: NEED to move metastore config to a toml, and parse the toml
-	defaultSchema := "test"
+	defaultSchema := "test_business"
 
 	conf := server.NewDefaultBusinessMetaConfig()
 	conf.Endpoints = businessMetaAddrs

@@ -61,12 +61,14 @@ type sqlKVClientImpl struct {
 }
 
 // NewSQLKVClientImpl new a sql implement for kvclient
-func NewSQLKVClientImpl(sqlDB *sql.DB, table string, jobID metaModel.JobID) (*sqlKVClientImpl, error) {
+func NewSQLKVClientImpl(sqlDB *sql.DB, storeType metaModel.StoreType, table string,
+	jobID metaModel.JobID,
+) (*sqlKVClientImpl, error) {
 	if sqlDB == nil {
 		return nil, cerrors.ErrMetaParamsInvalid.GenWithStackByArgs("input db is nil")
 	}
 
-	db, err := orm.NewGormDB(sqlDB)
+	db, err := orm.NewGormDB(sqlDB, storeType)
 	if err != nil {
 		return nil, err
 	}

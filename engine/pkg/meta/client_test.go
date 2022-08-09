@@ -33,8 +33,8 @@ func (c *errorClientConn) Initialize(conf *metaModel.StoreConfig) error {
 	return nil
 }
 
-func (c *errorClientConn) ClientType() metaModel.ClientType {
-	return metaModel.ClientType(100)
+func (c *errorClientConn) StoreType() metaModel.StoreType {
+	return metaModel.StoreType("unknown")
 }
 
 func (c *errorClientConn) GetConn() (interface{}, error) {
@@ -56,5 +56,6 @@ func TestNewKVClientWithNamespace(t *testing.T) {
 
 	_, err = NewKVClientWithNamespace(&errorClientConn{}, fakeProjectID, fakeJobID)
 	require.Error(t, err)
-	require.Regexp(t, regexp.QuoteMeta("[DFLOW:ErrMetaClientTypeNotSupport]meta client type not support:100"), err.Error())
+	require.Regexp(t, regexp.QuoteMeta("[DFLOW:ErrMetaClientTypeNotSupport]meta client type not support:unknown-kvclient"),
+		err.Error())
 }
