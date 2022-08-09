@@ -2850,7 +2850,10 @@ func (t *testMaster) TestDashboardAddress(c *check.C) {
 	server.leader.Store(oneselfLeader)
 	ctx, cancel := context.WithCancel(context.Background())
 	go server.ap.Start(ctx)
-	go server.Start(ctx)
+	go func() {
+		err := server.Start(ctx)
+		c.Assert(err, check.IsNil)
+	}()
 	defer server.Close()
 	defer cancel()
 
