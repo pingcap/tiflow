@@ -41,9 +41,9 @@ func (b *ClientBuilderImpl) NewKVClientWithNamespace(cc model.ClientConn,
 	db, ok := conn.(*sql.DB)
 	if !ok {
 		return nil, errors.ErrMetaParamsInvalid.GenWithStack(
-			"invalid ClientConn type:%d for sql kvclient builder", cc.ClientType())
+			"invalid ClientConn type for sql kvclient builder, conn type:%s", cc.StoreType())
 	}
 
 	tableName := namespace.TableNameWithNamespace(projectID)
-	return NewSQLKVClientImpl(db, tableName, jobID)
+	return NewSQLKVClientImpl(db, cc.StoreType(), tableName, jobID)
 }

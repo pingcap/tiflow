@@ -148,6 +148,9 @@ func TestMasterCreateWorker(t *testing.T) {
 	err := master.Init(ctx)
 	require.NoError(t, err)
 
+	epoch, err := master.MetaKVClient().GenEpoch(ctx)
+	require.NoError(t, err)
+
 	MockBaseMasterCreateWorker(
 		t,
 		master.DefaultBaseMaster,
@@ -157,7 +160,9 @@ func TestMasterCreateWorker(t *testing.T) {
 		masterName,
 		workerID1,
 		executorNodeID1,
-		[]resourcemeta.ResourceID{"resource-1", "resource-2"})
+		[]resourcemeta.ResourceID{"resource-1", "resource-2"},
+		epoch+2,
+	)
 
 	workerID, err := master.CreateWorker(
 		workerTypePlaceholder,

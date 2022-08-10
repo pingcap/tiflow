@@ -24,8 +24,8 @@ import (
 // MockPDClient mocks pd.Client to facilitate unit testing.
 type MockPDClient struct {
 	pd.Client
-	UpdateServiceGCSafePointFunc func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error)
 	ClusterID                    uint64
+	UpdateServiceGCSafePointFunc func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error)
 }
 
 // UpdateServiceGCSafePoint implements pd.Client.UpdateServiceGCSafePoint.

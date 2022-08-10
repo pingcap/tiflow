@@ -182,7 +182,7 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T) (
 ) {
 	up := upstream.NewUpstream4Test(&gc.MockPDClient{
 		UpdateServiceGCSafePointFunc: func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
-			return safePoint, nil
+			return safePoint - 1, nil
 		},
 	})
 
