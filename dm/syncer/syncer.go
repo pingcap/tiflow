@@ -917,7 +917,7 @@ func (s *Syncer) saveTablePoint(table *filter.Table, location binlog.Location) {
 			zap.Stringer("location", location),
 			zap.Error(err))
 	}
-	s.checkpoint.SaveTablePoint(table, location, ti.Clone())
+	s.checkpoint.SaveTablePoint(table, location, ti)
 }
 
 // only used in tests.
@@ -2201,6 +2201,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 		switch op {
 		case pb.ErrorOp_Skip:
+			// try to handle pessimistic sharding?
 			queryEvent, ok := e.Event.(*replication.QueryEvent)
 			if !ok {
 				s.tctx.L().Warn("can't skip an event which is not DDL", zap.Reflect("header", e.Header))
