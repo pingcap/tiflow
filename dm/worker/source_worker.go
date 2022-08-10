@@ -328,7 +328,7 @@ func (w *SourceWorker) EnableRelay(startBySourceCfg bool) (err error) {
 
 	if minLoc != nil {
 		w.l.Info("get min location in all subtasks", zap.Stringer("location", *minLoc))
-		w.cfg.RelayBinLogName = binlog.AdjustPosition(minLoc.Position).Name
+		w.cfg.RelayBinLogName = binlog.RemoveRelaySubDirSuffix(minLoc.Position).Name
 		w.cfg.RelayBinlogGTID = minLoc.GTIDSetStr()
 		// set UUIDSuffix when bound to a source
 		w.cfg.UUIDSuffix, err = binlog.ExtractSuffix(minLoc.Position.Name)
