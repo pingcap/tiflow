@@ -77,6 +77,7 @@ func (s *Scheduler) chainFilter(
 		var err error
 		candidates, err = filter.GetEligibleExecutors(ctx, request, candidates)
 		if err != nil {
+			// Note: filters are guaranteed to return errors when no suitable candidate is found.
 			return nil, err
 		}
 	}

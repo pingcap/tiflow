@@ -21,6 +21,11 @@ import (
 )
 
 type filter interface {
+	// GetEligibleExecutors determines which executors are eligible
+	// from a list of candidates.
+	//
+	// An implementation should guarantee that an informative error
+	// is returned if no suitable executor is found.
 	GetEligibleExecutors(
 		ctx context.Context,
 		request *schedModel.SchedulerRequest,

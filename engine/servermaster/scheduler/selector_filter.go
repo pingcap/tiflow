@@ -47,9 +47,9 @@ func (f *selectorFilter) GetEligibleExecutors(
 	}
 
 	// We iterate through all the selectors in the outer loop and
-	// removes executors that do not match the current selector.
+	// remove executors that do not match the current selector.
 	// It is so designed that logging a problematic selector or label
-	// becomes easier to troubleshooting.
+	// becomes easier to troubleshoot.
 	for _, selector := range request.Selectors {
 		for id, info := range executors {
 			if !selector.Matches(info.Labels) {
@@ -67,7 +67,7 @@ func (f *selectorFilter) GetEligibleExecutors(
 		}
 	}
 
-	var ret []model.ExecutorID
+	ret := make([]model.ExecutorID, 0, len(executors))
 	for id := range executors {
 		ret = append(ret, id)
 	}
