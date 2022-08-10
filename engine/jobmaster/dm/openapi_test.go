@@ -181,8 +181,8 @@ func (t *testDMOpenAPISuite) TestDMAPIGetJobStatus() {
 	require.Equal(t.T(), http.StatusOK, w.Code)
 
 	jobStatus := JobStatus{
-		JobMasterID: "dm-jobmaster-id",
-		TaskStatus:  map[string]TaskStatus{},
+		JobID:      "dm-jobmaster-id",
+		TaskStatus: map[string]TaskStatus{},
 	}
 	var jobStatus2 JobStatus
 	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &jobStatus2))
