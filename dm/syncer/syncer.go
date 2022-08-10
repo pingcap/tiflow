@@ -3480,7 +3480,7 @@ func (s *Syncer) adjustGlobalPointGTID(tctx *tcontext.Context) (bool, error) {
 		s.tctx.L(),
 	)
 
-	endPos := binlog.AdjustPosition(location.Position)
+	endPos := binlog.RemoveRelaySubDirSuffix(location.Position)
 	startPos := mysql.Position{
 		Name: endPos.Name,
 		Pos:  0,
