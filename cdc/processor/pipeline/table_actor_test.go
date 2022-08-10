@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline/system"
 	"github.com/pingcap/tiflow/cdc/redo"
+	mocksink "github.com/pingcap/tiflow/cdc/sink/mock"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -54,7 +55,8 @@ func TestAsyncStopFailed(t *testing.T) {
 		state:       TableStatePreparing,
 		upstream:    upstream.NewUpstream4Test(&mockPD{}),
 	}
-	tbl.sinkNode = newSinkNode(1, &mockSink{}, 0, 0, &mockFlowController{}, tbl.redoManager,
+	tbl.sinkNode = newSinkNode(1, mocksink.NewNormalMockSink(), nil,
+		0, 0, &mockFlowController{}, tbl.redoManager,
 		&tbl.state, model.DefaultChangeFeedID("changefeed-test"), true, false)
 	require.True(t, tbl.AsyncStop(1))
 
@@ -135,7 +137,7 @@ func TestTableActorCancel(t *testing.T) {
 	tbl.sinkNode = &sinkNode{
 		state:          &tbl.state,
 		flowController: &mockFlowController{},
-		sink:           &mockSink{},
+		sinkV1:         mocksink.NewNormalMockSink(),
 	}
 	mb := actor.NewMailbox[pmessage.Message](actor.ID(1), 0)
 	tbl.actorID = actor.ID(1)
@@ -180,7 +182,7 @@ func TestHandleError(t *testing.T) {
 	}
 	flowController := &mockFlowController{}
 	table.sinkNode = &sinkNode{
-		sink:           &errorCloseSink{},
+		sinkV1:         mocksink.NewMockErrorCloseSink(),
 		state:          &table.state,
 		flowController: flowController,
 	}
@@ -224,7 +226,7 @@ func TestPollTickMessage(t *testing.T) {
 
 	table.sinkNode = &sinkNode{
 		state:          &table.state,
-		sink:           &mockSink{},
+		sinkV1:         mocksink.NewNormalMockSink(),
 		flowController: &mockFlowController{},
 		targetTs:       11,
 	}
@@ -259,7 +261,7 @@ func TestPollStopMessage(t *testing.T) {
 	}
 	tbl.sinkNode = &sinkNode{
 		state:          &tbl.state,
-		sink:           &mockSink{},
+		sinkV1:         mocksink.NewNormalMockSink(),
 		flowController: &mockFlowController{},
 	}
 	tbl.Poll(context.TODO(), []message.Message[pmessage.Message]{
@@ -316,7 +318,7 @@ func TestPollDataFailed(t *testing.T) {
 		},
 	}
 	tbl.sinkNode = &sinkNode{
-		sink:           &mockSink{},
+		sinkV1:         mocksink.NewNormalMockSink(),
 		flowController: &mockFlowController{},
 		state:          &tbl.state,
 	}
@@ -342,9 +344,12 @@ func TestPollDataAfterSinkStopped(t *testing.T) {
 		return false, errors.New("error")
 	}
 	tbl := tableActor{
-		cancel:            func() {},
-		reportErr:         func(err error) {},
-		sinkNode:          &sinkNode{sink: &mockSink{}, flowController: &mockFlowController{}},
+		cancel:    func() {},
+		reportErr: func(err error) {},
+		sinkNode: &sinkNode{
+			sinkV1:         mocksink.NewNormalMockSink(),
+			flowController: &mockFlowController{},
+		},
 		lastFlushSinkTime: time.Now(),
 		nodes: []*ActorNode{
 			{
@@ -396,7 +401,7 @@ func TestNewTableActor(t *testing.T) {
 		&model.TableReplicaInfo{
 			StartTs:     0,
 			MarkTableID: 1,
-		}, &mockSink{}, redo.NewDisabledManager(), 10)
+		}, mocksink.NewNormalMockSink(), nil, redo.NewDisabledManager(), 10)
 	require.NotNil(t, tbl)
 	require.Nil(t, err)
 	require.Equal(t, TableStatePreparing, tbl.State())
@@ -413,7 +418,7 @@ func TestNewTableActor(t *testing.T) {
 		&model.TableReplicaInfo{
 			StartTs:     0,
 			MarkTableID: 1,
-		}, &mockSink{}, redo.NewDisabledManager(), 10)
+		}, mocksink.NewNormalMockSink(), nil, redo.NewDisabledManager(), 10)
 	require.Nil(t, tbl)
 	require.NotNil(t, err)
 
@@ -466,12 +471,4 @@ func TestTableActorStart(t *testing.T) {
 	require.Panics(t, func() {
 		_ = tbl.start(context.TODO())
 	})
-}
-
-type errorCloseSink struct {
-	mockSink
-}
-
-func (e *errorCloseSink) Close(ctx context.Context) error {
-	return errors.New("close sink failed")
 }

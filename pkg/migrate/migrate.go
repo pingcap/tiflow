@@ -79,7 +79,7 @@ type migrator struct {
 	// cdc old owner key
 	oldOwnerKey string
 	// etcd client
-	cli *etcd.CDCEtcdClient
+	cli etcd.CDCEtcdClient
 	// all keyPrefixes needed to be migrated or update
 	// map from oldKeyPrefix to newKeyPrefix
 	keyPrefixes keys
@@ -95,13 +95,13 @@ type migrator struct {
 }
 
 // NewMigrator returns a cdc metadata
-func NewMigrator(cli *etcd.CDCEtcdClient,
+func NewMigrator(cli etcd.CDCEtcdClient,
 	pdEndpoints []string,
 	serverConfig *config.ServerConfig,
 ) Migrator {
 	metaVersionCDCKey := &etcd.CDCKey{
 		Tp:        etcd.CDCKeyTypeMetaVersion,
-		ClusterID: cli.ClusterID,
+		ClusterID: cli.GetClusterID(),
 	}
 	return &migrator{
 		newMetaVersion:     cdcMetaVersion,
@@ -169,7 +169,7 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 	upstreamID := pdClient.GetClusterID(ctx)
 	// 1.1 check metaVersion, if the metaVersion in etcd does not match
 	// m.oldMetaVersion, it means that someone has migrated the metadata
-	metaVersion, err := getMetaVersion(ctx, m.cli.Client, m.cli.ClusterID)
+	metaVersion, err := getMetaVersion(ctx, m.cli.GetEtcdClient(), m.cli.GetClusterID())
 	if err != nil {
 		log.Error("get meta version failed, etcd meta data migration failed", zap.Error(err))
 		return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
@@ -189,7 +189,7 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 
 	// 1.2 put metaVersionKey to etcd to panic old version cdc server
 	if etcdNoMetaVersion {
-		_, err := m.cli.Client.Put(ctx, m.metaVersionKey, fmt.Sprintf("%d", oldVersion))
+		_, err := m.cli.GetEtcdClient().Put(ctx, m.metaVersionKey, fmt.Sprintf("%d", oldVersion))
 		if err != nil {
 			log.Error("put meta version failed, etcd meta data migration failed", zap.Error(err))
 			return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
@@ -212,7 +212,7 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 	beforeKV := make(map[string][]byte)
 	// 4.campaign owner successfully, begin to migrate data
 	for oldPrefix, newPrefix := range m.keyPrefixes {
-		resp, err := m.cli.Client.Get(ctx, oldPrefix, clientV3.WithPrefix())
+		resp, err := m.cli.GetEtcdClient().Get(ctx, oldPrefix, clientV3.WithPrefix())
 		if err != nil {
 			log.Error("get old meta data failed, etcd meta data migration failed",
 				zap.Error(err))
@@ -234,6 +234,9 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 				}
 				info.UpstreamID = upstreamID
 				info.Namespace = model.DefaultNamespace
+				// changefeed id is a part of etcd key path
+				// for example:  /tidb/cdc/changefeed/info/abcd,  abcd is the changefeed
+				info.ID = strings.TrimPrefix(string(v.Key), oldChangefeedPrefix+"/")
 				var str string
 				str, err = info.Marshal()
 				if err != nil {
@@ -241,9 +244,9 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 						zap.Error(err))
 					return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
 				}
-				_, err = m.cli.Client.Put(ctx, newKey, str)
+				_, err = m.cli.GetEtcdClient().Put(ctx, newKey, str)
 			} else {
-				_, err = m.cli.Client.Put(ctx, newKey, string(v.Value))
+				_, err = m.cli.GetEtcdClient().Put(ctx, newKey, string(v.Value))
 			}
 			if err != nil {
 				log.Error("put new meta data failed, etcd meta data migration failed",
@@ -268,13 +271,13 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 	}
 
 	// 5. update metaVersion
-	_, err = m.cli.Client.Put(ctx, m.metaVersionKey, fmt.Sprintf("%d", m.newMetaVersion))
+	_, err = m.cli.GetEtcdClient().Put(ctx, m.metaVersionKey, fmt.Sprintf("%d", m.newMetaVersion))
 	if err != nil {
 		log.Error("update meta version failed, etcd meta data migration failed", zap.Error(err))
 		return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
 	}
 	log.Info("etcd data migration successful")
-	cleanOldData(ctx, m.cli.Client)
+	cleanOldData(ctx, m.cli.GetEtcdClient())
 	log.Info("clean old etcd data successful")
 	return nil
 }
@@ -403,7 +406,7 @@ func (m *migrator) migrateGcServiceSafePoint(ctx context.Context,
 }
 
 func (m *migrator) campaignOldOwner(ctx context.Context) error {
-	sess, err := concurrency.NewSession(m.cli.Client.Unwrap(),
+	sess, err := concurrency.NewSession(m.cli.GetEtcdClient().Unwrap(),
 		concurrency.WithTTL(etcdSessionTTL))
 	if err != nil {
 		return errors.Trace(err)
@@ -421,7 +424,7 @@ func (m *migrator) campaignOldOwner(ctx context.Context) error {
 
 // Migrate migrate etcd meta data
 func (m *migrator) Migrate(ctx context.Context) error {
-	version, err := getMetaVersion(ctx, m.cli.Client, m.cli.ClusterID)
+	version, err := getMetaVersion(ctx, m.cli.GetEtcdClient(), m.cli.GetClusterID())
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -430,10 +433,10 @@ func (m *migrator) Migrate(ctx context.Context) error {
 	oldVersion, newVersion := 0, cdcMetaVersion
 
 	if version == noMetaVersion {
-		if m.cli.ClusterID != etcd.DefaultCDCClusterID {
+		if m.cli.GetClusterID() != etcd.DefaultCDCClusterID {
 			// not default cluster
 			log.Info("not a default cdc cluster, skip migration data",
-				zap.String("cluster", m.cli.ClusterID))
+				zap.String("cluster", m.cli.GetClusterID()))
 			// put upstream id
 			err = m.saveUpstreamInfo(ctx)
 			if err != nil {
@@ -442,7 +445,8 @@ func (m *migrator) Migrate(ctx context.Context) error {
 					zap.Error(err))
 				return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
 			}
-			_, err := m.cli.Client.Put(ctx, m.metaVersionKey, fmt.Sprintf("%d", newVersion))
+			_, err := m.cli.GetEtcdClient().
+				Put(ctx, m.metaVersionKey, fmt.Sprintf("%d", newVersion))
 			if err != nil {
 				log.Error("put meta version failed", zap.Error(err))
 			}
@@ -471,7 +475,7 @@ func (m *migrator) Migrate(ctx context.Context) error {
 
 // ShouldMigrate checks if we should migrate etcd metadata
 func (m *migrator) ShouldMigrate(ctx context.Context) (bool, error) {
-	version, err := getMetaVersion(ctx, m.cli.Client, m.cli.ClusterID)
+	version, err := getMetaVersion(ctx, m.cli.GetEtcdClient(), m.cli.GetClusterID())
 	if err != nil {
 		return false, errors.Trace(err)
 	}
@@ -481,7 +485,7 @@ func (m *migrator) ShouldMigrate(ctx context.Context) (bool, error) {
 // WaitMetaVersionMatched checks and waits until the metaVersion in etcd
 // matched to lock cdcMetaVersion
 func (m *migrator) WaitMetaVersionMatched(ctx context.Context) error {
-	version, err := getMetaVersion(ctx, m.cli.Client, m.cli.ClusterID)
+	version, err := getMetaVersion(ctx, m.cli.GetEtcdClient(), m.cli.GetClusterID())
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -499,7 +503,7 @@ func (m *migrator) WaitMetaVersionMatched(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			version, err := getMetaVersion(ctx, m.cli.Client, m.cli.ClusterID)
+			version, err := getMetaVersion(ctx, m.cli.GetEtcdClient(), m.cli.GetClusterID())
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -525,7 +529,7 @@ func (m *migrator) saveUpstreamInfo(ctx context.Context) error {
 	upstreamID := pdClient.GetClusterID(ctx)
 	upstreamKey := etcd.CDCKey{
 		Tp:         etcd.CDCKeyTypeUpStream,
-		ClusterID:  m.cli.ClusterID,
+		ClusterID:  m.cli.GetClusterID(),
 		UpstreamID: upstreamID,
 		Namespace:  model.DefaultNamespace,
 	}
@@ -542,7 +546,7 @@ func (m *migrator) saveUpstreamInfo(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	_, err = m.cli.Client.Put(ctx, upstreamKeyStr, string(upstreamInfoStr))
+	_, err = m.cli.GetEtcdClient().Put(ctx, upstreamKeyStr, string(upstreamInfoStr))
 	return err
 }
 

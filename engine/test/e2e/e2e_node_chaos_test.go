@@ -32,20 +32,29 @@ import (
 	"github.com/pingcap/tiflow/engine/test/e2e"
 )
 
+var DefaultTimeoutForTest = 3 * time.Second
+
 // update the watched key of workers belonging to a given job, and then
 // check the mvcc count and value of the key are updated as expected.
 func updateKeyAndCheckOnce(
 	ctx context.Context, t *testing.T, cli *e2e.ChaosCli,
 	jobID string, workerCount int, updateValue string, expectedMvcc int,
 ) {
+	log.Debug("update fake job key", zap.String("job-id", jobID), zap.String("update-value", updateValue),
+		zap.Int("expect-mvcc", expectedMvcc))
+	ctx1, cancel := context.WithTimeout(ctx, DefaultTimeoutForTest)
+	defer cancel()
 	for j := 0; j < workerCount; j++ {
-		err := cli.UpdateFakeJobKey(ctx, j, updateValue)
+		err := cli.UpdateFakeJobKey(ctx1, j, updateValue)
 		require.NoError(t, err)
 	}
 
 	require.Eventually(t, func() bool {
+		ctx1, cancel := context.WithTimeout(ctx, DefaultTimeoutForTest)
+		defer cancel()
+		log.Debug("wait and check fake job value and mvcc. tick.")
 		for jobIdx := 0; jobIdx < workerCount; jobIdx++ {
-			err := cli.CheckFakeJobKey(ctx, jobID, jobIdx, expectedMvcc, updateValue)
+			err := cli.CheckFakeJobKey(ctx1, jobID, jobIdx, expectedMvcc, updateValue)
 			if err != nil {
 				log.Warn("check fake job failed", zap.Error(err))
 				return false
@@ -59,9 +68,10 @@ func TestNodeFailure(t *testing.T) {
 	// TODO: make the following variables configurable, these variables keep the
 	// same in sample/3m3e.yaml
 	var (
-		masterAddrs                  = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
-		businessMetaAddrs            = []string{"127.0.0.1:12479"}
-		businessMetaAddrsInContainer = []string{"business-etcd-standalone:2379"}
+		masterAddrs          = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
+		businessMetaAddrs    = []string{"127.0.0.1:3336"}
+		etcdAddrs            = []string{"127.0.0.1:12479"}
+		etcdAddrsInContainer = []string{"etcd-standalone:2379"}
 	)
 
 	seed := time.Now().Unix()
@@ -75,14 +85,14 @@ func TestNodeFailure(t *testing.T) {
 		// use a large enough target tick to ensure the fake job long running
 		TargetTick:      10000000,
 		EtcdWatchEnable: true,
-		EtcdEndpoints:   businessMetaAddrsInContainer,
+		EtcdEndpoints:   etcdAddrsInContainer,
 		EtcdWatchPrefix: "/fake-job/test/",
 	}
 	cfgBytes, err := json.Marshal(cfg)
 	require.NoError(t, err)
 
 	fakeJobCfg := &e2e.FakeJobConfig{
-		EtcdEndpoints: businessMetaAddrs, // reuse business meta KV endpoints
+		EtcdEndpoints: etcdAddrs,
 		WorkerCount:   cfg.WorkerCount,
 		KeyPrefix:     cfg.EtcdWatchPrefix,
 	}
@@ -91,17 +101,23 @@ func TestNodeFailure(t *testing.T) {
 		fakeJobCfg)
 	require.NoError(t, err)
 
-	jobID, err := cli.CreateJob(ctx, engineModel.JobTypeFakeJob, cfgBytes)
+	ctx1, cancel := context.WithTimeout(ctx, DefaultTimeoutForTest)
+	defer cancel()
+	jobID, err := cli.CreateJob(ctx1, engineModel.JobTypeFakeJob, cfgBytes)
 	require.NoError(t, err)
+	log.Info("create fake job successful", zap.String("job-id", jobID))
 
 	err = cli.InitializeMetaClient(jobID)
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
+		ctx1, cancel := context.WithTimeout(ctx, DefaultTimeoutForTest)
+		defer cancel()
+		log.Info("wait and check if all workers are online. tick.")
 		// check tick increases to ensure all workers are online
 		targetTick := int64(20)
 		for jobIdx := 0; jobIdx < cfg.WorkerCount; jobIdx++ {
-			err := cli.CheckFakeJobTick(ctx, jobID, jobIdx, targetTick)
+			err := cli.CheckFakeJobTick(ctx1, jobID, jobIdx, targetTick)
 			if err != nil {
 				log.Warn("check fake job tick failed", zap.Error(err))
 				return false
@@ -110,10 +126,11 @@ func TestNodeFailure(t *testing.T) {
 		return true
 	}, time.Second*60, time.Second*2)
 
+	log.Info("wait and check if worker is normal")
 	mvccCount := 1
 	updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, "random-value-1", mvccCount)
 
-	// restart all server masters and check fake job is running normally
+	log.Info("restart all server masters and check fake job is running normally")
 	nodeCount := 3
 	for i := 0; i < nodeCount; i++ {
 		cli.ContainerRestart(masterContainerName(i))
@@ -122,16 +139,7 @@ func TestNodeFailure(t *testing.T) {
 		updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, value, mvccCount)
 	}
 
-	// transfer etcd leader to a random node for several times
-	for i := 0; i < nodeCount; i++ {
-		err := cli.TransferEtcdLeader(ctx)
-		require.NoError(t, err)
-		mvccCount++
-		value := fmt.Sprintf("transfer-etcd-leader-value-%d", i)
-		updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, value, mvccCount)
-	}
-
-	// restart all executors and check fake job is running normally
+	log.Info("restart all executors and check fake job is running normally")
 	for i := 0; i < nodeCount; i++ {
 		cli.ContainerRestart(executorContainerName(i))
 		mvccCount++
@@ -151,6 +159,7 @@ func TestNodeFailure(t *testing.T) {
 	mvccCount++
 	updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, value, mvccCount)
 
+	log.Info("pause job and check if the job status is stopped")
 	err = cli.PauseJob(ctx, jobID)
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {

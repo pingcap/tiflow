@@ -644,6 +644,10 @@ var (
 		"waiting processor to handle the operation finished timeout",
 		errors.RFCCodeText("CDC:ErrWaitHandleOperationTimeout"),
 	)
+	ErrClusterIsUnhealthy = errors.Normalize(
+		"TiCDC cluster is unhealthy",
+		errors.RFCCodeText("CDC:ErrClusterIsUnhealthy"),
+	)
 	ErrSupportPostOnly = errors.Normalize(
 		"this api supports POST method only",
 		errors.RFCCodeText("CDC:ErrSupportPostOnly"),
@@ -711,7 +715,7 @@ var (
 	)
 	ErrStartTsBeforeGC = errors.Normalize(
 		"fail to create or maintain changefeed because start-ts %d "+
-			"is earlier than GC safepoint at %d",
+			"is earlier than or equal to GC safepoint at %d",
 		errors.RFCCodeText("CDC:ErrStartTsBeforeGC"),
 	)
 	ErrTargetTsBeforeStartTs = errors.Normalize(
@@ -1067,7 +1071,7 @@ var (
 	// cli error
 	ErrCliInvalidCheckpointTs = errors.Normalize(
 		"invalid overwrite-checkpoint-ts %s, "+
-			"overwrite-checkpoint-ts only accept 'now' or number",
+			"overwrite-checkpoint-ts only accept 'now' or a valid timestamp in integer",
 		errors.RFCCodeText("CDC:ErrCliInvalidCheckpointTs"),
 	)
 	ErrCliCheckpointTsIsInFuture = errors.Normalize(

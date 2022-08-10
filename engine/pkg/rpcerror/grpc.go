@@ -20,9 +20,8 @@ import (
 
 	"github.com/gogo/status"
 	"github.com/pingcap/errors"
-	"google.golang.org/grpc/codes"
-
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"google.golang.org/grpc/codes"
 )
 
 func tryUnwrapNormalizedError(errIn error) (typeErasedNormalizedError, bool) {
@@ -103,12 +102,22 @@ func IsRetryable(errIn error) bool {
 	return normalized.isRetryable()
 }
 
+// IsManagedError returns whether the error is managed by the rpcerror library.
+func IsManagedError(errIn error) bool {
+	_, ok := tryUnwrapNormalizedError(errIn)
+	return ok
+}
+
 // GRPCStatusCode extracts the grpc status code from an error.
 func GRPCStatusCode(errIn error) (codes.Code, bool) {
 	if err, ok := tryUnwrapNormalizedError(errIn); ok {
 		return err.statusCode(), true
 	}
-	if st, ok := status.FromError(errors.Unwrap(errIn)); ok {
+
+	if errors.HasStack(errIn) {
+		errIn = errors.Unwrap(errIn)
+	}
+	if st, ok := status.FromError(errIn); ok {
 		// errIn is a raw gRPC error
 		return st.Code(), true
 	}

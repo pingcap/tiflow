@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
@@ -366,7 +367,7 @@ func (info *ChangeFeedInfo) fixSinkProtocol() {
 
 	// fix mysql sink
 	scheme := sinkURIParsed.Scheme
-	if !config.IsMqScheme(scheme) {
+	if !sink.IsMQScheme(scheme) {
 		if protocolStr != "" || info.Config.Sink.Protocol != "" {
 			maskedSinkURI, _ := util.MaskSinkURI(info.SinkURI)
 			log.Warn("sink URI or sink config contains protocol, but scheme is not mq",

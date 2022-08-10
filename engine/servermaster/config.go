@@ -16,48 +16,44 @@ package servermaster
 import (
 	"bytes"
 	"encoding/json"
-	"net/url"
 	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
+	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/engine/pkg/etcdutil"
+	"go.uber.org/zap"
+
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/security"
-	"go.etcd.io/etcd/server/v3/embed"
-	"go.uber.org/zap"
 )
 
 const (
-	defaultSessionTTL         = 5 * time.Second
-	defaultKeepAliveTTL       = "20s"
-	defaultKeepAliveInterval  = "500ms"
-	defaultRPCTimeout         = "3s"
-	defaultMemberLoopInterval = 10 * time.Second
-	defaultCampaignTimeout    = 5 * time.Second
-	defaultDiscoverTicker     = 3 * time.Second
-	defaultMetricInterval     = 15 * time.Second
-
-	defaultMasterAddr          = "127.0.0.1:10240"
-	defaultPeerUrls            = "http://127.0.0.1:8291"
-	defaultInitialClusterState = embed.ClusterStateFlagNew
+	defaultSessionTTL        = 5 * time.Second
+	defaultKeepAliveTTL      = "20s"
+	defaultKeepAliveInterval = "500ms"
+	defaultRPCTimeout        = "3s"
+	defaultCampaignTimeout   = 5 * time.Second
+	defaultDiscoverTicker    = 3 * time.Second
+	defaultMetricInterval    = 15 * time.Second
+	defaultMasterAddr        = "127.0.0.1:10240"
 
 	// DefaultBusinessMetaID is the ID for default business metastore
 	DefaultBusinessMetaID        = "_default"
-	defaultBusinessMetaEndpoints = "127.0.0.1:12479"
+	defaultBusinessMetaEndpoints = "127.0.0.1:3336"
+	defaultBusinessMetaUser      = "root"
+	defaultBusinessMetaPassword  = ""
 
 	// FrameMetaID is the ID for frame metastore
 	FrameMetaID               = "_root"
 	defaultFrameMetaEndpoints = "127.0.0.1:3336"
 	defaultFrameMetaUser      = "root"
-	defaultFrameMetaPassword  = "123456"
+	defaultFrameMetaPassword  = ""
 
-	defaultFrameworkStoreType = metaModel.StoreTypeSQL
-	// TODO: we will switch to StoreTypeSQL after we support sql implement
-	defaultbusinessStoreType = metaModel.StoreTypeEtcd
+	defaultFrameworkStoreType = metaModel.StoreTypeMySQL
+	defaultBusinessStoreType  = metaModel.StoreTypeMySQL
 )
 
 // Config is the configuration for server-master.
@@ -67,14 +63,9 @@ type Config struct {
 	Addr          string `toml:"addr" json:"addr"`
 	AdvertiseAddr string `toml:"advertise-addr" json:"advertise-addr"`
 
-	ConfigFile string `toml:"config-file" json:"config-file"`
+	ETCDEndpoints []string `toml:"etcd-endpoints" json:"etcd-endpoints"`
 
-	// etcd relative config items
-	// NOTE: we use `MasterAddr` to generate `ClientUrls` and `AdvertiseClientUrls`
-	// NOTE: more items will be add when adding leader election
-	Etcd *etcdutil.ConfigParams `toml:"etcd" json:"etcd"`
-
-	FrameMetaConf    *metaModel.StoreConfig `toml:"frame-metastore-conf" json:"frame-metastore-conf"`
+	FrameMetaConf    *metaModel.StoreConfig `toml:"framework-metastore-conf" json:"framework-metastore-conf"`
 	BusinessMetaConf *metaModel.StoreConfig `toml:"business-metastore-conf" json:"business-metastore-conf"`
 
 	KeepAliveTTLStr string `toml:"keepalive-ttl" json:"keepalive-ttl"`
@@ -109,9 +100,11 @@ func (c *Config) Toml() (string, error) {
 	return b.String(), nil
 }
 
-// Adjust adjusts the master configuration
-func (c *Config) Adjust() (err error) {
-	c.Etcd.Adjust(defaultPeerUrls, defaultInitialClusterState)
+// AdjustAndValidate validates and adjusts the master configuration
+func (c *Config) AdjustAndValidate() (err error) {
+	// adjust the metastore type
+	strings.ToLower(strings.TrimSpace(c.FrameMetaConf.StoreType))
+	strings.ToLower(strings.TrimSpace(c.BusinessMetaConf.StoreType))
 
 	if c.AdvertiseAddr == "" {
 		c.AdvertiseAddr = c.Addr
@@ -132,14 +125,10 @@ func (c *Config) Adjust() (err error) {
 		return err
 	}
 
-	c.adjustStoreConfig()
-	return nil
-}
-
-// adjustStoreConfig adjusts store configuration
-func (c *Config) adjustStoreConfig() {
-	strings.ToLower(strings.TrimSpace(c.FrameMetaConf.StoreType))
-	strings.ToLower(strings.TrimSpace(c.BusinessMetaConf.StoreType))
+	return validation.ValidateStruct(c,
+		validation.Field(&c.FrameMetaConf),
+		validation.Field(&c.BusinessMetaConf),
+	)
 }
 
 // configFromFile loads config from file and merges items into Config.
@@ -166,12 +155,8 @@ func GetDefaultMasterConfig() *Config {
 			Level: "info",
 			File:  "",
 		},
-		Addr:          defaultMasterAddr,
-		AdvertiseAddr: "",
-		Etcd: &etcdutil.ConfigParams{
-			PeerUrls:            defaultPeerUrls,
-			InitialClusterState: defaultInitialClusterState,
-		},
+		Addr:                 defaultMasterAddr,
+		AdvertiseAddr:        "",
 		FrameMetaConf:        newFrameMetaConfig(),
 		BusinessMetaConf:     NewDefaultBusinessMetaConfig(),
 		KeepAliveTTLStr:      defaultKeepAliveTTL,
@@ -192,34 +177,6 @@ func checkUndecodedItems(metaData toml.MetaData) error {
 	return nil
 }
 
-// parseURLs parse a string into multiple urls.
-// if the URL in the string without protocol scheme, use `http` as the default.
-// if no IP exists in the address, `0.0.0.0` is used.
-func parseURLs(s string) ([]url.URL, error) {
-	if s == "" {
-		return nil, nil
-	}
-
-	items := strings.Split(s, ",")
-	urls := make([]url.URL, 0, len(items))
-	for _, item := range items {
-		// tolerate valid `master-addr`, but invalid URL format. mainly caused by no protocol scheme
-		if !(strings.HasPrefix(item, "http://") || strings.HasPrefix(item, "https://")) {
-			prefix := "http://"
-			item = prefix + item
-		}
-		u, err := url.Parse(item)
-		if err != nil {
-			return nil, errors.WrapError(errors.ErrMasterParseURLFail, err, item)
-		}
-		if strings.Index(u.Host, ":") == 0 {
-			u.Host = "0.0.0.0" + u.Host
-		}
-		urls = append(urls, *u)
-	}
-	return urls, nil
-}
-
 // newFrameMetaConfig return the default framework metastore config
 func newFrameMetaConfig() *metaModel.StoreConfig {
 	conf := metaModel.DefaultStoreConfig()
@@ -236,8 +193,10 @@ func newFrameMetaConfig() *metaModel.StoreConfig {
 func NewDefaultBusinessMetaConfig() *metaModel.StoreConfig {
 	conf := metaModel.DefaultStoreConfig()
 	conf.StoreID = DefaultBusinessMetaID
-	conf.StoreType = defaultbusinessStoreType
+	conf.StoreType = defaultBusinessStoreType
 	conf.Endpoints = append(conf.Endpoints, defaultBusinessMetaEndpoints)
+	conf.Auth.User = defaultBusinessMetaUser
+	conf.Auth.Passwd = defaultBusinessMetaPassword
 
 	return conf
 }

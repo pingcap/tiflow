@@ -6,23 +6,19 @@ package enginepb
 import (
 	context "context"
 	fmt "fmt"
-	io "io"
-	math "math"
-	math_bits "math/bits"
-
 	proto "github.com/gogo/protobuf/proto"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	io "io"
+	math "math"
+	math_bits "math/bits"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
-
-var (
-	_ = fmt.Errorf
-	_ = math.Inf
-)
+var _ = fmt.Errorf
+var _ = math.Inf
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
@@ -37,7 +33,8 @@ type PreDispatchTaskRequest struct {
 	WorkerId    string       `protobuf:"bytes,4,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
 	ProjectInfo *ProjectInfo `protobuf:"bytes,5,opt,name=project_info,json=projectInfo,proto3" json:"project_info,omitempty"`
 	// request_id should be a UUID unique for each RPC call.
-	RequestId string `protobuf:"bytes,6,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	RequestId   string `protobuf:"bytes,6,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	WorkerEpoch int64  `protobuf:"varint,7,opt,name=worker_epoch,json=workerEpoch,proto3" json:"worker_epoch,omitempty"`
 }
 
 func (m *PreDispatchTaskRequest) Reset()         { *m = PreDispatchTaskRequest{} }
@@ -46,11 +43,9 @@ func (*PreDispatchTaskRequest) ProtoMessage()    {}
 func (*PreDispatchTaskRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_12d1cdcda51e000f, []int{0}
 }
-
 func (m *PreDispatchTaskRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-
 func (m *PreDispatchTaskRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_PreDispatchTaskRequest.Marshal(b, m, deterministic)
@@ -63,15 +58,12 @@ func (m *PreDispatchTaskRequest) XXX_Marshal(b []byte, deterministic bool) ([]by
 		return b[:n], nil
 	}
 }
-
 func (m *PreDispatchTaskRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_PreDispatchTaskRequest.Merge(m, src)
 }
-
 func (m *PreDispatchTaskRequest) XXX_Size() int {
 	return m.Size()
 }
-
 func (m *PreDispatchTaskRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_PreDispatchTaskRequest.DiscardUnknown(m)
 }
@@ -120,7 +112,15 @@ func (m *PreDispatchTaskRequest) GetRequestId() string {
 	return ""
 }
 
-type PreDispatchTaskResponse struct{}
+func (m *PreDispatchTaskRequest) GetWorkerEpoch() int64 {
+	if m != nil {
+		return m.WorkerEpoch
+	}
+	return 0
+}
+
+type PreDispatchTaskResponse struct {
+}
 
 func (m *PreDispatchTaskResponse) Reset()         { *m = PreDispatchTaskResponse{} }
 func (m *PreDispatchTaskResponse) String() string { return proto.CompactTextString(m) }
@@ -128,11 +128,9 @@ func (*PreDispatchTaskResponse) ProtoMessage()    {}
 func (*PreDispatchTaskResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_12d1cdcda51e000f, []int{1}
 }
-
 func (m *PreDispatchTaskResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-
 func (m *PreDispatchTaskResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_PreDispatchTaskResponse.Marshal(b, m, deterministic)
@@ -145,15 +143,12 @@ func (m *PreDispatchTaskResponse) XXX_Marshal(b []byte, deterministic bool) ([]b
 		return b[:n], nil
 	}
 }
-
 func (m *PreDispatchTaskResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_PreDispatchTaskResponse.Merge(m, src)
 }
-
 func (m *PreDispatchTaskResponse) XXX_Size() int {
 	return m.Size()
 }
-
 func (m *PreDispatchTaskResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_PreDispatchTaskResponse.DiscardUnknown(m)
 }
@@ -171,11 +166,9 @@ func (*ConfirmDispatchTaskRequest) ProtoMessage()    {}
 func (*ConfirmDispatchTaskRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_12d1cdcda51e000f, []int{2}
 }
-
 func (m *ConfirmDispatchTaskRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-
 func (m *ConfirmDispatchTaskRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_ConfirmDispatchTaskRequest.Marshal(b, m, deterministic)
@@ -188,15 +181,12 @@ func (m *ConfirmDispatchTaskRequest) XXX_Marshal(b []byte, deterministic bool) (
 		return b[:n], nil
 	}
 }
-
 func (m *ConfirmDispatchTaskRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ConfirmDispatchTaskRequest.Merge(m, src)
 }
-
 func (m *ConfirmDispatchTaskRequest) XXX_Size() int {
 	return m.Size()
 }
-
 func (m *ConfirmDispatchTaskRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_ConfirmDispatchTaskRequest.DiscardUnknown(m)
 }
@@ -217,7 +207,8 @@ func (m *ConfirmDispatchTaskRequest) GetRequestId() string {
 	return ""
 }
 
-type ConfirmDispatchTaskResponse struct{}
+type ConfirmDispatchTaskResponse struct {
+}
 
 func (m *ConfirmDispatchTaskResponse) Reset()         { *m = ConfirmDispatchTaskResponse{} }
 func (m *ConfirmDispatchTaskResponse) String() string { return proto.CompactTextString(m) }
@@ -225,11 +216,9 @@ func (*ConfirmDispatchTaskResponse) ProtoMessage()    {}
 func (*ConfirmDispatchTaskResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_12d1cdcda51e000f, []int{3}
 }
-
 func (m *ConfirmDispatchTaskResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-
 func (m *ConfirmDispatchTaskResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_ConfirmDispatchTaskResponse.Marshal(b, m, deterministic)
@@ -242,15 +231,12 @@ func (m *ConfirmDispatchTaskResponse) XXX_Marshal(b []byte, deterministic bool) 
 		return b[:n], nil
 	}
 }
-
 func (m *ConfirmDispatchTaskResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_ConfirmDispatchTaskResponse.Merge(m, src)
 }
-
 func (m *ConfirmDispatchTaskResponse) XXX_Size() int {
 	return m.Size()
 }
-
 func (m *ConfirmDispatchTaskResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_ConfirmDispatchTaskResponse.DiscardUnknown(m)
 }
@@ -268,11 +254,9 @@ func (*RemoveLocalResourceRequest) ProtoMessage()    {}
 func (*RemoveLocalResourceRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_12d1cdcda51e000f, []int{4}
 }
-
 func (m *RemoveLocalResourceRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-
 func (m *RemoveLocalResourceRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_RemoveLocalResourceRequest.Marshal(b, m, deterministic)
@@ -285,15 +269,12 @@ func (m *RemoveLocalResourceRequest) XXX_Marshal(b []byte, deterministic bool) (
 		return b[:n], nil
 	}
 }
-
 func (m *RemoveLocalResourceRequest) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_RemoveLocalResourceRequest.Merge(m, src)
 }
-
 func (m *RemoveLocalResourceRequest) XXX_Size() int {
 	return m.Size()
 }
-
 func (m *RemoveLocalResourceRequest) XXX_DiscardUnknown() {
 	xxx_messageInfo_RemoveLocalResourceRequest.DiscardUnknown(m)
 }
@@ -314,7 +295,8 @@ func (m *RemoveLocalResourceRequest) GetCreatorId() string {
 	return ""
 }
 
-type RemoveLocalResourceResponse struct{}
+type RemoveLocalResourceResponse struct {
+}
 
 func (m *RemoveLocalResourceResponse) Reset()         { *m = RemoveLocalResourceResponse{} }
 func (m *RemoveLocalResourceResponse) String() string { return proto.CompactTextString(m) }
@@ -322,11 +304,9 @@ func (*RemoveLocalResourceResponse) ProtoMessage()    {}
 func (*RemoveLocalResourceResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_12d1cdcda51e000f, []int{5}
 }
-
 func (m *RemoveLocalResourceResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-
 func (m *RemoveLocalResourceResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
 		return xxx_messageInfo_RemoveLocalResourceResponse.Marshal(b, m, deterministic)
@@ -339,15 +319,12 @@ func (m *RemoveLocalResourceResponse) XXX_Marshal(b []byte, deterministic bool) 
 		return b[:n], nil
 	}
 }
-
 func (m *RemoveLocalResourceResponse) XXX_Merge(src proto.Message) {
 	xxx_messageInfo_RemoveLocalResourceResponse.Merge(m, src)
 }
-
 func (m *RemoveLocalResourceResponse) XXX_Size() int {
 	return m.Size()
 }
-
 func (m *RemoveLocalResourceResponse) XXX_DiscardUnknown() {
 	xxx_messageInfo_RemoveLocalResourceResponse.DiscardUnknown(m)
 }
@@ -366,34 +343,35 @@ func init() {
 func init() { proto.RegisterFile("executor.proto", fileDescriptor_12d1cdcda51e000f) }
 
 var fileDescriptor_12d1cdcda51e000f = []byte{
-	// 430 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x93, 0xc1, 0x6e, 0xd3, 0x40,
-	0x10, 0x86, 0xbd, 0x2d, 0x54, 0xc9, 0x38, 0x04, 0x69, 0x11, 0x60, 0x5c, 0xd5, 0x35, 0x16, 0x48,
-	0x3e, 0xe5, 0x10, 0x2e, 0x9c, 0x0b, 0x1c, 0x2c, 0x71, 0xa8, 0x4c, 0x0f, 0x3d, 0x20, 0x59, 0xee,
-	0x7a, 0x52, 0x8c, 0x89, 0x77, 0xd9, 0xdd, 0x14, 0xfa, 0x16, 0x3c, 0x16, 0xe2, 0xd4, 0x23, 0x47,
-	0x94, 0xdc, 0x79, 0x06, 0x64, 0xaf, 0xad, 0xb8, 0xc1, 0x49, 0x8f, 0xfe, 0x67, 0x76, 0xbe, 0xf9,
-	0x7f, 0x8d, 0x61, 0x8c, 0xdf, 0x91, 0x2d, 0x34, 0x97, 0x13, 0x21, 0xb9, 0xe6, 0x74, 0x80, 0xe5,
-	0x65, 0x5e, 0xa2, 0xb8, 0x70, 0xc7, 0x42, 0xf2, 0xcf, 0xc8, 0xb4, 0x32, 0x95, 0xe0, 0x2f, 0x81,
-	0x27, 0xa7, 0x12, 0xdf, 0xe6, 0x4a, 0xa4, 0x9a, 0x7d, 0x3a, 0x4b, 0x55, 0x11, 0xe3, 0xd7, 0x05,
-	0x2a, 0x4d, 0x7d, 0x18, 0xe9, 0x54, 0x15, 0x89, 0xbe, 0x16, 0x98, 0xe4, 0x99, 0x43, 0x7c, 0x12,
-	0xee, 0xc7, 0x50, 0x69, 0x67, 0xd7, 0x02, 0xa3, 0x8c, 0x1e, 0x83, 0x5d, 0x77, 0x30, 0x5e, 0xce,
-	0xf2, 0x4b, 0x67, 0xcf, 0x27, 0xe1, 0xc8, 0x34, 0xbc, 0xa9, 0x15, 0x7a, 0x08, 0xc3, 0x79, 0xaa,
-	0x34, 0xca, 0xea, 0xfd, 0xbe, 0x4f, 0xc2, 0x61, 0x3c, 0x30, 0x42, 0x94, 0x55, 0xc5, 0x6f, 0x5c,
-	0x16, 0xa6, 0x78, 0xcf, 0x14, 0x8d, 0x10, 0x65, 0xf4, 0x35, 0x8c, 0x9a, 0x4d, 0x93, 0xbc, 0x9c,
-	0x71, 0xe7, 0xbe, 0x4f, 0x42, 0x7b, 0xfa, 0x78, 0xd2, 0x1a, 0x99, 0x9c, 0x9a, 0x6a, 0x54, 0xce,
-	0x78, 0x6c, 0x8b, 0xf5, 0x07, 0x3d, 0x02, 0x90, 0xc6, 0x41, 0x35, 0xf7, 0xa0, 0x9e, 0x3b, 0x6c,
-	0x94, 0x28, 0x0b, 0x9e, 0xc1, 0xd3, 0xff, 0xfc, 0x2a, 0xc1, 0x4b, 0x85, 0xc1, 0x39, 0xb8, 0xf5,
-	0xde, 0x72, 0xde, 0x17, 0xc7, 0xad, 0x75, 0xc9, 0xc6, 0xba, 0xb7, 0xa1, 0x7b, 0x9b, 0xd0, 0x23,
-	0x38, 0xec, 0x9d, 0xdc, 0x80, 0x3f, 0x82, 0x1b, 0xe3, 0x9c, 0x5f, 0xe1, 0x7b, 0xce, 0xd2, 0x2f,
-	0x31, 0x2a, 0xbe, 0x90, 0x0c, 0x5b, 0xf0, 0x31, 0xd8, 0xb2, 0x91, 0xd6, 0x68, 0x68, 0x25, 0x03,
-	0x67, 0x12, 0x53, 0xcd, 0x65, 0x07, 0xde, 0x28, 0x06, 0xde, 0x3b, 0xdd, 0xc0, 0xa7, 0xbf, 0x08,
-	0x0c, 0xde, 0x35, 0xe7, 0x42, 0xcf, 0xe1, 0xe1, 0x46, 0x3a, 0xd4, 0xef, 0x66, 0xde, 0x77, 0x28,
-	0xee, 0xf3, 0x1d, 0x1d, 0x8d, 0x43, 0x8b, 0x66, 0xf0, 0xa8, 0x27, 0x02, 0xfa, 0x62, 0xfd, 0x76,
-	0x7b, 0xf6, 0xee, 0xcb, 0x3b, 0xba, 0x5a, 0xca, 0x54, 0xc0, 0x83, 0x13, 0xc9, 0x0b, 0x94, 0x1f,
-	0x50, 0x5e, 0xe5, 0x0c, 0x69, 0x02, 0x63, 0x63, 0xbe, 0xf5, 0xdd, 0x25, 0x6e, 0x0f, 0xbd, 0x4b,
-	0xdc, 0x11, 0x5e, 0x60, 0x9d, 0x38, 0x3f, 0x97, 0x1e, 0xb9, 0x59, 0x7a, 0xe4, 0xcf, 0xd2, 0x23,
-	0x3f, 0x56, 0x9e, 0x75, 0xb3, 0xf2, 0xac, 0xdf, 0x2b, 0xcf, 0xba, 0x38, 0xa8, 0xff, 0xb0, 0x57,
-	0xff, 0x02, 0x00, 0x00, 0xff, 0xff, 0xa0, 0x6f, 0x61, 0x27, 0x8d, 0x03, 0x00, 0x00,
+	// 448 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x93, 0x41, 0x6f, 0xd3, 0x30,
+	0x14, 0xc7, 0xe3, 0x0e, 0x46, 0xfb, 0x52, 0x8a, 0x64, 0x04, 0x84, 0x4c, 0xcb, 0xb2, 0x08, 0xa4,
+	0x9e, 0x7a, 0x28, 0x17, 0xce, 0x83, 0x1d, 0x22, 0x71, 0x98, 0xc2, 0x0e, 0x3b, 0x20, 0x55, 0x99,
+	0xf3, 0xba, 0x85, 0xd2, 0xd8, 0xd8, 0xee, 0x60, 0xdf, 0x02, 0xbe, 0x15, 0xe2, 0xb4, 0x23, 0x47,
+	0xd4, 0x7e, 0x11, 0x94, 0xd8, 0x51, 0xb3, 0x92, 0x75, 0xc7, 0xfc, 0xdf, 0xf3, 0xfb, 0xbd, 0xff,
+	0x3f, 0x36, 0x0c, 0xf0, 0x3b, 0xb2, 0x85, 0xe6, 0x72, 0x24, 0x24, 0xd7, 0x9c, 0x76, 0xb1, 0xb8,
+	0xc8, 0x0b, 0x14, 0xe7, 0xfe, 0x40, 0x48, 0xfe, 0x19, 0x99, 0x56, 0xa6, 0x12, 0xfd, 0xec, 0xc0,
+	0xf3, 0x13, 0x89, 0xef, 0x73, 0x25, 0x52, 0xcd, 0x2e, 0x4f, 0x53, 0x35, 0x4b, 0xf0, 0xeb, 0x02,
+	0x95, 0xa6, 0x21, 0xf4, 0x75, 0xaa, 0x66, 0x13, 0x7d, 0x2d, 0x70, 0x92, 0x67, 0x1e, 0x09, 0xc9,
+	0x70, 0x27, 0x81, 0x52, 0x3b, 0xbd, 0x16, 0x18, 0x67, 0xf4, 0x00, 0xdc, 0xaa, 0x83, 0xf1, 0x62,
+	0x9a, 0x5f, 0x78, 0x9d, 0x90, 0x0c, 0xfb, 0xa6, 0xe1, 0x5d, 0xa5, 0xd0, 0x3d, 0xe8, 0xcd, 0x53,
+	0xa5, 0x51, 0x96, 0xe7, 0x77, 0x42, 0x32, 0xec, 0x25, 0x5d, 0x23, 0xc4, 0x59, 0x59, 0xfc, 0xc6,
+	0xe5, 0xcc, 0x14, 0x1f, 0x98, 0xa2, 0x11, 0xe2, 0x8c, 0xbe, 0x85, 0xbe, 0xdd, 0x74, 0x92, 0x17,
+	0x53, 0xee, 0x3d, 0x0c, 0xc9, 0xd0, 0x1d, 0x3f, 0x1b, 0xd5, 0x46, 0x46, 0x27, 0xa6, 0x1a, 0x17,
+	0x53, 0x9e, 0xb8, 0x62, 0xfd, 0x41, 0xf7, 0x01, 0xa4, 0x71, 0x50, 0xce, 0xdd, 0xad, 0xe6, 0xf6,
+	0xac, 0x12, 0x67, 0xf4, 0x10, 0xfa, 0x96, 0x8a, 0x82, 0xb3, 0x4b, 0xef, 0x51, 0xe5, 0xca, 0x35,
+	0xda, 0x71, 0x29, 0x45, 0x2f, 0xe1, 0xc5, 0x7f, 0x91, 0x28, 0xc1, 0x0b, 0x85, 0xd1, 0x19, 0xf8,
+	0x95, 0x35, 0x39, 0x6f, 0x4b, 0xec, 0x96, 0x23, 0xb2, 0xe1, 0xe8, 0xf6, 0x5e, 0x9d, 0x8d, 0xbd,
+	0xa2, 0x7d, 0xd8, 0x6b, 0x9d, 0x6c, 0xc1, 0x9f, 0xc0, 0x4f, 0x70, 0xce, 0xaf, 0xf0, 0x03, 0x67,
+	0xe9, 0x97, 0x04, 0x15, 0x5f, 0x48, 0x86, 0x35, 0xf8, 0x00, 0x5c, 0x69, 0xa5, 0x35, 0x1a, 0x6a,
+	0xc9, 0xc0, 0x99, 0xc4, 0x54, 0x73, 0xd9, 0x80, 0x5b, 0xc5, 0xc0, 0x5b, 0xa7, 0x1b, 0xf8, 0xf8,
+	0x37, 0x81, 0xee, 0xb1, 0xbd, 0x51, 0xf4, 0x0c, 0x9e, 0x6c, 0xa4, 0x43, 0xc3, 0xe6, 0x6f, 0x69,
+	0xbb, 0x4b, 0xfe, 0xe1, 0x96, 0x0e, 0xeb, 0xd0, 0xa1, 0x19, 0x3c, 0x6d, 0x89, 0x80, 0xbe, 0x5a,
+	0x9f, 0xbd, 0x3b, 0x7b, 0xff, 0xf5, 0x3d, 0x5d, 0x35, 0x65, 0x2c, 0xe0, 0xf1, 0x91, 0xe4, 0x33,
+	0x94, 0x1f, 0x51, 0x5e, 0xe5, 0x0c, 0xe9, 0x04, 0x06, 0xc6, 0x7c, 0xed, 0xbb, 0x49, 0xbc, 0x3b,
+	0xf4, 0x26, 0x71, 0x4b, 0x78, 0x91, 0x73, 0xe4, 0xfd, 0x5a, 0x06, 0xe4, 0x66, 0x19, 0x90, 0xbf,
+	0xcb, 0x80, 0xfc, 0x58, 0x05, 0xce, 0xcd, 0x2a, 0x70, 0xfe, 0xac, 0x02, 0xe7, 0x7c, 0xb7, 0x7a,
+	0x84, 0x6f, 0xfe, 0x05, 0x00, 0x00, 0xff, 0xff, 0xb0, 0xc8, 0x83, 0x75, 0xb0, 0x03, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -445,12 +423,12 @@ type ExecutorServer interface {
 }
 
 // UnimplementedExecutorServer can be embedded to have forward compatible implementations.
-type UnimplementedExecutorServer struct{}
+type UnimplementedExecutorServer struct {
+}
 
 func (*UnimplementedExecutorServer) PreDispatchTask(ctx context.Context, req *PreDispatchTaskRequest) (*PreDispatchTaskResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PreDispatchTask not implemented")
 }
-
 func (*UnimplementedExecutorServer) ConfirmDispatchTask(ctx context.Context, req *ConfirmDispatchTaskRequest) (*ConfirmDispatchTaskResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ConfirmDispatchTask not implemented")
 }
@@ -542,7 +520,8 @@ type BrokerServiceServer interface {
 }
 
 // UnimplementedBrokerServiceServer can be embedded to have forward compatible implementations.
-type UnimplementedBrokerServiceServer struct{}
+type UnimplementedBrokerServiceServer struct {
+}
 
 func (*UnimplementedBrokerServiceServer) RemoveResource(ctx context.Context, req *RemoveLocalResourceRequest) (*RemoveLocalResourceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveResource not implemented")
@@ -603,6 +582,11 @@ func (m *PreDispatchTaskRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 	_ = i
 	var l int
 	_ = l
+	if m.WorkerEpoch != 0 {
+		i = encodeVarintExecutor(dAtA, i, uint64(m.WorkerEpoch))
+		i--
+		dAtA[i] = 0x38
+	}
 	if len(m.RequestId) > 0 {
 		i -= len(m.RequestId)
 		copy(dAtA[i:], m.RequestId)
@@ -805,7 +789,6 @@ func encodeVarintExecutor(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
-
 func (m *PreDispatchTaskRequest) Size() (n int) {
 	if m == nil {
 		return 0
@@ -834,6 +817,9 @@ func (m *PreDispatchTaskRequest) Size() (n int) {
 	l = len(m.RequestId)
 	if l > 0 {
 		n += 1 + l + sovExecutor(uint64(l))
+	}
+	if m.WorkerEpoch != 0 {
+		n += 1 + sovExecutor(uint64(m.WorkerEpoch))
 	}
 	return n
 }
@@ -902,11 +888,9 @@ func (m *RemoveLocalResourceResponse) Size() (n int) {
 func sovExecutor(x uint64) (n int) {
 	return (math_bits.Len64(x|1) + 6) / 7
 }
-
 func sozExecutor(x uint64) (n int) {
 	return sovExecutor(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-
 func (m *PreDispatchTaskRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1121,6 +1105,25 @@ func (m *PreDispatchTaskRequest) Unmarshal(dAtA []byte) error {
 			}
 			m.RequestId = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+		case 7:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field WorkerEpoch", wireType)
+			}
+			m.WorkerEpoch = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowExecutor
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.WorkerEpoch |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipExecutor(dAtA[iNdEx:])
@@ -1142,7 +1145,6 @@ func (m *PreDispatchTaskRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *PreDispatchTaskResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1193,7 +1195,6 @@ func (m *PreDispatchTaskResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *ConfirmDispatchTaskRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1308,7 +1309,6 @@ func (m *ConfirmDispatchTaskRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *ConfirmDispatchTaskResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1359,7 +1359,6 @@ func (m *ConfirmDispatchTaskResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RemoveLocalResourceRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1474,7 +1473,6 @@ func (m *RemoveLocalResourceRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-
 func (m *RemoveLocalResourceResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1525,7 +1523,6 @@ func (m *RemoveLocalResourceResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-
 func skipExecutor(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0

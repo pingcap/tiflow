@@ -15,6 +15,7 @@ package meta
 
 import (
 	"github.com/pingcap/tiflow/engine/pkg/meta/internal/etcdkv"
+	"github.com/pingcap/tiflow/engine/pkg/meta/internal/sqlkv"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
@@ -24,6 +25,8 @@ func NewClientConn(storeConf *metaModel.StoreConfig) (metaModel.ClientConn, erro
 	switch storeConf.StoreType {
 	case metaModel.StoreTypeEtcd:
 		return etcdkv.NewClientConnImpl(storeConf)
+	case metaModel.StoreTypeMySQL:
+		return sqlkv.NewClientConnImpl(storeConf)
 	}
 
 	return nil, cerrors.ErrMetaClientTypeNotSupport.

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
@@ -41,7 +42,7 @@ func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 	job := metadata.NewJob(jobCfg)
 	jobStore := metadata.NewJobStore("task_manager_test", kvmock.NewMetaMock())
 	require.NoError(t.T(), jobStore.Put(context.Background(), job))
-	taskManager := NewTaskManager(nil, jobStore, nil)
+	taskManager := NewTaskManager(nil, jobStore, nil, log.L())
 
 	require.Len(t.T(), taskManager.TaskStatus(), 0)
 
@@ -102,7 +103,7 @@ func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 	for _, taskStatus := range taskStatusMap {
 		taskStatusList = append(taskStatusList, taskStatus)
 	}
-	taskManager = NewTaskManager(taskStatusList, jobStore, nil)
+	taskManager = NewTaskManager(taskStatusList, jobStore, nil, log.L())
 	taskStatusMap = taskManager.TaskStatus()
 	require.Len(t.T(), taskStatusMap, 2)
 	require.Contains(t.T(), taskStatusMap, jobCfg.Upstreams[0].SourceID)
@@ -115,7 +116,7 @@ func (t *testDMJobmasterSuite) TestOperateTask() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	jobStore := metadata.NewJobStore("task_manager_test", kvmock.NewMetaMock())
-	taskManager := NewTaskManager(nil, jobStore, &dmpkg.MockMessageAgent{})
+	taskManager := NewTaskManager(nil, jobStore, &dmpkg.MockMessageAgent{}, log.L())
 
 	source1 := jobCfg.Upstreams[0].SourceID
 	source2 := jobCfg.Upstreams[1].SourceID
@@ -150,8 +151,7 @@ func (t *testDMJobmasterSuite) TestOperateTask() {
 	require.NoError(t.T(), err)
 	job = state.(*metadata.Job)
 	require.Equal(t.T(), job.Tasks[source1].Stage, metadata.StageRunning)
-	// TODO: should it be paused?
-	require.Equal(t.T(), job.Tasks[source2].Stage, metadata.StageRunning)
+	require.Equal(t.T(), job.Tasks[source2].Stage, metadata.StagePaused)
 
 	require.NoError(t.T(), taskManager.OperateTask(context.Background(), dmpkg.Delete, nil, []string{source1, source2}))
 	state, err = jobStore.Get(context.Background())
@@ -162,7 +162,7 @@ func (t *testDMJobmasterSuite) TestOperateTask() {
 }
 
 func (t *testDMJobmasterSuite) TestClearTaskStatus() {
-	taskManager := NewTaskManager(nil, nil, nil)
+	taskManager := NewTaskManager(nil, nil, nil, log.L())
 	syncStatus1 := runtime.TaskStatus{
 		Unit:  framework.WorkerDMSync,
 		Task:  "source1",
@@ -216,7 +216,7 @@ func (t *testDMJobmasterSuite) TestCheckAndOperateTasks() {
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	job := metadata.NewJob(jobCfg)
 	mockAgent := &dmpkg.MockMessageAgent{}
-	taskManager := NewTaskManager(nil, nil, mockAgent)
+	taskManager := NewTaskManager(nil, nil, mockAgent, log.L())
 
 	require.EqualError(t.T(), taskManager.checkAndOperateTasks(context.Background(), job), "get task running status failed")
 
@@ -250,7 +250,7 @@ func (t *testDMJobmasterSuite) TestTaskManager() {
 	require.NoError(t.T(), jobStore.Put(context.Background(), job))
 
 	mockAgent := &dmpkg.MockMessageAgent{}
-	taskManager := NewTaskManager(nil, jobStore, mockAgent)
+	taskManager := NewTaskManager(nil, jobStore, mockAgent, log.L())
 	source1 := jobCfg.Upstreams[0].SourceID
 	source2 := jobCfg.Upstreams[1].SourceID
 

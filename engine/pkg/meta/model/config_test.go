@@ -14,6 +14,7 @@
 package model
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/pingcap/tiflow/engine/pkg/dbutil"
@@ -33,4 +34,55 @@ func TestGenerateDSNByParams(t *testing.T) {
 	require.Equal(t, "user:passwd@tcp(1.1.1.1)/?interpolateParams=true&"+
 		"loc=Local&parseTime=true&readTimeout=3s&sql_model=STRICT_TRANS_TABLES%2CSTRIC"+
 		"T_ALL_TABLES%2CERROR_FOR_DIVISION_BY_ZERO&timeout=3s&writeTimeout=3s", dsn)
+}
+
+func TestValidate(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		caseName string
+		conf     *StoreConfig
+		errMsg   string
+	}{
+		{
+			caseName: "Normal",
+			conf: &StoreConfig{
+				StoreType: defaultStoreType,
+				Schema:    "test",
+			},
+			errMsg: "",
+		},
+		{
+			caseName: "StoreTypeNotInEtcdOrSQL",
+			conf: &StoreConfig{
+				StoreType: "unknown",
+			},
+			errMsg: "store-type: must be a valid value",
+		},
+		{
+			caseName: "StoreTypeEtcdNotCheckSchema",
+			conf: &StoreConfig{
+				StoreType: StoreTypeEtcd,
+				Schema:    "",
+			},
+			errMsg: "",
+		},
+		{
+			caseName: "StoreTypeMySQLCheckSchema",
+			conf: &StoreConfig{
+				StoreType: StoreTypeMySQL,
+				Schema:    "",
+			},
+			errMsg: "schema: cannot be blank",
+		},
+	}
+
+	for _, ce := range cases {
+		err := ce.conf.Validate()
+		if ce.errMsg == "" {
+			require.NoError(t, err)
+		} else {
+			require.Regexp(t, regexp.QuoteMeta(ce.errMsg), err.Error())
+		}
+	}
 }

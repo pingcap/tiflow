@@ -3559,7 +3559,7 @@ func (s *Syncer) flushOptimisticTableInfos(tctx *tcontext.Context) {
 		targetTable := tbl[1]
 		tableInfo, err := s.getTableInfo(tctx, &sourceTable, &targetTable)
 		if err != nil {
-			tctx.L().Error("failed to get table  infos", log.ShortError(err))
+			tctx.L().Error("failed to get table infos", log.ShortError(err))
 			continue
 		}
 		sourceTables = append(sourceTables, &sourceTable)

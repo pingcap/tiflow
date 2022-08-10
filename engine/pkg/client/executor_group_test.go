@@ -119,6 +119,80 @@ func TestGetExecutorBlocked(t *testing.T) {
 	wg.Wait()
 }
 
+func TestGetExecutorTombstone(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	factory := newExecutorClientFactoryStub(ctrl)
+	group := newExecutorGroupWithClientFactory(nil, factory)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	err := group.AddExecutor("executor-1", "test-addr:1234")
+	require.NoError(t, err)
+	err = group.AddExecutor("executor-2", "test-addr-2:1234")
+	require.NoError(t, err)
+
+	cli, ok := group.GetExecutorClient("executor-1")
+	require.True(t, ok)
+	cli.(*MockExecutorClient).EXPECT().Close().Times(1)
+
+	cli, ok = group.GetExecutorClient("executor-2")
+	require.True(t, ok)
+	cli.(*MockExecutorClient).EXPECT().Close().Times(1)
+
+	err = group.RemoveExecutor("executor-1")
+	require.NoError(t, err)
+	err = group.RemoveExecutor("executor-2")
+	require.NoError(t, err)
+
+	startTime := time.Now()
+	_, err = group.GetExecutorClientB(ctx, "executor-1")
+	require.Error(t, err)
+	_, err = group.GetExecutorClientB(ctx, "executor-2")
+	require.Error(t, err)
+	require.Less(t, time.Since(startTime), 100*time.Millisecond)
+}
+
+func TestExecutorTombstoneCleaned(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	factory := newExecutorClientFactoryStub(ctrl)
+	group := newExecutorGroupWithClientFactory(nil, factory)
+	group.tombstoneKeepTime = time.Millisecond
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	err := group.AddExecutor("executor-1", "test-addr:1234")
+	require.NoError(t, err)
+	err = group.AddExecutor("executor-2", "test-addr-2:1234")
+	require.NoError(t, err)
+
+	cli, ok := group.GetExecutorClient("executor-1")
+	require.True(t, ok)
+	cli.(*MockExecutorClient).EXPECT().Close().Times(1)
+
+	cli, ok = group.GetExecutorClient("executor-2")
+	require.True(t, ok)
+	cli.(*MockExecutorClient).EXPECT().Close().Times(1)
+
+	err = group.RemoveExecutor("executor-1")
+	require.NoError(t, err)
+	err = group.RemoveExecutor("executor-2")
+	require.NoError(t, err)
+
+	// wait for the tombstones to be cleaned up
+	time.Sleep(100 * time.Millisecond)
+
+	_, err = group.GetExecutorClientB(ctx, "executor-1")
+	info, ok := ErrExecutorNotFound.Convert(err)
+	require.True(t, ok)
+	require.False(t, info.IsTombstone)
+}
+
 func TestGetExecutorBCanceled(t *testing.T) {
 	t.Parallel()
 

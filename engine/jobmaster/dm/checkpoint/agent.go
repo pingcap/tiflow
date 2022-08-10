@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -55,23 +54,30 @@ const (
 	)`
 )
 
+// NewCheckpointAgent is a method to create a new checkpoint agent
+var NewCheckpointAgent = NewAgentImpl
+
 // Agent defeins a checkpoint agent interface
 type Agent interface {
-	Init(ctx context.Context) error
+	Create(ctx context.Context) error
 	Remove(ctx context.Context) error
+	Update(ctx context.Context, cfg *config.JobCfg) error
 	IsFresh(ctx context.Context, workerType framework.WorkerType, task *metadata.Task) (bool, error)
 }
 
 // AgentImpl implements Agent
 type AgentImpl struct {
-	mu  sync.RWMutex
-	cfg *config.JobCfg
+	mu     sync.RWMutex
+	cfg    *config.JobCfg
+	logger *zap.Logger
 }
 
 // NewAgentImpl creates a new AgentImpl instance
-func NewAgentImpl(jobCfg *config.JobCfg) *AgentImpl {
-	c := &AgentImpl{}
-	c.updateConfig(jobCfg)
+func NewAgentImpl(jobCfg *config.JobCfg, pLogger *zap.Logger) Agent {
+	c := &AgentImpl{
+		logger: pLogger.With(zap.String("component", "checkpoint_agent")),
+		cfg:    jobCfg,
+	}
 	return c
 }
 
@@ -81,19 +87,14 @@ func (c *AgentImpl) getConfig() *config.JobCfg {
 	return c.cfg
 }
 
-func (c *AgentImpl) updateConfig(jobCfg *config.JobCfg) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.cfg = jobCfg
-}
-
-// Init implements Agent.Init
+// Create implements Agent.Create
+// Create will be called when the job is created/restarted/updated.
 // We create checkpoint table in master rather than in workers,
 // to avoid the annoying log of "table already exists",
 // because one job only need to create one checkpoint table per unit.
 // move these codes to tiflow later.
-func (c *AgentImpl) Init(ctx context.Context) error {
-	log.L().Info("init checkpoint", zap.String("job_id", c.cfg.Name))
+func (c *AgentImpl) Create(ctx context.Context) error {
+	c.logger.Info("create checkpoint")
 	cfg := c.getConfig()
 	db, err := conn.DefaultDBProvider.Apply(cfg.TargetDB)
 	if err != nil {
@@ -105,7 +106,6 @@ func (c *AgentImpl) Init(ctx context.Context) error {
 		return err
 	}
 
-	// NOTE: update-job changes the TaskMode is not supported now.
 	if cfg.TaskMode != dmconfig.ModeIncrement {
 		if err := createLoadCheckpointTable(ctx, cfg, db); err != nil {
 			return err
@@ -119,9 +119,18 @@ func (c *AgentImpl) Init(ctx context.Context) error {
 	return nil
 }
 
+// Update implements Agent.Update
+func (c *AgentImpl) Update(ctx context.Context, cfg *config.JobCfg) error {
+	c.logger.Info("update checkpoint")
+	c.mu.Lock()
+	c.cfg = cfg
+	c.mu.Unlock()
+	return c.Create(ctx)
+}
+
 // Remove implements Agent.Remove
 func (c *AgentImpl) Remove(ctx context.Context) error {
-	log.L().Info("remove checkpoint", zap.String("job_id", c.cfg.Name))
+	c.logger.Info("remove checkpoint")
 	cfg := c.getConfig()
 	db, err := conn.DefaultDBProvider.Apply(cfg.TargetDB)
 	if err != nil {

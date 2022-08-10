@@ -16,8 +16,8 @@ package model
 import (
 	"strings"
 
+	validation "github.com/go-ozzo/ozzo-validation/v4"
 	dmysql "github.com/go-sql-driver/mysql"
-
 	"github.com/pingcap/tiflow/engine/pkg/dbutil"
 )
 
@@ -25,12 +25,25 @@ const (
 	defaultReadTimeout  = "3s"
 	defaultWriteTimeout = "3s"
 	defaultDialTimeout  = "3s"
+)
 
-	defaultStoreType = StoreTypeSQL
+// StoreType is the type of metastore
+type StoreType = string
+
+const (
+	defaultStoreType = StoreTypeMySQL
 	// StoreTypeEtcd is the store type string for etcd
 	StoreTypeEtcd = "etcd"
-	// StoreTypeSQL is the store type string for SQL
-	StoreTypeSQL = "sql"
+	// StoreTypeMySQL is the store type string for MySQL
+	StoreTypeMySQL = "mysql"
+
+	// StoreTypeSQLite is the store type string for SQLite
+	// Only for test now
+	StoreTypeSQLite = "sqlite"
+	// StoreTypeMockKV is a specific store type which can generate
+	// a mock kvclient (using map as backend)
+	// Only for test now
+	StoreTypeMockKV = "mock-kv"
 )
 
 // AuthConfParams is basic authentication configurations
@@ -41,12 +54,16 @@ type AuthConfParams struct {
 
 // StoreConfig is metastore connection configurations
 type StoreConfig struct {
-	// storeID is the unique readable identifier for a store
-	StoreID   string          `toml:"store-id" json:"store-id"`
-	StoreType string          `toml:"store-type" json:"store-type"`
+	// StoreID is the unique readable identifier for a store
+	StoreID string `toml:"store-id" json:"store-id"`
+	// StoreType supports 'etcd' or 'mysql', default is 'mysql'
+	StoreType StoreType       `toml:"store-type" json:"store-type"`
 	Endpoints []string        `toml:"endpoints" json:"endpoints"`
 	Auth      *AuthConfParams `toml:"auth" json:"auth"`
 	// Schema is the predefine schema name for mysql-compatible metastore
+	// 1.It needs to stay UNCHANGED for one dataflow engine cluster
+	// 2.It needs be different between any two dataflow engine clusters
+	// 3.Naming rule: https://dev.mysql.com/doc/refman/5.7/en/identifiers.html
 	Schema       string `toml:"schema" json:"schema"`
 	ReadTimeout  string `toml:"read-timeout" json:"read-timeout"`
 	WriteTimeout string `toml:"write-timeout" json:"write-timeout"`
@@ -60,6 +77,14 @@ func (s *StoreConfig) SetEndpoints(endpoints string) {
 	if endpoints != "" {
 		s.Endpoints = strings.Split(endpoints, ",")
 	}
+}
+
+// Validate implements the validation.Validatable interface
+func (s StoreConfig) Validate() error {
+	return validation.ValidateStruct(&s,
+		validation.Field(&s.StoreType, validation.In(StoreTypeEtcd, StoreTypeMySQL)),
+		validation.Field(&s.Schema, validation.When(s.StoreType == StoreTypeMySQL, validation.Required, validation.Length(1, 128))),
+	)
 }
 
 // DefaultStoreConfig return a default *StoreConfig
@@ -109,12 +134,14 @@ func GenerateDSNByParams(storeConf *StoreConfig, pairs map[string]string) string
 }
 
 // ToClientType translates store type to client type
-func ToClientType(storeType string) ClientType {
+func ToClientType(storeType StoreType) ClientType {
 	switch storeType {
 	case StoreTypeEtcd:
 		return EtcdKVClientType
-	case StoreTypeSQL:
+	case StoreTypeMySQL:
 		return SQLKVClientType
+	case StoreTypeMockKV:
+		return MockKVClientType
 	}
 
 	return UnknownKVClientType

@@ -36,6 +36,19 @@ const (
 	apiOpVarJobID = "job_id"
 )
 
+// APICreateJobRequest defines the json fields when creating a job with OpenAPI
+type APICreateJobRequest struct {
+	JobType   int32  `json:"job_type"`
+	JobConfig string `json:"job_config"`
+}
+
+// APIQueryJobResponse defines the json fields of query job response
+type APIQueryJobResponse struct {
+	JobType   int32  `json:"job_type"`
+	JobConfig string `json:"job_config"`
+	Status    int32  `json:"status"`
+}
+
 // ServerInfoProvider provides server info.
 type ServerInfoProvider interface {
 	// IsLeader returns whether the server is leader.
@@ -64,6 +77,7 @@ func NewOpenAPI(infoProvider ServerInfoProvider) *OpenAPI {
 func RegisterOpenAPIRoutes(router *gin.Engine, openapi *OpenAPI) {
 	v1 := router.Group("/api/v1")
 	v1.Use(openapi.ForwardToLeader)
+	v1.Use(openapi.httpErrorHandler)
 
 	jobGroup := v1.Group("/jobs")
 	jobGroup.GET("", openapi.ListJobs)
@@ -121,13 +135,36 @@ func (o *OpenAPI) ListJobs(c *gin.Context) {
 // @Success 202
 // @Failure 400,500
 // @Router	/api/v1/jobs [post]
+// TODO: use gRPC gateway to serve OpenAPI in the future
 func (o *OpenAPI) SubmitJob(c *gin.Context) {
-	tenantID := c.Query(apiOpVarTenantID)
-	projectID := c.Query(apiOpVarProjectID)
-	jobID := c.Param(apiOpVarJobID)
-	_, _, _ = tenantID, projectID, jobID
-	// TODO: Implement it.
-	c.AbortWithStatus(http.StatusNotImplemented)
+	data := &APICreateJobRequest{}
+	err := c.ShouldBindJSON(data)
+	if err != nil {
+		_ = c.AbortWithError(http.StatusBadRequest, err)
+		return
+	}
+	projInfo := &pb.ProjectInfo{
+		TenantId:  c.Query(apiOpVarTenantID),
+		ProjectId: c.Query(apiOpVarProjectID),
+	}
+
+	jobMgr, ok := o.infoProvider.JobManager()
+	if !ok {
+		_ = c.AbortWithError(http.StatusServiceUnavailable, errors.New("job manager is not initialized"))
+		return
+	}
+	ctx := c.Request.Context()
+	req := &pb.SubmitJobRequest{
+		Tp:          data.JobType,
+		Config:      []byte(data.JobConfig),
+		ProjectInfo: projInfo,
+	}
+	resp := jobMgr.SubmitJob(ctx, req)
+	if resp.Err != nil {
+		_ = c.AbortWithError(http.StatusBadRequest, errors.New(resp.Err.String()))
+		return
+	}
+	c.IndentedJSON(http.StatusCreated, resp.JobId)
 }
 
 // QueryJob queries detail information of a job.
@@ -144,9 +181,31 @@ func (o *OpenAPI) QueryJob(c *gin.Context) {
 	tenantID := c.Query(apiOpVarTenantID)
 	projectID := c.Query(apiOpVarProjectID)
 	jobID := c.Param(apiOpVarJobID)
-	_, _, _ = tenantID, projectID, jobID
-	// TODO: Implement it.
-	c.AbortWithStatus(http.StatusNotImplemented)
+
+	jobMgr, ok := o.infoProvider.JobManager()
+	if !ok {
+		_ = c.AbortWithError(http.StatusServiceUnavailable, errors.New("job manager is not initialized"))
+		return
+	}
+	req := &pb.QueryJobRequest{
+		JobId: jobID,
+		ProjectInfo: &pb.ProjectInfo{
+			TenantId:  tenantID,
+			ProjectId: projectID,
+		},
+	}
+	ctx := c.Request.Context()
+	resp := jobMgr.QueryJob(ctx, req)
+	if resp.Err != nil {
+		_ = c.AbortWithError(http.StatusBadRequest, errors.New(resp.Err.String()))
+		return
+	}
+	queryResp := &APIQueryJobResponse{
+		JobType:   resp.GetTp(),
+		JobConfig: string(resp.GetConfig()),
+		Status:    int32(resp.GetStatus()),
+	}
+	c.IndentedJSON(http.StatusOK, queryResp)
 }
 
 // PauseJob pauses a job.
@@ -269,6 +328,15 @@ func (o *OpenAPI) ForwardToLeader(c *gin.Context) {
 	} else {
 		c.Next()
 	}
+}
+
+func (o *OpenAPI) httpErrorHandler(c *gin.Context) {
+	c.Next()
+	err := c.Errors.Last()
+	if err == nil {
+		return
+	}
+	c.IndentedJSON(c.Writer.Status(), err)
 }
 
 func (o *OpenAPI) parseURL(addrOrURL string) (*url.URL, error) {

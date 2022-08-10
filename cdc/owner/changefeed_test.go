@@ -182,11 +182,12 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T) (
 ) {
 	up := upstream.NewUpstream4Test(&gc.MockPDClient{
 		UpdateServiceGCSafePointFunc: func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
-			return safePoint, nil
+			return safePoint - 1, nil
 		},
 	})
 
 	cf := newChangefeed4Test(ctx.ChangefeedVars().ID, up,
+		// new ddl puller
 		func(ctx context.Context,
 			replicaConfig *config.ReplicaConfig,
 			up *upstream.Upstream,
@@ -194,17 +195,20 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T) (
 			changefeed model.ChangeFeedID,
 		) (puller.DDLPuller, error) {
 			return &mockDDLPuller{resolvedTs: startTs - 1}, nil
-		}, func() DDLSink {
+		},
+		// new ddl sink
+		func() DDLSink {
 			return &mockDDLSink{
 				resetDDLDone:     true,
 				recordDDLHistory: false,
 			}
+		},
+		// new scheduler
+		func(
+			ctx cdcContext.Context, startTs uint64,
+		) (scheduler.Scheduler, error) {
+			return &mockScheduler{}, nil
 		})
-	cf.newScheduler = func(
-		ctx cdcContext.Context, startTs uint64,
-	) (scheduler.Scheduler, error) {
-		return &mockScheduler{}, nil
-	}
 	cf.upstream = up
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		ctx.ChangefeedVars().ID)
@@ -251,7 +255,7 @@ func TestInitialize(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// initialize
-	ctx.GlobalVars().EtcdClient = &etcd.CDCEtcdClient{}
+	ctx.GlobalVars().EtcdClient = &etcd.CDCEtcdClientImpl{}
 	cf.Tick(ctx, state, captures)
 	tester.MustApplyPatches()
 	require.Equal(t, state.Status.CheckpointTs, ctx.ChangefeedVars().Info.StartTs)

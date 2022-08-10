@@ -9,7 +9,17 @@ services:
         volumes:
             - ./config/mysql.cnf:/etc/mysql/conf.d/mysql.cnf
         environment:
-            MYSQL_ROOT_PASSWORD: 123456
+            MYSQL_ALLOW_EMPTY_PASSWORD: 1
+
+    dm_upstream_mysql2:
+        image: mysql:8.0
+        container_name: dm_upstream_mysql2
+        ports:
+            - "3307:3306"
+        volumes:
+            - ./config/mysql.cnf:/etc/mysql/conf.d/mysql2.cnf
+        environment:
+            MYSQL_ALLOW_EMPTY_PASSWORD: true
 
     dm_downstream_pd:
         image: pingcap/pd:v5.4.0

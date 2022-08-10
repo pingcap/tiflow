@@ -116,6 +116,8 @@ type JobCfg struct {
 	// BWList map[string]*filter.Rules `yaml:"black-white-list" toml:"black-white-list" json:"black-white-list"`
 	// EnableANSIQuotes bool `yaml:"ansi-quotes" toml:"ansi-quotes" json:"ansi-quotes"`
 	// RemoveMeta bool `yaml:"remove-meta"`
+
+	ModRevision uint64 `yaml:"mod-revision" toml:"mod-revision" json:"mod-revision"`
 }
 
 // DecodeFile reads file content from a given path and decodes it.
@@ -184,7 +186,7 @@ func FromTaskCfgs(taskCfgs []*TaskCfg) *JobCfg {
 
 // toDMTaskConfig transform a jobCfg to DM TaskCfg.
 func (c *JobCfg) toDMTaskConfig() (*dmconfig.TaskConfig, error) {
-	dmTaskCfg := &dmconfig.TaskConfig{}
+	dmTaskCfg := dmconfig.NewTaskConfig()
 
 	// Copy all the fields contained in dmTaskCfg.
 	content, err := c.Yaml()

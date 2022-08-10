@@ -34,10 +34,9 @@ import (
 // Member stores server member information
 // TODO: make it a protobuf field and can be shared by gRPC API
 type Member struct {
-	IsServLeader  bool   `json:"is-serv-leader"`
-	IsEtcdLeader  bool   `json:"is-etcd-leader"`
 	Name          string `json:"name"`
 	AdvertiseAddr string `json:"advertise-addr"`
+	IsLeader      bool   `json:"is-leader"`
 }
 
 // String implements json marshal
@@ -57,22 +56,28 @@ type RPCClientType any
 
 // LeaderClientWithLock encapsulates a thread-safe rpc client
 type LeaderClientWithLock[T RPCClientType] struct {
-	mu    sync.RWMutex
-	inner *FailoverRPCClients[T]
+	mu      sync.RWMutex
+	inner   *T
+	closeFn func()
 }
 
 // Get returns internal FailoverRPCClients
-func (l *LeaderClientWithLock[T]) Get() *FailoverRPCClients[T] {
+func (l *LeaderClientWithLock[T]) Get() (ret T, ok bool) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
-	return l.inner
+	if l.inner == nil {
+		ok = false
+		return
+	}
+	return *l.inner, true
 }
 
 // Set sets internal FailoverRPCClients to given value
-func (l *LeaderClientWithLock[T]) Set(c *FailoverRPCClients[T]) {
+func (l *LeaderClientWithLock[T]) Set(c T, closeFn func()) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.inner = c
+	l.inner = &c
+	l.closeFn = closeFn
 }
 
 // Close closes internal FailoverRPCClients
@@ -80,9 +85,9 @@ func (l *LeaderClientWithLock[T]) Close() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.inner != nil {
-		err := l.inner.Close()
-		if err != nil {
-			log.Warn("close leader client failed", zap.Error(err))
+		if l.closeFn != nil {
+			l.closeFn()
+			l.closeFn = nil
 		}
 		l.inner = nil
 	}
@@ -116,7 +121,18 @@ func (rl *rpcLimiter) Allow(methodName string) bool {
 // into an RPC server struct and call PreRPCHook.PreRPC() for every RPC method.
 //
 // The type parameter T is the type of RPC client that implements "forward to leader".
-type PreRPCHook[T RPCClientType] struct {
+type PreRPCHook interface {
+	PreRPC(
+		ctx context.Context,
+		req interface{},
+		respPointer interface{},
+	) (shouldRet bool, err error)
+
+	CheckLeader() (leader *Member, exist bool)
+}
+
+// preRPCHookImpl implements PreRPCHook.
+type preRPCHookImpl[T RPCClientType] struct {
 	// forward to leader
 	id        string        // used to compare with leader.Name, to know if this is the leader
 	leader    *atomic.Value // should be a Member
@@ -129,7 +145,7 @@ type PreRPCHook[T RPCClientType] struct {
 	limiter *rpcLimiter
 }
 
-// NewPreRPCHook creates a new PreRPCHook
+// NewPreRPCHook creates a new preRPCHookImpl
 func NewPreRPCHook[T RPCClientType](
 	id string,
 	leader *atomic.Value,
@@ -137,9 +153,9 @@ func NewPreRPCHook[T RPCClientType](
 	initialized *atomic.Bool,
 	limiter *rate.Limiter,
 	rpcLimiterAllowList []string,
-) *PreRPCHook[T] {
+) PreRPCHook {
 	rpcLim := newRPCLimiter(limiter, rpcLimiterAllowList)
-	return &PreRPCHook[T]{
+	return &preRPCHookImpl[T]{
 		id:          id,
 		leader:      leader,
 		leaderCli:   leaderCli,
@@ -157,7 +173,7 @@ func NewPreRPCHook[T RPCClientType](
 // - rate limit
 // TODO: we can build a (req type -> resp type) map at compile time, to avoid passing
 // in respPointer.
-func (h PreRPCHook[T]) PreRPC(
+func (h preRPCHookImpl[T]) PreRPC(
 	ctx context.Context,
 	req interface{},
 	respPointer interface{},
@@ -177,13 +193,14 @@ func (h PreRPCHook[T]) PreRPC(
 	return
 }
 
-func (h PreRPCHook[T]) logRateLimit(methodName string, req interface{}) {
+func (h preRPCHookImpl[T]) logRateLimit(methodName string, req interface{}) {
+	// TODO: rate limiter based on different sender
 	if h.limiter.Allow(methodName) {
-		log.Info("Executing rpc", zap.String("request", methodName), zap.Any("payload", req))
+		log.Info("", zap.Any("payload", req), zap.String("request", methodName))
 	}
 }
 
-func (h PreRPCHook[T]) checkInitialized(respPointer interface{}) (shouldRet bool, err error) {
+func (h preRPCHookImpl[T]) checkInitialized(respPointer interface{}) (shouldRet bool, err error) {
 	if h.initialized.Load() {
 		return false, nil
 	}
@@ -200,7 +217,7 @@ func (h PreRPCHook[T]) checkInitialized(respPointer interface{}) (shouldRet bool
 	return true, nil
 }
 
-func (h PreRPCHook[T]) forwardToLeader(
+func (h preRPCHookImpl[T]) forwardToLeader(
 	ctx context.Context,
 	methodName string,
 	req interface{},
@@ -211,13 +228,13 @@ func (h PreRPCHook[T]) forwardToLeader(
 		return false, nil
 	}
 	if needForward {
-		inner := h.leaderCli.Get()
-		if inner == nil {
+		inner, ok := h.leaderCli.Get()
+		if !ok {
 			return true, errors.ErrMasterRPCNotForward.GenWithStackByArgs()
 		}
 
 		params := []reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(req)}
-		results := reflect.ValueOf(inner.GetLeaderClient()).
+		results := reflect.ValueOf(inner).
 			MethodByName(methodName).
 			Call(params)
 		// result's inner types should be (*pb.XXResponse, error), which is same as s.leaderClient.XXRPCMethod
@@ -234,7 +251,7 @@ func (h PreRPCHook[T]) forwardToLeader(
 	return true, errors.ErrMasterRPCNotForward.GenWithStackByArgs()
 }
 
-func (h PreRPCHook[T]) isLeaderAndNeedForward(ctx context.Context) (isLeader, needForward bool) {
+func (h preRPCHookImpl[T]) isLeaderAndNeedForward(ctx context.Context) (isLeader, needForward bool) {
 	leader, exist := h.CheckLeader()
 	// leader is nil, retry for 3 seconds
 	if !exist {
@@ -258,7 +275,7 @@ func (h PreRPCHook[T]) isLeaderAndNeedForward(ctx context.Context) (isLeader, ne
 	}
 
 	isLeader = false
-	needForward = h.leaderCli.Get() != nil
+	_, needForward = h.leaderCli.Get()
 	if leader == nil {
 		return
 	}
@@ -266,7 +283,7 @@ func (h PreRPCHook[T]) isLeaderAndNeedForward(ctx context.Context) (isLeader, ne
 	return
 }
 
-func (h PreRPCHook[T]) CheckLeader() (leader *Member, exist bool) {
+func (h preRPCHookImpl[T]) CheckLeader() (leader *Member, exist bool) {
 	lp := h.leader.Load()
 	if lp == nil {
 		return

@@ -851,12 +851,13 @@ func (h *OpenAPI) ServerStatus(c *gin.Context) {
 		return
 	}
 	status := model.ServerStatus{
-		Version:  version.ReleaseVersion,
-		GitHash:  version.GitHash,
-		Pid:      os.Getpid(),
-		ID:       info.ID,
-		IsOwner:  h.capture.IsOwner(),
-		Liveness: h.capture.Liveness(),
+		Version:   version.ReleaseVersion,
+		GitHash:   version.GitHash,
+		Pid:       os.Getpid(),
+		ID:        info.ID,
+		ClusterID: h.capture.GetEtcdClient().GetClusterID(),
+		IsOwner:   h.capture.IsOwner(),
+		Liveness:  h.capture.Liveness(),
 	}
 	c.IndentedJSON(http.StatusOK, status)
 }
@@ -873,7 +874,13 @@ func (h *OpenAPI) ServerStatus(c *gin.Context) {
 func (h *OpenAPI) Health(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	if _, err := h.capture.GetOwnerCaptureInfo(ctx); err != nil {
+	health, err := h.statusProvider().IsHealthy(ctx)
+	if err != nil {
+		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		return
+	}
+	if !health {
+		err = cerror.ErrClusterIsUnhealthy.FastGenByArgs()
 		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
 		return
 	}
