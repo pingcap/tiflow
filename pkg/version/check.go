@@ -49,11 +49,11 @@ var (
 	// we use the minimal release version as default.
 	defaultTiCDCVersion = semver.New("4.0.1")
 
-	// minTiCDCVersion is the version of the minimal allowed TiCDC version.
-	minTiCDCVersion = semver.New("6.3.0")
-	// maxTiCDCVersion is the version of the maximum allowed TiCDC version.
+	// MinTiCDCVersion is the version of the minimal allowed TiCDC version.
+	MinTiCDCVersion = semver.New("6.3.0")
+	// MaxTiCDCVersion is the version of the maximum allowed TiCDC version.
 	// for version `x.y.z`, max allowed `x+2.0.0`
-	maxTiCDCVersion = semver.New("8.0.0")
+	MaxTiCDCVersion = semver.New("8.0.0")
 )
 
 var versionHash = regexp.MustCompile("-[0-9]+-g[0-9a-f]{7,}(-dev)?")
@@ -93,7 +93,7 @@ func CheckClusterVersion(
 
 // CheckTiCDCVersion return true if all cdc instance have valid semantic version
 // the whole cluster only allow at most 2 different version instances
-// and should in the range [minTiCDCVersion, maxTiCDCVersion)
+// and should in the range [MinTiCDCVersion, MaxTiCDCVersion)
 func CheckTiCDCVersion(versions map[string]struct{}) error {
 	if len(versions) <= 1 {
 		return nil
@@ -109,14 +109,14 @@ func CheckTiCDCVersion(versions map[string]struct{}) error {
 		if err := ver.Set(removeVAndHash(v)); err != nil {
 			return cerror.WrapError(cerror.ErrNewSemVersion, err)
 		}
-		if ver.Compare(*minTiCDCVersion) < 0 {
+		if ver.Compare(*MinTiCDCVersion) < 0 {
 			arg := fmt.Sprintf("TiCDC %s is not supported, the minimal compatible version is %s",
-				removeVAndHash(v), minTiCDCVersion)
+				removeVAndHash(v), MinTiCDCVersion)
 			return cerror.ErrVersionIncompatible.GenWithStackByArgs(arg)
 		}
-		if ver.Compare(*maxTiCDCVersion) >= 0 {
+		if ver.Compare(*MaxTiCDCVersion) >= 0 {
 			arg := fmt.Sprintf("TiCDC %s is not supported, only support version less than %s",
-				removeVAndHash(v), maxTiCDCVersion)
+				removeVAndHash(v), MaxTiCDCVersion)
 			return cerror.ErrVersionIncompatible.GenWithStackByArgs(arg)
 		}
 	}
