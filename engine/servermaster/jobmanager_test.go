@@ -44,6 +44,7 @@ func TestJobManagerSubmitJob(t *testing.T) {
 	defer cancel()
 
 	mockMaster := framework.NewMockMasterImpl(t, "", "submit-job-test")
+	framework.MockMasterPrepareMeta(ctx, t, mockMaster)
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
 	mockMaster.MasterClient().EXPECT().ScheduleTask(
 		gomock.Any(),
@@ -101,6 +102,7 @@ func TestCreateWorkerReturnError(t *testing.T) {
 	defer cancel()
 
 	masterImpl := framework.NewMockMasterImpl(t, "", "create-worker-with-error")
+	framework.MockMasterPrepareMeta(ctx, t, masterImpl)
 	mockMaster := &mockBaseMasterCreateWorkerFailed{
 		MockMasterImpl: masterImpl,
 	}
@@ -129,6 +131,7 @@ func TestJobManagerPauseJob(t *testing.T) {
 	defer cancel()
 
 	mockMaster := framework.NewMockMasterImpl(t, "", "pause-job-test")
+	framework.MockMasterPrepareMeta(ctx, t, mockMaster)
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
 	mgr := &JobManagerImplV2{
 		BaseMaster:        mockMaster.DefaultBaseMaster,
@@ -167,6 +170,7 @@ func TestJobManagerCancelJob(t *testing.T) {
 	defer cancel()
 
 	mockMaster := framework.NewMockMasterImpl(t, "", "cancel-job-test")
+	framework.MockMasterPrepareMeta(ctx, t, mockMaster)
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
 	mgr := &JobManagerImplV2{
 		BaseMaster:        mockMaster.DefaultBaseMaster,
@@ -223,6 +227,7 @@ func TestJobManagerQueryJob(t *testing.T) {
 	}
 
 	mockMaster := framework.NewMockMasterImpl(t, "", "job-manager-query-job-test")
+	framework.MockMasterPrepareMeta(ctx, t, mockMaster)
 	for _, tc := range testCases {
 		cli := metadata.NewMasterMetadataClient(tc.meta.ID, mockMaster.GetFrameMetaClient())
 		err := cli.Store(ctx, tc.meta)
@@ -261,6 +266,7 @@ func TestJobManagerOnlineJob(t *testing.T) {
 	defer cancel()
 
 	mockMaster := framework.NewMockMasterImpl(t, "", "submit-job-test")
+	framework.MockMasterPrepareMeta(ctx, t, mockMaster)
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
 	mockMaster.MasterClient().EXPECT().ScheduleTask(gomock.Any(), gomock.Any()).
 		Return(&pb.ScheduleTaskResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs()).MinTimes(0)
@@ -300,8 +306,8 @@ func TestJobManagerRecover(t *testing.T) {
 	defer cancel()
 
 	mockMaster := framework.NewMockMasterImpl(t, "", "job-manager-recover-test")
+	framework.MockMasterPrepareMeta(ctx, t, mockMaster)
 	// prepare mockvk with two job masters
-
 	meta := []*frameModel.MasterMetaKVData{
 		{
 			ID: "master-1",
@@ -340,6 +346,7 @@ func TestJobManagerTickExceedQuota(t *testing.T) {
 	defer cancel()
 
 	masterImpl := framework.NewMockMasterImpl(t, "", "create-worker-with-error")
+	framework.MockMasterPrepareMeta(ctx, t, masterImpl)
 	mockMaster := &mockBaseMasterCreateWorkerFailed{
 		MockMasterImpl: masterImpl,
 	}
@@ -372,6 +379,7 @@ func TestJobManagerWatchJobStatuses(t *testing.T) {
 	defer cancel()
 
 	mockMaster := framework.NewMockMasterImpl(t, "", "cancel-job-test")
+	framework.MockMasterPrepareMeta(ctx, t, mockMaster)
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
 	mgr := &JobManagerImplV2{
 		BaseMaster:        mockMaster.DefaultBaseMaster,

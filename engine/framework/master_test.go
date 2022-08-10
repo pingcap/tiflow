@@ -26,7 +26,6 @@ import (
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/statusutil"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/uuid"
 )
@@ -44,16 +43,6 @@ type dummyConfig struct {
 	param int
 }
 
-func prepareMeta(ctx context.Context, t *testing.T, metaclient pkgOrm.Client) {
-	masterInfo := &frameModel.MasterMetaKVData{
-		ID:         masterName,
-		NodeID:     masterNodeName,
-		StatusCode: frameModel.MasterStatusUninit,
-	}
-	err := metaclient.UpsertJob(ctx, masterInfo)
-	require.NoError(t, err)
-}
-
 func TestMasterInit(t *testing.T) {
 	t.Parallel()
 
@@ -61,7 +50,7 @@ func TestMasterInit(t *testing.T) {
 	defer cancel()
 
 	master := NewMockMasterImpl(t, "", masterName)
-	prepareMeta(ctx, t, master.GetFrameMetaClient())
+	MockMasterPrepareMeta(ctx, t, master)
 
 	master.On("InitImpl", mock.Anything).Return(nil)
 	err := master.Init(ctx)
@@ -98,7 +87,7 @@ func TestMasterPollAndClose(t *testing.T) {
 	defer cancel()
 
 	master := NewMockMasterImpl(t, "", masterName)
-	prepareMeta(ctx, t, master.GetFrameMetaClient())
+	MockMasterPrepareMeta(ctx, t, master)
 
 	master.On("InitImpl", mock.Anything).Return(nil)
 	err := master.Init(ctx)
@@ -142,13 +131,14 @@ func TestMasterCreateWorker(t *testing.T) {
 	master.timeoutConfig.WorkerTimeoutDuration = time.Second * 1000
 	master.timeoutConfig.MasterHeartbeatCheckLoopInterval = time.Millisecond * 10
 	master.uuidGen = uuid.NewMock()
-	prepareMeta(ctx, t, master.GetFrameMetaClient())
+	MockMasterPrepareMeta(ctx, t, master)
 
-	master.On("InitImpl", mock.Anything).Return(nil)
-	err := master.Init(ctx)
+	// get current epoch
+	epoch, err := master.MetaKVClient().GenEpoch(ctx)
 	require.NoError(t, err)
 
-	epoch, err := master.MetaKVClient().GenEpoch(ctx)
+	master.On("InitImpl", mock.Anything).Return(nil)
+	err = master.Init(ctx)
 	require.NoError(t, err)
 
 	MockBaseMasterCreateWorker(
@@ -161,6 +151,8 @@ func TestMasterCreateWorker(t *testing.T) {
 		workerID1,
 		executorNodeID1,
 		[]resourcemeta.ResourceID{"resource-1", "resource-2"},
+		// call GenEpoch three times, including create master meta, master init
+		// refresh meta, create worker.
 		epoch+3,
 	)
 
@@ -245,7 +237,7 @@ func TestMasterCreateWorkerMetError(t *testing.T) {
 	master := NewMockMasterImpl(t, "", masterName)
 	master.timeoutConfig.MasterHeartbeatCheckLoopInterval = time.Millisecond * 10
 	master.uuidGen = uuid.NewMock()
-	prepareMeta(ctx, t, master.GetFrameMetaClient())
+	MockMasterPrepareMeta(ctx, t, master)
 
 	master.On("InitImpl", mock.Anything).Return(nil)
 	err := master.Init(ctx)

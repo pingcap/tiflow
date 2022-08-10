@@ -79,9 +79,6 @@ func MockBaseMaster(t *testing.T, id frameModel.MasterID, masterImpl MasterImpl)
 	require.NoError(t, err)
 	ctx.Environ.MasterMetaBytes = masterMetaBytes
 
-	err = cli.UpsertJob(ctx, masterMeta)
-	require.NoError(t, err)
-
 	ret := NewBaseMaster(
 		ctx,
 		masterImpl,
@@ -90,6 +87,13 @@ func MockBaseMaster(t *testing.T, id frameModel.MasterID, masterImpl MasterImpl)
 	)
 
 	return ret.(*DefaultBaseMaster)
+}
+
+// MockMasterPrepareMeta simulates the meta persistence for MockMasterImpl
+func MockMasterPrepareMeta(ctx context.Context, t *testing.T, master *MockMasterImpl) {
+	err := master.GetFrameMetaClient().UpsertJob(
+		ctx, master.DefaultBaseMaster.MasterMeta())
+	require.NoError(t, err)
 }
 
 // MockBaseMasterCreateWorker mocks to create worker in base master
