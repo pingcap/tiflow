@@ -600,9 +600,10 @@ function DM_INJECT_DDL_ERROR_SHARDING_BASE_CASE() {
       "\"result\": true" 3
 
 		run_sql_source1 "alter table ${db}.${tb1} drop column c;"
-		run_sql_source1 "insert into ${db}.${tb1} values(3,3);"
-
 		run_sql_source2 "alter table ${db}.${tb1} drop column c;"
+
+    check_log_contain_with_retry 'receive redirection operation from master' $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log
+		run_sql_source1 "insert into ${db}.${tb1} values(3,3);"
 		run_sql_source2 "insert into ${db}.${tb1} values(4,4);"
 	fi
 
@@ -610,8 +611,7 @@ function DM_INJECT_DDL_ERROR_SHARDING_BASE_CASE() {
 		"query-status test" \
 		"\"stage\": \"Running\"" 4
 
-  # need 15 seconds in my local PC, left some space for slow CI
-	run_sql_tidb_with_retry_times "select count(1) from ${db}.${tb}" "count(1): 4" 60
+	run_sql_tidb_with_retry "select count(1) from ${db}.${tb}" "count(1): 4"
 }
 
 # two source, 4 tables
@@ -670,8 +670,6 @@ function DM_INJECT_DDL_ERROR_SHARDING_BASE2_CASE() {
 		# 12/22 second ddl
 		run_sql_source1 "alter table ${db}.${tb2} drop column c;"
 		run_sql_source2 "alter table ${db}.${tb2} drop column c;"
-		run_sql_source1 "insert into ${db}.${tb2} values(7,7);"
-		run_sql_source2 "insert into ${db}.${tb2} values(8,8);"
 
 		# 12/22 first ddl error
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -682,14 +680,17 @@ function DM_INJECT_DDL_ERROR_SHARDING_BASE2_CASE() {
 		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"binlog replace test alter table ${db}.${tb2} add column c varchar(20); alter table ${db}.${tb2} add primary key (c);" \
 			"\"result\": true" 3
+
+		check_log_contain_with_retry 'receive redirection operation from master' $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log
+    run_sql_source1 "insert into ${db}.${tb2} values(7,7);"
+    run_sql_source2 "insert into ${db}.${tb2} values(8,8);"
 	fi
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"stage\": \"Running\"" 4
 
-  # need 15 seconds in my local PC, left some space for slow CI
-  run_sql_tidb_with_retry_times "select count(1) from ${db}.${tb}" "count(1): 8" 60
+  run_sql_tidb_with_retry "select count(1) from ${db}.${tb}" "count(1): 8"
 }
 
 function DM_INJECT_DDL_ERROR() {
