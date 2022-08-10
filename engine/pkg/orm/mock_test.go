@@ -57,17 +57,6 @@ func TestInitializeMock(t *testing.T) {
 	require.Nil(t, err)
 	require.NotNil(t, cli)
 	defer cli.Close()
-
-	testCases := []mCase{
-		{
-			fn:     "Initialize",
-			inputs: []interface{}{},
-		},
-	}
-
-	for _, tc := range testCases {
-		testInnerMock(t, cli, tc)
-	}
 }
 
 func TestProjectMock(t *testing.T) {
@@ -75,9 +64,6 @@ func TestProjectMock(t *testing.T) {
 	require.Nil(t, err)
 	require.NotNil(t, cli)
 	defer cli.Close()
-
-	err = cli.Initialize(context.TODO())
-	require.Nil(t, err)
 
 	tm := time.Now()
 	createdAt := tm.Add(time.Duration(1))
@@ -177,9 +163,6 @@ func TestProjectOperationMock(t *testing.T) {
 	require.NotNil(t, cli)
 	defer cli.Close()
 
-	err = cli.Initialize(context.TODO())
-	require.Nil(t, err)
-
 	tm := time.Now()
 	tm1 := tm.Add(time.Second * 10)
 	tm2 := tm.Add(time.Second)
@@ -263,9 +246,6 @@ func TestJobMock(t *testing.T) {
 	require.Nil(t, err)
 	require.NotNil(t, cli)
 	defer cli.Close()
-
-	err = cli.Initialize(context.TODO())
-	require.Nil(t, err)
 
 	tm := time.Now()
 	createdAt := tm.Add(time.Duration(1))
@@ -429,9 +409,6 @@ func TestWorkerMock(t *testing.T) {
 	require.Nil(t, err)
 	require.NotNil(t, cli)
 	defer cli.Close()
-
-	err = cli.Initialize(context.TODO())
-	require.Nil(t, err)
 
 	tm := time.Now()
 	createdAt := tm.Add(time.Duration(1))
@@ -603,9 +580,6 @@ func TestResourceMock(t *testing.T) {
 	require.Nil(t, err)
 	require.NotNil(t, cli)
 	defer cli.Close()
-
-	err = cli.Initialize(context.TODO())
-	require.Nil(t, err)
 
 	tm := time.Now()
 	createdAt := tm.Add(time.Duration(1))
@@ -787,18 +761,8 @@ func testInnerMock(t *testing.T, cli Client, c mCase) {
 		// result and error
 		if c.err != nil {
 			require.NotNil(t, result[1].Interface())
-			// FIXME:
-			// var args []reflect.Value
-			// require.NotNil(t, reflect.ValueOf(c.err).Interface())
-			// require.NotNil(t, result[1].MethodByName("Isxxx").Interface())
-			// args = append(args, reflect.ValueOf(c.err))
-			// res := result[1].MethodByName("Is").Call(args)
-			// require.True(t, res[0].Interface().(bool))
 		} else {
 			require.NotNil(t, result[0].Interface())
-			// log.Info("result", zap.Any("expect", c.output), zap.Any("actual", result[0].Interface()))
-			// FIXME: datetime is different from what we insert. Why??
-			// require.Equal(t, c.output, result[0].Interface())
 		}
 	}
 }
