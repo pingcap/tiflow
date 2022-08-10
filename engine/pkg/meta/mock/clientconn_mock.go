@@ -42,6 +42,8 @@ func NewClientConnForSQLite(dsn string) (metaModel.ClientConn, error) {
 		return nil, err
 	}
 
+	db.SetMaxOpenConns(1)
+
 	return &sqliteClientConn{
 		db: db,
 	}, nil

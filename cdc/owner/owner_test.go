@@ -31,9 +31,11 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
+	"golang.org/x/time/rate"
 )
 
 type mockManager struct {
@@ -755,18 +757,37 @@ func (h *heathScheduler) IsInitialized() bool {
 func TestIsHealthy(t *testing.T) {
 	t.Parallel()
 
-	o := &ownerImpl{changefeeds: make(map[model.ChangeFeedID]*changefeed)}
+	o := &ownerImpl{
+		changefeeds: make(map[model.ChangeFeedID]*changefeed),
+		logLimiter:  rate.NewLimiter(1, 1),
+	}
 	query := &Query{Tp: QueryHealth}
 
 	// Unhealthy, changefeeds are not ticked.
 	o.changefeedTicked = false
 	err := o.handleQueries(query)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.False(t, query.Data.(bool))
-	// Healthy, no changefeed.
+
 	o.changefeedTicked = true
+	// Unhealthy, cdc cluster version is inconsistent
+	o.captures = map[model.CaptureID]*model.CaptureInfo{
+		"1": {
+			Version: version.MinTiCDCVersion.String(),
+		},
+		"2": {
+			Version: version.MaxTiCDCVersion.String(),
+		},
+	}
 	err = o.handleQueries(query)
-	require.Nil(t, err)
+	require.NoError(t, err)
+	require.False(t, query.Data.(bool))
+
+	// make all captures version consistent.
+	o.captures["2"].Version = version.MinTiCDCVersion.String()
+	// Healthy, no changefeed.
+	err = o.handleQueries(query)
+	require.NoError(t, err)
 	require.True(t, query.Data.(bool))
 
 	// Unhealthy, scheduler is not set.
@@ -776,20 +797,20 @@ func TestIsHealthy(t *testing.T) {
 	o.changefeeds[model.ChangeFeedID{ID: "1"}] = cf
 	o.changefeedTicked = true
 	err = o.handleQueries(query)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.False(t, query.Data.(bool))
 
 	// Healthy, scheduler is set and return true.
 	cf.scheduler = &heathScheduler{init: true}
 	o.changefeedTicked = true
 	err = o.handleQueries(query)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.True(t, query.Data.(bool))
 
 	// Unhealthy, changefeeds are not ticked.
 	o.changefeedTicked = false
 	err = o.handleQueries(query)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.False(t, query.Data.(bool))
 
 	// Unhealthy, there is another changefeed is not initialized.
@@ -798,6 +819,6 @@ func TestIsHealthy(t *testing.T) {
 	}
 	o.changefeedTicked = true
 	err = o.handleQueries(query)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.False(t, query.Data.(bool))
 }
