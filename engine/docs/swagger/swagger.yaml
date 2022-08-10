@@ -112,4 +112,30 @@ paths:
       summary: Pause a job
       tags:
       - jobs
+  /api/v1/leader:
+    get:
+      description: gets the leader info
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: ""
+        "404":
+          description: ""
+        "500":
+          description: ""
+      summary: Get the leader info
+  /api/v1/leader/resign:
+    post:
+      description: resigns the leader
+      responses:
+        "202":
+          description: ""
+        "400":
+          description: ""
+        "500":
+          description: ""
+      summary: Resign the leader
+      tags:
+      - leader
 swagger: "2.0"

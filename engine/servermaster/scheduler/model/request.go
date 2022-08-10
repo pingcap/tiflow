@@ -16,6 +16,7 @@ package model
 import (
 	"github.com/pingcap/tiflow/engine/model"
 	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	"github.com/pingcap/tiflow/pkg/label"
 )
 
 // SchedulerRequest represents a request for an executor to run a given task.
@@ -24,6 +25,7 @@ type SchedulerRequest struct {
 
 	Cost              ResourceUnit
 	ExternalResources []resourcemeta.ResourceKey
+	Selectors         []label.Selector
 }
 
 // SchedulerResponse represents a response to a task scheduling request.

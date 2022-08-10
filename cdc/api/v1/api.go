@@ -851,12 +851,13 @@ func (h *OpenAPI) ServerStatus(c *gin.Context) {
 		return
 	}
 	status := model.ServerStatus{
-		Version:  version.ReleaseVersion,
-		GitHash:  version.GitHash,
-		Pid:      os.Getpid(),
-		ID:       info.ID,
-		IsOwner:  h.capture.IsOwner(),
-		Liveness: h.capture.Liveness(),
+		Version:   version.ReleaseVersion,
+		GitHash:   version.GitHash,
+		Pid:       os.Getpid(),
+		ID:        info.ID,
+		ClusterID: h.capture.GetEtcdClient().GetClusterID(),
+		IsOwner:   h.capture.IsOwner(),
+		Liveness:  h.capture.Liveness(),
 	}
 	c.IndentedJSON(http.StatusOK, status)
 }
