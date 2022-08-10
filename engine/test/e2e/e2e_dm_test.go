@@ -185,9 +185,15 @@ func testSimpleAllModeTask(
 		return err == nil && jobStatus.TaskStatus[source1].Status.Stage == metadata.StageFinished
 	}, time.Second*30, time.Millisecond*100)
 
-	// start incremental job via updateJobConfig
+	// check load finished status equals master status
 	binlogName, binlogPos, err := getMasterStatus(tcontext.Background(), conn.NewBaseDB(mysql), gmysql.MySQLFlavor)
 	require.NoError(t, err)
+	jobStatus, err := queryStatus(httpClient, jobID, []string{source1})
+	require.NoError(t, err)
+	// only check binlog-name, because binlog-pos will be changed by other test cases.
+	require.Contains(t, string(jobStatus.TaskStatus[source1].Status.Status), fmt.Sprintf(`"metaBinlog": "(%s,`, binlogName))
+
+	// start incremental job via updateJobConfig
 	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("task-mode: full"), []byte("task-mode: incremental"))
 	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("binlog-name: ON.000001"), []byte(fmt.Sprintf("binlog-name: %s", binlogName)))
 	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("binlog-pos: 4"), []byte(fmt.Sprintf("binlog-pos: %d", binlogPos)))
@@ -208,9 +214,9 @@ func testSimpleAllModeTask(
 	// check auto resume
 	waitRow("c = 3", db)
 
-	jobStatus, err := queryStatus(httpClient, jobID, []string{source1, source2})
+	jobStatus, err = queryStatus(httpClient, jobID, []string{source1, source2})
 	require.NoError(t, err)
-	require.Equal(t, jobID, jobStatus.JobMasterID)
+	require.Equal(t, jobID, jobStatus.JobID)
 	require.Contains(t, string(jobStatus.TaskStatus[source1].Status.Status), "totalEvents")
 	require.Contains(t, jobStatus.TaskStatus[source2].Status.ErrorMsg, fmt.Sprintf("task %s for job not found", source2))
 
