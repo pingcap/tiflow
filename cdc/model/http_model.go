@@ -95,12 +95,13 @@ func (l *Liveness) String() string {
 
 // ServerStatus holds some common information of a server
 type ServerStatus struct {
-	Version  string   `json:"version"`
-	GitHash  string   `json:"git_hash"`
-	ID       string   `json:"id"`
-	Pid      int      `json:"pid"`
-	IsOwner  bool     `json:"is_owner"`
-	Liveness Liveness `json:"liveness"`
+	Version   string   `json:"version"`
+	GitHash   string   `json:"git_hash"`
+	ID        string   `json:"id"`
+	ClusterID string   `json:"cluster_id"`
+	Pid       int      `json:"pid"`
+	IsOwner   bool     `json:"is_owner"`
+	Liveness  Liveness `json:"liveness"`
 }
 
 // ChangefeedCommonInfo holds some common usage information of a changefeed

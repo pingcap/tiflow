@@ -207,6 +207,8 @@ definitions:
     type: object
   model.ServerStatus:
     properties:
+      cluster_id:
+        type: string
       git_hash:
         type: string
       id:
