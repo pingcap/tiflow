@@ -25,14 +25,10 @@ import (
 // MockPDClient mocks pd.Client to facilitate unit testing.
 type MockPDClient struct {
 	pd.Client
-<<<<<<< HEAD
-=======
 	ClusterID        uint64
 	GetAllStoresFunc func(ctx context.Context, opts ...pd.GetStoreOption) ([]*metapb.Store, error)
 
->>>>>>> c0d6c4279 (api(cdc): drain capture also check store version (#6679))
 	UpdateServiceGCSafePointFunc func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error)
-	ClusterID                    uint64
 }
 
 // UpdateServiceGCSafePoint implements pd.Client.UpdateServiceGCSafePoint.
