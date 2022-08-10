@@ -917,7 +917,7 @@ func (s *Syncer) saveTablePoint(table *filter.Table, location binlog.Location) {
 			zap.Stringer("location", location),
 			zap.Error(err))
 	}
-	s.checkpoint.SaveTablePoint(table, location, ti)
+	s.checkpoint.SaveTablePoint(table, location, ti.Clone())
 }
 
 // only used in tests.

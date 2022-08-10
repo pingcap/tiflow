@@ -549,7 +549,7 @@ function DM_INJECT_DDL_ERROR_SHARDING_BASE_CASE() {
 	# first ddl: unsupport error
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"unsupported add column .* constraint UNIQUE KEY" 2
+		"unsupported add column .* constraint UNIQUE KEY" 1
 
 	# begin to handle error
 	# replace first ddl into two ddls, but add c as pk
@@ -615,7 +615,7 @@ function DM_INJECT_DDL_ERROR_SHARDING_BASE2_CASE() {
 	# 11/21 first ddl error
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"unsupported add column .* constraint UNIQUE KEY" 2
+		"unsupported add column .* constraint UNIQUE KEY" 1
 
 	# replace 11/21 first ddl
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -683,7 +683,7 @@ function DM_INJECT_DDL_ERROR_SHARDING_BASE2_CASE() {
 		# 12/22 first ddl error
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			"unsupported add column .* constraint UNIQUE KEY" 2
+			"unsupported add column .* constraint UNIQUE KEY" 1
 
 		# replace 12/22 first ddl
 		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -731,7 +731,7 @@ function DM_INJECT_DDL_ERROR_SHARDING_CROSS_CASE() {
 	# 11/21 first ddl: unsupport error
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"unsupported add column .* constraint UNIQUE KEY" 2
+		"unsupported add column .* constraint UNIQUE KEY" 1
 
 	# 11/21 second ddl
 	run_sql_source1 "alter table ${db}.${tb1} modify column c double;"
@@ -894,7 +894,7 @@ function DM_INJECT_DML_ERROR_CASE() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"unsupported add column .* constraint UNIQUE KEY" 2
+		"unsupported add column .* constraint UNIQUE KEY" 1
 
 	# replace sql but there has a mistake which is add unque to column 'b'
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
