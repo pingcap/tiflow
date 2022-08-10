@@ -602,7 +602,11 @@ func (s *trackerSuite) TestGetDownStreamIndexInfo(c *C) {
 	// downstream has no pk/uk
 	mock.ExpectQuery("SHOW CREATE TABLE " + tableID).WillReturnRows(
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
+<<<<<<< HEAD
 			AddRow("test", "create table t(a int, b int, c varchar(10))"))
+=======
+			AddRow("test", "create table t(a int primary key, b int, c varchar(20000), key(c(20000)))"))
+>>>>>>> 9ec5ff7b6 (tracker(dm): fix downstream table structure reports key too long (#6661))
 	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableID, oriTi)
 	c.Assert(err, IsNil)
 	c.Assert(dti, NotNil)
