@@ -408,6 +408,7 @@ func (o *ownerImpl) handleDrainCaptures(ctx context.Context, query *scheduler.Qu
 	}); err != nil {
 		log.Info("owner handle drain capture failed, since check upstream store version failed",
 			zap.String("target", query.CaptureID), zap.Error(err))
+		query.Resp = &model.DrainCaptureResp{CurrentTableCount: 0}
 		done <- err
 		close(done)
 		return
