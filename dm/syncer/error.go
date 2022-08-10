@@ -121,12 +121,13 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 							return "", err
 						}
 						if len(resultsLimitNext) == 0 {
-							break
+							// JOB QUERIES has been used up
+							return "", nil
 						}
 
 						// if new DDLs are written to TiDB after the last query 'ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET'
 						// we may get duplicate rows here, but it does not affect the checking
-						for k := 0; k < 10 && k < len(resultsLimitNext); k++ {
+						for k := range resultsLimitNext {
 							var jobIDForLimit int
 							jobIDForLimit, err = strconv.Atoi(resultsLimitNext[k][0])
 							if err != nil {

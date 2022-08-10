@@ -220,7 +220,7 @@ func TestGetDDLStatusFromTiDB(t *testing.T) {
 	)
 
 	db, mock, err := sqlmock.New()
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	adminShowDDLJobsSQL1 = fmt.Sprintf("ADMIN SHOW DDL JOBS 10")
 	adminShowDDLJobsSQL2 = fmt.Sprintf("ADMIN SHOW DDL JOBS 20")
@@ -368,29 +368,29 @@ func TestGetDDLStatusFromTiDB(t *testing.T) {
 
 	// test 1
 	createTime, err = time.Parse("2006-01-02 15:04:05", "2022-08-02 2:51:38")
-	require.Nil(t, err)
+	require.NoError(t, err)
 	status, err = getDDLStatusFromTiDB(ctx, db, "ALTER TABLE many_tables_test.t6 ADD x timestamp DEFAULT current_timestamp", createTime.Unix())
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, "running", status)
 
 	// test 2
 	createTime, err = time.Parse("2006-01-02 15:04:05", "2022-08-02 2:50:36")
-	require.Nil(t, err)
+	require.NoError(t, err)
 	status, err = getDDLStatusFromTiDB(ctx, db, "ALTER TABLE many_tables_test.t4 ADD x timestamp DEFAULT current_timestamp", createTime.Unix())
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, "none", status)
 
 	// test 3
 	createTime, err = time.Parse("2006-01-02 15:04:05", "2022-08-02 2:46:13")
-	require.Nil(t, err)
+	require.NoError(t, err)
 	status, err = getDDLStatusFromTiDB(ctx, db, "CREATE TABLE IF NOT EXISTS many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)", createTime.Unix())
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, "synced", status)
 
 	// test 4
 	createTime, err = time.Parse("2006-01-02 15:04:05", "2022-08-03 12:35:00")
-	require.Nil(t, err)
+	require.NoError(t, err)
 	status, err = getDDLStatusFromTiDB(ctx, db, "CREATE TABLE IF NOT EXISTS many_tables_test.t7(i TINYINT, j INT UNIQUE KEY)", createTime.Unix())
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, "", status) // DDL does not exist
 }
