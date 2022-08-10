@@ -27,6 +27,7 @@ import (
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -47,16 +48,14 @@ func (s *Server) generateSessionConfig() (*cluster.EtcdSessionConfig, error) {
 
 func (s *Server) leaderLoop(ctx context.Context) error {
 	var (
-		leaderResignFn context.CancelFunc
-
 		retryInterval    = time.Millisecond * 200
 		needResetSession = false
+
+		// After a leader is resigned, the server will stop to campaign itself
+		// for 10 seconds to avoid the server becoming a leader again.
+		stopCampaignInterval = time.Second * 10
+		stopCampaignUntil    = time.Now()
 	)
-	defer func() {
-		if leaderResignFn != nil {
-			leaderResignFn()
-		}
-	}()
 
 	sessionCfg, err := s.generateSessionConfig()
 	if err != nil {
@@ -83,23 +82,47 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 			continue
 		}
 
+		if time.Now().Before(stopCampaignUntil) {
+			time.Sleep(retryInterval)
+			continue
+		}
+
 		if needResetSession {
 			if err := session.Reset(ctx); err != nil {
 				return err
 			}
 			needResetSession = false
 		}
-		newCtx, newResignFn, err := session.Campaign(ctx, defaultCampaignTimeout)
+		leaderCtx, resignFn, err := session.Campaign(ctx, defaultCampaignTimeout)
 		if err != nil {
 			needResetSession = session.CheckNeedReset(err)
 			continue
 		}
-		leaderResignFn = newResignFn
 
-		if err := s.leaderServiceFn(newCtx); err != nil {
-			if errors.Cause(err) == context.Canceled ||
-				derrors.ErrEtcdLeaderChanged.Equal(err) {
+		g, gCtx := errgroup.WithContext(leaderCtx)
+
+		g.Go(func() error {
+			return s.leaderServiceFn(gCtx)
+		})
+
+		g.Go(func() error {
+			var retErr error
+			select {
+			case <-gCtx.Done():
+				retErr = gCtx.Err()
+			case <-s.resignCh:
+				retErr = derrors.ErrLeaderResigned.GenWithStackByArgs()
+			}
+			resignFn()
+			return retErr
+		})
+
+		if err := g.Wait(); err != nil {
+			if errors.Cause(err) == context.Canceled {
 				log.Info("leader service exits", zap.Error(err))
+			} else if derrors.ErrLeaderResigned.Equal(err) {
+				log.Info("leader has resigned")
+				stopCampaignUntil = time.Now().Add(stopCampaignInterval)
 			} else if derrors.ErrMasterSessionDone.Equal(err) {
 				log.Info("server master session done, reset session now", zap.Error(err))
 				needResetSession = true

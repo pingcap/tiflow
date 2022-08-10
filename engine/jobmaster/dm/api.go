@@ -37,7 +37,7 @@ type TaskStatus struct {
 
 // JobStatus represents status of a job
 type JobStatus struct {
-	JobMasterID frameModel.MasterID
+	JobID frameModel.MasterID
 	// taskID -> Status
 	TaskStatus map[string]TaskStatus
 }
@@ -67,8 +67,8 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 		wg              sync.WaitGroup
 		mu              sync.Mutex
 		jobStatus       = &JobStatus{
-			JobMasterID: jm.ID(),
-			TaskStatus:  make(map[string]TaskStatus),
+			JobID:      jm.ID(),
+			TaskStatus: make(map[string]TaskStatus),
 		}
 	)
 
@@ -98,7 +98,13 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 					// task finished
 					workerID = workerStatus.ID
 					cfgModRevision = workerStatus.CfgModRevision
-					queryStatusResp = &dmpkg.QueryStatusResponse{Unit: workerStatus.Unit, Stage: metadata.StageFinished}
+					finishedStatus, ok := jm.finishedStatus.Load(taskID)
+					if !ok {
+						queryStatusResp = &dmpkg.QueryStatusResponse{Unit: workerStatus.Unit, Stage: metadata.StageFinished, ErrorMsg: fmt.Sprintf("task %s is finished and status has been deleted", taskID)}
+					} else {
+						s := finishedStatus.(runtime.FinishedTaskStatus)
+						queryStatusResp = &dmpkg.QueryStatusResponse{Unit: workerStatus.Unit, Stage: metadata.StageFinished, Result: s.Result, Status: s.Status}
+					}
 				} else {
 					workerID = workerStatus.ID
 					cfgModRevision = workerStatus.CfgModRevision
@@ -168,6 +174,8 @@ func (jm *JobMaster) UpdateJobCfg(ctx context.Context, cfg *config.JobCfg) error
 	if err := jm.checkpointAgent.Update(ctx, cfg); err != nil {
 		return err
 	}
+	// reset finished status, all tasks will be restarted now.
+	jm.finishedStatus = sync.Map{}
 	jm.workerManager.SetNextCheckTime(time.Now())
 	return nil
 }
