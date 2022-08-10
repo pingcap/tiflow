@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/scheduler"
@@ -655,12 +657,35 @@ func TestHandleDrainCapturesSchedulerNotReady(t *testing.T) {
 			Info: &model.ChangeFeedInfo{State: model.StateNormal},
 		},
 	}
-	o := &ownerImpl{changefeeds: make(map[model.ChangeFeedID]*changefeed)}
+
+	pdClient := &gc.MockPDClient{}
+	o := &ownerImpl{
+		changefeeds:     make(map[model.ChangeFeedID]*changefeed),
+		upstreamManager: upstream.NewManager4Test(pdClient),
+	}
 	o.changefeeds[model.ChangeFeedID{}] = cf
 
+	ctx := context.Background()
 	query := &scheduler.Query{CaptureID: "test"}
 	done := make(chan error, 1)
-	o.handleDrainCaptures(query, done)
+
+	// check store version failed.
+	pdClient.GetAllStoresFunc = func(
+		ctx context.Context, opts ...pd.GetStoreOption,
+	) ([]*metapb.Store, error) {
+		return nil, errors.New("store version check failed")
+	}
+	o.handleDrainCaptures(ctx, query, done)
+	require.Equal(t, 0, query.Resp.(*model.DrainCaptureResp).CurrentTableCount)
+	require.Error(t, <-done)
+
+	pdClient.GetAllStoresFunc = func(
+		ctx context.Context, opts ...pd.GetStoreOption,
+	) ([]*metapb.Store, error) {
+		return nil, nil
+	}
+	done = make(chan error, 1)
+	o.handleDrainCaptures(ctx, query, done)
 	require.NotEqualValues(t, 0, query.Resp.(*model.DrainCaptureResp).CurrentTableCount)
 	require.Nil(t, <-done)
 
@@ -668,7 +693,7 @@ func TestHandleDrainCapturesSchedulerNotReady(t *testing.T) {
 	cf.state.Info.State = model.StateStopped
 	query = &scheduler.Query{CaptureID: "test"}
 	done = make(chan error, 1)
-	o.handleDrainCaptures(query, done)
+	o.handleDrainCaptures(ctx, query, done)
 	require.EqualValues(t, 0, query.Resp.(*model.DrainCaptureResp).CurrentTableCount)
 	require.Nil(t, <-done)
 }
