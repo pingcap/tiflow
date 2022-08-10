@@ -18,14 +18,20 @@ import (
 	"testing"
 	"time"
 
+<<<<<<< HEAD:cdc/sink/codec/craft/codec_test.go
 	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
+=======
+	"github.com/pingcap/tiflow/pkg/leakutil"
+	"github.com/stretchr/testify/require"
+>>>>>>> c3a120488 (pdutil(ticdc): split `tidb_ddl_job` table (#6673)):cdc/sink/mq/codec/craft/codec_test.go
 )
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
+<<<<<<< HEAD:cdc/sink/codec/craft/codec_test.go
 var _ = check.Suite(&codecSuite{allocator: NewSliceAllocator(64)})
 
 func Test(t *testing.T) { check.TestingT(t) }
@@ -36,6 +42,15 @@ type codecSuite struct {
 
 func (s *codecSuite) TestSizeTable(c *check.C) {
 	defer testleak.AfterTest(c)()
+=======
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(m)
+}
+
+func TestSizeTable(t *testing.T) {
+	t.Parallel()
+
+>>>>>>> c3a120488 (pdutil(ticdc): split `tidb_ddl_job` table (#6673)):cdc/sink/mq/codec/craft/codec_test.go
 	tables := [][]int64{
 		{
 			1, 3, 5, 7, 9,
@@ -54,8 +69,13 @@ func (s *codecSuite) TestSizeTable(c *check.C) {
 	c.Check(size, check.Equals, len(bits)-16)
 }
 
+<<<<<<< HEAD:cdc/sink/codec/craft/codec_test.go
 func (s *codecSuite) TestUvarintReverse(c *check.C) {
 	defer testleak.AfterTest(c)()
+=======
+func TestUvarintReverse(t *testing.T) {
+	t.Parallel()
+>>>>>>> c3a120488 (pdutil(ticdc): split `tidb_ddl_job` table (#6673)):cdc/sink/mq/codec/craft/codec_test.go
 
 	var i uint64 = 0
 
@@ -80,8 +100,14 @@ func newNullableString(a string) *string {
 	return &a
 }
 
+<<<<<<< HEAD:cdc/sink/codec/craft/codec_test.go
 func (s *codecSuite) TestEncodeChunk(c *check.C) {
 	defer testleak.AfterTest(c)()
+=======
+func TestEncodeChunk(t *testing.T) {
+	t.Parallel()
+
+>>>>>>> c3a120488 (pdutil(ticdc): split `tidb_ddl_job` table (#6673)):cdc/sink/mq/codec/craft/codec_test.go
 	stringChunk := []string{"a", "b", "c"}
 	nullableStringChunk := []*string{newNullableString("a"), newNullableString("b"), newNullableString("c")}
 	int64Chunk := []int64{1, 2, 3}

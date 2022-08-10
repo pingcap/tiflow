@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/util/codec"
@@ -26,6 +27,17 @@ import (
 	"go.uber.org/zap"
 )
 
+<<<<<<< HEAD
+=======
+const (
+	// JobTableID is the id of `tidb_ddl_job`.
+	JobTableID = ddl.JobTableID
+)
+
+// UpperBoundKey represents the maximum value.
+var UpperBoundKey = []byte{255, 255, 255, 255, 255}
+
+>>>>>>> c3a120488 (pdutil(ticdc): split `tidb_ddl_job` table (#6673))
 // Span represents an arbitrary kv range
 type Span struct {
 	Start []byte
