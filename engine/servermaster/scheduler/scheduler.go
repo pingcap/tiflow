@@ -16,33 +16,32 @@ package scheduler
 import (
 	"context"
 
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/engine/model"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
-	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // Scheduler is a full set of scheduling management, containing capacity provider,
 // real scheduler and resource placement manager.
 type Scheduler struct {
-	capacityProvider     CapacityProvider
-	costScheduler        *CostScheduler
+	infoProvider         executorInfoProvider
+	costScheduler        *costScheduler
 	placementConstrainer PlacementConstrainer
+	filters              []filter
 }
 
 // NewScheduler creates a new Scheduler instance
 func NewScheduler(
-	capacityProvider CapacityProvider,
+	infoProvider executorInfoProvider,
 	placementConstrainer PlacementConstrainer,
 ) *Scheduler {
 	return &Scheduler{
-		capacityProvider:     capacityProvider,
-		costScheduler:        NewRandomizedCostScheduler(capacityProvider),
+		infoProvider:         infoProvider,
+		costScheduler:        NewRandomizedCostScheduler(infoProvider),
 		placementConstrainer: placementConstrainer,
+		filters: []filter{
+			newResourceFilter(placementConstrainer),
+			newSelectorFilter(infoProvider),
+		},
 	}
 }
 
@@ -51,93 +50,36 @@ func (s *Scheduler) ScheduleTask(
 	ctx context.Context,
 	request *schedModel.SchedulerRequest,
 ) (*schedModel.SchedulerResponse, error) {
-	if len(request.ExternalResources) == 0 {
-		// There is no requirement for external resources.
-		return s.scheduleByCostOnly(request)
-	}
-
-	constraint, err := s.getConstraint(ctx, request.ExternalResources)
+	candidates, err := s.chainFilter(ctx, request)
 	if err != nil {
 		return nil, err
 	}
-	if constraint == "" {
-		// No constraint is found
-		return s.scheduleByCostOnly(request)
-	}
-
-	// Checks that the required executor has enough capacity to
-	// run the task.
-	if !s.checkCostAllows(request, constraint) {
-		return nil, errors.ErrClusterResourceNotEnough.GenWithStackByArgs()
-	}
-	return &schedModel.SchedulerResponse{ExecutorID: constraint}, nil
-}
-
-func (s *Scheduler) scheduleByCostOnly(
-	request *schedModel.SchedulerRequest,
-) (*schedModel.SchedulerResponse, error) {
-	target, ok := s.costScheduler.ScheduleByCost(request.Cost)
-	if ok {
-		return &schedModel.SchedulerResponse{
-			ExecutorID: target,
-		}, nil
-	}
-	return nil, errors.ErrClusterResourceNotEnough.GenWithStackByArgs()
-}
-
-func (s *Scheduler) checkCostAllows(
-	request *schedModel.SchedulerRequest,
-	target model.ExecutorID,
-) bool {
-	executorResc, ok := s.capacityProvider.CapacityForExecutor(target)
+	executorID, ok := s.costScheduler.ScheduleByCost(request.Cost, candidates)
 	if !ok {
-		// Executor is gone.
-		return false
+		return nil, ErrCapacityNotEnough.GenWithStack(
+			&CapacityNotEnoughError{
+				FinalCandidates: candidates,
+			})
 	}
-	remaining := executorResc.Remaining()
-	return remaining >= request.Cost
+	return &schedModel.SchedulerResponse{ExecutorID: executorID}, nil
 }
 
-func (s *Scheduler) getConstraint(
+// chainFilter runs the filter chain and returns a final candidate list.
+func (s *Scheduler) chainFilter(
 	ctx context.Context,
-	resources []resourcemeta.ResourceKey,
-) (model.ExecutorID, error) {
-	var (
-		lastResourceID resModel.ResourceID
-		ret            model.ExecutorID
-	)
-	for _, resource := range resources {
-		resourceID := resource.ID
-		executorID, hasConstraint, err := s.placementConstrainer.GetPlacementConstraint(ctx, resource)
-		if err != nil {
-			if errors.ErrResourceDoesNotExist.Equal(err) {
-				return "", schedModel.NewResourceNotFoundError(resourceID, err)
-			}
-			return "", err
-		}
-		if !hasConstraint {
-			// TODO change this to Debug when this part of code
-			// has been stabilized.
-			log.Info("No constraint is found for resource",
-				zap.String("resource-id", resourceID))
-			continue
-		}
-		log.Info("Found resource constraint for resource",
-			zap.String("resource-id", resourceID),
-			zap.String("executor-id", string(executorID)))
-
-		if ret != "" && ret != executorID {
-			// Conflicting constraints.
-			// We are forced to schedule the task to
-			// two different executors, which is impossible.
-			log.Warn("Conflicting resource constraints",
-				zap.Any("resources", resources))
-			return "", schedModel.NewResourceConflictError(
-				resourceID, executorID,
-				lastResourceID, ret)
-		}
-		ret = executorID
-		lastResourceID = resourceID
+	request *schedModel.SchedulerRequest,
+) (candidates []model.ExecutorID, retErr error) {
+	infos := s.infoProvider.GetExecutorInfos()
+	for id := range infos {
+		candidates = append(candidates, id)
 	}
-	return ret, nil
+	for _, filter := range s.filters {
+		var err error
+		candidates, err = filter.GetEligibleExecutors(ctx, request, candidates)
+		if err != nil {
+			// Note: filters are guaranteed to return errors when no suitable candidate is found.
+			return nil, err
+		}
+	}
+	return
 }
