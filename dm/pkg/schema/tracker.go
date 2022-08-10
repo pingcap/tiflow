@@ -35,7 +35,14 @@ import (
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/store/mockstore"
+<<<<<<< HEAD
 	"github.com/pingcap/tidb/types"
+=======
+	unistoreConfig "github.com/pingcap/tidb/store/mockstore/unistore/config"
+	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tidb/util/mock"
+	"go.uber.org/atomic"
+>>>>>>> 9ec5ff7b6 (tracker(dm): fix downstream table structure reports key too long (#6661))
 	"go.uber.org/zap"
 
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -71,6 +78,11 @@ type Tracker struct {
 
 // downstreamTracker tracks downstream schema.
 type downstreamTracker struct {
+<<<<<<< HEAD
+=======
+	sync.RWMutex
+	se             sessionctx.Context
+>>>>>>> 9ec5ff7b6 (tracker(dm): fix downstream table structure reports key too long (#6661))
 	downstreamConn *dbconn.DBConn                  // downstream connection
 	stmtParser     *parser.Parser                  // statement parser
 	tableInfos     map[string]*DownstreamTableInfo // downstream table infos
@@ -211,9 +223,12 @@ func NewTracker(ctx context.Context, task string, sessionCfg map[string]string, 
 		return nil, err
 	}
 
+	dsSession := mock.NewContext()
+	dsSession.GetSessionVars().StrictSQLMode = false
 	// init downstreamTracker
 	dsTracker := &downstreamTracker{
 		downstreamConn: downstreamConn,
+		se:             dsSession,
 		tableInfos:     make(map[string]*DownstreamTableInfo),
 	}
 
@@ -519,7 +534,7 @@ func (tr *Tracker) getTableInfoByCreateStmt(tctx *tcontext.Context, tableID stri
 		return nil, dmterror.ErrSchemaTrackerInvalidCreateTableStmt.Delegate(err, createStr)
 	}
 
-	ti, err := ddl.BuildTableInfoFromAST(stmtNode.(*ast.CreateTableStmt))
+	ti, err := ddl.BuildTableInfoWithStmt(dt.se, stmtNode.(*ast.CreateTableStmt), mysql.DefaultCharset, "", nil)
 	if err != nil {
 		return nil, dmterror.ErrSchemaTrackerCannotMockDownstreamTable.Delegate(err, createStr)
 	}
