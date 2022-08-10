@@ -15,6 +15,7 @@ package servermaster
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -71,6 +72,9 @@ func (m *mockServerInfoProvider) IsLeader() bool {
 
 func (m *mockServerInfoProvider) LeaderAddr() (string, bool) {
 	return m.leaderAddr, true
+}
+
+func (m *mockServerInfoProvider) ResignLeader() {
 }
 
 func (m *mockServerInfoProvider) JobManager() (JobManager, bool) {
@@ -207,4 +211,23 @@ func TestForwardToLeader(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	forwardReq := <-reqs
 	require.Equal(t, "/api/v1/jobs", forwardReq.URL.Path)
+}
+
+func TestGetLeader(t *testing.T) {
+	infoProvider := &mockServerInfoProvider{
+		mockMgr:    &mockManager{},
+		serverAddr: "servermaster0",
+		leaderAddr: "servermaster1",
+	}
+	openapi := NewOpenAPI(infoProvider)
+	router := gin.New()
+	RegisterOpenAPIRoutes(router, openapi)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/leader", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	require.Equal(t, http.StatusOK, resp.Code)
+	var leaderInfo APILeaderInfo
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &leaderInfo))
+	require.Equal(t, "servermaster1", leaderInfo.AdvertiseAddr)
 }
