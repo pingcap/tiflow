@@ -67,12 +67,18 @@ func updateKeyAndCheckOnce(
 func TestNodeFailure(t *testing.T) {
 	// TODO: make the following variables configurable, these variables keep the
 	// same in sample/3m3e.yaml
+	const nodeCount = 3
 	var (
 		masterAddrs          = []string{"127.0.0.1:10245", "127.0.0.1:10246", "127.0.0.1:10247"}
 		businessMetaAddrs    = []string{"127.0.0.1:3336"}
 		etcdAddrs            = []string{"127.0.0.1:12479"}
 		etcdAddrsInContainer = []string{"etcd-standalone:2379"}
 	)
+	masterContainerAddrsMapping := map[string]string{
+		"server-master-0:10240": masterAddrs[0],
+		"server-master-1:10240": masterAddrs[1],
+		"server-master-2:10240": masterAddrs[2],
+	}
 
 	seed := time.Now().Unix()
 	rand.Seed(seed)
@@ -131,13 +137,27 @@ func TestNodeFailure(t *testing.T) {
 	updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, "random-value-1", mvccCount)
 
 	log.Info("restart all server masters and check fake job is running normally")
-	nodeCount := 3
 	for i := 0; i < nodeCount; i++ {
 		cli.ContainerRestart(masterContainerName(i))
 		mvccCount++
 		value := fmt.Sprintf("restart-server-master-value-%d", i)
 		updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, value, mvccCount)
 	}
+
+	log.Info("resign the leader and check if the leader is changed")
+	leaderAddr, err := cli.GetLeaderAddr(ctx)
+	require.NoError(t, err)
+	require.Contains(t, masterContainerAddrsMapping, leaderAddr, "leader addr is invalid")
+	err = cli.ResignLeader(ctx, masterContainerAddrsMapping[leaderAddr])
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		newLeaderAddr, err := cli.GetLeaderAddr(ctx)
+		if err == e2e.ErrLeaderNotFound {
+			return false
+		}
+		require.NotEqual(t, leaderAddr, newLeaderAddr, "leader is not changed")
+		return true
+	}, time.Second*10, time.Second)
 
 	log.Info("restart all executors and check fake job is running normally")
 	for i := 0; i < nodeCount; i++ {

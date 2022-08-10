@@ -30,6 +30,8 @@ import (
 	derror "github.com/pingcap/tiflow/pkg/errors"
 )
 
+const defaultResignTimeout = time.Second * 5
+
 // Election is an interface that performs leader elections.
 type Election interface {
 	// Campaign returns only after being elected.
@@ -131,14 +133,18 @@ func (e *EtcdElection) doCampaign(ctx context.Context, selfID NodeID, timeout ti
 		return nil, nil, derror.WrapError(derror.ErrMasterEtcdElectionCampaignFail, err)
 	}
 	retCtx := newLeaderCtx(ctx, e.session)
+
+	var resignOnce sync.Once
 	resignFn := func() {
-		resignCtx, cancel := context.WithCancel(ctx)
-		defer cancel()
-		defer retCtx.OnResigned()
-		err := e.election.Resign(resignCtx)
-		if err != nil {
-			log.Warn("resign leader failed", zap.Error(err))
-		}
+		resignOnce.Do(func() {
+			resignCtx, cancel := context.WithTimeout(context.Background(), defaultResignTimeout)
+			defer cancel()
+			defer retCtx.OnResigned()
+			err := e.election.Resign(resignCtx)
+			if err != nil {
+				log.Warn("resign leader failed", zap.Error(err))
+			}
+		})
 	}
 	return retCtx, resignFn, nil
 }
