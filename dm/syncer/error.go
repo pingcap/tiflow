@@ -120,10 +120,13 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 						if err != nil {
 							return "", err
 						}
+						if len(resultsLimitNext) == 0 {
+							break
+						}
 
 						// if new DDLs are written to TiDB after the last query 'ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET'
 						// we may get duplicate rows here, but it does not affect the checking
-						for k := 0; k < 10; k++ {
+						for k := 0; k < 10 && k < len(resultsLimitNext); k++ {
 							var jobIDForLimit int
 							jobIDForLimit, err = strconv.Atoi(resultsLimitNext[k][0])
 							if err != nil {
@@ -140,7 +143,8 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 					}
 				}
 			} else {
-				// requested DDL cannot be found
+				// ddlCreateTime is monotonous in jobsResults
+				// here requested DDL cannot be found
 				return "", nil
 			}
 		}
