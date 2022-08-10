@@ -122,6 +122,7 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 						}
 						if len(resultsLimitNext) == 0 {
 							// JOB QUERIES has been used up
+							// requested DDL cannot be found
 							return "", nil
 						}
 
@@ -145,7 +146,7 @@ func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTim
 				}
 			} else {
 				// ddlCreateTime is monotonous in jobsResults
-				// here requested DDL cannot be found
+				// requested DDL cannot be found
 				return "", nil
 			}
 		}
