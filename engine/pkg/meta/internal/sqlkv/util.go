@@ -36,7 +36,7 @@ func (e *sqlError) Error() string {
 func sqlErrorFromOpFail(err error) *sqlError {
 	return &sqlError{
 		cause:     err,
-		displayed: errors.ErrMetaOpFail.GenWithStackByArgs(err),
+		displayed: errors.ErrMetaOpFail.Wrap(err),
 	}
 }
 
