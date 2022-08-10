@@ -69,7 +69,7 @@ func (s *Scheduler) chainFilter(
 	ctx context.Context,
 	request *schedModel.SchedulerRequest,
 ) (candidates []model.ExecutorID, retErr error) {
-	infos := s.infoProvider.GetExecutorInfo()
+	infos := s.infoProvider.GetExecutorInfos()
 	for id := range infos {
 		candidates = append(candidates, id)
 	}

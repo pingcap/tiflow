@@ -35,7 +35,7 @@ func (f *selectorFilter) GetEligibleExecutors(
 	ctx context.Context, request *schedModel.SchedulerRequest, candidates []model.ExecutorID,
 ) ([]model.ExecutorID, error) {
 	// Query the information for all executors.
-	allExecutors := f.infoProvider.GetExecutorInfo()
+	allExecutors := f.infoProvider.GetExecutorInfos()
 	executors := make(map[model.ExecutorID]schedModel.ExecutorInfo)
 	for _, id := range candidates {
 		if _, ok := allExecutors[id]; !ok {

@@ -53,7 +53,7 @@ type ExecutorManager interface {
 
 	// GetExecutorInfo implements the interface scheduler.executorInfoProvider.
 	// It is called by the scheduler as the source of truth for executors.
-	GetExecutorInfo() map[model.ExecutorID]schedModel.ExecutorInfo
+	GetExecutorInfos() map[model.ExecutorID]schedModel.ExecutorInfo
 }
 
 // ExecutorManagerImpl holds all the executors info, including liveness, status, resource usage.
@@ -342,9 +342,9 @@ func (e *ExecutorManagerImpl) WatchExecutors(
 	return
 }
 
-// GetExecutorInfo returns necessary information on the executor that
+// GetExecutorInfos returns necessary information on the executor that
 // is needed for scheduling.
-func (e *ExecutorManagerImpl) GetExecutorInfo() map[model.ExecutorID]schedModel.ExecutorInfo {
+func (e *ExecutorManagerImpl) GetExecutorInfos() map[model.ExecutorID]schedModel.ExecutorInfo {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 

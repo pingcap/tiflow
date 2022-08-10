@@ -21,15 +21,15 @@ import (
 // executorInfoProvider is the abstraction for an object that provides
 // necessary information on all online executors.
 type executorInfoProvider interface {
-	// GetExecutorInfo returns a map containing ExecutorInfo for
+	// GetExecutorInfos returns a map containing ExecutorInfo for
 	// all executors.
-	GetExecutorInfo() map[model.ExecutorID]schedModel.ExecutorInfo
+	GetExecutorInfos() map[model.ExecutorID]schedModel.ExecutorInfo
 }
 
 type mockExecutorInfoProvider struct {
 	infos map[model.ExecutorID]schedModel.ExecutorInfo
 }
 
-func (p *mockExecutorInfoProvider) GetExecutorInfo() map[model.ExecutorID]schedModel.ExecutorInfo {
+func (p *mockExecutorInfoProvider) GetExecutorInfos() map[model.ExecutorID]schedModel.ExecutorInfo {
 	return p.infos
 }

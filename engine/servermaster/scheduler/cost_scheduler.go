@@ -45,7 +45,7 @@ func NewDeterministicCostScheduler(infoProvider executorInfoProvider, seed int64
 
 // ScheduleByCost is a native random based scheduling strategy
 func (s *costScheduler) ScheduleByCost(cost schedModel.ResourceUnit, candidates []model.ExecutorID) (model.ExecutorID, bool) {
-	infos := s.infoProvider.GetExecutorInfo()
+	infos := s.infoProvider.GetExecutorInfos()
 	// TODO optimize for performance if the need arises.
 	s.random.Shuffle(len(candidates), func(i, j int) {
 		candidates[i], candidates[j] = candidates[j], candidates[i]

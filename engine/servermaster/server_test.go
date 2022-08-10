@@ -291,7 +291,7 @@ func (m *mockExecutorManager) ExecutorCount(status model.ExecutorStatus) int {
 	return m.count[status]
 }
 
-func (m *mockExecutorManager) GetExecutorInfo() map[model.ExecutorID]schedModel.ExecutorInfo {
+func (m *mockExecutorManager) GetExecutorInfos() map[model.ExecutorID]schedModel.ExecutorInfo {
 	panic("not implemented")
 }
 
