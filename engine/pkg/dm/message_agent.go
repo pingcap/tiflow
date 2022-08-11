@@ -170,7 +170,7 @@ type MessageAgent interface {
 type clientGroup struct {
 	mu sync.RWMutex
 	// key is client-id
-	m       map[string]client
+	clients map[string]client
 	ctxs    map[string]context.Context
 	cancels map[string]context.CancelFunc
 }
@@ -202,7 +202,7 @@ func NewMessageAgentImpl(id string, commandHandler interface{}, messageHandlerMa
 	agent := &MessageAgentImpl{
 		messageMatcher: newMessageMatcher(),
 		clients: clientGroup{
-			m:       map[string]client{},
+			clients: map[string]client{},
 			ctxs:    map[string]context.Context{},
 			cancels: map[string]context.CancelFunc{},
 		},
@@ -256,19 +256,19 @@ func (agent *MessageAgentImpl) UpdateClient(clientID string, client client) erro
 	agent.clients.mu.Lock()
 	defer agent.clients.mu.Unlock()
 
-	_, ok := agent.clients.m[clientID]
+	_, ok := agent.clients.clients[clientID]
 	if client == nil && ok {
 		// delete client
 		if err := agent.unregisterTopic(agent.ctx, clientID); err != nil {
 			return err
 		}
-		delete(agent.clients.m, clientID)
+		delete(agent.clients.clients, clientID)
 	} else if client != nil && !ok {
 		// add client
 		if err := agent.registerTopic(agent.ctx, clientID); err != nil {
 			return err
 		}
-		agent.clients.m[clientID] = client
+		agent.clients.clients[clientID] = client
 
 		// don't overwrite existing context, we allow multiple worker share same topic
 		if _, ok := agent.clients.ctxs[clientID]; !ok {
@@ -290,7 +290,7 @@ func (agent *MessageAgentImpl) RemoveClient(clientID string) error {
 		return err
 	}
 
-	delete(agent.clients.m, clientID)
+	delete(agent.clients.clients, clientID)
 	delete(agent.clients.ctxs, clientID)
 	cancel, ok := agent.clients.cancels[clientID]
 	if ok {
@@ -304,7 +304,7 @@ func (agent *MessageAgentImpl) getClient(clientID string) (client, error) {
 	agent.clients.mu.RLock()
 	defer agent.clients.mu.RUnlock()
 
-	client, ok := agent.clients.m[clientID]
+	client, ok := agent.clients.clients[clientID]
 	if !ok {
 		return nil, errors.Errorf("client %s not found", clientID)
 	}
@@ -328,7 +328,7 @@ func (agent *MessageAgentImpl) SendMessage(ctx context.Context, clientID string,
 // caller should persist the request itself if needed.
 func (agent *MessageAgentImpl) SendRequest(ctx context.Context, clientID string, command string, req interface{}) (interface{}, error) {
 	agent.clients.mu.RLock()
-	client, ok := agent.clients.m[clientID]
+	client, ok := agent.clients.clients[clientID]
 	clientCtx, ok2 := agent.clients.ctxs[clientID]
 	agent.clients.mu.RUnlock()
 
