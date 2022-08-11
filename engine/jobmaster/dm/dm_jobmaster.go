@@ -16,6 +16,7 @@ package dm
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -49,6 +50,10 @@ type JobMaster struct {
 	// only use when init
 	// it will be outdated if user update job cfg.
 	initJobCfg *config.JobCfg
+	// taskID -> FinishedTaskStatus
+	// worker exists after finished, so we need record the finished status for QueryJobStatus
+	// finishedStatus will be reset when jobmaster failover and update-job-cfg request comes.
+	finishedStatus sync.Map
 
 	metadata              *metadata.MetaData
 	workerManager         *WorkerManager
@@ -158,6 +163,7 @@ func (jm *JobMaster) handleOnlineStatus(worker framework.WorkerHandle) error {
 		return err
 	}
 
+	jm.finishedStatus.Delete(taskStatus.Task)
 	jm.taskManager.UpdateTaskStatus(taskStatus)
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerOnline, taskStatus.CfgModRevision))
 	return jm.messageAgent.UpdateClient(taskStatus.Task, worker.Unwrap())
@@ -166,13 +172,18 @@ func (jm *JobMaster) handleOnlineStatus(worker framework.WorkerHandle) error {
 // OnWorkerOffline implements JobMasterImpl.OnWorkerOffline
 func (jm *JobMaster) OnWorkerOffline(worker framework.WorkerHandle, reason error) error {
 	jm.Logger().Info("on worker offline", zap.String(logutil.ConstFieldWorkerKey, worker.ID()))
+	workerStatus := worker.Status()
 	var taskStatus runtime.TaskStatus
-	if err := json.Unmarshal(worker.Status().ExtBytes, &taskStatus); err != nil {
+	if err := json.Unmarshal(workerStatus.ExtBytes, &taskStatus); err != nil {
 		return err
 	}
 
 	if taskStatus.Stage == metadata.StageFinished {
-		return jm.onWorkerFinished(taskStatus, worker)
+		var finishedTaskStatus runtime.FinishedTaskStatus
+		if err := json.Unmarshal(workerStatus.ExtBytes, &finishedTaskStatus); err != nil {
+			return err
+		}
+		return jm.onWorkerFinished(finishedTaskStatus, worker)
 	}
 	jm.taskManager.UpdateTaskStatus(runtime.NewOfflineStatus(taskStatus.Task))
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerOffline, taskStatus.CfgModRevision))
@@ -183,8 +194,10 @@ func (jm *JobMaster) OnWorkerOffline(worker framework.WorkerHandle, reason error
 	return nil
 }
 
-func (jm *JobMaster) onWorkerFinished(taskStatus runtime.TaskStatus, worker framework.WorkerHandle) error {
+func (jm *JobMaster) onWorkerFinished(finishedTaskStatus runtime.FinishedTaskStatus, worker framework.WorkerHandle) error {
 	jm.Logger().Info("on worker finished", zap.String(logutil.ConstFieldWorkerKey, worker.ID()))
+	taskStatus := finishedTaskStatus.TaskStatus
+	jm.finishedStatus.Store(taskStatus.Task, finishedTaskStatus)
 	jm.taskManager.UpdateTaskStatus(taskStatus)
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerFinished, taskStatus.CfgModRevision))
 	if err := jm.messageAgent.RemoveClient(taskStatus.Task); err != nil {
