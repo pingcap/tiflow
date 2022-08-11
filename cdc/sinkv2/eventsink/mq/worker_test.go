@@ -35,7 +35,7 @@ func newTestWorker(t *testing.T) (*worker, dmlproducer.DMLProducer) {
 	require.Nil(t, err)
 	encoder := builder.Build()
 	require.Nil(t, err)
-	p, err := dmlproducer.NewDMLMockProducer(context.Background(), nil, nil)
+	p, err := dmlproducer.NewDMLMockProducer(context.Background(), nil, nil, nil)
 	require.Nil(t, err)
 	id := model.DefaultChangeFeedID("test")
 	return newWorker(id, encoder, p), p
