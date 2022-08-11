@@ -112,9 +112,9 @@ type Chann[T any] struct {
 // By default, or without specification, the function returns an unbounded
 // channel which has unlimited capacity.
 //
-//		ch := chann.New[float64]()
-//		// or
-//	 ch := chann.New[float64](chann.Cap(-1))
+//	ch := chann.New[float64]()
+//	or
+//	ch := chann.New[float64](chann.Cap(-1))
 //
 // If the chann.Cap specified a non-negative integer, the returned channel
 // is either unbuffered (0) or buffered (positive).
