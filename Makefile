@@ -572,14 +572,21 @@ engine_image_arm64:
 	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
 	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./cmd/tiflow-demoserver
 	GOOS=linux GOARCH=arm64 $(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-chaos-case ./engine/chaos/cases
-	docker build --platform linux/amd64 -f ./engine/deployments/docker/dev.Dockerfile -t dataflow:test ./ 
+	docker build --platform linux/arm64 -f ./engine/deployments/docker/dev.Dockerfile -t dataflow:test ./
+
+engine_image_from_local:
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	./engine/test/utils/run_engine.sh build-local
 
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))
 
-engine_integration_test:
+engine_integration_test: bin/sync_diff_inspector
 	@which docker || (echo "docker not found in ${PATH}"; exit 1)
 	./engine/test/integration_tests/run.sh "$(CASE)" "$(START_AT)"
+
+bin/sync_diff_inspector:
+	./scripts/download-sync-diff.sh
 
 tiflow-swagger-spec: tools/bin/swag
 	tools/bin/swag init --exclude cdc,dm  --parseVendor -generalInfo engine/servermaster/openapi.go --output engine/docs/swagger

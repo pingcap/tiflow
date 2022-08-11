@@ -585,6 +585,9 @@ func (c *TaskConfig) adjust() error {
 	if c.TaskMode != ModeFull && c.TaskMode != ModeIncrement && c.TaskMode != ModeAll {
 		return terror.ErrConfigInvalidTaskMode.Generate()
 	}
+	if c.MetaSchema == "" {
+		c.MetaSchema = defaultMetaSchema
+	}
 
 	if c.ShardMode != "" && c.ShardMode != ShardPessimistic && c.ShardMode != ShardOptimistic {
 		return terror.ErrConfigShardModeNotSupport.Generate(c.ShardMode)
