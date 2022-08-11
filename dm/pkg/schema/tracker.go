@@ -165,12 +165,17 @@ func (tr *Tracker) Exec(ctx context.Context, db string, stmt ast.StmtNode) error
 		return tr.upstreamTracker.CreateTable(tr.se, v)
 	case *ast.AlterTableStmt:
 		return tr.upstreamTracker.AlterTable(ctx, tr.se, v)
+	case *ast.RenameTableStmt:
+		return tr.upstreamTracker.RenameTable(tr.se, v)
 	case *ast.DropTableStmt:
 		return tr.upstreamTracker.DropTable(tr.se, v)
 	case *ast.CreateIndexStmt:
 		return tr.upstreamTracker.CreateIndex(tr.se, v)
 	case *ast.DropIndexStmt:
 		return tr.upstreamTracker.DropIndex(tr.se, v)
+	case *ast.TruncateTableStmt:
+		ident := ast.Ident{Schema: v.Table.Schema, Name: v.Table.Name}
+		return tr.upstreamTracker.TruncateTable(tr.se, ident)
 	default:
 		tr.logger.DPanic("unexpected statement type", zap.String("type", fmt.Sprintf("%T", v)))
 	}
