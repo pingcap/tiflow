@@ -2851,8 +2851,8 @@ func (t *testMaster) TestDashboardAddress(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	go server.ap.Start(ctx)
 	go func() {
-		err := server.Start(ctx)
-		c.Assert(err, check.IsNil)
+		err2 := server.Start(ctx)
+		c.Assert(err2, check.IsNil)
 	}()
 	defer server.Close()
 	defer cancel()
