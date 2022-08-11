@@ -8,7 +8,10 @@ drop_column_with_index
 gtid
 only_dml
 adjust_gtid
+<<<<<<< HEAD
 checkpoint_transaction
 lightning_mode
 downstream_diff_index
 downstream_index_order
+=======
+>>>>>>> 0492d3f50 (test(dm): split other test cases and fix unstable test (#6703))
