@@ -15,15 +15,11 @@ package resource
 
 import (
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
+	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 )
 
 // RescMgr manages the resources of the clusters.
 type RescMgr interface {
-	// CapacityProvider is embedded to guarantee that any RescMgr can be used
-	// to provide capacity info to scheduler.Scheduler.
-	scheduler.CapacityProvider
-
 	// Register registers new executor, it is called when an executor joins
 	Register(id model.ExecutorID, addr string, capacity model.RescUnit)
 
@@ -32,6 +28,9 @@ type RescMgr interface {
 
 	// Update updates executor resource usage and running status
 	Update(id model.ExecutorID, used, reserved model.RescUnit, status model.ExecutorStatus) error
+
+	// CapacityForExecutor returns the resource status for the given executor.
+	CapacityForExecutor(executor model.ExecutorID) (*schedModel.ExecutorResourceStatus, bool)
 }
 
 // ExecutorResource defines the capacity usage of an executor
