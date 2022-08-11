@@ -400,6 +400,13 @@ func TestCheckTiCDCVersion(t *testing.T) {
 	require.Regexp(t, "TiCDC .* not supported, only support version less than.*", err)
 
 	versions = map[string]struct{}{
+		"v6.3.0":        {},
+		"v8.0.0-master": {},
+	}
+	err = CheckTiCDCVersion(versions)
+	require.Regexp(t, "TiCDC .* not supported, only support version less than.*", err)
+
+	versions = map[string]struct{}{
 		"v6.3.0": {},
 		"v8.0.0": {},
 	}
