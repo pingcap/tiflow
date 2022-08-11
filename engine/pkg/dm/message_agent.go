@@ -248,6 +248,12 @@ func (agent *MessageAgentImpl) Close(ctx context.Context) error {
 		agent.cancel()
 	}
 	agent.wg.Wait()
+
+	agent.clients.mu.Lock()
+	for _, cancel := range agent.clients.cancels {
+		cancel()
+	}
+	agent.clients.mu.Unlock()
 	return nil
 }
 
