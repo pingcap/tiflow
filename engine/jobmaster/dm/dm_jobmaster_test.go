@@ -360,24 +360,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	require.NoError(t.T(), jm.CloseImpl(context.Background()))
 
 	// Stop
-	mockMessageAgent.On("SendRequest").Return(&dmpkg.QueryStatusResponse{Unit: framework.WorkerDMSync, Stage: metadata.StageRunning, Status: bytes1}, nil).Twice()
-	mockMessageAgent.On("SendMessage").Return(nil).Twice()
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		require.NoError(t.T(), jm.StopImpl(context.Background()))
-	}()
-	require.Eventually(t.T(), func() bool {
-		mockMessageAgent.Lock()
-		defer mockMessageAgent.Unlock()
-		return len(mockMessageAgent.Calls) == 2
-	}, 5*time.Second, 10*time.Millisecond)
-	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
-	workerHandle2.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes2}).Once()
-	jm.OnWorkerOffline(workerHandle1, errors.New("offline error"))
-	jm.OnWorkerOffline(workerHandle2, errors.New("offline error"))
-	wg.Wait()
+	require.NoError(t.T(), jm.StopImpl(context.Background()))
 
 	mockBaseJobmaster.AssertExpectations(t.T())
 	workerHandle1.AssertExpectations(t.T())
