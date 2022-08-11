@@ -249,11 +249,6 @@ func (agent *MessageAgentImpl) Close(ctx context.Context) error {
 	}
 	agent.wg.Wait()
 
-	agent.clients.mu.Lock()
-	for _, cancel := range agent.clients.cancels {
-		cancel()
-	}
-	agent.clients.mu.Unlock()
 	return nil
 }
 
@@ -278,7 +273,7 @@ func (agent *MessageAgentImpl) UpdateClient(clientID string, client client) erro
 
 		// don't overwrite existing context, we allow multiple worker share same topic
 		if _, ok := agent.clients.ctxs[clientID]; !ok {
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancel(agent.ctx)
 			agent.clients.ctxs[clientID] = ctx
 			agent.clients.cancels[clientID] = cancel
 		}
