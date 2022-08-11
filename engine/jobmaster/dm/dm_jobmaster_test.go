@@ -36,8 +36,8 @@ import (
 	"github.com/pingcap/tiflow/dm/checker"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/master"
+	dmpb "github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
-	engineRuntime "github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework"
 	libMetadata "github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -252,6 +252,19 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 		Unit:  framework.WorkerDMDump,
 		Stage: metadata.StageRunning,
 	}
+	loadStatus := &dmpb.LoadStatus{
+		FinishedBytes:  4,
+		TotalBytes:     100,
+		Progress:       "4%",
+		MetaBinlog:     "mysql-bin.000002, 8",
+		MetaBinlogGTID: "1-2-3",
+	}
+	loadStatusBytes, err := json.Marshal(loadStatus)
+	require.NoError(t.T(), err)
+	finishedStatus := runtime.FinishedTaskStatus{
+		Result: &dmpb.ProcessResult{IsCanceled: false},
+		Status: loadStatusBytes,
+	}
 	jm.workerManager.workerStatusMap.Range(func(key, val interface{}) bool {
 		if val.(runtime.WorkerStatus).ID == worker1 {
 			taskStatus1.Task = key.(string)
@@ -299,7 +312,8 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 
 	// worker1 finished
 	taskStatus1.Stage = metadata.StageFinished
-	bytes1, err = json.Marshal(taskStatus1)
+	finishedStatus.TaskStatus = taskStatus1
+	bytes1, err = json.Marshal(finishedStatus)
 	require.NoError(t.T(), err)
 	worker5 := "worker5"
 	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
@@ -376,7 +390,7 @@ type MockBaseJobmaster struct {
 	framework.BaseJobMaster
 }
 
-func (m *MockBaseJobmaster) ID() engineRuntime.RunnableID {
+func (m *MockBaseJobmaster) ID() frameModel.WorkerID {
 	return "dm-jobmaster-id"
 }
 
