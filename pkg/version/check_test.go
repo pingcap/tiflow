@@ -210,6 +210,22 @@ func TestCompareVersion(t *testing.T) {
 		Compare(*semver.New("3.0.5-beta.12")), 0)
 	require.Equal(t, semver.New(removeVAndHash("v2.1.0-rc.1-7-g38c939f-dirty")).
 		Compare(*semver.New("2.1.0-rc.1")), 0)
+
+	// build on master branch, `vx.y.z-master`
+	masterVersion := semver.New(removeVAndHash("v6.3.0-master"))
+	require.Equal(t, 1, masterVersion.Compare(*MinTiCDCVersion))
+
+	// pre-release version, `vx.y.z-alpha-nightly-yyyymmdd`
+	alphaVersion := semver.New(removeVAndHash("v6.3.0-alpha-nightly-20220202"))
+	require.Equal(t, 1, alphaVersion.Compare(*MinTiCDCVersion))
+
+	// release version, `vx.y.z.`
+	releaseVersion := semver.New(removeVAndHash("v6.3.0"))
+	require.Equal(t, 1, releaseVersion.Compare(*MinTiCDCVersion))
+
+	dirtyVersion := semver.New(removeVAndHash("v6.3.0-dirty"))
+	require.Equal(t, 1, dirtyVersion.Compare(*MinTiCDCVersion))
+
 }
 
 func TestReleaseSemver(t *testing.T) {
@@ -404,4 +420,11 @@ func TestCheckTiCDCVersion(t *testing.T) {
 	}
 	err = CheckTiCDCVersion(versions)
 	require.Regexp(t, "TiCDC .* not supported, the minimal compatible version.*", err)
+
+	versions = map[string]struct{}{
+		"v6.3.0-master": {},
+		"v7.0.0":        {},
+	}
+	err = CheckTiCDCVersion(versions)
+	require.NoError(t, err)
 }

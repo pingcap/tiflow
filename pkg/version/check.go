@@ -50,7 +50,7 @@ var (
 	defaultTiCDCVersion = semver.New("4.0.1")
 
 	// MinTiCDCVersion is the version of the minimal allowed TiCDC version.
-	MinTiCDCVersion = semver.New("6.3.0")
+	MinTiCDCVersion = semver.New("6.3.0-alpha")
 	// MaxTiCDCVersion is the version of the maximum allowed TiCDC version.
 	// for version `x.y.z`, max allowed `x+2.0.0`
 	MaxTiCDCVersion = semver.New("8.0.0")
