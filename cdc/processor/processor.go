@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net/url"
 	"strconv"
 	"sync"
 	"time"
@@ -42,6 +43,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
@@ -671,8 +673,15 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		zap.String("changefeed", p.changefeed.ID.ID))
 
 	start := time.Now()
-	conf := config.GetGlobalServerConfig()
-	if !conf.Debug.EnableNewSink {
+	sinkURI, err := url.Parse(p.changefeed.Info.SinkURI)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	scheam := sinkURI.Scheme
+	isKafka := func(schema string) bool {
+		return scheam == sink.KafkaSchema || scheam == sink.KafkaSSLSchema
+	}
+	if !isKafka(scheam) {
 		log.Info("Try to create sinkV1")
 		p.sinkV1, err = sinkv1.New(
 			stdCtx,
