@@ -122,8 +122,11 @@ func NewKafkaDMLProducer(
 			case <-ctx.Done():
 				return
 			case errCh <- err:
+				log.Error("Kafka DML producer run error", zap.Error(err),
+					zap.String("namespace", k.id.Namespace),
+					zap.String("changefeed", k.id.ID), zap.Any("role", role))
 			default:
-				log.Error("error channel is full", zap.Error(err),
+				log.Error("Error channel is full", zap.Error(err),
 					zap.String("namespace", k.id.Namespace),
 					zap.String("changefeed", k.id.ID), zap.Any("role", role))
 			}
