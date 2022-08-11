@@ -23,8 +23,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/util/memory"
-	lsorter "github.com/pingcap/tiflow/cdc/sorter/leveldb"
-	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
+	dbsorter "github.com/pingcap/tiflow/cdc/sorter/db"
+	"github.com/pingcap/tiflow/cdc/sorter/db/message"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/db"
@@ -55,7 +55,7 @@ type System struct {
 	ReaderRouter  *actor.Router[message.Task]
 	compactSystem *actor.System[message.Task]
 	compactRouter *actor.Router[message.Task]
-	compactSched  *lsorter.CompactScheduler
+	compactSched  *dbsorter.CompactScheduler
 	dir           string
 	memPercentage float64
 	cfg           *config.DBConfig
@@ -68,19 +68,19 @@ type System struct {
 
 // NewSystem returns a system.
 func NewSystem(dir string, memPercentage float64, cfg *config.DBConfig) *System {
-	// A system polles actors that read and write leveldb.
+	// A system polles actors that read and write db.
 	dbSystem, dbRouter := actor.NewSystemBuilder[message.Task]("sorter-db").
 		WorkerNumber(cfg.Count).Build()
-	// A system polles actors that compact leveldb, garbage collection.
+	// A system polles actors that compact db, garbage collection.
 	compactSystem, compactRouter := actor.NewSystemBuilder[message.Task]("sorter-compactor").
 		WorkerNumber(cfg.Count).Build()
 	// A system polles actors that receive events from Puller and batch send
-	// writes to leveldb.
+	// writes to db.
 	writerSystem, writerRouter := actor.NewSystemBuilder[message.Task]("sorter-writer").
 		WorkerNumber(cfg.Count).Throughput(4, 64).Build()
 	readerSystem, readerRouter := actor.NewSystemBuilder[message.Task]("sorter-reader").
 		WorkerNumber(cfg.Count).Throughput(4, 64).Build()
-	compactSched := lsorter.NewCompactScheduler(compactRouter)
+	compactSched := dbsorter.NewCompactScheduler(compactRouter)
 	return &System{
 		dbSystem:      dbSystem,
 		DBRouter:      dbRouter,
@@ -111,7 +111,7 @@ func (s *System) DBActorID(tableID uint64) actor.ID {
 }
 
 // CompactScheduler returns compaction scheduler.
-func (s *System) CompactScheduler() *lsorter.CompactScheduler {
+func (s *System) CompactScheduler() *dbsorter.CompactScheduler {
 	return s.compactSched
 }
 
@@ -123,7 +123,7 @@ func (s *System) Start(ctx context.Context) error {
 		// Already started.
 		return nil
 	} else if s.state == sysStateStopped {
-		return cerrors.ErrStartAStoppedLevelDBSystem.GenWithStackByArgs()
+		return cerrors.ErrStartAStoppedDBSystem.GenWithStackByArgs()
 	}
 	s.state = sysStateStarted
 
@@ -145,7 +145,7 @@ func (s *System) Start(ctx context.Context) error {
 		}
 		s.dbs = append(s.dbs, db)
 		// Create and spawn compactor actor.
-		compactor, cmb, err := lsorter.NewCompactActor(id, db, s.closedWg, s.cfg)
+		compactor, cmb, err := dbsorter.NewCompactActor(id, db, s.closedWg, s.cfg)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -154,7 +154,7 @@ func (s *System) Start(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 		// Create and spawn db actor.
-		dbac, dbmb, err := lsorter.NewDBActor(id, db, s.cfg, s.compactSched, s.closedWg)
+		dbac, dbmb, err := dbsorter.NewDBActor(id, db, s.cfg, s.compactSched, s.closedWg)
 		if err != nil {
 			return errors.Trace(err)
 		}

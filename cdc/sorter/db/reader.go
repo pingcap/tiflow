@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package leveldb
+package db
 
 import (
 	"context"
@@ -21,8 +21,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sorter/db/message"
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
-	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
 	"github.com/pingcap/tiflow/pkg/actor"
 	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/db"
@@ -134,7 +134,7 @@ func (r *reader) outputBufferedResolvedEvents(buffer *outputBuffer) {
 }
 
 // outputIterEvents nonblocking output resolved events that are buffered
-// in leveldb.
+// in db.
 // It appends outputted events's key to outputBuffer deleteKeys to delete them
 // later, and appends resolved events to outputBuffer resolvedEvents to send
 // them later.
@@ -467,7 +467,7 @@ func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 			r.reportError("failed to release iterator", err)
 			return false
 		}
-		// Send delete task to leveldb.
+		// Send delete task to db.
 		if task.DeleteReq != nil {
 			err = r.dbRouter.SendB(ctx, r.dbActorID, actormsg.ValueMessage(task))
 			if err != nil {
@@ -480,7 +480,7 @@ func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 
 	var hasIter bool
 	task.IterReq, hasIter = r.state.tryGetIterator(r.uid, r.tableID)
-	// Send delete/read task to leveldb.
+	// Send delete/read task to db.
 	err := r.dbRouter.SendB(ctx, r.dbActorID, actormsg.ValueMessage(task))
 	if err != nil {
 		r.reportError("failed to send delete request", err)
