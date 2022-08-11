@@ -28,7 +28,7 @@ func QuoteName(name string) string {
 	return "`" + EscapeName(name) + "`"
 }
 
-// EscapeName replaces all "`" in name with "“"
+// EscapeName replaces all "`" in name with double "`"
 func EscapeName(name string) string {
 	return strings.Replace(name, "`", "``", -1)
 }
