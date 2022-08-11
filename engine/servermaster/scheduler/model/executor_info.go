@@ -15,20 +15,18 @@ package model
 
 import (
 	"github.com/pingcap/tiflow/engine/model"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/pkg/label"
 )
 
-// SchedulerRequest represents a request for an executor to run a given task.
-type SchedulerRequest struct {
-	TenantID string // reserved for future use.
+// ExecutorInfo contains information about each executor
+// maintained internally to the scheduler.
+type ExecutorInfo struct {
+	// ID is the executorID.
+	ID model.ExecutorID
 
-	Cost              ResourceUnit
-	ExternalResources []resourcemeta.ResourceKey
-	Selectors         []label.Selector
-}
+	// ResourceStatus stores status related to computational resources.
+	ResourceStatus ExecutorResourceStatus
 
-// SchedulerResponse represents a response to a task scheduling request.
-type SchedulerResponse struct {
-	ExecutorID model.ExecutorID
+	// Labels stores the labels configured for the given executor.
+	Labels label.Set
 }
