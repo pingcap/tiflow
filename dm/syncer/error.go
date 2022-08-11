@@ -39,8 +39,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/errorutil"
 )
 
-// the constant layout for transferring time to timestamp.
-var timeLayout = "2006-01-02 15:04:05"
+// the time layout for TiDB SHOW DDL statements.
+const timeLayout = "2006-01-02 15:04:05"
 
 // ignoreTrackerDDLError is also same with ignoreDDLError, but in order to keep tracker's table structure same as
 // upstream's, we can't ignore "already exists" errors because already exists doesn't mean same.
