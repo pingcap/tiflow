@@ -251,9 +251,8 @@ func (jm *JobMaster) OnMasterMessage(topic p2p.Topic, message interface{}) error
 }
 
 // CloseImpl implements JobMasterImpl.CloseImpl
-// nothing to do now.
 func (jm *JobMaster) CloseImpl(ctx context.Context) error {
-	return nil
+	return jm.messageAgent.Close(ctx)
 }
 
 func (jm *JobMaster) status(ctx context.Context, code frameModel.WorkerStatusCode) (frameModel.WorkerStatus, error) {
