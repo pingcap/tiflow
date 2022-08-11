@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -321,12 +322,10 @@ func TestManagerError(t *testing.T) {
 		Storage: "blackhole://",
 	}
 	errCh := make(chan error, 1)
-	opts := &ManagerOptions{
-		EnableBgRunner: false,
-		ErrCh:          errCh,
-	}
+	opts := &ManagerOptions{EnableBgRunner: false, ErrCh: errCh}
 	logMgr, err := NewManager(ctx, cfg, opts)
 	require.Nil(t, err)
+
 	logMgr.writer = writer.NewInvalidBlackHoleWriter(logMgr.writer)
 	defer logMgr.Cleanup(ctx)
 
@@ -350,6 +349,7 @@ func TestManagerError(t *testing.T) {
 		require.Nil(t, err)
 	}
 
+	// bgUpdateLog exists because of writer.WriteLog failure.
 	select {
 	case <-ctx.Done():
 		t.Fatal("bgUpdateLog should return error before context is done")
@@ -358,6 +358,7 @@ func TestManagerError(t *testing.T) {
 		require.Regexp(t, ".*WriteLog.*", err)
 	}
 
+	// bgUpdateLog exists because of writer.FlushLog failure.
 	go logMgr.bgUpdateLog(ctx, errCh)
 	select {
 	case <-ctx.Done():
@@ -365,5 +366,44 @@ func TestManagerError(t *testing.T) {
 	case err := <-errCh:
 		require.Regexp(t, ".*invalid black hole writer.*", err)
 		require.Regexp(t, ".*FlushLog.*", err)
+	}
+}
+
+func TestReuseWritter(t *testing.T) {
+	ctxs := make([]context.Context, 0, 2)
+	cancels := make([]func(), 0, 2)
+	mgrs := make([]*ManagerImpl, 0, 2)
+
+	dir := t.TempDir()
+	cfg := &config.ConsistentConfig{
+		Level:   string(ConsistentLevelEventual),
+		Storage: "local://" + dir,
+	}
+
+	errCh := make(chan error, 1)
+	opts := &ManagerOptions{EnableBgRunner: false, ErrCh: errCh}
+	for i := 0; i < 2; i++ {
+		ctx, cancel := context.WithCancel(context.Background())
+		ctx = contextutil.PutChangefeedIDInCtx(ctx, model.ChangeFeedID{
+			Namespace: "default", ID: "test-reuse-writter",
+		})
+		mgr, err := NewManager(ctx, cfg, opts)
+		require.Nil(t, err)
+
+		ctxs = append(ctxs, ctx)
+		cancels = append(cancels, cancel)
+		mgrs = append(mgrs, mgr)
+	}
+
+	// Cancel one redo manager and wait for a while.
+	cancels[0]()
+	time.Sleep(time.Duration(100) * time.Millisecond)
+
+	// The another redo manager shouldn't be influenced.
+	mgrs[1].flushLog(ctxs[1], func(err error) { opts.ErrCh <- err })
+	select {
+	case x := <-errCh:
+		log.Panic("shouldn't get an error", zap.Error(x))
+	case <-time.NewTicker(time.Duration(100) * time.Millisecond).C:
 	}
 }
