@@ -177,9 +177,8 @@ func (c *captureImpl) reset(ctx context.Context) error {
 		c.EtcdClient.GetEtcdClient().Unwrap(),
 		concurrency.WithTTL(c.config.CaptureSessionTTL))
 	if err != nil {
-		return errors.Annotate(
-			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
-			"create capture session")
+		log.Error("create etcd session failed", zap.Error(err))
+		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
 	}
 
 	c.captureMu.Lock()
@@ -196,9 +195,8 @@ func (c *captureImpl) reset(ctx context.Context) error {
 	c.upstreamManager = upstream.NewManager(ctx, c.EtcdClient.GetGCServiceID())
 	_, err = c.upstreamManager.AddDefaultUpstream(c.pdEndpoints, c.config.Security)
 	if err != nil {
-		return errors.Annotate(
-			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
-			"add default upstream failed")
+		log.Error("add default upstream failed", zap.Error(err))
+		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
 	}
 
 	c.processorManager = c.newProcessorManager(c.upstreamManager, &c.liveness)
@@ -215,9 +213,7 @@ func (c *captureImpl) reset(ctx context.Context) error {
 	c.tableActorSystem = system.NewSystem()
 	err = c.tableActorSystem.Start(ctx)
 	if err != nil {
-		return errors.Annotate(
-			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
-			"create table actor system")
+		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
 	}
 	if c.config.Debug.EnableDBSorter {
 		if c.sorterSystem != nil {
@@ -233,9 +229,8 @@ func (c *captureImpl) reset(ctx context.Context) error {
 		c.sorterSystem = ssystem.NewSystem(sortDir, memPercentage, c.config.Debug.DB)
 		err = c.sorterSystem.Start(ctx)
 		if err != nil {
-			return errors.Annotate(
-				cerror.WrapError(cerror.ErrNewCaptureFailed, err),
-				"create sorter system")
+			log.Error("start sorter system failed", zap.Error(err))
+			return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
 		}
 	}
 
@@ -260,9 +255,7 @@ func (c *captureImpl) reset(ctx context.Context) error {
 
 	c.MessageRouter = p2p.NewMessageRouter(c.info.ID, c.config.Security, messageClientConfig)
 
-	log.Info("init capture",
-		zap.String("captureID", c.info.ID),
-		zap.String("captureAddr", c.info.AdvertiseAddr))
+	log.Info("capture initialized", zap.Any("capture", c.info))
 	return nil
 }
 
