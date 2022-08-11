@@ -63,6 +63,10 @@ func TestJobCfg(t *testing.T) {
 	require.Equal(t, content3, content)
 
 	require.Error(t, jobCfg.DecodeFile("./job_not_exist.yaml"))
+	jobCfg.Upstreams[0].SourceID = ""
+	require.EqualError(t, jobCfg.adjust(), "source-id of 1st upstream is empty")
+	jobCfg.Upstreams[0].SourceID = jobCfg.Upstreams[1].SourceID
+	require.EqualError(t, jobCfg.adjust(), fmt.Sprintf("source-id %s is duplicated", jobCfg.Upstreams[0].SourceID))
 }
 
 func TestTaskCfg(t *testing.T) {
