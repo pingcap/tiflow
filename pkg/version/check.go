@@ -53,7 +53,7 @@ var (
 	MinTiCDCVersion = semver.New("6.3.0-alpha")
 	// MaxTiCDCVersion is the version of the maximum allowed TiCDC version.
 	// for version `x.y.z`, max allowed `x+2.0.0`
-	MaxTiCDCVersion = semver.New("8.0.0")
+	MaxTiCDCVersion = semver.New("8.0.0-alpha")
 )
 
 var versionHash = regexp.MustCompile("-[0-9]+-g[0-9a-f]{7,}(-dev)?")
