@@ -402,7 +402,7 @@ LOOP:
 		//  1. to delete the service GC safepoint effectively,
 		//  2. in case owner update TiCDC service GC safepoint fails.
 		//
-		// Also it unblocks TiDB GC, because the service GC safepoint is set to
+		// Also, it unblocks TiDB GC, because the service GC safepoint is set to
 		// 1 hour TTL during creating changefeed.
 		//
 		// See more gc doc.
