@@ -15,7 +15,6 @@ package syncer
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -213,19 +212,19 @@ func TestIsConnectionRefusedError(t *testing.T) {
 
 func TestGetDDLStatusFromTiDB(t *testing.T) {
 	var (
-		adminShowDDLJobsSQL1      string
-		adminShowDDLJobsSQL2      string
-		adminShowDDLJobsLimitSQL1 string
-		adminShowDDLJobsLimitSQL2 string
+		adminShowDDLJobsSQL1      = "ADMIN SHOW DDL JOBS 10"
+		adminShowDDLJobsSQL2      = "ADMIN SHOW DDL JOBS 20"
+		adminShowDDLJobsLimitSQL1 = "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0"
+		adminShowDDLJobsLimitSQL2 = "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 10"
 	)
 
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 
-	adminShowDDLJobsSQL1 = fmt.Sprintf("ADMIN SHOW DDL JOBS 10")
-	adminShowDDLJobsSQL2 = fmt.Sprintf("ADMIN SHOW DDL JOBS 20")
-	adminShowDDLJobsLimitSQL1 = fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET %d", 0)
-	adminShowDDLJobsLimitSQL2 = fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET %d", 10)
+	var createTime time.Time
+	var status string
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	// test 1
 	mock.ExpectQuery(adminShowDDLJobsSQL1).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "DB_NAME", "TABLE_NAME", "JOB_TYPE", "SCHEMA_STATE", "SCHEMA_ID", "TABLE_ID", "ROW_COUNT", "CREATE_TIME", "START_TIME", "END_TIME", "STATE"}).
@@ -252,6 +251,12 @@ func TestGetDDLStatusFromTiDB(t *testing.T) {
 		AddRow(53, "CREATE TABLE IF NOT EXISTS many_tables_test.t4(i TINYINT, j INT UNIQUE KEY)").
 		AddRow(52, "CREATE TABLE IF NOT EXISTS many_tables_test.t3(i TINYINT, j INT UNIQUE KEY)"))
 
+	createTime, err = time.Parse(timeLayout, "2022-08-02 2:51:38")
+	require.NoError(t, err)
+	status, err = getDDLStatusFromTiDB(ctx, db, "ALTER TABLE many_tables_test.t6 ADD x timestamp DEFAULT current_timestamp", createTime.Unix())
+	require.NoError(t, err)
+	require.Equal(t, "running", status)
+
 	// test 2
 	mock.ExpectQuery(adminShowDDLJobsSQL1).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "DB_NAME", "TABLE_NAME", "JOB_TYPE", "SCHEMA_STATE", "SCHEMA_ID", "TABLE_ID", "ROW_COUNT", "CREATE_TIME", "START_TIME", "END_TIME", "STATE"}).
 		AddRow(61, "many_tables_test", "t6", "alter table", "public", 1, 61, 0, "2022-08-02 2:51:39", "2022-08-02 2:51:39", "NULL", "running").
@@ -276,6 +281,12 @@ func TestGetDDLStatusFromTiDB(t *testing.T) {
 		AddRow(54, "CREATE TABLE IF NOT EXISTS many_tables_test.t5(i TINYINT, j INT UNIQUE KEY)").
 		AddRow(53, "CREATE TABLE IF NOT EXISTS many_tables_test.t4(i TINYINT, j INT UNIQUE KEY)").
 		AddRow(52, "CREATE TABLE IF NOT EXISTS many_tables_test.t3(i TINYINT, j INT UNIQUE KEY)"))
+
+	createTime, err = time.Parse(timeLayout, "2022-08-02 2:50:36")
+	require.NoError(t, err)
+	status, err = getDDLStatusFromTiDB(ctx, db, "ALTER TABLE many_tables_test.t4 ADD x timestamp DEFAULT current_timestamp", createTime.Unix())
+	require.NoError(t, err)
+	require.Equal(t, "none", status)
 
 	// test 3
 	mock.ExpectQuery(adminShowDDLJobsSQL1).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "DB_NAME", "TABLE_NAME", "JOB_TYPE", "SCHEMA_STATE", "SCHEMA_ID", "TABLE_ID", "ROW_COUNT", "CREATE_TIME", "START_TIME", "END_TIME", "STATE"}).
@@ -336,6 +347,12 @@ func TestGetDDLStatusFromTiDB(t *testing.T) {
 		AddRow(43, "CREATE TABLE IF NOT EXISTS other_test.t1(i TINYINT, j INT UNIQUE KEY)").
 		AddRow(42, "CREATE TABLE IF NOT EXISTS other_test.t0(i TINYINT, j INT UNIQUE KEY)"))
 
+	createTime, err = time.Parse(timeLayout, "2022-08-02 2:46:13")
+	require.NoError(t, err)
+	status, err = getDDLStatusFromTiDB(ctx, db, "CREATE TABLE IF NOT EXISTS many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)", createTime.Unix())
+	require.NoError(t, err)
+	require.Equal(t, "synced", status)
+
 	// test 4
 	mock.ExpectQuery(adminShowDDLJobsSQL1).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "DB_NAME", "TABLE_NAME", "JOB_TYPE", "SCHEMA_STATE", "SCHEMA_ID", "TABLE_ID", "ROW_COUNT", "CREATE_TIME", "START_TIME", "END_TIME", "STATE"}).
 		AddRow(61, "many_tables_test", "t6", "alter table", "public", 1, 61, 0, "2022-08-02 2:51:39", "2022-08-02 2:51:39", "NULL", "running").
@@ -349,48 +366,12 @@ func TestGetDDLStatusFromTiDB(t *testing.T) {
 		AddRow(53, "many_tables_test", "t4", "create table", "public", 1, 53, 0, "2022-08-02 2:47:55", "2022-08-02 2:47:55", "2022-08-02 2:47:55", "synced").
 		AddRow(52, "many_tables_test", "t3", "create table", "public", 1, 52, 0, "2022-08-02 2:47:24", "2022-08-02 2:47:24", "2022-08-02 2:47:24", "synced"))
 
-	mock.ExpectQuery(adminShowDDLJobsLimitSQL1).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).
-		AddRow(61, "ALTER TABLE many_tables_test.t6 ADD x timestamp DEFAULT current_timestamp").
-		AddRow(60, "ALTER TABLE many_tables_test.t5 ADD x timestamp DEFAULT current_timestamp").
-		AddRow(59, "ALTER TABLE many_tables_test.t4 ADD x timestamp DEFAULT current_timestamp").
-		AddRow(58, "ALTER TABLE many_tables_test.t3 ADD x timestamp DEFAULT current_timestamp").
-		AddRow(57, "ALTER TABLE many_tables_test.t2 ADD x timestamp DEFAULT current_timestamp").
-		AddRow(56, "ALTER TABLE many_tables_test.t1 ADD x timestamp DEFAULT current_timestamp").
-		AddRow(55, "CREATE TABLE IF NOT EXISTS many_tables_test.t6(i TINYINT, j INT UNIQUE KEY)").
-		AddRow(54, "CREATE TABLE IF NOT EXISTS many_tables_test.t5(i TINYINT, j INT UNIQUE KEY)").
-		AddRow(53, "CREATE TABLE IF NOT EXISTS many_tables_test.t4(i TINYINT, j INT UNIQUE KEY)").
-		AddRow(52, "CREATE TABLE IF NOT EXISTS many_tables_test.t3(i TINYINT, j INT UNIQUE KEY)"))
-
-	var createTime time.Time
-	var status string
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// test 1
-	createTime, err = time.Parse("2006-01-02 15:04:05", "2022-08-02 2:51:38")
-	require.NoError(t, err)
-	status, err = getDDLStatusFromTiDB(ctx, db, "ALTER TABLE many_tables_test.t6 ADD x timestamp DEFAULT current_timestamp", createTime.Unix())
-	require.NoError(t, err)
-	require.Equal(t, "running", status)
-
-	// test 2
-	createTime, err = time.Parse("2006-01-02 15:04:05", "2022-08-02 2:50:36")
-	require.NoError(t, err)
-	status, err = getDDLStatusFromTiDB(ctx, db, "ALTER TABLE many_tables_test.t4 ADD x timestamp DEFAULT current_timestamp", createTime.Unix())
-	require.NoError(t, err)
-	require.Equal(t, "none", status)
-
-	// test 3
-	createTime, err = time.Parse("2006-01-02 15:04:05", "2022-08-02 2:46:13")
-	require.NoError(t, err)
-	status, err = getDDLStatusFromTiDB(ctx, db, "CREATE TABLE IF NOT EXISTS many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)", createTime.Unix())
-	require.NoError(t, err)
-	require.Equal(t, "synced", status)
-
-	// test 4
-	createTime, err = time.Parse("2006-01-02 15:04:05", "2022-08-03 12:35:00")
+	createTime, err = time.Parse(timeLayout, "2022-08-03 12:35:00")
 	require.NoError(t, err)
 	status, err = getDDLStatusFromTiDB(ctx, db, "CREATE TABLE IF NOT EXISTS many_tables_test.t7(i TINYINT, j INT UNIQUE KEY)", createTime.Unix())
 	require.NoError(t, err)
 	require.Equal(t, "", status) // DDL does not exist
+
+	err = mock.ExpectationsWereMet()
+	require.NoError(t, err)
 }
