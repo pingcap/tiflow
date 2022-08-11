@@ -8,6 +8,9 @@ sql_mode
 http_proxies
 openapi
 duplicate_event
+<<<<<<< HEAD
 tracker_ignored_ddl
 extend_column
 gbk
+=======
+>>>>>>> 0492d3f50 (test(dm): split other test cases and fix unstable test (#6703))

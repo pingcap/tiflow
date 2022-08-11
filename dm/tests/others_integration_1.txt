@@ -6,8 +6,11 @@ sequence_sharding_removemeta
 gtid
 only_dml
 adjust_gtid
+<<<<<<< HEAD
 checkpoint_transaction
 lightning_mode
 slow_relay_writer
 sync_collation
 downstream_index_order
+=======
+>>>>>>> 0492d3f50 (test(dm): split other test cases and fix unstable test (#6703))

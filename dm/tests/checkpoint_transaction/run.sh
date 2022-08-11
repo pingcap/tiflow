@@ -28,9 +28,40 @@ function run() {
 	# check diff
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
+<<<<<<< HEAD
+=======
+	# test ungraceful stop, worker will not wait transaction finish
+	run_sql_file $cur/data/db1.increment1.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	sleep 2
+	# kill dm-master 1 to make worker lost keep alive while a transaction is not finished
+	echo "kill dm-master1"
+	kill_dm_master
+	check_master_port_offline 1
+	sleep 1 # wait worker lost keep alive ttl is 1 second
+
+	# check dm-worker will exit quickly without waiting for the transaction to finish
+	check_worker_ungraceful_stop_with_retry
+
+	# test data in tidb less than source
+	dataCountSource=$(mysql -uroot -h$MYSQL_HOST1 -P$MYSQL_PORT1 -p$MYSQL_PASSWORD1 -se "select count(1) from checkpoint_transaction.t1")
+	dataCountInTiDB=$(mysql -uroot -h127.0.0.1 -P4000 -se "select count(1) from checkpoint_transaction.t1")
+	echo "after ungraceful exit data in source count: $dataCountSource data in tidb count: $dataCountInTiDB"
+	if [ "$dataCountInTiDB" -lt "$dataCountSource" ]; then
+		echo "ungraceful stop test success"
+	else
+		echo "ungraceful stop test failed"
+		exit 1
+	fi
+
+	# start dm-master again task will be resume, and data will be synced
+	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
+	sleep 3
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+>>>>>>> 0492d3f50 (test(dm): split other test cases and fix unstable test (#6703))
 	run_sql_file $cur/data/db1.increment1.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	# wait transaction start
-	check_log_contain_with_retry "receive dml job" $WORK_DIR/worker1/log/dm-worker.log
+	check_log_contain_with_retry "\[32,30,null\]" $WORK_DIR/worker1/log/dm-worker.log
 	echo "pause task and check status"
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"pause-task test" \
@@ -56,7 +87,7 @@ function run() {
 
 	run_sql_file $cur/data/db1.increment2.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	# wait transaction start
-	check_log_contain_with_retry "receive dml job" $WORK_DIR/worker1/log/dm-worker.log
+	check_log_contain_with_retry "\[62,null,30\]" $WORK_DIR/worker1/log/dm-worker.log
 	echo "stop task"
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-task test" \
