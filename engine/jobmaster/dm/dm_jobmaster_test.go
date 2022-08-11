@@ -359,6 +359,31 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	// Close
 	require.NoError(t.T(), jm.CloseImpl(context.Background()))
 
+	// OnCancel
+	mockMessageAgent.On("SendRequest").Return(&dmpkg.QueryStatusResponse{Unit: framework.WorkerDMSync, Stage: metadata.StageRunning, Status: bytes1}, nil).Twice()
+	mockMessageAgent.On("SendMessage").Return(nil).Twice()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		require.NoError(t.T(), jm.OnCancel(context.Background()))
+	}()
+	require.Eventually(t.T(), func() bool {
+		mockMessageAgent.Lock()
+		if len(mockMessageAgent.Calls) == 4 {
+			mockMessageAgent.Unlock()
+			return true
+		}
+		mockMessageAgent.Unlock()
+		jm.workerManager.Tick(context.Background())
+		return false
+	}, 10*time.Second, 1*time.Second)
+	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
+	workerHandle2.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes2}).Once()
+	jm.OnWorkerOffline(workerHandle1, errors.New("offline error"))
+	jm.OnWorkerOffline(workerHandle2, errors.New("offline error"))
+	wg.Wait()
+
 	// Stop
 	require.NoError(t.T(), jm.StopImpl(context.Background()))
 

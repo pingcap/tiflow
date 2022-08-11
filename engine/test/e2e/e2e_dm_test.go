@@ -181,7 +181,6 @@ func testSimpleAllModeTask(
 	// TODO: check load status after framework supports it
 	require.Eventually(t, func() bool {
 		result, err := e2e.QueryJobViaOpenAPI(ctx, masterAddr, tenantID, projectID, jobID)
-		fmt.Println(err, result.Status)
 		return err == nil && result.Status == int32(enginepb.QueryJobResponse_finished)
 	}, time.Second*30, time.Millisecond*100)
 
