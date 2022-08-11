@@ -23,6 +23,9 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/golang/mock/gomock"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -34,8 +37,7 @@ import (
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/master"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
-	"github.com/pingcap/tiflow/engine/client"
-	pb "github.com/pingcap/tiflow/engine/enginepb"
+	engineRuntime "github.com/pingcap/tiflow/engine/executor/worker"
 	"github.com/pingcap/tiflow/engine/framework"
 	libMetadata "github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -95,8 +97,8 @@ type masterParamListForTest struct {
 	MessageSender         p2p.MessageSender
 	FrameMetaClient       pkgOrm.Client
 	BusinessClientConn    metaModel.ClientConn
-	ExecutorClientManager client.ClientsManager
-	ServerMasterClient    client.MasterClient
+	ExecutorGroup         client.ExecutorGroup
+	ServerMasterClient    client.ServerMasterClient
 	ResourceBroker        broker.Broker
 }
 
@@ -104,14 +106,14 @@ type masterParamListForTest struct {
 func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 	cli, err := pkgOrm.NewMockClient()
 	require.NoError(t.T(), err)
-	mockServerMasterClient := &client.MockServerMasterClient{}
-	mockExecutorClient := client.NewClientManager()
+	mockServerMasterClient := client.NewMockServerMasterClient(gomock.NewController(t.T()))
+	mockExecutorGroup := client.NewMockExecutorGroup()
 	depsForTest := masterParamListForTest{
 		MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 		MessageSender:         p2p.NewMockMessageSender(),
 		FrameMetaClient:       cli,
 		BusinessClientConn:    kvmock.NewMockClientConn(),
-		ExecutorClientManager: mockExecutorClient,
+		ExecutorGroup:         mockExecutorGroup,
 		ServerMasterClient:    mockServerMasterClient,
 		ResourceBroker:        nil,
 	}
@@ -129,7 +131,11 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 	require.NoError(t.T(), err)
 	jobmaster, err := registry.GlobalWorkerRegistry().CreateWorker(dctx, framework.DMJobMaster, "dm-jobmaster", libMetadata.JobManagerUUID, cfgBytes)
 	require.NoError(t.T(), err)
+
 	// Init
+	verDB := conn.InitVersionDB()
+	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("version", "5.7.25-TiDB-v6.1.0"))
 	_, mockDB, err := conn.InitMockDBFull()
 	require.NoError(t.T(), err)
 	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
@@ -145,6 +151,9 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 
 	jobmaster, err = registry.GlobalWorkerRegistry().CreateWorker(dctx, framework.DMJobMaster, "dm-jobmaster", libMetadata.JobManagerUUID, cfgBytes)
 	require.NoError(t.T(), err)
+	verDB = conn.InitVersionDB()
+	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("version", "5.7.26-log"))
 	_, mockDB, err = conn.InitMockDBFull()
 	require.NoError(t.T(), err)
 	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
@@ -153,10 +162,15 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 	require.NoError(t.T(), jobmaster.Init(context.Background()))
 
 	// Poll
-	mockServerMasterClient.On("ScheduleTask", mock.Anything, mock.Anything, mock.Anything).
-		Return(&pb.ScheduleTaskResponse{}, nil).Once()
-	mockServerMasterClient.On("ScheduleTask", mock.Anything, mock.Anything, mock.Anything).
-		Return(&pb.ScheduleTaskResponse{}, nil).Once()
+	mockServerMasterClient.EXPECT().
+		ScheduleTask(gomock.Any(), gomock.Any()).
+		Return(&pb.ScheduleTaskResponse{}, nil).
+		MinTimes(0)
+	mockServerMasterClient.EXPECT().
+		ScheduleTask(gomock.Any(), gomock.Any()).
+		Return(&pb.ScheduleTaskResponse{}, nil).
+		MinTimes(0)
+
 	require.NoError(t.T(), jobmaster.Poll(context.Background()))
 	require.NoError(t.T(), jobmaster.Poll(context.Background()))
 	require.NoError(t.T(), jobmaster.Poll(context.Background()))
@@ -181,12 +195,14 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	jm := &JobMaster{
-		workerID:      "jobmaster-id",
-		jobCfg:        jobCfg,
+		initJobCfg:    jobCfg,
 		BaseJobMaster: mockBaseJobmaster,
 	}
 
 	// init
+	verDB := conn.InitVersionDB()
+	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("version", "5.7.25-TiDB-v6.1.0"))
 	precheckError := errors.New("precheck error")
 	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
 		return "", precheckError
@@ -198,14 +214,16 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
 		return "check pass", nil
 	}
+	verDB = conn.InitVersionDB()
+	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("version", "5.7.26-log"))
 	mockBaseJobmaster.On("MetaKVClient").Return(metaKVClient)
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]framework.WorkerHandle{}).Once()
 	require.NoError(t.T(), jm.InitImpl(context.Background()))
 
 	// recover
 	jm = &JobMaster{
-		workerID:      "jobmaster-id",
-		jobCfg:        jobCfg,
+		initJobCfg:    jobCfg,
 		BaseJobMaster: mockBaseJobmaster,
 		messageAgent:  mockMessageAgent,
 	}
@@ -296,8 +314,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 
 	// master failover
 	jm = &JobMaster{
-		workerID:        "jobmaster-id",
-		jobCfg:          jobCfg,
+		initJobCfg:      jobCfg,
 		BaseJobMaster:   mockBaseJobmaster,
 		checkpointAgent: mockCheckpointAgent,
 		messageAgent:    mockMessageAgent,
@@ -330,7 +347,11 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 		defer wg.Done()
 		require.NoError(t.T(), jm.CloseImpl(context.Background()))
 	}()
-	time.Sleep(time.Second * 2)
+	require.Eventually(t.T(), func() bool {
+		mockMessageAgent.Lock()
+		defer mockMessageAgent.Unlock()
+		return len(mockMessageAgent.Calls) == 2
+	}, 5*time.Second, 10*time.Millisecond)
 	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
 	workerHandle2.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes2}).Once()
 	jm.OnWorkerOffline(workerHandle1, errors.New("offline error"))
@@ -351,7 +372,7 @@ type MockBaseJobmaster struct {
 	framework.BaseJobMaster
 }
 
-func (m *MockBaseJobmaster) JobMasterID() frameModel.MasterID {
+func (m *MockBaseJobmaster) ID() engineRuntime.RunnableID {
 	return "dm-jobmaster-id"
 }
 
@@ -389,7 +410,7 @@ type MockCheckpointAgent struct {
 	mock.Mock
 }
 
-func (m *MockCheckpointAgent) Init(ctx context.Context) error {
+func (m *MockCheckpointAgent) Create(ctx context.Context) error {
 	return nil
 }
 
@@ -402,4 +423,11 @@ func (m *MockCheckpointAgent) IsFresh(ctx context.Context, workerType framework.
 	defer m.mu.Unlock()
 	args := m.Called()
 	return args.Get(0).(bool), args.Error(1)
+}
+
+func (m *MockCheckpointAgent) Update(ctx context.Context, jobCfg *config.JobCfg) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	args := m.Called()
+	return args.Error(0)
 }

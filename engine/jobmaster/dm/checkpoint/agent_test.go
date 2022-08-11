@@ -89,24 +89,28 @@ func TestCheckpointLifeCycle(t *testing.T) {
 	agent := NewAgentImpl(jobCfg, log.L())
 	checkpointAgent := agent.(*AgentImpl)
 	require.Equal(t, checkpointAgent.getConfig(), jobCfg)
-	jobCfg2 := &config.JobCfg{Name: "test2", MetaSchema: "meta", TaskMode: dmconfig.ModeAll}
-	checkpointAgent.updateConfig(jobCfg2)
-	require.Equal(t, checkpointAgent.getConfig(), jobCfg2)
-	require.NotEqual(t, jobCfg, jobCfg2)
 
 	// create meta database error
 	_, mock, err := conn.InitMockDBFull()
 	require.NoError(t, err)
 	mock.ExpectExec(".*").WillReturnError(errors.New("invalid connection"))
-	require.Error(t, checkpointAgent.Init(context.Background()))
+	require.Error(t, checkpointAgent.Create(context.Background()))
 	require.NoError(t, mock.ExpectationsWereMet())
+
+	// update
+	jobCfg2 := &config.JobCfg{Name: "test2", MetaSchema: "meta", TaskMode: dmconfig.ModeAll}
+	_, mock, err = conn.InitMockDBFull()
+	require.NoError(t, err)
+	mock.ExpectExec(".*").WillReturnError(errors.New("invalid connection"))
+	require.Error(t, checkpointAgent.Update(context.Background(), jobCfg2))
+	require.Equal(t, checkpointAgent.getConfig(), jobCfg2)
 
 	// create load checkpoint error
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(".*").WillReturnError(errors.New("invalid connection"))
-	require.Error(t, checkpointAgent.Init(context.Background()))
+	require.Error(t, checkpointAgent.Create(context.Background()))
 	require.NoError(t, mock.ExpectationsWereMet())
 
 	// create sync checkpoint error
@@ -115,7 +119,7 @@ func TestCheckpointLifeCycle(t *testing.T) {
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(".*").WillReturnError(errors.New("invalid connection"))
-	require.Error(t, checkpointAgent.Init(context.Background()))
+	require.Error(t, checkpointAgent.Create(context.Background()))
 	require.NoError(t, mock.ExpectationsWereMet())
 
 	// create all checkpoint tables
@@ -124,27 +128,27 @@ func TestCheckpointLifeCycle(t *testing.T) {
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
-	require.NoError(t, checkpointAgent.Init(context.Background()))
+	require.NoError(t, checkpointAgent.Create(context.Background()))
 	require.NoError(t, mock.ExpectationsWereMet())
 
 	// create load checkpoint only
 	jobCfg.TaskMode = dmconfig.ModeFull
-	checkpointAgent.updateConfig(jobCfg)
+	checkpointAgent.Update(context.Background(), jobCfg)
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
-	require.NoError(t, checkpointAgent.Init(context.Background()))
+	require.NoError(t, checkpointAgent.Create(context.Background()))
 	require.NoError(t, mock.ExpectationsWereMet())
 
 	// create sync checkpoint only
 	jobCfg.TaskMode = dmconfig.ModeIncrement
-	checkpointAgent.updateConfig(jobCfg)
+	checkpointAgent.Update(context.Background(), jobCfg)
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
-	require.NoError(t, checkpointAgent.Init(context.Background()))
+	require.NoError(t, checkpointAgent.Create(context.Background()))
 	require.NoError(t, mock.ExpectationsWereMet())
 
 	// drop load checkpoint error

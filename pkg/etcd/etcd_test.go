@@ -173,7 +173,7 @@ func TestGetAllChangeFeedInfo(t *testing.T) {
 
 func putChangeFeedStatus(
 	ctx context.Context,
-	c CDCEtcdClient,
+	c CDCEtcdClientImpl,
 	changefeedID model.ChangeFeedID,
 	status *model.ChangeFeedStatus,
 ) error {

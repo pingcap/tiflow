@@ -30,7 +30,7 @@ type DiscoveryRunner interface {
 	// and returned.
 	ResetDiscovery(ctx context.Context, resetSession bool) (Session, error)
 	GetWatcher() <-chan WatchResp
-	// returns current snapshot, DiscoveryRunner maintains this as snapshot plus
+	// GetSnapshot returns current snapshot, DiscoveryRunner maintains this as snapshot plus
 	// revision, which can be used in any failover scenarios. The drawback is to
 	// consume more memory, but since it contains node address information only,
 	// the memory consumption is acceptable.

@@ -71,10 +71,10 @@ func (mr *MockFactoryMockRecorder) APIV2Client() *gomock.Call {
 }
 
 // EtcdClient mocks base method.
-func (m *MockFactory) EtcdClient() (*etcd.CDCEtcdClient, error) {
+func (m *MockFactory) EtcdClient() (*etcd.CDCEtcdClientImpl, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "EtcdClient")
-	ret0, _ := ret[0].(*etcd.CDCEtcdClient)
+	ret0, _ := ret[0].(*etcd.CDCEtcdClientImpl)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

@@ -485,16 +485,16 @@ func TestMultiVersionStorage(t *testing.T) {
 	tbName := timodel.NewCIStr("T1")
 	// db and ignoreDB info
 	dbInfo := &timodel.DBInfo{
-		ID:    1,
+		ID:    11,
 		Name:  dbName,
 		State: timodel.StatePublic,
 	}
 	var jobs []*timodel.Job
 	// `createSchema` job1
 	job := &timodel.Job{
-		ID:         3,
+		ID:         13,
 		State:      timodel.JobStateSynced,
-		SchemaID:   1,
+		SchemaID:   11,
 		Type:       timodel.ActionCreateSchema,
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, FinishedTS: 100},
 		Query:      "create database test",
@@ -503,17 +503,17 @@ func TestMultiVersionStorage(t *testing.T) {
 
 	// table info
 	tblInfo := &timodel.TableInfo{
-		ID:    2,
+		ID:    12,
 		Name:  tbName,
 		State: timodel.StatePublic,
 	}
 
 	// `createTable` job
 	job = &timodel.Job{
-		ID:         6,
+		ID:         16,
 		State:      timodel.JobStateSynced,
-		SchemaID:   1,
-		TableID:    2,
+		SchemaID:   11,
+		TableID:    12,
 		Type:       timodel.ActionCreateTable,
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 2, TableInfo: tblInfo, FinishedTS: 110},
 		Query:      "create table " + tbName.O,
@@ -524,16 +524,16 @@ func TestMultiVersionStorage(t *testing.T) {
 	tbName = timodel.NewCIStr("T2")
 	// table info
 	tblInfo = &timodel.TableInfo{
-		ID:    3,
+		ID:    13,
 		Name:  tbName,
 		State: timodel.StatePublic,
 	}
 	// `createTable` job
 	job = &timodel.Job{
-		ID:         6,
+		ID:         16,
 		State:      timodel.JobStateSynced,
-		SchemaID:   1,
-		TableID:    3,
+		SchemaID:   11,
+		TableID:    13,
 		Type:       timodel.ActionCreateTable,
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 3, TableInfo: tblInfo, FinishedTS: 120},
 		Query:      "create table " + tbName.O,
@@ -549,10 +549,10 @@ func TestMultiVersionStorage(t *testing.T) {
 
 	// `dropTable` job
 	job = &timodel.Job{
-		ID:         6,
+		ID:         16,
 		State:      timodel.JobStateSynced,
-		SchemaID:   1,
-		TableID:    2,
+		SchemaID:   11,
+		TableID:    12,
 		Type:       timodel.ActionDropTable,
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 4, FinishedTS: 130},
 	}
@@ -562,9 +562,9 @@ func TestMultiVersionStorage(t *testing.T) {
 
 	// `dropSchema` job
 	job = &timodel.Job{
-		ID:         6,
+		ID:         16,
 		State:      timodel.JobStateSynced,
-		SchemaID:   1,
+		SchemaID:   11,
 		Type:       timodel.ActionDropSchema,
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 5, FinishedTS: 140, DBInfo: dbInfo},
 	}
@@ -575,70 +575,71 @@ func TestMultiVersionStorage(t *testing.T) {
 	require.Equal(t, storage.(*schemaStorageImpl).resolvedTs, uint64(140))
 	snap, err := storage.GetSnapshot(ctx, 100)
 	require.Nil(t, err)
-	_, exist := snap.SchemaByID(1)
+	_, exist := snap.SchemaByID(11)
 	require.True(t, exist)
-	_, exist = snap.PhysicalTableByID(2)
+	_, exist = snap.PhysicalTableByID(12)
 	require.False(t, exist)
-	_, exist = snap.PhysicalTableByID(3)
+	_, exist = snap.PhysicalTableByID(13)
 	require.False(t, exist)
 
 	snap, err = storage.GetSnapshot(ctx, 115)
 	require.Nil(t, err)
-	_, exist = snap.SchemaByID(1)
+	_, exist = snap.SchemaByID(11)
 	require.True(t, exist)
-	_, exist = snap.PhysicalTableByID(2)
+	_, exist = snap.PhysicalTableByID(12)
 	require.True(t, exist)
-	_, exist = snap.PhysicalTableByID(3)
+	_, exist = snap.PhysicalTableByID(13)
 	require.False(t, exist)
 
 	snap, err = storage.GetSnapshot(ctx, 125)
 	require.Nil(t, err)
-	_, exist = snap.SchemaByID(1)
+	_, exist = snap.SchemaByID(11)
 	require.True(t, exist)
-	_, exist = snap.PhysicalTableByID(2)
+	_, exist = snap.PhysicalTableByID(12)
 	require.True(t, exist)
-	_, exist = snap.PhysicalTableByID(3)
+	_, exist = snap.PhysicalTableByID(13)
 	require.True(t, exist)
 
 	snap, err = storage.GetSnapshot(ctx, 135)
 	require.Nil(t, err)
-	_, exist = snap.SchemaByID(1)
+	_, exist = snap.SchemaByID(11)
 	require.True(t, exist)
-	_, exist = snap.PhysicalTableByID(2)
+	_, exist = snap.PhysicalTableByID(12)
 	require.False(t, exist)
-	_, exist = snap.PhysicalTableByID(3)
+	_, exist = snap.PhysicalTableByID(13)
 	require.True(t, exist)
 
 	snap, err = storage.GetSnapshot(ctx, 140)
 	require.Nil(t, err)
-	_, exist = snap.SchemaByID(1)
+	_, exist = snap.SchemaByID(11)
 	require.False(t, exist)
-	_, exist = snap.PhysicalTableByID(2)
+	_, exist = snap.PhysicalTableByID(12)
 	require.False(t, exist)
-	_, exist = snap.PhysicalTableByID(3)
+	_, exist = snap.PhysicalTableByID(13)
 	require.False(t, exist)
 
 	lastSchemaTs := storage.DoGC(0)
-	require.Equal(t, uint64(0), lastSchemaTs)
+	// Snapshot.InitConcurrentDDLTables will create a schema with ts = 1
+	require.Equal(t, uint64(1), lastSchemaTs)
 
 	snap, err = storage.GetSnapshot(ctx, 100)
 	require.Nil(t, err)
-	_, exist = snap.SchemaByID(1)
+	_, exist = snap.SchemaByID(11)
 	require.True(t, exist)
-	_, exist = snap.PhysicalTableByID(2)
+	_, exist = snap.PhysicalTableByID(12)
 	require.False(t, exist)
-	_, exist = snap.PhysicalTableByID(3)
+	_, exist = snap.PhysicalTableByID(13)
 	require.False(t, exist)
 	storage.DoGC(115)
 	_, err = storage.GetSnapshot(ctx, 100)
 	require.NotNil(t, err)
 	snap, err = storage.GetSnapshot(ctx, 115)
 	require.Nil(t, err)
-	_, exist = snap.SchemaByID(1)
+	_, exist = snap.SchemaByID(11)
 	require.True(t, exist)
-	_, exist = snap.PhysicalTableByID(2)
+	_, exist = snap.PhysicalTableByID(12)
 	require.True(t, exist)
-	_, exist = snap.PhysicalTableByID(3)
+	_, exist = snap.PhysicalTableByID(13)
 	require.False(t, exist)
 
 	lastSchemaTs = storage.DoGC(155)
@@ -648,11 +649,11 @@ func TestMultiVersionStorage(t *testing.T) {
 
 	snap, err = storage.GetSnapshot(ctx, 180)
 	require.Nil(t, err)
-	_, exist = snap.SchemaByID(1)
+	_, exist = snap.SchemaByID(11)
 	require.False(t, exist)
-	_, exist = snap.PhysicalTableByID(2)
+	_, exist = snap.PhysicalTableByID(12)
 	require.False(t, exist)
-	_, exist = snap.PhysicalTableByID(3)
+	_, exist = snap.PhysicalTableByID(13)
 	require.False(t, exist)
 	_, err = storage.GetSnapshot(ctx, 130)
 	require.NotNil(t, err)
@@ -734,7 +735,7 @@ func TestExplicitTables(t *testing.T) {
 	require.GreaterOrEqual(t, snap2.TableCount(false), 4)
 
 	require.Equal(t, snap3.TableCount(true)-snap1.TableCount(true), 5)
-	require.Equal(t, snap3.TableCount(false), 37)
+	require.Equal(t, snap3.TableCount(false), 40)
 }
 
 /*
