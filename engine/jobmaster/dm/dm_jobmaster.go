@@ -331,7 +331,7 @@ func (jm *JobMaster) preCheck(ctx context.Context, cfg *config.JobCfg) error {
 	return nil
 }
 
-// all task finished and all worker offline
+// all task finished and all worker tombstone
 func (jm *JobMaster) isFinished(ctx context.Context) bool {
 	return jm.taskManager.allFinished(ctx) && jm.workerManager.allTombStone()
 }
