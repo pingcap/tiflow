@@ -666,10 +666,6 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		p.changefeed.Info.Config.EnableOldValue,
 	)
 
-	log.Info("processor try new sink",
-		zap.String("namespace", p.changefeedID.Namespace),
-		zap.String("changefeed", p.changefeed.ID.ID))
-
 	start := time.Now()
 	conf := config.GetGlobalServerConfig()
 	if !conf.Debug.EnableNewSink {
@@ -695,7 +691,9 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 			zap.Duration("duration", time.Since(start)))
 		return errors.Trace(err)
 	}
-	log.Info("processor try new sink success",
+	log.Info("processor new sink success",
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeed.ID.ID),
 		zap.Duration("duration", time.Since(start)))
 
 	redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: true, ErrCh: errCh}

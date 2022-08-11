@@ -507,11 +507,6 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 	eventFeedGauge.Inc()
 	defer eventFeedGauge.Dec()
 
-	log.Info("event feed started",
-		zap.Stringer("span", s.totalSpan), zap.Uint64("startTs", ts),
-		zap.String("namespace", s.client.changefeed.Namespace),
-		zap.String("changefeed", s.client.changefeed.ID))
-
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
@@ -562,7 +557,7 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 					if errInfo.logRateLimitedHint() {
 						zapFieldAddr := zap.Skip()
 						if errInfo.singleRegionInfo.rpcCtx != nil {
-							// rpcCtx may be nil if we fails to get region info
+							// rpcCtx may be nil if we failed to get region info
 							// from pd. It could cause by pd down or the region
 							// has been merged.
 							zapFieldAddr = zap.String("addr", errInfo.singleRegionInfo.rpcCtx.Addr)
@@ -594,6 +589,12 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 
 	s.requestRangeCh <- rangeRequestTask{span: s.totalSpan, ts: ts}
 	s.rangeChSizeGauge.Inc()
+
+	log.Info("event feed started",
+		zap.String("namespace", s.client.changefeed.Namespace),
+		zap.String("changefeed", s.client.changefeed.ID),
+		zap.Uint64("startTs", ts),
+		zap.Stringer("span", s.totalSpan))
 
 	return g.Wait()
 }
