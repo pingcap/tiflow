@@ -656,7 +656,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		return errors.Trace(err)
 	}
 
-	stdCtx := contextutil.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
+	stdCtx := contextutil.PutChangefeedIDInCtx(ctx, p.changefeedID)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
 
 	p.mounter = entry.NewMounter(p.schemaStorage,
@@ -668,7 +668,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 
 	log.Info("processor try new sink",
 		zap.String("namespace", p.changefeedID.Namespace),
-		zap.String("changefeed", p.changefeed.ID.ID))
+		zap.String("changefeed", p.changefeedID.ID))
 
 	start := time.Now()
 	conf := config.GetGlobalServerConfig()
@@ -676,7 +676,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		log.Info("Try to create sinkV1")
 		p.sinkV1, err = sinkv1.New(
 			stdCtx,
-			p.changefeed.ID,
+			p.changefeedID,
 			p.changefeed.Info.SinkURI,
 			p.changefeed.Info.Config,
 			errCh,
@@ -691,7 +691,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	if err != nil {
 		log.Info("processor new sink failed",
 			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeed.ID.ID),
+			zap.String("changefeed", p.changefeedID.ID),
 			zap.Duration("duration", time.Since(start)))
 		return errors.Trace(err)
 	}
@@ -1036,7 +1036,7 @@ func (p *processor) refreshMetrics() {
 func (p *processor) Close() error {
 	log.Info("processor closing ...",
 		zap.String("namespace", p.changefeedID.Namespace),
-		zap.String("changefeed", p.changefeed.ID.ID))
+		zap.String("changefeed", p.changefeedID.ID))
 	for _, tbl := range p.tables {
 		tbl.Cancel()
 	}
