@@ -401,12 +401,14 @@ func (p *processor) GetTableMeta(tableID model.TableID) pipeline.TableMeta {
 
 // newProcessor creates a new processor
 func newProcessor(
+	state *orchestrator.ChangefeedReactorState,
 	captureInfo *model.CaptureInfo,
 	changefeedID model.ChangeFeedID,
 	up *upstream.Upstream,
 	liveness *model.Liveness,
 ) *processor {
 	p := &processor{
+		changefeed:   state,
 		upstream:     up,
 		tables:       make(map[model.TableID]pipeline.TablePipeline),
 		errCh:        make(chan error, 1),

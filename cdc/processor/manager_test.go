@@ -48,6 +48,7 @@ func NewManager4Test(
 ) *managerImpl {
 	m := NewManager(upstream.NewManager4Test(nil), liveness).(*managerImpl)
 	m.newProcessor = func(
+		state *orchestrator.GlobalReactorState,
 		captureInfo *model.CaptureInfo,
 		changefeedID model.ChangeFeedID,
 		up *upstream.Upstream,

@@ -43,11 +43,13 @@ var _ scheduler.TableExecutor = (*processor)(nil)
 
 func newProcessor4Test(
 	t *testing.T,
+	state *orchestrator.ChangefeedReactorState,
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (pipeline.TablePipeline, error),
 	liveness *model.Liveness,
 ) *processor {
 	up := upstream.NewUpstream4Test(nil)
 	p := newProcessor(
+		state,
 		&model.CaptureInfo{AdvertiseAddr: "127.0.0.1:0000"},
 		model.ChangeFeedID4Test("processor-test", "processor-test"), up, liveness)
 	p.lazyInit = func(ctx cdcContext.Context) error {
