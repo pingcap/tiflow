@@ -22,15 +22,19 @@ import (
 	"sync"
 
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tidb/util/mock"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
+	"github.com/pingcap/tidb/util/sqlexec"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -289,6 +293,9 @@ func UnpackTableID(id string) *filter.Table {
 	}
 }
 
+var _ sessionctx.Context = (*session)(nil)
+var _ sqlexec.RestrictedSQLExecutor = (*session)(nil)
+
 type session struct {
 	sessionctx.Context
 	vars                 *variable.SessionVars
@@ -329,11 +336,24 @@ func (se *session) GetBuiltinFunctionUsage() map[string]uint32 {
 
 func (se *session) BuiltinFunctionUsageInc(scalarFuncSigName string) {}
 
+func (se *session) ParseWithParams(ctx context.Context, sql string, args ...interface{}) (ast.StmtNode, error) {
+	return nil, nil
+}
+
+func (se *session) ExecRestrictedStmt(ctx context.Context, stmt ast.StmtNode, opts ...sqlexec.OptionFuncAlias) ([]chunk.Row, []*ast.ResultField, error) {
+	return nil, nil, nil
+}
+
+func (se *session) ExecRestrictedSQL(ctx context.Context, opts []sqlexec.OptionFuncAlias, sql string, args ...interface{}) ([]chunk.Row, []*ast.ResultField, error) {
+	return nil, nil, nil
+}
+
 // ZeroSessionCtx is used when the session variables is not important.
 var ZeroSessionCtx sessionctx.Context
 
 // NewSessionCtx return a session context with specified session variables.
 func NewSessionCtx(vars map[string]string) sessionctx.Context {
+	mock.NewContext()
 	variables := variable.NewSessionVars()
 	for k, v := range vars {
 		_ = variables.SetSystemVar(k, v)
