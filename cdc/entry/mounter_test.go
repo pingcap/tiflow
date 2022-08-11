@@ -15,6 +15,7 @@ package entry
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -76,20 +77,20 @@ func TestMounterDisableOldValue(t *testing.T) {
 	}, {
 		tableName: "partition_table",
 		createTableDDL: `CREATE TABLE partition_table  (
-			id INT NOT NULL AUTO_INCREMENT UNIQUE KEY,
-			fname VARCHAR(25) NOT NULL,
-			lname VARCHAR(25) NOT NULL,
-			store_id INT NOT NULL,
-			department_id INT NOT NULL,
-			INDEX (department_id)
-		)
+				id INT NOT NULL AUTO_INCREMENT UNIQUE KEY,
+				fname VARCHAR(25) NOT NULL,
+				lname VARCHAR(25) NOT NULL,
+				store_id INT NOT NULL,
+				department_id INT NOT NULL,
+				INDEX (department_id)
+			)
 
-		PARTITION BY RANGE(id)  (
-			PARTITION p0 VALUES LESS THAN (5),
-			PARTITION p1 VALUES LESS THAN (10),
-			PARTITION p2 VALUES LESS THAN (15),
-			PARTITION p3 VALUES LESS THAN (20)
-		)`,
+			PARTITION BY RANGE(id)  (
+				PARTITION p0 VALUES LESS THAN (5),
+				PARTITION p1 VALUES LESS THAN (10),
+				PARTITION p2 VALUES LESS THAN (15),
+				PARTITION p3 VALUES LESS THAN (20)
+			)`,
 		values: [][]interface{}{
 			{1, "aa", "bb", 12, 12},
 			{6, "aac", "bab", 51, 51},
@@ -102,16 +103,16 @@ func TestMounterDisableOldValue(t *testing.T) {
 	}, {
 		tableName: "tp_int",
 		createTableDDL: `create table tp_int
-		(
-			id          int auto_increment,
-			c_tinyint   tinyint   null,
-			c_smallint  smallint  null,
-			c_mediumint mediumint null,
-			c_int       int       null,
-			c_bigint    bigint    null,
-			constraint pk
-				primary key (id)
-		);`,
+			(
+				id          int auto_increment,
+				c_tinyint   tinyint   null,
+				c_smallint  smallint  null,
+				c_mediumint mediumint null,
+				c_int       int       null,
+				c_bigint    bigint    null,
+				constraint pk
+					primary key (id)
+			);`,
 		values: [][]interface{}{
 			{1, 1, 2, 3, 4, 5},
 			{2},
@@ -146,12 +147,12 @@ func TestMounterDisableOldValue(t *testing.T) {
 			{
 				2, "89504E470D0A1A0A", "89504E470D0A1A0A", "89504E470D0A1A0A", "89504E470D0A1A0A", "89504E470D0A1A0A",
 				"89504E470D0A1A0A",
-				[]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
-				[]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
-				[]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
-				[]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
-				[]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
-				[]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
+				string([]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}),
+				string([]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}),
+				string([]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}),
+				string([]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}),
+				string([]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}),
+				string([]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}),
 			},
 			{
 				3, "bug free", "bug free", "bug free", "bug free", "bug free", "bug free", "bug free", "bug free",
@@ -238,6 +239,7 @@ func TestMounterDisableOldValue(t *testing.T) {
 		delApproximateBytes: [][]int{{592, 592}},
 	}}
 	for _, tc := range testCases {
+		fmt.Printf("lance test test case: %#v\n", tc)
 		testMounterDisableOldValue(t, tc)
 	}
 }
@@ -284,6 +286,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	}
 
 	for _, params := range tc.values {
+
 		insertSQL := prepareInsertSQL(t, tableInfo, len(params))
 		tk.MustExec(insertSQL, params...)
 	}
@@ -319,6 +322,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 			// TODO: test column flag, column type and index columns
 			if len(row.Columns) != 0 {
 				checkSQL, params := prepareCheckSQL(t, tc.tableName, row.Columns)
+				fmt.Printf("lance test checkSQL: %s, params: %#v\n", checkSQL, params)
 				result := tk.MustQuery(checkSQL, params...)
 				result.Check([][]interface{}{{"1"}})
 			}
@@ -410,6 +414,10 @@ func prepareCheckSQL(t *testing.T, tableName string, cols []*model.Column) (stri
 			_, err = sb.WriteString(col.Name + " IS NULL")
 			require.Nil(t, err)
 			continue
+		}
+		// convert types for tk.MustQuery
+		if bytes, ok := col.Value.([]byte); ok {
+			col.Value = string(bytes)
 		}
 		params = append(params, col.Value)
 		if col.Type == mysql.TypeJSON {

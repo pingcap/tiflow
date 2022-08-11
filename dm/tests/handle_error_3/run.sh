@@ -335,8 +335,8 @@ function DM_4177() {
 }
 
 function DM_4231_CASE() {
-  # trigger a flush checkpoint
-  run_sql_source1 "alter table ${db}.${tb1} add key (id);"
+	# trigger a flush checkpoint
+	run_sql_source1 "alter table ${db}.${tb1} add key (id);"
 
 	run_sql_source1 "insert into ${db}.${tb1} values(1);"
 	run_sql_source1 "alter table ${db}.${tb1} add column c int unique;"
