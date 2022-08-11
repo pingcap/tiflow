@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 
+	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
@@ -39,12 +40,14 @@ const (
 func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
+	jobCfg.TaskMode = dmconfig.ModeFull
 	job := metadata.NewJob(jobCfg)
 	jobStore := metadata.NewJobStore("task_manager_test", kvmock.NewMetaMock())
-	require.NoError(t.T(), jobStore.Put(context.Background(), job))
 	taskManager := NewTaskManager(nil, jobStore, nil, log.L())
 
 	require.Len(t.T(), taskManager.TaskStatus(), 0)
+	require.False(t.T(), taskManager.allFinished(context.Background()))
+	require.NoError(t.T(), jobStore.Put(context.Background(), job))
 
 	dumpStatus1 := runtime.TaskStatus{
 		Unit:  framework.WorkerDMDump,
@@ -67,9 +70,14 @@ func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 	require.Equal(t.T(), taskStatusMap[jobCfg.Upstreams[1].SourceID], dumpStatus2)
 
 	loadStatus1 := runtime.TaskStatus{
-		Unit:  framework.WorkerDMDump,
+		Unit:  framework.WorkerDMLoad,
 		Task:  jobCfg.Upstreams[0].SourceID,
 		Stage: metadata.StageRunning,
+	}
+	loadStatus2 := runtime.TaskStatus{
+		Unit:  framework.WorkerDMLoad,
+		Task:  jobCfg.Upstreams[1].SourceID,
+		Stage: metadata.StageFinished,
 	}
 	taskManager.UpdateTaskStatus(loadStatus1)
 	taskStatusMap = taskManager.TaskStatus()
@@ -110,6 +118,15 @@ func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 	require.Contains(t.T(), taskStatusMap, jobCfg.Upstreams[1].SourceID)
 	require.Equal(t.T(), taskStatusMap[jobCfg.Upstreams[0].SourceID], loadStatus1)
 	require.Equal(t.T(), taskStatusMap[jobCfg.Upstreams[1].SourceID], dumpStatus2)
+
+	require.False(t.T(), taskManager.allFinished(context.Background()))
+	loadStatus1.Stage = metadata.StageFinished
+	dumpStatus2.Stage = metadata.StageFinished
+	taskManager.UpdateTaskStatus(loadStatus1)
+	taskManager.UpdateTaskStatus(dumpStatus2)
+	require.False(t.T(), taskManager.allFinished(context.Background()))
+	taskManager.UpdateTaskStatus(loadStatus2)
+	require.True(t.T(), taskManager.allFinished(context.Background()))
 }
 
 func (t *testDMJobmasterSuite) TestOperateTask() {

@@ -357,13 +357,16 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	require.Equal(t.T(), jm.Workload(), model.RescUnit(2))
 
 	// Close
-	mockMessageAgent.On("SendMessage").Return(nil).Once()
-	mockMessageAgent.On("SendMessage").Return(nil).Once()
+	require.NoError(t.T(), jm.CloseImpl(context.Background()))
+
+	// Stop
+	mockMessageAgent.On("SendRequest").Return(&dmpkg.QueryStatusResponse{Unit: framework.WorkerDMSync, Stage: metadata.StageRunning, Status: bytes1}, nil).Twice()
+	mockMessageAgent.On("SendMessage").Return(nil).Twice()
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		require.NoError(t.T(), jm.CloseImpl(context.Background()))
+		require.NoError(t.T(), jm.StopImpl(context.Background()))
 	}()
 	require.Eventually(t.T(), func() bool {
 		mockMessageAgent.Lock()
@@ -421,6 +424,10 @@ func (m *MockBaseJobmaster) CurrentEpoch() int64 {
 
 func (m *MockBaseJobmaster) Logger() *zap.Logger {
 	return log.L()
+}
+
+func (m *MockBaseJobmaster) Exit(ctx context.Context, status frameModel.WorkerStatus, err error) error {
+	return nil
 }
 
 type MockCheckpointAgent struct {

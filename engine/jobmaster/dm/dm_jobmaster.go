@@ -131,7 +131,13 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 func (jm *JobMaster) Tick(ctx context.Context) error {
 	jm.workerManager.Tick(ctx)
 	jm.taskManager.Tick(ctx)
-	return jm.messageAgent.Tick(ctx)
+	if err := jm.messageAgent.Tick(ctx); err != nil {
+		return err
+	}
+	if jm.isFinished(ctx) {
+		return jm.exit(ctx, frameModel.WorkerStatusFinished)
+	}
+	return nil
 }
 
 // OnMasterRecovered implements JobMasterImpl.OnMasterRecovered
@@ -244,36 +250,59 @@ func (jm *JobMaster) OnMasterMessage(topic p2p.Topic, message interface{}) error
 }
 
 // CloseImpl implements JobMasterImpl.CloseImpl
+// nothing to do now.
 func (jm *JobMaster) CloseImpl(ctx context.Context) error {
-	jm.Logger().Info("closing the dm jobmaster")
+	return nil
+}
+
+func (jm *JobMaster) exit(ctx context.Context, code frameModel.WorkerStatusCode) error {
+	jm.Logger().Info("exit jobmaster", zap.Int32("code", int32(code)))
+	status := frameModel.WorkerStatus{
+		Code: code,
+	}
+	if jobStatus, err := jm.QueryJobStatus(ctx, nil); err != nil {
+		jm.Logger().Error("failed to job status", zap.Error(err))
+	} else if bs, err := json.Marshal(jobStatus); err != nil {
+		jm.Logger().Error("failed to marshal job status", zap.Error(err))
+	} else {
+		jm.Logger().Info("get job status", zap.String("status", string(bs)))
+		status.ExtBytes = bs
+	}
+
 	if err := jm.taskManager.OperateTask(ctx, dmpkg.Delete, nil, nil); err != nil {
-		return err
+		return jm.Exit(ctx, status, err)
 	}
 
 outer:
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return jm.Exit(ctx, status, ctx.Err())
 		case <-time.After(time.Second):
 			// wait all worker offline
 			jm.workerManager.SetNextCheckTime(time.Now())
 			// manually call Tick since outer event loop is closed.
 			jm.workerManager.Tick(ctx)
-			if len(jm.workerManager.WorkerStatus()) == 0 {
-				if err := jm.checkpointAgent.Remove(ctx); err != nil {
-					jm.Logger().Error("failed to remove checkpoint", zap.Error(err))
-				}
-				break outer
+			// wait all worker offline
+			if !jm.workerManager.allTombStone() {
+				log.Info("wait all worker tombstone")
+				continue
 			}
+			if err := jm.checkpointAgent.Remove(ctx); err != nil {
+				jm.Logger().Error("failed to remove checkpoint", zap.Error(err))
+			}
+			break outer
 		}
 	}
 
-	// unregister jobmanager client
-	if err := jm.messageAgent.UpdateClient(libMetadata.JobManagerUUID, nil); err != nil {
-		return err
-	}
-	return jm.messageAgent.Close(ctx)
+	return jm.Exit(ctx, status, jm.messageAgent.Close(ctx))
+}
+
+// StopImpl implements JobMasterImpl.StopImpl
+// stop all workers and wait for all workers to be closed.
+func (jm *JobMaster) StopImpl(ctx context.Context) error {
+	jm.Logger().Info("stoping the dm jobmaster")
+	return jm.exit(ctx, frameModel.WorkerStatusStopped)
 }
 
 // Workload implements JobMasterImpl.Workload
@@ -330,4 +359,9 @@ func (jm *JobMaster) preCheck(ctx context.Context, cfg *config.JobCfg) error {
 	}
 	jm.Logger().Info("finish pre-checking job config", zap.String("result", msg))
 	return nil
+}
+
+// all task finished and all worker offline
+func (jm *JobMaster) isFinished(ctx context.Context) bool {
+	return jm.taskManager.allFinished(ctx) && jm.workerManager.allTombStone()
 }

@@ -370,3 +370,16 @@ func (wm *WorkerManager) removeWorkerStatusByWorkerID(workerID frameModel.Worker
 		return true
 	})
 }
+
+func (wm *WorkerManager) allTombStone() bool {
+	result := true
+	wm.workerStatusMap.Range(func(key, value interface{}) bool {
+		workerStatus := value.(runtime.WorkerStatus)
+		if !workerStatus.IsTombStone() {
+			result = false
+			return false
+		}
+		return true
+	})
+	return result
+}

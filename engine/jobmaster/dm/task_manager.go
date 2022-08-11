@@ -19,6 +19,8 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	dmconfig "github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/engine/framework"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"go.uber.org/zap"
 
@@ -208,4 +210,28 @@ func (tm *TaskManager) operateTaskMessage(ctx context.Context, taskID string, op
 		Op:   op,
 	}
 	return tm.messageAgent.SendMessage(ctx, taskID, dmpkg.OperateTask, msg)
+}
+
+func (tm *TaskManager) allFinished(ctx context.Context) bool {
+	state, err := tm.jobStore.Get(ctx)
+	if err != nil {
+		return false
+	}
+	job := state.(*metadata.Job)
+
+	for taskID, task := range job.Tasks {
+		t, ok := tm.tasks.Load(taskID)
+		if !ok {
+			return false
+		}
+		runningTask := t.(runtime.TaskStatus)
+		if runningTask.Stage != metadata.StageFinished {
+			return false
+		}
+		// update if we add new task mode
+		if runningTask.Unit != framework.WorkerDMLoad || task.Cfg.TaskMode != dmconfig.ModeFull {
+			return false
+		}
+	}
+	return true
 }
