@@ -37,8 +37,9 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-//go:generate mockery --name=RedoLogWriter --inpackage
 // RedoLogWriter defines the interfaces used to write redo log, all operations are thread-safe
+//
+//go:generate mockery --name=RedoLogWriter --inpackage
 type RedoLogWriter interface {
 	io.Closer
 
