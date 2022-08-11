@@ -52,6 +52,12 @@ func TestExampleMaster(t *testing.T) {
 
 	master := newExampleMaster(t)
 	// master.Init will call CreateWorker, so we mock it first
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	epoch, err := master.MetaKVClient().GenEpoch(ctx)
+	require.NoError(t, err)
+
 	framework.MockBaseMasterCreateWorker(
 		t,
 		master.DefaultBaseMaster,
@@ -62,10 +68,12 @@ func TestExampleMaster(t *testing.T) {
 		workerID,
 		executorNodeID,
 		nil,
+		// call GenEpoch three times, including create master meta, master init
+		// refresh meta, create worker.
+		epoch+3,
 	)
 
-	ctx := context.Background()
-	err := master.Init(ctx)
+	err = master.Init(ctx)
 	require.NoError(t, err)
 
 	// worker is online

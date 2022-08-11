@@ -46,6 +46,9 @@ func init() {
 	log.SetLevel(zapcore.DebugLevel)
 }
 
+// ErrLeaderNotFound is returned when the leader is not found.
+var ErrLeaderNotFound = errors.New("leader not found")
+
 // ChaosCli is used to interact with server master, fake job and provides ways
 // to adding chaos in e2e test.
 type ChaosCli struct {
@@ -98,7 +101,7 @@ func NewUTCli(ctx context.Context, masterAddrs, businessMetaAddrs []string, proj
 	}
 
 	// TODO: NEED to move metastore config to a toml, and parse the toml
-	defaultSchema := "test"
+	defaultSchema := "test_business"
 
 	conf := server.NewDefaultBusinessMetaConfig()
 	conf.Endpoints = businessMetaAddrs
@@ -298,6 +301,49 @@ func (cli *ChaosCli) InitializeMetaClient(jobID string) error {
 	}
 
 	cli.metaCli = metaCli
+	return nil
+}
+
+// GetLeaderAddr gets the address of the leader of the server master.
+func (cli *ChaosCli) GetLeaderAddr(ctx context.Context) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/api/v1/leader", cli.masterAddrs[0]), nil)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return "", ErrLeaderNotFound
+	}
+	if resp.StatusCode/100 != 2 {
+		return "", errors.Errorf("unexpected status code %d", resp.StatusCode)
+	}
+	var leaderInfo struct {
+		AdvertiseAddr string `json:"advertise_addr"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&leaderInfo); err != nil {
+		return "", errors.Trace(err)
+	}
+	return leaderInfo.AdvertiseAddr, nil
+}
+
+// ResignLeader resigns the leader at the given addr.
+func (cli *ChaosCli) ResignLeader(ctx context.Context, addr string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("http://%s/api/v1/leader/resign", addr), nil)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return errors.Errorf("unexpected status code %d", resp.StatusCode)
+	}
 	return nil
 }
 

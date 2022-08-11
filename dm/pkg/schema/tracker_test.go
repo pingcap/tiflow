@@ -613,7 +613,7 @@ func TestGetDownStreamIndexInfo(t *testing.T) {
 
 	mock.ExpectQuery("SHOW CREATE TABLE " + tableID).WillReturnRows(
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow("test", "create table t(a int primary key, b int, c varchar(10000), key(c))"))
+			AddRow("test", "create table t(a int primary key, b int, c varchar(20000), key(c(20000)))"))
 	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableID, oriTi)
 	require.NoError(t, err)
 	require.NotNil(t, dti.WhereHandle.UniqueNotNullIdx)

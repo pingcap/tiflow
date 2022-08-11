@@ -69,6 +69,7 @@ type Tracker struct {
 // downstreamTracker tracks downstream schema.
 type downstreamTracker struct {
 	sync.RWMutex
+	se             sessionctx.Context
 	downstreamConn *dbconn.DBConn                  // downstream connection
 	stmtParser     *parser.Parser                  // statement parser
 	tableInfos     map[string]*DownstreamTableInfo // downstream table infos
@@ -111,8 +112,11 @@ func (tr *Tracker) Init(
 	logger = logger.WithFields(zap.String("component", "schema-tracker"), zap.String("task", task))
 
 	upTracker := schematracker.NewSchemaTracker(lowerCaseTableNames)
+	dsSession := mock.NewContext()
+	dsSession.GetSessionVars().StrictSQLMode = false
 	downTracker := &downstreamTracker{
 		downstreamConn: downstreamConn,
+		se:             dsSession,
 		tableInfos:     make(map[string]*DownstreamTableInfo),
 	}
 	se := utils.NewSessionCtx(nil)
@@ -434,9 +438,7 @@ func (dt *downstreamTracker) getTableInfoByCreateStmt(tctx *tcontext.Context, ta
 		return nil, dmterror.ErrSchemaTrackerInvalidCreateTableStmt.Delegate(err, createStr)
 	}
 
-	sctx := mock.NewContext()
-	sctx.GetSessionVars().StrictSQLMode = false
-	ti, err := ddl.BuildTableInfoWithStmt(sctx, stmtNode.(*ast.CreateTableStmt), mysql.DefaultCharset, "", nil)
+	ti, err := ddl.BuildTableInfoWithStmt(dt.se, stmtNode.(*ast.CreateTableStmt), mysql.DefaultCharset, "", nil)
 	if err != nil {
 		return nil, dmterror.ErrSchemaTrackerCannotMockDownstreamTable.Delegate(err, createStr)
 	}

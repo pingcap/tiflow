@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/kafka"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/stretchr/testify/require"
 )
 
@@ -68,8 +69,8 @@ func newForTest(ctx context.Context,
 		if err != nil {
 			return nil, err
 		}
-		s.mqSink = mqs
-		s.sinkType = mqSink
+		s.rowSink = mqs
+		s.sinkType = sink.RowSink
 	default:
 		return nil,
 			cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", schema)
@@ -99,8 +100,8 @@ func TestSinkFactory(t *testing.T) {
 	sinkFactory, err := newForTest(ctx, uri, replicaConfig, errCh)
 	require.NotNil(t, sinkFactory)
 	require.Nil(t, err)
-	require.Equal(t, mqSink, sinkFactory.sinkType)
-	require.NotNil(t, sinkFactory.mqSink)
+	require.Equal(t, sink.RowSink, sinkFactory.sinkType)
+	require.NotNil(t, sinkFactory.rowSink)
 
 	tableSink := sinkFactory.CreateTableSink(1)
 	require.NotNil(t, tableSink, "table sink can be created")

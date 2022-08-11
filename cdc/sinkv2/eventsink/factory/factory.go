@@ -19,20 +19,14 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/blackhole"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/kafka"
-)
-
-// sinkType is the type of sink.
-type sinkType int
-
-const (
-	mqSink sinkType = iota + 1
-	txnSink
+	"github.com/pingcap/tiflow/pkg/sink"
 )
 
 // SinkFactory is the factory of sink.
@@ -41,8 +35,8 @@ const (
 // to eventsink.EventSink[eventsink.TableEvent].
 // So we have to use this factory to create and store the sink.
 type SinkFactory struct {
-	sinkType sinkType
-	mqSink   eventsink.EventSink[*model.RowChangedEvent]
+	sinkType sink.Type
+	rowSink  eventsink.EventSink[*model.RowChangedEvent]
 	txnSink  eventsink.EventSink[*model.SingleTableTxn]
 }
 
@@ -61,29 +55,34 @@ func New(ctx context.Context,
 	schema := strings.ToLower(sinkURI.Scheme)
 	// TODO: add more sink factory here.
 	switch schema {
-	case "kafka", "kafka+ssl":
+	case sink.KafkaSchema, sink.KafkaSSLSchema:
 		mqs, err := mq.NewKafkaDMLSink(ctx, sinkURI, cfg, errCh,
 			kafka.NewSaramaAdminClient, dmlproducer.NewKafkaDMLProducer)
 		if err != nil {
 			return nil, err
 		}
-		s.mqSink = mqs
-		s.sinkType = mqSink
+		s.rowSink = mqs
+		s.sinkType = sink.RowSink
+	case sink.BlackHoleSchema:
+		bs := blackhole.New()
+		s.rowSink = bs
+		s.sinkType = sink.RowSink
 	default:
 		return nil,
 			cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", schema)
 	}
+
 	return s, nil
 }
 
 // CreateTableSink creates a TableSink by schema.
 func (s *SinkFactory) CreateTableSink(tableID model.TableID) tablesink.TableSink {
 	switch s.sinkType {
-	case mqSink:
+	case sink.RowSink:
 		// We have to indicate the type here, otherwise it can not be compiled.
 		return tablesink.New[*model.RowChangedEvent](tableID,
-			s.mqSink, &eventsink.RowChangeEventAppender{})
-	case txnSink:
+			s.rowSink, &eventsink.RowChangeEventAppender{})
+	case sink.TxnSink:
 		return tablesink.New[*model.SingleTableTxn](tableID,
 			s.txnSink, &eventsink.TxnEventAppender{})
 	default:
@@ -94,9 +93,9 @@ func (s *SinkFactory) CreateTableSink(tableID model.TableID) tablesink.TableSink
 // Close closes the sink.
 func (s *SinkFactory) Close() error {
 	switch s.sinkType {
-	case mqSink:
-		return s.mqSink.Close()
-	case txnSink:
+	case sink.RowSink:
+		return s.rowSink.Close()
+	case sink.TxnSink:
 		return s.txnSink.Close()
 	default:
 		panic("unknown sink type")
