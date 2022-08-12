@@ -62,7 +62,8 @@ func NewKafkaDMLSink(
 	defer func() {
 		if err != nil {
 			if err = adminClient.Close(); err != nil {
-				log.Error("close admin client failed", zap.Error(err))
+				log.Error("Close admin client failed in kafka "+
+					"DML sink", zap.Error(err))
 			}
 		}
 	}()
