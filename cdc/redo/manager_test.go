@@ -323,9 +323,9 @@ func TestManagerError(t *testing.T) {
 	}
 	errCh := make(chan error, 1)
 	opts := &ManagerOptions{EnableBgRunner: false, ErrCh: errCh}
+
 	logMgr, err := NewManager(ctx, cfg, opts)
 	require.Nil(t, err)
-
 	logMgr.writer = writer.NewInvalidBlackHoleWriter(logMgr.writer)
 	go logMgr.bgUpdateLog(ctx, errCh)
 
@@ -356,8 +356,12 @@ func TestManagerError(t *testing.T) {
 		require.Regexp(t, ".*WriteLog.*", err)
 	}
 
-	// bgUpdateLog exists because of writer.FlushLog failure.
+	logMgr, err = NewManager(ctx, cfg, opts)
+	require.Nil(t, err)
+	logMgr.writer = writer.NewInvalidBlackHoleWriter(logMgr.writer)
 	go logMgr.bgUpdateLog(ctx, errCh)
+
+	// bgUpdateLog exists because of writer.FlushLog failure.
 	select {
 	case <-ctx.Done():
 		t.Fatal("bgUpdateLog should return error before context is done")
