@@ -68,7 +68,9 @@ func TestExampleMaster(t *testing.T) {
 		workerID,
 		executorNodeID,
 		nil,
-		epoch+2,
+		// call GenEpoch three times, including create master meta, master init
+		// refresh meta, create worker.
+		epoch+3,
 	)
 
 	err = master.Init(ctx)

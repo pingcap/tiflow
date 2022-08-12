@@ -22,12 +22,10 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	kafkav1 "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/kafka"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 )
@@ -78,14 +76,15 @@ func TestProducerAck(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	ctx, cancel := context.WithCancel(context.Background())
-	ctx = contextutil.PutRoleInCtx(ctx, util.RoleTester)
 	saramaConfig, err := kafkav1.NewSaramaConfig(context.Background(), config)
 	require.Nil(t, err)
 	saramaConfig.Producer.Flush.MaxMessages = 1
 
 	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
-	producer, err := NewKafkaDMLProducer(ctx, client, errCh)
+	adminClient, err := kafka.NewMockAdminClient(config.BrokerEndpoints, saramaConfig)
+	require.Nil(t, err)
+	producer, err := NewKafkaDMLProducer(ctx, client, adminClient, errCh)
 	require.Nil(t, err)
 	require.NotNil(t, producer)
 
@@ -140,7 +139,6 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	errCh := make(chan error, 1)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	ctx = contextutil.PutRoleInCtx(ctx, util.RoleTester)
 	saramaConfig, err := kafkav1.NewSaramaConfig(context.Background(), config)
 	require.Nil(t, err)
 	saramaConfig.Producer.Flush.MaxMessages = 1
@@ -150,7 +148,9 @@ func TestProducerSendMsgFailed(t *testing.T) {
 
 	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
-	producer, err := NewKafkaDMLProducer(ctx, client, errCh)
+	adminClient, err := kafka.NewMockAdminClient(config.BrokerEndpoints, saramaConfig)
+	require.Nil(t, err)
+	producer, err := NewKafkaDMLProducer(ctx, client, adminClient, errCh)
 	defer func() {
 		producer.Close()
 
@@ -204,13 +204,14 @@ func TestProducerDoubleClose(t *testing.T) {
 	errCh := make(chan error, 1)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ctx = contextutil.PutRoleInCtx(ctx, util.RoleTester)
 	saramaConfig, err := kafkav1.NewSaramaConfig(context.Background(), config)
 	require.Nil(t, err)
 	saramaConfig.Producer.Flush.MaxMessages = 1
 	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
-	producer, err := NewKafkaDMLProducer(ctx, client, errCh)
+	adminClient, err := kafka.NewMockAdminClient(config.BrokerEndpoints, saramaConfig)
+	require.Nil(t, err)
+	producer, err := NewKafkaDMLProducer(ctx, client, adminClient, errCh)
 	require.Nil(t, err)
 	require.NotNil(t, producer)
 

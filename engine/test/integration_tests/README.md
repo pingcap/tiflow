@@ -9,7 +9,9 @@ Besides, make sure you have run the docker daemon. We recommend that you provide
 
 ## Run engine integration tests
 
-1. Run `make engine_image` to generate engine related image for integration test.
+1. Run `make engine_image` to generate engine related image for integration test. 
+   Or you can run `make tiflow`, `make tiflow-demo`, `make tiflow-chaos-case` to build necessary binaries in your local environment, 
+   then run `make engine_image_from_local` to generate image by local binaries.
 2. Run `make engine_integration_test` to execute the integration tests. This command will
 
    1. Check that all required executables exist.

@@ -195,21 +195,22 @@ func TestCheckClusterVersion(t *testing.T) {
 }
 
 func TestCompareVersion(t *testing.T) {
-	require.Equal(t, semver.New("4.0.0-rc").Compare(*semver.New("4.0.0-rc.2")), -1)
-	require.Equal(t, semver.New("4.0.0-rc.1").Compare(*semver.New("4.0.0-rc.2")), -1)
-	require.Equal(t, semver.New(removeVAndHash("4.0.0-rc-35-g31dae220")).Compare(*semver.New("4.0.0-rc.2")), -1)
-	require.Equal(t, semver.New(removeVAndHash("4.0.0-9-g30f0b014")).Compare(*semver.New("4.0.0-rc.1")), 1)
+	// build on master branch, `vx.y.z-master`
+	masterVersion := semver.New(removeVAndHash("v6.3.0-master"))
+	require.Equal(t, 1, masterVersion.Compare(*MinTiCDCVersion))
 
-	require.Equal(t, semver.New(removeVAndHash("4.0.0-rc-35-g31dae220")).Compare(*semver.New("4.0.0-rc.2")), -1)
-	require.Equal(t, semver.New(removeVAndHash("4.0.0-9-g30f0b014")).Compare(*semver.New("4.0.0-rc.1")), 1)
-	require.Equal(t, semver.New(removeVAndHash("v3.0.0-beta-211-g09beefbe0-dirty")).
-		Compare(*semver.New("3.0.0-beta")), 0)
-	require.Equal(t, semver.New(removeVAndHash("v3.0.5-dirty")).
-		Compare(*semver.New("3.0.5")), 0)
-	require.Equal(t, semver.New(removeVAndHash("v3.0.5-beta.12-dirty")).
-		Compare(*semver.New("3.0.5-beta.12")), 0)
-	require.Equal(t, semver.New(removeVAndHash("v2.1.0-rc.1-7-g38c939f-dirty")).
-		Compare(*semver.New("2.1.0-rc.1")), 0)
+	// pre-release version, `vx.y.z-alpha-nightly-yyyymmdd`
+	alphaVersion := semver.New(removeVAndHash("v6.3.0-alpha-nightly-20220202"))
+	require.Equal(t, 1, alphaVersion.Compare(*MinTiCDCVersion))
+
+	// release version, `vx.y.z.`
+	releaseVersion := semver.New(removeVAndHash("v6.3.0"))
+	require.Equal(t, 1, releaseVersion.Compare(*MinTiCDCVersion))
+
+	// build with uncommitted changes, `vx.y.z-dirty`
+	dirtyVersion := semver.New(removeVAndHash("v6.3.0-dirty"))
+	require.Equal(t, 1, dirtyVersion.Compare(*MinTiCDCVersion))
+	require.Equal(t, 0, dirtyVersion.Compare(*semver.New("6.3.0")))
 }
 
 func TestReleaseSemver(t *testing.T) {
@@ -363,33 +364,47 @@ func TestCheckPDVersionError(t *testing.T) {
 func TestCheckTiCDCVersion(t *testing.T) {
 	t.Parallel()
 
-	// only one capture in the cluster, it's ok
+	// all captures in the cluster in the same version which is the minimum supported one.
 	versions := map[string]struct{}{
 		"v6.3.0": {},
 	}
 	require.NoError(t, CheckTiCDCVersion(versions))
 
-	// 2 running instances in different versions both within the range, it's ok
+	// 2  different versions both within the range, it's ok
 	versions = map[string]struct{}{
 		"v6.3.0": {},
 		"v6.4.0": {},
 	}
 	require.NoError(t, CheckTiCDCVersion(versions))
+
+	versions = map[string]struct{}{
+		"v6.3.0": {},
+		"v7.9.9": {},
+	}
+	err := CheckTiCDCVersion(versions)
+	require.NoError(t, err)
 
 	versions = map[string]struct{}{
 		"v6.3.0": {},
 		"v6.4.0": {},
 		"v6.5.0": {},
 	}
-	err := CheckTiCDCVersion(versions)
+	err = CheckTiCDCVersion(versions)
 	require.Regexp(t, ".*all running cdc instance belong to 3 different versions.*", err)
 
 	versions = map[string]struct{}{
-		"v6.3.0": {},
-		"v5.0.0": {},
+		"v6.3.0":       {},
+		"v8.0.0-alpha": {},
 	}
 	err = CheckTiCDCVersion(versions)
-	require.Regexp(t, "TiCDC .* not supported, the minimal compatible version.*", err)
+	require.Regexp(t, "TiCDC .* not supported, only support version less than.*", err)
+
+	versions = map[string]struct{}{
+		"v6.3.0":        {},
+		"v8.0.0-master": {},
+	}
+	err = CheckTiCDCVersion(versions)
+	require.Regexp(t, "TiCDC .* not supported, only support version less than.*", err)
 
 	versions = map[string]struct{}{
 		"v6.3.0": {},
@@ -397,4 +412,18 @@ func TestCheckTiCDCVersion(t *testing.T) {
 	}
 	err = CheckTiCDCVersion(versions)
 	require.Regexp(t, "TiCDC .* not supported, only support version less than.*", err)
+
+	versions = map[string]struct{}{
+		"v6.3.0": {},
+		"v6.2.9": {},
+	}
+	err = CheckTiCDCVersion(versions)
+	require.Regexp(t, "TiCDC .* not supported, the minimal compatible version.*", err)
+
+	versions = map[string]struct{}{
+		"v6.3.0-master": {},
+		"v7.0.0":        {},
+	}
+	err = CheckTiCDCVersion(versions)
+	require.NoError(t, err)
 }
