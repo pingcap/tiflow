@@ -327,8 +327,6 @@ func TestManagerError(t *testing.T) {
 	require.Nil(t, err)
 
 	logMgr.writer = writer.NewInvalidBlackHoleWriter(logMgr.writer)
-	defer logMgr.Cleanup(ctx)
-
 	go logMgr.bgUpdateLog(ctx, errCh)
 
 	testCases := []struct {
