@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -40,8 +39,6 @@ var _ eventsink.EventSink[*model.RowChangedEvent] = (*sink)(nil)
 type sink struct {
 	// id indicates this sink belongs to which processor(changefeed).
 	id model.ChangeFeedID
-	// role indicates this sink used for what.
-	role util.Role
 	// protocol indicates the protocol used by this sink.
 	protocol config.Protocol
 
@@ -64,7 +61,6 @@ func newSink(ctx context.Context,
 	errCh chan error,
 ) (*sink, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-	role := contextutil.RoleFromCtx(ctx)
 
 	encoderBuilder, err := codec.NewEventBatchEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
@@ -76,7 +72,6 @@ func newSink(ctx context.Context,
 
 	s := &sink{
 		id:             changefeedID,
-		role:           role,
 		protocol:       encoderConfig.Protocol(),
 		worker:         w,
 		eventRouter:    eventRouter,
@@ -92,10 +87,9 @@ func newSink(ctx context.Context,
 				return
 			case errCh <- err:
 			default:
-				log.Error("error channel is full", zap.Error(err),
+				log.Error("error channel is full in DML sink", zap.Error(err),
 					zap.String("namespace", changefeedID.Namespace),
-					zap.String("changefeed", changefeedID.ID),
-					zap.Any("role", s.role))
+					zap.String("changefeed", changefeedID.ID))
 			}
 		}
 	}()
