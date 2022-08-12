@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package leveldb
+package db
 
 import (
 	"context"
@@ -20,8 +20,8 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sorter/db/message"
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
-	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
 	"github.com/pingcap/tiflow/pkg/actor"
 	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -112,7 +112,7 @@ func TestRunAndReportError(t *testing.T) {
 	go func() {
 		time.Sleep(100 * time.Millisecond)
 		s.common.reportError(
-			"test", errors.ErrLevelDBSorterError.GenWithStackByArgs())
+			"test", errors.ErrDBSorterError.GenWithStackByArgs())
 	}()
 	require.Error(t, s.Run(context.Background()))
 
@@ -144,7 +144,7 @@ func TestRunAndReportError(t *testing.T) {
 
 	// Must be nonblock.
 	s.common.reportError(
-		"test", errors.ErrLevelDBSorterError.GenWithStackByArgs())
+		"test", errors.ErrDBSorterError.GenWithStackByArgs())
 	s.common.reportError(
-		"test", errors.ErrLevelDBSorterError.GenWithStackByArgs())
+		"test", errors.ErrDBSorterError.GenWithStackByArgs())
 }

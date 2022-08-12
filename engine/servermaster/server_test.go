@@ -144,9 +144,10 @@ func testPrometheusMetrics(t *testing.T, addr string) {
 
 // Server master requires etcd/gRPC service as the minimum running environment,
 // this case
-// - starts an embed etcd with gRPC service, including message service and
-//   server master pb service.
-// - campaigns to be leader and then runs leader service.
+//   - starts an embed etcd with gRPC service, including message service and
+//     server master pb service.
+//   - campaigns to be leader and then runs leader service.
+//
 // Disable parallel run for this case, because prometheus http handler will meet
 // data race if parallel run is enabled
 // FIXME: disable this test temporary for no proper mock of frame metastore

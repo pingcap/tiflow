@@ -18,8 +18,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/cdc/sorter/leveldb"
-	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
+	"github.com/pingcap/tiflow/cdc/sorter/db"
+	"github.com/pingcap/tiflow/cdc/sorter/db/message"
 	"github.com/pingcap/tiflow/pkg/actor"
 	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -122,11 +122,11 @@ func TestSystemStopWithManyTablesAndFewStragglers(t *testing.T) {
 	sys := NewSystem(t.TempDir(), 1, cfg)
 	require.Nil(t, sys.Start(ctx))
 
-	ss := make([]*leveldb.Sorter, 0, 1000)
+	ss := make([]*db.Sorter, 0, 1000)
 	scancels := make([]context.CancelFunc, 0, 1000)
 	for i := uint64(0); i < 1000; i++ {
 		dbActorID := sys.DBActorID(i)
-		s, err := leveldb.NewSorter(
+		s, err := db.NewSorter(
 			ctx, int64(i), i, sys.DBRouter, dbActorID,
 			sys.WriterSystem, sys.WriterRouter,
 			sys.ReaderSystem, sys.ReaderRouter,
