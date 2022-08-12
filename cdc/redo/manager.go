@@ -216,7 +216,6 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 		rtsMap:        sync.Map{},
 		minResolvedTs: math.MaxInt64,
 
-		logBuffer: chann.New[cacheEvents](),
 		metricWriteLogDuration: common.RedoWriteLogDurationHistogram.
 			WithLabelValues(changeFeedID.Namespace, changeFeedID.ID),
 		metricFlushLogDuration: common.RedoFlushLogDurationHistogram.
@@ -278,6 +277,7 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 
 	// TODO: better to wait background goroutines after the context is canceled.
 	if m.opts.EnableBgRunner {
+		m.logBuffer = chann.New[cacheEvents]()
 		go m.bgUpdateLog(ctx, opts.ErrCh)
 	}
 	if m.opts.EnableGCRunner {
@@ -452,12 +452,6 @@ func (m *ManagerImpl) RemoveTable(tableID model.TableID) {
 
 // Cleanup removes all redo logs of this manager, it is called when changefeed is removed
 func (m *ManagerImpl) Cleanup(ctx context.Context) error {
-	m.logBuffer.Close()
-	// We must finish consuming the data here,
-	// otherwise it will cause the channel to not close properly.
-	for range m.logBuffer.Out() {
-		// Do nothing. We do not care about the data.
-	}
 	common.RedoWriteLogDurationHistogram.
 		DeleteLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
 	common.RedoFlushLogDurationHistogram.
@@ -577,6 +571,17 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 	ticker := time.NewTicker(time.Duration(flushIntervalInMs) * time.Millisecond)
 	defer func() {
 		ticker.Stop()
+
+		m.logBuffer.Close()
+		for range m.logBuffer.Out() {
+		}
+		if err := m.writer.Close(); err != nil {
+			log.Error("redo manager fails to close writer",
+				zap.String("namespace", m.changeFeedID.Namespace),
+				zap.String("changefeed", m.changeFeedID.ID),
+				zap.Error(err))
+		}
+
 		log.Info("redo manager bgUpdateLog exits",
 			zap.String("namespace", m.changeFeedID.Namespace),
 			zap.String("changefeed", m.changeFeedID.ID))
@@ -624,16 +629,6 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 	select {
 	case <-ctx.Done():
 	case errCh <- err:
-	}
-
-	m.logBuffer.Close()
-	for range m.logBuffer.Out() {
-	}
-	if err := m.writer.Close(); err != nil {
-		log.Error("redo manager fails to close writer",
-			zap.String("namespace", m.changeFeedID.Namespace),
-			zap.String("changefeed", m.changeFeedID.ID),
-			zap.Error(err))
 	}
 }
 

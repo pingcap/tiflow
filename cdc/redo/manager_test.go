@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
+	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -327,6 +328,7 @@ func TestManagerError(t *testing.T) {
 	logMgr, err := NewManager(ctx, cfg, opts)
 	require.Nil(t, err)
 	logMgr.writer = writer.NewInvalidBlackHoleWriter(logMgr.writer)
+	logMgr.logBuffer = chann.New[cacheEvents]()
 	go logMgr.bgUpdateLog(ctx, errCh)
 
 	testCases := []struct {
@@ -359,6 +361,7 @@ func TestManagerError(t *testing.T) {
 	logMgr, err = NewManager(ctx, cfg, opts)
 	require.Nil(t, err)
 	logMgr.writer = writer.NewInvalidBlackHoleWriter(logMgr.writer)
+	logMgr.logBuffer = chann.New[cacheEvents]()
 	go logMgr.bgUpdateLog(ctx, errCh)
 
 	// bgUpdateLog exists because of writer.FlushLog failure.
@@ -408,4 +411,5 @@ func TestReuseWritter(t *testing.T) {
 		log.Panic("shouldn't get an error", zap.Error(x))
 	case <-time.NewTicker(time.Duration(100) * time.Millisecond).C:
 	}
+	cancels[1]()
 }
