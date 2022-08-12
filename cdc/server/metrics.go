@@ -24,7 +24,7 @@ import (
 	sink "github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sorter"
-	"github.com/pingcap/tiflow/cdc/sorter/leveldb"
+	dbsroter "github.com/pingcap/tiflow/cdc/sorter/db"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
 	"github.com/pingcap/tiflow/pkg/actor"
@@ -58,7 +58,7 @@ func init() {
 	sorter.InitMetrics(registry)
 	memory.InitMetrics(registry)
 	unified.InitMetrics(registry)
-	leveldb.InitMetrics(registry)
+	dbsroter.InitMetrics(registry)
 	redo.InitMetrics(registry)
 	db.InitMetrics(registry)
 	kafka.InitMetrics(registry)

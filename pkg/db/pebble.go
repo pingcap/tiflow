@@ -179,7 +179,7 @@ func (p *pebbleDB) Iterator(lowerBound, upperBound []byte, lowerTs, upperTs uint
 	})}
 }
 
-func (p *pebbleDB) Batch(cap int) Batch {
+func (p *pebbleDB) Batch(_ int) Batch {
 	return pebbleBatch{
 		Batch: p.db.NewBatch(),
 	}
