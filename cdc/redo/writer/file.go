@@ -459,6 +459,8 @@ func (w *Writer) GC(checkPointTs uint64) error {
 	w.gcRunning.Store(true)
 	defer w.gcRunning.Store(false)
 
+	// FIXME: it will also delete other processor's files if the redo
+	// storage is a remote NFS path. Try to only clean itself's files.
 	remove, err := w.getShouldRemovedFiles(checkPointTs)
 	if err != nil {
 		return err

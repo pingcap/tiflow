@@ -36,6 +36,10 @@ func (bs *blackHoleWriter) DeleteAllLogs(ctx context.Context) error {
 	return nil
 }
 
+func (bs *blackHoleWriter) GC(ctx context.Context, checkpointTs model.Ts) error {
+	return nil
+}
+
 // NewBlackHoleWriter creates a blackHole writer
 func NewBlackHoleWriter() *blackHoleWriter {
 	return &blackHoleWriter{
@@ -62,7 +66,7 @@ func (bs *blackHoleWriter) FlushLog(_ context.Context, checkpointTs, resolvedTs 
 	return nil
 }
 
-func (ibs *blackHoleWriter) GetMeta() (checkpointTs, resolvedTs model.Ts) {
+func (bs *blackHoleWriter) GetMeta() (checkpointTs, resolvedTs model.Ts) {
 	return 0, 0
 }
 
