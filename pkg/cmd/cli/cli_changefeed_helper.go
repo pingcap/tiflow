@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/errors"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -44,7 +44,8 @@ func confirmLargeDataGap(cmd *cobra.Command, currentPhysical int64, startTs uint
 			return err
 		}
 		if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
-			return errors.NewNoStackError("abort changefeed create or resume")
+			cmd.Printf("abort changefeed create\n")
+			return cerror.ErrChangefeedCliAborted.FastGen("abort changefeed create or resume")
 		}
 	}
 
@@ -65,7 +66,8 @@ func confirmOverwriteCheckpointTs(
 		return err
 	}
 	if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
-		return errors.NewNoStackError("abort changefeed resume")
+		cmd.Printf("abort changefeed resume\n")
+		return cerror.ErrChangefeedCliAborted.FastGen("abort changefeed resume")
 	}
 
 	return nil
@@ -82,7 +84,7 @@ func confirmIgnoreIneligibleTables(cmd *cobra.Command) (bool, error) {
 	}
 	if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
 		cmd.Printf("No changefeed is created because you don't want to ignore some tables.\n")
-		return false, errors.NewNoStackError("abort changefeed create or resume")
+		return false, cerror.ErrChangefeedCliAborted.FastGen("abort changefeed create or resume")
 	}
 
 	return true, nil

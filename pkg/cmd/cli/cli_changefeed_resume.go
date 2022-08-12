@@ -231,7 +231,11 @@ func newCmdResumeChangefeed(f factory.Factory) *cobra.Command {
 				return err
 			}
 
-			return o.run(cmd)
+			err = o.run(cmd)
+			if cerror.IsCliNotPrintError(err) {
+				return nil
+			}
+			return nil
 		},
 	}
 

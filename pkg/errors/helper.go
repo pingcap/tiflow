@@ -153,3 +153,18 @@ func ToPBError(err error) *pb.Error {
 	pbErr.Message = err.Error()
 	return pbErr
 }
+
+var cliNotPrintError = []*errors.Error{ErrChangefeedCliAborted}
+
+// IsCliNotPrintError returns true if the error should not be printed in cli.
+func IsCliNotPrintError(err error) bool {
+	if err == nil {
+		return false
+	}
+	for _, e := range cliNotPrintError {
+		if strings.Contains(err.Error(), string(e.RFCCode())) {
+			return true
+		}
+	}
+	return false
+}

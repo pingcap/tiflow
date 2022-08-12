@@ -403,7 +403,11 @@ func newCmdCreateChangefeed(f factory.Factory) *cobra.Command {
 				return err
 			}
 
-			return o.run(ctx, cmd)
+			err = o.run(ctx, cmd)
+			if cerror.IsCliNotPrintError(err) {
+				return nil
+			}
+			return err
 		},
 	}
 
