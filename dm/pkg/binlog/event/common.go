@@ -41,7 +41,6 @@ type DDLDMLResult struct {
 //  1. BinLogFileHeader, [ fe `bin` ]
 //  2. FormatDescriptionEvent
 //  3. MariadbGTIDListEvent, depends on genGTID
-//     -. MariadbBinlogCheckPointEvent, not added yet
 func GenCommonFileHeader(flavor string, serverID uint32, gSet gmysql.GTIDSet, genGTID bool, ts int64) ([]*replication.BinlogEvent, []byte, error) {
 	if ts == 0 {
 		ts = time.Now().Unix()

@@ -198,8 +198,7 @@ func (p *pebbleDB) Close() error {
 }
 
 // TODO: Update metrics once we switch to pebble,
-//
-//	as some metrics are not applicable to pebble.
+// as some metrics are not applicable to pebble.
 func (p *pebbleDB) CollectMetrics(i int) {
 	db := p.db
 	stats := db.Metrics()

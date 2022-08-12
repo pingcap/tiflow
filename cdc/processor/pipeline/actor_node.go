@@ -39,8 +39,7 @@ func NewActorNode(
 }
 
 // TryRun get message from parentNode and handle it util there is no more message to come
-//
-//	or message handling is blocking
+// or message handling is blocking
 //
 // only one message will be cached
 func (n *ActorNode) TryRun(ctx context.Context) error {
