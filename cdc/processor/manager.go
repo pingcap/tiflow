@@ -34,7 +34,7 @@ import (
 type commandTp int
 
 const (
-	commandTpUnknow commandTp = iota //nolint:varcheck,deadcode
+	commandTpUnknown commandTp = iota //nolint:varcheck,deadcode
 	commandTpClose
 	commandTpWriteDebugInfo
 	// Query the number of tables in the manager.
@@ -59,6 +59,7 @@ type Manager interface {
 
 // managerImpl is a manager of processor, which maintains the state and behavior of processors
 type managerImpl struct {
+	captureInfo     *model.CaptureInfo
 	liveness        *model.Liveness
 	processors      map[model.ChangeFeedID]*processor
 	commandQueue    chan *command
@@ -76,8 +77,13 @@ type managerImpl struct {
 }
 
 // NewManager creates a new processor manager
-func NewManager(upstreamManager *upstream.Manager, liveness *model.Liveness) Manager {
+func NewManager(
+	captureInfo *model.CaptureInfo,
+	upstreamManager *upstream.Manager,
+	liveness *model.Liveness,
+) Manager {
 	return &managerImpl{
+		captureInfo:                  captureInfo,
 		liveness:                     liveness,
 		processors:                   make(map[model.ChangeFeedID]*processor),
 		commandQueue:                 make(chan *command, 4),
@@ -97,10 +103,9 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 		return state, err
 	}
 
-	captureInfo := ctx.GlobalVars().CaptureInfo
 	var inactiveChangefeedCount int
 	for changefeedID, changefeedState := range globalState.Changefeeds {
-		if !changefeedState.Active(captureInfo.ID) {
+		if !changefeedState.Active(m.captureInfo.ID) {
 			inactiveChangefeedCount++
 			m.closeProcessor(changefeedID)
 			continue
@@ -109,7 +114,7 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 			ID:   changefeedID,
 			Info: changefeedState.Info,
 		})
-		processor, exist := m.processors[changefeedID]
+		p, exist := m.processors[changefeedID]
 		if !exist {
 			up, ok := m.upstreamManager.Get(changefeedState.Info.UpstreamID)
 			if !ok {
@@ -117,10 +122,10 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 				up = m.upstreamManager.AddUpstream(upstreamInfo.ID, upstreamInfo)
 			}
 			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
-			processor = m.newProcessor(changefeedState, captureInfo, changefeedID, up, m.liveness)
-			m.processors[changefeedID] = processor
+			p = m.newProcessor(changefeedState, m.captureInfo, changefeedID, up, m.liveness)
+			m.processors[changefeedID] = p
 		}
-		if err := processor.Tick(ctx); err != nil {
+		if err := p.Tick(ctx); err != nil {
 			m.closeProcessor(changefeedID)
 			if cerrors.ErrReactorFinished.Equal(errors.Cause(err)) {
 				continue

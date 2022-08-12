@@ -110,7 +110,9 @@ type captureImpl struct {
 	migrator migrate.Migrator
 
 	newProcessorManager func(
-		upstreamManager *upstream.Manager, liveness *model.Liveness,
+		captureInfo *model.CaptureInfo,
+		upstreamManager *upstream.Manager,
+		liveness *model.Liveness,
 	) processor.Manager
 	newOwner func(upstreamManager *upstream.Manager) owner.Owner
 }
@@ -201,7 +203,7 @@ func (c *captureImpl) reset(ctx context.Context) error {
 			"add default upstream failed")
 	}
 
-	c.processorManager = c.newProcessorManager(c.upstreamManager, &c.liveness)
+	c.processorManager = c.newProcessorManager(c.info, c.upstreamManager, &c.liveness)
 	if c.session != nil {
 		// It can't be handled even after it fails, so we ignore it.
 		_ = c.session.Close()
