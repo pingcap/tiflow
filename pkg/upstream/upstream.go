@@ -136,6 +136,7 @@ func (up *Upstream) init(ctx context.Context) error {
 	err = version.CheckClusterVersion(ctx, up.PDClient, up.pdEndpoints, up.securityConfig, errorTiKVIncompatible)
 	if err != nil {
 		log.Error("init upstream error", zap.Error(err))
+		return errors.Trace(err)
 	}
 
 	up.KVStorage, err = kv.CreateTiStore(strings.Join(up.pdEndpoints, ","), up.securityConfig)
