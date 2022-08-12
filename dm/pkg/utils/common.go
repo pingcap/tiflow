@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
-	"github.com/pingcap/tidb/util/mock"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	"github.com/pingcap/tidb/util/sqlexec"
 	"go.uber.org/zap"
@@ -353,7 +352,6 @@ var ZeroSessionCtx sessionctx.Context
 
 // NewSessionCtx return a session context with specified session variables.
 func NewSessionCtx(vars map[string]string) sessionctx.Context {
-	mock.NewContext()
 	variables := variable.NewSessionVars()
 	for k, v := range vars {
 		_ = variables.SetSystemVar(k, v)

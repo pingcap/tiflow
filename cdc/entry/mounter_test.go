@@ -15,7 +15,6 @@ package entry
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -239,7 +238,6 @@ func TestMounterDisableOldValue(t *testing.T) {
 		delApproximateBytes: [][]int{{592, 592}},
 	}}
 	for _, tc := range testCases {
-		fmt.Printf("lance test test case: %#v\n", tc)
 		testMounterDisableOldValue(t, tc)
 	}
 }
@@ -322,7 +320,6 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 			// TODO: test column flag, column type and index columns
 			if len(row.Columns) != 0 {
 				checkSQL, params := prepareCheckSQL(t, tc.tableName, row.Columns)
-				fmt.Printf("lance test checkSQL: %s, params: %#v\n", checkSQL, params)
 				result := tk.MustQuery(checkSQL, params...)
 				result.Check([][]interface{}{{"1"}})
 			}

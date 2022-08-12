@@ -2983,6 +2983,7 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 		logger.Error("failed to create parser from SQL Mode, will skip loadTableStructureFromDump",
 			zap.String("SQLMode", s.cfg.LoaderConfig.SQLMode),
 			zap.Error(err))
+		return err
 	}
 
 	for _, dbAndFile := range tableFiles {
