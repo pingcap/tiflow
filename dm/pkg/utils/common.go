@@ -292,8 +292,10 @@ func UnpackTableID(id string) *filter.Table {
 	}
 }
 
-var _ sessionctx.Context = (*session)(nil)
-var _ sqlexec.RestrictedSQLExecutor = (*session)(nil)
+var (
+	_ sessionctx.Context            = (*session)(nil)
+	_ sqlexec.RestrictedSQLExecutor = (*session)(nil)
+)
 
 type session struct {
 	sessionctx.Context
