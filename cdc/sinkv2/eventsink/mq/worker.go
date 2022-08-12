@@ -36,7 +36,7 @@ type mqEvent struct {
 	rowEvent *eventsink.RowChangeCallbackableEvent
 }
 
-// worker will send messages to the Kafka producer on a batch basis.
+// worker will send messages to the DML producer on a batch basis.
 type worker struct {
 	// changeFeedID indicates this sink belongs to which processor(changefeed).
 	changeFeedID model.ChangeFeedID
@@ -75,7 +75,7 @@ func (w *worker) run(ctx context.Context) (retErr error) {
 			zap.String("namespace", w.changeFeedID.Namespace),
 			zap.String("changefeed", w.changeFeedID.ID))
 	}()
-	log.Info("Kafka DML sink worker started", zap.String("namespace", w.changeFeedID.Namespace),
+	log.Info("MQ sink worker started", zap.String("namespace", w.changeFeedID.Namespace),
 		zap.String("changefeed", w.changeFeedID.ID))
 	// Fixed size of the batch.
 	eventsBuf := make([]mqEvent, mqv1.FlushBatchSize)
@@ -99,7 +99,7 @@ func (w *worker) run(ctx context.Context) (retErr error) {
 	}
 }
 
-// batch collects a batch of messages to be sent to the Kafka producer.
+// batch collects a batch of messages to be sent to the DML producer.
 func (w *worker) batch(
 	ctx context.Context, events []mqEvent,
 ) (int, error) {
@@ -112,7 +112,7 @@ func (w *worker) batch(
 		return index, ctx.Err()
 	case msg, ok := <-w.msgChan.Out():
 		if !ok {
-			log.Warn("Kafka DML sink flush worker channel closed")
+			log.Warn("MQ sink flush worker channel closed")
 			return index, nil
 		}
 		if msg.rowEvent != nil {
@@ -129,7 +129,7 @@ func (w *worker) batch(
 			return index, ctx.Err()
 		case msg, ok := <-w.msgChan.Out():
 			if !ok {
-				log.Warn("Kafka DML sink flush worker channel closed")
+				log.Warn("MQ sink flush worker channel closed")
 				return index, nil
 			}
 
@@ -161,7 +161,7 @@ func (w *worker) group(
 	return partitionedRows
 }
 
-// asyncSend is responsible for sending messages to the Kafka producer.
+// asyncSend is responsible for sending messages to the DML producer.
 func (w *worker) asyncSend(
 	ctx context.Context,
 	partitionedRows map[mqv1.TopicPartitionKey][]*eventsink.RowChangeCallbackableEvent,
