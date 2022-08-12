@@ -179,7 +179,7 @@ func (b *Statistics) PrintStatus() {
 	totalDDLCount := atomic.LoadUint64(&b.totalDDLCount)
 	atomic.StoreUint64(&b.totalDDLCount, 0)
 
-	log.Info("sink replication status",
+	log.Info("DML sink replication status",
 		zap.Stringer("sinkType", b.sinkType),
 		zap.String("namespace", b.changefeedID.Namespace),
 		zap.String("changefeed", b.changefeedID.ID),

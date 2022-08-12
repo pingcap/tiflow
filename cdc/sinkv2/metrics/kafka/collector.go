@@ -270,12 +270,14 @@ func (m *Collector) Close() {
 	namespace := m.changefeedID.Namespace
 	changefeedID := m.changefeedID.ID
 	if err := m.adminClient.Close(); err != nil {
-		log.Warn("close kafka cluster admin with error", zap.Error(err),
+		log.Warn("Close kafka cluster admin with error in "+
+			"metric collector", zap.Error(err),
 			zap.Duration("duration", time.Since(start)),
 			zap.String("namespace", namespace),
 			zap.String("changefeed", changefeedID), zap.Any("role", m.role))
 	} else {
-		log.Info("kafka cluster admin closed", zap.Duration("duration", time.Since(start)),
+		log.Info("Kafka cluster admin closed in "+
+			"metric collector", zap.Duration("duration", time.Since(start)),
 			zap.String("namespace", namespace),
 			zap.String("changefeed", changefeedID), zap.Any("role", m.role))
 	}
