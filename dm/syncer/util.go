@@ -14,8 +14,11 @@
 package syncer
 
 import (
+	"context"
 	"crypto/tls"
+	"database/sql"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/replication"
@@ -34,6 +37,12 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
+
+// the time layout for TiDB SHOW DDL statements.
+const timeLayout = "2006-01-02 15:04:05"
+
+// everytime retrieve 10 new rows from TiDB history jobs.
+const linesOfRows = 10
 
 // getTableByDML gets table from INSERT/UPDATE/DELETE statement.
 func getTableByDML(dml ast.DMLNode) (*filter.Table, error) {
@@ -170,4 +179,98 @@ func safeToRedirect(e *replication.BinlogEvent) bool {
 		}
 	}
 	return false
+}
+
+// getDDLStatusFromTiDB retrieves the synchronizing status of DDL from TiDB
+// hence here db should be TiDB database
+// createTime should be based on the timezone of downstream, and its unit is second.
+func getDDLStatusFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTime int64) (string, error) {
+	rowNum := linesOfRows
+	rowOffset := 0
+	queryMap := make(map[int]string)
+
+	for {
+		// every attempt try 10 history jobs
+		showJobs := fmt.Sprintf("ADMIN SHOW DDL JOBS %d", rowNum)
+		jobsRows, err := db.QueryContext(ctx, showJobs)
+		if err != nil {
+			return "", err
+		}
+
+		var jobsResults [][]string
+		jobsResults, err = export.GetSpecifiedColumnValuesAndClose(jobsRows, "JOB_ID", "CREATE_TIME", "STATE")
+		if err != nil {
+			return "", err
+		}
+
+		for i := rowNum - linesOfRows; i < rowNum && i < len(jobsResults); i++ {
+			ddlCreateTimeStr := jobsResults[i][1]
+			var ddlCreateTimeParse time.Time
+			ddlCreateTimeParse, err = time.Parse(timeLayout, ddlCreateTimeStr)
+			if err != nil {
+				return "", err
+			}
+			ddlCreateTime := ddlCreateTimeParse.Unix()
+
+			// ddlCreateTime and createTime are both based on timezone of downstream
+			if ddlCreateTime >= createTime {
+				var jobID int
+				jobID, err = strconv.Atoi(jobsResults[i][0])
+				if err != nil {
+					return "", err
+				}
+
+				for {
+					ddlQuery, ok := queryMap[jobID]
+					if !ok {
+						// jobID does not exist, expand queryMap for deeper search
+						showJobsLimitNext := fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET %d", rowOffset)
+						var rowsLimitNext *sql.Rows
+						rowsLimitNext, err = db.QueryContext(ctx, showJobsLimitNext)
+						if err != nil {
+							return "", err
+						}
+
+						var resultsLimitNext [][]string
+						resultsLimitNext, err = export.GetSpecifiedColumnValuesAndClose(rowsLimitNext, "JOB_ID", "QUERY")
+						if err != nil {
+							return "", err
+						}
+						if len(resultsLimitNext) == 0 {
+							// JOB QUERIES has been used up
+							// requested DDL cannot be found
+							return "", nil
+						}
+
+						// if new DDLs are written to TiDB after the last query 'ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET'
+						// we may get duplicate rows here, but it does not affect the checking
+						for k := range resultsLimitNext {
+							var jobIDForLimit int
+							jobIDForLimit, err = strconv.Atoi(resultsLimitNext[k][0])
+							if err != nil {
+								return "", err
+							}
+							queryMap[jobIDForLimit] = resultsLimitNext[k][1]
+						}
+						rowOffset += linesOfRows
+					} else {
+						if ddl == ddlQuery {
+							return jobsResults[i][2], nil
+						}
+						break
+					}
+				}
+			} else {
+				// ddlCreateTime is monotonous in jobsResults
+				// requested DDL cannot be found
+				return "", nil
+			}
+		}
+		if len(jobsResults) == rowNum {
+			rowNum += linesOfRows
+		} else {
+			// jobsResults has been checked thoroughly
+			return "", nil
+		}
+	}
 }
