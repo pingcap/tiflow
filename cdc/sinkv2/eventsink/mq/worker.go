@@ -36,7 +36,7 @@ type mqEvent struct {
 	rowEvent *eventsink.RowChangeCallbackableEvent
 }
 
-// worker will send messages to the Kafka producer on a batch basis.
+// worker will send messages to the DML producer on a batch basis.
 type worker struct {
 	// changeFeedID indicates this sink belongs to which processor(changefeed).
 	changeFeedID model.ChangeFeedID
@@ -71,7 +71,7 @@ func newWorker(id model.ChangeFeedID, encoder codec.EventBatchEncoder,
 func (w *worker) run(ctx context.Context) (retErr error) {
 	defer func() {
 		w.ticker.Stop()
-		log.Info("flushWorker exited", zap.Error(retErr),
+		log.Info("FlushWorker exited", zap.Error(retErr),
 			zap.String("namespace", w.changeFeedID.Namespace),
 			zap.String("changefeed", w.changeFeedID.ID))
 	}()
@@ -99,7 +99,7 @@ func (w *worker) run(ctx context.Context) (retErr error) {
 	}
 }
 
-// batch collects a batch of messages to be sent to the Kafka producer.
+// batch collects a batch of messages to be sent to the DML producer.
 func (w *worker) batch(
 	ctx context.Context, events []mqEvent,
 ) (int, error) {
@@ -161,7 +161,7 @@ func (w *worker) group(
 	return partitionedRows
 }
 
-// asyncSend is responsible for sending messages to the Kafka producer.
+// asyncSend is responsible for sending messages to the DML producer.
 func (w *worker) asyncSend(
 	ctx context.Context,
 	partitionedRows map[mqv1.TopicPartitionKey][]*eventsink.RowChangeCallbackableEvent,
@@ -171,7 +171,7 @@ func (w *worker) asyncSend(
 			// Skip this event when the table is stopping.
 			if event.GetTableSinkState() == state.TableSinkStopping {
 				event.Callback()
-				log.Debug("skip event of stopped table", zap.Any("event", event))
+				log.Debug("Skip event of stopped table", zap.Any("event", event))
 				continue
 			}
 			err := w.encoder.AppendRowChangedEvent(ctx, key.Topic, event.Event, event.Callback)
@@ -188,7 +188,6 @@ func (w *worker) asyncSend(
 			}
 			thisBatchSize += message.GetRowsCount()
 		}
-		log.Debug("MQSink flush worker flushed", zap.Int("thisBatchSize", thisBatchSize))
 	}
 
 	return nil
