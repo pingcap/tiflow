@@ -15,6 +15,7 @@ package workerpoolv2
 
 import (
 	"context"
+	"github.com/pingcap/tiflow/pkg/workerpoolv2/internal"
 	"time"
 )
 
@@ -45,4 +46,6 @@ type EventHandle[T any] interface {
 	// ErrCh returns a channel that outputs the first non-nil error of events submitted to this EventHandle.
 	// Note that a non-nil result of an event cancels the EventHandle, so there is at most one error.
 	ErrCh() <-chan error
+
+	internal.Poller
 }
