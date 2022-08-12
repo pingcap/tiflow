@@ -75,7 +75,7 @@ func (o *queryChangefeedOptions) complete(f factory.Factory) error {
 	if err != nil {
 		return err
 	}
-	o.apiClient, err = apiv1client.NewAPIClient(owner.AdvertiseAddr, nil)
+	o.apiClient, err = apiv1client.NewAPIClient(owner.AdvertiseAddr, o.credential)
 	if err != nil {
 		return err
 	}
