@@ -97,10 +97,10 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 		return state, err
 	}
 
-	captureID := ctx.GlobalVars().CaptureInfo.ID
+	captureInfo := ctx.GlobalVars().CaptureInfo
 	var inactiveChangefeedCount int
 	for changefeedID, changefeedState := range globalState.Changefeeds {
-		if !changefeedState.Active(captureID) {
+		if !changefeedState.Active(captureInfo.ID) {
 			inactiveChangefeedCount++
 			m.closeProcessor(changefeedID)
 			continue
@@ -117,10 +117,10 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 				up = m.upstreamManager.AddUpstream(upstreamInfo.ID, upstreamInfo)
 			}
 			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
-			processor = m.newProcessor(changefeedState, ctx.GlobalVars().CaptureInfo, changefeedID, up, m.liveness)
+			processor = m.newProcessor(changefeedState, captureInfo, changefeedID, up, m.liveness)
 			m.processors[changefeedID] = processor
 		}
-		if _, err := processor.Tick(ctx, changefeedState); err != nil {
+		if err := processor.Tick(ctx); err != nil {
 			m.closeProcessor(changefeedID)
 			if cerrors.ErrReactorFinished.Equal(errors.Cause(err)) {
 				continue
