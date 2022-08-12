@@ -29,21 +29,10 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/pkg/fsutil"
-	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/pingcap/tiflow/pkg/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/atomic"
 )
-
-func TestMain(m *testing.M) {
-	originValue := defaultGCIntervalInMs
-	defaultGCIntervalInMs = 1
-	defer func() {
-		defaultGCIntervalInMs = originValue
-	}()
-
-	leakutil.SetUpLeakTest(m)
-}
 
 func TestWriterWrite(t *testing.T) {
 	dir, err := ioutil.TempDir("", "redo-writer")

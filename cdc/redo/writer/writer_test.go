@@ -479,68 +479,6 @@ func TestNewLogWriter(t *testing.T) {
 	require.Nil(t, err)
 }
 
-<<<<<<< HEAD
-func TestWriterRedoGC(t *testing.T) {
-	cfg := &LogWriterConfig{
-		Dir:               "dir",
-		ChangeFeedID:      model.DefaultChangeFeedID("test-cf"),
-		CaptureID:         "cp",
-		MaxLogSize:        10,
-		CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
-		FlushIntervalInMs: 5,
-	}
-
-	type args struct {
-		isRunning bool
-	}
-	tests := []struct {
-		name string
-		args args
-	}{
-		{
-			name: "running",
-			args: args{
-				isRunning: true,
-			},
-		},
-		{
-			name: "stopped",
-			args: args{
-				isRunning: false,
-			},
-		},
-	}
-	for _, tt := range tests {
-		mockWriter := &mockFileWriter{}
-		mockWriter.On("IsRunning").Return(tt.args.isRunning).Twice()
-		mockWriter.On("Close").Return(nil)
-		mockWriter.On("IsRunning").Return(false)
-
-		if tt.args.isRunning {
-			mockWriter.On("GC", mock.Anything).Return(nil)
-		}
-		writer := LogWriter{
-			rowWriter: mockWriter,
-			ddlWriter: mockWriter,
-			meta:      &common.LogMeta{},
-			cfg:       cfg,
-		}
-		go writer.runGC(context.Background())
-		time.Sleep(time.Duration(defaultGCIntervalInMs+1) * time.Millisecond)
-
-		writer.Close()
-		mockWriter.AssertNumberOfCalls(t, "Close", 2)
-
-		if tt.args.isRunning {
-			mockWriter.AssertCalled(t, "GC", mock.Anything)
-		} else {
-			mockWriter.AssertNotCalled(t, "GC", mock.Anything)
-		}
-	}
-}
-
-=======
->>>>>>> fa7cd9aa4 (redo(ticdc): owner and processores shouldn't share one redo log writer (#6671))
 func TestDeleteAllLogs(t *testing.T) {
 	fileName := "1"
 	fileName1 := "11"
