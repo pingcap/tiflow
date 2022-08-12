@@ -164,9 +164,9 @@ func (m *streamModifier) Delete(posStr string) error {
 
 // ListEqualAndAfter returns a JSON string of operators equals and after the given
 // position.
-// - if argument is "", it returns all operators.
-// - Otherwise caller should make sure the argument in format of "binlog-file:pos"
-//   and it returns all operators >= this position.
+//   - if argument is "", it returns all operators.
+//   - Otherwise caller should make sure the argument in format of "binlog-file:pos"
+//     and it returns all operators >= this position.
 func (m *streamModifier) ListEqualAndAfter(posStr string) []*pb.HandleWorkerErrorRequest {
 	var matchedOps []*operator
 	if posStr == "" {

@@ -49,6 +49,7 @@ var getAllServerIDFunc = utils.GetAllServerID
 // SampleSourceConfig is sample config file of source.
 // The embed source.yaml is a copy of dm/master/source.yaml, because embed
 // can only match regular files in the current directory and subdirectories.
+//
 //go:embed source.yaml
 var SampleSourceConfig string
 
