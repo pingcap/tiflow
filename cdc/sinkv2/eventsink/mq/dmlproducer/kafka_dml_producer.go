@@ -83,12 +83,14 @@ func NewKafkaDMLProducer(
 		// so close it asynchronously.
 		go func() {
 			if err := client.Close(); err != nil {
-				log.Error("Close sarama client with error in DML producer", zap.Error(err),
+				log.Error("Close sarama client with error in kafka "+
+					"DML producer", zap.Error(err),
 					zap.String("namespace", changefeedID.Namespace),
 					zap.String("changefeed", changefeedID.ID))
 			}
 			if err := adminClient.Close(); err != nil {
-				log.Error("Close kafka admin client with error in DML producer", zap.Error(err),
+				log.Error("Close kafka admin client with error in kafka "+
+					"DML producer", zap.Error(err),
 					zap.String("namespace", changefeedID.Namespace),
 					zap.String("changefeed", changefeedID.ID))
 			}
