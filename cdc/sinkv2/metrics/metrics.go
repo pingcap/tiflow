@@ -14,6 +14,7 @@
 package metrics
 
 import (
+	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -28,7 +29,7 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "txn_conflict_detect_duration",
-			Help:      "Bucketed histogram of conflict detect time (s) for single DML statement",
+			Help:      "Bucketed histogram of conflict detect time (s) for single DML statement.",
 			Buckets:   prometheus.ExponentialBuckets(0.001 /* 1 ms */, 2, 20),
 		})
 
@@ -38,7 +39,7 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "txn_batch_size",
-			Help:      "size of the DML transaction batch",
+			Help:      "Size of the DML transaction batch.",
 		})
 
 	// ExecBatchHistogram records batch size of a txn.
@@ -69,7 +70,7 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "large_row_changed_event_size",
-			Help:      "The size of all received row changed events (in bytes)",
+			Help:      "The size of all received row changed events (in bytes).",
 			Buckets:   prometheus.ExponentialBuckets(rowSizeLowBound, 2, 10),
 		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
 
@@ -89,7 +90,7 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "execution_error",
-			Help:      "total count of execution errors",
+			Help:      "Total count of execution errors.",
 		}, []string{"namespace", "changefeed"})
 
 	// TotalRowsCountGauge is the total number of rows that are processed by sink.
@@ -98,7 +99,7 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "total_rows_count",
-			Help:      "The total count of rows that are processed by sink",
+			Help:      "The total count of rows that are processed by sink.",
 		}, []string{"namespace", "changefeed"})
 
 	// TotalFlushedRowsCountGauge is the total count of rows that are flushed to sink.
@@ -107,7 +108,7 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "total_flushed_rows_count",
-			Help:      "The total count of rows that are flushed by sink",
+			Help:      "The total count of rows that are flushed by sink.",
 		}, []string{"namespace", "changefeed"})
 
 	// TableSinkTotalRowsCountCounter is the total count of rows that are processed by sink.
@@ -116,7 +117,7 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "table_sink_total_rows_count",
-			Help:      "The total count of rows that are processed by table sink",
+			Help:      "The total count of rows that are processed by table sink.",
 		}, []string{"namespace", "changefeed"})
 )
 
@@ -133,4 +134,7 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(TotalRowsCountGauge)
 	registry.MustRegister(TotalFlushedRowsCountGauge)
 	registry.MustRegister(TableSinkTotalRowsCountCounter)
+
+	// Register Kafka producer and broker metrics.
+	kafka.InitMetrics(registry)
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -30,60 +31,42 @@ const (
 	flushMetricsInterval = 5 * time.Second
 )
 
-type sinkType int
-
-const (
-	// SinkTypeDB is the type of sink for database.
-	SinkTypeDB sinkType = iota
-	// SinkTypeMQ is the type of sink for message queue.
-	SinkTypeMQ
-)
-
-func (t sinkType) String() string {
-	switch t {
-	case SinkTypeDB:
-		return "DB"
-	case SinkTypeMQ:
-		return "MQ"
-	}
-	return "unknown"
-}
-
 // NewStatistics creates a statistics
-func NewStatistics(ctx context.Context, captureAddr string, t sinkType) *Statistics {
+func NewStatistics(ctx context.Context, captureAddr string, sinkType sink.Type) *Statistics {
 	statistics := &Statistics{
-		sinkType:     t,
+		sinkType:     sinkType,
 		captureAddr:  captureAddr,
 		changefeedID: contextutil.ChangefeedIDFromCtx(ctx),
 	}
 	statistics.lastPrintStatusTime.Store(time.Now())
 
-	s := t.String()
+	namespcae := statistics.changefeedID.Namespace
+	changefeedID := statistics.changefeedID.ID
+	s := sinkType.String()
 	statistics.metricExecTxnHis = ExecTxnHistogram.
-		WithLabelValues(statistics.changefeedID.Namespace, statistics.changefeedID.ID, s)
+		WithLabelValues(namespcae, changefeedID, s)
 	statistics.metricExecBatchHis = ExecBatchHistogram.
-		WithLabelValues(statistics.changefeedID.Namespace, statistics.changefeedID.ID, s)
+		WithLabelValues(namespcae, changefeedID, s)
 	statistics.metricRowSizesHis = LargeRowSizeHistogram.
-		WithLabelValues(statistics.changefeedID.Namespace, statistics.changefeedID.ID, s)
+		WithLabelValues(namespcae, changefeedID, s)
 	statistics.metricExecDDLHis = ExecDDLHistogram.
-		WithLabelValues(statistics.changefeedID.Namespace, statistics.changefeedID.ID, s)
+		WithLabelValues(namespcae, changefeedID, s)
 	statistics.metricExecErrCnt = ExecutionErrorCounter.
-		WithLabelValues(statistics.changefeedID.Namespace, statistics.changefeedID.ID)
+		WithLabelValues(namespcae, changefeedID)
 
 	// Flush metrics in background for better accuracy and efficiency.
-	changefeedID := statistics.changefeedID
 	ticker := time.NewTicker(flushMetricsInterval)
 	go func() {
 		defer ticker.Stop()
 		metricTotalRows := TotalRowsCountGauge.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID)
+			WithLabelValues(namespcae, changefeedID)
 		metricTotalFlushedRows := TotalFlushedRowsCountGauge.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID)
+			WithLabelValues(namespcae, changefeedID)
 		defer func() {
 			TotalRowsCountGauge.
-				DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
+				DeleteLabelValues(namespcae, changefeedID)
 			TotalFlushedRowsCountGauge.
-				DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
+				DeleteLabelValues(namespcae, changefeedID)
 		}()
 		for {
 			select {
@@ -102,7 +85,7 @@ func NewStatistics(ctx context.Context, captureAddr string, t sinkType) *Statist
 // Statistics maintains some status and metrics of the Sink
 // Note: All methods of Statistics should be thread-safe.
 type Statistics struct {
-	sinkType         sinkType
+	sinkType         sink.Type
 	captureAddr      string
 	changefeedID     model.ChangeFeedID
 	totalRows        uint64
@@ -125,6 +108,16 @@ func (b *Statistics) AddRowsCount(count int) {
 	atomic.AddUint64(&b.totalRows, uint64(count))
 }
 
+// SubRowsCount records total number of rows needs to flush
+func (b *Statistics) SubRowsCount(count int) {
+	atomic.AddUint64(&b.totalRows, ^uint64(count-1))
+}
+
+// TotalRowsCount returns total number of rows
+func (b *Statistics) TotalRowsCount() uint64 {
+	return atomic.LoadUint64(&b.totalRows)
+}
+
 // ObserveRows record the size of all received `RowChangedEvent`
 func (b *Statistics) ObserveRows(rows ...*model.RowChangedEvent) {
 	for _, row := range rows {
@@ -134,16 +127,6 @@ func (b *Statistics) ObserveRows(rows ...*model.RowChangedEvent) {
 			b.metricRowSizesHis.Observe(float64(row.ApproximateDataSize))
 		}
 	}
-}
-
-// SubRowsCount records total number of rows needs to flush
-func (b *Statistics) SubRowsCount(count int) {
-	atomic.AddUint64(&b.totalRows, ^uint64(count-1))
-}
-
-// TotalRowsCount returns total number of rows
-func (b *Statistics) TotalRowsCount() uint64 {
-	return atomic.LoadUint64(&b.totalRows)
 }
 
 // AddDDLCount records total number of ddl needs to flush
@@ -176,12 +159,13 @@ func (b *Statistics) RecordDDLExecution(executor func() error) error {
 	return nil
 }
 
-// PrintStatus prints the status of the Sink
-func (b *Statistics) PrintStatus(ctx context.Context) {
+// PrintStatus prints the status of the Sink.
+func (b *Statistics) PrintStatus() {
 	since := time.Since(b.lastPrintStatusTime.Load().(time.Time))
 	if since < printStatusInterval {
 		return
 	}
+
 	totalRows := atomic.LoadUint64(&b.totalRows)
 	count := totalRows - atomic.LoadUint64(&b.lastPrintStatusTotalRows)
 	seconds := since.Seconds()
