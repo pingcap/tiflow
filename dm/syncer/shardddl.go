@@ -186,7 +186,10 @@ func (ddl *ShardDDL) HandleQueryEvent(ev *replication.QueryEvent, ec eventContex
 
 	if qec.shardingReSync != nil {
 		qec.shardingReSync.currLocation = *qec.currentLocation
-		if binlog.CompareLocation(qec.shardingReSync.currLocation, qec.shardingReSync.latestLocation, ddl.s.cfg.EnableGTID) >= 0 {
+		// TODO: refactor this, see https://github.com/pingcap/tiflow/issues/6691
+		// for optimistic ddl, we can resync idemponent ddl.
+		cmp := binlog.CompareLocation(qec.shardingReSync.currLocation, qec.shardingReSync.latestLocation, ddl.s.cfg.EnableGTID)
+		if cmp > 0 || (cmp == 0 && ddl.s.cfg.ShardMode != config.ShardOptimistic) {
 			ddl.logger.Info("re-replicate shard group was completed", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
 			return qec.closeShardingResync()
 		} else if ddl.s.cfg.ShardMode != config.ShardOptimistic {
