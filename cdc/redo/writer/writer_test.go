@@ -18,7 +18,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -26,6 +25,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/multierr"
+	"go.uber.org/zap"
 )
 
 func TestLogWriterWriteLog(t *testing.T) {
@@ -125,6 +126,11 @@ func TestLogWriterWriteLog(t *testing.T) {
 		mockWriter.On("IsRunning").Return(tt.isRunning)
 		mockWriter.On("AdvanceTs", mock.Anything)
 		writer := LogWriter{
+			cfg: &LogWriterConfig{
+				EmitMeta:      true,
+				EmitRowEvents: true,
+				EmitDDLEvents: true,
+			},
 			rowWriter: mockWriter,
 			ddlWriter: mockWriter,
 			meta:      &common.LogMeta{},
@@ -139,6 +145,8 @@ func TestLogWriterWriteLog(t *testing.T) {
 
 		err := writer.WriteLog(tt.args.ctx, tt.args.tableID, tt.args.rows)
 		if tt.wantErr != nil {
+			log.Info("want error", zap.Error(tt.wantErr))
+			log.Info("got error", zap.Error(err))
 			require.Truef(t, errors.ErrorEqual(tt.wantErr, err), tt.name)
 		} else {
 			require.Nil(t, err, tt.name)
@@ -221,6 +229,10 @@ func TestLogWriterSendDDL(t *testing.T) {
 		mockWriter.On("IsRunning").Return(tt.isRunning)
 		mockWriter.On("AdvanceTs", mock.Anything)
 		writer := LogWriter{
+			cfg: &LogWriterConfig{
+				EmitRowEvents: true,
+				EmitDDLEvents: true,
+			},
 			rowWriter: mockWriter,
 			ddlWriter: mockWriter,
 			meta:      &common.LogMeta{},
@@ -321,12 +333,16 @@ func TestLogWriterFlushLog(t *testing.T) {
 			CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 			FlushIntervalInMs: 5,
 			S3Storage:         true,
+
+			EmitMeta:      true,
+			EmitRowEvents: true,
+			EmitDDLEvents: true,
 		}
 		writer := LogWriter{
+			cfg:       cfg,
 			rowWriter: mockWriter,
 			ddlWriter: mockWriter,
 			meta:      &common.LogMeta{},
-			cfg:       cfg,
 			storage:   mockStorage,
 		}
 
@@ -352,6 +368,10 @@ func TestLogWriterRegress(t *testing.T) {
 		ChangeFeedID: model.DefaultChangeFeedID("test-log-writer-regress"),
 		CaptureID:    "cp",
 		S3Storage:    false,
+
+		EmitMeta:      true,
+		EmitRowEvents: true,
+		EmitDDLEvents: true,
 	})
 	require.Nil(t, err)
 	require.Nil(t, writer.FlushLog(context.Background(), 2, 4))
@@ -374,17 +394,16 @@ func TestNewLogWriter(t *testing.T) {
 		MaxLogSize:        10,
 		CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 		FlushIntervalInMs: 5,
+
+		EmitMeta:      true,
+		EmitRowEvents: true,
+		EmitDDLEvents: true,
 	}
 	uuidGen := uuid.NewConstGenerator("const-uuid")
 	ll, err := NewLogWriter(ctx, cfg,
 		WithUUIDGenerator(func() uuid.Generator { return uuidGen }),
 	)
 	require.Nil(t, err)
-	time.Sleep(time.Duration(defaultGCIntervalInMs+1) * time.Millisecond)
-
-	ll2, err := NewLogWriter(ctx, cfg)
-	require.Nil(t, err)
-	require.Same(t, ll, ll2)
 
 	cfg1 := &LogWriterConfig{
 		Dir:               "dirt111",
@@ -398,10 +417,6 @@ func TestNewLogWriter(t *testing.T) {
 	require.Nil(t, err)
 	require.NotSame(t, ll, ll1)
 
-	ll2, err = NewLogWriter(ctx, cfg)
-	require.Nil(t, err)
-	require.NotSame(t, ll, ll2)
-
 	dir := t.TempDir()
 	cfg = &LogWriterConfig{
 		Dir:               dir,
@@ -410,6 +425,10 @@ func TestNewLogWriter(t *testing.T) {
 		MaxLogSize:        10,
 		CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 		FlushIntervalInMs: 5,
+
+		EmitMeta:      true,
+		EmitRowEvents: true,
+		EmitDDLEvents: true,
 	}
 	l, err := NewLogWriter(ctx, cfg)
 	require.Nil(t, err)
@@ -419,10 +438,7 @@ func TestNewLogWriter(t *testing.T) {
 	f, err := os.Create(path)
 	require.Nil(t, err)
 
-	meta := &common.LogMeta{
-		CheckpointTs: 11,
-		ResolvedTs:   22,
-	}
+	meta := &common.LogMeta{CheckpointTs: 11, ResolvedTs: 22}
 	data, err := meta.MarshalMsg(nil)
 	require.Nil(t, err)
 	_, err = f.Write(data)
@@ -436,7 +452,6 @@ func TestNewLogWriter(t *testing.T) {
 	require.Equal(t, cfg.Dir, l.cfg.Dir)
 	require.Equal(t, meta.CheckpointTs, l.meta.CheckpointTs)
 	require.Equal(t, meta.ResolvedTs, l.meta.ResolvedTs)
-	time.Sleep(time.Millisecond * time.Duration(float64(defaultGCIntervalInMs)))
 
 	origin := common.InitS3storage
 	defer func() {
@@ -464,6 +479,7 @@ func TestNewLogWriter(t *testing.T) {
 	require.Nil(t, err)
 }
 
+<<<<<<< HEAD
 func TestWriterRedoGC(t *testing.T) {
 	cfg := &LogWriterConfig{
 		Dir:               "dir",
@@ -523,6 +539,8 @@ func TestWriterRedoGC(t *testing.T) {
 	}
 }
 
+=======
+>>>>>>> fa7cd9aa4 (redo(ticdc): owner and processores shouldn't share one redo log writer (#6671))
 func TestDeleteAllLogs(t *testing.T) {
 	fileName := "1"
 	fileName1 := "11"
@@ -608,6 +626,10 @@ func TestDeleteAllLogs(t *testing.T) {
 			CreateTime:        time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
 			FlushIntervalInMs: 5,
 			S3Storage:         tt.args.enableS3,
+
+			EmitMeta:      true,
+			EmitRowEvents: true,
+			EmitDDLEvents: true,
 		}
 		writer := LogWriter{
 			rowWriter: mockWriter,
@@ -616,16 +638,11 @@ func TestDeleteAllLogs(t *testing.T) {
 			cfg:       cfg,
 			storage:   mockStorage,
 		}
-		if strings.Contains(tt.name, "happy") {
-			logWriters[writer.cfg.ChangeFeedID] = &writer
-		}
 		ret := writer.DeleteAllLogs(context.Background())
 		if tt.wantErr != "" {
 			require.Regexp(t, tt.wantErr, ret.Error(), tt.name)
 		} else {
 			require.Nil(t, ret, tt.name)
-			_, ok := logWriters[writer.cfg.ChangeFeedID]
-			require.False(t, ok, tt.name)
 			if !tt.args.enableS3 {
 				_, err := os.Stat(dir)
 				require.True(t, os.IsNotExist(err), tt.name)
