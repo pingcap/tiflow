@@ -84,6 +84,7 @@ func TestWithUpstreamConfig(t *testing.T) {
 	defer cancel()
 	upManager := upstream.NewManager(ctx, "abc")
 	upManager.AddUpstream(&model.UpstreamInfo{
+		ID:          uint64(1),
 		PDEndpoints: "http://127.0.0.1:22379",
 	})
 	cpCtrl := gomock.NewController(t)

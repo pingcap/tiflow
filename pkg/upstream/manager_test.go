@@ -172,11 +172,11 @@ func TestRemoveThenAddAgain(t *testing.T) {
 	) error {
 		return nil
 	}
-	up := m.AddUpstream(&model.UpstreamInfo{})
+	up := m.AddUpstream(&model.UpstreamInfo{ID: uint64(3)})
 	require.NotNil(t, up)
 	// test Tick
 	_ = m.Tick(context.Background(), &orchestrator.GlobalReactorState{})
 	require.False(t, up.idleTime.IsZero())
-	_ = m.AddUpstream(&model.UpstreamInfo{})
+	_ = m.AddUpstream(&model.UpstreamInfo{ID: uint64(3)})
 	require.True(t, up.idleTime.IsZero())
 }
