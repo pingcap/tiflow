@@ -570,7 +570,16 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 
 	p.doGCSchemaStorage(ctx)
 
+<<<<<<< HEAD
 	if err := p.agent.Tick(ctx, p.liveness.Load()); err != nil {
+=======
+	if p.redoManager != nil && p.redoManager.Enabled() {
+		ckpt := p.changefeed.Status.CheckpointTs
+		p.redoManager.UpdateCheckpointTs(ckpt)
+	}
+
+	if err := p.agent.Tick(ctx); err != nil {
+>>>>>>> fa7cd9aa4 (redo(ticdc): owner and processores shouldn't share one redo log writer (#6671))
 		return errors.Trace(err)
 	}
 	return nil
@@ -680,11 +689,14 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	log.Info("processor try new sink success",
 		zap.Duration("duration", time.Since(start)))
 
-	redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: true, ErrCh: errCh}
+	redoManagerOpts := redo.NewProcessorManagerOptions(errCh)
 	p.redoManager, err = redo.NewManager(stdCtx, p.changefeed.Info.Config.Consistent, redoManagerOpts)
 	if err != nil {
 		return err
 	}
+	log.Info("processor creates redo manager",
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeedID.ID))
 
 	p.agent, err = p.newAgent(ctx)
 	if err != nil {
