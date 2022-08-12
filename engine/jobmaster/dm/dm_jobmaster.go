@@ -200,7 +200,7 @@ func (jm *JobMaster) onWorkerFinished(finishedTaskStatus runtime.FinishedTaskSta
 	jm.finishedStatus.Store(taskStatus.Task, finishedTaskStatus)
 	jm.taskManager.UpdateTaskStatus(taskStatus)
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus(taskStatus.Task, taskStatus.Unit, worker.ID(), runtime.WorkerFinished, taskStatus.CfgModRevision))
-	if err := jm.messageAgent.UpdateClient(taskStatus.Task, nil); err != nil {
+	if err := jm.messageAgent.RemoveClient(taskStatus.Task); err != nil {
 		return err
 	}
 	jm.workerManager.SetNextCheckTime(time.Now())

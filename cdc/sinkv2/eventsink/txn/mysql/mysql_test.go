@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -79,7 +80,7 @@ func newMySQLSink4Test(ctx context.Context, t *testing.T) *mysqlSink {
 	params.batchReplaceEnabled = false
 	ctx, cancel := context.WithCancel(ctx)
 	return &mysqlSink{
-		statistics: metrics.NewStatistics(ctx, metrics.SinkTypeDB),
+		statistics: metrics.NewStatistics(ctx, sink.TxnSink),
 		params:     params,
 		cancel:     cancel,
 	}

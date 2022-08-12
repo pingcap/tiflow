@@ -104,8 +104,8 @@ func (w *worker) doFlush() (shouldExit bool) {
 		case w.errCh <- err:
 		case <-ctx.Done():
 		}
-        shouldExit = true
-        return
+		shouldExit = true
+		return
 	}
 	if !w.timer.Stop() {
 		<-w.timer.C

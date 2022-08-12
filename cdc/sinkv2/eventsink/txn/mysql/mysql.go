@@ -38,6 +38,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/sink"
 )
 
 const (
@@ -99,7 +100,7 @@ func NewMySQLSink(
 		db:           db,
 		params:       params,
 		options:      opts[0],
-		statistics:   metrics.NewStatistics(ctx, metrics.SinkTypeDB),
+		statistics:   metrics.NewStatistics(ctx, sink.TxnSink),
 		cancel:       cancel,
 	}
 

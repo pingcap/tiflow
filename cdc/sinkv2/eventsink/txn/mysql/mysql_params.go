@@ -329,11 +329,13 @@ func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultVal
 	return "", nil
 }
 
+// SinkOptions includes some options for transaction backends.
 type SinkOptions struct {
 	forceReplicate bool
 	enableOldValue bool
 }
 
+// SinkOptionsFromReplicaConfig creates a SinkOptions from a ReplicaConfig.
 func SinkOptionsFromReplicaConfig(config *config.ReplicaConfig) SinkOptions {
 	return SinkOptions{
 		forceReplicate: config.ForceReplicate,
@@ -341,6 +343,7 @@ func SinkOptionsFromReplicaConfig(config *config.ReplicaConfig) SinkOptions {
 	}
 }
 
+// SinkOptionsDefault creates a default SinkOptions.
 func SinkOptionsDefault() SinkOptions {
 	return SinkOptionsFromReplicaConfig(config.GetDefaultReplicaConfig())
 }

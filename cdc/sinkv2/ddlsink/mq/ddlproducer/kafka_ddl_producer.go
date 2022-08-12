@@ -24,7 +24,10 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
+	collector "github.com/pingcap/tiflow/cdc/sinkv2/metrics/kafka"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	pkafka "github.com/pingcap/tiflow/pkg/kafka"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -38,6 +41,8 @@ type kafkaDDLProducer struct {
 	// We hold the client to make close operation faster.
 	// Please see the comment of Close().
 	client sarama.Client
+	// collector is used to report metrics.
+	collector *collector.Collector
 	// asyncProducer is used to send messages to kafka synchronously.
 	syncProducer sarama.SyncProducer
 	// closedMu is used to protect `closed`.
@@ -49,7 +54,9 @@ type kafkaDDLProducer struct {
 }
 
 // NewKafkaDDLProducer creates a new kafka producer for replicating DDL.
-func NewKafkaDDLProducer(ctx context.Context, client sarama.Client) (DDLProducer, error) {
+func NewKafkaDDLProducer(ctx context.Context, client sarama.Client,
+	adminClient pkafka.ClusterAdminClient,
+) (DDLProducer, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
 	syncProducer, err := sarama.NewSyncProducerFromClient(client)
@@ -64,16 +71,29 @@ func NewKafkaDDLProducer(ctx context.Context, client sarama.Client) (DDLProducer
 					zap.String("namespace", changefeedID.Namespace),
 					zap.String("changefeed", changefeedID.ID))
 			}
+			if err := adminClient.Close(); err != nil {
+				log.Error("Close kafka admin client with error", zap.Error(err),
+					zap.String("namespace", changefeedID.Namespace),
+					zap.String("changefeed", changefeedID.ID))
+			}
 		}()
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
+	collector := collector.New(changefeedID, util.RoleOwner,
+		adminClient, client.Config().MetricRegistry)
 
-	return &kafkaDDLProducer{
+	p := &kafkaDDLProducer{
 		id:           changefeedID,
 		client:       client,
+		collector:    collector,
 		syncProducer: syncProducer,
 		closed:       false,
-	}, nil
+	}
+
+	// Start collecting metrics.
+	go p.collector.Run(ctx)
+
+	return p, nil
 }
 
 func (k *kafkaDDLProducer) SyncBroadcastMessage(ctx context.Context, topic string,
@@ -178,5 +198,8 @@ func (k *kafkaDDLProducer) Close() {
 				zap.String("namespace", k.id.Namespace),
 				zap.String("changefeed", k.id.ID))
 		}
+
+		// Finally, close the metric collector.
+		k.collector.Close()
 	}()
 }
