@@ -186,7 +186,7 @@ func (ctx *throwContext) Throw(err error) {
 func NewContext4Test(baseCtx context.Context, withChangefeedVars bool) Context {
 	ctx := NewContext(baseCtx, &GlobalVars{
 		CaptureInfo: &model.CaptureInfo{
-			ID:            "capture-id-test",
+			ID:            "capture-test",
 			AdvertiseAddr: "127.0.0.1:0000",
 			// suppose the current version is `v6.3.0`
 			Version: "v6.3.0",

@@ -110,10 +110,6 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 			m.closeProcessor(changefeedID)
 			continue
 		}
-		ctx := cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-			ID:   changefeedID,
-			Info: changefeedState.Info,
-		})
 		p, exist := m.processors[changefeedID]
 		if !exist {
 			up, ok := m.upstreamManager.Get(changefeedState.Info.UpstreamID)
@@ -125,6 +121,10 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 			p = m.newProcessor(changefeedState, m.captureInfo, changefeedID, up, m.liveness)
 			m.processors[changefeedID] = p
 		}
+		ctx := cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
+			ID:   changefeedID,
+			Info: changefeedState.Info,
+		})
 		if err := p.Tick(ctx); err != nil {
 			m.closeProcessor(changefeedID)
 			if cerrors.ErrReactorFinished.Equal(errors.Cause(err)) {

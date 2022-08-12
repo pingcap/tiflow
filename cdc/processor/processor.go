@@ -495,13 +495,8 @@ func (p *processor) Tick(ctx cdcContext.Context) error {
 		return nil
 	}
 	startTime := time.Now()
-	p.changefeed.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
-	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-		ID:   p.changefeed.ID,
-		Info: p.changefeed.Info,
-	})
+	p.changefeed.CheckCaptureAlive(p.captureInfo.ID)
 	err := p.tick(ctx)
-
 	costTime := time.Since(startTime)
 	if costTime > processorLogsWarnDuration {
 		log.Warn("processor tick took too long", zap.String("changefeed", p.changefeedID.ID),
@@ -1072,7 +1067,7 @@ func (p *processor) Close() error {
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Duration("duration", time.Since(start)))
-	} else {
+	} else if p.sinkV2Factory != nil { // maybe nil in test
 		log.Info("processor try to close the sinkV2",
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID))

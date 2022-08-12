@@ -46,7 +46,7 @@ func NewManager4Test(
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
 	liveness *model.Liveness,
 ) *managerImpl {
-	captureInfo := &model.CaptureInfo{ID: "capture-test"}
+	captureInfo := &model.CaptureInfo{ID: "capture-test", AdvertiseAddr: "127.0.0.1:0000"}
 	m := NewManager(captureInfo, upstream.NewManager4Test(nil), liveness).(*managerImpl)
 	m.newProcessor = func(
 		state *orchestrator.ChangefeedReactorState,
@@ -55,7 +55,7 @@ func NewManager4Test(
 		up *upstream.Upstream,
 		liveness *model.Liveness,
 	) *processor {
-		return newProcessor4Test(t, state, createTablePipeline, m.liveness)
+		return newProcessor4Test(t, state, captureInfo, createTablePipeline, m.liveness)
 	}
 	return m
 }

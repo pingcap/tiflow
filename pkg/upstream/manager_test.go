@@ -134,7 +134,7 @@ func TestAddUpstream(t *testing.T) {
 	) error {
 		return errors.New("test")
 	}
-	up := m.AddUpstream(&model.UpstreamInfo{})
+	up := m.AddUpstream(&model.UpstreamInfo{ID: uint64(3)})
 	require.NotNil(t, up)
 	up1, ok := m.Get(uint64(3))
 	require.NotNil(t, up1)
