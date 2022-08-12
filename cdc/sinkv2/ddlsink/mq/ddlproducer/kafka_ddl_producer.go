@@ -159,8 +159,7 @@ func (k *kafkaDDLProducer) Close() {
 	if k.closed {
 		// We need to guard against double closed the clients,
 		// which could lead to panic.
-		log.Warn("Kafka producer already closed in kafka "+
-			"DDL producer",
+		log.Warn("Kafka DDL producer already closed",
 			zap.String("namespace", k.id.Namespace),
 			zap.String("changefeed", k.id.ID))
 		return
