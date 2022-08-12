@@ -89,7 +89,7 @@ func NewKafkaDMLProducer(
 					zap.String("changefeed", changefeedID.ID))
 			}
 			if err := adminClient.Close(); err != nil {
-				log.Error("Close kafka admin client with error in kafka "+
+				log.Error("Close sarama admin client with error in kafka "+
 					"DML producer", zap.Error(err),
 					zap.String("namespace", changefeedID.Namespace),
 					zap.String("changefeed", changefeedID.ID))
