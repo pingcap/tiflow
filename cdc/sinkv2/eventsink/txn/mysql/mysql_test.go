@@ -76,7 +76,7 @@ func mockTestDB(adjustSQLMode bool) (*sql.DB, error) {
 }
 
 func newMySQLSink4Test(ctx context.Context, t *testing.T) *mysqlSink {
-	params := defaultParams.Clone()
+	params := defaultParams()
 	params.batchReplaceEnabled = false
 	ctx, cancel := context.WithCancel(ctx)
 	return &mysqlSink{

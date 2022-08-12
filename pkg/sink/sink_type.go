@@ -45,6 +45,14 @@ const (
 	PulsarSSLSchema = "pulsar+ssl"
 	// BlackHoleSchema indicates the schema is blackhole.
 	BlackHoleSchema = "blackhole"
+	// MySQLSchema indicates the schema is MySQL.
+	MySQLSchema = "mysql"
+	// MySQLSSLSchema indicates the schema is MySQL+ssl.
+	MySQLSSLSchema = "mysql+ssl"
+	// TiDBSchema indicates the schema is TiDB.
+	TiDBSchema = "tidb"
+	// TiDBSSLSchema indicates the schema is TiDB+ssl.
+	TiDBSSLSchema = "tidb"
 )
 
 // IsMQScheme returns true if the scheme belong to mq schema.
@@ -56,4 +64,9 @@ func IsMQScheme(scheme string) bool {
 // IsPulsarScheme returns true if the scheme belong to pulsar schema.
 func IsPulsarScheme(scheme string) bool {
 	return scheme == PulsarSchema || scheme == PulsarSSLSchema
+}
+
+func IsMySQLCompatibleScheme(scheme string) bool {
+	return scheme == MySQLSchema || scheme == MySQLSchema ||
+		scheme == TiDBSchema || scheme == TiDBSSLSchema
 }

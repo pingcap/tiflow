@@ -1,4 +1,4 @@
-// Copyright 2021 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,13 +29,13 @@ import (
 func TestSinkParamsClone(t *testing.T) {
 	t.Parallel()
 
-	param1 := defaultParams.Clone()
+	param1 := defaultParams()
 	param2 := param1.Clone()
 	param2.batchReplaceEnabled = false
 	param2.maxTxnRow = 1
 	require.Equal(t, &sinkParams{
-		workerCount:         DefaultWorkerCount,
-		maxTxnRow:           DefaultMaxTxnRow,
+		workerCount:         defaultWorkerCount,
+		maxTxnRow:           defaultMaxTxnRow,
 		tidbTxnMode:         defaultTiDBTxnMode,
 		batchReplaceEnabled: defaultBatchReplaceEnabled,
 		batchReplaceSize:    defaultBatchReplaceSize,
@@ -45,7 +45,7 @@ func TestSinkParamsClone(t *testing.T) {
 		safeMode:            defaultSafeMode,
 	}, param1)
 	require.Equal(t, &sinkParams{
-		workerCount:         DefaultWorkerCount,
+		workerCount:         defaultWorkerCount,
 		maxTxnRow:           1,
 		tidbTxnMode:         defaultTiDBTxnMode,
 		batchReplaceEnabled: false,
@@ -66,7 +66,7 @@ func TestGenerateDSNByParams(t *testing.T) {
 
 		dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
 		require.Nil(t, err)
-		params := defaultParams.Clone()
+		params := defaultParams()
 		dsnStr, err := generateDSNByParams(context.TODO(), dsn, params, db)
 		require.Nil(t, err)
 		expectedParams := []string{
@@ -91,7 +91,7 @@ func TestGenerateDSNByParams(t *testing.T) {
 
 		dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
 		require.Nil(t, err)
-		params := defaultParams.Clone()
+		params := defaultParams()
 		params.timezone = `"UTC"`
 		dsnStr, err := generateDSNByParams(context.TODO(), dsn, params, db)
 		require.Nil(t, err)
@@ -136,7 +136,7 @@ func TestGenerateDSNByParams(t *testing.T) {
 		// simulate error
 		dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
 		require.Nil(t, err)
-		params := defaultParams.Clone()
+		params := defaultParams()
 		var dsnStr string
 		_, err = generateDSNByParams(context.TODO(), dsn, params, db)
 		require.Error(t, err)
@@ -197,7 +197,7 @@ func TestGenerateDSNByParams(t *testing.T) {
 func TestParseSinkURIToParams(t *testing.T) {
 	t.Parallel()
 
-	expected := defaultParams.Clone()
+	expected := defaultParams()
 	expected.workerCount = 64
 	expected.maxTxnRow = 20
 	expected.batchReplaceEnabled = true

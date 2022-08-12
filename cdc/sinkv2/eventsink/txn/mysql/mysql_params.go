@@ -1,4 +1,4 @@
-// Copyright 2021 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,20 +30,24 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"go.uber.org/zap"
 )
 
 const (
-	// DefaultWorkerCount is the default number of workers.
-	DefaultWorkerCount = 16
-	// DefaultMaxTxnRow is the default max number of rows in a transaction.
-	DefaultMaxTxnRow = 256
+	txnModeOptimistic  = "optimistic"
+	txnModePessimistic = "pessimistic"
+
+	// defaultWorkerCount is the default number of workers.
+	defaultWorkerCount = 16
+	// defaultMaxTxnRow is the default max number of rows in a transaction.
+	defaultMaxTxnRow = 256
 	// The upper limit of max worker counts.
 	maxWorkerCount = 1024
 	// The upper limit of max txn rows.
 	maxMaxTxnRow = 2048
 
-	defaultTiDBTxnMode         = "optimistic"
+	defaultTiDBTxnMode         = txnModeOptimistic
 	defaultBatchReplaceEnabled = true
 	defaultBatchReplaceSize    = 20
 	defaultReadTimeout         = "2m"
@@ -54,16 +58,18 @@ const (
 	defaultCharacterSet        = "utf8mb4"
 )
 
-var defaultParams = &sinkParams{
-	workerCount:         DefaultWorkerCount,
-	maxTxnRow:           DefaultMaxTxnRow,
-	tidbTxnMode:         defaultTiDBTxnMode,
-	batchReplaceEnabled: defaultBatchReplaceEnabled,
-	batchReplaceSize:    defaultBatchReplaceSize,
-	readTimeout:         defaultReadTimeout,
-	writeTimeout:        defaultWriteTimeout,
-	dialTimeout:         defaultDialTimeout,
-	safeMode:            defaultSafeMode,
+func defaultParams() *sinkParams {
+	return &sinkParams{
+		workerCount:         defaultWorkerCount,
+		maxTxnRow:           defaultMaxTxnRow,
+		tidbTxnMode:         defaultTiDBTxnMode,
+		batchReplaceEnabled: defaultBatchReplaceEnabled,
+		batchReplaceSize:    defaultBatchReplaceSize,
+		readTimeout:         defaultReadTimeout,
+		writeTimeout:        defaultWriteTimeout,
+		dialTimeout:         defaultDialTimeout,
+		safeMode:            defaultSafeMode,
+	}
 }
 
 var validSchemes = map[string]bool{
@@ -93,158 +99,214 @@ func (s *sinkParams) Clone() *sinkParams {
 }
 
 func parseSinkURIToParams(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL) (*sinkParams, error) {
-	params := defaultParams.Clone()
-
 	if sinkURI == nil {
-		return nil, cerror.ErrMySQLConnectionError.GenWithStack("fail to open MySQL sink, empty URL")
+		return nil, cerror.ErrMySQLConnectionError.GenWithStack("fail to open MySQL sink, empty SinkURI")
 	}
 
 	scheme := strings.ToLower(sinkURI.Scheme)
-	if _, ok := validSchemes[scheme]; !ok {
+	if !sink.IsMySQLCompatibleScheme(scheme) {
 		return nil, cerror.ErrMySQLConnectionError.GenWithStack("can't create MySQL sink with unsupported scheme: %s", scheme)
 	}
 
-	s := sinkURI.Query().Get("worker-count")
-	if s != "" {
-		c, err := strconv.Atoi(s)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-		}
-		if c <= 0 {
-			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig,
-				fmt.Errorf("invalid worker-count %d, which must be greater than 0", c))
-		}
-		if c > maxWorkerCount {
-			log.Warn("worker-count too large",
-				zap.Int("original", c), zap.Int("override", maxWorkerCount))
-			c = maxWorkerCount
-		}
-		params.workerCount = c
+	var err error
+	params := defaultParams()
+	query := sinkURI.Query()
+
+	if err = getWorkerCount(query, &params.workerCount); err != nil {
+		return nil, err
+	}
+	if err = getMaxTxnRow(query, &params.maxTxnRow); err != nil {
+		return nil, err
+	}
+	if err = getTiDBTxnMode(query, &params.tidbTxnMode); err != nil {
+		return nil, err
+	}
+	if err = getSSLCA(query, changefeedID, &params.tls); err != nil {
+		return nil, err
+	}
+	err = getBatchReplaceEnable(query, &params.batchReplaceEnabled, &params.batchReplaceSize)
+	if err != nil {
+		return nil, err
+	}
+	if err = getSafeMode(query, &params.safeMode); err != nil {
+		return nil, err
+	}
+	if err = getTimezone(ctx, query, &params.timezone); err != nil {
+		return nil, err
+	}
+	if err = getDuration(query, "read-timeout", &params.readTimeout); err != nil {
+		return nil, err
+	}
+	if err = getDuration(query, "write-timeout", &params.writeTimeout); err != nil {
+		return nil, err
+	}
+	if err = getDuration(query, "timeout", &params.dialTimeout); err != nil {
+		return nil, err
+	}
+	return params, nil
+}
+
+func getWorkerCount(values url.Values, workerCount *int) error {
+	s := values.Get("worker-count")
+	if len(s) == 0 {
+		return nil
 	}
 
-	s = sinkURI.Query().Get("max-txn-row")
-	if s != "" {
-		c, err := strconv.Atoi(s)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-		}
-		if c <= 0 {
-			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig,
-				fmt.Errorf("invalid max-txn-row %d, which must be greater than 0", c))
-		}
-		if c > maxMaxTxnRow {
-			log.Warn("max-txn-row too large",
-				zap.Int("original", c), zap.Int("override", maxMaxTxnRow))
-			c = maxMaxTxnRow
-		}
-		params.maxTxnRow = c
+	c, err := strconv.Atoi(s)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+	}
+	if c <= 0 {
+		return cerror.WrapError(cerror.ErrMySQLInvalidConfig,
+			fmt.Errorf("invalid worker-count %d, which must be greater than 0", c))
+	}
+	if c > maxWorkerCount {
+		log.Warn("worker-count too large",
+			zap.Int("original", c), zap.Int("override", maxWorkerCount))
+		c = maxWorkerCount
 	}
 
-	s = sinkURI.Query().Get("tidb-txn-mode")
-	if s != "" {
-		if s == "pessimistic" || s == "optimistic" {
-			params.tidbTxnMode = s
-		} else {
-			log.Warn("invalid tidb-txn-mode, should be pessimistic or optimistic",
-				zap.String("default", defaultTiDBTxnMode))
-		}
+	*workerCount = c
+	return nil
+}
+
+func getMaxTxnRow(values url.Values, maxTxnRow *int) error {
+	s := values.Get("max-txn-row")
+	if len(s) == 0 {
+		return nil
 	}
 
-	if sinkURI.Query().Get("ssl-ca") != "" {
-		credential := security.Credential{
-			CAPath:   sinkURI.Query().Get("ssl-ca"),
-			CertPath: sinkURI.Query().Get("ssl-cert"),
-			KeyPath:  sinkURI.Query().Get("ssl-key"),
-		}
-		tlsCfg, err := credential.ToTLSConfig()
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		name := "cdc_mysql_tls" + changefeedID.Namespace + "_" + changefeedID.ID
-		err = dmysql.RegisterTLSConfig(name, tlsCfg)
-		if err != nil {
-			return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
-		}
-		params.tls = "?tls=" + name
+	c, err := strconv.Atoi(s)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+	}
+	if c <= 0 {
+		return cerror.WrapError(cerror.ErrMySQLInvalidConfig,
+			fmt.Errorf("invalid max-txn-row %d, which must be greater than 0", c))
+	}
+	if c > maxMaxTxnRow {
+		log.Warn("max-txn-row too large",
+			zap.Int("original", c), zap.Int("override", maxMaxTxnRow))
+		c = maxMaxTxnRow
+	}
+	*maxTxnRow = c
+	return nil
+}
+
+func getTiDBTxnMode(values url.Values, mode *string) error {
+	s := values.Get("tidb-txn-mode")
+	if len(s) == 0 {
+		return nil
+	}
+	if s == txnModeOptimistic || s == txnModePessimistic {
+		*mode = s
+	} else {
+		log.Warn("invalid tidb-txn-mode, should be pessimistic or optimistic",
+			zap.String("default", defaultTiDBTxnMode))
+	}
+	return nil
+}
+
+func getSSLCA(values url.Values, changefeedID model.ChangeFeedID, tls *string) error {
+	s := values.Get("ssl-ca")
+	if len(s) == 0 {
+		return nil
 	}
 
-	s = sinkURI.Query().Get("batch-replace-enable")
-	if s != "" {
+	credential := security.Credential{
+		CAPath:   values.Get("ssl-ca"),
+		CertPath: values.Get("ssl-cert"),
+		KeyPath:  values.Get("ssl-key"),
+	}
+	tlsCfg, err := credential.ToTLSConfig()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	name := "cdc_mysql_tls" + changefeedID.Namespace + "_" + changefeedID.ID
+	err = dmysql.RegisterTLSConfig(name, tlsCfg)
+	if err != nil {
+		return cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
+	}
+	*tls = "?tls=" + name
+	return nil
+}
+
+func getBatchReplaceEnable(values url.Values, batchReplaceEnabled *bool, batchReplaceSize *int) error {
+	s := values.Get("batch-replace-enable")
+	if len(s) > 0 {
 		enable, err := strconv.ParseBool(s)
 		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+			return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
 		}
-		params.batchReplaceEnabled = enable
+		*batchReplaceEnabled = enable
 	}
 
-	if params.batchReplaceEnabled && sinkURI.Query().Get("batch-replace-size") != "" {
-		size, err := strconv.Atoi(sinkURI.Query().Get("batch-replace-size"))
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-		}
-		params.batchReplaceSize = size
+	if !*batchReplaceEnabled {
+		return nil
 	}
 
-	// TODO: force safe mode in startup phase
-	s = sinkURI.Query().Get("safe-mode")
-	if s != "" {
-		safeModeEnabled, err := strconv.ParseBool(s)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-		}
-		params.safeMode = safeModeEnabled
+	s = values.Get("batch-replace-size")
+	if len(s) == 0 {
+		return nil
 	}
+	size, err := strconv.Atoi(s)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+	}
+	*batchReplaceSize = size
+	return nil
+}
 
-	if _, ok := sinkURI.Query()["time-zone"]; ok {
-		s = sinkURI.Query().Get("time-zone")
-		if s == "" {
-			params.timezone = ""
-		} else {
-			value, err := url.QueryUnescape(s)
-			if err != nil {
-				return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-			}
-			_, err = time.LoadLocation(value)
-			if err != nil {
-				return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-			}
-			params.timezone = fmt.Sprintf(`"%s"`, s)
-		}
-	} else {
+func getSafeMode(values url.Values, safeMode *bool) error {
+	s := values.Get("safe-mode")
+	if len(s) == 0 {
+		return nil
+	}
+	enabled, err := strconv.ParseBool(s)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+	}
+	*safeMode = enabled
+	return nil
+}
+
+func getTimezone(ctx context.Context, values url.Values, timezone *string) error {
+	if _, ok := values["time-zone"]; !ok {
 		tz := contextutil.TimezoneFromCtx(ctx)
-		params.timezone = fmt.Sprintf(`"%s"`, tz.String())
+		*timezone = fmt.Sprintf(`"%s"`, tz.String())
+		return nil
 	}
 
-	// read, write, and dial timeout for each individual connection, equals to
-	// readTimeout, writeTimeout, timeout in go mysql driver respectively.
-	// ref: https://github.com/go-sql-driver/mysql#connection-pool-and-timeouts
-	// To keep the same style with other sink parameters, we use dash as word separator.
-	s = sinkURI.Query().Get("read-timeout")
-	if s != "" {
-		_, err := time.ParseDuration(s)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-		}
-		params.readTimeout = s
-	}
-	s = sinkURI.Query().Get("write-timeout")
-	if s != "" {
-		_, err := time.ParseDuration(s)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-		}
-		params.writeTimeout = s
-	}
-	s = sinkURI.Query().Get("timeout")
-	if s != "" {
-		_, err := time.ParseDuration(s)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-		}
-		params.dialTimeout = s
+	s := values.Get("time-zone")
+	if len(s) == 0 {
+		*timezone = ""
+		return nil
 	}
 
-	return params, nil
+	value, err := url.QueryUnescape(s)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+	}
+	_, err = time.LoadLocation(value)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+	}
+	*timezone = fmt.Sprintf(`"%s"`, s)
+	return nil
+}
+
+func getDuration(values url.Values, key string, target *string) error {
+	s := values.Get(key)
+	if len(s) == 0 {
+		return nil
+	}
+	_, err := time.ParseDuration(s)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+	}
+	*target = s
+	return nil
 }
 
 func generateDSNByParams(
