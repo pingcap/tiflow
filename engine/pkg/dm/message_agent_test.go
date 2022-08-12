@@ -109,7 +109,7 @@ func TestUpdateClient(t *testing.T) {
 
 	// add client
 	messageAgent.UpdateClient("task1", workerHandle1)
-	require.Len(t, messageAgent.clients, 1)
+	require.Len(t, messageAgent.clients.clients, 1)
 	client, err := messageAgent.getClient("task1")
 	require.NoError(t, err)
 	require.Equal(t, client, workerHandle1)
@@ -117,7 +117,7 @@ func TestUpdateClient(t *testing.T) {
 	require.EqualError(t, err, "client task2 not found")
 	require.Equal(t, client, nil)
 	messageAgent.UpdateClient("task2", workerHandle2)
-	require.Len(t, messageAgent.clients, 2)
+	require.Len(t, messageAgent.clients.clients, 2)
 	client, err = messageAgent.getClient("task1")
 	require.NoError(t, err)
 	require.Equal(t, client, workerHandle1)
@@ -127,7 +127,7 @@ func TestUpdateClient(t *testing.T) {
 
 	// remove client
 	messageAgent.UpdateClient("task3", nil)
-	require.Len(t, messageAgent.clients, 2)
+	require.Len(t, messageAgent.clients.clients, 2)
 	client, err = messageAgent.getClient("task1")
 	require.NoError(t, err)
 	require.Equal(t, client, workerHandle1)
@@ -135,7 +135,7 @@ func TestUpdateClient(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, client, workerHandle2)
 	messageAgent.UpdateClient("task2", nil)
-	require.Len(t, messageAgent.clients, 1)
+	require.Len(t, messageAgent.clients.clients, 1)
 	client, err = messageAgent.getClient("task1")
 	require.NoError(t, err)
 	require.Equal(t, client, workerHandle1)
