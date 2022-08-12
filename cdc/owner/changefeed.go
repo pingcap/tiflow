@@ -299,7 +299,9 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 				zap.Uint64("flushedResolvedTs", flushedResolvedTs),
 				zap.Uint64("flushedCheckpointTs", flushedCheckpointTs),
 				zap.Uint64("newResolvedTs", newResolvedTs),
-				zap.Uint64("newCheckpointTs", newCheckpointTs))
+				zap.Uint64("newCheckpointTs", newCheckpointTs),
+				zap.String("namespace", c.id.Namespace),
+				zap.String("changefeed", c.id.ID))
 			if flushedResolvedTs != 0 {
 				// It's not necessary to replace newCheckpointTs with flushedResolvedTs,
 				// as cdc can ensure newCheckpointTs can never exceed prevResolvedTs.
@@ -311,7 +313,9 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		log.Debug("owner prepares to update status",
 			zap.Uint64("prevResolvedTs", prevResolvedTs),
 			zap.Uint64("newResolvedTs", newResolvedTs),
-			zap.Uint64("newCheckpointTs", newCheckpointTs))
+			zap.Uint64("newCheckpointTs", newCheckpointTs),
+			zap.String("namespace", c.id.Namespace),
+			zap.String("changefeed", c.id.ID))
 		// resolvedTs should never regress but checkpointTs can, as checkpointTs has already
 		// been decreased when the owner is initialized.
 		if newResolvedTs < prevResolvedTs {
@@ -416,12 +420,15 @@ LOOP:
 	}()
 
 	stdCtx := contextutil.PutChangefeedIDInCtx(cancelCtx, c.id)
-	redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: true}
-	redoManager, err := redo.NewManager(stdCtx, c.state.Info.Config.Consistent, redoManagerOpts)
+	redoManagerOpts := redo.NewOwnerManagerOptions(c.errCh)
+	mgr, err := redo.NewManager(stdCtx, c.state.Info.Config.Consistent, redoManagerOpts)
+	c.redoManager = mgr
 	if err != nil {
 		return err
 	}
-	c.redoManager = redoManager
+	log.Info("owner creates redo manager",
+		zap.String("namespace", c.id.Namespace),
+		zap.String("changefeed", c.id.ID))
 
 	// init metrics
 	c.metricsChangefeedBarrierTsGauge = changefeedBarrierTsGauge.
@@ -624,12 +631,14 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 	}
 
 	if c.ddlEventCache == nil {
+		// We must build ddl events from job before we call c.schema.HandleDDL(job).
 		ddlEvents, err := c.schema.BuildDDLEvents(job)
 		if err != nil {
 			log.Error("build DDL event fail", zap.String("changefeed", c.id.ID),
 				zap.Reflect("job", job), zap.Error(err))
 			return false, errors.Trace(err)
 		}
+		c.ddlEventCache = ddlEvents
 		// We can't use the latest schema directly,
 		// we need to make sure we receive the ddl before we start or stop broadcasting checkpoint ts.
 		// So let's remember the name of the table before processing and cache the DDL.
@@ -637,13 +646,16 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
 		// refresh checkpointTs and currentTableNames when a ddl job is received
 		c.sink.emitCheckpointTs(checkpointTs, c.currentTableNames)
+		// we apply ddl to update changefeed schema here.
 		err = c.schema.HandleDDL(job)
 		if err != nil {
 			return false, errors.Trace(err)
 		}
-		c.ddlEventCache = ddlEvents
-		for _, ddlEvent := range ddlEvents {
-			if c.redoManager.Enabled() {
+		if c.redoManager.Enabled() {
+			for _, ddlEvent := range c.ddlEventCache {
+				// FIXME: seems it's not necessary to emit DDL to redo storage,
+				// because for a given redo meta with range (checkpointTs, resolvedTs],
+				// there must be no pending DDLs not flushed into DDL sink.
 				err = c.redoManager.EmitDDLEvent(ctx, ddlEvent)
 				if err != nil {
 					return false, err

@@ -180,20 +180,17 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 		resolved = model.NewResolvedTs(currentBarrierTs)
 	}
 	if n.redoManager != nil && n.redoManager.Enabled() {
-		redoTs := n.redoManager.GetMinResolvedTs()
 		redoFlushed := n.redoManager.GetResolvedTs(n.tableID)
-		if currentBarrierTs > redoTs {
+		if currentBarrierTs > redoFlushed {
 			// NOTE: How can barrierTs be greater than rodoTs?
 			// When scheduler moves a table from one place to another place, the table
 			// start position will be checkpointTs instead of resolvedTs, which means
 			// redoTs can be less than barrierTs.
-			log.Info("redoTs is less than current barrierTs",
+			log.Info("redo flushedTs is less than current barrierTs",
 				zap.Int64("tableID", n.tableID),
-				zap.Uint64("redoTs", redoTs),
 				zap.Uint64("barrierTs", currentBarrierTs),
 				zap.Uint64("tableRedoFlushed", redoFlushed))
-		}
-		if currentBarrierTs > redoFlushed {
+
 			// The latest above comment shows why barrierTs can be greater than redoTs.
 			// So here the aim is to avoid slow tables holding back the whole processor.
 			resolved = model.NewResolvedTs(redoFlushed)
