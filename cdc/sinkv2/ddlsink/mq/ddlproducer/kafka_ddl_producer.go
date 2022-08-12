@@ -24,7 +24,10 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
+	collector "github.com/pingcap/tiflow/cdc/sinkv2/metrics/kafka"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	pkafka "github.com/pingcap/tiflow/pkg/kafka"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -38,6 +41,8 @@ type kafkaDDLProducer struct {
 	// We hold the client to make close operation faster.
 	// Please see the comment of Close().
 	client sarama.Client
+	// collector is used to report metrics.
+	collector *collector.Collector
 	// asyncProducer is used to send messages to kafka synchronously.
 	syncProducer sarama.SyncProducer
 	// closedMu is used to protect `closed`.
@@ -49,7 +54,9 @@ type kafkaDDLProducer struct {
 }
 
 // NewKafkaDDLProducer creates a new kafka producer for replicating DDL.
-func NewKafkaDDLProducer(ctx context.Context, client sarama.Client) (*kafkaDDLProducer, error) {
+func NewKafkaDDLProducer(ctx context.Context, client sarama.Client,
+	adminClient pkafka.ClusterAdminClient,
+) (DDLProducer, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
 	syncProducer, err := sarama.NewSyncProducerFromClient(client)
@@ -60,20 +67,35 @@ func NewKafkaDDLProducer(ctx context.Context, client sarama.Client) (*kafkaDDLPr
 		go func() {
 			err := client.Close()
 			if err != nil {
-				log.Error("Close sarama client with error", zap.Error(err),
+				log.Error("Close sarama client with error in kafka "+
+					"DDL producer", zap.Error(err),
+					zap.String("namespace", changefeedID.Namespace),
+					zap.String("changefeed", changefeedID.ID))
+			}
+			if err := adminClient.Close(); err != nil {
+				log.Error("Close sarama admin client with error in kafka "+
+					"DDL producer", zap.Error(err),
 					zap.String("namespace", changefeedID.Namespace),
 					zap.String("changefeed", changefeedID.ID))
 			}
 		}()
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
+	collector := collector.New(changefeedID, util.RoleOwner,
+		adminClient, client.Config().MetricRegistry)
 
-	return &kafkaDDLProducer{
+	p := &kafkaDDLProducer{
 		id:           changefeedID,
 		client:       client,
+		collector:    collector,
 		syncProducer: syncProducer,
 		closed:       false,
-	}, nil
+	}
+
+	// Start collecting metrics.
+	go p.collector.Run(ctx)
+
+	return p, nil
 }
 
 func (k *kafkaDDLProducer) SyncBroadcastMessage(ctx context.Context, topic string,
@@ -137,7 +159,7 @@ func (k *kafkaDDLProducer) Close() {
 	if k.closed {
 		// We need to guard against double closed the clients,
 		// which could lead to panic.
-		log.Warn("kafka producer already closed",
+		log.Warn("Kafka DDL producer already closed",
 			zap.String("namespace", k.id.Namespace),
 			zap.String("changefeed", k.id.ID))
 		return
@@ -156,12 +178,14 @@ func (k *kafkaDDLProducer) Close() {
 	go func() {
 		start := time.Now()
 		if err := k.client.Close(); err != nil {
-			log.Error("close sarama client with error", zap.Error(err),
+			log.Error("Close sarama client with error in kafka "+
+				"DDL producer", zap.Error(err),
 				zap.Duration("duration", time.Since(start)),
 				zap.String("namespace", k.id.Namespace),
 				zap.String("changefeed", k.id.ID))
 		} else {
-			log.Info("sarama client closed", zap.Duration("duration", time.Since(start)),
+			log.Info("Sarama client closed in kafka "+
+				"DDL producer", zap.Duration("duration", time.Since(start)),
 				zap.String("namespace", k.id.Namespace),
 				zap.String("changefeed", k.id.ID))
 		}
@@ -169,14 +193,19 @@ func (k *kafkaDDLProducer) Close() {
 		start = time.Now()
 		err := k.syncProducer.Close()
 		if err != nil {
-			log.Error("close sync client with error", zap.Error(err),
+			log.Error("Close sync client with error in kafka "+
+				"DDL producer", zap.Error(err),
 				zap.Duration("duration", time.Since(start)),
 				zap.String("namespace", k.id.Namespace),
 				zap.String("changefeed", k.id.ID))
 		} else {
-			log.Info("sync client closed", zap.Duration("duration", time.Since(start)),
+			log.Info("Sync client closed in kafka "+
+				"DDL producer", zap.Duration("duration", time.Since(start)),
 				zap.String("namespace", k.id.Namespace),
 				zap.String("changefeed", k.id.ID))
 		}
+
+		// Finally, close the metric collector.
+		k.collector.Close()
 	}()
 }

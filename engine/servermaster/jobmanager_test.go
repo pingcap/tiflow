@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
@@ -42,12 +43,12 @@ func TestJobManagerSubmitJob(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	mockMaster := framework.NewMockMasterImpl("", "submit-job-test")
+	mockMaster := framework.NewMockMasterImpl(t, "", "submit-job-test")
+	framework.MockMasterPrepareMeta(ctx, t, mockMaster)
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
-	mockMaster.MasterClient().On(
-		"ScheduleTask", mock.Anything, mock.Anything, mock.Anything).Return(
-		&pb.ScheduleTaskResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs(),
-	)
+	mockMaster.MasterClient().EXPECT().ScheduleTask(
+		gomock.Any(),
+		gomock.Any()).Return(&pb.ScheduleTaskResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs()).Times(1)
 	mgr := &JobManagerImplV2{
 		BaseMaster:        mockMaster.DefaultBaseMaster,
 		JobFsm:            NewJobFsm(),
@@ -100,7 +101,8 @@ func TestCreateWorkerReturnError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	masterImpl := framework.NewMockMasterImpl("", "create-worker-with-error")
+	masterImpl := framework.NewMockMasterImpl(t, "", "create-worker-with-error")
+	framework.MockMasterPrepareMeta(ctx, t, masterImpl)
 	mockMaster := &mockBaseMasterCreateWorkerFailed{
 		MockMasterImpl: masterImpl,
 	}
@@ -128,7 +130,8 @@ func TestJobManagerPauseJob(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	mockMaster := framework.NewMockMasterImpl("", "pause-job-test")
+	mockMaster := framework.NewMockMasterImpl(t, "", "pause-job-test")
+	framework.MockMasterPrepareMeta(ctx, t, mockMaster)
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
 	mgr := &JobManagerImplV2{
 		BaseMaster:        mockMaster.DefaultBaseMaster,
@@ -166,7 +169,8 @@ func TestJobManagerCancelJob(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	mockMaster := framework.NewMockMasterImpl("", "cancel-job-test")
+	mockMaster := framework.NewMockMasterImpl(t, "", "cancel-job-test")
+	framework.MockMasterPrepareMeta(ctx, t, mockMaster)
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
 	mgr := &JobManagerImplV2{
 		BaseMaster:        mockMaster.DefaultBaseMaster,
@@ -222,7 +226,8 @@ func TestJobManagerQueryJob(t *testing.T) {
 		},
 	}
 
-	mockMaster := framework.NewMockMasterImpl("", "job-manager-query-job-test")
+	mockMaster := framework.NewMockMasterImpl(t, "", "job-manager-query-job-test")
+	framework.MockMasterPrepareMeta(ctx, t, mockMaster)
 	for _, tc := range testCases {
 		cli := metadata.NewMasterMetadataClient(tc.meta.ID, mockMaster.GetFrameMetaClient())
 		err := cli.Store(ctx, tc.meta)
@@ -239,7 +244,7 @@ func TestJobManagerQueryJob(t *testing.T) {
 
 	statuses, err := mgr.GetJobStatuses(ctx)
 	require.NoError(t, err)
-	require.Len(t, statuses, len(testCases))
+	require.Len(t, statuses, len(testCases)+1)
 
 	for _, tc := range testCases {
 		req := &pb.QueryJobRequest{
@@ -260,12 +265,11 @@ func TestJobManagerOnlineJob(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	mockMaster := framework.NewMockMasterImpl("", "submit-job-test")
+	mockMaster := framework.NewMockMasterImpl(t, "", "submit-job-test")
+	framework.MockMasterPrepareMeta(ctx, t, mockMaster)
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
-	mockMaster.MasterClient().On(
-		"ScheduleTask", mock.Anything, mock.Anything, mock.Anything).Return(
-		&pb.ScheduleTaskResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs(),
-	)
+	mockMaster.MasterClient().EXPECT().ScheduleTask(gomock.Any(), gomock.Any()).
+		Return(&pb.ScheduleTaskResponse{}, errors.ErrClusterResourceNotEnough.FastGenByArgs()).MinTimes(0)
 	mgr := &JobManagerImplV2{
 		BaseMaster:        mockMaster.DefaultBaseMaster,
 		JobFsm:            NewJobFsm(),
@@ -301,7 +305,8 @@ func TestJobManagerRecover(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	mockMaster := framework.NewMockMasterImpl("", "job-manager-recover-test")
+	mockMaster := framework.NewMockMasterImpl(t, "", "job-manager-recover-test")
+	framework.MockMasterPrepareMeta(ctx, t, mockMaster)
 	// prepare mockvk with two job masters
 	meta := []*frameModel.MasterMetaKVData{
 		{
@@ -328,7 +333,7 @@ func TestJobManagerRecover(t *testing.T) {
 	}
 	err := mgr.OnMasterRecovered(ctx)
 	require.Nil(t, err)
-	require.Equal(t, 2, mgr.JobFsm.JobCount(pb.QueryJobResponse_dispatched))
+	require.Equal(t, 3, mgr.JobFsm.JobCount(pb.QueryJobResponse_dispatched))
 	queryResp := mgr.QueryJob(ctx, &pb.QueryJobRequest{JobId: "master-1"})
 	require.Nil(t, queryResp.Err)
 	require.Equal(t, pb.QueryJobResponse_dispatched, queryResp.Status)
@@ -340,7 +345,8 @@ func TestJobManagerTickExceedQuota(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	masterImpl := framework.NewMockMasterImpl("", "create-worker-with-error")
+	masterImpl := framework.NewMockMasterImpl(t, "", "create-worker-with-error")
+	framework.MockMasterPrepareMeta(ctx, t, masterImpl)
 	mockMaster := &mockBaseMasterCreateWorkerFailed{
 		MockMasterImpl: masterImpl,
 	}
@@ -372,7 +378,8 @@ func TestJobManagerWatchJobStatuses(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	mockMaster := framework.NewMockMasterImpl("", "cancel-job-test")
+	mockMaster := framework.NewMockMasterImpl(t, "", "cancel-job-test")
+	framework.MockMasterPrepareMeta(ctx, t, mockMaster)
 	mockMaster.On("InitImpl", mock.Anything).Return(nil)
 	mgr := &JobManagerImplV2{
 		BaseMaster:        mockMaster.DefaultBaseMaster,
@@ -397,6 +404,7 @@ func TestJobManagerWatchJobStatuses(t *testing.T) {
 	snap, stream, err := mgr.WatchJobStatuses(ctx)
 	require.NoError(t, err)
 	require.Equal(t, map[frameModel.MasterID]frameModel.MasterStatusCode{
+		"cancel-job-test":    frameModel.MasterStatusUninit,
 		"job-to-be-canceled": frameModel.MasterStatusStopped,
 	}, snap)
 

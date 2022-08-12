@@ -21,16 +21,11 @@ import (
 	"io"
 	"net/http"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"google.golang.org/grpc"
-
-	"github.com/pingcap/tiflow/engine/client"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/fake"
 	engineModel "github.com/pingcap/tiflow/engine/model"
@@ -39,6 +34,11 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/servermaster"
 	server "github.com/pingcap/tiflow/engine/servermaster"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func init() {
@@ -46,13 +46,15 @@ func init() {
 	log.SetLevel(zapcore.DebugLevel)
 }
 
+// ErrLeaderNotFound is returned when the leader is not found.
+var ErrLeaderNotFound = errors.New("leader not found")
+
 // ChaosCli is used to interact with server master, fake job and provides ways
 // to adding chaos in e2e test.
 type ChaosCli struct {
-	masterAddrs []string
+	jobManagerCli pb.JobManagerClient
+	masterAddrs   []string
 	// masterCli is used to operate with server master, such as submit job
-	masterCli client.MasterClient
-	// clientConn is the client connection for business metastore
 	clientConn metaModel.ClientConn
 	// metaCli is used to query metadata which is stored from business logic(job-level isolation)
 	// NEED to reinitialize the metaCli if we access to a different job
@@ -71,16 +73,35 @@ type FakeJobConfig struct {
 	KeyPrefix     string
 }
 
+// NewJobManagerClient returns a pb.JobManagerClient that can be used for tests.
+// TODO remove this function. It is only for temporary use before an OpenAPI client is ready.
+func NewJobManagerClient(endpoint string) (pb.JobManagerClient, error) {
+	endpoint = strings.TrimLeft(endpoint, "http://")
+	conn, err := grpc.Dial(
+		endpoint,
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return pb.NewJobManagerClient(conn), nil
+}
+
 // NewUTCli creates a new ChaosCli instance
 func NewUTCli(ctx context.Context, masterAddrs, businessMetaAddrs []string, project tenant.ProjectInfo,
 	cfg *FakeJobConfig,
 ) (*ChaosCli, error) {
-	// TODO: NEED to move metastore config to a toml, and parse the toml
-	defaultSchema := "test"
-	masterCli, err := client.NewMasterClient(ctx, masterAddrs)
-	if err != nil {
-		return nil, errors.Trace(err)
+	if len(masterAddrs) == 0 {
+		panic("length of masterAddrs is 0")
 	}
+
+	jobManagerCli, err := NewJobManagerClient(masterAddrs[0])
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: NEED to move metastore config to a toml, and parse the toml
+	defaultSchema := "test_business"
 
 	conf := server.NewDefaultBusinessMetaConfig()
 	conf.Endpoints = businessMetaAddrs
@@ -101,12 +122,12 @@ func NewUTCli(ctx context.Context, masterAddrs, businessMetaAddrs []string, proj
 	}
 
 	return &ChaosCli{
-		masterAddrs: masterAddrs,
-		masterCli:   masterCli,
-		clientConn:  cc,
-		fakeJobCli:  fakeJobCli,
-		fakeJobCfg:  cfg,
-		project:     project,
+		jobManagerCli: jobManagerCli,
+		masterAddrs:   masterAddrs,
+		clientConn:    cc,
+		fakeJobCli:    fakeJobCli,
+		fakeJobCfg:    cfg,
+		project:       project,
 	}, nil
 }
 
@@ -125,7 +146,7 @@ func (cli *ChaosCli) PauseJob(ctx context.Context, jobID string) error {
 			ProjectId: cli.project.ProjectID(),
 		},
 	}
-	resp, err := cli.masterCli.PauseJob(ctx, req)
+	resp, err := cli.jobManagerCli.PauseJob(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -280,6 +301,49 @@ func (cli *ChaosCli) InitializeMetaClient(jobID string) error {
 	}
 
 	cli.metaCli = metaCli
+	return nil
+}
+
+// GetLeaderAddr gets the address of the leader of the server master.
+func (cli *ChaosCli) GetLeaderAddr(ctx context.Context) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/api/v1/leader", cli.masterAddrs[0]), nil)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return "", ErrLeaderNotFound
+	}
+	if resp.StatusCode/100 != 2 {
+		return "", errors.Errorf("unexpected status code %d", resp.StatusCode)
+	}
+	var leaderInfo struct {
+		AdvertiseAddr string `json:"advertise_addr"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&leaderInfo); err != nil {
+		return "", errors.Trace(err)
+	}
+	return leaderInfo.AdvertiseAddr, nil
+}
+
+// ResignLeader resigns the leader at the given addr.
+func (cli *ChaosCli) ResignLeader(ctx context.Context, addr string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("http://%s/api/v1/leader/resign", addr), nil)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return errors.Errorf("unexpected status code %d", resp.StatusCode)
+	}
 	return nil
 }
 

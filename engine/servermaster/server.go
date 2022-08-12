@@ -15,17 +15,46 @@ package servermaster
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/framework"
+	"github.com/pingcap/tiflow/engine/framework/metadata"
+	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	"github.com/pingcap/tiflow/engine/model"
+	pkgClient "github.com/pingcap/tiflow/engine/pkg/client"
+	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
+	"github.com/pingcap/tiflow/engine/pkg/deps"
+	externRescManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcetypes"
+	"github.com/pingcap/tiflow/engine/pkg/meta"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
+	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
+	"github.com/pingcap/tiflow/engine/pkg/serverutil"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
+	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
+	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
+	serverutil2 "github.com/pingcap/tiflow/engine/servermaster/serverutil"
+	"github.com/pingcap/tiflow/engine/test"
+	"github.com/pingcap/tiflow/engine/test/mock"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/tcpserver"
+	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
 	"github.com/prometheus/client_golang/prometheus"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
@@ -35,35 +64,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
-	"github.com/pingcap/tiflow/engine/client"
-	pb "github.com/pingcap/tiflow/engine/enginepb"
-	"github.com/pingcap/tiflow/engine/framework"
-	"github.com/pingcap/tiflow/engine/framework/metadata"
-	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	"github.com/pingcap/tiflow/engine/model"
-	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
-	"github.com/pingcap/tiflow/engine/pkg/deps"
-	externRescManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/resourcetypes"
-	"github.com/pingcap/tiflow/engine/pkg/meta"
-	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
-	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
-	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
-	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
-	"github.com/pingcap/tiflow/engine/pkg/serverutil"
-	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
-	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
-	"github.com/pingcap/tiflow/engine/test"
-	"github.com/pingcap/tiflow/engine/test/mock"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/security"
-	"github.com/pingcap/tiflow/pkg/tcpserver"
-	p2pProtocol "github.com/pingcap/tiflow/proto/p2p"
 )
 
 // use a slice instead of map because in small data size, slice search is faster
@@ -72,9 +72,6 @@ var masterRPCLimiterAllowList = []string{
 	"SubmitJob",
 	"CancelJob",
 	"ScheduleTask",
-}
-
-var resourceRPCLimiterAllowList = []string{
 	"CreateResource",
 	"RemoveResource",
 }
@@ -86,14 +83,16 @@ type Server struct {
 	cfg     *Config
 	info    *model.NodeInfo
 	metrics *serverMasterMetric
+	// Notify the server to resign leadership.
+	resignCh chan struct{}
 
 	etcdClient *clientv3.Client
 
-	leader          atomic.Value
-	masterCli       *rpcutil.LeaderClientWithLock[pb.MasterClient]
-	resourceCli     *rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]
+	leader    atomic.Value
+	masterCli *rpcutil.LeaderClientWithLock[multiClient]
+
 	leaderServiceFn func(context.Context) error
-	masterRPCHook   *rpcutil.PreRPCHook[pb.MasterClient]
+	masterRPCHook   rpcutil.PreRPCHook
 
 	// sched scheduler
 	executorManager        ExecutorManager
@@ -105,9 +104,11 @@ type Server struct {
 	gcRunner      externRescManager.GCRunner
 	gcCoordinator externRescManager.GCCoordinator
 
-	msgService      *p2p.MessageRPCService
-	p2pMsgRouter    p2p.MessageRouter
-	rpcLogRL        *rate.Limiter
+	msgService   *p2p.MessageRPCService
+	p2pMsgRouter p2p.MessageRouter
+	rpcLogRL     *rate.Limiter
+
+	// Deprecated. Will be replaced with `discovery.Agent`.
 	discoveryKeeper *serverutil.DiscoveryKeepaliver
 
 	metaStoreManager MetaStoreManager
@@ -120,8 +121,9 @@ type Server struct {
 	testCtx *test.Context
 
 	// framework metastore client
-	frameMetaClient    pkgOrm.Client
-	businessClientConn metaModel.ClientConn
+	frameMetaClient     pkgOrm.Client
+	frameworkClientConn metaModel.ClientConn
+	businessClientConn  metaModel.ClientConn
 }
 
 // PersistResource implements pb.MasterServer.PersistResource
@@ -191,12 +193,12 @@ func NewServer(cfg *Config, ctx *test.Context) (_ *Server, finalErr error) {
 		id:                id,
 		cfg:               cfg,
 		info:              info,
+		resignCh:          make(chan struct{}),
 		executorManager:   executorManager,
 		leaderInitialized: *atomic.NewBool(false),
 		testCtx:           ctx,
 		leader:            atomic.Value{},
-		masterCli:         &rpcutil.LeaderClientWithLock[pb.MasterClient]{},
-		resourceCli:       &rpcutil.LeaderClientWithLock[pb.ResourceManagerClient]{},
+		masterCli:         &rpcutil.LeaderClientWithLock[multiClient]{},
 		msgService:        msgService,
 		p2pMsgRouter:      p2pMsgRouter,
 		rpcLogRL:          rate.NewLimiter(rate.Every(time.Second*5), 3 /*burst*/),
@@ -206,7 +208,7 @@ func NewServer(cfg *Config, ctx *test.Context) (_ *Server, finalErr error) {
 		etcdClient:        etcdClient,
 	}
 	server.leaderServiceFn = server.runLeaderService
-	masterRPCHook := rpcutil.NewPreRPCHook(
+	masterRPCHook := rpcutil.NewPreRPCHook[multiClient](
 		id,
 		&server.leader,
 		server.masterCli,
@@ -292,6 +294,10 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 	resp2 := &pb.RegisterExecutorResponse{}
 	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
 	if shouldRet {
+		if err != nil {
+			log.Warn("RegisterExecutor failed", zap.Error(err))
+			return nil, err
+		}
 		return resp2, err
 	}
 	// register executor to scheduler
@@ -325,7 +331,7 @@ func (s *Server) ScheduleTask(ctx context.Context, req *pb.ScheduleTaskRequest) 
 	}
 	schedulerResp, err := s.scheduler.ScheduleTask(ctx, schedulerReq)
 	if err != nil {
-		return nil, schedModel.SchedulerErrorToGRPCError(err)
+		return nil, rpcerror.ToGRPCError(err)
 	}
 
 	addr, ok := s.executorManager.GetAddr(schedulerResp.ExecutorID)
@@ -447,11 +453,11 @@ func (s *Server) Stop() {
 	if s.masterCli != nil {
 		s.masterCli.Close()
 	}
-	if s.resourceCli != nil {
-		s.resourceCli.Close()
-	}
 	if s.frameMetaClient != nil {
 		s.frameMetaClient.Close()
+	}
+	if s.frameworkClientConn != nil {
+		s.frameworkClientConn.Close()
 	}
 	if s.businessClientConn != nil {
 		s.businessClientConn.Close()
@@ -475,7 +481,9 @@ func (s *Server) Run(ctx context.Context) error {
 	// ResourceManagerService should be initialized after registerMetaStore.
 	// FIXME: We should do these work inside NewServer.
 	s.initResourceManagerService()
-	s.scheduler = makeScheduler(s.executorManager, s.resourceManagerService)
+	s.scheduler = scheduler.NewScheduler(
+		s.executorManager,
+		s.resourceManagerService)
 
 	wg, ctx := errgroup.WithContext(ctx)
 
@@ -504,13 +512,29 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 	if err := s.metaStoreManager.Register(cfg.FrameMetaConf.StoreID, cfg.FrameMetaConf); err != nil {
 		return err
 	}
+	if cfg.FrameMetaConf.StoreType == metaModel.StoreTypeMySQL {
+		// Normally, a schema will be created in advance and we may have no privilege
+		// to create schema for framework meta. Just for easy test here. Ignore any error.
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+		if err := meta.CreateSchemaIfNotExists(ctx, *(s.cfg.FrameMetaConf)); err != nil {
+			log.Warn("create schema for framework metastore fail, but it can be ignored.",
+				zap.String("schema", s.cfg.FrameMetaConf.Schema),
+				zap.Error(err))
+		}
+	}
 	var err error
-	// TODO: replace default db config
-	if s.frameMetaClient, err = pkgOrm.NewClient(*cfg.FrameMetaConf, *(cfg.FrameMetaConf.DBConf)); err != nil {
+	s.frameworkClientConn, err = meta.NewClientConn(cfg.FrameMetaConf)
+	if err != nil {
 		log.Error("connect to framework metastore fail", zap.Any("config", cfg.FrameMetaConf), zap.Error(err))
 		return err
 	}
-
+	// some components depend on this framework meta client
+	s.frameMetaClient, err = pkgOrm.NewClient(s.frameworkClientConn)
+	if err != nil {
+		log.Error("create framework meta client fail", zap.Error(err))
+		return err
+	}
 	log.Info("register framework metastore successfully", zap.Any("metastore", cfg.FrameMetaConf))
 
 	// register metastore for business
@@ -518,11 +542,10 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if cfg.BusinessMetaConf.StoreType == metaModel.StoreTypeSQL {
+	if cfg.BusinessMetaConf.StoreType == metaModel.StoreTypeMySQL {
 		// Normally, a schema will be created in advance and we may have no privilege
-		// to create schema for business meta.
-		// Just for easy test here. Ignore any error.
-		ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
+		// to create schema for business meta. Just for easy test here. Ignore any error.
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 		if err := meta.CreateSchemaIfNotExists(ctx, *(s.cfg.BusinessMetaConf)); err != nil {
 			log.Warn("create schema for business metastore fail, but it can be ignored.",
@@ -530,7 +553,6 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 				zap.Error(err))
 		}
 	}
-
 	s.businessClientConn, err = meta.NewClientConn(cfg.BusinessMetaConf)
 	if err != nil {
 		log.Error("connect to business metastore fail", zap.Any("config", cfg.BusinessMetaConf), zap.Error(err))
@@ -542,18 +564,10 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 }
 
 func (s *Server) initResourceManagerService() {
-	resourceRPCHook := rpcutil.NewPreRPCHook(
-		s.id,
-		&s.leader,
-		s.resourceCli,
-		&s.leaderInitialized,
-		s.rpcLogRL,
-		resourceRPCLimiterAllowList,
-	)
 	s.resourceManagerService = externRescManager.NewService(
 		s.frameMetaClient,
 		s.executorManager,
-		resourceRPCHook,
+		s.masterRPCHook,
 	)
 }
 
@@ -581,7 +595,6 @@ func (s *Server) serve(ctx context.Context) error {
 	errGroup.Go(func() error {
 		return grpcServer.Serve(tcpServer.GrpcListener())
 	})
-
 	return errGroup.Wait()
 }
 
@@ -590,7 +603,9 @@ func (s *Server) createGRPCServer() *grpc.Server {
 		grpc.StreamInterceptor(grpcprometheus.StreamServerInterceptor),
 		grpc.UnaryInterceptor(grpcprometheus.UnaryServerInterceptor),
 	)
-	pb.RegisterMasterServer(grpcServer, s)
+	pb.RegisterDiscoveryServer(grpcServer, s)
+	pb.RegisterTaskSchedulerServer(grpcServer, s)
+	pb.RegisterJobManagerServer(grpcServer, s)
 	pb.RegisterResourceManagerServer(grpcServer, s.resourceManagerService)
 	p2pProtocol.RegisterCDCPeerToPeerServer(grpcServer, s.msgService.GetMessageServer())
 	return grpcServer
@@ -627,27 +642,16 @@ func (s *Server) name() string {
 func (s *Server) initializedBackendMeta(ctx context.Context) error {
 	bctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-
-	if err := s.frameMetaClient.Initialize(bctx); err != nil {
-		log.Error("framework metastore initialized all backend tables fail", zap.Error(err))
+	if err := pkgOrm.InitAllFrameworkModels(bctx, s.frameworkClientConn); err != nil {
+		log.Error("framework metastore initializes all backend tables fail", zap.Error(err))
 		return err
 	}
 
 	// Since we have the sql-type business metastore,
 	// we need to initialize the logic_epoches table for all jobs
-	if s.cfg.BusinessMetaConf.StoreType == metaModel.StoreTypeSQL {
-		conn, err := s.businessClientConn.GetConn()
-		if err != nil {
-			return err
-		}
-		gormDB, err := pkgOrm.NewGormDB(conn.(*sql.DB))
-		if err != nil {
-			return err
-		}
-		// TODO: we will replace the gormDB with ClientConn here after we unify the usage of
-		// framework client
-		err = ormModel.InitializeEpochModel(ctx, gormDB)
-		if err != nil {
+	if s.cfg.BusinessMetaConf.StoreType == metaModel.StoreTypeMySQL {
+		if err := pkgOrm.InitEpochModel(ctx, s.businessClientConn); err != nil {
+			log.Error("business metastore initializes the logic epoch table fail", zap.Error(err))
 			return err
 		}
 	}
@@ -677,11 +681,18 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		log.Info("resource manager exited")
 	}()
 
-	clients := client.NewClientManager()
-	err = clients.AddMasterClient(ctx, []string{s.cfg.Addr})
+	// TODO support TLS.
+	executorClients := pkgClient.NewExecutorGroup(&security.Credential{}, log.L())
+	masterClient, err := pkgClient.NewServerMasterClientWithFailOver(
+		pkgClient.MasterServerList{
+			s.cfg.Addr: true,
+		},
+		nil, // TODO support TLS
+	)
 	if err != nil {
 		return
 	}
+
 	dctx := dcontext.NewContext(ctx)
 	dctx.Environ.Addr = s.cfg.AdvertiseAddr
 	dctx.Environ.NodeID = s.name()
@@ -712,14 +723,14 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		return err
 	}
 
-	if err := dp.Provide(func() client.ClientsManager {
-		return clients
+	if err := dp.Provide(func() pkgClient.ExecutorGroup {
+		return executorClients
 	}); err != nil {
 		return err
 	}
 
-	if err := dp.Provide(func() client.MasterClient {
-		return clients.MasterClient()
+	if err := dp.Provide(func() pkgClient.ServerMasterClient {
+		return masterClient
 	}); err != nil {
 		return err
 	}
@@ -760,7 +771,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	}()
 
 	s.gcRunner = externRescManager.NewGCRunner(s.frameMetaClient, map[resModel.ResourceType]externRescManager.GCHandlerFunc{
-		"local": resourcetypes.NewLocalFileResourceType(clients).GCHandler(),
+		"local": resourcetypes.NewLocalFileResourceType(executorClients).GCHandler(),
 	})
 	s.gcCoordinator = externRescManager.NewGCCoordinator(s.executorManager, s.jobManager, s.frameMetaClient, s.gcRunner)
 
@@ -804,6 +815,10 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		}
 	})
 
+	errg.Go(func() error {
+		return serverutil2.WatchExecutors(ctx, s.executorManager, executorClients)
+	})
+
 	s.leaderInitialized.Store(true)
 	log.Info("leader is initialized", zap.Duration("took", time.Since(start)))
 
@@ -820,19 +835,6 @@ func (s *Server) collectLeaderMetric() {
 	}
 }
 
-// makeScheduler is a helper function for Server to create a scheduler.Scheduler.
-// This function makes it clear how a Scheduler is supposed to be constructed
-// using concrete type, from the perspective of Server.
-func makeScheduler(
-	executorManager ExecutorManager,
-	externalResourceManager *externRescManager.Service,
-) *scheduler.Scheduler {
-	return scheduler.NewScheduler(
-		executorManager.CapacityProvider(),
-		externalResourceManager,
-	)
-}
-
 // IsLeader implements ServerInfoProvider.IsLeader.
 func (s *Server) IsLeader() bool {
 	leader, ok := s.leader.Load().(*rpcutil.Member)
@@ -845,10 +847,18 @@ func (s *Server) IsLeader() bool {
 // LeaderAddr implements ServerInfoProvider.LeaderAddr.
 func (s *Server) LeaderAddr() (string, bool) {
 	leader, ok := s.leader.Load().(*rpcutil.Member)
-	if !ok || leader == nil {
+	if !ok || leader == nil || leader.AdvertiseAddr == "" {
 		return "", false
 	}
 	return leader.AdvertiseAddr, true
+}
+
+// ResignLeader implements ServerInfoProvider.ResignLeader.
+func (s *Server) ResignLeader() {
+	select {
+	case s.resignCh <- struct{}{}:
+	default:
+	}
 }
 
 // JobManager implements ServerInfoProvider.JobManager.

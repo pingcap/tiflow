@@ -33,8 +33,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
-	"github.com/pingcap/tiflow/cdc/sink"
+	sinkv1 "github.com/pingcap/tiflow/cdc/sink"
 	sinkmetric "github.com/pingcap/tiflow/cdc/sink/metrics"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -65,10 +66,11 @@ type processor struct {
 	schemaStorage entry.SchemaStorage
 	lastSchemaTs  model.Ts
 
-	filter      filter.Filter
-	mounter     entry.Mounter
-	sink        sink.Sink
-	redoManager redo.LogManager
+	filter        filter.Filter
+	mounter       entry.Mounter
+	sinkV1        sinkv1.Sink
+	sinkV2Factory *factory.SinkFactory
+	redoManager   redo.LogManager
 
 	initialized bool
 	errCh       chan error
@@ -77,7 +79,7 @@ type processor struct {
 
 	lazyInit            func(ctx cdcContext.Context) error
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (pipeline.TablePipeline, error)
-	newAgent            func(ctx cdcContext.Context) (scheduler.Agent, error)
+	newAgent            func(cdcContext.Context, *model.Liveness) (scheduler.Agent, error)
 
 	liveness     *model.Liveness
 	agent        scheduler.Agent
@@ -473,6 +475,7 @@ func isProcessorIgnorableError(err error) bool {
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
 func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) (orchestrator.ReactorState, error) {
+	p.changefeed = state
 	// check upstream error first
 	if err := p.upstream.Error(); err != nil {
 		return p.handleErr(state, err)
@@ -491,7 +494,6 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 		return state, nil
 	}
 	startTime := time.Now()
-	p.changefeed = state
 	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID:   state.ID,
@@ -576,7 +578,7 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 
 	p.doGCSchemaStorage()
 
-	if err := p.agent.Tick(ctx, p.liveness.Load()); err != nil {
+	if err := p.agent.Tick(ctx); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
@@ -654,7 +656,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		return errors.Trace(err)
 	}
 
-	stdCtx := contextutil.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
+	stdCtx := contextutil.PutChangefeedIDInCtx(ctx, p.changefeedID)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
 
 	p.mounter = entry.NewMounter(p.schemaStorage,
@@ -666,20 +668,30 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 
 	log.Info("processor try new sink",
 		zap.String("namespace", p.changefeedID.Namespace),
-		zap.String("changefeed", p.changefeed.ID.ID))
+		zap.String("changefeed", p.changefeedID.ID))
 
 	start := time.Now()
-	p.sink, err = sink.New(
-		stdCtx,
-		p.changefeed.ID,
-		p.changefeed.Info.SinkURI,
-		p.changefeed.Info.Config,
-		errCh,
-	)
+	conf := config.GetGlobalServerConfig()
+	if !conf.Debug.EnableNewSink {
+		log.Info("Try to create sinkV1")
+		p.sinkV1, err = sinkv1.New(
+			stdCtx,
+			p.changefeedID,
+			p.changefeed.Info.SinkURI,
+			p.changefeed.Info.Config,
+			errCh,
+		)
+	} else {
+		log.Info("Try to create sinkV2")
+		p.sinkV2Factory, err = factory.New(ctx, p.changefeed.Info.SinkURI,
+			p.changefeed.Info.Config,
+			errCh)
+	}
+
 	if err != nil {
 		log.Info("processor new sink failed",
 			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeed.ID.ID),
+			zap.String("changefeed", p.changefeedID.ID),
 			zap.Duration("duration", time.Since(start)))
 		return errors.Trace(err)
 	}
@@ -692,7 +704,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		return err
 	}
 
-	p.agent, err = p.newAgent(ctx)
+	p.agent, err = p.newAgent(ctx, p.liveness)
 	if err != nil {
 		return err
 	}
@@ -705,7 +717,9 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	return nil
 }
 
-func (p *processor) newAgentImpl(ctx cdcContext.Context) (ret scheduler.Agent, err error) {
+func (p *processor) newAgentImpl(
+	ctx cdcContext.Context, liveness *model.Liveness,
+) (ret scheduler.Agent, err error) {
 	messageServer := ctx.GlobalVars().MessageServer
 	messageRouter := ctx.GlobalVars().MessageRouter
 	etcdClient := ctx.GlobalVars().EtcdClient
@@ -713,10 +727,12 @@ func (p *processor) newAgentImpl(ctx cdcContext.Context) (ret scheduler.Agent, e
 	cfg := config.GetGlobalServerConfig().Debug
 	if cfg.EnableSchedulerV3 {
 		ret, err = scheduler.NewAgentV3(
-			ctx, captureID, messageServer, messageRouter, etcdClient, p, p.changefeedID)
+			ctx, captureID, liveness,
+			messageServer, messageRouter, etcdClient, p, p.changefeedID)
 	} else {
 		ret, err = scheduler.NewAgent(
-			ctx, captureID, messageServer, messageRouter, etcdClient, p, p.changefeedID)
+			ctx, captureID, liveness,
+			messageServer, messageRouter, etcdClient, p, p.changefeedID)
 	}
 	return ret, errors.Trace(err)
 }
@@ -905,7 +921,7 @@ func (p *processor) createTablePipelineImpl(
 	ctx cdcContext.Context,
 	tableID model.TableID,
 	replicaInfo *model.TableReplicaInfo,
-) (pipeline.TablePipeline, error) {
+) (table pipeline.TablePipeline, err error) {
 	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
 		if cerror.ErrTableProcessorStoppedSafely.Equal(err) ||
 			errors.Cause(errors.Cause(err)) == context.Canceled {
@@ -921,22 +937,42 @@ func (p *processor) createTablePipelineImpl(
 
 	tableName := p.getTableName(ctx, tableID)
 
-	s, err := sink.NewTableSink(p.sink, tableID, p.metricsTableSinkTotalRows)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	table, err := pipeline.NewTableActor(
-		ctx,
-		p.upstream,
-		p.mounter,
-		tableID,
-		tableName,
-		replicaInfo,
-		s,
-		p.redoManager,
-		p.changefeed.Info.GetTargetTs())
-	if err != nil {
-		return nil, errors.Trace(err)
+	if p.sinkV1 != nil {
+		s, err := sinkv1.NewTableSink(p.sinkV1, tableID, p.metricsTableSinkTotalRows)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		table, err = pipeline.NewTableActor(
+			ctx,
+			p.upstream,
+			p.mounter,
+			tableID,
+			tableName,
+			replicaInfo,
+			s,
+			nil,
+			p.redoManager,
+			p.changefeed.Info.GetTargetTs())
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+
+	} else {
+		s := p.sinkV2Factory.CreateTableSink(tableID)
+		table, err = pipeline.NewTableActor(
+			ctx,
+			p.upstream,
+			p.mounter,
+			tableID,
+			tableName,
+			replicaInfo,
+			nil,
+			s,
+			p.redoManager,
+			p.changefeed.Info.GetTargetTs())
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
 
 	log.Info("Add table pipeline", zap.Int64("tableID", tableID),
@@ -1000,7 +1036,7 @@ func (p *processor) refreshMetrics() {
 func (p *processor) Close() error {
 	log.Info("processor closing ...",
 		zap.String("namespace", p.changefeedID.Namespace),
-		zap.String("changefeed", p.changefeed.ID.ID))
+		zap.String("changefeed", p.changefeedID.ID))
 	for _, tbl := range p.tables {
 		tbl.Cancel()
 	}
@@ -1019,15 +1055,31 @@ func (p *processor) Close() error {
 	p.agent = nil
 
 	// sink close might be time-consuming, do it the last.
-	if p.sink != nil {
+	if p.sinkV1 != nil {
 		// pass a canceled context is ok here, since we don't need to wait Close
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		log.Info("processor try to close the sink",
+		log.Info("processor try to close the sinkV1",
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID))
 		start := time.Now()
-		if err := p.sink.Close(ctx); err != nil && errors.Cause(err) != context.Canceled {
+		if err := p.sinkV1.Close(ctx); err != nil && errors.Cause(err) != context.Canceled {
+			log.Info("processor close sink failed",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Duration("duration", time.Since(start)))
+			return errors.Trace(err)
+		}
+		log.Info("processor close sink success",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Duration("duration", time.Since(start)))
+	} else {
+		log.Info("processor try to close the sinkV2",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID))
+		start := time.Now()
+		if err := p.sinkV2Factory.Close(); err != nil && errors.Cause(err) != context.Canceled {
 			log.Info("processor close sink failed",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),

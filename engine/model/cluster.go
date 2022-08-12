@@ -16,7 +16,9 @@ package model
 import (
 	"encoding/json"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
+	"github.com/pingcap/tiflow/pkg/label"
 )
 
 // NodeType is the type of a server instance, could be either server master or executor
@@ -50,6 +52,10 @@ type NodeInfo struct {
 	// 3. disk cap
 	// TODO: So we should enrich the cap dimensions in the future.
 	Capability int `json:"cap"`
+
+	// Labels store the label set for each executor.
+	// It is invalid if Type != NodeTypeExecutor.
+	Labels label.Set `json:"labels"`
 }
 
 // EtcdKey return encoded key for a node used in service discovery etcd
@@ -89,7 +95,7 @@ func (s ExecutorStatus) String() string {
 func (e *NodeInfo) ToJSON() (string, error) {
 	data, err := json.Marshal(e)
 	if err != nil {
-		return "", err
+		return "", errors.Trace(err)
 	}
 	return string(data), nil
 }
@@ -107,6 +113,7 @@ const (
 // ExecutorStatusChange describes an event where an
 // executor's status has changed.
 type ExecutorStatusChange struct {
-	ID ExecutorID
-	Tp ExecutorStatusChangeType
+	ID   ExecutorID
+	Tp   ExecutorStatusChangeType
+	Addr string
 }

@@ -163,7 +163,7 @@ func (r *progressTracker) close(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case <-blockTicker.C:
-			log.Warn("close processor doesn't return in time, may be stuck",
+			log.Warn("Close process doesn't return in time, may be stuck",
 				zap.Int64("tableID", r.tableID),
 				zap.Int("trackingCount", r.trackingCount()),
 				zap.Any("lastMinResolvedTs", r.minTs()),

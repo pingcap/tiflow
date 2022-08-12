@@ -15,22 +15,21 @@ package servermaster
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"go.etcd.io/etcd/api/v3/mvccpb"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.uber.org/zap"
-
-	"github.com/pingcap/tiflow/engine/client"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	"github.com/pingcap/tiflow/engine/pkg/etcdutil"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/servermaster/cluster"
 	derrors "github.com/pingcap/tiflow/pkg/errors"
+	"go.etcd.io/etcd/api/v3/mvccpb"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func (s *Server) generateSessionConfig() (*cluster.EtcdSessionConfig, error) {
@@ -49,16 +48,14 @@ func (s *Server) generateSessionConfig() (*cluster.EtcdSessionConfig, error) {
 
 func (s *Server) leaderLoop(ctx context.Context) error {
 	var (
-		leaderResignFn context.CancelFunc
-
 		retryInterval    = time.Millisecond * 200
 		needResetSession = false
+
+		// After a leader is resigned, the server will stop to campaign itself
+		// for 10 seconds to avoid the server becoming a leader again.
+		stopCampaignInterval = time.Second * 10
+		stopCampaignUntil    = time.Now()
 	)
-	defer func() {
-		if leaderResignFn != nil {
-			leaderResignFn()
-		}
-	}()
 
 	sessionCfg, err := s.generateSessionConfig()
 	if err != nil {
@@ -85,23 +82,47 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 			continue
 		}
 
+		if time.Now().Before(stopCampaignUntil) {
+			time.Sleep(retryInterval)
+			continue
+		}
+
 		if needResetSession {
 			if err := session.Reset(ctx); err != nil {
 				return err
 			}
 			needResetSession = false
 		}
-		newCtx, newResignFn, err := session.Campaign(ctx, defaultCampaignTimeout)
+		leaderCtx, resignFn, err := session.Campaign(ctx, defaultCampaignTimeout)
 		if err != nil {
 			needResetSession = session.CheckNeedReset(err)
 			continue
 		}
-		leaderResignFn = newResignFn
 
-		if err := s.leaderServiceFn(newCtx); err != nil {
-			if errors.Cause(err) == context.Canceled ||
-				derrors.ErrEtcdLeaderChanged.Equal(err) {
+		g, gCtx := errgroup.WithContext(leaderCtx)
+
+		g.Go(func() error {
+			return s.leaderServiceFn(gCtx)
+		})
+
+		g.Go(func() error {
+			var retErr error
+			select {
+			case <-gCtx.Done():
+				retErr = gCtx.Err()
+			case <-s.resignCh:
+				retErr = derrors.ErrLeaderResigned.GenWithStackByArgs()
+			}
+			resignFn()
+			return retErr
+		})
+
+		if err := g.Wait(); err != nil {
+			if errors.Cause(err) == context.Canceled {
 				log.Info("leader service exits", zap.Error(err))
+			} else if derrors.ErrLeaderResigned.Equal(err) {
+				log.Info("leader has resigned")
+				stopCampaignUntil = time.Now().Add(stopCampaignInterval)
 			} else if derrors.ErrMasterSessionDone.Equal(err) {
 				log.Info("server master session done, reset session now", zap.Error(err))
 				needResetSession = true
@@ -171,37 +192,36 @@ func (s *Server) checkLeaderExists(ctx context.Context) (retry bool, err error) 
 }
 
 // TODO: we can use UpdateClients, don't need to close and re-create it.
-func (s *Server) createLeaderClient(ctx context.Context, addrs []string) {
+func (s *Server) createLeaderClient(ctx context.Context, addr string) {
 	s.closeLeaderClient()
 
-	endpoints := make([]string, 0, len(addrs))
-	for _, addr := range addrs {
-		endpoints = append(endpoints, strings.Replace(addr, "http://", "", 1))
-	}
-	cli, err := client.NewMasterClient(ctx, endpoints)
+	// TODO support TLS
+	credentials := insecure.NewCredentials()
+	conn, err := grpc.Dial(
+		addr,
+		grpc.WithTransportCredentials(credentials),
+	)
 	if err != nil {
-		log.Error("create server master client failed", zap.Strings("addrs", addrs), zap.Error(err))
+		log.Error("create server master client failed", zap.String("addr", addr), zap.Error(err))
 		return
 	}
-	s.masterCli.Set(cli.FailoverRPCClients)
-
-	cli2, err := manager.NewResourceClient(ctx, endpoints)
-	if err != nil {
-		log.Error("create resource client failed", zap.Strings("addrs", addrs), zap.Error(err))
-		return
-	}
-	s.resourceCli.Set(cli2)
+	cli := newMultiClient(conn)
+	s.masterCli.Set(cli, func() {
+		if err := conn.Close(); err != nil {
+			log.Warn("failed to close clinet", zap.String("addr", addr))
+		}
+	})
 }
 
 func (s *Server) closeLeaderClient() {
 	s.masterCli.Close()
-	s.resourceCli.Close()
 }
 
 func (s *Server) watchLeader(ctx context.Context, m *rpcutil.Member, key []byte, rev int64) {
 	m.IsLeader = true
 	s.leader.Store(m)
-	s.createLeaderClient(ctx, []string{m.AdvertiseAddr})
+
+	s.createLeaderClient(ctx, m.AdvertiseAddr)
 	defer s.leader.Store(&rpcutil.Member{})
 
 	watcher := clientv3.NewWatcher(s.etcdClient)

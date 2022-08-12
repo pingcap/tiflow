@@ -33,8 +33,13 @@ const (
 	regionLabelPrefix     = "/pd/api/v1/config/region-label/rules"
 	gcServiceSafePointURL = "/pd/api/v1/gc/safepoint"
 
-	// Split the default rule by `6e000000000000000000f8` to keep metadata region
-	// isolated from the normal data area.
+	// Split the default rule by following keys to keep metadata region isolated
+	// from the normal data area.
+	//
+	// * `6e000000000000000000f8`, keys starts with "m".
+	// * `748000fffffffffffffe00000000000000f8`, the table prefix of
+	//   `tidb_ddl_job` table, which has the table ID 281474976710654,
+	//   see "github.com/pingcap/tidb/ddl.JobTableID"
 	addMetaJSON = `{
 		"sets": [
 			{
@@ -50,6 +55,22 @@ const (
 					{
 						"start_key": "6d00000000000000f8",
 						"end_key": "6e00000000000000f8"
+					}
+				]
+			},
+			{
+				"id": "ticdc/meta_tidb_ddl_job",
+				"labels": [
+					{
+						"key": "data-type",
+						"value": "meta"
+					}
+				],
+				"rule_type": "key-range",
+				"data": [
+					{
+						"start_key": "748000fffffffffffffe00000000000000f8",
+						"end_key":   "748000ffffffffffffff00000000000000f8"
 					}
 				]
 			}

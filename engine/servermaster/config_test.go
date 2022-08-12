@@ -47,7 +47,7 @@ store-type = "etcd"
 	require.Equal(t, "root", config.FrameMetaConf.Auth.User)
 	require.Equal(t, "passwd", config.FrameMetaConf.Auth.Passwd)
 	require.Equal(t, "test0", config.FrameMetaConf.Schema)
-	require.Equal(t, "sql", config.FrameMetaConf.StoreType)
+	require.Equal(t, "mysql", config.FrameMetaConf.StoreType)
 
 	require.Equal(t, "etcd", config.BusinessMetaConf.StoreType)
 	require.Equal(t, "metastore:12479", config.BusinessMetaConf.Endpoints[0])

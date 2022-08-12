@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/openapi"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 )
@@ -107,7 +108,26 @@ func (jm *JobMaster) DMAPIGetJobConfig(c *gin.Context) {
 
 // DMAPIUpdateJobConfig implements the api of update job config.
 func (jm *JobMaster) DMAPIUpdateJobConfig(c *gin.Context) {
-	// TODO: support update job config
+	var req openapi.UpdateJobConfigRequest
+	if err := c.Bind(&req); err != nil {
+		// nolint:errcheck
+		_ = c.Error(err)
+		return
+	}
+
+	var jobCfg config.JobCfg
+	if err := jobCfg.Decode([]byte(req.Config)); err != nil {
+		// nolint:errcheck
+		_ = c.Error(err)
+		return
+	}
+
+	if err := jm.UpdateJobCfg(c.Request.Context(), &jobCfg); err != nil {
+		// nolint:errcheck
+		_ = c.Error(err)
+		return
+	}
+	c.Status(http.StatusOK)
 }
 
 // DMAPIOperateJob implements the api of operate job.
@@ -135,7 +155,7 @@ func (jm *JobMaster) DMAPIOperateJob(c *gin.Context) {
 	if req.Tasks != nil {
 		tasks = *req.Tasks
 	}
-	err := jm.OperateTask(c.Request.Context(), op, nil, tasks)
+	err := jm.operateTask(c.Request.Context(), op, nil, tasks)
 	if err != nil {
 		// nolint:errcheck
 		_ = c.Error(err)

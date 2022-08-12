@@ -82,7 +82,7 @@ func (k *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 		return errors.Trace(err)
 	}
 	if msg == nil {
-		log.Info("skip ddl event", zap.Uint64("commitTs", ddl.CommitTs),
+		log.Info("Skip ddl event", zap.Uint64("commitTs", ddl.CommitTs),
 			zap.String("query", ddl.Query),
 			zap.String("protocol", k.protocol.String()),
 			zap.String("namespace", k.id.Namespace),
@@ -92,7 +92,7 @@ func (k *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 
 	topic := k.eventRouter.GetTopicForDDL(ddl)
 	partitionRule := k.eventRouter.GetDLLDispatchRuleByProtocol(k.protocol)
-	log.Debug("emit ddl event",
+	log.Debug("Emit ddl event",
 		zap.Uint64("commitTs", ddl.CommitTs),
 		zap.String("query", ddl.Query),
 		zap.String("namespace", k.id.Namespace),
@@ -137,7 +137,7 @@ func (k *ddlSink) WriteCheckpointTs(ctx context.Context,
 		if err != nil {
 			return errors.Trace(err)
 		}
-		log.Debug("emit checkpointTs to default topic",
+		log.Debug("Emit checkpointTs to default topic",
 			zap.String("topic", topic), zap.Uint64("checkpointTs", ts))
 		err = k.producer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
 		return errors.Trace(err)

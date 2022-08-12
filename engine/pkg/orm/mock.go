@@ -16,16 +16,14 @@ package orm
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/engine/pkg/orm/model"
-	"github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/uuid"
 	"go.uber.org/zap"
-	"gorm.io/gorm"
+
+	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
+	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
+	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
 func randomDBFile() string {
@@ -36,56 +34,48 @@ func randomDBFile() string {
 func NewMockClient() (Client, error) {
 	// ref:https://www.sqlite.org/inmemorydb.html
 	// using dsn(file:%s?mode=memory&cache=shared) format here to
-	// 1. Create different DB for different TestXXX()
+	// 1. Create different DB for different TestXXX() to enable concurrent execution
 	// 2. Enable DB shared for different connection
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", randomDBFile())
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
-		SkipDefaultTransaction: true,
-		// TODO: logger
-	})
+	cc, err := mock.NewClientConnForSQLite(dsn)
 	if err != nil {
-		log.Error("create gorm client fail", zap.Error(err))
-		return nil, errors.ErrMetaNewClientFail.Wrap(err)
-	}
-
-	cli := &metaOpsClient{
-		db:          db,
-		epochClient: NewMockEpochClient(),
+		return nil, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	if err := cli.Initialize(ctx); err != nil {
-		cli.Close()
+	if err := InitAllFrameworkModels(ctx, cc); err != nil {
+		log.Error("initialize all framework models fail", zap.Error(err))
+		cc.Close()
 		return nil, err
 	}
 
-	return cli, nil
-}
-
-// NewMockEpochClient is the mock for EpochClient
-func NewMockEpochClient() model.EpochClient {
-	return &mockEpochClient{
-		epoch: 1,
+	cli, err := NewClient(cc)
+	if err != nil {
+		log.Error("new mock client fail", zap.Error(err))
+		cc.Close()
+		return nil, err
 	}
+
+	return &sqliteClient{
+		Client: cli,
+		conn:   cc,
+	}, nil
 }
 
-type mockEpochClient struct {
-	sync.Mutex
-	epoch int64
+type sqliteClient struct {
+	Client
+	conn metaModel.ClientConn
 }
 
-func (m *mockEpochClient) Initialize(ctx context.Context) error {
+func (c *sqliteClient) Close() error {
+	if c.Client != nil {
+		c.Client.Close()
+	}
+
+	if c.conn != nil {
+		c.conn.Close()
+	}
+
 	return nil
-}
-
-func (m *mockEpochClient) Close() error {
-	return nil
-}
-
-func (m *mockEpochClient) GenEpoch(ctx context.Context) (int64, error) {
-	m.Lock()
-	defer m.Unlock()
-	m.epoch = m.epoch + 1
-	return m.epoch, nil
 }

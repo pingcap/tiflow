@@ -18,6 +18,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/pingcap/errors"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
@@ -116,6 +117,8 @@ type JobCfg struct {
 	// BWList map[string]*filter.Rules `yaml:"black-white-list" toml:"black-white-list" json:"black-white-list"`
 	// EnableANSIQuotes bool `yaml:"ansi-quotes" toml:"ansi-quotes" json:"ansi-quotes"`
 	// RemoveMeta bool `yaml:"remove-meta"`
+
+	ModRevision uint64 `yaml:"mod-revision" toml:"mod-revision" json:"mod-revision"`
 }
 
 // DecodeFile reads file content from a given path and decodes it.
@@ -184,7 +187,7 @@ func FromTaskCfgs(taskCfgs []*TaskCfg) *JobCfg {
 
 // toDMTaskConfig transform a jobCfg to DM TaskCfg.
 func (c *JobCfg) toDMTaskConfig() (*dmconfig.TaskConfig, error) {
-	dmTaskCfg := &dmconfig.TaskConfig{}
+	dmTaskCfg := dmconfig.NewTaskConfig()
 
 	// Copy all the fields contained in dmTaskCfg.
 	content, err := c.Yaml()
@@ -215,6 +218,9 @@ func (c *JobCfg) fromDMTaskConfig(dmTaskCfg *dmconfig.TaskConfig) error {
 }
 
 func (c *JobCfg) adjust() error {
+	if err := c.verifySourceID(); err != nil {
+		return err
+	}
 	dmTaskCfg, err := c.toDMTaskConfig()
 	if err != nil {
 		return err
@@ -223,6 +229,20 @@ func (c *JobCfg) adjust() error {
 		return err
 	}
 	return c.fromDMTaskConfig(dmTaskCfg)
+}
+
+func (c *JobCfg) verifySourceID() error {
+	sourceIDs := make(map[string]struct{})
+	for i, upstream := range c.Upstreams {
+		if upstream.SourceID == "" {
+			return errors.Errorf("source-id of %s upstream is empty", humanize.Ordinal(i+1))
+		}
+		if _, ok := sourceIDs[upstream.SourceID]; ok {
+			return errors.Errorf("source-id %s is duplicated", upstream.SourceID)
+		}
+		sourceIDs[upstream.SourceID] = struct{}{}
+	}
+	return nil
 }
 
 // TaskCfg shares same struct as JobCfg, but it only serves one upstream.

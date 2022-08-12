@@ -49,12 +49,19 @@ type APIQueryJobResponse struct {
 	Status    int32  `json:"status"`
 }
 
+// APILeaderInfo defines the json fields of leader info.
+type APILeaderInfo struct {
+	AdvertiseAddr string `json:"advertise_addr"`
+}
+
 // ServerInfoProvider provides server info.
 type ServerInfoProvider interface {
 	// IsLeader returns whether the server is leader.
 	IsLeader() bool
 	// LeaderAddr returns the address of leader.
 	LeaderAddr() (string, bool)
+	// ResignLeader resigns the leader.
+	ResignLeader()
 	// JobManager returns the job manager instance.
 	// It returns nil if the server is not leader.
 	JobManager() (JobManager, bool)
@@ -76,10 +83,14 @@ func NewOpenAPI(infoProvider ServerInfoProvider) *OpenAPI {
 // RegisterOpenAPIRoutes registers routes for OpenAPI.
 func RegisterOpenAPIRoutes(router *gin.Engine, openapi *OpenAPI) {
 	v1 := router.Group("/api/v1")
-	v1.Use(openapi.ForwardToLeader)
 	v1.Use(openapi.httpErrorHandler)
 
+	leaderGroup := v1.Group("/leader")
+	leaderGroup.GET("", openapi.GetLeader)
+	leaderGroup.POST("/resign", openapi.ResignLeader)
+
 	jobGroup := v1.Group("/jobs")
+	jobGroup.Use(openapi.ForwardToLeader)
 	jobGroup.GET("", openapi.ListJobs)
 	jobGroup.POST("", openapi.SubmitJob)
 	jobGroup.GET("/:job_id", openapi.QueryJob)
@@ -105,6 +116,36 @@ func RegisterOpenAPIRoutes(router *gin.Engine, openapi *OpenAPI) {
 			openapi.ForwardToJobMaster(c)
 		}
 	})
+}
+
+// GetLeader returns the leader info.
+// @Summary Get the leader info
+// @Description gets the leader info
+// @Produce json
+// @Success 200
+// @Failure 404,500
+// @Router	/api/v1/leader [get]
+func (o *OpenAPI) GetLeader(c *gin.Context) {
+	leaderAddr, ok := o.infoProvider.LeaderAddr()
+	if ok {
+		leaderInfo := &APILeaderInfo{
+			AdvertiseAddr: leaderAddr,
+		}
+		c.IndentedJSON(http.StatusOK, leaderInfo)
+	} else {
+		c.AbortWithStatus(http.StatusNotFound)
+	}
+}
+
+// ResignLeader resigns the leader.
+// @Summary Resign the leader
+// @Description resigns the leader
+// @Tags leader
+// @Success 202
+// @Failure 400,500
+// @Router	/api/v1/leader/resign [post]
+func (o *OpenAPI) ResignLeader(_ *gin.Context) {
+	o.infoProvider.ResignLeader()
 }
 
 // ListJobs lists all jobs in servermaster.
@@ -317,10 +358,8 @@ func (o *OpenAPI) ForwardToLeader(c *gin.Context) {
 		}
 		u, err := o.parseURL(leaderAddr)
 		if err != nil {
-			if err != nil {
-				_ = c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("invalid executor address: %s", leaderAddr))
-				return
-			}
+			_ = c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("invalid executor address: %s", leaderAddr))
+			return
 		}
 		proxy := httputil.NewSingleHostReverseProxy(u)
 		proxy.ServeHTTP(c.Writer, c.Request)

@@ -18,18 +18,17 @@ import (
 	"sync"
 	"time"
 
-	"go.uber.org/zap"
-	"golang.org/x/time/rate"
-
 	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	"github.com/pingcap/tiflow/engine/servermaster/resource"
-	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
+	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"github.com/pingcap/tiflow/engine/test"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/uuid"
+	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 )
 
 // ExecutorManager defines an interface to manager all executors
@@ -41,7 +40,6 @@ type ExecutorManager interface {
 	ExecutorCount(status model.ExecutorStatus) int
 	HasExecutor(executorID string) bool
 	ListExecutors() []string
-	CapacityProvider() scheduler.CapacityProvider
 	GetAddr(executorID model.ExecutorID) (string, bool)
 	Start(ctx context.Context)
 	Stop()
@@ -50,8 +48,12 @@ type ExecutorManager interface {
 	// a stream of events describing changes that happen to the executors
 	// after the snapshot is taken.
 	WatchExecutors(ctx context.Context) (
-		snap []model.ExecutorID, stream *notifier.Receiver[model.ExecutorStatusChange], err error,
+		snap map[model.ExecutorID]string, stream *notifier.Receiver[model.ExecutorStatusChange], err error,
 	)
+
+	// GetExecutorInfo implements the interface scheduler.executorInfoProvider.
+	// It is called by the scheduler as the source of truth for executors.
+	GetExecutorInfos() map[model.ExecutorID]schedModel.ExecutorInfo
 }
 
 // ExecutorManagerImpl holds all the executors info, including liveness, status, resource usage.
@@ -90,11 +92,12 @@ func (e *ExecutorManagerImpl) removeExecutorImpl(id model.ExecutorID) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	log.Info("begin to remove executor", zap.String("id", string(id)))
-	_, ok := e.executors[id]
+	exec, ok := e.executors[id]
 	if !ok {
 		// This executor has been removed
 		return errors.ErrUnknownExecutorID.GenWithStackByArgs(id)
 	}
+	addr := exec.Addr
 	delete(e.executors, id)
 	e.rescMgr.Unregister(id)
 	log.Info("notify to offline exec")
@@ -106,8 +109,9 @@ func (e *ExecutorManagerImpl) removeExecutorImpl(id model.ExecutorID) error {
 	}
 
 	e.notifier.Notify(model.ExecutorStatusChange{
-		ID: id,
-		Tp: model.EventExecutorOffline,
+		ID:   id,
+		Tp:   model.EventExecutorOffline,
+		Addr: addr,
 	})
 	return nil
 }
@@ -154,8 +158,9 @@ func (e *ExecutorManagerImpl) RegisterExec(info *model.NodeInfo) {
 	e.mu.Lock()
 	e.executors[info.ID] = exec
 	e.notifier.Notify(model.ExecutorStatusChange{
-		ID: info.ID,
-		Tp: model.EventExecutorOnline,
+		ID:   info.ID,
+		Tp:   model.EventExecutorOnline,
+		Addr: info.Addr,
 	})
 	e.mu.Unlock()
 	e.rescMgr.Register(exec.ID, exec.Addr, model.RescUnit(exec.Capability))
@@ -304,11 +309,6 @@ func (e *ExecutorManagerImpl) ExecutorCount(status model.ExecutorStatus) (count 
 	return
 }
 
-// CapacityProvider returns the internal rescMgr as a scheduler.CapacityProvider.
-func (e *ExecutorManagerImpl) CapacityProvider() scheduler.CapacityProvider {
-	return e.rescMgr
-}
-
 // GetAddr implements ExecutorManager.GetAddr
 func (e *ExecutorManagerImpl) GetAddr(executorID model.ExecutorID) (string, bool) {
 	e.mu.Lock()
@@ -325,12 +325,13 @@ func (e *ExecutorManagerImpl) GetAddr(executorID model.ExecutorID) (string, bool
 // WatchExecutors implements the ExecutorManager interface.
 func (e *ExecutorManagerImpl) WatchExecutors(
 	ctx context.Context,
-) (snap []model.ExecutorID, receiver *notifier.Receiver[model.ExecutorStatusChange], err error) {
+) (snap map[model.ExecutorID]string, receiver *notifier.Receiver[model.ExecutorStatusChange], err error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	for executorID := range e.executors {
-		snap = append(snap, executorID)
+	snap = make(map[model.ExecutorID]string, len(e.executors))
+	for executorID, exec := range e.executors {
+		snap[executorID] = exec.Addr
 	}
 
 	if err := e.notifier.Flush(ctx); err != nil {
@@ -339,4 +340,26 @@ func (e *ExecutorManagerImpl) WatchExecutors(
 
 	receiver = e.notifier.NewReceiver()
 	return
+}
+
+// GetExecutorInfos returns necessary information on the executor that
+// is needed for scheduling.
+func (e *ExecutorManagerImpl) GetExecutorInfos() map[model.ExecutorID]schedModel.ExecutorInfo {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	ret := make(map[model.ExecutorID]schedModel.ExecutorInfo, len(e.executors))
+	for id, exec := range e.executors {
+		resStatus, ok := e.rescMgr.CapacityForExecutor(id)
+		if !ok {
+			continue
+		}
+		schedInfo := schedModel.ExecutorInfo{
+			ID:             id,
+			ResourceStatus: *resStatus,
+			Labels:         exec.Labels,
+		}
+		ret[id] = schedInfo
+	}
+	return ret
 }

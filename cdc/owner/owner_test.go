@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/scheduler"
@@ -31,9 +33,11 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
+	"golang.org/x/time/rate"
 )
 
 type mockManager struct {
@@ -724,12 +728,35 @@ func TestHandleDrainCapturesSchedulerNotReady(t *testing.T) {
 			Info: &model.ChangeFeedInfo{State: model.StateNormal},
 		},
 	}
-	o := &ownerImpl{changefeeds: make(map[model.ChangeFeedID]*changefeed)}
+
+	pdClient := &gc.MockPDClient{}
+	o := &ownerImpl{
+		changefeeds:     make(map[model.ChangeFeedID]*changefeed),
+		upstreamManager: upstream.NewManager4Test(pdClient),
+	}
 	o.changefeeds[model.ChangeFeedID{}] = cf
 
+	ctx := context.Background()
 	query := &scheduler.Query{CaptureID: "test"}
 	done := make(chan error, 1)
-	o.handleDrainCaptures(query, done)
+
+	// check store version failed.
+	pdClient.GetAllStoresFunc = func(
+		ctx context.Context, opts ...pd.GetStoreOption,
+	) ([]*metapb.Store, error) {
+		return nil, errors.New("store version check failed")
+	}
+	o.handleDrainCaptures(ctx, query, done)
+	require.Equal(t, 0, query.Resp.(*model.DrainCaptureResp).CurrentTableCount)
+	require.Error(t, <-done)
+
+	pdClient.GetAllStoresFunc = func(
+		ctx context.Context, opts ...pd.GetStoreOption,
+	) ([]*metapb.Store, error) {
+		return nil, nil
+	}
+	done = make(chan error, 1)
+	o.handleDrainCaptures(ctx, query, done)
 	require.NotEqualValues(t, 0, query.Resp.(*model.DrainCaptureResp).CurrentTableCount)
 	require.Nil(t, <-done)
 
@@ -737,7 +764,7 @@ func TestHandleDrainCapturesSchedulerNotReady(t *testing.T) {
 	cf.state.Info.State = model.StateStopped
 	query = &scheduler.Query{CaptureID: "test"}
 	done = make(chan error, 1)
-	o.handleDrainCaptures(query, done)
+	o.handleDrainCaptures(ctx, query, done)
 	require.EqualValues(t, 0, query.Resp.(*model.DrainCaptureResp).CurrentTableCount)
 	require.Nil(t, <-done)
 }
@@ -755,18 +782,37 @@ func (h *heathScheduler) IsInitialized() bool {
 func TestIsHealthy(t *testing.T) {
 	t.Parallel()
 
-	o := &ownerImpl{changefeeds: make(map[model.ChangeFeedID]*changefeed)}
+	o := &ownerImpl{
+		changefeeds: make(map[model.ChangeFeedID]*changefeed),
+		logLimiter:  rate.NewLimiter(1, 1),
+	}
 	query := &Query{Tp: QueryHealth}
 
 	// Unhealthy, changefeeds are not ticked.
 	o.changefeedTicked = false
 	err := o.handleQueries(query)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.False(t, query.Data.(bool))
-	// Healthy, no changefeed.
+
 	o.changefeedTicked = true
+	// Unhealthy, cdc cluster version is inconsistent
+	o.captures = map[model.CaptureID]*model.CaptureInfo{
+		"1": {
+			Version: version.MinTiCDCVersion.String(),
+		},
+		"2": {
+			Version: version.MaxTiCDCVersion.String(),
+		},
+	}
 	err = o.handleQueries(query)
-	require.Nil(t, err)
+	require.NoError(t, err)
+	require.False(t, query.Data.(bool))
+
+	// make all captures version consistent.
+	o.captures["2"].Version = version.MinTiCDCVersion.String()
+	// Healthy, no changefeed.
+	err = o.handleQueries(query)
+	require.NoError(t, err)
 	require.True(t, query.Data.(bool))
 
 	// Unhealthy, scheduler is not set.
@@ -776,20 +822,20 @@ func TestIsHealthy(t *testing.T) {
 	o.changefeeds[model.ChangeFeedID{ID: "1"}] = cf
 	o.changefeedTicked = true
 	err = o.handleQueries(query)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.False(t, query.Data.(bool))
 
 	// Healthy, scheduler is set and return true.
 	cf.scheduler = &heathScheduler{init: true}
 	o.changefeedTicked = true
 	err = o.handleQueries(query)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.True(t, query.Data.(bool))
 
 	// Unhealthy, changefeeds are not ticked.
 	o.changefeedTicked = false
 	err = o.handleQueries(query)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.False(t, query.Data.(bool))
 
 	// Unhealthy, there is another changefeed is not initialized.
@@ -798,6 +844,6 @@ func TestIsHealthy(t *testing.T) {
 	}
 	o.changefeedTicked = true
 	err = o.handleQueries(query)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.False(t, query.Data.(bool))
 }

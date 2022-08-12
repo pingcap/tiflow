@@ -255,9 +255,9 @@ var (
 		"server master has no leader",
 		errors.RFCCodeText("DFLOW:ErrMasterNoLeader"),
 	)
-	ErrEtcdLeaderChanged = errors.Normalize(
-		"etcd leader has changed",
-		errors.RFCCodeText("DFLOW:ErrEtcdLeaderChanged"),
+	ErrLeaderResigned = errors.Normalize(
+		"leader has resigned",
+		errors.RFCCodeText("DFLOW:ErrLeaderResigned"),
 	)
 	ErrDiscoveryDuplicateWatch = errors.Normalize(
 		"service discovery can't be watched multiple times",
@@ -408,7 +408,7 @@ var (
 		errors.RFCCodeText("DFLOW:ErrMetaEntryAlreadyExists"),
 	)
 	ErrMetaClientTypeNotSupport = errors.Normalize(
-		"meta client type not support:%d",
+		"meta client type not support:%s",
 		errors.RFCCodeText("DFLOW:ErrMetaClientTypeNotSupport"),
 	)
 

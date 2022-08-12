@@ -19,10 +19,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
+	"github.com/stretchr/testify/require"
 )
 
 func TestExecutorManager(t *testing.T) {
@@ -102,7 +101,9 @@ func TestExecutorManagerWatch(t *testing.T) {
 	executorID1 := info.ID
 	snap, stream, err := mgr.WatchExecutors(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, []model.ExecutorID{executorID1}, snap)
+	require.Equal(t, map[model.ExecutorID]string{
+		executorID1: info.Addr,
+	}, snap)
 
 	// register another executor server
 	executorAddr = "127.0.0.1:10002"
@@ -116,8 +117,9 @@ func TestExecutorManagerWatch(t *testing.T) {
 	executorID2 := info.ID
 	event := <-stream.C
 	require.Equal(t, model.ExecutorStatusChange{
-		ID: executorID2,
-		Tp: model.EventExecutorOnline,
+		ID:   executorID2,
+		Tp:   model.EventExecutorOnline,
+		Addr: "127.0.0.1:10002",
 	}, event)
 
 	newHeartbeatReq := func(executorID model.ExecutorID) *pb.HeartbeatRequest {
@@ -173,8 +175,9 @@ func TestExecutorManagerWatch(t *testing.T) {
 
 	event = <-stream.C
 	require.Equal(t, model.ExecutorStatusChange{
-		ID: executorID1,
-		Tp: model.EventExecutorOffline,
+		ID:   executorID1,
+		Tp:   model.EventExecutorOffline,
+		Addr: "127.0.0.1:10001",
 	}, event)
 
 	// executor-2 will timeout
@@ -182,8 +185,9 @@ func TestExecutorManagerWatch(t *testing.T) {
 	wg.Wait()
 	event = <-stream.C
 	require.Equal(t, model.ExecutorStatusChange{
-		ID: executorID2,
-		Tp: model.EventExecutorOffline,
+		ID:   executorID2,
+		Tp:   model.EventExecutorOffline,
+		Addr: "127.0.0.1:10002",
 	}, event)
 
 	cancel()
