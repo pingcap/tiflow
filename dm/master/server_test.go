@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
@@ -2820,4 +2821,46 @@ func (t *testMaster) TestOperateValidationError(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(resp.Result, check.IsFalse)
 	c.Assert(resp.Msg, check.Matches, ".*grpc error.*")
+}
+
+func (t *testMaster) TestDashboardAddress(c *check.C) {
+	// Temp file for test log output
+	file, err := ioutil.TempFile(c.MkDir(), "*")
+	c.Assert(err, check.IsNil)
+	defer os.Remove(file.Name())
+
+	cfg := NewConfig()
+	err = cfg.FromContent(SampleConfig)
+	c.Assert(err, check.IsNil)
+
+	err = log.InitLogger(&log.Config{
+		File: file.Name(),
+	})
+	c.Assert(err, check.IsNil)
+	defer func() {
+		err = log.InitLogger(&log.Config{})
+		c.Assert(err, check.IsNil)
+	}()
+
+	cfg.OpenAPI = true
+	cfg.LogFile = file.Name()
+	cfg.DataDir = c.MkDir()
+
+	server := NewServer(cfg)
+	server.leader.Store(oneselfLeader)
+	ctx, cancel := context.WithCancel(context.Background())
+	go server.ap.Start(ctx)
+	go func() {
+		err2 := server.Start(ctx)
+		c.Assert(err2, check.IsNil)
+	}()
+	defer server.Close()
+	defer cancel()
+
+	// Wait server bootstraped.
+	time.Sleep(time.Second * 3)
+
+	content, err := ioutil.ReadFile(file.Name())
+	c.Assert(err, check.IsNil)
+	c.Assert(string(content), check.Matches, "[\\s\\S]*Web UI enabled[\\s\\S]*")
 }
