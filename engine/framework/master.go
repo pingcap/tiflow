@@ -534,10 +534,10 @@ func (m *DefaultBaseMaster) markStatusCodeInMetadata(
 }
 
 // prepareWorkerConfig extracts information from WorkerConfig into detail fields.
-// - If workerType is master type, the config is a `*MasterMetaKVData` struct and
-//   contains pre allocated maseter ID, and json marshalled config.
-// - If workerType is worker type, the config is a user defined config struct, we
-//   marshal it to byte slice as returned config, and generate a random WorkerID.
+//   - If workerType is master type, the config is a `*MasterMetaKVData` struct and
+//     contains pre allocated maseter ID, and json marshalled config.
+//   - If workerType is worker type, the config is a user defined config struct, we
+//     marshal it to byte slice as returned config, and generate a random WorkerID.
 func (m *DefaultBaseMaster) prepareWorkerConfig(
 	workerType frameModel.WorkerType, config WorkerConfig,
 ) (rawConfig []byte, workerID frameModel.WorkerID, err error) {

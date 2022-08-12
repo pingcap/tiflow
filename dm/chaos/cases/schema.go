@@ -24,13 +24,14 @@ const (
 
 // createTableToSmithSchema converts a `CREATE TABLE` statement to a schema representation needed by go-sqlsmith.
 // for one column in `columns`:
-//  - columns[0]: DB name
-//  - columns[1]: table name
-//  - columns[2]: table type (only use `BASE TABLE` now)
-//  - columns[3]: column name
-//  - columns[4]: column type
+//   - columns[0]: DB name
+//   - columns[1]: table name
+//   - columns[2]: table type (only use `BASE TABLE` now)
+//   - columns[3]: column name
+//   - columns[4]: column type
+//
 // for `indexes`:
-//  - list of index name
+//   - list of index name
 func createTableToSmithSchema(dbName, sql string) (columns [][5]string, indexes []string, err error) {
 	parser2 := parser.New() // we should have clear `SQL_MODE.
 	stmt, err := parser2.ParseOneStmt(sql, "", "")

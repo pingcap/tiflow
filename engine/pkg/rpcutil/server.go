@@ -165,12 +165,13 @@ func NewPreRPCHook[T RPCClientType](
 }
 
 // PreRPC can do these common works:
-// - forward to leader
-//   the `req` argument must fit with the caller of PreRPC which is an RPC.
-//   the `respPointer` argument must be a pointer to the response and the response
-//   must fit with the caller of PreRPC which is an RPC.
-// - check if the server is initialized
-// - rate limit
+//   - forward to leader
+//     the `req` argument must fit with the caller of PreRPC which is an RPC.
+//     the `respPointer` argument must be a pointer to the response and the response
+//     must fit with the caller of PreRPC which is an RPC.
+//   - check if the server is initialized
+//   - rate limit
+//
 // TODO: we can build a (req type -> resp type) map at compile time, to avoid passing
 // in respPointer.
 func (h preRPCHookImpl[T]) PreRPC(
