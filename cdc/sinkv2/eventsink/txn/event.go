@@ -23,7 +23,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var crcTable *crc64.Table = crc64.MakeTable(crc64.ISO)
+var crcTable = crc64.MakeTable(crc64.ISO)
 
 type txnEvent struct {
 	*eventsink.TxnCallbackableEvent
@@ -90,7 +90,7 @@ func genRowKeys(row *model.RowChangedEvent) [][]byte {
 	if len(keys) == 0 {
 		// use table ID as key if no key generated (no PK/UK),
 		// no concurrence for rows in the same table.
-		log.Debug("use table id as the key", zap.Int64("tableID", row.Table.TableID))
+		log.Debug("Use table id as the key", zap.Int64("tableID", row.Table.TableID))
 		tableKey := make([]byte, 8)
 		binary.BigEndian.PutUint64(tableKey, uint64(row.Table.TableID))
 		keys = [][]byte{tableKey}

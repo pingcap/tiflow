@@ -255,7 +255,7 @@ func (k *kafkaDMLProducer) run(ctx context.Context) error {
 		case <-k.closedChan:
 			return nil
 		case err := <-k.failpointCh:
-			log.Warn("receive from failpoint chan in kafka "+
+			log.Warn("Receive from failpoint chan in kafka "+
 				"DML producer", zap.Error(err),
 				zap.String("namespace", k.id.Namespace),
 				zap.String("changefeed", k.id.ID))

@@ -87,7 +87,7 @@ func newSink(ctx context.Context,
 				return
 			case errCh <- err:
 			default:
-				log.Error("error channel is full in DML sink", zap.Error(err),
+				log.Error("Error channel is full in DML sink", zap.Error(err),
 					zap.String("namespace", changefeedID.Namespace),
 					zap.String("changefeed", changefeedID.ID))
 			}

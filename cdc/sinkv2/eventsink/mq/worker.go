@@ -71,11 +71,11 @@ func newWorker(id model.ChangeFeedID, encoder codec.EventBatchEncoder,
 func (w *worker) run(ctx context.Context) (retErr error) {
 	defer func() {
 		w.ticker.Stop()
-		log.Info("flushWorker exited", zap.Error(retErr),
+		log.Info("FlushWorker exited", zap.Error(retErr),
 			zap.String("namespace", w.changeFeedID.Namespace),
 			zap.String("changefeed", w.changeFeedID.ID))
 	}()
-	log.Info("MQ sink worker started", zap.String("namespace", w.changeFeedID.Namespace),
+	log.Info("Kafka DML sink worker started", zap.String("namespace", w.changeFeedID.Namespace),
 		zap.String("changefeed", w.changeFeedID.ID))
 	// Fixed size of the batch.
 	eventsBuf := make([]mqEvent, mqv1.FlushBatchSize)
@@ -112,7 +112,7 @@ func (w *worker) batch(
 		return index, ctx.Err()
 	case msg, ok := <-w.msgChan.Out():
 		if !ok {
-			log.Warn("MQ sink flush worker channel closed")
+			log.Warn("Kafka DML sink flush worker channel closed")
 			return index, nil
 		}
 		if msg.rowEvent != nil {
@@ -129,7 +129,7 @@ func (w *worker) batch(
 			return index, ctx.Err()
 		case msg, ok := <-w.msgChan.Out():
 			if !ok {
-				log.Warn("MQ sink flush worker channel closed")
+				log.Warn("Kafka DML sink flush worker channel closed")
 				return index, nil
 			}
 
@@ -171,7 +171,7 @@ func (w *worker) asyncSend(
 			// Skip this event when the table is stopping.
 			if event.GetTableSinkState() == state.TableSinkStopping {
 				event.Callback()
-				log.Debug("skip event of stopped table", zap.Any("event", event))
+				log.Debug("Skip event of stopped table", zap.Any("event", event))
 				continue
 			}
 			err := w.encoder.AppendRowChangedEvent(ctx, key.Topic, event.Event, event.Callback)
@@ -188,7 +188,6 @@ func (w *worker) asyncSend(
 			}
 			thisBatchSize += message.GetRowsCount()
 		}
-		log.Debug("MQSink flush worker flushed", zap.Int("thisBatchSize", thisBatchSize))
 	}
 
 	return nil

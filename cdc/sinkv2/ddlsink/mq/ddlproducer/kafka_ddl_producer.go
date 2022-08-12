@@ -159,7 +159,8 @@ func (k *kafkaDDLProducer) Close() {
 	if k.closed {
 		// We need to guard against double closed the clients,
 		// which could lead to panic.
-		log.Warn("kafka producer already closed",
+		log.Warn("Kafka producer already closed in kafka "+
+			"DDL producer",
 			zap.String("namespace", k.id.Namespace),
 			zap.String("changefeed", k.id.ID))
 		return
@@ -193,12 +194,14 @@ func (k *kafkaDDLProducer) Close() {
 		start = time.Now()
 		err := k.syncProducer.Close()
 		if err != nil {
-			log.Error("close sync client with error", zap.Error(err),
+			log.Error("Close sync client with error in kafka "+
+				"DDL producer", zap.Error(err),
 				zap.Duration("duration", time.Since(start)),
 				zap.String("namespace", k.id.Namespace),
 				zap.String("changefeed", k.id.ID))
 		} else {
-			log.Info("sync client closed", zap.Duration("duration", time.Since(start)),
+			log.Info("Sync client closed in kafka "+
+				"DDL producer", zap.Duration("duration", time.Since(start)),
 				zap.String("namespace", k.id.Namespace),
 				zap.String("changefeed", k.id.ID))
 		}
