@@ -119,7 +119,7 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 			up, ok := m.upstreamManager.Get(changefeedState.Info.UpstreamID)
 			if !ok {
 				upstreamInfo := globalState.Upstreams[changefeedState.Info.UpstreamID]
-				up = m.upstreamManager.AddUpstream(upstreamInfo.ID, upstreamInfo)
+				up = m.upstreamManager.AddUpstream(upstreamInfo)
 			}
 			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
 			p = m.newProcessor(changefeedState, m.captureInfo, changefeedID, up, m.liveness)
@@ -152,14 +152,14 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 func (m *managerImpl) closeProcessor(changefeedID model.ChangeFeedID) {
 	if processor, exist := m.processors[changefeedID]; exist {
 		startTime := time.Now()
-		captureID := processor.captureInfo.ID
 		err := processor.Close()
 		costTime := time.Since(startTime)
 		if costTime > processorLogsWarnDuration {
 			log.Warn("processor close took too long",
 				zap.String("namespace", changefeedID.Namespace),
 				zap.String("changefeed", changefeedID.ID),
-				zap.String("capture", captureID), zap.Duration("duration", costTime))
+				zap.String("capture", m.captureInfo.ID),
+				zap.Duration("duration", costTime))
 		}
 		m.metricProcessorCloseDuration.Observe(costTime.Seconds())
 		if err != nil {

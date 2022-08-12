@@ -1045,13 +1045,12 @@ func (p *processor) Close() error {
 	p.cancel()
 	p.wg.Wait()
 
-	if p.agent == nil {
-		return nil
+	if p.agent != nil {
+		if err := p.agent.Close(); err != nil {
+			log.Warn("close agent meet error", zap.Error(err))
+		}
+		p.agent = nil
 	}
-	if err := p.agent.Close(); err != nil {
-		return errors.Trace(err)
-	}
-	p.agent = nil
 
 	// sink close might be time-consuming, do it the last.
 	if p.sinkV1 != nil {
