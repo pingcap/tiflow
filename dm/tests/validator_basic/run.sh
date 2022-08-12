@@ -550,6 +550,9 @@ function stopped_validator_fail_over() {
 	run_sql_tidb_with_retry "select concat_ws('/', procd_ins, procd_upd, procd_del) processed
 														from dm_meta.test_validator_checkpoint where source='mysql-replica-01'" \
 		"processed: 3/2/1"
+	run_sql_tidb_with_retry "select count(1) cnt
+														from dm_meta.test_validator_error_change where source='mysql-replica-01'" \
+		"cnt: 1"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation stop test" \
 		"\"result\": true" 1
