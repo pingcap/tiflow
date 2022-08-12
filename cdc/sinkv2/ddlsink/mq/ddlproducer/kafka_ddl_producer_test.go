@@ -80,7 +80,9 @@ func TestSyncBroadcastMessage(t *testing.T) {
 
 	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
-	p, err := NewKafkaDDLProducer(ctx, client)
+	adminClient, err := kafka.NewMockAdminClient(config.BrokerEndpoints, saramaConfig)
+	require.Nil(t, err)
+	p, err := NewKafkaDDLProducer(ctx, client, adminClient)
 	require.Nil(t, err)
 
 	err = p.SyncBroadcastMessage(ctx, topic,
@@ -108,7 +110,9 @@ func TestSyncSendMessage(t *testing.T) {
 
 	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
-	p, err := NewKafkaDDLProducer(ctx, client)
+	adminClient, err := kafka.NewMockAdminClient(config.BrokerEndpoints, saramaConfig)
+	require.Nil(t, err)
+	p, err := NewKafkaDDLProducer(ctx, client, adminClient)
 	require.Nil(t, err)
 
 	err = p.SyncSendMessage(ctx, topic, 0, &codec.MQMessage{Ts: 417318403368288260})
@@ -138,7 +142,9 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
 
-	p, err := NewKafkaDDLProducer(ctx, client)
+	adminClient, err := kafka.NewMockAdminClient(config.BrokerEndpoints, saramaConfig)
+	require.Nil(t, err)
+	p, err := NewKafkaDDLProducer(ctx, client, adminClient)
 	require.Nil(t, err)
 	defer p.Close()
 
@@ -161,7 +167,9 @@ func TestProducerDoubleClose(t *testing.T) {
 
 	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
-	p, err := NewKafkaDDLProducer(ctx, client)
+	adminClient, err := kafka.NewMockAdminClient(config.BrokerEndpoints, saramaConfig)
+	require.Nil(t, err)
+	p, err := NewKafkaDDLProducer(ctx, client, adminClient)
 	require.Nil(t, err)
 
 	p.Close()
