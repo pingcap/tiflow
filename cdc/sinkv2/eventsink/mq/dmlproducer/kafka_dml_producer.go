@@ -187,7 +187,7 @@ func (k *kafkaDMLProducer) Close() {
 	if k.closed {
 		// We need to guard against double closing the clients,
 		// which could lead to panic.
-		log.Warn("kafka DML producer already closed",
+		log.Warn("Kafka DML producer already closed",
 			zap.String("namespace", k.id.Namespace),
 			zap.String("changefeed", k.id.ID))
 		return
@@ -216,13 +216,13 @@ func (k *kafkaDMLProducer) Close() {
 		// To prevent the scenario mentioned above, close the client first.
 		start := time.Now()
 		if err := k.client.Close(); err != nil {
-			log.Error("close sarama client with error in kafka "+
+			log.Error("Close sarama client with error in kafka "+
 				"DML producer", zap.Error(err),
 				zap.Duration("duration", time.Since(start)),
 				zap.String("namespace", k.id.Namespace),
 				zap.String("changefeed", k.id.ID))
 		} else {
-			log.Info("sarama client closed in kafka "+
+			log.Info("Sarama client closed in kafka "+
 				"DML producer", zap.Duration("duration", time.Since(start)),
 				zap.String("namespace", k.id.Namespace),
 				zap.String("changefeed", k.id.ID))
@@ -231,13 +231,13 @@ func (k *kafkaDMLProducer) Close() {
 		start = time.Now()
 		err := k.asyncProducer.Close()
 		if err != nil {
-			log.Error("close async client with error in kafka "+
+			log.Error("Close async client with error in kafka "+
 				"DML producer", zap.Error(err),
 				zap.Duration("duration", time.Since(start)),
 				zap.String("namespace", k.id.Namespace),
 				zap.String("changefeed", k.id.ID))
 		} else {
-			log.Info("async client closed in kafka "+
+			log.Info("Async client closed in kafka "+
 				"DML producer", zap.Duration("duration", time.Since(start)),
 				zap.String("namespace", k.id.Namespace),
 				zap.String("changefeed", k.id.ID))
@@ -255,7 +255,8 @@ func (k *kafkaDMLProducer) run(ctx context.Context) error {
 		case <-k.closedChan:
 			return nil
 		case err := <-k.failpointCh:
-			log.Warn("receive from failpoint chan in DML producer", zap.Error(err),
+			log.Warn("receive from failpoint chan in kafka "+
+				"DML producer", zap.Error(err),
 				zap.String("namespace", k.id.Namespace),
 				zap.String("changefeed", k.id.ID))
 			return errors.Trace(err)

@@ -178,13 +178,13 @@ func (k *kafkaDDLProducer) Close() {
 	go func() {
 		start := time.Now()
 		if err := k.client.Close(); err != nil {
-			log.Error("close sarama client with error in kafka "+
+			log.Error("Close sarama client with error in kafka "+
 				"DDL producer", zap.Error(err),
 				zap.Duration("duration", time.Since(start)),
 				zap.String("namespace", k.id.Namespace),
 				zap.String("changefeed", k.id.ID))
 		} else {
-			log.Info("sarama client closed in kafka "+
+			log.Info("Sarama client closed in kafka "+
 				"DDL producer", zap.Duration("duration", time.Since(start)),
 				zap.String("namespace", k.id.Namespace),
 				zap.String("changefeed", k.id.ID))
