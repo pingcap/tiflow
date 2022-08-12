@@ -314,7 +314,7 @@ func TestManagerRtsMap(t *testing.T) {
 // TestManagerError tests whether internal error in bgUpdateLog could be managed correctly.
 func TestManagerError(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
 	cfg := &config.ConsistentConfig{

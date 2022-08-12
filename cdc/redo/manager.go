@@ -643,7 +643,7 @@ func (m *ManagerImpl) bgGC(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("redo manager GC exits as context canceled",
+			log.Info("redo manager GC exits as context cancelled",
 				zap.String("namespace", m.changeFeedID.Namespace),
 				zap.String("changefeed", m.changeFeedID.ID))
 			return

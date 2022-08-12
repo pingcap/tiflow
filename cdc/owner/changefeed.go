@@ -491,7 +491,7 @@ LOOP:
 	}
 	log.Info("owner creates redo manager",
 		zap.String("namespace", c.id.Namespace),
-		zap.String("namespace", c.id.ID))
+		zap.String("changefeed", c.id.ID))
 
 	// init metrics
 	c.metricsChangefeedBarrierTsGauge = changefeedBarrierTsGauge.

@@ -33,7 +33,7 @@ type ManagerOptions struct {
 	ErrCh chan<- error
 }
 
-// NewOwnerManagerOptions creates a maanger options for owner.
+// NewOwnerManagerOptions creates a manager options for owner.
 func NewOwnerManagerOptions(errCh chan<- error) *ManagerOptions {
 	return &ManagerOptions{
 		EnableBgRunner: true,
@@ -44,7 +44,7 @@ func NewOwnerManagerOptions(errCh chan<- error) *ManagerOptions {
 	}
 }
 
-// NewProcessorManagerOptions creates a maanger options for processor.
+// NewProcessorManagerOptions creates a manager options for processor.
 func NewProcessorManagerOptions(errCh chan<- error) *ManagerOptions {
 	return &ManagerOptions{
 		EnableBgRunner: true,
@@ -55,7 +55,7 @@ func NewProcessorManagerOptions(errCh chan<- error) *ManagerOptions {
 	}
 }
 
-// newMockManagerOptions creates a maanger options for mock tests.
+// newMockManagerOptions creates a manager options for mock tests.
 func newMockManagerOptions(errCh chan<- error) *ManagerOptions {
 	return &ManagerOptions{
 		EnableBgRunner: true,

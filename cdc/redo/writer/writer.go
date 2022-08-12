@@ -451,14 +451,14 @@ func (l *LogWriter) flush(checkpointTs, resolvedTs model.Ts) (err error) {
 }
 
 func (l *LogWriter) isStopped() bool {
-	var rowStoped, ddlStoped bool
+	var rowStopped, ddlStopped bool
 	if l.cfg.EmitRowEvents {
-		rowStoped = !l.rowWriter.IsRunning()
+		rowStopped = !l.rowWriter.IsRunning()
 	}
 	if l.cfg.EmitDDLEvents {
-		ddlStoped = !l.ddlWriter.IsRunning()
+		ddlStopped = !l.ddlWriter.IsRunning()
 	}
-	return rowStoped || ddlStoped
+	return rowStopped || ddlStopped
 }
 
 func (l *LogWriter) getMetafileName() string {

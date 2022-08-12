@@ -710,7 +710,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	}
 	log.Info("processor creates redo manager",
 		zap.String("namespace", p.changefeedID.Namespace),
-		zap.String("namespace", p.changefeedID.ID))
+		zap.String("changefeed", p.changefeedID.ID))
 
 	p.agent, err = p.newAgent(ctx, p.liveness)
 	if err != nil {
