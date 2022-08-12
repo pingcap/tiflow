@@ -187,7 +187,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	metaKVClient := kvmock.NewMetaMock()
 	mockBaseJobmaster := &MockBaseJobmaster{}
 	mockCheckpointAgent := &MockCheckpointAgent{}
-	checkpoint.NewCheckpointAgent = func(*config.JobCfg, *zap.Logger) checkpoint.Agent { return mockCheckpointAgent }
+	checkpoint.NewCheckpointAgent = func(*metadata.JobStore, *zap.Logger) checkpoint.Agent { return mockCheckpointAgent }
 	mockMessageAgent := &dmpkg.MockMessageAgent{}
 	dmpkg.NewMessageAgent = func(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) dmpkg.MessageAgent {
 		return mockMessageAgent
@@ -208,12 +208,14 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("version", "5.7.25-TiDB-v6.1.0"))
 	precheckError := errors.New("precheck error")
+	exitError := errors.New("exit error")
 	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
 		return "", precheckError
 	}
 	mockBaseJobmaster.On("MetaKVClient").Return(metaKVClient)
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]framework.WorkerHandle{}).Once()
-	require.EqualError(t.T(), jm.InitImpl(context.Background()), precheckError.Error())
+	mockBaseJobmaster.On("Exit").Return(exitError).Once()
+	require.EqualError(t.T(), jm.InitImpl(context.Background()), exitError.Error())
 
 	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
 		return "check pass", nil
@@ -362,6 +364,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	// OnCancel
 	mockMessageAgent.On("SendRequest").Return(&dmpkg.QueryStatusResponse{Unit: framework.WorkerDMSync, Stage: metadata.StageRunning, Status: bytes1}, nil).Twice()
 	mockMessageAgent.On("SendMessage").Return(nil).Twice()
+	mockBaseJobmaster.On("Exit").Return(nil).Once()
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -435,7 +438,10 @@ func (m *MockBaseJobmaster) Logger() *zap.Logger {
 }
 
 func (m *MockBaseJobmaster) Exit(ctx context.Context, status frameModel.WorkerStatus, err error) error {
-	return nil
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	args := m.Called()
+	return args.Error(0)
 }
 
 type MockCheckpointAgent struct {
@@ -456,11 +462,4 @@ func (m *MockCheckpointAgent) IsFresh(ctx context.Context, workerType framework.
 	defer m.mu.Unlock()
 	args := m.Called()
 	return args.Get(0).(bool), args.Error(1)
-}
-
-func (m *MockCheckpointAgent) Update(ctx context.Context, jobCfg *config.JobCfg) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	args := m.Called()
-	return args.Error(0)
 }

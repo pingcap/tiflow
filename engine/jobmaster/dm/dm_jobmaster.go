@@ -92,22 +92,19 @@ func (j dmJobMasterFactory) NewWorkerImpl(dCtx *dcontext.Context, workerID frame
 	return jm, nil
 }
 
+// initComponents initializes components of dm job master
+// it need to be called firstly in InitImpl and OnMasterRecovered
 func (jm *JobMaster) initComponents(ctx context.Context) error {
 	jm.Logger().Info("initializing the dm jobmaster components")
-	jm.messageAgent = dmpkg.NewMessageAgent(jm.ID(), jm, jm.messageHandlerManager, jm.Logger())
-	if err := jm.messageAgent.Init(ctx); err != nil {
-		return err
-	}
 	taskStatus, workerStatus, err := jm.getInitStatus()
-	if err != nil {
-		return err
-	}
-
-	jm.checkpointAgent = checkpoint.NewCheckpointAgent(jm.initJobCfg, jm.Logger())
+	// still create components if any error
+	// CloseImpl/StopImpl will be called later to close components
 	jm.metadata = metadata.NewMetaData(jm.ID(), jm.MetaKVClient())
+	jm.messageAgent = dmpkg.NewMessageAgent(jm.ID(), jm, jm.messageHandlerManager, jm.Logger())
+	jm.checkpointAgent = checkpoint.NewCheckpointAgent(jm.metadata.JobStore(), jm.Logger())
 	jm.taskManager = NewTaskManager(taskStatus, jm.metadata.JobStore(), jm.messageAgent, jm.Logger())
 	jm.workerManager = NewWorkerManager(workerStatus, jm.metadata.JobStore(), jm, jm.messageAgent, jm.checkpointAgent, jm.Logger())
-	return nil
+	return err
 }
 
 // InitImpl implements JobMasterImpl.InitImpl
@@ -117,12 +114,12 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 		return err
 	}
 	if err := jm.preCheck(ctx, jm.initJobCfg); err != nil {
+		return jm.Exit(ctx, frameModel.WorkerStatus{Code: frameModel.WorkerStatusError}, err)
+	}
+	if err := jm.taskManager.OperateTask(ctx, dmpkg.Create, jm.initJobCfg, nil); err != nil {
 		return err
 	}
-	if err := jm.checkpointAgent.Create(ctx); err != nil {
-		return err
-	}
-	return jm.taskManager.OperateTask(ctx, dmpkg.Create, jm.initJobCfg, nil)
+	return jm.checkpointAgent.Create(ctx)
 }
 
 // Tick implements JobMasterImpl.Tick
@@ -139,6 +136,8 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 }
 
 // OnMasterRecovered implements JobMasterImpl.OnMasterRecovered
+// When it is called, the jobCfg may not be in the metadata, and we should not report an error
+// e.g. when the jobmaster is restarted in OnCancel/StopImpl, the jobCfg will be deleted in the metadata
 func (jm *JobMaster) OnMasterRecovered(ctx context.Context) error {
 	jm.Logger().Info("recovering the dm jobmaster")
 	return jm.initComponents(ctx)
@@ -262,10 +261,12 @@ func (jm *JobMaster) OnCancel(ctx context.Context) error {
 func (jm *JobMaster) StopImpl(ctx context.Context) error {
 	jm.Logger().Info("stoping the dm jobmaster")
 
+	// close component
 	if err := jm.CloseImpl(ctx); err != nil {
 		jm.Logger().Error("failed to close dm jobmaster", zap.Error(err))
 		return err
 	}
+	// remove other resources
 	if err := jm.checkpointAgent.Remove(ctx); err != nil {
 		jm.Logger().Error("failed to remove checkpoint", zap.Error(err))
 		return err
@@ -348,6 +349,7 @@ func (jm *JobMaster) status(ctx context.Context, code frameModel.WorkerStatusCod
 	}
 }
 
+// cancel remove jobCfg in metadata, and wait all workers offline.
 func (jm *JobMaster) cancel(ctx context.Context, code frameModel.WorkerStatusCode) error {
 	status, err := jm.status(ctx, code)
 	if err != nil {

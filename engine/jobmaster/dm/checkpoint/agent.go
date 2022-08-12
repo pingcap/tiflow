@@ -16,8 +16,8 @@ package checkpoint
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
-	"sync"
 
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
@@ -61,30 +61,34 @@ var NewCheckpointAgent = NewAgentImpl
 type Agent interface {
 	Create(ctx context.Context) error
 	Remove(ctx context.Context) error
-	Update(ctx context.Context, cfg *config.JobCfg) error
 	IsFresh(ctx context.Context, workerType framework.WorkerType, task *metadata.Task) (bool, error)
 }
 
 // AgentImpl implements Agent
 type AgentImpl struct {
-	mu     sync.RWMutex
-	cfg    *config.JobCfg
-	logger *zap.Logger
+	jobStore *metadata.JobStore
+	logger   *zap.Logger
 }
 
 // NewAgentImpl creates a new AgentImpl instance
-func NewAgentImpl(jobCfg *config.JobCfg, pLogger *zap.Logger) Agent {
+func NewAgentImpl(jobStore *metadata.JobStore, pLogger *zap.Logger) Agent {
 	c := &AgentImpl{
-		logger: pLogger.With(zap.String("component", "checkpoint_agent")),
-		cfg:    jobCfg,
+		logger:   pLogger.With(zap.String("component", "checkpoint_agent")),
+		jobStore: jobStore,
 	}
 	return c
 }
 
-func (c *AgentImpl) getConfig() *config.JobCfg {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.cfg
+func (c *AgentImpl) getConfig(ctx context.Context) (*config.JobCfg, error) {
+	state, err := c.jobStore.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	job := state.(*metadata.Job)
+	for _, task := range job.Tasks {
+		return (*config.JobCfg)(task.Cfg), nil
+	}
+	return nil, errors.New("no task found in job")
 }
 
 // Create implements Agent.Create
@@ -95,7 +99,10 @@ func (c *AgentImpl) getConfig() *config.JobCfg {
 // move these codes to tiflow later.
 func (c *AgentImpl) Create(ctx context.Context) error {
 	c.logger.Info("create checkpoint")
-	cfg := c.getConfig()
+	cfg, err := c.getConfig(ctx)
+	if err != nil {
+		return err
+	}
 	db, err := conn.DefaultDBProvider.Apply(cfg.TargetDB)
 	if err != nil {
 		return err
@@ -119,19 +126,13 @@ func (c *AgentImpl) Create(ctx context.Context) error {
 	return nil
 }
 
-// Update implements Agent.Update
-func (c *AgentImpl) Update(ctx context.Context, cfg *config.JobCfg) error {
-	c.logger.Info("update checkpoint")
-	c.mu.Lock()
-	c.cfg = cfg
-	c.mu.Unlock()
-	return c.Create(ctx)
-}
-
 // Remove implements Agent.Remove
 func (c *AgentImpl) Remove(ctx context.Context) error {
 	c.logger.Info("remove checkpoint")
-	cfg := c.getConfig()
+	cfg, err := c.getConfig(ctx)
+	if err != nil {
+		return err
+	}
 	db, err := conn.DefaultDBProvider.Apply(cfg.TargetDB)
 	if err != nil {
 		return err

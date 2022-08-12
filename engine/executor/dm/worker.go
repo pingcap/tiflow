@@ -124,9 +124,6 @@ func newDMWorker(ctx *dcontext.Context, masterID frameModel.MasterID, workerType
 func (w *dmWorker) InitImpl(ctx context.Context) error {
 	w.Logger().Info("initializing the dm worker", zap.String("task-id", w.taskID))
 	w.messageAgent = dmpkg.NewMessageAgentImpl(w.taskID, w, w.messageHandlerManager, w.Logger())
-	if err := w.messageAgent.Init(ctx); err != nil {
-		return err
-	}
 	// register jobmaster client
 	if err := w.messageAgent.UpdateClient(w.masterID, w); err != nil {
 		return err
