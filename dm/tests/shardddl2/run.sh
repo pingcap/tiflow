@@ -55,7 +55,7 @@ function DM_037_CASE() {
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
 			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `new_col1` INT DEFAULT' 1 \
-			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
+			"\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
 
@@ -127,7 +127,7 @@ function DM_040_CASE() {
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
 			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `col1` VARCHAR(10) CHARACTER SET UTF8' 1 \
-			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
+			"\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
 
@@ -306,9 +306,9 @@ function DM_DROP_COLUMN_EXEC_ERROR() {
 }
 
 function DM_DROP_COLUMN_ALL_DONE_CASE() {
-	# get worker of source1
+	# get worker of source2
 	w="1"
-	got=$(grep -a "mysql-replica-01" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
+	got=$(grep -a "mysql-replica-02" $WORK_DIR/worker1/log/dm-worker.log | wc -l)
 	if [[ "$got" -eq 0 ]]; then
 		w="2"
 	fi
@@ -317,40 +317,32 @@ function DM_DROP_COLUMN_ALL_DONE_CASE() {
 
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1,'aaa');"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(2,'bbb');"
-	run_sql_source2 "insert into ${shardddl1}.${tb2} values(3,'ccc');"
 
-	run_sql_source2 "alter table ${shardddl1}.${tb1} drop column b;"
+	run_sql_source1 "alter table ${shardddl1}.${tb1} drop column b;"
 	check_log_contain_with_retry 'finish to handle ddls in optimistic shard mode.*tb1 drop column' \
 		$WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log
 
-	run_sql_source1 "alter table ${shardddl1}.${tb1} drop column b;"
+	run_sql_source2 "alter table ${shardddl1}.${tb1} drop column b;"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"execute .* error" 1
-
-	run_sql_source2 "alter table ${shardddl1}.${tb2} drop column b;"
-	check_log_contain_with_retry 'finish to handle ddls in optimistic shard mode.*tb2 drop column' \
-		$WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log
 
 	restart_master
 
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(4);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(5);"
-	run_sql_source2 "insert into ${shardddl1}.${tb2} values(6);"
 
-	run_sql_source2 "alter table ${shardddl1}.${tb1} add column b varchar(10);"
+	run_sql_source1 "alter table ${shardddl1}.${tb1} add column b varchar(10);"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"because schema conflict detected" 1 \
 		"add column b that wasn't fully dropped in downstream" 1
 
 	restart_worker $w ""
-	run_sql_source2 "alter table ${shardddl1}.${tb2} add column b varchar(10);"
-	run_sql_source1 "alter table ${shardddl1}.${tb1} add column b varchar(10);"
+	run_sql_source2 "alter table ${shardddl1}.${tb1} add column b varchar(10);"
 
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(7,'ddd');"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(8,'eee');"
-	run_sql_source2 "insert into ${shardddl1}.${tb2} values(9,'fff');"
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
@@ -361,8 +353,7 @@ function DM_DROP_COLUMN_ALL_DONE_CASE() {
 function DM_DROP_COLUMN_ALL_DONE() {
 	run_case DROP_COLUMN_ALL_DONE "double-source-optimistic" \
 		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b varchar(10));\"; \
-     run_sql_source2 \"create table ${shardddl1}.${tb1} (a int primary key, b varchar(10));\"; \
-     run_sql_source2 \"create table ${shardddl1}.${tb2} (a int primary key, b varchar(10));\"" \
+     run_sql_source2 \"create table ${shardddl1}.${tb1} (a int primary key, b varchar(10));\"" \
 		"clean_table" "optimistic"
 }
 

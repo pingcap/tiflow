@@ -534,7 +534,6 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 				err := m.writer.WriteLog(ctx, cache.tableID, logs)
 				if err != nil {
 					handleErr(err)
-					return
 				}
 				m.metricWriteLogDuration.Observe(time.Since(start).Seconds())
 			case model.MessageTypeResolved:
