@@ -107,29 +107,23 @@ func TestRecordSourceTbls(t *testing.T) {
 	sourceTbls := make(map[string]map[string]struct{})
 
 	recordSourceTbls(sourceTbls, &ast.CreateDatabaseStmt{}, &filter.Table{Schema: "a", Name: ""})
-	_, ok := sourceTbls["a"]
-	require.True(t, ok)
-	_, ok = sourceTbls["a"][""]
-	require.True(t, ok)
+	require.Contains(t, sourceTbls, "a")
+	require.Contains(t, sourceTbls["a"], "")
 
 	recordSourceTbls(sourceTbls, &ast.CreateTableStmt{}, &filter.Table{Schema: "a", Name: "b"})
-	_, ok = sourceTbls["a"]
-	require.True(t, ok)
-	_, ok = sourceTbls["a"]["b"]
-	require.True(t, ok)
+	require.Contains(t, sourceTbls, "a")
+	require.Contains(t, sourceTbls["a"], "b")
 
 	recordSourceTbls(sourceTbls, &ast.DropTableStmt{}, &filter.Table{Schema: "a", Name: "b"})
-	_, ok = sourceTbls["a"]["b"]
+	_, ok := sourceTbls["a"]["b"]
 	require.False(t, ok)
 
 	recordSourceTbls(sourceTbls, &ast.CreateTableStmt{}, &filter.Table{Schema: "a", Name: "c"})
-	_, ok = sourceTbls["a"]
-	require.True(t, ok)
-	_, ok = sourceTbls["a"]["c"]
-	require.True(t, ok)
+	require.Contains(t, sourceTbls, "a")
+	require.Contains(t, sourceTbls["a"], "c")
 
 	recordSourceTbls(sourceTbls, &ast.DropDatabaseStmt{}, &filter.Table{Schema: "a", Name: ""})
-	require.Equal(t, 0, len(sourceTbls))
+	require.Len(t, sourceTbls, 0)
 }
 
 func TestGetDDLStatusFromTiDB(t *testing.T) {
