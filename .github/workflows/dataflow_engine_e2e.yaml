@@ -31,7 +31,7 @@ jobs:
         run: make engine_image
 
       - name: Run containers
-        run: docker compose -f $GITHUB_WORKSPACE/engine/deployments/docker-compose/3m3e.yaml -f $GITHUB_WORKSPACE/engine/deployments/docker-compose/demo.yaml up -d
+        run: docker compose -f $GITHUB_WORKSPACE/deployments/engine/docker-compose/3m3e.yaml -f $GITHUB_WORKSPACE/deployments/engine/docker-compose/demo.yaml up -d
 
       - name: Run tests
         run: |
@@ -71,7 +71,7 @@ jobs:
         run: make engine_image
 
       - name: Run containers
-        run: docker compose -f $GITHUB_WORKSPACE/engine/deployments/docker-compose/3m3e.yaml up -d
+        run: docker compose -f $GITHUB_WORKSPACE/deployments/engine/docker-compose/3m3e.yaml up -d
 
       - name: Run tests
         run: |
@@ -111,7 +111,7 @@ jobs:
         run: make engine_image
 
       - name: Run containers
-        run: docker compose -f $GITHUB_WORKSPACE/engine/deployments/docker-compose/3m3e.yaml up -d
+        run: docker compose -f $GITHUB_WORKSPACE/deployments/engine/docker-compose/3m3e.yaml up -d
 
       - name: Run tests
         run: |
@@ -152,7 +152,7 @@ jobs:
 
 
       - name: Run containers
-        run: docker compose -f $GITHUB_WORKSPACE/engine/deployments/docker-compose/3m3e.yaml -f $GITHUB_WORKSPACE/engine/deployments/docker-compose/dm_databases.yaml up -d
+        run: docker compose -f $GITHUB_WORKSPACE/deployments/engine/docker-compose/3m3e.yaml -f $GITHUB_WORKSPACE/deployments/engine/docker-compose/dm_databases.yaml up -d
 
       - name: Run tests
         run: |
