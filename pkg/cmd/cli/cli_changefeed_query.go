@@ -16,7 +16,9 @@ package cli
 import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
 	"github.com/pingcap/tiflow/pkg/cmd/context"
+	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -34,18 +36,18 @@ type captureTaskStatus struct {
 
 // cfMeta holds changefeed info and changefeed status.
 type cfMeta struct {
-	Info       *model.ChangeFeedInfo   `json:"info"`
-	Status     *model.ChangeFeedStatus `json:"status"`
-	Count      uint64                  `json:"count"`
-	TaskStatus []captureTaskStatus     `json:"task-status"`
+	Info       *model.ChangeFeedInfo     `json:"info"`
+	Status     *model.ChangeFeedStatus   `json:"status"`
+	Count      uint64                    `json:"count"`
+	TaskStatus []model.CaptureTaskStatus `json:"task-status"`
 }
 
 // queryChangefeedOptions defines flags for the `cli changefeed query` command.
 type queryChangefeedOptions struct {
 	etcdClient *etcd.CDCEtcdClient
 
-	credential *security.Credential
-
+	credential   *security.Credential
+	apiClient    apiv1client.APIV1Interface
 	changefeedID string
 	simplified   bool
 }
@@ -73,6 +75,16 @@ func (o *queryChangefeedOptions) complete(f factory.Factory) error {
 	o.etcdClient = etcdClient
 
 	o.credential = f.GetCredential()
+
+	ctx := cmdcontext.GetDefaultContext()
+	owner, err := getOwnerCapture(ctx, o.etcdClient)
+	if err != nil {
+		return err
+	}
+	o.apiClient, err = apiv1client.NewAPIClient(owner.AdvertiseAddr, nil)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -124,17 +136,12 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 		count += pinfo.Count
 	}
 
-	processorInfos, err := o.etcdClient.GetAllTaskStatus(ctx, o.changefeedID)
+	changefeedDetail, err := o.apiClient.Changefeeds().Get(ctx, o.changefeedID)
 	if err != nil {
 		return err
 	}
 
-	taskStatus := make([]captureTaskStatus, 0, len(processorInfos))
-	for captureID, status := range processorInfos {
-		taskStatus = append(taskStatus, captureTaskStatus{CaptureID: captureID, TaskStatus: status})
-	}
-
-	meta := &cfMeta{Info: info, Status: status, Count: count, TaskStatus: taskStatus}
+	meta := &cfMeta{Info: info, Status: status, Count: count, TaskStatus: changefeedDetail.TaskStatus}
 
 	return util.JSONPrint(cmd, meta)
 }
