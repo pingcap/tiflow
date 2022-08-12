@@ -28,12 +28,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// captureTaskStatus holds capture task status.
-type captureTaskStatus struct {
-	CaptureID  string            `json:"capture-id"`
-	TaskStatus *model.TaskStatus `json:"status"`
-}
-
 // cfMeta holds changefeed info and changefeed status.
 type cfMeta struct {
 	Info       *model.ChangeFeedInfo     `json:"info"`
