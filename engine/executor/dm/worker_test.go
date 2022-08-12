@@ -139,7 +139,8 @@ func TestWorker(t *testing.T) {
 	require.NoError(t, dmWorker.OnMasterMessage("", nil))
 
 	// Finished
-	unitHolder.On("Stage").Return(metadata.StageFinished, nil).Twice()
+	unitHolder.On("Stage").Return(metadata.StageFinished, nil).Times(3)
+	unitHolder.On("Status").Return(&pb.DumpStatus{}).Once()
 	require.True(t, cerrors.ErrWorkerFinish.Equal(dmWorker.Tick(context.Background())))
 
 	unitHolder.AssertExpectations(t)

@@ -14,6 +14,9 @@
 package runtime
 
 import (
+	"encoding/json"
+
+	"github.com/pingcap/tiflow/dm/pb"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 )
@@ -24,6 +27,14 @@ type TaskStatus struct {
 	Task           string
 	Stage          metadata.TaskStage
 	CfgModRevision uint64
+}
+
+// FinishedTaskStatus wraps the TaskStatus with FinishedStatus.
+// It only used when a task is finished.
+type FinishedTaskStatus struct {
+	TaskStatus
+	Result *pb.ProcessResult
+	Status json.RawMessage
 }
 
 // NewOfflineStatus is used when jobmaster receives a worker offline.

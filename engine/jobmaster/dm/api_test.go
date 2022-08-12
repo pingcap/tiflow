@@ -55,13 +55,8 @@ func TestQueryStatusAPI(t *testing.T) {
 				"task4": {Stage: metadata.StageRunning, Cfg: &config.TaskCfg{ModRevision: 4}},
 				"task5": {Stage: metadata.StageRunning, Cfg: &config.TaskCfg{ModRevision: 4}},
 				"task6": {Stage: metadata.StageRunning, Cfg: &config.TaskCfg{ModRevision: 4}},
+				"task7": {Stage: metadata.StageFinished, Cfg: &config.TaskCfg{ModRevision: 4}},
 			},
-		}
-		finishedTaskStatus = runtime.TaskStatus{
-			Unit:           framework.WorkerDMLoad,
-			Task:           "task2",
-			Stage:          metadata.StageFinished,
-			CfgModRevision: 3,
 		}
 		dumpStatus = &pb.DumpStatus{
 			TotalTables:       10,
@@ -107,6 +102,18 @@ func TestQueryStatusAPI(t *testing.T) {
 		dumpStatusResp     = &dmpkg.QueryStatusResponse{Unit: framework.WorkerDMDump, Stage: metadata.StageRunning, Status: dumpStatusBytes}
 		loadStatusResp     = &dmpkg.QueryStatusResponse{Unit: framework.WorkerDMLoad, Stage: metadata.StagePaused, Result: &pb.ProcessResult{IsCanceled: true}, Status: loadStatusBytes}
 		syncStatusResp     = &dmpkg.QueryStatusResponse{Unit: framework.WorkerDMSync, Stage: metadata.StageError, Result: &pb.ProcessResult{Errors: []*pb.ProcessError{processError}}, Status: syncStatusBytes}
+		finishedTaskStatus = runtime.FinishedTaskStatus{
+			TaskStatus: runtime.TaskStatus{
+				Unit:           framework.WorkerDMLoad,
+				Task:           "task2",
+				Stage:          metadata.StageFinished,
+				CfgModRevision: 3,
+			},
+			Result: &pb.ProcessResult{
+				IsCanceled: false,
+			},
+			Status: loadStatusBytes,
+		}
 	)
 	messageAgent := &dmpkg.MockMessageAgent{}
 	jm.messageAgent = messageAgent
@@ -117,7 +124,8 @@ func TestQueryStatusAPI(t *testing.T) {
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task4", framework.WorkerDMDump, "worker4", runtime.WorkerOnline, 3))
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task5", framework.WorkerDMLoad, "worker5", runtime.WorkerOnline, 4))
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task6", framework.WorkerDMSync, "worker6", runtime.WorkerOnline, 3))
-	jm.taskManager.UpdateTaskStatus(finishedTaskStatus)
+	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task7", framework.WorkerDMLoad, "worker7", runtime.WorkerFinished, 4))
+	jm.finishedStatus.Store("task7", finishedTaskStatus)
 
 	// no job
 	jobStatus, err := jm.QueryJobStatus(context.Background(), nil)
@@ -133,18 +141,18 @@ func TestQueryStatusAPI(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	jobStatus, err = jm.QueryJobStatus(ctx, []string{"task7"})
+	jobStatus, err = jm.QueryJobStatus(ctx, []string{"task8"})
 	require.NoError(t, err)
-	taskStatus := jobStatus.TaskStatus["task7"]
+	taskStatus := jobStatus.TaskStatus["task8"]
 	require.Equal(t, "", taskStatus.WorkerID)
 	require.Equal(t, 0, int(taskStatus.ExpectedStage))
-	require.Equal(t, &dmpkg.QueryStatusResponse{ErrorMsg: "task task7 for job not found"}, taskStatus.Status)
+	require.Equal(t, &dmpkg.QueryStatusResponse{ErrorMsg: "task task8 for job not found"}, taskStatus.Status)
 
 	jobStatus, err = jm.QueryJobStatus(ctx, nil)
 	require.NoError(t, err)
 
 	expectedStatus := `{
-	"JobMasterID": "dm-jobmaster-id",
+	"JobID": "dm-jobmaster-id",
 	"TaskStatus": {
 		"task1": {
 			"ExpectedStage": 3,
@@ -163,7 +171,7 @@ func TestQueryStatusAPI(t *testing.T) {
 			"WorkerID": "worker2",
 			"ConfigOutdated": true,
 			"Status": {
-				"ErrorMsg": "",
+				"ErrorMsg": "task task2 is finished and status has been deleted",
 				"Unit": 11,
 				"Stage": 4,
 				"Result": null,
@@ -256,6 +264,24 @@ func TestQueryStatusAPI(t *testing.T) {
 					"secondsBehindMaster": 10
 				}
 			}
+		},
+		"task7": {
+			"ExpectedStage": 4,
+			"WorkerID": "worker7",
+			"ConfigOutdated": false,
+			"Status": {
+				"ErrorMsg": "",
+				"Unit": 11,
+				"Stage": 4,
+				"Result": {},
+				"Status": {
+					"finishedBytes": 4,
+					"totalBytes": 100,
+					"progress": "4%",
+					"metaBinlog": "mysql-bin.000002, 8",
+					"metaBinlogGTID": "1-2-3"
+				}
+			}
 		}
 	}
 }`
@@ -335,8 +361,14 @@ func TestUpdateJobCfg(t *testing.T) {
 	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
 		return "check pass", nil
 	}
+	jm.finishedStatus.Store("key", "val")
 	mockCheckpointAgent.On("Update").Return(nil)
 	require.NoError(t, jm.UpdateJobCfg(context.Background(), jobCfg))
+	// finished status should be reset.
+	jm.finishedStatus.Range(func(k, v interface{}) bool {
+		require.FailNow(t, "finished status should be reset")
+		return true
+	})
 }
 
 func TestBinlog(t *testing.T) {

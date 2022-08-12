@@ -18,16 +18,21 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/goleak"
 )
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(m)
+}
+
 func TestSizeTable(t *testing.T) {
-	defer goleak.VerifyNone(t)
+	t.Parallel()
+
 	tables := [][]int64{
 		{
 			1, 3, 5, 7, 9,
@@ -47,7 +52,8 @@ func TestSizeTable(t *testing.T) {
 }
 
 func TestUvarintReverse(t *testing.T) {
-	defer goleak.VerifyNone(t)
+	t.Parallel()
+
 	var i uint64 = 0
 
 	for i < 0x8000000000000000 {
@@ -72,7 +78,8 @@ func newNullableString(a string) *string {
 }
 
 func TestEncodeChunk(t *testing.T) {
-	defer goleak.VerifyNone(t)
+	t.Parallel()
+
 	stringChunk := []string{"a", "b", "c"}
 	nullableStringChunk := []*string{newNullableString("a"), newNullableString("b"), newNullableString("c")}
 	int64Chunk := []int64{1, 2, 3}
