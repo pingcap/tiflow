@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/tiflow/dm/master"
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/framework/logutil"
-	libMetadata "github.com/pingcap/tiflow/engine/framework/metadata"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/registry"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/checkpoint"
