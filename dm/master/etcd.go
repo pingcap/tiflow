@@ -84,11 +84,12 @@ func startEtcd(etcdCfg *embed.Config,
 // - if local persistent data exists (in fact, it's not join):
 //   - just restart if `member` already exists (already joined before)
 //   - read `initial-cluster` back from local persistent data to restart (just like bootstrapping)
+//
 // - if local persistent data not exist:
-//   1. fetch member list from the cluster to check if we can join now.
-//   2. call `member add` to add the member info into the cluster.
-//   3. generate config for join (`initial-cluster` and `initial-cluster-state`).
-//   4. save `initial-cluster` in local persistent data for later restarting.
+//  1. fetch member list from the cluster to check if we can join now.
+//  2. call `member add` to add the member info into the cluster.
+//  3. generate config for join (`initial-cluster` and `initial-cluster-state`).
+//  4. save `initial-cluster` in local persistent data for later restarting.
 //
 // NOTE: A member can't join to another cluster after it has joined a previous one.
 func prepareJoinEtcd(cfg *Config) error {

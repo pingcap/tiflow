@@ -60,17 +60,19 @@ func TestMessageMatcher(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	clientCtx := context.Background()
+
 	messageErr := errors.New("message error")
 	// synchronous send
 	mockClient.On("SendMessage").Return(messageErr).Once()
-	resp, err := messageMatcher.sendRequest(ctx, "topic", "command", "request", mockClient)
+	resp, err := messageMatcher.sendRequest(ctx, clientCtx, "topic", "command", "request", mockClient)
 	require.EqualError(t, err, messageErr.Error())
 	require.Nil(t, resp)
 	// deadline exceeded
 	mockClient.On("SendMessage").Return(nil).Once()
 	ctx2, cancel2 := context.WithTimeout(ctx, 100*time.Millisecond)
 	defer cancel2()
-	resp, err = messageMatcher.sendRequest(ctx2, "topic", "command", "request", mockClient)
+	resp, err = messageMatcher.sendRequest(ctx2, clientCtx, "topic", "command", "request", mockClient)
 	require.EqualError(t, err, context.DeadlineExceeded.Error())
 	require.Nil(t, resp)
 	// late response
@@ -81,7 +83,7 @@ func TestMessageMatcher(t *testing.T) {
 		mockClient.On("SendMessage").Return(nil).Once()
 		ctx3, cancel3 := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel3()
-		resp3, err := messageMatcher.sendRequest(ctx3, "request-topic", "command", "request", mockClient)
+		resp3, err := messageMatcher.sendRequest(ctx3, clientCtx, "request-topic", "command", "request", mockClient)
 		require.NoError(t, err)
 		require.Equal(t, "response", resp3)
 	}()
@@ -106,7 +108,7 @@ func TestUpdateClient(t *testing.T) {
 
 	// add client
 	messageAgent.UpdateClient("task1", workerHandle1)
-	require.Len(t, messageAgent.clients, 1)
+	require.Len(t, messageAgent.clients.clients, 1)
 	client, err := messageAgent.getClient("task1")
 	require.NoError(t, err)
 	require.Equal(t, client, workerHandle1)
@@ -114,7 +116,7 @@ func TestUpdateClient(t *testing.T) {
 	require.EqualError(t, err, "client task2 not found")
 	require.Equal(t, client, nil)
 	messageAgent.UpdateClient("task2", workerHandle2)
-	require.Len(t, messageAgent.clients, 2)
+	require.Len(t, messageAgent.clients.clients, 2)
 	client, err = messageAgent.getClient("task1")
 	require.NoError(t, err)
 	require.Equal(t, client, workerHandle1)
@@ -124,7 +126,7 @@ func TestUpdateClient(t *testing.T) {
 
 	// remove client
 	messageAgent.UpdateClient("task3", nil)
-	require.Len(t, messageAgent.clients, 2)
+	require.Len(t, messageAgent.clients.clients, 2)
 	client, err = messageAgent.getClient("task1")
 	require.NoError(t, err)
 	require.Equal(t, client, workerHandle1)
@@ -132,7 +134,7 @@ func TestUpdateClient(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, client, workerHandle2)
 	messageAgent.UpdateClient("task2", nil)
-	require.Len(t, messageAgent.clients, 1)
+	require.Len(t, messageAgent.clients.clients, 1)
 	client, err = messageAgent.getClient("task1")
 	require.NoError(t, err)
 	require.Equal(t, client, workerHandle1)

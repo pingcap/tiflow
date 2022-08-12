@@ -158,6 +158,7 @@ func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
 	if err != nil {
 		up.err.Store(err)
 		log.Error("init upstream error", zap.Error(err))
+		return errors.Trace(err)
 	}
 
 	up.KVStorage, err = kv.CreateTiStore(strings.Join(up.PdEndpoints, ","), up.SecurityConfig)

@@ -294,7 +294,12 @@ func (w *dmWorker) checkAndAutoResume(ctx context.Context) error {
 
 	if strategy == worker.ResumeDispatch {
 		w.Logger().Info("dispatch auto resume task", zap.String("task-id", w.taskID))
-		return w.unitHolder.Resume(ctx)
+		err := w.unitHolder.Resume(ctx)
+		if err == nil {
+			w.autoResume.LatestResumeTime = time.Now()
+			w.autoResume.Backoff.BoundaryForward()
+		}
+		return err
 	}
 	return nil
 }

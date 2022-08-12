@@ -103,7 +103,14 @@ func (m *messageMatcher) allocID() messageID {
 }
 
 // sendRequest sends a request message and wait for response.
-func (m *messageMatcher) sendRequest(ctx context.Context, topic p2p.Topic, command string, req interface{}, client client) (interface{}, error) {
+func (m *messageMatcher) sendRequest(
+	ctx context.Context,
+	clientCtx context.Context,
+	topic p2p.Topic,
+	command string,
+	req interface{},
+	client client,
+) (interface{}, error) {
 	msg := message{ID: m.allocID(), Type: requestTp, Command: command, Payload: req}
 	respCh := make(chan interface{}, 1)
 	m.pendings.Store(msg.ID, respCh)
@@ -116,6 +123,8 @@ func (m *messageMatcher) sendRequest(ctx context.Context, topic p2p.Topic, comma
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
+	case <-clientCtx.Done():
+		return nil, errors.New("client is finished before receiving response")
 	case resp := <-respCh:
 		return resp, nil
 	}
@@ -146,11 +155,23 @@ func (m *messageMatcher) onResponse(id messageID, resp interface{}) error {
 type MessageAgent interface {
 	Tick(ctx context.Context) error
 	Close(ctx context.Context) error
-	// update the client to register the request/response topic when client online.
-	// update the client to nil to ungister the request/response when the client offline.
+	// UpdateClient updates the client status.
+	// When client online, caller should use this method to with not nil client.
+	// When client offline temporary, caller should use this method with nil client.
 	UpdateClient(clientID string, client client) error
+	// RemoveClient is used when client is offline permanently, or the new client
+	// with this clientID should be treated as a different client.
+	RemoveClient(clientID string) error
 	SendMessage(ctx context.Context, clientID string, command string, msg interface{}) error
 	SendRequest(ctx context.Context, clientID string, command string, req interface{}) (interface{}, error)
+}
+
+type clientGroup struct {
+	mu sync.RWMutex
+	// key is client-id
+	clients map[string]client
+	ctxs    map[string]context.Context
+	cancels map[string]context.CancelFunc
 }
 
 // MessageAgentImpl implements the message processing mechanism.
@@ -163,9 +184,7 @@ type MessageAgentImpl struct {
 	pool                  workerpool.AsyncPool
 	messageRouter         *framework.MessageRouter
 	wg                    sync.WaitGroup
-	mu                    sync.RWMutex
-	// client-id -> Client
-	clients map[string]client
+	clients               clientGroup
 	// when receive message/request/response,
 	// the corresponding processing method of commandHandler will be called according to the command name.
 	commandHandler interface{}
@@ -180,8 +199,12 @@ type MessageAgentImpl struct {
 // RequestFuncType(2): func(ctx context.Context, req *interface{}) (resp *interface{}) {}
 func NewMessageAgentImpl(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) MessageAgent {
 	agent := &MessageAgentImpl{
-		messageMatcher:        newMessageMatcher(),
-		clients:               make(map[string]client),
+		messageMatcher: newMessageMatcher(),
+		clients: clientGroup{
+			clients: map[string]client{},
+			ctxs:    map[string]context.Context{},
+			cancels: map[string]context.CancelFunc{},
+		},
 		commandHandler:        commandHandler,
 		messageHandlerManager: messageHandlerManager,
 		pool:                  workerpool.NewDefaultAsyncPool(10),
@@ -219,35 +242,64 @@ func (agent *MessageAgentImpl) Close(ctx context.Context) error {
 		agent.cancel()
 	}
 	agent.wg.Wait()
+
 	return nil
 }
 
-// UpdateClient adds or deletes the client by client-id and register/unregister topic.
+// UpdateClient implements MessageAgent.UpdateClient.
 func (agent *MessageAgentImpl) UpdateClient(clientID string, client client) error {
-	agent.mu.Lock()
-	defer agent.mu.Unlock()
-	_, ok := agent.clients[clientID]
+	agent.clients.mu.Lock()
+	defer agent.clients.mu.Unlock()
+
+	_, ok := agent.clients.clients[clientID]
 	if client == nil && ok {
 		// delete client
 		if err := agent.unregisterTopic(agent.ctx, clientID); err != nil {
 			return err
 		}
-		delete(agent.clients, clientID)
+		delete(agent.clients.clients, clientID)
 	} else if client != nil && !ok {
 		// add client
 		if err := agent.registerTopic(agent.ctx, clientID); err != nil {
 			return err
 		}
-		agent.clients[clientID] = client
+		agent.clients.clients[clientID] = client
+
+		// don't overwrite existing context, we allow multiple worker share same topic
+		if _, ok := agent.clients.ctxs[clientID]; !ok {
+			ctx, cancel := context.WithCancel(agent.ctx)
+			agent.clients.ctxs[clientID] = ctx
+			agent.clients.cancels[clientID] = cancel
+		}
+
 	}
 	return nil
 }
 
-// getClient gets client by client.
+// RemoveClient implements MessageAgent.RemoveClient.
+func (agent *MessageAgentImpl) RemoveClient(clientID string) error {
+	agent.clients.mu.Lock()
+	defer agent.clients.mu.Unlock()
+
+	if err := agent.unregisterTopic(agent.ctx, clientID); err != nil {
+		return err
+	}
+
+	delete(agent.clients.clients, clientID)
+	delete(agent.clients.ctxs, clientID)
+	cancel, ok := agent.clients.cancels[clientID]
+	if ok {
+		cancel()
+		delete(agent.clients.cancels, clientID)
+	}
+	return nil
+}
+
 func (agent *MessageAgentImpl) getClient(clientID string) (client, error) {
-	agent.mu.RLock()
-	defer agent.mu.RUnlock()
-	client, ok := agent.clients[clientID]
+	agent.clients.mu.RLock()
+	defer agent.clients.mu.RUnlock()
+
+	client, ok := agent.clients.clients[clientID]
 	if !ok {
 		return nil, errors.Errorf("client %s not found", clientID)
 	}
@@ -270,14 +322,21 @@ func (agent *MessageAgentImpl) SendMessage(ctx context.Context, clientID string,
 // caller should add its own retry mechanism if needed.
 // caller should persist the request itself if needed.
 func (agent *MessageAgentImpl) SendRequest(ctx context.Context, clientID string, command string, req interface{}) (interface{}, error) {
-	client, err := agent.getClient(clientID)
-	if err != nil {
-		return nil, err
+	agent.clients.mu.RLock()
+	client, ok := agent.clients.clients[clientID]
+	clientCtx, ok2 := agent.clients.ctxs[clientID]
+	agent.clients.mu.RUnlock()
+
+	if !ok {
+		return nil, errors.Errorf("client %s not found", clientID)
+	}
+	if !ok2 {
+		return nil, errors.Errorf("client %s context not found, this should not happen", clientID)
 	}
 	ctx2, cancel := context.WithTimeout(ctx, defaultRequestTimeOut)
 	defer cancel()
 	agent.logger.Debug("send request", zap.String("client-id", clientID), zap.String("command", command), zap.Any("req", req))
-	return agent.messageMatcher.sendRequest(ctx2, generateTopic(agent.id, clientID), command, req, client)
+	return agent.messageMatcher.sendRequest(ctx2, clientCtx, generateTopic(agent.id, clientID), command, req, client)
 }
 
 // sendResponse send response asynchronously.
