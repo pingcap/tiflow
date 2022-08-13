@@ -362,12 +362,7 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		return c.MessageServer.Run(ctx)
 	})
 
-	err = g.Wait()
-	if err != nil {
-		return errors.Annotate(err, "capture exited")
-	}
-
-	return nil
+	return errors.Trace(g.Wait())
 }
 
 // Info gets the capture info
@@ -411,7 +406,6 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		}
 		// Campaign to be the owner, it blocks until it been elected.
 		if err := c.campaign(ctx); err != nil {
-			log.Warn("campaign owner failed", zap.String("captureID", c.info.ID), zap.Error(err))
 			switch errors.Cause(err) {
 			case context.Canceled:
 				return nil
