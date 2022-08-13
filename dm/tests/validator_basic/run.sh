@@ -537,7 +537,7 @@ function stopped_validator_fail_over() {
 	run_sql_source1 "update $db_name.t2 set c2=11 where c2=1"
 	run_sql_source1 "update $db_name.t2 set c2=22 where c2=2"
 	run_sql_source1 "delete from $db_name.t2 where c1=3"
-	trigger_checkpoint_flush
+	trigger_checkpoint_flush	
 	# skipped row is not add to processed rows
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
@@ -546,10 +546,14 @@ function stopped_validator_fail_over() {
 		"new\/ignored\/resolved: 1\/0\/0" 1 \
 		"\"stage\": \"Running\"" 2
 	# make sure validator checkpoint is flushed
+	sleep 1 # wait for the min flush interval
 	trigger_checkpoint_flush
 	run_sql_tidb_with_retry "select concat_ws('/', procd_ins, procd_upd, procd_del) processed
 														from dm_meta.test_validator_checkpoint where source='mysql-replica-01'" \
 		"processed: 3/2/1"
+	run_sql_tidb_with_retry "select count(1) cnt
+														from dm_meta.test_validator_error_change where source='mysql-replica-01'" \
+		"cnt: 1"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation stop test" \
 		"\"result\": true" 1
@@ -715,13 +719,13 @@ function test_dup_autopk() {
 		"new\/ignored\/resolved: 0\/0\/0" 2
 }
 
-run_standalone $*
-validate_table_with_different_pk
-test_unsupported_table_status
+# run_standalone $*
+# validate_table_with_different_pk
+# test_unsupported_table_status
 stopped_validator_fail_over
-test_data_filter
-test_validation_syncer_stopped
-test_dup_autopk
+# test_data_filter
+# test_validation_syncer_stopped
+# test_dup_autopk
 cleanup_process $*
 cleanup_data $db_name
 cleanup_data_upstream $db_name
