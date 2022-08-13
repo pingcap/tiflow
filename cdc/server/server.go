@@ -135,7 +135,7 @@ func (s *server) Run(ctx context.Context) error {
 	logConfig := logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 
-	// we does not pass a `context` to the etcd client,
+	// we do not pass a `context` to the etcd client,
 	// to prevent it's cancelled when the server is closing.
 	// For example, when the non-owner node goes offline,
 	// it would resign the campaign key which was put by call `campaign`,
@@ -163,12 +163,11 @@ func (s *server) Run(ctx context.Context) error {
 		},
 	})
 	if err != nil {
-		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "new etcd client")
+		return errors.Trace(err)
 	}
 	cdcEtcdClient, err := etcd.NewCDCEtcdClient(ctx, etcdCli, conf.ClusterID)
 	if err != nil {
-		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err),
-			"wrapper etcd client")
+		return errors.Trace(err)
 	}
 	s.etcdClient = &cdcEtcdClient
 	err = s.initDir(ctx)
