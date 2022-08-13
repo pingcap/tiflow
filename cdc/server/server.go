@@ -87,17 +87,12 @@ type server struct {
 // New creates a server instance.
 func New(pdEndpoints []string) (*server, error) {
 	conf := config.GetGlobalServerConfig()
-	log.Info("creating CDC server",
-		zap.Strings("pd", pdEndpoints),
-		zap.Stringer("config", conf),
-	)
 
 	// This is to make communication between nodes possible.
 	// In other words, the nodes have to trust each other.
 	if len(conf.Security.CertAllowedCN) != 0 {
 		err := conf.Security.AddSelfCommonName()
 		if err != nil {
-			log.Error("status server set tls config failed", zap.Error(err))
 			return nil, errors.Trace(err)
 		}
 	}
@@ -116,6 +111,9 @@ func New(pdEndpoints []string) (*server, error) {
 		grpcService: p2p.NewServerWrapper(),
 		tcpServer:   tcpServer,
 	}
+
+	log.Info("CDC server created",
+		zap.Strings("pd", pdEndpoints), zap.Stringer("config", conf))
 
 	return s, nil
 }
