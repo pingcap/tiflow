@@ -719,13 +719,13 @@ function test_dup_autopk() {
 		"new\/ignored\/resolved: 0\/0\/0" 2
 }
 
-# run_standalone $*
-# validate_table_with_different_pk
-# test_unsupported_table_status
+run_standalone $*
+validate_table_with_different_pk
+test_unsupported_table_status
 stopped_validator_fail_over
-# test_data_filter
-# test_validation_syncer_stopped
-# test_dup_autopk
+test_data_filter
+test_validation_syncer_stopped
+test_dup_autopk
 cleanup_process $*
 cleanup_data $db_name
 cleanup_data_upstream $db_name
