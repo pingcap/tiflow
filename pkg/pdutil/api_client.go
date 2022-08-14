@@ -80,7 +80,10 @@ const (
 	}`
 )
 
-var defaultMaxRetry uint64 = 3
+const (
+	defaultMaxRetry       = 3
+	defaultRequestTimeout = 5 * time.Second
+)
 
 // pdAPIClient is the api client of Placement Driver, include grpc client and http client.
 type pdAPIClient struct {
@@ -108,7 +111,7 @@ func (pc *pdAPIClient) Close() {
 // UpdateMetaLabel is a reentrant function that updates the meta-region label of upstream cluster.
 func (pc *pdAPIClient) UpdateMetaLabel(ctx context.Context) error {
 	err := retry.Do(ctx, func() error {
-		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, defaultRequestTimeout)
 		defer cancel()
 
 		err := pc.patchMetaLabel(ctx)
@@ -151,7 +154,7 @@ func (pc *pdAPIClient) ListGcServiceSafePoint(
 		err  error
 	)
 	err = retry.Do(ctx, func() error {
-		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, defaultRequestTimeout)
 		defer cancel()
 
 		resp, err = pc.listGcServiceSafePoint(ctx)
