@@ -11,14 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package leveldb
+package db
 
 import (
 	"context"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/sorter/db/message"
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
-	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
 	"github.com/pingcap/tiflow/pkg/actor"
 	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/prometheus/client_golang/prometheus"
@@ -26,7 +26,7 @@ import (
 )
 
 // writer is a thin shim that batches, translates events into key-value pairs
-// and writes to leveldb.
+// and writes to db.
 type writer struct {
 	common
 	stopped bool
@@ -81,7 +81,7 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 	w.metricTotalEventsResolved.Add(float64(resolvedEventCount))
 
 	if len(writes) != 0 {
-		// Send write task to leveldb.
+		// Send write task to db.
 		task := message.Task{UID: w.uid, TableID: w.tableID, WriteReq: writes}
 		err := w.dbRouter.SendB(ctx, w.dbActorID, actormsg.ValueMessage(task))
 		if err != nil {
@@ -98,10 +98,10 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 	//
 	// It's ok to notify reader immediately without waiting writes done,
 	// because reader will see these writes:
-	//   1. reader/writer send tasks to the same leveldb, so tasks are ordered.
-	//   2. ReadTs will trigger reader to take iterator from leveldb,
-	//      it happens after writer send writes to leveldb.
-	//   3. Before leveldb takes iterator, it flushes all buffered writes.
+	//   1. reader/writer send tasks to the same db, so tasks are ordered.
+	//   2. ReadTs will trigger reader to take iterator from db,
+	//      it happens after writer send writes to db.
+	//   3. Before db takes iterator, it flushes all buffered writes.
 	msg := actormsg.ValueMessage(message.Task{
 		UID:     w.uid,
 		TableID: w.tableID,

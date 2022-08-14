@@ -15,9 +15,9 @@ package config
 
 import "github.com/pingcap/tiflow/pkg/errors"
 
-// DBConfig represents leveldb sorter config.
+// DBConfig represents db sorter config.
 type DBConfig struct {
-	// Count is the number of leveldb count.
+	// Count is the number of db count.
 	//
 	// The default value is 8.
 	Count int `toml:"count" json:"count"`
@@ -25,43 +25,30 @@ type DBConfig struct {
 	//
 	// The default value is 256.
 	Concurrency int `toml:"concurrency" json:"concurrency"`
-	// MaxOpenFiles is the maximum number of open FD by leveldb sorter.
+	// MaxOpenFiles is the maximum number of open FD by db sorter.
 	//
 	// The default value is 10000.
 	MaxOpenFiles int `toml:"max-open-files" json:"max-open-files"`
-	// BlockSize the block size of leveldb sorter.
+	// BlockSize the block size of db sorter.
 	//
 	// The default value is 65536, 64KB.
 	BlockSize int `toml:"block-size" json:"block-size"`
-	// BlockCacheSize is the capacity of leveldb block cache.
-	//
-	// The default value is 4294967296, 4GB.
-	BlockCacheSize int `toml:"block-cache-size" json:"block-cache-size"`
-	// WriterBufferSize is the size of memory table of leveldb.
+	// WriterBufferSize is the size of memory table of db.
 	//
 	// The default value is 8388608, 8MB.
 	WriterBufferSize int `toml:"writer-buffer-size" json:"writer-buffer-size"`
-	// Compression is the compression algorithm that is used by leveldb.
+	// Compression is the compression algorithm that is used by db.
 	// Valid values are "none" or "snappy".
 	//
 	// The default value is "snappy".
 	Compression string `toml:"compression" json:"compression"`
-	// TargetFileSizeBase limits size of leveldb sst file that compaction generates.
-	//
-	// The default value is 8388608, 8MB.
-	TargetFileSizeBase int `toml:"target-file-size-base" json:"target-file-size-base"`
-	// WriteL0SlowdownTrigger defines number of leveldb sst file at level-0 that
-	// will trigger write slowdown.
-	//
-	// The default value is 1<<31 - 1.
-	WriteL0SlowdownTrigger int `toml:"write-l0-slowdown-trigger" json:"write-l0-slowdown-trigger"`
-	// WriteL0PauseTrigger defines number of leveldb sst file at level-0 that will
+	// WriteL0PauseTrigger defines number of db sst file at level-0 that will
 	// pause write.
 	//
 	// The default value is 1<<31 - 1.
 	WriteL0PauseTrigger int `toml:"write-l0-pause-trigger" json:"write-l0-pause-trigger"`
 
-	// CompactionL0Trigger defines number of leveldb sst file at level-0 that will
+	// CompactionL0Trigger defines number of db sst file at level-0 that will
 	// trigger compaction.
 	//
 	// The default value is 160.

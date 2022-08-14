@@ -37,13 +37,13 @@ type Task struct {
 	// writer -> reader
 	ReadTs ReadTs
 	// A batch of events (bytes encoded) need to be wrote.
-	// writer -> leveldb
+	// writer -> db
 	WriteReq map[Key][]byte
 	// Requests an iterator when it is not nil.
-	// reader -> leveldb
+	// reader -> db
 	IterReq *IterRequest
 	// Deletes all of the key-values in the range.
-	// reader -> leveldb and leveldb -> compactor
+	// reader -> db and db -> compactor
 	DeleteReq *DeleteRequest
 
 	// StartTs let reader now the lower bound timestamp for reading data from db

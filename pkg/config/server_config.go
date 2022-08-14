@@ -124,7 +124,7 @@ var defaultServerConfig = &ServerConfig{
 			EventBatchSize: 32,
 		},
 		EnableNewScheduler: true,
-		// Default leveldb sorter config
+		// Default db sorter config
 		EnableDBSorter: true,
 		DB: &DBConfig{
 			Count: 8,
@@ -133,11 +133,8 @@ var defaultServerConfig = &ServerConfig{
 			Concurrency:                 128,
 			MaxOpenFiles:                10000,
 			BlockSize:                   65536,
-			BlockCacheSize:              4294967296,
 			WriterBufferSize:            8388608,
 			Compression:                 "snappy",
-			TargetFileSizeBase:          8388608,
-			WriteL0SlowdownTrigger:      math.MaxInt32,
 			WriteL0PauseTrigger:         math.MaxInt32,
 			CompactionL0Trigger:         160,
 			CompactionDeletionThreshold: 10485760,
