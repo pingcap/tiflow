@@ -125,9 +125,14 @@ type changefeed struct {
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error)
 }
 
-func newChangefeed(id model.ChangeFeedID, up *upstream.Upstream) *changefeed {
+func newChangefeed(
+	id model.ChangeFeedID,
+	state *orchestrator.ChangefeedReactorState,
+	up *upstream.Upstream,
+) *changefeed {
 	c := &changefeed{
-		id: id,
+		id:    id,
+		state: state,
 		// The scheduler will be created lazily.
 		scheduler:        nil,
 		barriers:         newBarriers(),
@@ -145,7 +150,7 @@ func newChangefeed(id model.ChangeFeedID, up *upstream.Upstream) *changefeed {
 }
 
 func newChangefeed4Test(
-	id model.ChangeFeedID, up *upstream.Upstream,
+	id model.ChangeFeedID, state *orchestrator.ChangefeedReactorState, up *upstream.Upstream,
 	newDDLPuller func(ctx context.Context,
 		replicaConfig *config.ReplicaConfig,
 		up *upstream.Upstream,
@@ -155,14 +160,14 @@ func newChangefeed4Test(
 	newSink func() DDLSink,
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error),
 ) *changefeed {
-	c := newChangefeed(id, up)
+	c := newChangefeed(id, state, up)
 	c.newDDLPuller = newDDLPuller
 	c.newSink = newSink
 	c.newScheduler = newScheduler
 	return c
 }
 
-func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) {
+func (c *changefeed) Tick(ctx cdcContext.Context, captures map[model.CaptureID]*model.CaptureInfo) {
 	startTime := time.Now()
 	if err := c.upstream.Error(); err != nil {
 		c.handleErr(ctx, err)
@@ -182,8 +187,8 @@ func (c *changefeed) Tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		c.errCh <- errors.Trace(err)
 		return nil
 	})
-	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
-	err := c.tick(ctx, state, captures)
+	c.state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
+	err := c.tick(ctx, captures)
 
 	// The tick duration is recorded only if changefeed has completed initialization
 	if c.initialized {
@@ -233,9 +238,8 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 	return nil
 }
 
-func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState, captures map[model.CaptureID]*model.CaptureInfo) error {
-	c.state = state
-	adminJobPending := c.feedStateManager.Tick(state)
+func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*model.CaptureInfo) error {
+	adminJobPending := c.feedStateManager.Tick(c.state)
 	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
 	// check stale checkPointTs must be called before `feedStateManager.ShouldRunning()`
 	// to ensure an error or stopped changefeed also be checked

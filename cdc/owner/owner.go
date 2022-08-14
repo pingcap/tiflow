@@ -114,7 +114,11 @@ type ownerImpl struct {
 	//         as it is not a thread-safe value.
 	changefeedTicked bool
 
-	newChangefeed func(id model.ChangeFeedID, up *upstream.Upstream) *changefeed
+	newChangefeed func(
+		id model.ChangeFeedID,
+		state *orchestrator.ChangefeedReactorState,
+		up *upstream.Upstream,
+	) *changefeed
 }
 
 // NewOwner creates a new Owner
@@ -174,10 +178,6 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 			}
 			continue
 		}
-		ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-			ID:   changefeedID,
-			Info: changefeedState.Info,
-		})
 		cfReactor, exist := o.changefeeds[changefeedID]
 		if !exist {
 			up, ok := o.upstreamManager.Get(changefeedState.Info.UpstreamID)
@@ -185,10 +185,14 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 				upstreamInfo := state.Upstreams[changefeedState.Info.UpstreamID]
 				up = o.upstreamManager.AddUpstream(upstreamInfo.ID, upstreamInfo)
 			}
-			cfReactor = o.newChangefeed(changefeedID, up)
+			cfReactor = o.newChangefeed(changefeedID, changefeedState, up)
 			o.changefeeds[changefeedID] = cfReactor
 		}
-		cfReactor.Tick(ctx, changefeedState, state.Captures)
+		ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
+			ID:   changefeedID,
+			Info: changefeedState.Info,
+		})
+		cfReactor.Tick(ctx, state.Captures)
 	}
 	o.changefeedTicked = true
 
