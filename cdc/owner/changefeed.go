@@ -152,11 +152,11 @@ func newChangefeed(
 func newChangefeed4Test(
 	id model.ChangeFeedID, state *orchestrator.ChangefeedReactorState, up *upstream.Upstream,
 	newDDLPuller func(ctx context.Context,
-		replicaConfig *config.ReplicaConfig,
-		up *upstream.Upstream,
-		startTs uint64,
-		changefeed model.ChangeFeedID,
-	) (puller.DDLPuller, error),
+	replicaConfig *config.ReplicaConfig,
+	up *upstream.Upstream,
+	startTs uint64,
+	changefeed model.ChangeFeedID,
+) (puller.DDLPuller, error),
 	newSink func() DDLSink,
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error),
 ) *changefeed {
@@ -396,8 +396,8 @@ LOOP:
 		resolvedTs = c.state.Status.ResolvedTs
 	}
 	log.Info("initialize changefeed",
-		zap.String("namespace", c.state.ID.Namespace),
-		zap.String("changefeed", c.state.ID.ID),
+		zap.String("namespace", c.id.Namespace),
+		zap.String("changefeed", c.id.ID),
 		zap.Stringer("info", c.state.Info),
 		zap.Uint64("checkpointTs", checkpointTs),
 		zap.Uint64("resolvedTs", resolvedTs))
@@ -424,7 +424,7 @@ LOOP:
 		err := gc.EnsureChangefeedStartTsSafety(
 			ctx, c.upstream.PDClient,
 			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceInitializing),
-			c.state.ID, ensureTTL, checkpointTs)
+			c.id, ensureTTL, checkpointTs)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -432,7 +432,7 @@ LOOP:
 		err = gc.UndoEnsureChangefeedStartTsSafety(
 			ctx, c.upstream.PDClient,
 			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
-			ctx.ChangefeedVars().ID,
+			c.id,
 		)
 		if err != nil {
 			return errors.Trace(err)
@@ -440,7 +440,7 @@ LOOP:
 		err = gc.UndoEnsureChangefeedStartTsSafety(
 			ctx, c.upstream.PDClient,
 			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
-			ctx.ChangefeedVars().ID,
+			c.id,
 		)
 		if err != nil {
 			return errors.Trace(err)
@@ -462,7 +462,7 @@ LOOP:
 	// the lower bound of an open interval, i.e. (startTs, ...), we pass checkpointTs-1 as the start-ts to initialize
 	// the schema cache.
 	c.schema, err = newSchemaWrap4Owner(c.upstream.KVStorage,
-		checkpointTs-1, c.state.Info.Config, ctx.ChangefeedVars().ID)
+		checkpointTs-1, c.state.Info.Config, c.id)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -470,13 +470,11 @@ LOOP:
 	c.cancel = cancel
 
 	c.sink = c.newSink()
-	c.sink.run(cancelCtx, cancelCtx.ChangefeedVars().ID, cancelCtx.ChangefeedVars().Info)
+	c.sink.run(cancelCtx, c.id, c.state.Info)
 
 	// Refer to the previous comment on why we use (checkpointTs-1).
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx,
-		cancelCtx.ChangefeedVars().Info.Config,
-		c.upstream, checkpointTs-1,
-		ctx.ChangefeedVars().ID)
+		c.state.Info.Config, c.upstream, checkpointTs-1, c.id)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -527,10 +525,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 		c.cleanupChangefeedServiceGCSafePoints(ctx)
 		return
 	}
-	log.Info("close changefeed",
-		zap.String("namespace", c.state.ID.Namespace),
-		zap.String("changefeed", c.state.ID.ID),
-		zap.Stringer("info", c.state.Info), zap.Bool("isRemoved", c.isRemoved))
+
 	c.cancel()
 	c.cancel = func() {}
 	c.ddlPuller.Close()
@@ -541,9 +536,9 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	cancel()
 	// We don't need to wait sink Close, pass a canceled context is ok
 	if err := c.sink.close(canceledCtx); err != nil {
-		log.Warn("Closing sink failed in Owner",
-			zap.String("namespace", c.state.ID.Namespace),
-			zap.String("changefeed", c.state.ID.ID),
+		log.Warn("owner close sink failed",
+			zap.String("namespace", c.id.Namespace),
+			zap.String("changefeed", c.id.ID),
 			zap.Error(err))
 	}
 	c.wg.Wait()
@@ -551,6 +546,16 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.scheduler = nil
 	c.barriers = nil
 
+	c.cleanupMetrics()
+	c.initialized = false
+
+	log.Info("changefeed closed",
+		zap.String("namespace", c.id.Namespace),
+		zap.String("changefeed", c.id.ID),
+		zap.Stringer("info", c.state.Info), zap.Bool("isRemoved", c.isRemoved))
+}
+
+func (c *changefeed) cleanupMetrics() {
 	changefeedCheckpointTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	changefeedCheckpointTsLagGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedCheckpointTsGauge = nil
@@ -566,8 +571,6 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 
 	changefeedBarrierTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedBarrierTsGauge = nil
-
-	c.initialized = false
 }
 
 // redoManagerCleanup cleanups redo logs if changefeed is removed and redo log is enabled
@@ -616,11 +619,11 @@ func (c *changefeed) cleanupChangefeedServiceGCSafePoints(ctx cdcContext.Context
 			ctx,
 			c.upstream.PDClient,
 			serviceID,
-			ctx.ChangefeedVars().ID)
+			c.id)
 		if err != nil {
 			log.Error("failed to remove gc safepoint",
-				zap.String("namespace", c.state.ID.Namespace),
-				zap.String("changefeed", c.state.ID.ID),
+				zap.String("namespace", c.id.Namespace),
+				zap.String("changefeed", c.id.ID),
 				zap.String("serviceID", serviceID))
 		}
 	}

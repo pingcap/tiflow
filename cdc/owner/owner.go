@@ -189,8 +189,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 			o.changefeeds[changefeedID] = cfReactor
 		}
 		ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-			ID:   changefeedID,
-			Info: changefeedState.Info,
+			ID: changefeedID,
 		})
 		cfReactor.Tick(ctx, state.Captures)
 	}
@@ -198,25 +197,19 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 
 	// Cleanup changefeeds that are not in the state.
 	if len(o.changefeeds) != len(state.Changefeeds) {
-		for changefeedID, cfReactor := range o.changefeeds {
+		for changefeedID, reactor := range o.changefeeds {
 			if _, exist := state.Changefeeds[changefeedID]; exist {
 				continue
 			}
-			ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-				ID: changefeedID,
-			})
-			cfReactor.Close(ctx)
+			reactor.Close(ctx)
 			delete(o.changefeeds, changefeedID)
 		}
 	}
 
 	// Close and cleanup all changefeeds.
 	if atomic.LoadInt32(&o.closed) != 0 {
-		for changefeedID, cfReactor := range o.changefeeds {
-			ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-				ID: changefeedID,
-			})
-			cfReactor.Close(ctx)
+		for _, reactor := range o.changefeeds {
+			reactor.Close(ctx)
 		}
 		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 	}
