@@ -537,7 +537,7 @@ function stopped_validator_fail_over() {
 	run_sql_source1 "update $db_name.t2 set c2=11 where c2=1"
 	run_sql_source1 "update $db_name.t2 set c2=22 where c2=2"
 	run_sql_source1 "delete from $db_name.t2 where c1=3"
-	trigger_checkpoint_flush	
+	trigger_checkpoint_flush
 	# skipped row is not add to processed rows
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
