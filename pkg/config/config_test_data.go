@@ -23,8 +23,7 @@ const (
     "rules": [
       "1.1"
     ],
-    "ignore-txn-start-ts": null,
-    "ddl-allow-list": null
+    "ignore-txn-start-ts": null
   },
   "mounter": {
     "worker-num": 3

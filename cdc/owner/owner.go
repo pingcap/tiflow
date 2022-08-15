@@ -183,7 +183,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 			up, ok := o.upstreamManager.Get(changefeedState.Info.UpstreamID)
 			if !ok {
 				upstreamInfo := state.Upstreams[changefeedState.Info.UpstreamID]
-				up = o.upstreamManager.AddUpstream(upstreamInfo.ID, upstreamInfo)
+				up = o.upstreamManager.AddUpstream(upstreamInfo)
 			}
 			cfReactor = o.newChangefeed(changefeedID, changefeedState, up)
 			o.changefeeds[changefeedID] = cfReactor
@@ -685,7 +685,7 @@ func (o *ownerImpl) updateGCSafepoint(
 		up, ok := o.upstreamManager.Get(upstreamID)
 		if !ok {
 			upstreamInfo := state.Upstreams[upstreamID]
-			up = o.upstreamManager.AddUpstream(upstreamInfo.ID, upstreamInfo)
+			up = o.upstreamManager.AddUpstream(upstreamInfo)
 		}
 		if !up.IsNormal() {
 			log.Warn("upstream is not ready, skip",
