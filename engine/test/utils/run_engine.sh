@@ -2,10 +2,9 @@
 
 set -e
 
-CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-DOCKER_DIR=$(cd $CUR_DIR/../../deployments/docker/ && pwd)
-TIFLOW_DIR=$(cd $CUR_DIR/../../../ && pwd)
-echo $CUR_DIR
+cd "$(dirname "$0")/../../.."
+
+DOCKER_DIR="./deployments/engine/docker"
 
 function generate_flag() {
 	shift
@@ -17,23 +16,23 @@ function generate_flag() {
 
 case $1 in
 "build-local")
-	docker build -f $DOCKER_DIR/dev.Dockerfile -t dataflow:test $TIFLOW_DIR
+	docker build -f $DOCKER_DIR/dev.Dockerfile -t dataflow:test .
 	;;
 "build")
-	docker build -f $DOCKER_DIR/Dockerfile -t dataflow:test $TIFLOW_DIR
+	docker build -f $DOCKER_DIR/Dockerfile -t dataflow:test .
 	;;
 "deploy")
 	flag=
-	generate_flag $*
-	docker compose $flag up -d --force-recreate
+	generate_flag "$@"
+	docker compose "$flag" up -d --force-recreate
 
 	echo -e "\n\n[$(date)] <<<<<< deploy engine cluster success! >>>>>>"
 	docker container ls
 	;;
 "stop")
 	flag=
-	generate_flag $*
-	docker compose $flag down
+	generate_flag "$@"
+	docker compose "$flag" down
 
 	echo -e "\n\n[$(date)] <<<<<< stop engine cluster success! >>>>>>"
 	docker container ls
