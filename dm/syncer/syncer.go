@@ -1765,7 +1765,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 	var (
 		endLocation        = s.checkpoint.GlobalPoint() // also init to global checkpoint
-		startLocation      = s.checkpoint.GlobalPoint()
 		lastTxnEndLocation = s.checkpoint.GlobalPoint()
 
 		currentGTID string
@@ -2124,7 +2123,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 		s.tctx.L().Debug("receive binlog event", zap.Reflect("header", e.Header))
 
-		startLocation = s.streamerController.GetCurStartLocation()
+		startLocation := s.streamerController.GetCurStartLocation()
 		endLocation = s.streamerController.GetCurEndLocation()
 		lastTxnEndLocation = s.streamerController.GetTxnEndLocation()
 
