@@ -390,24 +390,12 @@ func newCmdCreateChangefeed(f factory.Factory) *cobra.Command {
 		Use:   "create",
 		Short: "Create a new replication task (changefeed)",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		Run: func(cmd *cobra.Command, args []string) {
 			ctx := cmdcontext.GetDefaultContext()
 
-			err := o.complete(ctx, f, cmd)
-			if err != nil {
-				return err
-			}
-
-			err = o.validate(cmd)
-			if err != nil {
-				return err
-			}
-
-			err = o.run(ctx, cmd)
-			if cerror.IsCliNotPrintError(err) {
-				return nil
-			}
-			return err
+			util.CheckErr(o.complete(ctx, f, cmd))
+			util.CheckErr(o.validate(cmd))
+			util.CheckErr(o.run(ctx, cmd))
 		},
 	}
 

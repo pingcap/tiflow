@@ -15,11 +15,11 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -189,17 +189,16 @@ func TestChangefeedCreateCli(t *testing.T) {
 	}()
 	f.tso.EXPECT().Query(gomock.Any(), gomock.Any()).Return(&v2.Tso{
 		Timestamp: time.Now().Unix() * 1000,
-	}, nil)
+	}, nil).AnyTimes()
 	f.changefeedsv2.EXPECT().VerifyTable(gomock.Any(), gomock.Any()).Return(&v2.Tables{
 		IneligibleTables: []v2.TableName{{}},
-	}, nil)
+	}, nil).AnyTimes()
 	f.changefeedsv2.EXPECT().Create(gomock.Any(), gomock.Any()).Return(&v2.ChangeFeedInfo{}, nil)
 	require.Nil(t, cmd.Execute())
 
 	cmd = newCmdCreateChangefeed(f)
-	os.Args = []string{
-		"create",
-		"--sort-dir=false",
-	}
-	require.True(t, strings.Contains(cmd.Execute().Error(), "sort-dir"))
+	o := newCreateChangefeedOptions(newChangefeedCommonOptions())
+	o.commonChangefeedOptions.sortDir = "/tmp/test"
+	require.NoError(t, o.complete(context.Background(), f, cmd))
+	require.Contains(t, o.validate(cmd).Error(), "creating changefeed with `--sort-dir`")
 }

@@ -36,7 +36,10 @@ func TestChangefeedQueryCli(t *testing.T) {
 
 	f := &mockFactory{changefeeds: cfV1, changefeedsv2: cfV2}
 
+	o := newQueryChangefeedOptions()
+	o.complete(f)
 	cmd := newCmdQueryChangefeed(f)
+
 	cfV1.EXPECT().List(gomock.Any(), "all").Return(&[]model.ChangefeedCommonInfo{
 		{
 			UpstreamID:     1,
@@ -46,8 +49,10 @@ func TestChangefeedQueryCli(t *testing.T) {
 			RunningError:   nil,
 		},
 	}, nil)
-	os.Args = []string{"query", "--simple=true", "--changefeed-id=abc"}
-	require.Nil(t, cmd.Execute())
+
+	o.simplified = true
+	o.changefeedID = "abc"
+	require.Nil(t, o.run(cmd))
 	cfV1.EXPECT().List(gomock.Any(), "all").Return(&[]model.ChangefeedCommonInfo{
 		{
 			UpstreamID:     1,
@@ -57,22 +62,27 @@ func TestChangefeedQueryCli(t *testing.T) {
 			RunningError:   nil,
 		},
 	}, nil)
-	os.Args = []string{"query", "--simple=true", "--changefeed-id=abcd"}
-	require.NotNil(t, cmd.Execute())
+
+	o.simplified = true
+	o.changefeedID = "abcd"
+	require.NotNil(t, o.run(cmd))
 
 	cfV1.EXPECT().List(gomock.Any(), "all").Return(nil, errors.New("test"))
-	os.Args = []string{"query", "--simple=true", "--changefeed-id=abcd"}
-	require.NotNil(t, cmd.Execute())
+	o.simplified = true
+	o.changefeedID = "abcd"
+	require.NotNil(t, o.run(cmd))
 
 	// query success
 	cfV1.EXPECT().Get(gomock.Any(), "bcd").Return(&model.ChangefeedDetail{}, nil)
 	cfV2.EXPECT().GetInfo(gomock.Any(), gomock.Any()).Return(&v2.ChangeFeedInfo{
 		Config: v2.GetDefaultReplicaConfig(),
 	}, nil)
-	os.Args = []string{"query", "--simple=false", "--changefeed-id=bcd"}
+
+	o.simplified = false
+	o.changefeedID = "bcd"
 	b := bytes.NewBufferString("")
 	cmd.SetOut(b)
-	require.Nil(t, cmd.Execute())
+	require.Nil(t, o.run(cmd))
 	out, err := ioutil.ReadAll(b)
 	require.Nil(t, err)
 	// make sure config is printed
@@ -80,6 +90,8 @@ func TestChangefeedQueryCli(t *testing.T) {
 
 	// query failed
 	cfV1.EXPECT().Get(gomock.Any(), "bcd").Return(nil, errors.New("test"))
+	o.simplified = false
+	o.changefeedID = "bcd"
 	os.Args = []string{"query", "--simple=false", "--changefeed-id=bcd"}
-	require.NotNil(t, cmd.Execute())
+	require.NotNil(t, o.run(cmd))
 }

@@ -74,11 +74,7 @@ func newCmdListCapture(f factory.Factory) *cobra.Command {
 		Short: "List all captures in TiCDC cluster",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			err := o.complete(f)
-			if err != nil {
-				return err
-			}
-
+			util.CheckErr(o.complete(f))
 			return o.run(cmd)
 		},
 	}
