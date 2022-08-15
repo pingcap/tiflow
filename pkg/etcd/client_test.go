@@ -80,7 +80,7 @@ func TestRetry(t *testing.T) {
 	retrycli := Wrap(cli, nil)
 	get, err := retrycli.Get(context.TODO(), "")
 
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, get)
 
 	_, err = retrycli.Put(context.TODO(), "", "")
@@ -93,7 +93,7 @@ func TestRetry(t *testing.T) {
 	// Test Txn case
 	// case 0: normal
 	rsp, err := retrycli.Txn(ctx, nil, nil, nil)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.False(t, rsp.Succeeded)
 
 	// case 1: errors.ErrReachMaxTry

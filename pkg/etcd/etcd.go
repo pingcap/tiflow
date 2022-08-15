@@ -116,6 +116,10 @@ type CDCEtcdClient interface {
 		id model.ChangeFeedID,
 	) (*model.ChangeFeedInfo, error)
 
+	GetAllChangeFeedInfo(ctx context.Context) (
+		map[model.ChangeFeedID]*model.ChangeFeedInfo, error,
+	)
+
 	GetChangeFeedStatus(ctx context.Context,
 		id model.ChangeFeedID,
 	) (*model.ChangeFeedStatus, int64, error)
@@ -166,7 +170,7 @@ var _ CDCEtcdClient = (*CDCEtcdClientImpl)(nil)
 func NewCDCEtcdClient(ctx context.Context,
 	cli *clientv3.Client,
 	clusterID string,
-) (CDCEtcdClientImpl, error) {
+) (*CDCEtcdClientImpl, error) {
 	metrics := map[string]prometheus.Counter{
 		EtcdPut:    etcdRequestCounter.WithLabelValues(EtcdPut),
 		EtcdGet:    etcdRequestCounter.WithLabelValues(EtcdGet),
@@ -177,9 +181,9 @@ func NewCDCEtcdClient(ctx context.Context,
 	}
 	resp, err := cli.MemberList(ctx)
 	if err != nil {
-		return CDCEtcdClientImpl{}, err
+		return nil, errors.Trace(err)
 	}
-	return CDCEtcdClientImpl{
+	return &CDCEtcdClientImpl{
 		etcdClusterID: resp.Header.ClusterId,
 		Client:        Wrap(cli, metrics),
 		ClusterID:     clusterID,
