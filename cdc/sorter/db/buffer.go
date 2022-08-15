@@ -11,16 +11,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package leveldb
+package db
 
 import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
+	"github.com/pingcap/tiflow/cdc/sorter/db/message"
 	"go.uber.org/zap"
 )
 
-// outputBuffer a struct that facilitate leveldb table sorter.
+// outputBuffer a struct that facilitate db sorter.
 type outputBuffer struct {
 	// A slice of keys need to be deleted.
 	deleteKeys []message.Key

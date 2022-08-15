@@ -621,9 +621,9 @@ func (c *CDCEtcdClientImpl) GetAllTaskPositions(ctx context.Context,
 }
 
 // GetTaskPosition queries task process from etcd, returns
-//  - ModRevision of the given key
-//  - *model.TaskPosition unmarshaled from the value
-//  - error if error happens
+//   - ModRevision of the given key
+//   - *model.TaskPosition unmarshaled from the value
+//   - error if error happens
 func (c *CDCEtcdClientImpl) GetTaskPosition(
 	ctx context.Context,
 	changefeedID model.ChangeFeedID,

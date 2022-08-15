@@ -179,12 +179,12 @@ func (c *metaOpsClient) Close() error {
 	return nil
 }
 
-/////////////////////////////// Logic Epoch
+// ///////////////////////////// Logic Epoch
 func (c *metaOpsClient) GenEpoch(ctx context.Context) (frameModel.Epoch, error) {
 	return c.epochClient.GenEpoch(ctx)
 }
 
-///////////////////////// Project Operation
+// /////////////////////// Project Operation
 // CreateProject insert the model.ProjectInfo
 func (c *metaOpsClient) CreateProject(ctx context.Context, project *model.ProjectInfo) error {
 	if project == nil {
@@ -276,7 +276,7 @@ func (c *metaOpsClient) QueryProjectOperationsByTimeRange(ctx context.Context,
 	return projectOps, nil
 }
 
-/////////////////////////////// Job Operation
+// ///////////////////////////// Job Operation
 // UpsertJob upsert the jobInfo
 func (c *metaOpsClient) UpsertJob(ctx context.Context, job *frameModel.MasterMetaKVData) error {
 	if job == nil {
@@ -376,7 +376,7 @@ func (c *metaOpsClient) QueryJobsByStatus(ctx context.Context,
 	return jobs, nil
 }
 
-/////////////////////////////// Worker Operation
+// ///////////////////////////// Worker Operation
 // UpsertWorker insert the workerInfo
 func (c *metaOpsClient) UpsertWorker(ctx context.Context, worker *frameModel.WorkerStatus) error {
 	if worker == nil {
@@ -461,7 +461,7 @@ func (c *metaOpsClient) QueryWorkersByStatus(ctx context.Context, masterID strin
 	return workers, nil
 }
 
-/////////////////////////////// Resource Operation
+// ///////////////////////////// Resource Operation
 // UpsertResource upsert the ResourceMeta
 func (c *metaOpsClient) UpsertResource(ctx context.Context, resource *resModel.ResourceMeta) error {
 	if resource == nil {

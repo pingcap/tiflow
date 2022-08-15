@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sorter"
-	"github.com/pingcap/tiflow/cdc/sorter/leveldb"
+	"github.com/pingcap/tiflow/cdc/sorter/db"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
 	"github.com/pingcap/tiflow/pkg/actor"
@@ -115,7 +115,7 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 			ssystem := ctx.GlobalVars().SorterSystem
 			dbActorID := ssystem.DBActorID(uint64(tableID))
 			compactScheduler := ctx.GlobalVars().SorterSystem.CompactScheduler()
-			levelSorter, err := leveldb.NewSorter(
+			levelSorter, err := db.NewSorter(
 				ctx, tableID, startTs, ssystem.DBRouter, dbActorID,
 				ssystem.WriterSystem, ssystem.WriterRouter,
 				ssystem.ReaderSystem, ssystem.ReaderRouter,
