@@ -18,6 +18,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
+	"github.com/pingcap/tiflow/pkg/kafka"
 )
 
 // DMLProducer is the interface for message producer.
@@ -38,4 +39,4 @@ type DMLProducer interface {
 // So we let the GC close errCh.
 // It's usually a buffered channel.
 type Factory func(ctx context.Context, client sarama.Client,
-	errCh chan error) (DMLProducer, error)
+	adminClient kafka.ClusterAdminClient, errCh chan error) (DMLProducer, error)
