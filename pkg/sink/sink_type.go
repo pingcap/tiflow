@@ -66,6 +66,7 @@ func IsPulsarScheme(scheme string) bool {
 	return scheme == PulsarSchema || scheme == PulsarSSLSchema
 }
 
+// IsMySQLCompatibleScheme returns true if the scheme is compatible with MySQL.
 func IsMySQLCompatibleScheme(scheme string) bool {
 	return scheme == MySQLSchema || scheme == MySQLSchema ||
 		scheme == TiDBSchema || scheme == TiDBSSLSchema

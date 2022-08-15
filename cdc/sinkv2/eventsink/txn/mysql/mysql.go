@@ -91,7 +91,7 @@ func NewMySQLSink(
 
 	if len(opts) == 0 {
 		opts = make([]SinkOptions, 1)
-		opts[0] = SinkOptionsDefault()
+		opts[0] = sinkOptionsDefault()
 	}
 
 	ctx, cancel := context.WithCancel(ctx)

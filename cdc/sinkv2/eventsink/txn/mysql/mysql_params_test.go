@@ -23,8 +23,14 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
+
+// sinkOptionsDefault creates a default SinkOptions.
+func sinkOptionsDefault() SinkOptions {
+	return SinkOptionsFromReplicaConfig(config.GetDefaultReplicaConfig())
+}
 
 func TestSinkParamsClone(t *testing.T) {
 	t.Parallel()

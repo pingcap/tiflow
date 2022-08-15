@@ -72,13 +72,6 @@ func defaultParams() *sinkParams {
 	}
 }
 
-var validSchemes = map[string]bool{
-	"mysql":     true,
-	"mysql+ssl": true,
-	"tidb":      true,
-	"tidb+ssl":  true,
-}
-
 type sinkParams struct {
 	workerCount         int
 	maxTxnRow           int
@@ -403,9 +396,4 @@ func SinkOptionsFromReplicaConfig(config *config.ReplicaConfig) SinkOptions {
 		forceReplicate: config.ForceReplicate,
 		enableOldValue: config.EnableOldValue,
 	}
-}
-
-// SinkOptionsDefault creates a default SinkOptions.
-func SinkOptionsDefault() SinkOptions {
-	return SinkOptionsFromReplicaConfig(config.GetDefaultReplicaConfig())
 }
