@@ -488,7 +488,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			}
 
 			log.Warn("owner resign timeout", zap.String("captureID", c.info.ID),
-				zap.Error(err), zap.Int64("ownerRev", ownerRev))
+				zap.Error(resignErr), zap.Int64("ownerRev", ownerRev))
 		}
 		cancel()
 

@@ -89,7 +89,7 @@ func newUpstream(pdEndpoints []string,
 	}
 }
 
-// NewUpstream4Test new a upstream for unit test.
+// NewUpstream4Test new an upstream for unit test.
 func NewUpstream4Test(pdClient pd.Client) *Upstream {
 	pdClock := pdutil.NewClock4Test()
 	gcManager := gc.NewManager(
@@ -185,12 +185,19 @@ func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
 	log.Info("upstream's GCManager created", zap.Uint64("upstreamID", up.ID))
 
 	// Update meta-region label to ensure that meta region isolated from data regions.
-	err = pdutil.UpdateMetaLabel(ctx, up.PDClient, up.SecurityConfig)
+	pc, err := pdutil.NewPDAPIClient(up.PDClient, up.SecurityConfig)
+	if err != nil {
+		log.Error("create pd api client failed", zap.Error(err))
+		return errors.Trace(err)
+	}
+	defer pc.Close()
+
+	err = pc.UpdateMetaLabel(ctx)
 	if err != nil {
 		log.Warn("Fail to verify region label rule",
 			zap.Error(err),
 			zap.Uint64("upstreamID", up.ID),
-			zap.Strings("upstramEndpoints", up.PdEndpoints))
+			zap.Strings("upstreamEndpoints", up.PdEndpoints))
 	}
 
 	up.wg.Add(1)
