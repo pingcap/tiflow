@@ -93,11 +93,11 @@ func (j dmJobMasterFactory) NewWorkerImpl(dCtx *dcontext.Context, workerID frame
 
 // initComponents initializes components of dm job master
 // it need to be called firstly in InitImpl and OnMasterRecovered
+// we should create all components if there is any error
+// CloseImpl/StopImpl will be called later to close components
 func (jm *JobMaster) initComponents(ctx context.Context) error {
 	jm.Logger().Info("initializing the dm jobmaster components")
 	taskStatus, workerStatus, err := jm.getInitStatus()
-	// still create components if any error
-	// CloseImpl/StopImpl will be called later to close components
 	jm.metadata = metadata.NewMetaData(jm.ID(), jm.MetaKVClient())
 	jm.messageAgent = dmpkg.NewMessageAgent(jm.ID(), jm, jm.messageHandlerManager, jm.Logger())
 	jm.checkpointAgent = checkpoint.NewCheckpointAgent(jm.Logger())
@@ -276,6 +276,8 @@ func (jm *JobMaster) StopImpl(ctx context.Context) error {
 	cfg := jm.cfg
 	jm.mu.Unlock()
 	// remove other resources
+	// cfg maybe nil, if jobmaster recover when in OnCancel/StopImpl
+	// only remove checkpoints when config not nil.
 	if cfg != nil {
 		if err := jm.checkpointAgent.Remove(ctx, cfg); err != nil {
 			jm.Logger().Error("failed to remove checkpoint", zap.Error(err))
