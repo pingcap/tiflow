@@ -82,8 +82,7 @@ func initProcessor4Test(
             "rules": [
                 "*.*"
             ],
-            "ignore-txn-start-ts": null,
-            "ddl-allow-list": null
+            "ignore-txn-start-ts": null
         },
         "mounter": {
             "worker-num": 16
