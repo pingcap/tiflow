@@ -96,6 +96,422 @@ function run_standalone() {
 		"new\/ignored\/resolved: 1\/0\/0" 1
 	run_sql "SELECT count(*) from $db_name.t1" $TIDB_PORT $TIDB_PASSWORD
 	check_contains "count(*): 6"
+<<<<<<< HEAD
+=======
+
+	echo "--> check validator stop when pending row size too large"
+	# skip incremental rows with id <= 5
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/SkipDML=return(5)'
+	cp $cur/conf/dm-task-standalone.yaml.bak $cur/conf/dm-task-standalone.yaml
+	sed -i 's/row-error-delay: .*$/row-error-delay: 30m/' $cur/conf/dm-task-standalone.yaml
+	sed -i 's/max-pending-row-size: .*$/max-pending-row-size: 20/' $cur/conf/dm-task-standalone.yaml
+	prepare_for_standalone_test
+	run_sql_source1 "create table $db_name.t1_large_col(id int primary key, c varchar(100))"
+	run_sql_source1 "insert into $db_name.t1_large_col values(1, 'this-text-is-more-than-20-bytes')"
+	trigger_checkpoint_flush
+	# since multiple worker may send this error, there should be at least one "too much pending data" error
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"stage\": \"Stopped\"" 1 \
+		"too much pending data, stop validator" 1+ \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 1\/0\/0\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 1\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1
+
+	echo "--> check validator stop when pending row count too many"
+	# skip incremental rows with id <= 5
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/SkipDML=return(5)'
+	cp $cur/conf/dm-task-standalone.yaml.bak $cur/conf/dm-task-standalone.yaml
+	sed -i 's/row-error-delay: .*$/row-error-delay: 30m/' $cur/conf/dm-task-standalone.yaml
+	sed -i 's/max-pending-row-count: .*$/max-pending-row-count: 2/' $cur/conf/dm-task-standalone.yaml
+	prepare_for_standalone_test
+	run_sql_source1 "create table $db_name.t1_large_col(id int primary key)"
+	run_sql_source1 "insert into $db_name.t1_large_col values(1)"
+	run_sql_source1 "insert into $db_name.t1_large_col values(2)"
+	run_sql_source1 "insert into $db_name.t1_large_col values(3)"
+	trigger_checkpoint_flush
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"stage\": \"Stopped\"" 1 \
+		"too much pending data, stop validator" 1+ \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 3\/0\/0\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 3\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1
+
+	test_start_validator_on_the_fly false false
+	test_start_validator_on_the_fly false true
+	test_start_validator_on_the_fly true false
+	test_start_validator_on_the_fly true true
+
+	test_start_validator_with_time_smaller_than_min_binlog_pos false
+	test_start_validator_with_time_smaller_than_min_binlog_pos true
+
+	test_start_validator_with_time_in_range_of_binlog_pos false
+	test_start_validator_with_time_in_range_of_binlog_pos true
+
+	echo "--> start validator from time > max mysql binlog pos"
+	test_start_validator_on_the_fly_prepare false false
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation start --start-time '$(($(date "+%Y") + 2))-01-01 00:00:00' test" \
+		"\"result\": true" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"is too late, no binlog location matches it" 1 \
+		"\"stage\": \"Stopped\"" 1 \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 0\/0\/0\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1
+}
+
+function validate_table_with_different_pk() {
+	export GO_FAILPOINTS=""
+
+	# int type uk already tested in run_standalone, so not test it here
+	echo "--> single varchar col pk"
+	prepare_for_standalone_test
+	run_sql_source1 "create table $db_name.t2(c1 varchar(10) primary key, c2 varchar(10))"
+	run_sql_source1 "insert into $db_name.t2 values('a', NULL), ('b', 'b'), ('c', 'c')"
+	run_sql_source1 "update $db_name.t2 set c2='bb' where c1='b'"
+	run_sql_source1 "update $db_name.t2 set c2='cc' where c1='c'"
+	run_sql_source1 "delete from $db_name.t2 where c1='a'"
+	trigger_checkpoint_flush
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 3\/2\/1\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1
+	run_sql_tidb "SELECT count(*) from $db_name.t2"
+	check_contains "count(*): 2"
+
+	echo "--> single datetime col pk"
+	prepare_for_standalone_test
+	run_sql_source1 "create table $db_name.t2(c1 datetime primary key, c2 varchar(10))"
+	run_sql_source1 "insert into $db_name.t2 values('2022-01-01 00:00:00', NULL), ('2022-01-01 00:00:01', 'b'), ('2022-01-01 00:00:02', 'c')"
+	run_sql_source1 "update $db_name.t2 set c2='bb' where c1='2022-01-01 00:00:01'"
+	run_sql_source1 "update $db_name.t2 set c2='cc' where c1='2022-01-01 00:00:02'"
+	run_sql_source1 "delete from $db_name.t2 where c1='2022-01-01 00:00:00'"
+	trigger_checkpoint_flush
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 3\/2\/1\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1
+	run_sql_tidb "SELECT count(*) from $db_name.t2"
+	check_contains "count(*): 2"
+
+	echo "--> compound pk (datetime, timestamp, int, varchar)"
+	prepare_for_standalone_test
+	run_sql_source1 "create table $db_name.t2(c1 datetime, c2 timestamp DEFAULT CURRENT_TIMESTAMP, c3 int, c4 varchar(10), c5 int, primary key(c1, c2, c3, c4))"
+	run_sql_source1 "insert into $db_name.t2 values('2022-01-01 00:00:00', '2022-01-01 00:00:00', 1, 'a', 1)"
+	run_sql_source1 "insert into $db_name.t2 values('2022-01-01 00:00:00', '2022-01-01 00:00:00', 1, 'b', 2)"
+	run_sql_source1 "insert into $db_name.t2 values('2022-01-01 00:00:00', '2012-12-01 00:00:00', 1, 'a', 3)"
+	run_sql_source1 "insert into $db_name.t2 values('2012-12-01 00:00:00', '2022-01-01 00:00:00', 1, 'a', 4)"
+	run_sql_source1 "update $db_name.t2 set c5=11 where c1='2022-01-01 00:00:00'" # update 3 rows
+	run_sql_source1 "update $db_name.t2 set c5=22 where c2='2012-12-01 00:00:00'" # update 1 row
+	run_sql_source1 "delete from $db_name.t2 where c4='a'"                        # delete 3 row
+	trigger_checkpoint_flush
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 4\/4\/3\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1
+	run_sql_tidb "SELECT count(*) from $db_name.t2"
+	check_contains "count(*): 1"
+}
+
+function test_unsupported_table_status() {
+	export GO_FAILPOINTS=""
+
+	echo "--> table without primary key"
+	prepare_for_standalone_test
+	run_sql_source1 "create table $db_name.t2(c1 int)"
+	run_sql_source1 "insert into $db_name.t2 values(1)"
+	trigger_checkpoint_flush
+	# skipped row is not add to processed rows
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 0\/0\/0\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1 \
+		"\"stage\": \"Running\"" 1 \
+		"\"stage\": \"Stopped\"" 1 \
+		"no primary key" 1
+	run_sql_tidb "SELECT count(*) from $db_name.t2"
+	check_contains "count(*): 1"
+
+	echo "--> table is deleted on downstream"
+	prepare_dm_and_source
+	run_sql_source1 "reset master"
+	dmctl_start_task_standalone $cur/conf/dm-task-standalone-no-validator.yaml --remove-meta
+	run_sql_source1 "create table $db_name.t2(c1 int primary key, c2 int, c3 int)"
+	run_sql_source1 "insert into $db_name.t2 values(1, 1, 1)"
+	run_sql_source1 "insert into $db_name.t2 values(2, 2, 2)"
+	run_sql_source1 "drop table $db_name.t2"
+	trigger_checkpoint_flush
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"synced\": true" 1
+	run_sql_tidb "select count(*) from information_schema.tables where TABLE_SCHEMA='${db_name}' and TABLE_NAME = 't2'"
+	check_contains "count(*): 0"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation start --start-time '$(($(date "+%Y") - 2))-01-01 00:00:00' test" \
+		"\"result\": true" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 0\/0\/0\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1 \
+		"\"stage\": \"Running\"" 1 \
+		"\"stage\": \"Stopped\"" 1 \
+		"table is not synced or dropped" 1
+
+	echo "--> table in schema-tracker has less column than binlog"
+	prepare_dm_and_source
+	run_sql_source1 "reset master"
+	dmctl_start_task_standalone $cur/conf/dm-task-standalone-no-validator.yaml --remove-meta
+	run_sql_source1 "create table $db_name.t2(c1 int primary key, c2 int, c3 int)"
+	run_sql_source1 "insert into $db_name.t2 values(1, 1, 1)"
+	run_sql_source1 "alter table $db_name.t2 drop column c3"
+	run_sql_source1 "insert into $db_name.t2 values(2, 2)"
+	trigger_checkpoint_flush
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"synced\": true" 1
+	run_sql_tidb "SELECT count(*) from $db_name.t2"
+	check_contains "count(*): 2"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation start --start-time '$(($(date "+%Y") - 2))-01-01 00:00:00' test" \
+		"\"result\": true" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 0\/0\/0\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1 \
+		"\"stage\": \"Running\"" 1 \
+		"\"stage\": \"Stopped\"" 1 \
+		"binlog has more columns than current table" 1
+
+	echo "--> pk column of downstream table not in range of binlog column"
+	prepare_dm_and_source
+	run_sql_source1 "reset master"
+	dmctl_start_task_standalone $cur/conf/dm-task-standalone-no-validator.yaml --remove-meta
+	run_sql_source1 "create table $db_name.t2(c1 int)"
+	run_sql_source1 "insert into $db_name.t2 values(1)"
+	run_sql_source1 "alter table $db_name.t2 add column c2 int default 1"
+	run_sql_source1 "alter table $db_name.t2 add primary key(c2)"
+	run_sql_source1 "insert into $db_name.t2 values(2, 2)"
+	trigger_checkpoint_flush
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"synced\": true" 1
+	run_sql_tidb "SELECT count(*) from $db_name.t2"
+	check_contains "count(*): 2"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation start --start-time '$(($(date "+%Y") - 2))-01-01 00:00:00' test" \
+		"\"result\": true" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 0\/0\/0\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1 \
+		"\"stage\": \"Running\"" 1 \
+		"\"stage\": \"Stopped\"" 1 \
+		"primary key column of downstream table out of range of binlog event row" 1
+}
+
+function stopped_validator_fail_over() {
+	export GO_FAILPOINTS=""
+
+	echo "--> stopped validator fail over"
+	# skip incremental rows with c1 <= 1
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/syncer/SkipDML=return(1)'
+	prepare_for_standalone_test
+	run_sql_source1 "create table $db_name.t2(c1 int primary key, c2 int)"
+	run_sql_source1 "insert into $db_name.t2 values(1, 1), (2, 2), (3, 3)"
+	run_sql_source1 "update $db_name.t2 set c2=11 where c2=1"
+	run_sql_source1 "update $db_name.t2 set c2=22 where c2=2"
+	run_sql_source1 "delete from $db_name.t2 where c1=3"
+	trigger_checkpoint_flush
+	# skipped row is not add to processed rows
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 3\/2\/1\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 1\/0\/0" 1 \
+		"\"stage\": \"Running\"" 2
+	# make sure validator checkpoint is flushed
+	sleep 1 # wait for the min flush interval
+	trigger_checkpoint_flush
+	run_sql_tidb_with_retry "select concat_ws('/', procd_ins, procd_upd, procd_del) processed
+														from dm_meta.test_validator_checkpoint where source='mysql-replica-01'" \
+		"processed: 3/2/1"
+	run_sql_tidb_with_retry "select count(1) cnt
+														from dm_meta.test_validator_error_change where source='mysql-replica-01'" \
+		"cnt: 1"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation stop test" \
+		"\"result\": true" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 3\/2\/1\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 1\/0\/0" 1 \
+		"\"stage\": \"Running\"" 1 \
+		"\"stage\": \"Stopped\"" 1
+	# source1 bound to worker1, so source1 will bound to worker2. see prepare_dm_and_source
+	kill_process worker1
+	# stopped task fail over, processed row status and table status is not loaded into memory, so they're zero
+	# but we can see errors, since it's loaded from db all the time
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 0\/0\/0\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 1\/0\/0" 1 \
+		"\"stage\": \"Running\"" 0 \
+		"\"stage\": \"Stopped\"" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation show-error --error all test" \
+		"\"result\": true" 1 \
+		"\"id\": \"1\"" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation start test" \
+		"\"result\": true" 1
+	run_sql_source1 "insert into $db_name.t2 values(4, 4), (5, 5), (6, 6)"
+	run_sql_source1 "update $db_name.t2 set c2=55 where c2=5"
+	trigger_checkpoint_flush
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 6\/3\/1\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 1\/0\/0" 1 \
+		"\"stage\": \"Running\"" 2
+}
+
+# some events are filtered in syncer, validator should filter them too.
+# validator only support below 3 filter.
+function test_data_filter() {
+	export GO_FAILPOINTS=""
+
+	echo "--> filter online ddl shadow table"
+	prepare_dm_and_source
+	dmctl_start_task_standalone $cur/conf/test-filter.yaml --remove-meta
+	run_sql_source1 "create table $db_name.t2(id int primary key)"
+	run_sql_source1 "insert into $db_name.t2 values(1), (2), (3)"
+	run_sql_source1 "create table $db_name._t_gho(id int primary key)"
+	run_sql_source1 "insert into $db_name._t_gho values(1), (2), (3)"
+	trigger_checkpoint_flush
+	# skipped table has no table status, so number of running = 2
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 3\/0\/0\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1 \
+		"\"stage\": \"Running\"" 2
+
+	echo "--> filter by ba list"
+	run_sql_source1 "create table $db_name.x1(id int primary key)"
+	run_sql_source1 "insert into $db_name.x1 values(1), (2), (3)"
+	trigger_checkpoint_flush
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"synced\": true" 1
+	# skipped table has no table status, so number of running is still 2
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 3\/0\/0\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1 \
+		"\"stage\": \"Running\"" 2
+
+	echo "--> filter by filter-rules"
+	run_sql_source1 "create table $db_name.t_filter_del(id int primary key, val int)"
+	run_sql_source1 "insert into $db_name.t_filter_del values(1, 1), (2, 2), (3, 3), (4, 4)"
+	run_sql_source1 "update $db_name.t_filter_del set val=11 where id=1"
+	run_sql_source1 "update $db_name.t_filter_del set val=22 where id=2"
+	run_sql_source1 "delete from $db_name.t_filter_del where id in (1, 2, 3)"
+	trigger_checkpoint_flush
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"synced\": true" 1
+	run_sql_tidb "SELECT count(*) from $db_name.t_filter_del"
+	check_contains "count(*): 4"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 7\/2\/0\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1 \
+		"\"stage\": \"Running\"" 3
+}
+
+function test_validation_syncer_stopped() {
+	echo "--> validate when syncer is stopped"
+	insertCnt=5
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/mockValidatorDelay=return(2)"
+	prepare_for_standalone_test
+	run_sql_source1 "create table validator_basic.test(a int primary key, b int)"
+	run_sql_source1 "insert into validator_basic.test values(0, 0)"
+	trigger_checkpoint_flush
+	# wait syncer to start so that validator can start
+	sleep 4
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"synced\": true" 1 \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 1\/0\/0\"" 1
+	for ((k = 1; k <= $insertCnt; k++)); do
+		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"pause-task test" \
+			"\"result\": true" 2
+		trigger_checkpoint_flush
+		# catchup the last insert when the syncer is stopped
+		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"query-status test" \
+			"\"processedRowsStatus\": \"insert\/update\/delete: $k\/0\/0\"" 1 \
+			"new\/ignored\/resolved: 0\/0\/0" 1
+		run_sql_source1 "insert into validator_basic.test values($k, $k)"
+		trigger_checkpoint_flush
+		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"resume-task test" \
+			"\"result\": true" 2
+		# syncer synced but the validator delayed
+		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"query-status test" \
+			"\"synced\": true" 1 \
+			"\"processedRowsStatus\": \"insert\/update\/delete: $k\/0\/0\"" 1
+	done
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: $(($insertCnt + 1))\/0\/0\"" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1
+}
+
+function test_dup_autopk() {
+	# successfully validate sharding tables
+	# though the downstream table deletes the primary key
+	# because not null unique key can identify a row accurately.
+	echo "--> test duplicate auto-incr pk"
+	export GO_FAILPOINTS=""
+	prepare_dm_and_source
+	dmctl_operate_source create $cur/conf/source2.yaml $SOURCE_ID2
+	# auto_incr pk in both tables
+	run_sql_source1 "create table validator_basic.shard1(id int primary key auto_increment, ukey int not null unique key)"
+	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD1
+	run_sql_source2 "create table validator_basic.shard1(id int primary key auto_increment, ukey int not null unique key)"
+	# delete pk in tidb
+	run_sql_tidb "create database if not exists validator_basic"
+	run_sql_tidb "create table validator_basic.shard(id int, ukey int not null unique key)"
+	dmctl_start_task "$cur/conf/sharding-task.yaml" "--remove-meta"
+	run_sql_source1 "insert into validator_basic.shard1(ukey) values(1),(2),(3)"
+	run_sql_source2 "insert into validator_basic.shard1(ukey) values(4),(5),(6)"
+	sleep 1.5
+	run_sql_source2 "alter table $db_name.t1 comment 'a';" # trigger source2 flush
+	trigger_checkpoint_flush                               # trigger source1 flush
+	# validate pass
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 3\/0\/0\"" 2 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 2 \
+		"new\/ignored\/resolved: 0\/0\/0" 2
+>>>>>>> 304300450 (validator(dm): fix unstable test (#6739))
 }
 
 run_standalone $*
