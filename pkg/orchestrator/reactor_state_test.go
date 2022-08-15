@@ -63,7 +63,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
                 "*.*"
             ],
             "ignore-txn-start-ts": null,
-            "ddl-allow-list": null
         },
         "mounter": {
             "worker-num": 16

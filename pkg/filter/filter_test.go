@@ -142,12 +142,8 @@ func TestShouldIgnoreDMLEvent(t *testing.T) {
 func TestShouldDiscardDDL(t *testing.T) {
 	t.Parallel()
 
-	config := &config.ReplicaConfig{
-		Filter: &config.FilterConfig{
-			DDLAllowlist: []timodel.ActionType{timodel.ActionAddForeignKey},
-		},
-	}
-	filter, err := NewFilter(config, "")
+	cfg := &config.ReplicaConfig{}
+	filter, err := NewFilter(cfg, "")
 	require.Nil(t, err)
 	require.False(t, filter.ShouldDiscardDDL(timodel.ActionAddForeignKey))
 
