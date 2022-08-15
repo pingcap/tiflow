@@ -38,8 +38,8 @@ var (
 	location = binlog.Location{
 		Position: binlog.MinPosition,
 	}
-	ec             = &eventContext{startLocation: &location, currentLocation: &location, lastLocation: &location}
-	ecWithSafeMode = &eventContext{startLocation: &location, currentLocation: &location, lastLocation: &location, safeMode: true}
+	ec             = &eventContext{startLocation: location, endLocation: location, lastLocation: location}
+	ecWithSafeMode = &eventContext{startLocation: location, endLocation: location, lastLocation: location, safeMode: true}
 )
 
 func (s *testSyncerSuite) TestCastUnsigned(c *C) {

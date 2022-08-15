@@ -111,7 +111,7 @@ func (s *optShardingGroupSuite) TestSync() {
 	require.True(s.T(), k.inConflictStage(utils.UnpackTableID(sourceTbls[3]), utils.UnpackTableID(db2tbl)))
 	syncer.resolveOptimisticDDL(&eventContext{
 		shardingReSyncCh: &shardingReSyncCh,
-		currentLocation:  &endPos3,
+		endLocation:      endPos3,
 	}, utils.UnpackTableID(sourceTbls[2]), utils.UnpackTableID(db2tbl))
 	require.False(s.T(), k.tableInConflict(utils.UnpackTableID(db2tbl)))
 	require.False(s.T(), k.inConflictStage(utils.UnpackTableID(sourceTbls[3]), utils.UnpackTableID(db2tbl)))
@@ -134,7 +134,7 @@ func (s *optShardingGroupSuite) TestSync() {
 	require.True(s.T(), k.inConflictStage(utils.UnpackTableID(sourceTbls[0]), utils.UnpackTableID(db1tbl)))
 	syncer.resolveOptimisticDDL(&eventContext{
 		shardingReSyncCh: &shardingReSyncCh,
-		currentLocation:  &endPos12,
+		endLocation:      endPos12,
 	}, utils.UnpackTableID(sourceTbls[1]), utils.UnpackTableID(db1tbl))
 	require.False(s.T(), k.tableInConflict(utils.UnpackTableID(db1tbl)))
 	require.False(s.T(), k.inConflictStage(utils.UnpackTableID(sourceTbls[0]), utils.UnpackTableID(db1tbl)))

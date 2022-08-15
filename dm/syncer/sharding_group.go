@@ -242,7 +242,7 @@ func (sg *ShardingGroup) CheckSyncing(source string, location binlog.Location) (
 	}
 	// this function only affects dml
 	// activeDDLItem.FirstLocation is ddl's startLocation
-	// location is dml's currentLocation
+	// location is dml's endLocation
 	// dml should be synced when the comparation is equal
 	return binlog.CompareLocation(activeDDLItem.FirstLocation, location, sg.enableGTID) >= 0
 }

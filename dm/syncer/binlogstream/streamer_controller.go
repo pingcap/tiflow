@@ -311,7 +311,7 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 //   - Skip
 //     the skipped event will still be sent to caller, with op = pb.ErrorOp_Skip,
 //     to let caller track schema and save checkpoints.
-func (c *StreamerController) GetEvent(tctx *tcontext.Context) (*replication.BinlogEvent, int, pb.ErrorOp, error) {
+func (c *StreamerController) GetEvent(tctx *tcontext.Context) (*replication.BinlogEvent, pb.ErrorOp, error) {
 	event, suffix, op, err := c.getEvent(tctx)
 
 	// if is local binlog but switch to remote on error, need to add uuid information in binlog's filename
@@ -324,7 +324,7 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (*replication.Binl
 			} else if c.relaySubDirSuffix != "" {
 				filename, err2 := utils.ParseFilename(string(ev.NextLogName))
 				if err2 != nil {
-					return nil, 0, pb.ErrorOp_InvalidErrorOp, terror.Annotate(err2, "fail to parse binlog file name from rotate event")
+					return nil, pb.ErrorOp_InvalidErrorOp, terror.Annotate(err2, "fail to parse binlog file name from rotate event")
 				}
 				ev.NextLogName = []byte(utils.ConstructFilenameWithUUIDSuffix(filename, c.relaySubDirSuffix))
 			}
@@ -333,13 +333,13 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (*replication.Binl
 
 	if err != nil {
 		if err == context.Canceled || err == context.DeadlineExceeded {
-			return nil, 0, pb.ErrorOp_InvalidErrorOp, err
+			return nil, pb.ErrorOp_InvalidErrorOp, err
 		}
 		c.Lock()
 		tctx.L().Error("meet error when get binlog event", zap.Error(err))
 		c.meetError = true
 		c.Unlock()
-		return nil, 0, pb.ErrorOp_InvalidErrorOp, err
+		return nil, pb.ErrorOp_InvalidErrorOp, err
 	}
 
 	if suffix != 0 {
@@ -359,7 +359,7 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (*replication.Binl
 		}
 	}
 
-	return event, suffix, op, nil
+	return event, op, nil
 }
 
 func (c *StreamerController) getEvent(tctx *tcontext.Context) (
