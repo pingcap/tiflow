@@ -46,7 +46,8 @@ func NewCounterVec(f promutil.Factory, opts prometheus.CounterOpts, labelNames [
 // WithLabelValues works as GetMetricWithLabelValues, but panics where
 // GetMetricWithLabelValues would have returned an error. Not returning an
 // error allows shortcuts like
-//     myVec.WithLabelValues("404", "GET").Add(42)
+//
+//	myVec.WithLabelValues("404", "GET").Add(42)
 func (c *CounterVecProxy) WithLabelValues(lvs ...string) prometheus.Counter {
 	if len(lvs) > 0 {
 		noteLabelsInMetricsProxy(c, lvs)
@@ -56,7 +57,8 @@ func (c *CounterVecProxy) WithLabelValues(lvs ...string) prometheus.Counter {
 
 // With works as GetMetricWith, but panics where GetMetricWithLabels would have
 // returned an error. Not returning an error allows shortcuts like
-//     myVec.With(prometheus.Labels{"code": "404", "method": "GET"}).Add(42)
+//
+//	myVec.With(prometheus.Labels{"code": "404", "method": "GET"}).Add(42)
 func (c *CounterVecProxy) With(labels prometheus.Labels) prometheus.Counter {
 	if len(labels) > 0 {
 		values := make([]string, len(labels))

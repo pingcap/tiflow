@@ -46,7 +46,8 @@ func NewHistogramVec(f promutil.Factory, opts prometheus.HistogramOpts, labelNam
 // WithLabelValues works as GetMetricWithLabelValues, but panics where
 // GetMetricWithLabelValues would have returned an error. Not returning an
 // error allows shortcuts like
-//     myVec.WithLabelValues("404", "GET").Observe(42.21)
+//
+//	myVec.WithLabelValues("404", "GET").Observe(42.21)
 func (c *HistogramVecProxy) WithLabelValues(lvs ...string) prometheus.Observer {
 	if len(lvs) > 0 {
 		noteLabelsInMetricsProxy(c, lvs)
@@ -56,7 +57,8 @@ func (c *HistogramVecProxy) WithLabelValues(lvs ...string) prometheus.Observer {
 
 // With works as GetMetricWith but panics where GetMetricWithLabels would have
 // returned an error. Not returning an error allows shortcuts like
-//     myVec.With(prometheus.Labels{"code": "404", "method": "GET"}).Observe(42.21)
+//
+//	myVec.With(prometheus.Labels{"code": "404", "method": "GET"}).Observe(42.21)
 func (c *HistogramVecProxy) With(labels prometheus.Labels) prometheus.Observer {
 	if len(labels) > 0 {
 		values := make([]string, len(labels))

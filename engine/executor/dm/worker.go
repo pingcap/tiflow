@@ -221,7 +221,7 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 	w.Logger().Info("task stage changed", zap.String("task-id", w.taskID), zap.Int("from", int(previousStage)), zap.Int("to", int(currentStage)))
 	w.setStage(currentStage)
 
-	status := w.workerStatus()
+	status := w.workerStatus(ctx)
 	if currentStage != metadata.StageFinished {
 		w.Logger().Info("update status", zap.String("task-id", w.taskID), zap.String("status", string(status.ExtBytes)))
 		return w.UpdateStatus(ctx, status)
@@ -238,15 +238,30 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 }
 
 // workerStatus gets worker status.
-func (w *dmWorker) workerStatus() frameModel.WorkerStatus {
-	stage := w.getStage()
-	code := frameModel.WorkerStatusNormal
+func (w *dmWorker) workerStatus(ctx context.Context) frameModel.WorkerStatus {
+	var (
+		stage       = w.getStage()
+		code        frameModel.WorkerStatusCode
+		taskStatus  = &runtime.TaskStatus{Unit: w.workerType, Task: w.taskID, Stage: stage, CfgModRevision: w.cfgModRevision}
+		finalStatus any
+	)
 	if stage == metadata.StageFinished {
 		code = frameModel.WorkerStatusFinished
+		_, result := w.unitHolder.Stage()
+		status := w.unitHolder.Status(ctx)
+		// nolint:errcheck
+		statusBytes, _ := json.Marshal(status)
+		finalStatus = &runtime.FinishedTaskStatus{
+			TaskStatus: *taskStatus,
+			Result:     result,
+			Status:     statusBytes,
+		}
+	} else {
+		code = frameModel.WorkerStatusNormal
+		finalStatus = taskStatus
 	}
-	status := &runtime.TaskStatus{Unit: w.workerType, Task: w.taskID, Stage: stage, CfgModRevision: w.cfgModRevision}
 	// nolint:errcheck
-	statusBytes, _ := json.Marshal(status)
+	statusBytes, _ := json.Marshal(finalStatus)
 	return frameModel.WorkerStatus{
 		Code:     code,
 		ExtBytes: statusBytes,
@@ -282,7 +297,12 @@ func (w *dmWorker) checkAndAutoResume(ctx context.Context) error {
 
 	if strategy == worker.ResumeDispatch {
 		w.Logger().Info("dispatch auto resume task", zap.String("task-id", w.taskID))
-		return w.unitHolder.Resume(ctx)
+		err := w.unitHolder.Resume(ctx)
+		if err == nil {
+			w.autoResume.LatestResumeTime = time.Now()
+			w.autoResume.Backoff.BoundaryForward()
+		}
+		return err
 	}
 	return nil
 }

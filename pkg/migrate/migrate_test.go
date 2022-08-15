@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	parserModel "github.com/pingcap/tidb/parser/model"
 	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -129,9 +128,6 @@ func TestMigration(t *testing.T) {
 			IgnoreDBs: []string{"aa", "b2"},
 		},
 		IgnoreTxnStartTs: []uint64{1, 2, 3},
-		DDLAllowlist: []parserModel.ActionType{
-			parserModel.ActionType(2),
-		},
 	}
 	info3 := model.ChangeFeedInfo{
 		SinkURI: "test1",
@@ -191,13 +187,13 @@ func TestMigration(t *testing.T) {
 		require.Equal(t, tc.status, status)
 	}
 
-	// set timeout to make sure this test will finished
+	// set timeout to make sure this test will be finished
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cdcCli, err := etcd.NewCDCEtcdClient(ctx, cli, "default")
 	require.Nil(t, err)
 
-	m := NewMigrator(&cdcCli, []string{}, config.GetGlobalServerConfig())
+	m := NewMigrator(cdcCli, []string{}, config.GetGlobalServerConfig())
 	migrator := m.(*migrator)
 	migrator.createPDClientFunc = func(ctx context.Context,
 		pdEndpoints []string, conf *security.Credential,
@@ -419,7 +415,7 @@ func TestMigrationNonDefaultCluster(t *testing.T) {
 	cdcCli, err := etcd.NewCDCEtcdClient(ctx, cli, "nodefault")
 	require.Nil(t, err)
 
-	m := NewMigrator(&cdcCli, []string{}, config.GetGlobalServerConfig())
+	m := NewMigrator(cdcCli, []string{}, config.GetGlobalServerConfig())
 	migrator := m.(*migrator)
 	migrator.createPDClientFunc = func(ctx context.Context,
 		pdEndpoints []string, conf *security.Credential,

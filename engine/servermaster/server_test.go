@@ -25,8 +25,6 @@ import (
 	"time"
 
 	"github.com/phayes/freeport"
-	"github.com/stretchr/testify/require"
-
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -36,7 +34,9 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/servermaster/cluster"
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
+	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"github.com/pingcap/tiflow/pkg/logutil"
+	"github.com/stretchr/testify/require"
 )
 
 func init() {
@@ -144,9 +144,10 @@ func testPrometheusMetrics(t *testing.T, addr string) {
 
 // Server master requires etcd/gRPC service as the minimum running environment,
 // this case
-// - starts an embed etcd with gRPC service, including message service and
-//   server master pb service.
-// - campaigns to be leader and then runs leader service.
+//   - starts an embed etcd with gRPC service, including message service and
+//     server master pb service.
+//   - campaigns to be leader and then runs leader service.
+//
 // Disable parallel run for this case, because prometheus http handler will meet
 // data race if parallel run is enabled
 // FIXME: disable this test temporary for no proper mock of frame metastore
@@ -162,7 +163,9 @@ func testRunLeaderService(t *testing.T) {
 	_ = s.registerMetaStore(ctx)
 
 	s.initResourceManagerService()
-	s.scheduler = makeScheduler(s.executorManager, s.resourceManagerService)
+	s.scheduler = scheduler.NewScheduler(
+		s.executorManager,
+		s.resourceManagerService)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -256,10 +259,6 @@ func (m *mockExecutorManager) GetAddr(executorID model.ExecutorID) (string, bool
 	panic("implement me")
 }
 
-func (m *mockExecutorManager) CapacityProvider() scheduler.CapacityProvider {
-	panic("implement me")
-}
-
 func (m *mockExecutorManager) HandleHeartbeat(req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
 	panic("not implemented")
 }
@@ -291,6 +290,10 @@ func (m *mockExecutorManager) ExecutorCount(status model.ExecutorStatus) int {
 	m.executorMu.RLock()
 	defer m.executorMu.RUnlock()
 	return m.count[status]
+}
+
+func (m *mockExecutorManager) GetExecutorInfos() map[model.ExecutorID]schedModel.ExecutorInfo {
+	panic("not implemented")
 }
 
 func TestCollectMetric(t *testing.T) {

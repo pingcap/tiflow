@@ -2,14 +2,33 @@ package mock
 
 import (
 	"database/sql"
+	"database/sql/driver"
 	"log"
+	"sync"
 
-	// register sqlite driver
-	_ "github.com/mattn/go-sqlite3"
-
+	"github.com/glebarez/go-sqlite"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 )
+
+const mockSqliteDriverName = "mock-sqlite"
+
+func init() {
+	// The original sqlite driver is not thread-safe,
+	// so we wrap a new driver to make it thread-safe.
+	sql.Register(mockSqliteDriverName, &safeSqliteDriver{})
+}
+
+type safeSqliteDriver struct {
+	mu    sync.Mutex
+	inner sqlite.Driver
+}
+
+func (d *safeSqliteDriver) Open(dsn string) (driver.Conn, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.inner.Open(dsn)
+}
 
 // NewMockClientConn news a connection for mock kvclient
 // Only for test
@@ -37,10 +56,12 @@ func (c *mockClientConn) Close() error {
 // NewClientConnForSQLite news a connection of sqlite
 // Only for test
 func NewClientConnForSQLite(dsn string) (metaModel.ClientConn, error) {
-	db, err := sql.Open("sqlite3", dsn)
+	db, err := sql.Open(mockSqliteDriverName, dsn)
 	if err != nil {
 		return nil, err
 	}
+
+	db.SetMaxOpenConns(1)
 
 	return &sqliteClientConn{
 		db: db,

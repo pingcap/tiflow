@@ -150,9 +150,9 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 	// when there are different versions of cdc nodes in the cluster,
 	// the admin job may not be processed all the time. And http api relies on
 	// admin job, which will cause all http api unavailable.
-	o.handleJobs()
+	o.handleJobs(stdCtx)
 
-	if !o.clusterVersionConsistent(state.Captures) {
+	if !o.clusterVersionConsistent(o.captures) {
 		return state, nil
 	}
 	// Owner should update GC safepoint before initializing changefeed, so
@@ -183,7 +183,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 			up, ok := o.upstreamManager.Get(changefeedState.Info.UpstreamID)
 			if !ok {
 				upstreamInfo := state.Upstreams[changefeedState.Info.UpstreamID]
-				up = o.upstreamManager.AddUpstream(upstreamInfo.ID, upstreamInfo)
+				up = o.upstreamManager.AddUpstream(upstreamInfo)
 			}
 			cfReactor = o.newChangefeed(changefeedID, up)
 			o.changefeeds[changefeedID] = cfReactor
@@ -399,7 +399,21 @@ func (o *ownerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model
 	return true
 }
 
-func (o *ownerImpl) handleDrainCaptures(query *scheduler.Query, done chan<- error) {
+func (o *ownerImpl) handleDrainCaptures(ctx context.Context, query *scheduler.Query, done chan<- error) {
+	if err := o.upstreamManager.Visit(func(upstream *upstream.Upstream) error {
+		if err := version.CheckStoreVersion(ctx, upstream.PDClient, 0); err != nil {
+			return errors.Trace(err)
+		}
+		return nil
+	}); err != nil {
+		log.Info("owner handle drain capture failed, since check upstream store version failed",
+			zap.String("target", query.CaptureID), zap.Error(err))
+		query.Resp = &model.DrainCaptureResp{CurrentTableCount: 0}
+		done <- err
+		close(done)
+		return
+	}
+
 	var (
 		changefeedWithTableCount int
 		totalTableCount          int
@@ -458,7 +472,7 @@ func (o *ownerImpl) handleDrainCaptures(query *scheduler.Query, done chan<- erro
 	close(done)
 }
 
-func (o *ownerImpl) handleJobs() {
+func (o *ownerImpl) handleJobs(ctx context.Context) {
 	jobs := o.takeOwnerJobs()
 	for _, job := range jobs {
 		changefeedID := job.ChangefeedID
@@ -478,7 +492,7 @@ func (o *ownerImpl) handleJobs() {
 				cfReactor.scheduler.MoveTable(job.TableID, job.TargetCaptureID)
 			}
 		case ownerJobTypeDrainCapture:
-			o.handleDrainCaptures(job.scheduleQuery, job.done)
+			o.handleDrainCaptures(ctx, job.scheduleQuery, job.done)
 			continue // continue here to prevent close the done channel twice
 		case ownerJobTypeRebalance:
 			// Scheduler is created lazily, it is nil before initialization.
@@ -599,25 +613,33 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 		}
 		query.Data = ret
 	case QueryHealth:
-		isHealthy := true
-		if !o.changefeedTicked {
-			// Owner has not yet tick changefeeds, some changefeeds may be not
-			// initialized.
-			isHealthy = false
-		} else {
-			for _, cfReactor := range o.changefeeds {
-				provider := cfReactor.GetInfoProvider()
-				if provider == nil || !provider.IsInitialized() {
-					// The scheduler has not been initialized yet, it is considered
-					// unhealthy, because owner can not schedule tables for now.
-					isHealthy = false
-					break
-				}
-			}
+		isHealthy, err := o.isHealthy()
+		if err != nil {
+			return errors.Trace(err)
 		}
 		query.Data = isHealthy
 	}
 	return nil
+}
+
+func (o *ownerImpl) isHealthy() (bool, error) {
+	if !o.changefeedTicked {
+		// Owner has not yet tick changefeeds, some changefeeds may be not
+		// initialized.
+		return false, nil
+	}
+	if !o.clusterVersionConsistent(o.captures) {
+		return false, nil
+	}
+	for _, cfReactor := range o.changefeeds {
+		provider := cfReactor.GetInfoProvider()
+		if provider == nil || !provider.IsInitialized() {
+			// The scheduler has not been initialized yet, it is considered
+			// unhealthy, because owner can not schedule tables for now.
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func (o *ownerImpl) takeOwnerJobs() []*ownerJob {
@@ -666,7 +688,7 @@ func (o *ownerImpl) updateGCSafepoint(
 		up, ok := o.upstreamManager.Get(upstreamID)
 		if !ok {
 			upstreamInfo := state.Upstreams[upstreamID]
-			up = o.upstreamManager.AddUpstream(upstreamInfo.ID, upstreamInfo)
+			up = o.upstreamManager.AddUpstream(upstreamInfo)
 		}
 		if !up.IsNormal() {
 			log.Warn("upstream is not ready, skip",

@@ -9,9 +9,3 @@ sequence_sharding_removemeta
 gtid
 only_dml
 adjust_gtid
-checkpoint_transaction
-lightning_mode
-slow_relay_writer
-sync_collation
-s3_dumpling_lighting
-async_checkpoint_flush
