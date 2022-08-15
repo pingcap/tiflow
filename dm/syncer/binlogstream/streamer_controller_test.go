@@ -265,10 +265,9 @@ func checkGetEvent(t *testing.T, controller *StreamerController, expecteds []exp
 
 	ctx := tcontext.Background()
 	for i, expected := range expecteds {
-		event, suffix, op, err := controller.GetEvent(ctx)
+		event, op, err := controller.GetEvent(ctx)
 		require.NoError(t, err)
 		require.Equal(t, expected.pos, event.Header.LogPos)
-		require.Equal(t, expected.suffix, suffix)
 		require.Equal(t, expected.op, op)
 
 		curEndLoc := controller.GetCurEndLocation()
@@ -286,7 +285,7 @@ func checkGetEvent(t *testing.T, controller *StreamerController, expecteds []exp
 	ctx, cancel := ctx.WithTimeout(10 * time.Millisecond)
 	defer cancel()
 	// nolint:dogsled
-	_, _, _, err := controller.GetEvent(ctx)
+	_, _, err := controller.GetEvent(ctx)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 }
 
@@ -361,7 +360,7 @@ func (s *testLocationSuite) TestLocationsWithGTID() {
 	for i := 1; i < len(expectedLocations); i++ {
 		s.T().Logf("#%d", i)
 		// nolint:dogsled
-		_, _, _, err = controller.GetEvent(ctx)
+		_, _, err = controller.GetEvent(ctx)
 		s.Require().NoError(err)
 		s.Require().Equal(expectedLocations[i-1].String(), controller.GetCurStartLocation().String())
 		s.Require().Equal(expectedLocations[i].String(), controller.GetCurEndLocation().String())
@@ -370,6 +369,6 @@ func (s *testLocationSuite) TestLocationsWithGTID() {
 	ctx, cancel := ctx.WithTimeout(10 * time.Millisecond)
 	defer cancel()
 	// nolint:dogsled
-	_, _, _, err = controller.GetEvent(ctx)
+	_, _, err = controller.GetEvent(ctx)
 	s.Require().ErrorIs(err, context.DeadlineExceeded)
 }
