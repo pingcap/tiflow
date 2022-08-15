@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"go.uber.org/zap"
 )
 
@@ -131,7 +132,7 @@ func (s *SinkConfig) applyParameter(sinkURI *url.URL) error {
 	switch AtomicityLevel(txnAtomicity) {
 	case unknowTxnAtomicity:
 		// Set default value according to scheme.
-		if IsMQScheme(sinkURI.Scheme) {
+		if sink.IsMQScheme(sinkURI.Scheme) {
 			s.TxnAtomicity = defaultMqTxnAtomicity
 		} else {
 			s.TxnAtomicity = defaultMysqlTxnAtomicity
@@ -140,7 +141,7 @@ func (s *SinkConfig) applyParameter(sinkURI *url.URL) error {
 		s.TxnAtomicity = noneTxnAtomicity
 	case tableTxnAtomicity:
 		// MqSink only support `noneTxnAtomicity`.
-		if IsMQScheme(sinkURI.Scheme) {
+		if sink.IsMQScheme(sinkURI.Scheme) {
 			log.Warn("The configuration of transaction-atomicity is incompatible with scheme",
 				zap.Any("txnAtomicity", s.TxnAtomicity),
 				zap.String("scheme", sinkURI.Scheme),
@@ -168,7 +169,7 @@ func (s *SinkConfig) applyParameter(sinkURI *url.URL) error {
 	}
 
 	// validate that protocol is compatible with the scheme
-	if IsMQScheme(sinkURI.Scheme) {
+	if sink.IsMQScheme(sinkURI.Scheme) {
 		var protocol Protocol
 		err := protocol.FromString(s.Protocol)
 		if err != nil {
@@ -183,15 +184,4 @@ func (s *SinkConfig) applyParameter(sinkURI *url.URL) error {
 		zap.String("protocol", s.Protocol),
 		zap.String("txnAtomicity", string(s.TxnAtomicity)))
 	return nil
-}
-
-// IsMQScheme returns true if the scheme belong to mq schema.
-func IsMQScheme(scheme string) bool {
-	return scheme == "kafka" || scheme == "kafka+ssl" ||
-		IsPulsarScheme(scheme)
-}
-
-// IsPulsarScheme returns true if the scheme belong to pulsar schema.
-func IsPulsarScheme(scheme string) bool {
-	return scheme == "pulsar" || scheme == "pulsar+ssl"
 }

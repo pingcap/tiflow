@@ -23,8 +23,7 @@ const (
     "rules": [
       "1.1"
     ],
-    "ignore-txn-start-ts": null,
-    "ddl-allow-list": null
+    "ignore-txn-start-ts": null
   },
   "mounter": {
     "worker-num": 3
@@ -107,11 +106,8 @@ const (
       "concurrency": 128,
       "max-open-files": 10000,
       "block-size": 65536,
-      "block-cache-size": 4294967296,
       "writer-buffer-size": 8388608,
       "compression": "snappy",
-      "target-file-size-base": 8388608,
-      "write-l0-slowdown-trigger": 2147483647,
       "write-l0-pause-trigger": 2147483647,
       "compaction-l0-trigger": 160,
       "compaction-deletion-threshold": 10485760,

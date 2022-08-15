@@ -36,7 +36,7 @@ func TestClientConnImpl(t *testing.T) {
 	require.Nil(t, err)
 	defer cc.Close()
 
-	require.Equal(t, metaModel.EtcdKVClientType, cc.ClientType())
+	require.Equal(t, metaModel.StoreTypeEtcd, cc.StoreType())
 	_, err = cc.GetConn()
 	require.NoError(t, err)
 	require.Nil(t, cc.Close())
@@ -46,7 +46,7 @@ func TestClientConnImplError(t *testing.T) {
 	t.Parallel()
 
 	_, err := NewClientConnImpl(&metaModel.StoreConfig{
-		StoreType: metaModel.StoreTypeSQL,
+		StoreType: metaModel.StoreTypeMySQL,
 	})
 	require.Regexp(t, regexp.QuoteMeta("[DFLOW:ErrMetaParamsInvalid]"+
 		"etcd conn but get unmatch type"), err.Error())

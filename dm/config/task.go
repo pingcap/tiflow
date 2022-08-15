@@ -266,9 +266,10 @@ type LoaderConfig struct {
 // DefaultLoaderConfig return default loader config for task.
 func DefaultLoaderConfig() LoaderConfig {
 	return LoaderConfig{
-		PoolSize:   defaultPoolSize,
-		Dir:        defaultDir,
-		ImportMode: LoadModeSQL,
+		PoolSize:    defaultPoolSize,
+		Dir:         defaultDir,
+		ImportMode:  LoadModeSQL,
+		OnDuplicate: OnDuplicateReplace,
 	}
 }
 
@@ -584,6 +585,9 @@ func (c *TaskConfig) adjust() error {
 	}
 	if c.TaskMode != ModeFull && c.TaskMode != ModeIncrement && c.TaskMode != ModeAll {
 		return terror.ErrConfigInvalidTaskMode.Generate()
+	}
+	if c.MetaSchema == "" {
+		c.MetaSchema = defaultMetaSchema
 	}
 
 	if c.ShardMode != "" && c.ShardMode != ShardPessimistic && c.ShardMode != ShardOptimistic {

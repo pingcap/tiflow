@@ -20,6 +20,7 @@ import (
 	"github.com/Shopify/sarama"
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
+	"github.com/pingcap/tiflow/pkg/kafka"
 )
 
 var _ DMLProducer = (*MockDMLProducer)(nil)
@@ -31,14 +32,16 @@ type MockDMLProducer struct {
 }
 
 // NewDMLMockProducer creates a mock producer.
-func NewDMLMockProducer(_ context.Context, _ sarama.Client, _ chan error) (DMLProducer, error) {
+func NewDMLMockProducer(_ context.Context, _ sarama.Client,
+	_ kafka.ClusterAdminClient, _ chan error,
+) (DMLProducer, error) {
 	return &MockDMLProducer{
 		events: make(map[mqv1.TopicPartitionKey][]*codec.MQMessage),
 	}, nil
 }
 
 // AsyncSendMessage appends a message to the mock producer.
-func (m *MockDMLProducer) AsyncSendMessage(ctx context.Context, topic string,
+func (m *MockDMLProducer) AsyncSendMessage(_ context.Context, topic string,
 	partition int32, message *codec.MQMessage,
 ) error {
 	m.mu.Lock()

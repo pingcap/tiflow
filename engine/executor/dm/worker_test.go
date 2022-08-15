@@ -86,11 +86,18 @@ func TestFactory(t *testing.T) {
 	require.NoError(t, toml.NewEncoder(&b).Encode(taskCfg))
 	content := b.Bytes()
 	RegisterWorker()
-	_, err = registry.GlobalWorkerRegistry().CreateWorker(dctx, framework.WorkerDMDump, "worker-id", "dm-jobmaster-id", content)
+
+	_, err = registry.GlobalWorkerRegistry().CreateWorker(
+		dctx, framework.WorkerDMDump, "worker-id", "dm-jobmaster-id",
+		content, int64(2))
 	require.NoError(t, err)
-	_, err = registry.GlobalWorkerRegistry().CreateWorker(dctx, framework.WorkerDMLoad, "worker-id", "dm-jobmaster-id", content)
+	_, err = registry.GlobalWorkerRegistry().CreateWorker(
+		dctx, framework.WorkerDMLoad, "worker-id", "dm-jobmaster-id",
+		content, int64(3))
 	require.NoError(t, err)
-	_, err = registry.GlobalWorkerRegistry().CreateWorker(dctx, framework.WorkerDMSync, "worker-id", "dm-jobmaster-id", content)
+	_, err = registry.GlobalWorkerRegistry().CreateWorker(
+		dctx, framework.WorkerDMSync, "worker-id", "dm-jobmaster-id",
+		content, int64(4))
 	require.NoError(t, err)
 }
 
@@ -132,7 +139,8 @@ func TestWorker(t *testing.T) {
 	require.NoError(t, dmWorker.OnMasterMessage("", nil))
 
 	// Finished
-	unitHolder.On("Stage").Return(metadata.StageFinished, nil).Twice()
+	unitHolder.On("Stage").Return(metadata.StageFinished, nil).Times(3)
+	unitHolder.On("Status").Return(&pb.DumpStatus{}).Once()
 	require.True(t, cerrors.ErrWorkerFinish.Equal(dmWorker.Tick(context.Background())))
 
 	unitHolder.AssertExpectations(t)

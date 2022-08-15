@@ -50,6 +50,7 @@ var HeartbeatInterval = 3 * time.Second
 //                 ├────────────────────┼────────────────────┼──────────────────►│
 //                 │                    │                    │                   │
 //                 │                    │                    │                   │
+
 type WorkerStage int
 
 // All available WorkerStage

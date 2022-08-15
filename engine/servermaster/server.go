@@ -15,11 +15,12 @@ package servermaster
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -41,7 +42,6 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/meta"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
-	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/serverutil"
@@ -83,6 +83,8 @@ type Server struct {
 	cfg     *Config
 	info    *model.NodeInfo
 	metrics *serverMasterMetric
+	// Notify the server to resign leadership.
+	resignCh chan struct{}
 
 	etcdClient *clientv3.Client
 
@@ -119,8 +121,9 @@ type Server struct {
 	testCtx *test.Context
 
 	// framework metastore client
-	frameMetaClient    pkgOrm.Client
-	businessClientConn metaModel.ClientConn
+	frameMetaClient     pkgOrm.Client
+	frameworkClientConn metaModel.ClientConn
+	businessClientConn  metaModel.ClientConn
 }
 
 // PersistResource implements pb.MasterServer.PersistResource
@@ -190,6 +193,7 @@ func NewServer(cfg *Config, ctx *test.Context) (_ *Server, finalErr error) {
 		id:                id,
 		cfg:               cfg,
 		info:              info,
+		resignCh:          make(chan struct{}),
 		executorManager:   executorManager,
 		leaderInitialized: *atomic.NewBool(false),
 		testCtx:           ctx,
@@ -327,7 +331,7 @@ func (s *Server) ScheduleTask(ctx context.Context, req *pb.ScheduleTaskRequest) 
 	}
 	schedulerResp, err := s.scheduler.ScheduleTask(ctx, schedulerReq)
 	if err != nil {
-		return nil, schedModel.SchedulerErrorToGRPCError(err)
+		return nil, rpcerror.ToGRPCError(err)
 	}
 
 	addr, ok := s.executorManager.GetAddr(schedulerResp.ExecutorID)
@@ -452,6 +456,9 @@ func (s *Server) Stop() {
 	if s.frameMetaClient != nil {
 		s.frameMetaClient.Close()
 	}
+	if s.frameworkClientConn != nil {
+		s.frameworkClientConn.Close()
+	}
 	if s.businessClientConn != nil {
 		s.businessClientConn.Close()
 	}
@@ -474,7 +481,9 @@ func (s *Server) Run(ctx context.Context) error {
 	// ResourceManagerService should be initialized after registerMetaStore.
 	// FIXME: We should do these work inside NewServer.
 	s.initResourceManagerService()
-	s.scheduler = makeScheduler(s.executorManager, s.resourceManagerService)
+	s.scheduler = scheduler.NewScheduler(
+		s.executorManager,
+		s.resourceManagerService)
 
 	wg, ctx := errgroup.WithContext(ctx)
 
@@ -503,13 +512,29 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 	if err := s.metaStoreManager.Register(cfg.FrameMetaConf.StoreID, cfg.FrameMetaConf); err != nil {
 		return err
 	}
+	if cfg.FrameMetaConf.StoreType == metaModel.StoreTypeMySQL {
+		// Normally, a schema will be created in advance and we may have no privilege
+		// to create schema for framework meta. Just for easy test here. Ignore any error.
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+		if err := meta.CreateSchemaIfNotExists(ctx, *(s.cfg.FrameMetaConf)); err != nil {
+			log.Warn("create schema for framework metastore fail, but it can be ignored.",
+				zap.String("schema", s.cfg.FrameMetaConf.Schema),
+				zap.Error(err))
+		}
+	}
 	var err error
-	// TODO: replace default db config
-	if s.frameMetaClient, err = pkgOrm.NewClient(*cfg.FrameMetaConf, *(cfg.FrameMetaConf.DBConf)); err != nil {
+	s.frameworkClientConn, err = meta.NewClientConn(cfg.FrameMetaConf)
+	if err != nil {
 		log.Error("connect to framework metastore fail", zap.Any("config", cfg.FrameMetaConf), zap.Error(err))
 		return err
 	}
-
+	// some components depend on this framework meta client
+	s.frameMetaClient, err = pkgOrm.NewClient(s.frameworkClientConn)
+	if err != nil {
+		log.Error("create framework meta client fail", zap.Error(err))
+		return err
+	}
 	log.Info("register framework metastore successfully", zap.Any("metastore", cfg.FrameMetaConf))
 
 	// register metastore for business
@@ -517,11 +542,10 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if cfg.BusinessMetaConf.StoreType == metaModel.StoreTypeSQL {
+	if cfg.BusinessMetaConf.StoreType == metaModel.StoreTypeMySQL {
 		// Normally, a schema will be created in advance and we may have no privilege
-		// to create schema for business meta.
-		// Just for easy test here. Ignore any error.
-		ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
+		// to create schema for business meta. Just for easy test here. Ignore any error.
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 		if err := meta.CreateSchemaIfNotExists(ctx, *(s.cfg.BusinessMetaConf)); err != nil {
 			log.Warn("create schema for business metastore fail, but it can be ignored.",
@@ -529,7 +553,6 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 				zap.Error(err))
 		}
 	}
-
 	s.businessClientConn, err = meta.NewClientConn(cfg.BusinessMetaConf)
 	if err != nil {
 		log.Error("connect to business metastore fail", zap.Any("config", cfg.BusinessMetaConf), zap.Error(err))
@@ -619,27 +642,16 @@ func (s *Server) name() string {
 func (s *Server) initializedBackendMeta(ctx context.Context) error {
 	bctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-
-	if err := s.frameMetaClient.Initialize(bctx); err != nil {
-		log.Error("framework metastore initialized all backend tables fail", zap.Error(err))
+	if err := pkgOrm.InitAllFrameworkModels(bctx, s.frameworkClientConn); err != nil {
+		log.Error("framework metastore initializes all backend tables fail", zap.Error(err))
 		return err
 	}
 
 	// Since we have the sql-type business metastore,
 	// we need to initialize the logic_epoches table for all jobs
-	if s.cfg.BusinessMetaConf.StoreType == metaModel.StoreTypeSQL {
-		conn, err := s.businessClientConn.GetConn()
-		if err != nil {
-			return err
-		}
-		gormDB, err := pkgOrm.NewGormDB(conn.(*sql.DB))
-		if err != nil {
-			return err
-		}
-		// TODO: we will replace the gormDB with ClientConn here after we unify the usage of
-		// framework client
-		err = ormModel.InitializeEpochModel(ctx, gormDB)
-		if err != nil {
+	if s.cfg.BusinessMetaConf.StoreType == metaModel.StoreTypeMySQL {
+		if err := pkgOrm.InitEpochModel(ctx, s.businessClientConn); err != nil {
+			log.Error("business metastore initializes the logic epoch table fail", zap.Error(err))
 			return err
 		}
 	}
@@ -823,19 +835,6 @@ func (s *Server) collectLeaderMetric() {
 	}
 }
 
-// makeScheduler is a helper function for Server to create a scheduler.Scheduler.
-// This function makes it clear how a Scheduler is supposed to be constructed
-// using concrete type, from the perspective of Server.
-func makeScheduler(
-	executorManager ExecutorManager,
-	externalResourceManager *externRescManager.Service,
-) *scheduler.Scheduler {
-	return scheduler.NewScheduler(
-		executorManager.CapacityProvider(),
-		externalResourceManager,
-	)
-}
-
 // IsLeader implements ServerInfoProvider.IsLeader.
 func (s *Server) IsLeader() bool {
 	leader, ok := s.leader.Load().(*rpcutil.Member)
@@ -848,10 +847,18 @@ func (s *Server) IsLeader() bool {
 // LeaderAddr implements ServerInfoProvider.LeaderAddr.
 func (s *Server) LeaderAddr() (string, bool) {
 	leader, ok := s.leader.Load().(*rpcutil.Member)
-	if !ok || leader == nil {
+	if !ok || leader == nil || leader.AdvertiseAddr == "" {
 		return "", false
 	}
 	return leader.AdvertiseAddr, true
+}
+
+// ResignLeader implements ServerInfoProvider.ResignLeader.
+func (s *Server) ResignLeader() {
+	select {
+	case s.resignCh <- struct{}{}:
+	default:
+	}
 }
 
 // JobManager implements ServerInfoProvider.JobManager.

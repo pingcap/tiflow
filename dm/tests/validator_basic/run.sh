@@ -546,10 +546,14 @@ function stopped_validator_fail_over() {
 		"new\/ignored\/resolved: 1\/0\/0" 1 \
 		"\"stage\": \"Running\"" 2
 	# make sure validator checkpoint is flushed
+	sleep 1 # wait for the min flush interval
 	trigger_checkpoint_flush
 	run_sql_tidb_with_retry "select concat_ws('/', procd_ins, procd_upd, procd_del) processed
 														from dm_meta.test_validator_checkpoint where source='mysql-replica-01'" \
 		"processed: 3/2/1"
+	run_sql_tidb_with_retry "select count(1) cnt
+														from dm_meta.test_validator_error_change where source='mysql-replica-01'" \
+		"cnt: 1"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation stop test" \
 		"\"result\": true" 1
@@ -654,6 +658,7 @@ function test_validation_syncer_stopped() {
 	run_sql_source1 "insert into validator_basic.test values(0, 0)"
 	trigger_checkpoint_flush
 	# wait syncer to start so that validator can start
+	sleep 4
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"synced\": true" 1 \

@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/errors"
 	tidbConfig "github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/ddl"
+	"github.com/pingcap/tidb/ddl/schematracker"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
@@ -39,6 +40,7 @@ import (
 	"github.com/pingcap/tidb/store/mockstore"
 	unistoreConfig "github.com/pingcap/tidb/store/mockstore/unistore/config"
 	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tidb/util/mock"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -64,6 +66,9 @@ var (
 		TiDBClusteredIndex: "OFF",
 	}
 )
+
+// TODO: use it in next PR.
+var _ = schematracker.NewSchemaTracker(0)
 
 func init() {
 	unistoreConfig.DefaultConf.Engine.VlogFileSize = int64(kv.TxnEntrySizeLimit)
@@ -92,6 +97,7 @@ type Tracker struct {
 // downstreamTracker tracks downstream schema.
 type downstreamTracker struct {
 	sync.RWMutex
+	se             sessionctx.Context
 	downstreamConn *dbconn.DBConn                  // downstream connection
 	stmtParser     *parser.Parser                  // statement parser
 	tableInfos     map[string]*DownstreamTableInfo // downstream table infos
@@ -249,9 +255,12 @@ func (tr *Tracker) Init(
 		return err
 	}
 
+	dsSession := mock.NewContext()
+	dsSession.GetSessionVars().StrictSQLMode = false
 	// init downstreamTracker
 	dsTracker := &downstreamTracker{
 		downstreamConn: downstreamConn,
+		se:             dsSession,
 		tableInfos:     make(map[string]*DownstreamTableInfo),
 	}
 	tr.Lock()
@@ -647,7 +656,7 @@ func (dt *downstreamTracker) getTableInfoByCreateStmt(tctx *tcontext.Context, ta
 		return nil, dmterror.ErrSchemaTrackerInvalidCreateTableStmt.Delegate(err, createStr)
 	}
 
-	ti, err := ddl.BuildTableInfoFromAST(stmtNode.(*ast.CreateTableStmt))
+	ti, err := ddl.BuildTableInfoWithStmt(dt.se, stmtNode.(*ast.CreateTableStmt), mysql.DefaultCharset, "", nil)
 	if err != nil {
 		return nil, dmterror.ErrSchemaTrackerCannotMockDownstreamTable.Delegate(err, createStr)
 	}

@@ -1,0 +1,15 @@
+addr = "0.0.0.0:10240"
+
+etcd-endpoints = ["etcd-standalone:2379"]
+
+[framework-metastore-conf]
+endpoints = ["mysql-standalone:3306"]
+schema = "test_framework"
+auth.user = "root"
+auth.passwd = ""
+
+[business-metastore-conf]
+endpoints = ["mysql-standalone:3306"]
+schema = "test_business"
+auth.user = "root"
+auth.passwd = ""

@@ -27,14 +27,17 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/VividCortex/mysqlerr"
 	"github.com/go-sql-driver/mysql"
+	"github.com/pingcap/log"
 	sqlkvModel "github.com/pingcap/tiflow/engine/pkg/meta/internal/sqlkv/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zapcore"
 )
 
 const (
-	fakeJob   = "fakeJob"
-	fakeTable = "fakeTable"
+	fakeJob              = "fakeJob"
+	fakeTable            = "fakeTable"
+	defaultTestStoreType = metaModel.StoreTypeMySQL
 )
 
 type tCase struct {
@@ -59,11 +62,7 @@ func mockGetDBConn(t *testing.T, dsnStr string, table string, jobID string) (*sq
 		WillReturnRows(sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf("CREATE TABLE `%s` (`seq_id` bigint unsigned AUTO_INCREMENT,"+
 		"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL,`meta_key` varbinary(2048) not null,`meta_value` blob,"+
-		"`job_id` varchar(64) not null,PRIMARY KEY (`seq_id`),UNIQUE INDEX uidx_jk (`job_id`,`meta_key`))", table))).
-		WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO `logic_epoches` (`created_at`,`updated_at`,"+
-		"`job_id`,`epoch`) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE `seq_id`=`seq_id`")).
-		WithArgs(anyTime{}, anyTime{}, jobID, 1).
+		"`job_id` varchar(64) not null,PRIMARY KEY (`seq_id`),UNIQUE INDEX `uidx_jk` (`job_id`,`meta_key`))", table))).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	return db, mock, nil
 }
@@ -83,7 +82,7 @@ func TestNewSQLImpl(t *testing.T) {
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
 	require.Nil(t, err)
-	cli, err := NewSQLKVClientImpl(sqlDB, fakeTable, fakeJob)
+	cli, err := NewSQLKVClientImpl(sqlDB, defaultTestStoreType, fakeTable, fakeJob)
 	defer cli.Close()
 	require.Nil(t, err)
 	require.NotNil(t, cli)
@@ -96,7 +95,7 @@ func TestPut(t *testing.T) {
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
 	require.Nil(t, err)
-	cli, err := NewSQLKVClientImpl(sqlDB, fakeTable, fakeJob)
+	cli, err := NewSQLKVClientImpl(sqlDB, defaultTestStoreType, fakeTable, fakeJob)
 	defer cli.Close()
 	require.Nil(t, err)
 	require.NotNil(t, cli)
@@ -134,7 +133,7 @@ func TestGet(t *testing.T) {
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
 	require.Nil(t, err)
-	cli, err := NewSQLKVClientImpl(sqlDB, fakeTable, fakeJob)
+	cli, err := NewSQLKVClientImpl(sqlDB, defaultTestStoreType, fakeTable, fakeJob)
 	require.Nil(t, err)
 	require.NotNil(t, cli)
 
@@ -245,7 +244,7 @@ func TestDelete(t *testing.T) {
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
 	require.Nil(t, err)
-	cli, err := NewSQLKVClientImpl(sqlDB, fakeTable, fakeJob)
+	cli, err := NewSQLKVClientImpl(sqlDB, defaultTestStoreType, fakeTable, fakeJob)
 	require.Nil(t, err)
 	require.NotNil(t, cli)
 
@@ -324,7 +323,7 @@ func TestTxn(t *testing.T) {
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
 	require.Nil(t, err)
-	cli, err := NewSQLKVClientImpl(sqlDB, fakeTable, fakeJob)
+	cli, err := NewSQLKVClientImpl(sqlDB, defaultTestStoreType, fakeTable, fakeJob)
 	require.Nil(t, err)
 	require.NotNil(t, cli)
 	var anyT anyTime
@@ -403,7 +402,7 @@ func TestSQLImplWithoutNamespace(t *testing.T) {
 	defer sqlDB.Close()
 	defer mock.ExpectClose()
 	require.Nil(t, err)
-	cli, err := NewSQLKVClientImpl(sqlDB, sqlkvModel.MetaKVTableName, "")
+	cli, err := NewSQLKVClientImpl(sqlDB, defaultTestStoreType, sqlkvModel.MetaKVTableName, "")
 	require.Nil(t, err)
 	require.NotNil(t, cli)
 	var anyT anyTime
@@ -448,6 +447,11 @@ func TestSQLImplWithoutNamespace(t *testing.T) {
 }
 
 func TestInitializeError(t *testing.T) {
+	t.Parallel()
+
+	log.SetLevel(zapcore.DebugLevel)
+	defer log.SetLevel(zapcore.InfoLevel)
+
 	db, mock, err := sqlmock.New()
 	require.Nil(t, err)
 	defer db.Close()
@@ -460,8 +464,7 @@ func TestInitializeError(t *testing.T) {
 	mock.ExpectQuery(".*").WillReturnRows(sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf("CREATE TABLE `%s`", "test"))).
 		WillReturnError(&mysql.MySQLError{Number: mysqlerr.ER_TABLE_EXISTS_ERROR, Message: "table already exists"})
-	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
-	cli, err := NewSQLKVClientImpl(db, "test", "")
+	cli, err := NewSQLKVClientImpl(db, defaultTestStoreType, "test", "")
 	require.Nil(t, err)
 	require.NotNil(t, cli)
 	defer cli.Close()
@@ -473,9 +476,8 @@ func TestInitializeError(t *testing.T) {
 	mock.ExpectQuery(".*").WillReturnRows(sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf("CREATE TABLE `%s`", "test"))).
 		WillReturnError(&mysql.MySQLError{Number: mysqlerr.ER_WRONG_OUTER_JOIN, Message: "other mysql error"})
-	_, err = NewSQLKVClientImpl(db, "test", "")
+	_, err = NewSQLKVClientImpl(db, defaultTestStoreType, "test", "")
 	require.Regexp(t, "other mysql error", err.Error())
-
 	// other error
 	mock.ExpectQuery("SELECT VERSION()").
 		WillReturnRows(sqlmock.NewRows([]string{"VERSION()"}).
@@ -483,6 +485,6 @@ func TestInitializeError(t *testing.T) {
 	mock.ExpectQuery(".*").WillReturnRows(sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf("CREATE TABLE `%s`", "test"))).
 		WillReturnError(errors.New("other error"))
-	_, err = NewSQLKVClientImpl(db, "test", "")
+	_, err = NewSQLKVClientImpl(db, defaultTestStoreType, "test", "")
 	require.Regexp(t, "other error", err.Error())
 }

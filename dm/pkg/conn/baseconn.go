@@ -36,14 +36,16 @@ import (
 // BaseConn is the basic connection we use in dm
 // BaseDB -> BaseConn correspond to sql.DB -> sql.Conn
 // In our scenario, there are two main reasons why we need BaseConn
-//   1. we often need one fixed DB connection to execute sql
-//   2. we need own retry policy during execute failed
+//  1. we often need one fixed DB connection to execute sql
+//  2. we need own retry policy during execute failed
+//
 // So we split a fixed sql.Conn out of sql.DB, and wraps it to BaseConn
 // And Similar with sql.Conn, all BaseConn generated from one BaseDB shares this BaseDB to reset
 //
 // Basic usage:
 // For Syncer and Loader Unit, they both have different amount of connections due to config
 // Currently we have some types of connections exist
+//
 //	Syncer:
 //		Worker Connection:
 //			DML connection:

@@ -38,6 +38,9 @@ import (
 var (
 	flushIntervalInMs int64 = 2000 // 2 seconds
 	flushTimeout            = time.Second * 20
+
+	// Redo Manager GC interval. It can be changed in tests.
+	defaultGCIntervalInMs = 5000 // 5 seconds
 )
 
 // ConsistentLevelType is the level of redo log consistent level.
@@ -95,7 +98,7 @@ type LogManager interface {
 	// Enabled returns whether the log manager is enabled
 	Enabled() bool
 
-	// The following APIs are called from processor only
+	// The following APIs are called from processor only.
 	AddTable(tableID model.TableID, startTs uint64)
 	RemoveTable(tableID model.TableID)
 	GetResolvedTs(tableID model.TableID) model.Ts
@@ -104,21 +107,16 @@ type LogManager interface {
 	EmitRowChangedEvents(ctx context.Context, tableID model.TableID,
 		rows ...*model.RowChangedEvent) error
 	UpdateResolvedTs(ctx context.Context, tableID model.TableID, resolvedTs uint64) error
+	// Update checkpoint so that it can GC stale files.
+	UpdateCheckpointTs(checkpointTs model.Ts)
 
-	// The following APIs are called from owner only
+	// The following APIs are called from owner only.
 	EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 	UpdateMeta(checkpointTs, resolvedTs model.Ts)
 	GetFlushedMeta(checkpointTs, resolvedTs *model.Ts)
 
-	// Cleanup removes all redo logs
+	// Cleanup removes all redo logs. Only called from owner.
 	Cleanup(ctx context.Context) error
-}
-
-// ManagerOptions defines options for redo log manager
-type ManagerOptions struct {
-	// whether to run background goroutine to fetch table resolved ts
-	EnableBgRunner bool
-	ErrCh          chan<- error
 }
 
 type cacheEvents struct {
@@ -165,6 +163,8 @@ type ManagerImpl struct {
 	level        ConsistentLevelType
 	storageType  consistentStorage
 
+	opts *ManagerOptions
+
 	// rtsMap stores flushed and unflushed resolved timestamps for all tables.
 	// it's just like map[tableID]*statefulRts.
 	// For a given statefulRts, unflushed is updated in routine bgUpdateLog,
@@ -174,6 +174,10 @@ type ManagerImpl struct {
 	// A fast way to get min flushed timestamp in rtsMap. It can be updated
 	// in redo-flush goroutine and AddTable/RemoveTable.
 	minResolvedTs uint64
+
+	// Updated by `UpdateResolvedTs`. It's required by some internal places,
+	// such as GC.
+	checkpointTs uint64
 
 	metaCheckpointTs statefulRts
 	metaResolvedTs   statefulRts
@@ -208,9 +212,10 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 		enabled:       true,
 		level:         ConsistentLevelType(cfg.Level),
 		storageType:   consistentStorage(uri.Scheme),
+		opts:          opts,
 		rtsMap:        sync.Map{},
-		logBuffer:     chann.New[cacheEvents](),
 		minResolvedTs: math.MaxInt64,
+
 		metricWriteLogDuration: common.RedoWriteLogDurationHistogram.
 			WithLabelValues(changeFeedID.Namespace, changeFeedID.ID),
 		metricFlushLogDuration: common.RedoFlushLogDurationHistogram.
@@ -245,6 +250,10 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 			MaxLogSize:        cfg.MaxLogSize,
 			FlushIntervalInMs: cfg.FlushIntervalInMs,
 			S3Storage:         m.storageType == consistentStorageS3,
+
+			EmitMeta:      m.opts.EmitMeta,
+			EmitRowEvents: m.opts.EmitRowEvents,
+			EmitDDLEvents: m.opts.EmitDDLEvents,
 		}
 		if writerCfg.S3Storage {
 			writerCfg.S3URI = *uri
@@ -254,18 +263,27 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 			return nil, err
 		}
 		m.writer = writer
-		checkpointTs, resolvedTs := m.writer.GetMeta()
-		m.metaCheckpointTs.flushed = checkpointTs
-		m.metaCheckpointTs.unflushed = checkpointTs
-		m.metaResolvedTs.flushed = resolvedTs
-		m.metaResolvedTs.unflushed = resolvedTs
+
+		if m.opts.EmitMeta {
+			checkpointTs, resolvedTs := m.writer.GetMeta()
+			m.metaCheckpointTs.flushed = checkpointTs
+			m.metaCheckpointTs.unflushed = checkpointTs
+			m.metaResolvedTs.flushed = resolvedTs
+			m.metaResolvedTs.unflushed = resolvedTs
+		}
 	default:
 		return nil, cerror.ErrConsistentStorage.GenWithStackByArgs(m.storageType)
 	}
 
-	if opts.EnableBgRunner {
+	// TODO: better to wait background goroutines after the context is canceled.
+	if m.opts.EnableBgRunner {
+		m.logBuffer = chann.New[cacheEvents]()
 		go m.bgUpdateLog(ctx, opts.ErrCh)
 	}
+	if m.opts.EnableGCRunner {
+		go m.bgGC(ctx)
+	}
+
 	return m, nil
 }
 
@@ -280,12 +298,9 @@ func NewMockManager(ctx context.Context) (*ManagerImpl, error) {
 		Level:   string(ConsistentLevelEventual),
 		Storage: "blackhole://",
 	}
+
 	errCh := make(chan error, 1)
-	opts := &ManagerOptions{
-		EnableBgRunner: true,
-		ErrCh:          errCh,
-	}
-	logMgr, err := NewManager(ctx, cfg, opts)
+	logMgr, err := NewManager(ctx, cfg, newMockManagerOptions(errCh))
 	if err != nil {
 		return nil, err
 	}
@@ -347,6 +362,16 @@ func (m *ManagerImpl) UpdateResolvedTs(
 	}
 
 	return nil
+}
+
+// UpdateCheckpointTs updates checkpoint to the manager.
+func (m *ManagerImpl) UpdateCheckpointTs(ckpt model.Ts) {
+	for {
+		curr := atomic.LoadUint64(&m.checkpointTs)
+		if ckpt <= curr || atomic.CompareAndSwapUint64(&m.checkpointTs, curr, ckpt) {
+			break
+		}
+	}
 }
 
 // EmitDDLEvent sends DDL event to redo log writer
@@ -427,12 +452,6 @@ func (m *ManagerImpl) RemoveTable(tableID model.TableID) {
 
 // Cleanup removes all redo logs of this manager, it is called when changefeed is removed
 func (m *ManagerImpl) Cleanup(ctx context.Context) error {
-	m.logBuffer.Close()
-	// We must finish consuming the data here,
-	// otherwise it will cause the channel to not close properly.
-	for range m.logBuffer.Out() {
-		// Do nothing. We do not care about the data.
-	}
 	common.RedoWriteLogDurationHistogram.
 		DeleteLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
 	common.RedoFlushLogDurationHistogram.
@@ -441,9 +460,10 @@ func (m *ManagerImpl) Cleanup(ctx context.Context) error {
 }
 
 func (m *ManagerImpl) prepareForFlush() (tableRtsMap map[model.TableID]model.Ts, minResolvedTs model.Ts) {
-	// FIXME: currently all table progresses are flushed into meta file. It can be an issue
-	// if there are lots of tables. If we can put table meta into row file, it's only necessary
-	// to take care updated tables.
+	if !m.opts.EmitRowEvents {
+		return
+	}
+
 	tableRtsMap = make(map[model.TableID]model.Ts)
 	minResolvedTs = math.MaxUint64
 	m.rtsMap.Range(func(key interface{}, value interface{}) bool {
@@ -468,11 +488,13 @@ func (m *ManagerImpl) prepareForFlush() (tableRtsMap map[model.TableID]model.Ts,
 }
 
 func (m *ManagerImpl) postFlush(tableRtsMap map[model.TableID]model.Ts, minResolvedTs model.Ts) {
+	if !m.opts.EmitRowEvents {
+		return
+	}
 	if minResolvedTs != 0 {
 		// m.minResolvedTs is only updated in flushLog, so no other one can change it.
 		atomic.StoreUint64(&m.minResolvedTs, minResolvedTs)
 	}
-
 	for tableID, flushed := range tableRtsMap {
 		if value, loaded := m.rtsMap.Load(tableID); loaded {
 			value.(*statefulRts).setFlushed(flushed)
@@ -481,12 +503,18 @@ func (m *ManagerImpl) postFlush(tableRtsMap map[model.TableID]model.Ts, minResol
 }
 
 func (m *ManagerImpl) prepareForFlushMeta() (metaCheckpoint, metaResolved model.Ts) {
+	if !m.opts.EmitMeta {
+		return
+	}
 	metaCheckpoint = m.metaCheckpointTs.getUnflushed()
 	metaResolved = m.metaResolvedTs.getUnflushed()
 	return
 }
 
 func (m *ManagerImpl) postFlushMeta(metaCheckpoint, metaResolved model.Ts) {
+	if !m.opts.EmitMeta {
+		return
+	}
 	m.metaResolvedTs.setFlushed(metaResolved)
 	m.metaCheckpointTs.setFlushed(metaCheckpoint)
 }
@@ -531,28 +559,40 @@ func (m *ManagerImpl) onResolvedTsMsg(tableID model.TableID, resolvedTs model.Ts
 }
 
 func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
+	// logErrCh is used to retrieve errors from log flushing goroutines.
+	// if the channel is full, it's better to block subsequent flushings.
 	logErrCh := make(chan error, 1)
-	handleErr := func(err error) {
-		select {
-		case logErrCh <- err:
-		default:
-		}
-	}
+	handleErr := func(err error) { logErrCh <- err }
+
+	log.Info("redo manager bgUpdateLog is running",
+		zap.String("namespace", m.changeFeedID.Namespace),
+		zap.String("changefeed", m.changeFeedID.ID))
 
 	ticker := time.NewTicker(time.Duration(flushIntervalInMs) * time.Millisecond)
-	defer ticker.Stop()
+	defer func() {
+		ticker.Stop()
 
+		m.logBuffer.Close()
+		for range m.logBuffer.Out() {
+		}
+		if err := m.writer.Close(); err != nil {
+			log.Error("redo manager fails to close writer",
+				zap.String("namespace", m.changeFeedID.Namespace),
+				zap.String("changefeed", m.changeFeedID.ID),
+				zap.Error(err))
+		}
+
+		log.Info("redo manager bgUpdateLog exits",
+			zap.String("namespace", m.changeFeedID.Namespace),
+			zap.String("changefeed", m.changeFeedID.ID))
+	}()
+
+	var err error
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case err := <-logErrCh:
-			select {
-			case errCh <- err:
-			default:
-				log.Error("err channel in redoManager is full", zap.Error(err))
-			}
-			return
+		case err = <-logErrCh:
 		case <-ticker.C:
 			// interpolate tick message to flush writer if needed
 			m.flushLog(ctx, handleErr)
@@ -567,15 +607,55 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 				for _, row := range cache.rows {
 					logs = append(logs, RowToRedo(row))
 				}
-				err := m.writer.WriteLog(ctx, cache.tableID, logs)
-				if err != nil {
-					handleErr(err)
-				}
+				err = m.writer.WriteLog(ctx, cache.tableID, logs)
 				m.metricWriteLogDuration.Observe(time.Since(start).Seconds())
 			case model.MessageTypeResolved:
 				m.onResolvedTsMsg(cache.tableID, cache.resolvedTs)
 			default:
 				log.Debug("handle unknown event type")
+			}
+		}
+		if err != nil {
+			log.Warn("redo manager writer meets write or flush fail",
+				zap.String("namespace", m.changeFeedID.Namespace),
+				zap.String("changefeed", m.changeFeedID.ID),
+				zap.Error(err))
+			break
+		}
+	}
+
+	// NOTE: the goroutine should never exit until the err is put into errCh successfully
+	// or the context is canceled.
+	select {
+	case <-ctx.Done():
+	case errCh <- err:
+	}
+}
+
+func (m *ManagerImpl) bgGC(ctx context.Context) {
+	ticker := time.NewTicker(time.Duration(defaultGCIntervalInMs) * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			log.Info("redo manager GC exits as context cancelled",
+				zap.String("namespace", m.changeFeedID.Namespace),
+				zap.String("changefeed", m.changeFeedID.ID))
+			return
+		case <-ticker.C:
+			ckpt := atomic.LoadUint64(&m.checkpointTs)
+			if ckpt == 0 {
+				continue
+			}
+			log.Info("redo manager GC is triggered",
+				zap.Uint64("checkpointTs", ckpt),
+				zap.String("namespace", m.changeFeedID.Namespace),
+				zap.String("changefeed", m.changeFeedID.ID))
+			err := m.writer.GC(ctx, ckpt)
+			if err != nil {
+				log.Warn("redo manager log GC fail",
+					zap.String("namespace", m.changeFeedID.Namespace),
+					zap.String("changefeed", m.changeFeedID.ID), zap.Error(err))
 			}
 		}
 	}

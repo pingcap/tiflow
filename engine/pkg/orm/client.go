@@ -17,30 +17,23 @@ import (
 	"context"
 	"database/sql"
 	gerrors "errors"
-	"fmt"
-	"strconv"
 	"time"
 
-	dmysql "github.com/go-sql-driver/mysql"
-	"github.com/pingcap/failpoint"
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	engineModel "github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pkg/dbutil"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/orm/model"
-	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 var globalModels = []interface{}{
 	&model.ProjectInfo{},
 	&model.ProjectOperation{},
+	&model.LogicEpoch{},
 	&frameModel.MasterMetaKVData{},
 	&frameModel.WorkerStatus{},
 	&resModel.ResourceMeta{},
@@ -77,9 +70,6 @@ type Client interface {
 	WorkerClient
 	// resource meta
 	ResourceClient
-
-	// Initialize will create all tables for backend operation
-	Initialize(ctx context.Context) error
 }
 
 // ProjectClient defines interface that manages project in metastore
@@ -141,99 +131,38 @@ type ResourceClient interface {
 }
 
 // NewClient return the client to operate framework metastore
-func NewClient(mc metaModel.StoreConfig, conf dbutil.DBConfig) (Client, error) {
-	err := createDatabaseForProject(mc, tenant.FrameProjectInfo.UniqueID(), conf)
+func NewClient(cc metaModel.ClientConn) (Client, error) {
+	if cc == nil {
+		return nil, errors.ErrMetaParamsInvalid.GenWithStackByArgs("input client conn is nil")
+	}
+
+	conn, err := cc.GetConn()
 	if err != nil {
 		return nil, err
 	}
 
-	dsn := generateDSNByParams(mc, tenant.FrameProjectInfo.UniqueID(), conf, true)
-	sqlDB, err := dbutil.NewSQLDB("mysql", dsn, &conf)
+	sqlDB, ok := conn.(*sql.DB)
+	if !ok {
+		return nil, errors.ErrMetaParamsInvalid.GenWithStack("input client conn is not a sql type:%s",
+			cc.StoreType())
+	}
+
+	return newClient(sqlDB, cc.StoreType())
+}
+
+func newClient(db *sql.DB, storeType metaModel.StoreType) (Client, error) {
+	ormDB, err := NewGormDB(db, storeType)
 	if err != nil {
 		return nil, err
 	}
 
-	cli, err := newClient(sqlDB)
-	if err != nil {
-		sqlDB.Close()
-	}
-
-	return cli, err
-}
-
-// TODO: check the projectID
-func createDatabaseForProject(mc metaModel.StoreConfig, projectID tenant.ProjectID, conf dbutil.DBConfig) error {
-	dsn := generateDSNByParams(mc, projectID, conf, false)
-	log.Info("mysql connection", zap.String("dsn", dsn))
-
-	db, err := sql.Open("mysql", dsn)
-	if err != nil {
-		log.Error("open dsn fail", zap.String("dsn", dsn), zap.Error(err))
-		return errors.ErrMetaOpFail.Wrap(err)
-	}
-	defer db.Close()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-	query := fmt.Sprintf("CREATE DATABASE if not exists %s", projectID)
-	_, err = db.ExecContext(ctx, query)
-	if err != nil {
-		return errors.ErrMetaOpFail.Wrap(err)
-	}
-
-	return nil
-}
-
-// generateDSNByParams will use projectID as DBName to achieve isolation.
-// Besides, it will add some default mysql params to the dsn
-func generateDSNByParams(mc metaModel.StoreConfig, projectID tenant.ProjectID,
-	conf dbutil.DBConfig, withDB bool,
-) string {
-	dsnCfg := dmysql.NewConfig()
-	if dsnCfg.Params == nil {
-		dsnCfg.Params = make(map[string]string, 1)
-	}
-	if mc.Auth != nil {
-		dsnCfg.User = mc.Auth.User
-		dsnCfg.Passwd = mc.Auth.Passwd
-	}
-	dsnCfg.Net = "tcp"
-	dsnCfg.Addr = mc.Endpoints[0]
-	if withDB {
-		dsnCfg.DBName = projectID
-	}
-	dsnCfg.InterpolateParams = true
-	// dsnCfg.MultiStatements = true
-	dsnCfg.Params["readTimeout"] = mc.ReadTimeout
-	dsnCfg.Params["writeTimeout"] = mc.WriteTimeout
-	dsnCfg.Params["timeout"] = mc.DialTimeout
-	dsnCfg.Params["parseTime"] = "true"
-	// TODO: check for timezone
-	dsnCfg.Params["loc"] = "Local"
-	dsnCfg.Params["sql_mode"] = strconv.Quote(dbutil.GetSQLStrictMode())
-
-	// dsn format: [username[:password]@][protocol[(address)]]/
-	return dsnCfg.FormatDSN()
-}
-
-func newClient(sqlDB *sql.DB) (*metaOpsClient, error) {
-	db, err := NewGormDB(sqlDB)
-	if err != nil {
-		return nil, err
-	}
-
-	// TODO: decouple the model creation and client creation in other pr
-	if err := model.InitializeEpochModel(context.TODO(), db); err != nil {
-		return nil, errors.ErrMetaOpFail.Wrap(err)
-	}
-
-	epCli, err := model.NewEpochClient("" /*jobID*/, db)
+	epCli, err := model.NewEpochClient("" /*jobID*/, ormDB)
 	if err != nil {
 		return nil, err
 	}
 
 	return &metaOpsClient{
-		db:          db,
+		db:          ormDB,
 		epochClient: epCli,
 	}, nil
 }
@@ -246,38 +175,16 @@ type metaOpsClient struct {
 }
 
 func (c *metaOpsClient) Close() error {
-	c.epochClient.Close()
-	impl, err := c.db.DB()
-	if err != nil {
-		return err
-	}
-	if impl != nil {
-		return errors.ErrMetaOpFail.Wrap(impl.Close())
-	}
-
+	// DON NOT CLOSE the underlying connection
 	return nil
 }
 
-////////////////////////// Initialize
-// Initialize will create all related tables in SQL backend
-// TODO: What happen if we upgrade the definition of model when rolling update?
-// TODO: need test: change column definition/add column/drop column?
-// TODO: refine the Initialize to decouple the model creation and client
-func (c *metaOpsClient) Initialize(ctx context.Context) error {
-	failpoint.InjectContext(ctx, "initializedDelay", nil)
-	if err := c.db.WithContext(ctx).
-		AutoMigrate(globalModels...); err != nil {
-		return errors.ErrMetaOpFail.Wrap(err)
-	}
-	return nil
-}
-
-/////////////////////////////// Logic Epoch
+// ///////////////////////////// Logic Epoch
 func (c *metaOpsClient) GenEpoch(ctx context.Context) (frameModel.Epoch, error) {
 	return c.epochClient.GenEpoch(ctx)
 }
 
-///////////////////////// Project Operation
+// /////////////////////// Project Operation
 // CreateProject insert the model.ProjectInfo
 func (c *metaOpsClient) CreateProject(ctx context.Context, project *model.ProjectInfo) error {
 	if project == nil {
@@ -369,7 +276,7 @@ func (c *metaOpsClient) QueryProjectOperationsByTimeRange(ctx context.Context,
 	return projectOps, nil
 }
 
-/////////////////////////////// Job Operation
+// ///////////////////////////// Job Operation
 // UpsertJob upsert the jobInfo
 func (c *metaOpsClient) UpsertJob(ctx context.Context, job *frameModel.MasterMetaKVData) error {
 	if job == nil {
@@ -469,7 +376,7 @@ func (c *metaOpsClient) QueryJobsByStatus(ctx context.Context,
 	return jobs, nil
 }
 
-/////////////////////////////// Worker Operation
+// ///////////////////////////// Worker Operation
 // UpsertWorker insert the workerInfo
 func (c *metaOpsClient) UpsertWorker(ctx context.Context, worker *frameModel.WorkerStatus) error {
 	if worker == nil {
@@ -554,7 +461,7 @@ func (c *metaOpsClient) QueryWorkersByStatus(ctx context.Context, masterID strin
 	return workers, nil
 }
 
-/////////////////////////////// Resource Operation
+// ///////////////////////////// Resource Operation
 // UpsertResource upsert the ResourceMeta
 func (c *metaOpsClient) UpsertResource(ctx context.Context, resource *resModel.ResourceMeta) error {
 	if resource == nil {

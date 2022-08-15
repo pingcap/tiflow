@@ -25,7 +25,7 @@ func NewClientConn(storeConf *metaModel.StoreConfig) (metaModel.ClientConn, erro
 	switch storeConf.StoreType {
 	case metaModel.StoreTypeEtcd:
 		return etcdkv.NewClientConnImpl(storeConf)
-	case metaModel.StoreTypeSQL:
+	case metaModel.StoreTypeMySQL:
 		return sqlkv.NewClientConnImpl(storeConf)
 	}
 

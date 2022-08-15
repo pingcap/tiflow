@@ -97,6 +97,7 @@ type MasterImpl interface {
 const (
 	createWorkerWaitQuotaTimeout = 5 * time.Second
 	createWorkerTimeout          = 10 * time.Second
+	genEpochTimeout              = 5 * time.Second
 	maxCreateWorkerConcurrency   = 100
 )
 
@@ -533,10 +534,10 @@ func (m *DefaultBaseMaster) markStatusCodeInMetadata(
 }
 
 // prepareWorkerConfig extracts information from WorkerConfig into detail fields.
-// - If workerType is master type, the config is a `*MasterMetaKVData` struct and
-//   contains pre allocated maseter ID, and json marshalled config.
-// - If workerType is worker type, the config is a user defined config struct, we
-//   marshal it to byte slice as returned config, and generate a random WorkerID.
+//   - If workerType is master type, the config is a `*MasterMetaKVData` struct and
+//     contains pre allocated maseter ID, and json marshalled config.
+//   - If workerType is worker type, the config is a user defined config struct, we
+//     marshal it to byte slice as returned config, and generate a random WorkerID.
 func (m *DefaultBaseMaster) prepareWorkerConfig(
 	workerType frameModel.WorkerType, config WorkerConfig,
 ) (rawConfig []byte, workerID frameModel.WorkerID, err error) {
@@ -624,6 +625,14 @@ func (m *DefaultBaseMaster) CreateWorker(
 			return
 		}
 
+		genEpochCtx, cancel := context.WithTimeout(errCtx, genEpochTimeout)
+		defer cancel()
+		epoch, err := m.frameMetaClient.GenEpoch(genEpochCtx)
+		if err != nil {
+			m.workerManager.AbortCreatingWorker(workerID, err)
+			return
+		}
+
 		dispatchArgs := &client.DispatchTaskArgs{
 			// [NOTICE]:
 			// For JobManager, <JobID, ProjectInfo> pair is set in advance
@@ -633,10 +642,11 @@ func (m *DefaultBaseMaster) CreateWorker(
 			MasterID:     m.id,
 			WorkerType:   int64(workerType),
 			WorkerConfig: configBytes,
+			WorkerEpoch:  epoch,
 		}
 
 		err = executorClient.DispatchTask(requestCtx, dispatchArgs, func() {
-			m.workerManager.BeforeStartingWorker(workerID, executorID)
+			m.workerManager.BeforeStartingWorker(workerID, executorID, epoch)
 		}, func(err error) {
 			m.workerManager.AbortCreatingWorker(workerID, err)
 		})

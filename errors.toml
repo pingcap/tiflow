@@ -193,7 +193,7 @@ the overwrite-checkpoint-ts %d must be smaller than current TSO
 
 ["CDC:ErrCliInvalidCheckpointTs"]
 error = '''
-invalid overwrite-checkpoint-ts %s, overwrite-checkpoint-ts only accept 'now' or number
+invalid overwrite-checkpoint-ts %s, overwrite-checkpoint-ts only accept 'now' or a valid timestamp in integer
 '''
 
 ["CDC:ErrClusterIDMismatch"]
@@ -234,6 +234,11 @@ craft codec invalid data
 ["CDC:ErrCreateMarkTableFailed"]
 error = '''
 create mark table failed
+'''
+
+["CDC:ErrDBSorterError"]
+error = '''
+db error: %s
 '''
 
 ["CDC:ErrDDLEventIgnored"]
@@ -564,11 +569,6 @@ owner lease expired
 ["CDC:ErrLeaseTimeout"]
 error = '''
 owner lease timeout
-'''
-
-["CDC:ErrLevelDBSorterError"]
-error = '''
-leveldb error: %s
 '''
 
 ["CDC:ErrLoadTimezone"]
@@ -1071,14 +1071,14 @@ error = '''
 sorter is closed
 '''
 
-["CDC:ErrStartAStoppedLevelDBSystem"]
+["CDC:ErrStartAStoppedDBSystem"]
 error = '''
-start a stopped leveldb system
+start a stopped db system
 '''
 
 ["CDC:ErrStartTsBeforeGC"]
 error = '''
-fail to create or maintain changefeed because start-ts %d is earlier than GC safepoint at %d
+fail to create or maintain changefeed because start-ts %d is earlier than or equal to GC safepoint at %d
 '''
 
 ["CDC:ErrSupportGetOnly"]
@@ -1291,11 +1291,6 @@ error = '''
 etcd api returns error
 '''
 
-["DFLOW:ErrEtcdLeaderChanged"]
-error = '''
-etcd leader has changed
-'''
-
 ["DFLOW:ErrExecutorConfigInvalidFlag"]
 error = '''
 '%s' is an invalid flag
@@ -1409,6 +1404,11 @@ invalid worker type: %s
 ["DFLOW:ErrLeaderCtxCanceled"]
 error = '''
 leader context is canceled
+'''
+
+["DFLOW:ErrLeaderResigned"]
+error = '''
+leader has resigned
 '''
 
 ["DFLOW:ErrLocalFileDirNotWritable"]
@@ -1543,7 +1543,7 @@ peer message client is not found for worker: worker ID %s
 
 ["DFLOW:ErrMetaClientTypeNotSupport"]
 error = '''
-meta client type not support:%d
+meta client type not support:%s
 '''
 
 ["DFLOW:ErrMetaCommittedTxn"]

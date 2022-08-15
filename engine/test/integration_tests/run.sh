@@ -3,7 +3,7 @@
 set -eu
 
 CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-DOCKER_COMPOSE_DIR=$(cd $CUR_DIR/../../deployments/docker-compose/ && pwd)
+DOCKER_COMPOSE_DIR=$(cd $CUR_DIR/../../../deployments/engine/docker-compose/ && pwd)
 export PATH=$PATH:$CUR_DIR/../utils
 
 OUT_DIR=/tmp/tiflow_engine_test
@@ -11,10 +11,11 @@ mkdir -p $OUT_DIR || true
 
 if [ "${1-}" = 'debug' ]; then
 	shift
-	if [[ ${1} ]]; then
+	if [[ $# -lt 0 ]]; then
 		cnf=$*
 	else
 		cnf="$DOCKER_COMPOSE_DIR/1m1e.yaml"
+		echo "got empty file, use default config: ${cnf}"
 	fi
 
 	trap "stop_engine_cluster $cnf" EXIT
@@ -34,7 +35,7 @@ fi
 run_case() {
 	# cleanup test binaries and data, preserve logs, if we debug one case,
 	# these files will be preserved since no more case will be run.
-	find /tmp/tiflow_engine_test/*/* -type d | xargs rm -rf || true
+	find /tmp/tiflow_engine_test/*/* -print0 2>/dev/null | xargs -0 rm -rf || true
 	local case=$1
 	local script=$2
 	echo "=================>> Running test $script... <<================="

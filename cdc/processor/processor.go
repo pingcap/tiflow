@@ -475,6 +475,7 @@ func isProcessorIgnorableError(err error) bool {
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
 func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) (orchestrator.ReactorState, error) {
+	p.changefeed = state
 	// check upstream error first
 	if err := p.upstream.Error(); err != nil {
 		return p.handleErr(state, err)
@@ -493,7 +494,6 @@ func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 		return state, nil
 	}
 	startTime := time.Now()
-	p.changefeed = state
 	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID:   state.ID,
@@ -578,6 +578,11 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 
 	p.doGCSchemaStorage()
 
+	if p.redoManager != nil && p.redoManager.Enabled() {
+		ckpt := p.changefeed.Status.CheckpointTs
+		p.redoManager.UpdateCheckpointTs(ckpt)
+	}
+
 	if err := p.agent.Tick(ctx); err != nil {
 		return errors.Trace(err)
 	}
@@ -656,7 +661,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		return errors.Trace(err)
 	}
 
-	stdCtx := contextutil.PutChangefeedIDInCtx(ctx, p.changefeed.ID)
+	stdCtx := contextutil.PutChangefeedIDInCtx(ctx, p.changefeedID)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
 
 	p.mounter = entry.NewMounter(p.schemaStorage,
@@ -668,7 +673,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 
 	log.Info("processor try new sink",
 		zap.String("namespace", p.changefeedID.Namespace),
-		zap.String("changefeed", p.changefeed.ID.ID))
+		zap.String("changefeed", p.changefeedID.ID))
 
 	start := time.Now()
 	conf := config.GetGlobalServerConfig()
@@ -676,7 +681,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		log.Info("Try to create sinkV1")
 		p.sinkV1, err = sinkv1.New(
 			stdCtx,
-			p.changefeed.ID,
+			p.changefeedID,
 			p.changefeed.Info.SinkURI,
 			p.changefeed.Info.Config,
 			errCh,
@@ -691,18 +696,21 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	if err != nil {
 		log.Info("processor new sink failed",
 			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeed.ID.ID),
+			zap.String("changefeed", p.changefeedID.ID),
 			zap.Duration("duration", time.Since(start)))
 		return errors.Trace(err)
 	}
 	log.Info("processor try new sink success",
 		zap.Duration("duration", time.Since(start)))
 
-	redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: true, ErrCh: errCh}
+	redoManagerOpts := redo.NewProcessorManagerOptions(errCh)
 	p.redoManager, err = redo.NewManager(stdCtx, p.changefeed.Info.Config.Consistent, redoManagerOpts)
 	if err != nil {
 		return err
 	}
+	log.Info("processor creates redo manager",
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeedID.ID))
 
 	p.agent, err = p.newAgent(ctx, p.liveness)
 	if err != nil {
@@ -1037,7 +1045,7 @@ func (p *processor) refreshMetrics() {
 func (p *processor) Close() error {
 	log.Info("processor closing ...",
 		zap.String("namespace", p.changefeedID.Namespace),
-		zap.String("changefeed", p.changefeed.ID.ID))
+		zap.String("changefeed", p.changefeedID.ID))
 	for _, tbl := range p.tables {
 		tbl.Cancel()
 	}

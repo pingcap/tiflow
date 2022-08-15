@@ -57,19 +57,11 @@ func TestNewEpochClient(t *testing.T) {
 	gdb, mock, err := mockGetDBConn(t, "test")
 	require.NoError(t, err)
 	defer closeGormDB(t, gdb)
+	defer mock.ExpectClose()
 
-	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO `logic_epoches` (`created_at`,`updated_at`,`job_id`,`epoch`)" +
-		" VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE `seq_id`=`seq_id`")).
-		WillReturnResult(sqlmock.NewResult(1, 1))
-	_, err = NewEpochClient("fakeJob", gdb)
+	cli, err := NewEpochClient("fakeJob", gdb)
 	require.NoError(t, err)
-
-	mock.ExpectExec(".*").
-		WillReturnError(&gsql.MySQLError{Number: 1062, Message: "test error"})
-	_, err = NewEpochClient("fakeJob", gdb)
-	require.Error(t, err)
-
-	mock.ExpectClose()
+	defer cli.Close()
 }
 
 func TestGenEpoch(t *testing.T) {
@@ -83,10 +75,21 @@ func TestGenEpoch(t *testing.T) {
 	createdAt := tm.Add(time.Duration(1))
 	updatedAt := tm.Add(time.Duration(1))
 
-	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	epochClient, err := NewEpochClient("fakeJob", gdb)
 	require.NoError(t, err)
 
+	// insert first record fail
+	mock.ExpectExec(".*").
+		WillReturnError(&gsql.MySQLError{Number: 1062, Message: "test error"})
+	epoch, err := epochClient.GenEpoch(ctx)
+	require.Error(t, err)
+	require.Equal(t, int64(0), epoch)
+	require.False(t, epochClient.isInitialized.Load())
+
+	// insert first record successful
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO `logic_epoches` (`created_at`,`updated_at`,`job_id`,`epoch`)" +
+		" VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE `seq_id`=`seq_id`")).
+		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta("UPDATE `logic_epoches` SET `epoch`=epoch + ?,`updated_at`=? WHERE job_id = ?")).
 		WillReturnResult(sqlmock.NewResult(1, 1))
@@ -96,10 +99,12 @@ func TestGenEpoch(t *testing.T) {
 			AddRow(1, createdAt, updatedAt, "fakeJob", 11))
 	mock.ExpectCommit()
 
-	epoch, err := epochClient.GenEpoch(ctx)
+	epoch, err = epochClient.GenEpoch(ctx)
 	require.NoError(t, err)
 	require.Equal(t, int64(11), epoch)
+	require.True(t, epochClient.isInitialized.Load())
 
+	// update fail
 	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE `logic_epoches` SET").WillReturnError(errors.New("gen epoch error"))
 	mock.ExpectRollback()
@@ -121,32 +126,6 @@ func TestGenEpoch(t *testing.T) {
 	require.Error(t, err)
 	require.Regexp(t, "context deadline exceed", err.Error())
 	failpoint.Disable("github.com/pingcap/tiflow/engine/pkg/orm/model/genEpochDelay")
-
-	mock.ExpectClose()
-}
-
-func TestInitializeEpochModel(t *testing.T) {
-	t.Parallel()
-
-	gdb, mock, err := mockGetDBConn(t, "test")
-	require.NoError(t, err)
-	defer closeGormDB(t, gdb)
-	ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Second)
-	defer cancel()
-
-	err = InitializeEpochModel(ctx, nil)
-	require.Regexp(t, regexp.QuoteMeta("inner db is nil"), err.Error())
-
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA " +
-		"where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).WillReturnRows(
-		sqlmock.NewRows([]string{"SCHEMA_NAME"}))
-	mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `logic_epoches` (`seq_id` bigint unsigned AUTO_INCREMENT," +
-		"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL,`job_id` varchar(128) not null,`epoch` bigint not null default 1," +
-		"PRIMARY KEY (`seq_id`),UNIQUE INDEX uidx_jk (`job_id`))")).
-		WillReturnResult(sqlmock.NewResult(1, 1))
-
-	err = InitializeEpochModel(ctx, gdb)
-	require.NoError(t, err)
 
 	mock.ExpectClose()
 }
