@@ -82,7 +82,7 @@ Besides, make sure you have run the docker daemon. We recommend that you provide
 Then, change directory to working directory:
 
 ```bash
-cd ./deployments/docker-compose
+cd ./deployments/engine/docker-compose
 ```
 
 ### Build
