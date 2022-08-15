@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/tiflow/engine/framework"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
-	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
 )
 
 func TestTableName(t *testing.T) {
@@ -86,52 +85,30 @@ func TestCheckpoint(t *testing.T) {
 }
 
 func TestCheckpointLifeCycle(t *testing.T) {
-	jobStore := metadata.NewJobStore("job_test", mock.NewMetaMock())
-	agent := NewAgentImpl(jobStore, log.L())
+	agent := NewAgentImpl(log.L())
 	checkpointAgent := agent.(*AgentImpl)
-	cfg, err := checkpointAgent.getConfig(context.Background())
-	require.EqualError(t, err, "state not found")
-	require.Nil(t, cfg)
-
 	jobCfg := &config.JobCfg{Name: "test", MetaSchema: "meta", TaskMode: dmconfig.ModeAll}
-	job := metadata.NewJob(jobCfg)
-	require.NoError(t, jobStore.Put(context.Background(), job))
-	cfg, err = checkpointAgent.getConfig(context.Background())
-	require.EqualError(t, err, "no task found in job")
-	require.Nil(t, cfg)
-
-	jobCfg.Upstreams = append(jobCfg.Upstreams, &config.UpstreamCfg{})
-	job = metadata.NewJob(jobCfg)
-	require.NoError(t, jobStore.Put(context.Background(), job))
-	cfg, err = checkpointAgent.getConfig(context.Background())
-	require.Nil(t, err)
-	require.Equal(t, jobCfg.Name, cfg.Name)
 
 	// create meta database error
 	_, mock, err := conn.InitMockDBFull()
 	require.NoError(t, err)
 	mock.ExpectExec(".*").WillReturnError(errors.New("invalid connection"))
-	require.Error(t, checkpointAgent.Create(context.Background()))
+	require.Error(t, checkpointAgent.Create(context.Background(), jobCfg))
 	require.NoError(t, mock.ExpectationsWereMet())
 
 	// update
 	jobCfg2 := &config.JobCfg{Name: "test2", MetaSchema: "meta", TaskMode: dmconfig.ModeAll, Upstreams: jobCfg.Upstreams}
-	job = metadata.NewJob(jobCfg2)
-	require.NoError(t, jobStore.Put(context.Background(), job))
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
 	mock.ExpectExec(".*").WillReturnError(errors.New("invalid connection"))
-	require.Error(t, checkpointAgent.Create(context.Background()))
-	cfg, err = checkpointAgent.getConfig(context.Background())
-	require.Nil(t, err)
-	require.Equal(t, jobCfg2.Name, cfg.Name)
+	require.Error(t, checkpointAgent.Create(context.Background(), jobCfg2))
 
 	// create load checkpoint error
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(".*").WillReturnError(errors.New("invalid connection"))
-	require.Error(t, checkpointAgent.Create(context.Background()))
+	require.Error(t, checkpointAgent.Create(context.Background(), jobCfg2))
 	require.NoError(t, mock.ExpectationsWereMet())
 
 	// create sync checkpoint error
@@ -140,7 +117,7 @@ func TestCheckpointLifeCycle(t *testing.T) {
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(".*").WillReturnError(errors.New("invalid connection"))
-	require.Error(t, checkpointAgent.Create(context.Background()))
+	require.Error(t, checkpointAgent.Create(context.Background(), jobCfg2))
 	require.NoError(t, mock.ExpectationsWereMet())
 
 	// create all checkpoint tables
@@ -149,36 +126,32 @@ func TestCheckpointLifeCycle(t *testing.T) {
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
-	require.NoError(t, checkpointAgent.Create(context.Background()))
+	require.NoError(t, checkpointAgent.Create(context.Background(), jobCfg2))
 	require.NoError(t, mock.ExpectationsWereMet())
 
 	// create load checkpoint only
 	jobCfg.TaskMode = dmconfig.ModeFull
-	job = metadata.NewJob(jobCfg)
-	require.NoError(t, jobStore.Put(context.Background(), job))
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
-	require.NoError(t, checkpointAgent.Create(context.Background()))
+	require.NoError(t, checkpointAgent.Create(context.Background(), jobCfg))
 	require.NoError(t, mock.ExpectationsWereMet())
 
 	// create sync checkpoint only
 	jobCfg.TaskMode = dmconfig.ModeIncrement
-	job = metadata.NewJob(jobCfg)
-	require.NoError(t, jobStore.Put(context.Background(), job))
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
-	require.NoError(t, checkpointAgent.Create(context.Background()))
+	require.NoError(t, checkpointAgent.Create(context.Background(), jobCfg))
 	require.NoError(t, mock.ExpectationsWereMet())
 
 	// drop load checkpoint error
 	_, mock, err = conn.InitMockDBFull()
 	require.NoError(t, err)
 	mock.ExpectExec(".*").WillReturnError(errors.New("invalid connection"))
-	require.Error(t, checkpointAgent.Remove(context.Background()))
+	require.Error(t, checkpointAgent.Remove(context.Background(), jobCfg))
 	require.NoError(t, mock.ExpectationsWereMet())
 
 	// drop sync checkpoint error
@@ -186,7 +159,7 @@ func TestCheckpointLifeCycle(t *testing.T) {
 	require.NoError(t, err)
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(".*").WillReturnError(errors.New("invalid connection"))
-	require.Error(t, checkpointAgent.Remove(context.Background()))
+	require.Error(t, checkpointAgent.Remove(context.Background(), jobCfg))
 	require.NoError(t, mock.ExpectationsWereMet())
 
 	// drop shard-meta error
@@ -195,7 +168,7 @@ func TestCheckpointLifeCycle(t *testing.T) {
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(".*").WillReturnError(errors.New("invalid connection"))
-	require.Error(t, checkpointAgent.Remove(context.Background()))
+	require.Error(t, checkpointAgent.Remove(context.Background(), jobCfg))
 	require.NoError(t, mock.ExpectationsWereMet())
 
 	// drop online-ddl error
@@ -205,7 +178,7 @@ func TestCheckpointLifeCycle(t *testing.T) {
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(".*").WillReturnError(errors.New("invalid connection"))
-	require.Error(t, checkpointAgent.Remove(context.Background()))
+	require.Error(t, checkpointAgent.Remove(context.Background(), jobCfg))
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -225,7 +198,7 @@ func TestIsFresh(t *testing.T) {
 		},
 	}
 	taskCfg := jobCfg.ToTaskCfgs()[source1]
-	checkpointAgent := NewAgentImpl(nil, log.L())
+	checkpointAgent := NewAgentImpl(log.L())
 
 	isFresh, err := checkpointAgent.IsFresh(context.Background(), framework.WorkerDMDump, &metadata.Task{Cfg: taskCfg})
 	require.NoError(t, err)

@@ -171,8 +171,11 @@ func (jm *JobMaster) UpdateJobCfg(ctx context.Context, cfg *config.JobCfg) error
 	if err := jm.operateTask(ctx, dmpkg.Update, cfg, nil); err != nil {
 		return err
 	}
+	jm.mu.Lock()
+	jm.cfg = cfg
+	defer jm.mu.Unlock()
 	// we don't know whether we can remove the old checkpoint, so we just create new checkpoint when update.
-	if err := jm.checkpointAgent.Create(ctx); err != nil {
+	if err := jm.checkpointAgent.Create(ctx, cfg); err != nil {
 		return err
 	}
 	// reset finished status, all tasks will be restarted now.

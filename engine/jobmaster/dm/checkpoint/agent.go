@@ -16,7 +16,6 @@ package checkpoint
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
@@ -59,36 +58,22 @@ var NewCheckpointAgent = NewAgentImpl
 
 // Agent defeins a checkpoint agent interface
 type Agent interface {
-	Create(ctx context.Context) error
-	Remove(ctx context.Context) error
+	Create(ctx context.Context, cfg *config.JobCfg) error
+	Remove(ctx context.Context, cfg *config.JobCfg) error
 	IsFresh(ctx context.Context, workerType framework.WorkerType, task *metadata.Task) (bool, error)
 }
 
 // AgentImpl implements Agent
 type AgentImpl struct {
-	jobStore *metadata.JobStore
-	logger   *zap.Logger
+	logger *zap.Logger
 }
 
 // NewAgentImpl creates a new AgentImpl instance
-func NewAgentImpl(jobStore *metadata.JobStore, pLogger *zap.Logger) Agent {
+func NewAgentImpl(pLogger *zap.Logger) Agent {
 	c := &AgentImpl{
-		logger:   pLogger.With(zap.String("component", "checkpoint_agent")),
-		jobStore: jobStore,
+		logger: pLogger.With(zap.String("component", "checkpoint_agent")),
 	}
 	return c
-}
-
-func (c *AgentImpl) getConfig(ctx context.Context) (*config.JobCfg, error) {
-	state, err := c.jobStore.Get(ctx)
-	if err != nil {
-		return nil, err
-	}
-	job := state.(*metadata.Job)
-	for _, task := range job.Tasks {
-		return (*config.JobCfg)(task.Cfg), nil
-	}
-	return nil, errors.New("no task found in job")
 }
 
 // Create implements Agent.Create
@@ -97,12 +82,8 @@ func (c *AgentImpl) getConfig(ctx context.Context) (*config.JobCfg, error) {
 // to avoid the annoying log of "table already exists",
 // because one job only need to create one checkpoint table per unit.
 // move these codes to tiflow later.
-func (c *AgentImpl) Create(ctx context.Context) error {
+func (c *AgentImpl) Create(ctx context.Context, cfg *config.JobCfg) error {
 	c.logger.Info("create checkpoint")
-	cfg, err := c.getConfig(ctx)
-	if err != nil {
-		return err
-	}
 	db, err := conn.DefaultDBProvider.Apply(cfg.TargetDB)
 	if err != nil {
 		return err
@@ -127,12 +108,8 @@ func (c *AgentImpl) Create(ctx context.Context) error {
 }
 
 // Remove implements Agent.Remove
-func (c *AgentImpl) Remove(ctx context.Context) error {
+func (c *AgentImpl) Remove(ctx context.Context, cfg *config.JobCfg) error {
 	c.logger.Info("remove checkpoint")
-	cfg, err := c.getConfig(ctx)
-	if err != nil {
-		return err
-	}
 	db, err := conn.DefaultDBProvider.Apply(cfg.TargetDB)
 	if err != nil {
 		return err

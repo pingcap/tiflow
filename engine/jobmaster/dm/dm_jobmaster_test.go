@@ -187,7 +187,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	metaKVClient := kvmock.NewMetaMock()
 	mockBaseJobmaster := &MockBaseJobmaster{}
 	mockCheckpointAgent := &MockCheckpointAgent{}
-	checkpoint.NewCheckpointAgent = func(*metadata.JobStore, *zap.Logger) checkpoint.Agent { return mockCheckpointAgent }
+	checkpoint.NewCheckpointAgent = func(*zap.Logger) checkpoint.Agent { return mockCheckpointAgent }
 	mockMessageAgent := &dmpkg.MockMessageAgent{}
 	dmpkg.NewMessageAgent = func(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) dmpkg.MessageAgent {
 		return mockMessageAgent
@@ -199,7 +199,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	jm := &JobMaster{
-		initJobCfg:    jobCfg,
+		cfg:           jobCfg,
 		BaseJobMaster: mockBaseJobmaster,
 	}
 
@@ -229,12 +229,11 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 
 	// recover
 	jm = &JobMaster{
-		initJobCfg:    jobCfg,
 		BaseJobMaster: mockBaseJobmaster,
-		messageAgent:  mockMessageAgent,
 	}
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]framework.WorkerHandle{}).Once()
 	jm.OnMasterRecovered(context.Background())
+	require.Equal(t.T(), jobCfg.Name, jm.cfg.Name)
 
 	// tick
 	worker1 := "worker1"
@@ -334,10 +333,8 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 
 	// master failover
 	jm = &JobMaster{
-		initJobCfg:      jobCfg,
 		BaseJobMaster:   mockBaseJobmaster,
 		checkpointAgent: mockCheckpointAgent,
-		messageAgent:    mockMessageAgent,
 	}
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]framework.WorkerHandle{worker4: workerHandle1, worker3: workerHandle2}).Once()
 	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
@@ -449,11 +446,11 @@ type MockCheckpointAgent struct {
 	mock.Mock
 }
 
-func (m *MockCheckpointAgent) Create(ctx context.Context) error {
+func (m *MockCheckpointAgent) Create(ctx context.Context, cfg *config.JobCfg) error {
 	return nil
 }
 
-func (m *MockCheckpointAgent) Remove(ctx context.Context) error {
+func (m *MockCheckpointAgent) Remove(ctx context.Context, cfg *config.JobCfg) error {
 	return nil
 }
 
