@@ -15,7 +15,6 @@ package config
 
 import (
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	"github.com/pingcap/tidb/parser/model"
 	filter "github.com/pingcap/tidb/util/table-filter"
 )
 
@@ -24,7 +23,6 @@ type FilterConfig struct {
 	Rules []string `toml:"rules" json:"rules"`
 	*filter.MySQLReplicationRules
 	IgnoreTxnStartTs []uint64           `toml:"ignore-txn-start-ts" json:"ignore-txn-start-ts"`
-	DDLAllowlist     []model.ActionType `toml:"ddl-allow-list" json:"ddl-allow-list,omitempty"`
 	EventFilters     []*EventFilterRule `toml:"event-filters" json:"event-filters"`
 }
 
