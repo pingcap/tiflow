@@ -1223,9 +1223,9 @@ function run() {
 	end=155
 	except=(140 141 144)
 	for i in $(seq -f "%03g" ${start} ${end}); do
-	  if [[ ${except[@]} =~ $i ]]; then
-    			continue
-    		fi
+		if [[ ${except[@]} =~ $i ]]; then
+			continue
+		fi
 		DM_${i}
 		sleep 1
 	done
