@@ -43,7 +43,7 @@ func BenchmarkPool(b *testing.B) {
 		}
 		return nil
 	}, 1024, 1024)
-	pool.RegisterHandler(handle)
+	pool.RegisterHandle(handle)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -116,7 +116,7 @@ func BenchmarkPoolContention(b *testing.B) {
 			}
 			return nil
 		}, 1024, 128)
-		pool.RegisterHandler(handle)
+		pool.RegisterHandle(handle)
 		handles = append(handles, handle)
 	}
 

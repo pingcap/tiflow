@@ -22,7 +22,7 @@ import (
 // Pool is a workerpool that runs a large number of handles.
 type Pool interface {
 	Run(ctx context.Context) error
-	RegisterHandler(handler internal.Poller)
+	RegisterHandle(handle internal.Poller)
 }
 
 // NewPool creates a new Pool with the given workerNum.

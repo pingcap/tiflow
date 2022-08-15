@@ -46,7 +46,7 @@ func (p *PoolImpl) Run(ctx context.Context) error {
 	return errg.Wait()
 }
 
-func (p *PoolImpl) RegisterHandler(handler Poller) {
+func (p *PoolImpl) RegisterHandle(handler Poller) {
 	idx := (p.nextWorkerIdx.Add(1) - 1) % int64(len(p.workers))
 	p.workers[idx].AddPoller(handler)
 }

@@ -69,6 +69,7 @@ type EventHandleImpl[T any] struct {
 
 	notify NotifyFunc
 	fn     func(T) error
+	onExit func(error)
 
 	maxQueueLen int
 	batchSize   int
@@ -194,6 +195,10 @@ func (h *EventHandleImpl[T]) ErrCh() <-chan error {
 	return h.errCh
 }
 
+func (h *EventHandleImpl[T]) OnExit(fn func(error)) {
+	h.onExit = fn
+}
+
 func (h *EventHandleImpl[T]) setNotifyFunc(fn NotifyFunc) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -231,6 +236,9 @@ func (h *EventHandleImpl[T]) poll() (hasNext bool) {
 		if err != nil {
 			// Set errorFlag so that no more events will be processed.
 			h.errorFlag = true
+			if h.onExit != nil {
+				h.onExit(err)
+			}
 			h.exitOnError(err)
 			return
 		}

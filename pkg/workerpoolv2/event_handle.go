@@ -47,6 +47,9 @@ type EventHandle[T any] interface {
 	// Note that a non-nil result of an event cancels the EventHandle, so there is at most one error.
 	ErrCh() <-chan error
 
+	// OnExit registers a callback for error handling.
+	OnExit(fn func(error))
+
 	internal.Poller
 }
 

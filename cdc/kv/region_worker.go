@@ -16,12 +16,13 @@ package kv
 import (
 	"context"
 	"encoding/hex"
-	"github.com/pingcap/tiflow/pkg/workerpoolv2"
 	"reflect"
 	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/pingcap/tiflow/pkg/workerpoolv2"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -442,7 +443,8 @@ func (w *regionWorker) initPoolHandles(ctx context.Context, handleCount int) {
 		handle := workerpoolv2.NewEventHandle(func(event *regionStatefulEvent) error {
 			return w.processEvent(ctx, event)
 		})
-		regionWorkerPool.RegisterHandler(handle)
+		handle.OnExit(w.onHandleExit)
+		regionWorkerPool.RegisterHandle(handle)
 		handles = append(handles, handle)
 	}
 	w.handles = handles

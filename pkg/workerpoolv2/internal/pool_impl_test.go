@@ -61,7 +61,7 @@ func TestPoolBasics(t *testing.T) {
 			require.Equal(t, n, counters[i].Add(1)-1)
 			return nil
 		}, 128, 128)
-		pool.RegisterHandler(handles[i])
+		pool.RegisterHandle(handles[i])
 	}
 
 	for i := 0; i < producerNum; i++ {
@@ -130,7 +130,7 @@ func TestPoolUnregister(t *testing.T) {
 			return nil
 		}
 		handles[i] = NewEventHandlerImpl[int64](fn, 1024, 128)
-		pool.RegisterHandler(handles[i])
+		pool.RegisterHandle(handles[i])
 
 		wg.Add(1)
 		go func() {
@@ -172,9 +172,10 @@ func TestWorkerPoolError(t *testing.T) {
 
 	const handleNum = 32
 	var (
-		handles [handleNum]*EventHandleImpl[string]
-		wg      sync.WaitGroup
-		poolWg  sync.WaitGroup
+		handles       [handleNum]*EventHandleImpl[string]
+		errorCBCalled [handleNum]atomic.Bool
+		wg            sync.WaitGroup
+		poolWg        sync.WaitGroup
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -202,7 +203,11 @@ func TestWorkerPoolError(t *testing.T) {
 			panic("unreachable")
 		}
 		handles[i] = NewEventHandlerImpl[string](fn, 1024, 64)
-		pool.RegisterHandler(handles[i])
+		handles[i].OnExit(func(err error) {
+			require.ErrorContains(t, err, "fake")
+			require.False(t, errorCBCalled[i].Swap(true))
+		})
+		pool.RegisterHandle(handles[i])
 
 		done := make(chan struct{})
 		wg.Add(1)
@@ -214,6 +219,7 @@ func TestWorkerPoolError(t *testing.T) {
 			_ = handles[i].AddEvent(ctx, "poison")
 
 			<-done
+			require.True(t, errorCBCalled[i].Load())
 			require.ErrorIs(t, ErrEventHandleCanceled, handles[i].AddEvent(ctx, "poison"))
 			handles[i].Unregister() // should be no-op
 		}()
@@ -264,7 +270,7 @@ func TestPoolGracefulUnregister(t *testing.T) {
 			return nil
 		}
 		handles[i] = NewEventHandlerImpl[int64](fn, 1024, 128)
-		pool.RegisterHandler(handles[i])
+		pool.RegisterHandle(handles[i])
 
 		wg.Add(1)
 		go func() {
