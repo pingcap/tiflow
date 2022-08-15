@@ -151,6 +151,11 @@ error = '''
 changefeed in abnormal state: %s, replication status: %+v
 '''
 
+["CDC:ErrChangefeedCliAborted"]
+error = '''
+changefeed cli create or resume is aborted
+'''
+
 ["CDC:ErrChangefeedUpdateFailed"]
 error = '''
 changefeed update failed due to unexpected etcd transaction failure: %s
