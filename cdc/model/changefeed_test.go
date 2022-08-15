@@ -72,7 +72,7 @@ func TestFillV1(t *testing.T) {
             "ignore-txn-start-ts":[
                 1,
                 2
-            ],
+            ]
         },
         "mounter":{
             "worker-num":64
