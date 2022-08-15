@@ -31,5 +31,5 @@ exit with a nonzero error code on failure.
 ## Debug
 
 ```bash
-./run.sh debug ../../deployments/docker-compose/3m3e.yaml
+./run.sh debug ../../../deployments/engine/docker-compose/3m3e.yaml
 ```
