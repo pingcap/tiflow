@@ -62,7 +62,7 @@ func isDropColumnWithIndexError(err error) bool {
 }
 
 // handleSpecialDDLError handles special errors for DDL execution.
-func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls []string, index int, conn *dbconn.DBConn) error {
+func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls []string, index int, conn *dbconn.DBConn, createTime int64) error {
 	// We use default parser because ddls are came from *Syncer.genDDLInfo, which is StringSingleQuotes, KeyWordUppercase and NameBackQuotes
 	parser2 := parser.New()
 
@@ -72,7 +72,7 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 	// if we have other methods to judge the DDL dispatched but timeout for executing, we can update this method.
 	// NOTE: we must ensure other PK/UK exists for correctness.
 	// NOTE: when we are refactoring the shard DDL algorithm, we also need to consider supporting non-blocking `ADD INDEX`.
-	invalidConnF := func(tctx *tcontext.Context, err error, ddls []string, index int, conn *dbconn.DBConn) error {
+	invalidConnF := func(tctx *tcontext.Context, err error, ddls []string, index int, conn *dbconn.DBConn, createTime int64) error {
 		// must ensure only the last statement executed failed with the `invalid connection` error
 		if len(ddls) == 0 || index != len(ddls)-1 || errors.Cause(err) != mysql.ErrInvalidConn {
 			return err // return the original error
@@ -117,7 +117,7 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 	// for DROP COLUMN with its single-column index, try drop index first then drop column
 	// TiDB will support DROP COLUMN with index soon. After its support, executing that SQL will not have an error,
 	// so this function will not trigger and cause some trouble
-	dropColumnF := func(tctx *tcontext.Context, originErr error, ddls []string, index int, conn *dbconn.DBConn) error {
+	dropColumnF := func(tctx *tcontext.Context, originErr error, ddls []string, index int, conn *dbconn.DBConn, createTime int64) error {
 		if !isDropColumnWithIndexError(originErr) {
 			return originErr
 		}
@@ -211,13 +211,48 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 	}
 	// TODO: add support for downstream alter pk without schema
 
+	invalidConnF2 := func(tctx *tcontext.Context, err error, ddls []string, index int, conn *dbconn.DBConn, createTime int64) error {
+		statusChan := make(chan string)
+		var status string
+		var err2 error
+		for {
+			status, err2 = getDDLStatusFromTiDB(tctx, conn, ddls[index], createTime)
+			if err != nil {
+				return err2
+			}
+			statusChan <- status
+			select {
+			case <-tctx.Ctx.Done():
+				return nil
+			case status = <-statusChan:
+				switch status {
+				case "running":
+				case "rollingback":
+				case "rollback done":
+					return nil
+				case "done":
+					return nil
+				case "cancelled":
+					return err
+				case "cancelling":
+				case "synced":
+					return nil
+				case "queueing":
+				case "none":
+				default:
+				}
+			}
+		}
+	}
+
 	retErr := err
-	toHandle := []func(*tcontext.Context, error, []string, int, *dbconn.DBConn) error{
+	toHandle := []func(*tcontext.Context, error, []string, int, *dbconn.DBConn, int64) error{
 		dropColumnF,
 		invalidConnF,
+		invalidConnF2,
 	}
 	for _, f := range toHandle {
-		retErr = f(tctx, retErr, ddls, index, conn)
+		retErr = f(tctx, retErr, ddls, index, conn, createTime)
 		if retErr == nil {
 			break
 		}

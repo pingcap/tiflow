@@ -24,6 +24,9 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	_ "github.com/pingcap/tidb/types/parser_driver"
 	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -128,19 +131,27 @@ func TestRecordSourceTbls(t *testing.T) {
 
 func TestGetDDLStatusFromTiDB(t *testing.T) {
 	var (
+		cfg                       = genDefaultSubTaskConfig4Test()
+		tctx                      = tcontext.Background()
+		conn2                     = dbconn.NewDBConn(cfg, nil)
 		adminShowDDLJobsSQL1      = "ADMIN SHOW DDL JOBS 10"
 		adminShowDDLJobsSQL2      = "ADMIN SHOW DDL JOBS 20"
 		adminShowDDLJobsLimitSQL1 = "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0"
 		adminShowDDLJobsLimitSQL2 = "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 10"
 	)
 
-	db, mock, err := sqlmock.New()
-	require.NoError(t, err)
-
 	var createTime time.Time
 	var status string
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	conn1, err := db.Conn(context.Background())
+	require.NoError(t, err)
+	conn2.ResetBaseConnFn = func(_ *tcontext.Context, _ *conn.BaseConn) (*conn.BaseConn, error) {
+		return conn.NewBaseConn(conn1, nil), nil
+	}
+	err = conn2.ResetConn(tctx)
+	require.NoError(t, err)
 
 	// test 1
 	mock.ExpectQuery(adminShowDDLJobsSQL1).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "DB_NAME", "TABLE_NAME", "JOB_TYPE", "SCHEMA_STATE", "SCHEMA_ID", "TABLE_ID", "ROW_COUNT", "CREATE_TIME", "START_TIME", "END_TIME", "STATE"}).
@@ -169,7 +180,7 @@ func TestGetDDLStatusFromTiDB(t *testing.T) {
 
 	createTime, err = time.Parse(timeLayout, "2022-08-02 2:51:38")
 	require.NoError(t, err)
-	status, err = getDDLStatusFromTiDB(ctx, db, "ALTER TABLE many_tables_test.t6 ADD x timestamp DEFAULT current_timestamp", createTime.Unix())
+	status, err = getDDLStatusFromTiDB(tctx, conn2, "ALTER TABLE many_tables_test.t6 ADD x timestamp DEFAULT current_timestamp", createTime.Unix())
 	require.NoError(t, err)
 	require.Equal(t, "running", status)
 
@@ -200,7 +211,7 @@ func TestGetDDLStatusFromTiDB(t *testing.T) {
 
 	createTime, err = time.Parse(timeLayout, "2022-08-02 2:50:36")
 	require.NoError(t, err)
-	status, err = getDDLStatusFromTiDB(ctx, db, "ALTER TABLE many_tables_test.t4 ADD x timestamp DEFAULT current_timestamp", createTime.Unix())
+	status, err = getDDLStatusFromTiDB(tctx, conn2, "ALTER TABLE many_tables_test.t4 ADD x timestamp DEFAULT current_timestamp", createTime.Unix())
 	require.NoError(t, err)
 	require.Equal(t, "none", status)
 
@@ -265,7 +276,7 @@ func TestGetDDLStatusFromTiDB(t *testing.T) {
 
 	createTime, err = time.Parse(timeLayout, "2022-08-02 2:46:13")
 	require.NoError(t, err)
-	status, err = getDDLStatusFromTiDB(ctx, db, "CREATE TABLE IF NOT EXISTS many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)", createTime.Unix())
+	status, err = getDDLStatusFromTiDB(tctx, conn2, "CREATE TABLE IF NOT EXISTS many_tables_test.t1(i TINYINT, j INT UNIQUE KEY)", createTime.Unix())
 	require.NoError(t, err)
 	require.Equal(t, "synced", status)
 
@@ -284,7 +295,7 @@ func TestGetDDLStatusFromTiDB(t *testing.T) {
 
 	createTime, err = time.Parse(timeLayout, "2022-08-03 12:35:00")
 	require.NoError(t, err)
-	status, err = getDDLStatusFromTiDB(ctx, db, "CREATE TABLE IF NOT EXISTS many_tables_test.t7(i TINYINT, j INT UNIQUE KEY)", createTime.Unix())
+	status, err = getDDLStatusFromTiDB(tctx, conn2, "CREATE TABLE IF NOT EXISTS many_tables_test.t7(i TINYINT, j INT UNIQUE KEY)", createTime.Unix())
 	require.NoError(t, err)
 	require.Equal(t, "", status) // DDL does not exist
 
