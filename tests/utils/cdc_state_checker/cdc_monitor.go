@@ -79,7 +79,7 @@ func newCDCMonitor(ctx context.Context, pd string, credential *security.Credenti
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	etcdWorker, err := orchestrator.NewEtcdWorker(&cli,
+	etcdWorker, err := orchestrator.NewEtcdWorker(cli,
 		etcd.BaseKey(etcd.DefaultCDCClusterID), reactor, initState,
 		&migrate.NoOpMigrator{})
 	if err != nil {
