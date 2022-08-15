@@ -52,7 +52,7 @@ func NewEntrySorter() *EntrySorter {
 func (es *EntrySorter) Run(ctx context.Context) error {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	_, tableName := contextutil.TableIDFromCtx(ctx)
-	metricEntrySorterResolvedChanSizeGuage := entrySorterResolvedChanSizeGauge.
+	metricEntrySorterResolvedChanSizeGauge := entrySorterResolvedChanSizeGauge.
 		WithLabelValues(changefeedID.Namespace, changefeedID.ID, tableName)
 	metricEntrySorterOutputChanSizeGauge := entrySorterOutputChanSizeGauge.
 		WithLabelValues(changefeedID.Namespace, changefeedID.ID, tableName)
@@ -88,7 +88,7 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 			case <-time.After(defaultMetricInterval):
 				metricEntrySorterOutputChanSizeGauge.Set(float64(len(es.outputCh)))
 				es.lock.Lock()
-				metricEntrySorterResolvedChanSizeGuage.Set(float64(len(es.resolvedTsGroup)))
+				metricEntrySorterResolvedChanSizeGauge.Set(float64(len(es.resolvedTsGroup)))
 				metricEntryUnsortedSizeGauge.Set(float64(len(es.unsorted)))
 				es.lock.Unlock()
 			case <-receiver.C:
@@ -154,7 +154,7 @@ func (es *EntrySorter) Output() <-chan *model.PolymorphicEvent {
 }
 
 // EmitStartTs implement sorter interface
-func (es *EntrySorter) EmitStartTs(ctx context.Context, ts uint64) {}
+func (es *EntrySorter) EmitStartTs(_ context.Context, _ uint64) {}
 
 func eventLess(i *model.PolymorphicEvent, j *model.PolymorphicEvent) bool {
 	return model.ComparePolymorphicEvents(i, j)
