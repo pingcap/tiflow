@@ -61,7 +61,7 @@ func TestReset(t *testing.T) {
 	defer client.Close()
 
 	cp := NewCapture4Test(nil)
-	cp.EtcdClient = &client
+	cp.EtcdClient = client
 
 	// simulate network isolation scenarios
 	etcdServer.Close()
