@@ -805,9 +805,6 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 			case <-ctx.Done():
 				return
 			case jobEntry = <-ddlPuller.Output():
-				if jobEntry.Job != nil {
-					log.Info("fizz:processor get ddl job", zap.Any("job", jobEntry.Job.Query))
-				}
 			}
 			failpoint.Inject("processorDDLResolved", nil)
 			if jobEntry.OpType == model.OpTypeResolved {

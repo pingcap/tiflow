@@ -914,7 +914,7 @@ func (s *snapshot) renameTables(job *timodel.Job, currentTs uint64) error {
 		if !ok {
 			return cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(newSchemaIDs[i])
 		}
-		newSchemaName := newSchema.Name.L
+		newSchemaName := newSchema.Name.O
 		tbInfo := model.WrapTableInfo(newSchemaIDs[i], newSchemaName, job.BinlogInfo.FinishedTS, tableInfo)
 		err = s.createTable(tbInfo, currentTs)
 		if err != nil {

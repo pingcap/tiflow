@@ -50,10 +50,52 @@ create table t4 (
  primary key(value64, value32)
 );
 
+/*use by error changefeed*/
+create table t5 (
+ value64  bigint unsigned  not null,
+ value32  integer          not null,
+ primary key(value64, value32)
+);
+
+/*use by error changefeed*/
+create table t6 (
+ value64  bigint unsigned  not null,
+ value32  integer          not null,
+ primary key(value64, value32)
+);
+
+/*use by error changefeed*/
+create table t7 (
+ value64  bigint unsigned  not null,
+ value32  integer          not null,
+ primary key(value64, value32)
+);
+
+/*use by error changefeed*/
+create table t8 (
+ value64  bigint unsigned  not null,
+ value32  integer          not null,
+ primary key(value64, value32)
+);
+
+/*use by error changefeed*/
+create table t9 (
+ value64  bigint unsigned  not null,
+ value32  integer          not null,
+ primary key(value64, value32)
+);
+
 insert into t1 values(17156792991891826145, 1);
 insert into t1 values( 9223372036854775807, 2);
 insert into t2 values(17156792991891826145, 3);
 insert into t2 values( 9223372036854775807, 4);
+
+insert into t5 values(17156792991891826145, 1);
+insert into t6 values( 9223372036854775807, 2);
+insert into t7 values(17156792991891826145, 3);
+insert into t8 values( 9223372036854775807, 4);
+insert into t9 values( 9223372036854775807, 5);
+
 
 rename table t1 to t1_7, t2 to t2_7;
 
@@ -65,5 +107,17 @@ insert into t2_7 values(2036854775807, 8);
 insert into t3 select * from t1_7;
 insert into t4 select * from t2_7;
 drop table t3, t4;
+
+/* replicate successful */
+rename table t9 to t99;
+/* discard */
+rename table t9 to t999;
+/* replicate successful, they are all in `filter.rule`, */
+rename table t5 to t55, t6 to t66;
+/* discard by cdc totally, they are all not in `filter.rule` */
+rename table t55 to t555, t66 to t666;
+/* cdc report an error, t8 not in `filter.rule` */
+rename table t7 to t77, t8 to t88;
+
 
 create table finish_mark(id int primary key);

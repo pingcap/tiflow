@@ -15,6 +15,7 @@ package entry
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	ticonfig "github.com/pingcap/tidb/config"
@@ -73,6 +74,8 @@ func (s *SchemaTestHelper) DDL2Job(ddl string) *timodel.Job {
 	// the RawArgs field in job fetched from tidb snapshot meta is incorrent,
 	// so we manually construct `job.RawArgs` to do the workaround.
 	// we assume the old schema name is same as the new schema name here.
+	// for example, "ALTER TABLE RENAME test.t1 TO test.t1, test.t2 to test.t22", schema name is "test"
+	schema := strings.Split(strings.Split(strings.Split(res.Query, ",")[1], " ")[1], ".")[0]
 	tableNum := len(res.BinlogInfo.MultipleTableInfos)
 	oldSchemaIDs := make([]int64, tableNum)
 	for i := 0; i < tableNum; i++ {
@@ -88,7 +91,7 @@ func (s *SchemaTestHelper) DDL2Job(ddl string) *timodel.Job {
 	}
 	oldSchemaNames := make([]timodel.CIStr, tableNum)
 	for i := 0; i < tableNum; i++ {
-		oldSchemaNames[i] = timodel.NewCIStr(res.SchemaName)
+		oldSchemaNames[i] = timodel.NewCIStr(schema)
 	}
 	newSchemaIDs := oldSchemaIDs
 

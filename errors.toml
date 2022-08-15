@@ -941,6 +941,11 @@ error = '''
 regions not completely left cover span, span %v regions: %v
 '''
 
+["CDC:ErrRenameTablesTableNotFound"]
+error = '''
+failed to find table id(s): '%v' in cdc schema snapshot, ddl query: [%s], if you want to replicate these table(s), please add them to filter rule.
+'''
+
 ["CDC:ErrReplicationSetInconsistent"]
 error = '''
 replication set inconsistent: %s

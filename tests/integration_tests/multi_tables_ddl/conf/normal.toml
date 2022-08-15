@@ -1,0 +1,2 @@
+[filter]
+rules = ["multi_tables_ddl_test.t1", "multi_tables_ddl_test.t2", "multi_tables_ddl_test.t3", "multi_tables_ddl_test.t4"]

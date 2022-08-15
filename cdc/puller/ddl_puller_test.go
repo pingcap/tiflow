@@ -67,7 +67,6 @@ func (m *mockPuller) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case e := <-m.inCh:
-			log.Info("fizz output", zap.Stringer("entry", e))
 			m.outCh <- e
 			atomic.StoreUint64(&m.resolvedTs, e.CRTs)
 		}
@@ -138,7 +137,7 @@ func newMockDDLJobPuller(t *testing.T, puller Puller, needSchemaSnap bool) (DDLJ
 	return res, helper
 }
 
-func TestHandleRenameTables(t *testing.T) {
+func TestHandleRenameTable(t *testing.T) {
 	startTs := uint64(10)
 	mockPuller := newMockPuller(t, startTs)
 	ddlJobPuller, helper := newMockDDLJobPuller(t, mockPuller, true)
@@ -146,7 +145,19 @@ func TestHandleRenameTables(t *testing.T) {
 
 	ddlJobPullerImpl := ddlJobPuller.(*ddlJobPullerImpl)
 	cfg := config.GetDefaultReplicaConfig()
-	cfg.Filter.Rules = []string{"test1.t1", "test1.t2", "test2.t4"}
+	cfg.Filter.Rules = []string{
+		"test1.t1",
+		"test1.t2",
+
+		"test1.t4",
+		"test2.t4",
+
+		"Test3.t1",
+		"Test3.t2",
+
+		"test1.t99",
+		"test1.t100",
+	}
 	f, err := filter.NewFilter(cfg, "")
 	require.NoError(t, err)
 	ddlJobPullerImpl.filter = f
@@ -162,8 +173,9 @@ func TestHandleRenameTables(t *testing.T) {
 		}
 	}()
 
-	// filter out test1.t3, but nor filter out test1.t1, test1.t2
+	// table t3, t5 not found in snapshot, report error
 	{
+		missingTables := make([]int64, 2)
 		job := helper.DDL2Job("create database test1")
 		mockPuller.appendDDL(job)
 		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
@@ -180,18 +192,24 @@ func TestHandleRenameTables(t *testing.T) {
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table test1.t3(id int)")
+		missingTables[0] = job.TableID
 		mockPuller.appendDDL(job)
 		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
-		job = helper.DDL2Job("rename table test1.t1 to test1.t11, test1.t2 to test1.t22, test1.t3 to test1.t33")
+		job = helper.DDL2Job("create table test1.t5(id int)")
+		missingTables[1] = job.TableID
+		mockPuller.appendDDL(job)
+		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+
+		job = helper.DDL2Job("rename table test1.t1 to test1.t11, test1.t2 to test1.t22, test1.t3 to test1.t33, test1.t5 to test1.t4")
 
 		skip, err := ddlJobPullerImpl.handleRenameTables(job)
-		require.NoError(t, err)
-		require.False(t, skip)
-		require.Equal(t, 2, len(job.BinlogInfo.MultipleTableInfos))
-		require.Equal(t, "t11", job.BinlogInfo.MultipleTableInfos[0].Name.O)
-		require.Equal(t, "t22", job.BinlogInfo.MultipleTableInfos[1].Name.O)
+		require.Error(t, err)
+		require.True(t, skip)
+		require.Contains(t, err.Error(), fmt.Sprintf("failed to find table(s) '%v' in cdc schema snapshot, ddl query: [%s],"+
+			"if you want to replicate these table(s), please add them to filter rule.", missingTables, job.Query))
 	}
 
 	// all tables are filtered out
@@ -221,9 +239,221 @@ func TestHandleRenameTables(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, skip)
 	}
+
+	// test uppercase db name
+	{
+		job := helper.DDL2Job("create database Test3")
+		mockPuller.appendDDL(job)
+		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+
+		job = helper.DDL2Job("create table Test3.t1(id int)")
+		mockPuller.appendDDL(job)
+		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+
+		// skip this table
+		job = helper.DDL2Job("create table Test3.t2(id int)")
+		mockPuller.appendDDL(job)
+		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+
+		job = helper.DDL2Job("rename table Test3.t1 to Test3.t11, Test3.t2 to Test3.t22")
+		skip, err := ddlJobPullerImpl.handleRenameTables(job)
+		require.NoError(t, err)
+		require.False(t, skip)
+		require.Equal(t, 2, len(job.BinlogInfo.MultipleTableInfos))
+		require.Equal(t, "t11", job.BinlogInfo.MultipleTableInfos[0].Name.O)
+		require.Equal(t, "t22", job.BinlogInfo.MultipleTableInfos[1].Name.O)
+	}
+
+	// test rename table
+	{
+		job := helper.DDL2Job("create table test1.t99 (id int)")
+		mockPuller.appendDDL(job)
+		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+
+		// this ddl should be skipped
+		job = helper.DDL2Job("create table test1.t1000 (id int)")
+		mockPuller.appendDDL(job)
+		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+
+		// this ddl should be skipped
+		job = helper.DDL2Job("create table test1.t888 (id int)")
+		mockPuller.appendDDL(job)
+		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+
+		job = helper.DDL2Job("rename table test1.t99 to test1.t999")
+		skip, err := ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.False(t, skip)
+
+		// since test1.t1000 is not in filter rule, we should skip it
+		job = helper.DDL2Job("rename table test1.t1000 to test1.t100")
+		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.True(t, skip)
+
+		// since test1.t888 and test1.t777 are not in filter rule, skip it
+		job = helper.DDL2Job("rename table test1.t888 to test1.t777")
+		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.True(t, skip)
+	}
 }
 
 func TestHandleJob(t *testing.T) {
+	startTs := uint64(10)
+	mockPuller := newMockPuller(t, startTs)
+	ddlJobPuller, helper := newMockDDLJobPuller(t, mockPuller, true)
+	defer helper.Close()
+
+	ddlJobPullerImpl := ddlJobPuller.(*ddlJobPullerImpl)
+	cfg := config.GetDefaultReplicaConfig()
+	cfg.Filter.Rules = []string{
+		"test1.t1",
+		"test1.t2",
+	}
+	f, err := filter.NewFilter(cfg, "")
+	require.NoError(t, err)
+	ddlJobPullerImpl.filter = f
+	// ctx, cancel := context.WithCancel(context.Background())
+	// defer cancel()
+
+	// test create database
+	{
+		job := helper.DDL2Job("create database test1")
+		skip, err := ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.False(t, skip)
+
+		job = helper.DDL2Job("create database test2")
+		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.True(t, skip)
+	}
+
+	// test drop databases
+	{
+		job := helper.DDL2Job("drop database test2")
+		skip, err := ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.True(t, skip)
+	}
+
+	// test create table
+	{
+		job := helper.DDL2Job("create table test1.t1(id int) partition by range(id) (partition p0 values less than (10))")
+		skip, err := ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.False(t, skip)
+
+		job = helper.DDL2Job("create table test1.t2(id int)")
+		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.False(t, skip)
+
+		job = helper.DDL2Job("create table test1.t3(id int)")
+		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.True(t, skip)
+
+		job = helper.DDL2Job("create table test1.t4(id int) partition by range(id) (partition p0 values less than (10))")
+		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.True(t, skip)
+	}
+
+	// test drop table
+	{
+		job := helper.DDL2Job("drop table test1.t2")
+		skip, err := ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.False(t, skip)
+
+		job = helper.DDL2Job("drop table test1.t3")
+		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.True(t, skip)
+	}
+
+	// test add column and drop column
+	{
+		job := helper.DDL2Job("alter table test1.t1 add column age int")
+		skip, err := ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.False(t, skip)
+
+		job = helper.DDL2Job("alter table test1.t4 add column age int")
+		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.True(t, skip)
+	}
+
+	// test add index and drop index
+	{
+		job := helper.DDL2Job("alter table test1.t1 add index idx_age(age)")
+		skip, err := ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.False(t, skip)
+
+		job = helper.DDL2Job("alter table test1.t4 add index idx_age(age)")
+		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.True(t, skip)
+
+		job = helper.DDL2Job("alter table test1.t1 drop index idx_age")
+		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.False(t, skip)
+
+		job = helper.DDL2Job("alter table test1.t4 drop index idx_age")
+		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.True(t, skip)
+	}
+
+	// test drop column
+	{
+		job := helper.DDL2Job("alter table test1.t1 drop column age")
+		skip, err := ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.False(t, skip)
+
+		job = helper.DDL2Job("alter table test1.t4 drop column age")
+		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.True(t, skip)
+	}
+
+	// test truncate table
+	{
+		job := helper.DDL2Job("truncate table test1.t1")
+		skip, err := ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.False(t, skip)
+
+		job = helper.DDL2Job("truncate table test1.t4")
+		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.True(t, skip)
+	}
+
+	// test add table partition
+	{
+		job := helper.DDL2Job("alter table test1.t1 add partition (partition p1 values less than (100))")
+		skip, err := ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.False(t, skip)
+
+		job = helper.DDL2Job("alter table test1.t4 add partition (partition p1 values less than (100))")
+		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.True(t, skip)
+	}
 }
 
 func waitResolvedTs(t *testing.T, p DDLJobPuller, targetTs model.Ts) {

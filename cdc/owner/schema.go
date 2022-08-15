@@ -174,8 +174,8 @@ func (s *schemaWrap4Owner) parseRenameTables(
 			return nil, cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(
 				newSchemaIDs[i])
 		}
-		newSchemaName := newSchema.Name.L
-		oldSchemaName := oldSchemaNames[i].L
+		newSchemaName := newSchema.Name.O
+		oldSchemaName := oldSchemaNames[i].O
 		event := new(model.DDLEvent)
 		preTableInfo, ok := s.schemaSnapshot.PhysicalTableByID(tableInfo.ID)
 		if !ok {

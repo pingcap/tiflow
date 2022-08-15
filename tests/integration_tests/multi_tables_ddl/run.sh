@@ -25,15 +25,23 @@ function run() {
 	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
 	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/" ;;
 	esac
-	cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
+
+	cf_normal = "test-normal"
+	cf_err = "test-error"
+	cdc cli changefeed create -c=$cf_normal --start-ts=$start_ts --sink-uri="$SINK_URI" --config="../conf/normal.toml"
+	cdc cli changefeed create -c=$cf_err --start-ts=$start_ts --sink-uri="$SINK_URI" --config="../conf/error.toml"
+
 	if [ "$SINK_TYPE" == "kafka" ]; then
 		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
 	fi
 	run_sql_file $CUR/data/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	# sync_diff can't check non-exist table, so we check expected tables are created in downstream first
-
 	check_table_exists multi_tables_ddl_test.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	echo "check table exists success"
+
+	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $cf_normal "normal" "null" ""
+	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $cf_err "error" "ErrRenameTablesTableNotFound" ""
+
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 60
 
 	cleanup_process $CDC_BINARY
