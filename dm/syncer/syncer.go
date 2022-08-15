@@ -496,7 +496,9 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 // buildLowerCaseTableNamesMap build a lower case schema map and lower case table map for all tables
 // Input: map of schema --> list of tables
 // Output: schema names map: lower_case_schema_name --> schema_name
-//         tables names map: lower_case_schema_name --> lower_case_table_name --> table_name
+//
+//	tables names map: lower_case_schema_name --> lower_case_table_name --> table_name
+//
 // Note: the result will skip the schemas and tables that their lower_case_name are the same.
 func buildLowerCaseTableNamesMap(logger log.Logger, tables map[string][]string) (map[string]string, map[string]map[string]string) {
 	schemaMap := make(map[string]string)
@@ -1164,10 +1166,11 @@ func (s *Syncer) resetShardingGroup(table *filter.Table) {
 
 // flushCheckPoints synchronously flushes previous saved checkpoint in memory to persistent storage, like TiDB
 // we flush checkpoints in four cases:
-//   1. DDL executed
-//   2. pausing / stopping the sync (driven by `s.flushJobs`)
-//   3. IsFreshTask return true
-//   4. Heartbeat event received
+//  1. DDL executed
+//  2. pausing / stopping the sync (driven by `s.flushJobs`)
+//  3. IsFreshTask return true
+//  4. Heartbeat event received
+//
 // but when error occurred, we can not flush checkpoint, otherwise data may lost
 // and except rejecting to flush the checkpoint, we also need to rollback the checkpoint saved before
 // this should be handled when `s.Run` returned

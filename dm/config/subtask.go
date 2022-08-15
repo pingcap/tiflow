@@ -292,6 +292,7 @@ type SubTaskConfig struct {
 }
 
 // SampleSubtaskConfig is the content of subtask.toml in current folder.
+//
 //go:embed subtask.toml
 var SampleSubtaskConfig string
 

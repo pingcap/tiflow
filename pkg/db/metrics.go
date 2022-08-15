@@ -22,14 +22,14 @@ var (
 		Namespace: "ticdc",
 		Subsystem: "db",
 		Name:      "write_bytes_total",
-		Help:      "The total number of write bytes by the leveldb",
+		Help:      "The total number of write bytes by the db",
 	}, []string{"id"})
 
 	dbReadBytes = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
 		Subsystem: "db",
 		Name:      "read_bytes_total",
-		Help:      "The total number of read bytes by the leveldb",
+		Help:      "The total number of read bytes by the db",
 	}, []string{"id"})
 
 	dbSnapshotGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -57,21 +57,21 @@ var (
 		Namespace: "ticdc",
 		Subsystem: "db",
 		Name:      "write_delay_seconds",
-		Help:      "The duration of leveldb write delay seconds",
+		Help:      "The duration of db write delay seconds",
 	}, []string{"id"})
 
 	dbWriteDelayCount = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
 		Subsystem: "db",
 		Name:      "write_delay_total",
-		Help:      "The total number of leveldb delay",
+		Help:      "The total number of db delay",
 	}, []string{"id"})
 
 	dbBlockCacheAccess = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "ticdc",
 		Subsystem: "db",
 		Name:      "block_cache_access_total",
-		Help:      "The total number of leveldb block cache access",
+		Help:      "The total number of db block cache access",
 	}, []string{"id", "type"})
 )
 

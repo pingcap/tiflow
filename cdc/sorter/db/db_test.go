@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package leveldb
+package db
 
 import (
 	"bytes"
@@ -22,19 +22,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
+	"github.com/pingcap/tiflow/cdc/sorter/db/message"
 	"github.com/pingcap/tiflow/pkg/actor"
 	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/db"
 	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/goleak"
 )
 
 func TestMain(m *testing.M) {
-	leakutil.SetUpLeakTest(m,
-		goleak.IgnoreTopFunction("github.com/syndtr/goleveldb/leveldb.(*DB).mpoolDrain"))
+	leakutil.SetUpLeakTest(m)
 }
 
 func TestMaybeWrite(t *testing.T) {

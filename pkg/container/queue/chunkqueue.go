@@ -173,12 +173,12 @@ func (q *ChunkQueue[T]) addSpace(n int) {
 
 // adjustChunksArray extends/shrinks the chunk pointers array []*chunks, and
 // eliminates the former spaces caused by popped chunks:
-// 1) extend > 0: A positive expand represents an "extend" operation:
-//	The value is the amount of space the array should have in tail. Expand the
-//	chunks array until there is enough space.
-// 2) extend < 0: A negative expand represents a "shrink" operation:
-// 	The value of a negative extend is oblivious. The new length of the array
-//	[]*chunks is max(defaultLength, tail - head + 1), which makes sure
+//  1. extend > 0: A positive expand represents an "extend" operation:
+//     The value is the amount of space the array should have in tail. Expand the
+//     chunks array until there is enough space.
+//  2. extend < 0: A negative expand represents a "shrink" operation:
+//     The value of a negative extend is oblivious. The new length of the array
+//     []*chunks is max(defaultLength, tail - head + 1), which makes sure
 func (q *ChunkQueue[T]) adjustChunksArray(extend int) {
 	used := q.tail - q.head
 	// adjust the array length. The new length should
