@@ -18,18 +18,22 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hedzr/go-ringbuf/v2"
+	"github.com/hedzr/go-ringbuf/v2/mpmc"
 	"github.com/pingcap/errors"
 )
 
 type worker struct {
-	notifyCh chan Poller
-	pollers  sync.Map
-	toRemove sync.Map
+	notifyCh    chan struct{}
+	pollers     sync.Map
+	toRemove    sync.Map
+	pendingList mpmc.RingBuffer[Poller]
 }
 
 func newWorker() *worker {
 	return &worker{
-		notifyCh: make(chan Poller, 1024),
+		notifyCh:    make(chan struct{}, 1),
+		pendingList: ringbuf.New[Poller](1024),
 	}
 }
 
@@ -41,22 +45,39 @@ func (w *worker) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case p := <-w.notifyCh:
-			for w.doPoll(p) {
+		case <-w.notifyCh:
+			for {
+				p, err := w.pendingList.Get()
+				if err != nil {
+					break
+				}
+				if p.poll() {
+					_ = w.pendingList.Put(p)
+				}
 			}
 		case <-ticker.C:
 			w.pollers.Range(func(key, _ any) bool {
 				p := key.(Poller)
-				for w.doPoll(p) {
+				if w.doPoll(p) {
+					_ = w.pendingList.Put(p)
 				}
 				return true
 			})
+			for {
+				p, err := w.pendingList.Get()
+				if err != nil {
+					break
+				}
+				if p.poll() {
+					_ = w.pendingList.Put(p)
+				}
+			}
 		}
 	}
 }
 
 func (w *worker) doPoll(p Poller) bool {
-	hasNext := p.Poll()
+	hasNext := p.poll()
 
 	if _, ok := w.toRemove.LoadAndDelete(p); ok {
 		w.pollers.Delete(p)
@@ -70,13 +91,15 @@ func (w *worker) notify(p Poller, shouldExit bool) {
 		w.toRemove.Store(p, struct{}{})
 	}
 
+	_ = w.pendingList.Put(p)
+
 	select {
-	case w.notifyCh <- p:
+	case w.notifyCh <- struct{}{}:
 	default:
 	}
 }
 
 func (w *worker) AddPoller(p Poller) {
-	p.SetNotifyFunc(w.notify)
+	p.setNotifyFunc(w.notify)
 	w.pollers.Store(p, struct{}{})
 }

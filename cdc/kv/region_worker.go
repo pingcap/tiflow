@@ -16,6 +16,7 @@ package kv
 import (
 	"context"
 	"encoding/hex"
+	"github.com/pingcap/tiflow/pkg/workerpoolv2"
 	"reflect"
 	"runtime"
 	"sync"
@@ -30,7 +31,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/regionspan"
-	"github.com/pingcap/tiflow/pkg/workerpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -38,7 +38,7 @@ import (
 )
 
 var (
-	regionWorkerPool workerpool.WorkerPool
+	regionWorkerPool workerpoolv2.Pool
 	workerPoolOnce   sync.Once
 	// The magic number here is keep the same with some magic numbers in some
 	// other components in TiCDC, including worker pool task chan size, mounter
@@ -144,7 +144,7 @@ type regionWorker struct {
 	errorCh  chan error
 
 	// event handlers in region worker
-	handles []workerpool.EventHandle
+	handles []workerpoolv2.EventHandle[*regionStatefulEvent]
 	// how many workers in worker pool will be used for this region worker
 	concurrent    int
 	statesManager *regionStateManager
@@ -436,16 +436,14 @@ func (w *regionWorker) processEvent(ctx context.Context, event *regionStatefulEv
 	return err
 }
 
-func (w *regionWorker) initPoolHandles(handleCount int) {
-	handles := make([]workerpool.EventHandle, 0, handleCount)
+func (w *regionWorker) initPoolHandles(ctx context.Context, handleCount int) {
+	handles := make([]workerpoolv2.EventHandle[*regionStatefulEvent], 0, handleCount)
 	for i := 0; i < handleCount; i++ {
-		poolHandle := regionWorkerPool.RegisterEvent(func(ctx context.Context, eventI interface{}) error {
-			event := eventI.(*regionStatefulEvent)
+		handle := workerpoolv2.NewEventHandle(func(event *regionStatefulEvent) error {
 			return w.processEvent(ctx, event)
-		}).OnExit(func(err error) {
-			w.onHandleExit(err)
 		})
-		handles = append(handles, poolHandle)
+		regionWorkerPool.RegisterHandler(handle)
+		handles = append(handles, handle)
 	}
 	w.handles = handles
 }
@@ -508,14 +506,13 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 		if highWatermarkMet {
 			// All events in one batch can be hashed into one handle slot.
 			slot := w.inputCalcSlot(events[0].regionID)
-			eventsX := make([]interface{}, 0, len(events))
 			for _, event := range events {
-				eventsX = append(eventsX, event)
+				err = w.handles[slot].AddEvent(ctx, event)
+				if err != nil {
+					return err
+				}
 			}
-			err = w.handles[slot].AddEvents(ctx, eventsX)
-			if err != nil {
-				return err
-			}
+
 			// Principle: events from the same region must be processed linearly.
 			//
 			// When buffered events exceed high watermark, we start to use worker
@@ -618,7 +615,7 @@ func (w *regionWorker) run(parentCtx context.Context) error {
 	w.parentCtx = parentCtx
 	ctx, cancel := context.WithCancel(parentCtx)
 	wg, ctx := errgroup.WithContext(ctx)
-	w.initPoolHandles(w.concurrent)
+	w.initPoolHandles(ctx, w.concurrent)
 
 	var retErr error
 	once := sync.Once{}
@@ -868,7 +865,7 @@ func getWorkerPoolSize() (size int) {
 func InitWorkerPool() {
 	workerPoolOnce.Do(func() {
 		size := getWorkerPoolSize()
-		regionWorkerPool = workerpool.NewDefaultWorkerPool(size)
+		regionWorkerPool = workerpoolv2.NewPool(size)
 	})
 }
 

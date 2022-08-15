@@ -27,15 +27,22 @@ import (
 )
 
 type Poller interface {
-	Poll() (hasNext bool)
-	SetNotifyFunc(fn NotifyFunc)
+	poll() (hasNext bool)
+	setNotifyFunc(fn NotifyFunc)
 }
 
 // A NotifyFunc is used to notify the pool that a new event has come in.
 type NotifyFunc = func(p Poller, shouldExit bool)
 
-// ErrEventHandlerCanceled indicates that a given event handler has been canceled.
-var ErrEventHandlerCanceled = errors.New("event handler has been canceled")
+var (
+	// ErrEventHandleCanceled indicates that a given event handler has been canceled.
+	ErrEventHandleCanceled = errors.New("event handle has been canceled")
+
+	// ErrEventHandleAlreadyCanceled indicates that the event handler had already been canceled
+	// when GracefulUnregister was called.
+	ErrEventHandleAlreadyCanceled = errors.New("event handle had already been canceled " +
+		"when GracefulUnregister was called")
+)
 
 type cancelType = int32
 
@@ -45,8 +52,8 @@ const (
 	cancelTypeGraceful
 )
 
-// EventHandlerImpl implements EventHandler.
-type EventHandlerImpl[T any] struct {
+// EventHandleImpl implements EventHandler.
+type EventHandleImpl[T any] struct {
 	cond *syncutil.Cond
 	mu   sync.Mutex
 	q    *queue.ChunkQueue[T]
@@ -69,8 +76,8 @@ type EventHandlerImpl[T any] struct {
 
 func NewEventHandlerImpl[T any](
 	fn func(T) error, maxQueueLen int, batchSize int,
-) *EventHandlerImpl[T] {
-	ret := &EventHandlerImpl[T]{
+) *EventHandleImpl[T] {
+	ret := &EventHandleImpl[T]{
 		q:           queue.NewChunkQueue[T](),
 		cancelFlag:  *atomic.NewInt32(cancelTypeNone),
 		rcu:         syncutil.NewRCU(),
@@ -84,17 +91,19 @@ func NewEventHandlerImpl[T any](
 	return ret
 }
 
-func (h *EventHandlerImpl[T]) AddEvent(ctx context.Context, event T) error {
+func (h *EventHandleImpl[T]) AddEvent(ctx context.Context, event T) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	for h.q.Len() >= h.maxQueueLen && h.cancelFlag.Load() != cancelTypeNone {
+	for h.q.Len() >= h.maxQueueLen && h.cancelFlag.Load() == cancelTypeNone {
 		err := h.cond.WaitWithContext(ctx)
-		return err
+		if err != nil {
+			return err
+		}
 	}
 
 	if h.cancelFlag.Load() != cancelTypeNone {
-		return errors.Trace(ErrEventHandlerCanceled)
+		return errors.Trace(ErrEventHandleCanceled)
 	}
 
 	h.q.Push(event)
@@ -105,42 +114,94 @@ func (h *EventHandlerImpl[T]) AddEvent(ctx context.Context, event T) error {
 	return nil
 }
 
-func (h *EventHandlerImpl[T]) Unregister() {
+func (h *EventHandleImpl[T]) Unregister() {
 	h.unregisterOnce.Do(h.doUnregister)
 }
 
-func (h *EventHandlerImpl[T]) doUnregister() {
+func (h *EventHandleImpl[T]) doUnregister() {
 	h.mu.Lock()
+	// From this point on, no new event will be added by AddEvent.
 	success := h.cancelFlag.CAS(cancelTypeNone, cancelTypeImmediate)
 	h.mu.Unlock()
 
 	if !success {
-		return
+		panic("unreachable")
 	}
 
+	// Wake up possible blocked producers.
 	h.cond.Broadcast()
 
+	// Linearization point. No event will be processed hereafter.
 	h.rcu.Synchronize()
 	h.notify(h, true)
 }
 
-func (h *EventHandlerImpl[T]) GracefulUnregister(ctx context.Context, timeout time.Duration) error {
-	// TODO implement me
-	panic("implement me")
+func (h *EventHandleImpl[T]) doGracefulUnregister(ctx context.Context) error {
+	h.mu.Lock()
+	// From this point on, no new event will be added by AddEvent.
+	success := h.cancelFlag.CAS(cancelTypeNone, cancelTypeGraceful)
+	h.mu.Unlock()
+
+	if !success {
+		panic("unreachable")
+	}
+
+	// Wake up possible blocked producers.
+	h.cond.Broadcast()
+
+	h.mu.Lock()
+	for !h.q.Empty() && !h.errorFlag {
+		err := h.cond.WaitWithContext(ctx)
+		if err != nil {
+			h.mu.Unlock()
+			return err
+		}
+	}
+	// Must unlock here for Synchronize() to work.
+	h.mu.Unlock()
+
+	// Still need to synchronize because poll
+	// maybe processing the last batch of events.
+	h.rcu.Synchronize() // Linearization point.
+	h.notify(h, true)
+
+	if h.errorFlag {
+		// An error flag was set, indicating that an error occurred
+		// before the linearization point of the GracefulUnregister operation.
+		return errors.Trace(ErrEventHandleAlreadyCanceled)
+	}
+
+	return nil
 }
 
-func (h *EventHandlerImpl[T]) ErrCh() <-chan error {
+func (h *EventHandleImpl[T]) GracefulUnregister(ctx context.Context) error {
+	var (
+		hasRun atomic.Bool
+		err    error
+	)
+	h.unregisterOnce.Do(func() {
+		defer hasRun.Store(true)
+		err = h.doGracefulUnregister(ctx)
+	})
+
+	if !hasRun.Load() {
+		return errors.Trace(ErrEventHandleAlreadyCanceled)
+	}
+	return err
+}
+
+func (h *EventHandleImpl[T]) ErrCh() <-chan error {
 	return h.errCh
 }
 
-func (h *EventHandlerImpl[T]) SetNotifyFunc(fn NotifyFunc) {
+func (h *EventHandleImpl[T]) setNotifyFunc(fn NotifyFunc) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	h.notify = fn
 }
 
-func (h *EventHandlerImpl[T]) Poll() (hasNext bool) {
+func (h *EventHandleImpl[T]) poll() (hasNext bool) {
 	defer func() {
 		h.rcu.Quiesce()
 	}()
@@ -159,8 +220,10 @@ func (h *EventHandlerImpl[T]) Poll() (hasNext bool) {
 	remaining := h.q.Len()
 	h.mu.Unlock()
 
+	h.cond.Broadcast()
+
 	for _, event := range events {
-		if h.cancelFlag.Load() != cancelTypeNone {
+		if h.cancelFlag.Load() == cancelTypeImmediate {
 			return
 		}
 
@@ -177,7 +240,7 @@ func (h *EventHandlerImpl[T]) Poll() (hasNext bool) {
 	return
 }
 
-func (h *EventHandlerImpl[T]) safeProcessEvent(val T) (retErr error) {
+func (h *EventHandleImpl[T]) safeProcessEvent(val T) (retErr error) {
 	defer func() {
 		if v := recover(); v != nil {
 			retErr = errors.Errorf("panicked: %s", v)
@@ -187,7 +250,7 @@ func (h *EventHandlerImpl[T]) safeProcessEvent(val T) (retErr error) {
 	return errors.Trace(h.fn(val))
 }
 
-func (h *EventHandlerImpl[T]) getEventBatch() []T {
+func (h *EventHandleImpl[T]) getEventBatch() []T {
 	batchSize := h.batchSize
 	if batchSize > h.q.Len() {
 		batchSize = h.q.Len()
@@ -200,7 +263,7 @@ func (h *EventHandlerImpl[T]) getEventBatch() []T {
 	return events
 }
 
-func (h *EventHandlerImpl[T]) shouldNotify() bool {
+func (h *EventHandleImpl[T]) shouldNotify() bool {
 	// Note that this method is always called with h.mu locked.
 	if h.q.Len() >= h.maxQueueLen {
 		// We must notify if the queue is full.
@@ -210,9 +273,9 @@ func (h *EventHandlerImpl[T]) shouldNotify() bool {
 	return h.rl.Allow()
 }
 
-func (h *EventHandlerImpl[T]) exitOnError(errIn error) {
+func (h *EventHandleImpl[T]) exitOnError(errIn error) {
 	// Note that the following logic must be run in a separate goroutine
-	// other than Poll, or otherwise we risk deadlocking concurrent Unregister calls.
+	// other than poll, or otherwise we risk deadlocking concurrent Unregister calls.
 	go func() {
 		h.unregisterOnce.Do(h.doUnregister)
 

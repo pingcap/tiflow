@@ -12,3 +12,20 @@
 // limitations under the License.
 
 package workerpoolv2
+
+import (
+	"context"
+
+	"github.com/pingcap/tiflow/pkg/workerpoolv2/internal"
+)
+
+// Pool is a workerpool that runs a large number of handles.
+type Pool interface {
+	Run(ctx context.Context) error
+	RegisterHandler(handler internal.Poller)
+}
+
+// NewPool creates a new Pool with the given workerNum.
+func NewPool(workerNum int) Pool {
+	return internal.NewPoolImpl(workerNum)
+}

@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
@@ -29,11 +30,11 @@ func TestPoolBasics(t *testing.T) {
 	t.Parallel()
 
 	const (
-		workerNum          = 8
-		handlerNum         = 16
-		producerNum        = 16
-		eventPerHandler    = 1024 * 32
-		handlerPerProducer = handlerNum / producerNum
+		workerNum         = 8
+		handleNum         = 16
+		producerNum       = 8
+		eventPerHandler   = 1024 * 32
+		handlePerProducer = handleNum / producerNum
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -42,8 +43,8 @@ func TestPoolBasics(t *testing.T) {
 	pool := NewPoolImpl(workerNum)
 
 	var (
-		handlers [handlerNum]*EventHandlerImpl[int]
-		counters [handlerNum]atomic.Int64
+		handles  [handleNum]*EventHandleImpl[int64]
+		counters [handleNum]atomic.Int64
 		wg       sync.WaitGroup
 	)
 
@@ -54,19 +55,13 @@ func TestPoolBasics(t *testing.T) {
 		require.Error(t, pool.Run(ctx))
 	}()
 
-	for i := range handlers {
+	for i := range handles {
 		i := i
-		handlers[i] = NewEventHandlerImpl(func(n int) error {
-			if n != 0 {
-				if counters[i].Swap(int64(n)) != int64(n-1) {
-					panic("unreachable")
-				}
-			} else {
-				counters[i].Store(int64(n))
-			}
+		handles[i] = NewEventHandlerImpl(func(n int64) error {
+			require.Equal(t, n, counters[i].Add(1)-1)
 			return nil
-		}, 128, 64)
-		pool.RegisterHandler(handlers[i])
+		}, 128, 128)
+		pool.RegisterHandler(handles[i])
 	}
 
 	for i := 0; i < producerNum; i++ {
@@ -76,8 +71,8 @@ func TestPoolBasics(t *testing.T) {
 			defer wg.Done()
 
 			for j := 0; j < eventPerHandler; j++ {
-				for k := handlerPerProducer * i; k < handlerPerProducer*(i+1); k++ {
-					if err := handlers[k].AddEvent(ctx, j); err != nil {
+				for k := handlePerProducer * i; k < handlePerProducer*(i+1); k++ {
+					if err := handles[k].AddEvent(ctx, int64(j)); err != nil {
 						log.Panic("unexpected error", zap.Error(err))
 					}
 				}
@@ -86,18 +81,217 @@ func TestPoolBasics(t *testing.T) {
 	}
 
 	require.Eventually(t, func() bool {
-		for _, counter := range counters {
-			if counter.Load() < eventPerHandler-1 {
+		for i := range counters {
+			if counters[i].Load() < eventPerHandler {
 				return false
 			}
 		}
 		return true
 	}, 100*time.Second, 100*time.Millisecond)
 
-	for _, handler := range handlers {
-		handler.Unregister()
+	for _, handle := range handles {
+		handle.Unregister()
 	}
 
 	cancel()
 	wg.Wait()
+}
+
+func TestPoolUnregister(t *testing.T) {
+	t.Parallel()
+
+	const (
+		handleNum = 1024
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var poolWg sync.WaitGroup
+	pool := NewPoolImpl(1)
+	poolWg.Add(1)
+	go func() {
+		defer poolWg.Done()
+		require.Error(t, pool.Run(ctx))
+	}()
+
+	var (
+		handles           [handleNum]*EventHandleImpl[int64]
+		unregisteredFlags [handleNum]atomic.Bool
+		lastValue         [handleNum]atomic.Int64
+		wg                sync.WaitGroup
+	)
+
+	for i := 0; i < handleNum; i++ {
+		i := i
+		fn := func(n int64) error {
+			require.Equal(t, n+1, lastValue[i].Add(1))
+			require.False(t, unregisteredFlags[i].Load())
+			return nil
+		}
+		handles[i] = NewEventHandlerImpl[int64](fn, 1024, 128)
+		pool.RegisterHandler(handles[i])
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			j := int64(0)
+			for {
+				if err := handles[i].AddEvent(ctx, j); err != nil {
+					require.ErrorIs(t, err, ErrEventHandleCanceled)
+					break
+				}
+				j++
+			}
+		}()
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			handles[i].Unregister()
+			unregisteredFlags[i].Store(true)
+		}()
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			handles[i].Unregister()
+			unregisteredFlags[i].Store(true)
+		}()
+	}
+
+	wg.Wait()
+	cancel()
+	poolWg.Wait()
+}
+
+func TestWorkerPoolError(t *testing.T) {
+	t.Parallel()
+
+	const handleNum = 32
+	var (
+		handles [handleNum]*EventHandleImpl[string]
+		wg      sync.WaitGroup
+		poolWg  sync.WaitGroup
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pool := NewPoolImpl(1)
+	poolWg.Add(1)
+	go func() {
+		defer poolWg.Done()
+		require.Error(t, pool.Run(ctx))
+	}()
+
+	for i := 0; i < handleNum; i++ {
+		i := i
+		fn := func(input string) error {
+			switch input {
+			case "start":
+				return nil
+			case "error":
+				return errors.New("fake")
+			case "poison":
+				require.FailNow(t, "should not be called")
+			default:
+			}
+			panic("unreachable")
+		}
+		handles[i] = NewEventHandlerImpl[string](fn, 1024, 64)
+		pool.RegisterHandler(handles[i])
+
+		done := make(chan struct{})
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			require.NoError(t, handles[i].AddEvent(ctx, "start"))
+			require.NoError(t, handles[i].AddEvent(ctx, "error"))
+			_ = handles[i].AddEvent(ctx, "poison")
+
+			<-done
+			require.ErrorIs(t, ErrEventHandleCanceled, handles[i].AddEvent(ctx, "poison"))
+			handles[i].Unregister() // should be no-op
+		}()
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer close(done)
+			require.ErrorContains(t, <-handles[i].ErrCh(), "fake")
+		}()
+	}
+
+	wg.Wait()
+	cancel()
+}
+
+func TestPoolGracefulUnregister(t *testing.T) {
+	t.Parallel()
+
+	const (
+		handleNum = 1024
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var poolWg sync.WaitGroup
+	pool := NewPoolImpl(1)
+	poolWg.Add(1)
+	go func() {
+		defer poolWg.Done()
+		require.Error(t, pool.Run(ctx))
+	}()
+
+	var (
+		handles            [handleNum]*EventHandleImpl[int64]
+		unregisteredFlags  [handleNum]atomic.Bool
+		lastAddedValue     [handleNum]atomic.Int64
+		lastProcessedValue [handleNum]atomic.Int64
+		wg                 sync.WaitGroup
+	)
+
+	for i := 0; i < handleNum; i++ {
+		i := i
+		fn := func(n int64) error {
+			lastProcessedValue[i].Swap(n)
+			require.False(t, unregisteredFlags[i].Load())
+			return nil
+		}
+		handles[i] = NewEventHandlerImpl[int64](fn, 1024, 128)
+		pool.RegisterHandler(handles[i])
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			j := int64(0)
+			for {
+				if err := handles[i].AddEvent(ctx, j); err != nil {
+					require.ErrorIs(t, err, ErrEventHandleCanceled)
+					break
+				}
+				lastAddedValue[i].Store(j)
+				j++
+			}
+		}()
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			time.Sleep(500 * time.Millisecond)
+			require.NoError(t, handles[i].GracefulUnregister(ctx))
+			unregisteredFlags[i].Store(true)
+			require.Equal(t, lastAddedValue[i].Load(), lastProcessedValue[i].Load())
+		}()
+	}
+
+	wg.Wait()
+	cancel()
+	poolWg.Wait()
 }

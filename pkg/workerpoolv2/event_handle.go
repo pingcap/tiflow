@@ -15,8 +15,8 @@ package workerpoolv2
 
 import (
 	"context"
+
 	"github.com/pingcap/tiflow/pkg/workerpoolv2/internal"
-	"time"
 )
 
 // EventHandle is a handle for a registered callback in the workerpool.
@@ -41,11 +41,20 @@ type EventHandle[T any] interface {
 
 	// GracefulUnregister removes the EventHandle after
 	// all pending events have been processed.
-	GracefulUnregister(ctx context.Context, timeout time.Duration) error
+	GracefulUnregister(ctx context.Context) error
 
 	// ErrCh returns a channel that outputs the first non-nil error of events submitted to this EventHandle.
 	// Note that a non-nil result of an event cancels the EventHandle, so there is at most one error.
 	ErrCh() <-chan error
 
 	internal.Poller
+}
+
+const (
+	defaultEventHandleQueueLen  = 256
+	defaultEventHandleBatchSize = 256
+)
+
+func NewEventHandle[T any](fn func(T) error) EventHandle[T] {
+	return internal.NewEventHandlerImpl(fn, defaultEventHandleQueueLen, defaultEventHandleBatchSize)
 }
