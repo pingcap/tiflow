@@ -49,6 +49,7 @@ const (
 )
 
 // SampleConfig is sample config of dm-master.
+//
 //go:embed dm-master.toml
 var SampleConfig string
 

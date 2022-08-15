@@ -70,29 +70,30 @@ func (s *OptShardingGroup) Remove(sourceTableIDs []string) {
 
 // OptShardingGroupKeeper used to keep OptShardingGroup.
 // It's used to keep sharding group meta data to make sure optimistic sharding resync redirection works correctly.
-//                                                    newer
-//   │                       ───────────────────────► time
-//   │
-//   │ tb1 conflict DDL1     │  ▲      │
-//   │                       │  │      │
-//   │       ...             │  │      │
-//   │                       │  │      │
-//   │ tb1 conflict DDL2     │  │      │  ▲     │
-//   │                       │  │      │  │     │
-//   │       ...             │  │      │  │     │
-//   │                       │  │      │  │     │
-//   │ tb2 conflict DDL1     ▼  │      │  │     │
-//   │                                 │  │     │
-//   │       ...           redirect    │  │     │
-//   │                                 │  │     │
-//   │ tb2 conflict DDL2               ▼  │     │
-//   │                                          │
-//   │       ...                     redirect   │
-//   │                                          │
-//   │  other dml events                        ▼
-//   │
-//   │                                       continue
-//   ▼                                      replicating
+//
+//	                                                 newer
+//	│                       ───────────────────────► time
+//	│
+//	│ tb1 conflict DDL1     │  ▲      │
+//	│                       │  │      │
+//	│       ...             │  │      │
+//	│                       │  │      │
+//	│ tb1 conflict DDL2     │  │      │  ▲     │
+//	│                       │  │      │  │     │
+//	│       ...             │  │      │  │     │
+//	│                       │  │      │  │     │
+//	│ tb2 conflict DDL1     ▼  │      │  │     │
+//	│                                 │  │     │
+//	│       ...           redirect    │  │     │
+//	│                                 │  │     │
+//	│ tb2 conflict DDL2               ▼  │     │
+//	│                                          │
+//	│       ...                     redirect   │
+//	│                                          │
+//	│  other dml events                        ▼
+//	│
+//	│                                       continue
+//	▼                                      replicating
 //
 // newer
 // binlog

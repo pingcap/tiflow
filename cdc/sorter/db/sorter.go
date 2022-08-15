@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package leveldb
+package db
 
 import (
 	"context"
@@ -24,8 +24,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sorter"
+	"github.com/pingcap/tiflow/cdc/sorter/db/message"
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
-	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
 	"github.com/pingcap/tiflow/pkg/actor"
 	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -41,10 +41,10 @@ const (
 	batchReceiveEventSize = 32
 )
 
-var levelDBSorterIDAlloc uint32 = 0
+var dbSorterIDAlloc uint32 = 0
 
 func allocID() uint32 {
-	return atomic.AddUint32(&levelDBSorterIDAlloc, 1)
+	return atomic.AddUint32(&dbSorterIDAlloc, 1)
 }
 
 type common struct {
@@ -286,7 +286,7 @@ func (ls *Sorter) EmitStartTs(ctx context.Context, ts uint64) {
 		StartTs: ts,
 	})
 	_ = ls.readerRouter.SendB(ctx, ls.ReaderActorID, msg)
-	log.Info("leveldb sorter: send start ts to reader",
+	log.Info("db sorter: send start ts to reader",
 		zap.Uint64("tableID", ls.common.tableID),
 		zap.Uint64("ts", ts))
 }

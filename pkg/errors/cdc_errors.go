@@ -823,10 +823,10 @@ var (
 		errors.RFCCodeText("CDC:ErrMailboxFull"),
 	)
 
-	// leveldb sorter errors
-	ErrStartAStoppedLevelDBSystem = errors.Normalize(
-		"start a stopped leveldb system",
-		errors.RFCCodeText("CDC:ErrStartAStoppedLevelDBSystem"),
+	// db sorter errors
+	ErrStartAStoppedDBSystem = errors.Normalize(
+		"start a stopped db system",
+		errors.RFCCodeText("CDC:ErrStartAStoppedDBSystem"),
 	)
 	ErrUnexpectedSnapshot = errors.Normalize(
 		"unexpected snapshot, table %d",
@@ -898,9 +898,9 @@ var (
 		"error encountered when locking sort-dir",
 		errors.RFCCodeText("ErrSortDirLockError"),
 	)
-	ErrLevelDBSorterError = errors.Normalize(
-		"leveldb error: %s",
-		errors.RFCCodeText("CDC:ErrLevelDBSorterError"),
+	ErrDBSorterError = errors.Normalize(
+		"db error: %s",
+		errors.RFCCodeText("CDC:ErrDBSorterError"),
 	)
 	ErrSorterClosed = errors.Normalize(
 		"sorter is closed",

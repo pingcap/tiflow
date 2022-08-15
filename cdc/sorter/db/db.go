@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package leveldb
+package db
 
 import (
 	"container/list"
@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
+	"github.com/pingcap/tiflow/cdc/sorter/db/message"
 	"github.com/pingcap/tiflow/pkg/actor"
 	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -73,8 +73,8 @@ func (q *iterQueue) pop() (*message.IterRequest, bool) {
 	return req.req, true
 }
 
-// DBActor is a db actor, it reads, writes and deletes key value pair in its db.
-type DBActor struct {
+// Actor is a db actor, it reads, writes and deletes key value pair in its db.
+type Actor struct {
 	id      actor.ID
 	db      db.DB
 	wb      db.Batch
@@ -93,13 +93,13 @@ type DBActor struct {
 	metricWriteBytes    prometheus.Observer
 }
 
-var _ actor.Actor[message.Task] = (*DBActor)(nil)
+var _ actor.Actor[message.Task] = (*Actor)(nil)
 
 // NewDBActor returns a db actor.
 func NewDBActor(
 	id int, db db.DB, cfg *config.DBConfig, compact *CompactScheduler,
 	wg *sync.WaitGroup,
-) (*DBActor, actor.Mailbox[message.Task], error) {
+) (*Actor, actor.Mailbox[message.Task], error) {
 	idTag := strconv.Itoa(id)
 	// Write batch size should be larger than block size to save CPU.
 	const writeBatchSizeFactor = 16
@@ -114,7 +114,7 @@ func NewDBActor(
 	mb := actor.NewMailbox[message.Task](actor.ID(id), cfg.Concurrency)
 	wg.Add(1)
 
-	return &DBActor{
+	return &Actor{
 		id:      actor.ID(id),
 		db:      db,
 		wb:      wb,
@@ -134,7 +134,7 @@ func NewDBActor(
 	}, mb, nil
 }
 
-func (ldb *DBActor) tryScheduleCompact() {
+func (ldb *Actor) tryScheduleCompact() {
 	// Schedule a compact task when there are too many deletion.
 	if ldb.compact.tryScheduleCompact(ldb.id, ldb.deleteCount) {
 		// Reset delete key count if schedule compaction successfully.
@@ -142,13 +142,13 @@ func (ldb *DBActor) tryScheduleCompact() {
 	}
 }
 
-func (ldb *DBActor) maybeWrite(force bool) error {
+func (ldb *Actor) maybeWrite(force bool) error {
 	bytes := len(ldb.wb.Repr())
 	if bytes >= ldb.wbSize || (force && bytes != 0) {
 		startTime := time.Now()
 		err := ldb.wb.Commit()
 		if err != nil {
-			return cerrors.ErrLevelDBSorterError.GenWithStackByArgs(err)
+			return cerrors.ErrDBSorterError.GenWithStackByArgs(err)
 		}
 		ldb.metricWriteDuration.Observe(time.Since(startTime).Seconds())
 		ldb.metricWriteBytes.Observe(float64(bytes))
@@ -164,7 +164,7 @@ func (ldb *DBActor) maybeWrite(force bool) error {
 }
 
 // Batch acquire iterators for requests in the queue.
-func (ldb *DBActor) acquireIterators() {
+func (ldb *Actor) acquireIterators() {
 	for {
 		succeed := ldb.iterSem.TryAcquire(1)
 		if !succeed {
@@ -188,7 +188,7 @@ func (ldb *DBActor) acquireIterators() {
 
 // Poll implements actor.Actor.
 // It handles tasks by writing kv, deleting kv and taking iterators.
-func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message[message.Task]) bool {
+func (ldb *Actor) Poll(ctx context.Context, tasks []actormsg.Message[message.Task]) bool {
 	select {
 	case <-ctx.Done():
 		return false
@@ -256,8 +256,8 @@ func (ldb *DBActor) Poll(ctx context.Context, tasks []actormsg.Message[message.T
 	return true
 }
 
-// OnClose releases DBActor resource.
-func (ldb *DBActor) OnClose() {
+// OnClose releases Actor resource.
+func (ldb *Actor) OnClose() {
 	if ldb.stopped {
 		return
 	}
