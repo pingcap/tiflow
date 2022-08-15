@@ -148,7 +148,6 @@ func TestShouldDiscardDDL(t *testing.T) {
 	filter, err := NewFilter(cfg, "")
 	require.Nil(t, err)
 
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionAddForeignKey, "", ""))
 	require.False(t, filter.ShouldDiscardDDL(timodel.ActionDropSchema, "", ""))
 	require.False(t, filter.ShouldDiscardDDL(timodel.ActionCreateTable, "", ""))
 	require.False(t, filter.ShouldDiscardDDL(timodel.ActionDropTable, "", ""))
@@ -180,6 +179,7 @@ func TestShouldDiscardDDL(t *testing.T) {
 	require.False(t, filter.ShouldDiscardDDL(timodel.ActionMultiSchemaChange, "", ""))
 
 	// Discard sequence DDL.
+	require.True(t, filter.ShouldDiscardDDL(timodel.ActionAddForeignKey, "", ""))
 	require.True(t, filter.ShouldDiscardDDL(timodel.ActionCreateSequence, "", ""))
 	require.True(t, filter.ShouldDiscardDDL(timodel.ActionAlterSequence, "", ""))
 	require.True(t, filter.ShouldDiscardDDL(timodel.ActionDropSequence, "", ""))
