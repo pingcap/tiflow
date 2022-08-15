@@ -142,10 +142,11 @@ func TestShouldIgnoreDMLEvent(t *testing.T) {
 func TestShouldDiscardDDL(t *testing.T) {
 	t.Parallel()
 
-	cfg := &config.ReplicaConfig{}
+	cfg := &config.ReplicaConfig{
+		Filter: &config.FilterConfig{},
+	}
 	filter, err := NewFilter(cfg, "")
 	require.Nil(t, err)
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionAddForeignKey))
 
 	require.False(t, filter.ShouldDiscardDDL(timodel.ActionDropSchema))
 	require.False(t, filter.ShouldDiscardDDL(timodel.ActionCreateTable))
@@ -181,6 +182,7 @@ func TestShouldDiscardDDL(t *testing.T) {
 	require.True(t, filter.ShouldDiscardDDL(timodel.ActionCreateSequence))
 	require.True(t, filter.ShouldDiscardDDL(timodel.ActionAlterSequence))
 	require.True(t, filter.ShouldDiscardDDL(timodel.ActionDropSequence))
+	require.True(t, filter.ShouldDiscardDDL(timodel.ActionAddForeignKey))
 }
 
 func TestShouldIgnoreDDL(t *testing.T) {
