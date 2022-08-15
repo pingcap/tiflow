@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	parserModel "github.com/pingcap/tidb/parser/model"
 	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -129,9 +128,6 @@ func TestMigration(t *testing.T) {
 			IgnoreDBs: []string{"aa", "b2"},
 		},
 		IgnoreTxnStartTs: []uint64{1, 2, 3},
-		DDLAllowlist: []parserModel.ActionType{
-			parserModel.ActionType(2),
-		},
 	}
 	info3 := model.ChangeFeedInfo{
 		SinkURI: "test1",
