@@ -145,7 +145,7 @@ func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClientImpl, error) {
 				" and the pd address(es) \"%s\"")
 	}
 
-	return &client, err
+	return client, err
 }
 
 // PdClient creates new pd client.
