@@ -62,6 +62,10 @@ func (bs *blackHoleWriter) FlushLog(_ context.Context, checkpointTs, resolvedTs 
 	return nil
 }
 
+func (bs *blackHoleWriter) GetMeta() (checkpointTs, resolvedTs model.Ts) {
+	return 0, 0
+}
+
 func (bs *blackHoleWriter) SendDDL(_ context.Context, ddl *model.RedoDDLEvent) error {
 	log.Debug("send ddl event", zap.Any("ddl", ddl))
 	return nil
