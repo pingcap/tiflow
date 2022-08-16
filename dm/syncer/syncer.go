@@ -28,6 +28,7 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
+	mysql2 "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
@@ -1388,8 +1389,18 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 		if !ignore {
 			var affected int
 			affected, err = db.ExecuteSQLWithIgnore(s.syncCtx, s.metricsProxies, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)
+			failpoint.Inject("TestHandleSpecialDDLError", func() {
+				err = mysql2.ErrInvalidConn
+			})
 			if err != nil {
-				err = s.handleSpecialDDLError(s.syncCtx, err, ddlJob.ddls, affected, db)
+				var ddlCreateTime int64
+				row, err2 := db.QuerySQL(s.syncCtx, s.metricsProxies, "SELECT @@TIMESTAMP")
+				err2 = row.Scan(&ddlCreateTime)
+				if err2 != nil {
+					err = s.handleSpecialDDLError(s.syncCtx, err, ddlJob.ddls, affected, db, -1)
+				} else {
+					err = s.handleSpecialDDLError(s.syncCtx, err, ddlJob.ddls, affected, db, ddlCreateTime)
+				}
 				err = terror.WithScope(err, terror.ScopeDownstream)
 			}
 		}

@@ -211,10 +211,16 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 	}
 	// TODO: add support for downstream alter pk without schema
 
+	// it handles the operations of DDL when encountering `invalid connection`
 	invalidConnF2 := func(tctx *tcontext.Context, err error, ddls []string, index int, conn *dbconn.DBConn, createTime int64) error {
 		statusChan := make(chan string)
 		var status string
 		var err2 error
+
+		if createTime == -1 {
+			return err
+		}
+
 		for {
 			status, err2 = getDDLStatusFromTiDB(tctx, conn, ddls[index], createTime)
 			if err != nil {
