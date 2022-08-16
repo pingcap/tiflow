@@ -14,7 +14,7 @@ services:
     image: mysql:5.7
     container_name: mysql_standalone
     environment:
-      MYSQL_ALLOW_EMPTY_PASSWORD: true
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
     volumes:
       - './config/mysql_meta.cnf:/etc/my.cnf'
     ports:
