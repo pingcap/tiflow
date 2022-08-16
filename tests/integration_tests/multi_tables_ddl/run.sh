@@ -26,8 +26,8 @@ function run() {
 	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/" ;;
 	esac
 
-	cf_normal = "test-normal"
-	cf_err = "test-error"
+	cf_normal="test-normal"
+	cf_err="test-error"
 	cdc cli changefeed create -c=$cf_normal --start-ts=$start_ts --sink-uri="$SINK_URI" --config="../conf/normal.toml"
 	cdc cli changefeed create -c=$cf_err --start-ts=$start_ts --sink-uri="$SINK_URI" --config="../conf/error.toml"
 

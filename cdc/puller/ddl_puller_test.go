@@ -208,7 +208,7 @@ func TestHandleRenameTable(t *testing.T) {
 		skip, err := ddlJobPullerImpl.handleRenameTables(job)
 		require.Error(t, err)
 		require.True(t, skip)
-		require.Contains(t, err.Error(), fmt.Sprintf("failed to find table(s) '%v' in cdc schema snapshot, ddl query: [%s],"+
+		require.Contains(t, err.Error(), fmt.Sprintf("failed to find table id(s): '%v' in cdc schema snapshot, ddl query: [%s], "+
 			"if you want to replicate these table(s), please add them to filter rule.", missingTables, job.Query))
 	}
 
