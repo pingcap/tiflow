@@ -113,9 +113,9 @@ func (wm *WorkerManager) TickImpl(ctx context.Context) error {
 	wm.removeOfflineWorkers()
 
 	state, err := wm.jobStore.Get(ctx)
-	if err != nil {
-		wm.logger.Error("get job state failed", zap.Error(err))
-		if err2 := wm.onJobNotExist(ctx); err2 != nil {
+	if err != nil || state.(*metadata.Job).Deleting {
+		wm.logger.Info("on job deleting", zap.Error(err))
+		if err2 := wm.onJobDel(ctx); err2 != nil {
 			return err2
 		}
 		return err
@@ -151,7 +151,7 @@ func (wm *WorkerManager) removeOfflineWorkers() {
 }
 
 // stop all workers, usually happened when delete jobs.
-func (wm *WorkerManager) onJobNotExist(ctx context.Context) error {
+func (wm *WorkerManager) onJobDel(ctx context.Context) error {
 	var recordError error
 	wm.workerStatusMap.Range(func(key, value interface{}) bool {
 		workerStatus := value.(runtime.WorkerStatus)

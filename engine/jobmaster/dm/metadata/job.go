@@ -47,6 +47,9 @@ type Job struct {
 
 	// taskID -> task
 	Tasks map[string]*Task
+
+	// Deleting represents whether the job is being deleted.
+	Deleting bool
 }
 
 // NewJob creates a new Job instance
@@ -154,4 +157,15 @@ func (jobStore *JobStore) UpdateConfig(ctx context.Context, jobCfg *config.JobCf
 	}
 
 	return jobStore.Put(ctx, newJob)
+}
+
+// MarkDeleting marks the job as deleting.
+func (jobStore *JobStore) MarkDeleting(ctx context.Context) error {
+	state, err := jobStore.Get(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	job := state.(*Job)
+	job.Deleting = true
+	return jobStore.Put(ctx, job)
 }

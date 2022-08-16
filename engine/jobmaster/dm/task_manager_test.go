@@ -127,6 +127,8 @@ func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 	require.False(t.T(), taskManager.allFinished(context.Background()))
 	taskManager.UpdateTaskStatus(loadStatus2)
 	require.True(t.T(), taskManager.allFinished(context.Background()))
+	taskManager.tasks.Delete(loadStatus2.Task)
+	require.False(t.T(), taskManager.allFinished(context.Background()))
 }
 
 func (t *testDMJobmasterSuite) TestOperateTask() {
@@ -169,6 +171,13 @@ func (t *testDMJobmasterSuite) TestOperateTask() {
 	job = state.(*metadata.Job)
 	require.Equal(t.T(), job.Tasks[source1].Stage, metadata.StageRunning)
 	require.Equal(t.T(), job.Tasks[source2].Stage, metadata.StagePaused)
+	require.False(t.T(), job.Deleting)
+
+	require.NoError(t.T(), taskManager.OperateTask(context.Background(), dmpkg.Deleting, nil, nil))
+	state, err = jobStore.Get(context.Background())
+	require.NoError(t.T(), err)
+	job = state.(*metadata.Job)
+	require.True(t.T(), job.Deleting)
 
 	require.NoError(t.T(), taskManager.OperateTask(context.Background(), dmpkg.Delete, nil, []string{source1, source2}))
 	state, err = jobStore.Get(context.Background())
@@ -212,10 +221,10 @@ func (t *testDMJobmasterSuite) TestClearTaskStatus() {
 	require.True(t.T(), ok)
 	require.Equal(t.T(), syncStatus1, taskStatus)
 
-	taskManager.onJobNotExist(context.Background())
+	taskManager.onJobDel(context.Background())
 	require.Len(t.T(), taskManager.TaskStatus(), 0)
 
-	taskManager.onJobNotExist(context.Background())
+	taskManager.onJobDel(context.Background())
 	require.Len(t.T(), taskManager.TaskStatus(), 0)
 }
 

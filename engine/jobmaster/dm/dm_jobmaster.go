@@ -46,8 +46,9 @@ import (
 type JobMaster struct {
 	framework.BaseJobMaster
 
-	mu  sync.RWMutex
-	cfg *config.JobCfg
+	// only use when init
+	// it will be outdated if user update job cfg.
+	initJobCfg *config.JobCfg
 	// taskID -> FinishedTaskStatus
 	// worker exists after finished, so we need record the finished status for QueryJobStatus
 	// finishedStatus will be reset when jobmaster failover and update-job-cfg request comes.
@@ -81,7 +82,7 @@ func (j dmJobMasterFactory) DeserializeConfig(configBytes []byte) (registry.Work
 func (j dmJobMasterFactory) NewWorkerImpl(dCtx *dcontext.Context, workerID frameModel.WorkerID, masterID frameModel.MasterID, conf framework.WorkerConfig) (framework.WorkerImpl, error) {
 	log.L().Info("new dm jobmaster", zap.String(logutil.ConstFieldJobKey, workerID))
 	jm := &JobMaster{
-		cfg: conf.(*config.JobCfg),
+		initJobCfg: conf.(*config.JobCfg),
 	}
 	// nolint:errcheck
 	dCtx.Deps().Construct(func(m p2p.MessageHandlerManager) (p2p.MessageHandlerManager, error) {
@@ -112,16 +113,13 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 	if err := jm.initComponents(ctx); err != nil {
 		return err
 	}
-	jm.mu.RLock()
-	cfg := jm.cfg
-	jm.mu.RUnlock()
-	if err := jm.preCheck(ctx, cfg); err != nil {
+	if err := jm.preCheck(ctx, jm.initJobCfg); err != nil {
 		return jm.Exit(ctx, frameModel.WorkerStatus{Code: frameModel.WorkerStatusError}, err)
 	}
-	if err := jm.checkpointAgent.Create(ctx, cfg); err != nil {
+	if err := jm.checkpointAgent.Create(ctx, jm.initJobCfg); err != nil {
 		return err
 	}
-	return jm.taskManager.OperateTask(ctx, dmpkg.Create, cfg, nil)
+	return jm.taskManager.OperateTask(ctx, dmpkg.Create, jm.initJobCfg, nil)
 }
 
 // Tick implements JobMasterImpl.Tick
@@ -139,14 +137,9 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 
 // OnMasterRecovered implements JobMasterImpl.OnMasterRecovered
 // When it is called, the jobCfg may not be in the metadata, and we should not report an error
-// e.g. when the jobmaster is restarted in OnCancel/StopImpl, the jobCfg will be deleted in the metadata
 func (jm *JobMaster) OnMasterRecovered(ctx context.Context) error {
 	jm.Logger().Info("recovering the dm jobmaster")
-	if err := jm.initComponents(ctx); err != nil {
-		return err
-	}
-	jm.recoverConfig(ctx)
-	return nil
+	return jm.initComponents(ctx)
 }
 
 // OnWorkerDispatched implements JobMasterImpl.OnWorkerDispatched
@@ -272,19 +265,13 @@ func (jm *JobMaster) StopImpl(ctx context.Context) error {
 		jm.Logger().Error("failed to close dm jobmaster", zap.Error(err))
 		return err
 	}
-	jm.mu.Lock()
-	cfg := jm.cfg
-	jm.mu.Unlock()
+
 	// remove other resources
-	// cfg maybe nil, if jobmaster recover when in OnCancel/StopImpl
-	// only remove checkpoints when config not nil.
-	if cfg != nil {
-		if err := jm.checkpointAgent.Remove(ctx, cfg); err != nil {
-			jm.Logger().Error("failed to remove checkpoint", zap.Error(err))
-			return err
-		}
+	if err := jm.removeCheckpoint(ctx); err != nil {
+		// log and ignore the error.
+		jm.Logger().Error("failed to remove checkpoint", zap.Error(err))
 	}
-	return nil
+	return jm.taskManager.OperateTask(ctx, dmpkg.Delete, nil, nil)
 }
 
 // Workload implements JobMasterImpl.Workload
@@ -369,7 +356,7 @@ func (jm *JobMaster) cancel(ctx context.Context, code frameModel.WorkerStatusCod
 		jm.Logger().Error("failed to get status", zap.Error(err))
 	}
 
-	if err := jm.taskManager.OperateTask(ctx, dmpkg.Delete, nil, nil); err != nil {
+	if err := jm.taskManager.OperateTask(ctx, dmpkg.Deleting, nil, nil); err != nil {
 		return jm.Exit(ctx, status, err)
 	}
 	// wait all worker exit
@@ -387,19 +374,15 @@ func (jm *JobMaster) cancel(ctx context.Context, code frameModel.WorkerStatusCod
 	}
 }
 
-func (jm *JobMaster) recoverConfig(ctx context.Context) {
+func (jm *JobMaster) removeCheckpoint(ctx context.Context) error {
 	state, err := jm.metadata.JobStore().Get(ctx)
 	if err != nil {
-		jm.Logger().Warn("failed to recover job config", zap.Error(err))
+		return err
 	}
-
 	job := state.(*metadata.Job)
-	taskCfgs := make([]*config.TaskCfg, 0, len(job.Tasks))
 	for _, task := range job.Tasks {
-		taskCfgs = append(taskCfgs, task.Cfg)
+		cfg := (*config.JobCfg)(task.Cfg)
+		return jm.checkpointAgent.Remove(ctx, cfg)
 	}
-	jobCfg := config.FromTaskCfgs(taskCfgs)
-	jm.mu.Lock()
-	jm.cfg = jobCfg
-	jm.mu.Unlock()
+	return errors.New("no task found in job")
 }

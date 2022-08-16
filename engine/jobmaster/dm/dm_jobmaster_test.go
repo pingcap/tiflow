@@ -199,7 +199,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	jm := &JobMaster{
-		cfg:           jobCfg,
+		initJobCfg:    jobCfg,
 		BaseJobMaster: mockBaseJobmaster,
 	}
 
@@ -233,7 +233,6 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	}
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]framework.WorkerHandle{}).Once()
 	jm.OnMasterRecovered(context.Background())
-	require.Equal(t.T(), jobCfg.Name, jm.cfg.Name)
 
 	// tick
 	worker1 := "worker1"

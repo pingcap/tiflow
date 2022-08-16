@@ -179,6 +179,7 @@ func testSimpleAllModeTask(
 
 	// load finished and job exits
 	// TODO: check load status after framework supports it
+	// TODO: check checkpoint deleted after frameworker support StopImpl
 	require.Eventually(t, func() bool {
 		result, err := e2e.QueryJobViaOpenAPI(ctx, masterAddr, tenantID, projectID, jobID)
 		return err == nil && result.Status == int32(enginepb.QueryJobResponse_finished)

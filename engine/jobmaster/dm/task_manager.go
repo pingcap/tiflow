@@ -79,6 +79,10 @@ func (tm *TaskManager) OperateTask(ctx context.Context, op dmpkg.OperateType, jo
 		return tm.jobStore.Put(ctx, metadata.NewJob(jobCfg))
 	case dmpkg.Update:
 		return tm.jobStore.UpdateConfig(ctx, jobCfg)
+	// Deleting marks the job as deleting.
+	case dmpkg.Deleting:
+		return tm.jobStore.MarkDeleting(ctx)
+	// Delete deletes the job in metadata.
 	case dmpkg.Delete:
 		return tm.jobStore.Delete(ctx)
 	case dmpkg.Resume:
@@ -113,9 +117,9 @@ func (tm *TaskManager) TaskStatus() map[string]runtime.TaskStatus {
 func (tm *TaskManager) TickImpl(ctx context.Context) error {
 	tm.logger.Info("start to check and operate tasks")
 	state, err := tm.jobStore.Get(ctx)
-	if err != nil {
-		tm.logger.Error("get job state failed", zap.Error(err))
-		tm.onJobNotExist(ctx)
+	if err != nil || state.(*metadata.Job).Deleting {
+		tm.logger.Info("on job deleting", zap.Error(err))
+		tm.onJobDel(ctx)
 		return err
 	}
 	job := state.(*metadata.Job)
@@ -163,7 +167,7 @@ func (tm *TaskManager) checkAndOperateTasks(ctx context.Context, job *metadata.J
 }
 
 // remove all tasks, usually happened when delete jobs.
-func (tm *TaskManager) onJobNotExist(ctx context.Context) {
+func (tm *TaskManager) onJobDel(ctx context.Context) {
 	tm.logger.Info("clear all task status")
 	tm.tasks.Range(func(key, value interface{}) bool {
 		tm.tasks.Delete(key)
