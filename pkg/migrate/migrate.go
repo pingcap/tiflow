@@ -374,15 +374,21 @@ func (m *migrator) migrateGcServiceSafePoint(ctx context.Context,
 	newGcServiceID string,
 	ttl int64,
 ) error {
-	gcServiceSafePoins, err := pdutil.ListGcServiceSafePoint(ctx, pdClient,
-		config)
+	pc, err := pdutil.NewPDAPIClient(pdClient, config)
+	if err != nil {
+		log.Error("create pd api client failed", zap.Error(err))
+		return errors.Trace(err)
+	}
+	defer pc.Close()
+
+	gcServiceSafePoints, err := pc.ListGcServiceSafePoint(ctx)
 	if err != nil {
 		log.Error("list gc service safepoint failed",
 			zap.Error(err))
 		return errors.Trace(err)
 	}
 	var cdcGcSafePoint *pdutil.ServiceSafePoint
-	for _, item := range gcServiceSafePoins.ServiceGCSafepoints {
+	for _, item := range gcServiceSafePoints.ServiceGCSafepoints {
 		if item.ServiceID == oldGcServiceID {
 			cdcGcSafePoint = item
 			break

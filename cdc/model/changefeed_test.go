@@ -20,7 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tidb/parser/model"
 	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -73,8 +72,7 @@ func TestFillV1(t *testing.T) {
             "ignore-txn-start-ts":[
                 1,
                 2
-            ],
-            "ddl-allow-list":"AQI="
+            ]
         },
         "mounter":{
             "worker-num":64
@@ -126,7 +124,6 @@ func TestFillV1(t *testing.T) {
 					IgnoreDBs: []string{"test", "sys"},
 				},
 				IgnoreTxnStartTs: []uint64{1, 2},
-				DDLAllowlist:     []model.ActionType{1, 2},
 			},
 			Mounter: &config.MounterConfig{
 				WorkerNum: 64,

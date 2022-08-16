@@ -65,28 +65,6 @@ func TestAddEntry(t *testing.T) {
 		}, task.Value)
 }
 
-func TestTryAddEntry(t *testing.T) {
-	t.Parallel()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	s, mb := newTestSorter(t.Name(), 1)
-
-	event := model.NewResolvedPolymorphicEvent(0, 1)
-	sent, err := s.TryAddEntry(ctx, event)
-	require.True(t, sent)
-	require.Nil(t, err)
-	task, ok := mb.Receive()
-	require.True(t, ok)
-	require.EqualValues(t, event, task.Value.InputEvent)
-
-	sent, err = s.TryAddEntry(ctx, event)
-	require.True(t, sent)
-	require.Nil(t, err)
-	sent, err = s.TryAddEntry(ctx, event)
-	require.False(t, sent)
-	require.Nil(t, err)
-}
-
 func TestOutput(t *testing.T) {
 	t.Parallel()
 
