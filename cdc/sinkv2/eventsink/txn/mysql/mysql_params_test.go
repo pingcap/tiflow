@@ -27,9 +27,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// sinkOptionsDefault creates a default SinkOptions.
-func sinkOptionsDefault() SinkOptions {
-	return SinkOptionsFromReplicaConfig(config.GetDefaultReplicaConfig())
+// sinkOptionsDefault creates a default sinkOptions.
+func sinkOptionsDefault() sinkOptions {
+	return sinkOptionsFromReplicaConfig(config.GetDefaultReplicaConfig())
 }
 
 func TestSinkParamsClone(t *testing.T) {

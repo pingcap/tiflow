@@ -42,21 +42,22 @@ import (
 )
 
 const (
-	backoffBaseDelayInMs = 500       // 500ms
-	backoffMaxDelayInMs  = 60 * 1000 // 60s
+	backoffBaseDelay = 500 * time.Millisecond
+	backoffMaxDelay  = 60 * time.Second
 
 	// Max interval for flushing transactions to the downstream.
-	maxFlushInterval = time.Millisecond * time.Duration(100)
+	maxFlushInterval = 100 * time.Millisecond
 )
 
-var defaultDMLMaxRetry uint64 = 8 // TODO: use it later.
+var defaultDMLMaxRetry uint64 = 8
+
 // defaultDDLMaxRetry uint64 = 20
 
-type mysqlSink struct {
+type mysqlBackend struct {
 	changefeedID model.ChangeFeedID
 	db           *sql.DB
 	params       *sinkParams
-	options      SinkOptions
+	options      sinkOptions
 	statistics   *metrics.Statistics
 
 	events []*eventsink.TxnCallbackableEvent
@@ -65,13 +66,13 @@ type mysqlSink struct {
 	cancel func()
 }
 
-// NewMySQLSink creates a new MySQL sink using schema storage
-func NewMySQLSink(
+// NewMySQLBackend creates a new MySQL sink using schema storage
+func NewMySQLBackend(
 	ctx context.Context,
 	changefeedID model.ChangeFeedID,
 	sinkURI *url.URL,
-	opts ...SinkOptions,
-) (*mysqlSink, error) {
+	opts ...sinkOptions,
+) (*mysqlBackend, error) {
 	params, err := parseSinkURIToParams(ctx, changefeedID, sinkURI)
 	if err != nil {
 		return nil, err
@@ -90,12 +91,12 @@ func NewMySQLSink(
 	db.SetMaxOpenConns(params.workerCount)
 
 	if len(opts) == 0 {
-		opts = make([]SinkOptions, 1)
+		opts = make([]sinkOptions, 1)
 		opts[0] = sinkOptionsDefault()
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
-	sink := &mysqlSink{
+	sink := &mysqlBackend{
 		changefeedID: changefeedID,
 		db:           db,
 		params:       params,
@@ -185,17 +186,19 @@ func adjustDSN(ctx context.Context, sinkURI *url.URL, params *sinkParams) (dsnSt
 }
 
 // OnTxnEvent implements interface backend.
-func (s *mysqlSink) OnTxnEvent(event *eventsink.TxnCallbackableEvent) (needFlush bool) {
+func (s *mysqlBackend) OnTxnEvent(event *eventsink.TxnCallbackableEvent) (needFlush bool) {
 	if event.Event == nil {
+		// It's a special control message to flush pending transactions outside
+		// from workers of EventSink.
 		return true
 	}
 	s.events = append(s.events, event)
 	s.rows += len(event.Event.Rows)
-	return event.Event.FinishWg != nil || s.rows >= s.params.maxTxnRow
+	return event.Event.ToWaitFlush() || s.rows >= s.params.maxTxnRow
 }
 
 // Flush implements interface backend.
-func (s *mysqlSink) Flush(ctx context.Context) (err error) {
+func (s *mysqlBackend) Flush(ctx context.Context) (err error) {
 	failpoint.Inject("SinkFlushDMLPanic", func() {
 		time.Sleep(time.Second)
 		log.Fatal("SinkFlushDMLPanic")
@@ -233,7 +236,7 @@ func (s *mysqlSink) Flush(ctx context.Context) (err error) {
 }
 
 // Close implements interface backend.
-func (s *mysqlSink) Close() (err error) {
+func (s *mysqlBackend) Close() (err error) {
 	if s.db != nil {
 		err = s.db.Close()
 		s.db = nil
@@ -246,7 +249,7 @@ func (s *mysqlSink) Close() (err error) {
 }
 
 // MaxFlushInterval implements interface backend.
-func (s *mysqlSink) MaxFlushInterval() time.Duration {
+func (s *mysqlBackend) MaxFlushInterval() time.Duration {
 	return maxFlushInterval
 }
 
@@ -282,7 +285,7 @@ func checkCharsetSupport(ctx context.Context, db *sql.DB, charsetName string) (b
 }
 
 // prepareDMLs converts model.RowChangedEvent list to query string list and args list
-func (s *mysqlSink) prepareDMLs() *preparedDMLs {
+func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	// TODO: use a sync.Pool to reduce allocations.
 	startTsSet := make(map[uint64]struct{}, s.rows)
 	sqls := make([]string, 0, s.rows)
@@ -443,7 +446,7 @@ func isRetryableDMLError(err error) bool {
 	return true
 }
 
-func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDMLs) error {
+func (s *mysqlBackend) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDMLs) error {
 	if len(dmls.sqls) != len(dmls.values) {
 		log.Panic("unexpected number of sqls and values",
 			zap.Strings("sqls", dmls.sqls),
@@ -503,8 +506,8 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 			zap.String("changefeed", s.changefeedID.ID),
 			zap.Int("numOfRows", dmls.rowCount))
 		return nil
-	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
-		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
+	}, retry.WithBackoffBaseDelay(backoffBaseDelay.Milliseconds()),
+		retry.WithBackoffMaxDelay(backoffMaxDelay.Milliseconds()),
 		retry.WithMaxTries(defaultDMLMaxRetry),
 		retry.WithIsRetryableErr(isRetryableDMLError))
 }

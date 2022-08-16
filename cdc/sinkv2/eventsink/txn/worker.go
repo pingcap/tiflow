@@ -95,7 +95,8 @@ func (w *worker) runBackgroundLoop() {
 	}()
 }
 
-func (w *worker) doFlush() (shouldExit bool) {
+// doFlush flushes the backend. Returns true if the goroutine can exit.
+func (w *worker) doFlush() bool {
 	// TODO: support to cancel the worker when performing some blocking operations.
 	ctx := context.Background()
 	if err := w.backend.Flush(ctx); err != nil {
@@ -104,12 +105,11 @@ func (w *worker) doFlush() (shouldExit bool) {
 		case w.errCh <- err:
 		case <-ctx.Done():
 		}
-		shouldExit = true
-		return
+		return true
 	}
 	if !w.timer.Stop() {
 		<-w.timer.C
 	}
 	w.timer.Reset(w.backend.MaxFlushInterval())
-	return
+	return false
 }
