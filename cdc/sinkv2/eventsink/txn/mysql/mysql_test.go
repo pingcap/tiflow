@@ -189,7 +189,7 @@ func TestAdjustSQLMode(t *testing.T) {
 		return db, nil
 	}
 
-	sinkOpts := sinkOptionsDefault()
+	sinkOpts := SinkOptionsDefault()
 	sinkOpts.getDBConn = mockGetDBConn
 
 	changefeed := "test-changefeed"
@@ -257,8 +257,7 @@ func TestNewMySQLTimeout(t *testing.T) {
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse(fmt.Sprintf("mysql://%s/?read-timeout=1s&timeout=1s", addr))
 	require.Nil(t, err)
-	require.Nil(t, err)
-	_, err = NewMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI)
+	_, err = NewMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, SinkOptionsDefault())
 	require.Equal(t, driver.ErrBadConn, errors.Cause(err))
 }
 
@@ -290,7 +289,7 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 		return db, nil
 	}
 
-	sinkOpts := sinkOptionsDefault()
+	sinkOpts := SinkOptionsDefault()
 	sinkOpts.getDBConn = mockGetDBConn
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -452,7 +451,7 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 		return db, nil
 	}
 
-	sinkOpts := sinkOptionsDefault()
+	sinkOpts := SinkOptionsDefault()
 	sinkOpts.getDBConn = mockGetDBConnErrDatabaseNotExists
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -525,7 +524,7 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 		return db, nil
 	}
 
-	sinkOpts := sinkOptionsDefault()
+	sinkOpts := SinkOptionsDefault()
 	sinkOpts.getDBConn = mockGetDBConnErrDatabaseNotExists
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -600,7 +599,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 		return db, nil
 	}
 
-	sinkOpts := sinkOptionsDefault()
+	sinkOpts := SinkOptionsDefault()
 	sinkOpts.getDBConn = mockGetDBConnErrDatabaseNotExists
 	sinkOpts.dmlMaxRetry = 2
 
@@ -664,7 +663,7 @@ func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 		return db, nil
 	}
 
-	sinkOpts := sinkOptionsDefault()
+	sinkOpts := SinkOptionsDefault()
 	sinkOpts.getDBConn = mockDBInsertDupEntry
 	sinkOpts.dmlMaxRetry = 1
 
@@ -712,7 +711,7 @@ func TestNewMySQLBackend(t *testing.T) {
 		return db, nil
 	}
 
-	sinkOpts := sinkOptionsDefault()
+	sinkOpts := SinkOptionsDefault()
 	sinkOpts.getDBConn = mockGetDBConn
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -749,7 +748,7 @@ func TestNewMySQLBackendWithIPv6Address(t *testing.T) {
 		return db, nil
 	}
 
-	sinkOpts := sinkOptionsDefault()
+	sinkOpts := SinkOptionsDefault()
 	sinkOpts.getDBConn = mockGetDBConn
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -782,7 +781,7 @@ func TestGBKSupported(t *testing.T) {
 		return db, nil
 	}
 
-	sinkOpts := sinkOptionsDefault()
+	sinkOpts := SinkOptionsDefault()
 	sinkOpts.getDBConn = mockGetDBConn
 
 	zapcore, logs := observer.New(zap.WarnLevel)
@@ -847,7 +846,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 		return db, nil
 	}
 
-	sinkOpts := sinkOptionsDefault()
+	sinkOpts := SinkOptionsDefault()
 	sinkOpts.getDBConn = mockGetDBConn
 
 	ctx, cancel := context.WithCancel(context.Background())

@@ -30,8 +30,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/mysql"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
@@ -40,6 +38,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/sink"
+	"go.uber.org/zap"
 )
 
 const (
@@ -58,7 +57,7 @@ type mysqlBackend struct {
 	changefeedID model.ChangeFeedID
 	db           *sql.DB
 	params       *sinkParams
-	options      sinkOptions
+	options      SinkOptions
 	statistics   *metrics.Statistics
 
 	events []*eventsink.TxnCallbackableEvent
@@ -72,24 +71,19 @@ func NewMySQLBackend(
 	ctx context.Context,
 	changefeedID model.ChangeFeedID,
 	sinkURI *url.URL,
-	opts ...sinkOptions,
+	opts SinkOptions,
 ) (*mysqlBackend, error) {
-	if len(opts) == 0 {
-		opts = make([]sinkOptions, 1)
-		opts[0] = sinkOptionsDefault()
-	}
-
 	params, err := parseSinkURIToParams(ctx, changefeedID, sinkURI)
 	if err != nil {
 		return nil, err
 	}
 
-	dsnStr, err := adjustDSN(ctx, sinkURI, params, opts[0])
+	dsnStr, err := adjustDSN(ctx, sinkURI, params, opts)
 	if err != nil {
 		return nil, err
 	}
 
-	db, err := opts[0].getDBConn(ctx, dsnStr)
+	db, err := opts.getDBConn(ctx, dsnStr)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +95,7 @@ func NewMySQLBackend(
 		changefeedID: changefeedID,
 		db:           db,
 		params:       params,
-		options:      opts[0],
+		options:      opts,
 		statistics:   metrics.NewStatistics(ctx, sink.TxnSink),
 		cancel:       cancel,
 	}
@@ -113,7 +107,7 @@ func NewMySQLBackend(
 	return sink, nil
 }
 
-func adjustDSN(ctx context.Context, sinkURI *url.URL, params *sinkParams, opts sinkOptions) (dsnStr string, err error) {
+func adjustDSN(ctx context.Context, sinkURI *url.URL, params *sinkParams, opts SinkOptions) (dsnStr string, err error) {
 	// dsn format of the driver:
 	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
 	username := sinkURI.User.Username()

@@ -384,17 +384,17 @@ func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultVal
 	return "", nil
 }
 
-// sinkOptions includes some options for transaction backends.
-type sinkOptions struct {
+// SinkOptions includes some options for transaction backends.
+type SinkOptions struct {
 	forceReplicate bool
 	enableOldValue bool
 	getDBConn      func(ctx context.Context, dsnStr string) (*sql.DB, error)
 	dmlMaxRetry    uint64
 }
 
-// sinkOptionsFromReplicaConfig creates a sinkOptions from a ReplicaConfig.
-func sinkOptionsFromReplicaConfig(config *config.ReplicaConfig) sinkOptions {
-	return sinkOptions{
+// SinkOptionsFromReplicaConfig creates a SinkOptions from a ReplicaConfig.
+func SinkOptionsFromReplicaConfig(config *config.ReplicaConfig) SinkOptions {
+	return SinkOptions{
 		forceReplicate: config.ForceReplicate,
 		enableOldValue: config.EnableOldValue,
 		dmlMaxRetry:    defaultDMLMaxRetry,
@@ -402,7 +402,7 @@ func sinkOptionsFromReplicaConfig(config *config.ReplicaConfig) sinkOptions {
 	}
 }
 
-// sinkOptionsDefault creates a default sinkOptions.
-func sinkOptionsDefault() sinkOptions {
-	return sinkOptionsFromReplicaConfig(config.GetDefaultReplicaConfig())
+// SinkOptionsDefault creates a default SinkOptions.
+func SinkOptionsDefault() SinkOptions {
+	return SinkOptionsFromReplicaConfig(config.GetDefaultReplicaConfig())
 }
