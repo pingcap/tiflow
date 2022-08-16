@@ -322,9 +322,11 @@ func TestManagerError(t *testing.T) {
 		Level:   string(ConsistentLevelEventual),
 		Storage: "blackhole://",
 	}
-	errCh := make(chan error, 1)
-	opts := &ManagerOptions{EnableBgRunner: false, ErrCh: errCh}
 
+	errCh := make(chan error, 1)
+	opts := newMockManagerOptions(errCh)
+	opts.EnableBgRunner = false
+	opts.EnableGCRunner = false
 	logMgr, err := NewManager(ctx, cfg, opts)
 	require.Nil(t, err)
 	logMgr.writer = writer.NewInvalidBlackHoleWriter(logMgr.writer)
