@@ -52,6 +52,10 @@ func NewBroker(
 	executorID resModel.ExecutorID,
 	client ResourceManagerClient,
 ) *DefaultBroker {
+	log.Info("Create new resource broker",
+		zap.String("executor-id", string(executorID)),
+		zap.Any("config", config))
+
 	fm := NewLocalFileManager(config.Local)
 	return &DefaultBroker{
 		config:      config,
