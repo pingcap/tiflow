@@ -69,7 +69,8 @@ func newScheduler(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, 
 }
 
 type changefeed struct {
-	id    model.ChangeFeedID
+	id model.ChangeFeedID
+	// state is read-only during the Tick, should only be updated by patch the etcd.
 	state *orchestrator.ChangefeedReactorState
 
 	upstream  *upstream.Upstream
