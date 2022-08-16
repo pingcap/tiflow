@@ -240,8 +240,8 @@ func isResumableError(err *pb.ProcessError) bool {
 }
 
 // CheckResumeSubtask updates info and returns ResumeStrategy for a subtask.
-// When ResumeDispatch and the subtask is successfully resumed at caller,
-// LatestResumeTime and backoff should be updated.
+// When ResumeDispatch and the subtask is successfully resumed at caller, caller
+// should update LatestResumeTime and backoff.
 // This function is exposed for DM as library.
 func (i *AutoResumeInfo) CheckResumeSubtask(
 	stStatus *pb.SubTaskStatus,

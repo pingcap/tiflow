@@ -146,7 +146,7 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 
 	// NOTE: remove output dir before start dumping
 	// every time re-dump, loader should re-prepare
-	err := storage.RemoveAll(ctx, m.cfg.Dir, nil)
+	err := storage.RemoveAll(ctx, m.cfg.Dir, m.cfg.ExtStorage)
 	if err != nil {
 		m.logger.Error("fail to remove output directory", zap.String("directory", m.cfg.Dir), log.ShortError(err))
 		errs = append(errs, unit.NewProcessError(terror.ErrDumpUnitRuntime.Delegate(err, "fail to remove output directory: "+m.cfg.Dir)))
