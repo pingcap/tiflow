@@ -15,6 +15,7 @@ package metadata
 
 import (
 	"context"
+	"sync"
 
 	"github.com/pingcap/errors"
 
@@ -85,6 +86,7 @@ type JobStore struct {
 	*TomlStore
 
 	id frameModel.MasterID
+	mu sync.Mutex
 }
 
 // NewJobStore creates a new JobStore instance
@@ -109,12 +111,17 @@ func (jobStore *JobStore) Key() string {
 
 // UpdateStages will be called if user operate job.
 func (jobStore *JobStore) UpdateStages(ctx context.Context, taskIDs []string, stage TaskStage) error {
+	jobStore.mu.Lock()
+	defer jobStore.mu.Unlock()
 	state, err := jobStore.Get(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	job := state.(*Job)
+	if job.Deleting {
+		return errors.New("failed to update stages because job is being deleted")
+	}
 	if len(taskIDs) == 0 {
 		for task := range job.Tasks {
 			taskIDs = append(taskIDs, task)
@@ -133,11 +140,16 @@ func (jobStore *JobStore) UpdateStages(ctx context.Context, taskIDs []string, st
 
 // UpdateConfig will be called if user update job config.
 func (jobStore *JobStore) UpdateConfig(ctx context.Context, jobCfg *config.JobCfg) error {
+	jobStore.mu.Lock()
+	defer jobStore.mu.Unlock()
 	state, err := jobStore.Get(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	oldJob := state.(*Job)
+	if oldJob.Deleting {
+		return errors.New("failed to update config because job is being deleted")
+	}
 
 	// TODO: we may diff the config at task level in the future, that way different tasks will have different modify revisions.
 	// so that changing the configuration of one task will not affect other tasks.
@@ -161,6 +173,8 @@ func (jobStore *JobStore) UpdateConfig(ctx context.Context, jobCfg *config.JobCf
 
 // MarkDeleting marks the job as deleting.
 func (jobStore *JobStore) MarkDeleting(ctx context.Context) error {
+	jobStore.mu.Lock()
+	defer jobStore.mu.Unlock()
 	state, err := jobStore.Get(ctx)
 	if err != nil {
 		return errors.Trace(err)
