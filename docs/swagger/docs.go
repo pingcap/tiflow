@@ -761,6 +761,9 @@ var doc = `{
                 },
                 "schema-registry": {
                     "type": "string"
+                },
+                "transaction-atomicity": {
+                    "type": "string"
                 }
             }
         },

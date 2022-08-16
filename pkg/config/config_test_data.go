@@ -59,7 +59,7 @@ const (
   "consistent": {
     "level": "none",
     "max-log-size": 64,
-    "flush-interval": 1000,
+    "flush-interval": 2000,
     "storage": ""
   }
 }`
@@ -105,7 +105,7 @@ const (
     "region-retry-duration": 60000000000
   },
   "debug": {
-    "enable-table-actor": true,
+    "enable-table-actor": false,
     "table-actor": {
       "event-batch-size": 32
     },
@@ -168,7 +168,8 @@ const (
         ]
       }
     ],
-    "schema-registry": ""
+    "schema-registry": "",
+    "transaction-atomicity": ""
   },
   "cyclic-replication": {
     "enable": false,
@@ -180,7 +181,7 @@ const (
   "consistent": {
     "level": "none",
     "max-log-size": 64,
-    "flush-interval": 1000,
+    "flush-interval": 2000,
     "storage": ""
   }
 }`
@@ -224,7 +225,7 @@ const (
   "consistent": {
     "level": "none",
     "max-log-size": 64,
-    "flush-interval": 1000,
+    "flush-interval": 2000,
     "storage": ""
   }
 }`

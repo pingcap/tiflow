@@ -225,7 +225,11 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		return errors.Trace(err)
 	default:
 	}
-
+	// we need to wait sink to be ready before we do the other things
+	// otherwise, we may cause a nil pointer panic
+	if !c.sink.isInitialized() {
+		return nil
+	}
 	// This means that the cached DDL has been executed,
 	// and we need to use the latest table names.
 	if c.currentTableNames == nil {
@@ -277,6 +281,26 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 		}
 		if newCheckpointTs > barrierTs {
 			newCheckpointTs = barrierTs
+		}
+		prevResolvedTs := c.state.Status.ResolvedTs
+		var flushedCheckpointTs, flushedResolvedTs model.Ts
+		if c.redoManager.Enabled() {
+			// newResolvedTs can never exceed the barrier timestamp boundary. If redo is enabled,
+			// we can only upload it to etcd after it has been flushed into redo meta.
+			c.redoManager.UpdateMeta(newCheckpointTs, newResolvedTs)
+			c.redoManager.GetFlushedMeta(&flushedCheckpointTs, &flushedResolvedTs)
+			log.Debug("owner gets flushed meta",
+				zap.Uint64("flushedResolvedTs", flushedResolvedTs),
+				zap.Uint64("flushedCheckpointTs", flushedCheckpointTs),
+				zap.Uint64("newResolvedTs", newResolvedTs),
+				zap.Uint64("newCheckpointTs", newCheckpointTs))
+			if flushedResolvedTs != 0 {
+				// It's not necessary to replace newCheckpointTs with flushedResolvedTs,
+				// as cdc can ensure newCheckpointTs can never exceed prevResolvedTs.
+				newResolvedTs = flushedResolvedTs
+			} else {
+				newResolvedTs = prevResolvedTs
+			}
 		}
 		c.updateStatus(newCheckpointTs, newResolvedTs)
 		c.updateMetrics(currentTs, newCheckpointTs, newResolvedTs)
@@ -369,7 +393,7 @@ LOOP:
 	}()
 
 	stdCtx := contextutil.PutChangefeedIDInCtx(cancelCtx, c.id)
-	redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: false}
+	redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: true}
 	redoManager, err := redo.NewManager(stdCtx, c.state.Info.Config.Consistent, redoManagerOpts)
 	if err != nil {
 		return err

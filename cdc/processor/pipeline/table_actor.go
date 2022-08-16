@@ -57,7 +57,8 @@ type tableActor struct {
 	// backend mounter
 	mounter entry.Mounter
 	// backend tableSink
-	tableSink sink.Sink
+	tableSink   sink.Sink
+	redoManager redo.LogManager
 
 	pullerNode *pullerNode
 	sortNode   *sorterNode
@@ -103,6 +104,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 	tableName string,
 	replicaInfo *model.TableReplicaInfo,
 	sink sink.Sink,
+	redoManager redo.LogManager,
 	targetTs model.Ts,
 ) (TablePipeline, error) {
 	config := cdcCtx.ChangefeedVars().Info.Config
@@ -134,6 +136,7 @@ func NewTableActor(cdcCtx cdcContext.Context,
 		replicaInfo:   replicaInfo,
 		replicaConfig: config,
 		tableSink:     sink,
+		redoManager:   redoManager,
 		targetTs:      targetTs,
 		started:       false,
 
@@ -279,7 +282,10 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		zap.String("tableName", t.tableName),
 		zap.Uint64("quota", t.memoryQuota))
 
-	flowController := flowcontrol.NewTableFlowController(t.memoryQuota)
+	splitTxn := t.replicaConfig.Sink.TxnAtomicity.ShouldSplitTxn()
+
+	flowController := flowcontrol.NewTableFlowController(t.memoryQuota,
+		t.redoManager.Enabled(), splitTxn)
 	sorterNode := newSorterNode(t.tableName, t.tableID,
 		t.replicaInfo.StartTs, flowController,
 		t.mounter, t.replicaConfig,
@@ -296,7 +302,8 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		return err
 	}
 
-	pullerNode := newPullerNode(t.tableID, t.replicaInfo, t.tableName, t.changefeedVars.ID)
+	pullerNode := newPullerNode(t.tableID, t.replicaInfo, t.tableName,
+		t.changefeedVars.ID, t.upStream)
 	pullerActorNodeContext := newContext(sdtTableContext,
 		t.tableName,
 		t.globalVars.TableActorSystem.Router(),
@@ -317,7 +324,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 
 	actorSinkNode := newSinkNode(t.tableID, t.tableSink,
 		t.replicaInfo.StartTs,
-		t.targetTs, flowController)
+		t.targetTs, flowController, splitTxn, t.redoManager)
 	actorSinkNode.initWithReplicaConfig(true, t.replicaConfig)
 	t.sinkNode = actorSinkNode
 
@@ -429,8 +436,8 @@ func (t *tableActor) ResolvedTs() model.Ts {
 	// will be able to cooperate replication status directly. Then we will add
 	// another replication barrier for consistent replication instead of reusing
 	// the global resolved-ts.
-	if redo.IsConsistentEnabled(t.replicaConfig.Consistent.Level) {
-		return t.sinkNode.ResolvedTs().Ts
+	if t.redoManager.Enabled() {
+		return t.redoManager.GetResolvedTs(t.tableID)
 	}
 	return t.sortNode.ResolvedTs()
 }
@@ -518,7 +525,7 @@ func (t *tableActor) Wait() {
 
 // for ut
 var startPuller = func(t *tableActor, ctx *actorNodeContext) error {
-	return t.pullerNode.start(ctx, t.upStream, t.wg, true, t.sortNode)
+	return t.pullerNode.start(ctx, t.wg, true, t.sortNode)
 }
 
 var startSorter = func(t *tableActor, ctx *actorNodeContext) error {

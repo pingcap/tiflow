@@ -98,6 +98,12 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if checkpointTs == resolvedTs {
+		log.Info("apply redo log suncceed: checkpointTs == resolvedTs",
+			zap.Uint64("checkpointTs", checkpointTs),
+			zap.Uint64("resolvedTs", resolvedTs))
+		return errApplyFinished
+	}
 	err = ra.rd.ResetReader(ctx, checkpointTs, resolvedTs)
 	if err != nil {
 		return err
