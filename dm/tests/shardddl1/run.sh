@@ -243,6 +243,14 @@ function DM_RestartMaster_CASE() {
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	run_sql_source1 "alter table ${shardddl1}.${tb1} add column c double;"
+	if [[ "$1" = "pessimistic" ]]; then
+		check_log_contain_with_retry 'putted shard DDL info.*ADD COLUMN' \
+			$WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log
+	else
+		check_log_contain_with_retry 'finish to handle ddls in optimistic shard mode.*add column' \
+			$WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log
+	fi
+
 	run_sql_source2 "alter table ${shardddl1}.${tb1} add column c text;"
 
 	if [[ "$1" = "pessimistic" ]]; then
