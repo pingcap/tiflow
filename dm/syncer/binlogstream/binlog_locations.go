@@ -157,10 +157,6 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 	l.curStartLocation.Position = l.curEndLocation.Position
 	l.curStartLocation.Suffix = l.curEndLocation.Suffix
 
-	if !shouldUpdatePos(e) {
-		return
-	}
-
 	if event, ok := e.Event.(*replication.RotateEvent); ok {
 		nextName := string(event.NextLogName)
 		if l.curEndLocation.Position.Name != nextName {
@@ -168,6 +164,10 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 			l.curEndLocation.Position.Pos = binlog.FileHeaderLen
 			l.saveTxnEndLocation()
 		}
+		return
+	}
+
+	if !shouldUpdatePos(e) {
 		return
 	}
 
