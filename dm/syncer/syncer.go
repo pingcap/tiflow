@@ -1337,19 +1337,19 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 			s.timezoneLastTime = ddlJob.timezone
 			setTimezoneSQL := fmt.Sprintf("SET SESSION TIME_ZONE = '%s'", ddlJob.timezone)
 			ddlJob.ddls = append([]string{setTimezoneSQL}, ddlJob.ddls...)
-			setTimezoneSQLDefault := fmt.Sprintf("SET SESSION TIME_ZONE = DEFAULT")
+			setTimezoneSQLDefault := "SET SESSION TIME_ZONE = DEFAULT"
 			ddlJob.ddls = append(ddlJob.ddls, setTimezoneSQLDefault)
 		} else if s.timezoneLastTime != "" {
 			// use last time's time zone
 			setTimezoneSQL := fmt.Sprintf("SET SESSION TIME_ZONE = '%s'", s.timezoneLastTime)
 			ddlJob.ddls = append([]string{setTimezoneSQL}, ddlJob.ddls...)
-			setTimezoneSQLDefault := fmt.Sprintf("SET SESSION TIME_ZONE = DEFAULT")
+			setTimezoneSQLDefault := "SET SESSION TIME_ZONE = DEFAULT"
 			ddlJob.ddls = append(ddlJob.ddls, setTimezoneSQLDefault)
 		}
 		// set timestamp
 		setTimestampSQL := fmt.Sprintf("SET TIMESTAMP = %d", ddlJob.timestamp)
 		ddlJob.ddls = append([]string{setTimestampSQL}, ddlJob.ddls...)
-		setTimestampSQLDefault := fmt.Sprintf("SET TIMESTAMP = DEFAULT")
+		setTimestampSQLDefault := "SET TIMESTAMP = DEFAULT"
 		ddlJob.ddls = append(ddlJob.ddls, setTimestampSQLDefault)
 
 		// add this ddl ts beacause we start to exec this ddl.
@@ -2908,7 +2908,7 @@ func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext) (ma
 
 	affectedTbls := make(map[string]map[string]struct{})
 	for _, sql := range qec.splitDDLs {
-		ddlInfo, err := s.genDDLInfo(qec, sql)
+		ddlInfo, err := s.shardDDL.genDDLInfo(qec, sql)
 		if err != nil {
 			return nil, err
 		}
@@ -3120,13 +3120,15 @@ func (s *Syncer) flushJobs() error {
 }
 
 func (s *Syncer) route(table *filter.Table) *filter.Table {
+	return route(s.tableRouter, table)
+}
+
+func route(tableRouter *regexprrouter.RouteTable, table *filter.Table) *filter.Table {
 	if table.Schema == "" {
 		return table
 	}
-	targetSchema, targetTable, err := s.tableRouter.Route(table.Schema, table.Name)
-	if err != nil {
-		s.tctx.L().Error("fail to route table", zap.Stringer("table", table), zap.Error(err)) // log the error, but still continue
-	}
+	// nolint:errcheck
+	targetSchema, targetTable, _ := tableRouter.Route(table.Schema, table.Name)
 	if targetSchema == "" {
 		return table
 	}
