@@ -75,7 +75,7 @@ func mockTestDB(adjustSQLMode bool) (*sql.DB, error) {
 	return db, nil
 }
 
-func newMySQLSink4Test(ctx context.Context, t *testing.T) *mysqlBackend {
+func newMySQLBackendWithoutDB(ctx context.Context, t *testing.T) *mysqlBackend {
 	params := defaultParams()
 	params.batchReplaceEnabled = false
 	ctx, cancel := context.WithCancel(ctx)
@@ -84,13 +84,6 @@ func newMySQLSink4Test(ctx context.Context, t *testing.T) *mysqlBackend {
 		params:     params,
 		cancel:     cancel,
 	}
-}
-
-func TestMustFlushOnNilEvent(t *testing.T) {
-	mc := newMySQLSink4Test(context.Background(), t)
-	needFlush := mc.OnTxnEvent(&eventsink.TxnCallbackableEvent{Event: nil})
-	require.True(t, needFlush)
-	require.Nil(t, mc.Close())
 }
 
 func TestPrepareDML(t *testing.T) {
@@ -162,7 +155,7 @@ func TestPrepareDML(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ms := newMySQLSink4Test(ctx, t)
+	ms := newMySQLBackendWithoutDB(ctx, t)
 	for _, tc := range testCases {
 		ms.events = make([]*eventsink.TxnCallbackableEvent, 1)
 		ms.events[0] = &eventsink.TxnCallbackableEvent{
@@ -195,14 +188,14 @@ func TestAdjustSQLMode(t *testing.T) {
 		mock.ExpectClose()
 		return db, nil
 	}
-	backupGetDBConn := GetDBConnImpl
-	GetDBConnImpl = mockGetDBConn
-	defer func() { GetDBConnImpl = backupGetDBConn }()
+
+	sinkOpts := sinkOptionsDefault()
+	sinkOpts.getDBConn = mockGetDBConn
 
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
 	require.Nil(t, err)
-	sink, err := NewMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI)
+	sink, err := NewMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, sinkOpts)
 	require.Nil(t, err)
 	require.Nil(t, sink.Close())
 }
@@ -297,16 +290,15 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 		return db, nil
 	}
 
-	backupGetDBConn := GetDBConnImpl
-	GetDBConnImpl = mockGetDBConn
-	defer func() { GetDBConnImpl = backupGetDBConn }()
+	sinkOpts := sinkOptionsDefault()
+	sinkOpts.getDBConn = mockGetDBConn
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
 	require.Nil(t, err)
-	sink, err := NewMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI)
+	sink, err := NewMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, sinkOpts)
 	require.Nil(t, err)
 
 	rows := []*model.RowChangedEvent{
@@ -460,16 +452,15 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 		return db, nil
 	}
 
-	backupGetDBConn := GetDBConnImpl
-	GetDBConnImpl = mockGetDBConnErrDatabaseNotExists
-	defer func() { GetDBConnImpl = backupGetDBConn }()
+	sinkOpts := sinkOptionsDefault()
+	sinkOpts.getDBConn = mockGetDBConnErrDatabaseNotExists
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1")
 	require.Nil(t, err)
-	sink, err := NewMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI)
+	sink, err := NewMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, sinkOpts)
 	require.Nil(t, err)
 
 	_ = sink.OnTxnEvent(&eventsink.TxnCallbackableEvent{
@@ -534,16 +525,15 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 		return db, nil
 	}
 
-	backupGetDBConn := GetDBConnImpl
-	GetDBConnImpl = mockGetDBConnErrDatabaseNotExists
-	defer func() { GetDBConnImpl = backupGetDBConn }()
+	sinkOpts := sinkOptionsDefault()
+	sinkOpts.getDBConn = mockGetDBConnErrDatabaseNotExists
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1")
 	require.Nil(t, err)
-	sink, err := NewMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI)
+	sink, err := NewMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, sinkOpts)
 	require.Nil(t, err)
 
 	_ = sink.OnTxnEvent(&eventsink.TxnCallbackableEvent{
@@ -599,7 +589,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 		// normal db
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
-		for i := 0; i < int(defaultDMLMaxRetry); i++ {
+		for i := 0; i < 2; i++ {
 			mock.ExpectBegin()
 			mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?),(?)").
 				WithArgs(1, 2).
@@ -609,21 +599,17 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 		mock.ExpectClose()
 		return db, nil
 	}
-	backupGetDBConn := GetDBConnImpl
-	GetDBConnImpl = mockGetDBConnErrDatabaseNotExists
-	backupMaxRetry := defaultDMLMaxRetry
-	defaultDMLMaxRetry = 2
-	defer func() {
-		GetDBConnImpl = backupGetDBConn
-		defaultDMLMaxRetry = backupMaxRetry
-	}()
+
+	sinkOpts := sinkOptionsDefault()
+	sinkOpts.getDBConn = mockGetDBConnErrDatabaseNotExists
+	sinkOpts.dmlMaxRetry = 2
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1")
 	require.Nil(t, err)
-	sink, err := NewMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI)
+	sink, err := NewMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, sinkOpts)
 	require.Nil(t, err)
 
 	_ = sink.OnTxnEvent(&eventsink.TxnCallbackableEvent{
@@ -677,21 +663,17 @@ func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 		mock.ExpectClose()
 		return db, nil
 	}
-	backupGetDBConn := GetDBConnImpl
-	GetDBConnImpl = mockDBInsertDupEntry
-	backupMaxRetry := defaultDMLMaxRetry
-	defaultDMLMaxRetry = 1
-	defer func() {
-		GetDBConnImpl = backupGetDBConn
-		defaultDMLMaxRetry = backupMaxRetry
-	}()
+
+	sinkOpts := sinkOptionsDefault()
+	sinkOpts.getDBConn = mockDBInsertDupEntry
+	sinkOpts.dmlMaxRetry = 1
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&safe-mode=false")
 	require.Nil(t, err)
-	sink, err := NewMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI)
+	sink, err := NewMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, sinkOpts)
 	require.Nil(t, err)
 
 	_ = sink.OnTxnEvent(&eventsink.TxnCallbackableEvent{
@@ -729,9 +711,9 @@ func TestNewMySQLBackend(t *testing.T) {
 		require.Nil(t, err)
 		return db, nil
 	}
-	backupGetDBConn := GetDBConnImpl
-	GetDBConnImpl = mockGetDBConn
-	defer func() { GetDBConnImpl = backupGetDBConn }()
+
+	sinkOpts := sinkOptionsDefault()
+	sinkOpts.getDBConn = mockGetDBConn
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -739,7 +721,7 @@ func TestNewMySQLBackend(t *testing.T) {
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
 	require.Nil(t, err)
-	sink, err := NewMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI)
+	sink, err := NewMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, sinkOpts)
 
 	require.Nil(t, err)
 	require.Nil(t, sink.Close())
@@ -766,9 +748,9 @@ func TestNewMySQLBackendWithIPv6Address(t *testing.T) {
 		require.Nil(t, err)
 		return db, nil
 	}
-	backupGetDBConn := GetDBConnImpl
-	GetDBConnImpl = mockGetDBConn
-	defer func() { GetDBConnImpl = backupGetDBConn }()
+
+	sinkOpts := sinkOptionsDefault()
+	sinkOpts.getDBConn = mockGetDBConn
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -776,7 +758,7 @@ func TestNewMySQLBackendWithIPv6Address(t *testing.T) {
 	// See https://www.ietf.org/rfc/rfc2732.txt, we have to use brackets to wrap IPv6 address.
 	sinkURI, err := url.Parse("mysql://[::1]:3306/?time-zone=UTC&worker-count=4")
 	require.Nil(t, err)
-	sink, err := NewMySQLBackend(ctx, changefeed, sinkURI)
+	sink, err := NewMySQLBackend(ctx, changefeed, sinkURI, sinkOpts)
 	require.Nil(t, err)
 	require.Nil(t, sink.Close())
 }
@@ -799,9 +781,9 @@ func TestGBKSupported(t *testing.T) {
 		require.Nil(t, err)
 		return db, nil
 	}
-	backupGetDBConn := GetDBConnImpl
-	GetDBConnImpl = mockGetDBConn
-	defer func() { GetDBConnImpl = backupGetDBConn }()
+
+	sinkOpts := sinkOptionsDefault()
+	sinkOpts.getDBConn = mockGetDBConn
 
 	zapcore, logs := observer.New(zap.WarnLevel)
 	conf := &log.Config{Level: "warn", File: log.FileLogConfig{}}
@@ -814,7 +796,7 @@ func TestGBKSupported(t *testing.T) {
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
 	require.Nil(t, err)
-	sink, err := NewMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI)
+	sink, err := NewMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, sinkOpts)
 	require.Nil(t, err)
 
 	// no gbk-related warning log will be output because GBK charset is supported
@@ -864,16 +846,16 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 		mock.ExpectClose()
 		return db, nil
 	}
-	backupGetDBConn := GetDBConnImpl
-	GetDBConnImpl = mockGetDBConn
-	defer func() { GetDBConnImpl = backupGetDBConn }()
+
+	sinkOpts := sinkOptionsDefault()
+	sinkOpts.getDBConn = mockGetDBConn
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&batch-replace-size=1")
 	require.Nil(t, err)
-	sink, err := NewMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI)
+	sink, err := NewMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, sinkOpts)
 	require.Nil(t, err)
 
 	rows := []*model.RowChangedEvent{
@@ -1249,7 +1231,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 				},
 			},
 			expected: &preparedDMLs{
-				startTs: []model.Ts{418658114257813516, 418658114257813506},
+				startTs: []model.Ts{418658114257813506, 418658114257813516},
 				sqls: []string{
 					"REPLACE INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",
 					"REPLACE INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",
@@ -1261,7 +1243,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ms := newMySQLSink4Test(ctx, t)
+	ms := newMySQLBackendWithoutDB(ctx, t)
 	ms.params.safeMode = false
 	ms.options.enableOldValue = true
 	for _, tc := range testCases {

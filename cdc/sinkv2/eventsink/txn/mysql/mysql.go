@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"sort"
 	"strconv"
 	"time"
 
@@ -47,11 +48,11 @@ const (
 
 	// Max interval for flushing transactions to the downstream.
 	maxFlushInterval = 100 * time.Millisecond
+
+	defaultDMLMaxRetry uint64 = 8
+
+	// defaultDDLMaxRetry uint64 = 20
 )
-
-var defaultDMLMaxRetry uint64 = 8
-
-// defaultDDLMaxRetry uint64 = 20
 
 type mysqlBackend struct {
 	changefeedID model.ChangeFeedID
@@ -73,27 +74,27 @@ func NewMySQLBackend(
 	sinkURI *url.URL,
 	opts ...sinkOptions,
 ) (*mysqlBackend, error) {
+	if len(opts) == 0 {
+		opts = make([]sinkOptions, 1)
+		opts[0] = sinkOptionsDefault()
+	}
+
 	params, err := parseSinkURIToParams(ctx, changefeedID, sinkURI)
 	if err != nil {
 		return nil, err
 	}
 
-	dsnStr, err := adjustDSN(ctx, sinkURI, params)
+	dsnStr, err := adjustDSN(ctx, sinkURI, params, opts[0])
 	if err != nil {
 		return nil, err
 	}
 
-	db, err := GetDBConnImpl(ctx, dsnStr)
+	db, err := opts[0].getDBConn(ctx, dsnStr)
 	if err != nil {
 		return nil, err
 	}
 	db.SetMaxIdleConns(params.workerCount)
 	db.SetMaxOpenConns(params.workerCount)
-
-	if len(opts) == 0 {
-		opts = make([]sinkOptions, 1)
-		opts[0] = sinkOptionsDefault()
-	}
 
 	ctx, cancel := context.WithCancel(ctx)
 	sink := &mysqlBackend{
@@ -112,7 +113,7 @@ func NewMySQLBackend(
 	return sink, nil
 }
 
-func adjustDSN(ctx context.Context, sinkURI *url.URL, params *sinkParams) (dsnStr string, err error) {
+func adjustDSN(ctx context.Context, sinkURI *url.URL, params *sinkParams, opts sinkOptions) (dsnStr string, err error) {
 	// dsn format of the driver:
 	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
 	username := sinkURI.User.Username()
@@ -147,7 +148,7 @@ func adjustDSN(ctx context.Context, sinkURI *url.URL, params *sinkParams) (dsnSt
 	dsn.Params["timeout"] = params.dialTimeout
 
 	var testDB *sql.DB
-	testDB, err = GetDBConnImpl(ctx, dsn.FormatDSN())
+	testDB, err = opts.getDBConn(ctx, dsn.FormatDSN())
 	if err != nil {
 		return
 	}
@@ -187,11 +188,6 @@ func adjustDSN(ctx context.Context, sinkURI *url.URL, params *sinkParams) (dsnSt
 
 // OnTxnEvent implements interface backend.
 func (s *mysqlBackend) OnTxnEvent(event *eventsink.TxnCallbackableEvent) (needFlush bool) {
-	if event.Event == nil {
-		// It's a special control message to flush pending transactions outside
-		// from workers of EventSink.
-		return true
-	}
 	s.events = append(s.events, event)
 	s.rows += len(event.Event.Rows)
 	return event.Event.ToWaitFlush() || s.rows >= s.params.maxTxnRow
@@ -394,6 +390,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	for k := range startTsSet {
 		startTs = append(startTs, k)
 	}
+	sort.Slice(startTs, func(i, j int) bool { return startTs[i] < startTs[j] })
 
 	if len(callbacks) == 0 {
 		callbacks = nil
@@ -508,7 +505,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(ctx context.Context, dmls *prepared
 		return nil
 	}, retry.WithBackoffBaseDelay(backoffBaseDelay.Milliseconds()),
 		retry.WithBackoffMaxDelay(backoffMaxDelay.Milliseconds()),
-		retry.WithMaxTries(defaultDMLMaxRetry),
+		retry.WithMaxTries(s.options.dmlMaxRetry),
 		retry.WithIsRetryableErr(isRetryableDMLError))
 }
 
@@ -528,9 +525,6 @@ func getSQLErrCode(err error) (errors.ErrCode, bool) {
 
 	return errors.ErrCode(mysqlErr.Number), true
 }
-
-// GetDBConnImpl is the implement holder to get db connection. Export it for tests
-var GetDBConnImpl = getDBConn
 
 func getDBConn(ctx context.Context, dsnStr string) (*sql.DB, error) {
 	db, err := sql.Open("mysql", dsnStr)
