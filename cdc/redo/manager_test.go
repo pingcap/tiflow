@@ -388,7 +388,7 @@ func TestReuseWritter(t *testing.T) {
 	}
 
 	errCh := make(chan error, 1)
-	opts := &ManagerOptions{EnableBgRunner: false, ErrCh: errCh}
+	opts := newMockManagerOptions(errCh)
 	for i := 0; i < 2; i++ {
 		ctx, cancel := context.WithCancel(context.Background())
 		ctx = contextutil.PutChangefeedIDInCtx(ctx, model.ChangeFeedID{
@@ -413,5 +413,10 @@ func TestReuseWritter(t *testing.T) {
 		log.Panic("shouldn't get an error", zap.Error(x))
 	case <-time.NewTicker(time.Duration(100) * time.Millisecond).C:
 	}
+
+	// After the manager is closed, APIs can return errors instead of panic.
 	cancels[1]()
+	time.Sleep(time.Duration(100) * time.Millisecond)
+	err := mgrs[1].UpdateResolvedTs(context.Background(), 1, 1)
+	require.Error(t, err)
 }
