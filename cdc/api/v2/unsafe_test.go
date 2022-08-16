@@ -83,10 +83,10 @@ func TestWithUpstreamConfig(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	upManager := upstream.NewManager(ctx, "abc")
-	upManager.AddUpstream(1,
-		&model.UpstreamInfo{
-			PDEndpoints: "http://127.0.0.1:22379",
-		})
+	upManager.AddUpstream(&model.UpstreamInfo{
+		ID:          uint64(1),
+		PDEndpoints: "http://127.0.0.1:22379",
+	})
 	cpCtrl := gomock.NewController(t)
 	cp := mock_capture.NewMockCapture(cpCtrl)
 	hpCtrl := gomock.NewController(t)

@@ -39,7 +39,7 @@ func (m *mockPDClient) GetLeaderAddr() string {
 	return m.url
 }
 
-func newMockPDClient(ctx context.Context, normal bool) *mockPDClient {
+func newMockPDClient(normal bool) *mockPDClient {
 	mock := &mockPDClient{}
 	status := http.StatusOK
 	if !normal {
@@ -58,45 +58,57 @@ func newMockPDClient(ctx context.Context, normal bool) *mockPDClient {
 
 func TestMetaLabelNormal(t *testing.T) {
 	t.Parallel()
+
+	mockClient := newMockPDClient(true)
+
+	pc, err := NewPDAPIClient(mockClient, nil)
+	require.NoError(t, err)
+	defer pc.Close()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	mockClient := newMockPDClient(ctx, true)
-
-	err := UpdateMetaLabel(ctx, mockClient, nil)
-	require.Nil(t, err)
+	err = pc.UpdateMetaLabel(ctx)
+	require.NoError(t, err)
 	mockClient.testServer.Close()
 }
 
 func TestMetaLabelFail(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	mockClient := newMockPDClient(ctx, false)
-	pc, err := newPDApiClient(mockClient, nil)
-	require.Nil(t, err)
+
+	mockClient := newMockPDClient(false)
+	pc, err := NewPDAPIClient(mockClient, nil)
+	require.NoError(t, err)
+	defer pc.Close()
 	mockClient.url = "http://127.0.1.1:2345"
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	// test url error
 	err = pc.patchMetaLabel(ctx)
-	require.NotNil(t, err)
+	require.Error(t, err)
 
 	// test 404
 	mockClient.url = mockClient.testServer.URL
 	err = pc.patchMetaLabel(ctx)
 	require.Regexp(t, ".*404.*", err)
 
-	err = UpdateMetaLabel(ctx, mockClient, nil)
+	err = pc.UpdateMetaLabel(ctx)
 	require.ErrorIs(t, err, cerror.ErrReachMaxTry)
 	mockClient.testServer.Close()
 }
 
 func TestListGcServiceSafePoint(t *testing.T) {
 	t.Parallel()
+
+	mockClient := newMockPDClient(true)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	mockClient := newMockPDClient(ctx, true)
 
-	_, err := ListGcServiceSafePoint(ctx, mockClient, nil)
+	pc, err := NewPDAPIClient(mockClient, nil)
+	require.NoError(t, err)
+	defer pc.Close()
+	_, err = pc.ListGcServiceSafePoint(ctx)
 	require.Nil(t, err)
 	mockClient.testServer.Close()
 }

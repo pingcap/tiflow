@@ -20,6 +20,41 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 )
 
+// allowDDLList is a list of DDL types that can be applied to cdc's schema storage.
+// It's a white list.
+var allowDDLList = []timodel.ActionType{
+	timodel.ActionCreateSchema,
+	timodel.ActionDropSchema,
+	timodel.ActionCreateTable,
+	timodel.ActionDropTable,
+	timodel.ActionAddColumn,
+	timodel.ActionDropColumn,
+	timodel.ActionAddIndex,
+	timodel.ActionDropIndex,
+	timodel.ActionTruncateTable,
+	timodel.ActionModifyColumn,
+	timodel.ActionRenameTable,
+	timodel.ActionRenameTables,
+	timodel.ActionSetDefaultValue,
+	timodel.ActionModifyTableComment,
+	timodel.ActionRenameIndex,
+	timodel.ActionAddTablePartition,
+	timodel.ActionDropTablePartition,
+	timodel.ActionCreateView,
+	timodel.ActionModifyTableCharsetAndCollate,
+	timodel.ActionTruncateTablePartition,
+	timodel.ActionDropView,
+	timodel.ActionRecoverTable,
+	timodel.ActionModifySchemaCharsetAndCollate,
+	timodel.ActionAddPrimaryKey,
+	timodel.ActionDropPrimaryKey,
+	timodel.ActionAddColumns,  // Removed in TiDB v6.2.0, see https://github.com/pingcap/tidb/pull/35862.
+	timodel.ActionDropColumns, // Removed in TiDB v6.2.0
+	timodel.ActionRebaseAutoID,
+	timodel.ActionAlterIndexVisibility,
+	timodel.ActionMultiSchemaChange,
+}
+
 // Filter are safe for concurrent use.
 // TODO: find a better way to abstract this interface.
 type Filter interface {
@@ -50,7 +85,6 @@ type filter struct {
 	sqlEventFilter *sqlEventFilter
 	// ignoreTxnStartTs is used to filter out dml/ddl event by its starsTs.
 	ignoreTxnStartTs []uint64
-	ddlAllowlist     []timodel.ActionType
 }
 
 // NewFilter creates a filter.
@@ -77,7 +111,6 @@ func NewFilter(cfg *config.ReplicaConfig, tz string) (Filter, error) {
 		dmlExprFilter:    dmlExprFilter,
 		sqlEventFilter:   sqlEventFilter,
 		ignoreTxnStartTs: cfg.Filter.IgnoreTxnStartTs,
-		ddlAllowlist:     cfg.Filter.DDLAllowlist,
 	}, nil
 }
 
@@ -138,16 +171,12 @@ func (f *filter) ShouldIgnoreDDLEvent(ddl *model.DDLEvent) (bool, error) {
 // If a ddl is discarded, it will not be applied to cdc's schema storage
 // and sent to downstream.
 func (f *filter) ShouldDiscardDDL(ddlType timodel.ActionType) bool {
-	if !shouldDiscardByBuiltInDDLAllowlist(ddlType) {
-		return false
-	}
-	// If a ddl is in BuildInDDLAllowList we should check if it was be
-	// added to filter's ddlAllowList by user.
-	for _, allowDDLType := range f.ddlAllowlist {
-		if allowDDLType == ddlType {
+	for _, actionType := range allowDDLList {
+		if ddlType == actionType {
 			return false
 		}
 	}
+
 	return true
 }
 
