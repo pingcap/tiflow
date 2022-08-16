@@ -66,18 +66,18 @@ func (w *worker) runBackgroundLoop() {
 		for {
 			select {
 			case <-w.stopped:
-				log.Info("transaction sink backend worker exits expectedly",
+				log.Info("Transaction sink backend worker exits expectedly",
 					zap.Int("workerID", w.ID))
 				return
 			case txn := <-w.txnCh.Out():
 				txn.wantMore()
 				if w.backend.OnTxnEvent(txn.txnEvent.TxnCallbackableEvent) && w.doFlush() {
-					log.Warn("transaction sink backend exits unexceptedly")
+					log.Warn("Transaction sink backend exits unexceptedly")
 					return
 				}
 			case <-w.timer.C:
 				if w.doFlush() {
-					log.Warn("transaction sink backend exits unexceptedly")
+					log.Warn("Transaction sink backend exits unexceptedly")
 					return
 				}
 			}

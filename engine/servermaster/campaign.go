@@ -134,11 +134,11 @@ func (s *Server) leaderLoop(ctx context.Context) error {
 }
 
 // checkLeaderExists is the entrance of server master leader loop. It works as follows
-// 1. Try to query leader node from etcd
-// 2. If leader node exists, decode the leader information
-//    a. If decode fails, return retry=true to retry the leader loop
-//    b. If leader information is stale, try to delete it and retry the leader loop
-//    c. Otherwise, watch the leader until it is evicted.
+//  1. Try to query leader node from etcd
+//  2. If leader node exists, decode the leader information
+//     a. If decode fails, return retry=true to retry the leader loop
+//     b. If leader information is stale, try to delete it and retry the leader loop
+//     c. Otherwise, watch the leader until it is evicted.
 func (s *Server) checkLeaderExists(ctx context.Context) (retry bool, err error) {
 	// step-1
 	key, data, rev, err := etcdutil.GetLeader(ctx, s.etcdClient, adapter.MasterCampaignKey.Path())

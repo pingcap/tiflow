@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package leveldb
+package db
 
 import (
 	"context"
@@ -20,8 +20,8 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sorter/db/message"
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
-	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
 	"github.com/pingcap/tiflow/pkg/actor"
 	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -65,28 +65,6 @@ func TestAddEntry(t *testing.T) {
 		}, task.Value)
 }
 
-func TestTryAddEntry(t *testing.T) {
-	t.Parallel()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	s, mb := newTestSorter(t.Name(), 1)
-
-	event := model.NewResolvedPolymorphicEvent(0, 1)
-	sent, err := s.TryAddEntry(ctx, event)
-	require.True(t, sent)
-	require.Nil(t, err)
-	task, ok := mb.Receive()
-	require.True(t, ok)
-	require.EqualValues(t, event, task.Value.InputEvent)
-
-	sent, err = s.TryAddEntry(ctx, event)
-	require.True(t, sent)
-	require.Nil(t, err)
-	sent, err = s.TryAddEntry(ctx, event)
-	require.False(t, sent)
-	require.Nil(t, err)
-}
-
 func TestOutput(t *testing.T) {
 	t.Parallel()
 
@@ -112,7 +90,7 @@ func TestRunAndReportError(t *testing.T) {
 	go func() {
 		time.Sleep(100 * time.Millisecond)
 		s.common.reportError(
-			"test", errors.ErrLevelDBSorterError.GenWithStackByArgs())
+			"test", errors.ErrDBSorterError.GenWithStackByArgs())
 	}()
 	require.Error(t, s.Run(context.Background()))
 
@@ -144,7 +122,7 @@ func TestRunAndReportError(t *testing.T) {
 
 	// Must be nonblock.
 	s.common.reportError(
-		"test", errors.ErrLevelDBSorterError.GenWithStackByArgs())
+		"test", errors.ErrDBSorterError.GenWithStackByArgs())
 	s.common.reportError(
-		"test", errors.ErrLevelDBSorterError.GenWithStackByArgs())
+		"test", errors.ErrDBSorterError.GenWithStackByArgs())
 }

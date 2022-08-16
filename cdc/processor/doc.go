@@ -11,26 +11,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/*
-Package processor implements the processor logic based on ETCD worker(pkg/orchestrator).
+// Package processor implements the processor logic based on ETCD worker(pkg/orchestrator).
 
-There are three main modules: Manager, Processor and TablePipeline(cdc/processor/pipeline).
-The Manager's main responsibility is to maintain the Processor's life cycle, like create and destroy the processor instances.
-The Processor's main responsibility is to maintain the TablePipeline's life cycle according to the state stored by ETCD,
-and calculate the local resolved TS and local checkpoint Ts and put them into ETCD.
-The TablePipeline listens to the kv change logs of a specified table(with its mark table if it exists), and sends logs to Sink After sorting and mounting.
+// There are three main modules: Manager, Processor and TablePipeline(cdc/processor/pipeline).
+// The Manager's main responsibility is to maintain the Processor's life cycle, like create and destroy the processor instances.
+// The Processor's main responsibility is to maintain the TablePipeline's life cycle according to the state stored by ETCD,
+// and calculate the local resolved TS and local checkpoint Ts and put them into ETCD.
+// The TablePipeline listens to the kv change logs of a specified table(with its mark table if it exists), and sends logs to Sink After sorting and mounting.
 
-The relationship between the three module is as follows:
+// The relationship between the three module is as follows:
 
-One Capture(with processor role)  -> Processor Manager -> Processor(changefeed1) -> TablePipeline(tableA)
-                                                      ╲                         ╲
-                                                       ╲                         -> TablePipeline(tableB)
-                                                        ╲
-                                                         ╲
-                                                          -> Processor(changefeed2) -> TablePipeline(tableC)
-                                                                                    ╲
-                                                                                     -> TablePipeline(tableD)
+// One Capture(with processor role)  -> Processor Manager -> Processor(changefeed1) -> TablePipeline(tableA)
+//                                                       ╲                         ╲
+//                                                        ╲                         -> TablePipeline(tableB)
+//                                                         ╲
+//                                                          ╲
+//                                                           -> Processor(changefeed2) -> TablePipeline(tableC)
+//                                                                                     ╲
+//                                                                                      -> TablePipeline(tableD)
 
-
-*/
 package processor

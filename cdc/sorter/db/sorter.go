@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package leveldb
+package db
 
 import (
 	"context"
@@ -24,12 +24,11 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sorter"
+	"github.com/pingcap/tiflow/cdc/sorter/db/message"
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
-	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
 	"github.com/pingcap/tiflow/pkg/actor"
 	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -41,10 +40,10 @@ const (
 	batchReceiveEventSize = 32
 )
 
-var levelDBSorterIDAlloc uint32 = 0
+var dbSorterIDAlloc uint32 = 0
 
 func allocID() uint32 {
-	return atomic.AddUint32(&levelDBSorterIDAlloc, 1)
+	return atomic.AddUint32(&dbSorterIDAlloc, 1)
 }
 
 type common struct {
@@ -224,28 +223,6 @@ func (ls *Sorter) AddEntry(ctx context.Context, event *model.PolymorphicEvent) {
 	_ = ls.writerRouter.SendB(ctx, ls.writerActorID, msg)
 }
 
-// TryAddEntry tries to add an RawKVEntry to the EntryGroup
-func (ls *Sorter) TryAddEntry(
-	ctx context.Context, event *model.PolymorphicEvent,
-) (bool, error) {
-	if atomic.LoadInt32(&ls.closed) != 0 {
-		return false, nil
-	}
-	msg := actormsg.ValueMessage(message.Task{
-		UID:        ls.uid,
-		TableID:    ls.tableID,
-		InputEvent: event,
-	})
-	err := ls.writerRouter.Send(ls.writerActorID, msg)
-	if err != nil {
-		if cerror.ErrMailboxFull.Equal(err) {
-			return false, nil
-		}
-		return false, errors.Trace(err)
-	}
-	return true, nil
-}
-
 // Output returns the sorted raw kv output channel
 func (ls *Sorter) Output() <-chan *model.PolymorphicEvent {
 	// Notify reader to read sorted events
@@ -286,7 +263,7 @@ func (ls *Sorter) EmitStartTs(ctx context.Context, ts uint64) {
 		StartTs: ts,
 	})
 	_ = ls.readerRouter.SendB(ctx, ls.ReaderActorID, msg)
-	log.Info("leveldb sorter: send start ts to reader",
+	log.Info("db sorter: send start ts to reader",
 		zap.Uint64("tableID", ls.common.tableID),
 		zap.Uint64("ts", ts))
 }

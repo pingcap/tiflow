@@ -38,7 +38,7 @@ func NewKafkaDDLSink(
 	replicaConfig *config.ReplicaConfig,
 	adminClientCreator pkafka.ClusterAdminClientCreator,
 	producerCreator ddlproducer.Factory,
-) (*ddlSink, error) {
+) (_ *ddlSink, err error) {
 	topic, err := mqutil.GetTopic(sinkURI)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -57,12 +57,17 @@ func NewKafkaDDLSink(
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
-	// we must close adminClient when this func return cause by an error
-	// otherwise the adminClient will never be closed and lead to a goroutine leak
-	// TODO: we should pass this adminClient to the producer to get the metrics.
+	// We must close adminClient when this func return cause by an error
+	// otherwise the adminClient will never be closed and lead to a goroutine leak.
 	defer func() {
-		_ = adminClient.Close()
+		if err != nil {
+			if err = adminClient.Close(); err != nil {
+				log.Error("Close admin client failed in kafka "+
+					"DDL sink", zap.Error(err))
+			}
+		}
 	}()
+
 	if err := kafka.AdjustConfig(adminClient, baseConfig, saramaConfig, topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
@@ -80,9 +85,8 @@ func NewKafkaDDLSink(
 	start := time.Now()
 	log.Info("Try to create a DDL sink producer",
 		zap.Any("baseConfig", baseConfig))
-	p, err := producerCreator(ctx, client)
+	p, err := producerCreator(ctx, client, adminClient)
 	log.Info("DDL sink producer client created", zap.Duration("duration", time.Since(start)))
-
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}

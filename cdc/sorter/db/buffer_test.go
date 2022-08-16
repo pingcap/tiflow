@@ -11,13 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package leveldb
+package db
 
 import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
+	"github.com/pingcap/tiflow/cdc/sorter/db/message"
 	"github.com/stretchr/testify/require"
 )
 

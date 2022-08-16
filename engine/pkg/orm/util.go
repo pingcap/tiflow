@@ -19,9 +19,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/glebarez/sqlite"
 	"github.com/pingcap/failpoint"
 	"gorm.io/driver/mysql"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
 	"github.com/pingcap/tiflow/engine/pkg/meta/model"
