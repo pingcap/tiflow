@@ -320,11 +320,19 @@ func TestManagerError(t *testing.T) {
 		Level:   string(ConsistentLevelEventual),
 		Storage: "blackhole://",
 	}
+<<<<<<< HEAD
 	errCh := make(chan error, 1)
 	opts := &ManagerOptions{
 		EnableBgRunner: false,
 		ErrCh:          errCh,
 	}
+=======
+
+	errCh := make(chan error, 1)
+	opts := newMockManagerOptions(errCh)
+	opts.EnableBgRunner = false
+	opts.EnableGCRunner = false
+>>>>>>> 39430f844 (redo(ticdc): fix a bug about redo manager error handling (#6765))
 	logMgr, err := NewManager(ctx, cfg, opts)
 	require.Nil(t, err)
 	logMgr.writer = writer.NewInvalidBlackHoleWriter(logMgr.writer)
@@ -367,3 +375,51 @@ func TestManagerError(t *testing.T) {
 		require.Regexp(t, ".*FlushLog.*", err)
 	}
 }
+<<<<<<< HEAD
+=======
+
+func TestReuseWritter(t *testing.T) {
+	ctxs := make([]context.Context, 0, 2)
+	cancels := make([]func(), 0, 2)
+	mgrs := make([]*ManagerImpl, 0, 2)
+
+	dir := t.TempDir()
+	cfg := &config.ConsistentConfig{
+		Level:   string(ConsistentLevelEventual),
+		Storage: "local://" + dir,
+	}
+
+	errCh := make(chan error, 1)
+	opts := newMockManagerOptions(errCh)
+	for i := 0; i < 2; i++ {
+		ctx, cancel := context.WithCancel(context.Background())
+		ctx = contextutil.PutChangefeedIDInCtx(ctx, model.ChangeFeedID{
+			Namespace: "default", ID: "test-reuse-writter",
+		})
+		mgr, err := NewManager(ctx, cfg, opts)
+		require.Nil(t, err)
+
+		ctxs = append(ctxs, ctx)
+		cancels = append(cancels, cancel)
+		mgrs = append(mgrs, mgr)
+	}
+
+	// Cancel one redo manager and wait for a while.
+	cancels[0]()
+	time.Sleep(time.Duration(100) * time.Millisecond)
+
+	// The another redo manager shouldn't be influenced.
+	mgrs[1].flushLog(ctxs[1], func(err error) { opts.ErrCh <- err })
+	select {
+	case x := <-errCh:
+		log.Panic("shouldn't get an error", zap.Error(x))
+	case <-time.NewTicker(time.Duration(100) * time.Millisecond).C:
+	}
+
+	// After the manager is closed, APIs can return errors instead of panic.
+	cancels[1]()
+	time.Sleep(time.Duration(100) * time.Millisecond)
+	err := mgrs[1].UpdateResolvedTs(context.Background(), 1, 1)
+	require.Error(t, err)
+}
+>>>>>>> 39430f844 (redo(ticdc): fix a bug about redo manager error handling (#6765))
