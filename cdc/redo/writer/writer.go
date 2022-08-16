@@ -515,10 +515,10 @@ func (l *LogWriter) flushLogMeta(checkpointTs, resolvedTs uint64) error {
 		return nil
 	}
 
-	// err = os.MkdirAll(l.cfg.Dir, common.DefaultDirMode)
-	// if err != nil {
-	// 	return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't make dir for new redo logfile"))
-	// }
+	err = os.MkdirAll(l.cfg.Dir, common.DefaultDirMode)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't make dir for new redo logfile"))
+	}
 
 	// we will create a temp metadata file and then atomically rename it.
 	tmpFileName := l.filePath() + common.MetaTmpEXT
