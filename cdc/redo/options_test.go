@@ -30,7 +30,7 @@ func TestOwnerManagerOptions(t *testing.T) {
 	select {
 	case opts.ErrCh <- nil:
 	default:
-		panic("ch shouldn't be full")
+		t.Fatal("ch shouldn't be full")
 	}
 }
 
@@ -45,6 +45,6 @@ func TestProcessorManagerOptions(t *testing.T) {
 	select {
 	case opts.ErrCh <- nil:
 	default:
-		panic("ch shouldn't be full")
+		t.Fatal("ch shouldn't be full")
 	}
 }

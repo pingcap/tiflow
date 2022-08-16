@@ -676,7 +676,7 @@ func (m *ManagerImpl) withLock(action func(m *ManagerImpl) error) error {
 	m.rwlock.RLock()
 	defer m.rwlock.RUnlock()
 	if atomic.LoadInt32(&m.closed) != 0 {
-		return cerror.WrapError(cerror.ErrRedoWriterStopped, errors.New("redo manager is stopped"))
+		return cerror.ErrRedoWriterStopped.GenWithStack("redo manager is stopped")
 	}
 	return action(m)
 }
