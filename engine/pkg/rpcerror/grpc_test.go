@@ -18,10 +18,9 @@ import (
 
 	"github.com/gogo/status"
 	"github.com/pingcap/errors"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
-
-	pb "github.com/pingcap/tiflow/engine/enginepb"
 )
 
 func TestTryUnwrapNormalizedError(t *testing.T) {
@@ -39,7 +38,7 @@ func TestToGRPCError(t *testing.T) {
 	t.Parallel()
 
 	testErrorPrototype := Normalize[testError](WithName("ErrTestError"), WithMessage("test message"))
-	err := testErrorPrototype.GenWithStack(&testError{Val: "first test error"})
+	err := testErrorPrototype.Gen(&testError{Val: "first test error"})
 
 	grpcErr := ToGRPCError(err)
 	st := status.Convert(grpcErr)
