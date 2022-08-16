@@ -34,7 +34,6 @@ import (
 	cm "github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
-	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/util/dbutil"
@@ -755,6 +754,7 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	}
 }
 
+// getTableInfo returns a table info for sourceTable, it should not be modified by caller.
 func (s *Syncer) getTableInfo(tctx *tcontext.Context, sourceTable, targetTable *filter.Table) (*model.TableInfo, error) {
 	ti, err := s.schemaTracker.GetTableInfo(sourceTable)
 	if err == nil {
@@ -807,31 +807,23 @@ func (s *Syncer) trackTableInfoFromDownstream(tctx *tcontext.Context, sourceTabl
 	createStmt.Table.Name = model.NewCIStr(sourceTable.Name)
 
 	// schema tracker sets non-clustered index, so can't handle auto_random.
-	if v, _ := s.schemaTracker.GetSystemVar(schema.TiDBClusteredIndex); v == "OFF" {
-		for _, col := range createStmt.Cols {
-			for i, opt := range col.Options {
-				if opt.Tp == ast.ColumnOptionAutoRandom {
-					// col.Options is unordered
-					col.Options[i] = col.Options[len(col.Options)-1]
-					col.Options = col.Options[:len(col.Options)-1]
-					break
-				}
+	for _, col := range createStmt.Cols {
+		for i, opt := range col.Options {
+			if opt.Tp == ast.ColumnOptionAutoRandom {
+				// col.Options is unordered
+				col.Options[i] = col.Options[len(col.Options)-1]
+				col.Options = col.Options[:len(col.Options)-1]
+				break
 			}
 		}
 	}
 
-	var newCreateSQLBuilder strings.Builder
-	restoreCtx := format.NewRestoreCtx(format.DefaultRestoreFlags, &newCreateSQLBuilder)
-	if err = createStmt.Restore(restoreCtx); err != nil {
-		return terror.ErrSchemaTrackerCannotParseDownstreamTable.Delegate(err, targetTable, sourceTable)
-	}
-	newCreateSQL := newCreateSQLBuilder.String()
 	tctx.L().Debug("reverse-synchronized table schema",
 		zap.Stringer("sourceTable", sourceTable),
 		zap.Stringer("targetTable", targetTable),
-		zap.String("sql", newCreateSQL),
+		zap.String("sql", createSQL),
 	)
-	if err = s.schemaTracker.Exec(tctx.Ctx, sourceTable.Schema, newCreateSQL); err != nil {
+	if err = s.schemaTracker.Exec(tctx.Ctx, sourceTable.Schema, createStmt); err != nil {
 		return terror.ErrSchemaTrackerCannotCreateTable.Delegate(err, sourceTable)
 	}
 
@@ -1735,7 +1727,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	}
 	// prevent creating new Tracker on `Run` in order to avoid
 	// two different Trackers are invoked in the validator and the syncer.
-	err = s.schemaTracker.Init(ctx, s.cfg.Name, s.cfg.To.Session, s.downstreamTrackConn, s.tctx.L())
+	err = s.schemaTracker.Init(ctx, s.cfg.Name, int(s.SourceTableNamesFlavor), s.downstreamTrackConn, s.tctx.L())
 	if err != nil {
 		return terror.ErrSchemaTrackerInit.Delegate(err)
 	}
@@ -2209,6 +2201,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 		switch op {
 		case pb.ErrorOp_Skip:
+			// try to handle pessimistic sharding?
 			queryEvent, ok := e.Event.(*replication.QueryEvent)
 			if !ok {
 				s.tctx.L().Warn("can't skip an event which is not DDL", zap.Reflect("header", e.Header))
@@ -2764,7 +2757,7 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 		shouldReTrackDownstreamIndex bool // retrack downstreamIndex
 	)
 
-	switch node := trackInfo.originStmt.(type) {
+	switch node := trackInfo.stmtCache.(type) {
 	case *ast.CreateDatabaseStmt:
 		shouldExecDDLOnSchemaTracker = true
 	case *ast.AlterDatabaseStmt:
@@ -2815,7 +2808,7 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 	case *ast.LockTablesStmt, *ast.UnlockTablesStmt, *ast.CleanupTableLockStmt, *ast.TruncateTableStmt:
 		break
 	default:
-		ec.tctx.L().DPanic("unhandled DDL type cannot be tracked", zap.Stringer("type", reflect.TypeOf(trackInfo.originStmt)))
+		ec.tctx.L().DPanic("unhandled DDL type cannot be tracked", zap.Stringer("type", reflect.TypeOf(trackInfo.stmtCache)))
 	}
 
 	if shouldReTrackDownstreamIndex {
@@ -2848,7 +2841,7 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 	}
 
 	if shouldExecDDLOnSchemaTracker {
-		if err := s.schemaTracker.Exec(ec.tctx.Ctx, usedSchema, trackInfo.originDDL); err != nil {
+		if err := s.schemaTracker.Exec(ec.tctx.Ctx, usedSchema, trackInfo.originStmt); err != nil {
 			if ignoreTrackerDDLError(err) {
 				ec.tctx.L().Warn("will ignore a DDL error when tracking",
 					zap.String("schema", usedSchema),
@@ -2913,7 +2906,7 @@ func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext) (ma
 			return nil, err
 		}
 		sourceTable := ddlInfo.sourceTables[0]
-		switch ddlInfo.originStmt.(type) {
+		switch ddlInfo.stmtCache.(type) {
 		case *ast.DropDatabaseStmt:
 			delete(affectedTbls, sourceTable.Schema)
 		case *ast.DropTableStmt:
@@ -2985,6 +2978,13 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 			firstErr = err
 		}
 	}
+	p, err := utils.GetParserFromSQLModeStr(s.cfg.LoaderConfig.SQLMode)
+	if err != nil {
+		logger.Error("failed to create parser from SQL Mode, will skip loadTableStructureFromDump",
+			zap.String("SQLMode", s.cfg.LoaderConfig.SQLMode),
+			zap.Error(err))
+		return err
+	}
 
 	for _, dbAndFile := range tableFiles {
 		db, file := dbAndFile[0], dbAndFile[1]
@@ -3004,7 +3004,18 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 			if len(stmt) == 0 || bytes.HasPrefix(stmt, []byte("/*")) {
 				continue
 			}
-			err = s.schemaTracker.Exec(ctx, db, string(stmt))
+			stmtNode, err := p.ParseOneStmt(string(stmt), "", "")
+			if err != nil {
+				logger.Warn("fail to parse statement for creating table in schema tracker",
+					zap.String("db", db),
+					zap.String("path", s.cfg.LoaderConfig.Dir),
+					zap.String("file", file),
+					zap.ByteString("statement", stmt),
+					zap.Error(err))
+				setFirstErr(err)
+				continue
+			}
+			err = s.schemaTracker.Exec(ctx, db, stmtNode)
 			if err != nil {
 				logger.Warn("fail to create table for dump files",
 					zap.Any("path", s.cfg.LoaderConfig.Dir),
@@ -3156,9 +3167,7 @@ func (s *Syncer) Close() {
 	s.stopSync()
 	s.closeDBs()
 	s.checkpoint.Close()
-	if err := s.schemaTracker.Close(); err != nil {
-		s.tctx.L().Error("fail to close schema tracker", log.ShortError(err))
-	}
+	s.schemaTracker.Close()
 	if s.sgk != nil {
 		s.sgk.Close()
 	}
@@ -3211,9 +3220,7 @@ func (s *Syncer) Pause() {
 		return
 	}
 	s.stopSync()
-	if err := s.schemaTracker.Close(); err != nil {
-		s.tctx.L().Error("fail to close schema tracker", log.ShortError(err))
-	}
+	s.schemaTracker.Close()
 }
 
 // Resume resumes the paused process.

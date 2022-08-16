@@ -14,31 +14,24 @@
 package schema
 
 import (
+	"bytes"
 	"context"
 	"fmt"
-	"net/url"
-	"os"
 	"strings"
 	"sync"
 
-	"github.com/docker/go-units"
 	"github.com/pingcap/errors"
-	tidbConfig "github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/ddl/schematracker"
-	"github.com/pingcap/tidb/domain"
+	"github.com/pingcap/tidb/executor"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/meta/autoid"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/parser/terror"
-	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/sessionctx/variable"
-	"github.com/pingcap/tidb/store/mockstore"
-	unistoreConfig "github.com/pingcap/tidb/store/mockstore/unistore/config"
 	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tidb/util/mock"
 	"go.uber.org/atomic"
@@ -53,31 +46,10 @@ import (
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
 
-const (
-	// TiDBClusteredIndex is the variable name for clustered index.
-	TiDBClusteredIndex = "tidb_enable_clustered_index"
-)
-
-var (
-	// don't read clustered index variable from downstream because it may changed during syncing
-	// we always using OFF tidb_enable_clustered_index unless user set it in config.
-	downstreamVars    = []string{"sql_mode", "tidb_skip_utf8_check"}
-	defaultGlobalVars = map[string]string{
-		TiDBClusteredIndex: "OFF",
-	}
-)
-
-// TODO: use it in next PR.
-var _ = schematracker.NewSchemaTracker(0)
-
-func init() {
-	unistoreConfig.DefaultConf.Engine.VlogFileSize = int64(kv.TxnEntrySizeLimit)
-	unistoreConfig.DefaultConf.Engine.L1Size = 128 * units.MiB
-}
-
 // Tracker is used to track schema locally.
 type Tracker struct {
-	// The Tracker is an embedded tidb in essence, where there was basically no parallel operation at the beginning.
+	// The Tracker uses tidb DDL library to track table structure changes.
+	// where there was basically no parallel operation at the beginning.
 	// However, since the validator is introduced and heavily dependent on the Tracker, we need to make sure
 	// the synchronization between the reading from the validator and the modification from the syncer (e.g.
 	// when the checkpoint is being rolled back, we have to make sure the validator can still vision the original tables)
@@ -86,12 +58,12 @@ type Tracker struct {
 	// 2. Init: when the syncer restarts, it may re-initialize the Tracker while the validator may read the Tracker at the same time.
 	// 3. Close: Being similar as above, the validator can read the Tracker while the syncer is closing the Tracker.
 	sync.RWMutex
-	storePath string
-	store     kv.Storage
-	dom       *domain.Domain
-	se        session.Session
-	dsTracker *downstreamTracker
-	closed    atomic.Bool
+	lowerCaseTableNames int
+	se                  sessionctx.Context
+	upstreamTracker     schematracker.SchemaTracker
+	downstreamTracker   *downstreamTracker
+	logger              log.Logger
+	closed              atomic.Bool
 }
 
 // downstreamTracker tracks downstream schema.
@@ -121,20 +93,14 @@ func NewTracker() *Tracker {
 func (tr *Tracker) Init(
 	ctx context.Context,
 	task string,
-	sessionCfg map[string]string,
+	lowerCaseTableNames int,
 	downstreamConn *dbconn.DBConn,
 	logger log.Logger,
 ) error {
 	if tr == nil {
 		return nil
 	}
-	var (
-		err       error
-		storePath string
-		store     kv.Storage
-		dom       *domain.Domain
-		se        session.Session
-	)
+	var err error
 
 	rollbackHolder := fr.NewRollbackHolder("schema-tracker")
 	defer func() {
@@ -143,133 +109,24 @@ func (tr *Tracker) Init(
 		}
 	}()
 
-	// NOTE: tidb uses a **global** config so can't isolate tracker's config from each other. If that isolation is needed,
-	// we might SetGlobalConfig before every call to tracker, or use some patch like https://github.com/bouk/monkey
-	tidbConfig.UpdateGlobal(func(conf *tidbConfig.Config) {
-		// bypass wait time of https://github.com/pingcap/tidb/pull/20550
-		conf.TiKVClient.AsyncCommit.SafeWindow = 0
-		conf.TiKVClient.AsyncCommit.AllowedClockDrift = 0
-		// explicitly disable new-collation for better compatibility as tidb only support a subset of all mysql collations.
-		conf.NewCollationsEnabledOnFirstBootstrap = false
-		conf.Performance.RunAutoAnalyze = false
-	})
-
-	if len(sessionCfg) == 0 {
-		sessionCfg = make(map[string]string)
-	}
-
 	logger = logger.WithFields(zap.String("component", "schema-tracker"), zap.String("task", task))
-	tctx := tcontext.NewContext(ctx, logger)
-	// get variables if user doesn't specify
-	// all cfg in downstreamVars should be lowercase
-	for _, k := range downstreamVars {
-		if _, ok := sessionCfg[k]; !ok {
-			var ignoredColumn interface{}
-			rows, err2 := downstreamConn.QuerySQL(tctx, nil, fmt.Sprintf("SHOW VARIABLES LIKE '%s'", k))
-			if err2 != nil {
-				return err2
-			}
-			if rows.Next() {
-				var value string
-				if err3 := rows.Scan(&ignoredColumn, &value); err3 != nil {
-					return err3
-				}
-				sessionCfg[k] = value
-			}
-			// nolint:sqlclosecheck
-			if err2 = rows.Close(); err2 != nil {
-				return err2
-			}
-			if err2 = rows.Err(); err2 != nil {
-				return err2
-			}
-		}
-	}
 
-	storePath, err = newTmpFolderForTracker(task)
-	if err != nil {
-		return err
-	}
-	rollbackHolder.Add(fr.FuncRollback{Name: "DeleteStorePath", Fn: func() {
-		_ = os.RemoveAll(storePath)
-	}})
-
-	store, err = mockstore.NewMockStore(
-		mockstore.WithStoreType(mockstore.EmbedUnistore),
-		mockstore.WithPath(storePath))
-	if err != nil {
-		return err
-	}
-	rollbackHolder.Add(fr.FuncRollback{Name: "CloseStore", Fn: func() {
-		_ = store.Close()
-	}})
-
-	// avoid data race and of course no use in DM
-	session.DisableStats4Test()
-
-	dom, err = session.BootstrapSession(store)
-	if err != nil {
-		return err
-	}
-	rollbackHolder.Add(fr.FuncRollback{Name: "CloseDomain", Fn: dom.Close})
-
-	se, err = session.CreateSession(store)
-	if err != nil {
-		return err
-	}
-	rollbackHolder.Add(fr.FuncRollback{Name: "CloseSession", Fn: se.Close})
-
-	globalVarsToSet := make(map[string]string, len(defaultGlobalVars))
-	for k, v := range defaultGlobalVars {
-		// user's config has highest priority
-		if _, ok := sessionCfg[k]; !ok {
-			globalVarsToSet[k] = v
-		}
-	}
-
-	for k, v := range sessionCfg {
-		err = se.GetSessionVars().SetSystemVarWithRelaxedValidation(k, v)
-		if err != nil {
-			// when user set some unsupported variable, we just ignore it
-			if terror.ErrorEqual(err, variable.ErrUnknownSystemVar) {
-				log.L().Warn("can not set this variable", zap.Error(err))
-				continue
-			}
-			return err
-		}
-	}
-	for k, v := range globalVarsToSet {
-		err = se.GetSessionVars().SetSystemVarWithRelaxedValidation(k, v)
-		if err != nil {
-			return err
-		}
-	}
-	// skip DDL test https://github.com/pingcap/tidb/pull/33079
-	se.SetValue(sessionctx.QueryString, "skip")
-
-	// TiDB will unconditionally create an empty "test" schema.
-	// This interferes with MySQL/MariaDB upstream which such schema does not
-	// exist by default. So we need to drop it first.
-	err = dropDatabase(dom, se, "test")
-	if err != nil {
-		return err
-	}
-
+	upTracker := schematracker.NewSchemaTracker(lowerCaseTableNames)
 	dsSession := mock.NewContext()
 	dsSession.GetSessionVars().StrictSQLMode = false
-	// init downstreamTracker
-	dsTracker := &downstreamTracker{
+	downTracker := &downstreamTracker{
 		downstreamConn: downstreamConn,
 		se:             dsSession,
 		tableInfos:     make(map[string]*DownstreamTableInfo),
 	}
+	se := utils.NewSessionCtx(nil)
 	tr.Lock()
 	defer tr.Unlock()
-	tr.storePath = storePath
-	tr.store = store
-	tr.dom = dom
+	tr.lowerCaseTableNames = lowerCaseTableNames
 	tr.se = se
-	tr.dsTracker = dsTracker
+	tr.upstreamTracker = upTracker
+	tr.downstreamTracker = downTracker
+	tr.logger = logger
 	tr.closed.Store(false)
 	return nil
 }
@@ -279,27 +136,50 @@ func (tr *Tracker) Init(
 func NewTestTracker(
 	ctx context.Context,
 	task string,
-	sessionCfg map[string]string,
 	downstreamConn *dbconn.DBConn,
 	logger log.Logger,
 ) (*Tracker, error) {
 	tr := NewTracker()
-	err := tr.Init(ctx, task, sessionCfg, downstreamConn, logger)
+	err := tr.Init(ctx, task, int(utils.LCTableNamesSensitive), downstreamConn, logger)
 	if err != nil {
 		return nil, err
 	}
 	return tr, nil
 }
 
-func newTmpFolderForTracker(task string) (string, error) {
-	return os.MkdirTemp("./", url.PathEscape(task)+"-tracker")
-}
-
 // Exec runs an SQL (DDL) statement.
-func (tr *Tracker) Exec(ctx context.Context, db string, sql string) error {
-	tr.se.GetSessionVars().CurrentDB = db
-	_, err := tr.se.Execute(ctx, sql)
-	return err
+func (tr *Tracker) Exec(ctx context.Context, db string, stmt ast.StmtNode) error {
+	visitor := currentDBSetter{
+		currentDB: db,
+	}
+	stmt.Accept(&visitor)
+
+	switch v := stmt.(type) {
+	case *ast.CreateDatabaseStmt:
+		return tr.upstreamTracker.CreateSchema(tr.se, v)
+	case *ast.AlterDatabaseStmt:
+		return tr.upstreamTracker.AlterSchema(tr.se, v)
+	case *ast.DropDatabaseStmt:
+		return tr.upstreamTracker.DropSchema(tr.se, v)
+	case *ast.CreateTableStmt:
+		return tr.upstreamTracker.CreateTable(tr.se, v)
+	case *ast.AlterTableStmt:
+		return tr.upstreamTracker.AlterTable(ctx, tr.se, v)
+	case *ast.RenameTableStmt:
+		return tr.upstreamTracker.RenameTable(tr.se, v)
+	case *ast.DropTableStmt:
+		return tr.upstreamTracker.DropTable(tr.se, v)
+	case *ast.CreateIndexStmt:
+		return tr.upstreamTracker.CreateIndex(tr.se, v)
+	case *ast.DropIndexStmt:
+		return tr.upstreamTracker.DropIndex(tr.se, v)
+	case *ast.TruncateTableStmt:
+		ident := ast.Ident{Schema: v.Table.Schema, Name: v.Table.Name}
+		return tr.upstreamTracker.TruncateTable(tr.se, ident)
+	default:
+		tr.logger.DPanic("unexpected statement type", zap.String("type", fmt.Sprintf("%T", v)))
+	}
+	return nil
 }
 
 // GetTableInfo returns the schema associated with the table.
@@ -309,85 +189,58 @@ func (tr *Tracker) GetTableInfo(table *filter.Table) (*model.TableInfo, error) {
 	if tr.closed.Load() {
 		return nil, dmterror.ErrSchemaTrackerIsClosed.New("fail to get table info")
 	}
-	dbName := model.NewCIStr(table.Schema)
-	tableName := model.NewCIStr(table.Name)
-	t, err := tr.dom.InfoSchema().TableByName(dbName, tableName)
+	ti, err := tr.upstreamTracker.TableByName(model.NewCIStr(table.Schema), model.NewCIStr(table.Name))
 	if err != nil {
 		return nil, err
 	}
-	return t.Meta(), nil
+	return ti.Clone(), nil
 }
 
 // GetCreateTable returns the `CREATE TABLE` statement of the table.
 func (tr *Tracker) GetCreateTable(ctx context.Context, table *filter.Table) (string, error) {
-	// use `SHOW CREATE TABLE` now, another method maybe `executor.ConstructResultOfShowCreateTable`.
-	rs, err := tr.se.Execute(ctx, fmt.Sprintf("SHOW CREATE TABLE %s", table.String()))
-	if err != nil {
-		return "", err
-	} else if len(rs) != 1 {
-		return "", nil // this should not happen.
-	}
-	// nolint:errcheck
-	defer rs[0].Close()
-
-	req := rs[0].NewChunk(nil)
-	err = rs[0].Next(ctx, req)
+	tableInfo, err := tr.upstreamTracker.TableByName(model.NewCIStr(table.Schema), model.NewCIStr(table.Name))
 	if err != nil {
 		return "", err
 	}
-	if req.NumRows() == 0 {
-		return "", nil // this should not happen.
+	result := bytes.NewBuffer(make([]byte, 0, 512))
+	err = executor.ConstructResultOfShowCreateTable(tr.se, tableInfo, autoid.Allocators{}, result)
+	if err != nil {
+		return "", err
 	}
-
-	row := req.GetRow(0)
-	str := row.GetString(1) // the first column is the table name.
-	return utils.CreateTableSQLToOneRow(str), nil
+	return utils.CreateTableSQLToOneRow(result.String()), nil
 }
 
 // AllSchemas returns all schemas visible to the tracker (excluding system tables).
-func (tr *Tracker) AllSchemas() []*model.DBInfo {
-	allSchemas := tr.dom.InfoSchema().AllSchemas()
-	filteredSchemas := make([]*model.DBInfo, 0, len(allSchemas)-3)
-	for _, db := range allSchemas {
-		if !filter.IsSystemSchema(db.Name.L) {
-			filteredSchemas = append(filteredSchemas, db)
-		}
-	}
-	return filteredSchemas
+func (tr *Tracker) AllSchemas() []string {
+	return tr.upstreamTracker.AllSchemaNames()
 }
 
 // ListSchemaTables lists all tables in the schema.
 func (tr *Tracker) ListSchemaTables(schema string) ([]string, error) {
-	allSchemas := tr.AllSchemas()
-	for _, db := range allSchemas {
-		if db.Name.String() == schema {
-			tables := make([]string, len(db.Tables))
-			for i, t := range db.Tables {
-				tables[i] = t.Name.String()
-			}
-			return tables, nil
-		}
+	ret, err := tr.upstreamTracker.AllTableNamesOfSchema(model.NewCIStr(schema))
+	if err != nil {
+		return nil, dmterror.ErrSchemaTrackerUnSchemaNotExist.Generate(schema)
 	}
-	return nil, dmterror.ErrSchemaTrackerUnSchemaNotExist.Generate(schema)
+	return ret, nil
 }
 
 // GetSingleColumnIndices returns indices of input column if input column only has single-column indices
 // returns nil if input column has no indices, or has multi-column indices.
+// TODO: move out of this package!
 func (tr *Tracker) GetSingleColumnIndices(db, tbl, col string) ([]*model.IndexInfo, error) {
 	col = strings.ToLower(col)
-	t, err := tr.dom.InfoSchema().TableByName(model.NewCIStr(db), model.NewCIStr(tbl))
+	t, err := tr.upstreamTracker.TableByName(model.NewCIStr(db), model.NewCIStr(tbl))
 	if err != nil {
 		return nil, err
 	}
 
 	var idxInfos []*model.IndexInfo
-	for _, idx := range t.Indices() {
-		m := idx.Meta()
-		for _, col2 := range m.Columns {
+	for _, idx := range t.Indices {
+		for _, col2 := range idx.Columns {
 			// found an index covers input column
 			if col2.Name.L == col {
-				if len(m.Columns) == 1 {
-					idxInfos = append(idxInfos, m)
+				if len(idx.Columns) == 1 {
+					idxInfos = append(idxInfos, idx)
 				} else {
 					// temporary use errors.New, won't propagate further
 					return nil, errors.New("found multi-column index")
@@ -404,98 +257,39 @@ func IsTableNotExists(err error) bool {
 }
 
 // Reset drops all tables inserted into this tracker.
-func (tr *Tracker) Reset() error {
-	tr.se.SetValue(sessionctx.QueryString, "skip")
-	allDBs := tr.dom.InfoSchema().AllSchemaNames()
-	for _, db := range allDBs {
-		dbName := model.NewCIStr(db)
-		if filter.IsSystemSchema(dbName.L) {
-			continue
-		}
-		if err := dropDatabase(tr.dom, tr.se, dbName.L); err != nil {
-			return err
-		}
-	}
-	return nil
+func (tr *Tracker) Reset() {
+	// TODO: lock?
+	tr.upstreamTracker = schematracker.NewSchemaTracker(tr.lowerCaseTableNames)
 }
 
-func dropDatabase(dom *domain.Domain, se session.Session, db string) error {
-	stmt := &ast.DropDatabaseStmt{
-		Name:     model.NewCIStr(db),
-		IfExists: true,
-	}
-	return dom.DDL().DropSchema(se, stmt)
-}
-
-// Close close a tracker.
-func (tr *Tracker) Close() error {
+// Close closes a tracker.
+func (tr *Tracker) Close() {
 	if tr == nil {
-		return nil
+		return
 	}
 	// prevent SchemaTracker being closed when
 	// other components are getting/setting table info
 	tr.Lock()
 	defer tr.Unlock()
-	if !tr.closed.CAS(false, true) {
-		return nil
-	}
-	// Build of the Tracker and the initialization is divided.
-	// these fields can possibly be nil if the Tracker is closed before the initialization.
-	if tr.se != nil {
-		tr.se.Close()
-	}
-	if tr.dom != nil {
-		tr.dom.Close()
-	}
-	if tr.store != nil {
-		if err := tr.store.Close(); err != nil {
-			return err
-		}
-	}
-	return os.RemoveAll(tr.storePath)
+	tr.closed.Store(true)
 }
 
 // DropTable drops a table from this tracker.
 func (tr *Tracker) DropTable(table *filter.Table) error {
-	tr.se.SetValue(sessionctx.QueryString, "skip")
-	stmt := &ast.DropTableStmt{
-		Tables: []*ast.TableName{
-			{
-				Schema: model.NewCIStr(table.Schema),
-				Name:   model.NewCIStr(table.Name),
-			},
-		},
-		IfExists: true,
-	}
-	return tr.dom.DDL().DropTable(tr.se, stmt)
-}
-
-// DropIndex drops an index from this tracker.
-func (tr *Tracker) DropIndex(table *filter.Table, index string) error {
-	tr.se.SetValue(sessionctx.QueryString, "skip")
-	stmt := &ast.DropIndexStmt{
-		Table: &ast.TableName{
-			Schema: model.NewCIStr(table.Schema),
-			Name:   model.NewCIStr(table.Name),
-		},
-		IndexName: index,
-		IfExists:  true,
-	}
-	return tr.dom.DDL().DropIndex(tr.se, stmt)
+	return tr.upstreamTracker.DeleteTable(model.NewCIStr(table.Schema), model.NewCIStr(table.Name))
 }
 
 // CreateSchemaIfNotExists creates a SCHEMA of the given name if it did not exist.
 func (tr *Tracker) CreateSchemaIfNotExists(db string) error {
-	tr.se.SetValue(sessionctx.QueryString, "skip")
 	dbName := model.NewCIStr(db)
-	if tr.dom.InfoSchema().SchemaExists(dbName) {
+	if tr.upstreamTracker.SchemaByName(dbName) != nil {
 		return nil
 	}
 	stmt := &ast.CreateDatabaseStmt{
 		Name:        dbName,
 		IfNotExists: true,
 	}
-	return tr.dom.DDL().CreateSchema(tr.se, stmt)
+	return tr.upstreamTracker.CreateSchema(tr.se, stmt)
 }
 
 // cloneTableInfo creates a clone of the TableInfo.
@@ -513,18 +307,17 @@ func cloneTableInfo(ti *model.TableInfo) *model.TableInfo {
 
 // CreateTableIfNotExists creates a TABLE of the given name if it did not exist.
 func (tr *Tracker) CreateTableIfNotExists(table *filter.Table, ti *model.TableInfo) error {
-	tr.se.SetValue(sessionctx.QueryString, "skip")
 	schemaName := model.NewCIStr(table.Schema)
 	tableName := model.NewCIStr(table.Name)
 	ti = cloneTableInfo(ti)
 	ti.Name = tableName
-	return tr.dom.DDL().CreateTableWithInfo(tr.se, schemaName, ti, ddl.OnExistIgnore)
+	return tr.upstreamTracker.CreateTableWithInfo(tr.se, schemaName, ti, ddl.OnExistIgnore)
 }
 
 // SplitBatchCreateTableAndHandle will split the batch if it exceeds the kv entry size limit.
 func (tr *Tracker) SplitBatchCreateTableAndHandle(schema model.CIStr, info []*model.TableInfo, l int, r int) error {
 	var err error
-	if err = tr.dom.DDL().BatchCreateTableWithInfo(tr.se, schema, info[l:r], ddl.OnExistIgnore); kv.ErrEntryTooLarge.Equal(err) {
+	if err = tr.upstreamTracker.BatchCreateTableWithInfo(tr.se, schema, info[l:r], ddl.OnExistIgnore); kv.ErrEntryTooLarge.Equal(err) {
 		if r-l == 1 {
 			return err
 		}
@@ -544,7 +337,6 @@ func (tr *Tracker) SplitBatchCreateTableAndHandle(schema model.CIStr, info []*mo
 // BatchCreateTableIfNotExist will batch creating tables per schema. If the schema does not exist, it will create it.
 // The argument is { database name -> { table name -> TableInfo } }.
 func (tr *Tracker) BatchCreateTableIfNotExist(tablesToCreate map[string]map[string]*model.TableInfo) error {
-	tr.se.SetValue(sessionctx.QueryString, "skip")
 	for schema, tableNameInfo := range tablesToCreate {
 		if err := tr.CreateSchemaIfNotExists(schema); err != nil {
 			return err
@@ -564,15 +356,10 @@ func (tr *Tracker) BatchCreateTableIfNotExist(tablesToCreate map[string]map[stri
 	return nil
 }
 
-// GetSystemVar gets a variable from schema tracker.
-func (tr *Tracker) GetSystemVar(name string) (string, bool) {
-	return tr.se.GetSessionVars().GetSystemVar(name)
-}
-
 // GetDownStreamTableInfo gets downstream table info.
 // note. this function will init downstreamTrack's table info.
 func (tr *Tracker) GetDownStreamTableInfo(tctx *tcontext.Context, tableID string, originTI *model.TableInfo) (*DownstreamTableInfo, error) {
-	return tr.dsTracker.getOrInit(tctx, tableID, originTI)
+	return tr.downstreamTracker.getOrInit(tctx, tableID, originTI)
 }
 
 // RemoveDownstreamSchema just remove schema or table in downstreamTrack.
@@ -582,7 +369,7 @@ func (tr *Tracker) RemoveDownstreamSchema(tctx *tcontext.Context, targetTables [
 	}
 
 	for _, targetTable := range targetTables {
-		tr.dsTracker.remove(tctx, targetTable)
+		tr.downstreamTracker.remove(tctx, targetTable)
 	}
 }
 

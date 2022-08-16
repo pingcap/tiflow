@@ -67,11 +67,6 @@ import (
 
 var _ = Suite(&testSyncerSuite{})
 
-var defaultTestSessionCfg = map[string]string{
-	"sql_mode":             "ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION",
-	"tidb_skip_utf8_check": "0",
-}
-
 func TestSuite(t *testing.T) {
 	TestingT(t)
 }
@@ -787,7 +782,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	}
 	syncer.ddlDBConn = dbconn.NewDBConn(s.cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
 	syncer.downstreamTrackConn = dbconn.NewDBConn(s.cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
-	syncer.schemaTracker, err = schema.NewTestTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.downstreamTrackConn, log.L())
+	syncer.schemaTracker, err = schema.NewTestTracker(context.Background(), s.cfg.Name, syncer.downstreamTrackConn, log.L())
 	c.Assert(err, IsNil)
 
 	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
@@ -962,11 +957,6 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	mockDBProvider.ExpectQuery("SELECT cast\\(TIMEDIFF\\(NOW\\(6\\), UTC_TIMESTAMP\\(6\\)\\) as time\\);").
 		WillReturnRows(sqlmock.NewRows([]string{""}).AddRow("01:00:00"))
 	mockGetServerUnixTS(mock)
-	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(
-		sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
-	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_2`").WillReturnRows(
-		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow("t_2", "create table t_2(id int primary key, name varchar(24))"))
 	mock.ExpectBegin()
 	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", pmysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
@@ -1134,7 +1124,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
 			AddRow("t_1", "create table t_1(id int primary key, name varchar(24))"))
 
-	syncer.schemaTracker, err = schema.NewTestTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.ddlDBConn, log.L())
+	syncer.schemaTracker, err = schema.NewTestTracker(context.Background(), s.cfg.Name, syncer.ddlDBConn, log.L())
 	c.Assert(err, IsNil)
 	c.Assert(syncer.Type(), Equals, pb.UnitType_Sync)
 
@@ -1340,7 +1330,7 @@ func (s *testSyncerSuite) TestTrackDDL(c *C) {
 	}
 	syncer.ddlDBConn = dbconn.NewDBConn(s.cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
 	syncer.checkpoint.(*RemoteCheckPoint).dbConn = dbconn.NewDBConn(s.cfg, conn.NewBaseConn(checkPointDBConn, &retry.FiniteRetryStrategy{}))
-	syncer.schemaTracker, err = schema.NewTestTracker(context.Background(), s.cfg.Name, defaultTestSessionCfg, syncer.ddlDBConn, log.L())
+	syncer.schemaTracker, err = schema.NewTestTracker(context.Background(), s.cfg.Name, syncer.ddlDBConn, log.L())
 	c.Assert(err, IsNil)
 	defer syncer.schemaTracker.Close()
 	syncer.exprFilterGroup = NewExprFilterGroup(tcontext.Background(), utils.NewSessionCtx(nil), nil)
@@ -1426,7 +1416,7 @@ func (s *testSyncerSuite) TestTrackDDL(c *C) {
 		ca.callback()
 
 		c.Assert(syncer.trackDDL(testDB, ddlInfo, ec), IsNil)
-		c.Assert(syncer.schemaTracker.Reset(), IsNil)
+		syncer.schemaTracker.Reset()
 		c.Assert(mock.ExpectationsWereMet(), IsNil)
 		c.Assert(checkPointMock.ExpectationsWereMet(), IsNil)
 	}
@@ -1646,6 +1636,14 @@ func (s *Syncer) setupMockCheckpoint(c *C, checkPointDBConn *sql.Conn, checkPoin
 	s.checkpoint.(*RemoteCheckPoint).globalPointSaveTime = time.Now()
 }
 
+func parseSQL(sql string) (ast.StmtNode, error) {
+	stmt, err := parser.New().ParseOneStmt(sql, "", "")
+	if err != nil {
+		return nil, err
+	}
+	return stmt, nil
+}
+
 func (s *testSyncerSuite) TestTrackDownstreamTableWontOverwrite(c *C) {
 	syncer := Syncer{}
 	ctx := context.Background()
@@ -1658,7 +1656,7 @@ func (s *testSyncerSuite) TestTrackDownstreamTableWontOverwrite(c *C) {
 	baseConn := conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})
 	syncer.ddlDBConn = dbconn.NewDBConn(s.cfg, baseConn)
 	syncer.downstreamTrackConn = dbconn.NewDBConn(s.cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
-	syncer.schemaTracker, err = schema.NewTestTracker(ctx, s.cfg.Name, defaultTestSessionCfg, syncer.downstreamTrackConn, log.L())
+	syncer.schemaTracker, err = schema.NewTestTracker(ctx, s.cfg.Name, syncer.downstreamTrackConn, log.L())
 	c.Assert(err, IsNil)
 	defer syncer.schemaTracker.Close()
 
@@ -1671,6 +1669,8 @@ func (s *testSyncerSuite) TestTrackDownstreamTableWontOverwrite(c *C) {
 		Name:   "down",
 	}
 	createTableSQL := "CREATE TABLE up (c1 int, c2 int);"
+	createTableStmt, err := parseSQL(createTableSQL)
+	c.Assert(err, IsNil)
 
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(
 		sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
@@ -1679,7 +1679,7 @@ func (s *testSyncerSuite) TestTrackDownstreamTableWontOverwrite(c *C) {
 			AddRow(downTable.Name, " CREATE TABLE `"+downTable.Name+"` (\n  `c` int(11) DEFAULT NULL\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
 
 	c.Assert(syncer.schemaTracker.CreateSchemaIfNotExists(upTable.Schema), IsNil)
-	c.Assert(syncer.schemaTracker.Exec(ctx, "test", createTableSQL), IsNil)
+	c.Assert(syncer.schemaTracker.Exec(ctx, "test", createTableStmt), IsNil)
 	ti, err := syncer.getTableInfo(tctx, upTable, downTable)
 	c.Assert(err, IsNil)
 	c.Assert(ti.Columns, HasLen, 2)
@@ -1702,7 +1702,7 @@ func (s *testSyncerSuite) TestDownstreamTableHasAutoRandom(c *C) {
 	baseConn := conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})
 	syncer.ddlDBConn = dbconn.NewDBConn(s.cfg, baseConn)
 	syncer.downstreamTrackConn = dbconn.NewDBConn(s.cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
-	syncer.schemaTracker, err = schema.NewTestTracker(ctx, s.cfg.Name, defaultTestSessionCfg, syncer.downstreamTrackConn, log.L())
+	syncer.schemaTracker, err = schema.NewTestTracker(ctx, s.cfg.Name, syncer.downstreamTrackConn, log.L())
 	c.Assert(err, IsNil)
 
 	schemaName := "test"
@@ -1718,7 +1718,6 @@ func (s *testSyncerSuite) TestDownstreamTableHasAutoRandom(c *C) {
 	mock.ExpectQuery("SHOW CREATE TABLE.*").WillReturnRows(
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
 			AddRow(tableName, " CREATE TABLE `"+tableName+"` (\n  `c` bigint(20) NOT NULL /*T![auto_rand] AUTO_RANDOM(5) */,\n  PRIMARY KEY (`c`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
-
 	c.Assert(syncer.schemaTracker.CreateSchemaIfNotExists(schemaName), IsNil)
 	c.Assert(syncer.trackTableInfoFromDownstream(tctx, table, table), IsNil)
 	ti, err := syncer.getTableInfo(tctx, table, table)
@@ -1727,7 +1726,9 @@ func (s *testSyncerSuite) TestDownstreamTableHasAutoRandom(c *C) {
 
 	c.Assert(syncer.schemaTracker.DropTable(table), IsNil)
 	sql := "create table tbl (c bigint primary key);"
-	c.Assert(syncer.schemaTracker.Exec(ctx, schemaName, sql), IsNil)
+	stmt, err := parseSQL(sql)
+	c.Assert(err, IsNil)
+	c.Assert(syncer.schemaTracker.Exec(ctx, schemaName, stmt), IsNil)
 	ti2, err := syncer.getTableInfo(tctx, table, table)
 	c.Assert(err, IsNil)
 
@@ -1736,19 +1737,10 @@ func (s *testSyncerSuite) TestDownstreamTableHasAutoRandom(c *C) {
 
 	c.Assert(ti, DeepEquals, ti2)
 
-	// test if user set ON clustered index, no need to modify
-	sessionCfg := map[string]string{
-		"sql_mode":                "ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION",
-		"tidb_skip_utf8_check":    "0",
-		schema.TiDBClusteredIndex: "ON",
-	}
-	c.Assert(syncer.schemaTracker.Close(), IsNil)
-	syncer.schemaTracker, err = schema.NewTestTracker(ctx, s.cfg.Name, sessionCfg, syncer.downstreamTrackConn, log.L())
+	syncer.schemaTracker.Close()
+	syncer.schemaTracker, err = schema.NewTestTracker(ctx, s.cfg.Name, syncer.downstreamTrackConn, log.L())
 	c.Assert(err, IsNil)
 	defer syncer.schemaTracker.Close()
-	v, ok := syncer.schemaTracker.GetSystemVar(schema.TiDBClusteredIndex)
-	c.Assert(v, Equals, "ON")
-	c.Assert(ok, IsTrue)
 
 	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(
 		sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
@@ -1763,9 +1755,12 @@ func (s *testSyncerSuite) TestDownstreamTableHasAutoRandom(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(mock.ExpectationsWereMet(), IsNil)
 
+	// check trackTableInfoFromDownstream with AUTO_RANDOM is same as no AUTO_RANDOM
 	c.Assert(syncer.schemaTracker.DropTable(table), IsNil)
-	sql = "create table tbl (c bigint primary key auto_random);"
-	c.Assert(syncer.schemaTracker.Exec(ctx, schemaName, sql), IsNil)
+	sql = "create table tbl (c bigint primary key);"
+	stmt, err = parseSQL(sql)
+	c.Assert(err, IsNil)
+	c.Assert(syncer.schemaTracker.Exec(ctx, schemaName, stmt), IsNil)
 	ti2, err = syncer.getTableInfo(tctx, table, table)
 	c.Assert(err, IsNil)
 
@@ -1925,7 +1920,7 @@ func TestSyncerGetTableInfo(t *testing.T) {
 	baseConn := conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{})
 	syncer.ddlDBConn = dbconn.NewDBConn(cfg, baseConn)
 	syncer.downstreamTrackConn = dbconn.NewDBConn(cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
-	syncer.schemaTracker, err = schema.NewTestTracker(ctx, cfg.Name, defaultTestSessionCfg, syncer.downstreamTrackConn, log.L())
+	syncer.schemaTracker, err = schema.NewTestTracker(ctx, cfg.Name, syncer.downstreamTrackConn, log.L())
 	require.NoError(t, err)
 	defer syncer.schemaTracker.Close()
 
