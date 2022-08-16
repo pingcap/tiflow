@@ -53,6 +53,12 @@ type locations struct {
 	txnEndLocation binlog.Location
 }
 
+// String implements fmt.Stringer.
+func (l locations) String() string {
+	return fmt.Sprintf("curStartLocation: %s, curEndLocation: %s, txnEndLocation: %s",
+		l.curStartLocation.String(), l.curEndLocation.String(), l.txnEndLocation.String())
+}
+
 // updateHookFunc is used to run some logic before locationRecorder.update.
 type updateHookFunc func()
 
@@ -225,10 +231,4 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 
 		l.saveTxnEndLocation()
 	}
-}
-
-// String implements fmt.Stringer.
-func (l *locationRecorder) String() string {
-	return fmt.Sprintf("curStartLocation: %s, curEndLocation: %s, txnEndLocation: %s",
-		l.curStartLocation.String(), l.curEndLocation.String(), l.txnEndLocation.String())
 }

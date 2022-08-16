@@ -87,8 +87,11 @@ type locationStream struct {
 	*locationRecorder
 }
 
-func newLocationedStream(generator streamGenerator, location binlog.Location) (locationStream, error) {
+func newLocationStream(generator streamGenerator, location binlog.Location) (locationStream, error) {
 	var ret locationStream
+
+	// strip injected event suffix
+	location.Suffix = 0
 	s, err := generator.GenerateStreamFrom(location)
 	if err != nil {
 		return ret, err
@@ -254,7 +257,7 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 			t.reader.Close()
 		default:
 			// some other producers such as mockStreamerProducer, should not re-create
-			c.upstream, err = newLocationedStream(c.streamProducer, location)
+			c.upstream, err = newLocationStream(c.streamProducer, location)
 			return err
 		}
 	}
@@ -277,7 +280,7 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 		c.streamProducer = &localBinlogReader{c.relay.NewReader(tctx.L(), &relay.BinlogReaderConfig{RelayDir: c.localBinlogDir, Timezone: c.timezone, Flavor: c.syncCfg.Flavor}), c.enableGTID}
 	}
 
-	c.upstream, err = newLocationedStream(c.streamProducer, location)
+	c.upstream, err = newLocationStream(c.streamProducer, location)
 	if err == nil {
 		c.streamModifier.reset(location)
 		c.lastEventFromUpstream = nil
@@ -347,14 +350,17 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (*replication.Binl
 		c.locations.curStartLocation.Suffix = suffix - 1
 		c.locations.curEndLocation = c.upstream.curStartLocation
 		c.locations.curEndLocation.Suffix = suffix
+		// we only allow injecting DDL, so txnEndLocation is end location of every injected event
 		c.locations.txnEndLocation = c.locations.curEndLocation
 	} else {
+		// if suffix is 0, it means this is the last event of injected events, or this is an upstream event
 		if c.locations.curEndLocation.Suffix != 0 {
-			// this is the first upstream event after injection, keep suffix for start location
+			// last event of injected events, keep suffix for start location
 			c.locations.curStartLocation = c.locations.curEndLocation
 			c.locations.curEndLocation = c.upstream.curEndLocation
 			c.locations.txnEndLocation = c.upstream.txnEndLocation
 		} else {
+			// upstream event, simply copy locations from upstream location recorder
 			c.locations = c.upstream.locations
 		}
 	}
