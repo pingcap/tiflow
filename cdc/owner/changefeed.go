@@ -328,30 +328,21 @@ LOOP:
 		// See more gc doc.
 		ensureTTL := int64(10 * 60)
 		err := gc.EnsureChangefeedStartTsSafety(
-<<<<<<< HEAD
-			ctx, c.upStream.PDClient, c.state.ID, ensureTTL, checkpointTs)
-=======
-			ctx, c.upstream.PDClient,
-			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceInitializing),
+			ctx, c.upStream.PDClient,
+			gc.EnsureGCServiceInitializing,
 			c.state.ID, ensureTTL, checkpointTs)
->>>>>>> 5a4f4012e (cli(ticdc): Cleanup service GC safe point correctly (#6283))
 		if err != nil {
 			return errors.Trace(err)
 		}
 		// clean service GC safepoint '-creating-' and '-resuming-' if there are any.
 		err = gc.UndoEnsureChangefeedStartTsSafety(
-			ctx, c.upstream.PDClient,
-			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
+			ctx, c.upStream.PDClient,
+			gc.EnsureGCServiceCreating,
 			ctx.ChangefeedVars().ID,
 		)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		err = gc.UndoEnsureChangefeedStartTsSafety(
-			ctx, c.upstream.PDClient,
-			ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
-			ctx.ChangefeedVars().ID,
-		)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -505,15 +496,14 @@ func (c *changefeed) cleanupServiceGCSafePoints(ctx cdcContext.Context) {
 	}
 
 	serviceIDs := []string{
-		ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
-		ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
-		ctx.GlobalVars().EtcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceInitializing),
+		gc.EnsureGCServiceCreating,
+		gc.EnsureGCServiceInitializing,
 	}
 
 	for _, serviceID := range serviceIDs {
 		err := gc.UndoEnsureChangefeedStartTsSafety(
 			ctx,
-			c.upstream.PDClient,
+			c.upStream.PDClient,
 			serviceID,
 			ctx.ChangefeedVars().ID)
 		if err != nil {
