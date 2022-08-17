@@ -31,7 +31,7 @@ func (s *Syncer) skipQueryEvent(qec *queryEventContext, ddlInfo *ddlInfo) (bool,
 	if utils.IsBuildInSkipDDL(qec.originSQL) {
 		return true, nil
 	}
-	et := bf.AstToDDLEvent(ddlInfo.originStmt)
+	et := bf.AstToDDLEvent(ddlInfo.stmtCache)
 	// get real tables before apply block-allow list
 	realTables := make([]*filter.Table, 0, len(ddlInfo.sourceTables))
 	for _, table := range ddlInfo.sourceTables {

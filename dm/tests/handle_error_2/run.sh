@@ -12,51 +12,67 @@ function DM_4215_CASE() {
 	run_sql_source1 "insert into ${db}.${tb1} values(1);"
 	run_sql_source2 "insert into ${db}.${tb1} values(2);"
 	run_sql_source1 "alter table ${db}.${tb1} add column c int unique;"
+	check_log_contain_with_retry 'add column c int unique' $WORK_DIR/worker1/log/dm-worker.log
 	run_sql_source2 "alter table ${db}.${tb1} add column c int unique;"
 	run_sql_source1 "alter table ${db}.${tb1} add column d int unique;"
 	run_sql_source2 "alter table ${db}.${tb1} add column d int unique;"
 
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"unsupported add column 'c' constraint UNIQUE KEY" 2
+	if [[ "$1" = "pessimistic" ]]; then
+		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"query-status test" \
+			'"ErrScope": "downstream"' 1 \
+			"unsupported add column 'c' constraint UNIQUE KEY" 1
+	else
+		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"query-status test" \
+			'"ErrScope": "downstream"' 2 \
+			"unsupported add column 'c' constraint UNIQUE KEY" 2
+	fi
 
-	first_pos1=$(get_start_pos 127.0.0.1:$MASTER_PORT $source1)
-	first_pos2=$(get_start_pos 127.0.0.1:$MASTER_PORT $source2)
-	first_name1=$(get_start_name 127.0.0.1:$MASTER_PORT $source1)
-	first_name2=$(get_start_name 127.0.0.1:$MASTER_PORT $source2)
+	run_sql_tidb "alter table ${db}.${tb} add column c int; alter table ${db}.${tb} add unique (c);"
 
-	second_pos1=$(get_next_query_pos $MYSQL_PORT1 $MYSQL_PASSWORD1 $first_pos1)
-	second_pos2=$(get_next_query_pos $MYSQL_PORT2 $MYSQL_PASSWORD2 $first_pos2)
-
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog replace test -s $source1 -b $first_name1:$second_pos1 alter table ${db}.${tb1} add column d int;alter table ${db}.${tb1} add unique(d);" \
-		"\"result\": true" 2
-
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"unsupported add column 'c' constraint UNIQUE KEY" 2
-
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog replace test -s $source1 -b $first_name1:$first_pos1 alter table ${db}.${tb1} add column c int;alter table ${db}.${tb1} add unique(c);" \
-		"\"result\": true" 2
+	if [[ "$1" = "pessimistic" ]]; then
+		# unlock for non DDL lock owner
+		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"unlock-ddl-lock test-\`handle_error\`.\`tb\` --force-remove"
+		# skip for DDL lock owner
+		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"binlog skip test -s $source1" \
+			"\"result\": true" 2
+	else
+		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"binlog skip test" \
+			"\"result\": true" 3
+	fi
 
 	run_sql_source1 "insert into ${db}.${tb1} values(3,3,3);"
 
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"unsupported add column 'c' constraint UNIQUE KEY" 1
+	if [[ "$1" = "pessimistic" ]]; then
+		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"query-status test" \
+			'"ErrScope": "downstream"' 1 \
+			"unsupported add column 'd' constraint UNIQUE KEY" 1
+	else
+		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"query-status test" \
+			'"ErrScope": "downstream"' 2 \
+			"unsupported add column 'd' constraint UNIQUE KEY" 2
+	fi
 
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog replace test -s $source2 -b $first_name2:$first_pos2 alter table ${db}.${tb1} add column c int;alter table ${db}.${tb1} add unique(c);" \
-		"\"result\": true" 2
-
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"unsupported add column 'd' constraint UNIQUE KEY" 1
-
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog replace test -s $source2 -b $first_name2:$second_pos2 alter table ${db}.${tb1} add column d int;alter table ${db}.${tb1} add unique(d);" \
-		"\"result\": true" 2
+	run_sql_tidb "alter table ${db}.${tb} add column d int; alter table ${db}.${tb} add unique (d);"
+	if [[ "$1" = "pessimistic" ]]; then
+		# unlock for non DDL lock owner
+		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"unlock-ddl-lock test-\`handle_error\`.\`tb\` --force-remove"
+		# skip for DDL lock owner
+		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"binlog skip test" \
+			"\"result\": true" 2
+	else
+		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+			"binlog skip test" \
+			"\"result\": true" 3
+	fi
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
@@ -75,33 +91,33 @@ function DM_4215() {
 function DM_4216_CASE() {
 	run_sql_source1 "insert into ${db}.${tb1} values(1);"
 	run_sql_source2 "insert into ${db}.${tb1} values(2);"
-	run_sql_source1 "alter table ${db}.${tb1} add column c int unique;"
-	run_sql_source2 "alter table ${db}.${tb1} add column c int unique;"
+	run_sql_source1 "alter table ${db}.${tb1} add column c varchar(20) character set utf32;"
+	run_sql_source2 "alter table ${db}.${tb1} add column c varchar(20) character set utf32;"
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"unsupported add column .* constraint UNIQUE KEY" 2
+		"Unknown character set" 2
 
 	start_location1=$(get_start_location 127.0.0.1:$MASTER_PORT $source1)
 	start_location2=$(get_start_location 127.0.0.1:$MASTER_PORT $source2)
 
 	if [ "$start_location1" = "$start_location2" ]; then
 		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-			"binlog replace test -b $start_location1 alter table ${db}.${tb1} add column c int;alter table ${db}.${tb1} add unique(c);" \
+			"binlog replace test -b $start_location1 alter table ${db}.${tb1} add column c varchar(20);" \
 			"\"result\": true" 3
 	else
 		# WARN: may replace unknown event like later insert, test will fail
 		# It hasn't happened yet.
 		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-			"binlog replace test -b $start_location1 alter table ${db}.${tb1} add column c int;alter table ${db}.${tb1} add unique(c);" \
+			"binlog replace test -b $start_location1 alter table ${db}.${tb1} add column c varchar(20);" \
 			"\"result\": true" 3
 
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			"unsupported add column .* constraint UNIQUE KEY" 1
+			"Unknown character set" 1
 
 		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-			"binlog replace test -b $start_location2 alter table ${db}.${tb1} add column c int;alter table ${db}.${tb1} add unique(c);" \
+			"binlog replace test -b $start_location2 alter table ${db}.${tb1} add column c varchar(20);" \
 			"\"result\": true" 3
 	fi
 
@@ -127,25 +143,25 @@ function DM_4216() {
 function DM_4219_CASE() {
 	run_sql_source1 "insert into ${db}.${tb1} values(1);"
 	run_sql_source2 "insert into ${db}.${tb1} values(2);"
-	run_sql_source1 "alter table ${db}.${tb1} add column c int unique;"
-	run_sql_source2 "alter table ${db}.${tb1} add column c int unique;"
+	run_sql_source1 "alter table ${db}.${tb1} add column c varchar(20) character set utf32;"
+	run_sql_source2 "alter table ${db}.${tb1} add column c varchar(20) character set utf32;"
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"unsupported add column .* constraint UNIQUE KEY" 2
+		"Unknown character set" 2
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog replace test -s $source1 alter table ${db}.${tb1} add column c int;alter table ${db}.${tb1} add unique(c);" \
+		"binlog replace test -s $source1 alter table ${db}.${tb1} add column c varchar(20);" \
 		"\"result\": true" 2
 
 	run_sql_source1 "insert into ${db}.${tb1} values(3,3);"
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"unsupported add column .* constraint UNIQUE KEY" 1
+		"Unknown character set" 1
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog replace test -s $source2 alter table ${db}.${tb1} add column c int;alter table ${db}.${tb1} add unique(c);" \
+		"binlog replace test -s $source2 alter table ${db}.${tb1} add column c varchar(20);" \
 		"\"result\": true" 2
 
 	run_sql_source2 "insert into ${db}.${tb1} values(4,4);"
