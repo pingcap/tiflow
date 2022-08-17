@@ -94,7 +94,6 @@ insert into t5 values(17156792991891826145, 1);
 insert into t6 values( 9223372036854775807, 2);
 insert into t7 values(17156792991891826145, 3);
 insert into t8 values( 9223372036854775807, 4);
-insert into t9 values( 9223372036854775807, 5);
 
 
 rename table t1 to t1_7, t2 to t2_7;
