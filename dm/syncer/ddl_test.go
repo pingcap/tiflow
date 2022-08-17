@@ -694,9 +694,9 @@ func (s *testDDLSuite) TestAdjustDatabaseCollation(c *C) {
 			stmt, err := p.ParseOneStmt(sql, "", "")
 			c.Assert(err, IsNil)
 			c.Assert(stmt, NotNil)
-			ddlInfo.originStmt = stmt
+			ddlInfo.stmtCache = stmt
 			adjustCollation(tctx, ddlInfo, statusVars, charsetAndDefaultCollationMap, idAndCollationMap)
-			routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
+			routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.stmtCache, ddlInfo.targetTables)
 			c.Assert(err, IsNil)
 			c.Assert(routedDDL, Equals, expectedSQLs[i][j])
 		}
@@ -770,9 +770,9 @@ func (s *testDDLSuite) TestAdjustCollation(c *C) {
 		stmt, err := p.ParseOneStmt(sql, "", "")
 		c.Assert(err, IsNil)
 		c.Assert(stmt, NotNil)
-		ddlInfo.originStmt = stmt
+		ddlInfo.stmtCache = stmt
 		adjustCollation(tctx, ddlInfo, statusVars, charsetAndDefaultCollationMap, idAndCollationMap)
-		routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
+		routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.stmtCache, ddlInfo.targetTables)
 		c.Assert(err, IsNil)
 		c.Assert(routedDDL, Equals, expectedSQLs[i])
 	}
