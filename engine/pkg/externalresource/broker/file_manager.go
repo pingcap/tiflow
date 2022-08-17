@@ -18,8 +18,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	"go.uber.org/zap"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -27,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
 	derrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/fsutil"
+	"go.uber.org/zap"
 )
 
 // LocalFileManager manages the local files resources stored in
@@ -64,6 +63,9 @@ func (m *LocalFileManager) CreateResource(
 	if err := os.MkdirAll(res.AbsolutePath(), 0o700); err != nil {
 		return nil, derrors.ErrCreateLocalFileDirectoryFailed.Wrap(err)
 	}
+	log.Info("Created directory for local file resource",
+		zap.String("resource-name", resName),
+		zap.String("path", res.AbsolutePath()))
 	// TODO check for quota when we implement quota.
 	return res, nil
 }
