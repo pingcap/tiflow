@@ -397,7 +397,6 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 			// if resigning owner failed, return error to let capture exits
 			return errors.Annotatef(resignErr, "resign owner failed, capture: %s", c.info.ID)
 		}
-
 		if err != nil {
 			// for errors, return error and let capture exits or restart
 			return errors.Trace(err)
