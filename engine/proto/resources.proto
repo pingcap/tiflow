@@ -1,7 +1,10 @@
 syntax = "proto3";
 
 package enginepb;
-import "projects.proto";
+
+import "engine/proto/projects.proto";
+
+option go_package = "github.com/pingcap/tiflow/engine/enginepb";
 
 service ResourceManager {
   rpc CreateResource(CreateResourceRequest) returns (CreateResourceResponse){}

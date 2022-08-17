@@ -14,53 +14,173 @@
 package servermaster
 
 import (
-	"strings"
+	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
-	"github.com/gin-gonic/gin"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 func TestRegisterRoutes(t *testing.T) {
-	router := gin.New()
-	RegisterRoutes(router, NewOpenAPI(nil))
+	router := http.NewServeMux()
+	grpcMux := runtime.NewServeMux(
+		runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{
+			MarshalOptions:   protojson.MarshalOptions{UseProtoNames: true},
+			UnmarshalOptions: protojson.UnmarshalOptions{},
+		}),
+	)
+	err := pb.RegisterJobManagerHandlerServer(context.Background(), grpcMux, pb.UnimplementedJobManagerServer{})
+	require.NoError(t, err)
 
-	routes := router.Routes()
-	require.True(t, containsRoute(routes, "GET", "/swagger/*any"))
-	require.True(t, containsRouteWithPrefix(routes, "/api/v1"))
-	require.True(t, containsRoute(routes, "GET", "/debug/pprof/"))
-	require.True(t, containsRoute(routes, "GET", "/debug/pprof/trace"))
-	require.True(t, containsRoute(routes, "GET", "/debug/pprof/threadcreate"))
-	require.True(t, containsRoute(routes, "GET", "/debug/pprof/cmdline"))
-	require.True(t, containsRoute(routes, "GET", "/debug/pprof/profile"))
-	require.True(t, containsRoute(routes, "GET", "/debug/pprof/symbol"))
-	require.True(t, containsRoute(routes, "GET", "/debug/pprof/:any"))
-	require.True(t, containsRouteWithAnyMethod(routes, "/metrics"))
+	forwardJobAPI := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/jobs/job1/status" {
+			w.WriteHeader(http.StatusOK)
+		} else {
+			http.NotFound(w, r)
+		}
+	})
+	RegisterRoutes(router, grpcMux, forwardJobAPI)
+
+	testCases := []struct {
+		method       string
+		path         string
+		expectedCode int
+	}{
+		{
+			method:       http.MethodGet,
+			path:         "/swagger",
+			expectedCode: http.StatusOK,
+		},
+		{
+			method:       http.MethodGet,
+			path:         "/swagger/v1/openapiv2.json",
+			expectedCode: http.StatusOK,
+		},
+		{
+			method:       http.MethodGet,
+			path:         "/swagger/v1/openapiv3.json",
+			expectedCode: http.StatusNotFound,
+		},
+		{
+			method:       http.MethodGet,
+			path:         "/api/v1/jobs",
+			expectedCode: http.StatusNotImplemented,
+		},
+		{
+			method:       http.MethodPost,
+			path:         "/api/v1/jobs",
+			expectedCode: http.StatusNotImplemented,
+		},
+		{
+			method:       http.MethodGet,
+			path:         "/api/v1/jobs/job1",
+			expectedCode: http.StatusNotImplemented,
+		},
+		{
+			method:       http.MethodPost,
+			path:         "/api/v1/jobs/job1",
+			expectedCode: http.StatusNotImplemented,
+		},
+		{
+			method:       http.MethodGet,
+			path:         "/api/v1/jobs/job1/pause",
+			expectedCode: http.StatusNotImplemented,
+		},
+		{
+			method:       http.MethodGet,
+			path:         "/api/v1/jobs/job1/cancel",
+			expectedCode: http.StatusNotImplemented,
+		},
+		{
+			method:       http.MethodGet,
+			path:         "/api/v1/jobs/job1/status",
+			expectedCode: http.StatusOK,
+		},
+		{
+			method:       http.MethodGet,
+			path:         "/api/v1/jobs/job1/config",
+			expectedCode: http.StatusNotFound,
+		},
+		{
+			method:       http.MethodGet,
+			path:         "/debug/pprof/",
+			expectedCode: http.StatusOK,
+		},
+		{
+			method:       http.MethodGet,
+			path:         "/metrics",
+			expectedCode: http.StatusOK,
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("case-%d", i), func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			require.Equal(t, tc.expectedCode, w.Code)
+		})
+	}
 }
 
-func containsRoute(routes gin.RoutesInfo, method, path string) bool {
-	for _, route := range routes {
-		if route.Method == method && route.Path == path {
-			return true
-		}
+func TestShouldForwardJobAPI(t *testing.T) {
+	testCases := []struct {
+		method        string
+		path          string
+		shouldForward bool
+	}{
+		{
+			method:        http.MethodGet,
+			path:          "/api/v1/jobs",
+			shouldForward: false,
+		},
+		{
+			method:        http.MethodGet,
+			path:          "/api/v1/jobs/job1",
+			shouldForward: false,
+		},
+		{
+			method:        http.MethodGet,
+			path:          "/api/v1/jobs/job1/pause",
+			shouldForward: false,
+		},
+		{
+			method:        http.MethodPost,
+			path:          "/api/v1/jobs/job1/pause",
+			shouldForward: false,
+		},
+		{
+			method:        http.MethodGet,
+			path:          "/api/v1/jobs/job1/cancel",
+			shouldForward: false,
+		},
+		{
+			method:        http.MethodPost,
+			path:          "/api/v1/jobs/job1/cancel",
+			shouldForward: false,
+		},
+		{
+			method:        http.MethodGet,
+			path:          "/api/v1/jobs/job1/status",
+			shouldForward: true,
+		},
+		{
+			method:        http.MethodPost,
+			path:          "/api/v1/jobs/job1/config",
+			shouldForward: true,
+		},
 	}
-	return false
-}
 
-func containsRouteWithAnyMethod(routes gin.RoutesInfo, path string) bool {
-	for _, route := range routes {
-		if route.Path == path {
-			return true
-		}
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("case-%d", i), func(t *testing.T) {
+			req, err := http.NewRequest(tc.method, tc.path, nil)
+			require.NoError(t, err)
+			require.Equal(t, tc.shouldForward, shouldForwardJobAPI(req))
+		})
 	}
-	return false
-}
-
-func containsRouteWithPrefix(routes gin.RoutesInfo, prefix string) bool {
-	for _, route := range routes {
-		if strings.HasPrefix(route.Path, prefix) {
-			return true
-		}
-	}
-	return false
 }

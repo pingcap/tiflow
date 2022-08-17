@@ -107,37 +107,37 @@ func TestUpdateClient(t *testing.T) {
 	workerHandle2 := &framework.MockHandle{WorkerID: "worker2"}
 
 	// add client
-	messageAgent.UpdateClient("task1", workerHandle1)
+	messageAgent.UpdateClient("task1", workerHandle1.Unwrap())
 	require.Len(t, messageAgent.clients.clients, 1)
 	client, err := messageAgent.getClient("task1")
 	require.NoError(t, err)
-	require.Equal(t, client, workerHandle1)
+	require.Equal(t, client, workerHandle1.Unwrap())
 	client, err = messageAgent.getClient("task2")
 	require.EqualError(t, err, "client task2 not found")
 	require.Equal(t, client, nil)
-	messageAgent.UpdateClient("task2", workerHandle2)
+	messageAgent.UpdateClient("task2", workerHandle2.Unwrap())
 	require.Len(t, messageAgent.clients.clients, 2)
 	client, err = messageAgent.getClient("task1")
 	require.NoError(t, err)
-	require.Equal(t, client, workerHandle1)
+	require.Equal(t, client, workerHandle1.Unwrap())
 	client, err = messageAgent.getClient("task2")
 	require.NoError(t, err)
-	require.Equal(t, client, workerHandle2)
+	require.Equal(t, client, workerHandle2.Unwrap())
 
 	// remove client
 	messageAgent.UpdateClient("task3", nil)
 	require.Len(t, messageAgent.clients.clients, 2)
 	client, err = messageAgent.getClient("task1")
 	require.NoError(t, err)
-	require.Equal(t, client, workerHandle1)
+	require.Equal(t, client, workerHandle1.Unwrap())
 	client, err = messageAgent.getClient("task2")
 	require.NoError(t, err)
-	require.Equal(t, client, workerHandle2)
+	require.Equal(t, client, workerHandle2.Unwrap())
 	messageAgent.UpdateClient("task2", nil)
 	require.Len(t, messageAgent.clients.clients, 1)
 	client, err = messageAgent.getClient("task1")
 	require.NoError(t, err)
-	require.Equal(t, client, workerHandle1)
+	require.Equal(t, client, workerHandle1.Unwrap())
 }
 
 func TestMessageAgent(t *testing.T) {

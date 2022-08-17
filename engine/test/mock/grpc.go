@@ -71,8 +71,8 @@ func (s *masterServerConn) sendRequest(ctx context.Context, req interface{}) (in
 		return s.server.RegisterExecutor(ctx, x)
 	case *pb.PauseJobRequest:
 		return s.server.PauseJob(ctx, x)
-	case *pb.SubmitJobRequest:
-		return s.server.SubmitJob(ctx, x)
+	case *pb.CreateJobRequest:
+		return s.server.CreateJob(ctx, x)
 	case *pb.HeartbeatRequest:
 		return s.server.Heartbeat(ctx, x)
 	case *pb.CancelJobRequest:
@@ -95,19 +95,19 @@ func (c *masterServerClient) RegisterExecutor(ctx context.Context, req *pb.Regis
 	return resp.(*pb.RegisterExecutorResponse), err
 }
 
-func (c *masterServerClient) PauseJob(ctx context.Context, req *pb.PauseJobRequest, opts ...grpc.CallOption) (*pb.PauseJobResponse, error) {
+func (c *masterServerClient) PauseJob(ctx context.Context, req *pb.PauseJobRequest, opts ...grpc.CallOption) (*pb.Job, error) {
 	resp, err := c.conn.sendRequest(ctx, req)
-	return resp.(*pb.PauseJobResponse), err
+	return resp.(*pb.Job), err
 }
 
-func (c *masterServerClient) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest, opts ...grpc.CallOption) (*pb.SubmitJobResponse, error) {
+func (c *masterServerClient) CreateJob(ctx context.Context, req *pb.CreateJobRequest, opts ...grpc.CallOption) (*pb.Job, error) {
 	resp, err := c.conn.sendRequest(ctx, req)
-	return resp.(*pb.SubmitJobResponse), err
+	return resp.(*pb.Job), err
 }
 
-func (c *masterServerClient) CancelJob(ctx context.Context, req *pb.CancelJobRequest, opts ...grpc.CallOption) (*pb.CancelJobResponse, error) {
+func (c *masterServerClient) CancelJob(ctx context.Context, req *pb.CancelJobRequest, opts ...grpc.CallOption) (*pb.Job, error) {
 	resp, err := c.conn.sendRequest(ctx, req)
-	return resp.(*pb.CancelJobResponse), err
+	return resp.(*pb.Job), err
 }
 
 func (c *masterServerClient) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest, opts ...grpc.CallOption) (*pb.HeartbeatResponse, error) {
@@ -135,24 +135,14 @@ func (c *masterServerClient) QueryMetaStore(
 	return resp.(*pb.QueryMetaStoreResponse), nil
 }
 
-func (c *masterServerClient) QueryJob(
-	ctx context.Context, req *pb.QueryJobRequest, opts ...grpc.CallOption,
-) (*pb.QueryJobResponse, error) {
+func (c *masterServerClient) GetJob(
+	ctx context.Context, req *pb.GetJobRequest, opts ...grpc.CallOption,
+) (*pb.Job, error) {
 	resp, err := c.conn.sendRequest(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return resp.(*pb.QueryJobResponse), nil
-}
-
-func (c *masterServerClient) PersistResource(
-	ctx context.Context, req *pb.PersistResourceRequest, opts ...grpc.CallOption,
-) (*pb.PersistResourceResponse, error) {
-	resp, err := c.conn.sendRequest(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	return resp.(*pb.PersistResourceResponse), nil
+	return resp.(*pb.Job), nil
 }
 
 func (c *masterServerClient) ReportExecutorWorkload(

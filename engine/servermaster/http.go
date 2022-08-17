@@ -16,43 +16,64 @@ package servermaster
 import (
 	"net/http"
 	"net/http/pprof"
+	"strings"
 
-	"github.com/gin-gonic/gin"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/pingcap/failpoint"
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
-
+	"github.com/pingcap/tiflow/engine/pkg/openapi"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/pkg/util"
-
-	// Used for OpenAPI online docs.
-	_ "github.com/pingcap/tiflow/engine/docs/swagger"
 )
 
-// RegisterRoutes create a router for OpenAPI
-func RegisterRoutes(router *gin.Engine, openapi *OpenAPI) {
-	// online docs
-	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+// JobAPIPrefix is the prefix of the job API.
+const JobAPIPrefix = "/api/v1/jobs/"
 
-	// Open API
-	RegisterOpenAPIRoutes(router, openapi)
+// RegisterRoutes create a router for OpenAPI
+func RegisterRoutes(router *http.ServeMux, grpcMux *runtime.ServeMux, forwardJobAPI http.HandlerFunc) {
+	// Swagger UI
+	router.HandleFunc("/swagger", openapi.SwaggerUI)
+	router.HandleFunc("/swagger/v1/openapiv2.json", openapi.SwaggerAPIv1)
+
+	// Job API
+	router.HandleFunc("/api/v1/", func(w http.ResponseWriter, r *http.Request) {
+		if shouldForwardJobAPI(r) {
+			forwardJobAPI(w, r)
+		} else {
+			grpcMux.ServeHTTP(w, r)
+		}
+	})
 
 	// pprof debug API
-	pprofGroup := router.Group("/debug/pprof/")
-	pprofGroup.GET("", gin.WrapF(pprof.Index))
-	pprofGroup.GET("/:any", gin.WrapF(pprof.Index))
-	pprofGroup.GET("/cmdline", gin.WrapF(pprof.Cmdline))
-	pprofGroup.GET("/profile", gin.WrapF(pprof.Profile))
-	pprofGroup.GET("/symbol", gin.WrapF(pprof.Symbol))
-	pprofGroup.GET("/trace", gin.WrapF(pprof.Trace))
-	pprofGroup.GET("/threadcreate", gin.WrapF(pprof.Handler("threadcreate").ServeHTTP))
+	router.HandleFunc("/debug/pprof/", pprof.Index)
+	router.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	router.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	router.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	router.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	router.Handle("/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
 
 	// Failpoint API
 	if util.FailpointBuild {
 		// `http.StripPrefix` is needed because `failpoint.HttpHandler` assumes that it handles the prefix `/`.
-		router.Any("/debug/fail/*any", gin.WrapH(http.StripPrefix("/debug/fail", &failpoint.HttpHandler{})))
+		router.Handle("/debug/fail/", http.StripPrefix("/debug/fail", &failpoint.HttpHandler{}))
 	}
 
-	// Promtheus metrics API
-	router.Any("/metrics", gin.WrapH(promutil.HTTPHandlerForMetric()))
+	// Prometheus metrics API
+	router.Handle("/metrics", promutil.HTTPHandlerForMetric())
+}
+
+func shouldForwardJobAPI(r *http.Request) bool {
+	if !strings.HasPrefix(r.URL.Path, JobAPIPrefix) {
+		return false
+	}
+	apiPath := strings.TrimPrefix(r.URL.Path, JobAPIPrefix)
+	fields := strings.SplitN(apiPath, "/", 2)
+	if len(fields) != 2 {
+		return false
+	}
+	// pause and cancel are implemented by framework,
+	// don't forward them to the job master.
+	if fields[1] == "pause" || fields[1] == "cancel" {
+		return false
+	}
+	return true
 }

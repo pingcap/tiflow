@@ -26,9 +26,9 @@ import (
 	"go.uber.org/dig"
 	"go.uber.org/zap"
 
-	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/internal/master"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
+	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
@@ -294,16 +294,15 @@ func (m *MockWorkerHandler) ID() frameModel.WorkerID {
 	return m.WorkerID
 }
 
+// ExecutorID implements WorkerHandle.ExecutorID
+func (m *MockWorkerHandler) ExecutorID() model.ExecutorID {
+	return ""
+}
+
 // IsTombStone implements WorkerHandle.IsTombStone
 func (m *MockWorkerHandler) IsTombStone() bool {
 	args := m.Called()
 	return args.Bool(0)
-}
-
-// ToPB implements WorkerHandle.CleanTombstone
-func (m *MockWorkerHandler) ToPB() (*pb.WorkerInfo, error) {
-	args := m.Called()
-	return args.Get(0).(*pb.WorkerInfo), args.Error(1)
 }
 
 // CleanTombstone implements TombstoneHandle.CleanTombstone
