@@ -85,6 +85,13 @@ create table t9 (
  primary key(value64, value32)
 );
 
+/*use by error changefeed*/
+create table t10 (
+ value64  bigint unsigned  not null,
+ value32  integer          not null,
+ primary key(value64, value32)
+);
+
 insert into t1 values(17156792991891826145, 1);
 insert into t1 values( 9223372036854775807, 2);
 insert into t2 values(17156792991891826145, 3);
@@ -108,16 +115,16 @@ insert into t3 select * from t1_7;
 insert into t4 select * from t2_7;
 drop table t3, t4;
 
-/* replicate successful */
-rename table t9 to t99;
-/* discard */
-rename table t9 to t999;
-/* replicate successful, they are all in `filter.rule`, */
+
+/* filter.rules = ["multi_tables_ddl_test.t5", "multi_tables_ddl_test.t6", "multi_tables_ddl_test.t7, "multi_tables_ddl_test.t8" "multi_tables_ddl_test.t9"] */
+/* replicate successful, since t8 in `filter.rule` */
+rename table t8 to t88;
+/* discard, t88 and t888 both not in `filter.rule` */
+rename table t88 to t888;
+/* replicate successful, since t9 in `filter.rule`*/
+rename table t10 to t9;
+/* replicate successful, they are all in `filter.rule` */
 rename table t5 to t55, t6 to t66;
 /* discard by cdc totally, they are all not in `filter.rule` */
 rename table t55 to t555, t66 to t666;
-/* cdc report an error, t8 not in `filter.rule` */
-rename table t7 to t77, t8 to t88;
-
-
 create table finish_mark(id int primary key);

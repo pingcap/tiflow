@@ -1104,9 +1104,11 @@ var (
 		"failed to convert ddl '%s' to filter event type",
 		errors.RFCCodeText("CDC:ErrConvertDDLToEventTypeFailed"),
 	)
-	ErrRenameTablesTableNotFound = errors.Normalize(
-		"failed to find table id(s): '%v' in cdc schema snapshot, ddl query: [%s], "+
+	ErrSyncRenameTablesFailed = errors.Normalize(
+		"some table id(s): '%v' are not in filter rule, and '%v' are in filter rule "+
+			"ddl query: [%s], "+
+			"TiCDC replicates DDL atomically, "+
 			"if you want to replicate these table(s), please add them to filter rule.",
-		errors.RFCCodeText("CDC:ErrRenameTablesTableNotFound"),
+		errors.RFCCodeText("CDC:ErrSyncRenameTablesFailed"),
 	)
 )

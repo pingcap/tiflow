@@ -71,7 +71,8 @@ func IsChangefeedFastFailErrorCode(errCode errors.RFCErrorCode) bool {
 var changefeedUnRetryableErrors = []*errors.Error{
 	ErrExpressionColumnNotFound,
 	ErrExpressionParseFailed,
-	ErrRenameTablesTableNotFound,
+	ErrSyncRenameTablesFailed,
+	ErrSchemaSnapshotNotFound,
 }
 
 // IsChangefeedUnRetryableError returns true if a error is a changefeed not retry error.

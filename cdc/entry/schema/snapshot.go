@@ -445,7 +445,8 @@ func (s *Snapshot) DoHandleDDL(job *timodel.Job) error {
 		// first drop the table
 		err := s.inner.dropTable(job.TableID, job.BinlogInfo.FinishedTS)
 		if err != nil {
-			return errors.Trace(err)
+			log.Warn("the old table info not found when rename table",
+				zap.Int64("tableID", job.BinlogInfo.TableInfo.ID))
 		}
 		// create table
 		err = s.inner.createTable(getWrapTableInfo(job), job.BinlogInfo.FinishedTS)
@@ -906,7 +907,8 @@ func (s *snapshot) renameTables(job *timodel.Job, currentTs uint64) error {
 	// NOTE: should handle failures in halfway better.
 	for _, tableID := range oldTableIDs {
 		if err := s.dropTable(tableID, currentTs); err != nil {
-			return errors.Trace(err)
+			log.Warn("the old table info not found when rename table",
+				zap.Int64("tableID", tableID))
 		}
 	}
 	for i, tableInfo := range job.BinlogInfo.MultipleTableInfos {

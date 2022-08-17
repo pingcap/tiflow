@@ -159,7 +159,8 @@ func (f *filter) ShouldIgnoreDDLEvent(ddl *model.DDLEvent) (bool, error) {
 		timodel.ActionModifySchemaCharsetAndCollate:
 		shouldIgnoreTableOrSchema = !f.tableFilter.MatchSchema(ddl.TableInfo.Schema)
 	case timodel.ActionRenameTable:
-		shouldIgnoreTableOrSchema = f.ShouldIgnoreTable(ddl.PreTableInfo.Schema, ddl.PreTableInfo.Table)
+		shouldIgnoreTableOrSchema = f.ShouldIgnoreTable(ddl.PreTableInfo.Schema, ddl.PreTableInfo.Table) &&
+			f.ShouldIgnoreTable(ddl.TableInfo.Schema, ddl.TableInfo.Table)
 	default:
 		shouldIgnoreTableOrSchema = f.ShouldIgnoreTable(ddl.TableInfo.Schema, ddl.TableInfo.Table)
 	}

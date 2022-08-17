@@ -15,26 +15,7 @@ check-struct-only = false
 
     target-instance = "mysql1"
 
-    target-check-tables = [
-        "multi_tables_ddl_test.t1", 
-        "multi_tables_ddl_test.t2", 
-        "multi_tables_ddl_test.t3", 
-        "multi_tables_ddl_test.t4",
-        "multi_tables_ddl_test.t55",
-        "multi_tables_ddl_test.t66",]
-
-[routes]
-[routes.rule1] 
-schema-pattern = "multi_tables_ddl_test"   
-table-pattern = "t555"          
-target-schema = "multi_tables_ddl_test"    
-target-table = "t55" 
-
-[routes.rule2]
-schema-pattern = "multi_tables_ddl_test"     
-table-pattern = "t666"          
-target-schema = "multi_tables_ddl_test"       
-target-table = "t66" 
+    target-check-tables = ["multi_tables_ddl_test.t1_7", "multi_tables_ddl_test.t2_7"]
 
 
 [data-sources]
