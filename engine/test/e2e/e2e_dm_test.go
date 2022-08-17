@@ -177,28 +177,30 @@ func testSimpleAllModeTask(
 	}
 	waitRow("c = 1", db)
 
-	// check load finished
-	source1 := "mysql-replica-01"
-	source2 := "mysql-replica-02"
+	// load finished and job exits
+	// TODO: check load status after framework supports it
+	// TODO: check checkpoint deleted after frameworker support StopImpl
 	require.Eventually(t, func() bool {
-		jobStatus, err := queryStatus(httpClient, jobID, []string{source1})
-		return err == nil && jobStatus.TaskStatus[source1].Status.Stage == metadata.StageFinished
+		result, err := e2e.QueryJobViaOpenAPI(ctx, masterAddr, tenantID, projectID, jobID)
+		return err == nil && result.Status == int32(enginepb.QueryJobResponse_finished)
 	}, time.Second*30, time.Millisecond*100)
 
-	// check load finished status equals master status
+	source1 := "mysql-replica-01"
+	source2 := "mysql-replica-02"
+
 	binlogName, binlogPos, err := getMasterStatus(tcontext.Background(), conn.NewBaseDB(mysql), gmysql.MySQLFlavor)
 	require.NoError(t, err)
-	jobStatus, err := queryStatus(httpClient, jobID, []string{source1})
-	require.NoError(t, err)
-	// only check binlog-name, because binlog-pos will be changed by other test cases.
-	require.Contains(t, string(jobStatus.TaskStatus[source1].Status.Status), fmt.Sprintf(`"metaBinlog": "(%s,`, binlogName))
 
-	// start incremental job via updateJobConfig
+	// start incremental job
 	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("task-mode: full"), []byte("task-mode: incremental"))
 	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("binlog-name: ON.000001"), []byte(fmt.Sprintf("binlog-name: %s", binlogName)))
 	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("binlog-pos: 4"), []byte(fmt.Sprintf("binlog-pos: %d", binlogPos)))
-	err = updateJobCfg(httpClient, jobID, string(dmJobCfg))
-	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		var err error
+		jobID, err = e2e.CreateJobViaOpenAPI(ctx, masterAddr, tenantID, projectID,
+			engineModel.JobTypeDM, string(dmJobCfg))
+		return err == nil
+	}, time.Second*5, time.Millisecond*100)
 
 	// incremental phase
 	noError(mysql.Exec("insert into " + db + ".t1 values(2)"))
@@ -214,7 +216,7 @@ func testSimpleAllModeTask(
 	// check auto resume
 	waitRow("c = 3", db)
 
-	jobStatus, err = queryStatus(httpClient, jobID, []string{source1, source2})
+	jobStatus, err := queryStatus(httpClient, jobID, []string{source1, source2})
 	require.NoError(t, err)
 	require.Equal(t, jobID, jobStatus.JobID)
 	require.Contains(t, string(jobStatus.TaskStatus[source1].Status.Status), "totalEvents")
@@ -344,7 +346,7 @@ func testSimpleAllModeTask(
 	jobCfg, err = getJobCfg(httpClient, jobID)
 	require.NoError(t, err)
 	require.Contains(t, jobCfg, newDB)
-	require.Contains(t, jobCfg, `mod-revision: 2`)
+	require.Contains(t, jobCfg, `mod-revision: 1`)
 	// eventually apply new config, task still paused
 	require.Eventually(t, func() bool {
 		jobStatus, err = queryStatus(httpClient, jobID, nil)
