@@ -358,41 +358,31 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 		}()
 		conn, err = c.grpcPool.GetConn(addr)
 		if err != nil {
-			log.Info("get connection to store failed, retry later",
-				zap.String("addr", addr), zap.Error(err),
-				zap.String("namespace", c.changefeed.Namespace),
-				zap.String("changefeed", c.changefeed.ID))
-			return
+			return errors.Trace(err)
 		}
 		err = version.CheckStoreVersion(ctx, c.pd, storeID)
 		if err != nil {
-			log.Error("check tikv version failed",
-				zap.Error(err), zap.Uint64("storeID", storeID),
-				zap.String("namespace", c.changefeed.Namespace),
-				zap.String("changefeed", c.changefeed.ID))
-			return
+			return errors.Trace(err)
 		}
 		client := cdcpb.NewChangeDataClient(conn.ClientConn)
 		var streamClient cdcpb.ChangeData_EventFeedClient
 		streamClient, err = client.EventFeed(ctx)
 		if err != nil {
-			err = cerror.WrapError(cerror.ErrTiKVEventFeed, err)
-			log.Info("establish stream to store failed, retry later",
-				zap.String("addr", addr), zap.Error(err),
-				zap.String("namespace", c.changefeed.Namespace),
-				zap.String("changefeed", c.changefeed.ID))
-			return
+			return cerror.WrapError(cerror.ErrTiKVEventFeed, err)
 		}
 		stream = &eventFeedStream{
 			client: streamClient,
 			conn:   conn,
 		}
 		log.Debug("created stream to store",
-			zap.String("addr", addr),
 			zap.String("namespace", c.changefeed.Namespace),
-			zap.String("changefeed", c.changefeed.ID))
+			zap.String("changefeed", c.changefeed.ID),
+			zap.String("addr", addr))
 		return nil
-	}, retry.WithBackoffBaseDelay(500), retry.WithMaxTries(2), retry.WithIsRetryableErr(cerror.IsRetryableError))
+	}, retry.WithBackoffBaseDelay(500),
+		retry.WithMaxTries(2),
+		retry.WithIsRetryableErr(cerror.IsRetryableError),
+	)
 	return
 }
 
@@ -753,25 +743,18 @@ func (s *eventFeedSession) requestRegionToStore(
 			pendingRegions = newSyncRegionFeedStateMap()
 			storePendingRegions[rpcCtx.Addr] = pendingRegions
 			storeID := rpcCtx.Peer.GetStoreId()
-			log.Info("creating new stream to store to send request",
-				zap.String("namespace", s.client.changefeed.Namespace),
-				zap.String("changefeed", s.client.changefeed.ID),
-				zap.Uint64("regionID", sri.verID.GetID()),
-				zap.Uint64("requestID", requestID),
-				zap.Uint64("storeID", storeID),
-				zap.String("addr", rpcCtx.Addr))
 			streamCtx, streamCancel := context.WithCancel(ctx)
 			_ = streamCancel // to avoid possible context leak warning from govet
 			stream, err = s.client.newStream(streamCtx, rpcCtx.Addr, storeID)
 			if err != nil {
-				// if get stream failed, maybe the store is down permanently, we should try to relocate the active store
+				// get stream failed, maybe the store is down permanently, we should try to relocate the active store
 				log.Warn("get grpc stream client failed",
 					zap.String("namespace", s.client.changefeed.Namespace),
 					zap.String("changefeed", s.client.changefeed.ID),
 					zap.Uint64("regionID", sri.verID.GetID()),
 					zap.Uint64("requestID", requestID),
 					zap.Uint64("storeID", storeID),
-					zap.String("error", err.Error()))
+					zap.Error(err))
 				if cerror.ErrVersionIncompatible.Equal(err) {
 					// It often occurs on rolling update. Sleep 20s to reduce logs.
 					delay := 20 * time.Second
@@ -787,6 +770,13 @@ func (s *eventFeedSession) requestRegionToStore(
 				continue
 			}
 			s.addStream(rpcCtx.Addr, stream, streamCancel)
+			log.Info("creating new stream to store to send request",
+				zap.String("namespace", s.client.changefeed.Namespace),
+				zap.String("changefeed", s.client.changefeed.ID),
+				zap.Uint64("regionID", sri.verID.GetID()),
+				zap.Uint64("requestID", requestID),
+				zap.Uint64("storeID", storeID),
+				zap.String("addr", rpcCtx.Addr))
 
 			g.Go(func() error {
 				defer s.deleteStream(rpcCtx.Addr)
@@ -804,7 +794,7 @@ func (s *eventFeedSession) requestRegionToStore(
 		logReq("start new request",
 			zap.String("namespace", s.client.changefeed.Namespace),
 			zap.String("changefeed", s.client.changefeed.ID),
-			zap.Reflect("request", req), zap.String("addr", rpcCtx.Addr))
+			zap.Any("request", req), zap.String("addr", rpcCtx.Addr))
 
 		err = stream.client.Send(req)
 
@@ -962,6 +952,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 			log.Warn("load regions failed",
 				zap.String("namespace", s.client.changefeed.Namespace),
 				zap.String("changefeed", s.client.changefeed.ID),
+				zap.Any("span", nextSpan),
 				zap.Error(retryErr))
 			return retryErr
 		}
