@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tidb/dumpling/export"
 	tidbpromutil "github.com/pingcap/tidb/util/promutil"
 	filter "github.com/pingcap/tidb/util/table-filter"
+	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -38,7 +39,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	dutils "github.com/pingcap/tiflow/dm/pkg/dumpling"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/unit"
@@ -146,15 +146,18 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 
 	// NOTE: remove output dir before start dumping
 	// every time re-dump, loader should re-prepare
-	err := storage.RemoveAll(ctx, m.cfg.Dir, m.cfg.ExtStorage)
-	if err != nil {
-		m.logger.Error("fail to remove output directory", zap.String("directory", m.cfg.Dir), log.ShortError(err))
-		errs = append(errs, unit.NewProcessError(terror.ErrDumpUnitRuntime.Delegate(err, "fail to remove output directory: "+m.cfg.Dir)))
-		pr <- pb.ProcessResult{
-			IsCanceled: false,
-			Errors:     errs,
+	// when engine has opened an ExternalStorage, we can assume it's empty.
+	if m.cfg.ExtStorage == nil {
+		err := storage.RemoveAll(ctx, m.cfg.Dir, nil)
+		if err != nil {
+			m.logger.Error("fail to remove output directory", zap.String("directory", m.cfg.Dir), log.ShortError(err))
+			errs = append(errs, unit.NewProcessError(terror.ErrDumpUnitRuntime.Delegate(err, "fail to remove output directory: "+m.cfg.Dir)))
+			pr <- pb.ProcessResult{
+				IsCanceled: false,
+				Errors:     errs,
+			}
+			return
 		}
-		return
 	}
 
 	failpoint.Inject("dumpUnitProcessCancel", func() {
@@ -163,7 +166,10 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	})
 
 	newCtx, cancel := context.WithCancel(ctx)
-	var dumpling *export.Dumper
+	var (
+		dumpling *export.Dumper
+		err      error
+	)
 	if dumpling, err = export.NewDumper(newCtx, m.dumpConfig); err == nil {
 		m.mu.Lock()
 		m.core = dumpling

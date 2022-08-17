@@ -37,18 +37,12 @@ function run() {
 
 	# check data
 
-	check_sync_diff $WORK_DIR $CUR_DIR/conf/diff_config.toml 1
-
-	# test block-allow-list by the way
-	run_sql "show databases;" $TIDB_PORT $TIDB_PASSWORD
-	check_contains "Upper_DB1"
-	check_contains "lower_db"
-	# test route-rule
-	check_contains "UPPER_DB_ROUTE"
-
-	run_sql "show tables from UPPER_DB_ROUTE" $TIDB_PORT $TIDB_PASSWORD
-	check_contains "do_table_route"
-	run_sql_tidb_with_retry "select count(*) from UPPER_DB_ROUTE.do_table_route" "count(*): 5"
+  exec_with_retry 'run_sql --port 4000 "show databases;" | grep -q "Upper_DB1"'
+  exec_with_retry 'run_sql --port 4000 "show databases;" | grep -q "lower_db"'
+  exec_with_retry 'run_sql --port 4000 "show databases;" | grep -q "UPPER_DB_ROUTE"'
+  exec_with_retry '! run_sql --port 4000 "show databases;" | grep -q "Upper_Db_IGNORE"'
+  exec_with_retry '! run_sql --port 4000 "show tables from UPPER_DB_ROUTE;" | grep -q "Do_table_ignore"'
+  exec_with_retry 'run_sql --port 4000 "select count(*) from UPPER_DB_ROUTE.do_table_route\G" | grep -Fq "count(*): 2"'
 }
 
 trap "stop_engine_cluster $CONFIG" EXIT
