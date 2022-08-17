@@ -392,20 +392,11 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 		err = c.runEtcdWorker(ownerCtx, owner, orchestrator.NewGlobalState(), ownerFlushInterval, util.RoleOwner.String())
 		c.setOwner(nil)
 		log.Info("run owner exited", zap.Error(err))
-		// if owner exits, resign the owner key,
-		// use a new context to prevent the context from being cancelled.
-		resignCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		if resignErr := c.resign(resignCtx); resignErr != nil {
-			if errors.Cause(resignErr) != context.DeadlineExceeded {
-				log.Info("owner resign failed", zap.String("captureID", c.info.ID),
-					zap.Error(resignErr), zap.Int64("ownerRev", ownerRev))
-				cancel()
-				return errors.Trace(resignErr)
-			}
-			log.Warn("owner resign timeout", zap.String("captureID", c.info.ID),
-				zap.Error(resignErr), zap.Int64("ownerRev", ownerRev))
+		// if owner exits, resign the owner key
+		if resignErr := c.resign(ctx); resignErr != nil {
+			// if resigning owner failed, return error to let capture exits
+			return errors.Annotatef(resignErr, "resign owner failed, capture: %s", c.info.ID)
 		}
-		cancel()
 
 		if err != nil {
 			// for errors, return error and let capture exits or restart
@@ -476,7 +467,7 @@ func (c *Capture) campaign(ctx cdcContext.Context) error {
 }
 
 // resign lets an owner start a new election.
-func (c *Capture) resign(ctx context.Context) error {
+func (c *Capture) resign(ctx cdcContext.Context) error {
 	failpoint.Inject("capture-resign-failed", func() {
 		failpoint.Return(errors.New("capture resign failed"))
 	})
