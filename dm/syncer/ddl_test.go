@@ -702,7 +702,7 @@ func (s *testDDLSuite) TestAdjustDatabaseCollation(c *C) {
 			stmt, err := p.ParseOneStmt(sql, "", "")
 			c.Assert(err, IsNil)
 			c.Assert(stmt, NotNil)
-			ddlInfo.originStmt = stmt
+			ddlInfo.stmtCache = stmt
 			shardddl.adjustCollation(ddlInfo, statusVars, charsetAndDefaultCollationMap, idAndCollationMap)
 			routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
 			c.Assert(err, IsNil)
@@ -779,7 +779,7 @@ func (s *testDDLSuite) TestAdjustCollation(c *C) {
 		stmt, err := p.ParseOneStmt(sql, "", "")
 		c.Assert(err, IsNil)
 		c.Assert(stmt, NotNil)
-		ddlInfo.originStmt = stmt
+		ddlInfo.stmtCache = stmt
 		shardddl.adjustCollation(ddlInfo, statusVars, charsetAndDefaultCollationMap, idAndCollationMap)
 		routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
 		c.Assert(err, IsNil)

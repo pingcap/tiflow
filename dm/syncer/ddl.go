@@ -323,7 +323,7 @@ func (ddl *ShardDDL) HandleQueryEvent(ev *replication.QueryEvent, ec eventContex
 		// TODO: current table checkpoints will be deleted in track ddls, but created and updated in flush checkpoints,
 		//       we should use a better mechanism to combine these operations
 		if ddl.shardMode == "" {
-			recordSourceTbls(qec.sourceTbls, ddlInfo.originStmt, sourceTable)
+			recordSourceTbls(qec.sourceTbls, ddlInfo.stmtCache, sourceTable)
 		}
 	}
 
@@ -414,7 +414,7 @@ func (ddl *Normal) handleDDL(qec *queryEventContext) error {
 }
 
 func (ddl *Pessimist) preFilter(ddlInfo *ddlInfo, qec *queryEventContext, sourceTable *filter.Table, targetTable *filter.Table) (bool, error) {
-	switch ddlInfo.originStmt.(type) {
+	switch ddlInfo.stmtCache.(type) {
 	case *ast.DropDatabaseStmt:
 		err := ddl.dropSchemaInSharding(qec.tctx, sourceTable.Schema)
 		if err != nil {
@@ -466,7 +466,7 @@ func (ddl *Pessimist) handleDDL(qec *queryEventContext) error {
 	)
 
 	var annotate string
-	switch ddlInfo.originStmt.(type) {
+	switch ddlInfo.stmtCache.(type) {
 	case *ast.CreateDatabaseStmt:
 		// for CREATE DATABASE, we do nothing. when CREATE TABLE under this DATABASE, sharding groups will be added
 	case *ast.CreateTableStmt:
@@ -674,7 +674,7 @@ func (ddl *Optimist) preFilter(ddlInfo *ddlInfo, qec *queryEventContext, sourceT
 		ddl.logger.Info("skip event in re-replicating shard group", zap.String("event", "query"), zap.Stringer("re-shard", qec.shardingReSync))
 		return true, nil
 	}
-	switch ddlInfo.originStmt.(type) {
+	switch ddlInfo.stmtCache.(type) {
 	case *ast.TruncateTableStmt:
 		ddl.logger.Info("filter truncate table statement in shard group", zap.String("event", "query"), zap.String("statement", ddlInfo.routedDDL))
 		return true, nil
@@ -713,7 +713,7 @@ func (ddl *Optimist) handleDDL(qec *queryEventContext) error {
 		return nil
 	}
 
-	switch trackInfos[0].originStmt.(type) {
+	switch trackInfos[0].stmtCache.(type) {
 	case *ast.CreateDatabaseStmt, *ast.DropDatabaseStmt, *ast.AlterDatabaseStmt:
 		isDBDDL = true
 	}
@@ -728,7 +728,7 @@ func (ddl *Optimist) handleDDL(qec *queryEventContext) error {
 	}
 
 	if !isDBDDL {
-		if _, ok := trackInfos[0].originStmt.(*ast.CreateTableStmt); !ok {
+		if _, ok := trackInfos[0].stmtCache.(*ast.CreateTableStmt); !ok {
 			tiBefore, err = ddl.getTableInfo(qec.tctx, upTable, downTable)
 			if err != nil {
 				return err
@@ -759,7 +759,7 @@ func (ddl *Optimist) handleDDL(qec *queryEventContext) error {
 		skipOp bool
 		op     optimism.Operation
 	)
-	switch trackInfos[0].originStmt.(type) {
+	switch trackInfos[0].stmtCache.(type) {
 	case *ast.CreateDatabaseStmt, *ast.AlterDatabaseStmt:
 		// need to execute the DDL to the downstream, but do not do the coordination with DM-master.
 		op.DDLs = qec.needHandleDDLs
@@ -957,7 +957,7 @@ func (ddl *ShardDDL) processOneDDL(qec *queryEventContext, sql string) ([]string
 	}
 
 	if ddl.onlineDDL != nil {
-		if err = ddl.onlineDDL.CheckRegex(ddlInfo.originStmt, qec.ddlSchema, ddl.sourceTableNamesFlavor); err != nil {
+		if err = ddl.onlineDDL.CheckRegex(ddlInfo.stmtCache, qec.ddlSchema, ddl.sourceTableNamesFlavor); err != nil {
 			return nil, err
 		}
 	}
@@ -979,7 +979,7 @@ func (ddl *ShardDDL) processOneDDL(qec *queryEventContext, sql string) ([]string
 		return []string{ddlInfo.originDDL}, nil
 	}
 	// filter and save ghost table ddl
-	sqls, err := ddl.onlineDDL.Apply(qec.tctx, ddlInfo.sourceTables, ddlInfo.originDDL, ddlInfo.originStmt, qec.p)
+	sqls, err := ddl.onlineDDL.Apply(qec.tctx, ddlInfo.sourceTables, ddlInfo.originDDL, ddlInfo.stmtCache, qec.p)
 	if err != nil {
 		return nil, err
 	}
@@ -1006,6 +1006,8 @@ func (ddl *ShardDDL) genDDLInfo(qec *queryEventContext, sql string) (*ddlInfo, e
 	if err != nil {
 		return nil, terror.Annotatef(terror.ErrSyncerUnitParseStmt.New(err.Error()), "ddl %s", sql)
 	}
+	// get another stmt, one for representing original ddl, one for letting other function modify it.
+	stmt2, _ := qec.p.ParseOneStmt(sql, "", "")
 
 	sourceTables, err := parserpkg.FetchDDLTables(qec.ddlSchema, stmt, ddl.sourceTableNamesFlavor)
 	if err != nil {
@@ -1021,6 +1023,7 @@ func (ddl *ShardDDL) genDDLInfo(qec *queryEventContext, sql string) (*ddlInfo, e
 	ddlInfo := &ddlInfo{
 		originDDL:    sql,
 		originStmt:   stmt,
+		stmtCache:    stmt2,
 		sourceTables: sourceTables,
 		targetTables: targetTables,
 	}
@@ -1030,7 +1033,7 @@ func (ddl *ShardDDL) genDDLInfo(qec *queryEventContext, sql string) (*ddlInfo, e
 		ddl.adjustCollation(ddlInfo, qec.eventStatusVars, ddl.charsetAndDefaultCollation, ddl.idAndCollationMap)
 	}
 
-	routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
+	routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.stmtCache, ddlInfo.targetTables)
 	ddlInfo.routedDDL = routedDDL
 	return ddlInfo, err
 }
@@ -1099,7 +1102,7 @@ func (ddl *Pessimist) clearOnlineDDL(tctx *tcontext.Context, targetTable *filter
 
 // adjustCollation adds collation for create database and check create table.
 func (ddl *ShardDDL) adjustCollation(ddlInfo *ddlInfo, statusVars []byte, charsetAndDefaultCollationMap map[string]string, idAndCollationMap map[int]string) {
-	switch createStmt := ddlInfo.originStmt.(type) {
+	switch createStmt := ddlInfo.stmtCache.(type) {
 	case *ast.CreateTableStmt:
 		if createStmt.ReferTable != nil {
 			return
@@ -1198,6 +1201,7 @@ type ddlInfo struct {
 	originDDL    string
 	routedDDL    string
 	originStmt   ast.StmtNode
+	stmtCache    ast.StmtNode
 	sourceTables []*filter.Table
 	targetTables []*filter.Table
 }

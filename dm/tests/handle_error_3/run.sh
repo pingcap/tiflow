@@ -11,18 +11,18 @@ WORK_DIR=$TEST_DIR/$TEST_NAME
 function DM_4189_CASE() {
 	run_sql_source1 "insert into ${db}.${tb1} values(1);"
 	run_sql_source2 "insert into ${db}.${tb1} values(2);"
-	run_sql_source1 "alter table ${db}.${tb1} add column c int unique;"
-	run_sql_source2 "alter table ${db}.${tb1} add column c int unique;"
+	run_sql_source1 "alter table ${db}.${tb1} add column c varchar(20) character set utf32;"
+	run_sql_source2 "alter table ${db}.${tb1} add column c varchar(20) character set utf32;"
 
 	run_sql_source1 "insert into ${db}.${tb1} values(3,3);"
 	run_sql_source2 "insert into ${db}.${tb1} values(4,4);"
 
-	run_sql_source1 "alter table ${db}.${tb1} add column d int unique;"
-	run_sql_source2 "alter table ${db}.${tb1} add column d int unique;"
+	run_sql_source1 "alter table ${db}.${tb1} add column d varchar(20) character set utf32;"
+	run_sql_source2 "alter table ${db}.${tb1} add column d varchar(20) character set utf32;"
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"unsupported add column 'c' constraint UNIQUE KEY" 2
+		"Unknown character set" 2
 
 	first_pos1=$(get_start_pos 127.0.0.1:$MASTER_PORT $source1)
 	first_pos2=$(get_start_pos 127.0.0.1:$MASTER_PORT $source2)
@@ -33,30 +33,30 @@ function DM_4189_CASE() {
 
 	if [ "$second_pos1" = "$second_pos2" ]; then
 		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-			"binlog replace test -b $first_name1:$second_pos1 alter table ${db}.${tb1} add column d int;alter table ${db}.${tb1} add unique(d);" \
+			"binlog replace test -b $first_name1:$second_pos1 alter table ${db}.${tb1} add column d varchar(20);" \
 			"\"result\": true" 3
 	else
 		# WARN: may replace unknown event like later insert, test will fail
 		# It hasn't happened yet.
 		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-			"binlog replace test -b $first_name1:$second_pos1 alter table ${db}.${tb1} add column d int;alter table ${db}.${tb1} add unique(d);" \
+			"binlog replace test -b $first_name1:$second_pos1 alter table ${db}.${tb1} add column d varchar(20);" \
 			"\"result\": true" 3
 
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			"unsupported add column 'c' constraint UNIQUE KEY" 2
+			"Unknown character set" 2
 
 		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-			"binlog replace test -b $first_name2:$second_pos2 alter table ${db}.${tb1} add column d int;alter table ${db}.${tb1} add unique(d);" \
+			"binlog replace test -b $first_name2:$second_pos2 alter table ${db}.${tb1} add column d varchar(20);" \
 			"\"result\": true" 3
 	fi
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"unsupported add column 'c' constraint UNIQUE KEY" 2
+		"Unknown character set" 2
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog replace test alter table ${db}.${tb1} add column c int;alter table ${db}.${tb1} add unique(c);" \
+		"binlog replace test alter table ${db}.${tb1} add column c varchar(20);" \
 		"\"result\": true" 3
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -335,6 +335,9 @@ function DM_4177() {
 }
 
 function DM_4231_CASE() {
+	# trigger a flush checkpoint
+	run_sql_source1 "alter table ${db}.${tb1} add key (id);"
+
 	run_sql_source1 "insert into ${db}.${tb1} values(1);"
 	run_sql_source1 "alter table ${db}.${tb1} add column c int unique;"
 
@@ -351,15 +354,7 @@ function DM_4231_CASE() {
 		"unsupported add column 'd' constraint UNIQUE KEY" 1
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog revert test" \
-		"\"result\": true" 2
-
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"unsupported add column 'c' constraint UNIQUE KEY" 1
-
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog replace test alter table ${db}.${tb1} add unique(c);" \
+		"binlog skip test" \
 		"\"result\": true" 2
 
 	run_sql_source1 "insert into ${db}.${tb1} values(2,2);"
