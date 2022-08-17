@@ -21,11 +21,10 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
-	"go.uber.org/zap"
-	"google.golang.org/grpc/codes"
-
 	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
 )
 
 // normalizeOpts stores information used to generate a Prototype.
@@ -195,7 +194,10 @@ func (e *normalizedError[E]) mustMarshalJSON() []byte {
 }
 
 func (e *normalizedError[E]) toPB(stack errors.StackTrace) *pb.ErrorV2 {
-	stackTrace := fmt.Sprintf("%+v", stack)
+	var stackTrace string
+	if stack != nil {
+		stackTrace = fmt.Sprintf("%+v", stack)
+	}
 	return &pb.ErrorV2{
 		Name:       e.name(),
 		Details:    e.mustMarshalJSON(),

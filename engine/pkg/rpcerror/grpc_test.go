@@ -23,12 +23,12 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
+var testErrorPrototype = Normalize[testError](WithName("ErrTestError"), WithMessage("test message"))
+
 func TestTryUnwrapNormalizedError(t *testing.T) {
 	t.Parallel()
 
-	testErrorPrototype := Normalize[testError](WithName("ErrTestError"), WithMessage("test message"))
 	err := testErrorPrototype.GenWithStack(&testError{Val: "first test error"})
-
 	errOut, ok := tryUnwrapNormalizedError(err)
 	require.True(t, ok)
 	require.IsType(t, &normalizedError[testError]{}, errOut)
@@ -37,9 +37,7 @@ func TestTryUnwrapNormalizedError(t *testing.T) {
 func TestToGRPCError(t *testing.T) {
 	t.Parallel()
 
-	testErrorPrototype := Normalize[testError](WithName("ErrTestError"), WithMessage("test message"))
 	err := testErrorPrototype.Gen(&testError{Val: "first test error"})
-
 	grpcErr := ToGRPCError(err)
 	st := status.Convert(grpcErr)
 	require.Equal(t, codes.Unavailable, st.Code())
@@ -55,14 +53,21 @@ func TestToGRPCError(t *testing.T) {
 func TestFromGRPCError(t *testing.T) {
 	t.Parallel()
 
-	testErrorPrototype := Normalize[testError](WithName("ErrTestError"), WithMessage("test message"))
 	err := testErrorPrototype.GenWithStack(&testError{Val: "first test error"})
-
 	grpcErr := ToGRPCError(err)
-
 	errOut := FromGRPCError(grpcErr)
 	require.True(t, testErrorPrototype.Is(errOut))
-	require.ErrorContains(t, errOut, "grpc_test.go:59")
+	require.ErrorContains(t, errOut, "grpc_test.go:56")
+}
+
+func TestNoServerStack(t *testing.T) {
+	t.Parallel()
+
+	err := testErrorPrototype.Gen(&testError{Val: "first test error"})
+	grpcErr := ToGRPCError(err)
+	errOut := FromGRPCError(grpcErr)
+	require.True(t, testErrorPrototype.Is(errOut))
+	require.NotContains(t, errOut.Error(), "grpc_test.go:59")
 }
 
 type unretryableErr struct {
