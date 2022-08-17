@@ -163,6 +163,11 @@ func (meta *ShardingMeta) checkItemExists(item *DDLItem) (int, bool) {
 		return 0, false
 	}
 	for idx, ddlItem := range source.Items {
+		log.L().Warn("lance test will compare",
+			zap.String("item.FirstLocation", item.FirstLocation.String()),
+			zap.Strings("ddls", ddlItem.DDLs),
+			zap.String("ddlItem.FirstLocation", ddlItem.FirstLocation.String()),
+		)
 		if binlog.CompareLocation(item.FirstLocation, ddlItem.FirstLocation, meta.enableGTID) == 0 {
 			return idx, true
 		}
@@ -176,10 +181,13 @@ func (meta *ShardingMeta) checkItemExists(item *DDLItem) (int, bool) {
 // 3. if it is a new DDL in global sequence, which means len(source.Items) > len(global.Items), add it into global sequence
 // 4. check the source sequence is the prefix-sequence of global sequence, if not, return an error
 // returns:
-//   active: whether the DDL will be processed in this round
+//
+//	active: whether the DDL will be processed in this round
 func (meta *ShardingMeta) AddItem(item *DDLItem) (active bool, err error) {
 	index, exists := meta.checkItemExists(item)
 	if exists {
+		log.L().Warn("lance test exist", zap.String("item", item.String()),
+			zap.Int("index", index), zap.Int("meta.activeIdx", meta.activeIdx))
 		return index == meta.activeIdx, nil
 	}
 

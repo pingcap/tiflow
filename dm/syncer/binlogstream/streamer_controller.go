@@ -98,7 +98,7 @@ func newLocationStream(generator streamGenerator, location binlog.Location) (loc
 	}
 	ret.stream = s
 
-	recorder := &locationRecorder{}
+	recorder := newLocationRecorder()
 	recorder.reset(location)
 	ret.locationRecorder = recorder
 	return ret, nil
@@ -137,7 +137,7 @@ type StreamerController struct {
 
 	*streamModifier
 	// streamModifier will also modify locations so they'll be different from upstreamLocations.
-	locations locations
+	locations *locations
 
 	// lastEventFromUpstream is the last event from upstream, and not sent to caller
 	// yet. It should be set to nil after sent to caller.
@@ -193,6 +193,7 @@ func NewStreamerController(
 		closed:            true,
 		relay:             relay,
 		streamModifier:    newStreamModifier(logger),
+		locations:         &locations{},
 	}
 
 	return streamerController
@@ -283,6 +284,7 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 	c.upstream, err = newLocationStream(c.streamProducer, location)
 	if err == nil {
 		c.streamModifier.reset(location)
+		c.locations.reset(location)
 		c.lastEventFromUpstream = nil
 	}
 	return err
@@ -345,6 +347,11 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (*replication.Binl
 		return nil, pb.ErrorOp_InvalidErrorOp, err
 	}
 
+	// don't disturb locations for heartbeat events, ...
+	if !shouldUpdatePos(event) {
+		return event, op, nil
+	}
+
 	if suffix != 0 {
 		c.locations.curStartLocation = c.upstream.curStartLocation
 		c.locations.curStartLocation.Suffix = suffix - 1
@@ -361,7 +368,7 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (*replication.Binl
 			c.locations.txnEndLocation = c.upstream.txnEndLocation
 		} else {
 			// upstream event, simply copy locations from upstream location recorder
-			c.locations = c.upstream.locations
+			*c.locations = *c.upstream.locations
 		}
 	}
 
@@ -643,7 +650,7 @@ func NewStreamerController4Test(
 		streamProducer: streamerProducer,
 		upstream: locationStream{
 			stream:           streamer,
-			locationRecorder: &locationRecorder{},
+			locationRecorder: newLocationRecorder(),
 		},
 		closed:         false,
 		streamModifier: &streamModifier{logger: log.L()},
