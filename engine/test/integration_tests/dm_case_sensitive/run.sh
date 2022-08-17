@@ -20,7 +20,7 @@ function run() {
 	run_sql_file $CUR_DIR/data/db1.prepare.sql
 	run_sql_file --port 3307 $CUR_DIR/data/db2.prepare.sql
 	# manually create the route table
-  run_sql --port 4000 'CREATE DATABASE IF NOT EXISTS `UPPER_DB_ROUTE`'
+	run_sql --port 4000 'CREATE DATABASE IF NOT EXISTS `UPPER_DB_ROUTE`'
 
 	# create job
 
@@ -37,12 +37,12 @@ function run() {
 
 	# check data
 
-  exec_with_retry 'run_sql --port 4000 "show databases;" | grep -q "Upper_DB1"'
-  exec_with_retry 'run_sql --port 4000 "show databases;" | grep -q "lower_db"'
-  exec_with_retry 'run_sql --port 4000 "show databases;" | grep -q "UPPER_DB_ROUTE"'
-  exec_with_retry '! run_sql --port 4000 "show databases;" | grep -q "Upper_Db_IGNORE"'
-  exec_with_retry '! run_sql --port 4000 "show tables from UPPER_DB_ROUTE;" | grep -q "Do_table_ignore"'
-  exec_with_retry 'run_sql --port 4000 "select count(*) from UPPER_DB_ROUTE.do_table_route\G" | grep -Fq "count(*): 2"'
+	exec_with_retry 'run_sql --port 4000 "show databases;" | grep -q "Upper_DB1"'
+	exec_with_retry 'run_sql --port 4000 "show databases;" | grep -q "lower_db"'
+	exec_with_retry 'run_sql --port 4000 "show databases;" | grep -q "UPPER_DB_ROUTE"'
+	exec_with_retry '! run_sql --port 4000 "show databases;" | grep -q "Upper_Db_IGNORE"'
+	exec_with_retry '! run_sql --port 4000 "show tables from UPPER_DB_ROUTE;" | grep -q "Do_table_ignore"'
+	exec_with_retry 'run_sql --port 4000 "select count(*) from UPPER_DB_ROUTE.do_table_route\G" | grep -Fq "count(*): 2"'
 }
 
 trap "stop_engine_cluster $CONFIG" EXIT
