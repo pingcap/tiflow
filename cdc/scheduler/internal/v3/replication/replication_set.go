@@ -27,18 +27,19 @@ import (
 
 // ReplicationSetState is the state of ReplicationSet in owner.
 //
-//   AddTable
-//  ┌────────┐   ┌─────────┐
-//  │ Absent ├─> │ Prepare │
-//  └────────┘   └──┬──────┘
-//       ┌──────────┘   ^
-//       v              │ MoveTable
-//  ┌────────┐   ┌──────┴──────┐ RemoveTable ┌──────────┐
-//  │ Commit ├──>│ Replicating │────────────>│ Removing │
-//  └────────┘   └─────────────┘             └──────────┘
+//	 AddTable
+//	┌────────┐   ┌─────────┐
+//	│ Absent ├─> │ Prepare │
+//	└────────┘   └──┬──────┘
+//	     ┌──────────┘   ^
+//	     v              │ MoveTable
+//	┌────────┐   ┌──────┴──────┐ RemoveTable ┌──────────┐
+//	│ Commit ├──>│ Replicating │────────────>│ Removing │
+//	└────────┘   └─────────────┘             └──────────┘
 //
 // When a capture shutdown unexpectedly, we may need to transit the state to
 // Absent or Replicating immediately.
+//
 //nolint:revive
 type ReplicationSetState int
 

@@ -23,13 +23,13 @@ import (
 
 // CaptureState is the state of a capture.
 //
-//      ┌───────────────┐ Heartbeat Resp ┌─────────────┐
-//      │ Uninitialized ├───────────────>│ Initialized │
-//      └──────┬────────┘                └──────┬──────┘
-//             │                                │
-//  IsStopping │          ┌──────────┐          │ IsStopping
-//             └────────> │ Stopping │ <────────┘
-//                        └──────────┘
+//	    ┌───────────────┐ Heartbeat Resp ┌─────────────┐
+//	    │ Uninitialized ├───────────────>│ Initialized │
+//	    └──────┬────────┘                └──────┬──────┘
+//	           │                                │
+//	IsStopping │          ┌──────────┐          │ IsStopping
+//	           └────────> │ Stopping │ <────────┘
+//	                      └──────────┘
 type CaptureState int
 
 const (

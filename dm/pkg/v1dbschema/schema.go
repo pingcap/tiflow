@@ -82,8 +82,10 @@ func UpdateSchema(tctx *tcontext.Context, db *conn.BaseDB, cfg *config.SubTaskCo
 // - update table schema:
 //   - add column `binlog_gtid VARCHAR(256)`.
 //   - add column `table_info JSON NOT NULL`.
+//
 // - update column value:
 //   - fill `binlog_gtid` based on `binlog_name` and `binlog_pos` if GTID mode enable.
+//
 // NOTE: no need to update the value of `table_info` because DM can get schema automatically from downstream when replicating DML.
 func updateSyncerCheckpoint(tctx *tcontext.Context, dbConn *conn.BaseConn, taskName, tableName, sourceID string, fillGTIDs bool, tcpReader reader.Reader) error {
 	logger := log.L().WithFields(zap.String("task", taskName), zap.String("source", sourceID))

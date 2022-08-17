@@ -95,6 +95,21 @@ func (mr *MockCDCEtcdClientMockRecorder) GetAllCDCInfo(ctx interface{}) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllCDCInfo", reflect.TypeOf((*MockCDCEtcdClient)(nil).GetAllCDCInfo), ctx)
 }
 
+// GetAllChangeFeedInfo mocks base method.
+func (m *MockCDCEtcdClient) GetAllChangeFeedInfo(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAllChangeFeedInfo", ctx)
+	ret0, _ := ret[0].(map[model.ChangeFeedID]*model.ChangeFeedInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetAllChangeFeedInfo indicates an expected call of GetAllChangeFeedInfo.
+func (mr *MockCDCEtcdClientMockRecorder) GetAllChangeFeedInfo(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllChangeFeedInfo", reflect.TypeOf((*MockCDCEtcdClient)(nil).GetAllChangeFeedInfo), ctx)
+}
+
 // GetCaptures mocks base method.
 func (m *MockCDCEtcdClient) GetCaptures(arg0 context.Context) (int64, []*model.CaptureInfo, error) {
 	m.ctrl.T.Helper()

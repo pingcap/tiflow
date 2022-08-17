@@ -272,9 +272,13 @@ func (p *Pessimist) ShowLocks(task string, sources []string) []*pb.DDLLock {
 // UnlockLock unlocks a shard DDL lock manually when using `unlock-ddl-lock` command.
 // ID: the shard DDL lock ID.
 // replaceOwner: the new owner used to replace the original DDL for executing DDL to downstream.
-//   if the original owner is still exist, we should NOT specify any replaceOwner.
+//
+//	if the original owner is still exist, we should NOT specify any replaceOwner.
+//
 // forceRemove: whether force to remove the DDL lock even fail to unlock it (for the owner).
-//   if specified forceRemove and then fail to unlock, we may need to use `BreakLock` later.
+//
+//	if specified forceRemove and then fail to unlock, we may need to use `BreakLock` later.
+//
 // NOTE: this function has side effects, if it failed, some status can't revert anymore.
 // NOTE: this function should not be called if the lock is still in automatic resolving.
 func (p *Pessimist) UnlockLock(ctx context.Context, id, replaceOwner string, forceRemove bool) error {

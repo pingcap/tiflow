@@ -179,7 +179,7 @@ func (p *pebbleDB) Iterator(lowerBound, upperBound []byte, lowerTs, upperTs uint
 	})}
 }
 
-func (p *pebbleDB) Batch(cap int) Batch {
+func (p *pebbleDB) Batch(_ int) Batch {
 	return pebbleBatch{
 		Batch: p.db.NewBatch(),
 	}
@@ -198,7 +198,7 @@ func (p *pebbleDB) Close() error {
 }
 
 // TODO: Update metrics once we switch to pebble,
-//       as some metrics are not applicable to pebble.
+// as some metrics are not applicable to pebble.
 func (p *pebbleDB) CollectMetrics(i int) {
 	db := p.db
 	stats := db.Metrics()

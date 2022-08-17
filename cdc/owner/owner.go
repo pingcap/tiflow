@@ -114,7 +114,11 @@ type ownerImpl struct {
 	//         as it is not a thread-safe value.
 	changefeedTicked bool
 
-	newChangefeed func(id model.ChangeFeedID, up *upstream.Upstream) *changefeed
+	newChangefeed func(
+		id model.ChangeFeedID,
+		state *orchestrator.ChangefeedReactorState,
+		up *upstream.Upstream,
+	) *changefeed
 }
 
 // NewOwner creates a new Owner
@@ -174,45 +178,38 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 			}
 			continue
 		}
-		ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-			ID:   changefeedID,
-			Info: changefeedState.Info,
-		})
 		cfReactor, exist := o.changefeeds[changefeedID]
 		if !exist {
 			up, ok := o.upstreamManager.Get(changefeedState.Info.UpstreamID)
 			if !ok {
 				upstreamInfo := state.Upstreams[changefeedState.Info.UpstreamID]
-				up = o.upstreamManager.AddUpstream(upstreamInfo.ID, upstreamInfo)
+				up = o.upstreamManager.AddUpstream(upstreamInfo)
 			}
-			cfReactor = o.newChangefeed(changefeedID, up)
+			cfReactor = o.newChangefeed(changefeedID, changefeedState, up)
 			o.changefeeds[changefeedID] = cfReactor
 		}
-		cfReactor.Tick(ctx, changefeedState, state.Captures)
+		ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
+			ID: changefeedID,
+		})
+		cfReactor.Tick(ctx, state.Captures)
 	}
 	o.changefeedTicked = true
 
 	// Cleanup changefeeds that are not in the state.
 	if len(o.changefeeds) != len(state.Changefeeds) {
-		for changefeedID, cfReactor := range o.changefeeds {
+		for changefeedID, reactor := range o.changefeeds {
 			if _, exist := state.Changefeeds[changefeedID]; exist {
 				continue
 			}
-			ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-				ID: changefeedID,
-			})
-			cfReactor.Close(ctx)
+			reactor.Close(ctx)
 			delete(o.changefeeds, changefeedID)
 		}
 	}
 
 	// Close and cleanup all changefeeds.
 	if atomic.LoadInt32(&o.closed) != 0 {
-		for changefeedID, cfReactor := range o.changefeeds {
-			ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-				ID: changefeedID,
-			})
-			cfReactor.Close(ctx)
+		for _, reactor := range o.changefeeds {
+			reactor.Close(ctx)
 		}
 		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 	}
@@ -688,7 +685,7 @@ func (o *ownerImpl) updateGCSafepoint(
 		up, ok := o.upstreamManager.Get(upstreamID)
 		if !ok {
 			upstreamInfo := state.Upstreams[upstreamID]
-			up = o.upstreamManager.AddUpstream(upstreamInfo.ID, upstreamInfo)
+			up = o.upstreamManager.AddUpstream(upstreamInfo)
 		}
 		if !up.IsNormal() {
 			log.Warn("upstream is not ready, skip",
