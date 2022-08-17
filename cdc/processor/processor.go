@@ -306,20 +306,7 @@ func isProcessorIgnorableError(err error) bool {
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts, maintain table pipeline, error handling, etc.
 func (p *processor) Tick(ctx cdcContext.Context, state *orchestrator.ChangefeedReactorState) (orchestrator.ReactorState, error) {
-<<<<<<< HEAD
-=======
 	p.changefeed = state
-	// check upstream error first
-	if err := p.upstream.Error(); err != nil {
-		return p.handleErr(state, err)
-	}
-	if p.upstream.IsClosed() {
-		log.Panic("upstream is closed",
-			zap.Uint64("upstreamID", p.upstream.ID),
-			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID))
-	}
->>>>>>> a5bb4d22b (processor(ticdc): fix log make cdc instance panic (#6715))
 	// skip this tick
 	if !p.upStream.IsNormal() {
 		return state, nil
@@ -501,27 +488,6 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		zap.String("changefeed", p.changefeedID.ID))
 
 	start := time.Now()
-<<<<<<< HEAD
-	p.sink, err = sink.New(stdCtx, p.changefeed.ID, p.changefeed.Info.SinkURI, p.filter, p.changefeed.Info.Config, opts, errCh)
-=======
-	conf := config.GetGlobalServerConfig()
-	if !conf.Debug.EnableNewSink {
-		log.Info("Try to create sinkV1")
-		p.sinkV1, err = sinkv1.New(
-			stdCtx,
-			p.changefeedID,
-			p.changefeed.Info.SinkURI,
-			p.changefeed.Info.Config,
-			errCh,
-		)
-	} else {
-		log.Info("Try to create sinkV2")
-		p.sinkV2Factory, err = factory.New(ctx, p.changefeed.Info.SinkURI,
-			p.changefeed.Info.Config,
-			errCh)
-	}
-
->>>>>>> a5bb4d22b (processor(ticdc): fix log make cdc instance panic (#6715))
 	if err != nil {
 		log.Info("processor new sink failed",
 			zap.String("namespace", p.changefeedID.Namespace),
