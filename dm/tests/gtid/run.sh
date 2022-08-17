@@ -109,7 +109,7 @@ function run() {
 	run_sql_source2 "insert into gtid.t2 values (4)"
 	# now Previous_gtids event is 09bec856-ba95-11ea-850a-58f2b4af5188:1-4:6
 
-	sleep 1
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-task test" \
 		"\"result\": true" 3
