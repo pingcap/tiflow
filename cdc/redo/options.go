@@ -41,6 +41,7 @@ func NewOwnerManagerOptions(errCh chan<- error) *ManagerOptions {
 		EmitMeta:       true,
 		EmitRowEvents:  false,
 		EmitDDLEvents:  true,
+		ErrCh:          errCh,
 	}
 }
 
@@ -52,6 +53,7 @@ func NewProcessorManagerOptions(errCh chan<- error) *ManagerOptions {
 		EmitMeta:       false,
 		EmitRowEvents:  true,
 		EmitDDLEvents:  false,
+		ErrCh:          errCh,
 	}
 }
 
@@ -63,5 +65,6 @@ func newMockManagerOptions(errCh chan<- error) *ManagerOptions {
 		EmitMeta:       true,
 		EmitRowEvents:  true,
 		EmitDDLEvents:  true,
+		ErrCh:          errCh,
 	}
 }
