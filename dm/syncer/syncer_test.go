@@ -268,7 +268,7 @@ func (s *testSyncerSuite) TestSelectDB(c *C) {
 	}
 
 	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
-	shardDDL := NewShardDDL(&log.Logger{}, syncer)
+	shardDDL := NewShardDDL(&syncer.tctx.Logger, syncer)
 	for _, cs := range cases {
 		e, err := event.GenQueryEvent(header, 123, 0, 0, 0, statusVars, cs.schema, cs.query)
 		c.Assert(err, IsNil)
@@ -411,7 +411,7 @@ func (s *testSyncerSuite) TestIgnoreDB(c *C) {
 	c.Assert(syncer.genRouter(), IsNil)
 	i := 0
 
-	shardDDL := NewShardDDL(&log.Logger{}, syncer)
+	shardDDL := NewShardDDL(&syncer.tctx.Logger, syncer)
 	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
 	for _, e := range allEvents {
 		ev, ok := e.Event.(*replication.QueryEvent)
@@ -843,6 +843,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	}
 
 	syncer.handleJobFunc = syncer.addJobToMemory
+	syncer.shardDDL = NewShardDDL(&syncer.tctx.Logger, syncer)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	resultCh := make(chan pb.ProcessResult)
@@ -1182,6 +1183,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 	}
 
 	syncer.handleJobFunc = syncer.addJobToMemory
+	syncer.shardDDL = NewShardDDL(&syncer.tctx.Logger, syncer)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	resultCh := make(chan pb.ProcessResult)
@@ -1412,7 +1414,7 @@ func (s *testSyncerSuite) TestTrackDDL(c *C) {
 		}},
 	}
 
-	shardDDL := NewShardDDL(&log.Logger{}, syncer)
+	shardDDL := NewShardDDL(&syncer.tctx.Logger, syncer)
 	for _, ca := range cases {
 		ddlInfo, err := shardDDL.genDDLInfo(qec, ca.sql)
 		c.Assert(err, IsNil)
@@ -1432,7 +1434,7 @@ func checkEventWithTableResult(c *C, syncer *Syncer, allEvents []*replication.Bi
 		tctx: tctx,
 	}
 	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
-	shardDDL := NewShardDDL(&log.Logger{}, syncer)
+	shardDDL := NewShardDDL(&syncer.tctx.Logger, syncer)
 	for _, e := range allEvents {
 		switch ev := e.Event.(type) {
 		case *replication.QueryEvent:

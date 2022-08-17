@@ -133,7 +133,7 @@ func (s *testFilterSuite) TestSkipQueryEvent(c *C) {
 
 	loc := binlog.MustZeroLocation(mysql.MySQLFlavor)
 
-	shardDDL := NewShardDDL(&log.Logger{}, syncer)
+	shardDDL := NewShardDDL(&syncer.tctx.Logger, syncer)
 	for _, ca := range cases {
 		qec := &queryEventContext{
 			eventContext: &eventContext{

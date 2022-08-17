@@ -239,6 +239,7 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 	}
 	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
 	syncer.idAndCollationMap = map[int]string{46: "utf8mb4_bin"}
+	shardDDL := NewShardDDL(&tctx.Logger, syncer)
 	for i, sql := range sqls {
 		qec := &queryEventContext{
 			eventContext:    testEC,
@@ -251,7 +252,6 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *C) {
 		stmt, err := parseOneStmt(qec)
 		c.Assert(err, IsNil)
 
-		shardDDL := NewShardDDL(&log.Logger{}, syncer)
 		qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
 		c.Assert(err, IsNil)
 		for _, sql2 := range qec.splitDDLs {
@@ -606,7 +606,7 @@ func (s *testDDLSuite) TestDropSchemaInSharding(c *C) {
 	_, _, _, _, err = syncer.sgk.AddGroup(targetTable, []string{source2}, nil, true)
 	c.Assert(err, IsNil)
 	c.Assert(syncer.sgk.Groups(), HasLen, 2)
-	pessimist := Pessimist{}
+	pessimist := NewPessimistDDL(&syncer.tctx.Logger, syncer)
 	c.Assert(pessimist.dropSchemaInSharding(tctx, sourceDB), IsNil)
 	c.Assert(syncer.sgk.Groups(), HasLen, 0)
 }
@@ -639,7 +639,7 @@ func (s *testDDLSuite) TestClearOnlineDDL(c *C) {
 	_, _, _, _, err = syncer.sgk.AddGroup(targetTable, []string{source2}, nil, true)
 	c.Assert(err, IsNil)
 
-	pessimist := Pessimist{}
+	pessimist := NewPessimistDDL(&syncer.tctx.Logger, syncer)
 	c.Assert(pessimist.clearOnlineDDL(tctx, targetTable), IsNil)
 	c.Assert(mock.toFinish, HasLen, 0)
 }
@@ -704,7 +704,7 @@ func (s *testDDLSuite) TestAdjustDatabaseCollation(c *C) {
 			c.Assert(stmt, NotNil)
 			ddlInfo.stmtCache = stmt
 			shardddl.adjustCollation(ddlInfo, statusVars, charsetAndDefaultCollationMap, idAndCollationMap)
-			routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
+			routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.stmtCache, ddlInfo.targetTables)
 			c.Assert(err, IsNil)
 			c.Assert(routedDDL, Equals, expectedSQLs[i][j])
 		}
@@ -781,7 +781,7 @@ func (s *testDDLSuite) TestAdjustCollation(c *C) {
 		c.Assert(stmt, NotNil)
 		ddlInfo.stmtCache = stmt
 		shardddl.adjustCollation(ddlInfo, statusVars, charsetAndDefaultCollationMap, idAndCollationMap)
-		routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
+		routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.stmtCache, ddlInfo.targetTables)
 		c.Assert(err, IsNil)
 		c.Assert(routedDDL, Equals, expectedSQLs[i])
 	}

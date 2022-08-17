@@ -78,6 +78,42 @@ type ShardDDL struct {
 	flushJobs              func() error
 }
 
+// NewShardDDL creates a new ShardDDL instance.
+func NewShardDDL(pLogger *log.Logger, syncer *Syncer) *ShardDDL {
+	shardDDL := &ShardDDL{
+		logger:                     pLogger.WithFields(zap.String("component", "ddl")),
+		binlogFilter:               syncer.binlogFilter,
+		metricsProxies:             syncer.metricsProxies,
+		name:                       syncer.cfg.Name,
+		workerName:                 syncer.cfg.WorkerName,
+		sourceID:                   syncer.cfg.SourceID,
+		enableGTID:                 syncer.cfg.EnableGTID,
+		shardMode:                  syncer.cfg.ShardMode,
+		upstreamTZStr:              syncer.upstreamTZStr,
+		onlineDDL:                  syncer.onlineDDL,
+		checkpoint:                 syncer.checkpoint,
+		tableRouter:                syncer.tableRouter,
+		sourceTableNamesFlavor:     syncer.SourceTableNamesFlavor,
+		collationCompatible:        syncer.cfg.CollationCompatible,
+		charsetAndDefaultCollation: syncer.charsetAndDefaultCollation,
+		idAndCollationMap:          syncer.idAndCollationMap,
+		baList:                     syncer.baList,
+		recordSkipSQLsLocation:     syncer.recordSkipSQLsLocation,
+		trackDDL:                   syncer.trackDDL,
+		saveTablePoint:             syncer.saveTablePoint,
+		flushJobs:                  syncer.flushJobs,
+	}
+	switch syncer.cfg.ShardMode {
+	case config.ShardPessimistic:
+		shardDDL.strategy = NewPessimistDDL(&shardDDL.logger, syncer)
+	case config.ShardOptimistic:
+		shardDDL.strategy = NewOptimistDDL(&shardDDL.logger, syncer)
+	default:
+		shardDDL.strategy = NewNormalDDL(&shardDDL.logger, syncer)
+	}
+	return shardDDL
+}
+
 type Normal struct {
 	ShardDDLStrategy
 
@@ -87,6 +123,16 @@ type Normal struct {
 	onlineDDL     onlineddl.OnlinePlugin
 	handleJobFunc func(*job) (bool, error)
 	execError     *atomic.Error
+}
+
+func NewNormalDDL(pLogger *log.Logger, syncer *Syncer) *Normal {
+	return &Normal{
+		logger:        pLogger.WithFields(zap.String("mode", "normal")),
+		trackDDL:      syncer.trackDDL,
+		onlineDDL:     syncer.onlineDDL,
+		handleJobFunc: syncer.handleJobFunc,
+		execError:     &syncer.execError,
+	}
 }
 
 type Pessimist struct {
@@ -109,6 +155,25 @@ type Pessimist struct {
 	pessimist        *shardddl.Pessimist // shard DDL pessimist
 }
 
+func NewPessimistDDL(pLogger *log.Logger, syncer *Syncer) *Pessimist {
+	return &Pessimist{
+		logger:           pLogger.WithFields(zap.String("mode", "pessimist")),
+		sgk:              syncer.sgk,
+		checkpoint:       syncer.checkpoint,
+		onlineDDL:        syncer.onlineDDL,
+		metricsProxies:   syncer.metricsProxies,
+		name:             syncer.cfg.Name,
+		sourceID:         syncer.cfg.SourceID,
+		execError:        &syncer.execError,
+		safeMode:         syncer.safeMode,
+		trackDDL:         syncer.trackDDL,
+		handleJobFunc:    syncer.handleJobFunc,
+		flushCheckPoints: syncer.flushCheckPoints,
+		saveTablePoint:   syncer.saveTablePoint,
+		pessimist:        syncer.pessimist,
+	}
+}
+
 type Optimist struct {
 	ShardDDLStrategy
 
@@ -127,21 +192,21 @@ type Optimist struct {
 	optimist      *shardddl.Optimist // shard DDL optimist
 }
 
-// NewShardDDL creates a new ShardDDL instance.
-func NewShardDDL(pLogger *log.Logger, syncer *Syncer) *ShardDDL {
-	shardDDL := &ShardDDL{
-		logger:       pLogger.WithFields(zap.String("component", "ddl")),
-		binlogFilter: syncer.binlogFilter,
+func NewOptimistDDL(pLogger *log.Logger, syncer *Syncer) *Optimist {
+	return &Optimist{
+		logger:        pLogger.WithFields(zap.String("mode", "optimist")),
+		schemaTracker: syncer.schemaTracker,
+		flavor:        syncer.cfg.Flavor,
+		enableGTID:    syncer.cfg.EnableGTID,
+		onlineDDL:     syncer.onlineDDL,
+		checkpoint:    syncer.checkpoint,
+		trackDDL:      syncer.trackDDL,
+		handleJobFunc: syncer.handleJobFunc,
+		osgk:          syncer.osgk,
+		getTableInfo:  syncer.getTableInfo,
+		execError:     &syncer.execError,
+		optimist:      syncer.optimist,
 	}
-	switch syncer.cfg.ShardMode {
-	case config.ShardPessimistic:
-		shardDDL.strategy = &Pessimist{logger: shardDDL.logger}
-	case config.ShardOptimistic:
-		shardDDL.strategy = &Optimist{logger: shardDDL.logger}
-	default:
-		shardDDL.strategy = &Normal{logger: shardDDL.logger}
-	}
-	return shardDDL
 }
 
 func (ddl *ShardDDL) HandleQueryEvent(ev *replication.QueryEvent, ec eventContext, originSQL string) (err error) {
@@ -905,7 +970,7 @@ func (ddl *ShardDDL) skipQueryEvent(qec *queryEventContext, ddlInfo *ddlInfo) (b
 	if utils.IsBuildInSkipDDL(qec.originSQL) {
 		return true, nil
 	}
-	et := bf.AstToDDLEvent(ddlInfo.originStmt)
+	et := bf.AstToDDLEvent(ddlInfo.stmtCache)
 	// get real tables before apply block-allow list
 	realTables := make([]*filter.Table, 0, len(ddlInfo.sourceTables))
 	for _, table := range ddlInfo.sourceTables {
