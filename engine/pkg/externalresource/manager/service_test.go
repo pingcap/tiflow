@@ -97,20 +97,6 @@ func newServiceTestSuite(t *testing.T) *serviceTestSuite {
 	}
 }
 
-func (s *serviceTestSuite) Start() {
-	s.service.StartBackgroundWorker()
-}
-
-func (s *serviceTestSuite) Stop() {
-	s.service.Stop()
-}
-
-func (s *serviceTestSuite) OfflineExecutor(t *testing.T, executor resModel.ExecutorID) {
-	s.executorInfoProvider.RemoveExecutor(string(executor))
-	err := s.service.onExecutorOffline(executor)
-	require.NoError(t, err)
-}
-
 func (s *serviceTestSuite) LoadMockData() {
 	for _, resource := range serviceMockData {
 		_ = s.meta.UpsertResource(context.Background(), resource)
@@ -127,7 +113,6 @@ func TestServiceBasics(t *testing.T) {
 	fakeProjectInfo := tenant.NewProjectInfo("fakeTenant", "fakeProject")
 	suite := newServiceTestSuite(t)
 	suite.LoadMockData()
-	suite.Start()
 
 	ctx := context.Background()
 	_, err := suite.service.CreateResource(ctx, &pb.CreateResourceRequest{
@@ -232,14 +217,11 @@ func TestServiceBasics(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Equal(t, codes.NotFound, status.Convert(err).Code())
-
-	suite.Stop()
 }
 
 func TestServiceResourceTypeNoConstraint(t *testing.T) {
 	suite := newServiceTestSuite(t)
 	suite.LoadMockData()
-	suite.Start()
 
 	_, ok, err := suite.service.GetPlacementConstraint(context.Background(),
 		resModel.ResourceKey{
@@ -248,6 +230,4 @@ func TestServiceResourceTypeNoConstraint(t *testing.T) {
 		})
 	require.NoError(t, err)
 	require.False(t, ok)
-
-	suite.Stop()
 }

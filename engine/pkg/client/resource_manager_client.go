@@ -18,6 +18,8 @@ import (
 
 	"github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/client/internal"
+	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
+	"google.golang.org/grpc/codes"
 )
 
 // ResourceManagerClient is a client to the service ResourceManager, which
@@ -37,21 +39,68 @@ func NewResourceManagerClient(cli enginepb.ResourceManagerClient) ResourceManage
 	return &resourceManagerClient{cli: cli}
 }
 
-func (c *resourceManagerClient) CreateResource(ctx context.Context, request *enginepb.CreateResourceRequest) error {
+func (c *resourceManagerClient) CreateResource(
+	ctx context.Context, request *enginepb.CreateResourceRequest,
+) error {
 	call := internal.NewCall(c.cli.CreateResource, request)
 	_, err := call.Do(ctx)
-	// TODO specialized retry strategy.
-	return err
+	if err == nil {
+		return nil
+	}
+
+	code, ok := rpcerror.GRPCStatusCode(err)
+	if !ok {
+		return err
+	}
+	if code != codes.AlreadyExists {
+		return err
+	}
+
+	originalErr := err
+
+	// If the returned value is that the resource already exists,
+	// we need to do a query and check whether it's a duplicate request.
+	// This is to guarantee idempotency if the network is not stable.
+	queryResp, err := c.QueryResource(ctx, &enginepb.QueryResourceRequest{
+		ResourceKey: &enginepb.ResourceKey{
+			JobId:      request.JobId,
+			ResourceId: request.ResourceId,
+		}})
+	if err != nil {
+		return err
+	}
+
+	// Check whether the previous request has actually succeeded.
+	if queryResp.CreatorWorkerId == request.CreatorWorkerId {
+		return nil
+	}
+	return originalErr
 }
 
-func (c *resourceManagerClient) QueryResource(ctx context.Context, request *enginepb.QueryResourceRequest) (*enginepb.QueryResourceResponse, error) {
+func (c *resourceManagerClient) QueryResource(
+	ctx context.Context, request *enginepb.QueryResourceRequest,
+) (*enginepb.QueryResourceResponse, error) {
 	call := internal.NewCall(c.cli.QueryResource, request)
 	return call.Do(ctx)
 }
 
-func (c *resourceManagerClient) RemoveResource(ctx context.Context, request *enginepb.RemoveResourceRequest) error {
+func (c *resourceManagerClient) RemoveResource(
+	ctx context.Context, request *enginepb.RemoveResourceRequest,
+) error {
 	call := internal.NewCall(c.cli.RemoveResource, request)
 	_, err := call.Do(ctx)
-	// TODO specialized retry strategy.
-	return err
+	if err == nil {
+		return nil
+	}
+	code, ok := rpcerror.GRPCStatusCode(err)
+	if !ok {
+		return err
+	}
+	if code != codes.NotFound {
+		return err
+	}
+
+	// If code == codes.NotFound, we should regard this
+	// operation has succeeded.
+	return nil
 }
