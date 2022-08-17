@@ -24,10 +24,10 @@ func (z *LogMeta) DecodeMsg(dc *msgp.Reader) (err error) {
 			return
 		}
 		switch msgp.UnsafeString(field) {
-		case "checkPointTs":
-			z.CheckPointTs, err = dc.ReadUint64()
+		case "checkpointTs":
+			z.CheckpointTs, err = dc.ReadUint64()
 			if err != nil {
-				err = msgp.WrapError(err, "CheckPointTs")
+				err = msgp.WrapError(err, "CheckpointTs")
 				return
 			}
 		case "resolvedTs":
@@ -50,14 +50,14 @@ func (z *LogMeta) DecodeMsg(dc *msgp.Reader) (err error) {
 // EncodeMsg implements msgp.Encodable
 func (z LogMeta) EncodeMsg(en *msgp.Writer) (err error) {
 	// map header, size 2
-	// write "checkPointTs"
-	err = en.Append(0x82, 0xac, 0x63, 0x68, 0x65, 0x63, 0x6b, 0x50, 0x6f, 0x69, 0x6e, 0x74, 0x54, 0x73)
+	// write "checkpointTs"
+	err = en.Append(0x82, 0xac, 0x63, 0x68, 0x65, 0x63, 0x6b, 0x70, 0x6f, 0x69, 0x6e, 0x74, 0x54, 0x73)
 	if err != nil {
 		return
 	}
-	err = en.WriteUint64(z.CheckPointTs)
+	err = en.WriteUint64(z.CheckpointTs)
 	if err != nil {
-		err = msgp.WrapError(err, "CheckPointTs")
+		err = msgp.WrapError(err, "CheckpointTs")
 		return
 	}
 	// write "resolvedTs"
@@ -77,9 +77,9 @@ func (z LogMeta) EncodeMsg(en *msgp.Writer) (err error) {
 func (z LogMeta) MarshalMsg(b []byte) (o []byte, err error) {
 	o = msgp.Require(b, z.Msgsize())
 	// map header, size 2
-	// string "checkPointTs"
-	o = append(o, 0x82, 0xac, 0x63, 0x68, 0x65, 0x63, 0x6b, 0x50, 0x6f, 0x69, 0x6e, 0x74, 0x54, 0x73)
-	o = msgp.AppendUint64(o, z.CheckPointTs)
+	// string "checkpointTs"
+	o = append(o, 0x82, 0xac, 0x63, 0x68, 0x65, 0x63, 0x6b, 0x70, 0x6f, 0x69, 0x6e, 0x74, 0x54, 0x73)
+	o = msgp.AppendUint64(o, z.CheckpointTs)
 	// string "resolvedTs"
 	o = append(o, 0xaa, 0x72, 0x65, 0x73, 0x6f, 0x6c, 0x76, 0x65, 0x64, 0x54, 0x73)
 	o = msgp.AppendUint64(o, z.ResolvedTs)
@@ -104,10 +104,10 @@ func (z *LogMeta) UnmarshalMsg(bts []byte) (o []byte, err error) {
 			return
 		}
 		switch msgp.UnsafeString(field) {
-		case "checkPointTs":
-			z.CheckPointTs, bts, err = msgp.ReadUint64Bytes(bts)
+		case "checkpointTs":
+			z.CheckpointTs, bts, err = msgp.ReadUint64Bytes(bts)
 			if err != nil {
-				err = msgp.WrapError(err, "CheckPointTs")
+				err = msgp.WrapError(err, "CheckpointTs")
 				return
 			}
 		case "resolvedTs":

@@ -19,6 +19,6 @@ package manager
 type TopicManager interface {
 	// GetPartitionNum returns the number of partitions of the topic.
 	GetPartitionNum(topic string) (int32, error)
-	// CreateTopic creates the topic.
-	CreateTopic(topicName string) (int32, error)
+	// CreateTopicAndWaitUntilVisible creates the topic and wait for the topic completion.
+	CreateTopicAndWaitUntilVisible(topicName string) (int32, error)
 }

@@ -24,10 +24,12 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/multierr"
+	"go.uber.org/zap"
 )
 
 //go:generate mockery --name=RedoLogReader --inpackage
@@ -122,10 +124,11 @@ func (l *LogReader) ResetReader(ctx context.Context, startTs, endTs uint64) erro
 			return err
 		}
 	}
-	if startTs > endTs || startTs > l.meta.ResolvedTs || endTs <= l.meta.CheckPointTs {
+
+	if startTs > endTs || startTs > l.meta.ResolvedTs || endTs <= l.meta.CheckpointTs {
 		return errors.Errorf(
 			"startTs, endTs (%d, %d] should match the boundary: (%d, %d]",
-			startTs, endTs, l.meta.CheckPointTs, l.meta.ResolvedTs)
+			startTs, endTs, l.meta.CheckpointTs, l.meta.ResolvedTs)
 	}
 	return l.setUpReader(ctx, startTs, endTs)
 }
@@ -337,7 +340,7 @@ func (l *LogReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint
 	defer l.metaLock.Unlock()
 
 	if l.meta != nil {
-		return l.meta.CheckPointTs, l.meta.ResolvedTs, nil
+		return l.meta.CheckpointTs, l.meta.ResolvedTs, nil
 	}
 
 	files, err := ioutil.ReadDir(l.cfg.Dir)
@@ -345,9 +348,7 @@ func (l *LogReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint
 		return 0, 0, cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't read log file directory"))
 	}
 
-	haveMeta := false
-	metaList := map[uint64]*common.LogMeta{}
-	var maxCheckPointTs uint64
+	metas := make([]*common.LogMeta, 0, 64)
 	for _, file := range files {
 		if filepath.Ext(file.Name()) == common.MetaEXT {
 			path := filepath.Join(l.cfg.Dir, file.Name())
@@ -356,28 +357,28 @@ func (l *LogReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint
 				return 0, 0, cerror.WrapError(cerror.ErrRedoFileOp, err)
 			}
 
-			l.meta = &common.LogMeta{}
-			_, err = l.meta.UnmarshalMsg(fileData)
+			log.Debug("unmarshal redo meta", zap.Int("size", len(fileData)))
+			meta := &common.LogMeta{}
+			_, err = meta.UnmarshalMsg(fileData)
 			if err != nil {
 				return 0, 0, cerror.WrapError(cerror.ErrRedoFileOp, err)
 			}
-
-			if !haveMeta {
-				haveMeta = true
-			}
-			metaList[l.meta.CheckPointTs] = l.meta
-			// since checkPointTs is guaranteed to increase always
-			if l.meta.CheckPointTs > maxCheckPointTs {
-				maxCheckPointTs = l.meta.CheckPointTs
-			}
+			metas = append(metas, meta)
 		}
 	}
-	if !haveMeta {
+
+	if len(metas) == 0 {
 		return 0, 0, cerror.ErrRedoMetaFileNotFound.GenWithStackByArgs(l.cfg.Dir)
 	}
 
-	l.meta = metaList[maxCheckPointTs]
-	return l.meta.CheckPointTs, l.meta.ResolvedTs, nil
+	common.ParseMeta(metas, &checkpointTs, &resolvedTs)
+	if resolvedTs < checkpointTs {
+		log.Panic("in all meta files, resolvedTs is less than checkpointTs",
+			zap.Uint64("resolvedTs", resolvedTs),
+			zap.Uint64("checkpointTs", checkpointTs))
+	}
+	l.meta = &common.LogMeta{CheckpointTs: checkpointTs, ResolvedTs: resolvedTs}
+	return
 }
 
 func (l *LogReader) closeRowReader() error {

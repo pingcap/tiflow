@@ -139,6 +139,10 @@ func (m *mockDDLSink) close(ctx context.Context) error {
 	return nil
 }
 
+func (m *mockDDLSink) isInitialized() bool {
+	return true
+}
+
 func (m *mockDDLSink) Barrier(ctx context.Context) error {
 	return nil
 }
