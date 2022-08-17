@@ -36,12 +36,6 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	originValue := defaultGCIntervalInMs
-	defaultGCIntervalInMs = 1
-	defer func() {
-		defaultGCIntervalInMs = originValue
-	}()
-
 	leakutil.SetUpLeakTest(m)
 }
 

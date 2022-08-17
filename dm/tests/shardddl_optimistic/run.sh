@@ -142,8 +142,7 @@ function DM_DIFFERENT_SCHEMA_INCREMENTAL_CASE() {
 		"\"result\": true" 2
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"resume-task test" \
-		"\"result\": true" 3
+		"resume-task test"
 
 	run_sql_tidb_with_retry "select count(1) from ${shardddl}.${tb}" "count(1): 24"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml

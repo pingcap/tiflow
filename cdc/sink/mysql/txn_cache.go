@@ -155,6 +155,7 @@ func splitResolvedTxn(
 				resolvedTxnsWithTheSameCommitTs = txns[:i]
 				unresolvedTxns[tableID] = txns[i:]
 			}
+			txnsLength = 0
 			for _, txns := range resolvedTxnsWithTheSameCommitTs {
 				txnsLength += len(txns.txns)
 			}
