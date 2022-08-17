@@ -57,6 +57,7 @@ func NewProcessorManagerOptions(errCh chan<- error) *ManagerOptions {
 	}
 }
 
+// NewManagerOptionsForClean creates a manager options for cleaning.
 func NewManagerOptionsForClean() *ManagerOptions {
 	return &ManagerOptions{
 		EnableBgRunner: false,

@@ -599,8 +599,7 @@ func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 				zap.Error(err))
 			return
 		}
-		err := redoManager.Cleanup(ctx)
-		if err != nil {
+		if err = redoManager.Cleanup(ctx); err != nil {
 			log.Error("cleanup redo logs failed", zap.String("changefeed", c.id.ID), zap.Error(err))
 		}
 	}
