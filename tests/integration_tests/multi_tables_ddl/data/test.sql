@@ -79,13 +79,6 @@ create table t8 (
 );
 
 /*use by error changefeed*/
-create table t9 (
- value64  bigint unsigned  not null,
- value32  integer          not null,
- primary key(value64, value32)
-);
-
-/*use by error changefeed*/
 create table t10 (
  value64  bigint unsigned  not null,
  value32  integer          not null,
