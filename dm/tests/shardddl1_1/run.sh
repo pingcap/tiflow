@@ -300,7 +300,7 @@ function DM_031_CASE() {
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
 			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `new_col1`' 1 \
-			"\"${SOURCE_ID2}-\`${shardddl1}\`.\`${tb1}\`\"" 1
+			"\`${shardddl1}\`.\`${tb1}\`\"" 1
 	fi
 }
 

@@ -99,6 +99,7 @@ type LogManager interface {
 	AddTable(tableID model.TableID, startTs uint64)
 	RemoveTable(tableID model.TableID)
 	GetResolvedTs(tableID model.TableID) model.Ts
+	// Min resolvedTs for all tables. If there is no tables, return math.MaxInt64.
 	GetMinResolvedTs() uint64
 	EmitRowChangedEvents(ctx context.Context, tableID model.TableID, rows ...*model.RowChangedEvent) error
 	UpdateResolvedTs(ctx context.Context, tableID model.TableID, resolvedTs uint64) error
@@ -147,7 +148,7 @@ func (s *statefulRts) checkAndSetUnflushed(unflushed model.Ts) {
 	for {
 		old := atomic.LoadUint64(&s.unflushed)
 		if old > unflushed {
-			panic("statefulRts.unflushed should never regress")
+			return
 		}
 		if atomic.CompareAndSwapUint64(&s.unflushed, old, unflushed) {
 			break
@@ -169,12 +170,15 @@ type ManagerImpl struct {
 	// and flushed is updated in flushLog.
 	rtsMap sync.Map
 
+	// A fast way to get min flushed timestamp in rtsMap. It can be updated
+	// in redo-flush goroutine and AddTable/RemoveTable.
+	minResolvedTs uint64
+
 	metaCheckpointTs statefulRts
 	metaResolvedTs   statefulRts
 
 	writer        writer.RedoLogWriter
 	logBuffer     *chann.Chann[cacheEvents]
-	minResolvedTs uint64
 	flushing      int64
 	lastFlushTime time.Time
 
@@ -249,6 +253,11 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 			return nil, err
 		}
 		m.writer = writer
+		checkpointTs, resolvedTs := m.writer.GetMeta()
+		m.metaCheckpointTs.flushed = checkpointTs
+		m.metaCheckpointTs.unflushed = checkpointTs
+		m.metaResolvedTs.flushed = resolvedTs
+		m.metaResolvedTs.unflushed = resolvedTs
 	default:
 		return nil, cerror.ErrConsistentStorage.GenWithStackByArgs(m.storageType)
 	}
@@ -377,15 +386,41 @@ func (m *ManagerImpl) AddTable(tableID model.TableID, startTs uint64) {
 		return
 	}
 
-	if startTs < m.GetMinResolvedTs() {
-		atomic.StoreUint64(&m.minResolvedTs, startTs)
+	for {
+		currMin := m.GetMinResolvedTs()
+		if currMin < startTs || atomic.CompareAndSwapUint64(&m.minResolvedTs, currMin, startTs) {
+			break
+		}
 	}
 }
 
 // RemoveTable removes a table from redo log manager
 func (m *ManagerImpl) RemoveTable(tableID model.TableID) {
-	if _, ok := m.rtsMap.LoadAndDelete(tableID); !ok {
+	var v interface{}
+	var ok bool
+	if v, ok = m.rtsMap.LoadAndDelete(tableID); !ok {
 		log.Warn("remove a table not maintained in redo log manager", zap.Int64("tableID", tableID))
+		return
+	}
+
+	removedTs := v.(*statefulRts).getFlushed()
+	for {
+		currMin := m.GetMinResolvedTs()
+		if currMin > removedTs {
+			break
+		}
+		newMin := uint64(math.MaxInt64)
+		m.rtsMap.Range(func(key interface{}, value interface{}) bool {
+			rts := value.(*statefulRts)
+			flushed := rts.getFlushed()
+			if flushed < newMin {
+				newMin = flushed
+			}
+			return true
+		})
+		if atomic.CompareAndSwapUint64(&m.minResolvedTs, currMin, newMin) {
+			break
+		}
 	}
 }
 
