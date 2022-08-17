@@ -32,8 +32,10 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx"
+	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tidb/util/mock"
+	"github.com/pingcap/tidb/util/sqlexec"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -81,6 +83,24 @@ type DownstreamTableInfo struct {
 	WhereHandle *sqlmodel.WhereHandle
 }
 
+type executorContext struct {
+	sessionctx.Context
+}
+
+var _ sqlexec.RestrictedSQLExecutor = executorContext{}
+
+func (se executorContext) ParseWithParams(context.Context, string, ...interface{}) (ast.StmtNode, error) {
+	return nil, nil
+}
+
+func (se executorContext) ExecRestrictedStmt(context.Context, ast.StmtNode, ...sqlexec.OptionFuncAlias) ([]chunk.Row, []*ast.ResultField, error) {
+	return nil, nil, nil
+}
+
+func (se executorContext) ExecRestrictedSQL(context.Context, []sqlexec.OptionFuncAlias, string, ...interface{}) ([]chunk.Row, []*ast.ResultField, error) {
+	return nil, nil, nil
+}
+
 // NewTracker simply returns an empty Tracker,
 // which should be followed by an initialization before used.
 func NewTracker() *Tracker {
@@ -119,7 +139,8 @@ func (tr *Tracker) Init(
 		se:             dsSession,
 		tableInfos:     make(map[string]*DownstreamTableInfo),
 	}
-	se := utils.NewSessionCtx(nil)
+	// TODO: need to use upstream timezone to correctly check literal is in [1970, 2038]
+	se := executorContext{Context: mock.NewContext()}
 	tr.Lock()
 	defer tr.Unlock()
 	tr.lowerCaseTableNames = lowerCaseTableNames
