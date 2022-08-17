@@ -384,7 +384,7 @@ LOOP:
 		if err != nil {
 			return errors.Trace(err)
 		}
-		// clean service GC safepoint '-creating-' and '-resuming-' if there are any.
+		// clean service GC safepoint '-creating-' if there are any.
 		err = gc.UndoEnsureChangefeedStartTsSafety(
 			ctx, c.upStream.PDClient,
 			gc.EnsureGCServiceCreating,
@@ -481,7 +481,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.ddlPuller.Close()
 	c.schema = nil
 	c.cleanupRedoManager(ctx)
-	c.cleanupServiceGCSafePoints(ctx)
+	c.cleanupChangefeedServiceGCSafePoints(ctx)
 	canceledCtx, cancel := context.WithCancel(context.Background())
 	cancel()
 	// We don't need to wait sink Close, pass a canceled context is ok
@@ -543,7 +543,7 @@ func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 	}
 }
 
-func (c *changefeed) cleanupServiceGCSafePoints(ctx cdcContext.Context) {
+func (c *changefeed) cleanupChangefeedServiceGCSafePoints(ctx cdcContext.Context) {
 	if !c.isRemoved {
 		return
 	}
