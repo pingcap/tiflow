@@ -169,7 +169,12 @@ func NewTestTracker(
 }
 
 // Exec runs an SQL (DDL) statement.
-func (tr *Tracker) Exec(ctx context.Context, db string, stmt ast.StmtNode) error {
+func (tr *Tracker) Exec(ctx context.Context, db string, stmt ast.StmtNode) (errRet error) {
+	defer func() {
+		if r := recover(); r != nil {
+			errRet = fmt.Errorf("tracker panicked: %v", r)
+		}
+	}()
 	visitor := currentDBSetter{
 		currentDB: db,
 	}
