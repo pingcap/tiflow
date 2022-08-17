@@ -507,11 +507,6 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 	eventFeedGauge.Inc()
 	defer eventFeedGauge.Dec()
 
-	log.Info("event feed started",
-		zap.Stringer("span", s.totalSpan), zap.Uint64("startTs", ts),
-		zap.String("namespace", s.client.changefeed.Namespace),
-		zap.String("changefeed", s.client.changefeed.ID))
-
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
@@ -529,7 +524,7 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 				return ctx.Err()
 			case task := <-s.requestRangeCh:
 				s.rangeChSizeGauge.Dec()
-				// divideAndSendEventFeedToRegions could be block for some time,
+				// divideAndSendEventFeedToRegions could be blocked for some time,
 				// since it must wait for the region lock available. In order to
 				// consume region range request from `requestRangeCh` as soon as
 				// possible, we create a new goroutine to handle it.
@@ -562,7 +557,7 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 					if errInfo.logRateLimitedHint() {
 						zapFieldAddr := zap.Skip()
 						if errInfo.singleRegionInfo.rpcCtx != nil {
-							// rpcCtx may be nil if we fails to get region info
+							// rpcCtx may be nil if we failed to get region info
 							// from pd. It could cause by pd down or the region
 							// has been merged.
 							zapFieldAddr = zap.String("addr", errInfo.singleRegionInfo.rpcCtx.Addr)
@@ -570,9 +565,9 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 						log.Info("EventFeed retry rate limited",
 							zap.String("namespace", s.client.changefeed.Namespace),
 							zap.String("changefeed", s.client.changefeed.ID),
+							zap.Int64("tableID", tableID), zap.String("tableName", tableName),
 							zap.Uint64("regionID", errInfo.singleRegionInfo.verID.GetID()),
 							zap.Uint64("ts", errInfo.singleRegionInfo.ts),
-							zap.Int64("tableID", tableID), zap.String("tableName", tableName),
 							zap.Any("errInfo", errInfo),
 							zapFieldAddr)
 					}
@@ -594,6 +589,12 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 
 	s.requestRangeCh <- rangeRequestTask{span: s.totalSpan, ts: ts}
 	s.rangeChSizeGauge.Inc()
+
+	log.Info("event feed started",
+		zap.String("namespace", s.client.changefeed.Namespace),
+		zap.String("changefeed", s.client.changefeed.ID),
+		zap.Uint64("startTs", ts),
+		zap.Stringer("span", s.totalSpan))
 
 	return g.Wait()
 }
