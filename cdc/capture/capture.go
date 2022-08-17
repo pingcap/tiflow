@@ -173,12 +173,12 @@ func (c *captureImpl) GetEtcdClient() etcd.CDCEtcdClient {
 	return c.EtcdClient
 }
 
-func (c *captureImpl) reset(ctx context.Context) error {
+// prepare the capture then can run
+func (c *captureImpl) prepare(ctx context.Context) error {
 	sess, err := concurrency.NewSession(
 		c.EtcdClient.GetEtcdClient().Unwrap(),
 		concurrency.WithTTL(c.config.CaptureSessionTTL))
 	if err != nil {
-		log.Error("create etcd session failed", zap.Error(err))
 		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
 	}
 
@@ -196,7 +196,6 @@ func (c *captureImpl) reset(ctx context.Context) error {
 	c.upstreamManager = upstream.NewManager(ctx, c.EtcdClient.GetGCServiceID())
 	_, err = c.upstreamManager.AddDefaultUpstream(c.pdEndpoints, c.config.Security)
 	if err != nil {
-		log.Error("add default upstream failed", zap.Error(err))
 		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
 	}
 
@@ -230,7 +229,6 @@ func (c *captureImpl) reset(ctx context.Context) error {
 		c.sorterSystem = ssystem.NewSystem(sortDir, memPercentage, c.config.Debug.DB)
 		err = c.sorterSystem.Start(ctx)
 		if err != nil {
-			log.Error("start sorter system failed", zap.Error(err))
 			return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
 		}
 	}
@@ -263,7 +261,7 @@ func (c *captureImpl) reset(ctx context.Context) error {
 // Run runs the capture
 func (c *captureImpl) Run(ctx context.Context) error {
 	defer log.Info("the capture routine has exited")
-	// Limit the frequency of reset capture to avoid frequent recreating of resources
+	// Limit the frequency of prepare capture to avoid frequent recreating of resources
 	rl := rate.NewLimiter(0.05, 2)
 	for {
 		select {
@@ -280,12 +278,13 @@ func (c *captureImpl) Run(ctx context.Context) error {
 			}
 			return errors.Trace(err)
 		}
-		err = c.reset(ctx)
+		err = c.prepare(ctx)
 		if err != nil {
+			log.Error("prepare capture failed", zap.Error(err))
 			return errors.Trace(err)
 		}
 		err = c.run(ctx)
-		// if capture suicided, reset the capture and run again.
+		// if capture suicided, prepare the capture and run again.
 		// if the canceled error throw, there are two possible scenarios:
 		//   1. the internal context canceled, it means some error happened in the internal, and the routine is exited, we should restart the capture
 		//   2. the parent context canceled, it means that the caller of the capture hope the capture to exit, and this loop will return in the above `select` block
@@ -370,7 +369,7 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 func (c *captureImpl) Info() (model.CaptureInfo, error) {
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
-	// when c.reset has not been called yet, c.info is nil.
+	// when c.prepare has not been called yet, c.info is nil.
 	if c.info != nil {
 		return *c.info, nil
 	}

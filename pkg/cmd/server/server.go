@@ -156,13 +156,12 @@ func (o *options) run(cmd *cobra.Command) error {
 	// Run TiCDC server.
 	err = server.Run(ctx)
 	if err != nil && errors.Cause(err) != context.Canceled {
-		log.Warn("run cdc server exits with error", zap.Error(err))
+		log.Warn("cdc server exits with error", zap.Error(err))
 	} else {
 		log.Info("cdc server exits normally")
 	}
 	server.Close()
 	unified.CleanUp()
-	
 	return nil
 }
 
@@ -266,7 +265,7 @@ func (o *options) validate() error {
 		// NOTICE: The configuration used here is the one that has been completed,
 		// as it may be configured by the configuration file.
 		if err := util.VerifyPdEndpoint(ep, o.serverConfig.Security.IsTLSEnabled()); err != nil {
-			return cerror.ErrInvalidServerOption.Wrap(err).GenWithStackByCause()
+			return cerror.WrapError(cerror.ErrInvalidServerOption, err)
 		}
 	}
 	return nil
