@@ -78,7 +78,7 @@ function run() {
 	run_sql "INSERT INTO consistent_replicate_gbk.GBKTABLE VALUES (1, '测试', '中国', '上海', '你好,世界', 0xC4E3BAC3CAC0BDE7);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "CREATE table consistent_replicate_gbk.check1(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	check_table_exists "consistent_replicate_gbk.GBKTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	check_table_exists "consistent_replicate_gbk.check1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "consistent_replicate_gbk.check1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 120
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	# Inject the failpoint to prevent sink execution, but the global resolved can be moved forward.
@@ -90,8 +90,7 @@ function run() {
 	run_sql "insert into consistent_replicate_gbk.GBKTABLE2 select * from consistent_replicate_gbk.GBKTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	# to ensure row changed events have been replicated to TiCDC
-	# TODO: revert it to 5 after https://github.com/pingcap/tiflow/issues/6277 has been resolved.
-	sleep 30
+	sleep 5
 
 	current_tso=$(cdc cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
 	ensure 20 check_resolved_ts $changefeed_id $current_tso $WORK_DIR/redo/meta

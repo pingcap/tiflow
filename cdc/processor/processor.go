@@ -69,11 +69,10 @@ type processor struct {
 	schemaStorage entry.SchemaStorage
 	lastSchemaTs  model.Ts
 
-	filter        *filter.Filter
-	mounter       entry.Mounter
-	sink          sink.Sink
-	redoManager   redo.LogManager
-	lastRedoFlush time.Time
+	filter      *filter.Filter
+	mounter     entry.Mounter
+	sink        sink.Sink
+	redoManager redo.LogManager
 
 	initialized bool
 	errCh       chan error
@@ -245,13 +244,12 @@ func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 func newProcessor(ctx cdcContext.Context, upStream *upstream.Upstream) *processor {
 	changefeedID := ctx.ChangefeedVars().ID
 	p := &processor{
-		upStream:      upStream,
-		tables:        make(map[model.TableID]tablepipeline.TablePipeline),
-		errCh:         make(chan error, 1),
-		changefeedID:  changefeedID,
-		captureInfo:   ctx.GlobalVars().CaptureInfo,
-		cancel:        func() {},
-		lastRedoFlush: time.Now(),
+		upStream:     upStream,
+		tables:       make(map[model.TableID]tablepipeline.TablePipeline),
+		errCh:        make(chan error, 1),
+		changefeedID: changefeedID,
+		captureInfo:  ctx.GlobalVars().CaptureInfo,
+		cancel:       func() {},
 
 		metricResolvedTsGauge: resolvedTsGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
@@ -376,9 +374,6 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 	if err := p.lazyInit(ctx); err != nil {
 		return errors.Trace(err)
 	}
-	if err := p.flushRedoLogMeta(ctx); err != nil {
-		return err
-	}
 	// it is no need to check the error here, because we will use
 	// local time when an error return, which is acceptable
 	pdTime, _ := p.upStream.PDClock.CurrentTime()
@@ -388,6 +383,11 @@ func (p *processor) tick(ctx cdcContext.Context, state *orchestrator.ChangefeedR
 
 	p.doGCSchemaStorage(ctx)
 	p.metricSyncTableNumGauge.Set(float64(len(p.tables)))
+
+	if p.redoManager != nil && p.redoManager.Enabled() {
+		ckpt := p.changefeed.Status.CheckpointTs
+		p.redoManager.UpdateCheckpointTs(ckpt)
+	}
 
 	if err := p.agent.Tick(ctx); err != nil {
 		return errors.Trace(err)
@@ -504,11 +504,14 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	log.Info("processor try new sink success",
 		zap.Duration("duration", time.Since(start)))
 
-	redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: true, ErrCh: errCh}
+	redoManagerOpts := redo.NewProcessorManagerOptions(errCh)
 	p.redoManager, err = redo.NewManager(stdCtx, p.changefeed.Info.Config.Consistent, redoManagerOpts)
 	if err != nil {
 		return err
 	}
+	log.Info("processor creates redo manager",
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeedID.ID))
 
 	p.agent, err = p.newAgent(ctx)
 	if err != nil {
@@ -879,20 +882,6 @@ func (p *processor) doGCSchemaStorage(ctx cdcContext.Context) {
 		cdcContext.ZapFieldChangefeed(ctx))
 	lastSchemaPhysicalTs := oracle.ExtractPhysical(lastSchemaTs)
 	p.metricSchemaStorageGcTsGauge.Set(float64(lastSchemaPhysicalTs))
-}
-
-// flushRedoLogMeta flushes redo log meta, including resolved-ts and checkpoint-ts
-func (p *processor) flushRedoLogMeta(ctx context.Context) error {
-	if p.redoManager.Enabled() &&
-		time.Since(p.lastRedoFlush).Milliseconds() > p.changefeed.Info.Config.Consistent.FlushIntervalInMs {
-		st := p.changefeed.Status
-		err := p.redoManager.UpdateCheckpointTs(ctx, st.CheckpointTs)
-		if err != nil {
-			return err
-		}
-		p.lastRedoFlush = time.Now()
-	}
-	return nil
 }
 
 func (p *processor) Close() error {

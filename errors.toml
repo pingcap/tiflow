@@ -216,6 +216,11 @@ error = '''
 decode row data to datum failed
 '''
 
+["CDC:ErrDiskFull"]
+error = '''
+failed to preallocate file because disk is full
+'''
+
 ["CDC:ErrEncodeFailed"]
 error = '''
 encode failed: %s
@@ -918,7 +923,7 @@ sink config invalid
 
 ["CDC:ErrSinkURIInvalid"]
 error = '''
-sink uri invalid
+sink uri invalid '%s'
 '''
 
 ["CDC:ErrSnapshotLostByGC"]

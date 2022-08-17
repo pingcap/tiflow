@@ -15,6 +15,7 @@ package writer
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	"github.com/pingcap/log"
@@ -32,6 +33,10 @@ type blackHoleWriter struct {
 }
 
 func (bs *blackHoleWriter) DeleteAllLogs(ctx context.Context) error {
+	return nil
+}
+
+func (bs *blackHoleWriter) GC(ctx context.Context, checkpointTs model.Ts) error {
 	return nil
 }
 
@@ -55,13 +60,14 @@ func (bs *blackHoleWriter) WriteLog(_ context.Context, tableID model.TableID, lo
 	return
 }
 
-func (bs *blackHoleWriter) FlushLog(_ context.Context, rtsMap map[model.TableID]model.Ts) error {
+func (bs *blackHoleWriter) FlushLog(_ context.Context, checkpointTs, resolvedTs model.Ts) error {
 	bs.tableRtsMu.Lock()
 	defer bs.tableRtsMu.Unlock()
-	for tableID, rts := range rtsMap {
-		bs.tableRtsMap[tableID] = rts
-	}
 	return nil
+}
+
+func (bs *blackHoleWriter) GetMeta() (checkpointTs, resolvedTs model.Ts) {
+	return 0, 0
 }
 
 func (bs *blackHoleWriter) SendDDL(_ context.Context, ddl *model.RedoDDLEvent) error {
@@ -69,11 +75,29 @@ func (bs *blackHoleWriter) SendDDL(_ context.Context, ddl *model.RedoDDLEvent) e
 	return nil
 }
 
-func (bs *blackHoleWriter) EmitCheckpointTs(_ context.Context, ts uint64) error {
-	bs.checkpointTs = ts
+func (bs *blackHoleWriter) Close() error {
 	return nil
 }
 
-func (bs *blackHoleWriter) Close() error {
-	return nil
+type invalidBlackHoleWriter struct {
+	*blackHoleWriter
+}
+
+// NewInvalidBlackHoleWriter creates a invalid blackHole writer
+func NewInvalidBlackHoleWriter(rl RedoLogWriter) *invalidBlackHoleWriter {
+	return &invalidBlackHoleWriter{
+		blackHoleWriter: rl.(*blackHoleWriter),
+	}
+}
+
+func (ibs *invalidBlackHoleWriter) WriteLog(
+	_ context.Context, _ model.TableID, _ []*model.RedoRowChangedEvent,
+) (err error) {
+	return errors.New("[WriteLog] invalid black hole writer")
+}
+
+func (ibs *invalidBlackHoleWriter) FlushLog(
+	_ context.Context, _, _ model.Ts,
+) error {
+	return errors.New("[FlushLog] invalid black hole writer")
 }

@@ -31,8 +31,7 @@ function run() {
 
 	# upgrading should firstly upgrade master
 	echo "use current dm-master"
-	pkill -hup dm-master.test.previous 2>/dev/null || true
-	wait_process_exit dm-master.test.previous
+	kill_process dm-master.test.previous
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml current
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 	run_sql_file $cur/data/db1.increment.1.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
@@ -42,8 +41,7 @@ function run() {
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	echo "restart dm-worker, one use the current version, and the other one use the previous version"
-	pkill -hup dm-worker.test.previous 2>/dev/null || true
-	wait_process_exit dm-worker.test.previous
+	kill_process dm-worker.test.previous
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml current
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml previous
@@ -74,8 +72,7 @@ function run() {
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	echo "all dm-worker use current version"
-	pkill -hup dm-worker.test.previous 2>/dev/null || true
-	wait_process_exit dm-worker.test.previous
+	kill_process dm-worker.test.previous
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml current
 
 	run_sql_file $cur/data/db1.increment.3.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
