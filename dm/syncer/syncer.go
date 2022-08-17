@@ -293,7 +293,6 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	syncer.relay = relay
 	syncer.locations = &locationRecorder{}
 
-	syncer.shardDDL = NewShardDDL(&logger, syncer)
 	return syncer
 }
 
@@ -489,6 +488,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}
 	s.metricsProxies = metricProxies.CacheForOneTask(s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID)
 
+	s.shardDDL = NewShardDDL(&s.tctx.Logger, s)
 	return nil
 }
 
