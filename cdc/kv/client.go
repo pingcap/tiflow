@@ -857,7 +857,7 @@ func (s *eventFeedSession) requestRegionToStore(
 // establishing new stream, a goroutine will be spawned to handle events from
 // the stream.
 // Regions from `regionCh` will be connected. If any error happens to a
-// region, the error will be send to `errCh` and the receiver of `errCh` is
+// region, the error will be sent to `errCh` and the receiver of `errCh` is
 // responsible for handling the error.
 func (s *eventFeedSession) dispatchRequest(
 	ctx context.Context,
@@ -938,45 +938,31 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 			err     error
 		)
 		retryErr := retry.Do(ctx, func() error {
-			scanT0 := time.Now()
 			bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
+			start := time.Now()
 			regions, err = s.client.regionCache.BatchLoadRegionsWithKeyRange(bo, nextSpan.Start, nextSpan.End, limit)
-			scanRegionsDuration.Observe(time.Since(scanT0).Seconds())
+			scanRegionsDuration.Observe(time.Since(start).Seconds())
 			if err != nil {
 				return cerror.WrapError(cerror.ErrPDBatchLoadRegions, err)
 			}
 			metas := make([]*metapb.Region, 0, len(regions))
 			for _, region := range regions {
 				if region.GetMeta() == nil {
-					err = cerror.ErrMetaNotInRegion.GenWithStackByArgs()
-					log.Warn("batch load region",
-						zap.Stringer("span", nextSpan), zap.Error(err),
-						zap.String("namespace", s.client.changefeed.Namespace),
-						zap.String("changefeed", s.client.changefeed.ID),
-					)
-					return err
+					return cerror.ErrMetaNotInRegion.FastGenByArgs()
 				}
 				metas = append(metas, region.GetMeta())
 			}
 			if !regionspan.CheckRegionsLeftCover(metas, nextSpan) {
-				err = cerror.ErrRegionsNotCoverSpan.GenWithStackByArgs(nextSpan, metas)
-				log.Warn("ScanRegions",
-					zap.Stringer("span", nextSpan),
-					zap.Reflect("regions", metas), zap.Error(err),
-					zap.String("namespace", s.client.changefeed.Namespace),
-					zap.String("changefeed", s.client.changefeed.ID),
-				)
-				return err
+				return cerror.ErrRegionsNotCoverSpan.FastGenByArgs(nextSpan, metas)
 			}
-			log.Debug("ScanRegions",
-				zap.Stringer("span", nextSpan),
-				zap.Reflect("regions", metas),
-				zap.String("namespace", s.client.changefeed.Namespace),
-				zap.String("changefeed", s.client.changefeed.ID))
 			return nil
 		}, retry.WithBackoffMaxDelay(scanRegionMaxBackoff),
 			retry.WithTotalRetryDuratoin(time.Duration(s.client.config.RegionRetryDuration)))
 		if retryErr != nil {
+			log.Warn("load regions failed",
+				zap.String("namespace", s.client.changefeed.Namespace),
+				zap.String("changefeed", s.client.changefeed.ID),
+				zap.Error(retryErr))
 			return retryErr
 		}
 
@@ -986,22 +972,10 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 			if err != nil {
 				return errors.Trace(err)
 			}
-			log.Debug("get partialSpan",
-				zap.Stringer("span", partialSpan),
-				zap.Uint64("regionID", region.Id),
-				zap.String("namespace", s.client.changefeed.Namespace),
-				zap.String("changefeed", s.client.changefeed.ID))
 			nextSpan.Start = region.EndKey
 
 			sri := newSingleRegionInfo(tiRegion.VerID(), partialSpan, ts, nil)
 			s.scheduleRegionRequest(ctx, sri)
-			log.Debug("partialSpan scheduled",
-				zap.String("namespace", s.client.changefeed.Namespace),
-				zap.String("changefeed", s.client.changefeed.ID),
-				zap.Stringer("span", partialSpan),
-				zap.Uint64("regionID", region.Id),
-				zap.Any("sri", sri))
-
 			// return if no more regions
 			if regionspan.EndCompare(nextSpan.Start, span.End) >= 0 {
 				return nil
