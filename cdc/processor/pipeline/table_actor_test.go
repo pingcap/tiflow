@@ -450,6 +450,7 @@ func TestTableActorStart(t *testing.T) {
 			MarkTableID: 1,
 		},
 		replicaConfig: config.GetDefaultReplicaConfig(),
+		upStream:      upstream.NewUpstream4Test(&mockPD{}),
 	}
 	tbl.cyclicEnabled = true
 	require.Nil(t, tbl.start(ctx))
