@@ -62,6 +62,7 @@ func TestFromGRPCError(t *testing.T) {
 
 	errOut := FromGRPCError(grpcErr)
 	require.True(t, testErrorPrototype.Is(errOut))
+	require.ErrorContains(t, errOut, "grpc_test.go:59")
 }
 
 type unretryableErr struct {
