@@ -270,6 +270,8 @@ type RowChangedEvent struct {
 
 	// SplitTxn marks this RowChangedEvent as the first line of a new txn.
 	SplitTxn bool `json:"-" msg:"-"`
+	// ReplicatingTs is ts when a table starts replicating events to downstream.
+	ReplicatingTs Ts `json:"-" msg:"-"`
 }
 
 // IsDelete returns true if the row is a delete event

@@ -359,7 +359,6 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 		if err := n.verifySplitTxn(event); err != nil {
 			return false, errors.Trace(err)
 		}
-
 		if event.IsResolved() {
 			if n.status.Load() == TableStatusInitializing {
 				n.status.Store(TableStatusRunning)
