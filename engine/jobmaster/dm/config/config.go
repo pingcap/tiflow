@@ -258,7 +258,6 @@ func (c *TaskCfg) ToDMSubTaskCfg() *dmconfig.SubTaskConfig {
 	cfg.OnlineDDL = c.OnlineDDL
 	cfg.ShadowTableRules = c.ShadowTableRules
 	cfg.TrashTableRules = c.TrashTableRules
-	cfg.CaseSensitive = c.Upstreams[0].CaseSensitive
 	cfg.CollationCompatible = c.CollationCompatible
 	cfg.Name = c.Name
 	cfg.Mode = c.TaskMode
@@ -275,6 +274,7 @@ func (c *TaskCfg) ToDMSubTaskCfg() *dmconfig.SubTaskConfig {
 	cfg.From = *c.Upstreams[0].DBCfg
 	cfg.ServerID = c.Upstreams[0].ServerID
 	cfg.Flavor = c.Upstreams[0].Flavor
+	cfg.CaseSensitive = c.Upstreams[0].CaseSensitive
 
 	cfg.RouteRules = make([]*router.TableRule, len(c.Upstreams[0].RouteRules))
 	for j, name := range c.Upstreams[0].RouteRules {
