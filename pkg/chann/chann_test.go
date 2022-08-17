@@ -224,6 +224,8 @@ func TestNonblockRecvRace(t *testing.T) {
 	}
 }
 
+const internalCacheSize = 16 + 1<<10
+
 // This test checks that select acts on the state of the channels at one
 // moment in the execution, not over a smeared time window.
 // In the test, one goroutine does:
@@ -237,15 +239,19 @@ func TestNonblockRecvRace(t *testing.T) {
 // always receive from one or the other. It must never execute the default case.
 func TestNonblockSelectRace(t *testing.T) {
 	n := 1000
-	if testing.Short() {
-		n = 1000
-	}
 	done := New[bool](Cap(1))
 	for i := 0; i < n; i++ {
 		c1 := New[int]()
 		c2 := New[int]()
+		// The input channel of an unbounded buffer have an internal
+		// cache queue. When the input channel and the internal cache
+		// queue both gets full, we are certain that once the next send
+		// is complete, the out will be available for sure hence the
+		// waiting time of a receive is bounded.
+		for i := 0; i < internalCacheSize; i++ {
+			c1.In() <- 1
+		}
 		c1.In() <- 1
-		time.Sleep(time.Millisecond)
 		go func() {
 			runtime.Gosched()
 			select {
@@ -257,44 +263,58 @@ func TestNonblockSelectRace(t *testing.T) {
 			}
 			done.In() <- true
 		}()
+		// Same for c2
+		for i := 0; i < internalCacheSize; i++ {
+			c2.In() <- 1
+		}
 		c2.In() <- 1
 		select {
-		case <-c2.Out():
+		case <-c1.Out():
 		default:
 		}
 		require.Truef(t, <-done.Out(), "no chan is ready")
 		c1.Close()
+		// Drop all events.
+		for range c1.Out() {
+		}
 		c2.Close()
+		for range c2.Out() {
+		}
 	}
 }
 
 // Same as TestNonblockSelectRace, but close(c2) replaces c2 <- 1.
 func TestNonblockSelectRace2(t *testing.T) {
-	n := 100000
-	if testing.Short() {
-		n = 1000
-	}
+	n := 1000
 	done := make(chan bool, 1)
 	for i := 0; i < n; i++ {
-		c1 := make(chan int, 1)
-		c2 := make(chan int)
-		c1 <- 1
+		c1 := New[int]()
+		c2 := New[int]()
+		// See TestNonblockSelectRace.
+		for i := 0; i < internalCacheSize; i++ {
+			c1.In() <- 1
+		}
+		c1.In() <- 1
 		go func() {
 			select {
-			case <-c1:
-			case <-c2:
+			case <-c1.Out():
+			case <-c2.Out():
 			default:
 				done <- false
 				return
 			}
 			done <- true
 		}()
-		close(c2)
+		c2.Close()
 		select {
-		case <-c1:
+		case <-c1.Out():
 		default:
 		}
 		require.Truef(t, <-done, "no chan is ready")
+		c1.Close()
+		// Drop all events.
+		for range c1.Out() {
+		}
 	}
 }
 
@@ -409,6 +429,24 @@ func TestUnboundedChann(t *testing.T) {
 }
 
 func TestUnboundedChannClose(t *testing.T) {
+	t.Run("close-status", func(t *testing.T) {
+		ch := New[any]()
+		for i := 0; i < 100; i++ {
+			ch.In() <- 0
+		}
+		ch.Close()
+		go func() {
+			for range ch.Out() {
+			}
+		}()
+
+		// Theoretically, this is not a dead loop. If the channel
+		// is closed, then this loop must terminate at somepoint.
+		// If not, we will meet timeout in the test.
+		for !ch.isClosed() {
+			t.Log("unbounded channel is still not entirely closed")
+		}
+	})
 	t.Run("struct{}", func(t *testing.T) {
 		grs := runtime.NumGoroutine()
 		N := 10
