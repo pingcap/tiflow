@@ -287,8 +287,12 @@ func (o *createChangefeedOptions) validate(ctx context.Context, cmd *cobra.Comma
 		return errors.New("Creating changefeed without a sink-uri")
 	}
 
-	err := o.cfg.Validate()
+	paredSinkURI, err := url.Parse(o.commonChangefeedOptions.sinkURI)
 	if err != nil {
+		return err
+	}
+
+	if err = o.cfg.ValidateAndAdjust(paredSinkURI); err != nil {
 		return err
 	}
 

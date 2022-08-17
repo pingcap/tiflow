@@ -13,13 +13,18 @@
 
 package model
 
+import (
+	"math"
+
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+)
+
 // PolymorphicEvent describes an event can be in multiple states.
 type PolymorphicEvent struct {
-	StartTs uint64
-	// Commit or resolved TS
-	CRTs uint64
-	// Identify whether the resolved event is in batch mode.
-	Mode ResolvedMode
+	StartTs  uint64
+	CRTs     uint64
+	Resolved *ResolvedTs
 
 	RawKV *RawKVEntry
 	Row   *RowChangedEvent
@@ -66,11 +71,6 @@ func (e *PolymorphicEvent) IsResolved() bool {
 	return e.RawKV.OpType == OpTypeResolved
 }
 
-// IsBatchResolved returns true if the event is batch resolved event.
-func (e *PolymorphicEvent) IsBatchResolved() bool {
-	return e.IsResolved() && e.Mode == BatchResolvedMode
-}
-
 // ComparePolymorphicEvents compares two events by CRTs, Resolved, StartTs, Delete/Put order.
 // It returns true if and only if i should precede j.
 func ComparePolymorphicEvents(i, j *PolymorphicEvent) bool {
@@ -108,16 +108,48 @@ const (
 
 // ResolvedTs is the resolved timestamp of sink module.
 type ResolvedTs struct {
-	Ts   uint64
-	Mode ResolvedMode
+	Mode    ResolvedMode
+	Ts      uint64
+	BatchID uint64
 }
 
-// NewResolvedTs creates a new ResolvedTs.
+// NewResolvedTs creates a normal ResolvedTs.
 func NewResolvedTs(t uint64) ResolvedTs {
-	return ResolvedTs{Ts: t, Mode: NormalResolvedMode}
+	return ResolvedTs{Ts: t, Mode: NormalResolvedMode, BatchID: math.MaxUint64}
 }
 
-// NewResolvedTsWithMode creates a ResolvedTs with a given batch type.
-func NewResolvedTsWithMode(t uint64, m ResolvedMode) ResolvedTs {
-	return ResolvedTs{Ts: t, Mode: m}
+// IsBatchMode returns true if the resolved ts is BatchResolvedMode.
+func (r ResolvedTs) IsBatchMode() bool {
+	return r.Mode == BatchResolvedMode
+}
+
+// ResolvedMark returns a timestamp `ts` based on the r.mode, which marks that all events
+// whose commitTs is less than or equal to `ts` are sent to Sink.
+func (r ResolvedTs) ResolvedMark() uint64 {
+	switch r.Mode {
+	case NormalResolvedMode:
+		// with NormalResolvedMode, cdc guarantees all events whose commitTs is
+		// less than or equal to `resolved.Ts` are sent to Sink.
+		return r.Ts
+	case BatchResolvedMode:
+		// with BatchResolvedMode, cdc guarantees all events whose commitTs is
+		// less than `resolved.Ts` are sent to Sink.
+		return r.Ts - 1
+	default:
+		log.Error("unknown resolved mode", zap.Any("resolved", r))
+		return 0
+	}
+}
+
+// EqualOrGreater judge whether the resolved ts is equal or greater than the given ts.
+func (r ResolvedTs) EqualOrGreater(r1 ResolvedTs) bool {
+	if r.Ts == r1.Ts {
+		return r.BatchID >= r1.BatchID
+	}
+	return r.Ts > r1.Ts
+}
+
+// Less judge whether the resolved ts is less than the given ts.
+func (r ResolvedTs) Less(r1 ResolvedTs) bool {
+	return !r.EqualOrGreater(r1)
 }

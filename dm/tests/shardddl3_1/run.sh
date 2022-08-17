@@ -466,6 +466,11 @@ function DM_115_CASE {
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(8,8,8);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(9);"
 
+	check_log_contain_with_retry 'finish to handle ddls in optimistic shard mode.*add column' \
+		$WORK_DIR/worker1/log/dm-worker.log
+	check_log_contain_with_retry 'finish to handle ddls in optimistic shard mode.*add column' \
+		$WORK_DIR/worker2/log/dm-worker.log
+
 	run_sql_source2 "alter table ${shardddl1}.${tb1} drop column b, drop column c;"
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(10,10,10);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(11);"
@@ -479,7 +484,7 @@ function DM_115_CASE {
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 }
 
-# Add multiple fileds and rollback.
+# Add multiple fields and rollback.
 function DM_115 {
 	run_case 115 "double-source-optimistic" "init_table 111 211 212" "clean_table" "optimistic"
 }

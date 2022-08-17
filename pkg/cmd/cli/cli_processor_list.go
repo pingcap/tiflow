@@ -53,7 +53,7 @@ func (o *listProcessorOptions) complete(f factory.Factory) error {
 		return err
 	}
 
-	o.apiClient, err = apiv1client.NewAPIClient(owner.AdvertiseAddr, nil)
+	o.apiClient, err = apiv1client.NewAPIClient(owner.AdvertiseAddr, f.GetCredential())
 	if err != nil {
 		return err
 	}

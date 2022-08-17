@@ -248,6 +248,9 @@ var (
 		"kafka broker config item not found",
 		errors.RFCCodeText("CDC:ErrKafkaBrokerConfigNotFound"),
 	)
+	ErrKafkaTopicNotExists = errors.Normalize("kafka topic not exists after creation",
+		errors.RFCCodeText("CDC:ErrKafkaTopicNotExists"),
+	)
 	ErrPulsarNewProducer = errors.Normalize(
 		"new pulsar producer",
 		errors.RFCCodeText("CDC:ErrPulsarNewProducer"),
@@ -301,7 +304,7 @@ var (
 		errors.RFCCodeText("CDC:ErrAsyncBroadcastNotSupport"),
 	)
 	ErrSinkURIInvalid = errors.Normalize(
-		"sink uri invalid",
+		"sink uri invalid '%s'",
 		errors.RFCCodeText("CDC:ErrSinkURIInvalid"),
 	)
 	ErrMQSinkUnknownProtocol = errors.Normalize(
@@ -438,6 +441,9 @@ var (
 		"operate on a closed notifier",
 		errors.RFCCodeText("CDC:ErrOperateOnClosedNotifier"),
 	)
+	ErrDiskFull = errors.Normalize(
+		"failed to preallocate file because disk is full",
+		errors.RFCCodeText("CDC:ErrDiskFull"))
 
 	// encode/decode, data format and data integrity errors
 	ErrInvalidRecordKey = errors.Normalize(

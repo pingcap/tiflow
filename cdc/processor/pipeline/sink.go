@@ -15,6 +15,7 @@ package pipeline
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -73,35 +75,54 @@ type sinkNode struct {
 
 	// atomic oprations for model.ResolvedTs
 	resolvedTs   atomic.Value
-	checkpointTs model.Ts
+	checkpointTs atomic.Value
 	targetTs     model.Ts
 	barrierTs    model.Ts
 
 	flowController tableFlowController
+	redoManager    redo.LogManager
 
 	replicaConfig    *config.ReplicaConfig
 	isTableActorMode bool
+	splitTxn         bool
 }
 
-func newSinkNode(tableID model.TableID, sink sink.Sink, startTs model.Ts, targetTs model.Ts, flowController tableFlowController) *sinkNode {
+func newSinkNode(
+	tableID model.TableID,
+	sink sink.Sink,
+	startTs model.Ts,
+	targetTs model.Ts,
+	flowController tableFlowController,
+	splitTxn bool,
+	redoManager redo.LogManager,
+) *sinkNode {
 	sn := &sinkNode{
-		tableID:      tableID,
-		sink:         sink,
-		status:       TableStatusInitializing,
-		targetTs:     targetTs,
-		checkpointTs: startTs,
-		barrierTs:    startTs,
-
+		tableID:        tableID,
+		sink:           sink,
+		status:         TableStatusInitializing,
+		targetTs:       targetTs,
+		barrierTs:      startTs,
 		flowController: flowController,
+		splitTxn:       splitTxn,
+		redoManager:    redoManager,
 	}
 	sn.resolvedTs.Store(model.NewResolvedTs(startTs))
+	sn.checkpointTs.Store(model.NewResolvedTs(startTs))
 	return sn
 }
 
-func (n *sinkNode) ResolvedTs() model.ResolvedTs { return n.resolvedTs.Load().(model.ResolvedTs) }
-func (n *sinkNode) CheckpointTs() model.Ts       { return atomic.LoadUint64(&n.checkpointTs) }
-func (n *sinkNode) BarrierTs() model.Ts          { return atomic.LoadUint64(&n.barrierTs) }
-func (n *sinkNode) Status() TableStatus          { return n.status.Load() }
+func (n *sinkNode) ResolvedTs() model.Ts   { return n.getResolvedTs().ResolvedMark() }
+func (n *sinkNode) CheckpointTs() model.Ts { return n.getCheckpointTs().ResolvedMark() }
+func (n *sinkNode) BarrierTs() model.Ts    { return atomic.LoadUint64(&n.barrierTs) }
+func (n *sinkNode) Status() TableStatus    { return n.status.Load() }
+
+func (n *sinkNode) getResolvedTs() model.ResolvedTs {
+	return n.resolvedTs.Load().(model.ResolvedTs)
+}
+
+func (n *sinkNode) getCheckpointTs() model.ResolvedTs {
+	return n.checkpointTs.Load().(model.ResolvedTs)
+}
 
 func (n *sinkNode) Init(ctx pipeline.NodeContext) error {
 	n.replicaConfig = ctx.ChangefeedVars().Info.Config
@@ -137,22 +158,54 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 			n.status.Store(TableStatusStopped)
 			return
 		}
-		if atomic.LoadUint64(&n.checkpointTs) >= n.targetTs {
+		if n.CheckpointTs() >= n.targetTs {
 			err = n.stop(ctx)
 		}
 	}()
-	currentBarrierTs := atomic.LoadUint64(&n.barrierTs)
-	currentCheckpointTs := atomic.LoadUint64(&n.checkpointTs)
-	if resolved.Ts > currentBarrierTs {
-		resolved.Ts = currentBarrierTs
-	}
+
 	if resolved.Ts > n.targetTs {
-		resolved.Ts = n.targetTs
+		resolved = model.NewResolvedTs(n.targetTs)
 	}
-	if resolved.Ts <= currentCheckpointTs {
+
+	if n.redoManager != nil && n.redoManager.Enabled() {
+		// redo log do not support batch resolve mode, hence we
+		// use `ResolvedMark` to restore a normal resolved ts
+		resolved = model.NewResolvedTs(resolved.ResolvedMark())
+		err = n.redoManager.UpdateResolvedTs(ctx, n.tableID, resolved.Ts)
+	}
+
+	// Flush sink with barrierTs, which is broadcasted by owner.
+	currentBarrierTs := atomic.LoadUint64(&n.barrierTs)
+	if resolved.Ts > currentBarrierTs {
+		resolved = model.NewResolvedTs(currentBarrierTs)
+	}
+	if n.redoManager != nil && n.redoManager.Enabled() {
+		redoTs := n.redoManager.GetMinResolvedTs()
+		redoFlushed := n.redoManager.GetResolvedTs(n.tableID)
+		if currentBarrierTs > redoTs {
+			// NOTE: How can barrierTs be greater than rodoTs?
+			// When scheduler moves a table from one place to another place, the table
+			// start position will be checkpointTs instead of resolvedTs, which means
+			// redoTs can be less than barrierTs.
+			log.Info("redoTs is less than current barrierTs",
+				zap.Int64("tableID", n.tableID),
+				zap.Uint64("redoTs", redoTs),
+				zap.Uint64("barrierTs", currentBarrierTs),
+				zap.Uint64("tableRedoFlushed", redoFlushed))
+		}
+		if currentBarrierTs > redoFlushed {
+			// The latest above comment shows why barrierTs can be greater than redoTs.
+			// So here the aim is to avoid slow tables holding back the whole processor.
+			resolved = model.NewResolvedTs(redoFlushed)
+		}
+	}
+
+	currentCheckpointTs := n.getCheckpointTs()
+	if currentCheckpointTs.EqualOrGreater(resolved) {
 		return nil
 	}
-	checkpointTs, err := n.sink.FlushRowChangedEvents(ctx, n.tableID, resolved)
+
+	checkpoint, err := n.sink.FlushRowChangedEvents(ctx, n.tableID, resolved)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -160,16 +213,16 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 	// we must call flowController.Release immediately after we call
 	// FlushRowChangedEvents to prevent deadlock cause by checkpointTs
 	// fall back
-	n.flowController.Release(checkpointTs)
+	n.flowController.Release(checkpoint)
 
 	// the checkpointTs may fall back in some situation such as:
 	//   1. This table is newly added to the processor
 	//   2. There is one table in the processor that has a smaller
 	//   checkpointTs than this one
-	if checkpointTs <= currentCheckpointTs {
+	if currentCheckpointTs.EqualOrGreater(checkpoint) {
 		return nil
 	}
-	atomic.StoreUint64(&n.checkpointTs, checkpointTs)
+	n.checkpointTs.Store(checkpoint)
 
 	return nil
 }
@@ -181,6 +234,16 @@ func (n *sinkNode) emitRowToSink(ctx context.Context, event *model.PolymorphicEv
 		time.Sleep(10 * time.Second)
 		panic("ProcessorSyncResolvedPreEmit")
 	})
+
+	emitRows := func(rows ...*model.RowChangedEvent) error {
+		if n.redoManager != nil && n.redoManager.Enabled() {
+			err := n.redoManager.EmitRowChangedEvents(ctx, n.tableID, rows...)
+			if err != nil {
+				return err
+			}
+		}
+		return n.sink.EmitRowChangedEvents(ctx, rows...)
+	}
 
 	if event == nil || event.Row == nil {
 		log.Warn("skip emit nil event", zap.Any("event", event))
@@ -207,13 +270,13 @@ func (n *sinkNode) emitRowToSink(ctx context.Context, event *model.PolymorphicEv
 				return errors.Trace(err)
 			}
 			// NOTICE: Please do not change the order, the delete event always comes before the insert event.
-			return n.sink.EmitRowChangedEvents(ctx, deleteEvent.Row, insertEvent.Row)
+			return emitRows(deleteEvent.Row, insertEvent.Row)
 		}
 		// If the handle key columns are not updated, PreColumns is directly ignored.
 		event.Row.PreColumns = nil
 	}
 
-	return n.sink.EmitRowChangedEvents(ctx, event.Row)
+	return emitRows(event.Row)
 }
 
 // shouldSplitUpdateEvent determines if the split event is needed to align the old format based on
@@ -293,6 +356,10 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 	switch msg.Tp {
 	case pmessage.MessageTypePolymorphicEvent:
 		event := msg.PolymorphicEvent
+		if err := n.verifySplitTxn(event); err != nil {
+			return false, errors.Trace(err)
+		}
+
 		if event.IsResolved() {
 			if n.status.Load() == TableStatusInitializing {
 				n.status.Store(TableStatusRunning)
@@ -301,7 +368,11 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 				failpoint.Return(false, errors.New("processor sync resolved injected error"))
 			})
 
-			resolved := model.NewResolvedTsWithMode(event.CRTs, event.Mode)
+			resolved := model.NewResolvedTs(event.CRTs)
+			if event.Resolved != nil {
+				resolved = *(event.Resolved)
+			}
+
 			if err := n.flushSink(ctx, resolved); err != nil {
 				return false, errors.Trace(err)
 			}
@@ -312,7 +383,7 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 			return false, errors.Trace(err)
 		}
 	case pmessage.MessageTypeTick:
-		if err := n.flushSink(ctx, n.ResolvedTs()); err != nil {
+		if err := n.flushSink(ctx, n.getResolvedTs()); err != nil {
 			return false, errors.Trace(err)
 		}
 	case pmessage.MessageTypeCommand:
@@ -331,7 +402,7 @@ func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (boo
 
 func (n *sinkNode) updateBarrierTs(ctx context.Context, ts model.Ts) error {
 	atomic.StoreUint64(&n.barrierTs, ts)
-	if err := n.flushSink(ctx, n.ResolvedTs()); err != nil {
+	if err := n.flushSink(ctx, n.getResolvedTs()); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
@@ -345,4 +416,26 @@ func (n *sinkNode) releaseResource(ctx context.Context) error {
 	n.status.Store(TableStatusStopped)
 	n.flowController.Abort()
 	return n.sink.Close(ctx)
+}
+
+// Verify that TxnAtomicity compatibility with BatchResolved event and RowChangedEvent
+// with `SplitTxn==true`.
+func (n *sinkNode) verifySplitTxn(e *model.PolymorphicEvent) error {
+	if n.splitTxn {
+		return nil
+	}
+
+	// Fail-fast check, this situation should never happen normally when split transactions
+	// are not supported.
+	if e.Resolved != nil && e.Resolved.IsBatchMode() {
+		msg := fmt.Sprintf("batch mode resolved ts is not supported "+
+			"when sink.splitTxn is %+v", n.splitTxn)
+		return cerror.ErrSinkInvalidConfig.GenWithStackByArgs(msg)
+	}
+
+	if e.Row != nil && e.Row.SplitTxn {
+		msg := fmt.Sprintf("should not split txn when sink.splitTxn is %+v", n.splitTxn)
+		return cerror.ErrSinkInvalidConfig.GenWithStackByArgs(msg)
+	}
+	return nil
 }

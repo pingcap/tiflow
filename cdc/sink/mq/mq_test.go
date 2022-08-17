@@ -56,7 +56,7 @@ func waitCheckpointTs(t *testing.T, s *mqSink, tableID int64, target uint64) uin
 	var checkpointTs uint64
 	err := retry.Do(context.Background(), func() error {
 		if v, ok := s.tableCheckpointTsMap.Load(tableID); ok {
-			checkpointTs = v.(uint64)
+			checkpointTs = v.(model.ResolvedTs).Ts
 		}
 		if checkpointTs >= target {
 			return nil
@@ -91,6 +91,7 @@ func TestKafkaSink(t *testing.T) {
 		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
+	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 	sink, err := NewKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
 	require.Nil(t, err)
 
@@ -119,9 +120,9 @@ func TestKafkaSink(t *testing.T) {
 	checkpointTs := waitCheckpointTs(t, sink, tableID, uint64(120))
 	require.Equal(t, uint64(120), checkpointTs)
 	// flush older resolved ts
-	checkpointTs, err = sink.FlushRowChangedEvents(ctx, tableID, model.NewResolvedTs(uint64(110)))
+	checkpoint, err := sink.FlushRowChangedEvents(ctx, tableID, model.NewResolvedTs(uint64(110)))
 	require.Nil(t, err)
-	require.Equal(t, uint64(120), checkpointTs)
+	require.Equal(t, uint64(120), checkpoint.Ts)
 
 	// mock kafka broker processes 1 checkpoint ts event
 	err = sink.EmitCheckpointTs(ctx, uint64(120), []model.TableName{{
@@ -187,6 +188,7 @@ func TestKafkaSinkFilter(t *testing.T) {
 		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
+	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 	sink, err := NewKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
 	require.Nil(t, err)
 
@@ -278,6 +280,7 @@ func TestFlushRowChangedEvents(t *testing.T) {
 		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
 	}()
 
+	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 	sink, err := NewKafkaSaramaSink(ctx, sinkURI, fr, replicaConfig, opts, errCh)
 	require.Nil(t, err)
 
