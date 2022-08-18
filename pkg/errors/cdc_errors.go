@@ -1078,9 +1078,9 @@ var (
 		"the overwrite-checkpoint-ts %d must be smaller than current TSO",
 		errors.RFCCodeText("CDC:ErrCliCheckpointTsIsInFuture"),
 	)
-	ErrChangefeedCliAborted = errors.Normalize(
-		"changefeed cli create or resume is aborted",
-		errors.RFCCodeText("CDC:ErrChangefeedCliAborted"),
+	ErrCliAborted = errors.Normalize(
+		"command '%s' is aborted by user",
+		errors.RFCCodeText("CDC:ErrCliAborted"),
 	)
 	// Filter error
 	ErrFailedToFilterDML = errors.Normalize(

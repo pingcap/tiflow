@@ -30,8 +30,7 @@ func TestChangefeedRemoveCli(t *testing.T) {
 	defer ctrl.Finish()
 	cf := mock.NewMockChangefeedInterface(ctrl)
 	f := &mockFactory{changefeeds: cf}
-	o := newRemoveChangefeedOptions()
-	o.complete(f)
+
 	cmd := newCmdRemoveChangefeed(f)
 
 	cf.EXPECT().Get(gomock.Any(), "abc").Return(&model.ChangefeedDetail{}, nil)
@@ -45,6 +44,8 @@ func TestChangefeedRemoveCli(t *testing.T) {
 	os.Args = []string{"remove", "--changefeed-id=abc"}
 	require.Nil(t, cmd.Execute())
 
+	o := newRemoveChangefeedOptions()
+	o.complete(f)
 	o.changefeedID = "abc"
 	cf.EXPECT().Get(gomock.Any(), "abc").Return(nil, errors.New("abc"))
 	require.NotNil(t, o.run(cmd))

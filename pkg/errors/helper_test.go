@@ -175,7 +175,7 @@ func TestChangefeedNotRetryError(t *testing.T) {
 	}
 }
 
-func TestIsCliUnPrintError(t *testing.T) {
+func TestIsCliUnprintableError(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name string
@@ -187,10 +187,10 @@ func TestIsCliUnPrintError(t *testing.T) {
 		{"context DeadlineExceeded err", context.DeadlineExceeded, false},
 		{"normal err", errors.New("test"), false},
 		{"cdc reachMaxTry err", ErrReachMaxTry, false},
-		{"cli unprint err", ErrChangefeedCliAborted, true},
+		{"cli unprint err", ErrCliAborted, true},
 	}
 	for _, tt := range tests {
-		ret := IsCliNotPrintError(tt.err)
+		ret := IsCliUnprintableError(tt.err)
 		require.Equal(t, ret, tt.want, "case:%s", tt.name)
 	}
 }

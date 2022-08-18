@@ -186,7 +186,7 @@ func JSONPrint(cmd *cobra.Command, v interface{}) error {
 
 // CheckErr is used to cmd err.
 func CheckErr(err error) {
-	if cerror.IsCliNotPrintError(err) {
+	if cerror.IsCliUnprintableError(err) {
 		err = nil
 	}
 	cobra.CheckErr(err)

@@ -45,7 +45,7 @@ func confirmLargeDataGap(cmd *cobra.Command, currentPhysical int64, startTs uint
 		}
 		if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
 			cmd.Printf("abort changefeed create\n")
-			return cerror.ErrChangefeedCliAborted.FastGen("abort changefeed create or resume")
+			return cerror.ErrCliAborted.FastGenByArgs("cli changefeed create or resume")
 		}
 	}
 
@@ -67,7 +67,7 @@ func confirmOverwriteCheckpointTs(
 	}
 	if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
 		cmd.Printf("abort changefeed resume\n")
-		return cerror.ErrChangefeedCliAborted.FastGen("abort changefeed resume")
+		return cerror.ErrCliAborted.FastGenByArgs("cli changefeed resume")
 	}
 
 	return nil
@@ -84,7 +84,7 @@ func confirmIgnoreIneligibleTables(cmd *cobra.Command) (bool, error) {
 	}
 	if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
 		cmd.Printf("No changefeed is created because you don't want to ignore some tables.\n")
-		return false, cerror.ErrChangefeedCliAborted.FastGen("abort changefeed create or resume")
+		return false, cerror.ErrCliAborted.FastGenByArgs("cli changefeed create or resume")
 	}
 
 	return true, nil

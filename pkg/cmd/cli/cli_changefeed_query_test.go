@@ -90,8 +90,6 @@ func TestChangefeedQueryCli(t *testing.T) {
 
 	// query failed
 	cfV1.EXPECT().Get(gomock.Any(), "bcd").Return(nil, errors.New("test"))
-	o.simplified = false
-	o.changefeedID = "bcd"
 	os.Args = []string{"query", "--simple=false", "--changefeed-id=bcd"}
 	require.NotNil(t, o.run(cmd))
 }
