@@ -377,6 +377,7 @@ func (s *testLocationSuite) TestLocationsWithGTID() {
 
 func TestResetToMiddleOfReplace(t *testing.T) {
 	// this test case is to check we start at {empty binlog position, GTID: "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3", Suffix: 1}
+	// while that location we have replaced events
 
 	binlogName := "bin.000001"
 	fakeRotateHeader := &replication.EventHeader{EventType: replication.ROTATE_EVENT, Flags: replication.LOG_EVENT_ARTIFICIAL_F}
@@ -453,28 +454,28 @@ func TestResetToMiddleOfReplace(t *testing.T) {
 	}{
 		{
 			tp:          replication.ROTATE_EVENT,
-			startLocStr: "position: (, 4), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3",
-			endLocStr:   "position: (bin.000001, 4), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3",
+			startLocStr: "position: (, 4), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3, suffix: 1",
+			endLocStr:   "position: (bin.000001, 4), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3, suffix: 1",
 		},
 		{
 			tp:          replication.FORMAT_DESCRIPTION_EVENT,
-			startLocStr: "position: (bin.000001, 4), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3",
-			endLocStr:   "position: (bin.000001, 4), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3",
+			startLocStr: "position: (bin.000001, 4), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3, suffix: 1",
+			endLocStr:   "position: (bin.000001, 4), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3, suffix: 1",
 		},
 		{
 			tp:          replication.PREVIOUS_GTIDS_EVENT,
-			startLocStr: "position: (bin.000001, 4), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3",
-			endLocStr:   "position: (bin.000001, 4), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3",
+			startLocStr: "position: (bin.000001, 4), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3, suffix: 1",
+			endLocStr:   "position: (bin.000001, 4), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3, suffix: 1",
 		},
 		{
 			tp:          replication.HEARTBEAT_EVENT,
-			startLocStr: "position: (bin.000001, 4), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3",
-			endLocStr:   "position: (bin.000001, 4), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3",
+			startLocStr: "position: (bin.000001, 4), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3, suffix: 1",
+			endLocStr:   "position: (bin.000001, 4), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3, suffix: 1",
 		},
 		{
 			tp:          replication.GTID_EVENT,
-			startLocStr: "position: (bin.000001, 4), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3",
-			endLocStr:   "position: (bin.000001, 1099), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3",
+			startLocStr: "position: (bin.000001, 4), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3, suffix: 1",
+			endLocStr:   "position: (bin.000001, 1099), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3, suffix: 1",
 		},
 		{
 			tp:          replication.QUERY_EVENT,
@@ -493,6 +494,130 @@ func TestResetToMiddleOfReplace(t *testing.T) {
 
 		if i == len(expecteds) {
 			require.Equal(t, []byte("replace 2"), event.RawData)
+		}
+	}
+	ctx, cancel := ctx.WithTimeout(10 * time.Millisecond)
+	defer cancel()
+	// nolint:dogsled
+	_, _, err = controller.GetEvent(ctx)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+}
+
+func TestResetToLastOfInject(t *testing.T) {
+	// this test case is to check we start at {empty binlog position, GTID: "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3", Suffix: 1}
+	// while that location we have injected events
+
+	binlogName := "bin.000001"
+	fakeRotateHeader := &replication.EventHeader{EventType: replication.ROTATE_EVENT, Flags: replication.LOG_EVENT_ARTIFICIAL_F}
+	fakeRotate, err := event.GenRotateEvent(fakeRotateHeader, 0, []byte(binlogName), 0)
+	require.NoError(t, err)
+
+	uuid := "3ccc475b-2343-11e7-be21-6c0b84d59f30"
+	gtidHeader := &replication.EventHeader{
+		EventType: replication.GTID_EVENT, LogPos: 1111, EventSize: 77,
+	}
+	gtidEvent, err := event.GenGTIDEvent(gtidHeader, 1034, 0, uuid, 4, 0, 0)
+	require.NoError(t, err)
+	require.Equal(t, uint32(1099), gtidEvent.Header.LogPos)
+	upstream := &mockStream{
+		events: []*replication.BinlogEvent{
+			fakeRotate,
+			{
+				Header: &replication.EventHeader{EventType: replication.FORMAT_DESCRIPTION_EVENT, LogPos: 125, EventSize: 121},
+			},
+			{
+				Header: &replication.EventHeader{EventType: replication.PREVIOUS_GTIDS_EVENT, LogPos: 156, EventSize: 31},
+			},
+			{
+				Header: &replication.EventHeader{EventType: replication.HEARTBEAT_EVENT, LogPos: 1034, EventSize: 39},
+			},
+			gtidEvent,
+			{
+				Header:  &replication.EventHeader{EventType: replication.QUERY_EVENT, LogPos: 1199, EventSize: 100},
+				RawData: []byte("should inject before me at 1099"),
+			},
+		},
+	}
+	producer := &mockStreamProducer{upstream}
+
+	controller := NewStreamerController4Test(producer, upstream)
+
+	replaceReq := &pb.HandleWorkerErrorRequest{
+		Op:        pb.ErrorOp_Inject,
+		BinlogPos: "(bin.000001, 1099)",
+	}
+	replaceEvents := []*replication.BinlogEvent{
+		{
+			Header:  &replication.EventHeader{EventType: replication.QUERY_EVENT},
+			RawData: []byte("replace 1"),
+		},
+	}
+	err = controller.Set(replaceReq, replaceEvents)
+	require.NoError(t, err)
+
+	startSyncLoc := binlog.MustZeroLocation(mysql.MySQLFlavor)
+	gset, err := gtid.ParserGTID(mysql.MySQLFlavor, "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3")
+	require.NoError(t, err)
+	err = startSyncLoc.SetGTID(gset)
+	require.NoError(t, err)
+	startSyncLoc.Suffix = 1
+
+	replaceLoc := startSyncLoc
+	replaceLoc.Position.Name = binlogName
+	replaceLoc.Position.Pos = 1099
+
+	controller.streamModifier.reset(replaceLoc)
+	controller.locations.reset(startSyncLoc)
+	controller.upstream, err = newLocationStream(producer, startSyncLoc)
+	require.NoError(t, err)
+
+	expecteds := []struct {
+		tp          replication.EventType
+		startLocStr string
+		endLocStr   string
+	}{
+		{
+			tp:          replication.ROTATE_EVENT,
+			startLocStr: "position: (, 4), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3, suffix: 1",
+			endLocStr:   "position: (bin.000001, 4), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3, suffix: 1",
+		},
+		{
+			tp:          replication.FORMAT_DESCRIPTION_EVENT,
+			startLocStr: "position: (bin.000001, 4), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3, suffix: 1",
+			endLocStr:   "position: (bin.000001, 4), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3, suffix: 1",
+		},
+		{
+			tp:          replication.PREVIOUS_GTIDS_EVENT,
+			startLocStr: "position: (bin.000001, 4), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3, suffix: 1",
+			endLocStr:   "position: (bin.000001, 4), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3, suffix: 1",
+		},
+		{
+			tp:          replication.HEARTBEAT_EVENT,
+			startLocStr: "position: (bin.000001, 4), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3, suffix: 1",
+			endLocStr:   "position: (bin.000001, 4), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3, suffix: 1",
+		},
+		{
+			tp:          replication.GTID_EVENT,
+			startLocStr: "position: (bin.000001, 4), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3, suffix: 1",
+			endLocStr:   "position: (bin.000001, 1099), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3, suffix: 1",
+		},
+		{
+			tp:          replication.QUERY_EVENT,
+			startLocStr: "position: (bin.000001, 1099), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-3, suffix: 1",
+			endLocStr:   "position: (bin.000001, 1199), gtid-set: 3ccc475b-2343-11e7-be21-6c0b84d59f30:1-4",
+		},
+	}
+
+	ctx := tcontext.Background()
+	for i, expected := range expecteds {
+		event, _, err := controller.GetEvent(ctx)
+		require.NoError(t, err)
+		require.Equal(t, expected.tp, event.Header.EventType)
+		require.Equal(t, expected.startLocStr, controller.GetCurStartLocation().String())
+		require.Equal(t, expected.endLocStr, controller.GetCurEndLocation().String())
+
+		if i == len(expecteds) {
+			require.Equal(t, []byte("should inject before me at 1099"), event.RawData)
 		}
 	}
 	ctx, cancel := ctx.WithTimeout(10 * time.Millisecond)

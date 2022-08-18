@@ -290,6 +290,18 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 	return err
 }
 
+// shouldUpdateSuffix is used by StreamerController when we reset to the middle
+// of replace/inject. The reset location has suffix but upstream location does
+// not. when we update locations from upstream ones, we should decide if suffix
+// should be overwritten.
+// TODO: very ugly, many special cases :(
+func shouldUpdateSuffix(e *replication.BinlogEvent) bool {
+	isGTIDEvent := e.Header.EventType == replication.GTID_EVENT ||
+		e.Header.EventType == replication.ANONYMOUS_GTID_EVENT ||
+		e.Header.EventType == replication.MARIADB_GTID_EVENT
+	return shouldUpdatePos(e) && !isGTIDEvent
+}
+
 // GetEvent returns binlog event from upstream binlog or streamModifier. It's not
 // concurrent safe.
 // When return events from streamModifier, we should maintain these properties:
@@ -317,7 +329,7 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 //     the skipped event will still be sent to caller, with op = pb.ErrorOp_Skip,
 //     to let caller track schema and save checkpoints.
 func (c *StreamerController) GetEvent(tctx *tcontext.Context) (*replication.BinlogEvent, pb.ErrorOp, error) {
-	event, suffix, status, op, err := c.getEvent(tctx)
+	event, suffix, op, err := c.getEvent(tctx)
 
 	// if is local binlog but switch to remote on error, need to add uuid information in binlog's filename
 	if event != nil {
@@ -357,32 +369,35 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (*replication.Binl
 		return event, op, nil
 	}
 
-	if status == lastEvent {
-		// last event of injected events, rewrite suffix for start location
-		// see unit test TestResetToMiddleOfReplace to understand the reason
+	if shouldUpdateSuffix(event) {
 		c.locations.curStartLocation = c.locations.curEndLocation
-		c.locations.curStartLocation.Suffix = c.streamModifier.nextEventInOp - 1
 		c.locations.curEndLocation = c.upstream.curEndLocation
 		c.locations.txnEndLocation = c.upstream.txnEndLocation
-	} else {
-		// upstream event, simply copy locations from upstream location recorder
-		*c.locations = *c.upstream.locations
+		return event, op, nil
 	}
+
+	c.locations.curStartLocation = c.locations.curEndLocation
+	c.locations.curEndLocation.CopyWithoutSuffixFrom(c.upstream.curEndLocation)
+	c.locations.txnEndLocation.CopyWithoutSuffixFrom(c.upstream.txnEndLocation)
+
 	return event, op, nil
 }
 
+// getEvent gets event from upstream binlog or streamModifier. The maintaining of
+// locations is on its caller.
 func (c *StreamerController) getEvent(tctx *tcontext.Context) (
 	event *replication.BinlogEvent,
 	suffix int,
-	status getEventFromFrontOpStatus,
 	op pb.ErrorOp,
 	err error,
 ) {
 	failpoint.Inject("SyncerGetEventError", func(_ failpoint.Value) {
 		c.meetError = true
 		tctx.L().Info("mock upstream instance restart", zap.String("failpoint", "SyncerGetEventError"))
-		failpoint.Return(nil, 0, 0, pb.ErrorOp_InvalidErrorOp, terror.ErrDBBadConn.Generate())
+		failpoint.Return(nil, 0, pb.ErrorOp_InvalidErrorOp, terror.ErrDBBadConn.Generate())
 	})
+
+	var status getEventFromFrontOpStatus
 
 LOOP:
 	for frontOp := c.streamModifier.front(); frontOp != nil; frontOp = c.streamModifier.front() {

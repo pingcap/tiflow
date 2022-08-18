@@ -655,7 +655,7 @@ function DM_INJECT_DDL_ERROR_SHARDING_BASE2_CASE() {
 			"binlog inject test alter table ${db}.${tb1} drop primary key; alter table ${db}.${tb1} add unique(c);" \
 			"\"result\": true" 3
 
-		# 11/21 inject ddl with 12/22 second ddl: detect conflict
+		# 11/21 injected ddl conflict with 12/22 second ddl
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
 			"detect inconsistent DDL sequence from source" 2
@@ -842,19 +842,19 @@ function DM_INJECT_ERROR_MULTIPLE_CASE() {
 }
 
 function DM_INJECT_DDL_ERROR() {
-#	run_case INJECT_DDL_ERROR "double-source-no-sharding" \
-#		"run_sql_source1 \"create table ${db}.${tb1} (a int unique, b int);\"; \
-#     run_sql_source2 \"create table ${db}.${tb2} (a int unique, b int);\"" \
-#		"clean_table" ""
-#
-#	run_case INJECT_DDL_ERROR_SHARDING_BASE "double-source-pessimistic" \
-#		"run_sql_source1 \"create table ${db}.${tb1} (a int unique, b int);\"; \
-#     run_sql_source2 \"create table ${db}.${tb1} (a int unique, b int);\"" \
-#		"clean_table" "pessimistic"
-#	run_case INJECT_DDL_ERROR_SHARDING_BASE "double-source-optimistic" \
-#		"run_sql_source1 \"create table ${db}.${tb1} (a int unique, b int);\"; \
-#     run_sql_source2 \"create table ${db}.${tb1} (a int unique, b int);\"" \
-#		"clean_table" "optimistic"
+	run_case INJECT_DDL_ERROR "double-source-no-sharding" \
+		"run_sql_source1 \"create table ${db}.${tb1} (a int unique, b int);\"; \
+     run_sql_source2 \"create table ${db}.${tb2} (a int unique, b int);\"" \
+		"clean_table" ""
+
+	run_case INJECT_DDL_ERROR_SHARDING_BASE "double-source-pessimistic" \
+		"run_sql_source1 \"create table ${db}.${tb1} (a int unique, b int);\"; \
+     run_sql_source2 \"create table ${db}.${tb1} (a int unique, b int);\"" \
+		"clean_table" "pessimistic"
+	run_case INJECT_DDL_ERROR_SHARDING_BASE "double-source-optimistic" \
+		"run_sql_source1 \"create table ${db}.${tb1} (a int unique, b int);\"; \
+     run_sql_source2 \"create table ${db}.${tb1} (a int unique, b int);\"" \
+		"clean_table" "optimistic"
 
 	run_case INJECT_DDL_ERROR_SHARDING_BASE2 "double-source-pessimistic" \
 		"run_sql_source1 \"create table ${db}.${tb1} (a int unique, b int);\"; \
