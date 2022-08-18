@@ -70,6 +70,10 @@ func (d *dummyWorker) Poll(ctx context.Context) error {
 	return nil
 }
 
+func (d *dummyWorker) Stop(ctx context.Context) error {
+	return nil
+}
+
 func (d *dummyWorker) ID() RunnableID {
 	return d.id
 }

@@ -59,6 +59,7 @@ type Master interface {
 	Poll(ctx context.Context) error
 	MasterID() frameModel.MasterID
 	Close(ctx context.Context) error
+	Stop(ctx context.Context) error
 	NotifyExit(ctx context.Context, errIn error) error
 }
 
@@ -93,6 +94,9 @@ type MasterImpl interface {
 
 	// CloseImpl is called when the master is being closed
 	CloseImpl(ctx context.Context) error
+
+	// StopImpl is called when the master is being canceled
+	StopImpl(ctx context.Context) error
 }
 
 const (
@@ -305,8 +309,10 @@ func (m *DefaultBaseMaster) Logger() *zap.Logger {
 
 // Init implements BaseMaster.Init
 func (m *DefaultBaseMaster) Init(ctx context.Context) error {
-	ctx, cancel := m.errCenter.WithCancelOnFirstError(ctx)
-	defer cancel()
+	// Don't cancel this context until it meets first error. In this way this
+	// context can be used in business logic and leaves a robust way to cancel
+	// business logic from runtime.(If business uses context correctly)
+	ctx, _ = m.errCenter.WithCancelOnFirstError(ctx)
 
 	isInit, err := m.doInit(ctx)
 	if err != nil {
@@ -499,6 +505,15 @@ func (m *DefaultBaseMaster) Close(ctx context.Context) error {
 
 	m.doClose()
 	return errors.Trace(err)
+}
+
+// Stop implements Master.Stop
+func (m *DefaultBaseMaster) Stop(ctx context.Context) error {
+	err := m.Impl.StopImpl(ctx)
+	if err != nil {
+		m.Logger().Error("stop master impl failed", zap.Error(err))
+	}
+	return err
 }
 
 // refreshMetadata load and update metadata by current epoch, nodeID, advertiseAddr, etc.

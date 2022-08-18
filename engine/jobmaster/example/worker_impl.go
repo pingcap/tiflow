@@ -112,7 +112,7 @@ func (w *exampleWorker) Status() frameModel.WorkerStatus {
 	return frameModel.WorkerStatus{State: code}
 }
 
-func (w *exampleWorker) OnMasterMessage(topic p2p.Topic, message p2p.MessageValue) error {
+func (w *exampleWorker) OnMasterMessage(ctx context.Context, topic p2p.Topic, message p2p.MessageValue) error {
 	log.Info("OnMasterMessage", zap.Any("message", message))
 	return nil
 }

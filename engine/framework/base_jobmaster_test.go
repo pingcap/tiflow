@@ -78,6 +78,14 @@ func (m *testJobMasterImpl) CloseImpl(ctx context.Context) error {
 	return args.Error(0)
 }
 
+func (m *testJobMasterImpl) StopImpl(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	args := m.Called(ctx)
+	return args.Error(0)
+}
+
 func (m *testJobMasterImpl) OnMasterRecovered(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -134,14 +142,6 @@ func (m *testJobMasterImpl) Workload() model.RescUnit {
 	return args.Get(0).(model.RescUnit)
 }
 
-func (m *testJobMasterImpl) OnJobManagerMessage(topic p2p.Topic, message p2p.MessageValue) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	args := m.Called(topic, message)
-	return args.Error(0)
-}
-
 func (m *testJobMasterImpl) OnOpenAPIInitialized(apiGroup *gin.RouterGroup) {
 	apiGroup.GET("/status", func(c *gin.Context) {
 		c.String(http.StatusOK, "success")
@@ -156,6 +156,14 @@ func (m *testJobMasterImpl) Status() frameModel.WorkerStatus {
 	return frameModel.WorkerStatus{
 		State: frameModel.WorkerStateNormal,
 	}
+}
+
+func (m *testJobMasterImpl) OnCancel(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	args := m.Called(ctx)
+	return args.Error(0)
 }
 
 // simulate the job manager to insert a job record first since job master will only update the job
