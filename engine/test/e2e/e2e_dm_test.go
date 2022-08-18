@@ -376,7 +376,6 @@ func queryStatus(client *http.Client, jobID string, tasks []string) (*dm.JobStat
 		v.Add("tasks", task)
 	}
 	u += "?" + v.Encode()
-	fmt.Println("query-status", u)
 	resp, err := client.Get(u)
 	if err != nil {
 		return nil, err
