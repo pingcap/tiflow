@@ -316,10 +316,6 @@ func (h *ddlPullerImpl) handleDDLJobEntry(jobEntry *model.DDLJobEntry) error {
 			zap.Any("job", job))
 		return nil
 	}
-	log.Info("receive new ddl job",
-		zap.String("namespace", h.changefeedID.Namespace),
-		zap.String("changefeed", h.changefeedID.ID),
-		zap.Any("job", job))
 
 	h.mu.Lock()
 	defer h.mu.Unlock()

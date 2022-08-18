@@ -177,10 +177,11 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 		// We use schemaVersion to check if an already-executed DDL job is processed for a second time.
 		// Unexecuted DDL jobs should have largest schemaVersions.
 		if job.BinlogInfo.FinishedTS <= lastSnap.CurrentTs() || job.BinlogInfo.SchemaVersion <= s.schemaVersion {
-			log.Info("ignore foregone DDL", zap.Int64("jobID", job.ID),
-				zap.String("DDL", job.Query),
+			log.Info("ignore foregone DDL",
 				zap.String("namespace", s.id.Namespace),
 				zap.String("changefeed", s.id.ID),
+				zap.String("DDL", job.Query),
+				zap.Int64("jobID", job.ID),
 				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
 				zap.Int64("schemaVersion", s.schemaVersion),
 				zap.Int64("jobSchemaVersion", job.BinlogInfo.SchemaVersion),
@@ -193,16 +194,19 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 		snap.InitConcurrentDDLTables()
 	}
 	if err := snap.HandleDDL(job); err != nil {
-		log.Error("handle DDL failed", zap.String("DDL", job.Query),
-			zap.Stringer("job", job), zap.Error(err),
+		log.Error("handle DDL failed",
 			zap.String("namespace", s.id.Namespace),
-			zap.String("changefeed", s.id.ID), zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
+			zap.String("changefeed", s.id.ID),
+			zap.String("DDL", job.Query),
+			zap.Stringer("job", job), zap.Error(err),
+			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
 		return errors.Trace(err)
 	}
-	log.Info("handle DDL", zap.String("DDL", job.Query),
-		zap.Stringer("job", job),
+	log.Info("handle DDL",
 		zap.String("namespace", s.id.Namespace),
 		zap.String("changefeed", s.id.ID),
+		zap.String("DDL", job.Query),
+		zap.Stringer("job", job),
 		zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
 
 	s.snaps = append(s.snaps, snap)

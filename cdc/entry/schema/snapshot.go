@@ -482,12 +482,11 @@ func (s *Snapshot) DoHandleDDL(job *timodel.Job) error {
 	default:
 		binlogInfo := job.BinlogInfo
 		if binlogInfo == nil {
-			log.Warn("ignore a invalid DDL job", zap.Reflect("job", job))
+			log.Warn("ignore a invalid DDL job", zap.Any("job", job))
 			return nil
 		}
-		tbInfo := binlogInfo.TableInfo
-		if tbInfo == nil {
-			log.Warn("ignore a invalid DDL job", zap.Reflect("job", job))
+		if binlogInfo.TableInfo == nil {
+			log.Warn("ignore a invalid DDL job", zap.Any("job", job))
 			return nil
 		}
 		err := s.inner.replaceTable(getWrapTableInfo(job), job.BinlogInfo.FinishedTS)

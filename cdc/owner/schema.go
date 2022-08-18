@@ -137,14 +137,16 @@ func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
 			zap.String("namespace", s.id.Namespace),
 			zap.String("changefeed", s.id.ID),
 			zap.String("DDL", job.Query),
-			zap.Stringer("job", job), zap.Error(err),
+			zap.Stringer("job", job),
+			zap.Error(err),
 			zap.Any("role", util.RoleOwner))
 		return errors.Trace(err)
 	}
-	log.Info("handle DDL",
+	log.Info("owner handle DDL success",
 		zap.String("namespace", s.id.Namespace),
 		zap.String("changefeed", s.id.ID),
-		zap.String("DDL", job.Query), zap.Stringer("job", job),
+		zap.String("DDL", job.Query),
+		zap.Stringer("job", job),
 		zap.Any("role", util.RoleOwner))
 
 	s.ddlHandledTs = job.BinlogInfo.FinishedTS

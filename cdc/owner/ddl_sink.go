@@ -280,9 +280,9 @@ func (s *ddlSinkImpl) emitCheckpointTs(ts uint64, tableNames []model.TableName) 
 }
 
 // emitDDLEvent returns true if the ddl event is already executed.
-// For a rename tables job, the events in that job have identical StartTs
+// For the `rename tables` job, the events in that job have identical StartTs
 // and CommitTs. So in emitDDLEvent, we get the DDL finished ts of an event
-// from a map in order to check whether that event is finshed or not.
+// from a map in order to check whether that event is finished or not.
 func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
 	s.mu.Lock()
 	if ddl.Done {
@@ -299,10 +299,6 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 
 	ddlSentTs := s.ddlSentTsMap[ddl]
 	if ddl.CommitTs <= ddlSentTs {
-		log.Debug("ddl is not finished yet",
-			zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
-			zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
-			zap.Uint64("ddlSentTs", ddlSentTs), zap.Any("DDL", ddl))
 		// the DDL event is executing and not finished yet, return false
 		return false, nil
 	}
@@ -311,10 +307,6 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 		return false, errors.Trace(ctx.Err())
 	case s.ddlCh <- ddl:
 		s.ddlSentTsMap[ddl] = ddl.CommitTs
-		log.Info("ddl is sent",
-			zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
-			zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
-			zap.Uint64("ddlSentTs", ddl.CommitTs))
 	default:
 		log.Warn("ddl chan full, send it the next round",
 			zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
