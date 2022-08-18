@@ -23,6 +23,7 @@ import (
 
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sinkv2/backends"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/stretchr/testify/require"
@@ -60,7 +61,7 @@ func (b *blackhole) Close() error {
 func TestTxnSink(t *testing.T) {
 	t.Parallel()
 
-	bes := make([]backend, 0, 4)
+	bes := make([]backends.Backend, 0, 4)
 	for i := 0; i < 4; i++ {
 		bes = append(bes, &blackhole{block: int32(1), n: notify.Notifier{}})
 	}

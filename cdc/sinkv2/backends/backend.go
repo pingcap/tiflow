@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package txn
+package backends
 
 import (
 	"context"
@@ -21,7 +21,7 @@ import (
 )
 
 // backend indicates a transaction backend like MySQL, TiDB, ...
-type backend interface {
+type Backend interface {
 	// OnTxnEvent handles one TxnCallbackableEvent.
 	OnTxnEvent(e *eventsink.TxnCallbackableEvent) (needFlush bool)
 

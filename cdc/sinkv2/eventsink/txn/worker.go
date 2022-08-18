@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/sinkv2/backends"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"go.uber.org/zap"
@@ -34,14 +35,14 @@ type worker struct {
 	txnCh   *chann.Chann[txnWithNotifier]
 	stopped chan struct{}
 	wg      sync.WaitGroup
-	backend backend
+	backend backends.Backend
 	errCh   chan<- error
 
 	// Fields only used in the background loop.
 	timer *time.Timer
 }
 
-func newWorker(ID int, backend backend, errCh chan<- error) *worker {
+func newWorker(ID int, backend backends.Backend, errCh chan<- error) *worker {
 	return &worker{
 		ID:      ID,
 		txnCh:   chann.New[txnWithNotifier](chann.Cap(-1 /*unbounded*/)),

@@ -15,6 +15,7 @@ package txn
 
 import (
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sinkv2/backends"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/pkg/causality"
 )
@@ -32,7 +33,7 @@ type sink struct {
 	workers          []*worker
 }
 
-func newSink(backends []backend, errCh chan<- error, conflictDetectorSlots int64) sink {
+func newSink(backends []backends.Backend, errCh chan<- error, conflictDetectorSlots int64) sink {
 	workers := make([]*worker, 0, len(backends))
 	for i, backend := range backends {
 		w := newWorker(i, backend, errCh)
