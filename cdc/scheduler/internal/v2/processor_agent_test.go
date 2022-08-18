@@ -163,7 +163,7 @@ func (s *agentTestSuite) CreateAgent(t *testing.T) (*agentImpl, error) {
 	s.tableExecutor = NewMockTableExecutor(t)
 
 	ret, err := NewAgent(
-		s.ctx, messageServer, messageRouter, &cdcEtcdClient,
+		s.ctx, messageServer, messageRouter, cdcEtcdClient,
 		s.tableExecutor, model.DefaultChangeFeedID("cf-1"))
 	if err != nil {
 		return nil, err

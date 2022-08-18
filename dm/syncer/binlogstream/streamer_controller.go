@@ -297,29 +297,30 @@ var mockRestarted = false
 
 // GetEvent returns binlog event from upstream binlog or streamModifier.
 // When return events from streamModifier, we should maintain these properties:
-// - Inject
-//   if we inject events [DDL1, DDL2] at (start) position 900, where start position
-//   900 has Insert1 event whose LogPos (end position) is 1000, we should return
-//   to caller like
+//   - Inject
+//     if we inject events [DDL1, DDL2] at (start) position 900, where start position
+//     900 has Insert1 event whose LogPos (end position) is 1000, we should return
+//     to caller like
 //   - DDL1, start position 900 LogPos 900, suffix 1
 //   - DDL2, start position 900 LogPos 900, suffix 2
 //   - Insert1, start position 900 LogPos 1000, suffix 0
-//   The DDLs are placed before DML because user may want to use Inject to change
-//   table structure for DML.
-//   when DDL need shard resync, for example, after DDL2's shard group finished,
-//   caller should use (LogPos 900, suffix 2) to reset streamer, then the next
-//   event from upstream binlog is Insert1 since upstream will ignore the suffix,
-//   and next event from streamModifier is unknown in this context.
-// - Replace
-//   if we replace events [DDL1, DDL2] at (start) position 900, where start position
-//   900 has DDL0 event whose LogPos (end position) is 1000, we should return to
-//   caller like
+//     The DDLs are placed before DML because user may want to use Inject to change
+//     table structure for DML.
+//     when DDL need shard resync, for example, after DDL2's shard group finished,
+//     caller should use (LogPos 900, suffix 2) to reset streamer, then the next
+//     event from upstream binlog is Insert1 since upstream will ignore the suffix,
+//     and next event from streamModifier is unknown in this context.
+//   - Replace
+//     if we replace events [DDL1, DDL2] at (start) position 900, where start position
+//     900 has DDL0 event whose LogPos (end position) is 1000, we should return to
+//     caller like
 //   - DDL1, start position 900 LogPos 900, suffix 1
 //   - DDL2, start position 900 LogPos 1000, suffix 0
-//   for shard resync, caller should use end position to reset streamer as above
-// - Skip
-//   the skipped event will still be sent to caller, with op = pb.ErrorOp_Skip,
-//   to let caller track schema and save checkpoints.
+//     for shard resync, caller should use end position to reset streamer as above
+//   - Skip
+//     the skipped event will still be sent to caller, with op = pb.ErrorOp_Skip,
+//     to let caller track schema and save checkpoints.
+//
 // TODO: start position and suffix is maintained in caller, after location recorder
 // is enabled we can maintain it inside StreamerController.
 func (c *StreamerController) GetEvent(tctx *tcontext.Context) (

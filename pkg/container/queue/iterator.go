@@ -18,20 +18,26 @@ package queue
 // panics. Don't use an iterator of an element that has already been dequeued.
 // Instead, use with checks and in loop. E.g.
 //
-// for it := someQueue.First(); it.Valid(); it.Next() {
-// 		... // operations cannot pop element
-// }
+//	for it := someQueue.First(); it.Valid(); it.Next() {
+//			... // operations cannot pop element
+//	}
+//
 // Note: Begin() and First() are interchangeable
 // for it := someQueue.Begin(); it.Valid(); { 			// forwards
-// 		it.Next()
-// 		q.Pop() // can pop element
-// }
+//
+//			it.Next()
+//			q.Pop() // can pop element
+//	}
+//
 // for it := someQueue.Last(); it.Valid(); it.Next() {	// backwards
-// 		...
-// }
+//
+//			...
+//	}
+//
 // for it := someQueue.End(); it.Prev(); {				// backwards
-//		...
-// }
+//
+//			...
+//	}
 type ChunkQueueIterator[T any] struct {
 	idxInChunk int
 	chunk      *chunk[T]

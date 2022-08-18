@@ -44,7 +44,7 @@ func TestApplyChanges(t *testing.T) {
 
 	// Test for cli command flags that should be ignored.
 	oldInfo = &v2.ChangeFeedInfo{SinkURI: "blackhole://"}
-	require.Nil(t, cmd.ParseFlags([]string{"--interact"}))
+	require.Nil(t, cmd.ParseFlags([]string{"--log-level=debug"}))
 	_, err = o.applyChanges(oldInfo, cmd)
 	require.Nil(t, err)
 

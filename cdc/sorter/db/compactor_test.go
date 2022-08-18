@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package leveldb
+package db
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
+	"github.com/pingcap/tiflow/cdc/sorter/db/message"
 	"github.com/pingcap/tiflow/pkg/actor"
 	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -32,7 +32,7 @@ type mockCompactDB struct {
 	compact chan struct{}
 }
 
-func (m *mockCompactDB) Compact(start, end []byte) error {
+func (m *mockCompactDB) Compact(_, _ []byte) error {
 	m.compact <- struct{}{}
 	return nil
 }
@@ -84,7 +84,7 @@ func TestCompactorPoll(t *testing.T) {
 	case <-mockDB.compact:
 	}
 
-	// Close leveldb.
+	// Close db.
 	stopMsg := actormsg.StopMessage[message.Task]()
 	closed = !compactor.Poll(ctx, []actormsg.Message[message.Task]{stopMsg})
 	require.True(t, closed)

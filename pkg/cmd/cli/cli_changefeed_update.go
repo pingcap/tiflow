@@ -178,9 +178,6 @@ func (o *updateChangefeedOptions) applyChanges(oldInfo *v2.ChangeFeedInfo,
 		case "changefeed-id", "no-confirm":
 			// Do nothing, these are some flags from the changefeed command,
 			// we don't use it to update, but we do use these flags.
-		case "interact":
-			// Do nothing, this is a flags from the cli command
-			// we don't use it to update.
 		case "pd", "log-level", "key", "cert", "ca":
 		// Do nothing, this is a flags from the cli command
 		// we don't use it to update, but we do use these flags.

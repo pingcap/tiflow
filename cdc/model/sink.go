@@ -602,6 +602,7 @@ func (d *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
 }
 
 // SingleTableTxn represents a transaction which includes many row events in a single table
+//
 //msgp:ignore SingleTableTxn
 type SingleTableTxn struct {
 	// data fields of SingleTableTxn

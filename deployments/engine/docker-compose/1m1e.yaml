@@ -8,6 +8,7 @@ services:
       - "/tiflow"
       - "master"
       - "--config=/config.toml"
+      - "--log-level=debug"
       - "--addr=0.0.0.0:10240"
       - "--advertise-addr=server-master:10240"
     ports:
@@ -17,7 +18,7 @@ services:
         condition: service_started
       "mysql-standalone":
         condition: service_healthy
-  server-executor-0:
+  server-executor:
     image: dataflow:test
     volumes:
       - ./config/executor.toml:/config.toml
@@ -25,46 +26,19 @@ services:
       - "/tiflow"
       - "executor"
       - "--config=/config.toml"
+      - "--log-level=debug"
       - "--join=server-master:10240"
       - "--addr=0.0.0.0:10241"
-      - "--advertise-addr=server-executor-0:10241"
+      - "--advertise-addr=server-executor:10241"
+    ports:
+      - "10241:10241"
     depends_on:
       - "server-master"
     restart: "on-failure"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-  server-executor-1:
-    image: dataflow:test
-    volumes:
-      - ./config/executor.toml:/config.toml
-    command:
-      - "/tiflow"
-      - "executor"
-      - "--config=/config.toml"
-      - "--join=server-master:10240"
-      - "--addr=0.0.0.0:10241"
-      - "--advertise-addr=server-executor-1:10241"
-    depends_on:
-      - "server-master"
-    restart: "on-failure"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-  server-executor-2:
-    image: dataflow:test
-    volumes:
-      - ./config/executor.toml:/config.toml
-    command:
-      - "/tiflow"
-      - "executor"
-      - "--config=/config.toml"
-      - "--join=server-master:10240"
-      - "--addr=0.0.0.0:10241"
-      - "--advertise-addr=server-executor-2:10241"
-    depends_on:
-      - "server-master"
-    restart: "on-failure"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    environment:
+      - TZ=UTC
   etcd-standalone:
     image: quay.io/coreos/etcd
     container_name: etcd-standalone
@@ -76,9 +50,9 @@ services:
       - "12479:2379"
   mysql-standalone:
     image: mysql:5.7
-    container_name: mysql-standalone
+    container_name: mysql_standalone
     environment:
-      MYSQL_ALLOW_EMPTY_PASSWORD: true
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
     volumes:
       - './config/mysql_meta.cnf:/etc/my.cnf'
     ports:

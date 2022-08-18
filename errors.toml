@@ -241,6 +241,11 @@ error = '''
 create mark table failed
 '''
 
+["CDC:ErrDBSorterError"]
+error = '''
+db error: %s
+'''
+
 ["CDC:ErrDDLEventIgnored"]
 error = '''
 ddl event is ignored
@@ -569,11 +574,6 @@ owner lease expired
 ["CDC:ErrLeaseTimeout"]
 error = '''
 owner lease timeout
-'''
-
-["CDC:ErrLevelDBSorterError"]
-error = '''
-leveldb error: %s
 '''
 
 ["CDC:ErrLoadTimezone"]
@@ -1071,9 +1071,9 @@ error = '''
 sorter is closed
 '''
 
-["CDC:ErrStartAStoppedLevelDBSystem"]
+["CDC:ErrStartAStoppedDBSystem"]
 error = '''
-start a stopped leveldb system
+start a stopped db system
 '''
 
 ["CDC:ErrStartTsBeforeGC"]
