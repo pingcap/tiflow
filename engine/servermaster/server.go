@@ -676,16 +676,16 @@ func (s *Server) createHTTPServer() (*http.Server, error) {
 
 func (s *Server) forwardJobAPI(w http.ResponseWriter, r *http.Request) {
 	if err := s.handleForwardJobAPI(w, r); err != nil {
-		se, ok := status.FromError(rpcerror.ToGRPCError(err))
+		st, ok := status.FromError(rpcerror.ToGRPCError(err))
 		if !ok {
-			se = status.FromContextError(err)
+			st = status.FromContextError(err)
 		}
-		payload, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(se.Proto())
+		payload, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(st.Proto())
 		if err != nil {
 			log.Warn("failed to  marshal grpc status", zap.Error(err))
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(runtime.HTTPStatusFromCode(se.Code()))
+		w.WriteHeader(runtime.HTTPStatusFromCode(st.Code()))
 		if _, err := w.Write(payload); err != nil {
 			log.Warn("failed to write response", zap.Error(err))
 		}
