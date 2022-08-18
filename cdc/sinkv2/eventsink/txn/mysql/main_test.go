@@ -11,26 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package txn
+package mysql
 
 import (
-	"context"
-	"time"
+	"testing"
 
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
+	"github.com/pingcap/tiflow/pkg/leakutil"
 )
 
-// backend indicates a transaction backend like MySQL, TiDB, ...
-type backend interface {
-	// OnTxnEvent handles one TxnCallbackableEvent.
-	OnTxnEvent(e *eventsink.TxnCallbackableEvent) (needFlush bool)
-
-	// Flush pending events in the backend.
-	Flush(ctx context.Context) error
-
-	// To reduce latency for low throughput cases.
-	MaxFlushInterval() time.Duration
-
-	// Close the backend.
-	Close() error
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(m)
 }
