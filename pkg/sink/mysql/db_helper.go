@@ -23,10 +23,9 @@ import (
 
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/charset"
 	dmutils "github.com/pingcap/tiflow/dm/pkg/utils"
-
-	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )

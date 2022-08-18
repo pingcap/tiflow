@@ -42,18 +42,23 @@ import (
 const (
 	// Max interval for flushing transactions to the downstream.
 	maxFlushInterval = 100 * time.Millisecond
+
+	defaultDMLMaxRetry uint64 = 8
 )
 
 type mysqlBackend struct {
 	changefeedID model.ChangeFeedID
 	db           *sql.DB
-	cfg          *pmysql.Config
-	statistics   *metrics.Statistics
+
+	cfg         *pmysql.Config
+	dmlMaxRetry uint64
 
 	events []*eventsink.TxnCallbackableEvent
 	rows   int
 
 	cancel func()
+
+	statistics *metrics.Statistics
 }
 
 // NewMySQLBackend creates a new MySQL sink using schema storage
@@ -87,6 +92,7 @@ func NewMySQLBackend(
 		changefeedID: changefeedID,
 		db:           db,
 		cfg:          cfg,
+		dmlMaxRetry:  defaultDMLMaxRetry,
 		statistics:   metrics.NewStatistics(ctx, sink.TxnSink),
 		cancel:       cancel,
 	}
@@ -356,8 +362,13 @@ func (s *mysqlBackend) execDMLWithMaxRetries(ctx context.Context, dmls *prepared
 		return nil
 	}, retry.WithBackoffBaseDelay(pmysql.BackoffBaseDelay.Milliseconds()),
 		retry.WithBackoffMaxDelay(pmysql.BackoffMaxDelay.Milliseconds()),
-		retry.WithMaxTries(s.cfg.DMLMaxRetry),
+		retry.WithMaxTries(s.dmlMaxRetry),
 		retry.WithIsRetryableErr(isRetryableDMLError))
+}
+
+// Only for testing.
+func (s *mysqlBackend) setDMLMaxRetry(maxRetry uint64) {
+	s.dmlMaxRetry = maxRetry
 }
 
 func logDMLTxnErr(

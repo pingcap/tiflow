@@ -566,7 +566,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 	sink, err := NewMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConnErrDatabaseNotExists)
 	require.Nil(t, err)
-	sink.cfg.DMLMaxRetry = 2
+	sink.setDMLMaxRetry(2)
 
 	_ = sink.OnTxnEvent(&eventsink.TxnCallbackableEvent{
 		Event: &model.SingleTableTxn{Rows: rows},
@@ -628,7 +628,7 @@ func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 	sink, err := NewMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI,
 		config.GetDefaultReplicaConfig(), mockDBInsertDupEntry)
 	require.Nil(t, err)
-	sink.cfg.DMLMaxRetry = 1
+	sink.setDMLMaxRetry(1)
 	_ = sink.OnTxnEvent(&eventsink.TxnCallbackableEvent{
 		Event: &model.SingleTableTxn{Rows: rows},
 	})

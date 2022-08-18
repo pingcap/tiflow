@@ -46,16 +46,15 @@ const (
 	// The upper limit of max txn rows.
 	maxMaxTxnRow = 2048
 
-	defaultTiDBTxnMode                = txnModeOptimistic
-	defaultBatchReplaceEnabled        = true
-	defaultBatchReplaceSize           = 20
-	defaultReadTimeout                = "2m"
-	defaultWriteTimeout               = "2m"
-	defaultDialTimeout                = "2m"
-	defaultSafeMode                   = true
-	defaultTxnIsolationRC             = "READ-COMMITTED"
-	defaultCharacterSet               = "utf8mb4"
-	defaultDMLMaxRetry         uint64 = 8
+	defaultTiDBTxnMode         = txnModeOptimistic
+	defaultBatchReplaceEnabled = true
+	defaultBatchReplaceSize    = 20
+	defaultReadTimeout         = "2m"
+	defaultWriteTimeout        = "2m"
+	defaultDialTimeout         = "2m"
+	defaultSafeMode            = true
+	defaultTxnIsolationRC      = "READ-COMMITTED"
+	defaultCharacterSet        = "utf8mb4"
 
 	// BackoffBaseDelay indicates the base delay time for retrying.
 	BackoffBaseDelay = 500 * time.Millisecond
@@ -78,7 +77,6 @@ type Config struct {
 	TLS                 string
 	ForceReplicate      bool
 	EnableOldValue      bool
-	DMLMaxRetry         uint64
 }
 
 // NewConfig returns the default mysql backend config.
@@ -93,7 +91,6 @@ func NewConfig() *Config {
 		WriteTimeout:        defaultWriteTimeout,
 		DialTimeout:         defaultDialTimeout,
 		SafeMode:            defaultSafeMode,
-		DMLMaxRetry:         defaultDMLMaxRetry,
 	}
 }
 
