@@ -41,6 +41,7 @@ func NewOwnerManagerOptions(errCh chan<- error) *ManagerOptions {
 		EmitMeta:       true,
 		EmitRowEvents:  false,
 		EmitDDLEvents:  true,
+		ErrCh:          errCh,
 	}
 }
 
@@ -51,6 +52,18 @@ func NewProcessorManagerOptions(errCh chan<- error) *ManagerOptions {
 		EnableGCRunner: true,
 		EmitMeta:       false,
 		EmitRowEvents:  true,
+		EmitDDLEvents:  false,
+		ErrCh:          errCh,
+	}
+}
+
+// NewManagerOptionsForClean creates a manager options for cleaning.
+func NewManagerOptionsForClean() *ManagerOptions {
+	return &ManagerOptions{
+		EnableBgRunner: false,
+		EnableGCRunner: false,
+		EmitMeta:       false,
+		EmitRowEvents:  false,
 		EmitDDLEvents:  false,
 	}
 }
@@ -63,5 +76,6 @@ func newMockManagerOptions(errCh chan<- error) *ManagerOptions {
 		EmitMeta:       true,
 		EmitRowEvents:  true,
 		EmitDDLEvents:  true,
+		ErrCh:          errCh,
 	}
 }

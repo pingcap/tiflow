@@ -103,7 +103,6 @@ func TestMessageMatcher(t *testing.T) {
 
 func TestUpdateClient(t *testing.T) {
 	messageAgent := NewMessageAgentImpl("", nil, p2p.NewMockMessageHandlerManager(), log.L()).(*MessageAgentImpl)
-	require.NoError(t, messageAgent.Init(context.Background()))
 	workerHandle1 := &framework.MockHandle{WorkerID: "worker1"}
 	workerHandle2 := &framework.MockHandle{WorkerID: "worker2"}
 
@@ -143,7 +142,6 @@ func TestUpdateClient(t *testing.T) {
 
 func TestMessageAgent(t *testing.T) {
 	messageAgent := NewMessageAgentImpl("id", nil, p2p.NewMockMessageHandlerManager(), log.L()).(*MessageAgentImpl)
-	require.NoError(t, messageAgent.Init(context.Background()))
 	clientID := "client-id"
 	mockClient := &MockClient{}
 	messageAgent.UpdateClient(clientID, mockClient)
@@ -202,7 +200,6 @@ func TestMessageHandler(t *testing.T) {
 
 	// mock no handler
 	messageAgent := NewMessageAgentImpl("id", &MockNothing{}, p2p.NewMockMessageHandlerManager(), log.L()).(*MessageAgentImpl)
-	require.NoError(t, messageAgent.Init(context.Background()))
 	require.EqualError(t, messageAgent.onMessage(topic, serializeMsg), "message handler for command MessageAPI not found")
 	require.EqualError(t, messageAgent.onMessage(topic, serializeReq), "request handler for command RequestAPI not found")
 	require.EqualError(t, messageAgent.onMessage(topic, serializeResp), "response handler for command RequestAPI not found")
@@ -210,7 +207,6 @@ func TestMessageHandler(t *testing.T) {
 	// mock has handler
 	mockHandler := &MockHanlder{}
 	messageAgent = NewMessageAgentImpl("id", mockHandler, p2p.NewMockMessageHandlerManager(), log.L()).(*MessageAgentImpl)
-	require.NoError(t, messageAgent.Init(context.Background()))
 	mockClient := &MockClient{}
 	messageAgent.UpdateClient(clientID, mockClient)
 	mockClient.On("SendMessage").Return(nil).Once()
@@ -235,7 +231,6 @@ func TestMessageHandler(t *testing.T) {
 
 func TestMessageHandlerLifeCycle(t *testing.T) {
 	messageAgent := NewMessageAgentImpl("id", nil, p2p.NewMockMessageHandlerManager(), log.L())
-	messageAgent.Init(context.Background())
 	messageAgent.Tick(context.Background())
 	messageAgent.UpdateClient("client-id", &framework.MockWorkerHandler{})
 	messageAgent.UpdateClient("client-id", nil)

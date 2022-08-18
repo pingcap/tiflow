@@ -112,7 +112,6 @@ func NewUpstream4Test(pdClient pd.Client) *Upstream {
 
 // init initializes the upstream
 func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
-	log.Info("upstream is initializing", zap.Uint64("upstreamID", up.ID))
 	ctx, cancel := context.WithCancel(ctx)
 	up.cancel = cancel
 	grpcTLSOption, err := up.SecurityConfig.ToGRPCDialOption()
@@ -148,7 +147,6 @@ func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
 		return errors.Trace(err)
 	}
 	up.ID = clusterID
-	log.Info("upstream's PDClient created", zap.Uint64("upstreamID", up.ID))
 
 	// To not block CDC server startup, we need to warn instead of error
 	// when TiKV is incompatible.
@@ -166,23 +164,18 @@ func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
 		up.err.Store(err)
 		return errors.Trace(err)
 	}
-	log.Info("upstream's KVStorage created", zap.Uint64("upstreamID", up.ID))
 
 	up.GrpcPool = kv.NewGrpcPoolImpl(ctx, up.SecurityConfig)
-	log.Info("upstream's GrpcPool created", zap.Uint64("upstreamID", up.ID))
 
 	up.RegionCache = tikv.NewRegionCache(up.PDClient)
-	log.Info("upstream's RegionCache created", zap.Uint64("upstreamID", up.ID))
 
 	up.PDClock, err = pdutil.NewClock(ctx, up.PDClient)
 	if err != nil {
 		up.err.Store(err)
 		return errors.Trace(err)
 	}
-	log.Info("upstream's PDClock created", zap.Uint64("upstreamID", up.ID))
 
 	up.GCManager = gc.NewManager(gcServiceID, up.PDClient, up.PDClock)
-	log.Info("upstream's GCManager created", zap.Uint64("upstreamID", up.ID))
 
 	// Update meta-region label to ensure that meta region isolated from data regions.
 	pc, err := pdutil.NewPDAPIClient(up.PDClient, up.SecurityConfig)

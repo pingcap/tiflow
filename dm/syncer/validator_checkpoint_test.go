@@ -92,11 +92,13 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 	dbConn, err := db.Conn(context.Background())
 	require.NoError(t, err)
 	syncerObj.downstreamTrackConn = dbconn.NewDBConn(cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
-	syncerObj.schemaTracker, err = schema.NewTestTracker(context.Background(), cfg.Name, defaultTestSessionCfg, syncerObj.downstreamTrackConn, log.L())
+	syncerObj.schemaTracker, err = schema.NewTestTracker(context.Background(), cfg.Name, syncerObj.downstreamTrackConn, log.L())
 	defer syncerObj.schemaTracker.Close()
 	require.NoError(t, err)
 	require.NoError(t, syncerObj.schemaTracker.CreateSchemaIfNotExists(schemaName))
-	require.NoError(t, syncerObj.schemaTracker.Exec(context.Background(), schemaName, createTableSQL))
+	stmt, err := parseSQL(createTableSQL)
+	require.NoError(t, err)
+	require.NoError(t, syncerObj.schemaTracker.Exec(context.Background(), schemaName, stmt))
 
 	require.Nil(t, failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/ValidatorMockUpstreamTZ", `return()`))
 	defer func() {

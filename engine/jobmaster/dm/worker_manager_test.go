@@ -49,6 +49,7 @@ func (t *testDMJobmasterSuite) TestUpdateWorkerStatus() {
 	source2 := jobCfg.Upstreams[1].SourceID
 	workerStatus1 := runtime.InitWorkerStatus(source1, framework.WorkerDMDump, "worker-id-1")
 	workerStatus2 := runtime.InitWorkerStatus(source2, framework.WorkerDMDump, "worker-id-2")
+	require.True(t.T(), workerManager.allTombStone())
 
 	// Creating
 	workerManager.UpdateWorkerStatus(workerStatus1)
@@ -59,6 +60,7 @@ func (t *testDMJobmasterSuite) TestUpdateWorkerStatus() {
 	require.Contains(t.T(), workerStatusMap, source2)
 	require.Equal(t.T(), workerStatusMap[source1], workerStatus1)
 	require.Equal(t.T(), workerStatusMap[source2], workerStatus2)
+	require.False(t.T(), workerManager.allTombStone())
 
 	// Online
 	workerStatus1.Stage = runtime.WorkerOnline
@@ -71,6 +73,7 @@ func (t *testDMJobmasterSuite) TestUpdateWorkerStatus() {
 	require.Contains(t.T(), workerStatusMap, source2)
 	require.Equal(t.T(), workerStatusMap[source1], workerStatus1)
 	require.Equal(t.T(), workerStatusMap[source2], workerStatus2)
+	require.False(t.T(), workerManager.allTombStone())
 
 	// Offline
 	workerStatus1.Stage = runtime.WorkerOffline
@@ -81,6 +84,7 @@ func (t *testDMJobmasterSuite) TestUpdateWorkerStatus() {
 	require.Contains(t.T(), workerStatusMap, source2)
 	require.Equal(t.T(), workerStatusMap[source1], workerStatus1)
 	require.Equal(t.T(), workerStatusMap[source2], workerStatus2)
+	require.False(t.T(), workerManager.allTombStone())
 
 	// Finished
 	workerStatus1.Stage = runtime.WorkerFinished
@@ -91,6 +95,7 @@ func (t *testDMJobmasterSuite) TestUpdateWorkerStatus() {
 	require.Contains(t.T(), workerStatusMap, source2)
 	require.Equal(t.T(), workerStatusMap[source1], workerStatus1)
 	require.Equal(t.T(), workerStatusMap[source2], workerStatus2)
+	require.False(t.T(), workerManager.allTombStone())
 
 	// mock jobmaster recover
 	workerStatus1.Stage = runtime.WorkerOnline
@@ -103,6 +108,7 @@ func (t *testDMJobmasterSuite) TestUpdateWorkerStatus() {
 	require.Contains(t.T(), workerStatusMap, source2)
 	require.Equal(t.T(), workerStatusMap[source1], workerStatus1)
 	require.Equal(t.T(), workerStatusMap[source2], workerStatus2)
+	require.False(t.T(), workerManager.allTombStone())
 
 	// mock dispatch error
 	workerManager.removeWorkerStatusByWorkerID("worker-not-exist")
@@ -117,6 +123,11 @@ func (t *testDMJobmasterSuite) TestUpdateWorkerStatus() {
 	require.Len(t.T(), workerStatusMap, 1)
 	require.Contains(t.T(), workerStatusMap, source2)
 	require.Equal(t.T(), workerStatusMap[source2], workerStatus2)
+	require.False(t.T(), workerManager.allTombStone())
+
+	workerStatus2.Stage = runtime.WorkerFinished
+	workerManager.UpdateWorkerStatus(workerStatus2)
+	require.True(t.T(), workerManager.allTombStone())
 }
 
 func (t *testDMJobmasterSuite) TestClearWorkerStatus() {
@@ -176,7 +187,7 @@ func (t *testDMJobmasterSuite) TestClearWorkerStatus() {
 	workerManager.removeOfflineWorkers()
 	require.Len(t.T(), workerManager.WorkerStatus(), 0)
 
-	err = workerManager.onJobNotExist(context.Background())
+	err = workerManager.onJobDel(context.Background())
 	require.NoError(t.T(), err)
 	require.Len(t.T(), workerManager.WorkerStatus(), 0)
 
@@ -190,7 +201,7 @@ func (t *testDMJobmasterSuite) TestClearWorkerStatus() {
 	workerManager.UpdateWorkerStatus(workerStatus1)
 	workerManager.UpdateWorkerStatus(workerStatus2)
 	require.Len(t.T(), workerManager.WorkerStatus(), 2)
-	err = workerManager.onJobNotExist(context.Background())
+	err = workerManager.onJobDel(context.Background())
 	require.EqualError(t.T(), err, destroyError.Error())
 	require.Len(t.T(), workerManager.WorkerStatus(), 2)
 	workerStatus1.Stage = runtime.WorkerOffline
@@ -526,8 +537,8 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 		return workerManager.WorkerStatus()[source1].ID == worker4
 	}, 5*time.Second, 100*time.Millisecond)
 
-	// mock delete job
-	jobStore.Delete(ctx)
+	// mock deleting job
+	jobStore.MarkDeleting(ctx)
 	destroyError := errors.New("destroy error")
 	messageAgent.On("SendMessage").Return(destroyError).Once()
 	messageAgent.On("SendMessage").Return(nil).Once()
@@ -543,6 +554,7 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 	workerStatus.Stage = runtime.WorkerOffline
 	workerManager.UpdateWorkerStatus(workerStatus)
 	// deleted eventually
+	workerManager.SetNextCheckTime(time.Now())
 	require.Eventually(t.T(), func() bool {
 		return len(workerManager.WorkerStatus()) == 0
 	}, 5*time.Second, 100*time.Millisecond)

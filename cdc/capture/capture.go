@@ -173,14 +173,13 @@ func (c *captureImpl) GetEtcdClient() etcd.CDCEtcdClient {
 	return c.EtcdClient
 }
 
+// reset the capture before run it.
 func (c *captureImpl) reset(ctx context.Context) error {
 	sess, err := concurrency.NewSession(
 		c.EtcdClient.GetEtcdClient().Unwrap(),
 		concurrency.WithTTL(c.config.CaptureSessionTTL))
 	if err != nil {
-		return errors.Annotate(
-			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
-			"create capture session")
+		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
 	}
 
 	c.captureMu.Lock()
@@ -197,9 +196,7 @@ func (c *captureImpl) reset(ctx context.Context) error {
 	c.upstreamManager = upstream.NewManager(ctx, c.EtcdClient.GetGCServiceID())
 	_, err = c.upstreamManager.AddDefaultUpstream(c.pdEndpoints, c.config.Security)
 	if err != nil {
-		return errors.Annotate(
-			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
-			"add default upstream failed")
+		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
 	}
 
 	c.processorManager = c.newProcessorManager(c.info, c.upstreamManager, &c.liveness)
@@ -216,9 +213,7 @@ func (c *captureImpl) reset(ctx context.Context) error {
 	c.tableActorSystem = system.NewSystem()
 	err = c.tableActorSystem.Start(ctx)
 	if err != nil {
-		return errors.Annotate(
-			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
-			"create table actor system")
+		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
 	}
 	if c.config.Debug.EnableDBSorter {
 		if c.sorterSystem != nil {
@@ -234,9 +229,7 @@ func (c *captureImpl) reset(ctx context.Context) error {
 		c.sorterSystem = ssystem.NewSystem(sortDir, memPercentage, c.config.Debug.DB)
 		err = c.sorterSystem.Start(ctx)
 		if err != nil {
-			return errors.Annotate(
-				cerror.WrapError(cerror.ErrNewCaptureFailed, err),
-				"create sorter system")
+			return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
 		}
 	}
 
@@ -261,9 +254,7 @@ func (c *captureImpl) reset(ctx context.Context) error {
 
 	c.MessageRouter = p2p.NewMessageRouter(c.info.ID, c.config.Security, messageClientConfig)
 
-	log.Info("init capture",
-		zap.String("captureID", c.info.ID),
-		zap.String("captureAddr", c.info.AdvertiseAddr))
+	log.Info("capture initialized", zap.Any("capture", c.info))
 	return nil
 }
 
@@ -289,6 +280,7 @@ func (c *captureImpl) Run(ctx context.Context) error {
 		}
 		err = c.reset(ctx)
 		if err != nil {
+			log.Error("reset capture failed", zap.Error(err))
 			return errors.Trace(err)
 		}
 		err = c.run(ctx)
@@ -370,12 +362,7 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		return c.MessageServer.Run(ctx)
 	})
 
-	err = g.Wait()
-	if err != nil {
-		return errors.Annotate(err, "capture exited")
-	}
-
-	return nil
+	return errors.Trace(g.Wait())
 }
 
 // Info gets the capture info
@@ -419,7 +406,6 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		}
 		// Campaign to be the owner, it blocks until it been elected.
 		if err := c.campaign(ctx); err != nil {
-			log.Warn("campaign owner failed", zap.String("captureID", c.info.ID), zap.Error(err))
 			switch errors.Cause(err) {
 			case context.Canceled:
 				return nil
