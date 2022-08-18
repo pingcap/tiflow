@@ -508,11 +508,9 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 		if highWatermarkMet {
 			// All events in one batch can be hashed into one handle slot.
 			slot := w.inputCalcSlot(events[0].regionID)
-			for _, event := range events {
-				err = w.handles[slot].AddEvent(ctx, event)
-				if err != nil {
-					return err
-				}
+			err = w.handles[slot].AddBatchedEvents(ctx, events)
+			if err != nil {
+				return err
 			}
 
 			// Principle: events from the same region must be processed linearly.

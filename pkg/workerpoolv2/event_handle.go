@@ -31,6 +31,10 @@ type EventHandle[T any] interface {
 	// (3) Cancelling `ctx` here will only cancel this function call, rather than the callback's execution.
 	AddEvent(ctx context.Context, event T) error
 
+	// AddBatchedEvents add a batch of events with low overhead for each.
+	// The input slice can safely be reused after the call returns.
+	AddBatchedEvents(ctx context.Context, events []T) error
+
 	// Unregister removes the EventHandle from the WorkerPool.
 	// Note:
 	// (1) Unregister will block until the operation has taken effect,
