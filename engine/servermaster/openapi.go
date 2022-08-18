@@ -22,7 +22,9 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 
+	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
 )
@@ -113,6 +115,7 @@ func RegisterOpenAPIRoutes(router *gin.Engine, openapi *OpenAPI) {
 				openapi.CancelJob(c)
 			}
 		default:
+			log.L().Debug("receive http request", zap.String("action", action))
 			openapi.ForwardToJobMaster(c)
 		}
 	})
@@ -294,17 +297,20 @@ func (o *OpenAPI) ForwardToJobMaster(c *gin.Context) {
 	_, _ = tenantID, projectID
 	// TODO: verify the talent and project info.
 
+	log.L().Debug("forwarding request to job master")
 	jobID := c.Param(apiOpVarJobID)
 	if jobID == "" {
 		_ = c.AbortWithError(http.StatusBadRequest, errors.New("job id must not be empty"))
 		return
 	}
 
+	log.L().Debug("get job manager", zap.String("job", jobID))
 	jobMgr, ok := o.infoProvider.JobManager()
 	if !ok {
 		_ = c.AbortWithError(http.StatusServiceUnavailable, errors.New("job manager is not initialized"))
 		return
 	}
+	log.L().Debug("get executor manager", zap.String("job", jobID))
 	executorMgr, ok := o.infoProvider.ExecutorManager()
 	if !ok {
 		_ = c.AbortWithError(http.StatusServiceUnavailable, errors.New("executor manager is not initialized"))
@@ -312,6 +318,7 @@ func (o *OpenAPI) ForwardToJobMaster(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	log.L().Debug("query job", zap.String("job", jobID))
 	resp := jobMgr.QueryJob(ctx, &pb.QueryJobRequest{JobId: jobID})
 	if resp.Err != nil {
 		if resp.Err.Code == pb.ErrorCode_UnKnownJob {
@@ -322,27 +329,32 @@ func (o *OpenAPI) ForwardToJobMaster(c *gin.Context) {
 		return
 	}
 
+	log.L().Debug("detect job online", zap.String("job", jobID))
 	if resp.Status != pb.QueryJobResponse_online {
 		_ = c.AbortWithError(http.StatusServiceUnavailable, errors.New("job is not online"))
 		return
 	}
+	log.L().Debug("detect job master info", zap.String("job", jobID))
 	if resp.JobMasterInfo == nil {
 		_ = c.AbortWithError(http.StatusInternalServerError, errors.New("couldn't find job master info"))
 		return
 	}
 
 	executorID := model.ExecutorID(resp.JobMasterInfo.ExecutorId)
+	log.L().Debug("get executor addr", zap.String("job", jobID))
 	addr, ok := executorMgr.GetAddr(executorID)
 	if !ok {
 		_ = c.AbortWithError(http.StatusInternalServerError, errors.New("couldn't find executor address"))
 		return
 	}
 
+	log.L().Debug("parse url", zap.String("job", jobID))
 	u, err := o.parseURL(addr)
 	if err != nil {
 		_ = c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("invalid executor address: %s", addr))
 		return
 	}
+	log.L().Debug("proxy url", zap.String("job", jobID), zap.String("url", u.String()))
 	proxy := httputil.NewSingleHostReverseProxy(u)
 	proxy.ServeHTTP(c.Writer, c.Request)
 	c.Abort()
