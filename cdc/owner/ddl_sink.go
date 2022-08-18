@@ -286,11 +286,6 @@ func (s *ddlSinkImpl) emitCheckpointTs(ts uint64, tableNames []model.TableName) 
 func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) (bool, error) {
 	s.mu.Lock()
 	if ddl.Done {
-		// the DDL event is executed successfully, and done is true
-		log.Info("ddl already executed",
-			zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
-			zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
-			zap.Any("DDL", ddl))
 		delete(s.ddlSentTsMap, ddl)
 		s.mu.Unlock()
 		return true, nil
