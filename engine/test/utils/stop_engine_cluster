@@ -1,8 +1,10 @@
 #!/bin/bash
 
-# cdc server is ran by binary cdc.test, kill cdc server first to avoid too much
-# noise in cdc logs.
+# parameter 1: work directory
+# other parameters: config files
 
 echo "stop engine cluster..."
 
+run_engine.sh logs $*
+shift
 run_engine.sh stop $*

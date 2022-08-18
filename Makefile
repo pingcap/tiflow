@@ -520,9 +520,14 @@ engine_image_from_local:
 engine_unit_test: check_failpoint_ctl
 	$(call run_engine_unit_test,$(ENGINE_PACKAGES))
 
-engine_integration_test: bin/sync_diff_inspector
-	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+engine_integration_test: check_third_party_binary_for_engine
 	./engine/test/integration_tests/run.sh "$(CASE)" "$(START_AT)"
+
+check_third_party_binary_for_engine: bin/sync_diff_inspector
+	@which bash || (echo "bash not found in ${PATH}"; exit 1)
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	@which go || (echo "go not found in ${PATH}"; exit 1)
+	@which mysql || (echo "mysql not found in ${PATH}"; exit 1)
 
 bin/sync_diff_inspector:
 	./scripts/download-sync-diff.sh

@@ -1,0 +1,37 @@
+#!/bin/bash
+
+# parameter 1: out directory
+# parameter 1: sub directory / test name
+# other parameters: config files
+
+set -eux
+
+if [ $# -lt 3 ]; then
+	echo "<<<<<< can not adjust empty config >>>>>>"
+	exit 1
+fi
+
+set +x
+
+OUT_DIR=$1 && shift
+TEST_NAME=$1 && shift
+CONFIG_DIR=$(dirname $1)
+
+# 1. cleanup and init work directory.
+WORK_DIR=$OUT_DIR/$TEST_NAME
+rm -rf $WORK_DIR && mkdir -p $WORK_DIR
+cp -fr ${CONFIG_DIR}/config ${WORK_DIR} || exit 1
+
+# 2. generate new config files and replace `tmp/tiflow_engine_test` with
+# `tmp/tiflow_engine_test/${TEST_NAME}` which is used to store log files.
+new_configs=
+cnt=1
+while [[ $# -gt 0 ]]; do
+	path="${WORK_DIR}/config${cnt}.yaml"
+	cat ${1} | sed -e "s/\/tmp\/tiflow_engine_test/\/tmp\/tiflow_engine_test\/${TEST_NAME}/g" >${path}
+
+	new_configs="${new_configs} ${path}"
+	shift
+	let cnt++
+done
+echo $new_configs

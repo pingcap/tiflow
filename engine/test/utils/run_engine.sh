@@ -6,6 +6,12 @@ cd "$(dirname "$0")/../../.."
 
 DOCKER_DIR="./deployments/engine/docker"
 
+if which docker-compose &>/dev/null ; then 
+	COMPOSECMD="docker-compose"
+else
+	COMPOSECMD="docker compose"
+fi
+
 function generate_flag() {
 	shift
 	while [[ ${1} ]]; do
@@ -24,7 +30,7 @@ case $1 in
 "deploy")
 	flag=()
 	generate_flag "$@"
-	docker compose "${flag[@]}" up -d --force-recreate
+	$COMPOSECMD "${flag[@]}" up -d --force-recreate
 
 	echo -e "\n\n[$(date)] <<<<<< deploy engine cluster success! >>>>>>"
 	docker container ls
@@ -32,10 +38,18 @@ case $1 in
 "stop")
 	flag=()
 	generate_flag "$@"
-	docker compose "${flag[@]}" down
+	$COMPOSECMD "${flag[@]}" down
 
 	echo -e "\n\n[$(date)] <<<<<< stop engine cluster success! >>>>>>"
 	docker container ls
+	;;
+"logs")
+	shift && WORK_DIR=$1
+	flag=
+	generate_flag $*
+	$COMPOSECMD $flag logs -t >$WORK_DIR/docker_compose.log
+
+	echo -e "[$(date)] <<<<<< save docker compose logs success! >>>>>>\n"
 	;;
 *)
 	echo "Unknown parameter: ${1}" >&2
