@@ -633,3 +633,8 @@ func (t *SingleTableTxn) Append(row *RowChangedEvent) {
 	}
 	t.Rows = append(t.Rows, row)
 }
+
+// ToWaitFlush indicates whether to wait flushing after the txn is processed or not.
+func (t *SingleTableTxn) ToWaitFlush() bool {
+	return t.FinishWg != nil
+}

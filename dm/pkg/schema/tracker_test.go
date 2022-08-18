@@ -759,3 +759,49 @@ func TestPlacementRule(t *testing.T) {
 	_, ok := tracker.downstreamTracker.tableInfos[tableID]
 	require.True(t, ok)
 }
+
+func TestTimeTypes(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+	p.SetSQLMode(0)
+
+	tracker, err := NewTestTracker(ctx, "test-tracker", nil, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	// Create some sort of complicated table.
+	err = tracker.CreateSchemaIfNotExists("testdb")
+	require.NoError(t, err)
+
+	err = tracker.Exec(ctx, "testdb", parseSQL(t, p, `
+		create table foo(
+			c0 datetime primary key,
+			c1 datetime default current_timestamp,
+			c2 datetime default '0000-00-00 00:00:00',
+			c3 datetime default '2020-02-02 00:00:00',
+			c4 timestamp default current_timestamp,
+			c5 timestamp default '0000-00-00 00:00:00',
+			c6 timestamp default '2020-02-02 00:00:00'
+		);
+	`))
+	require.NoError(t, err)
+}
+
+func TestNeedRestrictedSQLExecutor(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+
+	tracker, err := NewTestTracker(ctx, "test-tracker", nil, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	// Create some sort of complicated table.
+	err = tracker.CreateSchemaIfNotExists("testdb")
+	require.NoError(t, err)
+
+	err = tracker.Exec(ctx, "testdb", parseSQL(t, p, `create table testdb.t (a int, b int);`))
+	require.NoError(t, err)
+
+	err = tracker.Exec(ctx, "testdb", parseSQL(t, p, `alter table testdb.t modify column a int not null;`))
+	require.NoError(t, err)
+}

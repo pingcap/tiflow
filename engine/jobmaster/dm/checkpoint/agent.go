@@ -17,7 +17,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"sync"
 
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
@@ -59,32 +58,22 @@ var NewCheckpointAgent = NewAgentImpl
 
 // Agent defeins a checkpoint agent interface
 type Agent interface {
-	Create(ctx context.Context) error
-	Remove(ctx context.Context) error
-	Update(ctx context.Context, cfg *config.JobCfg) error
+	Create(ctx context.Context, cfg *config.JobCfg) error
+	Remove(ctx context.Context, cfg *config.JobCfg) error
 	IsFresh(ctx context.Context, workerType framework.WorkerType, task *metadata.Task) (bool, error)
 }
 
 // AgentImpl implements Agent
 type AgentImpl struct {
-	mu     sync.RWMutex
-	cfg    *config.JobCfg
 	logger *zap.Logger
 }
 
 // NewAgentImpl creates a new AgentImpl instance
-func NewAgentImpl(jobCfg *config.JobCfg, pLogger *zap.Logger) Agent {
+func NewAgentImpl(pLogger *zap.Logger) Agent {
 	c := &AgentImpl{
 		logger: pLogger.With(zap.String("component", "checkpoint_agent")),
-		cfg:    jobCfg,
 	}
 	return c
-}
-
-func (c *AgentImpl) getConfig() *config.JobCfg {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.cfg
 }
 
 // Create implements Agent.Create
@@ -93,9 +82,8 @@ func (c *AgentImpl) getConfig() *config.JobCfg {
 // to avoid the annoying log of "table already exists",
 // because one job only need to create one checkpoint table per unit.
 // move these codes to tiflow later.
-func (c *AgentImpl) Create(ctx context.Context) error {
+func (c *AgentImpl) Create(ctx context.Context, cfg *config.JobCfg) error {
 	c.logger.Info("create checkpoint")
-	cfg := c.getConfig()
 	db, err := conn.DefaultDBProvider.Apply(cfg.TargetDB)
 	if err != nil {
 		return err
@@ -119,19 +107,9 @@ func (c *AgentImpl) Create(ctx context.Context) error {
 	return nil
 }
 
-// Update implements Agent.Update
-func (c *AgentImpl) Update(ctx context.Context, cfg *config.JobCfg) error {
-	c.logger.Info("update checkpoint")
-	c.mu.Lock()
-	c.cfg = cfg
-	c.mu.Unlock()
-	return c.Create(ctx)
-}
-
 // Remove implements Agent.Remove
-func (c *AgentImpl) Remove(ctx context.Context) error {
+func (c *AgentImpl) Remove(ctx context.Context, cfg *config.JobCfg) error {
 	c.logger.Info("remove checkpoint")
-	cfg := c.getConfig()
 	db, err := conn.DefaultDBProvider.Apply(cfg.TargetDB)
 	if err != nil {
 		return err

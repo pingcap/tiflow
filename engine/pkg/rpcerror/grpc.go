@@ -36,9 +36,13 @@ func tryUnwrapNormalizedError(errIn error) (typeErasedNormalizedError, bool) {
 // an error containing status information recognizable
 // by the grpc-go library.
 func ToGRPCError(errIn error) error {
+	var stackTrace errors.StackTrace
+	if tracer := errors.GetStackTracer(errIn); tracer != nil {
+		stackTrace = tracer.StackTrace()
+	}
 	if normalized, ok := tryUnwrapNormalizedError(errIn); ok {
 		st, err := status.New(normalized.statusCode(), normalized.message()).
-			WithDetails(normalized.toPB())
+			WithDetails(normalized.toPB(stackTrace))
 		if err != nil {
 			return errIn
 		}
@@ -88,6 +92,9 @@ func FromGRPCError(errIn error) error {
 		return errors.Annotatef(err, "decode error type %s", errPB.Name)
 	}
 
+	if len(errPB.StackTrace) > 0 {
+		errOut.setServerStackTrace(errPB.StackTrace)
+	}
 	return errors.Trace(errOut)
 }
 
