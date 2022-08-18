@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	kafkav1 "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/kafka"
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 )

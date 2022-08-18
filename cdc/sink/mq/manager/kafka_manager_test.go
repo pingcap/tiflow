@@ -18,16 +18,16 @@ import (
 	"time"
 
 	kafkaconfig "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
-	kafkamock "github.com/pingcap/tiflow/pkg/kafka"
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/stretchr/testify/require"
 )
 
 func TestPartitions(t *testing.T) {
 	t.Parallel()
 
-	client := kafkamock.NewClientMockImpl()
-	adminClient := kafkamock.NewClusterAdminClientMockImpl()
-	defer func(adminClient *kafkamock.ClusterAdminClientMockImpl) {
+	client := kafka.NewClientMockImpl()
+	adminClient := kafka.NewClusterAdminClientMockImpl()
+	defer func(adminClient *kafka.ClusterAdminClientMockImpl) {
 		_ = adminClient.Close()
 	}(adminClient)
 	cfg := &kafkaconfig.AutoCreateTopicConfig{
@@ -39,7 +39,7 @@ func TestPartitions(t *testing.T) {
 	manager, err := NewKafkaTopicManager(client, adminClient, cfg)
 	require.Nil(t, err)
 	partitionsNum, err := manager.GetPartitionNum(
-		kafkamock.DefaultMockTopicName)
+		kafka.DefaultMockTopicName)
 	require.Nil(t, err)
 	require.Equal(t, int32(3), partitionsNum)
 }
@@ -47,9 +47,9 @@ func TestPartitions(t *testing.T) {
 func TestTryRefreshMeta(t *testing.T) {
 	t.Parallel()
 
-	client := kafkamock.NewClientMockImpl()
-	adminClient := kafkamock.NewClusterAdminClientMockImpl()
-	defer func(adminClient *kafkamock.ClusterAdminClientMockImpl) {
+	client := kafka.NewClientMockImpl()
+	adminClient := kafka.NewClusterAdminClientMockImpl()
+	defer func(adminClient *kafka.ClusterAdminClientMockImpl) {
 		_ = adminClient.Close()
 	}(adminClient)
 	cfg := &kafkaconfig.AutoCreateTopicConfig{
@@ -61,7 +61,7 @@ func TestTryRefreshMeta(t *testing.T) {
 	manager, err := NewKafkaTopicManager(client, adminClient, cfg)
 	require.Nil(t, err)
 	partitionsNum, err := manager.GetPartitionNum(
-		kafkamock.DefaultMockTopicName)
+		kafka.DefaultMockTopicName)
 	require.Nil(t, err)
 	require.Equal(t, int32(3), partitionsNum)
 
@@ -83,9 +83,9 @@ func TestTryRefreshMeta(t *testing.T) {
 func TestCreateTopic(t *testing.T) {
 	t.Parallel()
 
-	client := kafkamock.NewClientMockImpl()
-	adminClient := kafkamock.NewClusterAdminClientMockImpl()
-	defer func(adminClient *kafkamock.ClusterAdminClientMockImpl) {
+	client := kafka.NewClientMockImpl()
+	adminClient := kafka.NewClusterAdminClientMockImpl()
+	defer func(adminClient *kafka.ClusterAdminClientMockImpl) {
 		_ = adminClient.Close()
 	}(adminClient)
 	cfg := &kafkaconfig.AutoCreateTopicConfig{
@@ -96,7 +96,7 @@ func TestCreateTopic(t *testing.T) {
 
 	manager, err := NewKafkaTopicManager(client, adminClient, cfg)
 	require.Nil(t, err)
-	partitionNum, err := manager.createTopic(kafkamock.DefaultMockTopicName)
+	partitionNum, err := manager.createTopic(kafka.DefaultMockTopicName)
 	require.Nil(t, err)
 	require.Equal(t, int32(3), partitionNum)
 
@@ -122,9 +122,9 @@ func TestCreateTopic(t *testing.T) {
 func TestCreateTopicWithDelay(t *testing.T) {
 	t.Parallel()
 
-	client := kafkamock.NewClientMockImpl()
-	adminClient := kafkamock.NewClusterAdminClientMockImpl()
-	defer func(adminClient *kafkamock.ClusterAdminClientMockImpl) {
+	client := kafka.NewClientMockImpl()
+	adminClient := kafka.NewClusterAdminClientMockImpl()
+	defer func(adminClient *kafka.ClusterAdminClientMockImpl) {
 		_ = adminClient.Close()
 	}(adminClient)
 	cfg := &kafkaconfig.AutoCreateTopicConfig{
