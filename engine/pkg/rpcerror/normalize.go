@@ -21,11 +21,10 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
-	"go.uber.org/zap"
-	"google.golang.org/grpc/codes"
-
 	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
 )
 
 // normalizeOpts stores information used to generate a Prototype.
@@ -141,8 +140,9 @@ func (p *Prototype[E]) fromJSONBytes(jsonBytes []byte) (typeErasedNormalizedErro
 }
 
 type normalizedError[E errorInfo] struct {
-	prototype *Prototype[E]
-	inner     E
+	prototype         *Prototype[E]
+	inner             E
+	serverStackStrace string
 }
 
 func (e *normalizedError[E]) isRetryable() bool {
@@ -175,6 +175,12 @@ func (e *normalizedError[E]) Error() string {
 		builder.WriteByte(' ')
 	}
 	builder.Write(jsonBytes)
+
+	if e.getServerStackTrace() != "" {
+		builder.WriteString(e.getServerStackTrace())
+		builder.WriteByte(' ')
+	}
+
 	return builder.String()
 }
 
@@ -187,11 +193,24 @@ func (e *normalizedError[E]) mustMarshalJSON() []byte {
 	return jsonBytes
 }
 
-func (e *normalizedError[E]) toPB() *pb.ErrorV2 {
-	return &pb.ErrorV2{
-		Name:    e.name(),
-		Details: e.mustMarshalJSON(),
+func (e *normalizedError[E]) toPB(stack errors.StackTrace) *pb.ErrorV2 {
+	var stackTrace string
+	if stack != nil {
+		stackTrace = fmt.Sprintf("%+v", stack)
 	}
+	return &pb.ErrorV2{
+		Name:       e.name(),
+		Details:    e.mustMarshalJSON(),
+		StackTrace: stackTrace,
+	}
+}
+
+func (e *normalizedError[E]) setServerStackTrace(stackTrace string) {
+	e.serverStackStrace = stackTrace
+}
+
+func (e *normalizedError[E]) getServerStackTrace() string {
+	return e.serverStackStrace
 }
 
 func (e *normalizedError[E]) statusCode() codes.Code {
@@ -203,11 +222,13 @@ func (e *normalizedError[E]) statusCode() codes.Code {
 }
 
 type typeErasedNormalizedError interface {
-	toPB() *pb.ErrorV2
+	toPB(errors.StackTrace) *pb.ErrorV2
 	statusCode() codes.Code
 	message() string
 	isRetryable() bool
 	Error() string
+	setServerStackTrace(string)
+	getServerStackTrace() string
 }
 
 type jsonDeserializer interface {
