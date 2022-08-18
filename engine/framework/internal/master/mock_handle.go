@@ -81,11 +81,6 @@ type mockRunningHandle struct {
 	handler *MockHandle
 }
 
-// ExecutorID implements RunningHandle.ExecutorID.
-func (rh mockRunningHandle) ExecutorID() model.ExecutorID {
-	return rh.handler.ExecutorID
-}
-
 // SendMessage implements RunningHandle.SendMessage
 func (rh mockRunningHandle) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error {
 	h := rh.handler

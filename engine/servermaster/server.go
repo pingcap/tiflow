@@ -692,15 +692,11 @@ func (s *Server) handleForwardJobAPI(w http.ResponseWriter, r *http.Request) err
 
 	var targetAddr string
 	if s.IsLeader() {
-		jobMasterInfo, err := s.jobManager.GetJobMasterInfo(r.Context(), jobID)
+		forwardAddr, err := s.jobManager.GetJobMasterForwardAddress(r.Context(), jobID)
 		if err != nil {
 			return err
 		}
-		executorAddr, ok := s.executorManager.GetAddr(jobMasterInfo.ExecutorID)
-		if !ok {
-			return errors.Errorf("executor %s not found", jobMasterInfo.ExecutorID)
-		}
-		targetAddr = executorAddr
+		targetAddr = forwardAddr
 	} else if leaderAddr, ok := s.LeaderAddr(); ok {
 		targetAddr = leaderAddr
 	} else {

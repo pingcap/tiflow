@@ -50,16 +50,11 @@ type JobManager interface {
 	JobStats
 	pb.JobManagerServer
 
-	GetJobMasterInfo(ctx context.Context, jobID string) (*JobMasterInfo, error)
+	GetJobMasterForwardAddress(ctx context.Context, jobID string) (string, error)
 	GetJobStatuses(ctx context.Context) (map[frameModel.MasterID]frameModel.MasterStatusCode, error)
 	WatchJobStatuses(
 		ctx context.Context,
 	) (resManager.JobStatusesSnapshot, *notifier.Receiver[resManager.JobStatusChangeEvent], error)
-}
-
-// JobMasterInfo provides information of a job master.
-type JobMasterInfo struct {
-	ExecutorID engineModel.ExecutorID
 }
 
 const defaultJobMasterCost = 1
@@ -356,23 +351,20 @@ func buildPBJob(masterMeta *frameModel.MasterMetaKVData) (*pb.Job, error) {
 	}, nil
 }
 
-// GetJobMasterInfo implements JobManager.GetJobMasterInfo.
-func (jm *JobManagerImpl) GetJobMasterInfo(ctx context.Context, jobID string) (*JobMasterInfo, error) {
-	// FIXME: The JobFsm's status may not be consistent with the database.
-	job := jm.JobFsm.QueryOnlineJob(jobID)
-	if job == nil {
-		if _, err := jm.frameMetaClient.GetJobByID(ctx, jobID); pkgOrm.IsNotFoundError(err) {
-			return nil, ErrJobNotFound.GenWithStack(&JobNotFoundError{JobID: jobID})
+// GetJobMasterForwardAddress implements JobManager.GetJobMasterForwardAddress.
+func (jm *JobManagerImpl) GetJobMasterForwardAddress(ctx context.Context, jobID string) (string, error) {
+	// Always query from database. Master meta in JobFsm may be out of date.
+	masterMeta, err := jm.frameMetaClient.GetJobByID(ctx, jobID)
+	if err != nil {
+		if pkgOrm.IsNotFoundError(err) {
+			return "", ErrJobNotFound.GenWithStack(&JobNotFoundError{JobID: jobID})
 		}
-		return nil, ErrJobNotRunning.GenWithStack(&JobNotRunningError{JobID: jobID})
+		return "", err
 	}
-	runningHandle := job.WorkerHandle().Unwrap()
-	if runningHandle == nil {
-		return nil, ErrJobNotRunning.GenWithStack(&JobNotRunningError{JobID: jobID})
+	if masterMeta.StatusCode != frameModel.MasterStatusInit || jm.JobFsm.QueryOnlineJob(jobID) == nil {
+		return "", ErrJobNotRunning.GenWithStack(&JobNotRunningError{JobID: jobID})
 	}
-	return &JobMasterInfo{
-		ExecutorID: runningHandle.ExecutorID(),
-	}, nil
+	return masterMeta.Addr, nil
 }
 
 // GetJobStatuses returns the status code of all jobs that are not deleted.

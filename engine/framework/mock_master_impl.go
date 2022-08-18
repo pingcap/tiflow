@@ -28,7 +28,6 @@ import (
 
 	"github.com/pingcap/tiflow/engine/framework/internal/master"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
-	"github.com/pingcap/tiflow/engine/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
@@ -292,11 +291,6 @@ func (m *MockWorkerHandler) Status() *frameModel.WorkerStatus {
 // ID implements WorkerHandle.ID
 func (m *MockWorkerHandler) ID() frameModel.WorkerID {
 	return m.WorkerID
-}
-
-// ExecutorID implements WorkerHandle.ExecutorID
-func (m *MockWorkerHandler) ExecutorID() model.ExecutorID {
-	return ""
 }
 
 // IsTombStone implements WorkerHandle.IsTombStone

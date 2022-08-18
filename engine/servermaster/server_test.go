@@ -218,7 +218,7 @@ func (m *mockJobManager) JobCount(status pb.Job_Status) int {
 	return m.jobs[status]
 }
 
-func (m *mockJobManager) GetJobMasterInfo(ctx context.Context, jobID string) (*JobMasterInfo, error) {
+func (m *mockJobManager) GetJobMasterForwardAddress(ctx context.Context, jobID string) (string, error) {
 	panic("not implemented")
 }
 

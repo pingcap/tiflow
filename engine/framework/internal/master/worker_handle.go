@@ -43,7 +43,6 @@ type WorkerHandle interface {
 type RunningHandle interface {
 	BaseHandle
 
-	ExecutorID() model.ExecutorID
 	SendMessage(
 		ctx context.Context,
 		topic p2p.Topic,
@@ -83,10 +82,6 @@ func (h *runningHandleImpl) Status() *frameModel.WorkerStatus {
 
 func (h *runningHandleImpl) ID() frameModel.WorkerID {
 	return h.workerID
-}
-
-func (h *runningHandleImpl) ExecutorID() model.ExecutorID {
-	return h.executorID
 }
 
 func (h *runningHandleImpl) GetTombstone() TombstoneHandle {
@@ -132,10 +127,6 @@ func (h *tombstoneHandleImpl) Status() *frameModel.WorkerStatus {
 
 func (h *tombstoneHandleImpl) ID() frameModel.WorkerID {
 	return h.workerID
-}
-
-func (h *tombstoneHandleImpl) ExecutorID() model.ExecutorID {
-	return ""
 }
 
 func (h *tombstoneHandleImpl) GetTombstone() TombstoneHandle {
