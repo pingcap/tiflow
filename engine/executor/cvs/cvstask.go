@@ -168,7 +168,7 @@ func (task *cvsTask) Tick(ctx context.Context) error {
 	}
 	switch task.getStatusCode() {
 	case frameModel.WorkerStatusFinished, frameModel.WorkerStatusError, frameModel.WorkerStatusStopped:
-		return task.BaseWorker.Exit(ctx, task.Status(), task.getRunError())
+		return task.BaseWorker.Exit(ctx, task.getRunError(), task.Status().ErrorMessage, task.Status().ExtBytes)
 	default:
 	}
 	return nil

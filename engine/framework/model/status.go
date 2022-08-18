@@ -60,7 +60,6 @@ var WorkerUpdateColumns = []string{
 // WorkerStatus records worker information, including master id, worker id,
 // worker type, project id(tenant), worker status(used in master worker framework),
 // error message and ext bytes(passed from business logic) in metastore.
-// TODO: refine me, merge orm model to WorkerStatus will cause some confuse
 type WorkerStatus struct {
 	ormModel.Model
 	ProjectID    tenant.ProjectID `json:"project-id" gorm:"column:project_id;type:varchar(128) not null"`

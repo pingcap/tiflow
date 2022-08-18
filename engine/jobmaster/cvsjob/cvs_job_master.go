@@ -158,7 +158,8 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 	if 0 == len(jm.jobStatus.FileInfos) {
 		jm.setStatusCode(frameModel.WorkerStatusFinished)
 		log.Info("cvs job master finished")
-		return jm.BaseJobMaster.Exit(ctx, jm.Status(), nil)
+		status := jm.Status()
+		return jm.BaseJobMaster.Exit(ctx, nil, status.ErrorMessage, status.ExtBytes)
 	}
 	for idx, workerInfo := range jm.syncFilesInfo {
 		// check if need to recreate worker
@@ -212,7 +213,8 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 	}
 	if jm.getStatusCode() == frameModel.WorkerStatusStopped {
 		log.Info("cvs job master stopped")
-		return jm.BaseJobMaster.Exit(ctx, jm.Status(), nil)
+		status := jm.Status()
+		return jm.BaseJobMaster.Exit(ctx, nil, status.ErrorMessage, status.ExtBytes)
 	}
 	return nil
 }

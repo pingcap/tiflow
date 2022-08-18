@@ -36,6 +36,7 @@ const (
 	MasterStatusInit     = MasterStatusCode(2)
 	MasterStatusFinished = MasterStatusCode(3)
 	MasterStatusStopped  = MasterStatusCode(4)
+	MasterStatusFailed   = MasterStatusCode(5)
 	// extend the status code here
 )
 
@@ -52,7 +53,12 @@ type MasterMetaKVData struct {
 
 	// Config holds business-specific data
 	Config []byte `json:"config" gorm:"column:config;type:blob"`
-	// TODO: add master status and checkpoint data
+
+	// ErrorMessage holds the error message for job
+	ErrorMessage string `json:"error-message" gorm:"column:error_message;type:text"`
+
+	// ExtBytes holds some extend information for job, e.g. dm's final job status
+	ExtBytes []byte `json:"ext-bytes" gorm:"column:ext_bytes;type:blob"`
 
 	// Deleted is a nullable timestamp. Then master is deleted
 	// if Deleted is not null.

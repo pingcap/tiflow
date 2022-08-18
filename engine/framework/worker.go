@@ -50,6 +50,7 @@ import (
 
 // Worker defines an interface that provides all methods that will be used in
 // runtime(runner container)
+// TODO: Unify the Master and Worker. Move to internal
 type Worker interface {
 	Init(ctx context.Context) error
 	Poll(ctx context.Context) error
@@ -66,8 +67,7 @@ type WorkerImpl interface {
 	// InitImpl provides customized logic for the business logic to initialize.
 	InitImpl(ctx context.Context) error
 
-	// Tick is called on a fixed interval. When an error is returned, the worker
-	// will be stopped.
+	// Tick is called on a fixed interval. When an error is returned, the worker will be stopped.
 	Tick(ctx context.Context) error
 
 	// Workload returns the current workload of the worker.
@@ -82,20 +82,34 @@ type WorkerImpl interface {
 
 // BaseWorker defines the worker interface, it embeds a Worker interface and adds
 // more utility methods
+// TODO: decouple the BaseWorker and WorkerService(for business)
 type BaseWorker interface {
 	Worker
 
+	// MetaKVClient return business metastore kv client with job-level isolation
 	MetaKVClient() metaModel.KVClient
+
+	// MetricFactory return a promethus factory with some underlying labels(e.g. job-id, work-id)
 	MetricFactory() promutil.Factory
+
+	// Logger return a zap logger with some underlying fields(e.g. job-id)
 	Logger() *zap.Logger
+
+	// UpdateStatus persists the status to framework metastore if worker status is changed and
+	// sends 'status updated message' to master.
 	UpdateStatus(ctx context.Context, status frameModel.WorkerStatus) error
+
+	// SendMessage sends a message of specific topic to master in a blocking or nonblocking way
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
+
+	// OpenStorage creates a resource and return the resource handle
+	// TODO: format??
 	OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error)
+
 	// Exit should be called when worker (in user logic) wants to exit.
-	// When `err` is not nil, the status code is assigned WorkerStatusError.
-	// Otherwise worker should set its status code to a meaningful value.
-	Exit(ctx context.Context, status frameModel.WorkerStatus, err error) error
-	NotifyExit(ctx context.Context, errIn error) error
+	// If `err` is nil, the inner worker status code will be set to WorkerStatusFinished
+	// If `err` is not nil, the status code is assigned WorkerStatusError.
+	Exit(ctx context.Context, err error, errMsg string, extBytes []byte) error
 }
 
 // DefaultBaseWorker implements BaseWorker interface, it also embeds an Impl
@@ -483,19 +497,19 @@ func (w *DefaultBaseWorker) OpenStorage(ctx context.Context, resourcePath resour
 }
 
 // Exit implements BaseWorker.Exit
-func (w *DefaultBaseWorker) Exit(ctx context.Context, status frameModel.WorkerStatus, err error) (errRet error) {
+func (w *DefaultBaseWorker) Exit(ctx context.Context, err error, errMsg string, extBytes []byte) (errRet error) {
 	// Set the errCenter to prevent user from forgetting to return directly after calling 'Exit'
 	defer func() {
 		w.onError(errRet)
 	}()
 
+	// TODO: cancelled 需要作为一种状态
+	w.workerStatus.Code = frameModel.WorkerStatusFinished
 	if err != nil {
-		status.Code = frameModel.WorkerStatusError
+		w.workerStatus.Code = frameModel.WorkerStatusError
 	}
-
-	w.workerStatus.Code = status.Code
-	w.workerStatus.ErrorMessage = status.ErrorMessage
-	w.workerStatus.ExtBytes = status.ExtBytes
+	w.workerStatus.ErrorMessage = errMsg
+	w.workerStatus.ExtBytes = extBytes
 	if errRet = w.statusSender.UpdateStatus(ctx, w.workerStatus); errRet != nil {
 		return
 	}

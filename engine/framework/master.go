@@ -66,6 +66,7 @@ type Master interface {
 // added in the functions of this interface
 type MasterImpl interface {
 	// InitImpl provides customized logic for the business logic to initialize.
+	// InitImpl will not be called if the master recovers from an error.
 	InitImpl(ctx context.Context) error
 
 	// Tick is called on a fixed interval.
@@ -106,14 +107,31 @@ const (
 type BaseMaster interface {
 	Master
 
-	// MetaKVClient return business metastore kv client
+	// MetaKVClient return business metastore kv client with job-level isolation
 	MetaKVClient() metaModel.KVClient
+
+	// MetricFactory return a promethus factory with some underlying labels(e.g. job-id, work-id)
 	MetricFactory() promutil.Factory
+
+	// Logger return a zap logger with some underlying fields(e.g. job-id)
 	Logger() *zap.Logger
+
+	// MasterMeta return the meta data of master
 	MasterMeta() *frameModel.MasterMetaKVData
+
+	// GetWorkers return the handle of all workers, from which we can get the worker status、worker id and
+	// the method for sending message to specific worker
 	GetWorkers() map[frameModel.WorkerID]WorkerHandle
+
+	// IsMasterReady returns whether the master has received heartbeats for all
+	// workers after a fail-over. If this is the first time the JobMaster started up,
+	// the return value is always true.
 	IsMasterReady() bool
-	OnError(err error)
+
+	// Exit should be called when master (in user logic) wants to exit.
+	// If `err` is nil, the inner master status code will be set to MasterStatusFinished
+	// If `err` is not nil, the status code is assigned to MasterStatusFailed.
+	Exit(ctx context.Context, err error, errMsg string, extBytes []byte) error
 
 	// CreateWorker requires the framework to dispatch a new worker.
 	// If the worker needs to access certain file system resources,
@@ -156,7 +174,7 @@ type DefaultBaseMaster struct {
 	advertiseAddr string
 	nodeID        p2p.NodeID
 	timeoutConfig config.TimeoutConfig
-	masterMeta    *frameModel.MasterMetaKVData
+	masterStatus  *frameModel.MasterMetaKVData
 
 	// workerProjectMap keep the <WorkerID, ProjectInfo> map
 	// It's only used by JobManager who has workers(jobmaster) with different project info
@@ -212,14 +230,14 @@ func NewBaseMaster(
 	var (
 		nodeID        p2p.NodeID
 		advertiseAddr string
-		masterMeta    = &frameModel.MasterMetaKVData{}
+		masterStatus  = &frameModel.MasterMetaKVData{}
 		params        masterParams
 	)
 	if ctx != nil {
 		nodeID = ctx.Environ.NodeID
 		advertiseAddr = ctx.Environ.Addr
 		metaBytes := ctx.Environ.MasterMetaBytes
-		err := errors.Trace(masterMeta.Unmarshal(metaBytes))
+		err := errors.Trace(masterStatus.Unmarshal(metaBytes))
 		if err != nil {
 			log.Warn("invalid master meta", zap.ByteString("data", metaBytes), zap.Error(err))
 		}
@@ -249,7 +267,7 @@ func NewBaseMaster(
 		clock:                 clock.New(),
 
 		timeoutConfig: config.DefaultTimeoutConfig(),
-		masterMeta:    masterMeta,
+		masterStatus:  masterStatus,
 
 		closeCh: make(chan struct{}),
 
@@ -443,7 +461,7 @@ func (m *DefaultBaseMaster) doPoll(ctx context.Context) error {
 
 // MasterMeta implements BaseMaster.MasterMeta
 func (m *DefaultBaseMaster) MasterMeta() *frameModel.MasterMetaKVData {
-	return m.masterMeta
+	return m.masterStatus
 }
 
 // MasterID implements BaseMaster.MasterID
@@ -494,7 +512,7 @@ func (m *DefaultBaseMaster) OnError(err error) {
 func (m *DefaultBaseMaster) refreshMetadata(ctx context.Context) (isInit bool, epoch frameModel.Epoch, err error) {
 	metaClient := metadata.NewMasterMetadataClient(m.id, m.frameMetaClient)
 
-	masterMeta, err := metaClient.Load(ctx)
+	masterStatus, err := metaClient.Load(ctx)
 	if err != nil {
 		return false, 0, err
 	}
@@ -505,17 +523,17 @@ func (m *DefaultBaseMaster) refreshMetadata(ctx context.Context) (isInit bool, e
 	}
 
 	// We should update the master data to reflect our current information
-	masterMeta.Epoch = epoch
-	masterMeta.Addr = m.advertiseAddr
-	masterMeta.NodeID = m.nodeID
+	masterStatus.Epoch = epoch
+	masterStatus.Addr = m.advertiseAddr
+	masterStatus.NodeID = m.nodeID
 
-	if err := metaClient.Update(ctx, masterMeta); err != nil {
+	if err := metaClient.Update(ctx, masterStatus); err != nil {
 		return false, 0, errors.Trace(err)
 	}
 
-	m.masterMeta = masterMeta
+	m.masterStatus = masterStatus
 	// isInit true means the master is created but has not been initialized.
-	isInit = masterMeta.StatusCode == frameModel.MasterStatusUninit
+	isInit = masterStatus.StatusCode == frameModel.MasterStatusUninit
 
 	return
 }
@@ -524,13 +542,13 @@ func (m *DefaultBaseMaster) markStatusCodeInMetadata(
 	ctx context.Context, code frameModel.MasterStatusCode,
 ) error {
 	metaClient := metadata.NewMasterMetadataClient(m.id, m.frameMetaClient)
-	masterMeta, err := metaClient.Load(ctx)
+	masterStatus, err := metaClient.Load(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	masterMeta.StatusCode = code
-	return metaClient.Update(ctx, masterMeta)
+	masterStatus.StatusCode = code
+	return metaClient.Update(ctx, masterStatus)
 }
 
 // prepareWorkerConfig extracts information from WorkerConfig into detail fields.
@@ -543,13 +561,13 @@ func (m *DefaultBaseMaster) prepareWorkerConfig(
 ) (rawConfig []byte, workerID frameModel.WorkerID, err error) {
 	switch workerType {
 	case CvsJobMaster, FakeJobMaster, DMJobMaster:
-		masterMeta, ok := config.(*frameModel.MasterMetaKVData)
+		masterStatus, ok := config.(*frameModel.MasterMetaKVData)
 		if !ok {
 			err = derror.ErrMasterInvalidMeta.GenWithStackByArgs(config)
 			return
 		}
-		rawConfig = masterMeta.Config
-		workerID = masterMeta.ID
+		rawConfig = masterStatus.Config
+		workerID = masterStatus.ID
 	case WorkerDMDump, WorkerDMLoad, WorkerDMSync:
 		var b bytes.Buffer
 		err = toml.NewEncoder(&b).Encode(config)
@@ -668,6 +686,31 @@ func (m *DefaultBaseMaster) CreateWorker(
 // IsMasterReady implements BaseMaster.IsMasterReady
 func (m *DefaultBaseMaster) IsMasterReady() bool {
 	return m.workerManager.IsInitialized()
+}
+
+// Exit implements BaseMaster.Exit
+func (m *DefaultBaseMaster) Exit(ctx context.Context, err error, errMsg string, extBytes []byte) (errRet error) {
+	// Set the errCenter to prevent user from forgetting to return directly after calling 'Exit'
+	defer func() {
+		m.errCenter.OnError(errRet)
+	}()
+
+	m.masterStatus.StatusCode = frameModel.MasterStatusFinished
+	if err != nil {
+		m.masterStatus.StatusCode = frameModel.MasterStatusFailed
+	}
+	m.masterStatus.ErrorMessage = errMsg
+	m.masterStatus.ExtBytes = extBytes
+
+	metaClient := metadata.NewMasterMetadataClient(m.id, m.frameMetaClient)
+	errRet = metaClient.Update(ctx, m.masterStatus)
+	if errRet != nil {
+		return
+	}
+
+	// TODO: change an error code
+	errRet = derror.ErrWorkerFinish.FastGenByArgs()
+	return
 }
 
 // SetProjectInfo set the project info of specific worker

@@ -231,7 +231,7 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 			return nil
 		}
 	}
-	return w.Exit(ctx, status, nil)
+	return w.Exit(ctx, nil, status.ErrorMessage, status.ExtBytes)
 }
 
 // workerStatus gets worker status.

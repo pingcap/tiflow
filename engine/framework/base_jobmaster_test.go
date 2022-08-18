@@ -229,7 +229,8 @@ func TestBaseJobMasterBasics(t *testing.T) {
 	jobMaster.On("CloseImpl", mock.Anything).Return(nil)
 	jobMaster.mu.Unlock()
 
-	err = jobMaster.base.Exit(ctx, jobMaster.Status(), nil)
+	status := jobMaster.Status()
+	err = jobMaster.base.Exit(ctx, nil, status.ErrorMessage, status.ExtBytes)
 	require.Regexp(t, ".*DFLOW:ErrWorkerFinish.*", err)
 
 	err = jobMaster.base.Close(ctx)

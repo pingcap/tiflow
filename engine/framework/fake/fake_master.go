@@ -368,15 +368,17 @@ func (m *Master) tickedCheckStatus(ctx context.Context) error {
 	}
 
 	// check for special worker status
-	if m.getStatusCode() == frameModel.WorkerStatusStopped {
-		log.Info("FakeMaster: received pause command, stop now")
-		m.setStatusCode(frameModel.WorkerStatusStopped)
-		return m.Exit(ctx, m.Status(), nil)
-	}
+	/*
+		if m.getStatusCode() == frameModel.WorkerStatusStopped {
+			log.Info("FakeMaster: received pause command, stop now")
+			m.setStatusCode(frameModel.WorkerStatusStopped)
+			return m.Exit(ctx, m.Status(), nil)
+		}
+	*/
 	if len(m.finishedSet) == m.config.WorkerCount {
 		log.Info("FakeMaster: all worker finished, job master exits now")
 		m.setStatusCode(frameModel.WorkerStatusFinished)
-		return m.Exit(ctx, m.Status(), nil)
+		return m.Exit(ctx, nil, "", []byte("all workers have been finished"))
 	}
 
 	return nil

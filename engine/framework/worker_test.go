@@ -544,9 +544,7 @@ func TestExitWithoutReturn(t *testing.T) {
 	worker.On("Tick", mock.Anything).Return(nil)
 	worker.On("CloseImpl", mock.Anything).Return(nil).Once()
 
-	_ = worker.DefaultBaseWorker.Exit(ctx, frameModel.WorkerStatus{
-		Code: frameModel.WorkerStatusFinished,
-	}, errors.New("Exit error"))
+	_ = worker.DefaultBaseWorker.Exit(ctx, errors.New("Exit error"), "test Exit error", nil)
 
 	err = worker.Poll(ctx)
 	require.Error(t, err)
