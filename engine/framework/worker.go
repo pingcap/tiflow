@@ -503,7 +503,7 @@ func (w *DefaultBaseWorker) Exit(ctx context.Context, err error, errMsg string, 
 		w.onError(errRet)
 	}()
 
-	// TODO: cancelled 需要作为一种状态
+	// TODO: cancelled need to be a state
 	w.workerStatus.Code = frameModel.WorkerStatusFinished
 	if err != nil {
 		w.workerStatus.Code = frameModel.WorkerStatusError

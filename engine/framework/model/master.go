@@ -54,11 +54,9 @@ type MasterMetaKVData struct {
 	// Config holds business-specific data
 	Config []byte `json:"config" gorm:"column:config;type:blob"`
 
-	// ErrorMessage holds the error message for job
-	ErrorMessage string `json:"error-message" gorm:"column:error_message;type:text"`
-
-	// ExtBytes holds some extend information for job, e.g. dm's final job status
-	ExtBytes []byte `json:"ext-bytes" gorm:"column:ext_bytes;type:blob"`
+	// ExtMsg holds the error message if the job is failed
+	// it holds some task info if the job is finished or cancelled
+	ExtMsg string `json:"ext-msg" gorm:"column:ext_msg;type:text"`
 
 	// Deleted is a nullable timestamp. Then master is deleted
 	// if Deleted is not null.
@@ -86,6 +84,7 @@ func (m *MasterMetaKVData) Map() map[string]interface{} {
 		"address":    m.Addr,
 		"epoch":      m.Epoch,
 		"config":     m.Config,
+		"ext_msg":    m.ExtMsg,
 	}
 }
 
@@ -102,4 +101,5 @@ var MasterUpdateColumns = []string{
 	"address",
 	"epoch",
 	"config",
+	"ext_msg",
 }

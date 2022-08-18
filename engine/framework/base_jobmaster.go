@@ -71,9 +71,9 @@ type BaseJobMaster interface {
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
 
 	// Exit should be called when job master (in user logic) wants to exit.
-	// If `err` is nil, the inner master status code will be set to MasterStatusFinished
-	// If `err` is not nil, the master status code is assigned MasterStatusFailed.
-	Exit(ctx context.Context, err error, errMsg string, extBytes []byte) error
+	// If `err` is nil, the inner master status code will be set to MasterStatusFinished and extMsg can hold the job status
+	// If `err` is not nil, the master status code is assigned MasterStatusFailed and the extMsg can hold the error message
+	Exit(ctx context.Context, err error, extMsg string) error
 
 	// IsMasterReady returns whether the master has received heartbeats for all
 	// workers after a fail-over. If this is the first time the JobMaster started up,
@@ -336,15 +336,15 @@ func (d *DefaultBaseJobMaster) IsMasterReady() bool {
 }
 
 // Exit implements BaseJobMaster.Exit
-func (d *DefaultBaseJobMaster) Exit(ctx context.Context, err error, errmsg string, extBytes []byte) error {
+func (d *DefaultBaseJobMaster) Exit(ctx context.Context, err error, extMsg string) error {
 	ctx, cancel := d.errCenter.WithCancelOnFirstError(ctx)
 	defer cancel()
 
-	if err := d.master.Exit(ctx, err, errmsg, extBytes); err != nil {
+	if err := d.master.Exit(ctx, err, extMsg); err != nil {
 		return err
 	}
 
-	return d.worker.Exit(ctx, err, errmsg, extBytes)
+	return d.worker.Exit(ctx, err, extMsg, nil)
 }
 
 // TriggerOpenAPIInitialize implements BaseJobMasterExt.TriggerOpenAPIInitialize.

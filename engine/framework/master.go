@@ -129,9 +129,9 @@ type BaseMaster interface {
 	IsMasterReady() bool
 
 	// Exit should be called when master (in user logic) wants to exit.
-	// If `err` is nil, the inner master status code will be set to MasterStatusFinished
-	// If `err` is not nil, the status code is assigned to MasterStatusFailed.
-	Exit(ctx context.Context, err error, errMsg string, extBytes []byte) error
+	// If `err` is nil, the inner master status code will be set to MasterStatusFinished and extMsg can hold the job status
+	// If `err` is not nil, the master status code is assigned MasterStatusFailed and the extMsg can hold the error message
+	Exit(ctx context.Context, err error, extMsg string) error
 
 	// CreateWorker requires the framework to dispatch a new worker.
 	// If the worker needs to access certain file system resources,
@@ -689,7 +689,7 @@ func (m *DefaultBaseMaster) IsMasterReady() bool {
 }
 
 // Exit implements BaseMaster.Exit
-func (m *DefaultBaseMaster) Exit(ctx context.Context, err error, errMsg string, extBytes []byte) (errRet error) {
+func (m *DefaultBaseMaster) Exit(ctx context.Context, err error, extMsg string) (errRet error) {
 	// Set the errCenter to prevent user from forgetting to return directly after calling 'Exit'
 	defer func() {
 		m.errCenter.OnError(errRet)
@@ -699,8 +699,7 @@ func (m *DefaultBaseMaster) Exit(ctx context.Context, err error, errMsg string, 
 	if err != nil {
 		m.masterStatus.StatusCode = frameModel.MasterStatusFailed
 	}
-	m.masterStatus.ErrorMessage = errMsg
-	m.masterStatus.ExtBytes = extBytes
+	m.masterStatus.ExtMsg = extMsg
 
 	metaClient := metadata.NewMasterMetadataClient(m.id, m.frameMetaClient)
 	errRet = metaClient.Update(ctx, m.masterStatus)
