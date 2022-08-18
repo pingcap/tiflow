@@ -1401,6 +1401,11 @@ error = '''
 invalid worker type: %s
 '''
 
+["DFLOW:ErrJobAlreadyCanceled"]
+error = '''
+job is already canceled: %s
+'''
+
 ["DFLOW:ErrLeaderCtxCanceled"]
 error = '''
 leader context is canceled

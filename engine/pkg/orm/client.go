@@ -70,6 +70,8 @@ type Client interface {
 	WorkerClient
 	// resource meta
 	ResourceClient
+	// job ops
+	JobOpClient
 }
 
 // ProjectClient defines interface that manages project in metastore
@@ -128,6 +130,13 @@ type ResourceClient interface {
 	DeleteResource(ctx context.Context, resourceKey ResourceKey) (Result, error)
 	DeleteResourcesByExecutorID(ctx context.Context, executorID engineModel.ExecutorID) (Result, error)
 	DeleteResourcesByExecutorIDs(ctx context.Context, executorID []engineModel.ExecutorID) (Result, error)
+}
+
+// JobOpClient defines interface that operates job status (upper logic oriented)
+type JobOpClient interface {
+	SetJobCanceling(ctx context.Context, JobID string) (Result, error)
+	SetJobCanceled(ctx context.Context, jobID string) (Result, error)
+	QueryJobOpsByStatus(ctx context.Context, op model.JobOpStatus) ([]*model.JobOp, error)
 }
 
 // NewClient return the client to operate framework metastore
@@ -639,6 +648,73 @@ func (c *metaOpsClient) GetOneResourceForGC(ctx context.Context) (*resModel.Reso
 		return nil, errors.ErrMetaOpFail.Wrap(err)
 	}
 	return &ret, nil
+}
+
+// SetJobCanceling sets a job cancelling status if this op record doesn't exist.
+// If a job cancelling op already exists, does nothing.
+// If the job is already cancelled, return ErrJobAlreadyCanceled error.
+func (c *metaOpsClient) SetJobCanceling(ctx context.Context, jobID string) (Result, error) {
+	result := &ormResult{}
+	err := c.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var count int64
+		var ops model.JobOp
+		query := tx.Model(&model.JobOp{}).Where("job_id = ?", jobID)
+		if err := query.Count(&count).Error; err != nil {
+			return errors.WrapError(errors.ErrMetaOpFail, err)
+		}
+		if count > 0 {
+			if err := query.First(&ops).Error; err != nil {
+				return errors.WrapError(errors.ErrMetaOpFail, err)
+			}
+			if ops.Op == model.JobOpStatusCanceled {
+				return errors.ErrJobAlreadyCanceled.GenWithStackByArgs(jobID)
+			}
+			return nil
+		}
+		ops = model.JobOp{
+			Op:    model.JobOpStatusCanceling,
+			JobID: jobID,
+		}
+		exec := tx.Create(&ops)
+		if err := exec.Error; err != nil {
+			return errors.WrapError(errors.ErrMetaOpFail, err)
+		}
+		result.rowsAffected = exec.RowsAffected
+		return nil
+	})
+	return result, errors.WrapError(errors.ErrMetaOpFail, err)
+}
+
+// SetJobCanceled sets a cancelled status if a cancelling op exists.
+// If job op status is not found, does nothing.
+// If a job is already cancelled, does nothing.
+func (c *metaOpsClient) SetJobCanceled(ctx context.Context, jobID string) (Result, error) {
+	result := &ormResult{}
+	ops := &model.JobOp{
+		Op: model.JobOpStatusCanceled,
+	}
+	exec := c.db.WithContext(ctx).
+		Model(&model.JobOp{}).
+		Where("job_id = ? AND op = ?", jobID, model.JobOpStatusCanceling).
+		Updates(ops.Map())
+	if err := exec.Error; err != nil {
+		return result, errors.WrapError(errors.ErrMetaOpFail, err)
+	}
+	result.rowsAffected = exec.RowsAffected
+	return result, nil
+}
+
+// QueryJobOpsByStatus query all jobOps with given `op`
+func (c *metaOpsClient) QueryJobOpsByStatus(
+	ctx context.Context, op model.JobOpStatus,
+) ([]*model.JobOp, error) {
+	var ops []*model.JobOp
+	if err := c.db.WithContext(ctx).
+		Where("op = ?", op).
+		Find(&ops).Error; err != nil {
+		return nil, errors.ErrMetaOpFail.Wrap(err)
+	}
+	return ops, nil
 }
 
 // Result defines a query result interface

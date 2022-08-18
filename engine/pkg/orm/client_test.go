@@ -1229,6 +1229,148 @@ func TestContext(t *testing.T) {
 	failpoint.Disable("github.com/pingcap/tiflow/engine/pkg/orm/initializedDelay")
 }
 
+func TestJobOp(t *testing.T) {
+	t.Parallel()
+
+	sqlDB, mock, err := mockGetDBConn(t)
+	defer sqlDB.Close()
+	defer mock.ExpectClose()
+	require.Nil(t, err)
+	cli, err := newClient(sqlDB, defaultTestStoreType)
+	require.Nil(t, err)
+	require.NotNil(t, cli)
+
+	tm := time.Now()
+	createdAt := tm.Add(time.Duration(1))
+	updatedAt := tm.Add(time.Duration(1))
+
+	testCases := []tCase{
+		// SetJobCanceling successfully
+		{
+			fn: "SetJobCanceling",
+			inputs: []interface{}{
+				"job-111",
+			},
+			output: &ormResult{
+				rowsAffected: 1,
+			},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectQuery(regexp.QuoteMeta(
+					"SELECT count(*) FROM `job_ops` WHERE job_id = ?")).
+					WithArgs("job-111").WillReturnRows(
+					sqlmock.NewRows([]string{
+						"count(0)",
+					}).AddRow(0))
+				mock.ExpectExec(regexp.QuoteMeta(
+					"INSERT INTO `job_ops` (`created_at`,`updated_at`,`op`,`job_id`")).
+					WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), model.JobOpStatusCanceling, "job-111").
+					WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectCommit()
+			},
+		},
+		// SetJobCanceling does nothing because cancelling op exists
+		{
+			fn: "SetJobCanceling",
+			inputs: []interface{}{
+				"job-111",
+			},
+			output: &ormResult{
+				rowsAffected: 0,
+			},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectQuery(regexp.QuoteMeta(
+					"SELECT count(*) FROM `job_ops` WHERE job_id = ?")).
+					WithArgs("job-111").WillReturnRows(
+					sqlmock.NewRows([]string{
+						"count(1)",
+					}).AddRow(1))
+				mock.ExpectQuery(
+					"SELECT [*] FROM `job_ops` WHERE job_id = ?").
+					WithArgs("job-111").WillReturnRows(
+					sqlmock.NewRows([]string{
+						"created_at", "updated_at", "op", "job_id", "seq_id",
+					}).AddRow(createdAt, updatedAt, model.JobOpStatusCanceling, "job-111", 1))
+				mock.ExpectCommit()
+			},
+		},
+		// SetJobCanceling returns error if job is already cancelled
+		{
+			fn: "SetJobCanceling",
+			inputs: []interface{}{
+				"job-111",
+			},
+			output: &ormResult{
+				rowsAffected: 0,
+			},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectQuery(regexp.QuoteMeta(
+					"SELECT count(*) FROM `job_ops` WHERE job_id = ?")).
+					WithArgs("job-111").WillReturnRows(
+					sqlmock.NewRows([]string{
+						"count(1)",
+					}).AddRow(1))
+				mock.ExpectQuery(
+					"SELECT [*] FROM `job_ops` WHERE job_id = ?").
+					WithArgs("job-111").WillReturnRows(
+					sqlmock.NewRows([]string{
+						"created_at", "updated_at", "op", "job_id", "seq_id",
+					}).AddRow(createdAt, updatedAt, model.JobOpStatusCanceled, "job-111", 1))
+				mock.ExpectRollback()
+			},
+			err: derror.ErrJobAlreadyCanceled.GenWithStackByArgs("job-111"),
+		},
+		// SetJobCanceled
+		{
+			fn: "SetJobCanceled",
+			inputs: []interface{}{
+				"job-111",
+			},
+			output: &ormResult{
+				rowsAffected: 1,
+			},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				expectedSQL := "UPDATE `job_ops` SET `op`=?,`updated_at`=? WHERE job_id = ? AND op = ?"
+				mock.ExpectExec(regexp.QuoteMeta(expectedSQL)).
+					WithArgs(model.JobOpStatusCanceled, anyTime{}, "job-111", model.JobOpStatusCanceling).
+					WillReturnResult(sqlmock.NewResult(0, 1))
+			},
+		},
+		// QueryJobOpsByStatus
+		{
+			fn: "QueryJobOpsByStatus",
+			inputs: []interface{}{
+				model.JobOpStatusCanceling,
+			},
+			output: []*model.JobOp{
+				{
+					Model: model.Model{
+						SeqID:     1,
+						CreatedAt: createdAt,
+						UpdatedAt: updatedAt,
+					},
+					JobID: "job-1",
+					Op:    model.JobOpStatusCanceling,
+				},
+			},
+			mockExpectResFn: func(mock sqlmock.Sqlmock) {
+				expectedSQL := "SELECT * FROM `job_ops` WHERE op = ?"
+				mock.ExpectQuery(regexp.QuoteMeta(expectedSQL)).
+					WithArgs(model.JobOpStatusCanceling).
+					WillReturnRows(
+						sqlmock.NewRows([]string{"created_at", "updated_at", "op", "job_id", "seq_id"}).
+							AddRow(createdAt, updatedAt, model.JobOpStatusCanceling, "job-1", 1))
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		testInner(t, mock, cli, tc)
+	}
+}
+
 func testInner(t *testing.T, m sqlmock.Sqlmock, cli Client, c tCase) {
 	// set the mock expectation
 	c.mockExpectResFn(m)

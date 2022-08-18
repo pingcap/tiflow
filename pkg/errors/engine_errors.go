@@ -468,6 +468,12 @@ var (
 		errors.RFCCodeText("DFLOW:ErrLocalFileDirNotWritable"),
 	)
 
+	// JobOps related error
+	ErrJobAlreadyCanceled = errors.Normalize(
+		"job is already canceled: %s",
+		errors.RFCCodeText("DFLOW:ErrJobAlreadyCanceled"),
+	)
+
 	// cli related errors
 	ErrInvalidCliParameter = errors.Normalize(
 		"invalid cli parameters",
