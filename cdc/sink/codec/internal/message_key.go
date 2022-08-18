@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package codec
+package internal
 
 import (
 	"encoding/json"
@@ -20,6 +20,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
+// MQMessageKey defines the key for a MQ message.
 type MQMessageKey struct {
 	Ts        uint64            `json:"ts"`
 	Schema    string            `json:"scm,omitempty"`
@@ -29,11 +30,13 @@ type MQMessageKey struct {
 	Type      model.MessageType `json:"t"`
 }
 
+// Encode encodes the message key to a byte slice.
 func (m *MQMessageKey) Encode() ([]byte, error) {
 	data, err := json.Marshal(m)
 	return data, cerror.WrapError(cerror.ErrMarshalFailed, err)
 }
 
+// Decode codes a message key from a byte slice.
 func (m *MQMessageKey) Decode(data []byte) error {
 	return cerror.WrapError(cerror.ErrUnmarshalFailed, json.Unmarshal(data, m))
 }

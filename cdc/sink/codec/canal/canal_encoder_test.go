@@ -28,7 +28,7 @@ func TestCanalBatchEncoder(t *testing.T) {
 	t.Parallel()
 	s := defaultCanalBatchTester
 	for _, cs := range s.rowCases {
-		encoder := newCanalBatchEncoder()
+		encoder := newBatchEncoder()
 		for _, row := range cs {
 			err := encoder.AppendRowChangedEvent(context.Background(), "", row, nil)
 			require.Nil(t, err)
@@ -55,7 +55,7 @@ func TestCanalBatchEncoder(t *testing.T) {
 	}
 
 	for _, cs := range s.ddlCases {
-		encoder := newCanalBatchEncoder()
+		encoder := newBatchEncoder()
 		for _, ddl := range cs {
 			msg, err := encoder.EncodeDDLEvent(ddl)
 			require.Nil(t, err)
@@ -76,7 +76,7 @@ func TestCanalBatchEncoder(t *testing.T) {
 }
 
 func TestCanalAppendRowChangedEventWithCallback(t *testing.T) {
-	encoder := newCanalBatchEncoder()
+	encoder := newBatchEncoder()
 	require.NotNil(t, encoder)
 
 	count := 0

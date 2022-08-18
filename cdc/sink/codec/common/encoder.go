@@ -11,14 +11,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package codec
+package common
 
 import (
 	"context"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 const (
@@ -43,24 +41,4 @@ type EventBatchEncoder interface {
 // EncoderBuilder builds encoder with context.
 type EncoderBuilder interface {
 	Build() EventBatchEncoder
-}
-
-// NewEventBatchEncoderBuilder returns an EncoderBuilder
-func NewEventBatchEncoderBuilder(ctx context.Context, c *Config) (EncoderBuilder, error) {
-	switch c.protocol {
-	case config.ProtocolDefault, config.ProtocolOpen:
-		return newOpenProtocolBatchEncoderBuilder(c), nil
-	case config.ProtocolCanal:
-		return newCanalBatchEncoderBuilder(), nil
-	case config.ProtocolAvro:
-		return newAvroEventBatchEncoderBuilder(ctx, c)
-	case config.ProtocolMaxwell:
-		return newMaxwellBatchEncoderBuilder(), nil
-	case config.ProtocolCanalJSON:
-		return newCanalJSONBatchEncoderBuilder(c), nil
-	case config.ProtocolCraft:
-		return newCraftBatchEncoderBuilder(c), nil
-	default:
-		return nil, cerror.ErrMQSinkUnknownProtocol.GenWithStackByArgs(c.protocol)
-	}
 }

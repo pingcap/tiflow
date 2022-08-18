@@ -20,7 +20,7 @@ import (
 	mm "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/internal"
 	canal "github.com/pingcap/tiflow/proto/canal"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/text/encoding/charmap"
@@ -94,31 +94,31 @@ func testInsert(t *testing.T) {
 		require.True(t, col.GetUpdated())
 		switch col.GetName() {
 		case "id":
-			require.Equal(t, int32(codec.JavaSQLTypeINTEGER), col.GetSqlType())
+			require.Equal(t, int32(internal.JavaSQLTypeINTEGER), col.GetSqlType())
 			require.True(t, col.GetIsKey())
 			require.False(t, col.GetIsNull())
 			require.Equal(t, "1", col.GetValue())
 			require.Equal(t, "int", col.GetMysqlType())
 		case "name":
-			require.Equal(t, int32(codec.JavaSQLTypeVARCHAR), col.GetSqlType())
+			require.Equal(t, int32(internal.JavaSQLTypeVARCHAR), col.GetSqlType())
 			require.False(t, col.GetIsKey())
 			require.False(t, col.GetIsNull())
 			require.Equal(t, "Bob", col.GetValue())
 			require.Equal(t, "varchar", col.GetMysqlType())
 		case "tiny":
-			require.Equal(t, int32(codec.JavaSQLTypeTINYINT), col.GetSqlType())
+			require.Equal(t, int32(internal.JavaSQLTypeTINYINT), col.GetSqlType())
 			require.False(t, col.GetIsKey())
 			require.False(t, col.GetIsNull())
 			require.Equal(t, "255", col.GetValue())
 		case "comment":
-			require.Equal(t, int32(codec.JavaSQLTypeCLOB), col.GetSqlType())
+			require.Equal(t, int32(internal.JavaSQLTypeCLOB), col.GetSqlType())
 			require.False(t, col.GetIsKey())
 			require.False(t, col.GetIsNull())
 			require.Nil(t, err)
 			require.Equal(t, "测试", col.GetValue())
 			require.Equal(t, "text", col.GetMysqlType())
 		case "blob":
-			require.Equal(t, int32(codec.JavaSQLTypeBLOB), col.GetSqlType())
+			require.Equal(t, int32(internal.JavaSQLTypeBLOB), col.GetSqlType())
 			require.False(t, col.GetIsKey())
 			require.False(t, col.GetIsNull())
 			s, err := charmap.ISO8859_1.NewEncoder().String(col.GetValue())
@@ -171,13 +171,13 @@ func testUpdate(t *testing.T) {
 		require.True(t, col.GetUpdated())
 		switch col.GetName() {
 		case "id":
-			require.Equal(t, int32(codec.JavaSQLTypeINTEGER), col.GetSqlType())
+			require.Equal(t, int32(internal.JavaSQLTypeINTEGER), col.GetSqlType())
 			require.True(t, col.GetIsKey())
 			require.False(t, col.GetIsNull())
 			require.Equal(t, "2", col.GetValue())
 			require.Equal(t, "int", col.GetMysqlType())
 		case "name":
-			require.Equal(t, int32(codec.JavaSQLTypeVARCHAR), col.GetSqlType())
+			require.Equal(t, int32(internal.JavaSQLTypeVARCHAR), col.GetSqlType())
 			require.False(t, col.GetIsKey())
 			require.False(t, col.GetIsNull())
 			require.Equal(t, "Nancy", col.GetValue())
@@ -191,13 +191,13 @@ func testUpdate(t *testing.T) {
 		require.True(t, col.GetUpdated())
 		switch col.GetName() {
 		case "id":
-			require.Equal(t, int32(codec.JavaSQLTypeINTEGER), col.GetSqlType())
+			require.Equal(t, int32(internal.JavaSQLTypeINTEGER), col.GetSqlType())
 			require.True(t, col.GetIsKey())
 			require.False(t, col.GetIsNull())
 			require.Equal(t, "1", col.GetValue())
 			require.Equal(t, "int", col.GetMysqlType())
 		case "name":
-			require.Equal(t, int32(codec.JavaSQLTypeVARCHAR), col.GetSqlType())
+			require.Equal(t, int32(internal.JavaSQLTypeVARCHAR), col.GetSqlType())
 			require.False(t, col.GetIsKey())
 			require.False(t, col.GetIsNull())
 			require.Equal(t, "Bob", col.GetValue())
@@ -241,7 +241,7 @@ func testDelete(t *testing.T) {
 		require.False(t, col.GetUpdated())
 		switch col.GetName() {
 		case "id":
-			require.Equal(t, int32(codec.JavaSQLTypeINTEGER), col.GetSqlType())
+			require.Equal(t, int32(internal.JavaSQLTypeINTEGER), col.GetSqlType())
 			require.True(t, col.GetIsKey())
 			require.False(t, col.GetIsNull())
 			require.Equal(t, "1", col.GetValue())

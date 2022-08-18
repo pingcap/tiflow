@@ -18,21 +18,21 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
-// canalJSONBatchDecoder decodes the byte into the original message.
-type canalJSONBatchDecoder struct {
+// batchDecoder decodes the byte into the original message.
+type batchDecoder struct {
 	data                []byte
 	msg                 canalJSONMessageInterface
 	enableTiDBExtension bool
 }
 
-// NewCanalJSONBatchDecoder return a decoder for canal-json
-func NewCanalJSONBatchDecoder(data []byte, enableTiDBExtension bool) codec.EventBatchDecoder {
-	return &canalJSONBatchDecoder{
+// NewBatchDecoder return a decoder for canal-json
+func NewBatchDecoder(data []byte, enableTiDBExtension bool) common.EventBatchDecoder {
+	return &batchDecoder{
 		data:                data,
 		msg:                 nil,
 		enableTiDBExtension: enableTiDBExtension,
@@ -40,7 +40,7 @@ func NewCanalJSONBatchDecoder(data []byte, enableTiDBExtension bool) codec.Event
 }
 
 // HasNext implements the EventBatchDecoder interface
-func (b *canalJSONBatchDecoder) HasNext() (model.MessageType, bool, error) {
+func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 	if len(b.data) == 0 {
 		return model.MessageTypeUnknown, false, nil
 	}
@@ -64,7 +64,7 @@ func (b *canalJSONBatchDecoder) HasNext() (model.MessageType, bool, error) {
 
 // NextRowChangedEvent implements the EventBatchDecoder interface
 // `HasNext` should be called before this.
-func (b *canalJSONBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
+func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if b.msg == nil || b.msg.mqMessageType() != model.MessageTypeRow {
 		return nil, cerrors.ErrCanalDecodeFailed.
 			GenWithStack("not found row changed event message")
@@ -79,7 +79,7 @@ func (b *canalJSONBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, e
 
 // NextDDLEvent implements the EventBatchDecoder interface
 // `HasNext` should be called before this.
-func (b *canalJSONBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
+func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	if b.msg == nil || b.msg.mqMessageType() != model.MessageTypeDDL {
 		return nil, cerrors.ErrCanalDecodeFailed.
 			GenWithStack("not found ddl event message")
@@ -92,7 +92,7 @@ func (b *canalJSONBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 
 // NextResolvedEvent implements the EventBatchDecoder interface
 // `HasNext` should be called before this.
-func (b *canalJSONBatchDecoder) NextResolvedEvent() (uint64, error) {
+func (b *batchDecoder) NextResolvedEvent() (uint64, error) {
 	if b.msg == nil || b.msg.mqMessageType() != model.MessageTypeResolved {
 		return 0, cerrors.ErrCanalDecodeFailed.
 			GenWithStack("not found resolved event message")

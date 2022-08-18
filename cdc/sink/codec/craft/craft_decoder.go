@@ -16,12 +16,12 @@ package craft
 import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
-// craftBatchDecoder decodes the byte of a batch into the original messages.
-type craftBatchDecoder struct {
+// batchDecoder decodes the byte of a batch into the original messages.
+type batchDecoder struct {
 	headers *Headers
 	decoder *MessageDecoder
 	index   int
@@ -30,7 +30,7 @@ type craftBatchDecoder struct {
 }
 
 // HasNext implements the EventBatchDecoder interface
-func (b *craftBatchDecoder) HasNext() (model.MessageType, bool, error) {
+func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 	if b.index >= b.headers.Count() {
 		return model.MessageTypeUnknown, false, nil
 	}
@@ -38,7 +38,7 @@ func (b *craftBatchDecoder) HasNext() (model.MessageType, bool, error) {
 }
 
 // NextResolvedEvent implements the EventBatchDecoder interface
-func (b *craftBatchDecoder) NextResolvedEvent() (uint64, error) {
+func (b *batchDecoder) NextResolvedEvent() (uint64, error) {
 	ty, hasNext, err := b.HasNext()
 	if err != nil {
 		return 0, errors.Trace(err)
@@ -52,7 +52,7 @@ func (b *craftBatchDecoder) NextResolvedEvent() (uint64, error) {
 }
 
 // NextRowChangedEvent implements the EventBatchDecoder interface
-func (b *craftBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
+func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	ty, hasNext, err := b.HasNext()
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -91,7 +91,7 @@ func (b *craftBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error
 }
 
 // NextDDLEvent implements the EventBatchDecoder interface
-func (b *craftBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
+func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	ty, hasNext, err := b.HasNext()
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -116,15 +116,15 @@ func (b *craftBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	return event, nil
 }
 
-// newCraftBatchDecoder creates a new craftBatchDecoder.
-func newCraftBatchDecoder(bits []byte) (codec.EventBatchDecoder, error) {
-	return newCraftBatchDecoderWithAllocator(bits, NewSliceAllocator(64))
+// newBatchDecoder creates a new batchDecoder.
+func newBatchDecoder(bits []byte) (common.EventBatchDecoder, error) {
+	return NewBatchDecoderWithAllocator(bits, NewSliceAllocator(64))
 }
 
-// newCraftBatchDecoderWithAllocator creates a new craftBatchDecoder with given allocator.
-func newCraftBatchDecoderWithAllocator(
+// NewBatchDecoderWithAllocator creates a new batchDecoder with given allocator.
+func NewBatchDecoderWithAllocator(
 	bits []byte, allocator *SliceAllocator,
-) (codec.EventBatchDecoder, error) {
+) (common.EventBatchDecoder, error) {
 	decoder, err := NewMessageDecoder(bits, allocator)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -134,7 +134,7 @@ func newCraftBatchDecoderWithAllocator(
 		return nil, errors.Trace(err)
 	}
 
-	return &craftBatchDecoder{
+	return &batchDecoder{
 		headers:   headers,
 		decoder:   decoder,
 		allocator: allocator,

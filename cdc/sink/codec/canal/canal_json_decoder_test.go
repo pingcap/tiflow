@@ -25,7 +25,7 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 	t.Parallel()
 	expectedDecodedValue := collectExpectedDecodedValue(testColumnsTable)
 	for _, encodeEnable := range []bool{false, true} {
-		encoder := &canalJSONBatchEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: encodeEnable}
+		encoder := &JSONBatchEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: encodeEnable}
 		require.NotNil(t, encoder)
 
 		err := encoder.AppendRowChangedEvent(context.Background(), "", testCaseInsert, nil)
@@ -36,7 +36,7 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 		msg := mqMessages[0]
 
 		for _, decodeEnable := range []bool{false, true} {
-			decoder := NewCanalJSONBatchDecoder(msg.Value, decodeEnable)
+			decoder := NewBatchDecoder(msg.Value, decodeEnable)
 
 			ty, hasNext, err := decoder.HasNext()
 			require.Nil(t, err)
@@ -78,7 +78,7 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 func TestNewCanalJSONBatchDecoder4DDLMessage(t *testing.T) {
 	t.Parallel()
 	for _, encodeEnable := range []bool{false, true} {
-		encoder := &canalJSONBatchEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: encodeEnable}
+		encoder := &JSONBatchEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: encodeEnable}
 		require.NotNil(t, encoder)
 
 		result, err := encoder.EncodeDDLEvent(testCaseDDL)
@@ -86,7 +86,7 @@ func TestNewCanalJSONBatchDecoder4DDLMessage(t *testing.T) {
 		require.NotNil(t, result)
 
 		for _, decodeEnable := range []bool{false, true} {
-			decoder := NewCanalJSONBatchDecoder(result.Value, decodeEnable)
+			decoder := NewBatchDecoder(result.Value, decodeEnable)
 
 			ty, hasNext, err := decoder.HasNext()
 			require.Nil(t, err)

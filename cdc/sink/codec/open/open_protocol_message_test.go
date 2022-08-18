@@ -11,19 +11,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package codec
+package open
 
 import (
 	"testing"
 
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec/internal"
 	"github.com/stretchr/testify/require"
 )
 
 func TestFormatCol(t *testing.T) {
 	t.Parallel()
-	row := &mqMessageRow{Update: map[string]column{"test": {
+	row := &mqMessageRow{Update: map[string]internal.Column{"test": {
 		Type:  mysql.TypeString,
 		Value: "测",
 	}}}
@@ -34,7 +35,7 @@ func TestFormatCol(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, row, row2)
 
-	row = &mqMessageRow{Update: map[string]column{"test": {
+	row = &mqMessageRow{Update: map[string]internal.Column{"test": {
 		Type:  mysql.TypeBlob,
 		Value: []byte("测"),
 	}}}
@@ -53,9 +54,9 @@ func TestNonBinaryStringCol(t *testing.T) {
 		Type:  mysql.TypeString,
 		Value: "value",
 	}
-	mqCol := column{}
-	mqCol.fromRowChangeColumn(col)
-	row := &mqMessageRow{Update: map[string]column{"test": mqCol}}
+	mqCol := internal.Column{}
+	mqCol.FromRowChangeColumn(col)
+	row := &mqMessageRow{Update: map[string]internal.Column{"test": mqCol}}
 	rowEncode, err := row.encode()
 	require.Nil(t, err)
 	row2 := new(mqMessageRow)
@@ -63,7 +64,7 @@ func TestNonBinaryStringCol(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, row, row2)
 	mqCol2 := row2.Update["test"]
-	col2 := mqCol2.toRowChangeColumn("test")
+	col2 := mqCol2.ToRowChangeColumn("test")
 	col2.Value = string(col2.Value.([]byte))
 	require.Equal(t, col, col2)
 }
@@ -76,9 +77,9 @@ func TestVarBinaryCol(t *testing.T) {
 		Flag:  model.BinaryFlag,
 		Value: []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
 	}
-	mqCol := column{}
-	mqCol.fromRowChangeColumn(col)
-	row := &mqMessageRow{Update: map[string]column{"test": mqCol}}
+	mqCol := internal.Column{}
+	mqCol.FromRowChangeColumn(col)
+	row := &mqMessageRow{Update: map[string]internal.Column{"test": mqCol}}
 	rowEncode, err := row.encode()
 	require.Nil(t, err)
 	row2 := new(mqMessageRow)
@@ -86,6 +87,6 @@ func TestVarBinaryCol(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, row, row2)
 	mqCol2 := row2.Update["test"]
-	col2 := mqCol2.toRowChangeColumn("test")
+	col2 := mqCol2.ToRowChangeColumn("test")
 	require.Equal(t, col, col2)
 }

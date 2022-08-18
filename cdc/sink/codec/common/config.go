@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package codec
+package common
 
 import (
 	"net/url"
@@ -27,7 +27,7 @@ const defaultMaxBatchSize int = 16
 
 // Config use to create the encoder
 type Config struct {
-	protocol config.Protocol
+	Protocol config.Protocol
 
 	// control batch behavior, only for `open-protocol` and `craft` at the moment.
 	MaxMessageBytes int
@@ -45,7 +45,7 @@ type Config struct {
 // NewConfig return a Config for codec
 func NewConfig(protocol config.Protocol) *Config {
 	return &Config{
-		protocol: protocol,
+		Protocol: protocol,
 
 		MaxMessageBytes: config.DefaultMaxMessageBytes,
 		MaxBatchSize:    defaultMaxBatchSize,
@@ -67,10 +67,14 @@ const (
 )
 
 const (
-	DecimalHandlingModeString        = "string"
-	DecimalHandlingModePrecise       = "precise"
+	// DecimalHandlingModeString is the string mode for decimal handling
+	DecimalHandlingModeString = "string"
+	// DecimalHandlingModePrecise is the precise mode for decimal handling
+	DecimalHandlingModePrecise = "precise"
+	// BigintUnsignedHandlingModeString is the string mode for unsigned bigint handling
 	BigintUnsignedHandlingModeString = "string"
-	BigintUnsignedHandlingModeLong   = "long"
+	// BigintUnsignedHandlingModeLong is the long mode for unsigned bigint handling
+	BigintUnsignedHandlingModeLong = "long"
 )
 
 // Apply fill the Config
@@ -81,7 +85,7 @@ func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
 		if err != nil {
 			return err
 		}
-		c.enableTiDBExtension = b
+		c.EnableTiDBExtension = b
 	}
 
 	if s := params.Get(codecOPTMaxBatchSize); s != "" {
@@ -123,14 +127,14 @@ func (c *Config) WithMaxMessageBytes(bytes int) *Config {
 
 // Validate the Config
 func (c *Config) Validate() error {
-	if c.enableTiDBExtension &&
-		!(c.protocol == config.ProtocolCanalJSON || c.protocol == config.ProtocolAvro) {
+	if c.EnableTiDBExtension &&
+		!(c.Protocol == config.ProtocolCanalJSON || c.Protocol == config.ProtocolAvro) {
 		return cerror.ErrMQCodecInvalidConfig.GenWithStack(
 			`enable-tidb-extension only supports canal-json/avro protocol`,
 		)
 	}
 
-	if c.protocol == config.ProtocolAvro {
+	if c.Protocol == config.ProtocolAvro {
 		if c.AvroSchemaRegistry == "" {
 			return cerror.ErrMQCodecInvalidConfig.GenWithStack(
 				`Avro protocol requires parameter "%s"`,
@@ -159,27 +163,17 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	if c.maxMessageBytes <= 0 {
+	if c.MaxMessageBytes <= 0 {
 		return cerror.ErrMQCodecInvalidConfig.Wrap(
-			errors.Errorf("invalid max-message-bytes %d", c.maxMessageBytes),
+			errors.Errorf("invalid max-message-bytes %d", c.MaxMessageBytes),
 		)
 	}
 
-	if c.maxBatchSize <= 0 {
+	if c.MaxBatchSize <= 0 {
 		return cerror.ErrMQCodecInvalidConfig.Wrap(
-			errors.Errorf("invalid max-batch-size %d", c.maxBatchSize),
+			errors.Errorf("invalid max-batch-size %d", c.MaxBatchSize),
 		)
 	}
 
 	return nil
-}
-
-// GetMaxMessageBytes return the axMessageBytes for the codec
-func (c *Config) GetMaxMessageBytes() int {
-	return c.maxMessageBytes
-}
-
-// Protocol return the protocol for the codec
-func (c *Config) Protocol() config.Protocol {
-	return c.protocol
 }

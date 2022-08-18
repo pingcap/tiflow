@@ -17,13 +17,13 @@ import (
 	mm "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/internal"
 )
 
 type testColumnTuple struct {
 	column              *model.Column
 	expectedMySQLType   string
-	expectedJavaSQLType codec.JavaSQLType
+	expectedJavaSQLType internal.JavaSQLType
 
 	// expectedEncodedValue is expected by encoding
 	expectedEncodedValue string
@@ -36,7 +36,7 @@ var (
 	testColumnsTable = []*testColumnTuple{
 		{
 			&model.Column{Name: "tinyint", Type: mysql.TypeTiny, Value: int64(127)},
-			"tinyint", codec.JavaSQLTypeTINYINT, "127", "127",
+			"tinyint", internal.JavaSQLTypeTINYINT, "127", "127",
 		},
 
 		{
@@ -44,7 +44,7 @@ var (
 				Name: "tinyint unsigned", Type: mysql.TypeTiny, Value: uint64(127),
 				Flag: model.UnsignedFlag,
 			},
-			"tinyint unsigned", codec.JavaSQLTypeTINYINT, "127", "127",
+			"tinyint unsigned", internal.JavaSQLTypeTINYINT, "127", "127",
 		},
 
 		{
@@ -52,7 +52,7 @@ var (
 				Name: "tinyint unsigned 2", Type: mysql.TypeTiny, Value: uint64(128),
 				Flag: model.UnsignedFlag,
 			},
-			"tinyint unsigned", codec.JavaSQLTypeSMALLINT, "128", "128",
+			"tinyint unsigned", internal.JavaSQLTypeSMALLINT, "128", "128",
 		},
 
 		{
@@ -60,7 +60,7 @@ var (
 				Name: "tinyint unsigned 3", Type: mysql.TypeTiny, Value: "0",
 				Flag: model.UnsignedFlag,
 			},
-			"tinyint unsigned", codec.JavaSQLTypeTINYINT, "0", "0",
+			"tinyint unsigned", internal.JavaSQLTypeTINYINT, "0", "0",
 		},
 
 		{
@@ -68,152 +68,152 @@ var (
 				Name: "tinyint unsigned 4", Type: mysql.TypeTiny, Value: nil,
 				Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag,
 			},
-			"tinyint unsigned", codec.JavaSQLTypeTINYINT, "", nil,
+			"tinyint unsigned", internal.JavaSQLTypeTINYINT, "", nil,
 		},
 
 		{
 			&model.Column{Name: "smallint", Type: mysql.TypeShort, Value: int64(32767)},
-			"smallint", codec.JavaSQLTypeSMALLINT, "32767", "32767",
+			"smallint", internal.JavaSQLTypeSMALLINT, "32767", "32767",
 		},
 		{
 			&model.Column{
 				Name: "smallint unsigned", Type: mysql.TypeShort, Value: uint64(32767),
 				Flag: model.UnsignedFlag,
 			},
-			"smallint unsigned", codec.JavaSQLTypeSMALLINT, "32767", "32767",
+			"smallint unsigned", internal.JavaSQLTypeSMALLINT, "32767", "32767",
 		},
 		{
 			&model.Column{
 				Name: "smallint unsigned 2", Type: mysql.TypeShort, Value: uint64(32768),
 				Flag: model.UnsignedFlag,
 			},
-			"smallint unsigned", codec.JavaSQLTypeINTEGER, "32768", "32768",
+			"smallint unsigned", internal.JavaSQLTypeINTEGER, "32768", "32768",
 		},
 		{
 			&model.Column{
 				Name: "smallint unsigned 3", Type: mysql.TypeShort, Value: "0",
 				Flag: model.UnsignedFlag,
 			},
-			"smallint unsigned", codec.JavaSQLTypeSMALLINT, "0", "0",
+			"smallint unsigned", internal.JavaSQLTypeSMALLINT, "0", "0",
 		},
 		{
 			&model.Column{
 				Name: "smallint unsigned 4", Type: mysql.TypeShort, Value: nil,
 				Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag,
 			},
-			"smallint unsigned", codec.JavaSQLTypeSMALLINT, "", nil,
+			"smallint unsigned", internal.JavaSQLTypeSMALLINT, "", nil,
 		},
 
 		{
 			&model.Column{Name: "mediumint", Type: mysql.TypeInt24, Value: int64(8388607)},
-			"mediumint", codec.JavaSQLTypeINTEGER, "8388607", "8388607",
+			"mediumint", internal.JavaSQLTypeINTEGER, "8388607", "8388607",
 		},
 		{
 			&model.Column{
 				Name: "mediumint unsigned", Type: mysql.TypeInt24, Value: uint64(8388607),
 				Flag: model.UnsignedFlag,
 			},
-			"mediumint unsigned", codec.JavaSQLTypeINTEGER, "8388607", "8388607",
+			"mediumint unsigned", internal.JavaSQLTypeINTEGER, "8388607", "8388607",
 		},
 		{
 			&model.Column{
 				Name: "mediumint unsigned 2", Type: mysql.TypeInt24, Value: uint64(8388608),
 				Flag: model.UnsignedFlag,
 			},
-			"mediumint unsigned", codec.JavaSQLTypeINTEGER, "8388608", "8388608",
+			"mediumint unsigned", internal.JavaSQLTypeINTEGER, "8388608", "8388608",
 		},
 		{
 			&model.Column{
 				Name: "mediumint unsigned 3", Type: mysql.TypeInt24, Value: "0",
 				Flag: model.UnsignedFlag,
 			},
-			"mediumint unsigned", codec.JavaSQLTypeINTEGER, "0", "0",
+			"mediumint unsigned", internal.JavaSQLTypeINTEGER, "0", "0",
 		},
 		{
 			&model.Column{
 				Name: "mediumint unsigned 4", Type: mysql.TypeInt24, Value: nil,
 				Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag,
 			},
-			"mediumint unsigned", codec.JavaSQLTypeINTEGER, "", nil,
+			"mediumint unsigned", internal.JavaSQLTypeINTEGER, "", nil,
 		},
 
 		{
 			&model.Column{Name: "int", Type: mysql.TypeLong, Value: int64(2147483647)},
-			"int", codec.JavaSQLTypeINTEGER, "2147483647", "2147483647",
+			"int", internal.JavaSQLTypeINTEGER, "2147483647", "2147483647",
 		},
 		{
 			&model.Column{
 				Name: "int unsigned", Type: mysql.TypeLong, Value: uint64(2147483647),
 				Flag: model.UnsignedFlag,
 			},
-			"int unsigned", codec.JavaSQLTypeINTEGER, "2147483647", "2147483647",
+			"int unsigned", internal.JavaSQLTypeINTEGER, "2147483647", "2147483647",
 		},
 		{
 			&model.Column{
 				Name: "int unsigned 2", Type: mysql.TypeLong, Value: uint64(2147483648),
 				Flag: model.UnsignedFlag,
 			},
-			"int unsigned", codec.JavaSQLTypeBIGINT, "2147483648", "2147483648",
+			"int unsigned", internal.JavaSQLTypeBIGINT, "2147483648", "2147483648",
 		},
 		{
 			&model.Column{
 				Name: "int unsigned 3", Type: mysql.TypeLong, Value: "0",
 				Flag: model.UnsignedFlag,
 			},
-			"int unsigned", codec.JavaSQLTypeINTEGER, "0", "0",
+			"int unsigned", internal.JavaSQLTypeINTEGER, "0", "0",
 		},
 		{
 			&model.Column{
 				Name: "int unsigned 4", Type: mysql.TypeLong, Value: nil,
 				Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag,
 			},
-			"int unsigned", codec.JavaSQLTypeINTEGER, "", nil,
+			"int unsigned", internal.JavaSQLTypeINTEGER, "", nil,
 		},
 
 		{
 			&model.Column{Name: "bigint", Type: mysql.TypeLonglong, Value: int64(9223372036854775807)},
-			"bigint", codec.JavaSQLTypeBIGINT, "9223372036854775807", "9223372036854775807",
+			"bigint", internal.JavaSQLTypeBIGINT, "9223372036854775807", "9223372036854775807",
 		},
 		{
 			&model.Column{
 				Name: "bigint unsigned", Type: mysql.TypeLonglong, Value: uint64(9223372036854775807),
 				Flag: model.UnsignedFlag,
 			},
-			"bigint unsigned", codec.JavaSQLTypeBIGINT, "9223372036854775807", "9223372036854775807",
+			"bigint unsigned", internal.JavaSQLTypeBIGINT, "9223372036854775807", "9223372036854775807",
 		},
 		{
 			&model.Column{
 				Name: "bigint unsigned 2", Type: mysql.TypeLonglong, Value: uint64(9223372036854775808),
 				Flag: model.UnsignedFlag,
 			},
-			"bigint unsigned", codec.JavaSQLTypeDECIMAL, "9223372036854775808", "9223372036854775808",
+			"bigint unsigned", internal.JavaSQLTypeDECIMAL, "9223372036854775808", "9223372036854775808",
 		},
 		{
 			&model.Column{
 				Name: "bigint unsigned 3", Type: mysql.TypeLonglong, Value: "0",
 				Flag: model.UnsignedFlag,
 			},
-			"bigint unsigned", codec.JavaSQLTypeBIGINT, "0", "0",
+			"bigint unsigned", internal.JavaSQLTypeBIGINT, "0", "0",
 		},
 		{
 			&model.Column{
 				Name: "bigint unsigned 4", Type: mysql.TypeLonglong, Value: nil,
 				Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag,
 			},
-			"bigint unsigned", codec.JavaSQLTypeBIGINT, "", nil,
+			"bigint unsigned", internal.JavaSQLTypeBIGINT, "", nil,
 		},
 
 		{
 			&model.Column{Name: "float", Type: mysql.TypeFloat, Value: 3.14},
-			"float", codec.JavaSQLTypeREAL, "3.14", "3.14",
+			"float", internal.JavaSQLTypeREAL, "3.14", "3.14",
 		},
 		{
 			&model.Column{Name: "double", Type: mysql.TypeDouble, Value: 2.71},
-			"double", codec.JavaSQLTypeDOUBLE, "2.71", "2.71",
+			"double", internal.JavaSQLTypeDOUBLE, "2.71", "2.71",
 		},
 		{
 			&model.Column{Name: "decimal", Type: mysql.TypeNewDecimal, Value: "2333"},
-			"decimal", codec.JavaSQLTypeDECIMAL, "2333", "2333",
+			"decimal", internal.JavaSQLTypeDECIMAL, "2333", "2333",
 		},
 
 		{
@@ -221,65 +221,65 @@ var (
 				Name: "float unsigned", Type: mysql.TypeFloat, Value: 3.14,
 				Flag: model.UnsignedFlag,
 			},
-			"float unsigned", codec.JavaSQLTypeREAL, "3.14", "3.14",
+			"float unsigned", internal.JavaSQLTypeREAL, "3.14", "3.14",
 		},
 		{
 			&model.Column{
 				Name: "double unsigned", Type: mysql.TypeDouble, Value: 2.71,
 				Flag: model.UnsignedFlag,
 			},
-			"double unsigned", codec.JavaSQLTypeDOUBLE, "2.71", "2.71",
+			"double unsigned", internal.JavaSQLTypeDOUBLE, "2.71", "2.71",
 		},
 		{
 			&model.Column{
 				Name: "decimal unsigned", Type: mysql.TypeNewDecimal, Value: "2333",
 				Flag: model.UnsignedFlag,
 			},
-			"decimal unsigned", codec.JavaSQLTypeDECIMAL, "2333", "2333",
+			"decimal unsigned", internal.JavaSQLTypeDECIMAL, "2333", "2333",
 		},
 
 		// for column value type in `[]uint8` and have `BinaryFlag`, expectedEncodedValue is dummy.
 		{
 			&model.Column{Name: "varchar", Type: mysql.TypeVarchar, Value: []uint8("测试Varchar")},
-			"varchar", codec.JavaSQLTypeVARCHAR, "测试Varchar", "测试Varchar",
+			"varchar", internal.JavaSQLTypeVARCHAR, "测试Varchar", "测试Varchar",
 		},
 		{
 			&model.Column{Name: "char", Type: mysql.TypeString, Value: []uint8("测试String")},
-			"char", codec.JavaSQLTypeCHAR, "测试String", "测试String",
+			"char", internal.JavaSQLTypeCHAR, "测试String", "测试String",
 		},
 		{
 			&model.Column{
 				Name: "binary", Type: mysql.TypeString, Value: []uint8("测试Binary"),
 				Flag: model.BinaryFlag,
 			},
-			"binary", codec.JavaSQLTypeBLOB, "测试Binary", "测试Binary",
+			"binary", internal.JavaSQLTypeBLOB, "测试Binary", "测试Binary",
 		},
 		{
 			&model.Column{
 				Name: "varbinary", Type: mysql.TypeVarchar, Value: []uint8("测试varbinary"),
 				Flag: model.BinaryFlag,
 			},
-			"varbinary", codec.JavaSQLTypeBLOB, "测试varbinary", "测试varbinary",
+			"varbinary", internal.JavaSQLTypeBLOB, "测试varbinary", "测试varbinary",
 		},
 
 		{
 			&model.Column{Name: "tinytext", Type: mysql.TypeTinyBlob, Value: []uint8("测试Tinytext")},
-			"tinytext", codec.JavaSQLTypeCLOB, "测试Tinytext", "测试Tinytext",
+			"tinytext", internal.JavaSQLTypeCLOB, "测试Tinytext", "测试Tinytext",
 		},
 		{
 			&model.Column{Name: "text", Type: mysql.TypeBlob, Value: []uint8("测试text")},
-			"text", codec.JavaSQLTypeCLOB, "测试text", "测试text",
+			"text", internal.JavaSQLTypeCLOB, "测试text", "测试text",
 		},
 		{
 			&model.Column{
 				Name: "mediumtext", Type: mysql.TypeMediumBlob,
 				Value: []uint8("测试mediumtext"),
 			},
-			"mediumtext", codec.JavaSQLTypeCLOB, "测试mediumtext", "测试mediumtext",
+			"mediumtext", internal.JavaSQLTypeCLOB, "测试mediumtext", "测试mediumtext",
 		},
 		{
 			&model.Column{Name: "longtext", Type: mysql.TypeLongBlob, Value: []uint8("测试longtext")},
-			"longtext", codec.JavaSQLTypeCLOB, "测试longtext", "测试longtext",
+			"longtext", internal.JavaSQLTypeCLOB, "测试longtext", "测试longtext",
 		},
 
 		{
@@ -287,72 +287,72 @@ var (
 				Name: "tinyblob", Type: mysql.TypeTinyBlob, Value: []uint8("测试tinyblob"),
 				Flag: model.BinaryFlag,
 			},
-			"tinyblob", codec.JavaSQLTypeBLOB, "测试tinyblob", "测试tinyblob",
+			"tinyblob", internal.JavaSQLTypeBLOB, "测试tinyblob", "测试tinyblob",
 		},
 		{
 			&model.Column{
 				Name: "blob", Type: mysql.TypeBlob, Value: []uint8("测试blob"),
 				Flag: model.BinaryFlag,
 			},
-			"blob", codec.JavaSQLTypeBLOB, "测试blob", "测试blob",
+			"blob", internal.JavaSQLTypeBLOB, "测试blob", "测试blob",
 		},
 		{
 			&model.Column{
 				Name: "mediumblob", Type: mysql.TypeMediumBlob, Value: []uint8("测试mediumblob"),
 				Flag: model.BinaryFlag,
 			},
-			"mediumblob", codec.JavaSQLTypeBLOB, "测试mediumblob", "测试mediumblob",
+			"mediumblob", internal.JavaSQLTypeBLOB, "测试mediumblob", "测试mediumblob",
 		},
 		{
 			&model.Column{
 				Name: "longblob", Type: mysql.TypeLongBlob, Value: []uint8("测试longblob"),
 				Flag: model.BinaryFlag,
 			},
-			"longblob", codec.JavaSQLTypeBLOB, "测试longblob", "测试longblob",
+			"longblob", internal.JavaSQLTypeBLOB, "测试longblob", "测试longblob",
 		},
 
 		{
 			&model.Column{Name: "date", Type: mysql.TypeDate, Value: "2020-02-20"},
-			"date", codec.JavaSQLTypeDATE, "2020-02-20", "2020-02-20",
+			"date", internal.JavaSQLTypeDATE, "2020-02-20", "2020-02-20",
 		},
 		{
 			&model.Column{Name: "datetime", Type: mysql.TypeDatetime, Value: "2020-02-20 02:20:20"},
-			"datetime", codec.JavaSQLTypeTIMESTAMP, "2020-02-20 02:20:20", "2020-02-20 02:20:20",
+			"datetime", internal.JavaSQLTypeTIMESTAMP, "2020-02-20 02:20:20", "2020-02-20 02:20:20",
 		},
 		{
 			&model.Column{Name: "timestamp", Type: mysql.TypeTimestamp, Value: "2020-02-20 10:20:20"},
-			"timestamp", codec.JavaSQLTypeTIMESTAMP, "2020-02-20 10:20:20", "2020-02-20 10:20:20",
+			"timestamp", internal.JavaSQLTypeTIMESTAMP, "2020-02-20 10:20:20", "2020-02-20 10:20:20",
 		},
 		{
 			&model.Column{Name: "time", Type: mysql.TypeDuration, Value: "02:20:20"},
-			"time", codec.JavaSQLTypeTIME, "02:20:20", "02:20:20",
+			"time", internal.JavaSQLTypeTIME, "02:20:20", "02:20:20",
 		},
 		{
 			&model.Column{Name: "year", Type: mysql.TypeYear, Value: "2020", Flag: model.UnsignedFlag},
-			"year", codec.JavaSQLTypeVARCHAR, "2020", "2020",
+			"year", internal.JavaSQLTypeVARCHAR, "2020", "2020",
 		},
 
 		{
 			&model.Column{Name: "enum", Type: mysql.TypeEnum, Value: uint64(1)},
-			"enum", codec.JavaSQLTypeINTEGER, "1", "1",
+			"enum", internal.JavaSQLTypeINTEGER, "1", "1",
 		},
 		{
 			&model.Column{Name: "set", Type: mysql.TypeSet, Value: uint64(3)},
-			"set", codec.JavaSQLTypeBIT, "3", uint64(3),
+			"set", internal.JavaSQLTypeBIT, "3", uint64(3),
 		},
 		{
 			&model.Column{
 				Name: "bit", Type: mysql.TypeBit, Value: uint64(65),
 				Flag: model.UnsignedFlag | model.BinaryFlag,
 			},
-			"bit", codec.JavaSQLTypeBIT, "65", uint64(65),
+			"bit", internal.JavaSQLTypeBIT, "65", uint64(65),
 		},
 		{
 			&model.Column{
 				Name: "json", Type: mysql.TypeJSON, Value: "{\"key1\": \"value1\"}",
 				Flag: model.BinaryFlag,
 			},
-			"json", codec.JavaSQLTypeVARCHAR, "{\"key1\": \"value1\"}", "{\"key1\": \"value1\"}",
+			"json", internal.JavaSQLTypeVARCHAR, "{\"key1\": \"value1\"}", "{\"key1\": \"value1\"}",
 		},
 	}
 

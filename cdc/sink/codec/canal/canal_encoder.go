@@ -20,15 +20,15 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	canal "github.com/pingcap/tiflow/proto/canal"
 	"go.uber.org/zap"
 )
 
-// canalBatchEncoder encodes the events into the byte of a batch into.
-type canalBatchEncoder struct {
+// BatchEncoder encodes the events into the byte of a batch into.
+type BatchEncoder struct {
 	messages     *canal.Messages
 	callbackBuf  []func()
 	packet       *canal.Packet
@@ -36,14 +36,14 @@ type canalBatchEncoder struct {
 }
 
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
-func (d *canalBatchEncoder) EncodeCheckpointEvent(ts uint64) (*codec.MQMessage, error) {
+func (d *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.MQMessage, error) {
 	// For canal now, there is no such a corresponding type to ResolvedEvent so far.
 	// Therefore, the event is ignored.
 	return nil, nil
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
-func (d *canalBatchEncoder) AppendRowChangedEvent(
+func (d *BatchEncoder) AppendRowChangedEvent(
 	_ context.Context,
 	_ string,
 	e *model.RowChangedEvent,
@@ -65,7 +65,7 @@ func (d *canalBatchEncoder) AppendRowChangedEvent(
 }
 
 // EncodeDDLEvent implements the EventBatchEncoder interface
-func (d *canalBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*codec.MQMessage, error) {
+func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.MQMessage, error) {
 	entry, err := d.entryBuilder.fromDDLEvent(e)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -94,11 +94,11 @@ func (d *canalBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*codec.MQMessage,
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
-	return codec.NewDDLMsg(config.ProtocolCanal, nil, b, e), nil
+	return common.NewDDLMsg(config.ProtocolCanal, nil, b, e), nil
 }
 
 // Build implements the EventBatchEncoder interface
-func (d *canalBatchEncoder) Build() []*codec.MQMessage {
+func (d *BatchEncoder) Build() []*common.MQMessage {
 	rowCount := len(d.messages.Messages)
 	if rowCount == 0 {
 		return nil
@@ -113,7 +113,7 @@ func (d *canalBatchEncoder) Build() []*codec.MQMessage {
 	if err != nil {
 		log.Panic("Error when serializing Canal packet", zap.Error(err))
 	}
-	ret := codec.NewMsg(config.ProtocolCanal, nil, value, 0, model.MessageTypeRow, nil, nil)
+	ret := common.NewMsg(config.ProtocolCanal, nil, value, 0, model.MessageTypeRow, nil, nil)
 	ret.SetRowsCount(rowCount)
 	d.messages.Reset()
 	d.resetPacket()
@@ -127,11 +127,11 @@ func (d *canalBatchEncoder) Build() []*codec.MQMessage {
 		}
 		d.callbackBuf = make([]func(), 0)
 	}
-	return []*codec.MQMessage{ret}
+	return []*common.MQMessage{ret}
 }
 
 // refreshPacketBody() marshals the messages to the packet body
-func (d *canalBatchEncoder) refreshPacketBody() error {
+func (d *BatchEncoder) refreshPacketBody() error {
 	oldSize := len(d.packet.Body)
 	newSize := proto.Size(d.messages)
 	if newSize > oldSize {
@@ -145,7 +145,7 @@ func (d *canalBatchEncoder) refreshPacketBody() error {
 	return err
 }
 
-func (d *canalBatchEncoder) resetPacket() {
+func (d *BatchEncoder) resetPacket() {
 	d.packet = &canal.Packet{
 		VersionPresent: &canal.Packet_Version{
 			Version: CanalPacketVersion,
@@ -154,9 +154,9 @@ func (d *canalBatchEncoder) resetPacket() {
 	}
 }
 
-// newCanalBatchEncoder creates a new canalBatchEncoder.
-func newCanalBatchEncoder() codec.EventBatchEncoder {
-	encoder := &canalBatchEncoder{
+// newBatchEncoder creates a new canalBatchEncoder.
+func newBatchEncoder() common.EventBatchEncoder {
+	encoder := &BatchEncoder{
 		messages:     &canal.Messages{},
 		callbackBuf:  make([]func(), 0),
 		entryBuilder: newCanalEntryBuilder(),
@@ -166,13 +166,14 @@ func newCanalBatchEncoder() codec.EventBatchEncoder {
 	return encoder
 }
 
-type canalBatchEncoderBuilder struct{}
+type batchEncoderBuilder struct{}
 
 // Build a `canalBatchEncoder`
-func (b *canalBatchEncoderBuilder) Build() codec.EventBatchEncoder {
-	return newCanalBatchEncoder()
+func (b *batchEncoderBuilder) Build() common.EventBatchEncoder {
+	return newBatchEncoder()
 }
 
-func newCanalBatchEncoderBuilder() codec.EncoderBuilder {
-	return &canalBatchEncoderBuilder{}
+// NewBatchEncoderBuilder creates a canal batchEncoderBuilder.
+func NewBatchEncoderBuilder() common.EncoderBuilder {
+	return &batchEncoderBuilder{}
 }

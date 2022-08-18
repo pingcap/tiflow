@@ -17,7 +17,7 @@ import (
 	"context"
 
 	"github.com/Shopify/sarama"
-	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/kafka"
 )
 
@@ -25,7 +25,7 @@ import (
 type DMLProducer interface {
 	// AsyncSendMessage sends a message asynchronously.
 	AsyncSendMessage(
-		ctx context.Context, topic string, partition int32, message *codec.MQMessage,
+		ctx context.Context, topic string, partition int32, message *common.MQMessage,
 	) error
 
 	// Close closes the producer and client(s).

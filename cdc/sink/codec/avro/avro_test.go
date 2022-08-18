@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,7 +34,7 @@ func setupEncoderAndSchemaRegistry(
 	enableTiDBExtension bool,
 	decimalHandlingMode string,
 	bigintUnsignedHandlingMode string,
-) (*AvroEventBatchEncoder, error) {
+) (*BatchEncoder, error) {
 	startHTTPInterceptForTestingRegistry()
 
 	keyManager, err := NewAvroSchemaManager(
@@ -57,11 +57,11 @@ func setupEncoderAndSchemaRegistry(
 		return nil, err
 	}
 
-	return &AvroEventBatchEncoder{
+	return &BatchEncoder{
 		namespace:                  model.DefaultNamespace,
 		valueSchemaManager:         valueManager,
 		keySchemaManager:           keyManager,
-		resultBuf:                  make([]*codec.MQMessage, 0, 4096),
+		resultBuf:                  make([]*common.MQMessage, 0, 4096),
 		maxMessageBytes:            math.MaxInt,
 		enableTiDBExtension:        enableTiDBExtension,
 		decimalHandlingMode:        decimalHandlingMode,

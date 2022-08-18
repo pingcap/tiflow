@@ -19,15 +19,16 @@ import (
 
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
+	"github.com/pingcap/tiflow/cdc/sink/codec/internal"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
 
 func TestCraftMaxMessageBytes(t *testing.T) {
 	t.Parallel()
-	cfg := codec.NewConfig(config.ProtocolCraft).WithMaxMessageBytes(256)
-	encoder := newCraftBatchEncoderBuilder(cfg).Build()
+	cfg := common.NewConfig(config.ProtocolCraft).WithMaxMessageBytes(256)
+	encoder := NewBatchEncoderBuilder(cfg).Build()
 
 	testEvent := &model.RowChangedEvent{
 		CommitTs: 1,
@@ -52,9 +53,9 @@ func TestCraftMaxMessageBytes(t *testing.T) {
 
 func TestCraftMaxBatchSize(t *testing.T) {
 	t.Parallel()
-	cfg := codec.NewConfig(config.ProtocolCraft).WithMaxMessageBytes(10485760)
+	cfg := common.NewConfig(config.ProtocolCraft).WithMaxMessageBytes(10485760)
 	cfg.MaxBatchSize = 64
-	encoder := newCraftBatchEncoderBuilder(cfg).Build()
+	encoder := NewBatchEncoderBuilder(cfg).Build()
 
 	testEvent := &model.RowChangedEvent{
 		CommitTs: 1,
@@ -74,7 +75,7 @@ func TestCraftMaxBatchSize(t *testing.T) {
 	messages := encoder.Build()
 	sum := 0
 	for _, msg := range messages {
-		decoder, err := newCraftBatchDecoder(msg.Value)
+		decoder, err := newBatchDecoder(msg.Value)
 		require.Nil(t, err)
 		count := 0
 		for {
@@ -97,21 +98,21 @@ func TestCraftMaxBatchSize(t *testing.T) {
 
 func TestBuildCraftBatchEncoder(t *testing.T) {
 	t.Parallel()
-	cfg := codec.NewConfig(config.ProtocolCraft)
+	cfg := common.NewConfig(config.ProtocolCraft)
 
-	builder := &craftBatchEncoderBuilder{config: cfg}
-	encoder, ok := builder.Build().(*craftBatchEncoder)
+	builder := &batchEncoderBuilder{config: cfg}
+	encoder, ok := builder.Build().(*BatchEncoder)
 	require.True(t, ok)
-	require.Equal(t, cfg.MaxBatchSize, encoder.maxBatchSize)
-	require.Equal(t, cfg.MaxMessageBytes, encoder.maxMessageBytes)
+	require.Equal(t, cfg.MaxBatchSize, encoder.MaxBatchSize)
+	require.Equal(t, cfg.MaxMessageBytes, encoder.MaxMessageBytes)
 }
 
 func testBatchCodec(
 	t *testing.T,
-	encoderBuilder codec.EncoderBuilder,
-	newDecoder func(value []byte) (codec.EventBatchDecoder, error),
+	encoderBuilder common.EncoderBuilder,
+	newDecoder func(value []byte) (common.EventBatchDecoder, error),
 ) {
-	checkRowDecoder := func(decoder codec.EventBatchDecoder, cs []*model.RowChangedEvent) {
+	checkRowDecoder := func(decoder common.EventBatchDecoder, cs []*model.RowChangedEvent) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -126,7 +127,7 @@ func testBatchCodec(
 			index++
 		}
 	}
-	checkDDLDecoder := func(decoder codec.EventBatchDecoder, cs []*model.DDLEvent) {
+	checkDDLDecoder := func(decoder common.EventBatchDecoder, cs []*model.DDLEvent) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -141,7 +142,7 @@ func testBatchCodec(
 			index++
 		}
 	}
-	checkTSDecoder := func(decoder codec.EventBatchDecoder, cs []uint64) {
+	checkTSDecoder := func(decoder common.EventBatchDecoder, cs []uint64) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -158,7 +159,7 @@ func testBatchCodec(
 	}
 
 	encoder := encoderBuilder.Build()
-	s := codec.NewDefaultBatchTester()
+	s := internal.NewDefaultBatchTester()
 
 	for _, cs := range s.RowCases {
 		events := 0
@@ -203,16 +204,16 @@ func testBatchCodec(
 }
 
 func TestDefaultCraftBatchCodec(t *testing.T) {
-	cfg := codec.NewConfig(config.ProtocolCraft).WithMaxMessageBytes(8192)
+	cfg := common.NewConfig(config.ProtocolCraft).WithMaxMessageBytes(8192)
 	cfg.MaxBatchSize = 64
-	testBatchCodec(t, newCraftBatchEncoderBuilder(cfg), newCraftBatchDecoder)
+	testBatchCodec(t, NewBatchEncoderBuilder(cfg), newBatchDecoder)
 }
 
 func TestCraftAppendRowChangedEventWithCallback(t *testing.T) {
 	t.Parallel()
-	cfg := codec.NewConfig(config.ProtocolCraft).WithMaxMessageBytes(10485760)
+	cfg := common.NewConfig(config.ProtocolCraft).WithMaxMessageBytes(10485760)
 	cfg.MaxBatchSize = 2
-	encoder := newCraftBatchEncoderBuilder(cfg).Build()
+	encoder := NewBatchEncoderBuilder(cfg).Build()
 	require.NotNil(t, encoder)
 
 	count := 0

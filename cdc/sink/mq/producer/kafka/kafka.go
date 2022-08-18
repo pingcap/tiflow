@@ -28,7 +28,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -84,7 +84,7 @@ type kafkaProducerClosingFlag = int32
 // otherwise Flush will not work as expected. It may never finish or flush the wrong message.
 // Because inflight will be modified by mistake.
 func (k *kafkaSaramaProducer) AsyncSendMessage(
-	ctx context.Context, topic string, partition int32, message *codec.MQMessage,
+	ctx context.Context, topic string, partition int32, message *common.MQMessage,
 ) error {
 	k.clientLock.RLock()
 	defer k.clientLock.RUnlock()
@@ -133,7 +133,7 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(
 }
 
 func (k *kafkaSaramaProducer) SyncBroadcastMessage(
-	ctx context.Context, topic string, partitionsNum int32, message *codec.MQMessage,
+	ctx context.Context, topic string, partitionsNum int32, message *common.MQMessage,
 ) error {
 	k.clientLock.RLock()
 	defer k.clientLock.RUnlock()

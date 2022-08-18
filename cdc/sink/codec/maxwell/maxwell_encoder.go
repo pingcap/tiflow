@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package codec
+package maxwell
 
 import (
 	"bytes"
@@ -20,12 +20,12 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/config"
 )
 
-// maxwellBatchEncoder is a maxwell format encoder implementation
-type maxwellBatchEncoder struct {
+// BatchEncoder is a maxwell format encoder implementation
+type BatchEncoder struct {
 	keyBuf      *bytes.Buffer
 	valueBuf    *bytes.Buffer
 	callbackBuf []func()
@@ -33,14 +33,14 @@ type maxwellBatchEncoder struct {
 }
 
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
-func (d *maxwellBatchEncoder) EncodeCheckpointEvent(ts uint64) (*codec.MQMessage, error) {
+func (d *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.MQMessage, error) {
 	// For maxwell now, there is no such a corresponding type to ResolvedEvent so far.
 	// Therefore the event is ignored.
 	return nil, nil
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
-func (d *maxwellBatchEncoder) AppendRowChangedEvent(
+func (d *BatchEncoder) AppendRowChangedEvent(
 	_ context.Context,
 	_ string,
 	e *model.RowChangedEvent,
@@ -61,7 +61,7 @@ func (d *maxwellBatchEncoder) AppendRowChangedEvent(
 
 // EncodeDDLEvent implements the EventBatchEncoder interface
 // DDL message unresolved tso
-func (d *maxwellBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*codec.MQMessage, error) {
+func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.MQMessage, error) {
 	keyMsg, valueMsg := ddlEventToMaxwellMsg(e)
 	key, err := keyMsg.Encode()
 	if err != nil {
@@ -72,16 +72,16 @@ func (d *maxwellBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*codec.MQMessag
 		return nil, errors.Trace(err)
 	}
 
-	return codec.NewDDLMsg(config.ProtocolMaxwell, key, value, e), nil
+	return common.NewDDLMsg(config.ProtocolMaxwell, key, value, e), nil
 }
 
 // Build implements the EventBatchEncoder interface
-func (d *maxwellBatchEncoder) Build() []*codec.MQMessage {
+func (d *BatchEncoder) Build() []*common.MQMessage {
 	if d.batchSize == 0 {
 		return nil
 	}
 
-	ret := codec.NewMsg(config.ProtocolMaxwell,
+	ret := common.NewMsg(config.ProtocolMaxwell,
 		d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0, model.MessageTypeRow, nil, nil)
 	ret.SetRowsCount(d.batchSize)
 	if len(d.callbackBuf) != 0 && len(d.callbackBuf) == d.batchSize {
@@ -94,22 +94,22 @@ func (d *maxwellBatchEncoder) Build() []*codec.MQMessage {
 		d.callbackBuf = make([]func(), 0)
 	}
 	d.reset()
-	return []*codec.MQMessage{ret}
+	return []*common.MQMessage{ret}
 }
 
 // reset implements the EventBatchEncoder interface
-func (d *maxwellBatchEncoder) reset() {
+func (d *BatchEncoder) reset() {
 	d.keyBuf.Reset()
 	d.valueBuf.Reset()
 	d.batchSize = 0
 	var versionByte [8]byte
-	binary.BigEndian.PutUint64(versionByte[:], codec.BatchVersion1)
+	binary.BigEndian.PutUint64(versionByte[:], common.BatchVersion1)
 	d.keyBuf.Write(versionByte[:])
 }
 
-// newMaxwellBatchEncoder creates a new maxwellBatchEncoder.
-func newMaxwellBatchEncoder() codec.EventBatchEncoder {
-	batch := &maxwellBatchEncoder{
+// newBatchEncoder creates a new maxwell BatchEncoder.
+func newBatchEncoder() common.EventBatchEncoder {
+	batch := &BatchEncoder{
 		keyBuf:      &bytes.Buffer{},
 		valueBuf:    &bytes.Buffer{},
 		callbackBuf: make([]func(), 0),
@@ -118,13 +118,14 @@ func newMaxwellBatchEncoder() codec.EventBatchEncoder {
 	return batch
 }
 
-type maxwellBatchEncoderBuilder struct{}
+type batchEncoderBuilder struct{}
 
-func newMaxwellBatchEncoderBuilder() codec.EncoderBuilder {
-	return &maxwellBatchEncoderBuilder{}
+// NewBatchEncoderBuilder creates a maxwell batchEncoderBuilder.
+func NewBatchEncoderBuilder() common.EncoderBuilder {
+	return &batchEncoderBuilder{}
 }
 
 // Build a `maxwellBatchEncoder`
-func (b *maxwellBatchEncoderBuilder) Build() codec.EventBatchEncoder {
-	return newMaxwellBatchEncoder()
+func (b *batchEncoderBuilder) Build() common.EventBatchEncoder {
+	return newBatchEncoder()
 }

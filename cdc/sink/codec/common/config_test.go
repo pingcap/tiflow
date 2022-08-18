@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package codec
+package common
 
 import (
 	"net/url"
@@ -25,13 +25,13 @@ func TestNewConfig(t *testing.T) {
 	t.Parallel()
 
 	c := NewConfig(config.ProtocolDefault)
-	require.Equal(t, config.ProtocolDefault, c.protocol)
-	require.Equal(t, config.DefaultMaxMessageBytes, c.maxMessageBytes)
-	require.Equal(t, defaultMaxBatchSize, c.maxBatchSize)
-	require.Equal(t, false, c.enableTiDBExtension)
-	require.Equal(t, "precise", c.avroDecimalHandlingMode)
-	require.Equal(t, "long", c.avroBigintUnsignedHandlingMode)
-	require.Equal(t, "", c.avroSchemaRegistry)
+	require.Equal(t, config.ProtocolDefault, c.Protocol)
+	require.Equal(t, config.DefaultMaxMessageBytes, c.MaxMessageBytes)
+	require.Equal(t, defaultMaxBatchSize, c.MaxBatchSize)
+	require.Equal(t, false, c.EnableTiDBExtension)
+	require.Equal(t, "precise", c.AvroDecimalHandlingMode)
+	require.Equal(t, "long", c.AvroBigintUnsignedHandlingMode)
+	require.Equal(t, "", c.AvroSchemaRegistry)
 }
 
 func TestConfigApplyValidate(t *testing.T) {
@@ -50,12 +50,12 @@ func TestConfigApplyValidate(t *testing.T) {
 	require.NoError(t, err)
 
 	c := NewConfig(p)
-	require.Equal(t, config.ProtocolCanalJSON, c.protocol)
+	require.Equal(t, config.ProtocolCanalJSON, c.Protocol)
 
 	replicaConfig := config.GetDefaultReplicaConfig()
 	err = c.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
-	require.True(t, c.enableTiDBExtension)
+	require.True(t, c.EnableTiDBExtension)
 
 	err = c.Validate()
 	require.NoError(t, err)
@@ -78,7 +78,7 @@ func TestConfigApplyValidate(t *testing.T) {
 	c = NewConfig(p)
 	err = c.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
-	require.True(t, c.enableTiDBExtension)
+	require.True(t, c.EnableTiDBExtension)
 
 	err = c.Validate()
 	require.ErrorContains(t, err, "enable-tidb-extension only supports canal-json/avro protocol")
@@ -93,11 +93,11 @@ func TestConfigApplyValidate(t *testing.T) {
 	err = p.FromString(protocol)
 	require.NoError(t, err)
 	c = NewConfig(p)
-	require.Equal(t, config.ProtocolAvro, c.protocol)
+	require.Equal(t, config.ProtocolAvro, c.Protocol)
 
 	err = c.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
-	require.Equal(t, "", c.avroSchemaRegistry)
+	require.Equal(t, "", c.AvroSchemaRegistry)
 	// `schema-registry` not set
 	err = c.Validate()
 	require.ErrorContains(t, err, `Avro protocol requires parameter "schema-registry"`)
@@ -105,13 +105,13 @@ func TestConfigApplyValidate(t *testing.T) {
 	replicaConfig.Sink.SchemaRegistry = "this-is-a-uri"
 	err = c.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
-	require.Equal(t, "this-is-a-uri", c.avroSchemaRegistry)
+	require.Equal(t, "this-is-a-uri", c.AvroSchemaRegistry)
 	err = c.Validate()
 	require.NoError(t, err)
 
 	// avro-decimal-handling-mode
 	c = NewConfig(config.ProtocolAvro)
-	require.Equal(t, "precise", c.avroDecimalHandlingMode)
+	require.Equal(t, "precise", c.AvroDecimalHandlingMode)
 
 	uri = "kafka://127.0.0.1:9092/abc?protocol=avro&avro-decimal-handling-mode=string"
 	sinkURI, err = url.Parse(uri)
@@ -119,7 +119,7 @@ func TestConfigApplyValidate(t *testing.T) {
 
 	err = c.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
-	require.Equal(t, "string", c.avroDecimalHandlingMode)
+	require.Equal(t, "string", c.AvroDecimalHandlingMode)
 
 	err = c.Validate()
 	require.NoError(t, err)
@@ -130,7 +130,7 @@ func TestConfigApplyValidate(t *testing.T) {
 
 	err = c.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
-	require.Equal(t, "invalid", c.avroDecimalHandlingMode)
+	require.Equal(t, "invalid", c.AvroDecimalHandlingMode)
 
 	err = c.Validate()
 	require.ErrorContains(
@@ -141,7 +141,7 @@ func TestConfigApplyValidate(t *testing.T) {
 
 	// avro-bigint-unsigned-handling-mode
 	c = NewConfig(config.ProtocolAvro)
-	require.Equal(t, "long", c.avroBigintUnsignedHandlingMode)
+	require.Equal(t, "long", c.AvroBigintUnsignedHandlingMode)
 
 	uri = "kafka://127.0.0.1:9092/abc?protocol=avro&avro-bigint-unsigned-handling-mode=string"
 	sinkURI, err = url.Parse(uri)
@@ -149,7 +149,7 @@ func TestConfigApplyValidate(t *testing.T) {
 
 	err = c.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
-	require.Equal(t, "string", c.avroBigintUnsignedHandlingMode)
+	require.Equal(t, "string", c.AvroBigintUnsignedHandlingMode)
 
 	err = c.Validate()
 	require.NoError(t, err)
@@ -160,7 +160,7 @@ func TestConfigApplyValidate(t *testing.T) {
 
 	err = c.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
-	require.Equal(t, "invalid", c.avroBigintUnsignedHandlingMode)
+	require.Equal(t, "invalid", c.AvroBigintUnsignedHandlingMode)
 
 	err = c.Validate()
 	require.ErrorContains(

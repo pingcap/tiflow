@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package codec
+package maxwell
 
 import (
 	"encoding/json"
@@ -19,7 +19,7 @@ import (
 	model2 "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/internal"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/tikv/pd/pkg/tsoutil"
 )
@@ -43,12 +43,12 @@ func (m *maxwellMessage) encode() ([]byte, error) {
 	return data, cerror.WrapError(cerror.ErrMaxwellEncodeFailed, err)
 }
 
-func rowChangeToMaxwellMsg(e *model.RowChangedEvent) (*codec.MQMessageKey, *maxwellMessage) {
+func rowChangeToMaxwellMsg(e *model.RowChangedEvent) (*internal.MQMessageKey, *maxwellMessage) {
 	var partition *int64
 	if e.Table.IsPartition {
 		partition = &e.Table.TableID
 	}
-	key := &codec.MQMessageKey{
+	key := &internal.MQMessageKey{
 		Ts:        e.CommitTs,
 		Schema:    e.Table.Schema,
 		Table:     e.Table.Table,
@@ -168,8 +168,8 @@ func (m *ddlMaxwellMessage) encode() ([]byte, error) {
 	return data, cerror.WrapError(cerror.ErrMaxwellEncodeFailed, err)
 }
 
-func ddlEventToMaxwellMsg(e *model.DDLEvent) (*codec.MQMessageKey, *ddlMaxwellMessage) {
-	key := &codec.MQMessageKey{
+func ddlEventToMaxwellMsg(e *model.DDLEvent) (*internal.MQMessageKey, *ddlMaxwellMessage) {
+	key := &internal.MQMessageKey{
 		Ts:     e.CommitTs,
 		Schema: e.TableInfo.Schema,
 		Table:  e.TableInfo.Table,

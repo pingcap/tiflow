@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/internal"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	canal "github.com/pingcap/tiflow/proto/canal"
 	"golang.org/x/text/encoding"
@@ -79,7 +79,7 @@ func (b *canalEntryBuilder) buildHeader(commitTs uint64, schema string, table st
 // see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/dbsync/src/main/java/com/taobao/tddl/dbsync/binlog/event/RowsLogBuffer.java#L276-L1147
 // all value will be represented in string type
 // see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L760-L855
-func (b *canalEntryBuilder) formatValue(value interface{}, javaType codec.JavaSQLType) (result string, err error) {
+func (b *canalEntryBuilder) formatValue(value interface{}, javaType internal.JavaSQLType) (result string, err error) {
 	// value would be nil, if no value insert for the column.
 	if value == nil {
 		return "", nil
@@ -102,7 +102,7 @@ func (b *canalEntryBuilder) formatValue(value interface{}, javaType codec.JavaSQ
 		// see https://github.com/alibaba/canal/blob/9f6021cf36f78cc8ac853dcf37a1769f359b868b/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L801
 		switch javaType {
 		// for normal text
-		case codec.JavaSQLTypeVARCHAR, codec.JavaSQLTypeCHAR, codec.JavaSQLTypeCLOB:
+		case internal.JavaSQLTypeVARCHAR, internal.JavaSQLTypeCHAR, internal.JavaSQLTypeCLOB:
 			result = string(v)
 		default:
 			// JavaSQLTypeBLOB
@@ -295,15 +295,15 @@ func isCanalDDL(t canal.EventType) bool {
 	return false
 }
 
-func getJavaSQLType(c *model.Column, mysqlType string) (result codec.JavaSQLType, err error) {
-	javaType := codec.MySQLType2JavaType(c.Type, c.Flag.IsBinary())
+func getJavaSQLType(c *model.Column, mysqlType string) (result internal.JavaSQLType, err error) {
+	javaType := internal.MySQLType2JavaType(c.Type, c.Flag.IsBinary())
 
 	switch javaType {
-	case codec.JavaSQLTypeBINARY, codec.JavaSQLTypeVARBINARY, codec.JavaSQLTypeLONGVARBINARY:
+	case internal.JavaSQLTypeBINARY, internal.JavaSQLTypeVARBINARY, internal.JavaSQLTypeLONGVARBINARY:
 		if strings.Contains(mysqlType, "text") {
-			return codec.JavaSQLTypeCLOB, nil
+			return internal.JavaSQLTypeCLOB, nil
 		}
-		return codec.JavaSQLTypeBLOB, nil
+		return internal.JavaSQLTypeBLOB, nil
 	}
 
 	// flag `isUnsigned` only for `numerical` and `bit`, `year` data type.
@@ -351,19 +351,19 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result codec.JavaSQLType
 	switch c.Type {
 	case mysql.TypeTiny:
 		if number > math.MaxInt8 {
-			javaType = codec.JavaSQLTypeSMALLINT
+			javaType = internal.JavaSQLTypeSMALLINT
 		}
 	case mysql.TypeShort:
 		if number > math.MaxInt16 {
-			javaType = codec.JavaSQLTypeINTEGER
+			javaType = internal.JavaSQLTypeINTEGER
 		}
 	case mysql.TypeLong:
 		if number > math.MaxInt32 {
-			javaType = codec.JavaSQLTypeBIGINT
+			javaType = internal.JavaSQLTypeBIGINT
 		}
 	case mysql.TypeLonglong:
 		if number > math.MaxInt64 {
-			javaType = codec.JavaSQLTypeDECIMAL
+			javaType = internal.JavaSQLTypeDECIMAL
 		}
 	}
 

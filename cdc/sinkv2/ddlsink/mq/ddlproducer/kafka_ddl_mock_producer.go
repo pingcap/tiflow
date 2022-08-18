@@ -17,8 +17,8 @@ import (
 	"context"
 
 	"github.com/Shopify/sarama"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
-	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/pkg/kafka"
 )
 
@@ -26,7 +26,7 @@ var _ DDLProducer = (*MockDDLProducer)(nil)
 
 // MockDDLProducer is a mock producer for test.
 type MockDDLProducer struct {
-	events map[mqv1.TopicPartitionKey][]*codec.MQMessage
+	events map[mqv1.TopicPartitionKey][]*common.MQMessage
 }
 
 // NewMockDDLProducer creates a mock producer.
@@ -34,13 +34,13 @@ func NewMockDDLProducer(_ context.Context, _ sarama.Client,
 	_ kafka.ClusterAdminClient,
 ) (DDLProducer, error) {
 	return &MockDDLProducer{
-		events: make(map[mqv1.TopicPartitionKey][]*codec.MQMessage),
+		events: make(map[mqv1.TopicPartitionKey][]*common.MQMessage),
 	}, nil
 }
 
 // SyncBroadcastMessage stores a message to all partitions of the topic.
 func (m *MockDDLProducer) SyncBroadcastMessage(ctx context.Context, topic string,
-	totalPartitionsNum int32, message *codec.MQMessage,
+	totalPartitionsNum int32, message *common.MQMessage,
 ) error {
 	for i := 0; i < int(totalPartitionsNum); i++ {
 		key := mqv1.TopicPartitionKey{
@@ -48,7 +48,7 @@ func (m *MockDDLProducer) SyncBroadcastMessage(ctx context.Context, topic string
 			Partition: int32(i),
 		}
 		if _, ok := m.events[key]; !ok {
-			m.events[key] = make([]*codec.MQMessage, 0)
+			m.events[key] = make([]*common.MQMessage, 0)
 		}
 		m.events[key] = append(m.events[key], message)
 	}
@@ -58,14 +58,14 @@ func (m *MockDDLProducer) SyncBroadcastMessage(ctx context.Context, topic string
 
 // SyncSendMessage stores a message to a partition of the topic.
 func (m *MockDDLProducer) SyncSendMessage(ctx context.Context, topic string,
-	partitionNum int32, message *codec.MQMessage,
+	partitionNum int32, message *common.MQMessage,
 ) error {
 	key := mqv1.TopicPartitionKey{
 		Topic:     topic,
 		Partition: partitionNum,
 	}
 	if _, ok := m.events[key]; !ok {
-		m.events[key] = make([]*codec.MQMessage, 0)
+		m.events[key] = make([]*common.MQMessage, 0)
 	}
 	m.events[key] = append(m.events[key], message)
 
@@ -76,8 +76,8 @@ func (m *MockDDLProducer) SyncSendMessage(ctx context.Context, topic string,
 func (m *MockDDLProducer) Close() {}
 
 // GetAllEvents returns the events received by the mock producer.
-func (m *MockDDLProducer) GetAllEvents() []*codec.MQMessage {
-	var events []*codec.MQMessage
+func (m *MockDDLProducer) GetAllEvents() []*common.MQMessage {
+	var events []*common.MQMessage
 	for _, v := range m.events {
 		events = append(events, v...)
 	}
@@ -85,6 +85,6 @@ func (m *MockDDLProducer) GetAllEvents() []*codec.MQMessage {
 }
 
 // GetEvents returns the event filtered by the key.
-func (m *MockDDLProducer) GetEvents(key mqv1.TopicPartitionKey) []*codec.MQMessage {
+func (m *MockDDLProducer) GetEvents(key mqv1.TopicPartitionKey) []*common.MQMessage {
 	return m.events[key]
 }

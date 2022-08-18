@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package codec
+package common
 
 import (
 	"encoding/binary"
@@ -69,6 +69,7 @@ func (m *MQMessage) IncRowsCount() {
 	m.rowsCount++
 }
 
+// NewDDLMsg creates a DDL message.
 func NewDDLMsg(proto config.Protocol, key, value []byte, event *model.DDLEvent) *MQMessage {
 	return NewMsg(
 		proto,
@@ -81,6 +82,7 @@ func NewDDLMsg(proto config.Protocol, key, value []byte, event *model.DDLEvent) 
 	)
 }
 
+// NewResolvedMsg creates a resolved ts message.
 func NewResolvedMsg(proto config.Protocol, key, value []byte, ts uint64) *MQMessage {
 	return NewMsg(proto, key, value, ts, model.MessageTypeResolved, nil, nil)
 }

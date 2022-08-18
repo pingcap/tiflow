@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package codec
+package maxwell
 
 import (
 	"context"
@@ -24,7 +24,7 @@ import (
 
 func TestMaxwellBatchCodec(t *testing.T) {
 	t.Parallel()
-	newEncoder := newMaxwellBatchEncoder
+	newEncoder := newBatchEncoder
 
 	rowCases := [][]*model.RowChangedEvent{{{
 		CommitTs: 1,
@@ -65,7 +65,7 @@ func TestMaxwellBatchCodec(t *testing.T) {
 }
 
 func TestMaxwellAppendRowChangedEventWithCallback(t *testing.T) {
-	encoder := newMaxwellBatchEncoder()
+	encoder := newBatchEncoder()
 	require.NotNil(t, encoder)
 
 	count := 0

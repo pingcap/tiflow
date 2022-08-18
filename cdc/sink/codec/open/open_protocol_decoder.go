@@ -11,26 +11,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package codec
+package open
 
 import (
 	"encoding/binary"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
+	"github.com/pingcap/tiflow/cdc/sink/codec/internal"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
-// OpenProtocolBatchMixedDecoder decodes the byte of a batch into the original messages.
-type OpenProtocolBatchMixedDecoder struct {
+// BatchMixedDecoder decodes the byte of a batch into the original messages.
+type BatchMixedDecoder struct {
 	mixedBytes []byte
-	nextKey    *codec.MQMessageKey
+	nextKey    *internal.MQMessageKey
 	nextKeyLen uint64
 }
 
 // HasNext implements the EventBatchDecoder interface
-func (b *OpenProtocolBatchMixedDecoder) HasNext() (model.MessageType, bool, error) {
+func (b *BatchMixedDecoder) HasNext() (model.MessageType, bool, error) {
 	if !b.hasNext() {
 		return 0, false, nil
 	}
@@ -41,7 +42,7 @@ func (b *OpenProtocolBatchMixedDecoder) HasNext() (model.MessageType, bool, erro
 }
 
 // NextResolvedEvent implements the EventBatchDecoder interface
-func (b *OpenProtocolBatchMixedDecoder) NextResolvedEvent() (uint64, error) {
+func (b *BatchMixedDecoder) NextResolvedEvent() (uint64, error) {
 	if b.nextKey == nil {
 		if err := b.decodeNextKey(); err != nil {
 			return 0, err
@@ -59,7 +60,7 @@ func (b *OpenProtocolBatchMixedDecoder) NextResolvedEvent() (uint64, error) {
 }
 
 // NextRowChangedEvent implements the EventBatchDecoder interface
-func (b *OpenProtocolBatchMixedDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
+func (b *BatchMixedDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if b.nextKey == nil {
 		if err := b.decodeNextKey(); err != nil {
 			return nil, err
@@ -82,7 +83,7 @@ func (b *OpenProtocolBatchMixedDecoder) NextRowChangedEvent() (*model.RowChanged
 }
 
 // NextDDLEvent implements the EventBatchDecoder interface
-func (b *OpenProtocolBatchMixedDecoder) NextDDLEvent() (*model.DDLEvent, error) {
+func (b *BatchMixedDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	if b.nextKey == nil {
 		if err := b.decodeNextKey(); err != nil {
 			return nil, err
@@ -104,15 +105,15 @@ func (b *OpenProtocolBatchMixedDecoder) NextDDLEvent() (*model.DDLEvent, error) 
 	return ddlEvent, nil
 }
 
-func (b *OpenProtocolBatchMixedDecoder) hasNext() bool {
+func (b *BatchMixedDecoder) hasNext() bool {
 	return len(b.mixedBytes) > 0
 }
 
-func (b *OpenProtocolBatchMixedDecoder) decodeNextKey() error {
+func (b *BatchMixedDecoder) decodeNextKey() error {
 	keyLen := binary.BigEndian.Uint64(b.mixedBytes[:8])
 	key := b.mixedBytes[8 : keyLen+8]
 	// drop value bytes
-	msgKey := new(codec.MQMessageKey)
+	msgKey := new(internal.MQMessageKey)
 	err := msgKey.Decode(key)
 	if err != nil {
 		return errors.Trace(err)
@@ -122,16 +123,16 @@ func (b *OpenProtocolBatchMixedDecoder) decodeNextKey() error {
 	return nil
 }
 
-// OpenProtocolBatchDecoder decodes the byte of a batch into the original messages.
-type OpenProtocolBatchDecoder struct {
+// BatchDecoder decodes the byte of a batch into the original messages.
+type BatchDecoder struct {
 	keyBytes   []byte
 	valueBytes []byte
-	nextKey    *codec.MQMessageKey
+	nextKey    *internal.MQMessageKey
 	nextKeyLen uint64
 }
 
 // HasNext implements the EventBatchDecoder interface
-func (b *OpenProtocolBatchDecoder) HasNext() (model.MessageType, bool, error) {
+func (b *BatchDecoder) HasNext() (model.MessageType, bool, error) {
 	if !b.hasNext() {
 		return 0, false, nil
 	}
@@ -142,7 +143,7 @@ func (b *OpenProtocolBatchDecoder) HasNext() (model.MessageType, bool, error) {
 }
 
 // NextResolvedEvent implements the EventBatchDecoder interface
-func (b *OpenProtocolBatchDecoder) NextResolvedEvent() (uint64, error) {
+func (b *BatchDecoder) NextResolvedEvent() (uint64, error) {
 	if b.nextKey == nil {
 		if err := b.decodeNextKey(); err != nil {
 			return 0, err
@@ -160,7 +161,7 @@ func (b *OpenProtocolBatchDecoder) NextResolvedEvent() (uint64, error) {
 }
 
 // NextRowChangedEvent implements the EventBatchDecoder interface
-func (b *OpenProtocolBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
+func (b *BatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if b.nextKey == nil {
 		if err := b.decodeNextKey(); err != nil {
 			return nil, err
@@ -183,7 +184,7 @@ func (b *OpenProtocolBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent
 }
 
 // NextDDLEvent implements the EventBatchDecoder interface
-func (b *OpenProtocolBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
+func (b *BatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	if b.nextKey == nil {
 		if err := b.decodeNextKey(); err != nil {
 			return nil, err
@@ -205,14 +206,14 @@ func (b *OpenProtocolBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	return ddlEvent, nil
 }
 
-func (b *OpenProtocolBatchDecoder) hasNext() bool {
+func (b *BatchDecoder) hasNext() bool {
 	return len(b.keyBytes) > 0 && len(b.valueBytes) > 0
 }
 
-func (b *OpenProtocolBatchDecoder) decodeNextKey() error {
+func (b *BatchDecoder) decodeNextKey() error {
 	keyLen := binary.BigEndian.Uint64(b.keyBytes[:8])
 	key := b.keyBytes[8 : keyLen+8]
-	msgKey := new(codec.MQMessageKey)
+	msgKey := new(internal.MQMessageKey)
 	err := msgKey.Decode(key)
 	if err != nil {
 		return errors.Trace(err)
@@ -222,20 +223,20 @@ func (b *OpenProtocolBatchDecoder) decodeNextKey() error {
 	return nil
 }
 
-// NewOpenProtocolBatchDecoder creates a new OpenProtocolBatchDecoder.
-func NewOpenProtocolBatchDecoder(key []byte, value []byte) (codec.EventBatchDecoder, error) {
+// NewBatchDecoder creates a new BatchDecoder.
+func NewBatchDecoder(key []byte, value []byte) (common.EventBatchDecoder, error) {
 	version := binary.BigEndian.Uint64(key[:8])
 	key = key[8:]
-	if version != codec.BatchVersion1 {
+	if version != common.BatchVersion1 {
 		return nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("unexpected key format version")
 	}
 	// if only decode one byte slice, we choose MixedDecoder
 	if len(key) > 0 && len(value) == 0 {
-		return &OpenProtocolBatchMixedDecoder{
+		return &BatchMixedDecoder{
 			mixedBytes: key,
 		}, nil
 	}
-	return &OpenProtocolBatchDecoder{
+	return &BatchDecoder{
 		keyBytes:   key,
 		valueBytes: value,
 	}, nil

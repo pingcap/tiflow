@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	kafkav1 "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/kafka"
@@ -86,12 +86,12 @@ func TestSyncBroadcastMessage(t *testing.T) {
 	require.Nil(t, err)
 
 	err = p.SyncBroadcastMessage(ctx, topic,
-		kafka.DefaultMockPartitionNum, &codec.MQMessage{Ts: 417318403368288260})
+		kafka.DefaultMockPartitionNum, &common.MQMessage{Ts: 417318403368288260})
 	require.Nil(t, err)
 
 	p.Close()
 	err = p.SyncBroadcastMessage(ctx, topic,
-		kafka.DefaultMockPartitionNum, &codec.MQMessage{Ts: 417318403368288260})
+		kafka.DefaultMockPartitionNum, &common.MQMessage{Ts: 417318403368288260})
 	require.ErrorIs(t, err, cerror.ErrKafkaProducerClosed)
 	cancel()
 }
@@ -115,11 +115,11 @@ func TestSyncSendMessage(t *testing.T) {
 	p, err := NewKafkaDDLProducer(ctx, client, adminClient)
 	require.Nil(t, err)
 
-	err = p.SyncSendMessage(ctx, topic, 0, &codec.MQMessage{Ts: 417318403368288260})
+	err = p.SyncSendMessage(ctx, topic, 0, &common.MQMessage{Ts: 417318403368288260})
 	require.Nil(t, err)
 
 	p.Close()
-	err = p.SyncSendMessage(ctx, topic, 0, &codec.MQMessage{Ts: 417318403368288260})
+	err = p.SyncSendMessage(ctx, topic, 0, &common.MQMessage{Ts: 417318403368288260})
 	require.ErrorIs(t, err, cerror.ErrKafkaProducerClosed)
 	cancel()
 }
@@ -148,7 +148,7 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	require.Nil(t, err)
 	defer p.Close()
 
-	err = p.SyncSendMessage(ctx, topic, 0, &codec.MQMessage{Ts: 417318403368288260})
+	err = p.SyncSendMessage(ctx, topic, 0, &common.MQMessage{Ts: 417318403368288260})
 	require.Regexp(t, ".*too large.*", err)
 }
 

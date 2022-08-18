@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package codec
+package internal
 
 import (
 	"encoding/base64"
@@ -25,6 +25,7 @@ import (
 	"golang.org/x/text/encoding/charmap"
 )
 
+// Column is a type only used in codec internally.
 type Column struct {
 	Type byte `json:"t"`
 	// Deprecated: please use Flag instead.
@@ -33,6 +34,7 @@ type Column struct {
 	Value       any                  `json:"v"`
 }
 
+// NewColumn creates a Column.
 func NewColumn(value any, tp byte) *Column {
 	return &Column{
 		Value: value,
@@ -40,6 +42,7 @@ func NewColumn(value any, tp byte) *Column {
 	}
 }
 
+// FromRowChangeColumn converts from a row changed column to a codec column.
 func (c *Column) FromRowChangeColumn(col *model.Column) {
 	c.Type = col.Type
 	c.Flag = col.Flag
@@ -72,6 +75,7 @@ func (c *Column) FromRowChangeColumn(col *model.Column) {
 	}
 }
 
+// ToRowChangeColumn converts from a codec column to a row changed column.
 func (c *Column) ToRowChangeColumn(name string) *model.Column {
 	col := new(model.Column)
 	col.Type = c.Type
@@ -98,6 +102,7 @@ func (c *Column) ToRowChangeColumn(name string) *model.Column {
 	return col
 }
 
+// ToCanalJSONFormatColumn converts from a codec column to a row changed column in canal-json format.
 func (c *Column) ToCanalJSONFormatColumn(name string, javaType JavaSQLType) *model.Column {
 	col := new(model.Column)
 	col.Type = c.Type
@@ -138,6 +143,7 @@ func (c *Column) ToCanalJSONFormatColumn(name string, javaType JavaSQLType) *mod
 	return col
 }
 
+// FormatColumn formats a codec column.
 func FormatColumn(c Column) Column {
 	switch c.Type {
 	case mysql.TypeTinyBlob, mysql.TypeMediumBlob,

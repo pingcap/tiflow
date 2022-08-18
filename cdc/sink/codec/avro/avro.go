@@ -30,19 +30,19 @@ import (
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
-// AvroEventBatchEncoder converts the events to binary Avro data
-type AvroEventBatchEncoder struct {
+// BatchEncoder converts the events to binary Avro data
+type BatchEncoder struct {
 	namespace          string
-	keySchemaManager   *AvroSchemaManager
-	valueSchemaManager *AvroSchemaManager
-	resultBuf          []*codec.MQMessage
+	keySchemaManager   *schemaManager
+	valueSchemaManager *schemaManager
+	resultBuf          []*common.MQMessage
 	maxMessageBytes    int
 
 	enableTiDBExtension        bool
@@ -57,14 +57,14 @@ type avroEncodeResult struct {
 
 // AppendRowChangedEvent appends a row change event to the encoder
 // NOTE: the encoder can only store one RowChangedEvent!
-func (a *AvroEventBatchEncoder) AppendRowChangedEvent(
+func (a *BatchEncoder) AppendRowChangedEvent(
 	ctx context.Context,
 	topic string,
 	e *model.RowChangedEvent,
 	_ func(),
 ) error {
 	log.Debug("AppendRowChangedEvent", zap.Any("rowChangedEvent", e))
-	mqMessage := codec.NewMsg(
+	mqMessage := common.NewMsg(
 		config.ProtocolAvro,
 		nil,
 		nil,
@@ -130,17 +130,17 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(
 }
 
 // EncodeCheckpointEvent is no-op for now
-func (a *AvroEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*codec.MQMessage, error) {
+func (a *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.MQMessage, error) {
 	return nil, nil
 }
 
 // EncodeDDLEvent is no-op now
-func (a *AvroEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*codec.MQMessage, error) {
+func (a *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.MQMessage, error) {
 	return nil, nil
 }
 
 // Build MQ Messages
-func (a *AvroEventBatchEncoder) Build() (mqMessages []*codec.MQMessage) {
+func (a *BatchEncoder) Build() (mqMessages []*common.MQMessage) {
 	old := a.resultBuf
 	a.resultBuf = nil
 	return old
@@ -151,7 +151,7 @@ const (
 	updateOperation = "u"
 )
 
-func (a *AvroEventBatchEncoder) avroEncode(
+func (a *BatchEncoder) avroEncode(
 	ctx context.Context,
 	e *model.RowChangedEvent,
 	topic string,
@@ -161,7 +161,7 @@ func (a *AvroEventBatchEncoder) avroEncode(
 		cols                []*model.Column
 		colInfos            []rowcodec.ColInfo
 		enableTiDBExtension bool
-		schemaManager       *AvroSchemaManager
+		schemaManager       *schemaManager
 		operation           string
 	)
 	if isKey {
@@ -527,7 +527,7 @@ func columnToAvroSchema(
 			Parameters: map[string]string{tidbType: tt},
 		}, nil
 	case mysql.TypeLonglong: // BIGINT
-		if col.Flag.IsUnsigned() && bigintUnsignedHandlingMode == codec.BigintUnsignedHandlingModeString {
+		if col.Flag.IsUnsigned() && bigintUnsignedHandlingMode == common.BigintUnsignedHandlingModeString {
 			return avroSchema{
 				Type:       "string",
 				Parameters: map[string]string{tidbType: tt},
@@ -555,7 +555,7 @@ func columnToAvroSchema(
 			},
 		}, nil
 	case mysql.TypeNewDecimal:
-		if decimalHandlingMode == codec.DecimalHandlingModePrecise {
+		if decimalHandlingMode == common.DecimalHandlingModePrecise {
 			defaultFlen, defaultDecimal := mysql.GetDefaultFieldLengthAndDecimal(ft.GetType())
 			displayFlen, displayDecimal := ft.GetFlen(), ft.GetDecimal()
 			// length not specified, set it to system type default
@@ -674,7 +674,7 @@ func columnToAvroData(
 	case mysql.TypeLonglong:
 		if v, ok := col.Value.(string); ok {
 			if col.Flag.IsUnsigned() {
-				if bigintUnsignedHandlingMode == codec.BigintUnsignedHandlingModeString {
+				if bigintUnsignedHandlingMode == common.BigintUnsignedHandlingModeString {
 					return v, "string", nil
 				}
 				n, err := strconv.ParseUint(v, 10, 64)
@@ -690,7 +690,7 @@ func columnToAvroData(
 			return n, "long", nil
 		}
 		if col.Flag.IsUnsigned() {
-			if bigintUnsignedHandlingMode == codec.BigintUnsignedHandlingModeLong {
+			if bigintUnsignedHandlingMode == common.BigintUnsignedHandlingModeLong {
 				return int64(col.Value.(uint64)), "long", nil
 			}
 			// bigintUnsignedHandlingMode == "string"
@@ -712,7 +712,7 @@ func columnToAvroData(
 		}
 		return []byte(types.NewBinaryLiteralFromUint(col.Value.(uint64), -1)), "bytes", nil
 	case mysql.TypeNewDecimal:
-		if decimalHandlingMode == codec.DecimalHandlingModePrecise {
+		if decimalHandlingMode == common.DecimalHandlingModePrecise {
 			v, succ := new(big.Rat).SetString(col.Value.(string))
 			if !succ {
 				return nil, "", cerror.ErrAvroEncodeFailed.GenWithStack(
@@ -794,11 +794,11 @@ func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-type avroEventBatchEncoderBuilder struct {
+type batchEncoderBuilder struct {
 	namespace          string
-	config             *codec.Config
-	keySchemaManager   *AvroSchemaManager
-	valueSchemaManager *AvroSchemaManager
+	config             *common.Config
+	keySchemaManager   *schemaManager
+	valueSchemaManager *schemaManager
 }
 
 const (
@@ -806,7 +806,8 @@ const (
 	valueSchemaSuffix = "-value"
 )
 
-func newAvroEventBatchEncoderBuilder(ctx context.Context, config *codec.Config) (codec.EncoderBuilder, error) {
+// NewBatchEncoderBuilder creates a avro batchEncoderBuilder.
+func NewBatchEncoderBuilder(ctx context.Context, config *common.Config) (common.EncoderBuilder, error) {
 	keySchemaManager, err := NewAvroSchemaManager(
 		ctx,
 		nil,
@@ -827,7 +828,7 @@ func newAvroEventBatchEncoderBuilder(ctx context.Context, config *codec.Config) 
 		return nil, errors.Trace(err)
 	}
 
-	return &avroEventBatchEncoderBuilder{
+	return &batchEncoderBuilder{
 		namespace:          contextutil.ChangefeedIDFromCtx(ctx).Namespace,
 		config:             config,
 		keySchemaManager:   keySchemaManager,
@@ -836,12 +837,12 @@ func newAvroEventBatchEncoderBuilder(ctx context.Context, config *codec.Config) 
 }
 
 // Build an AvroEventBatchEncoder.
-func (b *avroEventBatchEncoderBuilder) Build() codec.EventBatchEncoder {
-	encoder := &AvroEventBatchEncoder{}
+func (b *batchEncoderBuilder) Build() common.EventBatchEncoder {
+	encoder := &BatchEncoder{}
 	encoder.namespace = b.namespace
 	encoder.keySchemaManager = b.keySchemaManager
 	encoder.valueSchemaManager = b.valueSchemaManager
-	encoder.resultBuf = make([]*codec.MQMessage, 0, 4096)
+	encoder.resultBuf = make([]*common.MQMessage, 0, 4096)
 	encoder.maxMessageBytes = b.config.MaxMessageBytes
 	encoder.enableTiDBExtension = b.config.EnableTiDBExtension
 	encoder.decimalHandlingMode = b.config.AvroDecimalHandlingMode

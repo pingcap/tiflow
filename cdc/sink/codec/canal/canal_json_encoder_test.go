@@ -20,31 +20,31 @@ import (
 
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/text/encoding/charmap"
 )
 
-func TestBuildCanalJSONBatchEncoder(t *testing.T) {
+func TestBuildJSONBatchEncoder(t *testing.T) {
 	t.Parallel()
-	cfg := codec.NewConfig(config.ProtocolCanalJSON)
+	cfg := common.NewConfig(config.ProtocolCanalJSON)
 
-	builder := &canalJSONBatchEncoderBuilder{config: cfg}
-	encoder, ok := builder.Build().(*canalJSONBatchEncoder)
+	builder := &jsonBatchEncoderBuilder{config: cfg}
+	encoder, ok := builder.Build().(*JSONBatchEncoder)
 	require.True(t, ok)
 	require.False(t, encoder.enableTiDBExtension)
 
 	cfg.EnableTiDBExtension = true
-	builder = &canalJSONBatchEncoderBuilder{config: cfg}
-	encoder, ok = builder.Build().(*canalJSONBatchEncoder)
+	builder = &jsonBatchEncoderBuilder{config: cfg}
+	encoder, ok = builder.Build().(*JSONBatchEncoder)
 	require.True(t, ok)
 	require.True(t, encoder.enableTiDBExtension)
 }
 
 func TestNewCanalJSONMessage4DML(t *testing.T) {
 	t.Parallel()
-	encoder := &canalJSONBatchEncoder{builder: newCanalEntryBuilder()}
+	encoder := &JSONBatchEncoder{builder: newCanalEntryBuilder()}
 	require.NotNil(t, encoder)
 
 	message, err := encoder.newJSONMessageForDML(testCaseInsert)
@@ -104,7 +104,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	require.Nil(t, jsonMsg.Old)
 	require.Equal(t, "DELETE", jsonMsg.EventType)
 
-	encoder = &canalJSONBatchEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: true}
+	encoder = &JSONBatchEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: true}
 	require.NotNil(t, encoder)
 	message, err = encoder.newJSONMessageForDML(testCaseUpdate)
 	require.Nil(t, err)
@@ -118,7 +118,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 func TestNewCanalJSONMessageFromDDL(t *testing.T) {
 	t.Parallel()
-	encoder := &canalJSONBatchEncoder{builder: newCanalEntryBuilder()}
+	encoder := &JSONBatchEncoder{builder: newCanalEntryBuilder()}
 	require.NotNil(t, encoder)
 
 	message := encoder.newJSONMessageForDDL(testCaseDDL)
@@ -134,7 +134,7 @@ func TestNewCanalJSONMessageFromDDL(t *testing.T) {
 	require.Equal(t, testCaseDDL.Query, msg.Query)
 	require.Equal(t, "CREATE", msg.EventType)
 
-	encoder = &canalJSONBatchEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: true}
+	encoder = &JSONBatchEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: true}
 	require.NotNil(t, encoder)
 
 	message = encoder.newJSONMessageForDDL(testCaseDDL)
@@ -149,7 +149,7 @@ func TestNewCanalJSONMessageFromDDL(t *testing.T) {
 
 func TestBatching(t *testing.T) {
 	t.Parallel()
-	encoder := &canalJSONBatchEncoder{builder: newCanalEntryBuilder()}
+	encoder := &JSONBatchEncoder{builder: newCanalEntryBuilder()}
 	require.NotNil(t, encoder)
 
 	updateCase := *testCaseUpdate
@@ -182,7 +182,7 @@ func TestEncodeCheckpointEvent(t *testing.T) {
 	t.Parallel()
 	var watermark uint64 = 2333
 	for _, enable := range []bool{false, true} {
-		encoder := &canalJSONBatchEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: enable}
+		encoder := &JSONBatchEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: enable}
 		require.NotNil(t, encoder)
 
 		msg, err := encoder.EncodeCheckpointEvent(watermark)
@@ -194,7 +194,7 @@ func TestEncodeCheckpointEvent(t *testing.T) {
 		}
 
 		require.NotNil(t, msg)
-		decoder := NewCanalJSONBatchDecoder(msg.Value, enable)
+		decoder := NewBatchDecoder(msg.Value, enable)
 
 		ty, hasNext, err := decoder.HasNext()
 		require.Nil(t, err)
@@ -219,7 +219,7 @@ func TestEncodeCheckpointEvent(t *testing.T) {
 func TestCheckpointEventValueMarshal(t *testing.T) {
 	t.Parallel()
 	var watermark uint64 = 1024
-	encoder := &canalJSONBatchEncoder{
+	encoder := &JSONBatchEncoder{
 		builder:             newCanalEntryBuilder(),
 		enableTiDBExtension: true,
 	}
@@ -266,7 +266,7 @@ func TestCheckpointEventValueMarshal(t *testing.T) {
 
 func TestDDLEventWithExtensionValueMarshal(t *testing.T) {
 	t.Parallel()
-	encoder := &canalJSONBatchEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: true}
+	encoder := &JSONBatchEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: true}
 	require.NotNil(t, encoder)
 
 	message := encoder.newJSONMessageForDDL(testCaseDDL)
@@ -303,7 +303,7 @@ func TestDDLEventWithExtensionValueMarshal(t *testing.T) {
 }
 
 func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
-	encoder := &canalJSONBatchEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: true}
+	encoder := &JSONBatchEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: true}
 	require.NotNil(t, encoder)
 
 	count := 0

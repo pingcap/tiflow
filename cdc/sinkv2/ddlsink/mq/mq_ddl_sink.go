@@ -20,7 +20,8 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
@@ -44,7 +45,7 @@ type ddlSink struct {
 	// It is also responsible for creating topics.
 	topicManager manager.TopicManager
 	// encoderBuilder builds encoder for the sink.
-	encoderBuilder codec.EncoderBuilder
+	encoderBuilder common.EncoderBuilder
 	// producer used to send events to the MQ system.
 	// Usually it is a sync producer.
 	producer ddlproducer.DDLProducer
@@ -54,7 +55,7 @@ func newDDLSink(ctx context.Context,
 	producer ddlproducer.DDLProducer,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
-	encoderConfig *codec.Config,
+	encoderConfig *common.Config,
 ) (*ddlSink, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
@@ -65,7 +66,7 @@ func newDDLSink(ctx context.Context,
 
 	s := &ddlSink{
 		id:             changefeedID,
-		protocol:       encoderConfig.Protocol(),
+		protocol:       encoderConfig.Protocol,
 		eventRouter:    eventRouter,
 		topicManager:   topicManager,
 		encoderBuilder: encoderBuilder,

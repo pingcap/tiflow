@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package codec
+package open
 
 import (
 	"context"
@@ -19,19 +19,20 @@ import (
 
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
+	"github.com/pingcap/tiflow/cdc/sink/codec/internal"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
 
 func TestBuildOpenProtocolBatchEncoder(t *testing.T) {
 	t.Parallel()
-	config := codec.NewConfig(config.ProtocolOpen)
-	builder := &openProtocolBatchEncoderBuilder{config: config}
-	encoder, ok := builder.Build().(*OpenProtocolBatchEncoder)
+	config := common.NewConfig(config.ProtocolOpen)
+	builder := &batchEncoderBuilder{config: config}
+	encoder, ok := builder.Build().(*BatchEncoder)
 	require.True(t, ok)
-	require.Equal(t, config.MaxBatchSize, encoder.maxBatchSize)
-	require.Equal(t, config.MaxMessageBytes, encoder.maxMessageBytes)
+	require.Equal(t, config.MaxBatchSize, encoder.MaxBatchSize)
+	require.Equal(t, config.MaxMessageBytes, encoder.MaxMessageBytes)
 }
 
 func TestMaxMessageBytes(t *testing.T) {
@@ -51,20 +52,20 @@ func TestMaxMessageBytes(t *testing.T) {
 	topic := ""
 	// for a single message, the overhead is 36(maxRecordOverhead) + 8(versionHea) = 44, just can hold it.
 	a := 88 + 44
-	config := codec.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(a)
-	encoder := newOpenProtocolBatchEncoderBuilder(config).Build()
+	config := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(a)
+	encoder := NewBatchEncoderBuilder(config).Build()
 	err := encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
 	require.Nil(t, err)
 
 	// cannot hold a single message
 	config = config.WithMaxMessageBytes(a - 1)
-	encoder = newOpenProtocolBatchEncoderBuilder(config).Build()
+	encoder = NewBatchEncoderBuilder(config).Build()
 	err = encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
 	require.NotNil(t, err)
 
 	// make sure each batch's `Length` not greater than `max-message-bytes`
 	config = config.WithMaxMessageBytes(256)
-	encoder = newOpenProtocolBatchEncoderBuilder(config).Build()
+	encoder = NewBatchEncoderBuilder(config).Build()
 	for i := 0; i < 10000; i++ {
 		err := encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
 		require.Nil(t, err)
@@ -78,9 +79,9 @@ func TestMaxMessageBytes(t *testing.T) {
 
 func TestMaxBatchSize(t *testing.T) {
 	t.Parallel()
-	config := codec.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(1048576)
+	config := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(1048576)
 	config.MaxBatchSize = 64
-	encoder := newOpenProtocolBatchEncoderBuilder(config).Build()
+	encoder := NewBatchEncoderBuilder(config).Build()
 
 	testEvent := &model.RowChangedEvent{
 		CommitTs: 1,
@@ -100,7 +101,7 @@ func TestMaxBatchSize(t *testing.T) {
 	messages := encoder.Build()
 	sum := 0
 	for _, msg := range messages {
-		decoder, err := NewOpenProtocolBatchDecoder(msg.Key, msg.Value)
+		decoder, err := NewBatchDecoder(msg.Key, msg.Value)
 		require.Nil(t, err)
 		count := 0
 		for {
@@ -124,13 +125,13 @@ func TestMaxBatchSize(t *testing.T) {
 func TestOpenProtocolAppendRowChangedEventWithCallback(t *testing.T) {
 	t.Parallel()
 
-	cfg := codec.NewConfig(config.ProtocolOpen)
+	cfg := common.NewConfig(config.ProtocolOpen)
 	// Set the max batch size to 2, so that we can test the callback.
 	cfg.MaxBatchSize = 2
-	builder := &openProtocolBatchEncoderBuilder{config: cfg}
-	encoder, ok := builder.Build().(*OpenProtocolBatchEncoder)
+	builder := &batchEncoderBuilder{config: cfg}
+	encoder, ok := builder.Build().(*BatchEncoder)
 	require.True(t, ok)
-	require.Equal(t, cfg.MaxBatchSize, encoder.maxBatchSize)
+	require.Equal(t, cfg.MaxBatchSize, encoder.MaxBatchSize)
 
 	count := 0
 
@@ -202,8 +203,8 @@ func TestOpenProtocolAppendRowChangedEventWithCallback(t *testing.T) {
 }
 
 func TestOpenProtocolBatchCodec(t *testing.T) {
-	config := codec.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(8192)
+	config := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(8192)
 	config.MaxBatchSize = 64
-	tester := codec.NewDefaultBatchTester()
-	tester.TestBatchCodec(t, newOpenProtocolBatchEncoderBuilder(config), NewOpenProtocolBatchDecoder)
+	tester := internal.NewDefaultBatchTester()
+	tester.TestBatchCodec(t, NewBatchEncoderBuilder(config), NewBatchDecoder)
 }

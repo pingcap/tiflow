@@ -19,174 +19,27 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sink/codec/craft"
+	"github.com/pingcap/tiflow/cdc/sink/codec/internal"
+	"github.com/pingcap/tiflow/cdc/sink/codec/open"
 	"github.com/pingcap/tiflow/proto/benchmark"
 	"github.com/stretchr/testify/require"
 )
 
 var (
-	codecRowCases = [][]*model.RowChangedEvent{{{
-		CommitTs: 424316552636792833,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		PreColumns: []*model.Column{
-			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar0")},
-			{Name: "string", Type: mysql.TypeString, Value: []byte("string0")},
-			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/01"},
-			{Name: "timestamp", Type: mysql.TypeTimestamp, Value: "2021/01/01 00:00:00"},
-			{Name: "datetime", Type: mysql.TypeDatetime, Value: "2021/01/01 00:00:00"},
-			{Name: "float", Type: mysql.TypeFloat, Value: float64(1.0)},
-			{Name: "long", Type: mysql.TypeLong, Value: int64(1000)},
-			{Name: "null", Type: mysql.TypeNull, Value: nil},
-		},
-		Columns: []*model.Column{
-			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar1")},
-			{Name: "string", Type: mysql.TypeString, Value: []byte("string1")},
-			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/02"},
-			{Name: "timestamp", Type: mysql.TypeTimestamp, Value: "2021/01/02 00:00:00"},
-			{Name: "datetime", Type: mysql.TypeDatetime, Value: "2021/01/02 00:00:00"},
-			{Name: "float", Type: mysql.TypeFloat, Value: float64(2.0)},
-			{Name: "long", Type: mysql.TypeLong, Value: int64(2000)},
-			{Name: "null", Type: mysql.TypeNull, Value: nil},
-		},
-	}}, {{
-		CommitTs: 424316553934667777,
-		Table:    &model.TableName{Schema: "a", Table: "c"},
-		PreColumns: []*model.Column{
-			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar0")},
-			{Name: "string", Type: mysql.TypeString, Value: []byte("string0")},
-			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/01"},
-			{Name: "timestamp", Type: mysql.TypeTimestamp, Value: "2021/01/01 00:00:00"},
-			{Name: "datetime", Type: mysql.TypeDatetime, Value: "2021/01/01 00:00:00"},
-			{Name: "float", Type: mysql.TypeFloat, Value: float64(1.0)},
-			{Name: "long", Type: mysql.TypeLong, Value: int64(1000)},
-			{Name: "null", Type: mysql.TypeNull, Value: nil},
-		},
-		Columns: []*model.Column{
-			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar1")},
-			{Name: "string", Type: mysql.TypeString, Value: []byte("string1")},
-			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/02"},
-			{Name: "timestamp", Type: mysql.TypeTimestamp, Value: "2021/01/02 00:00:00"},
-			{Name: "datetime", Type: mysql.TypeDatetime, Value: "2021/01/02 00:00:00"},
-			{Name: "float", Type: mysql.TypeFloat, Value: float64(2.0)},
-			{Name: "long", Type: mysql.TypeLong, Value: int64(2000)},
-			{Name: "null", Type: mysql.TypeNull, Value: nil},
-		},
-	}, {
-		CommitTs: 424316554327097345,
-		Table:    &model.TableName{Schema: "a", Table: "d"},
-		PreColumns: []*model.Column{
-			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar0")},
-			{Name: "string", Type: mysql.TypeString, Value: []byte("string0")},
-			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/01"},
-			{Name: "timestamp", Type: mysql.TypeTimestamp, Value: "2021/01/01 00:00:00"},
-			{Name: "datetime", Type: mysql.TypeDatetime, Value: "2021/01/01 00:00:00"},
-			{Name: "float", Type: mysql.TypeFloat, Value: float64(1.0)},
-			{Name: "long", Type: mysql.TypeLong, Value: int64(1000)},
-			{Name: "null", Type: mysql.TypeNull, Value: nil},
-		},
-		Columns: []*model.Column{
-			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar1")},
-			{Name: "string", Type: mysql.TypeString, Value: []byte("string1")},
-			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/02"},
-			{Name: "timestamp", Type: mysql.TypeTimestamp, Value: "2021/01/02 00:00:00"},
-			{Name: "datetime", Type: mysql.TypeDatetime, Value: "2021/01/02 00:00:00"},
-			{Name: "float", Type: mysql.TypeFloat, Value: float64(2.0)},
-			{Name: "long", Type: mysql.TypeLong, Value: int64(2000)},
-			{Name: "null", Type: mysql.TypeNull, Value: nil},
-		},
-	}, {
-		CommitTs: 424316554746789889,
-		Table:    &model.TableName{Schema: "a", Table: "e"},
-		PreColumns: []*model.Column{
-			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar0")},
-			{Name: "string", Type: mysql.TypeString, Value: []byte("string0")},
-			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/01"},
-			{Name: "timestamp", Type: mysql.TypeTimestamp, Value: "2021/01/01 00:00:00"},
-			{Name: "datetime", Type: mysql.TypeDatetime, Value: "2021/01/01 00:00:00"},
-			{Name: "float", Type: mysql.TypeFloat, Value: float64(1.0)},
-			{Name: "long", Type: mysql.TypeLong, Value: int64(1000)},
-			{Name: "null", Type: mysql.TypeNull, Value: nil},
-		},
-		Columns: []*model.Column{
-			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar1")},
-			{Name: "string", Type: mysql.TypeString, Value: []byte("string1")},
-			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/02"},
-			{Name: "timestamp", Type: mysql.TypeTimestamp, Value: "2021/01/02 00:00:00"},
-			{Name: "datetime", Type: mysql.TypeDatetime, Value: "2021/01/02 00:00:00"},
-			{Name: "float", Type: mysql.TypeFloat, Value: float64(2.0)},
-			{Name: "long", Type: mysql.TypeLong, Value: int64(2000)},
-			{Name: "null", Type: mysql.TypeNull, Value: nil},
-		},
-	}, {
-		CommitTs: 424316555073945601,
-		Table:    &model.TableName{Schema: "a", Table: "f", TableID: 6, IsPartition: true},
-		PreColumns: []*model.Column{
-			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar0")},
-			{Name: "string", Type: mysql.TypeString, Value: []byte("string0")},
-			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/01"},
-			{Name: "timestamp", Type: mysql.TypeTimestamp, Value: "2021/01/01 00:00:00"},
-			{Name: "datetime", Type: mysql.TypeDatetime, Value: "2021/01/01 00:00:00"},
-			{Name: "float", Type: mysql.TypeFloat, Value: float64(1.0)},
-			{Name: "long", Type: mysql.TypeLong, Value: int64(1000)},
-			{Name: "null", Type: mysql.TypeNull, Value: nil},
-		},
-		Columns: []*model.Column{
-			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar1")},
-			{Name: "string", Type: mysql.TypeString, Value: []byte("string1")},
-			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/02"},
-			{Name: "timestamp", Type: mysql.TypeTimestamp, Value: "2021/01/02 00:00:00"},
-			{Name: "datetime", Type: mysql.TypeDatetime, Value: "2021/01/02 00:00:00"},
-			{Name: "float", Type: mysql.TypeFloat, Value: float64(2.0)},
-			{Name: "long", Type: mysql.TypeLong, Value: int64(2000)},
-			{Name: "null", Type: mysql.TypeNull, Value: nil},
-		},
-	}}, {}}
+	codecBenchmarkRowChanges = internal.CodecRowCases[1]
 
-	codecDDLCases = [][]*model.DDLEvent{{{
-		CommitTs: 424316555979653121,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "a", Table: "b",
-		},
-		Query: "create table a",
-		Type:  1,
-	}}, {{
-		CommitTs: 424316583965360129,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "a", Table: "b",
-		},
-		Query: "create table a",
-		Type:  1,
-	}, {
-		CommitTs: 424316586087940097,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "a", Table: "b",
-		},
-		Query: "create table b",
-		Type:  2,
-	}, {
-		CommitTs: 424316588736118785,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "a", Table: "b",
-		},
-		Query: "create table c",
-		Type:  3,
-	}}, {}}
-
-	codecResolvedTSCases = [][]uint64{{424316592563683329}, {424316594097225729, 424316594214141953, 424316594345213953}, {}}
-
-	codecBenchmarkRowChanges = codecRowCases[1]
-
-	codecCraftEncodedRowChanges = []*MQMessage{}
-	codecJSONEncodedRowChanges  = []*MQMessage{}
-	codecPB1EncodedRowChanges   = []*MQMessage{}
-	codecPB2EncodedRowChanges   = []*MQMessage{}
+	codecCraftEncodedRowChanges = []*common.MQMessage{}
+	codecJSONEncodedRowChanges  = []*common.MQMessage{}
+	codecPB1EncodedRowChanges   = []*common.MQMessage{}
+	codecPB2EncodedRowChanges   = []*common.MQMessage{}
 
 	codecTestSliceAllocator = craft.NewSliceAllocator(512)
 )
 
-func checkCompressedSize(messages []*MQMessage) (int, int) {
+func checkCompressedSize(messages []*common.MQMessage) (int, int) {
 	var buff bytes.Buffer
 	writer := zlib.NewWriter(&buff)
 	originalSize := 0
@@ -201,7 +54,7 @@ func checkCompressedSize(messages []*MQMessage) (int, int) {
 	return originalSize, buff.Len()
 }
 
-func encodeRowCase(t *testing.T, encoder EventBatchEncoder, events []*model.RowChangedEvent) []*MQMessage {
+func encodeRowCase(t *testing.T, encoder common.EventBatchEncoder, events []*model.RowChangedEvent) []*common.MQMessage {
 	msg, err := codecEncodeRowCase(encoder, events)
 	require.Nil(t, err)
 	return msg
@@ -211,18 +64,18 @@ func TestJsonVsCraftVsPB(t *testing.T) {
 	t.Parallel()
 	t.Logf("| case | craft size | json size | protobuf 1 size | protobuf 2 size | craft compressed | json compressed | protobuf 1 compressed | protobuf 2 compressed |")
 	t.Logf("| :---- | :--------- | :-------- | :-------------- | :-------------- | :--------------- | :-------------- | :-------------------- | :-------------------- |")
-	for i, cs := range codecRowCases {
+	for i, cs := range internal.CodecRowCases {
 		if len(cs) == 0 {
 			continue
 		}
-		craftEncoder := newCraftBatchEncoder()
-		craftEncoder.(*craftBatchEncoder).maxMessageBytes = 8192
-		craftEncoder.(*craftBatchEncoder).maxBatchSize = 64
+		craftEncoder := craft.NewBatchEncoder()
+		craftEncoder.(*craft.BatchEncoder).MaxMessageBytes = 8192
+		craftEncoder.(*craft.BatchEncoder).MaxBatchSize = 64
 		craftMessages := encodeRowCase(t, craftEncoder, cs)
 
-		jsonEncoder := newOpenProtocolBatchEncoder()
-		jsonEncoder.(*OpenProtocolBatchEncoder).maxMessageBytes = 8192
-		jsonEncoder.(*OpenProtocolBatchEncoder).maxBatchSize = 64
+		jsonEncoder := open.NewBatchEncoder()
+		jsonEncoder.(*open.BatchEncoder).MaxMessageBytes = 8192
+		jsonEncoder.(*open.BatchEncoder).MaxBatchSize = 64
 		jsonMessages := encodeRowCase(t, jsonEncoder, cs)
 
 		protobuf1Messages := codecEncodeRowChangedPB1ToMessage(cs)
@@ -285,10 +138,10 @@ func codecEncodeRowChangedPB(event *model.RowChangedEvent) []byte {
 	}
 }
 
-func codecEncodeRowChangedPB1ToMessage(events []*model.RowChangedEvent) []*MQMessage {
-	result := make([]*MQMessage, len(events))
+func codecEncodeRowChangedPB1ToMessage(events []*model.RowChangedEvent) []*common.MQMessage {
+	result := make([]*common.MQMessage, len(events))
 	for i, event := range events {
-		result[i] = &MQMessage{
+		result[i] = &common.MQMessage{
 			Key:   codecEncodeKeyPB(event),
 			Value: codecEncodeRowChangedPB(event),
 		}
@@ -296,8 +149,8 @@ func codecEncodeRowChangedPB1ToMessage(events []*model.RowChangedEvent) []*MQMes
 	return result
 }
 
-func codecEncodeRowChangedPB2ToMessage(events []*model.RowChangedEvent) []*MQMessage {
-	return []*MQMessage{{
+func codecEncodeRowChangedPB2ToMessage(events []*model.RowChangedEvent) []*common.MQMessage {
+	return []*common.MQMessage{{
 		Key:   codecEncodeKeysPB2(events),
 		Value: codecEncodeRowChangedPB2(events),
 	}}
@@ -350,7 +203,7 @@ func codecEncodeRowChangedPB2(events []*model.RowChangedEvent) []byte {
 	}
 }
 
-func codecEncodeRowCase(encoder EventBatchEncoder, events []*model.RowChangedEvent) ([]*MQMessage, error) {
+func codecEncodeRowCase(encoder common.EventBatchEncoder, events []*model.RowChangedEvent) ([]*common.MQMessage, error) {
 	for _, event := range events {
 		err := encoder.AppendRowChangedEvent(context.Background(), "", event, nil)
 		if err != nil {
@@ -366,16 +219,16 @@ func codecEncodeRowCase(encoder EventBatchEncoder, events []*model.RowChangedEve
 
 func init() {
 	var err error
-	encoder := newCraftBatchEncoder()
-	encoder.(*craftBatchEncoder).maxMessageBytes = 8192
-	encoder.(*craftBatchEncoder).maxBatchSize = 64
+	encoder := craft.NewBatchEncoder()
+	encoder.(*craft.BatchEncoder).MaxMessageBytes = 8192
+	encoder.(*craft.BatchEncoder).MaxBatchSize = 64
 	if codecCraftEncodedRowChanges, err = codecEncodeRowCase(encoder, codecBenchmarkRowChanges); err != nil {
 		panic(err)
 	}
 
-	encoder = newOpenProtocolBatchEncoder()
-	encoder.(*OpenProtocolBatchEncoder).maxMessageBytes = 8192
-	encoder.(*OpenProtocolBatchEncoder).maxBatchSize = 64
+	encoder = open.NewBatchEncoder()
+	encoder.(*open.BatchEncoder).MaxMessageBytes = 8192
+	encoder.(*open.BatchEncoder).MaxBatchSize = 64
 	if codecJSONEncodedRowChanges, err = codecEncodeRowCase(encoder, codecBenchmarkRowChanges); err != nil {
 		panic(err)
 	}
@@ -385,18 +238,18 @@ func init() {
 
 func BenchmarkCraftEncoding(b *testing.B) {
 	allocator := craft.NewSliceAllocator(128)
-	encoder := newCraftBatchEncoderWithAllocator(allocator)
-	encoder.(*craftBatchEncoder).maxMessageBytes = 8192
-	encoder.(*craftBatchEncoder).maxBatchSize = 64
+	encoder := craft.NewBatchEncoderWithAllocator(allocator)
+	encoder.(*craft.BatchEncoder).MaxMessageBytes = 8192
+	encoder.(*craft.BatchEncoder).MaxBatchSize = 64
 	for i := 0; i < b.N; i++ {
 		_, _ = codecEncodeRowCase(encoder, codecBenchmarkRowChanges)
 	}
 }
 
 func BenchmarkJsonEncoding(b *testing.B) {
-	encoder := newOpenProtocolBatchEncoder()
-	encoder.(*OpenProtocolBatchEncoder).maxMessageBytes = 8192
-	encoder.(*OpenProtocolBatchEncoder).maxBatchSize = 64
+	encoder := open.NewBatchEncoder()
+	encoder.(*open.BatchEncoder).MaxMessageBytes = 8192
+	encoder.(*open.BatchEncoder).MaxBatchSize = 64
 	for i := 0; i < b.N; i++ {
 		_, _ = codecEncodeRowCase(encoder, codecBenchmarkRowChanges)
 	}
@@ -418,7 +271,7 @@ func BenchmarkCraftDecoding(b *testing.B) {
 	allocator := craft.NewSliceAllocator(128)
 	for i := 0; i < b.N; i++ {
 		for _, message := range codecCraftEncodedRowChanges {
-			if decoder, err := newCraftBatchDecoderWithAllocator(
+			if decoder, err := craft.NewBatchDecoderWithAllocator(
 				message.Value, allocator); err != nil {
 				panic(err)
 			} else {
@@ -439,7 +292,7 @@ func BenchmarkCraftDecoding(b *testing.B) {
 func BenchmarkJsonDecoding(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		for _, message := range codecJSONEncodedRowChanges {
-			if decoder, err := NewOpenProtocolBatchDecoder(message.Key, message.Value); err != nil {
+			if decoder, err := open.NewBatchDecoder(message.Key, message.Value); err != nil {
 				panic(err)
 			} else {
 				for {

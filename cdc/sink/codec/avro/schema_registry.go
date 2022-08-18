@@ -34,10 +34,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// AvroSchemaManager is used to register Avro Schemas to the Registry server,
+// schemaManager is used to register Avro Schemas to the Registry server,
 // look up local cache according to the table's name, and fetch from the Registry
 // in cache the local cache entry is missing.
-type AvroSchemaManager struct {
+type schemaManager struct {
 	registryURL   string
 	subjectSuffix string
 
@@ -69,10 +69,10 @@ type lookupResponse struct {
 	Schema     string `json:"schema"`
 }
 
-// NewAvroSchemaManager creates a new AvroSchemaManager and test connectivity to the schema registry
+// NewAvroSchemaManager creates a new schemaManager and test connectivity to the schema registry
 func NewAvroSchemaManager(
 	ctx context.Context, credential *security.Credential, registryURL string, subjectSuffix string,
-) (*AvroSchemaManager, error) {
+) (*schemaManager, error) {
 	registryURL = strings.TrimRight(registryURL, "/")
 	httpCli, err := httputil.NewClient(credential)
 	if err != nil {
@@ -102,7 +102,7 @@ func NewAvroSchemaManager(
 		zap.String("registryURL", registryURL),
 	)
 
-	return &AvroSchemaManager{
+	return &schemaManager{
 		registryURL:   registryURL,
 		cache:         make(map[string]*schemaCacheEntry, 1),
 		subjectSuffix: subjectSuffix,
@@ -110,7 +110,7 @@ func NewAvroSchemaManager(
 }
 
 // Register a schema in schema registry, no cache
-func (m *AvroSchemaManager) Register(
+func (m *schemaManager) Register(
 	ctx context.Context,
 	topicName string,
 	codec *goavro.Codec,
@@ -201,7 +201,7 @@ func (m *AvroSchemaManager) Register(
 // RESTful request to the Registry.
 // Returns (codec, registry schema ID, error)
 // NOT USED for now, reserved for future use.
-func (m *AvroSchemaManager) Lookup(
+func (m *schemaManager) Lookup(
 	ctx context.Context,
 	topicName string,
 	tiSchemaID uint64,
@@ -303,7 +303,7 @@ type SchemaGenerator func() (string, error)
 // If not, a new schema is generated, registered and cached.
 // Re-registering an existing schema shall return the same id(and version), so even if the
 // cache is out-of-sync with schema registry, we could reload it.
-func (m *AvroSchemaManager) GetCachedOrRegister(
+func (m *schemaManager) GetCachedOrRegister(
 	ctx context.Context,
 	topicName string,
 	tiSchemaID uint64,
@@ -362,7 +362,7 @@ func (m *AvroSchemaManager) GetCachedOrRegister(
 // ClearRegistry clears the Registry subject for the given table. Should be idempotent.
 // Exported for testing.
 // NOT USED for now, reserved for future use.
-func (m *AvroSchemaManager) ClearRegistry(ctx context.Context, topicName string) error {
+func (m *schemaManager) ClearRegistry(ctx context.Context, topicName string) error {
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(
 		m.topicNameToSchemaSubject(topicName),
 	)
@@ -460,6 +460,6 @@ func httpRetry(
 }
 
 // TopicNameStrategy, ksqlDB only supports this
-func (m *AvroSchemaManager) topicNameToSchemaSubject(topicName string) string {
+func (m *schemaManager) topicNameToSchemaSubject(topicName string) string {
 	return topicName + m.subjectSuffix
 }
