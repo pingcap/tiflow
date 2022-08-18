@@ -401,6 +401,9 @@ func (w *regionWorker) processEvent(ctx context.Context, event *regionStatefulEv
 		event.finishedCallbackCh <- struct{}{}
 		return nil
 	}
+	if event.state.isStopped() {
+		return nil
+	}
 	var err error
 	event.state.lock.Lock()
 	if event.changeEvent != nil {
@@ -458,24 +461,6 @@ func (w *regionWorker) onHandleExit(err error) {
 }
 
 func (w *regionWorker) eventHandler(ctx context.Context) error {
-	preprocess := func(event *regionStatefulEvent, ok bool) (
-		exitEventHandler bool,
-		skipEvent bool,
-	) {
-		// event == nil means the region worker should exit and re-establish
-		// all existing regions.
-		if !ok || event == nil {
-			log.Info("region worker closed by error",
-				zap.String("namespace", w.session.client.changefeed.Namespace),
-				zap.String("changefeed", w.session.client.changefeed.ID))
-			exitEventHandler = true
-			return
-		}
-		if event.state.isStopped() {
-			skipEvent = true
-		}
-		return
-	}
 	pollEvents := func() (events []*regionStatefulEvent, ok bool, err error) {
 		select {
 		case <-ctx.Done():
@@ -489,70 +474,23 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 		return
 	}
 
-	highWatermarkMet := false
 	for {
 		events, ok, err := pollEvents()
 		if err != nil {
 			return err
 		}
 		regionEventsBatchSize.Observe(float64(len(events)))
-
-		intputPending := atomic.LoadInt32(&w.inputPending)
-		if highWatermarkMet {
-			highWatermarkMet = int(intputPending) >= regionWorkerLowWatermark
-		} else {
-			highWatermarkMet = int(intputPending) >= regionWorkerHighWatermark
-		}
 		atomic.AddInt32(&w.inputPending, -int32(len(events)))
 
-		if highWatermarkMet {
-			// All events in one batch can be hashed into one handle slot.
-			slot := w.inputCalcSlot(events[0].regionID)
-			err = w.handles[slot].AddBatchedEvents(ctx, events)
-			if err != nil {
-				return err
-			}
+		if !ok || (len(events) == 1 && events[0] == nil) {
+			return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
+		}
 
-			// Principle: events from the same region must be processed linearly.
-			//
-			// When buffered events exceed high watermark, we start to use worker
-			// pool to improve throughput, and we need a mechanism to quit worker
-			// pool when buffered events are less than low watermark, which means
-			// we should have a way to know whether events sent to the worker pool
-			// are all processed.
-			// Send a dummy event to each worker pool handler, after each of these
-			// events are processed, we can ensure all events sent to worker pool
-			// from this region worker are processed.
-			finishedCallbackCh := make(chan struct{}, 1)
-			err = w.handles[slot].AddEvent(ctx, &regionStatefulEvent{finishedCallbackCh: finishedCallbackCh})
-			if err != nil {
-				return err
-			}
-			select {
-			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
-			case err = <-w.errorCh:
-				return err
-			case <-finishedCallbackCh:
-			}
-		} else {
-			// We measure whether the current worker is busy based on the input
-			// channel size. If the buffered event count is larger than the high
-			// watermark, we send events to worker pool to increase processing
-			// throughput. Otherwise we process event in local region worker to
-			// ensure low processing latency.
-			for _, event := range events {
-				exitEventHandler, skipEvent := preprocess(event, ok)
-				if exitEventHandler {
-					return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
-				}
-				if !skipEvent {
-					err = w.processEvent(ctx, event)
-					if err != nil {
-						return err
-					}
-				}
-			}
+		// All events in one batch can be hashed into one handle slot.
+		slot := w.inputCalcSlot(events[0].regionID)
+		err = w.handles[slot].AddBatchedEvents(ctx, events)
+		if err != nil {
+			return err
 		}
 	}
 }
