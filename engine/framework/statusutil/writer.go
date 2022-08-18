@@ -69,12 +69,14 @@ func (w *Writer) UpdateStatus(ctx context.Context, newStatus *frameModel.WorkerS
 			zap.String("worker-id", w.workerID),
 			zap.String("master-id", w.masterInfo.MasterID()),
 			zap.String("master-node", w.masterInfo.MasterNode()),
-			zap.Int64("master-epoch", w.masterInfo.Epoch()))
+			zap.Int64("master-epoch", w.masterInfo.Epoch()),
+			zap.Error(retErr))
 	}()
 
 	if reflect2.IsNil(w.lastStatus) || newStatus.HasSignificantChange(w.lastStatus) {
 		// Status has changed, so we need to persist the status.
 		if err := w.persistStatus(ctx, newStatus); err != nil {
+			log.Error("persist fail", zap.Error(err))
 			return err
 		}
 	}

@@ -497,6 +497,7 @@ func (w *DefaultBaseWorker) OpenStorage(ctx context.Context, resourcePath resour
 func (w *DefaultBaseWorker) Exit(ctx context.Context, exitReason ExitReason, err error, errMsg string, extBytes []byte) (errRet error) {
 	// Set the errCenter to prevent user from forgetting to return directly after calling 'Exit'
 	defer func() {
+		// keep the original error or ErrWorkerFinish in error center
 		errTmp := err
 		if errTmp == nil {
 			errTmp = derror.ErrWorkerFinish.FastGenByArgs()
@@ -519,11 +520,7 @@ func (w *DefaultBaseWorker) Exit(ctx context.Context, exitReason ExitReason, err
 
 	w.workerStatus.ErrorMessage = errMsg
 	w.workerStatus.ExtBytes = extBytes
-	if err := w.statusSender.UpdateStatus(ctx, w.workerStatus); err != nil {
-		return err
-	}
-
-	return nil
+	return w.statusSender.UpdateStatus(ctx, w.workerStatus)
 }
 
 func (w *DefaultBaseWorker) startBackgroundTasks() {

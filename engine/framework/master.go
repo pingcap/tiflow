@@ -693,6 +693,10 @@ func (m *DefaultBaseMaster) Exit(ctx context.Context, exitReason ExitReason, err
 		m.errCenter.OnError(errTmp)
 	}()
 
+	return m.exitWithoutSetErrCenter(ctx, exitReason, err, extMsg)
+}
+
+func (m *DefaultBaseMaster) exitWithoutSetErrCenter(ctx context.Context, exitReason ExitReason, err error, extMsg string) (errRet error) {
 	switch exitReason {
 	case ExitReasonFinished:
 		m.masterMeta.StatusCode = frameModel.MasterStatusFinished
@@ -708,11 +712,7 @@ func (m *DefaultBaseMaster) Exit(ctx context.Context, exitReason ExitReason, err
 	m.masterMeta.ExtMsg = extMsg
 
 	metaClient := metadata.NewMasterMetadataClient(m.id, m.frameMetaClient)
-	if err := metaClient.Update(ctx, m.masterMeta); err != nil {
-		return err
-	}
-
-	return nil
+	return metaClient.Update(ctx, m.masterMeta)
 }
 
 // SetProjectInfo set the project info of specific worker

@@ -272,12 +272,6 @@ func (d *DefaultBaseJobMaster) NotifyExit(ctx context.Context, errIn error) (ret
 	return d.worker.masterClient.WaitClosed(ctx)
 }
 
-// OnError implements BaseJobMaster.OnError
-func (d *DefaultBaseJobMaster) OnError(err error) {
-	// TODO refine the OnError logic.
-	d.master.OnError(err)
-}
-
 // CreateWorker implements BaseJobMaster.CreateWorker
 func (d *DefaultBaseJobMaster) CreateWorker(workerType WorkerType, config WorkerConfig, cost model.RescUnit, resources ...resourcemeta.ResourceID) (frameModel.WorkerID, error) {
 	return d.master.CreateWorker(workerType, config, cost, resources...)
@@ -339,7 +333,8 @@ func (d *DefaultBaseJobMaster) Exit(ctx context.Context, exitReason ExitReason, 
 	ctx, cancel := d.errCenter.WithCancelOnFirstError(ctx)
 	defer cancel()
 
-	if errTmp := d.master.Exit(ctx, exitReason, err, extMsg); errTmp != nil {
+	// we don't set error center for master to make worker.Exit work well
+	if errTmp := d.master.exitWithoutSetErrCenter(ctx, exitReason, err, extMsg); errTmp != nil {
 		return errTmp
 	}
 

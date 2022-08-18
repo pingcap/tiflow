@@ -96,8 +96,10 @@ func MustConvertWorkerType2JobType(tp WorkerType) engineModel.JobType {
 	return engineModel.JobTypeInvalid
 }
 
+// ExitReason is the type for exit reason
 type ExitReason int
 
+// define some ExitReason
 const (
 	ExitReasonUnknown = ExitReason(iota)
 	ExitReasonFinished

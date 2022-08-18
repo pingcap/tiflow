@@ -154,9 +154,7 @@ func (m *testJobMasterImpl) Status() frameModel.WorkerStatus {
 
 func newBaseJobMasterForTests(t *testing.T, impl JobMasterImpl) *DefaultBaseJobMaster {
 	cli, err := pkgOrm.NewMockClient()
-	if err != nil {
-		panic(err)
-	}
+	require.NoError(t, err)
 	params := masterParamListForTest{
 		MessageHandlerManager: p2p.NewMockMessageHandlerManager(),
 		MessageSender:         p2p.NewMockMessageSender(),
@@ -231,7 +229,7 @@ func TestBaseJobMasterBasics(t *testing.T) {
 
 	status := jobMaster.Status()
 	err = jobMaster.base.Exit(ctx, ExitReasonFinished, nil, string(status.ExtBytes))
-	require.Error(t, err)
+	require.NoError(t, err)
 
 	err = jobMaster.base.Close(ctx)
 	require.NoError(t, err)
