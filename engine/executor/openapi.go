@@ -20,7 +20,9 @@ import (
 	"sync"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 
+	"github.com/pingcap/log"
 	engineModel "github.com/pingcap/tiflow/engine/model"
 )
 
@@ -43,13 +45,16 @@ func newJobAPIServer() *jobAPIServer {
 
 func (s *jobAPIServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h, ok := s.match(r.URL.Path); ok {
+		log.Debug("serve http request", zap.String("path", r.URL.Path))
 		h.ServeHTTP(w, r)
 	} else {
+		log.Debug("handler not found", zap.String("path", r.URL.Path))
 		http.NotFound(w, r)
 	}
 }
 
 func (s *jobAPIServer) match(path string) (http.Handler, bool) {
+	log.Debug("receive http request", zap.String("path", path))
 	if !strings.HasPrefix(path, jobAPIPrefix) {
 		return nil, false
 	}
