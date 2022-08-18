@@ -54,26 +54,25 @@ service JobManager {
             body: "job"
         };
     };
+
     rpc GetJob(GetJobRequest) returns (Job){
         option (google.api.http) = {
             get: "/api/v1/jobs/{id=*}"
         };
     };
+
     rpc ListJobs(ListJobsRequest) returns (ListJobsResponse){
         option (google.api.http) = {
             get: "/api/v1/jobs"
         };
     };
-    rpc PauseJob(PauseJobRequest) returns (Job){
-        option (google.api.http) = {
-            post: "/api/v1/jobs/{id=*}/pause"
-        };
-    };
+
     rpc CancelJob(CancelJobRequest) returns (Job){
         option (google.api.http) = {
             post: "/api/v1/jobs/{id=*}/cancel"
         };
     };
+
     rpc DeleteJob(DeleteJobRequest) returns (google.protobuf.Empty){
         option (google.api.http) = {
             delete: "/api/v1/jobs/{id=*}"
@@ -197,12 +196,6 @@ message ListJobsResponse {
     repeated Job jobs = 1;
     // A token to retrieve next page of results.
     string next_page_token = 2;
-}
-
-message PauseJobRequest {
-    string id = 1;
-    string tenant_id = 2;
-    string project_id = 3;
 }
 
 message CancelJobRequest {

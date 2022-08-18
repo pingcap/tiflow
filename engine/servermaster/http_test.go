@@ -89,7 +89,7 @@ func TestRegisterRoutes(t *testing.T) {
 		{
 			method:       http.MethodGet,
 			path:         "/api/v1/jobs/job1/pause",
-			expectedCode: http.StatusNotImplemented,
+			expectedCode: http.StatusNotFound,
 		},
 		{
 			method:       http.MethodGet,
@@ -147,12 +147,12 @@ func TestShouldForwardJobAPI(t *testing.T) {
 		{
 			method:        http.MethodGet,
 			path:          "/api/v1/jobs/job1/pause",
-			shouldForward: false,
+			shouldForward: true,
 		},
 		{
 			method:        http.MethodPost,
 			path:          "/api/v1/jobs/job1/pause",
-			shouldForward: false,
+			shouldForward: true,
 		},
 		{
 			method:        http.MethodGet,

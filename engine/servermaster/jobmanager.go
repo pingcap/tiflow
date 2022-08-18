@@ -91,11 +91,6 @@ type JobManagerImpl struct {
 	notifier          *notifier.Notifier[resManager.JobStatusChangeEvent]
 }
 
-// PauseJob implements JobManagerServer.PauseJob.
-func (jm *JobManagerImpl) PauseJob(ctx context.Context, req *pb.PauseJobRequest) (*pb.Job, error) {
-	return nil, status.Error(codes.Unimplemented, "")
-}
-
 // CancelJob implements JobManagerServer.CancelJob.
 func (jm *JobManagerImpl) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (*pb.Job, error) {
 	// FIXME: The JobFsm's status may not be consistent with the database.

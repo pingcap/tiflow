@@ -40,7 +40,7 @@ func registerRoutes(router *http.ServeMux, grpcMux *runtime.ServeMux, forwardJob
 	// 2. The job API implemented by the job master.
 	// Both of them are registered in the same "/api/v1/jobs/" path.
 	// The job API implemented by the job master is registered in the "/api/v1/jobs/{job_id}/".
-	// But framework has two special APIs cancel and pause will register in the "/api/v1/jobs/{job_id}/" path too.
+	// But framework has a special APIs cancel will register in the "/api/v1/jobs/{job_id}/" path too.
 	// So we first check whether the request should be forwarded to the job master.
 	// If yes, forward the request to the job master. Otherwise, delegate the request to the framework.
 	router.HandleFunc("/api/v1/", func(w http.ResponseWriter, r *http.Request) {
@@ -79,9 +79,9 @@ func shouldForwardJobAPI(r *http.Request) bool {
 	if len(fields) != 2 {
 		return false
 	}
-	// pause and cancel are implemented by framework,
+	// cancel is implemented by framework,
 	// don't forward them to the job master.
-	if fields[1] == "pause" || fields[1] == "cancel" {
+	if fields[1] == "cancel" {
 		return false
 	}
 	return true

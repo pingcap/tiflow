@@ -277,16 +277,6 @@ func (s *Server) ListJobs(ctx context.Context, req *pb.ListJobsRequest) (*pb.Lis
 	return s.jobManager.ListJobs(ctx, req)
 }
 
-// PauseJob delegates request to leader's JobManager.PauseJob.
-func (s *Server) PauseJob(ctx context.Context, req *pb.PauseJobRequest) (*pb.Job, error) {
-	job := &pb.Job{}
-	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &job)
-	if shouldRet {
-		return job, err
-	}
-	return s.jobManager.PauseJob(ctx, req)
-}
-
 // CancelJob delegates request to leader's JobManager.CancelJob.
 func (s *Server) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (*pb.Job, error) {
 	job := &pb.Job{}

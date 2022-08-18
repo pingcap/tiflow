@@ -69,8 +69,6 @@ func (s *masterServerConn) sendRequest(ctx context.Context, req interface{}) (in
 	switch x := req.(type) {
 	case *pb.RegisterExecutorRequest:
 		return s.server.RegisterExecutor(ctx, x)
-	case *pb.PauseJobRequest:
-		return s.server.PauseJob(ctx, x)
 	case *pb.CreateJobRequest:
 		return s.server.CreateJob(ctx, x)
 	case *pb.HeartbeatRequest:
@@ -93,11 +91,6 @@ func (c *masterServerClient) ScheduleTask(ctx context.Context, req *pb.ScheduleT
 func (c *masterServerClient) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest, opts ...grpc.CallOption) (*pb.RegisterExecutorResponse, error) {
 	resp, err := c.conn.sendRequest(ctx, req)
 	return resp.(*pb.RegisterExecutorResponse), err
-}
-
-func (c *masterServerClient) PauseJob(ctx context.Context, req *pb.PauseJobRequest, opts ...grpc.CallOption) (*pb.Job, error) {
-	resp, err := c.conn.sendRequest(ctx, req)
-	return resp.(*pb.Job), err
 }
 
 func (c *masterServerClient) CreateJob(ctx context.Context, req *pb.CreateJobRequest, opts ...grpc.CallOption) (*pb.Job, error) {

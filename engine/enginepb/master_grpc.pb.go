@@ -418,7 +418,6 @@ type JobManagerClient interface {
 	CreateJob(ctx context.Context, in *CreateJobRequest, opts ...grpc.CallOption) (*Job, error)
 	GetJob(ctx context.Context, in *GetJobRequest, opts ...grpc.CallOption) (*Job, error)
 	ListJobs(ctx context.Context, in *ListJobsRequest, opts ...grpc.CallOption) (*ListJobsResponse, error)
-	PauseJob(ctx context.Context, in *PauseJobRequest, opts ...grpc.CallOption) (*Job, error)
 	CancelJob(ctx context.Context, in *CancelJobRequest, opts ...grpc.CallOption) (*Job, error)
 	DeleteJob(ctx context.Context, in *DeleteJobRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
@@ -458,15 +457,6 @@ func (c *jobManagerClient) ListJobs(ctx context.Context, in *ListJobsRequest, op
 	return out, nil
 }
 
-func (c *jobManagerClient) PauseJob(ctx context.Context, in *PauseJobRequest, opts ...grpc.CallOption) (*Job, error) {
-	out := new(Job)
-	err := c.cc.Invoke(ctx, "/enginepb.JobManager/PauseJob", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *jobManagerClient) CancelJob(ctx context.Context, in *CancelJobRequest, opts ...grpc.CallOption) (*Job, error) {
 	out := new(Job)
 	err := c.cc.Invoke(ctx, "/enginepb.JobManager/CancelJob", in, out, opts...)
@@ -492,7 +482,6 @@ type JobManagerServer interface {
 	CreateJob(context.Context, *CreateJobRequest) (*Job, error)
 	GetJob(context.Context, *GetJobRequest) (*Job, error)
 	ListJobs(context.Context, *ListJobsRequest) (*ListJobsResponse, error)
-	PauseJob(context.Context, *PauseJobRequest) (*Job, error)
 	CancelJob(context.Context, *CancelJobRequest) (*Job, error)
 	DeleteJob(context.Context, *DeleteJobRequest) (*emptypb.Empty, error)
 }
@@ -509,9 +498,6 @@ func (UnimplementedJobManagerServer) GetJob(context.Context, *GetJobRequest) (*J
 }
 func (UnimplementedJobManagerServer) ListJobs(context.Context, *ListJobsRequest) (*ListJobsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListJobs not implemented")
-}
-func (UnimplementedJobManagerServer) PauseJob(context.Context, *PauseJobRequest) (*Job, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method PauseJob not implemented")
 }
 func (UnimplementedJobManagerServer) CancelJob(context.Context, *CancelJobRequest) (*Job, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CancelJob not implemented")
@@ -585,24 +571,6 @@ func _JobManager_ListJobs_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
-func _JobManager_PauseJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(PauseJobRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(JobManagerServer).PauseJob(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/enginepb.JobManager/PauseJob",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(JobManagerServer).PauseJob(ctx, req.(*PauseJobRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _JobManager_CancelJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CancelJobRequest)
 	if err := dec(in); err != nil {
@@ -657,10 +625,6 @@ var JobManager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListJobs",
 			Handler:    _JobManager_ListJobs_Handler,
-		},
-		{
-			MethodName: "PauseJob",
-			Handler:    _JobManager_PauseJob_Handler,
 		},
 		{
 			MethodName: "CancelJob",
