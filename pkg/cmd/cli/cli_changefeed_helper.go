@@ -44,7 +44,7 @@ func confirmLargeDataGap(cmd *cobra.Command, currentPhysical int64, startTs uint
 			return err
 		}
 		if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
-			cmd.Printf("abort changefeed create\n")
+			cmd.Printf("abort changefeed create or resume\n")
 			return cerror.ErrCliAborted.FastGenByArgs("cli changefeed create or resume")
 		}
 	}
