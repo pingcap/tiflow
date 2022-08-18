@@ -667,7 +667,7 @@ func (s *Server) createHTTPServer() (*http.Server, error) {
 	}
 
 	router := http.NewServeMux()
-	RegisterRoutes(router, grpcMux, s.forwardJobAPI)
+	registerRoutes(router, grpcMux, s.forwardJobAPI)
 
 	return &http.Server{
 		Handler: router,
@@ -693,7 +693,7 @@ func (s *Server) forwardJobAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleForwardJobAPI(w http.ResponseWriter, r *http.Request) error {
-	apiPath := strings.TrimPrefix(r.URL.Path, JobAPIPrefix)
+	apiPath := strings.TrimPrefix(r.URL.Path, jobAPIPrefix)
 	fields := strings.SplitN(apiPath, "/", 2)
 	if len(fields) != 2 {
 		return errors.New("invalid job api path")

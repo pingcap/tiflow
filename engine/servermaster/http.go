@@ -25,16 +25,24 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 )
 
-// JobAPIPrefix is the prefix of the job API.
-const JobAPIPrefix = "/api/v1/jobs/"
+// jobAPIPrefix is the prefix of the job API.
+const jobAPIPrefix = "/api/v1/jobs/"
 
-// RegisterRoutes create a router for OpenAPI
-func RegisterRoutes(router *http.ServeMux, grpcMux *runtime.ServeMux, forwardJobAPI http.HandlerFunc) {
+// registerRoutes registers the routes for the HTTP server.
+func registerRoutes(router *http.ServeMux, grpcMux *runtime.ServeMux, forwardJobAPI http.HandlerFunc) {
 	// Swagger UI
 	router.HandleFunc("/swagger", openapi.SwaggerUI)
 	router.HandleFunc("/swagger/v1/openapiv2.json", openapi.SwaggerAPIv1)
 
 	// Job API
+	// There are two types of job API:
+	// 1. The job API implemented by the framework.
+	// 2. The job API implemented by the job master.
+	// Both of them are registered in the same "/api/v1/jobs/" path.
+	// The job API implemented by the job master is registered in the "/api/v1/jobs/{job_id}/".
+	// But framework has two special APIs cancel and pause will register in the "/api/v1/jobs/{job_id}/" path too.
+	// So we first check whether the request should be forwarded to the job master.
+	// If yes, forward the request to the job master. Otherwise, delegate the request to the framework.
 	router.HandleFunc("/api/v1/", func(w http.ResponseWriter, r *http.Request) {
 		if shouldForwardJobAPI(r) {
 			forwardJobAPI(w, r)
@@ -61,11 +69,12 @@ func RegisterRoutes(router *http.ServeMux, grpcMux *runtime.ServeMux, forwardJob
 	router.Handle("/metrics", promutil.HTTPHandlerForMetric())
 }
 
+// shouldForwardJobAPI indicates whether the request should be forwarded to the job master.
 func shouldForwardJobAPI(r *http.Request) bool {
-	if !strings.HasPrefix(r.URL.Path, JobAPIPrefix) {
+	if !strings.HasPrefix(r.URL.Path, jobAPIPrefix) {
 		return false
 	}
-	apiPath := strings.TrimPrefix(r.URL.Path, JobAPIPrefix)
+	apiPath := strings.TrimPrefix(r.URL.Path, jobAPIPrefix)
 	fields := strings.SplitN(apiPath, "/", 2)
 	if len(fields) != 2 {
 		return false

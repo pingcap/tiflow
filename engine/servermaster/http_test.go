@@ -44,7 +44,7 @@ func TestRegisterRoutes(t *testing.T) {
 			http.NotFound(w, r)
 		}
 	})
-	RegisterRoutes(router, grpcMux, forwardJobAPI)
+	registerRoutes(router, grpcMux, forwardJobAPI)
 
 	testCases := []struct {
 		method       string
