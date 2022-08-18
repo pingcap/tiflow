@@ -684,13 +684,13 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	}
 
 	if err != nil {
-		log.Info("processor new sink failed",
+		log.Info("processor create sink failed",
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Duration("duration", time.Since(start)))
 		return errors.Trace(err)
 	}
-	log.Info("processor new sink success",
+	log.Info("processor create sink success",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeed.ID.ID),
 		zap.Duration("duration", time.Since(start)))

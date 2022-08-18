@@ -397,13 +397,6 @@ LOOP:
 		resolvedTs = c.state.Status.ResolvedTs
 	}
 
-	log.Info("initialize changefeed",
-		zap.String("namespace", c.id.Namespace),
-		zap.String("changefeed", c.id.ID),
-		zap.Stringer("info", c.state.Info),
-		zap.Uint64("checkpointTs", checkpointTs),
-		zap.Uint64("resolvedTs", resolvedTs))
-
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
 		failpoint.Return(cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs-300, checkpointTs))
 	})

@@ -68,7 +68,7 @@ func TestReset(t *testing.T) {
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
-		err = cp.prepare(ctx)
+		err = cp.reset(ctx)
 		require.Regexp(t, ".*context canceled.*", err)
 		wg.Done()
 	}()
