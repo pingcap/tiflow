@@ -37,7 +37,7 @@ type UpstreamCfg struct {
 	ServerID               uint32             `yaml:"server-id" toml:"server-id" json:"server-id"`
 	Flavor                 string             `yaml:"flavor" toml:"flavor" json:"flavor"`
 	EnableGTID             bool               `yaml:"enable-gtid" toml:"enable-gtid" json:"enable-gtid"`
-	CaseSensitive          bool               `yaml:"case-sentitive" toml:"case-sentitive" json:"case-sentitive"`
+	CaseSensitive          bool               `yaml:"case-sensitive" toml:"case-sensitive" json:"case-sensitive"`
 }
 
 func (u *UpstreamCfg) fromDMSourceConfig(from *dmconfig.SourceConfig) {
