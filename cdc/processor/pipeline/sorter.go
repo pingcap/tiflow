@@ -34,6 +34,8 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
+	"github.com/tikv/client-go/v2/oracle"
+	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -43,10 +45,12 @@ const (
 )
 
 type sorterNode struct {
-	sorter sorter.EventSorter
+	changefeed model.ChangeFeedID
+	pdClient   pd.Client
+	sorter     sorter.EventSorter
 
 	tableID   model.TableID
-	tableName string // quoted schema and table, used in metircs only
+	tableName string // quoted schema and table, used in metrics only
 
 	// for per-table flow control
 	flowController tableFlowController
@@ -72,6 +76,8 @@ func newSorterNode(
 	tableName string, tableID model.TableID, startTs model.Ts,
 	flowController tableFlowController, mounter entry.Mounter,
 	replConfig *config.ReplicaConfig,
+	changefeed model.ChangeFeedID,
+	pdClient pd.Client,
 ) *sorterNode {
 	return &sorterNode{
 		tableName:      tableName,
@@ -81,12 +87,18 @@ func newSorterNode(
 		resolvedTs:     startTs,
 		barrierTs:      startTs,
 		replConfig:     replConfig,
+		pdClient:       pdClient,
+		changefeed:     changefeed,
 	}
 }
 
 func (n *sorterNode) Init(ctx pipeline.NodeContext) error {
 	wg := errgroup.Group{}
-	return n.start(ctx, false, &wg, 0, nil)
+	sorter, err := createSorter(ctx, n.tableName, n.tableID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return n.start(ctx, false, &wg, 0, nil, sorter)
 }
 
 func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.TableID) (sorter.EventSorter, error) {
@@ -133,16 +145,12 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 func (n *sorterNode) start(
 	ctx pipeline.NodeContext, isTableActorMode bool, eg *errgroup.Group,
 	tableActorID actor.ID, tableActorRouter *actor.Router[pmessage.Message],
+	eventSorter sorter.EventSorter,
 ) error {
 	n.isTableActorMode = isTableActorMode
 	n.eg = eg
 	stdCtx, cancel := context.WithCancel(ctx)
 	n.cancel = cancel
-
-	eventSorter, err := createSorter(ctx, n.tableName, n.tableID)
-	if err != nil {
-		return errors.Trace(err)
-	}
 
 	failpoint.Inject("ProcessorAddTableError", func() {
 		failpoint.Return(errors.New("processor add table injected error"))
@@ -160,6 +168,32 @@ func (n *sorterNode) start(
 			WithLabelValues(ctx.ChangefeedVars().ID.Namespace, ctx.ChangefeedVars().ID.ID)
 		metricsTicker := time.NewTicker(flushMemoryMetricsDuration)
 		defer metricsTicker.Stop()
+
+		resolvedTsInterpolateFunc := func(commitTs uint64) {
+			// checks the condition: cur_event_commit_ts > prev_event_commit_ts > last_resolved_ts
+			// If this is true, it implies that (1) the last transaction has finished, and we are
+			// processing the first event in a new transaction, (2) a resolved-ts is safe to be
+			// sent, but it has not yet. This means that we can interpolate prev_event_commit_ts
+			// as a resolved-ts, improving the frequency at which the sink flushes.
+			if lastCRTs > lastSentResolvedTs && commitTs > lastCRTs {
+				lastSentResolvedTs = lastCRTs
+				lastSendResolvedTsTime = time.Now()
+				msg := model.NewResolvedPolymorphicEvent(0, lastSentResolvedTs)
+				ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
+			}
+		}
+
+		phy, logic, err := n.pdClient.GetTS(ctx)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		replicateTs := oracle.ComposeTS(phy, logic)
+		log.Info("table is replicating",
+			zap.Int64("tableID", n.tableID),
+			zap.String("tableName", n.tableName),
+			zap.Uint64("replicateTs", replicateTs),
+			zap.String("namespace", n.changefeed.Namespace),
+			zap.String("changefeed", n.changefeed.ID))
 
 		for {
 			// We must call `sorter.Output` before receiving resolved events.
@@ -188,34 +222,36 @@ func (n *sorterNode) start(
 					commitTs := msg.CRTs
 					// We interpolate a resolved-ts if none has been sent for some time.
 					if time.Since(lastSendResolvedTsTime) > resolvedTsInterpolateInterval {
-						// checks the condition: cur_event_commit_ts > prev_event_commit_ts > last_resolved_ts
-						// If this is true, it implies that (1) the last transaction has finished, and we are processing
-						// the first event in a new transaction, (2) a resolved-ts is safe to be sent, but it has not yet.
-						// This means that we can interpolate prev_event_commit_ts as a resolved-ts, improving the frequency
-						// at which the sink flushes.
-						if lastCRTs > lastSentResolvedTs && commitTs > lastCRTs {
-							lastSentResolvedTs = lastCRTs
-							lastSendResolvedTsTime = time.Now()
-							msg := model.NewResolvedPolymorphicEvent(0, lastCRTs)
-							ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
-						}
+						resolvedTsInterpolateFunc(commitTs)
 					}
 
+					// For all rows, we add table replicate ts, so mysql sink can
+					// determine when to turn off safe-mode.
+					msg.Row.ReplicatingTs = replicateTs
 					// We calculate memory consumption by RowChangedEvent size.
 					// It's much larger than RawKVEntry.
 					size := uint64(msg.Row.ApproximateBytes())
-					// NOTE we allow the quota to be exceeded if blocking means interrupting a transaction.
-					// Otherwise the pipeline would deadlock.
-					err = n.flowController.Consume(msg, size, func(batch bool) error {
-						if batch {
-							log.Panic("cdc does not support the batch resolve mechanism at this time")
-						} else if lastCRTs > lastSentResolvedTs {
+					// NOTE when redo log enabled, we allow the quota to be exceeded if blocking
+					// means interrupting a transaction. Otherwise the pipeline would deadlock.
+					err = n.flowController.Consume(msg, size, func(batchID uint64) error {
+						if commitTs > lastCRTs {
 							// If we are blocking, we send a Resolved Event here to elicit a sink-flush.
 							// Not sending a Resolved Event here will very likely deadlock the pipeline.
-							lastSentResolvedTs = lastCRTs
-							lastSendResolvedTsTime = time.Now()
+							resolvedTsInterpolateFunc(commitTs)
+						} else if commitTs == lastCRTs {
+							// send batch resolve event
 							msg := model.NewResolvedPolymorphicEvent(0, lastCRTs)
+							msg.Resolved = &model.ResolvedTs{
+								Ts:      commitTs,
+								Mode:    model.BatchResolvedMode,
+								BatchID: batchID,
+							}
 							ctx.SendToNextNode(pmessage.PolymorphicEventMessage(msg))
+						} else {
+							log.Panic("flow control blocked, report a bug",
+								zap.Uint64("commitTs", commitTs),
+								zap.Uint64("lastCommitTs", lastCRTs),
+								zap.Uint64("lastSentResolvedTs", lastSentResolvedTs))
 						}
 						return nil
 					})
@@ -229,7 +265,7 @@ func (n *sorterNode) start(
 						}
 						return nil
 					}
-					lastCRTs = commitTs
+					lastCRTs = msg.CRTs
 				} else {
 					// handle OpTypeResolved
 					if msg.CRTs < lastSentResolvedTs {

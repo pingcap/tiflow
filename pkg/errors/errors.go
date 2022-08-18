@@ -248,6 +248,9 @@ var (
 		"kafka broker config item not found",
 		errors.RFCCodeText("CDC:ErrKafkaBrokerConfigNotFound"),
 	)
+	ErrKafkaTopicNotExists = errors.Normalize("kafka topic not exists after creation",
+		errors.RFCCodeText("CDC:ErrKafkaTopicNotExists"),
+	)
 	ErrPulsarNewProducer = errors.Normalize(
 		"new pulsar producer",
 		errors.RFCCodeText("CDC:ErrPulsarNewProducer"),
@@ -301,7 +304,7 @@ var (
 		errors.RFCCodeText("CDC:ErrAsyncBroadcastNotSupport"),
 	)
 	ErrSinkURIInvalid = errors.Normalize(
-		"sink uri invalid",
+		"sink uri invalid '%s'",
 		errors.RFCCodeText("CDC:ErrSinkURIInvalid"),
 	)
 	ErrMQSinkUnknownProtocol = errors.Normalize(
@@ -328,8 +331,6 @@ var (
 		"MySQL worker panic",
 		errors.RFCCodeText("CDC:ErrMySQLWorkerPanic"),
 	)
-	ErrMQWorkerClosed = errors.Normalize("MQ worker has closed",
-		errors.RFCCodeText("CDC:ErrMQWorkerClosed"))
 	ErrAvroToEnvelopeError = errors.Normalize(
 		"to envelope failed",
 		errors.RFCCodeText("CDC:ErrAvroToEnvelopeError"),
@@ -440,6 +441,9 @@ var (
 		"operate on a closed notifier",
 		errors.RFCCodeText("CDC:ErrOperateOnClosedNotifier"),
 	)
+	ErrDiskFull = errors.Normalize(
+		"failed to preallocate file because disk is full",
+		errors.RFCCodeText("CDC:ErrDiskFull"))
 
 	// encode/decode, data format and data integrity errors
 	ErrInvalidRecordKey = errors.Normalize(
@@ -666,7 +670,7 @@ var (
 		errors.RFCCodeText("CDC:ErrUpdateServiceSafepointFailed"),
 	)
 	ErrStartTsBeforeGC = errors.Normalize(
-		"fail to create changefeed because start-ts %d is earlier than GC safepoint at %d",
+		"fail to create or maintain changefeed because start-ts %d is earlier than or equal to GC safepoint at %d",
 		errors.RFCCodeText("CDC:ErrStartTsBeforeGC"),
 	)
 	ErrTargetTsBeforeStartTs = errors.Normalize(

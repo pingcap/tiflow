@@ -18,12 +18,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"strconv"
 	"sync"
 	"sync/atomic"
 
-	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
 	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -40,6 +40,8 @@ import (
 
 var customID int64
 
+var netTimeout = utils.DefaultDBTimeout
+
 // DBProvider providers BaseDB instance.
 type DBProvider interface {
 	Apply(config *config.DBConfig) (*BaseDB, error)
@@ -55,15 +57,13 @@ func init() {
 	DefaultDBProvider = &DefaultDBProviderImpl{}
 }
 
-// mockDB is used in unit test.
-var mockDB sqlmock.Sqlmock
-
 // Apply will build BaseDB with DBConfig.
 func (d *DefaultDBProviderImpl) Apply(config *config.DBConfig) (*BaseDB, error) {
 	// maxAllowedPacket=0 can be used to automatically fetch the max_allowed_packet variable from server on every connection.
 	// https://github.com/go-sql-driver/mysql#maxallowedpacket
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4&interpolateParams=true&maxAllowedPacket=0",
-		config.User, config.Password, config.Host, config.Port)
+	hostPort := net.JoinHostPort(config.Host, strconv.Itoa(config.Port))
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/?charset=utf8mb4&interpolateParams=true&maxAllowedPacket=0",
+		config.User, config.Password, hostPort)
 
 	doFuncInClose := func() {}
 	if config.Security != nil {
@@ -116,14 +116,8 @@ func (d *DefaultDBProviderImpl) Apply(config *config.DBConfig) (*BaseDB, error) 
 	if err != nil {
 		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
 	}
-	failpoint.Inject("failDBPing", func(_ failpoint.Value) {
-		db.Close()
-		db, mockDB, _ = sqlmock.New()
-		mockDB.ExpectPing()
-		mockDB.ExpectClose()
-	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), utils.DefaultDBTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), netTimeout)
 	defer cancel()
 	err = db.PingContext(ctx)
 	failpoint.Inject("failDBPing", func(_ failpoint.Value) {
@@ -162,6 +156,8 @@ func NewBaseDB(db *sql.DB, doFuncInClose ...func()) *BaseDB {
 
 // GetBaseConn retrieves *BaseConn which has own retryStrategy.
 func (d *BaseDB) GetBaseConn(ctx context.Context) (*BaseConn, error) {
+	ctx, cancel := context.WithTimeout(ctx, netTimeout)
+	defer cancel()
 	conn, err := d.DB.Conn(ctx)
 	if err != nil {
 		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)

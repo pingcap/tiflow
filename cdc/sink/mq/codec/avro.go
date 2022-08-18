@@ -67,7 +67,7 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(
 		nil,
 		nil,
 		e.CommitTs,
-		model.MqMessageTypeRow,
+		model.MessageTypeRow,
 		&e.Table.Schema,
 		&e.Table.Table,
 	)

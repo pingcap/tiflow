@@ -216,6 +216,11 @@ error = '''
 decode row data to datum failed
 '''
 
+["CDC:ErrDiskFull"]
+error = '''
+failed to preallocate file because disk is full
+'''
+
 ["CDC:ErrEncodeFailed"]
 error = '''
 encode failed: %s
@@ -471,6 +476,11 @@ error = '''
 invalid topic expression
 '''
 
+["CDC:ErrKafkaTopicNotExists"]
+error = '''
+kafka topic not exists after creation
+'''
+
 ["CDC:ErrLeaseExpired"]
 error = '''
 owner lease expired 
@@ -504,11 +514,6 @@ MQ Codec invalid config
 ["CDC:ErrMQSinkUnknownProtocol"]
 error = '''
 unknown '%s' protocol for Message Queue sink
-'''
-
-["CDC:ErrMQWorkerClosed"]
-error = '''
-MQ worker has closed
 '''
 
 ["CDC:ErrMailboxFull"]
@@ -918,7 +923,7 @@ sink config invalid
 
 ["CDC:ErrSinkURIInvalid"]
 error = '''
-sink uri invalid
+sink uri invalid '%s'
 '''
 
 ["CDC:ErrSnapshotLostByGC"]
@@ -958,7 +963,7 @@ start a stopped leveldb system
 
 ["CDC:ErrStartTsBeforeGC"]
 error = '''
-fail to create changefeed because start-ts %d is earlier than GC safepoint at %d
+fail to create or maintain changefeed because start-ts %d is earlier than or equal to GC safepoint at %d
 '''
 
 ["CDC:ErrSupportGetOnly"]

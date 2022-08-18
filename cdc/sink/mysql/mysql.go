@@ -16,7 +16,9 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -29,9 +31,14 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
+	dmretry "github.com/pingcap/tiflow/dm/pkg/retry"
 	dmutils "github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/cyclic"
@@ -42,8 +49,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/retry"
-	"github.com/prometheus/client_golang/prometheus"
-	"go.uber.org/zap"
 )
 
 const (
@@ -77,6 +82,8 @@ type mysqlSink struct {
 
 	forceReplicate bool
 	cancel         func()
+
+	error atomic.Error
 }
 
 // NewMySQLSink creates a new MySQL sink using schema storage
@@ -98,17 +105,19 @@ func NewMySQLSink(
 	// dsn format of the driver:
 	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
 	username := sinkURI.User.Username()
-	password, _ := sinkURI.User.Password()
-	hostName := sinkURI.Hostname()
-	port := sinkURI.Port()
 	if username == "" {
 		username = "root"
 	}
+	password, _ := sinkURI.User.Password()
+	hostName := sinkURI.Hostname()
+	port := sinkURI.Port()
 	if port == "" {
 		port = "4000"
 	}
 
-	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, hostName, port, params.tls)
+	// This will handle the IPv6 address format.
+	host := net.JoinHostPort(hostName, port)
+	dsnStr := fmt.Sprintf("%s:%s@tcp(%s)/%s", username, password, host, params.tls)
 	dsn, err := dmysql.ParseDSN(dsnStr)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
@@ -227,18 +236,20 @@ func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 // Concurrency Note: FlushRowChangedEvents is thread-safe.
 func (s *mysqlSink) FlushRowChangedEvents(
 	ctx context.Context, tableID model.TableID, resolved model.ResolvedTs,
-) (uint64, error) {
+) (model.ResolvedTs, error) {
+	if err := s.error.Load(); err != nil {
+		return model.NewResolvedTs(0), err
+	}
+
 	v, ok := s.getTableResolvedTs(tableID)
-	if !ok || v.Ts < resolved.Ts {
+	if !ok || v.Less(resolved) {
 		s.tableMaxResolvedTs.Store(tableID, resolved)
 	}
 
 	// check and throw error
 	select {
 	case <-ctx.Done():
-		return 0, ctx.Err()
-	case err := <-s.errCh:
-		return 0, err
+		return model.NewResolvedTs(0), ctx.Err()
 	case s.resolvedCh <- struct{}{}:
 		// Notify `flushRowChangedEvents` to asynchronously write data.
 	default:
@@ -255,9 +266,17 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context) {
 			worker.close()
 		}
 	}()
+outer:
 	for {
 		select {
 		case <-ctx.Done():
+			return
+		case err := <-s.errCh:
+			log.Error("mysqlSink encountered error",
+				zap.Error(err),
+				zap.String("namespace", s.params.changefeedID.Namespace),
+				zap.String("changefeed", s.params.changefeedID.ID))
+			s.error.Store(err)
 			return
 		case <-s.resolvedCh:
 		}
@@ -273,8 +292,13 @@ func (s *mysqlSink) flushRowChangedEvents(ctx context.Context) {
 		if len(resolvedTxnsMap) != 0 {
 			s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
 		}
-		for tableID, resolvedTs := range checkpointTsMap {
-			s.tableCheckpointTs.Store(tableID, resolvedTs)
+		for _, worker := range s.workers {
+			if !worker.isNormal() {
+				continue outer
+			}
+		}
+		for tableID, resolved := range checkpointTsMap {
+			s.tableCheckpointTs.Store(tableID, resolved)
 		}
 	}
 }
@@ -513,10 +537,10 @@ func (s *mysqlSink) cleanTableResource(tableID model.TableID) {
 			zap.Int64("tableID", tableID),
 			zap.Uint64("resolvedTs", resolved.(model.ResolvedTs).Ts))
 	}
-	if checkpointTs, loaded := s.tableCheckpointTs.LoadAndDelete(tableID); loaded {
+	if checkpoint, loaded := s.tableCheckpointTs.LoadAndDelete(tableID); loaded {
 		log.Info("clean up table checkpoint ts in MySQL sink",
 			zap.Int64("tableID", tableID),
-			zap.Uint64("checkpointTs", checkpointTs.(uint64)))
+			zap.Uint64("checkpointTs", checkpoint.(model.ResolvedTs).Ts))
 	}
 	// try to remove table txn cache
 	s.txnCache.RemoveTableTxn(tableID)
@@ -541,25 +565,29 @@ func (s *mysqlSink) RemoveTable(ctx context.Context, tableID model.TableID) erro
 			return errors.Trace(ctx.Err())
 		case <-ticker.C:
 			maxResolved, ok := s.getTableResolvedTs(tableID)
-			log.Warn("Barrier doesn't return in time, may be stuck",
+			log.Warn("RemoveTable doesn't return in time, may be stuck",
 				zap.Int64("tableID", tableID),
 				zap.Bool("hasResolvedTs", ok),
 				zap.Any("resolvedTs", maxResolved.Ts),
-				zap.Uint64("checkpointTs", s.getTableCheckpointTs(tableID)))
+				zap.Uint64("checkpointTs", s.getTableCheckpointTs(tableID).Ts))
 		default:
+			if err := s.error.Load(); err != nil {
+				return err
+			}
 			maxResolved, ok := s.getTableResolvedTs(tableID)
 			if !ok {
 				log.Info("No table resolvedTs is found", zap.Int64("tableID", tableID))
 				return nil
 			}
-			if s.getTableCheckpointTs(tableID) >= maxResolved.Ts {
+			checkpoint := s.getTableCheckpointTs(tableID)
+			if checkpoint.EqualOrGreater(maxResolved) {
 				return nil
 			}
-			checkpointTs, err := s.FlushRowChangedEvents(ctx, tableID, maxResolved)
+			checkpoint, err := s.FlushRowChangedEvents(ctx, tableID, maxResolved)
 			if err != nil {
 				return err
 			}
-			if checkpointTs >= maxResolved.Ts {
+			if checkpoint.Ts >= maxResolved.Ts {
 				return nil
 			}
 			// short sleep to avoid cpu spin
@@ -568,12 +596,12 @@ func (s *mysqlSink) RemoveTable(ctx context.Context, tableID model.TableID) erro
 	}
 }
 
-func (s *mysqlSink) getTableCheckpointTs(tableID model.TableID) uint64 {
+func (s *mysqlSink) getTableCheckpointTs(tableID model.TableID) model.ResolvedTs {
 	v, ok := s.tableCheckpointTs.Load(tableID)
 	if ok {
-		return v.(uint64)
+		return v.(model.ResolvedTs)
 	}
-	return uint64(0)
+	return model.NewResolvedTs(0)
 }
 
 func (s *mysqlSink) getTableResolvedTs(tableID model.TableID) (model.ResolvedTs, bool) {
@@ -585,9 +613,21 @@ func (s *mysqlSink) getTableResolvedTs(tableID model.TableID) (model.ResolvedTs,
 	return resolved, ok
 }
 
-func logDMLTxnErr(err error) error {
+func logDMLTxnErr(
+	err error, start time.Time, changefeed model.ChangeFeedID, query string, count int,
+) error {
 	if isRetryableDMLError(err) {
-		log.Warn("execute DMLs with error, retry later", zap.Error(err))
+		log.Warn("execute DMLs with error, retry later",
+			zap.Error(err), zap.Duration("duration", time.Since(start)),
+			zap.String("query", query), zap.Int("count", count),
+			zap.String("namespace", changefeed.Namespace),
+			zap.String("changefeed", changefeed.ID))
+	} else {
+		log.Error("execute DMLs with error, can not retry",
+			zap.Error(err), zap.Duration("duration", time.Since(start)),
+			zap.String("query", query), zap.Int("count", count),
+			zap.String("namespace", changefeed.Namespace),
+			zap.String("changefeed", changefeed.ID))
 	}
 	return err
 }
@@ -596,17 +636,12 @@ func isRetryableDMLError(err error) bool {
 	if !cerror.IsRetryableError(err) {
 		return false
 	}
-
-	errCode, ok := getSQLErrCode(err)
-	if !ok {
+	// Check if the error is connection errors that can retry safely.
+	if dmretry.IsConnectionError(err) {
 		return true
 	}
-
-	switch errCode {
-	case mysql.ErrNoSuchTable, mysql.ErrBadDB:
-		return false
-	}
-	return true
+	// Check if the error is an retriable TiDB error or MySQL error.
+	return dbutil.IsRetryableError(err)
 }
 
 func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDMLs, bucket int) error {
@@ -616,18 +651,23 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 			zap.Any("values", dmls.values))
 	}
 
+	start := time.Now()
 	return retry.Do(ctx, func() error {
 		failpoint.Inject("MySQLSinkTxnRandomError", func() {
-			failpoint.Return(logDMLTxnErr(errors.Trace(dmysql.ErrInvalidConn)))
+			failpoint.Return(
+				logDMLTxnErr(
+					errors.Trace(driver.ErrBadConn),
+					start, s.params.changefeedID, "failpoint", 0))
 		})
 		failpoint.Inject("MySQLSinkHangLongTime", func() {
 			time.Sleep(time.Hour)
 		})
-
 		err := s.statistics.RecordBatchExecution(func() (int, error) {
 			tx, err := s.db.BeginTx(ctx, nil)
 			if err != nil {
-				return 0, logDMLTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
+				return 0, logDMLTxnErr(
+					cerror.WrapError(cerror.ErrMySQLTxnError, err),
+					start, s.params.changefeedID, "BEGIN", dmls.rowCount)
 			}
 
 			for i, query := range dmls.sqls {
@@ -636,8 +676,13 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 					if rbErr := tx.Rollback(); rbErr != nil {
 						log.Warn("failed to rollback txn", zap.Error(err))
+						_ = logDMLTxnErr(
+							cerror.WrapError(cerror.ErrMySQLTxnError, err),
+							start, s.params.changefeedID, query, dmls.rowCount)
 					}
-					return 0, logDMLTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
+					return 0, logDMLTxnErr(
+						cerror.WrapError(cerror.ErrMySQLTxnError, err),
+						start, s.params.changefeedID, query, dmls.rowCount)
 				}
 			}
 
@@ -647,12 +692,16 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 					if rbErr := tx.Rollback(); rbErr != nil {
 						log.Warn("failed to rollback txn", zap.Error(err))
 					}
-					return 0, logDMLTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
+					return 0, logDMLTxnErr(
+						cerror.WrapError(cerror.ErrMySQLTxnError, err),
+						start, s.params.changefeedID, dmls.markSQL, dmls.rowCount)
 				}
 			}
 
 			if err = tx.Commit(); err != nil {
-				return 0, logDMLTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
+				return 0, logDMLTxnErr(
+					cerror.WrapError(cerror.ErrMySQLTxnError, err),
+					start, s.params.changefeedID, "COMMIT", dmls.rowCount)
 			}
 			return dmls.rowCount, nil
 		})
@@ -686,6 +735,15 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 	rowCount := 0
 	// translateToInsert control the update and insert behavior
 	translateToInsert := s.params.enableOldValue && !s.params.safeMode
+	for _, row := range rows {
+		if !translateToInsert {
+			break
+		}
+		// It can be translated in to INSERT, if the row is committed after
+		// we starting replicating the table, which means it must not be
+		// replicated before, and there is no such row in downstream MySQL.
+		translateToInsert = row.CommitTs > row.ReplicatingTs
+	}
 
 	// flush cached batch replace or insert, to keep the sequence of DMLs
 	flushCacheDMLs := func() {
@@ -978,15 +1036,6 @@ func whereSlice(cols []*model.Column, forceReplicate bool) (colNames []string, a
 		}
 	}
 	return
-}
-
-func getSQLErrCode(err error) (errors.ErrCode, bool) {
-	mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError)
-	if !ok {
-		return -1, false
-	}
-
-	return errors.ErrCode(mysqlErr.Number), true
 }
 
 func buildColumnList(names []string) string {

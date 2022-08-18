@@ -15,6 +15,7 @@ package api
 
 import (
 	"bufio"
+	"fmt"
 	"net/http"
 	"os"
 
@@ -27,6 +28,8 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/logutil"
+	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -207,19 +210,20 @@ func (h *openAPI) GetChangefeed(c *gin.Context) {
 		return
 	}
 
-	processorInfos, err := h.statusProvider().GetAllTaskStatuses(ctx, changefeedID)
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-
-	taskStatus := make([]model.CaptureTaskStatus, 0, len(processorInfos))
-	for captureID, status := range processorInfos {
-		tables := make([]int64, 0)
-		for tableID := range status.Tables {
-			tables = append(tables, tableID)
+	taskStatus := make([]model.CaptureTaskStatus, 0)
+	if info.State == model.StateNormal {
+		processorInfos, err := h.statusProvider().GetAllTaskStatuses(ctx, changefeedID)
+		if err != nil {
+			_ = c.Error(err)
+			return
 		}
-		taskStatus = append(taskStatus, model.CaptureTaskStatus{CaptureID: captureID, Tables: tables, Operation: status.Operation})
+		for captureID, status := range processorInfos {
+			tables := make([]int64, 0)
+			for tableID := range status.Tables {
+				tables = append(tables, tableID)
+			}
+			taskStatus = append(taskStatus, model.CaptureTaskStatus{CaptureID: captureID, Tables: tables, Operation: status.Operation})
+		}
 	}
 
 	changefeedDetail := &model.ChangefeedDetail{
@@ -272,8 +276,29 @@ func (h *openAPI) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
+	up := h.capture.UpstreamManager.Get(upstream.DefaultUpstreamID)
+	defer up.Release()
+
+	needRemoveGCSafePoint := false
+	defer func() {
+		if !needRemoveGCSafePoint {
+			return
+		}
+		err := gc.UndoEnsureChangefeedStartTsSafety(
+			ctx,
+			up.PDClient,
+			gc.EnsureGCServiceCreating,
+			model.DefaultChangeFeedID(changefeedConfig.ID),
+		)
+		if err != nil {
+			_ = c.Error(err)
+			return
+		}
+	}()
+
 	infoStr, err := info.Marshal()
 	if err != nil {
+		needRemoveGCSafePoint = true
 		_ = c.Error(err)
 		return
 	}
@@ -281,6 +306,7 @@ func (h *openAPI) CreateChangefeed(c *gin.Context) {
 	err = h.capture.EtcdClient.CreateChangefeedInfo(ctx, info,
 		model.DefaultChangeFeedID(changefeedConfig.ID))
 	if err != nil {
+		needRemoveGCSafePoint = true
 		_ = c.Error(err)
 		return
 	}
@@ -626,6 +652,16 @@ func (h *openAPI) GetProcessor(c *gin.Context) {
 		return
 	}
 
+	info, err := h.statusProvider().GetChangeFeedInfo(ctx, changefeedID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	if info.State != model.StateNormal {
+		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam,
+			fmt.Errorf("changefeed in abnormal state: %s, can't get processors of an abnormal changefeed",
+				string(info.State))))
+	}
 	// check if this captureID exist
 	procInfos, err := h.statusProvider().GetProcessors(ctx)
 	if err != nil {

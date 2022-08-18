@@ -15,6 +15,7 @@ package writer
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	"github.com/pingcap/log"
@@ -35,6 +36,10 @@ func (bs *blackHoleWriter) DeleteAllLogs(ctx context.Context) error {
 	return nil
 }
 
+func (bs *blackHoleWriter) GC(ctx context.Context, checkpointTs model.Ts) error {
+	return nil
+}
+
 // NewBlackHoleWriter creates a blackHole writer
 func NewBlackHoleWriter() *blackHoleWriter {
 	return &blackHoleWriter{
@@ -42,25 +47,27 @@ func NewBlackHoleWriter() *blackHoleWriter {
 	}
 }
 
-func (bs *blackHoleWriter) WriteLog(_ context.Context, tableID model.TableID, logs []*model.RedoRowChangedEvent) (resolvedTs uint64, err error) {
+func (bs *blackHoleWriter) WriteLog(_ context.Context, tableID model.TableID, logs []*model.RedoRowChangedEvent) (err error) {
 	bs.tableRtsMu.Lock()
 	defer bs.tableRtsMu.Unlock()
 	if len(logs) == 0 {
-		return bs.tableRtsMap[tableID], nil
+		return nil
 	}
-	resolvedTs = bs.tableRtsMap[tableID]
 	current := logs[len(logs)-1].Row.CommitTs
 	bs.tableRtsMap[tableID] = current
 	log.Debug("write row redo logs", zap.Int("count", len(logs)),
-		zap.Uint64("resolvedTs", resolvedTs), zap.Uint64("current", current))
+		zap.Uint64("current", current))
 	return
 }
 
-func (bs *blackHoleWriter) FlushLog(_ context.Context, tableID model.TableID, resolvedTs uint64) error {
+func (bs *blackHoleWriter) FlushLog(_ context.Context, checkpointTs, resolvedTs model.Ts) error {
 	bs.tableRtsMu.Lock()
 	defer bs.tableRtsMu.Unlock()
-	bs.tableRtsMap[tableID] = resolvedTs
 	return nil
+}
+
+func (bs *blackHoleWriter) GetMeta() (checkpointTs, resolvedTs model.Ts) {
+	return 0, 0
 }
 
 func (bs *blackHoleWriter) SendDDL(_ context.Context, ddl *model.RedoDDLEvent) error {
@@ -68,28 +75,29 @@ func (bs *blackHoleWriter) SendDDL(_ context.Context, ddl *model.RedoDDLEvent) e
 	return nil
 }
 
-func (bs *blackHoleWriter) EmitResolvedTs(_ context.Context, ts uint64) error {
-	bs.resolvedTs = ts
-	return nil
-}
-
-func (bs *blackHoleWriter) EmitCheckpointTs(_ context.Context, ts uint64) error {
-	bs.checkpointTs = ts
-	return nil
-}
-
-func (bs *blackHoleWriter) GetCurrentResolvedTs(_ context.Context, tableIDs []int64) (map[int64]uint64, error) {
-	bs.tableRtsMu.RLock()
-	defer bs.tableRtsMu.RUnlock()
-	rtsMap := make(map[int64]uint64, len(bs.tableRtsMap))
-	for _, tableID := range tableIDs {
-		if rts, ok := bs.tableRtsMap[tableID]; ok {
-			rtsMap[tableID] = rts
-		}
-	}
-	return rtsMap, nil
-}
-
 func (bs *blackHoleWriter) Close() error {
 	return nil
+}
+
+type invalidBlackHoleWriter struct {
+	*blackHoleWriter
+}
+
+// NewInvalidBlackHoleWriter creates a invalid blackHole writer
+func NewInvalidBlackHoleWriter(rl RedoLogWriter) *invalidBlackHoleWriter {
+	return &invalidBlackHoleWriter{
+		blackHoleWriter: rl.(*blackHoleWriter),
+	}
+}
+
+func (ibs *invalidBlackHoleWriter) WriteLog(
+	_ context.Context, _ model.TableID, _ []*model.RedoRowChangedEvent,
+) (err error) {
+	return errors.New("[WriteLog] invalid black hole writer")
+}
+
+func (ibs *invalidBlackHoleWriter) FlushLog(
+	_ context.Context, _, _ model.Ts,
+) error {
+	return errors.New("[FlushLog] invalid black hole writer")
 }

@@ -23,6 +23,7 @@ import (
 	"sort"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	dmysql "github.com/go-sql-driver/mysql"
@@ -1080,7 +1081,6 @@ func (s *mockUnavailableMySQL) Stop() {
 }
 
 func TestNewMySQLTimeout(t *testing.T) {
-	t.Parallel()
 	addr := "127.0.0.1:33333"
 	mockMySQL := newMockUnavailableMySQL(addr, t)
 	defer mockMySQL.Stop()
@@ -1088,7 +1088,7 @@ func TestNewMySQLTimeout(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	changefeed := "test-changefeed"
-	sinkURI, err := url.Parse(fmt.Sprintf("mysql://%s/?read-timeout=2s&timeout=2s", addr))
+	sinkURI, err := url.Parse(fmt.Sprintf("mysql://%s/?read-timeout=1s&timeout=1s", addr))
 	require.Nil(t, err)
 	rc := config.GetDefaultReplicaConfig()
 	f, err := filter.NewFilter(rc)
@@ -1250,8 +1250,8 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 	err = retry.Do(context.Background(), func() error {
 		ts, err := sink.FlushRowChangedEvents(ctx, 1, model.NewResolvedTs(uint64(2)))
 		require.Nil(t, err)
-		if ts < uint64(2) {
-			return errors.Errorf("checkpoint ts %d less than resolved ts %d", ts, 2)
+		if ts.Ts < uint64(2) {
+			return errors.Errorf("checkpoint ts %d less than resolved ts %d", ts.Ts, 2)
 		}
 		return nil
 	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerror.IsRetryableError))
@@ -1261,8 +1261,8 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 	err = retry.Do(context.Background(), func() error {
 		ts, err := sink.FlushRowChangedEvents(ctx, 2, model.NewResolvedTs(uint64(4)))
 		require.Nil(t, err)
-		if ts < uint64(4) {
-			return errors.Errorf("checkpoint ts %d less than resolved ts %d", ts, 4)
+		if ts.Ts < uint64(4) {
+			return errors.Errorf("checkpoint ts %d less than resolved ts %d", ts.Ts, 4)
 		}
 		return nil
 	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerror.IsRetryableError))
@@ -1520,6 +1520,77 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 	require.Nil(t, err)
 }
 
+func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
+	errDup := mysql.NewErr(mysql.ErrDupEntry)
+	rows := []*model.RowChangedEvent{
+		{
+			StartTs:       2,
+			CommitTs:      3,
+			ReplicatingTs: 1,
+			Table:         &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 1,
+				},
+			},
+		},
+	}
+
+	dbIndex := 0
+	mockDBInsertDupEntry := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		defer func() {
+			dbIndex++
+		}()
+		if dbIndex == 0 {
+			// test db
+			db, err := mockTestDB(true)
+			require.Nil(t, err)
+			return db, nil
+		}
+		// normal db
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		require.Nil(t, err)
+		mock.ExpectBegin()
+		mock.ExpectExec("INSERT INTO `s1`.`t1`(`a`) VALUES (?)").
+			WithArgs(1).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectCommit().
+			WillReturnError(errDup)
+		mock.ExpectClose()
+		return db, nil
+	}
+	backupGetDBConn := GetDBConnImpl
+	GetDBConnImpl = mockDBInsertDupEntry
+	backupMaxRetry := defaultDMLMaxRetry
+	defaultDMLMaxRetry = 2
+	defer func() {
+		GetDBConnImpl = backupGetDBConn
+		defaultDMLMaxRetry = backupMaxRetry
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	changefeed := "test-changefeed"
+	sinkURI, err := url.Parse(
+		"mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&safe-mode=false")
+	require.Nil(t, err)
+	rc := config.GetDefaultReplicaConfig()
+	f, err := filter.NewFilter(rc)
+	require.Nil(t, err)
+	sink, err := NewMySQLSink(
+		ctx, model.DefaultChangeFeedID(changefeed), sinkURI, f, rc, map[string]string{})
+	require.Nil(t, err)
+
+	err = sink.execDMLs(ctx, rows, 0, 1 /* bucket */)
+	require.Equal(t, errDup, errors.Cause(err))
+
+	err = sink.Close(ctx)
+	require.Nil(t, err)
+}
+
 func TestNewMySQLSinkExecDDL(t *testing.T) {
 	dbIndex := 0
 	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
@@ -1697,6 +1768,48 @@ func TestNewMySQLSink(t *testing.T) {
 	require.Nil(t, err)
 }
 
+func TestNewMySQLSinkWithIPv6Address(t *testing.T) {
+	dbIndex := 0
+	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		require.Contains(t, dsnStr, "root@tcp([::1]:3306)")
+		defer func() {
+			dbIndex++
+		}()
+		if dbIndex == 0 {
+			// test db
+			db, err := mockTestDB(true)
+			require.Nil(t, err)
+			return db, nil
+		}
+		// normal db
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		mock.ExpectClose()
+		require.Nil(t, err)
+		return db, nil
+	}
+	backupGetDBConn := GetDBConnImpl
+	GetDBConnImpl = mockGetDBConn
+	defer func() {
+		GetDBConnImpl = backupGetDBConn
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	changefeed := model.DefaultChangeFeedID("test-changefeed")
+	// See https://www.ietf.org/rfc/rfc2732.txt, we have to use brackets to wrap IPv6 address.
+	sinkURI, err := url.Parse("mysql://[::1]:3306/?time-zone=UTC&worker-count=4")
+	require.Nil(t, err)
+	rc := config.GetDefaultReplicaConfig()
+	f, err := filter.NewFilter(rc)
+	require.Nil(t, err)
+	sink, err := NewMySQLSink(ctx,
+		changefeed,
+		sinkURI, f, rc, map[string]string{})
+	require.Nil(t, err)
+	err = sink.Close(ctx)
+	require.Nil(t, err)
+}
+
 func TestMySQLSinkClose(t *testing.T) {
 	dbIndex := 0
 	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
@@ -1789,7 +1902,7 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 	require.Nil(t, err)
 	checkpoint, err := sink.FlushRowChangedEvents(ctx, model.TableID(1), model.NewResolvedTs(1))
 	require.Nil(t, err)
-	require.True(t, checkpoint <= 1)
+	require.True(t, checkpoint.Ts <= 1)
 	rows := []*model.RowChangedEvent{
 		{
 			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
@@ -1807,9 +1920,9 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 	err = sink.EmitRowChangedEvents(ctx, rows...)
 	require.Nil(t, err)
 	checkpoint, err = sink.FlushRowChangedEvents(ctx, model.TableID(1), model.NewResolvedTs(6))
-	require.True(t, checkpoint <= 6)
+	require.True(t, checkpoint.Ts <= 6)
 	require.Nil(t, err)
-	require.True(t, sink.getTableCheckpointTs(model.TableID(1)) <= 6)
+	require.True(t, sink.getTableCheckpointTs(model.TableID(1)).Ts <= 6)
 	rows = []*model.RowChangedEvent{
 		{
 			Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
@@ -1827,9 +1940,9 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 	err = sink.EmitRowChangedEvents(ctx, rows...)
 	require.Nil(t, err)
 	checkpoint, err = sink.FlushRowChangedEvents(ctx, model.TableID(2), model.NewResolvedTs(5))
-	require.True(t, checkpoint <= 5)
+	require.True(t, checkpoint.Ts <= 5)
 	require.Nil(t, err)
-	require.True(t, sink.getTableCheckpointTs(model.TableID(2)) <= 5)
+	require.True(t, sink.getTableCheckpointTs(model.TableID(2)).Ts <= 5)
 	_ = sink.Close(ctx)
 	_, err = sink.FlushRowChangedEvents(ctx, model.TableID(2), model.NewResolvedTs(6))
 	require.Nil(t, err)
@@ -1905,7 +2018,7 @@ func TestCleanTableResource(t *testing.T) {
 	require.Nil(t, s.EmitRowChangedEvents(ctx, &model.RowChangedEvent{
 		Table: &model.TableName{TableID: tblID, Schema: "test", Table: "t1"},
 	}))
-	s.tableCheckpointTs.Store(tblID, uint64(1))
+	s.tableCheckpointTs.Store(tblID, model.NewResolvedTs(uint64(1)))
 	s.tableMaxResolvedTs.Store(tblID, model.NewResolvedTs(uint64(2)))
 	_, ok := s.txnCache.unresolvedTxns[tblID]
 	require.True(t, ok)
@@ -1936,4 +2049,447 @@ func TestHolderString(t *testing.T) {
 	// test invalid input
 	require.Panics(t, func() { placeHolder(0) }, "strings.Builder.Grow: negative count")
 	require.Panics(t, func() { placeHolder(-1) }, "strings.Builder.Grow: negative count")
+}
+
+func TestMySQLSinkExecDMLError(t *testing.T) {
+	// The purpose of this test is to make sure
+	// that error during executing DML does not block
+	// RemoveTable.
+
+	dbIndex := 0
+	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		defer func() {
+			dbIndex++
+		}()
+		if dbIndex == 0 {
+			// test db
+			db, err := mockTestDB(true)
+			require.Nil(t, err)
+			return db, nil
+		}
+		// normal db
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		require.Nil(t, err)
+		mock.ExpectBegin()
+		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`,`b`) VALUES (?,?)").
+			WillDelayFor(1 * time.Second).
+			WillReturnError(&dmysql.MySQLError{Number: mysql.ErrNoSuchTable})
+		return db, nil
+	}
+	backupGetDBConn := GetDBConnImpl
+	GetDBConnImpl = mockGetDBConn
+	defer func() {
+		GetDBConnImpl = backupGetDBConn
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	changefeed := "test-changefeed"
+	sinkURI, err := url.Parse(
+		"mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&batch-replace-size=1")
+	require.Nil(t, err)
+	rc := config.GetDefaultReplicaConfig()
+	f, err := filter.NewFilter(rc)
+	require.Nil(t, err)
+	sink, err := NewMySQLSink(ctx,
+		model.DefaultChangeFeedID(changefeed),
+		sinkURI, f, rc, map[string]string{})
+	require.Nil(t, err)
+
+	rows := []*model.RowChangedEvent{
+		{
+			StartTs:  1,
+			CommitTs: 2,
+			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 1,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Flag:  0,
+					Value: "test",
+				},
+			},
+		},
+		{
+			StartTs:  2,
+			CommitTs: 3,
+			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 2,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Flag:  0,
+					Value: "test",
+				},
+			},
+		},
+		{
+			StartTs:  3,
+			CommitTs: 4,
+			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 3,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Flag:  0,
+					Value: "test",
+				},
+			},
+		},
+		{
+			StartTs:  4,
+			CommitTs: 5,
+			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 1,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Flag:  0,
+					Value: "test",
+				},
+			},
+		},
+		{
+			StartTs:  5,
+			CommitTs: 6,
+			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			Columns: []*model.Column{
+				{
+					Name:  "a",
+					Type:  mysql.TypeLong,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+					Value: 2,
+				},
+				{
+					Name:  "b",
+					Type:  mysql.TypeVarchar,
+					Flag:  0,
+					Value: "test",
+				},
+			},
+		},
+	}
+
+	for _, row := range rows {
+		err = sink.EmitRowChangedEvents(ctx, row)
+		require.NoError(t, err)
+	}
+
+	i := 0
+	for {
+		// Keep flushing so that appendFinishTxn is called enough times.
+		ts, err := sink.FlushRowChangedEvents(ctx, 1, model.NewResolvedTs(uint64(i)))
+		if err != nil {
+			break
+		}
+		require.Less(t, ts.ResolvedMark(), uint64(2))
+		i++
+	}
+
+	err = sink.RemoveTable(ctx, 1)
+	require.Error(t, err)
+	require.Regexp(t, ".*ErrMySQLTxnError.*", err)
+
+	_ = sink.Close(ctx)
+}
+
+func TestMysqlSinkSafeModeOff(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		input    []*model.RowChangedEvent
+		expected *preparedDMLs
+	}{
+		{
+			name:     "empty",
+			input:    []*model.RowChangedEvent{},
+			expected: &preparedDMLs{sqls: []string{}, values: [][]interface{}{}},
+		}, {
+			name: "insert without PK",
+			input: []*model.RowChangedEvent{
+				{
+					StartTs:       418658114257813514,
+					CommitTs:      418658114257813515,
+					ReplicatingTs: 418658114257813513,
+					Table:         &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					Columns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Value: 1,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Value: 1,
+					}},
+				},
+			},
+			expected: &preparedDMLs{
+				sqls: []string{
+					"INSERT INTO `common_1`.`uk_without_pk`(`a1`,`a3`) VALUES (?,?);",
+				},
+				values:   [][]interface{}{{1, 1}},
+				rowCount: 1,
+			},
+		}, {
+			name: "insert with PK",
+			input: []*model.RowChangedEvent{
+				{
+					StartTs:       418658114257813514,
+					CommitTs:      418658114257813515,
+					ReplicatingTs: 418658114257813513,
+					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
+					Columns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+						Value: 1,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Value: 1,
+					}},
+				},
+			},
+			expected: &preparedDMLs{
+				sqls:     []string{"INSERT INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);"},
+				values:   [][]interface{}{{1, 1}},
+				rowCount: 1,
+			},
+		}, {
+			name: "update without PK",
+			input: []*model.RowChangedEvent{
+				{
+					StartTs:       418658114257813516,
+					CommitTs:      418658114257813517,
+					ReplicatingTs: 418658114257813515,
+					Table:         &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					PreColumns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Value: 2,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Value: 2,
+					}},
+					Columns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Value: 3,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Value: 3,
+					}},
+				},
+			},
+			expected: &preparedDMLs{
+				sqls: []string{
+					"UPDATE `common_1`.`uk_without_pk` SET `a1`=?,`a3`=? " +
+						"WHERE `a1`=? AND `a3`=? LIMIT 1;",
+				},
+				values:   [][]interface{}{{3, 3, 2, 2}},
+				rowCount: 1,
+			},
+		}, {
+			name: "update with PK",
+			input: []*model.RowChangedEvent{
+				{
+					StartTs:       418658114257813516,
+					CommitTs:      418658114257813517,
+					ReplicatingTs: 418658114257813515,
+					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
+					PreColumns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+						Value: 2,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Value: 2,
+					}},
+					Columns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+						Value: 3,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Value: 3,
+					}},
+				},
+			},
+			expected: &preparedDMLs{
+				sqls: []string{"UPDATE `common_1`.`pk` SET `a1`=?,`a3`=? " +
+					"WHERE `a1`=? AND `a3`=? LIMIT 1;"},
+				values:   [][]interface{}{{3, 3, 2, 2}},
+				rowCount: 1,
+			},
+		}, {
+			name: "batch insert with PK",
+			input: []*model.RowChangedEvent{
+				{
+					StartTs:       418658114257813516,
+					CommitTs:      418658114257813517,
+					ReplicatingTs: 418658114257813515,
+					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
+					Columns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+						Value: 3,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Value: 3,
+					}},
+				},
+				{
+					StartTs:       418658114257813516,
+					CommitTs:      418658114257813517,
+					ReplicatingTs: 418658114257813515,
+					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
+					Columns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+						Value: 5,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Value: 5,
+					}},
+				},
+			},
+			expected: &preparedDMLs{
+				sqls: []string{
+					"INSERT INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",
+					"INSERT INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",
+				},
+				values:   [][]interface{}{{3, 3}, {5, 5}},
+				rowCount: 2,
+			},
+		}, {
+			name: "safe mode on commit ts < replicating ts",
+			input: []*model.RowChangedEvent{
+				{
+					StartTs:       418658114257813516,
+					CommitTs:      418658114257813517,
+					ReplicatingTs: 418658114257813518,
+					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
+					Columns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+						Value: 3,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Value: 3,
+					}},
+				},
+			},
+			expected: &preparedDMLs{
+				sqls: []string{
+					"REPLACE INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",
+				},
+				values:   [][]interface{}{{3, 3}},
+				rowCount: 1,
+			},
+		}, {
+			name: "safe mode on one row commit ts < replicating ts",
+			input: []*model.RowChangedEvent{
+				{
+					StartTs:       418658114257813516,
+					CommitTs:      418658114257813517,
+					ReplicatingTs: 418658114257813518,
+					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
+					Columns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+						Value: 3,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Value: 3,
+					}},
+				},
+				{
+					StartTs:       418658114257813516,
+					CommitTs:      418658114257813517,
+					ReplicatingTs: 418658114257813515,
+					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
+					Columns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+						Value: 5,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Value: 5,
+					}},
+				},
+			},
+			expected: &preparedDMLs{
+				sqls: []string{
+					"REPLACE INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",
+					"REPLACE INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",
+				},
+				values:   [][]interface{}{{3, 3}, {5, 5}},
+				rowCount: 2,
+			},
+		},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ms := newMySQLSink4Test(ctx, t)
+	ms.params.safeMode = false
+	ms.params.enableOldValue = true
+	for _, tc := range testCases {
+		dmls := ms.prepareDMLs(tc.input, 0, 0)
+		require.Equal(t, tc.expected, dmls, tc.name)
+	}
 }

@@ -62,7 +62,7 @@ type Sink interface {
 	// FlushRowChangedEvents is thread-safe.
 	FlushRowChangedEvents(
 		ctx context.Context, tableID model.TableID, resolved model.ResolvedTs,
-	) (uint64, error)
+	) (model.ResolvedTs, error)
 
 	// EmitCheckpointTs sends CheckpointTs to Sink.
 	// TiCDC guarantees that all Events **in the cluster** which of commitTs
@@ -158,6 +158,9 @@ func New(
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 	}
+	if err := config.ValidateAndAdjust(sinkURI); err != nil {
+		return nil, err
+	}
 	if newSink, ok := sinkIniterMap[strings.ToLower(sinkURI.Scheme)]; ok {
 		return newSink(ctx, changefeedID, sinkURI, filter, config, opts, errCh)
 	}
@@ -171,13 +174,17 @@ func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig, op
 		return err
 	}
 	errCh := make(chan error)
-	ctx = contextutil.PutRoleInCtx(ctx, util.RoleClient)
 	// TODO: find a better way to verify a sinkURI is valid
+	ctx, cancel := context.WithCancel(contextutil.PutRoleInCtx(ctx, util.RoleClient))
 	s, err := New(ctx, model.DefaultChangeFeedID("sink-verify"),
 		sinkURI, sinkFilter, cfg, opts, errCh)
 	if err != nil {
+		cancel()
 		return err
 	}
+	// NOTICE: We have to cancel the context before we close it,
+	// otherwise we will write data to closed chan after sink closed.
+	cancel()
 	err = s.Close(ctx)
 	if err != nil {
 		return err
