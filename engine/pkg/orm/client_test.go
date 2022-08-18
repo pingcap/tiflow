@@ -405,7 +405,6 @@ func TestJob(t *testing.T) {
 			},
 		},
 		{
-			// "UPDATE `master_meta_kv_data` SET `addr`=?,`config`=?,`epoch`=?,`id`=?,`node_id`=?,`project-id`=?,`status`=?,`type`=?,`updated_at`=? WHERE id = ?"
 			fn: "UpdateJob",
 			inputs: []interface{}{
 				&frameModel.MasterMetaKVData{

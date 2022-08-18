@@ -500,11 +500,6 @@ func (m *DefaultBaseMaster) Close(ctx context.Context) error {
 	return errors.Trace(err)
 }
 
-// OnError implements BaseMaster.OnError
-func (m *DefaultBaseMaster) OnError(err error) {
-	m.errCenter.OnError(err)
-}
-
 // refreshMetadata load and update metadata by current epoch, nodeID, advertiseAddr, etc.
 // master meta is persisted before it is created, in this function we update some
 // fileds to the current value, including epoch, nodeID and advertiseAddr.
