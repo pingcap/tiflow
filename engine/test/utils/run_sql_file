@@ -5,7 +5,7 @@ host="127.0.0.1"
 port=3306
 user="root"
 password=""
-sql=""
+file=""
 
 while [[ ${1} ]]; do
 	case "${1}" in
@@ -26,7 +26,7 @@ while [[ ${1} ]]; do
 		shift
 		;;
 	*)
-		sql="$sql ${1}"
+		file=${1}
 		;;
 	esac
 
@@ -37,10 +37,10 @@ while [[ ${1} ]]; do
 done
 
 if [ -z ${password} ]; then
-	cmd="mysql -u${user} -h${host} -P${port} --default-character-set utf8mb4 -e '${sql}'"
+	cmd="mysql -u${user} -h${host} -P${port} --default-character-set utf8mb4 <${file}"
 else
-	cmd="mysql -u${user} -h${host} -P${port} -p${password} --default-character-set utf8mb4 -e '${sql}'"
+	cmd="mysql -u${user} -h${host} -P${port} -p${password} --default-character-set utf8mb4 <${file}"
 fi
 
-echo "will execute: $cmd" >&2
+echo "will execute: $cmd"
 eval $cmd
