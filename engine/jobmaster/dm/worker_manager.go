@@ -218,6 +218,7 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 	var (
 		runningWorker runtime.WorkerStatus
 		nextUnit      frameModel.WorkerType
+		isFresh       bool
 		err           error
 		recordError   error
 	)
@@ -228,7 +229,8 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		if ok {
 			runningWorker = worker.(runtime.WorkerStatus)
 			nextUnit = getNextUnit(persistentTask, runningWorker)
-		} else if nextUnit, err = wm.getCurrentUnit(ctx, persistentTask); err != nil {
+			isFresh = nextUnit != runningWorker.Unit
+		} else if nextUnit, isFresh, err = wm.getCurrentUnit(ctx, persistentTask); err != nil {
 			wm.logger.Error("get current unit failed", zap.String("task", taskID), zap.Error(err))
 			recordError = err
 			continue
@@ -246,8 +248,10 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		}
 
 		var resources []resourcemeta.ResourceID
-		// we can assure only first worker don't need local resource.
-		if workerIdxInSeq(persistentTask.Cfg.TaskMode, nextUnit) != 0 {
+		// first worker don't need local resource.
+		// unfresh sync unit don't need local resource.
+		// TODO: storage should be created/discarded in jobmaster instead of worker.
+		if workerIdxInSeq(persistentTask.Cfg.TaskMode, nextUnit) != 0 && !(nextUnit == framework.WorkerDMSync && !isFresh) {
 			resources = append(resources, NewDMResourceID(persistentTask.Cfg.Name, persistentTask.Cfg.Upstreams[0].SourceID))
 		}
 
@@ -275,7 +279,7 @@ var workerSeqMap = map[string][]frameModel.WorkerType{
 	},
 }
 
-func (wm *WorkerManager) getCurrentUnit(ctx context.Context, task *metadata.Task) (frameModel.WorkerType, error) {
+func (wm *WorkerManager) getCurrentUnit(ctx context.Context, task *metadata.Task) (frameModel.WorkerType, bool, error) {
 	workerSeq, ok := workerSeqMap[task.Cfg.TaskMode]
 	if !ok {
 		wm.logger.Panic("Unexpected TaskMode", zap.String("TaskMode", task.Cfg.TaskMode))
@@ -284,14 +288,14 @@ func (wm *WorkerManager) getCurrentUnit(ctx context.Context, task *metadata.Task
 	for i := len(workerSeq) - 1; i >= 0; i-- {
 		isFresh, err := wm.checkpointAgent.IsFresh(ctx, workerSeq[i], task)
 		if err != nil {
-			return 0, err
+			return 0, false, err
 		}
 		if !isFresh {
-			return workerSeq[i], nil
+			return workerSeq[i], false, nil
 		}
 	}
 
-	return workerSeq[0], nil
+	return workerSeq[0], true, nil
 }
 
 func workerIdxInSeq(taskMode string, worker frameModel.WorkerType) int {
