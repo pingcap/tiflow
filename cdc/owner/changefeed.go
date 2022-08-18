@@ -509,8 +509,16 @@ LOOP:
 }
 
 func (c *changefeed) releaseResources(ctx cdcContext.Context) {
+	// Must clean redo manager before calling cancel, otherwise
+	// the manager can be closed internally.
+	c.cleanupRedoManager(ctx)
+
 	if !c.initialized {
+<<<<<<< HEAD
 		c.cleanupRedoManager(ctx)
+=======
+		c.cleanupChangefeedServiceGCSafePoints(ctx)
+>>>>>>> 366f9e988 (cdc: ensure owner can clean stale redo files correctly (#6786))
 		return
 	}
 	log.Info("close changefeed",
@@ -521,8 +529,12 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.cancel = func() {}
 	c.ddlPuller.Close()
 	c.schema = nil
+<<<<<<< HEAD
 	c.cleanupRedoManager(ctx)
 	c.cleanupServiceGCSafePoints(ctx)
+=======
+	c.cleanupChangefeedServiceGCSafePoints(ctx)
+>>>>>>> 366f9e988 (cdc: ensure owner can clean stale redo files correctly (#6786))
 	canceledCtx, cancel := context.WithCancel(context.Background())
 	cancel()
 	// We don't need to wait sink Close, pass a canceled context is ok
@@ -569,10 +581,11 @@ func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 		}
 		// when removing a paused changefeed, the redo manager is nil, create a new one
 		if c.redoManager == nil {
-			redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: false}
+			redoManagerOpts := redo.NewManagerOptionsForClean()
 			redoManager, err := redo.NewManager(ctx, c.state.Info.Config.Consistent, redoManagerOpts)
 			if err != nil {
-				log.Error("create redo manager failed",
+				log.Info("owner creates redo manager for clean fail",
+					zap.String("namespace", c.id.Namespace),
 					zap.String("changefeed", c.id.ID),
 					zap.Error(err))
 				return
