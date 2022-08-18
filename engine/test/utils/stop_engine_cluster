@@ -3,8 +3,11 @@
 # parameter 1: work directory
 # other parameters: config files
 
-echo "stop engine cluster..."
+set -x
 
+echo "save docker compose logs..."
 run_engine.sh logs $*
 shift
+
+echo "stop engine cluster..."
 run_engine.sh stop $*

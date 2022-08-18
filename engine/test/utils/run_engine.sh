@@ -45,9 +45,9 @@ case $1 in
 	;;
 "logs")
 	shift && WORK_DIR=$1
-	flag=
-	generate_flag $*
-	$COMPOSECMD $flag logs -t >$WORK_DIR/docker_compose.log
+	flag=()
+	generate_flag "$@"
+	$COMPOSECMD "${flag[@]}" logs -t >$WORK_DIR/docker_compose.log || echo "fail to save logs"
 
 	echo -e "[$(date)] <<<<<< save docker compose logs success! >>>>>>\n"
 	;;

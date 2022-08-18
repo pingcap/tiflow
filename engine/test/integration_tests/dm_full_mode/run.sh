@@ -40,7 +40,8 @@ function run() {
 	check_sync_diff $WORK_DIR $CUR_DIR/conf/diff_config.toml 1
 }
 
+
 CONFIG=$(adjust_config $OUT_DIR $TEST_NAME $CONFIG)
-trap "stop_engine_cluster $CONFIG" EXIT
+trap "stop_engine_cluster $WORK_DIR $CONFIG" EXIT
 run $*
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

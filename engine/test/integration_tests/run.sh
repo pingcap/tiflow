@@ -32,7 +32,7 @@ fi
 run_case() {
 	# cleanup test binaries and data, preserve logs, if we debug one case,
 	# these files will be preserved since no more case will be run.
-	find /tmp/tiflow_engine_test/*/* -print0 2>/dev/null | xargs -0 rm -rf || true
+	find /tmp/tiflow_engine_test/*/* -type d | xargs rm -rf || true	
 	local case=$1
 	local script=$2
 	echo "=================>> Running test $script... <<================="
