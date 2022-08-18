@@ -28,6 +28,8 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/logutil"
+	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -274,8 +276,29 @@ func (h *openAPI) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
+	up := h.capture.UpstreamManager.Get(upstream.DefaultUpstreamID)
+	defer up.Release()
+
+	needRemoveGCSafePoint := false
+	defer func() {
+		if !needRemoveGCSafePoint {
+			return
+		}
+		err := gc.UndoEnsureChangefeedStartTsSafety(
+			ctx,
+			up.PDClient,
+			gc.EnsureGCServiceCreating,
+			model.DefaultChangeFeedID(changefeedConfig.ID),
+		)
+		if err != nil {
+			_ = c.Error(err)
+			return
+		}
+	}()
+
 	infoStr, err := info.Marshal()
 	if err != nil {
+		needRemoveGCSafePoint = true
 		_ = c.Error(err)
 		return
 	}
@@ -283,6 +306,7 @@ func (h *openAPI) CreateChangefeed(c *gin.Context) {
 	err = h.capture.EtcdClient.CreateChangefeedInfo(ctx, info,
 		model.DefaultChangeFeedID(changefeedConfig.ID))
 	if err != nil {
+		needRemoveGCSafePoint = true
 		_ = c.Error(err)
 		return
 	}
