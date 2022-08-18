@@ -81,8 +81,7 @@ func IsRetryableEtcdError(err error) bool {
 		return true
 	}
 	// see: https://github.com/pingcap/tiflow/issues/6720
-	if strings.Contains(etcdErr.Error(), "error reading from server: EOF") &&
-		strings.Contains(etcdErr.Error(), "received prior goaway") {
+	if strings.Contains(etcdErr.Error(), "received prior goaway: code: NO_ERROR") {
 		return true
 	}
 	return false
