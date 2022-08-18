@@ -674,13 +674,6 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 		return
 	}
 
-	// start background managers
-	s.resourceManagerService.StartBackgroundWorker()
-	defer func() {
-		s.resourceManagerService.Stop()
-		log.Info("resource manager exited")
-	}()
-
 	// TODO support TLS.
 	executorClients := pkgClient.NewExecutorGroup(&security.Credential{}, log.L())
 	masterClient, err := pkgClient.NewServerMasterClientWithFailOver(

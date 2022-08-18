@@ -65,7 +65,8 @@ func (c *resourceManagerClient) CreateResource(
 		ResourceKey: &enginepb.ResourceKey{
 			JobId:      request.JobId,
 			ResourceId: request.ResourceId,
-		}})
+		},
+	})
 	if err != nil {
 		return err
 	}
