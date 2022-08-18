@@ -55,6 +55,17 @@ func NewProcessorManagerOptions(errCh chan<- error) *ManagerOptions {
 	}
 }
 
+// NewManagerOptionsForClean creates a manager options for cleaning.
+func NewManagerOptionsForClean() *ManagerOptions {
+	return &ManagerOptions{
+		EnableBgRunner: false,
+		EnableGCRunner: false,
+		EmitMeta:       false,
+		EmitRowEvents:  false,
+		EmitDDLEvents:  false,
+	}
+}
+
 // newMockManagerOptions creates a manager options for mock tests.
 func newMockManagerOptions(errCh chan<- error) *ManagerOptions {
 	return &ManagerOptions{
