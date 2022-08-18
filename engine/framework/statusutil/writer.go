@@ -76,7 +76,6 @@ func (w *Writer) UpdateStatus(ctx context.Context, newStatus *frameModel.WorkerS
 	if reflect2.IsNil(w.lastStatus) || newStatus.HasSignificantChange(w.lastStatus) {
 		// Status has changed, so we need to persist the status.
 		if err := w.persistStatus(ctx, newStatus); err != nil {
-			log.Error("persist fail", zap.Error(err))
 			return err
 		}
 	}
