@@ -114,7 +114,7 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 		return err
 	}
 	if err := jm.preCheck(ctx, jm.initJobCfg); err != nil {
-		return jm.Exit(ctx, frameModel.WorkerStatus{Code: frameModel.WorkerStatusError}, err)
+		return jm.Exit(ctx, framework.ExitReasonFailed, err, err.Error())
 	}
 	if err := jm.checkpointAgent.Create(ctx, jm.initJobCfg); err != nil {
 		return err
@@ -357,17 +357,23 @@ func (jm *JobMaster) cancel(ctx context.Context, code frameModel.WorkerStatusCod
 	}
 
 	if err := jm.taskManager.OperateTask(ctx, dmpkg.Deleting, nil, nil); err != nil {
-		return jm.Exit(ctx, status, err)
+		// would not recover again
+		return jm.Exit(ctx, framework.ExitReasonCancelled, err, err.Error())
 	}
 	// wait all worker exit
 	jm.workerManager.SetNextCheckTime(time.Now())
 	for {
 		select {
 		case <-ctx.Done():
-			return jm.Exit(ctx, status, ctx.Err())
+			return jm.Exit(ctx, framework.ExitReasonCancelled, ctx.Err(), ctx.Err().Error())
 		case <-time.After(time.Second):
 			if jm.workerManager.allTombStone() {
-				return jm.Exit(ctx, status, err)
+				if err == nil {
+					// TODO: change status.ExtBytes to readable string
+					return jm.Exit(ctx, framework.ExitReasonCancelled, err, string(status.ExtBytes))
+				} else {
+					return jm.Exit(ctx, framework.ExitReasonCancelled, err, err.Error())
+				}
 			}
 			jm.workerManager.SetNextCheckTime(time.Now())
 		}
