@@ -164,7 +164,7 @@ func (d *dummyWorker) Tick(ctx context.Context) error {
 
 	if d.status.Tick >= d.config.TargetTick {
 		d.setStatusCode(frameModel.WorkerStatusFinished)
-		return d.Exit(ctx, nil, "", []byte("worker has reached target tick"))
+		return d.Exit(ctx, framework.ExitReasonFinished, nil, "", []byte("worker has reached target tick"))
 	}
 
 	if d.config.InjectErrorInterval != 0 {

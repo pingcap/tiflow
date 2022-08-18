@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -144,7 +143,7 @@ func TestStopWorker(t *testing.T) {
 
 	require.EqualError(t, dmWorker.StopWorker(context.Background(), &dmpkg.StopWorkerMessage{Task: "wrong-task-id"}), "task id mismatch, get wrong-task-id, actually task-id")
 	err := dmWorker.StopWorker(context.Background(), &dmpkg.StopWorkerMessage{Task: "task-id"})
-	require.True(t, cerrors.ErrWorkerFinish.Equal(err))
+	require.NoError(t, err)
 
 	// mock close by framework
 	require.NoError(t, dmWorker.CloseImpl(context.Background()))

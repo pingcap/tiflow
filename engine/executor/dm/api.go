@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/engine/framework"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 )
 
@@ -52,7 +53,7 @@ func (w *dmWorker) StopWorker(ctx context.Context, msg *dmpkg.StopWorkerMessage)
 	}
 
 	workerStatus := w.workerStatus(ctx)
-	return w.Exit(ctx, nil, workerStatus.ErrorMessage, workerStatus.ExtBytes)
+	return w.Exit(ctx, framework.ExitReasonCancelled, nil, "", workerStatus.ExtBytes)
 }
 
 // OperateTask implements the api of operate task message.

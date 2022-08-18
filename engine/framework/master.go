@@ -129,9 +129,8 @@ type BaseMaster interface {
 	IsMasterReady() bool
 
 	// Exit should be called when master (in user logic) wants to exit.
-	// If `err` is nil, the inner master status code will be set to MasterStatusFinished and extMsg can hold the job status
-	// If `err` is not nil, the master status code is assigned MasterStatusFailed and the extMsg can hold the error message
-	Exit(ctx context.Context, err error, extMsg string) error
+	// exitReason: ExitReasonFinished/ExitReasonCancelled/ExitReasonFailed
+	Exit(ctx context.Context, exitReason ExitReason, err error, extMsg string) error
 
 	// CreateWorker requires the framework to dispatch a new worker.
 	// If the worker needs to access certain file system resources,
@@ -174,7 +173,7 @@ type DefaultBaseMaster struct {
 	advertiseAddr string
 	nodeID        p2p.NodeID
 	timeoutConfig config.TimeoutConfig
-	masterStatus  *frameModel.MasterMetaKVData
+	masterMeta    *frameModel.MasterMetaKVData
 
 	// workerProjectMap keep the <WorkerID, ProjectInfo> map
 	// It's only used by JobManager who has workers(jobmaster) with different project info
@@ -230,14 +229,14 @@ func NewBaseMaster(
 	var (
 		nodeID        p2p.NodeID
 		advertiseAddr string
-		masterStatus  = &frameModel.MasterMetaKVData{}
+		masterMeta    = &frameModel.MasterMetaKVData{}
 		params        masterParams
 	)
 	if ctx != nil {
 		nodeID = ctx.Environ.NodeID
 		advertiseAddr = ctx.Environ.Addr
 		metaBytes := ctx.Environ.MasterMetaBytes
-		err := errors.Trace(masterStatus.Unmarshal(metaBytes))
+		err := errors.Trace(masterMeta.Unmarshal(metaBytes))
 		if err != nil {
 			log.Warn("invalid master meta", zap.ByteString("data", metaBytes), zap.Error(err))
 		}
@@ -267,7 +266,7 @@ func NewBaseMaster(
 		clock:                 clock.New(),
 
 		timeoutConfig: config.DefaultTimeoutConfig(),
-		masterStatus:  masterStatus,
+		masterMeta:    masterMeta,
 
 		closeCh: make(chan struct{}),
 
@@ -461,7 +460,7 @@ func (m *DefaultBaseMaster) doPoll(ctx context.Context) error {
 
 // MasterMeta implements BaseMaster.MasterMeta
 func (m *DefaultBaseMaster) MasterMeta() *frameModel.MasterMetaKVData {
-	return m.masterStatus
+	return m.masterMeta
 }
 
 // MasterID implements BaseMaster.MasterID
@@ -512,7 +511,7 @@ func (m *DefaultBaseMaster) OnError(err error) {
 func (m *DefaultBaseMaster) refreshMetadata(ctx context.Context) (isInit bool, epoch frameModel.Epoch, err error) {
 	metaClient := metadata.NewMasterMetadataClient(m.id, m.frameMetaClient)
 
-	masterStatus, err := metaClient.Load(ctx)
+	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
 		return false, 0, err
 	}
@@ -523,17 +522,17 @@ func (m *DefaultBaseMaster) refreshMetadata(ctx context.Context) (isInit bool, e
 	}
 
 	// We should update the master data to reflect our current information
-	masterStatus.Epoch = epoch
-	masterStatus.Addr = m.advertiseAddr
-	masterStatus.NodeID = m.nodeID
+	masterMeta.Epoch = epoch
+	masterMeta.Addr = m.advertiseAddr
+	masterMeta.NodeID = m.nodeID
 
-	if err := metaClient.Update(ctx, masterStatus); err != nil {
+	if err := metaClient.Update(ctx, masterMeta); err != nil {
 		return false, 0, errors.Trace(err)
 	}
 
-	m.masterStatus = masterStatus
+	m.masterMeta = masterMeta
 	// isInit true means the master is created but has not been initialized.
-	isInit = masterStatus.StatusCode == frameModel.MasterStatusUninit
+	isInit = masterMeta.StatusCode == frameModel.MasterStatusUninit
 
 	return
 }
@@ -542,13 +541,13 @@ func (m *DefaultBaseMaster) markStatusCodeInMetadata(
 	ctx context.Context, code frameModel.MasterStatusCode,
 ) error {
 	metaClient := metadata.NewMasterMetadataClient(m.id, m.frameMetaClient)
-	masterStatus, err := metaClient.Load(ctx)
+	masterMeta, err := metaClient.Load(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	masterStatus.StatusCode = code
-	return metaClient.Update(ctx, masterStatus)
+	masterMeta.StatusCode = code
+	return metaClient.Update(ctx, masterMeta)
 }
 
 // prepareWorkerConfig extracts information from WorkerConfig into detail fields.
@@ -561,13 +560,13 @@ func (m *DefaultBaseMaster) prepareWorkerConfig(
 ) (rawConfig []byte, workerID frameModel.WorkerID, err error) {
 	switch workerType {
 	case CvsJobMaster, FakeJobMaster, DMJobMaster:
-		masterStatus, ok := config.(*frameModel.MasterMetaKVData)
+		masterMeta, ok := config.(*frameModel.MasterMetaKVData)
 		if !ok {
 			err = derror.ErrMasterInvalidMeta.GenWithStackByArgs(config)
 			return
 		}
-		rawConfig = masterStatus.Config
-		workerID = masterStatus.ID
+		rawConfig = masterMeta.Config
+		workerID = masterMeta.ID
 	case WorkerDMDump, WorkerDMLoad, WorkerDMSync:
 		var b bytes.Buffer
 		err = toml.NewEncoder(&b).Encode(config)
@@ -689,27 +688,36 @@ func (m *DefaultBaseMaster) IsMasterReady() bool {
 }
 
 // Exit implements BaseMaster.Exit
-func (m *DefaultBaseMaster) Exit(ctx context.Context, err error, extMsg string) (errRet error) {
+func (m *DefaultBaseMaster) Exit(ctx context.Context, exitReason ExitReason, err error, extMsg string) (errRet error) {
 	// Set the errCenter to prevent user from forgetting to return directly after calling 'Exit'
 	defer func() {
-		m.errCenter.OnError(errRet)
+		errTmp := err
+		if errTmp == nil {
+			errTmp = derror.ErrWorkerFinish.FastGenByArgs()
+		}
+		m.errCenter.OnError(errTmp)
 	}()
 
-	m.masterStatus.StatusCode = frameModel.MasterStatusFinished
-	if err != nil {
-		m.masterStatus.StatusCode = frameModel.MasterStatusFailed
+	switch exitReason {
+	case ExitReasonFinished:
+		m.masterMeta.StatusCode = frameModel.MasterStatusFinished
+	case ExitReasonCancelled:
+		// TODO: replace stop with cancel
+		m.masterMeta.StatusCode = frameModel.MasterStatusStopped
+	case ExitReasonFailed:
+		m.masterMeta.StatusCode = frameModel.MasterStatusFailed
+	default:
+		m.masterMeta.StatusCode = frameModel.MasterStatusFailed
 	}
-	m.masterStatus.ExtMsg = extMsg
+
+	m.masterMeta.ExtMsg = extMsg
 
 	metaClient := metadata.NewMasterMetadataClient(m.id, m.frameMetaClient)
-	errRet = metaClient.Update(ctx, m.masterStatus)
-	if errRet != nil {
-		return
+	if err := metaClient.Update(ctx, m.masterMeta); err != nil {
+		return err
 	}
 
-	// TODO: change an error code
-	errRet = derror.ErrWorkerFinish.FastGenByArgs()
-	return
+	return nil
 }
 
 // SetProjectInfo set the project info of specific worker

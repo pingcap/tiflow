@@ -103,13 +103,11 @@ type BaseWorker interface {
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
 
 	// OpenStorage creates a resource and return the resource handle
-	// TODO: format??
 	OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error)
 
 	// Exit should be called when worker (in user logic) wants to exit.
-	// If `err` is nil, the inner worker status code will be set to WorkerStatusFinished
-	// If `err` is not nil, the status code is assigned WorkerStatusError.
-	Exit(ctx context.Context, err error, errMsg string, extBytes []byte) error
+	// exitReason: ExitReasonFinished/ExitReasonCancelled/ExitReasonFailed
+	Exit(ctx context.Context, exitReason ExitReason, err error, errMsg string, extBytes []byte) error
 }
 
 // DefaultBaseWorker implements BaseWorker interface, it also embeds an Impl
@@ -497,25 +495,36 @@ func (w *DefaultBaseWorker) OpenStorage(ctx context.Context, resourcePath resour
 }
 
 // Exit implements BaseWorker.Exit
-func (w *DefaultBaseWorker) Exit(ctx context.Context, err error, errMsg string, extBytes []byte) (errRet error) {
+func (w *DefaultBaseWorker) Exit(ctx context.Context, exitReason ExitReason, err error, errMsg string, extBytes []byte) (errRet error) {
 	// Set the errCenter to prevent user from forgetting to return directly after calling 'Exit'
 	defer func() {
-		w.onError(errRet)
+		errTmp := err
+		if errTmp == nil {
+			errTmp = derror.ErrWorkerFinish.FastGenByArgs()
+		}
+		w.onError(errTmp)
 	}()
 
-	// TODO: cancelled need to be a state
-	w.workerStatus.Code = frameModel.WorkerStatusFinished
-	if err != nil {
+	switch exitReason {
+	case ExitReasonFinished:
+		w.workerStatus.Code = frameModel.WorkerStatusFinished
+	case ExitReasonCancelled:
+		// TODO: replace stop with cancel
+		w.workerStatus.Code = frameModel.WorkerStatusStopped
+	case ExitReasonFailed:
+		// TODO: replace error with failed
+		w.workerStatus.Code = frameModel.WorkerStatusError
+	default:
 		w.workerStatus.Code = frameModel.WorkerStatusError
 	}
+
 	w.workerStatus.ErrorMessage = errMsg
 	w.workerStatus.ExtBytes = extBytes
-	if errRet = w.statusSender.UpdateStatus(ctx, w.workerStatus); errRet != nil {
-		return
+	if err := w.statusSender.UpdateStatus(ctx, w.workerStatus); err != nil {
+		return err
 	}
 
-	errRet = derror.ErrWorkerFinish.FastGenByArgs()
-	return
+	return nil
 }
 
 func (w *DefaultBaseWorker) startBackgroundTasks() {

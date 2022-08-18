@@ -378,7 +378,7 @@ func (m *Master) tickedCheckStatus(ctx context.Context) error {
 	if len(m.finishedSet) == m.config.WorkerCount {
 		log.Info("FakeMaster: all worker finished, job master exits now")
 		m.setStatusCode(frameModel.WorkerStatusFinished)
-		return m.Exit(ctx, nil, "all workers have been finished")
+		return m.Exit(ctx, framework.ExitReasonFinished, nil, "all workers have been finished")
 	}
 
 	return nil

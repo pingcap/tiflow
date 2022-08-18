@@ -95,3 +95,12 @@ func MustConvertWorkerType2JobType(tp WorkerType) engineModel.JobType {
 	log.Panic("unexpected fail when convert worker type to job type", zap.Int32("worker_type", int32(tp)))
 	return engineModel.JobTypeInvalid
 }
+
+type ExitReason int
+
+const (
+	ExitReasonUnknown = ExitReason(iota)
+	ExitReasonFinished
+	ExitReasonCancelled
+	ExitReasonFailed
+)
