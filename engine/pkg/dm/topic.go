@@ -41,8 +41,6 @@ const (
 type OperateType int
 
 // These op may updated in later pr.
-// NOTICE: consider to only use Update cmd to add/remove task.
-// e.g. start-task/stop-task -s source in origin DM will be replaced by update-job now.
 const (
 	None OperateType = iota
 	Create
@@ -50,6 +48,8 @@ const (
 	Resume
 	Update
 	Delete
+	// internal
+	Deleting
 )
 
 // OperateTaskMessage is operate task message
