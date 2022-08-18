@@ -83,6 +83,84 @@ func BenchmarkPoolV1(b *testing.B) {
 	<-done
 }
 
+func BenchmarkPoolBatch(b *testing.B) {
+	const (
+		batchSize = 512
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pool := NewPoolImpl(1)
+	go func() {
+		_ = pool.Run(ctx)
+	}()
+
+	done := make(chan struct{})
+	var lastN atomic.Int64
+	handle := NewEventHandlerImpl(func(n int64) error {
+		if n != lastN.Add(1)-1 && n > 0 {
+			panic("unreachable")
+		}
+		if n == int64(b.N-1) {
+			close(done)
+		}
+		return nil
+	}, 1024, 1024)
+	pool.RegisterHandle(handle)
+
+	b.ResetTimer()
+	var batch []int64
+	for i := 0; i < b.N; i++ {
+		batch = append(batch, int64(i))
+		if len(batch) == batchSize || i == b.N-1 {
+			_ = handle.AddBatchedEvents(ctx, batch)
+			batch = batch[:0]
+		}
+	}
+
+	<-done
+}
+
+func BenchmarkPoolBatchV1(b *testing.B) {
+	const (
+		batchSize = 512
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pool := workerpool.NewDefaultWorkerPool(1)
+	go func() {
+		_ = pool.Run(ctx)
+	}()
+
+	done := make(chan struct{})
+	var lastN atomic.Int64
+	handle := pool.RegisterEvent(func(ctx context.Context, ev interface{}) error {
+		n := ev.(int64)
+		if n != lastN.Add(1)-1 && n > 0 {
+			panic("unreachable")
+		}
+		if n == int64(b.N-1) {
+			close(done)
+		}
+		return nil
+	})
+
+	b.ResetTimer()
+	var batch []any
+	for i := 0; i < b.N; i++ {
+		batch = append(batch, int64(i))
+		if len(batch) == batchSize || i == b.N-1 {
+			_ = handle.AddEvents(ctx, batch)
+			batch = make([]any, 0, batchSize)
+		}
+	}
+
+	<-done
+}
+
 const (
 	concurrency = 16
 )

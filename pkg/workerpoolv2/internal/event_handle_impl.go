@@ -17,6 +17,7 @@ import (
 	"context"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -52,11 +53,38 @@ const (
 	cancelTypeGraceful
 )
 
+type eventWrapper[T any] struct {
+	isBatch bool
+	event   unsafe.Pointer
+}
+
+func (w *eventWrapper[T]) process(fn func(T) error) (retErr error) {
+	defer func() {
+		if v := recover(); v != nil {
+			retErr = errors.Errorf("panicked: %s", v)
+		}
+	}()
+
+	if w.isBatch {
+		events := *(*[]T)(w.event)
+		for _, event := range events {
+			if err := fn(event); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Not a batch
+	event := *(*T)(w.event)
+	return fn(event)
+}
+
 // EventHandleImpl implements EventHandler.
 type EventHandleImpl[T any] struct {
 	cond *syncutil.Cond
 	mu   sync.Mutex
-	q    *queue.ChunkQueue[T]
+	q    *queue.ChunkQueue[eventWrapper[T]]
 
 	cancelFlag atomic.Int32
 	errorFlag  bool // should only be accessed from the Poll thread
@@ -79,7 +107,7 @@ func NewEventHandlerImpl[T any](
 	fn func(T) error, maxQueueLen int, batchSize int,
 ) *EventHandleImpl[T] {
 	ret := &EventHandleImpl[T]{
-		q:           queue.NewChunkQueue[T](),
+		q:           queue.NewChunkQueue[eventWrapper[T]](),
 		cancelFlag:  *atomic.NewInt32(cancelTypeNone),
 		rcu:         syncutil.NewRCU(),
 		errCh:       make(chan error, 1),
@@ -96,6 +124,38 @@ func (h *EventHandleImpl[T]) AddEvent(ctx context.Context, event T) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	if err := h.addOneEvent(ctx, eventWrapper[T]{event: unsafe.Pointer(&event)}); err != nil {
+		return err
+	}
+
+	if h.shouldNotify() && h.notify != nil {
+		h.notify(h, false)
+	}
+	return nil
+}
+
+func (h *EventHandleImpl[T]) AddBatchedEvents(ctx context.Context, events []T) error {
+	eventsCloned := make([]T, len(events))
+	copy(eventsCloned, events)
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if err := h.addOneEvent(ctx, eventWrapper[T]{
+		isBatch: true,
+		event:   unsafe.Pointer(&eventsCloned),
+	}); err != nil {
+		return err
+	}
+
+	if h.shouldNotify() && h.notify != nil {
+		h.notify(h, false)
+	}
+	return nil
+}
+
+// addOneEvent adds one event to the queue. Must be called with h.mu locked.
+func (h *EventHandleImpl[T]) addOneEvent(ctx context.Context, wrapper eventWrapper[T]) error {
 	for h.q.Len() >= h.maxQueueLen && h.cancelFlag.Load() == cancelTypeNone {
 		err := h.cond.WaitWithContext(ctx)
 		if err != nil {
@@ -107,11 +167,7 @@ func (h *EventHandleImpl[T]) AddEvent(ctx context.Context, event T) error {
 		return errors.Trace(ErrEventHandleCanceled)
 	}
 
-	h.q.Push(event)
-
-	if h.shouldNotify() && h.notify != nil {
-		h.notify(h, false)
-	}
+	h.q.Push(wrapper)
 	return nil
 }
 
@@ -232,7 +288,7 @@ func (h *EventHandleImpl[T]) poll() (hasNext bool) {
 			return
 		}
 
-		err := h.safeProcessEvent(event)
+		err := event.process(h.fn)
 		if err != nil {
 			// Set errorFlag so that no more events will be processed.
 			h.errorFlag = true
@@ -258,7 +314,7 @@ func (h *EventHandleImpl[T]) safeProcessEvent(val T) (retErr error) {
 	return errors.Trace(h.fn(val))
 }
 
-func (h *EventHandleImpl[T]) getEventBatch() []T {
+func (h *EventHandleImpl[T]) getEventBatch() []eventWrapper[T] {
 	batchSize := h.batchSize
 	if batchSize > h.q.Len() {
 		batchSize = h.q.Len()

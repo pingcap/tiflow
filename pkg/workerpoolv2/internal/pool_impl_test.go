@@ -97,6 +97,45 @@ func TestPoolBasics(t *testing.T) {
 	wg.Wait()
 }
 
+func TestPoolBatch(t *testing.T) {
+	const (
+		totalEventCount = 1024 * 1024
+		batchSize       = 512
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pool := NewPoolImpl(1)
+	go func() {
+		_ = pool.Run(ctx)
+	}()
+
+	done := make(chan struct{})
+	var lastN atomic.Int64
+	handle := NewEventHandlerImpl(func(n int64) error {
+		if n != lastN.Add(1)-1 && n > 0 {
+			panic("unreachable")
+		}
+		if n == int64(totalEventCount-1) {
+			close(done)
+		}
+		return nil
+	}, 1024, 1024)
+	pool.RegisterHandle(handle)
+
+	var batch []int64
+	for i := 0; i < totalEventCount; i++ {
+		batch = append(batch, int64(i))
+		if len(batch) == batchSize {
+			_ = handle.AddBatchedEvents(ctx, batch)
+			batch = batch[:0]
+		}
+	}
+
+	<-done
+}
+
 func TestPoolUnregister(t *testing.T) {
 	t.Parallel()
 
