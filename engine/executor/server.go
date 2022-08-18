@@ -38,7 +38,6 @@ import (
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
@@ -375,9 +374,8 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
-	// TODO: make the prefix configurable later
 	s.resourceBroker = broker.NewBroker(
-		&storagecfg.Config{Local: storagecfg.LocalFileConfig{BaseDir: "./"}},
+		&s.cfg.Storage,
 		s.info.ID,
 		s.masterClient)
 
