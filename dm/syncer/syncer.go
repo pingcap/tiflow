@@ -493,7 +493,9 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 // buildLowerCaseTableNamesMap build a lower case schema map and lower case table map for all tables
 // Input: map of schema --> list of tables
 // Output: schema names map: lower_case_schema_name --> schema_name
-//         tables names map: lower_case_schema_name --> lower_case_table_name --> table_name
+//
+//	tables names map: lower_case_schema_name --> lower_case_table_name --> table_name
+//
 // Note: the result will skip the schemas and tables that their lower_case_name are the same.
 func buildLowerCaseTableNamesMap(logger log.Logger, tables map[string][]string) (map[string]string, map[string]map[string]string) {
 	schemaMap := make(map[string]string)
@@ -1161,10 +1163,11 @@ func (s *Syncer) resetShardingGroup(table *filter.Table) {
 
 // flushCheckPoints synchronously flushes previous saved checkpoint in memory to persistent storage, like TiDB
 // we flush checkpoints in four cases:
-//   1. DDL executed
-//   2. pausing / stopping the sync (driven by `s.flushJobs`)
-//   3. IsFreshTask return true
-//   4. Heartbeat event received
+//  1. DDL executed
+//  2. pausing / stopping the sync (driven by `s.flushJobs`)
+//  3. IsFreshTask return true
+//  4. Heartbeat event received
+//
 // but when error occurred, we can not flush checkpoint, otherwise data may lost
 // and except rejecting to flush the checkpoint, we also need to rollback the checkpoint saved before
 // this should be handled when `s.Run` returned
@@ -2348,14 +2351,6 @@ func (s *Syncer) handleRotateEvent(ev *replication.RotateEvent, ec eventContext)
 	})
 
 	if utils.IsFakeRotateEvent(ec.header) {
-		if fileName := string(ev.NextLogName); mysql.CompareBinlogFileName(fileName, ec.lastLocation.Position.Name) <= 0 {
-			// NOTE A fake rotate event is also generated when a master-slave switch occurs upstream, and the binlog filename may be rolled back in this case
-			// when the DM is updating based on the GTID, we also update the filename of the lastLocation
-			if s.cfg.EnableGTID {
-				ec.lastLocation.Position.Name = fileName
-			}
-			return nil // not rotate to the next binlog file, ignore it
-		}
 		// when user starts a new task with GTID and no binlog file name, we can't know active relay log at init time
 		// at this case, we update active relay log when receive fake rotate event
 		if !s.recordedActiveRelayLog {

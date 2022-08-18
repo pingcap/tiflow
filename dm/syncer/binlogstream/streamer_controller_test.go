@@ -356,11 +356,11 @@ func (s *testLocationSuite) TestLocationsWithGTID() {
 	s.Require().NoError(err)
 
 	controller.streamModifier.reset(startLoc)
+	controller.locations.reset(startLoc)
 	controller.upstream.locationRecorder.reset(startLoc)
 	ctx := tcontext.Background()
 
 	for i := 1; i < len(expectedLocations); i++ {
-		s.T().Logf("#%d", i)
 		// nolint:dogsled
 		_, _, err = controller.GetEvent(ctx)
 		s.Require().NoError(err)
@@ -486,8 +486,8 @@ func TestResetToMiddleOfReplace(t *testing.T) {
 
 	ctx := tcontext.Background()
 	for i, expected := range expecteds {
-		event, _, err := controller.GetEvent(ctx)
-		require.NoError(t, err)
+		event, _, err2 := controller.GetEvent(ctx)
+		require.NoError(t, err2)
 		require.Equal(t, expected.tp, event.Header.EventType)
 		require.Equal(t, expected.startLocStr, controller.GetCurStartLocation().String())
 		require.Equal(t, expected.endLocStr, controller.GetCurEndLocation().String())
@@ -610,8 +610,8 @@ func TestResetToLastOfInject(t *testing.T) {
 
 	ctx := tcontext.Background()
 	for i, expected := range expecteds {
-		event, _, err := controller.GetEvent(ctx)
-		require.NoError(t, err)
+		event, _, err2 := controller.GetEvent(ctx)
+		require.NoError(t, err2)
 		require.Equal(t, expected.tp, event.Header.EventType)
 		require.Equal(t, expected.startLocStr, controller.GetCurStartLocation().String())
 		require.Equal(t, expected.endLocStr, controller.GetCurEndLocation().String())

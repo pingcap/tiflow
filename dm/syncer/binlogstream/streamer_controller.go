@@ -109,6 +109,17 @@ func (l locationStream) GetEvent(ctx context.Context) (*replication.BinlogEvent,
 	if err != nil {
 		return nil, err
 	}
+
+	failpoint.Inject("MakeFakeRotateEvent", func(val failpoint.Value) {
+		ev, ok := e.Event.(*replication.RotateEvent)
+		if ok {
+			e.Header.LogPos = 0
+			e.Header.Flags = replication.LOG_EVENT_ARTIFICIAL_F
+			ev.NextLogName = []byte(val.(string))
+			log.L().Info("MakeFakeRotateEvent", zap.String("fake file name", string(ev.NextLogName)))
+		}
+	})
+
 	l.locationRecorder.update(e)
 	return e, nil
 }
@@ -294,7 +305,7 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 // of replace/inject. The reset location has suffix but upstream location does
 // not. when we update locations from upstream ones, we should decide if suffix
 // should be overwritten.
-// TODO: very ugly, many special cases :(
+// TODO: very ugly, many special cases :( .
 func shouldUpdateSuffix(e *replication.BinlogEvent) bool {
 	isGTIDEvent := e.Header.EventType == replication.GTID_EVENT ||
 		e.Header.EventType == replication.ANONYMOUS_GTID_EVENT ||

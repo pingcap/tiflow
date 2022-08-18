@@ -541,7 +541,7 @@ func (s *testLocationSuite) TestRotateEvent() {
 	err := expected[12].SetGTID(s.currGSet)
 	s.Require().NoError(err)
 
-	r := &locationRecorder{}
+	r := &locationRecorder{locations: &locations{}}
 	r.reset(expected[0])
 	s.Require().Equal(expected[0], r.curStartLocation)
 	s.Require().Equal(expected[0], r.curEndLocation)
