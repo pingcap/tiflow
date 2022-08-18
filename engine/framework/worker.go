@@ -50,7 +50,6 @@ import (
 
 // Worker defines an interface that provides all methods that will be used in
 // runtime(runner container)
-// TODO: Unify the Master and Worker. Move to internal
 type Worker interface {
 	Init(ctx context.Context) error
 	Poll(ctx context.Context) error
