@@ -30,7 +30,7 @@ const (
 )
 
 // confirmLargeDataGap checks if a large data gap is used.
-func confirmLargeDataGap(cmd *cobra.Command, currentPhysical int64, startTs uint64, cli string) error {
+func confirmLargeDataGap(cmd *cobra.Command, currentPhysical int64, startTs uint64, command string) error {
 	tsGap := currentPhysical - oracle.ExtractPhysical(startTs)
 
 	if tsGap > tsGapWarning {
