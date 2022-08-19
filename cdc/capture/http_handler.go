@@ -26,6 +26,12 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
+<<<<<<< HEAD:cdc/capture/http_handler.go
+=======
+	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/util"
+>>>>>>> 819612a58 (changefeed (ticdc): Mask sensitive information in changefeed info (#6815)):cdc/api/open.go
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -169,10 +175,20 @@ func (h *HTTPHandler) GetChangefeed(c *gin.Context) {
 		}
 		taskStatus = append(taskStatus, model.CaptureTaskStatus{CaptureID: captureID, Tables: tables, Operation: status.Operation})
 	}
+	sinkURI, err := util.MaskSinkURI(info.SinkURI)
+	if err != nil {
+		log.Error("failed to mask sink URI", zap.Error(err))
+	}
 
 	changefeedDetail := &model.ChangefeedDetail{
+<<<<<<< HEAD:cdc/capture/http_handler.go
 		ID:             changefeedID,
 		SinkURI:        info.SinkURI,
+=======
+		Namespace:      changefeedID.Namespace,
+		ID:             changefeedID.ID,
+		SinkURI:        sinkURI,
+>>>>>>> 819612a58 (changefeed (ticdc): Mask sensitive information in changefeed info (#6815)):cdc/api/open.go
 		CreateTime:     model.JSONTime(info.CreateTime),
 		StartTs:        info.StartTs,
 		TargetTs:       info.TargetTs,
@@ -215,7 +231,31 @@ func (h *HTTPHandler) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
+<<<<<<< HEAD:cdc/capture/http_handler.go
 	infoStr, err := info.Marshal()
+=======
+	up := h.capture.UpstreamManager.Get(upstream.DefaultUpstreamID)
+	defer up.Release()
+
+	needRemoveGCSafePoint := false
+	defer func() {
+		if !needRemoveGCSafePoint {
+			return
+		}
+		err := gc.UndoEnsureChangefeedStartTsSafety(
+			ctx,
+			up.PDClient,
+			gc.EnsureGCServiceCreating,
+			model.DefaultChangeFeedID(changefeedConfig.ID),
+		)
+		if err != nil {
+			_ = c.Error(err)
+			return
+		}
+	}()
+
+	infoStr := info.String()
+>>>>>>> 819612a58 (changefeed (ticdc): Mask sensitive information in changefeed info (#6815)):cdc/api/open.go
 	if err != nil {
 		_ = c.Error(err)
 		return
