@@ -97,7 +97,7 @@ func TestChangefeedResumeCli(t *testing.T) {
 	}()
 	err = o.run(cmd)
 	require.NotNil(t, err)
-	require.Regexp(t, "cli changefeed create or resume", err)
+	require.Regexp(t, "cli changefeed resume", err)
 }
 
 func TestChangefeedResumeWithNewCheckpointTs(t *testing.T) {

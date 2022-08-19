@@ -303,7 +303,7 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 	}
 
 	if !o.commonChangefeedOptions.noConfirm {
-		if err = confirmLargeDataGap(cmd, tso.Timestamp, o.startTs); err != nil {
+		if err = confirmLargeDataGap(cmd, tso.Timestamp, o.startTs, "create"); err != nil {
 			return err
 		}
 	}

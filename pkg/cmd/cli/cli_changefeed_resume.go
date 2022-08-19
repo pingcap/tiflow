@@ -152,7 +152,7 @@ func (o *resumeChangefeedOptions) confirmResumeChangefeedCheck(ctx context.Conte
 	if !o.noConfirm {
 		if len(o.overwriteCheckpointTs) == 0 {
 			return confirmLargeDataGap(cmd, o.currentTso.Timestamp,
-				o.changefeedDetail.CheckpointTSO)
+				o.changefeedDetail.CheckpointTSO, "resume")
 		}
 
 		return confirmOverwriteCheckpointTs(cmd, o.changefeedID, o.checkpointTs)
