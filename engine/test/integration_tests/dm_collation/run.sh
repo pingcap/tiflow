@@ -15,20 +15,22 @@ function run() {
 	wait_mysql_online.sh --port 3307
 	wait_mysql_online.sh --port 4000
 
+	# change default charset and collation for MySQL 8.0
+  run_sql --port 3307 "set global character_set_server='utf8mb4';set global collation_server='utf8mb4_bin';"
+
 	# prepare data
 
 	run_sql_file $CUR_DIR/data/db1.prepare.sql
 	run_sql_file --port 3307 $CUR_DIR/data/db2.prepare.sql
-	# manually create the route table
-	run_sql --port 4000 'CREATE DATABASE IF NOT EXISTS `UPPER_DB_ROUTE`'
 
 	# create job
 
-	create_job_json=$(jq -Rs '{ job_type: 3, tenant_id: "dm_case_sensitive", project_id: "dm_case_sensitive", job_config: . }' $CUR_DIR/conf/job.yaml)
+	create_job_json=$(jq -Rs '{ job_type: 3, tenant_id: "dm_full_mode", project_id: "dm_full_mode", job_config: . }' $CUR_DIR/conf/job.yaml)
 	echo "create_job_json: $create_job_json"
 	job_id=$(curl -X POST -H "Content-Type: application/json" -d "$create_job_json" http://127.0.0.1:10245/api/v1/jobs)
 	echo "job_id: $job_id"
 
+read -p 123
 	# wait for job finished
 
 	# remove quotes
