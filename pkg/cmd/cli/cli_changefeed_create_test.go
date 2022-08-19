@@ -15,11 +15,11 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -197,9 +197,8 @@ func TestChangefeedCreateCli(t *testing.T) {
 	require.Nil(t, cmd.Execute())
 
 	cmd = newCmdCreateChangefeed(f)
-	os.Args = []string{
-		"create",
-		"--sort-dir=false",
-	}
-	require.True(t, strings.Contains(cmd.Execute().Error(), "sort-dir"))
+	o := newCreateChangefeedOptions(newChangefeedCommonOptions())
+	o.commonChangefeedOptions.sortDir = "/tmp/test"
+	require.NoError(t, o.complete(context.Background(), f, cmd))
+	require.Contains(t, o.validate(cmd).Error(), "creating changefeed with `--sort-dir`")
 }

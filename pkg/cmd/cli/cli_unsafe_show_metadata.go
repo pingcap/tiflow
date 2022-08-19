@@ -18,6 +18,7 @@ import (
 	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	"github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
+	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/spf13/cobra"
 )
 
@@ -67,13 +68,9 @@ func newCmdShowMetadata(f factory.Factory) *cobra.Command {
 		Use:   "show-metadata",
 		Short: "Show metadata stored in PD",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			err := o.complete(f)
-			if err != nil {
-				return err
-			}
-
-			return o.run(cmd)
+		Run: func(cmd *cobra.Command, args []string) {
+			util.CheckErr(o.complete(f))
+			util.CheckErr(o.run(cmd))
 		},
 	}
 

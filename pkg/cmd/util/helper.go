@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cmdconetxt "github.com/pingcap/tiflow/pkg/cmd/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -181,4 +182,12 @@ func JSONPrint(cmd *cobra.Command, v interface{}) error {
 	}
 	cmd.Printf("%s\n", data)
 	return nil
+}
+
+// CheckErr is used to cmd err.
+func CheckErr(err error) {
+	if cerror.IsCliUnprintableError(err) {
+		err = nil
+	}
+	cobra.CheckErr(err)
 }
