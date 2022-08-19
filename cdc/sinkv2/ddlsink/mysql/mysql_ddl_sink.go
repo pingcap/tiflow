@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package txn
+package mysql
 
 import (
 	"context"
@@ -164,7 +164,7 @@ func (m *mysqlDDLSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 			return err
 		}
 
-		return tx.Commit()
+		return errors.Trace(tx.Commit())
 	})
 	if err != nil {
 		log.Error("Failed to exec DDL", zap.String("sql", ddl.Query),

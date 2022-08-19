@@ -22,7 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/blackhole"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq/ddlproducer"
-	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/txn"
+	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mysql"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
@@ -47,7 +47,7 @@ func New(
 	case sink.BlackHoleSchema:
 		return blackhole.New(), nil
 	case sink.MySQLSSLSchema, sink.MySQLSchema, sink.TiDBSchema, sink.TiDBSSLSchema:
-		return txn.NewMySQLDDLSink(ctx, sinkURI, cfg, pmysql.CreateMySQLDBConn)
+		return mysql.NewMySQLDDLSink(ctx, sinkURI, cfg, pmysql.CreateMySQLDBConn)
 	default:
 		return nil,
 			cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", schema)
