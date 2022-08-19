@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sink/codec/internal"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -109,10 +110,10 @@ func TestBuildCraftBatchEncoder(t *testing.T) {
 
 func testBatchCodec(
 	t *testing.T,
-	encoderBuilder common.EncoderBuilder,
-	newDecoder func(value []byte) (common.EventBatchDecoder, error),
+	encoderBuilder codec.EncoderBuilder,
+	newDecoder func(value []byte) (codec.EventBatchDecoder, error),
 ) {
-	checkRowDecoder := func(decoder common.EventBatchDecoder, cs []*model.RowChangedEvent) {
+	checkRowDecoder := func(decoder codec.EventBatchDecoder, cs []*model.RowChangedEvent) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -127,7 +128,7 @@ func testBatchCodec(
 			index++
 		}
 	}
-	checkDDLDecoder := func(decoder common.EventBatchDecoder, cs []*model.DDLEvent) {
+	checkDDLDecoder := func(decoder codec.EventBatchDecoder, cs []*model.DDLEvent) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -142,7 +143,7 @@ func testBatchCodec(
 			index++
 		}
 	}
-	checkTSDecoder := func(decoder common.EventBatchDecoder, cs []uint64) {
+	checkTSDecoder := func(decoder codec.EventBatchDecoder, cs []uint64) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()

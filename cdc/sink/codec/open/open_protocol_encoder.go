@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 
 	"github.com/pingcap/tiflow/pkg/config"
@@ -76,7 +77,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		// Before we create a new message, we should handle the previous callbacks.
 		d.tryBuildCallback()
 		versionHead := make([]byte, 8)
-		binary.BigEndian.PutUint64(versionHead, common.BatchVersion1)
+		binary.BigEndian.PutUint64(versionHead, codec.BatchVersion1)
 		msg := common.NewMsg(config.ProtocolOpen, versionHead, nil, 0, model.MessageTypeRow, nil, nil)
 		d.messageBuf = append(d.messageBuf, msg)
 		d.curBatchSize = 0
@@ -119,7 +120,7 @@ func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error
 
 	keyBuf := new(bytes.Buffer)
 	var versionByte [8]byte
-	binary.BigEndian.PutUint64(versionByte[:], common.BatchVersion1)
+	binary.BigEndian.PutUint64(versionByte[:], codec.BatchVersion1)
 	keyBuf.Write(versionByte[:])
 	keyBuf.Write(keyLenByte[:])
 	keyBuf.Write(key)
@@ -147,7 +148,7 @@ func (d *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error)
 
 	keyBuf := new(bytes.Buffer)
 	var versionByte [8]byte
-	binary.BigEndian.PutUint64(versionByte[:], common.BatchVersion1)
+	binary.BigEndian.PutUint64(versionByte[:], codec.BatchVersion1)
 	keyBuf.Write(versionByte[:])
 	keyBuf.Write(keyLenByte[:])
 	keyBuf.Write(key)
@@ -186,7 +187,7 @@ type batchEncoderBuilder struct {
 }
 
 // Build a BatchEncoder
-func (b *batchEncoderBuilder) Build() common.EventBatchEncoder {
+func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
 	encoder := NewBatchEncoder()
 	encoder.(*BatchEncoder).MaxMessageBytes = b.config.MaxMessageBytes
 	encoder.(*BatchEncoder).MaxBatchSize = b.config.MaxBatchSize
@@ -195,12 +196,12 @@ func (b *batchEncoderBuilder) Build() common.EventBatchEncoder {
 }
 
 // NewBatchEncoderBuilder creates an open-protocol batchEncoderBuilder.
-func NewBatchEncoderBuilder(config *common.Config) common.EncoderBuilder {
+func NewBatchEncoderBuilder(config *common.Config) codec.EncoderBuilder {
 	return &batchEncoderBuilder{config: config}
 }
 
 // NewBatchEncoder creates a new BatchEncoder.
-func NewBatchEncoder() common.EventBatchEncoder {
+func NewBatchEncoder() codec.EventBatchEncoder {
 	batch := &BatchEncoder{}
 	return batch
 }

@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/config"
 )
@@ -103,12 +104,12 @@ func (d *BatchEncoder) reset() {
 	d.valueBuf.Reset()
 	d.batchSize = 0
 	var versionByte [8]byte
-	binary.BigEndian.PutUint64(versionByte[:], common.BatchVersion1)
+	binary.BigEndian.PutUint64(versionByte[:], codec.BatchVersion1)
 	d.keyBuf.Write(versionByte[:])
 }
 
 // newBatchEncoder creates a new maxwell BatchEncoder.
-func newBatchEncoder() common.EventBatchEncoder {
+func newBatchEncoder() codec.EventBatchEncoder {
 	batch := &BatchEncoder{
 		keyBuf:      &bytes.Buffer{},
 		valueBuf:    &bytes.Buffer{},
@@ -121,11 +122,11 @@ func newBatchEncoder() common.EventBatchEncoder {
 type batchEncoderBuilder struct{}
 
 // NewBatchEncoderBuilder creates a maxwell batchEncoderBuilder.
-func NewBatchEncoderBuilder() common.EncoderBuilder {
+func NewBatchEncoderBuilder() codec.EncoderBuilder {
 	return &batchEncoderBuilder{}
 }
 
 // Build a `maxwellBatchEncoder`
-func (b *batchEncoderBuilder) Build() common.EventBatchEncoder {
+func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
 	return newBatchEncoder()
 }

@@ -22,7 +22,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -86,7 +86,7 @@ func NewMockProducer() *mockProducer {
 func newTestWorker(ctx context.Context) (*flushWorker, *mockProducer) {
 	// 200 is about the size of a row change.
 	encoderConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(200)
-	builder, err := codec.NewEventBatchEncoderBuilder(context.Background(), encoderConfig)
+	builder, err := builder.NewEventBatchEncoderBuilder(context.Background(), encoderConfig)
 	if err != nil {
 		panic(err)
 	}

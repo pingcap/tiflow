@@ -20,7 +20,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec/common"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer"
 	"github.com/pingcap/tiflow/pkg/chann"
@@ -62,14 +62,14 @@ type flushWorker struct {
 	// It is also used to notify that the flush has completed.
 	needsFlush chan<- struct{}
 
-	encoder    common.EventBatchEncoder
+	encoder    codec.EventBatchEncoder
 	producer   producer.Producer
 	statistics *metrics.Statistics
 }
 
 // newFlushWorker creates a new flush worker.
 func newFlushWorker(
-	encoder common.EventBatchEncoder,
+	encoder codec.EventBatchEncoder,
 	producer producer.Producer,
 	statistics *metrics.Statistics,
 ) *flushWorker {

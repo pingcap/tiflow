@@ -16,7 +16,7 @@ package craft
 import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec/common"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -117,14 +117,14 @@ func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 }
 
 // newBatchDecoder creates a new batchDecoder.
-func newBatchDecoder(bits []byte) (common.EventBatchDecoder, error) {
+func newBatchDecoder(bits []byte) (codec.EventBatchDecoder, error) {
 	return NewBatchDecoderWithAllocator(bits, NewSliceAllocator(64))
 }
 
 // NewBatchDecoderWithAllocator creates a new batchDecoder with given allocator.
 func NewBatchDecoderWithAllocator(
 	bits []byte, allocator *SliceAllocator,
-) (common.EventBatchDecoder, error) {
+) (codec.EventBatchDecoder, error) {
 	decoder, err := NewMessageDecoder(bits, allocator)
 	if err != nil {
 		return nil, errors.Trace(err)

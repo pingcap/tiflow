@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
@@ -48,7 +49,7 @@ type resolvedTsEvent struct {
 type mqSink struct {
 	mqProducer     producer.Producer
 	eventRouter    *dispatcher.EventRouter
-	encoderBuilder common.EncoderBuilder
+	encoderBuilder codec.EncoderBuilder
 	protocol       config.Protocol
 
 	topicManager         manager.TopicManager
@@ -70,7 +71,7 @@ func newMqSink(
 	replicaConfig *config.ReplicaConfig, encoderConfig *common.Config,
 	errCh chan error,
 ) (*mqSink, error) {
-	encoderBuilder, err := codec.NewEventBatchEncoderBuilder(ctx, encoderConfig)
+	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}

@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
@@ -51,7 +52,7 @@ type sink struct {
 	topicManager manager.TopicManager
 
 	// encoderBuilder builds encoder for the sink.
-	encoderBuilder common.EncoderBuilder
+	encoderBuilder codec.EncoderBuilder
 }
 
 func newSink(ctx context.Context,
@@ -63,7 +64,7 @@ func newSink(ctx context.Context,
 ) (*sink, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
-	encoderBuilder, err := codec.NewEventBatchEncoderBuilder(ctx, encoderConfig)
+	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}

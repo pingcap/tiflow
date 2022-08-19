@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
@@ -45,7 +46,7 @@ type ddlSink struct {
 	// It is also responsible for creating topics.
 	topicManager manager.TopicManager
 	// encoderBuilder builds encoder for the sink.
-	encoderBuilder common.EncoderBuilder
+	encoderBuilder codec.EncoderBuilder
 	// producer used to send events to the MQ system.
 	// Usually it is a sync producer.
 	producer ddlproducer.DDLProducer
@@ -59,7 +60,7 @@ func newDDLSink(ctx context.Context,
 ) (*ddlSink, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
-	encoderBuilder, err := codec.NewEventBatchEncoderBuilder(ctx, encoderConfig)
+	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}

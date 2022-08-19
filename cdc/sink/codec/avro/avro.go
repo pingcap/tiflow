@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -807,7 +808,7 @@ const (
 )
 
 // NewBatchEncoderBuilder creates a avro batchEncoderBuilder.
-func NewBatchEncoderBuilder(ctx context.Context, config *common.Config) (common.EncoderBuilder, error) {
+func NewBatchEncoderBuilder(ctx context.Context, config *common.Config) (codec.EncoderBuilder, error) {
 	keySchemaManager, err := NewAvroSchemaManager(
 		ctx,
 		nil,
@@ -837,7 +838,7 @@ func NewBatchEncoderBuilder(ctx context.Context, config *common.Config) (common.
 }
 
 // Build an AvroEventBatchEncoder.
-func (b *batchEncoderBuilder) Build() common.EventBatchEncoder {
+func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
 	encoder := &BatchEncoder{}
 	encoder.namespace = b.namespace
 	encoder.keySchemaManager = b.keySchemaManager

@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
@@ -32,7 +32,7 @@ import (
 func newTestWorker(t *testing.T) (*worker, dmlproducer.DMLProducer) {
 	// 200 is about the size of a rowEvent change.
 	encoderConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(200)
-	builder, err := codec.NewEventBatchEncoderBuilder(context.Background(), encoderConfig)
+	builder, err := builder.NewEventBatchEncoderBuilder(context.Background(), encoderConfig)
 	require.Nil(t, err)
 	encoder := builder.Build()
 	require.Nil(t, err)

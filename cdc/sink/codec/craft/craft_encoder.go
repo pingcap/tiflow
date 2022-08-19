@@ -17,6 +17,7 @@ import (
 	"context"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/config"
 )
@@ -97,7 +98,7 @@ func (e *BatchEncoder) flush() {
 }
 
 // NewBatchEncoder creates a new BatchEncoder.
-func NewBatchEncoder() common.EventBatchEncoder {
+func NewBatchEncoder() codec.EventBatchEncoder {
 	// 64 is a magic number that come up with these assumptions and manual benchmark.
 	// 1. Most table will not have more than 64 columns
 	// 2. It only worth allocating slices in batch for slices that's small enough
@@ -109,7 +110,7 @@ type batchEncoderBuilder struct {
 }
 
 // Build a BatchEncoder
-func (b *batchEncoderBuilder) Build() common.EventBatchEncoder {
+func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
 	encoder := NewBatchEncoder()
 	encoder.(*BatchEncoder).MaxMessageBytes = b.config.MaxMessageBytes
 	encoder.(*BatchEncoder).MaxBatchSize = b.config.MaxBatchSize
@@ -117,12 +118,12 @@ func (b *batchEncoderBuilder) Build() common.EventBatchEncoder {
 }
 
 // NewBatchEncoderBuilder creates a craft batchEncoderBuilder.
-func NewBatchEncoderBuilder(config *common.Config) common.EncoderBuilder {
+func NewBatchEncoderBuilder(config *common.Config) codec.EncoderBuilder {
 	return &batchEncoderBuilder{config: config}
 }
 
 // NewBatchEncoderWithAllocator creates a new BatchEncoder with given allocator.
-func NewBatchEncoderWithAllocator(allocator *SliceAllocator) common.EventBatchEncoder {
+func NewBatchEncoderWithAllocator(allocator *SliceAllocator) codec.EventBatchEncoder {
 	return &BatchEncoder{
 		allocator:        allocator,
 		messageBuf:       make([]*common.Message, 0, 2),

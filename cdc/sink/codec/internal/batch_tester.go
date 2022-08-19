@@ -19,7 +19,7 @@ import (
 
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec/common"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/stretchr/testify/require"
 )
 
@@ -218,10 +218,10 @@ func NewDefaultBatchTester() *BatchTester {
 // TestBatchCodec tests bunch of cases for EventBatchDecoder.
 func (s *BatchTester) TestBatchCodec(
 	t *testing.T,
-	encoderBuilder common.EncoderBuilder,
-	newDecoder func(key []byte, value []byte) (common.EventBatchDecoder, error),
+	encoderBuilder codec.EncoderBuilder,
+	newDecoder func(key []byte, value []byte) (codec.EventBatchDecoder, error),
 ) {
-	checkRowDecoder := func(decoder common.EventBatchDecoder, cs []*model.RowChangedEvent) {
+	checkRowDecoder := func(decoder codec.EventBatchDecoder, cs []*model.RowChangedEvent) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -237,7 +237,7 @@ func (s *BatchTester) TestBatchCodec(
 			index++
 		}
 	}
-	checkDDLDecoder := func(decoder common.EventBatchDecoder, cs []*model.DDLEvent) {
+	checkDDLDecoder := func(decoder codec.EventBatchDecoder, cs []*model.DDLEvent) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -252,7 +252,7 @@ func (s *BatchTester) TestBatchCodec(
 			index++
 		}
 	}
-	checkTSDecoder := func(decoder common.EventBatchDecoder, cs []uint64) {
+	checkTSDecoder := func(decoder codec.EventBatchDecoder, cs []uint64) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()

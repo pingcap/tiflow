@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
@@ -39,7 +40,7 @@ type JSONBatchEncoder struct {
 }
 
 // newJSONBatchEncoder creates a new JSONBatchEncoder
-func newJSONBatchEncoder() common.EventBatchEncoder {
+func newJSONBatchEncoder() codec.EventBatchEncoder {
 	return &JSONBatchEncoder{
 		builder:             newCanalEntryBuilder(),
 		messageBuf:          make([]canalJSONMessageInterface, 0),
@@ -251,12 +252,12 @@ type jsonBatchEncoderBuilder struct {
 }
 
 // NewJSONBatchEncoderBuilder creates a canal-json batchEncoderBuilder.
-func NewJSONBatchEncoderBuilder(config *common.Config) common.EncoderBuilder {
+func NewJSONBatchEncoderBuilder(config *common.Config) codec.EncoderBuilder {
 	return &jsonBatchEncoderBuilder{config: config}
 }
 
 // Build a `JSONBatchEncoder`
-func (b *jsonBatchEncoderBuilder) Build() common.EventBatchEncoder {
+func (b *jsonBatchEncoderBuilder) Build() codec.EventBatchEncoder {
 	encoder := newJSONBatchEncoder()
 	encoder.(*JSONBatchEncoder).enableTiDBExtension = b.config.EnableTiDBExtension
 

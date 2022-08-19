@@ -36,8 +36,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/codec/canal"
-	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sink/codec/open"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	cmdUtil "github.com/pingcap/tiflow/pkg/cmd/util"
@@ -501,7 +501,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	eventGroups := make(map[int64]*eventsGroup)
 	for message := range claim.Messages() {
 		var (
-			decoder common.EventBatchDecoder
+			decoder codec.EventBatchDecoder
 			err     error
 		)
 		switch c.protocol {

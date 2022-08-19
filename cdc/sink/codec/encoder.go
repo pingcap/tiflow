@@ -11,12 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package common
+package codec
 
 import (
 	"context"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 )
 
 const (
@@ -28,14 +29,14 @@ const (
 type EventBatchEncoder interface {
 	// EncodeCheckpointEvent appends a checkpoint event into the batch.
 	// This event will be broadcast to all partitions to signal a global checkpoint.
-	EncodeCheckpointEvent(ts uint64) (*Message, error)
+	EncodeCheckpointEvent(ts uint64) (*common.Message, error)
 	// AppendRowChangedEvent appends the calling context, a row changed event and the dispatch
 	// topic into the batch
 	AppendRowChangedEvent(context.Context, string, *model.RowChangedEvent, func()) error
 	// EncodeDDLEvent appends a DDL event into the batch
-	EncodeDDLEvent(e *model.DDLEvent) (*Message, error)
+	EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error)
 	// Build builds the batch and returns the bytes of key and value.
-	Build() []*Message
+	Build() []*common.Message
 }
 
 // EncoderBuilder builds encoder with context.

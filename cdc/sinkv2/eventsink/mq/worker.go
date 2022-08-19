@@ -20,7 +20,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec/common"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
@@ -46,13 +46,13 @@ type worker struct {
 	// ticker used to force flush the messages when the interval is reached.
 	ticker *time.Ticker
 	// encoder is used to encode the messages.
-	encoder common.EventBatchEncoder
+	encoder codec.EventBatchEncoder
 	// producer is used to send the messages to the Kafka/Pulsar broker.
 	producer dmlproducer.DMLProducer
 }
 
 // newWorker creates a new flush worker.
-func newWorker(id model.ChangeFeedID, encoder common.EventBatchEncoder,
+func newWorker(id model.ChangeFeedID, encoder codec.EventBatchEncoder,
 	producer dmlproducer.DMLProducer,
 ) *worker {
 	w := &worker{

@@ -18,7 +18,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec/common"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -31,7 +31,7 @@ type batchDecoder struct {
 }
 
 // NewBatchDecoder return a decoder for canal-json
-func NewBatchDecoder(data []byte, enableTiDBExtension bool) common.EventBatchDecoder {
+func NewBatchDecoder(data []byte, enableTiDBExtension bool) codec.EventBatchDecoder {
 	return &batchDecoder{
 		data:                data,
 		msg:                 nil,

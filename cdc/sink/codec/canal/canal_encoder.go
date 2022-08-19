@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -155,7 +156,7 @@ func (d *BatchEncoder) resetPacket() {
 }
 
 // newBatchEncoder creates a new canalBatchEncoder.
-func newBatchEncoder() common.EventBatchEncoder {
+func newBatchEncoder() codec.EventBatchEncoder {
 	encoder := &BatchEncoder{
 		messages:     &canal.Messages{},
 		callbackBuf:  make([]func(), 0),
@@ -169,11 +170,11 @@ func newBatchEncoder() common.EventBatchEncoder {
 type batchEncoderBuilder struct{}
 
 // Build a `canalBatchEncoder`
-func (b *batchEncoderBuilder) Build() common.EventBatchEncoder {
+func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
 	return newBatchEncoder()
 }
 
 // NewBatchEncoderBuilder creates a canal batchEncoderBuilder.
-func NewBatchEncoderBuilder() common.EncoderBuilder {
+func NewBatchEncoderBuilder() codec.EncoderBuilder {
 	return &batchEncoderBuilder{}
 }
