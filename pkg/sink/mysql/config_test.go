@@ -23,53 +23,23 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
 
-func TestSinkParamsClone(t *testing.T) {
+func TestGenerateDSNByConfig(t *testing.T) {
 	t.Parallel()
-
-	param1 := defaultParams()
-	param2 := param1.Clone()
-	param2.batchReplaceEnabled = false
-	param2.maxTxnRow = 1
-	require.Equal(t, &sinkParams{
-		workerCount:         defaultWorkerCount,
-		maxTxnRow:           defaultMaxTxnRow,
-		tidbTxnMode:         defaultTiDBTxnMode,
-		batchReplaceEnabled: defaultBatchReplaceEnabled,
-		batchReplaceSize:    defaultBatchReplaceSize,
-		readTimeout:         defaultReadTimeout,
-		writeTimeout:        defaultWriteTimeout,
-		dialTimeout:         defaultDialTimeout,
-		safeMode:            defaultSafeMode,
-	}, param1)
-	require.Equal(t, &sinkParams{
-		workerCount:         defaultWorkerCount,
-		maxTxnRow:           1,
-		tidbTxnMode:         defaultTiDBTxnMode,
-		batchReplaceEnabled: false,
-		batchReplaceSize:    defaultBatchReplaceSize,
-		readTimeout:         defaultReadTimeout,
-		writeTimeout:        defaultWriteTimeout,
-		dialTimeout:         defaultDialTimeout,
-		safeMode:            defaultSafeMode,
-	}, param2)
-}
-
-func TestGenerateDSNByParams(t *testing.T) {
-	t.Parallel()
-	testDefaultParams := func() {
-		db, err := mockTestDB(false)
+	testDefaultConfig := func() {
+		db, err := MockTestDB(false)
 		require.Nil(t, err)
 		defer db.Close()
 
 		dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
 		require.Nil(t, err)
-		params := defaultParams()
-		dsnStr, err := generateDSNByParams(context.TODO(), dsn, params, db)
+		cfg := NewConfig()
+		dsnStr, err := generateDSNByConfig(context.TODO(), dsn, cfg, db)
 		require.Nil(t, err)
-		expectedParams := []string{
+		expectedCfg := []string{
 			"tidb_txn_mode=optimistic",
 			"readTimeout=2m",
 			"writeTimeout=2m",
@@ -78,28 +48,28 @@ func TestGenerateDSNByParams(t *testing.T) {
 			"charset=utf8mb4",
 			"tidb_placement_mode=%22ignore%22",
 		}
-		for _, param := range expectedParams {
+		for _, param := range expectedCfg {
 			require.Contains(t, dsnStr, param)
 		}
 		require.False(t, strings.Contains(dsnStr, "time_zone"))
 	}
 
 	testTimezoneParam := func() {
-		db, err := mockTestDB(false)
+		db, err := MockTestDB(false)
 		require.Nil(t, err)
 		defer db.Close()
 
 		dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
 		require.Nil(t, err)
-		params := defaultParams()
-		params.timezone = `"UTC"`
-		dsnStr, err := generateDSNByParams(context.TODO(), dsn, params, db)
+		cfg := NewConfig()
+		cfg.Timezone = `"UTC"`
+		dsnStr, err := generateDSNByConfig(context.TODO(), dsn, cfg, db)
 		require.Nil(t, err)
 		require.True(t, strings.Contains(dsnStr, "time_zone=%22UTC%22"))
 	}
 
-	testTimeoutParams := func() {
-		db, err := mockTestDB(false)
+	testTimeoutConfig := func() {
+		db, err := MockTestDB(false)
 		require.Nil(t, err)
 		defer db.Close()
 
@@ -107,22 +77,23 @@ func TestGenerateDSNByParams(t *testing.T) {
 		require.Nil(t, err)
 		uri, err := url.Parse("mysql://127.0.0.1:3306/?read-timeout=4m&write-timeout=5m&timeout=3m")
 		require.Nil(t, err)
-		params, err := parseSinkURIToParams(context.TODO(),
-			model.DefaultChangeFeedID("123"), uri)
+		cfg := NewConfig()
+		err = cfg.Apply(context.TODO(),
+			model.DefaultChangeFeedID("123"), uri, config.GetDefaultReplicaConfig())
 		require.Nil(t, err)
-		dsnStr, err := generateDSNByParams(context.TODO(), dsn, params, db)
+		dsnStr, err := generateDSNByConfig(context.TODO(), dsn, cfg, db)
 		require.Nil(t, err)
-		expectedParams := []string{
+		expectedCfg := []string{
 			"readTimeout=4m",
 			"writeTimeout=5m",
 			"timeout=3m",
 		}
-		for _, param := range expectedParams {
+		for _, param := range expectedCfg {
 			require.True(t, strings.Contains(dsnStr, param))
 		}
 	}
 
-	testIsolationParams := func() {
+	testIsolationConfig := func() {
 		db, mock, err := sqlmock.New()
 		require.Nil(t, err)
 		defer db.Close() // nolint:errcheck
@@ -136,9 +107,9 @@ func TestGenerateDSNByParams(t *testing.T) {
 		// simulate error
 		dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
 		require.Nil(t, err)
-		params := defaultParams()
+		cfg := NewConfig()
 		var dsnStr string
-		_, err = generateDSNByParams(context.TODO(), dsn, params, db)
+		_, err = generateDSNByConfig(context.TODO(), dsn, cfg, db)
 		require.Error(t, err)
 
 		// simulate no transaction_isolation
@@ -154,12 +125,12 @@ func TestGenerateDSNByParams(t *testing.T) {
 				sqlmock.NewRows(columns).
 					AddRow("tidb_placement_mode", "IGNORE"),
 			)
-		dsnStr, err = generateDSNByParams(context.TODO(), dsn, params, db)
+		dsnStr, err = generateDSNByConfig(context.TODO(), dsn, cfg, db)
 		require.Nil(t, err)
-		expectedParams := []string{
+		expectedCfg := []string{
 			"tx_isolation=%22READ-COMMITTED%22",
 		}
-		for _, param := range expectedParams {
+		for _, param := range expectedCfg {
 			require.True(t, strings.Contains(dsnStr, param))
 		}
 
@@ -178,41 +149,43 @@ func TestGenerateDSNByParams(t *testing.T) {
 				sqlmock.NewRows(columns).
 					AddRow("tidb_placement_mode", "IGNORE"),
 			)
-		dsnStr, err = generateDSNByParams(context.TODO(), dsn, params, db)
+		dsnStr, err = generateDSNByConfig(context.TODO(), dsn, cfg, db)
 		require.Nil(t, err)
-		expectedParams = []string{
+		expectedCfg = []string{
 			"transaction_isolation=%22READ-COMMITTED%22",
 		}
-		for _, param := range expectedParams {
+		for _, param := range expectedCfg {
 			require.True(t, strings.Contains(dsnStr, param))
 		}
 	}
 
-	testDefaultParams()
+	testDefaultConfig()
 	testTimezoneParam()
-	testTimeoutParams()
-	testIsolationParams()
+	testTimeoutConfig()
+	testIsolationConfig()
 }
 
-func TestParseSinkURIToParams(t *testing.T) {
+func TestApplySinkURIParamsToConfig(t *testing.T) {
 	t.Parallel()
 
-	expected := defaultParams()
-	expected.workerCount = 64
-	expected.maxTxnRow = 20
-	expected.batchReplaceEnabled = true
-	expected.batchReplaceSize = 50
-	expected.safeMode = true
-	expected.timezone = `"UTC"`
+	expected := NewConfig()
+	expected.WorkerCount = 64
+	expected.MaxTxnRow = 20
+	expected.BatchReplaceEnabled = true
+	expected.BatchReplaceSize = 50
+	expected.SafeMode = true
+	expected.Timezone = `"UTC"`
 	expected.tidbTxnMode = "pessimistic"
+	expected.EnableOldValue = true
 	uriStr := "mysql://127.0.0.1:3306/?worker-count=64&max-txn-row=20" +
 		"&batch-replace-enable=true&batch-replace-size=50&safe-mode=true" +
 		"&tidb-txn-mode=pessimistic"
 	uri, err := url.Parse(uriStr)
 	require.Nil(t, err)
-	params, err := parseSinkURIToParams(context.TODO(), model.ChangeFeedID{}, uri)
+	cfg := NewConfig()
+	err = cfg.Apply(context.TODO(), model.ChangeFeedID{}, uri, config.GetDefaultReplicaConfig())
 	require.Nil(t, err)
-	require.Equal(t, expected, params)
+	require.Equal(t, expected, cfg)
 }
 
 func TestParseSinkURITimezone(t *testing.T) {
@@ -232,11 +205,12 @@ func TestParseSinkURITimezone(t *testing.T) {
 	for i, uriStr := range uris {
 		uri, err := url.Parse(uriStr)
 		require.Nil(t, err)
-		params, err := parseSinkURIToParams(ctx,
+		cfg := NewConfig()
+		err = cfg.Apply(ctx,
 			model.DefaultChangeFeedID("cf"),
-			uri)
+			uri, config.GetDefaultReplicaConfig())
 		require.Nil(t, err)
-		require.Equal(t, expected[i], params.timezone)
+		require.Equal(t, expected[i], cfg.Timezone)
 	}
 }
 
@@ -245,20 +219,20 @@ func TestParseSinkURIOverride(t *testing.T) {
 
 	cases := []struct {
 		uri     string
-		checker func(*sinkParams)
+		checker func(*Config)
 	}{{
 		uri: "mysql://127.0.0.1:3306/?worker-count=2147483648", // int32 max
-		checker: func(sp *sinkParams) {
-			require.EqualValues(t, sp.workerCount, maxWorkerCount)
+		checker: func(sp *Config) {
+			require.EqualValues(t, sp.WorkerCount, maxWorkerCount)
 		},
 	}, {
 		uri: "mysql://127.0.0.1:3306/?max-txn-row=2147483648", // int32 max
-		checker: func(sp *sinkParams) {
-			require.EqualValues(t, sp.maxTxnRow, maxMaxTxnRow)
+		checker: func(sp *Config) {
+			require.EqualValues(t, sp.MaxTxnRow, maxMaxTxnRow)
 		},
 	}, {
 		uri: "mysql://127.0.0.1:3306/?tidb-txn-mode=badmode",
-		checker: func(sp *sinkParams) {
+		checker: func(sp *Config) {
 			require.EqualValues(t, sp.tidbTxnMode, defaultTiDBTxnMode)
 		},
 	}}
@@ -272,11 +246,12 @@ func TestParseSinkURIOverride(t *testing.T) {
 		} else {
 			uri = nil
 		}
-		p, err := parseSinkURIToParams(ctx,
+		cfg := NewConfig()
+		err = cfg.Apply(ctx,
 			model.DefaultChangeFeedID("changefeed-01"),
-			uri)
+			uri, config.GetDefaultReplicaConfig())
 		require.Nil(t, err)
-		cs.checker(p)
+		cs.checker(cfg)
 	}
 }
 
@@ -311,8 +286,9 @@ func TestParseSinkURIBadQueryString(t *testing.T) {
 		} else {
 			uri = nil
 		}
-		_, err = parseSinkURIToParams(ctx,
-			model.DefaultChangeFeedID("changefeed-01"), uri)
+		cfg := NewConfig()
+		err = cfg.Apply(ctx,
+			model.DefaultChangeFeedID("changefeed-01"), uri, config.GetDefaultReplicaConfig())
 		require.Error(t, err)
 	}
 }
