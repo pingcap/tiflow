@@ -27,7 +27,6 @@ import (
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	cvs "github.com/pingcap/tiflow/engine/jobmaster/cvsjob"
-	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/test/e2e"
 )
 
@@ -150,8 +149,8 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr stri
 	<-flowControl
 	fmt.Printf("test is ready\n")
 
-	jobID, err := e2e.CreateJobViaOpenAPI(ctx, config.MasterAddrs[0],
-		tenantID, projectID, engineModel.JobTypeCVSDemo, string(configBytes))
+	jobID, err := e2e.CreateJobViaHTTP(ctx, config.MasterAddrs[0],
+		tenantID, projectID, pb.Job_CVSDemo, configBytes)
 	require.NoError(t, err)
 
 	fmt.Printf("job id %s\n", jobID)
@@ -159,15 +158,15 @@ func testSubmitTest(t *testing.T, cfg *cvs.Config, config *Config, demoAddr stri
 	// continue to query
 	for {
 		ctx1, cancel := context.WithTimeout(ctx, 3*time.Second)
-		queryResp, err := e2e.QueryJobViaOpenAPI(ctx1, config.MasterAddrs[0],
+		job, err := e2e.QueryJobViaHTTP(ctx1, config.MasterAddrs[0],
 			tenantID, projectID, jobID,
 		)
 		require.NoError(t, err)
 		cancel()
-		require.Equal(t, int32(engineModel.JobTypeCVSDemo), queryResp.JobType)
+		require.Equal(t, pb.Job_CVSDemo, job.Type)
 		fmt.Printf("query id %s, status %d, time %s\n",
-			jobID, int(queryResp.Status), time.Now().Format("2006-01-02 15:04:05"))
-		if queryResp.Status == int32(pb.QueryJobResponse_finished) {
+			jobID, int(job.Status), time.Now().Format("2006-01-02 15:04:05"))
+		if job.Status == pb.Job_Finished {
 			break
 		}
 		time.Sleep(time.Second)
