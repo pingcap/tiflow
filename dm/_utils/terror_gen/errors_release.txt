@@ -517,7 +517,7 @@ ErrSchemaTrackerCannotCreateSchema,[code=44002:class=schema-tracker:scope=intern
 ErrSchemaTrackerCannotCreateTable,[code=44003:class=schema-tracker:scope=internal:level=high], "Message: failed to create table for %v in schema tracker"
 ErrSchemaTrackerCannotSerialize,[code=44004:class=schema-tracker:scope=internal:level=high], "Message: failed to serialize table info for `%s`.`%s`"
 ErrSchemaTrackerCannotGetTable,[code=44005:class=schema-tracker:scope=internal:level=high], "Message: cannot get table info for %v from schema tracker"
-ErrSchemaTrackerCannotExecDDL,[code=44006:class=schema-tracker:scope=internal:level=high], "Message: cannot track DDL: %s"
+ErrSchemaTrackerCannotExecDDL,[code=44006:class=schema-tracker:scope=internal:level=high], "Message: cannot track DDL: %s, Workaround: You can use handle-error to replace or skip this DDL."
 ErrSchemaTrackerMarshalJSON,[code=44013:class=schema-tracker:scope=downstream:level=high], "Message: can not marshal struct maybe `%v` is unable to serialize"
 ErrSchemaTrackerUnMarshalJSON,[code=44014:class=schema-tracker:scope=downstream:level=high], "Message: can not unmarshal json maybe `%s` is not proper JSON"
 ErrSchemaTrackerUnSchemaNotExist,[code=44015:class=schema-tracker:scope=downstream:level=high], "Message: can not find `%s` in tracker"
