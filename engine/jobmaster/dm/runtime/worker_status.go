@@ -25,31 +25,34 @@ import (
 var HeartbeatInterval = 3 * time.Second
 
 // WorkerStage represents the stage of a worker.
-//          ,──────────────.      ,────────────.      ,─────────────.     ,──────────────.
-//          │WorkerCreating│      │WorkerOnline│      │WorkerOffline│     │WorkerFinished│
-//          `──────┬───────'      `─────┬──────'      `──────┬──────'     `──────┬───────'
-//                 │                    │                    │                   │
-//   CreateWorker  │                    │                    │                   │
+//
+//	       ,──────────────.      ,────────────.      ,─────────────.     ,──────────────.
+//	       │WorkerCreating│      │WorkerOnline│      │WorkerOffline│     │WorkerFinished│
+//	       `──────┬───────'      `─────┬──────'      `──────┬──────'     `──────┬───────'
+//	              │                    │                    │                   │
+//	CreateWorker  │                    │                    │                   │
+//
 // ───────────────►│                    │                    │                   │
-//                 │  OnWorkerOnline    │                    │                   │
-//                 ├───────────────────►│                    │                   │
-//                 │                    │  OnWorkerOffline   │                   │
-//                 │                    ├───────────────────►│                   │
-//                 │                    │                    │                   │
-//                 │                    │                    │                   │
-//                 │                    │  OnWorkerFinished  │                   │
-//                 │                    ├────────────────────┼──────────────────►│
-//                 │                    │                    │                   │
-//                 │  OnWorkerOffline/OnWorkerDispacth       │                   │
-//                 ├────────────────────┬───────────────────►│                   │
-//                 │                    │                    │                   │
-//                 │                    │                    │                   │
-//                 │                    │                    │                   │
-//                 │                    │                    │                   │
-//                 │  OnWorkerFinished  │                    │                   │
-//                 ├────────────────────┼────────────────────┼──────────────────►│
-//                 │                    │                    │                   │
-//                 │                    │                    │                   │
+//
+//	│  OnWorkerOnline    │                    │                   │
+//	├───────────────────►│                    │                   │
+//	│                    │  OnWorkerOffline   │                   │
+//	│                    ├───────────────────►│                   │
+//	│                    │                    │                   │
+//	│                    │                    │                   │
+//	│                    │  OnWorkerFinished  │                   │
+//	│                    ├────────────────────┼──────────────────►│
+//	│                    │                    │                   │
+//	│  OnWorkerOffline/OnWorkerDispacth       │                   │
+//	├────────────────────┬───────────────────►│                   │
+//	│                    │                    │                   │
+//	│                    │                    │                   │
+//	│                    │                    │                   │
+//	│                    │                    │                   │
+//	│  OnWorkerFinished  │                    │                   │
+//	├────────────────────┼────────────────────┼──────────────────►│
+//	│                    │                    │                   │
+//	│                    │                    │                   │
 type WorkerStage int
 
 // All available WorkerStage
