@@ -15,7 +15,6 @@ package mysql
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -56,87 +55,96 @@ const (
 	defaultSafeMode            = true
 	defaultTxnIsolationRC      = "READ-COMMITTED"
 	defaultCharacterSet        = "utf8mb4"
+
+	// BackoffBaseDelay indicates the base delay time for retrying.
+	BackoffBaseDelay = 500 * time.Millisecond
+	// BackoffMaxDelay indicates the max delay time for retrying.
+	BackoffMaxDelay = 60 * time.Second
 )
 
-func defaultParams() *sinkParams {
-	return &sinkParams{
-		workerCount:         defaultWorkerCount,
-		maxTxnRow:           defaultMaxTxnRow,
+// Config is the configs for MySQL backend.
+type Config struct {
+	WorkerCount         int
+	MaxTxnRow           int
+	tidbTxnMode         string
+	BatchReplaceEnabled bool
+	BatchReplaceSize    int
+	ReadTimeout         string
+	WriteTimeout        string
+	DialTimeout         string
+	SafeMode            bool
+	Timezone            string
+	TLS                 string
+	ForceReplicate      bool
+	EnableOldValue      bool
+}
+
+// NewConfig returns the default mysql backend config.
+func NewConfig() *Config {
+	return &Config{
+		WorkerCount:         defaultWorkerCount,
+		MaxTxnRow:           defaultMaxTxnRow,
 		tidbTxnMode:         defaultTiDBTxnMode,
-		batchReplaceEnabled: defaultBatchReplaceEnabled,
-		batchReplaceSize:    defaultBatchReplaceSize,
-		readTimeout:         defaultReadTimeout,
-		writeTimeout:        defaultWriteTimeout,
-		dialTimeout:         defaultDialTimeout,
-		safeMode:            defaultSafeMode,
+		BatchReplaceEnabled: defaultBatchReplaceEnabled,
+		BatchReplaceSize:    defaultBatchReplaceSize,
+		ReadTimeout:         defaultReadTimeout,
+		WriteTimeout:        defaultWriteTimeout,
+		DialTimeout:         defaultDialTimeout,
+		SafeMode:            defaultSafeMode,
 	}
 }
 
-type sinkParams struct {
-	workerCount         int
-	maxTxnRow           int
-	tidbTxnMode         string
-	batchReplaceEnabled bool
-	batchReplaceSize    int
-	readTimeout         string
-	writeTimeout        string
-	dialTimeout         string
-	safeMode            bool
-	timezone            string
-	tls                 string
-}
-
-func (s *sinkParams) Clone() *sinkParams {
-	clone := *s
-	return &clone
-}
-
-func parseSinkURIToParams(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL) (*sinkParams, error) {
+// Apply applies the sink URI parameters to the config.
+func (c *Config) Apply(
+	ctx context.Context,
+	changefeedID model.ChangeFeedID,
+	sinkURI *url.URL,
+	replicaConfig *config.ReplicaConfig,
+) (err error) {
 	if sinkURI == nil {
-		return nil, cerror.ErrMySQLConnectionError.GenWithStack("fail to open MySQL sink, empty SinkURI")
+		return cerror.ErrMySQLConnectionError.GenWithStack("fail to open MySQL sink, empty SinkURI")
 	}
 
 	scheme := strings.ToLower(sinkURI.Scheme)
 	if !sink.IsMySQLCompatibleScheme(scheme) {
-		return nil, cerror.ErrMySQLConnectionError.GenWithStack("can't create MySQL sink with unsupported scheme: %s", scheme)
+		return cerror.ErrMySQLConnectionError.GenWithStack("can't create MySQL sink with unsupported scheme: %s", scheme)
 	}
-
-	var err error
-	params := defaultParams()
 	query := sinkURI.Query()
+	if err = getWorkerCount(query, &c.WorkerCount); err != nil {
+		return err
+	}
+	if err = getMaxTxnRow(query, &c.MaxTxnRow); err != nil {
+		return err
+	}
+	if err = getTiDBTxnMode(query, &c.tidbTxnMode); err != nil {
+		return err
+	}
+	if err = getSSLCA(query, changefeedID, &c.TLS); err != nil {
+		return err
+	}
+	if err = getBatchReplaceEnable(query, &c.BatchReplaceEnabled, &c.BatchReplaceSize); err != nil {
+		return err
+	}
+	if err = getSafeMode(query, &c.SafeMode); err != nil {
+		return err
+	}
+	if err = getTimezone(ctx, query, &c.Timezone); err != nil {
+		return err
+	}
+	if err = getDuration(query, "read-timeout", &c.ReadTimeout); err != nil {
+		return err
+	}
+	if err = getDuration(query, "write-timeout", &c.WriteTimeout); err != nil {
+		return err
+	}
+	if err = getDuration(query, "timeout", &c.DialTimeout); err != nil {
+		return err
+	}
 
-	if err = getWorkerCount(query, &params.workerCount); err != nil {
-		return nil, err
-	}
-	if err = getMaxTxnRow(query, &params.maxTxnRow); err != nil {
-		return nil, err
-	}
-	if err = getTiDBTxnMode(query, &params.tidbTxnMode); err != nil {
-		return nil, err
-	}
-	if err = getSSLCA(query, changefeedID, &params.tls); err != nil {
-		return nil, err
-	}
-	err = getBatchReplaceEnable(query, &params.batchReplaceEnabled, &params.batchReplaceSize)
-	if err != nil {
-		return nil, err
-	}
-	if err = getSafeMode(query, &params.safeMode); err != nil {
-		return nil, err
-	}
-	if err = getTimezone(ctx, query, &params.timezone); err != nil {
-		return nil, err
-	}
-	if err = getDuration(query, "read-timeout", &params.readTimeout); err != nil {
-		return nil, err
-	}
-	if err = getDuration(query, "write-timeout", &params.writeTimeout); err != nil {
-		return nil, err
-	}
-	if err = getDuration(query, "timeout", &params.dialTimeout); err != nil {
-		return nil, err
-	}
-	return params, nil
+	c.EnableOldValue = replicaConfig.EnableOldValue
+	c.ForceReplicate = replicaConfig.ForceReplicate
+
+	return nil
 }
 
 func getWorkerCount(values url.Values, workerCount *int) error {
@@ -300,109 +308,4 @@ func getDuration(values url.Values, key string, target *string) error {
 	}
 	*target = s
 	return nil
-}
-
-func generateDSNByParams(
-	ctx context.Context,
-	dsnCfg *dmysql.Config,
-	params *sinkParams,
-	testDB *sql.DB,
-) (string, error) {
-	if dsnCfg.Params == nil {
-		dsnCfg.Params = make(map[string]string, 1)
-	}
-	dsnCfg.DBName = ""
-	dsnCfg.InterpolateParams = true
-	dsnCfg.MultiStatements = true
-	// if timezone is empty string, we don't pass this variable in dsn
-	if params.timezone != "" {
-		dsnCfg.Params["time_zone"] = params.timezone
-	}
-	dsnCfg.Params["readTimeout"] = params.readTimeout
-	dsnCfg.Params["writeTimeout"] = params.writeTimeout
-	dsnCfg.Params["timeout"] = params.dialTimeout
-
-	autoRandom, err := checkTiDBVariable(ctx, testDB, "allow_auto_random_explicit_insert", "1")
-	if err != nil {
-		return "", err
-	}
-	if autoRandom != "" {
-		dsnCfg.Params["allow_auto_random_explicit_insert"] = autoRandom
-	}
-
-	txnMode, err := checkTiDBVariable(ctx, testDB, "tidb_txn_mode", params.tidbTxnMode)
-	if err != nil {
-		return "", err
-	}
-	if txnMode != "" {
-		dsnCfg.Params["tidb_txn_mode"] = txnMode
-	}
-
-	// Since we don't need select, just set default isolation level to read-committed
-	// transaction_isolation is mysql newly introduced variable and will vary from MySQL5.7/MySQL8.0/Mariadb
-	isolation, err := checkTiDBVariable(ctx, testDB, "transaction_isolation", defaultTxnIsolationRC)
-	if err != nil {
-		return "", err
-	}
-	if isolation != "" {
-		dsnCfg.Params["transaction_isolation"] = fmt.Sprintf(`"%s"`, defaultTxnIsolationRC)
-	} else {
-		dsnCfg.Params["tx_isolation"] = fmt.Sprintf(`"%s"`, defaultTxnIsolationRC)
-	}
-
-	// equals to executing "SET NAMES utf8mb4"
-	dsnCfg.Params["charset"] = defaultCharacterSet
-
-	tidbPlacementMode, err := checkTiDBVariable(ctx, testDB, "tidb_placement_mode", "ignore")
-	if err != nil {
-		return "", err
-	}
-	if tidbPlacementMode != "" {
-		dsnCfg.Params["tidb_placement_mode"] = fmt.Sprintf(`"%s"`, tidbPlacementMode)
-	}
-	dsnClone := dsnCfg.Clone()
-	dsnClone.Passwd = "******"
-	log.Info("sink uri is configured", zap.String("dsn", dsnClone.FormatDSN()))
-
-	return dsnCfg.FormatDSN(), nil
-}
-
-func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultValue string) (string, error) {
-	var name string
-	var value string
-	querySQL := fmt.Sprintf("show session variables like '%s';", variableName)
-	err := db.QueryRowContext(ctx, querySQL).Scan(&name, &value)
-	if err != nil && err != sql.ErrNoRows {
-		errMsg := "fail to query session variable " + variableName
-		return "", cerror.ErrMySQLQueryError.Wrap(err).GenWithStack(errMsg)
-	}
-	// session variable works, use given default value
-	if err == nil {
-		return defaultValue, nil
-	}
-	// session variable not exists, return "" to ignore it
-	return "", nil
-}
-
-// SinkOptions includes some options for transaction backends.
-type SinkOptions struct {
-	forceReplicate bool
-	enableOldValue bool
-	getDBConn      func(ctx context.Context, dsnStr string) (*sql.DB, error)
-	dmlMaxRetry    uint64
-}
-
-// SinkOptionsFromReplicaConfig creates a SinkOptions from a ReplicaConfig.
-func SinkOptionsFromReplicaConfig(config *config.ReplicaConfig) SinkOptions {
-	return SinkOptions{
-		forceReplicate: config.ForceReplicate,
-		enableOldValue: config.EnableOldValue,
-		dmlMaxRetry:    defaultDMLMaxRetry,
-		getDBConn:      getDBConn,
-	}
-}
-
-// SinkOptionsDefault creates a default SinkOptions.
-func SinkOptionsDefault() SinkOptions {
-	return SinkOptionsFromReplicaConfig(config.GetDefaultReplicaConfig())
 }

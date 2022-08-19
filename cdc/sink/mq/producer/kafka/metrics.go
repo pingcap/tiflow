@@ -20,7 +20,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/kafka"
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rcrowley/go-metrics"

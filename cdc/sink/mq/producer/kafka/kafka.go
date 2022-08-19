@@ -30,7 +30,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/kafka"
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
