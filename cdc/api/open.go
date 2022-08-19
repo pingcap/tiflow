@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -225,11 +226,15 @@ func (h *openAPI) GetChangefeed(c *gin.Context) {
 			taskStatus = append(taskStatus, model.CaptureTaskStatus{CaptureID: captureID, Tables: tables, Operation: status.Operation})
 		}
 	}
+	sinkURI, err := util.MaskSinkURI(info.SinkURI)
+	if err != nil {
+		log.Error("failed to mask sink URI", zap.Error(err))
+	}
 
 	changefeedDetail := &model.ChangefeedDetail{
 		Namespace:      changefeedID.Namespace,
 		ID:             changefeedID.ID,
-		SinkURI:        info.SinkURI,
+		SinkURI:        sinkURI,
 		CreateTime:     model.JSONTime(info.CreateTime),
 		StartTs:        info.StartTs,
 		TargetTs:       info.TargetTs,
@@ -296,7 +301,7 @@ func (h *openAPI) CreateChangefeed(c *gin.Context) {
 		}
 	}()
 
-	infoStr, err := info.Marshal()
+	infoStr := info.String()
 	if err != nil {
 		needRemoveGCSafePoint = true
 		_ = c.Error(err)
