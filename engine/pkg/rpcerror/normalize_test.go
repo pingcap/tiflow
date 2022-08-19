@@ -30,7 +30,6 @@ func TestNormalize(t *testing.T) {
 
 	testErrorPrototype := Normalize[testError](WithName("ErrTestError"), WithMessage("test message"))
 	err := testErrorPrototype.GenWithStack(&testError{Val: "first test error"})
-
 	info, ok := testErrorPrototype.Convert(err)
 	require.True(t, ok)
 	require.Equal(t, &testError{Val: "first test error"}, info)

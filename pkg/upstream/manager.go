@@ -138,10 +138,8 @@ func (m *Manager) add(upstreamID uint64,
 }
 
 // AddUpstream adds an upstream and init it.
-func (m *Manager) AddUpstream(upstreamID model.UpstreamID,
-	info *model.UpstreamInfo,
-) *Upstream {
-	return m.add(upstreamID,
+func (m *Manager) AddUpstream(info *model.UpstreamInfo) *Upstream {
+	return m.add(info.ID,
 		strings.Split(info.PDEndpoints, ","),
 		&security.Credential{
 			CAPath:        info.CAPath,

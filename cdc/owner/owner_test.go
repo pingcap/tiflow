@@ -68,8 +68,12 @@ func newOwner4Test(
 	o := NewOwner(m).(*ownerImpl)
 	// Most tests do not need to test bootstrap.
 	o.bootstrapped = true
-	o.newChangefeed = func(id model.ChangeFeedID, up *upstream.Upstream) *changefeed {
-		return newChangefeed4Test(id, up, newDDLPuller, newSink, newScheduler)
+	o.newChangefeed = func(
+		id model.ChangeFeedID,
+		state *orchestrator.ChangefeedReactorState,
+		up *upstream.Upstream,
+	) *changefeed {
+		return newChangefeed4Test(id, state, up, newDDLPuller, newSink, newScheduler)
 	}
 	return o
 }

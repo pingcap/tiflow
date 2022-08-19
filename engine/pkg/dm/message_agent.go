@@ -153,7 +153,6 @@ func (m *messageMatcher) onResponse(id messageID, resp interface{}) error {
 
 // MessageAgent defines interface for message communication.
 type MessageAgent interface {
-	Init(ctx context.Context) error
 	Tick(ctx context.Context) error
 	Close(ctx context.Context) error
 	// UpdateClient updates the client status.
@@ -222,11 +221,6 @@ func NewMessageAgentImpl(id string, commandHandler interface{}, messageHandlerMa
 			return err
 		},
 	)
-	return agent
-}
-
-// Init inits message agent.
-func (agent *MessageAgentImpl) Init(ctx context.Context) error {
 	agent.ctx, agent.cancel = context.WithCancel(context.Background())
 	agent.wg.Add(1)
 	go func() {
@@ -234,7 +228,7 @@ func (agent *MessageAgentImpl) Init(ctx context.Context) error {
 		err := agent.pool.Run(agent.ctx)
 		agent.logger.Info("workerpool exited", zap.Error(err))
 	}()
-	return nil
+	return agent
 }
 
 // Tick implements MessageAgent.Tick

@@ -42,5 +42,5 @@ else
 	cmd="mysql -u${user} -h${host} -P${port} -p${password} --default-character-set utf8mb4 -e '${sql}'"
 fi
 
-echo "will execute: $cmd"
+echo "will execute: $cmd" >&2
 eval $cmd

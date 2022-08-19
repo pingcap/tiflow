@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/actor"
 	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -222,28 +221,6 @@ func (ls *Sorter) AddEntry(ctx context.Context, event *model.PolymorphicEvent) {
 		InputEvent: event,
 	})
 	_ = ls.writerRouter.SendB(ctx, ls.writerActorID, msg)
-}
-
-// TryAddEntry tries to add an RawKVEntry to the EntryGroup
-func (ls *Sorter) TryAddEntry(
-	ctx context.Context, event *model.PolymorphicEvent,
-) (bool, error) {
-	if atomic.LoadInt32(&ls.closed) != 0 {
-		return false, nil
-	}
-	msg := actormsg.ValueMessage(message.Task{
-		UID:        ls.uid,
-		TableID:    ls.tableID,
-		InputEvent: event,
-	})
-	err := ls.writerRouter.Send(ls.writerActorID, msg)
-	if err != nil {
-		if cerror.ErrMailboxFull.Equal(err) {
-			return false, nil
-		}
-		return false, errors.Trace(err)
-	}
-	return true, nil
 }
 
 // Output returns the sorted raw kv output channel

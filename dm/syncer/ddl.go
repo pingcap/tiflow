@@ -58,7 +58,7 @@ func (s *Syncer) processOneDDL(qec *queryEventContext, sql string) ([]string, er
 	}
 
 	if s.onlineDDL != nil {
-		if err = s.onlineDDL.CheckRegex(ddlInfo.originStmt, qec.ddlSchema, s.SourceTableNamesFlavor); err != nil {
+		if err = s.onlineDDL.CheckRegex(ddlInfo.stmtCache, qec.ddlSchema, s.SourceTableNamesFlavor); err != nil {
 			return nil, err
 		}
 	}
@@ -80,7 +80,7 @@ func (s *Syncer) processOneDDL(qec *queryEventContext, sql string) ([]string, er
 		return []string{ddlInfo.originDDL}, nil
 	}
 	// filter and save ghost table ddl
-	sqls, err := s.onlineDDL.Apply(qec.tctx, ddlInfo.sourceTables, ddlInfo.originDDL, ddlInfo.originStmt, qec.p)
+	sqls, err := s.onlineDDL.Apply(qec.tctx, ddlInfo.sourceTables, ddlInfo.originDDL, ddlInfo.stmtCache, qec.p)
 	if err != nil {
 		return nil, err
 	}
@@ -108,6 +108,8 @@ func (s *Syncer) genDDLInfo(qec *queryEventContext, sql string) (*ddlInfo, error
 	if err != nil {
 		return nil, terror.Annotatef(terror.ErrSyncerUnitParseStmt.New(err.Error()), "ddl %s", sql)
 	}
+	// get another stmt, one for representing original ddl, one for letting other function modify it.
+	stmt2, _ := qec.p.ParseOneStmt(sql, "", "")
 
 	sourceTables, err := parserpkg.FetchDDLTables(qec.ddlSchema, stmt, s.SourceTableNamesFlavor)
 	if err != nil {
@@ -123,6 +125,7 @@ func (s *Syncer) genDDLInfo(qec *queryEventContext, sql string) (*ddlInfo, error
 	ddlInfo := &ddlInfo{
 		originDDL:    sql,
 		originStmt:   stmt,
+		stmtCache:    stmt2,
 		sourceTables: sourceTables,
 		targetTables: targetTables,
 	}
@@ -132,7 +135,7 @@ func (s *Syncer) genDDLInfo(qec *queryEventContext, sql string) (*ddlInfo, error
 		adjustCollation(s.tctx, ddlInfo, qec.eventStatusVars, s.charsetAndDefaultCollation, s.idAndCollationMap)
 	}
 
-	routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.originStmt, ddlInfo.targetTables)
+	routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.stmtCache, ddlInfo.targetTables)
 	ddlInfo.routedDDL = routedDDL
 	return ddlInfo, err
 }
@@ -201,7 +204,7 @@ func (s *Syncer) clearOnlineDDL(tctx *tcontext.Context, targetTable *filter.Tabl
 
 // adjustCollation adds collation for create database and check create table.
 func adjustCollation(tctx *tcontext.Context, ddlInfo *ddlInfo, statusVars []byte, charsetAndDefaultCollationMap map[string]string, idAndCollationMap map[int]string) {
-	switch createStmt := ddlInfo.originStmt.(type) {
+	switch createStmt := ddlInfo.stmtCache.(type) {
 	case *ast.CreateTableStmt:
 		if createStmt.ReferTable != nil {
 			return
@@ -300,6 +303,7 @@ type ddlInfo struct {
 	originDDL    string
 	routedDDL    string
 	originStmt   ast.StmtNode
+	stmtCache    ast.StmtNode
 	sourceTables []*filter.Table
 	targetTables []*filter.Table
 }
