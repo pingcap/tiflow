@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
@@ -64,11 +65,11 @@ type mysqlBackend struct {
 // NewMySQLBackend creates a new MySQL sink using schema storage
 func NewMySQLBackend(
 	ctx context.Context,
-	changefeedID model.ChangeFeedID,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
 	dbConnFactory pmysql.Factory,
 ) (*mysqlBackend, error) {
+	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	cfg := pmysql.NewConfig()
 	err := cfg.Apply(ctx, changefeedID, sinkURI, replicaConfig)
 	if err != nil {
