@@ -1,6 +1,9 @@
 name: Dataflow Engine Chaos
 
 on:
+  push:
+    branches:
+      - grpc-gateway
   schedule:
     - cron: '0 17-23 * * *' # run at minute 0 every hour from 01:00 ~ 07:00 UTC+8
   workflow_dispatch:
