@@ -26,7 +26,7 @@ import (
 // BatchMixedDecoder decodes the byte of a batch into the original messages.
 type BatchMixedDecoder struct {
 	mixedBytes []byte
-	nextKey    *internal.MQMessageKey
+	nextKey    *internal.MessageKey
 	nextKeyLen uint64
 }
 
@@ -73,7 +73,7 @@ func (b *BatchMixedDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error
 	valueLen := binary.BigEndian.Uint64(b.mixedBytes[:8])
 	value := b.mixedBytes[8 : valueLen+8]
 	b.mixedBytes = b.mixedBytes[valueLen+8:]
-	rowMsg := new(mqMessageRow)
+	rowMsg := new(messageRow)
 	if err := rowMsg.decode(value); err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -96,7 +96,7 @@ func (b *BatchMixedDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	valueLen := binary.BigEndian.Uint64(b.mixedBytes[:8])
 	value := b.mixedBytes[8 : valueLen+8]
 	b.mixedBytes = b.mixedBytes[valueLen+8:]
-	ddlMsg := new(mqMessageDDL)
+	ddlMsg := new(messageDDL)
 	if err := ddlMsg.decode(value); err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -113,7 +113,7 @@ func (b *BatchMixedDecoder) decodeNextKey() error {
 	keyLen := binary.BigEndian.Uint64(b.mixedBytes[:8])
 	key := b.mixedBytes[8 : keyLen+8]
 	// drop value bytes
-	msgKey := new(internal.MQMessageKey)
+	msgKey := new(internal.MessageKey)
 	err := msgKey.Decode(key)
 	if err != nil {
 		return errors.Trace(err)
@@ -127,7 +127,7 @@ func (b *BatchMixedDecoder) decodeNextKey() error {
 type BatchDecoder struct {
 	keyBytes   []byte
 	valueBytes []byte
-	nextKey    *internal.MQMessageKey
+	nextKey    *internal.MessageKey
 	nextKeyLen uint64
 }
 
@@ -174,7 +174,7 @@ func (b *BatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
 	value := b.valueBytes[8 : valueLen+8]
 	b.valueBytes = b.valueBytes[valueLen+8:]
-	rowMsg := new(mqMessageRow)
+	rowMsg := new(messageRow)
 	if err := rowMsg.decode(value); err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -197,7 +197,7 @@ func (b *BatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
 	value := b.valueBytes[8 : valueLen+8]
 	b.valueBytes = b.valueBytes[valueLen+8:]
-	ddlMsg := new(mqMessageDDL)
+	ddlMsg := new(messageDDL)
 	if err := ddlMsg.decode(value); err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -213,7 +213,7 @@ func (b *BatchDecoder) hasNext() bool {
 func (b *BatchDecoder) decodeNextKey() error {
 	keyLen := binary.BigEndian.Uint64(b.keyBytes[:8])
 	key := b.keyBytes[8 : keyLen+8]
-	msgKey := new(internal.MQMessageKey)
+	msgKey := new(internal.MessageKey)
 	err := msgKey.Decode(key)
 	if err != nil {
 		return errors.Trace(err)

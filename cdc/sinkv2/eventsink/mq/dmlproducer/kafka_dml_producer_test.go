@@ -90,7 +90,7 @@ func TestProducerAck(t *testing.T) {
 
 	count := atomic.NewInt64(0)
 	for i := 0; i < 10; i++ {
-		err = producer.AsyncSendMessage(ctx, topic, int32(0), &common.MQMessage{
+		err = producer.AsyncSendMessage(ctx, topic, int32(0), &common.Message{
 			Key:   []byte("test-key-1"),
 			Value: []byte("test-value"),
 			Callback: func() {
@@ -98,7 +98,7 @@ func TestProducerAck(t *testing.T) {
 			},
 		})
 		require.Nil(t, err)
-		err = producer.AsyncSendMessage(ctx, topic, int32(1), &common.MQMessage{
+		err = producer.AsyncSendMessage(ctx, topic, int32(1), &common.Message{
 			Key:   []byte("test-key-1"),
 			Value: []byte("test-value"),
 			Callback: func() {
@@ -122,7 +122,7 @@ func TestProducerAck(t *testing.T) {
 	producer.Close()
 	cancel()
 	// check send messages when context is producer closed
-	err = producer.AsyncSendMessage(ctx, topic, int32(0), &common.MQMessage{
+	err = producer.AsyncSendMessage(ctx, topic, int32(0), &common.Message{
 		Key:   []byte("cancel"),
 		Value: nil,
 	})
@@ -166,7 +166,7 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	go func(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < 20; i++ {
-			err = producer.AsyncSendMessage(ctx, topic, int32(0), &common.MQMessage{
+			err = producer.AsyncSendMessage(ctx, topic, int32(0), &common.Message{
 				Key:   []byte("test-key-1"),
 				Value: []byte("test-value"),
 			})

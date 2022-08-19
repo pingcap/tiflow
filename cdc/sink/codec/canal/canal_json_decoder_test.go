@@ -31,9 +31,9 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 		err := encoder.AppendRowChangedEvent(context.Background(), "", testCaseInsert, nil)
 		require.Nil(t, err)
 
-		mqMessages := encoder.Build()
-		require.Equal(t, 1, len(mqMessages))
-		msg := mqMessages[0]
+		messages := encoder.Build()
+		require.Equal(t, 1, len(messages))
+		msg := messages[0]
 
 		for _, decodeEnable := range []bool{false, true} {
 			decoder := NewBatchDecoder(msg.Value, decodeEnable)

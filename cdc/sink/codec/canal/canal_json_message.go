@@ -39,7 +39,7 @@ type canalJSONMessageInterface interface {
 	getData() map[string]interface{}
 	getMySQLType() map[string]string
 	getJavaSQLType() map[string]int32
-	mqMessageType() model.MessageType
+	messageType() model.MessageType
 	eventType() canal.EventType
 	pkNameSet() map[string]struct{}
 }
@@ -55,7 +55,7 @@ type canalJSONMessage struct {
 	EventType string   `json:"type"`
 	// officially the timestamp of the event-time of the message, in milliseconds since Epoch.
 	ExecutionTime int64 `json:"es"`
-	// officially the timestamp of building the MQ message, in milliseconds since Epoch.
+	// officially the timestamp of building the message, in milliseconds since Epoch.
 	BuildTime int64 `json:"ts"`
 	// SQL that generated the change event, DDL or Query
 	Query string `json:"sql"`
@@ -113,7 +113,7 @@ func (c *canalJSONMessage) getJavaSQLType() map[string]int32 {
 	return c.SQLType
 }
 
-func (c *canalJSONMessage) mqMessageType() model.MessageType {
+func (c *canalJSONMessage) messageType() model.MessageType {
 	if c.IsDDL {
 		return model.MessageTypeDDL
 	}

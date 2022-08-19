@@ -28,7 +28,7 @@ var _ DMLProducer = (*MockDMLProducer)(nil)
 // MockDMLProducer is a mock producer for test.
 type MockDMLProducer struct {
 	mu     sync.Mutex
-	events map[mqv1.TopicPartitionKey][]*common.MQMessage
+	events map[mqv1.TopicPartitionKey][]*common.Message
 }
 
 // NewDMLMockProducer creates a mock producer.
@@ -36,13 +36,13 @@ func NewDMLMockProducer(_ context.Context, _ sarama.Client,
 	_ kafka.ClusterAdminClient, _ chan error,
 ) (DMLProducer, error) {
 	return &MockDMLProducer{
-		events: make(map[mqv1.TopicPartitionKey][]*common.MQMessage),
+		events: make(map[mqv1.TopicPartitionKey][]*common.Message),
 	}, nil
 }
 
 // AsyncSendMessage appends a message to the mock producer.
 func (m *MockDMLProducer) AsyncSendMessage(_ context.Context, topic string,
-	partition int32, message *common.MQMessage,
+	partition int32, message *common.Message,
 ) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -51,7 +51,7 @@ func (m *MockDMLProducer) AsyncSendMessage(_ context.Context, topic string,
 		Partition: partition,
 	}
 	if _, ok := m.events[key]; !ok {
-		m.events[key] = make([]*common.MQMessage, 0)
+		m.events[key] = make([]*common.Message, 0)
 	}
 	m.events[key] = append(m.events[key], message)
 
@@ -62,10 +62,10 @@ func (m *MockDMLProducer) AsyncSendMessage(_ context.Context, topic string,
 func (m *MockDMLProducer) Close() {}
 
 // GetAllEvents returns the events received by the mock producer.
-func (m *MockDMLProducer) GetAllEvents() []*common.MQMessage {
+func (m *MockDMLProducer) GetAllEvents() []*common.Message {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	var events []*common.MQMessage
+	var events []*common.Message
 	for _, v := range m.events {
 		events = append(events, v...)
 	}
@@ -73,7 +73,7 @@ func (m *MockDMLProducer) GetAllEvents() []*common.MQMessage {
 }
 
 // GetEvents returns the event filtered by the key.
-func (m *MockDMLProducer) GetEvents(key mqv1.TopicPartitionKey) []*common.MQMessage {
+func (m *MockDMLProducer) GetEvents(key mqv1.TopicPartitionKey) []*common.Message {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.events[key]

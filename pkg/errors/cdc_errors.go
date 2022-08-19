@@ -315,9 +315,9 @@ var (
 		"new s3 storage for redo log",
 		errors.RFCCodeText("CDC:ErrS3StorageInitialize"),
 	)
-	ErrMQCodecInvalidConfig = errors.Normalize(
-		"MQ Codec invalid config",
-		errors.RFCCodeText("CDC:ErrMQCodecInvalidConfig"),
+	ErrCodecInvalidConfig = errors.Normalize(
+		"Codec invalid config",
+		errors.RFCCodeText("CDC:ErrCodecInvalidConfig"),
 	)
 	ErrAsyncBroadcastNotSupport = errors.Normalize(
 		"Async broadcasts not supported",
@@ -327,9 +327,9 @@ var (
 		"sink uri invalid '%s'",
 		errors.RFCCodeText("CDC:ErrSinkURIInvalid"),
 	)
-	ErrMQSinkUnknownProtocol = errors.Normalize(
-		"unknown '%s' protocol for Message Queue sink",
-		errors.RFCCodeText("CDC:ErrMQSinkUnknownProtocol"),
+	ErrSinkUnknownProtocol = errors.Normalize(
+		"unknown '%s' message protocol for sink",
+		errors.RFCCodeText("CDC:ErrSinkUnknownProtocol"),
 	)
 	ErrMySQLTxnError = errors.Normalize(
 		"MySQL txn error",

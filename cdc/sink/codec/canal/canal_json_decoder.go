@@ -59,13 +59,13 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 	b.msg = msg
 	b.data = nil
 
-	return b.msg.mqMessageType(), true, nil
+	return b.msg.messageType(), true, nil
 }
 
 // NextRowChangedEvent implements the EventBatchDecoder interface
 // `HasNext` should be called before this.
 func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
-	if b.msg == nil || b.msg.mqMessageType() != model.MessageTypeRow {
+	if b.msg == nil || b.msg.messageType() != model.MessageTypeRow {
 		return nil, cerrors.ErrCanalDecodeFailed.
 			GenWithStack("not found row changed event message")
 	}
@@ -80,7 +80,7 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 // NextDDLEvent implements the EventBatchDecoder interface
 // `HasNext` should be called before this.
 func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
-	if b.msg == nil || b.msg.mqMessageType() != model.MessageTypeDDL {
+	if b.msg == nil || b.msg.messageType() != model.MessageTypeDDL {
 		return nil, cerrors.ErrCanalDecodeFailed.
 			GenWithStack("not found ddl event message")
 	}
@@ -93,7 +93,7 @@ func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 // NextResolvedEvent implements the EventBatchDecoder interface
 // `HasNext` should be called before this.
 func (b *batchDecoder) NextResolvedEvent() (uint64, error) {
-	if b.msg == nil || b.msg.mqMessageType() != model.MessageTypeResolved {
+	if b.msg == nil || b.msg.messageType() != model.MessageTypeResolved {
 		return 0, cerrors.ErrCanalDecodeFailed.
 			GenWithStack("not found resolved event message")
 	}
@@ -103,7 +103,7 @@ func (b *batchDecoder) NextResolvedEvent() (uint64, error) {
 		log.Error("canal-json resolved event message should have tidb extension, but not found",
 			zap.Any("msg", b.msg))
 		return 0, cerrors.ErrCanalDecodeFailed.
-			GenWithStack("MqMessageTypeResolved tidb extension not found")
+			GenWithStack("MessageTypeResolved tidb extension not found")
 	}
 	b.msg = nil
 	return withExtensionEvent.Extensions.WatermarkTs, nil

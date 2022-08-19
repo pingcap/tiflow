@@ -179,7 +179,7 @@ func (c *JSONBatchEncoder) newJSONMessage4CheckpointEvent(ts uint64) *canalJSONM
 }
 
 // EncodeCheckpointEvent implements the EventJSONBatchEncoder interface
-func (c *JSONBatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.MQMessage, error) {
+func (c *JSONBatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 	if !c.enableTiDBExtension {
 		return nil, nil
 	}
@@ -211,7 +211,7 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 }
 
 // EncodeDDLEvent encodes DDL events
-func (c *JSONBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.MQMessage, error) {
+func (c *JSONBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
 	message := c.newJSONMessageForDDL(e)
 	value, err := json.Marshal(message)
 	if err != nil {
@@ -221,11 +221,11 @@ func (c *JSONBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.MQMessage,
 }
 
 // Build implements the EventJSONBatchEncoder interface
-func (c *JSONBatchEncoder) Build() []*common.MQMessage {
+func (c *JSONBatchEncoder) Build() []*common.Message {
 	if len(c.messageBuf) == 0 {
 		return nil
 	}
-	ret := make([]*common.MQMessage, len(c.messageBuf))
+	ret := make([]*common.Message, len(c.messageBuf))
 	for i, msg := range c.messageBuf {
 		value, err := json.Marshal(msg)
 		if err != nil {

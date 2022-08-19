@@ -30,7 +30,7 @@ import (
 
 // BatchEncoder encodes the events into the byte of a batch into.
 type BatchEncoder struct {
-	messageBuf   []*common.MQMessage
+	messageBuf   []*common.Message
 	callbackBuff []func()
 	curBatchSize int
 
@@ -101,7 +101,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 }
 
 // EncodeDDLEvent implements the EventBatchEncoder interface
-func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.MQMessage, error) {
+func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
 	keyMsg, valueMsg := ddlEventToMsg(e)
 	key, err := keyMsg.Encode()
 	if err != nil {
@@ -133,7 +133,7 @@ func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.MQMessage, err
 }
 
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
-func (d *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.MQMessage, error) {
+func (d *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 	keyMsg := newResolvedMessage(ts)
 	key, err := keyMsg.Encode()
 	if err != nil {
@@ -160,10 +160,10 @@ func (d *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.MQMessage, erro
 }
 
 // Build implements the EventBatchEncoder interface
-func (d *BatchEncoder) Build() (mqMessages []*common.MQMessage) {
+func (d *BatchEncoder) Build() (messages []*common.Message) {
 	d.tryBuildCallback()
 	ret := d.messageBuf
-	d.messageBuf = make([]*common.MQMessage, 0)
+	d.messageBuf = make([]*common.Message, 0)
 	return ret
 }
 

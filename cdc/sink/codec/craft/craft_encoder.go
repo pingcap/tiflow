@@ -24,7 +24,7 @@ import (
 // BatchEncoder encodes the events into the byte of a batch into craft binary format.
 type BatchEncoder struct {
 	rowChangedBuffer *RowChangedEventBuffer
-	messageBuf       []*common.MQMessage
+	messageBuf       []*common.Message
 	callbackBuf      []func()
 
 	// configs
@@ -35,7 +35,7 @@ type BatchEncoder struct {
 }
 
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
-func (e *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.MQMessage, error) {
+func (e *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 	return common.NewResolvedMsg(
 		config.ProtocolCraft, nil,
 		NewResolvedEventEncoder(e.allocator, ts).Encode(), ts), nil
@@ -59,19 +59,19 @@ func (e *BatchEncoder) AppendRowChangedEvent(
 }
 
 // EncodeDDLEvent implements the EventBatchEncoder interface
-func (e *BatchEncoder) EncodeDDLEvent(ev *model.DDLEvent) (*common.MQMessage, error) {
+func (e *BatchEncoder) EncodeDDLEvent(ev *model.DDLEvent) (*common.Message, error) {
 	return common.NewDDLMsg(config.ProtocolCraft,
 		nil, NewDDLEventEncoder(e.allocator, ev).Encode(), ev), nil
 }
 
 // Build implements the EventBatchEncoder interface
-func (e *BatchEncoder) Build() []*common.MQMessage {
+func (e *BatchEncoder) Build() []*common.Message {
 	if e.rowChangedBuffer.Size() > 0 {
 		// flush buffered data to message buffer
 		e.flush()
 	}
 	ret := e.messageBuf
-	e.messageBuf = make([]*common.MQMessage, 0, 2)
+	e.messageBuf = make([]*common.Message, 0, 2)
 	return ret
 }
 
@@ -81,19 +81,19 @@ func (e *BatchEncoder) flush() {
 	schema := headers.GetSchema(0)
 	table := headers.GetTable(0)
 	rowsCnt := e.rowChangedBuffer.RowsCount()
-	mqMessage := common.NewMsg(config.ProtocolCraft,
+	message := common.NewMsg(config.ProtocolCraft,
 		nil, e.rowChangedBuffer.Encode(), ts, model.MessageTypeRow, &schema, &table)
-	mqMessage.SetRowsCount(rowsCnt)
+	message.SetRowsCount(rowsCnt)
 	if len(e.callbackBuf) != 0 && len(e.callbackBuf) == rowsCnt {
 		callbacks := e.callbackBuf
-		mqMessage.Callback = func() {
+		message.Callback = func() {
 			for _, cb := range callbacks {
 				cb()
 			}
 		}
 		e.callbackBuf = make([]func(), 0)
 	}
-	e.messageBuf = append(e.messageBuf, mqMessage)
+	e.messageBuf = append(e.messageBuf, message)
 }
 
 // NewBatchEncoder creates a new BatchEncoder.
@@ -125,7 +125,7 @@ func NewBatchEncoderBuilder(config *common.Config) common.EncoderBuilder {
 func NewBatchEncoderWithAllocator(allocator *SliceAllocator) common.EventBatchEncoder {
 	return &BatchEncoder{
 		allocator:        allocator,
-		messageBuf:       make([]*common.MQMessage, 0, 2),
+		messageBuf:       make([]*common.Message, 0, 2),
 		callbackBuf:      make([]func(), 0),
 		rowChangedBuffer: NewRowChangedEventBuffer(allocator),
 	}

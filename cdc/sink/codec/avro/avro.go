@@ -42,7 +42,7 @@ type BatchEncoder struct {
 	namespace          string
 	keySchemaManager   *schemaManager
 	valueSchemaManager *schemaManager
-	resultBuf          []*common.MQMessage
+	resultBuf          []*common.Message
 	maxMessageBytes    int
 
 	enableTiDBExtension        bool
@@ -64,7 +64,7 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 	_ func(),
 ) error {
 	log.Debug("AppendRowChangedEvent", zap.Any("rowChangedEvent", e))
-	mqMessage := common.NewMsg(
+	message := common.NewMsg(
 		config.ProtocolAvro,
 		nil,
 		nil,
@@ -88,9 +88,9 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 			return errors.Trace(err)
 		}
 
-		mqMessage.Value = evlp
+		message.Value = evlp
 	} else {
-		mqMessage.Value = nil
+		message.Value = nil
 	}
 
 	res, err := a.avroEncode(ctx, e, topic, true)
@@ -105,42 +105,42 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 			log.Error("AppendRowChangedEvent: could not construct Avro envelope", zap.Error(err))
 			return errors.Trace(err)
 		}
-		mqMessage.Key = evlp
+		message.Key = evlp
 	} else {
-		mqMessage.Key = nil
+		message.Key = nil
 	}
-	mqMessage.IncRowsCount()
+	message.IncRowsCount()
 
-	if mqMessage.Length() > a.maxMessageBytes {
+	if message.Length() > a.maxMessageBytes {
 		log.Error(
 			"Single message too large",
 			zap.Int(
 				"maxMessageBytes",
 				a.maxMessageBytes,
 			),
-			zap.Int("length", mqMessage.Length()),
+			zap.Int("length", message.Length()),
 			zap.Any("table", e.Table),
 		)
 		return cerror.ErrAvroEncodeFailed.GenWithStackByArgs()
 	}
 
-	a.resultBuf = append(a.resultBuf, mqMessage)
+	a.resultBuf = append(a.resultBuf, message)
 
 	return nil
 }
 
 // EncodeCheckpointEvent is no-op for now
-func (a *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.MQMessage, error) {
+func (a *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 	return nil, nil
 }
 
 // EncodeDDLEvent is no-op now
-func (a *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.MQMessage, error) {
+func (a *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
 	return nil, nil
 }
 
-// Build MQ Messages
-func (a *BatchEncoder) Build() (mqMessages []*common.MQMessage) {
+// Build Messages
+func (a *BatchEncoder) Build() (messages []*common.Message) {
 	old := a.resultBuf
 	a.resultBuf = nil
 	return old
@@ -842,7 +842,7 @@ func (b *batchEncoderBuilder) Build() common.EventBatchEncoder {
 	encoder.namespace = b.namespace
 	encoder.keySchemaManager = b.keySchemaManager
 	encoder.valueSchemaManager = b.valueSchemaManager
-	encoder.resultBuf = make([]*common.MQMessage, 0, 4096)
+	encoder.resultBuf = make([]*common.Message, 0, 4096)
 	encoder.maxMessageBytes = b.config.MaxMessageBytes
 	encoder.enableTiDBExtension = b.config.EnableTiDBExtension
 	encoder.decimalHandlingMode = b.config.AvroDecimalHandlingMode

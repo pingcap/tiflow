@@ -29,8 +29,8 @@ import (
 // which will be treated as `version = 2` by sarama producer.
 const MaxRecordOverhead = 5*binary.MaxVarintLen32 + binary.MaxVarintLen64 + 1
 
-// MQMessage represents an MQ message to the mqSink
-type MQMessage struct {
+// Message represents an message to the sink
+type Message struct {
 	Key       []byte
 	Value     []byte
 	Ts        uint64            // reserved for possible output sorting
@@ -38,39 +38,39 @@ type MQMessage struct {
 	Table     *string           // table
 	Type      model.MessageType // type
 	Protocol  config.Protocol   // protocol
-	rowsCount int               // rows in one MQ Message
-	Callback  func()            // Callback function will be called when the message is sent to the mqSink.
+	rowsCount int               // rows in one Message
+	Callback  func()            // Callback function will be called when the message is sent to the sink.
 }
 
 // Length returns the expected size of the Kafka message
 // We didn't append any `Headers` when send the message, so ignore the calculations related to it.
 // If `ProducerMessage` Headers fields used, this method should also adjust.
-func (m *MQMessage) Length() int {
+func (m *Message) Length() int {
 	return len(m.Key) + len(m.Value) + MaxRecordOverhead
 }
 
 // PhysicalTime returns physical time part of Ts in time.Time
-func (m *MQMessage) PhysicalTime() time.Time {
+func (m *Message) PhysicalTime() time.Time {
 	return oracle.GetTimeFromTS(m.Ts)
 }
 
-// GetRowsCount returns the number of rows batched in one MQMessage
-func (m *MQMessage) GetRowsCount() int {
+// GetRowsCount returns the number of rows batched in one Message
+func (m *Message) GetRowsCount() int {
 	return m.rowsCount
 }
 
 // SetRowsCount set the number of rows
-func (m *MQMessage) SetRowsCount(cnt int) {
+func (m *Message) SetRowsCount(cnt int) {
 	m.rowsCount = cnt
 }
 
 // IncRowsCount increase the number of rows
-func (m *MQMessage) IncRowsCount() {
+func (m *Message) IncRowsCount() {
 	m.rowsCount++
 }
 
 // NewDDLMsg creates a DDL message.
-func NewDDLMsg(proto config.Protocol, key, value []byte, event *model.DDLEvent) *MQMessage {
+func NewDDLMsg(proto config.Protocol, key, value []byte, event *model.DDLEvent) *Message {
 	return NewMsg(
 		proto,
 		key,
@@ -83,11 +83,11 @@ func NewDDLMsg(proto config.Protocol, key, value []byte, event *model.DDLEvent) 
 }
 
 // NewResolvedMsg creates a resolved ts message.
-func NewResolvedMsg(proto config.Protocol, key, value []byte, ts uint64) *MQMessage {
+func NewResolvedMsg(proto config.Protocol, key, value []byte, ts uint64) *Message {
 	return NewMsg(proto, key, value, ts, model.MessageTypeResolved, nil, nil)
 }
 
-// NewMsg should be used when creating a MQMessage struct.
+// NewMsg should be used when creating a Message struct.
 // It copies the input byte slices to avoid any surprises in asynchronous MQ writes.
 func NewMsg(
 	proto config.Protocol,
@@ -96,8 +96,8 @@ func NewMsg(
 	ts uint64,
 	ty model.MessageType,
 	schema, table *string,
-) *MQMessage {
-	ret := &MQMessage{
+) *Message {
+	ret := &Message{
 		Key:       nil,
 		Value:     nil,
 		Ts:        ts,

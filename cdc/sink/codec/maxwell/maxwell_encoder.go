@@ -33,7 +33,7 @@ type BatchEncoder struct {
 }
 
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
-func (d *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.MQMessage, error) {
+func (d *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 	// For maxwell now, there is no such a corresponding type to ResolvedEvent so far.
 	// Therefore the event is ignored.
 	return nil, nil
@@ -61,7 +61,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 
 // EncodeDDLEvent implements the EventBatchEncoder interface
 // DDL message unresolved tso
-func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.MQMessage, error) {
+func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
 	keyMsg, valueMsg := ddlEventToMaxwellMsg(e)
 	key, err := keyMsg.Encode()
 	if err != nil {
@@ -76,7 +76,7 @@ func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.MQMessage, err
 }
 
 // Build implements the EventBatchEncoder interface
-func (d *BatchEncoder) Build() []*common.MQMessage {
+func (d *BatchEncoder) Build() []*common.Message {
 	if d.batchSize == 0 {
 		return nil
 	}
@@ -94,7 +94,7 @@ func (d *BatchEncoder) Build() []*common.MQMessage {
 		d.callbackBuf = make([]func(), 0)
 	}
 	d.reset()
-	return []*common.MQMessage{ret}
+	return []*common.Message{ret}
 }
 
 // reset implements the EventBatchEncoder interface

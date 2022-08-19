@@ -28,14 +28,14 @@ const (
 type EventBatchEncoder interface {
 	// EncodeCheckpointEvent appends a checkpoint event into the batch.
 	// This event will be broadcast to all partitions to signal a global checkpoint.
-	EncodeCheckpointEvent(ts uint64) (*MQMessage, error)
+	EncodeCheckpointEvent(ts uint64) (*Message, error)
 	// AppendRowChangedEvent appends the calling context, a row changed event and the dispatch
 	// topic into the batch
 	AppendRowChangedEvent(context.Context, string, *model.RowChangedEvent, func()) error
 	// EncodeDDLEvent appends a DDL event into the batch
-	EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error)
+	EncodeDDLEvent(e *model.DDLEvent) (*Message, error)
 	// Build builds the batch and returns the bytes of key and value.
-	Build() []*MQMessage
+	Build() []*Message
 }
 
 // EncoderBuilder builds encoder with context.

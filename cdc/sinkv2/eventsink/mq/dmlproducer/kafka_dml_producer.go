@@ -136,7 +136,7 @@ func NewKafkaDMLProducer(
 
 func (k *kafkaDMLProducer) AsyncSendMessage(
 	ctx context.Context, topic string,
-	partition int32, message *common.MQMessage,
+	partition int32, message *common.Message,
 ) error {
 	// We have to hold the lock to avoid writing to a closed producer.
 	// Close may be blocked for a long time.

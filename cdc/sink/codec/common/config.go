@@ -129,14 +129,14 @@ func (c *Config) WithMaxMessageBytes(bytes int) *Config {
 func (c *Config) Validate() error {
 	if c.EnableTiDBExtension &&
 		!(c.Protocol == config.ProtocolCanalJSON || c.Protocol == config.ProtocolAvro) {
-		return cerror.ErrMQCodecInvalidConfig.GenWithStack(
+		return cerror.ErrCodecInvalidConfig.GenWithStack(
 			`enable-tidb-extension only supports canal-json/avro protocol`,
 		)
 	}
 
 	if c.Protocol == config.ProtocolAvro {
 		if c.AvroSchemaRegistry == "" {
-			return cerror.ErrMQCodecInvalidConfig.GenWithStack(
+			return cerror.ErrCodecInvalidConfig.GenWithStack(
 				`Avro protocol requires parameter "%s"`,
 				codecOPTAvroSchemaRegistry,
 			)
@@ -144,7 +144,7 @@ func (c *Config) Validate() error {
 
 		if c.AvroDecimalHandlingMode != DecimalHandlingModePrecise &&
 			c.AvroDecimalHandlingMode != DecimalHandlingModeString {
-			return cerror.ErrMQCodecInvalidConfig.GenWithStack(
+			return cerror.ErrCodecInvalidConfig.GenWithStack(
 				`%s value could only be "%s" or "%s"`,
 				codecOPTAvroDecimalHandlingMode,
 				DecimalHandlingModeString,
@@ -154,7 +154,7 @@ func (c *Config) Validate() error {
 
 		if c.AvroBigintUnsignedHandlingMode != BigintUnsignedHandlingModeLong &&
 			c.AvroBigintUnsignedHandlingMode != BigintUnsignedHandlingModeString {
-			return cerror.ErrMQCodecInvalidConfig.GenWithStack(
+			return cerror.ErrCodecInvalidConfig.GenWithStack(
 				`%s value could only be "%s" or "%s"`,
 				codecOPTAvroBigintUnsignedHandlingMode,
 				BigintUnsignedHandlingModeLong,
@@ -164,13 +164,13 @@ func (c *Config) Validate() error {
 	}
 
 	if c.MaxMessageBytes <= 0 {
-		return cerror.ErrMQCodecInvalidConfig.Wrap(
+		return cerror.ErrCodecInvalidConfig.Wrap(
 			errors.Errorf("invalid max-message-bytes %d", c.MaxMessageBytes),
 		)
 	}
 
 	if c.MaxBatchSize <= 0 {
-		return cerror.ErrMQCodecInvalidConfig.Wrap(
+		return cerror.ErrCodecInvalidConfig.Wrap(
 			errors.Errorf("invalid max-batch-size %d", c.MaxBatchSize),
 		)
 	}

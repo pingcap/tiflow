@@ -36,7 +36,7 @@ type BatchEncoder struct {
 }
 
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
-func (d *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.MQMessage, error) {
+func (d *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 	// For canal now, there is no such a corresponding type to ResolvedEvent so far.
 	// Therefore, the event is ignored.
 	return nil, nil
@@ -65,7 +65,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 }
 
 // EncodeDDLEvent implements the EventBatchEncoder interface
-func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.MQMessage, error) {
+func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
 	entry, err := d.entryBuilder.fromDDLEvent(e)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -98,7 +98,7 @@ func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.MQMessage, err
 }
 
 // Build implements the EventBatchEncoder interface
-func (d *BatchEncoder) Build() []*common.MQMessage {
+func (d *BatchEncoder) Build() []*common.Message {
 	rowCount := len(d.messages.Messages)
 	if rowCount == 0 {
 		return nil
@@ -127,7 +127,7 @@ func (d *BatchEncoder) Build() []*common.MQMessage {
 		}
 		d.callbackBuf = make([]func(), 0)
 	}
-	return []*common.MQMessage{ret}
+	return []*common.Message{ret}
 }
 
 // refreshPacketBody() marshals the messages to the packet body

@@ -25,7 +25,7 @@ import (
 type DMLProducer interface {
 	// AsyncSendMessage sends a message asynchronously.
 	AsyncSendMessage(
-		ctx context.Context, topic string, partition int32, message *common.MQMessage,
+		ctx context.Context, topic string, partition int32, message *common.Message,
 	) error
 
 	// Close closes the producer and client(s).

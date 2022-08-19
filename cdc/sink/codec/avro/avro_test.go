@@ -61,7 +61,7 @@ func setupEncoderAndSchemaRegistry(
 		namespace:                  model.DefaultNamespace,
 		valueSchemaManager:         valueManager,
 		keySchemaManager:           keyManager,
-		resultBuf:                  make([]*common.MQMessage, 0, 4096),
+		resultBuf:                  make([]*common.Message, 0, 4096),
 		maxMessageBytes:            math.MaxInt,
 		enableTiDBExtension:        enableTiDBExtension,
 		decimalHandlingMode:        decimalHandlingMode,

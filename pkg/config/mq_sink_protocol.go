@@ -58,7 +58,7 @@ func (p *Protocol) FromString(protocol string) error {
 	case "open-protocol":
 		*p = ProtocolOpen
 	default:
-		return cerror.ErrMQSinkUnknownProtocol.GenWithStackByArgs(protocol)
+		return cerror.ErrSinkUnknownProtocol.GenWithStackByArgs(protocol)
 	}
 
 	return nil

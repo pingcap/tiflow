@@ -25,11 +25,11 @@ import (
 type DDLProducer interface {
 	// SyncBroadcastMessage broadcasts a message synchronously.
 	SyncBroadcastMessage(
-		ctx context.Context, topic string, totalPartitionsNum int32, message *common.MQMessage,
+		ctx context.Context, topic string, totalPartitionsNum int32, message *common.Message,
 	) error
 	// SyncSendMessage sends a message for a partition synchronously.
 	SyncSendMessage(
-		ctx context.Context, topic string, partitionNum int32, message *common.MQMessage,
+		ctx context.Context, topic string, partitionNum int32, message *common.Message,
 	) error
 	// Close closes the producer.
 	Close()

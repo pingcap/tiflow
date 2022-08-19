@@ -41,6 +41,6 @@ func NewEventBatchEncoderBuilder(ctx context.Context, c *common.Config) (common.
 	case config.ProtocolCraft:
 		return craft.NewBatchEncoderBuilder(c), nil
 	default:
-		return nil, cerror.ErrMQSinkUnknownProtocol.GenWithStackByArgs(c.Protocol)
+		return nil, cerror.ErrSinkUnknownProtocol.GenWithStackByArgs(c.Protocol)
 	}
 }

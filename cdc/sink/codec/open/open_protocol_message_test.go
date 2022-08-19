@@ -24,24 +24,24 @@ import (
 
 func TestFormatCol(t *testing.T) {
 	t.Parallel()
-	row := &mqMessageRow{Update: map[string]internal.Column{"test": {
+	row := &messageRow{Update: map[string]internal.Column{"test": {
 		Type:  mysql.TypeString,
 		Value: "测",
 	}}}
 	rowEncode, err := row.encode()
 	require.Nil(t, err)
-	row2 := new(mqMessageRow)
+	row2 := new(messageRow)
 	err = row2.decode(rowEncode)
 	require.Nil(t, err)
 	require.Equal(t, row, row2)
 
-	row = &mqMessageRow{Update: map[string]internal.Column{"test": {
+	row = &messageRow{Update: map[string]internal.Column{"test": {
 		Type:  mysql.TypeBlob,
 		Value: []byte("测"),
 	}}}
 	rowEncode, err = row.encode()
 	require.Nil(t, err)
-	row2 = new(mqMessageRow)
+	row2 = new(messageRow)
 	err = row2.decode(rowEncode)
 	require.Nil(t, err)
 	require.Equal(t, row, row2)
@@ -56,10 +56,10 @@ func TestNonBinaryStringCol(t *testing.T) {
 	}
 	mqCol := internal.Column{}
 	mqCol.FromRowChangeColumn(col)
-	row := &mqMessageRow{Update: map[string]internal.Column{"test": mqCol}}
+	row := &messageRow{Update: map[string]internal.Column{"test": mqCol}}
 	rowEncode, err := row.encode()
 	require.Nil(t, err)
-	row2 := new(mqMessageRow)
+	row2 := new(messageRow)
 	err = row2.decode(rowEncode)
 	require.Nil(t, err)
 	require.Equal(t, row, row2)
@@ -79,10 +79,10 @@ func TestVarBinaryCol(t *testing.T) {
 	}
 	mqCol := internal.Column{}
 	mqCol.FromRowChangeColumn(col)
-	row := &mqMessageRow{Update: map[string]internal.Column{"test": mqCol}}
+	row := &messageRow{Update: map[string]internal.Column{"test": mqCol}}
 	rowEncode, err := row.encode()
 	require.Nil(t, err)
-	row2 := new(mqMessageRow)
+	row2 := new(messageRow)
 	err = row2.decode(rowEncode)
 	require.Nil(t, err)
 	require.Equal(t, row, row2)

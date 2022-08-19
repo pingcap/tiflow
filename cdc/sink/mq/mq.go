@@ -362,7 +362,7 @@ func (k *mqSink) run(ctx context.Context) error {
 // asyncFlushToPartitionZero writes message to
 // partition zero asynchronously and flush it immediately.
 func (k *mqSink) asyncFlushToPartitionZero(
-	ctx context.Context, topic string, message *common.MQMessage,
+	ctx context.Context, topic string, message *common.Message,
 ) error {
 	err := k.mqProducer.AsyncSendMessage(ctx, topic, dispatcher.PartitionZero, message)
 	if err != nil {

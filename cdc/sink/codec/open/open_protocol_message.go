@@ -25,18 +25,18 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
-type mqMessageRow struct {
+type messageRow struct {
 	Update     map[string]internal.Column `json:"u,omitempty"`
 	PreColumns map[string]internal.Column `json:"p,omitempty"`
 	Delete     map[string]internal.Column `json:"d,omitempty"`
 }
 
-func (m *mqMessageRow) encode() ([]byte, error) {
+func (m *messageRow) encode() ([]byte, error) {
 	data, err := json.Marshal(m)
 	return data, cerror.WrapError(cerror.ErrMarshalFailed, err)
 }
 
-func (m *mqMessageRow) decode(data []byte) error {
+func (m *messageRow) decode(data []byte) error {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.UseNumber()
 	err := decoder.Decode(m)
@@ -55,33 +55,33 @@ func (m *mqMessageRow) decode(data []byte) error {
 	return nil
 }
 
-type mqMessageDDL struct {
+type messageDDL struct {
 	Query string             `json:"q"`
 	Type  timodel.ActionType `json:"t"`
 }
 
-func (m *mqMessageDDL) encode() ([]byte, error) {
+func (m *messageDDL) encode() ([]byte, error) {
 	data, err := json.Marshal(m)
 	return data, cerror.WrapError(cerror.ErrMarshalFailed, err)
 }
 
-func (m *mqMessageDDL) decode(data []byte) error {
+func (m *messageDDL) decode(data []byte) error {
 	return cerror.WrapError(cerror.ErrUnmarshalFailed, json.Unmarshal(data, m))
 }
 
-func newResolvedMessage(ts uint64) *internal.MQMessageKey {
-	return &internal.MQMessageKey{
+func newResolvedMessage(ts uint64) *internal.MessageKey {
+	return &internal.MessageKey{
 		Ts:   ts,
 		Type: model.MessageTypeResolved,
 	}
 }
 
-func rowChangeToMsg(e *model.RowChangedEvent) (*internal.MQMessageKey, *mqMessageRow) {
+func rowChangeToMsg(e *model.RowChangedEvent) (*internal.MessageKey, *messageRow) {
 	var partition *int64
 	if e.Table.IsPartition {
 		partition = &e.Table.TableID
 	}
-	key := &internal.MQMessageKey{
+	key := &internal.MessageKey{
 		Ts:        e.CommitTs,
 		Schema:    e.Table.Schema,
 		Table:     e.Table.Table,
@@ -89,17 +89,17 @@ func rowChangeToMsg(e *model.RowChangedEvent) (*internal.MQMessageKey, *mqMessag
 		Partition: partition,
 		Type:      model.MessageTypeRow,
 	}
-	value := &mqMessageRow{}
+	value := &messageRow{}
 	if e.IsDelete() {
-		value.Delete = rowChangeColumns2MQColumns(e.PreColumns)
+		value.Delete = rowChangeColumns2CodecColumns(e.PreColumns)
 	} else {
-		value.Update = rowChangeColumns2MQColumns(e.Columns)
-		value.PreColumns = rowChangeColumns2MQColumns(e.PreColumns)
+		value.Update = rowChangeColumns2CodecColumns(e.Columns)
+		value.PreColumns = rowChangeColumns2CodecColumns(e.PreColumns)
 	}
 	return key, value
 }
 
-func msgToRowChange(key *internal.MQMessageKey, value *mqMessageRow) *model.RowChangedEvent {
+func msgToRowChange(key *internal.MessageKey, value *messageRow) *model.RowChangedEvent {
 	e := new(model.RowChangedEvent)
 	// TODO: we lost the startTs from kafka message
 	// startTs-based txn filter is out of work
@@ -115,15 +115,15 @@ func msgToRowChange(key *internal.MQMessageKey, value *mqMessageRow) *model.RowC
 	}
 
 	if len(value.Delete) != 0 {
-		e.PreColumns = mqColumns2RowChangeColumns(value.Delete)
+		e.PreColumns = codecColumns2RowChangeColumns(value.Delete)
 	} else {
-		e.Columns = mqColumns2RowChangeColumns(value.Update)
-		e.PreColumns = mqColumns2RowChangeColumns(value.PreColumns)
+		e.Columns = codecColumns2RowChangeColumns(value.Update)
+		e.PreColumns = codecColumns2RowChangeColumns(value.PreColumns)
 	}
 	return e
 }
 
-func rowChangeColumns2MQColumns(cols []*model.Column) map[string]internal.Column {
+func rowChangeColumns2CodecColumns(cols []*model.Column) map[string]internal.Column {
 	jsonCols := make(map[string]internal.Column, len(cols))
 	for _, col := range cols {
 		if col == nil {
@@ -139,7 +139,7 @@ func rowChangeColumns2MQColumns(cols []*model.Column) map[string]internal.Column
 	return jsonCols
 }
 
-func mqColumns2RowChangeColumns(cols map[string]internal.Column) []*model.Column {
+func codecColumns2RowChangeColumns(cols map[string]internal.Column) []*model.Column {
 	sinkCols := make([]*model.Column, 0, len(cols))
 	for name, col := range cols {
 		c := col.ToRowChangeColumn(name)
@@ -154,21 +154,21 @@ func mqColumns2RowChangeColumns(cols map[string]internal.Column) []*model.Column
 	return sinkCols
 }
 
-func ddlEventToMsg(e *model.DDLEvent) (*internal.MQMessageKey, *mqMessageDDL) {
-	key := &internal.MQMessageKey{
+func ddlEventToMsg(e *model.DDLEvent) (*internal.MessageKey, *messageDDL) {
+	key := &internal.MessageKey{
 		Ts:     e.CommitTs,
 		Schema: e.TableInfo.Schema,
 		Table:  e.TableInfo.Table,
 		Type:   model.MessageTypeDDL,
 	}
-	value := &mqMessageDDL{
+	value := &messageDDL{
 		Query: e.Query,
 		Type:  e.Type,
 	}
 	return key, value
 }
 
-func msgToDDLEvent(key *internal.MQMessageKey, value *mqMessageDDL) *model.DDLEvent {
+func msgToDDLEvent(key *internal.MessageKey, value *messageDDL) *model.DDLEvent {
 	e := new(model.DDLEvent)
 	e.TableInfo = new(model.SimpleTableInfo)
 	// TODO: we lost the startTs from kafka message

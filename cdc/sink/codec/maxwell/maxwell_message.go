@@ -43,12 +43,12 @@ func (m *maxwellMessage) encode() ([]byte, error) {
 	return data, cerror.WrapError(cerror.ErrMaxwellEncodeFailed, err)
 }
 
-func rowChangeToMaxwellMsg(e *model.RowChangedEvent) (*internal.MQMessageKey, *maxwellMessage) {
+func rowChangeToMaxwellMsg(e *model.RowChangedEvent) (*internal.MessageKey, *maxwellMessage) {
 	var partition *int64
 	if e.Table.IsPartition {
 		partition = &e.Table.TableID
 	}
-	key := &internal.MQMessageKey{
+	key := &internal.MessageKey{
 		Ts:        e.CommitTs,
 		Schema:    e.Table.Schema,
 		Table:     e.Table.Table,
@@ -168,8 +168,8 @@ func (m *ddlMaxwellMessage) encode() ([]byte, error) {
 	return data, cerror.WrapError(cerror.ErrMaxwellEncodeFailed, err)
 }
 
-func ddlEventToMaxwellMsg(e *model.DDLEvent) (*internal.MQMessageKey, *ddlMaxwellMessage) {
-	key := &internal.MQMessageKey{
+func ddlEventToMaxwellMsg(e *model.DDLEvent) (*internal.MessageKey, *ddlMaxwellMessage) {
+	key := &internal.MessageKey{
 		Ts:     e.CommitTs,
 		Schema: e.TableInfo.Schema,
 		Table:  e.TableInfo.Table,

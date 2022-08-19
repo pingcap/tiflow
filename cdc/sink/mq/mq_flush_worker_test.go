@@ -31,14 +31,14 @@ import (
 )
 
 type mockProducer struct {
-	mqEvent      map[TopicPartitionKey][]*common.MQMessage
+	mqEvent      map[TopicPartitionKey][]*common.Message
 	flushedTimes int
 
 	mockErr chan error
 }
 
 func (m *mockProducer) AsyncSendMessage(
-	ctx context.Context, topic string, partition int32, message *common.MQMessage,
+	ctx context.Context, topic string, partition int32, message *common.Message,
 ) error {
 	select {
 	case err := <-m.mockErr:
@@ -51,14 +51,14 @@ func (m *mockProducer) AsyncSendMessage(
 		Partition: partition,
 	}
 	if _, ok := m.mqEvent[key]; !ok {
-		m.mqEvent[key] = make([]*common.MQMessage, 0)
+		m.mqEvent[key] = make([]*common.Message, 0)
 	}
 	m.mqEvent[key] = append(m.mqEvent[key], message)
 	return nil
 }
 
 func (m *mockProducer) SyncBroadcastMessage(
-	ctx context.Context, topic string, partitionsNum int32, message *common.MQMessage,
+	ctx context.Context, topic string, partitionsNum int32, message *common.Message,
 ) error {
 	panic("Not used")
 }
@@ -78,7 +78,7 @@ func (m *mockProducer) InjectError(err error) {
 
 func NewMockProducer() *mockProducer {
 	return &mockProducer{
-		mqEvent: make(map[TopicPartitionKey][]*common.MQMessage),
+		mqEvent: make(map[TopicPartitionKey][]*common.Message),
 		mockErr: make(chan error, 1),
 	}
 }

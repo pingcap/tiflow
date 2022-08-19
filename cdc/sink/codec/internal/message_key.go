@@ -20,8 +20,8 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
-// MQMessageKey defines the key for a MQ message.
-type MQMessageKey struct {
+// MessageKey defines the key for a message.
+type MessageKey struct {
 	Ts        uint64            `json:"ts"`
 	Schema    string            `json:"scm,omitempty"`
 	Table     string            `json:"tbl,omitempty"`
@@ -31,12 +31,12 @@ type MQMessageKey struct {
 }
 
 // Encode encodes the message key to a byte slice.
-func (m *MQMessageKey) Encode() ([]byte, error) {
+func (m *MessageKey) Encode() ([]byte, error) {
 	data, err := json.Marshal(m)
 	return data, cerror.WrapError(cerror.ErrMarshalFailed, err)
 }
 
 // Decode codes a message key from a byte slice.
-func (m *MQMessageKey) Decode(data []byte) error {
+func (m *MessageKey) Decode(data []byte) error {
 	return cerror.WrapError(cerror.ErrUnmarshalFailed, json.Unmarshal(data, m))
 }

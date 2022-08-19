@@ -23,11 +23,11 @@ import (
 type Producer interface {
 	// AsyncSendMessage sends a message asynchronously.
 	AsyncSendMessage(
-		ctx context.Context, topic string, partition int32, message *common.MQMessage,
+		ctx context.Context, topic string, partition int32, message *common.Message,
 	) error
 	// SyncBroadcastMessage broadcasts a message synchronously.
 	SyncBroadcastMessage(
-		ctx context.Context, topic string, partitionsNum int32, message *common.MQMessage,
+		ctx context.Context, topic string, partitionsNum int32, message *common.Message,
 	) error
 	// Flush all the messages buffered in the client and wait until all messages have been successfully
 	// persisted.

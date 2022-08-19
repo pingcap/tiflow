@@ -31,15 +31,15 @@ import (
 var (
 	codecBenchmarkRowChanges = internal.CodecRowCases[1]
 
-	codecCraftEncodedRowChanges = []*common.MQMessage{}
-	codecJSONEncodedRowChanges  = []*common.MQMessage{}
-	codecPB1EncodedRowChanges   = []*common.MQMessage{}
-	codecPB2EncodedRowChanges   = []*common.MQMessage{}
+	codecCraftEncodedRowChanges = []*common.Message{}
+	codecJSONEncodedRowChanges  = []*common.Message{}
+	codecPB1EncodedRowChanges   = []*common.Message{}
+	codecPB2EncodedRowChanges   = []*common.Message{}
 
 	codecTestSliceAllocator = craft.NewSliceAllocator(512)
 )
 
-func checkCompressedSize(messages []*common.MQMessage) (int, int) {
+func checkCompressedSize(messages []*common.Message) (int, int) {
 	var buff bytes.Buffer
 	writer := zlib.NewWriter(&buff)
 	originalSize := 0
@@ -54,7 +54,7 @@ func checkCompressedSize(messages []*common.MQMessage) (int, int) {
 	return originalSize, buff.Len()
 }
 
-func encodeRowCase(t *testing.T, encoder common.EventBatchEncoder, events []*model.RowChangedEvent) []*common.MQMessage {
+func encodeRowCase(t *testing.T, encoder common.EventBatchEncoder, events []*model.RowChangedEvent) []*common.Message {
 	msg, err := codecEncodeRowCase(encoder, events)
 	require.Nil(t, err)
 	return msg
@@ -138,10 +138,10 @@ func codecEncodeRowChangedPB(event *model.RowChangedEvent) []byte {
 	}
 }
 
-func codecEncodeRowChangedPB1ToMessage(events []*model.RowChangedEvent) []*common.MQMessage {
-	result := make([]*common.MQMessage, len(events))
+func codecEncodeRowChangedPB1ToMessage(events []*model.RowChangedEvent) []*common.Message {
+	result := make([]*common.Message, len(events))
 	for i, event := range events {
-		result[i] = &common.MQMessage{
+		result[i] = &common.Message{
 			Key:   codecEncodeKeyPB(event),
 			Value: codecEncodeRowChangedPB(event),
 		}
@@ -149,8 +149,8 @@ func codecEncodeRowChangedPB1ToMessage(events []*model.RowChangedEvent) []*commo
 	return result
 }
 
-func codecEncodeRowChangedPB2ToMessage(events []*model.RowChangedEvent) []*common.MQMessage {
-	return []*common.MQMessage{{
+func codecEncodeRowChangedPB2ToMessage(events []*model.RowChangedEvent) []*common.Message {
+	return []*common.Message{{
 		Key:   codecEncodeKeysPB2(events),
 		Value: codecEncodeRowChangedPB2(events),
 	}}
@@ -203,7 +203,7 @@ func codecEncodeRowChangedPB2(events []*model.RowChangedEvent) []byte {
 	}
 }
 
-func codecEncodeRowCase(encoder common.EventBatchEncoder, events []*model.RowChangedEvent) ([]*common.MQMessage, error) {
+func codecEncodeRowCase(encoder common.EventBatchEncoder, events []*model.RowChangedEvent) ([]*common.Message, error) {
 	for _, event := range events {
 		err := encoder.AppendRowChangedEvent(context.Background(), "", event, nil)
 		if err != nil {
