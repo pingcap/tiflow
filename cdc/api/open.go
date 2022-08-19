@@ -301,7 +301,7 @@ func (h *openAPI) CreateChangefeed(c *gin.Context) {
 		}
 	}()
 
-	infoStr, err := info.Marshal()
+	infoStr := info.String()
 	if err != nil {
 		needRemoveGCSafePoint = true
 		_ = c.Error(err)
