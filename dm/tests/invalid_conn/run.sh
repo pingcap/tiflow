@@ -68,23 +68,11 @@ function run() {
 
 	test_from_tidb
 
-	echo "prepare data for invalid connection test"
-	run_sql_source1 "CREATE TABLE IF NOT EXISTS gbk.invalid_conn_test1(i TINYINT, j INT UNIQUE KEY)"
-	run_sql_source1 "CREATE TABLE IF NOT EXISTS gbk.invalid_conn_test2(i TINYINT, j INT UNIQUE KEY)"
-	run_sql_source1 "CREATE TABLE IF NOT EXISTS gbk.invalid_conn_test3(i TINYINT, j INT UNIQUE KEY)"
-	run_sql_source1 "CREATE TABLE IF NOT EXISTS gbk.invalid_conn_test4(i TINYINT, j INT UNIQUE KEY)"
-	run_sql_source1 "CREATE TABLE IF NOT EXISTS gbk.invalid_conn_test5(i TINYINT, j INT UNIQUE KEY)"
-	run_sql_source1 "CREATE TABLE IF NOT EXISTS gbk.invalid_conn_test6(i TINYINT, j INT UNIQUE KEY)"
-
+	kill_dm_worker
 	dmctl_stop_task $cur/conf/dm-task.yaml "--remove-meta"
 	dmctl_operate_source stop $WORK_DIR/source1.yaml $SOURCE_ID1
 	dmctl_operate_source stop $WORK_DIR/source2.yaml $SOURCE_ID2
-	kill_dm_worker
-#	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/TestHandleSpecialDDLError=return()"
-	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/TestHandleSpecialDDLError=return();github.com/pingcap/tiflow/dm/syncer/TestStatusRunning=3*return()"
-#	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/TestHandleSpecialDDLError=return();github.com/pingcap/tiflow/dm/syncer/TestStatusCancelled=return()"
-#	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/TestHandleSpecialDDLError=return();github.com/pingcap/tiflow/dm/syncer/TestStatusQueueing=return()"
-#	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/TestHandleSpecialDDLError=return();github.com/pingcap/tiflow/dm/syncer/TestStatusNone=return()"
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/syncer/TestHandleSpecialDDLError=return()"
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
@@ -96,23 +84,13 @@ function run() {
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
-  echo "start task 2"
-	dmctl_start_task $cur/conf/dm-task.yaml "--remove-meta"
-
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-
 	echo "start test invalid connection"
-
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test1 MODIFY COLUMN i SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test2 MODIFY COLUMN i SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test3 MODIFY COLUMN i SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test4 MODIFY COLUMN i SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test5 MODIFY COLUMN i SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_source1 "ALTER TABLE gbk.invalid_conn_test6 MODIFY COLUMN i SMALLINT(4) NOT NULL DEFAULT _UTF8MB4'0'"
-	run_sql_tidb_with_retry "ADMIN SHOW DDL JOB QUERIES LIMIT 20 OFFSET 0" "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`i\` SMALLINT(4) NOT NULL DEFAULT '0'"
+	run_sql_source1 "DROP DATABASE IF EXISTS test"
+	run_sql_source1 "CREATE DATABASE test"
+	run_sql_source1 "CREATE TABLE IF NOT EXISTS test.t1(i TINYINT, j INT UNIQUE KEY)"
+	run_sql_tidb "ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0"
 	echo "check count_contains"
-	#read -p 123
-  count_contains "ALTER TABLE \`gbk\`.\`invalid_conn_test1\` MODIFY COLUMN \`i\` SMALLINT(4) NOT NULL DEFAULT '0'"
+  count_contains "CREATE TABLE IF NOT EXISTS test.t1(i TINYINT, j INT UNIQUE KEY)"
   echo "check test invalid connection successfully"
 
 	kill_dm_worker

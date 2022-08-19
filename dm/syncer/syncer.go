@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/failpoint"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	cm "github.com/pingcap/tidb-tools/pkg/column-mapping"
+	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/format"
@@ -1393,13 +1394,19 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 				err = mysql2.ErrInvalidConn
 			})
 			if err != nil {
-				var ddlCreateTime int64
+				var ddlCreateTime int
 				row, err2 := db.QuerySQL(s.syncCtx, s.metricsProxies, "SELECT @@TIMESTAMP")
-				err2 = row.Scan(&ddlCreateTime)
+				fmt.Printf("err2: %v", err2)
+				var createTimeResults [][]string
+				createTimeResults, err2 = export.GetSpecifiedColumnValuesAndClose(row, "@@TIMESTAMP")
+				ddlCreateTimeFloat, err2 := strconv.ParseFloat(createTimeResults[0][0], 64)
+				ddlCreateTime, err2 = strconv.Atoi(fmt.Sprintf("%1.0f", ddlCreateTimeFloat))
+				fmt.Printf("ddlCreateTime: %d \n", ddlCreateTime)
 				if err2 != nil {
 					err = s.handleSpecialDDLError(s.syncCtx, err, ddlJob.ddls, affected, db, -1)
 				} else {
-					err = s.handleSpecialDDLError(s.syncCtx, err, ddlJob.ddls, affected, db, ddlCreateTime)
+					err = s.handleSpecialDDLError(s.syncCtx, err, ddlJob.ddls, affected, db, int64(ddlCreateTime))
+					//err = s.handleSpecialDDLError(s.syncCtx, err, ddlJob.ddls, affected, db, -1)
 				}
 				err = terror.WithScope(err, terror.ScopeDownstream)
 			}

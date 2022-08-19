@@ -20,6 +20,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/errno"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/parser"
@@ -65,6 +66,7 @@ func isDropColumnWithIndexError(err error) bool {
 func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls []string, index int, conn *dbconn.DBConn, createTime int64) error {
 	// We use default parser because ddls are came from *Syncer.genDDLInfo, which is StringSingleQuotes, KeyWordUppercase and NameBackQuotes
 	parser2 := parser.New()
+	fmt.Println("handleSpecialDDLError")
 
 	// it only ignore `invalid connection` error (timeout or other causes) for `ADD INDEX`.
 	// `invalid connection` means some data already sent to the server,
@@ -74,6 +76,7 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 	// NOTE: when we are refactoring the shard DDL algorithm, we also need to consider supporting non-blocking `ADD INDEX`.
 	invalidConnF := func(tctx *tcontext.Context, err error, ddls []string, index int, conn *dbconn.DBConn, createTime int64) error {
 		// must ensure only the last statement executed failed with the `invalid connection` error
+		fmt.Println("invalidConnF precheck")
 		if len(ddls) == 0 || index != len(ddls)-1 || errors.Cause(err) != mysql.ErrInvalidConn {
 			return err // return the original error
 		}
@@ -118,6 +121,7 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 	// TiDB will support DROP COLUMN with index soon. After its support, executing that SQL will not have an error,
 	// so this function will not trigger and cause some trouble
 	dropColumnF := func(tctx *tcontext.Context, originErr error, ddls []string, index int, conn *dbconn.DBConn, createTime int64) error {
+		fmt.Println("dropColumnF precheck")
 		if !isDropColumnWithIndexError(originErr) {
 			return originErr
 		}
@@ -213,16 +217,32 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 
 	// it handles the operations of DDL when encountering `invalid connection`
 	invalidConnF2 := func(tctx *tcontext.Context, err error, ddls []string, index int, conn *dbconn.DBConn, createTime int64) error {
+		fmt.Println("invalidConnF2 precheck")
+		if len(ddls) == 0 || errors.Cause(err) != mysql.ErrInvalidConn || createTime == -1 {
+			return err // return the original error
+		}
+
 		statusChan := make(chan string)
 		var status string
 		var err2 error
 
-		if createTime == -1 {
-			return err
-		}
+		fmt.Println("invalidConnF2")
 
 		for {
-			status, err2 = getDDLStatusFromTiDB(tctx, conn, ddls[index], createTime)
+			status, err2 = getDDLStatusFromTiDB(tctx, conn, ddls[index], createTime) // status is synced
+			failpoint.Inject("TestStatusRunning", func() {
+				status = "running"
+			})
+			failpoint.Inject("TestStatusCancelled", func() {
+				status = "cancelled"
+			})
+			failpoint.Inject("TestStatusQueueing", func() {
+				status = "queueing"
+			})
+			failpoint.Inject("TestStatusNone", func() {
+				status = "none"
+			})
+			fmt.Printf("status: %v \n", status)
 			if err != nil {
 				return err2
 			}
@@ -258,6 +278,7 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 		invalidConnF2,
 	}
 	for _, f := range toHandle {
+		fmt.Printf("retErr: %v \n", retErr)
 		retErr = f(tctx, retErr, ddls, index, conn, createTime)
 		if retErr == nil {
 			break
