@@ -141,6 +141,7 @@ func (h *realRelayHolder) run() {
 	h.setResult(nil) // clear previous result
 
 	r := h.relay.Process(h.ctx)
+	h.cancel()
 
 	h.setResult(&r)
 	for _, err := range r.Errors {

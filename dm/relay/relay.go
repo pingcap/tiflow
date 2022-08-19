@@ -454,6 +454,23 @@ func (r *Relay) handleEvents(
 		// 1. read events from upstream server
 		readTimer := time.Now()
 		rResult, err := reader2.GetEvent(ctx)
+<<<<<<< HEAD
+=======
+
+		failpoint.Inject("RelayGetEventFailed", func() {
+			err = errors.New("RelayGetEventFailed")
+		})
+		failpoint.Inject("RelayGetEventFailedAt", func(v failpoint.Value) {
+			if intVal, ok := v.(int); ok && intVal == eventIndex {
+				err = errors.New("fail point triggered")
+				_, gtid := r.meta.GTID()
+				r.logger.Warn("failed to get event", zap.Int("event_index", eventIndex),
+					zap.Any("gtid", gtid), log.ShortError(err))
+				// wait backoff retry interval
+				time.Sleep(1 * time.Second)
+			}
+		})
+>>>>>>> a9b5c0b1d (relay(dm): cancel when relay meet error to close goroutine (#6803))
 		if err != nil {
 			switch errors.Cause(err) {
 			case context.Canceled:
