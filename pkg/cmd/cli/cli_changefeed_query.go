@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
+	ticdcutil "github.com/pingcap/tiflow/pkg/util"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
@@ -124,6 +125,7 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
+<<<<<<< HEAD
 
 	taskStatus := make([]captureTaskStatus, 0, len(processorInfos))
 	for captureID, status := range processorInfos {
@@ -131,6 +133,13 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 	}
 
 	meta := &cfMeta{Info: info, Status: status, Count: count, TaskStatus: taskStatus}
+=======
+	info.SinkURI, err = ticdcutil.MaskSinkURI(info.SinkURI)
+	if err != nil {
+		cmd.PrintErr(err)
+	}
+	meta := &cfMeta{Info: info, Status: status, Count: count, TaskStatus: changefeedDetail.TaskStatus}
+>>>>>>> 819612a58 (changefeed (ticdc): Mask sensitive information in changefeed info (#6815))
 
 	return util.JSONPrint(cmd, meta)
 }
