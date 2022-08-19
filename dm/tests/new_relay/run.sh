@@ -118,7 +118,7 @@ function test_relay_leak() {
 		echo "relay goroutine leak detected, count expect 1 but got $count"
 		exit 1
 	fi
-	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>test test_cant_dail_upstream passed"
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>test test_relay_leak passed"
 }
 
 function test_cant_dail_upstream() {
