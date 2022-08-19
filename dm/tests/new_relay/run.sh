@@ -90,6 +90,38 @@ function test_restart_relay_status() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>test test_restart_relay_status passed"
 }
 
+function test_relay_leak() {
+	cleanup_process
+	cleanup_data $TEST_NAME
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/relay/RelayGetEventFailed=return()"
+
+	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+
+	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
+	sed -i "/check-enable: false/d" $WORK_DIR/source1.yaml
+	sed -i "/checker:/d" $WORK_DIR/source1.yaml
+	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-relay -s $SOURCE_ID1 worker1"
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status -s $SOURCE_ID1" \
+		"RelayGetEventFailed" 1
+
+	check_log_contain_with_retry 'dispatch auto resume relay' $WORK_DIR/worker1/log/dm-worker.log
+
+	count=$(curl "http://127.0.0.1:8262/debug/pprof/goroutine?debug=2" 2>/dev/null | grep -c doIntervalOps || true)
+	if [ $count -gt 1 ]; then
+		echo "relay goroutine leak detected, count expect 1 but got $count"
+		exit 1
+	fi
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>test test_relay_leak passed"
+}
+
 function test_cant_dail_upstream() {
 	cleanup_process
 	cleanup_data $TEST_NAME
@@ -356,6 +388,7 @@ function test_relay_operations() {
 }
 
 function run() {
+	test_relay_leak
 	test_relay_operations
 	test_cant_dail_upstream
 	test_restart_relay_status
