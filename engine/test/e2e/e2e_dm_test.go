@@ -211,16 +211,11 @@ func testSimpleAllModeTask(
 	waitRow("c = 3", db)
 
 	var jobStatus *dm.JobStatus
+	// wait job online
 	require.Eventually(t, func() bool {
-		var err error
 		jobStatus, err = queryStatus(httpClient, jobID, []string{source1, source2})
-		if err != nil {
-			t.Logf("query error: %v", err)
-			return false
-		}
-		return err == nil
-	}, time.Second*10, time.Second)
-	require.Equal(t, jobID, jobStatus.JobID)
+		return err == nil && jobStatus.JobID == jobID
+	}, time.Second*5, time.Millisecond*100)
 	require.Contains(t, string(jobStatus.TaskStatus[source1].Status.Status), "totalEvents")
 	require.Contains(t, jobStatus.TaskStatus[source2].Status.ErrorMsg, fmt.Sprintf("task %s for job not found", source2))
 

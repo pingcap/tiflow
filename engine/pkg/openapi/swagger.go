@@ -17,7 +17,7 @@
 // All rights reserved.
 
 // This file is almost a copy of
-// https://github.com/juanfont/headscale/blob/09cd7ba304ec8a9cd683b9ab02ad39899d2128d2/swagger.go.
+// https://github.com/juanfont/headscale/blob/19455399f4762fb0ab1308a78f4625ce746b2c51/swagger.go.
 // The only difference is the apiV1JSON variable.
 
 package openapi
