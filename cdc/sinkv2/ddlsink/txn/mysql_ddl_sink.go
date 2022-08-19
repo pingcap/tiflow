@@ -100,7 +100,7 @@ func (m *mysqlDDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDL
 	return retry.Do(ctx, func() error {
 		err := m.execDDL(ctx, ddl)
 		if errorutil.IsIgnorableMySQLDDLError(err) {
-			log.Info("execute DDL failed, but error can be ignored",
+			log.Info("Execute DDL failed, but error can be ignored",
 				zap.Uint64("startTs", ddl.StartTs), zap.String("ddl", ddl.Query),
 				zap.String("namespace", m.id.Namespace),
 				zap.String("changefeed", m.id.ID),
@@ -108,7 +108,7 @@ func (m *mysqlDDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDL
 			return nil
 		}
 		if err != nil {
-			log.Warn("execute DDL with error, retry later",
+			log.Warn("Execute DDL with error, retry later",
 				zap.Uint64("startTs", ddl.StartTs), zap.String("ddl", ddl.Query),
 				zap.String("namespace", m.id.Namespace),
 				zap.String("changefeed", m.id.ID),
@@ -133,7 +133,7 @@ func (m *mysqlDDLSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 		failpoint.Return(nil)
 	})
 
-	log.Info("start exec DDL", zap.Any("DDL", ddl), zap.String("namespace", m.id.Namespace),
+	log.Info("Start exec DDL", zap.Any("DDL", ddl), zap.String("namespace", m.id.Namespace),
 		zap.String("changefeed", m.id.ID))
 	err := m.statistics.RecordDDLExecution(func() error {
 		tx, err := m.db.BeginTx(ctx, nil)
