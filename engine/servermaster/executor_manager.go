@@ -51,7 +51,7 @@ type ExecutorManager interface {
 		snap map[model.ExecutorID]string, stream *notifier.Receiver[model.ExecutorStatusChange], err error,
 	)
 
-	// GetExecutorInfo implements the interface scheduler.executorInfoProvider.
+	// GetExecutorInfos implements the interface scheduler.executorInfoProvider.
 	// It is called by the scheduler as the source of truth for executors.
 	GetExecutorInfos() map[model.ExecutorID]schedModel.ExecutorInfo
 }

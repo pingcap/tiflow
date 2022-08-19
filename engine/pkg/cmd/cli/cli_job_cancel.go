@@ -23,21 +23,21 @@ import (
 	"go.uber.org/zap"
 )
 
-// jobPauseOptions defines flags for job pause.
-type jobPauseOptions struct {
+// jobCancelOptions defines flags for job cancel.
+type jobCancelOptions struct {
 	generalOpts *jobGeneralOptions
 
 	jobID string
 }
 
-// newJobPauseOptions creates new pause job options.
-func newJobPauseOptions(generalOpts *jobGeneralOptions) *jobPauseOptions {
-	return &jobPauseOptions{generalOpts: generalOpts}
+// newJobCancelOptions creates new cancel job options.
+func newJobCancelOptions(generalOpts *jobGeneralOptions) *jobCancelOptions {
+	return &jobCancelOptions{generalOpts: generalOpts}
 }
 
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
-func (o *jobPauseOptions) addFlags(cmd *cobra.Command) {
+func (o *jobCancelOptions) addFlags(cmd *cobra.Command) {
 	if o == nil {
 		return
 	}
@@ -45,33 +45,31 @@ func (o *jobPauseOptions) addFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.jobID, "job-id", "", "job id")
 }
 
-func (o *jobPauseOptions) validate(ctx context.Context, cmd *cobra.Command) error {
+func (o *jobCancelOptions) validate(ctx context.Context, cmd *cobra.Command) error {
 	return o.generalOpts.validate(ctx, cmd)
 }
 
 // run the `cli job create` command.
-func (o *jobPauseOptions) run(ctx context.Context, cmd *cobra.Command) error {
-	resp, err := o.generalOpts.jobManagerCli.PauseJob(ctx, &enginepb.PauseJobRequest{
-		JobId: o.jobID,
-		ProjectInfo: &enginepb.ProjectInfo{
-			TenantId:  o.generalOpts.tenant.TenantID(),
-			ProjectId: o.generalOpts.tenant.ProjectID(),
-		},
+func (o *jobCancelOptions) run(ctx context.Context, cmd *cobra.Command) error {
+	resp, err := o.generalOpts.jobManagerCli.CancelJob(ctx, &enginepb.CancelJobRequest{
+		Id:        o.jobID,
+		TenantId:  o.generalOpts.tenant.TenantID(),
+		ProjectId: o.generalOpts.tenant.ProjectID(),
 	})
 	if err != nil {
 		return err
 	}
-	log.Info("pause job request is sent", zap.Any("resp", resp))
+	log.Info("cancel job request is sent", zap.Any("resp", resp))
 	return nil
 }
 
-// newCmdJobPause creates the `cli job create` command.
-func newCmdJobPause(generalOpts *jobGeneralOptions) *cobra.Command {
-	o := newJobPauseOptions(generalOpts)
+// newCmdJobCancel creates the `cli job create` command.
+func newCmdJobCancel(generalOpts *jobGeneralOptions) *cobra.Command {
+	o := newJobCancelOptions(generalOpts)
 
 	command := &cobra.Command{
-		Use:   "pause",
-		Short: "Pause a job",
+		Use:   "cancel",
+		Short: "Cancel a job",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmdcontext.GetDefaultContext()
