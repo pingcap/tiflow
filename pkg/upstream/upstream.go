@@ -122,6 +122,8 @@ func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
 
 	up.PDClient, err = pd.NewClientWithContext(
 		ctx, up.PdEndpoints, up.SecurityConfig.PDSecurityOption(),
+		// the default `timeout` is 3s, maybe too small if the pd is busy,
+		// set to 10s to avoid frequent timeout.
 		pd.WithCustomTimeoutOption(10*time.Second),
 		pd.WithGRPCDialOptions(
 			grpcTLSOption,
