@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	collector "github.com/pingcap/tiflow/cdc/sinkv2/metrics/kafka"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	pkafka "github.com/pingcap/tiflow/pkg/kafka"
+	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
