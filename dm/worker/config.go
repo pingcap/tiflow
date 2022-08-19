@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/pkg/version"
 )
 
 // SampleConfigFile is sample config file of dm-worker.
@@ -145,7 +146,7 @@ func (c *Config) Parse(arguments []string) error {
 	}
 
 	if c.printVersion {
-		fmt.Println(utils.GetRawInfo())
+		fmt.Println(version.GetRawInfo())
 		return flag.ErrHelp
 	}
 
