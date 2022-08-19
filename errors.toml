@@ -186,6 +186,11 @@ error = '''
 check dir writable failed
 '''
 
+["CDC:ErrCliAborted"]
+error = '''
+command '%s' is aborted by user
+'''
+
 ["CDC:ErrCliCheckpointTsIsInFuture"]
 error = '''
 the overwrite-checkpoint-ts %d must be smaller than current TSO

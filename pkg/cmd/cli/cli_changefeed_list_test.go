@@ -34,6 +34,7 @@ func TestChangefeedListCli(t *testing.T) {
 	cmd := newCmdListChangefeed(f)
 	b := bytes.NewBufferString("")
 	cmd.SetOut(b)
+
 	cf.EXPECT().List(gomock.Any(), gomock.Any()).Return(&[]model.ChangefeedCommonInfo{
 		{
 			UpstreamID:     1,
@@ -106,7 +107,8 @@ func TestChangefeedListCli(t *testing.T) {
 	require.Contains(t, string(out), "finished-5")
 	require.Contains(t, string(out), "stopped-6")
 
-	os.Args = []string{"list", "--all=false"}
-	cf.EXPECT().List(gomock.Any(), gomock.Any()).Return(nil, errors.New("test"))
-	require.NotNil(t, cmd.Execute())
+	cf.EXPECT().List(gomock.Any(), gomock.Any()).Return(nil, errors.New("changefeed list test error"))
+	o := newListChangefeedOptions()
+	require.NoError(t, o.complete(f))
+	require.Contains(t, o.run(cmd).Error(), "changefeed list test error")
 }
