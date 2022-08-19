@@ -216,9 +216,12 @@ func testSimpleAllModeTask(
 	// check auto resume
 	waitRow("c = 3", db)
 
-	jobStatus, err := queryStatus(httpClient, jobID, []string{source1, source2})
-	require.NoError(t, err)
-	require.Equal(t, jobID, jobStatus.JobID)
+	var jobStatus *dm.JobStatus
+	// wait job online
+	require.Eventually(t, func() bool {
+		jobStatus, err = queryStatus(httpClient, jobID, []string{source1, source2})
+		return err == nil && jobStatus.JobID == jobID
+	}, time.Second*5, time.Millisecond*100)
 	require.Contains(t, string(jobStatus.TaskStatus[source1].Status.Status), "totalEvents")
 	require.Contains(t, jobStatus.TaskStatus[source2].Status.ErrorMsg, fmt.Sprintf("task %s for job not found", source2))
 
