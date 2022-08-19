@@ -47,7 +47,7 @@ function run() {
 	echo "check table exists success"
 
 	# changefeed test-error will report an error
-	run_sql "rename table t7 to t77, t88 to t99;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "rename table multi_tables_ddl_test.t7 to multi_tables_ddl_test.t77, multi_tables_ddl_test.t555 to multi_tables_ddl_test.t55;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $cf_normal "normal" "null" ""
 	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $cf_err1 "error" "ErrSyncRenameTablesFailed" ""
