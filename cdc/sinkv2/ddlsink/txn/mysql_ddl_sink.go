@@ -135,6 +135,7 @@ func (m *mysqlDDLSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 		failpoint.Return(nil)
 	})
 
+	start := time.Now()
 	log.Info("Start exec DDL", zap.Any("DDL", ddl), zap.String("namespace", m.id.Namespace),
 		zap.String("changefeed", m.id.ID))
 	err := m.statistics.RecordDDLExecution(func() error {
@@ -166,10 +167,15 @@ func (m *mysqlDDLSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 		return tx.Commit()
 	})
 	if err != nil {
+		log.Error("Failed to exec DDL", zap.String("sql", ddl.Query),
+			zap.Duration("duration", time.Since(start)),
+			zap.String("namespace", m.id.Namespace),
+			zap.String("changefeed", m.id.ID), zap.Error(err))
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
 
 	log.Info("Exec DDL succeeded", zap.String("sql", ddl.Query),
+		zap.Duration("duration", time.Since(start)),
 		zap.String("namespace", m.id.Namespace),
 		zap.String("changefeed", m.id.ID))
 	return nil
