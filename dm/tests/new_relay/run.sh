@@ -113,11 +113,11 @@ function test_relay_leak() {
 
 	check_log_contain_with_retry 'dispatch auto resume relay' $WORK_DIR/worker1/log/dm-worker.log
 
-  count=`curl "http://127.0.0.1:8262/debug/pprof/goroutine?debug=2" 2>/dev/null| grep -c doIntervalOps || true`
-  if [ $count -gt 1 ]; then
-    echo "relay goroutine leak detected, count expect 1 but got $count"
-    exit 1
-  fi
+	count=$(curl "http://127.0.0.1:8262/debug/pprof/goroutine?debug=2" 2>/dev/null | grep -c doIntervalOps || true)
+	if [ $count -gt 1 ]; then
+		echo "relay goroutine leak detected, count expect 1 but got $count"
+		exit 1
+	fi
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>test test_cant_dail_upstream passed"
 }
 
@@ -385,7 +385,7 @@ function test_relay_operations() {
 }
 
 function run() {
-  test_relay_leak
+	test_relay_leak
 	test_relay_operations
 	test_cant_dail_upstream
 	test_restart_relay_status
