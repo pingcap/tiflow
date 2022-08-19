@@ -99,22 +99,24 @@ func (m *mysqlDDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) e
 func (m *mysqlDDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent) error {
 	return retry.Do(ctx, func() error {
 		err := m.execDDL(ctx, ddl)
-		if errorutil.IsIgnorableMySQLDDLError(err) {
-			log.Info("Execute DDL failed, but error can be ignored",
-				zap.Uint64("startTs", ddl.StartTs), zap.String("ddl", ddl.Query),
-				zap.String("namespace", m.id.Namespace),
-				zap.String("changefeed", m.id.ID),
-				zap.Error(err))
-			return nil
-		}
 		if err != nil {
+			if errorutil.IsIgnorableMySQLDDLError(err) {
+				log.Info("Execute DDL failed, but error can be ignored",
+					zap.Uint64("startTs", ddl.StartTs), zap.String("ddl", ddl.Query),
+					zap.String("namespace", m.id.Namespace),
+					zap.String("changefeed", m.id.ID),
+					zap.Error(err))
+				// If the error is ignorable, we will direly ignore the error.
+				return nil
+			}
 			log.Warn("Execute DDL with error, retry later",
 				zap.Uint64("startTs", ddl.StartTs), zap.String("ddl", ddl.Query),
 				zap.String("namespace", m.id.Namespace),
 				zap.String("changefeed", m.id.ID),
 				zap.Error(err))
+			return err
 		}
-		return err
+		return nil
 	}, retry.WithBackoffBaseDelay(pmysql.BackoffBaseDelay.Milliseconds()),
 		retry.WithBackoffMaxDelay(pmysql.BackoffMaxDelay.Milliseconds()),
 		retry.WithMaxTries(defaultDDLMaxRetry),
