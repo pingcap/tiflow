@@ -1105,10 +1105,16 @@ var (
 		errors.RFCCodeText("CDC:ErrConvertDDLToEventTypeFailed"),
 	)
 	ErrSyncRenameTablesFailed = errors.Normalize(
-		"some table id(s): '%v' are not in filter rule, and '%v' are in filter rule "+
-			"ddl query: [%s], "+
-			"TiCDC replicates DDL atomically, "+
-			"if you want to replicate these table(s), please add them to filter rule.",
+		"some table(s) old name are not in the filter rule, table id(s): '%v' "+
+			"and other table(s) old name are in filter rule, table id(s): '%v' "+
+			"ddl query: [%s], TiCDC replicates DDL atomically, "+
+			"if you want to replicate these table(s), please add their name to filter rule.",
+		errors.RFCCodeText("CDC:ErrSyncRenameTablesFailed"),
+	)
+	ErrSyncRenameTableFailed = errors.Normalize(
+		"table's old name is not in filter rule, and its new name in filter rule "+
+			"table id '%d', ddl query: [%s], it's an unexpected behavior, "+
+			"if you want to replicate this table, please add its old name to filter rule.",
 		errors.RFCCodeText("CDC:ErrSyncRenameTablesFailed"),
 	)
 )

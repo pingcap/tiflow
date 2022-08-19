@@ -148,16 +148,15 @@ func TestHandleRenameTable(t *testing.T) {
 	cfg.Filter.Rules = []string{
 		"test1.t1",
 		"test1.t2",
-		"test1.t66",
-
 		"test1.t4",
+		"test1.t66",
+		"test1.t99",
+		"test1.t100",
+
 		"test2.t4",
 
 		"Test3.t1",
 		"Test3.t2",
-
-		"test1.t99",
-		"test1.t100",
 	}
 	f, err := filter.NewFilter(cfg, "")
 	require.NoError(t, err)
@@ -176,8 +175,8 @@ func TestHandleRenameTable(t *testing.T) {
 
 	// table t3, t5 not found in snapshot, report error
 	{
-		missingTables := make([]int64, 1)
-		replicatedTables := make([]int64, 2)
+		missingTables := make([]int64, 2)
+		replicatedTables := make([]int64, 1)
 		job := helper.DDL2Job("create database test1")
 		mockPuller.appendDDL(job)
 		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
@@ -201,28 +200,31 @@ func TestHandleRenameTable(t *testing.T) {
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
 		job = helper.DDL2Job("create table test1.t5(id int)")
-		replicatedTables[1] = job.TableID
+		missingTables[1] = job.TableID
 		mockPuller.appendDDL(job)
 		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
-		job = helper.DDL2Job("rename table test1.t1 to test1.t11, test1.t3 to test1.t33, test1.t5 to test1.t4")
+		job = helper.DDL2Job("rename table test1.t1 to test1.t11, test1.t3 to test1.t33, test1.t5 to test1.t55")
 
 		skip, err := ddlJobPullerImpl.handleRenameTables(job)
 		require.Error(t, err)
 		require.True(t, skip)
-		require.Contains(t, err.Error(), fmt.Sprintf("some table id(s): '%v' are not in filter rule, and '%v' are in filter rule "+
-			"ddl query: [%s], "+
-			"TiCDC replicates DDL atomically, "+
-			"if you want to replicate these table(s), please add them to filter rule.", missingTables, replicatedTables, job.Query))
+		require.Contains(t, err.Error(), fmt.Sprintf("some table(s) old name are not in the filter rule, table id(s): '%v' "+
+			"and other table(s) old name are in filter rule, table id(s): '%v' "+
+			"ddl query: [%s], TiCDC replicates DDL atomically, "+
+			"if you want to replicate these table(s), please add their name to filter rule.", missingTables, replicatedTables, job.Query))
 	}
 
 	{
 		_ = helper.DDL2Job("create table test1.t6(id int)")
 		job := helper.DDL2Job("rename table test1.t2 to test1.t22, test1.t6 to test1.t66")
 		skip, err := ddlJobPullerImpl.handleRenameTables(job)
-		require.NoError(t, err)
-		require.False(t, skip)
+		require.Error(t, err)
+		require.True(t, skip)
+		require.Contains(t, err.Error(), fmt.Sprintf("table's old name is not in filter rule, and its new name in filter rule "+
+			"table id '%d', ddl query: [%s], it's an unexpected behavior, "+
+			"if you want to replicate this table, please add its old name to filter rule.", job.TableID, job.Query))
 	}
 
 	// all tables are filtered out
@@ -308,8 +310,11 @@ func TestHandleRenameTable(t *testing.T) {
 		// since test1.t100 is in filter rule, replicate it
 		job = helper.DDL2Job("rename table test1.t1000 to test1.t100")
 		skip, err = ddlJobPullerImpl.handleJob(job)
-		require.NoError(t, err)
-		require.False(t, skip)
+		require.Error(t, err)
+		require.True(t, skip)
+		require.Contains(t, err.Error(), fmt.Sprintf("table's old name is not in filter rule, and its new name in filter rule "+
+			"table id '%d', ddl query: [%s], it's an unexpected behavior, "+
+			"if you want to replicate this table, please add its old name to filter rule.", job.TableID, job.Query))
 
 		// since test1.t888 and test1.t777 are not in filter rule, skip it
 		job = helper.DDL2Job("rename table test1.t888 to test1.t777")

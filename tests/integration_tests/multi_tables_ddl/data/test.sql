@@ -57,29 +57,36 @@ create table t5 (
  primary key(value64, value32)
 );
 
-/*use by error changefeed*/
+/*use by error1 changefeed*/
 create table t6 (
  value64  bigint unsigned  not null,
  value32  integer          not null,
  primary key(value64, value32)
 );
 
-/*use by error changefeed*/
+/*use by error1 changefeed*/
 create table t7 (
  value64  bigint unsigned  not null,
  value32  integer          not null,
  primary key(value64, value32)
 );
 
-/*use by error changefeed*/
+/*use by error1 changefeed*/
 create table t8 (
  value64  bigint unsigned  not null,
  value32  integer          not null,
  primary key(value64, value32)
 );
 
-/*use by error changefeed*/
+/*use by error2 changefeed*/
 create table t10 (
+ value64  bigint unsigned  not null,
+ value32  integer          not null,
+ primary key(value64, value32)
+);
+
+/*use by error2 changefeed*/
+create table t11 (
  value64  bigint unsigned  not null,
  value32  integer          not null,
  primary key(value64, value32)
@@ -108,15 +115,25 @@ insert into t4 select * from t2_7;
 drop table t3, t4;
 
 
-/* filter.rules = ["multi_tables_ddl_test.t5", "multi_tables_ddl_test.t6", "multi_tables_ddl_test.t7, "multi_tables_ddl_test.t8" "multi_tables_ddl_test.t9"] */
-/* replicate successful, since t8 in `filter.rule` */
-rename table t8 to t88;
-/* discard, t88 and t888 both not in `filter.rule` */
-rename table t88 to t888;
-/* replicate successful, since t9 in `filter.rule`*/
-rename table t10 to t9;
+
+/* cf_err1, filter.rules = ["multi_tables_ddl_test.t5", "multi_tables_ddl_test.t6", "multi_tables_ddl_test.t7, "multi_tables_ddl_test.t8"] */
 /* replicate successful, they are all in `filter.rule` */
 rename table t5 to t55, t6 to t66;
 /* discard by cdc totally, they are all not in `filter.rule` */
 rename table t55 to t555, t66 to t666;
+/* replicate successful, since t8 in `filter.rule` */
+rename table t8 to t88;
+/* discard, t88 and t888 both not in `filter.rule` */
+rename table t88 to t888;
+
+
+/* cf_err2, filter.rules = ["multi_tables_ddl_test.t9", "multi_tables_ddl_test.t10"] */
+/* replicate successful, since t10 in `filter.rule` */
+rename table t10 to t9;
+/* replicate successful, since t9 in `filter.rule` */
+rename table t9 to t13;
+/* discard, t13 and t14 both not in `filter.rule` */
+rename table t13 to t14;
+/* error, t11 not match `filter.rule` and t9 match `filter.rule` */
+rename table t11 to t9;
 create table finish_mark(id int primary key);

@@ -27,9 +27,12 @@ function run() {
 	esac
 
 	cf_normal="test-normal"
-	cf_err="test-error"
+	cf_err1="test-error-1"
+	cf_err2="test-error-2"
+
 	cdc cli changefeed create -c=$cf_normal --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/normal.toml"
-	cdc cli changefeed create -c=$cf_err --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/error.toml"
+	cdc cli changefeed create -c=$cf_err1 --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/error-1.toml"
+	cdc cli changefeed create -c=$cf_err2 --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/error-2.toml"
 
 	if [ "$SINK_TYPE" == "kafka" ]; then
 		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
@@ -39,7 +42,6 @@ function run() {
 	check_table_exists multi_tables_ddl_test.t66 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists multi_tables_ddl_test.t7 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists multi_tables_ddl_test.t88 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	check_table_exists multi_tables_ddl_test.t9 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	# sync_diff can't check non-exist table, so we check expected tables are created in downstream first
 	check_table_exists multi_tables_ddl_test.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	echo "check table exists success"
@@ -48,7 +50,8 @@ function run() {
 	run_sql "rename table t7 to t77, t88 to t99;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $cf_normal "normal" "null" ""
-	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $cf_err "error" "ErrRenameTablesTableNotFound" ""
+	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $cf_err1 "error" "ErrSyncRenameTablesFailed" ""
+	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $cf_err2 "error" "ErrSyncRenameTableFailed" ""
 
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 60
 

@@ -222,60 +222,47 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 		return true, cerror.ErrInvalidDDLJob.GenWithStackByArgs(job.ID)
 	}
 	var skipTablesCount int
-	filteredTables := make([]int64, 0)
-	replicatedTables := make([]int64, 0)
-	newReplicatedTables := make([]int64, 0)
+	matchTables := make([]int64, 0)
 	for i, tableInfo := range multiTableInfos {
-		newSchema, ok := p.schemaSnapshot.SchemaByID(newSchemaIDs[i])
+		schema, ok := p.schemaSnapshot.SchemaByID(newSchemaIDs[i])
 		if !ok {
-			return true, cerror.ErrSchemaSnapshotNotFound.GenWithStackByArgs(newSchemaIDs[i])
+			return true, cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(newSchemaIDs[i])
 		}
-
-		preTableInfo, ok := p.schemaSnapshot.PhysicalTableByID(tableInfo.ID)
+		table, ok := p.schemaSnapshot.PhysicalTableByID(tableInfo.ID)
 		if !ok {
-			if p.filter.ShouldDiscardDDL(job.Type, newSchema.Name.O, tableInfo.Name.O) {
-				filteredTables = append(filteredTables, tableInfo.ID)
-				skipTablesCount++
-			} else {
-				replicatedTables = append(replicatedTables, tableInfo.ID)
-				newReplicatedTables = append(newReplicatedTables, tableInfo.ID)
+			// if a table is not found and its new name is in filter rule, return error.
+			if !p.filter.ShouldDiscardDDL(job.Type, schema.Name.O, newTableNames[i].O) {
+				return true, cerror.ErrSyncRenameTableFailed.GenWithStackByArgs(tableInfo.ID, job.Query)
 			}
+			skipTablesCount++
 			continue
 		}
-
 		// we skip a rename table ddl only when its old table name and new table name are both filtered.
-		skip := p.filter.ShouldDiscardDDL(job.Type, oldSchemaNames[i].O, preTableInfo.Name.O)
+		skip := p.filter.ShouldDiscardDDL(job.Type, oldSchemaNames[i].O, table.Name.O)
 		if skip {
-			skip = p.filter.ShouldDiscardDDL(job.Type, newSchema.Name.O, tableInfo.Name.O)
-			if !skip {
-				newReplicatedTables = append(newReplicatedTables, tableInfo.ID)
-			} else {
-				log.Info("table is filtered",
-					zap.Int64("tableID", tableInfo.ID),
-					zap.String("schema", oldSchemaNames[i].O),
-					zap.String("table", preTableInfo.Name.O))
-				filteredTables = append(filteredTables, tableInfo.ID)
-				skipTablesCount++
+			// if a table should be skip by its old name and its new name is in filter rule, return error.
+			if !p.filter.ShouldDiscardDDL(job.Type, schema.Name.O, newTableNames[i].O) {
+				return true, cerror.ErrSyncRenameTableFailed.GenWithStackByArgs(tableInfo.ID, job.Query)
 			}
+			log.Info("table is filtered",
+				zap.Int64("tableID", tableInfo.ID),
+				zap.String("schema", oldSchemaNames[i].O),
+				zap.String("table", table.Name.O))
+			skipTablesCount++
 		} else {
-			replicatedTables = append(replicatedTables, tableInfo.ID)
+			matchTables = append(matchTables, tableInfo.ID)
 		}
 	}
 
 	if skipTablesCount == 0 {
-		if len(newReplicatedTables) > 0 {
-			log.Warn("These tables are not replicated before, since their old names were not in the filter rules "+
-				"but their new names are in the filter rules, so we replicate them from now on. "+
-				"there is a risk of data inconsistency because they are not replicated from the beginning.",
-				zap.Int64s("tableIDs", newReplicatedTables))
-		}
 		return false, nil
 	}
 
 	if len(multiTableInfos) == skipTablesCount {
 		return true, nil
 	}
-	return true, cerror.ErrSyncRenameTablesFailed.GenWithStackByArgs(filteredTables, replicatedTables, job.Query)
+
+	return true, cerror.ErrSyncRenameTablesFailed.GenWithStackByArgs(util.Difference(oldTableIDs, matchTables), matchTables, job.Query)
 }
 
 // handleJob handles the DDL job.
@@ -314,28 +301,24 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			return true, errors.Trace(err)
 		}
 	case timodel.ActionRenameTable:
-		var replicatedByNewName bool
-		table, ok := p.schemaSnapshot.PhysicalTableByID(job.TableID)
-		// 1. If we can not find the preTableInfo, we filter it by the new table name.
+		// schema, ok := p.schemaSnapshot.SchemaByID(job.SchemaID)
+		// if !ok {
+		// 	return true, cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(job.SchemaID)
+		// }
+		oldTable, ok := p.schemaSnapshot.PhysicalTableByID(job.TableID)
 		if !ok {
-			skip = p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.BinlogInfo.TableInfo.Name.O)
-			replicatedByNewName = !skip
+			// 1. If we can not find the old table, and the new table name is in filter rule, return error.
+			if !p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.BinlogInfo.TableInfo.Name.O) {
+				return true, cerror.ErrSyncRenameTableFailed.GenWithStackByArgs(job.TableID, job.Query)
+			}
+			skip = true
 		} else {
 			// 2. If we can find the preTableInfo, we filter it by the old table name.
-			skip = p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, table.Name.O)
-			// 3. If the old table name if filtered, we check the new table name.
-			// we skip the ddl when only old table name and new table name are both filtered.
-			if skip {
-				skip = p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.BinlogInfo.TableInfo.Name.O)
-				replicatedByNewName = !skip
+			skip = p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, oldTable.Name.O)
+			// 3. If it old table name is not in filter rule, and it new table name in filter rule, return error.
+			if skip && !p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.BinlogInfo.TableInfo.Name.O) {
+				return true, cerror.ErrSyncRenameTableFailed.GenWithStackByArgs(job.TableID, job.Query)
 			}
-		}
-		if replicatedByNewName {
-			log.Warn("this table is not replicated before, since its old name was not in the filter rules "+
-				"but its new table name is in the filter rules, so we replicate it from now on. "+
-				"there is a risk of data inconsistency because it is not replicated from the beginning.",
-				zap.Int64("tableID", job.TableID),
-			)
 		}
 	default:
 		// nil means it is a schema ddl job, it's no need to fill the table name.
@@ -363,6 +346,8 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.String("query", job.Query),
+			zap.String("schema", job.SchemaName),
+			zap.String("table", job.BinlogInfo.TableInfo.Name.O),
 			zap.String("job", job.String()),
 			zap.Error(err))
 		return true, errors.Trace(err)
