@@ -70,11 +70,11 @@ type QueryStatusRequest struct {
 
 // QueryStatusResponse is query status response
 type QueryStatusResponse struct {
-	ErrorMsg string
-	Unit     frameModel.WorkerType
-	Stage    metadata.TaskStage
-	Result   *pb.ProcessResult
-	Status   json.RawMessage
+	ErrorMsg string                `json:"error_msg"`
+	Unit     frameModel.WorkerType `json:"unit"`
+	Stage    metadata.TaskStage    `json:"stage"`
+	Result   *pb.ProcessResult     `json:"result"`
+	Status   json.RawMessage       `json:"status"`
 }
 
 // BinlogRequest is binlog request

@@ -98,7 +98,13 @@ func (tm *TaskManager) OperateTask(ctx context.Context, op dmpkg.OperateType, jo
 
 // UpdateTaskStatus is called when receive task status from worker.
 func (tm *TaskManager) UpdateTaskStatus(taskStatus runtime.TaskStatus) {
-	tm.logger.Debug("update task status", zap.String("task_id", taskStatus.Task), zap.Int("stage", int(taskStatus.Stage)), zap.Int("unit", int(taskStatus.Unit)), zap.Uint64("config_modify_revison", taskStatus.CfgModRevision))
+	tm.logger.Debug(
+		"update task status",
+		zap.String("task_id", taskStatus.Task),
+		zap.String("stage", string(taskStatus.Stage)),
+		zap.Int("unit", int(taskStatus.Unit)),
+		zap.Uint64("config_modify_revison", taskStatus.CfgModRevision),
+	)
 	tm.tasks.Store(taskStatus.Task, taskStatus)
 }
 
@@ -150,12 +156,21 @@ func (tm *TaskManager) checkAndOperateTasks(ctx context.Context, job *metadata.J
 
 		op := genOp(runningTask.Stage, persistentTask.Stage)
 		if op == dmpkg.None {
-			tm.logger.Debug("task status will not be changed", zap.String("task_id", taskID), zap.Int("stage", int(runningTask.Stage)))
+			tm.logger.Debug(
+				"task status will not be changed",
+				zap.String("task_id", taskID),
+				zap.String("stage", string(runningTask.Stage)),
+			)
 			continue
 		}
 
-		tm.logger.Info("unexpected task status", zap.String("task_id", taskID), zap.Int("op", int(op)),
-			zap.Int("expected_stage", int(persistentTask.Stage)), zap.Int("stage", int(runningTask.Stage)))
+		tm.logger.Info(
+			"unexpected task status",
+			zap.String("task_id", taskID),
+			zap.Int("op", int(op)),
+			zap.String("expected_stage", string(persistentTask.Stage)),
+			zap.String("stage", string(runningTask.Stage)),
+		)
 		// operateTaskMessage should be a asynchronous request
 		if err := tm.operateTaskMessage(ctx, taskID, op); err != nil {
 			recordError = err

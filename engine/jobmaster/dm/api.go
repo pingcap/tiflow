@@ -29,17 +29,17 @@ import (
 
 // TaskStatus represents status of a task
 type TaskStatus struct {
-	ExpectedStage  metadata.TaskStage
-	WorkerID       frameModel.WorkerID
-	ConfigOutdated bool
-	Status         *dmpkg.QueryStatusResponse
+	ExpectedStage  metadata.TaskStage         `json:"expected_stage"`
+	WorkerID       frameModel.WorkerID        `json:"worker_id"`
+	ConfigOutdated bool                       `json:"config_outdated"`
+	Status         *dmpkg.QueryStatusResponse `json:"status"`
 }
 
 // JobStatus represents status of a job
 type JobStatus struct {
-	JobID frameModel.MasterID
+	JobID frameModel.MasterID `json:"job_id"`
 	// taskID -> Status
-	TaskStatus map[string]TaskStatus
+	TaskStatus map[string]TaskStatus `json:"task_status"`
 }
 
 // QueryJobStatus is the api of query job status.
