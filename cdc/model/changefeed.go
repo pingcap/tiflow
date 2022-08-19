@@ -140,7 +140,16 @@ func (info *ChangeFeedInfo) String() (str string) {
 		log.Error("failed to unmarshal changefeed info", zap.Error(err))
 		return
 	}
+<<<<<<< HEAD
 	clone.SinkURI = "***"
+=======
+
+	clone.SinkURI, err = util.MaskSinkURI(clone.SinkURI)
+	if err != nil {
+		log.Error("failed to mask sink uri", zap.Error(err))
+	}
+
+>>>>>>> 819612a58 (changefeed (ticdc): Mask sensitive information in changefeed info (#6815))
 	str, err = clone.Marshal()
 	if err != nil {
 		log.Error("failed to marshal changefeed info", zap.Error(err))
