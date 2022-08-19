@@ -17,11 +17,11 @@ import (
 	"context"
 	"time"
 
-	"github.com/gogo/status"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"

@@ -17,10 +17,10 @@ import (
 	"context"
 	"sync"
 
-	"github.com/gogo/status"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
