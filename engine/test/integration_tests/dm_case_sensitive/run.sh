@@ -30,9 +30,6 @@ function run() {
 	echo "job_id: $job_id"
 
 	# wait for job finished
-
-	# remove quotes
-	job_id=${job_id:1:-1}
 	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.TaskStatus.\"mysql-01\".Status.Stage == 4 and .TaskStatus.\"mysql-02\".Status.Stage == 4'"
 
 	# check data
