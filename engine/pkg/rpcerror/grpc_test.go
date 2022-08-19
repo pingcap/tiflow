@@ -16,11 +16,12 @@ package rpcerror
 import (
 	"testing"
 
-	"github.com/gogo/status"
 	"github.com/pingcap/errors"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 var testErrorPrototype = Normalize[testError](WithName("ErrTestError"), WithMessage("test message"))
@@ -44,10 +45,10 @@ func TestToGRPCError(t *testing.T) {
 	require.Len(t, st.Details(), 1)
 
 	pbErr := st.Details()[0].(*pb.ErrorV2)
-	require.Equal(t, &pb.ErrorV2{
+	require.True(t, proto.Equal(pbErr, &pb.ErrorV2{
 		Name:    "ErrTestError",
 		Details: []byte(`{"val":"first test error"}`),
-	}, pbErr)
+	}))
 }
 
 func TestFromGRPCError(t *testing.T) {
@@ -57,7 +58,7 @@ func TestFromGRPCError(t *testing.T) {
 	grpcErr := ToGRPCError(err)
 	errOut := FromGRPCError(grpcErr)
 	require.True(t, testErrorPrototype.Is(errOut))
-	require.ErrorContains(t, errOut, "grpc_test.go:56")
+	require.ErrorContains(t, errOut, "grpc_test.go:57")
 }
 
 func TestNoServerStack(t *testing.T) {
