@@ -473,6 +473,206 @@ func (s *changefeedSuite) TestFixState(c *check.C) {
 
 	for _, tc := range testCases {
 		tc.info.fixState()
+<<<<<<< HEAD
 		c.Assert(tc.info.State, check.Equals, tc.expectedState)
+=======
+		require.Equal(t, tc.expectedState, tc.info.State)
+	}
+}
+
+func TestFixSinkProtocol(t *testing.T) {
+	t.Parallel()
+
+	// Test fixing the protocol in the configuration.
+	configTestCases := []struct {
+		info             *ChangeFeedInfo
+		expectedProtocol config.Protocol
+	}{
+		{
+			info: &ChangeFeedInfo{
+				SinkURI: "mysql://root:test@127.0.0.1:3306/",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedProtocol: config.ProtocolOpen,
+		},
+		{
+			info: &ChangeFeedInfo{
+				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolCanal.String()},
+				},
+			},
+			expectedProtocol: config.ProtocolCanal,
+		},
+		{
+			info: &ChangeFeedInfo{
+				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedProtocol: config.ProtocolOpen,
+		},
+		{
+			info: &ChangeFeedInfo{
+				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: "random"},
+				},
+			},
+			expectedProtocol: config.ProtocolOpen,
+		},
+	}
+
+	for _, tc := range configTestCases {
+		tc.info.fixSinkProtocol()
+		var protocol config.Protocol
+		err := protocol.FromString(tc.info.Config.Sink.Protocol)
+		if strings.Contains(tc.info.SinkURI, "kafka") {
+			require.Nil(t, err)
+			require.Equal(t, tc.expectedProtocol, protocol)
+		} else {
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "ErrMQSinkUnknownProtocol")
+		}
+	}
+
+	// Test fixing the protocol in SinkURI.
+	sinkURITestCases := []struct {
+		info            *ChangeFeedInfo
+		expectedSinkURI string
+	}{
+		{
+			info: &ChangeFeedInfo{
+				SinkURI: "mysql://root:test@127.0.0.1:3306/",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedSinkURI: "mysql://root:test@127.0.0.1:3306/",
+		},
+		{
+			info: &ChangeFeedInfo{
+				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolCanal.String()},
+				},
+			},
+			expectedSinkURI: "kafka://127.0.0.1:9092/ticdc-test2",
+		},
+		{
+			info: &ChangeFeedInfo{
+				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2?protocol=canal",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedSinkURI: "kafka://127.0.0.1:9092/ticdc-test2?protocol=canal",
+		},
+		{
+			info: &ChangeFeedInfo{
+				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2?protocol=random",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedSinkURI: "kafka://127.0.0.1:9092/ticdc-test2?protocol=open-protocol",
+		},
+		{
+			info: &ChangeFeedInfo{
+				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2?protocol=random&max-message-size=15",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedSinkURI: "kafka://127.0.0.1:9092/ticdc-test2?max-message-size=15&protocol=open-protocol",
+		},
+		{
+			info: &ChangeFeedInfo{
+				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2?protocol=default&max-message-size=15",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedSinkURI: "kafka://127.0.0.1:9092/ticdc-test2?max-message-size=15&protocol=open-protocol",
+		},
+	}
+
+	for _, tc := range sinkURITestCases {
+		tc.info.fixSinkProtocol()
+		require.Equal(t, tc.expectedSinkURI, tc.info.SinkURI)
+	}
+}
+
+func TestChangeFeedInfoClone(t *testing.T) {
+	t.Parallel()
+
+	info := &ChangeFeedInfo{
+		SinkURI: "blackhole://",
+		Opts:    map[string]string{},
+		StartTs: 417257993615179777,
+		Config: &config.ReplicaConfig{
+			CaseSensitive:    true,
+			EnableOldValue:   true,
+			CheckGCSafePoint: true,
+		},
+	}
+
+	cloned, err := info.Clone()
+	require.Nil(t, err)
+	sinkURI := "mysql://unix:/var/run/tidb.sock"
+	cloned.SinkURI = sinkURI
+	cloned.Config.EnableOldValue = false
+	require.Equal(t, sinkURI, cloned.SinkURI)
+	require.False(t, cloned.Config.EnableOldValue)
+	require.Equal(t, "blackhole://", info.SinkURI)
+	require.True(t, info.Config.EnableOldValue)
+}
+
+func TestChangefeedInfoStringer(t *testing.T) {
+	t.Parallel()
+
+	testcases := []struct {
+		info                  *ChangeFeedInfo
+		expectedSinkURIRegexp string
+	}{
+		{
+			&ChangeFeedInfo{
+				SinkURI: "blackhole://",
+				StartTs: 418881574869139457,
+			},
+			`.*blackhole:.*`,
+		},
+		{
+			&ChangeFeedInfo{
+				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2",
+				StartTs: 418881574869139457,
+			},
+			`.*kafka://.*ticdc-test2.*`,
+		},
+		{
+			&ChangeFeedInfo{
+				SinkURI: "mysql://root:124567@127.0.0.1:3306/",
+				StartTs: 418881574869139457,
+			},
+			`.*mysql://root:xxxx@127.0.0.1:3306.*`,
+		},
+		{
+			&ChangeFeedInfo{
+				SinkURI: "mysql://root@127.0.0.1:3306/",
+				StartTs: 418881574869139457,
+			},
+			`.*mysql://root:xxxx@127.0.0.1:3306.*`,
+		},
+		{
+			&ChangeFeedInfo{
+				SinkURI: "mysql://root:test%21%23%24%25%5E%26%2A@127.0.0.1:3306/",
+				StartTs: 418881574869139457,
+			},
+			`.*mysql://root:xxxx@127.0.0.1:3306/.*`,
+		},
+>>>>>>> 819612a58 (changefeed (ticdc): Mask sensitive information in changefeed info (#6815))
 	}
 }
