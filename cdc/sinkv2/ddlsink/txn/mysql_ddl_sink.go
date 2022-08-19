@@ -46,8 +46,11 @@ var _ ddlsink.DDLEventSink = (*mysqlDDLSink)(nil)
 
 type mysqlDDLSink struct {
 	// id indicates which processor (changefeed) this sink belongs to.
-	id         model.ChangeFeedID
-	db         *sql.DB
+	id model.ChangeFeedID
+	// db is the database connection.
+	db *sql.DB
+	// statistics is the statistics of this sink.
+	// We use it to record the DDL count.
 	statistics *metrics.Statistics
 }
 
