@@ -25,8 +25,8 @@ import (
 	"github.com/pingcap/log"
 	kafkaconfig "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
