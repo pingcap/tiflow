@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/gogo/status"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
@@ -29,6 +28,7 @@ import (
 	derrors "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // ResourceManagerClient is a type alias for a client connecting to

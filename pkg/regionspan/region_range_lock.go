@@ -224,9 +224,9 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 		log.Info("range locked",
 			zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
 			zap.Uint64("version", version),
+			zap.Uint64("checkpointTs", checkpointTs),
 			zap.String("startKey", hex.EncodeToString(startKey)),
-			zap.String("endKey", hex.EncodeToString(endKey)),
-			zap.Uint64("checkpointTs", checkpointTs))
+			zap.String("endKey", hex.EncodeToString(endKey)))
 
 		return LockRangeResult{
 			Status:       LockRangeStatusSuccess,
@@ -389,9 +389,9 @@ func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, regionID, version
 	log.Info("unlocked range",
 		zap.String("changefeed", l.changefeedLogInfo),
 		zap.Uint64("lockID", l.id), zap.Uint64("regionID", entry.regionID),
+		zap.Uint64("checkpointTs", checkpointTs),
 		zap.String("startKey", hex.EncodeToString(startKey)),
-		zap.String("endKey", hex.EncodeToString(endKey)),
-		zap.Uint64("checkpointTs", checkpointTs))
+		zap.String("endKey", hex.EncodeToString(endKey)))
 }
 
 const (

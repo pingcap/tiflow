@@ -21,24 +21,22 @@ import (
 	"io"
 	"net/http"
 	"os/exec"
-	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/framework/fake"
-	engineModel "github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/meta"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
-	"github.com/pingcap/tiflow/engine/servermaster"
 	server "github.com/pingcap/tiflow/engine/servermaster"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 func init() {
@@ -52,8 +50,7 @@ var ErrLeaderNotFound = errors.New("leader not found")
 // ChaosCli is used to interact with server master, fake job and provides ways
 // to adding chaos in e2e test.
 type ChaosCli struct {
-	jobManagerCli pb.JobManagerClient
-	masterAddrs   []string
+	masterAddrs []string
 	// masterCli is used to operate with server master, such as submit job
 	clientConn metaModel.ClientConn
 	// metaCli is used to query metadata which is stored from business logic(job-level isolation)
@@ -73,31 +70,12 @@ type FakeJobConfig struct {
 	KeyPrefix     string
 }
 
-// NewJobManagerClient returns a pb.JobManagerClient that can be used for tests.
-// TODO remove this function. It is only for temporary use before an OpenAPI client is ready.
-func NewJobManagerClient(endpoint string) (pb.JobManagerClient, error) {
-	endpoint = strings.TrimLeft(endpoint, "http://")
-	conn, err := grpc.Dial(
-		endpoint,
-		grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	return pb.NewJobManagerClient(conn), nil
-}
-
 // NewUTCli creates a new ChaosCli instance
 func NewUTCli(ctx context.Context, masterAddrs, businessMetaAddrs []string, project tenant.ProjectInfo,
 	cfg *FakeJobConfig,
 ) (*ChaosCli, error) {
 	if len(masterAddrs) == 0 {
 		panic("length of masterAddrs is 0")
-	}
-
-	jobManagerCli, err := NewJobManagerClient(masterAddrs[0])
-	if err != nil {
-		return nil, err
 	}
 
 	// TODO: NEED to move metastore config to a toml, and parse the toml
@@ -122,50 +100,39 @@ func NewUTCli(ctx context.Context, masterAddrs, businessMetaAddrs []string, proj
 	}
 
 	return &ChaosCli{
-		jobManagerCli: jobManagerCli,
-		masterAddrs:   masterAddrs,
-		clientConn:    cc,
-		fakeJobCli:    fakeJobCli,
-		fakeJobCfg:    cfg,
-		project:       project,
+		masterAddrs: masterAddrs,
+		clientConn:  cc,
+		fakeJobCli:  fakeJobCli,
+		fakeJobCfg:  cfg,
+		project:     project,
 	}, nil
 }
 
 // CreateJob sends SubmitJob command to servermaster
-func (cli *ChaosCli) CreateJob(ctx context.Context, tp engineModel.JobType, config []byte) (string, error) {
-	return CreateJobViaOpenAPI(ctx, cli.masterAddrs[0], cli.project.TenantID(),
-		cli.project.ProjectID(), tp, string(config))
+func (cli *ChaosCli) CreateJob(ctx context.Context, jobType pb.Job_Type, config []byte) (string, error) {
+	return CreateJobViaHTTP(ctx, cli.masterAddrs[0], cli.project.TenantID(), cli.project.ProjectID(), jobType, config)
 }
 
-// PauseJob sends PauseJob command to servermaster
-func (cli *ChaosCli) PauseJob(ctx context.Context, jobID string) error {
-	req := &pb.PauseJobRequest{
-		JobId: jobID,
-		ProjectInfo: &pb.ProjectInfo{
-			TenantId:  cli.project.TenantID(),
-			ProjectId: cli.project.ProjectID(),
-		},
+// CancelJob sends CancelJob command to servermaster
+func (cli *ChaosCli) CancelJob(ctx context.Context, jobID string) error {
+	url := fmt.Sprintf("http://%s/api/v1/jobs/%s/cancel", cli.masterAddrs[0], jobID)
+	req := &pb.CancelJobRequest{
+		Id:        jobID,
+		ProjectId: cli.project.ProjectID(),
+		TenantId:  cli.project.TenantID(),
 	}
-	resp, err := cli.jobManagerCli.PauseJob(ctx, req)
-	if err != nil {
-		return err
-	}
-	if resp.Err != nil {
-		return errors.New(resp.Err.String())
-	}
-	return nil
+	return sendHTTPRequest(ctx, http.MethodPost, url, req, nil)
 }
 
 // CheckJobStatus checks job status is as expected.
 func (cli *ChaosCli) CheckJobStatus(
-	ctx context.Context, jobID string, expectedStatus pb.QueryJobResponse_JobStatus,
+	ctx context.Context, jobID string, expectedStatus pb.Job_Status,
 ) (bool, error) {
-	resp, err := QueryJobViaOpenAPI(ctx, cli.masterAddrs[0],
-		cli.project.TenantID(), cli.project.ProjectID(), jobID)
+	job, err := QueryJobViaHTTP(ctx, cli.masterAddrs[0], cli.project.TenantID(), cli.project.ProjectID(), jobID)
 	if err != nil {
-		return false, err
+		return false, errors.Trace(err)
 	}
-	return resp.Status == int32(expectedStatus), nil
+	return job.Status == expectedStatus, nil
 }
 
 // UpdateFakeJobKey updates the etcd value of a worker belonging to a fake job
@@ -306,98 +273,75 @@ func (cli *ChaosCli) InitializeMetaClient(jobID string) error {
 
 // GetLeaderAddr gets the address of the leader of the server master.
 func (cli *ChaosCli) GetLeaderAddr(ctx context.Context) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/api/v1/leader", cli.masterAddrs[0]), nil)
-	if err != nil {
+	url := fmt.Sprintf("http://%s/api/v1/leader", cli.masterAddrs[0])
+	resp := &pb.GetLeaderResponse{}
+	if err := sendHTTPRequest(ctx, http.MethodGet, url, &pb.ResignLeaderRequest{}, resp); err != nil {
 		return "", errors.Trace(err)
 	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusNotFound {
-		return "", ErrLeaderNotFound
-	}
-	if resp.StatusCode/100 != 2 {
-		return "", errors.Errorf("unexpected status code %d", resp.StatusCode)
-	}
-	var leaderInfo struct {
-		AdvertiseAddr string `json:"advertise_addr"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&leaderInfo); err != nil {
-		return "", errors.Trace(err)
-	}
-	return leaderInfo.AdvertiseAddr, nil
+	return resp.AdvertiseAddr, nil
 }
 
 // ResignLeader resigns the leader at the given addr.
 func (cli *ChaosCli) ResignLeader(ctx context.Context, addr string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("http://%s/api/v1/leader/resign", addr), nil)
+	url := fmt.Sprintf("http://%s/api/v1/leader/resign", addr)
+	return sendHTTPRequest(ctx, http.MethodPost, url, &pb.ResignLeaderRequest{}, nil)
+}
+
+// CreateJobViaHTTP creates a job via http.
+func CreateJobViaHTTP(ctx context.Context, masterAddr, tenantID, projectID string, jobType pb.Job_Type, config []byte) (string, error) {
+	url := fmt.Sprintf("http://%s/api/v1/jobs?tenant_id=%s&project_id=%s", masterAddr, tenantID, projectID)
+	reqJob := &pb.Job{
+		Type:   jobType,
+		Config: config,
+	}
+	job := &pb.Job{}
+	if err := sendHTTPRequest(ctx, http.MethodPost, url, reqJob, job); err != nil {
+		return "", errors.Trace(err)
+	}
+	return job.Id, nil
+}
+
+// QueryJobViaHTTP queries a job via http.
+func QueryJobViaHTTP(ctx context.Context, masterAddr, tenantID, projectID, jobID string) (*pb.Job, error) {
+	url := fmt.Sprintf("http://%s/api/v1/jobs/%s?tenant_id=%s&project_id=%s", masterAddr, jobID, tenantID, projectID)
+	job := &pb.Job{}
+	if err := sendHTTPRequest(ctx, http.MethodGet, url, nil, job); err != nil {
+		return nil, errors.Trace(err)
+	}
+	return job, nil
+}
+
+// sendHTTPRequest sends a http request to the master.
+//
+// Here we use http client instead of gRPC client because our caller is usually access our
+// API via http. We want to simulate the http client behavior.
+func sendHTTPRequest(ctx context.Context, method, url string, reqBody, resp proto.Message) error {
+	var payload []byte
+	if reqBody != nil {
+		var err error
+		payload, err = protojson.MarshalOptions{UseProtoNames: false}.Marshal(reqBody)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(payload))
 	if err != nil {
 		return errors.Trace(err)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	httpResp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode/100 != 2 {
-		return errors.Errorf("unexpected status code %d", resp.StatusCode)
-	}
-	return nil
-}
-
-// CreateJobViaOpenAPI wraps OpenAPI to create a job
-func CreateJobViaOpenAPI(
-	ctx context.Context, apiEndpoint string, tenantID string, projectID string,
-	tp engineModel.JobType, cfg string,
-) (string, error) {
-	data := &servermaster.APICreateJobRequest{
-		JobType:   int32(tp),
-		JobConfig: cfg,
-	}
-	postData, err := json.Marshal(data)
+	defer httpResp.Body.Close()
+	body, err := io.ReadAll(httpResp.Body)
 	if err != nil {
-		return "", err
+		log.Warn("read response body failed", zap.Error(err))
 	}
-
-	resp, err := http.Post(
-		fmt.Sprintf("http://%s/api/v1/jobs?tenant_id=%s&project_id=%s",
-			apiEndpoint, tenantID, projectID,
-		),
-		"application/json",
-		bytes.NewReader(postData),
-	)
-	if err != nil {
-		return "", err
+	if httpResp.StatusCode/100 != 2 {
+		return errors.Errorf("unexpected status code %d, body %s", httpResp.StatusCode, string(body))
 	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
+	if resp == nil {
+		return nil
 	}
-
-	var jobID string
-	err = json.Unmarshal(body, &jobID)
-	return jobID, err
-}
-
-// QueryJobViaOpenAPI wraps OpenAPI to query a job
-func QueryJobViaOpenAPI(
-	ctx context.Context, apiEndpoint string, tenantID, projectID, jobID string,
-) (result *servermaster.APIQueryJobResponse, err error) {
-	url := fmt.Sprintf(
-		"http://%s/api/v1/jobs/%s?tenant_id=%s&project_id=%s",
-		apiEndpoint, jobID, tenantID, projectID,
-	)
-	resp, err := http.Get(url) // #nosec G107
-	if err != nil {
-		return
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return
-	}
-	result = &servermaster.APIQueryJobResponse{}
-	err = json.Unmarshal(body, result)
-	return
+	return protojson.Unmarshal(body, resp)
 }

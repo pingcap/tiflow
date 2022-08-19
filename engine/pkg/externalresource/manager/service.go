@@ -17,17 +17,16 @@ import (
 	"context"
 	"sync"
 
-	"github.com/gogo/status"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
-	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -62,21 +61,12 @@ func NewService(
 func (s *Service) QueryResource(
 	ctx context.Context,
 	request *pb.QueryResourceRequest,
-) (
-	resp *pb.QueryResourceResponse,
-	retErr error,
-) {
+) (*pb.QueryResourceResponse, error) {
 	var resp2 *pb.QueryResourceResponse
 	shouldRet, err := s.preRPCHook.PreRPC(ctx, request, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
-
-	defer func() {
-		if retErr != nil {
-			retErr = rpcerror.ToGRPCError(retErr)
-		}
-	}()
 
 	jobID := request.GetResourceKey().GetJobId()
 	resourceID := request.GetResourceKey().GetResourceId()
@@ -88,7 +78,7 @@ func (s *Service) QueryResource(
 	record, err := s.metaclient.GetResourceByID(ctx, pkgOrm.ResourceKey{JobID: jobID, ID: resourceID})
 	if err != nil {
 		if pkgOrm.IsNotFoundError(err) {
-			return nil, internal.ErrResourceNotFound.GenWithStack(&internal.ResourceNotFoundErrorInfo{
+			return nil, internal.ErrResourceNotFound.GenWithStack(&internal.ResourceNotFoundError{
 				ResourceID: resourceID,
 				Details:    err.Error(),
 			})
@@ -110,18 +100,12 @@ func (s *Service) QueryResource(
 func (s *Service) CreateResource(
 	ctx context.Context,
 	request *pb.CreateResourceRequest,
-) (resp *pb.CreateResourceResponse, retErr error) {
+) (*pb.CreateResourceResponse, error) {
 	var resp2 *pb.CreateResourceResponse
 	shouldRet, err := s.preRPCHook.PreRPC(ctx, request, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
-
-	defer func() {
-		if retErr != nil {
-			retErr = rpcerror.ToGRPCError(retErr)
-		}
-	}()
 
 	if err := checkArguments(request.GetResourceId(), request.GetJobId()); err != nil {
 		return nil, err
@@ -139,7 +123,7 @@ func (s *Service) CreateResource(
 	err = s.metaclient.CreateResource(ctx, resourceRecord)
 	if errors.ErrDuplicateResourceID.Equal(err) {
 		return nil, internal.ErrResourceAlreadyExists.GenWithStack(
-			&internal.ResourceAlreadyExistsErrorInfo{
+			&internal.ResourceAlreadyExistsError{
 				ResourceID: request.GetResourceId(),
 				Details:    err.Error(),
 			})
@@ -159,18 +143,12 @@ func (s *Service) CreateResource(
 func (s *Service) RemoveResource(
 	ctx context.Context,
 	request *pb.RemoveResourceRequest,
-) (resp *pb.RemoveResourceResponse, retErr error) {
+) (*pb.RemoveResourceResponse, error) {
 	var resp2 *pb.RemoveResourceResponse
 	shouldRet, err := s.preRPCHook.PreRPC(ctx, request, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
-
-	defer func() {
-		if retErr != nil {
-			retErr = rpcerror.ToGRPCError(retErr)
-		}
-	}()
 
 	jobID := request.GetResourceKey().GetJobId()
 	resourceID := request.GetResourceKey().GetResourceId()
@@ -189,7 +167,7 @@ func (s *Service) RemoveResource(
 
 	if res.RowsAffected() == 0 {
 		return nil, internal.ErrResourceNotFound.GenWithStack(
-			&internal.ResourceNotFoundErrorInfo{
+			&internal.ResourceNotFoundError{
 				ResourceID: resourceID,
 				Details:    err.Error(),
 			})
@@ -247,14 +225,14 @@ func (s *Service) GetPlacementConstraint(
 
 func checkArguments(resourceID resModel.ResourceID, jobID model.JobID) error {
 	if resourceID == "" {
-		return internal.ErrInvalidArgument.GenWithStack(&internal.InvalidArgumentErrorInfo{
+		return internal.ErrInvalidArgument.GenWithStack(&internal.InvalidArgumentError{
 			JobID:      jobID,
 			Annotation: "resource-id cannot be empty",
 		})
 	}
 
 	if jobID == "" {
-		return internal.ErrInvalidArgument.GenWithStack(&internal.InvalidArgumentErrorInfo{
+		return internal.ErrInvalidArgument.GenWithStack(&internal.InvalidArgumentError{
 			ResourceID: resourceID,
 			Annotation: "job-id cannot be empty",
 		})

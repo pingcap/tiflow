@@ -19,8 +19,8 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 )
 
-// ResourceNotFoundErrorInfo provides details of ErrResourceNotFound.
-type ResourceNotFoundErrorInfo struct {
+// ResourceNotFoundError provides details of ErrResourceNotFound.
+type ResourceNotFoundError struct {
 	rpcerror.Error[rpcerror.NotRetryable, rpcerror.NotFound]
 
 	ResourceID resModel.ResourceID
@@ -28,7 +28,7 @@ type ResourceNotFoundErrorInfo struct {
 }
 
 // ErrResourceNotFound indicates that a resource is not found.
-var ErrResourceNotFound = rpcerror.Normalize[ResourceNotFoundErrorInfo]()
+var ErrResourceNotFound = rpcerror.Normalize[ResourceNotFoundError]()
 
 // ResourceMetastoreError provides details of ErrResourceMetastoreError.
 type ResourceMetastoreError struct {
@@ -42,8 +42,8 @@ type ResourceMetastoreError struct {
 // metastore on a resource, but the error can be non-fatal.
 var ErrResourceMetastoreError = rpcerror.Normalize[ResourceMetastoreError]()
 
-// ResourceAlreadyExistsErrorInfo provides details of ErrResourceAlreadyExists
-type ResourceAlreadyExistsErrorInfo struct {
+// ResourceAlreadyExistsError provides details of ErrResourceAlreadyExists
+type ResourceAlreadyExistsError struct {
 	rpcerror.Error[rpcerror.Retryable, rpcerror.AlreadyExists]
 
 	ResourceID resModel.ResourceID
@@ -51,10 +51,10 @@ type ResourceAlreadyExistsErrorInfo struct {
 }
 
 // ErrResourceAlreadyExists indicates that a resource already exists.
-var ErrResourceAlreadyExists = rpcerror.Normalize[ResourceAlreadyExistsErrorInfo]()
+var ErrResourceAlreadyExists = rpcerror.Normalize[ResourceAlreadyExistsError]()
 
-// InvalidArgumentErrorInfo provides details of ErrInvalidArgument
-type InvalidArgumentErrorInfo struct {
+// InvalidArgumentError provides details of ErrInvalidArgument
+type InvalidArgumentError struct {
 	rpcerror.Error[rpcerror.NotRetryable, rpcerror.InvalidArgument]
 
 	ResourceID resModel.ResourceID
@@ -63,4 +63,4 @@ type InvalidArgumentErrorInfo struct {
 }
 
 // ErrInvalidArgument indicates that a resource-related request has an invalid argument.
-var ErrInvalidArgument = rpcerror.Normalize[InvalidArgumentErrorInfo]()
+var ErrInvalidArgument = rpcerror.Normalize[InvalidArgumentError]()
