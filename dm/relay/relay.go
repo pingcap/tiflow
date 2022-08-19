@@ -574,7 +574,11 @@ func (r *Relay) handleEvents(
 		// 1. read events from upstream server
 		readTimer := time.Now()
 		rResult, err := reader2.GetEvent(ctx)
-		failpoint.Inject("RelayGetEventFailed", func(v failpoint.Value) {
+
+		failpoint.Inject("RelayGetEventFailed", func() {
+			err = errors.New("RelayGetEventFailed")
+		})
+		failpoint.Inject("RelayGetEventFailedAt", func(v failpoint.Value) {
 			if intVal, ok := v.(int); ok && intVal == eventIndex {
 				err = errors.New("fail point triggered")
 				_, gtid := r.meta.GTID()
