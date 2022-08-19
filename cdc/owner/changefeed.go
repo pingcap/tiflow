@@ -396,12 +396,6 @@ LOOP:
 	if c.state.Status != nil {
 		resolvedTs = c.state.Status.ResolvedTs
 	}
-	log.Info("initialize changefeed",
-		zap.String("namespace", c.id.Namespace),
-		zap.String("changefeed", c.id.ID),
-		zap.Stringer("info", c.state.Info),
-		zap.Uint64("checkpointTs", checkpointTs),
-		zap.Uint64("resolvedTs", resolvedTs))
 
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
 		failpoint.Return(cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs-300, checkpointTs))
@@ -417,7 +411,7 @@ LOOP:
 		//  1. to delete the service GC safepoint effectively,
 		//  2. in case owner update TiCDC service GC safepoint fails.
 		//
-		// Also it unblocks TiDB GC, because the service GC safepoint is set to
+		// Also, it unblocks TiDB GC, because the service GC safepoint is set to
 		// 1 hour TTL during creating changefeed.
 		//
 		// See more gc doc.
@@ -517,12 +511,23 @@ LOOP:
 	}
 
 	c.initialized = true
+
+	log.Info("changefeed initialized",
+		zap.String("namespace", c.state.ID.Namespace),
+		zap.String("changefeed", c.state.ID.ID),
+		zap.Uint64("checkpointTs", checkpointTs),
+		zap.Uint64("resolvedTs", resolvedTs),
+		zap.Stringer("info", c.state.Info))
+
 	return nil
 }
 
 func (c *changefeed) releaseResources(ctx cdcContext.Context) {
+	// Must clean redo manager before calling cancel, otherwise
+	// the manager can be closed internally.
+	c.cleanupRedoManager(ctx)
+
 	if !c.initialized {
-		c.cleanupRedoManager(ctx)
 		c.cleanupChangefeedServiceGCSafePoints(ctx)
 		return
 	}
@@ -531,7 +536,6 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.cancel = func() {}
 	c.ddlPuller.Close()
 	c.schema = nil
-	c.cleanupRedoManager(ctx)
 	c.cleanupChangefeedServiceGCSafePoints(ctx)
 	canceledCtx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -587,10 +591,11 @@ func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 		}
 		// when removing a paused changefeed, the redo manager is nil, create a new one
 		if c.redoManager == nil {
-			redoManagerOpts := &redo.ManagerOptions{EnableBgRunner: false}
+			redoManagerOpts := redo.NewManagerOptionsForClean()
 			redoManager, err := redo.NewManager(ctx, c.state.Info.Config.Consistent, redoManagerOpts)
 			if err != nil {
-				log.Error("create redo manager failed",
+				log.Info("owner creates redo manager for clean fail",
+					zap.String("namespace", c.id.Namespace),
 					zap.String("changefeed", c.id.ID),
 					zap.Error(err))
 				return

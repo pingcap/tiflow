@@ -218,10 +218,10 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					log.Info("puller is initialized",
 						zap.String("namespace", changefeedID.Namespace),
 						zap.String("changefeed", changefeedID.ID),
-						zap.Duration("duration", time.Since(start)),
 						zap.Int64("tableID", tableID),
-						zap.Strings("spans", spans),
-						zap.Uint64("resolvedTs", resolvedTs))
+						zap.Uint64("resolvedTs", resolvedTs),
+						zap.Duration("duration", time.Since(start)),
+						zap.Strings("spans", spans))
 				}
 				if !initialized || resolvedTs == lastResolvedTs {
 					continue
