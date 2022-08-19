@@ -122,6 +122,7 @@ func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
 
 	up.PDClient, err = pd.NewClientWithContext(
 		ctx, up.PdEndpoints, up.SecurityConfig.PDSecurityOption(),
+		pd.WithCustomTimeoutOption(10*time.Second),
 		pd.WithGRPCDialOptions(
 			grpcTLSOption,
 			grpc.WithBlock(),
