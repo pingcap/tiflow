@@ -17,18 +17,17 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
-
-	"github.com/gogo/status"
-	"github.com/pingcap/tiflow/engine/pkg/client"
-	"go.uber.org/zap"
-	"google.golang.org/grpc/codes"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
+	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	derrors "github.com/pingcap/tiflow/pkg/errors"
 )

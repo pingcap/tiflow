@@ -19,7 +19,6 @@ import (
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
-	pb "github.com/pingcap/tiflow/engine/enginepb"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
@@ -29,7 +28,6 @@ import (
 type BaseHandle interface {
 	Status() *frameModel.WorkerStatus
 	ID() frameModel.WorkerID
-	ToPB() (*pb.WorkerInfo, error)
 }
 
 // WorkerHandle defines the interface of a worker, businiss logic can use this
@@ -94,20 +92,6 @@ func (h *runningHandleImpl) Unwrap() RunningHandle {
 	return h
 }
 
-func (h *runningHandleImpl) ToPB() (*pb.WorkerInfo, error) {
-	statusBytes, err := h.Status().Marshal()
-	if err != nil {
-		return nil, err
-	}
-
-	ret := &pb.WorkerInfo{
-		Id:         h.workerID,
-		ExecutorId: string(h.executorID),
-		Status:     statusBytes,
-	}
-	return ret, nil
-}
-
 func (h *runningHandleImpl) SendMessage(
 	ctx context.Context,
 	topic p2p.Topic,
@@ -151,10 +135,6 @@ func (h *tombstoneHandleImpl) GetTombstone() TombstoneHandle {
 
 func (h *tombstoneHandleImpl) Unwrap() RunningHandle {
 	return nil
-}
-
-func (h *tombstoneHandleImpl) ToPB() (*pb.WorkerInfo, error) {
-	return nil, nil
 }
 
 func (h *tombstoneHandleImpl) CleanTombstone(ctx context.Context) error {
