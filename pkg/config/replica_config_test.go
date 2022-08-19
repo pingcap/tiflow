@@ -42,9 +42,17 @@ func TestReplicaConfigMarshal(t *testing.T) {
 			Columns: []string{"a", "b"},
 		},
 	}
+	conf.Sink.CSVConfig = &CSVConfig{
+		Seperator:       ",",
+		Delimiter:       "\"",
+		Terminator:      "",
+		Null:            `\N`,
+		DateSeparator:   "month",
+		IncludeCommitTs: true,
+	}
 	b, err := conf.Marshal()
 	require.Nil(t, err)
-	require.Equal(t, testCfgTestReplicaConfigMarshal1, mustIndentJSON(t, b))
+	require.JSONEq(t, testCfgTestReplicaConfigMarshal1, mustIndentJSON(t, b))
 	conf2 := new(ReplicaConfig)
 	err = conf2.UnmarshalJSON([]byte(testCfgTestReplicaConfigMarshal2))
 	require.Nil(t, err)

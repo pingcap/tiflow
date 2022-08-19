@@ -28,7 +28,7 @@ import (
 
 const (
 	// waitingInterval is the interval to wait for the all callbacks be called.
-	// It used for close the table sink.
+	// It used for closing the table sink.
 	waitingInterval = 100 * time.Millisecond
 	// warnDuration is the duration to warn the progress tracker is not closed.
 	warnDuration = 3 * time.Minute
@@ -46,7 +46,7 @@ type progressTracker struct {
 	tableID model.TableID
 	// This lock for both pendingEventAndResolvedTs and lastMinResolvedTs.
 	lock sync.Mutex
-	// pendingEventAndResolvedTs is used to store the pending event keys and resolved tss.
+	// pendingEventAndResolvedTs is used to store the pending event keys and resolved timestamps.
 	// The key is the key of the event or the resolved ts.
 	// The value is nil or the resolved ts. **nil for event**.
 	// Since the data in TableSink is sequential,

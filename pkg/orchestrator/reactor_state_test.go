@@ -124,8 +124,12 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						CheckGCSafePoint: true,
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
-						Sink:             &config.SinkConfig{Protocol: "open-protocol"},
-						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
+						Sink: &config.SinkConfig{
+							MQConfig: config.MQConfig{
+								Protocol: "open-protocol",
+							},
+						},
+						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713, ResolvedTs: 421980720003809281},
@@ -173,8 +177,12 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						CheckGCSafePoint: true,
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
-						Sink:             &config.SinkConfig{Protocol: "open-protocol"},
-						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
+						Sink: &config.SinkConfig{
+							MQConfig: config.MQConfig{
+								Protocol: "open-protocol",
+							},
+						},
+						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713, ResolvedTs: 421980720003809281},
@@ -228,8 +236,12 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						CheckGCSafePoint: true,
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
-						Sink:             &config.SinkConfig{Protocol: "open-protocol"},
-						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
+						Sink: &config.SinkConfig{
+							MQConfig: config.MQConfig{
+								Protocol: "open-protocol",
+							},
+						},
+						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713, ResolvedTs: 421980720003809281},

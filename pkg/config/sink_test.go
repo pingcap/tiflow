@@ -71,7 +71,9 @@ func TestValidateOldValue(t *testing.T) {
 
 	for _, tc := range testCases {
 		cfg := SinkConfig{
-			Protocol: tc.protocol,
+			MQConfig: MQConfig{
+				Protocol: tc.protocol,
+			},
 		}
 		if tc.expectedErr == "" {
 			require.Nil(t, cfg.validateAndAdjust(nil, tc.enableOldValue))
@@ -169,7 +171,9 @@ func TestApplyParameter(t *testing.T) {
 	}{
 		{
 			sinkConfig: &SinkConfig{
-				Protocol: "default",
+				MQConfig: MQConfig{
+					Protocol: "default",
+				},
 			},
 			sinkURI: "kafka://127.0.0.1:9092?protocol=whatever",
 			result:  "whatever",
@@ -181,7 +185,9 @@ func TestApplyParameter(t *testing.T) {
 		},
 		{
 			sinkConfig: &SinkConfig{
-				Protocol: "default",
+				MQConfig: MQConfig{
+					Protocol: "default",
+				},
 			},
 			sinkURI: "kafka://127.0.0.1:9092",
 			result:  "default",

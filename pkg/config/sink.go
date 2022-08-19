@@ -16,6 +16,7 @@ package config
 import (
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -63,11 +64,70 @@ var ForceEnableOldValueProtocols = []string{
 
 // SinkConfig represents sink config for a changefeed
 type SinkConfig struct {
-	DispatchRules   []*DispatchRule   `toml:"dispatchers" json:"dispatchers"`
-	Protocol        string            `toml:"protocol" json:"protocol"`
+	// the MQ-related configuration items probably would be extracted to an independent toml table
+	MQConfig
+	CSVConfig       *CSVConfig        `toml:"csv" json:"csv"`
 	ColumnSelectors []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
-	SchemaRegistry  string            `toml:"schema-registry" json:"schema-registry"`
 	TxnAtomicity    AtomicityLevel    `toml:"transaction-atomicity" json:"transaction-atomicity"`
+}
+
+type MQConfig struct {
+	DispatchRules  []*DispatchRule `toml:"dispatchers" json:"dispatchers"`
+	Protocol       string          `toml:"protocol" json:"protocol"`
+	SchemaRegistry string          `toml:"schema-registry" json:"schema-registry"`
+}
+
+type CSVConfig struct {
+	Seperator       string `toml:"separator" json:"separator"`
+	Delimiter       string `toml:"delimiter" json:"delimiter"`
+	Terminator      string `toml:"terminator" json:"terminator"`
+	Null            string `toml:"null" json:"null"`
+	DateSeparator   string `toml:"date-separator" json:"date-separator"`
+	IncludeCommitTs bool   `toml:"include-commit-ts" json:"include-commit-ts"`
+}
+
+// DateSeperator sepecifies the date seperator in s3 path
+type DateSeparator int
+
+// Enum types of DateSeperator
+const (
+	DateSeparatorNone DateSeparator = iota
+	DateSeparatorYear
+	DateSeparatorMonth
+	DateSeparatorDay
+)
+
+// FromString converts the seperator from string to DateSeperator enum type.
+func (d *DateSeparator) FromString(seperator string) error {
+	switch strings.ToLower(seperator) {
+	case "none":
+		*d = DateSeparatorNone
+	case "year":
+		*d = DateSeparatorYear
+	case "month":
+		*d = DateSeparatorMonth
+	case "day":
+		*d = DateSeparatorDay
+	default:
+		return cerror.ErrS3SinkInvalidDateSeparator.GenWithStackByArgs(seperator)
+	}
+
+	return nil
+}
+
+func (d DateSeparator) String() string {
+	switch d {
+	case DateSeparatorNone:
+		return "none"
+	case DateSeparatorYear:
+		return "year"
+	case DateSeparatorMonth:
+		return "month"
+	case DateSeparatorDay:
+		return "day"
+	default:
+		return "unknown"
+	}
 }
 
 // DispatchRule represents partition rule for a table.

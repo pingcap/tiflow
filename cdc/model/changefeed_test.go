@@ -548,7 +548,11 @@ func TestFixSinkProtocol(t *testing.T) {
 			info: &ChangeFeedInfo{
 				SinkURI: "mysql://root:test@127.0.0.1:3306/",
 				Config: &config.ReplicaConfig{
-					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+					Sink: &config.SinkConfig{
+						MQConfig: config.MQConfig{
+							Protocol: config.ProtocolDefault.String(),
+						},
+					},
 				},
 			},
 			expectedProtocol: config.ProtocolOpen,
@@ -557,7 +561,11 @@ func TestFixSinkProtocol(t *testing.T) {
 			info: &ChangeFeedInfo{
 				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2",
 				Config: &config.ReplicaConfig{
-					Sink: &config.SinkConfig{Protocol: config.ProtocolCanal.String()},
+					Sink: &config.SinkConfig{
+						MQConfig: config.MQConfig{
+							Protocol: config.ProtocolCanal.String(),
+						},
+					},
 				},
 			},
 			expectedProtocol: config.ProtocolCanal,
@@ -566,7 +574,11 @@ func TestFixSinkProtocol(t *testing.T) {
 			info: &ChangeFeedInfo{
 				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2",
 				Config: &config.ReplicaConfig{
-					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+					Sink: &config.SinkConfig{
+						MQConfig: config.MQConfig{
+							Protocol: config.ProtocolDefault.String(),
+						},
+					},
 				},
 			},
 			expectedProtocol: config.ProtocolOpen,
@@ -575,7 +587,11 @@ func TestFixSinkProtocol(t *testing.T) {
 			info: &ChangeFeedInfo{
 				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2",
 				Config: &config.ReplicaConfig{
-					Sink: &config.SinkConfig{Protocol: "random"},
+					Sink: &config.SinkConfig{
+						MQConfig: config.MQConfig{
+							Protocol: "random",
+						},
+					},
 				},
 			},
 			expectedProtocol: config.ProtocolOpen,
@@ -604,7 +620,11 @@ func TestFixSinkProtocol(t *testing.T) {
 			info: &ChangeFeedInfo{
 				SinkURI: "mysql://root:test@127.0.0.1:3306/",
 				Config: &config.ReplicaConfig{
-					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+					Sink: &config.SinkConfig{
+						MQConfig: config.MQConfig{
+							Protocol: config.ProtocolDefault.String(),
+						},
+					},
 				},
 			},
 			expectedSinkURI: "mysql://root:test@127.0.0.1:3306/",
@@ -613,7 +633,11 @@ func TestFixSinkProtocol(t *testing.T) {
 			info: &ChangeFeedInfo{
 				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2",
 				Config: &config.ReplicaConfig{
-					Sink: &config.SinkConfig{Protocol: config.ProtocolCanal.String()},
+					Sink: &config.SinkConfig{
+						MQConfig: config.MQConfig{
+							Protocol: config.ProtocolDefault.String(),
+						},
+					},
 				},
 			},
 			expectedSinkURI: "kafka://127.0.0.1:9092/ticdc-test2",
@@ -622,7 +646,11 @@ func TestFixSinkProtocol(t *testing.T) {
 			info: &ChangeFeedInfo{
 				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2?protocol=canal",
 				Config: &config.ReplicaConfig{
-					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+					Sink: &config.SinkConfig{
+						MQConfig: config.MQConfig{
+							Protocol: config.ProtocolDefault.String(),
+						},
+					},
 				},
 			},
 			expectedSinkURI: "kafka://127.0.0.1:9092/ticdc-test2?protocol=canal",
@@ -631,7 +659,11 @@ func TestFixSinkProtocol(t *testing.T) {
 			info: &ChangeFeedInfo{
 				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2?protocol=random",
 				Config: &config.ReplicaConfig{
-					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+					Sink: &config.SinkConfig{
+						MQConfig: config.MQConfig{
+							Protocol: config.ProtocolDefault.String(),
+						},
+					},
 				},
 			},
 			expectedSinkURI: "kafka://127.0.0.1:9092/ticdc-test2?protocol=open-protocol",
@@ -640,7 +672,11 @@ func TestFixSinkProtocol(t *testing.T) {
 			info: &ChangeFeedInfo{
 				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2?protocol=random&max-message-size=15",
 				Config: &config.ReplicaConfig{
-					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+					Sink: &config.SinkConfig{
+						MQConfig: config.MQConfig{
+							Protocol: config.ProtocolDefault.String(),
+						},
+					},
 				},
 			},
 			expectedSinkURI: "kafka://127.0.0.1:9092/ticdc-test2?max-message-size=15&protocol=open-protocol",
@@ -649,7 +685,11 @@ func TestFixSinkProtocol(t *testing.T) {
 			info: &ChangeFeedInfo{
 				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2?protocol=default&max-message-size=15",
 				Config: &config.ReplicaConfig{
-					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+					Sink: &config.SinkConfig{
+						MQConfig: config.MQConfig{
+							Protocol: config.ProtocolDefault.String(),
+						},
+					},
 				},
 			},
 			expectedSinkURI: "kafka://127.0.0.1:9092/ticdc-test2?max-message-size=15&protocol=open-protocol",

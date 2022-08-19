@@ -289,7 +289,11 @@ func TestFixChangefeedSinkProtocol(t *testing.T) {
 		CreatorVersion: "5.3.0",
 		SinkURI:        "kafka://127.0.0.1:9092/ticdc-test2?protocol=random",
 		Config: &config.ReplicaConfig{
-			Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+			Sink: &config.SinkConfig{
+				MQConfig: config.MQConfig{
+					Protocol: config.ProtocolDefault.String(),
+				},
+			},
 		},
 	}
 	changefeedStr, err := changefeedInfo.Marshal()

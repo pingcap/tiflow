@@ -87,23 +87,25 @@ func TestMigration(t *testing.T) {
 	cfg.EnableOldValue = false
 	cfg.CheckGCSafePoint = false
 	cfg.Sink = &config.SinkConfig{
-		DispatchRules: []*config.DispatchRule{
-			{
-				Matcher:        []string{"a", "b", "c"},
-				DispatcherRule: "",
-				PartitionRule:  "rule",
-				TopicRule:      "topic",
+		MQConfig: config.MQConfig{
+			DispatchRules: []*config.DispatchRule{
+				{
+					Matcher:        []string{"a", "b", "c"},
+					DispatcherRule: "",
+					PartitionRule:  "rule",
+					TopicRule:      "topic",
+				},
 			},
+			Protocol:       "aaa",
+			SchemaRegistry: "bbb",
 		},
-		Protocol: "aaa",
 		ColumnSelectors: []*config.ColumnSelector{
 			{
 				Matcher: []string{"a", "b", "c"},
 				Columns: []string{"a", "b"},
 			},
 		},
-		SchemaRegistry: "bbb",
-		TxnAtomicity:   "aa",
+		TxnAtomicity: "aa",
 	}
 	cfg.Consistent = &config.ConsistentConfig{
 		Level:             "1",

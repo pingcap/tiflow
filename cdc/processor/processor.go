@@ -956,7 +956,6 @@ func (p *processor) createTablePipelineImpl(
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-
 	} else {
 		s := p.sinkV2Factory.CreateTableSink(tableID)
 		table, err = pipeline.NewTableActor(
