@@ -71,8 +71,8 @@ const (
 
 // MasterFailoverReason contains failover reason code and error message
 type MasterFailoverReason struct {
-	Code         MasterFailoverReasonCode
-	ErrorMessage string
+	Code     MasterFailoverReasonCode
+	ErrorMsg string
 }
 
 // MustConvertWorkerType2JobType return the job type of worker type. Panic if it fail.

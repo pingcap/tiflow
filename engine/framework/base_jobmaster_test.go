@@ -273,53 +273,60 @@ func TestJobMasterExit(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		exitReason     ExitReason
-		err            error
-		extMsg         string
-		expectedStatus frameModel.MasterStatusCode
-		expectedExtMsg string
+		exitReason       ExitReason
+		err              error
+		extMsg           string
+		expectedStatus   frameModel.MasterStatusCode
+		expectedErrorMsg string
+		expectedExtMsg   string
 	}{
 		{
-			exitReason:     ExitReasonFinished,
-			err:            nil,
-			extMsg:         "test finished",
-			expectedStatus: frameModel.MasterStatusFinished,
-			expectedExtMsg: "test finished",
+			exitReason:       ExitReasonFinished,
+			err:              nil,
+			extMsg:           "test finished",
+			expectedStatus:   frameModel.MasterStatusFinished,
+			expectedErrorMsg: "",
+			expectedExtMsg:   "test finished",
 		},
 		{
-			exitReason:     ExitReasonFinished,
-			err:            errors.New("test finished with error"),
-			extMsg:         "test finished",
-			expectedStatus: frameModel.MasterStatusFinished,
-			expectedExtMsg: "test finished with error",
+			exitReason:       ExitReasonFinished,
+			err:              errors.New("test finished with error"),
+			extMsg:           "test finished",
+			expectedStatus:   frameModel.MasterStatusFinished,
+			expectedErrorMsg: "test finished with error",
+			expectedExtMsg:   "test finished",
 		},
 		{
-			exitReason:     ExitReasonCancelled,
-			err:            nil,
-			extMsg:         "test cancelled",
-			expectedStatus: frameModel.MasterStatusStopped,
-			expectedExtMsg: "test cancelled",
+			exitReason:       ExitReasonCancelled,
+			err:              nil,
+			extMsg:           "test cancelled",
+			expectedStatus:   frameModel.MasterStatusStopped,
+			expectedErrorMsg: "",
+			expectedExtMsg:   "test cancelled",
 		},
 		{
-			exitReason:     ExitReasonCancelled,
-			err:            errors.New("test cancelled with error"),
-			extMsg:         "test cancelled",
-			expectedStatus: frameModel.MasterStatusStopped,
-			expectedExtMsg: "test cancelled with error",
+			exitReason:       ExitReasonCancelled,
+			err:              errors.New("test cancelled with error"),
+			extMsg:           "test cancelled",
+			expectedStatus:   frameModel.MasterStatusStopped,
+			expectedErrorMsg: "test cancelled with error",
+			expectedExtMsg:   "test cancelled",
 		},
 		{
-			exitReason:     ExitReasonFailed,
-			err:            nil,
-			extMsg:         "test failed",
-			expectedStatus: frameModel.MasterStatusFailed,
-			expectedExtMsg: "test failed",
+			exitReason:       ExitReasonFailed,
+			err:              nil,
+			extMsg:           "test failed",
+			expectedStatus:   frameModel.MasterStatusFailed,
+			expectedErrorMsg: "",
+			expectedExtMsg:   "test failed",
 		},
 		{
-			exitReason:     ExitReasonFailed,
-			err:            errors.New("test failed with error"),
-			extMsg:         "test failed",
-			expectedStatus: frameModel.MasterStatusFailed,
-			expectedExtMsg: "test failed with error",
+			exitReason:       ExitReasonFailed,
+			err:              errors.New("test failed with error"),
+			extMsg:           "test failed",
+			expectedStatus:   frameModel.MasterStatusFailed,
+			expectedErrorMsg: "test failed with error",
+			expectedExtMsg:   "test failed",
 		},
 	}
 

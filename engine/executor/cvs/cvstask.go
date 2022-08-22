@@ -197,7 +197,8 @@ func (task *cvsTask) Status() frameModel.WorkerStatus {
 		log.Panic("get stats error", zap.String("id", task.ID()), zap.Error(err))
 	}
 	return frameModel.WorkerStatus{
-		Code: task.getStatusCode(), ErrorMessage: "",
+		Code:     task.getStatusCode(),
+		ErrorMsg: "",
 		ExtBytes: statsBytes,
 	}
 }

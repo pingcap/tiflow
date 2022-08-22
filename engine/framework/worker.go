@@ -448,7 +448,7 @@ func (w *DefaultBaseWorker) Logger() *zap.Logger {
 }
 
 // UpdateStatus updates the worker's status and tries to notify the master.
-// The status is persisted if Code or ErrorMessage has changed. Refer to (*WorkerStatus).HasSignificantChange.
+// The status is persisted if Code or ErrorMsg has changed. Refer to (*WorkerStatus).HasSignificantChange.
 //
 // If UpdateStatus returns without an error, then the status must have been persisted,
 // but there is no guarantee that the master has received a notification.
@@ -459,7 +459,7 @@ func (w *DefaultBaseWorker) UpdateStatus(ctx context.Context, status frameModel.
 	defer cancel()
 
 	w.workerStatus.Code = status.Code
-	w.workerStatus.ErrorMessage = status.ErrorMessage
+	w.workerStatus.ErrorMsg = status.ErrorMsg
 	w.workerStatus.ExtBytes = status.ExtBytes
 	err := w.statusSender.UpdateStatus(ctx, w.workerStatus)
 	if err != nil {
@@ -518,7 +518,7 @@ func (w *DefaultBaseWorker) Exit(ctx context.Context, exitReason ExitReason, err
 	}
 
 	if err != nil {
-		w.workerStatus.ErrorMessage = err.Error()
+		w.workerStatus.ErrorMsg = err.Error()
 	}
 	w.workerStatus.ExtBytes = extBytes
 	return w.statusSender.UpdateStatus(ctx, w.workerStatus)

@@ -683,7 +683,7 @@ func (m *DefaultBaseMaster) IsMasterReady() bool {
 }
 
 // Exit implements BaseMaster.Exit
-func (m *DefaultBaseMaster) Exit(ctx context.Context, exitReason ExitReason, err error, extMsg string) (errRet error) {
+func (m *DefaultBaseMaster) Exit(ctx context.Context, exitReason ExitReason, err error, extMsg string) error {
 	// Set the errCenter to prevent user from forgetting to return directly after calling 'Exit'
 	// keep the original error in errCenter if possible
 	defer func() {
@@ -709,10 +709,10 @@ func (m *DefaultBaseMaster) exitWithoutSetErrCenter(ctx context.Context, exitRea
 		m.masterMeta.StatusCode = frameModel.MasterStatusFailed
 	}
 
-	m.masterMeta.ExtMsg = extMsg
 	if err != nil {
-		m.masterMeta.ExtMsg = err.Error()
+		m.masterMeta.ErrorMsg = err.Error()
 	}
+	m.masterMeta.ExtMsg = extMsg
 
 	metaClient := metadata.NewMasterMetadataClient(m.id, m.frameMetaClient)
 	return metaClient.Update(ctx, m.masterMeta)

@@ -54,7 +54,9 @@ type MasterMetaKVData struct {
 	// Config holds business-specific data
 	Config []byte `json:"config" gorm:"column:config;type:blob"`
 
-	// if job is failed, business logic can set error message to `ExtMsg` by calling `Exit`
+	// error message for the job
+	ErrorMsg string `json:"error-msg" gorm:"column:error_msg;type:text"`
+
 	// if job is finished or cancelled, business logic can set self-defined job info to `ExtMsg`
 	ExtMsg string `json:"ext-msg" gorm:"column:ext_msg;type:text"`
 
@@ -84,6 +86,7 @@ func (m *MasterMetaKVData) Map() map[string]interface{} {
 		"address":    m.Addr,
 		"epoch":      m.Epoch,
 		"config":     m.Config,
+		"error_msg":  m.ErrorMsg,
 		"ext_msg":    m.ExtMsg,
 	}
 }
@@ -101,5 +104,6 @@ var MasterUpdateColumns = []string{
 	"address",
 	"epoch",
 	"config",
+	"error_msg",
 	"ext_msg",
 }

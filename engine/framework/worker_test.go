@@ -556,7 +556,7 @@ func checkWorkerStatusMsg(t *testing.T, expect, msg *statusutil.WorkerStatusMess
 	require.Equal(t, expect.Worker, msg.Worker)
 	require.Equal(t, expect.MasterEpoch, msg.MasterEpoch)
 	require.Equal(t, expect.Status.Code, expect.Status.Code)
-	require.Equal(t, expect.Status.ErrorMessage, expect.Status.ErrorMessage)
+	require.Equal(t, expect.Status.ErrorMsg, expect.Status.ErrorMsg)
 	require.Equal(t, expect.Status.ExtBytes, expect.Status.ExtBytes)
 }
 
@@ -651,7 +651,7 @@ func TestWorkerExit(t *testing.T) {
 		meta, err := worker.metaClient.GetWorkerByID(ctx, masterName, worker.ID())
 		require.NoError(t, err)
 		require.Equal(t, cs.expectedStatus, meta.Code)
-		require.Equal(t, cs.expectedErrorMsg, meta.ErrorMessage)
+		require.Equal(t, cs.expectedErrorMsg, meta.ErrorMsg)
 		require.Equal(t, cs.expectedExtMsg, meta.ExtBytes)
 
 		require.NoError(t, worker.Close(ctx))
