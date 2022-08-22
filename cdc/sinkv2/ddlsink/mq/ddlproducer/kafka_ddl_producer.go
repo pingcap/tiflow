@@ -23,7 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	collector "github.com/pingcap/tiflow/cdc/sinkv2/metrics/kafka"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
@@ -99,7 +99,7 @@ func NewKafkaDDLProducer(ctx context.Context, client sarama.Client,
 }
 
 func (k *kafkaDDLProducer) SyncBroadcastMessage(ctx context.Context, topic string,
-	totalPartitionsNum int32, message *codec.MQMessage,
+	totalPartitionsNum int32, message *common.Message,
 ) error {
 	k.closedMu.RLock()
 	defer k.closedMu.RUnlock()
@@ -127,7 +127,7 @@ func (k *kafkaDDLProducer) SyncBroadcastMessage(ctx context.Context, topic strin
 }
 
 func (k *kafkaDDLProducer) SyncSendMessage(ctx context.Context, topic string,
-	partitionNum int32, message *codec.MQMessage,
+	partitionNum int32, message *common.Message,
 ) error {
 	k.closedMu.RLock()
 	defer k.closedMu.RUnlock()
