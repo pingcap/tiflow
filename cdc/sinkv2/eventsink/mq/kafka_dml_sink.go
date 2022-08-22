@@ -38,7 +38,7 @@ func NewKafkaDMLSink(
 	errCh chan error,
 	adminClientCreator pkafka.ClusterAdminClientCreator,
 	producerCreator dmlproducer.Factory,
-) (_ *sink, err error) {
+) (_ *dmlSink, err error) {
 	topic, err := mqutil.GetTopic(sinkURI)
 	if err != nil {
 		return nil, errors.Trace(err)

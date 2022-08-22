@@ -23,12 +23,14 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/stretchr/testify/require"
 )
 
-func newTestWorker(t *testing.T) (*worker, dmlproducer.DMLProducer) {
+func newTestWorker(ctx context.Context, t *testing.T) (*worker, dmlproducer.DMLProducer) {
 	// 200 is about the size of a rowEvent change.
 	encoderConfig := codec.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(200)
 	builder, err := codec.NewEventBatchEncoderBuilder(context.Background(), encoderConfig)
@@ -38,7 +40,7 @@ func newTestWorker(t *testing.T) (*worker, dmlproducer.DMLProducer) {
 	p, err := dmlproducer.NewDMLMockProducer(context.Background(), nil, nil, nil)
 	require.Nil(t, err)
 	id := model.DefaultChangeFeedID("test")
-	return newWorker(id, encoder, p), p
+	return newWorker(id, encoder, p, metrics.NewStatistics(ctx, sink.RowSink)), p
 }
 
 func TestBatch(t *testing.T) {
@@ -46,7 +48,7 @@ func TestBatch(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	worker, _ := newTestWorker(t)
+	worker, _ := newTestWorker(ctx, t)
 	defer worker.close()
 	key := mqv1.TopicPartitionKey{
 		Topic:     "test",
@@ -106,7 +108,9 @@ func TestGroup(t *testing.T) {
 		Topic:     "test1",
 		Partition: 2,
 	}
-	worker, _ := newTestWorker(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker, _ := newTestWorker(ctx, t)
 	defer worker.close()
 
 	tableStatus := state.TableSinkSinking
@@ -204,8 +208,9 @@ func TestAsyncSend(t *testing.T) {
 	}
 
 	tableStatus := state.TableSinkSinking
-
-	worker, p := newTestWorker(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker, p := newTestWorker(ctx, t)
 	defer worker.close()
 	events := []mqEvent{
 		{
@@ -299,7 +304,9 @@ func TestAsyncSendWhenTableStopping(t *testing.T) {
 		Topic:     "test",
 		Partition: 1,
 	}
-	worker, p := newTestWorker(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker, p := newTestWorker(ctx, t)
 	defer worker.close()
 	replicatingStatus := state.TableSinkSinking
 	stoopedStatus := state.TableSinkStopping
@@ -353,7 +360,7 @@ func TestAbort(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	worker, _ := newTestWorker(t)
+	worker, _ := newTestWorker(ctx, t)
 	defer worker.close()
 
 	var wg sync.WaitGroup

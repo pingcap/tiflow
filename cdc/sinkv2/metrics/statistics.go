@@ -99,23 +99,12 @@ type Statistics struct {
 	metricExecDDLHis   prometheus.Observer
 	metricExecBatchHis prometheus.Observer
 	metricExecErrCnt   prometheus.Counter
-
-	metricRowSizesHis prometheus.Observer
+	metricRowSizesHis  prometheus.Observer
 }
 
 // AddRowsCount records total number of rows needs to flush
 func (b *Statistics) AddRowsCount(count int) {
 	atomic.AddUint64(&b.totalRows, uint64(count))
-}
-
-// SubRowsCount records total number of rows needs to flush
-func (b *Statistics) SubRowsCount(count int) {
-	atomic.AddUint64(&b.totalRows, ^uint64(count-1))
-}
-
-// TotalRowsCount returns total number of rows
-func (b *Statistics) TotalRowsCount() uint64 {
-	return atomic.LoadUint64(&b.totalRows)
 }
 
 // ObserveRows record the size of all received `RowChangedEvent`
@@ -127,11 +116,6 @@ func (b *Statistics) ObserveRows(rows ...*model.RowChangedEvent) {
 			b.metricRowSizesHis.Observe(float64(row.ApproximateDataSize))
 		}
 	}
-}
-
-// AddDDLCount records total number of ddl needs to flush
-func (b *Statistics) AddDDLCount() {
-	atomic.AddUint64(&b.totalDDLCount, 1)
 }
 
 // RecordBatchExecution records the cost time of batch execution and batch size
@@ -146,6 +130,11 @@ func (b *Statistics) RecordBatchExecution(executor func() (int, error)) error {
 	b.metricExecBatchHis.Observe(float64(batchSize))
 	atomic.AddUint64(&b.totalFlushedRows, uint64(batchSize))
 	return nil
+}
+
+// AddDDLCount records total number of ddl needs to flush
+func (b *Statistics) AddDDLCount() {
+	atomic.AddUint64(&b.totalDDLCount, 1)
 }
 
 // RecordDDLExecution record the time cost of execute ddl

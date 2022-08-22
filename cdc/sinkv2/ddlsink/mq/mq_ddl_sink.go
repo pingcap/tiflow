@@ -25,8 +25,10 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq/ddlproducer"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"go.uber.org/zap"
 )
 
@@ -48,6 +50,8 @@ type ddlSink struct {
 	// producer used to send events to the MQ system.
 	// Usually it is a sync producer.
 	producer ddlproducer.DDLProducer
+	// statistics is used to record DDL metrics.
+	statistics *metrics.Statistics
 }
 
 func newDDLSink(ctx context.Context,
@@ -70,12 +74,15 @@ func newDDLSink(ctx context.Context,
 		topicManager:   topicManager,
 		encoderBuilder: encoderBuilder,
 		producer:       producer,
+		statistics:     metrics.NewStatistics(ctx, sink.RowSink),
 	}
 
 	return s, nil
 }
 
 func (k *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
+	k.statistics.AddDDLCount()
+
 	encoder := k.encoderBuilder.Build()
 	msg, err := encoder.EncodeDDLEvent(ddl)
 	if err != nil {
