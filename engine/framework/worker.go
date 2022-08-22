@@ -106,7 +106,7 @@ type BaseWorker interface {
 
 	// Exit should be called when worker (in user logic) wants to exit.
 	// exitReason: ExitReasonFinished/ExitReasonCancelled/ExitReasonFailed
-	Exit(ctx context.Context, exitReason ExitReason, err error, errMsg string, extBytes []byte) error
+	Exit(ctx context.Context, exitReason ExitReason, err error, extBytes []byte) error
 }
 
 // DefaultBaseWorker implements BaseWorker interface, it also embeds an Impl
@@ -494,15 +494,14 @@ func (w *DefaultBaseWorker) OpenStorage(ctx context.Context, resourcePath resour
 }
 
 // Exit implements BaseWorker.Exit
-func (w *DefaultBaseWorker) Exit(ctx context.Context, exitReason ExitReason, err error, errMsg string, extBytes []byte) (errRet error) {
+func (w *DefaultBaseWorker) Exit(ctx context.Context, exitReason ExitReason, err error, extBytes []byte) (errRet error) {
 	// Set the errCenter to prevent user from forgetting to return directly after calling 'Exit'
 	defer func() {
 		// keep the original error or ErrWorkerFinish in error center
-		errTmp := err
-		if errTmp == nil {
-			errTmp = derror.ErrWorkerFinish.FastGenByArgs()
+		if err == nil {
+			err = derror.ErrWorkerFinish.FastGenByArgs()
 		}
-		w.onError(errTmp)
+		w.onError(err)
 	}()
 
 	switch exitReason {
@@ -518,7 +517,9 @@ func (w *DefaultBaseWorker) Exit(ctx context.Context, exitReason ExitReason, err
 		w.workerStatus.Code = frameModel.WorkerStatusError
 	}
 
-	w.workerStatus.ErrorMessage = errMsg
+	if err != nil {
+		w.workerStatus.ErrorMessage = err.Error()
+	}
 	w.workerStatus.ExtBytes = extBytes
 	return w.statusSender.UpdateStatus(ctx, w.workerStatus)
 }

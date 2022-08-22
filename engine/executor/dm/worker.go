@@ -234,7 +234,7 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 		}
 	}
 
-	if err := w.Exit(ctx, framework.ExitReasonFinished, nil, status.ErrorMessage, status.ExtBytes); err != nil {
+	if err := w.Exit(ctx, framework.ExitReasonFinished, nil, status.ExtBytes); err != nil {
 		return err
 	}
 

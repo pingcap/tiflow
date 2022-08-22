@@ -53,7 +53,7 @@ func (w *dmWorker) StopWorker(ctx context.Context, msg *dmpkg.StopWorkerMessage)
 	}
 
 	workerStatus := w.workerStatus(ctx)
-	return w.Exit(ctx, framework.ExitReasonCancelled, nil, "", workerStatus.ExtBytes)
+	return w.Exit(ctx, framework.ExitReasonCancelled, nil, workerStatus.ExtBytes)
 }
 
 // OperateTask implements the api of operate task message.

@@ -338,7 +338,7 @@ func (d *DefaultBaseJobMaster) Exit(ctx context.Context, exitReason ExitReason, 
 		return errTmp
 	}
 
-	return d.worker.Exit(ctx, exitReason, err, extMsg, nil)
+	return d.worker.Exit(ctx, exitReason, err, []byte(extMsg))
 }
 
 // TriggerOpenAPIInitialize implements BaseJobMasterExt.TriggerOpenAPIInitialize.

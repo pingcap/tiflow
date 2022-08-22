@@ -157,12 +157,12 @@ func (d *dummyWorker) Tick(ctx context.Context) error {
 
 	if d.getStatusCode() == frameModel.WorkerStatusStopped {
 		d.setStatusCode(frameModel.WorkerStatusStopped)
-		return d.Exit(ctx, framework.ExitReasonCancelled, nil, "worker has been cancelled", nil)
+		return d.Exit(ctx, framework.ExitReasonCancelled, nil, []byte("worker has been cancelled"))
 	}
 
 	if d.status.Tick >= d.config.TargetTick {
 		d.setStatusCode(frameModel.WorkerStatusFinished)
-		return d.Exit(ctx, framework.ExitReasonFinished, nil, "worker has reached target tick", nil)
+		return d.Exit(ctx, framework.ExitReasonFinished, nil, []byte("worker has reached target tick"))
 	}
 
 	if d.config.InjectErrorInterval != 0 {

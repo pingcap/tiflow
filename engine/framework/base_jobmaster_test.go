@@ -254,3 +254,53 @@ func TestOnOpenAPIInitialized(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, "success", w.Body.String())
 }
+
+func TestExit(t *testing.T) {
+	jobMaster := &testJobMasterImpl{}
+	base := newBaseJobMasterForTests(t, jobMaster)
+	jobMaster.base = base
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	jobMaster.mu.Lock()
+	jobMaster.On("InitImpl", mock.Anything).Return(nil)
+	jobMaster.mu.Unlock()
+
+	err := jobMaster.base.Init(ctx)
+	require.NoError(t, err)
+
+	jobMaster.mu.Lock()
+	jobMaster.AssertNumberOfCalls(t, "InitImpl", 1)
+
+	// clean status
+	jobMaster.ExpectedCalls = nil
+	jobMaster.Calls = nil
+
+	jobMaster.On("Tick", mock.Anything).Return(nil)
+	jobMaster.mu.Unlock()
+
+	err = jobMaster.base.Poll(ctx)
+	require.NoError(t, err)
+
+	jobMaster.mu.Lock()
+	jobMaster.AssertNumberOfCalls(t, "Tick", 1)
+
+	// clean status
+	jobMaster.ExpectedCalls = nil
+	jobMaster.Calls = nil
+
+	jobMaster.On("CloseImpl", mock.Anything).Return(nil)
+	jobMaster.mu.Unlock()
+
+	status := jobMaster.Status()
+	err = jobMaster.base.Exit(ctx, ExitReasonFinished, nil, string(status.ExtBytes))
+	require.NoError(t, err)
+
+	err = jobMaster.base.Close(ctx)
+	require.NoError(t, err)
+
+	jobMaster.mu.Lock()
+	jobMaster.AssertNumberOfCalls(t, "CloseImpl", 1)
+	jobMaster.mu.Unlock()
+}
