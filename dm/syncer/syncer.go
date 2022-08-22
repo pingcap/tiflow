@@ -292,6 +292,7 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	syncer.lastCheckpointFlushedTime = time.Time{}
 	syncer.relay = relay
 	syncer.locations = &locationRecorder{}
+	syncer.safeMode = sm.NewSafeMode()
 
 	return syncer
 }
@@ -487,7 +488,6 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		metricProxies.Init(s.cfg.MetricsFactory)
 	}
 	s.metricsProxies = metricProxies.CacheForOneTask(s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID)
-	s.safeMode = sm.NewSafeMode()
 
 	s.shardDDL = NewShardDDL(&s.tctx.Logger, s)
 	return nil
