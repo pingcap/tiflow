@@ -368,11 +368,7 @@ func (jm *JobMaster) cancel(ctx context.Context, code frameModel.WorkerStatusCod
 			return jm.Exit(ctx, framework.ExitReasonCancelled, ctx.Err(), "")
 		case <-time.After(time.Second):
 			if jm.workerManager.allTombStone() {
-				if err == nil {
-					return jm.Exit(ctx, framework.ExitReasonCancelled, err, string(status.ExtBytes))
-				} else {
-					return jm.Exit(ctx, framework.ExitReasonCancelled, err, "")
-				}
+				return jm.Exit(ctx, framework.ExitReasonCancelled, err, string(status.ExtBytes))
 			}
 			jm.workerManager.SetNextCheckTime(time.Now())
 		}
