@@ -2,10 +2,15 @@ syntax = "proto3";
 
 package enginepb;
 
-import "error.proto";
-import "metastore.proto";
-import "projects.proto";
-import "resources.proto";
+import "google/api/annotations.proto";
+import "google/api/field_behavior.proto";
+import "google/protobuf/empty.proto";
+
+import "engine/proto/error.proto";
+import "engine/proto/metastore.proto";
+import "engine/proto/resources.proto";
+
+option go_package = "github.com/pingcap/tiflow/engine/enginepb";
 
 service Discovery {
     rpc RegisterExecutor(RegisterExecutorRequest) returns(RegisterExecutorResponse) {}
@@ -20,6 +25,18 @@ service Discovery {
     // QueryMetaStore queries metastore manager and returns
     // the information of a matching metastore
     rpc QueryMetaStore(QueryMetaStoreRequest) returns(QueryMetaStoreResponse) {}
+
+    rpc GetLeader(GetLeaderRequest) returns(GetLeaderResponse) {
+        option (google.api.http) = {
+            get: "/api/v1/leader"
+        };
+    }
+
+    rpc ResignLeader(ResignLeaderRequest) returns(google.protobuf.Empty) {
+        option (google.api.http) = {
+            post: "/api/v1/leader/resign"
+        };
+    }
 }
 
 service TaskScheduler {
@@ -31,21 +48,43 @@ service TaskScheduler {
 }
 
 service JobManager {
-    rpc SubmitJob(SubmitJobRequest) returns(SubmitJobResponse) {
+    rpc CreateJob(CreateJobRequest) returns (Job){
+        option (google.api.http) = {
+            post: "/api/v1/jobs"
+            body: "job"
+        };
+    };
+
+    rpc GetJob(GetJobRequest) returns (Job){
+        option (google.api.http) = {
+            get: "/api/v1/jobs/{id=*}"
+        };
+    };
+
+    rpc ListJobs(ListJobsRequest) returns (ListJobsResponse){
+        option (google.api.http) = {
+            get: "/api/v1/jobs"
+        };
+    };
+
+    rpc CancelJob(CancelJobRequest) returns (Job){
+        option (google.api.http) = {
+            post: "/api/v1/jobs/{id=*}/cancel"
+        };
+    };
+
+    rpc DeleteJob(DeleteJobRequest) returns (google.protobuf.Empty){
+        option (google.api.http) = {
+            delete: "/api/v1/jobs/{id=*}"
+        };
     }
-
-    rpc QueryJob(QueryJobRequest) returns(QueryJobResponse) {}
-
-    rpc PauseJob(PauseJobRequest) returns(PauseJobResponse) {}
-
-    rpc CancelJob(CancelJobRequest) returns(CancelJobResponse) {}
 }
 
 message HeartbeatRequest {
     string executor_id = 1;
     int32 resource_usage = 2;
     int32 status = 3;
-    
+
     uint64 timestamp = 4;
     uint64 ttl = 5;
 }
@@ -54,67 +93,6 @@ message HeartbeatResponse {
     Error err = 1;
     string leader = 2;
     repeated string addrs = 3;
-}
-
-message SubmitJobRequest {
-    int32 tp = 1;
-    bytes config = 2;
-    ProjectInfo project_info = 3;
-    // TODO: Resource Limit
-}
-
-message QueryJobRequest {
-    string job_id = 1;
-    ProjectInfo project_info = 2;
-}
-
-message WorkerInfo {
-    string id = 1;
-    string executor_id = 2;
-    bytes  status = 3;
-    bytes  config = 4;
-    bool  is_tombstone = 5;
-    int64  last_hb_time = 6;
-    int64  workload = 7;
-}
-
-message QueryJobResponse {
-    enum JobStatus {
-        init = 0;
-        pending = 1;
-        online = 2;
-        dispatched = 3;
-        finished = 4;
-        stopped = 5;
-    }
-    int32   tp = 1;
-    bytes config = 2;
-    JobStatus status = 3;
-    WorkerInfo job_master_info = 4;
-    Error err = 5;
-}
-
-message CancelJobRequest {
-    string job_id = 1;
-    ProjectInfo project_info = 2;
-}
-
-message PauseJobRequest {
-    string job_id = 1 ;
-    ProjectInfo project_info = 2;
-}
-
-message SubmitJobResponse {
-    Error err = 1;
-    string  job_id = 2;
-}
-
-message PauseJobResponse {
-    Error err = 1;
-}
-
-message CancelJobResponse {
-    Error err = 1;
 }
 
 message RegisterExecutorRequest {
@@ -156,11 +134,78 @@ message ExecWorkloadResponse {
     Error err = 1;
 }
 
-message PersistResourceRequest {
-    string executor_id = 1;
-    string resource_id = 2;
+message GetLeaderRequest {
 }
 
-message PersistResourceResponse {
-    Error err = 1;
+message GetLeaderResponse {
+    string advertise_addr = 1;
+}
+
+message ResignLeaderRequest {
+}
+
+message Job {
+    enum Type {
+        TypeUnknown = 0;
+        CVSDemo = 1;
+        DM = 2;
+        CDC = 3;
+        FakeJob = 4;
+    }
+
+    enum Status{
+        StatusUnknown = 0;
+        Created = 1;
+        Running = 2;
+        Failed = 3;
+        Finished = 4;
+        Canceling = 5;
+        Canceled = 6;
+    }
+
+    string id = 1;
+    Type type = 2;
+    Status status = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
+    bytes config = 4;
+    Error error = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+message CreateJobRequest {
+    Job job = 1;
+    string tenant_id = 2;
+    string project_id = 3;
+}
+
+message GetJobRequest {
+    string id = 1;
+    string tenant_id = 2;
+    string project_id = 3;
+}
+
+message ListJobsRequest {
+    // The maximum number of jobs to return.
+    // If it is unspecified or less than 1, currently server will return all jobs.
+    int32 page_size = 1;
+    // The page token, returned by a previous call, to request the next page of results.
+    string page_token = 2;
+    string tenant_id = 3;
+    string project_id = 4;
+}
+
+message ListJobsResponse {
+    repeated Job jobs = 1;
+    // A token to retrieve next page of results.
+    string next_page_token = 2;
+}
+
+message CancelJobRequest {
+    string id = 1;
+    string tenant_id = 2;
+    string project_id = 3;
+}
+
+message DeleteJobRequest {
+    string id = 1;
+    string tenant_id = 2;
+    string project_id = 3;
 }

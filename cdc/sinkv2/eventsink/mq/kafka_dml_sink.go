@@ -26,7 +26,7 @@ import (
 	mqutil "github.com/pingcap/tiflow/cdc/sinkv2/util/mq"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	pkafka "github.com/pingcap/tiflow/pkg/kafka"
+	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	"go.uber.org/zap"
 )
 
