@@ -23,6 +23,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/model"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
@@ -31,10 +33,6 @@ import (
 )
 
 // Service implements pb.ResourceManagerServer
-// TODOs:
-// (1) Refactor cache-related logic
-// (2) Add RemoveResource method for explicit resource releasing
-// (3) Implement automatic resource GC
 type Service struct {
 	metaclient pkgOrm.Client
 
@@ -43,13 +41,8 @@ type Service struct {
 	wg       sync.WaitGroup
 	cancelCh chan struct{}
 
-	offlinedExecutors chan resModel.ExecutorID
-	preRPCHook        rpcutil.PreRPCHook
+	preRPCHook rpcutil.PreRPCHook
 }
-
-const (
-	offlineExecutorQueueSize = 1024
-)
 
 // NewService creates a new externalresource manage service
 func NewService(
@@ -58,31 +51,46 @@ func NewService(
 	preRPCHook rpcutil.PreRPCHook,
 ) *Service {
 	return &Service{
-		metaclient:        metaclient,
-		executors:         executorInfoProvider,
-		offlinedExecutors: make(chan resModel.ExecutorID, offlineExecutorQueueSize),
-		preRPCHook:        preRPCHook,
+		metaclient: metaclient,
+		executors:  executorInfoProvider,
+		preRPCHook: preRPCHook,
 	}
 }
 
 // QueryResource implements ResourceManagerClient.QueryResource
-func (s *Service) QueryResource(ctx context.Context, request *pb.QueryResourceRequest) (*pb.QueryResourceResponse, error) {
+func (s *Service) QueryResource(
+	ctx context.Context,
+	request *pb.QueryResourceRequest,
+) (*pb.QueryResourceResponse, error) {
 	var resp2 *pb.QueryResourceResponse
 	shouldRet, err := s.preRPCHook.PreRPC(ctx, request, &resp2)
 	if shouldRet {
 		return resp2, err
 	}
 
-	record, err := s.metaclient.GetResourceByID(ctx,
-		pkgOrm.ResourceKey{JobID: request.GetResourceKey().GetJobId(), ID: request.GetResourceKey().GetResourceId()})
+	jobID := request.GetResourceKey().GetJobId()
+	resourceID := request.GetResourceKey().GetResourceId()
+
+	if err := checkArguments(resourceID, jobID); err != nil {
+		return nil, err
+	}
+
+	record, err := s.metaclient.GetResourceByID(ctx, pkgOrm.ResourceKey{JobID: jobID, ID: resourceID})
 	if err != nil {
 		if pkgOrm.IsNotFoundError(err) {
-			return nil, status.Error(codes.NotFound, err.Error())
+			return nil, internal.ErrResourceNotFound.GenWithStack(&internal.ResourceNotFoundError{
+				ResourceID: resourceID,
+				Details:    err.Error(),
+			})
 		}
-		return nil, status.Error(codes.Aborted, err.Error())
+		return nil, internal.ErrResourceMetastoreError.GenWithStack(&internal.ResourceMetastoreError{
+			ResourceID: resourceID,
+			Details:    err.Error(),
+		})
 	}
 
 	if record.Deleted {
+		// This logic is currently not used.
 		return nil, status.Error(codes.NotFound, "resource marked as deleted")
 	}
 	return record.ToQueryResourceResponse(), nil
@@ -99,6 +107,10 @@ func (s *Service) CreateResource(
 		return resp2, err
 	}
 
+	if err := checkArguments(request.GetResourceId(), request.GetJobId()); err != nil {
+		return nil, err
+	}
+
 	resourceRecord := &resModel.ResourceMeta{
 		ProjectID: tenant.NewProjectInfo(request.GetProjectInfo().TenantId, request.GetProjectInfo().ProjectId).UniqueID(),
 		ID:        request.GetResourceId(),
@@ -110,10 +122,18 @@ func (s *Service) CreateResource(
 
 	err = s.metaclient.CreateResource(ctx, resourceRecord)
 	if errors.ErrDuplicateResourceID.Equal(err) {
-		return nil, status.Error(codes.AlreadyExists, "resource manager error")
+		return nil, internal.ErrResourceAlreadyExists.GenWithStack(
+			&internal.ResourceAlreadyExistsError{
+				ResourceID: request.GetResourceId(),
+				Details:    err.Error(),
+			})
 	}
 	if err != nil {
-		return nil, status.Error(codes.Unknown, err.Error())
+		return nil, internal.ErrResourceMetastoreError.GenWithStack(
+			&internal.ResourceMetastoreError{
+				ResourceID: request.GetResourceId(),
+				Details:    err.Error(),
+			})
 	}
 
 	return &pb.CreateResourceResponse{}, nil
@@ -132,16 +152,25 @@ func (s *Service) RemoveResource(
 
 	jobID := request.GetResourceKey().GetJobId()
 	resourceID := request.GetResourceKey().GetResourceId()
-	if jobID == "" || resourceID == "" {
-		return nil, status.Error(codes.InvalidArgument, "empty job-id or resource-id")
+	if err := checkArguments(resourceID, jobID); err != nil {
+		return nil, err
 	}
 
 	res, err := s.metaclient.DeleteResource(ctx, pkgOrm.ResourceKey{JobID: jobID, ID: resourceID})
 	if err != nil {
-		return nil, status.Error(codes.Aborted, err.Error())
+		return nil, internal.ErrResourceMetastoreError.GenWithStack(
+			&internal.ResourceMetastoreError{
+				ResourceID: resourceID,
+				Details:    err.Error(),
+			})
 	}
+
 	if res.RowsAffected() == 0 {
-		return nil, status.Error(codes.NotFound, "resource not found")
+		return nil, internal.ErrResourceNotFound.GenWithStack(
+			&internal.ResourceNotFoundError{
+				ResourceID: resourceID,
+				Details:    err.Error(),
+			})
 	}
 	if res.RowsAffected() > 1 {
 		log.Panic("unexpected RowsAffected",
@@ -164,7 +193,9 @@ func (s *Service) GetPlacementConstraint(
 	ctx context.Context,
 	resourceKey resModel.ResourceKey,
 ) (resModel.ExecutorID, bool, error) {
-	logger := log.With(zap.String("job-id", resourceKey.JobID), zap.String("resource-id", resourceKey.ID))
+	logger := log.With(
+		zap.String("job-id", resourceKey.JobID),
+		zap.String("resource-id", resourceKey.ID))
 
 	rType, _, err := resModel.ParseResourcePath(resourceKey.ID)
 	if err != nil {
@@ -189,63 +220,22 @@ func (s *Service) GetPlacementConstraint(
 		logger.Info("Resource meta is marked as deleted", zap.Any("record", record))
 		return "", false, errors.ErrResourceDoesNotExist.GenWithStackByArgs(resourceKey.ID)
 	}
-
-	if !s.executors.HasExecutor(string(record.Executor)) {
-		logger.Info("Resource meta indicates a non-existent executor",
-			zap.String("executor-id", string(record.Executor)))
-		return "", false, errors.ErrResourceDoesNotExist.GenWithStackByArgs(resourceKey.ID)
-	}
-
 	return record.Executor, true, nil
 }
 
-func (s *Service) onExecutorOffline(executorID resModel.ExecutorID) error {
-	select {
-	case s.offlinedExecutors <- executorID:
-		return nil
-	default:
+func checkArguments(resourceID resModel.ResourceID, jobID model.JobID) error {
+	if resourceID == "" {
+		return internal.ErrInvalidArgument.GenWithStack(&internal.InvalidArgumentError{
+			JobID:      jobID,
+			Annotation: "resource-id cannot be empty",
+		})
 	}
-	log.Warn("Too many offlined executors, dropping event",
-		zap.String("executor-id", string(executorID)))
+
+	if jobID == "" {
+		return internal.ErrInvalidArgument.GenWithStack(&internal.InvalidArgumentError{
+			ResourceID: resourceID,
+			Annotation: "job-id cannot be empty",
+		})
+	}
 	return nil
-}
-
-// StartBackgroundWorker starts all background worker of this service
-func (s *Service) StartBackgroundWorker() {
-	s.cancelCh = make(chan struct{})
-	ctx, cancel := context.WithCancel(context.Background())
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
-		<-s.cancelCh
-		cancel()
-	}()
-
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
-		defer log.Info("Resource manager's background task exited")
-		s.runBackgroundWorker(ctx)
-	}()
-}
-
-// Stop can only be called after StartBackgroundWorker.
-func (s *Service) Stop() {
-	close(s.cancelCh)
-	s.wg.Wait()
-}
-
-func (s *Service) runBackgroundWorker(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case executorID := <-s.offlinedExecutors:
-			s.handleExecutorOffline(ctx, executorID)
-		}
-	}
-}
-
-func (s *Service) handleExecutorOffline(ctx context.Context, executorID resModel.ExecutorID) {
-	// TODO
 }
