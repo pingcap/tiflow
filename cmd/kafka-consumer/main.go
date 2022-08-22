@@ -36,7 +36,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink"
-	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/canal"
+	"github.com/pingcap/tiflow/cdc/sink/codec/open"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	cmdUtil "github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -504,9 +506,9 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		)
 		switch c.protocol {
 		case config.ProtocolOpen, config.ProtocolDefault:
-			decoder, err = codec.NewOpenProtocolBatchDecoder(message.Key, message.Value)
+			decoder, err = open.NewBatchDecoder(message.Key, message.Value)
 		case config.ProtocolCanalJSON:
-			decoder = codec.NewCanalJSONBatchDecoder(message.Value, c.enableTiDBExtension)
+			decoder = canal.NewBatchDecoder(message.Value, c.enableTiDBExtension)
 		default:
 			log.Panic("Protocol not supported", zap.Any("Protocol", c.protocol))
 		}
