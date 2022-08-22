@@ -6,7 +6,8 @@ echo "start check count"
 echo "$TEST_DIR/sql_res.$TEST_NAME.txt"
 count=$(cat "$TEST_DIR/sql_res.$TEST_NAME.txt" | grep -c "$1") || true
 echo "OUTPUT CONTAINS $count '$1'"
+echo "OUTPUT:"
 echo "____________________________________"
 cat "$TEST_DIR/sql_res.$TEST_NAME.txt"
-echo "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
-exit 1
+echo "____________________________________"
+#exit 1

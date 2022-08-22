@@ -1392,21 +1392,20 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 			affected, err = db.ExecuteSQLWithIgnore(s.syncCtx, s.metricsProxies, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)
 			failpoint.Inject("TestHandleSpecialDDLError", func() {
 				err = mysql2.ErrInvalidConn
+				affected = 1
+				s.tctx.L().Info("test handle special DDL error", zap.Strings("DDL", ddlJob.ddls), zap.String("affected", string(affected)), zap.String("failpoint", "TestHandleSpecialDDLError"))
 			})
 			if err != nil {
 				var ddlCreateTime int
 				row, err2 := db.QuerySQL(s.syncCtx, s.metricsProxies, "SELECT @@TIMESTAMP")
-				fmt.Printf("err2: %v", err2)
 				var createTimeResults [][]string
 				createTimeResults, err2 = export.GetSpecifiedColumnValuesAndClose(row, "@@TIMESTAMP")
 				ddlCreateTimeFloat, err2 := strconv.ParseFloat(createTimeResults[0][0], 64)
 				ddlCreateTime, err2 = strconv.Atoi(fmt.Sprintf("%1.0f", ddlCreateTimeFloat))
-				fmt.Printf("ddlCreateTime: %d \n", ddlCreateTime)
 				if err2 != nil {
 					err = s.handleSpecialDDLError(s.syncCtx, err, ddlJob.ddls, affected, db, -1)
 				} else {
 					err = s.handleSpecialDDLError(s.syncCtx, err, ddlJob.ddls, affected, db, int64(ddlCreateTime))
-					//err = s.handleSpecialDDLError(s.syncCtx, err, ddlJob.ddls, affected, db, -1)
 				}
 				err = terror.WithScope(err, terror.ScopeDownstream)
 			}
