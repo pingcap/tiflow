@@ -108,12 +108,12 @@ func (b *basicScheduler) Schedule(
 			tableField = zap.Int64s("tableIDs", newTables)
 		}
 		log.Info("schedulerv3: burst add table",
-			tableField,
 			zap.String("namespace", b.changefeedID.Namespace),
 			zap.String("changefeed", b.changefeedID.ID),
-			zap.Strings("captureIDs", captureIDs))
+			zap.Strings("captureIDs", captureIDs),
+			tableField)
 		tasks = append(
-			tasks, newBurstBalanceAddTables(checkpointTs, newTables, captureIDs))
+			tasks, newBurstAddTables(checkpointTs, newTables, captureIDs))
 		if len(newTables) == len(currentTables) {
 			// The initial balance, if new tables and current tables are equal.
 			return tasks
@@ -145,19 +145,32 @@ func (b *basicScheduler) Schedule(
 		}
 		if len(rmTables) > 0 {
 			tasks = append(tasks,
-				newBurstBalanceRemoveTables(rmTables, replications, b.changefeedID))
+				newBurstRemoveTables(rmTables, replications, b.changefeedID))
 		}
 	}
 	return tasks
 }
 
-// newBurstBalanceAddTables add each new table to captures in a round-robin way.
-func newBurstBalanceAddTables(
+const (
+	// defaultBurstAddTableBatchSize is the default batch size of adding tables on each tick.
+	// When the owner crashed, it may exist hundreds of tables need to be added by the new owner,
+	// but the crashed old owner is going online but not available yet, add table in batch to wait
+	// for the old owner join the cluster.
+	// When there are only 2 captures, and a large number of tables, this can be helpful to prevent
+	// oom caused by all tables dispatched to only one capture.
+	defaultBurstAddTableBatchSize = 50
+)
+
+// newBurstAddTables add each new table to captures in a round-robin way.
+func newBurstAddTables(
 	checkpointTs model.Ts, newTables []model.TableID, captureIDs []model.CaptureID,
 ) *replication.ScheduleTask {
 	idx := 0
 	tables := make([]replication.AddTable, 0, len(newTables))
-	for _, tableID := range newTables {
+	for i, tableID := range newTables {
+		if i > defaultBurstAddTableBatchSize {
+			break
+		}
 		tables = append(tables, replication.AddTable{
 			TableID:      tableID,
 			CaptureID:    captureIDs[idx],
@@ -173,7 +186,7 @@ func newBurstBalanceAddTables(
 	}}
 }
 
-func newBurstBalanceRemoveTables(
+func newBurstRemoveTables(
 	rmTables []model.TableID, replications map[model.TableID]*replication.ReplicationSet,
 	changefeedID model.ChangeFeedID,
 ) *replication.ScheduleTask {

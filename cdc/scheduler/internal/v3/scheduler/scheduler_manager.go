@@ -69,7 +69,7 @@ func (sm *SchedulerManager) Schedule(
 ) []*replication.ScheduleTask {
 	for sid, scheduler := range sm.schedulers {
 		// Basic scheduler bypasses max task check, because it handles the most
-		// critical scheduling, eg. add table via CREATE TABLE DDL.
+		// critical scheduling, e.g. add table via CREATE TABLE DDL.
 		if sid != int(schedulerPriorityBasic) {
 			if len(runTasking) >= sm.maxTaskConcurrency {
 				// Do not generate more scheduling tasks if there are too many
