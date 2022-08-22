@@ -17,19 +17,19 @@ import (
 	"context"
 
 	"github.com/Shopify/sarama"
-	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
-	"github.com/pingcap/tiflow/pkg/kafka"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
 )
 
 // DDLProducer is the interface for DDL message producer.
 type DDLProducer interface {
 	// SyncBroadcastMessage broadcasts a message synchronously.
 	SyncBroadcastMessage(
-		ctx context.Context, topic string, totalPartitionsNum int32, message *codec.MQMessage,
+		ctx context.Context, topic string, totalPartitionsNum int32, message *common.Message,
 	) error
 	// SyncSendMessage sends a message for a partition synchronously.
 	SyncSendMessage(
-		ctx context.Context, topic string, partitionNum int32, message *codec.MQMessage,
+		ctx context.Context, topic string, partitionNum int32, message *common.Message,
 	) error
 	// Close closes the producer.
 	Close()

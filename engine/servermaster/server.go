@@ -18,13 +18,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
+	"strings"
 	"time"
 
-	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
-
-	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
@@ -43,6 +44,7 @@ import (
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
+	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/serverutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
@@ -64,12 +66,14 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // use a slice instead of map because in small data size, slice search is faster
 // than map search.
 var masterRPCLimiterAllowList = []string{
-	"SubmitJob",
+	"CreateJob",
 	"CancelJob",
 	"ScheduleTask",
 	"CreateResource",
@@ -126,23 +130,17 @@ type Server struct {
 	businessClientConn  metaModel.ClientConn
 }
 
-// PersistResource implements pb.MasterServer.PersistResource
-func (s *Server) PersistResource(ctx context.Context, request *pb.PersistResourceRequest) (*pb.PersistResourceResponse, error) {
-	// TODO implement me
-	panic("implement me")
-}
-
 type serverMasterMetric struct {
-	metricJobNum      map[pb.QueryJobResponse_JobStatus]prometheus.Gauge
+	metricJobNum      map[pb.Job_Status]prometheus.Gauge
 	metricExecutorNum map[model.ExecutorStatus]prometheus.Gauge
 }
 
 func newServerMasterMetric() *serverMasterMetric {
 	// Following are leader only metrics
-	metricJobNum := make(map[pb.QueryJobResponse_JobStatus]prometheus.Gauge)
-	for status, name := range pb.QueryJobResponse_JobStatus_name {
-		metric := serverJobNumGauge.WithLabelValues(name)
-		metricJobNum[pb.QueryJobResponse_JobStatus(status)] = metric
+	metricJobNum := make(map[pb.Job_Status]prometheus.Gauge)
+	for status, statusName := range pb.Job_Status_name {
+		metric := serverJobNumGauge.WithLabelValues(statusName)
+		metricJobNum[pb.Job_Status(status)] = metric
 	}
 
 	metricExecutorNum := make(map[model.ExecutorStatus]prometheus.Gauge)
@@ -249,44 +247,54 @@ func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.H
 	return resp, err
 }
 
-// SubmitJob passes request onto "JobManager".
-func (s *Server) SubmitJob(ctx context.Context, req *pb.SubmitJobRequest) (*pb.SubmitJobResponse, error) {
-	resp2 := &pb.SubmitJobResponse{}
-	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
+// CreateJob delegates request to leader's JobManager.CreateJob.
+func (s *Server) CreateJob(ctx context.Context, req *pb.CreateJobRequest) (*pb.Job, error) {
+	job := &pb.Job{}
+	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &job)
 	if shouldRet {
-		return resp2, err
+		return job, err
 	}
-	return s.jobManager.SubmitJob(ctx, req), nil
+	return s.jobManager.CreateJob(ctx, req)
 }
 
-// QueryJob implements pb.MasterServer.QueryJob
-func (s *Server) QueryJob(ctx context.Context, req *pb.QueryJobRequest) (*pb.QueryJobResponse, error) {
-	resp2 := &pb.QueryJobResponse{}
-	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
+// GetJob delegates request to leader's JobManager.GetJob.
+func (s *Server) GetJob(ctx context.Context, req *pb.GetJobRequest) (*pb.Job, error) {
+	job := &pb.Job{}
+	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &job)
 	if shouldRet {
-		return resp2, err
+		return job, err
 	}
-	return s.jobManager.QueryJob(ctx, req), nil
+	return s.jobManager.GetJob(ctx, req)
 }
 
-// CancelJob implements pb.MasterServer.CancelJob
-func (s *Server) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (*pb.CancelJobResponse, error) {
-	resp2 := &pb.CancelJobResponse{}
-	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
+// ListJobs delegates request to leader's JobManager.ListJobs.
+func (s *Server) ListJobs(ctx context.Context, req *pb.ListJobsRequest) (*pb.ListJobsResponse, error) {
+	resp := &pb.ListJobsResponse{}
+	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp)
 	if shouldRet {
-		return resp2, err
+		return resp, err
 	}
-	return s.jobManager.CancelJob(ctx, req), nil
+	return s.jobManager.ListJobs(ctx, req)
 }
 
-// PauseJob implements pb.MasterServer.PauseJob
-func (s *Server) PauseJob(ctx context.Context, req *pb.PauseJobRequest) (*pb.PauseJobResponse, error) {
-	resp2 := &pb.PauseJobResponse{}
-	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
+// CancelJob delegates request to leader's JobManager.CancelJob.
+func (s *Server) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (*pb.Job, error) {
+	job := &pb.Job{}
+	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &job)
 	if shouldRet {
-		return resp2, err
+		return job, err
 	}
-	return s.jobManager.PauseJob(ctx, req), nil
+	return s.jobManager.CancelJob(ctx, req)
+}
+
+// DeleteJob delegates request to leader's JobManager.DeleteJob.
+func (s *Server) DeleteJob(ctx context.Context, req *pb.DeleteJobRequest) (*emptypb.Empty, error) {
+	empty := &emptypb.Empty{}
+	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &empty)
+	if shouldRet {
+		return empty, err
+	}
+	return s.jobManager.DeleteJob(ctx, req)
 }
 
 // RegisterExecutor implements grpc interface, and passes request onto executor manager.
@@ -411,6 +419,26 @@ func (s *Server) QueryMetaStore(
 			},
 		}, nil
 	}
+}
+
+// GetLeader implements DiscoveryServer.GetLeader.
+func (s *Server) GetLeader(_ context.Context, _ *pb.GetLeaderRequest) (*pb.GetLeaderResponse, error) {
+	leaderAddr, ok := s.LeaderAddr()
+	if !ok {
+		return nil, status.Error(codes.NotFound, "no leader")
+	}
+	return &pb.GetLeaderResponse{
+		AdvertiseAddr: leaderAddr,
+	}, nil
+}
+
+// ResignLeader implements DiscoveryServer.ResignLeader.
+func (s *Server) ResignLeader(_ context.Context, _ *pb.ResignLeaderRequest) (*emptypb.Empty, error) {
+	select {
+	case s.resignCh <- struct{}{}:
+	default:
+	}
+	return &emptypb.Empty{}, nil
 }
 
 // ReportExecutorWorkload implements pb.MasterServer.ReportExecutorWorkload
@@ -584,7 +612,10 @@ func (s *Server) serve(ctx context.Context) error {
 		return tcpServer.Run(ctx)
 	})
 
-	httpServer := s.createHTTPServer()
+	httpServer, err := s.createHTTPServer()
+	if err != nil {
+		return err
+	}
 	defer httpServer.Close()
 	errGroup.Go(func() error {
 		return httpServer.Serve(tcpServer.HTTP1Listener())
@@ -601,7 +632,7 @@ func (s *Server) serve(ctx context.Context) error {
 func (s *Server) createGRPCServer() *grpc.Server {
 	grpcServer := grpc.NewServer(
 		grpc.StreamInterceptor(grpcprometheus.StreamServerInterceptor),
-		grpc.UnaryInterceptor(grpcprometheus.UnaryServerInterceptor),
+		grpc.ChainUnaryInterceptor(rpcerror.UnaryServerInterceptor, grpcprometheus.UnaryServerInterceptor),
 	)
 	pb.RegisterDiscoveryServer(grpcServer, s)
 	pb.RegisterTaskSchedulerServer(grpcServer, s)
@@ -611,14 +642,75 @@ func (s *Server) createGRPCServer() *grpc.Server {
 	return grpcServer
 }
 
-func (s *Server) createHTTPServer() *http.Server {
-	router := gin.New()
-	openapi := NewOpenAPI(s)
-	RegisterRoutes(router, openapi)
+func (s *Server) createHTTPServer() (*http.Server, error) {
+	grpcMux := runtime.NewServeMux(
+		runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{
+			MarshalOptions:   protojson.MarshalOptions{UseProtoNames: true},
+			UnmarshalOptions: protojson.UnmarshalOptions{},
+		}),
+	)
+	if err := pb.RegisterJobManagerHandlerServer(context.Background(), grpcMux, s); err != nil {
+		return nil, errors.Trace(err)
+	}
+	if err := pb.RegisterDiscoveryHandlerServer(context.Background(), grpcMux, s); err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	router := http.NewServeMux()
+	registerRoutes(router, grpcMux, s.forwardJobAPI)
 
 	return &http.Server{
 		Handler: router,
+	}, nil
+}
+
+func (s *Server) forwardJobAPI(w http.ResponseWriter, r *http.Request) {
+	if err := s.handleForwardJobAPI(w, r); err != nil {
+		st, ok := status.FromError(rpcerror.ToGRPCError(err))
+		if !ok {
+			st = status.FromContextError(err)
+		}
+		payload, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(st.Proto())
+		if err != nil {
+			log.Warn("failed to  marshal grpc status", zap.Error(err))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(runtime.HTTPStatusFromCode(st.Code()))
+		if _, err := w.Write(payload); err != nil {
+			log.Warn("failed to write response", zap.Error(err))
+		}
 	}
+}
+
+func (s *Server) handleForwardJobAPI(w http.ResponseWriter, r *http.Request) error {
+	apiPath := strings.TrimPrefix(r.URL.Path, jobAPIPrefix)
+	fields := strings.SplitN(apiPath, "/", 2)
+	if len(fields) != 2 {
+		return errors.New("invalid job api path")
+	}
+	jobID := fields[0]
+
+	var targetAddr string
+	if s.IsLeader() {
+		forwardAddr, err := s.jobManager.GetJobMasterForwardAddress(r.Context(), jobID)
+		if err != nil {
+			return err
+		}
+		targetAddr = forwardAddr
+	} else if leaderAddr, ok := s.LeaderAddr(); ok {
+		targetAddr = leaderAddr
+	} else {
+		return errors.New("no leader found")
+	}
+
+	// TODO: Support TLS.
+	u, err := url.Parse("http://" + targetAddr)
+	if err != nil {
+		return errors.Errorf("invalid target address %s", targetAddr)
+	}
+	proxy := httputil.NewSingleHostReverseProxy(u)
+	proxy.ServeHTTP(w, r)
+	return nil
 }
 
 // member returns member information of the server
@@ -673,13 +765,6 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
-
-	// start background managers
-	s.resourceManagerService.StartBackgroundWorker()
-	defer func() {
-		s.resourceManagerService.Stop()
-		log.Info("resource manager exited")
-	}()
 
 	// TODO support TLS.
 	executorClients := pkgClient.NewExecutorGroup(&security.Credential{}, log.L())
@@ -758,7 +843,7 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 	}()
 
 	dctx = dctx.WithDeps(dp)
-	s.jobManager, err = NewJobManagerImplV2(dctx, metadata.JobManagerUUID)
+	s.jobManager, err = NewJobManagerImpl(dctx, metadata.JobManagerUUID)
 	if err != nil {
 		return
 	}
@@ -826,12 +911,12 @@ func (s *Server) runLeaderService(ctx context.Context) (err error) {
 }
 
 func (s *Server) collectLeaderMetric() {
-	for status := range pb.QueryJobResponse_JobStatus_name {
-		pbStatus := pb.QueryJobResponse_JobStatus(status)
+	for statusName := range pb.Job_Status_name {
+		pbStatus := pb.Job_Status(statusName)
 		s.metrics.metricJobNum[pbStatus].Set(float64(s.jobManager.JobCount(pbStatus)))
 	}
-	for status := range model.ExecutorStatusNameMapping {
-		s.metrics.metricExecutorNum[status].Set(float64(s.executorManager.ExecutorCount(status)))
+	for statusName := range model.ExecutorStatusNameMapping {
+		s.metrics.metricExecutorNum[statusName].Set(float64(s.executorManager.ExecutorCount(statusName)))
 	}
 }
 
@@ -851,28 +936,4 @@ func (s *Server) LeaderAddr() (string, bool) {
 		return "", false
 	}
 	return leader.AdvertiseAddr, true
-}
-
-// ResignLeader implements ServerInfoProvider.ResignLeader.
-func (s *Server) ResignLeader() {
-	select {
-	case s.resignCh <- struct{}{}:
-	default:
-	}
-}
-
-// JobManager implements ServerInfoProvider.JobManager.
-func (s *Server) JobManager() (JobManager, bool) {
-	if s.leaderInitialized.Load() && s.jobManager != nil {
-		return s.jobManager, true
-	}
-	return nil, false
-}
-
-// ExecutorManager implements ServerInfoProvider.ExecutorManager.
-func (s *Server) ExecutorManager() (ExecutorManager, bool) {
-	if s.leaderInitialized.Load() && s.executorManager != nil {
-		return s.executorManager, true
-	}
-	return nil, false
 }

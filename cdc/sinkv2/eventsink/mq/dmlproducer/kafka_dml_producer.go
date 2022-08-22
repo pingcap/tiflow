@@ -24,11 +24,11 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	collector "github.com/pingcap/tiflow/cdc/sinkv2/metrics/kafka"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	pkafka "github.com/pingcap/tiflow/pkg/kafka"
+	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
@@ -136,7 +136,7 @@ func NewKafkaDMLProducer(
 
 func (k *kafkaDMLProducer) AsyncSendMessage(
 	ctx context.Context, topic string,
-	partition int32, message *codec.MQMessage,
+	partition int32, message *common.Message,
 ) error {
 	// We have to hold the lock to avoid writing to a closed producer.
 	// Close may be blocked for a long time.

@@ -21,6 +21,7 @@ import (
 	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	"github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
+	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/spf13/cobra"
 )
 
@@ -107,17 +108,10 @@ func newCmdDeleteServiceGcSafepoint(f factory.Factory, commonOptions *unsafeComm
 		Use:   "delete-service-gc-safepoint",
 		Short: "Delete CDC service GC safepoint in PD, confirm that you know what this command will do and use it at your own risk",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := commonOptions.confirmMetaDelete(cmd); err != nil {
-				return err
-			}
-
-			err := o.complete(f)
-			if err != nil {
-				return err
-			}
-
-			return o.run(cmd)
+		Run: func(cmd *cobra.Command, args []string) {
+			util.CheckErr(commonOptions.confirmMetaDelete(cmd))
+			util.CheckErr(o.complete(f))
+			util.CheckErr(o.run(cmd))
 		},
 	}
 	o.addFlags(command)

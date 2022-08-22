@@ -18,17 +18,16 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/gogo/status"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
+	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
+	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
+	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc/codes"
-
-	pb "github.com/pingcap/tiflow/engine/enginepb"
-	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
-	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
-	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
-	"github.com/pingcap/tiflow/engine/pkg/tenant"
 )
 
 var _ pb.ResourceManagerServer = (*Service)(nil)
@@ -97,20 +96,6 @@ func newServiceTestSuite(t *testing.T) *serviceTestSuite {
 	}
 }
 
-func (s *serviceTestSuite) Start() {
-	s.service.StartBackgroundWorker()
-}
-
-func (s *serviceTestSuite) Stop() {
-	s.service.Stop()
-}
-
-func (s *serviceTestSuite) OfflineExecutor(t *testing.T, executor resModel.ExecutorID) {
-	s.executorInfoProvider.RemoveExecutor(string(executor))
-	err := s.service.onExecutorOffline(executor)
-	require.NoError(t, err)
-}
-
 func (s *serviceTestSuite) LoadMockData() {
 	for _, resource := range serviceMockData {
 		_ = s.meta.UpsertResource(context.Background(), resource)
@@ -127,7 +112,6 @@ func TestServiceBasics(t *testing.T) {
 	fakeProjectInfo := tenant.NewProjectInfo("fakeTenant", "fakeProject")
 	suite := newServiceTestSuite(t)
 	suite.LoadMockData()
-	suite.Start()
 
 	ctx := context.Background()
 	_, err := suite.service.CreateResource(ctx, &pb.CreateResourceRequest{
@@ -147,7 +131,9 @@ func TestServiceBasics(t *testing.T) {
 		CreatorWorkerId: "test-worker-4",
 	})
 	require.Error(t, err)
-	require.Equal(t, codes.AlreadyExists, status.Convert(err).Code())
+	code, ok := rpcerror.GRPCStatusCode(err)
+	require.True(t, ok)
+	require.Equal(t, codes.AlreadyExists, code)
 
 	execID, ok, err := suite.service.GetPlacementConstraint(ctx,
 		resModel.ResourceKey{
@@ -222,24 +208,23 @@ func TestServiceBasics(t *testing.T) {
 			JobId: "test-job-1", ResourceId: "/local/test/2",
 		},
 	})
-	require.Error(t, err)
-	require.Equal(t, codes.NotFound, status.Convert(err).Code())
+	code, ok = rpcerror.GRPCStatusCode(err)
+	require.True(t, ok)
+	require.Equal(t, codes.NotFound, code)
 
 	_, err = suite.service.QueryResource(ctx, &pb.QueryResourceRequest{
 		ResourceKey: &pb.ResourceKey{
 			JobId: "test-job-1", ResourceId: "/local/test/non-existent",
 		},
 	})
-	require.Error(t, err)
-	require.Equal(t, codes.NotFound, status.Convert(err).Code())
-
-	suite.Stop()
+	code, ok = rpcerror.GRPCStatusCode(err)
+	require.True(t, ok)
+	require.Equal(t, codes.NotFound, code)
 }
 
 func TestServiceResourceTypeNoConstraint(t *testing.T) {
 	suite := newServiceTestSuite(t)
 	suite.LoadMockData()
-	suite.Start()
 
 	_, ok, err := suite.service.GetPlacementConstraint(context.Background(),
 		resModel.ResourceKey{
@@ -248,6 +233,4 @@ func TestServiceResourceTypeNoConstraint(t *testing.T) {
 		})
 	require.NoError(t, err)
 	require.False(t, ok)
-
-	suite.Stop()
 }
