@@ -487,6 +487,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		metricProxies.Init(s.cfg.MetricsFactory)
 	}
 	s.metricsProxies = metricProxies.CacheForOneTask(s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID)
+	s.safeMode = sm.NewSafeMode()
 
 	s.shardDDL = NewShardDDL(&s.tctx.Logger, s)
 	return nil
@@ -1860,7 +1861,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	// but there are no ways to make `update` idempotent,
 	// if we start syncer at an early position, database must bear a period of inconsistent state,
 	// it's eventual consistency.
-	s.safeMode = sm.NewSafeMode()
 	s.enableSafeModeInitializationPhase(s.runCtx)
 
 	closeShardingResync := func() error {
