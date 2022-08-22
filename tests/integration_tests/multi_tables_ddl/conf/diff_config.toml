@@ -6,8 +6,6 @@ export-fix-sql = true
 
 check-struct-only = false
 
-
-
 [task]
     output-dir = "/tmp/tidb_cdc_test/multi_tables_ddl/sync_diff/output"
 
@@ -16,7 +14,6 @@ check-struct-only = false
     target-instance = "mysql1"
 
     target-check-tables = ["multi_tables_ddl_test.t1_7", "multi_tables_ddl_test.t2_7"]
-
 
 [data-sources]
 [data-sources.tidb0]

@@ -339,8 +339,6 @@ func TestHandleJob(t *testing.T) {
 	f, err := filter.NewFilter(cfg, "")
 	require.NoError(t, err)
 	ddlJobPullerImpl.filter = f
-	// ctx, cancel := context.WithCancel(context.Background())
-	// defer cancel()
 
 	// test create database
 	{

@@ -301,10 +301,6 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			return true, errors.Trace(err)
 		}
 	case timodel.ActionRenameTable:
-		// schema, ok := p.schemaSnapshot.SchemaByID(job.SchemaID)
-		// if !ok {
-		// 	return true, cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(job.SchemaID)
-		// }
 		oldTable, ok := p.schemaSnapshot.PhysicalTableByID(job.TableID)
 		if !ok {
 			// 1. If we can not find the old table, and the new table name is in filter rule, return error.
