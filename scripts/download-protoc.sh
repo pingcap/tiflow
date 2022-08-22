@@ -53,6 +53,9 @@ mkdir -p $TOOLS_INCLUDE_DIR/google/api/
 [ ! -f $TOOLS_INCLUDE_DIR/google/api/http.proto ] &&
 	curl -sL https://raw.githubusercontent.com/googleapis/googleapis/$GOOGLE_API_VERSION/google/api/http.proto \
 		-o $TOOLS_INCLUDE_DIR/google/api/http.proto
+[ ! -f $TOOLS_INCLUDE_DIR/google/api/field_behavior.proto ] &&
+	curl -sL https://raw.githubusercontent.com/googleapis/googleapis/$GOOGLE_API_VERSION/google/api/field_behavior.proto \
+		-o $TOOLS_INCLUDE_DIR/google/api/field_behavior.proto
 
 echo "download protoc..."
 [ ! -d $TOOLS_BIN_DIR ] && mkdir -p $TOOLS_BIN_DIR

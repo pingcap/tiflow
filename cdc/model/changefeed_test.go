@@ -332,7 +332,7 @@ func TestFixSinkProtocolIncompatible(t *testing.T) {
 				require.NoError(t, err)
 			} else {
 				require.Error(t, err)
-				require.Contains(t, err.Error(), "ErrMQSinkUnknownProtocol")
+				require.Contains(t, err.Error(), "ErrSinkUnknownProtocol")
 			}
 		}
 	}
@@ -591,7 +591,7 @@ func TestFixSinkProtocol(t *testing.T) {
 			require.Equal(t, tc.expectedProtocol, protocol)
 		} else {
 			require.Error(t, err)
-			require.Contains(t, err.Error(), "ErrMQSinkUnknownProtocol")
+			require.Contains(t, err.Error(), "ErrSinkUnknownProtocol")
 		}
 	}
 

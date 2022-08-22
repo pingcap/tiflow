@@ -43,8 +43,8 @@ func TestConfirmLargeDataGap(t *testing.T) {
 		os.Stdin = stdin
 	}()
 
-	err = confirmLargeDataGap(cmd, currentTs, startTs)
-	require.Regexp(t, "abort changefeed create or resume", err)
+	err = confirmLargeDataGap(cmd, currentTs, startTs, "test")
+	require.Regexp(t, "cli changefeed test", err)
 
 	// check start ts more than 1 day before current ts, and type Y when confirming
 	err = os.WriteFile(path, []byte("Y"), 0o644)
@@ -52,7 +52,7 @@ func TestConfirmLargeDataGap(t *testing.T) {
 	f, err = os.Open(path)
 	require.Nil(t, err)
 	os.Stdin = f
-	err = confirmLargeDataGap(cmd, currentTs, startTs)
+	err = confirmLargeDataGap(cmd, currentTs, startTs, "test")
 	require.Nil(t, err)
 }
 
@@ -73,7 +73,7 @@ func TestConfirmIgnoreIneligibleTables(t *testing.T) {
 	}()
 
 	ignore, err := confirmIgnoreIneligibleTables(cmd)
-	require.Regexp(t, "abort changefeed create or resume", err)
+	require.Regexp(t, "cli changefeed create", err)
 	require.False(t, ignore)
 
 	// check start ts more than 1 day before current ts, and type Y when confirming

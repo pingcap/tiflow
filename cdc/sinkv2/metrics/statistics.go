@@ -32,10 +32,10 @@ const (
 )
 
 // NewStatistics creates a statistics
-func NewStatistics(ctx context.Context, captureAddr string, sinkType sink.Type) *Statistics {
+func NewStatistics(ctx context.Context, sinkType sink.Type) *Statistics {
 	statistics := &Statistics{
 		sinkType:     sinkType,
-		captureAddr:  captureAddr,
+		captureAddr:  contextutil.CaptureAddrFromCtx(ctx),
 		changefeedID: contextutil.ChangefeedIDFromCtx(ctx),
 	}
 	statistics.lastPrintStatusTime.Store(time.Now())

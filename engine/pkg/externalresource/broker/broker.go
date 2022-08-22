@@ -17,20 +17,18 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
-
-	"github.com/gogo/status"
-	"github.com/pingcap/tiflow/engine/pkg/client"
-	"go.uber.org/zap"
-	"google.golang.org/grpc/codes"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pkg/client"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/storagecfg"
+	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	derrors "github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // ResourceManagerClient is a type alias for a client connecting to
@@ -52,6 +50,10 @@ func NewBroker(
 	executorID resModel.ExecutorID,
 	client ResourceManagerClient,
 ) *DefaultBroker {
+	log.Info("Create new resource broker",
+		zap.String("executor-id", string(executorID)),
+		zap.Any("config", config))
+
 	fm := NewLocalFileManager(config.Local)
 	return &DefaultBroker{
 		config:      config,
