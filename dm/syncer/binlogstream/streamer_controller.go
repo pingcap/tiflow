@@ -301,41 +301,34 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 	return err
 }
 
-// shouldUpdateSuffix is used by StreamerController when we reset to the middle
-// of replace/inject. The reset location has suffix but upstream location does
-// not. when we update locations from upstream ones, we should decide if suffix
-// should be overwritten.
-// TODO: very ugly, many special cases :( .
-func shouldUpdateSuffix(e *replication.BinlogEvent) bool {
-	isGTIDEvent := e.Header.EventType == replication.GTID_EVENT ||
-		e.Header.EventType == replication.ANONYMOUS_GTID_EVENT ||
-		e.Header.EventType == replication.MARIADB_GTID_EVENT
-	return shouldUpdatePos(e) && !isGTIDEvent
-}
-
 // GetEvent returns binlog event from upstream binlog or streamModifier. It's not
 // concurrent safe.
-// When return events from streamModifier, we should maintain these properties:
+//
+// After GetEvent returns an event, GetCurStartLocation, GetCurEndLocation, GetTxnEndLocation
+// will return the corresponding locations of the event. The definition of 3 locations
+// can be found in the comment of locations struct in binlog_locations.go .
+//
+// When return events from streamModifier, 3 locations are maintained as below:
 //   - Inject
 //     if we inject events [DDL1, DDL2] at (start) position 900, where start position
 //     900 has Insert1 event whose LogPos (end position) is 1000, we should return
 //     to caller like
-//   - DDL1, start position 900 LogPos 900, suffix 1
-//   - DDL2, start position 900 LogPos 900, suffix 2
-//   - Insert1, start position 900 LogPos 1000, suffix 0
+//
+//     1. DDL1, start (900, suffix 0) end (900, suffix 1)
+//     2. DDL2, start (900, suffix 1) end (900, suffix 2)
+//     3. Insert1, start (900, suffix 2) end (1000, suffix 0)
+//
 //     The DDLs are placed before DML because user may want to use Inject to change
 //     table structure for DML.
-//     when DDL need shard resync, for example, after DDL2's shard group finished,
-//     caller should use (LogPos 900, suffix 2) to reset streamer, then the next
-//     event from upstream binlog is Insert1 since upstream will ignore the suffix,
-//     and next event from streamModifier is unknown in this context.
+//
 //   - Replace
 //     if we replace events [DDL1, DDL2] at (start) position 900, where start position
 //     900 has DDL0 event whose LogPos (end position) is 1000, we should return to
 //     caller like
-//   - DDL1, start position 900 LogPos 900, suffix 1
-//   - DDL2, start position 900 LogPos 1000, suffix 0
-//     for shard resync, caller should use end position to reset streamer as above
+//
+//     1. DDL1, start (900, suffix 0) end (900, suffix 1)
+//     2. DDL2, start (900, suffix 1) end (1000, suffix 0)
+//
 //   - Skip
 //     the skipped event will still be sent to caller, with op = pb.ErrorOp_Skip,
 //     to let caller track schema and save checkpoints.
@@ -380,7 +373,7 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (*replication.Binl
 		return event, op, nil
 	}
 
-	if shouldUpdateSuffix(event) {
+	if isDataEvent(event) {
 		c.locations.curStartLocation = c.locations.curEndLocation
 		c.locations.curEndLocation = c.upstream.curEndLocation
 		c.locations.txnEndLocation = c.upstream.txnEndLocation

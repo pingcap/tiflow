@@ -26,16 +26,35 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
+func isDataEvent(e *replication.BinlogEvent) bool {
+	switch e.Event.(type) {
+	case *replication.TableMapEvent, *replication.RowsEvent, *replication.QueryEvent:
+		return true
+	}
+	return false
+}
+
+// locations provides curStartLocation, curEndLocation, txnEndLocation for binlog
+// events.
+//
+// - for the event which isDataEvent:
+//               +-------------+
+//           ... |current event| ...
+//          ^    +-------------+    ^
+//          |                       |
+//    curStartLocation        curEndLocation
+//
+//    there may be more events between curStartLocation and curEndLocation due
+//    to the limitation of binlog or implementation of DM, but in such scenario,
+//    those events should always belong to one transaction.
+//
+// - for RotateEvent:
+//    the binlog filename of curEndLocation and txnEndLocation will be updated
+//    to the new NextLogName in RotateEvent.
+//
+// - else:
+//    we do not guarantee the behaviour of 3 locations of this struct.
 type locations struct {
-	//            +-------------+
-	//        ... |current event| ...
-	//       ^    +-------------+    ^
-	//       |                       |
-	// curStartLocation        curEndLocation
-	// there may be more events between curStartLocation and curEndLocation due to the limitation of binlog or
-	// implementation of DM, but in such scenario, those events should always belong to one transaction.
-	// When curStartLocation is equal to curEndLocation, it means current event is not a data change.
-	//
 	// curStartLocation is used when
 	// - display a meaningful location
 	// - match the injected location by handle-error
@@ -70,6 +89,8 @@ func (l *locations) String() string {
 // updateHookFunc is used to run some logic before locationRecorder.update.
 type updateHookFunc func()
 
+// locationRecorder can maintain locations along with update(BinlogEvent). For the
+// properties of locations see comments of locations struct.
 // locationRecorder is not concurrent-safe.
 type locationRecorder struct {
 	*locations

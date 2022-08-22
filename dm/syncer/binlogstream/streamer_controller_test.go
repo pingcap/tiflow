@@ -134,6 +134,7 @@ func TestGetEventWithInject(t *testing.T) {
 			},
 			{
 				Header:  &replication.EventHeader{LogPos: 1020, EventSize: 10},
+				Event:   &replication.QueryEvent{Query: []byte("a DDL")},
 				RawData: []byte("should inject before me at 1010"),
 			},
 		},
@@ -149,10 +150,12 @@ func TestGetEventWithInject(t *testing.T) {
 	injectEvents := []*replication.BinlogEvent{
 		{
 			Header:  &replication.EventHeader{},
+			Event:   &replication.QueryEvent{Query: []byte("a DDL")},
 			RawData: []byte("inject 1"),
 		},
 		{
 			Header:  &replication.EventHeader{},
+			Event:   &replication.QueryEvent{Query: []byte("a DDL")},
 			RawData: []byte("inject 2"),
 		},
 	}
@@ -198,10 +201,12 @@ func TestGetEventWithReplace(t *testing.T) {
 	replaceEvents := []*replication.BinlogEvent{
 		{
 			Header:  &replication.EventHeader{},
+			Event:   &replication.QueryEvent{Query: []byte("a DDL")},
 			RawData: []byte("replace 1"),
 		},
 		{
 			Header:  &replication.EventHeader{},
+			Event:   &replication.QueryEvent{Query: []byte("a DDL")},
 			RawData: []byte("replace 2"),
 		},
 	}
@@ -325,10 +330,12 @@ func (s *testLocationSuite) TestLocationsWithGTID() {
 	replaceEvents := []*replication.BinlogEvent{
 		{
 			Header:  &replication.EventHeader{},
+			Event:   &replication.QueryEvent{Query: []byte("a DDL")},
 			RawData: []byte("first replace event"),
 		},
 		{
 			Header:  &replication.EventHeader{},
+			Event:   &replication.QueryEvent{Query: []byte("a DDL")},
 			RawData: []byte("seconds replace event"),
 		},
 	}
@@ -406,6 +413,7 @@ func TestResetToMiddleOfReplace(t *testing.T) {
 			gtidEvent,
 			{
 				Header:  &replication.EventHeader{EventType: replication.QUERY_EVENT, LogPos: 1199, EventSize: 100},
+				Event:   &replication.QueryEvent{Query: []byte("a DDL")},
 				RawData: []byte("should replace me at 1099"),
 			},
 		},
@@ -421,10 +429,12 @@ func TestResetToMiddleOfReplace(t *testing.T) {
 	replaceEvents := []*replication.BinlogEvent{
 		{
 			Header:  &replication.EventHeader{EventType: replication.QUERY_EVENT},
+			Event:   &replication.QueryEvent{Query: []byte("a DDL")},
 			RawData: []byte("replace 1"),
 		},
 		{
 			Header:  &replication.EventHeader{EventType: replication.QUERY_EVENT},
+			Event:   &replication.QueryEvent{Query: []byte("a DDL")},
 			RawData: []byte("replace 2"),
 		},
 	}
@@ -534,6 +544,7 @@ func TestResetToLastOfInject(t *testing.T) {
 			gtidEvent,
 			{
 				Header:  &replication.EventHeader{EventType: replication.QUERY_EVENT, LogPos: 1199, EventSize: 100},
+				Event:   &replication.QueryEvent{Query: []byte("a DDL")},
 				RawData: []byte("should inject before me at 1099"),
 			},
 		},
@@ -549,6 +560,7 @@ func TestResetToLastOfInject(t *testing.T) {
 	replaceEvents := []*replication.BinlogEvent{
 		{
 			Header:  &replication.EventHeader{EventType: replication.QUERY_EVENT},
+			Event:   &replication.QueryEvent{Query: []byte("a DDL")},
 			RawData: []byte("replace 1"),
 		},
 	}
