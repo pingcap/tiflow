@@ -72,6 +72,7 @@ type BaseJobMaster interface {
 
 	// Exit should be called when jobmaster (in user logic) wants to exit.
 	// exitReason: ExitReasonFinished/ExitReasonCancelled/ExitReasonFailed
+	// if err is not nil, extMsg will be ignored.
 	Exit(ctx context.Context, exitReason ExitReason, err error, extMsg string) error
 
 	// IsMasterReady returns whether the master has received heartbeats for all
