@@ -308,8 +308,7 @@ func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorR
 		}
 		return resp2, err
 	}
-	// register executor to scheduler
-	// TODO: check leader, if not leader, return notLeader error.
+
 	execInfo, err := s.executorManager.AllocateNewExec(req)
 	if err != nil {
 		log.Error("add executor failed", zap.Error(err))

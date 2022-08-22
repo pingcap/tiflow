@@ -311,6 +311,14 @@
         "DDL"
       ]
     },
+    "SelectorOp": {
+      "type": "string",
+      "enum": [
+        "SelectorEq",
+        "SelectorNeq",
+        "SelectorRegex"
+      ]
+    },
     "enginepbCheckDirResponse": {
       "type": "object",
       "properties": {
@@ -443,6 +451,12 @@
         },
         "error": {
           "$ref": "#/definitions/enginepbError"
+        },
+        "selectors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/enginepbSelector"
+          }
         }
       }
     },
@@ -641,6 +655,20 @@
         },
         "executor_addr": {
           "type": "string"
+        }
+      }
+    },
+    "enginepbSelector": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "op": {
+          "$ref": "#/definitions/SelectorOp"
         }
       }
     },

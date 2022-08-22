@@ -172,11 +172,13 @@ func (e *ExecutorManagerImpl) AllocateNewExec(req *pb.RegisterExecutorRequest) (
 	log.Info("allocate new executor", zap.Stringer("req", req))
 
 	e.mu.Lock()
-	info := &model.NodeInfo{
-		ID:         model.ExecutorID(e.idAllocator.NewString()),
-		Addr:       req.Address,
-		Capability: int(req.Capability),
+	newExecutorID := model.ExecutorID(e.idAllocator.NewString())
+	info := model.NewNodeInfoForExecutor(newExecutorID)
+
+	if err := info.FromRegisterExecutorRequest(req); err != nil {
+		return nil, err
 	}
+
 	if _, ok := e.executors[info.ID]; ok {
 		e.mu.Unlock()
 		return nil, errors.ErrExecutorDupRegister.GenWithStackByArgs()

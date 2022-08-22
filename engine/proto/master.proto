@@ -80,6 +80,19 @@ service JobManager {
     }
 }
 
+message Selector {
+    enum Op {
+        SelectorTypeUnknown = 0;
+        SelectorEq = 1;
+        SelectorNeq = 2;
+        SelectorRegex = 3;
+    }
+
+    string label = 1;
+    string target = 2;
+    Op op = 3;
+}
+
 message HeartbeatRequest {
     string executor_id = 1;
     int32 resource_usage = 2;
@@ -101,6 +114,7 @@ message RegisterExecutorRequest {
     string address = 1;
     string version = 2;
     int64  capability = 3;
+    map<string, string> labels = 4;
 }
 
 message RegisterExecutorResponse {
@@ -112,6 +126,7 @@ message ScheduleTaskRequest {
     string task_id = 1;
     int64 cost = 2;
     repeated ResourceKey resource_requirements = 3;
+    repeated Selector selectors = 4;
 }
 
 message ScheduleTaskResponse {
@@ -168,6 +183,7 @@ message Job {
     Status status = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
     bytes config = 4;
     Error error = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+    repeated Selector selectors = 6;
 }
 
 message CreateJobRequest {

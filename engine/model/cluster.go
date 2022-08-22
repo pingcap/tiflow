@@ -17,11 +17,12 @@ import (
 	"encoding/json"
 
 	"github.com/pingcap/errors"
+	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	"github.com/pingcap/tiflow/pkg/label"
 )
 
-// NodeType is the type of a server instance, could be either server master or executor
+// NodeType is a type of server instance, could be either server master or executor
 type NodeType int
 
 // All node types
@@ -58,9 +59,43 @@ type NodeInfo struct {
 	Labels label.Set `json:"labels"`
 }
 
+// NewNodeInfoForExecutor constructs a NodeInfo struct for an executor.
+func NewNodeInfoForExecutor(id ExecutorID) *NodeInfo {
+	return &NodeInfo{
+		Type: NodeTypeExecutor,
+		ID:   id,
+	}
+}
+
+// FromRegisterExecutorRequest fills the NodeInfo with information provided by
+// a RegisterExecutorRequest.
+func (e *NodeInfo) FromRegisterExecutorRequest(req *pb.RegisterExecutorRequest) error {
+	if e.Type != NodeTypeExecutor {
+		panic("FromRegisterExecutorRequest must be called with Type == NodeTypeExecutor")
+	}
+	e.Addr = req.Address
+	e.Capability = int(req.Capability)
+
+	var err error
+	e.Labels, err = label.NewSetFromMap(req.GetLabels())
+	if err != nil {
+		return errors.Annotate(err, "FromRegisterExecutorRequest")
+	}
+	return nil
+}
+
 // EtcdKey return encoded key for a node used in service discovery etcd
 func (e *NodeInfo) EtcdKey() string {
 	return adapter.NodeInfoKeyAdapter.Encode(string(e.ID))
+}
+
+// ToJSON returns json marshal of a node info
+func (e *NodeInfo) ToJSON() (string, error) {
+	data, err := json.Marshal(e)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	return string(data), nil
 }
 
 // ExecutorStatus describes the node aliveness status of an executor
@@ -89,15 +124,6 @@ func (s ExecutorStatus) String() string {
 		return "unknown"
 	}
 	return val
-}
-
-// ToJSON returns json marshal of a node info
-func (e *NodeInfo) ToJSON() (string, error) {
-	data, err := json.Marshal(e)
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-	return string(data), nil
 }
 
 // ExecutorStatusChangeType describes the types of ExecutorStatusChange.
