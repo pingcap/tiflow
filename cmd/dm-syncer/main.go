@@ -27,8 +27,8 @@ import (
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer"
+	"github.com/pingcap/tiflow/pkg/version"
 
 	"github.com/pingcap/errors"
 	globalLog "github.com/pingcap/log"
@@ -70,9 +70,8 @@ func main() {
 	globalLog.ReplaceGlobals(lg, r)
 
 	// 3. print process version information
-	utils.PrintInfo("dm-syncer", func() {
-		log.L().Info("", zap.Stringer("dm-syncer conf", conf))
-	})
+	version.LogVersionInfo("dm-syncer")
+	log.L().Info("", zap.Stringer("dm-syncer conf", conf))
 
 	sync := syncer.NewSyncer(conf, nil, nil) // do not support shard DDL for singleton syncer.
 	sc := make(chan os.Signal, 1)

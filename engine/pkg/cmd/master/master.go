@@ -26,12 +26,12 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tiflow/engine/pkg/cmd/util"
-	"github.com/pingcap/tiflow/engine/pkg/version"
 	"github.com/pingcap/tiflow/engine/servermaster"
 	cmdconetxt "github.com/pingcap/tiflow/pkg/cmd/context"
 	ticdcutil "github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/version"
 )
 
 // options defines flags for the `server` command.
@@ -93,7 +93,7 @@ func (o *options) run(cmd *cobra.Command) error {
 		return errors.Trace(err)
 	}
 
-	version.LogVersionInfo()
+	version.LogVersionInfo("TiFlow Master")
 	if os.Getenv(gin.EnvGinMode) == "" {
 		gin.SetMode(gin.ReleaseMode)
 	}
