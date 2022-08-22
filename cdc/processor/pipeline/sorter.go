@@ -360,22 +360,6 @@ func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.Polymorphi
 	n.sorter.AddEntry(ctx, event)
 }
 
-func (n *sorterNode) TryHandleDataMessage(
-	ctx context.Context, msg pmessage.Message,
-) (bool, error) {
-	switch msg.Tp {
-	case pmessage.MessageTypePolymorphicEvent:
-		n.handleRawEvent(ctx, msg.PolymorphicEvent)
-		return true, nil
-	case pmessage.MessageTypeBarrier:
-		n.updateBarrierTs(msg.BarrierTs)
-		fallthrough
-	default:
-		ctx.(pipeline.NodeContext).SendToNextNode(msg)
-		return true, nil
-	}
-}
-
 func (n *sorterNode) updateBarrierTs(barrierTs model.Ts) {
 	if barrierTs > n.BarrierTs() {
 		atomic.StoreUint64(&n.barrierTs, barrierTs)
