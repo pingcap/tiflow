@@ -240,6 +240,11 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 }
 
 func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*model.CaptureInfo) error {
+	log.Info("[QP] changefeed.tick is called",
+		zap.Uint64("resolvedTs", c.state.Status.ResolvedTs),
+		zap.Uint64("checkpointTs", c.state.Status.CheckpointTs),
+		zap.String("changefeed", c.id.ID))
+
 	adminJobPending := c.feedStateManager.Tick(c.state)
 	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
 	// check stale checkPointTs must be called before `feedStateManager.ShouldRunning()`
@@ -642,6 +647,10 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 	ok = true
 	if c.state.Status == nil {
 		c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+			log.Info("[QP] owner inits phase 1",
+				zap.Uint64("checkpointTs", c.state.Info.StartTs),
+				zap.Uint64("resolvedTs", c.state.Info.StartTs),
+				zap.String("changefeed", c.id.ID))
 			if status == nil {
 				status = &model.ChangeFeedStatus{
 					// the changefeed status is nil when the changefeed is just created.
@@ -655,24 +664,25 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 		})
 		ok = false
 	}
-    log.Info("[QP] owner inits phase 1",
-        zap.Uint64("checkpointTs", c.state.Status.CheckpointTs),
-        zap.Uint64("resolvedTs", c.state.Status.CheckpointTs),
-        zap.String("changefeed", c.id.ID))
 
 	for captureID := range c.state.TaskPositions {
 		if _, exist := captures[captureID]; !exist {
 			c.state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+				if position != nil {
+					log.Info("[QP] owner inits phase 2",
+						zap.Uint64("checkpointTs", position.CheckPointTs),
+						zap.Uint64("resolvedTs", position.ResolvedTs),
+						zap.String("changefeed", c.id.ID))
+				} else {
+					log.Info("[QP] owner inits phase 2, position is nil",
+						zap.String("changefeed", c.id.ID))
+				}
 				return nil, position != nil, nil
 			})
 			ok = false
 		}
 	}
 
-    log.Info("[QP] owner inits phase 2",
-        zap.Uint64("checkpointTs", c.state.Status.CheckpointTs),
-        zap.Uint64("resolvedTs", c.state.Status.CheckpointTs),
-        zap.String("changefeed", c.id.ID))
 	return
 }
 
