@@ -655,6 +655,10 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 		})
 		ok = false
 	}
+    log.Info("[QP] owner inits phase 1",
+        zap.Uint64("checkpointTs", c.state.Status.CheckpointTs),
+        zap.Uint64("resolvedTs", c.state.Status.CheckpointTs),
+        zap.String("changefeed", c.id.ID))
 
 	for captureID := range c.state.TaskPositions {
 		if _, exist := captures[captureID]; !exist {
@@ -664,6 +668,11 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 			ok = false
 		}
 	}
+
+    log.Info("[QP] owner inits phase 2",
+        zap.Uint64("checkpointTs", c.state.Status.CheckpointTs),
+        zap.Uint64("resolvedTs", c.state.Status.CheckpointTs),
+        zap.String("changefeed", c.id.ID))
 	return
 }
 
