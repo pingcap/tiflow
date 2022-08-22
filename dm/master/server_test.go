@@ -65,6 +65,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/pessimism"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/pkg/version"
 )
 
 // use task config from integration test `sharding`.
@@ -1391,7 +1392,7 @@ func (t *testMaster) TestServer(c *check.C) {
 	cfg.AdvertiseAddr = cfg.MasterAddr
 
 	basicServiceCheck := func(c *check.C, cfg *Config) {
-		t.testHTTPInterface(c, fmt.Sprintf("http://%s/status", cfg.AdvertiseAddr), []byte(utils.GetRawInfo()))
+		t.testHTTPInterface(c, fmt.Sprintf("http://%s/status", cfg.AdvertiseAddr), []byte(version.GetRawInfo()))
 		t.testHTTPInterface(c, fmt.Sprintf("http://%s/debug/pprof/", cfg.AdvertiseAddr), []byte("Types of profiles available"))
 		// HTTP API in this unit test is unstable, but we test it in `http_apis` in integration test.
 		// t.testHTTPInterface(c, fmt.Sprintf("http://%s/apis/v1alpha1/status/test-task", cfg.AdvertiseAddr), []byte("task test-task has no source or not exist"))
@@ -1605,7 +1606,7 @@ func (t *testMaster) TestMasterTLS(c *check.C) {
 
 func (t *testMaster) testTLSPrefix(c *check.C, cfg *Config) {
 	t.testNormalServerLifecycle(c, cfg, func(c *check.C, cfg *Config) {
-		t.testHTTPInterface(c, fmt.Sprintf("https://%s/status", cfg.AdvertiseAddr), []byte(utils.GetRawInfo()))
+		t.testHTTPInterface(c, fmt.Sprintf("https://%s/status", cfg.AdvertiseAddr), []byte(version.GetRawInfo()))
 		t.testHTTPInterface(c, fmt.Sprintf("https://%s/debug/pprof/", cfg.AdvertiseAddr), []byte("Types of profiles available"))
 	})
 }

@@ -28,11 +28,13 @@ func TestProcessorListCli(t *testing.T) {
 	defer ctrl.Finish()
 	f := newMockFactory(ctrl)
 
+	o := newListProcessorOptions()
+	o.complete(f)
 	cmd := newCmdListProcessor(f)
 	os.Args = []string{"list"}
 	f.processor.EXPECT().List(gomock.Any()).
 		Return(nil, errors.New("test"))
-	require.NotNil(t, cmd.Execute())
+	require.NotNil(t, o.run(cmd))
 
 	cmd = newCmdListProcessor(f)
 	os.Args = []string{"list"}

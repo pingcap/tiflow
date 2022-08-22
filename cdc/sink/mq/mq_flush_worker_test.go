@@ -22,22 +22,23 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
-	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 )
 
 type mockProducer struct {
-	mqEvent      map[TopicPartitionKey][]*codec.MQMessage
+	mqEvent      map[TopicPartitionKey][]*common.Message
 	flushedTimes int
 
 	mockErr chan error
 }
 
 func (m *mockProducer) AsyncSendMessage(
-	ctx context.Context, topic string, partition int32, message *codec.MQMessage,
+	ctx context.Context, topic string, partition int32, message *common.Message,
 ) error {
 	select {
 	case err := <-m.mockErr:
@@ -50,14 +51,14 @@ func (m *mockProducer) AsyncSendMessage(
 		Partition: partition,
 	}
 	if _, ok := m.mqEvent[key]; !ok {
-		m.mqEvent[key] = make([]*codec.MQMessage, 0)
+		m.mqEvent[key] = make([]*common.Message, 0)
 	}
 	m.mqEvent[key] = append(m.mqEvent[key], message)
 	return nil
 }
 
 func (m *mockProducer) SyncBroadcastMessage(
-	ctx context.Context, topic string, partitionsNum int32, message *codec.MQMessage,
+	ctx context.Context, topic string, partitionsNum int32, message *common.Message,
 ) error {
 	panic("Not used")
 }
@@ -77,15 +78,15 @@ func (m *mockProducer) InjectError(err error) {
 
 func NewMockProducer() *mockProducer {
 	return &mockProducer{
-		mqEvent: make(map[TopicPartitionKey][]*codec.MQMessage),
+		mqEvent: make(map[TopicPartitionKey][]*common.Message),
 		mockErr: make(chan error, 1),
 	}
 }
 
 func newTestWorker(ctx context.Context) (*flushWorker, *mockProducer) {
 	// 200 is about the size of a row change.
-	encoderConfig := codec.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(200)
-	builder, err := codec.NewEventBatchEncoderBuilder(context.Background(), encoderConfig)
+	encoderConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(200)
+	builder, err := builder.NewEventBatchEncoderBuilder(context.Background(), encoderConfig)
 	if err != nil {
 		panic(err)
 	}

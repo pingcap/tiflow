@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package enginepb;
 
+option go_package = "github.com/pingcap/tiflow/engine/enginepb";
+
 service DataRWService {
     rpc ReadLines(ReadLinesRequest ) returns (stream ReadLinesResponse) {}
     rpc WriteLines(stream WriteLinesRequest) returns (WriteLinesResponse) {}
