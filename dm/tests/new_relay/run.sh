@@ -236,6 +236,9 @@ function run() {
 	test_cant_dail_upstream
 	test_relay_leak
 
+	cleanup_process
+	cleanup_data $TEST_NAME
+
 	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/relay/ReportRelayLogSpaceInBackground=return(1)"
 
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
