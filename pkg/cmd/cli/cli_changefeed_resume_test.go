@@ -33,6 +33,8 @@ func TestChangefeedResumeCli(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	f := newMockFactory(ctrl)
+	o := newResumeChangefeedOptions()
+	o.complete(f)
 	cmd := newCmdResumeChangefeed(f)
 
 	// 1. test changefeed resume with non-nil changefeed get result, non-nil tso get result
@@ -55,7 +57,9 @@ func TestChangefeedResumeCli(t *testing.T) {
 	// 2. test changefeed resume with nil changfeed get result
 	f.changefeeds.EXPECT().Get(gomock.Any(), "abc").Return(&model.ChangefeedDetail{}, nil)
 	os.Args = []string{"resume", "--no-confirm=false", "--changefeed-id=abc"}
-	require.NotNil(t, cmd.Execute())
+	o.noConfirm = false
+	o.changefeedID = "abc"
+	require.NotNil(t, o.run(cmd))
 
 	// 3. test changefeed resume with nil tso get result
 	f.changefeeds.EXPECT().Get(gomock.Any(), "abc").Return(&model.ChangefeedDetail{
@@ -66,8 +70,7 @@ func TestChangefeedResumeCli(t *testing.T) {
 		CheckpointTSO:  2,
 	}, nil)
 	f.tso.EXPECT().Query(gomock.Any(), gomock.Any()).Return(nil, errors.New("test")).AnyTimes()
-	os.Args = []string{"resume", "--no-confirm=false", "--changefeed-id=abc"}
-	require.NotNil(t, cmd.Execute())
+	require.NotNil(t, o.run(cmd))
 
 	// 4. test changefeed resume with non-nil changefeed result, non-nil tso get result,
 	// and confirmation checking
@@ -81,7 +84,6 @@ func TestChangefeedResumeCli(t *testing.T) {
 	f.tso.EXPECT().Query(gomock.Any(), gomock.Any()).Return(&v2.Tso{
 		Timestamp: time.Now().Unix() * 1000,
 	}, nil).AnyTimes()
-	os.Args = []string{"resume", "--no-confirm=false", "--changefeed-id=abc"}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "confirm.txt")
 	err := os.WriteFile(path, []byte("n"), 0o644)
@@ -93,15 +95,17 @@ func TestChangefeedResumeCli(t *testing.T) {
 	defer func() {
 		os.Stdin = stdin
 	}()
-	err = cmd.Execute()
+	err = o.run(cmd)
 	require.NotNil(t, err)
-	require.Regexp(t, "abort changefeed create or resume", err)
+	require.Regexp(t, "cli changefeed resume", err)
 }
 
 func TestChangefeedResumeWithNewCheckpointTs(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	f := newMockFactory(ctrl)
+	o := newResumeChangefeedOptions()
+	o.complete(f)
 	cmd := newCmdResumeChangefeed(f)
 
 	// 1. test changefeed resume with valid overwritten checkpointTs
@@ -134,11 +138,10 @@ func TestChangefeedResumeWithNewCheckpointTs(t *testing.T) {
 		RunningError:   nil,
 	}, nil)
 	f.tso.EXPECT().Query(gomock.Any(), gomock.Any()).Return(tso, nil).AnyTimes()
-	os.Args = []string{
-		"resume", "--no-confirm=true", "--changefeed-id=abc",
-		"--overwrite-checkpoint-ts=Hello",
-	}
-	require.NotNil(t, cmd.Execute())
+	o.noConfirm = true
+	o.changefeedID = "abc"
+	o.overwriteCheckpointTs = "Hello"
+	require.NotNil(t, o.run(cmd))
 
 	// 3. test changefeed resume with checkpointTs larger than current tso
 	f.changefeeds.EXPECT().Get(gomock.Any(), "abc").Return(&model.ChangefeedDetail{
@@ -149,11 +152,8 @@ func TestChangefeedResumeWithNewCheckpointTs(t *testing.T) {
 		RunningError:   nil,
 	}, nil)
 	f.tso.EXPECT().Query(gomock.Any(), gomock.Any()).Return(tso, nil).AnyTimes()
-	os.Args = []string{
-		"resume", "--no-confirm=true", "--changefeed-id=abc",
-		"--overwrite-checkpoint-ts=18446744073709551615",
-	}
-	require.NotNil(t, cmd.Execute())
+	o.overwriteCheckpointTs = "18446744073709551615"
+	require.NotNil(t, o.run(cmd))
 
 	// 4. test changefeed resume with checkpointTs smaller than gcSafePoint
 	f.changefeeds.EXPECT().Get(gomock.Any(), "abc").Return(&model.ChangefeedDetail{
@@ -171,9 +171,6 @@ func TestChangefeedResumeWithNewCheckpointTs(t *testing.T) {
 		OverwriteCheckpointTs: 262144,
 	}, "abc").
 		Return(cerror.ErrStartTsBeforeGC)
-	os.Args = []string{
-		"resume", "--no-confirm=true", "--changefeed-id=abc",
-		"--overwrite-checkpoint-ts=262144",
-	}
-	require.NotNil(t, cmd.Execute())
+	o.overwriteCheckpointTs = "262144"
+	require.NotNil(t, o.run(cmd))
 }
