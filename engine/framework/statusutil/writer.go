@@ -17,7 +17,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/modern-go/reflect2"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 
@@ -37,7 +36,7 @@ import (
 type Writer struct {
 	metaclient    pkgOrm.Client
 	messageSender p2p.MessageSender
-	lastStatus    *frameModel.WorkerStatus
+	lastStatus    frameModel.WorkerStatus
 
 	workerID   frameModel.WorkerID
 	masterInfo worker.MasterInfoProvider
@@ -73,14 +72,14 @@ func (w *Writer) UpdateStatus(ctx context.Context, newStatus *frameModel.WorkerS
 			zap.Error(retErr))
 	}()
 
-	if reflect2.IsNil(w.lastStatus) || newStatus.HasSignificantChange(w.lastStatus) {
+	if w.lastStatus.HasSignificantChange(newStatus) {
 		// Status has changed, so we need to persist the status.
 		if err := w.persistStatus(ctx, newStatus); err != nil {
 			return err
 		}
 	}
 
-	w.lastStatus = newStatus
+	w.lastStatus = *newStatus
 
 	// TODO replace the timeout with a variable.
 	return w.sendStatusMessageWithRetry(ctx, 15*time.Second, newStatus)

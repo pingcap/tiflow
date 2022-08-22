@@ -77,7 +77,7 @@ type WorkerStatus struct {
 }
 
 // HasSignificantChange indicates whether `s` has significant changes worth persisting.
-func (s *WorkerStatus) HasSignificantChange(other *WorkerStatus) bool {
+func (s WorkerStatus) HasSignificantChange(other *WorkerStatus) bool {
 	return s.Code != other.Code || s.ErrorMessage != other.ErrorMessage
 }
 
