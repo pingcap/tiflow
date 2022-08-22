@@ -202,7 +202,7 @@ func (w *worker) asyncSend(
 				return message.GetRowsCount(), nil
 			})
 			if err != nil {
-				return errors.Trace(err)
+				return err
 			}
 		}
 	}
