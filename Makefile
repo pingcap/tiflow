@@ -96,26 +96,12 @@ GITHASH := $(shell git rev-parse HEAD)
 GITBRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 GOVERSION := $(shell go version)
 
-# CDC LDFLAGS.
+# Version LDFLAGS.
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.ReleaseVersion=$(RELEASE_VERSION)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.BuildTS=$(BUILDTS)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.GitHash=$(GITHASH)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.GitBranch=$(GITBRANCH)"
 LDFLAGS += -X "$(CDC_PKG)/pkg/version.GoVersion=$(GOVERSION)"
-
-# DM LDFLAGS.
-LDFLAGS += -X "$(DM_PKG)/pkg/utils.ReleaseVersion=$(RELEASE_VERSION)"
-LDFLAGS += -X "$(DM_PKG)/pkg/utils.BuildTS=$(BUILDTS)"
-LDFLAGS += -X "$(DM_PKG)/pkg/utils.GitHash=$(GITHASH)"
-LDFLAGS += -X "$(DM_PKG)/pkg/utils.GitBranch=$(GITBRANCH)"
-LDFLAGS += -X "$(DM_PKG)/pkg/utils.GoVersion=$(GOVERSION)"
-
-# Engine LDFLAGS.
-LDFLAGS += -X "$(ENGINE_PKG)/pkg/version.ReleaseVersion=$(RELEASE_VERSION)"
-LDFLAGS += -X "$(ENGINE_PKG)/pkg/version.BuildTS=$(BUILDTS)"
-LDFLAGS += -X "$(ENGINE_PKG)/pkg/version.GitHash=$(GITHASH)"
-LDFLAGS += -X "$(ENGINE_PKG)/pkg/version.GitBranch=$(GITBRANCH)"
-LDFLAGS += -X "$(ENGINE_PKG)/pkg/version.GoVersion=$(GOVERSION)"
 
 include tools/Makefile
 

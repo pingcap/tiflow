@@ -26,12 +26,12 @@ import (
 	"go.uber.org/zap"
 
 	lightningLog "github.com/pingcap/tidb/br/pkg/lightning/log"
-
 	"github.com/pingcap/tiflow/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/worker"
+	"github.com/pingcap/tiflow/pkg/version"
 )
 
 func main() {
@@ -67,9 +67,8 @@ func main() {
 	lightningLogger := lg.With(zap.String("component", "lightning"))
 	lightningLog.SetAppLogger(lightningLogger)
 
-	utils.PrintInfo("dm-worker", func() {
-		log.L().Info("", zap.Stringer("dm-worker config", cfg))
-	})
+	version.LogVersionInfo("dm-worker")
+	log.L().Info("", zap.Stringer("dm-worker config", cfg))
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,

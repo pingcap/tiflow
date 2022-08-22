@@ -43,8 +43,8 @@ func ReleaseSemver() string {
 }
 
 // LogVersionInfo prints the CDC version information.
-func LogVersionInfo() {
-	log.Info("Welcome to Change Data Capture (CDC)",
+func LogVersionInfo(app string) {
+	log.Info("Welcome to "+app,
 		zap.String("release-version", ReleaseVersion),
 		zap.String("git-hash", GitHash),
 		zap.String("git-branch", GitBranch),

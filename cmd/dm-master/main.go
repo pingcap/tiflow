@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/pkg/version"
 )
 
 func main() {
@@ -59,9 +60,8 @@ func main() {
 	utils.LogHTTPProxies(true)
 
 	// 3. print process version information
-	utils.PrintInfo("dm-master", func() {
-		log.L().Info("", zap.Stringer("dm-master config", cfg))
-	})
+	version.LogVersionInfo("dm-master")
+	log.L().Info("", zap.Stringer("dm-master config", cfg))
 
 	// 4. start the server
 	ctx, cancel := context.WithCancel(context.Background())
