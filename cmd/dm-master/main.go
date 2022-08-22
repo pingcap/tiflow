@@ -60,8 +60,8 @@ func main() {
 	utils.LogHTTPProxies(true)
 
 	// 3. print process version information
-	version.LogVersionInfo("DM Master")
-	log.L().Info("", zap.Stringer("config", cfg))
+	version.LogVersionInfo("dm-master")
+	log.L().Info("", zap.Stringer("dm-master config", cfg))
 
 	// 4. start the server
 	ctx, cancel := context.WithCancel(context.Background())

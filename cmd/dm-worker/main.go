@@ -67,8 +67,8 @@ func main() {
 	lightningLogger := lg.With(zap.String("component", "lightning"))
 	lightningLog.SetAppLogger(lightningLogger)
 
-	version.LogVersionInfo("DM Worker")
-	log.L().Info("", zap.Stringer("config", cfg))
+	version.LogVersionInfo("dm-worker")
+	log.L().Info("", zap.Stringer("dm-worker config", cfg))
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,
