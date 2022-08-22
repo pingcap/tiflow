@@ -240,11 +240,6 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 }
 
 func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*model.CaptureInfo) error {
-	log.Info("[QP] changefeed.tick is called",
-		zap.Uint64("resolvedTs", c.state.Status.ResolvedTs),
-		zap.Uint64("checkpointTs", c.state.Status.CheckpointTs),
-		zap.String("changefeed", c.id.ID))
-
 	adminJobPending := c.feedStateManager.Tick(c.state)
 	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
 	// check stale checkPointTs must be called before `feedStateManager.ShouldRunning()`
@@ -269,6 +264,11 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	if err := c.initialize(ctx); err != nil {
 		return errors.Trace(err)
 	}
+
+	log.Info("[QP] changefeed post potential init",
+		zap.Uint64("resolvedTs", c.state.Status.ResolvedTs),
+		zap.Uint64("checkpointTs", c.state.Status.CheckpointTs),
+		zap.String("changefeed", c.id.ID))
 
 	select {
 	case err := <-c.errCh:
