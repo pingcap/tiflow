@@ -685,12 +685,12 @@ func (m *DefaultBaseMaster) IsMasterReady() bool {
 // Exit implements BaseMaster.Exit
 func (m *DefaultBaseMaster) Exit(ctx context.Context, exitReason ExitReason, err error, extMsg string) (errRet error) {
 	// Set the errCenter to prevent user from forgetting to return directly after calling 'Exit'
+	// keep the original error in errCenter if possible
 	defer func() {
-		errTmp := err
-		if errTmp == nil {
-			errTmp = derror.ErrWorkerFinish.FastGenByArgs()
+		if err == nil {
+			err = derror.ErrWorkerFinish.FastGenByArgs()
 		}
-		m.errCenter.OnError(errTmp)
+		m.errCenter.OnError(err)
 	}()
 
 	return m.exitWithoutSetErrCenter(ctx, exitReason, err, extMsg)

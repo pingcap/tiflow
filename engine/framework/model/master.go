@@ -54,8 +54,8 @@ type MasterMetaKVData struct {
 	// Config holds business-specific data
 	Config []byte `json:"config" gorm:"column:config;type:blob"`
 
-	// if job is failed, `ExtMsg` can hold the error message
-	// if job is finished or cancelled, `ExtMsg` can hold the self-defined job info
+	// if job is failed, business logic can set error message to `ExtMsg` by calling `Exit`
+	// if job is finished or cancelled, business logic can set self-defined job info to `ExtMsg`
 	ExtMsg string `json:"ext-msg" gorm:"column:ext_msg;type:text"`
 
 	// Deleted is a nullable timestamp. Then master is deleted

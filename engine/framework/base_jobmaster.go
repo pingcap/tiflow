@@ -333,7 +333,7 @@ func (d *DefaultBaseJobMaster) Exit(ctx context.Context, exitReason ExitReason, 
 	ctx, cancel := d.errCenter.WithCancelOnFirstError(ctx)
 	defer cancel()
 
-	// we don't set error center for master to make worker.Exit work well
+	// Don't set error center for master to make worker.Exit work well
 	if errTmp := d.master.exitWithoutSetErrCenter(ctx, exitReason, err, extMsg); errTmp != nil {
 		return errTmp
 	}
