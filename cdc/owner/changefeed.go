@@ -647,11 +647,11 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 	ok = true
 	if c.state.Status == nil {
 		c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
-			log.Info("[QP] owner inits phase 1",
-				zap.Uint64("checkpointTs", c.state.Info.StartTs),
-				zap.Uint64("resolvedTs", c.state.Info.StartTs),
-				zap.String("changefeed", c.id.ID))
 			if status == nil {
+				log.Info("[QP] owner inits phase 1",
+					zap.Uint64("checkpointTs", c.state.Info.StartTs),
+					zap.Uint64("resolvedTs", c.state.Info.StartTs),
+					zap.String("changefeed", c.id.ID))
 				status = &model.ChangeFeedStatus{
 					// the changefeed status is nil when the changefeed is just created.
 					ResolvedTs:   c.state.Info.StartTs,
@@ -682,7 +682,6 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 			ok = false
 		}
 	}
-
 	return
 }
 
