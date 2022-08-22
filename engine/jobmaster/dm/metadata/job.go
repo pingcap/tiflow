@@ -31,15 +31,15 @@ type TaskStage string
 
 // These stages may be updated in later pr.
 const (
-	StageInit     = "init"
-	StageRunning  = "running"
-	StagePaused   = "paused"
-	StageFinished = "finished"
-	StageError    = "error"
-	StagePausing  = "pausing"
+	StageInit     TaskStage = "init"
+	StageRunning  TaskStage = "running"
+	StagePaused   TaskStage = "paused"
+	StageFinished TaskStage = "finished"
+	StageError    TaskStage = "error"
+	StagePausing  TaskStage = "pausing"
 	// UnScheduled means the task is not scheduled.
 	// This usually happens when the worker is offline.
-	StageUnscheduled = "unscheduled"
+	StageUnscheduled TaskStage = "unscheduled"
 )
 
 // Job represents the state of a job.
