@@ -30,23 +30,33 @@ function run() {
   job_id=$(curl -X POST -H "Content-Type: application/json" -d "$create_job_json" "http://127.0.0.1:10245/api/v1/jobs?tenant_id=dm_case_sensitive&project_id=dm_case_sensitive" | jq -r .id)
   echo "job_id: $job_id"
 
-read -p 123
-	# wait for job finished
+	# wait for dump and load finished
 
-	# remove quotes
-	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.TaskStatus.\"mysql-01\".Status.Stage == 4 and .TaskStatus.\"mysql-02\".Status.Stage == 4'"
+	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.TaskStatus.\"mysql-01\".Status.Unit == 12 and .TaskStatus.\"mysql-02\".Status.Unit == 12'"
 
 	# check data
 
-	exec_with_retry 'run_sql --port 4000 "show databases;" | grep -q "Upper_DB1"'
-	exec_with_retry 'run_sql --port 4000 "show databases;" | grep -q "lower_db"'
-	exec_with_retry 'run_sql --port 4000 "show databases;" | grep -q "UPPER_DB_ROUTE"'
-	exec_with_retry '! run_sql --port 4000 "show databases;" | grep -q "Upper_Db_IGNORE"'
-	exec_with_retry '! run_sql --port 4000 "show tables from UPPER_DB_ROUTE;" | grep -q "Do_table_ignore"'
-	exec_with_retry 'run_sql --port 4000 "select count(*) from UPPER_DB_ROUTE.do_table_route\G" | grep -Fq "count(*): 2"'
+	exec_with_retry 'run_sql --port 4000 "select count(1) from sync_collation.t1 where name =' "'aa'" '\G" | grep -Fq "count(1): 2"'
+	exec_with_retry 'run_sql --port 4000 "select count(1) from sync_collation.t2 where name =' "'aa'" '\G" | grep -Fq "count(1): 2"'
+	exec_with_retry 'run_sql --port 4000 "select count(1) from sync_collation2.t1 where name =' "'aa'" '\G" | grep -Fq "count(1): 2"'
+	exec_with_retry 'run_sql --port 4000 "select count(1) from sync_collation2.t2 where name =' "'aa'" '\G" | grep -Fq "count(1): 2"'
+
+  # insert increment data
+
+	run_sql_file $CUR_DIR/data/db1.increment.sql
+	run_sql_file --port 3307 $CUR_DIR/data/db2.increment.sql
+
+  # check data
+
+  exec_with_retry 'run_sql --port 4000 "select count(1) from sync_collation_increment.t1 where name =' "'aa'" '\G" | grep -Fq "count(1): 2"'
+	exec_with_retry 'run_sql --port 4000 "select count(1) from sync_collation_increment.t2 where name =' "'aa'" '\G" | grep -Fq "count(1): 2"'
+	exec_with_retry 'run_sql --port 4000 "select count(1) from sync_collation_increment2.t1 where name =' "'aa'" '\G" | grep -Fq "count(1): 2"'
+	exec_with_retry 'run_sql --port 4000 "select count(1) from sync_collation_increment2.t2 where name =' "'aa'" '\G" | grep -Fq "count(1): 2"'
+  exec_with_retry 'run_sql --port 4000 "select count(1) from sync_collation_server.t1 where name =' "'aa'" '\G" | grep -Fq "count(1): 2"'
+  exec_with_retry 'run_sql --port 4000 "select count(1) from sync_collation_server2.t1 where name =' "'aa'" '\G" | grep -Fq "count(1): 2"'
 }
 
-trap "stop_engine_cluster $CONFIG" EXIT
+#trap "stop_engine_cluster $CONFIG" EXIT
 run $*
 # TODO: handle log properly
 # check_logs $WORK_DIR
