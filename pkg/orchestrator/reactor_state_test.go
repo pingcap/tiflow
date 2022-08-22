@@ -125,9 +125,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
 						Sink: &config.SinkConfig{
-							MQConfig: config.MQConfig{
-								Protocol: "open-protocol",
-							},
+							Protocol: "open-protocol",
 						},
 						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
 					},
@@ -178,9 +176,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
 						Sink: &config.SinkConfig{
-							MQConfig: config.MQConfig{
-								Protocol: "open-protocol",
-							},
+							Protocol: "open-protocol",
 						},
 						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
 					},
@@ -237,9 +233,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
 						Sink: &config.SinkConfig{
-							MQConfig: config.MQConfig{
-								Protocol: "open-protocol",
-							},
+							Protocol: "open-protocol",
 						},
 						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
 					},

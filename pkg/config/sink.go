@@ -67,13 +67,13 @@ type SinkConfig struct {
 	// the MQ-related configuration items probably would be extracted to an independent toml table
 	MQConfig
 	CSVConfig       *CSVConfig        `toml:"csv" json:"csv"`
+	Protocol        string            `toml:"protocol" json:"protocol"`
 	ColumnSelectors []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
 	TxnAtomicity    AtomicityLevel    `toml:"transaction-atomicity" json:"transaction-atomicity"`
 }
 
 type MQConfig struct {
 	DispatchRules  []*DispatchRule `toml:"dispatchers" json:"dispatchers"`
-	Protocol       string          `toml:"protocol" json:"protocol"`
 	SchemaRegistry string          `toml:"schema-registry" json:"schema-registry"`
 }
 

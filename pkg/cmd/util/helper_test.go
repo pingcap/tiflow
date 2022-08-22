@@ -185,12 +185,12 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 	err = cfg.ValidateAndAdjust(nil)
 	require.Nil(t, err)
 	require.Equal(t, &config.SinkConfig{
+		Protocol: "open-protocol",
 		MQConfig: config.MQConfig{
 			DispatchRules: []*config.DispatchRule{
 				{PartitionRule: "ts", TopicRule: "hello_{schema}", Matcher: []string{"test1.*", "test2.*"}},
 				{PartitionRule: "rowid", TopicRule: "{schema}_world", Matcher: []string{"test3.*", "test4.*"}},
 			},
-			Protocol: "open-protocol",
 		},
 		ColumnSelectors: []*config.ColumnSelector{
 			{Matcher: []string{"test1.*", "test2.*"}, Columns: []string{"column1", "column2"}},

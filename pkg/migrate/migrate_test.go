@@ -87,6 +87,7 @@ func TestMigration(t *testing.T) {
 	cfg.EnableOldValue = false
 	cfg.CheckGCSafePoint = false
 	cfg.Sink = &config.SinkConfig{
+		Protocol: "aaa",
 		MQConfig: config.MQConfig{
 			DispatchRules: []*config.DispatchRule{
 				{
@@ -96,7 +97,6 @@ func TestMigration(t *testing.T) {
 					TopicRule:      "topic",
 				},
 			},
-			Protocol:       "aaa",
 			SchemaRegistry: "bbb",
 		},
 		ColumnSelectors: []*config.ColumnSelector{
