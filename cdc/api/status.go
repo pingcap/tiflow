@@ -76,7 +76,7 @@ func (h *statusAPI) handleStatus(w http.ResponseWriter, req *http.Request) {
 	if h.capture != nil {
 		info, err := h.capture.Info()
 		if err != nil {
-			api.WriteError(w, http.StatusInternalServerError, err)
+			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
 
