@@ -50,9 +50,15 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20220423142525-ae43b7f4e5c3
 	github.com/pingcap/kvproto v0.0.0-20220517085838-12e2f5a9d167
 	github.com/pingcap/log v1.1.0
+<<<<<<< HEAD
 	github.com/pingcap/tidb v1.1.0-beta.0.20220727102111-099c736ff30a
 	github.com/pingcap/tidb-tools v6.0.1-0.20220516050036-b3ea358e374a+incompatible
 	github.com/pingcap/tidb/parser v0.0.0-20220727102111-099c736ff30a
+=======
+	github.com/pingcap/tidb v1.1.0-beta.0.20220819091852-41b9e26d1ef4
+	github.com/pingcap/tidb-tools v6.1.1-0.20220715000306-1d2f00da8c3e+incompatible
+	github.com/pingcap/tidb/parser v0.0.0-20220819091852-41b9e26d1ef4
+>>>>>>> 750f0e4dd (syncer(dm): fix collation compatibility behaviour (#6833))
 	github.com/prometheus/client_golang v1.12.2
 	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0
@@ -66,7 +72,11 @@ require (
 	github.com/swaggo/gin-swagger v1.2.0
 	github.com/swaggo/swag v1.6.6-0.20200529100950-7c765ddd0476
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
+<<<<<<< HEAD
 	github.com/tikv/client-go/v2 v2.0.1-0.20220531092439-efebaeb9fe53
+=======
+	github.com/tikv/client-go/v2 v2.0.1-0.20220818084834-0d0ae0dcfb1f
+>>>>>>> 750f0e4dd (syncer(dm): fix collation compatibility behaviour (#6833))
 	github.com/tikv/pd v1.1.0-beta.0.20220303060546-3695d8164800
 	github.com/tikv/pd/client v0.0.0-20220307081149-841fa61e9710
 	github.com/tinylib/msgp v1.1.6
@@ -114,7 +124,11 @@ require (
 	github.com/apache/thrift v0.13.1-0.20201008052519-daf620915714 // indirect
 	github.com/ardielle/ardielle-go v1.5.2 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
+<<<<<<< HEAD
 	github.com/blacktear23/go-proxyprotocol v0.0.0-20180807104634-af7a81e8dd0d // indirect
+=======
+	github.com/blacktear23/go-proxyprotocol v1.0.2 // indirect
+>>>>>>> 750f0e4dd (syncer(dm): fix collation compatibility behaviour (#6833))
 	github.com/cakturk/go-netstat v0.0.0-20200220111822-e5b49efee7a5 // indirect
 	github.com/carlmjohnson/flagext v0.21.0 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
