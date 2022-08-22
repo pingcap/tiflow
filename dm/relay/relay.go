@@ -427,10 +427,11 @@ func (r *Relay) tryRecoverLatestFile(ctx context.Context, parser2 *parser.Parser
 }
 
 // handleEvents handles binlog events, including:
-//   1. read events from upstream
-//   2. transform events
-//   3. write events into relay log files
-//   4. update metadata if needed
+//  1. read events from upstream
+//  2. transform events
+//  3. write events into relay log files
+//  4. update metadata if needed
+//
 // the first return value is the index of last read rows event if the transaction is not finished.
 func (r *Relay) handleEvents(
 	ctx context.Context,
@@ -454,23 +455,10 @@ func (r *Relay) handleEvents(
 		// 1. read events from upstream server
 		readTimer := time.Now()
 		rResult, err := reader2.GetEvent(ctx)
-<<<<<<< HEAD
-=======
 
 		failpoint.Inject("RelayGetEventFailed", func() {
 			err = errors.New("RelayGetEventFailed")
 		})
-		failpoint.Inject("RelayGetEventFailedAt", func(v failpoint.Value) {
-			if intVal, ok := v.(int); ok && intVal == eventIndex {
-				err = errors.New("fail point triggered")
-				_, gtid := r.meta.GTID()
-				r.logger.Warn("failed to get event", zap.Int("event_index", eventIndex),
-					zap.Any("gtid", gtid), log.ShortError(err))
-				// wait backoff retry interval
-				time.Sleep(1 * time.Second)
-			}
-		})
->>>>>>> a9b5c0b1d (relay(dm): cancel when relay meet error to close goroutine (#6803))
 		if err != nil {
 			switch errors.Cause(err) {
 			case context.Canceled:

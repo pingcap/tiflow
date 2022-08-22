@@ -157,10 +157,6 @@ function test_restart_relay_status() {
 		"list-member --worker" \
 		"relay" 1 \
 		"bound" 2
-<<<<<<< HEAD
-=======
-
-	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>test test_restart_relay_status passed"
 }
 
 function test_relay_leak() {
@@ -193,77 +189,6 @@ function test_relay_leak() {
 		exit 1
 	fi
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>test test_relay_leak passed"
-}
-
-function test_cant_dail_upstream() {
-	cleanup_process
-	cleanup_data $TEST_NAME
-	export GO_FAILPOINTS=""
-
-	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
-	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
-	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
-
-	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
-	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
-
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-relay -s $SOURCE_ID1 worker1" \
-		"\"result\": true" 2
-
-	echo "kill dm-worker1"
-	kill_process dm-worker1
-	check_port_offline $WORKER1_PORT 20
-
-	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/pkg/conn/failDBPing=return()"
-	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
-
-	# make sure DM-worker doesn't exit
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status -s $SOURCE_ID1" \
-		"injected error" 1
-	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>test test_cant_dail_upstream passed"
-}
-
-function test_cant_dail_downstream() {
-	cleanup_process
-	cleanup_data $TEST_NAME
-	export GO_FAILPOINTS=""
-
-	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
-	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
-	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
-
-	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
-	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
-
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-relay -s $SOURCE_ID1 worker1" \
-		"\"result\": true" 2
-	dmctl_start_task_standalone $cur/conf/dm-task.yaml "--remove-meta"
-
-	echo "kill dm-worker1"
-	kill_process dm-worker1
-	check_port_offline $WORKER1_PORT 20
-	# kill tidb
-	pkill -hup tidb-server 2>/dev/null || true
-	wait_process_exit tidb-server
-
-	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
-
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status -s $SOURCE_ID1" \
-		"\"relayCatchUpMaster\": true" 1 \
-		"dial tcp 127.0.0.1:4000: connect: connection refused" 1
-
-	# restart tidb
-	run_tidb_server 4000 $TIDB_PASSWORD
-	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>test test_cant_dail_downstream passed"
->>>>>>> a9b5c0b1d (relay(dm): cancel when relay meet error to close goroutine (#6803))
 }
 
 function test_kill_dump_connection() {
@@ -309,6 +234,7 @@ function run() {
 	test_restart_relay_status
 	test_cant_dail_downstream
 	test_cant_dail_upstream
+	test_relay_leak
 
 	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/relay/ReportRelayLogSpaceInBackground=return(1)"
 
@@ -461,15 +387,6 @@ function run() {
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
-<<<<<<< HEAD
-=======
-function run() {
-	test_relay_leak
-	test_relay_operations
-	test_cant_dail_upstream
-	test_restart_relay_status
-	test_cant_dail_downstream
->>>>>>> a9b5c0b1d (relay(dm): cancel when relay meet error to close goroutine (#6803))
 	test_kill_dump_connection
 }
 
