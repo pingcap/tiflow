@@ -64,7 +64,7 @@ func (b *basicScheduler) Schedule(
 	tablesAllFind := true
 	newTables := make([]model.TableID, 0)
 	for _, tableID := range currentTables {
-		if len(newTables) > b.batchSize {
+		if len(newTables) >= b.batchSize {
 			break
 		}
 		rep, ok := replications[tableID]
@@ -106,19 +106,13 @@ func (b *basicScheduler) Schedule(
 				zap.Any("allCaptureStatus", captures))
 			return tasks
 		}
-
-		tableField := zap.Skip()
 		log.Info("schedulerv3: burst add table",
 			zap.String("namespace", b.changefeedID.Namespace),
 			zap.String("changefeed", b.changefeedID.ID),
 			zap.Strings("captureIDs", captureIDs),
-			tableField)
+			zap.Int64s("tableIDs", newTables))
 		tasks = append(
 			tasks, newBurstAddTables(checkpointTs, newTables, captureIDs))
-		if len(newTables) == len(currentTables) {
-			// The initial balance, if new tables and current tables are equal.
-			return tasks
-		}
 	}
 
 	// Build remove table tasks.

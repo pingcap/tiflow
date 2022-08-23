@@ -32,17 +32,15 @@ func TestSchedulerBasic(t *testing.T) {
 	// Initial table dispatch.
 	// AddTable only
 	replications := map[model.TableID]*replication.ReplicationSet{}
-	b := newBasicScheduler(model.ChangeFeedID{})
+	b := newBasicScheduler(2, model.ChangeFeedID{})
 
 	// one capture stopping, another one is initialized
 	captures["a"].State = member.CaptureStateStopping
 	tasks := b.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
-	require.Len(t, tasks[0].BurstBalance.AddTables, 4)
+	require.Len(t, tasks[0].BurstBalance.AddTables, 2)
 	require.Equal(t, tasks[0].BurstBalance.AddTables[0].CaptureID, "b")
 	require.Equal(t, tasks[0].BurstBalance.AddTables[1].CaptureID, "b")
-	require.Equal(t, tasks[0].BurstBalance.AddTables[2].CaptureID, "b")
-	require.Equal(t, tasks[0].BurstBalance.AddTables[3].CaptureID, "b")
 
 	// all capture's stopping, cannot add table
 	captures["b"].State = member.CaptureStateStopping
@@ -53,11 +51,9 @@ func TestSchedulerBasic(t *testing.T) {
 	captures["b"].State = member.CaptureStateInitialized
 	tasks = b.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
-	require.Len(t, tasks[0].BurstBalance.AddTables, 4)
+	require.Len(t, tasks[0].BurstBalance.AddTables, 2)
 	require.Equal(t, tasks[0].BurstBalance.AddTables[0].TableID, model.TableID(1))
 	require.Equal(t, tasks[0].BurstBalance.AddTables[1].TableID, model.TableID(2))
-	require.Equal(t, tasks[0].BurstBalance.AddTables[2].TableID, model.TableID(3))
-	require.Equal(t, tasks[0].BurstBalance.AddTables[3].TableID, model.TableID(4))
 
 	// Capture offline, causes replication.ReplicationSetStateAbsent.
 	// AddTable only.
@@ -218,7 +214,7 @@ func BenchmarkSchedulerBasicAddTables(b *testing.B) {
 		}
 		replications = map[model.TableID]*replication.ReplicationSet{}
 		name = fmt.Sprintf("AddTable %d", total)
-		sched = newBasicScheduler(model.ChangeFeedID{})
+		sched = newBasicScheduler(defaultBurstAddTableBatchSize, model.ChangeFeedID{})
 		return name, currentTables, captures, replications, sched
 	})
 }
@@ -244,7 +240,7 @@ func BenchmarkSchedulerBasicRemoveTables(b *testing.B) {
 			}
 		}
 		name = fmt.Sprintf("RemoveTable %d", total)
-		sched = newBasicScheduler(model.ChangeFeedID{})
+		sched = newBasicScheduler(defaultBurstAddTableBatchSize, model.ChangeFeedID{})
 		return name, currentTables, captures, replications, sched
 	})
 }
@@ -273,7 +269,7 @@ func BenchmarkSchedulerBasicAddRemoveTables(b *testing.B) {
 			}
 		}
 		name = fmt.Sprintf("AddRemoveTable %d", total)
-		sched = newBasicScheduler(model.ChangeFeedID{})
+		sched = newBasicScheduler(defaultBurstAddTableBatchSize, model.ChangeFeedID{})
 		return name, currentTables, captures, replications, sched
 	})
 }

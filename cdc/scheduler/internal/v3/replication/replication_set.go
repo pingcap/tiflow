@@ -99,7 +99,7 @@ const (
 	RolePrimary = 1
 	// RoleSecondary secondary role.
 	RoleSecondary = 2
-	// RoleUndetermined means that we don't known its state, it may be
+	// RoleUndetermined means that we don't know its state, it may be
 	// replicating, stopping or stopped.
 	RoleUndetermined = 3
 )
