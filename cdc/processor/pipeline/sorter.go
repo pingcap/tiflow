@@ -99,7 +99,8 @@ func newSorterNode(
 func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.TableID) (sorter.EventSorter, error) {
 	sortEngine := ctx.ChangefeedVars().Info.Engine
 	switch sortEngine {
-	case model.SortInMemory, model.SortUnified, model.SortInFile /* `file` becomes an alias of `unified` for backward compatibility */ :
+	// `file` and `memory` become aliases of `unified` for backward compatibility.
+	case model.SortInMemory, model.SortUnified, model.SortInFile:
 		if sortEngine == model.SortInMemory {
 			log.Warn("Memory sorter is deprecated so we use unified sorter by default.",
 				zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
