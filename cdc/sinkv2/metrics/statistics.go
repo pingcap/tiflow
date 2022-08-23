@@ -18,16 +18,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/prometheus/client_golang/prometheus"
-	"go.uber.org/zap"
 )
 
 const (
-	printStatusInterval  = 10 * time.Minute
 	flushMetricsInterval = 5 * time.Second
 )
 
@@ -38,7 +35,6 @@ func NewStatistics(ctx context.Context, sinkType sink.Type) *Statistics {
 		captureAddr:  contextutil.CaptureAddrFromCtx(ctx),
 		changefeedID: contextutil.ChangefeedIDFromCtx(ctx),
 	}
-	statistics.lastPrintStatusTime.Store(time.Now())
 
 	namespcae := statistics.changefeedID.Namespace
 	changefeedID := statistics.changefeedID.ID
@@ -92,9 +88,6 @@ type Statistics struct {
 	totalFlushedRows uint64
 	totalDDLCount    uint64
 
-	lastPrintStatusTotalRows uint64
-	lastPrintStatusTime      atomic.Value
-
 	metricExecTxnHis   prometheus.Observer
 	metricExecDDLHis   prometheus.Observer
 	metricExecBatchHis prometheus.Observer
@@ -146,34 +139,4 @@ func (b *Statistics) RecordDDLExecution(executor func() error) error {
 
 	b.metricExecDDLHis.Observe(time.Since(start).Seconds())
 	return nil
-}
-
-// PrintStatus prints the status of the Sink.
-func (b *Statistics) PrintStatus() {
-	since := time.Since(b.lastPrintStatusTime.Load().(time.Time))
-	if since < printStatusInterval {
-		return
-	}
-
-	totalRows := atomic.LoadUint64(&b.totalRows)
-	count := totalRows - atomic.LoadUint64(&b.lastPrintStatusTotalRows)
-	seconds := since.Seconds()
-	var qps uint64
-	if seconds > 0 {
-		qps = count / uint64(seconds)
-	}
-	b.lastPrintStatusTime.Store(time.Now())
-	atomic.StoreUint64(&b.lastPrintStatusTotalRows, totalRows)
-
-	totalDDLCount := atomic.LoadUint64(&b.totalDDLCount)
-	atomic.StoreUint64(&b.totalDDLCount, 0)
-
-	log.Info("DML sink replication status",
-		zap.Stringer("sinkType", b.sinkType),
-		zap.String("namespace", b.changefeedID.Namespace),
-		zap.String("changefeed", b.changefeedID.ID),
-		zap.String("capture", b.captureAddr),
-		zap.Uint64("count", count),
-		zap.Uint64("qps", qps),
-		zap.Uint64("ddl", totalDDLCount))
 }

@@ -103,8 +103,6 @@ func (w *worker) run(ctx context.Context) (retErr error) {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		// Try to log the statistics.
-		w.statistics.PrintStatus()
 	}
 }
 
