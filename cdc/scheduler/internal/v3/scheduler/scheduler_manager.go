@@ -25,8 +25,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// SchedulerManager manages schedulers and generates schedule tasks.
-type SchedulerManager struct { //nolint:revive
+// Manager manages schedulers and generates schedule tasks.
+type Manager struct { //nolint:revive
 	changefeedID model.ChangeFeedID
 
 	schedulers         []scheduler
@@ -37,8 +37,8 @@ type SchedulerManager struct { //nolint:revive
 // NewSchedulerManager returns a new scheduler manager.
 func NewSchedulerManager(
 	changefeedID model.ChangeFeedID, cfg *config.SchedulerConfig,
-) *SchedulerManager {
-	sm := &SchedulerManager{
+) *Manager {
+	sm := &Manager{
 		maxTaskConcurrency: cfg.MaxTaskConcurrency,
 		changefeedID:       changefeedID,
 		schedulers:         make([]scheduler, schedulerPriorityMax),
@@ -48,7 +48,8 @@ func NewSchedulerManager(
 		}]int),
 	}
 
-	sm.schedulers[schedulerPriorityBasic] = newBasicScheduler(changefeedID)
+	sm.schedulers[schedulerPriorityBasic] = newBasicScheduler(
+		defaultBurstAddTableBatchSize, changefeedID)
 	sm.schedulers[schedulerPriorityDrainCapture] = newDrainCaptureScheduler(
 		cfg.MaxTaskConcurrency, changefeedID)
 	sm.schedulers[schedulerPriorityBalance] = newBalanceScheduler(
@@ -60,7 +61,7 @@ func NewSchedulerManager(
 }
 
 // Schedule generates schedule tasks based on the inputs.
-func (sm *SchedulerManager) Schedule(
+func (sm *Manager) Schedule(
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
 	aliveCaptures map[model.CaptureID]*member.CaptureStatus,
@@ -98,7 +99,7 @@ func (sm *SchedulerManager) Schedule(
 }
 
 // MoveTable moves a table to the target capture.
-func (sm *SchedulerManager) MoveTable(tableID model.TableID, target model.CaptureID) {
+func (sm *Manager) MoveTable(tableID model.TableID, target model.CaptureID) {
 	scheduler := sm.schedulers[schedulerPriorityMoveTable]
 	moveTableScheduler, ok := scheduler.(*moveTableScheduler)
 	if !ok {
@@ -117,7 +118,7 @@ func (sm *SchedulerManager) MoveTable(tableID model.TableID, target model.Captur
 }
 
 // Rebalance rebalance tables.
-func (sm *SchedulerManager) Rebalance() {
+func (sm *Manager) Rebalance() {
 	scheduler := sm.schedulers[schedulerPriorityRebalance]
 	rebalanceScheduler, ok := scheduler.(*rebalanceScheduler)
 	if !ok {
@@ -130,7 +131,7 @@ func (sm *SchedulerManager) Rebalance() {
 }
 
 // DrainCapture drains all tables in the target capture.
-func (sm *SchedulerManager) DrainCapture(target model.CaptureID) bool {
+func (sm *Manager) DrainCapture(target model.CaptureID) bool {
 	scheduler := sm.schedulers[schedulerPriorityDrainCapture]
 	drainCaptureScheduler, ok := scheduler.(*drainCaptureScheduler)
 	if !ok {
@@ -143,12 +144,12 @@ func (sm *SchedulerManager) DrainCapture(target model.CaptureID) bool {
 }
 
 // DrainingTarget returns a capture id that is currently been draining.
-func (sm *SchedulerManager) DrainingTarget() model.CaptureID {
+func (sm *Manager) DrainingTarget() model.CaptureID {
 	return sm.schedulers[schedulerPriorityDrainCapture].(*drainCaptureScheduler).getTarget()
 }
 
 // CollectMetrics collects metrics.
-func (sm *SchedulerManager) CollectMetrics() {
+func (sm *Manager) CollectMetrics() {
 	cf := sm.changefeedID
 	for name, counter := range sm.tasksCounter {
 		scheduleTaskCounter.
@@ -159,7 +160,7 @@ func (sm *SchedulerManager) CollectMetrics() {
 }
 
 // CleanMetrics cleans metrics.
-func (sm *SchedulerManager) CleanMetrics() {
+func (sm *Manager) CleanMetrics() {
 	cf := sm.changefeedID
 	for name := range sm.tasksCounter {
 		scheduleTaskCounter.DeleteLabelValues(cf.Namespace, cf.ID, name.scheduler, name.task)
