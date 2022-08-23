@@ -52,7 +52,7 @@ const (
 	// TiDBSchema indicates the schema is TiDB.
 	TiDBSchema = "tidb"
 	// TiDBSSLSchema indicates the schema is TiDB+ssl.
-	TiDBSSLSchema = "tidb"
+	TiDBSSLSchema = "tidb+ssl"
 )
 
 // IsMQScheme returns true if the scheme belong to mq schema.

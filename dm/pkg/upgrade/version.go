@@ -21,7 +21,7 @@ import (
 	"github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/pkg/version"
 )
 
 const (
@@ -35,7 +35,7 @@ const (
 
 var (
 	// CurrentVersion represents the current version of the cluster.
-	CurrentVersion = NewVersion(currentInternalNo, utils.ReleaseVersion)
+	CurrentVersion = NewVersion(currentInternalNo, version.ReleaseVersion)
 	// MinVersion represents the minimum version of the cluster.
 	// this version only be set after finished importing from v1.0.x, but has not upgraded to the current version.
 	MinVersion = NewVersion(minInternalNo, "min-ver")
