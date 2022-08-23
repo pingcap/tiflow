@@ -22,6 +22,10 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/backoff"
@@ -39,9 +43,7 @@ import (
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
-	"go.uber.org/zap"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	derror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // RegisterWorker is used to register dm task to global registry
@@ -215,7 +217,7 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 	if currentStage == previousStage {
 		return nil
 	}
-	w.Logger().Info("task stage changed", zap.String("task-id", w.taskID), zap.Int("from", int(previousStage)), zap.Int("to", int(currentStage)))
+	w.Logger().Info("task stage changed", zap.String("task-id", w.taskID), zap.String("from", string(previousStage)), zap.String("to", string(currentStage)))
 	w.setStage(currentStage)
 
 	status := w.workerStatus(ctx)
@@ -231,7 +233,12 @@ func (w *dmWorker) tryUpdateStatus(ctx context.Context) error {
 			return nil
 		}
 	}
-	return w.Exit(ctx, status, nil)
+
+	if err := w.Exit(ctx, framework.ExitReasonFinished, nil, status.ExtBytes); err != nil {
+		return err
+	}
+
+	return derror.ErrWorkerFinish.FastGenByArgs()
 }
 
 // workerStatus gets worker status.

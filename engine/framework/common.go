@@ -71,8 +71,8 @@ const (
 
 // MasterFailoverReason contains failover reason code and error message
 type MasterFailoverReason struct {
-	Code         MasterFailoverReasonCode
-	ErrorMessage string
+	Code     MasterFailoverReasonCode
+	ErrorMsg string
 }
 
 // MustConvertWorkerType2JobType return the job type of worker type. Panic if it fail.
@@ -94,4 +94,30 @@ func MustConvertWorkerType2JobType(tp WorkerType) engineModel.JobType {
 
 	log.Panic("unexpected fail when convert worker type to job type", zap.Int32("worker_type", int32(tp)))
 	return engineModel.JobTypeInvalid
+}
+
+// ExitReason is the type for exit reason
+type ExitReason int
+
+// define some ExitReason
+const (
+	ExitReasonUnknown = ExitReason(iota)
+	ExitReasonFinished
+	ExitReasonCanceled
+	ExitReasonFailed
+)
+
+// WorkerStatusCodeToExitReason translates WorkerStatusCode to ExitReason
+// TODO: business logic should not sense 'WorkerStatus'
+func WorkerStatusCodeToExitReason(code model.WorkerStatusCode) ExitReason {
+	switch code {
+	case model.WorkerStatusFinished:
+		return ExitReasonFinished
+	case model.WorkerStatusStopped:
+		return ExitReasonCanceled
+	case model.WorkerStatusError:
+		return ExitReasonFailed
+	}
+
+	return ExitReasonUnknown
 }

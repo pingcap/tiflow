@@ -71,7 +71,6 @@ func TestAsyncStopFailed(t *testing.T) {
 func TestTableActorInterface(t *testing.T) {
 	table := &tableActor{
 		tableID:     1,
-		markTableID: 2,
 		redoManager: redo.NewDisabledManager(),
 		tableName:   "t1",
 		state:       TableStatePreparing,
@@ -85,9 +84,8 @@ func TestTableActorInterface(t *testing.T) {
 	table.sinkNode = &sinkNode{state: &table.state}
 	table.sortNode = &sorterNode{state: &table.state, resolvedTs: 5}
 
-	tableID, markID := table.ID()
+	tableID := table.ID()
 	require.Equal(t, int64(1), tableID)
-	require.Equal(t, int64(2), markID)
 	require.Equal(t, "t1", table.Name())
 	require.Equal(t, TableStatePreparing, table.State())
 
@@ -399,8 +397,7 @@ func TestNewTableActor(t *testing.T) {
 	}
 	tbl, err := NewTableActor(cctx, upstream.NewUpstream4Test(&mockPD{}), nil, 1, "t1",
 		&model.TableReplicaInfo{
-			StartTs:     0,
-			MarkTableID: 1,
+			StartTs: 0,
 		}, mocksink.NewNormalMockSink(), nil, redo.NewDisabledManager(), 10)
 	require.NotNil(t, tbl)
 	require.Nil(t, err)
@@ -416,8 +413,7 @@ func TestNewTableActor(t *testing.T) {
 
 	tbl, err = NewTableActor(cctx, upstream.NewUpstream4Test(&mockPD{}), nil, 1, "t1",
 		&model.TableReplicaInfo{
-			StartTs:     0,
-			MarkTableID: 1,
+			StartTs: 0,
 		}, mocksink.NewNormalMockSink(), nil, redo.NewDisabledManager(), 10)
 	require.Nil(t, tbl)
 	require.NotNil(t, err)
@@ -456,8 +452,7 @@ func TestTableActorStart(t *testing.T) {
 			},
 		},
 		replicaInfo: &model.TableReplicaInfo{
-			StartTs:     0,
-			MarkTableID: 1,
+			StartTs: 0,
 		},
 		replicaConfig: config.GetDefaultReplicaConfig(),
 		upstream:      upstream.NewUpstream4Test(&mockPD{}),

@@ -216,6 +216,11 @@ error = '''
 codec decode error
 '''
 
+["CDC:ErrCodecInvalidConfig"]
+error = '''
+Codec invalid config
+'''
+
 ["CDC:ErrConsistentLevel"]
 error = '''
 consistent level (%s) not support
@@ -584,16 +589,6 @@ load timezone
 ["CDC:ErrLocateRegion"]
 error = '''
 locate region by id
-'''
-
-["CDC:ErrMQCodecInvalidConfig"]
-error = '''
-MQ Codec invalid config
-'''
-
-["CDC:ErrMQSinkUnknownProtocol"]
-error = '''
-unknown '%s' protocol for Message Queue sink
 '''
 
 ["CDC:ErrMailboxFull"]
@@ -1039,6 +1034,11 @@ sink config invalid
 ["CDC:ErrSinkURIInvalid"]
 error = '''
 sink uri invalid '%s'
+'''
+
+["CDC:ErrSinkUnknownProtocol"]
+error = '''
+unknown '%s' message protocol for sink
 '''
 
 ["CDC:ErrSnapshotLostByGC"]
