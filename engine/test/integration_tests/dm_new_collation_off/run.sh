@@ -42,7 +42,7 @@ function run() {
 	check_sync_diff $WORK_DIR $CUR_DIR/conf/diff_config.toml
 }
 
-#trap "stop_engine_cluster $CONFIG" EXIT
+trap "stop_engine_cluster $CONFIG" EXIT
 run $*
 # TODO: handle log properly
 # check_logs $WORK_DIR
