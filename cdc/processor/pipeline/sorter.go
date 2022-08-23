@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/db"
-	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/actor/message"
@@ -100,11 +99,15 @@ func newSorterNode(
 func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.TableID) (sorter.EventSorter, error) {
 	sortEngine := ctx.ChangefeedVars().Info.Engine
 	switch sortEngine {
-	case model.SortInMemory:
-		return memory.NewEntrySorter(), nil
-	case model.SortUnified, model.SortInFile /* `file` becomes an alias of `unified` for backward compatibility */ :
+	case model.SortInMemory, model.SortUnified, model.SortInFile /* `file` becomes an alias of `unified` for backward compatibility */ :
+		if sortEngine == model.SortInMemory {
+			log.Warn("Memory sorter is deprecated so we use unified sorter by default.",
+				zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
+				zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
+				zap.String("tableName", tableName))
+		}
 		if sortEngine == model.SortInFile {
-			log.Warn("File sorter is obsolete and replaced by unified sorter. Please revise your changefeed settings",
+			log.Warn("File sorter is obsolete and replaced by unified sorter. Please revise your changefeed settings.",
 				zap.String("namespace", ctx.ChangefeedVars().ID.Namespace),
 				zap.String("changefeed", ctx.ChangefeedVars().ID.ID),
 				zap.String("tableName", tableName))
