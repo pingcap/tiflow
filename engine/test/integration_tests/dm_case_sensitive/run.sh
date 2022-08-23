@@ -26,7 +26,7 @@ function run() {
 
 	create_job_json=$(base64 -w0 $CUR_DIR/conf/job.yaml | jq -Rs '{ type: "DM", config: . }')
 	echo "create_job_json: $create_job_json"
-	job_id=$(curl -X POST -H "Content-Type: application/json" -d "$create_job_json" "http://127.0.0.1:10245/api/v1/jobs?tenant_id=dm_full_mode&project_id=dm_full_mode" | jq -r .id)
+	job_id=$(curl -X POST -H "Content-Type: application/json" -d "$create_job_json" "http://127.0.0.1:10245/api/v1/jobs?tenant_id=dm_case_sensitive&project_id=dm_case_sensitive" | jq -r .id)
 	echo "job_id: $job_id"
 
 	# wait for job finished
