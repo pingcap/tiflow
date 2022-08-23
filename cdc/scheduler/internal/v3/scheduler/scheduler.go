@@ -42,3 +42,14 @@ const (
 	schedulerPriorityBalance
 	schedulerPriorityMax
 )
+
+const (
+	// defaultBurstAddTableBatchSize is the default batch size of adding tables on each tick,
+	// used by the `BasicScheduler`.
+	// When the owner crashed, it may exist hundreds of tables need to be added by the new owner,
+	// the crashed old owner is going online and not available yet, add tables in batch instead of
+	// add all to captures to wait for the old owner join the cluster .
+	// When there are only 2 captures, and a large number of tables, this can be helpful to prevent
+	// oom caused by all tables dispatched to only one capture.
+	defaultBurstAddTableBatchSize = 50
+)

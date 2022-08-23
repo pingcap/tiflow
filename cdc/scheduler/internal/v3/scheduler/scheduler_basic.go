@@ -34,14 +34,16 @@ var _ scheduler = &basicScheduler{}
 // 2. DDL CREATE/DROP/TRUNCATE TABLE
 // 3. Capture offline.
 type basicScheduler struct {
+	batchSize            int
 	random               *rand.Rand
 	lastRebalanceTime    time.Time
 	checkBalanceInterval time.Duration
 	changefeedID         model.ChangeFeedID
 }
 
-func newBasicScheduler(changefeed model.ChangeFeedID) *basicScheduler {
+func newBasicScheduler(batchSize int, changefeed model.ChangeFeedID) *basicScheduler {
 	return &basicScheduler{
+		batchSize:    batchSize,
 		random:       rand.New(rand.NewSource(time.Now().UnixNano())),
 		changefeedID: changefeed,
 	}
@@ -63,7 +65,7 @@ func (b *basicScheduler) Schedule(
 	newTables := make([]model.TableID, 0)
 	for _, tableID := range currentTables {
 		rep, ok := replications[tableID]
-		if !ok {
+		if !ok && len(newTables) < b.batchSize {
 			newTables = append(newTables, tableID)
 			// The table ID is not in the replication means the two sets are
 			// not identical.
@@ -102,11 +104,7 @@ func (b *basicScheduler) Schedule(
 			return tasks
 		}
 
-		const logTableIDThreshold = 50
 		tableField := zap.Skip()
-		if len(newTables) < logTableIDThreshold {
-			tableField = zap.Int64s("tableIDs", newTables)
-		}
 		log.Info("schedulerv3: burst add table",
 			zap.String("namespace", b.changefeedID.Namespace),
 			zap.String("changefeed", b.changefeedID.ID),
@@ -151,26 +149,13 @@ func (b *basicScheduler) Schedule(
 	return tasks
 }
 
-const (
-	// defaultBurstAddTableBatchSize is the default batch size of adding tables on each tick.
-	// When the owner crashed, it may exist hundreds of tables need to be added by the new owner,
-	// but the crashed old owner is going online but not available yet, add table in batch to wait
-	// for the old owner join the cluster.
-	// When there are only 2 captures, and a large number of tables, this can be helpful to prevent
-	// oom caused by all tables dispatched to only one capture.
-	defaultBurstAddTableBatchSize = 50
-)
-
 // newBurstAddTables add each new table to captures in a round-robin way.
 func newBurstAddTables(
 	checkpointTs model.Ts, newTables []model.TableID, captureIDs []model.CaptureID,
 ) *replication.ScheduleTask {
 	idx := 0
 	tables := make([]replication.AddTable, 0, len(newTables))
-	for i, tableID := range newTables {
-		if i > defaultBurstAddTableBatchSize {
-			break
-		}
+	for _, tableID := range newTables {
 		tables = append(tables, replication.AddTable{
 			TableID:      tableID,
 			CaptureID:    captureIDs[idx],
