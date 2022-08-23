@@ -298,28 +298,52 @@ func (s *Server) DeleteJob(ctx context.Context, req *pb.DeleteJobRequest) (*empt
 }
 
 // RegisterExecutor implements grpc interface, and passes request onto executor manager.
-func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest) (*pb.RegisterExecutorResponse, error) {
-	resp2 := &pb.RegisterExecutorResponse{}
-	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp2)
+func (s *Server) RegisterExecutor(ctx context.Context, req *pb.RegisterExecutorRequest) (*pb.Executor, error) {
+	executor := &pb.Executor{}
+	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &executor)
 	if shouldRet {
 		if err != nil {
 			log.Warn("RegisterExecutor failed", zap.Error(err))
 			return nil, err
 		}
-		return resp2, err
+		return executor, err
 	}
-	// register executor to scheduler
-	// TODO: check leader, if not leader, return notLeader error.
-	execInfo, err := s.executorManager.AllocateNewExec(req)
+
+	nodeInfo, err := s.executorManager.AllocateNewExec(req)
 	if err != nil {
-		log.Error("add executor failed", zap.Error(err))
-		return &pb.RegisterExecutorResponse{
-			Err: cerrors.ToPBError(err),
-		}, nil
+		log.Error("register executor failed", zap.Error(err))
+		return nil, err
 	}
-	return &pb.RegisterExecutorResponse{
-		ExecutorId: string(execInfo.ID),
+	return &pb.Executor{
+		Id:         string(nodeInfo.ID),
+		Name:       nodeInfo.Name,
+		Address:    nodeInfo.Addr,
+		Capability: int64(nodeInfo.Capability),
 	}, nil
+}
+
+// ListExecutors implements grpc interface, and passes request onto executor manager.
+func (s *Server) ListExecutors(ctx context.Context, req *pb.ListExecutorsRequest) (*pb.ListExecutorsResponse, error) {
+	resp := &pb.ListExecutorsResponse{}
+	shouldRet, err := s.masterRPCHook.PreRPC(ctx, req, &resp)
+	if shouldRet {
+		if err != nil {
+			log.Warn("ListExecutors failed", zap.Error(err))
+			return nil, err
+		}
+		return resp, err
+	}
+
+	nodeInfos := s.executorManager.ListExecutors()
+	for _, nodeInfo := range nodeInfos {
+		resp.Executors = append(resp.Executors, &pb.Executor{
+			Id:         string(nodeInfo.ID),
+			Name:       nodeInfo.Name,
+			Address:    nodeInfo.Addr,
+			Capability: int64(nodeInfo.Capability),
+		})
+	}
+	return resp, nil
 }
 
 // ScheduleTask implements grpc interface. It works as follows

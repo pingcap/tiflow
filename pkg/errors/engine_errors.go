@@ -54,10 +54,6 @@ var (
 		errors.RFCCodeText("DFLOW:ErrBuildJobFailed"),
 	)
 
-	ErrExecutorDupRegister = errors.Normalize(
-		"executor %s has been registered",
-		errors.RFCCodeText("DFLOW:ErrExecutorDupRegister"),
-	)
 	ErrGrpcBuildConn = errors.Normalize(
 		"dial grpc connection to %s failed",
 		errors.RFCCodeText("DFLOW:ErrGrpcBuildConn"),
