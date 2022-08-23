@@ -64,8 +64,11 @@ func (b *basicScheduler) Schedule(
 	tablesAllFind := true
 	newTables := make([]model.TableID, 0)
 	for _, tableID := range currentTables {
+		if len(newTables) > b.batchSize {
+			break
+		}
 		rep, ok := replications[tableID]
-		if !ok && len(newTables) < b.batchSize {
+		if !ok {
 			newTables = append(newTables, tableID)
 			// The table ID is not in the replication means the two sets are
 			// not identical.
