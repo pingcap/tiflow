@@ -16,11 +16,11 @@ set +x
 # 1. cleanup and init work directory.
 OUT_DIR=$1 && shift
 TEST_NAME=$1 && shift
-WORK_DIR=$OUT_DIR/$TEST_NAME  # typical working directory is /tmp/tiflow_engine_test/${test_name}
+WORK_DIR=$OUT_DIR/$TEST_NAME # typical working directory is /tmp/tiflow_engine_test/${test_name}
 rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
 # 2. move config files to working directory.
-# CONFIG_DIR is directory where the deployment files are located, and it needs to contain a 
+# CONFIG_DIR is directory where the deployment files are located, and it needs to contain a
 # subdirectory `config` to store the additional configuration files.
 CONFIG_DIR=$(dirname $1)
 cp -fr ${CONFIG_DIR}/config ${WORK_DIR} || exit 1

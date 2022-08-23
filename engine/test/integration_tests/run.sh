@@ -32,12 +32,15 @@ fi
 run_case() {
 	# cleanup test binaries and data, preserve logs, if we debug one case,
 	# these files will be preserved since no more case will be run.
-	find /tmp/tiflow_engine_test/*/* -type d | xargs rm -rf || true	
+	find /tmp/tiflow_engine_test/*/* -type d | xargs rm -rf || true
 	local case=$1
 	local script=$2
 
 	# validate the case script
-	validated=$(cat $script | grep "adjust_config " | grep -v "^#" &>/dev/null; echo $?)
+	validated=$(
+		cat $script | grep "adjust_config " | grep -v "^#" &>/dev/null
+		echo $?
+	)
 	if [ $validated -ne 0 ]; then
 		echo "[Error] need adjust_config in $script"
 		exit 1

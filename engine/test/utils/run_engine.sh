@@ -6,7 +6,7 @@ cd "$(dirname "$0")/../../.."
 
 DOCKER_DIR="./deployments/engine/docker"
 
-if which docker-compose &>/dev/null ; then 
+if which docker-compose &>/dev/null; then
 	COMPOSECMD="docker-compose"
 else
 	COMPOSECMD="docker compose"
