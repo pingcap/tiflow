@@ -131,7 +131,7 @@ func (o *options) run(cmd *cobra.Command) error {
 	ctx := contextutil.PutTimezoneInCtx(cmdcontext.GetDefaultContext(), tz)
 	ctx = contextutil.PutCaptureAddrInCtx(ctx, o.serverConfig.AdvertiseAddr)
 
-	version.LogVersionInfo()
+	version.LogVersionInfo("Change Data Capture (CDC)")
 	if ticdcutil.FailpointBuild {
 		for _, path := range failpoint.List() {
 			status, err := failpoint.Status(path)

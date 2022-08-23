@@ -21,7 +21,7 @@ import (
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -71,7 +71,7 @@ type Producer struct {
 	partitionNum int
 }
 
-func createProperties(message *codec.MQMessage, partition int32) map[string]string {
+func createProperties(message *common.Message, partition int32) map[string]string {
 	properties := map[string]string{route: strconv.Itoa(int(partition))}
 	properties["ts"] = strconv.FormatUint(message.Ts, 10)
 	properties["type"] = strconv.Itoa(int(message.Type))
@@ -87,7 +87,7 @@ func createProperties(message *codec.MQMessage, partition int32) map[string]stri
 
 // AsyncSendMessage send key-value msg to target partition.
 func (p *Producer) AsyncSendMessage(
-	ctx context.Context, _ string, partition int32, message *codec.MQMessage,
+	ctx context.Context, _ string, partition int32, message *common.Message,
 ) error {
 	p.producer.SendAsync(ctx, &pulsar.ProducerMessage{
 		Payload:    message.Value,
@@ -110,7 +110,7 @@ func (p *Producer) errors(_ pulsar.MessageID, _ *pulsar.ProducerMessage, err err
 
 // SyncBroadcastMessage send key-value msg to all partition.
 func (p *Producer) SyncBroadcastMessage(
-	ctx context.Context, _ string, _ int32, message *codec.MQMessage,
+	ctx context.Context, _ string, _ int32, message *common.Message,
 ) error {
 	for partition := 0; partition < p.partitionNum; partition++ {
 		_, err := p.producer.Send(ctx, &pulsar.ProducerMessage{
