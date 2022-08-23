@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # parameter 1: out directory
-# parameter 1: sub directory / test name
-# other parameters: config files
+# parameter 1: test name which is used to generate the sub directory
+# other parameters: deployment files
 
 set -eux
 
@@ -13,16 +13,19 @@ fi
 
 set +x
 
+# 1. cleanup and init work directory.
 OUT_DIR=$1 && shift
 TEST_NAME=$1 && shift
-CONFIG_DIR=$(dirname $1)
-
-# 1. cleanup and init work directory.
-WORK_DIR=$OUT_DIR/$TEST_NAME
+WORK_DIR=$OUT_DIR/$TEST_NAME  # typical working directory is /tmp/tiflow_engine_test/${test_name}
 rm -rf $WORK_DIR && mkdir -p $WORK_DIR
+
+# 2. move config files to working directory.
+# CONFIG_DIR is directory where the deployment files are located, and it needs to contain a 
+# subdirectory `config` to store the additional configuration files.
+CONFIG_DIR=$(dirname $1)
 cp -fr ${CONFIG_DIR}/config ${WORK_DIR} || exit 1
 
-# 2. generate new config files and replace `tmp/tiflow_engine_test` with
+# 3. generate new deploy files and replace `tmp/tiflow_engine_test` with
 # `tmp/tiflow_engine_test/${TEST_NAME}` which is used to store log files.
 new_configs=
 cnt=1
@@ -34,4 +37,4 @@ while [[ $# -gt 0 ]]; do
 	shift
 	let cnt++
 done
-echo $new_configs
+echo "$new_configs"
