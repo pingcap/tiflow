@@ -265,11 +265,6 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		return errors.Trace(err)
 	}
 
-	log.Info("[QP] changefeed post potential init",
-		zap.Uint64("resolvedTs", c.state.Status.ResolvedTs),
-		zap.Uint64("checkpointTs", c.state.Status.CheckpointTs),
-		zap.String("changefeed", c.id.ID))
-
 	select {
 	case err := <-c.errCh:
 		return errors.Trace(err)
@@ -381,7 +376,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 }
 
 func (c *changefeed) initialize(ctx cdcContext.Context) error {
-	if c.initialized {
+	if c.initialized || c.state.Status == nil {
 		return nil
 	}
 	// clean the errCh
@@ -396,11 +391,8 @@ LOOP:
 		}
 	}
 
-	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
-	resolvedTs := checkpointTs
-	if c.state.Status != nil {
-		resolvedTs = c.state.Status.ResolvedTs
-	}
+	checkpointTs := c.state.Status.CheckpointTs
+	resolvedTs := c.state.Status.ResolvedTs
 
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
 		failpoint.Return(cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs-300, checkpointTs))
@@ -448,11 +440,12 @@ LOOP:
 	}
 	c.barriers = newBarriers()
 	if c.state.Info.SyncPointEnabled {
-		c.barriers.Update(syncPointBarrier, checkpointTs)
+		c.barriers.Update(syncPointBarrier, resolvedTs)
 	}
 	// Since we are starting DDL puller from (checkpointTs-1) to make
 	// the DDL committed at checkpointTs executable by CDC, we need to set
 	// the DDL barrier to the correct start point.
+	// TODO: get DDL barrier based on resolvedTs.
 	c.barriers.Update(ddlJobBarrier, checkpointTs-1)
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
 
@@ -648,10 +641,6 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 	if c.state.Status == nil {
 		c.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 			if status == nil {
-				log.Info("[QP] owner inits phase 1",
-					zap.Uint64("checkpointTs", c.state.Info.StartTs),
-					zap.Uint64("resolvedTs", c.state.Info.StartTs),
-					zap.String("changefeed", c.id.ID))
 				status = &model.ChangeFeedStatus{
 					// the changefeed status is nil when the changefeed is just created.
 					ResolvedTs:   c.state.Info.StartTs,
@@ -668,15 +657,6 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 	for captureID := range c.state.TaskPositions {
 		if _, exist := captures[captureID]; !exist {
 			c.state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-				if position != nil {
-					log.Info("[QP] owner inits phase 2",
-						zap.Uint64("checkpointTs", position.CheckPointTs),
-						zap.Uint64("resolvedTs", position.ResolvedTs),
-						zap.String("changefeed", c.id.ID))
-				} else {
-					log.Info("[QP] owner inits phase 2, position is nil",
-						zap.String("changefeed", c.id.ID))
-				}
 				return nil, position != nil, nil
 			})
 			ok = false
