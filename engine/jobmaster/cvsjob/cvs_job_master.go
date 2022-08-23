@@ -214,7 +214,7 @@ func (jm *JobMaster) Tick(ctx context.Context) error {
 	if jm.getStatusCode() == frameModel.WorkerStatusStopped {
 		log.Info("cvs job master stopped")
 		status := jm.Status()
-		return jm.BaseJobMaster.Exit(ctx, framework.ExitReasonCancelled, nil, string(status.ExtBytes))
+		return jm.BaseJobMaster.Exit(ctx, framework.ExitReasonCanceled, nil, string(status.ExtBytes))
 	}
 	return nil
 }

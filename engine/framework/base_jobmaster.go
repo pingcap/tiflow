@@ -71,7 +71,7 @@ type BaseJobMaster interface {
 	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
 
 	// Exit should be called when jobmaster (in user logic) wants to exit.
-	// exitReason: ExitReasonFinished/ExitReasonCancelled/ExitReasonFailed
+	// exitReason: ExitReasonFinished/ExitReasonCanceled/ExitReasonFailed
 	// if err is not nil, extMsg will be ignored.
 	Exit(ctx context.Context, exitReason ExitReason, err error, extMsg string) error
 

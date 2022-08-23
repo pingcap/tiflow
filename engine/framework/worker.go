@@ -105,7 +105,7 @@ type BaseWorker interface {
 	OpenStorage(ctx context.Context, resourcePath resourcemeta.ResourceID) (broker.Handle, error)
 
 	// Exit should be called when worker (in user logic) wants to exit.
-	// exitReason: ExitReasonFinished/ExitReasonCancelled/ExitReasonFailed
+	// exitReason: ExitReasonFinished/ExitReasonCanceled/ExitReasonFailed
 	Exit(ctx context.Context, exitReason ExitReason, err error, extBytes []byte) error
 }
 
@@ -507,7 +507,7 @@ func (w *DefaultBaseWorker) Exit(ctx context.Context, exitReason ExitReason, err
 	switch exitReason {
 	case ExitReasonFinished:
 		w.workerStatus.Code = frameModel.WorkerStatusFinished
-	case ExitReasonCancelled:
+	case ExitReasonCanceled:
 		// TODO: replace stop with cancel
 		w.workerStatus.Code = frameModel.WorkerStatusStopped
 	case ExitReasonFailed:

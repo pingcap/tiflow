@@ -115,7 +115,7 @@ func (s *dummyWorkerStatus) Unmarshal(data []byte) error {
 func (d *dummyWorker) InitImpl(_ context.Context) error {
 	if !d.init {
 		if d.config.EtcdWatchEnable {
-			// Don't use the ctx from the caller, because it may be cancelled by the caller after InitImpl() returns.
+			// Don't use the ctx from the caller, because it may be canceled by the caller after InitImpl() returns.
 			ctx, cancel := context.WithCancel(context.Background())
 			d.bgRunEtcdWatcher(ctx)
 			d.cancel = cancel
@@ -157,7 +157,7 @@ func (d *dummyWorker) Tick(ctx context.Context) error {
 
 	if d.getStatusCode() == frameModel.WorkerStatusStopped {
 		d.setStatusCode(frameModel.WorkerStatusStopped)
-		return d.Exit(ctx, framework.ExitReasonCancelled, nil, []byte("worker has been cancelled"))
+		return d.Exit(ctx, framework.ExitReasonCanceled, nil, []byte("worker has been canceled"))
 	}
 
 	if d.status.Tick >= d.config.TargetTick {

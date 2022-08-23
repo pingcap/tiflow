@@ -174,7 +174,7 @@ func (task *cvsTask) Tick(ctx context.Context) error {
 	case frameModel.WorkerStatusError:
 		exitReason = framework.ExitReasonFailed
 	case frameModel.WorkerStatusStopped:
-		exitReason = framework.ExitReasonCancelled
+		exitReason = framework.ExitReasonCanceled
 	default:
 	}
 

@@ -129,7 +129,8 @@ type BaseMaster interface {
 	IsMasterReady() bool
 
 	// Exit should be called when master (in user logic) wants to exit.
-	// exitReason: ExitReasonFinished/ExitReasonCancelled/ExitReasonFailed
+	// exitReason: ExitReasonFinished/ExitReasonCanceled/ExitReasonFailed
+	// NOTE: Currently, no implement has used this method, but we still keep it to make the interface intact
 	Exit(ctx context.Context, exitReason ExitReason, err error, extMsg string) error
 
 	// CreateWorker requires the framework to dispatch a new worker.
@@ -683,6 +684,7 @@ func (m *DefaultBaseMaster) IsMasterReady() bool {
 }
 
 // Exit implements BaseMaster.Exit
+// NOTE: Currently, no implement has used this method, but we still keep it to make the interface intact
 func (m *DefaultBaseMaster) Exit(ctx context.Context, exitReason ExitReason, err error, extMsg string) error {
 	// Set the errCenter to prevent user from forgetting to return directly after calling 'Exit'
 	// keep the original error in errCenter if possible
@@ -700,7 +702,7 @@ func (m *DefaultBaseMaster) exitWithoutSetErrCenter(ctx context.Context, exitRea
 	switch exitReason {
 	case ExitReasonFinished:
 		m.masterMeta.StatusCode = frameModel.MasterStatusFinished
-	case ExitReasonCancelled:
+	case ExitReasonCanceled:
 		// TODO: replace stop with cancel
 		m.masterMeta.StatusCode = frameModel.MasterStatusStopped
 	case ExitReasonFailed:

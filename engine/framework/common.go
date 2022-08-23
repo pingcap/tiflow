@@ -103,6 +103,21 @@ type ExitReason int
 const (
 	ExitReasonUnknown = ExitReason(iota)
 	ExitReasonFinished
-	ExitReasonCancelled
+	ExitReasonCanceled
 	ExitReasonFailed
 )
+
+// WorkerStatusCodeToExitReason translates WorkerStatusCode to ExitReason
+// TODO: business logic should not sense 'WorkerStatus'
+func WorkerStatusCodeToExitReason(code model.WorkerStatusCode) ExitReason {
+	switch code {
+	case model.WorkerStatusFinished:
+		return ExitReasonFinished
+	case model.WorkerStatusStopped:
+		return ExitReasonCanceled
+	case model.WorkerStatusError:
+		return ExitReasonFailed
+	}
+
+	return ExitReasonUnknown
+}
