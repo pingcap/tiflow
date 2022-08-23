@@ -89,7 +89,9 @@ If you have build the binary on your local Linux, you can try `../run-engine.sh 
 
 ### Deploy
 
-There are several configure files to use. The file name suggests the number of running server-master and executor nodes. For example, `1m1e.yaml` means this file contains one server-master and one executor. Use `../run-engine.sh deploy 1m1e.yaml` to deploy cluster.
+There are several configure files to use. The file name suggests the number of running server-master and executor nodes. 
+For example, `1m1e.yaml` means this file contains one server-master and one executor. 
+Use `../run-engine.sh deploy ./deployments/engine/docker-compose/1m1e.yaml` to deploy cluster.
 
 ### Destroy
 
