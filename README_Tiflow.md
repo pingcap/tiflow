@@ -4,17 +4,13 @@
 
 This repo implements a new prototype of distributed task scheduler.
 
-### Master
+### ServerMaster
 
 Master is set to process the requests from outside and to schedule and dispatch tasks.
 
 ### Executor
 
 Executor is the worker process to run the tasks.
-
-### Master-Client
-
-Master-Client is set to interact with master.
 
 ## Build
 
@@ -97,7 +93,7 @@ There are several configure files to use. The file name suggests the number of r
 
 ### Destroy
 
-Use `../run-engine.sh stop 1m1e.yaml` to destroy the cluster.
+Use `../run-engine.sh stop ./deployments/engine/docker-compose/1m1e.yaml` to destroy the cluster.
 
 ### Cleanup
 
@@ -107,7 +103,7 @@ sudo rm -rf /tmp/df/master
 
 ```bash
 sudo rm -rf /tmp/df/master
-../run-engine.sh deploy ./3m3e.yaml ./demo.yaml
+../run-engine.sh deploy ./deployments/engine/docker-compose/3m3e.yaml ./deployments/engine/docker-compose/demo.yaml
 
 cd ../../../ # root dir of tiflow
 ./bin/tiflow cli job create --master-addrs ${$server-master-ip0}:${port0} --job-type CVSDemo --job-config ./deployments/engine/docker-compose/config/demo.json
