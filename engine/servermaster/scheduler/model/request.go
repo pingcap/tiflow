@@ -14,8 +14,10 @@
 package model
 
 import (
+	"github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/model"
-	resourcemeta "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/resourcemeta/model"
+	"github.com/pingcap/tiflow/engine/pkg/rpcerror"
 	"github.com/pingcap/tiflow/pkg/label"
 )
 
@@ -24,8 +26,79 @@ type SchedulerRequest struct {
 	TenantID string // reserved for future use.
 
 	Cost              ResourceUnit
-	ExternalResources []resourcemeta.ResourceKey
-	Selectors         []label.Selector
+	ExternalResources []resModel.ResourceKey
+	Selectors         []*label.Selector
+}
+
+// NewSchedulerRequestFromPB converts a protobuf message ScheduleTaskRequest
+// to the internal data structure SchedulerRequest.
+func NewSchedulerRequestFromPB(req *enginepb.ScheduleTaskRequest) (*SchedulerRequest, error) {
+	selectors := make([]*label.Selector, 0, len(req.GetSelectors()))
+	for _, sel := range req.GetSelectors() {
+		internalSel, err := SelectorFromPB(sel)
+		if err != nil {
+			return nil, err
+		}
+		selectors = append(selectors, internalSel)
+	}
+
+	schedulerReq := &SchedulerRequest{
+		Cost:              ResourceUnit(req.GetCost()),
+		ExternalResources: resModel.ToResourceKeys(req.GetResourceRequirements()),
+		Selectors:         selectors,
+	}
+	return schedulerReq, nil
+}
+
+// IncompatibleSchedulerRequestError indicates that the PB request is not compatible with
+// the current version.
+type IncompatibleSchedulerRequestError struct {
+	rpcerror.Error[rpcerror.NotRetryable, rpcerror.InvalidArgument]
+
+	Message string
+	Payload string
+}
+
+// ErrIncompatibleSchedulerRequest indicates that the scheduler does not recognize
+// a protobuf message as valid input. May indicate a version incompatibility problem.
+var ErrIncompatibleSchedulerRequest = rpcerror.Normalize[IncompatibleSchedulerRequestError]()
+
+// SelectorFromPB converts a protobuf Selector message to the internal
+// data type label.Selector.
+// This function does the necessary sanity checks, so it's safe to use
+// with an RPC argument.
+func SelectorFromPB(req *enginepb.Selector) (*label.Selector, error) {
+	var op label.Op
+	switch req.Op {
+	case enginepb.Selector_SelectorEq:
+		op = label.OpEq
+	case enginepb.Selector_SelectorNeq:
+		op = label.OpNeq
+	case enginepb.Selector_SelectorRegex:
+		op = label.OpRegex
+	default:
+		// Future-proof the code in case a new Op is added.
+		return nil, ErrIncompatibleSchedulerRequest.GenWithStack(
+			&IncompatibleSchedulerRequestError{
+				Message: "unknown selector op",
+				Payload: req.String(),
+			})
+	}
+
+	ret := &label.Selector{
+		Key:    label.Key(req.Label),
+		Target: req.Target,
+		Op:     op,
+	}
+
+	if err := ret.Validate(); err != nil {
+		return nil, ErrIncompatibleSchedulerRequest.GenWithStack(
+			&IncompatibleSchedulerRequestError{
+				Message: "invalid selector",
+				Payload: err.Error(),
+			})
+	}
+	return ret, nil
 }
 
 // SchedulerResponse represents a response to a task scheduling request.

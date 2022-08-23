@@ -332,10 +332,11 @@ func (s *Server) ScheduleTask(ctx context.Context, req *pb.ScheduleTaskRequest) 
 		return resp2, err
 	}
 
-	schedulerReq := &schedModel.SchedulerRequest{
-		Cost:              schedModel.ResourceUnit(req.GetCost()),
-		ExternalResources: resModel.ToResourceKeys(req.GetResourceRequirements()),
+	schedulerReq, err := schedModel.NewSchedulerRequestFromPB(req)
+	if err != nil {
+		return nil, err
 	}
+
 	schedulerResp, err := s.scheduler.ScheduleTask(ctx, schedulerReq)
 	if err != nil {
 		return nil, rpcerror.ToGRPCError(err)
