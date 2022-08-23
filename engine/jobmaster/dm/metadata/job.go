@@ -27,19 +27,19 @@ import (
 
 // TaskStage represents internal stage of a task
 // TODO: use Stage in lib or move Stage to lib.
-type TaskStage int
+type TaskStage string
 
-// These stages may updated in later pr.
+// These stages may be updated in later pr.
 const (
-	StageInit TaskStage = iota + 1
-	StageRunning
-	StagePaused
-	StageFinished
-	StageError
-	StagePausing
+	StageInit     TaskStage = "init"
+	StageRunning  TaskStage = "running"
+	StagePaused   TaskStage = "paused"
+	StageFinished TaskStage = "finished"
+	StageError    TaskStage = "error"
+	StagePausing  TaskStage = "pausing"
 	// UnScheduled means the task is not scheduled.
 	// This usually happens when the worker is offline.
-	StageUnscheduled
+	StageUnscheduled TaskStage = "unscheduled"
 )
 
 // Job represents the state of a job.
