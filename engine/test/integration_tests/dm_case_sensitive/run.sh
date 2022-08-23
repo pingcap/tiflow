@@ -20,7 +20,7 @@ function run() {
 	run_sql_file $CUR_DIR/data/db1.prepare.sql
 	run_sql_file --port 3307 $CUR_DIR/data/db2.prepare.sql
 	# manually create the route table
-	run_sql --port 4000 'CREATE DATABASE IF NOT EXISTS `UPPER_DB_ROUTE`'
+	run_sql --port 4000 'CREATE DATABASE IF NOT EXISTS \`UPPER_DB_ROUTE\`'
 
 	# create job
 
@@ -30,7 +30,7 @@ function run() {
 	echo "job_id: $job_id"
 
 	# wait for job finished
-	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.TaskStatus.\"mysql-01\".Status.Stage == 4 and .TaskStatus.\"mysql-02\".Status.Stage == 4'"
+	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.status == \"Finished\"'"
 
 	# check data
 
@@ -43,8 +43,7 @@ function run() {
 }
 
 trap "stop_engine_cluster $CONFIG" EXIT
-# fixme: job exit can't persist status for now
-#run $*
+run $*
 # TODO: handle log properly
 # check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

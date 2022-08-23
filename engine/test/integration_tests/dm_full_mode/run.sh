@@ -35,7 +35,7 @@ function run() {
 	echo "job_id: $job_id"
 
 	# wait for job finished
-	exec_with_retry --count 200 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.TaskStatus.\"mysql-01\".Status.Stage == 4'"
+	exec_with_retry --count 200 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.status == \"Finished\"'"
 
 	# check data
 
@@ -43,8 +43,7 @@ function run() {
 }
 
 trap "stop_engine_cluster $CONFIG" EXIT
-# fixme: job exit can't persist status for now
-#run $*
+run $*
 # TODO: handle log properly
 # check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
