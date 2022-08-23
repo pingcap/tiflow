@@ -29,7 +29,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// EntrySorter accepts out-of-order raw kv entries and output sorted entries
+// EntrySorter accepts out-of-order raw kv entries and output sorted entries.
+// For now, it only uses for DDL puller and test.
 type EntrySorter struct {
 	unsorted        []*model.PolymorphicEvent
 	lock            sync.Mutex
@@ -180,6 +181,7 @@ func mergeEvents(kvsA []*model.PolymorphicEvent, kvsB []*model.PolymorphicEvent,
 }
 
 // SortOutput receives a channel from a puller, then sort event and output to the channel returned.
+// Only for DDL puller.
 func SortOutput(ctx context.Context, input <-chan *model.RawKVEntry) <-chan *model.RawKVEntry {
 	ctx, cancel := context.WithCancel(ctx)
 	sorter := NewEntrySorter()

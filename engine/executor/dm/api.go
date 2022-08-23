@@ -40,7 +40,7 @@ func (w *dmWorker) QueryStatus(ctx context.Context, req *dmpkg.QueryStatusReques
 	return &dmpkg.QueryStatusResponse{
 		Unit:   w.workerType,
 		Stage:  stage,
-		Result: result,
+		Result: dmpkg.NewProcessResultFromPB(result),
 		Status: statusBytes,
 	}
 }

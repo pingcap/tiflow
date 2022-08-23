@@ -62,7 +62,16 @@ func TestQueryStatusAPI(t *testing.T) {
 			BlockDDLOwner:       "",
 			ConflictMsg:         "",
 		}
-		processError = &pb.ProcessError{
+		processError = &dmpkg.ProcessError{
+			ErrCode:    1,
+			ErrClass:   "class",
+			ErrScope:   "scope",
+			ErrLevel:   "low",
+			Message:    "msg",
+			RawCause:   "raw cause",
+			Workaround: "workaround",
+		}
+		pbProcessError = &pb.ProcessError{
 			ErrCode:    1,
 			ErrClass:   "class",
 			ErrScope:   "scope",
@@ -82,13 +91,13 @@ func TestQueryStatusAPI(t *testing.T) {
 		loadStatusResp = &dmpkg.QueryStatusResponse{
 			Unit:   framework.WorkerDMLoad,
 			Stage:  metadata.StageFinished,
-			Result: &pb.ProcessResult{IsCanceled: false},
+			Result: &dmpkg.ProcessResult{IsCanceled: false},
 			Status: loadStatusBytes,
 		}
 		syncStatusResp = &dmpkg.QueryStatusResponse{
 			Unit:   framework.WorkerDMSync,
 			Stage:  metadata.StagePaused,
-			Result: &pb.ProcessResult{Errors: []*pb.ProcessError{processError}},
+			Result: &dmpkg.ProcessResult{Errors: []*dmpkg.ProcessError{processError}},
 			Status: syncStatusBytes,
 		}
 	)
@@ -121,7 +130,7 @@ func TestQueryStatusAPI(t *testing.T) {
 	require.Equal(t, loadStatusResp, resp)
 
 	unitHolder.On("Status").Return(syncStatus).Once()
-	unitHolder.On("Stage").Return(metadata.StagePaused, &pb.ProcessResult{Errors: []*pb.ProcessError{processError}}).Once()
+	unitHolder.On("Stage").Return(metadata.StagePaused, &pb.ProcessResult{Errors: []*pb.ProcessError{pbProcessError}}).Once()
 	dmWorker.workerType = framework.WorkerDMSync
 	resp = dmWorker.QueryStatus(context.Background(), &dmpkg.QueryStatusRequest{Task: "task-id"})
 	require.Equal(t, "", resp.ErrorMsg)
