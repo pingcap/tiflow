@@ -70,20 +70,21 @@ func WatchExecutors(ctx context.Context, watcher executorWatcher, user executorI
 		return errors.Annotate(err, "watch executors")
 	}
 
-	emptyChange := model.ExecutorStatusChange{}
 	for {
-		var change model.ExecutorStatusChange
+		var (
+			change model.ExecutorStatusChange
+			ok     bool
+		)
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case change = <-updates.C:
+		case change, ok = <-updates.C:
 		}
 
-		if change == emptyChange {
+		if !ok {
 			log.Info("receive empty executor change")
 			return cerrors.ErrExecutorWatcherClosed.GenWithStackByArgs()
 		}
-
 		if change.Tp == model.EventExecutorOnline {
 			err := user.AddExecutor(change.ID, change.Addr)
 			if err != nil {
