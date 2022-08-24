@@ -24,7 +24,7 @@ service Discovery {
     // Executors will use this API to discover other executors.
     // Currently, we assume that there aren't too many executors.
     // If the number of executors becomes very large in the future,
-    // we can consider implement a mechanism to watch the changes of the executors.
+    // we can consider a mechanism to watch the changes of the executors.
     rpc ListExecutors(ListExecutorsRequest) returns(ListExecutorsResponse) {
         option (google.api.http) = {
             get: "/api/v1/executors"
