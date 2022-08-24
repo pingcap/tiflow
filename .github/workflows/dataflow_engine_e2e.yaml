@@ -38,18 +38,6 @@ jobs:
           cd $GITHUB_WORKSPACE/engine/test/e2e
           go test -count=1 -v -run=TestSubmitTest
 
-      - name: Dump docker container logs on failure
-        if: ${{ failure() }}
-        uses: jwalton/gh-docker-logs@v2
-        with:
-          tail: '100'
-
-      - name: Collect docker logs on failure
-        if: ${{ always() }}
-        uses: jwalton/gh-docker-logs@v2
-        with:
-          dest: '/tmp/tiflow_engine_test/docker_log/'
-
       - name: Upload logs to GitHub
         if: ${{ always() }}
         uses: actions/upload-artifact@master
@@ -78,18 +66,6 @@ jobs:
           cd $GITHUB_WORKSPACE/engine/test/e2e
           go test -count=1 -v -run=TestNodeFailure
 
-      - name: Dump docker container logs on failure
-        if: ${{ failure() }}
-        uses: jwalton/gh-docker-logs@v2
-        with:
-          tail: '100'
-
-      - name: Collect docker logs on failure
-        if: ${{ always() }}
-        uses: jwalton/gh-docker-logs@v2
-        with:
-          dest: '/tmp/tiflow_engine_test/docker_log/'
-
       - name: Upload logs to GitHub
         if: ${{ always() }}
         uses: actions/upload-artifact@master
@@ -117,18 +93,6 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/engine/test/e2e
           go test -count=1 -v -run=TestWorkerExit
-
-      - name: Dump docker container logs on failure
-        if: ${{ failure() }}
-        uses: jwalton/gh-docker-logs@v2
-        with:
-          tail: '100'
-
-      - name: Collect docker logs on failure
-        if: ${{ always() }}
-        uses: jwalton/gh-docker-logs@v2
-        with:
-          dest: '/tmp/tiflow_engine_test/docker_log/'
 
       - name: Upload logs to GitHub
         if: ${{ always() }}
@@ -160,18 +124,6 @@ jobs:
           $GITHUB_WORKSPACE/engine/test/utils/wait_mysql_online.sh --host 127.0.0.1 --port 4000
           cd $GITHUB_WORKSPACE/engine/test/e2e
           go test -count=1 -v -run=TestDMJob
-
-      - name: Dump docker container logs on failure
-        if: ${{ failure() }}
-        uses: jwalton/gh-docker-logs@v2
-        with:
-          tail: '100'
-
-      - name: Collect docker logs on failure
-        if: ${{ always() }}
-        uses: jwalton/gh-docker-logs@v2
-        with:
-          dest: '/tmp/tiflow_engine_test/docker_log/'
 
       - name: Upload logs to GitHub
         if: ${{ always() }}
