@@ -29,7 +29,7 @@ new_configs=
 while [[ $# -gt 0 ]]; do
 	old_path=$1 && shift
 	new_path="${WORK_DIR}/$(basename ${old_path})"
-	cat ${old_path} | sed -e "s, /tmp/tiflow_engine_test.*:, /tmp/tiflow_engine_test/${TEST_NAME}:, g" > ${new_path}
+	cat ${old_path} | sed -e "s, /tmp/tiflow_engine_test.*:, /tmp/tiflow_engine_test/${TEST_NAME}:, g" >${new_path}
 	new_configs="${new_configs} ${new_path}"
 done
 echo "$new_configs"
