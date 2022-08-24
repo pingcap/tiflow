@@ -997,8 +997,12 @@ func TestBarrierAdvance(t *testing.T) {
 			ctx.ChangefeedVars().Info.SyncPointInterval = 100 * time.Second
 		}
 
-		cf, captures, tester := createChangefeed4Test(ctx, t)
+		cf, state, captures, tester := createChangefeed4Test(ctx, t)
 		defer cf.Close(ctx)
+
+		// Pre tick, to fill cf.state.Info.
+		cf.Tick(ctx, state, captures)
+		tester.MustApplyPatches()
 
 		// The changefeed load the info from etcd.
 		cf.state.Status = &model.ChangeFeedStatus{
@@ -1007,7 +1011,7 @@ func TestBarrierAdvance(t *testing.T) {
 		}
 
 		// Do the preflightCheck and initialize the changefeed.
-		cf.Tick(ctx, captures)
+		cf.Tick(ctx, state, captures)
 		tester.MustApplyPatches()
 
 		// add 5s to resolvedTs.

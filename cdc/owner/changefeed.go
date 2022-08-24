@@ -350,22 +350,8 @@ LOOP:
 		}
 	}
 
-<<<<<<< HEAD
-	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
-	resolvedTs := checkpointTs
-	if c.state.Status != nil {
-		resolvedTs = c.state.Status.ResolvedTs
-	}
-	log.Info("initialize changefeed",
-		zap.String("namespace", c.state.ID.Namespace),
-		zap.String("changefeed", c.state.ID.ID),
-		zap.Stringer("info", c.state.Info),
-		zap.Uint64("checkpointTs", checkpointTs),
-		zap.Uint64("resolvedTs", resolvedTs))
-=======
 	checkpointTs := c.state.Status.CheckpointTs
 	resolvedTs := c.state.Status.ResolvedTs
->>>>>>> b6de2bd88 (cdc: changefeed shouldn't be blocked by sync-point (#6837))
 
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
 		failpoint.Return(cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs-300, checkpointTs))
@@ -472,6 +458,13 @@ LOOP:
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	log.Info("initialize changefeed",
+		zap.String("namespace", c.state.ID.Namespace),
+		zap.String("changefeed", c.state.ID.ID),
+		zap.Stringer("info", c.state.Info),
+		zap.Uint64("checkpointTs", checkpointTs),
+		zap.Uint64("resolvedTs", resolvedTs))
 
 	c.initialized = true
 	return nil
