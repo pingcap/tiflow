@@ -635,7 +635,7 @@ function DM_INJECT_DDL_ERROR_SHARDING_BASE2_CASE() {
 		run_sql_source1 "insert into ${db}.${tb2} values(7,7,7.7);"
 		run_sql_source2 "insert into ${db}.${tb2} values(8,8,8.8);"
 
-		# 11/21 inject with 12/22 first ddl conflict
+		# 11/21 injected ddl conflict with 12/22 first ddl
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
 			"detect inconsistent DDL sequence from source" 2
@@ -645,7 +645,7 @@ function DM_INJECT_DDL_ERROR_SHARDING_BASE2_CASE() {
 			"binlog replace test -s mysql-replica-01,mysql-replica-02 alter table ${db}.${tb2} add column c int default 100; alter table ${db}.${tb2} add primary key (c);" \
 			"\"result\": true" 3
 
-		# 11/21 second ddl: unsupport error
+		# 11/21 second ddl: unsupported error
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
 			"Unsupported modify column: this column has primary key flag" 2
@@ -655,7 +655,7 @@ function DM_INJECT_DDL_ERROR_SHARDING_BASE2_CASE() {
 			"binlog inject test alter table ${db}.${tb1} drop primary key; alter table ${db}.${tb1} add unique(c);" \
 			"\"result\": true" 3
 
-		# 11/21 inject ddl with 12/22 second ddl: detect conflict
+		# 11/21 injected ddl conflict with 12/22 second ddl
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
 			"detect inconsistent DDL sequence from source" 2

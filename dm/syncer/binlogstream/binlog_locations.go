@@ -26,16 +26,35 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
+func isDataEvent(e *replication.BinlogEvent) bool {
+	switch e.Event.(type) {
+	case *replication.TableMapEvent, *replication.RowsEvent, *replication.QueryEvent:
+		return true
+	}
+	return false
+}
+
+// locations provides curStartLocation, curEndLocation, txnEndLocation for binlog
+// events.
+//
+// - for the event which isDataEvent:
+//               +-------------+
+//           ... |current event| ...
+//          ^    +-------------+    ^
+//          |                       |
+//    curStartLocation        curEndLocation
+//
+//    there may be more events between curStartLocation and curEndLocation due
+//    to the limitation of binlog or implementation of DM, but in such scenario,
+//    those events should always belong to one transaction.
+//
+// - for RotateEvent:
+//    the binlog filename of curEndLocation and txnEndLocation will be updated
+//    to the new NextLogName in RotateEvent.
+//
+// - else:
+//    we do not guarantee the behaviour of 3 locations of this struct.
 type locations struct {
-	//            +-------------+
-	//        ... |current event| ...
-	//       ^    +-------------+    ^
-	//       |                       |
-	// curStartLocation        curEndLocation
-	// there may be more events between curStartLocation and curEndLocation due to the limitation of binlog or
-	// implementation of DM, but in such scenario, those events should always belong to one transaction.
-	// When curStartLocation is equal to curEndLocation, it means current event is not a data change.
-	//
 	// curStartLocation is used when
 	// - display a meaningful location
 	// - match the injected location by handle-error
@@ -53,12 +72,28 @@ type locations struct {
 	txnEndLocation binlog.Location
 }
 
+func (l *locations) reset(loc binlog.Location) {
+	// need to clone location to avoid the modification leaking outside
+	clone := loc.Clone()
+	l.curStartLocation = clone
+	l.curEndLocation = clone
+	l.txnEndLocation = clone
+}
+
+// String implements fmt.Stringer.
+func (l *locations) String() string {
+	return fmt.Sprintf("curStartLocation: %s, curEndLocation: %s, txnEndLocation: %s",
+		l.curStartLocation.String(), l.curEndLocation.String(), l.txnEndLocation.String())
+}
+
 // updateHookFunc is used to run some logic before locationRecorder.update.
 type updateHookFunc func()
 
+// locationRecorder can maintain locations along with update(BinlogEvent). For the
+// properties of locations see comments of locations struct.
 // locationRecorder is not concurrent-safe.
 type locationRecorder struct {
-	locations
+	*locations
 
 	// DML will also generate a query event if user set session binlog_format='statement', we use this field to
 	// distinguish DML query event.
@@ -67,12 +102,10 @@ type locationRecorder struct {
 	preUpdateHook []updateHookFunc
 }
 
-func (l *locationRecorder) reset(loc binlog.Location) {
-	// need to clone location to avoid the modification leaking outside
-	clone := loc.Clone()
-	l.curStartLocation = clone
-	l.curEndLocation = clone
-	l.txnEndLocation = clone
+func newLocationRecorder() *locationRecorder {
+	return &locationRecorder{
+		locations: &locations{},
+	}
 }
 
 func (l *locationRecorder) saveTxnEndLocation() {
@@ -151,10 +184,6 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 	l.curStartLocation.Position = l.curEndLocation.Position
 	l.curStartLocation.Suffix = l.curEndLocation.Suffix
 
-	if !shouldUpdatePos(e) {
-		return
-	}
-
 	if event, ok := e.Event.(*replication.RotateEvent); ok {
 		nextName := string(event.NextLogName)
 		if l.curEndLocation.Position.Name != nextName {
@@ -162,6 +191,10 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 			l.curEndLocation.Position.Pos = binlog.FileHeaderLen
 			l.saveTxnEndLocation()
 		}
+		return
+	}
+
+	if !shouldUpdatePos(e) {
 		return
 	}
 
@@ -225,10 +258,4 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 
 		l.saveTxnEndLocation()
 	}
-}
-
-// String implements fmt.Stringer.
-func (l *locationRecorder) String() string {
-	return fmt.Sprintf("curStartLocation: %s, curEndLocation: %s, txnEndLocation: %s",
-		l.curStartLocation.String(), l.curEndLocation.String(), l.txnEndLocation.String())
 }

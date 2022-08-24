@@ -87,15 +87,18 @@ type locationStream struct {
 	*locationRecorder
 }
 
-func newLocationedStream(generator streamGenerator, location binlog.Location) (locationStream, error) {
+func newLocationStream(generator streamGenerator, location binlog.Location) (locationStream, error) {
 	var ret locationStream
+
+	// strip injected event suffix
+	location.Suffix = 0
 	s, err := generator.GenerateStreamFrom(location)
 	if err != nil {
 		return ret, err
 	}
 	ret.stream = s
 
-	recorder := &locationRecorder{}
+	recorder := newLocationRecorder()
 	recorder.reset(location)
 	ret.locationRecorder = recorder
 	return ret, nil
@@ -106,6 +109,17 @@ func (l locationStream) GetEvent(ctx context.Context) (*replication.BinlogEvent,
 	if err != nil {
 		return nil, err
 	}
+
+	failpoint.Inject("MakeFakeRotateEvent", func(val failpoint.Value) {
+		ev, ok := e.Event.(*replication.RotateEvent)
+		if ok {
+			e.Header.LogPos = 0
+			e.Header.Flags = replication.LOG_EVENT_ARTIFICIAL_F
+			ev.NextLogName = []byte(val.(string))
+			log.L().Info("MakeFakeRotateEvent", zap.String("fake file name", string(ev.NextLogName)))
+		}
+	})
+
 	l.locationRecorder.update(e)
 	return e, nil
 }
@@ -134,7 +148,7 @@ type StreamerController struct {
 
 	*streamModifier
 	// streamModifier will also modify locations so they'll be different from upstreamLocations.
-	locations locations
+	locations *locations
 
 	// lastEventFromUpstream is the last event from upstream, and not sent to caller
 	// yet. It should be set to nil after sent to caller.
@@ -190,6 +204,7 @@ func NewStreamerController(
 		closed:            true,
 		relay:             relay,
 		streamModifier:    newStreamModifier(logger),
+		locations:         &locations{},
 	}
 
 	return streamerController
@@ -254,7 +269,7 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 			t.reader.Close()
 		default:
 			// some other producers such as mockStreamerProducer, should not re-create
-			c.upstream, err = newLocationedStream(c.streamProducer, location)
+			c.upstream, err = newLocationStream(c.streamProducer, location)
 			return err
 		}
 	}
@@ -277,9 +292,10 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 		c.streamProducer = &localBinlogReader{c.relay.NewReader(tctx.L(), &relay.BinlogReaderConfig{RelayDir: c.localBinlogDir, Timezone: c.timezone, Flavor: c.syncCfg.Flavor}), c.enableGTID}
 	}
 
-	c.upstream, err = newLocationedStream(c.streamProducer, location)
+	c.upstream, err = newLocationStream(c.streamProducer, location)
 	if err == nil {
 		c.streamModifier.reset(location)
+		c.locations.reset(location)
 		c.lastEventFromUpstream = nil
 	}
 	return err
@@ -287,31 +303,36 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 
 // GetEvent returns binlog event from upstream binlog or streamModifier. It's not
 // concurrent safe.
-// When return events from streamModifier, we should maintain these properties:
+//
+// After GetEvent returns an event, GetCurStartLocation, GetCurEndLocation, GetTxnEndLocation
+// will return the corresponding locations of the event. The definition of 3 locations
+// can be found in the comment of locations struct in binlog_locations.go .
+//
+// When return events from streamModifier, 3 locations are maintained as below:
 //   - Inject
 //     if we inject events [DDL1, DDL2] at (start) position 900, where start position
 //     900 has Insert1 event whose LogPos (end position) is 1000, we should return
 //     to caller like
-//   - DDL1, start position 900 LogPos 900, suffix 1
-//   - DDL2, start position 900 LogPos 900, suffix 2
-//   - Insert1, start position 900 LogPos 1000, suffix 0
+//
+//     1. DDL1, start (900, suffix 0) end (900, suffix 1)
+//     2. DDL2, start (900, suffix 1) end (900, suffix 2)
+//     3. Insert1, start (900, suffix 2) end (1000, suffix 0)
+//
 //     The DDLs are placed before DML because user may want to use Inject to change
 //     table structure for DML.
-//     when DDL need shard resync, for example, after DDL2's shard group finished,
-//     caller should use (LogPos 900, suffix 2) to reset streamer, then the next
-//     event from upstream binlog is Insert1 since upstream will ignore the suffix,
-//     and next event from streamModifier is unknown in this context.
+//
 //   - Replace
 //     if we replace events [DDL1, DDL2] at (start) position 900, where start position
 //     900 has DDL0 event whose LogPos (end position) is 1000, we should return to
 //     caller like
-//   - DDL1, start position 900 LogPos 900, suffix 1
-//   - DDL2, start position 900 LogPos 1000, suffix 0
-//     for shard resync, caller should use end position to reset streamer as above
+//
+//     1. DDL1, start (900, suffix 0) end (900, suffix 1)
+//     2. DDL2, start (900, suffix 1) end (1000, suffix 0)
+//
 //   - Skip
 //     the skipped event will still be sent to caller, with op = pb.ErrorOp_Skip,
 //     to let caller track schema and save checkpoints.
-func (c *StreamerController) GetEvent(tctx *tcontext.Context) (*replication.BinlogEvent, int, pb.ErrorOp, error) {
+func (c *StreamerController) GetEvent(tctx *tcontext.Context) (*replication.BinlogEvent, pb.ErrorOp, error) {
 	event, suffix, op, err := c.getEvent(tctx)
 
 	// if is local binlog but switch to remote on error, need to add uuid information in binlog's filename
@@ -324,7 +345,7 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (*replication.Binl
 			} else if c.relaySubDirSuffix != "" {
 				filename, err2 := utils.ParseFilename(string(ev.NextLogName))
 				if err2 != nil {
-					return nil, 0, pb.ErrorOp_InvalidErrorOp, terror.Annotate(err2, "fail to parse binlog file name from rotate event")
+					return nil, pb.ErrorOp_InvalidErrorOp, terror.Annotate(err2, "fail to parse binlog file name from rotate event")
 				}
 				ev.NextLogName = []byte(utils.ConstructFilenameWithUUIDSuffix(filename, c.relaySubDirSuffix))
 			}
@@ -333,13 +354,13 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (*replication.Binl
 
 	if err != nil {
 		if err == context.Canceled || err == context.DeadlineExceeded {
-			return nil, 0, pb.ErrorOp_InvalidErrorOp, err
+			return nil, pb.ErrorOp_InvalidErrorOp, err
 		}
 		c.Lock()
 		tctx.L().Error("meet error when get binlog event", zap.Error(err))
 		c.meetError = true
 		c.Unlock()
-		return nil, 0, pb.ErrorOp_InvalidErrorOp, err
+		return nil, pb.ErrorOp_InvalidErrorOp, err
 	}
 
 	if suffix != 0 {
@@ -347,21 +368,27 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (*replication.Binl
 		c.locations.curStartLocation.Suffix = suffix - 1
 		c.locations.curEndLocation = c.upstream.curStartLocation
 		c.locations.curEndLocation.Suffix = suffix
+		// we only allow injecting DDL, so txnEndLocation is end location of every injected event
 		c.locations.txnEndLocation = c.locations.curEndLocation
-	} else {
-		if c.locations.curEndLocation.Suffix != 0 {
-			// this is the first upstream event after injection, keep suffix for start location
-			c.locations.curStartLocation = c.locations.curEndLocation
-			c.locations.curEndLocation = c.upstream.curEndLocation
-			c.locations.txnEndLocation = c.upstream.txnEndLocation
-		} else {
-			c.locations = c.upstream.locations
-		}
+		return event, op, nil
 	}
 
-	return event, suffix, op, nil
+	if isDataEvent(event) {
+		c.locations.curStartLocation = c.locations.curEndLocation
+		c.locations.curEndLocation = c.upstream.curEndLocation
+		c.locations.txnEndLocation = c.upstream.txnEndLocation
+		return event, op, nil
+	}
+
+	c.locations.curStartLocation = c.locations.curEndLocation
+	c.locations.curEndLocation.CopyWithoutSuffixFrom(c.upstream.curEndLocation)
+	c.locations.txnEndLocation.CopyWithoutSuffixFrom(c.upstream.txnEndLocation)
+
+	return event, op, nil
 }
 
+// getEvent gets event from upstream binlog or streamModifier. The maintaining of
+// locations is on its caller.
 func (c *StreamerController) getEvent(tctx *tcontext.Context) (
 	event *replication.BinlogEvent,
 	suffix int,
@@ -374,11 +401,12 @@ func (c *StreamerController) getEvent(tctx *tcontext.Context) (
 		failpoint.Return(nil, 0, pb.ErrorOp_InvalidErrorOp, terror.ErrDBBadConn.Generate())
 	})
 
+	var status getEventFromFrontOpStatus
+
 LOOP:
 	for frontOp := c.streamModifier.front(); frontOp != nil; frontOp = c.streamModifier.front() {
 		op = pb.ErrorOp_InvalidErrorOp
 		suffix = 0
-		var status getEventFromFrontOpStatus
 
 		if c.lastEventFromUpstream == nil {
 			c.lastEventFromUpstream, err = c.upstream.GetEvent(tctx.Context())
@@ -637,9 +665,10 @@ func NewStreamerController4Test(
 		streamProducer: streamerProducer,
 		upstream: locationStream{
 			stream:           streamer,
-			locationRecorder: &locationRecorder{},
+			locationRecorder: newLocationRecorder(),
 		},
 		closed:         false,
 		streamModifier: &streamModifier{logger: log.L()},
+		locations:      &locations{},
 	}
 }

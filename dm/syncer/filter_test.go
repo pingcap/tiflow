@@ -137,7 +137,7 @@ func (s *testFilterSuite) TestSkipQueryEvent(c *C) {
 		qec := &queryEventContext{
 			eventContext: &eventContext{
 				tctx:         tcontext.Background(),
-				lastLocation: &loc,
+				lastLocation: loc,
 			},
 			p:         p,
 			ddlSchema: ca.schema,

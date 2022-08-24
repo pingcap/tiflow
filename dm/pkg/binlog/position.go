@@ -212,9 +212,10 @@ func VerifyBinlogPos(pos string) (*gmysql.Position, error) {
 }
 
 // ComparePosition returns:
-//   1 if pos1 is bigger than pos2
-//   0 if pos1 is equal to pos2
-//   -1 if pos1 is less than pos2
+//
+//	1 if pos1 is bigger than pos2
+//	0 if pos1 is equal to pos2
+//	-1 if pos1 is less than pos2
 func ComparePosition(pos1, pos2 gmysql.Position) int {
 	adjustedPos1 := RemoveRelaySubDirSuffix(pos1)
 	adjustedPos2 := RemoveRelaySubDirSuffix(pos2)
@@ -298,19 +299,17 @@ func (l Location) CloneWithFlavor(flavor string) Location {
 	}
 
 	return Location{
-		Position: gmysql.Position{
-			Name: l.Position.Name,
-			Pos:  l.Position.Pos,
-		},
-		gtidSet: newGTIDSet,
-		Suffix:  l.Suffix,
+		Position: l.Position,
+		gtidSet:  newGTIDSet,
+		Suffix:   l.Suffix,
 	}
 }
 
 // CompareLocation returns:
-//   1 if point1 is bigger than point2
-//   0 if point1 is equal to point2
-//   -1 if point1 is less than point2
+//
+//	1 if point1 is bigger than point2
+//	0 if point1 is equal to point2
+//	-1 if point1 is less than point2
 func CompareLocation(location1, location2 Location, cmpGTID bool) int {
 	if cmpGTID {
 		cmp, canCmp := CompareGTID(location1.gtidSet, location2.gtidSet)
@@ -361,9 +360,11 @@ func IsFreshPosition(location Location, flavor string, cmpGTID bool) bool {
 }
 
 // CompareGTID returns:
-//   1, true if gSet1 is bigger than gSet2
-//   0, true if gSet1 is equal to gSet2
-//   -1, true if gSet1 is less than gSet2
+//
+//	1, true if gSet1 is bigger than gSet2
+//	0, true if gSet1 is equal to gSet2
+//	-1, true if gSet1 is less than gSet2
+//
 // but if can't compare gSet1 and gSet2, will returns 0, false.
 func CompareGTID(gSet1, gSet2 gmysql.GTIDSet) (int, bool) {
 	gSetIsEmpty1 := gSet1 == nil || len(gSet1.String()) == 0
@@ -410,6 +411,12 @@ func compareInjectSuffix(lhs, rhs int) int {
 // ResetSuffix set suffix to 0.
 func (l *Location) ResetSuffix() {
 	l.Suffix = 0
+}
+
+// CopyWithoutSuffixFrom copies a same Location without suffix. Note that gtidSet is shared.
+func (l *Location) CopyWithoutSuffixFrom(from Location) {
+	l.Position = from.Position
+	l.gtidSet = from.gtidSet
 }
 
 // SetGTID set new gtid for location.

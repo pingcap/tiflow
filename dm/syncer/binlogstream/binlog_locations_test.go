@@ -198,7 +198,7 @@ func (s *testLocationSuite) generateDDLEvents() []*replication.BinlogEvent {
 // initAndCheckOneTxnEvents checks locationRecorder.update can correctly track binlog events of one transaction.
 // the first one of `expected` is the location to reset streamer, the last one is the last event of a transaction.
 func (s *testLocationSuite) initAndCheckOneTxnEvents(events []*replication.BinlogEvent, expected []binlog.Location) {
-	r := &locationRecorder{}
+	r := newLocationRecorder()
 	r.reset(expected[0])
 	s.Require().Equal(expected[0], r.curStartLocation)
 	s.Require().Equal(expected[0], r.curEndLocation)
@@ -541,7 +541,7 @@ func (s *testLocationSuite) TestRotateEvent() {
 	err := expected[12].SetGTID(s.currGSet)
 	s.Require().NoError(err)
 
-	r := &locationRecorder{}
+	r := newLocationRecorder()
 	r.reset(expected[0])
 	s.Require().Equal(expected[0], r.curStartLocation)
 	s.Require().Equal(expected[0], r.curEndLocation)
