@@ -158,7 +158,7 @@ func TestAdjustSQLMode(t *testing.T) {
 
 	changefeed := "test-changefeed"
 	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
-	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
+	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1")
 	require.Nil(t, err)
 	sink, err := NewMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConn)
@@ -261,7 +261,7 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 	defer cancel()
 	changefeed := "test-changefeed"
 	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
-	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
+	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1")
 	require.Nil(t, err)
 	sink, err := NewMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConn)
@@ -678,7 +678,7 @@ func TestNewMySQLBackend(t *testing.T) {
 
 	changefeed := "test-changefeed"
 	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
-	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
+	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1")
 	require.Nil(t, err)
 	sink, err := NewMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConn)
@@ -714,7 +714,7 @@ func TestNewMySQLBackendWithIPv6Address(t *testing.T) {
 	changefeed := "test-changefeed"
 	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
 	// See https://www.ietf.org/rfc/rfc2732.txt, we have to use brackets to wrap IPv6 address.
-	sinkURI, err := url.Parse("mysql://[::1]:3306/?time-zone=UTC&worker-count=4")
+	sinkURI, err := url.Parse("mysql://[::1]:3306/?time-zone=UTC&worker-count=1")
 	require.Nil(t, err)
 	sink, err := NewMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConn)
@@ -751,7 +751,7 @@ func TestGBKSupported(t *testing.T) {
 	ctx := context.Background()
 	changefeed := "test-changefeed"
 	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
-	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=4")
+	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1")
 	require.Nil(t, err)
 	sink, err := NewMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConn)

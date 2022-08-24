@@ -138,29 +138,29 @@ func TestLoadAllWorkers(t *testing.T) {
 	// Using context.Background() since there is no risk that
 	// the mock KV might time out.
 	err = workerMetaClient.Store(context.Background(), &frameModel.WorkerStatus{
-		JobID:        "master-1",
-		ID:           "worker-1",
-		Code:         frameModel.WorkerStatusInit,
-		ErrorMessage: "test-1",
-		ExtBytes:     []byte("ext-bytes-1"),
+		JobID:    "master-1",
+		ID:       "worker-1",
+		Code:     frameModel.WorkerStatusInit,
+		ErrorMsg: "test-1",
+		ExtBytes: []byte("ext-bytes-1"),
 	})
 	require.NoError(t, err)
 
 	err = workerMetaClient.Store(context.Background(), &frameModel.WorkerStatus{
-		JobID:        "master-1",
-		ID:           "worker-2",
-		Code:         frameModel.WorkerStatusNormal,
-		ErrorMessage: "test-2",
-		ExtBytes:     []byte("ext-bytes-2"),
+		JobID:    "master-1",
+		ID:       "worker-2",
+		Code:     frameModel.WorkerStatusNormal,
+		ErrorMsg: "test-2",
+		ExtBytes: []byte("ext-bytes-2"),
 	})
 	require.NoError(t, err)
 
 	err = workerMetaClient.Store(context.Background(), &frameModel.WorkerStatus{
-		JobID:        "master-1",
-		ID:           "worker-3",
-		Code:         frameModel.WorkerStatusFinished,
-		ErrorMessage: "test-3",
-		ExtBytes:     []byte("ext-bytes-3"),
+		JobID:    "master-1",
+		ID:       "worker-3",
+		Code:     frameModel.WorkerStatusFinished,
+		ErrorMsg: "test-3",
+		ExtBytes: []byte("ext-bytes-3"),
 	})
 	require.NoError(t, err)
 
@@ -170,36 +170,36 @@ func TestLoadAllWorkers(t *testing.T) {
 	require.Equal(t,
 		map[frameModel.WorkerID]*frameModel.WorkerStatus{
 			"worker-1": {
-				Code:         frameModel.WorkerStatusInit,
-				ErrorMessage: "test-1",
-				ExtBytes:     []byte("ext-bytes-1"),
+				Code:     frameModel.WorkerStatusInit,
+				ErrorMsg: "test-1",
+				ExtBytes: []byte("ext-bytes-1"),
 			},
 			"worker-2": {
-				Code:         frameModel.WorkerStatusNormal,
-				ErrorMessage: "test-2",
-				ExtBytes:     []byte("ext-bytes-2"),
+				Code:     frameModel.WorkerStatusNormal,
+				ErrorMsg: "test-2",
+				ExtBytes: []byte("ext-bytes-2"),
 			},
 			"worker-3": {
-				Code:         frameModel.WorkerStatusFinished,
-				ErrorMessage: "test-3",
-				ExtBytes:     []byte("ext-bytes-3"),
+				Code:     frameModel.WorkerStatusFinished,
+				ErrorMsg: "test-3",
+				ExtBytes: []byte("ext-bytes-3"),
 			},
 		},
 		map[frameModel.WorkerID]*frameModel.WorkerStatus{
 			workerStatuses["worker-1"].ID: {
-				Code:         workerStatuses["worker-1"].Code,
-				ErrorMessage: workerStatuses["worker-1"].ErrorMessage,
-				ExtBytes:     workerStatuses["worker-1"].ExtBytes,
+				Code:     workerStatuses["worker-1"].Code,
+				ErrorMsg: workerStatuses["worker-1"].ErrorMsg,
+				ExtBytes: workerStatuses["worker-1"].ExtBytes,
 			},
 			workerStatuses["worker-2"].ID: {
-				Code:         workerStatuses["worker-2"].Code,
-				ErrorMessage: workerStatuses["worker-2"].ErrorMessage,
-				ExtBytes:     workerStatuses["worker-2"].ExtBytes,
+				Code:     workerStatuses["worker-2"].Code,
+				ErrorMsg: workerStatuses["worker-2"].ErrorMsg,
+				ExtBytes: workerStatuses["worker-2"].ExtBytes,
 			},
 			workerStatuses["worker-3"].ID: {
-				Code:         workerStatuses["worker-3"].Code,
-				ErrorMessage: workerStatuses["worker-3"].ErrorMessage,
-				ExtBytes:     workerStatuses["worker-3"].ExtBytes,
+				Code:     workerStatuses["worker-3"].Code,
+				ErrorMsg: workerStatuses["worker-3"].ErrorMsg,
+				ExtBytes: workerStatuses["worker-3"].ExtBytes,
 			},
 		},
 	)

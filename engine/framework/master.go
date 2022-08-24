@@ -66,6 +66,7 @@ type Master interface {
 // added in the functions of this interface
 type MasterImpl interface {
 	// InitImpl provides customized logic for the business logic to initialize.
+	// InitImpl will not be called if the master recovers from an error.
 	InitImpl(ctx context.Context) error
 
 	// Tick is called on a fixed interval.
@@ -106,14 +107,31 @@ const (
 type BaseMaster interface {
 	Master
 
-	// MetaKVClient return business metastore kv client
+	// MetaKVClient return business metastore kv client with job-level isolation
 	MetaKVClient() metaModel.KVClient
+
+	// MetricFactory return a promethus factory with some underlying labels(e.g. job-id, work-id)
 	MetricFactory() promutil.Factory
+
+	// Logger return a zap logger with some underlying fields(e.g. job-id)
 	Logger() *zap.Logger
+
+	// MasterMeta return the meta data of master
 	MasterMeta() *frameModel.MasterMetaKVData
+
+	// GetWorkers return the handle of all workers, from which we can get the worker status、worker id and
+	// the method for sending message to specific worker
 	GetWorkers() map[frameModel.WorkerID]WorkerHandle
+
+	// IsMasterReady returns whether the master has received heartbeats for all
+	// workers after a fail-over. If this is the first time the JobMaster started up,
+	// the return value is always true.
 	IsMasterReady() bool
-	OnError(err error)
+
+	// Exit should be called when master (in user logic) wants to exit.
+	// exitReason: ExitReasonFinished/ExitReasonCanceled/ExitReasonFailed
+	// NOTE: Currently, no implement has used this method, but we still keep it to make the interface intact
+	Exit(ctx context.Context, exitReason ExitReason, err error, extMsg string) error
 
 	// CreateWorker requires the framework to dispatch a new worker.
 	// If the worker needs to access certain file system resources,
@@ -483,11 +501,6 @@ func (m *DefaultBaseMaster) Close(ctx context.Context) error {
 	return errors.Trace(err)
 }
 
-// OnError implements BaseMaster.OnError
-func (m *DefaultBaseMaster) OnError(err error) {
-	m.errCenter.OnError(err)
-}
-
 // refreshMetadata load and update metadata by current epoch, nodeID, advertiseAddr, etc.
 // master meta is persisted before it is created, in this function we update some
 // fileds to the current value, including epoch, nodeID and advertiseAddr.
@@ -668,6 +681,43 @@ func (m *DefaultBaseMaster) CreateWorker(
 // IsMasterReady implements BaseMaster.IsMasterReady
 func (m *DefaultBaseMaster) IsMasterReady() bool {
 	return m.workerManager.IsInitialized()
+}
+
+// Exit implements BaseMaster.Exit
+// NOTE: Currently, no implement has used this method, but we still keep it to make the interface intact
+func (m *DefaultBaseMaster) Exit(ctx context.Context, exitReason ExitReason, err error, extMsg string) error {
+	// Set the errCenter to prevent user from forgetting to return directly after calling 'Exit'
+	// keep the original error in errCenter if possible
+	defer func() {
+		if err == nil {
+			err = derror.ErrWorkerFinish.FastGenByArgs()
+		}
+		m.errCenter.OnError(err)
+	}()
+
+	return m.exitWithoutSetErrCenter(ctx, exitReason, err, extMsg)
+}
+
+func (m *DefaultBaseMaster) exitWithoutSetErrCenter(ctx context.Context, exitReason ExitReason, err error, extMsg string) (errRet error) {
+	switch exitReason {
+	case ExitReasonFinished:
+		m.masterMeta.StatusCode = frameModel.MasterStatusFinished
+	case ExitReasonCanceled:
+		// TODO: replace stop with cancel
+		m.masterMeta.StatusCode = frameModel.MasterStatusStopped
+	case ExitReasonFailed:
+		m.masterMeta.StatusCode = frameModel.MasterStatusFailed
+	default:
+		m.masterMeta.StatusCode = frameModel.MasterStatusFailed
+	}
+
+	if err != nil {
+		m.masterMeta.ErrorMsg = err.Error()
+	}
+	m.masterMeta.ExtMsg = extMsg
+
+	metaClient := metadata.NewMasterMetadataClient(m.id, m.frameMetaClient)
+	return metaClient.Update(ctx, m.masterMeta)
 }
 
 // SetProjectInfo set the project info of specific worker
