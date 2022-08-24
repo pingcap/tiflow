@@ -331,7 +331,11 @@ func (c *changefeed) tick(ctx cdcContext.Context, state *orchestrator.Changefeed
 }
 
 func (c *changefeed) initialize(ctx cdcContext.Context) error {
-	if c.initialized {
+	if c.initialized || c.state.Status == nil {
+		// If `c.state.Status` is nil it means the changefeed struct is just created, it needs to
+		//  1. use startTs as checkpointTs and resolvedTs, if it's a new created changefeed; or
+		//  2. load checkpointTs and resolvedTs from etcd, if it's an existing changefeed.
+		// And then it can continue to initialize.
 		return nil
 	}
 	// clean the errCh
@@ -346,17 +350,8 @@ LOOP:
 		}
 	}
 
-	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
-	resolvedTs := checkpointTs
-	if c.state.Status != nil {
-		resolvedTs = c.state.Status.ResolvedTs
-	}
-	log.Info("initialize changefeed",
-		zap.String("namespace", c.state.ID.Namespace),
-		zap.String("changefeed", c.state.ID.ID),
-		zap.Stringer("info", c.state.Info),
-		zap.Uint64("checkpointTs", checkpointTs),
-		zap.Uint64("resolvedTs", resolvedTs))
+	checkpointTs := c.state.Status.CheckpointTs
+	resolvedTs := c.state.Status.ResolvedTs
 
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
 		failpoint.Return(cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs-300, checkpointTs))
@@ -398,11 +393,12 @@ LOOP:
 		}
 	}
 	if c.state.Info.SyncPointEnabled {
-		c.barriers.Update(syncPointBarrier, checkpointTs)
+		c.barriers.Update(syncPointBarrier, resolvedTs)
 	}
 	// Since we are starting DDL puller from (checkpointTs-1) to make
 	// the DDL committed at checkpointTs executable by CDC, we need to set
 	// the DDL barrier to the correct start point.
+	// TODO: get DDL barrier based on resolvedTs.
 	c.barriers.Update(ddlJobBarrier, checkpointTs-1)
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
 	var err error
@@ -462,6 +458,13 @@ LOOP:
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	log.Info("initialize changefeed",
+		zap.String("namespace", c.state.ID.Namespace),
+		zap.String("changefeed", c.state.ID.ID),
+		zap.Stringer("info", c.state.Info),
+		zap.Uint64("checkpointTs", checkpointTs),
+		zap.Uint64("resolvedTs", resolvedTs))
 
 	c.initialized = true
 	return nil
@@ -686,7 +689,7 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		// we need to make sure we receive the ddl before we start or stop broadcasting checkpoint ts.
 		// So let's remember the name of the table before processing and cache the DDL.
 		c.currentTableNames = c.schema.AllTableNames()
-		checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
+		checkpointTs := c.state.Status.CheckpointTs
 		// refresh checkpointTs and currentTableNames when a ddl job is received
 		c.sink.emitCheckpointTs(checkpointTs, c.currentTableNames)
 		err = c.schema.HandleDDL(job)
