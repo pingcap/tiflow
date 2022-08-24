@@ -335,9 +335,8 @@ func (c *StreamerController) resetReplicationSyncer(tctx *tcontext.Context, loca
 //     to let caller track schema and save checkpoints.
 func (c *StreamerController) GetEvent(tctx *tcontext.Context) (*replication.BinlogEvent, pb.ErrorOp, error) {
 	event, suffix, op, err := c.getEvent(tctx)
-
 	// if is local binlog but switch to remote on error, need to add uuid information in binlog's filename
-	if err != nil {
+	if err == nil {
 		if ev, ok := event.Event.(*replication.RotateEvent); ok {
 			// nolint:dogsled
 			_, relaySubDirSuffix, _, _ := utils.SplitFilenameWithUUIDSuffix(string(ev.NextLogName))

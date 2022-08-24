@@ -37,23 +37,23 @@ func isDataEvent(e *replication.BinlogEvent) bool {
 // locations provides curStartLocation, curEndLocation, txnEndLocation for binlog
 // events.
 //
-// - for the event which isDataEvent:
-//               +-------------+
-//           ... |current event| ...
-//          ^    +-------------+    ^
-//          |                       |
-//    curStartLocation        curEndLocation
+//   - for the event which isDataEvent:
+//     |          +-------------+
+//     |      ... |current event| ...
+//     |     ^    +-------------+    ^
+//     |     |                       |
+//     | curStartLocation        curEndLocation
 //
-//    there may be more events between curStartLocation and curEndLocation due
-//    to the limitation of binlog or implementation of DM, but in such scenario,
-//    those events should always belong to one transaction.
+//     there may be more events between curStartLocation and curEndLocation due
+//     to the limitation of binlog or implementation of DM, but in such scenario,
+//     those events should always belong to one transaction.
 //
-// - for RotateEvent:
-//    the binlog filename of curEndLocation and txnEndLocation will be updated
-//    to the new NextLogName in RotateEvent.
+//   - for RotateEvent:
+//     the binlog filename of curEndLocation and txnEndLocation will be updated
+//     to the new NextLogName in RotateEvent.
 //
-// - else:
-//    we do not guarantee the behaviour of 3 locations of this struct.
+//   - else:
+//     we do not guarantee the behaviour of 3 locations of this struct.
 type locations struct {
 	// curStartLocation is used when
 	// - display a meaningful location
