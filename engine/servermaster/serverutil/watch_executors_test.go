@@ -23,6 +23,7 @@ import (
 
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -169,7 +170,7 @@ func TestCloseWatchExecutors(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err := WatchExecutors(ctx, watcher, user)
-		require.NoError(t, err)
+		require.ErrorIs(t, err, errors.ErrExecutorWatcherClosed)
 	}()
 
 	evNotifier.Close()

@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/engine/model"
 	pkgClient "github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.uber.org/zap"
 )
@@ -80,7 +81,7 @@ func WatchExecutors(ctx context.Context, watcher executorWatcher, user executorI
 
 		if change == emptyChange {
 			log.Info("receive empty executor change")
-			return nil
+			return cerrors.ErrExecutorWatcherClosed.GenWithStackByArgs()
 		}
 
 		if change.Tp == model.EventExecutorOnline {
