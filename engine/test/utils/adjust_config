@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # parameter 1: out directory
-# parameter 1: test name which is used to generate the sub directory
+# parameter 2: test name which is used to generate the sub directory
 # other parameters: deployment files
 
 set -eux
@@ -28,13 +28,10 @@ cp -fr ${CONFIG_DIR}/config ${WORK_DIR} || exit 1
 # 3. generate new deploy files and replace `tmp/tiflow_engine_test` with
 # `tmp/tiflow_engine_test/${TEST_NAME}` which is used to store log files.
 new_configs=
-cnt=1
 while [[ $# -gt 0 ]]; do
-	path="${WORK_DIR}/config${cnt}.yaml"
-	cat ${1} | sed -e "s/\/tmp\/tiflow_engine_test/\/tmp\/tiflow_engine_test\/${TEST_NAME}/g" >${path}
-
-	new_configs="${new_configs} ${path}"
-	shift
-	let cnt++
+	old_path=$1 && shift
+	new_path="${WORK_DIR}/$(basename ${old_path})"
+	cat ${old_path} | sed -e "s, /tmp/tiflow_engine_test, /tmp/tiflow_engine_test/${TEST_NAME}, g" > ${new_path}
+	new_configs="${new_configs} ${new_path}"
 done
 echo "$new_configs"

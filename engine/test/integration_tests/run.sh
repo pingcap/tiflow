@@ -10,7 +10,6 @@ mkdir -p $OUT_DIR || true
 
 if [ "${1-}" = 'debug' ]; then
 	shift
-	echo "count: $#"
 	if [[ $# -gt 0 ]]; then
 		cnf=$*
 	else
