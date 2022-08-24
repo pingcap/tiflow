@@ -48,7 +48,7 @@ jobs:
         if: ${{ always() }}
         uses: jwalton/gh-docker-logs@v2
         with:
-          dest: '/tmp/tiflow_engine_test/'
+          dest: '/tmp/tiflow_engine_test/docker_log/'
 
       - name: Upload logs to GitHub
         if: ${{ always() }}
@@ -88,7 +88,7 @@ jobs:
         if: ${{ always() }}
         uses: jwalton/gh-docker-logs@v2
         with:
-          dest: '/tmp/tiflow_engine_test/'
+          dest: '/tmp/tiflow_engine_test/docker_log/'
 
       - name: Upload logs to GitHub
         if: ${{ always() }}
@@ -128,7 +128,7 @@ jobs:
         if: ${{ always() }}
         uses: jwalton/gh-docker-logs@v2
         with:
-          dest: '/tmp/tiflow_engine_test/'
+          dest: '/tmp/tiflow_engine_test/docker_log/'
 
       - name: Upload logs to GitHub
         if: ${{ always() }}
@@ -171,7 +171,7 @@ jobs:
         if: ${{ always() }}
         uses: jwalton/gh-docker-logs@v2
         with:
-          dest: '/tmp/tiflow_engine_test/'
+          dest: '/tmp/tiflow_engine_test/docker_log/'
 
       - name: Upload logs to GitHub
         if: ${{ always() }}
